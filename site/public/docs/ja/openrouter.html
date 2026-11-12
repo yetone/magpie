@@ -295,6 +295,8 @@ magpie group set opus-anywhere stays=session models+=openrouter/anthropic/claude
       <li><b>キーの確認。</b><code>magpie provider test openrouter</code> は各エンドポイントに、または指定した各モデルに小さなリクエストを送ります。<code>--as codex</code> や <code>--as claude-code</code> を付けると、そのツールと同じ形で送ります。</li>
     </ul>
 
+    <p><a href="/docs/ja/vercel">Vercel AI Gateway を Claude Code・Codex などのエージェントで使う</a></p>
+
     <h2 id="faq"><a class="anchor" href="#faq">よくある質問</a></h2>
     <h3>Claude Code で OpenRouter を使うには？</h3>
     <p>magpie に OpenRouter のキーを追加し（プロバイダ、プロバイダを追加、OpenRouter）、Claude Code の行で <code>anthropic/claude-opus-5.5</code> などのモデルを選ぶか、<code>magpie claude openrouter/anthropic/claude-opus-5.5</code> を実行します。magpie が Claude Code の <code>settings.json</code> を書き、リクエストはそのまま OpenRouter の Anthropic エンドポイントに渡されます。</p>

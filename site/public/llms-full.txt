@@ -2356,6 +2356,8 @@ magpie group set opus-anywhere stays=session models+=openrouter/anthropic/claude
 - **Web search asks a model you didn’t pick..** It doesn’t: when OpenRouter answers magpie’s web search, magpie asks one of the OpenRouter models you have picked, since OpenRouter can refuse others for your region. For that search magpie turns on OpenRouter’s own `web` plugin, which works with any of its models.
 - **Checking a key..** `magpie provider test openrouter` sends a tiny request through each endpoint, or to each model you name. Add `--as codex` or `--as claude-code` to send it the way that agent would.
 
+[Vercel AI Gateway in Claude Code, Codex and other agents](https://usemagpie.ai/docs/vercel)
+
 ## FAQ
 
 ### How do I use OpenRouter in Claude Code?
@@ -9701,6 +9703,71 @@ When Groq's 429 names the model, magpie rests only that model on that key and th
 Yes. Send an OpenAI-style form to magpie's /v1/audio/transcriptions with model groq/whisper-large-v3; text to speech goes to /v1/audio/speech.
 
 Related: [Mistral in Claude Code, Codex, Gemini CLI and OpenCode](https://usemagpie.ai/docs/mistral), [OpenAI in Claude Code, Codex, Gemini CLI and OpenCode](https://usemagpie.ai/docs/openai). If something fails, see [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting) or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/vercel
+
+# Vercel AI Gateway in Claude Code, Codex and other agents
+
+Vercel AI Gateway serves every maker's models with one key, as `maker/model` ids. magpie's `vercel` preset brings it to Claude Code, Codex, OpenCode and other agents, with all three APIs set and no address to type.
+
+## Add it
+
+1. **Get a key..** Create one under AI Gateway → API Keys in the Vercel dashboard.
+2. **Add it..** Pick Vercel AI Gateway in the app and paste the key into API key, or from the CLI:
+
+```
+magpie provider add vercel 
+magpie provider test vercel
+```
+
+The preset points Chat Completions and Responses at `https://ai-gateway.vercel.sh/v1` and Anthropic Messages at `https://ai-gateway.vercel.sh`. By Vercel's docs, each of them serves every model.
+
+## Use it in an agent
+
+Model ids are `vercel/<Vercel's model id>`, which already names the maker:
+
+```
+magpie claude vercel/anthropic/claude-sonnet-4.6
+magpie codex vercel/openai/gpt-5.5
+```
+
+A Claude model goes to Vercel's Anthropic Messages whatever API the agent spoke: a relay serving both drops `cache_control` on Chat, so every turn was billed uncached, and thinking with it. Other models go on the agent's own API: Responses for Codex, Chat Completions for a Chat client.
+
+## The model list
+
+Vercel's `/v1/models` says each row's type, and magpie sorts by it:
+
+- Chat models show in agents' model pickers, their window from Vercel's `context_window`.
+- Image and video models serve magpie's image and video generation; embedding and reranking models go on `/v1/embeddings` and `/v1/rerank`; speech and transcription models on `/v1/audio`.
+- Evaluation models (`typesafe-ai/jev`, say) and realtime voices answer no chat and are left out.
+- A `-batch` id is for Vercel's batch API alone, which synchronous requests don't accept, and is left out too.
+
+## Notes
+
+- Vercel AI Gateway is a relay: put it in a routing group beside OpenRouter or a maker's own account, and when one fails the group's next member answers.
+- Vercel's billing and credit are in the Vercel dashboard; magpie's Usage records each request's tokens.
+
+## FAQ
+
+### Does magpie support Vercel AI Gateway?
+
+Yes, with the vercel preset. Give an AI Gateway key; Chat Completions, Responses and Anthropic Messages are set, and a model id is vercel//.
+
+### Does Claude Code hit the cache with Claude on Vercel?
+
+Yes. A Claude model always goes to Vercel's Anthropic Messages with cache_control as sent, so the cache isn't lost on Chat.
+
+### Can Codex use Vercel AI Gateway?
+
+Yes. Codex speaks Responses, which magpie sends to Vercel's /v1 Responses API; the model is vercel//.
+
+### Why are some models missing from the list?
+
+magpie sorts by Vercel's types: evaluation models, realtime voices and -batch ids answer no synchronous chat and stay out of agents' lists; image, video, embedding and speech models go to their own APIs.
+
+Related: [OpenRouter in Claude Code, Codex, Gemini CLI and OpenCode](https://usemagpie.ai/docs/openrouter), [Round robin and failover across accounts, keys and providers](https://usemagpie.ai/docs/routing-groups). If something fails, see [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting) or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 

@@ -295,6 +295,8 @@ magpie group set opus-anywhere stays=session models+=openrouter/anthropic/claude
       <li><b>检查 Key。</b><code>magpie provider test openrouter</code> 会向每个接口发一个很小的请求，或者发给你指定的每个模型。加上 <code>--as codex</code> 或 <code>--as claude-code</code>，就按那个工具的方式发送。</li>
     </ul>
 
+    <p><a href="/docs/zh/vercel">Vercel AI Gateway 接入 Claude Code、Codex 等 Agent</a></p>
+
     <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
     <h3>Claude Code 怎么用 OpenRouter？</h3>
     <p>在 magpie 里添加 OpenRouter 的 Key（供应商页，添加供应商，选 OpenRouter），然后在 Claude Code 那一行选一个模型，比如 <code>anthropic/claude-opus-5.5</code>，或者运行 <code>magpie claude openrouter/anthropic/claude-opus-5.5</code>。magpie 会写好 Claude Code 的 <code>settings.json</code>，请求原样转给 OpenRouter 的 Anthropic 接口。</p>

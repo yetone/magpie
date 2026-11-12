@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vercel AI Gateway in Claude Code and Codex: every maker's models with one key · magpie</title>
+<meta name="description" content="Connect Vercel AI Gateway to Claude Code, Codex, OpenCode and other agents with magpie: the vercel preset has Chat Completions, Responses and Anthropic Messages set, Claude models go to Messages to keep the cache, and the model list is sorted by Vercel's own types into chat, image, video, embedding and speech models.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/vercel">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/vercel">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/vercel">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/vercel">
+<link rel="canonical" href="https://usemagpie.ai/docs/vercel">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="Vercel AI Gateway in Claude Code, Codex and other agents">
+<meta property="og:description" content="Connect Vercel AI Gateway to Claude Code, Codex, OpenCode and other agents with magpie: the vercel preset has Chat Completions, Responses and Anthropic Messages set, Claude models go to Messages to keep the cache, and the model list is sorted by Vercel's own types into chat, image, video, embedding and speech models.">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/vercel">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "Vercel AI Gateway in Claude Code, Codex and other agents",
+   "description": "Connect Vercel AI Gateway to Claude Code, Codex, OpenCode and other agents with magpie: the vercel preset has Chat Completions, Responses and Anthropic Messages set, Claude models go to Messages to keep the cache, and the model list is sorted by Vercel's own types into chat, image, video, embedding and speech models.",
+   "inLanguage": "en",
+   "url": "https://usemagpie.ai/docs/vercel",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "Does magpie support Vercel AI Gateway?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes, with the vercel preset. Give an AI Gateway key; Chat Completions, Responses and Anthropic Messages are set, and a model id is vercel/<maker>/<model>."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Does Claude Code hit the cache with Claude on Vercel?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. A Claude model always goes to Vercel's Anthropic Messages with cache_control as sent, so the cache isn't lost on Chat."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Can Codex use Vercel AI Gateway?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. Codex speaks Responses, which magpie sends to Vercel's /v1 Responses API; the model is vercel/<maker>/<model>."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Why are some models missing from the list?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "magpie sorts by Vercel's types: evaluation models, realtime voices and -batch ids answer no synchronous chat and stay out of agents' lists; image, video, embedding and speech models go to their own APIs."
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "Docs",
+     "item": "https://usemagpie.ai/docs/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "Vercel AI Gateway in Claude Code, Codex and other agents",
+     "item": "https://usemagpie.ai/docs/vercel"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>Docs</small></a>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/start">Get started</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a class="toc-only" href="/docs/remote">Remote magpie</a>
+    <a class="toc-only" href="/docs/docker">Docker</a>
+    <a class="toc-only" href="/docs/privacy">Privacy</a>
+    <a class="toc-only" href="/docs/masking">Privacy masking</a>
+    <a class="toc-only" href="/docs/mcp-router">MCP router</a>
+    <a class="toc-only" href="/docs/library">Library</a>
+    <a class="toc-only" href="/docs/claude-code-models">Models in Claude Code</a>
+    <a class="toc-only" href="/docs/codex-models">Models in Codex</a>
+    <a class="toc-only" href="/docs/gemini-cli-models">Models in Gemini CLI</a>
+    <a class="toc-only" href="/docs/subscriptions">Subscriptions in any agent</a>
+    <a class="toc-only" href="/docs/local-models">Local models</a>
+    <a class="toc-only" href="/docs/opencode-models">Models in OpenCode</a>
+    <a class="toc-only" href="/docs/alternatives">magpie vs CC Switch vs CCR</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="Language" title="Language" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/vercel" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/vercel" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/vercel" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">Download</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>Vercel AI Gateway</p>
+    <a href="#overview">What it is</a>
+    <a href="#add">Add it</a>
+    <a href="#agents">Use it in an agent</a>
+    <a href="#models">The model list</a>
+    <a href="#notes">Notes</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">Docs · Guide</p>
+    <h1>Vercel AI Gateway in Claude Code, Codex and other agents</h1>
+    <p class="lede">Vercel AI Gateway serves every maker's models with one key, as <code>maker/model</code> ids. magpie's <code>vercel</code> preset brings it to Claude Code, Codex, OpenCode and other agents, with all three APIs set and no address to type.</p>
+    <h2 id="add"><a class="anchor" href="#add">Add it</a></h2>
+    <ol class="steps">
+      <li><b>Get a key.</b>Create one under AI Gateway → API Keys in the Vercel dashboard.</li>
+      <li><b>Add it.</b>Pick Vercel AI Gateway in the app and paste the key into <span class="ui">API key</span>, or from the CLI:</li>
+    </ol>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="vc-add">Copy</button><pre id="vc-add">magpie provider add vercel <key>
+magpie provider test vercel</pre></div>
+    <p>The preset points Chat Completions and Responses at <code>https://ai-gateway.vercel.sh/v1</code> and Anthropic Messages at <code>https://ai-gateway.vercel.sh</code>. By Vercel's docs, each of them serves every model.</p>
+    <h2 id="agents"><a class="anchor" href="#agents">Use it in an agent</a></h2>
+    <p>Model ids are <code>vercel/&lt;Vercel's model id&gt;</code>, which already names the maker:</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="vc-use">Copy</button><pre id="vc-use">magpie claude vercel/anthropic/claude-sonnet-4.6
+magpie codex vercel/openai/gpt-5.5</pre></div>
+    <p>A Claude model goes to Vercel's Anthropic Messages whatever API the agent spoke: a relay serving both drops <code>cache_control</code> on Chat, so every turn was billed uncached, and thinking with it. Other models go on the agent's own API: Responses for Codex, Chat Completions for a Chat client.</p>
+    <h2 id="models"><a class="anchor" href="#models">The model list</a></h2>
+    <p>Vercel's <code>/v1/models</code> says each row's type, and magpie sorts by it:</p>
+    <ul><li>Chat models show in agents' model pickers, their window from Vercel's <code>context_window</code>.</li><li>Image and video models serve magpie's image and video generation; embedding and reranking models go on <code>/v1/embeddings</code> and <code>/v1/rerank</code>; speech and transcription models on <code>/v1/audio</code>.</li><li>Evaluation models (<code>typesafe-ai/jev</code>, say) and realtime voices answer no chat and are left out.</li><li>A <code>-batch</code> id is for Vercel's batch API alone, which synchronous requests don't accept, and is left out too.</li></ul>
+    <h2 id="notes"><a class="anchor" href="#notes">Notes</a></h2>
+    <ul><li>Vercel AI Gateway is a relay: put it in a routing group beside OpenRouter or a maker's own account, and when one fails the group's next member answers.</li><li>Vercel's billing and credit are in the Vercel dashboard; magpie's Usage records each request's tokens.</li></ul>
+
+    <h2 id="faq"><a class="anchor" href="#faq">FAQ</a></h2>
+    <h3>Does magpie support Vercel AI Gateway?</h3>
+    <p>Yes, with the vercel preset. Give an AI Gateway key; Chat Completions, Responses and Anthropic Messages are set, and a model id is vercel/<maker>/<model>.</p>
+    <h3>Does Claude Code hit the cache with Claude on Vercel?</h3>
+    <p>Yes. A Claude model always goes to Vercel's Anthropic Messages with cache_control as sent, so the cache isn't lost on Chat.</p>
+    <h3>Can Codex use Vercel AI Gateway?</h3>
+    <p>Yes. Codex speaks Responses, which magpie sends to Vercel's /v1 Responses API; the model is vercel/<maker>/<model>.</p>
+    <h3>Why are some models missing from the list?</h3>
+    <p>magpie sorts by Vercel's types: evaluation models, realtime voices and -batch ids answer no synchronous chat and stay out of agents' lists; image, video, embedding and speech models go to their own APIs.</p>
+
+    <p style="margin-top:48px">Related: <a href="/docs/openrouter">OpenRouter in Claude Code, Codex, Gemini CLI and OpenCode</a>, <a href="/docs/routing-groups">Round robin and failover across accounts, keys and providers</a>. If something fails, see <a href="/docs/troubleshooting">Fixing common errors: 401, 429, 502, 504 and more</a> or ask on <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>.</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a href="/docs/remote">Remote magpie</a>
+    <a href="/docs/docker">Docker</a>
+    <a href="/docs/privacy">Privacy</a>
+    <a href="/docs/masking">Privacy masking</a>
+    <a href="/docs/mcp-router">MCP router</a>
+    <a href="/docs/library">Library</a>
+    <a href="/docs/claude-code-models">Models in Claude Code</a>
+    <a href="/docs/codex-models">Models in Codex</a>
+    <a href="/docs/gemini-cli-models">Models in Gemini CLI</a>
+    <a href="/docs/subscriptions">Subscriptions in any agent</a>
+    <a href="/docs/local-models">Local models</a>
+    <a href="/docs/opencode-models">Models in OpenCode</a>
+    <a href="/docs/alternatives">magpie vs CC Switch vs CCR</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/contributors">Contributors</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "Copied"; setTimeout(() => (b.textContent = "Copy"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

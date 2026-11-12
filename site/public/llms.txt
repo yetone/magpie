@@ -146,6 +146,7 @@ DeepSeek, Kimi (Moonshot), GLM (Zhipu), Qwen, MiniMax, Anthropic (Claude), OpenA
 - [Amazon Bedrock in Claude Code, Codex and other agents](https://usemagpie.ai/docs/bedrock): the bedrock and bedrock-mantle presets with one Bedrock API key and no SigV4; regions, global inference profiles for Claude and GPT, other makers' in-region ids, Mantle's own model list, and CLAUDE_CODE_USE_BEDROCK.
 - [Azure OpenAI in Codex, Claude Code and other agents](https://usemagpie.ai/docs/azure): the azure preset at your own resource, its v1 API under /openai/v1, the key in api-key, deployments as model ids, API Management gateways and headers.
 - [Groq in Claude Code, Codex and other agents](https://usemagpie.ai/docs/groq): the groq preset with one key, Claude Code translated to Chat with the cache counted, per-model rate limits, overflows that make the agent compact, Whisper and speech.
+- [Vercel AI Gateway in Claude Code, Codex and other agents](https://usemagpie.ai/docs/vercel): the vercel preset with Chat, Responses and Anthropic Messages set, Claude models kept on Messages for the cache, and the model list sorted by Vercel's own types.
 - [Library](https://usemagpie.ai/docs/library): instructions, MCP servers, skills, hooks and subagents for each agent.
 - [MCP router](https://usemagpie.ai/docs/mcp-router): one magpie MCP server per agent.
 - [Remote magpie](https://usemagpie.ai/docs/remote): use one magpie from several computers.
