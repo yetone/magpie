@@ -8343,7 +8343,89 @@ Vibe reads its settings at start-up. Restart open vibe sessions.
 
 Yes. magpie noted what active_model was and puts it back.
 
-More agents on the same models: [Avibe on any model](https://usemagpie.ai/docs/avibe), [Pencil on any model](https://usemagpie.ai/docs/pencil) and [WorkBuddy on any model](https://usemagpie.ai/docs/workbuddy). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Avibe on any model](https://usemagpie.ai/docs/avibe), [Pencil on any model](https://usemagpie.ai/docs/pencil), [WorkBuddy on any model](https://usemagpie.ai/docs/workbuddy) and [OpenMausBot on any model](https://usemagpie.ai/docs/openmausbot). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/openmausbot
+
+# OpenMausBot on any model
+
+OpenMausBot is an open-source Electron chat app whose bots run the CLIs installed on the computer. It keeps its settings in `config.json` in its data folder: `$OMB_DATA_DIR`, else `~/.openmausbot` on every system. Each engine a bot can run on is an entry in that file's instances. magpie adds an engine of its own there, magpie, so bots can run on DeepSeek, GLM, Kimi, Qwen, Claude, a ChatGPT subscription or any other model in magpie.
+
+## Set up OpenMausBot
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Quit OpenMausBot.** magpie refuses the change while OpenMausBot runs (on Windows magpie can't tell, so quit it first).
+3. **Set OpenMausBot's provider to magpie on the Agents page.** magpie puts every magpie model in the magpie engine's model picker.
+4. **Open OpenMausBot and pick magpie as a bot's engine.** Then pick the model in the engine's picker.
+
+## The magpie engine
+
+Why an engine of its own: OpenMausBot's Claude bots run Claude Code isolated, with only the sign-in keys of `~/.claude/settings.json` carried over, so a Claude Code wired to magpie reaches the gateway already but its picker lists Claude's own models alone. Its Codex bots run your `~/.codex` as it is, which magpie's Codex wiring already covers.
+
+magpie writes the engine as OpenMausBot's own Claude endpoint writes one: a claudeAgent with access custom, a Claude home of its own, requireApiKey, the gateway's address and magpie's key as ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN and ANTHROPIC_API_KEY, and every magpie model in endpointModels. An engine with those keys owns its routing: neither your settings nor a provider switch in OpenMausBot reaches it. If you gave OpenMausBot a Claude Code of your own, the magpie engine uses it too.
+
+```
+// ~/.openmausbot/config.json
+"instances": {
+  "magpie": {
+    "driver": "claudeAgent",
+    "displayName": "magpie",
+    "access": "custom",
+    "config": {
+      "configDir": "~/.openmausbot/providers/magpie",
+      "requireApiKey": true,
+      "endpointModels": […]
+    },
+    "environment": {
+      "ANTHROPIC_BASE_URL": "http://127.0.0.1:3425",
+      "ANTHROPIC_AUTH_TOKEN": "",
+      "ANTHROPIC_API_KEY": "",
+      "ANTHROPIC_MODEL": "…"
+    }
+  },
+  …
+}
+```
+
+A 1M model is marked `[1m]`. A model id OpenMausBot wouldn't take is left out, since one such id makes it refuse the whole engine.
+
+## The default fleet stays
+
+With no engines saved in config.json, OpenMausBot runs its default fleet. A saved instances map is the whole fleet, so one holding magpie's alone would take every other engine away. When the file has none, magpie writes the default fleet beside its own.
+
+## Why quit it first
+
+OpenMausBot reads the file when it starts, and writes its whole map of engines, as it holds it, back when you change one in its Settings. So magpie refuses a change while it runs. A sync writes anyway: what OpenMausBot writes over is written again by the next sync, or within half a minute. When OpenMausBot runs on an older list than the file's, magpie's Agents page offers a restart.
+
+## What stays yours
+
+The magpie engine's name, colour, icon, whether it is on or hidden, the keys magpie doesn't write and the environment besides the routing are yours. So is the model picked first, while magpie still lists it. The routing, the Claude home and the model list are magpie's.
+
+## Switching back
+
+When you switch OpenMausBot off in magpie, magpie takes its engine out, and the default fleet it wrote with it while that is still the default fleet, so OpenMausBot runs its defaults again as they are then.
+
+## FAQ
+
+### Can OpenMausBot's bots use DeepSeek or GLM?
+
+Yes. magpie adds a magpie engine to config.json; pick it as a bot's engine, then pick the model.
+
+### Why quit OpenMausBot first?
+
+When you change an engine in it, it writes its whole map back over magpie's change, so magpie refuses while it runs.
+
+### Will my other engines disappear?
+
+No. When the file has no engines saved, magpie writes OpenMausBot's default fleet beside its own.
+
+### How do Codex bots use magpie?
+
+OpenMausBot's Codex bots run your ~/.codex as it is, which magpie's Codex wiring already covers.
+
+More agents on the same models: [Mistral Vibe on any model](https://usemagpie.ai/docs/mistral-vibe), [Pencil on any model](https://usemagpie.ai/docs/pencil) and [Claude Desktop on any model](https://usemagpie.ai/docs/claude-desktop). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
