@@ -1760,7 +1760,9 @@ func promptRefused(status int, body []byte) bool {
 // JSON schema: OpenCode Go's 400 "JSON schema exceeds the maximum nesting
 // depth of 10 levels" on muse-spark-1.3-contributor for Claude Code's MCP
 // tools (#1870), which another member's model may take as they are; and a
-// custom tool turned away (customToolRefusal, DeepSeek's "Unsupported
+// Huawei CodeArts's HTTP 200 "The request param is invalid" over a
+// parameter it can't take, InferHub.001001005.400 (a `stop` array, #6342),
+// which the plugin now sends as a string; and a custom tool turned away (customToolRefusal, DeepSeek's "Unsupported
 // custom tool: 'exec'", #2656) where no translation took it in. A
 // request missing what every API requires ("field required") or too long
 // for the model isn't one. Google's refusal of a function declaration's
@@ -1775,7 +1777,7 @@ func promptRefused(status int, body []byte) bool {
 // the only field set." (#5374, worksyang) — a description beside an
 // anyOf, which Google's Schema takes alone, the reporter's same tools
 // another member took.
-var shapeWords = lazyre.New(`(?i)failed to deserialize|unknown (item |content |input )?(type|variant|field|parameter)|unknown_parameter|unrecognized (request argument|field|parameter)|extra (inputs|fields) are not permitted|additional properties are not allowed|schema exceeds the maximum (nesting )?depth|schema[^"]{0,60}\bnesting depth\b|function_declarations\[\d+\]\.parameters\b|schema specified other fields alongside any_?of`)
+var shapeWords = lazyre.New(`(?i)failed to deserialize|unknown (item |content |input )?(type|variant|field|parameter)|unknown_parameter|unrecognized (request argument|field|parameter)|extra (inputs|fields) are not permitted|additional properties are not allowed|schema exceeds the maximum (nesting )?depth|schema[^"]{0,60}\bnesting depth\b|function_declarations\[\d+\]\.parameters\b|schema specified other fields alongside any_?of|InferHub\.001001005\.400`)
 
 // unsaidWords are Command Code's Provider API turning a request away with
 // nothing but a trace id: {"message":"invalid request error trace_id:
