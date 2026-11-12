@@ -869,7 +869,10 @@ lifetime with `runTTLFor`:
   `caller.claudeHere`), it is this computer's, read as `claudeRunTTL`
   reads it. For a request another magpie passed on, it is what that
   magpie named in `X-Magpie-Claude-Cache-TTL` (`ClaudeCacheTTLHeader`):
-  `5m`, `1h`, or `default` for no pick. `passOnCaller` sends it on every
+  `5m`, `1h`, or `default` for no pick. Claude Desktop (`claude-desktop`)
+  with no such header is `default` too: its gateway key makes Claude Code
+  mark 5 minutes with no ttl, which says no pick (`TestClaudeDesktopRunKeepsAnHour`).
+  `passOnCaller` sends it on every
   request to a Remote magpie whose caller is Claude Code here, or that
   came with it. `callerFrom` takes it from a `magpie/` request alone, and
   `withCaller` takes it off what comes in, so no vendor is sent it.

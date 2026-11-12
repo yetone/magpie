@@ -72,6 +72,8 @@ func TestClaudeCacheTTLOf(t *testing.T) {
 		{name: "here, forced", settings: "// picked\n{\"env\":{\"FORCE_PROMPT_CACHING_5M\":\"1\"},\"promptCacheTtl\":\"1h\",}", who: caller{agent: "claude", claudeHere: true}, want: "5m"},
 		{name: "here, unreadable", settings: `{"promptCacheTtl":"5m"`, who: caller{agent: "claude", claudeHere: true}},
 		{name: "passed on", settings: `{"promptCacheTtl":"5m"}`, who: caller{agent: "claude", cacheTTL: "1h"}, want: "1h"},
+		{name: "Claude Desktop, marks with no ttl are no pick", settings: `{"promptCacheTtl":"5m"}`, who: caller{agent: "claude-desktop"}, want: "default"},
+		{name: "Claude Desktop through a magpie", who: caller{agent: "claude-desktop", cacheTTL: "5m"}, want: "5m"},
 		{name: "another agent", settings: `{"promptCacheTtl":"5m"}`, who: caller{agent: "codex"}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -185,5 +187,28 @@ func TestClaudeCacheTTLReachesTheRemoteMagpie(t *testing.T) {
 	defer mu.Unlock()
 	if len(leaked) > 0 {
 		t.Errorf("the vendor was sent magpie's headers: %v", leaked)
+	}
+}
+
+// Claude Desktop's marks carry no ttl (Claude Code takes the gateway key
+// for an API key: 5 minutes), yet its run is on a subscription: it keeps an
+// hour, as Claude Code's default is there, and a 1h mark stays 1h
+// (DIYgod on X: Desktop through magpie wrote 5-minute cache).
+func TestClaudeDesktopRunKeepsAnHour(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	t.Setenv("CLAUDE_CODE_PROMPT_CACHE_TTL", "")
+	t.Setenv("FORCE_PROMPT_CACHING_5M", "")
+	for _, c := range []struct {
+		agent, asked, want string
+	}{
+		{"claude-desktop", "5m", "1h"},
+		{"claude-desktop", "1h", "1h"},
+		{"claude-desktop", "", "1h"},
+		{"opencode", "5m", "5m"},
+	} {
+		req := &Request{askedTTL: c.asked, pickedTTL: claudeTTLOf(caller{agent: c.agent})}
+		if got := runTTLFor(req, nil); got != c.want {
+			t.Errorf("%s asking %q: %q, want %q", c.agent, c.asked, got, c.want)
+		}
 	}
 }

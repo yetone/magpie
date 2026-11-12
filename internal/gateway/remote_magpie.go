@@ -172,6 +172,15 @@ func callerFrom(r *http.Request) caller {
 // Claude Code on this computer: this computer's pick, as claudeRunTTL
 // reads it.
 func claudeTTLOf(c caller) string {
+	if c.cacheTTL == "" && c.agent == "claude-desktop" {
+		// Claude Desktop reaches magpie with a gateway key, which Claude
+		// Code takes for an API key and marks five minutes with no ttl
+		// (its docs: automatic is 1 hour on a subscription, 5 minutes on an
+		// API key), though magpie's run is on a subscription. Its marks
+		// can't say a pick, so none is read from them: the run keeps
+		// Claude Code's own default (DIYgod on X)
+		return "default"
+	}
 	if c.cacheTTL != "" || !c.claudeHere {
 		return c.cacheTTL
 	}
