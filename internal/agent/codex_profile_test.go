@@ -97,3 +97,23 @@ func TestCodexScopeWaitsForDisconnect(t *testing.T) {
 		t.Fatal("a profile was written by the default wiring")
 	}
 }
+
+// Codex routed through magpie by the base URL alone (beside its ChatGPT
+// sign-in, or for failover) reads as not wired, yet magpie keeps config.toml
+// and its list there. "applies to" moving to the profile then made magpie
+// stop looking at config.toml: its wiring stayed behind unmanaged and the
+// row read disconnected, Codex on its own list (kakzyanaba on X).
+func TestCodexScopeWaitsForBaseURLRouteToo(t *testing.T) {
+	const routed = "openai_base_url = \"http://127.0.0.1:3425/backend-api/codex\"\n"
+	home, read := codexHome(t, `{"tokens":{"access_token":"x","id_token":"x.e30.x"}}`, routed)
+	cx := codex(home)
+	if cx.Routed == nil || !cx.Routed() {
+		t.Fatal("fixture is not routed by the base URL")
+	}
+	if err := cx.Field("scope").Set("profile"); err == nil {
+		t.Fatal("scope changed while Codex is routed through magpie")
+	}
+	if codex(home).Path != filepath.Join(home, ".codex", "config.toml") || read() != routed {
+		t.Fatalf("Codex moved off config.toml:\n%s", read())
+	}
+}

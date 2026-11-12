@@ -2454,7 +2454,11 @@ func codexIn(at place) *Agent {
 			},
 		},
 	}, path, catalogPath)
-	a.Fields = append(a.Fields, codexScopeField(at, func() bool { return a.Wired() }))
+	// any hold magpie has on config.toml counts: Codex routed through the
+	// base URL beside its sign-in, or for failover alone, reads as not wired
+	// yet is managed there (switching then left config.toml's wiring behind,
+	// and Codex on its own list; kakzyanaba on X)
+	a.Fields = append(a.Fields, codexScopeField(at, func() bool { return a.Wired() || a.Routed() || a.FailingOver() }))
 	// this machine's Codex: the address its config keeps is tried (Drift),
 	// and moved to WSL's new one when that changed (#1013)
 	if at.spell == nil {
