@@ -285,6 +285,8 @@ magpie provider fallback mistral deepseek/deepseek-v4-pro</pre></div>
       <li><b>キーの確認。</b><code>magpie provider test mistral</code> は各エンドポイントに、または指定した各モデルに小さなリクエストを送ります。<code>--as codex</code> や <code>--as claude-code</code> を付けると、そのツールと同じ形で送ります。</li>
     </ul>
 
+    <p><a href="/docs/ja/groq">Groq を Claude Code・Codex などのエージェントで使う</a></p>
+
     <h2 id="faq"><a class="anchor" href="#faq">よくある質問</a></h2>
     <h3>Claude Code で Mistral を使うには？</h3>
     <p>magpie に Mistral の API キーを追加し（プロバイダ、プロバイダを追加、Mistral）、Claude Code の行で <code>mistral-large-4</code> などの Mistral モデルを選ぶか、<code>magpie claude mistral/mistral-large-4</code> を実行します。Mistral は Chat Completions しか提供していないので、magpie が Claude Code の Anthropic Messages リクエストを変換して <code>https://api.mistral.ai/v1</code> に送り、返答を戻します。思考内容も含みます。</p>

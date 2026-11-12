@@ -2936,6 +2936,8 @@ magpie provider fallback mistral deepseek/deepseek-v4-pro
 - **No Vibe card..** magpie shows the month only for a key Mistral says is a Vibe key or a Studio key, and only when its budget is more than zero.
 - **Checking a key..** `magpie provider test mistral` sends a tiny request through each endpoint, or to each model you name. Add `--as codex` or `--as claude-code` to send it the way that agent would.
 
+[Groq in Claude Code, Codex and other agents](https://usemagpie.ai/docs/groq)
+
 ## FAQ
 
 ### How do I use Mistral in Claude Code?
@@ -9625,6 +9627,80 @@ No. magpie uses Azure's v1 API, and a classic /openai/deployments/…?api-versio
 Give the gateway's address; magpie leaves it as it is. Add the headers it needs under Headers, where ${sessionId} and the like become the conversation's ids.
 
 Related: [OpenAI in Claude Code, Codex, Gemini CLI and OpenCode](https://usemagpie.ai/docs/openai), [Amazon Bedrock in Claude Code, Codex and other agents](https://usemagpie.ai/docs/bedrock). If something fails, see [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting) or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/groq
+
+# Groq in Claude Code, Codex and other agents
+
+Groq runs open models on its own LPU chips and is known for speed. It serves OpenAI's gpt-oss and other makers' open models. magpie's `groq` preset brings it to Claude Code, Codex, OpenCode and other agents: one Groq key, with the model list Groq gives.
+
+## Add it
+
+1. **Get a key..** Create an API key at console.groq.com/keys.
+2. **Add it..** Pick Groq in the app and paste the key into API key, or from the CLI:
+
+```
+magpie provider add groq 
+magpie provider test groq
+```
+
+The preset points Chat Completions and Responses at `https://api.groq.com/openai/v1`, so there is no address to type. A Groq provider set up in OpenCode or another app becomes the `groq` preset when imported.
+
+## Use it in an agent
+
+Model ids are `groq/<Groq's model id>`:
+
+```
+magpie claude groq/openai/gpt-oss-120b
+magpie codex groq/openai/gpt-oss-120b
+```
+
+Claude Code and other Anthropic agents have their requests translated by magpie to Chat Completions for Groq: Groq's Chat API reports its cache, so Usage shows what was read from it.
+
+Most of Groq's models are other makers', and models.dev lists them under Groq, so magpie doesn't take Groq's list as a maker's word on theirs.
+
+## Rate limits and context
+
+- Groq's 429 names the model it limits (for model `…`). magpie rests that model on that key alone and asks the other models straight; a 429 that names no model rests the key whole.
+- When Groq says "reduce the length of the messages", magpie reads it as an overflow and gives the agent the error it knows (OpenAI's `context_length_exceeded`, say), so the agent compacts instead of asking again.
+- Groq turns away a field it doesn't take with a 400 saying "unsupported". For a field magpie adds, such as its cache key, magpie asks again without it and doesn't send it to Groq again.
+
+## Speech to text and text to speech
+
+The gateway's `/v1/audio/transcriptions` and `/v1/audio/speech` take Groq too: the form and the audio go to Groq as sent, with only the model set to Groq's own id, and the answer comes back in Groq's own format. Text to speech works the same way, with model `groq/playai-tts`.
+
+```
+curl http://127.0.0.1:3425/v1/audio/transcriptions \
+  -H 'Authorization: Bearer magpie' \
+  -F model=groq/whisper-large-v3 -F file=@meeting.m4a
+```
+
+## Notes
+
+- Groq takes its turn in a routing group like any provider: when it fails, the group's next member answers.
+- When one key isn't enough, add another as a second account of the same provider.
+
+## FAQ
+
+### Does magpie support Groq?
+
+Yes, with the groq preset. Give a Groq API key; Chat Completions and Responses are set, the models come from Groq's list, and a model id is groq/.
+
+### Can Claude Code use Groq's models?
+
+Yes. magpie translates Claude Code's Anthropic requests to Chat Completions for Groq, whose Chat API reports its cache, so Usage shows it.
+
+### What happens when Groq rate-limits me?
+
+When Groq's 429 names the model, magpie rests only that model on that key and the others go on; in a routing group with other providers, the request goes to the next one.
+
+### Can I use Groq's Whisper?
+
+Yes. Send an OpenAI-style form to magpie's /v1/audio/transcriptions with model groq/whisper-large-v3; text to speech goes to /v1/audio/speech.
+
+Related: [Mistral in Claude Code, Codex, Gemini CLI and OpenCode](https://usemagpie.ai/docs/mistral), [OpenAI in Claude Code, Codex, Gemini CLI and OpenCode](https://usemagpie.ai/docs/openai). If something fails, see [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting) or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 

@@ -285,6 +285,8 @@ magpie provider fallback mistral deepseek/deepseek-v4-pro</pre></div>
       <li><b>检查 Key。</b><code>magpie provider test mistral</code> 会向每个接口发一个很小的请求，或者发给你指定的每个模型。加上 <code>--as codex</code> 或 <code>--as claude-code</code>，就按那个工具的方式发送。</li>
     </ul>
 
+    <p><a href="/docs/zh/groq">Groq 接入 Claude Code、Codex 等 Agent</a></p>
+
     <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
     <h3>怎么在 Claude Code 里用 Mistral？</h3>
     <p>在 magpie 里添加 Mistral API Key（供应商、添加供应商、Mistral），然后在 Claude Code 那一行选一个 Mistral 模型，比如 <code>mistral-large-4</code>，或者运行 <code>magpie claude mistral/mistral-large-4</code>。Mistral 只提供 Chat Completions 接口，所以 magpie 把 Claude Code 的 Anthropic Messages 请求转换后发到 <code>https://api.mistral.ai/v1</code>，再把回复转换回来，思考内容也一样。</p>
