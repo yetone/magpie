@@ -568,7 +568,11 @@ func adaptiveThinking(body []byte) []byte {
 		thinking["display"] = d.Value()
 	}
 	fields := map[string]any{"thinking": thinking}
-	if gjson.GetBytes(body, "output_config.effort").String() == "" {
+	// a level a turn's message carries is the one asked: a top-level effort
+	// made of the budget would be read first by the next magpie, and by
+	// parseAnthropicRequest, over it (a High asked as 31999 went on as max;
+	// DIYgod on X)
+	if gjson.GetBytes(body, "output_config.effort").String() == "" && turnEffort(body) == "" {
 		if e := effortOfBudget(int(th.Get("budget_tokens").Int())); e != "" {
 			if e == "xhigh" {
 				e = "max" // a budget can't tell xhigh from max (budgetOf), and 4.6 has no xhigh
@@ -668,7 +672,7 @@ func thinkingOffAsTaken(body []byte, path string) []byte {
 		model = path
 	}
 	rule := thinkingOffOf(model)
-	effort := gjson.GetBytes(body, "output_config.effort").String()
+	effort := outputConfigEffort(body) // a turn's own level counts too
 	aboveHigh := effort == "xhigh" || effort == "max"
 	var thinking map[string]any // nil: left out
 	effortTo := ""
@@ -752,8 +756,11 @@ func withBetweenTools(body []byte) ([]byte, bool) {
 		return nil, false
 	}
 	fields := map[string]any{"thinking": map[string]any{"type": "between_tools"}}
-	if e := gjson.GetBytes(body, "output_config.effort").String(); e == "xhigh" || e == "max" {
+	if e := outputConfigEffort(body); e == "xhigh" || e == "max" {
 		oc, _ := gjson.GetBytes(body, "output_config").Value().(map[string]any)
+		if oc == nil {
+			oc = map[string]any{}
+		}
 		oc["effort"] = "high"
 		fields["output_config"] = oc
 	}
