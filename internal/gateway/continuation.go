@@ -680,7 +680,7 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 					if cut || relooped {
 						return errStreamCut
 					}
-					if actual == provider.Chat && strings.TrimSpace(data) == "[DONE]" {
+					if saidOver(actual, data) {
 						// the upstream's own end: what the reply has is
 						// whole, hold or not (#5936)
 						return errDoneSaid
@@ -834,4 +834,23 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 		enc.event(Event{Kind: KError, Text: failed, Code: failedCode})
 	}
 	return 200, failed
+}
+
+// saidOver reports whether an upstream event is its protocol's own last
+// word on a reply that went well: Chat's [DONE], Anthropic's message_stop,
+// Responses' completed, incomplete or failed. A relay that holds the
+// connection after it must not hold the translated reply's end (#5936).
+func saidOver(proto provider.Protocol, data string) bool {
+	switch proto {
+	case provider.Chat:
+		return strings.TrimSpace(data) == "[DONE]"
+	case provider.Anthropic:
+		return eventType(data) == "message_stop"
+	case provider.Responses:
+		switch eventType(data) {
+		case "response.completed", "response.incomplete", "response.failed":
+			return true
+		}
+	}
+	return false
 }

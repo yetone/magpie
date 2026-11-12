@@ -871,3 +871,76 @@ func TestChatDoneEndsTranslatedReply(t *testing.T) {
 		t.Errorf("completed's usage = %v, want 9 in and 4 out", usage)
 	}
 }
+
+// holdAfter is an upstream that streams the given events whole and then
+// holds the connection (#5936's siblings: Anthropic's message_stop and a
+// Responses upstream's response.completed).
+func holdAfter(t *testing.T, events ...string) *httptest.Server {
+	t.Helper()
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		for _, e := range events {
+			io.WriteString(w, e+"\n\n")
+		}
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	}))
+	t.Cleanup(up.Close)
+	return up
+}
+
+func endsWhileHeld(t *testing.T, p provider.Provider, path, body, want string) {
+	t.Helper()
+	if err := provider.Save(p); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(New().Handler())
+	t.Cleanup(srv.Close)
+	res, err := http.Post(srv.URL+path, "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	got := make(chan bool, 1)
+	go func() {
+		sc := bufio.NewScanner(res.Body)
+		for sc.Scan() {
+			if strings.Contains(sc.Text(), want) {
+				got <- true
+				return
+			}
+		}
+		got <- false
+	}()
+	select {
+	case ok := <-got:
+		if !ok {
+			t.Fatalf("the reply closed without %q", want)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("no %q while the upstream holds its connection", want)
+	}
+}
+
+func TestAnthropicStopEndsTranslatedReply(t *testing.T) {
+	fresh(t)
+	up := holdAfter(t,
+		`data: {"type":"message_start","message":{"id":"m","model":"c","usage":{"input_tokens":3}}}`,
+		`data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`,
+		`data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hello"}}`,
+		`data: {"type":"content_block_stop","index":0}`,
+		`data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2}}`,
+		`data: {"type":"message_stop"}`)
+	endsWhileHeld(t, provider.Provider{ID: "up", Name: "UP", Key: "k", Models: []string{"c"}, Anthropic: up.URL + "/v1"},
+		"/v1/responses", `{"model":"up/c","stream":true,"input":[{"role":"user","content":"hi"}]}`, "response.completed")
+}
+
+func TestResponsesCompletedEndsTranslatedReply(t *testing.T) {
+	fresh(t)
+	up := holdAfter(t,
+		`data: {"type":"response.output_text.delta","delta":"hello"}`,
+		`data: {"type":"response.completed","response":{"id":"r","status":"completed","output":[],"usage":{"input_tokens":3,"output_tokens":2}}}`)
+	endsWhileHeld(t, provider.Provider{ID: "up", Name: "UP", Key: "k", Models: []string{"c"}, Responses: up.URL + "/v1"},
+		"/v1/chat/completions", `{"model":"up/c","stream":true,"messages":[{"role":"user","content":"hi"}]}`, "[DONE]")
+}
