@@ -144,3 +144,21 @@ func TestDayTalliesCountARateLimitAsOne(t *testing.T) {
 		t.Errorf("tallied %v, want 1 rate and 2 quota", a.Fails)
 	}
 }
+
+// Two seats of one email on different plans are two accounts in the day's
+// tallies, as the Routing page's list keys them (RayYanOnline on X); a
+// seat with no plan keeps the two-part key.
+func TestTallyKeyTellsPlansApart(t *testing.T) {
+	seat := func(plan string) Weighed {
+		return Weighed{ID: "codex", Provider: "codex", Kind: "account", Who: "Jd@Example.com", Plan: plan}
+	}
+	if a, b := tallyKey(seat("team")), tallyKey(seat("prolite")); a == b {
+		t.Errorf("a Team seat and a Pro Lite login share the key %s", a)
+	}
+	if got, want := tallyKey(seat("")), `["codex","jd@example.com"]`; got != want {
+		t.Errorf("a seat with no plan: %s, want %s", got, want)
+	}
+	if got, want := tallyKey(seat(" Team ")), `["codex","jd@example.com","team"]`; got != want {
+		t.Errorf("a plan: %s, want %s", got, want)
+	}
+}
