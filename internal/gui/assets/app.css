@@ -5289,3 +5289,11 @@ body .row.agent .ag-prefs .row.pref .who { display: block; }
 .server-pin .hint.err { color: var(--red); overflow-wrap: anywhere; }
 .server-pin .pin-acts { display: flex; flex-wrap: wrap; gap: 12px; }
 .server-pin .pin-peek.busy { pointer-events: none; opacity: .6; }
+/* WebKitGTK draws without accelerated compositing (webkit_linux.go), so a
+   backdrop blur is redone by the CPU for its whole box on every frame: a
+   full-window modal took 25ms a frame where the same page took 16ms with none
+   (lagging scroll, Lsheng2012 on X, KDE). Each of these grounds is 92% opaque
+   or a dim, so the blur is barely seen; the Linux app draws without it. */
+body.linux .modal, body.linux .pop, body.linux.panel .profiles.open,
+body.linux:not(.side-nav) #view-settings .set-head::before,
+body.linux .action-confirm::backdrop { -webkit-backdrop-filter: none; backdrop-filter: none; }
