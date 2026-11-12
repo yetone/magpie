@@ -8022,7 +8022,93 @@ Yes. Claude Science doesn't take API keys and needs a Claude sign-in, which magp
 
 Claude Science lists only ids that start with claude-, so magpie lists each model as claude-magpie-, named as its Agents page names it.
 
-More agents on the same models: [Claude Desktop on any model](https://usemagpie.ai/docs/claude-desktop), [mu on any model](https://usemagpie.ai/docs/mu) and [Mister Morph on any model](https://usemagpie.ai/docs/mister-morph). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Claude Desktop on any model](https://usemagpie.ai/docs/claude-desktop), [mu on any model](https://usemagpie.ai/docs/mu), [Mister Morph on any model](https://usemagpie.ai/docs/mister-morph) and [VS Code on any model](https://usemagpie.ai/docs/vscode). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/vscode
+
+# VS Code on any model
+
+VS Code's own Chat (GitHub Copilot Chat) has a Custom Endpoint provider since VS Code Stable 1.122, which takes other vendors' models with no GitHub sign-in or Copilot plan. Its groups of models are in `chatLanguageModels.json` beside `settings.json`, a file VS Code watches and reads again when it changes. magpie adds a group of its own there, and VS Code's Chat runs on any model in magpie: DeepSeek, GLM, Kimi, Qwen, Claude or a ChatGPT subscription.
+
+## Set up VS Code
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Pick a model for VS Code on the Agents page.** Pick one via magpie.
+3. **Pick the model in VS Code's Chat.** magpie's models are in Chat's model picker, under magpie. If they don't show, run Developer: Reload Window in VS Code.
+
+## chatLanguageModels.json
+
+magpie writes a group `{"vendor": "customendpoint", "name": "magpie"}` listing magpie's catalog: each model at the gateway's `/v1/chat/completions`, with tool calling on, as agent mode lists only models that call tools.
+
+```
+// chatLanguageModels.json (beside settings.json)
+[
+  {
+    "name": "magpie",
+    "vendor": "customendpoint",
+    "apiType": "chat-completions",
+    "models": [
+      {
+        "id": "deepseek/deepseek-v4-pro",
+        "name": "…",
+        "url": "http://127.0.0.1:3425/v1/chat/completions",
+        "toolCalling": true,
+        "vision": …,
+        "contextWindow": …,
+        "maxOutputTokens": …,
+        "requestHeaders": { "Authorization": "Bearer " }
+      }
+    ]
+  }
+]
+```
+
+A group's apiKey can't be written in the file: VS Code reads it from its secret storage alone. So each model sends magpie's token as the Authorization in `requestHeaders`, which a Custom Endpoint model takes in place of the key, and VS Code asks you for none. Groups of your own stay as they are.
+
+## A new chat's model
+
+The model a new chat starts on is the `chat.defaultModel` setting, which magpie sets to the catalog id. A model picked in Chat's model picker is kept in VS Code's storage, not there.
+
+```
+// settings.json
+"chat.defaultModel": "deepseek/deepseek-v4-pro"
+```
+
+## Profiles and Insiders
+
+The default profile's chatLanguageModels.json is in its User folder, and each other profile has its own. magpie writes its group in every profile, and in one made later too. VS Code Insiders has its own User folder and its own row, and is set up the same way. A portable VS Code keeps its files in its data folder, where magpie finds them.
+
+## VSCodium
+
+VSCodium has no Copilot Chat of its own; its users install the Marketplace's, whose last release (0.48.1) has no Custom Endpoint but an OpenAI Compatible provider (customoai). magpie writes for whichever the installed extension's package.json declares. The OpenAI Compatible one takes the same group in the same file, with magpie's token in `x-api-key`, as it drops an Authorization in requestHeaders. It shows its providers only while Copilot Chat is signed in to GitHub with a personal Copilot plan.
+
+VSCodium's Chat features must also be on (`chat.disableAIFeatures=false`), and its product.json must have defaultChatAgent and trustedExtensionAuthAccess for GitHub.copilot-chat; then run Developer: Reload Window. The Agents page says so.
+
+## Switching back
+
+Picking one of VS Code's own models for it in magpie, such as Copilot's Auto, sets chat.defaultModel to it, puts the other profiles back on theirs, and leaves magpie's group in Chat's picker. Switching VS Code off in magpie puts back each profile's chat.defaultModel and takes the group out.
+
+## FAQ
+
+### Can VS Code's Chat use DeepSeek or GLM without a Copilot plan?
+
+Yes. The Custom Endpoint provider, since VS Code 1.122, needs no GitHub sign-in or Copilot plan, and magpie writes its group in chatLanguageModels.json.
+
+### Why don't magpie's models show in Chat?
+
+It takes VS Code 1.122 or later. On that, run Developer: Reload Window in VS Code.
+
+### Where does magpie's key go?
+
+VS Code reads an apiKey only from its secret storage, so magpie puts its token in each model's requestHeaders, and VS Code asks you for no key.
+
+### Does VSCodium work?
+
+Yes, with the Marketplace's Copilot Chat, whose OpenAI Compatible provider shows only while it is signed in to GitHub with a personal Copilot plan.
+
+More agents on the same models: [Claude Science on any model](https://usemagpie.ai/docs/claude-science), [Claude Desktop on any model](https://usemagpie.ai/docs/claude-desktop) and [mu on any model](https://usemagpie.ai/docs/mu). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
