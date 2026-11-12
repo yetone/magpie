@@ -257,6 +257,8 @@
     <h2 id="tools"><a class="anchor" href="#tools">Other tools</a></h2>
     <p>Any tool with a base-URL setting can use a subscription through the gateway too. The <span class="ui">Gateway</span> tab’s <span class="ui">Connect</span> section has the address and key to copy. The base URL is <code>http://127.0.0.1:3425/v1</code> for an OpenAI client and <code>http://127.0.0.1:3425</code> for an Anthropic or Gemini one. See <a href="/docs/integrate">Integrate your app</a>.</p>
 
+    <p>Several accounts or keys can share the load and stand in for each other. See <a href="/docs/routing-groups">Round robin and failover across accounts, keys and providers</a>.</p>
+
     <h2 id="faq"><a class="anchor" href="#faq">FAQ</a></h2>
     <h3>Can I use my ChatGPT Plus or Pro subscription in Claude Code?</h3>
     <p>Yes. Sign in to ChatGPT in magpie and pick a <code>codex/…</code> model on Claude Code’s row, or run <code>magpie claude codex/gpt-5.5</code>. magpie translates Claude Code’s Anthropic requests for the GPT model and the replies back, tool calls included. The whole setup, tiers and effort included, is in <a href="/docs/claude-code-chatgpt">ChatGPT in Claude Code</a>.</p>

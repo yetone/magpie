@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>多个账号、API Key 和供应商轮询与故障切换：Claude Code、Codex 的负载均衡 · magpie 路由组</title>
+<meta name="description" content="在 magpie 里给一个供应商加多个账号或 API Key，或把多个供应商的同一模型放进路由组：按顺序、轮流、用量少的优先、按权重、免费优先等路由方式，额度用完、被限流或出错时自动换下一个，会话保持让提示缓存不失效。Claude Code、Codex 等 Agent 选 group/<id> 即可。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/routing-groups">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/routing-groups">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/routing-groups">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/routing-groups">
+<link rel="canonical" href="https://usemagpie.ai/docs/zh/routing-groups">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="多个账号、Key 和供应商轮询与故障切换">
+<meta property="og:description" content="在 magpie 里给一个供应商加多个账号或 API Key，或把多个供应商的同一模型放进路由组：按顺序、轮流、用量少的优先、按权重、免费优先等路由方式，额度用完、被限流或出错时自动换下一个，会话保持让提示缓存不失效。Claude Code、Codex 等 Agent 选 group/<id> 即可。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/zh/routing-groups">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "多个账号、Key 和供应商轮询与故障切换",
+   "description": "在 magpie 里给一个供应商加多个账号或 API Key，或把多个供应商的同一模型放进路由组：按顺序、轮流、用量少的优先、按权重、免费优先等路由方式，额度用完、被限流或出错时自动换下一个，会话保持让提示缓存不失效。Claude Code、Codex 等 Agent 选 group/<id> 即可。",
+   "inLanguage": "zh-CN",
+   "url": "https://usemagpie.ai/docs/zh/routing-groups",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "多个 Claude 账号能轮流用吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。把账号都加到同一个 Claude 订阅里，编辑页出现 路由 后选 轮流 或 用量少的优先；一个额度用完时请求自动交给下一个。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "API Key 被限流（429）时会怎样？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "被限流的 Key 休息到供应商要求的时间，请求交给同一供应商的其他 Key；选 排到最后 则让它排到队尾，负载轮转。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "DeepSeek 挂了能自动换别的模型吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。建一个路由组，把 DeepSeek 和备用模型按顺序放进去，路由方式选 按顺序，Agent 选 group/<id>。回复开始前上游出错就换下一个。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "切换账号会让提示缓存失效吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "会话保持 默认 自动：缓存还值得保留时对话留在原账号，一轮之内总是留下，所以轮转不会每个请求都丢缓存。"
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/zh/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "文档",
+     "item": "https://usemagpie.ai/docs/zh/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "多个账号、Key 和供应商轮询与故障切换",
+     "item": "https://usemagpie.ai/docs/zh/routing-groups"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/zh/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>文档</small></a>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/start">快速上手</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a class="toc-only" href="/docs/zh/remote">远程 magpie</a>
+    <a class="toc-only" href="/docs/zh/docker">Docker</a>
+    <a class="toc-only" href="/docs/zh/privacy">隐私</a>
+    <a class="toc-only" href="/docs/zh/masking">本地脱敏</a>
+    <a class="toc-only" href="/docs/zh/mcp-router">MCP 路由</a>
+    <a class="toc-only" href="/docs/zh/library">资源库</a>
+    <a class="toc-only" href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a class="toc-only" href="/docs/zh/local-models">本地模型</a>
+    <a class="toc-only" href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="语言" title="语言" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/routing-groups" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/routing-groups" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/routing-groups" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">下载</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>Routing groups</p>
+    <a href="#overview">两层路由</a>
+    <a href="#keys">一个供应商的多个账号或 Key</a>
+    <a href="#routing">路由方式</a>
+    <a href="#stays">会话保持</a>
+    <a href="#groups">路由组</a>
+    <a href="#cli">命令行</a>
+    <a href="#templates">现成的组</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">文档 · 指南</p>
+    <h1>多个账号、Key 和供应商轮询与故障切换</h1>
+    <p class="lede">一个 Claude 订阅不够用、一个 API Key 老被限流，或者想让 DeepSeek 挂了时自动换到别家？magpie 在两层上路由请求：一个供应商的多个账号或 Key 之间，以及多个供应商、多个模型组成的路由组之间。回复还没开始发给 Agent 时上游出错，magpie 就换下一个候选，Agent 不会察觉。</p>
+    <h2 id="keys"><a class="anchor" href="#keys">一个供应商的多个账号或 Key</a></h2>
+    <p>给同一个供应商加上第二个账号或第二个 Key 并打开后，它的编辑页会多出 <span class="ui">路由</span> 和 <span class="ui">会话保持</span> 两项，决定请求在这些账号或 Key 之间怎么分。</p>
+    <p>被限流（429）但还有额度的那个怎么办，也可以选：<span class="ui">保持原位</span>：休息到供应商要求的时间，再回到原来的位置；<span class="ui">排到最后</span>：排到所有没被限流的后面，让负载轮转起来，而不是每次都回到第一个。</p>
+    <h2 id="routing"><a class="anchor" href="#routing">路由方式</a></h2>
+    <ul><li><b><span class="ui">智能</span></b>（默认）：第一个在额度充足时接请求，额度快用完时由剩得最多的接手。没余额的歇半小时，额度用完的歇到重置，被限流的歇到供应商要求的时间，出错的歇一分钟，再错就更久。</li><li><b><span class="ui">按顺序</span></b>：请求都发给第一个，它额度用完、被限流或出错时由下一个接手。</li><li><b><span class="ui">轮流</span></b>：会话的每一轮交给下一个，均摊负载；一轮之内的请求留在开始的地方，提示缓存不失效。</li><li><b><span class="ui">用量少的优先</span></b>：订阅按已用额度的比例，Key 按最近几小时用掉的 token。</li><li><b><span class="ui">重置前用完</span></b>：交给本周剩余额度按小时算最多的订阅，让每周重置时浪费得最少；用到 90% 以上的，等别的都答不了才用。</li><li><b><span class="ui">按权重</span></b>：按每个 Key 旁边设的权重分，权重 3 的接 3 个请求，权重 1 的接 1 个。只有 Key 能用，账号不行。</li><li><b><span class="ui">免费优先</span></b>：先用不占额度、不花钱的模型，它们答不了时才用花钱的。</li></ul>
+    <h2 id="stays"><a class="anchor" href="#stays">会话保持</a></h2>
+    <p><span class="ui">会话保持</span> 决定一段对话是否留在答过它的那个账号或 Key 上：</p>
+    <ul><li><b><span class="ui">自动</span></b>（默认）：在供应商为它缓存的内容还值得保留时留下，一轮之内总是留下。</li><li><b><span class="ui">整个会话</span></b>：整个会话都留在那里，只要它还能答。</li><li><b><span class="ui">一轮之内</span></b>：Agent 发回工具结果时不动，你再说话时重新路由。</li><li><b><span class="ui">关闭</span></b>：每个请求都重新路由。</li><li><b><span class="ui">严格</span></b>：永远不换，哪怕它被限流或额度用完，错误直接交给 Agent。新会话照常路由。</li></ul>
+    <h2 id="groups"><a class="anchor" href="#groups">路由组</a></h2>
+    <p>路由组把不同供应商的模型放在一起，比如官方 Claude 订阅里的 Opus 和 Copilot 里的 Opus，或者几个免费模型。Agent 选 <code>group/&lt;id&gt;</code> 作为模型，magpie 按组的路由方式和规则决定每个请求交给谁。组在 <span class="ui">路由</span> 页的 <span class="ui">路由组</span> 里，用 <span class="ui">新建组</span> 创建。</p>
+    <ol class="steps">
+      <li><b>magpie 自己会找组</b>两个及以上供应商都提供的模型，自动成为一个组（auto-&lt;模型&gt;），不用设置。不想要可以关掉 <span class="ui">自动创建路由组</span>。</li>
+      <li><b>组里放什么</b>任意模型，用 provider/model 写；也可以放另一个组（最多 8 层），或者用通配符：<code>openrouter/*:free</code> 会把以后新出的免费模型也加进来。</li>
+      <li><b>组的路由方式</b>除了上面几种，组还有 <span class="ui">按权重</span>（按每个模型的权重）和 <span class="ui">手动</span>（只用你选的那个，不切换）。</li>
+      <li><b>规则</b>可以按一轮的长度、是否带图、要求的推理强度或 Agent，决定一轮先交给哪个模型。</li>
+    </ol>
+    <p>组还能定推理强度：每个成员可以写死 <code>:high</code> 这类强度；或者让分类模型在每轮开始时判断难度，再决定 low 到 xhigh。</p>
+    <h2 id="cli"><a class="anchor" href="#cli">命令行</a></h2>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="rg-cli">复制</button><pre id="rg-cli">magpie groups                       # yours, then those magpie found
+magpie group add "Opus anywhere" models=claude/claude-opus-5-5,copilot/claude-opus-5.5 routing=order
+magpie group set opus-anywhere stays=session models+=openrouter/anthropic/claude-opus-5.5
+magpie group set opus-anywhere routing=weight weight=claude/claude-opus-5-5=3
+magpie group add my-free-pool models='openrouter/*:free,opencode-zen/*-free' routing=order
+magpie group pick opus-anywhere copilot/claude-opus-5.5
+magpie claude group/opus-anywhere</pre></div>
+    <p>路由方式写法：smart、order、rotate、usage、pace、weight、manual；会话保持写法：auto、session、turn、off、strict。<code>magpie group help</code> 列出全部字段。</p>
+    <h2 id="templates"><a class="anchor" href="#templates">现成的组</a></h2>
+    <p><code>magpie group template</code> 用你自己的模型一次建好常用的组：</p>
+    <ul><li><b>smart</b>：难的一轮给最强的模型，简单的给便宜的，由分类模型区分。</li><li><b>thrifty</b>：先用便宜模型，要高推理或便宜的都失败时才用最强的。</li><li><b>steady</b>：最多三个供应商各自最强的模型，一个接一个兜底。</li></ul>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="rg-tpl">复制</button><pre id="rg-tpl">magpie group template            # lists smart, thrifty, steady and the models each would take
+magpie group template steady</pre></div>
+
+    <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
+    <h3>多个 Claude 账号能轮流用吗？</h3>
+    <p>能。把账号都加到同一个 Claude 订阅里，编辑页出现 路由 后选 轮流 或 用量少的优先；一个额度用完时请求自动交给下一个。</p>
+    <h3>API Key 被限流（429）时会怎样？</h3>
+    <p>被限流的 Key 休息到供应商要求的时间，请求交给同一供应商的其他 Key；选 排到最后 则让它排到队尾，负载轮转。</p>
+    <h3>DeepSeek 挂了能自动换别的模型吗？</h3>
+    <p>能。建一个路由组，把 DeepSeek 和备用模型按顺序放进去，路由方式选 按顺序，Agent 选 group/<id>。回复开始前上游出错就换下一个。</p>
+    <h3>切换账号会让提示缓存失效吗？</h3>
+    <p>会话保持 默认 自动：缓存还值得保留时对话留在原账号，一轮之内总是留下，所以轮转不会每个请求都丢缓存。</p>
+
+    <p style="margin-top:48px">相关页面：<a href="/docs/zh/subscriptions">在任意 Agent 中使用 Claude Pro/Max、ChatGPT Plus/Pro、GitHub Copilot 订阅</a>。遇到报错？见 <a href="/docs/zh/troubleshooting">常见错误排查：401、429、502、504 等</a>，或到 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 提问。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a href="/docs/zh/remote">远程 magpie</a>
+    <a href="/docs/zh/docker">Docker</a>
+    <a href="/docs/zh/privacy">隐私</a>
+    <a href="/docs/zh/masking">本地脱敏</a>
+    <a href="/docs/zh/mcp-router">MCP 路由</a>
+    <a href="/docs/zh/library">资源库</a>
+    <a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a href="/docs/zh/local-models">本地模型</a>
+    <a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/zh/contributors">贡献墙</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "已复制"; setTimeout(() => (b.textContent = "复制"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

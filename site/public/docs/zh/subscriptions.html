@@ -257,6 +257,8 @@
     <h2 id="tools"><a class="anchor" href="#tools">其他工具</a></h2>
     <p>任何能设置 base URL 的工具，也能通过网关用订阅。<span class="ui">网关</span> 标签页的 <span class="ui">接入</span> 部分有地址和 Key 可以直接复制。OpenAI 客户端的 base URL 是 <code>http://127.0.0.1:3425/v1</code>，Anthropic 或 Gemini 客户端是 <code>http://127.0.0.1:3425</code>。见 <a href="/docs/zh/integrate">接入你的应用</a>。</p>
 
+    <p>多个账号或 Key 可以分担负载、互相兜底，见 <a href="/docs/zh/routing-groups">多个账号、Key 和供应商轮询与故障切换</a>。</p>
+
     <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
     <h3>Claude Code 能用 ChatGPT Plus 或 Pro 订阅吗？</h3>
     <p>能。在 magpie 里登录 ChatGPT，在 Claude Code 那一行选一个 <code>codex/…</code> 模型，或者运行 <code>magpie claude codex/gpt-5.5</code>。magpie 把 Claude Code 的 Anthropic 请求转成 GPT 模型的格式，再把回复转回来，工具调用也包括在内。分档、推理强度等完整设置见 <a href="/docs/zh/claude-code-chatgpt">Claude Code 用 ChatGPT</a>。</p>

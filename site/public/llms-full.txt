@@ -766,6 +766,8 @@ The routing modes are in [Get started](https://usemagpie.ai/docs/start#routing).
 
 Any tool with a base-URL setting can use a subscription through the gateway too. The Gateway tab’s Connect section has the address and key to copy. The base URL is `http://127.0.0.1:3425/v1` for an OpenAI client and `http://127.0.0.1:3425` for an Anthropic or Gemini one. See [Integrate your app](https://usemagpie.ai/docs/integrate).
 
+Several accounts or keys can share the load and stand in for each other. See [Round robin and failover across accounts, keys and providers](https://usemagpie.ai/docs/routing-groups).
+
 ## FAQ
 
 ### Can I use my ChatGPT Plus or Pro subscription in Claude Code?
@@ -8979,6 +8981,98 @@ It uses the chosen service's allowance: a provider that searches spends its quot
 Yes. Add /mcp/magpie/web-search to Cursor as an MCP server (Streamable HTTP), and it gets the web_search and web_fetch tools.
 
 Related: [DeepSeek in Claude Code, Codex, Gemini CLI and OpenCode](https://usemagpie.ai/docs/deepseek) and [When an agent stops going through magpie](https://usemagpie.ai/docs/agent-drift). Something fails? See [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/routing-groups
+
+# Round robin and failover across accounts, keys and providers
+
+One Claude subscription isn't enough, one API key keeps getting rate limited, or you want another vendor to take over when DeepSeek is down? magpie routes requests at two levels: between a provider's accounts or keys, and between the providers and models in a routing group. When an upstream fails before any of the reply is sent to the agent, magpie moves to the next candidate, and the agent never knows.
+
+## Several accounts or keys
+
+Once a provider has a second account or key switched on, its editor gets Routing and Stays, which decide how requests go between them.
+
+You can also choose what one rate limited (429) while it still has quota does: Keeps its place rests as long as the vendor asks, then takes its place again; Goes to the back goes behind every one not rate limited since, so the load goes round rather than back to the first each time.
+
+## Routings
+
+- **Smart.** (default): the first takes requests while it has quota to spare; when it runs low, the one with the most left takes over. One out of credit sits out half an hour, one out of quota until it resets, one rate limited as long as the vendor asks, and one that fails a minute, longer each time it fails again.
+- **In order.** : requests go to the first; the next takes over when the one before runs out of quota, hits a rate limit or fails.
+- **In turn.** : each turn of a conversation goes to the next one, spreading the load; the requests within a turn stay where it began, so the prompt cache holds.
+- **Least used first.** : a subscription by the share of its allowance used, a key by the tokens it served in the last hours.
+- **Weekly pace.** : the subscription with the most of its week left per hour until it renews, so less of each week is lost at its reset; one at 90% or more waits until the others can't answer.
+- **By weight.** : by the weight beside each key; a key weighing 3 takes three requests for every one a key weighing 1 takes. Keys only, not accounts.
+- **Free first.** : what costs nothing first, and only when those can't answer one that spends.
+
+## Stays
+
+Stays decides whether a conversation stays with the account or key that answered it:
+
+- **Auto.** (default): while what the vendor cached of it is worth keeping; within a turn always.
+- **Session.** : for the whole session, while it can answer.
+- **Within a turn.** : stays put while the agent sends tool results back; routed afresh when you speak again.
+- **Off.** : every request routed afresh.
+- **Strict.** : never moved, even rate limited or out of quota; the error goes to the agent. New conversations are routed as usual.
+
+## Routing groups
+
+A routing group puts models from different providers together: Opus from a Claude subscription and from Copilot, say, or several free models. An agent picks `group/<id>` as its model, and magpie sends each request as the group's routing and rules say. Groups are under Routing groups on the Routing page; New group makes one.
+
+1. **magpie finds groups by itself.** A model two or more of your providers serve becomes a group of them (auto-<model>), with nothing to set. Switch off Find groups on their own if you don't want them.
+2. **What goes in.** Any model as provider/model, another group (up to 8 deep), or a pattern: `openrouter/*:free` takes in free models the vendor adds later too.
+3. **A group's routing.** Besides the ones above, a group can go By weight (each model's weight) or Manual (only the model you pick, with no failover).
+4. **Rules.** Which model a turn goes to first, by its length, an image, the reasoning asked for or the agent.
+
+A group can set reasoning too: a member can be fixed at `:high` and the like, or a classifier rates each turn as it begins and picks low to xhigh.
+
+## CLI
+
+```
+magpie groups                       # yours, then those magpie found
+magpie group add "Opus anywhere" models=claude/claude-opus-5-5,copilot/claude-opus-5.5 routing=order
+magpie group set opus-anywhere stays=session models+=openrouter/anthropic/claude-opus-5.5
+magpie group set opus-anywhere routing=weight weight=claude/claude-opus-5-5=3
+magpie group add my-free-pool models='openrouter/*:free,opencode-zen/*-free' routing=order
+magpie group pick opus-anywhere copilot/claude-opus-5.5
+magpie claude group/opus-anywhere
+```
+
+Routings: smart, order, rotate, usage, pace, weight, manual. Stays: auto, session, turn, off, strict. `magpie group help` lists every field.
+
+## Ready-made groups
+
+`magpie group template` makes a group for a common need from your own models in one go:
+
+- **smart.** : hard turns to the strongest model, easy ones to a cheap one, a classifier telling them apart.
+- **thrifty.** : a cheap model first, the strongest for high reasoning or when the cheap ones fail.
+- **steady.** : the strongest model of each of up to three providers, each behind the other.
+
+```
+magpie group template            # lists smart, thrifty, steady and the models each would take
+magpie group template steady
+```
+
+## FAQ
+
+### Can I use several Claude accounts in turn?
+
+Yes. Add them to the same Claude subscription; once Routing shows in its editor, pick In turn or Least used first. When one runs out, requests go to the next.
+
+### What happens when an API key is rate limited (429)?
+
+It rests as long as the vendor asks and requests go to the provider's other keys; with Goes to the back it goes behind the others, so the load goes round.
+
+### Can another model take over when DeepSeek is down?
+
+Yes. Make a routing group with DeepSeek and a fallback in order, routing In order, and pick group/ in the agent. An upstream that fails before the reply starts gives way to the next.
+
+### Does switching accounts lose the prompt cache?
+
+Stays is Auto by default: a conversation stays with its account while the cache is worth keeping, and always within a turn, so rotating doesn't lose the cache on every request.
+
+Related: [Use your Claude Pro/Max, ChatGPT Plus/Pro or GitHub Copilot subscription in any coding agent](https://usemagpie.ai/docs/subscriptions). Something fails? See [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 

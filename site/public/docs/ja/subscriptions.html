@@ -257,6 +257,8 @@
     <h2 id="tools"><a class="anchor" href="#tools">その他のツール</a></h2>
     <p>ベース URL を設定できるツールなら、ゲートウェイ経由でサブスクリプションを使えます。<span class="ui">Gateway</span> タブの <span class="ui">Connect</span> セクションに、コピーできるアドレスとキーがあります。ベース URL は、OpenAI クライアントなら <code>http://127.0.0.1:3425/v1</code>、Anthropic や Gemini のクライアントなら <code>http://127.0.0.1:3425</code> です。<a href="/docs/integrate">アプリ連携</a>（英語）を参照してください。</p>
 
+    <p>複数のアカウントやキーで負荷を分け、互いに引き継げます。<a href="/docs/ja/routing-groups">アカウント・キー・プロバイダーのローテーションとフェイルオーバー</a> を参照してください。</p>
+
     <h2 id="faq"><a class="anchor" href="#faq">よくある質問</a></h2>
     <h3>ChatGPT Plus や Pro のサブスクリプションを Claude Code で使えますか？</h3>
     <p>はい。magpie で ChatGPT にサインインし、Claude Code の行で <code>codex/…</code> のモデルを選ぶか、<code>magpie claude codex/gpt-5.5</code> を実行します。magpie が Claude Code の Anthropic リクエストを GPT モデル向けに変換し、応答を戻します。ツール呼び出しも含みます。ティアや推論レベルを含む設定の全体は <a href="/docs/ja/claude-code-chatgpt">Claude Code で ChatGPT</a> にあります。</p>
