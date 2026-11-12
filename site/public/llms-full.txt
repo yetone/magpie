@@ -6610,7 +6610,7 @@ Your allowedModels doesn't list it. magpie leaves that list to you; add the mode
 
 By the key magpie gives it, magpie-prime-agent, since its requests carry no User-Agent.
 
-More agents on the same models: [Pi on any model](https://usemagpie.ai/docs/pi), [Kimi Code on any model](https://usemagpie.ai/docs/kimi-code) and [DS Bot on any model](https://usemagpie.ai/docs/ds-bot). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Pi on any model](https://usemagpie.ai/docs/pi), [Kimi Code on any model](https://usemagpie.ai/docs/kimi-code), [DS Bot on any model](https://usemagpie.ai/docs/ds-bot) and [Muse Code on any model](https://usemagpie.ai/docs/muse-code). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
@@ -6895,6 +6895,77 @@ OpenPencil v0.8.4 reads only the model field, so it lists the first model; later
 Yes. magpie removes only the entry with id magpie and leaves the rest as it was.
 
 More desktop apps on the same models: [Alma on any model](https://usemagpie.ai/docs/alma), [Kun on any model](https://usemagpie.ai/docs/kun) and [Pi on any model](https://usemagpie.ai/docs/pi). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/muse-code
+
+# Muse Code on any model
+
+Muse Code is Meta's `muse` coding agent CLI. Where its requests go is `endpoint_transport` in its settings.json, and the model sessions start on is the top-level `model`. magpie points both at the gateway, so Muse Code runs on any model in magpie: DeepSeek, GLM, Kimi, Qwen, Claude or a ChatGPT subscription.
+
+## Set up Muse Code
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Pick a model for Muse Code on the Agents page.** Pick a model via magpie.
+3. **Restart open muse sessions.** Muse Code reads its settings at start-up.
+
+```
+magpie muse deepseek/deepseek-v4-pro
+```
+
+## settings.json
+
+Muse Code keeps its settings in `${XDG_CONFIG_HOME:-~/.config}/muse/settings.json`, and refuses the file without `"schema_version": 1`. magpie writes:
+
+```
+{
+  "schema_version": 1,
+  "endpoint_transport": {
+    "base_url": "http://127.0.0.1:3425/v1",
+    "auth": "none"
+  },
+  "model": "deepseek/deepseek-v4-pro"
+}
+```
+
+Muse Code streams to `/responses` under `base_url` (OpenAI's Responses API), where the gateway answers. The file's other keys are left as they are. With no file, magpie makes one with the schema version. Muse Code in a WSL distro is set up the same way, in `~/.config/muse` there.
+
+## Why auth is none
+
+With `auth` `bearer`, Muse Code sends the Meta sign-in's token (auth.json, or META_API_KEY); with `none` it sends no Authorization and asks for no sign-in. magpie uses none, so your Meta token is neither read by magpie nor sent to the gateway.
+
+## The model list
+
+Muse Code lists its models from `/muse-code/models` on `base_url`'s host, which the gateway serves, so magpie's models show in Muse Code's model choice.
+
+## Switching back
+
+When it first steps in, magpie stashes the `endpoint_transport` and `model` you had. Switching back puts them back, or takes magpie's out where you had none. A file magpie made goes again once only the schema version is left.
+
+```
+magpie muse default
+```
+
+## FAQ
+
+### Can Muse Code run on DeepSeek, GLM or a ChatGPT subscription?
+
+Yes. Pick a via-magpie model for Muse Code on magpie's Agents page, then restart open muse sessions.
+
+### Does magpie read my Meta sign-in token?
+
+No. magpie sets auth to none, so Muse Code sends no Authorization; the token is neither read nor sent to the gateway.
+
+### Nothing changed in Muse Code. Why?
+
+Muse Code reads settings.json at start-up. Restart open muse sessions.
+
+### Does switching back restore my settings?
+
+Yes. magpie stashed the endpoint_transport and model you had and puts them back; the file's other keys were never touched.
+
+More agents on the same models: [Prime Agent on any model](https://usemagpie.ai/docs/prime-agent), [Pi on any model](https://usemagpie.ai/docs/pi) and [Kimi Code on any model](https://usemagpie.ai/docs/kimi-code). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
