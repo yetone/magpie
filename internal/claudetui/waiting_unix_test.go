@@ -29,7 +29,11 @@ func TestShimSaysWhatAnUndrawnClaudeWaitsOn(t *testing.T) {
 		{"silent", []string{"FAKE_SILENT=1"}, []string{"(0 bytes read); it runs no command,", "MiB resident"}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			by := time.Now().Add(3 * time.Second).UnixMilli()
+			// the deadline is fixed before the shim and its fake start,
+			// and a loaded runner spent all but 100ms of a 3s one there
+			// before the fake had started its Keychain read: the window
+			// leaves room for both to start
+			by := time.Now().Add(10 * time.Second).UnixMilli()
 			out, stderr, err := runEnds(t, t.TempDir(), append(c.env, DeadlineEnv+"="+strconv.FormatInt(by, 10)))
 			if err == nil || strings.Contains(out, `"type":"result"`) {
 				t.Fatalf("ended %v, wrote %q", err, out)
