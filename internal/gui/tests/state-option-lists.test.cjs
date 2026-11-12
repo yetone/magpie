@@ -5,7 +5,8 @@
 // from 1, and api() puts the list back before anything reads the state.
 // Two agents' model pickers sharing one list each show it whole, a field
 // with its own options keeps them, and the state kept from the last read
-// (?last=1), shared the same way, draws too. Chromium and WebKit, wide
+// (?last=1), shared the same way, draws too. A fastFor sent as "*" is
+// the agent's own id again in each agent's list. Chromium and WebKit, wide
 // and narrow, in every language.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -18,6 +19,8 @@ const catalog = [
   { value: "magpie/codex/gpt-5.5", ref: "codex/gpt-5.5", label: "GPT-5.5", note: "", group: "ChatGPT" },
   { value: "magpie/zai/glm-5", ref: "zai/glm-5", label: "GLM-5", note: "", group: "Z.ai" },
   { value: "magpie/kimi/k2", ref: "kimi/k2", label: "Kimi K2", note: "", group: "Kimi" },
+  // sent fast for the agent whose list it is: "*" on the wire
+  { value: "magpie/codex/gpt-5.5-fast", ref: "codex/gpt-5.5-fast", label: "GPT-5.5 Fast", note: "", group: "ChatGPT", fastFor: "*" },
 ];
 const effort = [{ value: "low", note: "" }, { value: "high", note: "" }];
 
@@ -81,10 +84,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.goto("http://magpie.test/?view=agents");
         // drawn from the kept state, before the fresh one comes
         await page.locator('.row.agent[data-id="crush"]').waitFor();
-        const read = () => page.evaluate(() => state.agents.map((a) => [a.id, a.fields.map((f) => [f.key, (f.options || []).map((o) => o.value)])]));
+        const read = () => page.evaluate(() => state.agents.map((a) => [a.id, a.fields.map((f) => [f.key, (f.options || []).map((o) => o.value + (o.fastFor ? " " + o.fastFor : ""))])]));
+        const own = (id) => catalog.map((o) => o.value + (o.fastFor ? " " + id : ""));
         const want = [
-          ["codex", [["model", catalog.map((o) => o.value)], ["effort", ["low", "high"]]]],
-          ["crush", [["model", catalog.map((o) => o.value)]]],
+          ["codex", [["model", own("codex")], ["effort", ["low", "high"]]]],
+          ["crush", [["model", own("crush")]]],
         ];
         assert.deepEqual(await read(), want, "the kept state's lists put back");
         release();
@@ -99,6 +103,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await page.keyboard.press("Escape");
           await page.locator("#pop").waitFor({ state: "hidden" });
         }
+        // fast for one agent is fast for that agent only, though the list is shared
+        const fast = await page.evaluate(() => {
+          const opt = (id) => state.agents.find((a) => a.id === id).fields[0].options.find((o) => o.fastFor);
+          setFast(opt("codex"), true);
+          return [opt("codex").fast, !!opt("crush").fast];
+        });
+        assert.deepEqual(fast, [true, false], "codex's fast leaves crush's alone");
         assert.deepEqual(errors, []);
         await page.context().close();
       });

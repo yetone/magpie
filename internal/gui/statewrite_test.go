@@ -133,7 +133,12 @@ func TestStateSendsEachOptionListOnce(t *testing.T) {
 		{ID: "c", Fields: []fieldJSON{{Key: "model", Options: other}}},
 		{ID: "d", Fields: []fieldJSON{{Key: "model", Options: icons}}},
 		{ID: "e", Fields: []fieldJSON{{Key: "model", Options: []agent.Option{}}}},
+		// each agent's catalog names it as the one its fast models are
+		// for: alike all the same
+		{ID: "f", Fields: []fieldJSON{{Key: "model", Options: fastFor("f")}}},
+		{ID: "g", Fields: []fieldJSON{{Key: "model", Options: fastFor("g")}}},
 	}}
+	fCatalog := s.Agents[5].Fields[0].Options
 	var before bytes.Buffer
 	if err := json.NewEncoder(&before).Encode(s); err != nil {
 		t.Fatal(err)
@@ -154,8 +159,8 @@ func TestStateSendsEachOptionListOnce(t *testing.T) {
 	if err := json.Unmarshal(w.body.Bytes(), &sent); err != nil {
 		t.Fatal(err)
 	}
-	if len(sent.OptionLists) != 3 {
-		t.Fatalf("%d option lists sent, want 3 (the catalog, the fast one's, the other icons'): %s", len(sent.OptionLists), w.body.Bytes())
+	if len(sent.OptionLists) != 4 {
+		t.Fatalf("%d option lists sent, want 4 (the catalog, codex's fast one's, the other icons', f's and g's): %s", len(sent.OptionLists), w.body.Bytes())
 	}
 	lists := map[string]int{}
 	for _, a := range sent.Agents {
@@ -174,6 +179,12 @@ func TestStateSendsEachOptionListOnce(t *testing.T) {
 	if lists["c/model"] == lists["a/model"] || lists["d/model"] == lists["a/model"] {
 		t.Fatalf("a list unlike the catalog was sent as it: %v", lists)
 	}
+	if lists["f/model"] == 0 || lists["f/model"] != lists["g/model"] || lists["f/model"] == lists["a/model"] {
+		t.Fatalf("catalogs differing only by their own agent's fastFor are not one list: %v", lists)
+	}
+	if fCatalog[1].FastFor != "f" {
+		t.Fatal("sharing the list changed the agent's own options")
+	}
 	if lists["a/effort"] != 0 || lists["e/model"] != 0 {
 		t.Fatalf("a list of one or none was moved: %v", lists)
 	}
@@ -187,7 +198,20 @@ func TestStateSendsEachOptionListOnce(t *testing.T) {
 		for _, f := range a.(map[string]any)["fields"].([]any) {
 			f := f.(map[string]any)
 			if l, ok := f["list"].(float64); ok {
-				f["options"] = ol[int(l)-1]
+				var opts []any
+				for _, o := range ol[int(l)-1].([]any) {
+					o := o.(map[string]any)
+					if o["fastFor"] == "*" {
+						c := map[string]any{}
+						for k, v := range o {
+							c[k] = v
+						}
+						c["fastFor"] = a.(map[string]any)["id"]
+						o = c
+					}
+					opts = append(opts, o)
+				}
+				f["options"] = opts
 				delete(f, "list")
 			}
 		}
@@ -208,4 +232,9 @@ func TestStateSendsEachOptionListOnce(t *testing.T) {
 	if !bytes.Equal(before.Bytes(), after.Bytes()) {
 		t.Fatal("writing the state changed the caller's agents")
 	}
+}
+
+// fastFor is a catalog whose fast model is sent fast for id.
+func fastFor(id string) []agent.Option {
+	return []agent.Option{{Value: "x/1"}, {Value: "x/2", FastFor: id}, {Value: "x/3", FastFor: "codex"}}
 }

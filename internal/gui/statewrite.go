@@ -142,7 +142,8 @@ func (l lineless) Write(b []byte) (int, error) {
 
 // shareOptions is s with each fields' option list sent once, in
 // OptionLists, and named by the field's List: a list two fields offer
-// alike is one entry. s's own agents are left as they were. The page
+// alike is one entry, a FastFor naming the field's own agent sent as
+// fastSelf. s's own agents are left as they were. The page
 // puts each field's list back as it reads the state (api in app.js).
 func shareOptions(s stateJSON) stateJSON {
 	if s.OptionLists != nil {
@@ -158,6 +159,7 @@ func shareOptions(s stateJSON) stateJSON {
 			if len(opts) < 2 {
 				continue
 			}
+			opts = fastForSelf(opts, agents[i].ID)
 			k := slices.IndexFunc(lists, func(l []agent.Option) bool { return sameOptions(l, opts) })
 			if k < 0 {
 				lists = append(lists, opts)
@@ -175,6 +177,27 @@ func shareOptions(s stateJSON) stateJSON {
 	}
 	s.Agents, s.OptionLists = agents, lists
 	return s
+}
+
+// fastSelf is the FastFor an option list is sent with for the agent
+// whose list it is: each agent's catalog differed only there, so none
+// were alike. The page puts the agent's id back (api in app.js).
+const fastSelf = "*"
+
+// fastForSelf is opts with each FastFor that names id as fastSelf; opts
+// itself when none does, a copy otherwise.
+func fastForSelf(opts []agent.Option, id string) []agent.Option {
+	copied := false
+	for k := range opts {
+		if opts[k].FastFor != id || id == "" {
+			continue
+		}
+		if !copied {
+			opts, copied = slices.Clone(opts), true
+		}
+		opts[k].FastFor = fastSelf
+	}
+	return opts
 }
 
 // sameOptions reports whether a and b are the same options, in the same
