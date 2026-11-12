@@ -469,4 +469,9 @@ func memoryForget(a memoryArgs) (string, error) {
 // put a memory on the day before or after the one the user lived
 // (Norethcy on X). Memories saved before this are stored in UTC ("…Z")
 // and are shown the same way.
-func memoryStamp(t time.Time) string { return t.In(time.Local).Format("2006-01-02T15:04Z07:00") }
+func memoryStamp(t time.Time) string { return t.In(memoryZone()).Format("2006-01-02T15:04Z07:00") }
+
+// memoryZone is the zone memoryStamp writes in: time.Local, a variable for
+// tests, which must never swap time.Local itself (every goroutine still
+// running reads it, so the swap is a race).
+var memoryZone = func() *time.Location { return time.Local }

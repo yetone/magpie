@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -256,11 +255,13 @@ func TestRootDirs(t *testing.T) {
 // A memory is dated in the reader's own zone, with the time and its
 // offset: at 04:30 in Shanghai on the 11th, UTC is still the 10th
 // (Norethcy on X). One saved before, stored as "…Z", reads the same way.
+// That a new one is stored in the local zone is memory's
+// TestSaveKeepsTheLocalZone.
 func TestMemorySearchDatesInLocalTime(t *testing.T) {
 	fresh(t)
-	oldLocal := time.Local
-	time.Local = time.FixedZone("CST", 8*3600)
-	t.Cleanup(func() { time.Local = oldLocal })
+	oldZone := memoryZone
+	memoryZone = func() *time.Location { return time.FixedZone("CST", 8*3600) }
+	t.Cleanup(func() { memoryZone = oldZone })
 
 	old := `{"memories":[{"id":"m1","text":"Heavy tests run on mote","kind":"fact","scope":"global","origin":"agent","status":"active","created":"2026-11-10T20:30:00Z","updated":"2026-11-10T20:30:00Z"}]}`
 	if err := os.MkdirAll(filepath.Dir(memory.Path()), 0o700); err != nil {
@@ -273,17 +274,5 @@ func TestMemorySearchDatesInLocalTime(t *testing.T) {
 	said, bad := memPost(t, h, memorySearchTool, `{"query":"mote"}`)
 	if bad || !strings.Contains(said, ", 2026-11-11T04:30+08:00: Heavy tests run on mote") {
 		t.Fatalf("an old UTC memory: %s", said)
-	}
-
-	// a new one is kept with the zone it was saved in
-	if _, bad := memPost(t, h, memorySaveTool, `{"text":"Answer in Chinese","kind":"preference"}`); bad {
-		t.Fatal("save failed")
-	}
-	b, _ := os.ReadFile(memory.Path())
-	if !strings.Contains(string(b), `"updated": "`) && !strings.Contains(string(b), `"updated":"`) {
-		t.Fatalf("no updated in %s", b)
-	}
-	if !regexp.MustCompile(`"updated":\s*"[^"]*\+08:00"`).Match(b) {
-		t.Fatalf("saved in UTC, not the local zone: %s", b)
 	}
 }

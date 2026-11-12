@@ -33,6 +33,21 @@ func save(t *testing.T, text, kind, scope string, tags ...string) *Memory {
 	return m
 }
 
+// A memory is stored with the zone it was saved in, not in UTC: read back
+// as a day, UTC puts 04:30 in Shanghai on the day before (Norethcy on X).
+func TestSaveKeepsTheLocalZone(t *testing.T) {
+	at := fresh(t)
+	*at = time.Date(2026, 11, 11, 4, 30, 0, 0, time.FixedZone("CST", 8*3600))
+	save(t, "Answer in Chinese", Preference, Global)
+	b, err := os.ReadFile(Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"updated": "2026-11-11T04:30:00+08:00"`) && !strings.Contains(string(b), `"updated":"2026-11-11T04:30:00+08:00"`) {
+		t.Fatalf("not saved in the local zone: %s", b)
+	}
+}
+
 func TestSaveKeepsOneOfTheSameText(t *testing.T) {
 	fresh(t)
 	a := save(t, "UI uses no gradients.", Preference, Global, "ui")
