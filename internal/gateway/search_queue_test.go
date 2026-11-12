@@ -105,12 +105,16 @@ func TestSearchQueueKeepsCodexAlive(t *testing.T) {
 			req.Header.Set("Authorization", "Bearer magpie")
 			// The idle deadline is much longer than the simulated queue tick;
 			// comments cannot reset it. A hard cap also catches runaway pings.
-			hard := time.AfterFunc(5*time.Second, cancel)
+			// It starts at the headers: a loaded machine's path to them is
+			// not the stream's, and a 5s cap from before the request cut
+			// silent on macOS CI before any header came (context canceled).
+			hard := time.AfterFunc(60*time.Second, cancel)
 			defer hard.Stop()
 			res, err := http.DefaultClient.Do(req)
 			if err != nil {
 				t.Fatal(err)
 			}
+			hard.Reset(5 * time.Second)
 			defer res.Body.Close()
 			// #2547: the idle window starts at the first data line, not at
 			// the headers: a loaded machine's path to the first translated
