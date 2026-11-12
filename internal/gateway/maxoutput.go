@@ -139,6 +139,12 @@ func replyLeft(msg []byte) int {
 	} else if m := inputPlusReply.FindSubmatch(msg); m != nil {
 		prompt, _ = strconv.Atoi(string(m[1]))
 		window, _ = strconv.Atoi(string(m[2]))
+	} else if m := routerWindow.FindSubmatch(msg); m != nil {
+		window, _ = strconv.Atoi(string(m[1]))
+		for _, part := range routerInput.FindAllSubmatch(m[2], -1) {
+			n, _ := strconv.Atoi(string(part[1]))
+			prompt += n
+		}
 	}
 	if window <= 0 || prompt <= 0 || prompt >= window {
 		return 0
@@ -152,10 +158,48 @@ func replyLeft(msg []byte) int {
 // tokens".
 var windowAndPrompt = lazyre.New(`(?is)maximum context length is (\d+) tokens.{0,200}?(?:\((\d+) in the messages, \d+ in the completion\)|your prompt contains at least (\d+) input tokens)`)
 
+// routerWindow matches OpenRouter's refusal, which splits the prompt by
+// kind and counts the reply in the window: "This endpoint's maximum
+// context length is 1048576 tokens. However, you requested about 1050086
+// tokens (101187 of text input, 5181 of tool input, 943718 in the output)".
+// Group 2 is the parenthesis; routerInput reads each "N of <kind> input".
+var routerWindow = lazyre.New(`(?is)maximum context length is (\d+) tokens\..{0,100}?requested about \d+ tokens \(([^)]{0,200}?\d+ in the output)\)`)
+var routerInput = lazyre.New(`(?i)(\d+) of [a-z ]{1,20}? input`)
+
 // inputPlusReply is Anthropic's words for the same, which an endpoint
 // speaking its API may answer with: "input length and `max_tokens` exceed
 // context limit: 197202 + 21333 > 200000".
 var inputPlusReply = lazyre.New(`(?i)input length and .{0,3}max_tokens.{0,3} exceed context limit:\s*(\d+)\s*\+\s*\d+\s*>\s*(\d+)`)
+
+// roomedOutput is the reply limit n a request is filled in with, lowered
+// to what a window holds with a prompt of about promptTokens: the model's
+// own limit may be nearly the whole window (OpenRouter lists 943718 for a
+// DeepSeek model of 1048576), and a vendor that counts the reply in the
+// window refuses the pair (H1_B1_K1 on X). The prompt is sized from its
+// bytes, rounded up; room under leastReplyLeft leaves n as it was, and the
+// refusal tells the agent to compact. An unknown window leaves n alone.
+func roomedOutput(n, window, promptTokens int) int {
+	if n <= 0 || window <= 0 {
+		return n
+	}
+	room := window - promptTokens*5/4 - 1024
+	if room >= leastReplyLeft && room < n {
+		return room
+	}
+	return n
+}
+
+// contextOf is the context window of p's model, 0 when unknown.
+func contextOf(p provider.Provider, model string) int {
+	cat := provider.Served()
+	for i := range cat {
+		e := &cat[i]
+		if e.Group == "" && e.Provider.ID == p.ID && (e.Model == model || e.ID == model) {
+			return e.Context
+		}
+	}
+	return 0
+}
 
 // leastReplyLeft is the least room left for a reply that is worth asking
 // for: less, and the conversation needs compacting, which the refusal
@@ -244,7 +288,7 @@ func withOwnOutput(p provider.Provider, model string, proto provider.Protocol, b
 	if !shortByDefault(p) || namesOutput(proto, body) {
 		return body
 	}
-	n := askedOutput(p, model)
+	n := roomedOutput(askedOutput(p, model), contextOf(p, model), len(body)/4)
 	if n <= 0 {
 		return body
 	}

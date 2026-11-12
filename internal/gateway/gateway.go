@@ -8102,7 +8102,12 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 		// the model gives (fillsOutput), unless it turned the one filled
 		// in away before
 		if req.MaxTokens <= 0 && fillsOutput(p, to) && (to == provider.Anthropic || s.fits(p.ID, outputFillRefused(model), to)) {
-			if n := askedOutput(p, model); n > 0 {
+			n := askedOutput(p, model)
+			if to != provider.Anthropic {
+				// the window holds the prompt and the reply together
+				n = roomedOutput(n, contextOf(p, model), estimate(req))
+			}
+			if n > 0 {
 				r := *req
 				r.MaxTokens, req = n, &r
 				filledOutput = to != provider.Anthropic
