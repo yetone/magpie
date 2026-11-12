@@ -14,7 +14,7 @@ import (
 // field it doesn't know: 422 extra_forbidden, every such field listed.
 func mistralRefuse(body []byte) (int, string) {
 	known := []string{"model", "messages", "stream", "stream_options", "max_tokens", "temperature", "top_p", "tools", "tool_choice",
-		"parallel_tool_calls", "response_format", "stop", "random_seed", "presence_penalty", "frequency_penalty", "n", "reasoning_effort"}
+		"parallel_tool_calls", "response_format", "stop", "random_seed", "presence_penalty", "frequency_penalty", "n", "reasoning_effort", "prompt_cache_key"}
 	var m map[string]json.RawMessage
 	json.Unmarshal(body, &m)
 	var detail []string

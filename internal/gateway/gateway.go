@@ -8615,7 +8615,21 @@ func withMistralCacheKey(p provider.Provider, in http.Header, body []byte) []byt
 		return body
 	}
 	sum := sha256.Sum256([]byte("mistral\x00" + id))
-	return withFields(body, map[string]any{cacheKeyField: hex.EncodeToString(sum[:])})
+	// written in ahead of the first member, so the client's own bytes
+	// (and the order its messages were sent in, for the cache) stay as sent
+	i := bytes.IndexByte(body, '{')
+	if i < 0 || len(bytes.TrimSpace(body[:i])) > 0 {
+		return body
+	}
+	rest := bytes.TrimLeft(body[i+1:], " \t\r\n")
+	sep := ","
+	if len(rest) == 0 || rest[0] == '}' {
+		sep = ""
+	}
+	out := make([]byte, 0, len(body)+96)
+	out = append(out, body[:i+1]...)
+	out = append(out, `"`+cacheKeyField+`":"`+hex.EncodeToString(sum[:])+`"`+sep...)
+	return append(out, body[i+1:]...)
 }
 
 // cacheKeyOf is the prompt cache key of the conversation req is a turn
