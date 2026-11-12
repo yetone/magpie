@@ -9054,6 +9054,8 @@ magpie group template            # lists smart, thrifty, steady and the models e
 magpie group template steady
 ```
 
+To see what is left of each account before it runs out, see [Quota left on every subscription and key](https://usemagpie.ai/docs/quota).
+
 ## FAQ
 
 ### Can I use several Claude accounts in turn?
@@ -9073,6 +9075,99 @@ Yes. Make a routing group with DeepSeek and a fallback in order, routing In orde
 Stays is Auto by default: a conversation stays with its account while the cache is worth keeping, and always within a turn, so rotating doesn't lose the cache on every request.
 
 Related: [Use your Claude Pro/Max, ChatGPT Plus/Pro or GitHub Copilot subscription in any coding agent](https://usemagpie.ai/docs/subscriptions). Something fails? See [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/quota
+
+# Quota left on every subscription and key
+
+How much of Claude's five hours is left? When does Codex's week reset? Is the DeepSeek balance enough? magpie asks the vendors and puts each window of every subscription and plan, its use and when it starts again, beside each key's balance. It is on the Usage page, and the CLI and a local API read it too.
+
+## magpie quota
+
+`magpie quota` lists what is left of every subscription, plan and key magpie has: each window's use and when it starts again, and each key's balance, asked of the vendors now (or less than a minute ago). Name providers to see only those.
+
+```
+magpie quota                       # every subscription, plan and key
+magpie quota codex claude --json   # for scripts and agents
+magpie quota refresh claude        # read one card again
+magpie quota history --days 7 --json
+```
+
+- `--json` is for scripts and agents, each entry with `lastServedAt`, when it last answered through the gateway, and `last: true` on the latest.
+- `magpie quota refresh` reads one card again, as its refresh button on the Usage page does. A card read less than 30 seconds ago isn't asked again.
+- A Claude account's use is told by Claude Code as it answers or runs /usage; `refresh` reads it by running Claude Code's /usage in the account's own folder, which plain `magpie quota` never does.
+
+## For scripts and agents
+
+The gateway answers the same on a local API, on the port in Settings' Gateway address. Another machine reaches it only while magpie is shared on the local network, with its key as the API key (Authorization: Bearer or x-api-key).
+
+```
+curl http://127.0.0.1:3425/v1/magpie/quotas
+curl 'http://127.0.0.1:3425/v1/magpie/quotas/history?days=7&provider=codex'
+```
+
+magpie's own skill `magpie-quota` lets an agent read `magpie quota --json` and wait with `magpie quota wait`. It is first in the Library's skills market.
+
+## Alerts
+
+Have the magpie app notify you when any window of a subscription or plan reaches a share used, once each time the window runs, or when a balance falls to an amount or under, in its own currency or credits, once until topped up past it. Both are off until set; `off` turns either off.
+
+```
+magpie quota alert 80              # notify at 80% used, once per window
+magpie quota alert --balance 5     # notify when a balance falls to 5 or under
+magpie quota alert                 # what is set
+```
+
+## Wait for allowance
+
+`magpie quota wait codex` returns once any Codex account magpie has on has allowance again; an account's email or login, or `<provider>/<account>`, waits for that one alone. It reads the vendors itself, gateway running or not, again shortly after the soonest reset (every 1 to 10 minutes), and says on stderr what it waits for. A script can go on with work it stopped:
+
+```
+magpie quota wait codex --timeout 6h
+until codex exec …; do magpie quota wait codex || break; done
+```
+
+Exit 0 once there is allowance, 1 when `--timeout` (30m, 6h) passes first, 2 for a name it doesn't know, 130 on Ctrl+C.
+
+## History
+
+`magpie quota history` is what magpie has read of each subscription's and plan's windows over time, kept 45 days (UTC times, a reading only when it changed, each window's runs apart by when they reset): the latest readings of each window, or with `--json` every one since `--days` days ago, as `/v1/magpie/quotas/history` answers.
+
+## A Codex account's resets
+
+A Codex account that holds rate-limit resets says how many.
+
+```
+magpie quota reset                 # spends one held reset; asks first
+magpie quota auto-reset on
+magpie quota credits off
+```
+
+- `magpie quota reset` spends one, starting the account's current windows again. It can't be undone, so it asks first; `--yes` doesn't.
+- `magpie quota auto-reset on` lets the account spend one by itself when its weekly window is used up and no other account can take a request, one a week at most (the five hours running out never does), and spend the one about to expire about half an hour before it does, if the account's windows have been used. Off until turned on.
+- `magpie quota credits off` keeps a Codex account from spending its credits once a window is used up: routing holds it as used up and the request goes to the other accounts, groups and fallbacks. On, the default, lets the task go on.
+
+## FAQ
+
+### How do I see Claude Code's five hours and week left?
+
+Run magpie quota, or open magpie's Usage page. A Claude account's use updates as Claude Code answers or runs /usage; magpie quota refresh claude runs /usage to read it again.
+
+### Can a Codex job go on once its quota is back?
+
+Yes. In a script, until codex exec …; do magpie quota wait codex || break; done: magpie quota wait returns once there is allowance, and the command runs again.
+
+### Can I be told when use is nearly full?
+
+magpie quota alert 80 has the magpie app notify when any window reaches 80% used; --balance 5 when a balance falls to 5 or under. Both are off until set.
+
+### Can an agent read the quota itself?
+
+Yes. magpie quota --json and GET http://127.0.0.1:3425/v1/magpie/quotas give the same; magpie's skill magpie-quota teaches an agent to read it and wait for allowance.
+
+Related: [Round robin and failover across accounts, keys and providers](https://usemagpie.ai/docs/routing-groups) and [Use your Claude Pro/Max, ChatGPT Plus/Pro or GitHub Copilot subscription in any coding agent](https://usemagpie.ai/docs/subscriptions). Something fails? See [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
