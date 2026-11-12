@@ -237,3 +237,14 @@ fix, taken from a shared index. On 10-12 3e88fc09d carried the auto-mode
 subject but held the Get started card (#1825). On 10-17 another session
 checked out origin/main in 7660399a1's worktree mid-run, and another
 deleted part of 17557132c's GUI log.
+
+A commit's tree is origin/main plus its own change. A file in its `--stat`
+that the change never meant to touch, or a test file going out, is a stale
+tree taking out someone else's work: stop, rebase or cherry-pick onto
+origin/main, and never commit files copied from an older checkout. A
+review checks `git diff <commit>^ <commit> --stat` against the subject.
+On 11-11 85e6ec540 took out the six commits before it (b52c71114). On
+11-12 76ceff87c, under a usage subject, dropped 7c37424fc and d6b5f24db
+with their GUI tests (8097860ab). On 11-13 8c7328f3a (remote quotas)
+wrote 21 files back to their state before 35aaaa4b9 and took out the
+Codex client setting, 2fa79aef3 (#6289) and 797a23cad (926b1e7df).

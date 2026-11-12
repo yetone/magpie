@@ -929,21 +929,9 @@ is read back before the push.**
   pushing.
 - Seen 2× (2026-10-15, 2026-11-12).
 
-**A commit's `--stat` names only the files its change touched; any other
-file is a stale tree taking out someone's work.**
-- 85e6ec540 (11-11, the Paseo agent) was committed on a stale index and
-  took out the six commits before it; b52c71114 restored them.
-- 76ceff87c (11-12, Usage's hours back) was built on an older base. Its
-  tree dropped 7c37424fc (Linux without backdrop blur) and d6b5f24db
-  (Codex seats of one name) with their two GUI tests, the
-  history_tallies test and the gui-shell doc line: 156 lines out under a
-  usage subject. 8097860ab put them back from d6b5f24db. Its body ran
-  usage-hours "at the rebased head", which the dropped tests weren't in.
-- Before pushing, `git show --stat HEAD` against the subject: a file the
-  change never meant to touch, or a test file going out, is a stop.
-  Rebase or cherry-pick onto origin/main; never commit a tree copied
-  from an older checkout.
-- Seen 2× (2026-11-11, 2026-11-12).
+**A commit's `--stat` names only the files its change touched** is in
+the code standards since 11-13. See
+[Moved to the code standards](#moved-to-the-code-standards).
 
 **A community PR that changes how a page looks is not merged on review
 alone.**
@@ -961,6 +949,10 @@ standards since 10-18, widened to a worktree and its logs. See
 
 ## Moved to the code standards
 
+- **A commit's `--stat` names only the files its change touched; any
+  other file is a stale tree** (11-11, 11-12, 11-13). On 11-13 8c7328f3a
+  (remote quotas) wrote 21 files back to 35aaaa4b9^ and took out three
+  commits; 926b1e7df put them back.
 - **A red's issue is read to its last comment, and a patch on it is
   taken first** (10-12, 10-17, 10-27, 10-28). On 10-28 JoeyWu-tech's
   #3568 patch sat three days until CI went red on it again (11c427eaa).
