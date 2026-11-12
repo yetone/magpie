@@ -189,6 +189,13 @@ var others = []*Agent{
 	// ("pi-desktop/0.1.0"), it is told apart from Pi by that name, which
 	// Pi's "pi-" would take otherwise (#1966, dgmico)
 	{ID: "pi-desktop", Name: "PI-Desktop", Icon: "pi", UA: []string{"pi-desktop"}},
+	// FlowDown (wiki.qaq.flow) and Bob (com.hezongyidev.Bob) set no
+	// User-Agent of their own: FlowDown's sources have none, and Bob's
+	// requests go out through the system's networking, which names the
+	// app's executable first ("FlowDown/<build> CFNetwork/… Darwin/…").
+	// Icons are the apps' own App Store icons (#shannnnnks on X).
+	{ID: "flowdown", Name: "FlowDown", Icon: "flowdown-color", UA: []string{"flowdown"}},
+	{ID: "bob", Name: "Bob", Icon: "bob-color", UA: []string{"bob/"}},
 	// Kimi Code Desktop runs Kimi Code's engine on ~/.kimi-code, so it
 	// reaches magpie through Kimi Code's config, under a client name of
 	// its own ("kimi-code-desktop/…", jiabubu on Discord). Its icon is the
