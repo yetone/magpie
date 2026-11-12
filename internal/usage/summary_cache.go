@@ -54,13 +54,13 @@ func ReadAhead() { SummarizeTopIn(Today, summaryCacheSessions, nil) }
 // gives every one, works it out again each time. Over a long history
 // (Vantiboo1ean, ~750k requests in ~84k sessions) that was every refresh of
 // the Usage page and the TUI, and the page was sent all 84k.
-func SummarizeTop(p Period, n int) Summary { return topSummary(p, Clock(), n) }
+func SummarizeTop(p Period, n int) Summary { return topSummary(p, localNow(), n) }
 
 // SummarizeTopIn is SummarizeTop with the period's days and the chart's
 // hours read in zone (Zone gives it), the reader's: the Usage page's.
 func SummarizeTopIn(p Period, n int, zone *time.Location) Summary {
 	if zone == nil {
-		zone = time.Local
+		zone = Zone("")
 	}
 	return topSummary(p, Clock().In(zone), n)
 }

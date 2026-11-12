@@ -6,6 +6,7 @@ package usage
 
 import (
 	"encoding/csv"
+	"github.com/yetone/magpie/internal/dayzone"
 	"io"
 	"slices"
 	"sort"
@@ -771,7 +772,7 @@ func timeline(p Period, now, first time.Time) (since time.Time, bucket string, p
 			bucket = "hour"
 			for h := 0; h <= int(d.Hours()); h++ {
 				t := since.Add(time.Duration(h) * time.Hour)
-				pts = append(pts, Point{Label: t.Format("15"), Time: t})
+				pts = append(pts, Point{Label: hourLabel(t), Time: t})
 			}
 		} else {
 			n = int(d.Hours())/24 + 1
@@ -837,7 +838,7 @@ func timeline(p Period, now, first time.Time) (since time.Time, bucket string, p
 		}
 		for h := 0; since.Add(time.Duration(h) * time.Hour).Before(end); h++ {
 			t := since.Add(time.Duration(h) * time.Hour)
-			pts = append(pts, Point{Label: t.Format("15"), Time: t})
+			pts = append(pts, Point{Label: hourLabel(t), Time: t})
 		}
 	case "day":
 		for i := 0; i < n; i++ {
@@ -1232,7 +1233,7 @@ const seriesKeep = 24
 // hour, day or week, for the chart over them. A row is of the point its
 // time falls in; the rows are in any order.
 func LedgerSeries(p Period, rows []Row) (bucket string, pts []SeriesPoint) {
-	return ledgerSeriesAt(p, rows, Clock())
+	return ledgerSeriesAt(p, rows, localNow())
 }
 
 // ledgerSeriesAt is LedgerSeries with the period read at now, the moment the
@@ -1313,4 +1314,10 @@ func NewCoster() func(Record) (float64, bool) {
 		t.add(r, priceOf(r))
 		return t.Cost, t.Unpriced == 0
 	}
+}
+
+// hourLabel is the hour of the real day a point stands for: in a zone whose
+// day starts later (dayzone), its clock is that many hours behind.
+func hourLabel(t time.Time) string {
+	return t.Add(dayzone.Offset(t.Location())).Format("15")
 }

@@ -1,6 +1,9 @@
 package access
 
 import (
+	"github.com/yetone/magpie/internal/dayzone"
+	"github.com/yetone/magpie/internal/settings"
+
 	"errors"
 	"fmt"
 	"math"
@@ -275,8 +278,13 @@ func (l *Limit) Window(now time.Time) (start, reset time.Time) {
 // Window is the calendar window of period that now is in, in now's
 // location: its start and when the next begins.
 func Window(period string, now time.Time) (start, reset time.Time) {
+	// a day that starts after midnight (settings.DayStart) moves the
+	// calendar: the week and the month begin at that hour too
+	home := now.Location()
+	loc := dayzone.Shift(home, settings.Shared().DayStart)
+	now = now.In(loc)
 	y, m, d := now.Date()
-	loc := now.Location()
+	defer func() { start, reset = start.In(home), reset.In(home) }()
 	switch period {
 	case "week":
 		back := (int(now.Weekday()) + 6) % 7 // days since Monday

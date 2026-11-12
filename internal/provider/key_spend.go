@@ -18,6 +18,8 @@ package provider
 
 import (
 	"fmt"
+	"github.com/yetone/magpie/internal/dayzone"
+	"github.com/yetone/magpie/internal/settings"
 	"math"
 	"strconv"
 	"strings"
@@ -48,8 +50,17 @@ const MaxSpendCap = 1_000_000
 // Window is the period c counts over at now: when it began and when the
 // next begins, zero for a cap in all, which never renews.
 func (c SpendCap) Window(now time.Time) (start, reset time.Time) {
+	// a day that starts after midnight (settings.DayStart) moves the day
+	// and the month with it
+	home := now.Location()
+	loc := dayzone.Shift(home, settings.Shared().DayStart)
+	now = now.In(loc)
 	y, m, d := now.Date()
-	loc := now.Location()
+	defer func() {
+		if c.Period != SpendTotal {
+			start, reset = start.In(home), reset.In(home)
+		}
+	}()
 	switch c.Period {
 	case SpendMonth:
 		return time.Date(y, m, 1, 0, 0, 0, 0, loc), time.Date(y, m+1, 1, 0, 0, 0, 0, loc)

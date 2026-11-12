@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // A key's spend cap (sparkling_lemur_62868 on Discord) is set by the key's
@@ -130,5 +132,33 @@ func TestParseSpendCap(t *testing.T) {
 		if _, err := ParseSpendCap(bad[0], bad[1]); err == nil {
 			t.Fatalf("%q %q was taken", bad[0], bad[1])
 		}
+	}
+}
+
+// A day that starts at 4 moves a spend cap's day and month: at 02:00 on the
+// 15th the cap's day began at 04:00 on the 14th.
+func TestSpendCapWindowFollowsTheDayStart(t *testing.T) {
+	t.Cleanup(func() { s := settings.Load(); s.DayStart = 0; settings.Save(s) })
+	loc := time.FixedZone("X", 8*3600)
+	at := func(m time.Month, d, h int) time.Time { return time.Date(2026, m, d, h, 0, 0, 0, loc) }
+	for hour, want := range map[int][2]time.Time{0: {at(9, 15, 0), at(9, 16, 0)}, 4: {at(9, 14, 4), at(9, 15, 4)}} {
+		s := settings.Load()
+		s.DayStart = hour
+		if err := settings.Save(s); err != nil {
+			t.Fatal(err)
+		}
+		from, to := SpendCap{USD: 1, Period: SpendDay}.Window(at(9, 15, 2))
+		if !from.Equal(want[0]) || !to.Equal(want[1]) || from.Location() != loc {
+			t.Errorf("start %d: day window %v..%v, want %v..%v", hour, from, to, want[0], want[1])
+		}
+	}
+	st := settings.Load()
+	st.DayStart = 4
+	if err := settings.Save(st); err != nil {
+		t.Fatal(err)
+	}
+	from, to := SpendCap{USD: 1, Period: SpendMonth}.Window(at(10, 1, 2))
+	if !from.Equal(at(9, 1, 4)) || !to.Equal(at(10, 1, 4)) {
+		t.Errorf("month window %v..%v, want September from 04:00", from, to)
 	}
 }

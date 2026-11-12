@@ -3,6 +3,9 @@ package usage
 import (
 	"sync"
 	"time"
+
+	"github.com/yetone/magpie/internal/dayzone"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // The Usage page buckets its calls by the reader's days and hours, not the
@@ -18,7 +21,15 @@ var zones sync.Map // name → *time.Location, one for each name
 // keeps this computer's clock, the page on this computer, is time.Local,
 // whose answers the tray and the TUI share. An empty name or one this
 // computer doesn't know is time.Local: the computer's days, as before.
+//
+// With a day that starts after midnight (Settings' dayStart, ssharpcc on
+// X), the zone is that zone moved so its midnight is that hour (dayzone):
+// every day and hour the page cuts by it starts there.
 func Zone(name string) *time.Location {
+	return dayzone.Shift(zoneNamed(name), settings.Shared().DayStart)
+}
+
+func zoneNamed(name string) *time.Location {
 	if name == "" || name == "Local" {
 		return time.Local
 	}
@@ -58,5 +69,9 @@ func (f Filter) loc() *time.Location {
 	if f.Zone != nil {
 		return f.Zone
 	}
-	return time.Local
+	return Zone("")
 }
+
+// localNow is now in this computer's days (Zone("")): where nothing names a
+// reader's zone, the TUI, the CLI and the tray.
+func localNow() time.Time { return Clock().In(Zone("")) }

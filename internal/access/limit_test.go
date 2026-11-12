@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/settings"
 )
 
 func TestLimitWindow(t *testing.T) {
@@ -499,3 +501,34 @@ func TestLimitTotal(t *testing.T) {
 }
 
 func v0(period string) *Limit { return &Limit{Period: period, Cost: 1} }
+
+// A day that starts at 4 moves every calendar window: at 02:00 on the 15th
+// the day is the 14th's from 04:00, the week and the month are those the
+// 14th is in, and with the start at 0 nothing moves.
+func TestLimitWindowFollowsTheDayStart(t *testing.T) {
+	t.Cleanup(func() { s := settings.Load(); s.DayStart = 0; settings.Save(s) })
+	loc := time.FixedZone("X", 8*3600)
+	at := func(d, h int) time.Time { return time.Date(2026, 9, d, h, 0, 0, 0, loc) }
+	cases := []struct {
+		period, start, name string
+		now, from, to       time.Time
+	}{
+		{"day", "4", "day", at(15, 2), at(14, 4), at(15, 4)},
+		{"day", "4", "day after", at(15, 4), at(15, 4), at(16, 4)},
+		{"week", "4", "week starts Monday 4am", at(14, 2), at(7, 4), at(14, 4)}, // Mon 14th 02:00 is still Sunday's
+		{"month", "4", "month", at(1, 2), time.Date(2026, 8, 1, 4, 0, 0, 0, loc), at(1, 4)},
+		{"day", "0", "plain", at(15, 2), at(15, 0), at(16, 0)},
+	}
+	for _, c := range cases {
+		n := int(c.start[0] - '0')
+		s := settings.Load()
+		s.DayStart = n
+		if err := settings.Save(s); err != nil {
+			t.Fatal(err)
+		}
+		from, to := Window(c.period, c.now)
+		if !from.Equal(c.from) || !to.Equal(c.to) || from.Location() != loc {
+			t.Errorf("%s: Window(%s, %v) = %v..%v in %v, want %v..%v in %v", c.name, c.period, c.now, from, to, from.Location(), c.from, c.to, loc)
+		}
+	}
+}

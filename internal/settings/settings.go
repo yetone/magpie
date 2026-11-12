@@ -96,6 +96,11 @@ type Settings struct {
 	// westernUnits, which asked for K/M/B: what that chose is now the
 	// default, so an old file's is left unread.
 	ChineseUnits bool `json:"chineseUnits,omitempty"`
+	// DayStart is the hour a day starts at in usage: 0 is midnight, and 1 to
+	// 6 count the small hours before it with the day before (ssharpcc on X,
+	// who codes past 1am). The Usage page, its daily cards and the gateway
+	// keys' daily and calendar caps cut their days there.
+	DayStart int `json:"dayStart,omitempty"`
 	// Dock keeps magpie in the Mac's Dock as well as the menu bar, for a
 	// menu bar too full to show its icon.
 	Dock bool `json:"dock,omitempty"`
@@ -2440,6 +2445,9 @@ func saveOwn(s Settings, recording, reads bool) error {
 	}
 	if s.BusyLoad < 0 || s.BusyLoad >= BusyLoadMost {
 		return fmt.Errorf("busy models go last over a load from 1 to %d%%, or 0 for off, not %d", BusyLoadMost-1, s.BusyLoad)
+	}
+	if s.DayStart < 0 || s.DayStart > 6 {
+		return fmt.Errorf("a day starts at an hour from 0 to 6, not %d", s.DayStart)
 	}
 	if s.UsageAlert < 0 || s.UsageAlert > 100 {
 		return fmt.Errorf("a usage alert is at a percentage from 1 to 100, or 0 for off, not %d", s.UsageAlert)
