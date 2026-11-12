@@ -164,7 +164,6 @@ body.window .sm-group .row.sm-sess { padding-left: 32px; }
 .row.sm-sub-row { width: 100%; min-height: 38px; text-align: left; padding-left: calc(11px + var(--sub-in, 0) * var(--sub-step)); }
 body.window .row.sm-sub-row { min-height: 42px; padding-left: calc(14px + var(--sub-in, 0) * var(--sub-step)); }
 .row.sm-sub-row .who { display: flex; flex-direction: column; }
-.sm-sub .sess-talk { margin: 0 10px 8px; }
 @media (max-width: 560px) {
   .sm-subs { --sub-step: 10px; padding-left: calc(12px + var(--sub-depth, 0) * var(--sub-step)); padding-right: 8px; }
 }
@@ -213,3 +212,17 @@ body.window .row.sm-sub-row { min-height: 42px; padding-left: calc(14px + var(--
 .sm-sp-stats > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .sm-sp-k { font-size: 11px; color: var(--muted); }
 .sm-sp-v { font-size: 13px; font-weight: 500; color: var(--fg); white-space: nowrap; }
+
+/* a conversation in a sheet of its own: the turns, top and bottom in its head */
+.modal .editor.sess-sheet { height: min(760px, calc(100vh - 80px)); }
+.modal .editor.sess-sheet > .ehead { gap: 4px; }
+.modal .editor.sess-sheet > .ehead b { min-width: 0; margin-right: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.modal .editor.sess-sheet > .ebody { display: block; outline: none; }
+.sess-sheet .sess-talk { max-height: none; overflow: visible; margin: 0; padding: 0; border: 0; background: none; }
+.sess-turns { flex: none; min-width: 5ch; margin-right: 4px; text-align: right; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sess-nav { flex: none; width: 26px; height: 26px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 7px; background: none; color: var(--muted); cursor: pointer; transition: background-color .12s ease, color .12s ease, transform .1s cubic-bezier(.23, 1, .32, 1); }
+.sess-nav:disabled { opacity: .35; cursor: default; }
+.sess-nav:focus-visible { outline: 2px solid var(--accent, var(--fg)); outline-offset: 1px; }
+@media (hover: hover) and (pointer: fine) { .sess-nav:not(:disabled):hover { background: var(--pill); color: var(--fg); } }
+.sess-nav:not(:disabled):active { transform: scale(.97); }
+@media (max-width: 560px) { .sess-turns { display: none; } }

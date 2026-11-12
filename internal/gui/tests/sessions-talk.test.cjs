@@ -153,9 +153,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert(keys.includes(w.talk));
       const show = detail.locator(".sess-talk-btn");
       assert.equal((await show.textContent()).trim(), w.show);
-      assert.equal(await detail.locator(".sess-talk").isVisible(), false, "the conversation waits to be asked for");
+      assert.equal(await page.locator(".sess-sheet").count(), 0, "the conversation waits to be asked for");
       await still(row("p-1"), "showing the conversation", () => show.click());
-      const talk = detail.locator(".sess-talk");
+      const talk = page.locator(".sess-sheet .sess-talk");
       await talk.locator(".cx-part").first().waitFor();
       assert.deepEqual(calls.filter((c) => c.path === "transcript"), [{ path: "transcript", agent: "pi", id: "p-1" }]);
       assert.equal(await talk.locator(".cx-part").count(), PARTS.length);
@@ -165,13 +165,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.deepEqual(await talk.locator(".cx-name").allTextContents(), ["bash", "bash"]);
       assert.equal(await talk.locator("details.cx-part").getAttribute("open"), null, "thinking is folded");
       assert((await talk.locator(".cx-t").first().textContent()).includes("Rename foo to bar"));
-      assert.equal((await show.textContent()).trim(), w.hide);
-      // hidden, and shown again from what was read
-      await show.click();
-      assert.equal(await talk.isVisible(), false);
+      // closed, and shown again from what was read
+      await page.locator(".sess-sheet .bar .primary").click();
+      await page.locator(".sess-sheet").waitFor({ state: "detached" });
       await show.click();
       await talk.locator(".cx-part").first().waitFor();
       assert.equal(calls.filter((c) => c.path === "transcript").length, 1, "read once");
+      await page.locator(".sess-sheet .bar .primary").click();
+      await page.locator(".sess-sheet").waitFor({ state: "detached" });
 
       const border = await page.evaluate(() => [...document.querySelectorAll("#view-sessions, #view-sessions *")]
         .filter((e) => parseFloat(getComputedStyle(e).borderLeftWidth) > 1 && getComputedStyle(e).borderLeftColor !== getComputedStyle(e).borderRightColor).map((e) => e.className));
@@ -192,7 +193,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       if (lang === "zh") {
         const missing = await page.evaluate(() => ["Continue in {agent}", "Continue in", "Continue this session in another agent", "Continue in another agent",
-          "Copy the command", "Conversation", "Show conversation", "Hide conversation", "Reading…"].filter((k) => !I18N.zh[k] || !I18N.ja[k] || !I18N.de[k]));
+          "Copy the command", "Conversation", "Show conversation", "Top", "Bottom", "Previous turn", "Next turn", "Reading…"].filter((k) => !I18N.zh[k] || !I18N.ja[k] || !I18N.de[k]));
         assert.deepEqual(missing, [], "every string has its Chinese, Japanese and German");
       }
       assert.deepEqual(errors, []);

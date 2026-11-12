@@ -93,7 +93,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const detail = view.locator(".sess-detail");
         await detail.waitFor();
         await detail.locator(".sess-talk-btn").click();
-        const talk = detail.locator(".sess-talk");
+        const talk = page.locator(".sess-sheet .sess-talk");
         await talk.locator(".cx-part").first().waitFor();
         assert.deepEqual(calls, ["c-1"]);
         assert.equal(await talk.locator(".cx-part").count(), PARTS.length);

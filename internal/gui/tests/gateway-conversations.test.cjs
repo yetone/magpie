@@ -125,6 +125,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await page.locator(".sess-talk .cx-part").count(), 5);
       assert.equal(await page.locator(".sess-talk details").getAttribute("open"), null);
       assert.equal(await row.evaluate((e) => e.getBoundingClientRect().top), top, "no click scroll");
+      await page.locator(".sess-sheet .bar .primary").click();
+      await page.locator(".sess-sheet").waitFor({ state: "detached" });
       for (const width of [1000, 390]) {
         await page.setViewportSize({ width, height: 850 });
         await page.waitForTimeout(100);
@@ -136,13 +138,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         }
       }
       // A transcript read started before clearing must not restore old content.
+      await page.evaluate(() => document.querySelector("#nav button[data-view=sessions]").click());
+      await row.locator(".who").waitFor();
+      await page.waitForTimeout(300);
+      if (!(await page.locator(".sess-talk-btn").count())) await row.locator(".who").click();
       holdNextTranscript = true;
       const readStarted = page.waitForRequest((r) => new URL(r.url()).pathname === "/api/sessions/transcript");
-      await page.evaluate(() => magpie.call("sessions", "open"));
+      await page.locator(".sess-talk-btn").click();
       await readStarted;
       await assertRecordCard(page);
       assert.equal(await page.locator(".sm-record .sm-record-clear").count(), 1, "kept text can be deleted from the card");
-      await page.locator(".sm-record-clear").click();
+      await page.locator(".sm-record-clear").evaluate((b) => b.click());
       await page.locator("dialog.action-confirm .primary").click();
       await page.waitForFunction(() => document.querySelector(".sm-record-switch")?.getAttribute("aria-checked") === "false");
       await page.waitForFunction(() => document.querySelector(".sess-talk .cx-none") && !document.querySelector(".sess-talk .cx-part"));

@@ -173,24 +173,27 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
         const a1 = subs.nth(1).locator(".sm-sub-row");
         await still(a1, "opening a subagent", () => a1.click());
-        assert.equal(await a1.getAttribute("aria-expanded"), "true");
-        const talk = subs.nth(1).locator(".sess-talk");
+        const talk = page.locator(".sess-sheet .sess-talk");
         await talk.locator(".cx-part").first().waitFor();
         assert.deepEqual(calls, [{ agent: "claude", id: "c-1", sub: "ac1d8e7a80d42178d" }]);
         assert.equal(await talk.locator(".cx-part").count(), PARTS.length);
         assert((await talk.textContent()).includes("Kimi reads ~/.kimi/mcp.json"));
         await tidy();
-        await a1.click();
-        assert.equal(await talk.isVisible(), false);
+        await page.locator(".sess-sheet .bar .primary").click();
+        await page.locator(".sess-sheet").waitFor({ state: "detached" });
         await a1.click();
         await talk.locator(".cx-part").first().waitFor();
         assert.equal(calls.length, 1, "read once");
+        await page.locator(".sess-sheet .bar .primary").click();
+        await page.locator(".sess-sheet").waitFor({ state: "detached" });
 
         // the session's own conversation is still its own
         await row("c-1").locator(".who").click();
         await view.locator(".sess-detail .sess-talk-btn").click();
-        await view.locator(".sess-detail .sess-talk .cx-part").first().waitFor();
+        await page.locator(".sess-sheet .sess-talk .cx-part").first().waitFor();
         assert.deepEqual(calls[1], { agent: "claude", id: "c-1" });
+        await page.locator(".sess-sheet .bar .primary").click();
+        await page.locator(".sess-sheet").waitFor({ state: "detached" });
         // folded again, it stays folded when the row is drawn again
         await item.locator(".sm-subs-fold").first().click();
         assert.equal(await view.locator(".sm-sub").count(), 0);
