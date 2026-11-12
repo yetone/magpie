@@ -15,9 +15,12 @@ import (
 // again: ~1.1 GB a minute and a third, a fifth of all magpie allocated
 // (#2278). Guarded by mu.
 var keptStats struct {
-	files  []keptFile
-	today  time.Time
-	gen    uint64
+	files []keptFile
+	today time.Time
+	gen   uint64
+	// names are the aliases the ranges' models are counted under
+	// (provider.UsageNamesKey)
+	names  string
 	ranges map[int]Stats
 	// native is every listed session's agent|id, nil when no read asked
 	// for it; shared, so read only
@@ -89,13 +92,13 @@ func keptFileOf(f file) keptFile {
 // keptFor reports whether the kept ranges were read from files as they
 // are now, today, with the prices and names they got still the same. When
 // they weren't, what was kept is let go.
-func keptFor(files []file, today time.Time, price func(string) *catalog.Price, titles func(string) string) bool {
+func keptFor(files []file, today time.Time, names string, price func(string) *catalog.Price, titles func(string) string) bool {
 	k := &keptStats
-	same := k.ranges != nil && k.gen == cacheGeneration && k.today.Equal(today) &&
+	same := k.ranges != nil && k.gen == cacheGeneration && k.today.Equal(today) && k.names == names &&
 		keptStill(k.files, files, k.prices, &k.titles, k.desktop, price, titles)
 	if !same {
 		forgetKeptStats()
-		k.files, k.today, k.gen = make([]keptFile, len(files)), today, cacheGeneration
+		k.files, k.today, k.gen, k.names = make([]keptFile, len(files)), today, cacheGeneration, names
 		for i, f := range files {
 			k.files[i] = keptFileOf(f)
 		}
@@ -203,7 +206,6 @@ func keepDesktop(st Stats) {
 func forgetKeptStats() {
 	keptStats.files, keptStats.ranges, keptStats.native = nil, nil, nil
 	keptStats.prices, keptStats.titles, keptStats.desktop = nil, titleAnswers{}, nil
-	forgetAliasedKept()
 }
 
 // ForgetKeptRanges lets go of the ranges' Stats kept for the next read,

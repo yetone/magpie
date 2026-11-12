@@ -211,13 +211,7 @@ func StatsAndNative(days int) (Stats, map[string]bool) {
 // day, each read again behind it (statsFor in internal/gui, #2278).
 func StatsAndNativeAll(days []int) ([]Stats, map[string]bool) {
 	alias, names := provider.UsageAliasKeyed()
-	out, native := statsKept(days, time.Now(), true)
-	if alias != nil {
-		for i := range out {
-			out[i] = aliasKept(days[i], out[i], alias, names)
-		}
-	}
-	return out, native
+	return statsKept(days, time.Now(), true, alias, names)
 }
 
 func statsAt(days int, now time.Time) Stats { return statsIn(days, now, nil) }
@@ -226,21 +220,18 @@ func statsAt(days int, now time.Time) Stats { return statsIn(days, now, nil) }
 func statsIn(days int, now time.Time, native map[string]bool) Stats {
 	// read before the locks: it reads settings.json
 	alias, names := provider.UsageAliasKeyed()
-	st := statsRead(days, now, native)
-	if alias != nil {
-		st = aliasKept(days, st, alias, names)
-	}
-	return st
+	return statsReadAll([]int{days}, now, native, alias, names)[0]
 }
 
 func statsRead(days int, now time.Time, native map[string]bool) Stats {
-	return statsReadAll([]int{days}, now, native)[0]
+	return statsReadAll([]int{days}, now, native, nil, "")[0]
 }
 
 // statsReadAll is statsRead for each of days, sharing what doesn't
-// depend on the range.
-func statsReadAll(ranges []int, now time.Time, native map[string]bool) []Stats {
-	out, listed := statsKept(ranges, now, native != nil)
+// depend on the range, with the models counted under alias's names (none
+// when nil), which names stands for (provider.UsageNamesKey).
+func statsReadAll(ranges []int, now time.Time, native map[string]bool, alias func(string) string, names string) []Stats {
+	out, listed := statsKept(ranges, now, native != nil, alias, names)
 	if native != nil {
 		maps.Copy(native, listed)
 	}
@@ -248,9 +239,9 @@ func statsReadAll(ranges []int, now time.Time, native map[string]bool) []Stats {
 }
 
 // statsKept is statsReadAll, and the agent|id of every session listed when
-// native is asked for. The ranges' Stats and the map are kept for the
-// next read (keptStats), so neither is written.
-func statsKept(ranges []int, now time.Time, wantNative bool) ([]Stats, map[string]bool) {
+// native is asked for. The ranges' Stats, aliased, and the map are kept for
+// the next read (keptStats), so neither is written.
+func statsKept(ranges []int, now time.Time, wantNative bool, alias func(string) string, names string) ([]Stats, map[string]bool) {
 	now = now.In(time.Local)
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
 
@@ -265,7 +256,10 @@ func statsKept(ranges []int, now time.Time, wantNative bool) ([]Stats, map[strin
 	// finds them read rather than starting another run
 	refresh(files, files)
 	price, titles := pricer(), codexTitleOf()
-	keptFor(files, today, price, titles)
+	if alias == nil {
+		names = "\x00none"
+	}
+	keptFor(files, today, names, price, titles)
 	out := make([]Stats, len(ranges))
 	var todo []int
 	for i, days := range ranges {
@@ -317,6 +311,9 @@ func statsKept(ranges []int, now time.Time, wantNative bool) ([]Stats, map[strin
 	for _, i := range todo {
 		st := statsOfRange(ranges[i], today, files, copies, copied, folder, listed, identities, taskTitles, price, titles)
 		keepDesktop(st)
+		if alias != nil {
+			aliasOwned(&st, alias)
+		}
 		keepRange(ranges[i], st, ranges)
 		out[i] = st
 	}

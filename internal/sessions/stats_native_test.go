@@ -44,7 +44,7 @@ func TestStatsAllRangesOnePass(t *testing.T) {
 	passes := 0
 	filesHook = func() { passes++ }
 	t.Cleanup(func() { filesHook = nil })
-	all := statsReadAll(ranges, now, map[string]bool{})
+	all := statsReadAll(ranges, now, map[string]bool{}, nil, "")
 	if passes != 1 {
 		t.Fatalf("%d passes over the files", passes)
 	}

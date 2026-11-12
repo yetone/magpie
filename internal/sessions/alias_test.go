@@ -86,6 +86,11 @@ func TestSessionsCountAliasedModelsAsOne(t *testing.T) {
 			t.Fatalf("aliased summary models: %v", sum.Models)
 		}
 	}
+	// the Stats kept for the next read are the aliased ones themselves:
+	// no second copy of every summary beside them (#2278)
+	if k, ok := keptStats.ranges[0]; !ok || len(k.Sessions) == 0 || &k.Sessions[0] != &st.Sessions[0] {
+		t.Fatalf("an aliased read keeps a copy of its summaries beside the kept ones")
+	}
 	// what List and Stats keep for the next read is not changed: with the
 	// alias gone, the next read has two rows again
 	if _, err := provider.SetUsageAlias("gpt-6-astra", ""); err != nil {
@@ -99,9 +104,9 @@ func TestSessionsCountAliasedModelsAsOne(t *testing.T) {
 	}
 }
 
-// Merging never writes into the slices it was given: a memo's copy stays
-// as it was.
-func TestAliasStatsLeavesItsInputAlone(t *testing.T) {
+// Aliasing a Stats made for the read never writes into the slices its days
+// and sessions were given: a memo's copy stays as it was.
+func TestAliasOwnedLeavesSharedSlicesAlone(t *testing.T) {
 	alias := provider.UsageAliasIn(map[string]string{"b-model": "a-model"})
 	in := Stats{
 		Days: []Day{{Date: "2026-09-25", Usage: []Usage{
@@ -114,7 +119,10 @@ func TestAliasStatsLeavesItsInputAlone(t *testing.T) {
 			{Model: "b-model", Effort: "high", Tokens: Tokens{Input: 2}, Reasoning: 2, Cost: 2, Priced: true},
 		}}},
 	}
-	out := aliasStats(in, alias)
+	memo := Stats{Days: []Day{in.Days[0]}, Sessions: []Summary{in.Sessions[0]}}
+	out := in
+	aliasOwned(&out, alias)
+	in = memo
 	u := out.Days[0].Usage
 	if len(u) != 2 || u[0].Model != "a-model" || u[0].Input != 3 || u[0].Cost != 3 || u[0].Priced || u[1].Cwd != "/v" || u[1].Model != "a-model" {
 		t.Fatalf("usage: %+v", u)

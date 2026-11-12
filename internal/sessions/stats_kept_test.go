@@ -104,8 +104,8 @@ func TestTitleAnswersSettled(t *testing.T) {
 func TestStatsKeptNewDay(t *testing.T) {
 	setup(t)
 	now := time.Now()
-	a := statsReadAll([]int{7}, now, nil)[0]
-	b := statsReadAll([]int{7}, now.AddDate(0, 0, 1), nil)[0]
+	a := statsReadAll([]int{7}, now, nil, nil, "")[0]
+	b := statsReadAll([]int{7}, now.AddDate(0, 0, 1), nil, nil, "")[0]
 	if a.To == b.To {
 		t.Fatalf("the next day's range is today's: %s", b.To)
 	}
@@ -116,7 +116,7 @@ func TestStatsKeptRangesBounded(t *testing.T) {
 	setup(t)
 	now := time.Now()
 	for d := 1; d <= 40; d++ {
-		statsReadAll([]int{0, d}, now, nil)
+		statsReadAll([]int{0, d}, now, nil, nil, "")
 	}
 	mu.Lock()
 	n, all := len(keptStats.ranges), keptStats.ranges[0].To != ""
