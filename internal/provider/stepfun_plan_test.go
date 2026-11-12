@@ -154,7 +154,7 @@ func TestStepFunSession(t *testing.T) {
 	if fi, err := os.Stat(stepfunPath()); err != nil || runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600 {
 		t.Fatalf("session file: %v %v", fi, err)
 	}
-	p := Provider{ID: "stepfun", Name: "StepFun", Icon: "stepfun-color", Chat: "https://api.stepfun.ai/step_plan/v1"}
+	p := Provider{ID: "stepfun", Name: "StepFun", Icon: "stepfun", Chat: "https://api.stepfun.ai/step_plan/v1"}
 	q := stepPlanQuota(ctx, p)
 	if q.Error != "" || q.Plan != "Plus" || len(q.Windows) != 3 || q.Renew != "auto" || q.Until == nil || q.Until.Unix() != 1793000000 {
 		t.Fatalf("card: %+v", q)

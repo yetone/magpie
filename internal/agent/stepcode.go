@@ -431,7 +431,7 @@ func stepcodeIn(at place) *Agent {
 	a := &Agent{
 		ID:      "stepcode",
 		Name:    "StepCode",
-		Icon:    "stepfun-color",
+		Icon:    "stepfun",
 		Bin:     "step",
 		Aliases: []string{"step"},
 		Dir:     dir,

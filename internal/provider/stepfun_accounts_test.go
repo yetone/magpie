@@ -25,7 +25,7 @@ func stepfunHome(t *testing.T, ps ...Provider) {
 }
 
 func stepfunOn(id, name, site string) Provider {
-	return Provider{ID: id, Name: name, Icon: "stepfun-color", Chat: "https://api.stepfun." + site + "/step_plan/v1"}
+	return Provider{ID: id, Name: name, Icon: "stepfun", Chat: "https://api.stepfun." + site + "/step_plan/v1"}
 }
 
 // stepfunFile is stepfun-auth.json as written.

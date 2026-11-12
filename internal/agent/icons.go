@@ -24,7 +24,7 @@ var byFamily = []struct{ prefix, icon string }{
 	{"mistral", "mistral-color"}, {"codestral", "mistral-color"}, {"devstral", "mistral-color"}, {"magistral", "mistral-color"},
 	{"minimax", "minimax-color"},
 	{"mimo", "mimocode"}, {"xiaomi", "mimocode"},
-	{"step", "stepfun-color"},
+	{"step", "stepfun"},
 }
 
 // providerIcon is the logo of a models.dev provider itself, which for one

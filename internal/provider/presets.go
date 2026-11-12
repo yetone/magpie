@@ -252,14 +252,14 @@ var presets = []PresetDef{
 		Website: "https://platform.minimaxi.com", KeysURL: "https://platform.minimaxi.com/user-center/basic-information/interface-key"},
 	// a Step Plan is served at its own endpoints (step_plan/…), its key
 	// refused at the pay-as-you-go ones
-	{ID: "stepfun", Name: "StepFun", Icon: "stepfun-color", Kind: KindVendor, Catalog: "stepfun-ai-step-plan, stepfun-ai",
+	{ID: "stepfun", Name: "StepFun", Icon: "stepfun", Kind: KindVendor, Catalog: "stepfun-ai-step-plan, stepfun-ai",
 		Chat: "https://api.stepfun.ai/step_plan/v1", Anthropic: "https://api.stepfun.ai/step_plan",
 		Website: "https://platform.stepfun.ai", KeysURL: "https://platform.stepfun.ai/interface-key",
 		RegionLabel: "Plan", KeyPlans: true, Regions: []Region{
 			{ID: "plan", Name: "Step Plan", Chat: "https://api.stepfun.ai/step_plan/v1", Anthropic: "https://api.stepfun.ai/step_plan"},
 			{ID: "api", Name: "Pay as you go", Chat: "https://api.stepfun.ai/v1", Anthropic: "https://api.stepfun.ai"},
 		}},
-	{ID: "stepfun-cn", Name: "StepFun (China)", Icon: "stepfun-color", Kind: KindVendor, Catalog: "stepfun-step-plan, stepfun",
+	{ID: "stepfun-cn", Name: "StepFun (China)", Icon: "stepfun", Kind: KindVendor, Catalog: "stepfun-step-plan, stepfun",
 		Chat: "https://api.stepfun.com/step_plan/v1", Anthropic: "https://api.stepfun.com/step_plan",
 		Website: "https://platform.stepfun.com", KeysURL: "https://platform.stepfun.com/interface-key",
 		RegionLabel: "Plan", KeyPlans: true, Regions: []Region{
