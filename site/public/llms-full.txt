@@ -6680,7 +6680,75 @@ Not while it runs: magpie goes through its local API and the models reload at on
 
 Yes. magpie stashed it and puts it back; if OpenHanako no longer has it, the agent goes to OpenHanako's first model of its own.
 
-More desktop apps on the same models: [DS Bot on any model](https://usemagpie.ai/docs/ds-bot), [Tuanjie Cowork on any model](https://usemagpie.ai/docs/tuanjie-cowork) and [OpenBot on any model](https://usemagpie.ai/docs/openbot). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More desktop apps on the same models: [DS Bot on any model](https://usemagpie.ai/docs/ds-bot), [Tuanjie Cowork on any model](https://usemagpie.ai/docs/tuanjie-cowork), [OpenBot on any model](https://usemagpie.ai/docs/openbot) and [Kun on any model](https://usemagpie.ai/docs/kun). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/kun
+
+# Kun on any model
+
+Kun (KunAgent) is a local-first AI workbench: a desktop app (Code, Work, chats, agents) and a `kun` TUI, both clients of one runtime, `kun serve`. Its models come from the runtime's model connections. magpie adds a connection of its own and makes it the default, so Kun runs on any model in magpie: DeepSeek, GLM, Kimi, Qwen, Claude or a ChatGPT subscription, in the desktop app and the TUI alike.
+
+## Set up Kun
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Open Kun.** magpie adds its connection through the running Kun, as below.
+3. **Pick a model for Kun on the Agents page.** Pick a model via magpie; it becomes Kun's default.
+
+```
+magpie kun deepseek/deepseek-v4-pro
+```
+
+## Through Kun's own API
+
+Kun keeps its connections in `model-connections.v2.json` in its data folder (`$KUN_DATA_DIR`, else `~/.kun/data`), and a connection's key in its protected credential store, so a connection can't be written into a file by hand. magpie adds and removes its connection as Kun's own Settings › Providers and its `kun provider` command do, through the runtime's admin API:
+
+```
+GET    /v1/model-connections              the connections, with a revision
+POST   /v1/model-connections/connect      magpie's connection
+PATCH  /v1/model-connections/magpie       its model list
+POST   /v1/model-connections/select       Kun's default model
+DELETE /v1/model-connections/magpie       switching back
+```
+
+The address and token come from `runtime.json` in the data folder. magpie's connection, `magpie`, is an HTTP one at the gateway's `/v1`, spoken to as Chat Completions with magpie's own key for Kun. magpie remembers its id, so one you renamed to magpie-2 in Kun is still magpie's.
+
+## The model list
+
+The connection's models are the ones you tick for Kun on magpie's Agents page, at most 500. A model picked or dropped there reaches the connection, and so does a gateway on a new port.
+
+## Kun has to be running
+
+Kun adds and changes model providers only while it runs. When it isn't running, magpie says to open Kun, then try again.
+
+## Switching back
+
+magpie stashes the default Kun had when it first steps in. Switching back picks that default again, then removes magpie's connection. With no provider of your own in Kun to go back to, magpie asks you to add one in Kun's Settings › Providers.
+
+```
+magpie kun default
+```
+
+## FAQ
+
+### Can Kun run on DeepSeek, GLM or a ChatGPT subscription?
+
+Yes. Open Kun and pick a via-magpie model for Kun on magpie's Agents page. magpie adds a magpie model connection and makes it the default.
+
+### magpie says open Kun, then try again. Why?
+
+Kun takes provider changes only while it runs. Open the Kun desktop app or kun serve, and try again.
+
+### Does the kun TUI get the models too?
+
+Yes. The desktop app and the kun TUI are both clients of kun serve and share its model connections.
+
+### Does switching back restore my default model?
+
+Yes. magpie stashed the default Kun had, picks it again, then removes its connection.
+
+More desktop apps on the same models: [OpenHanako on any model](https://usemagpie.ai/docs/openhanako), [DS Bot on any model](https://usemagpie.ai/docs/ds-bot) and [Tuanjie Cowork on any model](https://usemagpie.ai/docs/tuanjie-cowork). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
