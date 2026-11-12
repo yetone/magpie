@@ -213,6 +213,8 @@ magpie opencode modelscope/Qwen/Qwen3-235B-A22B-Instruct-2507</pre></div>
     <h2 id="images"><a class="anchor" href="#images">画像</a></h2>
     <p>ModelScope の画像生成は独自の非同期タスクです。リクエストでタスクを始めて task_id を受け取り、成功か失敗まで問い合わせます。ユーザーごとに同時 1 タスクで、バーストには 429 を返すため、magpie は 1 枚ずつ頼み、混んでいるときは少し待ってから、結果をツールが読める画像として渡します。</p>
 
+    <p><a href="/docs/ja/nvidia">NVIDIA NIM を Claude Code・Codex などのエージェントで使う</a></p>
+
     <h2 id="faq"><a class="anchor" href="#faq">よくある質問</a></h2>
     <h3>ModelScope を Claude Code で使うには？</h3>
     <p>magpie に ModelScope を追加してアクセストークンをキーに貼り、Claude Code の行で Qwen/Qwen3-Coder-30B-A3B-Instruct を選ぶか、magpie claude modelscope/Qwen/Qwen3-Coder-30B-A3B-Instruct を実行します。Anthropic エンドポイントがないため magpie が変換します。</p>

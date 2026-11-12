@@ -1797,6 +1797,8 @@ ModelScope's model names carry their organisation, written as they are: Qwen/Qwe
 
 ModelScope draws through async tasks of its own: a request starts a task and answers its task_id, which is asked about until it succeeds or fails. It runs one task of a user's at a time and answers bursts with 429, so magpie asks for one image at a time, waits a moment when it is busy, and hands the result to your tool as an image it can read.
 
+[NVIDIA NIM in Claude Code, Codex and other agents](https://usemagpie.ai/docs/nvidia)
+
 ## FAQ
 
 ### How do I use ModelScope in Claude Code?
@@ -9768,6 +9770,71 @@ Yes. Codex speaks Responses, which magpie sends to Vercel's /v1 Responses API; t
 magpie sorts by Vercel's types: evaluation models, realtime voices and -batch ids answer no synchronous chat and stay out of agents' lists; image, video, embedding and speech models go to their own APIs.
 
 Related: [OpenRouter in Claude Code, Codex, Gemini CLI and OpenCode](https://usemagpie.ai/docs/openrouter), [Round robin and failover across accounts, keys and providers](https://usemagpie.ai/docs/routing-groups). If something fails, see [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting) or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/nvidia
+
+# NVIDIA NIM in Claude Code, Codex and other agents
+
+NVIDIA hosts NIM endpoints at build.nvidia.com: one `nvapi-` key reaches the many models it hosts. magpie's `nvidia` preset brings it to Claude Code, Codex, OpenCode and other agents.
+
+## Add it
+
+1. **Get a key..** Sign in at build.nvidia.com and make one under Settings → API Keys.
+2. **Add it..** Pick NVIDIA NIM in the app and paste the key into API key, or from the CLI:
+
+```
+magpie provider add nvidia nvapi-…
+magpie provider test nvidia
+```
+
+The preset sets Chat Completions alone, at `https://integrate.api.nvidia.com/v1`: NIM's `/v1/responses` answers for a few models and 404 for the rest, so magpie doesn't use it.
+
+## Use it in an agent
+
+Model ids are `nvidia/<NIM's model id>`, from NIM's own list:
+
+```
+magpie claude nvidia/
+magpie codex nvidia/
+```
+
+Claude Code speaks Anthropic's API and Codex speaks Responses; magpie translates both to Chat Completions for NIM and the answers back to what the agent reads.
+
+## Free models
+
+A model NIM prices at 0 is marked free beside it in agents' model pickers. The price is NIM's alone: the same model on another provider costs what it costs there, and NIM's $0 isn't taken as the maker's price.
+
+## Many keys
+
+Importing from an app that keeps an entry per key, as CC Switch does, often brings hundreds of entries, "NVIDIA #001" to "NVIDIA #600". magpie folds entries alike in all but their key into one provider, each key an account of it; otherwise every model showed hundreds of times in every agent's picker. Each entry's old name becomes its key's name, and one that was off stays off.
+
+## Notes
+
+- An `nvidia` provider set up in OpenCode becomes this preset when imported.
+- When NIM's free use runs out or is rate-limited, put it in a routing group with other providers: when one fails, the group's next member answers.
+- magpie can't tell a free NIM key from a paid one, so it doesn't say how a key bills.
+
+## FAQ
+
+### Does magpie support NVIDIA NIM?
+
+Yes, with the nvidia preset. Give a build.nvidia.com API key; magpie asks Chat Completions at integrate.api.nvidia.com/v1, and a model id is nvidia/.
+
+### Can Claude Code and Codex use NIM's models?
+
+Yes. NIM is asked on Chat Completions alone, and magpie translates Claude Code's Anthropic requests and Codex's Responses requests to Chat and the answers back.
+
+### How do I tell which models are free?
+
+A model NIM prices at 0 is marked free beside it in agents' model pickers. That is NIM's price only; the same model costs what it costs on other providers.
+
+### I imported hundreds of NVIDIA entries. What now?
+
+magpie folds entries alike in all but their key into one provider, each key an account of it, so models aren't repeated in the pickers.
+
+Related: [ModelScope in Claude Code and Codex](https://usemagpie.ai/docs/modelscope), [Round robin and failover across accounts, keys and providers](https://usemagpie.ai/docs/routing-groups). If something fails, see [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting) or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 

@@ -213,6 +213,8 @@ magpie opencode modelscope/Qwen/Qwen3-235B-A22B-Instruct-2507</pre></div>
     <h2 id="images"><a class="anchor" href="#images">画图</a></h2>
     <p>魔搭的画图接口是它自己的异步任务：先提交任务拿到 task_id，再查询到成功或失败。它每个用户同时只跑一个任务，突发请求会回 429，所以 magpie 一次只画一张，忙的时候稍等再试，再把结果变成工具能读的图片。</p>
 
+    <p><a href="/docs/zh/nvidia">NVIDIA NIM 接入 Claude Code、Codex 等 Agent</a></p>
+
     <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
     <h3>魔搭 ModelScope 怎么接入 Claude Code？</h3>
     <p>在 magpie 里添加 ModelScope，把访问令牌当 Key 粘贴，在 Claude Code 那一行选 Qwen/Qwen3-Coder-30B-A3B-Instruct 这类模型，或运行 magpie claude modelscope/Qwen/Qwen3-Coder-30B-A3B-Instruct。魔搭没有 Anthropic 接口，magpie 把请求转换成 Chat Completions。</p>

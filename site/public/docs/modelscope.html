@@ -213,6 +213,8 @@ magpie opencode modelscope/Qwen/Qwen3-235B-A22B-Instruct-2507</pre></div>
     <h2 id="images"><a class="anchor" href="#images">Images</a></h2>
     <p>ModelScope draws through async tasks of its own: a request starts a task and answers its task_id, which is asked about until it succeeds or fails. It runs one task of a user's at a time and answers bursts with 429, so magpie asks for one image at a time, waits a moment when it is busy, and hands the result to your tool as an image it can read.</p>
 
+    <p><a href="/docs/nvidia">NVIDIA NIM in Claude Code, Codex and other agents</a></p>
+
     <h2 id="faq"><a class="anchor" href="#faq">FAQ</a></h2>
     <h3>How do I use ModelScope in Claude Code?</h3>
     <p>Add ModelScope in magpie with your access token as the key, then pick Qwen/Qwen3-Coder-30B-A3B-Instruct on Claude Code's row, or run magpie claude modelscope/Qwen/Qwen3-Coder-30B-A3B-Instruct. ModelScope has no Anthropic endpoint, so magpie converts to Chat Completions.</p>
