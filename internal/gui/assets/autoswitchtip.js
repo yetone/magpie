@@ -15,12 +15,10 @@ window.autoSwitchTip = function (box, head, p) {
   if (!m || !(m.mode === "moves" || m.mode === "kept" && !m.routed) || box.querySelector(":scope > .hint")) return;
   const codex = p.account?.agent === "codex";
   const lines = codex
-    ? [t("magpie writes the next account's sign-in to Codex's own auth.json, as codex login does, and reads what is left where Codex's /status reads it. Sessions already open keep their account until they are restarted."),
-      t("It changes which of your own accounts Codex is signed in to, and nothing else: the requests are the ones Codex makes."),
-      t("So it is the same as switching accounts by hand. Use only accounts that are yours: sharing one is against OpenAI's terms.")]
-    : [t("magpie writes the next account's sign-in where Claude Code keeps its own, as /login does, and reads what is left by running Claude Code's own /usage. Sessions already open keep their account until they are restarted."),
-      t("Claude Code itself still sends every request, straight to Anthropic and unchanged; magpie sends none of them. An account with its own proxy keeps it."),
-      t("So it is the same as switching accounts by hand. Use only accounts that are yours: sharing one is against Anthropic's terms.")];
+    ? [t("When the account runs low, magpie signs Codex in to your next account, as codex login does. Sessions already open keep their account until they are restarted."),
+      t("Requests still come from Codex itself. Use only accounts that are yours: sharing one is against OpenAI's terms.")]
+    : [t("When the account runs low, magpie signs Claude Code in to your next account, as /login does. Sessions already open keep their account until they are restarted."),
+      t("Requests still go from Claude Code straight to Anthropic, unchanged. Use only accounts that are yours: sharing one is against Anthropic's terms.")];
   box.classList.add("hint-row");
   box.append(...lines.map((s) => el("p", "hint", s)));
   const mark = el("span", "as-tip");

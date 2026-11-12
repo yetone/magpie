@@ -68,9 +68,8 @@ const words = {
     keep: "Keep Claude Code signed in to",
     gateway: "Claude Code's requests go through magpie, which sends each one to an account with room; its own sign-in stays where you put it.",
     tip: [
-      "magpie writes the next account's sign-in where Claude Code keeps its own, as /login does, and reads what is left by running Claude Code's own /usage. Sessions already open keep their account until they are restarted.",
-      "Claude Code itself still sends every request, straight to Anthropic and unchanged; magpie sends none of them. An account with its own proxy keeps it.",
-      "So it is the same as switching accounts by hand. Use only accounts that are yours: sharing one is against Anthropic's terms.",
+      "When the account runs low, magpie signs Claude Code in to your next account, as /login does. Sessions already open keep their account until they are restarted.",
+      "Requests still go from Claude Code straight to Anthropic, unchanged. Use only accounts that are yours: sharing one is against Anthropic's terms.",
     ],
   },
   zh: {
@@ -80,9 +79,8 @@ const words = {
     keep: "Claude Code 始终登录",
     gateway: "Claude Code 的请求经过 magpie，每个请求都发给有额度的账号；Claude Code 自己的登录保持你选的账号不变。",
     tip: [
-      "magpie 把下一个账号的登录写到 Claude Code 自己保存登录的地方，和 /login 一样；剩余额度通过运行 Claude Code 自己的 /usage 读取。已经打开的会话继续用原来的账号，直到重新启动。",
-      "每个请求仍由 Claude Code 本身发出，直接发往 Anthropic，原样不改；magpie 一个都不发。设了自己代理的账号继续走它的代理。",
-      "所以这和你手动切换账号是一样的。请只用你自己的账号：共享账号违反 Anthropic 的条款。",
+      "账号额度快用完时，magpie 把 Claude Code 登录到你的下一个账号，和 /login 一样。已经打开的会话继续用原来的账号，直到重新启动。",
+      "请求仍由 Claude Code 直接发往 Anthropic，原样不改。请只用你自己的账号：共享账号违反 Anthropic 的条款。",
     ],
   },
 };

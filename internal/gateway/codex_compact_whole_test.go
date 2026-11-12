@@ -180,7 +180,7 @@ func TestCodexCompactKeepsFailingIsHeld(t *testing.T) {
 	}
 	asked := f.calls
 	rec := codexPostTo(s, codexCompactOf("fake/m1", "thread-1"))
-	if rec.Code != 400 || !strings.Contains(rec.Body.String(), "3 times in a row") {
+	if rec.Code != 400 || !strings.Contains(rec.Body.String(), "Couldn't compact the conversation: fake/m1 failed 3 times in a row") || !strings.Contains(rec.Body.String(), "switch this conversation to another model") {
 		t.Fatalf("held: %d %s", rec.Code, rec.Body)
 	}
 	if f.calls != asked {

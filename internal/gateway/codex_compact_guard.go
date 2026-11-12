@@ -74,7 +74,7 @@ func (f *compactFails) held(key, model string) (string, bool) {
 		return "", false
 	}
 	left := (compactHeldFor - time.Since(c.last)).Round(time.Second)
-	return fmt.Sprintf("compaction: %s failed to summarise this conversation %d times in a row (last: %s); magpie doesn't ask it again for %s, so a compaction that can't succeed isn't paid for over and over. Pick another model for this conversation, or a group whose compaction rule sends it to one that answers",
+	return fmt.Sprintf("Couldn't compact the conversation: %s failed %d times in a row (last: %s). magpie waits %s before asking it again. To compact now, switch this conversation to another model.",
 		model, c.n, c.why, left), true
 }
 
