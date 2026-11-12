@@ -48,3 +48,29 @@ func SetCodexOpen(v string) error {
 	s.CodexOpen = v
 	return settings.Save(s)
 }
+
+// CodexClient is the Codex client magpie presents to the ChatGPT backend
+// (settings.CodexClient): "" for Codex CLI, "desktop" for the Codex app. A
+// value this magpie doesn't know (a newer one's, a file edited by hand) is
+// read as "" and changes nothing.
+func CodexClient() string {
+	v := strings.TrimSpace(heldSettings().CodexClient)
+	if !slices.Contains(settings.CodexClients, v) {
+		return ""
+	}
+	return v
+}
+
+// SetCodexClient sets settings.CodexClient.
+func SetCodexClient(v string) error {
+	v = strings.TrimSpace(v)
+	if !slices.Contains(settings.CodexClients, v) {
+		return fmt.Errorf("the Codex client must be one of %q, not %q", settings.CodexClients[1:], v)
+	}
+	s := settings.Load()
+	if s.CodexClient == v {
+		return nil
+	}
+	s.CodexClient = v
+	return settings.Save(s)
+}

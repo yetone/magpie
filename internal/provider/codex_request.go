@@ -60,9 +60,41 @@ func codexSign(token func(context.Context) (tok, accountID string, err error)) f
 // sent with). The ChatGPT account's own calls that aren't a model's
 // (/wham/usage, the reset credits, the token refresh) went with Go's
 // User-Agent and no originator, unlike any request Codex makes.
+//
+// Which Codex that is is settings.CodexClient's: Codex CLI by default, the
+// Codex app when the user chose it (ouhthuo on X: the backend routes some
+// models by the client's originator).
 func codexClientHeaders(h http.Header, ver string) {
+	if CodexClient() == "desktop" {
+		h.Set("originator", codexDesktopOriginator)
+		h.Set("User-Agent", codexDesktopUserAgent(ver))
+		return
+	}
 	h.Set("originator", "codex_cli_rs")
 	h.Set("User-Agent", codexUserAgent(ver))
+}
+
+// codexDesktopOriginator is the originator the Codex app gives
+// (set_default_originator, which codex-rs login/src/auth/default_client.rs
+// turns into the first word of the User-Agent as well); its threads record
+// the same name.
+const codexDesktopOriginator = "Codex Desktop"
+
+// codexDesktopBuild is the app's own version, the last part of the
+// User-Agent it sends, from the app's logs (26.1026.10807 is the newest
+// build seen); its codex-rs version is ver.
+const codexDesktopBuild = "26.1026.10807"
+
+// codexDesktopUserAgent is the User-Agent the Codex app of codex-rs version
+// v sends: "Codex Desktop/0.166.0 (Mac OS 26.6.0; arm64) unknown (Codex
+// Desktop; 26.1026.10807)". The terminal is "unknown" on every system,
+// since the app has none.
+func codexDesktopUserAgent(v string) string {
+	ua := codexUserAgent(v)
+	if i := strings.Index(ua, ") "); i >= 0 {
+		ua = ua[:i+2]
+	}
+	return codexDesktopOriginator + strings.TrimPrefix(ua, "codex_cli_rs") + "unknown (" + codexDesktopOriginator + "; " + codexDesktopBuild + ")"
 }
 
 // codexAccountHeaders are the headers of a call Codex makes about the

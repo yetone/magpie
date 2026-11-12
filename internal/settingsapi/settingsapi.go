@@ -377,6 +377,7 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	in.DesktopSubagentModel = cur.DesktopSubagentModel
 	in.DesktopGateway = cur.DesktopGateway     // Desktop's address, set in its row
 	in.CodexServiceTier = cur.CodexServiceTier // codex-service-tier
+	in.CodexClient = cur.CodexClient           // codex-client
 	// and the model DeepSeek Harness compacts on, set in its row
 	in.DshCompactModel = cur.DshCompactModel
 	// and the model Codex compacts on, set in its row

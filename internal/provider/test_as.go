@@ -210,7 +210,8 @@ func clientHeaders(client string, h http.Header) {
 	shape := clientShape(client)
 	if shape == nil && client == ClientCodex {
 		v := codexVersion()
-		shape = http.Header{"User-Agent": {codexUserAgent(v)}, "Originator": {"codex_cli_rs"}, "Version": {v}}
+		shape = http.Header{"Version": {v}}
+		codexClientHeaders(shape, v)
 	}
 	for k, vs := range shape {
 		h[k] = vs

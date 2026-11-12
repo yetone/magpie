@@ -176,6 +176,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		CodexAutoReview:      "fake/m1",
 		CodexSubagentModel:   "codex/gpt-6-astra",
 		CodexServiceTier:     "priority",
+		CodexClient:          "desktop",
 		CodexOpen:            "terminal",
 		DesktopSubagentModel: "fake/m2",
 		DesktopGateway:       "https://192.168.1.20:3425",
