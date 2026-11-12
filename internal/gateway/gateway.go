@@ -5797,6 +5797,13 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 	// back whole (gathers)
 	relayable := slices.Contains(s.usable(p, model), from) && (p.Account == nil || !p.Account.Stream || streamOf(body) || gathers(p, from, body))
 	relay := relayable
+	// a subagent's task its lead sealed (#1109) is lost by a translation,
+	// as a native compaction is (#1099): responsesParts reads an
+	// agent_message's text and images alone, so the sealed body would be
+	// dropped and the NEW_TASK header asked alone. Every downgrade below
+	// leaves a sealed task with who can open it, as it came, or the request
+	// fails saying so
+	sealed := from == provider.Responses && hasSealedAgentMessage(body)
 	// a Claude model is asked on Messages whatever API the client spoke,
 	// for the cache breakpoints the translation adds: OpenCode speaks Chat
 	// for every model, and a relay drops cache_control on Chat, so every
@@ -5817,7 +5824,7 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 	// apply_patch as a function, left web_search out and added
 	// max_output_tokens, the shape such a relay turns away (maralica on
 	// Discord). Its web_search goes to the relay as sent.
-	if relay && searchedForIt(r.Context(), p, from, model, body) && !(from == provider.Responses && (hasSealedAgentMessage(body) || codexAsSent(p, r.Header))) {
+	if relay && searchedForIt(r.Context(), p, from, model, body) && !(sealed || codexAsSent(p, r.Header)) {
 		relay, ownAPI = false, true
 	}
 	// Claude Code's advisor, which magpie runs for a model whose upstream
@@ -5895,7 +5902,7 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 	if relay && !keep && streamOnly {
 		relay, ownAPI = false, true
 	}
-	if keep && relayable {
+	if (keep || sealed) && relayable {
 		relay, ownAPI = true, false
 	}
 	if relay {
@@ -5914,9 +5921,10 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 		}
 		// the model isn't served on the client's own API: speak another;
 		// or it turned the custom tools away just now: speak it translated,
-		// except a compaction, which a translation would leave out
+		// except a compaction or a sealed subagent task, which a
+		// translation would leave out
 		if customOff() || !s.fits(p.ID, streamOnlyRefused(model), from) && !streamOf(body) {
-			if keep {
+			if keep || sealed {
 				return writeError(w, from, status, msg), msg
 			}
 			ownAPI = true
