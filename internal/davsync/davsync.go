@@ -854,6 +854,8 @@ func collect(c Config) (backup.Bundle, error) {
 		s := settings.Load()
 		b.Settings = &s
 	}
+	// a provider kept on this computer (Provider.ThisDevice) never goes out
+	b.Providers, b.Order = provider.SyncedOnly(b.Providers, b.Order)
 	if !c.Agents {
 		b.Agents = nil
 	}

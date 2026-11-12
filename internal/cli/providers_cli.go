@@ -139,6 +139,9 @@ const providerUsage = `usage:
                                           rest at all, while out of quota, its key refused or rate limited
                                           still rests it
   magpie provider listed <id> yes|no      no: its models serve only through routing groups, not in the list
+  magpie provider this-device <id> yes|no
+                                          yes: kept on this computer; sync neither sends it out nor lets
+                                          another computer's copy replace or remove it
   magpie provider off|on <id>             switch it off (kept, but no agent or request uses it), or on again
   magpie provider test <id> [--as codex|claude-code] [model…]
                                           send a tiny request through each endpoint, or to each model;
@@ -706,6 +709,25 @@ func providerCmd(args []string) error {
 			fmt.Println(green.Render("✓"), p.Name, muted.Render("serves only through routing groups"))
 		} else {
 			fmt.Println(green.Render("✓"), p.Name, muted.Render("its models are listed"))
+		}
+		return nil
+	case "this-device":
+		// yes: sync neither sends the provider out nor lets another
+		// computer's copy replace or remove it (treydtw on X)
+		if len(rest) != 2 || (rest[1] != "yes" && rest[1] != "no") {
+			return fmt.Errorf("magpie provider this-device <id> yes|no")
+		}
+		p, err := provider.Find(rest[0])
+		if err != nil {
+			return err
+		}
+		if err := provider.SetThisDevice(p.ID, rest[1] == "yes"); err != nil {
+			return err
+		}
+		if rest[1] == "yes" {
+			fmt.Println(green.Render("✓"), p.Name, muted.Render("stays on this device: sync doesn't send it out or change it"))
+		} else {
+			fmt.Println(green.Render("✓"), p.Name, muted.Render("syncs with your other computers"))
 		}
 		return nil
 	case "off", "on":

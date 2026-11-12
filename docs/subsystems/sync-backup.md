@@ -108,6 +108,22 @@ sync both ways throughout. A kept agent is not listed under Kept on this
 computer, which is the implicit own fields only (`TestAgentHereThroughSync`,
 `TestAgentsHereIsThisComputers`, `agent-here.test.cjs`).
 
+A provider can also be kept on one computer
+([`Provider.ThisDevice`](../../internal/provider/provider.go): the provider
+row's menu, `magpie provider this-device <id> yes|no`), for a local model that
+exists only there (treydtw on X). `collect` leaves it, and its place in the
+provider order, out of what sync sends, so changing it is no change to push
+and the other computers lose their copy of it at their next sync. When a
+bundle is brought in, `provider.Mirror` neither replaces nor removes a provider
+kept here, whatever the other computers have under its id, and takes in none
+that a bundle marks as kept on its computer
+(`TestProviderOnThisDeviceStaysOnIt`). It is off by default for every provider,
+local addresses included: a copy of a `127.0.0.1` provider on a computer that
+runs the same local server works, and turning it on by default would take the
+copies off the computers that have one. A file backup (`backup.Collect`) still
+carries the provider, with the mark, and a Restore keeps the mark a provider
+here has.
+
 Sharing turned on at one computer never turns it on or off at another
 (Lullaby on Discord). A backup restored onto a new computer leaves sharing as
 that computer has it, off on a fresh one: sharing opens the gateway to the

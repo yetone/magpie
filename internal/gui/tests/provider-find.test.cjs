@@ -190,8 +190,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await menu.waitFor();
         await atPointer(page, row.locator(".name"), menu);
         const names = await menu.locator(".rm-name").allTextContents();
-        assert.deepEqual(names, [await tr("Move to top"), await tr("Move up"), await tr("Move down"), await tr("Move to bottom"), await tr("Use first"), await tr("Never a fallback")]);
-        assert.deepEqual(await menu.locator(".rm-item").evaluateAll((bs) => bs.map((b) => b.disabled)), [false, false, true, true, false, false]);
+        assert.deepEqual(names, [await tr("Move to top"), await tr("Move up"), await tr("Move down"), await tr("Move to bottom"), await tr("Use first"), await tr("Never a fallback"), await tr("Only on this device")]);
+        assert.deepEqual(await menu.locator(".rm-item").evaluateAll((bs) => bs.map((b) => b.disabled)), [false, false, true, true, false, false, false]);
         await menu.locator(".rm-item").first().click();
         await page.waitForFunction(() => document.querySelector("#providers > .row.provider").dataset.id === "zhipu");
         assert.deepEqual(f.posted.at(-1), ["zhipu", "openai", "relay-two", "relay-one", "anthropic", "relay-three", "deepseek", "moonshot", "relay-off"]);
@@ -200,7 +200,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // the first one's: Move to Bottom
         await page.locator('#providers > .row.provider[data-id="zhipu"] .name').click({ button: "right" });
         await menu.waitFor();
-        assert.deepEqual(await menu.locator(".rm-item").evaluateAll((bs) => bs.map((b) => b.disabled)), [true, true, false, false, false, false]);
+        assert.deepEqual(await menu.locator(".rm-item").evaluateAll((bs) => bs.map((b) => b.disabled)), [true, true, false, false, false, false, false]);
         await menu.locator(".rm-item").nth(3).click();
         await page.waitForFunction(() => [...document.querySelectorAll("#providers > .row.provider")].at(-1).dataset.id === "zhipu");
         assert.deepEqual(f.posted.at(-1), ["openai", "relay-two", "relay-one", "anthropic", "relay-three", "deepseek", "moonshot", "zhipu", "relay-off"]);

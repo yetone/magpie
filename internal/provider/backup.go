@@ -50,8 +50,10 @@ func Restore(ps []Provider) (added, replaced int, err error) {
 			continue
 		}
 		keepSelf := f.Providers[i].KeepSelf // this computer's own (Mirror)
+		keepThis := f.Providers[i].ThisDevice
 		f.Providers[i] = KeepSecrets(p, f.Providers[i], p.Key == "" && len(p.Keys) == 0)
 		f.Providers[i].KeepSelf = keepSelf
+		f.Providers[i].ThisDevice = f.Providers[i].ThisDevice || keepThis // a restore doesn't send it away
 		replaced++
 	}
 	if added+replaced == 0 {
@@ -99,7 +101,9 @@ func RestoreGroups(gs []Group) error {
 // restarted to follow (RestartApp), and whether a Remote magpie that is
 // this magpie is used anyway (KeepSelf), is this computer's own:
 // one person signs in to a personal account at home and a work account at
-// the office, and sync set each computer to the other's every day.
+// the office, and sync set each computer to the other's every day. A
+// provider kept on this computer (ThisDevice) is neither replaced nor
+// removed by them.
 func Mirror(ps []Provider, gs []Group) error {
 	f, err := read()
 	if err != nil {
@@ -115,6 +119,12 @@ func Mirror(ps []Provider, gs []Group) error {
 		if p.ID == "" || p.ID != Slug(p.ID) || p.ID == "magpie" {
 			continue
 		}
+		// a provider kept on this computer isn't replaced by another
+		// computer's copy of its id, and one another computer kept is not
+		// here to be taken in
+		if p.ThisDevice || here[p.ID].ThisDevice {
+			continue
+		}
 		if h, ok := here[p.ID]; ok {
 			p = KeepSecrets(p, h, p.Key == "" && len(p.Keys) == 0)
 			p.KeepLogin, p.KeepLoginAs, p.SwitchOnly, p.RestartApp = h.KeepLogin, h.KeepLoginAs, h.SwitchOnly, h.RestartApp
@@ -124,6 +134,11 @@ func Mirror(ps []Provider, gs []Group) error {
 			p.KeepSelf = false // kept on the other computer, of a magpie that isn't this one
 		}
 		out = append(out, p)
+	}
+	for _, h := range f.Providers { // and those kept here stay, whatever the others have
+		if h.ThisDevice {
+			out = append(out, h)
+		}
 	}
 	f.Providers = out
 	f.Groups = slices.DeleteFunc(slices.Clone(gs), func(g Group) bool { return g.ID == "" || g.ID != GroupSlug(g.ID) })
@@ -251,3 +266,27 @@ func notSignedIn(ps []Provider, have map[string]bool) []string {
 // model picks and settings alone, with no endpoint or key of its own: it
 // is signed in to, never given a key.
 func OnlyPicks(p Provider) bool { return !hasEndpoint(normalize(p)) }
+
+// SetThisDevice keeps a provider on this computer, out of sync, or lets it
+// sync again (Provider.ThisDevice).
+func SetThisDevice(id string, only bool) error {
+	p, err := Find(id)
+	if err != nil {
+		return err
+	}
+	p.ThisDevice = only
+	return Save(*p)
+}
+
+// SyncedOnly is the providers and their order without those kept on this
+// computer (ThisDevice): what sync sends out.
+func SyncedOnly(ps []Provider, order []string) ([]Provider, []string) {
+	here := map[string]bool{}
+	out := slices.DeleteFunc(slices.Clone(ps), func(p Provider) bool {
+		if p.ThisDevice {
+			here[p.ID] = true
+		}
+		return p.ThisDevice
+	})
+	return out, slices.DeleteFunc(slices.Clone(order), func(id string) bool { return here[id] })
+}
