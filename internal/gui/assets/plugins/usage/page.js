@@ -1638,6 +1638,19 @@ function renderLedReq() {
   pane.replaceChildren(bar, head, ledDetail(r));
 }
 
+// the service tier of a request (OpenAI's words: priority, flex, default…):
+// what the client asked for, what went out to the vendor when that differs
+// (a fast pick, a plan without Ultrafast), and what the vendor's reply said
+// it ran at. Each is told only when the row has it: a tier the reply never
+// named is not said to have been served.
+function ledTierText(r) {
+  const parts = [];
+  if (r.tier_asked) parts.push(t("asked {tier}", { tier: r.tier_asked }));
+  if (r.tier_sent && r.tier_sent !== r.tier_asked) parts.push(t("sent {tier}", { tier: r.tier_sent }));
+  if (r.tier_served) parts.push(t("answered {tier}", { tier: r.tier_served }));
+  return parts.join(" · ");
+}
+
 // what is known of one request: when, who sent it and from where, what
 // it asked for and what answered, what it cost and took, the id its
 // vendor gave it, the path it went to, and, if it failed, what the vendor
@@ -1672,6 +1685,7 @@ function ledDetail(r) {
   add("Sent", r.model);
   if (r.served) add("Served", ledServed(r));
   add("Effort", r.effort);
+  add("Service tier", ledTierText(r));
   if (ledFailed_(r)) {
     add("Status", r.status ? String(r.status) : "—", "bad");
     add("Error type", r.err_type, "bad");

@@ -445,7 +445,9 @@ vendor's reply said it ran at, empty when the reply doesn't say. The
 ChatGPT backend (Codex signed in with ChatGPT) says `auto` and `default`
 whether Fast ran or not, so from it those are left empty too. The JSON
 log keeps them as `tier_asked`, `tier_sent` and `tier_served`, and each
-try in `/v1/magpie/route` has `tier` and `tier_served`. The last column,
+try in `/v1/magpie/route` has `tier` and `tier_served`. A request's row
+on the Requests page shows them as Service tier (asked, sent when it
+differs, answered). The last column,
 `upstream_stop`, is why the upstream said its reply ended, in its own
 words (`stop`, `tool_calls`, `end_turn`, a Responses reply's
 `completed`), empty when it said none. A request's row on the Requests
