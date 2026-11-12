@@ -18744,7 +18744,8 @@ function quotaWindows(sub) {
       if (!r) quota.append(r = el("div", "quota-reset"));
       const line = holdsLine(w.holds);
       // a past cycle's whole is reckoned at its own last reading (#2009)
-      if (sub.history) line.title = t("Estimated from the window that began {start}, read {at}", { start: quotaCycleDate(Date.parse(w.holds.since)), at: quotaCycleDate(w.recordedAt) }) + "\n" + line.title;
+      // the last window's, kept until this one has data to tell its own
+      if (sub.history || w.holds.prevAt) line.title = t("Estimated from the window that began {start}, read {at}", { start: quotaCycleDate(w.holds.since), at: quotaCycleDate(w.recordedAt || w.holds.prevAt) }) + "\n" + line.title;
       r.append(line);
     } else if (w.holdsWhy && holdsWhy[w.holdsWhy]) {
       // and where it can't be told, so, and why in its tooltip (#2045)

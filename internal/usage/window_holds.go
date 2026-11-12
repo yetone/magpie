@@ -28,14 +28,14 @@ func init() { provider.ReckonHolds = WithWindowHolds }
 func WithWindowHolds(qs []provider.SubscriptionQuota, now time.Time) []provider.SubscriptionQuota {
 	since, ok := holdsSince(qs, now)
 	if !ok { // none can be reckoned: each one only says why
-		return windowHolds(qs, now, time.Time{}, nil, provider.Renames{}, nil, nil, func(func(Record)) {})
+		return carryHolds(windowHolds(qs, now, time.Time{}, nil, provider.Renames{}, nil, nil, func(func(Record)) {}), now)
 	}
 	s := readLogSnapshot()
 	hist := provider.QuotaHistories(since, "", "")
 	started := withRecordedWindowStarts(qs, hist, now)
 	dry := dryRuns(started, hist, now)
 	out := windowHolds(started, now, s.firstOwn, apiPricer(), provider.UsageRenames(), provider.SamePlanAccounts(), dry, func(fn func(Record)) { s.visit(since, fn) })
-	return withSpansOf(out, qs)
+	return carryHolds(withSpansOf(out, qs), now)
 }
 
 // holdsSince is the earliest start of a window that could be reckoned.

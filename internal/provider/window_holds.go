@@ -41,6 +41,10 @@ type WindowHolds struct {
 		BaseCost   float64 `json:"baseCost,omitempty"`
 	} `json:"routed"`
 	Since time.Time `json:"since"`
+	// PrevAt is set when this is the last window's whole, carried over a
+	// reset until the new window has enough data (Musikrv77852 on X): the
+	// time that figure was last reckoned. Since is then that window's start.
+	PrevAt *time.Time `json:"prevAt,omitempty"`
 }
 
 // HoldsFloor is the least share used a window's whole is reckoned from:

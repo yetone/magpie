@@ -211,3 +211,36 @@ for (const [name, engine] of [["webkit", webkit], ["chromium", chromium]]) {
     } finally { await browser.close(); }
   });
 }
+
+// Musikrv77852 on X: after a window resets with nothing used yet, the last
+// window's whole stays (the server's holds.prevAt), its tooltip saying
+// which window it was reckoned in, as a past cycle's does; a window that
+// tells its own says nothing of the kind.
+for (const [name, engine] of [["webkit", webkit], ["chromium", chromium]]) {
+  test(`${name}: a whole kept from the last window says which window, in every language`, async () => {
+    const browser = await engine.launch();
+    try {
+      for (const lang of Object.keys(want)) {
+        for (const width of [360, 1000]) {
+          const page = await (await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce" })).newPage();
+          page.setDefaultTimeout(5000);
+          page.setDefaultNavigationTimeout(60000);
+          const since = new Date(Date.now() - 8 * 86400e3).toISOString(), prevAt = new Date(Date.now() - 86400e3).toISOString();
+          const cards = [{ provider: "kimi-code", name: "Kimi Code", icon: "kimi", plan: "pro", user: "mu@example.com", windows: [
+            { name: "7 days", used: 0, resetsAt: soon(160), holds: { ...holds(12345678, 0, 40, false), since, prevAt } },
+            { name: "5 hours", used: 20, resetsAt: soon(2), holds: holds(2345678, 0, 20, false) },
+          ] }];
+          await page.route("**/*", serve(lang, cards));
+          await page.goto("http://magpie.test/?view=usage");
+          await page.locator(".subscription-card .quota-holds").nth(1).waitFor();
+          const got = await page.evaluate(() => [...document.querySelectorAll(".quota-holds")].map((l) => ({ text: l.textContent, title: l.title })));
+          const at = `${lang} ${width}px`;
+          assert.equal(got.length, 2, at);
+          assert.ok(got[0].text.length > 0 && got[0].title.split("\n").length === 5, `${at}: the kept whole's tooltip says which window: ${got[0].title}`);
+          assert.ok(got[0].title.split("\n")[0].length > 0 && got[1].title.split("\n").length === 4, `${at}: a window with its own says nothing: ${got[1].title}`);
+          await page.close();
+        }
+      }
+    } finally { await browser.close(); }
+  });
+}
