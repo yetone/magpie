@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"runtime"
+	"slices"
 	"testing"
 
 	"github.com/yetone/magpie/internal/agent"
@@ -69,7 +70,7 @@ func TestStateWrittenAsEncoded(t *testing.T) {
 		w := &sinkWriter{keep: true}
 		sum, ok := writeStateJSON(w, s)
 		var want bytes.Buffer
-		if err := json.NewEncoder(&want).Encode(s); err != nil {
+		if err := json.NewEncoder(&want).Encode(shareOptions(s)); err != nil {
 			t.Fatal(err)
 		}
 		if !bytes.Equal(w.body.Bytes(), want.Bytes()) {
@@ -112,5 +113,99 @@ func TestStateWriteGrowsNoBufferItsSize(t *testing.T) {
 	per := int(all) / runs
 	if per > size/2 {
 		t.Fatalf("writing a %d-byte state allocated %d bytes, want under half its size", size, per)
+	}
+}
+
+// Each field's option list goes once: the fields offering one list alike
+// name it, and what the page puts back (api in app.js) is the state as
+// it was. With real accounts 13 agents' model pickers offered the same
+// 51KB catalog, 650KB of a 690KB state read.
+func TestStateSendsEachOptionListOnce(t *testing.T) {
+	catalog := []agent.Option{{Value: "a/1", Label: "One", Icons: []string{"x"}}, {Value: "a/2", Note: "fast"}}
+	same := slices.Clone(catalog) // equal, not the same backing array
+	other := slices.Clone(catalog)
+	other[1].FastFor = "codex"
+	icons := slices.Clone(catalog)
+	icons[0].Icons = []string{"y"}
+	s := stateJSON{Agents: []agentJSON{
+		{ID: "a", Fields: []fieldJSON{{Key: "model", Options: catalog}, {Key: "effort", Options: []agent.Option{{Value: "low"}}}}},
+		{ID: "b", Fields: []fieldJSON{{Key: "model", Options: same}, {Key: "small", Options: catalog}}},
+		{ID: "c", Fields: []fieldJSON{{Key: "model", Options: other}}},
+		{ID: "d", Fields: []fieldJSON{{Key: "model", Options: icons}}},
+		{ID: "e", Fields: []fieldJSON{{Key: "model", Options: []agent.Option{}}}},
+	}}
+	var before bytes.Buffer
+	if err := json.NewEncoder(&before).Encode(s); err != nil {
+		t.Fatal(err)
+	}
+	w := &sinkWriter{keep: true}
+	writeStateJSON(w, s)
+	var sent struct {
+		Agents []struct {
+			ID     string `json:"id"`
+			Fields []struct {
+				Key     string         `json:"key"`
+				Options []agent.Option `json:"options"`
+				List    int            `json:"list"`
+			} `json:"fields"`
+		} `json:"agents"`
+		OptionLists [][]agent.Option `json:"optionLists"`
+	}
+	if err := json.Unmarshal(w.body.Bytes(), &sent); err != nil {
+		t.Fatal(err)
+	}
+	if len(sent.OptionLists) != 3 {
+		t.Fatalf("%d option lists sent, want 3 (the catalog, the fast one's, the other icons'): %s", len(sent.OptionLists), w.body.Bytes())
+	}
+	lists := map[string]int{}
+	for _, a := range sent.Agents {
+		for _, f := range a.Fields {
+			if f.List != 0 {
+				if f.Options != nil {
+					t.Fatalf("%s's %s sent its options and a list", a.ID, f.Key)
+				}
+				lists[a.ID+"/"+f.Key] = f.List
+			}
+		}
+	}
+	if lists["a/model"] == 0 || lists["a/model"] != lists["b/model"] || lists["a/model"] != lists["b/small"] {
+		t.Fatalf("the fields offering one list name %v", lists)
+	}
+	if lists["c/model"] == lists["a/model"] || lists["d/model"] == lists["a/model"] {
+		t.Fatalf("a list unlike the catalog was sent as it: %v", lists)
+	}
+	if lists["a/effort"] != 0 || lists["e/model"] != 0 {
+		t.Fatalf("a list of one or none was moved: %v", lists)
+	}
+	// put back as the page does, it is the state as it was
+	var back map[string]any
+	if err := json.Unmarshal(w.body.Bytes(), &back); err != nil {
+		t.Fatal(err)
+	}
+	ol := back["optionLists"].([]any)
+	for _, a := range back["agents"].([]any) {
+		for _, f := range a.(map[string]any)["fields"].([]any) {
+			f := f.(map[string]any)
+			if l, ok := f["list"].(float64); ok {
+				f["options"] = ol[int(l)-1]
+				delete(f, "list")
+			}
+		}
+	}
+	delete(back, "optionLists")
+	var want map[string]any
+	if err := json.Unmarshal(before.Bytes(), &want); err != nil {
+		t.Fatal(err)
+	}
+	b1, _ := json.Marshal(back)
+	b2, _ := json.Marshal(want)
+	if !bytes.Equal(b1, b2) {
+		t.Fatalf("put back, the state is\n%s\nwant\n%s", b1, b2)
+	}
+	// and the state given is as it was
+	var after bytes.Buffer
+	_ = json.NewEncoder(&after).Encode(s)
+	if !bytes.Equal(before.Bytes(), after.Bytes()) {
+		t.Fatal("writing the state changed the caller's agents")
 	}
 }

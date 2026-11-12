@@ -7,7 +7,11 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"reflect"
+	"slices"
 	"sync/atomic"
+
+	"github.com/yetone/magpie/internal/agent"
 )
 
 // stateHeld is what writeStateJSON writes through, used again from poll
@@ -48,10 +52,13 @@ const agentsNull = `{"agents":null`
 // now, straight to both, and only the rest of the state, without its
 // agents, is encoded twice (with the settings and without). false when
 // the sum wasn't found; s was written all the same, when it could be.
+// s goes as shareOptions has it, each option list once.
 func writeStateJSON(rw http.ResponseWriter, s stateJSON) ([32]byte, bool) {
-	agents := s.Agents
+	s = shareOptions(s)
+	agents, lists := s.Agents, s.OptionLists
 	f := keptFile(s)
 	s.Agents, f.State.Agents = nil, nil
+	s.OptionLists, f.State.OptionLists = nil, nil
 	bufs := stateHeld.Swap(nil)
 	if bufs == nil {
 		bufs = new(stateBufs)
@@ -69,8 +76,9 @@ func writeStateJSON(rw http.ResponseWriter, s stateJSON) ([32]byte, bool) {
 	v, _ := json.Marshal(Version)
 	keptHead := `{"version":` + string(v) + `,"state":` + agentsNull
 	if agents == nil || err != nil || kerr != nil ||
-		!bytes.HasPrefix(tail, []byte(agentsNull)) || !bytes.HasPrefix(keptTail, []byte(keptHead)) {
-		s.Agents = agents
+		!bytes.HasPrefix(tail, []byte(agentsNull)) || !bytes.HasPrefix(keptTail, []byte(keptHead)) ||
+		!bytes.HasSuffix(tail, []byte("}")) || !bytes.HasSuffix(keptTail, []byte("}}")) {
+		s.Agents, s.OptionLists = agents, lists
 		writeJSON(rw, s)
 		sum, err := encodedSum(keptFile(s))
 		return sum, err == nil
@@ -84,26 +92,39 @@ func writeStateJSON(rw http.ResponseWriter, s stateJSON) ([32]byte, bool) {
 	out := bufs.out
 	defer out.Flush()
 	h := sha256.New()
+	both := io.MultiWriter(out, h)
 	_, _ = out.WriteString(`{"agents":[`)
 	h.Write([]byte(keptHead[:len(keptHead)-len("null")] + "["))
 	// each agent goes straight to rw and the sum, as Encode writes it
-	enc := json.NewEncoder(lineless{io.MultiWriter(out, h)})
+	enc := json.NewEncoder(lineless{both})
 	for i := range agents {
 		if i > 0 {
-			_ = out.WriteByte(',')
-			h.Write([]byte{','})
+			_, _ = both.Write([]byte{','})
 		}
 		// a pointer, so a method on *T is used as it is in the slice
 		if enc.Encode(&agents[i]) != nil {
 			return [32]byte{}, false
 		}
 	}
-	_ = out.WriteByte(']')
-	_, _ = out.Write(tail[len(agentsNull):])
-	_ = out.WriteByte('\n')
-	h.Write([]byte{']'})
-	h.Write(keptTail[len(keptHead):])
-	h.Write([]byte{'\n'})
+	_, _ = both.Write([]byte{']'})
+	// the rest, up to the state's closing brace: the option lists, the
+	// state's last field, go after it one by one, as the agents do
+	_, _ = out.Write(tail[len(agentsNull) : len(tail)-1])
+	h.Write(keptTail[len(keptHead) : len(keptTail)-2])
+	if len(lists) > 0 {
+		_, _ = both.Write([]byte(`,"optionLists":[`))
+		for i := range lists {
+			if i > 0 {
+				_, _ = both.Write([]byte{','})
+			}
+			if enc.Encode(lists[i]) != nil {
+				return [32]byte{}, false
+			}
+		}
+		_, _ = both.Write([]byte{']'})
+	}
+	_, _ = out.WriteString("}\n")
+	h.Write([]byte("}}\n"))
 	return [32]byte(h.Sum(nil)), true
 }
 
@@ -117,4 +138,56 @@ func (l lineless) Write(b []byte) (int, error) {
 		return n, err
 	}
 	return l.w.Write(b)
+}
+
+// shareOptions is s with each fields' option list sent once, in
+// OptionLists, and named by the field's List: a list two fields offer
+// alike is one entry. s's own agents are left as they were. The page
+// puts each field's list back as it reads the state (api in app.js).
+func shareOptions(s stateJSON) stateJSON {
+	if s.OptionLists != nil {
+		return s
+	}
+	agents := slices.Clone(s.Agents)
+	var lists [][]agent.Option
+	for i := range agents {
+		fields := agents[i].Fields
+		cloned := false
+		for j := range fields {
+			opts := fields[j].Options
+			if len(opts) < 2 {
+				continue
+			}
+			k := slices.IndexFunc(lists, func(l []agent.Option) bool { return sameOptions(l, opts) })
+			if k < 0 {
+				lists = append(lists, opts)
+				k = len(lists) - 1
+			}
+			if !cloned {
+				fields, cloned = slices.Clone(fields), true
+			}
+			fields[j].Options, fields[j].List = nil, k+1
+		}
+		agents[i].Fields = fields
+	}
+	if lists == nil {
+		return s
+	}
+	s.Agents, s.OptionLists = agents, lists
+	return s
+}
+
+// sameOptions reports whether a and b are the same options, in the same
+// order.
+func sameOptions(a, b []agent.Option) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	if &a[0] == &b[0] {
+		return true
+	}
+	if a[0].Value != b[0].Value || a[len(a)-1].Value != b[len(b)-1].Value {
+		return false
+	}
+	return reflect.DeepEqual(a, b)
 }
