@@ -18,7 +18,7 @@ import (
 // `git log -L` of this file.
 const (
 	appScriptBudget  = 1_086_267 // app.js: 1,080,614 at 8016205e3, with the 5,653 of room it had
-	coreScriptBudget = 1_263_333 // every core script at 8016205e3, the old measure 682 over its cap there (#5918)
+	coreScriptBudget = 1_263_700 // every core script at 8016205e3, the old measure 682 over its cap there (#5918); +367 for the model test on a chosen account (tmr11235), no page left to move it to
 )
 
 // codeBytes is how many bytes of b are code: its blank lines, its lines

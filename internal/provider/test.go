@@ -425,9 +425,24 @@ func (p Provider) testOne(ctx context.Context, model string) Result {
 	// (AccountsFor; #4992, scutken: a newapi pool's grok-4.7, served by
 	// its third account alone, was asked of the first and failed 503 "no
 	// available channel" while real requests were answered)
-	acct, ok := p.accountFor(model)
-	if !ok {
-		return Result{Model: model, Error: "every account that's on is set not to serve this model"}
+	var acct Provider
+	if ref := testOnRef(ctx); ref != "" && p.Account != nil {
+		// the account the user picked to test (TestOn)
+		var found bool
+		if acct, found = p.accountNamed(ref); !found {
+			return Result{Model: model, Error: fmt.Sprintf("no account %q that's on", ref)}
+		}
+	} else if ref != "" {
+		var found bool
+		if p, found = p.keyNamed(ref); !found {
+			return Result{Model: model, Error: "no such key that's on"}
+		}
+		acct = p
+	} else {
+		var ok bool
+		if acct, ok = p.accountFor(model); !ok {
+			return Result{Model: model, Error: "every account that's on is set not to serve this model"}
+		}
 	}
 	ctx, p = p.loggedAs(ctx, acct), acct
 	if p.isClaudeAccount() {
@@ -789,6 +804,14 @@ func (p Provider) ownRequests(ctx context.Context, kind string) context.Context 
 // write the status alone, so a failed test's row said nothing of why
 // (ysm119 on Discord: "no answer", and no error to find anywhere).
 func probe(ctx context.Context, p Provider, proto Protocol, url string, body []byte, model string, wait time.Duration) Result {
+	r := probeRetried(ctx, p, proto, url, body, model, wait)
+	if r.Account == "" {
+		r.Account = p.testedAccount()
+	}
+	return r
+}
+
+func probeRetried(ctx context.Context, p Provider, proto Protocol, url string, body []byte, model string, wait time.Duration) Result {
 	r := probeAt(ctx, p, proto, url, body, model, wait)
 	if r.Status != http.StatusNotFound {
 		return r
