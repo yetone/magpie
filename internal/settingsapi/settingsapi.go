@@ -373,6 +373,7 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	// and the models Codex's and Desktop's subagents are put on, set
 	// in their Agents rows
 	in.CodexSubagentModel = cur.CodexSubagentModel
+	in.CodexOpen = cur.CodexOpen // set on its own (codex-open)
 	in.DesktopSubagentModel = cur.DesktopSubagentModel
 	in.DesktopGateway = cur.DesktopGateway     // Desktop's address, set in its row
 	in.CodexServiceTier = cur.CodexServiceTier // codex-service-tier

@@ -416,9 +416,26 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 	// is made here from the agent as detected (agentCommand), and the page
 	// sends only its id.
 	mux.HandleFunc("POST /api/agents/open", func(rw http.ResponseWriter, r *http.Request) {
-		var in struct{ Agent string }
+		var in struct {
+			Agent string
+			// Terminal asks for the terminal even where the Open button
+			// opens the app (the row menu's Open in terminal)
+			Terminal bool
+		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			fail(rw, err)
+			return
+		}
+		if in.Agent == "codex" && !in.Terminal && codexOpensApp() {
+			if isWeb(w) {
+				fail(rw, errors.New("opening an app is only for the desktop app"))
+				return
+			}
+			if err := codexAppOpener(r.Context()); err != nil {
+				fail(rw, err)
+				return
+			}
+			rw.WriteHeader(http.StatusNoContent)
 			return
 		}
 		if !terminalHere() || isWeb(w) {
@@ -1189,6 +1206,20 @@ func agentCommand(a *agent.Agent) string {
 	}
 	return agentLine(a, launch, runtime.GOOS)
 }
+
+// codexOpensApp says whether Codex's Open button opens the desktop app:
+// the app where one is installed, unless the setting codexOpen asks for the
+// terminal (Yink88564391 on X).
+func codexOpensApp() bool {
+	return settings.Load().CodexOpen != "terminal" && codexAppInstalled()
+}
+
+// codexAppInstalled and codexAppOpener are the agent package's, vars so a
+// test doesn't open a real app.
+var (
+	codexAppInstalled = agent.CodexAppInstalled
+	codexAppOpener    = agent.OpenCodexApp
+)
 
 // agentLine is agentCommand with a's Launch already asked, for goos.
 func agentLine(a *agent.Agent, launch, goos string) string {

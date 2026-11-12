@@ -265,6 +265,9 @@ type agentJSON struct {
 	// copies; Terminal: and opens in a terminal, this system having one
 	Command  string `json:"command,omitempty"`
 	Terminal bool   `json:"terminal,omitempty"`
+	// OpenApp: its Open button opens the desktop app, not a terminal
+	// (Codex, by the setting codexOpen, Yink88564391 on X)
+	OpenApp bool `json:"openApp,omitempty"`
 }
 
 // clientJSON is an agent, or another client the gateway knows, as a
@@ -2190,6 +2193,20 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		writeJSON(rw, settingsState())
 	})
+	// what the Open button of Codex's Agents row opens: "", "app" or
+	// "terminal" (Yink88564391 on X)
+	mux.HandleFunc("POST /api/settings/codex-open", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ Open string }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		if err := provider.SetCodexOpen(in.Open); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, settingsState())
+	})
 	// Warm up now: one Codex or Claude account's warm-up sent at once, and
 	// why it failed
 	mux.HandleFunc("POST /api/warm-now", func(rw http.ResponseWriter, r *http.Request) {
@@ -3240,6 +3257,7 @@ func state() stateJSON {
 		// as agentCommand makes it, Launch asked once
 		aj.Command = agentLine(a, aj.Launch, runtime.GOOS)
 		aj.Terminal = terminalHere() && aj.Command != ""
+		aj.OpenApp = a.ID == "codex" && codexOpensApp()
 		if a.Native != nil {
 			native := a.Native.Read()
 			aj.Native = &native

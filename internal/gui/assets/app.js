@@ -1573,6 +1573,7 @@ function connectRow(a, row, who, { fields, extras, fieldBtn, sw, kind }) {
     // only way it takes magpie: on the row, before the model
     const launch = a.wired && fields.querySelector(".field.launch");
     if (launch) row.append(launch);
+    if (a.id === "codex" && (a.openApp || a.terminal) && !web) row.append(openButton(a));
     if (start) row.append(startButton(a, start, fieldBtn));
     // Claude Desktop's: which models its own menu lists
     else if (menuFromList(a)) row.append(menuButton(a));
@@ -3808,7 +3809,7 @@ function openAgentMenu(anchor, a, inFold, at) {
   const i = shown.findIndex((x) => x.id === a.id);
   const reapply = !a.cliMissing && (a.drift || a.fields.some((f) => optionFor(f, f.value)?.ref));
   // coolmantou, lileo0668
-  const o = a.terminal && mode != "panel" && !web, term = [...o ? [{ name: "Open in terminal", icon: LAUNCH_GLYPH, sep: !0, run: () => api("agents/open", { agent: a.id }).catch(statusErr) }] : [], ...a.command ? [{ name: "Copy launch command", icon: COPY_ICON, sep: !o, run: () => copy(a.command, t("Launch command")) }] : []];
+  const o = a.terminal && mode != "panel" && !web, term = [...o ? [{ name: "Open in terminal", icon: LAUNCH_GLYPH, sep: !0, run: () => api("agents/open", { agent: a.id, terminal: !0 }).catch(statusErr) }] : [], ...a.command ? [{ name: "Copy launch command", icon: COPY_ICON, sep: !o, run: () => copy(a.command, t("Launch command")) }] : []];
   const acts = inFold && isHidden(a)
     ? [{ name: "Show", icon: EYE, run: () => setAgentHidden(a, false) }]
     : inFold
@@ -4039,6 +4040,15 @@ function agentPrefsButton(a) {
   return b;
 }
 
+// openButton opens Codex from its row: the desktop app, or the CLI in a
+// terminal by the setting Open Codex with (Yink88564391 on X)
+function openButton(a) {
+  const b = el("button", "ag-openapp", t("Open"));
+  b.type = "button";
+  b.title = b.ariaLabel = t(a.openApp ? "Open the Codex app" : "Open Codex in a terminal");
+  b.onclick = (ev) => { ev.stopPropagation(); api("agents/open", { agent: a.id }).catch(statusErr); };
+  return b;
+}
 // launchButton copies the command that starts an agent on magpie, for one
 // that takes the gateway only from its environment (agy)
 function launchButton(a) {
@@ -21176,7 +21186,7 @@ function renderAlerts(s, keep) {
 
 // AGENT_PREFS: an agent's own settings rows, by its id (openAgentPrefs)
 const AGENT_PREFS = {
-  codex: ["codexAgentsV1Row", "codexSubagentModelRow", "codexServiceTierRow", "fullContextRow", "codexAsyncRow", "codexTitlesRow", "codexDescriptionsRow", "codexPredictionsRow", "codexAutoReviewRow", "codexMemoriesRow"],
+  codex: ["codexAgentsV1Row", "codexOpenRow", "codexSubagentModelRow", "codexServiceTierRow", "fullContextRow", "codexAsyncRow", "codexTitlesRow", "codexDescriptionsRow", "codexPredictionsRow", "codexAutoReviewRow", "codexMemoriesRow"],
   claude: ["fullContextRow"],
   grok: ["fullContextRow"],
 };
@@ -21317,6 +21327,7 @@ function renderAgentPrefs() {
   if (held.length) box.append(el("div", "hint codex-async-held", codexHeld(held)));
   $("#codexAsyncSegs").replaceChildren(box);
   renderCodexServiceTier(s);
+  renderCodexOpen(s);
   renderCodexTitles(s);
   renderCodexDescriptions(s);
   renderCodexPredictions(s);
@@ -21419,6 +21430,21 @@ function renderCodexServiceTier(s) {
     }, "Codex service tier", "sess-menu");
   };
   $("#codexServiceTierPick").replaceChildren(b);
+}
+
+// what Codex's Open button opens (Yink88564391 on X)
+const CODEX_OPENS = [{ v: "", name: "Automatic" }, { v: "app", name: "Codex app" }, { v: "terminal", name: "Terminal" }];
+function renderCodexOpen(s) {
+  const cur = CODEX_OPENS.find((o) => o.v === (s.codexOpen || "")) || CODEX_OPENS[0];
+  const b = el("button", "rt-cond on", t(cur.name));
+  b.type = "button";
+  b.setAttribute("aria-label", t("Open Codex with"));
+  b.onclick = (e) => {
+    e.stopPropagation();
+    if (b.classList.contains("open")) return closeProtoMenu();
+    openProtoMenu(b, CODEX_OPENS, cur.v, (open) => open !== cur.v && prefWrite(api("settings/codex-open", { open })), "Open Codex with", "sess-menu");
+  };
+  $("#codexOpenPick").replaceChildren(b);
 }
 
 // Codex's descriptions: as sent, off, or a model

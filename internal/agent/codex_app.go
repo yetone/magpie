@@ -156,3 +156,34 @@ func codexAppReopen(ctx context.Context) error {
 	}
 	return a.restartWin(ctx, codexWinApp, c)
 }
+
+// CodexAppInstalled says whether the Codex desktop app is installed here
+// and magpie can open it: ChatGPT.app or Codex.app on macOS, the Store
+// app on Windows. Linux's package has no launcher magpie starts.
+func CodexAppInstalled() bool {
+	if !restartOnMac && !restartOnWindows {
+		return false
+	}
+	return (&Agent{ID: "codex"}).AppVersion() != ""
+}
+
+// OpenCodexApp opens the Codex desktop app, which brings its window up
+// when it is running already (Yink88564391 on X). On macOS it opens the
+// bundle whose Info.plist says com.openai.codex; on Windows it starts the
+// Store package's app by its AppUserModelID, as a restart does.
+func OpenCodexApp(ctx context.Context) error {
+	switch {
+	case restartOnMac:
+		app := desktopApps["codex"]
+		for _, bundle := range macBundles(app) {
+			if info, ok := bundleInfo(bundle); ok && info.hasID && info.id == app.id {
+				return appOpen(ctx, bundle)
+			}
+		}
+	case restartOnWindows:
+		if CodexAppInstalled() {
+			return winLaunch(winProc{aumid: codexWinAUMID})
+		}
+	}
+	return errors.New("the Codex app is not installed here")
+}

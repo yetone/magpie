@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -120,5 +121,73 @@ func TestAgentCommandNeedsAProgram(t *testing.T) {
 	// one that starts on magpie by its environment (agy) opens on that
 	if run := agentCommand(&agent.Agent{ID: "agy", Bin: "agy", Launch: func() string { return "X=1 agy" }}); run != "X=1 agy" {
 		t.Errorf("agy: %q", run)
+	}
+}
+
+// Codex's Open button (Yink88564391 on X) opens the desktop app where one
+// is installed and the setting codexOpen doesn't say terminal; the row menu's
+// Open in terminal still opens the terminal; a value the setting can't
+// take is refused.
+func TestCodexOpenButton(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the stand-in codex is a POSIX script")
+	}
+	sandboxHome(t)
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "codex"), []byte("#!/bin/sh\necho codex-cli 0.1.0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+"/usr/bin:/bin")
+	proc.Forget()
+	t.Cleanup(proc.Forget)
+	var apps, terms []string
+	wasApp, wasTerm := codexAppOpener, agentTerminal
+	t.Cleanup(func() { codexAppOpener, agentTerminal = wasApp, wasTerm })
+	codexAppOpener = func(context.Context) error { apps = append(apps, "app"); return nil }
+	agentTerminal = func(run, label, choice string) error { terms = append(terms, run); return nil }
+	wasInst := codexAppInstalled
+	t.Cleanup(func() { codexAppInstalled = wasInst })
+	codexAppInstalled = func() bool { return true }
+
+	h := Handler(nil, nil)
+	post := func(path string, body any) int {
+		t.Helper()
+		b, _ := json.Marshal(body)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest("POST", path, strings.NewReader(string(b))))
+		return rec.Code
+	}
+	row := func() agentJSON {
+		for _, a := range state().Agents {
+			if a.ID == "codex" {
+				return a
+			}
+		}
+		return agentJSON{}
+	}
+
+	if !row().OpenApp {
+		t.Fatal("app installed and no choice, yet the Open button is not the app's")
+	}
+	if code := post("/api/agents/open", map[string]any{"agent": "codex"}); code != http.StatusNoContent || len(apps) != 1 {
+		t.Fatalf("Open: %d, apps %v", code, apps)
+	}
+	if code := post("/api/settings/codex-open", map[string]string{"open": "browser"}); code == http.StatusOK {
+		t.Fatal("an Open that opens a browser was accepted")
+	}
+	if code := post("/api/settings/codex-open", map[string]string{"open": "terminal"}); code != http.StatusOK {
+		t.Fatalf("terminal: %d", code)
+	}
+	if row().OpenApp {
+		t.Fatal("terminal chosen, yet the button is the app's")
+	}
+	post("/api/agents/open", map[string]any{"agent": "codex"})
+	if len(apps) != 1 {
+		t.Fatalf("terminal chosen, yet the app opened: %v", apps)
+	}
+	post("/api/settings/codex-open", map[string]string{"open": "app"})
+	post("/api/agents/open", map[string]any{"agent": "codex", "terminal": true})
+	if len(apps) != 1 {
+		t.Fatalf("Open in terminal opened the app: %v", apps)
 	}
 }

@@ -50,6 +50,9 @@ const CodexSubagentLead = "lead"
 // sentinel codex-rs itself uses for that (SERVICE_TIER_DEFAULT_REQUEST_VALUE).
 const CodexTierStandard = "default"
 
+// CodexOpens are the values CodexOpen may take, "" for the default.
+var CodexOpens = []string{"", "app", "terminal"}
+
 // CodexServiceTiers are the values CodexServiceTier may take, "" (as
 // Codex asks) first.
 var CodexServiceTiers = []string{"", CodexTierStandard, "priority", "ultrafast"}
@@ -846,6 +849,11 @@ type Settings struct {
 	// Ultra Fast). Codex's words, as codex-rs ServiceTier::request_value
 	// sends them; its Flex is not offered, the ChatGPT backend takes none.
 	CodexServiceTier string `json:"codexServiceTier,omitempty"`
+	// CodexOpen is what the Open button of Codex's Agents row opens
+	// (Yink88564391 on X): "app" the Codex desktop app, "terminal" the CLI
+	// in a terminal. "" is the app where one is installed, else the
+	// terminal. It belongs to this computer.
+	CodexOpen string `json:"codexOpen,omitempty"`
 	// DesktopSubagentModel is the model the gateway puts Claude Desktop's
 	// subagent tool turns on. "" leaves them on the model their lead asks
 	// for; tool-less helpers and the lead's own turns are never moved.
@@ -1667,6 +1675,7 @@ func (s *Settings) KeepOwn(cur Settings) {
 	s.RouterNote, s.RouterAllTools = cur.RouterNote, cur.RouterAllTools
 	s.FetchPrivate = cur.FetchPrivate
 	s.SessionTerminal = cur.SessionTerminal
+	s.CodexOpen = cur.CodexOpen
 	s.PanelShortcut = cur.PanelShortcut
 	s.RedactModel, s.RedactModelName, s.RedactModelScore = cur.RedactModel, cur.RedactModelName, cur.RedactModelScore
 	s.RedactModelOff, s.RedactModelAuto = cur.RedactModelOff, cur.RedactModelAuto
@@ -2569,6 +2578,10 @@ func saveOwn(s Settings, recording, reads bool) error {
 	s.CodexServiceTier = strings.TrimSpace(s.CodexServiceTier)
 	if !slices.Contains(CodexServiceTiers, s.CodexServiceTier) {
 		return fmt.Errorf("Codex's service tier must be one of %q, not %q", CodexServiceTiers[1:], s.CodexServiceTier)
+	}
+	s.CodexOpen = strings.TrimSpace(s.CodexOpen)
+	if !slices.Contains(CodexOpens, s.CodexOpen) {
+		return fmt.Errorf("Codex's Open button must open one of %q, not %q", CodexOpens[1:], s.CodexOpen)
 	}
 	s.RedactRouteTo = strings.TrimSpace(s.RedactRouteTo)
 	if s.RedactRouteTo != "" && !strings.Contains(s.RedactRouteTo, "/") {

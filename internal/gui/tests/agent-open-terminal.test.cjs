@@ -107,7 +107,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await item().click();
       await sent;
       await page.locator(".pop.row-menu").waitFor({ state: "detached" });
-      assert.deepEqual(posts.map(([p, b]) => [p, JSON.parse(b)]), [["/api/agents/open", { agent: "codex" }]], "the id and nothing else");
+      assert.deepEqual(posts.map(([p, b]) => [p, JSON.parse(b)]), [["/api/agents/open", { agent: "codex", terminal: true }]], "the id, and the terminal asked for");
       assert.deepEqual(errors, []);
     });
   }
