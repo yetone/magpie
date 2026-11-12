@@ -3421,6 +3421,26 @@ only. The private key is the `UPDATE_SIGNING_KEY` secret of
 `yetone/magpie-releases`, nowhere else. The public key is built into magpie
 (`internal/update/signed.go`).
 
+From v0.1.3891 the release workflow also attests every file with
+`actions/attest-build-provenance` (a SLSA provenance statement signed through
+Sigstore with the run's GitHub identity). Before downloading a file of such a
+release, the updater (`internal/update/attest.go`, sigstore-go) fetches the
+bundle for the file's signed SHA-256 from
+`api.github.com/repos/yetone/magpie-releases/attestations/sha256:<digest>` and
+checks it offline against the Sigstore trusted root embedded in the binary
+(`attest_root.json`, public-good instance): certificate chain, certificate
+timestamp, Rekor entry, issuer `token.actions.githubusercontent.com`, subject
+`release.yml` of `yetone/magpie-releases` on `main` or a `v*` tag, source
+repository `yetone/magpie-releases`, and the digest among the statement's
+subjects. This is in addition to the ed25519 check, never instead of it. A
+bundle that fails, or GitHub saying it has none (404, empty list), refuses the
+file. Anything that leaves it unknown (GitHub unreachable, rate limited, 5xx,
+not JSON, *Update source* set to the site alone) does not stop the update,
+since the signature has held; the log says the file went unattested. A
+`MAGPIE_UPDATE_FEED` of your own skips it. The embedded root must be renewed
+(`gh attestation trusted-root`, first line) when Sigstore rotates its public
+good keys; until then a new chain fails as "not attested".
+
 The feed hands the app that `SHA256SUMS` and signature (`signed`). The app
 checks the signature against its key, takes every file's SHA-256 from the
 signed list, and refuses the update when the signature is missing or does not

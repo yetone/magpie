@@ -95,6 +95,7 @@ func (rel *Release) verify() error {
 			return fmt.Errorf("release %s: the feed's checksum for %s is not the signed one; not installed", rel.Version, name)
 		}
 		a.SHA256 = want
+		a.attest = !Newer(firstAttested, rel.Version)
 		rel.Assets[name] = a
 	}
 	return nil

@@ -74,6 +74,9 @@ type Asset struct {
 	// site's copy on R2): where a download goes on when URL fails, and
 	// what a mirror the user gave is put in front of.
 	GitHub string `json:"github,omitempty"`
+	// attest is set by Release.verify for a file of a release that carries
+	// GitHub build attestations (attest.go): download checks it.
+	attest bool
 }
 
 // client asks the feed and downloads a release through the proxy the rest
@@ -1207,6 +1210,10 @@ var retryWaits = []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Seco
 func download(ctx context.Context, a Asset, path string) error {
 	if a.SHA256 == "" {
 		return errors.New("the release lists no checksum for " + filepath.Base(path))
+	}
+	// the attestation of the signed checksum, before the bytes are fetched
+	if err := attestedFile(ctx, a, filepath.Base(path)); err != nil {
+		return err
 	}
 	// a file left by an earlier run is no part of this one; one that can't
 	// go is said so here, not asked to go on from its end (416)
