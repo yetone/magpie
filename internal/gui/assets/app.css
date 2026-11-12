@@ -170,6 +170,9 @@ body.linux.panel { --panel-tint: var(--bg); }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: default; appearance: none; -webkit-appearance: none; text-align: center; }
 button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 input { font: inherit; color: var(--fg); }
+/* a text field no rule names still looks like the app's own (input.words),
+   never the browser's white inset box; :where keeps every named rule ahead */
+:where(input:not([type=checkbox], [type=radio], [type=range], [type=hidden], [type=file], [type=color], [type=button], [type=submit]), textarea) { border: 1px solid var(--line); border-radius: 7px; background: var(--card); }
 .grow { flex: 1; }
 [hidden] { display: none !important; }
 /* the app's own rows (Text size, the tray, login, the menu bar's allowances)

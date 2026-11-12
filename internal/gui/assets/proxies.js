@@ -78,7 +78,7 @@ function proxyFormRow(done) {
   };
   cancel.onclick = () => { proxyForm = null; renderSettings(); };
   for (const x of [name, url, user, pass]) {
-    x.className = "proxy-credential";
+    x.className = "words proxy-credential";
     x.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") save.onclick(); else if (e.key === "Escape") cancel.onclick(); };
   }
   const val = el("div", "proxy-controls");
