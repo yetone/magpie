@@ -7201,7 +7201,88 @@ magpie sets thinkingFormat to openai, so MothX sends reasoning_effort, which the
 
 Yes. magpie takes out the default and the provider it added; when the file says the same as before, the original is put back as it was.
 
-More agents on the same models: [PenguinHarness on any model](https://usemagpie.ai/docs/penguin), [Paimon on any model](https://usemagpie.ai/docs/paimon) and [Pi on any model](https://usemagpie.ai/docs/pi). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [PenguinHarness on any model](https://usemagpie.ai/docs/penguin), [Paimon on any model](https://usemagpie.ai/docs/paimon), [Pi on any model](https://usemagpie.ai/docs/pi) and [Avibe on any model](https://usemagpie.ai/docs/avibe). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/avibe
+
+# Avibe on any model
+
+Avibe (avibe-bot/avibe, MIT, the `avibe-os` package and its `vibe` CLI) is a local agent OS. Its own agent, Vibey, and the Claude Code, Codex and OpenCode it runs all take their models from its Model Hub, a gateway of Avibe's own (CLIProxyAPI) in front of the model sources added on its Models page. magpie is added as one such source, so every agent in Avibe runs on any model in magpie: DeepSeek, GLM, Kimi, Qwen, Claude or a ChatGPT subscription.
+
+## Set up Avibe
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Start Avibe.** Avibe adds and removes model sources only while it runs, so start it with `vibe start` first.
+3. **Pick magpie for Avibe on the Agents page.** magpie shows up as a model source on Avibe's Models page, for Vibey and the agents it runs.
+
+```
+vibe start
+magpie avibe magpie
+```
+
+## magpie as a model source
+
+Avibe's home is `$AVIBE_HOME`, else `~/.avibe` (`~/.vibe_remote` before 3.0), and its sources are `model_hub.sources` in `config/config.json` there. A source can't be written into config.json by hand: each is checked whole, its key lives in the Model Hub's store, and Avibe adds it to its agents' route chains as it is added. So magpie adds and removes it as Avibe's Models page does, through Avibe's internal API: the socket `state/dispatch.sock` in its home on macOS and Linux, or on Windows the loopback port and bearer token `runtime/control-ipc/endpoint.json` gives. What magpie sends:
+
+```
+POST /internal/model-hub
+{
+  "operation": "create_source",
+  "payload": {
+    "source": {
+      "kind": "api_key",
+      "vendor": "custom",
+      "display_name": "magpie",
+      "base_url": "http://127.0.0.1:3425/v1",
+      "key": "",
+      "protocol": "openai_chat",
+      "supply_channel": "hub",
+      "billing": "metered",
+      "save_unverified": true
+    }
+  }
+}
+```
+
+magpie keeps the source's id, so one you rename in Avibe is still magpie's. A custom source at the gateway that you added by hand on the Models page counts as magpie's too. When the gateway moves to another port, a sync removes the old source and adds it again at the new address, since the key is sealed with the address; one pointed at another machine, a local proxy's path or the way a WSL distro reaches Windows stays where it is.
+
+## Why chat completions
+
+The source's protocol is `openai_chat`, not Responses. For a Responses source the Model Hub runs Codex's executor, which names itself codex-tui and would be taken for Codex itself; for chat it passes each backend's own headers on. A hub source serves every backend, the Model Hub translating Claude's and Codex's requests. It is saved without Avibe's protocol probe, which can't tell the gateway's protocols apart, as it serves them all.
+
+## The model list
+
+Avibe lists its models from the gateway's `/v1/models` itself, so what it offers is the models you picked for Avibe on magpie's Agents page. Avibe lists them again on its own only once the listing is half an hour old, so magpie has it refresh the source when you add or drop one.
+
+## Removing it
+
+Switching back has magpie delete the source through the same internal API and forget its id. When removing it would take a hop out of a route or interrupt work in progress, Avibe asks for that to be confirmed, as its Models page does; you asked for it in magpie, so magpie asks again with what Avibe listed.
+
+```
+magpie avibe default
+```
+
+## FAQ
+
+### Do Claude Code and Codex inside Avibe get magpie's models too?
+
+Yes. magpie is a Model Hub source, and a hub source serves Vibey and every backend Avibe runs: Claude Code, Codex and OpenCode.
+
+### Why does magpie say to start Avibe first?
+
+Avibe adds and removes model sources only through its internal API while it runs; config.json can't be edited for it. Run vibe start and try again.
+
+### Which models does Avibe offer?
+
+The ones you picked for Avibe on magpie's Agents page. Avibe reads them from the gateway's /v1/models, and magpie has it refresh when the list changes.
+
+### How do I remove magpie?
+
+Switch Avibe back to its default in magpie, or run magpie avibe default. magpie deletes the source it added.
+
+More agents on the same models: [MothX on any model](https://usemagpie.ai/docs/mothx), [PenguinHarness on any model](https://usemagpie.ai/docs/penguin) and [Paimon on any model](https://usemagpie.ai/docs/paimon). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
