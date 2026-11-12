@@ -6748,7 +6748,74 @@ Yes. The desktop app and the kun TUI are both clients of kun serve and share its
 
 Yes. magpie stashed the default Kun had, picks it again, then removes its connection.
 
-More desktop apps on the same models: [OpenHanako on any model](https://usemagpie.ai/docs/openhanako), [DS Bot on any model](https://usemagpie.ai/docs/ds-bot) and [Tuanjie Cowork on any model](https://usemagpie.ai/docs/tuanjie-cowork). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More desktop apps on the same models: [OpenHanako on any model](https://usemagpie.ai/docs/openhanako), [DS Bot on any model](https://usemagpie.ai/docs/ds-bot), [Tuanjie Cowork on any model](https://usemagpie.ai/docs/tuanjie-cowork) and [Alma on any model](https://usemagpie.ai/docs/alma). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/alma
+
+# Alma on any model
+
+Alma is a desktop AI chat app that keeps its providers and settings in the app, not in a file magpie can edit. magpie adds a provider named magpie through the local API Alma serves while it runs, and makes it the default model, so Alma runs on any model in magpie: DeepSeek, GLM, Kimi, Qwen, Claude or a ChatGPT subscription.
+
+## Set up Alma
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Open Alma.** magpie can change Alma's settings only through a running Alma. When it isn't open, magpie says to open Alma and try again.
+3. **Pick a model for Alma on the Agents page.** Pick a model via magpie; it becomes Alma's default model.
+
+```
+magpie alma deepseek/deepseek-v4-pro
+```
+
+## Through Alma's local API
+
+While it runs, Alma serves a local API at `http://localhost:23001`, and that is what magpie uses:
+
+```
+GET  /api/providers              Alma's providers
+POST /api/providers              magpie's provider
+PUT  /api/providers/:id/models   its model list
+GET  /api/settings, PUT it back  chat.defaultModel, imageGen.model
+```
+
+magpie's provider is of type openai at the gateway's `/v1`, with magpie's own key for Alma. Alma's requests carry only the AI SDK's User-Agent, so the key is how the gateway knows them for Alma's. The default model is `chat.defaultModel`, as `providerId:model`; Alma takes only the whole settings, so magpie puts the rest back as they were.
+
+## Models and thinking levels
+
+Alma works out a model's capabilities from models.dev by its id, and magpie's ids (codex/gpt-5.5) aren't models.dev's, so such a model would show no thinking. magpie tells Alma each model's capabilities: a model that reasons comes with the thinking levels Alma knows, and its window, output limit and images when magpie knows them. One you set yourself in Alma's model options (tool calling) stays as you set it. Models added or dropped in magpie reach Alma while it is open.
+
+## Image generation
+
+When magpie has an image model and Alma's image generation model is Auto, picking one of magpie's models for Alma makes magpie's image model Alma's too. An image model you picked is left as it is.
+
+## Switching back
+
+Switching back clears Alma's default model when it is magpie's, leaving it to Alma, puts an image generation model of magpie's back to Auto, and removes magpie's provider. If Alma has been uninstalled, magpie remembers, and takes its provider out once Alma is installed again and answers.
+
+```
+magpie alma default
+```
+
+## FAQ
+
+### Can Alma run on DeepSeek, GLM or a ChatGPT subscription?
+
+Yes. Open Alma and pick a via-magpie model for Alma on magpie's Agents page. magpie adds a magpie provider and makes it the default model.
+
+### magpie says Alma isn't running. Why?
+
+Alma's settings change only through the local API it serves while it runs. Open Alma and try again.
+
+### Why do magpie's models have thinking levels in Alma?
+
+magpie tells Alma each model's capabilities: whether it reasons, its thinking levels and its window.
+
+### What happens when I switch back?
+
+magpie's provider is removed, a default model of magpie's is cleared for Alma to pick, and the image generation model goes back to Auto.
+
+More desktop apps on the same models: [Kun on any model](https://usemagpie.ai/docs/kun), [Every model in Cherry Studio, through magpie](https://usemagpie.ai/docs/cherry-studio) and [OpenHanako on any model](https://usemagpie.ai/docs/openhanako). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
