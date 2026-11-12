@@ -3296,6 +3296,36 @@ downloads a new version in the background and installs it when you restart
 a terminal. Every release is on
 [yetone/magpie-releases](https://github.com/yetone/magpie-releases/releases).
 
+### Signed releases
+
+usemagpie.ai's feed only carries a release; it is not what magpie trusts. From
+v0.1.3862 on, release CI in `yetone/magpie-releases` signs each release's
+`SHA256SUMS` with an ed25519 key and publishes the signature as
+`SHA256SUMS.sig` (base64). The signed text is the line `magpie release
+<version>` followed by `SHA256SUMS`, so a signature is good for one version
+only. The private key is the `UPDATE_SIGNING_KEY` secret of
+`yetone/magpie-releases`, nowhere else. The public key is built into magpie
+(`internal/update/signed.go`).
+
+The feed hands the app that `SHA256SUMS` and signature (`signed`). The app
+checks the signature against its key, takes every file's SHA-256 from the
+signed list, and refuses the update when the signature is missing or does not
+match, or when the feed's own hash for a file differs from the signed one.
+That holds for the Mac app, `magpie update`, the background update and the
+Windows and Linux builds alike, so a changed feed, a mirror or a proxy can no
+longer swap a file together with its hash. On the Mac the new app's signing
+team is still checked too.
+
+Transition: a magpie that has the key refuses any release at or above
+v0.1.3862 that is not signed. Releases below it were never signed, and a
+magpie older than the key (it ignores `signed`) still updates by the feed's
+SHA-256 as before, so nobody is cut off; the first update that lands on a
+signed release is trusted that way once, and every one after it is verified.
+`MAGPIE_UPDATE_FEED`, which points updates at a server of your own for
+testing, lifts the requirement (a signature the server does give is still
+checked). `install.sh` does not verify the signature: its first download is
+trusted to the site over HTTPS and the SHA-256 the site gives.
+
 ### Update channel
 
 magpie takes every version as it comes out unless you choose Stable, in

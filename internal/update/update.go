@@ -58,6 +58,8 @@ type Release struct {
 	Notes   string           `json:"notes"`   // markdown
 	URL     string           `json:"url"`     // the release page
 	Assets  map[string]Asset `json:"assets"`  // by file name
+	// Signed is what vouches for Assets' hashes (signed.go).
+	Signed *Signed `json:"signed,omitempty"`
 }
 
 // Asset is one downloadable file of a release.
@@ -157,6 +159,9 @@ func latestAt(ctx context.Context, feed, lang string) (*Release, error) {
 	}
 	if parse(r.Version) == nil {
 		return nil, fmt.Errorf("update feed: no version")
+	}
+	if err := r.verify(); err != nil {
+		return nil, fmt.Errorf("update feed: %w", err)
 	}
 	r.Notes = InLang(r.Notes, lang)
 	return &r, nil

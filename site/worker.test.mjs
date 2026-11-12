@@ -28,6 +28,7 @@ let apiDown = false, pagesDown = false;
 // API serves the same files (2026-11-08)
 let downloadsDown = false;
 const seen = [];
+const SIG64 = "OT7nCVnsnONdQsBC4rfHcpqouwWLfavkbv3FCdPOBjGTBdHTefDVHQdZe8w1T5nOwlvA/S5a2EiI9zC9yOOcBQ==";
 const FEED = `<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
   <entry>
@@ -87,11 +88,13 @@ globalThis.fetch = async (u, init = {}) => {
   const gh = (tag) => ({ tag_name: tag, body: BODIES[tag], html_url: "https://github.com/r/" + tag, published_at: "2026-10-01T00:00:00Z", draft: false, prerelease: false, assets: [
       { name: "magpie-linux-amd64", size: 1, browser_download_url: "https://dl/x", url: "https://api.github.com/repos/yetone/magpie-releases/releases/assets/1" },
       { name: "SHA256SUMS", size: 1, browser_download_url: "https://dl/sums", url: "https://api.github.com/repos/yetone/magpie-releases/releases/assets/2" },
+      { name: "SHA256SUMS.sig", size: 88, browser_download_url: "https://dl/sig", url: "https://api.github.com/repos/yetone/magpie-releases/releases/assets/3" },
     ] });
   if (u.endsWith("/releases/tags/v0.1.3")) return Response.json(gh("v0.1.3"));
   if (u.endsWith("/releases/latest")) return Response.json(gh("v0.1.3"));
   if (u.includes("/releases?per_page=")) return Response.json(Object.keys(BODIES).map(gh));
   if (u.endsWith("/SHA256SUMS")) return new Response("abc  magpie-linux-amd64\n");
+  if (u.endsWith("/SHA256SUMS.sig")) return new Response(SIG64 + "\n");
   return new Response("not found", { status: 404 });
 };
 
@@ -114,6 +117,15 @@ test("latest: the English alone without lang, the Chinese with zh", async () => 
   }
   // asked in Chinese first, the edge's copy still has both
   assert.equal((await get("/api/latest")).body.notes, EN);
+});
+
+// The app checks the signature itself (internal/update/signed.go); the feed
+// only carries the signed list and the signature, and never lists the
+// signature as a file to download.
+test("latest: carries SHA256SUMS and its signature, and the signature is no file", async () => {
+  const { body } = await get("/api/latest");
+  assert.deepEqual(body.signed, { sums: "abc  magpie-linux-amd64\n", sig: SIG64 });
+  assert.deepEqual(Object.keys(body.assets), ["magpie-linux-amd64"]);
 });
 
 test("notes: each release in the language, English where it has no Chinese", async () => {

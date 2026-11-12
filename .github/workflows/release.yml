@@ -126,7 +126,7 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       REF: ${{ needs.trigger-release.outputs.ref }}
-      ASSETS: 16 # what every release carries; a smaller count is still uploading
+      ASSETS: 17 # what every release carries; a smaller count is still uploading
     steps:
       - name: Wait for magpie-releases to publish every asset
         run: |
