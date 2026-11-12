@@ -8108,7 +8108,88 @@ VS Code reads an apiKey only from its secret storage, so magpie puts its token i
 
 Yes, with the Marketplace's Copilot Chat, whose OpenAI Compatible provider shows only while it is signed in to GitHub with a personal Copilot plan.
 
-More agents on the same models: [Claude Science on any model](https://usemagpie.ai/docs/claude-science), [Claude Desktop on any model](https://usemagpie.ai/docs/claude-desktop) and [mu on any model](https://usemagpie.ai/docs/mu). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Claude Science on any model](https://usemagpie.ai/docs/claude-science), [Claude Desktop on any model](https://usemagpie.ai/docs/claude-desktop), [mu on any model](https://usemagpie.ai/docs/mu) and [WorkBuddy on any model](https://usemagpie.ai/docs/workbuddy). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/workbuddy
+
+# WorkBuddy on any model
+
+WorkBuddy is Tencent's CodeBuddy desktop app. It reads your own models from `~/.workbuddy/models.json` (or `$WORKBUDDY_CONFIG_DIR` when set), as OpenAI chat-completions models. magpie writes its models into that file, so WorkBuddy's model picker lists DeepSeek, GLM, Kimi, Qwen, Claude, a ChatGPT subscription or any other model in magpie.
+
+## Set up WorkBuddy
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Set WorkBuddy's provider to magpie on the Agents page.** WorkBuddy's picker then lists the models magpie picked for it.
+3. **Pick the model per task in WorkBuddy.** The model is picked for each task in WorkBuddy's window; magpie's show as custom-local:<id>. If they don't show, restart WorkBuddy; magpie's Agents page offers a restart.
+
+Why a restart: WorkBuddy 5.6 watches models.json only when the file existed at start, and it watches the file itself, so a rewrite can go unseen until it restarts.
+
+## models.json
+
+The file is either a list of models or `{"models":[…],"availableModels":[…]}` as CodeBuddy Code's CLI writes it; magpie reads and writes both. WorkBuddy's own local models are entries in the same list (`local: true`), and magpie leaves them alone. Each of magpie's models points at the gateway's `/v1/chat/completions`, with tool calling on and magpie's key for WorkBuddy:
+
+```
+// ~/.workbuddy/models.json (one of magpie's entries)
+{
+  "id": "deepseek/deepseek-v4-pro",
+  "name": "…",
+  "vendor": "magpie",
+  "apiKey": "",
+  "url": "http://127.0.0.1:3425/v1/chat/completions",
+  "maxInputTokens": …,
+  "maxOutputTokens": …,
+  "contextWindow": { "supportedLengths": [200000, …], "defaultLength": … },
+  "supportsToolCall": true,
+  "supportsImages": …,
+  "supportsReasoning": true,
+  "reasoning": { "supportedEfforts": […], "canDisableThinking": …, "defaultEffort": "…" }
+}
+```
+
+WorkBuddy sends requests to url with reasoning_effort, under the apiKey as a Bearer token. Its requests say CLI/<version> WorkBuddy/<version>, so magpie tells them apart by their key. An entry you edited in WorkBuddy is saved under vendor Custom, and magpie still recognises it by its key.
+
+## Context and reply length
+
+WorkBuddy offers a choice of context in its model menu only when contextWindow lists two sizes or more. magpie adds a smaller 200K beside the whole window, and defaultLength is the whole window. Without maxOutputTokens WorkBuddy caps every reply at its own default, so magpie writes it.
+
+## What stays yours
+
+WorkBuddy rewrites models.json itself a few seconds after every start: it purges local models this computer can't run, and may encrypt the apiKey. magpie doesn't take that rewrite as a change. The other entries and keys stay as WorkBuddy wrote them:
+
+- A model you turned off in WorkBuddy stays off.
+- Models pointed at a magpie on another machine (a NAS) keep that address and key.
+- A reply limit you typed stays.
+- A default effort set in WorkBuddy's model settings, Auto included, stays while the model still offers it.
+
+## WorkBuddy AI
+
+WorkBuddy AI, the international build (www.workbuddy.ai, com.workbuddy.workbuddy-ai), is the same app with its data in `~/.workbuddy-ai`. magpie wires it as an agent of its own, under its own key. On a Mac magpie finds it by its app, not by that folder. WorkBuddy in WSL works too, with the gateway's address as the distro reaches it.
+
+## Switching back
+
+When you switch WorkBuddy off in magpie, magpie takes its models out of models.json and leaves every other entry as it was.
+
+## FAQ
+
+### Can WorkBuddy use DeepSeek or GLM?
+
+Yes. magpie writes its models into ~/.workbuddy/models.json; pick one starting with custom-local in WorkBuddy's model picker.
+
+### Why don't magpie's models show in WorkBuddy?
+
+WorkBuddy may not have seen the rewrite. Restart it; magpie's Agents page offers a restart.
+
+### Does magpie change my WorkBuddy settings?
+
+No. Models you turned off, models pointed at a NAS, reply limits you typed and your default effort all stay.
+
+### Does WorkBuddy AI, the international build, work?
+
+Yes. Its data is in ~/.workbuddy-ai, and magpie wires it as an agent of its own.
+
+More agents on the same models: [VS Code on any model](https://usemagpie.ai/docs/vscode), [CodeBuddy on any model](https://usemagpie.ai/docs/codebuddy) and [Claude Science on any model](https://usemagpie.ai/docs/claude-science). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
