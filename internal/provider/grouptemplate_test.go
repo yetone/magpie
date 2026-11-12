@@ -9,7 +9,7 @@ import (
 
 // tm is a model a template may be made of, as templateModels rates it.
 func tm(pid, model string, out float64, maker bool, released string) rated {
-	r := rated{e: Entry{ID: pid + "/" + model, Model: model, Provider: Provider{ID: pid, Name: pid}, Released: released}, out: out, maker: maker}
+	r := rated{e: Entry{ID: pid + "/" + model, Model: model, Provider: &Provider{ID: pid, Name: pid}, Released: released}, out: out, maker: maker}
 	r.small, r.tiny = sizeOf(model)
 	return r
 }

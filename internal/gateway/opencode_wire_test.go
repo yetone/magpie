@@ -134,7 +134,7 @@ func TestOtherRelayKeepsItsOneAPI(t *testing.T) {
 	if apis := p.APIs("gpt-6-luna"); apis != nil {
 		t.Errorf("relay gpt-6-luna APIs %v, want none named", apis)
 	}
-	if got := provider.NativeEndpoints(provider.Entry{Provider: *p, Model: "gpt-6-luna", ID: "relay/gpt-6-luna"}); len(got) != 1 || got[0] != "/v1/chat/completions" {
+	if got := provider.NativeEndpoints(provider.Entry{Provider: p, Model: "gpt-6-luna", ID: "relay/gpt-6-luna"}); len(got) != 1 || got[0] != "/v1/chat/completions" {
 		t.Errorf("relay native_endpoints %v", got)
 	}
 }

@@ -1053,7 +1053,7 @@ func CodexTiers(m *catalog.Model, e Entry, members func(id string) []Member) {
 	}
 	// so is a model of its own that has one, which no tier above names
 	// (an Anthropic key's Opus, an OpenAI key's GPT, a Cursor account's)
-	if len(m.Tiers) == 0 && CanFast(e.Provider, e.Model) {
+	if len(m.Tiers) == 0 && CanFast(*e.Provider, e.Model) {
 		m.Tiers = []string{codexFastTier}
 	}
 }
@@ -1065,7 +1065,7 @@ func CodexTiers(m *catalog.Model, e Entry, members func(id string) []Member) {
 // none.
 func CodexSeals(m *catalog.Model, e Entry, members func(id string) []Member) {
 	if e.Group == "" {
-		m.Seals = maySeal(e.Provider)
+		m.Seals = maySeal(*e.Provider)
 		return
 	}
 	for _, mb := range members(e.ID) {

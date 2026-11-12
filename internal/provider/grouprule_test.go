@@ -168,10 +168,10 @@ func TestRuleConditions(t *testing.T) {
 func TestRuledEntry(t *testing.T) {
 	no, yes := false, true
 	entries := []Entry{
-		{ID: "a/text", Model: "text", Provider: Provider{ID: "a"}, Context: 128000, ImageInput: &no},
-		{ID: "a/vision", Model: "vision", Provider: Provider{ID: "a"}, Context: 200000, Images: true, ImageInput: &yes},
-		{ID: "b/huge", Model: "huge", Provider: Provider{ID: "b"}, Context: 1000000},
-		{ID: "b/small", Model: "small", Provider: Provider{ID: "b"}, Context: 32000},
+		{ID: "a/text", Model: "text", Provider: &Provider{ID: "a"}, Context: 128000, ImageInput: &no},
+		{ID: "a/vision", Model: "vision", Provider: &Provider{ID: "a"}, Context: 200000, Images: true, ImageInput: &yes},
+		{ID: "b/huge", Model: "huge", Provider: &Provider{ID: "b"}, Context: 1000000},
+		{ID: "b/small", Model: "small", Provider: &Provider{ID: "b"}, Context: 32000},
 	}
 	member := func(id string) Member {
 		p, m, _ := strings.Cut(id, "/")

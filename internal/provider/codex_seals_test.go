@@ -23,9 +23,9 @@ func TestCodexSeals(t *testing.T) {
 		e    Entry
 		want bool
 	}{
-		{Entry{ID: "relay/gpt-6-astra", Provider: relay, Model: "gpt-6-astra"}, true},
-		{Entry{ID: "ds/deepseek-v4", Provider: chat, Model: "deepseek-v4"}, false},
-		{Entry{ID: "copilot/gpt-6.1-sol", Provider: copilot, Model: "gpt-6.1-sol"}, false},
+		{Entry{ID: "relay/gpt-6-astra", Provider: &relay, Model: "gpt-6-astra"}, true},
+		{Entry{ID: "ds/deepseek-v4", Provider: &chat, Model: "deepseek-v4"}, false},
+		{Entry{ID: "copilot/gpt-6.1-sol", Provider: &copilot, Model: "gpt-6.1-sol"}, false},
 		{Entry{ID: "group/mixed", Group: "mixed"}, true},
 		{Entry{ID: "group/plain", Group: "plain"}, false},
 	} {

@@ -23,7 +23,7 @@ func TestAutoGroupsSameModel(t *testing.T) {
 		}
 	}
 	e := func(p, m, name string) Entry {
-		return Entry{ID: p + "/" + m, Model: m, Name: name, Provider: Provider{ID: p}}
+		return Entry{ID: p + "/" + m, Model: m, Name: name, Provider: &Provider{ID: p}}
 	}
 	gs := autoGroups([]Entry{
 		e("openrouter", "anthropic/claude-opus-5.5", "anthropic/claude-opus-5.5"),
@@ -45,7 +45,7 @@ func TestGroupImages(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "")
 	no, yes := false, true
 	e := func(p, m string, images bool, in *bool) Entry {
-		return Entry{ID: p + "/" + m, Model: m, Name: m, Provider: Provider{ID: p}, Images: images, ImageInput: in}
+		return Entry{ID: p + "/" + m, Model: m, Name: m, Provider: &Provider{ID: p}, Images: images, ImageInput: in}
 	}
 	gs := groupEntries([]Entry{
 		e("a", "kimi-k3", true, nil), e("b", "kimi-k3", true, nil),
@@ -72,8 +72,8 @@ func TestGroupImagesFromAMemberThatSees(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "")
 	yes := true
 	entries := []Entry{
-		{ID: "a/m", Model: "m", Provider: Provider{ID: "a"}, Images: true, ImageInput: &yes},
-		{ID: "b/m", Model: "m", Provider: Provider{ID: "b"}, Images: true},
+		{ID: "a/m", Model: "m", Provider: &Provider{ID: "a"}, Images: true, ImageInput: &yes},
+		{ID: "b/m", Model: "m", Provider: &Provider{ID: "b"}, Images: true},
 	}
 	groups := groupEntries(entries)
 	if len(groups) != 1 || !groups[0].Images || groups[0].ImageInput == nil || !*groups[0].ImageInput {
@@ -88,10 +88,10 @@ func TestGroupInputsAreItsMembers(t *testing.T) {
 	t.Setenv("USERPROFILE", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", "")
 	entries := []Entry{
-		{ID: "a/m", Model: "m", Provider: Provider{ID: "a"}, Images: true, Inputs: []string{"text", "image"}, Outputs: []string{"text"}},
-		{ID: "b/m", Model: "m", Provider: Provider{ID: "b"}, Images: true, Inputs: []string{"text", "image", "video"}, Outputs: []string{"text"}},
-		{ID: "a/n", Model: "n", Provider: Provider{ID: "a"}},
-		{ID: "b/n", Model: "n", Provider: Provider{ID: "b"}},
+		{ID: "a/m", Model: "m", Provider: &Provider{ID: "a"}, Images: true, Inputs: []string{"text", "image"}, Outputs: []string{"text"}},
+		{ID: "b/m", Model: "m", Provider: &Provider{ID: "b"}, Images: true, Inputs: []string{"text", "image", "video"}, Outputs: []string{"text"}},
+		{ID: "a/n", Model: "n", Provider: &Provider{ID: "a"}},
+		{ID: "b/n", Model: "n", Provider: &Provider{ID: "b"}},
 	}
 	got := map[string]Entry{}
 	for _, g := range groupEntries(entries) {
@@ -110,9 +110,9 @@ func TestGroupInputsAreItsMembers(t *testing.T) {
 func TestCodexListedKeepsGroups(t *testing.T) {
 	acct := Provider{ID: "codex-me", Account: &Account{Agent: "codex"}}
 	ms := codexListed([]Entry{
-		{ID: GroupPrefix + "fast", Model: "gpt-5.5", Name: "fast", Provider: acct, Group: "fast"},
-		{ID: "codex-me/gpt-5.5", Model: "gpt-5.5", Provider: acct},
-		{ID: "or/glm-5.3", Model: "glm-5.3", Provider: Provider{ID: "or"}},
+		{ID: GroupPrefix + "fast", Model: "gpt-5.5", Name: "fast", Provider: &acct, Group: "fast"},
+		{ID: "codex-me/gpt-5.5", Model: "gpt-5.5", Provider: &acct},
+		{ID: "or/glm-5.3", Model: "glm-5.3", Provider: &Provider{ID: "or"}},
 	}, func(id string) []Member {
 		return []Member{{Provider: Provider{ID: "or"}, Model: "glm-5.3"}, {Provider: acct, Model: "gpt-5.5"}}
 	}, false)
@@ -139,7 +139,7 @@ func TestGroupSharesKimiFacts(t *testing.T) {
 	t.Setenv("USERPROFILE", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", "")
 	e := func(p, m string, always, dynamic bool, def string) Entry {
-		return Entry{ID: p + "/" + m, Model: m, Name: m, Provider: Provider{ID: p}, Reasoning: true,
+		return Entry{ID: p + "/" + m, Model: m, Name: m, Provider: &Provider{ID: p}, Reasoning: true,
 			Efforts: []string{"low", "medium", "high"}, AlwaysThinks: always, DynamicTools: dynamic, DefaultEffort: def}
 	}
 	type facts struct {
@@ -170,7 +170,7 @@ func TestGroupSharesKimiFacts(t *testing.T) {
 // AI's other models, are unchanged.
 func TestAutoGroupsEditionTwins(t *testing.T) {
 	e := func(p, m string) Entry {
-		return Entry{ID: p + "/" + m, Model: m, Name: "DeepSeek-V4.1-Flash", Provider: Provider{ID: p}}
+		return Entry{ID: p + "/" + m, Model: m, Name: "DeepSeek-V4.1-Flash", Provider: &Provider{ID: p}}
 	}
 	gs := autoGroups([]Entry{e("workbuddy", "deepseek-v4.1-flash"), e("workbuddy-ai", "deepseek-v4.1-flash-sg")}, nil)
 	if len(gs) != 1 || gs[0].ID != "auto-deepseek-v4-1-flash" || len(gs[0].Members) != 2 {

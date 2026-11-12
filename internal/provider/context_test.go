@@ -27,7 +27,7 @@ func TestContextSetByUser(t *testing.T) {
 	}
 
 	e := func(p, m string, ctx int) Entry {
-		return Entry{ID: p + "/" + m, Model: m, Name: m, Provider: Provider{ID: p}, Context: ctx}
+		return Entry{ID: p + "/" + m, Model: m, Name: m, Provider: &Provider{ID: p}, Context: ctx}
 	}
 	entries := []Entry{e("a", "m1", 128000), e("b", "m2", 200000)}
 	of := func() int {
@@ -85,7 +85,7 @@ func TestGroupToldItsLargestWindow(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	e := func(p, m string, ctx int) Entry {
-		return Entry{ID: p + "/" + m, Model: m, Name: m, Provider: Provider{ID: p}, Context: ctx}
+		return Entry{ID: p + "/" + m, Model: m, Name: m, Provider: &Provider{ID: p}, Context: ctx}
 	}
 	entries := []Entry{
 		e("workbuddy-ai", "deepseek-v4.1-flash", 1000000),

@@ -124,7 +124,7 @@ func offEntries() []Entry {
 			continue
 		}
 		for _, m := range p.Exposed() {
-			out = append(out, Entry{ID: p.ID + "/" + m.ID})
+			out = append(out, Entry{ID: p.ID + "/" + m.ID, Provider: &p})
 		}
 	}
 	return out

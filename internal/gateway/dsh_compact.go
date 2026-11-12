@@ -92,7 +92,7 @@ func (s *Server) dshCompactElsewhere(r *http.Request, agent, kind, asked string,
 		if e.Group != "" || e.Provider.ID == p.ID || e.Context <= window || provider.AutoGroupOf(e.Provider.ID, e.Model) != key {
 			continue
 		}
-		if compactRefused(r, e.ID) != "" || s.allResting(e.Provider, e.Model, from) {
+		if compactRefused(r, e.ID) != "" || s.allResting(*e.Provider, e.Model, from) {
 			continue
 		}
 		best, window = e.ID, e.Context

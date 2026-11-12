@@ -111,9 +111,9 @@ func TestThenUsesLeavesOutTheRulesOwn(t *testing.T) {
 func TestRuledEntrySeveralModels(t *testing.T) {
 	no, yes := false, true
 	entries := []Entry{
-		{ID: "a/text", Model: "text", Provider: Provider{ID: "a"}, Context: 128000, ImageInput: &no},
-		{ID: "a/vision", Model: "vision", Provider: Provider{ID: "a"}, Context: 200000, Images: true, ImageInput: &yes},
-		{ID: "b/vision", Model: "vision", Provider: Provider{ID: "b"}, Context: 400000, Images: true, ImageInput: &yes},
+		{ID: "a/text", Model: "text", Provider: &Provider{ID: "a"}, Context: 128000, ImageInput: &no},
+		{ID: "a/vision", Model: "vision", Provider: &Provider{ID: "a"}, Context: 200000, Images: true, ImageInput: &yes},
+		{ID: "b/vision", Model: "vision", Provider: &Provider{ID: "b"}, Context: 400000, Images: true, ImageInput: &yes},
 	}
 	run := func(members []string, rules []Rule) Entry {
 		var ms []Member

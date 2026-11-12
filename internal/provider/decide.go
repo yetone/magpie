@@ -712,9 +712,9 @@ func deciders(keep func(id string) bool) []Entry {
 		for _, m := range ms {
 			if p.isDecision(m) && !off(p.ID, m.ID) { // a disabled one isn't offered (#1867)
 				if p.IsRemoteMagpie() {
-					out = append(out, entryFor(p, m, s))
+					out = append(out, sharedEntry(&p, m, s))
 				} else {
-					out = append(out, Entry{ID: p.ID + "/" + m.ID, Model: m.ID, Name: m.Name, Provider: p})
+					out = append(out, Entry{ID: p.ID + "/" + m.ID, Model: m.ID, Name: m.Name, Provider: &p})
 				}
 			}
 		}

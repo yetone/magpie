@@ -14,11 +14,11 @@ import (
 // request to that subscription; a key's model says nothing of it.
 func TestServedRefSaysASubscription(t *testing.T) {
 	sub := servedRef(provider.Entry{ID: "codex/gpt-5-mini", Name: "gpt-5-mini", Model: "gpt-5-mini",
-		Provider: provider.Provider{ID: "codex", Name: "Codex", Account: &provider.Account{Agent: "codex", User: "a@x.y"}}}, settings.Settings{})
+		Provider: &provider.Provider{ID: "codex", Name: "Codex", Account: &provider.Account{Agent: "codex", User: "a@x.y"}}}, settings.Settings{})
 	if !sub.Sub {
 		t.Fatalf("a subscription's model: %+v", sub)
 	}
-	key := servedRef(provider.Entry{ID: "or/flash", Name: "flash", Model: "flash", Provider: provider.Provider{ID: "or", Name: "OpenRouter", Key: "k"}}, settings.Settings{})
+	key := servedRef(provider.Entry{ID: "or/flash", Name: "flash", Model: "flash", Provider: &provider.Provider{ID: "or", Name: "OpenRouter", Key: "k"}}, settings.Settings{})
 	if key.Sub {
 		t.Fatalf("a key's model: %+v", key)
 	}

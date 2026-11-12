@@ -61,7 +61,7 @@ func newQuotaScope(who access.Identity, catalog []provider.Entry) *quotaScope {
 		if seen && !ok {
 			continue
 		}
-		s.every[id] = modelAllowed(who, e.Provider, e.Model)
+		s.every[id] = modelAllowed(who, *e.Provider, e.Model)
 	}
 	return s
 }

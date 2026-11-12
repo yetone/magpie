@@ -360,7 +360,7 @@ func claudeReviewed(catalogs []string, models ...string) bool {
 	find := provider.GroupFinder()
 	for _, e := range entries {
 		if e.Group == "" {
-			if !answered(e.Provider, e.Model) {
+			if !answered(*e.Provider, e.Model) {
 				return false
 			}
 			continue

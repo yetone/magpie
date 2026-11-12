@@ -15,7 +15,7 @@ func NativeEndpoints(e Entry) []string {
 	if e.Group != "" {
 		return nil
 	}
-	return endpointsOf(relayed(e.Provider, e.Model))
+	return endpointsOf(relayed(*e.Provider, e.Model))
 }
 
 // relayed are the APIs p takes a request for model on as it is, in the

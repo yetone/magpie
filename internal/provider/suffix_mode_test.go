@@ -112,7 +112,7 @@ func TestAgentSuffix(t *testing.T) {
 	if AgentSuffix("pi") != SuffixOn || AgentSuffix("codex") != "" {
 		t.Fatalf("own %q %q", AgentSuffix("pi"), AgentSuffix("codex"))
 	}
-	es := []Entry{{ID: "relay/glm-5", Name: "GLM-5", Provider: Provider{ID: "relay", Name: "Relay"}}}
+	es := []Entry{{ID: "relay/glm-5", Name: "GLM-5", Provider: &Provider{ID: "relay", Name: "Relay"}}}
 	if got := LabelsFor("pi", es); !slices.Equal(got, []string{"GLM-5 · Relay"}) {
 		t.Fatalf("pi %q", got)
 	}

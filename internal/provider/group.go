@@ -912,7 +912,7 @@ func AutoStandInFor(agent, id string) (string, bool) {
 		if AutoGroupOf(e.Provider.ID, e.Model) != gid {
 			continue
 		}
-		if ownAgent(e.Provider, agent) {
+		if ownAgent(*e.Provider, agent) {
 			return e.ID, true
 		}
 		if kept == "" && !slices.Contains(f.AutoGroupSkip, e.Provider.ID) {
@@ -1505,7 +1505,7 @@ func buildGroupEntries(entries []Entry) []Entry {
 		if len(ms) == 0 || DecisionGroup(ms) {
 			continue // a decision group answers System One, no agent's conversation
 		}
-		e := Entry{ID: g.Ref(), Model: ms[0].Model, Name: g.Name, Provider: ms[0].Provider, Group: g.ID, Named: !g.Auto}
+		e := Entry{ID: g.Ref(), Model: ms[0].Model, Name: g.Name, Provider: &ms[0].Provider, Group: g.ID, Named: !g.Auto}
 		var fixed []string // the efforts members are fixed at
 		levelled := false  // a member that follows the agent's effort was met
 		// Codex's ultra (max, with Codex handing parts of the task to agents

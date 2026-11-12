@@ -76,7 +76,7 @@ func TestEntryQuiet(t *testing.T) {
 	// a provider signed in through a plugin: its own account list is a
 	// word on every model it serves, and says nothing of reasoning for
 	// this one — the shape the Trae plugin's model was read as (#950)
-	plugin := Entry{ID: "plugin/m", Model: "m", Provider: Provider{ID: "plugin",
+	plugin := Entry{ID: "plugin/m", Model: "m", Provider: &Provider{ID: "plugin",
 		Account: &Account{Agent: "plugin", models: func() []catalog.Model { return nil }}}}
 	if !plugin.Quiet() {
 		t.Errorf("a plugin's model with no reasoning: Quiet false (reasoning %v, levels %v)", plugin.Reasoning, plugin.Efforts)

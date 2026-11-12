@@ -277,7 +277,7 @@ func TestAgentPricerLeavesTheRateWindowOut(t *testing.T) {
 		t.Fatal(err)
 	}
 	none := func(string) (Group, []Member, bool) { return Group{}, nil, false }
-	e := Entry{ID: "relay/sol", Model: "sol", Provider: p}
+	e := Entry{ID: "relay/sol", Model: "sol", Provider: &p}
 	if pr, ok := AgentPricer(settings.Load(), none)(e); !ok || pr.Input != 4 || pr.Output != 20 {
 		t.Fatalf("an agent file's price under an all-day 3× window: %+v %v, want the 2× relay's 4 and 20", pr, ok)
 	}
@@ -292,7 +292,7 @@ func TestAgentPricerLeavesTheRateWindowOut(t *testing.T) {
 	group := func(string) (Group, []Member, bool) {
 		return Group{}, []Member{{Provider: p, Model: "sol"}, {Provider: q, Model: "sol"}}, true
 	}
-	g := Entry{ID: "auto/sol", Model: "sol", Group: "auto", Provider: p}
+	g := Entry{ID: "auto/sol", Model: "sol", Group: "auto", Provider: &p}
 	if pr, ok := AgentPricer(settings.Load(), group)(g); !ok || pr.Input != 4 {
 		t.Fatalf("a mixed group's first member in an agent file: %+v %v, want 4", pr, ok)
 	}

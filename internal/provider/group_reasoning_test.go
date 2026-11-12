@@ -227,7 +227,7 @@ func thinksMember() Entry { return thinks("a", levels) }
 // thinks is a model that does: its own levels as given. Same model id as
 // quietMember's, so the two are members of one group.
 func thinks(p string, efforts []string) Entry {
-	return Entry{ID: p + "/m", Model: "m", Name: "m", Provider: Provider{ID: p}, Efforts: efforts, Reasoning: true}
+	return Entry{ID: p + "/m", Model: "m", Name: "m", Provider: &Provider{ID: p}, Efforts: efforts, Reasoning: true}
 }
 
 // quietMember is a member that doesn't think, and has no levels of its own:
@@ -243,7 +243,7 @@ func quietMember() Entry {
 // quiet is a model that doesn't think: its provider gives no levels for it,
 // and nothing says it reasons.
 func quiet(p string) Entry {
-	return Entry{ID: p + "/m", Model: "m", Name: "m", Provider: Provider{ID: p}}
+	return Entry{ID: p + "/m", Model: "m", Name: "m", Provider: &Provider{ID: p}}
 }
 
 // groupReasoningHome is a machine of its own with a provider whose model

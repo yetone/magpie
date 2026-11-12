@@ -70,7 +70,7 @@ func searchableModel(p provider.Provider, model string) bool {
 // webSearchOf is what this magpie's list tells another magpie of how it
 // searches for e (remoteSearch): magpie is whether it has a searcher.
 func webSearchOf(e provider.Entry, magpie bool) string {
-	p := e.Provider
+	p := *e.Provider
 	if e.Group == "" {
 		if p.IsRemoteMagpie() && remoteSearch(p, e.Model) == searchNative || codeAssistSearches(p, provider.CodeAssist, e.Model) {
 			return searchNative

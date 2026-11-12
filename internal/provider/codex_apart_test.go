@@ -19,11 +19,11 @@ func TestCodexPickerNamesSameNamesApart(t *testing.T) {
 	b := Provider{ID: "codex-b", Name: "Codex", Account: &Account{Agent: "codex", User: "b@example.com"}}
 	r := Provider{ID: "relay", Name: "Relay"}
 	ms := codexListed([]Entry{
-		{ID: "codex/gpt-6.1-sol", Model: "gpt-6.1-sol", Name: "GPT-6.1-Sol", Provider: a},
-		{ID: "codex-b/gpt-6.1-sol", Model: "gpt-6.1-sol", Name: "GPT-6.1-Sol", Provider: b},
-		{ID: "relay/glm-5.3", Model: "glm-5.3", Name: "GLM-5.3", Provider: r},
-		{ID: "relay/glm-5.3-old", Model: "glm-5.3-old", Name: "GLM-5.3", Provider: r},
-		{ID: "relay/kimi-k3", Model: "kimi-k3", Name: "Kimi K3", Provider: r},
+		{ID: "codex/gpt-6.1-sol", Model: "gpt-6.1-sol", Name: "GPT-6.1-Sol", Provider: &a},
+		{ID: "codex-b/gpt-6.1-sol", Model: "gpt-6.1-sol", Name: "GPT-6.1-Sol", Provider: &b},
+		{ID: "relay/glm-5.3", Model: "glm-5.3", Name: "GLM-5.3", Provider: &r},
+		{ID: "relay/glm-5.3-old", Model: "glm-5.3-old", Name: "GLM-5.3", Provider: &r},
+		{ID: "relay/kimi-k3", Model: "kimi-k3", Name: "Kimi K3", Provider: &r},
 	}, func(string) []Member { return nil }, true)
 	type shown struct{ name, desc string }
 	want := []shown{

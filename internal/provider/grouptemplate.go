@@ -147,7 +147,7 @@ func templateModels() []rated {
 		r := rated{e: e}
 		if pr, ok := MakerPrice(e.Model); ok {
 			r.out, r.maker = pr.Output, true
-		} else if pr, ok := priceOf(s, e.Provider, true, e.Model, time.Time{}); ok {
+		} else if pr, ok := priceOf(s, *e.Provider, true, e.Model, time.Time{}); ok {
 			// without a rate window's rate (#2463): a template weighs how
 			// strong a model is, which the hour it is made in doesn't change
 			r.out = pr.Output

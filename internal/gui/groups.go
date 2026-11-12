@@ -239,7 +239,7 @@ type modelRef struct {
 
 // servedRef is a served model as the Routing page lists it
 func servedRef(e provider.Entry, s settings.Settings) modelRef {
-	return modelRef{Free: e.Free, Zero: !e.Free && e.Provider.PricedFree(s, e.Model), ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon, Context: e.Context, Efforts: e.Efforts, CanFast: provider.CanFast(e.Provider, e.Model), OwnFast: provider.OwnFast(e.Provider, e.Model), Images: seesImages(e), ImagesUnknown: imagesUnknown(e), Sub: e.Provider.Account != nil}
+	return modelRef{Free: e.Free, Zero: !e.Free && e.Provider.PricedFree(s, e.Model), ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon, Context: e.Context, Efforts: e.Efforts, CanFast: provider.CanFast(*e.Provider, e.Model), OwnFast: provider.OwnFast(*e.Provider, e.Model), Images: seesImages(e), ImagesUnknown: imagesUnknown(e), Sub: e.Provider.Account != nil}
 }
 
 type poolJSON struct {
@@ -386,7 +386,7 @@ func groupsState() groupsJSON {
 		if e.Group == "" {
 			chat[e.ID] = true
 			ref := servedRef(e, set)
-			ref.UltraOK = ref.CanFast && provider.UltraOn(e.Provider, e.Model, ultra())
+			ref.UltraOK = ref.CanFast && provider.UltraOn(*e.Provider, e.Model, ultra())
 			out.Models = append(out.Models, ref)
 		}
 	}

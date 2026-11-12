@@ -14,13 +14,13 @@ func TestServedByAndUpstreamLabel(t *testing.T) {
 		e         Entry
 		by, label string
 	}{
-		{Entry{Name: "DeepSeek Chat", Provider: relay}, "Relay A", "DeepSeek Chat · Relay A"},
-		{Entry{Name: "Fast", Group: "fast", Provider: relay}, "routing group", "Fast · routing group"},
-		{Entry{Name: "DeepSeek Chat · Relay A", Plain: "DeepSeek Chat", By: "Relay A", Provider: remote}, "Relay A", "DeepSeek Chat · Office › Relay A"},
-		{Entry{Name: "Mine", Default: "DeepSeek Chat", By: "Relay A", Provider: remote}, "Relay A", "Mine · Office › Relay A"},
-		{Entry{Name: "DeepSeek Chat · Relay A", Plain: "DeepSeek Chat", Provider: remote}, "Office", "DeepSeek Chat · Relay A · Office"},
+		{Entry{Name: "DeepSeek Chat", Provider: &relay}, "Relay A", "DeepSeek Chat · Relay A"},
+		{Entry{Name: "Fast", Group: "fast", Provider: &relay}, "routing group", "Fast · routing group"},
+		{Entry{Name: "DeepSeek Chat · Relay A", Plain: "DeepSeek Chat", By: "Relay A", Provider: &remote}, "Relay A", "DeepSeek Chat · Office › Relay A"},
+		{Entry{Name: "Mine", Default: "DeepSeek Chat", By: "Relay A", Provider: &remote}, "Relay A", "Mine · Office › Relay A"},
+		{Entry{Name: "DeepSeek Chat · Relay A", Plain: "DeepSeek Chat", Provider: &remote}, "Office", "DeepSeek Chat · Relay A · Office"},
 		// upstream names on a provider that isn't a Remote magpie do nothing
-		{Entry{Name: "DeepSeek Chat", By: "Relay A", Provider: Provider{ID: "x", Name: "X", UpstreamProviders: true}}, "X", "DeepSeek Chat · X"},
+		{Entry{Name: "DeepSeek Chat", By: "Relay A", Provider: &Provider{ID: "x", Name: "X", UpstreamProviders: true}}, "X", "DeepSeek Chat · X"},
 	} {
 		if got := c.e.ServedBy(); got != c.by {
 			t.Errorf("%+v: served by %q, want %q", c.e, got, c.by)

@@ -12,7 +12,7 @@ func ownEntries() []Entry {
 	codex := Provider{ID: "codex", Account: &Account{Agent: "codex", User: "a@example.com"}}
 	devin := Provider{ID: "devin-plugin", Account: &Account{Agent: "plugin"}}
 	relay := Provider{ID: "relay"}
-	e := func(p Provider, m string) Entry { return Entry{ID: p.ID + "/" + m, Model: m, Provider: p} }
+	e := func(p Provider, m string) Entry { return Entry{ID: p.ID + "/" + m, Model: m, Provider: &p} }
 	return []Entry{
 		e(relay, "gpt-6-astra"), e(relay, "glm-6"),
 		e(devin, "gpt-6-astra"), e(devin, "glm-6"),
@@ -51,7 +51,7 @@ func TestOwnRoute(t *testing.T) {
 		}
 	}
 	// spelt otherwise by the vendor (sameModel), still its own
-	dotted := []Entry{{ID: "codex/gpt-6.1-sol", Model: "gpt-6.1-sol", Provider: Provider{ID: "codex", Account: &Account{Agent: "codex"}}}}
+	dotted := []Entry{{ID: "codex/gpt-6.1-sol", Model: "gpt-6.1-sol", Provider: &Provider{ID: "codex", Account: &Account{Agent: "codex"}}}}
 	if to, _, ok := ownRouteIn(dotted, nil, "codex", "gpt-6-1-sol"); !ok || to != "codex/gpt-6.1-sol" {
 		t.Errorf("by its vendor's spelling: %q %v", to, ok)
 	}

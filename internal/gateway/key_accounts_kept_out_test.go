@@ -273,7 +273,7 @@ func TestGatewayKeyKeptOutQuotaCards(t *testing.T) {
 		t.Fatal(err)
 	}
 	who := access.Identity{KeyID: "k", Quotas: true, Accounts: []string{"relay/!" + provider.KeyID("kB")}}
-	s := newQuotaScope(who, []provider.Entry{{Provider: provider.Provider{ID: "relay"}, Model: "m"}})
+	s := newQuotaScope(who, []provider.Entry{{Provider: &provider.Provider{ID: "relay"}, Model: "m"}})
 	if !s.provider("relay") {
 		t.Fatal("the provider's quota is the key's")
 	}

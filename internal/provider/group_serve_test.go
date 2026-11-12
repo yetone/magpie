@@ -20,8 +20,8 @@ func TestOwnGroupsWaitOnThePlugin(t *testing.T) {
 		t.Fatal(err)
 	}
 	entries := []Entry{
-		{ID: "a/x", Model: "x", Provider: Provider{ID: "a"}}, {ID: "b/y", Model: "y", Provider: Provider{ID: "b"}},
-		{ID: "a/m", Model: "m", Provider: Provider{ID: "a"}}, {ID: "b/m", Model: "m", Provider: Provider{ID: "b"}},
+		{ID: "a/x", Model: "x", Provider: &Provider{ID: "a"}}, {ID: "b/y", Model: "y", Provider: &Provider{ID: "b"}},
+		{ID: "a/m", Model: "m", Provider: &Provider{ID: "a"}}, {ID: "b/m", Model: "m", Provider: &Provider{ID: "b"}},
 	}
 	listed := func() []string {
 		var ids []string
@@ -81,7 +81,7 @@ func TestOwnGroupRefreshesTheGate(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", "")
-	entries := []Entry{{ID: "a/m", Model: "m", Provider: Provider{ID: "a"}}, {ID: "b/m", Model: "m", Provider: Provider{ID: "b"}}}
+	entries := []Entry{{ID: "a/m", Model: "m", Provider: &Provider{ID: "a"}}, {ID: "b/m", Model: "m", Provider: &Provider{ID: "b"}}}
 	asked := 0
 	var remove func()
 	defer func() {

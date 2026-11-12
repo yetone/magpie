@@ -100,7 +100,7 @@ func ownEntry(entries []Entry, agent, id string) *Entry {
 	k := sameModel(id)
 	for i := range entries {
 		e := &entries[i]
-		if e.Group != "" || !ownAgent(e.Provider, agent) {
+		if e.Group != "" || !ownAgent(*e.Provider, agent) {
 			continue
 		}
 		if e.Model == id {

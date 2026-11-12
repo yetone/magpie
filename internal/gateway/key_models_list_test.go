@@ -27,7 +27,7 @@ func listedBefore(who access.Identity, es []provider.Entry) []string {
 				ok = slices.ContainsFunc(ms, func(m provider.Member) bool { return accountServes(who, m.Provider, m.Model) })
 			}
 		} else if !ok {
-			ok = modelAllowed(who, e.Provider, e.Model) && accountServes(who, e.Provider, e.Model)
+			ok = modelAllowed(who, *e.Provider, e.Model) && accountServes(who, *e.Provider, e.Model)
 		}
 		if ok {
 			out = append(out, e.ID)

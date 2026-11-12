@@ -418,10 +418,10 @@ func (k *keyList) entryAllowed(e provider.Entry) bool {
 		}
 		return false
 	}
-	if !modelAllowed(who, e.Provider, e.Model) {
+	if !modelAllowed(who, *e.Provider, e.Model) {
 		return false
 	}
-	return k.accountServes(e.Provider, e.Model)
+	return k.accountServes(*e.Provider, e.Model)
 }
 
 // accountServes is accountServes with p's accounts and keys read once
@@ -529,7 +529,7 @@ func keyListed(r *http.Request, shown []provider.Entry, off func(string) bool) [
 		shown = slices.Clone(shown)
 		for _, s := range ins {
 			e := s.Entry
-			if in[e.ID] || off != nil && off(e.ID) || held && !modelAllowed(who, e.Provider, e.Model) || slices.ContainsFunc(s.Groups, given) {
+			if in[e.ID] || off != nil && off(e.ID) || held && !modelAllowed(who, *e.Provider, e.Model) || slices.ContainsFunc(s.Groups, given) {
 				continue
 			}
 			// beside its provider's other models, where it would be
