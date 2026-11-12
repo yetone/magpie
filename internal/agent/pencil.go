@@ -105,7 +105,7 @@ func pencilProviderJSON(gw string) map[string]any {
 			e["input"] = []string{"text"}
 		}
 		if _, ok := e["contextWindow"]; !ok {
-			e["contextWindow"] = 128000
+			e["contextWindow"] = unknownWindow(128000)
 		}
 		if _, ok := e["maxTokens"]; !ok {
 			e["maxTokens"] = min(16384, e["contextWindow"].(int))

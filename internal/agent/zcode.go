@@ -135,7 +135,7 @@ func zcodeProviderJSON(path string, keep bool) any {
 	for _, m := range sharedModels("zcode") {
 		window := m.Context
 		if window == 0 {
-			window = 200000
+			window = unknownWindow(200000)
 		}
 		in := []string{"text"}
 		if m.Images {

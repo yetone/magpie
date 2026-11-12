@@ -498,3 +498,9 @@ func group(name string, opts []Option) []Option {
 }
 
 func gatewayV1() string { return gateway.URL() + "/v1" }
+
+// unknownWindow is the window an agent is told of a model whose own magpie
+// doesn't know: the agent's default n, held to the longest context the user
+// set for every model (settings.ContextCap) like every window that is known
+// (ul3140773077392 on X, #6259).
+func unknownWindow(n int) int { return settings.Shared().Capped(n) }

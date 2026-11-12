@@ -624,7 +624,7 @@ func vscodeGroupJSON(k vscodeKind, vendor string) map[string]any {
 	for _, m := range sharedModels(k.id) {
 		context := m.Context
 		if context == 0 {
-			context = 128000 // what VS Code takes a model of unknown window for
+			context = unknownWindow(128000) // what VS Code takes a model of unknown window for
 		}
 		// VS Code keeps the output budget out of the window it fills with
 		// the prompt, so a model whose output limit is near its window

@@ -107,7 +107,7 @@ func jcodeWant(was []jcodeModel) []jcodeModel {
 	for _, m := range sharedModels("jcode") {
 		ctx := m.Context
 		if ctx <= 0 {
-			ctx = jcodeContext
+			ctx = unknownWindow(jcodeContext)
 		}
 		e := jcodeModel{ID: m.ID, ContextWindow: ctx, Input: []string{"text"}}
 		if m.Images {

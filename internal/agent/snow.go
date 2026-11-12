@@ -491,7 +491,7 @@ func snowProfileFor(from []byte, ours bool, v1, key, ref string, wrote map[strin
 	if !ours {
 		snowOwnVision(sc)
 	}
-	ctx, out := snowContext, snowOutput
+	ctx, out := unknownWindow(snowContext), snowOutput
 	sees := false
 	for _, m := range sharedModels("snow") {
 		if m.ID == ref {

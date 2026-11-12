@@ -359,7 +359,7 @@ const buddySmallWindow = 200000
 // agent's key.
 func buddyModel(agent, id, name string, context, output int, images bool, efforts []string) map[string]any {
 	if context == 0 {
-		context = 200000
+		context = unknownWindow(200000)
 	}
 	e := map[string]any{
 		"id": id, "name": name, "vendor": magpieID,

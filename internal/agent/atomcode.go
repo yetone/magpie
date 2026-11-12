@@ -310,7 +310,7 @@ func atomcodeTablesAt(path, v1, key string) []edit.Table {
 	for _, m := range sharedModels("atomcode") {
 		ctx := m.Context
 		if ctx <= 0 {
-			ctx = atomcodeContext
+			ctx = unknownWindow(atomcodeContext)
 		}
 		kvs := []edit.KV{
 			{Path: "account", Value: magpieID},
@@ -320,8 +320,8 @@ func atomcodeTablesAt(path, v1, key string) []edit.Table {
 		// an output above the window is cut to it — the window AtomCode is
 		// told when magpie doesn't know the model's is atomcodeContext
 		if n := maxTokens(m); n > 0 {
-			if m.Context <= 0 && n > atomcodeContext {
-				n = atomcodeContext
+			if m.Context <= 0 && n > ctx {
+				n = ctx
 			}
 			kvs = append(kvs, edit.KV{Path: "max_tokens", Value: n})
 		}

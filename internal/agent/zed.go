@@ -213,7 +213,7 @@ func zedProviderJSON(path, url string) map[string]any {
 	for _, m := range sharedModels("zed") {
 		context := m.Context
 		if context == 0 {
-			context = 128000 // Zed requires a context window for every custom model.
+			context = unknownWindow(128000) // Zed requires a context window for every custom model.
 		}
 		// Zed's max_tokens is the window a prompt and its reply share: it
 		// keeps max_output_tokens of it for the reply and lets the prompt

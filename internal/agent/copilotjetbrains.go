@@ -225,7 +225,7 @@ func copilotJBModelsJSON(hidden map[string]bool) map[string]any {
 	for _, m := range sharedModels(copilotJBID) {
 		context := m.Context
 		if context == 0 {
-			context = 128000 // the server's own default for a custom endpoint
+			context = unknownWindow(128000) // the server's own default for a custom endpoint
 		}
 		// the output is reserved out of the window the prompt fills
 		output := maxTokens(m)

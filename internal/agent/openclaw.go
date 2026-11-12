@@ -186,7 +186,7 @@ func openClawWant(raw gjson.Result) []any {
 	for _, m := range sharedModels("openclaw") {
 		ctx := m.Context
 		if ctx <= 0 {
-			ctx = openClawContext
+			ctx = unknownWindow(openClawContext)
 		}
 		e := openClawEntry{ID: m.ID, Name: m.ID, Input: []string{"text"}, ContextWindow: ctx}
 		if m.Images {

@@ -254,7 +254,7 @@ func zooCodeModelInfo(m catalog.Model) map[string]any {
 	info := map[string]any{"supportsPromptCache": false, "supportsImages": m.Images}
 	// Zoo Code's own default for a model it isn't told about
 	// (openAiModelInfoSaneDefaults)
-	info["contextWindow"] = 128_000
+	info["contextWindow"] = unknownWindow(128_000)
 	if m.Context > 0 {
 		info["contextWindow"] = m.Context
 	}
