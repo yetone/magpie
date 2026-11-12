@@ -10,8 +10,9 @@ import (
 	"testing"
 )
 
-// oldPrefixHash is prefixHash as it was, through io.CopyN: a stored hash
-// must still match after the change, or every cache is read again.
+// oldPrefixHash is prefixHash as it was, through io.CopyN and written in
+// full: a stored hash must still match after the change, or every cache
+// is read again.
 func oldPrefixHash(path string, n int64) string {
 	f, err := os.Open(path)
 	if err != nil {
@@ -45,13 +46,13 @@ func TestPrefixHashUnchangedAndUnbuffered(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, n := range []int64{0, 1, 4095, 4096, 65535, 65536, 65537, 1 << 20, 3 << 20} {
-		if got, want := prefixHash(path, n), oldPrefixHash(path, n); got != want || got == "" {
+		if got, want := prefixHash(path, n), parseDigest(oldPrefixHash(path, n)); got != want || got == (digest{}) {
 			t.Fatalf("n=%d: %q, was %q", n, got, want)
 		}
 	}
 	// Past the file's end is unknown, as it was.
 	for _, n := range []int64{3<<20 + 1, 4 << 20} {
-		if got := prefixHash(path, n); got != "" {
+		if got := prefixHash(path, n); got != (digest{}) {
 			t.Fatalf("n=%d past the end: %q", n, got)
 		}
 		if old := oldPrefixHash(path, n); old != "" {

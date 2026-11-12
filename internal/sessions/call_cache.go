@@ -596,7 +596,7 @@ type callDiskState struct {
 }
 
 func diskCallState(s *callFile) callDiskState {
-	d := callDiskState{ContentHash: s.ContentHash, Size: s.Size, Mod: s.Mod, Off: s.Off, Head: s.Head, HeadSize: s.HeadSize,
+	d := callDiskState{ContentHash: s.ContentHash.String(), Size: s.Size, Mod: s.Mod, Off: s.Off, Head: s.Head.String(), HeadSize: s.HeadSize,
 		Path: s.Path, Agent: s.Agent, Parser: callParseVersions[s.Agent], At: s.At, End: s.End, AsstEnd: s.AsstEnd, Session: s.Session, Requested: s.Requested,
 		LastUser: s.LastUser, LastAsst: s.LastAsst}
 	if s.Dsh != nil {
@@ -611,8 +611,8 @@ func diskCallState(s *callFile) callDiskState {
 	return d
 }
 func (s callDiskState) restore() *callFile {
-	st := &callFile{ContentHash: s.ContentHash, Size: s.Size, Mod: s.Mod, Off: s.Off,
-		Head: s.Head, HeadSize: s.HeadSize, Path: s.Path, Agent: s.Agent, At: s.At, End: s.End,
+	st := &callFile{ContentHash: parseDigest(s.ContentHash), Size: s.Size, Mod: s.Mod, Off: s.Off,
+		Head: parseDigest(s.Head), HeadSize: s.HeadSize, Path: s.Path, Agent: s.Agent, At: s.At, End: s.End,
 		AsstEnd: s.AsstEnd, Session: s.Session, Requested: s.Requested, LastUser: s.LastUser, LastAsst: s.LastAsst}
 	if len(s.Dsh) > 0 {
 		var c dshCarry

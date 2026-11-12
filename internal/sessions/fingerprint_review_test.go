@@ -51,7 +51,7 @@ func TestSampledPrefixFingerprint(t *testing.T) {
 		}
 		os.WriteFile(path, data, 0600)
 	}
-	if prefixHash(path, n+1) != "" {
+	if prefixHash(path, n+1) != (digest{}) {
 		t.Fatal("short read accepted")
 	}
 }
@@ -64,7 +64,7 @@ func BenchmarkPrefixFingerprint(b *testing.B) {
 	for _, impl := range []struct {
 		name string
 		f    func(string, int64) string
-	}{{"sampled", prefixHash}, {"without_sampling", fullPrefixHash}} {
+	}{{"sampled", func(p string, n int64) string { return prefixHash(p, n).String() }}, {"without_sampling", fullPrefixHash}} {
 		b.Run(impl.name, func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {

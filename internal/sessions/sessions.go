@@ -218,14 +218,14 @@ type state struct {
 	Codex     *codexUsageState  `json:"-"`
 	codexPath string            // the rollout read, for its fork's parent
 	Claude    *claudeUsageState `json:"claude,omitempty"`
-	Head      string            `json:"head,omitempty"`
+	Head      digest            `json:"head,omitzero"`
 	// int32 beside CdRead: the head is headLen bytes at most, and the 8 bytes
 	// it saves take a state from the 448-byte size class to 416 (#2278)
 	HeadSize int32 `json:"head_size,omitempty"`
 	// Claude Code: parsed by a magpie that reads /cd's relocated lines
 	// (ccRelocated), so Cwd is the folder the session was last moved to
 	CdRead        bool           `json:"cd_read,omitempty"`
-	ContentHash   string         `json:"content_hash,omitempty"`
+	ContentHash   digest         `json:"content_hash,omitzero"`
 	Size          int64          `json:"size"`
 	Mod           int64          `json:"mod"` // unix nanoseconds
 	Off           int64          `json:"off"` // after the last whole line read
@@ -2346,13 +2346,13 @@ func parseRead(f file, old *state, calls *callsRide) *state {
 
 	headBytes := headOf(f.path)
 	var s *state
-	if old != nil && !packed(f.path) && f.size >= old.Size && old.Off <= f.size && sameHead(headBytes, old.Head, int(old.HeadSize)) && old.ContentHash != "" && prefixHash(f.path, old.Size) == old.ContentHash {
+	if old != nil && !packed(f.path) && f.size >= old.Size && old.Off <= f.size && sameHead(headBytes, old.Head, int(old.HeadSize)) && old.ContentHash != (digest{}) && prefixHash(f.path, old.Size) == old.ContentHash {
 		s = old.clone()
 	} else {
 		s = &state{}
 	}
 	s.Size, s.Mod = f.size, f.mod.UnixNano()
-	s.Head, s.HeadSize = hashHead(headBytes), int32(len(headBytes))
+	s.Head, s.HeadSize = headDigest(headBytes), int32(len(headBytes))
 	s.CdRead = parser.claude
 	s.ContentHash = prefixHash(f.path, f.size)
 	var head func([]byte) bool
