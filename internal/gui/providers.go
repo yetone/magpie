@@ -2810,7 +2810,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				fail(rw, err)
 				return
 			}
-			ctx := r.Context()
+			// the account or key the test is pinned to (provider.TestOn;
+			// tmr11235 on X: "Test on account…" was posted but never read)
+			ctx := provider.TestOn(r.Context(), req.Account)
 			if req.Run != "" {
 				var stop context.CancelFunc
 				ctx, stop = context.WithCancel(ctx)
