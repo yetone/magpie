@@ -36,7 +36,7 @@ const seats = [
   cx("ivy", "Plus", {}, { tried: 2, ok: 1, fails: { auth: 1 }, last: now - 10 * M, authAt: now - 5 * M }),
 ];
 const tallies = {};
-for (const { seat, tally } of seats) tallies[JSON.stringify([seat.provider, seat.who])] = { ...seat, ...tally, models: tally.ok ? [seat.model] : [] };
+for (const { seat, tally } of seats) tallies[JSON.stringify(seat.plan ? [seat.provider, seat.who, seat.plan.toLowerCase()] : [seat.provider, seat.who])] = { ...seat, ...tally, models: tally.ok ? [seat.model] : [] };
 const order = seats.map((s) => s.seat);
 const routes = [{ id: 1, seq: 1, time: iso(now - 20e3), agent: "codex", model: "gpt-5.5", provider: "codex", done: true, status: 200, ms: 4200, order,
   tries: [{ id: "codex@main", model: "gpt-5.5", start: iso(now - 20e3), done: true, ms: 4100, status: 200 }] }];

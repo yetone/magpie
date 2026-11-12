@@ -33,7 +33,7 @@ const seats = provs.map(([id, name, ic, kind], i) => ({
   tally: { tried: 10, ok: 10, fails: {}, last: now - (i + 1) * 60e3 },
 }));
 const tallies = {};
-for (const { seat, tally } of seats) tallies[JSON.stringify([seat.provider, seat.who])] = { ...seat, ...tally, models: [seat.model] };
+for (const { seat, tally } of seats) tallies[JSON.stringify(seat.plan ? [seat.provider, seat.who, seat.plan.toLowerCase()] : [seat.provider, seat.who])] = { ...seat, ...tally, models: [seat.model] };
 const order = seats.map((s) => s.seat);
 const routes = [{ id: 1, seq: 1, time: iso(now - 20e3), agent: "codex", model: "m0", provider: "codex", done: true, status: 200, ms: 4200, order,
   tries: [{ id: "codex@a", model: "m0", start: iso(now - 20e3), done: true, ms: 4100, status: 200 }] }];
