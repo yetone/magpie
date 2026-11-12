@@ -1,8 +1,11 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // An agent's own context windows (ul3140773077392 on X: dsh compacts earlier
 // than the other agents at the same window). Any agent with models has, in
-// its sheet, "Context window": empty follows each model's own
-// window; a size or model=size pairs post settings/agent-contexts for that
+// its sheet, "Context window": each model's own window until a size is
+// picked from the app's menu (or one length typed under "Other size…"),
+// and a model set apart is picked from the agent's own models with its size
+// from the same menu (the owner, 11-12: no syntax to type). Each posts
+// settings/agent-contexts for that
 // agent alone, never the general preferences. A bad size is refused and
 // sends nothing, the row fits a narrow window, there is no native select.
 // Chromium and WebKit, every language, wide and narrow; the API is faked.
@@ -11,7 +14,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
-const { watchSettingsReads, agentRow, openAgentSettings } = require("./reader.cjs");
+const { watchSettingsReads, agentRow, openAgentSettings, pickItem } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
 
@@ -51,18 +54,17 @@ function serve(lang, posts) {
 }
 
 const words = {
-  en: { name: (a) => "Context window", bad: "Context window: lots is not a length like 128k or 1m" },
-  zh: { name: (a) => "上下文窗口", bad: "上下文窗口：lots 不是 128k、1m 这样的长度" },
-  "zh-TW": { name: (a) => "上下文視窗", bad: "上下文視窗：lots 不是 128k、1m 這樣的長度" },
-  ja: { name: (a) => "コンテキストウィンドウ", bad: "コンテキストウィンドウ：lots は 128k や 1m のような長さではありません" },
-  de: { name: (a) => "Kontextfenster", bad: "Kontextfenster: lots ist keine Länge wie 128k oder 1m" },
+  en: { name: (a) => "Context window", own: "Each model's own", other: "Other size…", bad: "Context window: lots is not a length like 128k or 1m" },
+  zh: { name: (a) => "上下文窗口", own: "各模型自己的", other: "其他大小…", bad: "上下文窗口：lots 不是 128k、1m 这样的长度" },
+  "zh-TW": { name: (a) => "上下文視窗", own: "各模型自己的", other: "其他大小…", bad: "上下文視窗：lots 不是 128k、1m 這樣的長度" },
+  ja: { name: (a) => "コンテキストウィンドウ", own: "各モデルのまま", other: "ほかのサイズ…", bad: "コンテキストウィンドウ：lots は 128k や 1m のような長さではありません" },
+  de: { name: (a) => "Kontextfenster", own: "Je Modell sein eigenes", other: "Andere Größe…", bad: "Kontextfenster: lots ist keine Länge wie 128k oder 1m" },
 };
-
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   for (const lang of Object.keys(words)) {
     for (const width of [900, 420]) {
       const w = words[lang];
-      test(`${engine} ${lang} ${width}px: an agent sets its own context window`, async (t) => {
+      test(`${engine} ${lang} ${width}px: an agent picks its own context window`, async (t) => {
         const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || "chromium" }));
         t.after(() => browser.close());
         const page = await (await browser.newContext({ viewport: { width, height: 760 }, reducedMotion: "reduce" })).newPage();
@@ -78,33 +80,62 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await row.waitFor();
         assert.equal(await row.locator(".name").textContent(), w.name("Dsh"));
         assert.equal(await row.locator("select").count(), 0, "no native select");
-        const num = row.locator("input.window-in");
-        assert.equal(await num.inputValue(), "", "empty while it follows each model's own window");
+        // picked, never typed as a syntax (the owner, 11-12)
+        assert.equal(await row.locator("input").count(), 0, "no field to type a syntax into");
+        const all = row.locator(".window-all");
+        assert.equal((await all.textContent()).trim(), w.own, "each model's own while nothing is set");
         const view = () => page.locator("#view-agents").evaluate((v) => v.scrollTop);
         const before = await view();
-        await num.fill("500k");
+        const item = (name) => page.locator(".sess-menu .pm-item", { hasText: new RegExp(`^\\s*${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`) });
+        const sent = async (n, body) => {
+          for (let i = 0; i < 200 && posts.length < n; i++) await page.evaluate(() => new Promise((r) => requestAnimationFrame(r)));
+          assert.equal(posts.length, n, "posts: " + JSON.stringify(posts));
+          assert.deepEqual(posts.at(-1), { path: "/api/settings/agent-contexts", body: { agent: "dsh", contexts: body } });
+        };
+        // one size for all its models, from the menu
+        await all.click();
+        await item("400K").click();
+        await sent(1, { "*": 400000 });
+        await page.waitForFunction(() => document.querySelector(".agent-window .window-all")?.textContent.trim() === "400K");
+        // a size the menu hasn't, typed as one length
+        await row.locator(".window-all").click();
+        await item(w.other).click();
+        const num = row.locator("input.window-in");
+        await num.fill("300k");
         await num.press("Enter");
-        await page.waitForFunction(() => document.querySelector(".agent-window input")?.value === "500k");
-        assert.deepEqual(posts.map((p) => [p.path, p.body]), [["/api/settings/agent-contexts", { agent: "dsh", contexts: { "*": 500000 } }]]);
-        await num.fill("relay/m1=1m, 300k");
-        await num.press("Enter");
-        await page.waitForFunction(() => document.querySelector(".agent-window input")?.value.includes("relay/m1"));
-        assert.deepEqual(posts.at(-1).body, { agent: "dsh", contexts: { "relay/m1": 1000000, "*": 300000 } });
-        assert(!posts.some((p) => p.path === "/api/settings"), "set on its own, not with the other preferences");
-        assert.equal(await view(), before, "the row scrolled the page");
+        await sent(2, { "*": 300000 });
+        await page.waitForFunction(() => document.querySelector(".agent-window .window-all")?.textContent.trim() === "300K");
         // a size that isn't one is refused, nothing sent
-        const sent = posts.length;
-        await num.fill("lots");
-        await num.press("Enter");
+        await row.locator(".window-all").click();
+        await item("300K").click();
+        await row.locator("input.window-in").fill("lots");
+        await row.locator("input.window-in").press("Enter");
         await page.getByText(w.bad).waitFor();
-        assert.equal(posts.length, sent, "a bad size sent nothing");
-        // emptied, the agent follows each model's window again
-        await num.fill("");
-        await num.press("Enter");
-        await page.waitForFunction(() => document.querySelector(".agent-window input")?.value === "");
-        assert.deepEqual(posts.at(-1).body, { agent: "dsh", contexts: {} });
-        // every agent has one, its own
-        await page.locator('.row.agent[data-id="codex"] .ag-link').scrollIntoViewIfNeeded();
+        assert.equal(posts.length, 2, "a bad size sent nothing");
+        await page.waitForFunction(() => !document.querySelector(".agent-window input"));
+        // a model of its own: picked from the agent's models, then its size
+        await row.locator(".window-add").click();
+        await pickItem(page, page.locator("#list li", { hasText: "m1" }).first());
+        await item("1M").click();
+        await sent(3, { "*": 300000, "relay/m1": 1000000 });
+        const line = row.locator('.window-model[data-model="relay/m1"]');
+        await line.waitFor();
+        assert.equal((await line.locator(".window-size").textContent()).trim(), "1M");
+        // its size changed from the same menu
+        await line.locator(".window-size").click();
+        await item("200K").click();
+        await sent(4, { "*": 300000, "relay/m1": 200000 });
+        // removed, the line goes
+        await row.locator('.window-model[data-model="relay/m1"] .window-rm').click();
+        await sent(5, { "*": 300000 });
+        await page.waitForFunction(() => !document.querySelector(".agent-window .window-model"));
+        // back to each model's own window
+        await row.locator(".window-all").click();
+        await item(w.own).click();
+        await sent(6, {});
+        await page.waitForFunction((own) => document.querySelector(".agent-window .window-all")?.textContent.trim() === own, w.own);
+        assert(!posts.some((p) => p.path === "/api/settings"), "set on its own, not with the other preferences");
+        assert.equal(await view(), before, "picking scrolled the page");
         const over = await row.evaluate((r) => r.scrollWidth - r.clientWidth);
         assert(over <= 1, `the row overflows by ${over}px`);
         assert.deepEqual(errors, []);

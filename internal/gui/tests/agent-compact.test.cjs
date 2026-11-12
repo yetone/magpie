@@ -1,12 +1,13 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
-// An agent's own Long conversations (molianyin4227 on Discord: models
-// differ, so one size for every agent fits none). Under Long conversations
-// in Claude Code's and Codex's sheets, "Long conversations in <agent>"
-// follows Every agent until it is given its own: Compact at a size
-// (starting from every agent's) or Full window, each posting
-// settings/agent-compact for that agent alone; Every agent again takes
-// its own away. Its label follows every agent's size when that row
-// changes, no click or typing scrolls the page, there is no native select.
+// An agent's Long conversations, one row in its sheet (molianyin4227 on
+// Discord: models differ, so one size for every agent fits none; the owner,
+// 11-12: two rows for the same thing read as a duplicate). Claude Code's
+// and Codex's sheets show one "Long conversations" row, in place of every
+// agent's, with this agent's value (its own, else every agent's): Compact
+// at a size or Full window, each posting settings/agent-compact for that
+// agent alone. Every agent's row is not shown in the sheet. Its label
+// follows every agent's size until the agent has its own, no click or
+// typing scrolls the page, there is no native select.
 // English and Chinese, Chromium and WebKit, wide and narrow; no backend,
 // the API is faked here.
 const assert = require("node:assert/strict");
@@ -60,8 +61,8 @@ function serve(lang, posts) {
 }
 
 const words = {
-  en: { name: (a) => `Long conversations in ${a}`, all: "Every agent", at: (n) => `Compact at ${n}`, full: "Full window", bad: "Compact at: lots is not a number of tokens like 272k" },
-  zh: { name: (a) => `${a} 的长对话`, all: "所有智能体", at: (n) => `${n} 时压缩`, full: "完整窗口", bad: "压缩阈值：lots 不是 272k 这样的 token 数" },
+  en: { name: "Long conversations", at: (n) => `Compact at ${n}`, full: "Full window", bad: "Compact at: lots is not a number of tokens like 272k" },
+  zh: { name: "长对话", at: (n) => `${n} 时压缩`, full: "完整窗口", bad: "压缩阈值：lots 不是 272k 这样的 token 数" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -82,43 +83,35 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await openAgentSettings(page, "claude");
         const row = page.locator('.agent-compact[data-agent="claude"]');
         await row.waitFor();
-        assert.equal(await row.locator(".name").textContent(), w.name("Claude Code"));
+        assert.equal(await row.locator(".name").textContent(), w.name);
         assert.equal(await row.locator("select").count(), 0, "no native select");
-        // right under Long conversations
+        // in every agent's place: that row is not shown in the sheet, so the
+        // setting reads once
         assert.equal(await row.evaluate((r) => r.previousElementSibling?.id), "fullContextRow");
+        assert(await page.locator(".agent-compact ~ #fullContextRow, #fullContextRow").first().isHidden(), "every agent's row shows beside it");
+        assert.equal(await page.getByText(w.name, { exact: true }).filter({ visible: true }).count(), 1, "Long conversations shown twice");
         const seg = (label) => row.getByText(label, { exact: true });
         const on = (label) => seg(label).evaluate((b) => b.classList.contains("on") || b.getAttribute("aria-pressed") === "true" || b.getAttribute("aria-checked") === "true");
-        assert(await on(w.all), "follows every agent until set");
-        assert(await seg(w.at("400K")).isVisible(), "every agent's size is the start");
+        // every agent's value until it has its own
+        assert(await on(w.at("400K")), "every agent's size is shown");
         const num = row.locator("input.compact-num");
-        assert(await num.isHidden(), "no size while it follows every agent");
+        assert.equal(await num.inputValue(), "400k");
         const view = () => page.locator("#view-agents").evaluate((v) => v.scrollTop);
         const before = await view();
+        await seg(w.full).click();
+        await page.waitForFunction(() => document.querySelector(".agent-compact input.compact-num")?.hidden);
+        assert.deepEqual(posts.map((p) => [p.path, p.body]), [["/api/settings/agent-compact", { agent: "claude", own: true, full: true, at: 400000 }]]);
         await seg(w.at("400K")).click();
         await page.waitForFunction(() => document.querySelector(".agent-compact input.compact-num")?.hidden === false);
-        assert.deepEqual(posts.map((p) => [p.path, p.body]), [["/api/settings/agent-compact", { agent: "claude", own: true, full: false, at: 400000 }]]);
+        assert.deepEqual(posts.at(-1).body, { agent: "claude", own: true, full: false, at: 400000 });
         await num.fill("150k");
         await num.press("Enter");
         await seg(w.at("150K")).waitFor();
         assert.deepEqual(posts.at(-1).body, { agent: "claude", own: true, full: false, at: 150000 });
-        await seg(w.full).click();
-        await page.waitForFunction(() => document.querySelector(".agent-compact input.compact-num")?.hidden);
-        assert.deepEqual(posts.at(-1).body, { agent: "claude", own: true, full: true, at: 150000 });
-        // every agent's row is untouched by it, and its own change shows here
         assert(!posts.some((p) => p.path === "/api/settings/full-context"), "every agent's Long conversations was not sent");
-        await seg(w.all).click();
-        await page.waitForFunction(() => document.querySelector(".agent-compact input.compact-num")?.hidden);
-        assert.deepEqual(posts.at(-1).body, { agent: "claude", own: false });
-        const every = page.locator("#fullContextSegs input.compact-num");
-        await every.fill("500k");
-        await every.press("Enter");
-        await seg(w.at("500K")).waitFor();
-        assert(await on(w.all));
-        assert.equal(await view(), before, "the row scrolled the page");
         assert(!posts.some((p) => p.path === "/api/settings"), "set on its own, not with the other preferences");
+        assert.equal(await view(), before, "the row scrolled the page");
         // a size that isn't one is refused, nothing sent
-        await seg(w.at("500K")).click();
-        await page.waitForFunction(() => document.querySelector(".agent-compact input.compact-num")?.hidden === false);
         const sent = posts.length;
         await num.fill("lots");
         await num.press("Enter");

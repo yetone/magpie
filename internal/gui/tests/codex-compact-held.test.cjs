@@ -1,5 +1,6 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
-// Long conversations, in Codex's opened row: a model_context_window or
+// Long conversations, in Codex's opened row (its one row since the owner
+// merged the two, 11-12): a model_context_window or
 // model_auto_compact_token_limit in Codex's config.toml comes before it in
 // Codex (zgjfjfl on Discord: 128000 there, 544K here, and every
 // conversation compacted near 128K), so the row names each one, with the
@@ -75,14 +76,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.goto("http://magpie.test/?view=agents");
         await openAgentSettings(page);
         // the window magpie tells Codex for the model its config runs, when Long conversations is over it (gpt-6-A)
-        const own = page.locator("#fullContextRow .compact-held").filter({ hasText: w.own });
+        const own = page.locator(".agent-compact .compact-held").filter({ hasText: w.own });
         await own.waitFor();
         assert.equal((await own.textContent()).trim(), w.own);
-        const note = page.locator("#fullContextRow .compact-held").filter({ has: page.locator("button") });
+        const note = page.locator(".agent-compact .compact-held").filter({ has: page.locator("button") });
         await note.waitFor();
         assert.equal((await note.locator("span").textContent()).trim(), w.line);
-        if (w.at) await page.locator("#fullContextRow").getByText(w.at, { exact: true }).waitFor();
-        const box = await note.boundingBox(), row = await page.locator("#fullContextRow").boundingBox();
+        if (w.at) await page.locator(".row.agent-compact").getByText(w.at, { exact: true }).waitFor();
+        const box = await note.boundingBox(), row = await page.locator(".row.agent-compact").boundingBox();
         assert(box.x >= row.x - 1 && box.x + box.width <= row.x + row.width + 1, `the line stays in its row: ${JSON.stringify({ box, row })}`);
         const view = () => page.locator("#view-agents").evaluate((v) => v.scrollTop);
         // the button is wheeled into view first, as the reader would, so only the click itself is measured (en, ja and de at 420px)

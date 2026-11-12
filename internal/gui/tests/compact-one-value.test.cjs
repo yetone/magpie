@@ -1,11 +1,13 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // Where Codex compacts is one value (7eleven on Discord): the Usage page's
 // Tuned for you card and Long conversations in Codex's settings on the
-// Agents page. The card says it is Long conversations, shared by Codex and
-// Claude Code, and keeps saying so after Use, with Undo; after Use, the Agents
-// page's sheet shows the window Use put in, with no reload. A window typed
-// in the sheet is the one the card shows as Now when the Usage page comes
-// back. Chromium and WebKit, in every language; the API is faked here and
+// Agents page. The card says it is Long conversations, shared by Codex,
+// Claude Code and Grok Build, and keeps saying so after Use, with Undo;
+// after Use, the Agents page's sheet shows the window Use put in, with no
+// reload, in its one Long conversations row (the owner, 11-12: not a row for
+// every agent above one for Codex). A window typed there is Codex's own, the
+// one the card shows as Now when the Usage page comes back, and the card
+// then says it is Codex's. Chromium and WebKit, in every language; the API is faked here and
 // keeps the one value as the gateway does (settings.CompactAt).
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -25,7 +27,12 @@ const facts = { calls: 900, streams: 20, compacts: 40, peak: 380000, after: 5700
 function serve(lang, posts) {
   let settings = { theme: "light", lang, tray: "panel", currency: "usd", version: "0.1.900", dir: "~/.config/magpie", gateway: "http://127.0.0.1:3425", proxyNow: "none", proxySource: "none", visionModels: [], imageGenModels: [], titleModels: [], workbuddyCheckins: [], lanURLs: [], redactWords: [], trayUsageEvery: 3, compactAt: 0, fullContext: false };
   let ours = 0; // the window tune put in, as the gateway's stash keeps it
-  const window = () => settings.fullContext ? 0 : settings.compactAt || 272000;
+  // Codex's own Long conversations comes first (settings.ForAgent)
+  const window = () => {
+    const own = (settings.agentCompacts || {}).codex;
+    if (own) return own.full ? 0 : own.at || 272000;
+    return settings.fullContext ? 0 : settings.compactAt || 272000;
+  };
   const tune = () => {
     const now = window();
     return {
@@ -49,7 +56,10 @@ function serve(lang, posts) {
       posts.push({ path: url.pathname, body: b });
       if (url.pathname.endsWith("apply")) {
         ours = +b.value;
-        settings = { ...settings, compactAt: ours, fullContext: false };
+        // a Use puts the advice where Codex reads it (tune.longKey)
+        settings = (settings.agentCompacts || {}).codex
+          ? { ...settings, agentCompacts: { ...settings.agentCompacts, codex: { at: ours } } }
+          : { ...settings, compactAt: ours, fullContext: false };
       }
       return json({});
     }
@@ -57,6 +67,15 @@ function serve(lang, posts) {
       const body = req.postDataJSON();
       posts.push({ path: url.pathname, body });
       settings = { ...settings, fullContext: body.on, ...(body.at !== undefined ? { compactAt: body.at === 272000 ? 0 : body.at } : {}) };
+      return json(settings);
+    }
+    if (url.pathname === "/api/settings/agent-compact") {
+      const body = req.postDataJSON();
+      posts.push({ path: url.pathname, body });
+      const ac = { ...(settings.agentCompacts || {}) };
+      if (body.own) ac[body.agent] = { ...(body.full ? { full: true } : {}), ...(body.at && body.at !== 272000 ? { at: body.at } : {}) };
+      else delete ac[body.agent];
+      settings = { ...settings, agentCompacts: ac };
       return json(settings);
     }
     if (url.pathname === "/api/settings") return json(settings);
@@ -80,11 +99,11 @@ function serve(lang, posts) {
 }
 
 const words = {
-  en: { long: "Long conversations, shared by Codex, Claude Code and Grok Build", undo: "Undo" },
-  zh: { long: "「长对话」，Codex、Claude Code 和 Grok Build 共用", undo: "撤销" },
-  "zh-TW": { long: "「長對話」，Codex、Claude Code 與 Grok Build 共用", undo: "復原" },
-  ja: { long: "「長い会話」。Codex、Claude Code、Grok Build で共通", undo: "取り消す" },
-  de: { long: "„Lange Unterhaltungen“, die Codex, Claude Code und Grok Build teilen", undo: "Rückgängig" },
+  en: { long: "Long conversations, shared by Codex, Claude Code and Grok Build", own: "Long conversations in Codex", undo: "Undo" },
+  zh: { long: "「长对话」，Codex、Claude Code 和 Grok Build 共用", own: "Codex 的长对话", undo: "撤销" },
+  "zh-TW": { long: "「長對話」，Codex、Claude Code 與 Grok Build 共用", own: "Codex 的長對話", undo: "復原" },
+  ja: { long: "「長い会話」。Codex、Claude Code、Grok Build で共通", own: "Codex の長い会話", undo: "取り消す" },
+  de: { long: "„Lange Unterhaltungen“, die Codex, Claude Code und Grok Build teilen", own: "Lange Unterhaltungen in Codex", undo: "Rückgängig" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -113,23 +132,24 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await row.locator(".ctx-tune-src").innerText(), w.long);
         assert.deepEqual(posts.map((p) => [p.path, p.body.agent, p.body.value]), [["/api/tune/apply", "codex", "400000"]]);
 
-        // the Agents page's sheet shows the window Use put in
+        // the Agents page's sheet shows the window Use put in, in one row
         await page.locator('#nav button[data-view="agents"]').click();
         await openAgentSettings(page, "codex");
-        const num = page.locator("#fullContextSegs input.compact-num");
+        const num = page.locator(".agent-compact input.compact-num");
         await num.waitFor();
         assert.equal(await num.inputValue(), "400k", "Long conversations after Use on the Usage page");
+        assert.equal(await page.locator("#fullContextRow").filter({ visible: true }).count(), 0, "every agent's row stands beside Codex's own");
 
-        // a window typed there is the card's Now when Usage is back
+        // a window typed there is Codex's own, the card's Now when Usage is back
         await num.fill("300k");
         await num.press("Enter");
-        await page.waitForFunction(() => document.querySelector("#fullContextSegs input.compact-num")?.value === "300k");
-        assert.deepEqual(posts.at(-1), { path: "/api/settings/full-context", body: { on: false, at: 300000 } });
+        await page.waitForFunction(() => document.querySelector(".agent-compact input.compact-num")?.value === "300k");
+        assert.deepEqual(posts.at(-1), { path: "/api/settings/agent-compact", body: { agent: "codex", own: true, full: false, at: 300000 } });
         await page.locator('#nav button[data-view="usage"]').click();
         await page.locator(".ctx-tune-row .ctx-tune-val.now b").filter({ hasText: "300K" }).waitFor();
-        // no longer the window tune put in: no Undo, and still the one value
+        // no longer the window tune put in: no Undo, and the card says whose it is
         assert.equal(await page.locator(".ctx-tune-row").first().getByRole("button", { name: w.undo, exact: true }).count(), 0);
-        assert.equal(await page.locator(".ctx-tune-row .ctx-tune-src").first().innerText(), w.long);
+        assert.equal(await page.locator(".ctx-tune-row .ctx-tune-src").first().innerText(), w.own);
         assert.deepEqual(errors, []);
         await ctx.close();
       });

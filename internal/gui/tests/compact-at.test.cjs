@@ -5,9 +5,10 @@
 // form: one size for all its models, model=size for one, shown as set,
 // sent with the Save, a value that isn't a number of tokens refused before
 // anything is sent. Long conversations, in Codex's and Claude Code's
-// settings on their opened rows (here Claude Code's), takes a size of its own
-// beside Compact at / Full window; a typed size posts settings/full-context
-// with it, and no click or typing scrolls the page. The editor's Compact at
+// settings on their opened rows (here Claude Code's, its one row since the
+// owner merged the two, 11-12), takes a size of its own beside Compact at /
+// Full window; a typed size posts settings/agent-compact for that agent with
+// it, and no click or typing scrolls the page. The editor's Compact at
 // says that is where its empty value follows (#3425).
 // English and Chinese, Chromium and WebKit; no backend, the API is faked here.
 const assert = require("node:assert/strict");
@@ -40,6 +41,12 @@ function serve(lang, posts) {
       const body = req.postDataJSON();
       posts.push({ path: url.pathname, body });
       settings = { ...settings, fullContext: body.on, ...(body.at !== undefined ? { compactAt: body.at === 272000 ? 0 : body.at } : {}) };
+      return json(settings);
+    }
+    if (url.pathname === "/api/settings/agent-compact") {
+      const body = req.postDataJSON();
+      posts.push({ path: url.pathname, body });
+      settings = { ...settings, agentCompacts: { ...(settings.agentCompacts || {}), [body.agent]: { full: body.full, at: body.at === 272000 ? 0 : body.at } } };
       return json(settings);
     }
     if (url.pathname === "/api/settings") {
@@ -114,7 +121,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     test(`${engine} ${lang}: Long conversations compacts at a size the user types`, async (t) => {
       const { page, errors, posts } = await open(t, "agents");
       await openAgentSettings(page, "claude");
-      const row = page.locator("#fullContextSegs");
+      const row = page.locator('.row.agent-compact[data-agent="claude"]');
       const num = row.locator("input.compact-num");
       await num.waitFor();
       assert.equal(await num.getAttribute("aria-label"), w.field);
@@ -130,15 +137,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await num.fill("500k");
       await num.press("Enter");
       await row.getByText(w.at("500K"), { exact: true }).waitFor();
-      assert.deepEqual(posts.map((p) => [p.path, p.body]), [["/api/settings/full-context", { on: false, at: 500000 }]]);
+      assert.deepEqual(posts.map((p) => [p.path, p.body]), [["/api/settings/agent-compact", { agent: "claude", own: true, full: false, at: 500000 }]]);
       assert.equal(await row.locator("input.compact-num").inputValue(), "500k");
       // the whole window hides the size; back to it shows it again
       await row.getByText(w.full, { exact: true }).click();
-      await page.waitForFunction(() => document.querySelector("#fullContextSegs input.compact-num")?.hidden);
-      assert.deepEqual(posts.at(-1).body, { on: true });
+      await page.waitForFunction(() => document.querySelector(".agent-compact input.compact-num")?.hidden);
+      assert.deepEqual(posts.at(-1).body, { agent: "claude", own: true, full: true, at: 500000 });
       await row.getByText(w.at("500K"), { exact: true }).click();
-      await page.waitForFunction(() => document.querySelector("#fullContextSegs input.compact-num")?.hidden === false);
-      assert.deepEqual(posts.at(-1).body, { on: false });
+      await page.waitForFunction(() => document.querySelector(".agent-compact input.compact-num")?.hidden === false);
+      assert.deepEqual(posts.at(-1).body, { agent: "claude", own: true, full: false, at: 500000 });
+      assert(!posts.some((p) => p.path === "/api/settings/full-context"), "every agent's value left as it was");
       assert.equal(await view(), before, "the row scrolled the page");
       assert(!posts.some((p) => p.path === "/api/settings"), "set on its own, not with the other preferences");
       assert.deepEqual(errors, []);

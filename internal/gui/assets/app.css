@@ -4097,6 +4097,20 @@ input.words { width: 240px; max-width: 100%; }
 .compact-held { font-size: 11.5px; user-select: text; -webkit-user-select: text; line-height: 1.4; color: var(--fg-2); margin-top: 6px; text-align: right; overflow-wrap: anywhere; }
 .compact-held button.text { font-size: inherit; margin-left: 0.3em; }
 input.words.compact-num { flex: none; width: 76px; font-variant-numeric: tabular-nums; }
+/* an agent's sheet: its own Long conversations row stands for every
+   agent's, which stays in Settings for when no agent holds it */
+.own-compact > #fullContextRow { display: none; }
+.compact-helds:empty { display: none; }
+/* an agent's context windows: all its models, then a model apart a line
+   each, picked from menus (agentwindow.js) */
+.window-own { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; margin-left: auto; min-width: 0; max-width: 100%; }
+.window-model { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
+.window-model .window-model-b { min-width: 0; flex: 0 1 auto; max-width: 220px; }
+.window-model-b .icon, .window-model-b img { width: 14px; height: 14px; flex: none; }
+.window-rm { flex: none; display: inline-grid; place-items: center; width: 22px; height: 22px; border: 0; border-radius: 6px; background: none; color: var(--muted); cursor: default; transition: background-color .15s ease, color .15s ease; }
+.window-rm:hover { background: var(--pill); color: var(--fg); }
+.window-own button.text.window-add { font-size: 12px; }
+input.words.window-in { width: 96px; font-variant-numeric: tabular-nums; }
 /* the masking rules' add row: its words in full, then on a line of their
    own a name, prefix or regex, the match taking the room left, Add */
 .row.pref.rule-row { flex-wrap: wrap; row-gap: 8px; }

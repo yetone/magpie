@@ -1,52 +1,59 @@
-// An agent's own Long conversations (molianyin4227 on Discord: models
-// differ, so one size for every agent fits none): Every agent follows the
-// row above, else this agent compacts at its own size or runs to the whole
-// window (settings.AgentCompacts). app.js imports this when an agent's
-// sheet holds Long conversations, so it weighs nothing on the core.
+// An agent's Long conversations, one row in its sheet (molianyin4227 on
+// Discord: models differ, so one size for every agent fits none; the owner,
+// 11-12: two rows for one thing, every agent's above this agent's, read as
+// the same setting twice). It shows what this agent does, its own value
+// else every agent's, and a change is its own (settings.AgentCompacts);
+// every agent's row stays in Settings for when no agent holds it. app.js
+// imports this when an agent's sheet holds Long conversations, so it weighs
+// nothing on the core.
 const compactFill = function (list, a) {
   const kind = kindOf(a);
   const row = el("div", "row pref agent-compact");
   row.dataset.agent = kind;
   const who = el("div", "who"), box = el("div");
-  who.append(el("div", "name", t("Long conversations in {agent}", { agent: a.name })), el("div", "sub", t("Its own size, for models that differ; Every agent follows Long conversations above")));
+  who.append(el("div", "name", t("Long conversations")), el("div", "sub", t("{agent} compacts at 272K or the size picked; the full window is slower and costlier. magpie's models only: a subscription's own models keep their own.", { agent: a.name })));
   row.append(who, box);
+  // what Codex's own config holds back, said under the row (renderAgentPrefs)
+  const held = el("div", "compact-helds");
   let drawn;
   const draw = () => {
+    if (kind === "codex") held.replaceChildren(...list.querySelectorAll("#fullContextSegs .compact-held"));
     // the opened row is built before the settings are read; drawn again then,
-    // and only when its own values changed, so the page under it holds still
+    // and only when its values changed, so the page under it holds still
     const s = prefs || {}, own = (s.agentCompacts || {})[kind];
-    const key = JSON.stringify([own, s.compactAt]);
+    const key = JSON.stringify([own, s.compactAt, s.fullContext]);
     if (key === drawn) return;
     drawn = key;
-    const mode = !own ? "all" : own.full ? "full" : "at";
-    // a size of its own starts from the one every agent has
+    const full = own ? !!own.full : !!s.fullContext;
     const at = own ? own.at || 0 : s.compactAt || 0;
-    const set = (body) => writingPrefs(api("settings/agent-compact", { agent: kind, ...body }))
+    const set = (body) => writingPrefs(api("settings/agent-compact", { agent: kind, own: true, ...body }))
       .then((ns) => { prefs = ns; renderSettings(); if (row.isConnected) draw(); }).catch(settingsErr);
     const size = contextsText({ "*": at || 272000 });
-    const sg = segs([["all", t("Every agent")], ["at", t("Compact at {n}", { n: size.toUpperCase() })], ["full", t("Full window")]], mode,
-      (v) => set(v === "all" ? { own: false } : { own: true, full: v === "full", at }));
-    const num = input(at && own ? size : "", "272k");
+    const sg = segs([["at", t("Compact at {n}", { n: size.toUpperCase() })], ["full", t("Full window")]], full ? "full" : "at",
+      (v) => set({ full: v === "full", at }));
+    const num = input(at ? size : "", "272k");
     num.className = "words compact-num";
-    num.hidden = mode !== "at";
+    num.hidden = full;
     num.title = t("Compact at");
     num.setAttribute("aria-label", t("Compact at"));
     num.onchange = () => {
       const r = parseContexts(num.value);
       if (r.error || Object.keys(r.map).some((k) => k !== "*")) return status(t("Compact at: {v} is not a number of tokens like 272k", { v: num.value.trim() }), "err");
-      set({ own: true, full: false, at: r.map["*"] || 0 });
+      set({ full: false, at: r.map["*"] || 0 });
     };
     const line = el("div", "compact-at");
     line.append(sg, num);
-    box.replaceChildren(line);
+    box.replaceChildren(line, held);
   };
   draw();
   list.querySelector(".agent-compact")?.remove();
   list.querySelectorAll(".claude-cache, .claude-attribution").forEach((r) => r.remove());
+  // every agent's row gives its place to this one (app.css .own-compact)
+  list.classList.add("own-compact");
   const above = list.querySelector("#fullContextRow");
   above ? above.after(row) : list.append(row);
   if (kind === "claude") row.after(...claudeCacheRows(list), claudeAttributionRow(list));
-  // every agent's size, in its label, changes when the row above is drawn
+  // every agent's values, and Codex's hints, change when that row is drawn
   const seen = new MutationObserver(() => row.isConnected ? draw() : seen.disconnect());
   // Details can build this list before attaching it to the page.
   const segsBox = list.querySelector("#fullContextSegs");

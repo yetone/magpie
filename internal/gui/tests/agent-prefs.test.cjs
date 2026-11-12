@@ -2,7 +2,8 @@
 // An agent's own settings are where the agent is (the owner, 10-20: Codex's
 // and Claude Code's rows sat in Settings › General, apart from the agents
 // they set). In the window, Codex's opened row holds its nine and Claude
-// Code's and Grok Build's their one, Long conversations (Grok Build's since
+// Code's and Grok Build's their one, Long conversations (its own row, which
+// stands in for every agent's, 11-12) (Grok Build's since
 // uk.jent on Discord: its context_window is where it compacts); Settings has none of them, but its
 // search still finds them, as a row saying where they are whose Open shows
 // the agent's sheet. In the panel a "Settings" line opens the sheet, and so
@@ -21,6 +22,10 @@ const { watchSettingsReads, agentRow, openAgentSettings } = require("./reader.cj
 
 const assets = path.resolve(__dirname, "../assets");
 const CODEX = ["codexAgentsV1Row", "codexOpenRow", "codexServiceTierRow", "codexClientRow", "fullContextRow", "codexAsyncRow", "codexTitlesRow", "codexDescriptionsRow", "codexPredictionsRow", "codexAutoReviewRow", "codexMemoriesRow"];
+// shown in a sheet: every agent's Long conversations gives its place to the
+// agent's own row, one row for one thing (the owner, 11-12)
+const CODEX_SHOWN = CODEX.filter((id) => id !== "fullContextRow");
+const ownLong = (page, box) => page.locator(`${box} .row.agent-compact`).evaluate((r) => r.checkVisibility());
 
 function settingsPayload(over) {
   return {
@@ -103,16 +108,19 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.goto("http://magpie.test/?view=agents");
         await openAgentSettings(page, "codex");
         const codexBox = '.row.agent[data-id="codex"] .ag-prefs';
-        assert.deepEqual(await shownIn(page, codexBox), CODEX, `${lang} ${width}: Codex's ten`);
+        assert.deepEqual(await shownIn(page, codexBox), CODEX_SHOWN, `${lang} ${width}: Codex's ten`);
+        assert(await ownLong(page, codexBox), `${lang} ${width}: Codex's Long conversations`);
         assert(await page.locator(codexBox).evaluate((b) => b.scrollWidth <= b.clientWidth + 1), `${lang} ${width}: the rows fit the opened row`);
         await noSideScroll(page, `${lang} ${width} Codex`);
         await openAgentSettings(page, "claude");
-        assert.deepEqual(await shownIn(page, '.row.agent[data-id="claude"] .ag-prefs'), ["fullContextRow"], `${lang} ${width}: Claude Code's one`);
+        assert.deepEqual(await shownIn(page, '.row.agent[data-id="claude"] .ag-prefs'), [], `${lang} ${width}: Claude Code's one, its own`);
+        assert(await ownLong(page, '.row.agent[data-id="claude"] .ag-prefs'), `${lang} ${width}: Claude Code's Long conversations`);
         // Grok Build's one, Long conversations, whose line names it
         await openAgentSettings(page, "grok");
         const grokBox = '.row.agent[data-id="grok"] .ag-prefs';
-        assert.deepEqual(await shownIn(page, grokBox), ["fullContextRow"], `${lang} ${width}: Grok Build's one`);
-        assert.match(await page.locator(`${grokBox} #fullContextRow .sub`).textContent(), /Grok Build/, `${lang}: the line names Grok Build`);
+        assert.deepEqual(await shownIn(page, grokBox), [], `${lang} ${width}: Grok Build's one, its own`);
+        assert(await ownLong(page, grokBox), `${lang} ${width}: Grok Build's Long conversations`);
+        assert.match(await page.locator(`${grokBox} .agent-compact .sub`).textContent(), /Grok Build/, `${lang}: the line names Grok Build`);
         assert(await page.locator(grokBox).evaluate((b) => b.scrollWidth <= b.clientWidth + 1), `${lang} ${width}: Grok Build's row fits`);
         await noSideScroll(page, `${lang} ${width} Grok Build`);
 
@@ -131,7 +139,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await link.getByRole("button", { name: w.open, exact: true }).click();
         await sheet(page).waitFor();
         assert.equal(await sheet(page).locator(".ehead").textContent(), w.sheet);
-        assert.deepEqual(await shownIn(page, "#modal .editor.agent-prefs"), CODEX, `${lang} ${width}: the sheet has Codex's ten`);
+        assert.deepEqual(await shownIn(page, "#modal .editor.agent-prefs"), CODEX_SHOWN, `${lang} ${width}: the sheet has Codex's ten`);
+        assert(await ownLong(page, "#modal .editor.agent-prefs"), `${lang} ${width}: the sheet's Long conversations`);
         assert(await page.locator("#view-agents").isVisible(), "Open goes to the Agents page");
         await page.keyboard.press("Escape");
         await page.locator("#modal").waitFor({ state: "hidden" });
@@ -182,7 +191,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await noSideScroll(page, `${lang} panel`);
       await line.click();
       await sheet(page).waitFor();
-      assert.deepEqual(await shownIn(page, "#modal .editor.agent-prefs"), CODEX);
+      assert.deepEqual(await shownIn(page, "#modal .editor.agent-prefs"), CODEX_SHOWN);
+      assert(await ownLong(page, "#modal .editor.agent-prefs"), `${lang}: the sheet's Long conversations`);
       assert(await page.locator("#modal .dialog").evaluate((d) => d.scrollWidth <= d.clientWidth + 1), `${lang}: the sheet fits 360`);
       await page.keyboard.press("Escape");
       await page.locator("#modal").waitFor({ state: "hidden" });
@@ -190,14 +200,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator('.row.agent[data-id="claude"] .ag-handle').click();
       await page.getByRole("menuitem", { name: w.sheet.replace("Codex", "Claude Code") }).click();
       await sheet(page).waitFor();
-      assert.deepEqual(await shownIn(page, "#modal .editor.agent-prefs"), ["fullContextRow"]);
+      assert.deepEqual(await shownIn(page, "#modal .editor.agent-prefs"), []);
+      assert(await ownLong(page, "#modal .editor.agent-prefs"), `${lang}: Claude Code's sheet's Long conversations`);
       await page.keyboard.press("Escape");
       await page.locator("#modal").waitFor({ state: "hidden" });
 
       await page.locator('.row.agent[data-id="grok"] .ag-handle').click();
       await page.getByRole("menuitem", { name: w.sheet.replace("Codex", "Grok Build") }).click();
       await sheet(page).waitFor();
-      assert.deepEqual(await shownIn(page, "#modal .editor.agent-prefs"), ["fullContextRow"], `${lang}: Grok Build's sheet`);
+      assert.deepEqual(await shownIn(page, "#modal .editor.agent-prefs"), [], `${lang}: Grok Build's sheet`);
+      assert(await ownLong(page, "#modal .editor.agent-prefs"), `${lang}: Grok Build's sheet's Long conversations`);
       assert(await page.locator("#modal .dialog").evaluate((d) => d.scrollWidth <= d.clientWidth + 1), `${lang}: Grok Build's sheet fits 360`);
       await page.keyboard.press("Escape");
       await page.locator("#modal").waitFor({ state: "hidden" });
