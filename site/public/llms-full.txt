@@ -6453,7 +6453,89 @@ No. magpie adds and removes only entries with the id magpie. If you have one of 
 
 Restart Tuanjie Cowork. While it runs, magpie says so too.
 
-More desktop apps on the same models: [OpenBot on any model](https://usemagpie.ai/docs/openbot), [miniQ on any model](https://usemagpie.ai/docs/miniq) and [Cindy on any model](https://usemagpie.ai/docs/cindy). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More desktop apps on the same models: [OpenBot on any model](https://usemagpie.ai/docs/openbot), [miniQ on any model](https://usemagpie.ai/docs/miniq), [Cindy on any model](https://usemagpie.ai/docs/cindy) and [DS Bot on any model](https://usemagpie.ai/docs/ds-bot). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/ds-bot
+
+# DS Bot on any model
+
+DS Bot (once DeepSeek Bot) is an Electron desktop app built on DSH. It ships its own DSH and runs the profile `ds-bot` on a data folder of its own, and its models are that DSH's llm-pi-ai routes. magpie adds a route of its own there, so DS Bot runs on any model in magpie: GLM, Kimi, Qwen, Claude, GPT or a ChatGPT subscription, and DeepSeek too.
+
+## Set up DS Bot
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Pick a model for DS Bot on the Agents page.** Pick a model via magpie; magpie writes its route and key into DS Bot's data folder.
+3. **Make a new Bot in DS Bot.** New Bots start on that model, as below.
+
+```
+magpie ds-bot deepseek/deepseek-v4-pro
+```
+
+This is the DS Bot desktop app. DS Bot is also a DSH plugin: in DSH Desktop or `dsh web` it runs on `~/.dsh`, and its model follows magpie's DSH row.
+
+## Where the data folder is
+
+magpie looks for the data folder in DS Bot's own order:
+
+1. **`DS_BOT_HOME`.** When it is set, as for a throwaway folder.
+2. **`dataDir` in locations.json.** In Electron's userData: `DS_BOT_SHELL_DATA`, else `<config dir>/DS Bot`. The older `<config dir>/DeepSeek Bot` is used when it exists and DS Bot's folder has no locations.json.
+3. **`~/.ds-bot`.** When there is no locations.json, the first run's default.
+
+When locations.json can't be read, or has no `dataDir`, magpie counts the folder as unknown and touches none.
+
+## What gets written
+
+```
+/
+  .env                              ← magpie's key for DS Bot
+  profiles/ds-bot/cordis.patch.yml  ← magpie's llm-pi-ai route
+  (DSH's key store)                 ← the same key
+  agent-default-model               ← the model you picked
+```
+
+As for DSH: magpie puts its route in the profile's patch list, `profiles/ds-bot/cordis.patch.yml`, the key in `.env` and DSH's key store, and sets agent-default-model. Your own routes stay as they are.
+
+## New Bots and older ones
+
+New Bots in DS Bot start on DSH's agent-default-model, so a Bot you make now is on the model you picked in magpie, unless a default model for Bots is set in DS Bot. A Bot made before keeps its own model until you pick another for it. magpie says so on the Agents page.
+
+## Web search
+
+DS Bot's web search goes through magpie too. When magpie has nothing to search with yet, it asks you to set up a provider that searches by itself (DeepSeek, Claude, Codex, …) or a search API under Settings › Web search.
+
+## Before DS Bot is opened
+
+You can set it up before DS Bot is ever opened; magpie says it starts on this the first time it opens. DS Bot's first open writes the profile's files only where they are missing, so the patch list magpie made is kept.
+
+## Switching back
+
+Switching back takes magpie's route out. For a DS Bot that was never opened, magpie removes the files it made.
+
+```
+magpie ds-bot default
+```
+
+## FAQ
+
+### Can DS Bot use models other than DeepSeek?
+
+Yes. Pick a via-magpie model for DS Bot on magpie's Agents page. magpie adds a route to the DSH that DS Bot ships, so GLM, Kimi, Qwen, Claude, GPT or a ChatGPT subscription all work.
+
+### Why are my existing Bots still on the old model?
+
+A Bot made before keeps its own model. New Bots start on the default magpie sets; pick another model for an older Bot in DS Bot.
+
+### I moved DS Bot's data folder. Does magpie find it?
+
+Yes. magpie reads dataDir from DS Bot's locations.json. When it can't be read, magpie changes no folder.
+
+### What about the DS Bot plugin in DSH Desktop?
+
+The plugin runs on ~/.dsh, so its model follows magpie's DSH row: pick a model for DSH on the Agents page.
+
+More desktop apps on the same models: [Tuanjie Cowork on any model](https://usemagpie.ai/docs/tuanjie-cowork), [OpenBot on any model](https://usemagpie.ai/docs/openbot) and [miniQ on any model](https://usemagpie.ai/docs/miniq). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
