@@ -515,7 +515,13 @@ func Run(version string, showMain bool, link string) error {
 		e.Cancel()
 	})
 
-	h.panel = h.makePanel()
+	// The Mac's panel is made the first time it is opened (panelWin): made
+	// here, its page and WebContent process (~67 MB) sat hidden for as long
+	// as magpie ran, for a user who never opens it too. Elsewhere it is made
+	// now, as the made-again path hasn't been run in a real window there.
+	if !panelOnFirstOpen(runtime.GOOS) {
+		h.panel = h.makePanel()
+	}
 	h.main = h.makeMain("/?" + theme)
 	onFonts = h.fontsChanged
 
@@ -635,7 +641,9 @@ func Run(version string, showMain bool, link string) error {
 		})
 	}
 	h.tray.SetMenu(menu)
-	h.tray.AttachWindow(h.panel).WindowOffset(6)
+	if h.panel != nil { // one made later hangs itself on the icon (makePanel)
+		h.tray.AttachWindow(h.panel).WindowOffset(6)
+	}
 	// before Wails removes the item as the app quits, which would forget
 	// where the user put the icon (trayshown_darwin.go; nothing elsewhere)
 	h.app.OnShutdown(func() { keepTrayPlace() })
@@ -714,8 +722,10 @@ func Run(version string, showMain bool, link string) error {
 			// makes a window of its own (toolbarRounder), which deadlocks the
 			// main thread while a hidden background launch (an update's
 			// relaunch) is still inside FBSWorkspaceScenesClient on macOS 26.
-			nameWindow(h.panel, panelTitle)
-			ownFrame(h.panel) // KDE: no title bar of KWin's on it (#1283)
+			if h.panel != nil { // one made later is named as it is (madeAgain)
+				nameWindow(h.panel, panelTitle)
+				ownFrame(h.panel) // KDE: no title bar of KWin's on it (#1283)
+			}
 			markReady()
 		})
 	}

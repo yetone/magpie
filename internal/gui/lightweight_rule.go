@@ -28,3 +28,8 @@ func lightStep(on, shown bool, ticks int) (int, bool) {
 	ticks++
 	return ticks, ticks >= lightTicks
 }
+
+// panelOnFirstOpen says whether the tray panel is made the first time it is
+// opened rather than as magpie starts: on the Mac, where a hidden panel's
+// page kept a WebContent process of its own (~67 MB) for nothing.
+func panelOnFirstOpen(goos string) bool { return goos == "darwin" }
