@@ -165,3 +165,23 @@ func keptClaudeWindows(key string) []QuotaWindow {
 	}
 	return out
 }
+
+// ClaudeAllowanceForTest is the allowance routing weighs for limits as
+// Claude Code told them, for the gateway's tests.
+func ClaudeAllowanceForTest(ls []ClaudeLimit, now time.Time) Allowance {
+	var ws []QuotaWindow
+	for _, l := range ls {
+		for _, k := range claudeKinds {
+			if k.kind != l.Kind {
+				continue
+			}
+			w := QuotaWindow{Name: k.name, Used: l.Used * 100, Span: k.span, Model: k.model}
+			if l.ResetsAt > 0 {
+				t := time.Unix(l.ResetsAt, 0)
+				w.ResetsAt = &t
+			}
+			ws = append(ws, w)
+		}
+	}
+	return allowanceOf(ws, now)
+}

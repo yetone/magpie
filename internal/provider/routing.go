@@ -689,6 +689,14 @@ func (a Allowance) Full(model string, share float64, now time.Time) time.Time {
 	return t
 }
 
+// Scoped says whether some window of the allowance counts some models only
+// and counts model: Opus's or Fable's own week. A refusal of model with none
+// of its windows read full may be that window's, read before it filled.
+func (a Allowance) Scoped(model string) bool {
+	model = strings.ToLower(model)
+	return slices.ContainsFunc(a, func(l Limit) bool { return (l.Model != "" || l.matches != nil) && l.applies(model) })
+}
+
 // Pooled says whether a refusal of model for its allowance leaves the
 // account's other models alone: the windows that count model and are full
 // at share are each of some models only (Opus's own week, Cursor's Other

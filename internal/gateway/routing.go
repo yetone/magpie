@@ -1473,6 +1473,14 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	pooled := why == failQuota && c.pooled(now)
 	// and none to tell from: the account rests, narrowed once read (#2036)
 	unread := why == failQuota && c.p.Account != nil && len(allowances(c.p.Account.UsageAgent())[c.p.Account.User]) == 0
+	// or read before the model's own window filled: its pool is among them,
+	// no window known full, and the refusal (Claude Code's "You've hit
+	// your limit" names no window) may be that pool's. The reading asked
+	// for below tells (Fable's week used up, the other weekly quota left:
+	// kaitokiku on X)
+	if !unread && why == failQuota && !pooled && c.p.Account != nil && c.model != "" && c.full(now).IsZero() {
+		unread = allowances(c.p.Account.UsageAgent())[c.p.Account.User].Scoped(c.model)
+	}
 	// a model the key's plan doesn't serve rests alone, counted by itself
 	// (#1235): the key's other models are still served. So does a ZCode
 	// trial entry zcode.z.ai's firewall blocked (zcodeTrialBlocked): the
