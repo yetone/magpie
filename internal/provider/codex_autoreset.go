@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/settings"
-	"github.com/yetone/magpie/internal/steady"
 )
 
 // The two times an account the user lets spend its resets by itself
@@ -342,7 +341,7 @@ func (a *autoResets) save() {
 	}
 	b, _ := json.MarshalIndent(a.spent, "", "  ")
 	_ = os.MkdirAll(settings.Dir(), 0o755)
-	if err := steady.WriteFile(a.path, append(b, '\n'), 0o644); err != nil {
+	if err := writeChanged(a.path, append(b, '\n'), 0o644); err != nil {
 		log.Printf("writing what a week's auto-use spent to %s: %v", a.path, err)
 	}
 }

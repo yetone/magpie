@@ -19,6 +19,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -319,6 +320,15 @@ func writeLoginsTold(ls []savedLogin, tell bool) error {
 		defer Changed() // an account added, switched or gone: All builds anew
 	}
 	beforeLoginsWrite()
+	b = append(b, '\n')
+	if fileHolds(loginsPath(), b, 0o600) {
+		// the bytes are on the disk already (#6289): no new generation, no
+		// new mtime, and what filememo parsed stays
+		lastLoginsMu.Lock()
+		lastLogins, loginsKnown = slices.Clone(ls), true
+		lastLoginsMu.Unlock()
+		return nil
+	}
 	// the file there now is kept first: as its last good generation, or
 	// copied aside when it doesn't read, never written over unkept
 	if err := lastgood.Keep(loginsPath(), validLogins, 0o600); err != nil {
@@ -328,7 +338,7 @@ func writeLoginsTold(ls []savedLogin, tell bool) error {
 	if !tell {
 		write = writePrivateQuiet
 	}
-	if err := write(loginsPath(), append(b, '\n')); err != nil {
+	if err := write(loginsPath(), b); err != nil {
 		return err
 	}
 	lastLoginsMu.Lock()
@@ -365,6 +375,9 @@ func sortLogins(ls []savedLogin) {
 // an agent reading it at that moment sees either version, never half; the
 // new one is on the disk before it is renamed over the old (#1505).
 func writePrivate(path string, b []byte) error {
+	if fileHolds(path, b, 0o600) { // the file has these bytes (#6289): nothing moves
+		return nil
+	}
 	defer filememo.Forget() // read again, where a request holds it
 	return writePrivateQuiet(path, b)
 }
@@ -372,6 +385,9 @@ func writePrivate(path string, b []byte) error {
 // writePrivateQuiet is writePrivate with nothing read forgotten: a
 // request holding the file reads the old bytes for up to a second.
 func writePrivateQuiet(path string, b []byte) error {
+	if fileHolds(path, b, 0o600) {
+		return nil
+	}
 	path, err := edit.Target(path) // a symlink stays, its target written
 	if err != nil {
 		return err
@@ -380,6 +396,33 @@ func writePrivateQuiet(path string, b []byte) error {
 		return err
 	}
 	return steady.WriteFile(path, b, 0o600)
+}
+
+// fileHolds reports whether path is a file of exactly b, with the mode
+// the write would give it. A read that fails is "no": it is written.
+// writeChanged is steady.WriteFile for a file that is left alone, mtime
+// and all, when it already holds b (#6289).
+func writeChanged(path string, b []byte, perm os.FileMode) error {
+	if fileHolds(path, b, perm) {
+		return nil
+	}
+	return steady.WriteFile(path, b, perm)
+}
+
+func fileHolds(path string, b []byte, perm os.FileMode) bool {
+	path, err := edit.Target(path)
+	if err != nil {
+		return false
+	}
+	fi, err := os.Stat(path)
+	if err != nil || !fi.Mode().IsRegular() || fi.Size() != int64(len(b)) {
+		return false
+	}
+	if runtime.GOOS != "windows" && fi.Mode().Perm() != perm {
+		return false
+	}
+	old, err := os.ReadFile(path)
+	return err == nil && bytes.Equal(old, b)
 }
 
 func upsertLogin(ls []savedLogin, l savedLogin) []savedLogin {
