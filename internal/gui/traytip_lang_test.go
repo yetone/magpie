@@ -75,3 +75,37 @@ func TestTrayTooltipFollowsMagpiesLanguage(t *testing.T) {
 		}
 	}
 }
+
+// jipairamen on X: Settings' number unit was 万/亿, and the menu bar still
+// said K and M. The tray's counts follow it as the Usage page's do, in
+// Chinese only (the unit means nothing in English), 億 and 萬 in Traditional.
+func TestTrayCountFollowsChineseUnits(t *testing.T) {
+	old := trayChineseUnits
+	t.Cleanup(func() { trayChineseUnits = old })
+	n := 133_400_000
+	for _, c := range []struct {
+		units bool
+		lang  string
+		n     int
+		want  string
+	}{
+		{true, "zh", n, "1.33 亿"},
+		{true, "zh", 68_100, "6.8 万"},
+		{true, "zh", 9_999, "9999"},
+		{true, "zh-TW", n, "1.33 億"},
+		{true, "zh-TW", 681_000, "68.1 萬"},
+		{true, "en", n, "133M"},
+		{true, "ja", n, "133M"},
+		{false, "zh", n, "133M"},
+	} {
+		trayChineseUnits = func() bool { return c.units }
+		if got := trayCount(c.lang, c.n); got != c.want {
+			t.Errorf("trayCount(%q, %d) with units %v = %q, want %q", c.lang, c.n, c.units, got, c.want)
+		}
+	}
+	trayChineseUnits = func() bool { return true }
+	today := usage.Totals{Calls: 3, Input: 2_900, Output: 180, CacheRead: 118_000_000}
+	if got := trayTotalCard("zh", "usage:today", today, "usd", 0); !strings.HasPrefix(got.Balance, "Σ1.18 亿") || !strings.Contains(got.Name, "1.18 亿 token") {
+		t.Errorf("total card = %q / %q", got.Balance, got.Name)
+	}
+}

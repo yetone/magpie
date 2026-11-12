@@ -1617,7 +1617,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		// is in (yi_time)
 		if (!slices.Equal(settings.Load().TrayUsages, cur.TrayUsages) || in.TrayUsageEvery != cur.TrayUsageEvery ||
 			in.TrayNoLogos != cur.TrayNoLogos || in.TrayNoBird != cur.TrayNoBird || in.TrayNoNumber != cur.TrayNoNumber || in.TrayPace != cur.TrayPace ||
-			in.TrayNoCost != cur.TrayNoCost || !maps.EqualFunc(in.TrayWindows, cur.TrayWindows, slices.Equal) || in.Lang != cur.Lang) && onTrayUsage != nil {
+			in.TrayNoCost != cur.TrayNoCost || !maps.EqualFunc(in.TrayWindows, cur.TrayWindows, slices.Equal) || in.Lang != cur.Lang || in.ChineseUnits != cur.ChineseUnits) && onTrayUsage != nil {
 			onTrayUsage()
 		}
 		// an alert turned on or moved is looked at now, the Mac asked for its

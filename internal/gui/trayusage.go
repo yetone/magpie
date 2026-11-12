@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -494,7 +495,7 @@ func trayTotalCard(lang, id string, t usage.Totals, currency string, rate float6
 	if p, _ := trayTotalPeriod(id); p == usage.Week {
 		when = "Last 7 days in magpie"
 	}
-	rows := []string{"Σ" + trayCount(t.Tokens()+t.CacheRead+t.CacheWrite)}
+	rows := []string{"Σ" + trayCount(lang, t.Tokens()+t.CacheRead+t.CacheWrite)}
 	tip := trayText(lang, when) + "\n" + trayTokens(lang, t)
 	if t.Cost > 0 {
 		c := usage.FormatCost(t.Cost, currency, rate)
@@ -534,11 +535,11 @@ func trayCurrency() (currency string, rate float64) {
 // trayTokens is a total's every token, the cache's too, with what they
 // were, in lang: "6.3M tokens (912K in · 318K out · 5.1M cached)".
 func trayTokens(lang string, t usage.Totals) string {
-	parts := []string{trayText(lang, "%s in", trayCount(t.Input)), trayText(lang, "%s out", trayCount(t.Output))}
+	parts := []string{trayText(lang, "%s in", trayCount(lang, t.Input)), trayText(lang, "%s out", trayCount(lang, t.Output))}
 	if cached := t.CacheRead + t.CacheWrite; cached > 0 {
-		parts = append(parts, trayText(lang, "%s cached", trayCount(cached)))
+		parts = append(parts, trayText(lang, "%s cached", trayCount(lang, cached)))
 	}
-	return trayText(lang, "%s tokens (%s)", trayCount(t.Tokens()+t.CacheRead+t.CacheWrite), strings.Join(parts, " · "))
+	return trayText(lang, "%s tokens (%s)", trayCount(lang, t.Tokens()+t.CacheRead+t.CacheWrite), strings.Join(parts, " · "))
 }
 
 // trayIdleTip is the tooltip while the menu bar shows no cards: magpie's
@@ -567,10 +568,27 @@ func trayIdleTip(lang string, t usage.Totals, currency string, rate float64) str
 	return "magpie\n" + line + trayText(lang, n, t.Calls)
 }
 
-// trayCount is a count as the Usage page says it in English: 133M, 1.2M,
-// 456K, 8.2K, 950.
-func trayCount(n int) string {
+// trayChineseUnits is Settings' 万/亿 choice, read when a count is said.
+var trayChineseUnits = func() bool { return settings.Load().ChineseUnits }
+
+// trayCount is a count as the Usage page says it (fmtN in app.js): 133M,
+// 1.2M, 456K, 8.2K, 950; with Settings' 万/亿 units and magpie in Chinese,
+// 1.33 亿, 68.1 万 (億 and 萬 in Traditional).
+func trayCount(lang string, n int) string {
 	f := float64(n)
+	if (lang == "zh" || lang == "zh-TW") && trayChineseUnits() {
+		hundredM, tenK := " 亿", " 万"
+		if lang == "zh-TW" {
+			hundredM, tenK = " 億", " 萬"
+		}
+		switch {
+		case n >= 1e8:
+			return strconv.FormatFloat(math.Round(f/1e8*100)/100, 'f', -1, 64) + hundredM
+		case n >= 1e4:
+			return strconv.FormatFloat(math.Round(f/1e4*10)/10, 'f', -1, 64) + tenK
+		}
+		return fmt.Sprint(n)
+	}
 	switch {
 	case n >= 1e9:
 		return fmt.Sprintf("%.2fB", f/1e9)
