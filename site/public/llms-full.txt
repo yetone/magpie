@@ -7696,7 +7696,91 @@ fx refuses the whole settings file when model_metadata holds more than 256, so m
 
 The one it talks to without magpie; Vercel's AI Gateway when none was set.
 
-More agents on the same models: [Aside on any model](https://usemagpie.ai/docs/aside), [Ante on any model](https://usemagpie.ai/docs/ante) and [omp on any model](https://usemagpie.ai/docs/omp). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Aside on any model](https://usemagpie.ai/docs/aside), [Ante on any model](https://usemagpie.ai/docs/ante), [omp on any model](https://usemagpie.ai/docs/omp) and [Grok App on any model](https://usemagpie.ai/docs/grok-app). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/grok-app
+
+# Grok App on any model
+
+Grok App (RongleCat/grok-app) is a desktop front end for the grok CLI, which it starts over ACP. Its own model list is Grok Build's official catalog only; a model of your choosing is a provider channel in its settings. magpie adds itself as a custom provider named magpie, so Grok App's model picker offers any model in magpie: DeepSeek, GLM, Kimi, Qwen, Claude or a ChatGPT subscription.
+
+## Set up Grok App
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Pick a model for Grok App on the Agents page.** Pick one via magpie, and magpie writes its custom provider.
+3. **Press Use in Grok App.** Press Use on magpie in Grok App's Settings › Account; that is what moves the App onto magpie.
+
+```
+magpie grok-app deepseek/deepseek-v4-pro
+```
+
+## magpie's custom provider
+
+magpie writes `[model.magpie]` in `agent-home/config.toml` under the App's data folder, the way the App writes a channel itself: the gateway's `/v1` as base_url, magpie's own key for Grok App, chat completions. `app_models` is a JSON list of magpie's models, each with its context window, whether it takes images and its effort levels, so the custom providers in Settings list magpie and the model picker can offer those models and their efforts.
+
+```
+# /agent-home/config.toml
+[model.magpie]
+model = "deepseek/deepseek-v4-pro"
+base_url = "http://127.0.0.1:3425/v1"
+name = "magpie"
+api_key = ""
+api_backend = "chat_completions"
+app_provider_mode = "generic"
+app_models = "[…]"
+app_efforts = "[…]"
+supports_reasoning_effort = …
+context_window = …
+```
+
+The channel's context window, images and efforts follow the model picked. When the picked model is one magpie no longer has, the channel moves to the first in the list.
+
+## The route is yours to switch
+
+`[models] default` is the route the App starts on. magpie doesn't write it: making it magpie takes the App over, and the App then drops its own sign-in and the session no longer runs. So the route stays what the App had, and pressing Use in the App's settings is what switches it, the App's own choice. An older magpie set the route to magpie; this one puts the old route back once, on the next sync or connect, and a Use you press after that stays. A model you pick in the App's picker since is yours too, and stays through a sync.
+
+On magpie, the App starts the CLI with GROK_HOME at agent-home, its independent mode; its default shared mode uses `~/.grok`, Grok Build's home.
+
+## Models and efforts
+
+Grok Build has no effort none for a channel, so the levels are the model's others. The one the picker starts on is the default you marked for that model on the App's Providers page, while the model still has it, else medium, or the middle level without it.
+
+## The data folder
+
+magpie finds Grok App's data folder at `$GROK_APP_HOME` when it is set, else by system, the first that is there.
+
+```
+macOS    ~/Library/Application Support/com.grokapp.grok-app
+Windows  %APPDATA%\grokapp\grok-app\data
+Linux    $XDG_DATA_HOME/grok-app (~/.local/share/grok-app)
+         or ~/.grok-app; $GROK_APP_HOME when set
+```
+
+## Disconnecting
+
+Disconnecting takes `[model.magpie]` out. The route is touched only when it still names magpie, a route that doesn't run: magpie puts back the one it remembered, or clears it. Any other route is the App's and stays. Picking one of the App's own routes in magpie, such as the official Grok, also takes magpie's channel out and makes that the route.
+
+## FAQ
+
+### Can Grok App run on DeepSeek, GLM or a ChatGPT subscription?
+
+Yes. magpie adds itself as a custom provider in Grok App, so its model picker offers magpie's models; press Use on magpie in its settings to switch.
+
+### Why is Grok App not on magpie after connecting?
+
+magpie leaves the App's route alone, as taking it over makes the App drop its own sign-in. Press Use on magpie in Grok App's Settings › Account.
+
+### Can I pick an effort in Grok App?
+
+Yes. Each magpie model comes with its own effort levels, starting on the one you marked, else medium.
+
+### Does disconnecting put Grok App's old route back?
+
+Yes, when the route still names magpie; any other route is left alone.
+
+More agents on the same models: [fx on any model](https://usemagpie.ai/docs/fx), [Aside on any model](https://usemagpie.ai/docs/aside) and [Ante on any model](https://usemagpie.ai/docs/ante). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
@@ -8232,6 +8316,23 @@ steps:
 ```
 
 The key is issued under the rule’s gateway key and held to it like any other issued key, lives no longer than the rule says, and is named after the repository, branch and run. A token from another repository or branch, an expired one, or one already traded gets `401` and why. The route answers another computer only while magpie is shared, and refused tokens count against the failed sign-ins it allows. Without a rule nothing is traded.
+
+## Management API
+
+Providers, accounts, gateway keys and account groups can be managed with no hand-edited file, by a key you allow to. Allow it from the command line (not through the API: a key can't give another more than it has):
+
+```
+magpie gateway-key add automation
+magpie gateway-key admin <id> local   # this computer only
+magpie gateway-key admin <id> any     # also from other computers
+curl -s http://127.0.0.1:3425/v1/magpie/admin/providers -H "Authorization: Bearer $KEY"
+curl -s -X POST http://127.0.0.1:3425/v1/magpie/admin/gateway-keys/add-key \
+  -H "Authorization: Bearer $KEY" -d '{"name":"ci"}'
+```
+
+It answers the same as the app’s own pages do, under `/v1/magpie/admin/`: `GET providers`, `POST provider/{save,delete,on,off,name,…}`, `POST keys/…` (a provider’s keys), `GET`/`POST gateway-keys[/{add-key,rename-key,limit-key,models-key,remove-key,…}]`, `GET`/`POST account-groups[/…]`, and `POST signin` with `{"agent":…}`, which answers the vendor’s page and the code to type there, never a password; open it on a computer with a browser. A saved key and a gateway key’s secret are never told again, and what changes this computer’s apps is not served.
+
+A key that is read-only, the extension’s, issued or short-lived, or the sharing key, can’t have it. A web page can’t call it, with a key or without (any request with `Origin` or `Sec-Fetch-*` is refused), and nor can a request under another name for this computer. Shared over the network, only a key set to `any` gets in.
 
 ## Stats API
 
