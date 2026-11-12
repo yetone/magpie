@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mister Morph（morph）接入 DeepSeek、GLM、Kimi、Qwen、Claude 或 ChatGPT 订阅：通过 magpie 配置 ~/.morph/config.yaml 的 llm 模型和思考强度 · magpie</title>
+<meta name="description" content="通过 magpie 让 Mister Morph（morph）用上 DeepSeek、GLM、Kimi、Qwen、Claude 或 ChatGPT 订阅：~/.morph/config.yaml（或 MISTER_MORPH_CONFIG）里 llm 下的 inference_provider、endpoint、api_key、model 和 context_window_tokens，OpenAI Responses 接口，reasoning_effort 思考强度，llm.profiles 和 llm.routes 保持不动，以及切回原来的设置。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/mister-morph">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/mister-morph">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/mister-morph">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/mister-morph">
+<link rel="canonical" href="https://usemagpie.ai/docs/zh/mister-morph">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="让 Mister Morph 用任意模型">
+<meta property="og:description" content="通过 magpie 让 Mister Morph（morph）用上 DeepSeek、GLM、Kimi、Qwen、Claude 或 ChatGPT 订阅：~/.morph/config.yaml（或 MISTER_MORPH_CONFIG）里 llm 下的 inference_provider、endpoint、api_key、model 和 context_window_tokens，OpenAI Responses 接口，reasoning_effort 思考强度，llm.profiles 和 llm.routes 保持不动，以及切回原来的设置。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/zh/mister-morph">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "让 Mister Morph 用任意模型",
+   "description": "通过 magpie 让 Mister Morph（morph）用上 DeepSeek、GLM、Kimi、Qwen、Claude 或 ChatGPT 订阅：~/.morph/config.yaml（或 MISTER_MORPH_CONFIG）里 llm 下的 inference_provider、endpoint、api_key、model 和 context_window_tokens，OpenAI Responses 接口，reasoning_effort 思考强度，llm.profiles 和 llm.routes 保持不动，以及切回原来的设置。",
+   "inLanguage": "zh-CN",
+   "url": "https://usemagpie.ai/docs/zh/mister-morph",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "Mister Morph 能用 DeepSeek、GLM 或 ChatGPT 订阅吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。在 magpie 的 Agent 页给 Mister Morph 选一个 via magpie 的模型，magpie 会改好 config.yaml 里 llm 的几项。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Mister Morph 走的是哪个接口？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "OpenAI Responses 接口（openai_response_compatible），这是 Mister Morph 的默认，magpie 网关对每个厂商都支持。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "为什么 magpie 要写 context_window_tokens？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Mister Morph 只从自带的列表里查上下文长度，查不到 magpie 的模型 ID，所以 magpie 把已知的长度直接写给它。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "我的 llm.profiles 和 llm.routes 会被改吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "不会。它们是你的，magpie 只改 llm 下的那几项，切回时还原。"
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/zh/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "文档",
+     "item": "https://usemagpie.ai/docs/zh/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "让 Mister Morph 用任意模型",
+     "item": "https://usemagpie.ai/docs/zh/mister-morph"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/zh/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>文档</small></a>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/start">快速上手</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a class="toc-only" href="/docs/zh/remote">远程 magpie</a>
+    <a class="toc-only" href="/docs/zh/docker">Docker</a>
+    <a class="toc-only" href="/docs/zh/privacy">隐私</a>
+    <a class="toc-only" href="/docs/zh/masking">本地脱敏</a>
+    <a class="toc-only" href="/docs/zh/mcp-router">MCP 路由</a>
+    <a class="toc-only" href="/docs/zh/library">资源库</a>
+    <a class="toc-only" href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a class="toc-only" href="/docs/zh/local-models">本地模型</a>
+    <a class="toc-only" href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="语言" title="语言" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/mister-morph" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/mister-morph" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/mister-morph" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">下载</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>Mister Morph</p>
+    <a href="#overview">工作原理</a>
+    <a href="#on">接入 Mister Morph</a>
+    <a href="#config">config.yaml</a>
+    <a href="#window">上下文长度</a>
+    <a href="#effort">思考强度</a>
+    <a href="#profiles">profiles 和 routes</a>
+    <a href="#off">切回</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">文档 · 指南</p>
+    <h1>让 Mister Morph 用任意模型</h1>
+    <p class="lede">Mister Morph（<code>morph</code> 命令）把设置放在 <code>~/.morph/config.yaml</code>，或 <code>MISTER_MORPH_CONFIG</code> 指定的文件：主模型在 <code>llm.model</code>，向 <code>llm.inference_provider</code> 指定的厂商、用 <code>llm.api_key</code> 在 <code>llm.endpoint</code> 请求。它没有可以添加供应商的列表，所以 magpie 直接接管 llm 这几项，Mister Morph 就能用 DeepSeek、GLM、Kimi、Qwen、Claude 或 ChatGPT 订阅等 magpie 里的任意模型。</p>
+    <h2 id="on"><a class="anchor" href="#on">接入 Mister Morph</a></h2>
+    <ol class="steps">
+      <li><b>在 magpie 里添加供应商</b>在 <span class="ui">供应商</span> 页添加 API Key，或登录一个订阅。</li>
+      <li><b>在 <span class="ui">Agent</span> 页给 Mister Morph 选模型</b>选一个 via magpie 的模型，需要的话再选思考强度。magpie 通过 <code>~/.morph</code> 文件夹认出它，不看 <code>morph</code> 命令，因为别的工具也叫这个名字；这个文件夹在第一次运行、<code>morph install</code> 或桌面应用的设置时创建。</li>
+      <li><b>开始新任务</b>Mister Morph 的 Console 新任务直接用新模型；打开着的 morph 对话要重启。</li>
+    </ol>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="morph-on">复制</button><pre id="morph-on">magpie morph deepseek/deepseek-v4-pro</pre></div>
+    <h2 id="config"><a class="anchor" href="#config">config.yaml</a></h2>
+    <p>magpie 写入 llm 下面这几项：<code>inference_provider</code> 设成 openai_response_compatible，也就是 Mister Morph 默认用的 OpenAI Responses 接口，网关对每个厂商都支持；<code>endpoint</code> 是网关的 <code>/v1</code>（地址已经以 /v1 结尾时，Mister Morph 不会再加一个）；<code>api_key</code> 是 magpie 的 Key；<code>model</code> 是目录里的模型 ID。在 Mister Morph 里，这个模型显示为 <code>magpie/deepseek/deepseek-v4-pro</code>。magpie 还在 <code>llm.headers</code> 里把 User-Agent 设成 mistermorph，否则请求带的是 OpenAI SDK 的 User-Agent，分不出来自哪里。</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="morph-yaml">复制</button><pre id="morph-yaml"># ~/.morph/config.yaml (or $MISTER_MORPH_CONFIG)
+llm:
+  inference_provider: openai_response_compatible
+  endpoint: http://127.0.0.1:3425/v1
+  api_key: <magpie's key>
+  model: deepseek/deepseek-v4-pro
+  context_window_tokens: …
+  headers:
+    User-Agent: mistermorph
+  reasoning_effort: high</pre></div>
+    <p><code>llm.provider</code> 不动，Mister Morph 会从 inference_provider 推出它。在 WSL 里装的 Mister Morph 也一样接入，只是那里不读 MISTER_MORPH_CONFIG，用的是 <code>~/.morph/config.yaml</code>。</p>
+    <h2 id="window"><a class="anchor" href="#window">上下文长度</a></h2>
+    <p>Mister Morph 只从自带的列表里知道模型的上下文长度，按 ID 最后一个斜杠后面的部分查。所以 magpie 把它知道的上下文长度写进 <code>llm.context_window_tokens</code>；magpie 也不知道时就删掉这一项。</p>
+    <h2 id="effort"><a class="anchor" href="#effort">思考强度</a></h2>
+    <p>思考强度写在 <code>llm.reasoning_effort</code>，可选 none、minimal、low、medium、high、xhigh 和 max；不设时 Mister Morph 不发送思考强度。</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="morph-effort">复制</button><pre id="morph-effort">magpie morph effort high</pre></div>
+    <h2 id="profiles"><a class="anchor" href="#profiles">profiles 和 routes</a></h2>
+    <p><code>llm.profiles</code> 和 <code>llm.routes</code> 是你的，magpie 不碰。如果某条 route 把主循环发到另一个 profile，它照样生效。</p>
+    <h2 id="off"><a class="anchor" href="#off">切回</a></h2>
+    <p>magpie 第一次接管前会记下你在 llm 下这几项原来的值。切回时把它们放回去，原来没有的就删掉；User-Agent 是 llm.headers 里唯一一项时，整个 headers 也删掉。选 Mister Morph 自己的模型时也是先恢复，再把 <code>llm.model</code> 设成你选的模型。</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="morph-off">复制</button><pre id="morph-off">magpie morph default</pre></div>
+
+    <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
+    <h3>Mister Morph 能用 DeepSeek、GLM 或 ChatGPT 订阅吗？</h3>
+    <p>能。在 magpie 的 Agent 页给 Mister Morph 选一个 via magpie 的模型，magpie 会改好 config.yaml 里 llm 的几项。</p>
+    <h3>Mister Morph 走的是哪个接口？</h3>
+    <p>OpenAI Responses 接口（openai_response_compatible），这是 Mister Morph 的默认，magpie 网关对每个厂商都支持。</p>
+    <h3>为什么 magpie 要写 context_window_tokens？</h3>
+    <p>Mister Morph 只从自带的列表里查上下文长度，查不到 magpie 的模型 ID，所以 magpie 把已知的长度直接写给它。</p>
+    <h3>我的 llm.profiles 和 llm.routes 会被改吗？</h3>
+    <p>不会。它们是你的，magpie 只改 llm 下的那几项，切回时还原。</p>
+
+    <p style="margin-top:48px">更多 Agent 用同样的模型：<a href="/docs/zh/grok-app">让 Grok App 用任意模型</a>、<a href="/docs/zh/fx">让 fx 用任意模型</a>、<a href="/docs/zh/aside">让 Aside 用任意模型</a>。遇到报错？见 <a href="/docs/zh/troubleshooting">常见错误排查</a>，或到 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 提问。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a href="/docs/zh/remote">远程 magpie</a>
+    <a href="/docs/zh/docker">Docker</a>
+    <a href="/docs/zh/privacy">隐私</a>
+    <a href="/docs/zh/masking">本地脱敏</a>
+    <a href="/docs/zh/mcp-router">MCP 路由</a>
+    <a href="/docs/zh/library">资源库</a>
+    <a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a href="/docs/zh/local-models">本地模型</a>
+    <a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/zh/contributors">贡献墙</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "已复制"; setTimeout(() => (b.textContent = "复制"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

@@ -7780,7 +7780,88 @@ Yes. Each magpie model comes with its own effort levels, starting on the one you
 
 Yes, when the route still names magpie; any other route is left alone.
 
-More agents on the same models: [fx on any model](https://usemagpie.ai/docs/fx), [Aside on any model](https://usemagpie.ai/docs/aside) and [Ante on any model](https://usemagpie.ai/docs/ante). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [fx on any model](https://usemagpie.ai/docs/fx), [Aside on any model](https://usemagpie.ai/docs/aside), [Ante on any model](https://usemagpie.ai/docs/ante) and [Mister Morph on any model](https://usemagpie.ai/docs/mister-morph). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/mister-morph
+
+# Mister Morph on any model
+
+Mister Morph (the `morph` command) keeps its settings in `~/.morph/config.yaml`, or the file `MISTER_MORPH_CONFIG` names: the main model under `llm.model`, asked of the vendor `llm.inference_provider` names at `llm.endpoint` with `llm.api_key`. It has no list of providers to add one to, so magpie takes those llm keys over, and Mister Morph runs on any model in magpie: DeepSeek, GLM, Kimi, Qwen, Claude or a ChatGPT subscription.
+
+## Set up Mister Morph
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Pick a model for Mister Morph on the Agents page.** Pick one via magpie, and an effort if you want. magpie finds it by its `~/.morph` folder, not the `morph` command, which other tools are named too; the folder is made by its first run, `morph install` or the desktop app's setup.
+3. **Start a new task.** Mister Morph's Console uses the model for new tasks; restart open morph chats to use it there.
+
+```
+magpie morph deepseek/deepseek-v4-pro
+```
+
+## config.yaml
+
+magpie writes these keys under llm: `inference_provider` openai_response_compatible, OpenAI's Responses API, Mister Morph's own default, which the gateway serves for every vendor; `endpoint` the gateway's `/v1` (Mister Morph adds no second /v1 to a base ending in one); `api_key` magpie's key; and `model` the catalog id. In Mister Morph the model reads `magpie/deepseek/deepseek-v4-pro`. magpie also sets a User-Agent of mistermorph in `llm.headers`, as its requests otherwise carry the OpenAI SDK's, which tells them from no one's.
+
+```
+# ~/.morph/config.yaml (or $MISTER_MORPH_CONFIG)
+llm:
+  inference_provider: openai_response_compatible
+  endpoint: http://127.0.0.1:3425/v1
+  api_key: 
+  model: deepseek/deepseek-v4-pro
+  context_window_tokens: …
+  headers:
+    User-Agent: mistermorph
+  reasoning_effort: high
+```
+
+`llm.provider` is left as it is: Mister Morph derives it from inference_provider. A Mister Morph in WSL is set up the same way, at `~/.morph/config.yaml`, as MISTER_MORPH_CONFIG isn't read there.
+
+## The context window
+
+Mister Morph knows a model's context window only from a list of its own, by the id after its last slash. So magpie writes the window it knows in `llm.context_window_tokens`, and removes the key when it knows none.
+
+## Effort
+
+The effort goes in `llm.reasoning_effort`: none, minimal, low, medium, high, xhigh or max. Unset, Mister Morph sends none.
+
+```
+magpie morph effort high
+```
+
+## Profiles and routes
+
+`llm.profiles` and `llm.routes` are yours, and magpie leaves them alone. A route that sends the main loop to another profile still does.
+
+## Switching back
+
+Before it first takes llm over, magpie saves what you had under those keys. Switching back puts them back, and removes the ones you didn't have; when the User-Agent was alone in llm.headers, headers goes too. Picking one of Mister Morph's own models restores them the same way, then sets `llm.model` to it.
+
+```
+magpie morph default
+```
+
+## FAQ
+
+### Can Mister Morph run on DeepSeek, GLM or a ChatGPT subscription?
+
+Yes. Pick a via-magpie model for Mister Morph on magpie's Agents page, and magpie sets the llm keys in config.yaml.
+
+### Which API does Mister Morph use through magpie?
+
+OpenAI's Responses API (openai_response_compatible), Mister Morph's default, which magpie's gateway serves for every vendor.
+
+### Why does magpie write context_window_tokens?
+
+Mister Morph looks a window up only in its own list, which doesn't have magpie's model ids, so magpie gives it the window it knows.
+
+### Are my llm.profiles and llm.routes changed?
+
+No. They are yours; magpie changes only its keys under llm and puts them back when you switch back.
+
+More agents on the same models: [Grok App on any model](https://usemagpie.ai/docs/grok-app), [fx on any model](https://usemagpie.ai/docs/fx) and [Aside on any model](https://usemagpie.ai/docs/aside). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
