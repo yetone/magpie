@@ -291,7 +291,14 @@ func unreadBytes(path string) []byte {
 	return b
 }
 
-func writeLogins(ls []savedLogin) error {
+func writeLogins(ls []savedLogin) error { return writeLoginsTold(ls, true) }
+
+// writeLoginsTold writes the accounts, and with tell has every catalog
+// built anew (Changed). Without it the write moved only when accounts
+// were last seen, which nothing built from the accounts reads: told, an
+// idle magpie built every catalog again each seenEvery, ~42 MB for dsh's
+// round alone. A reader still finds the file's new time and size.
+func writeLoginsTold(ls []savedLogin, tell bool) error {
 	if settings.AccountDiscoveryOff() {
 		return errAccountDiscoveryOff
 	}
@@ -308,14 +315,20 @@ func writeLogins(ls []savedLogin) error {
 	if err != nil {
 		return err
 	}
-	defer Changed() // an account added, switched or gone: All builds anew
+	if tell {
+		defer Changed() // an account added, switched or gone: All builds anew
+	}
 	beforeLoginsWrite()
 	// the file there now is kept first: as its last good generation, or
 	// copied aside when it doesn't read, never written over unkept
 	if err := lastgood.Keep(loginsPath(), validLogins, 0o600); err != nil {
 		return err
 	}
-	if err := writePrivate(loginsPath(), append(b, '\n')); err != nil {
+	write := writePrivate
+	if !tell {
+		write = writePrivateQuiet
+	}
+	if err := write(loginsPath(), append(b, '\n')); err != nil {
 		return err
 	}
 	lastLoginsMu.Lock()
@@ -352,7 +365,13 @@ func sortLogins(ls []savedLogin) {
 // an agent reading it at that moment sees either version, never half; the
 // new one is on the disk before it is renamed over the old (#1505).
 func writePrivate(path string, b []byte) error {
-	defer filememo.Forget()        // read again, where a request holds it
+	defer filememo.Forget() // read again, where a request holds it
+	return writePrivateQuiet(path, b)
+}
+
+// writePrivateQuiet is writePrivate with nothing read forgotten: a
+// request holding the file reads the old bytes for up to a second.
+func writePrivateQuiet(path string, b []byte) error {
 	path, err := edit.Target(path) // a symlink stays, its target written
 	if err != nil {
 		return err
@@ -1008,7 +1027,7 @@ func rememberLogins(force bool) {
 	// seconds above don't hold for: one that would only move Seen on, and
 	// that recently, writes nothing (#1674)
 	if changed && !onlySeenMoved(was, ls, now) {
-		_ = writeLogins(ls)
+		_ = writeLoginsTold(ls, !sameButSeen(was, ls))
 	}
 }
 
@@ -1019,6 +1038,20 @@ const seenEvery = 10 * time.Minute
 // onlySeenMoved says next is was with nothing changed but the times
 // accounts were last seen, each of them less than seenEvery before now.
 func onlySeenMoved(was, next []savedLogin, now time.Time) bool {
+	return seenApart(was, next, func(a, b time.Time) bool {
+		return !a.IsZero() && now.Sub(a) < seenEvery && !b.Before(a)
+	})
+}
+
+// sameButSeen says that next differs from was in when accounts were last
+// seen alone, however long ago.
+func sameButSeen(was, next []savedLogin) bool {
+	return seenApart(was, next, func(a, b time.Time) bool { return !a.IsZero() })
+}
+
+// seenApart says that next is was with Seen moved, each move one that
+// let allows.
+func seenApart(was, next []savedLogin, let func(was, next time.Time) bool) bool {
 	if len(was) != len(next) {
 		return false
 	}
@@ -1036,7 +1069,7 @@ func onlySeenMoved(was, next []savedLogin, now time.Time) bool {
 			return false
 		}
 		if !b[i].Seen.Equal(a[i].Seen) {
-			if a[i].Seen.IsZero() || now.Sub(a[i].Seen) >= seenEvery || b[i].Seen.Before(a[i].Seen) {
+			if !let(a[i].Seen, b[i].Seen) {
 				return false
 			}
 			b[i].Seen = a[i].Seen
