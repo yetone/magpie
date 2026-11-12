@@ -3411,6 +3411,15 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .sheet .kind { display: flex; align-items: baseline; gap: 8px; padding: 22px 8px 6px; font-size: 12px; }
 .sheet .kind b { font-size: 13px; font-weight: 600; color: var(--fg); }
 .sheet .kind span { color: var(--faint); }
+/* Partners' heading row: the heading, and at its end the way to join them */
+.sheet .kind-row { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; column-gap: 12px; }
+.sheet .sponsor-me { display: inline-flex; align-items: center; gap: 5px; height: 22px; margin: 0 8px 0 auto; padding: 0 9px 0 8px; border: 1px solid var(--line); border-radius: 11px; background: var(--card); color: var(--fg-2); font: inherit; font-size: 12px; line-height: 1; white-space: nowrap; cursor: pointer; transition: color .15s ease, border-color .15s ease, transform .12s cubic-bezier(.23, 1, .32, 1); }
+.sheet .sponsor-me svg { flex: none; color: var(--accent); }
+.sheet .sponsor-me:active { transform: scale(.97); }
+.sheet .sponsor-me:focus-visible { outline: none; border-color: var(--accent); color: var(--fg); }
+@media (hover: hover) and (pointer: fine) {
+  .sheet .sponsor-me:hover { color: var(--fg); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+}
 /* Partners' light (shinePartners): a hairline runs once round the heading
    and, together, round the partners' tiles below it, each over a breath of
    the accent, then fades; nothing with reduced motion. The two outlines

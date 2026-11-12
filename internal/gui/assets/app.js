@@ -288,6 +288,9 @@ const CHEV_R = "m6.5 4.5 3 3.5-3 3.5";
 const CHECK = "m3.5 8.5 3 3 6-7";
 const CROSS = "M4.5 4.5l7 7M11.5 4.5l-7 7";
 const PLUS = "M8 3.5v9M3.5 8h9";
+const HEART = "M8 13.2S2.5 9.9 2.5 6.1A2.8 2.8 0 0 1 8 5a2.8 2.8 0 0 1 5.5 1.1C13.5 9.9 8 13.2 8 13.2Z";
+// internal/gui/providers.go's sponsorMail, the one mailto: /api/open opens
+const SPONSOR_MAIL = "mailto:yetoneful@gmail.com?subject=Sponsoring%20magpie";
 const OUT = "M6.5 3.5h-3v9h9v-3M9 3.5h3.5V7M12.5 3.5 7.5 8.5";
 const PLAY_ICON = "M5.5 3.75v8.5L12.25 8z";
 const COPY_ICON = "M5.5 5.5V3.5h7v7h-2M3.5 5.5h7v7h-7z";
@@ -7193,7 +7196,17 @@ function renderAdd() {
     if (partners.length) {
       any = true;
       const grid = section("Partners", "magpie's sponsors");
-      shinePartners(grid.previousElementSibling, grid);
+      const k = grid.previousElementSibling;
+      // the heading's row ends in the way to join them, the address
+      // usemagpie.ai's own "Become a sponsor" writes to
+      const head = el("div", "kind-row");
+      const join = el("button", "sponsor-me");
+      join.type = "button";
+      join.append(svg(HEART, 12, 1.4), el("span", "", t("Become a sponsor")));
+      join.onclick = () => (web ? (location.href = SPONSOR_MAIL) : api("open", { url: SPONSOR_MAIL }));
+      k.replaceWith(head);
+      head.append(k, join);
+      shinePartners(k, grid);
       // a new one's tile keeps a dot until opened (partnerTile)
       newPartnerTiles ??= new Set();
       for (const p of partners) if (p.new && !p.added) newPartnerTiles.add(p.id);

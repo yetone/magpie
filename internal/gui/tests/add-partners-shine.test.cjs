@@ -70,7 +70,7 @@ const block = (page) => page.locator("#addSheet .kind").first().evaluate(async (
     .filter((a) => !/^shine-/.test(a.animationName) && a.effect?.getComputedTiming().iterations !== Infinity)
     .map((a) => a.finished.catch(() => {})));
   const r = (e) => e.getBoundingClientRect();
-  const grid = k.nextElementSibling, kr = k.querySelector("i.ring"), gr = grid.querySelector(":scope > i.ring");
+  const grid = (k.closest(".kind-row") || k).nextElementSibling, kr = k.querySelector("i.ring"), gr = grid.querySelector(":scope > i.ring");
   const g = r(grid), a = kr && r(kr), b = gr && r(gr);
   // the heading's words, not its box: a lit heading is as wide as its words
   // each from the sheet's corner, which may still be sliding in
