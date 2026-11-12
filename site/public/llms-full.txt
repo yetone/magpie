@@ -7120,7 +7120,88 @@ No. It reads its settings again whenever the file's modification time moves.
 
 Yes. magpie stashed the default_model you had, picks it again if PenguinHarness still has it, and removes the provider and models it added.
 
-More agents on the same models: [Paimon on any model](https://usemagpie.ai/docs/paimon), [Muse Code on any model](https://usemagpie.ai/docs/muse-code) and [Prime Agent on any model](https://usemagpie.ai/docs/prime-agent). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Paimon on any model](https://usemagpie.ai/docs/paimon), [Muse Code on any model](https://usemagpie.ai/docs/muse-code), [Prime Agent on any model](https://usemagpie.ai/docs/prime-agent) and [MothX on any model](https://usemagpie.ai/docs/mothx). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/mothx
+
+# MothX on any model
+
+MothX (OSCHINA's oschina/mothx, the `mothx` command, formerly vibecoding) is a coding agent in the terminal, written in Go. Its providers and the model it starts on are in one settings.json. magpie adds a provider named magpie and makes it the default, so MothX runs on any model in magpie: DeepSeek, GLM, Kimi, Qwen, Claude or a ChatGPT subscription.
+
+## Set up MothX
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Pick a model for MothX on the Agents page.** Pick a model via magpie, and a thinking level if you want one.
+3. **Restart MothX.** MothX reads its settings when it starts, so an open session keeps its model until it starts again.
+
+```
+magpie mothx deepseek/deepseek-v4-pro
+```
+
+## settings.json
+
+The config folder is `$MOTHX_DIR`, else `%APPDATA%\mothx` on Windows and `~/.mothx` elsewhere. What magpie writes:
+
+```
+{
+  "defaultProvider": "magpie",
+  "defaultModel": "deepseek/deepseek-v4-pro",
+  "defaultThinkingLevel": "high",
+  "providers": {
+    "magpie": {
+      "baseUrl": "http://127.0.0.1:3425/v1",
+      "api": "openai-chat",
+      "apiKey": "",
+      "thinkingFormat": "openai",
+      "models": [
+        { "id": "deepseek/deepseek-v4-pro", "name": "…", "reasoning": true,
+          "input": ["text"], "contextWindow": …, "maxTokens": …,
+          "cost": { "input": …, "output": …, "cacheRead": …, "cacheWrite": … } }
+      ]
+    }
+  }
+}
+```
+
+MothX asks the default provider for the default model on that provider's api: `openai-chat` is baseUrl plus `/chat/completions`, under Bearer apiKey. Each of magpie's models is one entry, with whether it reads images, its context window, its cap on a reply and its price per million tokens; without them MothX takes its own default window and cap, and can't count a turn's cost. Headers or an httpProxy you put in magpie's provider stay, and your own providers aren't touched. MothX in a WSL distro is set up the same way, in `~/.mothx` there.
+
+## Thinking levels
+
+`defaultThinkingLevel` is the level a session starts at: off, minimal, low, medium, high, xhigh or max, narrowed to the ones a model takes when magpie knows them. MothX sends a level only for a model whose entry says `reasoning` is true. magpie writes `thinkingFormat: "openai"`, so MothX asks every model as reasoning_effort, which the gateway carries to each vendor's own form. Without it MothX guesses the vendor from the model id and the address: a model named qwen… got Qwen's enable_thinking, a deepseek… one only thinking:{type:enabled}, whatever served it. A thinkingFormat you already set is left alone.
+
+## Restart MothX
+
+MothX reads settings.json at start-up, so a running MothX needs a restart; magpie tells you when a mothx or vibecoding process is running. MothX's own /model and /auth dialogs write the whole file back, and magpie's settings survive that. Its requests say `Vibecoding Client/<version>` as their User-Agent, and Usage counts them as MothX.
+
+## Switching back
+
+Switching back takes out defaultProvider, defaultModel and `providers.magpie`, and a providers object left empty. When the file then says the same as before magpie's first write, the original file is put back byte for byte.
+
+```
+magpie mothx default
+```
+
+## FAQ
+
+### Can MothX run on DeepSeek, GLM or a ChatGPT subscription?
+
+Yes. Pick a via-magpie model for MothX on magpie's Agents page, then restart MothX.
+
+### Does this work for vibecoding too?
+
+Yes. vibecoding is MothX's old name; magpie takes it for MothX, with the same settings.json.
+
+### How does the thinking level reach the model?
+
+magpie sets thinkingFormat to openai, so MothX sends reasoning_effort, which the gateway turns into each vendor's own form.
+
+### Does switching back restore my settings?
+
+Yes. magpie takes out the default and the provider it added; when the file says the same as before, the original is put back as it was.
+
+More agents on the same models: [PenguinHarness on any model](https://usemagpie.ai/docs/penguin), [Paimon on any model](https://usemagpie.ai/docs/paimon) and [Pi on any model](https://usemagpie.ai/docs/pi). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
