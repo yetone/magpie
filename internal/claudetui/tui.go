@@ -342,7 +342,9 @@ func (s *shim) read() {
 				// a panel can be drawn only for a moment (Claude Code
 				// 2.1.316 draws /usage's windows, then the panel again
 				// without them), so each look of it is kept
-				if t := s.grid.text(); usageUsed.MatchString(t) {
+				// A look saying "Refreshing…" is of the figures Claude
+				// Code saved, not kept (#6376).
+				if t := s.grid.text(); usageUsed.MatchString(t) && !usageRefreshing.MatchString(t) {
 					s.panel = t
 				}
 			}
@@ -374,6 +376,14 @@ func (s *shim) plain() string {
 	b := string(s.screen)
 	s.screenMu.Unlock()
 	return ansi.ReplaceAllString(b, " ")
+}
+
+// dropPanel forgets the looks of /usage's panel kept so far: they are of
+// the figures Claude Code saved, drawn before it said "Refreshing…".
+func (s *shim) dropPanel() {
+	s.screenMu.Lock()
+	s.panel = ""
+	s.screenMu.Unlock()
 }
 
 func (s *shim) clearScreen() {
@@ -813,7 +823,7 @@ func (s *shim) command(name string) error {
 		s.screenMu.Unlock()
 	}()
 	by := time.After(commandWait)
-	last, quiet, drawn, retried := "", time.Now(), false, false
+	last, quiet, drawn, retried, refreshing := "", time.Now(), false, false, false
 	var now, panel string
 	for waiting := true; waiting; {
 		p := s.plain()
@@ -823,7 +833,12 @@ func (s *shim) command(name string) error {
 		}
 		still := time.Since(quiet)
 		loading, failed := usageLoading.MatchString(now), usageFailed.MatchString(now)
-		figures := panel != "" || usageUsed.MatchString(p)
+		// once "Refreshing…" was drawn, what was drawn before it is the
+		// figures Claude Code saved: only the screen as it is now, or a
+		// look of it kept since, has today's. A redraw stalled after its
+		// clear had the saved ones told as today's (#6376).
+		figures := panel != "" || usageUsed.MatchString(p) && !refreshing ||
+			refreshing && usageUsed.MatchString(now) && !usageRefreshing.MatchString(now)
 		switch {
 		case usageStale.MatchString(now) && still >= commandSettle:
 			// the figures drawn are the last ones Claude Code saved,
@@ -835,6 +850,10 @@ func (s *shim) command(name string) error {
 			// Taken once they stood still a second, every read told the
 			// one before it, its time now (jsc9495)
 			s.doing.Store("was still refreshing " + name + "'s figures")
+			if !refreshing {
+				refreshing = true
+				s.dropPanel()
+			}
 		case loading:
 			// the panel is drawn before its figures, which Claude Code
 			// asks Anthropic for: a slow answer kept "Loading usage
@@ -860,7 +879,7 @@ func (s *shim) command(name string) error {
 		// Anything else is waited for only once the panel's tabs are
 		// drawn, and not loading.
 		case figures && still >= commandSettle,
-			(failed || usageDrawn(p) || usageDrawn(now)) && still >= 3*commandSettle:
+			(failed || usageDrawn(p) && !refreshing || usageDrawn(now)) && still >= 3*commandSettle:
 			drawn = true
 		}
 		if drawn {
@@ -878,7 +897,10 @@ func (s *shim) command(name string) error {
 	_, _ = io.WriteString(s.pty, "\x1b")
 	p := s.plain()
 	text := usageText(panel)
-	if panel == "" {
+	switch {
+	case panel == "" && refreshing:
+		text = usageText(now)
+	case panel == "":
 		text = usageText(p)
 	}
 	stale := usageStale.FindString(now)

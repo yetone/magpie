@@ -462,6 +462,16 @@ func fakeClaude(args []string) {
 				switch os.Getenv("FAKE_USAGE_THEN") {
 				case "slow":
 					time.Sleep(4 * time.Second)
+				case "stalled":
+					// the figures 4s later, their redraw stalled a
+					// moment after the screen is cleared, as a busy
+					// machine can (#6376)
+					time.Sleep(4 * time.Second)
+					if clear := []byte("\x1b[2J\x1b[H"); bytes.HasPrefix(b, clear) {
+						_, _ = os.Stdout.Write(clear)
+						b = b[len(clear):]
+					}
+					time.Sleep(2 * time.Second)
 				case "retry":
 					retry = b
 					continue
@@ -1365,6 +1375,16 @@ func TestShimWaitsPastSavedUsage(t *testing.T) {
 	}
 	t.Run("refreshed", func(t *testing.T) {
 		out := runShim(t, []string{"FAKE_USAGE=" + fresh, "FAKE_USAGE_FIRST=" + refreshing, "FAKE_USAGE_THEN=slow"},
+			append([]string{fakePath(t)}, pArgs...), []string{`raw:{"type":"command","command":"/usage"}`}, 2)
+		want := "Current session: 0% used · resets 12am (Asia/Shanghai)\nCurrent week (all models): 81% used · resets Nov 4 at 6am (Asia/Shanghai)"
+		if r := out[1]; r["type"] != "result" || r["is_error"] != false || r["result"] != want {
+			t.Fatalf("told %v", r)
+		}
+	})
+	// the refreshed panel's redraw stalls after the clear: the saved
+	// figures drawn before it are not told (#6376)
+	t.Run("refreshed after a stall", func(t *testing.T) {
+		out := runShim(t, []string{"FAKE_USAGE=" + fresh, "FAKE_USAGE_FIRST=" + refreshing, "FAKE_USAGE_THEN=stalled"},
 			append([]string{fakePath(t)}, pArgs...), []string{`raw:{"type":"command","command":"/usage"}`}, 2)
 		want := "Current session: 0% used · resets 12am (Asia/Shanghai)\nCurrent week (all models): 81% used · resets Nov 4 at 6am (Asia/Shanghai)"
 		if r := out[1]; r["type"] != "result" || r["is_error"] != false || r["result"] != want {
