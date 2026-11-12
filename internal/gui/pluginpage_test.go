@@ -190,7 +190,10 @@ func TestPluginPageReadsWhatItDeclared(t *testing.T) {
 	if w := post("/api/plugin-pages/options", `{"spec":`+string(offSpec)+`,"options":{"x":1}}`); w.Code == 200 {
 		t.Errorf("another plugin's options set: %d", w.Code)
 	}
-	if !pageSetAllowed("x", time.Now()) || pageSetAllowed("x", time.Now()) || !pageSetAllowed("x", time.Now().Add(2*time.Second)) {
+	// a key of this run's own: the limiter is package state, and the
+	// last call leaves "now + 2s" in it for the next -count round
+	key := "x" + time.Now().String()
+	if !pageSetAllowed(key, time.Now()) || pageSetAllowed(key, time.Now()) || !pageSetAllowed(key, time.Now().Add(2*time.Second)) {
 		t.Error("pageSetAllowed")
 	}
 }
