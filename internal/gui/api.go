@@ -265,7 +265,7 @@ type agentJSON struct {
 	// copies; Terminal: and opens in a terminal, this system having one
 	Command  string `json:"command,omitempty"`
 	Terminal bool   `json:"terminal,omitempty"`
-	// OpenApp: its Open button opens the desktop app, not a terminal
+	// OpenApp: its row menu opens the desktop app, not only a terminal
 	// (Codex, by the setting codexOpen, Yink88564391 on X)
 	OpenApp bool `json:"openApp,omitempty"`
 }
@@ -2213,7 +2213,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		writeJSON(rw, settingsState())
 	})
-	// what the Open button of Codex's Agents row opens: "", "app" or
+	// what Codex opens in from its Agents row menu: "", "app" or
 	// "terminal" (Yink88564391 on X)
 	mux.HandleFunc("POST /api/settings/codex-open", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct{ Open string }

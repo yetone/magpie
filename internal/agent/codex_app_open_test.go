@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// Codex's Open button (Yink88564391 on X): on a Mac it opens the bundle
+// Open the Codex app (Yink88564391 on X): on a Mac it opens the bundle
 // whose Info.plist says com.openai.codex, never the ChatGPT chat app's
 // of the same name; on Windows it starts the Store package's app; with no
 // app installed it opens nothing and says so.

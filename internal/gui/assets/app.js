@@ -1576,7 +1576,6 @@ function connectRow(a, row, who, { fields, extras, fieldBtn, sw, kind }) {
     // only way it takes magpie: on the row, before the model
     const launch = a.wired && fields.querySelector(".field.launch");
     if (launch) row.append(launch);
-    if (a.id === "codex" && (a.openApp || a.terminal) && !web) row.append(openButton(a));
     if (start) row.append(startButton(a, start, fieldBtn));
     // Claude Desktop's: which models its own menu lists
     else if (menuFromList(a)) row.append(menuButton(a));
@@ -3812,7 +3811,9 @@ function openAgentMenu(anchor, a, inFold, at) {
   const i = shown.findIndex((x) => x.id === a.id);
   const reapply = !a.cliMissing && (a.drift || a.fields.some((f) => optionFor(f, f.value)?.ref));
   // coolmantou, lileo0668
-  const o = a.terminal && mode != "panel" && !web, term = [...o ? [{ name: "Open in terminal", icon: LAUNCH_GLYPH, sep: !0, run: () => api("agents/open", { agent: a.id, terminal: !0 }).catch(statusErr) }] : [], ...a.command ? [{ name: "Copy launch command", icon: COPY_ICON, sep: !o, run: () => copy(a.command, t("Launch command")) }] : []];
+  // Codex's desktop app, by the setting Open Codex with (Yink88564391 on
+  // X): in the menu, not on the row, so the row lines up with the others
+  const app = a.openApp && mode != "panel" && !web, o = a.terminal && mode != "panel" && !web, term = [...app ? [{ name: "Open the Codex app", icon: LAUNCH_GLYPH, sep: !0, run: () => api("agents/open", { agent: a.id }).catch(statusErr) }] : [], ...o ? [{ name: "Open in terminal", icon: LAUNCH_GLYPH, sep: !app, run: () => api("agents/open", { agent: a.id, terminal: !0 }).catch(statusErr) }] : [], ...a.command ? [{ name: "Copy launch command", icon: COPY_ICON, sep: !o && !app, run: () => copy(a.command, t("Launch command")) }] : []];
   const acts = inFold && isHidden(a)
     ? [{ name: "Show", icon: EYE, run: () => setAgentHidden(a, false) }]
     : inFold
@@ -4043,15 +4044,6 @@ function agentPrefsButton(a) {
   return b;
 }
 
-// openButton opens Codex from its row: the desktop app, or the CLI in a
-// terminal by the setting Open Codex with (Yink88564391 on X)
-function openButton(a) {
-  const b = el("button", "ag-openapp", t("Open"));
-  b.type = "button";
-  b.title = b.ariaLabel = t(a.openApp ? "Open the Codex app" : "Open Codex in a terminal");
-  b.onclick = (ev) => { ev.stopPropagation(); api("agents/open", { agent: a.id }).catch(statusErr); };
-  return b;
-}
 // launchButton copies the command that starts an agent on magpie, for one
 // that takes the gateway only from its environment (agy)
 function launchButton(a) {

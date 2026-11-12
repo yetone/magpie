@@ -858,7 +858,7 @@ type Settings struct {
 	// CLI (originator codex_cli_rs), "desktop" the Codex app (originator
 	// "Codex Desktop"), each with the User-Agent that client sends.
 	CodexClient string `json:"codexClient,omitempty"`
-	// CodexOpen is what the Open button of Codex's Agents row opens
+	// CodexOpen is what Codex opens in from its Agents row menu
 	// (Yink88564391 on X): "app" the Codex desktop app, "terminal" the CLI
 	// in a terminal. "" is the app where one is installed, else the
 	// terminal. It belongs to this computer.
@@ -2594,7 +2594,7 @@ func saveOwn(s Settings, recording, reads bool) error {
 	}
 	s.CodexOpen = strings.TrimSpace(s.CodexOpen)
 	if !slices.Contains(CodexOpens, s.CodexOpen) {
-		return fmt.Errorf("Codex's Open button must open one of %q, not %q", CodexOpens[1:], s.CodexOpen)
+		return fmt.Errorf("Open Codex with must be one of %q, not %q", CodexOpens[1:], s.CodexOpen)
 	}
 	s.RedactRouteTo = strings.TrimSpace(s.RedactRouteTo)
 	if s.RedactRouteTo != "" && !strings.Contains(s.RedactRouteTo, "/") {

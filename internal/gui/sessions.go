@@ -418,7 +418,7 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 	mux.HandleFunc("POST /api/agents/open", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct {
 			Agent string
-			// Terminal asks for the terminal even where the Open button
+			// Terminal asks for the terminal even where Codex otherwise
 			// opens the app (the row menu's Open in terminal)
 			Terminal bool
 		}
@@ -1227,7 +1227,7 @@ func agentCommand(a *agent.Agent) string {
 	return agentLine(a, launch, runtime.GOOS)
 }
 
-// codexOpensApp says whether Codex's Open button opens the desktop app:
+// codexOpensApp says whether Codex opens in the desktop app:
 // the app where one is installed, unless the setting codexOpen asks for the
 // terminal (Yink88564391 on X).
 func codexOpensApp() bool {

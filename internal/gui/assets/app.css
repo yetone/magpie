@@ -5058,12 +5058,6 @@ body.window .row + .row.agent.conn > .who { min-height: 41px; } /* the line abov
 .row.agent.conn > .field.launch + .field.ag-start { margin-left: 0; }
 .ag-add { flex: none; height: 24px; padding: 0 10px; border: 0; border-radius: 6px; background: var(--pill); color: var(--fg); font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; }
 .ag-add:hover { background: var(--pill-hover); }
-.ag-openapp { flex: none; height: 24px; padding: 0 10px; border: 0; border-radius: 6px; background: var(--pill); color: var(--fg); font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; transition: background .15s ease, transform .12s cubic-bezier(.23, 1, .32, 1); }
-.ag-openapp:hover { background: var(--pill-hover); }
-.ag-openapp:active { transform: scale(.97); }
-.ag-openapp:focus-visible { outline: 1.5px solid var(--accent); outline-offset: 1px; }
-.row.agent.conn > .ag-openapp { margin-left: 8px; align-self: center; }
-.row.agent.conn > .who + .ag-openapp { margin-left: auto; }
 .ag-cant { flex: none; font-size: 12px; color: var(--faint); }
 .ag-conn-gap { flex: none; width: 32px; margin-left: 10px; }
 .row.agent.conn.unplugged .ag-handle .ic { opacity: .7; }

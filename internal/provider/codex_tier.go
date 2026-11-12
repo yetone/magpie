@@ -34,12 +34,12 @@ func SetCodexServiceTier(tier string) error {
 	return settings.Save(s)
 }
 
-// SetCodexOpen sets what the Open button of Codex's Agents row opens: "",
+// SetCodexOpen sets what Codex opens in from its Agents row menu: "",
 // "app" or "terminal" (Yink88564391 on X).
 func SetCodexOpen(v string) error {
 	v = strings.TrimSpace(v)
 	if !slices.Contains(settings.CodexOpens, v) {
-		return fmt.Errorf("Codex's Open button must open one of %q, not %q", settings.CodexOpens[1:], v)
+		return fmt.Errorf("Open Codex with must be one of %q, not %q", settings.CodexOpens[1:], v)
 	}
 	s := settings.Load()
 	if s.CodexOpen == v {

@@ -124,7 +124,7 @@ func TestAgentCommandNeedsAProgram(t *testing.T) {
 	}
 }
 
-// Codex's Open button (Yink88564391 on X) opens the desktop app where one
+// Codex's Open the Codex app (Yink88564391 on X) opens the desktop app where one
 // is installed and the setting codexOpen doesn't say terminal; the row menu's
 // Open in terminal still opens the terminal; a value the setting can't
 // take is refused.
@@ -167,7 +167,7 @@ func TestCodexOpenButton(t *testing.T) {
 	}
 
 	if !row().OpenApp {
-		t.Fatal("app installed and no choice, yet the Open button is not the app's")
+		t.Fatal("app installed and no choice, yet Codex does not open in the app")
 	}
 	if code := post("/api/agents/open", map[string]any{"agent": "codex"}); code != http.StatusNoContent || len(apps) != 1 {
 		t.Fatalf("Open: %d, apps %v", code, apps)

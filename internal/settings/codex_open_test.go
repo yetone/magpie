@@ -2,7 +2,7 @@ package settings
 
 import "testing"
 
-// The Open button's choice for Codex is this computer's own: another
+// Open Codex with is this computer's own: another
 // computer's sync does not carry it in.
 func TestCodexOpenIsThisComputers(t *testing.T) {
 	from := Settings{CodexOpen: "app"}

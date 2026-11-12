@@ -1,13 +1,14 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
-// Codex's Open button (Yink88564391 on X): Codex's row on the Agents page has a
-// visible Open button beside its model, not only the row menu's Open in
-// terminal. It opens the desktop app where one is installed (openApp) and
-// the CLI in a terminal otherwise; either way it posts agents/open with the
-// id alone, while the menu's Open in terminal asks for the terminal. A row
-// of any other agent, the web build and a Codex with nothing to open have no
-// button. Codex's settings have "Open Codex with" (Automatic, Codex app,
-// Terminal), an app menu, which posts settings/codex-open. Every language,
-// Chromium and WebKit, wide and narrow; no backend, the API is faked here.
+// Opening Codex (Yink88564391 on X): Codex's row menu has Open the Codex app
+// where the desktop app is installed and Open Codex with doesn't say
+// Terminal (openApp); it posts agents/open with the id alone, while Open in
+// terminal asks for the terminal. Nothing of it sits on the row: every
+// row's Details and model picker line up (the owner, 11-13, on the Open
+// button ee1553913 had put between them). Another agent's menu, the web
+// build and a Codex with nothing to open have no such item. Codex's
+// settings have "Open Codex with" (Automatic, Codex app, Terminal), an app
+// menu, which posts settings/codex-open. Every language, Chromium and
+// WebKit, wide and narrow; no backend, the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -48,11 +49,11 @@ function server(lang, web, codex, posted) {
 }
 
 const W = {
-  en: { open: "Open", app: "Open the Codex app", term: "Open Codex in a terminal", name: "Open Codex with", auto: "Automatic", capp: "Codex app", cterm: "Terminal" },
-  zh: { open: "打开", app: "打开 Codex 应用", term: "在终端中打开 Codex", name: "打开 Codex 的方式", auto: "自动", capp: "Codex 应用", cterm: "终端" },
-  "zh-TW": { open: "開啟", app: "開啟 Codex 應用程式", term: "在終端機中開啟 Codex", name: "開啟 Codex 的方式", auto: "自動", capp: "Codex 應用程式", cterm: "終端機" },
-  ja: { open: "開く", app: "Codex アプリを開く", term: "ターミナルで Codex を開く", name: "Codex を開く方法", auto: "自動", capp: "Codex アプリ", cterm: "ターミナル" },
-  de: { open: "Öffnen", app: "Codex-App öffnen", term: "Codex im Terminal öffnen", name: "Codex öffnen mit", auto: "Automatisch", capp: "Codex-App", cterm: "Terminal" },
+  en: { open: "Open", app: "Open the Codex app", term: "Open in terminal", name: "Open Codex with", auto: "Automatic", capp: "Codex app", cterm: "Terminal" },
+  zh: { open: "打开", app: "打开 Codex 应用", term: "在终端中打开", name: "打开 Codex 的方式", auto: "自动", capp: "Codex 应用", cterm: "终端" },
+  "zh-TW": { open: "開啟", app: "開啟 Codex 應用程式", term: "在終端機中開啟", name: "開啟 Codex 的方式", auto: "自動", capp: "Codex 應用程式", cterm: "終端機" },
+  ja: { open: "開く", app: "Codex アプリを開く", term: "ターミナルで開く", name: "Codex を開く方法", auto: "自動", capp: "Codex アプリ", cterm: "ターミナル" },
+  de: { open: "Öffnen", app: "Codex-App öffnen", term: "Im Terminal öffnen", name: "Codex öffnen mit", auto: "Automatisch", capp: "Codex-App", cterm: "Terminal" },
 };
 const engines = process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"];
 const langs = process.env.LANGS ? process.env.LANGS.split(",") : Object.keys(W);
@@ -72,41 +73,53 @@ async function start(engine, t, lang, width, web, codex) {
   return { page, errors, posted };
 }
 
+// lineUp: every agent row's Details and model picker start where every
+// other row's do; nothing of Codex's own sits between them (an Open button
+// there pushed its Details left, the owner, 11-13)
+async function lineUp(page) {
+  await page.locator('.row.agent[data-id="claude"] .ag-start').waitFor();
+  const xs = await page.evaluate(() => [...document.querySelectorAll(".row.agent.conn")].filter((r) => r.offsetParent).map((r) => {
+    const x = (s) => { const e = r.querySelector(s); return e ? Math.round(e.getBoundingClientRect().left) : null; };
+    return { id: r.dataset.id, link: x(".ag-link"), pick: x(".ag-start") };
+  }));
+  assert(xs.length >= 2, `rows: ${JSON.stringify(xs)}`);
+  for (const k of ["link", "pick"]) assert.equal(new Set(xs.map((r) => r[k])).size, 1, `${k} not lined up: ${JSON.stringify(xs)}`);
+}
+
 for (const engine of engines) {
   for (const lang of langs) {
     for (const width of [900, 400]) {
       const w = W[lang];
-      test(`${engine} ${lang} ${width}px: Codex's row has an Open button that opens the app`, async (t) => {
+      test(`${engine} ${lang} ${width}px: Codex's row menu opens the app, and its row lines up with the others`, async (t) => {
         const { page, errors, posted } = await start(engine, t, lang, width, false, { terminal: true, command: "codex", openApp: true });
-        const btn = page.locator('.row.agent[data-id="codex"] .ag-openapp');
-        await btn.waitFor();
-        assert.equal((await btn.textContent()).trim(), w.open);
-        assert.equal(await btn.getAttribute("title"), w.app);
-        assert.equal(await page.locator('.row.agent[data-id="claude"] .ag-openapp').count(), 0, "another agent's row");
-        const box = await btn.boundingBox(), row = await page.locator('.row.agent[data-id="codex"]').boundingBox();
-        assert(box.width > 0 && box.x >= row.x && box.x + box.width <= row.x + row.width, `the button leaves the row: ${JSON.stringify([box, row])}`);
-        // it does not sit on the model picker or the switch
-        for (const sel of [".ag-start", ".ag-conn"]) {
-          const o = await page.locator(`.row.agent[data-id="codex"] ${sel}`).first().boundingBox();
-          if (o) assert(box.x + box.width <= o.x + 1 || o.x + o.width <= box.x + 1 || box.y + box.height <= o.y + 1 || o.y + o.height <= box.y + 1, `Open overlaps ${sel}`);
-        }
-        assert(await page.evaluate(() => document.scrollingElement.scrollWidth <= innerWidth), "the page scrolls sideways");
+        await lineUp(page);
+        await page.locator('.row.agent[data-id="codex"] .ag-handle').click();
+        const menu = page.locator(".pop.row-menu");
+        await menu.waitFor();
+        const app = menu.locator(".rm-item", { hasText: w.app });
+        assert.equal(await app.count(), 1, "Open the Codex app in the menu");
+        assert.equal(await menu.locator(".rm-item", { hasText: w.term }).count(), 1, "Open in terminal beside it");
+        const mb = await menu.boundingBox();
+        assert(mb.x >= 0 && mb.x + mb.width <= width, `the menu runs off the window: ${JSON.stringify(mb)}`);
         const sent = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/agents/open");
-        await btn.click();
+        await app.click();
         await sent;
         assert.deepEqual(posted, [["open", { agent: "codex" }]], "the id alone");
+        await menu.waitFor({ state: "detached" });
+        await page.locator('.row.agent[data-id="claude"] .ag-handle').click();
+        await menu.waitFor();
+        assert.equal(await menu.locator(".rm-item", { hasText: w.app }).count(), 0, "another agent's menu");
         assert.deepEqual(errors, []);
       });
 
-      test(`${engine} ${lang} ${width}px: with no app the button opens the terminal`, async (t) => {
-        const { page, errors, posted } = await start(engine, t, lang, width, false, { terminal: true, command: "codex" });
-        const btn = page.locator('.row.agent[data-id="codex"] .ag-openapp');
-        await btn.waitFor();
-        assert.equal(await btn.getAttribute("title"), w.term);
-        const sent = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/agents/open");
-        await btn.click();
-        await sent;
-        assert.deepEqual(posted, [["open", { agent: "codex" }]]);
+      test(`${engine} ${lang} ${width}px: with no app the menu opens the terminal only`, async (t) => {
+        const { page, errors } = await start(engine, t, lang, width, false, { terminal: true, command: "codex" });
+        await lineUp(page);
+        await page.locator('.row.agent[data-id="codex"] .ag-handle').click();
+        const menu = page.locator(".pop.row-menu");
+        await menu.waitFor();
+        assert.equal(await menu.locator(".rm-item", { hasText: w.app }).count(), 0);
+        assert.equal(await menu.locator(".rm-item", { hasText: w.term }).count(), 1);
         assert.deepEqual(errors, []);
       });
 
@@ -140,13 +153,17 @@ for (const engine of engines) {
       });
     }
   }
-
-  test(`${engine}: the web build and a Codex with nothing to open have no Open button`, async (t) => {
+  test(`${engine}: the web build and a Codex with nothing to open have no Open the Codex app`, async (t) => {
+    const item = async (page) => {
+      await page.locator('.row.agent[data-id="codex"] .ag-handle').click();
+      await page.locator(".pop.row-menu").waitFor();
+      return page.locator(".pop.row-menu .rm-item", { hasText: "Open the Codex app" }).count();
+    };
     let { page, errors } = await start(engine, t, "en", 900, true, { terminal: true, command: "codex", openApp: true });
-    assert.equal(await page.locator('.row.agent[data-id="codex"] .ag-openapp').count(), 0, "the web build");
+    assert.equal(await item(page), 0, "the web build");
     assert.deepEqual(errors, []);
     ({ page, errors } = await start(engine, t, "en", 900, false, {}));
-    assert.equal(await page.locator('.row.agent[data-id="codex"] .ag-openapp').count(), 0, "nothing to open");
+    assert.equal(await item(page), 0, "nothing to open");
     assert.deepEqual(errors, []);
   });
 }
