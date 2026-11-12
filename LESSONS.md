@@ -829,9 +829,30 @@ it doesn't.**
   (quotatable.js and its test deleted, its app.js, app.css and i18n
   hunks reverted) and 88d2962e0's 16-byte sessions hashes (digest.go
   deleted). Both were gone from main until c14fa0ce9 put them back.
+- The same day, three hours later: d31988c95 ("the Mac's plain title
+  bar is done as the main window is first shown") also reversed
+  1648fcfe2 and 95eab9a66, Mistral's prompt_cache_key: gateway.go's
+  withMistralCacheKey, mistral_cache_key_test.go and two
+  TestOwnCacheKey rows, none of them in its body. 2858566a1 put them
+  back. A GUI change has no reason to touch internal/gateway.
 - Before pushing, read `git show --stat HEAD` after the rebase. A deleted
   file or a hunk in a package the goal never names means the tree is
   stale: rebuild the change on origin/main, don't push the old tree.
+- Seen 1× (2026-11-12).
+
+**State added for one provider or one feature is keyed by it, not
+held process-wide.**
+- b70563ec6 kept one "accounts reordered at" stamp for the whole
+  gateway. Reordering Claude's accounts dropped every other provider's
+  conversation stick, so a Codex conversation lost its account and its
+  prompt cache on the next turn. In tests, any earlier reorder made
+  three cache tests red in package runs (#6249 and #6262, filed twice
+  for one cause). 04e38e604 keys the stamp by provider and has tests
+  forget it.
+- A test of such a value resets it in `t.Cleanup`, and a case where
+  another provider changes it shows the scope is right.
+- A process-local value set by the CLI never reaches the running
+  gateway (#6265).
 - Seen 1× (2026-11-12).
 
 **A squash merge's message is written, not GitHub's default.** Give
