@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/probelog"
+	"github.com/yetone/magpie/internal/provider"
 )
 
 // ledgerSpy is an Observer that only counts the rows Append hands it.
@@ -129,5 +130,36 @@ func TestAnsweredModelListIsNoRow(t *testing.T) {
 	}
 	if p := QueryPage(All, Filter{Failed: true}, 0, 50); p.Total != 2 {
 		t.Fatalf("failed filter: total %d", p.Total)
+	}
+}
+
+// The request page asks for the probes on every poll; while none was
+// made and no host or rename changed, the chunk made last time is the
+// answer, and any of those changing makes it again (#2278).
+func TestProbeChunkMadeOncePerChange(t *testing.T) {
+	at := time.Date(2026, 8, 1, 9, 0, 0, 0, time.UTC)
+	rows := probeRows{}
+	for i := range 3 {
+		rows.add(Record{Time: at.Add(time.Duration(i) * time.Minute), Agent: "magpie", Provider: "p", Host: "api.example.com", Status: 500, Source: SourceProbe}, int64(i))
+	}
+	blocks := rows.done()
+	hosts := map[string]string{"api.example.com": "p"}
+	first := probeChunk(blocks, at, provider.Renames{}, hosts)
+	if first == nil || first.Count != 3 {
+		t.Fatalf("first: %+v", first)
+	}
+	if again := probeChunk(slices.Clone(blocks), at, provider.Renames{}, map[string]string{"api.example.com": "p"}); again != first {
+		t.Fatal("the same probes, since, renames and hosts made the chunk again")
+	}
+	if c := probeChunk(blocks, at.Add(time.Minute), provider.Renames{}, hosts); c == first || c.Count != 2 {
+		t.Fatalf("a later since kept the old chunk: %+v", c)
+	}
+	if c := probeChunk(blocks, at, provider.Renames{}, map[string]string{"api.example.com": "q"}); c == first {
+		t.Fatal("a changed host kept the old chunk")
+	}
+	more := probeRows{blocks: slices.Clone(blocks)}
+	more.add(Record{Time: at.Add(5 * time.Minute), Agent: "magpie", Provider: "p", Host: "api.example.com", Status: 500, Source: SourceProbe}, 3)
+	if c := probeChunk(more.done(), at, provider.Renames{}, hosts); c == first || c.Count != 4 {
+		t.Fatalf("a new probe kept the old chunk: %+v", c)
 	}
 }

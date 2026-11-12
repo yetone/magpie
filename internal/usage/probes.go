@@ -1,6 +1,8 @@
 package usage
 
 import (
+	"maps"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -169,6 +171,39 @@ func clipProbeError(s string) string {
 // way: CyberCaius again, Leee's model list asked at leee.baby before it
 // was saved on another host of that site.
 func probeChunk(probes []*rowChunk, since time.Time, renames provider.Renames, hosts map[string]string) *rowChunk {
+	// the page polls every few seconds and the probes rarely change: the
+	// chunk was made again each time, ~45 MB of two and a half minutes'
+	// allocations with the page open (#2278). A frozen block is never
+	// written again, so the same blocks, since, renames and hosts make
+	// the same chunk, which no reader writes.
+	probeMemo.Lock()
+	m := probeMemo.last
+	probeMemo.Unlock()
+	if m != nil && m.since.Equal(since) && slices.Equal(m.probes, probes) && m.renames.Same(renames) && maps.Equal(m.hosts, hosts) {
+		return m.c
+	}
+	c := makeProbeChunk(probes, since, renames, hosts)
+	probeMemo.Lock()
+	probeMemo.last = &probeMade{probes: slices.Clone(probes), since: since, renames: renames, hosts: maps.Clone(hosts), c: c}
+	probeMemo.Unlock()
+	return c
+}
+
+// probeMemo is the last chunk probeChunk made, and what it was made from.
+var probeMemo struct {
+	sync.Mutex
+	last *probeMade
+}
+
+type probeMade struct {
+	probes  []*rowChunk
+	since   time.Time
+	renames provider.Renames
+	hosts   map[string]string
+	c       *rowChunk
+}
+
+func makeProbeChunk(probes []*rowChunk, since time.Time, renames provider.Renames, hosts map[string]string) *rowChunk {
 	var c *rowChunk
 	sites := sync.OnceValue(func() map[string]string { return sitesOf(hosts) })
 	eachProbe(probes, since, func(r Record, off int64) {
