@@ -58,7 +58,7 @@ func DetectBase(base string, proto Protocol) string {
 		if pu, err := url.Parse(u); err == nil && pu.Host != "" && strings.Trim(pu.Path, "/") == "v1" {
 			return u + "beta"
 		}
-		return GeminiBase(u)
+		return geminiVersioned(u)
 	}
 	if pu, err := url.Parse(u); err == nil && strings.Trim(pu.Path, "/") == "" {
 		return u + "/v1"

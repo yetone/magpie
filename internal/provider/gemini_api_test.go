@@ -16,7 +16,10 @@ func TestGeminiBase(t *testing.T) {
 		"https://generativelanguage.googleapis.com/":                                                           "https://generativelanguage.googleapis.com/v1beta",
 		"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:streamGenerateContent?alt=sse": "https://generativelanguage.googleapis.com/v1beta",
 		"https://relay.example/proxy/v1beta/models":                                                            "https://relay.example/proxy/v1beta",
-		"https://relay.example/proxy/v1":                                                                       "https://relay.example/proxy/v1",
+		"https://relay.example":          "https://relay.example",
+		"https://relay.example/":         "https://relay.example",
+		"relay.example:8080":             "https://relay.example:8080",
+		"https://relay.example/proxy/v1": "https://relay.example/proxy/v1",
 	} {
 		if got := GeminiBase(in); got != want {
 			t.Errorf("GeminiBase(%q) = %q, want %q", in, got, want)
@@ -181,5 +184,38 @@ func TestAIStudioGeminiClearedStays(t *testing.T) {
 		if err := Save(*got); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+// A relay's Gemini base typed without a version is saved and reopened as
+// typed; only Google's own bare host is given /v1beta (JNDliuliuM on X:
+// 点击保存之后再重新打开看，还是会被添加上/v1beta).
+func TestGeminiBaseSavedAsTyped(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	for id, c := range map[string][2]string{
+		"root":   {"https://relay.example", "https://relay.example"},
+		"v1":     {"https://relay.example/v1", "https://relay.example/v1"},
+		"prefix": {"https://relay.example/gemini", "https://relay.example/gemini"},
+		"google": {"https://generativelanguage.googleapis.com", "https://generativelanguage.googleapis.com/v1beta"},
+	} {
+		if err := Save(Provider{ID: id, Name: id, Key: "k", Gemini: c[0]}); err != nil {
+			t.Fatal(err)
+		}
+		got, err := Find(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Gemini != c[1] {
+			t.Errorf("%s: Gemini %q saved as %q, want %q", id, c[0], got.Gemini, c[1])
+		}
+	}
+	// the other protocols' bases are kept as typed too
+	if err := Save(Provider{ID: "oa", Name: "oa", Key: "k", Chat: "https://relay.example", Responses: "https://relay.example/api"}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := Find("oa")
+	if got.Chat != "https://relay.example" || got.Responses != "https://relay.example/api" {
+		t.Errorf("openai bases changed: %q %q", got.Chat, got.Responses)
 	}
 }

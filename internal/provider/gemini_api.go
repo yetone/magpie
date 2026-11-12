@@ -17,8 +17,9 @@ import (
 var geminiMethod = lazyre.New(`/models(?:/[^/?#]*)?(?:[?#].*)?$`)
 
 // GeminiBase is the base a Gemini URL is kept as: trimmed, an endpoint or
-// the model list pasted whole cut back to the base, and a bare host given
-// Google's version (/v1beta), as the Gemini API's SDKs add it.
+// the model list pasted whole cut back to the base. Only Google's own bare
+// host is given its version (/v1beta); any other URL stays as typed, so a
+// relay's root is not rewritten on the next open (JNDliuliuM on X).
 func GeminiBase(u string) string {
 	u = strings.TrimRight(strings.TrimSpace(u), "/")
 	if u == "" {
@@ -28,6 +29,17 @@ func GeminiBase(u string) string {
 		u = "https://" + u
 	}
 	u = strings.TrimRight(geminiMethod.ReplaceAllString(u, ""), "/")
+	if pu, err := url.Parse(u); err == nil && strings.EqualFold(pu.Hostname(), "generativelanguage.googleapis.com") && strings.Trim(pu.Path, "/") == "" {
+		return u + "/v1beta"
+	}
+	return u
+}
+
+// geminiVersioned is GeminiBase with the /v1beta a bare host of any vendor
+// is asked at, for a detection that proposes a base rather than keeping one
+// the user typed.
+func geminiVersioned(u string) string {
+	u = GeminiBase(u)
 	if pu, err := url.Parse(u); err == nil && pu.Host != "" && strings.Trim(pu.Path, "/") == "" {
 		return u + "/v1beta"
 	}
