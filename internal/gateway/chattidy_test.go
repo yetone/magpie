@@ -242,3 +242,37 @@ func TestChatTidyRenumbersAReusedIndex(t *testing.T) {
 		}
 	}
 }
+
+// hixonchan on X (OpenDesign, deepseek-v4.1-flash): a reply of one
+// sentence and then three parallel calls came with Responses'
+// output_index as the calls' index, the text holding 0: 1,1,2,3. A client
+// that keeps calls in an array by index broke on the gap. The calls go
+// by 0, 1, 2 in the order they start.
+func TestChatTidyNumbersCallsFromZero(t *testing.T) {
+	var tidy chatTidy
+	frames := []string{
+		`{"index":1,"id":"call_a","type":"function","function":{"name":"read_file","arguments":""}}`,
+		`{"index":1,"function":{"arguments":"{\"path\":\"a\"}"}}`,
+		`{"index":2,"id":"call_b","type":"function","function":{"name":"list_dir","arguments":""}}`,
+		`{"index":2,"function":{"arguments":"{}"}}`,
+		`{"index":3,"id":"call_c","type":"function","function":{"name":"pwd","arguments":""}}`,
+		`{"index":3,"function":{"arguments":"{}"}}`,
+	}
+	want := []float64{0, 0, 1, 1, 2, 2}
+	for i, f := range frames {
+		out := tidy.write([]byte(`data: {"id":"resp_03","choices":[{"index":0,"delta":{"tool_calls":[` + f + `]}}]}` + "\n"))
+		var chunk struct {
+			Choices []struct {
+				Delta struct {
+					ToolCalls []map[string]any `json:"tool_calls"`
+				} `json:"delta"`
+			} `json:"choices"`
+		}
+		if err := json.Unmarshal(bytes.TrimPrefix(bytes.TrimSpace(out), []byte("data:")), &chunk); err != nil {
+			t.Fatalf("frame %d unreadable %q: %v", i, out, err)
+		}
+		if got := chunk.Choices[0].Delta.ToolCalls[0]["index"]; got != want[i] {
+			t.Errorf("frame %d: index %v, want %v: %s", i, got, want[i], out)
+		}
+	}
+}
