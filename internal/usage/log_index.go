@@ -55,7 +55,7 @@ type logSnapshot struct {
 	// probes are the requests magpie sent on its own (SourceProbe), kept
 	// out of blocks: every reader of those counts what it reads, and the
 	// request log alone lists these (queryPage)
-	probes []probeRow
+	probes []*rowChunk
 	// hosts are the providers by the host their calls went to, as the log
 	// recorded them: "" for a host two providers were on. A probe made
 	// while a provider was being added, under its host, is that
@@ -162,7 +162,7 @@ func readLogSnapshot() *logSnapshot {
 		next.off, next.first, next.firstOwn = old.off, old.first, old.firstOwn
 		next.blocks = slices.Clone(old.blocks)
 		next.keyProviders = maps.Clone(old.keyProviders)
-		next.probes = slices.Clip(old.probes) // appended to, never written in
+		next.probes = slices.Clone(old.probes) // the last reopened as a copy (probeRows.add)
 		next.hosts = maps.Clone(old.hosts)
 		next.full = old.full
 	} else if old == nil {
@@ -196,6 +196,7 @@ func readLogSnapshot() *logSnapshot {
 		return kept()
 	}
 	var tail *rowChunk
+	probes := probeRows{blocks: next.probes}
 	routes := routeRows{}
 	if n := len(next.blocks); n > 0 && next.blocks[n-1].Count < logBlockRows {
 		tail = next.blocks[n-1].writable()
@@ -219,7 +220,7 @@ func readLogSnapshot() *logSnapshot {
 		next.sawHost(r)
 		if r.IsProbe() {
 			if !quietProbe(r) { // a model list answered is no row (ferock)
-				next.probes = append(next.probes, probeRow{r, next.off})
+				probes.add(r, next.off)
 			}
 			continue
 		}
@@ -249,6 +250,7 @@ func readLogSnapshot() *logSnapshot {
 	if tail != nil {
 		next.blocks = append(next.blocks, tail.freeze())
 	}
+	next.probes = probes.done()
 	next.hash, next.digest = fmt.Sprintf("%x", sum.Sum(nil)), marshalLogHash(sum)
 	// A rewrite during the read must not give old blocks the new content's
 	// hash. A read inside the stamp's tick is checked when it settles

@@ -58,11 +58,62 @@ func (r Row) IsProbe() bool {
 	return r.Source == SourceProbe || r.Source == SourceMCP || r.Source == SourceSearch || r.Record.IsProbe()
 }
 
-// probeRow is a probe's record and where its line ends in the log, as a
+// probeRows are the probes' blocks as the gateway rows' are: logBlockRows
+// rows a block, frozen when full, the last reopened to take the next.
+// A probe was a whole Record in a slice (952 B each): a log of 25k MCP tool
+// calls held ~25 MB of them, and every append copied the slice.
+type probeRows struct {
+	blocks []*rowChunk
+	tail   *rowChunk
+}
+
+// add takes a probe's record and where its line ends in the log, as a
 // gateway row's Order is.
-type probeRow struct {
-	Record
-	off int64
+func (p *probeRows) add(r Record, off int64) {
+	if p.tail == nil {
+		if n := len(p.blocks); n > 0 && p.blocks[n-1].Count < logBlockRows {
+			p.tail = p.blocks[n-1].writable()
+			p.blocks = p.blocks[:n-1]
+		} else {
+			p.tail = &rowChunk{}
+		}
+	}
+	p.tail.add(Row{Record: r, Source: r.Source}, "", off, false)
+	if len(p.tail.Rows) == logBlockRows {
+		p.blocks = append(p.blocks, p.tail.freeze())
+		p.tail = nil
+	}
+}
+
+// done is the blocks with the tail frozen in.
+func (p *probeRows) done() []*rowChunk {
+	if p.tail != nil {
+		p.blocks = append(p.blocks, p.tail.freeze())
+		p.tail = nil
+	}
+	return p.blocks
+}
+
+// eachProbe calls f with each probe made since since (all for zero) and
+// where its line ends in the log.
+func eachProbe(blocks []*rowChunk, since time.Time, f func(r Record, off int64)) {
+	rows := chunkRows{}
+	defer rows.release()
+	for _, b := range blocks {
+		if !since.IsZero() && b.Latest.Before(since) {
+			continue
+		}
+		c := rows.of(b)
+		for i := range c.Rows {
+			row := c.row(i)
+			if !since.IsZero() && row.Time.Before(since) {
+				continue
+			}
+			r := row.Record
+			r.Source = row.Source
+			f(r, c.Rows[i].Order)
+		}
+	}
 }
 
 func init() {
@@ -117,32 +168,28 @@ func clipProbeError(s string) string {
 // A host no provider was on goes by its site (provider.SiteOf) the same
 // way: CyberCaius again, Leee's model list asked at leee.baby before it
 // was saved on another host of that site.
-func probeChunk(probes []probeRow, since time.Time, renames provider.Renames, hosts map[string]string) *rowChunk {
+func probeChunk(probes []*rowChunk, since time.Time, renames provider.Renames, hosts map[string]string) *rowChunk {
 	var c *rowChunk
 	sites := sync.OnceValue(func() map[string]string { return sitesOf(hosts) })
-	for _, p := range probes {
-		if !since.IsZero() && p.Time.Before(since) {
-			continue
-		}
+	eachProbe(probes, since, func(r Record, off int64) {
 		if c == nil {
 			c = &rowChunk{}
 		}
-		r := p.Record
 		if r.Source == SourceMCP {
 			// a tool call names the provider its gateway call went to, by id
 			if r.Provider != "" {
 				r.Provider = renames.Of(r.Provider, r.Time)
 			}
-			c.add(Row{Record: r, Source: SourceMCP}, "", p.off, false)
-			continue
+			c.add(Row{Record: r, Source: SourceMCP}, "", off, false)
+			return
 		}
 		if r.Source == SourceSearch { // a search API is no provider
-			c.add(Row{Record: r, Source: SourceSearch}, "", p.off, false)
-			continue
+			c.add(Row{Record: r, Source: SourceSearch}, "", off, false)
+			return
 		}
 		r.Provider = probeProvider(r, renames, hosts, sites)
-		c.add(Row{Record: r, Source: SourceProbe}, "", p.off, false)
-	}
+		c.add(Row{Record: r, Source: SourceProbe}, "", off, false)
+	})
 	if c == nil {
 		return nil
 	}

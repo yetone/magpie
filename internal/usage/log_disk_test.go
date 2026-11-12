@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/probelog"
+	"github.com/yetone/magpie/internal/provider"
 )
 
 // logLines appends n calls from the i-th on to the log, as a gateway that
@@ -60,10 +61,10 @@ func logRead(t *testing.T, s *logSnapshot) map[string]any {
 		b, _ := json.Marshal(r)
 		rows = append(rows, string(b))
 	})
-	for _, p := range s.probes {
-		b, _ := json.Marshal(p.Record)
-		probes = append(probes, fmt.Sprintf("%d %s", p.off, b))
-	}
+	eachProbe(s.probes, time.Time{}, func(r Record, off int64) {
+		b, _ := json.Marshal(r)
+		probes = append(probes, fmt.Sprintf("%d %s", off, b))
+	})
 	first, _ := s.first.MarshalText()
 	firstOwn, _ := s.firstOwn.MarshalText()
 	return map[string]any{"rows": rows, "probes": probes, "first": string(first), "firstOwn": string(firstOwn), "off": s.off, "hash": s.hash,
@@ -146,5 +147,68 @@ func TestStartReadsKeptLogBlocks(t *testing.T) {
 	restartLog()
 	if want := logRead(t, readLogSnapshot()); !reflect.DeepEqual(rewritten, want) {
 		t.Fatal("the log written over isn't read as a parse of it reads it")
+	}
+}
+
+// probeLines appends n MCP tool calls from the i-th on to the log.
+func probeLines(t *testing.T, from, n int) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(Path()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.OpenFile(Path(), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	enc := json.NewEncoder(f)
+	at := time.Date(2026, 8, 1, 9, 0, 0, 0, time.UTC)
+	for i := from; i < from+n; i++ {
+		r := Record{Time: at.Add(time.Duration(i) * time.Second), Source: SourceMCP, Agent: "codex", Provider: fmt.Sprintf("p%d", i%3),
+			Model: fmt.Sprintf("tool%d", i%9), Millis: int64(i), Status: 200}
+		if i%5 == 0 {
+			r.Source, r.Kind, r.Host, r.Status, r.Error = SourceProbe, probelog.KindTest, "h.example", 500, "down"
+		}
+		if err := enc.Encode(r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The probes are kept in blocks as the gateway rows are: a read continued
+// over appended probes reopens the last block as a copy, so the snapshot
+// before it reads as it did, and the two read as one parse of the log.
+func TestProbeBlocksContinued(t *testing.T) {
+	pageHome(t)
+	settleLogClock(t)
+	t.Cleanup(restartLog)
+	restartLog()
+	probeLines(t, 0, 2*logBlockRows+100)
+	before := readLogSnapshot()
+	want := logRead(t, before)
+	if n := len(want["probes"].([]string)); n != 2*logBlockRows+100 {
+		t.Fatalf("%d probes, want %d", n, 2*logBlockRows+100)
+	}
+	if len(before.probes) != 3 {
+		t.Fatalf("%d probe blocks, want 3", len(before.probes))
+	}
+	probeLines(t, 2*logBlockRows+100, logBlockRows)
+	after := readLogSnapshot()
+	if after == before || len(after.probes) < 4 {
+		t.Fatalf("not read again: %d blocks", len(after.probes))
+	}
+	if got := logRead(t, before); !reflect.DeepEqual(got["probes"], want["probes"]) {
+		t.Fatal("the snapshot before the append changed under its readers")
+	}
+	grown := logRead(t, after)
+	os.Remove(logDiskPath())
+	restartLog()
+	if whole := logRead(t, readLogSnapshot()); !reflect.DeepEqual(grown["probes"], whole["probes"]) {
+		t.Fatalf("the continued read's probes differ from the log's parse: %d vs %d", len(grown["probes"].([]string)), len(whole["probes"].([]string)))
+	}
+	if c := probeChunk(after.probes, time.Date(2026, 8, 1, 9, 20, 0, 0, time.UTC), provider.Renames{}, nil); c == nil || c.Count != 3*logBlockRows+100-1200 {
+		t.Fatalf("probes since: %v", c)
 	}
 }

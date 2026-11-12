@@ -60,7 +60,7 @@ var logDiskWrote struct {
 // what was read with them, or nil.
 type logDisk struct {
 	full   logFull
-	probes []probeRow
+	probes []*rowChunk
 	blocks []*rowChunk
 }
 
@@ -142,9 +142,11 @@ func logDiskOf(b []byte, m *diskMapping, path string, size int64) *logDisk {
 	if !ok || json.Unmarshal(raw, &probes) != nil {
 		return nil
 	}
+	kept := probeRows{}
 	for _, p := range probes {
-		d.probes = append(d.probes, probeRow{p.R, p.Off})
+		kept.add(p.R, p.Off)
 	}
+	d.probes = kept.done()
 	for range d.full.n {
 		raw, b, ok = cutDiskEntry(b)
 		if !ok {
@@ -215,11 +217,11 @@ func logDiskSave(s *logSnapshot) error {
 	}
 	// the probes of the full blocks' lines: the lines after are parsed again
 	probes := []logDiskProbe{}
-	for _, p := range s.probes {
-		if p.off <= s.full.off {
-			probes = append(probes, logDiskProbe{p.Record, p.off})
+	eachProbe(s.probes, time.Time{}, func(r Record, off int64) {
+		if off <= s.full.off {
+			probes = append(probes, logDiskProbe{r, off})
 		}
-	}
+	})
 	pb, err := json.Marshal(probes)
 	if err != nil {
 		return err
