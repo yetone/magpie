@@ -168,3 +168,50 @@ func TestRepoIconsWaitForFirstFetch(t *testing.T) {
 		t.Fatal("RepoIcons waited past its 300ms for the held fetch")
 	}
 }
+
+// /api/providers asks for every plugin provider's icon on each answer: a
+// kept icon found on disk isn't looked for again within iconSeenFor, and
+// one removed is given up (and fetched again) once that has passed.
+func TestKeptIconNotLookedForEachAsk(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	t.Setenv("MAGPIE_PLUGIN_MARKET", "off")
+
+	png := []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR")
+	data := "data:image/png;base64," + base64.StdEncoding.EncodeToString(png)
+	pp := plugin.Provider{ID: "lemon", Spec: "lemon-plugin", Icon: data}
+	ic := PluginIcon(pp)
+	if !strings.HasPrefix(ic, "file:") {
+		t.Fatalf("icon = %q", ic)
+	}
+	if again := PluginIcon(pp); again != ic {
+		t.Fatalf("asked again = %q, want %q", again, ic)
+	}
+	f := IconFile(strings.TrimPrefix(ic, "file:"))
+	if err := os.Remove(f); err != nil {
+		t.Fatal(err)
+	}
+	// within the minute: the file isn't looked for, so nothing finds it
+	// gone and stores the picture again
+	if got := PluginIcon(pp); got != ic {
+		t.Errorf("removed within iconSeenFor = %q, want %q", got, ic)
+	}
+	if _, err := os.Stat(f); err == nil {
+		t.Errorf("the file was looked for within iconSeenFor and stored again")
+	}
+	// past it: looked for, gone, and the data URI stored again
+	plugIcons.Lock()
+	for k := range plugIcons.seen {
+		plugIcons.seen[k] = time.Now().Add(-iconSeenFor - time.Second)
+	}
+	plugIcons.tried = map[string]time.Time{}
+	plugIcons.Unlock()
+	if got := PluginIcon(pp); !strings.HasPrefix(got, "file:") {
+		t.Errorf("past iconSeenFor = %q", got)
+	} else if _, err := os.Stat(IconFile(strings.TrimPrefix(got, "file:"))); err != nil {
+		t.Errorf("stored again: %v", err)
+	}
+}

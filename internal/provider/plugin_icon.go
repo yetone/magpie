@@ -55,6 +55,11 @@ var plugIcons struct {
 	from  string // the file they were read from
 	kept  map[string]string
 	tried map[string]time.Time
+	// seen is when each kept icon's file was last found on disk: within
+	// iconSeenFor it is not looked for again. /api/providers asks for
+	// every plugin provider's icon, and a stat each was a fifth of its
+	// time on a real account's 26 providers
+	seen map[string]time.Time
 	// the URLs being fetched now, each closed once its fetch is over
 	busy map[string]chan struct{}
 }
@@ -63,6 +68,10 @@ var plugIcons struct {
 // public host only, at most MaxIcon. Tests point it elsewhere.
 var fetchPluginIcon = FetchIcon
 
+// iconSeenFor is how long a kept icon found on disk is taken to be there
+// still: one removed is fetched again within it.
+const iconSeenFor = time.Minute
+
 func plugIconsPath() string { return filepath.Join(filepath.Dir(Path()), "plugin-icons.json") }
 
 func loadPlugIcons() {
@@ -70,7 +79,7 @@ func loadPlugIcons() {
 		return
 	}
 	plugIcons.from = plugIconsPath()
-	plugIcons.kept, plugIcons.tried = map[string]string{}, map[string]time.Time{}
+	plugIcons.kept, plugIcons.tried, plugIcons.seen = map[string]string{}, map[string]time.Time{}, map[string]time.Time{}
 	if b, err := os.ReadFile(plugIcons.from); err == nil {
 		_ = json.Unmarshal(b, &plugIcons.kept)
 	}
@@ -100,11 +109,16 @@ func pluginOwnIcon(said string) string {
 	defer plugIcons.Unlock()
 	loadPlugIcons()
 	if ic := plugIcons.kept[k]; ic != "" {
+		if t, ok := plugIcons.seen[k]; ok && time.Since(t) < iconSeenFor {
+			return ic
+		}
 		if f := IconFile(strings.TrimPrefix(ic, iconPrefix)); f != "" {
 			if _, err := os.Stat(f); err == nil {
+				plugIcons.seen[k] = time.Now()
 				return ic
 			}
 		}
+		delete(plugIcons.seen, k)
 	}
 	if t, ok := plugIcons.tried[k]; ok && time.Since(t) < time.Hour {
 		return ""
