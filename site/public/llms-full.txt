@@ -3413,6 +3413,8 @@ magpie provider fallback openai deepseek/deepseek-v4-pro
 - **A 400 over `prompt_cache_key`..** magpie asks again without the key it added.
 - **Checking a key..** `magpie provider test openai` sends a tiny request through each endpoint, or to each model you name. Add `--as codex` or `--as claude-code` to send it the way that agent would.
 
+[Azure OpenAI in Codex, Claude Code and other agents](https://usemagpie.ai/docs/azure)
+
 ## FAQ
 
 ### How do I use OpenAI’s models in Claude Code?
@@ -9547,6 +9549,82 @@ The global. Claude and GPT profiles are routed in every commercial region; other
 Both take the same key. The runtime has global. profiles and a given model list; Mantle lists your account's own models, Mantle-only ones included, under in-region ids alone.
 
 Related: [Anthropic in Claude Code, Codex, Gemini CLI and OpenCode](https://usemagpie.ai/docs/anthropic), [Google Vertex AI in Claude Code, Codex and other agents](https://usemagpie.ai/docs/vertex). If something fails, see [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting) or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/azure
+
+# Azure OpenAI in Codex, Claude Code and other agents
+
+Azure OpenAI serves OpenAI's models, and other makers' such as Kimi, DeepSeek and Grok, at your own Azure resource. magpie's `azure` preset brings that resource to Codex, Claude Code, OpenCode and other agents: the endpoint and key are your resource's, and the model ids are your deployments' names.
+
+## Add it
+
+1. **Find the endpoint and key..** Open the resource's Keys and Endpoint in the Azure portal, and copy the endpoint and a key.
+2. **Add it..** Pick Azure OpenAI in the app and paste the address into Endpoint, or from the CLI:
+
+```
+magpie provider add azure  url=https://my-resource.openai.azure.com
+magpie provider test azure
+```
+
+Paste the address any way: `https://<resource>.openai.azure.com`, `…/openai`, `…/openai/v1`, a classic deployment's URL with its api-version, or only the resource's name. magpie asks every one at the resource's v1 API (`/openai/v1`, generally available since August 2025), where chat completions, Responses and the model list sit at OpenAI's paths and no api-version is wanted. Hosts ending `.openai.azure.com`, `.cognitiveservices.azure.com` and `.services.ai.azure.com` are all known.
+
+The key goes in `api-key`, never as a Bearer: a Bearer on Azure is an Entra ID token.
+
+## Deployments are the models
+
+Once added, magpie asks the resource for its deployments with the key, and their names are the model ids. Where the data plane won't list them, it takes the models the v1 API lists, which match only when each deployment is named after its model. When neither answers, the error says to type your deployments' names in:
+
+```
+magpie provider models azure my-gpt-5-5 my-gpt-6-sol
+```
+
+Azure hosts other makers' models too, which models.dev lists under it with no reasoning levels, so magpie doesn't take its list as a maker's word on theirs.
+
+## Use it in an agent
+
+Codex speaks Responses; Claude Code and other Anthropic agents are translated by magpie to Azure's API:
+
+```
+magpie codex azure/my-gpt-5-5
+magpie claude azure/my-gpt-5-5
+```
+
+## API Management and headers
+
+When an API Management gateway (or any address that isn't a resource's host) sits in front of the resource, magpie keeps the URLs you gave and doesn't move them to the v1 API. Add headers in the editor's Headers; `${sessionId}`, `${threadId}` and `${subagentId}` in a value become the conversation's ids, so a gateway can keep one conversation on one account:
+
+```
+magpie provider set azure 'header.X-Session=${sessionId}'
+```
+
+## Notes
+
+- An Azure provider imported from another app becomes the `azure` preset's too, on the resource's v1 API.
+- Azure's `content_filter` is read as the vendor's safety filter, not a broken request: another account or model in a routing group may still answer.
+- Reasoning items Codex hands back are left out of a request relayed as is to Azure, unless `store` is true: Azure, like OpenAI, looks the id up among stored items and answers 400 "Item with id 'rs_…' not found".
+- OpenAI's Decisions API (`/v1/decisions`) goes to Azure too, at `/openai/v1/decisions`, with your deployment's name as the model.
+
+## FAQ
+
+### Does magpie support Azure OpenAI?
+
+Yes, with the azure preset. Give the resource's endpoint and key; magpie asks its v1 API under /openai/v1 with the key in the api-key header, and lists the resource's deployments as models.
+
+### What goes in as the model id?
+
+Your deployment's name, not the model's. magpie asks the resource for its deployments; when it can't, type them in with magpie provider models azure .
+
+### Do I need an api-version?
+
+No. magpie uses Azure's v1 API, and a classic /openai/deployments/…?api-version= address is moved onto it.
+
+### What if an API Management gateway is in front of the resource?
+
+Give the gateway's address; magpie leaves it as it is. Add the headers it needs under Headers, where ${sessionId} and the like become the conversation's ids.
+
+Related: [OpenAI in Claude Code, Codex, Gemini CLI and OpenCode](https://usemagpie.ai/docs/openai), [Amazon Bedrock in Claude Code, Codex and other agents](https://usemagpie.ai/docs/bedrock). If something fails, see [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting) or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 

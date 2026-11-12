@@ -144,6 +144,7 @@ DeepSeek, Kimi (Moonshot), GLM (Zhipu), Qwen, MiniMax, Anthropic (Claude), OpenA
 - [Token usage and cost per agent](https://usemagpie.ai/docs/usage): tokens and cost per agent, model, account and session; magpie usage --csv; magpie model price for a relay's real price; Claude Code status line; /v1/magpie/usage
 - [Google Vertex AI in Claude Code, Codex and other agents](https://usemagpie.ai/docs/vertex): Gemini, Claude and partner models (DeepSeek, GLM, gpt-oss) from your own Google Cloud project, signed with gcloud credentials or a service account, no API key; models per location, Model Garden, PayGo headers and common errors.
 - [Amazon Bedrock in Claude Code, Codex and other agents](https://usemagpie.ai/docs/bedrock): the bedrock and bedrock-mantle presets with one Bedrock API key and no SigV4; regions, global inference profiles for Claude and GPT, other makers' in-region ids, Mantle's own model list, and CLAUDE_CODE_USE_BEDROCK.
+- [Azure OpenAI in Codex, Claude Code and other agents](https://usemagpie.ai/docs/azure): the azure preset at your own resource, its v1 API under /openai/v1, the key in api-key, deployments as model ids, API Management gateways and headers.
 - [Library](https://usemagpie.ai/docs/library): instructions, MCP servers, skills, hooks and subagents for each agent.
 - [MCP router](https://usemagpie.ai/docs/mcp-router): one magpie MCP server per agent.
 - [Remote magpie](https://usemagpie.ai/docs/remote): use one magpie from several computers.

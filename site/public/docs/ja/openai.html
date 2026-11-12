@@ -300,6 +300,8 @@ magpie provider fallback openai deepseek/deepseek-v4-pro</pre></div>
       <li><b>キーの確認。</b><code>magpie provider test openai</code> は各エンドポイントに、または指定した各モデルに小さなリクエストを送ります。<code>--as codex</code> や <code>--as claude-code</code> を付けると、そのツールと同じ形で送ります。</li>
     </ul>
 
+    <p><a href="/docs/ja/azure">Azure OpenAI を Codex・Claude Code などのエージェントで使う</a></p>
+
     <h2 id="faq"><a class="anchor" href="#faq">よくある質問</a></h2>
     <h3>Claude Code で OpenAI のモデルを使うには？</h3>
     <p>magpie に OpenAI の API キーを追加し（プロバイダ、プロバイダを追加、OpenAI）、Claude Code の行で <code>gpt-6.1-sol</code> などのモデルを選ぶか、<code>magpie claude openai/gpt-6.1-sol</code> を実行します。OpenAI は Anthropic Messages API を提供していないので、magpie が Claude Code のリクエストを変換して OpenAI の Responses API <code>https://api.openai.com/v1</code> に送り、返答を戻します。推論の要約は思考として届きます。</p>

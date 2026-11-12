@@ -300,6 +300,8 @@ magpie provider fallback openai deepseek/deepseek-v4-pro</pre></div>
       <li><b>Checking a key.</b> <code>magpie provider test openai</code> sends a tiny request through each endpoint, or to each model you name. Add <code>--as codex</code> or <code>--as claude-code</code> to send it the way that agent would.</li>
     </ul>
 
+    <p><a href="/docs/azure">Azure OpenAI in Codex, Claude Code and other agents</a></p>
+
     <h2 id="faq"><a class="anchor" href="#faq">FAQ</a></h2>
     <h3>How do I use OpenAI’s models in Claude Code?</h3>
     <p>Add your OpenAI API key in magpie (Providers, Add provider, OpenAI), then pick a model such as <code>gpt-6.1-sol</code> on Claude Code’s row, or run <code>magpie claude openai/gpt-6.1-sol</code>. OpenAI serves no Anthropic Messages API, so magpie translates Claude Code’s requests to OpenAI’s Responses API at <code>https://api.openai.com/v1</code> and the replies back, the reasoning summary as thinking.</p>
