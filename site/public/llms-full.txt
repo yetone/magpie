@@ -2360,6 +2360,8 @@ magpie group set opus-anywhere stays=session models+=openrouter/anthropic/claude
 
 [Vercel AI Gateway in Claude Code, Codex and other agents](https://usemagpie.ai/docs/vercel)
 
+[API relays in Claude Code, Codex and other agents](https://usemagpie.ai/docs/relay)
+
 ## FAQ
 
 ### How do I use OpenRouter in Claude Code?
@@ -9835,6 +9837,92 @@ A model NIM prices at 0 is marked free beside it in agents' model pickers. That 
 magpie folds entries alike in all but their key into one provider, each key an account of it, so models aren't repeated in the pickers.
 
 Related: [ModelScope in Claude Code and Codex](https://usemagpie.ai/docs/modelscope), [Round robin and failover across accounts, keys and providers](https://usemagpie.ai/docs/routing-groups). If something fails, see [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting) or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/relay
+
+# API relays in Claude Code, Codex and other agents
+
+A relay sells many vendors' models on one key, often at its own prices and under its own model names. magpie treats a relay as a provider: an agent asks for `relay/model`, and prices, names and windows can be set to what the relay really does.
+
+## Add a relay
+
+1. **A preset relay..** AiHubMix, PipeLLM, 302.AI, CherryIN and 鱼鱼连线 are presets: give an API key. 鱼鱼连线 also takes an Auto, Global or China Mainland line.
+2. **Any other relay..** Give its addresses: `url=` for an OpenAI-compatible base, `anthropic=` for an Anthropic-compatible one, both when it has both, and `responses=` when Responses has an address of its own.
+
+```
+magpie presets
+magpie provider add aihubmix sk-…
+magpie provider add "My Relay" url=https://relay.example.com/v1 anthropic=https://relay.example.com key=sk-…
+magpie provider test "My Relay"
+```
+
+`magpie provider test` sends one tiny request per API, with latency.
+
+## Caching for Claude models
+
+When a relay has both an OpenAI and an Anthropic address, a Claude model goes to Anthropic's Messages whatever API the agent spoke: many relays drop `cache_control` on Chat, so every turn was billed uncached, and thinking went with it (#997). If the relay has an Anthropic address, give it.
+
+## Count the relay's prices
+
+Out of the box a call is counted at the model maker's list price, the wrong number for a relay that sells at a discount or a multiplier. Say what the relay charges, and the usage ledger and session totals use it:
+
+```
+magpie model price relay-a/gpt-5.5 0.12,0.60,0.01,0.15
+magpie model price relay-a/gpt-5.5
+magpie model prices
+```
+
+The four numbers are input, output, cache read and cache write, in USD per million tokens, and all four are asked for; `0` is a model served at no cost. A relay that sells `kimi-k3` as `moonshot-kimi-k3` answers as `kimi-k3`, so a renamed model with no price of its own is counted at `kimi-k3`'s price at the same relay.
+
+## Model names and windows
+
+Relays often add a prefix or a date to a model's id. `magpie model wire` sets the name the relay is asked for, `*` standing for the model; for a model models.dev doesn't list or lists at the wrong size, `magpie model context` and `magpie model output` set the window and the reply limit:
+
+```
+magpie model wire 'relay-b/*' 'vendor-c/*'
+magpie model wire relay-b/model-2 --reset
+magpie model context "relay-a/*" 200000
+magpie model output relay-a/gpt-5.5 131072
+```
+
+Quote arguments with a `*` in zsh, or it answers `no matches found`. Windows and limits are looked for in this order: this model → this provider's `*` → the provider's own list → models.dev.
+
+## The model list
+
+Relays list new models fast. Have the gateway fetch the list on a schedule, and expose new models that match a pattern:
+
+```
+magpie provider refresh-every relay 6h
+magpie provider auto-include relay 'gpt-*' 're:claude-.*'
+```
+
+## Notes
+
+- Agents only ever reach magpie; they never hold the relay's key or its address.
+- Several relays can share a routing group: when one fails, the group's next member answers.
+- When a reply says another model answered, usage marks it and counts the model that answered.
+
+## FAQ
+
+### Can magpie use an API relay?
+
+Yes. AiHubMix, PipeLLM, 302.AI, CherryIN and 鱼鱼连线 are presets that take a key; any other relay is added with magpie provider add and its OpenAI- and Anthropic-compatible addresses.
+
+### Why does caching miss for Claude models through a relay?
+
+Many relays drop cache_control on Chat. Give the relay's Anthropic address, and magpie sends Claude models to Messages, keeping caching and thinking.
+
+### The relay sells at a discount. How do I count the right cost?
+
+Run magpie model price relay/model with the input, output, cache read and cache write prices in USD per million tokens; usage and session totals use them.
+
+### The relay's model names have a prefix. What now?
+
+magpie model wire sets the name the relay is asked for: 'relay-b/*' 'vendor-c/*' sends every model with a vendor-c/ prefix.
+
+Related: [OpenRouter in Claude Code, Codex, Gemini CLI and OpenCode](https://usemagpie.ai/docs/openrouter), [Round robin and failover across accounts, keys and providers](https://usemagpie.ai/docs/routing-groups). If something fails, see [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting) or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
