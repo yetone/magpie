@@ -89,6 +89,8 @@ var Vars = []string{
 	"KUN_DATA_DIR",
 	// AstrBot's root, the folder holding its data/ (else ~/.astrbot, the desktop app's)
 	"ASTRBOT_ROOT",
+	// Mistral Vibe's folder (config.toml, skills, AGENTS.md), ~/.vibe without it
+	"VIBE_HOME",
 	// jcode's folder, ~/.jcode without it
 	"JCODE_HOME",
 	// OpenClaw: its config file, its state folder (openclaw.json in it), a

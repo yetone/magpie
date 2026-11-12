@@ -325,6 +325,7 @@ func onMachineAll(home, cfg string) []*Agent {
 		qwenpaw(home),
 		openClaw(home),
 		jcode(home),
+		vibe(home),
 		miniMax(home),
 		droid(home),
 		cline(home),
