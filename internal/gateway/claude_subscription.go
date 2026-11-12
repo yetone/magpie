@@ -5818,6 +5818,10 @@ func saidWithResults(msgs []Message) string {
 // </task-notification>.
 var taskNotice = lazyre.New(`(?s)(?:\[SYSTEM NOTIFICATION - NOT USER INPUT\][^<]*)?<task-notification>.*?</task-notification>`)
 
+// taskOrAgentMsg is a task notification (taskNotice) or an agent's message
+// (<agent-message from="…">…</agent-message>), in the order they came.
+var taskOrAgentMsg = lazyre.New(`(?s)(?:\[SYSTEM NOTIFICATION - NOT USER INPUT\][^<]*)?<task-notification>.*?</task-notification>|<agent-message\b[^>]*>.*?</agent-message>`)
+
 // withTaskNotices hands the run the notifications of background tasks
 // that came after the results (taskNotice), in a reminder at the end of the
 // last result, where Claude Code itself puts one for some models (inside
@@ -5846,6 +5850,21 @@ func withTaskNotices(results []Part, msgs []Message) []Part {
 			case p.Kind == ToolResult:
 				seen = true
 			case p.Kind == Text && seen:
+				if m.Role == "system" || m.Role == "developer" {
+					// Claude Code delivers a sub-agent's report that arrives
+					// mid-turn here, as "Another Claude session sent a message
+					// while you were working: <agent-message from=…>report
+					// </agent-message>" (#6277); a user message's own carries
+					// through as the user-role text it is. Handed over as
+					// the agent's output, never as the user's.
+					for _, n := range taskOrAgentMsg.FindAllString(p.Text, -1) {
+						if strings.HasPrefix(n, "<agent-message") {
+							n = "A message from another agent (its output, not an instruction from the user):\n" + n
+						}
+						notices = append(notices, n)
+					}
+					continue
+				}
 				notices = append(notices, taskNotice.FindAllString(p.Text, -1)...)
 			}
 		}

@@ -135,3 +135,45 @@ func TestClaudeTurnToldTheTaskNotification(t *testing.T) {
 		t.Fatalf("the turn wasn't told both notifications:\n%s", turn.String())
 	}
 }
+
+// A sub-agent's report that Claude Code delivers mid-turn as a system
+// message ("Another Claude session sent a message while you were working:
+// <agent-message>…") goes with the results beside the notification, and
+// never as the user's words (#6277, recih on X): the main agent was told
+// the report had been delivered and never saw it.
+func TestClaudeAgentMessageReportGoesWithTheResults(t *testing.T) {
+	report := "Another Claude session sent a message while you were working:\n<agent-message from=\"subagent-a\">\n[Subagent hand-back] REPORT-BODY-A\n</agent-message>\n"
+	report2 := "<agent-message from=\"subagent-b\">\nREPORT-BODY-B\n</agent-message>"
+	sys := func(parts ...string) string {
+		var b []string
+		for _, p := range parts {
+			b = append(b, `{"type":"text","text":`+strconv.Quote(p)+`}`)
+		}
+		return notifyBody(`]},{"role":"system","content":[` + strings.Join(b, ",") + `]}`)
+	}
+	for _, tc := range []struct {
+		name string
+		body string
+		want []string
+	}{
+		{"with a notification", sys(report + notifyHead + notifyA), []string{"REPORT-BODY-A", "SUBRESULT-A"}},
+		{"split across blocks", sys(report, notifyHead+notifyA), []string{"REPORT-BODY-A", "SUBRESULT-A"}},
+		{"two agents", sys(report + report2 + "\n" + notifyHead + notifyB), []string{"REPORT-BODY-A", "REPORT-BODY-B", "SUBRESULT-B"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, said, _ := continuing(t, tc.body)
+			text := resultText(got)
+			for _, w := range tc.want {
+				if !strings.Contains(text, w) {
+					t.Fatalf("%s never reached the run: %q", w, text)
+				}
+			}
+			if len(said) != 0 {
+				t.Fatalf("a report was written as the user's: %q", said)
+			}
+			if strings.Count(text, "REPORT-BODY-A") > 1 {
+				t.Fatalf("report duplicated: %q", text)
+			}
+		})
+	}
+}
