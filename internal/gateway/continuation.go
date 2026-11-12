@@ -464,7 +464,11 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 	// said nothing and counted none fails too (repliesCounted, #2086)
 	var counts bool
 	// voids: a reply in this protocol cut at its length that says nothing
-	// fails at once, asked again nowhere (cutVoid, #2972)
+	// fails at once, asked again nowhere (cutVoid, #2972); one that said
+	// nothing and never gave a finish_reason fails as an empty reply
+	// (Copilot's gemini-4-carbon, now and then, answered 200 with only a
+	// usage frame, which went to Codex as a response.completed with
+	// nothing in it: codealc on X)
 	var voids bool
 	empties := 0 // the times such a reply was asked again here
 	said, stop := false, ""
@@ -729,7 +733,7 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 			if held != nil {
 				held()
 			}
-			if (empty || counts && uncounted(this)) && !said && answersNothing(stop) {
+			if (empty || counts && uncounted(this) || voids && stop == "") && !said && answersNothing(stop) {
 				if empties < emptyRetries(w, r.Context()) && r.Context().Err() == nil && !p.PassesErrors() {
 					// asked again here first, for the agent to have the
 					// answer rather than the error: Gemini on a long
