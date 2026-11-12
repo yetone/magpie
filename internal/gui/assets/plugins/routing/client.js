@@ -4744,8 +4744,7 @@ function routingPage(part) {
     // that same account uses provider@user and the base ID names another.
     // Group accounts by their identity, resolving each try in its own route.
     const keyOf = (w) => w.kind === "account" && w.who
-      ? JSON.stringify(w.plan && String(w.plan).trim()
-        ? [w.provider, w.who.trim().toLowerCase(), String(w.plan).trim().toLowerCase()] : [w.provider, w.who.trim().toLowerCase()]) : w.id;
+      ? JSON.stringify([w.provider, w.who.trim().toLowerCase()]) : w.id;
     // Live: the day's counts come with the history read the page already
     // asks for (#3351) — the Usage page's own reading of the day, not the
     // last few requests the gateway keeps. What that read cannot say (the

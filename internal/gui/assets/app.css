@@ -3256,6 +3256,7 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .range-menu .rm-times { display: flex; align-items: center; gap: 6px; margin-top: 6px; padding: 7px 2px 0; border-top: 1px solid var(--line-2); color: var(--muted); }
 .range-menu .rm-times svg { flex: none; }
 .range-menu .rm-time { width: 52px; height: 24px; padding: 0 6px; border: 1px solid var(--line-2); border-radius: 6px; background: transparent; color: var(--fg); font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; text-align: center; }
+.range-menu .rm-hours { margin: 0 0 6px; padding: 0 2px 7px; border-top: 0; border-bottom: 1px solid var(--line-2); }
 .range-menu .rm-time:focus { outline: none; border-color: var(--accent); }
 .range-menu .rm-time[aria-invalid="true"] { border-color: var(--red); }
 .range-menu .rm-dash { color: var(--faint); }
@@ -5289,11 +5290,3 @@ body .row.agent .ag-prefs .row.pref .who { display: block; }
 .server-pin .hint.err { color: var(--red); overflow-wrap: anywhere; }
 .server-pin .pin-acts { display: flex; flex-wrap: wrap; gap: 12px; }
 .server-pin .pin-peek.busy { pointer-events: none; opacity: .6; }
-/* WebKitGTK draws without accelerated compositing (webkit_linux.go), so a
-   backdrop blur is redone by the CPU for its whole box on every frame: a
-   full-window modal took 25ms a frame where the same page took 16ms with none
-   (lagging scroll, Lsheng2012 on X, KDE). Each of these grounds is 92% opaque
-   or a dim, so the blur is barely seen; the Linux app draws without it. */
-body.linux .modal, body.linux .pop, body.linux.panel .profiles.open,
-body.linux:not(.side-nav) #view-settings .set-head::before,
-body.linux .action-confirm::backdrop { -webkit-backdrop-filter: none; backdrop-filter: none; }

@@ -533,17 +533,12 @@ type tallied struct {
 	Tries []Try     `json:"tries"`
 }
 
-// tallyKey is what the page groups an account by: its provider, its user
-// and its plan (two seats of one email on different plans are two
-// accounts, not one), however it is weighed into a request (its sign-in may move); a
+// tallyKey is what the page groups an account by: its provider and its
+// user, however it is weighed into a request (its sign-in may move); a
 // key or a provider by its own id.
 func tallyKey(w Weighed) string {
 	if w.Kind == "account" && w.Who != "" {
-		k := []string{w.Provider, strings.ToLower(strings.TrimSpace(w.Who))}
-		if plan := strings.ToLower(strings.TrimSpace(w.Plan)); plan != "" {
-			k = append(k, plan) // a plan-less seat keeps the two-part key
-		}
-		b, _ := json.Marshal(k)
+		b, _ := json.Marshal([]string{w.Provider, strings.ToLower(strings.TrimSpace(w.Who))})
 		return string(b)
 	}
 	return w.ID

@@ -156,7 +156,18 @@ function archivePanel(name, id, redraw) {
 // is kept for the next time the page opens; picked days are not, as they
 // go stale.
 const PERIODS = [["today", "Today"], ["last:24h", "24 hours"], ["7d", "7 days"], ["30d", "30 days"], ["all", "All"]];
-try { const v = localStorage.getItem("magpie.usagePeriod"); if (PERIODS.some(([id]) => id === v)) period = v; } catch {}
+// Hours of the reader's own (eachg0 on X): the last N hours, up to now, so
+// yesterday needn't be dug out of the calendar each time the date rolls
+// over. The range menu sets N; the pick and N are kept on this device.
+const HOURS_MAX = 720;
+function periodHours(p) {
+  const m = /^last:(\d+)h$/.exec(p || "");
+  const n = m ? +m[1] : 0;
+  return n >= 1 && n <= HOURS_MAX ? n : 0;
+}
+const keptPeriod = (id) => PERIODS.some(([p]) => p === id) || periodHours(id) > 0;
+const hoursName = (n) => (n === 1 ? t("Last hour") : t("Last {n} hours", { n }));
+try { const v = localStorage.getItem("magpie.usagePeriod"); if (keptPeriod(v)) period = v; } catch {}
 
 // The reader's time zone, which magpie reads the period's days, the chart's
 // hours and a picked day in: magpie web may be read from another zone than
@@ -233,18 +244,20 @@ function renderPeriod(loading) {
   // days of the reader's own (#1492): the last opt names them once picked,
   // and opens the range menu to pick them, or others
   const range = periodDays(period);
-  const b = el("button", "opt range-opt" + (range ? " on" : ""));
+  // hours other than the 24 the preset has name the same chip
+  const hours = PERIODS.some(([id]) => id === period) ? 0 : periodHours(period);
+  const b = el("button", "opt range-opt" + (range || hours ? " on" : ""));
   b.type = "button";
   b.disabled = !!loading;
   b.setAttribute("aria-haspopup", "dialog");
   b.setAttribute("aria-expanded", "false");
-  b.setAttribute("aria-label", range ? t("Days picked: {days}", { days: rangeName(range) }) : t("Pick days"));
-  b.append(svg("M3 4.5h10v8.5H3zM3 7h10M5.5 3v3M10.5 3v3", 12, 1.4), el("span", "", range ? rangeName(range) : t("Custom")));
+  b.setAttribute("aria-label", hours ? t("Hours picked: {hours}", { hours: hoursName(hours) }) : range ? t("Days picked: {days}", { days: rangeName(range) }) : t("Pick days"));
+  b.append(svg("M3 4.5h10v8.5H3zM3 7h10M5.5 3v3M10.5 3v3", 12, 1.4), el("span", "", hours ? hoursName(hours) : range ? rangeName(range) : t("Custom")));
   if (range) b.title = t("Days picked: {days}", { days: rangeName(range) });
   b.onclick = () => {
     if (b.classList.contains("open")) return closeProtoMenu();
     // on a phone the strip is hidden behind the head's menu, which opens it
-    openRangeMenu(b.offsetParent ? b : $("#usageRangeMenu"), range, (from, to) => {
+    openRangeMenu(b.offsetParent ? b : $("#usageRangeMenu"), range, hours, (from, to) => {
       const picked = periodDays(from + ".." + to);
       for (const x of seg.querySelectorAll(".opt")) x.classList.toggle("on", x === b);
       b.lastChild.textContent = rangeName(picked);
@@ -252,6 +265,11 @@ function renderPeriod(loading) {
       b.setAttribute("aria-label", b.title);
       slide(seg, "period");
       pickPeriod(from + ".." + to);
+    }, (n) => {
+      for (const x of seg.querySelectorAll(".opt")) x.classList.toggle("on", x === b);
+      b.lastChild.textContent = hoursName(n);
+      slide(seg, "period");
+      pickPeriod("last:" + n + "h");
     });
   };
   seg.append(b);
@@ -293,7 +311,7 @@ function renderPeriod(loading) {
 
 function pickPeriod(id) {
   period = id; ledDay = ""; ledOffset = 0;
-  if (PERIODS.some(([p]) => p === id)) try { localStorage.setItem("magpie.usagePeriod", id); } catch {}
+  if (keptPeriod(id)) try { localStorage.setItem("magpie.usagePeriod", id); } catch {}
   loadUsage().catch((e) => status(e.message, "err"));
 }
 
@@ -347,13 +365,16 @@ async function readsNote(host) {
 // noCallsIn is what an empty page says of the period it is on
 function noCallsIn(p) {
   if (periodDays(p)) return "No calls on the days picked.";
+  if (periodHours(p) && p !== "last:24h") return periodHours(p) === 1 ? "No calls in the last hour." : "No calls in the last {n} hours.";
   return { today: "No calls today.", "last:24h": "No calls in the last 24 hours.", "7d": "No calls in the last 7 days.", "30d": "No calls in the last 30 days.", all: "No calls yet." }[p] || "No calls yet.";
 }
 
 // openRangeMenu is the app's own menu for picking days (#1492): a few
 // spans a click away, and a month to pick the first day on, then the last.
 // Days after today can't be picked. choose gets the two days, in order.
-function openRangeMenu(anchor, current, choose) {
+// hours is the last N hours the page is on, 0 when it is not; chooseHours
+// gets N from the row at the menu's top.
+function openRangeMenu(anchor, current, hours, choose, chooseHours) {
   closeProtoMenu();
   const today = dayKeyOf(new Date());
   let start = null; // the first day clicked, waiting for the last
@@ -381,6 +402,25 @@ function openRangeMenu(anchor, current, choose) {
     b.onclick = (e) => { e.stopPropagation(); closeProtoMenu(); choose(r.from, r.to); };
     quick.append(b);
   }
+  // the last N hours, up to now: N is kept on this device
+  const lastH = el("label", "rm-times rm-hours");
+  const hin = el("input", "rm-time");
+  let keptH = 0;
+  try { keptH = periodHours("last:" + localStorage.getItem("magpie.usageHours") + "h"); } catch {}
+  Object.assign(hin, { type: "text", inputMode: "numeric", maxLength: 3, placeholder: "24", value: String(hours || keptH || ""), spellcheck: false, autocomplete: "off" });
+  hin.setAttribute("aria-label", t("hours back"));
+  hin.oninput = () => hin.removeAttribute("aria-invalid");
+  hin.onkeydown = (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    e.stopPropagation();
+    const n = periodHours("last:" + hin.value.trim() + "h");
+    if (!n) return hin.setAttribute("aria-invalid", "true");
+    try { localStorage.setItem("magpie.usageHours", String(n)); } catch {}
+    closeProtoMenu();
+    chooseHours(n);
+  };
+  lastH.append(svg("M8 2.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11zM8 5v3.2l2 1.3", 12, 1.4), hin, el("span", "rm-dash", t("hours back")));
   const nav = el("div", "rm-nav");
   const prev = el("button", "rm-step"), next = el("button", "rm-step"), month = el("span", "rm-month");
   prev.type = next.type = "button";
@@ -422,6 +462,7 @@ function openRangeMenu(anchor, current, choose) {
     return true;
   };
   box.append(head, quick, nav, grid, times);
+  if (chooseHours) head.after(lastH);
   const draw = (focusDay) => {
     head.textContent = start ? t("Now the last day") : t("Pick the first day, then the last");
     month.textContent = shown.toLocaleDateString(intlLang(), { year: "numeric", month: "long" });
@@ -774,7 +815,7 @@ function renderUsage() {
   if (empty) {
     stats.classList.add("empty");
     const none = noCallsIn(period);
-    stats.append(el("div", "none", t(none) + " " + t("Calls through the gateway and the calls Claude Code's and Codex's own session files record are counted here, with no provider set up.")));
+    stats.append(el("div", "none", t(none, { n: periodHours(period) }) + " " + t("Calls through the gateway and the calls Claude Code's and Codex's own session files record are counted here, with no provider set up.")));
     readsNote(stats);
     $("#usageNote").textContent = "";
     $("#usageClear").hidden = true;
@@ -3010,7 +3051,7 @@ function renderLedger() {
     wrap.classList.add("none");
     const filtered = ledPurpose || ledDay || ledRoute || ledAgent || ledProvider || ledAccount || ledComputer || ledCallerKey || ledModel || ledVia || ledFailed || ledRetried || ledQuery.trim();
     const none = noCallsIn(period);
-    wrap.replaceChildren(el("div", "led-none", filtered ? t("No requests match these filters.") : t(none)));
+    wrap.replaceChildren(el("div", "led-none", filtered ? t("No requests match these filters.") : t(none, { n: periodHours(period) })));
     if (!filtered) readsNote(wrap.firstChild);
     ledFit();
     ledHScroll();
@@ -4867,7 +4908,7 @@ if (mode === "window" && params.get("view") === "usage") {
   if (tab === "requests" || tab === "usage") usageTab = tab;
   // a total in the menu bar opens the Overview at its period
   const per = params.get("period");
-  if (PERIODS.some(([id]) => id === per)) period = per;
+  if (keptPeriod(per)) period = per;
   quotaFocus = usageTab === "usage" ? (params.get("card") || params.get("provider") || "") : "";
   usagePeek = quotaFocus;
   quotaFocusUntil = performance.now() + 5000;

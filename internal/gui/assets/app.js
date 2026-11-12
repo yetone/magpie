@@ -16522,7 +16522,7 @@ function creditDays(daily, named) {
   // picked range's own (#1492), its last 120 at most
   const range = periodDays(period);
   const last = range ? dayOfKey(range.to) : today;
-  let n = range ? Math.round((last - dayOfKey(range.from)) / 864e5) + 1 : { today: 1, "last:24h": 2, "7d": 7, "30d": 30 }[period];
+  let n = range ? Math.round((last - dayOfKey(range.from)) / 864e5) + 1 : { today: 1, "last:24h": 2, "7d": 7, "30d": 30 }[period] || (/^last:(\d+)h$/.test(period) ? Math.ceil(+period.slice(5, -1) / 24) + 1 : 0);
   if (!n) n = Math.round((today - new Date(since + "T12:00:00")) / 864e5) + 1;
   n = Math.min(120, Math.max(1, n));
   const list = [];
