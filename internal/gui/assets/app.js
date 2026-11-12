@@ -125,7 +125,9 @@ const readTags = new WeakMap();
 // heads, when given, is shown the answer's headers (loadQuotas' X-Magpie-Reading);
 // signal, when given, cancels the request (a read the reader moved on from)
 async function api(path, body, heads, signal) {
-  if (web && path === "open") { window.open(body.url, "_blank", "noopener"); return null; }
+  // a web link is the browser's to open; an app's import link (cindy://)
+  // is the host's, where that app and its database are
+  if (web && path === "open" && /^https?:/i.test(body.url)) { window.open(body.url, "_blank", "noopener"); return null; }
   // a segment may be an agent id, and omp's named profiles are omp#<name>:
   // left raw, the browser reads #work as the fragment and the request
   // reaches the default omp row (#1187). Only # is encoded: ? = & stay a
@@ -2839,8 +2841,8 @@ function importButton(a) {
   b.append(el("span", "chev", svg(OUT, 11, 1.6)));
   b.onclick = (ev) => {
     ev.stopPropagation();
-    if (web) location.href = a.import;
-    else api("open", { url: a.import }).then(() => status(t("Sent to {name}: confirm adding magpie there", a), "ok"), statusErr);
+    // the host's own app, even from a browser on another machine
+    api("open", { url: a.import }).then(() => status(t("Sent to {name}: confirm adding magpie there", a), "ok"), statusErr);
   };
   return b;
 }

@@ -22,6 +22,7 @@ import (
 
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/plugin"
+	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/update"
 )
 
@@ -36,7 +37,7 @@ type webHost struct{ quit func() }
 func (webHost) HidePanel()                       {}
 func (webHost) ShowMain(string)                  {}
 func (h webHost) Quit()                          { h.quit() }
-func (webHost) OpenURL(string) error             { return nil } // the page opens links itself
+func (webHost) OpenURL(u string) error           { return openOnHost(u) }
 func (webHost) Copy(string) bool                 { return false }
 func (webHost) FitPanel(int, Glide)              {}
 func (webHost) TintPanel([4]uint8, int) bool     { return false }
@@ -47,6 +48,18 @@ func (webHost) OpenFolder(path string) error {
 }
 func (webHost) ChooseFolder(string) (string, error) {
 	return "", errors.New("in the browser magpie can't show a folder picker: type the folder's path")
+}
+
+// openOnHost opens an app's import link (cindy://, lody://, ...) on this
+// computer, the one magpie runs on: the apps' databases it reads for "added"
+// are here, so the link must open here and not in the browser that views the
+// page, which may be another machine's (Jealousy_Du on X). A web page's own
+// https links stay the page's to open. Tests stand in for the system.
+var openOnHost = func(u string) error {
+	if strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://") {
+		return nil // the page opens links itself
+	}
+	return proc.OpenBrowser(u)
 }
 
 // Web is a started `magpie web`: its address and the link that signs a
