@@ -5250,6 +5250,10 @@ body .row.agent .ag-prefs .row.pref .who { display: block; }
 .editor .prov-prefs .row.pref { display: grid; grid-template-columns: minmax(min(40%, 9em), 1fr) auto; align-items: start; min-height: 0; padding: 0; gap: 2px 12px; border: 0; }
 .editor .prov-prefs .row.pref[hidden] { display: none; }
 .editor .prov-prefs .row.pref > .who { display: contents; }
+/* so the row holds the line kept out of sight (.who has no box to): held
+   against the dialog it sat under the editor's scroll, and the dialog grew
+   a second scrollbar beside the editor's, the rows 8px narrower in WebKit */
+.editor .prov-prefs .row.pref { position: relative; }
 .editor .prov-prefs .row.pref > .who > * { grid-column: 1 / -1; }
 .editor .prov-prefs .row.pref > .who > .name { grid-column: 1; grid-row: 1; }
 .editor .prov-prefs .row.pref > :not(.who) { grid-column: 2; grid-row: 1; justify-self: end; min-width: 0; margin-left: 0; }

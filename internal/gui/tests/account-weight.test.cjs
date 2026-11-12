@@ -133,6 +133,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // back to Smart hides them
       await page.locator(".editor").getByRole("button", { name: await say(page, lang, "Smart"), exact: true }).first().click();
       assert.equal(await chip("max@example.com").isVisible(), false, `${at}: a weight under Smart`);
+      // Advanced open, as a user may have it
+      { const adv = page.locator(".editor details.advanced"); await adv.waitFor({ state: "attached" }); if (!(await adv.evaluate((d) => d.open))) await adv.locator(":scope > summary").click(); }
+      // open, the editor scrolls and the dialog around it doesn't: the lines
+      // its check-in and warm-up rows keep out of sight were held against
+      // the dialog and grew it a second scrollbar, every row 8px narrower
+      const dialog = await page.evaluate(() => { const d = document.querySelector(".dialog"); return [d.scrollHeight, d.clientHeight]; });
+      assert.ok(dialog[0] <= dialog[1] + 1, `${at}: the dialog scrolls beside the editor (${dialog})`);
       assert.deepEqual(errors, [], at);
       await context.close();
     }
