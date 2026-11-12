@@ -222,6 +222,17 @@ func TestFetchPrivateEntries(t *testing.T) {
 			t.Errorf("%s: %v", ip, !ok)
 		}
 	}
+	// the package's tests share one HOME: the file's own bytes go back
+	// before allowPrivate's Save, which refuses to write over "{not json"
+	raw, err := os.ReadFile(settings.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.WriteFile(settings.Path(), raw, 0o600); err != nil {
+			t.Error(err)
+		}
+	})
 	if err := os.WriteFile(settings.Path(), []byte("{not json"), 0o600); err != nil {
 		t.Fatal(err)
 	}
