@@ -8962,6 +8962,8 @@ It speaks Streamable HTTP only. A client that only speaks stdio mounts it throug
 
 Every search magpie makes shows on the Routing page. When another source searched in place of the first, it says who searched instead.
 
+[Image recognition and generation for any model](https://usemagpie.ai/docs/images): screenshots for models that can't see, and images and videos made from an agent.
+
 ## FAQ
 
 ### Can DeepSeek search the web?
@@ -9168,6 +9170,86 @@ magpie quota alert 80 has the magpie app notify when any window reaches 80% used
 Yes. magpie quota --json and GET http://127.0.0.1:3425/v1/magpie/quotas give the same; magpie's skill magpie-quota teaches an agent to read it and wait for allowance.
 
 Related: [Round robin and failover across accounts, keys and providers](https://usemagpie.ai/docs/routing-groups) and [Use your Claude Pro/Max, ChatGPT Plus/Pro or GitHub Copilot subscription in any coding agent](https://usemagpie.ai/docs/subscriptions). Something fails? See [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/images
+
+# Image recognition and generation for any model
+
+Many models can't see images: DeepSeek, GLM and others. Paste a screenshot in Claude Code or Codex, switch to such a model, and the request is usually turned away. Through magpie, a model that can see describes the image first, and the description goes in the image's place: in the current turn, older turns and tool results alike. So screenshots keep working whichever model you switch to. The other way round, agents can generate images and videos through the Magpie Image tool.
+
+## Image recognition
+
+Pick the model that describes images under Settings › Models › Image recognition:
+
+- **Automatic:.** the default. magpie picks one of your models that can see, one with allowance left first.
+- **A model you pick:.** always that one. If its provider is removed or turned off, the row says so and the automatic choice takes its place.
+- **Off:.** images are no longer described, and a model that can't see turns away a request with one in its latest message.
+
+Each image is described once and the description is cached, so an agent sending the same image again every turn doesn't pay again. A request's images are described at once, up to 4 in parallel. A chip beside the model picks how hard it thinks; unset, it uses the model's lowest level.
+
+A model that can see still gets the image itself, not a description.
+
+## Image recognition MCP server
+
+Image recognition is also an MCP server (Streamable HTTP) with one analyze_image tool, which reads an image with the Image recognition model. The address is on the Image recognition MCP server row; by default:
+
+```
+http://127.0.0.1:3425/mcp/magpie/vision
+```
+
+1. **Add the address to an agent as an MCP server.** Cursor, Claude Desktop or any agent that speaks Streamable HTTP.
+2. **Call analyze_image.** image is an http(s) URL, a data URL, or an absolute path to a file on this computer (`~/` and `file://` taken, up to 20 MB). An optional prompt asks a question about the image; without one, the image is described.
+
+A file path works only for a caller on this computer. From another computer (with magpie shared on the local network), send a gateway key as `Authorization: Bearer <key>` and the image as a URL or data URL. With Image recognition off, or no model that sees, the tool answers with an error that says where to pick one.
+
+## Generating images and videos
+
+Magpie Image is magpie's own MCP tool (`magpie mcp image`, stdio). Give it to an agent from the Library, or with Give agents Magpie Image… under Settings › Models › Image generation. It has three tools:
+
+- **generate_image:.** an image from a prompt, or an edit or combination of reference_images. Optional size (1024x1024 or 16:9, say), n (1 to 4), quality and background.
+- **generate_video:.** a short video of 1 to 15 seconds from a prompt, optionally from an image as its first frame, or with reference images.
+- **generation_result:.** waits for an image or video still being made, by the id it gave, and says where it was saved.
+
+Images go in the project's `generated-images` folder and videos in `generated-videos` unless a path is given, and an existing file is never written over. Images are drawn with the model picked under Image generation (with Automatic, magpie picks it), videos with the first video model magpie has.
+
+Many agents wait only 30 to 60 seconds on a tool call, and an image often takes a minute or more. So a call waits at most 20 seconds: if the job isn't done, it answers with an id, and the job goes on and saves what it makes.
+
+## Image API
+
+The gateway also serves OpenAI's image endpoints, translated to the picked model's own image API:
+
+```
+/v1/images/generations
+/v1/images/edits
+```
+
+magpie handles the differences between OpenRouter's, Volcengine Ark's and other providers' endpoints. A ChatGPT account's GPT Image, a Grok subscription's Grok Imagine and a WorkBuddy plan's image models aren't held back by an account's own list of models. A name that points to a routing group tries its members in the group's order, moving on when one fails.
+
+## Image generation timeout
+
+Settings › Models › Image generation timeout: how long a provider is given to draw an image and send it, 1 to 60 minutes, 5 by default. A slow image endpoint may need longer.
+
+## FAQ
+
+### Can DeepSeek see images?
+
+DeepSeek's models can't see images by themselves. Through magpie, the Image recognition model describes each image first and the description goes to DeepSeek in its place, so screenshots in Claude Code still work.
+
+### Does image recognition cost extra?
+
+Describing an image uses the Image recognition model's allowance or price. Each image is described once and the result is cached.
+
+### How do I make Claude Code generate images?
+
+Give Claude Code Magpie Image from the Library. It then has a generate_image tool that draws with the model under Settings › Models › Image generation and saves to the project's generated-images folder.
+
+### Can Cursor use magpie's image recognition?
+
+Yes. Add /mcp/magpie/vision to Cursor as an MCP server (Streamable HTTP) and it has the analyze_image tool.
+
+Related: [Web search for any model](https://usemagpie.ai/docs/web-search), [DeepSeek in Claude Code, Codex, Gemini CLI and OpenCode](https://usemagpie.ai/docs/deepseek). Hit an error? See [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 

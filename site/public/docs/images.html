@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image input for DeepSeek, GLM and models that can't see, plus image and video generation in any agent · magpie</title>
+<meta name="description" content="magpie lets models that can't see images work with screenshots: an Image recognition model describes each image once and the description goes in its place. Picking that model, Automatic and Off, the analyze_image MCP server, and the Magpie Image tool that lets Claude Code, Codex and other agents generate images and videos into the project.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/images">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/images">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/images">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/images">
+<link rel="canonical" href="https://usemagpie.ai/docs/images">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="Image recognition and generation for any model">
+<meta property="og:description" content="magpie lets models that can't see images work with screenshots: an Image recognition model describes each image once and the description goes in its place. Picking that model, Automatic and Off, the analyze_image MCP server, and the Magpie Image tool that lets Claude Code, Codex and other agents generate images and videos into the project.">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/images">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "Image recognition and generation for any model",
+   "description": "magpie lets models that can't see images work with screenshots: an Image recognition model describes each image once and the description goes in its place. Picking that model, Automatic and Off, the analyze_image MCP server, and the Magpie Image tool that lets Claude Code, Codex and other agents generate images and videos into the project.",
+   "inLanguage": "en",
+   "url": "https://usemagpie.ai/docs/images",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "Can DeepSeek see images?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "DeepSeek's models can't see images by themselves. Through magpie, the Image recognition model describes each image first and the description goes to DeepSeek in its place, so screenshots in Claude Code still work."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Does image recognition cost extra?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Describing an image uses the Image recognition model's allowance or price. Each image is described once and the result is cached."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "How do I make Claude Code generate images?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Give Claude Code Magpie Image from the Library. It then has a generate_image tool that draws with the model under Settings › Models › Image generation and saves to the project's generated-images folder."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Can Cursor use magpie's image recognition?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. Add /mcp/magpie/vision to Cursor as an MCP server (Streamable HTTP) and it has the analyze_image tool."
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "Docs",
+     "item": "https://usemagpie.ai/docs/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "Image recognition and generation for any model",
+     "item": "https://usemagpie.ai/docs/images"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>Docs</small></a>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/start">Get started</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a class="toc-only" href="/docs/remote">Remote magpie</a>
+    <a class="toc-only" href="/docs/docker">Docker</a>
+    <a class="toc-only" href="/docs/privacy">Privacy</a>
+    <a class="toc-only" href="/docs/masking">Privacy masking</a>
+    <a class="toc-only" href="/docs/mcp-router">MCP router</a>
+    <a class="toc-only" href="/docs/library">Library</a>
+    <a class="toc-only" href="/docs/claude-code-models">Models in Claude Code</a>
+    <a class="toc-only" href="/docs/codex-models">Models in Codex</a>
+    <a class="toc-only" href="/docs/gemini-cli-models">Models in Gemini CLI</a>
+    <a class="toc-only" href="/docs/subscriptions">Subscriptions in any agent</a>
+    <a class="toc-only" href="/docs/local-models">Local models</a>
+    <a class="toc-only" href="/docs/opencode-models">Models in OpenCode</a>
+    <a class="toc-only" href="/docs/alternatives">magpie vs CC Switch vs CCR</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="Language" title="Language" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/images" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/images" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/images" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">Download</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>Images</p>
+    <a href="#overview">How it works</a>
+    <a href="#vision">Image recognition</a>
+    <a href="#mcp">Image recognition MCP server</a>
+    <a href="#draw">Generating images and videos</a>
+    <a href="#api">Image API</a>
+    <a href="#timeout">Image generation timeout</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">Docs · Guide</p>
+    <h1>Image recognition and generation for any model</h1>
+    <p class="lede">Many models can't see images: DeepSeek, GLM and others. Paste a screenshot in Claude Code or Codex, switch to such a model, and the request is usually turned away. Through magpie, a model that can see describes the image first, and the description goes in the image's place: in the current turn, older turns and tool results alike. So screenshots keep working whichever model you switch to. The other way round, agents can generate images and videos through the Magpie Image tool.</p>
+    <h2 id="vision"><a class="anchor" href="#vision">Image recognition</a></h2>
+    <p>Pick the model that describes images under <span class="ui">Settings</span> › <span class="ui">Models</span> › <span class="ui">Image recognition</span>:</p>
+    <ul><li><b><span class="ui">Automatic</span>:</b> the default. magpie picks one of your models that can see, one with allowance left first.</li><li><b>A model you pick:</b> always that one. If its provider is removed or turned off, the row says so and the automatic choice takes its place.</li><li><b>Off:</b> images are no longer described, and a model that can't see turns away a request with one in its latest message.</li></ul>
+    <p>Each image is described once and the description is cached, so an agent sending the same image again every turn doesn't pay again. A request's images are described at once, up to 4 in parallel. A chip beside the model picks how hard it thinks; unset, it uses the model's lowest level.</p>
+    <p>A model that can see still gets the image itself, not a description.</p>
+    <h2 id="mcp"><a class="anchor" href="#mcp">Image recognition MCP server</a></h2>
+    <p>Image recognition is also an MCP server (Streamable HTTP) with one analyze_image tool, which reads an image with the Image recognition model. The address is on the <span class="ui">Image recognition MCP server</span> row; by default:</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="img-mcp">Copy</button><pre id="img-mcp">http://127.0.0.1:3425/mcp/magpie/vision</pre></div>
+    <ol class="steps">
+      <li><b>Add the address to an agent as an MCP server</b>Cursor, Claude Desktop or any agent that speaks Streamable HTTP.</li>
+      <li><b>Call analyze_image</b>image is an http(s) URL, a data URL, or an absolute path to a file on this computer (<code>~/</code> and <code>file://</code> taken, up to 20 MB). An optional prompt asks a question about the image; without one, the image is described.</li>
+    </ol>
+    <p>A file path works only for a caller on this computer. From another computer (with magpie shared on the local network), send a gateway key as <code>Authorization: Bearer &lt;key&gt;</code> and the image as a URL or data URL. With Image recognition off, or no model that sees, the tool answers with an error that says where to pick one.</p>
+    <h2 id="draw"><a class="anchor" href="#draw">Generating images and videos</a></h2>
+    <p>Magpie Image is magpie's own MCP tool (<code>magpie mcp image</code>, stdio). Give it to an agent from the <span class="ui">Library</span>, or with <span class="ui">Give agents Magpie Image…</span> under <span class="ui">Settings</span> › <span class="ui">Models</span> › <span class="ui">Image generation</span>. It has three tools:</p>
+    <ul><li><b>generate_image:</b> an image from a prompt, or an edit or combination of reference_images. Optional size (1024x1024 or 16:9, say), n (1 to 4), quality and background.</li><li><b>generate_video:</b> a short video of 1 to 15 seconds from a prompt, optionally from an image as its first frame, or with reference images.</li><li><b>generation_result:</b> waits for an image or video still being made, by the id it gave, and says where it was saved.</li></ul>
+    <p>Images go in the project's <code>generated-images</code> folder and videos in <code>generated-videos</code> unless a path is given, and an existing file is never written over. Images are drawn with the model picked under <span class="ui">Image generation</span> (with <span class="ui">Automatic</span>, magpie picks it), videos with the first video model magpie has.</p>
+    <p>Many agents wait only 30 to 60 seconds on a tool call, and an image often takes a minute or more. So a call waits at most 20 seconds: if the job isn't done, it answers with an id, and the job goes on and saves what it makes.</p>
+    <h2 id="api"><a class="anchor" href="#api">Image API</a></h2>
+    <p>The gateway also serves OpenAI's image endpoints, translated to the picked model's own image API:</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="img-api">Copy</button><pre id="img-api">/v1/images/generations
+/v1/images/edits</pre></div>
+    <p>magpie handles the differences between OpenRouter's, Volcengine Ark's and other providers' endpoints. A ChatGPT account's GPT Image, a Grok subscription's Grok Imagine and a WorkBuddy plan's image models aren't held back by an account's own list of models. A name that points to a routing group tries its members in the group's order, moving on when one fails.</p>
+    <h2 id="timeout"><a class="anchor" href="#timeout">Image generation timeout</a></h2>
+    <p><span class="ui">Settings</span> › <span class="ui">Models</span> › <span class="ui">Image generation timeout</span>: how long a provider is given to draw an image and send it, 1 to 60 minutes, 5 by default. A slow image endpoint may need longer.</p>
+
+    <h2 id="faq"><a class="anchor" href="#faq">FAQ</a></h2>
+    <h3>Can DeepSeek see images?</h3>
+    <p>DeepSeek's models can't see images by themselves. Through magpie, the Image recognition model describes each image first and the description goes to DeepSeek in its place, so screenshots in Claude Code still work.</p>
+    <h3>Does image recognition cost extra?</h3>
+    <p>Describing an image uses the Image recognition model's allowance or price. Each image is described once and the result is cached.</p>
+    <h3>How do I make Claude Code generate images?</h3>
+    <p>Give Claude Code Magpie Image from the Library. It then has a generate_image tool that draws with the model under Settings › Models › Image generation and saves to the project's generated-images folder.</p>
+    <h3>Can Cursor use magpie's image recognition?</h3>
+    <p>Yes. Add /mcp/magpie/vision to Cursor as an MCP server (Streamable HTTP) and it has the analyze_image tool.</p>
+
+    <p style="margin-top:48px">Related: <a href="/docs/web-search">Web search for any model</a>, <a href="/docs/deepseek">DeepSeek in Claude Code, Codex, Gemini CLI and OpenCode</a>. Hit an error? See <a href="/docs/troubleshooting">Fixing common errors: 401, 429, 502, 504 and more</a>, or ask on <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>.</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a href="/docs/remote">Remote magpie</a>
+    <a href="/docs/docker">Docker</a>
+    <a href="/docs/privacy">Privacy</a>
+    <a href="/docs/masking">Privacy masking</a>
+    <a href="/docs/mcp-router">MCP router</a>
+    <a href="/docs/library">Library</a>
+    <a href="/docs/claude-code-models">Models in Claude Code</a>
+    <a href="/docs/codex-models">Models in Codex</a>
+    <a href="/docs/gemini-cli-models">Models in Gemini CLI</a>
+    <a href="/docs/subscriptions">Subscriptions in any agent</a>
+    <a href="/docs/local-models">Local models</a>
+    <a href="/docs/opencode-models">Models in OpenCode</a>
+    <a href="/docs/alternatives">magpie vs CC Switch vs CCR</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/contributors">Contributors</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "Copied"; setTimeout(() => (b.textContent = "Copy"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

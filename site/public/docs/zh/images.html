@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>让 DeepSeek、GLM 等不能识图的模型看图，并在 Agent 里生成图片和视频 · magpie</title>
+<meta name="description" content="通过 magpie，不能识图的模型也能处理截图和图片：识图模型先把每张图描述一遍，描述代替图片交给模型。识图模型的选择、自动与关闭、识图 MCP 服务器 analyze_image，以及用 Magpie Image 工具让 Claude Code、Codex 等 Agent 生成图片和视频并保存到项目里。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/images">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/images">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/images">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/images">
+<link rel="canonical" href="https://usemagpie.ai/docs/zh/images">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="让任意模型识图，并在 Agent 里生成图片">
+<meta property="og:description" content="通过 magpie，不能识图的模型也能处理截图和图片：识图模型先把每张图描述一遍，描述代替图片交给模型。识图模型的选择、自动与关闭、识图 MCP 服务器 analyze_image，以及用 Magpie Image 工具让 Claude Code、Codex 等 Agent 生成图片和视频并保存到项目里。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/zh/images">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "让任意模型识图，并在 Agent 里生成图片",
+   "description": "通过 magpie，不能识图的模型也能处理截图和图片：识图模型先把每张图描述一遍，描述代替图片交给模型。识图模型的选择、自动与关闭、识图 MCP 服务器 analyze_image，以及用 Magpie Image 工具让 Claude Code、Codex 等 Agent 生成图片和视频并保存到项目里。",
+   "inLanguage": "zh-CN",
+   "url": "https://usemagpie.ai/docs/zh/images",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "DeepSeek 能看图吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "DeepSeek 的模型本身不能看图。通过 magpie 用它时，识图模型会先描述图片，描述代替图片交给 DeepSeek，所以 Claude Code 里的截图照样能用。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "识图要另外花钱吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "描述图片用的是识图模型的额度或费用。每张图只描述一次，结果会缓存。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "怎么让 Claude Code 生成图片？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "在资源库里把 Magpie Image 添加给 Claude Code，它就有 generate_image 工具，用 设置 › 模型 › 生图模型 里的模型画图，图片保存在项目的 generated-images 文件夹。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Cursor 能用 magpie 识图吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。把 /mcp/magpie/vision 作为 MCP 服务器（Streamable HTTP）添加到 Cursor，就有 analyze_image 工具。"
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/zh/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "文档",
+     "item": "https://usemagpie.ai/docs/zh/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "让任意模型识图，并在 Agent 里生成图片",
+     "item": "https://usemagpie.ai/docs/zh/images"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/zh/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>文档</small></a>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/start">快速上手</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a class="toc-only" href="/docs/zh/remote">远程 magpie</a>
+    <a class="toc-only" href="/docs/zh/docker">Docker</a>
+    <a class="toc-only" href="/docs/zh/privacy">隐私</a>
+    <a class="toc-only" href="/docs/zh/masking">本地脱敏</a>
+    <a class="toc-only" href="/docs/zh/mcp-router">MCP 路由</a>
+    <a class="toc-only" href="/docs/zh/library">资源库</a>
+    <a class="toc-only" href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a class="toc-only" href="/docs/zh/local-models">本地模型</a>
+    <a class="toc-only" href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="语言" title="语言" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/images" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/images" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/images" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">下载</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>Images</p>
+    <a href="#overview">工作原理</a>
+    <a href="#vision">识图模型</a>
+    <a href="#mcp">识图 MCP 服务器</a>
+    <a href="#draw">生成图片和视频</a>
+    <a href="#api">图片 API</a>
+    <a href="#timeout">生图超时</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">文档 · 指南</p>
+    <h1>让任意模型识图，并在 Agent 里生成图片</h1>
+    <p class="lede">DeepSeek、GLM 等很多模型不能看图。在 Claude Code 或 Codex 里粘贴截图后，换到这样的模型，请求通常会被拒绝。通过 magpie 用它们时，magpie 会让一个能看图的模型先把图片描述出来，再把描述放在图片的位置交给模型：当前这一轮、之前的轮次和工具结果里的图片都一样处理。所以换成任何模型，截图照样能用。反过来，Agent 还能通过 Magpie Image 工具生成图片和视频。</p>
+    <h2 id="vision"><a class="anchor" href="#vision">识图模型</a></h2>
+    <p>在 <span class="ui">设置</span> › <span class="ui">模型</span> › <span class="ui">识图模型</span> 里选择由哪个模型描述图片：</p>
+    <ul><li><b><span class="ui">自动</span>：</b>默认值，由 magpie 从你已配置的、能看图的模型里挑一个，优先挑还有额度的。</li><li><b>选一个模型：</b>固定用它。它所在的供应商被删除或关闭后，这一行会提示，并由自动挑选的模型代替。</li><li><b>关闭：</b>不再描述图片，不能看图的模型收到最新一条消息带图的请求时会拒绝。</li></ul>
+    <p>每张图只描述一次，描述会被缓存，Agent 每轮重发同一张图时不会重复花钱。一个请求里的多张图同时描述，最多 4 张并行。模型旁边可以选思考强度，不选时用该模型最低的一档。</p>
+    <p>能看图的模型收到的仍是原图，不经过描述。</p>
+    <h2 id="mcp"><a class="anchor" href="#mcp">识图 MCP 服务器</a></h2>
+    <p>识图也是一个 MCP 服务器（Streamable HTTP），只有一个 analyze_image 工具，用识图模型读图。地址在 <span class="ui">识图 MCP 服务器</span> 一行，默认是：</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="img-mcp">复制</button><pre id="img-mcp">http://127.0.0.1:3425/mcp/magpie/vision</pre></div>
+    <ol class="steps">
+      <li><b>把地址作为 MCP 服务器添加到 Agent</b>Cursor、Claude Desktop 或任何支持 Streamable HTTP 的 Agent 都行。</li>
+      <li><b>调用 analyze_image</b>image 可以是 http(s) URL、data URL，或本机文件的绝对路径（支持 <code>~/</code> 和 <code>file://</code>，最大 20 MB）。可选的 prompt 用来就图片提问；不给时就描述图片。</li>
+    </ol>
+    <p>本机文件路径只对本机的调用有效。从其他电脑访问时（magpie 开着局域网共享），以 <code>Authorization: Bearer &lt;key&gt;</code> 发送网关密钥，图片用 URL 或 data URL。识图模型关闭或没有能看图的模型时，工具会返回错误，说明去哪里选。</p>
+    <h2 id="draw"><a class="anchor" href="#draw">生成图片和视频</a></h2>
+    <p>Magpie Image 是 magpie 自带的 MCP 工具（<code>magpie mcp image</code>，stdio），在 <span class="ui">资源库</span> 里添加给 Agent，也可以在 <span class="ui">设置</span> › <span class="ui">模型</span> › <span class="ui">生图模型</span> 里点 <span class="ui">把 Magpie Image 添加给 Agent…</span>。它有三个工具：</p>
+    <ul><li><b>generate_image：</b>按提示词生成图片，或用 reference_images 编辑、合成图片。可选 size（如 1024x1024 或 16:9）、n（1 到 4 张）、quality、background。</li><li><b>generate_video：</b>按提示词生成 1 到 15 秒的短视频，可以给一张图作为第一帧，或给参考图。</li><li><b>generation_result：</b>图片或视频还没做完时，用返回的 id 等它完成，拿到保存位置。</li></ul>
+    <p>图片默认保存在项目的 <code>generated-images</code> 文件夹，视频在 <code>generated-videos</code>，也可以用 path 指定，已有的文件不会被覆盖。生图用 <span class="ui">生图模型</span> 里选的模型（<span class="ui">自动</span> 时由 magpie 挑），视频用 magpie 找到的第一个视频模型。</p>
+    <p>很多 Agent 的工具调用只等 30 到 60 秒，生图常常要一分钟以上。所以每次调用最多等 20 秒：没做完就先返回 id，任务在后台继续，做完照样保存。</p>
+    <h2 id="api"><a class="anchor" href="#api">图片 API</a></h2>
+    <p>网关本身也提供 OpenAI 格式的图片接口，会转换成所选模型自己的图片 API：</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="img-api">复制</button><pre id="img-api">/v1/images/generations
+/v1/images/edits</pre></div>
+    <p>OpenRouter、火山方舟等供应商的不同接口由 magpie 处理。ChatGPT 账号的 GPT Image、Grok 订阅的 Grok Imagine 和 WorkBuddy 计划的图片模型，不受账号模型列表的限制。名称指向路由分组时，按分组的顺序逐个尝试，一个失败就换下一个。</p>
+    <h2 id="timeout"><a class="anchor" href="#timeout">生图超时</a></h2>
+    <p><span class="ui">设置</span> › <span class="ui">模型</span> › <span class="ui">生图超时</span>：给供应商画图并返回的时间，1 到 60 分钟，默认 5 分钟。图片接口很慢时可以调长。</p>
+
+    <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
+    <h3>DeepSeek 能看图吗？</h3>
+    <p>DeepSeek 的模型本身不能看图。通过 magpie 用它时，识图模型会先描述图片，描述代替图片交给 DeepSeek，所以 Claude Code 里的截图照样能用。</p>
+    <h3>识图要另外花钱吗？</h3>
+    <p>描述图片用的是识图模型的额度或费用。每张图只描述一次，结果会缓存。</p>
+    <h3>怎么让 Claude Code 生成图片？</h3>
+    <p>在资源库里把 Magpie Image 添加给 Claude Code，它就有 generate_image 工具，用 设置 › 模型 › 生图模型 里的模型画图，图片保存在项目的 generated-images 文件夹。</p>
+    <h3>Cursor 能用 magpie 识图吗？</h3>
+    <p>能。把 /mcp/magpie/vision 作为 MCP 服务器（Streamable HTTP）添加到 Cursor，就有 analyze_image 工具。</p>
+
+    <p style="margin-top:48px">相关页面：<a href="/docs/zh/web-search">让任意模型联网搜索</a>、<a href="/docs/zh/deepseek">DeepSeek 接入 Claude Code、Codex、Gemini CLI 和 OpenCode</a>。遇到报错？见 <a href="/docs/zh/troubleshooting">常见错误排查：401、429、502、504 等</a>，或到 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 提问。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a href="/docs/zh/remote">远程 magpie</a>
+    <a href="/docs/zh/docker">Docker</a>
+    <a href="/docs/zh/privacy">隐私</a>
+    <a href="/docs/zh/masking">本地脱敏</a>
+    <a href="/docs/zh/mcp-router">MCP 路由</a>
+    <a href="/docs/zh/library">资源库</a>
+    <a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a href="/docs/zh/local-models">本地模型</a>
+    <a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/zh/contributors">贡献墙</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "已复制"; setTimeout(() => (b.textContent = "复制"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

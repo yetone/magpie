@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DeepSeek・GLM など画像を読めないモデルに画像を渡し、エージェントで画像と動画を生成する · magpie</title>
+<meta name="description" content="magpie なら画像を読めないモデルでもスクリーンショットを扱えます。画像認識モデルが各画像を一度説明し、その説明を画像の代わりに渡します。モデルの選び方、自動とオフ、analyze_image の MCP サーバー、Claude Code や Codex などのエージェントが画像と動画をプロジェクトに生成する Magpie Image ツール。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/images">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/images">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/images">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/images">
+<link rel="canonical" href="https://usemagpie.ai/docs/ja/images">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="どのモデルでも画像認識と画像生成">
+<meta property="og:description" content="magpie なら画像を読めないモデルでもスクリーンショットを扱えます。画像認識モデルが各画像を一度説明し、その説明を画像の代わりに渡します。モデルの選び方、自動とオフ、analyze_image の MCP サーバー、Claude Code や Codex などのエージェントが画像と動画をプロジェクトに生成する Magpie Image ツール。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/ja/images">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "どのモデルでも画像認識と画像生成",
+   "description": "magpie なら画像を読めないモデルでもスクリーンショットを扱えます。画像認識モデルが各画像を一度説明し、その説明を画像の代わりに渡します。モデルの選び方、自動とオフ、analyze_image の MCP サーバー、Claude Code や Codex などのエージェントが画像と動画をプロジェクトに生成する Magpie Image ツール。",
+   "inLanguage": "ja",
+   "url": "https://usemagpie.ai/docs/ja/images",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "DeepSeek は画像を読めますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "DeepSeek のモデル自体は画像を読めません。magpie を通すと、画像認識モデルがまず画像を説明し、その説明が画像の代わりに DeepSeek に渡るので、Claude Code のスクリーンショットもそのまま使えます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "画像認識に追加の料金はかかりますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "画像の説明には画像認識モデルの枠または料金を使います。各画像の説明は一度だけで、結果はキャッシュされます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Claude Code に画像を生成させるには？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "ライブラリから Claude Code に Magpie Image を追加します。generate_image ツールが使えるようになり、設定 › モデル › 画像生成 のモデルで描いて、プロジェクトの generated-images フォルダーに保存します。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Cursor で magpie の画像認識を使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。/mcp/magpie/vision を MCP サーバー（Streamable HTTP）として Cursor に追加すると、analyze_image ツールが使えます。"
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/ja/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "ドキュメント",
+     "item": "https://usemagpie.ai/docs/ja/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "どのモデルでも画像認識と画像生成",
+     "item": "https://usemagpie.ai/docs/ja/images"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/ja/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>ドキュメント</small></a>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/start">はじめに</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a class="toc-only" href="/docs/ja/remote">リモート magpie</a>
+    <a class="toc-only" href="/docs/ja/docker">Docker</a>
+    <a class="toc-only" href="/docs/ja/privacy">プライバシー</a>
+    <a class="toc-only" href="/docs/ja/masking">プライバシーマスキング</a>
+    <a class="toc-only" href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a class="toc-only" href="/docs/ja/library">ライブラリ</a>
+    <a class="toc-only" href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a class="toc-only" href="/docs/ja/local-models">ローカルモデル</a>
+    <a class="toc-only" href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="言語" title="言語" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/images" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/images" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/images" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="Discord の magpie" title="Discord に参加"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="GitHub の magpie" title="GitHub のソースコード"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">ダウンロード</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>Images</p>
+    <a href="#overview">仕組み</a>
+    <a href="#vision">画像認識</a>
+    <a href="#mcp">画像認識 MCP サーバー</a>
+    <a href="#draw">画像と動画の生成</a>
+    <a href="#api">画像 API</a>
+    <a href="#timeout">画像生成のタイムアウト</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">ドキュメント · ガイド</p>
+    <h1>どのモデルでも画像認識と画像生成</h1>
+    <p class="lede">DeepSeek や GLM など、画像を読めないモデルは多くあります。Claude Code や Codex にスクリーンショットを貼ってからそうしたモデルに切り替えると、たいていリクエストが断られます。magpie を通すと、画像を読めるモデルがまず画像を説明し、その説明を画像の位置に入れて渡します。今のターン、前のターン、ツールの結果の画像も同じです。どのモデルに切り替えてもスクリーンショットはそのまま使えます。逆に、エージェントは Magpie Image ツールで画像や動画を生成することもできます。</p>
+    <h2 id="vision"><a class="anchor" href="#vision">画像認識</a></h2>
+    <p>画像を説明するモデルは <span class="ui">設定</span> › <span class="ui">モデル</span> › <span class="ui">画像認識</span> で選びます。</p>
+    <ul><li><b><span class="ui">自動</span>：</b>既定値です。設定済みの、画像を読めるモデルから magpie が選びます。枠が残っているものが優先です。</li><li><b>モデルを選ぶ：</b>常にそのモデルを使います。そのプロバイダーが削除またはオフになると、この行にそう表示され、自動の選択が代わりに使われます。</li><li><b>オフ：</b>画像を説明しません。画像を読めないモデルは、最新のメッセージに画像があるリクエストを断ります。</li></ul>
+    <p>各画像の説明は一度だけで、キャッシュされます。エージェントが毎ターン同じ画像を送り直しても、料金は二重にかかりません。1 つのリクエストの画像は同時に説明され、並列は最大 4 枚です。モデルの横で思考の強さを選べます。選ばない場合はそのモデルの最も低い段階です。</p>
+    <p>画像を読めるモデルには、説明ではなく画像そのものが渡ります。</p>
+    <h2 id="mcp"><a class="anchor" href="#mcp">画像認識 MCP サーバー</a></h2>
+    <p>画像認識は MCP サーバー（Streamable HTTP）としても使えます。ツールは analyze_image の 1 つで、画像認識モデルで画像を読みます。アドレスは <span class="ui">画像認識 MCP サーバー</span> の行にあり、既定では次のとおりです。</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="img-mcp">コピー</button><pre id="img-mcp">http://127.0.0.1:3425/mcp/magpie/vision</pre></div>
+    <ol class="steps">
+      <li><b>アドレスを MCP サーバーとしてエージェントに追加</b>Cursor、Claude Desktop など、Streamable HTTP に対応したエージェントならどれでも使えます。</li>
+      <li><b>analyze_image を呼ぶ</b>image には http(s) URL、data URL、またはこのコンピューターのファイルの絶対パス（<code>~/</code> と <code>file://</code> も可、最大 20 MB）を渡します。省略できる prompt で画像について質問でき、なければ画像を説明します。</li>
+    </ol>
+    <p>ファイルのパスはこのコンピューターからの呼び出しでのみ使えます。別のコンピューターから使うとき（magpie をローカルネットワークで共有中）は、<code>Authorization: Bearer &lt;key&gt;</code> でゲートウェイキーを送り、画像は URL か data URL で渡します。画像認識がオフ、または画像を読めるモデルがない場合、ツールはどこで選ぶかを示すエラーを返します。</p>
+    <h2 id="draw"><a class="anchor" href="#draw">画像と動画の生成</a></h2>
+    <p>Magpie Image は magpie 自身の MCP ツール（<code>magpie mcp image</code>、stdio）です。<span class="ui">ライブラリ</span> からエージェントに追加するか、<span class="ui">設定</span> › <span class="ui">モデル</span> › <span class="ui">画像生成</span> の <span class="ui">エージェントに Magpie Image を付与…</span> を使います。ツールは 3 つです。</p>
+    <ul><li><b>generate_image：</b>プロンプトから画像を生成するか、reference_images を編集・合成します。size（1024x1024 や 16:9 など）、n（1〜4 枚）、quality、background を指定できます。</li><li><b>generate_video：</b>プロンプトから 1〜15 秒の短い動画を生成します。最初のフレームにする画像や参考画像も渡せます。</li><li><b>generation_result：</b>まだ作成中の画像や動画を、返された id で待ち、保存先を返します。</li></ul>
+    <p>path を指定しなければ、画像はプロジェクトの <code>generated-images</code> フォルダー、動画は <code>generated-videos</code> に保存され、既存のファイルは上書きされません。画像は <span class="ui">画像生成</span> で選んだモデル（<span class="ui">自動</span> なら magpie が選ぶ）で、動画は magpie が見つけた最初の動画モデルで作られます。</p>
+    <p>多くのエージェントはツール呼び出しを 30〜60 秒しか待ちませんが、画像生成には 1 分以上かかることがよくあります。そのため 1 回の呼び出しは最大 20 秒だけ待ち、終わっていなければ id を返します。ジョブはその後も続き、できたものを保存します。</p>
+    <h2 id="api"><a class="anchor" href="#api">画像 API</a></h2>
+    <p>ゲートウェイ自体も OpenAI 形式の画像エンドポイントを提供し、選んだモデルの画像 API に変換します。</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="img-api">コピー</button><pre id="img-api">/v1/images/generations
+/v1/images/edits</pre></div>
+    <p>OpenRouter や Volcengine Ark など、プロバイダーごとのエンドポイントの違いは magpie が吸収します。ChatGPT アカウントの GPT Image、Grok サブスクリプションの Grok Imagine、WorkBuddy プランの画像モデルは、アカウント側のモデル一覧で制限されません。ルーティンググループを指す名前なら、グループの順にメンバーを試し、失敗すると次に移ります。</p>
+    <h2 id="timeout"><a class="anchor" href="#timeout">画像生成のタイムアウト</a></h2>
+    <p><span class="ui">設定</span> › <span class="ui">モデル</span> › <span class="ui">画像生成のタイムアウト</span>：プロバイダーが画像を描いて返すまでの時間です。1〜60 分、既定は 5 分。遅い画像エンドポイントでは長くしてください。</p>
+
+    <h2 id="faq"><a class="anchor" href="#faq">よくある質問</a></h2>
+    <h3>DeepSeek は画像を読めますか？</h3>
+    <p>DeepSeek のモデル自体は画像を読めません。magpie を通すと、画像認識モデルがまず画像を説明し、その説明が画像の代わりに DeepSeek に渡るので、Claude Code のスクリーンショットもそのまま使えます。</p>
+    <h3>画像認識に追加の料金はかかりますか？</h3>
+    <p>画像の説明には画像認識モデルの枠または料金を使います。各画像の説明は一度だけで、結果はキャッシュされます。</p>
+    <h3>Claude Code に画像を生成させるには？</h3>
+    <p>ライブラリから Claude Code に Magpie Image を追加します。generate_image ツールが使えるようになり、設定 › モデル › 画像生成 のモデルで描いて、プロジェクトの generated-images フォルダーに保存します。</p>
+    <h3>Cursor で magpie の画像認識を使えますか？</h3>
+    <p>使えます。/mcp/magpie/vision を MCP サーバー（Streamable HTTP）として Cursor に追加すると、analyze_image ツールが使えます。</p>
+
+    <p style="margin-top:48px">関連ページ：<a href="/docs/ja/web-search">どのモデルでもウェブ検索</a>、<a href="/docs/ja/deepseek">DeepSeek を Claude Code・Codex・Gemini CLI・OpenCode で使う</a>。エラーが出たら <a href="/docs/ja/troubleshooting">よくあるエラーの直し方：401・429・502・504 など</a> を見るか、<a href="https://discord.gg/vGSnD3ZKQF">Discord</a> で質問してください。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a href="/docs/ja/remote">リモート magpie</a>
+    <a href="/docs/ja/docker">Docker</a>
+    <a href="/docs/ja/privacy">プライバシー</a>
+    <a href="/docs/ja/masking">プライバシーマスキング</a>
+    <a href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a href="/docs/ja/library">ライブラリ</a>
+    <a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a href="/docs/ja/local-models">ローカルモデル</a>
+    <a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/ja/contributors">コントリビューター</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "コピーしました"; setTimeout(() => (b.textContent = "コピー"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>
