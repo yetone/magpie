@@ -8510,7 +8510,84 @@ Yes. magpie turns tool calling on for every model, and Copilot's agent mode list
 
 Yes. They run the same Copilot language server and read the same byok.json.
 
-More agents on the same models: [VS Code on any model](https://usemagpie.ai/docs/vscode), [Copilot CLI on any model](https://usemagpie.ai/docs/copilot-cli) and [OpenMausBot on any model](https://usemagpie.ai/docs/openmausbot). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [VS Code on any model](https://usemagpie.ai/docs/vscode), [Copilot CLI on any model](https://usemagpie.ai/docs/copilot-cli), [OpenMausBot on any model](https://usemagpie.ai/docs/openmausbot) and [Kiro Crew on any model](https://usemagpie.ai/docs/kirocrew). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/kirocrew
+
+# Kiro Crew on any model
+
+Kiro Crew (kirodotdev/KiroCrew) is a persistent agent: the KiroCrew.app desktop app, the kirocrew CLI, its web dashboard and the Gateway they share. It runs each session on a harness, an agent it starts and talks to over ACP. Kiro Crew has no model provider of its own to point at magpie; its models are its harness's. So what magpie sets is which harness it runs: an agent already connected to magpie, whose own config sends its requests to the gateway, so DeepSeek, GLM, Kimi, Qwen, Claude, a ChatGPT subscription and every other model in magpie are there.
+
+## Set up Kiro Crew
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Set Kiro Crew's provider to magpie on the Agents page.** When Kiro Crew is set to a harness magpie wires, magpie keeps it, and connects that agent to magpie too if it isn't yet. On a harness magpie doesn't wire (KAS, kiro-cli, deepseek), magpie picks the first harness connected to magpie, one whose adapter is here first.
+3. **Start a new session in Kiro Crew.** The Gateway reloads the file when it changes. New sessions take the new harness; sessions already open keep theirs.
+
+To change the harness, pick another agent connected to magpie under harness on Kiro Crew's row. With none connected, magpie asks you to connect Codex, Claude Code, OpenCode, Pi or Goose to magpie first, then Kiro Crew.
+
+## The harnesses
+
+magpie offers the harnesses it wires itself, through the files each one reads under Kiro Crew too:
+
+- Codex: through the codex-acp adapter (npm @agentclientprotocol/codex-acp), reading `~/.codex` or `$CODEX_HOME`
+- Claude Code: through the claude-agent-acp adapter (npm @agentclientprotocol/claude-agent-acp), running your claude, which reads `~/.claude`
+- OpenCode: `opencode acp`
+- Pi: through the pi-acp adapter (npm pi-acp)
+- Goose: `goose acp`
+
+Not deepseek: Kiro Crew runs it as `dsh --profile acp`, a profile of its own that magpie's dsh wiring doesn't reach.
+
+## config.json
+
+Kiro Crew's settings are `config.json` in its home: `$KIROCREW_HOME` when set (made absolute; a root, `/usr`, `/System` or `/etc` is refused and the default used), else `~/.kiro/crew`, the desktop app's too. magpie writes two keys:
+
+```
+// ~/.kiro/crew/config.json
+{
+  "agent": {
+    "acp_backend": "codex",
+    "member_acp_backend": "codex"
+  },
+  …
+}
+```
+
+`acp_backend` is the sessions' harness; empty, it is kiro-cli, the default. `member_acp_backend` is the crew members' harness, kas by default, written only for a harness that can dispatch members (Codex, Claude Code, OpenCode, Goose), not Pi. magpie keeps what both keys said before, and puts it back on switching off.
+
+## ACP adapters
+
+Codex, Claude Code and Pi run through an npm adapter Kiro Crew doesn't ship. magpie looks for it where Kiro Crew does: the path its variable names (CODEX_ACP_BIN, CLAUDE_AGENT_ACP_BIN, PI_ACP_BIN), the PATH, `~/.local/bin`, npm's, mise's, Volta's and Homebrew's folders, and every Node version mise, asdf, nvm and fnm keep. When it isn't there, the Agents page says to install the package with `npm i -g`, then start a new session. magpie installs nothing.
+
+## config.local.json is yours
+
+`config.local.json` beside it is merged over config.json key by key and wins. When it sets the harness (agent.acp_backend), magpie writes no key, and asks you to set it there to a harness connected to magpie, or take it out and connect again.
+
+## Switching back
+
+When you switch Kiro Crew off in magpie, magpie puts back what both keys said before; a key you changed since stays as you set it. When connecting Kiro Crew is what connected its harness agent to magpie, and you haven't disconnected that agent yourself since, magpie disconnects it again. Otherwise it stays connected.
+
+## FAQ
+
+### Can Kiro Crew use DeepSeek or GLM?
+
+Yes. Kiro Crew's models are its harness's; magpie sets the harness to Codex, Claude Code, OpenCode, Pi or Goose connected to magpie, and the model is picked in that harness.
+
+### Why didn't my open session change?
+
+Sessions already open keep their harness; the new one is for new sessions.
+
+### magpie says codex-acp isn't found. What now?
+
+Codex, Claude Code and Pi run through an npm adapter. Install the package it names with npm i -g, then start a new session.
+
+### Why didn't magpie change my harness?
+
+Your config.local.json sets agent.acp_backend, which wins over config.json, so magpie leaves your setting alone.
+
+More agents on the same models: [Goose on any model](https://usemagpie.ai/docs/goose), [Pi on any model](https://usemagpie.ai/docs/pi) and [JetBrains Copilot on any model](https://usemagpie.ai/docs/copilot-jetbrains). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 

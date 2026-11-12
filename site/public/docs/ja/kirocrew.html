@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kiro Crew で DeepSeek・GLM・Kimi・Qwen・Claude・ChatGPT サブスクリプションを使う：ハーネスを magpie に · magpie</title>
+<meta name="description" content="magpie で Kiro Crew から DeepSeek・GLM・Kimi・Qwen・Claude・ChatGPT サブスクリプションを使う方法：自前のモデルプロバイダーはなく、モデルはセッションを動かすハーネスのもの。magpie はハーネスを magpie につないだ Codex・Claude Code・OpenCode・Pi・Goose にします。config.json と config.local.json、ACP アダプター、新しいセッション、元に戻す方法。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/kirocrew">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/kirocrew">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/kirocrew">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/kirocrew">
+<link rel="canonical" href="https://usemagpie.ai/docs/ja/kirocrew">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="Kiro Crew を任意のモデルで">
+<meta property="og:description" content="magpie で Kiro Crew から DeepSeek・GLM・Kimi・Qwen・Claude・ChatGPT サブスクリプションを使う方法：自前のモデルプロバイダーはなく、モデルはセッションを動かすハーネスのもの。magpie はハーネスを magpie につないだ Codex・Claude Code・OpenCode・Pi・Goose にします。config.json と config.local.json、ACP アダプター、新しいセッション、元に戻す方法。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/ja/kirocrew">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "Kiro Crew を任意のモデルで",
+   "description": "magpie で Kiro Crew から DeepSeek・GLM・Kimi・Qwen・Claude・ChatGPT サブスクリプションを使う方法：自前のモデルプロバイダーはなく、モデルはセッションを動かすハーネスのもの。magpie はハーネスを magpie につないだ Codex・Claude Code・OpenCode・Pi・Goose にします。config.json と config.local.json、ACP アダプター、新しいセッション、元に戻す方法。",
+   "inLanguage": "ja",
+   "url": "https://usemagpie.ai/docs/ja/kirocrew",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "Kiro Crew で DeepSeek や GLM を使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。Kiro Crew のモデルはハーネスのもので、magpie はハーネスを magpie につないだ Codex・Claude Code・OpenCode・Pi・Goose にします。モデルはそのハーネスで選びます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "開いているセッションが変わらないのはなぜですか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "開いているセッションは元のハーネスのままで、新しいハーネスは新しいセッションから使われます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "codex-acp が見つからないと出たら？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Codex・Claude Code・Pi は npm アダプター経由で動きます。案内されたパッケージを npm i -g で入れ、新しいセッションを開いてください。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "magpie がハーネスを変えないのはなぜですか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "config.local.json で agent.acp_backend を設定しており、それが config.json より優先されるので、magpie はあなたの設定に触れません。"
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/ja/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "ドキュメント",
+     "item": "https://usemagpie.ai/docs/ja/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "Kiro Crew を任意のモデルで",
+     "item": "https://usemagpie.ai/docs/ja/kirocrew"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/ja/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>ドキュメント</small></a>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/start">はじめに</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a class="toc-only" href="/docs/ja/remote">リモート magpie</a>
+    <a class="toc-only" href="/docs/ja/docker">Docker</a>
+    <a class="toc-only" href="/docs/ja/privacy">プライバシー</a>
+    <a class="toc-only" href="/docs/ja/masking">プライバシーマスキング</a>
+    <a class="toc-only" href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a class="toc-only" href="/docs/ja/library">ライブラリ</a>
+    <a class="toc-only" href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a class="toc-only" href="/docs/ja/local-models">ローカルモデル</a>
+    <a class="toc-only" href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="言語" title="言語" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/kirocrew" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/kirocrew" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/kirocrew" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="Discord の magpie" title="Discord に参加"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="GitHub の magpie" title="GitHub のソースコード"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">ダウンロード</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>Kiro Crew</p>
+    <a href="#overview">仕組み</a>
+    <a href="#on">Kiro Crew の設定</a>
+    <a href="#harness">選べるハーネス</a>
+    <a href="#file">config.json</a>
+    <a href="#adapter">ACP アダプター</a>
+    <a href="#local">config.local.json はあなたのもの</a>
+    <a href="#off">元に戻す</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">ドキュメント · ガイド</p>
+    <h1>Kiro Crew を任意のモデルで</h1>
+    <p class="lede">Kiro Crew（kirodotdev/KiroCrew）は常駐型のエージェントで、KiroCrew.app デスクトップアプリ、kirocrew CLI、Web ダッシュボードと、それらが共有する Gateway からなります。各セッションはハーネス、つまり Kiro Crew が起動して ACP で話す別のエージェントで動きます。Kiro Crew には magpie に向けられる自前のモデルプロバイダーがなく、モデルはハーネスのものです。そこで magpie はどのハーネスで動かすかを設定します。magpie につないだエージェントなら、その設定がリクエストをゲートウェイに送るので、DeepSeek・GLM・Kimi・Qwen・Claude・ChatGPT サブスクリプションなど magpie のモデルが使えます。</p>
+    <h2 id="on"><a class="anchor" href="#on">Kiro Crew の設定</a></h2>
+    <ol class="steps">
+      <li><b>magpie でプロバイダーを追加</b><span class="ui">プロバイダー</span> ページで API キーを追加するか、サブスクリプションにサインインします。</li>
+      <li><b><span class="ui">エージェント</span> ページで Kiro Crew のプロバイダーを magpie にする</b>Kiro Crew が magpie の扱うハーネスに設定されていればそのまま使い、まだ magpie につながっていなければそれも一緒につなぎます。magpie が扱わないハーネス（KAS・kiro-cli・deepseek）のときは、magpie につながった最初のハーネスを、この PC にアダプターがあるものを優先して選びます。</li>
+      <li><b>Kiro Crew で新しいセッションを開く</b>Gateway はファイルの変更で読み直します。新しいセッションは新しいハーネスを使い、開いているセッションは元のままです。</li>
+    </ol>
+    <p>ハーネスを変えるには、Kiro Crew の行の harness で magpie につながった別のエージェントを選びます。1 つもつながっていなければ、先に Codex・Claude Code・OpenCode・Pi・Goose を magpie につなぎ、それから Kiro Crew をつなぐよう magpie が案内します。</p>
+    <h2 id="harness"><a class="anchor" href="#harness">選べるハーネス</a></h2>
+    <p>magpie が提供するのは自分で接続を管理するハーネスで、Kiro Crew の下でも同じファイルを読みます。</p>
+<ul><li>Codex：codex-acp アダプター（npm の @agentclientprotocol/codex-acp）経由で、<code>~/.codex</code> か <code>$CODEX_HOME</code> を読みます</li><li>Claude Code：claude-agent-acp アダプター（npm の @agentclientprotocol/claude-agent-acp）経由で、<code>~/.claude</code> を読むあなたの claude を動かします</li><li>OpenCode：<code>opencode acp</code></li><li>Pi：pi-acp アダプター（npm の pi-acp）経由</li><li>Goose：<code>goose acp</code></li></ul>
+    <p>deepseek は含みません。Kiro Crew はこれを <code>dsh --profile acp</code> として動かし、それは Kiro Crew 独自のプロファイルなので magpie の dsh の接続が届かないからです。</p>
+    <h2 id="file"><a class="anchor" href="#file">config.json</a></h2>
+    <p>Kiro Crew の設定はホームの <code>config.json</code> です。ホームは <code>$KIROCREW_HOME</code> があればそこ（絶対パスにし、ルート・<code>/usr</code>・<code>/System</code>・<code>/etc</code> は拒否して既定を使います）、なければ <code>~/.kiro/crew</code> で、デスクトップアプリもここを使います。magpie は 2 つのキーを書きます。</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="kcrew-json">コピー</button><pre id="kcrew-json">// ~/.kiro/crew/config.json
+{
+  "agent": {
+    "acp_backend": "codex",
+    "member_acp_backend": "codex"
+  },
+  …
+}</pre></div>
+    <p><code>acp_backend</code> はセッションのハーネスで、空なら既定の kiro-cli です。<code>member_acp_backend</code> はクルーメンバーのハーネスで既定は kas、メンバーを派遣できるハーネス（Codex・Claude Code・OpenCode・Goose）のときだけ書き、Pi では書きません。magpie は 2 つのキーの元の値を覚え、オフにすると戻します。</p>
+    <h2 id="adapter"><a class="anchor" href="#adapter">ACP アダプター</a></h2>
+    <p>Codex・Claude Code・Pi は、Kiro Crew が同梱しない npm アダプター経由で動きます。magpie は Kiro Crew が探す場所で探します：アダプターの変数（CODEX_ACP_BIN・CLAUDE_AGENT_ACP_BIN・PI_ACP_BIN）が指すパス、PATH、<code>~/.local/bin</code>、npm・mise・Volta・Homebrew のフォルダー、mise・asdf・nvm・fnm が持つすべての Node バージョンです。見つからないときは、エージェントページが <code>npm i -g</code> でパッケージを入れてから新しいセッションを開くよう案内します。magpie 自身は何もインストールしません。</p>
+    <h2 id="local"><a class="anchor" href="#local">config.local.json はあなたのもの</a></h2>
+    <p>同じフォルダーの <code>config.local.json</code> はキーごとに config.json に重ねられ、優先されます。ここでハーネス（agent.acp_backend）を設定していると、magpie はキーを 1 つも書かず、そこで magpie につながったハーネスに変えるか、取り除いてからつなぎ直すよう案内します。</p>
+    <h2 id="off"><a class="anchor" href="#off">元に戻す</a></h2>
+    <p>magpie で Kiro Crew をオフにすると、magpie は 2 つのキーを元の値に戻します。その後あなたが変えたキーはそのままです。Kiro Crew をつないだことでハーネスのエージェントも magpie につながり、その後あなたが自分で切っていなければ、magpie はそれも切ります。そうでなければつながったままです。</p>
+
+    <h2 id="faq"><a class="anchor" href="#faq">よくある質問</a></h2>
+    <h3>Kiro Crew で DeepSeek や GLM を使えますか？</h3>
+    <p>使えます。Kiro Crew のモデルはハーネスのもので、magpie はハーネスを magpie につないだ Codex・Claude Code・OpenCode・Pi・Goose にします。モデルはそのハーネスで選びます。</p>
+    <h3>開いているセッションが変わらないのはなぜですか？</h3>
+    <p>開いているセッションは元のハーネスのままで、新しいハーネスは新しいセッションから使われます。</p>
+    <h3>codex-acp が見つからないと出たら？</h3>
+    <p>Codex・Claude Code・Pi は npm アダプター経由で動きます。案内されたパッケージを npm i -g で入れ、新しいセッションを開いてください。</p>
+    <h3>magpie がハーネスを変えないのはなぜですか？</h3>
+    <p>config.local.json で agent.acp_backend を設定しており、それが config.json より優先されるので、magpie はあなたの設定に触れません。</p>
+
+    <p style="margin-top:48px">同じモデルを他のエージェントでも：<a href="/docs/ja/goose">Goose を任意のモデルで</a>、<a href="/docs/ja/pi">Pi を任意のモデルで</a>、<a href="/docs/ja/copilot-jetbrains">JetBrains Copilot を任意のモデルで</a>。エラーが出るときは <a href="/docs/ja/troubleshooting">よくあるエラーの直し方</a>、または <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> で質問してください。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a href="/docs/ja/remote">リモート magpie</a>
+    <a href="/docs/ja/docker">Docker</a>
+    <a href="/docs/ja/privacy">プライバシー</a>
+    <a href="/docs/ja/masking">プライバシーマスキング</a>
+    <a href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a href="/docs/ja/library">ライブラリ</a>
+    <a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a href="/docs/ja/local-models">ローカルモデル</a>
+    <a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/ja/contributors">コントリビューター</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "コピーしました"; setTimeout(() => (b.textContent = "コピー"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>
