@@ -1625,7 +1625,7 @@ func restOf(id string) (Rest, bool) {
 
 // quotaWords are how vendors say "out of quota" or "slow down" when their
 // status code doesn't: some answer 400 or 403 with it.
-var quotaWords = lazyre.New(`(?i)quota|insufficient|balance|credit|billing|out of budget|budget (exceeded|exhausted)|exceeded|rate.?limit|usage.?limit|limit.?reached|hit your .*limit|limit.{0,24}resets|too many requests|overloaded|余额|额度|欠费|限流|频率|频繁|速率|套餐|用量|上限`)
+var quotaWords = lazyre.New(`(?i)quota|insufficient|balance|credit|billing|out of budget|budget (exceeded|exhausted)|exceeded|rate.?limit|usage.?limit|limit.?reached|(?:hit|reached) your .*limit|limit.{0,24}resets|too many requests|overloaded|余额|额度|欠费|限流|频率|频繁|速率|套餐|用量|上限`)
 
 // quotaSaid is whether an error's words, with no status to go by, say
 // out of quota or slow down: quotaWords, unless they say the conversation
