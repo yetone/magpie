@@ -343,29 +343,69 @@ type Merged struct {
 	Name string `json:"name"`
 }
 
+// namer gives a usage.Row the names the page shows it by: its agent and
+// provider, the account type, and a routing group's public model.
+type namer struct {
+	agents map[string]*Named
+	which  func(string) Named
+	access map[string]string
+	// pub: a group magpie found is named as agents pick it, auto/<model>;
+	// the ledger keeps group/auto-<slug> (provider.CanonicalRef)
+	pub func(string) string
+}
+
+func newNamer() namer {
+	all := provider.All()
+	n := namer{agents: clients(), which: providerFaces(all), access: map[string]string{}, pub: provider.PublicRefs()}
+	for _, pr := range all {
+		if pr.Account != nil {
+			n.access[pr.ID] = "subscription"
+		} else if pr.Key != "" {
+			n.access[pr.ID] = "api"
+		}
+	}
+	return n
+}
+
+func (n namer) who(id string) Named {
+	if a := n.agents[id]; a != nil {
+		return Named{ID: id, Name: a.Name, Icon: a.Icon}
+	}
+	return Named{ID: id, Name: id, Icon: "generic"}
+}
+
+func (n namer) row(r usage.Row, callerLabels, computerNames map[string]string) Row {
+	a := n.who(r.Agent)
+	lr := Row{Row: r, AgentName: a.Name, Icon: a.Icon, ProviderName: n.which(r.Provider).Name, Canceled: r.Canceled()}
+	if n.pub != nil {
+		lr.Model, lr.Requested = n.pub(r.Model), n.pub(r.Requested)
+	}
+	if r.Source != "log" && r.Source != usage.SourceReported {
+		lr.Access = n.access[r.Provider]
+	}
+	if r.Priced && r.OwnCost == nil {
+		if model := provider.PricedNameFor(r.Provider, r.Model); model != r.Model {
+			lr.PricingModel = model
+		}
+	}
+	lr.CallerKeyLabel = callerLabels[r.CallerKeyID]
+	if r.Computer != "" {
+		lr.ComputerName = computerNames[r.Computer]
+		if lr.ComputerName == "" {
+			lr.ComputerName = r.Computer
+		}
+	}
+	return lr
+}
+
 // LedgerPage is one page of the ledger: limit rows (100 when none is
 // given, 500 at most) from offset.
 func LedgerPage(p usage.Period, f usage.Filter, offset, limit int) Ledger {
 	l := usage.QueryPage(p, f, offset, limit)
 	offset = max(0, min(offset, l.Total))
 	page := l.Rows
-	agents := clients()
-	all := provider.All()
-	which := providerFaces(all)
-	access := map[string]string{}
-	for _, pr := range all {
-		if pr.Account != nil {
-			access[pr.ID] = "subscription"
-		} else if pr.Key != "" {
-			access[pr.ID] = "api"
-		}
-	}
-	who := func(id string) Named {
-		if a := agents[id]; a != nil {
-			return Named{ID: id, Name: a.Name, Icon: a.Icon}
-		}
-		return Named{ID: id, Name: id, Icon: "generic"}
-	}
+	names := newNamer()
+	which, who, pub := names.which, names.who, names.pub
 	out := Ledger{Period: p, Rows: make([]Row, 0, len(page)), Offset: offset, Total: l.Total, Totals: l.Sum, Agents: []Named{}, Providers: []Named{}, Accounts: []Account{}}
 	out.Through, out.Direct, out.Reported = l.Through, l.Direct, l.Reported
 	out.Bucket, out.Series = l.Bucket, l.Series
@@ -377,31 +417,8 @@ func LedgerPage(p usage.Period, f usage.Filter, offset, limit int) Ledger {
 	for _, g := range out.CallerKeys {
 		callerLabels[g.CallerKeyID] = g.Name
 	}
-	// a group magpie found is named as agents pick it, auto/<model>; the
-	// ledger keeps group/auto-<slug> (provider.CanonicalRef)
-	pub := provider.PublicRefs()
 	for _, r := range page {
-		a := who(r.Agent)
-		lr := Row{Row: r, AgentName: a.Name, Icon: a.Icon, ProviderName: which(r.Provider).Name, Canceled: r.Canceled()}
-		if pub != nil {
-			lr.Model, lr.Requested = pub(r.Model), pub(r.Requested)
-		}
-		if r.Source != "log" && r.Source != usage.SourceReported {
-			lr.Access = access[r.Provider]
-		}
-		if r.Priced && r.OwnCost == nil {
-			if model := provider.PricedNameFor(r.Provider, r.Model); model != r.Model {
-				lr.PricingModel = model
-			}
-		}
-		lr.CallerKeyLabel = callerLabels[r.CallerKeyID]
-		if r.Computer != "" {
-			lr.ComputerName = l.Names[r.Computer]
-			if lr.ComputerName == "" {
-				lr.ComputerName = r.Computer
-			}
-		}
-		out.Rows = append(out.Rows, lr)
+		out.Rows = append(out.Rows, names.row(r, callerLabels, l.Names))
 	}
 	for _, id := range l.Agents {
 		out.Agents = append(out.Agents, who(id))

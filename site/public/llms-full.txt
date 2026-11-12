@@ -8903,6 +8903,7 @@ What the Usage page shows is also served as JSON, to this computer and, while ma
 
 - `/v1/magpie/usage?period=today|7d|30d|all`: totals, by model, agent, provider, account and gateway key.
 - `/v1/magpie/usage/requests`: the request log, with `period`, `day`, `offset`, `limit`, and filters `model`, `agent`, `provider`, `account`, `callerKey`, `failed=1`, `retried=1` and `q`.
+- `/v1/magpie/usage/requests?cursor=start`: the same requests as changes for a ledger of your own: `rows` to upsert by a stable `id` (with `original_ids`), `deleted` ids, `next_cursor` and `has_more`; `cursor=now` reads only what comes after, and a cursor magpie cannot resume from is refused with a `code`, never skipped.
 - `/v1/magpie/quotas`: each subscription’s windows (`?kept=1` without asking the vendors); `/v1/magpie/quotas/history?days=`: what was left over time, 45 days at most.
 - `/v1/magpie/limit`: the key’s own limits, its expiry, and its issuer’s limits; for a held key, what holds it (`heldTo`), its `models`, and whether it is told quotas (`quotas`, `quotaProviders`).
 - `/v1/magpie/concurrency`: requests in flight, per account.

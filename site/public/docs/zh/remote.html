@@ -266,6 +266,7 @@ curl -s -X POST http://127.0.0.1:3425/v1/magpie/admin/gateway-keys/add-key \
     <ul>
       <li><code>/v1/magpie/usage?period=today|7d|30d|all</code>：总量，以及按模型、agent、提供商、账号和网关密钥的分项。</li>
       <li><code>/v1/magpie/usage/requests</code>：请求记录，支持 <code>period</code>、<code>day</code>、<code>offset</code>、<code>limit</code>，以及筛选 <code>model</code>、<code>agent</code>、<code>provider</code>、<code>account</code>、<code>callerKey</code>、<code>failed=1</code>、<code>retried=1</code> 和 <code>q</code>。</li>
+      <li><code>/v1/magpie/usage/requests?cursor=start</code>：把同样的请求当作变更来读，便于自己维护账本：按稳定的 <code>id</code> 更新的 <code>rows</code>（含 <code>original_ids</code>）、<code>deleted</code>、<code>next_cursor</code> 和 <code>has_more</code>；<code>cursor=now</code> 只读之后的新数据，无法续读的游标会返回带 <code>code</code> 的错误，不会悄悄漏数据。</li>
       <li><code>/v1/magpie/quotas</code>：每个订阅的额度窗口（<code>?kept=1</code> 不去问厂商）；<code>/v1/magpie/quotas/history?days=</code>：剩余额度的历史，最多 45 天。</li>
       <li><code>/v1/magpie/limit</code>：这把密钥自己的限额、过期时间，以及签发它的密钥的限额；受限的密钥还会告诉它受什么限制（<code>heldTo</code>）、可用的模型（<code>models</code>），以及能否看到额度（<code>quotas</code>、<code>quotaProviders</code>）。</li>
       <li><code>/v1/magpie/concurrency</code>：每个账号正在进行的请求。</li>

@@ -1447,6 +1447,7 @@ told its own calls and limit alone:
 | --- | --- |
 | `GET /v1/magpie/usage?period=today\|7d\|30d\|all` | the usage summary: totals, by model, agent, provider, account and gateway key |
 | `GET /v1/magpie/usage/requests?period=&offset=&limit=` | the request log, filtered by `day`, `model`, `agent`, `provider`, `account`, `callerKey` (a gateway key's id, an issued one's too), `failed=1`, `retried=1`, `q`, `computer`, `via` |
+| `GET /v1/magpie/usage/requests?cursor=start\|now\|<next_cursor>&limit=` | the same requests as changes (#6060): `rows` to upsert by stable `id` with `original_ids`, `deleted` ids, `next_cursor`, `has_more`; a cursor it can't resume from is a 400/410 with a `code`, never a gap (see [the request feed](gateway-sessions.md#the-request-feed)) |
 | `GET /v1/magpie/quotas[?kept=1]` | each subscription's windows; `kept=1` without asking a vendor |
 | `GET /v1/magpie/quotas/history?days=&provider=&user=` | what was left of each window over time (45 days at most) |
 | `GET /v1/magpie/limit` | the key's own limits, its `expires`, and `issuerLimits`; a held key's `heldTo`, `models`, `quotas` and `quotaProviders` |

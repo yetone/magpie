@@ -399,7 +399,7 @@ const UnknownProvider = "session-unknown"
 func logRecord(c sessions.Call) Record {
 	r := Record{Time: c.Time, Agent: c.Agent, Provider: UnknownProvider, Model: c.Model, Served: c.Model, Requested: c.Requested,
 		Input: c.Input, Output: c.Output, CacheRead: c.CacheRead, CacheWrite: c.CacheWrite, CacheWrite1h: c.CacheWrite1h, Reasoning: c.Reasoning, Effort: c.Effort,
-		Millis: c.Millis, TTFT: c.TTFT, Session: c.Session, RequestID: c.RequestID, Error: c.ErrorText, ErrType: c.Error, Subagent: sessions.SubagentOf(c.File), ParentAgent: sessions.SubagentParent(c.File)}
+		Millis: c.Millis, TTFT: c.TTFT, Session: c.Session, RequestID: c.RequestID, MessageID: c.Msg, Error: c.ErrorText, ErrType: c.Error, Subagent: sessions.SubagentOf(c.File), ParentAgent: sessions.SubagentParent(c.File)}
 	if c.Agent == "codex" {
 		r.ResponseID = c.ResponseID
 		r.Compaction = codexCompactionOf(c)

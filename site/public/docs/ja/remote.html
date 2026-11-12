@@ -266,6 +266,7 @@ curl -s -X POST http://127.0.0.1:3425/v1/magpie/admin/gateway-keys/add-key \
     <ul>
       <li><code>/v1/magpie/usage?period=today|7d|30d|all</code>：合計と、モデル、エージェント、プロバイダー、アカウント、ゲートウェイキーごとの内訳。</li>
       <li><code>/v1/magpie/usage/requests</code>：リクエストログ。<code>period</code>、<code>day</code>、<code>offset</code>、<code>limit</code> と、絞り込みの <code>model</code>、<code>agent</code>、<code>provider</code>、<code>account</code>、<code>callerKey</code>、<code>failed=1</code>、<code>retried=1</code>、<code>q</code>。</li>
+      <li><code>/v1/magpie/usage/requests?cursor=start</code>：同じリクエストを変更として読み、自前の台帳を保てます。安定した <code>id</code> で upsert する <code>rows</code>（<code>original_ids</code> 付き）、<code>deleted</code>、<code>next_cursor</code>、<code>has_more</code>。<code>cursor=now</code> はそれ以降だけを読み、再開できないカーソルは <code>code</code> 付きで拒否され、黙って飛ばされることはありません。</li>
       <li><code>/v1/magpie/quotas</code>：各サブスクリプションのウィンドウ（<code>?kept=1</code> でベンダーに問い合わせない）。<code>/v1/magpie/quotas/history?days=</code>：残量の履歴、最大 45 日。</li>
       <li><code>/v1/magpie/limit</code>：キー自身の上限、有効期限、発行元キーの上限。制限されたキーには、何で制限されているか（<code>heldTo</code>）、使えるモデル（<code>models</code>）、クォータが返るか（<code>quotas</code>、<code>quotaProviders</code>）も。</li>
       <li><code>/v1/magpie/concurrency</code>：アカウントごとの実行中のリクエスト。</li>

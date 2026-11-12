@@ -95,6 +95,9 @@ key; a key held to a budget, models or accounts sees its own calls and
 routes alone, and is refused the quotas unless its owner lets it see
 those of what it may use (`magpie gateway-key quotas <id> on`, #2216;
 its own limit, and what holds it, is `GET /v1/magpie/limit`).
+To keep a ledger of your own, read the requests as changes with `GET
+/v1/magpie/usage/requests?cursor=start` (stable `id`s, the vendors' ids
+under `original_ids`, `next_cursor`; `cursor=now` for what comes after).
 Calls your app makes to its vendor itself can be reported with `POST
 /v1/magpie/usage/requests` (one record or up to 5000 a post, in
 `usage.jsonl`'s shape, each with a `rid`; past times are kept, so a
