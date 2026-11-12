@@ -282,6 +282,7 @@
       <li><b>连不上 magpie。</b>在 WSL 默认的 NAT 网络下，magpie 还会在 Windows 的 WSL 网络地址上提供网关，使用单独的密钥，并把这个地址写进 Agent 的配置。镜像网络模式下，Agent 和 Windows 上一样用 <code>127.0.0.1</code>。是否放行仍由 Windows 防火墙决定：WSL 网络属于“公用”网络，连接被拦时请在那里允许 magpie。</li>
       <li><b>改动没生效。</b>WSL 里的 Agent 启动时读取配置：在那边重启它。</li>
     </ul>
+    <p>Agent 页上被标出 <span class="ui">重新应用</span> 或 <span class="ui">如何修复</span> 的 Agent：见 <a href="/docs/zh/agent-drift">Agent 没走 magpie 怎么办</a>。</p>
 
     <h2 id="lan"><a class="anchor" href="#lan">从局域网里的其他电脑使用</a></h2>
     <p>默认情况下网关只回应本机。要让其他电脑使用：<span class="ui">设置</span> › <span class="ui">网络与共享</span> › <span class="ui">局域网共享</span>。另一台电脑需要发送 <span class="ui">网关</span> 页 <span class="ui">网关密钥</span> 里的密钥。</p>

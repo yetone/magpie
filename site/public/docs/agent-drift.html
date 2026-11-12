@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>When an agent stops going through magpie: a changed config, an old process, an address that doesn't answer, a proxy · magpie</title>
+<meta name="description" content="What it means and how to fix it when the Agents page says an agent no longer goes through magpie, was switched off a model outside magpie, was used without going through magpie, gets no answer at the address it reaches magpie by, or reaches magpie through a proxy that doesn't pass its requests on: Apply again, Keep current settings, restarting the agent, WSL's firewall, NO_PROXY and Disconnect from magpie.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/agent-drift">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/agent-drift">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/agent-drift">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/agent-drift">
+<link rel="canonical" href="https://usemagpie.ai/docs/agent-drift">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="When an agent stops going through magpie">
+<meta property="og:description" content="What it means and how to fix it when the Agents page says an agent no longer goes through magpie, was switched off a model outside magpie, was used without going through magpie, gets no answer at the address it reaches magpie by, or reaches magpie through a proxy that doesn't pass its requests on: Apply again, Keep current settings, restarting the agent, WSL's firewall, NO_PROXY and Disconnect from magpie.">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/agent-drift">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "When an agent stops going through magpie",
+   "description": "What it means and how to fix it when the Agents page says an agent no longer goes through magpie, was switched off a model outside magpie, was used without going through magpie, gets no answer at the address it reaches magpie by, or reaches magpie through a proxy that doesn't pass its requests on: Apply again, Keep current settings, restarting the agent, WSL's firewall, NO_PROXY and Disconnect from magpie.",
+   "inLanguage": "en",
+   "url": "https://usemagpie.ai/docs/agent-drift",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "Why does magpie say the config was changed after I switched models in the agent?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "The model you switched to doesn't go through magpie. Pick Keep current settings to keep it, or Apply again to go back to magpie. Moving from one magpie model to another in the agent isn't flagged."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "It still says the agent bypassed magpie after Apply again?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "The agent was open before magpie set it up and still runs on its old config. Quit and reopen it; once a new request reaches magpie, the mark goes away."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "An agent in WSL can't reach magpie. What do I do?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Most often Windows' firewall keeps WSL out: allow magpie when Windows asks, or run the New-NetFirewallRule command the detail gives in PowerShell as administrator. On Windows 11, networkingMode=mirrored in .wslconfig also works."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Codex fails every turn with 502 and magpie says a proxy doesn't pass its requests on?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "A proxy takes Codex's requests for magpie. Have it send 127.0.0.1 direct, or add 127.0.0.1 to NO_PROXY, then reopen Codex."
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "Docs",
+     "item": "https://usemagpie.ai/docs/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "When an agent stops going through magpie",
+     "item": "https://usemagpie.ai/docs/agent-drift"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>Docs</small></a>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/start">Get started</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a class="toc-only" href="/docs/remote">Remote magpie</a>
+    <a class="toc-only" href="/docs/docker">Docker</a>
+    <a class="toc-only" href="/docs/privacy">Privacy</a>
+    <a class="toc-only" href="/docs/masking">Privacy masking</a>
+    <a class="toc-only" href="/docs/mcp-router">MCP router</a>
+    <a class="toc-only" href="/docs/library">Library</a>
+    <a class="toc-only" href="/docs/claude-code-models">Models in Claude Code</a>
+    <a class="toc-only" href="/docs/codex-models">Models in Codex</a>
+    <a class="toc-only" href="/docs/gemini-cli-models">Models in Gemini CLI</a>
+    <a class="toc-only" href="/docs/subscriptions">Subscriptions in any agent</a>
+    <a class="toc-only" href="/docs/local-models">Local models</a>
+    <a class="toc-only" href="/docs/opencode-models">Models in OpenCode</a>
+    <a class="toc-only" href="/docs/alternatives">magpie vs CC Switch vs CCR</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="Language" title="Language" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/agent-drift" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/agent-drift" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/agent-drift" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">Download</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>Agent drift</p>
+    <a href="#overview">How magpie notices</a>
+    <a href="#unwired">Its config was changed</a>
+    <a href="#replaced">Switched off a model outside magpie</a>
+    <a href="#bypassed">Used without going through magpie</a>
+    <a href="#unreachable">Nothing answers at the address</a>
+    <a href="#proxied">A proxy doesn't pass requests on</a>
+    <a href="#off">Disconnect from magpie</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">Docs · Guide</p>
+    <h1>When an agent stops going through magpie</h1>
+    <p class="lede">When magpie connects an agent, it remembers what it set in the agent's config. From then on the Agents page keeps checking two things: whether the config still says what magpie set, and, when it does, whether the agent's latest requests actually reached magpie's gateway. When they don't, the agent's row is marked with the reason and a fix: usually <span class="ui">Apply again</span> (on the status line, <span class="ui">Reconnect</span>), or <span class="ui">How to fix</span> when an address doesn't answer or a proxy is in the way. Here are the five things magpie can say, one by one.</p>
+    <p>Two things are not a problem: moving from one magpie model to another in the agent's own model picker isn't flagged, and a provider named magpie that you wrote by hand is yours, so magpie neither flags nor overwrites it.</p>
+    <h2 id="unwired"><a class="anchor" href="#unwired">“No longer goes through magpie — its config was changed”</a></h2>
+    <p>The model is still magpie's, but the part of the config that sends requests to magpie (the gateway's address, for one) was changed: by a hand edit, an update of the agent that rewrote its config, or another tool.</p>
+    <ol class="steps">
+      <li><b>Press <span class="ui">Apply again</span></b>magpie writes what it set once more and renews its record. The mark goes away.</li>
+      <li><b>Restart the agent</b>Most agents read their config at start-up, so one that is open needs reopening.</li>
+    </ol>
+    <h2 id="replaced"><a class="anchor" href="#replaced">“Was switched off {model} outside magpie”</a></h2>
+    <p>magpie set a magpie model, and the config now has the agent's own model there, one that doesn't go through magpie. The detail says what the field is now and what magpie set. You have two choices:</p>
+    <ul><li><b><span class="ui">Apply again</span>:</b> magpie's model goes back, and so do the other fields magpie set with it, such as an effort.</li><li><b><span class="ui">Keep current settings</span>:</b> the change was yours on purpose. magpie forgets what it set, keeps your config as it is and stops flagging it. The row menu has this item only in this case.</li></ul>
+    <h2 id="bypassed"><a class="anchor" href="#bypassed">“Was used without going through magpie — restart it after applying”</a></h2>
+    <p>The config is right, yet the agent was used after magpie set it up and none of its requests reached magpie. Most often the agent was already open before magpie changed its config and still runs on the old one; something outside the file, such as an environment variable, can also override it. The detail says which:</p>
+    <ul><li>Its last request went to another host, not magpie: it was started before magpie set it up and still runs on its old config.</li><li>It couldn't reach magpie at a given time: magpie wasn't running then, so it has none of magpie's models.</li><li>It was used at a given time, but none of its requests reached magpie.</li></ul>
+    <p>The fix each time is to quit and reopen the agent. Press <span class="ui">Apply again</span> first if you like: it renews the record, so a use before then no longer counts.</p>
+    <h2 id="unreachable"><a class="anchor" href="#unreachable">“Is set up, but nothing answers at the address it reaches magpie by”</a></h2>
+    <p>The config is right, but the agent reaches magpie at an address other than this computer's loopback (127.0.0.1), nothing answers there, and magpie itself answers fine here. That is usually an agent in WSL, or a forward of your own. magpie tries the address from here in the background.</p>
+    <p>When an agent in WSL is pointed at the address magpie listens on for WSL and nothing answers, Windows' firewall is keeping WSL out. Allow magpie when Windows asks, or run this in PowerShell as administrator (<code>-Program</code> is magpie.exe's real path; the detail gives the whole command):</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="drift-fw">Copy</button><pre id="drift-fw">New-NetFirewallRule -DisplayName 'magpie (WSL)' -Direction Inbound -Action Allow -Profile Any -InterfaceAlias 'vEthernet (WSL*)' -Program '…\magpie.exe'</pre></div>
+    <p>WSL's network counts as Public, so a rule for Private networks only doesn't do. On Windows 11 you can also turn on mirrored networking in .wslconfig, and WSL then reaches magpie at 127.0.0.1:</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="drift-wslconfig">Copy</button><pre id="drift-wslconfig"># %UserProfile%\.wslconfig
+[wsl2]
+networkingMode=mirrored</pre></div>
+    <p>Under WSL's NAT networking, Windows as WSL sees it answers only while something listens there: magpie itself with <span class="ui">Settings</span> › <span class="ui">Network and sharing</span> › <span class="ui">Share on local network</span> on (it then listens on every address, and asks other computers for a gateway key), or a forward of your own (netsh interface portproxy, which may need setting up again after Windows restarts). If it answers here and WSL still can't connect, it is the firewall: allow the gateway's port (3425 by default) for the WSL network.</p>
+    <p>When the address a WSL distro reaches Windows at has moved, the detail names the new one and the button reads <span class="ui">Use {url}</span>: pressing it points the agent there. Outside WSL, whatever forwarded the address to magpie isn't listening any more: start it again, or point the agent at magpie's address on this computer.</p>
+    <h2 id="proxied"><a class="anchor" href="#proxied">“Reaches magpie through a proxy that doesn't pass its requests on”</a></h2>
+    <p>This one is Codex. Codex sends its requests for magpie through a proxy set in the environment or the system settings, and that proxy doesn't pass them back to magpie: every turn fails with 502 Bad Gateway, whichever model it is on. magpie asks which proxy Codex would use the way Codex does (a terminal's environment for Codex in a terminal, the login shell's for the ChatGPT app's Codex), and the detail names the proxy and where it is set. Any one of these fixes it:</p>
+    <ul><li>Have the proxy send 127.0.0.1 direct: a DIRECT rule for 127.0.0.0/8, or rule mode rather than global.</li><li>When the proxy comes from a *_PROXY variable, add 127.0.0.1 to NO_PROXY where that variable is set.</li><li>On Windows, add 127.0.0.1 to “Don't use the proxy server for addresses beginning with” in Windows' proxy settings (127.* there is not enough for Codex).</li><li>On macOS and Linux, add NO_PROXY to your shell profile; Codex in a terminal and the ChatGPT app's Codex both read it:</li></ul>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="drift-noproxy">Copy</button><pre id="drift-noproxy"># ~/.zshrc
+export NO_PROXY=127.0.0.1</pre></div>
+    <p>Then quit and reopen Codex.</p>
+    <h2 id="off"><a class="anchor" href="#off">Disconnect from magpie</a></h2>
+    <p>If you can't fix it now, or don't want the agent on magpie at all, pick <span class="ui">Disconnect from magpie</span> in the row menu: magpie puts the agent's config back as it was before and forgets what it set. To connect it again later, set it up on the <span class="ui">Agents</span> page.</p>
+
+    <h2 id="faq"><a class="anchor" href="#faq">FAQ</a></h2>
+    <h3>Why does magpie say the config was changed after I switched models in the agent?</h3>
+    <p>The model you switched to doesn't go through magpie. Pick Keep current settings to keep it, or Apply again to go back to magpie. Moving from one magpie model to another in the agent isn't flagged.</p>
+    <h3>It still says the agent bypassed magpie after Apply again?</h3>
+    <p>The agent was open before magpie set it up and still runs on its old config. Quit and reopen it; once a new request reaches magpie, the mark goes away.</p>
+    <h3>An agent in WSL can't reach magpie. What do I do?</h3>
+    <p>Most often Windows' firewall keeps WSL out: allow magpie when Windows asks, or run the New-NetFirewallRule command the detail gives in PowerShell as administrator. On Windows 11, networkingMode=mirrored in .wslconfig also works.</p>
+    <h3>Codex fails every turn with 502 and magpie says a proxy doesn't pass its requests on?</h3>
+    <p>A proxy takes Codex's requests for magpie. Have it send 127.0.0.1 direct, or add 127.0.0.1 to NO_PROXY, then reopen Codex.</p>
+
+    <p style="margin-top:48px">Related: <a href="/docs/codex-models">Use DeepSeek, Kimi, GLM, Claude or any model in Codex</a> and <a href="/docs/remote">Remote magpie</a>. Something else fails? See <a href="/docs/troubleshooting">Fixing common errors</a>, or ask on <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>.</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a href="/docs/remote">Remote magpie</a>
+    <a href="/docs/docker">Docker</a>
+    <a href="/docs/privacy">Privacy</a>
+    <a href="/docs/masking">Privacy masking</a>
+    <a href="/docs/mcp-router">MCP router</a>
+    <a href="/docs/library">Library</a>
+    <a href="/docs/claude-code-models">Models in Claude Code</a>
+    <a href="/docs/codex-models">Models in Codex</a>
+    <a href="/docs/gemini-cli-models">Models in Gemini CLI</a>
+    <a href="/docs/subscriptions">Subscriptions in any agent</a>
+    <a href="/docs/local-models">Local models</a>
+    <a href="/docs/opencode-models">Models in OpenCode</a>
+    <a href="/docs/alternatives">magpie vs CC Switch vs CCR</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/contributors">Contributors</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "Copied"; setTimeout(() => (b.textContent = "Copy"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

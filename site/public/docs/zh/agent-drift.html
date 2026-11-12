@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent 没走 magpie 怎么办：配置被改、旧进程、地址不通、代理拦截 · magpie</title>
+<meta name="description" content="Agent 页提示某个 Agent 已不经过 magpie、在 magpie 之外换了模型、最近绕过了 magpie、连 magpie 的地址没有回应，或代理没把请求转给 magpie 时，各是什么原因、怎么修：重新应用、保留当前设置、重启 Agent、WSL 防火墙、NO_PROXY，以及断开 magpie。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/agent-drift">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/agent-drift">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/agent-drift">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/agent-drift">
+<link rel="canonical" href="https://usemagpie.ai/docs/zh/agent-drift">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="Agent 没走 magpie 怎么办">
+<meta property="og:description" content="Agent 页提示某个 Agent 已不经过 magpie、在 magpie 之外换了模型、最近绕过了 magpie、连 magpie 的地址没有回应，或代理没把请求转给 magpie 时，各是什么原因、怎么修：重新应用、保留当前设置、重启 Agent、WSL 防火墙、NO_PROXY，以及断开 magpie。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/zh/agent-drift">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "Agent 没走 magpie 怎么办",
+   "description": "Agent 页提示某个 Agent 已不经过 magpie、在 magpie 之外换了模型、最近绕过了 magpie、连 magpie 的地址没有回应，或代理没把请求转给 magpie 时，各是什么原因、怎么修：重新应用、保留当前设置、重启 Agent、WSL 防火墙、NO_PROXY，以及断开 magpie。",
+   "inLanguage": "zh-CN",
+   "url": "https://usemagpie.ai/docs/zh/agent-drift",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "为什么我在 Agent 里换了模型，magpie 提示配置被改？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "你换到的是不经过 magpie 的模型。想保留就选 保留当前设置，想回到 magpie 就点 重新应用。在 Agent 里从一个 magpie 模型换到另一个 magpie 模型不会提示。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "重新应用之后还是提示绕过了 magpie？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "这个 Agent 在 magpie 设置之前就开着，还在用旧配置。退出并重新打开它，新请求到达 magpie 后提示就会消失。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "WSL 里的 Agent 连不上 magpie 怎么办？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "多半是 Windows 防火墙挡住了 WSL：在弹窗里允许 magpie，或在管理员 PowerShell 里运行提示给出的 New-NetFirewallRule 命令。Windows 11 上也可以在 .wslconfig 里设 networkingMode=mirrored。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Codex 每轮都 502，提示代理没转给 magpie？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Codex 发给 magpie 的请求被代理接走了。让代理对 127.0.0.1 直连，或把 127.0.0.1 加进 NO_PROXY，然后重开 Codex。"
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/zh/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "文档",
+     "item": "https://usemagpie.ai/docs/zh/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "Agent 没走 magpie 怎么办",
+     "item": "https://usemagpie.ai/docs/zh/agent-drift"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/zh/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>文档</small></a>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/start">快速上手</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a class="toc-only" href="/docs/zh/remote">远程 magpie</a>
+    <a class="toc-only" href="/docs/zh/docker">Docker</a>
+    <a class="toc-only" href="/docs/zh/privacy">隐私</a>
+    <a class="toc-only" href="/docs/zh/masking">本地脱敏</a>
+    <a class="toc-only" href="/docs/zh/mcp-router">MCP 路由</a>
+    <a class="toc-only" href="/docs/zh/library">资源库</a>
+    <a class="toc-only" href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a class="toc-only" href="/docs/zh/local-models">本地模型</a>
+    <a class="toc-only" href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="语言" title="语言" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/agent-drift" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/agent-drift" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/agent-drift" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">下载</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>Agent drift</p>
+    <a href="#overview">magpie 怎么发现</a>
+    <a href="#unwired">配置已变更</a>
+    <a href="#replaced">在 magpie 之外换了模型</a>
+    <a href="#bypassed">最近绕过了 magpie</a>
+    <a href="#unreachable">地址没有回应</a>
+    <a href="#proxied">代理没转给 magpie</a>
+    <a href="#off">断开 magpie</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">文档 · 指南</p>
+    <h1>Agent 没走 magpie 怎么办</h1>
+    <p class="lede">magpie 接入一个 Agent 时，会记下自己在它的配置里设了什么。之后 Agent 页一直对照两件事：配置还是不是 magpie 设的样子，以及配置没问题时，Agent 最近的请求有没有真的到达 magpie 网关。对不上时，Agent 页上它那一行会标出来，说明原因，并给出修复按钮：多数情况是 <span class="ui">重新应用</span>（状态行上叫 <span class="ui">重新接入</span>），地址不通或经代理时是 <span class="ui">如何修复</span>。下面按 magpie 给出的五种提示逐一说明。</p>
+    <p>不算问题的两种情况：在 Agent 自己的模型选择器里从一个 magpie 模型换到另一个 magpie 模型，magpie 不会提示；你自己手写了一个叫 magpie 的供应商，那是你的配置，magpie 也不会标出或覆盖。</p>
+    <h2 id="unwired"><a class="anchor" href="#unwired">“已不经过 magpie：配置已变更”</a></h2>
+    <p>模型还是 magpie 的，但配置里把请求送到 magpie 的那部分（比如网关地址）被改掉了，常见于手动编辑配置、Agent 自己更新后改写了配置，或另一个工具改过它。</p>
+    <ol class="steps">
+      <li><b>点 <span class="ui">重新应用</span></b>magpie 把它设过的内容再写一遍，并更新记录。之后提示消失。</li>
+      <li><b>重启 Agent</b>多数 Agent 只在启动时读取配置，已经开着的要重开一次。</li>
+    </ol>
+    <h2 id="replaced"><a class="anchor" href="#replaced">“已在 magpie 之外换掉 {model}”</a></h2>
+    <p>magpie 设的是某个 magpie 模型，现在配置里换成了 Agent 自己的模型，也就是不经过 magpie 的那种。提示里会说这个字段现在是什么、magpie 当初设的是什么。这时有两个选择：</p>
+    <ul><li><b><span class="ui">重新应用</span>：</b>把 magpie 设的模型放回去，和它一起设过的其他字段（比如推理强度）也一并放回。</li><li><b><span class="ui">保留当前设置</span>：</b>这是你有意的改动。magpie 忘掉它之前设的内容，保留你现在的配置，不再提示。这一项只在这种情况下出现在行菜单里。</li></ul>
+    <h2 id="bypassed"><a class="anchor" href="#bypassed">“最近绕过了 magpie，重新应用后请重启”</a></h2>
+    <p>配置是对的，但 Agent 在 magpie 设好之后被用过，而它的请求一个都没到 magpie。最常见的原因是这个 Agent 在 magpie 改配置之前就开着，还在用旧配置运行；也可能是配置文件之外的东西（比如环境变量）覆盖了它。提示里写得更具体：</p>
+    <ul><li>最后一次请求发到了别的主机，而不是 magpie：它在 magpie 设置之前就启动了，还在用旧配置。</li><li>某个时间连不上 magpie：那时 magpie 没在运行，所以它拿不到 magpie 的模型。</li><li>在某个时间被用过，但没有请求到达 magpie。</li></ul>
+    <p>修法都是退出并重新打开这个 Agent。需要的话先点 <span class="ui">重新应用</span>，它会更新记录，之前的使用就不再算数。</p>
+    <h2 id="unreachable"><a class="anchor" href="#unreachable">“已设好，但它连 magpie 用的地址没有回应”</a></h2>
+    <p>配置没问题，但 Agent 连 magpie 用的不是本机回环地址（127.0.0.1），而那个地址没有回应，同时 magpie 自己在本机是正常的。这通常是 WSL 里的 Agent，或者你自己做的端口转发。magpie 会在后台从本机去试这个地址。</p>
+    <p>WSL 里的 Agent 连的是 magpie 为 WSL 监听的地址却没有回应时，是 Windows 防火墙挡住了 WSL。Windows 弹窗时允许 magpie，或在管理员 PowerShell 里运行（<code>-Program</code> 是 magpie.exe 的实际路径，提示里会给出完整命令）：</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="drift-fw">复制</button><pre id="drift-fw">New-NetFirewallRule -DisplayName 'magpie (WSL)' -Direction Inbound -Action Allow -Profile Any -InterfaceAlias 'vEthernet (WSL*)' -Program '…\magpie.exe'</pre></div>
+    <p>WSL 的网络属于“公用”网络，只勾“专用”网络的规则不起作用。在 Windows 11 上，也可以在 .wslconfig 里改用镜像网络，WSL 就能直接用 127.0.0.1 连 magpie：</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="drift-wslconfig">复制</button><pre id="drift-wslconfig"># %UserProfile%\.wslconfig
+[wsl2]
+networkingMode=mirrored</pre></div>
+    <p>在 WSL 的 NAT 网络下，Windows 的地址只有在有东西监听时才连得上：要么 magpie 自己开着 <span class="ui">设置</span> › <span class="ui">网络与共享</span> › <span class="ui">局域网共享</span>（这时它监听所有地址，其他电脑要用网关密钥），要么是你自己的转发（netsh interface portproxy，Windows 重启后可能要重新设置）。在这里能连上而 WSL 仍连不上时，就是防火墙，放行 WSL 网络的网关端口（默认 3425）。</p>
+    <p>如果是 WSL 发行版连 Windows 的地址变了，提示里会说新地址，按钮变成 <span class="ui">改用 {url}</span>，点一下 magpie 就把 Agent 指到新地址。不在 WSL 时，是之前把地址转发给 magpie 的东西没在监听了：重新启动它，或把 Agent 直接指向 magpie 的本机地址。</p>
+    <h2 id="proxied"><a class="anchor" href="#proxied">“经代理连 magpie，但这个代理没把它的请求转给 magpie”</a></h2>
+    <p>这是 Codex 的情况。Codex 发给 magpie 的请求会先经过环境变量或系统设置里的代理，而这个代理没有把请求转回 magpie，结果每一轮都是 502 Bad Gateway，换哪个模型都一样。magpie 会按 Codex 的方式检查它走哪个代理（终端里的 Codex 看终端环境，ChatGPT 应用里的 Codex 看登录 shell 的环境），提示里写明代理地址和它是在哪里设置的。修法任选一种：</p>
+    <ul><li>让代理对 127.0.0.1 直连：给 127.0.0.0/8 加一条 DIRECT 规则，或者用规则模式而不是全局模式。</li><li>代理来自 *_PROXY 环境变量时，在设置它的地方把 127.0.0.1 加进 NO_PROXY。</li><li>Windows 上，在系统代理设置的“请勿对以下列条目开头的地址使用代理服务器”里加 127.0.0.1（只写 127.* 对 Codex 不够）。</li><li>macOS 和 Linux 上，在 shell 配置里加 NO_PROXY，终端里的 Codex 和 ChatGPT 应用里的 Codex 都会读到：</li></ul>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="drift-noproxy">复制</button><pre id="drift-noproxy"># ~/.zshrc
+export NO_PROXY=127.0.0.1</pre></div>
+    <p>改完之后退出并重新打开 Codex。</p>
+    <h2 id="off"><a class="anchor" href="#off">断开 magpie</a></h2>
+    <p>一时修不好，或者你就是不想让这个 Agent 走 magpie，可以在行菜单里选 <span class="ui">断开 magpie（还原配置）</span>：magpie 把 Agent 的配置放回接入之前的样子，并忘掉它设过的内容。之后想再接入，在 <span class="ui">Agent</span> 页重新设置即可。</p>
+
+    <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
+    <h3>为什么我在 Agent 里换了模型，magpie 提示配置被改？</h3>
+    <p>你换到的是不经过 magpie 的模型。想保留就选 保留当前设置，想回到 magpie 就点 重新应用。在 Agent 里从一个 magpie 模型换到另一个 magpie 模型不会提示。</p>
+    <h3>重新应用之后还是提示绕过了 magpie？</h3>
+    <p>这个 Agent 在 magpie 设置之前就开着，还在用旧配置。退出并重新打开它，新请求到达 magpie 后提示就会消失。</p>
+    <h3>WSL 里的 Agent 连不上 magpie 怎么办？</h3>
+    <p>多半是 Windows 防火墙挡住了 WSL：在弹窗里允许 magpie，或在管理员 PowerShell 里运行提示给出的 New-NetFirewallRule 命令。Windows 11 上也可以在 .wslconfig 里设 networkingMode=mirrored。</p>
+    <h3>Codex 每轮都 502，提示代理没转给 magpie？</h3>
+    <p>Codex 发给 magpie 的请求被代理接走了。让代理对 127.0.0.1 直连，或把 127.0.0.1 加进 NO_PROXY，然后重开 Codex。</p>
+
+    <p style="margin-top:48px">相关页面：<a href="/docs/zh/codex-models">Codex 接入 DeepSeek、Kimi、GLM、Claude 等第三方模型</a>、<a href="/docs/zh/remote">远程 magpie</a>。遇到报错？见 <a href="/docs/zh/troubleshooting">常见错误排查</a>，或到 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 提问。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a href="/docs/zh/remote">远程 magpie</a>
+    <a href="/docs/zh/docker">Docker</a>
+    <a href="/docs/zh/privacy">隐私</a>
+    <a href="/docs/zh/masking">本地脱敏</a>
+    <a href="/docs/zh/mcp-router">MCP 路由</a>
+    <a href="/docs/zh/library">资源库</a>
+    <a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a href="/docs/zh/local-models">本地模型</a>
+    <a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/zh/contributors">贡献墙</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "已复制"; setTimeout(() => (b.textContent = "复制"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

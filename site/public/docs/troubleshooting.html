@@ -282,6 +282,7 @@
       <li><b>It can’t reach magpie.</b> Under WSL’s default NAT networking, magpie also serves the gateway at Windows’ address on the WSL network, with a key of its own, and writes that address into the agent’s config. With mirrored networking the agent uses <code>127.0.0.1</code> as on Windows. Windows’ firewall still decides: WSL’s network counts as Public, so allow magpie there if the connection is blocked.</li>
       <li><b>A change doesn’t show.</b> An agent in WSL reads its config at start-up: restart it there.</li>
     </ul>
+    <p>An agent that magpie marks <span class="ui">Apply again</span> or <span class="ui">How to fix</span>: see <a href="/docs/agent-drift">When an agent stops going through magpie</a>.</p>
 
     <h2 id="lan"><a class="anchor" href="#lan">From another computer on the network</a></h2>
     <p>By default the gateway answers only this computer. To use it from another: <span class="ui">Settings</span> › <span class="ui">Network and sharing</span> › <span class="ui">Share on local network</span>. The other computer sends a gateway key from the <span class="ui">Gateway</span> page’s <span class="ui">Gateway keys</span>.</p>

@@ -282,6 +282,7 @@
       <li><b>magpie に届かない。</b>WSL 既定の NAT ネットワークでは、magpie は WSL ネットワーク上の Windows のアドレスでも専用のキーでゲートウェイを提供し、そのアドレスをエージェントの設定に書き込みます。ミラーモードでは、エージェントは Windows と同じく <code>127.0.0.1</code> を使います。通すかどうかは Windows ファイアウォールが決め、WSL のネットワークは「パブリック」扱いです。接続が遮断されるときはそこで magpie を許可してください。</li>
       <li><b>変更が反映されない。</b>WSL のエージェントは起動時に設定を読みます。WSL 側で再起動してください。</li>
     </ul>
+    <p>magpie が <span class="ui">再適用</span> や <span class="ui">直し方</span> を出しているエージェントは <a href="/docs/ja/agent-drift">エージェントが magpie を通らなくなったとき</a> を見てください。</p>
 
     <h2 id="lan"><a class="anchor" href="#lan">ネットワーク上の別のコンピュータから</a></h2>
     <p>既定では、ゲートウェイはこのコンピュータにだけ応答します。別のコンピュータから使うには <span class="ui">設定</span> › <span class="ui">ネットワークと共有</span> › <span class="ui">ローカルネットワークで共有</span> をオンにします。相手のコンピュータは <span class="ui">ゲートウェイ</span> ページの <span class="ui">ゲートウェイキー</span> のキーを送ります。</p>

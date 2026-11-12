@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>エージェントが magpie を通らなくなったとき：設定の変更、古いプロセス、応答しないアドレス、プロキシ · magpie</title>
+<meta name="description" content="エージェントページに、magpie を経由しなくなった、magpie の外でモデルから切り替えられた、magpie を経由せずに使われた、magpie につなぐアドレスから応答がない、プロキシがリクエストを magpie に渡していない、と出たときの原因と直し方：再適用、現在の設定を維持、エージェントの再起動、WSL のファイアウォール、NO_PROXY、magpie から切断。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/agent-drift">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/agent-drift">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/agent-drift">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/agent-drift">
+<link rel="canonical" href="https://usemagpie.ai/docs/ja/agent-drift">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="エージェントが magpie を通らなくなったとき">
+<meta property="og:description" content="エージェントページに、magpie を経由しなくなった、magpie の外でモデルから切り替えられた、magpie を経由せずに使われた、magpie につなぐアドレスから応答がない、プロキシがリクエストを magpie に渡していない、と出たときの原因と直し方：再適用、現在の設定を維持、エージェントの再起動、WSL のファイアウォール、NO_PROXY、magpie から切断。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/ja/agent-drift">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "エージェントが magpie を通らなくなったとき",
+   "description": "エージェントページに、magpie を経由しなくなった、magpie の外でモデルから切り替えられた、magpie を経由せずに使われた、magpie につなぐアドレスから応答がない、プロキシがリクエストを magpie に渡していない、と出たときの原因と直し方：再適用、現在の設定を維持、エージェントの再起動、WSL のファイアウォール、NO_PROXY、magpie から切断。",
+   "inLanguage": "ja",
+   "url": "https://usemagpie.ai/docs/ja/agent-drift",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "エージェントでモデルを変えたら、設定が変更されたと出るのはなぜ？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "変えた先が magpie を通らないモデルだからです。残すなら 現在の設定を維持、magpie に戻すなら 再適用 を押します。エージェント内で magpie のモデル同士を移すのは表示されません。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "再適用しても magpie を経由せずに使われたと出る？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "そのエージェントは magpie の設定より前から開いていて、古い設定で動いています。終了して開き直し、新しいリクエストが magpie に届けば表示は消えます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "WSL のエージェントが magpie につながらないときは？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "多くは Windows ファイアウォールが WSL を遮っています。聞かれたら magpie を許可するか、詳細にある New-NetFirewallRule のコマンドを管理者の PowerShell で実行します。Windows 11 なら .wslconfig の networkingMode=mirrored でも直ります。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Codex が毎ターン 502 で、プロキシが渡していないと出る？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Codex の magpie 宛てのリクエストをプロキシが受け取っています。127.0.0.1 を直結にするか NO_PROXY に 127.0.0.1 を加え、Codex を開き直します。"
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/ja/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "ドキュメント",
+     "item": "https://usemagpie.ai/docs/ja/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "エージェントが magpie を通らなくなったとき",
+     "item": "https://usemagpie.ai/docs/ja/agent-drift"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/ja/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>ドキュメント</small></a>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/start">はじめに</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a class="toc-only" href="/docs/ja/remote">リモート magpie</a>
+    <a class="toc-only" href="/docs/ja/docker">Docker</a>
+    <a class="toc-only" href="/docs/ja/privacy">プライバシー</a>
+    <a class="toc-only" href="/docs/ja/masking">プライバシーマスキング</a>
+    <a class="toc-only" href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a class="toc-only" href="/docs/ja/library">ライブラリ</a>
+    <a class="toc-only" href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a class="toc-only" href="/docs/ja/local-models">ローカルモデル</a>
+    <a class="toc-only" href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="言語" title="言語" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/agent-drift" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/agent-drift" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/agent-drift" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="Discord の magpie" title="Discord に参加"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="GitHub の magpie" title="GitHub のソースコード"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">ダウンロード</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>Agent drift</p>
+    <a href="#overview">magpie が気づくしくみ</a>
+    <a href="#unwired">設定が変更された</a>
+    <a href="#replaced">magpie の外でモデルが切り替えられた</a>
+    <a href="#bypassed">magpie を経由せずに使われた</a>
+    <a href="#unreachable">アドレスから応答がない</a>
+    <a href="#proxied">プロキシが渡していない</a>
+    <a href="#off">magpie から切断</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">ドキュメント · ガイド</p>
+    <h1>エージェントが magpie を通らなくなったとき</h1>
+    <p class="lede">magpie はエージェントを接続するとき、その設定に何を書いたかを記録します。以後エージェントページは二つのことを確かめ続けます。設定がまだ magpie の書いたとおりか、そして設定が正しいとき、エージェントの最近のリクエストが実際に magpie のゲートウェイに届いたか。合わないときは、そのエージェントの行に理由と直す手段が出ます。たいていは <span class="ui">再適用</span>（ステータス行では <span class="ui">再接続</span>）、アドレスが応答しないときやプロキシが間にあるときは <span class="ui">直し方</span> です。magpie が出す五つの表示を順に説明します。</p>
+    <p>問題にならないものが二つあります。エージェント自身のモデル選択で magpie のモデルから別の magpie のモデルに移すのは表示されません。また、あなたが手で書いた magpie という名前のプロバイダーはあなたのものなので、magpie は表示も上書きもしません。</p>
+    <h2 id="unwired"><a class="anchor" href="#unwired">「magpie を経由しなくなりました — 設定が変更されています」</a></h2>
+    <p>モデルはまだ magpie のものですが、リクエストを magpie に送る部分（ゲートウェイのアドレスなど）が変わっています。手での編集、エージェントの更新による設定の書き換え、別のツールなどが原因です。</p>
+    <ol class="steps">
+      <li><b><span class="ui">再適用</span> を押す</b>magpie が書いた内容をもう一度書き、記録を更新します。表示は消えます。</li>
+      <li><b>エージェントを再起動する</b>多くのエージェントは起動時に設定を読むので、開いているものは開き直します。</li>
+    </ol>
+    <h2 id="replaced"><a class="anchor" href="#replaced">「magpie の外で {model} から切り替えられました」</a></h2>
+    <p>magpie が設定したのは magpie のモデルでしたが、今は magpie を通らないエージェント自身のモデルになっています。詳細には今の値と magpie が設定した値が出ます。選べるのは二つです。</p>
+    <ul><li><b><span class="ui">再適用</span>：</b>magpie のモデルに戻し、一緒に設定した他の項目（推論の強さなど）も戻します。</li><li><b><span class="ui">現在の設定を維持</span>：</b>意図した変更の場合です。magpie は設定した内容を忘れ、今の設定をそのまま残し、表示しなくなります。この項目が行メニューに出るのはこの場合だけです。</li></ul>
+    <h2 id="bypassed"><a class="anchor" href="#bypassed">「magpie を経由せずに使われました — 適用後に再起動してください」</a></h2>
+    <p>設定は正しいのに、magpie が設定した後にエージェントが使われ、そのリクエストが一つも magpie に届いていません。多いのは、magpie が設定を変える前から開いていて古い設定のまま動いている場合です。環境変数など、ファイルの外のものが上書きしていることもあります。詳細にはどれかが出ます。</p>
+    <ul><li>最後のリクエストが magpie ではなく別のホストに行った：magpie の設定より前に起動し、古い設定で動いています。</li><li>ある時刻に magpie につながらなかった：そのとき magpie が動いておらず、magpie のモデルを持っていません。</li><li>ある時刻に使われたが、リクエストが magpie に届いていない。</li></ul>
+    <p>どれもエージェントを終了して開き直せば直ります。先に <span class="ui">再適用</span> を押すと記録が更新され、それ以前の使用は数えられなくなります。</p>
+    <h2 id="unreachable"><a class="anchor" href="#unreachable">「設定済みですが、magpie につなぐアドレスから応答がありません」</a></h2>
+    <p>設定は正しいものの、エージェントが magpie につなぐのはこのコンピューターのループバック（127.0.0.1）以外のアドレスで、そこが応答せず、magpie 自身はここで正常に応答しています。たいていは WSL のエージェントか、自分で用意した転送です。magpie はそのアドレスをバックグラウンドでここから試します。</p>
+    <p>WSL のエージェントが、magpie が WSL 向けに待ち受けるアドレスを指しているのに応答がないときは、Windows ファイアウォールが WSL を遮っています。Windows に聞かれたら magpie を許可するか、管理者の PowerShell で次を実行します（<code>-Program</code> は magpie.exe の実際のパスで、詳細に完全なコマンドが出ます）。</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="drift-fw">コピー</button><pre id="drift-fw">New-NetFirewallRule -DisplayName 'magpie (WSL)' -Direction Inbound -Action Allow -Profile Any -InterfaceAlias 'vEthernet (WSL*)' -Program '…\magpie.exe'</pre></div>
+    <p>WSL のネットワークは「パブリック」扱いなので、「プライベート」だけのルールでは足りません。Windows 11 なら .wslconfig でミラーモードにすると、WSL から 127.0.0.1 で magpie に届きます。</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="drift-wslconfig">コピー</button><pre id="drift-wslconfig"># %UserProfile%\.wslconfig
+[wsl2]
+networkingMode=mirrored</pre></div>
+    <p>WSL 既定の NAT ネットワークでは、WSL から見た Windows のアドレスは何かが待ち受けているときだけ応答します。<span class="ui">設定</span> › <span class="ui">ネットワークと共有</span> › <span class="ui">ローカルネットワークで共有</span> をオンにした magpie 自身（すべてのアドレスで待ち受け、他のコンピューターにはゲートウェイキーを求めます）か、自分で用意した転送（netsh interface portproxy。Windows の再起動後に設定し直しが要ることがあります）です。ここでは応答するのに WSL からつながらないなら、ファイアウォールです。WSL のネットワークにゲートウェイのポート（既定は 3425）を許可します。</p>
+    <p>WSL ディストリビューションから見た Windows のアドレスが変わったときは、詳細に新しいアドレスが出て、ボタンが <span class="ui">{url} を使う</span> になります。押すとエージェントがそこを指します。WSL 以外では、そのアドレスを magpie に転送していたものが止まっています。起動し直すか、エージェントをこのコンピューターの magpie のアドレスに向けてください。</p>
+    <h2 id="proxied"><a class="anchor" href="#proxied">「プロキシ経由で magpie につなぎますが、そのプロキシがリクエストを magpie に渡していません」</a></h2>
+    <p>これは Codex の場合です。Codex は magpie 宛てのリクエストを環境変数やシステム設定のプロキシ経由で送り、そのプロキシが magpie に渡さないため、どのモデルでも毎ターン 502 Bad Gateway になります。magpie は Codex と同じやり方でどのプロキシを通るかを調べ（ターミナルの Codex はターミナルの環境、ChatGPT アプリの Codex はログインシェルの環境）、詳細にプロキシとその設定場所が出ます。直し方はどれか一つで足ります。</p>
+    <ul><li>プロキシで 127.0.0.1 を直結にする：127.0.0.0/8 に DIRECT ルールを足すか、グローバルではなくルールモードにします。</li><li>プロキシが *_PROXY 変数から来ているときは、それを設定している場所で NO_PROXY に 127.0.0.1 を加えます。</li><li>Windows では、プロキシ設定の「次のエントリで始まるアドレス以外にプロキシ サーバーを使います」に 127.0.0.1 を加えます（127.* だけでは Codex には足りません）。</li><li>macOS と Linux では、シェルの設定に NO_PROXY を加えます。ターミナルの Codex も ChatGPT アプリの Codex も読みます。</li></ul>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="drift-noproxy">コピー</button><pre id="drift-noproxy"># ~/.zshrc
+export NO_PROXY=127.0.0.1</pre></div>
+    <p>そのあと Codex を終了して開き直します。</p>
+    <h2 id="off"><a class="anchor" href="#off">magpie から切断</a></h2>
+    <p>すぐに直せないとき、またはそのエージェントで magpie を使いたくないときは、行メニューの <span class="ui">magpie から切断</span> を選びます。magpie はエージェントの設定を接続前に戻し、設定した内容を忘れます。あとでまたつなぐときは <span class="ui">エージェント</span> ページで設定し直します。</p>
+
+    <h2 id="faq"><a class="anchor" href="#faq">よくある質問</a></h2>
+    <h3>エージェントでモデルを変えたら、設定が変更されたと出るのはなぜ？</h3>
+    <p>変えた先が magpie を通らないモデルだからです。残すなら 現在の設定を維持、magpie に戻すなら 再適用 を押します。エージェント内で magpie のモデル同士を移すのは表示されません。</p>
+    <h3>再適用しても magpie を経由せずに使われたと出る？</h3>
+    <p>そのエージェントは magpie の設定より前から開いていて、古い設定で動いています。終了して開き直し、新しいリクエストが magpie に届けば表示は消えます。</p>
+    <h3>WSL のエージェントが magpie につながらないときは？</h3>
+    <p>多くは Windows ファイアウォールが WSL を遮っています。聞かれたら magpie を許可するか、詳細にある New-NetFirewallRule のコマンドを管理者の PowerShell で実行します。Windows 11 なら .wslconfig の networkingMode=mirrored でも直ります。</p>
+    <h3>Codex が毎ターン 502 で、プロキシが渡していないと出る？</h3>
+    <p>Codex の magpie 宛てのリクエストをプロキシが受け取っています。127.0.0.1 を直結にするか NO_PROXY に 127.0.0.1 を加え、Codex を開き直します。</p>
+
+    <p style="margin-top:48px">関連ページ：<a href="/docs/ja/codex-models">Codex で DeepSeek・Kimi・GLM・Claude など他のモデルを使う</a>、<a href="/docs/ja/remote">リモート magpie</a>。ほかのエラーは <a href="/docs/ja/troubleshooting">よくあるエラーの直し方</a>、または <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> で質問してください。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a href="/docs/ja/remote">リモート magpie</a>
+    <a href="/docs/ja/docker">Docker</a>
+    <a href="/docs/ja/privacy">プライバシー</a>
+    <a href="/docs/ja/masking">プライバシーマスキング</a>
+    <a href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a href="/docs/ja/library">ライブラリ</a>
+    <a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a href="/docs/ja/local-models">ローカルモデル</a>
+    <a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/ja/contributors">コントリビューター</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "コピーしました"; setTimeout(() => (b.textContent = "コピー"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

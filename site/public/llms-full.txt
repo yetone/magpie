@@ -8748,6 +8748,8 @@ On Windows, magpie looks in running WSL distros for agents such as Claude Code, 
 - **It can’t reach magpie..** Under WSL’s default NAT networking, magpie also serves the gateway at Windows’ address on the WSL network, with a key of its own, and writes that address into the agent’s config. With mirrored networking the agent uses `127.0.0.1` as on Windows. Windows’ firewall still decides: WSL’s network counts as Public, so allow magpie there if the connection is blocked.
 - **A change doesn’t show..** An agent in WSL reads its config at start-up: restart it there.
 
+An agent that magpie marks Apply again or How to fix: see [When an agent stops going through magpie](https://usemagpie.ai/docs/agent-drift).
+
 ## From another computer on the network
 
 By default the gateway answers only this computer. To use it from another: Settings › Network and sharing › Share on local network. The other computer sends a gateway key from the Gateway page’s Gateway keys.
@@ -8793,6 +8795,102 @@ Yes. magpie finds agents in running WSL distros and sets each up with an address
 Yes. Turn on Settings › Network and sharing › Share on local network, and send a gateway key from the other computer. Don’t open the port to the internet.
 
 Still stuck? Copy the request’s report from the Routing page and ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/agent-drift
+
+# When an agent stops going through magpie
+
+When magpie connects an agent, it remembers what it set in the agent's config. From then on the Agents page keeps checking two things: whether the config still says what magpie set, and, when it does, whether the agent's latest requests actually reached magpie's gateway. When they don't, the agent's row is marked with the reason and a fix: usually Apply again (on the status line, Reconnect), or How to fix when an address doesn't answer or a proxy is in the way. Here are the five things magpie can say, one by one.
+
+Two things are not a problem: moving from one magpie model to another in the agent's own model picker isn't flagged, and a provider named magpie that you wrote by hand is yours, so magpie neither flags nor overwrites it.
+
+## “No longer goes through magpie — its config was changed”
+
+The model is still magpie's, but the part of the config that sends requests to magpie (the gateway's address, for one) was changed: by a hand edit, an update of the agent that rewrote its config, or another tool.
+
+1. **Press Apply again.** magpie writes what it set once more and renews its record. The mark goes away.
+2. **Restart the agent.** Most agents read their config at start-up, so one that is open needs reopening.
+
+## “Was switched off {model} outside magpie”
+
+magpie set a magpie model, and the config now has the agent's own model there, one that doesn't go through magpie. The detail says what the field is now and what magpie set. You have two choices:
+
+- **Apply again:.** magpie's model goes back, and so do the other fields magpie set with it, such as an effort.
+- **Keep current settings:.** the change was yours on purpose. magpie forgets what it set, keeps your config as it is and stops flagging it. The row menu has this item only in this case.
+
+## “Was used without going through magpie — restart it after applying”
+
+The config is right, yet the agent was used after magpie set it up and none of its requests reached magpie. Most often the agent was already open before magpie changed its config and still runs on the old one; something outside the file, such as an environment variable, can also override it. The detail says which:
+
+- Its last request went to another host, not magpie: it was started before magpie set it up and still runs on its old config.
+- It couldn't reach magpie at a given time: magpie wasn't running then, so it has none of magpie's models.
+- It was used at a given time, but none of its requests reached magpie.
+
+The fix each time is to quit and reopen the agent. Press Apply again first if you like: it renews the record, so a use before then no longer counts.
+
+## “Is set up, but nothing answers at the address it reaches magpie by”
+
+The config is right, but the agent reaches magpie at an address other than this computer's loopback (127.0.0.1), nothing answers there, and magpie itself answers fine here. That is usually an agent in WSL, or a forward of your own. magpie tries the address from here in the background.
+
+When an agent in WSL is pointed at the address magpie listens on for WSL and nothing answers, Windows' firewall is keeping WSL out. Allow magpie when Windows asks, or run this in PowerShell as administrator (`-Program` is magpie.exe's real path; the detail gives the whole command):
+
+```
+New-NetFirewallRule -DisplayName 'magpie (WSL)' -Direction Inbound -Action Allow -Profile Any -InterfaceAlias 'vEthernet (WSL*)' -Program '…\magpie.exe'
+```
+
+WSL's network counts as Public, so a rule for Private networks only doesn't do. On Windows 11 you can also turn on mirrored networking in .wslconfig, and WSL then reaches magpie at 127.0.0.1:
+
+```
+# %UserProfile%\.wslconfig
+[wsl2]
+networkingMode=mirrored
+```
+
+Under WSL's NAT networking, Windows as WSL sees it answers only while something listens there: magpie itself with Settings › Network and sharing › Share on local network on (it then listens on every address, and asks other computers for a gateway key), or a forward of your own (netsh interface portproxy, which may need setting up again after Windows restarts). If it answers here and WSL still can't connect, it is the firewall: allow the gateway's port (3425 by default) for the WSL network.
+
+When the address a WSL distro reaches Windows at has moved, the detail names the new one and the button reads Use {url}: pressing it points the agent there. Outside WSL, whatever forwarded the address to magpie isn't listening any more: start it again, or point the agent at magpie's address on this computer.
+
+## “Reaches magpie through a proxy that doesn't pass its requests on”
+
+This one is Codex. Codex sends its requests for magpie through a proxy set in the environment or the system settings, and that proxy doesn't pass them back to magpie: every turn fails with 502 Bad Gateway, whichever model it is on. magpie asks which proxy Codex would use the way Codex does (a terminal's environment for Codex in a terminal, the login shell's for the ChatGPT app's Codex), and the detail names the proxy and where it is set. Any one of these fixes it:
+
+- Have the proxy send 127.0.0.1 direct: a DIRECT rule for 127.0.0.0/8, or rule mode rather than global.
+- When the proxy comes from a *_PROXY variable, add 127.0.0.1 to NO_PROXY where that variable is set.
+- On Windows, add 127.0.0.1 to “Don't use the proxy server for addresses beginning with” in Windows' proxy settings (127.* there is not enough for Codex).
+- On macOS and Linux, add NO_PROXY to your shell profile; Codex in a terminal and the ChatGPT app's Codex both read it:
+
+```
+# ~/.zshrc
+export NO_PROXY=127.0.0.1
+```
+
+Then quit and reopen Codex.
+
+## Disconnect from magpie
+
+If you can't fix it now, or don't want the agent on magpie at all, pick Disconnect from magpie in the row menu: magpie puts the agent's config back as it was before and forgets what it set. To connect it again later, set it up on the Agents page.
+
+## FAQ
+
+### Why does magpie say the config was changed after I switched models in the agent?
+
+The model you switched to doesn't go through magpie. Pick Keep current settings to keep it, or Apply again to go back to magpie. Moving from one magpie model to another in the agent isn't flagged.
+
+### It still says the agent bypassed magpie after Apply again?
+
+The agent was open before magpie set it up and still runs on its old config. Quit and reopen it; once a new request reaches magpie, the mark goes away.
+
+### An agent in WSL can't reach magpie. What do I do?
+
+Most often Windows' firewall keeps WSL out: allow magpie when Windows asks, or run the New-NetFirewallRule command the detail gives in PowerShell as administrator. On Windows 11, networkingMode=mirrored in .wslconfig also works.
+
+### Codex fails every turn with 502 and magpie says a proxy doesn't pass its requests on?
+
+A proxy takes Codex's requests for magpie. Have it send 127.0.0.1 direct, or add 127.0.0.1 to NO_PROXY, then reopen Codex.
+
+Related: [Use DeepSeek, Kimi, GLM, Claude or any model in Codex](https://usemagpie.ai/docs/codex-models) and [Remote magpie](https://usemagpie.ai/docs/remote). Something else fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
