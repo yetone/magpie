@@ -1135,7 +1135,13 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		webPage.Store(true)
 	}
 	mux := http.NewServeMux()
-	mux.Handle("/", devPage(revalidated(http.FileServer(http.FS(staticFS())))))
+	page := devPage(revalidated(http.FileServer(http.FS(staticFS()))))
+	mux.Handle("/", http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		if warmsSessions(r) {
+			warmSessions()
+		}
+		page.ServeHTTP(rw, r)
+	}))
 	devRoutes(mux)
 	pluginPageRoutes(mux, isWeb(w))
 	feedbackRoutes(mux)

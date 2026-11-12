@@ -1,6 +1,9 @@
 package gui
 
-import "testing"
+import (
+	"net/http/httptest"
+	"testing"
+)
 
 // A closed window's webview goes on the second look in a row that finds it
 // closed with lightweight mode on (#580), never while it is shown or the
@@ -53,6 +56,27 @@ func TestMainOnFirstOpen(t *testing.T) {
 	} {
 		if got := mainOnFirstOpen(c.goos, c.showMain); got != c.want {
 			t.Errorf("mainOnFirstOpen(%q, %v) = %v, want %v", c.goos, c.showMain, got, c.want)
+		}
+	}
+}
+
+// The warm-up's read of the history starts with the app's page, never
+// with the tray panel's page or a file the page loads.
+func TestWarmsSessions(t *testing.T) {
+	for _, c := range []struct {
+		method, url string
+		want        bool
+	}{
+		{"GET", "/?theme=dark", true},
+		{"GET", "/", true},
+		{"GET", "/index.html", true},
+		{"GET", "/?mode=panel&theme=dark", false},
+		{"GET", "/app.js", false},
+		{"HEAD", "/", false},
+	} {
+		r := httptest.NewRequest(c.method, c.url, nil)
+		if got := warmsSessions(r); got != c.want {
+			t.Errorf("%s %s: %v, want %v", c.method, c.url, got, c.want)
 		}
 	}
 }
