@@ -35,7 +35,7 @@ func writeCallRevisions(st *callFile) {
 		_ = os.Remove(path)
 		return
 	}
-	r := callRevisions{Off: st.Off, ContentHash: st.ContentHash, CompactMs: st.CompactMs, Window: st.Claude.window()}
+	r := callRevisions{Off: st.Off, ContentHash: st.ContentHash.String(), CompactMs: st.CompactMs, Window: st.Claude.window()}
 	var data bytes.Buffer
 	if gob.NewEncoder(&data).Encode(r) != nil {
 		return
@@ -57,7 +57,7 @@ func writeCallRevisions(st *callFile) {
 // withCallRevisions is old with the window kept for it, when old is a
 // Claude file's read without one and the window kept is of that same read.
 func withCallRevisions(old *callFile) *callFile {
-	if old == nil || old.Claude != nil || (old.Agent != "claude" && old.Agent != "claude-desktop") || old.ContentHash == "" {
+	if old == nil || old.Claude != nil || (old.Agent != "claude" && old.Agent != "claude-desktop") || old.ContentHash == (digest{}) {
 		return old
 	}
 	data, err := os.ReadFile(callRevisionsPath(old.Path))
@@ -65,7 +65,7 @@ func withCallRevisions(old *callFile) *callFile {
 		return old
 	}
 	var r callRevisions
-	if gob.NewDecoder(bytes.NewReader(data)).Decode(&r) != nil || r.Off != old.Off || r.ContentHash != old.ContentHash {
+	if gob.NewDecoder(bytes.NewReader(data)).Decode(&r) != nil || r.Off != old.Off || parseDigest(r.ContentHash) != old.ContentHash {
 		return old
 	}
 	c := *old
