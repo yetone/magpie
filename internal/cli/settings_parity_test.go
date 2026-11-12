@@ -229,6 +229,7 @@ var cliForRoute = map[string]string{
 	"GET /api/update":                      "magpie update check",
 	"POST /api/update/check":               "magpie update check",
 	"POST /api/settings/agent-compact":     "magpie model compact",
+	"POST /api/settings/agent-contexts":    "magpie model window",
 	"POST /api/settings/agent-suffix":      "magpie model suffix",
 	"POST /api/settings/context-cap":       "magpie model context-cap",
 	"POST /api/settings/context-cap-mode":  "magpie model context-cap",

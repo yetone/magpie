@@ -284,6 +284,12 @@ type Group struct {
 	// as the members change (Mikan on Discord), so the agent compacts
 	// before any member would turn the conversation away.
 	Context int `json:"context,omitempty"`
+	// Compact is where Codex and Claude Code compact a conversation on the
+	// group, in tokens (NovaStudiosss on X): over what its members' own
+	// thresholds (settings.ModelCompacts) and Long conversations say, so a
+	// group carries both its window (Context) and its compaction and no
+	// provider needs either set for it. 0 leaves it to those.
+	Compact int `json:"compact,omitempty"`
 	// Levels are the reasoning levels agents are offered for the group,
 	// lowest first, when the user names them (#295): rather than those
 	// every member has, so that a member with few doesn't take the rest
@@ -1813,6 +1819,7 @@ func SaveGroup(g Group) error {
 	if g.Context < 0 {
 		g.Context = ContextSmallest
 	}
+	g.Compact = max(g.Compact, 0)
 	// the members it names and its patterns, without what the patterns
 	// matched when it was read: those are found again below, and stored
 	// never

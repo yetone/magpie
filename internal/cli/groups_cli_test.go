@@ -137,6 +137,18 @@ func TestApplyGroupPairs(t *testing.T) {
 			t.Errorf("context=%s: %d %v", c.v, g.Context, err)
 		}
 	}
+	// compact=: where agents compact on the group (NovaStudiosss on X)
+	for _, c := range []struct {
+		v    string
+		want int
+	}{{"160k", 160000}, {"1m", 1000000}, {"off", 0}, {"", 0}} {
+		if err := applyGroupPairs(&g, []string{"compact=" + c.v}, resolve, false); err != nil || g.Compact != c.want {
+			t.Errorf("compact=%s: %d %v", c.v, g.Compact, err)
+		}
+	}
+	if err := applyGroupPairs(&g, []string{"compact=lots"}, resolve, false); err == nil {
+		t.Error("compact=lots was accepted")
+	}
 	// listed=no: its models offered through the group alone (#1783)
 	if err := applyGroupPairs(&g, []string{"listed=no"}, resolve, false); err != nil || !g.Unlists {
 		t.Fatalf("listed=no: %v %v", g.Unlists, err)

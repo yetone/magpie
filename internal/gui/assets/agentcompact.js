@@ -3,7 +3,7 @@
 // row above, else this agent compacts at its own size or runs to the whole
 // window (settings.AgentCompacts). app.js imports this when an agent's
 // sheet holds Long conversations, so it weighs nothing on the core.
-window.agentCompactFill = function (list, a) {
+const compactFill = function (list, a) {
   const kind = kindOf(a);
   const row = el("div", "row pref agent-compact");
   row.dataset.agent = kind;
@@ -142,3 +142,9 @@ function claudeAttributionRow(list) {
   if (box) seen.observe(box, { childList: true });
   return row;
 }
+
+// Its own context windows come in the same sheet, last (agentwindow.js).
+window.agentCompactFill = function (list, a, ids) {
+  if (ids.includes("fullContextRow")) compactFill(list, a);
+  if (a.fields.length) import("./agentwindow.js").then(() => agentWindowFill(list, a), () => {});
+};

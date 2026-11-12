@@ -915,6 +915,16 @@ type Settings struct {
 	// (molianyin4227 on Discord: models differ, so one size for every
 	// agent fits none). An agent with none follows those two (ForAgent).
 	AgentCompacts map[string]AgentCompact `json:"agentCompacts,omitempty"`
+	// AgentContexts is the context window an agent is told for a model, when
+	// it is not the one every agent is told (ul3140773077392 on X: dsh
+	// compacts earlier than Codex does at the same window, so its window
+	// wants setting apart). By the agent's list id (Agent.ListsFor), then
+	// the model as the catalog has it ("provider/model", or "group/<id>"),
+	// "provider/*" for every model of a provider, a bare model id for that
+	// model at any provider, and "*" for all of them (which only shortens a
+	// window, as a provider's "*" does). An agent with none is told the
+	// model's own, or a group's.
+	AgentContexts map[string]map[string]int `json:"agentContexts,omitempty"`
 	// CodexAsyncCompact has Codex (0.163 on) compact a long conversation
 	// in the background, while its turn goes on, once it is past
 	// CodexAsyncCompactPercent of the model's window (#2490, lantern2077

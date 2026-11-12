@@ -66,3 +66,33 @@ func TestModelCompactAgentCmd(t *testing.T) {
 		t.Fatal(settings.Load().AgentCompacts)
 	}
 }
+
+// magpie model window dsh deepseek-v4-flash=500k gives dsh a window of its
+// own for that model (ul3140773077392 on X); a size alone is for every
+// model, off takes them away, and a size that is not one is refused.
+func TestModelAgentWindowCmd(t *testing.T) {
+	groupsHome(t)
+	catalog.Changed = nil
+	if err := modelCmd([]string{"window", "dsh", "a/m=500k", "*=256k"}); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]int{"a/m": 500000, "*": 256000}
+	if got := settings.Load().AgentContexts["dsh"]; len(got) != 2 || got["a/m"] != want["a/m"] || got["*"] != want["*"] {
+		t.Fatalf("dsh: %v", got)
+	}
+	if err := modelCmd([]string{"window", "dsh"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := modelCmd([]string{"window", "dsh", "lots"}); err == nil {
+		t.Fatal("took lots")
+	}
+	if len(settings.Load().AgentContexts["dsh"]) != 2 {
+		t.Fatal("a refused size changed them", settings.Load().AgentContexts)
+	}
+	if err := modelCmd([]string{"window", "dsh", "off"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := settings.Load().AgentContexts; len(got) != 0 {
+		t.Fatal(got)
+	}
+}

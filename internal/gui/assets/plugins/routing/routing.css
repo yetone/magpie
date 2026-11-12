@@ -718,6 +718,7 @@ body.window .rt-gedit > .bar { --vfoot: 8px; }
 .rt-gedit .gsuffix { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
 .rt-gedit .gsuffix .hint { overflow-wrap: anywhere; }
 .rt-gedit .ctx-wrap input.ctx-in { width: 96px; flex: none; }
+.rt-gedit input.cmp-in { width: 96px; flex: none; }
 .rt-gedit .ctx-wrap input.first-in { width: 64px; }
 .rt-gedit .ctx-wrap .first-unit { margin-left: -2px; color: var(--muted); font-size: 12px; }
 .rt-gedit .ctx-wrap .first-unit[hidden] { display: none; }

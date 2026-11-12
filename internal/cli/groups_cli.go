@@ -28,7 +28,9 @@ const groupUsage = `usage:
                                           models (the whole list, in order, patterns too),
                                           models+=<m>[,m2…] (append), models-=<m>[,m2…] (drop), routing, stays,
                                           context (how long a request agents are told it takes: 272k; smallest
-                                          is its smallest model's; empty is its largest model's), levels (the reasoning levels agents are offered:
+                                          is its smallest model's; empty is its largest model's),
+                                          compact (where Codex and Claude Code compact a conversation on it: 200k;
+                                          empty leaves it to its models' and Long conversations), levels (the reasoning levels agents are offered:
                                           levels=none,low,medium,high,xhigh,max; empty is those every model has —
                                           a model without the one asked is sent its nearest),
                                           family (a tag: magpie visible shows agents families, not each group),
@@ -516,6 +518,15 @@ func applyGroupPairs(g *provider.Group, pairs []string, resolve func(string) (st
 				g.Context = provider.ContextSmallest
 			default:
 				g.Context, err = parseTokens(v)
+			}
+		case "compact", "compact-at":
+			// where Codex and Claude Code compact a conversation on the
+			// group; empty or 0 leaves it to its members' and Settings'
+			switch strings.ToLower(strings.TrimSpace(v)) {
+			case "", "default", "off":
+				g.Compact = 0
+			default:
+				g.Compact, err = parseTokens(v)
 			}
 		case "levels", "level":
 			// the reasoning levels agents are offered; empty is those every

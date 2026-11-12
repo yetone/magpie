@@ -117,6 +117,12 @@ const modelUsage = `usage:
                                                  shorter or unknown window stays as it is. off takes it away;
                                                  all also holds a window you set for a model or its
                                                  provider (the shorter is told), own leaves those alone
+  magpie model window <agent> [<model>=<size>…|off]
+                                                 the context window one agent is told for a model, apart from
+                                                 every other agent's (dsh compacts earlier than Codex at the
+                                                 same window): <model> is provider/model, group/<id>,
+                                                 provider/*, a bare model id or * (which only shortens);
+                                                 off takes them away. No pairs shows them
   magpie model compact <agent> [every|off|<size>] codex, claude or grok's own Long conversations: every
                                                  follows the one above; off runs to the whole window; a
                                                  size compacts there
@@ -158,6 +164,8 @@ func modelCmd(args []string) error {
 		return modelSuffix(args[1:])
 	case "compact", "full-context":
 		return modelCompact(args[1:])
+	case "window", "agent-context":
+		return modelAgentWindow(args[1:])
 	case "context-cap", "ctx-cap":
 		return modelContextCap(args[1:])
 	case "context", "ctx":
@@ -881,6 +889,53 @@ func agentCompact(agent string, args []string) error {
 		return err
 	}
 	fmt.Println(green.Render("✓"), agent+":", compactWords(settings.Load().ForAgent(agent)))
+	return nil
+}
+
+// modelAgentWindow says or sets the windows one agent is told
+// (settings.AgentContexts): model=size pairs replace those it had, off
+// takes them away.
+func modelAgentWindow(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("magpie model window <agent> [<model>=<size>…|off]")
+	}
+	a, err := agent.Find(args[0])
+	if err != nil {
+		return err
+	}
+	id := a.ListsFor()
+	if len(args) == 1 {
+		cur := provider.AgentContexts(id)
+		if len(cur) == 0 {
+			fmt.Println(muted.Render(fmt.Sprintf("%s is told each model's own window · magpie model window %s <model>=<size>", a.ID, a.ID)))
+			return nil
+		}
+		for _, k := range slices.Sorted(maps.Keys(cur)) {
+			fmt.Println(k, tokenCount(cur[k]))
+		}
+		return nil
+	}
+	cs := map[string]int{}
+	if v := strings.ToLower(args[1]); len(args) == 2 && (v == "off" || v == "every" || v == "default") {
+		cs = nil
+	} else {
+		for _, w := range args[1:] {
+			k, v, ok := strings.Cut(w, "=")
+			n, perr := provider.ParseTokens(v)
+			if !ok || perr != nil || n <= 0 {
+				return fmt.Errorf("magpie model window %s <model>=<size such as 500k>|off, not %q", a.ID, w)
+			}
+			cs[k] = n
+		}
+	}
+	if err := provider.SetAgentContexts(id, cs); err != nil {
+		return err
+	}
+	if len(cs) == 0 {
+		fmt.Println(green.Render("✓"), a.ID, "is told each model's own window again")
+		return nil
+	}
+	fmt.Println(green.Render("✓"), a.ID, "is told", len(cs), "window(s) of its own", muted.Render("· takes effect when it next starts"))
 	return nil
 }
 

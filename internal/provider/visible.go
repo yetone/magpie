@@ -99,6 +99,8 @@ func catalogFor(agent string) (shown, hidden []Entry) {
 			shown = append(shown, e)
 		}
 	}
+	// the windows the user set for this agent alone (settings.AgentContexts)
+	shown = withAgentWindows(heldSettings(), agent, shown)
 	return shown, hidden
 }
 

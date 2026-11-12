@@ -21179,7 +21179,7 @@ const AGENT_PREFS = {
   claude: ["fullContextRow"],
   grok: ["fullContextRow"],
 };
-const agentPrefsOf = (a) => gatewayMode ? null : AGENT_PREFS[kindOf(a)] || (a.telemetry ? [] : null);
+const agentPrefsOf = (a) => gatewayMode ? null : AGENT_PREFS[kindOf(a)] || (a.telemetry || a.fields.length ? [] : null);
 
 // telemetryRow: the agent's own telemetry off in its config (OipsAnthony on X)
 function telemetryRow(a) {
@@ -21211,7 +21211,7 @@ function telemetryRow(a) {
 const PREFS_GLYPH = "M2.75 4.75h10.5M2.75 11.25h10.5M5.75 3.25v3M10.25 9.75v3";
 let agentPrefRowEls = null;
 // an agent's own Long conversations, under every agent's (agentcompact.js)
-const agentCompactIn = (list, ids, a) => ids.includes("fullContextRow") && (window.agentCompactFill ? agentCompactFill(list, a) : import("./agentcompact.js").then(() => agentCompactFill(list, a), () => {}));
+const agentCompactIn = (list, ids, a) => window.agentCompactFill ? agentCompactFill(list, a, ids) : import("./agentcompact.js").then(() => agentCompactFill(list, a, ids), () => {});
 // homeAgentPrefRows: the rows a sheet took back in the page
 function homeAgentPrefRows() {
   const box = $("#agentPrefRows");

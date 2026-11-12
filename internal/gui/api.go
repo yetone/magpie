@@ -1969,6 +1969,28 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		writeJSON(rw, settingsState())
 	})
+	// the windows one agent is told, apart from every other's
+	// (settings.AgentContexts): Contexts replaces them, none takes them away
+	mux.HandleFunc("POST /api/settings/agent-contexts", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Agent    string
+			Contexts map[string]int
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		a, err := agent.Find(in.Agent)
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		if err := provider.SetAgentContexts(a.ListsFor(), in.Contexts); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, settingsState())
+	})
 	// an agent's own Provider in model names (settings.AgentSuffix): Mode
 	// "" follows the one for every agent again
 	mux.HandleFunc("POST /api/settings/agent-suffix", func(rw http.ResponseWriter, r *http.Request) {

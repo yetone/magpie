@@ -178,7 +178,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const line = page.locator('.row.agent[data-id="codex"] .agent-prefs-open');
       await line.waitFor();
       assert.equal(await line.getAttribute("aria-label"), w.sheet);
-      assert.equal(await page.locator('.row.agent[data-id="pi"] .agent-prefs-open').count(), 0, "Pi has none");
+      assert.equal(await page.locator('.row.agent[data-id="pi"] .agent-prefs-open').count(), 1, "Pi has one, for its own context window only");
       await noSideScroll(page, `${lang} panel`);
       await line.click();
       await sheet(page).waitFor();
