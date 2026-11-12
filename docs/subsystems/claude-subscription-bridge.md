@@ -518,6 +518,13 @@ the cache again (3 to 10 times the cost;
 `TestTapPutsTheGuardFilesSafeguards`). A changed safety beta, or
 safeguards appearing or going, still restarts.
 
+The level a remote client asks reaches `--effort` from every route: Messages
+(`thinking` budget, `output_config.effort`, and the last turn's
+`output_config` when the request's own names none), Chat (`reasoning_effort`,
+else `reasoning.effort`, `output_config.effort` or a `thinking` budget, as a
+relay turning a Claude client's request into Chat may put it) and Responses
+(`reasoning.effort`) (`TestClaudeBridgeTakesTheEffortOfEveryRoute`).
+
 A turn asking another effort goes on in its run too (#5584). The `-p`
 run is told it by `apply_flag_settings` (`setEffort`, #502). The
 interactive mode takes another level only from a person typing

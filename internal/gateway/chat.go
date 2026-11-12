@@ -63,14 +63,48 @@ type cRequest struct {
 	Stop                json.RawMessage `json:"stop,omitempty"`
 	Stream              bool            `json:"stream,omitempty"`
 	ReasoningEffort     string          `json:"reasoning_effort,omitempty"`
-	ParallelToolCalls   *bool           `json:"parallel_tool_calls,omitempty"`
-	ServiceTier         string          `json:"service_tier,omitempty"`
-	PromptCacheKey      string          `json:"prompt_cache_key,omitempty"`
-	ResponseFormat      json.RawMessage `json:"response_format,omitempty"`
+	// the level in the other places a relay or a client puts it: new-api
+	// and OpenRouter's reasoning object, a Claude client's output_config
+	// and thinking budget (chatEffort)
+	Reasoning         json.RawMessage `json:"reasoning,omitempty"`
+	OutputConfig      json.RawMessage `json:"output_config,omitempty"`
+	Thinking          json.RawMessage `json:"thinking,omitempty"`
+	ParallelToolCalls *bool           `json:"parallel_tool_calls,omitempty"`
+	ServiceTier       string          `json:"service_tier,omitempty"`
+	PromptCacheKey    string          `json:"prompt_cache_key,omitempty"`
+	ResponseFormat    json.RawMessage `json:"response_format,omitempty"`
 	// not a Chat field: OpenCode merges a model's options into its body
 	// whichever API it speaks, and a Codex model it asks on Chat is asked
 	// on Responses (Request.AccessPrograms)
 	AccessPrograms json.RawMessage `json:"access_programs,omitempty"`
+}
+
+// chatEffort is the level a Chat request asks: reasoning_effort, and when
+// it names none, the places a relay puts the level of a Claude client's
+// request it turned into Chat (reasoning.effort, output_config.effort, a
+// thinking budget). reasoning_effort, when there, is the client's word.
+func chatEffort(c *cRequest) string {
+	if e := effortOf(c.ReasoningEffort); e != "" || strings.TrimSpace(c.ReasoningEffort) != "" {
+		return e
+	}
+	var o struct {
+		Effort string `json:"effort"`
+	}
+	for _, raw := range []json.RawMessage{c.Reasoning, c.OutputConfig} {
+		if len(raw) > 0 && decodeJSON(raw, &o) == nil {
+			if e := effortOf(o.Effort); e != "" {
+				return e
+			}
+		}
+	}
+	var th struct {
+		Type   string `json:"type"`
+		Budget int    `json:"budget_tokens"`
+	}
+	if len(c.Thinking) > 0 && decodeJSON(c.Thinking, &th) == nil && th.Type == "enabled" {
+		return effortOfBudget(th.Budget)
+	}
+	return ""
 }
 
 func parseChat(body []byte) (*Request, error) { return readChat(body, false) }
@@ -92,7 +126,7 @@ func readChat(body []byte, facts bool) (*Request, error) {
 		return nil, fmt.Errorf("invalid request: %v", err)
 	}
 	r := &Request{Model: c.Model, MaxTokens: c.MaxCompletionTokens, Temp: c.Temperature, TopP: c.TopP,
-		Stream: c.Stream, Effort: effortOf(c.ReasoningEffort), Parallel: c.ParallelToolCalls, Fast: c.ServiceTier == "priority" || c.ServiceTier == "ultrafast", Ultrafast: c.ServiceTier == "ultrafast", Tier: c.ServiceTier,
+		Stream: c.Stream, Effort: chatEffort(&c), Parallel: c.ParallelToolCalls, Fast: c.ServiceTier == "priority" || c.ServiceTier == "ultrafast", Ultrafast: c.ServiceTier == "ultrafast", Tier: c.ServiceTier,
 		CacheKey: c.PromptCacheKey, Format: openAIFormat(c.ResponseFormat), AccessPrograms: c.AccessPrograms}
 	if r.MaxTokens == 0 {
 		r.MaxTokens = c.MaxTokens
