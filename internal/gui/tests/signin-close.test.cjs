@@ -115,10 +115,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         });
       });
       assert(fit.every((f) => f.inside), JSON.stringify(fit));
-      // one button puts it away: Open again stands alone, no Close (beside
-      // it only the proxy the sign-in goes through, #1663)
-      const acts = box.locator(".acts");
-      assert.deepEqual(await acts.locator("button:not(.via)").allTextContents(), [w.again]);
+      // Open again sits to the right of Copy, no Close (the proxy the
+      // sign-in goes through, #1663, is below)
+      assert.deepEqual(await box.locator(".signlink button.link").allTextContents(), [w.again]);
+      assert.deepEqual(await box.locator(".acts button:not(.via)").allTextContents(), []);
       assert.equal(await box.getByRole("button", { name: w.close, exact: true }).count(), 0, "no Close beside Cancel");
       const cancel = box.locator(":scope > button", { hasText: w.cancel });
       assert.equal(await cancel.count(), 1);
@@ -166,8 +166,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       const missing = await page.evaluate(() => ["Stop waiting for this sign-in"].filter((k) => !I18N.zh[k]));
       assert.deepEqual(missing, []);
-      // a Windows window tints its title bar to the page (6927bedfc), which changes nothing
-      assert.deepEqual(ctl.other.filter((o) => o.startsWith("POST") && !o.includes("/api/open") && !o.includes("/api/window/titlebar")), [], "nothing else was changed");
+      // a Windows window tints its title bar to the page (6927bedfc), which changes nothing; so does the "in use" ping a click sends (10c4dc109)
+      assert.deepEqual(ctl.other.filter((o) => o.startsWith("POST") && !o.includes("/api/open") && !o.includes("/api/window/titlebar") && !o.includes("/api/update/using")), [], "nothing else was changed");
       assert.deepEqual(errors, []);
     });
   }

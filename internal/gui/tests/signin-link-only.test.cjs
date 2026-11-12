@@ -20,11 +20,11 @@ const assets = path.resolve(__dirname, "../assets");
 const LINK = "https://accounts.example/o/oauth2/auth?client_id=x&redirect_uri=http%3A%2F%2F127.0.0.1%3A51234%2Fcallback&state=" + "s".repeat(80);
 
 const W = {
-  en: { settings: "Settings", head: "Sign-in pages", name: "Open sign-in pages in the browser", anyway: "Sign in anyway", said: "magpie didn't open the sign-in page", open: "Open", again: "Open again", copy: "Copy link" },
-  zh: { settings: "设置", head: "登录页", name: "在浏览器中打开登录页", anyway: "仍然登录", said: "magpie 按设置没有打开登录页", open: "打开", again: "重新打开", copy: "复制链接" },
-  "zh-TW": { settings: "設定", head: "登入頁", name: "在瀏覽器中開啟登入頁", anyway: "仍然登入", said: "magpie 依設定沒有開啟登入頁", open: "開啟", again: "重新開啟", copy: "複製連結" },
-  ja: { settings: "設定", head: "サインインページ", name: "サインインページをブラウザで開く", anyway: "それでもサインイン", said: "設定に従い、magpie はサインインページを開いていません", open: "開く", again: "もう一度開く", copy: "リンクをコピー" },
-  de: { settings: "Einstellungen", head: "Anmeldeseiten", name: "Anmeldeseiten im Browser öffnen", anyway: "Trotzdem anmelden", said: "magpie hat die Anmeldeseite wie in den Einstellungen festgelegt nicht geöffnet", open: "Öffnen", again: "Erneut öffnen", copy: "Link kopieren" },
+  en: { settings: "Settings", head: "Sign-in pages", name: "Open sign-in pages in the browser", anyway: "Sign in anyway", said: "magpie didn't open the sign-in page", open: "Open in browser", again: "Open again", copy: "Copy link" },
+  zh: { settings: "设置", head: "登录页", name: "在浏览器中打开登录页", anyway: "仍然登录", said: "magpie 按设置没有打开登录页", open: "在浏览器中打开", again: "重新打开", copy: "复制链接" },
+  "zh-TW": { settings: "設定", head: "登入頁", name: "在瀏覽器中開啟登入頁", anyway: "仍然登入", said: "magpie 依設定沒有開啟登入頁", open: "在瀏覽器中開啟", again: "重新開啟", copy: "複製連結" },
+  ja: { settings: "設定", head: "サインインページ", name: "サインインページをブラウザで開く", anyway: "それでもサインイン", said: "設定に従い、magpie はサインインページを開いていません", open: "ブラウザで開く", again: "もう一度開く", copy: "リンクをコピー" },
+  de: { settings: "Einstellungen", head: "Anmeldeseiten", name: "Anmeldeseiten im Browser öffnen", anyway: "Trotzdem anmelden", said: "magpie hat die Anmeldeseite wie in den Einstellungen festgelegt nicht geöffnet", open: "Im Browser öffnen", again: "Erneut öffnen", copy: "Link kopieren" },
 };
 
 function settingsPayload(lang, over) {
@@ -134,8 +134,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           if (linkOnly) {
             assert.deepEqual(opened, [], "no page opened");
             assert(said.startsWith(w.said), said);
-            assert.equal(await box.locator(".acts button", { hasText: new RegExp("^" + w.open + "$") }).count(), 1, "Open");
-            assert.equal(await box.locator(".acts button", { hasText: w.again }).count(), 0, "not Open again");
+            assert.equal(await box.locator(".signlink button", { hasText: new RegExp("^" + w.open + "$") }).count(), 1, "Open in browser, beside the link");
+            // Copy first, Open in browser to its right
+            const at = await box.locator(".signlink").evaluate((r) => [...r.children].map((c) => c.tagName + "." + c.className));
+            assert.deepEqual(at, ["CODE.", "BUTTON.copy", "BUTTON.link"], "link, Copy, Open in browser");
+            assert.equal(await box.locator("button", { hasText: w.again }).count(), 0, "not Open again");
             // "as set in Settings" leads to the setting
             const go = box.locator(".tt > .s button");
             assert.equal((await go.textContent()).trim(), w.settings + " ›");
@@ -145,7 +148,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             assert.deepEqual(opened, [LINK], "the page opened once");
             assert(!said.startsWith(w.said), said);
             assert.equal(await box.locator(".tt > .s button").count(), 0, "nothing to lead to");
-            assert.equal(await box.locator(".acts button", { hasText: w.again }).count(), 1, "Open again");
+            assert.equal(await box.locator(".signlink button", { hasText: w.again }).count(), 1, "Open again, beside Copy");
           }
           assert.deepEqual(errors, []);
           await context.close();
