@@ -8,6 +8,7 @@ import (
 
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/gateway"
+	"github.com/yetone/magpie/internal/memdistill"
 )
 
 // genericIcon are the clients magpie has no logo for yet, drawn with the
@@ -77,7 +78,7 @@ func TestEveryClientHasNameAndIcon(t *testing.T) {
 	}
 	// the ids the gateway gives a request by more than its User-Agent
 	// (gateway.agentOf), and those it names by one: each is a client
-	for _, id := range []string{"claude-desktop", gateway.ScienceID, "cursor-local", "codex", "magpie", "kimi", "kimi-code-desktop"} {
+	for _, id := range []string{"claude-desktop", gateway.ScienceID, "cursor-local", "codex", "magpie", "kimi", "kimi-code-desktop", memdistill.Agent} {
 		if !clients[id] {
 			t.Errorf("the gateway records requests as %s, which isn't among the clients", id)
 		}

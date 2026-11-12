@@ -205,6 +205,10 @@ var others = []*Agent{
 	// Sessions lists those as Raft's (internal/sessions/raft.go), while
 	// their requests say "pi (…)" and are Pi's
 	{ID: "raft", Name: "Raft", Icon: "generic"},
+	// Magpie Memory reading conversations into memories: its requests are
+	// made as memdistill.Agent, by its token and never a User-Agent, and
+	// drawn with the brain the Library's Memory tab has (the owner, 11-12)
+	{ID: "memory", Name: "Memory", Icon: "memory"},
 }
 
 // Clients is everyone whose requests the gateway knows by name: every
