@@ -13,11 +13,11 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sync"
 	"time"
 
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // Quiet is how long a version has to be behind before the pill lights, and
@@ -119,7 +119,7 @@ func (b Behind) Lit(current string, now time.Time) bool {
 	return !b.Since.IsZero() && now.Sub(b.Since) >= Quiet
 }
 
-var urgentLine = regexp.MustCompile(`(?im)^[ \t]*(?:>[ \t]*)?\*\*urgent release:\*\*`)
+var urgentLine = lazyre.New(`(?im)^[ \t]*(?:>[ \t]*)?\*\*urgent release:\*\*`)
 
 // UrgentIn is whether a release's notes mark it urgent, as the site reads
 // them (site/worker.js, urgentIn).
