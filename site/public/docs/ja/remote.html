@@ -137,6 +137,7 @@
     <a href="#models">使えるもの</a>
     <a href="#quotas">クォータと使用量</a>
     <a href="#keys">短期キー</a>
+    <a href="#admin">管理 API</a>
     <a href="#oidc">GitHub Actions のキー</a>
     <a href="#api">統計 API</a>
     <a href="#trouble">うまくいかないとき</a>
@@ -244,6 +245,21 @@ steps:
       echo "MAGPIE_KEY=$KEY" &gt;&gt; "$GITHUB_ENV"</pre>
     </div>
     <p>キーはルールのゲートウェイキーの下で発行され、他の発行済みキーと同じくそのキーに縛られ、ルールの期間より長くは有効になりません。名前はリポジトリ、ブランチ、実行番号です。別のリポジトリやブランチのトークン、期限切れ、交換済みのトークンには理由付きの <code>401</code> が返ります。他のコンピューターから使えるのは magpie を共有している間だけで、断られたトークンは認証失敗の回数に数えられます。ルールがなければ何も交換されません。</p>
+
+    <h2 id="admin"><a class="anchor" href="#admin">管理 API</a></h2>
+    <p>プロバイダー、アカウント、ゲートウェイキー、アカウントグループは、許可したキーがあれば設定ファイルを手で編集せずに管理できます。許可はコマンドラインで行います（API 経由ではできません。キーは自分以上の権限を別のキーに与えられません）。</p>
+    <div class="code">
+      <span class="lang">Shell</span>
+      <button class="copy" data-copy="ex-admin">Copy</button>
+      <pre id="ex-admin">magpie gateway-key add automation
+magpie gateway-key admin &lt;id&gt; local   <span class="c"># このコンピューターのみ</span>
+magpie gateway-key admin &lt;id&gt; any     <span class="c"># ほかのコンピューターからも</span>
+curl -s http://127.0.0.1:3425/v1/magpie/admin/providers -H "Authorization: Bearer $KEY"
+curl -s -X POST http://127.0.0.1:3425/v1/magpie/admin/gateway-keys/add-key \
+  -H "Authorization: Bearer $KEY" -d '{"name":"ci"}'</pre>
+    </div>
+    <p>アプリ自身のページと同じ処理が <code>/v1/magpie/admin/</code> の下にあります。<code>GET providers</code>、<code>POST provider/{save,delete,on,off,name,…}</code>、<code>POST keys/…</code>（プロバイダーのキー）、<code>GET</code>/<code>POST gateway-keys[/{add-key,rename-key,limit-key,models-key,remove-key,…}]</code>、<code>GET</code>/<code>POST account-groups[/…]</code>、そして <code>POST signin</code>（<code>{"agent":…}</code>）は、ベンダーのページと入力するコードを返し、パスワードは受け取りません。ブラウザーのあるコンピューターで開いてください。保存済みのキーとゲートウェイキーの秘密は再び返されず、このコンピューターのほかのアプリを変更する操作も提供しません。</p>
+    <p>読み取り専用キー、拡張機能のキー、発行されたキーや短期キー、共有キーは使えません。キーの有無にかかわらず Web ページからは呼べません（<code>Origin</code> や <code>Sec-Fetch-*</code> を持つリクエストはすべて拒否）。このコンピューターの別名で届いたリクエストも拒否されます。ネットワーク越しに共有している場合、<code>any</code> のキーだけが通ります。</p>
 
     <h2 id="api"><a class="anchor" href="#api">統計 API</a></h2>
     <p>使用量ページの内容は JSON でも、このコンピューターに、また magpie を共有している間はゲートウェイキー付きのリクエストに提供されます。予算、モデル、アカウントで制限されたキーには、自分のリクエストと上限だけが返ります。持ち主がそのキーの<span class="ui">残量</span>をオンにすると（<code>magpie gateway-key quotas &lt;id&gt; on</code>）、使えるもののクォータも返ります。</p>

@@ -1045,6 +1045,8 @@ func (s *Server) routes() *routeMux {
 	mux.HandleFunc("GET "+routeEventsPath, s.routeEvents)
 	mux.HandleFunc("GET /v1/magpie/concurrency", s.concurrency)
 	mux.HandleFunc("GET /v1/magpie/limit", s.keyLimit)
+	// the management API, for a key that may manage magpie (admin.go)
+	mux.HandleFunc(AdminPath, s.admin)
 	mux.HandleFunc("GET "+OwnMCPPath, s.ownMCPList)
 	// short-lived keys, issued by a key let issue them or from loopback
 	// (issue_keys.go)

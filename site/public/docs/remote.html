@@ -137,6 +137,7 @@
     <a href="#models">What you get</a>
     <a href="#quotas">Quotas and usage</a>
     <a href="#keys">Short-lived keys</a>
+    <a href="#admin">Management API</a>
     <a href="#oidc">Keys for GitHub Actions</a>
     <a href="#api">Stats API</a>
     <a href="#trouble">When it doesn’t work</a>
@@ -244,6 +245,21 @@ steps:
       echo "MAGPIE_KEY=$KEY" &gt;&gt; "$GITHUB_ENV"</pre>
     </div>
     <p>The key is issued under the rule’s gateway key and held to it like any other issued key, lives no longer than the rule says, and is named after the repository, branch and run. A token from another repository or branch, an expired one, or one already traded gets <code>401</code> and why. The route answers another computer only while magpie is shared, and refused tokens count against the failed sign-ins it allows. Without a rule nothing is traded.</p>
+
+    <h2 id="admin"><a class="anchor" href="#admin">Management API</a></h2>
+    <p>Providers, accounts, gateway keys and account groups can be managed with no hand-edited file, by a key you allow to. Allow it from the command line (not through the API: a key can't give another more than it has):</p>
+    <div class="code">
+      <span class="lang">Shell</span>
+      <button class="copy" data-copy="ex-admin">Copy</button>
+      <pre id="ex-admin">magpie gateway-key add automation
+magpie gateway-key admin &lt;id&gt; local   <span class="c"># this computer only</span>
+magpie gateway-key admin &lt;id&gt; any     <span class="c"># also from other computers</span>
+curl -s http://127.0.0.1:3425/v1/magpie/admin/providers -H "Authorization: Bearer $KEY"
+curl -s -X POST http://127.0.0.1:3425/v1/magpie/admin/gateway-keys/add-key \
+  -H "Authorization: Bearer $KEY" -d '{"name":"ci"}'</pre>
+    </div>
+    <p>It answers the same as the app’s own pages do, under <code>/v1/magpie/admin/</code>: <code>GET providers</code>, <code>POST provider/{save,delete,on,off,name,…}</code>, <code>POST keys/…</code> (a provider’s keys), <code>GET</code>/<code>POST gateway-keys[/{add-key,rename-key,limit-key,models-key,remove-key,…}]</code>, <code>GET</code>/<code>POST account-groups[/…]</code>, and <code>POST signin</code> with <code>{"agent":…}</code>, which answers the vendor’s page and the code to type there, never a password; open it on a computer with a browser. A saved key and a gateway key’s secret are never told again, and what changes this computer’s apps is not served.</p>
+    <p>A key that is read-only, the extension’s, issued or short-lived, or the sharing key, can’t have it. A web page can’t call it, with a key or without (any request with <code>Origin</code> or <code>Sec-Fetch-*</code> is refused), and nor can a request under another name for this computer. Shared over the network, only a key set to <code>any</code> gets in.</p>
 
     <h2 id="api"><a class="anchor" href="#api">Stats API</a></h2>
     <p>What the Usage page shows is also served as JSON, to this computer and, while magpie is shared, to a request with a gateway key. A key held to a budget, models or accounts is told only its own calls and limit, and the quotas of what it may use once its owner turns on <span class="ui">Quotas</span> for it (<code>magpie gateway-key quotas &lt;id&gt; on</code>).</p>

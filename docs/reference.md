@@ -690,6 +690,7 @@ magpie gateway-key groups set Work codex/me@example.com   # every key naming Wor
 magpie gateway-key mcp <id> github fs/read_file   # only these MCP servers and tools
 magpie gateway-key mcp <id> none        # no MCP server (all: every one)
 magpie gateway-key quotas <id> on      # told the quotas of what it may use
+magpie gateway-key admin <id> local     # may manage magpie through /v1/magpie/admin/, from this computer (any: from the network too; off)
 ```
 
 Each gateway key can have its own **limit**: a token total, an estimated
@@ -1117,6 +1118,41 @@ default, `us-east-1`, `eu-central-1`, `ap-northeast-1`, `cn-hongkong` and
 `sk-sp-` keys), with the plan's documented text models. Both serve Chat
 Completions at `/compatible-mode/v1` and Anthropic Messages at
 `/apps/anthropic`.
+
+### Management API
+
+A script or a provisioning tool manages providers, accounts, gateway keys and
+account groups with no hand-edited file (ljayic on X). The routes are under
+`/v1/magpie/admin/` and are the app's own handlers, so a page and a script
+can't drift:
+
+| Route | What it does |
+| --- | --- |
+| `GET providers` | the Providers list, as the app shows it (keys masked) |
+| `POST provider/{action}` | `save`, `delete`, `on`, `off`, `name`, `efforts`, `images`, `arrange`, `route`, `affinity`, `sink`, `usefirst`, `test`, `models`, `list`, and each key's or account's setting (`accountcap`, `accountname`, `windowcap`, `accountweight`, `keyspendcap`, `keyexpiring`, …) |
+| `POST keys/{action}`, `POST login/{action}`, `GET login/usage` | a provider's keys, and its signed-in accounts |
+| `POST signin` `{"agent": …}`, `GET signin/{id}`, `POST signin/{id}/cancel`, `POST signin/{id}/callback` | OAuth sign-in: the answer holds the vendor's page and the code to type there. Nothing is opened on this computer and no password is taken |
+| `GET gateway-keys[/models\|/mcp]`, `POST gateway-keys/{action}` | gateway keys: `add-key`, `rename-key`, `rotate-key`, `limit-key`, `models-key`, `accounts-key`, `mcp-key`, `access-key`, `on-key`, `off-key`, `remove-key`, … |
+| `GET account-groups`, `POST account-groups/{action}` | named account groups |
+
+Bodies are the app's own JSON. A route or action not listed is a 404. Never
+served: a provider's saved key, a gateway key's secret after its `add-key` or
+`rotate-key` answer, exporting sign-ins, and what changes this computer's
+other apps (moving, showing, restarting).
+
+Who may call it: a gateway key set with `magpie gateway-key admin <id>
+local|any`. `local` is from this computer only; `any` also from the network
+when sharing is on. Only a key the user made can have it: a read-only,
+Magpie Browser, issued or expiring key, and the default sharing key, can't,
+and the API can't set the level on any key, so it can't raise its own
+caller. A request with no key is 401, a key without the level 403
+(`gateway_key_not_admin`). Browsers never call it, with or without a key:
+any request with `Origin` (`null`, a foreign page, a listed page or
+`*.localhost` among them) or `Sec-Fetch-*` is 403, and so is one that
+reached loopback under another name (a rebound page's GET has neither).
+Answers are `Cache-Control: no-store`. This first part leaves out Routing
+Groups (the Routing page) and the import and export of sign-ins; they are
+tracked in [#6307](https://github.com/yetone/magpie/issues/6307).
 
 ### Embeddings and rerank
 

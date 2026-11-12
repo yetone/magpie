@@ -137,6 +137,7 @@
     <a href="#models">能用到什么</a>
     <a href="#quotas">额度与用量</a>
     <a href="#keys">短期密钥</a>
+    <a href="#admin">管理 API</a>
     <a href="#oidc">GitHub Actions 的密钥</a>
     <a href="#api">统计 API</a>
     <a href="#trouble">出问题时</a>
@@ -244,6 +245,21 @@ steps:
       echo "MAGPIE_KEY=$KEY" &gt;&gt; "$GITHUB_ENV"</pre>
     </div>
     <p>换到的密钥由规则里的网关密钥签发，和其他签发的密钥一样受它约束，有效期不超过规则所写，名字是仓库、分支和运行编号。其他仓库或分支的 token、过期的 token、已经换过的 token 会收到 <code>401</code> 和原因。只有 magpie 共享时其他电脑才能调用这个接口，被拒的 token 计入失败认证次数。没有规则就什么都换不到。</p>
+
+    <h2 id="admin"><a class="anchor" href="#admin">管理 API</a></h2>
+    <p>提供商、账号、网关密钥和账号组都可以不改任何配置文件来管理，用你允许的密钥即可。在命令行里允许（不能通过 API：密钥给不了别的密钥比自己更多的权限）：</p>
+    <div class="code">
+      <span class="lang">Shell</span>
+      <button class="copy" data-copy="ex-admin">Copy</button>
+      <pre id="ex-admin">magpie gateway-key add automation
+magpie gateway-key admin &lt;id&gt; local   <span class="c"># 只限这台电脑</span>
+magpie gateway-key admin &lt;id&gt; any     <span class="c"># 其他电脑也可以</span>
+curl -s http://127.0.0.1:3425/v1/magpie/admin/providers -H "Authorization: Bearer $KEY"
+curl -s -X POST http://127.0.0.1:3425/v1/magpie/admin/gateway-keys/add-key \
+  -H "Authorization: Bearer $KEY" -d '{"name":"ci"}'</pre>
+    </div>
+    <p>它和应用自己的页面答得一样，路径在 <code>/v1/magpie/admin/</code> 下：<code>GET providers</code>、<code>POST provider/{save,delete,on,off,name,…}</code>、<code>POST keys/…</code>（提供商的密钥）、<code>GET</code>/<code>POST gateway-keys[/{add-key,rename-key,limit-key,models-key,remove-key,…}]</code>、<code>GET</code>/<code>POST account-groups[/…]</code>，以及 <code>POST signin</code>（<code>{"agent":…}</code>），它返回厂商的网页和要输入的代码，从不收密码；请在有浏览器的电脑上打开。已保存的密钥和网关密钥的明文不会再被告知，会改动这台电脑上其他应用的操作也不提供。</p>
+    <p>只读密钥、浏览器扩展的密钥、签发的或短期的密钥以及共享密钥，都不能拥有它。网页不能调用它，带不带密钥都一样（带 <code>Origin</code> 或 <code>Sec-Fetch-*</code> 的请求一律拒绝），用别的名字指向本机的请求也不行。通过网络共享时，只有设为 <code>any</code> 的密钥能进来。</p>
 
     <h2 id="api"><a class="anchor" href="#api">统计 API</a></h2>
     <p>用量页上的内容也以 JSON 提供给本机；共享 magpie 时，也提供给带网关密钥的请求。受预算、模型或账号限制的密钥只能看到自己的请求和限额；主人为它打开<span class="ui">额度</span>后（<code>magpie gateway-key quotas &lt;id&gt; on</code>），还能看到它可用部分的额度。</p>

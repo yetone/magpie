@@ -155,6 +155,7 @@ const usage = `magpie — one place to pick every agent's model
   magpie gateway-key concurrency <id> [<n>|off]   at most n of a key's requests at once; the rest wait their turn
   magpie gateway-key mcp <id> [all|none|<server>|<server>/<tool> ...]   the MCP servers and tools a key may use
   magpie gateway-key access <id> [read-only|full]   read-only: the key reads quotas and usage (GET /, /v1/magpie/quotas, /v1/magpie/usage) and uses no model, MCP server or write
+  magpie gateway-key admin <id> [off|local|any]   let the key manage providers, accounts and gateway keys through /v1/magpie/admin/ (local: from this computer only)
   magpie gateway-key move <id> <place>   put a key at a place in the list (from 1), the order list and the app show them in
   magpie gateway-key issue --ttl 1h [--name n] [--models a,b] [--accounts a,b] [--tokens N] [--cost USD] [--read-only] [--from <id>] [--json]
                                          a short-lived key (1m to 30 days) that stops working by itself; --from holds it to a key that issues keys; prints the key

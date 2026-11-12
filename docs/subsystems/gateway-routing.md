@@ -1452,6 +1452,26 @@ told its own calls and limit alone:
 | `GET /v1/magpie/concurrency` | requests in flight per account |
 | `POST`/`GET /v1/magpie/keys`, `DELETE /v1/magpie/keys/{id}` | short-lived keys, above |
 | `POST /v1/magpie/keys/oidc` | an OIDC token traded for a short-lived key, above |
+| `/v1/magpie/admin/…` | the management API: the app's provider, account, gateway-key and account-group handlers for a key with `Key.Admin`, below |
+
+### The management API
+
+`/v1/magpie/admin/` (ljayic on X) serves the GUI's own `/api` handlers to a
+script. [`admin.go`](../../internal/gateway/admin.go) is the guard and
+[`internal/gui/admin.go`](../../internal/gui/admin.go) the route list
+(`adminRoutes`: what is served, to which `/api` route; anything else is a
+404, and `TestAdminRoutesEveryAPIRoute` fails when a listed route is not the
+app's). The guard, in order: a request carrying `Origin` or `Sec-Fetch-Site`
+or `-Mode` is refused with a key or without (a page can't leave them off, so
+`Origin: null`, a foreign or listed page and `*.localhost` need no case of
+their own); no key is 401; `Identity.Admin == ""` is 403; from loopback the
+Host must be `ownHost` (a rebound page's GET has no Origin), and from
+anywhere else the key must be `AdminAny`. `Key.Admin` is set only by
+`magpie gateway-key admin` and the app, never through the API, and
+`adminOf` drops it for a read-only, Browser, issued, expiring or default
+key. The route is in `readOnlyRefused`, so a read-only key never reaches
+it. The handlers are built with no window, so a sign-in opens no browser.
+Routing Groups and sign-in export are not in it yet (#6307).
 
 ### Route events for a display
 

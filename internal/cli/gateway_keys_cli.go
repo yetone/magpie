@@ -70,6 +70,10 @@ func gatewayKeysTo(out io.Writer, args []string) error {
 		access.MigrateLegacyLANKeyBestEffort()
 		return gatewayKeyAccess(out, args[1:])
 	}
+	if action == "admin" {
+		access.MigrateLegacyLANKeyBestEffort()
+		return gatewayKeyAdmin(out, args[1:])
+	}
 	if action == "move" {
 		access.MigrateLegacyLANKeyBestEffort()
 		return gatewayKeyMove(out, args[1:])
@@ -937,6 +941,47 @@ func gatewayKeyAccess(out io.Writer, args []string) error {
 		_, err = fmt.Fprintf(out, "%s: read-only, it reads quotas and usage and uses no model, MCP server or write\n", k.Name)
 	} else {
 		_, err = fmt.Fprintf(out, "%s: full access, models and stats as its other limits let it\n", k.Name)
+	}
+	return err
+}
+
+// gatewayKeyAdmin shows or sets whether a key may call the management API
+// (/v1/magpie/admin/), which adds, changes and removes providers, accounts
+// and gateway keys:
+//
+//	magpie gateway-key admin <id> [off | local | any]
+//
+// Only here and in the app: the API itself never sets it.
+func gatewayKeyAdmin(out io.Writer, args []string) error {
+	usage := fmt.Errorf("usage: magpie gateway-key admin <id> [off | local | any]")
+	if len(args) == 0 || len(args) > 2 {
+		return usage
+	}
+	id := args[0]
+	if len(args) == 2 {
+		if _, err := access.CleanAdmin(args[1]); err != nil {
+			return usage
+		}
+		if _, err := access.Update("admin-key", access.Change{Key: id, Admin: args[1]}); err != nil {
+			return err
+		}
+	}
+	keys, err := access.List()
+	if err != nil {
+		return err
+	}
+	i := slices.IndexFunc(keys, func(k access.Key) bool { return k.ID == id })
+	if i < 0 {
+		return fmt.Errorf("Key not found")
+	}
+	k := keys[i]
+	switch k.Admin {
+	case access.AdminLocal:
+		_, err = fmt.Fprintf(out, "%s: may manage magpie (/v1/magpie/admin/) from this computer\n", k.Name)
+	case access.AdminAny:
+		_, err = fmt.Fprintf(out, "%s: may manage magpie (/v1/magpie/admin/) from this computer and, while magpie is shared, from other machines\n", k.Name)
+	default:
+		_, err = fmt.Fprintf(out, "%s: may not manage magpie\n", k.Name)
 	}
 	return err
 }
