@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ante（antigma.ai）で DeepSeek、GLM、Kimi、Qwen、Claude、ChatGPT サブスクリプションを使う：magpie を catalog.json と settings.json に · magpie</title>
+<meta name="description" content="magpie で Ante（antigma.ai のターミナル用コーディングエージェント）に DeepSeek、GLM、Kimi、Qwen、Claude、ChatGPT サブスクリプションを：~/.ante/catalog.json に magpie が加える magpie プロバイダーと preferred_models、settings.json の provider と model、auth を書かない理由、再起動、元に戻す方法。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/ante">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/ante">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/ante">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/ante">
+<link rel="canonical" href="https://usemagpie.ai/docs/ja/ante">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="Ante を任意のモデルで">
+<meta property="og:description" content="magpie で Ante（antigma.ai のターミナル用コーディングエージェント）に DeepSeek、GLM、Kimi、Qwen、Claude、ChatGPT サブスクリプションを：~/.ante/catalog.json に magpie が加える magpie プロバイダーと preferred_models、settings.json の provider と model、auth を書かない理由、再起動、元に戻す方法。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/ja/ante">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "Ante を任意のモデルで",
+   "description": "magpie で Ante（antigma.ai のターミナル用コーディングエージェント）に DeepSeek、GLM、Kimi、Qwen、Claude、ChatGPT サブスクリプションを：~/.ante/catalog.json に magpie が加える magpie プロバイダーと preferred_models、settings.json の provider と model、auth を書かない理由、再起動、元に戻す方法。",
+   "inLanguage": "ja",
+   "url": "https://usemagpie.ai/docs/ja/ante",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "Ante で DeepSeek、GLM、ChatGPT サブスクリプションを使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。magpie のエージェントページで Ante に via magpie のモデルを選び、Ante を再起動します。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "カタログに magpie があるのに Ante が使わないのはなぜですか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Ante は settings.json の provider と model で始まり、なければ同梱の最初のサインイン済みプロバイダーを使います。magpie はこの二つも書きます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "magpie のエントリに API キーがないのはなぜですか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "ゲートウェイはこのコンピューターではキー不要で、Ante は auth のないプロバイダーをサインイン済みとみなします。自分で加えた auth は残ります。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "元に戻すと設定も戻りますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "戻ります。元の provider と model が戻り、magpie のエントリは外れます。その間に Ante で選んだものは残ります。"
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/ja/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "ドキュメント",
+     "item": "https://usemagpie.ai/docs/ja/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "Ante を任意のモデルで",
+     "item": "https://usemagpie.ai/docs/ja/ante"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/ja/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>ドキュメント</small></a>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/start">はじめに</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a class="toc-only" href="/docs/ja/remote">リモート magpie</a>
+    <a class="toc-only" href="/docs/ja/docker">Docker</a>
+    <a class="toc-only" href="/docs/ja/privacy">プライバシー</a>
+    <a class="toc-only" href="/docs/ja/masking">プライバシーマスキング</a>
+    <a class="toc-only" href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a class="toc-only" href="/docs/ja/library">ライブラリ</a>
+    <a class="toc-only" href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a class="toc-only" href="/docs/ja/local-models">ローカルモデル</a>
+    <a class="toc-only" href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="言語" title="言語" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/ante" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/ante" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/ante" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="Discord の magpie" title="Discord に参加"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="GitHub の magpie" title="GitHub のソースコード"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">ダウンロード</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>Ante</p>
+    <a href="#overview">仕組み</a>
+    <a href="#on">Ante の設定</a>
+    <a href="#catalog">catalog.json</a>
+    <a href="#settings">settings.json</a>
+    <a href="#restart">Ante の再起動</a>
+    <a href="#off">元に戻す</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">ドキュメント · ガイド</p>
+    <h1>Ante を任意のモデルで</h1>
+    <p class="lede">Ante は antigma.ai のターミナルのコーディングエージェントで、コマンドは <code>ante</code> です。同梱のプロバイダーに加え、catalog.json に自分のプロバイダーを重ねられます。magpie がそこに magpie という名前のプロバイダーを加え、settings.json でそこから起動させると、Ante が DeepSeek、GLM、Kimi、Qwen、Claude、ChatGPT サブスクリプションなど magpie の任意のモデルで動きます。</p>
+    <h2 id="on"><a class="anchor" href="#on">Ante の設定</a></h2>
+    <ol class="steps">
+      <li><b>magpie にプロバイダーを追加</b><span class="ui">プロバイダー</span> ページで API キーを追加するか、サブスクリプションにサインインします。</li>
+      <li><b><span class="ui">エージェント</span> ページで Ante のモデルを選ぶ</b>via magpie のモデルを選びます。</li>
+      <li><b>Ante を再起動</b>Ante は catalog.json をプロセスごとに一度だけ読むので、起動中のものは再起動が要ります。</li>
+    </ol>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ante-on">コピー</button><pre id="ante-on">magpie ante deepseek/deepseek-v4-pro</pre></div>
+    <h2 id="catalog"><a class="anchor" href="#catalog">catalog.json</a></h2>
+    <p>ファイルは <code>~/.ante/catalog.json</code>、<code>ANTE_HOME</code> があれば <code>$ANTE_HOME/catalog.json</code> です。providers のキーが <code>--provider</code> に渡す名前です。magpie のエントリはゲートウェイの <code>/v1</code> を指し、wire_style は OpenAiCompatible、つまり Ante が Chat Completions で話す形で、ゲートウェイはどのモデルもこれで受けます。magpie のモデルは Ante のモデルピッカーである <code>preferred_models</code> に並びます。</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ante-catalog">コピー</button><pre id="ante-catalog">// ~/.ante/catalog.json
+{
+  "providers": {
+    "magpie": {
+      "display_name": "magpie",
+      "base_url": "http://127.0.0.1:3425/v1",
+      "wire_style": "OpenAiCompatible",
+      "preferred_models": [
+        { "id": "deepseek/deepseek-v4-pro", "display_name": "…",
+          "context_limit": …, "max_tokens": …, "supported_efforts": […] }
+      ]
+    }
+  }
+}</pre></div>
+    <p>エントリに auth はありません。ゲートウェイはこのコンピューターで待ち受け、そこからのリクエストはキーなしで通します。Ante は auth ブロックのないプロバイダーをサインイン済みとして扱います。bearer env_key を書くと Ante の環境変数にキーを置くことになり、それは自分で決めることです。magpie のエントリに自分で加えた auth、http_headers、extra_body は残り、ネットワークで共有したゲートウェイや WSL から使うときはそれでキーを送ります。自分のプロバイダーと models の部分には触れません。support_vision も書きません。Ante は言われない限りモデルが画像を見られるとみなし、false にするとゲートウェイの手前で画像を捨ててしまいます。ゲートウェイなら画像を見られないモデルに画像を説明できます。ルーティンググループには思考レベルを付けません。各ターンにどのメンバーが答え、何を受け付けるかはグループが決めるからです。</p>
+    <h2 id="settings"><a class="anchor" href="#settings">settings.json</a></h2>
+    <p>カタログに載るだけでは足りません。セッションが始まるプロバイダーは <code>~/.ante/settings.json</code> の <code>provider</code> と <code>model</code> で決まり、どちらもなければ Ante はカタログ順で最初のサインイン済みプロバイダーを使います。同梱のものが先に並びます。そこで magpie はこの二つも書き、元の値を保存します。</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ante-settings">コピー</button><pre id="ante-settings">// ~/.ante/settings.json
+{ "provider": "magpie", "model": "deepseek/deepseek-v4-pro" }</pre></div>
+    <h2 id="restart"><a class="anchor" href="#restart">Ante の再起動</a></h2>
+    <p>Ante はプロセスごとに一度カタログを読むので、変更には再起動が要ります。読み込みは寛容で、読めないエントリは通知付きで飛ばし、残りは読み込みます。そのため壊れたエントリがあっても失うのは magpie のプロバイダーだけで、自分のものは残ります。</p>
+    <h2 id="off"><a class="anchor" href="#off">元に戻す</a></h2>
+    <p>元に戻すと、Ante の元の provider と model を戻し（なければ空のままにして Ante の自動検出に任せ）、カタログから magpie のエントリを外します。空になった providers と magpie が作ったファイルも消します。magpie の設定中に Ante 自身の /providers で選んだものは自分の選択なので、そのまま残ります。</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ante-off">コピー</button><pre id="ante-off">magpie ante default</pre></div>
+
+    <h2 id="faq"><a class="anchor" href="#faq">よくある質問</a></h2>
+    <h3>Ante で DeepSeek、GLM、ChatGPT サブスクリプションを使えますか？</h3>
+    <p>使えます。magpie のエージェントページで Ante に via magpie のモデルを選び、Ante を再起動します。</p>
+    <h3>カタログに magpie があるのに Ante が使わないのはなぜですか？</h3>
+    <p>Ante は settings.json の provider と model で始まり、なければ同梱の最初のサインイン済みプロバイダーを使います。magpie はこの二つも書きます。</p>
+    <h3>magpie のエントリに API キーがないのはなぜですか？</h3>
+    <p>ゲートウェイはこのコンピューターではキー不要で、Ante は auth のないプロバイダーをサインイン済みとみなします。自分で加えた auth は残ります。</p>
+    <h3>元に戻すと設定も戻りますか？</h3>
+    <p>戻ります。元の provider と model が戻り、magpie のエントリは外れます。その間に Ante で選んだものは残ります。</p>
+
+    <p style="margin-top:48px">同じモデルを他のエージェントでも：<a href="/docs/ja/omp">omp を任意のモデルで</a>、<a href="/docs/ja/stepcode">StepCode を任意のモデルで</a>、<a href="/docs/ja/avibe">Avibe を任意のモデルで</a>。エラーが出るときは <a href="/docs/ja/troubleshooting">よくあるエラーの直し方</a>、または <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> で質問してください。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a href="/docs/ja/remote">リモート magpie</a>
+    <a href="/docs/ja/docker">Docker</a>
+    <a href="/docs/ja/privacy">プライバシー</a>
+    <a href="/docs/ja/masking">プライバシーマスキング</a>
+    <a href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a href="/docs/ja/library">ライブラリ</a>
+    <a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a href="/docs/ja/local-models">ローカルモデル</a>
+    <a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/ja/contributors">コントリビューター</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "コピーしました"; setTimeout(() => (b.textContent = "コピー"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

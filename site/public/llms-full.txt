@@ -7449,7 +7449,89 @@ While enabledModels lists models, the default model has to be in it. magpie adds
 
 Yes. Each role gets back what it had; once nothing is on magpie, its provider and its enabledModels entry go too.
 
-More agents on the same models: [Pi on any model](https://usemagpie.ai/docs/pi), [StepCode on any model](https://usemagpie.ai/docs/stepcode) and [MothX on any model](https://usemagpie.ai/docs/mothx). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Pi on any model](https://usemagpie.ai/docs/pi), [StepCode on any model](https://usemagpie.ai/docs/stepcode), [MothX on any model](https://usemagpie.ai/docs/mothx) and [Ante on any model](https://usemagpie.ai/docs/ante). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/ante
+
+# Ante on any model
+
+Ante is antigma.ai's coding agent in the terminal, the `ante` command. It ships its own providers, and takes more of yours in catalog.json, merged on top. magpie adds a provider named magpie there and has Ante start on it in settings.json, so Ante runs on any model in magpie: DeepSeek, GLM, Kimi, Qwen, Claude or a ChatGPT subscription.
+
+## Set up Ante
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Pick a model for Ante on the Agents page.** Pick a model via magpie.
+3. **Restart Ante.** Ante reads catalog.json once per process, so a running one needs a restart.
+
+```
+magpie ante deepseek/deepseek-v4-pro
+```
+
+## catalog.json
+
+The file is `~/.ante/catalog.json`, or `$ANTE_HOME/catalog.json` when `ANTE_HOME` is set. A key under providers is what `--provider` takes. magpie's entry points at the gateway's `/v1` on the OpenAiCompatible wire style, which is how Ante speaks Chat Completions, and the gateway takes every model on it. magpie's models are listed in `preferred_models`, Ante's model picker.
+
+```
+// ~/.ante/catalog.json
+{
+  "providers": {
+    "magpie": {
+      "display_name": "magpie",
+      "base_url": "http://127.0.0.1:3425/v1",
+      "wire_style": "OpenAiCompatible",
+      "preferred_models": [
+        { "id": "deepseek/deepseek-v4-pro", "display_name": "…",
+          "context_limit": …, "max_tokens": …, "supported_efforts": […] }
+      ]
+    }
+  }
+}
+```
+
+The entry has no auth: the gateway listens on this computer and lets its requests in without a key, and Ante counts a provider with no auth block as signed in. A bearer env_key would mean putting a key into Ante's environment, which is yours to decide. An auth block, http_headers or extra_body you add inside magpie's entry stays, which is how a gateway shared on the network or reached from WSL gets its key. Your own providers and the models section are left alone. magpie doesn't write support_vision either: Ante takes a model as seeing images unless told otherwise, and false would have Ante drop your images before the gateway, which can describe them to a model that can't see. A routing group gets no thinking levels, since which member answers each turn, and what it takes, is the group's to decide.
+
+## settings.json
+
+Being in the catalog isn't enough. The provider a session starts on is `provider` and `model` in `~/.ante/settings.json`; with neither set, Ante takes the first signed-in provider in catalog order, and the ones it ships come first. So magpie sets those two as well, and saves what was there.
+
+```
+// ~/.ante/settings.json
+{ "provider": "magpie", "model": "deepseek/deepseek-v4-pro" }
+```
+
+## Restart Ante
+
+Ante reads the catalog once per process, so an edit needs a restart. It parses the file leniently: an entry it can't read is skipped with a notice and the rest still load, so a bad entry would cost you magpie's provider, not your own.
+
+## Switching back
+
+Switching back puts Ante's original provider and model back (or nothing, which leaves Ante to its own detection) and takes magpie's entry out of the catalog, with a providers map left empty and files magpie made. A provider you picked in Ante's own /providers while magpie was set up is your choice and stands.
+
+```
+magpie ante default
+```
+
+## FAQ
+
+### Can Ante run on DeepSeek, GLM or a ChatGPT subscription?
+
+Yes. Pick a via-magpie model for Ante on magpie's Agents page, then restart Ante.
+
+### Why didn't Ante use magpie's provider when it was in the catalog?
+
+Ante starts on provider and model in settings.json, else the first signed-in provider it ships. magpie sets those two as well.
+
+### Why is there no API key in magpie's entry?
+
+The gateway takes no key on this computer, and Ante counts a provider with no auth as signed in. An auth block you add stays.
+
+### Does switching back restore my settings?
+
+Yes. Your original provider and model go back and magpie's entry comes out; a choice you made in Ante since stands.
+
+More agents on the same models: [omp on any model](https://usemagpie.ai/docs/omp), [StepCode on any model](https://usemagpie.ai/docs/stepcode) and [Avibe on any model](https://usemagpie.ai/docs/avibe). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
