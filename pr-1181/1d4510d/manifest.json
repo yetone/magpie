@@ -1,0 +1,24 @@
+{
+  "summary": "Routing 页读取 Usage 额度卡时不再只匹配订阅账号：供应商 Key 或供应商行也会匹配对应的 Plan 额度卡，使实时路由中的单个 Key 能带出 5 小时、7 天等额度窗口。",
+  "scenes": [
+    {
+      "title": "路由页的 Key 额度窗口",
+      "shots": [
+        {
+          "file": "01-routing-live-route.png",
+          "caption": "路由页的实时路由与账号行",
+          "width": 2168
+        }
+      ]
+    }
+  ],
+  "video": null,
+  "poster": null,
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "描述提到的选择历史时保留额度区位置、失败或畸形读数的提示、共享 loadQuotas 缓存与并发合并、X-Magpie-Reading 重试，以及五种语言文案，都不是本 diff 实现的（diff 只改 cardOf 并新增测试）。",
+  "unseen": "沙盒里没有 Kimi Code Key，当前实时路由是单个 Acme Cloud Key，且它没有 Plan 额度卡；Sub2API Relay 的额度窗口只在用量页出现。因此路由页无法显示本次改动后应出现的 5 小时/7 天额度窗口。",
+  "interactive": false,
+  "pages": 1
+}
