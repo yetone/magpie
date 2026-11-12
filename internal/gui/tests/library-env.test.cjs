@@ -102,7 +102,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const row = (name) => v.locator(".lib-env").filter({ has: page.locator(".name", { hasText: new RegExp("^" + name + "$") }) });
 
         const tabs = (await v.locator(".lib-tabs button").allTextContents()).map((x) => x.trim());
-        assert(tabs.includes(w("Variables") + " · 1"), tabs.join("|"));
+        assert(tabs.includes(w("Environment variables") + " · 1"), tabs.join("|"));
         assert.equal((await row("HTTPS_PROXY").locator(".lib-envval").textContent()).trim(), "http://127.0.0.1:7890");
         assert.deepEqual(await sideways(page), []);
 
@@ -122,7 +122,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual([...posts[0].body.agents].sort(), ["claude", "codex"]);
 
         // Add opens the editor; Save posts env/save with what was typed
-        await v.getByRole("button", { name: w("＋ Add variable") }).click();
+        await v.getByRole("button", { name: w("＋ Add environment variable") }).click();
         const m = page.locator("#modal");
         await m.locator("input").first().fill("NO_PROXY");
         await m.locator("input").nth(1).fill("localhost");

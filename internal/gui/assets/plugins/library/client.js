@@ -792,7 +792,7 @@ magpie.plugin("library", (ctx) => {
       ul.append(li);
     }
     if (ul.childElementCount) card.append(ul);
-    const tabNames = { instructions: t("Instructions"), mcp: t("MCP servers"), skills: t("Skills"), hooks: t("Hooks"), env: t("Variables"), subagents: t("Subagents"), plugins: t("Claude plugins") };
+    const tabNames = { instructions: t("Instructions"), mcp: t("MCP servers"), skills: t("Skills"), hooks: t("Hooks"), env: t("Environment variables"), subagents: t("Subagents"), plugins: t("Claude plugins") };
     const others = Object.keys(away).filter((k) => k in tabNames);
     if (others.length) {
       const more = el("div", "lib-problems-away");
@@ -940,7 +940,7 @@ magpie.plugin("library", (ctx) => {
       ["mcp", t("MCP servers") + n("mcp")],
       ["skills", t("Skills") + n("skills")],
       ["hooks", t("Hooks") + n("hooks")],
-      ["env", t("Variables") + n("env")],
+      ["env", t("Environment variables") + n("env")],
       ["subagents", t("Subagents") + n("subagents")],
       ["plugins", t("Claude plugins") + n("plugins")],
       ["rtk", "RTK"],
@@ -4262,14 +4262,14 @@ magpie.plugin("library", (ctx) => {
     const all = envAgents();
     const vars = lib.env || [];
     if (!vars.length) {
-      body.append(empty(t("No variables in the library yet"), t("Add one, and pick the agents that get it."), button(t("＋ Add a variable"), "action", () => editEnv(null))));
+      body.append(empty(t("No environment variables in the library yet"), t("Add one, and pick the agents that get it."), button(t("＋ Add an environment variable"), "action", () => editEnv(null))));
       return;
     }
     const list = el("div", "list lib-list");
     list.append(...[...vars].sort((a, b) => a.name.localeCompare(b.name)).map((v) => envRow(v, all)));
     body.append(list);
     const after = el("div", "after-list");
-    after.append(button(t("＋ Add variable"), "", () => editEnv(null)));
+    after.append(button(t("＋ Add environment variable"), "", () => editEnv(null)));
     body.append(after);
   }
   function envRow(v, all) {
@@ -4290,7 +4290,7 @@ magpie.plugin("library", (ctx) => {
     const d = v ? { name: v.name, value: v.value, agents: [...(v.agents || [])] } : { name: "", value: "", agents: all.filter((a) => !envBlocked()(a)).map((a) => a.id) };
     const ed = el("div", "editor lib-editor lib-envedit");
     const head = el("div", "ehead");
-    head.append(glyph(GLYPH.hook), el("b", "", v ? v.name : t("New variable")));
+    head.append(glyph(GLYPH.hook), el("b", "", v ? v.name : t("New environment variable")));
     ed.append(head);
     const err = el("div", "editor-error");
     const name = field2(d.name, t("e.g. HTTPS_PROXY"), (x) => { d.name = x.trim(); });
