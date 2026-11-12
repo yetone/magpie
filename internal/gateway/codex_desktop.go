@@ -49,6 +49,9 @@ var codexDesk struct {
 	// revoked: the last ask had the backend call the sign-in revoked
 	// (provider.CodexListRevoked)
 	revoked bool
+	// failed: the last ask got no list (the backend not reachable from
+	// here, or not answering 200), and none is known for who
+	failed bool
 	// who is the sign-in body and revoked are of (codexDeskWho); asked
 	// the one the last ask was for; want the one a caller last asked about
 	who, asked, want string
@@ -80,10 +83,10 @@ func CodexDesktopCatalog() (b []byte, ok bool) {
 	who := codexDeskWho()
 	codexDesk.Lock()
 	codexDesk.want = who
-	body, revoked := codexDesk.body, codexDesk.revoked
+	body, revoked, failed := codexDesk.body, codexDesk.revoked, codexDesk.failed
 	mine := codexDesk.who == who
 	if !mine {
-		body, revoked = nil, false
+		body, revoked, failed = nil, false, false
 	}
 	stale := body == nil || time.Since(codexDesk.got) >= codexDeskFor
 	if stale && !codexDesk.asking && (codexDesk.asked != who || time.Since(codexDesk.tried) >= codexDeskRetry) {
@@ -92,10 +95,17 @@ func CodexDesktopCatalog() (b []byte, ok bool) {
 		go codexDeskRefresh(codexDesk.done, who)
 	}
 	codexDesk.Unlock()
-	if body == nil && revoked {
+	if body == nil && (revoked || failed) {
 		var own []any
 		for _, e := range codexcat.CacheEntries() {
 			own = append(own, e)
+		}
+		// the backend can't be asked (not reachable from here: a Windows
+		// box behind a firewall): Codex's own last list, from its
+		// models_cache.json, stands in. With none of it, the file stays
+		// as it was rather than hold magpie's models alone.
+		if !revoked && len(own) == 0 {
+			return nil, false
 		}
 		b, err := json.MarshalIndent(map[string]any{"models": codexMerged(own, true)}, "", " ")
 		return b, err == nil
@@ -124,18 +134,27 @@ func codexDeskRefresh(done chan struct{}, who string) {
 	b, err := codexDeskFetch(ctx)
 	codexDesk.Lock()
 	changed := false
+	wasRevoked := codexDesk.revoked && codexDesk.who == who
 	if codexDesk.who != who {
 		// another sign-in's list, and what was said of it, is not who's
-		codexDesk.body, codexDesk.revoked, codexDesk.who = nil, false, who
+		codexDesk.body, codexDesk.revoked, codexDesk.failed, codexDesk.who = nil, false, false, who
 	}
 	if err == nil {
 		changed = !bytes.Equal(b, codexDesk.body) || codexDesk.revoked
-		codexDesk.body, codexDesk.got, codexDesk.revoked = b, time.Now(), false
+		codexDesk.body, codexDesk.got, codexDesk.revoked, codexDesk.failed = b, time.Now(), false, false
 	} else if revoked := provider.CodexListRevoked(err); revoked != codexDesk.revoked {
 		// told only where it changes what is handed out: with no list
 		// from before (CodexDesktopCatalog)
 		changed = codexDesk.body == nil
 		codexDesk.revoked = revoked
+	}
+	// no list for who from before, and none now: the cached one stands in
+	// (CodexDesktopCatalog), told once
+	// (a 502 after the backend called the sign-in revoked is still no
+	// answer, as before)
+	if err != nil && codexDesk.body == nil && !codexDesk.failed && !wasRevoked && !codexDesk.revoked {
+		codexDesk.failed = true
+		changed = true
 	}
 	// Codex went on to another sign-in while this one was asked about:
 	// told, for the next look to ask about that one
