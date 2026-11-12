@@ -7276,7 +7276,7 @@ function routingPage(part) {
     if (!g) nw.append(idHint);
     ed.append(el("label", "", t("Name")), nw);
     // the user's own word on the group, shown under its name in the list
-    const noteIn = keys(input(d.note || "", t("e.g. for the work key")));
+    const noteIn = keys(input(d.note || "", t("Optional, e.g. for the work key")));
     noteIn.classList.add("rt-gnote-in");
     noteIn.maxLength = 200; // provider.NoteLongest
     noteIn.oninput = () => { d.note = noteIn.value; };

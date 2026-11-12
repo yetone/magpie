@@ -24,11 +24,11 @@ const long = "For the office key only: Sol first, Flash when Sol is rate limited
 const group = (id, name, extra) => ({ id, name, members, routing: "order", ready: true, memberInfo: members.map((m) => ({ id: m, ready: true })), ...extra });
 
 const words = {
-  en: { label: "Note", hint: "e.g. for the work key" },
-  zh: { label: "备注", hint: "例如：给工作 Key 用" },
-  "zh-TW": { label: "備註", hint: "例如：給工作 Key 用" },
-  ja: { label: "メモ", hint: "例：仕事用のキー向け" },
-  de: { label: "Notiz", hint: "z. B. für den Arbeitsschlüssel" },
+  en: { label: "Note", hint: "Optional, e.g. for the work key" },
+  zh: { label: "备注", hint: "可选，例如：给工作 Key 用" },
+  "zh-TW": { label: "備註", hint: "選填，例如：給工作 Key 用" },
+  ja: { label: "メモ", hint: "任意。例：仕事用のキー向け" },
+  de: { label: "Notiz", hint: "Optional, z. B. für den Arbeitsschlüssel" },
 };
 
 function serve(lang, posts) {
