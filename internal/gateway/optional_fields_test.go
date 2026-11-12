@@ -181,6 +181,10 @@ func TestRefusedOptionalNamesOnlyUnsupportedFields(t *testing.T) {
 		{"codex-unquoted-unsupported-parameter", `{"code":null,"message":"Codex: Unsupported parameter: prompt_cache_retention","param":null,"type":"invalid_request_error"}`, 400, []string{"prompt_cache_retention"}},
 		// the ChatGPT backend's, as it gave it on 2026-10-14 (#2154)
 		{"openai-bare-name", `{"error":{"message":"prompt_cache_options is not supported on this model","type":"invalid_request_error","param":"prompt_cache_options","code":"invalid_parameter"}}`, 400, []string{"prompt_cache_options"}},
+		// a relay's Chinese refusal (基元律动, ldl123292 on X)
+		{"chinese-unknown-field", `{"error":{"message":"未知请求字段：prompt_cache_retention","type":"invalid_request_error"}}`, 400, []string{"prompt_cache_retention"}},
+		{"chinese-unsupported-quoted", `{"error":{"message":"不支持的参数: 'prompt_cache_retention'"}}`, 400, []string{"prompt_cache_retention"}},
+		{"chinese-other-field", `{"error":{"message":"未知请求字段：foo_bar"}}`, 400, nil},
 		{"bare-name-not-leading", `{"error":{"message":"The input said metadata is not supported here"}}`, 400, nil},
 		{"bare-name-other-field", `{"error":{"message":"reasoning is not supported on this model"}}`, 400, nil},
 		{"plain-error", `Unknown name "store": Cannot find field.`, 400, []string{"store"}},
