@@ -84,11 +84,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       // Smart: no weights shown
       assert.equal(await chip("max@example.com").isVisible(), false, `${at}: a weight under Smart`);
+      // Routing is under Advanced
+      { const adv = page.locator(".editor details.advanced"); await adv.waitFor({ state: "attached" }); if (!(await adv.evaluate((d) => d.open))) await adv.locator(":scope > summary").click(); }
       const by = page.locator(".editor").getByRole("button", { name: await say(page, lang, "By weight"), exact: true });
       await by.scrollIntoViewIfNeeded();
-      const sc = await scrolled();
+      // the weights it shows sit above it, in the accounts, so the editor
+      // holds it where it was clicked rather than keep its scroll
+      const top = () => by.evaluate((b) => Math.round(b.getBoundingClientRect().top));
+      const was = await top();
       await by.click();
-      assert.equal(await scrolled(), sc, `${at}: a click scrolled`);
+      await chip("max@example.com").waitFor();
+      assert(Math.abs((await top()) - was) <= 1, `${at}: By weight moved from ${was} to ${await top()}`);
       // the routing's hint names accounts too
       await page.locator(".editor .hint", { hasText: (await say(page, lang, "Requests spread over the keys or accounts by the weight set beside each: one weighing 3 takes three requests for every one weighing 1 takes, evenly over a few requests. One that fails is passed over while it rests, and the others share its requests; a conversation stays with it as Stays says.")).slice(0, 20) }).first().waitFor();
       assert.equal((await chip("max@example.com").textContent()).trim(), await say(page, lang, "Weight {n} · {share}%", { n: 3, share: 75 }), at);
@@ -133,8 +139,6 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // back to Smart hides them
       await page.locator(".editor").getByRole("button", { name: await say(page, lang, "Smart"), exact: true }).first().click();
       assert.equal(await chip("max@example.com").isVisible(), false, `${at}: a weight under Smart`);
-      // Advanced open, as a user may have it
-      { const adv = page.locator(".editor details.advanced"); await adv.waitFor({ state: "attached" }); if (!(await adv.evaluate((d) => d.open))) await adv.locator(":scope > summary").click(); }
       // open, the editor scrolls and the dialog around it doesn't: the lines
       // its check-in and warm-up rows keep out of sight were held against
       // the dialog and grew it a second scrollbar, every row 8px narrower

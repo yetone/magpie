@@ -80,6 +80,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       // smart: no weights shown
       assert.equal(await chip("aaaaaaaaaa").isVisible(), false);
+      // Routing is under Advanced
+      { const adv = page.locator(".editor details.advanced"); await adv.waitFor({ state: "attached" }); if (!(await adv.evaluate((d) => d.open))) await adv.locator(":scope > summary").click(); }
       const by = page.locator(".editor").getByRole("button", { name: w.by, exact: true });
       await by.scrollIntoViewIfNeeded();
       const sc = await scrolled();

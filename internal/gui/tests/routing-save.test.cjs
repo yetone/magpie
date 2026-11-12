@@ -78,6 +78,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const open = async () => {
           await page.locator(".row.provider", { hasText: p.name }).first().click();
           await page.locator(".editor .accts").first().waitFor();
+          // Routing and Stays are under Advanced, open already when one is set
+          const adv = page.locator(".editor details.advanced");
+          if (!(await adv.evaluate((d) => d.open))) await adv.locator(":scope > summary").click();
         };
         // the field under a label: the label's next sibling
         const fieldOf = (label) => page.locator(".editor label", { hasText: new RegExp(`^${label}$`) }).locator("xpath=following-sibling::div[1]");

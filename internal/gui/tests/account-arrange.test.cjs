@@ -126,6 +126,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // picked, then made with the editor's Save, which closes it
         const saveResponse = page.waitForResponse(response =>
           new URL(response.url()).pathname === "/api/provider/save" && response.request().method() === "POST");
+        // Routing is under Advanced, open already when it isn't Smart
+        { const adv = page.locator(".editor details.advanced"); await adv.waitFor({ state: "attached" }); if (!(await adv.evaluate(d => d.open))) await adv.locator(":scope > summary").click(); }
         await page.locator(".editor .segs button", { hasText: new RegExp(`^${label}$`) }).click();
         await page.locator(".editor .bar button", { hasText: /^Save$/ }).click();
         assert.equal((await saveResponse).status(), 200);
