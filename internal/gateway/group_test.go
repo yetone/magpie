@@ -49,6 +49,8 @@ func fresh(t *testing.T) {
 	sticks.Lock()
 	sticks.m = map[string]stick{}
 	sticks.Unlock()
+	provider.ForgetReorders()
+	t.Cleanup(provider.ForgetReorders)
 	refusedSeals.Lock()
 	refusedSeals.m = map[string]sealsRefused{}
 	refusedSeals.Unlock()

@@ -3040,7 +3040,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			change = func() error {
 				err := provider.SwitchLogin(in.Agent, in.User)
 				if err == nil {
-					provider.NoteReordered()
+					provider.NoteReordered(in.Agent)
 				}
 				return err
 			}

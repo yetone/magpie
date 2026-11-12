@@ -17,11 +17,15 @@ func TestReorderedAccountsTakeTheConversationAtItsNextTurn(t *testing.T) {
 	for _, c := range []struct {
 		name, mode string
 		reorder    bool
+		other      bool // the reorder is of another provider's accounts
 		want       string
 	}{
-		{"reordered", "", true, "k1 k2 k2"},
-		{"not reordered keeps its cache", "", false, "k1 k1 k1"},
-		{"session keeps it", provider.AffinitySession, true, "k1 k1 k1"},
+		{"reordered", "", true, false, "k1 k2 k2"},
+		{"not reordered keeps its cache", "", false, false, "k1 k1 k1"},
+		{"session keeps it", provider.AffinitySession, true, false, "k1 k1 k1"},
+		// a drag in another provider's pool moves no conversation of this
+		// one: it would only lose its cache
+		{"another provider reordered keeps it", "", true, true, "k1 k1 k1"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			fresh(t)
@@ -33,6 +37,11 @@ func TestReorderedAccountsTakeTheConversationAtItsNextTurn(t *testing.T) {
 			if err := provider.Save(p); err != nil {
 				t.Fatal(err)
 			}
+			other := provider.Provider{ID: "ord2", Name: "Ord2", Key: "o1", Keys: []provider.KeyAccount{{Key: "o2"}},
+				Models: []string{"m1"}, Anthropic: srv.URL + "/v1"}
+			if err := provider.Save(other); err != nil {
+				t.Fatal(err)
+			}
 			forgetRouting()
 			s := New()
 			t.Cleanup(s.subscription.abortAll)
@@ -40,8 +49,19 @@ func TestReorderedAccountsTakeTheConversationAtItsNextTurn(t *testing.T) {
 			var got []string
 			for i := range 3 {
 				if i == 1 && c.reorder {
-					ids := p.KeyList()
-					if err := provider.SetAccountOrder("ord", []string{ids[1].ID, ids[0].ID}); err != nil {
+					id, ids := "ord", p.KeyList()
+					if c.other {
+						// k2 goes first here without a reorder being
+						// noted, so only the cache keeps the conversation
+						// on k1; then another provider's accounts are
+						// reordered
+						p.Key, p.Keys = "k2", []provider.KeyAccount{{Key: "k1"}}
+						if err := provider.Save(p); err != nil {
+							t.Fatal(err)
+						}
+						id, ids = "ord2", other.KeyList()
+					}
+					if err := provider.SetAccountOrder(id, []string{ids[1].ID, ids[0].ID}); err != nil {
 						t.Fatal(err)
 					}
 					forgetRouting()

@@ -53,6 +53,7 @@ func drawingFollowsThePool(t *testing.T, path string) {
 	if err := provider.SetAccountOrder("codex", []string{"spare@example.com", "me@example.com"}); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(provider.ForgetReorders)
 	for _, l := range provider.Logins("codex") {
 		if l.Active != (l.User == "me@example.com") {
 			t.Fatalf("kept on me, signed in as %+v", l)

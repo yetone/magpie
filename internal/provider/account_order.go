@@ -2,27 +2,37 @@ package provider
 
 import (
 	"fmt"
-	"sync/atomic"
+	"sync"
 	"time"
 )
 
-var reorderedAt atomic.Int64
+// reorderedAt holds, per provider id, when the user last changed which of
+// its accounts goes first: a reorder of one provider's accounts is no
+// reason to move a conversation on another's (a drag in Kimi's pool cost a
+// Claude conversation its hour of cache).
+var reorderedAt sync.Map // provider id -> int64 unix nanos
 
-// NoteReordered records that the user just changed which account goes
-// first (a drag in the pool, Make first, the CLI), so a conversation
-// last answered before it is routed anew at its next turn (the gateway's
-// affine) instead of staying with the account the user moved down.
-func NoteReordered() { reorderedAt.Store(time.Now().UnixNano()) }
+// NoteReordered records that the user just changed which of provider id's
+// accounts goes first (a drag in the pool, Make first, the CLI), so a
+// conversation it last answered before that is routed anew at its next
+// turn (the gateway's affine) instead of staying with the account the user
+// moved down.
+func NoteReordered(id string) { reorderedAt.Store(id, time.Now().UnixNano()) }
 
-// ReorderedAt is when NoteReordered was last called in this process; the
-// zero time before.
-func ReorderedAt() time.Time {
-	n := reorderedAt.Load()
-	if n == 0 {
+// ReorderedAt is when NoteReordered was last called for provider id in
+// this process; the zero time before.
+func ReorderedAt(id string) time.Time {
+	n, ok := reorderedAt.Load(id)
+	if !ok {
 		return time.Time{}
 	}
-	return time.Unix(0, n)
+	return time.Unix(0, n.(int64))
 }
+
+// ForgetReorders forgets every NoteReordered, for a test that reordered
+// accounts: a later test's conversation, backdated past the real time of
+// that reorder, would otherwise be routed anew (#6249).
+func ForgetReorders() { reorderedAt.Clear() }
 
 // SetAccountOrder changes the order used by routing, not just its presentation.
 // The first enabled account becomes first through the same switch used by Make
@@ -30,7 +40,7 @@ func ReorderedAt() time.Time {
 func SetAccountOrder(id string, order []string) error {
 	err := setAccountOrder(id, order)
 	if err == nil {
-		NoteReordered()
+		NoteReordered(id)
 	}
 	return err
 }

@@ -20,6 +20,7 @@ func TestArrangedKeysAreGatewayCandidates(t *testing.T) {
 		if err := provider.SetAccountOrder(p.ID, order); err != nil {
 			t.Fatal(err)
 		}
+		t.Cleanup(provider.ForgetReorders)
 		got, err := provider.Find(p.ID)
 		if err != nil {
 			t.Fatal(err)
