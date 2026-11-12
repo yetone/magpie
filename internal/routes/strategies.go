@@ -19,6 +19,14 @@ const (
 	UsedShare = provider.SpentShare
 )
 
+// lapsingMin is the points of the used share that lapsing soon unspent
+// (Seat.Lapsing) must reach to send an account ahead in Least used first:
+// a few credits of a large pool are not worth unbalancing it for.
+const lapsingMin = 0.5
+
+// urgent says a seat with room has credits to spend before they lapse.
+func urgent(s Seat) bool { return tier(s.Used) == 0 && s.Lapsing >= lapsingMin }
+
 // tier is 0 for a share with room, 1 for low, 2 for all but used up.
 func tier(share float64) int {
 	switch {
@@ -314,6 +322,11 @@ var Rotate = Strategy{Order: func(pool string, seats []Seat) []int {
 // whose share was told and has room, and before those running low or
 // spent, as Smart and Pace keep the unknown. One not known that tells
 // what it has left as it answers goes first, once, as in Smart and Pace.
+// The share used is taken less what lapses soon unspent (Seat.Lapsing):
+// WorkBuddy's account with half of a year-long pack used but check-in
+// credits ending tomorrow ranks by what it can really lose, not by the
+// pool's share (kudi3699 on X): one with room whose credits lapse soon goes
+// ahead of the rest, the soonest first.
 var LeastUsed = Strategy{ByUse: true, Order: func(_ string, seats []Seat) []int {
 	left := byLeft(seats, fewerTokens)
 	// shared: the seat's share of its allowance was told — a use past 0
@@ -357,6 +370,14 @@ var LeastUsed = Strategy{ByUse: true, Order: func(_ string, seats []Seat) []int 
 		}
 		if ta, tb := tier(sa.Used), tier(sb.Used); ta == 2 && tb == 2 && sa.Credits != sb.Credits {
 			return sa.Credits
+		}
+		// credits about to lapse unspent cost nothing to spend: an account
+		// with some (Seat.Lapsing) goes before those without, the soonest
+		// lapse first; the share used decides among those alike
+		if ua, ub := urgent(sa), urgent(sb); ua != ub {
+			return ua
+		} else if ua && !sa.Lapse.Truncate(time.Hour).Equal(sb.Lapse.Truncate(time.Hour)) {
+			return sa.Lapse.Before(sb.Lapse)
 		}
 		if sa.Used != sb.Used {
 			return sa.Used < sb.Used

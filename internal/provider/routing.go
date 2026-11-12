@@ -676,6 +676,37 @@ func (a Allowance) Lapse(model string, now time.Time) time.Time {
 	return t
 }
 
+// lapseHorizon is how far ahead credits about to be lost count as spent
+// already: they weigh in full when they lapse now and fade to nothing a
+// week out (Allowance.Lapsing).
+const lapseHorizon = 7 * 24 * time.Hour
+
+// Lapsing is the share of an allowance, in points of the 0–100 used share,
+// that is lost soon whatever is done: what a window that counts model
+// loses at RunsOut (RunsOutLeft of Of, never more than it has left), less
+// the further off that is, to nothing at lapseHorizon. Credits that are
+// lost unspent cost nothing to spend, so a ranking by the share used takes
+// them off it, and an account whose month is half used but whose check-in
+// credits lapse tomorrow is not kept behind a fresh one (kudi3699 on X).
+// Zero when no window says how much lapses: the amount is never guessed
+// from what is left. The most of any window's, as they overlap.
+func (a Allowance) Lapsing(model string, now time.Time) float64 {
+	model = strings.ToLower(model)
+	best := 0.0
+	for _, l := range a {
+		if !l.applies(model) || !l.RunsOut.After(now) || l.RunsOutLeft <= 0 || l.Of <= 0 {
+			continue
+		}
+		fade := 1 - float64(l.RunsOut.Sub(now))/float64(lapseHorizon)
+		if fade <= 0 {
+			continue
+		}
+		u := min(100, max(0, l.Used))
+		best = max(best, fade*min(100*l.RunsOutLeft/l.Of, 100-u))
+	}
+	return best
+}
+
 // Full is when an account used up for model can take it again: the last
 // reset of its windows that are full, zero when none is or it isn't known.
 func (a Allowance) Full(model string, share float64, now time.Time) time.Time {

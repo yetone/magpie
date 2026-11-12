@@ -133,3 +133,39 @@ func TestSmartSpendsCreditsLapsingFirstWhenRenewingTogether(t *testing.T) {
 		t.Fatalf("spent last: %s", got)
 	}
 }
+
+// kudi3699 on X: a WorkBuddy account holds a 5000-credit pack that ends
+// next March, half used, and check-in credits that end tomorrow. Its
+// share used over the whole pool (about 50%) kept it behind a fresher
+// account in "Least used first" and the check-in credits were lost. What
+// lapses soon unspent is spent first.
+func TestLeastUsedSpendsWorkBuddyCheckInCreditsAboutToLapse(t *testing.T) {
+	old := allowances
+	defer func() { allowances = old }()
+	now := time.Now()
+	share := map[string]provider.Allowance{}
+	allowances = func(string) map[string]provider.Allowance { return share }
+	p := provider.Provider{ID: "workbuddy", Routing: provider.LeastUsed, Account: &provider.Account{Agent: "workbuddy", User: "a"}}
+	acct := func(user string) candidate {
+		return candidate{p: provider.Provider{ID: "workbuddy", Account: &provider.Account{Agent: "workbuddy", User: user}}, model: "hy3", rest: "workbuddy#" + user}
+	}
+	order := func(cs ...candidate) string {
+		got, _ := weigh(p, cs, "hy3", provider.Chat)
+		var s []string
+		for _, c := range got {
+			s = append(s, c.p.Account.User)
+		}
+		return strings.Join(s, "")
+	}
+	// 5500 in all, 2750 used (50%); 500 of it lapses in a day
+	share["old"] = provider.Allowance{{Used: 50, Amount: 2750, Of: 5500, Unit: "credits", RunsOut: now.Add(24 * time.Hour), RunsOutLeft: 500}}
+	share["new"] = provider.Allowance{{Used: 20, Amount: 1100, Of: 5500, Unit: "credits", RunsOut: now.Add(200 * 24 * time.Hour), RunsOutLeft: 4400}}
+	if got := order(acct("new"), acct("old")); got != "oldnew" {
+		t.Fatalf("credits lapsing tomorrow not spent first: %s", got)
+	}
+	// nothing about to lapse: the least used, as before
+	share["old"] = provider.Allowance{{Used: 50, Amount: 2750, Of: 5500, Unit: "credits", RunsOut: now.Add(200 * 24 * time.Hour), RunsOutLeft: 2750}}
+	if got := order(acct("old"), acct("new")); got != "newold" {
+		t.Fatalf("least used first as before: %s", got)
+	}
+}

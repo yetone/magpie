@@ -287,3 +287,27 @@ func TestSmartLeadFirst(t *testing.T) {
 		t.Fatalf("Smart with none set: %v, want %v", got, want)
 	}
 }
+
+// Credits that lapse soon unspent cost nothing to spend: an account whose
+// pool is half used but whose check-in credits end tomorrow goes before a
+// fresher one, the soonest lapse first (kudi3699 on X). A trifle doesn't
+// unbalance the pool, and one running low is not helped by it.
+func TestLeastUsedSpendsLapsingFirst(t *testing.T) {
+	now := time.Now()
+	s := []Seat{{Key: "fresh", Known: true, Used: 20}, {Key: "half", Known: true, Used: 50, Lapsing: 5, Lapse: now.Add(24 * time.Hour)}}
+	if got := keys(s, Apply(LeastUsed, "p", s)); !slices.Equal(got, []string{"half", "fresh"}) {
+		t.Fatalf("lapsing credits not spent first: %v", got)
+	}
+	s = []Seat{{Key: "fresh", Known: true, Used: 20}, {Key: "half", Known: true, Used: 50, Lapsing: 0.1, Lapse: now.Add(24 * time.Hour)}}
+	if got := keys(s, Apply(LeastUsed, "p", s)); !slices.Equal(got, []string{"fresh", "half"}) {
+		t.Fatalf("a trifle unbalanced the pool: %v", got)
+	}
+	s = []Seat{{Key: "a", Known: true, Used: 30, Lapsing: 1, Lapse: now.Add(60 * time.Hour)}, {Key: "b", Known: true, Used: 60, Lapsing: 1, Lapse: now.Add(30 * time.Hour)}}
+	if got := keys(s, Apply(LeastUsed, "p", s)); !slices.Equal(got, []string{"b", "a"}) {
+		t.Fatalf("soonest lapse not first: %v", got)
+	}
+	s = []Seat{{Key: "a", Known: true, Used: 91}, {Key: "b", Known: true, Used: 95, Lapsing: 9, Lapse: now.Add(time.Hour)}}
+	if got := keys(s, Apply(LeastUsed, "p", s)); !slices.Equal(got, []string{"a", "b"}) {
+		t.Fatalf("a low account went first for its lapse: %v", got)
+	}
+}

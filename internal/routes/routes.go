@@ -52,6 +52,11 @@ type Seat struct {
 	// its windows' renewals (Allowance.Lapse): zero when not told. Smart
 	// goes by it when Soon ties.
 	Lapse time.Time
+	// Lapsing is the share of its allowance, in points of Used, that is
+	// lost soon unspent (Allowance.Lapsing): zero when not told. Least
+	// used first sends a seat with room and some ahead, as credits lost
+	// anyway cost nothing to spend.
+	Lapsing float64
 	// Pace is its week left per hour until that renews; an account not
 	// known has a whole week (provider.FreshPace), a key none
 	Pace float64
