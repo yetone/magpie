@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -1181,7 +1180,7 @@ func makerPriced(all map[string]mdProvider, at int, prefer []string, id string) 
 
 // mmddSnapshot is the date a vendor ends a snapshot's id with: -0813,
 // -1017 (month and day), -20261017 or -2026-10-17.
-var mmddSnapshot = regexp.MustCompile(`-(?:(?:0[1-9]|1[0-2])(?:0[1-9]|[12][0-9]|3[01])|20[0-9]{2}(?:-?)(?:0[1-9]|1[0-2])(?:-?)(?:0[1-9]|[12][0-9]|3[01]))$`)
+var mmddSnapshot = lazyre.New(`-(?:(?:0[1-9]|1[0-2])(?:0[1-9]|[12][0-9]|3[01])|20[0-9]{2}(?:-?)(?:0[1-9]|1[0-2])(?:-?)(?:0[1-9]|[12][0-9]|3[01]))$`)
 
 // snapshotOf is an id without the date of its snapshot, as the model it is
 // a snapshot of: deepseek-v4.1-flash-1017 is deepseek-v4.1-flash.
