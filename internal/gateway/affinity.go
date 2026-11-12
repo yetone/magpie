@@ -75,10 +75,15 @@ const (
 	// cache_control's ttl "1h" (cache_creation's ephemeral_1h_input_tokens)
 	// without it being read, as Claude Code asks of a subscription (#2302)
 	cacheHour = time.Hour
-	// stickKeep is how long a conversation's last answerer is remembered.
-	stickKeep = 24 * time.Hour
+	// stickKeep is how long a conversation's last answerer is remembered,
+	// counted from its last answer: a binding in use is renewed by every
+	// answer. A long task is often picked up again after a weekend or a
+	// week, and a binding gone by then moves it to another provider, which
+	// refuses the reasoning the first sealed (invalid_encrypted_content;
+	// npikng161274 on X).
+	stickKeep = 30 * 24 * time.Hour
 	// sticksKept is how many conversations, the latest, are kept on disk.
-	sticksKept = 512
+	sticksKept = 4096
 )
 
 // coldAfter is how long p's vendor keeps a prompt cached without it being

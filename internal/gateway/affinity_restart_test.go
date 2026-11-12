@@ -74,3 +74,23 @@ func TestAffinityFileBounded(t *testing.T) {
 		t.Fatalf("read back %d (old kept %v), want the latest %d", n, old, sticksKept)
 	}
 }
+
+// A conversation picked up again days after its last answer stays with who
+// answered it, and so does one saved to disk and read back after a restart
+// (npikng161274 on X: a 24h binding expired over a weekend and the provider
+// switched mid-task, refused with invalid_encrypted_content).
+func TestStickSurvivesDaysAway(t *testing.T) {
+	fresh(t)
+	at := time.Now().Add(-4 * 24 * time.Hour)
+	sticks.Lock()
+	sticks.m["long-task"] = stick{rest: "a", who: "a", at: at}
+	sticks.Unlock()
+	saveSticks()
+	sticks.Lock()
+	sticks.m, sticks.from, sticks.mod = map[string]stick{}, "", time.Time{}
+	st, ok := stickOf("long-task")
+	sticks.Unlock()
+	if !ok || st.who != "a" || time.Since(st.at) > stickKeep {
+		t.Fatalf("a 4-day-old binding was lost: found %v, who %q, keep %v", ok, st.who, stickKeep)
+	}
+}
