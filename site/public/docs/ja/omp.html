@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>omp（oh-my-pi）で DeepSeek、GLM、Kimi、Qwen、Claude、ChatGPT サブスクリプションを使う：magpie を config.yml の modelRoles と models.yml に · magpie</title>
+<meta name="description" content="magpie で omp（oh-my-pi、Pi のフォーク）に DeepSeek、GLM、Kimi、Qwen、Claude、ChatGPT サブスクリプションを：~/.omp/agent/config.yml の各ロール（default、smol、slow、plan、commit など）のモデルと思考レベル、models.yml の magpie プロバイダー、enabledModels、プロファイル、画像モデル、元に戻す方法。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/omp">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/omp">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/omp">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/omp">
+<link rel="canonical" href="https://usemagpie.ai/docs/ja/omp">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="omp を任意のモデルで">
+<meta property="og:description" content="magpie で omp（oh-my-pi、Pi のフォーク）に DeepSeek、GLM、Kimi、Qwen、Claude、ChatGPT サブスクリプションを：~/.omp/agent/config.yml の各ロール（default、smol、slow、plan、commit など）のモデルと思考レベル、models.yml の magpie プロバイダー、enabledModels、プロファイル、画像モデル、元に戻す方法。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/ja/omp">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "omp を任意のモデルで",
+   "description": "magpie で omp（oh-my-pi、Pi のフォーク）に DeepSeek、GLM、Kimi、Qwen、Claude、ChatGPT サブスクリプションを：~/.omp/agent/config.yml の各ロール（default、smol、slow、plan、commit など）のモデルと思考レベル、models.yml の magpie プロバイダー、enabledModels、プロファイル、画像モデル、元に戻す方法。",
+   "inLanguage": "ja",
+   "url": "https://usemagpie.ai/docs/ja/omp",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "omp で DeepSeek、GLM、ChatGPT サブスクリプションを使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。magpie のエージェントページで omp の default ロールに via magpie のモデルを選び、新しいセッションを始めます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "smol、slow、commit にそれぞれ別のモデルを使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えます。各ロールに magpie のモデルを選べ、default 以外は思考レベルもそれぞれ持てます。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "default を設定したのに omp が別のモデルで始まるのはなぜですか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "enabledModels にモデルがあると、default のモデルがそこに入っている必要があります。magpie は magpie/** を加え、元に戻すと外します。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "元に戻すと設定も戻りますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "戻ります。各ロールは元の値に戻り、magpie を使うものがなくなればプロバイダーと enabledModels のエントリも外れます。"
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/ja/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "ドキュメント",
+     "item": "https://usemagpie.ai/docs/ja/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "omp を任意のモデルで",
+     "item": "https://usemagpie.ai/docs/ja/omp"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/ja/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>ドキュメント</small></a>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/start">はじめに</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a class="toc-only" href="/docs/ja/remote">リモート magpie</a>
+    <a class="toc-only" href="/docs/ja/docker">Docker</a>
+    <a class="toc-only" href="/docs/ja/privacy">プライバシー</a>
+    <a class="toc-only" href="/docs/ja/masking">プライバシーマスキング</a>
+    <a class="toc-only" href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a class="toc-only" href="/docs/ja/library">ライブラリ</a>
+    <a class="toc-only" href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a class="toc-only" href="/docs/ja/local-models">ローカルモデル</a>
+    <a class="toc-only" href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a class="toc-only" href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="言語" title="言語" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/omp" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/omp" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/omp" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="Discord の magpie" title="Discord に参加"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="GitHub の magpie" title="GitHub のソースコード"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">ダウンロード</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>omp</p>
+    <a href="#overview">仕組み</a>
+    <a href="#on">omp の設定</a>
+    <a href="#files">config.yml と models.yml</a>
+    <a href="#roles">ロールごとのモデル</a>
+    <a href="#scope">enabledModels</a>
+    <a href="#api">モデルごとに自分の API</a>
+    <a href="#profiles">プロファイルと WSL</a>
+    <a href="#off">元に戻す</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">ドキュメント · ガイド</p>
+    <h1>omp を任意のモデルで</h1>
+    <p class="lede">omp（oh-my-pi、<code>omp</code> コマンド）は Pi のフォークで、ターミナルのコーディングエージェントです。仕事の種類ごとにモデルのロールがあり、セッションは default、サブエージェントは task、小さな仕事は smol、レビューは slow、ほかに plan や commit などがあります。magpie が models.yml に magpie という名前のプロバイダーを加え、選んだロールをそこに向けると、omp の各ロールが DeepSeek、GLM、Kimi、Qwen、Claude、ChatGPT サブスクリプションなど magpie の任意のモデルで動きます。</p>
+    <h2 id="on"><a class="anchor" href="#on">omp の設定</a></h2>
+    <ol class="steps">
+      <li><b>magpie にプロバイダーを追加</b><span class="ui">プロバイダー</span> ページで API キーを追加するか、サブスクリプションにサインインします。</li>
+      <li><b><span class="ui">エージェント</span> ページで omp のモデルを選ぶ</b>まず default ロールのモデルを選び、必要ならほかのロールと思考レベルも選びます。コマンドラインの <code>magpie oh-my-pi</code> も同じエージェントです。</li>
+      <li><b>新しいセッションを始める</b>omp の新しいセッションは default ロールのモデルで始まります。</li>
+    </ol>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="omp-on">コピー</button><pre id="omp-on">magpie omp deepseek/deepseek-v4-pro</pre></div>
+    <h2 id="files"><a class="anchor" href="#files">config.yml と models.yml</a></h2>
+    <p>omp の設定は <code>~/.omp/agent/config.yml</code> にあります。<code>PI_CONFIG_DIR</code> は <code>~/.omp</code> の名前を変え、<code>PI_CODING_AGENT_DIR</code> は agent フォルダーを動かします。各ロールのモデルは <code>modelRoles</code> に「プロバイダー/モデル」で書かれ、magpie のモデルは <code>magpie/&lt;プロバイダー&gt;/&lt;モデル&gt;</code>、末尾に <code>:レベル</code> を付けられます。</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="omp-config">コピー</button><pre id="omp-config"># ~/.omp/agent/config.yml
+modelRoles:
+  default: magpie/deepseek/deepseek-v4-pro
+  slow: magpie/…:high
+enabledModels:
+  - …
+  - magpie/**</pre></div>
+    <p>隣の models.yml では、magpie のプロバイダーはこのコンピューターではキー不要（<code>auth: none</code>）で、models には各モデルのコンテキストウィンドウ、一回の応答の上限、画像を読めるか、使える思考レベル、100 万トークンあたりの価格が付きます。価格があると omp は呼び出しごとの費用を数えられます。ないと magpie のモデルは omp 同梱のモデルに当たらず、費用はすべて 0 になります。models.yml の自分のプロバイダーや modelOverrides などはそのままです。</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="omp-models">コピー</button><pre id="omp-models"># ~/.omp/agent/models.yml
+providers:
+  magpie:
+    baseUrl: http://127.0.0.1:3425/v1
+    auth: none
+    models:
+      - id: deepseek/deepseek-v4-pro
+        …</pre></div>
+    <h2 id="roles"><a class="anchor" href="#roles">ロールごとのモデル</a></h2>
+    <p>default はセッションが始まるモデルです。task はサブエージェント用で、scout と sonic は smol、reviewer は slow で動きます。未設定なら task は親セッションのモデル、smol と slow は default のモデルを使います。plan は計画モード、vision は画像、advisor はセカンドオピニオン（未設定なら slow が先）、commit はコミットメッセージ、tiny はセッション名を付け、memory は tiny に従います。default 以外のロールは自分の思考レベルを持てます。たとえばセッションは medium、slow は high です。レベルは minimal、low、medium、high、xhigh、max で、16.4.0 より前の omp は max を受け付けないので xhigh になります。magpie の <span class="ui">設定</span> › モデル › 画像で選んだ画像モデルは、omp 18.7.0 から omp 自身の Roles ビューの画像ロールに出ます。</p>
+    <h2 id="scope"><a class="anchor" href="#scope">enabledModels</a></h2>
+    <p><code>enabledModels</code> にモデルがある間、新しいセッションはそのリストに縛られます。default のモデルがリストになければ始まらず、omp はリストから別のモデルを選びます。そこでリストがあるときは magpie が <code>magpie/**</code> を加え、omp のピッカーと Ctrl+P にも magpie の全モデルが出るようにします。リストは自分のものです。magpie は既存のエントリ、順序、コメントを残し、リストがなければ作らず、フォルダーに限ったエントリには触れません。ほかのロールはこのリストに縛られません。</p>
+    <h2 id="api"><a class="anchor" href="#api">モデルごとに自分の API</a></h2>
+    <p>Pi と同じく、各モデルはプロバイダー本来の API で呼ばれ、ゲートウェイは翻訳せずにそのまま中継します。OpenAI の Responses、Anthropic の Messages、Gemini の <code>/v1beta</code> です。Chat 経由だと、Claude はツール呼び出しの間で思考の署名を失っていました。Chat にはそれを置く場所がないからです。magpie は omp にセッション id と自分の名前をヘッダーで送らせるので、使用量では omp として数え、「ゲートウェイの会話を記録」も omp の会話を残します。</p>
+    <h2 id="profiles"><a class="anchor" href="#profiles">プロファイルと WSL</a></h2>
+    <p><code>~/.omp/profiles/&lt;名前&gt;/agent</code> の各プロファイルはそれぞれ別の omp で、エージェントページに <code>omp#&lt;名前&gt;</code> として、自分の config.yml と models.yml を持って並びます。<code>OMP_PROFILE</code> が選ぶものは既定の行です。WSL のディストリビューションの omp はそちらの <code>~/.omp/agent</code> を使い、NAT 越しに Windows のアドレスへ届くときは、ゲートウェイをネットワークで共有するキーをプロバイダーに付けます。</p>
+    <h2 id="off"><a class="anchor" href="#off">元に戻す</a></h2>
+    <p>magpie はロールを引き継ぐ前に元の値を保存し、ロールを戻すとそれをそのまま戻します。YAML のリストだったものは書かれていた形で戻ります。どこかのロール、フォールバックチェーン、タスクエージェントが magpie のモデルを使っている間は magpie のプロバイダーを models.yml に残し、使うものがなくなれば、magpie が加えた <code>enabledModels</code> のエントリと一緒に外します。</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="omp-off">コピー</button><pre id="omp-off">magpie omp default</pre></div>
+
+    <h2 id="faq"><a class="anchor" href="#faq">よくある質問</a></h2>
+    <h3>omp で DeepSeek、GLM、ChatGPT サブスクリプションを使えますか？</h3>
+    <p>使えます。magpie のエージェントページで omp の default ロールに via magpie のモデルを選び、新しいセッションを始めます。</p>
+    <h3>smol、slow、commit にそれぞれ別のモデルを使えますか？</h3>
+    <p>使えます。各ロールに magpie のモデルを選べ、default 以外は思考レベルもそれぞれ持てます。</p>
+    <h3>default を設定したのに omp が別のモデルで始まるのはなぜですか？</h3>
+    <p>enabledModels にモデルがあると、default のモデルがそこに入っている必要があります。magpie は magpie/** を加え、元に戻すと外します。</p>
+    <h3>元に戻すと設定も戻りますか？</h3>
+    <p>戻ります。各ロールは元の値に戻り、magpie を使うものがなくなればプロバイダーと enabledModels のエントリも外れます。</p>
+
+    <p style="margin-top:48px">同じモデルを他のエージェントでも：<a href="/docs/ja/pi">Pi を任意のモデルで</a>、<a href="/docs/ja/stepcode">StepCode を任意のモデルで</a>、<a href="/docs/ja/mothx">MothX を任意のモデルで</a>。エラーが出るときは <a href="/docs/ja/troubleshooting">よくあるエラーの直し方</a>、または <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> で質問してください。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/ja/">ホーム</a>
+    <a href="/docs/ja/intent">インテントルーティング</a>
+    <a href="/docs/ja/plugins">プラグイン</a>
+    <a href="/docs/ja/remote">リモート magpie</a>
+    <a href="/docs/ja/docker">Docker</a>
+    <a href="/docs/ja/privacy">プライバシー</a>
+    <a href="/docs/ja/masking">プライバシーマスキング</a>
+    <a href="/docs/ja/mcp-router">MCP ルーター</a>
+    <a href="/docs/ja/library">ライブラリ</a>
+    <a href="/docs/ja/claude-code-models">Claude Code で他のモデル</a>
+    <a href="/docs/ja/codex-models">Codex で他のモデル</a>
+    <a href="/docs/ja/gemini-cli-models">Gemini CLI で他のモデル</a>
+    <a href="/docs/ja/subscriptions">サブスクを任意のエージェントで</a>
+    <a href="/docs/ja/local-models">ローカルモデル</a>
+    <a href="/docs/ja/opencode-models">OpenCode で他のモデル</a>
+    <a href="/docs/ja/alternatives">CC Switch・CCR との比較</a>
+    <a href="/docs/ja/import">magpie に追加</a>
+    <a href="/docs/integrate">アプリ連携</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/ja/contributors">コントリビューター</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "コピーしました"; setTimeout(() => (b.textContent = "コピー"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

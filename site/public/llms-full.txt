@@ -7360,7 +7360,96 @@ Yes. magpie reads it as JSONC, and writes nothing when the root, providers or pr
 
 Yes. The original provider, model, scope and providers.magpie go back, and files magpie made are removed.
 
-More agents on the same models: [Avibe on any model](https://usemagpie.ai/docs/avibe), [MothX on any model](https://usemagpie.ai/docs/mothx) and [Pi on any model](https://usemagpie.ai/docs/pi). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Avibe on any model](https://usemagpie.ai/docs/avibe), [MothX on any model](https://usemagpie.ai/docs/mothx), [Pi on any model](https://usemagpie.ai/docs/pi) and [omp on any model](https://usemagpie.ai/docs/omp). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/omp
+
+# omp on any model
+
+omp (oh-my-pi, the `omp` command) is a fork of Pi, a coding agent in the terminal. It gives each kind of work a model role: default for the session, task for subagents, smol for small jobs, slow for review, plus plan, commit and more. magpie adds a provider named magpie to models.yml and points the roles you pick at it, so each of omp's roles runs on any model in magpie: DeepSeek, GLM, Kimi, Qwen, Claude or a ChatGPT subscription.
+
+## Set up omp
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Pick models for omp on the Agents page.** Pick the default role's model first, then one for any other role and a thinking level if you want. On the command line, `magpie oh-my-pi` is the same agent.
+3. **Start a new session.** A new omp session starts on the default role's model.
+
+```
+magpie omp deepseek/deepseek-v4-pro
+```
+
+## config.yml and models.yml
+
+omp's settings are in `~/.omp/agent/config.yml`; `PI_CONFIG_DIR` renames `~/.omp`, and `PI_CODING_AGENT_DIR` moves the agent folder. Each role's model is under `modelRoles` as provider/model, so one of magpie's is `magpie/<provider>/<model>`, with an optional `:level` on the end.
+
+```
+# ~/.omp/agent/config.yml
+modelRoles:
+  default: magpie/deepseek/deepseek-v4-pro
+  slow: magpie/…:high
+enabledModels:
+  - …
+  - magpie/**
+```
+
+In models.yml beside it, magpie's provider takes no key on this computer (`auth: none`), and its models carry their context window, cap on a reply, whether they read images, the thinking levels each takes and the price per million tokens. With the price, omp counts what each call cost; without it a magpie model matches none of omp's bundled ones and every call costs 0. Your own providers and what else you keep in models.yml, such as modelOverrides, are left alone.
+
+```
+# ~/.omp/agent/models.yml
+providers:
+  magpie:
+    baseUrl: http://127.0.0.1:3425/v1
+    auth: none
+    models:
+      - id: deepseek/deepseek-v4-pro
+        …
+```
+
+## A model per role
+
+default is the model a session starts on. task is for subagents; scout and sonic run on smol and reviewer on slow. Unset, task takes the parent session's model, and smol and slow the default's. plan is plan mode's, vision handles images, advisor gives a second opinion (slow first when unset), commit writes commit messages, tiny names sessions, and memory follows tiny. Every role but default can have a thinking level of its own, say medium for sessions and high for slow. The levels are minimal, low, medium, high, xhigh and max; an omp before 16.4.0 doesn't take max, so it gets xhigh. Image models set in magpie's Settings › Models › Images show up for omp's image role in its own Roles view, from omp 18.7.0.
+
+## enabledModels
+
+While `enabledModels` lists models, a new session is held to it: a default model outside the list never starts, and omp picks another from the list. So when you have one, magpie adds `magpie/**` to it, which also keeps all of magpie's models in omp's picker and Ctrl+P. The list is yours: magpie keeps its entries, order and comments, never makes one where there is none, and leaves entries scoped to folders as they are. The other roles aren't held to it.
+
+## Each model on its own API
+
+As with Pi, each model is asked on its provider's native API, and the gateway relays it as it is: OpenAI's Responses, Anthropic's Messages, Gemini's `/v1beta`. Over Chat, a Claude lost its thinking's signatures between tool turns, since Chat has no place for them. magpie also has omp send its session id and its own name in headers, so Usage counts it as omp and Record gateway conversations keeps its turns.
+
+## Profiles and WSL
+
+Each profile in `~/.omp/profiles/<name>/agent` is an omp of its own, shown on the Agents page as `omp#<name>` with its own config.yml and models.yml; the one `OMP_PROFILE` picks is the default row. omp in a WSL distro uses `~/.omp/agent` there; when it reaches Windows' address from behind NAT, the provider carries the key the gateway is shared on the network with.
+
+## Switching back
+
+Before magpie takes a role over it saves what the role had, and setting the role back puts that back as it was, a YAML list in the style it was written. magpie's provider stays in models.yml while any role, fallback chain or task agent is on one of its models, and goes once none is, with the `enabledModels` entry magpie added.
+
+```
+magpie omp default
+```
+
+## FAQ
+
+### Can omp run on DeepSeek, GLM or a ChatGPT subscription?
+
+Yes. Pick a via-magpie model for omp's default role on magpie's Agents page, then start a new session.
+
+### Can smol, slow and commit each have their own model?
+
+Yes. Each role can take its own magpie model, and every role but default its own thinking level.
+
+### Why did omp start on another model when default was set?
+
+While enabledModels lists models, the default model has to be in it. magpie adds magpie/** and removes it when switching back.
+
+### Does switching back restore my settings?
+
+Yes. Each role gets back what it had; once nothing is on magpie, its provider and its enabledModels entry go too.
+
+More agents on the same models: [Pi on any model](https://usemagpie.ai/docs/pi), [StepCode on any model](https://usemagpie.ai/docs/stepcode) and [MothX on any model](https://usemagpie.ai/docs/mothx). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 

@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>omp（oh-my-pi）接入 DeepSeek、GLM、Kimi、Qwen、Claude 或 ChatGPT 订阅：通过 magpie 配置 config.yml 的 modelRoles 和 models.yml · magpie</title>
+<meta name="description" content="通过 magpie 让 omp（oh-my-pi，Pi 的分支）用上 DeepSeek、GLM、Kimi、Qwen、Claude 或 ChatGPT 订阅：~/.omp/agent/config.yml 里每个角色（default、smol、slow、plan、commit 等）的模型和思考强度，models.yml 里的 magpie 供应商，enabledModels，profiles，图片模型，以及切回原来的设置。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/omp">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/omp">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/omp">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/omp">
+<link rel="canonical" href="https://usemagpie.ai/docs/zh/omp">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="让 omp 用任意模型">
+<meta property="og:description" content="通过 magpie 让 omp（oh-my-pi，Pi 的分支）用上 DeepSeek、GLM、Kimi、Qwen、Claude 或 ChatGPT 订阅：~/.omp/agent/config.yml 里每个角色（default、smol、slow、plan、commit 等）的模型和思考强度，models.yml 里的 magpie 供应商，enabledModels，profiles，图片模型，以及切回原来的设置。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/zh/omp">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "让 omp 用任意模型",
+   "description": "通过 magpie 让 omp（oh-my-pi，Pi 的分支）用上 DeepSeek、GLM、Kimi、Qwen、Claude 或 ChatGPT 订阅：~/.omp/agent/config.yml 里每个角色（default、smol、slow、plan、commit 等）的模型和思考强度，models.yml 里的 magpie 供应商，enabledModels，profiles，图片模型，以及切回原来的设置。",
+   "inLanguage": "zh-CN",
+   "url": "https://usemagpie.ai/docs/zh/omp",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "omp 能用 DeepSeek、GLM 或 ChatGPT 订阅吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。在 magpie 的 Agent 页给 omp 的 default 角色选一个 via magpie 的模型，然后开一个新会话。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "能给 smol、slow、commit 这些角色分别选模型吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。每个角色都可以单独选 magpie 的模型，除 default 外还能各有自己的思考强度。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "为什么设了 default，omp 还是用了别的模型？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "enabledModels 列了模型时，default 角色的模型要在列表里。magpie 会加一条 magpie/**，切回时再删掉。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "切回后原来的设置会恢复吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "会。每个角色原来的值都原样放回；没有地方用 magpie 后，它的供应商和加进 enabledModels 的那条也会删掉。"
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/zh/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "文档",
+     "item": "https://usemagpie.ai/docs/zh/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "让 omp 用任意模型",
+     "item": "https://usemagpie.ai/docs/zh/omp"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/zh/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>文档</small></a>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/start">快速上手</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a class="toc-only" href="/docs/zh/remote">远程 magpie</a>
+    <a class="toc-only" href="/docs/zh/docker">Docker</a>
+    <a class="toc-only" href="/docs/zh/privacy">隐私</a>
+    <a class="toc-only" href="/docs/zh/masking">本地脱敏</a>
+    <a class="toc-only" href="/docs/zh/mcp-router">MCP 路由</a>
+    <a class="toc-only" href="/docs/zh/library">资源库</a>
+    <a class="toc-only" href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a class="toc-only" href="/docs/zh/local-models">本地模型</a>
+    <a class="toc-only" href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="语言" title="语言" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/omp" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/omp" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/omp" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">下载</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>omp</p>
+    <a href="#overview">工作原理</a>
+    <a href="#on">接入 omp</a>
+    <a href="#files">config.yml 和 models.yml</a>
+    <a href="#roles">每个角色的模型</a>
+    <a href="#scope">enabledModels</a>
+    <a href="#api">每个模型走自己的接口</a>
+    <a href="#profiles">profiles 和 WSL</a>
+    <a href="#off">切回</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">文档 · 指南</p>
+    <h1>让 omp 用任意模型</h1>
+    <p class="lede">omp（oh-my-pi，<code>omp</code> 命令）是 Pi 的一个分支，终端编程 Agent。它给不同的活分配不同的模型角色：会话用 default，子 Agent 用 task，小活用 smol，评审用 slow，还有 plan、commit 等。magpie 在 models.yml 里加一个名为 magpie 的供应商，再把你选的角色指向它，omp 的每个角色都能用 DeepSeek、GLM、Kimi、Qwen、Claude 或 ChatGPT 订阅等 magpie 里的任意模型。</p>
+    <h2 id="on"><a class="anchor" href="#on">接入 omp</a></h2>
+    <ol class="steps">
+      <li><b>在 magpie 里添加供应商</b>在 <span class="ui">供应商</span> 页添加 API Key，或登录一个订阅。</li>
+      <li><b>在 <span class="ui">Agent</span> 页给 omp 选模型</b>先选 default 角色的模型，需要的话再给其他角色各选一个，以及思考强度。命令行里 <code>magpie oh-my-pi</code> 也是同一个 Agent。</li>
+      <li><b>开一个新会话</b>omp 的新会话就从 default 角色的模型开始。</li>
+    </ol>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="omp-on">复制</button><pre id="omp-on">magpie omp deepseek/deepseek-v4-pro</pre></div>
+    <h2 id="files"><a class="anchor" href="#files">config.yml 和 models.yml</a></h2>
+    <p>omp 的设置在 <code>~/.omp/agent/config.yml</code>；<code>PI_CONFIG_DIR</code> 会改掉 <code>~/.omp</code> 这个名字，<code>PI_CODING_AGENT_DIR</code> 会移动 agent 文件夹。角色的模型写在 <code>modelRoles</code> 下，格式是“供应商/模型”，magpie 的模型就是 <code>magpie/&lt;供应商&gt;/&lt;模型&gt;</code>，末尾可以带 <code>:级别</code>。</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="omp-config">复制</button><pre id="omp-config"># ~/.omp/agent/config.yml
+modelRoles:
+  default: magpie/deepseek/deepseek-v4-pro
+  slow: magpie/…:high
+enabledModels:
+  - …
+  - magpie/**</pre></div>
+    <p>旁边的 models.yml 里，magpie 的供应商在本机不要 Key（<code>auth: none</code>），models 里是 magpie 的模型，带上上下文窗口、单次回复上限、能不能读图片、各模型能用的思考强度和每百万 token 的价格。写上价格后，omp 才能算出每次调用花了多少；不写的话，magpie 的模型匹配不到 omp 自带的模型，花费都记成 0。models.yml 里你自己的供应商和 modelOverrides 等内容，magpie 不动。</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="omp-models">复制</button><pre id="omp-models"># ~/.omp/agent/models.yml
+providers:
+  magpie:
+    baseUrl: http://127.0.0.1:3425/v1
+    auth: none
+    models:
+      - id: deepseek/deepseek-v4-pro
+        …</pre></div>
+    <h2 id="roles"><a class="anchor" href="#roles">每个角色的模型</a></h2>
+    <p>default 是会话开始用的模型。task 是子 Agent 的；scout 和 sonic 跑在 smol 上，reviewer 跑在 slow 上；不设时，task 用父会话的模型，smol 和 slow 用 default 的。plan 是计划模式的，vision 处理图片，advisor 给第二意见（不设时先用 slow），commit 写提交信息，tiny 给会话起名，memory 默认跟 tiny。除 default 外，每个角色都可以有自己的思考强度，比如会话用 medium、slow 用 high。思考强度有 minimal、low、medium、high、xhigh、max，omp 16.4.0 以前不认 max，magpie 就给 xhigh。在 magpie 的 <span class="ui">设置</span> › 模型 › 图片里设的图片模型，omp 18.7.0 起也会出现在 omp 自己 Roles 视图的图片角色里。</p>
+    <h2 id="scope"><a class="anchor" href="#scope">enabledModels</a></h2>
+    <p><code>enabledModels</code> 列了模型时，新会话只能用列表里的：default 角色的模型不在列表里，omp 就从列表里另挑一个。所以你有这个列表时，magpie 会在里面加一条 <code>magpie/**</code>，让 magpie 的所有模型都能在 omp 的选择器和 Ctrl+P 里出现。列表本身是你的：magpie 保留原有条目、顺序和注释，没有列表时不新建，限定在某些文件夹的条目也不动。其他角色不受这个列表限制。</p>
+    <h2 id="api"><a class="anchor" href="#api">每个模型走自己的接口</a></h2>
+    <p>和 Pi 一样，每个模型都走它供应商原生的接口，网关原样转发，不做翻译：OpenAI 的 Responses、Anthropic 的 Messages、Gemini 的 <code>/v1beta</code>。走 Chat 的话，Claude 在工具调用之间会丢掉思考的签名，Chat 里没有放它们的地方。magpie 还让 omp 在请求头里带上会话 id 和 omp 自己的名字，用量页按 omp 统计，“记录网关对话”也能记下 omp 的对话。</p>
+    <h2 id="profiles"><a class="anchor" href="#profiles">profiles 和 WSL</a></h2>
+    <p><code>~/.omp/profiles/&lt;名字&gt;/agent</code> 里的每个 profile 都是一个单独的 omp，在 Agent 页显示为 <code>omp#&lt;名字&gt;</code>，有自己的 config.yml 和 models.yml；<code>OMP_PROFILE</code> 选中的那个就是默认那一行。WSL 发行版里的 omp 用那边的 <code>~/.omp/agent</code>；它在 NAT 后面要访问 Windows 的地址时，供应商改带网关在局域网共享用的 Key。</p>
+    <h2 id="off"><a class="anchor" href="#off">切回</a></h2>
+    <p>magpie 接管一个角色前，会记下它原来的值；把角色设回去时就原样放回，原来是 YAML 列表的也按原来的写法写回。只要还有角色、回退链或子 Agent 用着 magpie 的模型，magpie 的供应商就留在 models.yml 里；都不用了才删掉，<code>enabledModels</code> 里 magpie 加的那条也一起删掉。</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="omp-off">复制</button><pre id="omp-off">magpie omp default</pre></div>
+
+    <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
+    <h3>omp 能用 DeepSeek、GLM 或 ChatGPT 订阅吗？</h3>
+    <p>能。在 magpie 的 Agent 页给 omp 的 default 角色选一个 via magpie 的模型，然后开一个新会话。</p>
+    <h3>能给 smol、slow、commit 这些角色分别选模型吗？</h3>
+    <p>能。每个角色都可以单独选 magpie 的模型，除 default 外还能各有自己的思考强度。</p>
+    <h3>为什么设了 default，omp 还是用了别的模型？</h3>
+    <p>enabledModels 列了模型时，default 角色的模型要在列表里。magpie 会加一条 magpie/**，切回时再删掉。</p>
+    <h3>切回后原来的设置会恢复吗？</h3>
+    <p>会。每个角色原来的值都原样放回；没有地方用 magpie 后，它的供应商和加进 enabledModels 的那条也会删掉。</p>
+
+    <p style="margin-top:48px">更多 Agent 用同样的模型：<a href="/docs/zh/pi">让 Pi 用任意模型</a>、<a href="/docs/zh/stepcode">让 StepCode 用任意模型</a>、<a href="/docs/zh/mothx">让 MothX 用任意模型</a>。遇到报错？见 <a href="/docs/zh/troubleshooting">常见错误排查</a>，或到 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 提问。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a href="/docs/zh/remote">远程 magpie</a>
+    <a href="/docs/zh/docker">Docker</a>
+    <a href="/docs/zh/privacy">隐私</a>
+    <a href="/docs/zh/masking">本地脱敏</a>
+    <a href="/docs/zh/mcp-router">MCP 路由</a>
+    <a href="/docs/zh/library">资源库</a>
+    <a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a href="/docs/zh/local-models">本地模型</a>
+    <a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/zh/contributors">贡献墙</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "已复制"; setTimeout(() => (b.textContent = "复制"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>
