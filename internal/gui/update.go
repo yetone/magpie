@@ -33,6 +33,9 @@ type updater struct {
 	mu     sync.Mutex
 	state  string // checking | latest | found | downloading | ready | available | source | error | blocked
 	latest *update.Release
+	// behind: since when a newer version has been out for this one, and
+	// whether it is urgent; the pill waits for it (update.Behind)
+	behind update.Behind
 	err    string
 	bundle string // the .app to replace, "" when not in one or stuck
 	stuck  string // why the .app or binary can't be replaced where it is (update.Stuck, exeStuck)
@@ -138,7 +141,12 @@ type updateJSON struct {
 	Speed int64  `json:"speed,omitempty"`
 	// blocked: the version this computer wouldn't start, and why (#894)
 	Blocked *update.Blocked `json:"blocked,omitempty"`
-	Total   int64           `json:"total,omitempty"`
+
+	// Quiet: a newer version is out but this one has not been behind long
+	// enough, and none is urgent, so the header's pill stays out (the
+	// Version row and Restart to update still offer it)
+	Quiet bool  `json:"quiet,omitempty"`
+	Total int64 `json:"total,omitempty"`
 	// found: the size of the file Download update would fetch, in bytes
 	// (0 when the feed doesn't say)
 	Size int64 `json:"size,omitempty"`
@@ -168,6 +176,7 @@ func updateDue(s settings.Settings, last, now time.Time) bool {
 }
 
 func (u *updater) start() {
+	u.behind = update.ReadBehind(Version)
 	u.place(runtime.GOOS, update.GUI)
 	gateway.SetRestarter(u.restartBesideAsked) // magpie update in a terminal
 	gateway.SetForceRestarter(u.restartBesideNow)
@@ -493,6 +502,14 @@ func (u *updater) run() {
 		return
 	}
 	u.latest, u.notesIn, u.stable = rel, lang, stable
+	if update.Released(Version) && update.Newer(rel.Version, Version) {
+		u.behind = update.NoteBehind(Version, rel.Version, update.UrgentIn(rel.Notes), time.Now())
+		if u.behind.Urgent == "" {
+			// an urgent release between this one and the latest: its
+			// notes aren't the latest's
+			go u.urgentBetween(rel.Version, lang)
+		}
+	}
 	switch {
 	case !update.Released(Version):
 		u.state = "source"
@@ -687,6 +704,10 @@ func (u *updater) jsonIn(lang string) updateJSON {
 	if u.state == "blocked" {
 		j.Blocked = u.blocked
 	}
+	switch j.State {
+	case "ready", "found", "available":
+		j.Quiet = !u.behind.Lit(Version, time.Now())
+	}
 	if u.state == "found" && u.latest != nil {
 		j.Size = u.assetSize(u.latest)
 	}
@@ -703,6 +724,34 @@ func (u *updater) jsonIn(lang string) updateJSON {
 		j.Latest, j.Notes, j.URL = u.latest.Version, update.StripInstall(u.latest.Notes), u.latest.URL
 	}
 	return j
+}
+
+// urgentBetween notes it when a release after this one up to latest is
+// urgent: a security fix a few releases back isn't in the latest's notes.
+func (u *updater) urgentBetween(latest, lang string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	notes, err := update.NotesBetween(ctx, Version, latest, lang)
+	if err != nil {
+		return
+	}
+	for _, n := range notes {
+		if update.UrgentIn(n.Notes) {
+			b := update.NoteUrgent(Version, n.Version, time.Now())
+			u.mu.Lock()
+			u.behind = b
+			u.mu.Unlock()
+			return
+		}
+	}
+}
+
+// quietAgain starts the pill's quiet over: it was dismissed.
+func (u *updater) quietAgain() {
+	b := update.QuietAgain(Version, time.Now())
+	u.mu.Lock()
+	u.behind = b
+	u.mu.Unlock()
 }
 
 // inLang has the next checks ask for the notes in lang ("" leaves it).

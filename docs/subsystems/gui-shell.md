@@ -891,6 +891,27 @@ See `TestGatewayPauseAndResume`, `TestGatewayPauseRollsBack`,
 `TestGatewayResumesOnWire`, `TestGatewayPauseFileUnreadable`,
 `TestTrayMenuLabels` and `gateway-pause.test.cjs`.
 
+### The Update pill waits until it is news
+
+A release comes every few minutes, so a newer one is nearly always out and
+downloaded, and a pill lit for each was never out (certhon520, jkd6688,
+Yuyuaneth and milianxinqi on X, 11-12). The header's Update pill (window and
+tray panel alike) lights only when `/api/update` has no `quiet`:
+this version has been behind for `update.Quiet` (3 days, the Stable
+channel's soak), counted from the first newer version seen and kept across
+restarts in `update-behind.json` (`update.Behind`, for the version running,
+so an update starts it over), or an urgent release is out (a line starting
+"**Urgent release:**" in the latest's notes, or in any release between this
+one and it, `urgentBetween`). An urgent release lights the pill at once and
+a dismissal does not hide it. Dismissing with the × hides that version and
+starts the quiet over (`quietAgain`), so the pill is not back with the next
+release. The pill waiting changes nothing else: Settings › Version, the
+tray's Restart to update, quitting and Restart automatically work at any
+time. Plugin updates have their own dot on Plugins, which lights only for
+a plugin that does not update by itself. See `TestPillWaitsForTheQuiet`,
+`TestUrgentLightsThePillAtOnce`, `TestDismissalStartsTheQuietOver`,
+`TestUpdateQuietUntilBehindAWhile` and `update-quiet.test.cjs`.
+
 ### A restart to update hands the gateway over
 
 On a Mac and on Linux, a restart into a downloaded update (the Update pill,
