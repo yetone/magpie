@@ -73,8 +73,8 @@ const chip = async (page, loc) => {
 };
 
 const words = {
-  en: { none: "No servers yet", one: "fs is in app for Claude Code", on: "fs is in app for Claude Code, Codex", off: "fs is out of app", foot: "Written into .mcp.json, .codex/config.toml of the project" },
-  zh: { none: "还没有服务器", one: "fs 已写入 app，供 Claude Code 使用", on: "fs 已写入 app，供 Claude Code, Codex 使用", off: "fs 已从 app 移除", foot: "写入项目的 .mcp.json, .codex/config.toml" },
+  en: { head: "Project servers", none: "No servers yet", one: "fs is in app for Claude Code", on: "fs is in app for Claude Code, Codex", off: "fs is out of app", foot: "Written into .mcp.json, .codex/config.toml of the project" },
+  zh: { head: "项目服务器", none: "还没有服务器", one: "fs 已写入 app，供 Claude Code 使用", on: "fs 已写入 app，供 Claude Code, Codex 使用", off: "fs 已从 app 移除", foot: "写入项目的 .mcp.json, .codex/config.toml" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -101,6 +101,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const card = page.locator("#view-library .lib-project");
         await card.waitFor();
         assert.equal((await card.locator(".lib-tags").textContent()).trim(), w.none);
+        // the section says what it holds, never "In projects" (the owner, 11-12)
+        assert.ok((await page.locator("#view-library .row-head .label").allTextContents()).includes(w.head));
 
         await card.locator(".lib-projhead").scrollIntoViewIfNeeded();
         const before = await scrolled(page);

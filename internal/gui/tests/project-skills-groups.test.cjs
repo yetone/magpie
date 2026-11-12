@@ -60,6 +60,7 @@ function server(lang, posts) {
 }
 
 const heads = { en: "On this computer", zh: "本机", "zh-TW": "本機", ja: "このコンピュータ", de: "Auf diesem Computer" };
+const projHeads = { en: "Project skills", zh: "项目技能", "zh-TW": "專案技能", ja: "プロジェクトのスキル", de: "Projekt-Skills" };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   test(engine + ": a project's Skills menu is grouped by source", async (t) => {
@@ -80,6 +81,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator('button[data-view="library"]').click();
         const app = page.locator("#view-library .lib-project").filter({ hasText: "~/code/app" });
         await app.waitFor();
+        // the section says what it holds, never "In projects" (the owner, 11-12)
+        assert.ok((await page.locator("#view-library .row-head .label").allTextContents()).includes(projHeads[lang]));
         await app.locator(".lib-projhead").click();
         await app.locator(".lib-projskill").first().waitFor();
         const menu = page.locator(".proto-menu");

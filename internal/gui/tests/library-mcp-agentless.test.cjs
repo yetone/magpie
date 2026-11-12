@@ -123,7 +123,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await v.locator(".lib-server").count(), 1, where);
         assert.equal(await v.locator(".lib-ag, .lib-agents").count(), 0, `${where}: agent chips`);
         const text = await v.textContent();
-        for (const gone of [w("In your agents"), w("In projects"), "Claude Code", "agent-own"]) assert.ok(!text.includes(gone), `${where}: ${gone} is shown`);
+        for (const gone of [w("In your agents"), w("Project servers"), "Claude Code", "agent-own"]) assert.ok(!text.includes(gone), `${where}: ${gone} is shown`);
         assert.equal(await page.locator("select").count(), 0);
 
         // off: what it would do
