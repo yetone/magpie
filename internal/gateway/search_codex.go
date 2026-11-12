@@ -105,7 +105,7 @@ func (s *Server) codexSearchBy(ctx context.Context, p provider.Provider, query s
 func (s *Server) codexSearch(ctx context.Context, p provider.Provider, query string) (string, []Hit, error) {
 	ctx, cancel := context.WithTimeout(s.metered(p.Via(ctx), p, ""), searchTimeout/2)
 	defer cancel()
-	q, err := maskedQuery(ctx, query, &p)
+	q, err := maskedQuery(ctx, unscoped(ctx, query), &p)
 	if err != nil {
 		return "", nil, err
 	}
@@ -115,14 +115,43 @@ func (s *Server) codexSearch(ctx context.Context, p provider.Provider, query str
 	if model == "" {
 		model = "gpt-5"
 	}
+	sc := scopeOf(ctx)
+	query1 := map[string]any{"q": q}
+	settingsBody := map[string]any{
+		"allowed_callers":     []string{"direct"},
+		"external_web_access": webAccess(ctx),
+	}
+	kind := "search_query"
+	if sc != nil {
+		if sc.RecencyDays > 0 {
+			query1["recency"] = sc.RecencyDays
+		}
+		if len(sc.Allowed) > 0 {
+			query1["domains"] = sc.Allowed
+		}
+		filters := map[string]any{}
+		if len(sc.Allowed) > 0 {
+			filters["allowed_domains"] = sc.Allowed
+		}
+		if len(sc.Blocked) > 0 {
+			filters["blocked_domains"] = sc.Blocked
+		}
+		if len(filters) > 0 {
+			settingsBody["filters"] = filters
+		}
+		if sc.Size != "" {
+			settingsBody["search_context_size"] = sc.Size
+		}
+		if sc.Images {
+			kind = "image_query"
+			settingsBody["image_settings"] = map[string]any{"max_results": searchCount(ctx), "caption": true}
+		}
+	}
 	body, _ := json.Marshal(map[string]any{
-		"id":       newUUID(),
-		"model":    model,
-		"commands": map[string]any{"search_query": []map[string]any{{"q": q}}},
-		"settings": map[string]any{
-			"allowed_callers":     []string{"direct"},
-			"external_web_access": webAccess(ctx),
-		},
+		"id":                newUUID(),
+		"model":             model,
+		"commands":          map[string]any{kind: []map[string]any{query1}},
+		"settings":          settingsBody,
 		"max_output_tokens": codexSearchBudget,
 	})
 	who := p.Name + ": "
@@ -202,7 +231,7 @@ func codexPages(output string, out codexSearchReply, n int) []foundPage {
 				rest = after
 			}
 		}
-		text := rest
+		text := imageSaid(rest)
 		if r, ok := byRef[ref]; ok {
 			title, link = cmp.Or(strings.TrimSpace(r.title), title), r.url
 			if strings.TrimSpace(text) == "" {
@@ -231,4 +260,16 @@ func dropPrivateUse(r rune) rune {
 		return -1
 	}
 	return r
+}
+
+// imageSaid sets an image result's text out: the backend gives it as
+// "Image URL: <url># <caption>" with no break between the two.
+func imageSaid(text string) string {
+	t := strings.TrimSpace(text)
+	u, ok := strings.CutPrefix(t, "Image URL:")
+	if !ok {
+		return text
+	}
+	img, caption, _ := strings.Cut(strings.TrimSpace(u), "# ")
+	return strings.TrimSpace("Image: " + strings.TrimSpace(img) + "\n" + strings.TrimSpace(caption))
 }

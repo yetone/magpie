@@ -55,7 +55,8 @@ const searchMCPTool = "web_search"
 // set (settings.SearchPages).
 func searchMCPSchema(n int) string {
 	return fmt.Sprintf(`{"type":"object","properties":{"query":{"type":"string","description":"What to search for"},`+
-		`"count":{"type":"integer","minimum":1,"maximum":%d,"default":%d,"description":"How many results to return, 1 to %d (%d when not given)"}},"required":["query"]}`,
+		`"count":{"type":"integer","minimum":1,"maximum":%d,"default":%d,"description":"How many results to return, 1 to %d (%d when not given)"},`+
+		searchScopeSchema+`},"required":["query"]}`,
 		searchHitsMost, n, searchHitsMost, n)
 }
 
@@ -230,6 +231,7 @@ func (s *Server) searchMCPCall(r *http.Request, m mcpMessage) (any, map[string]a
 			Arguments struct {
 				Query string          `json:"query"`
 				Count json.RawMessage `json:"count"`
+				searchArgs
 				fetchArgs
 			} `json:"arguments"`
 		}
@@ -240,7 +242,7 @@ func (s *Server) searchMCPCall(r *http.Request, m mcpMessage) (any, map[string]a
 		var err error
 		switch p.Name {
 		case searchMCPTool:
-			said, err = s.searchMCPRun(r, strings.TrimSpace(p.Arguments.Query), searchCountArg(p.Arguments.Count))
+			said, err = s.searchMCPRun(r, strings.TrimSpace(p.Arguments.Query), searchCountArg(p.Arguments.Count), p.Arguments.searchArgs.scope())
 		case fetchMCPTool:
 			said, err = s.fetchMCPRun(r, p.Arguments.fetchArgs)
 		default:
@@ -279,7 +281,7 @@ func (e searchMCPError) Error() string { return string(e) }
 // held to the calling gateway key's limit, and named in the Routing view
 // as the agent's MCP call; for count results when it is given (held to 1
 // through searchHitsMost), else the count the user set (searchCount).
-func (s *Server) searchMCPRun(r *http.Request, query string, count *int) (string, error) {
+func (s *Server) searchMCPRun(r *http.Request, query string, count *int, scope *searchScope) (string, error) {
 	if query == "" {
 		return "", searchMCPError("web_search needs a query")
 	}
@@ -292,6 +294,7 @@ func (s *Server) searchMCPRun(r *http.Request, query string, count *int) (string
 	if count != nil {
 		ctx = withSearchCount(ctx, *count)
 	}
+	ctx = withScope(ctx, scope)
 	said, _, err := s.webSearch(ctx, query)
 	if err != nil {
 		if r.Context().Err() == nil {

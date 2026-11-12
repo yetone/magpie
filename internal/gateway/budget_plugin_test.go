@@ -44,7 +44,7 @@ func TestKeyLimitsOnAndOff(t *testing.T) {
 	capped := access.Identity{KeyID: keys[0].ID, KeyName: "Capped", Limit: &access.Limit{Period: "day", Tokens: 700}}
 	mcp := func() error {
 		r := httptest.NewRequest("POST", SearchMCPPath, nil).WithContext(access.WithIdentity(t.Context(), capped))
-		_, err := s.searchMCPRun(r, "latest go", nil)
+		_, err := s.searchMCPRun(r, "latest go", nil, nil)
 		return err
 	}
 

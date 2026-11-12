@@ -754,6 +754,7 @@ func (s *Server) webSearch(ctx context.Context, query string) (string, []Hit, er
 	// is set to (#1522: Codex asked while a "direct" provider served the
 	// turn dialed chatgpt.com directly)
 	ctx = netproxy.With(ctx, "")
+	ctx, query = searchScoped(ctx, query)
 	if !searchServed() {
 		return "", nil, errSearchOff
 	}

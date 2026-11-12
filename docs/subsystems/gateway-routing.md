@@ -1955,6 +1955,22 @@ Covered by `TestVisionEffortPicked`, `TestVisionEffortOnAnthropic`,
 `TestSearcherEffortPicked`, `TestSearcherEffortOnGemini`,
 `TestSideEffortChecked` and `side-effort.test.cjs`.
 
+## What the web-search MCP server's `web_search` narrows by
+
+Beside `query` and `count`, `web_search` takes `allowed_domains`,
+`blocked_domains`, `recency_days`, `images` and `search_context_size`
+([`search_mcp.go`](../../internal/gateway/search_mcp.go),
+[`searchopts.go`](../../internal/gateway/searchopts.go)). They travel in
+ctx (`withScope`), never in a request body. The ChatGPT backend's search
+(`codexSearch`) takes them as the fields Codex's web.run has (codex-rs
+codex-api `search.rs`): a query's `domains` and `recency`, `image_query`
+instead of `search_query` for `images`, `settings.filters`,
+`settings.search_context_size` and `settings.image_settings`. Every other
+searcher is asked the sites as `site:` and `-site:` operators in the query
+(`searchScoped`, at the top of `webSearch`) and ignores the rest. Image
+results come back as pages whose text starts "Image: <url>" (`imageSaid`).
+`TestSearchScopeReachesCodexSearch`, `TestSearchScopeOperatorsForOtherSearchers`.
+
 ## How many results a search is answered with
 
 A search asks its backend for `searchCount(ctx)` pages
