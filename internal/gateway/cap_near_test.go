@@ -333,3 +333,38 @@ func TestNearCapClaudeAccountsTakeOneTurnEach(t *testing.T) {
 		t.Fatalf("tried %v; want one turn on the account near its cap, one on the spare", got)
 	}
 }
+
+// A turn that waits for the one before it on an account near its cap has
+// no try yet, and its row said "routing" till that one ended (tmr11235 on
+// X, v0.1.3852): its route says queued, and the wait is one magpie knows
+// of, so the watch on a request with no route doesn't end it as unknown.
+func TestNearCapWaitSaysQueued(t *testing.T) {
+	codexSignedIn(t)
+	b := newNearCapBackend(t, map[string]float64{"acct-1": 89}, map[string]float64{"acct-1": 89}, nil)
+	nearCapAccounts(t, 90, 89)
+	srv := New()
+	replies := postAtOnce(t, srv, 2)
+	waitFor(t, "one turn sent, one waiting", func() bool { return len(b.sent()) == 1 && srv.nearCap.waiting() == 1 })
+	queued := func() (n int) {
+		for _, r := range srv.Trace(context.Background(), 0, 0).Routes {
+			if r.Phase == phaseQueue && len(r.Tries) == 0 {
+				n++
+			}
+		}
+		return
+	}
+	waitFor(t, "the waiting turn's route says queued", func() bool { return queued() == 1 })
+	if !slices.ContainsFunc(srv.Active(), func(a Active) bool { return a.Phase == phaseQueue }) {
+		t.Fatalf("active %v; want one queued", srv.Active())
+	}
+	close(b.open)
+	for range 2 {
+		<-replies
+	}
+	waitFor(t, "no route says queued once it ended", func() bool { return queued() == 0 })
+	for _, r := range srv.Trace(context.Background(), 0, 0).Routes {
+		if r.Phase != "" {
+			t.Fatalf("route %d still says %q", r.ID, r.Phase)
+		}
+	}
+}

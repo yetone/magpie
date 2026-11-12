@@ -125,3 +125,27 @@ func nearCapAgain(ctx context.Context, c candidate, used float64) {
 	defer cancel()
 	readUsageNow(ctx, a.UsageAgent(), a.User)
 }
+
+// phaseQueue is the phase of a request that waits, before any try is begun,
+// for the turn of an account near its usage cap: its route says it too
+// (Route.Phase), so the Routing page says queued, not routing.
+const phaseQueue = "queue"
+
+// showQueued marks ctx's request as waiting for a turn, on its route tr as
+// well, and answers the func that takes the mark off.
+func (s *Server) showQueued(ctx context.Context, tr *Route) (stop func()) {
+	restore := notePhase(ctx, phaseQueue)
+	s.trace.update(tr, func(t *Route) {
+		if t.Phase == "" {
+			t.Phase = phaseQueue
+		}
+	})
+	return func() {
+		restore()
+		s.trace.update(tr, func(t *Route) {
+			if t.Phase == phaseQueue {
+				t.Phase = ""
+			}
+		})
+	}
+}

@@ -840,6 +840,8 @@ function routingPage(part) {
   function noneWhy(r) {
     if (!r.done) return r.phase === "redact"
       ? t("magpie is masking this request before routing it (Settings › Privacy), so who takes it isn't picked yet.")
+      : r.phase === "queue"
+      ? t("This request waits for the turn before it on an account near its usage cap, so it goes out when that one is done.")
       : t("magpie hasn't routed this request yet, so who takes it isn't picked yet.");
     if (r.error) return t("Nothing took this request: {error}", { error: r.error });
     return t("Nothing could take {model}.", { model: r.model });
@@ -3831,7 +3833,7 @@ function routingPage(part) {
   // (Settings → Privacy, the gateway's "redact" phase), or being routed
   // (fremontdango on Discord: a long request read as routing while it
   // was masked)
-  const waitWord = (r) => t(r.phase === "redact" ? "masking…" : "routing…");
+  const waitWord = (r) => t(r.phase === "redact" ? "masking…" : r.phase === "queue" ? "queued…" : "routing…");
 
   // who answered a request, or what its agent got
   function outcome(r) {
