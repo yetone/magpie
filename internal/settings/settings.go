@@ -153,6 +153,14 @@ type Settings struct {
 	UpdateProxy string `json:"updateProxy,omitempty"`
 	// UpdateProxyCustom is UpdateProxy's ProxyCustom.
 	UpdateProxyCustom string `json:"updateProxyCustom,omitempty"`
+	// UpdateSource is where magpie's update is read and downloaded from
+	// (RootSir and Sakugar_ on X: usemagpie.ai's download is slow, or
+	// github.com is the one that works). "" is automatic: usemagpie.ai,
+	// then GitHub when it can't be reached; UpdateSourceSite never goes to
+	// GitHub; UpdateSourceGitHub never to usemagpie.ai (Stable's release
+	// list excepted, which only the site has). The release is held to its
+	// signature whichever source gave it. This computer's own (KeepOwn).
+	UpdateSource string `json:"updateSource,omitempty"`
 	// Proxies are the proxies kept by name (NamedProxy); a proxy choice
 	// "@"+id anywhere (Proxy, PluginProxy, a provider's, a key's, an
 	// account's) uses one. This computer's own (KeepOwn).
@@ -1275,6 +1283,12 @@ const AnyProvider = "*/"
 // at once.
 const UpdateStable = "stable"
 
+// The values of Settings.UpdateSource; "" is automatic.
+const (
+	UpdateSourceSite   = "site"
+	UpdateSourceGitHub = "github"
+)
+
 // What a reply's model name says (ReplyModel): the model asked for is "".
 const (
 	ReplyAsked  = "asked" // read as ""
@@ -1622,6 +1636,7 @@ func (s *Settings) KeepOwn(cur Settings) {
 	s.ProxyCustom, s.Proxies, s.ProxyNames = cur.ProxyCustom, cur.Proxies, cur.ProxyNames
 	s.PluginProxy, s.PluginProxyCustom = cur.PluginProxy, cur.PluginProxyCustom
 	s.UpdateProxy, s.UpdateProxyCustom = cur.UpdateProxy, cur.UpdateProxyCustom
+	s.UpdateSource = cur.UpdateSource
 	s.WindowMaximised, s.KeepAwake, s.KeepAwakeDisplay = cur.WindowMaximised, cur.KeepAwake, cur.KeepAwakeDisplay
 	s.WindowAt = cur.WindowAt
 	s.TrayUsages, s.TrayUsage, s.TrayUsageEvery, s.TrayNoLogos, s.TrayNoBird, s.TrayPace, s.TrayNoCost = cur.TrayUsages, cur.TrayUsage, cur.TrayUsageEvery, cur.TrayNoLogos, cur.TrayNoBird, cur.TrayPace, cur.TrayNoCost
@@ -2504,6 +2519,11 @@ func saveOwn(s Settings, recording, reads bool) error {
 	}
 	if s.UpdateProxy != "" && s.UpdateProxy != "direct" && !IsProxyRef(s.UpdateProxy) {
 		s.UpdateProxyCustom = s.UpdateProxy
+	}
+	switch s.UpdateSource {
+	case "", UpdateSourceSite, UpdateSourceGitHub:
+	default:
+		return fmt.Errorf("the update source must be site or github, not %q", s.UpdateSource)
 	}
 	s.Vision = strings.TrimSpace(s.Vision)
 	if s.Vision != "" && s.Vision != "off" && !strings.Contains(s.Vision, "/") {

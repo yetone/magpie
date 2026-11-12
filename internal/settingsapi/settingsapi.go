@@ -37,7 +37,7 @@ var Keys = []string{
 	// usage and alerts
 	"currency", "chineseUnits", "dayStart", "usageAlert", "balanceAlert", "resetReminder", "turnDoneAlert", "maskAlert",
 	// network
-	"proxy", "pluginProxy", "updateProxy",
+	"proxy", "pluginProxy", "updateProxy", "updateSource",
 	// privacy
 	"redact", "redactPersonal", "redactKinds", "redactWords", "redactWordsAnyCase", "redactWordsWhole", "redactShape",
 	"noStats", "noUsageStats", "otel",
@@ -68,6 +68,7 @@ var Choices = map[string][]string{
 	"trayUsageEvery": ints(settings.TrayEvery),
 	"dayStart":       {"0", "1", "2", "3", "4", "5", "6"},
 	"updateChannel":  {settings.UpdateStable},
+	"updateSource":   {settings.UpdateSourceSite, settings.UpdateSourceGitHub},
 	"updateEvery":    ints(settings.UpdateEveries),
 	"searchFirst":    {settings.SearchFirstModel, settings.SearchFirstAPI},
 	"replyModel":     settings.ReplyModels,

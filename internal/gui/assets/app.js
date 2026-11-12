@@ -20766,6 +20766,7 @@ function renderProxy(s, keep) {
   });
   renderProxyCheck(s, row);
   renderPluginProxy(s, keep);
+  import("./updatesource.js").then(() => updateSourcePick(s, keep), statusErr);
 }
 const proxyState = { custom: false };
 // plugin downloads' proxy (JonahFu on X); plugins' vendor requests follow the one above
@@ -22742,7 +22743,7 @@ function dockChoice(s) {
 
 // prefsKeep is what the settings page sends of s, all of it each time.
 function prefsKeep(s) {
-  return { theme: s.theme, colorblind: !!s.colorblind, reduceMotion: !!s.reduceMotion, noBird: !!s.noBird, lang: s.lang, tray: s.tray, dock: !!s.dock, dockWindow: !!s.dockWindow, dockNever: !!s.dockNever, lightweight: s.lightweight, keepAwake: !!s.keepAwake, keepAwakeDisplay: !!s.keepAwakeDisplay, noWSLAgents: !!s.noWSLAgents, quitNoAsk: !!s.quitNoAsk, restoreOnQuit: !!s.restoreOnQuit, proxy: s.proxy || "", pluginProxy: s.pluginProxy || "", updateProxy: s.updateProxy || "",
+  return { theme: s.theme, colorblind: !!s.colorblind, reduceMotion: !!s.reduceMotion, noBird: !!s.noBird, lang: s.lang, tray: s.tray, dock: !!s.dock, dockWindow: !!s.dockWindow, dockNever: !!s.dockNever, lightweight: s.lightweight, keepAwake: !!s.keepAwake, keepAwakeDisplay: !!s.keepAwakeDisplay, noWSLAgents: !!s.noWSLAgents, quitNoAsk: !!s.quitNoAsk, restoreOnQuit: !!s.restoreOnQuit, proxy: s.proxy || "", pluginProxy: s.pluginProxy || "", updateProxy: s.updateProxy || "", updateSource: s.updateSource || "",
     sessionTerminal: s.sessionTerminal || "",
     uiFont: s.uiFont || null, codeFont: s.codeFont || null,
     otel: s.otel || {},

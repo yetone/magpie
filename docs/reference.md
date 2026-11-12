@@ -3317,6 +3317,18 @@ binary, the version in the signed message, each file's hash from the signed
 list. A release read this way must be signed whatever its version. The
 Stable channel and a `MAGPIE_UPDATE_FEED` of your own don't fall back.
 
+Settings → Network → *Update source* (`"updateSource"` in settings.json,
+`magpie settings set updateSource github`, this computer's own) chooses where an
+update comes from. Automatic (empty, the default) is what is described here:
+usemagpie.ai, then GitHub. `site` (usemagpie.ai only) never goes to GitHub,
+for the release or for a file. `github` (GitHub only) reads the release from
+`yetone/magpie-releases` without asking the feed, and downloads files from
+github.com (through a `--mirror` when one is given, then GitHub's API route);
+usemagpie.ai is not asked. On the Stable channel the list of releases is only
+the site's, so `github` still reads it from the feed and downloads from
+GitHub. A `MAGPIE_UPDATE_FEED` of your own is never overridden. Every source
+is held to the same signature and hashes (`Release.verify`).
+
 Release files are downloaded from usemagpie.ai's copy on Cloudflare R2
 (`usemagpie.ai/files/<tag>/<file>`). Every five minutes the site copies the
 newest release and the Stable one from GitHub into R2, which takes a file

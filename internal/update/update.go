@@ -141,6 +141,9 @@ func LatestEvery(ctx context.Context, lang string) (*Release, error) {
 }
 
 func latestAt(ctx context.Context, feed, lang string) (*Release, error) {
+	if githubOnly() {
+		return githubLatest(ctx, lang)
+	}
 	if !fallsBack(ctx) {
 		return latestFrom(ctx, feed, lang)
 	}
@@ -1220,6 +1223,16 @@ func download(ctx context.Context, a Asset, path string) error {
 	on, viaAPI := a, false
 	toGitHub := a.GitHub != "" && a.GitHub != a.URL
 	toAPI := mirrorOf(ctx) == ""
+	// Settings' update source (source.go): GitHub only starts at github.com
+	// and goes on to its API route; the site only goes to no other
+	switch Source() {
+	case settings.UpdateSourceGitHub:
+		if toGitHub {
+			on.URL, toGitHub = a.GitHub, false
+		}
+	case settings.UpdateSourceSite:
+		toGitHub, toAPI = false, false
+	}
 	var before []string // each route left, and how it failed
 	for try := 0; try <= len(retryWaits); try++ {
 		if try > 0 {

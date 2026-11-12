@@ -240,6 +240,7 @@ func TestRefusedValueWritesNothing(t *testing.T) {
 		"searcher":       `"nobody/nothing"`,
 		"usageAlert":     `101`,
 		"updateChannel":  `"nightly"`,
+		"updateSource":   `"cloudflare"`,
 	} {
 		cur := settings.Load()
 		body, err := Body(cur, key, json.RawMessage(value))
