@@ -125,3 +125,67 @@ func TestAdminRoutesEveryAPIRoute(t *testing.T) {
 		}
 	}
 }
+
+// A key allowed to manage magpie from this computer only can't rotate a
+// key allowed from anywhere through the API (it would get that key's new
+// secret, or set one of its own), nor turn off or remove another key that
+// manages magpie. Its own key and keys that don't manage magpie it can.
+func TestAdminAPILeavesOtherManagingKeys(t *testing.T) {
+	sandboxHome(t)
+	add := func(name string) string {
+		t.Helper()
+		if _, err := access.Update("add-key", access.Change{Name: name}); err != nil {
+			t.Fatal(err)
+		}
+		keys, _ := access.List()
+		return keys[len(keys)-1].ID
+	}
+	local, anyKey, plain := add("Local"), add("Any"), add("Plain")
+	if _, err := access.Update("admin-key", access.Change{Key: local, Admin: access.AdminLocal}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := access.Update("admin-key", access.Change{Key: anyKey, Admin: access.AdminAny}); err != nil {
+		t.Fatal(err)
+	}
+	as := func(action, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		r := httptest.NewRequest("POST", "/gateway-keys/"+action, strings.NewReader(body))
+		r = r.WithContext(access.WithIdentity(r.Context(), access.Identity{KeyID: local, Admin: access.AdminLocal}))
+		w := httptest.NewRecorder()
+		serveAdmin(w, r)
+		return w
+	}
+	for _, c := range []struct{ action, body string }{
+		{"rotate-key", `{"key":"` + anyKey + `"}`},
+		{"rotate-key", `{"key":"` + anyKey + `","secret":"chosen-by-the-caller-1234"}`},
+		{"off-key", `{"key":"` + anyKey + `"}`},
+		{"remove-key", `{"key":"` + anyKey + `"}`},
+		{"access-key", `{"key":"` + anyKey + `","readOnly":true}`},
+	} {
+		w := as(c.action, c.body)
+		if w.Code != http.StatusForbidden {
+			t.Errorf("%s %s: %d, want 403 (%s)", c.action, c.body, w.Code, w.Body)
+		}
+		if strings.Contains(w.Body.String(), `"secret":"magpie`) {
+			t.Errorf("%s told a secret: %s", c.action, w.Body)
+		}
+	}
+	keys, _ := access.List()
+	for _, k := range keys {
+		if k.ID == anyKey && (k.Off || k.Admin != access.AdminAny || k.ReadOnly) {
+			t.Errorf("the other managing key was changed: %+v", k)
+		}
+	}
+	if who, ok := access.Authenticate("chosen-by-the-caller-1234"); ok {
+		t.Errorf("the caller's chosen secret opens %q", who.KeyName)
+	}
+	for _, c := range []struct{ action, body string }{
+		{"rotate-key", `{"key":"` + local + `"}`},
+		{"rotate-key", `{"key":"` + plain + `"}`},
+		{"rename-key", `{"key":"` + plain + `","name":"Renamed"}`},
+	} {
+		if w := as(c.action, c.body); w.Code != 200 {
+			t.Errorf("%s %s: %d, want 200 (%s)", c.action, c.body, w.Code, w.Body)
+		}
+	}
+}

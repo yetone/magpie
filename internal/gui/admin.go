@@ -1,12 +1,15 @@
 package gui
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"slices"
 	"strings"
 	"sync"
 
+	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
 )
@@ -94,6 +97,9 @@ func adminAPI() http.Handler {
 				adminError(w, http.StatusNotFound, "this action is not in the management API")
 				return
 			}
+			if strings.HasPrefix(ar.pattern, "POST /gateway-keys/") && !adminMayChangeKey(w, r) {
+				return
+			}
 			to := r.URL.Path
 			if ar.to != "" {
 				to = strings.ReplaceAll(ar.to, "{action}", r.PathValue("action"))
@@ -124,6 +130,45 @@ func adminAPI() http.Handler {
 		writeJSON(w, st)
 	})
 	return mux
+}
+
+// adminMayChangeKey refuses, with 403, a key action through the API on
+// another key that may manage magpie. Rotating one hands the caller its
+// new secret (or sets one the caller chose), so a key allowed from this
+// computer only would become one allowed from anywhere, or take over a
+// peer's; and turning one off or removing it locks its owner out. A key
+// that manages magpie is changed by the command line and the app, as its
+// Admin is set there (admin-key is left out above). The caller's own key
+// stays its to change. The body is read and put back for the handler.
+func adminMayChangeKey(w http.ResponseWriter, r *http.Request) bool {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		adminError(w, http.StatusBadRequest, err.Error())
+		return false
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	var in struct {
+		Key string `json:"key"`
+	}
+	if json.Unmarshal(body, &in) != nil || in.Key == "" {
+		return true // add-key, or a body the handler refuses itself
+	}
+	if in.Key == access.Caller(r.Context()).KeyID {
+		return true
+	}
+	keys, err := access.List()
+	if err != nil {
+		// unknown: refused, not let through
+		adminError(w, http.StatusServiceUnavailable, "the gateway keys can't be read: "+err.Error())
+		return false
+	}
+	for _, k := range keys {
+		if k.ID == in.Key && k.Admin != "" {
+			adminError(w, http.StatusForbidden, "this key may manage magpie, so the management API doesn't change it: use `magpie gateway-key` or the app")
+			return false
+		}
+	}
+	return true
 }
 
 func adminError(w http.ResponseWriter, status int, msg string) {

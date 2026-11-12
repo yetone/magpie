@@ -1473,7 +1473,10 @@ Host must be `ownHost` (a rebound page's GET has no Origin), and from
 anywhere else the key must be `AdminAny`. `Key.Admin` is set only by
 `magpie gateway-key admin` and the app, never through the API, and
 `adminOf` drops it for a read-only, Browser, issued, expiring or default
-key. The route is in `readOnlyRefused`, so a read-only key never reaches
+key. A key action through the API on another key that has `Admin`
+(`adminMayChangeKey`) is 403: rotating it would hand the caller its new
+secret, or set one the caller chose, so a `local` key would get an `any`
+one or take over a peer's. The caller's own key is its to change. The route is in `readOnlyRefused`, so a read-only key never reaches
 it. The handlers are built with no window, so a sign-in opens no browser.
 Routing Groups and sign-in export are not in it yet (#6307).
 
