@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JetBrains Copilot 自定义模型：IntelliJ IDEA、PyCharm、GoLand 里的 Copilot Chat 接入 DeepSeek、GLM、Kimi、Qwen 或 Claude · magpie</title>
+<meta name="description" content="通过 magpie 让 IntelliJ IDEA、PyCharm、GoLand、Android Studio 等 JetBrains IDE 里的 GitHub Copilot Chat 用上 DeepSeek、GLM、Kimi、Qwen、Claude 或 ChatGPT 订阅：Bring Your Own Key 的 byok.json、需要的 Copilot 方案、重启 IDE、Agent 模式、隐藏的模型保持隐藏，以及切回。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/copilot-jetbrains">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/copilot-jetbrains">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/copilot-jetbrains">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/copilot-jetbrains">
+<link rel="canonical" href="https://usemagpie.ai/docs/zh/copilot-jetbrains">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="让 JetBrains Copilot 用任意模型">
+<meta property="og:description" content="通过 magpie 让 IntelliJ IDEA、PyCharm、GoLand、Android Studio 等 JetBrains IDE 里的 GitHub Copilot Chat 用上 DeepSeek、GLM、Kimi、Qwen、Claude 或 ChatGPT 订阅：Bring Your Own Key 的 byok.json、需要的 Copilot 方案、重启 IDE、Agent 模式、隐藏的模型保持隐藏，以及切回。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/zh/copilot-jetbrains">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "让 JetBrains Copilot 用任意模型",
+   "description": "通过 magpie 让 IntelliJ IDEA、PyCharm、GoLand、Android Studio 等 JetBrains IDE 里的 GitHub Copilot Chat 用上 DeepSeek、GLM、Kimi、Qwen、Claude 或 ChatGPT 订阅：Bring Your Own Key 的 byok.json、需要的 Copilot 方案、重启 IDE、Agent 模式、隐藏的模型保持隐藏，以及切回。",
+   "inLanguage": "zh-CN",
+   "url": "https://usemagpie.ai/docs/zh/copilot-jetbrains",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "JetBrains 里的 Copilot 能用 DeepSeek 或 GLM 吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。magpie 在 Copilot 的 byok.json 里写一个自定义端点，重启 IDE 后在 Copilot Chat 的模型选择器里选 magpie 下的模型即可。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Copilot Business 能用吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Bring Your Own Key 在 Business 和 Enterprise 上要看组织的策略是否允许；Free、Pro 和 Pro+ 都可以用。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Agent 模式里能选 magpie 的模型吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。magpie 给每个模型打开了工具调用，Copilot 的 Agent 模式只列出能调用工具的模型。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Xcode 或 Eclipse 里的 Copilot 也会有吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "会。它们运行同一个 Copilot 语言服务器，读同一个 byok.json。"
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/zh/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "文档",
+     "item": "https://usemagpie.ai/docs/zh/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "让 JetBrains Copilot 用任意模型",
+     "item": "https://usemagpie.ai/docs/zh/copilot-jetbrains"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/zh/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>文档</small></a>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/start">快速上手</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a class="toc-only" href="/docs/zh/remote">远程 magpie</a>
+    <a class="toc-only" href="/docs/zh/docker">Docker</a>
+    <a class="toc-only" href="/docs/zh/privacy">隐私</a>
+    <a class="toc-only" href="/docs/zh/masking">本地脱敏</a>
+    <a class="toc-only" href="/docs/zh/mcp-router">MCP 路由</a>
+    <a class="toc-only" href="/docs/zh/library">资源库</a>
+    <a class="toc-only" href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a class="toc-only" href="/docs/zh/local-models">本地模型</a>
+    <a class="toc-only" href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="语言" title="语言" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/copilot-jetbrains" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/copilot-jetbrains" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/copilot-jetbrains" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">下载</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>JetBrains Copilot</p>
+    <a href="#overview">工作原理</a>
+    <a href="#on">接入 JetBrains Copilot</a>
+    <a href="#plan">需要哪种 Copilot 方案</a>
+    <a href="#file">byok.json</a>
+    <a href="#agent">Agent 模式和上下文</a>
+    <a href="#yours">你的设置保持不变</a>
+    <a href="#off">切回</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">文档 · 指南</p>
+    <h1>让 JetBrains Copilot 用任意模型</h1>
+    <p class="lede">IntelliJ IDEA、PyCharm、GoLand 等 JetBrains IDE 和 Android Studio 里的 GitHub Copilot 插件，可以通过 Bring Your Own Key（自带 Key）使用其他厂商的模型：在 Copilot Chat 的模型选择器里点 Manage Models…，再添加 Custom Endpoint Provider。magpie 直接替你把这个自定义端点写好，名叫 magpie，于是 DeepSeek、GLM、Kimi、Qwen、Claude 或 ChatGPT 订阅等 magpie 里的每个模型都出现在 Copilot Chat 的选择器里。想反过来把 Copilot 订阅用在别的 Agent 里，见 <a href="/docs/zh/copilot">GitHub Copilot 接入 Claude Code、Codex、Gemini CLI 和 OpenCode</a>。</p>
+    <h2 id="on"><a class="anchor" href="#on">接入 JetBrains Copilot</a></h2>
+    <ol class="steps">
+      <li><b>在 magpie 里添加供应商</b>在 <span class="ui">供应商</span> 页添加 API Key，或登录一个订阅。</li>
+      <li><b>在 <span class="ui">Agent</span> 页把 Copilot (JetBrains) 的供应商设为 magpie</b>magpie 把自己的端点写进 Copilot 的 byok.json。</li>
+      <li><b>重启 IDE</b>IDE 在 Copilot 登录时读取端点列表，所以重启后 magpie 的模型才会出现。</li>
+      <li><b>在 Copilot Chat 的模型选择器里选模型</b>magpie 的模型列在 magpie 下面。选好的模型由 IDE 记在项目文件里。</li>
+    </ol>
+    <p>magpie 发现 JetBrains IDE 或 Android Studio 的插件文件夹里装了 github-copilot-intellij 插件，或者 byok.json 里已经有 magpie 的端点时，就会在 Agent 页列出 Copilot (JetBrains)。</p>
+    <h2 id="plan"><a class="anchor" href="#plan">需要哪种 Copilot 方案</a></h2>
+    <p>Bring Your Own Key 要求 Copilot 用 GitHub 账号登录。个人方案 Copilot Free、Pro 和 Pro+ 都有这个功能；Business 和 Enterprise 要看组织的策略是否允许。这些请求和 Copilot 语言服务器的其他客户端一样，带的都是 <code>GithubCopilot/&lt;服务器版本&gt;</code>，magpie 靠 Key 区分它们。</p>
+    <h2 id="file"><a class="anchor" href="#file">byok.json</a></h2>
+    <p>JetBrains 插件自己不保存这些设置，而是交给它内置的 Copilot 语言服务器（copilot-language-server）。这个服务器把所有自定义端点放在一个 JSON 文件里，每次用到时都重新读取：</p>
+<ul><li>设置了 <code>$XDG_CONFIG_HOME</code>（绝对路径）时：<code>$XDG_CONFIG_HOME/github-copilot/byok.json</code></li><li>Windows：<code>%USERPROFILE%\AppData\Local\github-copilot\byok.json</code></li><li>macOS 和 Linux：<code>~/.config/github-copilot/byok.json</code></li></ul>
+    <p>一个自定义端点在这里是三个键。magpie 按语言服务器自己保存时的写法写入：</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="cjb-json">复制</button><pre id="cjb-json">// ~/.config/github-copilot/byok.json
+{
+  "magpie-provider-config": { "groupName": "magpie", "apiType": "chatCompletions" },
+  "magpie-api-key": "<magpie's key for Copilot (JetBrains)>",
+  "magpie-models-config": {
+    "…": {
+      "deploymentUrl": "http://127.0.0.1:3425/v1/chat/completions",
+      "isRegistered": true,
+      "isCustomModel": true,
+      "modelCapabilities": {
+        "name": "…", "maxInputTokens": …, "maxOutputTokens": …,
+        "toolCalling": true, "vision": …
+      }
+    }
+  },
+  …
+}</pre></div>
+    <p>每个模型都指向网关的 <code>/v1/chat/completions</code>，Key 作为 Bearer 令牌发送。注意 Key 以明文写在这个文件里，不在 IDE 的密码库中。Xcode 和 Eclipse 里的 Copilot 运行同一个语言服务器、读同一个文件，所以它们也会列出 magpie 的模型。</p>
+    <h2 id="agent"><a class="anchor" href="#agent">Agent 模式和上下文</a></h2>
+    <p>每个模型都打开了工具调用，因为 Copilot 的 Agent 模式只列出能调用工具的模型。maxInputTokens 是服务器填充提示词用的窗口，取 magpie 目录里的上下文长度，不知道时用服务器自己对自定义端点的默认值 128K；maxOutputTokens 留在这个窗口里面。</p>
+    <h2 id="yours"><a class="anchor" href="#yours">你的设置保持不变</a></h2>
+    <p>你在 byok.json 里的其他端点和 Key 保持原样。你在 IDE 的 Manage Models 里隐藏的 magpie 模型，同步后仍然隐藏。没有变化时 magpie 不写文件，文件保持语言服务器最后写入的样子。</p>
+    <h2 id="off"><a class="anchor" href="#off">切回</a></h2>
+    <p>在 magpie 里关掉 Copilot (JetBrains) 时，magpie 删掉 byok.json 里自己的三个键，你自己的端点不受影响。</p>
+
+    <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
+    <h3>JetBrains 里的 Copilot 能用 DeepSeek 或 GLM 吗？</h3>
+    <p>能。magpie 在 Copilot 的 byok.json 里写一个自定义端点，重启 IDE 后在 Copilot Chat 的模型选择器里选 magpie 下的模型即可。</p>
+    <h3>Copilot Business 能用吗？</h3>
+    <p>Bring Your Own Key 在 Business 和 Enterprise 上要看组织的策略是否允许；Free、Pro 和 Pro+ 都可以用。</p>
+    <h3>Agent 模式里能选 magpie 的模型吗？</h3>
+    <p>能。magpie 给每个模型打开了工具调用，Copilot 的 Agent 模式只列出能调用工具的模型。</p>
+    <h3>Xcode 或 Eclipse 里的 Copilot 也会有吗？</h3>
+    <p>会。它们运行同一个 Copilot 语言服务器，读同一个 byok.json。</p>
+
+    <p style="margin-top:48px">更多 Agent 用同样的模型：<a href="/docs/zh/vscode">让 VS Code 用任意模型</a>、<a href="/docs/zh/copilot-cli">让 Copilot CLI 用任意模型</a>、<a href="/docs/zh/openmausbot">让 OpenMausBot 用任意模型</a>。遇到报错？见 <a href="/docs/zh/troubleshooting">常见错误排查</a>，或到 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 提问。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a href="/docs/zh/remote">远程 magpie</a>
+    <a href="/docs/zh/docker">Docker</a>
+    <a href="/docs/zh/privacy">隐私</a>
+    <a href="/docs/zh/masking">本地脱敏</a>
+    <a href="/docs/zh/mcp-router">MCP 路由</a>
+    <a href="/docs/zh/library">资源库</a>
+    <a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a href="/docs/zh/local-models">本地模型</a>
+    <a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/zh/contributors">贡献墙</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "已复制"; setTimeout(() => (b.textContent = "复制"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

@@ -8425,7 +8425,92 @@ No. When the file has no engines saved, magpie writes OpenMausBot's default flee
 
 OpenMausBot's Codex bots run your ~/.codex as it is, which magpie's Codex wiring already covers.
 
-More agents on the same models: [Mistral Vibe on any model](https://usemagpie.ai/docs/mistral-vibe), [Pencil on any model](https://usemagpie.ai/docs/pencil) and [Claude Desktop on any model](https://usemagpie.ai/docs/claude-desktop). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Mistral Vibe on any model](https://usemagpie.ai/docs/mistral-vibe), [Pencil on any model](https://usemagpie.ai/docs/pencil), [Claude Desktop on any model](https://usemagpie.ai/docs/claude-desktop) and [JetBrains Copilot on any model](https://usemagpie.ai/docs/copilot-jetbrains). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/copilot-jetbrains
+
+# JetBrains Copilot on any model
+
+The GitHub Copilot plugin in JetBrains IDEs (IntelliJ IDEA, PyCharm, GoLand and the rest) and Android Studio takes other vendors' models through Bring Your Own Key: Manage Models… in Copilot Chat's model picker, then Add Custom Endpoint Provider. magpie writes that custom endpoint for you, named magpie, so every model in magpie (DeepSeek, GLM, Kimi, Qwen, Claude, a ChatGPT subscription and the rest) is in Copilot Chat's picker. To use a Copilot subscription in other agents instead, see [GitHub Copilot in Claude Code, Codex, Gemini CLI and OpenCode](https://usemagpie.ai/docs/copilot).
+
+## Set up JetBrains Copilot
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Set Copilot (JetBrains)'s provider to magpie on the Agents page.** magpie writes its endpoint into Copilot's byok.json.
+3. **Restart the IDE.** The IDE lists the endpoints when Copilot signs in, so magpie's models show after a restart.
+4. **Pick a model in Copilot Chat's model picker.** magpie's models are listed under magpie. The IDE keeps the one you pick in its project files.
+
+magpie lists Copilot (JetBrains) on the Agents page when a JetBrains IDE or Android Studio has the github-copilot-intellij plugin in its plugins folder, or when byok.json already has magpie's endpoint.
+
+## Which Copilot plan
+
+Bring Your Own Key needs Copilot signed in to GitHub. The personal plans, Copilot Free, Pro and Pro+, have it; Business and Enterprise have it when the organisation's policy allows it. Its requests say `GithubCopilot/<server version>`, as every client of the Copilot language server does, so magpie tells them apart by their key.
+
+## byok.json
+
+The JetBrains plugin keeps none of this itself. It asks the Copilot language server it bundles (copilot-language-server), which keeps every custom endpoint in one JSON file and reads it again each time it is used:
+
+- With `$XDG_CONFIG_HOME` set (and absolute): `$XDG_CONFIG_HOME/github-copilot/byok.json`
+- Windows: `%USERPROFILE%\AppData\Local\github-copilot\byok.json`
+- macOS and Linux: `~/.config/github-copilot/byok.json`
+
+A custom endpoint is three keys there. magpie writes them as the language server itself saves them:
+
+```
+// ~/.config/github-copilot/byok.json
+{
+  "magpie-provider-config": { "groupName": "magpie", "apiType": "chatCompletions" },
+  "magpie-api-key": "",
+  "magpie-models-config": {
+    "…": {
+      "deploymentUrl": "http://127.0.0.1:3425/v1/chat/completions",
+      "isRegistered": true,
+      "isCustomModel": true,
+      "modelCapabilities": {
+        "name": "…", "maxInputTokens": …, "maxOutputTokens": …,
+        "toolCalling": true, "vision": …
+      }
+    }
+  },
+  …
+}
+```
+
+Each model points at the gateway's `/v1/chat/completions`, with the key sent as a Bearer token. The key is in this file in plain text, not in the IDE's password safe. Xcode's and Eclipse's Copilot run the same language server and read the same file, so they list magpie's models too.
+
+## Agent mode and context
+
+Tool calling is on for every model, as Copilot's agent mode lists only models that call tools. maxInputTokens is the window the server fills: the context length from magpie's catalog, or the server's own 128K default for a custom endpoint when that isn't known. maxOutputTokens stays within that window.
+
+## What stays yours
+
+Your other endpoints and keys in byok.json stay as they are. A magpie model you hid in the IDE's Manage Models stays hidden after a sync. When nothing changed, magpie doesn't write the file, so it stays as the language server last wrote it.
+
+## Switching back
+
+When you switch Copilot (JetBrains) off in magpie, magpie deletes its three keys from byok.json. Your own endpoints are left alone.
+
+## FAQ
+
+### Can Copilot in JetBrains use DeepSeek or GLM?
+
+Yes. magpie writes a custom endpoint into Copilot's byok.json; restart the IDE and pick a model under magpie in Copilot Chat's picker.
+
+### Does Copilot Business work?
+
+Bring Your Own Key works on Business and Enterprise when the organisation's policy allows it, and on Free, Pro and Pro+.
+
+### Can agent mode use magpie's models?
+
+Yes. magpie turns tool calling on for every model, and Copilot's agent mode lists only models that call tools.
+
+### Do Xcode's and Eclipse's Copilot get them too?
+
+Yes. They run the same Copilot language server and read the same byok.json.
+
+More agents on the same models: [VS Code on any model](https://usemagpie.ai/docs/vscode), [Copilot CLI on any model](https://usemagpie.ai/docs/copilot-cli) and [OpenMausBot on any model](https://usemagpie.ai/docs/openmausbot). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
