@@ -57,6 +57,13 @@ type CarriedSkill struct {
 	Note string `json:"note,omitempty"`
 	// Router is Skill.Router: direct, kept out of the skill router
 	Router string `json:"router,omitempty"`
+	// From is the repository the skill was traced to on the computer that
+	// made the bundle (Skill.From, skill_from.go), when it isn't a source
+	// the skill carries itself: the lock, a checkout, CC Switch's record or
+	// an install-again there. What traced it is that computer's own files,
+	// so without this the other computer groups the skill under "this
+	// computer". Bundles from before this have none.
+	From string `json:"from,omitempty"`
 }
 
 // A skill's file bigger than maxCarried is left out, and so are the
@@ -114,8 +121,12 @@ func Collect() (*Bundle, error) {
 	for _, s := range skills {
 		dirs = append(dirs, realDir(skillDir(s.Name)))
 	}
+	tr := &tracer{}
 	for i, c := range readSkills(dirs) {
 		s := skills[i]
+		if s.Source == nil || s.Source.Kind == "folder" {
+			c.From = tr.repoOf(s)
+		}
 		c.Name, c.Source, c.Agents, c.Called, c.Note, c.Router = s.Name, s.Source, orNone(slices.Sorted(slices.Values(s.Agents))), s.Called, s.Note, s.Router
 		b.Skills = append(b.Skills, c)
 	}
@@ -515,7 +526,18 @@ func Put(b *Bundle) (*Result, error) {
 		for _, s := range b.Skills {
 			// turned off here stays off here: that is this computer's own
 			off := l.skill(s.Name) != nil && l.skill(s.Name).OffHere
-			skills = append(skills, &Skill{Name: s.Name, Source: s.Source, Agents: slices.Clone(orNone(s.Agents)), OffHere: off, Called: s.Called, Note: s.Note, Router: s.Router})
+			n := &Skill{Name: s.Name, Source: s.Source, Agents: slices.Clone(orNone(s.Agents)), OffHere: off, Called: s.Called, Note: s.Note, Router: s.Router}
+			// where it came from: the other computer's trace, else what
+			// this one has found itself (Group again) for the same skill,
+			// which a bundle from before From was carried says nothing of
+			n.From = s.From
+			if cur := l.skill(s.Name); cur != nil && sameSource(cur.Source, s.Source) {
+				if n.From == "" {
+					n.From = cur.From
+				}
+				n.Gone = cur.Gone // kept on this computer only
+			}
+			skills = append(skills, n)
 			if keep[s.Name] {
 				continue
 			}
