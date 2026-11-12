@@ -7719,7 +7719,6 @@ function routingPage(part) {
     // groupBarred). Left on any key, every key may use it, as before. The
     // row shows once there is a key to bind, or the group is bound already
     const keysLabel = el("label", "rt-gkeys", t("Gateway keys")), keysBox = el("div", "rt-gkeys");
-    ed.append(keysLabel, keysBox);
     const drawKeys = () => {
       const all = groups.gatewayKeys || [];
       keysLabel.hidden = keysBox.hidden = !all.length && !d.keys.length;
@@ -7748,7 +7747,6 @@ function routingPage(part) {
     // ("Send requests unmasked") and Settings, or is masked as Settings say
     // whichever provider it has, or is sent as written (Group.Redact)
     const redactLabel = el("label", "rt-gredact", t("Masking")), redactBox = el("div", "rt-gredact");
-    ed.append(redactLabel, redactBox);
     const REDACT = { "": "Follow providers", on: "Always masked", off: "Sent as written" };
     const drawRedact = () => {
       const b = el("button", "rt-cond rt-gredact-b" + (d.redact ? " on" : ""));
@@ -7822,7 +7820,7 @@ function routingPage(part) {
     // owner: the form was too much at once). Open when one of them is set,
     // or as it was left while this group is being edited
     const adv = edAligned(el("details", "more advanced rt-gadv"));
-    adv.open = gEdit.adv ?? !!(d.match.length || d.unlists || d.routing || d.sink === "sink" || d.sink === "" || d.firstToken || d.patience || d.context || d.compact || d.affinity || d.effort || d.levels?.length);
+    adv.open = gEdit.adv ?? !!(d.match.length || d.unlists || d.routing || d.sink === "sink" || d.sink === "" || d.firstToken || d.patience || d.context || d.compact || d.affinity || d.effort || d.levels?.length || d.keys.length || d.redact);
     const advOf = gEdit;
     adv.onfold = (open) => { advOf.adv = open; };
     adv.append(el("summary", "", t("Advanced")));
@@ -7973,6 +7971,9 @@ function routingPage(part) {
     const aw = el("div");
     aw.append(segs(AFF_OPTS.map(([id, n]) => [id, t(n)]), d.affinity, (v) => { d.affinity = v; aHint.textContent = t(AFF_HINT[v] || AFF_HINT[""]); }), aHint);
     advIn.append(el("label", "", t("Stays")), aw);
+    // which gateway keys may use it, and masking: set by few, so under
+    // Advanced with the rest (the owner, 11-12)
+    advIn.append(keysLabel, keysBox, redactLabel, redactBox);
 
     // rules: which member a turn goes to first, by what the request shows.
     // A rule reads as one line, a sentence: the conditions it has, then →

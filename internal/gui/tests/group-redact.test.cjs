@@ -10,6 +10,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
+const { reach } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
 const models = [{ id: "rl/glm-5", name: "glm-5", provider: "rl", providerName: "Relay", icon: "generic" }];
@@ -93,7 +94,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const { page, card, errors, posts } = await open(engine, lang, width, "", t);
         await card.locator("button", { hasText: w.edit }).click();
         const ed = page.locator(".rt-gedit");
-        const label = ed.locator("> label.rt-gredact");
+        // set by few, so folded under Advanced (the owner, 11-12); this
+        // group's routing is set, so it opens on it
+        await ed.locator(".rt-gadv").waitFor();
+        assert.equal(await ed.locator("> .rt-gredact").count(), 0, "not on the form itself");
+        if (!(await ed.locator(".rt-gadv").evaluate((d) => d.open))) await ed.locator(".rt-gadv > summary").click();
+        const label = ed.locator(".rt-gadv > .inner > label.rt-gredact");
         await label.waitFor();
         assert.equal((await label.textContent()).trim(), w.label);
         const chip = ed.locator("button.rt-gredact-b");
@@ -102,9 +108,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.doesNotMatch((await chip.getAttribute("class")) || "", /\bon\b/);
         assert.equal(await ed.locator("select").count(), 0);
 
-        await chip.scrollIntoViewIfNeeded();
+        // wheeled to, as a reader would: the app puts back a scroll that
+        // isn't the reader's (Playwright's own), and opening the menu then
+        // leaves the page where the reader left it
+        await reach(page, chip);
+        const top = () => page.evaluate(() => { let e = document.querySelector(".rt-gredact-b"); while ((e = e.parentElement) && !(e.scrollHeight > e.clientHeight + 2 && getComputedStyle(e).overflowY !== "visible")); return e ? e.scrollTop : scrollY; });
+        const was = await top();
         await chip.click();
         await option(page, w.off).waitFor();
+        assert.equal(await top(), was, "opening Masking's menu scrolled the page");
         assert.deepEqual(await page.locator("#pop #list li:not(.group) .v").allTextContents(), [w.follow, w.on, w.off]);
         await option(page, w.off).click();
         await page.waitForFunction(() => document.querySelector("#pop").hidden);
@@ -130,6 +142,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const chip = page.locator(".rt-gedit button.rt-gredact-b");
           await chip.waitFor();
           assert.equal((await chip.textContent()).trim(), w.on);
+          assert.equal(await page.locator(".rt-gedit .rt-gadv").evaluate((d) => d.open), true, "Advanced opens on a set masking");
           await save(page, w);
           assert.equal(posts.filter((p) => p.path === "/api/groups/save").at(-1).body.redact, "on", "saved as it was");
           await card.locator("button", { hasText: w.edit }).click();

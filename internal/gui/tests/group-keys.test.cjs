@@ -99,7 +99,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const { page, card, errors, posts } = await open(engine, lang, width, true, null, t);
         await card.locator("button", { hasText: w.edit }).click();
         const ed = page.locator(".rt-gedit");
-        const label = ed.locator("> label.rt-gkeys");
+        // set by few, so folded under Advanced (the owner, 11-12); this
+        // group's routing is set, so it opens on it
+        await ed.locator(".rt-gadv").waitFor();
+        assert.equal(await ed.locator("> .rt-gkeys").count(), 0, "not on the form itself");
+        if (!(await ed.locator(".rt-gadv").evaluate((d) => d.open))) await ed.locator(".rt-gadv > summary").click();
+        const label = ed.locator(".rt-gadv > .inner > label.rt-gkeys");
         await label.waitFor();
         assert.equal((await label.textContent()).trim(), w.label);
         const chip = ed.locator("button.rt-gkey");
@@ -177,7 +182,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await card.locator("button", { hasText: w.edit }).click();
           const ed = page.locator(".rt-gedit");
           await ed.locator("button.primary", { hasText: w.save }).waitFor();
-          assert.equal(await ed.locator("> .rt-gkeys:visible").count(), 0);
+          assert.equal(await ed.locator(".rt-gkeys:visible").count(), 0);
           await save(page, w);
           const sent = posts.filter((p) => p.path === "/api/groups/save").at(-1).body;
           assert.deepEqual(sent.keys, []);
