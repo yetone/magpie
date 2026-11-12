@@ -870,6 +870,25 @@ func dshNodeLines(n *yaml.Node) ([]string, error) {
 	return splitLinesKeep(buf.String()), nil
 }
 
+// yamlSame says whether a and b write out the same: every field Marshal
+// reads, not where they were in the file. Comparing two Marshals of the
+// dsh settings section was 13 MB of every start's allocations.
+func yamlSame(a, b *yaml.Node) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	if a.Kind != b.Kind || a.Style != b.Style || a.Tag != b.Tag || a.Value != b.Value || a.Anchor != b.Anchor || a.Alias != b.Alias ||
+		a.HeadComment != b.HeadComment || a.LineComment != b.LineComment || a.FootComment != b.FootComment || len(a.Content) != len(b.Content) {
+		return false
+	}
+	for i := range a.Content {
+		if !yamlSame(a.Content[i], b.Content[i]) {
+			return false
+		}
+	}
+	return true
+}
+
 func yamlKey(n *yaml.Node, key string) *yaml.Node {
 	if n == nil || n.Kind != yaml.MappingNode {
 		return nil
@@ -1612,7 +1631,7 @@ func dshSettingsRoute(dir string, on bool, models []catalog.Model, gw string) er
 		if n == nil || n.Kind != yaml.MappingNode {
 			return false, false
 		}
-		before, _ := yaml.Marshal(n)
+		was := yamlCopy(n)
 		providers := yamlMapping(n, "providers")
 		if err := dshPutProviders(providers, on, models, gw); err != nil {
 			return false, false
@@ -1620,6 +1639,12 @@ func dshSettingsRoute(dir string, on bool, models []catalog.Model, gw string) er
 		if !on && len(providers.Content) == 0 {
 			yamlDelKey(n, "providers")
 		}
+		if yamlSame(was, n) {
+			return false, false
+		}
+		// a tree that differs can still write out the same (a tag
+		// spelled out or left to resolve)
+		before, _ := yaml.Marshal(was)
 		after, _ := yaml.Marshal(n)
 		if bytes.Equal(before, after) {
 			return false, false

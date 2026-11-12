@@ -107,3 +107,27 @@ func TestDshRouteKeepsTheUsersIdleWait(t *testing.T) {
 		}
 	}
 }
+
+func TestYamlSameReadsWhatMarshalWrites(t *testing.T) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte("a: 1 # c\nb:\n  - x\n  - \"y\"\n"), &doc); err != nil {
+		t.Fatal(err)
+	}
+	n := doc.Content[0]
+	was := yamlCopy(n)
+	if !yamlSame(was, n) {
+		t.Fatal("a copy differs from its tree")
+	}
+	for _, change := range []func(){
+		func() { n.Content[1].Value = "2" },
+		func() { n.Content[1].LineComment = "" },
+		func() { n.Content[3].Content[1].Style = 0 },
+		func() { n.Content[3].Content = n.Content[3].Content[:1] },
+	} {
+		change()
+		if yamlSame(was, n) {
+			t.Fatal("a change went unseen")
+		}
+		n = yamlCopy(was)
+	}
+}
