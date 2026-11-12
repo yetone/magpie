@@ -290,8 +290,8 @@ func TestOllamaCloudOffPeakPrice(t *testing.T) {
 // commandCodeCatalog is models.dev's api.json as magpie had it on
 // 2026-10-30, these entries byte for byte (descriptions and the like left
 // out). DeepSeek lists V4.1 Flash only as deepseek-flash, by a dated
-// canonical id, so no maker price is found for Command Code's undated
-// deepseek/deepseek-v4.1-flash; Command Code's own catalog lists it.
+// canonical id; Command Code's own catalog lists its undated
+// deepseek/deepseek-v4.1-flash, which comes first for its plan.
 const commandCodeCatalog = `{
 "deepseek":{"id":"deepseek","api":"https://api.deepseek.com","name":"DeepSeek","models":{
 "deepseek-flash":{"id":"deepseek-flash","name":"DeepSeek Flash","cost":{"input":0.15,"output":0.6,"cache_read":0.003},"canonical_model_id":"deepseek/deepseek-v4.1-flash-1017"},
@@ -350,8 +350,10 @@ func TestCommandCodePlanPrice(t *testing.T) {
 			t.Errorf("set at %s: %+v at peak, %+v off-peak", key, a, b)
 		}
 	}
-	// another provider's id says nothing of Command Code's catalog
-	if _, ok := (Provider{ID: "relay", Chat: "https://relay.example/v1"}).ListPrice("deepseek/deepseek-v4.1-flash"); ok {
-		t.Error("a relay took Command Code's list price")
+	// another provider's id says nothing of Command Code's catalog: a relay
+	// has its maker's price, DeepSeek's deepseek-flash, whose dated
+	// canonical id (deepseek-v4.1-flash-1017) is this model's snapshot
+	if pr, ok := (Provider{ID: "relay", Chat: "https://relay.example/v1"}).ListPrice("deepseek/deepseek-v4.1-flash"); !ok || pr.Input != 0.15 || pr.Output != 0.6 || pr.CacheRead != 0.003 {
+		t.Errorf("a relay's price: %+v %v; want DeepSeek's 0.15/0.6/0.003", pr, ok)
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -979,6 +980,9 @@ type priceIndex struct {
 	// canon and canonDashed are the price the vendor's own entries under a
 	// canonical id (bare, and dashed) give, nil where they disagree
 	canon, canonDashed map[string]*Price
+	// canonSnap is canonDashed with the canonical's snapshot date taken
+	// off (deepseek-v4.1-flash-1017 is deepseek-v4.1-flash)
+	canonSnap map[string]*Price
 }
 
 var priceIndexes struct {
@@ -998,13 +1002,13 @@ func priceIndexOf(all map[string]mdProvider, at int, pid string) *priceIndex {
 	if x, ok := priceIndexes.by[pid]; ok {
 		return x
 	}
-	x := &priceIndex{bare: map[string]string{}, dashed: map[string]string{}, canon: map[string]*Price{}, canonDashed: map[string]*Price{}}
+	x := &priceIndex{bare: map[string]string{}, dashed: map[string]string{}, canon: map[string]*Price{}, canonDashed: map[string]*Price{}, canonSnap: map[string]*Price{}}
 	first := func(by map[string]string, k, key string) {
 		if was, ok := by[k]; !ok || key < was {
 			by[k] = key
 		}
 	}
-	seen := map[*map[string]*Price]map[string]bool{&x.canon: {}, &x.canonDashed: {}}
+	seen := map[*map[string]*Price]map[string]bool{&x.canon: {}, &x.canonDashed: {}, &x.canonSnap: {}}
 	agree := func(by *map[string]*Price, k string, p *Price) {
 		if !seen[by][k] {
 			seen[by][k] = true
@@ -1027,6 +1031,9 @@ func priceIndexOf(all map[string]mdProvider, at int, pid string) *priceIndex {
 		c := bareID(m.Canonical)
 		agree(&x.canon, c, m.Cost)
 		agree(&x.canonDashed, dashed(c), m.Cost)
+		if sn := snapshotOf(dashed(c)); sn != dashed(c) {
+			agree(&x.canonSnap, sn, m.Cost)
+		}
 	}
 	priceIndexes.by[pid] = x
 	return x
@@ -1047,6 +1054,10 @@ func canonicallyPriced(all map[string]mdProvider, at int, providers []string, b 
 	for _, by := range []func(*priceIndex) (*Price, bool){
 		func(x *priceIndex) (*Price, bool) { p, ok := x.canon[b]; return p, ok },
 		func(x *priceIndex) (*Price, bool) { p, ok := x.canonDashed[dashed(b)]; return p, ok },
+		// and as the snapshot it is: models.dev says DeepSeek's deepseek-flash
+		// is deepseek/deepseek-v4.1-flash-1017, and the relays serve it as
+		// deepseek-v4.1-flash (Open Design's, Winnie7572 on X)
+		func(x *priceIndex) (*Price, bool) { p, ok := x.canonSnap[dashed(b)]; return p, ok },
 	} {
 		for _, pid := range providers {
 			if p, ok := by(priceIndexOf(all, at, pid)); ok && p != nil {
@@ -1167,6 +1178,14 @@ func makerPriced(all map[string]mdProvider, at int, prefer []string, id string) 
 	}
 	return Price{}, false
 }
+
+// mmddSnapshot is the date a vendor ends a snapshot's id with: -0813,
+// -1017 (month and day), -20261017 or -2026-10-17.
+var mmddSnapshot = regexp.MustCompile(`-(?:(?:0[1-9]|1[0-2])(?:0[1-9]|[12][0-9]|3[01])|20[0-9]{2}(?:-?)(?:0[1-9]|1[0-2])(?:-?)(?:0[1-9]|[12][0-9]|3[01]))$`)
+
+// snapshotOf is an id without the date of its snapshot, as the model it is
+// a snapshot of: deepseek-v4.1-flash-1017 is deepseek-v4.1-flash.
+func snapshotOf(id string) string { return mmddSnapshot.ReplaceAllString(id, "") }
 
 // dashed is an id with its dots as dashes: the spelling two ids are compared
 // in when one vendor writes a model's version 4.6 and another 4-6.
