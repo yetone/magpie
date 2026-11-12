@@ -158,6 +158,8 @@ func TestOwnCacheKey(t *testing.T) {
 	}{
 		{provider.Provider{ID: "relay", Chat: "https://relay.example/v1"}, true},
 		{provider.Provider{ID: "openai", Preset: "openai", Responses: "https://api.openai.com/v1"}, true},
+		{provider.Provider{ID: "mistral", Preset: "mistral", Chat: "https://api.mistral.ai/v1"}, true},
+		{provider.Provider{ID: "mistral-own", Chat: "https://api.mistral.ai/v1", ExtraBody: provider.ExtraBody{"prompt_cache_key": json.RawMessage(`"k"`)}}, false},
 		{provider.Provider{ID: "deepseek", Preset: "deepseek", Chat: "https://api.deepseek.com/v1"}, false},
 		{provider.Provider{ID: "codex", Account: &provider.Account{}, Responses: "https://chatgpt.com/backend-api/codex"}, false},
 		{provider.Provider{ID: "relay-own", Chat: "https://relay.example/v1", ExtraBody: provider.ExtraBody{"prompt_cache_key": json.RawMessage(`"${sessionId}"`)}}, false},

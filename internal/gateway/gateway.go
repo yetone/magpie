@@ -6463,6 +6463,9 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	}
 	upstream := provider.UpstreamNameIn(wiresOf(r.Context()), p.ID, model)
 	body = rewriteModel(body, upstream)
+	if proto == provider.Chat {
+		body = withMistralCacheKey(p, r.Header, body)
+	}
 	if proto == provider.Responses {
 		// Claude's blocks magpie gave a Responses client go back to Claude
 		// alone; to this API the item is its summary, as before
@@ -8566,7 +8569,9 @@ const cacheKeyField = "prompt_cache_key"
 // client's never has one): OpenAI's API routes a conversation by it to
 // where its prompt is cached, and a relay in front of it can refuse a
 // request without it ("prompt_cache_key is required", CyberCaius's
-// AnyRouter on Discord). Only OpenAI's own API with a key, and a provider
+// AnyRouter on Discord). Only OpenAI's own API with a key, Mistral's
+// (its prompt_cache_key keeps a conversation on the server that holds its
+// cache; daoche_wuzui on X), and a provider
 // the user added by its address, which may be such a relay: a vendor's
 // preset, a signed-in account (the ChatGPT backend gets its own, as Codex
 // CLI sends it), a plugin, Bedrock and Vertex are sent nothing they didn't
@@ -8584,11 +8589,47 @@ func ownCacheKey(p provider.Provider) bool {
 	if _, ok := p.ExtraBody["!"+cacheKeyField]; ok {
 		return false
 	}
-	if p.AddedByAddress() {
+	if p.AddedByAddress() || isMistral(p) {
 		return true
 	}
 	h := p.VendorHost()
 	return h == "api.openai.com" || strings.HasSuffix(h, ".api.openai.com")
+}
+
+func isMistral(p provider.Provider) bool {
+	return p.Preset == "mistral" || p.Host() == "api.mistral.ai"
+}
+
+// withMistralCacheKey gives a Chat body bound for Mistral the
+// prompt_cache_key Mistral routes a conversation by to where its prompt is
+// cached (daoche_wuzui on X: poor cache hits). The key is a hash of the
+// session or conversation, never the id itself, and a key the client sent,
+// or the user's extraBody, is the one kept. A body with no conversation to
+// name gets none.
+func withMistralCacheKey(p provider.Provider, in http.Header, body []byte) []byte {
+	if !isMistral(p) || !ownCacheKey(p) || gjson.GetBytes(body, cacheKeyField).Exists() {
+		return body
+	}
+	id := cmp.Or(sessionOf(in), conversationID(in, body))
+	if id == "" {
+		return body
+	}
+	sum := sha256.Sum256([]byte("mistral\x00" + id))
+	// written in ahead of the first member, so the client's own bytes
+	// (and the order its messages were sent in, for the cache) stay as sent
+	i := bytes.IndexByte(body, '{')
+	if i < 0 || len(bytes.TrimSpace(body[:i])) > 0 {
+		return body
+	}
+	rest := bytes.TrimLeft(body[i+1:], " \t\r\n")
+	sep := ","
+	if len(rest) == 0 || rest[0] == '}' {
+		sep = ""
+	}
+	out := make([]byte, 0, len(body)+96)
+	out = append(out, body[:i+1]...)
+	out = append(out, `"`+cacheKeyField+`":"`+hex.EncodeToString(sum[:])+`"`+sep...)
+	return append(out, body[i+1:]...)
 }
 
 // cacheKeyOf is the prompt cache key of the conversation req is a turn
