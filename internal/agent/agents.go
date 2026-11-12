@@ -211,7 +211,7 @@ func ClientsIn(all []*Agent) []*Agent {
 	var out []*Agent
 	for _, a := range all {
 		// a WSL agent's requests are its Windows twin's by their UA
-		if a.WSL == "" {
+		if a.WSL == "" && !a.Nested {
 			out = append(out, a)
 		}
 	}

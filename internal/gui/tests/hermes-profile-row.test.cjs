@@ -1,7 +1,6 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
-// Hermes's other profiles are agents of their own (hermes#<name>, Norethcy on
-// X) so the Library can give each its skills and MCP servers. The row is
-// named for the profile, says it starts on the model picked here as the
+// Hermes is one row in the Agents list (geekbb on X); its other profiles
+// (hermes#<name>) are the Library's, never rows here. The row says it starts on the model picked here as the
 // Hermes row does, and the picker posts the encoded id (a raw # would be
 // the URL's fragment). In every language, in both engines. No backend: the
 // API is faked here.
@@ -23,7 +22,6 @@ const hermes = (id, bots) => ({
 const fresh = () => ({
   agents: [
     { id: "hermes", name: "Hermes Agent", path: "/test/.hermes/config.yaml", icon: "hermes", wired: true, fields: [{ key: "model", label: "model", value: "magpie/v/glm", options: models }] },
-    { id: "hermes#coder", name: "Hermes · coder", path: "/test/.hermes/profiles/coder/config.yaml", icon: "hermes", wired: true, fields: [{ key: "model", label: "model", value: "magpie/v/glm", options: models }] },
   ],
   profiles: [],
 });
@@ -64,7 +62,7 @@ const W = {
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   for (const lang of Object.keys(W)) {
-    test(`${engine} ${lang}: a Hermes profile is a row of its own`, async (t) => {
+    test(`${engine} ${lang}: Hermes is one row, its profiles are none`, async (t) => {
       const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
       const page = await browser.newPage({ viewport: { width: 560, height: 800 } });
       page.setDefaultTimeout(5000);
@@ -74,9 +72,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.route("**/*", server(lang, sets));
       t.after(() => browser.close());
       await page.goto("http://magpie.test/");
-      const row = '.row.agent[data-id="hermes#coder"]';
+      const row = '.row.agent[data-id="hermes"]';
       await page.locator(row).waitFor();
-      assert.ok((await page.locator(row).innerText()).includes("Hermes · coder"));
+      // geekbb on X: one entry for Hermes; its bots (profiles) are not rows
+      assert.equal(await page.locator('.row.agent[data-id^="hermes"]').count(), 1);
+      assert.ok(!(await page.locator("#agents, body").first().innerText()).includes("Hermes · "));
       assert.ok((await page.locator(row).innerText()).includes(W[lang]), await page.locator(row).innerText());
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "the Agents view overflows");
       assert.deepEqual(errors, []);

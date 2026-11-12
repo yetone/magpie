@@ -153,6 +153,11 @@ type Agent struct {
 	// the name alone (Empryo, Cursor Private Inference). The setting says
 	// so for each one connected, rather than seeming to do nothing.
 	NoNames bool
+	// Nested: the agent is a part of another one (a Hermes profile,
+	// hermes#<name>) that the Library gives its own skills and servers. No
+	// list of agents or model picker shows it (DetectedIn leaves it out); its
+	// model is a line of the parent's row, and All and Find still reach it.
+	Nested bool
 	// Sync, for an agent that reads magpie's models from a file of its own
 	// rather than asking the gateway, rewrites that list as the catalog is
 	// now — where magpie wrote one; nothing else changes (see SyncCatalog).
@@ -652,7 +657,7 @@ func Detected() []*Agent { return DetectedIn(All()) }
 func DetectedIn(all []*Agent) []*Agent {
 	var out []*Agent
 	for _, a := range all {
-		if a.Detected() {
+		if a.Detected() && !a.Nested {
 			out = append(out, a)
 		}
 	}

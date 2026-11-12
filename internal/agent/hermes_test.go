@@ -1109,3 +1109,53 @@ func TestHermesProfileRowsReadAsNames(t *testing.T) {
 		}
 	}
 }
+
+// geekbb on X: Hermes is one entry in the Agents list and the model
+// pickers; its profiles (hermes#<name>) are the Library's targets only, so
+// no list that DetectedIn or ClientsIn builds shows them, while All and Find
+// still reach one by its id.
+func TestHermesProfilesAreNotListedAsAgents(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("HERMES_HOME", "")
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	root := appdir.HermesHomeIn(home)
+	write := func(rel, s string) {
+		p := filepath.Join(root, rel)
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.WriteFile(p, []byte(s), 0o644)
+	}
+	write("config.yaml", "model:\n  default: a/b\n  provider: openrouter\n")
+	write("hermes-agent/run_agent.py", "")
+	write("profiles/coder/config.yaml", "model:\n  default: kimi-k3\n  provider: moonshot\n")
+	all := onMachine(home, filepath.Join(home, ".config"))
+	if a := FindByID(all, "hermes#coder"); a == nil || !a.Nested {
+		t.Fatalf("the profile is no agent for the Library: %+v", a)
+	}
+	for name, list := range map[string][]*Agent{"DetectedIn": DetectedIn(all), "ClientsIn": ClientsIn(all)} {
+		var hermes []string
+		for _, a := range list {
+			if strings.HasPrefix(a.ID, "hermes") {
+				hermes = append(hermes, a.ID)
+			}
+		}
+		if name == "DetectedIn" && !slices.Equal(hermes, []string{"hermes"}) || strings.HasPrefix(name, "C") && slices.Contains(hermes, "hermes#coder") {
+			t.Fatalf("%s lists %v", name, hermes)
+		}
+	}
+	// the profile's own model stays as its user set it
+	if b, _ := os.ReadFile(filepath.Join(root, "profiles/coder/config.yaml")); !strings.Contains(string(b), "kimi-k3") {
+		t.Fatalf("profile config: %s", b)
+	}
+}
+
+func FindByID(all []*Agent, id string) *Agent {
+	for _, a := range all {
+		if a.ID == id {
+			return a
+		}
+	}
+	return nil
+}

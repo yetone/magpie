@@ -477,7 +477,7 @@ func hermesProfileAgents(home string) []*Agent {
 		dir := filepath.Dir(p)
 		out = append(out, &Agent{
 			ID: "hermes#" + name, Name: "Hermes · " + hermesProfileLabel(p, name), Icon: "hermes",
-			Spelled: prefixed, NoNames: true,
+			Spelled: prefixed, NoNames: true, Nested: true,
 			Dir: dir, Path: p,
 			Fields: []Field{func() Field {
 				f := hermesProfileField(at, p, "model", "model")
