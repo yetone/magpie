@@ -822,6 +822,18 @@ it doesn't.**
 **One commit, one goal** is in the code standards since 10-28. See
 [Moved to the code standards](#moved-to-the-code-standards).
 
+**A commit's file list is checked against its goal before pushing.**
+- 698ed4adb (11-12, "a busy port names its holder") was committed from a
+  tree made before two commits pushed eight minutes earlier, and took
+  both out with no word in its body: 919780414's Usage table view
+  (quotatable.js and its test deleted, its app.js, app.css and i18n
+  hunks reverted) and 88d2962e0's 16-byte sessions hashes (digest.go
+  deleted). Both were gone from main until c14fa0ce9 put them back.
+- Before pushing, read `git show --stat HEAD` after the rebase. A deleted
+  file or a hunk in a package the goal never names means the tree is
+  stale: rebuild the change on origin/main, don't push the old tree.
+- Seen 1× (2026-11-12).
+
 **A squash merge's message is written, not GitHub's default.** Give
 `gh pr merge --squash` a `--subject` and a `--body-file` holding the PR's
 own change and what was run at the reviewed head.
