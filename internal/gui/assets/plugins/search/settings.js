@@ -186,7 +186,7 @@ function renderSearch(s, keep) {
   // Discord), for an agent to mount as its web_search and web_fetch tools
   const mcpURL = mcpAddress(s, "/mcp/magpie/web-search");
   const mcp = row(t("MCP server"), t("Cursor, Claude Desktop and other agents can add this search as an MCP server (Streamable HTTP), with a web_search tool and a web_fetch tool that reads a page by its URL. From another computer, send a gateway key as Authorization: Bearer <key>."),
-    el("code", "", mcpURL), copyBtn(mcpURL, t("Address")));
+    ...mcpWhere(s, renderSettings), el("code", "", mcpURL), copyBtn(mcpURL, t("Address")));
   mcp.id = "searchMcpRow";
   // The Library gives this search to the agents picked for it, as Magpie
   // Web Search, and lists it under its MCP servers: an address alone had

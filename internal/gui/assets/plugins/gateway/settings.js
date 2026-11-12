@@ -577,6 +577,46 @@ function sideLAN(g) {
   const pub = g.publicURL && !(g.lazyCatBox && g.publicURL === g.lazyCat) ? g.publicURL : "";
   return u[0] && (pub || (u.includes(lanWant) ? lanWant : u[0]));
 }
+// mcpFar: where other machines reach the gateway, from Settings' read, and
+// how it is named (addrWho); none while magpie isn't shared (xzhih on X:
+// Settings' MCP server addresses said 127.0.0.1 on a server)
+function mcpFar(s) {
+  const g = { ...s, url: s.gateway, container: s.lanContainer, containerHost: s.lanContainerHost, lazyCat: s.lanLazyCat, lazyCatBox: s.lanLazyCatBox };
+  const url = s.lan ? sideLAN(g) : web && s.publicURL;
+  return url && { url, who: addrWho(g, url, gwLAN(g).others) };
+}
+// mcpLan: whether Settings' MCP servers are shown at the far address: the
+// pick of mcpWhere, a page other machines opened starting there
+function mcpLan() {
+  try { return (localStorage.getItem("magpie.mcpWhere") || (web ? "lan" : "this")) === "lan"; } catch { return web; }
+}
+// mcpBase: the gateway's address for Settings' MCP servers; "" when there
+// is no far address, and mcpAddress goes on as before
+function mcpBase(s) {
+  const far = mcpFar(s);
+  return far && (mcpLan() ? far.url : s.gateway || providers?.gateway?.url || `http://127.0.0.1:${s.port || 3425}`);
+}
+// mcpWhere: the This computer / far address switch beside an MCP server's
+// address, none while there is only one; redo draws the page again
+function mcpWhere(s, redo) {
+  const far = mcpFar(s);
+  return far ? [segs([["this", t("This computer")], ["lan", far.who]], mcpLan() ? "lan" : "this", (v) => { keepPick("magpie.mcpWhere", v); redo(); })] : [];
+}
+// mcpRows: Image recognition's and Image generation's MCP servers, each with
+// its address (mcpWhere's pick); Settings › Models, under the image rows
+function mcpRows(s, box) {
+  // both as the gateway's MCP servers, for an agent with no Library (JonahFu on X)
+  const mcpRow = (id, path, name, sub) => {
+    const url = mcpAddress(s, path), r = el("div", "row pref"), who = el("div", "who"), val = el("div", "val");
+    who.append(el("div", "name", name), el("div", "sub", sub));
+    val.append(...mcpWhere(s, renderSettings), el("code", "", url), copyBtn(url, t("Address")));
+    r.append(who, val);
+    r.id = id;
+    box.append(r);
+  };
+  mcpRow("visionMcpRow", "/mcp/magpie/vision", t("Image recognition MCP server"), t("Agents can add image recognition as an MCP server (Streamable HTTP) with one analyze_image tool, which reads an image with the Image recognition model from a file path, a URL or a data URL. From another computer, send a gateway key as Authorization: Bearer <key> and the image as a URL or data URL."));
+  mcpRow("imageMcpRow", "/mcp/magpie/image", t("Image generation MCP server"), t("Agents can add image generation as an MCP server (Streamable HTTP) with generate_image, generate_video and generation_result tools, which draw with the Image generation model. An image comes back in the answer and at a URL kept for an hour, a video at a URL; nothing is saved in the agent's project. From another computer, send a gateway key as Authorization: Bearer <key>."));
+}
 // the line was drawn from boot.js before this script came
 if (sideGwAt) renderSideGw();
 function renderLAN(s) {
