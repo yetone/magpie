@@ -4543,7 +4543,7 @@ In that folder, with ~ expanded. A relative path is ignored, and magpie uses ~/.
 
 Yes. magpie sets up a Pi in a WSL distro too, its provider pointing at the gateway as the distro reaches it.
 
-More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Kimi Code on any model](https://usemagpie.ai/docs/kimi-code) and [Cursor Private Inference on any model](https://usemagpie.ai/docs/cursor-private-inference). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More agents on the same models: [Models in OpenCode](https://usemagpie.ai/docs/opencode-models), [Models in Claude Code](https://usemagpie.ai/docs/claude-code-models), [Kimi Code on any model](https://usemagpie.ai/docs/kimi-code), [Cursor Private Inference on any model](https://usemagpie.ai/docs/cursor-private-inference) and [Prime Agent on any model](https://usemagpie.ai/docs/prime-agent). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
@@ -6536,6 +6536,81 @@ Yes. magpie reads dataDir from DS Bot's locations.json. When it can't be read, m
 The plugin runs on ~/.dsh, so its model follows magpie's DSH row: pick a model for DSH on the Agents page.
 
 More desktop apps on the same models: [Tuanjie Cowork on any model](https://usemagpie.ai/docs/tuanjie-cowork), [OpenBot on any model](https://usemagpie.ai/docs/openbot) and [miniQ on any model](https://usemagpie.ai/docs/miniq). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/prime-agent
+
+# Prime Agent on any model
+
+Prime Agent is Prime Intellect's open-source coding agent in Rust, the `prime-agent` command. It keeps Pi's settings.json and models.json in a folder of its own and reads them with Pi's fields and types. magpie sets it up as it does [Pi](https://usemagpie.ai/docs/pi), so Prime Agent runs on any model in magpie: DeepSeek, GLM, Kimi, Qwen, Claude or a ChatGPT subscription.
+
+## Set up Prime Agent
+
+1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
+2. **Pick a model for Prime Agent on the Agents page.** Pick a model via magpie.
+3. **Run prime-agent.** A new session starts on that model, with every model of magpie's in its list.
+
+```
+magpie prime-agent deepseek/deepseek-v4-pro
+```
+
+## What gets written
+
+```
+~/.prime/agent/            (or $PRIME_AGENT_CODING_AGENT_DIR)
+  settings.json            defaultProvider: "magpie"
+                           defaultModel:    "deepseek/deepseek-v4-pro"
+                           defaultThinkingLevel
+  models.json              providers.magpie: the gateway's /v1,
+                           the key magpie-prime-agent, magpie's models
+```
+
+magpie adds a provider named `magpie` to models.json, at the gateway's `/v1` with magpie's models, and sets `defaultProvider`, `defaultModel` and `defaultThinkingLevel` in settings.json. Your own providers and settings stay as they are.
+
+Prime Agent's requests carry no User-Agent, so the key magpie gives it names it, `magpie-prime-agent`: that is how the gateway counts its requests as Prime Agent's.
+
+## PRIME_AGENT_CODING_AGENT_DIR
+
+Prime Agent's folder is `~/.prime/agent`, or `$PRIME_AGENT_CODING_AGENT_DIR` when it is set, `~` in it standing for home. A relative path is its working directory's, which magpie can't know, so it isn't taken and magpie writes `~/.prime/agent`. A Prime Agent in WSL is set up too.
+
+## Settings left to you
+
+Only the global settings.json is written, as for Pi. These are yours, and magpie doesn't change them:
+
+1. **A project's `.prime/agent/settings.json`.** Settings for that project.
+2. **`allowedModels`.** Its daemon's allow-list; a model outside it fails loudly.
+3. **`subagentDefaultModel`.** The model subagents start on.
+
+So if you keep allowedModels, add magpie's model to it.
+
+## Switching back
+
+Pick one of your own models on Prime Agent's row, or run the command below. magpie copied both files before its first write: if nothing changed since, they go back byte for byte; otherwise only magpie's provider is removed.
+
+```
+magpie prime-agent default
+```
+
+## FAQ
+
+### Can Prime Agent run on DeepSeek or GLM?
+
+Yes. Pick a via-magpie model for Prime Agent on magpie's Agents page. magpie adds its provider to models.json, so DeepSeek, GLM, Kimi, Qwen and Claude all work.
+
+### Which folder does magpie write to?
+
+~/.prime/agent, or PRIME_AGENT_CODING_AGENT_DIR when it is set, with ~ expanded. A relative path isn't taken.
+
+### magpie's model fails as not allowed. Why?
+
+Your allowedModels doesn't list it. magpie leaves that list to you; add the model to it.
+
+### How does magpie know Prime Agent's requests?
+
+By the key magpie gives it, magpie-prime-agent, since its requests carry no User-Agent.
+
+More agents on the same models: [Pi on any model](https://usemagpie.ai/docs/pi), [Kimi Code on any model](https://usemagpie.ai/docs/kimi-code) and [DS Bot on any model](https://usemagpie.ai/docs/ds-bot). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
