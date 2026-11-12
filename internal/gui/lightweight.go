@@ -311,6 +311,9 @@ func (h *host) openMain(url string) {
 // can do that without showing it first (showsMinimised); elsewhere it is
 // shown quietly, as any window a restart by itself brings back.
 func (h *host) reveal(w *application.WebviewWindow, quiet, minimised bool) {
+	if runtime.GOOS == "darwin" {
+		plainTitlebar(w) // the Mac's, not shown yet; not at start (app.go)
+	}
 	if minimised && showsMinimised {
 		showMinimised(w, h.placeAt(w))
 		return

@@ -707,7 +707,13 @@ func Run(version string, showMain bool, link string) error {
 		h.main.OnWindowEvent(events.Windows.WebViewNavigationCompleted, func(*application.WindowEvent) { markReady() })
 	} else {
 		h.app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
-			plainTitlebar(h.main) // Linux: the page's header is the title bar; the Mac: a plain one's corners
+			if runtime.GOOS != "darwin" {
+				plainTitlebar(h.main) // Linux: the page's header is the title bar
+			}
+			// The Mac's is done as the window is first shown (reveal): it
+			// makes a window of its own (toolbarRounder), which deadlocks the
+			// main thread while a hidden background launch (an update's
+			// relaunch) is still inside FBSWorkspaceScenesClient on macOS 26.
 			nameWindow(h.panel, panelTitle)
 			ownFrame(h.panel) // KDE: no title bar of KWin's on it (#1283)
 			markReady()
