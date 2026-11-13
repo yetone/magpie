@@ -11338,24 +11338,6 @@ function renderModels(p) {
       status(v ? t("{model} is asked on {api} once saved", { model: id, api: apiLabel(v) }) : t("{model} is asked as its vendor's list says once saved", { model: id }), "ok");
     }, "API this model is asked on", "model-api-menu");
   };
-  // what a model makes, said by the user (shen-joe, #1399), staged as its API is
-  const kindNow = (id) => draft.modelPrefs?.[id]?.kind ?? p.models.find((m) => m.id === id)?.kind ?? "";
-  const KIND_NAMES = { "": "Auto", image: "Image model", video: "Video model" };
-  const pickKind = (c, id) => {
-    const m = p.models.find((x) => x.id === id) || { id };
-    const opts = [{ v: "", name: "Auto", note: "As its vendor's model list and its name say" },
-      { v: "image", name: "Image model", note: "Draws at the provider's images API (/images/generations), listed under Image generation" },
-      { v: "video", name: "Video model", note: "Makes videos at the provider's videos API (POST /videos, then GET /videos/<id>)" }];
-    openProtoMenu(c, opts, kindNow(id), (v) => {
-      if (v === kindNow(id)) return;
-      const prefs = draft.modelPrefs = draft.modelPrefs || {};
-      prefs[id] = prefs[id] || {};
-      if (v === (m.kind || "")) delete prefs[id].kind; else prefs[id].kind = v;
-      if (!Object.keys(prefs[id]).length) delete prefs[id];
-      draw();
-      status(t(v === "video" ? "{model} makes videos once saved" : v === "image" ? "{model} draws images once saved" : "{model} makes what its vendor's list says once saved", { model: id }), "ok");
-    }, "What this model makes", "model-kind-menu");
-  };
   // staged as Model settings' tick stages it (archsiono on X)
   const setImages = (id, m, v) => {
     const P = draft.modelPrefs = draft.modelPrefs || {}, x = P[id] = P[id] || {};
@@ -11402,10 +11384,7 @@ function renderModels(p) {
         const on = x?.ownImages ? !!m.ownImages : x?.images ?? !!m.images;
         acts.push({ name: on ? "Turn off image input" : "Turn on image input", icon: "M2.5 3.5h11v9h-11zM2.5 10.5l3-3 2.5 2.5 2-2 3 3", tip: t("Whether agents are told {id} can see images", { id }), run: () => setImages(id, m, !on) });
       }
-      if (p.marksKinds && !decidesModel(p, id)) {
-        const k = kindNow(id);
-        acts.push({ name: k ? t("Makes: {kind}…", { kind: t(KIND_NAMES[k]) }) : t("Makes: Auto…"), icon: "M2.5 4h11v8h-11zM6.5 6.25v3.5L9.5 8z", tip: t("Say this model makes images or videos, when the provider's model list doesn't"), run: () => pickKind(c, id) });
-      }
+      if (p.marksKinds && !decidesModel(p, id)) acts.push(kindAct(c, p, id, draw));
       openRowMenu(c, acts, { x: e.clientX, y: e.clientY });
     };
     // the API it is asked on, when one is picked (or staged)
@@ -11415,12 +11394,7 @@ function renderModels(p) {
       tag.title = t("Asked on {api} alone; right-click to change", { api: apiLabel(now) });
       c.append(tag);
     }
-    const kind = p.marksKinds && !decidesModel(p, id) ? kindNow(id) : "";
-    if (kind) {
-      const tag = el("span", "badge mkind-tag", t(kind === "video" ? "video" : "image"));
-      tag.title = t("{kind}, as you said; right-click to change", { kind: t(KIND_NAMES[kind]) });
-      c.append(tag);
-    }
+    if (p.marksKinds && !decidesModel(p, id)) kindTag(c, modelKindNow(p, id));
   };
   const box = el("div", "models");
   const chips = el("div", "mchips");
@@ -12191,9 +12165,51 @@ function mediaChips(cls, ids, key, p, names) {
       show();
     };
     show();
+    // its right-click says what it makes, as a chat model's does: a
+    // video model its id doesn't name sat among the image models with
+    // no way to move it (iceloon on X)
+    if (p.marksKinds) {
+      const tag = () => kindTag(c, modelKindNow(p, id));
+      tag();
+      c.oncontextmenu = (e) => {
+        e.preventDefault();
+        const again = agentMenu?.anchor === c || protoMenu?.anchor === c;
+        closeAgentMenu(); closeProtoMenu();
+        again || openRowMenu(c, [kindAct(c, p, id, tag)], { x: e.clientX, y: e.clientY });
+      };
+    }
     chips.append(c);
   }
   return chips;
+}
+
+// what a model makes, said by the user (shen-joe, #1399), staged in
+// draft.modelPrefs as its API is: a chat model's, or an image or video
+// model's, listed apart (p.mediaKinds)
+const KIND_NAMES = { "": "Auto", image: "Image model", video: "Video model" };
+const savedModelKind = (p, id) => p.models.find((m) => m.id === id)?.kind ?? p.mediaKinds?.[id] ?? "";
+const modelKindNow = (p, id) => draft.modelPrefs?.[id]?.kind ?? savedModelKind(p, id);
+
+// kindAct: the right-click menu's Makes… for p's model id, staged in
+// draft.modelPrefs; redraw shows what was staged
+function kindAct(c, p, id, redraw) {
+  const k = modelKindNow(p, id);
+  return { name: k ? t("Makes: {kind}…", { kind: t(KIND_NAMES[k]) }) : t("Makes: Auto…"), icon: "M2.5 4h11v8h-11zM6.5 6.25v3.5L9.5 8z", tip: t("Say this model makes images or videos, when the provider's model list doesn't"), run: () => openProtoMenu(c, [{ v: "", name: "Auto", note: "As its vendor's model list and its name say" },
+    { v: "image", name: "Image model", note: "Draws at the provider's images API (/images/generations), listed under Image generation" },
+    { v: "video", name: "Video model", note: "Makes videos at the provider's videos API (POST /videos, then GET /videos/<id>)" }], k, (v) => {
+    if (v == k) return;
+    const P = draft.modelPrefs ||= {}, x = P[id] ||= {};
+    if (v == savedModelKind(p, id)) delete x.kind; else x.kind = v;
+    if (!Object.keys(x).length) delete P[id];
+    redraw();
+    status(t(v === "video" ? "{model} makes videos once saved" : v === "image" ? "{model} draws images once saved" : "{model} makes what its vendor's list says once saved", { model: id }), "ok");
+  }, "What this model makes", "model-kind-menu") };
+}
+
+// kindTag: chip c's tag of what the user said it makes, or none
+function kindTag(c, kind) {
+  c.querySelector(".mkind-tag")?.remove();
+  if (kind) c.append(Object.assign(el("span", "badge mkind-tag", t(kind === "video" ? "video" : "image")), { title: t("{kind}, as you said; right-click to change", { kind: t(KIND_NAMES[kind]) }) }));
 }
 
 // renderRouting: spread over keys or accounts and stickiness, staged in

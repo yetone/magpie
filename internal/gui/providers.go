@@ -441,8 +441,12 @@ type providerJSON struct {
 	// (provider.HiddenVideomakers)
 	FilmIDs           []string `json:"filmIds,omitempty"`
 	HiddenVideomakers []string `json:"hiddenVideomakers,omitempty"`
-	Unlisted          bool     `json:"unlisted"` // its models serve only through routing groups
-	NoModels          bool     `json:"noModels"` // Select none: none of its models served (#1818)
+	// what the user said those image and video models make
+	// (provider.ModelKind), by id: they aren't among Models, whose kind is
+	// said there, and a chip's right-click starts from it (iceloon on X)
+	MediaKinds map[string]string `json:"mediaKinds,omitempty"`
+	Unlisted   bool              `json:"unlisted"` // its models serve only through routing groups
+	NoModels   bool              `json:"noModels"` // Select none: none of its models served (#1818)
 	// Best in family: with nothing picked, only the newest model of each
 	// family it lists is served (provider.Provider.BestInFamily)
 	BestInFamily bool `json:"bestInFamily"`
@@ -1307,6 +1311,14 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 		out.FilmIDs = append(out.FilmIDs, m.ID)
 		if p.VideomakerHidden(m.ID) {
 			out.HiddenVideomakers = append(out.HiddenVideomakers, m.ID)
+		}
+	}
+	for _, id := range append(slices.Clone(out.DrawIDs), out.FilmIDs...) {
+		if k := p.ModelKind(id); k != "" {
+			if out.MediaKinds == nil {
+				out.MediaKinds = map[string]string{}
+			}
+			out.MediaKinds[id] = k
 		}
 	}
 	if t, ok := p.Listed(); ok {
