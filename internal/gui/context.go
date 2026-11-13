@@ -886,7 +886,9 @@ var readingDay func(day string)
 func dayStamp(day string) string {
 	var b strings.Builder
 	base := filepath.Join(gateway.HistoryDir(), day+".jsonl")
-	for _, p := range []string{base, base + ".gz"} {
+	// the day's numbered files (day.1.jsonl, past a size) are part of it
+	numbered, _ := filepath.Glob(filepath.Join(gateway.HistoryDir(), day+".*.jsonl*"))
+	for _, p := range append([]string{base, base + ".gz"}, numbered...) {
 		if fi, err := os.Stat(p); err == nil {
 			fmt.Fprintf(&b, "%d/%d;", fi.Size(), fi.ModTime().UnixNano())
 		} else {

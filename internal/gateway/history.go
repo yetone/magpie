@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"hash/maphash"
 	"io"
 	"maps"
 	"os"
@@ -34,6 +35,57 @@ const (
 	historyBytes = 200 << 20
 	historyMax   = 2000 // the routes of one day served at most: its latest
 )
+
+// A day written plain was bounded by nothing: one reached 7.25 GB, and
+// gzipping it took a 1.6 GB host down (tsingchao on X). Past
+// historyFileBytes a day goes on in a file of its next number
+// (2026-11-13.1.jsonl), and past historyDayBytes in all its oldest files go.
+// Variables for the tests.
+var (
+	historyFileBytes int64 = 256 << 20
+	historyDayBytes  int64 = 1 << 30
+)
+
+// dayAppendPath is the file a day's next route is written to: the first of
+// its numbered files with room.
+func dayAppendPath(dir, day string) string {
+	for n := 0; ; n++ {
+		p := filepath.Join(dir, day+".jsonl")
+		if n > 0 {
+			p = filepath.Join(dir, day+"."+strconv.Itoa(n)+".jsonl")
+		}
+		if fi, err := os.Stat(p); err != nil || fi.Size() < historyFileBytes {
+			return p
+		}
+	}
+}
+
+// capToday removes the oldest of today's numbered files while they hold more
+// than historyDayBytes, the latest one staying whatever its size.
+func capToday(dir, today string) {
+	type part struct {
+		n    int
+		path string
+		size int64
+	}
+	var parts []part
+	var total int64
+	for _, d := range historyFiles(dir) {
+		name := filepath.Base(d.path)
+		if d.day != today || !strings.HasSuffix(name, ".jsonl") {
+			continue
+		}
+		n, _ := strconv.Atoi(strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(name, today), "."), ".jsonl"))
+		parts = append(parts, part{n, d.path, d.size})
+		total += d.size
+	}
+	sort.Slice(parts, func(i, j int) bool { return parts[i].n < parts[j].n })
+	for i := 0; i < len(parts)-1 && total > historyDayBytes; i++ {
+		if os.Remove(parts[i].path) == nil {
+			total -= parts[i].size
+		}
+	}
+}
 
 // HistoryDir is where the days are kept: ~/.config/magpie/routing.
 func HistoryDir() string { return filepath.Join(filepath.Dir(provider.Path()), "routing") }
@@ -101,7 +153,7 @@ func saveRoute(r Route) {
 	if os.MkdirAll(dir, 0o755) != nil {
 		return
 	}
-	f, err := os.OpenFile(filepath.Join(dir, r.Time.Local().Format(dayForm)+".jsonl"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	f, err := os.OpenFile(dayAppendPath(dir, r.Time.Local().Format(dayForm)), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return
 	}
@@ -137,6 +189,7 @@ func pruneHistory(dir string, now time.Time) {
 			gzipFile(d.path)
 		}
 	}
+	capToday(dir, today)
 	oldest := now.Local().AddDate(0, 0, -historyDays+1).Format(dayForm)
 	days := historyFiles(dir)
 	// the days that are over, held to historyBytes: today's file isn't
@@ -177,51 +230,98 @@ func pruneHistory(dir string, now time.Time) {
 // written, and the file goes once its routes are in. A .gz that can't be read
 // from disk is left as it is, and the file with it, for a later prune.
 func gzipFile(path string) {
-	b, err := os.ReadFile(path)
+	src, err := os.Open(path)
 	if err != nil {
 		return
 	}
-	old, err := os.ReadFile(path + ".gz")
-	if err != nil && !os.IsNotExist(err) {
+	defer src.Close()
+	gzPath := path + ".gz"
+	var old *os.File
+	if f, err := os.Open(gzPath); err == nil {
+		defer f.Close()
+		if fi, err := f.Stat(); err == nil && fi.Size() > 0 {
+			old = f
+		}
+	} else if !os.IsNotExist(err) {
 		return
 	}
 	// the file's routes, each true once the .gz is seen to have it: a set
-	// built from the file, a few routes, not from the whole day
-	in := map[string]bool{}
+	// of their hashes, 8 bytes a route, never the routes themselves (a
+	// day's file was read whole into memory, and a 7 GB one took a 1.6 GB
+	// host down, tsingchao on X)
+	in := map[uint64]bool{}
 	whole := true // the .gz, if there is one, can have routes go after it
-	if len(old) > 0 {
-		for l := range bytes.Lines(b) {
-			in[string(bytes.TrimSpace(l))] = false
+	if old != nil {
+		eachLine(src, func(l []byte) { in[routeKey(l)] = false })
+		if _, err := src.Seek(0, io.SeekStart); err != nil {
+			return
 		}
 		whole = gzRoutes(old, func(l []byte) {
-			if _, ok := in[string(l)]; ok {
-				in[string(l)] = true
+			k := routeKey(l)
+			if _, ok := in[k]; ok {
+				in[k] = true
 			}
 		})
 	}
-	buf := new(bytes.Buffer)
-	if whole {
-		buf = bytes.NewBuffer(old)
-	}
-	z := gzip.NewWriter(buf)
-	nl := []byte{'\n'}
-	add := func(l []byte) {
-		z.Write(l)
-		z.Write(nl)
-	}
-	if !whole {
-		gzRoutes(old, add) // written anew, its whole routes first
-	}
-	added := false
-	for l := range bytes.Lines(b) {
-		if l = bytes.TrimSpace(l); len(l) > 0 && !in[string(l)] {
-			add(l)
-			added = true
+	// the new .gz is written beside the old one and renamed over it; made
+	// at the first route to add, so a day with none leaves the .gz alone
+	tmp := path + ".gz.tmp"
+	var out *os.File
+	var z *gzip.Writer
+	fail := func() {
+		if out != nil {
+			out.Close()
+			os.Remove(tmp)
 		}
 	}
+	nl := []byte{'\n'}
+	open := func() bool {
+		f, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+		if err != nil {
+			return false
+		}
+		out = f
+		if old != nil {
+			if _, err := old.Seek(0, io.SeekStart); err != nil {
+				return false
+			}
+			if whole {
+				if _, err := io.Copy(out, old); err != nil {
+					return false
+				}
+			}
+		}
+		z = gzip.NewWriter(out)
+		if !whole {
+			gzRoutes(old, func(l []byte) { z.Write(l); z.Write(nl) }) // written anew, its whole routes first
+		}
+		return true
+	}
+	added, ok := false, true
+	eachLine(src, func(l []byte) {
+		if !ok || in[routeKey(l)] {
+			return
+		}
+		if z == nil && !open() {
+			ok = false
+			return
+		}
+		z.Write(l)
+		z.Write(nl)
+		added = true
+	})
+	if !ok {
+		fail()
+		return
+	}
+	// closed before the rename and the remove: Windows holds an open file
+	src.Close()
+	if old != nil {
+		old.Close()
+	}
 	if added {
-		tmp := path + ".gz.tmp"
-		if z.Close() != nil || os.WriteFile(tmp, buf.Bytes(), 0o600) != nil || steady.Rename(tmp, path+".gz") != nil {
+		if z.Close() != nil || out.Sync() != nil || out.Close() != nil || steady.Rename(tmp, gzPath) != nil {
+			fail()
 			os.Remove(tmp)
 			return
 		}
@@ -229,12 +329,43 @@ func gzipFile(path string) {
 	os.Remove(path)
 }
 
+// routeKey is what a route is remembered by when a day's file is set
+// against its .gz.
+func routeKey(l []byte) uint64 { return maphash.Bytes(routeSeed, l) }
+
+var routeSeed = maphash.MakeSeed()
+
+// eachLine calls f with each non-blank line of r, trimmed, one line in
+// memory at a time.
+func eachLine(r io.Reader, f func([]byte)) {
+	br := bufio.NewReaderSize(r, 256<<10)
+	var long []byte // a line longer than the buffer, kept across reads
+	for {
+		line, err := br.ReadSlice('\n')
+		if err == bufio.ErrBufferFull {
+			long = append(long, line...)
+			continue
+		}
+		if len(long) > 0 {
+			long = append(long, line...)
+			line = long
+		}
+		if l := bytes.TrimSpace(line); len(l) > 0 {
+			f(l)
+		}
+		long = long[:0]
+		if err != nil {
+			return
+		}
+	}
+}
+
 // gzRoutes calls f with each route of a day's .gz in turn, a last route
 // whole but for its newline among them and one cut short left out. It says
 // whether the .gz read to its end, its last route ending in a newline: what
 // a gzip member added after it needs to be read.
-func gzRoutes(gz []byte, f func([]byte)) bool {
-	z, err := gzip.NewReader(bytes.NewReader(gz))
+func gzRoutes(gz io.Reader, f func([]byte)) bool {
+	z, err := gzip.NewReader(gz)
 	if err != nil {
 		return false
 	}
@@ -715,8 +846,12 @@ func foldTally(tallies map[string]*Tally, line []byte) {
 func HistoryRoute(id int64, day time.Time) (Route, bool) {
 	needle := []byte(`"id":` + strconv.FormatInt(id, 10) + `,`)
 	for _, offset := range []int{0, -1, 1} {
-		name := filepath.Join(HistoryDir(), day.AddDate(0, 0, offset).Format(dayForm)+".jsonl")
-		for _, path := range []string{name, name + ".gz"} {
+		want := day.AddDate(0, 0, offset).Format(dayForm)
+		for _, d := range historyFiles(HistoryDir()) { // its numbered files too
+			if d.day != want {
+				continue
+			}
+			path := d.path
 			var found Route
 			readDay(path, func(line []byte) bool {
 				if !bytes.Contains(line, needle) {
