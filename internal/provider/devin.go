@@ -818,6 +818,35 @@ func devinTierOf(id string) (tier, level string) {
 	return "", devinLevel(id)
 }
 
+// DevinModelEffort splits a Devin variant id into the model it runs and the
+// effort it runs at, the way its own logs name a call (generation_model):
+// swe-2-high is ("swe-2", "high"), claude-opus-5-5-high-fast
+// ("claude-opus-5-5-fast", "high"), and an id that names no effort
+// (glm-5-2-1m, swe-1-6-fast) is itself with none. No family list is needed:
+// the effort and tier words are Devin's own (devinLevels, devinTiers).
+func DevinModelEffort(id string) (model, effort string) {
+	tier, level := devinTierOf(id)
+	if level == "" {
+		return id, ""
+	}
+	rest, sep := id, ""
+	if tier != "" {
+		rest, sep = id[:len(id)-len(tier)-1], id[len(id)-len(tier)-1:len(id)-len(tier)]
+	}
+	low := strings.ToLower(rest)
+	for _, l := range devinLevels {
+		if l.level != level {
+			continue
+		}
+		for _, s := range []string{"-", "_"} {
+			if strings.HasSuffix(low, s+l.word) {
+				return rest[:len(rest)-len(l.word)-1] + sep + id[len(id)-len(tier):], level
+			}
+		}
+	}
+	return id, level
+}
+
 // devinEffortOf is the effort a Devin id runs at, in a tier or not.
 func devinEffortOf(id string) string {
 	_, l := devinTierOf(id)

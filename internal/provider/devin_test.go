@@ -331,3 +331,23 @@ func TestDevinStatusKeepsTheAccount(t *testing.T) {
 		t.Fatal("Devin's servers unreachable dropped the account")
 	}
 }
+
+// TestDevinModelEffort: a Devin CLI log names a call's model with its effort
+// (and tier) in it; usage counts the model and the effort apart.
+func TestDevinModelEffort(t *testing.T) {
+	for id, want := range map[string][2]string{
+		"swe-2-high":                {"swe-2", "high"},
+		"claude-haiku-5-5-low":      {"claude-haiku-5-5", "low"},
+		"claude-opus-5-5-high-fast": {"claude-opus-5-5-fast", "high"},
+		"gpt-6-sol-none":            {"gpt-6-sol", "none"},
+		"gpt-6-sol-xhigh-priority":  {"gpt-6-sol-priority", "xhigh"},
+		"MODEL_X_HIGH":              {"MODEL_X", "high"},
+		"model-minimal":             {"model", "minimal"},
+		"glm-5-2-1m":                {"glm-5-2-1m", ""},
+		"swe-1-6-fast":              {"swe-1-6-fast", ""},
+	} {
+		if m, e := DevinModelEffort(id); m != want[0] || e != want[1] {
+			t.Errorf("DevinModelEffort(%q) = %q, %q; want %q, %q", id, m, e, want[0], want[1])
+		}
+	}
+}

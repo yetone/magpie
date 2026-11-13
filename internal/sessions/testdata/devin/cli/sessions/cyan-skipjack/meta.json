@@ -1,0 +1,13 @@
+{
+  "v": 1,
+  "id": "cyan-skipjack",
+  "working_directory": "/work/proj",
+  "backend_type": "windsurf",
+  "model": "claude-haiku-5-5-low",
+  "agent_mode": "normal",
+  "created_at": 1794543179,
+  "last_activity_at": 1794543181,
+  "title": "Read note.txt and tell me its first word",
+  "hidden": false,
+  "main_chain_id": 26
+}

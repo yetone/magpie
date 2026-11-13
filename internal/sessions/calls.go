@@ -347,6 +347,7 @@ func callSourcesInto(out []file, codex []file) []file {
 		minimaxCallFiles(), kimiCallFiles(), wslFiles("kimi"), piCallFiles(), codebuddyCallFiles(), workbuddyAIFiles(),
 		agyCallFiles(),                        // #2097
 		antigravityCallFiles(),                // #2190
+		devinCallFiles(),                      // aohan0905 on X
 		workbuddyCallFiles(), grokCallFiles()) // #4423
 	if out == nil {
 		return allowed(distinctOf(lists...))

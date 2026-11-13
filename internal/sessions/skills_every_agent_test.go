@@ -50,6 +50,7 @@ var skillsCounted = map[string]struct {
 	"agy":          {none: "skill_lookup's keys are not known from a real session"},
 	"antigravity":  {none: "its steps' payloads are encrypted at rest; only the usage in steps.metadata is read"},
 	"minimax-code": {none: "calls only: no Sessions summaries"},
+	"devin":        {none: "calls only (Usage): no Sessions summaries"},
 	"gemini":       {none: "calls only: no Sessions summaries"},
 }
 
