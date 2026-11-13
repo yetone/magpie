@@ -72,8 +72,35 @@ window.tlsCertRows = function ({ p, pr, draft, at, certTakes, onHTTPS, addressOf
     rows.push(crow);
     show(() => { for (const e of crow) e.style.display = onHTTPS() ? "" : "none"; });
   }
+  // connect addresses (quantum_lsfc on X), for a provider of the user's own
+  if (p ? !!p.takesResolve : !pr) rows.push(resolveRow(draft));
   at.replaceWith(...rows.flat());
 };
+
+// resolveText and resolveOf turn a provider's connect addresses into the
+// lines the box shows and back: host = place, place. A line without a
+// place keeps its host with none, so Save says what it lacks.
+const resolveText = (m) => Object.entries(m || {}).map(([h, ps]) => `${h} = ${ps.join(", ")}`).join("\n");
+const resolveOf = (text) => {
+  const out = {};
+  for (const line of text.split("\n")) {
+    if (!line.trim()) continue;
+    const i = line.indexOf("=");
+    const host = (i < 0 ? line : line.slice(0, i)).trim();
+    out[host] = i < 0 ? [] : line.slice(i + 1).split(/[,\s]+/).filter(Boolean);
+  }
+  return out;
+};
+function resolveRow(draft) {
+  const box = el("textarea", "words resolve-rules");
+  box.rows = 2;
+  box.spellcheck = false;
+  box.value = resolveText(draft.resolve);
+  box.placeholder = "api.example.com = dns:gateway.corp, 10.0.0.1";
+  box.onkeydown = (e) => e.stopPropagation();
+  box.oninput = () => { draft.resolve = resolveOf(box.value); };
+  return field(t("Connect to"), box, t("Where a host's connection goes, as curl --resolve: the name in the URL stays for TLS and Host. Tried in order; if none connects, it connects as usual. Not used through a proxy."));
+}
 
 function pinRow({ p, pr, draft, certTakes, addressOf, asTyped, show, save }) {
   const host = (u) => { try { return new URL(String(u).trim()).hostname.toLowerCase(); } catch { return ""; } };
