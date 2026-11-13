@@ -310,7 +310,10 @@ body.side-nav #view-groups:not(.rt-gfrom) .rt-gback { display: none; }
    few accounts'. Only where the requests' column still keeps each request
    on one line (wider than 760px, see below): narrower, one column of
    one-line requests reads better than two with each request on three
-   (#860, huoranxuanyuan). Where the page is 1150px wide or more. Kept to
+   (#860, huoranxuanyuan). Where the page is 1150px wide or more and the
+   requests, tried beside, keep their numbers on one line (sideFit in
+   client.js: normalcoder_ on X saw a wider window put each request on two
+   lines where a narrower one kept it on one). Kept to
    28%, no more than 360px: in a page kept to 1200px the accounts had room
    to spare while the requests' models were cut (#1926, hibaliqya-yonma) */
 :where(.rt-more.min1150) .rt-cols { grid-template-columns: minmax(0, 1fr) clamp(260px, 28%, 360px); }
