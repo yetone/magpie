@@ -362,16 +362,19 @@ func vertexGeneration(model string) int {
 
 // vertexModels are the models a location serves, as each answered
 // on 2026-10-06: every one at global (and Gemini 4 Argon, there since
-// 2026-10-13, #2155, and the partner models Google serves at global
-// alone, VertexPartner); Gemini 3's Flash models at us and
-// eu, which serve no Pro, preview or 2.5; Gemini 2.5 at a region, where a
-// few add one more (asia-northeast1's gemini-3.5-flash), typed in by hand.
+// 2026-10-13, #2155, Carbon since 11-10 and Hydrogen since 11-12, #6452,
+// and the partner models Google serves at global alone, VertexPartner);
+// Gemini 3's Flash models at us and eu, which serve no Pro, preview or
+// 2.5, and Gemini 4, which Google's model pages give PayGo at global, us
+// and eu; Gemini 2.5 at a region, where a few add one more
+// (asia-northeast1's gemini-3.5-flash), typed in by hand.
 func vertexModels(loc string) []string {
 	switch cmp.Or(loc, "global") {
 	case "global":
 		return Preset(VertexPreset).Models
 	case "us", "eu":
-		return []string{"gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"}
+		return []string{"gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite",
+			"gemini-4-carbon", "gemini-4-hydrogen", "gemini-4-argon", "gemini-3.1-flash-lite"}
 	}
 	return []string{"gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"}
 }

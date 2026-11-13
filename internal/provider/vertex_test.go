@@ -526,12 +526,21 @@ func TestVertexProviderListed(t *testing.T) {
 		case "global":
 			wrong = func(m string) bool { return !slices.Contains(global, m) }
 		case "us", "eu":
-			// Gemini 3's Flash models, of those global serves
+			// Gemini 3's Flash models and Gemini 4, of those global serves
 			wrong = func(m string) bool {
-				return !strings.HasPrefix(m, "gemini-3") || !strings.Contains(m, "-flash") || strings.Contains(m, "preview") || !slices.Contains(global, m)
+				gen4 := strings.HasPrefix(m, "gemini-4-")
+				return !gen4 && (!strings.HasPrefix(m, "gemini-3") || !strings.Contains(m, "-flash") || strings.Contains(m, "preview")) || !slices.Contains(global, m)
 			}
 		default:
 			wrong = func(m string) bool { return !strings.HasPrefix(m, "gemini-2.5-") }
+		}
+		if loc == "global" || loc == "us" || loc == "eu" {
+			// Gemini 4 is served at each of the three (#6452)
+			for _, m := range []string{"gemini-4-carbon", "gemini-4-hydrogen", "gemini-4-argon"} {
+				if !slices.Contains(got, m) {
+					t.Errorf("at %s: no %s in %v", loc, m, got)
+				}
+			}
 		}
 		if len(got) == 0 || slices.ContainsFunc(got, wrong) || loc == "global" && len(got) != len(global) {
 			t.Errorf("at %s: %v", loc, got)
@@ -1408,6 +1417,8 @@ func TestVertexTestRequest(t *testing.T) {
 		"gemini-3.5-flash":       low,
 		"gemini-3.1-pro-preview": low,
 		"gemini-4-argon":         low,
+		"gemini-4-carbon":        low,
+		"gemini-4-hydrogen":      low,
 		"gemini-3-flash-preview": low,
 		"gemini-2.5-pro":         budget(128),
 		"Gemini-2.5-Pro":         budget(128),
