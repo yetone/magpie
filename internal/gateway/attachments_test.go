@@ -127,3 +127,30 @@ func TestHeldGeminiStreamSendsNoComment(t *testing.T) {
 		}
 	}
 }
+
+// ZCode with a local WebM attached sends a Messages video block or, on
+// Chat, a video_url data URL (Flandern1211's capture of ZCode 0.17.1,
+// #5098). Both reach a Gemini model through Code Assist as inlineData with
+// the bytes and type ZCode sent, now that magpie tells ZCode the model
+// takes video (zcodeInputs).
+func TestZCodeVideoReachesCodeAssist(t *testing.T) {
+	for _, tc := range []struct{ name, body string }{
+		{"messages", `{"model":"m","max_tokens":10,"messages":[{"role":"user","content":[{"type":"text","text":"what happens?"},{"type":"video","source":{"type":"base64","media_type":"video/webm","data":"GkXfo59ChoEB"}}]}]}`},
+		{"chat", `{"model":"m","messages":[{"role":"user","content":[{"type":"text","text":"what happens?"},{"type":"video_url","video_url":{"url":"data:video/webm;base64,GkXfo59ChoEB"}}]}]}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			parse := parseAnthropic
+			if tc.name == "chat" {
+				parse = parseChat
+			}
+			r, err := parse([]byte(tc.body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			b := string(buildCodeAssist(r, "gemini-4-argon", "antigravity"))
+			if !strings.Contains(b, `"mimeType":"video/webm"`) || !strings.Contains(b, `"data":"GkXfo59ChoEB"`) {
+				t.Fatalf("the video didn't reach Code Assist: %s", b)
+			}
+		})
+	}
+}

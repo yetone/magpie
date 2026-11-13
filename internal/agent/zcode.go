@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
 )
@@ -132,15 +133,13 @@ func zcode(home string) *Agent {
 func zcodeProviderJSON(path string, keep bool) any {
 	was, own := zcodeDefaultLevels(path), zcodeLevelOptions(path)
 	ms := map[string]any{}
+	format := zcodeFormat(filepath.Dir(path))
 	for _, m := range sharedModels("zcode") {
 		window := m.Context
 		if window == 0 {
 			window = unknownWindow(200000)
 		}
-		in := []string{"text"}
-		if m.Images {
-			in = append(in, "image")
-		}
+		in := zcodeInputs(m, format)
 		limit := map[string]any{"context": window}
 		// without it ZCode caps every reply at 32000 tokens
 		if out := outputOr(m, zcodeOutput(maxTokens(m))); out > 0 {
@@ -164,8 +163,27 @@ func zcodeProviderJSON(path string, keep bool) any {
 	if keep {
 		base, token = zcodeKept(filepath.Dir(path))
 	}
-	return map[string]any{"name": "magpie", "kind": zcodeKinds[zcodeFormat(filepath.Dir(path))], "enabled": on, "source": "custom",
+	return map[string]any{"name": "magpie", "kind": zcodeKinds[format], "enabled": on, "source": "custom",
 		"options": map[string]any{"apiKey": token, "baseURL": base}, "models": ms}
+}
+
+// zcodeInputs are the kinds ZCode is told model m takes on format: text,
+// an image when it takes one, and a video when its source lists one and
+// format is Messages or Chat. ZCode attaches a video only to a model whose
+// rule says supportsVideo (its own built-in rules say it per model), and
+// sends it as a Messages video block or a Chat video_url, both of which the
+// gateway carries on (video_input.go); on Responses ZCode refuses a video
+// before asking. A PDF is not offered: a translated request still loses one
+// (#5452). Flandern1211 on X, #5098.
+func zcodeInputs(m catalog.Model, format string) []string {
+	in := []string{"text"}
+	if m.Images {
+		in = append(in, "image")
+	}
+	if (format == "anthropic-messages" || format == "openai-chat-completions") && slices.Contains(m.InputModalities, "video") {
+		in = append(in, "video")
+	}
+	return in
 }
 
 // zcodeOutputsKept keeps a limit.output the user typed into one of
@@ -662,7 +680,11 @@ func zcodeRules(path string, on, keep bool) error {
 				delete(searched, m.ID)
 				continue
 			}
-			props := map[string]any{"inputFormat": map[string]any{"supportsImage": m.Images}}
+			inputFormat := map[string]any{"supportsImage": m.Images}
+			if slices.Contains(zcodeInputs(m, format), "video") {
+				inputFormat["supportsVideo"] = true
+			}
+			props := map[string]any{"inputFormat": inputFormat}
 			if m.Context > 0 {
 				props["contextWindow"] = m.Context
 			}
