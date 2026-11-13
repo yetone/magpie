@@ -1308,6 +1308,12 @@ each one.
   - A record that points elsewhere: 2f34649a6's body is "Run: see push
     notes", and 8f82e08b4's "(see below)" has nothing below it; neither
     says whether what it ran passed. A pointer is not a record (10-14).
+  - The eager-regexp guard, red twice more: 1ca2c62c4 (catalog, fixed
+    in 19fd0dfb8) and d52e2feaf (agent, whose record is one -run in
+    ./internal/agent; fixed in 6a506e283). TestNoEagerPackageRegexps
+    lives in the root package, so a run of the changed package never
+    reaches it. A new package-level regexp is lazyre.New, and `go test
+    .` runs beside the package's own.
 - **Done right on 10-17.** The retire stack (0f1666b38 to de671719a)
   diffed staticcheck's U1000 against its base for dead code, b98f906b1
   was red on the old code for an own-account gap, and 8 subscriptions
