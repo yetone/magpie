@@ -742,3 +742,36 @@ func TestRTKNoHookGrokBuild(t *testing.T) {
 		t.Fatalf("magpie library rtk on grok: %v", err)
 	}
 }
+
+// TestRTKGainRealDaily reads what rtk 1.0.1 itself printed for rtk gain
+// --daily --format json (testdata/rtk-gain-daily.json, made by real rtk from
+// its own history.db): every day comes through, oldest first, and the days
+// add up to the summary, so the Library chart's bars and its range total are
+// rtk's own numbers (jasonchia58 on X read the chart's scale as the total).
+func TestRTKGainRealDaily(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "rtk-gain-daily.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, days, why := parseGain(string(raw))
+	if g == nil || why != "" {
+		t.Fatalf("gain %+v, %q", g, why)
+	}
+	if g.Commands != 632 || g.Input != 3160000 || g.Saved != 865000 {
+		t.Fatalf("summary %+v", g)
+	}
+	if len(days) != 6 || days[0].Date != "2026-10-23" || days[5].Date != "2026-11-12" {
+		t.Fatalf("days %+v", days)
+	}
+	var c int
+	var in, saved int64
+	for _, d := range days {
+		c, in, saved = c+d.Commands, in+d.Input, saved+d.Saved
+	}
+	if c != g.Commands || in != g.Input || saved != g.Saved {
+		t.Fatalf("days add up to %d commands, %d in, %d saved; summary %+v", c, in, saved, g)
+	}
+	if days[1].Input != 1205000 || days[1].Saved != 361500 {
+		t.Fatalf("the day with most input: %+v", days[1])
+	}
+}

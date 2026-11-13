@@ -2135,7 +2135,11 @@ magpie.plugin("library", (ctx) => {
       try { localStorage.setItem("magpie.rtkRange", String(r)); } catch {}
       chart.replaceWith(rtkChart(days));
     });
-    head.append(el("span", "label", t(step === 7 ? "Saved by week" : "Saved by day")), seg, el("span", "grow"), el("span", "peak", tokens(peak)));
+    // the bars' scale, the busiest day (week) in the range, said as that:
+    // a bare number there read as RTK's total, one that stopped growing
+    // once no day passed the old busiest (jasonchia58 on X); the Usage page's is #6517
+    head.append(el("span", "label", t(step === 7 ? "Saved by week" : "Saved by day")), seg, el("span", "grow"));
+    if (sum.input) head.append(el("span", "peak", t(step === 7 ? "peak week {n}" : "peak day {n}", { n: tokens(peak) })));
     const bars = el("div", "bars"), labels = el("div", "labels");
     const k = buckets.length;
     const every = k <= 8 ? 1 : k <= 31 ? Math.ceil(k / 6) : Math.ceil(k / 5);

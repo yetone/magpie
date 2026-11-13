@@ -1,0 +1,74 @@
+{
+  "summary": {
+    "total_commands": 632,
+    "total_input": 3160000,
+    "total_output": 2295000,
+    "total_saved": 865000,
+    "avg_savings_pct": 27.37341772151899,
+    "total_time_ms": 6320,
+    "avg_time_ms": 10,
+    "oversized_excluded": 0
+  },
+  "daily": [
+    {
+      "date": "2026-10-23",
+      "commands": 79,
+      "input_tokens": 395000,
+      "output_tokens": 276500,
+      "saved_tokens": 118500,
+      "savings_pct": 30.0,
+      "total_time_ms": 790,
+      "avg_time_ms": 10
+    },
+    {
+      "date": "2026-10-24",
+      "commands": 241,
+      "input_tokens": 1205000,
+      "output_tokens": 843500,
+      "saved_tokens": 361500,
+      "savings_pct": 30.0,
+      "total_time_ms": 2410,
+      "avg_time_ms": 10
+    },
+    {
+      "date": "2026-11-01",
+      "commands": 60,
+      "input_tokens": 300000,
+      "output_tokens": 210000,
+      "saved_tokens": 90000,
+      "savings_pct": 30.0,
+      "total_time_ms": 600,
+      "avg_time_ms": 10
+    },
+    {
+      "date": "2026-11-05",
+      "commands": 160,
+      "input_tokens": 800000,
+      "output_tokens": 600000,
+      "saved_tokens": 200000,
+      "savings_pct": 25.0,
+      "total_time_ms": 1600,
+      "avg_time_ms": 10
+    },
+    {
+      "date": "2026-11-10",
+      "commands": 80,
+      "input_tokens": 400000,
+      "output_tokens": 320000,
+      "saved_tokens": 80000,
+      "savings_pct": 20.0,
+      "total_time_ms": 800,
+      "avg_time_ms": 10
+    },
+    {
+      "date": "2026-11-12",
+      "commands": 12,
+      "input_tokens": 60000,
+      "output_tokens": 45000,
+      "saved_tokens": 15000,
+      "savings_pct": 25.0,
+      "total_time_ms": 120,
+      "avg_time_ms": 10
+    }
+  ]
+}
