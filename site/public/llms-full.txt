@@ -8790,6 +8790,8 @@ Command Code, Cursor, Devin, Factory, Grok, Kiro, Xiaomi MiMo, Qoder, WorkBuddy,
 
 An error after the move comes from the plugin, which does the sign-in, models and requests.
 
+[Mirrors in China: faster magpie plugin, Bun and update downloads](https://usemagpie.ai/docs/mirrors)
+
 ## FAQ
 
 ### Why does magpie answer 502 when the provider is up?
@@ -10226,6 +10228,78 @@ No, sign in to them on each computer. Their model picks and settings are synced 
 Export an encrypted backup with magpie backup and restore it there with magpie restore. --no-keys leaves the API keys out.
 
 Related: [Get started](https://usemagpie.ai/docs/start), [magpie in Docker](https://usemagpie.ai/docs/docker). Questions go to [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/mirrors
+
+# Mirrors in China: faster magpie plugin, Bun and update downloads
+
+From China, npm and GitHub are often slow or unreachable when installing plugins. magpie can have those downloads asked of a mirror in China first; the mirror's file is the very same, checked the same way.
+
+## The Plugins page's Mirrors in China
+
+1. **Open the Plugins page..**
+2. **Turn on Mirrors in China..** The page's downloads then ask a mirror in China first and the official address after.
+
+- **npm** (plugin packages, versions and search): `registry.npmmirror.com`.
+- **Bun**: npmmirror's binary mirror.
+- **The plugin list**: jsDelivr (`cdn.jsdelivr.net/gh/magpie-community/plugins`).
+
+What the mirror hasn't copied yet is asked of the official address. npm's weekly download counts stay npmjs's own. `bun add` is pointed at npmmirror too, unless `BUN_CONFIG_REGISTRY` or `NPM_CONFIG_REGISTRY` names a registry already. The switch never sends anything through a proxy such as gh-proxy.
+
+## Installs and updates through a mirror or proxy
+
+Both the installer and `magpie update` take `--proxy` (http, https, socks5, socks5h; or `MAGPIE_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`) and `--mirror`, a GitHub download mirror put before the release's github.com URL (or `MAGPIE_MIRROR`).
+
+```
+curl -fsSL https://usemagpie.ai/install.sh | sh -s -- --proxy http://127.0.0.1:7890
+magpie update --mirror https://mirror.example/
+magpie update mirror https://mirror.example/   # every update, the app's too
+magpie update mirror off
+```
+
+In the app, Settings' Download source row has Use a mirror… for a Mirror address, and Remove mirror to go back. No mirror is used unless you give one. On a network that lets GitHub through and not usemagpie.ai, nothing needs setting: the update comes from GitHub, its signature checked.
+
+## MAGPIE_MIRRORS: a mirror after a failure
+
+Another way is off by default. With `MAGPIE_MIRRORS=on`, the official source is tried first, and a mirror only after a network error, HTTP 429, HTTP 5xx or GitHub's rate-limit 403. The defaults are `registry.npmmirror.com` for npm and `gh-proxy.com` for GitHub; `MAGPIE_NPM_REGISTRY` and `MAGPIE_GITHUB_MIRROR` replace them:
+
+```
+MAGPIE_MIRRORS=on \
+MAGPIE_NPM_REGISTRY=https://registry.example.com \
+MAGPIE_GITHUB_MIRROR=https://gh.example magpie serve
+```
+
+The official source and the mirror share one request budget, so a hanging official source doesn't make the wait twice as long.
+
+## Is a mirror safe
+
+- magpie's own update files are checked against a SHA-256 from usemagpie.ai, never from the mirror; a file that doesn't match is not installed.
+- Bun's zip is checked against Bun's SHA-256s, and a plugin package against the integrity npm gave.
+- Requests that carry credentials (`Authorization`, a cookie, an API key, a token in the URL) never use a mirror; they go to the official source alone.
+- Skill tarballs always use the official source.
+- npm metadata, plugin READMEs and search results and version checks are not checksummed; a mirror can report a different version.
+
+## FAQ
+
+### Plugins install slowly in magpie. What helps?
+
+Turn on Mirrors in China on the Plugins page. The plugin list comes from jsDelivr, npm packages and Bun from npmmirror, and the official address after.
+
+### A magpie update fails to download. What do I do?
+
+Run magpie update --mirror , or magpie update mirror to keep it for every update; --proxy goes through a proxy. The checksum always comes from usemagpie.ai.
+
+### Can a mirror see my API keys?
+
+No. Requests carrying Authorization, a cookie, an API key or a URL token never use a mirror; they go to the official source alone.
+
+### How is MAGPIE_MIRRORS different from the Mirrors in China switch?
+
+The switch has the Plugins page ask a mirror in China first. MAGPIE_MIRRORS=on asks the official source first and a mirror only after a network error, 429, 5xx or GitHub's rate limit.
+
+Related: [Get started](https://usemagpie.ai/docs/start), [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting). Questions go to [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 

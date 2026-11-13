@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>magpie 国内镜像：插件、Bun 和更新下载加速（npmmirror、jsDelivr） · magpie</title>
+<meta name="description" content="国内网络下载 magpie 插件、Bun 或更新太慢、失败？打开插件页的国内镜像开关，插件列表、npm 包和 Bun 先走 npmmirror 和 jsDelivr；安装和更新可以加 --proxy 或 --mirror，下载的文件仍按官方校验和核对。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/mirrors">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/mirrors">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/mirrors">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/mirrors">
+<link rel="canonical" href="https://usemagpie.ai/docs/zh/mirrors">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="国内镜像：magpie 插件、Bun 和更新下载加速">
+<meta property="og:description" content="国内网络下载 magpie 插件、Bun 或更新太慢、失败？打开插件页的国内镜像开关，插件列表、npm 包和 Bun 先走 npmmirror 和 jsDelivr；安装和更新可以加 --proxy 或 --mirror，下载的文件仍按官方校验和核对。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/zh/mirrors">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "国内镜像：magpie 插件、Bun 和更新下载加速",
+   "description": "国内网络下载 magpie 插件、Bun 或更新太慢、失败？打开插件页的国内镜像开关，插件列表、npm 包和 Bun 先走 npmmirror 和 jsDelivr；安装和更新可以加 --proxy 或 --mirror，下载的文件仍按官方校验和核对。",
+   "inLanguage": "zh-CN",
+   "url": "https://usemagpie.ai/docs/zh/mirrors",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "magpie 装插件很慢怎么办？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "在插件页打开国内镜像开关。插件列表走 jsDelivr，npm 包和 Bun 走 npmmirror，失败再用官方地址。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "magpie 更新下载失败怎么办？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "运行 magpie update --mirror <镜像前缀>，或者 magpie update mirror <镜像前缀> 让以后每次更新都走它；也可以加 --proxy 走代理。校验和始终来自 usemagpie.ai。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "用镜像会泄露我的 API Key 吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "不会。带 Authorization、Cookie、API Key 或 URL 令牌的请求从不走镜像，只发给官方源。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "MAGPIE_MIRRORS 和国内镜像开关有什么不同？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "国内镜像开关让插件页的下载先走国内镜像。MAGPIE_MIRRORS=on 是先请求官方源，遇到网络错误、429、5xx 或 GitHub 限流才用镜像。"
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/zh/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "文档",
+     "item": "https://usemagpie.ai/docs/zh/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "国内镜像：magpie 插件、Bun 和更新下载加速",
+     "item": "https://usemagpie.ai/docs/zh/mirrors"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/zh/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>文档</small></a>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/start">快速上手</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a class="toc-only" href="/docs/zh/remote">远程 magpie</a>
+    <a class="toc-only" href="/docs/zh/docker">Docker</a>
+    <a class="toc-only" href="/docs/zh/privacy">隐私</a>
+    <a class="toc-only" href="/docs/zh/masking">本地脱敏</a>
+    <a class="toc-only" href="/docs/zh/mcp-router">MCP 路由</a>
+    <a class="toc-only" href="/docs/zh/library">资源库</a>
+    <a class="toc-only" href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a class="toc-only" href="/docs/zh/local-models">本地模型</a>
+    <a class="toc-only" href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="语言" title="语言" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/mirrors" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/mirrors" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/mirrors" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">下载</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>Mirrors</p>
+    <a href="#overview">是什么</a>
+    <a href="#plugins">插件页的国内镜像开关</a>
+    <a href="#update">安装和更新走镜像或代理</a>
+    <a href="#fallback">MAGPIE_MIRRORS：失败后再用镜像</a>
+    <a href="#safe">镜像安全吗</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">文档 · 指南</p>
+    <h1>国内镜像：magpie 插件、Bun 和更新下载加速</h1>
+    <p class="lede">在国内装插件时，npm 和 GitHub 常常很慢，甚至连不上。magpie 可以让这些下载先走国内镜像，镜像上的文件和官方的是同一个，校验方式也一样。</p>
+    <h2 id="plugins"><a class="anchor" href="#plugins">插件页的国内镜像开关</a></h2>
+    <ol class="steps">
+      <li><b>打开 <span class="ui">插件</span> 页。</b></li>
+      <li><b>打开 <span class="ui">国内镜像</span> 开关。</b>之后插件页的下载先问国内镜像，失败再用官方地址。</li>
+    </ol>
+    <ul><li><strong>npm 包</strong>（插件包、版本和搜索）：<code>registry.npmmirror.com</code>。</li><li><strong>Bun</strong>：npmmirror 的二进制镜像。</li><li><strong>插件列表</strong>：jsDelivr（<code>cdn.jsdelivr.net/gh/magpie-community/plugins</code>）。</li></ul>
+    <p>镜像还没同步到的文件，会去官方地址下载。npm 的每周下载量仍然显示 npmjs 自己的数字。<code>bun add</code> 也会指向 npmmirror，除非 <code>BUN_CONFIG_REGISTRY</code> 或 <code>NPM_CONFIG_REGISTRY</code> 已经指定了别的源。这个开关不会把任何请求转给 gh-proxy 这类代理。</p>
+    <h2 id="update"><a class="anchor" href="#update">安装和更新走镜像或代理</a></h2>
+    <p>安装脚本和 <code>magpie update</code> 都接受 <code>--proxy</code>（http、https、socks5、socks5h，也可以用 <code>MAGPIE_PROXY</code>、<code>HTTPS_PROXY</code>、<code>ALL_PROXY</code>）和 <code>--mirror</code>：一个放在 GitHub 下载地址前面的镜像前缀（也可以用 <code>MAGPIE_MIRROR</code>）。</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="mi-update">复制</button><pre id="mi-update">curl -fsSL https://usemagpie.ai/install.sh | sh -s -- --proxy http://127.0.0.1:7890
+magpie update --mirror https://mirror.example/
+magpie update mirror https://mirror.example/   # every update, the app's too
+magpie update mirror off</pre></div>
+    <p>在桌面应用里，设置的 <span class="ui">下载源</span> 一栏点 <span class="ui">使用镜像…</span>，填 <span class="ui">镜像地址</span>；点 <span class="ui">不用镜像</span> 就改回去。不填就不用任何镜像。如果网络能连 GitHub、连不上 usemagpie.ai，不用设置，更新会自动改从 GitHub 下载并验证签名。</p>
+    <h2 id="fallback"><a class="anchor" href="#fallback">MAGPIE_MIRRORS：失败后再用镜像</a></h2>
+    <p>另一种方式默认关闭。设置 <code>MAGPIE_MIRRORS=on</code> 后，magpie 先请求官方源，只有遇到网络错误、HTTP 429、HTTP 5xx 或 GitHub 的限流 403 才改用镜像。默认镜像是 npm 的 <code>registry.npmmirror.com</code> 和 GitHub 的 <code>gh-proxy.com</code>，可以用 <code>MAGPIE_NPM_REGISTRY</code> 和 <code>MAGPIE_GITHUB_MIRROR</code> 换成你自己的：</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="mi-env">复制</button><pre id="mi-env">MAGPIE_MIRRORS=on \
+MAGPIE_NPM_REGISTRY=https://registry.example.com \
+MAGPIE_GITHUB_MIRROR=https://gh.example magpie serve</pre></div>
+    <p>官方源和镜像共用一个请求时限，官方源卡住时，总等待时间不会翻倍。</p>
+    <h2 id="safe"><a class="anchor" href="#safe">镜像安全吗</a></h2>
+    <ul><li>magpie 的更新文件，校验和始终来自 usemagpie.ai，不来自镜像；不符的文件不会安装。</li><li>Bun 的 zip 按 Bun 官方的 SHA-256 核对；插件包按 npm 给出的 integrity 核对。</li><li>带凭据的请求（<code>Authorization</code>、Cookie、API Key、URL 里的令牌）从不走镜像，只发给官方源。</li><li>技能的压缩包始终从官方源下载。</li><li>npm 的元数据、插件的 README 和搜索结果、版本检查没有校验和，镜像报的版本可能和官方不同。</li></ul>
+
+    <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
+    <h3>magpie 装插件很慢怎么办？</h3>
+    <p>在插件页打开国内镜像开关。插件列表走 jsDelivr，npm 包和 Bun 走 npmmirror，失败再用官方地址。</p>
+    <h3>magpie 更新下载失败怎么办？</h3>
+    <p>运行 magpie update --mirror <镜像前缀>，或者 magpie update mirror <镜像前缀> 让以后每次更新都走它；也可以加 --proxy 走代理。校验和始终来自 usemagpie.ai。</p>
+    <h3>用镜像会泄露我的 API Key 吗？</h3>
+    <p>不会。带 Authorization、Cookie、API Key 或 URL 令牌的请求从不走镜像，只发给官方源。</p>
+    <h3>MAGPIE_MIRRORS 和国内镜像开关有什么不同？</h3>
+    <p>国内镜像开关让插件页的下载先走国内镜像。MAGPIE_MIRRORS=on 是先请求官方源，遇到网络错误、429、5xx 或 GitHub 限流才用镜像。</p>
+
+    <p style="margin-top:48px">相关页面：<a href="/docs/zh/start">快速上手</a>、<a href="/docs/zh/troubleshooting">常见错误排查：401、429、502、504 等</a>。遇到问题请到 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 提问。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a href="/docs/zh/remote">远程 magpie</a>
+    <a href="/docs/zh/docker">Docker</a>
+    <a href="/docs/zh/privacy">隐私</a>
+    <a href="/docs/zh/masking">本地脱敏</a>
+    <a href="/docs/zh/mcp-router">MCP 路由</a>
+    <a href="/docs/zh/library">资源库</a>
+    <a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a href="/docs/zh/local-models">本地模型</a>
+    <a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/zh/contributors">贡献墙</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "已复制"; setTimeout(() => (b.textContent = "复制"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>
