@@ -1356,6 +1356,11 @@ each one.
     lives in the root package, so a run of the changed package never
     reaches it. A new package-level regexp is lazyre.New, and `go test
     .` runs beside the package's own.
+    A third on 11-13: d21cb563e (davsync's setupBody) ran
+    ./internal/gui and ./internal/davsync, and 48e394146 (#6534) fixed
+    it. Six times in this file now, so a line here is not reaching the
+    sessions that add a regexp. A guard that only the root package runs
+    belongs in a check every push runs, or beside each package's tests.
 - **Done right on 10-17.** The retire stack (0f1666b38 to de671719a)
   diffed staticcheck's U1000 against its base for dead code, b98f906b1
   was red on the old code for an own-account gap, and 8 subscriptions
