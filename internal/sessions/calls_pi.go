@@ -90,13 +90,14 @@ type piCallLine struct {
 	Model     string   `json:"model"`    // usage, model_usage; omp's model_change, as provider/model
 	Usage     *piUsage `json:"usage"`
 	Message   *struct {
-		Role       string   `json:"role"`
-		Provider   string   `json:"provider"`
-		Model      string   `json:"model"`
-		Usage      *piUsage `json:"usage"`
-		DurationMs float64  `json:"durationMs"` // Pi's
-		Duration   float64  `json:"duration"`   // omp's, in milliseconds
-		TTFT       float64  `json:"ttft"`       // omp's
+		Role       string        `json:"role"`
+		Provider   string        `json:"provider"`
+		Model      string        `json:"model"`
+		Usage      *piUsage      `json:"usage"`
+		DurationMs float64       `json:"durationMs"` // Pi's
+		Duration   float64       `json:"duration"`   // omp's, in milliseconds
+		TTFT       float64       `json:"ttft"`       // omp's
+		Details    *piSubResults `json:"details"`    // toolResult
 	} `json:"message"`
 }
 
@@ -173,6 +174,10 @@ func piCall(st *callFile, agent string, l piCallLine, provider, model string) (C
 			return Call{}, false
 		}
 		u = m.Usage
+		// a pi-subagents result's: its subagents' own files hold the calls
+		if m.Role != "assistant" && piSubagentsRead(agent, st.Session, m.Details) {
+			return Call{}, false
+		}
 		if m.Role == "assistant" {
 			provider, model = m.Provider, m.Model
 			millis = int64(math.Round(max(m.DurationMs, m.Duration)))

@@ -727,7 +727,7 @@ func codexBody(s *state, b []byte, main bool) {
 		codexState(s).context(session, "", "")
 		codexState(s).beginSnapshot(at, p.ID, p.cxHistorySnapshot)
 		if s.ID == "" {
-			codexState(s).forkedFrom(s.codexPath, p.ForkedFrom)
+			codexState(s).forkedFrom(s.parsePath, p.ForkedFrom)
 			s.ID = p.ID
 			if s.Provider = p.ModelProvider; s.Provider == "" {
 				s.Provider = "openai"

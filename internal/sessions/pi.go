@@ -3,10 +3,13 @@ package sessions
 import (
 	"bytes"
 	"encoding/json"
+	"io"
+	"io/fs"
 	"os"
 	pathpkg "path"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/tidwall/jsonc"
 
@@ -70,7 +73,8 @@ func expandHome(p string) string {
 func piFiles() []file { return piFilesIn(PiDir(), piSessionDir()) }
 
 // piFilesIn are the sessions in a Pi folder, and in the folder it was told
-// to keep them in ("" for none).
+// to keep them in ("" for none), with their subagents' (piNamed,
+// piSubagentFiles).
 func piFilesIn(dir, sessionDir string) []file {
 	if !Reads("pi") {
 		return nil
@@ -80,11 +84,24 @@ func piFilesIn(dir, sessionDir string) []file {
 		more, _ := filepath.Glob(filepath.Join(d, "*.jsonl"))
 		paths = append(paths, more...)
 	}
-	return piNamed("pi", paths)
+	out := piNamed("pi", paths)
+	if d := piSubagentSessionDir(dir); d != "" {
+		out = piSubagentFiles(out, d)
+	}
+	return out
 }
 
 // piNamed are the Pi session files among paths, <time>_<id>.jsonl, each
-// once, as agent's.
+// once, as agent's, with their subagents'. pi-subagents (npm pi-subagents
+// 0.88.1) runs a subagent as a Pi of its own, told to keep its session in
+// the folder named for its parent's file, beside it:
+// <time>_<id>/<run id>/run-<n>/session.jsonl (async-<id>/ and parallel
+// levels between for those runs), a header naming the parent
+// (parentSession) and then the entries as Pi writes them, its model's
+// calls on whichever provider the subagent was given; and a subagent's own
+// subagents deeper in the same way. They count in the session they ran
+// for, as omp's do (nzvzbmz78932 on X: a Pi subagent's DeepSeek calls on
+// Pi's own provider were on no page).
 func piNamed(agent string, paths []string) []file {
 	var out []file
 	seen := map[string]bool{}
@@ -93,17 +110,197 @@ func piNamed(agent string, paths []string) []file {
 			continue
 		}
 		seen[p] = true
-		name := strings.TrimSuffix(filepath.Base(p), ".jsonl")
-		_, id, ok := strings.Cut(name, "_")
-		if !ok || id == "" {
+		id := piFileID(p)
+		if id == "" {
 			continue
 		}
-		f := file{agent: agent, key: agent + ":" + id, path: p, main: true}
-		if stat(&f) {
-			out = append(out, f)
+		key := agent + ":" + id
+		f := file{agent: agent, key: key, path: p, main: true}
+		if !stat(&f) {
+			continue
+		}
+		out = append(out, f)
+		for _, q := range piSessionsUnder(strings.TrimSuffix(p, ".jsonl")) {
+			if seen[q] {
+				continue
+			}
+			seen[q] = true
+			sub := file{agent: agent, key: key, path: q}
+			if stat(&sub) {
+				out = append(out, sub)
+			}
 		}
 	}
 	return out
+}
+
+// piFileID is a Pi session file's id, from its name, <time>_<id>.jsonl; ""
+// for another file.
+func piFileID(p string) string {
+	name, ok := strings.CutSuffix(filepath.Base(p), ".jsonl")
+	if !ok {
+		return ""
+	}
+	_, id, _ := strings.Cut(name, "_")
+	return id
+}
+
+// piSessionsUnder are the session files at any depth under dir: Pi's own,
+// <time>_<id>.jsonl, and pi-subagents' session.jsonl. Its other files
+// there (status, events) are none.
+func piSessionsUnder(dir string) []string {
+	var out []string
+	filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		if d.Name() == "session.jsonl" || piFileID(p) != "" {
+			out = append(out, p)
+		}
+		return nil
+	})
+	return out
+}
+
+// piSubagentSessionDir is the folder pi-subagents was told to keep every
+// subagent's session in instead, its config's defaultSessionDir
+// (<agent folder>/extensions/subagent/config.json), "" for none.
+func piSubagentSessionDir(dir string) string {
+	b, err := os.ReadFile(filepath.Join(dir, "extensions", "subagent", "config.json"))
+	if err != nil {
+		return ""
+	}
+	var c struct {
+		DefaultSessionDir string `json:"defaultSessionDir"`
+	}
+	if json.Unmarshal(jsonc.ToJSON(b), &c) != nil || c.DefaultSessionDir == "" {
+		return ""
+	}
+	if d := expandHome(c.DefaultSessionDir); filepath.IsAbs(d) {
+		return filepath.Clean(d)
+	}
+	return ""
+}
+
+// piSubagentFiles adds the sessions under pi-subagents' defaultSessionDir
+// not among out yet (<run id>/run-<n>/session.jsonl there): each in the
+// session its header's parentSession names (that one's, for a subagent's
+// subagent), else a session of its own.
+func piSubagentFiles(out []file, dir string) []file {
+	seen := map[string]bool{}
+	for _, f := range out {
+		seen[f.path] = true
+	}
+	for _, p := range piSessionsUnder(dir) {
+		if seen[p] {
+			continue
+		}
+		f := file{agent: "pi", path: p}
+		if !stat(&f) {
+			continue
+		}
+		parent, id := piHeadOf(p)
+		for i := 0; i < 8 && parent != "" && piFileID(parent) == ""; i++ {
+			parent, _ = piHeadOf(parent)
+		}
+		switch {
+		case piFileID(parent) != "":
+			f.key = "pi:" + piFileID(parent)
+		case id != "":
+			f.key, f.main = "pi:"+id, true
+		default:
+			continue
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
+var piHeads sync.Map // path → [2]string{parentSession, id}
+
+// piHeadOf is a session file's parent (its header's parentSession) and id,
+// read once: Pi writes the header first and never again.
+func piHeadOf(p string) (parent, id string) {
+	if v, ok := piHeads.Load(p); ok {
+		h := v.([2]string)
+		return h[0], h[1]
+	}
+	fh, err := os.Open(p)
+	if err != nil {
+		return "", ""
+	}
+	defer fh.Close()
+	b := make([]byte, 16<<10)
+	n, _ := io.ReadFull(fh, b)
+	line, _, done := bytes.Cut(b[:n], []byte("\n"))
+	if !done && n == len(b) {
+		return "", ""
+	}
+	var l piLine
+	if json.Unmarshal(line, &l) != nil || l.Type != "session" {
+		return "", ""
+	}
+	piHeads.Store(p, [2]string{l.ParentSession, l.ID})
+	return l.ParentSession, l.ID
+}
+
+// piSubResults is a pi-subagents tool result's details: the session file
+// each subagent it ran wrote.
+type piSubResults struct {
+	Results []struct {
+		SessionFile string `json:"sessionFile"`
+	} `json:"results"`
+}
+
+// piLeadID is the id of the Pi session a file at p is read in: its own
+// for Pi's <time>_<id>.jsonl, else the one whose folder holds it (a
+// subagent's session.jsonl, nested as deep as pi-subagents nests runs), else
+// "" (a subagent's in defaultSessionDir).
+func piLeadID(p string) string {
+	if id := piFileID(p); id != "" {
+		return id
+	}
+	for i, d := 0, filepath.Dir(p); i < 8 && d != filepath.Dir(d); i, d = i+1, filepath.Dir(d) {
+		if id := piFileID(d + ".jsonl"); len(id) == 36 {
+			return id
+		}
+	}
+	return ""
+}
+
+// piSubagentsRead is whether a tool result's model work is pi-subagents'
+// subagents', each with a session file read on its own (piNamed,
+// piSubagentFiles) in the session keyed id: their calls are counted there,
+// on the model and provider each ran, and not again on the result. Pi
+// writes the result with their usage summed, and it was counted on the
+// lead's model: a lead on magpie's entry took a DeepSeek subagent's calls
+// for the gateway's, which left them out (nzvzbmz78932 on X).
+func piSubagentsRead(agent, id string, d *piSubResults) bool {
+	if agent == "omp" || d == nil || len(d.Results) == 0 {
+		return false
+	}
+	own, read := "", false
+	for _, r := range d.Results {
+		p := strings.ReplaceAll(r.SessionFile, `\`, "/")
+		if p == "" {
+			return false
+		}
+		// beside the lead's file, in the folder named for it
+		if id != "" && strings.Contains(p, "_"+id+"/") {
+			continue
+		}
+		// in pi-subagents' defaultSessionDir, which only Pi's own is read in
+		if !read && agent == "pi" {
+			if d := piSubagentSessionDir(PiDir()); d != "" {
+				own = strings.TrimSuffix(strings.ReplaceAll(d, `\`, "/"), "/") + "/"
+			}
+		}
+		read = true
+		if own == "" || !strings.HasPrefix(p, own) {
+			return false
+		}
+	}
+	return true
 }
 
 type piUsage struct {
@@ -140,6 +337,7 @@ type piLine struct {
 				Name string `json:"name"`
 			} `json:"calls"`
 		} `json:"nestedCalls"` // toolResult
+		Details *piSubResults `json:"details"` // toolResult
 	} `json:"message"`
 }
 
@@ -262,7 +460,7 @@ func piParse(s *state, b []byte, main bool) {
 				}
 			}
 			// a tool that did model work of its own, on the model in use
-			if !copied && m.Usage != nil && s.Model != "" {
+			if !copied && m.Usage != nil && s.Model != "" && !piSubagentsRead(s.Agent, piLeadID(s.parsePath), m.Details) {
 				s.use(dateOf(at), s.Model, m.Usage.tokens())
 			}
 		}

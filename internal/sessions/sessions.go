@@ -216,7 +216,7 @@ type state struct {
 	// the agent whose file it is, for its parseVersions
 	Agent     string            `json:"agent,omitempty"`
 	Codex     *codexUsageState  `json:"-"`
-	codexPath string            // the rollout read, for its fork's parent
+	parsePath string            // the file read: a Codex fork's parent, a Pi subagent's lead (piLeadID)
 	Claude    *claudeUsageState `json:"claude,omitempty"`
 	Head      digest            `json:"head,omitzero"`
 	// int32 beside CdRead: the head is headLen bytes at most, and the 8 bytes
@@ -1466,7 +1466,9 @@ const cacheVersion = 29
 // request still answering carried and has no reply id for yet.
 // agy 1: a step's tokens are counted under the model its conversation's
 // database names (agyStepModels), not "agy".
-var parseVersions = map[string]int{"codex": 3, "zcode": 1, "dsh": 3, "antigravity": 2, "agy": 1}
+// pi 1, raft 1, cindy 1: a pi-subagents tool result's model work is its
+// subagents', counted from their own files (piSubagentsRead).
+var parseVersions = map[string]int{"codex": 3, "zcode": 1, "dsh": 3, "antigravity": 2, "agy": 1, "pi": 1, "raft": 1, "cindy": 1}
 
 type cacheFile struct {
 	Version int    `json:"version"`
@@ -2361,8 +2363,8 @@ func parseRead(f file, old *state, calls *callsRide) *state {
 	s.CdRead = parser.claude
 	s.ContentHash = prefixHash(f.path, f.size)
 	var head func([]byte) bool
+	s.Agent, s.parsePath = f.agent, f.path
 	if f.agent == "codex" {
-		s.codexPath = f.path
 		head = func(b []byte) bool { return codexHead(s, b, f.main) }
 	}
 	line := func(b []byte, _, _ int64) bool {

@@ -90,7 +90,19 @@ header id of its own, and omp sends that id, not the main session's, in
 the gateway's `omp|<sub id>` is its own in the same places as Raft's `pi|`
 key, and is never a second session counted again (Jumy, Discord 10-30:
 `TestOmpSubagentsAreTheSessionsToTheGateway`,
-`TestOmpSubagentCountedOnceWithTheGateway`). A Claude Code session's
+`TestOmpSubagentCountedOnceWithTheGateway`). A Pi session stands for the
+subagents pi-subagents ran for it the same way: each runs as a Pi of its
+own, its file `<run id>/run-<n>/session.jsonl` (async and parallel runs a
+folder deeper) in the folder named for the lead's file, or under the
+`defaultSessionDir` of `extensions/subagent/config.json`, where its
+header's `parentSession` names the lead's file (`piFilesIn`,
+`piSubagentFiles` in [`pi.go`](../../internal/sessions/pi.go)). Its calls
+are the lead session's, on its own model and provider, and the lead's
+`subagent` tool result, which carries their usage summed, counts nothing
+once those files are read (`piSubagentsRead`). Before, a lead on magpie's
+entry left a DeepSeek subagent on no page: its files went unread and the
+sum went under the lead's model, the gateway's to count (nzvzbmz78932 on
+X, `TestPiSubagentCalls`). A Claude Code session's
 copies (`Copies`) are among its keys the same way. A ZCode session stands
 for its bare id too: a request names it by the id its database gives with
 a prefix stripped (`sess_…`, a subagent's `sess_subagent_agent_…`:
