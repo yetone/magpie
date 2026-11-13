@@ -1969,6 +1969,10 @@ const desktopIsolatedLine = (iso) => agSwitchLine("ag-isolated", !!iso.on, "Clau
   status(on ? t("Open Claude Magpie from Applications") : t("Claude Magpie removed"), "ok");
 });
 
+// isoLazy: Claude Magpie's Advanced fold (#6459), drawn by
+// claudemagpie.js, imported the first time it shows
+const isoLazy = (f, x, at = el("span")) => (at.hidden = 1, import("./claudemagpie.js").then(() => at.replaceWith(window[f](x)), () => {}), at);
+
 const desktopLongestLine = () => agSwitchLine("ag-longest", !!state.settings?.desktopLongest, t("Only each model's largest window"), t("A model of 1M or more is listed once, as its 1M entry. Quit and reopen Claude Desktop after a change."), async (on) => {
   prefs = await writingPrefs(api("settings/desktop-longest", { on }));
   state.settings = prefs;
@@ -2185,7 +2189,7 @@ function connectPanel(a, { fields, fieldBtn }) {
     kv(t("In {agent}", { agent: a.name }), ...p);
   } else if (AIR_KINDS.has(kindOf(a))) kv(t("In {agent}", { agent: a.name }), ...airSaid(a, line));
   // Claude Magpie.app (#5671), macOS only
-  if (a.id === "claude-desktop" && a.isolated) kv(t("Separate app"), desktopIsolatedLine(a.isolated));
+  if (a.id === "claude-desktop" && a.isolated) kv(t("Separate app"), desktopIsolatedLine(a.isolated), ...(a.isolated.on ? [isoLazy("desktopIsolatedMore", a.isolated)] : []));
   // Claude Code's tiers, each with the /model that picks it
   if (kindOf(a) === "claude") {
     const tiers = a.fields.filter((f) => TIERS.includes(f.label) && f.options.length);

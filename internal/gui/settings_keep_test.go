@@ -214,6 +214,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 	}
 	was.RedactModelOff, was.RedactModelAuto = true, true
 	was.DesktopSubagentEffort = "high"
+	was.DesktopIsolatedClaude = true
 	was.ReplyModel = settings.ReplyMember // memberModel, its mirror, is kept with it
 	was.CodexAsyncCompact, was.CodexAsyncCompactPercent = true, 70
 	was.ClaudeRunsMost = 3

@@ -75,12 +75,23 @@ func Here(home string) string {
 // claudeApp (else in /Applications or ~/Applications, where it may have
 // moved since) run on dir. A Desktop already running on dir is not started
 // a second time on it: two copies on one userData share no lock.
-func Script(claudeApp, exe, dir string) string {
+//
+// With claudeDir, the Claude Code Desktop's Code tab runs keeps its files
+// there (#6459): Desktop takes CLAUDE_CONFIG_DIR from its environment when
+// its own Settings set none (Desktop 4.23118 and 2.7032), and starts its
+// sessions with it. "" leaves it ~/.claude, or whatever the user's own
+// environment says.
+func Script(claudeApp, exe, dir, claudeDir string) string {
 	q := func(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
+	env := ""
+	if claudeDir != "" {
+		env = "export CLAUDE_CONFIG_DIR=" + q(claudeDir) + "\n"
+	}
 	return "#!/bin/sh\n" +
 		"# Claude Desktop on magpie, in a folder of its own; " + mark + ".\n" +
 		"# magpie's Claude Desktop settings take it away again.\n" +
 		"dir=" + q(dir) + "\n" +
+		env +
 		"exe=" + q(exe) + "\n" +
 		"if /usr/bin/pgrep -f -- \"--user-data-dir=$dir( |\\$)\" >/dev/null 2>&1; then exit 0; fi\n" +
 		"for app in " + q(claudeApp) + " /Applications/Claude.app \"$HOME/Applications/Claude.app\"; do\n" +
@@ -154,9 +165,10 @@ var register = func(p string) {
 var ErrTheirs = errors.New(Name + ".app is there already and isn't magpie's")
 
 // Add makes the app for home, starting the Desktop at claudeApp on dir,
-// and gives its path. One of magpie's there already is made again; one
-// that isn't magpie's stays, and Add fails (ErrTheirs).
-func Add(home, claudeApp, dir string) (string, error) {
+// its Code tab's Claude Code on claudeDir when one is given (Script), and
+// gives its path. One of magpie's there already is made again; one that
+// isn't magpie's stays, and Add fails (ErrTheirs).
+func Add(home, claudeApp, dir, claudeDir string) (string, error) {
 	p := Path(home)
 	if _, err := os.Lstat(p); err == nil && !Mine(p) {
 		return "", ErrTheirs
@@ -181,7 +193,7 @@ func Add(home, claudeApp, dir string) (string, error) {
 	if err := os.WriteFile(filepath.Join(tmp, "Contents", "Info.plist"), []byte(plist(claudeApp)), 0o644); err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(filepath.Join(tmp, "Contents", "MacOS", exeName), []byte(Script(claudeApp, exe, dir)), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, "Contents", "MacOS", exeName), []byte(Script(claudeApp, exe, dir, claudeDir)), 0o755); err != nil {
 		return "", err
 	}
 	// the icon: Claude's with magpie's badge, or none when Claude's can't

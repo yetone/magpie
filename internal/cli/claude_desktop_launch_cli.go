@@ -20,6 +20,9 @@ import (
 const claudeDesktopLauncherUsage = `magpie claude-desktop launcher [add|remove]
           Claude Magpie.app (macOS): Claude Desktop on magpie in a folder of
           its own, beside your own Claude Desktop signed in with Anthropic
+magpie claude-desktop launcher claude-dir [on|off]
+          its Code tab's Claude Code on a folder of its own
+          (CLAUDE_CONFIG_DIR=~/.claude-magpie-desktop), or on ~/.claude
 `
 
 // claudeDesktopLaunchCmd is `magpie claude-desktop launcher …`; ok false
@@ -42,10 +45,16 @@ var setDesktopIsolated = agent.SetDesktopIsolated
 // desktopIsolatedHere is agent.DesktopIsolatedHere; tests set it.
 var desktopIsolatedHere = agent.DesktopIsolatedHere
 
+// setDesktopIsolatedClaude is agent.SetDesktopIsolatedClaude; tests set it.
+var setDesktopIsolatedClaude = agent.SetDesktopIsolatedClaude
+
 func claudeDesktopLauncher(args []string) error {
 	what := "status"
 	if len(args) > 0 {
 		what = args[0]
+	}
+	if what == "claude-dir" {
+		return claudeDesktopClaudeDir(args[1:])
 	}
 	if len(args) > 1 {
 		return fmt.Errorf("magpie claude-desktop launcher takes one word, not %q", args[1])
@@ -82,5 +91,42 @@ func claudeDesktopLauncher(args []string) error {
 		return nil
 	}
 	fmt.Println("no Claude Magpie app: run `magpie claude-desktop launcher add`")
+	return nil
+}
+
+// claudeDesktopClaudeDir is `magpie claude-desktop launcher claude-dir
+// [on|off]` (#6459): the Code tab of Claude Magpie.app's Desktop on a
+// Claude Code folder of its own, or on ~/.claude; nothing says which.
+func claudeDesktopClaudeDir(args []string) error {
+	if len(args) > 1 {
+		return fmt.Errorf("magpie claude-desktop launcher claude-dir takes one word, not %q", args[1])
+	}
+	st, ok := desktopIsolatedHere()
+	if !ok {
+		return errors.New("Claude Desktop runs in a folder of its own on macOS only")
+	}
+	if len(args) == 0 {
+		if st.Claude {
+			fmt.Println(st.ClaudeDir)
+		} else {
+			fmt.Println("~/.claude: run `magpie claude-desktop launcher claude-dir on` for a folder of its own")
+		}
+		return nil
+	}
+	if args[0] != "on" && args[0] != "off" {
+		return fmt.Errorf("magpie claude-desktop launcher claude-dir: on, off or nothing, not %q", args[0])
+	}
+	home, _ := os.UserHomeDir()
+	if err := setDesktopIsolatedClaude(home, args[0] == "on"); err != nil {
+		return err
+	}
+	if args[0] == "on" {
+		fmt.Println("Claude Code in Claude Magpie:", st.ClaudeDir)
+	} else {
+		fmt.Println("Claude Code in Claude Magpie: ~/.claude")
+	}
+	if st.Launcher != "" {
+		fmt.Println("Quit Claude Magpie and open it again to use it.")
+	}
 	return nil
 }

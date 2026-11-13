@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/yetone/magpie/internal/desktopdir"
+	"github.com/yetone/magpie/internal/desktopiso"
+	"github.com/yetone/magpie/internal/edit"
 )
 
 // isolatedSandbox is desktopSandbox on a Mac, with the user's choice held
@@ -19,28 +21,47 @@ func isolatedSandbox(t *testing.T) (string, desktopPaths, desktopPaths, *bool) {
 	desktopdir.OS = "darwin"
 	t.Cleanup(func() { desktopdir.OS = old })
 	home, _ := desktopSandbox(t)
+	usual, iso, on, _ := isolatedFakes(t, home)
+	return home, usual, iso, on
+}
+
+// isolatedFakes holds the isolated Desktop's choices in the test, its
+// Claude Code folder's too, and stubs the app: made as magpie would make
+// it (desktopiso.Here finds it), with the Claude Code folder it was last
+// made with in *made. desktopdir.OS is darwin.
+func isolatedFakes(t *testing.T, home string) (desktopPaths, desktopPaths, *bool, *[]string) {
+	t.Helper()
 	usual := desktopUsualSets("darwin", home, os.Getenv)[0]
 	iso, ok := desktopIsolatedSet("darwin", home, os.Getenv)
 	if !ok {
 		t.Fatal("no isolated set on darwin")
 	}
-	on := false
+	on, claudeOn := false, false
+	var made []string
 	oldOn, oldSave, oldApp, oldAdd := desktopIsolatedOn, saveDesktopIsolated, desktopClaudeApp, desktopIsoAdd
+	oldCOn, oldCSave := desktopIsolatedClaudeOn, saveDesktopIsolatedClaude
 	desktopIsolatedOn = func() bool { return on }
 	saveDesktopIsolated = func(v bool) error { on = v; return nil }
+	desktopIsolatedClaudeOn = func() bool { return claudeOn }
+	saveDesktopIsolatedClaude = func(v bool) error { claudeOn = v; return nil }
 	claudeApp := filepath.Join(home, "Applications", "Claude.app")
 	desktopClaudeApp = func() string { return claudeApp }
-	desktopIsoAdd = func(home, app, dir string) (string, error) {
+	desktopIsoAdd = func(home, app, dir, claudeDir string) (string, error) {
 		if app != claudeApp || dir != iso.dir3p {
 			t.Errorf("app made for %q on %q", app, dir)
 		}
-		p := filepath.Join(home, "Applications", "Claude Magpie.app")
-		return p, os.MkdirAll(p, 0o755)
+		made = append(made, claudeDir)
+		p := desktopiso.Path(home)
+		if err := os.MkdirAll(filepath.Join(p, "Contents"), 0o755); err != nil {
+			return "", err
+		}
+		return p, os.WriteFile(filepath.Join(p, "Contents", "Info.plist"), []byte("<key>CFBundleIdentifier</key><string>"+desktopiso.BundleID+"</string>"), 0o644)
 	}
 	t.Cleanup(func() {
 		desktopIsolatedOn, saveDesktopIsolated, desktopClaudeApp, desktopIsoAdd = oldOn, oldSave, oldApp, oldAdd
+		desktopIsolatedClaudeOn, saveDesktopIsolatedClaude = oldCOn, oldCSave
 	})
-	return home, usual, iso, &on
+	return usual, iso, &on, &made
 }
 
 // The isolated Desktop (#5671): turned on with Desktop on magpie, the
@@ -201,5 +222,120 @@ func TestDesktopInstance(t *testing.T) {
 	}
 	if restartApps["claude-desktop"].macCmd == nil {
 		t.Error("Claude Desktop's Restart reads every Claude.app process")
+	}
+}
+
+// The isolated Desktop's Code tab on a Claude Code folder of its own
+// (#6459, xMopf7RF on X): Claude Magpie.app is made again with
+// CLAUDE_CONFIG_DIR on ~/.claude-magpie-desktop, the windows and
+// capabilities of Desktop's models leave ~/.claude/settings.json (the
+// user's own keys stay) and go to that folder's, which is a Claude Code
+// row of its own named for the app. Off takes them back, the app made
+// again without the folder; the folder stays. The isolated Desktop
+// turned off brings them back to ~/.claude too, its folder no longer
+// being what any Desktop runs on.
+func TestClaudeDesktopIsolatedClaudeDir(t *testing.T) {
+	home, path := desktopWindowSandbox(t)
+	old := desktopdir.OS
+	desktopdir.OS = "darwin"
+	t.Cleanup(func() { desktopdir.OS = old })
+	_, iso, _, made := isolatedFakes(t, home)
+	own := filepath.Join(home, ".claude-magpie-desktop", "settings.json")
+	get := func(f, k string) string { v, _ := edit.GetJSON(f, "env."+k); return v }
+	where := func(want string) {
+		t.Helper()
+		for _, f := range []string{path, own} {
+			w, c := get(f, claudeContextEnv), get(f, claudeCapsEnv)
+			if f == want && (w == "" || c == "") || f != want && (w != "" || c != "") {
+				t.Fatalf("%s: window %q, caps %q; want them in %s", f, w, c, want)
+			}
+		}
+		if v, _ := edit.GetJSON(path, "theme"); v != "dark" {
+			t.Fatalf("the user's own theme: %q", v)
+		}
+	}
+
+	if err := claudeDesktop(home).Field("provider").Set("magpie"); err != nil {
+		t.Fatal(err)
+	}
+	where(path)
+	window := get(path, claudeContextEnv)
+	if _, err := SetDesktopIsolated(home, true); err != nil {
+		t.Fatal(err)
+	}
+	if !desktopWired(iso) {
+		t.Fatal("isolated Desktop not on magpie")
+	}
+	// on ~/.claude still, as before
+	where(path)
+	if !reflect.DeepEqual(*made, []string{""}) {
+		t.Fatalf("app made with %q", *made)
+	}
+
+	if err := SetDesktopIsolatedClaude(home, true); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(*made, []string{"", filepath.Join(home, ".claude-magpie-desktop")}) {
+		t.Fatalf("app made with %q", *made)
+	}
+	where(own)
+	if got := get(own, claudeContextEnv); got != window {
+		t.Errorf("its window %q, ~/.claude's was %q", got, window)
+	}
+	st, ok := DesktopIsolatedHere()
+	if !ok || !st.Claude || st.ClaudeDir != filepath.Dir(own) {
+		t.Errorf("state %+v", st)
+	}
+	var row *Agent
+	for _, a := range claudeDirAgents(home) {
+		if a.Path == own {
+			row = a
+		}
+	}
+	if row == nil || row.Name != "Claude Code · Claude Magpie" {
+		t.Fatalf("its row: %+v", row)
+	}
+	// the round that syncs every agent keeps it so
+	if err := claude(home).Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if err := row.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	where(own)
+
+	if err := SetDesktopIsolatedClaude(home, false); err != nil {
+		t.Fatal(err)
+	}
+	where(path)
+	if (*made)[len(*made)-1] != "" {
+		t.Fatalf("app made with %q", *made)
+	}
+	if _, err := os.Stat(own); err != nil {
+		t.Fatal("its folder went:", err)
+	}
+
+	// on again, then the isolated Desktop off: ~/.claude again
+	if err := SetDesktopIsolatedClaude(home, true); err != nil {
+		t.Fatal(err)
+	}
+	where(own)
+	if _, err := SetDesktopIsolated(home, false); err != nil {
+		t.Fatal(err)
+	}
+	where(path)
+}
+
+// Off a Mac there is no such folder to give it.
+func TestClaudeDesktopIsolatedClaudeDirOnlyOnAMac(t *testing.T) {
+	old := desktopdir.OS
+	desktopdir.OS = "windows"
+	t.Cleanup(func() { desktopdir.OS = old })
+	home, _ := desktopSandbox(t)
+	if err := SetDesktopIsolatedClaude(home, true); !errors.Is(err, ErrDesktopIsolatedOS) {
+		t.Fatalf("err %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".claude-magpie-desktop")); err == nil {
+		t.Fatal("folder made off a Mac")
 	}
 }

@@ -1166,6 +1166,11 @@ func claudeIn(at place) *Agent {
 		if at.sys != nil {
 			return desktopWiredAny(desktopSetsHere())
 		}
+		// the isolated Desktop's Code tab on a folder of its own (#6459):
+		// that folder's Claude Code, and ~/.claude's no more
+		if d := desktopCodeDir(at.home); d != "" {
+			return at.dir != "" && filepath.Clean(at.dir) == filepath.Clean(d) && desktopWiredAny(desktopSets(desktopdir.OS, at.home, os.Getenv))
+		}
 		return at.id == "" && desktopWiredAny(desktopSets(desktopdir.OS, at.home, os.Getenv))
 	}
 	// Desktop's Explore compatibility flag has its own ownership: taking

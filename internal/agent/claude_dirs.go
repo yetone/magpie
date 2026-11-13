@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/desktopiso"
 	"github.com/yetone/magpie/internal/dirent"
 )
 
@@ -87,6 +88,10 @@ func claudeDirAgents(home string) []*Agent {
 		id := "claude#" + name
 		a := claudeIn(place{home: home, id: id, dir: dir})
 		a.ID, a.Name = id, "Claude Code · "+name
+		// the isolated Claude Desktop's Code tab's (#6459), by its app's name
+		if dir == desktopIsolatedClaudeDir(home) {
+			a.Name = "Claude Code · " + desktopiso.Name
+		}
 		// the claude row keeps the command, the names and the requests
 		a.Aliases, a.UA, a.Bin = nil, nil, ""
 		a.detect = func() bool { return claudeDirIsClaude(dir) }

@@ -301,6 +301,7 @@ var notYet = map[string]string{
 	"POST /api/settings/codex-warm-at":           S2, // api.go
 	"POST /api/settings/cors":                    S2, // api.go
 	"POST /api/settings/desktop-isolated":        A,  // api.go; `magpie claude-desktop launcher`, an agent's form this check can't read
+	"POST /api/settings/desktop-isolated-claude": A,  // api.go; `magpie claude-desktop launcher claude-dir`, an agent's form this check can't read
 	"POST /api/settings/desktop-longest":         S2, // api.go
 	"POST /api/settings/disabled-models":         S2, // api.go
 	"POST /api/settings/full-context":            S2, // api.go

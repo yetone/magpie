@@ -919,6 +919,13 @@ type Settings struct {
 	// --user-data-dir set to it, beside the user's own signed-in Desktop,
 	// which is left as it is. macOS only (desktopdir.Isolated).
 	DesktopIsolated bool `json:"desktopIsolated,omitempty"`
+	// DesktopIsolatedClaude gives that Desktop's Code tab a Claude Code
+	// config folder of its own (#6459, xMopf7RF on X): Claude Magpie.app
+	// starts Desktop with CLAUDE_CONFIG_DIR set to ~/.claude-magpie-desktop,
+	// and magpie writes the windows and capabilities of Desktop's models
+	// there instead of ~/.claude/settings.json. Off by default: the folder
+	// starts with none of ~/.claude's CLAUDE.md, skills, plugins or history.
+	DesktopIsolatedClaude bool `json:"desktopIsolatedClaude,omitempty"`
 	// GuideHidden: the user put away the Agents page's Get started card
 	// (wangye1644294 on X) before finishing it. Kept here, not in the
 	// page's storage, so the panel, the window and a reload agree.

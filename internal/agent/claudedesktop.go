@@ -427,7 +427,7 @@ func desktopApply(home string, ps []desktopPaths, v string) error {
 	}
 	// its Code tab is Claude Code, told what Desktop's ids for
 	// magpie's models can do while that one runs on magpie
-	_ = claude(home).Sync()
+	desktopClaudeSync(home)
 	// and a running distro's, which a Code tab session with
 	// WSL as its host runs on (a stopped one is written on
 	// the round after it starts)
@@ -471,7 +471,7 @@ func desktopTierFields(home string, ps []desktopPaths) []Field {
 					}
 				}
 				if desktopWiredAny(ps) {
-					_ = claude(home).Sync()
+					desktopClaudeSync(home)
 				}
 				return joinErrs(errs)
 			},

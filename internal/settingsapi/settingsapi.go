@@ -367,6 +367,8 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	in.DesktopLongest = cur.DesktopLongest
 	// and whether it runs in a folder of its own, set there too (#5671)
 	in.DesktopIsolated = cur.DesktopIsolated
+	// and whether its Code tab has a Claude Code folder of its own (#6459)
+	in.DesktopIsolatedClaude = cur.DesktopIsolatedClaude
 	// and the Get started card put away, from the card itself
 	in.GuideHidden = cur.GuideHidden
 

@@ -1433,6 +1433,21 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		writeJSON(rw, state())
 	})
+	// its Code tab's Claude Code on a folder of its own, or back on
+	// ~/.claude (#6459): the app made again with the folder or without
+	mux.HandleFunc("POST /api/settings/desktop-isolated-claude", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ On bool }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		home, _ := os.UserHomeDir()
+		if err := agent.SetDesktopIsolatedClaude(home, in.On); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, state())
+	})
 	// an agent's own telemetry off, or back (agent/telemetry.go)
 	mux.HandleFunc("POST /api/agents/telemetry/{id}", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct{ Off bool }

@@ -40,7 +40,8 @@ func fakeClaude(t *testing.T, root, out string) string {
 	if err := os.WriteFile(filepath.Join(app, "Contents", "Info.plist"), []byte(info), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	exe := "#!/bin/sh\nprintf '%s\\n' \"$@\" > '" + out + "'\n"
+	// and the CLAUDE_CONFIG_DIR it was given to out.env
+	exe := "#!/bin/sh\nprintf '%s\\n' \"$@\" > '" + out + "'\nprintf '%s' \"${CLAUDE_CONFIG_DIR-unset}\" > '" + out + ".env'\n"
 	if err := os.WriteFile(filepath.Join(app, "Contents", "MacOS", "Claude"), []byte(exe), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +85,7 @@ func TestAddStartsDesktopOnTheFolder(t *testing.T) {
 	claudeApp := fakeClaude(t, filepath.Join(home, "Applications"), out)
 	dir := filepath.Join(home, "Library", "Application Support", "Claude-Magpie-3p")
 
-	p, err := Add(home, claudeApp, dir)
+	p, err := Add(home, claudeApp, dir, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +127,7 @@ func TestAddStartsDesktopOnTheFolder(t *testing.T) {
 	}
 
 	// made again: still one app, magpie's
-	if _, err := Add(home, claudeApp, dir); err != nil {
+	if _, err := Add(home, claudeApp, dir, ""); err != nil {
 		t.Fatal(err)
 	}
 	ents, _ := os.ReadDir(filepath.Dir(p))
@@ -156,7 +157,7 @@ func TestScriptFindsClaudeMoved(t *testing.T) {
 	fakeClaude(t, filepath.Join(home, "Applications"), out)
 	dir := filepath.Join(home, "iso-3p")
 	s := filepath.Join(home, "run.sh")
-	os.WriteFile(s, []byte(Script(filepath.Join(home, "Gone", "Claude.app"), "Claude", dir)), 0o755)
+	os.WriteFile(s, []byte(Script(filepath.Join(home, "Gone", "Claude.app"), "Claude", dir, "")), 0o755)
 	if b, err := exec.Command(s).CombinedOutput(); err != nil {
 		t.Fatalf("%v: %s", err, b)
 	}
@@ -180,12 +181,50 @@ func TestScriptQuotes(t *testing.T) {
 	app := fakeClaude(t, home, out)
 	dir := filepath.Join(home, "it's $HOME `x`")
 	s := filepath.Join(home, "run.sh")
-	os.WriteFile(s, []byte(Script(app, "Claude", dir)), 0o755)
+	os.WriteFile(s, []byte(Script(app, "Claude", dir, "")), 0o755)
 	if b, err := exec.Command(s).CombinedOutput(); err != nil {
 		t.Fatalf("%v: %s", err, b)
 	}
 	if args, _ := os.ReadFile(out); string(args) != "--user-data-dir="+dir+"\n" {
 		t.Fatalf("args %q", args)
+	}
+}
+
+// With a Claude Code folder of its own (#6459), Desktop is started with
+// CLAUDE_CONFIG_DIR set to it, whatever the user's own environment says,
+// a name with quotes in it whole; without one, the environment's own (or
+// none) reaches it as it is.
+func TestScriptClaudeConfigDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script")
+	}
+	home := t.TempDir()
+	out := filepath.Join(home, "args")
+	app := fakeClaude(t, home, out)
+	dir := filepath.Join(home, "iso-3p")
+	cc := filepath.Join(home, ".claude-it's $HOME `x`")
+	for _, c := range []struct{ claudeDir, env, want string }{
+		{cc, "", cc},
+		{cc, "/elsewhere", cc},
+		{"", "", "unset"},
+		{"", "/theirs", "/theirs"},
+	} {
+		s := filepath.Join(home, "run.sh")
+		os.WriteFile(s, []byte(Script(app, "Claude", dir, c.claudeDir)), 0o755)
+		cmd := exec.Command(s)
+		cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=" + home}
+		if c.env != "" {
+			cmd.Env = append(cmd.Env, "CLAUDE_CONFIG_DIR="+c.env)
+		}
+		if b, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("%v: %s", err, b)
+		}
+		if got, _ := os.ReadFile(out + ".env"); string(got) != c.want {
+			t.Errorf("claudeDir %q, env %q: CLAUDE_CONFIG_DIR %q, want %q", c.claudeDir, c.env, got, c.want)
+		}
+		if args, _ := os.ReadFile(out); string(args) != "--user-data-dir="+dir+"\n" {
+			t.Fatalf("args %q", args)
+		}
 	}
 }
 
@@ -196,7 +235,7 @@ func TestAddLeavesTheirs(t *testing.T) {
 	theirs := Path(home)
 	os.MkdirAll(filepath.Join(theirs, "Contents"), 0o755)
 	os.WriteFile(filepath.Join(theirs, "Contents", "Info.plist"), []byte("<plist><dict><key>CFBundleIdentifier</key><string>me.mine</string></dict></plist>"), 0o644)
-	if _, err := Add(home, filepath.Join(home, "Claude.app"), "/x"); !errors.Is(err, ErrTheirs) {
+	if _, err := Add(home, filepath.Join(home, "Claude.app"), "/x", ""); !errors.Is(err, ErrTheirs) {
 		t.Fatalf("add over theirs: %v", err)
 	}
 	if got, err := Remove(home); got != "" || err != nil {
