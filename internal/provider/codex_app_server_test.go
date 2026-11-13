@@ -49,7 +49,7 @@ func stubCodexApp(t *testing.T) *codexAppStub {
 		codexApp.ended, codexApp.backBy, codexApp.spent, codexApp.why = nil, time.Time{}, false, ""
 		codexApp.back, codexApp.backAt = nil, time.Time{}
 		codexApp.crashSince, codexApp.crashBy, codexApp.snag, codexApp.snagPids = time.Time{}, time.Time{}, false, nil
-		codexApp.crashSpent = false
+		codexApp.crashSpent, codexApp.desk = false, time.Time{}
 		codexApp.Unlock()
 	}
 	oldCrashed, oldRelaunch, oldOff := CodexAppCrashed, CodexAppRelaunch, CodexTakeoverOff
@@ -1399,4 +1399,89 @@ func TestCodexRouteChangeMovesOpenChatsFirst(t *testing.T) {
 	if !slices.Equal(order, []string{"move", "end"}) {
 		t.Fatalf("order %v, want the chats moved before the app-server ends", order)
 	}
+}
+
+// not_4O4 on X: magpie's models never reached the Windows app's picker,
+// in a new window or a new project on D: either. The app-server reads
+// model_catalog_json only as it starts, and the app keeps one for all its
+// windows, running from login: an app-server that started before magpie
+// named its list (CodexAppDesk) is restarted for it, once for each naming,
+// as for a Connect, RestartApp off too. One that started after, or whose
+// start can't be read, is left; and so is the takeover's, where the list
+// is named again as the reset ends it (#4550).
+func TestCodexAppRestartedForTheListNamed(t *testing.T) {
+	signIn(t)
+	s := stubCodexApp(t)
+	codexRestartsApp = func() bool { return false }
+	oldDesk, oldStart := CodexAppDesk, codexServerStart
+	t.Cleanup(func() { CodexAppDesk, codexServerStart = oldDesk, oldStart })
+	var desk time.Time
+	CodexAppDesk = func() time.Time { return desk }
+	starts := map[int]time.Time{}
+	codexServerStart = func(pid int) (time.Time, error) {
+		if at, ok := starts[pid]; ok {
+			return at, nil
+		}
+		return time.Time{}, errors.New("unknown")
+	}
+	now := time.Now()
+	idle := func() (int, time.Time) { return 0, now.Add(-time.Minute) }
+	step := func() []int { return codexAppStep(context.Background(), now, idle) }
+	none := func(what string) {
+		t.Helper()
+		for range 2 {
+			if got := step(); got != nil {
+				t.Fatalf("%s: ended %v", what, got)
+			}
+		}
+	}
+	ends := func(what string, want int) {
+		t.Helper()
+		if got := step(); !slices.Equal(got, []int{want}) {
+			t.Fatalf("%s: ended %v, want [%d]", what, got, want)
+		}
+		none("after " + what)
+	}
+	tick := now.Add(-time.Hour)
+	later := func() time.Time { tick = tick.Add(time.Minute); return tick }
+
+	s.running = []int{60}
+	starts[60] = later()
+	none("no list named")
+	desk = later()
+	starts[100] = later()
+	ends("the list named after the app-server started", 60)
+	// named again (a Disconnect and a Connect): the app-server from
+	// before that naming lists the old way
+	desk = later()
+	starts[101] = later()
+	ends("named again", 100)
+	// one that started after the naming read it
+	desk = starts[101].Add(-time.Second)
+	none("named before the app-server started")
+	// a start that can't be read is left
+	desk = later()
+	delete(starts, 101)
+	none("start unknown")
+	starts[101] = tick.Add(-time.Second)
+
+	// the takeover: magpie Codex's provider, its own list named and the
+	// app's taken out; the reset ends it and names the app's again, in the
+	// same look or a later one, and the app is left on the takeover's
+	// app-server till the user restarts it (#4550)
+	desk = time.Time{}
+	s.on = true
+	starts[102] = later()
+	ends("magpie took over", 101)
+	s.on = false
+	desk = later()
+	none("the reset ended the takeover and named the list in one look")
+	s.on = true
+	desk = time.Time{}
+	starts[103] = later()
+	ends("magpie took over again", 102)
+	s.on = false
+	none("the reset ended the takeover")
+	desk = later()
+	none("the list named a look after the reset")
 }

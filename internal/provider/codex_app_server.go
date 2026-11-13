@@ -60,6 +60,20 @@ import (
 // pick would restart it.
 var CodexAppRoute func() (route string, out, known bool)
 
+// CodexAppDesk is set by the agent package: when magpie named its model
+// list for the Codex app in Codex's config (model_catalog_json beside the
+// ChatGPT sign-in), zero while it names none or the time isn't known. The
+// app-server reads model_catalog_json only as it starts and never again
+// (codex-rs app-server model_catalog.rs reloads on an account change
+// alone), and the app keeps one app-server for every window, so an app
+// that started before the list was named shows Codex's own models alone
+// until it is quit (not_4O4 on X, the Windows app: a new window and a new
+// project on D: listed GPT alone). Unlike a new list, which changes with
+// every pick and is left for the app's next launch (#4550), the list is
+// named once, as Codex is connected or the list first becomes known: its
+// app-servers from before are restarted for it once, as for a Connect.
+var CodexAppDesk func() time.Time
+
 // CodexBeforeAppEnd is set by the agent package: it is called with Codex's
 // home just before the app's app-server is ended for a change of where
 // Codex goes, to put the chats the app has open onto the provider Codex is
@@ -302,6 +316,8 @@ var codexApp struct {
 	// it (SwitchWhenSpent, or by hand off one known held, noteCodexSwitch),
 	// or magpie became Codex's provider for it (out)
 	spent bool
+	// desk: magpie's list named for the app as last handled (CodexAppDesk)
+	desk time.Time
 	// ended: the app-servers ended and no new one seen since, and by when
 	// one has to start (codexAppBackWait after the last end)
 	ended  map[int]bool
@@ -544,6 +560,9 @@ func codexAppStep(ctx context.Context, now time.Time, busy func() (int, time.Tim
 	} else {
 		checkCodexAppBack(ctx, now, home)
 	}
+	if !changed && !codexAppDeskStep(ctx, out || wasOut, home) {
+		return nil
+	}
 	if changed {
 		lctx, cancel := context.WithTimeout(ctx, codexAppListWait)
 		pids, err := codexAppServersOn(lctx, home)
@@ -678,6 +697,61 @@ func codexAppStep(ctx context.Context, now time.Time, busy func() (int, time.Tim
 		c.crashSpent = c.crashSpent || spent
 	}
 	return ended
+}
+
+// codexAppDeskStep notes the Codex app's app-servers that started before
+// magpie last named its list for the app (CodexAppDesk) as stale, once for
+// each naming, and says whether a step should go on to end them. Not
+// around the takeover (takeover: magpie Codex's provider for the used-up
+// account now or until this look), where the list is taken out and named
+// again as it ends and the app is left on the takeover's app-server
+// (c.back) as the reset leaves it (#4550): that naming is noted and
+// nothing ended for it. A start that can't be read is not counted.
+func codexAppDeskStep(ctx context.Context, takeover bool, home string) bool {
+	if CodexAppDesk == nil {
+		return true
+	}
+	at := CodexAppDesk()
+	c := &codexApp
+	c.Lock()
+	fresh := !at.IsZero() && !at.Equal(c.desk)
+	if fresh && (takeover || c.back != nil) {
+		c.desk, fresh = at, false
+	}
+	c.Unlock()
+	if !fresh {
+		return true
+	}
+	lctx, cancel := context.WithTimeout(ctx, codexAppListWait)
+	pids, err := codexAppServersOn(lctx, home)
+	cancel()
+	if err != nil {
+		// unknown: taken up again at the next look
+		log.Printf("codex: listing the Codex app's app-servers: %v", err)
+		return false
+	}
+	var before []int
+	for _, p := range pids {
+		if t, err := codexServerStart(p); err == nil && !t.IsZero() && t.Before(at) {
+			before = append(before, p)
+		}
+	}
+	c.Lock()
+	defer c.Unlock()
+	c.desk = at
+	if len(before) == 0 {
+		return true
+	}
+	c.why = "magpie's model list was named for the Codex app after its app-server started"
+	if c.stale == nil {
+		c.stale = map[int]int{}
+	}
+	for _, p := range before {
+		if _, ok := c.stale[p]; !ok {
+			c.stale[p] = 0
+		}
+	}
+	return true
 }
 
 // codexTurnOpen is whether a Codex session under home has a turn started

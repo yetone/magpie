@@ -474,6 +474,10 @@ func codexIn(at place) *Agent {
 	deskList := func() error {
 		named := deskCatalog(get("model_catalog_json"))
 		if !deskWanted() {
+			// the list not wanted: the next one named is named anew
+			if stashShared()[at.key("codex.desk_at")] != "" {
+				stash(map[string]string{at.key("codex.desk_at"): ""})
+			}
 			if named {
 				if err := edit.DelTOMLTop(path, "model_catalog_json"); err != nil {
 					return err
@@ -507,7 +511,17 @@ func codexIn(at place) *Agent {
 			}
 		}
 		if !named {
-			return edit.SetTOMLTop(path, edit.KV{Path: "model_catalog_json", Value: deskRef})
+			if err := edit.SetTOMLTop(path, edit.KV{Path: "model_catalog_json", Value: deskRef}); err != nil {
+				return err
+			}
+			// when, for the Codex app's app-servers started before it,
+			// which list Codex's models alone till they restart (DeskAt).
+			// Taken out and named again in one change (a model picked in
+			// magpie, a reset to Codex's default) it was named all along,
+			// and keeps its time: a new one would restart the app for it
+			if stashShared()[at.key("codex.desk_at")] == "" {
+				stash(map[string]string{at.key("codex.desk_at"): strconv.FormatInt(time.Now().UnixNano(), 10)})
+			}
 		}
 		return nil
 	}
@@ -2005,6 +2019,16 @@ func codexIn(at place) *Agent {
 		Joined:    func() bool { return joined() && !asProvider() },
 		AppOut:    func() bool { return asProvider() && !api() && chatGPT() && stashShared()[at.key("codex.out")] == "1" },
 		AppOutOff: func() bool { return stashShared()[at.key("codex.login")] == "chatgpt" || !routed() },
+		DeskAt: func() time.Time {
+			if !deskCatalog(get("model_catalog_json")) {
+				return time.Time{}
+			}
+			n, err := strconv.ParseInt(stashShared()[at.key("codex.desk_at")], 10, 64)
+			if err != nil || n <= 0 {
+				return time.Time{}
+			}
+			return time.Unix(0, n)
+		},
 		HoldMatters: func() bool {
 			return stashShared()[at.key("codex.login")] == "" && chatGPT() &&
 				(viaBase() || asProvider() && stashShared()[at.key("codex.out")] == "1")

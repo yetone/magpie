@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // codexAppReads has the Codex app (and a CLI) read every config when app
@@ -208,5 +209,65 @@ func TestCodexDesktopListKeepsTheirs(t *testing.T) {
 	}
 	if _, err := os.Stat(desk); !os.IsNotExist(err) {
 		t.Fatalf("written beside theirs: %v", err)
+	}
+}
+
+// not_4O4 on X: the Windows app listed GPT alone, in a new window and a
+// new project too. Its app-server reads the list only as it starts, so
+// magpie keeps when it named the list (DeskAt), for one running from
+// before to be restarted: the time it was named, kept while the list is
+// unknown or its file rewritten, zero once the key is gone, and new when
+// it is named again.
+func TestCodexDesktopListNamedAt(t *testing.T) {
+	home, read := codexHome(t, `{"tokens":{"access_token":"x","id_token":"x.e30.x"}}`, `model = "gpt-5.5"`+"\n")
+	app := true
+	codexAppReads(t, &app)
+	// not known at the Connect: nothing named yet, and no time
+	var list string
+	deskListIs(t, &list)
+	cx := codex(home)
+	if ok, err := cx.Join(); err != nil || !ok {
+		t.Fatalf("join: %v %v", ok, err)
+	}
+	if strings.Contains(read(), "model_catalog_json") || !cx.DeskAt().IsZero() {
+		t.Fatalf("named before the list is known: %v\n%s", cx.DeskAt(), read())
+	}
+	// known a sync later, after the app-server started
+	list = `{"models":[{"slug":"gpt-6-sol"},{"slug":"fake/m1"}]}`
+	before := time.Now()
+	if err := cx.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	at := cx.DeskAt()
+	if !strings.Contains(read(), "magpie-desktop-models.json") || at.Before(before) || at.After(time.Now()) {
+		t.Fatalf("named at %v, want after %v\n%s", at, before, read())
+	}
+	// a new list in the file is no new naming: the app's next launch reads it
+	list = `{"models":[{"slug":"gpt-6-sol"},{"slug":"fake/m2"}]}`
+	if err := cx.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if !cx.DeskAt().Equal(at) {
+		t.Fatalf("named at %v after a new list, want %v", cx.DeskAt(), at)
+	}
+	// magpie API: the list goes, and with it the time
+	if err := cx.Fields[0].Set("fake/m1"); err != nil {
+		t.Fatal(err)
+	}
+	if !cx.DeskAt().Equal(at) {
+		t.Fatalf("a magpie model picked beside the sign-in: named at %v, want %v", cx.DeskAt(), at)
+	}
+	if err := cx.Field("login").Set("api"); err != nil {
+		t.Fatal(err)
+	}
+	if !cx.DeskAt().IsZero() {
+		t.Fatalf("api: named at %v\n%s", cx.DeskAt(), read())
+	}
+	// back beside the sign-in: named again, at a time of its own
+	if err := cx.Field("login").Set(""); err != nil {
+		t.Fatal(err)
+	}
+	if again := cx.DeskAt(); !again.After(at) {
+		t.Fatalf("named again at %v, want after %v\n%s", again, at, read())
 	}
 }

@@ -211,6 +211,12 @@ type Agent struct {
 	// takeover ending so is the user's change, not the reset's, and the
 	// Codex app's app-server is restarted for it (CodexTakeoverOff).
 	AppOutOff func() bool
+	// DeskAt is when magpie named its model list for the Codex app in
+	// Codex's config (deskList's model_catalog_json), zero while it
+	// names none or the time isn't known (named by a magpie before it
+	// was kept). The app-server reads the list only as it starts, so one
+	// running from before shows Codex's own models alone (CodexAppDesk).
+	DeskAt func() time.Time
 	// HoldMatters reports Codex takes magpie's models beside a ChatGPT
 	// sign-in, so that magpie is its provider while the Codex app holds
 	// the account (out), or is that already: what the app holds is read
