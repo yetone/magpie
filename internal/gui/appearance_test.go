@@ -84,7 +84,7 @@ func TestAccentSetting(t *testing.T) {
 // Whatever colour is picked, the accent drawn reads as text on the
 // theme's background and cards, and the text on it reads too.
 func TestAccentReadable(t *testing.T) {
-	re := regexp.MustCompile(`--accent:(#[0-9a-f]{6});--accent-soft:(#[0-9a-f]{6});--accent-fg:(#[0-9a-f]{6})`)
+	re := regexp.MustCompile(`--accent:(#[0-9a-f]{6});--accent-soft:(#[0-9a-f]{6});--accent-fg:(#[0-9a-f]{6});--sel:#[0-9a-f]{6};--mark:(#[0-9a-f]{6})$`)
 	for _, pick := range []string{"#ffffff", "#000000", "#ffff00", "#00ff00", "#0d9488", "#2563eb", "#ea580c", "#52525b", "#808080", "#1a1a1e", "#f4f4f6"} {
 		c, _ := parseHex(pick)
 		for _, dark := range []bool{false, true} {
@@ -106,11 +106,24 @@ func TestAccentReadable(t *testing.T) {
 			if r := contrast(a, fg); r < 4.4 {
 				t.Errorf("%s dark=%v: text %s on accent %s is %.2f:1", pick, dark, m[3], m[1], r)
 			}
+			// what is chosen is in the colour picked (CHENGJIAHEGOXIS on X:
+			// a colour picked showed nowhere on Settings), and reads as text
+			// on every surface a chosen option sits on
+			mark, _ := parseHex(m[4])
+			on := []rgb{lightBg, white, lightPick}
+			if dark {
+				on = []rgb{darkBg, darkCard, darkPick}
+			}
+			for _, bg := range on {
+				if r := contrast(mark, bg); r < 4.4 {
+					t.Errorf("%s dark=%v: chosen ink %s on %s is %.2f:1", pick, dark, m[4], bg.hex(), r)
+				}
+			}
 		}
 	}
 	// a colour that reads already is drawn as picked
 	c, _ := parseHex("#2563eb")
-	if got := accentVars(c, false); !strings.HasPrefix(got, "--accent:#2563eb;") {
+	if got := accentVars(c, false); !strings.HasPrefix(got, "--accent:#2563eb;") || !strings.Contains(got, ";--mark:#") {
 		t.Fatalf("a readable blue was changed: %s", got)
 	}
 }

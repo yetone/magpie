@@ -129,6 +129,11 @@ var (
 	darkBg    = rgb{0x1a, 0x1a, 0x1e}
 	darkCard  = rgb{0x23, 0x23, 0x27}
 	accentInk = 4.5 // WCAG AA for text: the accent is a link's colour too
+	// the surfaces a chosen option's text sits on (--mark): the light
+	// theme's darkest, a tab's --pill-hover, and the dark theme's lightest,
+	// the header switch's thumb (--seg-thumb over --seg-track)
+	lightPick = rgb{0xe9, 0xe9, 0xee}
+	darkPick  = rgb{0x4c, 0x4c, 0x52}
 	// how much of the theme's background lies over the picture
 	wallVeil = "color-mix(in srgb,var(--bg) 84%,transparent)"
 )
@@ -136,10 +141,14 @@ var (
 // accentOn is c, darkened (light theme) or lightened (dark theme) just
 // enough to read as text on that theme's background and cards.
 func accentOn(c rgb, dark bool) rgb {
-	toward, against := black, lightBg
 	if dark {
-		toward, against = white, darkCard
+		return inkOn(c, white, darkCard)
 	}
+	return inkOn(c, black, lightBg)
+}
+
+// inkOn is c moved toward toward just enough to read as text on against.
+func inkOn(c, toward, against rgb) rgb {
 	out := c
 	for p := 0.0; p <= 1 && contrast(out, against) < accentInk; p += 0.02 {
 		out = c.mix(toward, p)
@@ -147,8 +156,12 @@ func accentOn(c rgb, dark bool) rgb {
 	return out
 }
 
-// accentVars are the theme's --accent, its soft fill, the text on it and
-// the selection, from c.
+// accentVars are the theme's --accent, its soft fill, the text on it, the
+// selection, and --mark, from c. --mark is the ink of what is chosen (the
+// open page's sidebar icon, a switch's or tab's chosen option), magpie's
+// own text colour without an accent of the user's, as a Mac's Graphite:
+// without it a colour picked showed nowhere on Settings, nor on most pages
+// (CHENGJIAHEGOXIS on X, 「选中任意强调色没反应」).
 func accentVars(c rgb, dark bool) string {
 	a := accentOn(c, dark)
 	fg := white
@@ -156,10 +169,12 @@ func accentVars(c rgb, dark bool) string {
 		fg = rgb{0x14, 0x14, 0x1a}
 	}
 	soft, sel := white.mix(a, 0.09), white.mix(a, 0.11)
+	mark := inkOn(c, black, lightPick)
 	if dark {
 		soft, sel = darkBg.mix(a, 0.14), darkBg.mix(a, 0.2)
+		mark = inkOn(c, white, darkPick)
 	}
-	return fmt.Sprintf("--accent:%s;--accent-soft:%s;--accent-fg:%s;--sel:%s", a.hex(), soft.hex(), fg.hex(), sel.hex())
+	return fmt.Sprintf("--accent:%s;--accent-soft:%s;--accent-fg:%s;--sel:%s;--mark:%s", a.hex(), soft.hex(), fg.hex(), sel.hex(), mark.hex())
 }
 
 // appearanceRoutes serve the look's stylesheet and the wallpaper, and take

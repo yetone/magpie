@@ -23,6 +23,10 @@
   --accent-soft: #eeedfd;
   --accent-fg: #ffffff;
   --sel: #ecebfb;
+  /* the ink of what is chosen: the open page's sidebar icon, a switch's or
+     tab's chosen option. The text's own, graphite as a Mac's sidebar is,
+     until an accent of the user's own takes it (appearance.go accentVars) */
+  --mark: var(--fg);
   --green: #189a58;
   --green-soft: #e4f6ec;
   --red: #d64545;
@@ -280,7 +284,7 @@ body:not(.window.linux) #winclose { display: none; }
 .seg > .thumb { border-radius: 6px; background: var(--seg-thumb); box-shadow: var(--seg-edge); }
 body.panel .seg { display: none; }
 .seg button { position: relative; z-index: 1; white-space: nowrap; height: 24px; padding: 0 12px; border-radius: 6px; font-size: 12.5px; color: var(--ctl-fg); transition: color .18s var(--ease), transform .14s var(--ease); }
-.seg button.on { color: var(--fg); }
+.seg button.on { color: var(--mark); }
 /* a plugin update waiting for the reader: a dot on Plugins */
 .seg button.has-dot::after { content: ""; position: absolute; top: 4px; right: 4px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
 .seg button:hover:not(.on) { color: var(--fg-2); }
@@ -375,7 +379,7 @@ body:not(.side-nav) #nav button[data-view="groups"], body.side-nav .rt-togroups 
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
     font-size: 10.5px; font-weight: 500; line-height: 1.1; color: var(--muted);
   }
-  body.web:not(.panel) .top #nav > button.on { color: var(--fg); }
+  body.web:not(.panel) .top #nav > button.on { color: var(--mark); }
   body.web:not(.panel) .top #nav > button > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   body.web:not(.panel) .top #nav .nav-ic { display: block; flex: none; width: 23px; height: 23px; }
   body.web:not(.panel) .top #nav > button.has-dot::after { top: 5px; right: calc(50% - 17px); }
@@ -473,8 +477,8 @@ body.side-nav #nav.hl-on button[data-view] .nav-ic { transition: color .22s var(
 body.side-nav .nav-ic { display: block; flex: none; color: var(--muted); }
 body.side-nav #prefs svg { flex: none; width: 15px; height: 15px; margin: 0 .5px; color: var(--muted); }
 /* graphite, as a Mac sidebar is: no colour of its own, the page open in the
-   text's own ink; the accent is kept for what acts */
-body.side-nav :is(#nav button.on .nav-ic, #prefs.on svg) { color: var(--fg); }
+   text's own ink, until an accent of the user's own colours it (--mark) */
+body.side-nav :is(#nav button.on .nav-ic, #prefs.on svg) { color: var(--mark); }
 body.side-nav .side-l { display: inline; }
 body.side-nav #nav > button[data-plugin-page] { position: relative; }
 body.side-nav #nav > button[data-plugin-page]::before { content: ""; position: absolute; left: 2px; top: 50%; width: 6px; height: 11px; margin-top: -5.5px; background: radial-gradient(circle, var(--muted) .9px, transparent 1.2px) 0 0 / 3px 3.75px; opacity: 0; transition: opacity .15s; }
@@ -2000,7 +2004,7 @@ body.panel .view { padding-top: 2px; }
 .ptabs[hidden] { display: none; }
 .ptabs button { position: relative; z-index: 1; flex: 1; display: flex; align-items: center; justify-content: center; gap: 3px; height: 26px; border-radius: 7px; font-size: 12px; color: var(--muted); transition: color .15s, background-color .15s; }
 .ptabs button:hover:not(.on) { color: var(--fg-2); }
-.ptabs button.on { color: var(--fg); font-weight: 550; }
+.ptabs button.on { color: var(--mark); font-weight: 550; }
 .ptabs button[hidden] { display: none; }
 .ptabs em { font-style: normal; font-weight: 400; color: var(--faint); font-variant-numeric: tabular-nums; }
 body.panel[data-ptab="usage"] :is(#agents, #panelRouting, #panelUsage),
@@ -3206,7 +3210,7 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 #gatewayKeys .klf-which { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
 #gatewayKeys .klf-tab { height: 24px; padding: 0 10px; border-radius: 6px; font-size: 12px; color: var(--ctl-fg); white-space: nowrap; }
 #gatewayKeys .klf-tab:hover:not(.on) { color: var(--fg-2); }
-#gatewayKeys .klf-tab.on { color: var(--fg); background: var(--seg-thumb); box-shadow: var(--seg-edge); }
+#gatewayKeys .klf-tab.on { color: var(--mark); background: var(--seg-thumb); box-shadow: var(--seg-edge); }
 @media (max-width: 520px) { #gatewayKeys .klf, #gatewayKeys .klf.with-days { grid-template-columns: 1fr; } #gatewayKeys .klf-used { flex-wrap: wrap; } }
 /* the models a key may use (#882): a long model's id is cut, and the
    badge gives way first on a narrow window */
@@ -3681,7 +3685,7 @@ body:not(.side-nav) #addSheet > .row-head.stuck::before { box-shadow: 0 1px 0 va
    sheet into a sideways scroll (German Routing at the 560px window) */
 .editor .segs { max-width: 100%; flex-wrap: wrap; }
 .opt { position: relative; z-index: 1; white-space: nowrap; height: 22px; padding: 0 10px; border-radius: 5px; font-size: 12px; color: var(--muted); transition: color .18s var(--ease), transform .14s var(--ease); }
-.opt.on { color: var(--fg); }
+.opt.on { color: var(--mark); }
 /* how often magpie checks for updates, while it doesn't by itself */
 .update-every-row.off .segs, .update-restart-row.off .segs, .search-all-row.off .segs { opacity: .55; }
 /* Command line: each shell's `magpie`, a dot for whether it runs this app */
@@ -3988,7 +3992,7 @@ body:not(.side-nav) #addSheet > .row-head.stuck::before { box-shadow: 0 1px 0 va
 .warm-tabs { display: flex; align-items: center; gap: 2px; margin-left: -7px; }
 .warm-tabs button { height: 22px; padding: 0 7px; border-radius: 6px; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); transition: color .12s, background-color .12s; }
 .warm-tabs button:hover:not(.on) { color: var(--fg-2); }
-.warm-tabs button.on { color: var(--fg); background: var(--pill); }
+.warm-tabs button.on { color: var(--mark); background: var(--pill); }
 .warm-tabs button[hidden] { display: none; }
 /* the page's parts (#471): a tab each at the top in the same look, a line
    more when they don't fit across (a narrow window, a larger text size),
@@ -4738,7 +4742,7 @@ body.panel .modal { padding: 16px 12px; }
 .editor.importapps .apptabs { display: flex; gap: 4px; padding: 3px; border-radius: 10px; background: var(--pill); overflow-x: auto; scrollbar-width: none; }
 .editor.importapps .apptab { flex: 1 1 0; min-width: max-content; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 6px 12px; border-radius: 7px; font-size: 12.5px; font-weight: 500; color: var(--muted); white-space: nowrap; }
 .editor.importapps .apptab:hover { color: var(--fg); }
-.editor.importapps .apptab.on { background: var(--card); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,.18); }
+.editor.importapps .apptab.on { background: var(--card); color: var(--mark); box-shadow: 0 1px 2px rgba(0,0,0,.18); }
 .editor.importapps .apptab.missing .applogo { filter: grayscale(1); opacity: .5; }
 .editor.importapps .apptab .count { min-width: 16px; padding: 0 5px; border-radius: 8px; font-size: 10.5px; line-height: 16px; text-align: center; color: var(--fg-2); background: var(--line); }
 .editor.importapps .apptab.missing .count { background: none; color: var(--faint); }
@@ -4956,7 +4960,7 @@ body.window .row.agent .who.with-models { flex-wrap: wrap; row-gap: 0; }
 .am-search:focus-within { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent); }
 .am-seg { display: inline-flex; flex: none; padding: 2px; border-radius: 8px; background: var(--seg-track); }
 .am-seg button { height: 24px; padding: 0 9px; border: 0; border-radius: 6px; background: none; color: var(--ctl-fg); font: inherit; font-size: 12px; cursor: pointer; transition: background-color .15s, color .15s; }
-.am-seg button.on { background: var(--seg-thumb); color: var(--fg); box-shadow: var(--seg-edge); }
+.am-seg button.on { background: var(--seg-thumb); color: var(--mark); box-shadow: var(--seg-edge); }
 .am-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 2px; }
 /* the providers down the left (蓝猫 on Discord), the models of the one
    picked beside them, each scrolling on its own */
@@ -5399,7 +5403,7 @@ body .row.agent .ag-prefs .row.pref .who { display: block; }
 .rate-win { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .rate-win .day-chips { display: flex; gap: 2px; }
 .rate-win .day-chip { min-width: 24px; height: 24px; padding: 0 4px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--muted); font: inherit; font-size: 11px; }
-.rate-win .day-chip.on { color: var(--fg); background: var(--seg-thumb); box-shadow: var(--seg-edge); }
+.rate-win .day-chip.on { color: var(--mark); background: var(--seg-thumb); box-shadow: var(--seg-edge); }
 .rate-win input { width: 64px; height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--card); color: var(--fg); font: inherit; font-size: 12px; }
 .rate-win .rate-rate { width: 56px; }
 .rate-win .rate-dash { color: var(--muted); }

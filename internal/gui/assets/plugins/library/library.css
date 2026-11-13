@@ -258,7 +258,7 @@ button.row.lib-hubfolded:hover { background: var(--pill); }
 /* the switch */
 .lib-switch { flex: none; position: relative; width: 32px; height: 19px; border-radius: 10px; background: var(--line); transition: background .2s var(--ease); }
 .lib-switch i { position: absolute; top: 2px; left: 2px; width: 15px; height: 15px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .25); transition: transform .22s var(--ease); }
-.lib-switch.on { background: var(--fg); }
+.lib-switch.on { background: var(--mark); }
 .lib-switch.on i { transform: translateX(13px); background: var(--card); }
 :root[data-theme="dark"] .lib-switch.on i { background: var(--bg); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .lib-switch.on i { background: var(--bg); } }
@@ -267,8 +267,8 @@ button.row.lib-hubfolded:hover { background: var(--pill); }
 .lib-sets .lib-cardhead { padding-bottom: 8px; }
 .lib-radio { flex: none; width: 17px; height: 17px; border-radius: 50%; border: 1.5px solid var(--faint); display: grid; place-items: center; transition: border-color .14s; }
 .lib-radio:hover { border-color: var(--fg-2); }
-.lib-radio.on { border-color: var(--fg); }
-.lib-radio.on::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--fg); }
+.lib-radio.on { border-color: var(--mark); }
+.lib-radio.on::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--mark); }
 .lib-set.on .name { font-weight: 600; }
 .lib-sets .lib-detail { padding-left: 40px; }
 .lib-sets > .lib-cardhead + .row, .lib-sets .lib-detail + .row, .lib-sets .lib-detail + .lib-setadd, .lib-sets .row + .lib-setadd { border-top: 1px solid var(--line-2); }

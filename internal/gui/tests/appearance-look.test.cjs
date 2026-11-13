@@ -21,17 +21,23 @@ const { chromium, webkit } = require("playwright");
 const assets = path.resolve(__dirname, "../assets");
 // a 1×1 PNG
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
-const accentCSS = (a) => (a ? `html:not(.omarchy):root{--accent:${a};--accent-soft:#e6f4f2;--accent-fg:#ffffff;--sel:#e1f1ef}` : "");
+// as appearance.go's lookCSS draws it: the light theme's, then the dark
+// one's, --mark the ink of what is chosen
+const DARK = { "#0d9488": "#5cc9bd", "#db2777": "#f08cbd", "#7c3aed": "#c4a6f8" };
+const accentCSS = (a) => (a ? `html:not(.omarchy):root{--accent:${a};--accent-soft:#e6f4f2;--accent-fg:#ffffff;--sel:#e1f1ef;--mark:${a}}
+@media (prefers-color-scheme: dark){html:not(.omarchy):root:not([data-theme="light"]){--accent:${DARK[a] || a};--accent-soft:#1a2c2e;--accent-fg:#14141a;--sel:#1a3435;--mark:${DARK[a] || a}}}
+html:not(.omarchy):root[data-theme="dark"]{--accent:${DARK[a] || a};--accent-soft:#1a2c2e;--accent-fg:#14141a;--sel:#1a3435;--mark:${DARK[a] || a}}` : "");
 
 function serve(st, log) {
   const settings = () => ({ lang: "en", theme: "light", searchVendors: [], searchAPIs: [], ...st });
+  const theme = () => settings().theme;
   return async (r) => {
     const url = new URL(r.request().url());
     const json = (data) => r.fulfill({ json: data });
     if (url.pathname === "/boot.js") {
       const look = (st.accent || "") + "," + (st.wallpaper || "");
       const css = accentCSS(st.accent);
-      return r.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = ${JSON.stringify({ lang: st.lang || "en", theme: "light", web: false, look })};` + (css ? `(function(){var e=document.createElement("style");e.id="lookCSS";e.textContent=${JSON.stringify(css)};document.head.appendChild(e)})();` : "") });
+      return r.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = ${JSON.stringify({ lang: st.lang || "en", theme: theme(), web: false, look })};` + (css ? `(function(){var e=document.createElement("style");e.id="lookCSS";e.textContent=${JSON.stringify(css)};document.head.appendChild(e)})();` : "") });
     }
     if (url.pathname === "/wails/runtime.js") return r.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
     if (url.pathname === "/api/state") return json({ agents: [], profiles: [], settings: settings() });
@@ -70,15 +76,15 @@ function serve(st, log) {
 const NAMES = { en: "Accent color", zh: "强调色", "zh-TW": "強調色", ja: "アクセントカラー", de: "Akzentfarbe" };
 const PICTURE = { en: "Background image", zh: "背景图片", "zh-TW": "背景圖片", ja: "背景画像", de: "Hintergrundbild" };
 
-async function open(browser, st, width) {
+async function open(browser, st, width, query = "view=settings", wait = "#accentPick .swatch") {
   const page = await (await browser.newContext({ viewport: { width, height: 800 } })).newPage();
   page.setDefaultTimeout(5000);
   page.setDefaultNavigationTimeout(60000);
   const errors = [], log = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.route("**/*", serve(st, log));
-  await page.goto("http://magpie.test/?view=settings");
-  await page.locator("#accentPick .swatch").first().waitFor();
+  await page.goto("http://magpie.test/?" + query);
+  await page.locator(wait).first().waitFor();
   return { page, errors, log };
 }
 
@@ -115,6 +121,71 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     assert.equal(log.filter(([k]) => k === "settings").at(-1)[1].accent, "");
     assert.deepEqual(errors, []);
   });
+
+  // CHENGJIAHEGOXIS on X: 「选中任意强调色没反应」. The accent reached
+  // only buttons, links and bars, none of them on Settings, so a colour
+  // picked changed nothing in sight. What is chosen (the open page in the
+  // sidebar, a switch's or tab's chosen option) is in --mark: the text's
+  // own ink by default, the colour picked once there is one, in the window
+  // and the panel, light and dark, over a picture too.
+  for (const theme of ["light", "dark"]) {
+    // the chosen option's ink, and the probe's for a colour
+    const inks = (page, sel) => page.evaluate((sel) => {
+      const ink = (v) => { const p = document.createElement("i"); p.style.color = v; document.body.append(p); const c = getComputedStyle(p).color; p.remove(); return c; };
+      return { got: sel.map((s) => { const e = document.querySelector(s); return e ? getComputedStyle(e).color : "missing " + s; }), fg: ink("var(--fg)"), mark: ink("var(--mark)") };
+    }, sel);
+    const same = (r, want, what) => assert.deepEqual(r.got, r.got.map(() => want), what);
+    // what is chosen eases to its colour (.18s): read it once it stands still
+    const settled = async (page, sel) => {
+      let last = "";
+      for (let i = 0; i < 40; i++) {
+        const r = await inks(page, sel), now = JSON.stringify(r);
+        if (now === last) return r;
+        last = now;
+        await page.waitForTimeout(100);
+      }
+      return JSON.parse(last);
+    };
+
+    test(`${engine}: ${theme}, a colour picked shows on what is chosen, in the window`, async (t) => {
+      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+      t.after(() => browser.close());
+      const st = { theme, wallpaper: 1700000000000 };
+      const { page, errors } = await open(browser, st, 1200);
+      await page.waitForFunction(() => document.body.classList.contains("side-nav"));
+      const sel = ["#themeSegs .opt.on", "#birdSegs .opt.on", "body.side-nav #prefs.on svg"];
+      const before = await settled(page, sel);
+      same(before, before.fg, "magpie's own look: what is chosen is in the text's ink");
+      for (const [v, light] of [["#0d9488", "#0d9488"], ["#db2777", "#db2777"]]) {
+        await page.locator(`#accentPick .swatch[data-accent="${v}"]`).click();
+        const want = theme === "dark" ? DARK[v] : light;
+        await page.waitForFunction((w) => getComputedStyle(document.documentElement).getPropertyValue("--mark").trim() === w, want);
+        const r = await settled(page, sel);
+        assert.notEqual(r.mark, r.fg);
+        same(r, r.mark, `${v}: what is chosen is in the colour picked`);
+      }
+      await page.locator('#accentPick .swatch[data-accent=""]').click();
+      await page.waitForFunction(() => !document.getElementById("lookCSS")?.textContent);
+      const back = await settled(page, sel);
+      same(back, back.fg, "back to magpie's own");
+      assert.deepEqual(errors, []);
+    });
+
+    test(`${engine}: ${theme}, the header's tabs and the panel's take the colour`, async (t) => {
+      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+      t.after(() => browser.close());
+      for (const [query, width, sel] of [["view=agents", 900, ["#nav button.on"]], ["mode=panel", 380, [".ptabs button.on"]]]) {
+        for (const accent of ["", "#0d9488"]) {
+          const { page, errors } = await open(browser, { theme, accent }, width, query, sel[0]);
+          const r = await settled(page, sel);
+          if (accent) assert.notEqual(r.mark, r.fg);
+          same(r, accent ? r.mark : r.fg, `${query} ${accent || "default"}`);
+          assert.deepEqual(errors, []);
+          await page.context().close();
+        }
+      }
+    });
+  }
 
   test(`${engine}: a look boot.js drew is not asked for again`, async (t) => {
     const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
