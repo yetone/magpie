@@ -16004,14 +16004,21 @@ function fmtN(n) {
 // or cny, converted with fx (the rate this session last got from magpie,
 // with when that was and whether it's stale — kept only for the tooltip;
 // see applyPrefs, which fills both from what /api/settings answers).
+// "provider" shows a cost of one provider's calls in what that provider
+// sells in (yuanProviders, from fx's yuan: DeepSeek, Kimi's .cn, Zhipu…)
+// and every sum across providers in totalCurrency.
 let currency = "usd";
+let totalCurrency = "usd";
+let yuanProviders = [];
 let fx = { rate: 0, at: null, stale: true };
-function fmtCost(t) {
+// costInYuan is whether a cost of prov's calls (none: a sum) shows in yuan
+const costInYuan = (p) => fx.rate > 0 && (currency !== "provider" ? currency === "cny" : p && p !== "session-unknown" ? yuanProviders.includes(p) : totalCurrency === "cny");
+function fmtCost(t, prov) {
   // no cost read (null, or a reply without one) is unknown: nothing shown,
   // not $0 and not a throw that stops the page drawing (#3406)
   if (typeof t.cost !== "number" || (!t.cost && t.unpriced)) return "";
   let c = t.cost, sign = "$";
-  if (currency === "cny" && fx.rate > 0) { c = c * fx.rate; sign = "¥"; }
+  if (costInYuan(prov)) { c = c * fx.rate; sign = "¥"; }
   const s = c >= 100 ? c.toFixed(0) : c >= 1 ? c.toFixed(2) : c.toFixed(3);
   return sign + s + (t.unpriced ? "+" : "");
 }
@@ -18656,25 +18663,26 @@ function familyQuota(sub) {
 // holdsLine: a window's whole (WindowHolds), how in its tooltip. With a
 // baseCost (#5861, no long-context premium) its figure switches every card.
 let holdsBase = kept("holdsBase", false);
-function holdsCostText(h) {
-  const c = fmtCost({ cost: holdsBase ? h.baseCost : h.cost });
+function holdsCostText(h, prov) {
+  const c = fmtCost({ cost: holdsBase ? h.baseCost : h.cost }, prov);
   return holdsBase ? t("≈ {cost} base", { cost: c }) : t("≈ {cost} API", { cost: c });
 }
-function holdsLine(h) {
-  const cost = (c) => fmtCost({ cost: c });
+function holdsLine(h, prov) {
+  const cost = (c) => fmtCost({ cost: c }, prov);
   const line = el("span", "quota-holds");
   line.append(el("span", "", t("Whole ≈ {n} tokens", { n: fmtN(h.tokens) }) + (h.priced ? " ·" : "")));
   const two = h.priced && h.baseCost > 0;
   if (two) {
-    const b = el("button", "quota-holds-cost", holdsCostText(h));
+    const b = el("button", "quota-holds-cost", holdsCostText(h, prov));
     b.type = "button";
     b._holds = h;
+    b._prov = prov;
     b.onclick = (e) => {
       e.preventDefault();
       e.stopPropagation();
       holdsBase = !holdsBase;
       keep("holdsBase", holdsBase);
-      for (const o of document.querySelectorAll(".quota-holds-cost")) if (o._holds) o.textContent = holdsCostText(o._holds);
+      for (const o of document.querySelectorAll(".quota-holds-cost")) if (o._holds) o.textContent = holdsCostText(o._holds, o._prov);
     };
     line.append(" ", b);
   } else if (h.priced) line.append(" ", el("span", "", "≈ " + cost(h.cost)));
@@ -18812,7 +18820,7 @@ function quotaWindows(sub) {
     // the reset's line, so the window keeps its three rows
     if (w.holds) {
       if (!r) quota.append(r = el("div", "quota-reset"));
-      const line = holdsLine(w.holds);
+      const line = holdsLine(w.holds, sub.provider);
       // a past cycle's whole is reckoned at its own last reading (#2009)
       // the last window's, kept until this one has data to tell its own
       if (sub.history || w.holds.prevAt) line.title = t("Estimated from the window that began {start}, read {at}", { start: quotaCycleDate(w.holds.since), at: quotaCycleDate(w.recordedAt || w.holds.prevAt) }) + "\n" + line.title;
@@ -18862,9 +18870,9 @@ function ledCredits(x) {
 const ledTook = (ms = 0) => (ms = Math.round(ms) || 0) < 1000 ? t("{n} ms", { n: ms }) : t("{n} s", { n: (ms / 1000).toFixed(ms < 10e3 ? 1 : 0) });
 
 // a cost as an axis says it: the currency Settings picks, no more digits than it takes
-function ledMoney(v) {
+function ledMoney(v, prov) {
   let sign = "$";
-  if (currency === "cny" && fx.rate > 0) { v *= fx.rate; sign = "¥"; }
+  if (costInYuan(prov)) { v *= fx.rate; sign = "¥"; }
   return sign + (v >= 10 ? v.toFixed(0) : v >= 1 ? v.toFixed(1) : v.toFixed(2));
 }
 
@@ -19337,7 +19345,7 @@ function openSessCombo(anchor, all, opts, value, choose, head) {
 const THEMES = [["system", "System"], ["light", "Light"], ["dark", "Dark"]];
 const LOCALES = [["system", "System"], ["en", "English"], ["zh", "简体中文"], ["zh-TW", "繁體中文"], ["ja", "日本語"], ["de", "Deutsch"]];
 const TRAYS = [["panel", "Open the quick panel"], ["window", "Open the main window"]];
-const CURRENCIES = [["usd", "$ USD"], ["cny", "¥ CNY"]];
+const CURRENCIES = [["usd", "$ USD"], ["cny", "¥ CNY"], ["provider", "By provider"]];
 // The text size is the windows' own zoom, as a browser's Ctrl/Cmd +: the
 // page is laid out again in larger CSS pixels, so everything it measures is
 // as at 100%, and magpie sizes the windows around it (textsize.go). None is
@@ -19591,8 +19599,12 @@ function applyPrefs(s, rate) {
   const moved = !!got && got.rate !== fx.rate;
   if (got) fx = got;
   let costs = false;
-  if (currency !== (s.currency || "usd") || (moved && currency === "cny")) {
+  const yuan = got?.yuan || [];
+  if (currency !== (s.currency || "usd") || totalCurrency !== (s.totalCurrency || "usd") ||
+    (currency === "provider" && yuan + "" !== yuanProviders + "") || (moved && currency !== "usd")) {
     currency = s.currency || "usd";
+    totalCurrency = s.totalCurrency || "usd";
+    yuanProviders = yuan;
     costs = true;
   }
   if (chineseUnits !== !!s.chineseUnits) {
@@ -20671,7 +20683,8 @@ function renderTrayUsage(s, keep) {
   $("#quotaReadsSegs").replaceChildren(segs([["", t("Automatic")], ["asked", t("When I ask")]], s.quotaReads || "", (v) =>
     writingPrefs(api("settings/quota-reads", { reads: v })).then((ns) => { prefs = state.settings = ns; renderSettings(); })
       .catch(settingsErr)));
-  $("#currencySegs").replaceChildren(segs(CURRENCIES.map(([id, name]) => [id, t(name)]), s.currency || "usd", (v) => savePrefs({ ...keep, currency: v })));
+  // the currency rows, in currencyprefs.js
+  import("./currencyprefs.js").then(() => currencyPrefs(s, keep), () => {});
   // 万 and 亿 are Chinese's alone: in English a count is always K, M and B
   $("#unitsRow").hidden = locale !== "zh" && locale !== "zh-TW";
   $("#unitsSegs").replaceChildren(segs([[false, t("K / M / B")], [true, t("万 / 亿")]], !!s.chineseUnits,
@@ -20683,10 +20696,6 @@ function renderTrayUsage(s, keep) {
   renderAgentPrefs();
   renderAgentPrefLinks();
   renderProvPrefLinks();
-  const rate = s.fx?.rate;
-  const currencySub = $("#currencySub");
-  currencySub.textContent = t("What a cost — the Usage page's, the tray panel's, the TUI's and the CLI's — is shown as; a vendor's own balance, already in its own currency, is never converted");
-  currencySub.title = rate ? t("1 USD = {rate} CNY{when}", { rate: rate.toFixed(2), when: s.fx.at ? " · " + (s.fx.stale ? t("last fetched {when}", { when: syncWhen(s.fx.at) }) : t("fetched {when}", { when: syncWhen(s.fx.at) })) : "" }) : "";
   $("#trayUsageRow").hidden = web;
   if (web) return;
   const mac = document.body.classList.contains("mac");
@@ -22846,7 +22855,7 @@ function prefsKeep(s) {
     codexWarmAts: warmTimes(s.codexWarmAts, s.codexWarmAt), claudeWarmAts: warmTimes(s.claudeWarmAts, s.claudeWarmAt), workbuddyCheckin: !!s.workbuddyCheckin, traeCheckin: !!s.traeCheckin, minimaxCheckin: !!s.minimaxCheckin, qoderCheckin: !!s.qoderCheckin, checkinAt: s.checkinAt || "", noStats: !!s.noStats, noUsageStats: !!s.noUsageStats, signInLinkOnly: !!s.signInLinkOnly,
     replyModel: s.replyModel || "", noLoopGuard: !!s.noLoopGuard, claudeLeanPrompt: !!s.claudeLeanPrompt, claudePrintMode: !!s.claudePrintMode, refusalRetries: s.refusalRetries ?? null, retryAfterCap: s.retryAfterCap ?? null,
     noUpdatePill: !!s.noUpdatePill, noAutoUpdate: !!s.noAutoUpdate, updateEvery: s.updateEvery || 360, autoRestart: !!s.autoRestart, noAutoDownload: !!s.noAutoDownload, updateChannel: s.updateChannel || "",
-    trayUsage: s.trayUsage || "", trayUsageEvery: s.trayUsageEvery || 3, trayNoLogos: !!s.trayNoLogos, trayNoBird: !!s.trayNoBird, trayNoNumber: !!s.trayNoNumber, trayPace: !!s.trayPace, trayNoCost: !!s.trayNoCost, trayWindows: s.trayWindows || {}, vision: s.vision || "", visionEffort: s.visionEffort || "", searcherEffort: s.searcherEffort || "", imageGen: s.imageGen || "", videoGen: s.videoGen || "", imageTimeout: s.imageTimeout || 0, classifyTimeout: s.classifyTimeout || 0, searcher: s.searcher || "", searchFirst: s.searchFirst || "", currency: s.currency || "usd",
+    trayUsage: s.trayUsage || "", trayUsageEvery: s.trayUsageEvery || 3, trayNoLogos: !!s.trayNoLogos, trayNoBird: !!s.trayNoBird, trayNoNumber: !!s.trayNoNumber, trayPace: !!s.trayPace, trayNoCost: !!s.trayNoCost, trayWindows: s.trayWindows || {}, vision: s.vision || "", visionEffort: s.visionEffort || "", searcherEffort: s.searcherEffort || "", imageGen: s.imageGen || "", videoGen: s.videoGen || "", imageTimeout: s.imageTimeout || 0, classifyTimeout: s.classifyTimeout || 0, searcher: s.searcher || "", searchFirst: s.searchFirst || "", currency: s.currency || "usd", totalCurrency: s.totalCurrency || "", trayCurrency: s.trayCurrency || "",
     chineseUnits: !!s.chineseUnits, dayStart: s.dayStart || 0, usageAlert: s.usageAlert || 0, balanceAlert: s.balanceAlert || 0, resetReminder: s.resetReminder || 0,
     turnDoneAlert: s.turnDoneAlert || 0, maskAlert: !!s.maskAlert };
 }

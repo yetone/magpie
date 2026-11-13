@@ -131,12 +131,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           workbuddyCheckins: [{ user: "Ann", day: today, at: new Date().toISOString(), outcome: "claimed", credit: 2, streak: 3 }],
         });
 
-        // Settings' Usage part: its list and the Alerts, no service's rows
+        // Settings' Usage part: its list, its Advanced fold (the menu bar's
+        // currency) and the Alerts, no service's rows
         await page.goto("http://magpie.test/?view=settings&tab=usage");
         await page.locator("#setPage-usage #currencySegs .opt").first().waitFor();
         const parts = await page.evaluate(() => [...document.querySelectorAll("#setPage-usage > *")]
           .map((h) => h.querySelector("#currencySegs") ? "usage" : h.id));
-        assert.deepEqual(parts, ["usage", "alertHead", "alertList"]);
+        assert.deepEqual(parts, ["usage", "usageMore", "alertHead", "alertList"]);
         assert.equal(await page.locator("#warmTabs, .warm-panes").count(), 0, "no tabs left");
         for (const id of ["#warmSegs", "#warmAtSegs", "#claudeWarmSegs", "#claudeWarmAtSegs", "#wbCheckinSegs", "#traeCheckinSegs"]) {
           assert.equal(await page.locator("#setPage-usage").locator(id).count(), 0, id + " is out of Settings");

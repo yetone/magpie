@@ -99,7 +99,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await openPart(page, "usage");
         await page.locator("#currencySegs .opt").first().waitFor();
         const segs = page.locator("#currencySegs .opt");
-        assert.equal(await segs.count(), 2);
+        assert.equal(await segs.count(), 3, "$, ¥ and By provider");
         assert.equal((await segs.nth(0).textContent()).trim(), usd);
         assert.equal((await segs.nth(1).textContent()).trim(), cny);
         assert.equal(await segs.nth(0).evaluate((b) => b.classList.contains("on")), true, "usd starts picked");

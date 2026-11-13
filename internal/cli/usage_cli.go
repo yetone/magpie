@@ -18,21 +18,26 @@ import (
 	stats "github.com/yetone/magpie/internal/usage"
 )
 
-// costCurrency and costRate are cost's currency and, for cny, the
-// CNY-per-USD rate to show it at — loadCostCurrency sets them once at a
-// command's start, not again for every row it prints.
+// costSettings, costRate and costYuan are Settings' currency choice, the
+// CNY-per-USD rate to show a cost in yuan at, and, for the choice
+// "provider", the providers that sell in yuan — loadCostCurrency sets
+// them once at a command's start, not again for every row it prints.
 var (
-	costCurrency = "usd"
+	costSettings settings.Settings
 	costRate     float64
+	costYuan     map[string]bool
 )
 
-// loadCostCurrency reads Settings' currency choice and, only for cny, the
-// exchange rate (internal/fx, its own 12h cache — this asks the network
-// only when that's stale).
+// loadCostCurrency reads Settings' currency choice and, only when a cost
+// may be in yuan, the exchange rate (internal/fx, its own 12h cache —
+// this asks the network only when that's stale).
 func loadCostCurrency() {
-	costCurrency = settings.Load().Currency
-	costRate = 0
-	if costCurrency == "cny" {
+	costSettings = settings.Load()
+	costRate, costYuan = 0, nil
+	if costSettings.Currency == settings.CurrencyByProvider {
+		costYuan = pr.YuanPricedSet()
+	}
+	if costSettings.Currency != "usd" && costSettings.Currency != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 		costRate = fx.Get(ctx).CNYPerUSD
 		cancel()
@@ -220,7 +225,7 @@ func printUsage(out io.Writer, s stats.Summary, title string, names map[string]s
 			if s.Tokens() > 0 {
 				share = fmt.Sprintf("%3.0f%%", 100*float64(g.Tokens())/float64(s.Tokens()))
 			}
-			fmt.Fprintln(out, "  "+pad(name(g), w), muted.Render(share), pad(fmtTokens(g.Tokens()), 7), faint.Render(pad(plural(g.Calls, "call"), 10)), cost(g.Totals), faint.Render(speed(g.Totals)), muted.Render(stats.FormatCredits(g.Totals)))
+			fmt.Fprintln(out, "  "+pad(name(g), w), muted.Render(share), pad(fmtTokens(g.Tokens()), 7), faint.Render(pad(plural(g.Calls, "call"), 10)), costOf(g.Totals, g.Provider), faint.Render(speed(g.Totals)), muted.Render(stats.FormatCredits(g.Totals)))
 		}
 	}
 	provider := func(id string) string {
@@ -349,14 +354,23 @@ func credits(t stats.Totals) string {
 	return ""
 }
 
-// cost renders list-price cost, saying when some calls could not be
-// priced, in costCurrency at costRate (set once per command by
-// loadCostCurrency).
-func cost(t stats.Totals) string {
+// cost renders a list-price cost of several providers' calls, saying
+// when some could not be priced, in the currency Settings shows a total in
+// at costRate (set once per command by loadCostCurrency).
+func cost(t stats.Totals) string { return costOf(t, "") }
+
+// costOf is cost of one provider's calls, in the currency Settings shows
+// that provider's in (its own, with the choice "provider"); "" is a sum
+// of several.
+func costOf(t stats.Totals, providerID string) string {
 	if t.Cost == 0 && t.Unpriced > 0 {
 		return faint.Render("no price")
 	}
-	s := stats.FormatCost(t.Cost, costCurrency, costRate)
+	cncy := costSettings.TotalCostIn()
+	if providerID != "" && providerID != stats.UnknownProvider {
+		cncy = costSettings.CostIn(costYuan[providerID])
+	}
+	s := stats.FormatCost(t.Cost, cncy, costRate)
 	if t.Unpriced > 0 {
 		s += muted.Render("+")
 	}

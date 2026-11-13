@@ -35,7 +35,7 @@ var Keys = []string{
 	// the menu bar's allowance cards
 	"trayUsages", "trayUsage", "trayUsageEvery", "trayNoLogos", "trayNoBird", "trayNoNumber", "trayPace", "trayNoCost", "trayWindows",
 	// usage and alerts
-	"currency", "chineseUnits", "dayStart", "usageAlert", "balanceAlert", "resetReminder", "turnDoneAlert", "maskAlert",
+	"currency", "totalCurrency", "trayCurrency", "chineseUnits", "dayStart", "usageAlert", "balanceAlert", "resetReminder", "turnDoneAlert", "maskAlert",
 	// network
 	"proxy", "pluginProxy", "updateProxy", "updateSource",
 	// privacy
@@ -63,6 +63,8 @@ var Choices = map[string][]string{
 	"lang":           settings.Langs,
 	"tray":           settings.Trays,
 	"currency":       settings.Currencies,
+	"totalCurrency":  settings.TotalCurrencies,
+	"trayCurrency":   settings.TotalCurrencies,
 	"codexWarmup":    {"off", "week", "all"},
 	"claudeWarmup":   {"off", "week", "all"},
 	"trayUsageEvery": ints(settings.TrayEvery),

@@ -946,7 +946,7 @@ function routingPage(part) {
         // read it for this request (Weighed.price)
         const p = f.price;
         if (p) {
-          const price = t("{in} in, {out} out a million tokens", { in: fmtCost({ cost: p.input }), out: fmtCost({ cost: p.output }) });
+          const price = t("{in} in, {out} out a million tokens", { in: fmtCost({ cost: p.input }, f.provider), out: fmtCost({ cost: p.output }, f.provider) });
           if (p.peak) return restedTo(t("it costs least now, even at its peak price — {price}.", { price }))
             || t("Cheapest first: {model} costs least on {who} now, even at its peak price — {price}.", { model: f.model, who: w, price });
           return restedTo(t("it costs least now — {price}.", { price }))
@@ -4130,10 +4130,17 @@ function routingPage(part) {
     return said ? ledCredits({ credits: n, credited: said }).textContent : "";
   }
   const creditsNote = () => t("What it cost in its plan's credits, as the reply said");
+  // the one provider a request's cost is of, for Settings' currency "By
+  // provider": none (a sum, in the totals' currency) when its tries went to
+  // more than one
+  function routeProvider(r) {
+    const ids = new Set((r.tries || []).map((tr) => tr.id).filter(Boolean));
+    return ids.size === 1 ? [...ids][0] : !ids.size && !r.group ? r.provider : "";
+  }
   function routeCost(r) {
     const credits = routeCredits([r]);
     if (!r.priced) return credits || "—";
-    return "≈" + fmtCost({ cost: r.cost || 0, unpriced: 0 }) + (r.unpriced ? "+" : "") + (credits ? " · " + credits : "");
+    return "≈" + fmtCost({ cost: r.cost || 0, unpriced: 0 }, routeProvider(r)) + (r.unpriced ? "+" : "") + (credits ? " · " + credits : "");
   }
   // byKey: grouped by the gateway key each came with, one sent with none
   // (from this computer, or kept before routes named their key) a group of

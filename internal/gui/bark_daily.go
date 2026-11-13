@@ -111,7 +111,7 @@ func barkSummary(ctx context.Context, now time.Time) (title, body string) {
 	if pct <= 0 {
 		pct = barkNearPct
 	}
-	currency, rate := trayCurrency()
+	currency, rate := totalsCurrency()
 	return barkDailyText(trayLang(s.Lang, systemLang), trayTotalSum(usage.Today), currency, rate,
 		provider.NearLimits(qs, pct, s.BalanceAlert, now), s.BalanceAlert, s.QuotaLeft, now)
 }

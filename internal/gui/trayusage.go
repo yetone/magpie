@@ -522,10 +522,21 @@ func trayMoney(t usage.Totals, noCost bool) usage.Totals {
 	return t
 }
 
-// trayCurrency is the currency Settings shows costs in, and the yuan's
-// rate when that is CNY.
+// trayCurrency is the currency the menu bar and its tooltip show magpie's
+// totals' cost in (Settings' Menu bar currency, else the totals'), and the
+// yuan's rate when that is CNY.
 func trayCurrency() (currency string, rate float64) {
-	currency = settings.Load().Currency
+	return currencyRate(settings.Load().TrayCostIn())
+}
+
+// totalsCurrency is the currency Settings shows a sum of costs in (a
+// total's, of every provider), and the yuan's rate when that is CNY.
+func totalsCurrency() (currency string, rate float64) {
+	return currencyRate(settings.Load().TotalCostIn())
+}
+
+func currencyRate(currency string) (string, float64) {
+	var rate float64
 	if currency == "cny" {
 		rate = fx.Soon().CNYPerUSD // never waited for, as the Settings page's
 	}

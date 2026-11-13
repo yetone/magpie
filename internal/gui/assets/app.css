@@ -5178,15 +5178,20 @@ body.window .row + .row.agent.conn > .who { min-height: 41px; } /* the line abov
 .ag-longest, .ag-isolated, .ag-iso-claude { cursor: pointer; }
 .ag-longest-say, .ag-isolated-say, .ag-iso-claude-say { color: var(--fg-2); }
 /* the Claude Magpie app's own Claude Code folder (#6459), folded under Advanced */
-.ag-iso-more > summary { font-size: 12px; line-height: 18px; color: var(--fg-2); list-style: none; display: inline-flex; align-items: center; gap: 5px; padding: 3px 0; border-radius: 4px; cursor: pointer; transition: color .12s ease; }
-.ag-iso-more > summary::-webkit-details-marker { display: none; }
-.ag-iso-more > summary::before { content: ""; flex: none; width: 10px; height: 10px; background: var(--muted); transition: transform .2s cubic-bezier(.23, 1, .32, 1), background-color .12s ease;
+.ag-iso-more > summary, .prefs-more > summary { font-size: 12px; line-height: 18px; color: var(--fg-2); list-style: none; display: inline-flex; align-items: center; gap: 5px; padding: 3px 0; border-radius: 4px; cursor: pointer; transition: color .12s ease; }
+.ag-iso-more > summary::-webkit-details-marker, .prefs-more > summary::-webkit-details-marker { display: none; }
+.ag-iso-more > summary::before, .prefs-more > summary::before { content: ""; flex: none; width: 10px; height: 10px; background: var(--muted); transition: transform .2s cubic-bezier(.23, 1, .32, 1), background-color .12s ease;
   -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M3.6 1.6 7 5 3.6 8.4' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
           mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M3.6 1.6 7 5 3.6 8.4' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat; }
-.ag-iso-more[open] > summary::before { transform: rotate(90deg); }
-@media (hover: hover) and (pointer: fine) { .ag-iso-more > summary:hover { color: var(--fg); } }
-.ag-iso-more > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-@media (prefers-reduced-motion: reduce) { .ag-iso-more > summary, .ag-iso-more > summary::before { transition: none; } }
+.ag-iso-more[open] > summary::before, .prefs-more[open] > summary::before { transform: rotate(90deg); }
+@media (hover: hover) and (pointer: fine) { .ag-iso-more > summary:hover, .prefs-more > summary:hover { color: var(--fg); } }
+.ag-iso-more > summary:focus-visible, .prefs-more > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .ag-iso-more > summary, .ag-iso-more > summary::before, .prefs-more > summary, .prefs-more > summary::before { transition: none; } }
+/* a settings page's rarely changed rows, folded under Advanced (the menu
+   bar's currency, onkashiko on X) */
+.prefs-more { margin: 10px 0 0; }
+.prefs-more > summary { margin-left: 2px; }
+.prefs-more > .list { margin-top: 6px; }
 /* which copy is left on the old list: a sentence that wraps as one, under the warning's words */
 .ag-vl.ag-stale-copy { display: block; padding-left: 14px; font-size: 12px; line-height: 1.6; color: var(--fg-2); }
 /* Codex's daemon: restarted from its line, a button that sits in the sentence */

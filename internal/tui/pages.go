@@ -1201,39 +1201,54 @@ func fmtTokens(n int) string {
 	return fmt.Sprint(n)
 }
 
-// costCurrency is Settings' currency choice and, for cny, the CNY-per-USD
-// rate to show costs at (internal/fx), refreshed at most once a second so
-// a page redrawn on every keypress doesn't reread the settings file or
-// touch the rate's own cache for each row fmtCost renders.
+// costCurrency is Settings' currency choice and the CNY-per-USD rate to
+// show costs at when one is in yuan (internal/fx), with, for the choice
+// "provider", the providers that sell in yuan, refreshed at most once a
+// second so a page redrawn on every keypress doesn't reread the settings
+// file or touch the rate's own cache for each row fmtCost renders.
 var (
 	costMu      sync.Mutex
 	costAt      time.Time
-	costCncy    string
+	costSet     settings.Settings
 	costRateVal float64
+	costYuan    map[string]bool
 )
 
-func costCurrency() (string, float64) {
+func costCurrency() (settings.Settings, float64, map[string]bool) {
 	costMu.Lock()
 	defer costMu.Unlock()
 	if time.Since(costAt) < time.Second {
-		return costCncy, costRateVal
+		return costSet, costRateVal, costYuan
 	}
-	costCncy = settings.Load().Currency
-	costRateVal = 0
-	if costCncy == "cny" {
+	costSet = settings.Load()
+	costRateVal, costYuan = 0, nil
+	if costSet.Currency == settings.CurrencyByProvider {
+		costYuan = provider.YuanPricedSet()
+	}
+	if costSet.Currency != "usd" && costSet.Currency != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 		costRateVal = fx.Get(ctx).CNYPerUSD
 		cancel()
 	}
 	costAt = time.Now()
-	return costCncy, costRateVal
+	return costSet, costRateVal, costYuan
 }
 
-func fmtCost(t usage.Totals) string {
+// fmtCost is a sum of several providers' costs, in the currency Settings
+// shows a total in.
+func fmtCost(t usage.Totals) string { return fmtCostOf(t, "") }
+
+// fmtCostOf is one provider's cost, in the currency Settings shows it in
+// (its own, with the choice "provider"); "" is a sum of several.
+func fmtCostOf(t usage.Totals, providerID string) string {
 	if t.Cost == 0 && t.Unpriced > 0 {
 		return "no price"
 	}
-	cncy, rate := costCurrency()
+	st, rate, yuan := costCurrency()
+	cncy := st.TotalCostIn()
+	if providerID != "" && providerID != usage.UnknownProvider {
+		cncy = st.CostIn(yuan[providerID])
+	}
 	s := usage.FormatCost(t.Cost, cncy, rate)
 	if t.Unpriced > 0 {
 		s += "+"
@@ -1347,7 +1362,7 @@ func (m model) usageBlock(b *strings.Builder, s usage.Summary, room int, names m
 				break
 			}
 			share := fmt.Sprintf("%3.0f%%", 100*float64(g.Tokens())/float64(max(1, s.Tokens())))
-			b.WriteString(pad + "  " + sText.Render(padRight(name(g), w)) + "  " + sMuted.Render(share) + "  " + sText.Render(padRight(fmtTokens(g.Tokens()), 7)) + "  " + sFaint.Render(padRight(fmt.Sprintf("%d call%s", g.Calls, plural(g.Calls)), 10)) + "  " + sOK.Render(fmtCost(g.Totals)) + sMuted.Render(credits(g.Totals)) + "\n")
+			b.WriteString(pad + "  " + sText.Render(padRight(name(g), w)) + "  " + sMuted.Render(share) + "  " + sText.Render(padRight(fmtTokens(g.Tokens()), 7)) + "  " + sFaint.Render(padRight(fmt.Sprintf("%d call%s", g.Calls, plural(g.Calls)), 10)) + "  " + sOK.Render(fmtCostOf(g.Totals, g.Provider)) + sMuted.Render(credits(g.Totals)) + "\n")
 		}
 		b.WriteString("\n")
 	}

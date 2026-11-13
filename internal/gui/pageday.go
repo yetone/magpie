@@ -102,11 +102,9 @@ func pageDay(params map[string]any) (any, error) {
 			want(m.Icon)
 		}
 	}
-	// a cost as Settings shows it: in USD, or in CNY at the rate known now
-	cur := settings.Load().Currency
-	if cur == "" {
-		cur = "usd"
-	}
+	// a cost as Settings shows a sum of several providers': in USD, or in
+	// CNY at the rate known now
+	cur := settings.Load().TotalCostIn()
 	return struct {
 		usageapi.Day
 		Icons    map[string]pageIcon `json:"icons"`

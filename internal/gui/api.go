@@ -388,6 +388,19 @@ type fxJSON struct {
 	Rate  float64    `json:"rate"`
 	At    *time.Time `json:"at,omitempty"`
 	Stale bool       `json:"stale"`
+	// Yuan, with the currency "provider", are the providers whose costs
+	// are shown in yuan, as they sell in it (provider.PricesInYuan)
+	Yuan []string `json:"yuan,omitempty"`
+}
+
+// costFX is currentFX with, for the currency "provider", which providers'
+// costs are in yuan.
+func costFX(s settings.Settings) fxJSON {
+	out := currentFX()
+	if s.Currency == settings.CurrencyByProvider {
+		out.Yuan = provider.YuanPriced()
+	}
+	return out
 }
 
 // currentFX is the rate known now, never waited for: a stale one is asked
@@ -881,7 +894,7 @@ func settingsState() settingsJSON {
 		}
 		s.TerminalDefault = found.Default
 	}
-	s.FX = currentFX()
+	s.FX = costFX(s.Settings)
 	if (s.UsageAlert > 0 || s.BalanceAlert > 0 || s.ResetReminder > 0 || s.TurnDoneAlert > 0 || s.MaskAlert) && notifyProblem != nil {
 		s.NotifyProblem = notifyProblem()
 	}
@@ -1688,10 +1701,11 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		// Windows' icon or not, and
 		// with their Pace numbers or not, with magpie's totals' cost or not,
 		// which of each subscription's windows, and the language the tooltip
-		// is in (yi_time)
+		// is in (yi_time), and the currency its totals' cost is in
 		if (!slices.Equal(settings.Load().TrayUsages, cur.TrayUsages) || in.TrayUsageEvery != cur.TrayUsageEvery ||
 			in.TrayNoLogos != cur.TrayNoLogos || in.TrayNoBird != cur.TrayNoBird || in.TrayNoNumber != cur.TrayNoNumber || in.TrayPace != cur.TrayPace ||
-			in.TrayNoCost != cur.TrayNoCost || !maps.EqualFunc(in.TrayWindows, cur.TrayWindows, slices.Equal) || in.Lang != cur.Lang || in.ChineseUnits != cur.ChineseUnits) && onTrayUsage != nil {
+			in.TrayNoCost != cur.TrayNoCost || !maps.EqualFunc(in.TrayWindows, cur.TrayWindows, slices.Equal) || in.Lang != cur.Lang || in.ChineseUnits != cur.ChineseUnits ||
+			in.TrayCostIn() != cur.TrayCostIn()) && onTrayUsage != nil {
 			onTrayUsage()
 		}
 		// an alert turned on or moved is looked at now, the Mac asked for its
@@ -3247,8 +3261,8 @@ func state() stateJSON {
 	// state() is asked for after nearly every click, so the rate — a
 	// network fetch once every TTL — is only worth its rare latency when
 	// cny is actually chosen; usd never looks at it
-	if s.Settings.Currency == "cny" {
-		s.FX = currentFX()
+	if s.Settings.Currency != "usd" {
+		s.FX = costFX(s.Settings)
 	}
 	s.Unlisted = unlistedModels()
 	s.CLIBehind = cliBehind()

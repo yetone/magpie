@@ -111,6 +111,36 @@ func TestFmtCostShowsChosenCurrency(t *testing.T) {
 	if got := fmtCost(usage.Totals{Cost: 0, Unpriced: 1}); got != "no price" {
 		t.Fatalf("unpriced: %q", got)
 	}
+
+	// By provider (onkashiko on X): DeepSeek's row in yuan, OpenAI's in
+	// dollars, a total in the currency picked for totals
+	for _, p := range []provider.Provider{
+		{ID: "deepseek", Name: "DeepSeek", Preset: "deepseek", Key: "k", Chat: "https://api.deepseek.com/v1"},
+		{ID: "openai", Name: "OpenAI", Preset: "openai", Key: "k", Chat: "https://api.openai.com/v1"},
+	} {
+		if err := provider.Save(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := settings.Save(settings.Settings{Currency: settings.CurrencyByProvider, TotalCurrency: "usd"}); err != nil {
+		t.Fatal(err)
+	}
+	costAt = time.Time{}
+	for _, c := range []struct{ id, want string }{{"deepseek", "≈¥8.86"}, {"openai", "≈$1.23"}, {"", "≈$1.23"}, {usage.UnknownProvider, "≈$1.23"}} {
+		if got := fmtCostOf(usage.Totals{Cost: 1.23}, c.id); got != c.want {
+			t.Errorf("by provider, %q: %q, want %q", c.id, got, c.want)
+		}
+	}
+	if err := settings.Save(settings.Settings{Currency: settings.CurrencyByProvider, TotalCurrency: "cny"}); err != nil {
+		t.Fatal(err)
+	}
+	costAt = time.Time{}
+	if got := fmtCost(usage.Totals{Cost: 1.23}); got != "≈¥8.86" {
+		t.Errorf("by provider, the total in cny: %q", got)
+	}
+	if got := fmtCostOf(usage.Totals{Cost: 1.23}, "openai"); got != "≈$1.23" {
+		t.Errorf("by provider, openai with totals in cny: %q", got)
+	}
 }
 
 func TestUnlimitedQuotaCell(t *testing.T) {

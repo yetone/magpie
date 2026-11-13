@@ -926,7 +926,7 @@ function renderUsage() {
       const hit = g.cache_read && hitRate !== null ? " · " + t("hit rate {p}", { p: hitPct(hitRate) }) : "";
       num.append(el("b", "", fmtN(usageTokens(g))), el("small", "", t("{a} in · {b} out", { a: fmtN(g.input), b: fmtN(g.output) }) + (g.cache_read ? " · " + t("{n} cached", { n: fmtN(g.cache_read) }) : "") + hit));
       r.append(num);
-      r.append(el("div", "cost", fmtCost(g) ? "≈" + fmtCost(g) : ""));
+      r.append(el("div", "cost", fmtCost(g, g.provider) ? "≈" + fmtCost(g, g.provider) : ""));
       if (act) act(r, g);
       box.append(r);
     }
@@ -1942,7 +1942,7 @@ function ledDetail(r) {
   if (r.in || r.out || r.cache_read || r.cache_write || !ledFailed_(r)) {
     add("Tokens", t("{i} in · {o} out · {r} cache read · {w} cache creation", { i: ledNum(r.in || 0), o: ledNum(r.out || 0), r: ledNum(r.cache_read || 0), w: ledNum(r.cache_write || 0) }) + cacheTTLs(r, ledNum) + (r.cache_unknown ? " · " + t("The vendor doesn't count the cache") : ""), "led-tokens");
   }
-  if (r.priced) add("Cost", "≈" + fmtCost({ cost: r.cost, unpriced: 0 }));
+  if (r.priced) add("Cost", "≈" + fmtCost({ cost: r.cost, unpriced: 0 }, r.provider));
   if (r.credits != null) add("Credits", ledCredits({ credits: r.credits, credited: 1 }).textContent);
   if (ledRowSpeed(r)) add("Speed", t("{n} tok/s", { n: ledNum(Math.round(ledRowSpeed(r))) }));
   else if (ledFloorSpeed(r)) add("Speed", "≥" + t("{n} tok/s", { n: ledNum(Math.round(ledFloorSpeed(r))) }));
@@ -3300,7 +3300,7 @@ function renderLedger() {
     // (jiabubu on Discord): in place of the dash a plan's model has for a
     // price, or under the price; a reply that said none says nothing
     const credits = r.credits != null ? ledCredits({ credits: r.credits, credited: 1 }).textContent : "";
-    const cost = td(r.priced ? "≈" + fmtCost({ cost: r.cost, unpriced: 0 }) : credits || "—", "n cost" + (r.priced || credits ? "" : " faint"), r.priced ? (r.pricing_model ? t("API price reference") + ": " + r.pricing_model : "") : credits ? t("What it cost in its plan's credits, as the reply said") : t("No known price for this model"));
+    const cost = td(r.priced ? "≈" + fmtCost({ cost: r.cost, unpriced: 0 }, r.provider) : credits || "—", "n cost" + (r.priced || credits ? "" : " faint"), r.priced ? (r.pricing_model ? t("API price reference") + ": " + r.pricing_model : "") : credits ? t("What it cost in its plan's credits, as the reply said") : t("No known price for this model"));
     if (r.priced && r.pricing_model) {
       const reference = el("div", "price-reference", t("Price reference: {model}", { model: r.pricing_model }));
       reference.title = t("Model used for the API price estimate; this is not an observed model forwarding event.");
