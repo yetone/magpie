@@ -136,6 +136,13 @@ type Model struct {
 	// itself when asked in plain words (m.searches: Trae's search model),
 	// which magpie may then search with for other models.
 	Searches bool `json:"searches,omitempty"`
+	// Also are the AI SDK packages of the other APIs the plugin says its
+	// vendor serves the model on besides its own (NPM), as the packages
+	// name them (m.also: Open Design's amr-link serves every model on
+	// chat completions, Responses and Anthropic's messages, plugins#888).
+	// A client's request on one of them is relayed there as it was sent,
+	// not translated to the model's own API (gaubeebangeel on X).
+	Also []string `json:"also,omitempty"`
 }
 
 // Provider is a provider a plugin signs in to.

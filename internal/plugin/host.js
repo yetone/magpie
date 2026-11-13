@@ -2217,6 +2217,8 @@ async function info(id, key, strict, limit, quiet, signal) {
       ...(typeof m.decides === "boolean" ? { decides: m.decides } : was?.decides !== undefined ? { decides: was.decides } : {}),
       // and one that searches the web by itself, asked in plain words
       ...(typeof m.searches === "boolean" ? { searches: m.searches } : was?.searches !== undefined ? { searches: was.searches } : {}),
+      // and the other APIs its vendor serves it on, by their AI SDK packages
+      ...(Array.isArray(m.also) ? { also: m.also } : was?.also !== undefined ? { also: was.also } : {}),
     }
   }
   const server = auths().get(id)?.spec
@@ -2694,6 +2696,10 @@ function rowOf(id, a, keys, stored, p, own) {
         // a model that searches the web by itself, asked in plain
         // words, which magpie may search with for other models
         searches: m.searches === true,
+        // the other APIs its vendor serves it on besides npm's, by their AI
+        // SDK packages (Open Design's amr-link serves every model on all
+        // three), where a client's request is relayed as it was sent
+        also: Array.isArray(m.also) ? m.also.filter((x) => typeof x === "string" && x !== "") : [],
       })),
   }
 }

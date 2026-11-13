@@ -7963,6 +7963,13 @@ func (s *Server) usable(p provider.Provider, model string) []provider.Protocol {
 	if p.MessagesFirst(model) {
 		sort.SliceStable(out, func(i, j int) bool { return out[i] == provider.Anthropic && out[j] != provider.Anthropic })
 	}
+	if p.IsPlugin() && len(apis) > 1 {
+		// a plugin's model is translated to its own API, the first it
+		// lists: the others its vendor serves it on (Open Design's) take a
+		// client's request as it was sent, and are no default
+		own := apis[0]
+		sort.SliceStable(out, func(i, j int) bool { return out[i] == own && out[j] != own })
+	}
 	return out
 }
 
