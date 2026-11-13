@@ -297,6 +297,12 @@ type subscriptionRun struct {
 	// came after, and Claude Code's resume goes on from them, whatever the
 	// taken-back turn's own still sit above (shelve)
 	replied bool
+	// fromLen is how long the file of the saved session it was started
+	// from (unshelve, a branch, a replayed transcript) was as it started,
+	// until it answers a turn whole: the conversation as it stood before
+	// its first turn, which a turn refused for the account's limit is
+	// cut back to (keepForReset, #6292)
+	fromLen int64
 
 	// effort is the level its Claude Code thinks at, as it started (its
 	// --effort) or was told since (setEffort, setTUIEffort); "" is Claude
@@ -1147,8 +1153,10 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 			defer from.discard() // unless the run took it
 		}
 	}
+	var fromLen int64
 	if from != nil {
 		args = append(args, "--resume", from.session)
+		fromLen = from.size()
 	} else if hasReply(req.Messages) {
 		// no run had the conversation: this one is told it whole, in one
 		// message, its earlier turns marked as such (renderClaudePrompt)
@@ -1396,7 +1404,7 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 		// for it
 		from.taken()
 		run.mu.Lock()
-		run.sessionID = from.session
+		run.sessionID, run.fromLen = from.session, fromLen
 		run.mu.Unlock()
 	}
 	line, _ := json.Marshal(map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": prompt}})
@@ -2029,6 +2037,7 @@ func (b *subscriptionBridge) resume(req *Request, owner string) (*subscriptionRu
 	run.segment = ch
 	run.active = time.Now()
 	run.turnUUID, run.backKey, run.backLine, run.backMsg = turn, key, run.lastLine, run.lastMsg
+	run.fromLen = 0 // it answered a turn since it started: its lines say where the conversation stood
 	run.allowed = allowedTools(req)
 	run.mu.Unlock()
 	run.endIn(runTimeout)
@@ -2527,8 +2536,12 @@ type savedSession struct {
 	loose      *looseTurn
 	tools      map[string]bool // the tools its agent was told of
 	at         time.Time       // since when it waits
-	timer      *time.Timer
-	since      []Message // the turn's messages, once unshelved
+	// until, when set, is when it is let go, in place of idleLongest
+	// after at: a session kept past a turn refused for the account's
+	// limit waits for the limit to reset (keepForReset, #6292)
+	until time.Time
+	timer *time.Timer
+	since []Message // the turn's messages, once unshelved
 	// cut, for a branch of a live run's session (branch), is the line it
 	// is cut after: the run that takes it resumes a copy of the session
 	// as far as that line (cutSession), and the file stays the run's
@@ -2581,7 +2594,15 @@ func (b *subscriptionBridge) shelve(run *subscriptionRun) {
 	run.mu.Lock()
 	run.shelved = true
 	run.mu.Unlock()
-	s.timer = time.AfterFunc(idleLongest-time.Since(s.at), func() {
+	b.shelfTimer(s)
+	b.trimShelf()
+}
+
+// shelfTimer lets s go from the shelf once it has waited as long as it
+// may (expires), b.mu held or not.
+func (b *subscriptionBridge) shelfTimer(s *savedSession) {
+	key := s.key
+	s.timer = time.AfterFunc(max(time.Until(s.expires()), 0), func() {
 		b.mu.Lock()
 		if b.shelf[key] == s {
 			delete(b.shelf, key)
@@ -2589,6 +2610,20 @@ func (b *subscriptionBridge) shelve(run *subscriptionRun) {
 		b.mu.Unlock()
 		s.discard()
 	})
+}
+
+// expires is when s is let go: until when set, else idleLongest after it
+// began to wait, as its run would have been.
+func (s *savedSession) expires() time.Time {
+	if !s.until.IsZero() {
+		return s.until
+	}
+	return s.at.Add(idleLongest)
+}
+
+// trimShelf lets the longest waiting go while the shelf holds more than
+// shelfMost (b.mu held).
+func (b *subscriptionBridge) trimShelf() {
 	for len(b.shelf) > shelfMost {
 		var oldKey string
 		var oldest *savedSession
@@ -3156,6 +3191,16 @@ func (s *savedSession) saved() bool {
 		}
 	}
 	return false
+}
+
+// size is how long its session's file is, 0 when it isn't there.
+func (s *savedSession) size() int64 {
+	for _, dir := range s.sessions {
+		if fi, err := os.Stat(filepath.Join(dir, s.session+".jsonl")); err == nil {
+			return fi.Size()
+		}
+	}
+	return 0
 }
 
 // taken hands the session to the run that goes on with it.
@@ -7237,10 +7282,17 @@ func (s *Server) serveSubscriptionAs(w http.ResponseWriter, r *http.Request, fro
 		run.letGo()
 	})
 	defer gone()
-	abort := func() {
-		if !letting.Load() {
-			run.abort()
+	abort := func(code int, msg string) {
+		if letting.Load() {
+			return
 		}
+		if code == http.StatusTooManyRequests && name == "Claude Code" {
+			// refused for the account's limit, not for the conversation:
+			// its session is kept for the turn asked again once the limit
+			// resets (#6292)
+			s.subscription.keepForReset(run, req, owner, msg)
+		}
+		run.abort()
 	}
 	// the allowance as kept now, and again as the reply begins, its turn
 	// having told it by then
@@ -7257,7 +7309,7 @@ func (s *Server) serveSubscriptionAs(w http.ResponseWriter, r *http.Request, fro
 		defer close(quit)
 		events = keepBridgeHeard(events, quit)
 	}
-	code, msg := relay(w, r, from, name, req, events, usage, abort, begin, func(said, stop string, ok bool) {
+	code, msg := relayFailing(w, r, from, name, req, events, usage, abort, begin, func(said, stop string, ok bool) {
 		if !gone() {
 			return // the client went first: letGo has the run
 		}
@@ -7535,6 +7587,13 @@ func keepBridgeHeard(events <-chan Event, quit <-chan struct{}) <-chan Event {
 // event goes out.
 func relay(w http.ResponseWriter, r *http.Request, from provider.Protocol, name string, req *Request, events <-chan Event, usage *Usage,
 	abort, begin func(), ended func(said, stop string, ok bool)) (int, string) {
+	return relayFailing(w, r, from, name, req, events, usage, func(int, string) { abort() }, begin, ended)
+}
+
+// relayFailing is relay with abort told the status and words the client
+// is answered with (bridgeFailed).
+func relayFailing(w http.ResponseWriter, r *http.Request, from provider.Protocol, name string, req *Request, events <-chan Event, usage *Usage,
+	abort func(code int, msg string), begin func(), ended func(said, stop string, ok bool)) (int, string) {
 	stream := req.Stream
 	if stream {
 		// an error before any of the answer — out of quota, rate limited —
@@ -7558,10 +7617,11 @@ func relay(w http.ResponseWriter, r *http.Request, from provider.Protocol, name 
 		}
 		if n := len(head); !alive && (n == 0 || head[n-1].Kind == KError) {
 			msg := name + " ended without an answer"
+			code := 502
 			if n > 0 {
-				msg = head[n-1].Text
+				code, msg = bridgeFailed(name, head[n-1].Text, head[n-1].Status)
 			}
-			abort()
+			abort(code, msg)
 			// what Anthropic said the reply's start used, the conversation
 			// written to the account's cache, is the failed try's, kept
 			// with its row when the request goes on to another (serve)
@@ -7570,9 +7630,7 @@ func relay(w http.ResponseWriter, r *http.Request, from provider.Protocol, name 
 					usage.add(ev.Usage)
 				}
 			}
-			code := 502
 			if n > 0 {
-				code, msg = bridgeFailed(name, msg, head[n-1].Status)
 				// nothing of the reply was said, nor has reached the client
 				if redoable(r, name, req, code, msg) {
 					return redoAsPrint, msg
@@ -7651,7 +7709,6 @@ func relay(w http.ResponseWriter, r *http.Request, from provider.Protocol, name 
 		col.err, col.errStatus = unansweredWhy(said), http.StatusBadGateway
 	}
 	if col.err != "" {
-		abort()
 		// a status, as in a stream, so another account can take over;
 		// what the reply's start used is the failed try's. Words said
 		// before the failure are no answer either: handed whole, they
@@ -7659,8 +7716,9 @@ func relay(w http.ResponseWriter, r *http.Request, from provider.Protocol, name 
 		// short for a finished one (#4822); nothing has reached the
 		// client yet, so it is told the failure, as a translated reply
 		// cut short is (errEndedShort)
-		usage.add(col.res.Usage)
 		code, msg := bridgeFailed(name, col.err, col.errStatus)
+		abort(code, msg)
+		usage.add(col.res.Usage)
 		if len(col.res.Parts) == 0 && redoable(r, name, req, code, msg) {
 			return redoAsPrint, msg
 		}

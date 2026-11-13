@@ -1915,6 +1915,40 @@ written then). A conversation a client rewrote (`looseTurn`) is not kept,
 and a run in a turn or parked on tool results at the stop is not either.
 `TestClaudeIdleRunSurvivesARestart`, `TestClaudeShelfFileUnreadableFallsBackToReplay`.
 
+### A turn refused for the account's limit
+
+A turn Anthropic refuses for the account's limit before any of its reply
+(429, "You've hit your limit · resets 9pm") ends its run, as any turn with
+no answer does (`relay`'s abort). Before, the session went with it, and the
+turn asked again after the reset, hours later, was told whole to a new
+Claude Code (#6292, recih: 354,900 tokens written to the cache). Now
+`relayFailing` tells the abort the status and words the client gets
+(`bridgeFailed`), and on a 429 `keepForReset`
+([`claude_persist.go`](../../internal/gateway/claude_persist.go)) shelves a
+copy of the run's session cut before the refused turn, so neither its user
+line nor Claude Code's synthetic error line is in it, under the turn's key
+(`nextTurn`). The cut is at `backLine`/`backMsg` for an idle run resumed for
+the turn, or at `fromLen`, the length of the saved session's file a run was
+started from (unshelve, a branch, a replay), while it has answered no turn:
+a turn asked again while the account is still limited is shelved again,
+cut at the same place. A run started for the turn (nothing before it in its
+session), a conversation taken back and not gone on with, or one with the
+client's own cache marks keeps nothing.
+
+The entry waits until `until` (`expires`), not `idleLongest`: the reset the
+refusal names (`resetsAt`), else the latest reset of the account's windows
+that are used up (`KeptClaudeLimits`, from Claude Code's
+`rate_limit_event`), else 5 hours (`quotaShelfUnsaid`), plus
+`quotaShelfMargin` (1h), never less than `idleLongest` and never more than
+`quotaShelfLongest` (`longestQuota`). `until` is written to
+`claude-shelf.json`, so the entry survives a restart while the account
+waits; an entry whose `until` is further than `quotaShelfLongest` past its
+`at` is unknown. The shelf still holds `shelfMost` at most, the longest
+waiting let go first (`trimShelf`).
+`TestClaudeTurnRefusedForTheLimitKeepsItsSessionTillTheReset` (both modes:
+two refusals, a restart, then the turn resumes the cut session told the
+turn alone), `TestQuotaShelfFor`.
+
 ## Verification
 
 ```sh
