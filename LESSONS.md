@@ -1350,6 +1350,10 @@ each one.
     (v0.1.4043) met the budget with no raise, partly by joining
     statements onto one line. Joining lines moves nothing out and costs
     readability; it is a last resort, not the way to meet the budget.
+    The same evening 5211fd3ba (+1,016 lines) "packed" costInYuan to
+    land 3 bytes under it, after 9a8219237 had left 14. Each change now
+    shaves until it fits, and the next one has nothing to shave: move a
+    page out of the core first (#2710).
   - A record that points elsewhere: 2f34649a6's body is "Run: see push
     notes", and 8f82e08b4's "(see below)" has nothing below it; neither
     says whether what it ran passed. A pointer is not a record (10-14).
