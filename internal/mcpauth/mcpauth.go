@@ -1256,5 +1256,5 @@ func Cancel(id string) {
 func page(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
-	fmt.Fprintf(w, `<!doctype html><meta charset="utf-8"><title>Magpie</title><body style="font:15px -apple-system,system-ui,sans-serif;max-width:32em;margin:4em auto;padding:0 1em;color:#222">%s</body>`, html.EscapeString(msg))
+	fmt.Fprintf(w, `<!doctype html><meta charset="utf-8"><meta name="color-scheme" content="light dark"><title>Magpie</title><body style="font:15px -apple-system,system-ui,sans-serif;max-width:32em;margin:4em auto;padding:0 1em">%s</body>`, html.EscapeString(msg))
 }

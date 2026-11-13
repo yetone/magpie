@@ -94,6 +94,15 @@
   --tk-s: #98d8a4; --tk-k: #c4b5fd; --tk-f: #93c5fd; --tk-n: #f2b544; --tk-v: #67e8f9; --tk-o: #f0abfc; --tk-c: #8b8b94;
   --c1: #a5b4fc; --c2: #7dd3fc; --c3: #6ee7b7; --c4: #fcd34d; --c5: #f9a8d4; --c6: #c4b5fd; --c7: #94a3b8;
 }
+/* magpie draws both themes itself. The root says so, as index.html's meta
+   does, so a browser that repaints light pages dark (Chrome's Auto Dark
+   Theme, Safari's Adaptive Dark Mode) leaves the page alone (xjp on X).
+   The page under it takes the theme shown, so native controls, scrollbars
+   and a plugin's frame match it, and a theme chosen in Settings is the
+   only one: Light stays light on a dark system. */
+:root { color-scheme: light dark; }
+:root[data-theme="light"] body { color-scheme: light only; }
+:root[data-theme="dark"] body { color-scheme: dark; }
 /* Okabe–Ito qualitative series (#2073): adjacent series stay apart in hue and
    lightness in both light and dark themes */
 :root[data-colorblind="1"] {

@@ -98,8 +98,10 @@
   function paint(theme) {
     const root = document.documentElement;
     root.dataset.theme = theme.dark ? "dark" : "light";
-    // the frame's canvas matches the window's, not a white sheet in dark
-    root.style.colorScheme = theme.dark ? "dark" : "light";
+    // the frame's canvas matches the window's, not a white sheet in dark;
+    // a light one is light only, so a browser that repaints light pages
+    // dark leaves it as the window is left (xjp on X)
+    root.style.colorScheme = theme.dark ? "dark" : "light only";
     root.lang = theme.lang || "en";
     for (const [k, v] of Object.entries(theme.tokens || {})) root.style.setProperty("--magpie-" + k, v);
   }

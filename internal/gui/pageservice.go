@@ -196,7 +196,7 @@ func servePageService(rw http.ResponseWriter, r *http.Request, p *pluginPage, to
 				// sandboxed document refreshes only with allow-scripts
 				h.Set("Content-Type", "text/html; charset=utf-8")
 				rw.WriteHeader(http.StatusBadGateway)
-				fmt.Fprint(rw, `<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="2"><style>body{font:13px/1.5 system-ui,sans-serif;display:grid;place-items:center;height:90vh;margin:0;color:GrayText}</style><p>The plugin's service isn't answering yet. Trying again…</p>`)
+				fmt.Fprint(rw, `<!doctype html><meta charset="utf-8"><meta name="color-scheme" content="light dark"><meta http-equiv="refresh" content="2"><style>body{font:13px/1.5 system-ui,sans-serif;display:grid;place-items:center;height:90vh;margin:0;color:GrayText}</style><p>The plugin's service isn't answering yet. Trying again…</p>`)
 				return
 			}
 			http.Error(rw, "the plugin's service isn't answering", http.StatusBadGateway)

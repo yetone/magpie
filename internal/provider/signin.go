@@ -1018,8 +1018,9 @@ func signInPage(w http.ResponseWriter, ok bool, title, msg string) {
 		mark = `<path d="M7 7l10 10M17 7L7 17"/>`
 	}
 	fmt.Fprintf(w, `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>magpie · %[1]s</title><style>
-:root{--bg:#fafafa;--fg:#111;--muted:#6b6b6b;--line:#e4e4e4;--card:#fff}
+:root{--bg:#fafafa;--fg:#111;--muted:#6b6b6b;--line:#e4e4e4;--card:#fff;color-scheme:light dark}
 @media (prefers-color-scheme:dark){:root{--bg:#0e0e0e;--fg:#f2f2f2;--muted:#9a9a9a;--line:#262626;--card:#161616}}
 *{box-sizing:border-box}html,body{height:100%%;margin:0}
 body{background:var(--bg);color:var(--fg);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;display:grid;place-items:center;padding:16px}
