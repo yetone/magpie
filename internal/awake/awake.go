@@ -114,3 +114,18 @@ func Keep(ctx context.Context, level func() Level, state func() State) {
 		}
 	}
 }
+
+// NoNap keeps macOS from App Napping the magpie serving the gateway until
+// the release it returns is called (#6261, ChasLui). The menu-bar app
+// serves it in its own process, and with the screen locked macOS naps the
+// app as one in the background: its priority falls to 4 and its timers
+// wait, so the first request after a quiet while spent its 30 seconds
+// before routing and got a 504. An agent waiting on the gateway is the
+// user's work, so the activity says it is user initiated, as Apple's App
+// Nap opt-out does. It lets the system sleep when idle, as it did: holding
+// that off is Keep's, and only while the user asked for it. Nor does it
+// ask for NSActivityLatencyCritical's timer precision, which is for audio
+// and video; a request needs the process run, not run to the millisecond.
+func NoNap() func() {
+	return napOff("magpie serves the gateway agents send their requests to")
+}
