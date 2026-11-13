@@ -178,7 +178,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert(await p.locator("#panelUsage rect.col").count() > 10, "columns");
       assert.deepEqual(await p.locator("#panelUsage .led-rank .rk-nm").allTextContents(), ["Claude", "Relay"]);
       assert.equal((await p.locator("#panelUsage .sess-pick").textContent()).trim(), w.all);
-      assert.deepEqual(await p.locator("#panelUsage .pu-card .segs .opt").allTextContents(), w.metrics);
+      assert.deepEqual(await p.locator("#panelUsage .pu-card .segs:not(.pu-split) .opt").allTextContents(), w.metrics);
       // Labels in the 440px panel must be readable, not clipped by ellipsis.
       assert(await p.locator("#panelUsage .pu-tot .blk").first().locator(".sub").evaluate(e =>
         e.scrollWidth <= e.clientWidth + 1 && e.scrollHeight <= e.clientHeight + 1 && getComputedStyle(e).textOverflow !== "ellipsis"), "token input/output is fully visible");
@@ -211,10 +211,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(fitted.at(-1),height,`the panel fits the ${need.tab} tab showing`);
       const scroll = () => p.locator("#view-agents").evaluate(v => v.scrollTop);
       const before = await scroll();
-      await p.locator("#panelUsage .pu-card .segs .opt").nth(1).click();
+      await p.locator("#panelUsage .pu-card .segs:not(.pu-split) .opt").nth(1).click();
       assert((await p.locator("#panelUsage svg .axis").allTextContents()).some(s => /^[$¥]/.test(s)), "the cost's axis");
       assert.equal(await scroll(),before,"a click moved the panel");
-      await p.locator("#panelUsage .pu-card .segs .opt").nth(0).click();
+      await p.locator("#panelUsage .pu-card .segs:not(.pu-split) .opt").nth(0).click();
       assert.equal(await scroll(),before,"a click moved the panel");
 
       // All, as the window's Usage has it (#860): asked for, and the
@@ -256,9 +256,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await refresh.click();
       await p.locator("#panelUsage:not(.pu-loading)").waitFor();
       assert.equal(asked.at(-1).get("day"), selectedDay, "refresh keeps the selected day");
-      await p.locator("#panelUsage .pu-card .segs .opt").nth(1).click();
+      await p.locator("#panelUsage .pu-card .segs:not(.pu-split) .opt").nth(1).click();
       assert.equal(parseFloat((await p.locator("#panelUsage .led-rank .rk").first().locator(".rk-val").textContent()).slice(1)), 0.9);
-      await p.locator("#panelUsage .pu-card .segs .opt").nth(0).click();
+      await p.locator("#panelUsage .pu-card .segs:not(.pu-split) .opt").nth(0).click();
       if (process.env.ARTIFACT_DIR) {
         await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
         const context = await browser.newContext({ viewport: { width: 440, height: 760 }, reducedMotion: "reduce" });
