@@ -1717,6 +1717,7 @@ func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 		shown := catalogFor(r)
 		if agent := agentOf(r); agent == "claude-desktop" {
 			data = desktopModels(shown, desktopKnowsMythos(r.Header.Get("User-Agent")))
+			data = append(data, DesktopTierRows(shown, data)...)
 		} else if agent == ScienceID {
 			data = scienceModels(shown)
 		} else {

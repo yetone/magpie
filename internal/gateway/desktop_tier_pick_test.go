@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -73,14 +74,67 @@ func tierEntries(t *testing.T, list []map[string]any) map[string]map[string]any 
 	return out
 }
 
+// desktopListed is Claude Desktop's /v1/models, asked with its key, as
+// raw rows.
+func desktopListed(t *testing.T) []map[string]any {
+	t.Helper()
+	req := httptest.NewRequest("GET", "/v1/models?limit=1000", nil)
+	req.Header.Set("x-api-key", TokenFor("claude-desktop"))
+	rec := httptest.NewRecorder()
+	New().Handler().ServeHTTP(rec, req)
+	var out struct {
+		Data []map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatal(rec.Body.String(), err)
+	}
+	return out.Data
+}
+
+// rowTiers are the /v1/models rows by the tier they carry; a tier carried
+// by two rows fails.
+func rowTiers(t *testing.T, rows []map[string]any) map[string]map[string]any {
+	t.Helper()
+	out := map[string]map[string]any{}
+	for _, r := range rows {
+		if tier, _ := r["anthropic_family_tier"].(string); tier != "" {
+			if out[tier] != nil {
+				t.Fatalf("%s carried twice: %v", tier, rows)
+			}
+			out[tier] = r
+		}
+	}
+	return out
+}
+
+// noTierEntry fails when the inferenceModels list holds an entry beyond
+// the rows: Desktop's model menu is that list, so such an entry showed as
+// a model of its own, "Gemini 4 Hydrogen · haiku" beside "Gemini 4
+// Hydrogen" (yanghonghang on X).
+func noTierEntry(t *testing.T, list []map[string]any) {
+	t.Helper()
+	shown, _ := provider.CatalogFor("claude-desktop")
+	if len(list) != len(shown) {
+		t.Fatalf("%d entries in Desktop's model menu for %d models: %v", len(list), len(shown), list)
+	}
+	for _, e := range list {
+		if l, _ := e["labelOverride"].(string); strings.Contains(l, " · ") && regexp.MustCompile(` · (opus|sonnet|haiku)$`).MatchString(l) {
+			t.Fatalf("a tier's own entry in Desktop's model menu: %v", e)
+		}
+	}
+}
+
 // A model picked for two of Claude Desktop's tiers (a user's
 // copilot/claude-sonnet-5.5 for sonnet and haiku) was tagged with the
 // first only: Desktop keys inferenceModels by name and reads one tier off
 // an entry, so haiku had no model, Claude Code in the Code tab got an empty
-// ANTHROPIC_DEFAULT_HAIKU_MODEL, and its small tasks (WebFetch's page
-// summaries) ran on the session's model. The second tier is listed once
-// more, after the rows, by the model's id form under a number of its own,
-// which the gateway reads back to the model and serves as the pick.
+// ANTHROPIC_DEFAULT_HAIKU_MODEL, and its small tasks ran on the session's
+// model. The second tier was then listed once more in inferenceModels, and
+// Desktop's model menu, which is that list, showed it as a model of its
+// own (yanghonghang on X). The second tier now goes in /v1/models only,
+// by the model's id form under a number of its own, tagged with the tier:
+// Desktop's discovery pins the tier's variable to it, and the gateway reads
+// it back to the model and serves it as the pick.
 func TestDesktopTierSharedPick(t *testing.T) {
 	t.Run("claude model", func(t *testing.T) {
 		u := desktopPickSetup(t)
@@ -91,34 +145,34 @@ func TestDesktopTierSharedPick(t *testing.T) {
 			}
 		}
 		list, ok := DesktopInferenceModels()
-		shown, _ := provider.CatalogFor("claude-desktop")
-		rows := desktopModels(shown, true)
-		if !ok || len(list) != len(rows)+1 {
-			t.Fatalf("%d entries for %d rows and one more tier: %v", len(list), len(rows), list)
+		if !ok {
+			t.Fatal("no list")
 		}
-		for i, r := range rows {
-			if want := strings.TrimSuffix(r["id"].(string), "[1m]"); list[i]["name"] != want {
-				t.Fatalf("entry %d is %v, /v1/models has %s there", i, list[i]["name"], want)
-			}
+		noTierEntry(t, list)
+		if on, ok := DesktopDiscovers(); !on || !ok {
+			t.Fatalf("a shared tier needs Desktop's discovery: %v %v", on, ok)
 		}
 		tiers := tierEntries(t, list)
 		if e := tiers["sonnet"]; e == nil || e["name"] != DesktopID(sonnet) {
 			t.Fatalf("sonnet: %v", list)
 		}
-		haiku := tiers["haiku"]
+		if tiers["haiku"] != nil {
+			t.Fatalf("haiku in the list: %v", list)
+		}
+		rows := desktopListed(t)
+		shown, _ := provider.CatalogFor("claude-desktop")
+		if len(rows) != len(shown)+1 {
+			t.Fatalf("%d rows for %d models and one more tier: %v", len(rows), len(shown), rows)
+		}
+		haiku := rowTiers(t, rows)["haiku"]
 		if haiku == nil {
-			t.Fatalf("haiku has no entry, so Claude Code's ANTHROPIC_DEFAULT_HAIKU_MODEL is empty: %v", list)
+			t.Fatalf("haiku has no row, so Claude Code's ANTHROPIC_DEFAULT_HAIKU_MODEL is empty: %v", rows)
 		}
-		alias, _ := haiku["name"].(string)
+		alias, _ := haiku["id"].(string)
+		alias = strings.TrimSuffix(alias, "[1m]")
 		if !regexp.MustCompile(`^magpie-\d{10}\.anthropic\.claude-sonnet-5-5$`).MatchString(alias) || alias == DesktopID(sonnet) ||
-			haiku["isFamilyDefault"] != true || list[len(list)-1]["name"] != alias {
-			t.Fatalf("haiku's entry: %v (sonnet's name %s)", haiku, DesktopID(sonnet))
-		}
-		if _, has := haiku["behavesAs"]; has {
-			t.Fatalf("Claude Code knows %s as Claude Sonnet 5.5: %v", alias, haiku)
-		}
-		if l, _ := haiku["labelOverride"].(string); !strings.HasSuffix(l, " · haiku") {
-			t.Fatalf("haiku's label: %v", haiku)
+			haiku["is_family_default"] != true {
+			t.Fatalf("haiku's row: %v (sonnet's name %s)", haiku, DesktopID(sonnet))
 		}
 		for _, id := range []string{alias, alias + "[1m]"} {
 			if got := DesktopCatalogID(id); got != sonnet.ID {
@@ -130,7 +184,7 @@ func TestDesktopTierSharedPick(t *testing.T) {
 		}
 
 		// the session on m1; Claude Code's small task for the haiku tier,
-		// by that entry's name, goes to the pick, not the session's model
+		// by that row's id, goes to the pick, not the session's model
 		s := New()
 		m1 := shownEntry(t, func(e provider.Entry) bool { return e.ID == "fake/m1" })
 		desktopSubagentAsk(t, s, Token+"-claude-desktop", DesktopID(m1), "", "/v1/messages", true)
@@ -142,15 +196,18 @@ func TestDesktopTierSharedPick(t *testing.T) {
 			t.Fatalf("haiku's small task went to %q, want the haiku pick claude-sonnet-5-5", m)
 		}
 
-		// the picks apart again: one entry a tier, none more
+		// the picks apart again: no more rows, no discovery
 		if err := SetDesktopTier("haiku", "fake/m1"); err != nil {
 			t.Fatal(err)
 		}
-		if list, _ := DesktopInferenceModels(); len(list) != len(rows) {
-			t.Fatalf("picks apart: %v", list)
+		if rows := desktopListed(t); len(rows) != len(shown) {
+			t.Fatalf("picks apart: %v", rows)
 		}
 		if a := DesktopTierAliases(); a != nil {
 			t.Fatalf("picks apart, tier aliases: %v", a)
+		}
+		if on, ok := DesktopDiscovers(); on || !ok {
+			t.Fatalf("picks apart, discovery: %v %v", on, ok)
 		}
 	})
 
@@ -163,20 +220,21 @@ func TestDesktopTierSharedPick(t *testing.T) {
 			}
 		}
 		list, _ := DesktopInferenceModels()
-		tiers := tierEntries(t, list)
-		opus, haiku := tiers["opus"], tiers["haiku"]
+		noTierEntry(t, list)
+		opus := tierEntries(t, list)["opus"]
 		if opus == nil || opus["name"] != DesktopID(m1) || opus["behavesAs"] != "claude-opus-5-5" {
 			t.Fatalf("opus: %v", list)
 		}
+		haiku := rowTiers(t, desktopListed(t))["haiku"]
 		if haiku == nil {
-			t.Fatalf("haiku has no entry: %v", list)
+			t.Fatal("haiku has no row")
 		}
-		alias, _ := haiku["name"].(string)
-		if !regexp.MustCompile(`^mythos-magpie-\d{10}$`).MatchString(alias) || alias == DesktopID(m1) || haiku["behavesAs"] != "claude-haiku-5-5" {
-			t.Fatalf("haiku's entry: %v", haiku)
+		alias, _ := haiku["id"].(string)
+		if !regexp.MustCompile(`^mythos-magpie-\d{10}$`).MatchString(alias) || alias == DesktopID(m1) {
+			t.Fatalf("haiku's row: %v", haiku)
 		}
 		as, ok := DesktopBehavesAs()
-		if !ok || as[DesktopID(m1)] != "claude-opus-5-5" || as[alias] != "claude-haiku-5-5" || len(as) != 2 {
+		if !ok || as[DesktopID(m1)] != "claude-opus-5-5" || len(as) != 1 {
 			t.Fatalf("behaves as: %v %v", as, ok)
 		}
 		if got := DesktopCatalogID(alias); got != m1.ID {
@@ -184,8 +242,8 @@ func TestDesktopTierSharedPick(t *testing.T) {
 		}
 	})
 
-	// one model for every tier: each tier after the first gets an entry
-	// of its own, by an id of its own, each served as the pick
+	// one model for every tier: each tier after the first gets a row of its
+	// own, by an id of its own, each served as the pick
 	t.Run("every tier", func(t *testing.T) {
 		u := desktopPickSetup(t)
 		m1 := shownEntry(t, func(e provider.Entry) bool { return e.ID == "fake/m1" })
@@ -196,30 +254,32 @@ func TestDesktopTierSharedPick(t *testing.T) {
 			}
 		}
 		list, _ := DesktopInferenceModels()
+		noTierEntry(t, list)
+		if e := tierEntries(t, list)["opus"]; e == nil || e["name"] != DesktopID(m1) {
+			t.Fatalf("opus, the first tier, on the entry: %v", list)
+		}
+		rows := desktopListed(t)
 		shown, _ := provider.CatalogFor("claude-desktop")
-		if len(list) != len(shown)+len(DesktopTierNames)-1 {
-			t.Fatalf("%d entries for %d rows and %d more tiers: %v", len(list), len(shown), len(DesktopTierNames)-1, list)
+		if len(rows) != len(shown)+len(DesktopTierNames)-1 {
+			t.Fatalf("%d rows for %d models and %d more tiers: %v", len(rows), len(shown), len(DesktopTierNames)-1, rows)
 		}
-		tiers := tierEntries(t, list)
-		names := map[string]bool{}
-		for _, e := range list {
-			n, _ := e["name"].(string)
-			if names[n] {
-				t.Fatalf("%s listed twice: %v", n, list)
+		ids := map[string]bool{}
+		for _, r := range rows {
+			id, _ := r["id"].(string)
+			if ids[id] {
+				t.Fatalf("%s listed twice: %v", id, rows)
 			}
-			names[n] = true
+			ids[id] = true
 		}
-		if tiers["opus"] == nil || tiers["opus"]["name"] != DesktopID(m1) {
-			t.Fatalf("opus, the first tier, on the row: %v", list)
-		}
+		tiers := rowTiers(t, rows)
 		s := New()
 		desktopSubagentAsk(t, s, Token+"-claude-desktop", DesktopID(sonnet), "", "/v1/messages", true)
 		for _, tier := range DesktopTierNames {
-			e := tiers[tier]
-			if e == nil || e["behavesAs"] != desktopBehavesAs[tier] || e["isFamilyDefault"] != true {
-				t.Fatalf("%s: %v", tier, list)
+			r := tiers[tier]
+			if r == nil || r["is_family_default"] != true {
+				t.Fatalf("%s: %v", tier, rows)
 			}
-			id, _ := e["name"].(string)
+			id, _ := r["id"].(string)
 			if got := DesktopCatalogID(id); got != m1.ID {
 				t.Fatalf("%s's %s read back as %q", tier, id, got)
 			}
@@ -234,9 +294,8 @@ func TestDesktopTierSharedPick(t *testing.T) {
 	})
 
 	// a Claude model with no reasoning levels is listed by its own id,
-	// which has no number to change: the later tier's entry is
-	// anthropic/magpie-<n>, which Claude Code doesn't know, so it runs as
-	// that model
+	// which has no number to change: the later tier's row is
+	// anthropic/magpie-<n>
 	t.Run("own id", func(t *testing.T) {
 		desktopPickSetup(t)
 		if err := provider.Save(provider.Provider{ID: "own", Name: "Own", Key: "k", Anthropic: "http://127.0.0.1:1", Models: []string{"claude-haiku-4-5"}}); err != nil {
@@ -249,14 +308,14 @@ func TestDesktopTierSharedPick(t *testing.T) {
 			}
 		}
 		list, _ := DesktopInferenceModels()
-		tiers := tierEntries(t, list)
-		if e := tiers["sonnet"]; e == nil || e["name"] != DesktopID(h) {
+		noTierEntry(t, list)
+		if e := tierEntries(t, list)["sonnet"]; e == nil || e["name"] != DesktopID(h) {
 			t.Fatalf("sonnet: %v", list)
 		}
-		haiku := tiers["haiku"]
-		alias, _ := haiku["name"].(string)
-		if !regexp.MustCompile(`^anthropic/magpie-\d{10}$`).MatchString(alias) || haiku["behavesAs"] != "claude-haiku-4-5" {
-			t.Fatalf("haiku's entry: %v", haiku)
+		haiku := rowTiers(t, desktopListed(t))["haiku"]
+		alias, _ := haiku["id"].(string)
+		if !regexp.MustCompile(`^anthropic/magpie-\d{10}$`).MatchString(alias) {
+			t.Fatalf("haiku's row: %v", haiku)
 		}
 		if got := DesktopCatalogID(alias); got != h.ID {
 			t.Fatalf("%s read back as %q", alias, got)

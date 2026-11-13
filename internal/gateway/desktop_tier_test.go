@@ -48,7 +48,11 @@ func TestClaudeDesktopTiers(t *testing.T) {
 		}
 		out := map[string]row{}
 		for _, d := range list.Data {
-			out[DesktopCatalogID(d.ID)] = d.row
+			// a model picked for two tiers has a row for the later one
+			// too (TestDesktopTierSharedPick): the model's own row is first
+			if _, seen := out[DesktopCatalogID(d.ID)]; !seen {
+				out[DesktopCatalogID(d.ID)] = d.row
+			}
 		}
 		return out
 	}
