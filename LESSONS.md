@@ -1281,6 +1281,17 @@ each one.
     f97415bc0. Its body lists the gui tests and vet it ran, and neither
     guard's package. A new package-level var runs `go test .`; a new
     route runs internal/cli's parity test.
+- **11-13, criteria still missed.**
+  - A budget's pass recorded at a tree it wasn't run at: 5a0e0378c's
+    body says TestCoreScriptBudget passed "rebased on 7583ed65c", but
+    the core had 40 bytes of room there and the commit added 344 to
+    plugins.js. Main was red on it from 06:00 (CI first at e9e63c6d7)
+    until 5a44051eb moved the hook into plugingrid.js. The budget is
+    pure arithmetic over the files: a copy of codeBytes over `git show`
+    gives the number for any sha in a second, so "passes" can be
+    checked at the pushed head without a build.
+  - ee1553913 wrote its "+1,112" budget reason twice in one comment for
+    one raise. A reason that is in the line twice reads as two raises.
 - **Done right on 10-17.** The retire stack (0f1666b38 to de671719a)
   diffed staticcheck's U1000 against its base for dead code, b98f906b1
   was red on the old code for an own-account gap, and 8 subscriptions
