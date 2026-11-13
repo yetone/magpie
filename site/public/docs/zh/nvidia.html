@@ -200,6 +200,8 @@ magpie codex nvidia/<model id></pre></div>
     <h2 id="notes"><a class="anchor" href="#notes">几点说明</a></h2>
     <ul><li>在 OpenCode 里配过的 <code>nvidia</code> 供应商，导入时也会变成这个预设。</li><li>NIM 的免费额度用完或被限速时，可以把它和其他供应商放进同一个路由组：一个失败了，组里的下一个接着回答。</li><li>magpie 分不出一把 NIM 的 Key 是免费的还是付费的，所以不会替你判断它的计费方式。</li></ul>
 
+    <p><a href="/docs/zh/free-models">免费模型接入 Claude Code、Codex 等 Agent</a></p>
+
     <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
     <h3>magpie 支持 NVIDIA NIM 吗？</h3>
     <p>支持，用 nvidia 预设。填一把 build.nvidia.com 的 API Key，magpie 走 integrate.api.nvidia.com/v1 的 Chat Completions，模型 id 写成 nvidia/<模型>。</p>

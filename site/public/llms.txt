@@ -150,6 +150,7 @@ DeepSeek, Kimi (Moonshot), GLM (Zhipu), Qwen, MiniMax, Anthropic (Claude), OpenA
 - [NVIDIA NIM in Claude Code, Codex and other agents](https://usemagpie.ai/docs/nvidia): the nvidia preset on Chat Completions at integrate.api.nvidia.com, Claude Code and Codex translated, free models marked in the pickers, imported keys folded into one provider.
 - [API relays in Claude Code, Codex and other agents](https://usemagpie.ai/docs/relay): preset relays (AiHubMix, PipeLLM, 302.AI, CherryIN, 鱼鱼连线) and any OpenAI- or Anthropic-compatible address, Claude models on Messages for caching, model price, model wire, context and output limits, scheduled list refresh.
 - [Fireworks and Fireworks Nexus in Claude Code, Codex and other agents](https://usemagpie.ai/docs/fireworks): the fireworks preset on Chat Completions, pay as you go; fireworks-nexus on Nexus Auto (Pro and Team take only auto), Claude and GPT with your own keys in x-anthropic-api-key and x-openai-api-key.
+- [Free models in Claude Code, Codex and other agents](https://usemagpie.ai/docs/free-models): OpenCode Zen's and Kilo Gateway's free models with no key, the free mark in pickers, and free models first in a routing group.
 - [Library](https://usemagpie.ai/docs/library): instructions, MCP servers, skills, hooks and subagents for each agent.
 - [MCP router](https://usemagpie.ai/docs/mcp-router): one magpie MCP server per agent.
 - [Remote magpie](https://usemagpie.ai/docs/remote): use one magpie from several computers.

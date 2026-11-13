@@ -9820,6 +9820,8 @@ Importing from an app that keeps an entry per key, as CC Switch does, often brin
 - When NIM's free use runs out or is rate-limited, put it in a routing group with other providers: when one fails, the group's next member answers.
 - magpie can't tell a free NIM key from a paid one, so it doesn't say how a key bills.
 
+[Free models in Claude Code, Codex and other agents](https://usemagpie.ai/docs/free-models)
+
 ## FAQ
 
 ### Does magpie support NVIDIA NIM?
@@ -9995,6 +9997,81 @@ Pro and Team refuse an open model named directly with a 403 and take only auto. 
 Put your own Anthropic and OpenAI keys in the x-anthropic-api-key and x-openai-api-key headers, or set up Provider Keys on the Nexus account.
 
 Related: [Groq in Claude Code, Codex and other agents](https://usemagpie.ai/docs/groq), [API relays in Claude Code, Codex and other agents](https://usemagpie.ai/docs/relay). If something fails, see [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting) or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/free-models
+
+# Free models in Claude Code, Codex and other agents
+
+Some providers serve models free, some with no key at all. magpie lists them in the same picker as every other model, an agent asks for `provider/model`, and free ones are marked.
+
+## Free models with no key
+
+1. **OpenCode Zen..** Its free models (ids ending in `-free`, and `big-pickle`) need no key. Zen serves its free tier to OpenCode alone, and magpie asks for them as OpenCode does.
+2. **Kilo Gateway..** Its free models (marked free, ids ending in `:free`) need no key. With none, a caller counts as anonymous, by IP, at 200 requests an hour.
+
+```
+magpie provider add opencode-zen
+magpie provider add kilo
+magpie models
+```
+
+Once added, the free models are in every agent's picker:
+
+```
+magpie claude opencode-zen/big-pickle
+magpie codex kilo/:free
+```
+
+For their paid models, add a key; the free ones keep working:
+
+```
+magpie provider key opencode-zen 
+magpie provider key kilo 
+```
+
+## The free mark in pickers
+
+A model a provider prices at 0 on all four counts (input, output, cache read, cache write) is marked free beside it in the pickers: OpenRouter's `:free` models, OpenCode Zen's `-free` ones, [NVIDIA NIM](https://usemagpie.ai/docs/nvidia)'s free models.
+
+- It is that provider's price alone: the same model on another provider costs what it costs there.
+- A model its maker gives away (Zhipu's `glm-4.7-flash`) isn't marked, since a provider reselling it may not.
+- A plan's price list says what members pay per token, not what the model costs, so it doesn't count either.
+- A price you set yourself wins: 0 is marked free, anything else isn't.
+
+```
+magpie model price relay-a/some-model 0,0,0,0
+```
+
+## Free models first, paid as fallback
+
+Free models are often rate-limited. Put a free model and a paid one in a routing group, the free one first: when it is limited or fails, the group's next member answers. See [Round robin and failover across accounts, keys and providers](https://usemagpie.ai/docs/routing-groups).
+
+## Notes
+
+- When a provider answers that a model is deprecated or retired (Zen's 410 "Model exo-free has been deprecated."), the model leaves `magpie models`, `/v1/models` and every agent's list. It comes back once a request for it is answered, or after a week.
+- Which models are free, and how far, is as each provider's own pages say, and changes.
+
+## FAQ
+
+### Are there free models I can use in Claude Code with no key?
+
+Yes. OpenCode Zen's free models (ending in -free, and big-pickle) and Kilo Gateway's free models (ending in :free) need no key: add them with magpie provider add opencode-zen or magpie provider add kilo.
+
+### What is the limit on Kilo Gateway with no key?
+
+With no key, a caller counts as anonymous, by IP, at 200 requests an hour. A Kilo key reaches its paid models too.
+
+### Where does the free mark in the pickers come from?
+
+A provider pricing a model at 0 on all four counts. It is that provider's price alone; a model its maker gives away, or a plan's $0 price list, doesn't count.
+
+### What if a free model is rate-limited?
+
+Put it in a routing group with a paid model, the free one first. When it is limited or fails, the group's next member answers.
+
+Related: [NVIDIA NIM in Claude Code, Codex and other agents](https://usemagpie.ai/docs/nvidia), [OpenRouter in Claude Code, Codex, Gemini CLI and OpenCode](https://usemagpie.ai/docs/openrouter). If something fails, see [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting) or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
