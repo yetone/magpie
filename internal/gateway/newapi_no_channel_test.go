@@ -159,6 +159,11 @@ func TestNoChannelAs404FromAFork(t *testing.T) {
 		falls      bool
 	}{
 		{"fork no channel", `{"error":{"message":"分组 default 下模型 gpt-6.1-sol 暂无渠道","type":"new_api_error","code":"model_not_found"}}`, true},
+		// WandAPI's own words (equinox0253 on X, 11-13): the protocol
+		// named, no channel; a wrong endpoint (wrongEndpoint) as the
+		// tweet's screenshot reads it
+		{"entry protocol", `{"error":{"message":"模型 gpt-6.1-sol 不支持当前入口协议","type":"new_api_error","code":"model_not_found"}}`, true},
+		{"entry protocol, Anthropic's shape", `{"type":"error","error":{"type":"invalid_request_error","message":"模型 gpt-6.1-sol 不支持当前入口协议"}}`, true},
 		{"missing model", `{"error":{"message":"The model gpt-6.1-sol does not exist or you do not have access to it.","type":"invalid_request_error","code":"model_not_found"}}`, false},
 		{"wrong base URL", `404 page not found`, false},
 	} {

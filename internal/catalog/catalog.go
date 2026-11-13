@@ -2284,6 +2284,13 @@ func WrongEndpoint(status int, body []byte) bool {
 		// /v1/responses（OpenAI Responses API）。")
 		"不支持 /v1/chat/completions 接口",
 		"改用 /v1/responses",
+		// a relay's 404 for a model asked on an API it doesn't serve it
+		// on (equinox0253 on X: WandAPI's "模型 gpt-6.1-sol 不支持当前入口
+		// 协议" to Claude Code's /v1/messages). It names the protocol, which
+		// a 404 for a wrong base URL or a missing model never does.
+		"不支持当前入口协议",
+		"不支持该入口协议",
+		"不支持此入口协议",
 	} {
 		if strings.Contains(msg, phrase) {
 			return true
