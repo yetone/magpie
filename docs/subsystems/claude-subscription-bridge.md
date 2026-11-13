@@ -1630,7 +1630,9 @@ there as the user's own sessions do; a sweep can't tell them apart.
 
 - Its session: `<config>/projects/<work project>/<session>.jsonl`, for
   `--resume` (`claudeSessions`). It is removed when the run ends unless
-  shelved, and when a saved session is discarded (`removeSession`).
+  shelved or kept for a branch ([A run that ended during a
+  turn](#a-run-that-ended-during-a-turn-6528)), and when a saved session
+  is discarded (`removeSession`).
   `sweepSessions` removes those a stopped gateway left in magpie's own
   work folder's project, once older than `idleLongest`; a caller's folder
   is never swept (`clientWorkDir`).
@@ -1713,6 +1715,59 @@ the one the run answered. Then, and when the cut or the resume fails, the
 run is told the whole conversation as before.
 `TestClaudeCutSessionCopiesAsFarAsTheLine` and
 `TestClaudeForkBranchesOffTheLeadsSession` holds it.
+
+### A run that ended during a turn (#6528)
+
+A run can end in a turn the client still goes on with. It waited on the
+client's AskUserQuestion past `runTimeout` ("it waited as long as it
+may"), or its client went away mid-reply in a turn that can't be taken
+back (`letGo`: the interactive mode, or calls in the client's hands).
+Before, its session went with it (`removeRun`), and what came after found
+no run and was told whole to a new Claude Code. recih saw an answer given
+two minutes after the timeout write 118K tokens to the cache, and a
+tunnel drop's two retried sub-agents and their delayed AgentSummary write
+305K.
+
+Now `removeRun` keeps such a run's session for a branch to be cut from
+(`keepEnded`, [`claude_ended.go`](../../internal/gateway/claude_ended.go)),
+in the same `b.mu` section that takes it out of `runs`, so no request
+between finds it in neither. The run object is kept as it ended: its
+session id and folders, the call lines (`lines`, each with the
+conversation its reply answered), `told`, `convKey`, `backLine` and
+`backMsg`, and its mode, owner and prompt flags. Kept: a session on disk
+with a call line or a turn start to cut at (`keepable`). Not kept: a run
+on the shelf (its file is the shelf's), one whose turn was taken back
+(`rewound`), one with the client's own cache marks, one whose account was
+handed over to Claude Code, and every run as the gateway stops
+(`abortAll` sets `stopping` and removes the kept ones; they are not
+written to `claude-shelf.json`, and `sweepSessions` takes what a crash
+left). Each is kept `endedLongest` (`idleLongest`, the cache's hour), and
+`endedMost` (16) at most, the oldest let go first; letting one go removes
+its files.
+
+`branch` and `retryBranch` look at the kept runs after the live ones, the
+one that ended last first, with the same rules except that a kept run is
+closed. Tool results that come after (the late answer, or a retry of a
+continuation) are cut after the call's line and told the results; a
+delayed AgentSummary on the history before them is cut before the calls
+(`cutBefore`); a turn sent again after its run ended answering it (a
+retry after a dropped connection) is cut before the turn
+(`backLine`/`backMsg`) and told the turn. A kept session is never taken
+or written: each branch cuts a copy of its own, so the AgentSummary after
+a recovery still branches. The log says the run ended, when, and why
+("the run this conversation goes on from ended 2m0s ago (it waited as long
+as it may); its session, kept since, is branched").
+
+Claude Code 2.1.316 writes a reply's text and `tool_use` lines when the
+reply has streamed, before the tool runs, in both modes; killed (SIGTERM)
+while an MCP call is held, it adds only `cost-state` lines, no result and
+no interrupt marker (tried on 11-13 with a mock Anthropic and an MCP tool
+that never answers). So the kept file has the call line, and a cut after
+it leaves the reply's call open for the results the branch is told. No
+tool is run again: the branch is told the client's results.
+`TestClaudeAnswerAfterTheRunEndedBranchesOffItsKeptSession`,
+`TestClaudeEndedRunsSessionsAreBounded`,
+`TestClaudeTurnSentAgainAfterItsRunEndedBranchesOffItsSession`.
 
 ## The user's words beside tool results (#872, #1878)
 
@@ -1974,6 +2029,7 @@ go test -tags nogui ./internal/gateway/ -run '^TestClaudeRunsNamesEachProcess$' 
 go test -tags nogui ./internal/settings/ -run '^TestClaudeRunsMostIsMachineLocal$' -count=1
 go test -tags nogui ./internal/gateway/ -run 'ClaudeSubscriptionRunsTheDownloaded|ClaudeSubscriptionWithoutClaudeCode|ClaudeRewritten|LostMedia|ImagesTakenOut|RunLetGoWhenTheClientRewrote|ClaudeSessionTempFiles|ClaudeLetGo|ClaudeSessionFiles|ClaudeOldSessions|ClaudeSubscriptionReplySaysTheAllowance|ClaudeAllowanceHeaders|ClaudeForksAnsweringTheLeadsCalls|ClaudeTurnGivenUpOn|ClaudeToolResultsGivenUpOn|ClaudePromptMarksEarlierTurns|ClaudeHistoryCachedAcrossNewRuns|ClaudeUnloadableSession|ClaudeEndedRunSaysWhy|ClaudeIdle|ClaudeSideQuestion|ClaudeInteractiveSideQuestion|ClaudeCutSession|ClaudeForkBranches|ClaudeToolChoiceNone|ClaudeAside|ClaudeNoRunSaysWhy|ClaudeToolResultsNoRunSaysWhy|ClaudePromptToldUserText|ClaudePromptKeepsInstructions|ClaudeToolResultsGoOnWithTheUsersWords|ClaudeToolResultsKeepInstructions|ToolResultKeepsUserTextSentMidTurn|ClaudeTextToolCalls|ClaudeTextCallsHoldsOnlyTheLine|ClaudePromptSaysPastCallsAreARecord' -count=1
 go test -tags nogui ./internal/gateway/ -run 'TestClaudeTaskNotification|TestWithTaskNotices|TestClaudeTurnToldTheTaskNotification' -count=1
+go test -tags nogui ./internal/gateway/ -run 'TestClaudeAnswerAfterTheRunEnded|TestClaudeEndedRuns|TestClaudeTurnSentAgain|TestClaudeBranchFor' -count=1
 ```
 
 `claude_rewritten_test.go` has a case for each relaxation and one for each

@@ -88,6 +88,11 @@ type subscriptionBridge struct {
 	// finds no run
 	lost      map[string]lostRun
 	lostCalls map[string]lostRun
+	// ended are runs that ended during a turn, their sessions kept for a
+	// branch to be cut from (keepEnded, #6528); stopping says the gateway
+	// stops, and keeps none
+	ended    map[*subscriptionRun]endedRun
+	stopping bool
 	// untrusted are callers' folders, by account folder, whose
 	// interactive Claude Code asked whether to trust them, and when: a
 	// run for one goes in magpie's own folder until untrustedFor has
@@ -2807,21 +2812,27 @@ func (b *subscriptionBridge) branch(req *Request, owner string) (*savedSession, 
 	pending := len(calls) == 0
 	told := historyKey(msgs[:k])
 	b.mu.Lock()
-	runs := make([]*subscriptionRun, 0, len(b.runs))
+	runs := make([]*subscriptionRun, 0, len(b.runs)+len(b.ended))
 	for _, run := range b.runs {
 		runs = append(runs, run)
 	}
+	// then the runs that ended with their sessions kept (#6528), the
+	// latest first: a call's results that came after its run ended
+	ended := b.endedRuns()
+	runs = append(runs, endedLatestFirst(ended)...)
 	b.mu.Unlock()
 	why := "no run of the account made the calls"
 	if pending {
 		why = "the reply has no call, and no run waits on a reply to this conversation"
 	}
 	var found *savedSession
+	var foundEnded *subscriptionRun
 	foundSeq := 0
 	for _, run := range runs {
 		if run.owned() != owner {
 			continue
 		}
+		_, gone := ended[run]
 		run.mu.Lock()
 		at, seq, said := "", 0, ""
 		var unread []string // pending calls whose line isn't read yet
@@ -2855,7 +2866,8 @@ func (b *subscriptionBridge) branch(req *Request, owner string) (*savedSession, 
 			}
 		}
 		sid, sessions, prefix := run.sessionID, slices.Clone(run.sessions), run.cachePrefix
-		usable := !run.closed && !run.rewound && run.lean == req.leanPrompt && !run.clientMarks && (run.tui || !wantTUI(req))
+		// a run that ended is closed, its session kept as it left it
+		usable := (gone || !run.closed) && !run.rewound && run.lean == req.leanPrompt && !run.clientMarks && (run.tui || !wantTUI(req))
 		run.mu.Unlock()
 		if at == "" && len(unread) == 0 {
 			continue
@@ -2872,6 +2884,10 @@ func (b *subscriptionBridge) branch(req *Request, owner string) (*savedSession, 
 				continue
 			}
 			found, foundSeq = &savedSession{session: sid, sessions: sessions, owner: owner, at: time.Now(), since: msgs[i:], cut: at, cutCalls: unread, cutBefore: pending, tui: run.tui, appended: run.appended, cachePrefix: prefix, gone: true}, seq
+			foundEnded = nil
+			if gone {
+				foundEnded = run
+			}
 		}
 		if !pending {
 			break
@@ -2880,7 +2896,17 @@ func (b *subscriptionBridge) branch(req *Request, owner string) (*savedSession, 
 	if found == nil {
 		return nil, why
 	}
+	if foundEnded != nil {
+		log.Printf("claude: the run this conversation goes on from ended %s ago (%s); its session, kept since, is branched", time.Since(ended[foundEnded]).Round(time.Second), foundEnded.whyLost())
+	}
 	return found, ""
+}
+
+// endedLatestFirst is the ended runs, the one that ended last first.
+func endedLatestFirst(ended map[*subscriptionRun]time.Time) []*subscriptionRun {
+	runs := slices.Collect(maps.Keys(ended))
+	slices.SortFunc(runs, func(a, b *subscriptionRun) int { return ended[b].Compare(ended[a]) })
+	return runs
 }
 
 // retryBranch is where a turn sent again while its run is busy answering
@@ -2915,14 +2941,26 @@ func (b *subscriptionBridge) retryBranch(req *Request, owner string) *savedSessi
 		}
 		runs = append(runs, run)
 	}
+	// a run that ended answering the very turn (#6528): its client went
+	// away mid-reply, a turn the interactive mode can't take back (letGo),
+	// and the client's retry comes after; it ended busy, not waiting for a
+	// next turn (idleKey)
+	ended := b.endedRuns()
+	for run := range ended {
+		if run.owned() == owner && run.idleKey == "" && run.convKey != "" && slices.Contains(keys, run.convKey) {
+			runs = append(runs, run)
+		}
+	}
 	b.mu.Unlock()
 	var found *savedSession
+	var foundEnded *subscriptionRun
 	var at time.Time
 	for _, run := range runs {
+		_, gone := ended[run]
 		run.mu.Lock()
 		// the very turn, not one that goes on from it (follows): a turn
 		// whose reply the client has is no retry of it
-		busy := !run.closed && run.rewinding == nil && !run.rewound && run.lean == req.leanPrompt &&
+		busy := (gone || !run.closed) && run.rewinding == nil && !run.rewound && run.lean == req.leanPrompt &&
 			!run.clientMarks && (run.tui || !wantTUI(req)) && run.told == want
 		sid, sessions, backLine, backMsg, appended, tui, prefix := run.sessionID, slices.Clone(run.sessions), run.backLine, run.backMsg, run.appended, run.tui, run.cachePrefix
 		started := run.started
@@ -2942,9 +2980,17 @@ func (b *subscriptionBridge) retryBranch(req *Request, owner string) *savedSessi
 			found.discard() // a newer run's copy is taken: the older one's goes
 		}
 		found, at = &savedSession{session: cut, sessions: sessions, owner: owner, at: time.Now(), since: since, tui: tui, appended: appended, cachePrefix: prefix}, started
+		foundEnded = nil
+		if gone {
+			foundEnded = run
+		}
 	}
 	if found == nil {
 		return nil
+	}
+	if foundEnded != nil {
+		log.Printf("claude: a turn sent again after its run ended answering it (%s ago: %s) goes on in a branch of the session kept, cut before the turn", time.Since(ended[foundEnded]).Round(time.Second), foundEnded.whyLost())
+		return found
 	}
 	log.Printf("claude: a turn sent again while its run is busy answering it goes on in a branch of its session, cut before the turn")
 	return found
@@ -6663,6 +6709,8 @@ func (r *subscriptionRun) abortFor(why string) {
 // to be interrupted with it.
 func (b *subscriptionBridge) abortAll() {
 	b.keepShelf() // the next gateway resumes what waits for a next turn (#6292)
+	// the sessions of runs that ended go, and those ending now aren't kept
+	b.dropAllEnded()
 	b.mu.Lock()
 	runs := make([]*subscriptionRun, 0, len(b.runs))
 	for _, run := range b.runs {
@@ -6728,6 +6776,7 @@ func (b *subscriptionBridge) removeRun(run *subscriptionRun) {
 	results := slices.Clone(run.results)
 	run.mu.Unlock()
 	lost := lostRun{at: time.Now(), why: why}
+	keep := run.keepable()
 	b.mu.Lock()
 	if b.lost == nil {
 		b.lost, b.lostCalls = map[string]lostRun{}, map[string]lostRun{}
@@ -6751,12 +6800,20 @@ func (b *subscriptionBridge) removeRun(run *subscriptionRun) {
 			keepLost(b.lostCalls, id, lost, 4*lostMost)
 		}
 	}
+	// kept as it leaves the runs, so a request between finds it in one
+	var drop []*subscriptionRun
+	if keep {
+		keep, drop = b.keepEnded(run)
+	}
 	b.mu.Unlock()
+	for _, r := range drop {
+		r.removeFiles()
+	}
 	_ = os.RemoveAll(run.tmp)
 	run.mu.Lock()
 	sid, sessions, shelved := run.sessionID, run.sessions, run.shelved
 	run.mu.Unlock()
-	if !shelved {
+	if !shelved && !keep {
 		removeSession(sessions, sid)
 	}
 }
