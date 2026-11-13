@@ -78,3 +78,13 @@ func rarestByte(sep string) int {
 	}
 	return k
 }
+
+// bodyHasBytes is bodyHas for a needle kept as bytes.
+func bodyHasBytes(b, sep []byte) bool { return bodyIndex(b, bytesStr(sep)) >= 0 }
+
+// bodyIndexBytes is bodyIndex for a needle kept as bytes.
+func bodyIndexBytes(b, sep []byte) int { return bodyIndex(b, bytesStr(sep)) }
+
+// bytesStr reads b as a string without copying it; b must not change
+// while the string is in use.
+func bytesStr(b []byte) string { return unsafe.String(unsafe.SliceData(b), len(b)) }

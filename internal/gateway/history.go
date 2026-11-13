@@ -854,7 +854,7 @@ func HistoryRoute(id int64, day time.Time) (Route, bool) {
 			path := d.path
 			var found Route
 			readDay(path, func(line []byte) bool {
-				if !bytes.Contains(line, needle) {
+				if !bodyHasBytes(line, needle) {
 					return true
 				}
 				if json.Unmarshal(line, &found) != nil || found.ID != id {

@@ -155,20 +155,20 @@ func (t *chatTidy) lines(b []byte) []byte {
 // needsTidy reports whether a line carries any of the shapes chatTidy
 // mends.
 func needsTidy(line []byte) bool {
-	return bytes.Contains(line, emptyReasoning) ||
-		bytes.Contains(line, emptyFinishReason) ||
-		bytes.Contains(line, emptyToolName) ||
-		bytes.Contains(line, emptyToolCalls) ||
-		bytes.Contains(line, contentParts) ||
-		bytes.Contains(line, contentPartsSpace) ||
-		bytes.Contains(line, toolCallsField) ||
-		bytes.Contains(line, functionCallField)
+	return bodyHasBytes(line, emptyReasoning) ||
+		bodyHasBytes(line, emptyFinishReason) ||
+		bodyHasBytes(line, emptyToolName) ||
+		bodyHasBytes(line, emptyToolCalls) ||
+		bodyHasBytes(line, contentParts) ||
+		bodyHasBytes(line, contentPartsSpace) ||
+		bodyHasBytes(line, toolCallsField) ||
+		bodyHasBytes(line, functionCallField)
 }
 
 // needs is needsTidy, a finish_reason once a choice made a call, and a
 // usage that may tell its cache in names OpenAI's clients don't read.
 func (t *chatTidy) needs(b []byte) bool {
-	return needsTidy(b) || len(t.called) > 0 && bytes.Contains(b, finishReasonField) || mayMendUsage(b)
+	return needsTidy(b) || len(t.called) > 0 && bodyHasBytes(b, finishReasonField) || mayMendUsage(b)
 }
 
 var (
@@ -185,11 +185,11 @@ var (
 // prompt_tokens_details' own. A usage in OpenAI's names alone, every
 // OpenAI reply, is left unread.
 func mayMendUsage(b []byte) bool {
-	if !bytes.Contains(b, usageField) {
+	if !bodyHasBytes(b, usageField) {
 		return false
 	}
 	for _, f := range otherCacheFields {
-		if bytes.Contains(b, f) {
+		if bodyHasBytes(b, f) {
 			return true
 		}
 	}
@@ -721,8 +721,8 @@ func (t *chatWhole) write(b []byte) []byte {
 func (t *chatWhole) flush() []byte {
 	b := t.buf
 	t.buf = nil
-	parts := bytes.Contains(b, contentParts) || bytes.Contains(b, contentPartsSpace)
-	if !parts && !mayWriteCalls(b, t.names) && !bytes.Contains(b, toolCallsField) && !mayMendUsage(b) {
+	parts := bodyHasBytes(b, contentParts) || bodyHasBytes(b, contentPartsSpace)
+	if !parts && !mayWriteCalls(b, t.names) && !bodyHasBytes(b, toolCallsField) && !mayMendUsage(b) {
 		return b
 	}
 	var reply map[string]json.RawMessage
@@ -1032,7 +1032,7 @@ func withoutMessageReasoning(body []byte, fields []string) []byte {
 func editMessages(body []byte, fields []string, edit func(m map[string]json.RawMessage) bool) []byte {
 	has := false
 	for _, f := range fields {
-		has = has || bytes.Contains(body, []byte(`"`+f+`"`))
+		has = has || bodyHas(body, `"`+f+`"`)
 	}
 	if !has {
 		return body

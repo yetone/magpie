@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"strings"
 
 	"github.com/tidwall/gjson"
@@ -25,7 +24,7 @@ import (
 // other byte of the body stays as sent, and a body with no such list
 // comes back as it was.
 func textPartsAsString(body []byte) []byte {
-	if !bytes.Contains(body, contentParts) && !bytes.Contains(body, contentPartsSpace) {
+	if !bodyHasBytes(body, contentParts) && !bodyHasBytes(body, contentPartsSpace) {
 		return body
 	}
 	msgs := gjson.GetBytes(body, "messages")

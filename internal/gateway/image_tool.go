@@ -31,7 +31,7 @@ func mayDropImageTool(p provider.Provider) bool {
 // withoutImageTool is a Responses body without Codex's image tool among its
 // tools, and whether it had it.
 func withoutImageTool(body []byte) ([]byte, bool) {
-	if !bytes.Contains(body, []byte(`"`+imageNamespace+`"`)) {
+	if !bodyHas(body, `"`+imageNamespace+`"`) {
 		return body, false
 	}
 	dec := json.NewDecoder(bytes.NewReader(body))

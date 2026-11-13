@@ -1925,7 +1925,7 @@ func withoutUnreadable(body, msg []byte) ([]byte, bool) {
 		// (passthrough_refused.go)
 		return withoutPassthrough(body, f)
 	}
-	if !foreignReasoning.Match(msg) && !bytes.Contains(bytes.ToLower(msg), []byte("not found")) {
+	if !foreignReasoning.Match(msg) && !bodyHas(bytes.ToLower(msg), "not found") {
 		return nil, false
 	}
 	if m := unreadableItem.FindSubmatch(msg); m != nil {
@@ -3539,7 +3539,7 @@ func forVendor(p provider.Provider, body []byte, compaction bool) []byte {
 	if compaction {
 		body = developerItemsAsSystem(body)
 	}
-	if !slices.ContainsFunc(openaiOnly, func(k []byte) bool { return bytes.Contains(body, k) }) || !forVendorChanges(body) {
+	if !slices.ContainsFunc(openaiOnly, func(k []byte) bool { return bodyHasBytes(body, k) }) || !forVendorChanges(body) {
 		return body
 	}
 	q, err := rawObject(body)
@@ -3661,7 +3661,7 @@ func forVendorChanges(body []byte) bool {
 	}
 	if inc, found, ok := topMember(body, "include"); !ok {
 		return false
-	} else if found && bytes.Contains(inc, []byte(`"`+outputReplay+`"`)) {
+	} else if found && bodyHas(inc, `"`+outputReplay+`"`) {
 		return true
 	}
 	return anyInputItem(body, func(it []byte) bool {
@@ -4104,7 +4104,7 @@ func summaryTooLarge(rec *recorder) bool {
 // 'rs_…' not found", #1008), which a relay in front of them passes on.
 func itemNotFound(rec *recorder) bool {
 	b := rec.body.Bytes()
-	return rec.status == http.StatusBadRequest && unreadableItem.Match(b) && bytes.Contains(bytes.ToLower(b), []byte("not found"))
+	return rec.status == http.StatusBadRequest && unreadableItem.Match(b) && bodyHas(bytes.ToLower(b), "not found")
 }
 
 // inputKindRefused is a summary request turned away for a kind of item in

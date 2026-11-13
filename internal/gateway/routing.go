@@ -672,7 +672,7 @@ func dashScopeRate(p provider.Provider, status int, body []byte) bool {
 		return false
 	}
 	w := wordsOf(body)
-	if bytes.Contains(bytes.ToLower(w), []byte("free allocated quota")) || longWords.Match(urlWords.ReplaceAll(w, nil)) {
+	if bodyHas(bytes.ToLower(w), "free allocated quota") || longWords.Match(urlWords.ReplaceAll(w, nil)) {
 		return false
 	}
 	return dashScopeTokenRate.Match(w)
@@ -1973,7 +1973,7 @@ func namesModel(words []byte, name string) bool {
 		return b >= 'a' && b <= 'z' || b >= '0' && b <= '9' || b == '-' || b == '_' || b == '.'
 	}
 	for from := 0; ; {
-		i := bytes.Index(words[from:], n)
+		i := bodyIndexBytes(words[from:], n)
 		if i < 0 {
 			return false
 		}

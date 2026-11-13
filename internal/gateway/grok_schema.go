@@ -23,10 +23,12 @@ import (
 // as it goes upstream, or xAI's own API; every other model's tools go as
 // they came.
 func grokToolPatterns(p provider.Provider, to provider.Protocol, body []byte) []byte {
-	if p.VendorHost() != "api.x.ai" && !grokModel(gjson.GetBytes(body, "model").String()) {
+	// the cheap look first: most requests hold no pattern, and finding the
+	// model walks the whole body when it comes after the conversation
+	if !bodyHas(body, `"pattern"`) {
 		return body
 	}
-	if !bodyHas(body, `"pattern"`) {
+	if p.VendorHost() != "api.x.ai" && !grokModel(gjson.GetBytes(body, "model").String()) {
 		return body
 	}
 	return toolPatterns(body, ecmaClassForRust)

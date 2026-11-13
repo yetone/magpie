@@ -64,7 +64,7 @@ func (t *sigFieldTidy) flush() []byte {
 }
 
 func (t *sigFieldTidy) lines(b []byte) []byte {
-	if !bytes.Contains(b, thinkingType) {
+	if !bodyHasBytes(b, thinkingType) {
 		return append([]byte(nil), b...)
 	}
 	var out []byte
@@ -77,7 +77,7 @@ func (t *sigFieldTidy) lines(b []byte) []byte {
 		}
 		body := bytes.TrimRight(line, "\r\n")
 		data, ok := bytes.CutPrefix(body, []byte("data:"))
-		if !ok || !bytes.Contains(data, thinkingType) || !bodyHas(data, "content_block_start") {
+		if !ok || !bodyHasBytes(data, thinkingType) || !bodyHas(data, "content_block_start") {
 			out = append(out, line...)
 			continue
 		}
@@ -114,7 +114,7 @@ func signedStart(data []byte) ([]byte, bool) {
 // signedContent is a whole Messages reply whose thinking blocks without a
 // signature are given an empty one, and whether it had such a block.
 func signedContent(b []byte) ([]byte, bool) {
-	if !bytes.Contains(b, thinkingType) {
+	if !bodyHasBytes(b, thinkingType) {
 		return nil, false
 	}
 	var reply map[string]json.RawMessage
@@ -147,7 +147,7 @@ func signedContent(b []byte) ([]byte, bool) {
 // empty one, and whether it was one. A signature that isn't a string (a
 // null) is none too.
 func unsignedThinking(raw json.RawMessage) (json.RawMessage, bool) {
-	if !bytes.Contains(raw, thinkingType) {
+	if !bodyHasBytes(raw, thinkingType) {
 		return nil, false
 	}
 	var block map[string]json.RawMessage

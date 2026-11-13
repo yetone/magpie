@@ -22,7 +22,6 @@ package gateway
 // thread's state costs one cache miss, as before.
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/json"
 	"os"
@@ -119,7 +118,7 @@ func withEffortUpdates(conv, who, model, effort string, body []byte) ([]byte, bo
 	_, prev := q["previous_response_id"]
 	_, managed := q["context_management"]
 	if prev || managed || string(q["truncation"]) == `"auto"` || effort == "" || effort == "none" ||
-		bytes.Contains(q["input"], []byte(`"configuration_update"`)) {
+		bodyHas(q["input"], `"configuration_update"`) {
 		delete(effortThreads.m, k)
 		return nil, false
 	}

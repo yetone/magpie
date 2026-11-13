@@ -327,7 +327,7 @@ func (t *sigTidy) flush() []byte {
 }
 
 func (t *sigTidy) lines(b []byte) []byte {
-	if !bytes.Contains(b, thoughtSignatureField) {
+	if !bodyHasBytes(b, thoughtSignatureField) {
 		return append([]byte(nil), b...)
 	}
 	var out []byte
@@ -340,7 +340,7 @@ func (t *sigTidy) lines(b []byte) []byte {
 		}
 		body := bytes.TrimRight(line, "\r\n")
 		data, ok := bytes.CutPrefix(body, []byte("data:"))
-		if !ok || !bytes.Contains(data, thoughtSignatureField) {
+		if !ok || !bodyHasBytes(data, thoughtSignatureField) {
 			out = append(out, line...)
 			continue
 		}
@@ -358,7 +358,7 @@ func (t *sigTidy) lines(b []byte) []byte {
 // carrying their signatures, noted as provider by's, and whether there
 // was one.
 func signReply(data []byte, by string) ([]byte, bool) {
-	if !bytes.Contains(data, thoughtSignatureField) {
+	if !bodyHasBytes(data, thoughtSignatureField) {
 		return nil, false
 	}
 	var reply map[string]json.RawMessage
@@ -499,7 +499,7 @@ var geminiSignatureField = []byte(`"thoughtSignature"`)
 // or a whole one (an object, or streamGenerateContent's array of them),
 // as provider by's.
 func noteGeminiSigners(b []byte, by string) {
-	if !bytes.Contains(b, geminiSignatureField) {
+	if !bodyHasBytes(b, geminiSignatureField) {
 		return
 	}
 	note := func(r gjson.Result) {
@@ -537,7 +537,7 @@ func noteGeminiSigners(b []byte, by string) {
 		if d, ok := bytes.CutPrefix(line, []byte("data:")); ok {
 			line = bytes.TrimSpace(d)
 		}
-		if !bytes.Contains(line, geminiSignatureField) {
+		if !bodyHasBytes(line, geminiSignatureField) {
 			continue
 		}
 		all(gjson.ParseBytes(line))
@@ -549,7 +549,7 @@ func noteGeminiSigners(b []byte, by string) {
 // nor any when keep is false: a function call that had one goes waved
 // through (skipSignature), a text without.
 func geminiBodySignatures(body []byte, by string, keep bool) []byte {
-	if !bytes.Contains(body, geminiSignatureField) {
+	if !bodyHasBytes(body, geminiSignatureField) {
 		return body
 	}
 	var q map[string]json.RawMessage

@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"encoding/json"
 	"strings"
 
@@ -373,7 +372,7 @@ func hasDeferredTools(body []byte) bool {
 	getIn(body, "messages").ForEach(func(_, m gjson.Result) bool {
 		m.Get("content").ForEach(func(_, b gjson.Result) bool {
 			found = deferredBlock(b.Get("type").String()) ||
-				b.Get("type").String() == "tool_result" && bytes.Contains([]byte(b.Get("content").Raw), []byte(`"tool_definition"`))
+				b.Get("type").String() == "tool_result" && strings.Contains(b.Get("content").Raw, `"tool_definition"`)
 			return !found
 		})
 		return !found
@@ -422,7 +421,7 @@ func withoutDeferredTools(body []byte) []byte {
 					have[name.String()] = true
 				}
 			}
-			if b.Get("type").String() == "tool_result" && bytes.Contains([]byte(b.Get("content").Raw), []byte(`"tool_definition"`)) {
+			if b.Get("type").String() == "tool_result" && strings.Contains(b.Get("content").Raw, `"tool_definition"`) {
 				// a ToolSearch answer carrying the definition itself: the
 				// definition joins the tools and the block goes as the
 				// reference the result takes (#5404)

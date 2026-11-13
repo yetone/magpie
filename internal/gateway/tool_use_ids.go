@@ -53,7 +53,7 @@ func unsaltCallID(id string) (string, bool) {
 // turns: what the client holds, and would drop a reply's block over saying
 // again (#4910).
 func clientToolUseIDs(body []byte) map[string]bool {
-	if !bytes.Contains(body, toolUseType) {
+	if !bodyHasBytes(body, toolUseType) {
 		return nil
 	}
 	var q struct {
@@ -90,7 +90,7 @@ func clientToolUseIDs(body []byte) map[string]bool {
 // upstream that made the call gets its own again, on the call and on the
 // result answering it. The rest goes as it came.
 func saltedCallIDsBack(body []byte) []byte {
-	if !bytes.Contains(body, []byte(`"`+anthropicIDMark)) {
+	if !bodyHas(body, `"`+anthropicIDMark) {
 		return body
 	}
 	var reply map[string]json.RawMessage
@@ -181,7 +181,7 @@ func (t *toolUseIDs) flush() []byte {
 
 func (t *toolUseIDs) event(ev []byte) []byte {
 	data := eventData(ev)
-	if len(data) == 0 || !bytes.Contains(data, toolUseType) || !gjson.ValidBytes(data) {
+	if len(data) == 0 || !bodyHasBytes(data, toolUseType) || !gjson.ValidBytes(data) {
 		return ev
 	}
 	e := gjson.ParseBytes(data)
@@ -225,7 +225,7 @@ func (t *toolUseIDs) event(ev []byte) []byte {
 // client already holds, or an earlier block of the reply said, go out
 // salted.
 func (t *toolUseIDs) whole(b []byte) []byte {
-	if !bytes.Contains(b, toolUseType) {
+	if !bodyHasBytes(b, toolUseType) {
 		return b
 	}
 	var reply map[string]json.RawMessage

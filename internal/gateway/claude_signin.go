@@ -101,7 +101,7 @@ func (w *signInWriter) Write(b []byte) (int, error) {
 		w.wrote = true
 		_, err := w.ResponseWriter.Write(body)
 		return n, err
-	case bytes.HasPrefix(b, []byte("event: error\n")) && bytes.Contains(bytes.ToLower(b), []byte("x-api-key")):
+	case bytes.HasPrefix(b, []byte("event: error\n")) && bodyHas(bytes.ToLower(b), "x-api-key"):
 		// a stream's error, after its 200 went
 		b = xAPIKey.ReplaceAll(b, []byte("API key"))
 	}

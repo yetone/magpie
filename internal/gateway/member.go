@@ -278,7 +278,7 @@ var modelKey = []byte(`"model`)
 // memberLines is a run of an event stream's lines with name for the model
 // each line's data names, the same slice when none is changed.
 func memberLines(b []byte, name string, paths []string) []byte {
-	if name == "" || !bytes.Contains(b, modelKey) {
+	if name == "" || !bodyHasBytes(b, modelKey) {
 		return b
 	}
 	var out []byte
@@ -291,7 +291,7 @@ func memberLines(b []byte, name string, paths []string) []byte {
 		}
 		line := b[i:j]
 		named := line
-		if bytes.Contains(line, modelKey) {
+		if bodyHasBytes(line, modelKey) {
 			named = memberLineAt(line, name, paths)
 		}
 		if out == nil && !bytes.Equal(named, line) {
@@ -366,7 +366,7 @@ func memberPathsOf(from provider.Protocol) []string {
 // one of paths.
 func memberNamedAt(b []byte, id string, paths []string) []byte {
 	// a body cut short goes on as it came: nothing is made up in it
-	if id == "" || !bytes.Contains(b, modelKey) || !json.Valid(b) {
+	if id == "" || !bodyHasBytes(b, modelKey) || !json.Valid(b) {
 		return b
 	}
 	name, _ := json.Marshal(id)

@@ -248,7 +248,7 @@ func (s *toolScan) add(p []byte) {
 // m's does, with any spaces between.
 func marked(b []byte, m replyMark) bool {
 	for i := 0; ; {
-		j := bytes.Index(b[i:], m.key)
+		j := bodyIndexBytes(b[i:], m.key)
 		if j < 0 {
 			return false
 		}
@@ -266,7 +266,7 @@ func marked(b []byte, m replyMark) bool {
 func toolIn(b []byte) bool {
 	for _, v := range toolValues {
 		for i := 0; ; {
-			j := bytes.Index(b[i:], v)
+			j := bodyIndexBytes(b[i:], v)
 			if j < 0 {
 				break
 			}
@@ -278,7 +278,7 @@ func toolIn(b []byte) bool {
 		}
 	}
 	for i := 0; ; {
-		j := bytes.Index(b[i:], geminiCall)
+		j := bodyIndexBytes(b[i:], geminiCall)
 		if j < 0 {
 			return false
 		}

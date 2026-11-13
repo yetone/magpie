@@ -297,7 +297,7 @@ func (t *crTidy) cut() bool {
 // would not survive being said from where it lies.
 func (t *crTidy) lines(b []byte, copy bool) []byte {
 	t.looked += len(b)
-	if !bytes.Contains(b, crSeq) && !t.cut() {
+	if !bodyHasBytes(b, crSeq) && !t.cut() {
 		if copy {
 			return append([]byte(nil), b...)
 		}
@@ -338,7 +338,7 @@ func (t *crTidy) lines(b []byte, copy bool) []byte {
 // to answer, goes as it came.
 func (t *crTidy) line(l []byte) ([]byte, bool) {
 	t.looked += len(l)
-	if !bytes.Contains(l, crSeq) && !t.cut() {
+	if !bodyHasBytes(l, crSeq) && !t.cut() {
 		return l, false
 	}
 	body := bytes.TrimRight(l, "\r\n")

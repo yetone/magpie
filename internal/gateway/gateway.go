@@ -8318,7 +8318,7 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			r.MaxTokens, req, filledOutput = 0, &r, false
 			continue
 		}
-		if req.LoadedInPlace && refusesField(res.StatusCode, b, additionalToolsItem) && bytes.Contains(body, []byte(`"`+additionalToolsItem+`"`)) {
+		if req.LoadedInPlace && refusesField(res.StatusCode, b, additionalToolsItem) && bodyHas(body, `"`+additionalToolsItem+`"`) {
 			// an upstream that turns the item away is asked again with the
 			// loaded tools among the others, and not sent it again: the
 			// prompt's prefix changes from here, as before #2660, and the
@@ -8991,7 +8991,7 @@ func refusedInMessages(status int, msg, body []byte) []string {
 		return nil
 	}
 	if m := fieldAtPosition.FindSubmatch(msg); m != nil {
-		if f := string(m[1]); bytes.Contains(body, []byte(`"`+f+`"`)) {
+		if f := string(m[1]); bodyHas(body, `"`+f+`"`) {
 			return []string{f}
 		}
 	}
@@ -9014,7 +9014,7 @@ func refusedInMessages(status int, msg, body []byte) []string {
 				}
 				f, _ := loc[len(loc)-1].(string)
 				if loc[0] == "messages" && slices.Contains(messageReasoning, f) && !slices.Contains(out, f) &&
-					bytes.Contains(body, []byte(`"`+f+`"`)) {
+					bodyHas(body, `"`+f+`"`) {
 					out = append(out, f)
 				}
 				return
@@ -9114,7 +9114,7 @@ var cacheControlField = []byte("cache_control")
 // other request is one bytes.Contains away from this, a scan next to the
 // parse of the same body.
 func parseTranslated(from, to provider.Protocol, body []byte, advised bool) (*Request, error) {
-	if from == provider.Anthropic && to == provider.Anthropic && bytes.Contains(body, cacheControlField) {
+	if from == provider.Anthropic && to == provider.Anthropic && bodyHasBytes(body, cacheControlField) {
 		if req, err := readAdvised(body, true, false, advised); err == nil {
 			return afterParse(from, body, req)
 		}
@@ -10464,7 +10464,7 @@ func offAsNone(from provider.Protocol, body []byte) []byte {
 func saysOff(body []byte) bool {
 	key := []byte(`effort"`)
 	for rest := body; ; {
-		i := bytes.Index(rest, key)
+		i := bodyIndexBytes(rest, key)
 		if i < 0 {
 			return false
 		}
@@ -10739,7 +10739,7 @@ func asCompletionTokens(body []byte) []byte {
 func withoutFields(body []byte, fields ...string) []byte {
 	found := false
 	for _, f := range fields {
-		found = found || bytes.Contains(body, []byte(`"`+f+`"`))
+		found = found || bodyHas(body, `"`+f+`"`)
 	}
 	if !found {
 		return body

@@ -3097,7 +3097,7 @@ func cutAfterReply(b []byte, msg string) int {
 		}
 		line := b[at : at+nl]
 		at += nl + 1
-		if !bytes.Contains(line, mark) {
+		if !bodyHasBytes(line, mark) {
 			continue
 		}
 		var l struct {
@@ -3153,7 +3153,7 @@ func cutBeforeCalls(b []byte, ids []string) int {
 		start := at
 		at += nl + 1
 		for _, id := range ids {
-			if bytes.Contains(line, []byte(`"id":"`+id+`"`)) {
+			if bodyHas(line, `"id":"`+id+`"`) {
 				return start
 			}
 		}
@@ -3206,7 +3206,7 @@ func cutAfter(b, mark []byte, uuid string) int {
 		}
 		line := b[at : at+nl]
 		at += nl + 1
-		if !bytes.Contains(line, mark) {
+		if !bodyHasBytes(line, mark) {
 			continue
 		}
 		var l struct {

@@ -1736,7 +1736,7 @@ func codeAssistModelMissing(p provider.Provider, status int, body []byte) bool {
 	if p.Account.Agent != "antigravity" && p.Account.Agent != "gemini" {
 		return false
 	}
-	return bodyHas(body, "NOT_FOUND") || bytes.Contains(bytes.ToLower(body), []byte("not found"))
+	return bodyHas(body, "NOT_FOUND") || bodyHas(bytes.ToLower(body), "not found")
 }
 
 // retiredWords are how a vendor says the model is retired, though its
@@ -3034,7 +3034,7 @@ func (h *holdWriter) see(b []byte) {
 		buf = append([]byte{'\n'}, b...) // the stream starts a line
 	}
 	for _, m := range streamEnds {
-		if bytes.Contains(buf, m) {
+		if bodyHasBytes(buf, m) {
 			h.ended = true
 			return
 		}
@@ -3501,7 +3501,7 @@ func mayCall(b []byte) bool {
 // a reply that has begun goes through this.
 func mayRefuse(ev []byte) bool {
 	for _, w := range refusalSays {
-		if bytes.Contains(ev, w) {
+		if bodyHasBytes(ev, w) {
 			return true
 		}
 	}

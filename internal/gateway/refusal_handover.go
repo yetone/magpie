@@ -372,7 +372,7 @@ func (s *splicedWriter) rewrite(ev []byte) []byte {
 	for _, e := range edits {
 		nd = append(nd[:e.at:e.at], append([]byte(e.to), nd[e.at+e.n:]...)...)
 	}
-	at := bytes.Index(ev, data)
+	at := bodyIndexBytes(ev, data)
 	if at < 0 {
 		return ev
 	}
