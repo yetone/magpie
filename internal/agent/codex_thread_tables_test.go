@@ -164,3 +164,112 @@ func TestCodexTakesThreadTables(t *testing.T) {
 		}
 	}
 }
+
+// JsonParser on X: T3 Code starts Codex with a provider of its own on the
+// command line (`-c model_providers.openai_token_sharing={…, auth =
+// {command = …}}`), so its threads name openai_token_sharing while
+// config.toml never had that table. magpie wrote one for them, pointed at
+// itself with experimental_bearer_token, Codex merged it with T3's -c, and
+// refused the whole config: "model_providers.openai_token_sharing: provider
+// auth cannot be combined with experimental_bearer_token". An id
+// config.toml never had is the other app's: magpie writes no table for it,
+// and takes out the one an older magpie wrote, wired or not. CC Switch's
+// ids, and a table of the user's that config.toml lost, are still written
+// (#1372).
+func TestCodexLeavesOtherAppsProviders(t *testing.T) {
+	for _, auth := range []string{`{"tokens":{"access_token":"x","id_token":"x.e30.x"}}`, ""} {
+		conf := "model = \"gpt-5.4\"\n\n" +
+			"[model_providers.relay]\nname = \"relay\"\nbase_url = \"https://relay.example/v1\"\nexperimental_bearer_token = \"sk-relay\"\n"
+		home, read := codexHome(t, auth, conf)
+		dir := filepath.Join(home, ".codex")
+		codexThreads(t, dir, "openai_token_sharing", "custom", "relay")
+		path := filepath.Join(dir, "config.toml")
+		cx := codex(home)
+		// seen once, then lost, as CC Switch's rewrite loses a table
+		if err := cx.Sync(); err != nil {
+			t.Fatal(err)
+		}
+		if err := edit.DelTOMLTable(path, "model_providers.relay"); err != nil {
+			t.Fatal(err)
+		}
+		if err := cx.Fields[0].Set("fake/m1"); err != nil {
+			t.Fatal(err)
+		}
+		if err := cx.Sync(); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(read(), "openai_token_sharing") {
+			t.Fatalf("auth %q: wrote another app's provider:\n%s", auth, read())
+		}
+		v1 := here(home).v1()
+		for _, id := range []string{"custom", "relay"} {
+			if tb, _ := edit.GetTOMLTable(path, "model_providers."+id); tb["base_url"] != v1 {
+				t.Fatalf("auth %q: %s's table not written back:\n%s", auth, id, read())
+			}
+		}
+	}
+}
+
+// The table an older magpie wrote for T3 Code's provider is taken out at
+// the next sync or Disconnect, connected or not; one the user made, one with keys of
+// theirs added, and one Codex is on stay.
+func TestCodexDropsStrayThreadTables(t *testing.T) {
+	for _, wire := range []bool{true, false} {
+		home, read := codexHome(t, "", "model = \"gpt-5.4\"\n")
+		dir := filepath.Join(home, ".codex")
+		codexThreads(t, dir, "openai_token_sharing", "other_app", "kept")
+		path := filepath.Join(dir, "config.toml")
+		cx := codex(home)
+		if wire {
+			if err := cx.Fields[0].Set("fake/m1"); err != nil {
+				t.Fatal(err)
+			}
+		}
+		at := here(home)
+		stray := func(id string) string {
+			return "\n[model_providers." + id + "]\nname = \"" + id + "\"\nbase_url = \"" + at.v1() + "\"\nwire_api = \"responses\"\nexperimental_bearer_token = \"" + at.gwKey() + "\"\n"
+		}
+		raw, err := edit.Read(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		conf := string(raw) + stray("openai_token_sharing") + stray("other_app") + "env_key = \"MINE\"\n" + stray("kept") +
+			"\n[model_providers.mine]\nname = \"mine\"\nbase_url = \"https://mine.example/v1\"\nwire_api = \"responses\"\nexperimental_bearer_token = \"sk-mine\"\n" +
+			"\n[profiles.k]\nmodel_provider = \"kept\"\n"
+		if err := edit.WriteAtomic(path, []byte(conf)); err != nil {
+			t.Fatal(err)
+		}
+		// a Disconnect (an uninstall's, a quit's) with no Sync before it
+		// takes it out too, wired or not
+		if err := cx.Fields[0].Set(""); err != nil {
+			t.Fatal(err)
+		}
+		got := read()
+		if strings.Contains(got, "openai_token_sharing") {
+			t.Fatalf("wired %v: stray table kept:\n%s", wire, got)
+		}
+		for _, id := range []string{"other_app", "kept", "mine"} {
+			if !strings.Contains(got, "[model_providers."+id+"]") {
+				t.Fatalf("wired %v: %s taken out:\n%s", wire, id, got)
+			}
+		}
+	}
+}
+
+// The same stray table goes at the next Sync with nothing else to do.
+func TestCodexSyncDropsStrayThreadTable(t *testing.T) {
+	home, read := codexHome(t, "", "model = \"gpt-5.4\"\n")
+	codexThreads(t, filepath.Join(home, ".codex"), "openai_token_sharing")
+	at := here(home)
+	path := filepath.Join(home, ".codex", "config.toml")
+	conf := "model = \"gpt-5.4\"\n\n[model_providers.openai_token_sharing]\nname = \"openai_token_sharing\"\nbase_url = \"" + at.v1() + "\"\nwire_api = \"responses\"\nexperimental_bearer_token = \"" + at.gwKey() + "\"\n"
+	if err := edit.WriteAtomic(path, []byte(conf)); err != nil {
+		t.Fatal(err)
+	}
+	if err := codex(home).Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(read(), "openai_token_sharing") {
+		t.Fatalf("\n%s", read())
+	}
+}
