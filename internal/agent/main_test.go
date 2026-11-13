@@ -41,6 +41,10 @@ func TestMain(m *testing.M) {
 	// Microsoft Store apps are read from the current user's AppX registry;
 	// never this machine's (a Windows box with the Codex app installed)
 	windowsStorePackages = func() []string { return nil }
+	// a distro found off the gateway tries Windows' other addresses as a
+	// WSL via (wslFindVia); never this machine's, which on a Windows box
+	// would each be waited on for 15s
+	wslViaCandidates = func() []string { return nil }
 	// nor what an installer registered there (DeepSeek Harness Desktop's
 	// folder, #2279)
 	windowsRegisteredApp = func(string) (string, string) { return "", "" }

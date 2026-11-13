@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/gateway"
+	"github.com/yetone/magpie/internal/wslrun"
 )
 
 // fakeWSLNet makes cidr the WSL network Windows has an address on.
@@ -123,5 +124,92 @@ func TestWSLReachAskedInsideTheDistro(t *testing.T) {
 	defer mu.Unlock()
 	if runs != 0 {
 		t.Errorf("a stopped distro was run %d times", runs)
+	}
+}
+
+// H1_B1_K1 on X: a company's firewall kept WSL off Windows' address on
+// vEthernet (WSL), while Windows' LAN address answered from WSL. Codex in
+// a distro under NAT, found shut at the WSL network's address from inside
+// the distro, is set again at the address of Windows' that answers there,
+// with nothing asked of the user; the gateway listened at the others only
+// while they were tried. Once the WSL network's address answers again and
+// the via doesn't, it goes back there.
+func TestWSLFirewalledFindsAnotherWay(t *testing.T) {
+	home, read := codexHome(t, `{"OPENAI_API_KEY":"sk-x"}`, "model = \"gpt-5.5\"\n")
+	fakeWSLNet(t, "172.20.0.1/20")
+	nat, lan := "http://172.20.0.1:"+gateway.Port(), "http://10.0.0.132:"+gateway.Port()
+	fakeReach(t, map[string]bool{gateway.URL(): true, nat: true, lan: true})
+	oldVia := gateway.WSLVia
+	gateway.WSLVia = func() []net.IP { v, _ := wslrun.Via(); return v }
+	t.Cleanup(func() { gateway.WSLVia = oldVia; gateway.SetWSLVia(nil, nil) })
+	oldC, oldL := wslViaCandidates, wslViaListening
+	var mu sync.Mutex
+	var tried [][]net.IP
+	wslViaCandidates = func() []string { return []string{"10.0.0.99", "10.0.0.132"} }
+	wslViaListening = func(ip string) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		_, t := wslrun.Via()
+		tried = append(tried, t)
+		return true
+	}
+	t.Cleanup(func() { wslViaCandidates, wslViaListening = oldC, oldL })
+	// inside the distro: only the LAN address answers
+	answers := map[string]string{nat: "no", lan: "ok", "http://10.0.0.99:" + gateway.Port(): "no"}
+	was := wslRun
+	wslRun = func(_ time.Duration, args ...string) ([]byte, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if slices.Contains(args, wslReachScript) {
+			return []byte(answers[args[len(args)-3]] + "\n"), nil
+		}
+		return nil, nil
+	}
+	t.Cleanup(func() { wslRun = was })
+	d := fakeDistro(home, false)
+	wsl.Lock()
+	seen := wsl.seen
+	wsl.seen = map[string]*distro{d.Name: &d}
+	wsl.Unlock()
+	t.Cleanup(func() { wsl.Lock(); wsl.seen = seen; wsl.Unlock() })
+	a := wslCodex(d)
+	oldOn := wslOnGateway
+	wslOnGateway = func() []*Agent { return []*Agent{wslCodex(d)} }
+	t.Cleanup(func() { wslOnGateway = oldOn })
+	if err := a.Fields[0].Set("fake/m1"); err != nil {
+		t.Fatal(err)
+	}
+	if cfg := read(); !strings.Contains(cfg, `base_url = "`+nat+`/v1"`) {
+		t.Fatalf("not on the WSL network first:\n%s", cfg)
+	}
+
+	driftSettled(t, a)
+	if cfg := read(); !strings.Contains(cfg, `base_url = "`+lan+`/v1"`) || strings.Contains(cfg, "172.20.0.1") {
+		t.Fatalf("not set again at the address that answers:\n%s", cfg)
+	}
+	if v, tr := wslrun.Via(); len(v) != 1 || v[0].String() != "10.0.0.132" || len(tr) != 0 {
+		t.Errorf("via %v, still trying %v", v, tr)
+	}
+	mu.Lock()
+	if len(tried) == 0 || len(tried[0]) != 2 {
+		t.Errorf("listened at while tried: %v", tried)
+	}
+	mu.Unlock()
+	reachForget()
+	if dr := driftSettled(t, wslCodex(d)); dr != nil {
+		t.Fatalf("set again, still %+v", dr)
+	}
+
+	// the firewall opened, the LAN's address shut: back on the WSL network
+	mu.Lock()
+	answers[nat], answers[lan] = "ok", "no"
+	mu.Unlock()
+	reachForget()
+	driftSettled(t, wslCodex(d))
+	if cfg := read(); !strings.Contains(cfg, `base_url = "`+nat+`/v1"`) || strings.Contains(cfg, "10.0.0.132") {
+		t.Fatalf("not back on the WSL network:\n%s", cfg)
+	}
+	if v, _ := wslrun.Via(); len(v) != 0 {
+		t.Errorf("via kept: %v", v)
 	}
 }

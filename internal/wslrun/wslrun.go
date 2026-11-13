@@ -24,6 +24,7 @@ import (
 	"time"
 	"unicode/utf16"
 
+	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/settings"
@@ -387,6 +388,83 @@ func HostAt(mode, route string, nets []*net.IPNet) string {
 	}
 	return route
 }
+
+// Via are Windows' own addresses off the WSL networks that a distro under
+// NAT reaches Windows at instead of its address on vEthernet (WSL), where a
+// firewall keeps WSL off that one (agent.wslFindVia, gateway.WSLVia), and
+// those being tried for it (listened at while a distro is asked, never
+// written into an agent): kept in magpie's folder (wsl-via), one a line,
+// a tried one after "try ", read again after viaAge. A file that can't be
+// read keeps the last read.
+func Via() (via, trying []net.IP) {
+	path := viaPath()
+	viaState.Lock()
+	defer viaState.Unlock()
+	if viaState.path == path && time.Since(viaState.at) < viaAge {
+		return viaState.ips, viaState.trying
+	}
+	b, err := os.ReadFile(path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return viaState.ips, viaState.trying
+	}
+	for _, l := range strings.Split(string(b), "\n") {
+		l = strings.TrimSpace(l)
+		to := &via
+		if t, ok := strings.CutPrefix(l, "try "); ok {
+			l, to = strings.TrimSpace(t), &trying
+		}
+		if ip := net.ParseIP(l); viaOK(ip) && !slices.ContainsFunc(*to, ip.Equal) {
+			*to = append(*to, ip)
+		}
+	}
+	viaState.ips, viaState.trying, viaState.at, viaState.path = via, trying, time.Now(), path
+	return via, trying
+}
+
+// SetVia makes via the vias and trying those tried (Via); none of either
+// removes the file.
+func SetVia(via, trying []string) error {
+	path := viaPath()
+	var lines []string
+	parse := func(ss []string, prefix string) (out []net.IP) {
+		for _, s := range ss {
+			if ip := net.ParseIP(s); viaOK(ip) && !slices.ContainsFunc(out, ip.Equal) {
+				out = append(out, ip)
+				lines = append(lines, prefix+ip.String())
+			}
+		}
+		return out
+	}
+	v, t := parse(via, ""), parse(trying, "try ")
+	var err error
+	if len(lines) == 0 {
+		if err = os.Remove(path); errors.Is(err, os.ErrNotExist) {
+			err = nil
+		}
+	} else if err = os.MkdirAll(settings.Dir(), 0o700); err == nil {
+		err = edit.WriteAtomic(path, []byte(strings.Join(lines, "\n")+"\n"))
+	}
+	if err != nil {
+		return err
+	}
+	viaState.Lock()
+	viaState.ips, viaState.trying, viaState.at, viaState.path = v, t, time.Now(), path
+	viaState.Unlock()
+	return nil
+}
+
+var viaState struct {
+	sync.Mutex
+	ips, trying []net.IP
+	at          time.Time
+	path        string
+}
+
+const viaAge = 10 * time.Second
+
+func viaPath() string { return filepath.Join(settings.Dir(), "wsl-via") }
+
+func viaOK(ip net.IP) bool { return ip != nil && !ip.IsUnspecified() }
 
 // HostLoopback reports whether 127.0.0.1 inside a WSL 2 distro reaches
 // Windows' own 127.0.0.1 in networking mode, as wslinfo --networking-mode

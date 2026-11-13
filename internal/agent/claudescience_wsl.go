@@ -131,7 +131,7 @@ func scienceInWSL(d distro) *scienceHost {
 		mu:   mu,
 	}
 	if relay {
-		to := net.JoinHostPort(d.Gateway, gateway.Port())
+		to := net.JoinHostPort(d.host(), gateway.Port())
 		h.ready = func() error { return scienceRelay(d.Name, gateway.Port(), to) }
 		h.unready = func() error { return scienceRelay(d.Name, gateway.Port(), "") }
 	}

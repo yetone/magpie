@@ -223,3 +223,149 @@ func TestServeWSLListensBesideLoopback(t *testing.T) {
 	s.lnMu.Unlock()
 	waitFor(false, "shared on every address")
 }
+
+// H1_B1_K1 on X: a firewall kept WSL off vEthernet (WSL), and the distro
+// reached Windows at its LAN address instead. At such a WSL via the WSL
+// key is served from Windows' own address (a NATed distro's connection
+// comes from there) or a WSL network, and refused from the LAN; an
+// address that is no via is judged as before.
+func TestWSLViaCallerServed(t *testing.T) {
+	fresh(t)
+	t.Setenv("MAGPIE_ADDR", "")
+	fakeWSLNet(t, "172.17.32.1/20")
+	oldVia := WSLVia
+	WSLVia = func() []net.IP { return []net.IP{net.ParseIP("10.0.0.132")} }
+	t.Cleanup(func() { WSLVia = oldVia })
+	key := WSLKey()
+	served := false
+	h := lanGuard(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { served = local(r) }))
+	call := func(from, at string) int {
+		served = false
+		r := httptest.NewRequest("POST", "http://"+at+"/v1/responses", nil)
+		r.RemoteAddr = from
+		ip, _, _ := net.SplitHostPort(at)
+		r = r.WithContext(context.WithValue(r.Context(), http.LocalAddrContextKey, &net.TCPAddr{IP: net.ParseIP(ip), Port: 3425}))
+		r.Header.Set("Authorization", "Bearer "+key)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w.Code
+	}
+	for _, c := range []struct {
+		from, at string
+		ok       bool
+	}{
+		{"10.0.0.132:51000", "10.0.0.132:3425", true},     // NATed from the distro
+		{"172.17.38.240:51000", "10.0.0.132:3425", true},  // from the WSL network
+		{"10.0.0.20:51000", "10.0.0.132:3425", false},     // another machine on the LAN
+		{"10.0.0.132:51000", "10.0.0.133:3425", false},    // an address that is no via
+		{"172.17.38.240:51000", "172.17.32.1:3425", true}, // the WSL network, as before
+	} {
+		code := call(c.from, c.at)
+		if (code == 200 && served) != c.ok {
+			t.Errorf("%s to %s: %d served as local %v, want %v", c.from, c.at, code, served, c.ok)
+		}
+	}
+}
+
+// viaListener takes only connections from the address it listens at, or a
+// WSL network; another machine's is closed as soon as it is taken.
+func TestWSLViaListenerLetsInWindowsAndWSLOnly(t *testing.T) {
+	fakeWSLNet(t, "172.17.32.1/20")
+	tcp := func(s string) *net.TCPAddr { return &net.TCPAddr{IP: net.ParseIP(s), Port: 3425} }
+	for _, c := range []struct {
+		peer string
+		ok   bool
+	}{{"10.0.0.132", true}, {"172.17.38.240", true}, {"10.0.0.20", false}, {"192.168.1.5", false}} {
+		if got := viaPeer(tcp(c.peer), tcp("10.0.0.132")); got != c.ok {
+			t.Errorf("from %s: let in %v, want %v", c.peer, got, c.ok)
+		}
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := viaListener{ln}
+	defer v.Close()
+	got := make(chan net.Conn, 1)
+	go func() {
+		if c, err := v.Accept(); err == nil {
+			got <- c
+		}
+	}()
+	c, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	select {
+	case s := <-got:
+		s.Close() // from itself: let in
+	case <-time.After(10 * time.Second):
+		t.Fatal("a connection from the address listened at was not let in")
+	}
+}
+
+// The gateway on loopback listens at a WSL via of this computer's as it
+// is set, and lets it go when it is unset.
+func TestServeWSLListensAtVia(t *testing.T) {
+	fresh(t)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { ln.Close() })
+	t.Setenv("MAGPIE_ADDR", ln.Addr().String())
+	if l6, err := net.Listen("tcp6", "[::1]:0"); err != nil {
+		t.Skip("no IPv6 loopback")
+	} else {
+		l6.Close()
+	}
+	old, oldW := wslServeEverywhere, wslWatch
+	wslServeEverywhere, wslWatch = true, time.Hour // only SetWSLVia's nudge looks again
+	t.Cleanup(func() { wslServeEverywhere, wslWatch = old, oldW })
+	fakeWSLNet(t)
+	oldOwn := ownIP
+	ownIP = func(ip net.IP) bool { return ip.Equal(net.IPv6loopback) }
+	t.Cleanup(func() { ownIP = oldOwn; SetWSLVia(nil, nil) })
+
+	s := &Server{}
+	s.ln = ln
+	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "ok") })}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { s.serveWSL(ctx, srv); close(done) }()
+	t.Cleanup(func() { cancel(); <-done; srv.Close() })
+
+	at := "http://" + net.JoinHostPort("::1", Port()) + "/"
+	answers := func() bool {
+		res, err := (&http.Client{Timeout: time.Second}).Get(at)
+		if err != nil {
+			return false
+		}
+		res.Body.Close()
+		return true
+	}
+	waitFor := func(want bool, what string) {
+		t.Helper()
+		for deadline := time.Now().Add(10 * time.Second); answers() != want; time.Sleep(10 * time.Millisecond) {
+			if time.Now().After(deadline) {
+				t.Fatalf("%s: %s answers = %v", what, at, !want)
+			}
+		}
+	}
+	if answers() {
+		t.Fatal("answering before any via")
+	}
+	if err := SetWSLVia(nil, []string{"::1", "10.9.9.9"}); err != nil { // the second isn't this computer's
+		t.Fatal(err)
+	}
+	waitFor(true, "via set")
+	if err := SetWSLVia([]string{"::1"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(true, "the one tried kept")
+	if err := SetWSLVia(nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(false, "via unset")
+}

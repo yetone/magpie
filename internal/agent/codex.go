@@ -2589,8 +2589,9 @@ func codexIn(at place) *Agent {
 	if at.spell == nil {
 		a.reach = at.base
 		a.viaProxy = func() (bool, bool, string, string) { return codexThroughProxy(path, at.gw()) }
-		a.move = func(from, to string) error { return codexMoveGateway(path, from, to) }
 	}
+	// in a distro too: its way to Windows moves (wslFindVia)
+	a.move = func(from, to string) error { return codexMoveGateway(path, from, to) }
 	return a
 }
 

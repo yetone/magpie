@@ -25,19 +25,30 @@ func fakeReach(t *testing.T, answers map[string]bool) *sync.Mutex {
 	reach.m = nil
 	reach.Unlock()
 	t.Cleanup(func() {
+		reachForget()
 		reachProbe, reachAge = was, age
-		reach.Lock()
-		reach.m = nil
-		reach.Unlock()
 	})
 	return &mu
 }
 
-// reachForget drops every answer, so the next Drift asks again.
+// reachForget drops every answer, so the next Drift asks again. A probe
+// still out (one the last Drift started, for an address it was just set
+// at) is waited for first: its answer would be written into no map.
 func reachForget() {
-	reach.Lock()
-	reach.m = nil
-	reach.Unlock()
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(5 * time.Millisecond) {
+		reach.Lock()
+		busy := false
+		for _, r := range reach.m {
+			busy = busy || r.busy
+		}
+		if !busy {
+			reach.m = nil
+			reach.Unlock()
+			return
+		}
+		reach.Unlock()
+	}
+	panic("a reach probe never answered")
 }
 
 // driftSettled is the agent's drift once the probes it starts have

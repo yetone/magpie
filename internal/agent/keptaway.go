@@ -323,7 +323,7 @@ func wslHost(base string) bool {
 	wsl.Lock()
 	defer wsl.Unlock()
 	for _, d := range wsl.seen {
-		if d != nil && (d.Gateway == h || slices.Contains(d.Was, h)) {
+		if d != nil && (d.Gateway == h || d.host() == h || slices.Contains(d.Was, h)) {
 			return true
 		}
 	}

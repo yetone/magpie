@@ -392,7 +392,19 @@ func (d distro) base() string {
 	if d.Mirrored || d.Gateway == "" {
 		return gateway.URL()
 	}
-	return "http://" + net.JoinHostPort(d.Gateway, gateway.Port())
+	return "http://" + net.JoinHostPort(d.host(), gateway.Port())
+}
+
+// host is Windows as the distro reaches it: Gateway, or under NAT the WSL
+// via (gateway.WSLVia) where a firewall keeps WSL off Gateway (wslFindVia).
+func (d distro) host() string {
+	if d.Gateway == "" || d.Net == "bridged" || wslrun.HostLoopback(d.Net) || !gateway.OnWSLNet(d.Gateway) {
+		return d.Gateway
+	}
+	if v := gateway.WSLVia(); len(v) > 0 {
+		return v[0].String()
+	}
+	return d.Gateway
 }
 
 func (d distro) place(id string) place {
@@ -937,6 +949,10 @@ func wslAgent(k wslKind, d distro) *Agent {
 				return true // stopped since: never started to be asked
 			}
 			ok, told := wslReach(d.Name, base)
+			if told && !ok && d.Gateway != "" && d.Net != "bridged" && gateway.OnWSLNet(base) {
+				// shut from WSL: another of Windows' addresses may answer
+				wslFindVia(d, base)
+			}
 			return ok || !told // can't tell: taken as answering
 		})
 	}
@@ -2020,3 +2036,204 @@ var (
 	noticeWSLNoRelay     = newNotice("WSL {distro} is in {net} networking with localhostForwarding=false in %UserProfile%\\.wslconfig, so 127.0.0.1 there, where its {agent} was pointed, isn't relayed to Windows, where magpie listens. Remove localhostForwarding=false under [wsl2] (it is on by default) and run wsl --shutdown.")
 	noticeWSLAsleep      = newNotice("WSL {distro} isn't running: magpie shows what it last saw there, and starts it only to change something.")
 )
+
+// H1_B1_K1 on X: a company's firewall (火绒企业版), which its user can't
+// open, kept a distro under NAT off Windows' address on vEthernet (WSL),
+// while Windows' own address on the LAN answered from WSL. Where the
+// gateway's address on the WSL network (or the WSL via in its place) is
+// found shut from inside a distro under NAT, magpie asks the gateway to
+// listen at each of Windows' other addresses as well (gateway.SetWSLVia,
+// let in only from Windows itself or WSL), asks from the distro which of
+// them answers, keeps that one as the via and lets the others go. Every
+// NAT distro's agents on magpie are then set again to reach it there
+// (distro.host, Rewire), the address they were on being magpie's to move
+// (wslHost, wslMovedFrom). Where the via is found shut later and the WSL
+// network's address answers again, the via is dropped. A setting isn't
+// needed: what answers is found.
+
+// wslViaCandidates are Windows' own IPv4 addresses off the WSL networks:
+// its LAN's first, other vEthernet adapters' (Hyper-V's Default Switch)
+// last. None off Windows. A var for the tests.
+var wslViaCandidates = func() []string {
+	if runtime.GOOS != "windows" {
+		return nil
+	}
+	ifs, err := net.Interfaces()
+	if err != nil {
+		return nil
+	}
+	var first, last []string
+	for _, i := range ifs {
+		if i.Flags&net.FlagUp == 0 || i.Flags&net.FlagLoopback != 0 || strings.Contains(i.Name, "(WSL") {
+			continue
+		}
+		addrs, _ := i.Addrs()
+		for _, a := range addrs {
+			n, ok := a.(*net.IPNet)
+			if !ok || n.IP.To4() == nil || n.IP.IsLinkLocalUnicast() || n.IP.IsLoopback() || gateway.OnWSLNet(n.IP.String()) {
+				continue
+			}
+			if strings.HasPrefix(i.Name, "vEthernet") {
+				last = append(last, n.IP.String())
+			} else {
+				first = append(first, n.IP.String())
+			}
+		}
+	}
+	return append(first, last...)
+}
+
+// wslViaListening waits until the gateway listens at ip, as told from here
+// (a connection from Windows itself is let in there); the gateway in
+// another process looks for new vias every 10s. A var for the tests.
+var wslViaListening = func(ip string) bool {
+	addr := net.JoinHostPort(ip, gateway.Port())
+	for deadline := time.Now().Add(15 * time.Second); time.Now().Before(deadline); time.Sleep(250 * time.Millisecond) {
+		if c, err := net.DialTimeout("tcp", addr, time.Second); err == nil {
+			c.Close()
+			return true
+		}
+	}
+	return false
+}
+
+// wslViaMu lets one search for a via run at a time.
+var wslViaMu sync.Mutex
+
+// wslFindVia looks for a way from distro d to the gateway, once shut, the
+// address it found shut: the WSL network's again, else another of
+// Windows' addresses (see above), tried one by one while the gateway
+// listens at all of them. The one that answers is kept; the agents of
+// every distro under NAT on magpie then are set again to reach it there.
+func wslFindVia(d distro, shut string) {
+	wslViaMu.Lock()
+	defer wslViaMu.Unlock()
+	port := gateway.Port()
+	url := func(ip string) string { return "http://" + net.JoinHostPort(ip, port) }
+	var old []string
+	for _, ip := range gateway.WSLVia() {
+		old = append(old, ip.String())
+	}
+	keep := func(via []string) {
+		if slices.Equal(via, old) {
+			if err := gateway.SetWSLVia(old, nil); err != nil {
+				log.Printf("wsl: can't keep the way to magpie from WSL: %v", err)
+			}
+			return
+		}
+		on := wslOnGateway()
+		from := make([]string, len(on))
+		for i, a := range on {
+			from[i] = a.pointedAt()
+		}
+		if err := gateway.SetWSLVia(via, nil); err != nil {
+			log.Printf("wsl: can't keep the way to magpie from WSL: %v", err)
+			return
+		}
+		if len(old) > 0 {
+			wslViaLeft(old[0])
+		}
+		// one that moves its own addresses (Codex's two URLs) is moved;
+		// the others are set again
+		var rest []*Agent
+		var moved []string
+		var errs []error
+		for i, a := range on {
+			to := ""
+			if a.Gateway != nil {
+				to = a.Gateway()
+			}
+			if a.move == nil || from[i] == "" || to == "" || from[i] == to {
+				rest = append(rest, a)
+				continue
+			}
+			if err := a.move(from[i], to); err != nil {
+				errs = append(errs, err)
+				continue
+			}
+			moved = append(moved, a.Name)
+		}
+		m, err := Rewire(rest)
+		moved = append(moved, m...)
+		if err != nil {
+			errs = append(errs, err)
+		}
+		if len(moved) > 0 || len(errs) > 0 {
+			log.Printf("wsl: set again to reach magpie from WSL: %v %v", moved, joinErrs(errs))
+		}
+	}
+	if len(old) > 0 && shut != url(old[0]) {
+		// found already, by another agent's ask
+		if ok, told := wslReach(d.Name, url(old[0])); ok && told {
+			return
+		}
+	}
+	if len(old) > 0 && shut != url(d.Gateway) {
+		// the via shut: the WSL network's address may answer again
+		if ok, told := wslReach(d.Name, url(d.Gateway)); ok && told {
+			log.Printf("wsl: WSL %s reaches magpie at %s again", d.Name, url(d.Gateway))
+			keep(nil)
+			return
+		}
+	}
+	var cands []string
+	for _, c := range wslViaCandidates() {
+		if url(c) != shut {
+			cands = append(cands, c)
+		}
+	}
+	if len(cands) == 0 {
+		return
+	}
+	if err := gateway.SetWSLVia(old, cands); err != nil {
+		log.Printf("wsl: can't listen for WSL beyond its network: %v", err)
+		return
+	}
+	for _, c := range cands {
+		if !wslViaListening(c) {
+			continue
+		}
+		if ok, told := wslReach(d.Name, url(c)); ok && told {
+			log.Printf("wsl: WSL %s can't reach magpie at %s; it reaches it at %s", d.Name, shut, c)
+			keep([]string{c})
+			return
+		}
+	}
+	keep(old)
+}
+
+// wslOnGateway are the agents on magpie in distros under NAT, taken
+// before their way to Windows moves (as OnGateway before a port change).
+// A var for the tests, set in init: its agents' probes find vias.
+var wslOnGateway func() []*Agent
+
+func init() { wslOnGateway = wslOnGatewayNow }
+
+func wslOnGatewayNow() []*Agent {
+	var out []*Agent
+	for _, a := range wslAgents() {
+		if len(a.Fields) == 0 || !a.Wired() {
+			continue
+		}
+		if dr := a.Drift(); dr != nil && dr.Kind == "unwired" {
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
+}
+
+// wslViaLeft notes a via let go as an address every NAT distro reached
+// Windows at before (Was), so an agent still on it is magpie's to move.
+func wslViaLeft(via string) {
+	wsl.Lock()
+	defer wsl.Unlock()
+	for _, d := range wsl.seen {
+		if d == nil || d.Gateway == "" || d.Net == "bridged" || wslrun.HostLoopback(d.Net) || slices.Contains(d.Was, via) {
+			continue
+		}
+		d.Was = append(d.Was, via)
+		wsl.dirty = true
+	}
+	wslSaveLocked()
+}
