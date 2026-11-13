@@ -19,6 +19,7 @@ import (
 	"maps"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -3383,6 +3384,10 @@ type mcpSignInOpened struct {
 func openMCPSignIn(w Windows, st mcpauth.State) mcpSignInOpened {
 	if settings.Load().SignInLinkOnly {
 		return mcpSignInOpened{State: st, LinkOnly: true}
+	}
+	if u, err := url.Parse(st.URL); st.URL != "" && (err != nil || !mcpauth.WebURL(u)) {
+		// the server named it: only a web page is handed to the system
+		return mcpSignInOpened{State: st, OpenError: "not a web page"}
 	}
 	return mcpSignInOpened{State: st, OpenError: openError(w, st.URL)}
 }

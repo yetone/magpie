@@ -647,6 +647,17 @@ type meta struct {
 
 func origin(u *url.URL) string { return u.Scheme + "://" + u.Host }
 
+// WebURL is whether u is a web page a browser may be asked to open: http
+// or https, with a host. A sign-in page an MCP server names is opened by
+// the system, so anything else (file:, smb:, an app's scheme) is refused.
+func WebURL(u *url.URL) bool {
+	if u == nil || u.Host == "" || u.Opaque != "" {
+		return false
+	}
+	s := strings.ToLower(u.Scheme)
+	return s == "https" || s == "http"
+}
+
 // challenge is the server's 401: its resource metadata and the scope it
 // asks for, from WWW-Authenticate.
 func challenge(h http.Header) (metadata, scope string) {
@@ -1075,6 +1086,14 @@ func start(ctx context.Context, name, serverURL string, app *App, add *string) (
 	if err != nil {
 		ln.Close()
 		return State{}, fmt.Errorf("the authorization endpoint isn't a URL: %w", err)
+	}
+	if !WebURL(au) {
+		// the server's metadata names it, and the page is handed to the
+		// system to open: a file:, smb: or app link there would run or
+		// mount what the server chose (Windows opens it through
+		// url.dll's FileProtocolHandler)
+		ln.Close()
+		return State{}, fmt.Errorf("the authorization endpoint isn't a web page (%q)", m.AuthorizeURL)
 	}
 	aq := au.Query()
 	for k, v := range q {
