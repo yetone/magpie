@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -549,4 +551,36 @@ func TestRequestChunksForgottenLongIdle(t *testing.T) {
 	ask()
 	wait("forgotten", func() bool { return chunks() == 0 })
 	ask() // read back from the file of them
+}
+
+// A trim that lets most chunks go gives back the map's table too: a map
+// never shrinks, and the forget's trim(0) of a real history's index kept
+// an empty 853 KB table for the life of the process.
+func TestRequestTrimGivesBackTheMap(t *testing.T) {
+	const n = 100000
+	idx := &requestIndex{chunks: make(map[string]*rowChunk)}
+	c := &rowChunk{Bytes: 1, used: new(atomic.Uint64)}
+	keys := make([]string, n) // held, so only the table is measured
+	for i := range n {
+		keys[i] = fmt.Sprint("/s/rollout-", i, ".jsonl")
+		idx.chunks[keys[i]] = c
+	}
+	heap := func() uint64 {
+		runtime.GC()
+		var m runtime.MemStats
+		runtime.ReadMemStats(&m)
+		return m.HeapAlloc
+	}
+	before := heap()
+	idx.trim(0)
+	after := heap()
+	if len(idx.chunks) != 0 {
+		t.Fatalf("%d chunks after trim(0)", len(idx.chunks))
+	}
+	// the table of 100k entries is ~3 MB
+	if after+1<<20 > before {
+		t.Fatalf("heap %d → %d after trim(0): the map's table was kept", before, after)
+	}
+	idx.chunks["/s/kept"] = c // the map is usable after
+	runtime.KeepAlive(keys)
 }
