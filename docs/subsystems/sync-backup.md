@@ -518,6 +518,24 @@ entries, an older bundle with no list keeps this computer's, and a library
 with none hashes as before (`TestSyncHooks`, `TestNoHooksHashAsBefore`,
 `TestBackupFileCarriesHooks`).
 
+billion-context's own config, `billion-context.json` (`library.Bundle.Bili`,
+see [library](library.md)), goes in the library part by sync and backup file
+alike: the text as written, comments kept, with magpie's summary recipe at
+the canonical gateway address, put back at this computer's gateway when it
+is written, so two computers on different ports don't trade it back and
+forth. A file bili can't read, or one over 1 MiB, is not carried, so it
+never arrives as empty; a bundle without it leaves this computer's alone.
+Before a carried file replaces a different one here, this computer's is
+kept with the backups. Its credential store, `<config>.summary-credentials.json`,
+is never carried: the computer that writes magpie's recipe saves its own
+gateway key there. A file naming a DSN is left out of a keyless backup
+file (`WithoutSecrets`). A library with no such file hashes as before, and
+running bilis are asked to reload after one is written
+(`TestBiliFileCarried`, `TestBiliFileNotCarriedUnreadable`,
+`TestBiliFileDSNNotInKeylessBackup`, `TestBiliFileInLibraryPart`). A sync's preview names it as
+the file `billion-context.json`, added, changed or removed
+(`TestBiliFileInPreview`).
+
 ## Verification
 
 ```sh

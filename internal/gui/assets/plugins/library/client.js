@@ -1870,11 +1870,14 @@ magpie.plugin("library", (ctx) => {
   let bili = null;          // /api/library/bili
   const biliBusy = new Set(); // agents being switched
   let biliLoading = false, biliInstalling = false, biliInstallErr = "";
+  // billion-context.json's settings the tab changes, with magpie's models
+  // to pick the summary model from (/api/library/bili/settings)
+  let biliSet = null, biliSetBusy = false;
   async function loadBili() {
     if (biliLoading) return;
     biliLoading = true;
     try {
-      bili = await api("library/bili");
+      [bili, biliSet] = await Promise.all([api("library/bili"), api("library/bili/settings").catch(() => null)]);
     } catch (e) {
       status(e.message, "err");
     }
@@ -1933,6 +1936,109 @@ magpie.plugin("library", (ctx) => {
     }
     if (!rows.length) list.append(el("div", "lib-none", t("None of your agents can use billion-context with magpie: Pi, omp, OpenCode, Claude Code, Hermes, DeepSeek Harness or Zed.")));
     body.append(list);
+    if (bili.path && biliSet?.path) biliSettings(body);
+  }
+  // billion-context.json's settings, as billion-context reads them: the
+  // ones changed often in front, its compression philosophy under
+  // Advanced. A change is written into the file (keeping what else it
+  // has) and the running billion-context reads it again (bili_config.go).
+  function biliSettings(body) {
+    const s = biliSet;
+    const rh = el("div", "row-head");
+    rh.append(el("span", "label", t("Settings")), el("span", "grow"), pathLink(s.path));
+    body.append(rh);
+    const list = el("div", "list lib-list lib-bili-set");
+    if (s.bad) {
+      list.append(el("div", "lib-none lib-rtk-err", t("billion-context.json can't be read, so magpie leaves it alone. Fix it or take it out to change these here.")));
+      body.append(list);
+      return;
+    }
+    const row = (name, ...end) => {
+      const r = el("div", "row lib-row");
+      const who = el("div", "who");
+      who.append(el("div", "name", name));
+      r.append(who, el("span", "grow"), ...end);
+      list.append(r);
+      return r;
+    };
+    const models = biliSet.models || [];
+    const target = s.targets[0] || "";
+    const ours = target.startsWith("magpie/") ? target.slice(7) : "";
+    const named = ours ? (models.find((m) => m.id === ours)?.name || ours) : target;
+    const pick = menuButton(named || t("Choose a model"), "lib-bili-model", () => openProtoMenu(pick, [
+      ...models.map((m) => ({ v: "m\n" + m.id, name: m.name || m.id, note: m.providerName || "", literalName: true })),
+      ...s.recipes.map((r) => ({ v: "r\n" + r, name: r, note: "billion-context.json", literalName: true }))],
+    ours ? "m\n" + ours : target ? "r\n" + target : "", (v) => {
+      const [k, id] = v.split("\n");
+      biliChange(k === "m" ? { model: id, summary: true } : { target: id, summary: true });
+    }, "Model", "", "left", false, models.length + s.recipes.length > 8 ? "Search models" : ""));
+    pick.disabled = biliSetBusy;
+    const sum = toggle(s.summary, t("Summarize with a fast model"), (v) => biliChange({ summary: v }));
+    sum.disabled = biliSetBusy || !target;
+    if (!target) sum.title = t("Choose a model first");
+    row(t("Summarize with a fast model"), pick, sum);
+    const nudge = toggle(s.nudge, t("Fold only when nudged"), (v) => biliChange({ nudge: v }));
+    nudge.disabled = biliSetBusy;
+    row(t("Fold only when nudged"), nudge);
+    const num = el("input", "lib-bili-growth");
+    num.type = "number";
+    num.min = "1000";
+    num.step = "1000";
+    num.inputMode = "numeric";
+    num.placeholder = "50000";
+    num.value = s.growth ? String(s.growth) : "";
+    num.disabled = biliSetBusy;
+    num.setAttribute("aria-label", t("Nudge every"));
+    const putGrowth = () => {
+      const v = num.value.trim() === "" ? 0 : Math.round(+num.value);
+      if (v !== (s.growth || 0)) biliChange({ growth: v });
+    };
+    num.onchange = putGrowth;
+    num.onkeydown = (e) => { if (e.key === "Enter") num.blur(); };
+    row(t("Nudge every"), num, el("span", "note", t("tokens")));
+    body.append(list);
+
+    const more = el("details", "lib-more lib-bili-more");
+    more.append(el("summary", "", t("Advanced")));
+    const ph = el("div", "lib-bili-phil");
+    ph.append(el("div", "name", t("Compression philosophy")));
+    const ta = el("textarea", "lib-text small");
+    // what's typed outlives a redraw until it is saved
+    ta.value = biliPhil ?? (s.philosophy || "");
+    ta.oninput = () => { biliPhil = ta.value; };
+    ta.placeholder = t("billion-context's own");
+    ta.setAttribute("aria-label", t("Compression philosophy"));
+    ta.disabled = biliSetBusy;
+    ph.append(ta, el("p", "lib-rtk-note", t("Replaces billion-context's guidance on what a fold keeps. Setting it also tells billion-context you accept the risk of changing its prompts.")));
+    const acts = el("div", "lib-acts");
+    const save = button(t("Save"), "action", () => ta.value.trim() !== (s.philosophy || "") && biliChange({ philosophy: ta.value }));
+    save.disabled = biliSetBusy;
+    acts.append(save);
+    ph.append(acts);
+    more.append(ph);
+    // open as it was across redraws
+    more.open = biliMoreOpen;
+    more.ontoggle = () => { biliMoreOpen = more.open; };
+    body.append(more);
+    autosize(ta, 72);
+  }
+  let biliMoreOpen = false, biliPhil = null;
+  async function biliChange(c) {
+    biliSetBusy = true;
+    render();
+    try {
+      biliSet = await api("library/bili/settings", c);
+      if ("philosophy" in c) biliPhil = null;
+      status(biliSet.reloaded
+        ? t("Saved — the running billion-context uses it now")
+        : biliSet.running
+          ? t("Saved — billion-context didn't reload it; restart the agent to use it")
+          : t("Saved — billion-context uses it when it next starts"), "ok", 6000);
+    } catch (e) {
+      status(e.message, "err", 8000);
+    }
+    biliSetBusy = false;
+    render();
   }
   // What billion-context saved, in its own count: what its running proxy
   // says at /__bili/overview (its dashboard's net savings), over every

@@ -272,6 +272,11 @@ func itemsOf(b backup.Bundle, p string) map[string]item {
 				out["instructions\x00"] = item{Kind: "instructions", Raw: string(v)}
 				continue
 			}
+			// billion-context's own config is one file, shown by its name
+			if k == "bili" {
+				out["bili\x00"] = item{Kind: "file", Name: "billion-context.json", Raw: string(v)}
+				continue
+			}
 			flatten(out, k, x)
 		}
 	}

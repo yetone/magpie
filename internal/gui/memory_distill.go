@@ -54,16 +54,25 @@ func readDistill() (*distillView, error) {
 	if inUse != "" {
 		v.Efforts, v.EffortNow = gateway.ModelEfforts(inUse), gateway.SideEffort(inUse, st.Effort)
 	}
+	v.Models = servedModels()
+	return v, nil
+}
+
+// servedModels are the models a side job can be sent to through the
+// gateway: a ready subscription's (not one that only decides) and each
+// routing group's, the group named in place of a provider
+func servedModels() []modelRef {
+	ms := []modelRef{}
 	for _, e := range provider.Served() {
 		if e.Group != "" || e.Provider.Ready() && !e.Provider.DecideOnly() {
 			m := modelRef{ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon}
 			if e.Group != "" {
 				m.Provider, m.PName = "", e.Group
 			}
-			v.Models = append(v.Models, m)
+			ms = append(ms, m)
 		}
 	}
-	return v, nil
+	return ms
 }
 
 // distillAuto is the model conversations are read with when none is

@@ -1029,7 +1029,8 @@ func unset(b backup.Bundle, p string) bool {
 			}
 		}
 		return len(l.MCP) == 0 && len(l.Skills) == 0 &&
-			(l.Subagents == nil || len(*l.Subagents) == 0) && (l.Hooks == nil || len(*l.Hooks) == 0)
+			(l.Subagents == nil || len(*l.Subagents) == 0) && (l.Hooks == nil || len(*l.Hooks) == 0) &&
+			(l.Bili == nil || strings.TrimSpace(*l.Bili) == "")
 	}
 	return false
 }

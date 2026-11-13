@@ -41,6 +41,11 @@ type Bundle struct {
 	// Put keeps this computer's. Applied.Env stays out. A backup made
 	// without keys carries the names with empty values (WithoutSecrets).
 	Env *[]*EnvVar `json:"env,omitempty"`
+	// Bili is billion-context's own billion-context.json, with magpie's
+	// recipe at the default gateway address (carriedBili). It is nil when
+	// this computer has none or it can't be read, and in a bundle from a
+	// magpie before it was carried: Put keeps this computer's then.
+	Bili *string `json:"bili,omitempty"`
 }
 
 // CarriedSkill is a skill with its folder's files.
@@ -154,6 +159,7 @@ func Collect() (*Bundle, error) {
 		envs = append(envs, &c)
 	}
 	b.Env = &envs
+	b.Bili = carriedBili()
 	return b, nil
 }
 
@@ -353,6 +359,12 @@ func localFile(rel string) bool {
 // WithoutSecrets empties the values of the servers' environment variables
 // and headers that secret says hold one; their names stay, to be filled in.
 func (b *Bundle) WithoutSecrets(secret func(string) bool) {
+	// billion-context.json holds no keys (bili takes a key's variable or
+	// its own store's name), except a storage DSN's password: a file
+	// naming one stays out, kept on each computer as it is
+	if b.Bili != nil && strings.Contains(strings.ToLower(*b.Bili), "dsn") {
+		b.Bili = nil
+	}
 	// a variable's name says nothing of what its value is: every value
 	// goes, the names stay
 	if b.Env != nil {
@@ -467,7 +479,8 @@ func Put(b *Bundle) (*Result, error) {
 	if err := b.check(); err != nil {
 		return nil, err
 	}
-	return change(func(l *Library) error {
+	biliWrote := false
+	res, err := change(func(l *Library) error {
 		if err := os.MkdirAll(skillsDir(), 0o755); err != nil {
 			return err
 		}
@@ -643,8 +656,21 @@ func Put(b *Bundle) (*Result, error) {
 			}
 			l.Env = envs
 		}
+		if b.Bili != nil {
+			wrote, err := putBili(*b.Bili, kept)
+			if err != nil {
+				return err
+			}
+			biliWrote = wrote
+		}
 		return nil
 	})
+	if err == nil && biliWrote {
+		// the running bilis read their settings again (best effort: one
+		// started later reads the file anyway)
+		biliReload()
+	}
+	return res, err
 }
 
 func sameSource(a, b *Source) bool {
@@ -717,11 +743,15 @@ func isDir(p string) bool {
 }
 
 // Changed is when the library was last changed: library.json, or a file
-// of its own (links not followed).
+// of its own (links not followed), or billion-context.json, which a
+// sync carries with it.
 func Changed() time.Time {
 	var t time.Time
 	if fi, err := os.Stat(path()); err == nil {
 		t = fi.ModTime()
+	}
+	if b := biliChanged(); b.After(t) {
+		t = b
 	}
 	filepath.WalkDir(Dir(), func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
