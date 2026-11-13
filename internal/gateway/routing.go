@@ -2426,7 +2426,9 @@ type left struct {
 	// fullest: when the window used is the share of renews
 	// (Allowance.Fullest), zero when not known
 	fullest time.Time
-	soon    []time.Time // renews as Smart ranks them (Allowance.Renewal)
+	// fullestName: that window's name, when more than one counts the model
+	fullestName string
+	soon        []time.Time // renews as Smart ranks them (Allowance.Renewal)
 	// unreached: how many of soon's windows Smart passes over, as they
 	// can't be used up before they renew any more (Allowance.Unreached)
 	unreached int
@@ -2550,7 +2552,7 @@ func weighRouted(p provider.Provider, cs []candidate, model string, from provide
 			pc, due := a.Pace(c.model, now)
 			amt, of, unit := a.Count(c.model, now)
 			rs := a.Restarts(now)
-			l := left{used: u, renews: r, fullest: a.Fullest(c.model, now), soon: a.Renewal(c.model, now), unreached: a.Unreached(c.model, now), lapse: a.Lapse(c.model, now), lapsing: a.Lapsing(c.model, now), pace: pc, due: due, amount: amt, of: of, unit: unit,
+			l := left{used: u, renews: r, fullest: a.Fullest(c.model, now), fullestName: a.FullestName(c.model, now), soon: a.Renewal(c.model, now), unreached: a.Unreached(c.model, now), lapse: a.Lapse(c.model, now), lapsing: a.Lapsing(c.model, now), pace: pc, due: due, amount: amt, of: of, unit: unit,
 				restarts: rs, dueRestart: !rs.IsZero() && due.Equal(rs), credits: spendsCredits(c.p, a)} // one not known counts as unused
 			l.dueExpiry = !l.dueRestart && !l.lapse.IsZero() && due.Equal(l.lapse)
 			l.weekLow = u >= lowShare && u < usedShare && a.CapUsed(c.model, now) < lowShare

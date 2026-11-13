@@ -611,8 +611,12 @@ function routingPage(part) {
     const out = x ? runsOutText(x) : "";
     return out ? " · " + out : "";
   };
+  // the window the share is of before it, when the account has more than
+  // one (Weighed.UsedWindow): its fullest, which sets it aside under every
+  // routing, In turn's too: "7d 41% used", not a bare 41% read as its
+  // five hours (Wing8Aqua on X)
   const quota = (w, used, left, vars) => w.balance != null ? t(left, { n: balText(w), ...vars }) + lapses(w)
-    : (w.limit > 0 ? quotaCount(w) + " · " : "") + t(quotaLeft ? left : used, { n: pct(share(w)), ...vars });
+    : (w.usedWindow ? shortWindow(w.usedWindow) + " " : "") + (w.limit > 0 ? quotaCount(w) + " · " : "") + t(quotaLeft ? left : used, { n: pct(share(w)), ...vars });
   const fill = (w) => Math.max(0, Math.min(100, share(w))) + "%";
   const FAIL = { rate: "rate limited", credit: "out of credit", quota: "quota used up", other: "failed", auth: "sign-in required", canceled: "canceled", foreign: "another account's reasoning", floor: "reply too short", verify: "needs verification", refused: "refused (safety filter)", shape: "request not understood", sight: "images not taken", proxy: "proxy not reachable", offline: "network down", overloaded: "servers overloaded", effort: "reasoning effort not in its plan", overflow: "too long for its model", room: "reply asked past the window left", slow: "slow to start", prompt: "agent's prompt turned away", restricted: "account restricted by the vendor" };
   // a refusal the vendor called a rate limit, resting as out of quota

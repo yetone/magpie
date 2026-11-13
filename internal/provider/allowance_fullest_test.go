@@ -39,3 +39,24 @@ func TestFullestRenewsWithTheShare(t *testing.T) {
 		t.Fatalf("a reset not known: %v", got)
 	}
 }
+
+// FullestName names Fullest's window when more than one counts the model,
+// so a share isn't read as another window's (Wing8Aqua on X); none for a
+// lone window.
+func TestFullestNameNamesTheShare(t *testing.T) {
+	now := time.Now()
+	a := Allowance{
+		{Name: "5 hours", Used: 0, Resets: now.Add(5 * time.Hour), Span: 5 * time.Hour},
+		{Name: "7 days", Used: 41, Resets: now.Add(48 * time.Hour), Span: 7 * 24 * time.Hour},
+	}
+	if got := a.FullestName("claude-opus-5-5", now); got != "7 days" {
+		t.Fatalf("FullestName %q, want the week", got)
+	}
+	a[0].Used = 60
+	if got := a.FullestName("claude-opus-5-5", now); got != "5 hours" {
+		t.Fatalf("five hours fuller: %q", got)
+	}
+	if got := a[1:].FullestName("m", now); got != "" {
+		t.Fatalf("one window named: %q", got)
+	}
+}

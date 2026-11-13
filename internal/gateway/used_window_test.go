@@ -60,4 +60,44 @@ func TestUsedRenewsWithItsOwnWindow(t *testing.T) {
 	if d := weighed(got[0], dp, wg, false, provider.Anthropic); d.UsedRenews == nil || !d.UsedRenews.Equal(devinWeek) {
 		t.Fatalf("Devin's: %+v", d)
 	}
+	// the window the share is of, named, as more than one counts the
+	// model; Devin's one window needs no name (Wing8Aqua on X)
+	if w.UsedWindow != "7 days" {
+		t.Fatalf("Factory's 32%% is of %q, want its week", w.UsedWindow)
+	}
+	if d := weighed(got[0], dp, wg, false, provider.Anthropic); d.UsedWindow != "" {
+		t.Fatalf("Devin's one window named: %q", d.UsedWindow)
+	}
+}
+
+// Wing8Aqua on X: two Claude Code accounts In turn, each at 0% of its
+// five hours and some of its week. The share the row shows is the week's,
+// the fullest, which sets an account aside under every routing; the trace
+// names it so the row says "7d 41% used", not a bare 41% read as the
+// five hours'.
+func TestUsedWindowNamesTheWeekInTurn(t *testing.T) {
+	now := time.Now()
+	five, week := now.Add(5*time.Hour), now.Add(2*24*time.Hour)
+	claude := provider.Allowance{
+		{Name: "5 hours", Used: 0, Resets: five, Span: 5 * time.Hour},
+		{Name: "7 days", Used: 41, Resets: week, Span: 7 * 24 * time.Hour},
+	}
+	old := allowances
+	t.Cleanup(func() { allowances = old })
+	allowances = func(agent string) map[string]provider.Allowance {
+		if agent == "claude" {
+			return map[string]provider.Allowance{"a@example.com": claude, "b@example.com": claude}
+		}
+		return nil
+	}
+	a := provider.Provider{ID: "claude", Routing: provider.Rotate, Account: &provider.Account{Agent: "claude", User: "a@example.com"}}
+	b := provider.Provider{ID: "claude", Routing: provider.Rotate, Account: &provider.Account{Agent: "claude", User: "b@example.com"}}
+	cs := []candidate{{p: a, model: "claude-opus-5-5", rest: "claude@a"}, {p: b, model: "claude-opus-5-5", rest: "claude@b"}}
+	got, wg := weigh(provider.Provider{ID: "claude", Routing: provider.Rotate}, cs, "claude-opus-5-5", provider.Anthropic)
+	for _, c := range got {
+		w := weighed(c, c.p, wg, false, provider.Anthropic)
+		if !w.Known || w.Used != 41 || w.UsedWindow != "7 days" || w.UsedRenews == nil || !w.UsedRenews.Equal(week) {
+			t.Fatalf("%s: used %v of %q renewing %v, want 41 of its week", c.rest, w.Used, w.UsedWindow, w.UsedRenews)
+		}
+	}
 }

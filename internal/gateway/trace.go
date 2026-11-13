@@ -465,6 +465,10 @@ type Weighed struct {
 	// from Renews' biggest first: a row says the two together, so of one
 	// window, a Factory account's week and not its month (#1778)
 	UsedRenews *time.Time `json:"usedRenews,omitempty"`
+	// UsedWindow: the name of the window Used is the share of, when more
+	// than one counts the model: the row says it with the share, so a
+	// week's 41% isn't read as the five hours' (Wing8Aqua on X)
+	UsedWindow string `json:"usedWindow,omitempty"`
 	// Sunk: when it was rate limited with quota left, sending it to the
 	// back of an order that sinks (sink.go); nil when it didn't, or the
 	// order doesn't sink
@@ -637,6 +641,7 @@ func weighed(c candidate, p provider.Provider, wg weighing, fallback bool, from 
 			ur := l.fullest
 			w.UsedRenews = &ur
 		}
+		w.UsedWindow = l.fullestName
 		if l.of > 0 {
 			w.Amount, w.Limit, w.Unit = l.amount, l.of, l.unit
 		}
