@@ -2744,6 +2744,15 @@ magpie.plugin("library", (ctx) => {
         out.push(p);
       }
     }
+    // skills in an agent's own folder that the library doesn't have are not
+    // listed, so each stays in its prompt
+    const mine = skillAgents().filter((a) => !a.gone && (a.skillRouter === "on" || a.skillRouter === "none")
+      && lib.foundSkills.some((f) => !f.manual && f.agents.includes(a.id))).map((a) => a.name).join(", ");
+    if (mine) {
+      const p = el("p", "lib-aside lib-hub-why", t("{agents} has skills of its own that aren't in the library, so the router doesn't list them: bring them in below.", { agents: mine }));
+      p.dataset.why = "found";
+      out.push(p);
+    }
     return out;
   }
   // What the router says of itself to the agents (packinggoodsllc_07668 on
@@ -6563,6 +6572,7 @@ magpie.plugin("library", (ctx) => {
       ["shared", "{agents} reads ~/.agents/skills, which other agents read too, so it keeps each skill of its own."],
       ["taken", "A skill in the library is called magpie-skills, so {agents} keeps each skill of its own: give that skill another name for the router to be used."],
       ["own", "{agents} has a skill called magpie-skills of its own, which magpie leaves as it is, so it keeps each skill of its own."],
+      ["none", "No skill of the library's is listed for {agents}: tick one for it, or list one kept out of the router."],
     ];
     for (const [k, text] of why) {
       const n = names(k);
@@ -6571,6 +6581,15 @@ magpie.plugin("library", (ctx) => {
         p.dataset.why = k;
         out.push(p);
       }
+    }
+    // skills in an agent's own folder that the library doesn't have are not
+    // listed, so each stays in its prompt
+    const mine = skillAgents().filter((a) => !a.gone && (a.skillRouter === "on" || a.skillRouter === "none")
+      && lib.foundSkills.some((f) => !f.manual && f.agents.includes(a.id))).map((a) => a.name).join(", ");
+    if (mine) {
+      const p = el("p", "lib-aside lib-hub-why", t("{agents} has skills of its own that aren't in the library, so the router doesn't list them: bring them in below.", { agents: mine }));
+      p.dataset.why = "found";
+      out.push(p);
     }
     return out;
   }

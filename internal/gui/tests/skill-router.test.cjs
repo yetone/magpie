@@ -24,7 +24,7 @@ const fixture = (st) => ({
     { id: "claude", name: "Claude Code", icon: "claudecode-color", skills: `${HOME}/.claude/skills`, ...(st.on ? { skillRouter: "on" } : {}) },
     { id: "pi", name: "Pi", icon: "", skills: `${HOME}/.agents/skills`, ...(st.on ? { skillRouter: "shared" } : {}) },
   ],
-  instructions: { agents: [], sets: [] }, servers: [], foundServers: [], projects: [], foundSkills: [], problems: [],
+  instructions: { agents: [], sets: [] }, servers: [], foundServers: [], projects: [], foundSkills: [{ name: "mine", description: "Its own", agents: ["claude"] }], problems: [],
   skills: [
     { name: "pdf", description: "Read PDFs", kind: "folder", agents: ["claude", "pi"], ...(st.direct ? { router: "direct" } : {}) },
     { name: "deploy", description: "Ship it", kind: "folder", agents: ["claude"], manual: true },
@@ -137,7 +137,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // Pi keeps its own skills, and the page says why
         const why = v.locator('.lib-hub-why[data-why="shared"]');
         assert.equal((await why.textContent()).trim(), w("{agents} reads ~/.agents/skills, which other agents read too, so it keeps each skill of its own.", { agents: "Pi" }));
-        assert.equal(await v.locator(".lib-hub-why").count(), 1);
+        // Claude Code has a skill of its own the library lacks: it stays in
+        // its prompt, the router can't list it, and the page says so
+        const found = v.locator('.lib-hub-why[data-why="found"]');
+        assert.equal((await found.textContent()).trim(), w("{agents} has skills of its own that aren't in the library, so the router doesn't list them: bring them in below.", { agents: "Claude Code" }));
+        assert.equal(await v.locator(".lib-hub-why").count(), 2);
         assert.deepEqual(await sideways(page), []);
         await shot(page, `${engine}-${lang}-${width}-on`);
 

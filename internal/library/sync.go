@@ -429,7 +429,8 @@ type AgentView struct {
 	Hub string `json:"hub,omitempty"`
 	// SkillRouter, with the skill router on, is "on" for an agent whose
 	// skills folder is given magpie-skills, or why it keeps each skill's
-	// own link (routerWhy): copies, liveagent, shared, taken or own
+	// own link (routerWhy): copies, liveagent, shared, taken or own; or
+	// "none" for an agent whose folder takes it and has no skill to list
 	SkillRouter string `json:"skillRouter,omitempty"`
 	// How is the way it is given its skills, link or copy, and HowOwn its
 	// own over the library's; MustCopy is one that can only take copies
@@ -636,6 +637,10 @@ func readView(problems []Problem, glance bool) (*View, error) {
 				av.SkillRouter = "on"
 				if why := l.routerWhy(t, av.How == HowCopy); why != "" {
 					av.SkillRouter = why
+				} else if a := l.Applied[t.Agent.ID]; !t.Gone && (a == nil || !a.Router) {
+					// the folder takes it, yet no skill is listed there:
+					// none is ticked for the agent, or each is kept direct
+					av.SkillRouter = routerNone
 				}
 			}
 		}

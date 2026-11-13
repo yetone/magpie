@@ -192,6 +192,15 @@ func TestSkillRouterLastSkillUnticked(t *testing.T) {
 	if a := loaded(t).Applied["claude"]; a != nil && a.Router {
 		t.Fatalf("applied: %+v", a)
 	}
+	// the router is on and lists nothing there: the page must not say "on"
+	// for an agent whose prompt is as it was (ConatusMoon2222 on X)
+	if got := agentView(t, routerView(t), "claude").SkillRouter; got != routerNone {
+		t.Fatalf("nothing listed, the view says %q", got)
+	}
+	ok(t)(SkillAgents("pdf", []string{"claude"}))
+	if got := agentView(t, routerView(t), "claude").SkillRouter; got != "on" {
+		t.Fatalf("a skill listed, the view says %q", got)
+	}
 }
 
 // A magpie-skills of the user's own in the agent's folder is left as it

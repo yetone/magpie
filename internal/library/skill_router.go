@@ -63,6 +63,7 @@ const (
 	routerShared    = "shared"    // its folder is ~/.agents/skills, read by many
 	routerTaken     = "taken"     // the library has a skill called magpie-skills
 	routerOwn       = "own"       // its folder has a magpie-skills of its own
+	routerNone      = "none"      // its folder takes it, but no skill is listed there
 )
 
 // routerDescMax is the most a SKILL.md's description may be: Codex
