@@ -1354,6 +1354,11 @@ each one.
     land 3 bytes under it, after 9a8219237 had left 14. Each change now
     shaves until it fits, and the next one has nothing to shave: move a
     page out of the core first (#2710).
+    An hour later 23457a51f raised it 316 ("no page to move it to")
+    and left the media chip's Copy model ID out to fit: the budget now
+    shapes what users get. Done right: 817d35ffa then moved ~2.8KB of
+    usage helpers into page.js. The raises live in one ~3KB comment
+    line on coreScriptBudget; that is a log, not a growth rate.
   - A record that points elsewhere: 2f34649a6's body is "Run: see push
     notes", and 8f82e08b4's "(see below)" has nothing below it; neither
     says whether what it ran passed. A pointer is not a record (10-14).
