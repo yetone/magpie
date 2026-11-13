@@ -229,7 +229,10 @@ func (e errAdvice) Error() string { return e.err.Error() }
 // what it said before calling the advisor.
 func (s *Server) advise(ctx context.Context, q *Request, said []Part, model string) (string, error) {
 	body := buildAnthropic(adviceFor(q, said), model)
-	r, err := http.NewRequestWithContext(ownAsk(magpieChose(ctx)), http.MethodPost, "http://magpie/v1/messages", nil)
+	// the caller named the advisor's model, not magpie's settings, so it is
+	// asked as the caller: the key's models and limits hold it (no
+	// magpieChose, which a search's or a title's model takes)
+	r, err := http.NewRequestWithContext(ownAsk(ctx), http.MethodPost, "http://magpie/v1/messages", nil)
 	if err != nil {
 		return "", errAdvice{"unavailable", err}
 	}

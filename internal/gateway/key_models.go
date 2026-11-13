@@ -54,6 +54,17 @@ func keyHolds(r *http.Request) (access.Identity, bool) {
 	return who, who.Restricted() || len(who.Spent) > 0
 }
 
+// keyAllows is whether the calling key may use one of p's models, nil when
+// the key isn't held to any (keyHolds): for a model the client names inside
+// a request, beside the one it asks for (Claude Code's advisor).
+func keyAllows(r *http.Request, p provider.Provider) func(model string) bool {
+	who, held := keyHolds(r)
+	if !held {
+		return nil
+	}
+	return func(model string) bool { return modelAllowed(who, p, model) }
+}
+
 // keyListHolds is keyHolds for a list of models shown to the key: a
 // spent limit leaves its models listed, as a spent limit of the whole key
 // does, and a request for one is told why it is refused.

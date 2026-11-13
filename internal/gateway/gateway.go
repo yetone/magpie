@@ -6679,7 +6679,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		toolSeen = clientToolUseIDs(body)
 		body = saltedCallIDsBack(body)
 		// Claude Code's advisor, named by magpie's id (advisor.go)
-		body = advisorTools(body, p, upstream, wiresOf(r.Context()))
+		body = advisorTools(body, p, upstream, wiresOf(r.Context()), keyAllows(r, p))
 		if p.IsBedrock() {
 			// Claude Code's metadata.user_id, a JSON string these days, is
 			// not the plain id Bedrock checks it against (#176)

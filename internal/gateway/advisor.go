@@ -25,8 +25,11 @@ import (
 // advisor when the request's model is not Claude's (a vendor's Messages
 // API knows no such tool): the turn is answered without one, as a model
 // that isn't on magpie would be. What Claude Code put in the conversation
-// for an advisor left out goes with it (withoutAdvisor).
-func advisorTools(body []byte, p provider.Provider, upstream string, wires map[string]string) []byte {
+// for an advisor left out goes with it (withoutAdvisor). allowed says
+// whether the calling key may use one of p's models (keyAllows): the
+// advisor's model is the client's to name, and the vendor runs it on the
+// user's account, so a key held to some models is held here too.
+func advisorTools(body []byte, p provider.Provider, upstream string, wires map[string]string, allowed func(model string) bool) []byte {
 	if !bytes.Contains(body, []byte(`"advisor_`)) {
 		return body
 	}
@@ -52,6 +55,9 @@ func advisorTools(body []byte, p provider.Provider, upstream string, wires map[s
 		}
 		json.Unmarshal(t["model"], &model)
 		name, ok := advisorModel(p, model, wires)
+		if ok && allowed != nil && !allowed(advisorKeyModel(model)) {
+			ok = false
+		}
 		if !claude || !ok {
 			var n string
 			json.Unmarshal(t["name"], &n)
@@ -82,6 +88,17 @@ func advisorTools(body []byte, p provider.Provider, upstream string, wires map[s
 		return body
 	}
 	return out
+}
+
+// advisorKeyModel is the model id a key's models are checked against for
+// an advisor named model: magpie's model id when it names one, else the
+// bare id as it was sent.
+func advisorKeyModel(model string) string {
+	model = strings.TrimSuffix(strings.TrimSpace(model), "[1m]")
+	if _, m, ok := provider.Resolve(model); ok && !provider.IsGroupRef(model) {
+		return m
+	}
+	return model
 }
 
 // advisorModel is the name p's upstream knows the advisor model by, and
