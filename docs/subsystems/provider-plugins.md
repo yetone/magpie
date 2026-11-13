@@ -382,3 +382,22 @@ personal-key entry for it; ordinary API methods still require a key.
 its account slot and the account action says Sign in again. Existing records
 are not deleted. Other plugins keep multiple accounts. OpenCode ignores
 these optional fields; no provider id is special-cased in magpie.
+
+### Accounts from a file
+
+A plugin may declare magpie-only `auth.import(texts, { signal })`, which
+turns the text of the files the user picks (or pastes) into sign-in results:
+an array of `{ type: "success", … }` (as a callback gives) and
+`{ type: "failed", error, accountId? }`, or one result. `auth.importFrom`
+says which file to pick, `auth.importFroms` the same by language code. The
+host lists such a provider as `importable` with those words (`importOf` in
+`host.js`, `plugin.Provider.Importable`), and its `importFiles` op checks
+nothing itself: it keeps each success as a sign-in is (`save`, then
+`settle`, so an account already signed in is updated, not added twice),
+under the provider's proxy, cancellable like a sign-in, at most 100 a call.
+`POST /api/signin/import` sends a plugin subscription's files there
+(`provider.ImportPluginFiles`), and the GUI's "Import accounts from a
+file…" shows for every importable plugin subscription, moved built-ins
+included (`pluginSubs`, `subOf`, `importSay` in app.js). The vendor check
+(refresh, account lookup) is the plugin's, as its sign-in is. Tests:
+`TestPluginImportFiles`, `tests/plugin-import.test.cjs`.

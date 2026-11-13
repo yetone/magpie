@@ -12475,7 +12475,7 @@ const subOf = (agent) => {
   if (own && pl && movedSub(agent)) {
     const { name, icon, plans, risk, riskNote, hint, sites, importable } = own;
     // a moved Factory's imported API keys go to its plugin (factory_key.go)
-    return { ...pl, name, icon, plans, risk, riskNote, hint, sites, importable, moved: true };
+    return { ...pl, name, icon, plans, risk, riskNote, hint, sites, importable: importable || pl.importable, moved: true };
   }
   return own || pl;
 };
@@ -12500,7 +12500,7 @@ function pluginMethod(sub, site) {
 // magpie, signs in and carries the requests.
 function pluginSubs() {
   return ((providers || panelAccts)?.plugins || []).map((x) => ({
-    agent: x.id, pid: x.pid, name: x.name, icon: x.icon, plugin: x, own: true, single: !!x.single,
+    agent: x.id, pid: x.pid, name: x.name, icon: x.icon, plugin: x, own: true, single: !!x.single, importable: x.importable,
     get plans() { return t("from the plugin {spec}", { spec: x.spec }); },
   }));
 }
@@ -12537,6 +12537,9 @@ function importSay(agent) {
       checks: t("Each account is kept as the file has it; nothing is asked of Claude."),
     };
   }
+  // a plugin's own import (auth.import): its words say which file (marchen_cc on X)
+  const pl = agent != "antigravity" && pluginSubs().find((x) => x.agent == agent && x.importable)?.plugin, from = pl && (inLang(pl.importFroms, pl.importFrom) || t("Import accounts from a file…"));
+  if (pl) return { from, intro: from, checking: t("Checking the accounts with {vendor}…", { vendor: pl.name }), checks: t("Each account's sign-in is refreshed and its account looked up, as signing in does.") };
   return {
     from: t("Bring in accounts exported from Antigravity Cockpit, Antigravity Manager or CLIProxyAPI"),
     intro: t("Choose or paste an export from Antigravity Cockpit, Antigravity Manager or CLIProxyAPI — JSON, or refresh tokens one a line. Each account is checked with Google before it is added."),

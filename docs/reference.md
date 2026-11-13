@@ -2527,7 +2527,7 @@ adding one; use an account you can afford to lose.
 
 Accounts signed in elsewhere can be imported from their files instead of
 signed in again: *Import accounts from a file…* under a subscription's
-accounts, or `magpie accounts import <codex|claude|antigravity|factory>
+accounts, or `magpie accounts import <codex|claude|antigravity|factory|<plugin>>
 <file>... [--yes]`. For ChatGPT that takes Codex's `auth.json`, codexbar's
 `~/.codexbar/config.json` (every ChatGPT account it switches between) and
 the exports of Cockpit Tools, CLIProxyAPI and Sub2API, as many files as

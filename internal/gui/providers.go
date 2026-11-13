@@ -3358,6 +3358,10 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			imp = func(ctx context.Context, _ string, files []string) ([]provider.ImportedAccount, error) {
 				return provider.ImportFactoryKeys(ctx, files)
 			}
+		} else if provider.PluginImportable(in.Agent) {
+			// a plugin's subscription whose plugin reads such files itself
+			// (auth.import): WorkBuddy's sign-in file (marchen_cc on X)
+			imp = provider.ImportPluginFiles
 		}
 		// the address a sign-in's browser ended on, pasted here rather than
 		// in the sign-in's Callback URL field, finishes that sign-in: it is

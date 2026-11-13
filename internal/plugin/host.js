@@ -2618,6 +2618,9 @@ function rowOf(id, a, keys, stored, p, own) {
     api: p.api ?? "",
     methods: methods(a.auth),
     single: a.auth.single === true,
+    // its accounts can be brought in from a file (auth.import), and which
+    // file that is, as the plugin says it
+    ...importOf(a.auth),
     icon: iconOf(a),
     usage: typeof a.auth.usage === "function",
     checkin: typeof a.auth.checkin === "function",
@@ -2857,6 +2860,55 @@ function keptAs(r) {
   if ("refresh" in r || "key" in r) return r
   if (typeof r.access === "string" && r.access) return { ...r, refresh: "" }
   return null
+}
+
+// ---- accounts from a file -----------------------------------------------------
+
+// A plugin may take accounts from a file the user picks (magpie's own
+// hook, which OpenCode ignores), as magpie's "Import accounts from a
+// file…" does for its built-ins:
+//   auth.import(texts, { signal }) → what each file's text holds, checked
+//     with the vendor as a sign-in is: an array of sign-in results
+//     ({ type: "success", … } as a callback or an api authorize gives one,
+//     or { type: "failed", error, accountId? }), or one of them.
+//   auth.importFrom: the file to pick, in a sentence (importFroms: the same
+//     in other languages, by language code).
+// Each success is kept as a sign-in is, as one more account or over the
+// account it already is. It runs through the provider's proxy, as a
+// sign-in does (#1663).
+const IMPORT_MOST = 100
+
+function importOf(auth) {
+  if (typeof auth?.import !== "function") return {}
+  const from = shown(auth.importFrom, 300)
+  const froms = inLanguages(auth.importFroms, 300)
+  return { importable: true, ...(from ? { importFrom: from } : {}), ...(froms ? { importFroms: froms } : {}) }
+}
+
+async function importFiles({ provider, texts, proxy }, signal) {
+  const a = authOf(provider)
+  if (typeof a.import !== "function") throw new Error(`${provider} takes no accounts from a file`)
+  const files = (Array.isArray(texts) ? texts : []).filter((t) => typeof t === "string" && t.trim())
+  const got = await signingIn(signal, proxy ?? "", provider, freshKey(provider), () => a.import(files, { signal }))
+  if (signal?.aborted) throw abortedSignIn()
+  const list = (Array.isArray(got) ? got : got ? [got] : []).slice(0, IMPORT_MOST)
+  const results = []
+  for (const r of list) {
+    const user = typeof whoOf(r) === "string" ? whoOf(r).slice(0, 200) : ""
+    if (!r || r.type !== "success") {
+      results.push({ status: "failed", user, error: failed(r).error || `${provider} didn't take it` })
+      continue
+    }
+    const kept = keptAs(r)
+    if (!kept) {
+      results.push({ status: "failed", user, error: `${provider} gave nothing to keep` })
+      continue
+    }
+    const had = new Set(accountsOf(readAuth(), r.provider ?? provider))
+    const saved = await save(provider, signInKey(provider), kept)
+    results.push({ status: had.has(saved.account) ? "updated" : "added", user, ...saved })
+  }
+  return { results }
 }
 
 async function apiKey({ provider, method, inputs, key, account, proxy }, signal) {
@@ -3551,6 +3603,7 @@ const handlers = {
   tool: runTool,
   search: runSearch,
   apiKey,
+  importFiles,
   load,
   usage,
   checkin,
@@ -3675,7 +3728,7 @@ const gatewayInflight = new Map() // RPC id -> AbortController
 // (host.go's cancellable): the user cancelled it, or it timed out. Its
 // answer is then nobody's, and it counts as done at once, whether the
 // plugin's wait ends or not (#5016).
-const signInSteps = new Set(["authorize", "callback", "apiKey"])
+const signInSteps = new Set(["authorize", "callback", "apiKey", "importFiles"])
 const signInInflight = new Map() // RPC id -> AbortController
 const rpcInflight = new Map() // an ordinary RPC's id -> its AbortController (#4678)
 const rl = readline.createInterface({ input: process.stdin, terminal: false })

@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -234,6 +235,53 @@ func PluginAPIKey(ctx context.Context, id string, method int, inputs map[string]
 		return "", err
 	}
 	return PluginSignedIn(saved), nil
+}
+
+// PluginImportable is whether the subscription id (a magpie id) is a
+// plugin's that takes accounts from a file (auth.import). Factory's
+// plugin has its own importer here (ImportFactoryKeys), which goes first.
+func PluginImportable(id string) bool {
+	pp, ok := PluginOf(id)
+	return ok && pp.Importable
+}
+
+// ImportPluginFiles brings in the accounts the files' texts hold for the
+// plugin's subscription id (a magpie id): the plugin reads them, checks
+// each with its vendor as a sign-in does, and keeps the ones it takes,
+// through the proxy the subscription's requests go through (#1663).
+func ImportPluginFiles(ctx context.Context, id string, texts []string) ([]ImportedAccount, error) {
+	if settings.AccountDiscoveryOff() {
+		return nil, errAccountDiscoveryOff
+	}
+	pp, ok := PluginOf(id)
+	if !ok || !pp.Importable {
+		return nil, errors.New("this subscription takes no accounts from a file")
+	}
+	if len(texts) > maxGoogleImport {
+		return nil, fmt.Errorf("%d files; at most %d at a time", len(texts), maxGoogleImport)
+	}
+	got, err := plugin.ImportFiles(Via(ctx, id), pp.ID, texts)
+	if err != nil {
+		return nil, err
+	}
+	if len(got) == 0 {
+		return nil, errors.New("no account to import was found in it")
+	}
+	out := make([]ImportedAccount, 0, len(got))
+	for i, r := range got {
+		user := r.User
+		if user == "" {
+			user = fmt.Sprintf("#%d", i+1)
+		}
+		if r.Status == "failed" {
+			out = append(out, ImportedAccount{User: user, Status: "failed", Error: r.Error})
+			continue
+		}
+		PluginSignedIn(plugin.Saved{Provider: r.Provider, Account: r.Account})
+		out = append(out, ImportedAccount{User: user, Status: r.Status})
+	}
+	forgetAccountCaches()
+	return out, nil
 }
 
 // PluginSignedIn finishes a sign-in to a plugin's provider that magpie

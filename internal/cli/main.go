@@ -105,7 +105,7 @@ const usage = `magpie — one place to pick every agent's model
   magpie accounts add <agent>     sign in to one more Claude, ChatGPT or Google (Gemini CLI, Antigravity) subscription
   magpie accounts add copilot [--host <name>.ghe.com]   one more Copilot account, on github.com or an enterprise's GHE.com
   magpie accounts discovery [on|off]   read agents' sign-ins (default on; MAGPIE_NO_ACCOUNTS=1 disables too)
-  magpie accounts import <codex|claude|antigravity|factory> <file>... [--yes]   bring in accounts from other tools' files (Codex's auth.json, Cockpit Tools, CLIProxyAPI, Sub2API, claude-swap); the tool a ChatGPT or Claude file came from is signed out of it
+  magpie accounts import <codex|claude|antigravity|factory|<plugin>> <file>... [--yes]   bring in accounts from other tools' files (Codex's auth.json, Cockpit Tools, CLIProxyAPI, Sub2API, claude-swap, a plugin's own); the tool a ChatGPT or Claude file came from is signed out of it
   magpie accounts export <codex|claude> [<email>...] [--format sub2api|cliproxyapi] [--to <folder>] [--yes]   write accounts as a file Sub2API, CLIProxyAPI or magpie imports (0600; holds live sign-ins)
   magpie accounts import codex <file>... --access-only   keep each ChatGPT account with its access token only: never renewed, so the tool it came from stays signed in
   magpie accounts access-only codex <email> [on|off]   keep a ChatGPT account access token only, or let magpie renew its sign-in again

@@ -38,6 +38,11 @@ type pluginSubJSON struct {
 	SignedIn bool            `json:"signedIn"`
 	Single   bool            `json:"single,omitempty"`
 	Models   int             `json:"models"`
+	// Importable says its accounts can be brought in from a file
+	// (auth.import); ImportFrom(s) is which file, as the plugin says it
+	Importable  bool              `json:"importable,omitempty"`
+	ImportFrom  string            `json:"importFrom,omitempty"`
+	ImportFroms map[string]string `json:"importFroms,omitempty"`
 	// Options are the switches the plugin declares (auth.options, #2038),
 	// each with where it stands now
 	Options []pluginOptionJSON `json:"options,omitempty"`
@@ -88,6 +93,7 @@ func pluginSubs() []pluginSubJSON {
 		out = append(out, pluginSubJSON{
 			ID: provider.PluginID(pp.ID), PID: pp.ID, Name: pp.Name, Icon: pluginIcon(pp), Spec: pp.Spec,
 			Methods: pp.Methods, SignedIn: pp.SignedIn, Single: pp.Single, Models: len(pp.Models), Options: opts,
+			Importable: pp.Importable, ImportFrom: pp.ImportFrom, ImportFroms: pp.ImportFroms,
 		})
 	}
 	return out
