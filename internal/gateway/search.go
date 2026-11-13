@@ -1282,16 +1282,24 @@ func textCallRound(tools []Tool, ask round) round {
 }
 
 // searchReply answers req through ask, running the searches its model
-// asks for and asking it again with what they found; the client sees one
-// reply. The first round's failure is a status, as another provider may
-// take over.
-func (s *Server) searchReply(w http.ResponseWriter, r *http.Request, from provider.Protocol, name string, req *Request, usage *Usage, ask round) (int, string) {
+// asks for (when search) and the advisor calls (req.Advisor,
+// advisor_serve.go), and asking it again with what they gave; the client
+// sees one reply. The first round's failure is a status, as another
+// provider may take over.
+func (s *Server) searchReply(w http.ResponseWriter, r *http.Request, from provider.Protocol, name string, req *Request, usage *Usage, ask round, search bool) (int, string) {
 	ctx, cancel := context.WithCancel(withWebAccess(context.WithValue(r.Context(), searchForKey{}, &CallFor{Agent: callerOf(r).agent, Model: unprefixed(req.Model)}), req.WebAccess))
 	defer cancel()
 	q := *req
-	q.WebSearch = false
-	tool := searchTool(q.Tools)
-	q.Tools = append(slices.Clone(q.Tools), tool)
+	q.Tools = slices.Clone(q.Tools)
+	var tool Tool
+	if search {
+		q.WebSearch = false
+		tool = searchTool(q.Tools)
+		q.Tools = append(q.Tools, tool)
+	}
+	if q.Advisor != "" {
+		q.Tools = append(q.Tools, advisorToolDef())
+	}
 	q.Messages = slices.Clone(q.Messages)
 	ask = textCallRound(q.Tools, ask)
 	first, status, msg := ask(ctx, &q)
@@ -1317,6 +1325,10 @@ func (s *Server) searchRounds(ctx context.Context, q *Request, tool string, in <
 	}
 	var before, this Usage
 	started, said := false, false
+	ours := func(name string) bool {
+		return name != "" && name == tool || q.Advisor != "" && name == advisorTool
+	}
+	advised := 0 // the advisor's calls so far
 	for n := 1; ; n++ {
 		var col collector
 		mine, theirs, gap := false, false, said
@@ -1353,7 +1365,7 @@ func (s *Server) searchRounds(ctx context.Context, q *Request, tool string, in <
 				}
 				said = said || ev.Text != ""
 			case KToolStart:
-				mine = ev.Name == tool
+				mine = ours(ev.Name)
 				theirs = theirs || !mine
 				if mine {
 					continue
@@ -1375,12 +1387,18 @@ func (s *Server) searchRounds(ctx context.Context, q *Request, tool string, in <
 		}
 		res := col.finish()
 		var calls []Part
+		var at []int // where in the reply each call is
 		for i, p := range res.Parts {
-			if p.Kind == ToolCall && p.Name == tool {
+			if p.Kind == ToolCall && ours(p.Name) {
 				if p.ID == "" {
-					res.Parts[i].ID = fmt.Sprintf("call_search_%d_%d", n, i)
+					kind := "search"
+					if p.Name == advisorTool && p.Name != tool {
+						kind = advisorTool
+					}
+					res.Parts[i].ID = fmt.Sprintf("call_%s_%d_%d", kind, n, i)
 				}
 				calls = append(calls, res.Parts[i])
+				at = append(at, i)
 			}
 		}
 		// a reply that calls the client's tools goes to the client: it
@@ -1396,6 +1414,13 @@ func (s *Server) searchRounds(ctx context.Context, q *Request, tool string, in <
 		searches := make([]Event, len(calls))
 		var wg sync.WaitGroup
 		for i, c := range calls {
+			if c.Name == advisorTool && c.Name != tool {
+				// the advisor, in order, each seeing what the model
+				// said before it
+				advised++
+				results[i], searches[i] = s.adviceRound(ctx, q, res.Parts[:at[i]], c, advised)
+				continue
+			}
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -1427,7 +1452,7 @@ func (s *Server) searchRounds(ctx context.Context, q *Request, tool string, in <
 		}
 		// the client hears of the searches as its provider's own
 		for _, ev := range searches {
-			if ev.Kind == KSearch && !send(ev) {
+			if (ev.Kind == KSearch || ev.Kind == KAdvice) && !send(ev) {
 				return
 			}
 		}

@@ -28,6 +28,10 @@ const (
 	ToolResult Kind = "tool_result"
 	Thinking   Kind = "thinking"
 	Search     Kind = "web_search" // a web search run for the model: its query and hits
+	// Advice is Claude Code's advisor run by magpie for the model
+	// (advisor_serve.go): ID the call's, Text the advice, or Name an
+	// error_code and nothing in Text
+	Advice Kind = "advisor"
 )
 
 // Part is one block of a message.
@@ -292,6 +296,10 @@ type Request struct {
 	ThinkOff  bool
 	Parallel  *bool // parallel tool calls allowed
 	WebSearch bool  // the client offered its provider's own web search
+	// Advisor is the model of Claude Code's advisor that magpie runs
+	// itself (advisor_serve.go), "" when it doesn't: its calls and results
+	// in the conversation are ToolCall and ToolResult parts then
+	Advisor string
 	// WebAccess is the external_web_access of the client's web_search
 	// tool, as it sent it: Codex's web_search mode (false for "cached",
 	// true for "live"), which magpie's own search for a model that can't
@@ -451,6 +459,9 @@ const (
 	// keepaliveGap of nothing else: a reply read in rounds (searchReply)
 	// keeps its client alive with it as a translated stream does (#2316)
 	KAlive
+	// KAdvice: Claude Code's advisor run by magpie (advisor_serve.go), ID
+	// the call's, Text the advice, or Code its error_code
+	KAdvice
 )
 
 // Event is one thing a streaming reply said.
@@ -788,6 +799,9 @@ func (c *collector) add(ev Event) {
 	case KImage:
 		c.closeTool()
 		c.res.Parts = append(c.res.Parts, Part{Kind: Image, MediaType: ev.Name, Data: ev.Text})
+	case KAdvice:
+		c.closeTool()
+		c.res.Parts = append(c.res.Parts, Part{Kind: Advice, ID: ev.ID, Text: ev.Text, Name: ev.Code})
 	}
 	switch ev.Kind {
 	case KStart, KUsage, KError, KAlive:

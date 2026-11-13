@@ -218,7 +218,7 @@ func TestTranslatedWithMarksTakesSignaturesOffCallIDs(t *testing.T) {
 {"role":"user","content":[{"type":"text","text":"go"}]},
 {"role":"assistant","content":[{"type":"tool_use","id":` + string(q) + `,"name":"Bash","input":{}}]},
 {"role":"user","content":[{"type":"tool_result","tool_use_id":` + string(q) + `,"content":"ok","cache_control":{"type":"ephemeral","ttl":"1h"}}]}]}`)
-	req, err := parseTranslated(provider.Anthropic, provider.Anthropic, body)
+	req, err := parseTranslated(provider.Anthropic, provider.Anthropic, body, false)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -107,6 +107,8 @@ type aRequest struct {
 		InputSchema  json.RawMessage `json:"input_schema,omitempty"`
 		CacheControl json.RawMessage `json:"cache_control,omitempty"`
 		DeferLoading bool            `json:"defer_loading,omitempty"`
+		// an advisor's (advisor_20260301): the model it runs on
+		Model string `json:"model,omitempty"`
 	} `json:"tools,omitempty"`
 	ToolChoice *struct {
 		Type                   string `json:"type"`
@@ -146,6 +148,14 @@ func parseAnthropicRequest(body []byte, clientMarks bool) (*Request, error) {
 // out what they never read, as readChat does: the assistant's blocks, the
 // tools' outputs, and the copies of raw values a parse kept would need.
 func readAnthropic(body []byte, clientMarks, facts bool) (*Request, error) {
+	return readAdvised(body, clientMarks, facts, false)
+}
+
+// readAdvised is readAnthropic; advised, Claude Code's advisor is one
+// magpie runs (advisor_serve.go): its calls and results in the
+// conversation are read as the model's tool calls and their results, and
+// its instructions stay as Claude Code wrote them.
+func readAdvised(body []byte, clientMarks, facts, advised bool) (*Request, error) {
 	decode := decodeJSON
 	if facts {
 		decode = decodeJSONView
@@ -226,6 +236,16 @@ func readAnthropic(body []byte, clientMarks, facts bool) (*Request, error) {
 					msg.Parts = append(msg.Parts, Part{Kind: ToolResult, CallID: anthropicInID(b.ToolUseID), Text: out, Images: images, IsError: b.IsError, Loads: toolRefs(b.Content), block: true})
 				case "thinking":
 					msg.Parts = append(msg.Parts, Part{Kind: Thinking, Text: b.Thinking, Signature: b.Signature, block: true})
+				case "server_tool_use":
+					// the advisor's call, as magpie gave it (advisor_serve.go)
+					if advised && b.Name == advisorTool {
+						msg.Parts = append(msg.Parts, Part{Kind: ToolCall, ID: adviceInID(b.ID), Name: advisorTool, Args: json.RawMessage(`{}`), block: true})
+					}
+				case "advisor_tool_result", "advisor_tool_result_error":
+					if advised {
+						text, failed := adviceOf(b.Content)
+						msg.Parts = append(msg.Parts, Part{Kind: ToolResult, CallID: adviceInID(b.ToolUseID), Text: text, IsError: failed, block: true})
+					}
 				case "redacted_thinking":
 					// Claude's reasoning its safety systems sealed: it
 					// goes back to Messages whole, and is nothing to
@@ -248,6 +268,10 @@ func readAnthropic(body []byte, clientMarks, facts bool) (*Request, error) {
 				}
 			}
 		}
+		if advised && msg.Role == "assistant" {
+			r.Messages = append(r.Messages, adviceApart(msg)...)
+			continue
+		}
 		r.Messages = append(r.Messages, msg)
 	}
 	for _, t := range a.Tools {
@@ -258,6 +282,12 @@ func readAnthropic(body []byte, clientMarks, facts bool) (*Request, error) {
 				r.WebSearch = true
 			}
 			if strings.HasPrefix(t.Type, "advisor_") {
+				if advised {
+					// run by magpie: offered as a tool of the model's
+					// own when the reply is asked (advisor_serve.go)
+					r.Advisor = cmp.Or(r.Advisor, t.Model)
+					continue
+				}
 				// Claude Code's advisor: its instructions, which would
 				// have the model call a tool it hasn't got (advisor.go)
 				for i := range r.Messages {
@@ -1792,6 +1822,18 @@ func (e *anthropicEncoder) event(ev Event) {
 		e.cite.hits = append(e.cite.hits, ev.Hits...)
 		e.w.event("content_block_stop", map[string]any{"type": "content_block_stop", "index": e.index})
 		e.index++
+	case KAdvice:
+		// as Anthropic's own advisor tells it: its call, then its result
+		e.close()
+		e.w.event("content_block_start", map[string]any{"type": "content_block_start", "index": e.index,
+			"content_block": map[string]any{"type": "server_tool_use", "id": ev.ID, "name": advisorTool, "input": map[string]any{}}})
+		e.delta(map[string]any{"type": "input_json_delta", "partial_json": ""})
+		e.w.event("content_block_stop", map[string]any{"type": "content_block_stop", "index": e.index})
+		e.index++
+		e.w.event("content_block_start", map[string]any{"type": "content_block_start", "index": e.index,
+			"content_block": adviceBlock(ev.ID, ev.Text, ev.Code)})
+		e.w.event("content_block_stop", map[string]any{"type": "content_block_stop", "index": e.index})
+		e.index++
 	case KError:
 		e.close()
 		typ := "api_error"
@@ -1880,6 +1922,10 @@ func renderAnthropic(res Result, model string) []byte {
 				map[string]any{"type": "server_tool_use", "id": id, "name": "web_search", "input": map[string]any{"query": p.Text}},
 				searchResultBlock(id, p.Hits))
 			cite.hits = append(cite.hits, p.Hits...)
+		case Advice:
+			content = append(content,
+				map[string]any{"type": "server_tool_use", "id": p.ID, "name": advisorTool, "input": map[string]any{}},
+				adviceBlock(p.ID, p.Text, p.Name))
 		}
 	}
 	id := anthropicID(res.ID)

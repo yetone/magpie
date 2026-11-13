@@ -5700,6 +5700,11 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 	if relay && searchedForIt(r.Context(), p, from, model, body) && !(from == provider.Responses && (hasSealedAgentMessage(body) || codexAsSent(p, r.Header))) {
 		relay, ownAPI = false, true
 	}
+	// Claude Code's advisor, which magpie runs for a model whose upstream
+	// can't (advisor_serve.go): a relay would leave it out (advisorTools)
+	if relay && advisedHere(p, from, from, model, body, wiresOf(r.Context())) {
+		relay, ownAPI = false, true
+	}
 	// Copilot seals an argument the tools mark "encrypted" (spawn_agent's
 	// message, MultiAgentV2) and then can't open what it sealed: the
 	// subagent's turn came back "Encrypted function output content could
@@ -9073,11 +9078,18 @@ var cacheControlField = []byte("cache_control")
 // not refused with a 400 the old translation never gave (#3835). Every
 // other request is one bytes.Contains away from this, a scan next to the
 // parse of the same body.
-func parseTranslated(from, to provider.Protocol, body []byte) (*Request, error) {
+func parseTranslated(from, to provider.Protocol, body []byte, advised bool) (*Request, error) {
 	if from == provider.Anthropic && to == provider.Anthropic && bytes.Contains(body, cacheControlField) {
-		if req, err := parseAnthropicRequest(body, true); err == nil {
+		if req, err := readAdvised(body, true, false, advised); err == nil {
 			return afterParse(from, body, req)
 		}
+	}
+	if advised && from == provider.Anthropic {
+		req, err := readAdvised(body, false, false, true)
+		if err != nil {
+			return nil, err
+		}
+		return afterParse(from, body, req)
 	}
 	return parseRequest(from, body, false, to == provider.Responses)
 }
@@ -9090,7 +9102,10 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 		msg := "input_image without image_url cannot be translated; send an image_url or use a native Responses route"
 		return writeError(w, from, 400, msg), msg
 	}
-	request, err := parseTranslated(from, to, body)
+	// Claude Code's advisor, run by magpie for a model whose upstream
+	// can't (advisor_serve.go)
+	advised := advisedHere(p, from, to, model, body, wiresOf(r.Context()))
+	request, err := parseTranslated(from, to, body, advised)
 	if err != nil {
 		return writeError(w, from, 400, err.Error()), err.Error()
 	}
@@ -9133,16 +9148,17 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 	if p.OpenCodeFree(model) {
 		zen = &zenReply{z: zenFreeTools(request)}
 	}
-	if request.WebSearch {
-		if !searching(r.Context()) && canSearchFor(p) && (!searchesFor(p, to, model, request) || magpieSearches(r.Context(), p)) {
-			ask := antigravityRound(w, p, s.askTranslated(p, to, model, r.Header, w.Header()))
-			if zen != nil {
-				ask = zenRound(zen.z, ask)
-			}
+	search := request.WebSearch && !searching(r.Context()) && canSearchFor(p) && (!searchesFor(p, to, model, request) || magpieSearches(r.Context(), p))
+	if search || request.Advisor != "" {
+		ask := antigravityRound(w, p, s.askTranslated(p, to, model, r.Header, w.Header()))
+		if zen != nil {
+			ask = zenRound(zen.z, ask)
+		}
+		if search {
 			// a Kimi Code plan's own searches stay on it
 			r = r.WithContext(searchingOn(r.Context(), p))
-			return s.searchReply(w, r, from, p.Name, request, u, ask)
 		}
+		return s.searchReply(w, r, from, p.Name, request, u, ask, search)
 	}
 	if msg := unportableVideo(to, request); msg != "" {
 		// told, not left out for the model to answer the words alone (#6135)
@@ -9396,7 +9412,7 @@ func saysSomething(ev Event) bool {
 	switch ev.Kind {
 	case KText:
 		return ev.Text != ""
-	case KToolStart, KSearch, KImage:
+	case KToolStart, KSearch, KImage, KAdvice:
 		return true
 	}
 	return false
