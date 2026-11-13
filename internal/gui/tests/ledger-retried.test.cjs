@@ -4,7 +4,9 @@
 // rows had been answered): a request answered after a try that failed is
 // counted beside the failures as answered on a retry. Each count is a
 // button for its requests: "N failed" turns on the list's Failed filter,
-// "N answered on a retry" its Retried one, and the button again turns it
+// which lists every request a try failed on, those a later try answered
+// too, as Routing shows them failed (maohy915 on X: Routing had failed
+// calls the Failed filter didn't), "N answered on a retry" its Retried one, and the button again turns it
 // off. A try handed on to the next says so in its row, and a request that
 // took more than one says how many. No click moves the page, nothing runs
 // past the window at 420 or 1100 wide, in every language; the API is faked.
@@ -49,7 +51,7 @@ function serve(lang, asked) {
       const q = url.searchParams;
       asked.push(q);
       const base = { period: q.get("period"), agents: [{ id: "codex", name: "Codex", icon: "codex" }] };
-      if (q.get("failed") === "1") return json({ ...base, ...sum([FAILED], 1, 1, 0) });
+      if (q.get("failed") === "1") return json({ ...base, ...sum([RETRIED, HANDED, FAILED], 2, 1, 1) });
       if (q.get("retried") === "1") return json({ ...base, ...sum([RETRIED], 1, 0, 1) });
       return json({ ...base, ...sum([RETRIED, HANDED, FAILED, OK], 3, 1, 1) });
     }
@@ -66,7 +68,7 @@ function serve(lang, asked) {
   };
 }
 
-const STRINGS = ["{n} failed", "{n} answered on a retry", "Retried", "Failed", "Show only the failed requests", "Show only the requests answered on a retry",
+const STRINGS = ["{n} failed", "{n} answered on a retry", "Retried", "Failed", "Show the requests a try failed on, with those a later try answered", "Show only the requests answered on a retry",
   "handed on", "{n} tries", "This try failed and the request was handed on to the next: the request is counted by how it ended, not by this try"];
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -106,7 +108,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const failed = card.locator("button.led-jump.bad"), retried = card.locator("button.led-jump:not(.bad)");
         assert.equal(await failed.textContent(), await tr("{n} failed", { n: "1" }));
         assert.equal(await retried.textContent(), await tr("{n} answered on a retry", { n: "1" }));
-        assert.equal(await failed.getAttribute("title"), await tr("Show only the failed requests"));
+        assert.equal(await failed.getAttribute("title"), await tr("Show the requests a try failed on, with those a later try answered"));
+        assert.equal(await page.locator("#ledStatus .opt").nth(1).getAttribute("title"), await tr("Show the requests a try failed on, with those a later try answered"));
         // whole, inside the card, and nothing past the window
         const fits = await card.evaluate((b) => {
           const r = b.getBoundingClientRect();
@@ -149,9 +152,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         let q = await press(failed);
         assert.equal(q.get("failed"), "1");
         assert.equal(q.get("retried"), null);
-        await page.waitForFunction(() => document.querySelectorAll(".led tbody tr.led-row").length === 1);
+        // the failed request, the try handed on and the request it was
+        // handed to, each counted by how it ended
+        await page.waitForFunction(() => document.querySelectorAll(".led tbody tr.led-row").length === 3);
         assert.equal(await page.locator("#ledStatus .opt.on").textContent(), await tr("Failed"));
         assert.equal(await card.locator("button.led-jump.bad").getAttribute("aria-pressed"), "true");
+        assert.equal(await status(0), "200 · " + (await tr("{n} tries", { n: 3 })));
+        assert((await page.locator("#ledSum").textContent()).includes((await tr("{n} failed", { n: "1" })) + " · " + (await tr("{n} answered on a retry", { n: "1" }))));
         // pressed again: every request
         q = await press(card.locator("button.led-jump.bad"));
         assert.equal(q.get("failed"), null);

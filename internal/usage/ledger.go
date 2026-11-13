@@ -101,10 +101,12 @@ type Filter struct {
 	// Account narrows to the calls a subscription account answered, by its
 	// name as Record.Account gives it (#557)
 	Account string
-	// Failed keeps the rows of the requests the agent got an error for
-	// (Record.LostRequest), Retried those of the requests answered after a
-	// try that failed first (Record.RetriedRequest): what the Requests
-	// card's two counts are of
+	// Failed keeps the rows of every request a try failed on
+	// (Record.FailedTry): those the agent got an error for, the tries
+	// handed on, and the requests a later try answered, as Routing shows
+	// them failed (maohy915 on X). Retried keeps only the requests answered
+	// after a try that failed first (Record.RetriedRequest). The Requests
+	// card still counts each request once, by how it ended.
 	Failed  bool
 	Retried bool
 	Query   string
@@ -224,7 +226,7 @@ func (f Filter) keepsRecord(r *Record, codexIdentity bool, subagent, parentAgent
 	if !f.computer(r) {
 		return false
 	}
-	if f.Failed && !r.LostRequest() {
+	if f.Failed && !r.FailedTry() {
 		return false
 	}
 	if f.Retried && !r.RetriedRequest() {

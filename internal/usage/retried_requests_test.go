@@ -70,12 +70,15 @@ func TestRequestsCountedOnceWithTheirRetries(t *testing.T) {
 		t.Fatalf("%d rows handed on, want 2", handed)
 	}
 
+	// Failed keeps every request a try failed on, as Routing shows them
+	// (maohy915 on X): the two that failed, the two tries handed on and
+	// the two answers after them; still counted by how each ended
 	failed, fsum, _ := Ledger(Today, Filter{Failed: true})
-	if len(failed) != 2 || fsum.Errors != 2 || fsum.Calls != 2 {
+	if len(failed) != 6 || fsum.Errors != 2 || fsum.Retried != 2 || fsum.Calls != 4 {
 		t.Fatalf("failed filter: %d rows, %+v", len(failed), fsum)
 	}
 	for _, r := range failed {
-		if r.HandedOn || !r.Failed() {
+		if r.RouteID == 104 || !r.Failed() && r.Tries < 2 {
 			t.Fatalf("failed filter kept %+v", r)
 		}
 	}
@@ -93,7 +96,7 @@ func TestRequestsCountedOnceWithTheirRetries(t *testing.T) {
 	if page.Sum.Calls != 5 || page.Sum.Errors != 2 || page.Sum.Retried != 2 {
 		t.Fatalf("page sum %+v", page.Sum)
 	}
-	if p := QueryPage(Today, Filter{Failed: true}, 0, 100); p.Total != 2 {
+	if p := QueryPage(Today, Filter{Failed: true}, 0, 100); p.Total != 6 || p.Sum.Errors != 2 || p.Sum.Retried != 2 {
 		t.Fatalf("failed page has %d rows", p.Total)
 	}
 	if p := QueryPage(Today, Filter{Retried: true}, 0, 100); p.Total != 2 {

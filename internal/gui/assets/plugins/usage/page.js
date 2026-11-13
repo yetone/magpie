@@ -2155,7 +2155,7 @@ function renderLedgerDash(l) {
   // an error: not those their agent canceled, which are counted apart
   const settled = l.calls - (l.canceled || 0);
   block("Requests", fmtN(l.calls), l.errors
-    ? jumps(jump(t("{n} failed", { n: fmtN(l.errors) }), "failed", t("Show only the failed requests")), " · " + t("{p} succeeded", { p: (100 * (1 - l.errors / settled)).toFixed(1) + "%" }))
+    ? jumps(jump(t("{n} failed", { n: fmtN(l.errors) }), "failed", t("Show the requests a try failed on, with those a later try answered")), " · " + t("{p} succeeded", { p: (100 * (1 - l.errors / settled)).toFixed(1) + "%" }))
     : line(t("none failed")), "", exactN(l.calls));
   if (l.retried) strip.lastChild.append(jumps(jump(t("{n} answered on a retry", { n: fmtN(l.retried) }), "retried", t("Show only the requests answered on a retry"))));
   if (l.canceled) {
@@ -2944,6 +2944,9 @@ function renderLedger() {
   for (const [on, name] of [["", "All"], ["failed", "Failed"], ["retried", "Retried"]]) {
     const b = el("button", "opt" + (on === shown ? " on" : ""), t(name));
     if (on === "retried") b.title = t("Show only the requests answered on a retry");
+    // a request a later try answered is still one a try failed on, as
+    // Routing shows it (maohy915 on X)
+    if (on === "failed") b.title = t("Show the requests a try failed on, with those a later try answered");
     b.onclick = () => {
       if (on === ledStatusOf()) return;
       for (const x of seg.querySelectorAll(".opt")) x.classList.toggle("on", x === b);

@@ -938,6 +938,13 @@ func (t *Totals) count(r Record) {
 // failed row that no later try took over from.
 func (r Record) LostRequest() bool { return r.Failed() && !r.HandedOn }
 
+// FailedTry is whether a try of r's request failed: r failed (whether the
+// agent got the error or a later try took over), or r answered after a
+// try that failed first. What Usage's Failed filter keeps: Routing shows
+// those tries failed, and a request a fallback answered had none of its
+// own failures listed under Failed (maohy915 on X).
+func (r Record) FailedTry() bool { return r.Failed() || r.RetriedRequest() }
+
 // RetriedRequest is whether r ends a request that was answered after a try
 // that failed first (not one its agent canceled after a failed try).
 func (r Record) RetriedRequest() bool { return !r.HandedOn && r.Answered() && r.Tries > 1 }
