@@ -1335,6 +1335,12 @@ each one.
     11-13, +3,028 bytes. A move out of the core
     first checks every caller of what it moves, or the budget comes back
     with the code.
+    Again at 5b25d7e9e: +106 bytes into context.js with the core at
+    exactly its budget, tagged v0.1.4040 red; its record ran the
+    Routing GUI files and not the sub-second guard. e4ea31321
+    (v0.1.4043) met the budget with no raise, partly by joining
+    statements onto one line. Joining lines moves nothing out and costs
+    readability; it is a last resort, not the way to meet the budget.
   - A record that points elsewhere: 2f34649a6's body is "Run: see push
     notes", and 8f82e08b4's "(see below)" has nothing below it; neither
     says whether what it ran passed. A pointer is not a record (10-14).
