@@ -582,7 +582,13 @@ func fetchSubscriptionUsage(ctx context.Context) []SubscriptionQuota {
 			} else if ok {
 				forgetLoginReading(l.Login)
 			}
-			fetches = append(fetches, func() SubscriptionQuota { return loginReading(viaLogin(agent, l.User), l.Login).read })
+			fetches = append(fetches, func() SubscriptionQuota {
+				q := loginReading(viaLogin(agent, l.User), l.Login).read
+				if q.User == "" {
+					q.User = l.User // as perLogin names it
+				}
+				return q
+			})
 		}
 	}
 	fetches = append(fetches, pluginUsageFetches(via, hidden, placed)...)

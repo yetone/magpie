@@ -125,7 +125,7 @@ func LoginUsageShown(ctx context.Context, agent string) map[string]SubscriptionQ
 func keptLoginUsage(logins []Login) map[string]SubscriptionQuota {
 	out := map[string]SubscriptionQuota{}
 	for _, l := range logins {
-		out[l.User] = keepLast(SubscriptionQuota{Provider: loginProvider(l), Plan: l.Plan, Windows: []QuotaWindow{}, Error: errLeftAlone.Error()}, l.User)
+		out[l.User] = keepLast(cutShort(l, errLeftAlone), l.User)
 	}
 	return out
 }
@@ -299,7 +299,7 @@ func cachedLoginReading(ctx context.Context, l Login) loginUsageEntry {
 		// nothing read since magpie started: the reading kept on disk,
 		// as of when it was made
 		c.Unlock()
-		return entry(keepLast(SubscriptionQuota{Provider: loginProvider(l), Plan: l.Plan, Windows: []QuotaWindow{}, Error: errNotAsked.Error()}, l.User))
+		return entry(keepLast(cutShort(l, errNotAsked), l.User))
 	}
 	if r == nil {
 		if stale {
@@ -317,7 +317,7 @@ func cachedLoginReading(ctx context.Context, l Login) loginUsageEntry {
 			// it is bounded as the Usage page's refresh is
 			rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), subscriptionTimeout)
 			defer cancel()
-			r.e = entry(keepReading(rctx, readNow(loginQuota(rctx, l)), l.User))
+			r.e = entry(keepReading(rctx, readNow(namedFor(l, loginQuota(rctx, l))), l.User))
 			c.Lock()
 			// one dropped meanwhile (StaleAllowance) read too soon, and a
 			// Claude account the user asked to see meanwhile is read again
@@ -341,7 +341,7 @@ func cachedLoginReading(ctx context.Context, l Login) loginUsageEntry {
 		return r.e
 	case <-ctx.Done():
 		// given up on: as a reading cut short would have said
-		return entry(keepReading(ctx, SubscriptionQuota{Provider: loginProvider(l), Plan: l.Plan, Windows: []QuotaWindow{}, Error: ctx.Err().Error()}, l.User))
+		return entry(keepReading(ctx, cutShort(l, ctx.Err()), l.User))
 	}
 }
 
@@ -658,4 +658,22 @@ func codexLoginAuth(l Login) []byte {
 		}
 	}
 	return nil
+}
+
+// cutShort is account l's reading when none was made: the error says
+// why, and keepLast puts the last reading kept under it.
+func cutShort(l Login, err error) SubscriptionQuota {
+	return namedFor(l, SubscriptionQuota{Provider: loginProvider(l), Plan: l.Plan, Windows: []QuotaWindow{}, Error: err.Error()})
+}
+
+// namedFor names a reading for the account l it was asked for. keepLast
+// puts the name it is given on what it kept, so an unnamed reading came
+// back unnamed even with the windows kept, and on Usage each one drew a
+// card of its own instead of a row on its provider's (#5310: 768 of
+// 1,440 Antigravity accounts, after reads given up on at their deadline).
+func namedFor(l Login, q SubscriptionQuota) SubscriptionQuota {
+	if q.User == "" {
+		q.User = l.User
+	}
+	return q
 }
