@@ -1403,6 +1403,8 @@ function connectLine(a, kind) {
       words.title = t("magpie set openai_base_url in {agent}'s config.toml, so a request the ChatGPT account {agent} is signed in to has no allowance for goes on to your other ChatGPT accounts on in magpie. {agent} keeps to its own models. To stop it, tick Only switch {agent}'s sign-in under Providers › Codex, or switch those accounts off; connecting {agent} adds magpie's models.", { agent: a.name });
     }
     else if (sw?.p.switchOnly) say(t("Not connected · switching accounts only"));
+    // with Claude Magpie made, connecting wires it, not the user's own Desktop (desktopSets; xMopf7RF on X)
+    else if (a.isolated?.on) say(t("Not connected · connecting puts Claude Magpie on magpie; your own Claude Desktop stays signed in with Anthropic"));
     else if (CONNECT_BEFORE[kindOf(a)]) say(t(CONNECT_BEFORE[kindOf(a)]));
     else if (src === "sub") say(t("Not connected · now on its Claude subscription"));
     else if (src === "chatgpt") say(t("Not connected · now signed in with ChatGPT · OpenAI's models stay available once connected"));
@@ -1580,8 +1582,10 @@ function connectRow(a, row, who, { fields, extras, fieldBtn, sw, kind }) {
     if (start) row.append(startButton(a, start, fieldBtn));
     // Claude Desktop's: which models its own menu lists
     else if (menuFromList(a)) row.append(menuButton(a));
-    // Use Claude Magpie, beside the switch: the twin, made without the user's own Desktop (xMopf7RF on X)
-    if (!a.wired && a.isolated && !a.isolated.on) row.append(isoLazy("desktopTwinBtn", a));
+    // Use Claude Magpie, beside the switch: the twin, made without the user's own Desktop (xMopf7RF on X).
+    // Shown whenever Desktop isn't on magpie, the twin made already too: it was hidden then, with the
+    // app perhaps deleted since, and the row read as if the switch moved the user's own Desktop
+    if (!a.wired && a.isolated) row.append(isoLazy("desktopTwinBtn", a));
     row.append(sw);
   } else if (kind === "empty") {
     const add = el("button", "ag-add", t("Add a provider"));

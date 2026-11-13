@@ -4,7 +4,11 @@
 // Mac, not in its status line. It turns the
 // Claude Magpie app on and then connects Desktop, which puts only that
 // app on magpie; the user's own Desktop isn't wired. The button is gone
-// once the app is on, and isn't there off a Mac (no isolated in the state).
+// once Desktop is on magpie, and isn't there off a Mac (no isolated in the
+// state). With Claude Magpie made already but Desktop not on magpie (the
+// reporter of 0.1.4076: "没看到按钮"), or the app deleted since, the button
+// is still there, and the status line says the switch puts Claude Magpie
+// on magpie, not the user's own Desktop with a separate profile.
 // No click scrolls the page. Every language, wide and narrow, both
 // engines. No backend: faked here.
 const assert = require("node:assert/strict");
@@ -15,10 +19,10 @@ const { chromium, webkit } = require("playwright");
 
 const assets = path.resolve(__dirname, "../assets");
 
-function fixture(lang, offered = true) {
+function fixture(lang, offered = true, made = {}) {
   const settings = { lang, theme: "light" };
   const posts = [];
-  const iso = { on: false };
+  const iso = { on: false, ...made };
   let wired = false;
   const state = () => ({
     agents: [{
@@ -60,23 +64,23 @@ function fixture(lang, offered = true) {
 }
 
 const W = {
-  en: { b: "Use Claude Magpie", tip: "A second Claude Desktop, on magpie, in Applications. Your own Claude Desktop isn't changed. macOS only.", ok: "Open Claude Magpie from Applications" },
-  zh: { b: "启用 Claude Magpie", tip: "在「应用程序」里加一个接入 magpie 的 Claude Desktop 分身，你自己的 Claude Desktop 保持不变。仅限 macOS。", ok: "从「应用程序」打开 Claude Magpie" },
-  "zh-TW": { b: "啟用 Claude Magpie", tip: "在「應用程式」裡加一個接入 magpie 的 Claude Desktop 分身，你自己的 Claude Desktop 保持不變。僅限 macOS。", ok: "從「應用程式」打開 Claude Magpie" },
-  ja: { b: "Claude Magpie を使う", tip: "magpie につながる 2 つ目の Claude Desktop を「アプリケーション」に追加します。ご自身の Claude Desktop は変わりません。macOS のみ。", ok: "「アプリケーション」から Claude Magpie を開いてください" },
-  de: { b: "Claude Magpie nutzen", tip: "Ein zweites Claude Desktop auf magpie unter Programme. Dein eigenes Claude Desktop bleibt, wie es ist. Nur macOS.", ok: "Öffne Claude Magpie unter Programme" },
+  en: { st: "Not connected · connecting puts Claude Magpie on magpie; your own Claude Desktop stays signed in with Anthropic", b: "Use Claude Magpie", tip: "A second Claude Desktop, on magpie, in Applications. Your own Claude Desktop isn't changed. macOS only.", ok: "Open Claude Magpie from Applications" },
+  zh: { st: "未接入 · 接入的是 Claude Magpie，你自己的 Claude Desktop 保持 Anthropic 登录", b: "启用 Claude Magpie", tip: "在「应用程序」里加一个接入 magpie 的 Claude Desktop 分身，你自己的 Claude Desktop 保持不变。仅限 macOS。", ok: "从「应用程序」打开 Claude Magpie" },
+  "zh-TW": { st: "未接入 · 接入的是 Claude Magpie，你自己的 Claude Desktop 維持 Anthropic 登入", b: "啟用 Claude Magpie", tip: "在「應用程式」裡加一個接入 magpie 的 Claude Desktop 分身，你自己的 Claude Desktop 保持不變。僅限 macOS。", ok: "從「應用程式」打開 Claude Magpie" },
+  ja: { st: "未接続 · 接続するのは Claude Magpie です。ご自身の Claude Desktop は Anthropic にサインインしたままです", b: "Claude Magpie を使う", tip: "magpie につながる 2 つ目の Claude Desktop を「アプリケーション」に追加します。ご自身の Claude Desktop は変わりません。macOS のみ。", ok: "「アプリケーション」から Claude Magpie を開いてください" },
+  de: { st: "Nicht verbunden · verbunden wird Claude Magpie; dein eigenes Claude Desktop bleibt bei Anthropic angemeldet", b: "Claude Magpie nutzen", tip: "Ein zweites Claude Desktop auf magpie unter Programme. Dein eigenes Claude Desktop bleibt, wie es ist. Nur macOS.", ok: "Öffne Claude Magpie unter Programme" },
 };
 const cd = '.row.agent[data-id="claude-desktop"]';
 const twin = `${cd} .ag-twin`;
 
-async function open(engine, lang, width, offered, t) {
+async function open(engine, lang, width, offered, t, made) {
   const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
   const page = await browser.newPage({ viewport: { width, height: 700 } });
   page.setDefaultTimeout(5000);
   page.setDefaultNavigationTimeout(60000);
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  const fx = fixture(lang, offered);
+  const fx = fixture(lang, offered, made);
   await page.route("**/*", fx.serve);
   t.after(() => browser.close());
   await page.goto("http://magpie.test/");
@@ -124,6 +128,31 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await page.locator("select").count(), 0, "a native select");
         assert.deepEqual(errors, []);
       });
+    }
+  }
+  // Claude Magpie made, Desktop not on magpie: with the app there, and
+  // with it deleted since (no launcher)
+  for (const made of [{ on: true, launcher: "/test/Applications/Claude Magpie.app" }, { on: true }]) {
+    for (const lang of Object.keys(W)) {
+      for (const width of [1100, 640]) {
+        test(`${engine} ${lang} ${width}px: Claude Magpie made${made.launcher ? "" : ", app gone"}, not on magpie: the button and a line naming it`, async (t) => {
+          const w = W[lang];
+          const { page, fx, errors } = await open(engine, lang, width, true, t, made);
+          const b = page.locator(twin);
+          await b.waitFor();
+          assert.equal(await b.textContent(), w.b);
+          const box = await b.boundingBox();
+          assert.ok(box.x + box.width <= width && box.height > 0, JSON.stringify(box));
+          assert.equal((await page.locator(`${cd} .ag-st-t`).textContent()).trim(), w.st);
+          const y = await page.evaluate(() => scrollY);
+          await b.click();
+          await page.locator(`${cd} .ag-conn.on`).waitFor();
+          assert.deepEqual(fx.posts, [["isolated", { on: true }], ["connect", true]]);
+          assert.equal(await page.locator(twin).count(), 0, "still offered once on");
+          assert.equal(await page.evaluate(() => scrollY), y, "a click scrolled the page");
+          assert.deepEqual(errors, []);
+        });
+      }
     }
   }
   test(`${engine}: no Use Claude Magpie where Desktop can't run so`, async (t) => {
