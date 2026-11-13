@@ -1410,6 +1410,13 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 			}
 			body = b
 		}
+		if rest == "/images/generations" || rest == "/images/edits" {
+			if acct, ok := codexRelayedAccount(base, r.Header, on); ok {
+				// Codex's own drawing, relayed: the image window its reply
+				// tells is the account's image row (#6412)
+				heardCodexImage(acct, res.Header)
+			}
+		}
 		if rest == "/responses" {
 			if acct, ok := codexRelayedAccount(base, r.Header, on); ok {
 				// the windows the reply tells of the account it went out on

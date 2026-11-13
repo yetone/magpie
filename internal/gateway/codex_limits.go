@@ -77,11 +77,23 @@ func codexAnsweredLately(agent, user string, now time.Time) bool {
 
 // codexHeaderLimits are the windows the x-codex-primary-* and
 // x-codex-secondary-* headers tell; one that doesn't say how long it runs
-// is left out, as no window read can be told to be it.
+// is left out, as no window read can be told to be it. None when
+// x-codex-active-limit names the image allowance, whose window they then
+// are (codexImageHeaderLimit).
 func codexHeaderLimits(h http.Header, now time.Time) []provider.CodexLimit {
+	if imageLimitName(h.Get("x-codex-active-limit")) {
+		// the x-codex-* windows are the image allowance's (#6412)
+		return nil
+	}
+	return headerLimitsOf(h, "x-codex-", now)
+}
+
+// headerLimitsOf are the windows of the header family fam (x-codex-,
+// x-imagegen-premium-) tells: its primary- and secondary- ones.
+func headerLimitsOf(h http.Header, fam string, now time.Time) []provider.CodexLimit {
 	var out []provider.CodexLimit
 	for _, which := range []string{"primary", "secondary"} {
-		pre := "x-codex-" + which + "-"
+		pre := fam + which + "-"
 		used, err := strconv.ParseFloat(strings.TrimSpace(h.Get(pre+"used-percent")), 64)
 		if err != nil {
 			continue

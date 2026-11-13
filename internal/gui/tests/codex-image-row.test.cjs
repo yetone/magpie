@@ -18,14 +18,16 @@ const chat = [{ name: "5 hours", used: 40, resetSecs: 3600 }, { name: "7 days", 
 const quotas = [
   { provider: "codex", name: "Codex", icon: "codex-color", user: "spent@example.com", windows: [...chat, img({ display: "Used up", resetsAt: soon, resetSecs: 10800 })] },
   { provider: "codex", name: "Codex", icon: "codex-color", user: "fresh@example.com", windows: [...chat, img({})] },
+  // a drawing's 200 told the window's renewal (#6412)
+  { provider: "codex", name: "Codex", icon: "codex-color", user: "drew@example.com", windows: [...chat, img({ display: "Available", resetsAt: soon, resetSecs: 10800 })] },
 ];
 
 const words = {
-  en: { name: "Image generation", used: "Used up", unknown: "Unknown" },
-  zh: { name: "生图模型", used: "已用完", unknown: "未知" },
-  "zh-TW": { name: "生圖模型", used: "已用完", unknown: "未知" },
-  ja: { name: "画像生成", used: "使い切り", unknown: "不明" },
-  de: { name: "Bilderzeugung", used: "Aufgebraucht", unknown: "Unbekannt" },
+  en: { name: "Image generation", used: "Used up", unknown: "Unknown", ok: "Available" },
+  zh: { name: "生图模型", used: "已用完", unknown: "未知", ok: "可用" },
+  "zh-TW": { name: "生圖模型", used: "已用完", unknown: "未知", ok: "可用" },
+  ja: { name: "画像生成", used: "使い切り", unknown: "不明", ok: "利用可能" },
+  de: { name: "Bilderzeugung", used: "Aufgebraucht", unknown: "Unbekannt", ok: "Verfügbar" },
 };
 
 function serve(lang) {
@@ -66,7 +68,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator("#subscriptionUsage .quota").first().waitFor();
       await page.locator(".quota-more").click();
       const w = words[lang];
-      for (const [user, text, resets] of [["spent@example.com", w.used, true], ["fresh@example.com", w.unknown, false]]) {
+      for (const [user, text, resets] of [["spent@example.com", w.used, true], ["fresh@example.com", w.unknown, false], ["drew@example.com", w.ok, true]]) {
         const mine = page.locator(`[data-card="codex|${user}"] + .quota-windows`);
         const row = mine.locator(".quota", { hasText: w.name });
         await row.waitFor();
