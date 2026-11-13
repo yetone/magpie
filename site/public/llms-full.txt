@@ -10198,6 +10198,16 @@ Switching between the three keeps the others' settings and credentials for switc
 
 A change to an agent's model on one computer reaches the others. When sync changes one on a computer and you set it back there, that computer keeps its own: the others' picks no longer change it, and its picks stay there, while everything else keeps syncing. Kept on this computer lists those fields, and Follow the others takes the synced value again.
 
+## Pick what syncs, preview, undo
+
+Under What syncs in the sync's form, untick what each computer should keep as its own: providers, settings, agents' models, the library or memory (profiles, usage and sign-ins are under Advanced). A part not ticked is neither sent nor taken: this computer keeps its own, and the server keeps the others'. Ticked again later, it is joined like a first sync, with this computer's copy kept in the sync folder first. Preview a sync lists what would come here and what would go to the server, item by item, before anything changes; Sync now there runs that sync only if nothing changed since. Undo the last sync puts back what the last sync brought in, on this computer only.
+
+```
+magpie webdav set providers=no settings=no agents=no   # only the library and memory sync
+magpie webdav preview                                 # what syncing now would change
+magpie webdav undo-sync                               # put back what the last sync brought in
+```
+
 ## A one-off backup and restore
 
 For a move to a new computer without sync, use an encrypted backup file:
