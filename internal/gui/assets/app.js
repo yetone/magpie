@@ -13696,7 +13696,7 @@ function renderAccounts(a, p) {
       list.append(imp);
     }
     // the link alone, to open where the account can sign in (Wing8Aqua on X)
-    if (a.agent === "claude" || a.agent === "codex") list.append(addRow(t("Sign in on another computer…"), () => startSignIn(a.agent, false, undefined, { linkOnly: true })));
+    if (cx || a.agent === "claude") list.append(addRow(t("Sign in on another computer…"), () => startSignIn(a.agent, 0, 0, { linkOnly: 1 })));
     if (a.agent === "claude") list.append(addRow(t("Add an account by setup-token…"), startClaudeToken));
     // last of them, and no plus: it adds nothing (the owner, 11-12)
     if (sub.importable && (a.agent === "claude" || a.agent === "codex")) list.append(addRow(t("Export accounts to a file…"), () => startExport(a.agent), EXPORT_GLYPH));
