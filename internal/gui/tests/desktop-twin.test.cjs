@@ -1,6 +1,7 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // Claude Magpie as a twin (xMopf7RF on X, #6459): Claude Desktop's row,
-// not on magpie, has a "Use Claude Magpie" button on a Mac. It turns the
+// not on magpie, has a "Use Claude Magpie" button beside its switch on a
+// Mac, not in its status line. It turns the
 // Claude Magpie app on and then connects Desktop, which puts only that
 // app on magpie; the user's own Desktop isn't wired. The button is gone
 // once the app is on, and isn't there off a Mac (no isolated in the state).
@@ -100,6 +101,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await b.getAttribute("title"), w.tip);
         const box = await b.boundingBox();
         assert.ok(box.x + box.width <= width && box.height > 0, JSON.stringify(box));
+        // its own button beside the row's switch, not words in the status
+        // line (xMopf7RF on X: "在 Claude Desktop 旁边单独加一个按钮")
+        assert.equal(await page.locator(`${cd} .ag-st .ag-twin`).count(), 0, "in the status line");
+        // the fold's rows still moving in measure nothing
+        await page.waitForFunction(() => !document.getAnimations().some((x) => x.playState === "running"));
+        const sw = await page.locator(`${cd} > .ag-conn`).boundingBox(), at = await b.boundingBox();
+        assert.ok(Math.abs(sw.y + sw.height / 2 - (at.y + at.height / 2)) < 2, `not level with the switch: ${JSON.stringify([sw, at])}`);
+        const gap = sw.x - (at.x + at.width);
+        assert.ok(gap >= 8 && gap <= 28, `not beside the switch: ${gap}`);
+        const st = await page.locator(`${cd} .ag-st`).boundingBox();
+        assert.ok(st.x + st.width <= at.x + 1, "status runs under the button");
 
         const y = await page.evaluate(() => scrollY);
         await b.click();

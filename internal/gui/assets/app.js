@@ -1414,7 +1414,6 @@ function connectLine(a, kind) {
     else say(t("Not connected · {agent} uses its own settings", { agent: a.name }));
     if (sw) line.append(sw.button);
     if (a.appRestart) line.append(appRestart(a));
-    if (a.isolated && !a.isolated.on) line.append(isoLazy("desktopTwinBtn", a));
     return line;
   }
   if (a.native) {
@@ -1581,6 +1580,8 @@ function connectRow(a, row, who, { fields, extras, fieldBtn, sw, kind }) {
     if (start) row.append(startButton(a, start, fieldBtn));
     // Claude Desktop's: which models its own menu lists
     else if (menuFromList(a)) row.append(menuButton(a));
+    // Use Claude Magpie, beside the switch: the twin, made without the user's own Desktop (xMopf7RF on X)
+    if (!a.wired && a.isolated && !a.isolated.on) row.append(isoLazy("desktopTwinBtn", a));
     row.append(sw);
   } else if (kind === "empty") {
     const add = el("button", "ag-add", t("Add a provider"));

@@ -6,7 +6,7 @@
 // user's own Claude Desktop left as it is (xMopf7RF on X, #6459), like a
 // phone's app twin: its own app, its own folder
 window.desktopTwinBtn = function (a) {
-  const b = el("button", "ag-quiet ag-twin", t("Use Claude Magpie"));
+  const b = el("button", "ag-add ag-twin", t("Use Claude Magpie"));
   b.type = "button";
   b.title = t("A second Claude Desktop, on magpie, in Applications. Your own Claude Desktop isn't changed. macOS only.");
   b.onclick = async (e) => {

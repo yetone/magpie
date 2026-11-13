@@ -5131,6 +5131,10 @@ body.window .row + .row.agent.conn > .who { min-height: 41px; } /* the line abov
 .row.agent.conn > .ag-conn { margin-left: 4px; align-self: center; cursor: pointer; }
 .row.agent.conn > .ag-link + .ag-conn { margin-left: 4px; }
 .row.agent.conn > .who + .ag-conn, .row.agent.conn > .who + .ag-add, .row.agent.conn > .who + .ag-cant { margin-left: auto; }
+.row.agent.conn > .who + span[hidden] + .ag-conn { margin-left: auto; }
+.row.agent.conn > .ag-twin { margin-left: 8px; align-self: center; }
+.row.agent.conn > .ag-twin + .ag-conn { margin-left: 10px; }
+.row.agent.conn > .who + .ag-twin { margin-left: auto; }
 .row.agent.conn > .ag-conn:disabled { opacity: .4; cursor: default; }
 /* the model it starts on, beside the switch: one width down the list, so
    the pickers and the switches line up */
