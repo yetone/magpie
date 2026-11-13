@@ -2343,7 +2343,7 @@ func claudeIn(at place) *Agent {
 	self = &Agent{
 		ID: "claude", Name: "Claude Code", Icon: "claudecode-color", Aliases: []string{"cc", "claude-code"},
 		UA:  []string{"claude-cli", "claude-code"},
-		Bin: "claude", Dir: filepath.Dir(path), Path: path,
+		Bin: "claude", Dir: filepath.Dir(path), Path: path, signIn: ".credentials.json",
 		Fields:       fields,
 		ModelAliases: claudeAliases,
 		Telemetry:    claudeTelemetry(at, path),
