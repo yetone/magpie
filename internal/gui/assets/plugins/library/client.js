@@ -5527,6 +5527,11 @@ magpie.plugin("library", (ctx) => {
       head.append(el("span", "grow"), groupChips(live, all, null));
     }
     head.title = folded ? t("Show its skills") : t("Hide its skills");
+    // a click draws it anew, and the first part's only neighbour above is
+    // the list's empty pad: the page held the next part's heading, pushed
+    // down by the rows opened, and scrolled the clicked one away
+    // (jinpwng on X). Held is its list instead, whose top doesn't move.
+    head.dataset.unrolls = "";
     head.onclick = () => {
       if (filtering) { if (folded) unfiltered.delete(fk); else unfiltered.add(fk); }
       else { folds[fk] = !folded; saveFolds(); }
