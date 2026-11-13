@@ -648,6 +648,7 @@
   // a long list draws only the rows near the view (plugingrid.js); until
   // that has come, and for a short list, every card is drawn
   let vg;
+  const inst = { kind: "", src: "" }, iload = () => iload.p ||= import("./plugininstalled.js").then(drawBody, () => {});
   const vload = () => vload.p = vload.p || import("./plugingrid.js").then(() => vg = pmVirtualGrids(page, card, () => body, drawBody), () => {});
   function cardGrid(list) {
     const g = el("div", "pm-grid");
@@ -800,23 +801,31 @@
     b.onclick = (ev) => { ev.stopPropagation(); open(b); };
     return b;
   }
-  function browseBar(all, base) {
-    const bar = el("div", "pm-bar");
-    const kinds = ORDER.filter((k) => all.some((l) => kindOf(l) === k));
-    if (kindPick && !kinds.includes(kindPick)) kindPick = "";
-    const n = (k) => base.filter((l) => !k || kindOf(l) === k).length;
+  // the strip of kinds, each with how many n(kind) says: Discover's, and
+  // Installed's over what is installed
+  function kindStrip(kinds, n, now, onPick) {
     const ids = ["", ...kinds];
-    const pick = segs(ids.map((k) => [k, k ? t(SHORT[k]) : t("All")]), kindPick, (k) => { kindPick = k; drawBody(); });
+    const pick = segs(ids.map((k) => [k, k ? t(SHORT[k]) : t("All")]), now, onPick);
     pick.classList.add("pm-kinds");
     pick.setAttribute("role", "group");
     pick.setAttribute("aria-label", t("Kind of plugin"));
     [...pick.querySelectorAll(".opt")].forEach((b, i) => b.append(el("em", "", String(n(ids[i])))));
-    bar.append(pick, el("span", "grow"));
+    return pick;
+  }
+  // the Origin menu: SOURCES, and Discover's "Not installed only" (extra)
+  function originButton(now, extra, onPick) {
+    const srcName = (now ? t(SOURCES.find(([v]) => v === now)[1]) : t("All")) + (extra?.ticked ? " · " + t("Not installed") : "");
+    return popButton(t("Origin"), srcName, (b) => openProtoMenu(b,
+      [...SOURCES.map(([v, name]) => ({ v, name, note: "" })), ...(extra ? [{ v: "\x01", name: "Not installed only", note: "", ticked: extra.ticked }] : [])],
+      now, onPick, "Origin", "pm-srcmenu", "right"));
+  }
+  function browseBar(all, base) {
+    const bar = el("div", "pm-bar");
+    const kinds = ORDER.filter((k) => all.some((l) => kindOf(l) === k));
+    if (kindPick && !kinds.includes(kindPick)) kindPick = "";
+    bar.append(kindStrip(kinds, (k) => base.filter((l) => !k || kindOf(l) === k).length, kindPick, (k) => { kindPick = k; drawBody(); }), el("span", "grow"));
     if (ghLooking()) bar.append(ghLook());
-    const srcName = (srcPick ? t(SOURCES.find(([v]) => v === srcPick)[1]) : t("All")) + (onlyNew ? " · " + t("Not installed") : "");
-    bar.append(popButton(t("Origin"), srcName, (b) => openProtoMenu(b,
-      [...SOURCES.map(([v, name]) => ({ v, name, note: "" })), { v: "\x01", name: "Not installed only", note: "", ticked: onlyNew }],
-      srcPick, (v) => { if (v === "\x01") onlyNew = !onlyNew; else srcPick = v; drawBody(); }, "Origin", "pm-srcmenu", "right")));
+    bar.append(originButton(srcPick, { ticked: onlyNew }, (v) => { if (v === "\x01") onlyNew = !onlyNew; else srcPick = v; drawBody(); }));
     bar.append(popButton(t("Sort"), t(SORTS.find(([v]) => v === sortPick)[1]), (b) => openProtoMenu(b,
       SORTS.map(([v, name]) => ({ v, name, note: "" })), sortPick, (v) => { sortPick = v; drawBody(); }, "Sort", "pm-sortmenu", "right")));
     return bar;
@@ -1005,6 +1014,7 @@
   let body = null;
   function draw() {
     vload();
+    iload();
     const scroll = page.scrollTop;
     // the body is made once, so the GitHub section's field stays in the page
     body = body || el("div", "lib-body pm-body");
@@ -1205,17 +1215,22 @@
       bar.append(up);
       body.append(bar);
     }
+    // narrowed by Discover's kinds and origins (plugininstalled.js), the
+    // list drawn whole until that has come
+    const f = window.pmInstalled ? pmInstalled({ es, st: inst, everything, entryOf, kindOf, srcOf, name, isGit, ORDER, SOURCES, kindStrip, originButton, drawBody }) : (iload(), { shown: es });
     // by name, in the order the reader picked (#481), not the order they
     // were installed in
     const list = el("div", "list pm-list");
-    const fill = () => list.replaceChildren(...[...es].sort(byName(sortOf("plugins"), shownName)).map(installedRow));
+    const fill = () => list.replaceChildren(...[...f.shown].sort(byName(sortOf("plugins"), shownName)).map(installedRow));
     if (es.length > 1) {
       const h = el("div", "row-head pm-listhead");
-      h.append(el("span", "grow"), sortBy("plugins", NAME_SORTS, fill));
+      h.append(...[f.strip, el("span", "grow"), f.pop, sortBy("plugins", NAME_SORTS, fill)].filter(Boolean));
+      h.classList.toggle("pm-bar", !!(f.strip || f.pop));
       body.append(h);
     }
     fill();
     body.append(list);
+    if (f.none) body.append(f.none);
     const foot = el("div", "pm-foot");
     foot.append(el("span", "", mine.bun ? t("Plugins run on Bun {v}", { v: mine.bunVersion }) : ""), el("span", "grow"));
     // npm has versions to ask for, and a git one's repository commits; a
@@ -1231,6 +1246,7 @@
     }
     body.append(foot);
   }
+
 
   // an installed plugin's name as its row shows it: the market's, else the
   // one its package.json gives itself (magpie.name, #4558), else the

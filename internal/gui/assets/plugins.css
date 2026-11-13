@@ -262,6 +262,8 @@ body.window .pm-manual { --bleed-l: 16px; }
 
 /* Installed */
 .pm-listhead { margin: 0 0 -10px; padding: 0 2px; }
+/* with Discover's kinds and Origin (plugins.js drawInstalled): wraps when narrow */
+.pm-listhead.pm-bar { height: auto; min-height: 26px; }
 /* the plugins with an update, above the list: the sidebar's dot, named */
 .pm-updates { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; padding: 9px 10px 9px 12px; border-radius: 10px; background: var(--accent-soft); font-size: 12px; line-height: 1.35; }
 .pm-updates .grow { flex: 1; min-width: 0; overflow-wrap: anywhere; }
