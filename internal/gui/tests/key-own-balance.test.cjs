@@ -67,11 +67,11 @@ function serve(lang, posts) {
 }
 
 const words = {
-  en: { currency: "Currency", yuan40: "≈¥40.00 left", usd100: "≈$100.00 left", k1: "≈$12.50 left", none: "Set balance", menu: "Balance", enter: "Enter balance…", off: "No balance", k2: "≈$5.00 left", k1again: "≈$40.00 left", yuan: "≈¥100.00 left", bad: "A balance is an amount from -1,000,000 to 1,000,000, in USD or in yuan (¥)", month: "Refills each month…", week: "Refills each week…", never: "Never refills", on: "Refills on", refills: "Refills to $40.00 on" },
-  zh: { currency: "货币", yuan40: "≈¥40.00 剩余", usd100: "≈$100.00 剩余", k1: "≈$12.50 剩余", none: "设置余额", menu: "余额", enter: "填写余额…", off: "无余额", k2: "≈$5.00 剩余", k1again: "≈$40.00 剩余", yuan: "≈¥100.00 剩余", bad: "余额是 -1,000,000 到 1,000,000 之间的金额，美元或人民币（¥）", month: "每月恢复…", week: "每周恢复…", never: "不恢复", on: "恢复于", refills: "恢复为 $40.00" },
-  "zh-TW": { currency: "貨幣", yuan40: "≈¥40.00 剩餘", usd100: "≈$100.00 剩餘", k1: "≈$12.50 剩餘", none: "設定餘額", menu: "餘額", enter: "填寫餘額…", off: "無餘額", k2: "≈$5.00 剩餘", k1again: "≈$40.00 剩餘", yuan: "≈¥100.00 剩餘", bad: "餘額是 -1,000,000 到 1,000,000 之間的金額，美元或人民幣（¥）", month: "每月恢復…", week: "每週恢復…", never: "不恢復", on: "恢復於", refills: "恢復為 $40.00" },
-  ja: { currency: "通貨", yuan40: "残り ≈¥40.00", usd100: "残り ≈$100.00", k1: "残り ≈$12.50", none: "残高を設定", menu: "残高", enter: "残高を入力…", off: "残高なし", k2: "残り ≈$5.00", k1again: "残り ≈$40.00", yuan: "残り ≈¥100.00", bad: "残高は -1,000,000 から 1,000,000 までの金額です（USD または人民元 ¥）", month: "毎月戻す…", week: "毎週戻す…", never: "戻さない", on: "戻す曜日", refills: "$40.00 へ戻る" },
-  de: { currency: "Währung", yuan40: "≈¥40.00 übrig", usd100: "≈$100.00 übrig", k1: "≈$12.50 übrig", none: "Guthaben festlegen", menu: "Guthaben", enter: "Guthaben eingeben…", off: "Kein Guthaben", k2: "≈$5.00 übrig", k1again: "≈$40.00 übrig", yuan: "≈¥100.00 übrig", bad: "Ein Guthaben ist ein Betrag von -1.000.000 bis 1.000.000, in USD oder in Yuan (¥)", month: "Monatlich auffüllen…", week: "Wöchentlich auffüllen…", never: "Nie auffüllen", on: "Auffüllen am", refills: "wieder auf $40.00 aufgefüllt" },
+  en: { currency: "Currency", yuan40: "≈¥40.00 left", usd100: "≈$100.00 left", k1: "≈$12.50 left", none: "Set balance", menu: "Balance", enter: "Enter balance…", off: "No balance", k2: "≈$5.00 left", k1again: "≈$40.00 left", yuan: "≈¥100.00 left", bad: "A balance is an amount from -1,000,000 to 1,000,000, in USD or in yuan (¥)", month: "Refills each month…", week: "Refills each week…", day: "Refills each day", never: "Never refills", on: "Refills on", refills: "Refills to $40.00 on" },
+  zh: { currency: "货币", yuan40: "≈¥40.00 剩余", usd100: "≈$100.00 剩余", k1: "≈$12.50 剩余", none: "设置余额", menu: "余额", enter: "填写余额…", off: "无余额", k2: "≈$5.00 剩余", k1again: "≈$40.00 剩余", yuan: "≈¥100.00 剩余", bad: "余额是 -1,000,000 到 1,000,000 之间的金额，美元或人民币（¥）", month: "每月恢复…", week: "每周恢复…", day: "每日恢复", never: "不恢复", on: "恢复于", refills: "恢复为 $40.00" },
+  "zh-TW": { currency: "貨幣", yuan40: "≈¥40.00 剩餘", usd100: "≈$100.00 剩餘", k1: "≈$12.50 剩餘", none: "設定餘額", menu: "餘額", enter: "填寫餘額…", off: "無餘額", k2: "≈$5.00 剩餘", k1again: "≈$40.00 剩餘", yuan: "≈¥100.00 剩餘", bad: "餘額是 -1,000,000 到 1,000,000 之間的金額，美元或人民幣（¥）", month: "每月恢復…", week: "每週恢復…", day: "每日恢復", never: "不恢復", on: "恢復於", refills: "恢復為 $40.00" },
+  ja: { currency: "通貨", yuan40: "残り ≈¥40.00", usd100: "残り ≈$100.00", k1: "残り ≈$12.50", none: "残高を設定", menu: "残高", enter: "残高を入力…", off: "残高なし", k2: "残り ≈$5.00", k1again: "残り ≈$40.00", yuan: "残り ≈¥100.00", bad: "残高は -1,000,000 から 1,000,000 までの金額です（USD または人民元 ¥）", month: "毎月戻す…", week: "毎週戻す…", day: "毎日戻す", never: "戻さない", on: "戻す曜日", refills: "$40.00 へ戻る" },
+  de: { currency: "Währung", yuan40: "≈¥40.00 übrig", usd100: "≈$100.00 übrig", k1: "≈$12.50 übrig", none: "Guthaben festlegen", menu: "Guthaben", enter: "Guthaben eingeben…", off: "Kein Guthaben", k2: "≈$5.00 übrig", k1again: "≈$40.00 übrig", yuan: "≈¥100.00 übrig", bad: "Ein Guthaben ist ein Betrag von -1.000.000 bis 1.000.000, in USD oder in Yuan (¥)", month: "Monatlich auffüllen…", week: "Wöchentlich auffüllen…", day: "Täglich auffüllen", never: "Nie auffüllen", on: "Auffüllen am", refills: "wieder auf $40.00 aufgefüllt" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -196,7 +196,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(p.body, { id: "relay", account: "k1", balance: 40 });
         await page.waitForTimeout(250);
 
-        // k1 refills on a day of each month, then each Friday, then never
+        // k1 refills on a day of each month, then each Friday, then each day, then never
         await still("k1");
         await menu.waitFor();
         await item(w.month).click();
@@ -233,6 +233,21 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         p = await posted(n);
         assert.deepEqual(p.body, { id: "relay", account: "k1", refill: { every: "week", day: 5 } });
         await page.waitForTimeout(250);
+        // each day (Kelen_Yc on X): picked at once, no day to choose, and
+        // the menu shows it picked
+        await still("k1");
+        await menu.waitFor();
+        n = posts.length;
+        await item(w.day).click();
+        p = await posted(n);
+        assert.deepEqual(p.body, { id: "relay", account: "k1", refill: { every: "day", day: 0 } });
+        await page.waitForTimeout(250);
+        assert.equal(await page.locator(".proto-menu").count(), 0, "a daily refill asked for more");
+        await still("k1");
+        await menu.waitFor();
+        assert.equal(await item(w.day).getAttribute("aria-checked"), "true");
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(200);
         await still("k1");
         await menu.waitFor();
         n = posts.length;

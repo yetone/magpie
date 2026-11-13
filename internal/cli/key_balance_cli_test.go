@@ -60,6 +60,15 @@ func TestKeyBalanceCmd(t *testing.T) {
 	if b, _ := typed(); b.CNY == nil || *b.CNY != 700 || b.Refill == nil || *b.Refill != (provider.Refill{Every: provider.RefillWeek, Day: 5}) {
 		t.Fatalf("weekly:fri: %+v", b)
 	}
+	if err := providerCmd([]string{"provider", "key-balance", "relay", "Team", "--refill", "daily"}); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := typed(); b.CNY == nil || *b.CNY != 700 || b.Refill == nil || *b.Refill != (provider.Refill{Every: provider.RefillDay}) {
+		t.Fatalf("daily: %+v", b)
+	}
+	if err := providerCmd([]string{"provider", "key-balance", "relay", "Team", "--refill=weekly:fri"}); err != nil {
+		t.Fatal(err)
+	}
 	for _, bad := range [][]string{{"relay", "Team", "--refill", "yearly"}, {"relay", "--refill", "monthly"}, {"relay", "Team", "off", "--refill", "monthly"}, {"relay", "Team", "--refill"}} {
 		if err := providerCmd(append([]string{"provider", "key-balance"}, bad...)); err == nil {
 			t.Fatalf("%v taken", bad)

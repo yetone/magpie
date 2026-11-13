@@ -16,8 +16,9 @@ package provider
 // learned (internal/fx, fetched behind the page and cached), and while it
 // has never learned one what is left is unknown, never counted at a guess.
 // It may refill (the same user: $10 a month from the 1st): at each refill,
-// at midnight local time on a day of the month or of the week, the amount
-// typed is whole again and the spend counted from then.
+// at midnight local time on a day of the month or of the week, or every
+// midnight (Kelen_Yc on X: a relay key with a daily allowance), the
+// amount typed is whole again and the spend counted from then.
 
 // It may have credit that expires on top of it (the same user: some
 // vendors split a balance into money that stays and credit good until a
@@ -118,7 +119,7 @@ func (b OwnBalance) Amount() (float64, string) {
 
 // Refill is when a balance typed is whole again: at midnight, local time,
 // on Day of each month (1–31, a month without that day on its last) or of
-// each week (1 Monday to 7 Sunday).
+// each week (1 Monday to 7 Sunday), or each day (Day 0).
 type Refill struct {
 	Every string `json:"every"`
 	Day   int    `json:"day"`
@@ -128,12 +129,16 @@ type Refill struct {
 const (
 	RefillMonth = "month"
 	RefillWeek  = "week"
+	RefillDay   = "day"
 )
 
 // Last is the last refill at or before now, in now's location.
 func (r Refill) Last(now time.Time) time.Time {
 	y, m, d := now.Date()
 	loc := now.Location()
+	if r.Every == RefillDay {
+		return time.Date(y, m, d, 0, 0, 0, 0, loc)
+	}
 	if r.Every == RefillWeek {
 		iso := (int(now.Weekday())+6)%7 + 1
 		return time.Date(y, m, d-(iso-r.Day+7)%7, 0, 0, 0, 0, loc)
@@ -149,6 +154,9 @@ func (r Refill) Last(now time.Time) time.Time {
 func (r Refill) Next(now time.Time) time.Time {
 	l := r.Last(now)
 	y, m, d := l.Date()
+	if r.Every == RefillDay {
+		return time.Date(y, m, d+1, 0, 0, 0, 0, l.Location())
+	}
 	if r.Every == RefillWeek {
 		return time.Date(y, m, d+7, 0, 0, 0, 0, l.Location())
 	}
@@ -167,14 +175,18 @@ func (r Refill) check() error {
 	switch {
 	case r.Every == RefillMonth && r.Day >= 1 && r.Day <= 31:
 	case r.Every == RefillWeek && r.Day >= 1 && r.Day <= 7:
+	case r.Every == RefillDay && r.Day == 0:
 	default:
-		return fmt.Errorf("a balance refills each month on a day from 1 to 31, or each week on a day from 1 (Monday) to 7 (Sunday), not %s %d", r.Every, r.Day)
+		return fmt.Errorf("a balance refills each month on a day from 1 to 31, each week on a day from 1 (Monday) to 7 (Sunday), or each day (day 0), not %s %d", r.Every, r.Day)
 	}
 	return nil
 }
 
-// String is r as the CLI takes and shows it: monthly:1, weekly:mon.
+// String is r as the CLI takes and shows it: monthly:1, weekly:mon, daily.
 func (r Refill) String() string {
+	if r.Every == RefillDay {
+		return "daily"
+	}
 	if r.Every == RefillWeek {
 		return "weekly:" + strings.ToLower(time.Weekday(r.Day % 7).String()[:3])
 	}
@@ -746,8 +758,8 @@ func ParseOwnBalance(amount string) (*OwnBalance, error) {
 }
 
 // ParseRefill reads a refill as the CLI takes it: monthly (on the 1st),
-// monthly:15, weekly (on Monday), weekly:fri or weekly:5; off or never
-// for none (nil).
+// monthly:15, weekly (on Monday), weekly:fri or weekly:5, daily (each
+// midnight); off or never for none (nil).
 func ParseRefill(s string) (*Refill, error) {
 	a := strings.ToLower(strings.TrimSpace(s))
 	switch a {
@@ -755,7 +767,7 @@ func ParseRefill(s string) (*Refill, error) {
 		return nil, nil
 	}
 	every, day, _ := strings.Cut(a, ":")
-	bad := fmt.Errorf("a refill is monthly[:day 1-31], weekly[:mon…sun] or off, not %q", s)
+	bad := fmt.Errorf("a refill is monthly[:day 1-31], weekly[:mon…sun], daily or off, not %q", s)
 	var r Refill
 	switch every {
 	case "monthly", "month", "m":
@@ -767,6 +779,11 @@ func ParseRefill(s string) (*Refill, error) {
 			}
 			r.Day = n
 		}
+	case "daily", "day", "d":
+		if day != "" {
+			return nil, bad
+		}
+		r = Refill{Every: RefillDay}
 	case "weekly", "week", "w":
 		r = Refill{Every: RefillWeek, Day: 1}
 		if day != "" {

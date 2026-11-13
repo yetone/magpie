@@ -4,7 +4,8 @@
 // own usage prices the calls it sends on the key (provider/
 // key_balance_own.go). Typing it again sets it anew. It may be typed in
 // yuan ("¥100", or picked beside the field, which starts at the balance's
-// own currency, else Settings' one), and may refill each month or week.
+// own currency, else Settings' one), and may refill each month, week or
+// day (Kelen_Yc on X).
 // Credit may come on top that expires on a day, in grants (promotional
 // credit twice, gone on two days: tenacious_eagle_96548), the one that
 // goes soonest spent first: the pill says how much of each is left and in
@@ -71,6 +72,7 @@ function keyBalancePill(p, k) {
   const refill = (r) => accountAction("provider/keybalancerefill", { id: p.id, account: k.id, refill: r },
     !r ? t("{who} no longer refills", { who: name })
       : r.every === "week" ? t("{who} refills each {weekday}", { who: name, weekday: weekdayName(r.day) })
+      : r.every === "day" ? t("{who} refills each day", { who: name })
       : t("{who} refills on day {day} of each month", { who: name, day: r.day }));
   const expiring = (v) => accountAction("provider/keyexpiring", { id: p.id, account: k.id, expiring: v },
     !v ? t("{who} has no credit that expires", { who: name }) : t("{who} has {amount} that counts through {last}", { who: name, amount: moneyText(v.amount, cny), last: dateText(v.until) }));
@@ -187,9 +189,11 @@ function keyBalancePill(p, k) {
       ...xs.length > 1 || b.expired ? [{ v: "noexp", name: "No credit that expires", note: "" }] : [],
       { v: "month", name: "Refills each month…", note: "" },
       { v: "week", name: "Refills each week…", note: "" },
+      { v: "day", name: "Refills each day", note: "" },
       { v: "never", name: "Never refills", note: "" },
       { v: "off", name: "No balance", note: "" },
     ], b.refill?.every || "never", (v) => v === "off" ? set(null) : v === "exp" ? credit() : v === "noexp" ? expiring(null) : v === "month" ? monthly() : v === "week" ? weekly()
+      : v === "day" ? refill({ every: "day", day: 0 })
       : v === "never" ? b.refill && refill(null) : v[0] === "x" ? unexpiring(xs[+v.slice(1)]) : type(), "Balance", "sess-menu");
     // a grant that goes within a week says so in amber, as on the pill
     const items = protoMenu?.box.querySelectorAll(".pm-item");
