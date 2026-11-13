@@ -179,6 +179,45 @@ test("mirror: a release's attestation bundles land in R2 as attestations.jsonl, 
   assert.deepEqual(asked, []);
 });
 
+test("mirror: a kept release the feeds no longer name still gets its bundles, for the files R2 holds of it (v0.1.3978)", async () => {
+  const env = { RELEASES: bucket() };
+  // v0.1.3978 was the newest for one run, which copied its files and spent
+  // its budget; by the next run v0.1.3979 had taken its place in the feed
+  await hold(env.RELEASES, "v0.1.3978", "a", "A");
+  await hold(env.RELEASES, "v0.1.3978", "b", "B");
+  await hold(env.RELEASES, "v0.1.3890", "a", "old");
+  const rel = { version: "0.1.3979", assets: { c: { sha256: sha("C") } } };
+  const asked = [];
+  const attest = async (h) => (asked.push(h), [{ for: h }]);
+  const done = await mirror(env, [rel], async () => new Response("C"), Date.now, attest);
+  assert.deepEqual(done.copied.sort(), ["v0.1.3978/attestations.jsonl", "v0.1.3979/attestations.jsonl", "v0.1.3979/c"]);
+  const res = await ask(env, "/files/v0.1.3978/attestations.jsonl");
+  assert.equal(res.status, 200);
+  const lines = (await res.text()).trimEnd().split("\n").map((l) => JSON.parse(l));
+  assert.deepEqual(lines.map((l) => l.for).sort(), [sha("A"), sha("B")].sort());
+  // a kept release from before the attestations is not asked
+  assert.equal(asked.includes(sha("old")), false);
+  // written once: the next run asks nothing more
+  asked.length = 0;
+  await mirror(env, [rel], async () => new Response("C"), Date.now, attest);
+  assert.deepEqual(asked, []);
+});
+
+test("mirror: one statement signing every file is asked for once a release, not once a file", async () => {
+  const env = { RELEASES: bucket() };
+  const names = ["a", "b", "c"];
+  const rel = { version: "0.1.3982", assets: Object.fromEntries(names.map((n) => [n, { sha256: sha(n) }])) };
+  const statement = { subject: names.map((n) => ({ name: n, digest: { sha256: sha(n) } })) };
+  const bundle = { dsseEnvelope: { payload: btoa(JSON.stringify(statement)) } };
+  const asked = [];
+  const attest = async (h) => (asked.push(h), [bundle]);
+  const done = await mirror(env, [rel], async (n) => new Response(n), Date.now, attest);
+  assert.ok(done.copied.includes("v0.1.3982/attestations.jsonl"));
+  assert.equal(asked.length, 1);
+  const res = await ask(env, "/files/v0.1.3982/attestations.jsonl");
+  assert.deepEqual((await res.text()).trimEnd().split("\n").map((l) => JSON.parse(l)), [bundle]);
+});
+
 test("mirror: a release from before the attestations is not asked for any", async () => {
   const env = { RELEASES: bucket() };
   const rel = { version: "0.1.3890", assets: { a: { sha256: sha("A") } } };

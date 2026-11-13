@@ -8,7 +8,7 @@ import (
 	"github.com/yetone/magpie/internal/provider"
 )
 
-const keyBalanceUsage = "magpie provider key-balance <id> [key [usd|¥cny|off] [--refill monthly[:day]|weekly[:mon…sun]|off] [--expiring amount@yyyy-mm-dd|off]… [--expiring-remove [amount@]yyyy-mm-dd]…]"
+const keyBalanceUsage = "magpie provider key-balance <id> [key [usd|¥cny|off] [--refill monthly[:day]|weekly[:mon…sun]|daily|off] [--expiring amount@yyyy-mm-dd|off]… [--expiring-remove [amount@]yyyy-mm-dd]…]"
 
 // keyBalanceCmd shows, or sets, the balance typed by hand on a provider's
 // API keys whose vendor tells none (tenacious_eagle on Discord): what is

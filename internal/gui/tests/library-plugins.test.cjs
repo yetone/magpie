@@ -139,6 +139,19 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await page.locator("#modal .lib-pldetail").waitFor();
           await settled(page);
           assert.deepEqual(await sideways(page), [], "sideways scroll in the dialog at 1100");
+          // the description keeps the dialog's width, and the parts are folded (jinpwng on X)
+          const m = await page.evaluate(() => {
+            const d = document.querySelector("#modal .lib-pldetail");
+            const p = d.querySelector("p").getBoundingClientRect();
+            const w = (x) => x.getBoundingClientRect().width;
+            return { p: p.width, d: d.getBoundingClientRect().width, open: [...d.querySelectorAll("details")].filter((x) => x.open).length, n: d.querySelectorAll("details").length,
+              parts: [...d.querySelectorAll("details")].map(w), src: w(d.querySelector(".lib-plsource")) };
+          });
+          assert(m.p > m.d * 0.8, "the description is squeezed: " + JSON.stringify(m));
+          // #6309: Plannotator's Hooks heading sat far right and the GitHub line in the middle
+          for (const x of [...m.parts, m.src]) assert(x > m.d * 0.8, "a part or the source is squeezed: " + JSON.stringify(m));
+          assert.equal(m.open, 0, "parts open by default");
+          assert.equal(m.n, 4);
           await ctx.close();
         }
 
@@ -149,7 +162,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const tabs = (await v.locator(".lib-tabs button").allTextContents()).map((x) => x.trim());
         assert(tabs.includes(w("Claude plugins") + " · 1"), tabs.join("|"));
         assert.equal((await row("code-kit").locator(".lib-plparts").textContent()).trim(),
-          [w("Skills: {names}", { names: "code-kit-tdd" }), w("MCP servers: {names}", { names: "code-kit-docs" }), w("Hooks: {names}", { names: "code-kit-lint" }), w("Subagents: {names}", { names: "code-kit-reviewer" })].join(" · "));
+          [w("Skills") + " 1", w("MCP servers") + " 1", w("Hooks") + " 1", w("Subagents") + " 1"].join(" · "));
         assert.deepEqual(await sideways(page), [], "sideways scroll at 420");
         assert.equal(await page.locator("select").count(), 0, "a native <select>");
 

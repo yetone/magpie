@@ -148,7 +148,20 @@ export async function mirror(env, rels, open, now = Date.now, attest = null) {
       else done.failed.push(`${tag}/${BUNDLES}`);
     }
   }
-  await prune(env, tags);
+  const kept = await prune(env, tags);
+  // a release the feeds named for one run only (the next tag came minutes
+  // later) can leave that run with its files copied and its budget spent;
+  // its bundles are filled in from the files R2 holds of it, while kept
+  for (const tag of kept) {
+    if (!attest || byVersion(tag, "v" + ATTESTED) < 0 || now() > until) continue;
+    const have = await held(env, tag);
+    if (!have || BUNDLES in have) continue;
+    const assets = {};
+    for (const [name, sha256] of Object.entries(have)) if (sha256) assets[name] = { sha256 };
+    if (!Object.keys(assets).length) continue;
+    if (await keepBundles(env, tag, { assets }, attest)) done.copied.push(`${tag}/${BUNDLES}`);
+    else done.failed.push(`${tag}/${BUNDLES}`);
+  }
   return done;
 }
 
@@ -157,8 +170,12 @@ export async function mirror(env, rels, open, now = Date.now, attest = null) {
 // the next run asks again rather than keep a list with holes in it.
 async function keepBundles(env, tag, rel, attest) {
   const lines = new Set();
+  // release CI signs every file in one statement, so the first answer
+  // covers the rest: GitHub's API is asked once a release, not once a file
+  // (unsigned, it allows 60 an hour to an IP the worker shares)
+  const covered = new Set();
   for (const [name, a] of Object.entries(rel.assets)) {
-    if (!a.sha256) continue;
+    if (!a.sha256 || covered.has(a.sha256)) continue;
     let got = null;
     try {
       got = await attest(a.sha256);
@@ -169,7 +186,10 @@ async function keepBundles(env, tag, rel, attest) {
       console.log("r2 attest: none for", tag, name);
       return false;
     }
-    for (const b of got) lines.add(JSON.stringify(b));
+    for (const b of got) {
+      lines.add(JSON.stringify(b));
+      for (const h of subjects(b)) covered.add(h);
+    }
   }
   if (!lines.size) return false;
   try {
@@ -180,6 +200,16 @@ async function keepBundles(env, tag, rel, attest) {
   } catch (e) {
     console.log("r2 attest: put", tag, String(e));
     return false;
+  }
+}
+
+// subjects is the sha256 of each file a Sigstore bundle's statement names.
+export function subjects(b) {
+  try {
+    const st = JSON.parse(atob(b.dsseEnvelope.payload));
+    return (st.subject || []).map((x) => x.digest && x.digest.sha256).filter(Boolean);
+  } catch {
+    return [];
   }
 }
 
@@ -216,7 +246,8 @@ async function copy(env, tag, name, a, open) {
   }
 }
 
-// prune deletes every tag but keep and the KEEP newest besides.
+// prune deletes every tag but keep and the KEEP newest besides, and
+// returns those KEEP newest.
 async function prune(env, keep) {
   let tags = [], cursor;
   try {
@@ -227,7 +258,7 @@ async function prune(env, keep) {
     } while (cursor);
   } catch (e) {
     console.log("r2 prune: list", String(e));
-    return;
+    return [];
   }
   const rest = tags.filter((t) => !keep.includes(t)).sort((a, b) => byVersion(b, a));
   for (const tag of rest.slice(KEEP)) {
@@ -240,6 +271,7 @@ async function prune(env, keep) {
       console.log("r2 prune: delete", tag, String(e));
     }
   }
+  return rest.slice(0, KEEP);
 }
 
 function byVersion(a, b) {

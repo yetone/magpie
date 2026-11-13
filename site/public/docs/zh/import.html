@@ -318,6 +318,7 @@ href = <span class="s">"https://usemagpie.ai/import#"</span> + urlencode({
       <tr><td>Linux</td><td>通过桌面文件（<code>x-scheme-handler/magpie</code>）注册，安装器写一次，首次运行时再写一次。</td></tr>
       <tr><td>终端</td><td><code>magpie import &lt;链接&gt;</code> 显示同样的摘要，添加前会询问。</td></tr>
     </table></div>
+    <p><b>CC Switch 链接。</b>magpie 也能打开中转站为 CC Switch 做的 <code>ccswitch://v1/import?resource=provider&amp;…</code> 链接（<code>app</code>、<code>name</code>、<code>endpoint</code>、<code>apiKey</code>、<code>apiFormat</code>、<code>model</code>，或 base64 的 <code>config</code>），同样要用户确认。只收供应商，不收提示词、MCP 和技能。只有没有别的应用占用这个协议时，magpie 才会注册它：装了 CC Switch 就仍由它打开（macOS 上两者都能声明，由系统选择）。</p>
     <p>导入链接需要 magpie 0.1.8 或更新版本。magpie 已在运行时，链接会交给那个实例，并把它的窗口调到前台。</p>
   </article>
 </main>

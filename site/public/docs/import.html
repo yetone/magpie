@@ -318,6 +318,7 @@ href = <span class="s">"https://usemagpie.ai/import#"</span> + urlencode({
       <tr><td>Linux</td><td>By a desktop entry (<code>x-scheme-handler/magpie</code>), written by the installer and again on first run.</td></tr>
       <tr><td>Terminal</td><td><code>magpie import &lt;link&gt;</code> shows the same summary and asks before adding.</td></tr>
     </table></div>
+    <p><b>CC Switch links.</b> magpie also opens the <code>ccswitch://v1/import?resource=provider&amp;…</code> links relays make for CC Switch (<code>app</code>, <code>name</code>, <code>endpoint</code>, <code>apiKey</code>, <code>apiFormat</code>, <code>model</code>, or a base64 <code>config</code>), with the same confirmation. Only providers are taken, not prompts, MCP servers or skills. magpie claims the scheme only when no other app has it, so CC Switch, if installed, keeps its links (on macOS, where both can claim it, the system picks).</p>
     <p>Import links need magpie 0.1.8 or later. When magpie is already running, the link goes to that instance and its window comes forward.</p>
   </article>
 </main>
