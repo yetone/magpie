@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"weak"
 
 	"github.com/yetone/magpie/internal/filememo"
 )
@@ -74,6 +75,7 @@ type tomlAnswers struct {
 	tables    map[string]map[string]string // nil for a table the file hasn't
 	names     []string                     // TOMLTables' answer, once haveNames
 	haveNames bool
+	namesHeld bool // in namesKept.held
 }
 
 type tomlTop struct {
@@ -133,6 +135,9 @@ func (a *tomlAnswers) setTable(name string, t map[string]string) {
 func (a *tomlAnswers) getNames() ([]string, bool) {
 	a.Lock()
 	defer a.Unlock()
+	if a.haveNames {
+		namesUsed(a)
+	}
 	return a.names, a.haveNames
 }
 
@@ -148,6 +153,70 @@ func (a *tomlAnswers) setNames(names []string) {
 	a.Lock()
 	defer a.Unlock()
 	a.names, a.haveNames = kept, true
+	namesUsed(a)
+}
+
+// A file's kept table names are let go too once no one has listed them
+// for namesIdle: Codex's ~11k are 1.2 MB, listed by a one-time rename at
+// start and then only by the Agents page and a sync, and were held for
+// as long as magpie ran. The next list parses the file again: 9 ms and
+// 21 MB of garbage for that config on an M5 Pro.
+const namesIdle = 5 * time.Minute
+
+var namesKept struct {
+	last  atomic.Int64 // UnixNano of the last list answered
+	armed atomic.Bool
+	mu    sync.Mutex
+	held  []weak.Pointer[tomlAnswers]
+}
+
+// namesUsed notes a list of a's names, and arms the timer that lets them
+// go once lists stop. a.Lock is held.
+func namesUsed(a *tomlAnswers) {
+	if tomlKept.off {
+		return
+	}
+	namesKept.last.Store(time.Now().UnixNano())
+	if !a.namesHeld {
+		a.namesHeld = true
+		namesKept.mu.Lock()
+		namesKept.held = append(namesKept.held, weak.Make(a))
+		namesKept.mu.Unlock()
+	}
+	if namesKept.armed.CompareAndSwap(false, true) {
+		time.AfterFunc(namesIdle, namesIdleCheck)
+	}
+}
+
+func namesIdleCheck() {
+	idle := time.Since(time.Unix(0, namesKept.last.Load()))
+	if idle < namesIdle {
+		time.AfterFunc(namesIdle-idle, namesIdleCheck)
+		return
+	}
+	namesKept.armed.Store(false)
+	dropTOMLNames()
+	// a list between the check and the drop armed nothing: look again
+	if time.Since(time.Unix(0, namesKept.last.Load())) < namesIdle && namesKept.armed.CompareAndSwap(false, true) {
+		time.AfterFunc(namesIdle, namesIdleCheck)
+	}
+}
+
+// dropTOMLNames lets go of every file's kept table names; the other
+// answers stay.
+func dropTOMLNames() {
+	namesKept.mu.Lock()
+	held := namesKept.held
+	namesKept.held = nil
+	namesKept.mu.Unlock()
+	for _, w := range held {
+		if a := w.Value(); a != nil {
+			a.Lock()
+			a.names, a.haveNames, a.namesHeld = nil, false, false
+			a.Unlock()
+		}
+	}
+	debug.FreeOSMemory()
 }
 
 // packStrings copies ss into one buffer; the copies share nothing with ss.

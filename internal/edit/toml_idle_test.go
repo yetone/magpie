@@ -110,3 +110,67 @@ func TestTOMLTablesKeptWhenIdle(t *testing.T) {
 		t.Fatalf("after a change the tables = %q", names)
 	}
 }
+
+// A file's table names no one has listed for namesIdle are let go, and
+// the next list parses the file again; a list a caller holds stays whole.
+func TestTOMLNamesLetGoWhenIdle(t *testing.T) {
+	tomlKept.off = false
+	t.Cleanup(func() { tomlKept.off = true })
+	p := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(p, []byte("a = 1\n\n[projects.\"/x\"]\ntrust_level = \"trusted\"\n\n[model_providers.magpie]\nbase_url = \"http://x\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-time.Hour)
+	os.Chtimes(p, old, old)
+	filememo.Forget()
+	want := []string{`projects."/x"`, "model_providers.magpie"}
+	held, err := TOMLTables(p)
+	if err != nil || !slices.Equal(held, want) {
+		t.Fatalf("tables = %q, %v", held, err)
+	}
+	if v, _ := GetTOMLTop(p, "a"); v != "1" {
+		t.Fatalf("a = %q", v)
+	}
+	tomlKept.last.Store(time.Now().Add(-2 * tomlIdle).UnixNano())
+	tomlIdleCheck()
+
+	// listed within namesIdle: kept
+	namesKept.last.Store(time.Now().Add(-namesIdle / 2).UnixNano())
+	n := tomlParses.Load()
+	if names, _ := TOMLTables(p); !slices.Equal(names, want) || tomlParses.Load() != n {
+		t.Fatalf("tables %q after %d parses; want them kept", names, tomlParses.Load()-n)
+	}
+
+	namesKept.last.Store(time.Now().Add(-2 * namesIdle).UnixNano())
+	namesIdleCheck()
+	a := tomlAnswersOf(p)
+	if _, ok := a.getNames(); ok {
+		t.Fatal("the names were kept past namesIdle")
+	}
+	if !slices.Equal(held, want) {
+		t.Fatalf("a caller's list = %q after the let-go", held)
+	}
+	if v, _ := GetTOMLTop(p, "a"); v != "1" || tomlParses.Load() != n {
+		t.Fatalf("a = %q after %d parses; the other answers should stay", v, tomlParses.Load()-n)
+	}
+	if names, _ := TOMLTables(p); !slices.Equal(names, want) || tomlParses.Load() != n+1 {
+		t.Fatalf("tables %q after %d parses; want one parse", names, tomlParses.Load()-n)
+	}
+	if names, _ := TOMLTables(p); !slices.Equal(names, want) || tomlParses.Load() != n+1 {
+		t.Fatalf("listed again: %q after %d parses; want them kept again", names, tomlParses.Load()-n)
+	}
+}
+
+func BenchmarkTOMLTablesCold(b *testing.B) {
+	src := os.Getenv("MAGPIE_BENCH_TOML")
+	if src == "" {
+		b.Skip("MAGPIE_BENCH_TOML unset")
+	}
+	for b.Loop() {
+		filememo.DropKind("toml file")
+		filememo.DropKind("toml answers")
+		if _, err := TOMLTables(src); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
