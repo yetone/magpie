@@ -135,13 +135,15 @@
 /* the session an account answers (connor_yang on Discord): one line cut
    short, also where a narrow stage lets the status wrap */
 .rt-accts em .ses { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
-.rt-accts .bar { grid-column: 2 / 4; height: 3px; border-radius: 2px; background: var(--card-2); overflow: hidden; }
-.rt-accts .bar i { display: block; height: 100%; width: 0; border-radius: 2px; background: var(--muted); transition: width .4s; }
+/* an account's bar is Usage's .quota-track (app.css), its colours the
+   same in either theme (normalcoder_ on X: grey and black here, blue
+   there); only its size and place are the stage's */
+.rt-accts .bar { grid-column: 2 / 4; height: 3px; }
+.rt-accts .bar i { width: 0; transition: width .4s; }
 .rt-accts li.nobar .bar { display: none; }
 .rt-accts .dot { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--muted); }
 .rt-accts li.on { border-color: var(--fg); }
 .rt-accts li.on em { color: var(--fg); }
-.rt-accts li.on .bar i { background: var(--fg); }
 .rt-accts li.on .dot { background: var(--fg); border-color: var(--fg); }
 /* A live dot's pulse: a disk 6px wider all round grows from the dot and
    fades. It moves by transform and opacity, on the compositor: as a
@@ -554,9 +556,8 @@ button.rt-session { cursor: pointer; }
 /* under the cell, in its bottom padding: every cell keeps its height. In
    the flow, not absolute: Chromium put an absolute bar of a row in a
    column's unbroken block (.rt-lead) over the row above it */
-.rt-act .bar { height: 2px; margin: 2px 0 -4px; border-radius: 2px; background: var(--card-2); overflow: hidden; }
+.rt-act .bar { height: 2px; margin: 2px 0 -4px; }
 .rt-act:has(> .bar) { padding-bottom: 8px; }
-.rt-act .bar i { display: block; height: 100%; border-radius: 2px; background: var(--muted); }
 /* a provider's keys summed up in one row (#1319), opened to each */
 .rt-act.rt-keys { cursor: pointer; user-select: none; }
 .rt-act.rt-keys .chev { display: inline-flex; align-self: center; margin-left: auto; color: var(--muted); transition: transform .2s; }

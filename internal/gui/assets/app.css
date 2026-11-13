@@ -1050,12 +1050,10 @@ body.panel .row.pref.flash { border-radius: 10px; }
 .subscription-head .ic { width: 17px; height: 17px; }
 .subscription-head b { font-size: 12.5px; font-weight: 600; }
 .subscription-account { display: flex; align-items: baseline; gap: 7px; margin: 0 0 6px; font-size: 11px; color: var(--fg-2); }
-.subscription-card.several .quota-windows:not([hidden]) + .subscription-account,
-.subscription-card.several .subscription-error:not([hidden]) + .subscription-account,
-.subscription-card.several .quota-balance:not([hidden]) + .subscription-account,
-.subscription-card.several .quota-read:not([hidden]) + .subscription-account,
-.subscription-card.several .credit-days:not([hidden]) + .subscription-account,
-.subscription-card.several .quota-curve:not([hidden]) + .subscription-account { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line); }
+/* every account after the first has a hairline over it, whatever the one
+   before ends with (normalcoder_ on X: a check-in row or magpie's own
+   requests, which no list of row kinds named, ran two accounts together) */
+.subscription-card.several > :not(.subscription-head, .quota-all) + .subscription-account { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line); }
 .subscription-account .user { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* an account the user named (#1515): the name, then the account and the
    key plan it stands in for, muted, giving their room up first */
@@ -1204,7 +1202,6 @@ body.panel .row.pref.flash { border-radius: 10px; }
 :root[data-colorblind="1"] :is(.qc-line, .qc-dash)[data-series="6"] { stroke-dasharray: 12 4 3.5 4 3.5 4; }
 .quota-resets { display: flex; align-items: center; gap: 8px; margin-top: 9px; font-size: 10.5px; font-variant-numeric: tabular-nums; }
 .quota-resets .text { margin-left: auto; flex: none; font-size: 11px; padding: 2px 7px; }
-.subscription-card.several .quota-resets:not([hidden]) + .subscription-account { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line); }
 /* a remote magpie's gateway key (#1547): its cycle, calls, used up */
 .quota-keyline { margin-top: 7px; font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .quota-keyline.spent { color: var(--red); }
@@ -1213,7 +1210,6 @@ body.panel .row.pref.flash { border-radius: 10px; }
 .led .who .own-badge { margin-left: 0; }
 .quota-own { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 7px; font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .quota-own .own-badge { margin-left: 0; }
-.subscription-card.several .quota-keyline + .subscription-account { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line); }
 .reset-ask .reset-idle { color: var(--amber); }
 /* which of an account's resets is used, the soonest unless another is picked */
 .reset-ask .reset-pick { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 2px 0 10px; font-size: 12px; color: var(--muted); }
@@ -2210,8 +2206,6 @@ body.panel .profiles #save { height: 25px; } /* the field's: the line keeps its 
 .quota-autoreset .ar-say, .pq-autoreset .ar-say, .quota-credits .ar-say, .pq-credits .ar-say { line-height: 16px; }
 .quota-autoreset, .quota-credits { margin-top: 8px; font-size: 10.5px; }
 .quota-resets + .quota-autoreset, .quota-autoreset + .quota-credits { margin-top: 6px; }
-.subscription-card.several .quota-autoreset + .subscription-account,
-.subscription-card.several .quota-credits + .subscription-account { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line); }
 .pq-autoreset, .pq-credits { grid-column: 1 / -1; margin-top: 5px; padding-top: 7px; border-top: 1px solid var(--line-2); font-size: 11px; }
 .pq-resets + .pq-autoreset, .pq-autoreset + .pq-credits { margin-top: 5px; padding-top: 0; border-top: 0; }
 /* spending them only after everything else, a line of its own under the

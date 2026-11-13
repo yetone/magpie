@@ -2544,7 +2544,7 @@ function routingPage(part) {
     let f = folds.get(key);
     if (!f) {
       const li = el("li", "rt-fold"), b = el("b"), st = el("em"), tg = el("span", "tag");
-      const n = el("span", "n"), chev = el("span", "chev"), bar = el("div", "bar"), bi = el("i");
+      const n = el("span", "n"), chev = el("span", "chev"), bar = el("div", "bar quota-track"), bi = el("i");
       chev.append(svg(CHEV, 12, 1.7));
       bar.append(bi);
       li.append(el("i", "dot"), b, st, chev, bar, tg);
@@ -2589,7 +2589,8 @@ function routingPage(part) {
       b.append(f);
     }
     if (w.fallback) b.append(el("small", "fb", t("fallback")));
-    const st = el("em"), bar = el("div", "bar"), bi = el("i"), tg = el("span", "tag");
+    // its bar is Usage's .quota-track, coloured alike (normalcoder_ on X)
+    const st = el("em"), bar = el("div", "bar quota-track"), bi = el("i"), tg = el("span", "tag");
     bar.append(bi);
     // what the row says, cut short beside the model (routing.css), is read
     // whole over it (yi_time on Discord). Measured as the pointer comes,
@@ -5008,7 +5009,7 @@ function routingPage(part) {
         fix.append(again);
       }
       if (w.known && w.balance == null) {
-        const bar = el("div", "bar"), bi = el("i");
+        const bar = el("div", "bar quota-track"), bi = el("i");
         bi.style.width = fill(w);
         bar.append(bi);
         row.append(bar);
