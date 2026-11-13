@@ -1927,6 +1927,7 @@ func ReleaseScratch() {
 	keptSeen.Store(nil)
 	releaseRows()
 	releasePriced()
+	releaseProbes()
 }
 
 // ReleaseMatchScratch is ReleaseScratch keeping the priced blocks.
@@ -1935,6 +1936,7 @@ func ReleaseMatchScratch() {
 	keptPicks.Store(nil)
 	keptSeen.Store(nil)
 	releaseRows()
+	releaseProbes()
 }
 
 // scratchLinger is how long the matcher's scratch is kept once the last

@@ -163,3 +163,22 @@ func TestProbeChunkMadeOncePerChange(t *testing.T) {
 		t.Fatalf("a new probe kept the old chunk: %+v", c)
 	}
 }
+
+// The probe chunk is let go when the pages rest and after the warm-up:
+// it was held for the process's life, ~5 MB of unpacked rows.
+func TestProbeChunkLetGoAtRest(t *testing.T) {
+	at := time.Date(2026, 8, 1, 9, 0, 0, 0, time.UTC)
+	rows := probeRows{}
+	rows.add(Record{Time: at, Agent: "magpie", Provider: "p", Host: "api.example.com", Status: 500, Source: SourceProbe}, 0)
+	blocks := rows.done()
+	for name, release := range map[string]func(){"ReleaseScratch": ReleaseScratch, "ReleaseMatchScratch": ReleaseMatchScratch} {
+		probeChunk(blocks, at, provider.Renames{}, nil)
+		release()
+		probeMemo.Lock()
+		held := probeMemo.last != nil
+		probeMemo.Unlock()
+		if held {
+			t.Fatalf("%s kept the probe chunk", name)
+		}
+	}
+}

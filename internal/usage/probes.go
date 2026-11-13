@@ -195,6 +195,16 @@ var probeMemo struct {
 	last *probeMade
 }
 
+// releaseProbes lets the probe chunk go once the pages rest, with the
+// rest of the reads' scratch: its rows are unpacked, ~5 MB of a day's
+// probes on a real gateway, and were held for the process's life after
+// the warm-up or a window's last poll. The next page read makes it again.
+func releaseProbes() {
+	probeMemo.Lock()
+	probeMemo.last = nil
+	probeMemo.Unlock()
+}
+
 type probeMade struct {
 	probes  []*rowChunk
 	since   time.Time
