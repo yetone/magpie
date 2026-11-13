@@ -216,7 +216,6 @@ func pruneCalls(files []file) {
 }
 
 func keepCalls(path string, st *callFile) {
-	defer trimCallRevisions(time.Now())
 	if callRoot == "" {
 		// what is kept is of this root: a Sessions parse that read a
 		// rollout's calls along (callsRide) keeps them before any Requests
@@ -250,6 +249,13 @@ func keepCalls(path string, st *callFile) {
 	}
 	callCache[path] = st
 	callOrder = append(callOrder, path)
+	// A file kept with no revision window adds nothing to trim, and a
+	// usage build keeps one for each of the ~11k files a long history
+	// holds: trimming after each, a sort and a map under callsMu, had its
+	// readers waiting on each other for seconds of a build.
+	if st.revisionWeight() > 0 {
+		trimCallRevisions(time.Now())
+	}
 }
 
 // wholeCallReaders read an agent's calls from one session file at a time,

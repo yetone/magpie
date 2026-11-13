@@ -17,7 +17,6 @@ type callContinuation struct {
 // keepCallContinuation is called with callsMu held. Published continuations
 // are immutable; prepareCalls clones them before applying another append.
 func keepCallContinuation(st *callFile) {
-	defer trimCallRevisions(time.Now())
 	if st.Agent != "codex" && st.Agent != "claude" && st.Agent != "claude-desktop" {
 		return
 	}
@@ -54,6 +53,7 @@ func keepCallContinuation(st *callFile) {
 	state.dirty = nil
 	callContinuations[st.Path] = callContinuation{state, len(st.Calls)}
 	callContinuationOrder = append(callContinuationOrder, st.Path)
+	trimCallRevisions(time.Now())
 }
 
 func restoreCallContinuation(st *callFile) *callFile {
