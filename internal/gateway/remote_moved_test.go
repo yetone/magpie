@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/provider"
@@ -130,5 +132,118 @@ func TestRemoteProveAnswersOnlyTheKeysHolder(t *testing.T) {
 	}
 	if w := ask(provider.RemoteKeyID(secrets[0])); w.Code != http.StatusForbidden {
 		t.Errorf("not shared: %d %s", w.Code, w.Body)
+	}
+}
+
+// A Remote magpie's new address, saved while a request to it is being
+// retried (le13ure on X: "实时的请求却不会立刻改变而是反复重试"), is where
+// the retry goes: the old one is asked no more.
+func TestRemoteMagpieRetryGoesToTheSavedAddress(t *testing.T) {
+	fresh(t)
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"c1","object":"chat.completion","model":"sol","choices":[{"index":0,"message":{"role":"assistant","content":"from the new address"},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":2}}`)
+	}))
+	t.Cleanup(up.Close)
+	if err := provider.Save(provider.Provider{ID: "fake", Name: "Fake", Key: "k", Models: []string{"sol"}, Chat: up.URL + "/v1"}); err != nil {
+		t.Fatal(err)
+	}
+	_, secrets := newCaller(t, "B")
+	h := New().Handler()
+	remote := httptest.NewServer(h)
+	t.Cleanup(remote.Close)
+	id, err := provider.Add(provider.Provider{ID: "office", Name: "Office", Preset: provider.RemoteMagpiePreset, Key: secrets[0], Chat: strings.TrimPrefix(remote.URL, "http://")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	office, _ := provider.Find(id)
+	if _, err := office.Fetch(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	// the old address answers busy, and the user types the new one in
+	// before the retry
+	var oldHits atomic.Int32
+	old := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if oldHits.Add(1) == 1 {
+			q, _ := provider.Find(id)
+			q.Chat, q.Responses, q.Anthropic, q.Decide = remote.URL, "", "", ""
+			if err := provider.Save(*q); err != nil {
+				t.Error(err)
+			}
+		}
+		w.Header().Set("Retry-After", "1")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		io.WriteString(w, `{"error":{"message":"overloaded"}}`)
+	}))
+	t.Cleanup(old.Close)
+	office, _ = provider.Find(id)
+	office.Chat, office.Responses, office.Anthropic, office.Decide = old.URL, "", "", ""
+	if err := provider.Save(*office); err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model":"office/fake/sol","messages":[{"role":"user","content":"hi"}]}`)))
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "from the new address") {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body)
+	}
+	if n := oldHits.Load(); n != 1 {
+		t.Errorf("the old address was asked %d times, want once", n)
+	}
+}
+
+// A pause before a Remote magpie is asked again ends when its new address
+// is saved, or at once when it was saved before the pause began; a pause
+// for nobody that moved runs its course.
+func TestPauseEndsWhenReaddressed(t *testing.T) {
+	fresh(t)
+	id, err := provider.Add(provider.Provider{ID: "office", Name: "Office", Preset: provider.RemoteMagpiePreset, Key: "k", Chat: "127.0.0.1:1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	held, _ := provider.Find(id)
+	cs := []candidate{{p: *held, model: "m", rest: held.ID}}
+	if readdressedOf([]candidate{{p: provider.Provider{ID: "x", Chat: "http://h/v1"}}}) != nil {
+		t.Error("a pause for no Remote magpie wakes for edits")
+	}
+	done := make(chan bool, 1)
+	go func() { done <- pauseUntilReaddressed(context.Background(), time.Hour, readdressedOf(cs)) }()
+	// an edit that moves nothing doesn't end it
+	other, _ := provider.Find(id)
+	other.Name = "Office 2"
+	if err := provider.Save(*other); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+		t.Fatal("ended by an edit that kept the address")
+	case <-time.After(50 * time.Millisecond):
+	}
+	moved, _ := provider.Find(id)
+	moved.Chat, moved.Responses, moved.Anthropic, moved.Decide = "127.0.0.1:2", "", "", ""
+	if err := provider.Save(*moved); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case ok := <-done:
+		if !ok {
+			t.Fatal("ended as if the agent went away")
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("the pause went on after the address was saved")
+	}
+	// saved before the pause began
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		done <- pauseAlive(ctx, httptest.NewRecorder(), nil, false, time.Now(), time.Hour, readdressedOf(cs))
+	}()
+	select {
+	case ok := <-done:
+		if !ok {
+			t.Fatal("ended as if the agent went away")
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("a pause for one saved elsewhere already waited")
 	}
 }

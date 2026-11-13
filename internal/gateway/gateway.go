@@ -3583,6 +3583,12 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			nearDone = nil
 		}
 		c := cands[i]
+		if q, ok := provider.Readdressed(c.p); ok {
+			// a Remote magpie saved at another address since the
+			// request read it is asked there, a retry of it too
+			// (le13ure on X)
+			c.p = q
+		}
 		if handed.release != nil && handed.who != c.who() {
 			handed.release()
 			handed.release = nil
@@ -4938,15 +4944,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
 			skipped = append(skipped, c.label()+": "+call.Error)
 			again++
-			select {
-			case <-time.After(wait):
+			if pauseUntilReaddressed(r.Context(), wait, readdressedOf([]candidate{c})) {
 				i--
 				continue
-			case <-r.Context().Done():
-				call.Status, call.Error = canceled(r.Context())
-				try.Gone = true
-				s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
 			}
+			call.Status, call.Error = canceled(r.Context())
+			try.Gone = true
+			s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
 			break
 		}
 		if !last && hw.failed() && codexReset(hw.code(), hw.errBody()) {
@@ -5230,7 +5234,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
 				skipped = append(skipped, c.label()+": "+call.Error)
 				rounds, busyNow = rounds+1, nil
-				if pauseAlive(r.Context(), w, kept, streams, start, wait) {
+				if pauseAlive(r.Context(), w, kept, streams, start, wait, readdressedOf(next)) {
 					cands = append(cands[:i+1:i+1], next...)
 					continue
 				}
@@ -5248,15 +5252,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
 			skipped = append(skipped, c.label()+": "+call.Error)
 			again++
-			select {
-			case <-time.After(wait):
+			if pauseUntilReaddressed(r.Context(), wait, readdressedOf([]candidate{c})) {
 				i--
 				continue
-			case <-r.Context().Done():
-				call.Status, call.Error = canceled(r.Context())
-				try.Gone = true
-				s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
 			}
+			call.Status, call.Error = canceled(r.Context())
+			try.Gone = true
+			s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
 			break
 		}
 		// (not for one account pinned: the others weren't asked)

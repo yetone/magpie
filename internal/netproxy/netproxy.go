@@ -218,8 +218,10 @@ var HTTP1 func(u *url.URL) bool
 // said not to check (WithUncheckedTLS) through a clone kept for that
 // host alone (uncheckTLS), and one made with a provider's own TLS
 // identity (WithClientCert) through a clone kept for it (clientTLS). A host whose IPv6 is taken but goes nowhere
-// is dialed over IPv4 (v4Fallback).
+// is dialed over IPv4 (v4Fallback), and one on the user's own network
+// is given lanDial to connect (lanDialCap).
 func Dispatch(base *http.Transport) http.RoundTripper {
+	lanDialCap(base)
 	v4Fallback(base)
 	return &dispatch{base: base, own: map[route]*http.Transport{}, moved: Watch()}
 }

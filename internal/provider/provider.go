@@ -934,6 +934,8 @@ func store(f file) error {
 	pruneIcons(f)
 	// what agents were handed of the catalog may be out of date now
 	catalog.Touched()
+	// and a request waiting to ask a provider again asks it as saved now
+	editedNow()
 	return nil
 }
 

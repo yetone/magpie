@@ -1222,7 +1222,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 	askAgain := func(status int, msg string, wait time.Duration) bool {
 		handOn(status, msg, wait)
 		busyAgain++
-		if !pauseAlive(r.Context(), w, kept, streams, start, wait) {
+		if !pauseAlive(r.Context(), w, kept, streams, start, wait, nil) {
 			s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1].Gone = true })
 			end(status, msg, 0, 0)
 			return false

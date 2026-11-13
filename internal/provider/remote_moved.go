@@ -108,6 +108,12 @@ func SeekMoved(ctx context.Context, p Provider, err error) (Provider, bool) {
 	if !p.IsRemoteMagpie() || err == nil || !unconnected.MatchString(err.Error()) {
 		return p, false
 	}
+	if q, ok := Readdressed(p); ok {
+		// saved at another address since the request read it: typed in,
+		// or found by a look within seekEvery, which a request still
+		// asking the old one met as no look at all (le13ure on X)
+		return q, true
+	}
 	ctx, cancel := context.WithTimeout(ctx, seekFor)
 	defer cancel()
 	q := seekOnce(ctx, p.ID)
@@ -116,6 +122,45 @@ func SeekMoved(ctx context.Context, p Provider, err error) (Provider, bool) {
 	}
 	p.Chat, p.Responses, p.Anthropic, p.Decide = q.Chat, q.Responses, q.Anthropic, q.Decide
 	return p, true
+}
+
+// Readdressed is p, a Remote magpie, at the address it is saved at now,
+// when that is another than p's: the user typed the new one in, or a look
+// (seekMoved) found it there, while a request held p as it read it (le13ure
+// on X: a request asked the old address again and again, through its
+// retries and its patience, after the new one was saved). Only the
+// addresses are taken; a key's view of p stays as it was.
+func Readdressed(p Provider) (Provider, bool) {
+	if !p.IsRemoteMagpie() {
+		return p, false
+	}
+	q := lookIn(sharedAll(), p.ID)
+	if q == nil || q.ID != p.ID || !q.IsRemoteMagpie() || q.Chat == "" || q.Chat == p.Chat {
+		return p, false
+	}
+	p.Chat, p.Responses, p.Anthropic, p.Decide = q.Chat, q.Responses, q.Anthropic, q.Decide
+	return p, true
+}
+
+// edited is closed, and made anew, each time providers.json is written
+// here (store): a request pausing before it asks again wakes for it.
+var edited = struct {
+	sync.Mutex
+	ch chan struct{}
+}{ch: make(chan struct{})}
+
+// Edited is closed when this magpie next writes the providers.
+func Edited() <-chan struct{} {
+	edited.Lock()
+	defer edited.Unlock()
+	return edited.ch
+}
+
+func editedNow() {
+	edited.Lock()
+	close(edited.ch)
+	edited.ch = make(chan struct{})
+	edited.Unlock()
 }
 
 // a look under way, for those who wait for it

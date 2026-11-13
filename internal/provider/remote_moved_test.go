@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -319,5 +320,40 @@ func TestRemoteProof(t *testing.T) {
 		if hmac.Equal(a, b) {
 			t.Error("a proof for another key, nonce or address is the same")
 		}
+	}
+}
+
+// A request that read a Remote magpie at its old address, whose new one
+// was saved since (typed in by the user, or found by a look within
+// seekEvery), finds no one there: it is asked at the saved one, with no
+// look made (le13ure on X: a request asked the old address again and
+// again after the new one was saved).
+func TestRemoteMagpieSavedElsewhereIsTaken(t *testing.T) {
+	isolate(t)
+	isolateFetchHome(t)
+	asked := seekHere(t)
+	id, err := Add(Provider{ID: "office", Name: "Office", Preset: RemoteMagpiePreset, Key: "secret", Chat: movedAway})
+	if err != nil {
+		t.Fatal(err)
+	}
+	held, _ := Find(id)
+	if _, ok := Readdressed(*held); ok {
+		t.Fatal("readdressed while saved where it was read")
+	}
+	now := movedMagpie(t, "secret", "a", nil)
+	saved, _ := Find(id)
+	saved.Chat, saved.Responses, saved.Anthropic, saved.Decide = now, "", "", ""
+	if err := Save(*saved); err != nil {
+		t.Fatal(err)
+	}
+	q, ok := SeekMoved(context.Background(), *held, errors.New("dial tcp 127.0.0.1:1: connect: connection refused"))
+	if !ok || q.Chat != "http://"+now+"/v1" || q.Anthropic != "http://"+now {
+		t.Fatalf("SeekMoved = %q %q %v, want the saved address", q.Chat, q.Anthropic, ok)
+	}
+	if q.Key != held.Key {
+		t.Errorf("key %q, want the held one's", q.Key)
+	}
+	if n := asked.Load(); n != 0 {
+		t.Errorf("looked around %d times for a provider saved elsewhere", n)
 	}
 }

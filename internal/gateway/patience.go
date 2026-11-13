@@ -217,10 +217,16 @@ func minTime(a, b time.Time) time.Time {
 
 // pauseAlive waits d, keeping a streaming agent alive as a held stream
 // does once the request has gone keepHeldAfter without a word. false: the
-// agent went away first.
-func pauseAlive(ctx context.Context, w http.ResponseWriter, kept *keptAlive, streams bool, start time.Time, d time.Duration) bool {
+// agent went away first. A pause ends early once moved (when given) says
+// a provider about to be asked again was saved at another address
+// (readdressedOf).
+func pauseAlive(ctx context.Context, w http.ResponseWriter, kept *keptAlive, streams bool, start time.Time, d time.Duration, moved func() bool) bool {
 	t := time.NewTimer(d)
 	defer t.Stop()
+	edits := editsOf(moved)
+	if moved != nil && moved() {
+		return true // saved elsewhere while it was asked
+	}
 	var hw *holdWriter
 	if streams && kept != nil && kept.proto != provider.Gemini {
 		hw = newHoldWriter(w, true)
@@ -238,6 +244,61 @@ func pauseAlive(ctx context.Context, w http.ResponseWriter, kept *keptAlive, str
 		case <-ctx.Done():
 			return false
 		case <-tick.C:
+		case <-edits:
+			if moved() {
+				return true
+			}
+			edits = provider.Edited()
 		}
+	}
+}
+
+// pauseUntilReaddressed waits d, or until moved (when given) says a
+// provider about to be asked again was saved at another address. false:
+// ctx ended first.
+func pauseUntilReaddressed(ctx context.Context, d time.Duration, moved func() bool) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	edits := editsOf(moved)
+	if moved != nil && moved() {
+		return true // saved elsewhere while it was asked
+	}
+	for {
+		select {
+		case <-t.C:
+			return true
+		case <-ctx.Done():
+			return false
+		case <-edits:
+			if moved() {
+				return true
+			}
+			edits = provider.Edited()
+		}
+	}
+}
+
+// editsOf is provider.Edited when there is a moved to ask, else a channel
+// that never fires.
+func editsOf(moved func() bool) <-chan struct{} {
+	if moved == nil {
+		return nil
+	}
+	return provider.Edited()
+}
+
+// readdressedOf says whether any of cs is a Remote magpie saved at another
+// address since the request read it: the user typed its new address in
+// while the request paused before asking it again (le13ure on X). nil
+// when none of cs is a Remote magpie, for a pause that never wakes early.
+func readdressedOf(cs []candidate) func() bool {
+	if !slices.ContainsFunc(cs, func(c candidate) bool { return c.p.IsRemoteMagpie() }) {
+		return nil
+	}
+	return func() bool {
+		return slices.ContainsFunc(cs, func(c candidate) bool {
+			_, ok := provider.Readdressed(c.p)
+			return ok
+		})
 	}
 }
