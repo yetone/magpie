@@ -3,10 +3,14 @@
 // with all of them. The grid keeps the whole list's height in its padding
 // above and below what it shows, and the rows follow the scroll; a card
 // with focus is kept. plugins.js imports this when its page is first drawn,
-// so it weighs nothing on the core; a list shorter than its VMIN is drawn
-// whole there.
-window.pmVirtualGrids = function (page, card) {
+// so it weighs nothing on the core; a list shorter than VMIN is drawn
+// whole there. body() is Discover's body, and draw() draws it again.
+window.pmVirtualGrids = function (page, card, body, draw) {
+  const VMIN = 48; // the shortest list drawn in part
   const VMORE = 700; // px drawn past each edge of the view
+  // a long list drawn whole before this came is drawn again, once the
+  // caller holds what this returns
+  queueMicrotask(() => { if (body()?.querySelector(".pm-grid:not(.pm-virtual) > .pm-card:nth-child(" + VMIN + ")")) draw(); });
   const vgrids = new Set();
   let vrowH = 172, vcols = 3; // a row's height and the columns, as last measured
   function grid(g, list) {
@@ -106,5 +110,5 @@ window.pmVirtualGrids = function (page, card) {
   const vsoon = () => { if (vgrids.size && !vframe) vframe = requestAnimationFrame(vnow); };
   page.addEventListener("scroll", vsoon, { passive: true });
   if (window.ResizeObserver) new ResizeObserver(vsoon).observe(page);
-  return { grid, now: vnow };
+  return { grid, now: vnow, min: VMIN };
 };

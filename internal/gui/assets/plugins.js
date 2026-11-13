@@ -647,16 +647,14 @@
 
   // a long list draws only the rows near the view (plugingrid.js); until
   // that has come, and for a short list, every card is drawn
-  const VMIN = 48;
-  let vg = null;
-  const vload = () => vload.p = vload.p || import("./plugingrid.js").then(() => { vg = pmVirtualGrids(page, card); if (body?.querySelector(".pm-grid:not(.pm-virtual) > .pm-card:nth-child(" + VMIN + ")")) drawBody(); }, () => {});
+  let vg;
+  const vload = () => vload.p = vload.p || import("./plugingrid.js").then(() => vg = pmVirtualGrids(page, card, () => body, drawBody), () => {});
   function cardGrid(list) {
     const g = el("div", "pm-grid");
-    if (list.length >= VMIN && vg) return vg.grid(g, list);
+    if (list.length >= vg?.min) return vg.grid(g, list);
     for (const l of list) g.append(card(l));
     return g;
   }
-  const vnow = () => vg?.now();
 
   // Discover is one market (#owner, 11-09): every plugin, whoever wrote
   // it (magpie's community, another author on npm, a repository its
@@ -1013,7 +1011,7 @@
     replaceKeeping(page, [head(), body]);
     drawBody();
     page.scrollTop = scroll;
-    vnow();
+    vg?.now();
   }
 
   function drawBody() {
@@ -1048,7 +1046,7 @@
         import("./registry.js").then(() => pmRegistry(regBox, mine, askNPM), statusTErr);
       }
       replaceKeeping(body, out);
-      vnow();
+      vg?.now();
       if (agentsFor && body.querySelector(".pm-agents")) {
         // after the view is put back where the reader was, as showing it
         // does; the section then is the one drawn last (npm's answers draw
@@ -1081,7 +1079,7 @@
     }
     out.push(box);
     replaceKeeping(body, out);
-    vnow();
+    vg?.now();
   }
 
   // what a plugin is to the reader, and how one is written, under the list
