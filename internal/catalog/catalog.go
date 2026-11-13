@@ -660,6 +660,7 @@ func loadGen() (map[string]mdProvider, int) {
 				}
 				var m map[string]mdProvider
 				if json.Unmarshal(b, &m) == nil && len(m) > 0 {
+					shareCatalog(m)
 					mdev = m
 					votes, reasons := map[string]int{}, map[string]int{}
 					named := map[string]map[string]int{}
