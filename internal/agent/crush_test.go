@@ -8,7 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/provider"
 )
 
 // crushHome is effortHome with Crush's data folder in the sandbox too, and
@@ -240,5 +242,55 @@ func TestCrushInWSLPicksInTheDistrosDataFile(t *testing.T) {
 		if _, err := os.Stat(other); err == nil {
 			t.Fatalf("the distro's pick went to this machine's %s", other)
 		}
+	}
+}
+
+// Crush takes a model's image input from catwalk's supports_attachments
+// (capabilities.vision once Crush 0.99 migrates the file): without it its
+// view tool answers "does not support image data", its file picker is
+// hidden and a pasted image is left out, for every model through magpie
+// (Novello42 on X, #6515). A model that takes images says so in the
+// crush.json magpie writes; one that doesn't says it doesn't.
+func TestCrushModelsSayTheyTakeImages(t *testing.T) {
+	home, _ := crushHome(t)
+	// images only where the model takes them itself, not where magpie's
+	// vision model describes them (those say true as well)
+	was := provider.Described
+	provider.Described = func() bool { return false }
+	t.Cleanup(func() { provider.Described = was })
+	if err := provider.Save(provider.Provider{ID: "see", Name: "See", Chat: "https://example.test/v1", Key: "key",
+		Models: []string{"looks", "blind"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := catalog.SaveLive("see", "https://example.test/v1", []catalog.Model{
+		{ID: "looks", Images: true, InputModalities: []string{"text", "image"}},
+		{ID: "blind", InputModalities: []string{"text"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cr := crush(home, filepath.Join(home, ".config"))
+	if err := cr.Field("model").Set("magpie/see/looks"); err != nil {
+		t.Fatal(err)
+	}
+	var f struct {
+		Providers map[string]struct {
+			Models []map[string]any `json:"models"`
+		} `json:"providers"`
+	}
+	if err := json.Unmarshal([]byte(readFile(cr.Path)), &f); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]any{}
+	for _, m := range f.Providers["magpie"].Models {
+		if id, _ := m["id"].(string); strings.HasPrefix(id, "see/") {
+			v, ok := m["supports_attachments"]
+			if !ok {
+				t.Fatalf("%s has no supports_attachments: %v", id, m)
+			}
+			got[id] = v
+		}
+	}
+	if got["see/looks"] != true || got["see/blind"] != false {
+		t.Fatalf("supports_attachments %v in:\n%s", got, readFile(cr.Path))
 	}
 }
