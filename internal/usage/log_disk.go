@@ -18,7 +18,7 @@ import (
 // its first page: a long history's 109 MB took ~620 MB of allocations in
 // the first seconds, the start's largest part, and its collections (#2278).
 // The file stands for the log's first bytes while their SHA-256 is the
-// one it was written with, under the same code (requestDiskBinary); a
+// one it was written with, under the same code (logDiskBinary); a
 // start reads the blocks from it and parses only the lines after them, as
 // a parse continues the snapshot before it.
 
@@ -121,7 +121,7 @@ func logDiskOf(b []byte, m *diskMapping, path string, size int64) *logDisk {
 		header = header[n:]
 		return s
 	}
-	if text() != logDiskMagic || text() != requestDiskBinary() || text() != path || header == nil {
+	if text() != logDiskMagic || text() != logDiskBinary() || text() != path || header == nil {
 		return nil
 	}
 	d := &logDisk{full: logFull{keyProviders: map[string]bool{}, hosts: map[string]string{}}}
@@ -212,7 +212,7 @@ func logDiskWrite(s *logSnapshot) {
 
 func logDiskSave(s *logSnapshot) error {
 	var h []byte
-	for _, t := range []string{logDiskMagic, requestDiskBinary(), s.path, s.full.hash, string(s.full.digest)} {
+	for _, t := range []string{logDiskMagic, logDiskBinary(), s.path, s.full.hash, string(s.full.digest)} {
 		h = appendDiskString(h, t)
 	}
 	h = binary.AppendUvarint(h, uint64(s.full.off))

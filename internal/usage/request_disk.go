@@ -15,7 +15,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -45,12 +44,26 @@ func requestDiskPath() string {
 // requestDiskBinary names the code a file was written by: another may make
 // a row of a call differently. It was the binary itself, so every upgrade
 // read every session file again (~15.6k call shards, a cold start's
-// longest step); it is the call shards' version and this package's own
-// source, which 17 of 99 releases changed.
+// longest step). It was then this package's whole source, which a change
+// anywhere in it named anew: on a long history the start after such an
+// upgrade read every call shard again, ~14 s of CPU and 2.6 GB of
+// allocations, for an edit to the effort or log files (#2278). It is the
+// call shards' version and the source of the files a row of a call is made,
+// kept and read back through (rowSource).
 var requestDiskBinary = sync.OnceValue(func() string {
-	h := sha256.New()
-	io.WriteString(h, sessions.CallCacheVersion())
-	// unread, it is the binary's, as it was
+	return sourceKey(rowSource, sessions.CallCacheVersion())
+})
+
+// logDiskBinary names the code log-v1.bin was written by, as
+// requestDiskBinary does requests-v1.bin's: the files a log is read into
+// blocks, kept and read back through (logSource).
+var logDiskBinary = sync.OnceValue(func() string {
+	return sourceKey(logSource, "log")
+})
+
+// sourceKey is a hash of salt and src's files, or the binary's own name
+// when they can't be read, as it was.
+func sourceKey(src embed.FS, salt string) string {
 	binary := func() string {
 		exe, err := os.Executable()
 		if err != nil {
@@ -58,15 +71,14 @@ var requestDiskBinary = sync.OnceValue(func() string {
 		}
 		return statKey(exe)
 	}
-	names, err := fs.Glob(ownSource, "*.go")
+	names, err := fs.Glob(src, "*.go")
 	if err != nil || len(names) == 0 {
 		return binary()
 	}
+	h := sha256.New()
+	io.WriteString(h, salt)
 	for _, name := range names { // in lexical order
-		if strings.HasSuffix(name, "_test.go") {
-			continue
-		}
-		b, err := ownSource.ReadFile(name)
+		b, err := src.ReadFile(name)
 		if err != nil {
 			return binary()
 		}
@@ -74,12 +86,20 @@ var requestDiskBinary = sync.OnceValue(func() string {
 		h.Write(b)
 	}
 	return fmt.Sprintf("source %x", h.Sum(nil))
-})
+}
 
-// ownSource is this package's source, for requestDiskBinary.
+// rowSource is the files a session file's chunk of rows is made, written
+// and read back through: TestRequestDiskNamesTheCodeOfItsRows finds them
+// from its roots, and fails when one is missing or another isn't one.
 //
-//go:embed *.go
-var ownSource embed.FS
+//go:embed block_price.go client_agents.go codex_actors.go codex_identity.go gateway_alias.go ledger.go request_disk.go request_disk_map_other.go request_disk_map_unix.go request_page.go request_snapshot.go request_spill.go served.go session_provider.go usage.go
+var rowSource embed.FS
+
+// logSource is the files a log is read into blocks, kept and read back
+// through, found as rowSource's are.
+//
+//go:embed block_price.go client_agents.go codex_actors.go codex_identity.go ledger.go log_change_darwin.go log_change_linux.go log_change_other.go log_change_windows.go log_disk.go log_file.go log_file_other.go log_index.go probes.go refset.go request_cells.go request_disk.go request_disk_map_other.go request_disk_map_unix.go request_page.go request_snapshot.go served.go usage.go
+var logSource embed.FS
 
 // requestDiskLeast is how many session files must want reading before the
 // file is read for them: a page after a call reads one or two again.

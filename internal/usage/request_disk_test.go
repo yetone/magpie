@@ -2,11 +2,12 @@ package usage
 
 import (
 	"crypto/sha256"
+	"embed"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -116,31 +117,35 @@ func TestRequestChunksFromDisk(t *testing.T) {
 }
 
 // The file is of the code that makes a call's rows, not of the binary: an
-// upgrade that changed no source of this package reads it as the last run
-// left it. The name is of every source file here but the tests, and of
-// the call shards' version.
+// upgrade that changed none of that code reads it as the last run left
+// it. The name is of the source files rowSource holds, as they are here,
+// and of the call shards' version; log-v1.bin's is of logSource's.
 func TestRequestDiskNamesItsSource(t *testing.T) {
-	names, err := filepath.Glob("*.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	h := sha256.New()
-	io.WriteString(h, sessions.CallCacheVersion())
-	sources := 0
-	for _, name := range names {
-		if strings.HasSuffix(name, "_test.go") {
-			continue
-		}
-		b, err := os.ReadFile(name)
+	for _, c := range []struct {
+		src  embed.FS
+		salt string
+		key  string
+	}{{rowSource, sessions.CallCacheVersion(), requestDiskBinary()}, {logSource, "log", logDiskBinary()}} {
+		names, err := fs.Glob(c.src, "*.go")
 		if err != nil {
 			t.Fatal(err)
 		}
-		fmt.Fprintf(h, "\x00%s\x00%d\x00", name, len(b))
-		h.Write(b)
-		sources++
+		h := sha256.New()
+		io.WriteString(h, c.salt)
+		for _, name := range names {
+			b, err := os.ReadFile(name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			fmt.Fprintf(h, "\x00%s\x00%d\x00", name, len(b))
+			h.Write(b)
+		}
+		if want := fmt.Sprintf("source %x", h.Sum(nil)); c.key != want || len(names) < 10 {
+			t.Fatalf("named %q, want %q of %d source files", c.key, want, len(names))
+		}
 	}
-	if want := fmt.Sprintf("source %x", h.Sum(nil)); requestDiskBinary() != want || sources < 10 {
-		t.Fatalf("named %q, want %q of %d source files", requestDiskBinary(), want, sources)
+	if requestDiskBinary() == logDiskBinary() {
+		t.Fatal("the log's file and the session files' are named alike")
 	}
 }
 
