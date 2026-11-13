@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Keep magpie in sync across computers: WebDAV, S3 and GitHub sync and encrypted backups · magpie</title>
+<meta name="description" content="magpie syncs your providers and keys, settings, every agent's model and the library to a WebDAV folder, S3-compatible storage or a private GitHub repo every 3 minutes, sealed on your machine with a passphrase so the server holds only ciphertext; or export an encrypted backup and restore it elsewhere.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/sync">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/sync">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/sync">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/sync">
+<link rel="canonical" href="https://usemagpie.ai/docs/sync">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="Keep magpie in sync across computers: WebDAV, S3 and GitHub">
+<meta property="og:description" content="magpie syncs your providers and keys, settings, every agent's model and the library to a WebDAV folder, S3-compatible storage or a private GitHub repo every 3 minutes, sealed on your machine with a passphrase so the server holds only ciphertext; or export an encrypted backup and restore it elsewhere.">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/sync">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "Keep magpie in sync across computers: WebDAV, S3 and GitHub",
+   "description": "magpie syncs your providers and keys, settings, every agent's model and the library to a WebDAV folder, S3-compatible storage or a private GitHub repo every 3 minutes, sealed on your machine with a passphrase so the server holds only ciphertext; or export an encrypted backup and restore it elsewhere.",
+   "inLanguage": "en",
+   "url": "https://usemagpie.ai/docs/sync",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "Can magpie sync through Nutstore (坚果云)?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Yes. Pick WebDAV in Settings → Sync and backup with Nutstore's WebDAV address and account, or run magpie webdav on https://dav.jianguoyun.com/dav/ user=<account>. Use one passphrase on every computer."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Is syncing to a cloud safe?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "The file is sealed on your machine with your passphrase before it goes up, so the server holds only ciphertext. GitHub sync takes only a private repository."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Are Claude and ChatGPT subscriptions synced?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "No, sign in to them on each computer. Their model picks and settings are synced and show once signed in."
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "I only want to move to a new computer. What do I do?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "Export an encrypted backup with magpie backup and restore it there with magpie restore. --no-keys leaves the API keys out."
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "Docs",
+     "item": "https://usemagpie.ai/docs/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "Keep magpie in sync across computers: WebDAV, S3 and GitHub",
+     "item": "https://usemagpie.ai/docs/sync"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>Docs</small></a>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/start">Get started</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a class="toc-only" href="/docs/remote">Remote magpie</a>
+    <a class="toc-only" href="/docs/docker">Docker</a>
+    <a class="toc-only" href="/docs/privacy">Privacy</a>
+    <a class="toc-only" href="/docs/masking">Privacy masking</a>
+    <a class="toc-only" href="/docs/mcp-router">MCP router</a>
+    <a class="toc-only" href="/docs/library">Library</a>
+    <a class="toc-only" href="/docs/claude-code-models">Models in Claude Code</a>
+    <a class="toc-only" href="/docs/codex-models">Models in Codex</a>
+    <a class="toc-only" href="/docs/gemini-cli-models">Models in Gemini CLI</a>
+    <a class="toc-only" href="/docs/subscriptions">Subscriptions in any agent</a>
+    <a class="toc-only" href="/docs/local-models">Local models</a>
+    <a class="toc-only" href="/docs/opencode-models">Models in OpenCode</a>
+    <a class="toc-only" href="/docs/alternatives">magpie vs CC Switch vs CCR</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="Language" title="Language" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/sync" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/sync" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/sync" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">Download</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>Sync</p>
+    <a href="#overview">What it is</a>
+    <a href="#what">What is synced</a>
+    <a href="#setup">Turn it on</a>
+    <a href="#services">Three kinds of storage</a>
+    <a href="#keep">A computer keeping its own</a>
+    <a href="#backup">A one-off backup and restore</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">Docs · Guide</p>
+    <h1>Keep magpie in sync across computers: WebDAV, S3 and GitHub</h1>
+    <p class="lede">With a computer at work and one at home, or a new one, there is no need to set up providers, keys and every agent's model again. magpie keeps them as one encrypted file on your own WebDAV, S3 or private GitHub repo, and every computer follows it.</p>
+    <h2 id="what"><a class="anchor" href="#what">What is synced</a></h2>
+    <ul><li>Providers, with their keys, and the pictures picked for them.</li><li>Settings, profiles and every agent's model.</li><li>The library: instruction sets, MCP servers, skills and their files.</li><li>Plugins added from npm or git, installed on the other computer; a plugin's sign-in is not carried.</li><li>Gateway keys, sealed with the settings.</li></ul>
+    <p>Subscriptions (Claude, ChatGPT and other accounts) are not in it: sign in to them on each computer. Their model picks and settings come along and show once signed in, and the sync status names the ones still to sign in to.</p>
+    <h2 id="setup"><a class="anchor" href="#setup">Turn it on</a></h2>
+    <ol class="steps">
+      <li><b>Turn on sync.</b>Pick a kind of storage in <span class="ui">Settings</span> → <span class="ui">Sync and backup</span> → <span class="ui">WebDAV, S3 or GitHub sync</span>, or from the CLI:</li>
+    </ol>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="sy-on">Copy</button><pre id="sy-on">magpie webdav on https://dav.jianguoyun.com/dav/ user=me@example.com
+magpie s3 on s3://my-bucket/magpie endpoint=https://<account>.r2.cloudflarestorage.com access-key-id=…
+magpie github on github://owner/private-backups/settings branch=main
+magpie github                   # where it syncs to and how the last sync went</pre></div>
+    <ol class="steps">
+      <li><b>Use one passphrase on every computer.</b>The file is sealed on your machine with it before it goes up, so the server holds only ciphertext.</li>
+      <li><b>Let it sync.</b>Every 3 minutes while the gateway runs. Each computer writes only over the version it read, so changes from two computers are merged, not lost.</li>
+    </ol>
+    <h2 id="services"><a class="anchor" href="#services">Three kinds of storage</a></h2>
+    <ul><li><strong>WebDAV</strong>: a folder on a WebDAV server such as 坚果云 (Nutstore), Nextcloud or a Synology.</li><li><strong>S3</strong>: AWS S3, Cloudflare R2, Backblaze B2, MinIO, Garage, a NAS or any S3-compatible server. The bucket must exist; MinIO and most servers you run yourself need <code>path-style=yes</code>. A server without conditional writes works too (Aliyun OSS): when two computers write at once, the later one merges its change back in at its next sync.</li><li><strong>GitHub</strong>: an existing <strong>private</strong> repository, with a fine-grained token that has Contents read and write. A public one is refused, since its history would give anyone every sealed version. Each update is a commit, so the history is the encrypted backup's.</li></ul>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="sy-s3">Copy</button><pre id="sy-s3">magpie s3 on s3://backups endpoint=http://nas.local:9000 path-style=yes access-key-id=…</pre></div>
+    <p>Switching between the three keeps the others' settings and credentials for switching back; one syncs at a time.</p>
+    <h2 id="keep"><a class="anchor" href="#keep">A computer keeping its own</a></h2>
+    <p>A change to an agent's model on one computer reaches the others. When sync changes one on a computer and you set it back there, that computer keeps its own: the others' picks no longer change it, and its picks stay there, while everything else keeps syncing. <span class="ui">Kept on this computer</span> lists those fields, and <span class="ui">Follow the others</span> takes the synced value again.</p>
+    <h2 id="backup"><a class="anchor" href="#backup">A one-off backup and restore</a></h2>
+    <p>For a move to a new computer without sync, use an encrypted backup file:</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="sy-backup">Copy</button><pre id="sy-backup">magpie backup                               # writes magpie.magpie-backup, asks for a passphrase twice
+magpie backup --no-keys ~/b.magpie-backup   # no API keys in it
+magpie restore magpie.magpie-backup         # on the other machine
+magpie restore --no-agents b.magpie-backup  # agents left as they are</pre></div>
+    <p>It is encrypted on your machine with AES-256-GCM, the key derived from the passphrase with PBKDF2-SHA256; nothing in it can be read without the passphrase. Restoring replaces providers with the same id and adds the rest; agent models are set only for agents installed on that computer.</p>
+
+    <h2 id="faq"><a class="anchor" href="#faq">FAQ</a></h2>
+    <h3>Can magpie sync through Nutstore (坚果云)?</h3>
+    <p>Yes. Pick WebDAV in Settings → Sync and backup with Nutstore's WebDAV address and account, or run magpie webdav on https://dav.jianguoyun.com/dav/ user=<account>. Use one passphrase on every computer.</p>
+    <h3>Is syncing to a cloud safe?</h3>
+    <p>The file is sealed on your machine with your passphrase before it goes up, so the server holds only ciphertext. GitHub sync takes only a private repository.</p>
+    <h3>Are Claude and ChatGPT subscriptions synced?</h3>
+    <p>No, sign in to them on each computer. Their model picks and settings are synced and show once signed in.</p>
+    <h3>I only want to move to a new computer. What do I do?</h3>
+    <p>Export an encrypted backup with magpie backup and restore it there with magpie restore. --no-keys leaves the API keys out.</p>
+
+    <p style="margin-top:48px">Related: <a href="/docs/start">Get started</a>, <a href="/docs/docker">magpie in Docker</a>. Questions go to <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>.</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/">Home</a>
+    <a href="/docs/intent">Intent routing</a>
+    <a href="/docs/plugins">Plugins</a>
+    <a href="/docs/remote">Remote magpie</a>
+    <a href="/docs/docker">Docker</a>
+    <a href="/docs/privacy">Privacy</a>
+    <a href="/docs/masking">Privacy masking</a>
+    <a href="/docs/mcp-router">MCP router</a>
+    <a href="/docs/library">Library</a>
+    <a href="/docs/claude-code-models">Models in Claude Code</a>
+    <a href="/docs/codex-models">Models in Codex</a>
+    <a href="/docs/gemini-cli-models">Models in Gemini CLI</a>
+    <a href="/docs/subscriptions">Subscriptions in any agent</a>
+    <a href="/docs/local-models">Local models</a>
+    <a href="/docs/opencode-models">Models in OpenCode</a>
+    <a href="/docs/alternatives">magpie vs CC Switch vs CCR</a>
+    <a href="/docs/import">Add to magpie</a>
+    <a href="/docs/integrate">Integrate</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/contributors">Contributors</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "Copied"; setTimeout(() => (b.textContent = "Copy"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>

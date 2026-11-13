@@ -338,6 +338,8 @@ magpie claude group/opus-anywhere    <span class="c"># 使用它</span></pre>
       <tr><td><code>magpie log</code> · <code>magpie log -f</code></td><td>magpie 的日志在哪里，报告问题时附上；<code>-n 200</code> 打印应用日志的最后几行，<code>-f</code> 持续跟随</td></tr>
     </table></div>
 
+    <p><a href="/docs/zh/sync">多台电脑同步 magpie 配置：WebDAV、S3、GitHub</a></p>
+
     <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
     <h3>需要自己 export <code>OPENAI_BASE_URL</code> 或 <code>ANTHROPIC_BASE_URL</code> 吗？</h3>
     <p>不需要。对 magpie 列出的 Agent，它会把网关地址和令牌直接写进 Agent 自己的配置文件。这些环境变量只用于 magpie 不管理的、带 base URL 设置的其他工具：<span class="ui">网关</span> 标签页的 <span class="ui">接入</span> 部分有一键复制和示例代码。</p>

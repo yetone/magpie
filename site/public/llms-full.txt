@@ -215,6 +215,8 @@ magpie claude group/opus-anywhere    # use it
 | `magpie tray` | Start with the menu bar icon only |
 | `magpie log` · `magpie log -f` | Where magpie’s logs are, to send with a report; `-n 200` prints the app log’s last lines, `-f` follows it |
 
+[Keep magpie in sync across computers: WebDAV, S3 and GitHub](https://usemagpie.ai/docs/sync)
+
 ## FAQ
 
 ### Do I need to export `OPENAI_BASE_URL` or `ANTHROPIC_BASE_URL`?
@@ -10143,6 +10145,87 @@ Yes. Add it with magpie provider add clinepass and a Cline key; the plan's model
 magpie's Quota page shows OpenCode Go's 5-hour, 7-day and monthly windows, with what is used and when each resets.
 
 Related: [Use DeepSeek, Kimi, GLM or your Claude and ChatGPT subscription in OpenCode](https://usemagpie.ai/docs/opencode-models), [Cline on any model](https://usemagpie.ai/docs/cline), [Quota left on every subscription and key](https://usemagpie.ai/docs/quota). If something fails, see [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting) or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/sync
+
+# Keep magpie in sync across computers: WebDAV, S3 and GitHub
+
+With a computer at work and one at home, or a new one, there is no need to set up providers, keys and every agent's model again. magpie keeps them as one encrypted file on your own WebDAV, S3 or private GitHub repo, and every computer follows it.
+
+## What is synced
+
+- Providers, with their keys, and the pictures picked for them.
+- Settings, profiles and every agent's model.
+- The library: instruction sets, MCP servers, skills and their files.
+- Plugins added from npm or git, installed on the other computer; a plugin's sign-in is not carried.
+- Gateway keys, sealed with the settings.
+
+Subscriptions (Claude, ChatGPT and other accounts) are not in it: sign in to them on each computer. Their model picks and settings come along and show once signed in, and the sync status names the ones still to sign in to.
+
+## Turn it on
+
+1. **Turn on sync..** Pick a kind of storage in Settings → Sync and backup → WebDAV, S3 or GitHub sync, or from the CLI:
+
+```
+magpie webdav on https://dav.jianguoyun.com/dav/ user=me@example.com
+magpie s3 on s3://my-bucket/magpie endpoint=https://.r2.cloudflarestorage.com access-key-id=…
+magpie github on github://owner/private-backups/settings branch=main
+magpie github                   # where it syncs to and how the last sync went
+```
+
+1. **Use one passphrase on every computer..** The file is sealed on your machine with it before it goes up, so the server holds only ciphertext.
+2. **Let it sync..** Every 3 minutes while the gateway runs. Each computer writes only over the version it read, so changes from two computers are merged, not lost.
+
+## Three kinds of storage
+
+- **WebDAV**: a folder on a WebDAV server such as 坚果云 (Nutstore), Nextcloud or a Synology.
+- **S3**: AWS S3, Cloudflare R2, Backblaze B2, MinIO, Garage, a NAS or any S3-compatible server. The bucket must exist; MinIO and most servers you run yourself need `path-style=yes`. A server without conditional writes works too (Aliyun OSS): when two computers write at once, the later one merges its change back in at its next sync.
+- **GitHub**: an existing **private** repository, with a fine-grained token that has Contents read and write. A public one is refused, since its history would give anyone every sealed version. Each update is a commit, so the history is the encrypted backup's.
+
+```
+magpie s3 on s3://backups endpoint=http://nas.local:9000 path-style=yes access-key-id=…
+```
+
+Switching between the three keeps the others' settings and credentials for switching back; one syncs at a time.
+
+## A computer keeping its own
+
+A change to an agent's model on one computer reaches the others. When sync changes one on a computer and you set it back there, that computer keeps its own: the others' picks no longer change it, and its picks stay there, while everything else keeps syncing. Kept on this computer lists those fields, and Follow the others takes the synced value again.
+
+## A one-off backup and restore
+
+For a move to a new computer without sync, use an encrypted backup file:
+
+```
+magpie backup                               # writes magpie.magpie-backup, asks for a passphrase twice
+magpie backup --no-keys ~/b.magpie-backup   # no API keys in it
+magpie restore magpie.magpie-backup         # on the other machine
+magpie restore --no-agents b.magpie-backup  # agents left as they are
+```
+
+It is encrypted on your machine with AES-256-GCM, the key derived from the passphrase with PBKDF2-SHA256; nothing in it can be read without the passphrase. Restoring replaces providers with the same id and adds the rest; agent models are set only for agents installed on that computer.
+
+## FAQ
+
+### Can magpie sync through Nutstore (坚果云)?
+
+Yes. Pick WebDAV in Settings → Sync and backup with Nutstore's WebDAV address and account, or run magpie webdav on https://dav.jianguoyun.com/dav/ user=. Use one passphrase on every computer.
+
+### Is syncing to a cloud safe?
+
+The file is sealed on your machine with your passphrase before it goes up, so the server holds only ciphertext. GitHub sync takes only a private repository.
+
+### Are Claude and ChatGPT subscriptions synced?
+
+No, sign in to them on each computer. Their model picks and settings are synced and show once signed in.
+
+### I only want to move to a new computer. What do I do?
+
+Export an encrypted backup with magpie backup and restore it there with magpie restore. --no-keys leaves the API keys out.
+
+Related: [Get started](https://usemagpie.ai/docs/start), [magpie in Docker](https://usemagpie.ai/docs/docker). Questions go to [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 

@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>多台电脑同步 magpie 配置：坚果云 WebDAV、S3、GitHub 同步与加密备份 · magpie</title>
+<meta name="description" content="magpie 可以把供应商和 Key、设置、每个 Agent 的模型和资料库同步到坚果云等 WebDAV、S3 兼容存储或私有 GitHub 仓库，每 3 分钟一次，在本机用口令加密，服务器上只有密文；也能导出加密备份，到另一台电脑上恢复。">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafafa">
+<script>
+(() => {
+  let mode = "system";
+  try { mode = localStorage.getItem("theme") || "system"; } catch {}
+  const q = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    const t = mode === "system" ? (q.matches ? "dark" : "light") : mode;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]').content = t === "dark" ? "#0b0b0c" : "#fafafa";
+    document.querySelectorAll("button.theme").forEach((b) => { b.dataset.mode = mode; b.title = "Theme: " + mode; });
+  };
+  q.addEventListener("change", () => mode === "system" && apply());
+  window.setTheme = (m) => { mode = m; try { m === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", m); } catch {} apply(); };
+  window.themeMode = () => mode;
+  apply();
+})();
+</script>
+<script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icon-256.png">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/sync">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/sync">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/sync">
+<link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/docs/sync">
+<link rel="canonical" href="https://usemagpie.ai/docs/zh/sync">
+<link rel="stylesheet" href="/docs.css">
+<meta property="og:site_name" content="magpie">
+<meta property="og:title" content="多台电脑同步 magpie 配置：WebDAV、S3、GitHub">
+<meta property="og:description" content="magpie 可以把供应商和 Key、设置、每个 Agent 的模型和资料库同步到坚果云等 WebDAV、S3 兼容存储或私有 GitHub 仓库，每 3 分钟一次，在本机用口令加密，服务器上只有密文；也能导出加密备份，到另一台电脑上恢复。">
+<meta property="og:image" content="https://usemagpie.ai/img/og.png">
+<meta property="og:url" content="https://usemagpie.ai/docs/zh/sync">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "TechArticle",
+   "headline": "多台电脑同步 magpie 配置：WebDAV、S3、GitHub",
+   "description": "magpie 可以把供应商和 Key、设置、每个 Agent 的模型和资料库同步到坚果云等 WebDAV、S3 兼容存储或私有 GitHub 仓库，每 3 分钟一次，在本机用口令加密，服务器上只有密文；也能导出加密备份，到另一台电脑上恢复。",
+   "inLanguage": "zh-CN",
+   "url": "https://usemagpie.ai/docs/zh/sync",
+   "about": {
+    "@type": "SoftwareApplication",
+    "name": "magpie",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Windows, Linux"
+   },
+   "publisher": {
+    "@type": "Organization",
+    "name": "magpie",
+    "url": "https://usemagpie.ai/"
+   }
+  },
+  {
+   "@type": "FAQPage",
+   "mainEntity": [
+    {
+     "@type": "Question",
+     "name": "magpie 能用坚果云同步配置吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "能。在设置 → 同步与备份里选 WebDAV，填坚果云的 WebDAV 地址和账号，或者运行 magpie webdav on https://dav.jianguoyun.com/dav/ user=<账号>。每台电脑用同一个口令。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "同步到云上安全吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "文件在本机用你的口令加密后才上传，服务器上只有密文。GitHub 同步只接受私有仓库。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "Claude、ChatGPT 订阅会同步吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "不会，订阅要在每台电脑上各自登录。它们的模型选择和设置会同步，登录后就能看到。"
+     }
+    },
+    {
+     "@type": "Question",
+     "name": "不想同步，只想换电脑怎么办？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "用 magpie backup 导出加密备份文件，在新电脑上用 magpie restore 恢复。加 --no-keys 可以不带 API Key。"
+     }
+    }
+   ]
+  },
+  {
+   "@type": "BreadcrumbList",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "magpie",
+     "item": "https://usemagpie.ai/zh/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "文档",
+     "item": "https://usemagpie.ai/docs/zh/start"
+    },
+    {
+     "@type": "ListItem",
+     "position": 3,
+     "name": "多台电脑同步 magpie 配置：WebDAV、S3、GitHub",
+     "item": "https://usemagpie.ai/docs/zh/sync"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <a class="brand" href="/zh/"><img class="bird" src="/img/magpie-small.svg" alt="">magpie <small>文档</small></a>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/start">快速上手</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a class="toc-only" href="/docs/zh/remote">远程 magpie</a>
+    <a class="toc-only" href="/docs/zh/docker">Docker</a>
+    <a class="toc-only" href="/docs/zh/privacy">隐私</a>
+    <a class="toc-only" href="/docs/zh/masking">本地脱敏</a>
+    <a class="toc-only" href="/docs/zh/mcp-router">MCP 路由</a>
+    <a class="toc-only" href="/docs/zh/library">资源库</a>
+    <a class="toc-only" href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a class="toc-only" href="/docs/zh/local-models">本地模型</a>
+    <a class="toc-only" href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a class="toc-only" href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+  <div class="langs">
+    <button class="icon-btn lang" type="button" aria-label="语言" title="语言" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
+    <div class="lang-menu" id="langs" hidden>
+      <a href="/docs/sync" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/sync" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/sync" hreflang="ja" lang="ja">日本語</a>
+    </div>
+  </div>
+  <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
+  <a class="icon-btn" href="https://github.com/yetone/magpie" aria-label="magpie on GitHub" title="Source on GitHub"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg></a>
+  <button class="icon-btn theme" type="button" aria-label="Theme" title="Theme: system"><svg class="i-system" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.25V14"/></svg><svg class="i-light" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1"/></svg><svg class="i-dark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z"/></svg></button>
+  <a class="btn small" href="/#get">下载</a>
+</div></nav>
+
+<main class="wrap doc">
+  <aside class="toc">
+    <p>Sync</p>
+    <a href="#overview">是什么</a>
+    <a href="#what">同步哪些内容</a>
+    <a href="#setup">开启同步</a>
+    <a href="#services">三种存储</a>
+    <a href="#keep">某台电脑保留自己的设置</a>
+    <a href="#backup">一次性备份和恢复</a>
+  </aside>
+
+  <article>
+    <p class="eyebrow" id="overview">文档 · 指南</p>
+    <h1>多台电脑同步 magpie 配置：WebDAV、S3、GitHub</h1>
+    <p class="lede">在公司和家里各有一台电脑，或者换了新电脑时，不用把供应商、Key 和每个 Agent 的模型再配一遍。magpie 把它们存成一个加密文件，放在你自己的 WebDAV、S3 或私有 GitHub 仓库里，每台电脑都跟它保持一致。</p>
+    <h2 id="what"><a class="anchor" href="#what">同步哪些内容</a></h2>
+    <ul><li>供应商（连同 Key）和给它们选的图标。</li><li>设置、配置档、每个 Agent 的模型。</li><li>资料库：指令集、MCP 服务器、技能和它们的文件。</li><li>从 npm 或 git 加的插件，会在另一台电脑上装好；插件的登录不会带过去。</li><li>网关密钥，加密后和设置一起同步。</li></ul>
+    <p>订阅（Claude、ChatGPT 等账号）不在里面，要在每台电脑上各自登录；它们的模型选择和设置会同步过来，登录后就能看到。同步状态会列出还没登录的订阅。</p>
+    <h2 id="setup"><a class="anchor" href="#setup">开启同步</a></h2>
+    <ol class="steps">
+      <li><b>打开同步。</b>在 <span class="ui">设置</span> → <span class="ui">同步与备份</span> → <span class="ui">WebDAV / S3 / GitHub 同步</span> 里选一种存储，或者在命令行：</li>
+    </ol>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="sy-on">复制</button><pre id="sy-on">magpie webdav on https://dav.jianguoyun.com/dav/ user=me@example.com
+magpie s3 on s3://my-bucket/magpie endpoint=https://<account>.r2.cloudflarestorage.com access-key-id=…
+magpie github on github://owner/private-backups/settings branch=main
+magpie github                   # where it syncs to and how the last sync went</pre></div>
+    <ol class="steps">
+      <li><b>每台电脑用同一个口令。</b>文件在本机用口令加密后才上传，服务器上只有密文。</li>
+      <li><b>等它同步。</b>网关运行时每 3 分钟同步一次。每台电脑只覆盖它读到的那个版本，两台电脑之间的修改会合并，不会丢。</li>
+    </ol>
+    <h2 id="services"><a class="anchor" href="#services">三种存储</a></h2>
+    <ul><li><strong>WebDAV</strong>：坚果云、Nextcloud、群晖等 WebDAV 服务器上的一个文件夹。</li><li><strong>S3</strong>：AWS S3、Cloudflare R2、Backblaze B2、MinIO、Garage、NAS 或任何兼容 S3 的服务器。桶要先建好；自己搭的服务器和 MinIO 一般要加 <code>path-style=yes</code>。不支持条件写入的服务器也能用（比如阿里云 OSS），两台电脑同时写时，后一台会在下次同步时把自己的修改再合并上去。</li><li><strong>GitHub</strong>：一个已有的<strong>私有</strong>仓库，用只有 Contents 读写权限的细粒度 Token。公开仓库会被拒绝，因为它的历史会让任何人拿到每个加密版本。每次更新是一个提交，仓库历史就是加密备份的历史。</li></ul>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="sy-s3">复制</button><pre id="sy-s3">magpie s3 on s3://backups endpoint=http://nas.local:9000 path-style=yes access-key-id=…</pre></div>
+    <p>在三种之间切换时，另外两种的设置和凭据会保留，方便切回来；同一时间只用一种。</p>
+    <h2 id="keep"><a class="anchor" href="#keep">某台电脑保留自己的设置</a></h2>
+    <p>在一台电脑上改了 Agent 的模型，其他电脑会跟着改。如果同步改了某台电脑上的值，你又在那台电脑上改了回去，那台电脑就保留自己的：别的电脑的选择不再改它，它的选择也只留在它自己这里，其他内容照常同步。<span class="ui">仅本机保留</span> 列出这些字段，点 <span class="ui">跟随其他电脑</span> 就重新用同步的值。</p>
+    <h2 id="backup"><a class="anchor" href="#backup">一次性备份和恢复</a></h2>
+    <p>不想开同步，只是搬到新电脑，就用加密备份文件：</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="sy-backup">复制</button><pre id="sy-backup">magpie backup                               # writes magpie.magpie-backup, asks for a passphrase twice
+magpie backup --no-keys ~/b.magpie-backup   # no API keys in it
+magpie restore magpie.magpie-backup         # on the other machine
+magpie restore --no-agents b.magpie-backup  # agents left as they are</pre></div>
+    <p>备份用 AES-256-GCM 在本机加密，密钥由口令经 PBKDF2-SHA256 派生，没有口令谁也读不了。恢复时同 id 的供应商被替换，其余的加上；Agent 的模型只设给那台电脑上装了的 Agent。</p>
+
+    <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
+    <h3>magpie 能用坚果云同步配置吗？</h3>
+    <p>能。在设置 → 同步与备份里选 WebDAV，填坚果云的 WebDAV 地址和账号，或者运行 magpie webdav on https://dav.jianguoyun.com/dav/ user=<账号>。每台电脑用同一个口令。</p>
+    <h3>同步到云上安全吗？</h3>
+    <p>文件在本机用你的口令加密后才上传，服务器上只有密文。GitHub 同步只接受私有仓库。</p>
+    <h3>Claude、ChatGPT 订阅会同步吗？</h3>
+    <p>不会，订阅要在每台电脑上各自登录。它们的模型选择和设置会同步，登录后就能看到。</p>
+    <h3>不想同步，只想换电脑怎么办？</h3>
+    <p>用 magpie backup 导出加密备份文件，在新电脑上用 magpie restore 恢复。加 --no-keys 可以不带 API Key。</p>
+
+    <p style="margin-top:48px">相关页面：<a href="/docs/zh/start">快速上手</a>、<a href="/docs/zh/docker">在 Docker 里运行 magpie</a>。遇到问题请到 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 提问。</p>
+  </article>
+</main>
+
+<footer><div class="wrap">
+  <span>© 2026 magpie · MIT</span>
+  <div class="links">
+    <a href="/zh/">首页</a>
+    <a href="/docs/zh/intent">意图路由</a>
+    <a href="/docs/zh/plugins">插件开发</a>
+    <a href="/docs/zh/remote">远程 magpie</a>
+    <a href="/docs/zh/docker">Docker</a>
+    <a href="/docs/zh/privacy">隐私</a>
+    <a href="/docs/zh/masking">本地脱敏</a>
+    <a href="/docs/zh/mcp-router">MCP 路由</a>
+    <a href="/docs/zh/library">资源库</a>
+    <a href="/docs/zh/claude-code-models">Claude Code 接入其他模型</a>
+    <a href="/docs/zh/codex-models">Codex 接入其他模型</a>
+    <a href="/docs/zh/gemini-cli-models">Gemini CLI 接入其他模型</a>
+    <a href="/docs/zh/subscriptions">订阅用于任意 Agent</a>
+    <a href="/docs/zh/local-models">本地模型</a>
+    <a href="/docs/zh/opencode-models">OpenCode 接入其他模型</a>
+    <a href="/docs/zh/alternatives">与 CC Switch、CCR 对比</a>
+    <a href="/docs/zh/import">Add to magpie</a>
+    <a href="/docs/zh/integrate">接入应用</a>
+    <a href="https://github.com/yetone/magpie">GitHub</a>
+    <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>
+    <a href="/docs/zh/contributors">贡献墙</a>
+    <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
+  </div>
+</div></footer>
+
+<script>
+(() => {
+  const next = { system: "light", light: "dark", dark: "system" };
+  document.querySelectorAll("button.theme").forEach((b) => {
+    b.dataset.mode = themeMode();
+    b.title = "Theme: " + themeMode();
+    b.addEventListener("click", () => setTheme(next[themeMode()]));
+  });
+
+  document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
+      b.textContent = "已复制"; setTimeout(() => (b.textContent = "复制"), 1400);
+    } catch {}
+  }));
+})();
+</script>
+<script src="/docs.js"></script>
+</body>
+</html>
