@@ -384,3 +384,17 @@ body.window .msk-onebar::before { inset: -6px calc(var(--bar, 0px) - 16px) -6px 
 .word-import-bar { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; min-width: 0; }
 .word-import-bar .grow { flex: 1; }
 .word-import-count { min-width: 0; }
+/* Import… and Copy on the Masking rules row (ruleBulk in settings.js):
+   beside its words, the fields and the box under them across the row */
+.row.pref.rule-row.rule-bulk .who { flex: 1 1 0; }
+.rule-tools { display: flex; align-items: center; gap: 2px; flex: none; }
+/* a button taller than the name (a phone's 44px) reaches over the row's
+   padding, so the row is no taller than before */
+.rule-tools .text { margin-block: -12px; }
+.rule-import { flex: 1 1 100%; }
+.rule-import-list { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 12px; }
+.rule-import-line { display: flex; gap: 8px; min-width: 0; }
+.rule-import-line b { flex: none; font-weight: 600; color: var(--fg-2); }
+.rule-import-line code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.word-import-count.err { color: var(--red); overflow-wrap: anywhere; }
+.rule-import .word-import-bar .segs { margin-left: 0; }
