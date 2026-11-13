@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -110,6 +111,20 @@ func Install(o Options) error {
 	}
 	os.Remove(removedMark())
 	return nil
+}
+
+// Mend brings a service written by an older magpie up to what Install
+// writes now, where that can be done in place: on a Mac, a launch agent
+// that ran the gateway as Background runs it as Standard (#2961) from the
+// next login, or `magpie daemon restart`. The service calls it as it
+// starts, so no user has to install it again.
+func Mend() {
+	if goos != "darwin" {
+		return
+	}
+	if (launchd{}).mended() {
+		log.Print("daemon: the launch agent runs the gateway as Standard, not Background, from the next login or `magpie daemon restart` (#2961)")
+	}
 }
 
 // removedMark is there once the user removed the service (Uninstall): what

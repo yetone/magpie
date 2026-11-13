@@ -19,6 +19,7 @@ import (
 
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/daemon"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/provider"
@@ -1682,6 +1683,8 @@ func serve() error {
 	// before a change and no codex session is on it
 	go agent.KeepCodexDaemonCurrent(context.Background())
 	go agent.KeepCodexRolloutsPortable(context.Background())
+	// a launch agent an older magpie wrote, brought up to date (#2961)
+	daemon.Mend()
 	public := advertisedURL()
 	fmt.Println(green.Render("●"), "magpie gateway on", bold.Render(gateway.URL()))
 	fmt.Println(muted.Render("  OpenAI  "), public+"/v1/chat/completions", muted.Render("·"), public+"/v1/responses")

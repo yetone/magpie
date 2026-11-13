@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"html"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -49,7 +50,7 @@ func plist(exe string, args, env []string) string {
 	<key>KeepAlive</key>
 	<dict><key>SuccessfulExit</key><false/></dict>
 	<key>ThrottleInterval</key><integer>5</integer>
-	<key>ProcessType</key><string>Standard</string>
+	` + processType + `
 	<key>StandardOutPath</key>` + s(logFile()) + `
 	<key>StandardErrorPath</key>` + s(logFile()) + `
 `)
@@ -107,6 +108,9 @@ func (l launchd) unload() {
 }
 
 func (l launchd) start() error {
+	if l.mended() {
+		l.unload()
+	}
 	if !l.loaded() {
 		_, err := launchctl("bootstrap", domain(), l.file())
 		return err
@@ -125,12 +129,35 @@ func (l launchd) stop() error {
 	return err
 }
 
+// restart takes the agent out and loads it again: launchd reads the file
+// when it loads it, not on a kickstart, so a file mended or changed since
+// (Mend, as the service started) is what runs.
 func (l launchd) restart() error {
-	if !l.loaded() {
-		return l.start()
+	l.unload()
+	return l.start()
+}
+
+// oldProcessType is what an agent written before #2961 runs the gateway
+// as, and processType what plist writes now.
+const (
+	oldProcessType = "<key>ProcessType</key><string>Background</string>"
+	processType    = "<key>ProcessType</key><string>Standard</string>"
+)
+
+// mended rewrites an agent written before #2961, which ran the gateway as
+// Background, to run it as Standard, and says whether it did. It changes
+// that line alone: the rest is the user's install. launchd takes it up
+// when it next loads the agent: at the next login, or a start or restart.
+func (l launchd) mended() bool {
+	b, err := os.ReadFile(l.file())
+	if err != nil || !strings.Contains(string(b), oldProcessType) {
+		return false
 	}
-	_, err := launchctl("kickstart", "-k", service())
-	return err
+	if err := private(l.file(), []byte(strings.Replace(string(b), oldProcessType, processType, 1))); err != nil {
+		log.Printf("daemon: can't rewrite %s to run the gateway as Standard: %v", l.file(), err)
+		return false
+	}
+	return true
 }
 
 func (l launchd) status() (Status, error) {

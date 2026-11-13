@@ -284,7 +284,8 @@ func TestLaunchdInstall(t *testing.T) {
 		t.Errorf("install ran\n%s\nwant\n%s", got, want)
 	}
 
-	// loaded: install again takes it out first; restart kills and starts
+	// loaded: install again takes it out first; restart takes it out and
+	// loads it again (the fake still says loaded, so start kickstarts)
 	os.Remove(filepath.Join(dir, "launchctl.print.fail"))
 	write(t, filepath.Join(dir, "launchctl.print.out"), "gui/501/com.yetone.magpie.serve = {\n\tactive count = 1\n\tstate = running\n\tprogram = /opt/magpie\n\tpid = 777\n\tlast exit code = (never exited)\n\tendpoints = {\n\t\tstate = active\n\t}\n}\n")
 	os.Remove(log)
@@ -296,7 +297,7 @@ func TestLaunchdInstall(t *testing.T) {
 	}
 	got = strings.Join(calls(t, log), "\n")
 	svc := "gui/" + uid + "/com.yetone.magpie.serve"
-	want = "launchctl print " + svc + "\nlaunchctl bootout " + svc + "\nlaunchctl bootstrap gui/" + uid + " " + file + "\nlaunchctl print " + svc + "\nlaunchctl kickstart -k " + svc
+	want = "launchctl print " + svc + "\nlaunchctl bootout " + svc + "\nlaunchctl bootstrap gui/" + uid + " " + file + "\nlaunchctl print " + svc + "\nlaunchctl bootout " + svc + "\nlaunchctl print " + svc + "\nlaunchctl kickstart " + svc
 	if got != want {
 		t.Errorf("reinstall and restart ran\n%s\nwant\n%s", got, want)
 	}
@@ -593,5 +594,73 @@ func TestProgramOf(t *testing.T) {
 	}
 	if got := programOf("nothing"); got != "" {
 		t.Errorf("none: %q", got)
+	}
+}
+
+// A launch agent an older magpie wrote, running the gateway as Background,
+// is mended to Standard in place: by the service as it starts (Mend), with
+// nothing else in it changed and launchd left alone, and by a restart,
+// which loads it anew for launchd to read it (#2961).
+func TestLaunchdOldAgentMended(t *testing.T) {
+	log, dir := fakes(t, "darwin")
+	write(t, filepath.Join(dir, "launchctl.print.fail"), "Could not find service")
+	if err := Install(Options{}); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(os.Getenv("HOME"), "Library", "LaunchAgents", "com.yetone.magpie.serve.plist")
+	b, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := string(b)
+	old := strings.Replace(now, processType, oldProcessType, 1)
+	if old == now {
+		t.Fatalf("the plist has no %q:\n%s", processType, now)
+	}
+	// loaded, as the running service's is
+	os.Remove(filepath.Join(dir, "launchctl.print.fail"))
+	write(t, filepath.Join(dir, "launchctl.print.out"), "state = running\n")
+	mended := func(what string) {
+		t.Helper()
+		b, _ := os.ReadFile(file)
+		if string(b) != now {
+			t.Errorf("%s: the plist is\n%s\nwant\n%s", what, b, now)
+		}
+		if st, _ := os.Stat(file); st.Mode().Perm() != 0o600 {
+			t.Errorf("%s: the plist is %v", what, st.Mode().Perm())
+		}
+	}
+
+	write(t, file, old)
+	os.Remove(log)
+	Mend()
+	mended("Mend")
+	if got := strings.Join(calls(t, log), "\n"); got != "" {
+		t.Errorf("Mend ran %s", got)
+	}
+	Mend() // a second time finds nothing to do
+	mended("Mend again")
+
+	write(t, file, old)
+	os.Remove(log)
+	if err := Restart(); err != nil {
+		t.Fatal(err)
+	}
+	mended("Restart")
+	uid := strconv.Itoa(os.Getuid())
+	svc := "gui/" + uid + "/com.yetone.magpie.serve"
+	// the fake still says loaded after the bootout, so start kickstarts
+	// what bootstrap would load: what matters is the bootout first
+	got := strings.Join(calls(t, log), "\n")
+	if !strings.HasPrefix(got, "launchctl print "+svc+"\nlaunchctl bootout "+svc+"\n") {
+		t.Errorf("restart of an old agent ran\n%s\nwant a bootout first", got)
+	}
+
+	// on Linux there is no launch agent to mend
+	goos = "linux"
+	write(t, file, old)
+	Mend()
+	if b, _ := os.ReadFile(file); string(b) != old {
+		t.Errorf("Mend on Linux changed the plist")
 	}
 }
