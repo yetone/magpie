@@ -12412,7 +12412,7 @@ const I18N = {
     "Manage accounts…": "アカウントを管理…",
     "{agent} is now signed in as {user}. New {agent} sessions use this account; one already open keeps its account until it is started again.": "{agent} は {user} としてサインインしました。新しい {agent} セッションはこのアカウントを使います。開いているセッションは起動し直すまで元のアカウントのままです。",
     "Not connected · switching accounts only": "未接続 · アカウント切り替えのみ",
-    "Don't go to fallbacks when every account is at its cap": "すべてのアカウントが上限に達したら、フォールバックへ送らない",
+    "Don't go to fallbacks when every account is at its cap": "全アカウントが上限なら、フォールバックへ送らない",
     "Off: once every account in use is at its cap, requests go on to this provider's fallbacks (other providers or keys). On: they get 429 and nothing else is tried.": "オフ：使用中のアカウントがすべて上限に達すると、リクエストはこのプロバイダーのフォールバック（他のプロバイダーやキー）に回ります。オン：429 を返し、ほかは試しません。",
     "Check usage again near a cap": "上限に近づいたら使用量を読み直す",
     "On: an account near its cap has its usage read again before a request. One whose usage can't be read is held.": "オン：上限に近いアカウントは、リクエスト前に使用量を読み直します。読めないアカウントは使いません。",
