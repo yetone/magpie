@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
@@ -21,7 +22,7 @@ import (
 // start reads the blocks from it and parses only the lines after them, as
 // a parse continues the snapshot before it.
 
-const logDiskMagic = "magpie-log-v1\n"
+const logDiskMagic = "magpie-log-v2\n"
 
 func logDiskPath() string {
 	return filepath.Join(filepath.Dir(sessions.CachePath()), "log-v1.bin")
@@ -29,9 +30,13 @@ func logDiskPath() string {
 
 // logFull is a snapshot as it was where its full blocks end: how many,
 // the log's bytes up to the last of them, their hash and its running
-// state, and what the lines up to there said.
+// state, and what the lines up to there said. probes is how many of the
+// probe blocks were full there: a log of MCP tool calls has no gateway
+// block at all, and with none it was never kept, so every start parsed
+// its 25k lines again (~60 MB of allocations, #2278).
 type logFull struct {
 	n               int
+	probes          int
 	off             int64
 	hash            string
 	digest          []byte
@@ -52,7 +57,7 @@ var logDiskLoaded func(n int)
 var logDiskWrote struct {
 	sync.Mutex
 	path string
-	n    int
+	off  int64
 	at   time.Time
 }
 
@@ -121,7 +126,7 @@ func logDiskOf(b []byte, m *diskMapping, path string, size int64) *logDisk {
 	}
 	d := &logDisk{full: logFull{keyProviders: map[string]bool{}, hosts: map[string]string{}}}
 	d.full.hash, d.full.digest = text(), []byte(text())
-	d.full.off, d.full.n = int64(take()), int(take())
+	d.full.off, d.full.n, d.full.probes = int64(take()), int(take()), int(take())
 	for _, t := range []*time.Time{&d.full.first, &d.full.firstOwn} {
 		if s := text(); s != "" && t.UnmarshalText([]byte(s)) != nil {
 			return nil
@@ -137,17 +142,8 @@ func logDiskOf(b []byte, m *diskMapping, path string, size int64) *logDisk {
 	if header == nil || len(header) != 0 || d.full.off > size || d.full.hash == "" || logRecordHash(path, d.full.off) != d.full.hash {
 		return nil
 	}
-	raw, b, ok := cutDiskEntry(b)
-	var probes []logDiskProbe
-	if !ok || json.Unmarshal(raw, &probes) != nil {
-		return nil
-	}
-	kept := probeRows{}
-	for _, p := range probes {
-		kept.add(p.R, p.Off)
-	}
-	d.probes = kept.done()
-	for range d.full.n {
+	chunk := func() *rowChunk {
+		var raw []byte
 		raw, b, ok = cutDiskEntry(b)
 		if !ok {
 			return nil
@@ -157,6 +153,31 @@ func logDiskOf(b []byte, m *diskMapping, path string, size int64) *logDisk {
 			return nil
 		}
 		c.serial, c.mapped = nextChunkSerial(), m
+		return c
+	}
+	kept := probeRows{}
+	for range d.full.probes {
+		c := chunk()
+		if c == nil || c.Count != logBlockRows {
+			return nil
+		}
+		kept.blocks = append(kept.blocks, c)
+	}
+	// the probes after the full probe blocks, up to the full point
+	raw, b, ok := cutDiskEntry(b)
+	var probes []logDiskProbe
+	if !ok || json.Unmarshal(raw, &probes) != nil {
+		return nil
+	}
+	for _, p := range probes {
+		kept.add(p.R, p.Off)
+	}
+	d.probes = kept.done()
+	for range d.full.n {
+		c := chunk()
+		if c == nil {
+			return nil
+		}
 		d.blocks = append(d.blocks, c)
 	}
 	if len(b) != 0 {
@@ -165,27 +186,27 @@ func logDiskOf(b []byte, m *diskMapping, path string, size int64) *logDisk {
 	return d
 }
 
-// logDiskKept notes that the file holds n full blocks of the log at path.
-func logDiskKept(path string, n int) {
+// logDiskKept notes that the file holds the log at path up to off.
+func logDiskKept(path string, off int64) {
 	logDiskWrote.Lock()
-	logDiskWrote.path, logDiskWrote.n, logDiskWrote.at = path, n, time.Now()
+	logDiskWrote.path, logDiskWrote.off, logDiskWrote.at = path, off, time.Now()
 	logDiskWrote.Unlock()
 }
 
-// logDiskWrite keeps s's full blocks, when it has more than the file was
-// last written with and logDiskEvery has passed since.
+// logDiskWrite keeps s's full blocks, when they reach further than the
+// file was last written with and logDiskEvery has passed since.
 func logDiskWrite(s *logSnapshot) {
-	if s.full.n == 0 || s.full.hash == "" || s.full.digest == nil {
+	if s.full.off == 0 || s.full.hash == "" || s.full.digest == nil {
 		return
 	}
 	logDiskWrote.Lock()
 	defer logDiskWrote.Unlock()
 	w := &logDiskWrote
-	if w.path == s.path && (s.full.n <= w.n || time.Since(w.at) < logDiskEvery) {
+	if w.path == s.path && (s.full.off <= w.off || time.Since(w.at) < logDiskEvery) {
 		return
 	}
 	if logDiskSave(s) == nil {
-		w.path, w.n, w.at = s.path, s.full.n, time.Now()
+		w.path, w.off, w.at = s.path, s.full.off, time.Now()
 	}
 }
 
@@ -196,6 +217,7 @@ func logDiskSave(s *logSnapshot) error {
 	}
 	h = binary.AppendUvarint(h, uint64(s.full.off))
 	h = binary.AppendUvarint(h, uint64(s.full.n))
+	h = binary.AppendUvarint(h, uint64(s.full.probes))
 	for _, t := range []time.Time{s.full.first, s.full.firstOwn} {
 		text := ""
 		if !t.IsZero() {
@@ -215,9 +237,15 @@ func logDiskSave(s *logSnapshot) error {
 	for k, v := range s.full.hosts {
 		h = appendDiskString(appendDiskString(h, k), v)
 	}
-	// the probes of the full blocks' lines: the lines after are parsed again
+	// The full probe blocks go as entries; the probes after them, of the
+	// lines up to the full point, as records: the lines after are parsed
+	// again. All of them went as records, and a start parsed them back
+	// one at a time.
+	if s.full.probes > len(s.probes) {
+		return errDiskEntry
+	}
 	probes := []logDiskProbe{}
-	eachProbe(s.probes, time.Time{}, func(r Record, off int64) {
+	eachProbe(s.probes[s.full.probes:], time.Time{}, func(r Record, off int64) {
 		if off <= s.full.off {
 			probes = append(probes, logDiskProbe{r, off})
 		}
@@ -237,13 +265,16 @@ func logDiskSave(s *logSnapshot) error {
 	defer os.Remove(out.Name())
 	bw := bufio.NewWriterSize(out, 1<<20)
 	err = writeDiskEntry(bw, h)
-	if err == nil {
-		err = writeDiskEntry(bw, pb)
-	}
 	var buf []byte
-	for _, c := range s.blocks[:s.full.n] {
+	chunks := append(slices.Clone(s.probes[:s.full.probes]), nil)
+	chunks = append(chunks, s.blocks[:s.full.n]...)
+	for _, c := range chunks {
 		if err != nil {
 			break
+		}
+		if c == nil {
+			err = writeDiskEntry(bw, pb)
+			continue
 		}
 		b := diskEntry(buf, c)
 		if b == nil {

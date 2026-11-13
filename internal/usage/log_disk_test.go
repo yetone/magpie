@@ -76,7 +76,7 @@ func restartLog() {
 	logIndex.snapshot = nil
 	logIndex.Unlock()
 	logDiskWrote.Lock()
-	logDiskWrote.path, logDiskWrote.n, logDiskWrote.at = "", 0, time.Time{}
+	logDiskWrote.path, logDiskWrote.off, logDiskWrote.at = "", 0, time.Time{}
 	logDiskWrote.Unlock()
 }
 
@@ -210,5 +210,39 @@ func TestProbeBlocksContinued(t *testing.T) {
 	}
 	if c := probeChunk(after.probes, time.Date(2026, 8, 1, 9, 20, 0, 0, time.UTC), provider.Renames{}, nil); c == nil || c.Count != 3*logBlockRows+100-1200 {
 		t.Fatalf("probes since: %v", c)
+	}
+}
+
+// A log of MCP tool calls and probes alone has no gateway block, and was
+// never kept: every start parsed all of it again. Its full probe blocks
+// are kept, and a start reads them as a parse of the log does (#2278).
+func TestStartReadsKeptProbeBlocks(t *testing.T) {
+	pageHome(t)
+	settleLogClock(t)
+	t.Cleanup(restartLog)
+	loaded := -1
+	logDiskLoaded = func(n int) { loaded = n }
+	t.Cleanup(func() { logDiskLoaded = nil })
+	restartLog()
+	probeLines(t, 0, 3*logBlockRows+100)
+	readLogSnapshot()
+	if _, err := os.Stat(logDiskPath()); err != nil {
+		t.Fatalf("a log of probes wasn't kept: %v", err)
+	}
+	probeLines(t, 3*logBlockRows+100, logBlockRows/2)
+	restartLog()
+	kept := logRead(t, readLogSnapshot())
+	if loaded != 3 {
+		t.Fatalf("started again, %d blocks read from the file, want 3", loaded)
+	}
+	os.Remove(logDiskPath())
+	restartLog()
+	loaded = -1
+	whole := logRead(t, readLogSnapshot())
+	if loaded != -1 {
+		t.Fatal("read blocks from a file that was removed")
+	}
+	if !reflect.DeepEqual(kept, whole) {
+		t.Fatalf("the kept probes differ from the log's parse: %d vs %d", len(kept["probes"].([]string)), len(whole["probes"].([]string)))
 	}
 }

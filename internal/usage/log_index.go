@@ -172,9 +172,9 @@ func readLogSnapshot() *logSnapshot {
 			next.off, next.first, next.firstOwn = d.full.off, d.full.first, d.full.firstOwn
 			next.blocks, next.probes = d.blocks, d.probes
 			next.keyProviders, next.hosts = maps.Clone(d.full.keyProviders), maps.Clone(d.full.hosts)
-			logDiskKept(path, d.full.n)
+			logDiskKept(path, d.full.off)
 			if logDiskLoaded != nil {
-				logDiskLoaded(d.full.n)
+				logDiskLoaded(d.full.n + d.full.probes)
 			}
 		}
 	}
@@ -205,6 +205,17 @@ func readLogSnapshot() *logSnapshot {
 			routes.seen(tail, i)
 		}
 	}
+	// full marks where the full blocks end: every gateway row up to here
+	// is in a full block, and every probe in a full probe block or in the
+	// probe tail after them
+	full := func() {
+		n := 0
+		for n < len(probes.blocks) && probes.blocks[n].Count == logBlockRows {
+			n++
+		}
+		next.full = logFull{n: len(next.blocks), probes: n, off: next.off, hash: fmt.Sprintf("%x", sum.Sum(nil)), digest: marshalLogHash(sum),
+			first: next.first, firstOwn: next.firstOwn, keyProviders: maps.Clone(next.keyProviders), hosts: maps.Clone(next.hosts)}
+	}
 	rd := bufio.NewReaderSize(io.LimitReader(f, info.Size()-next.off), 64<<10)
 	for next.off < info.Size() {
 		b, e := rd.ReadBytes('\n')
@@ -221,6 +232,9 @@ func readLogSnapshot() *logSnapshot {
 		if r.IsProbe() {
 			if !quietProbe(r) { // a model list answered is no row (ferock)
 				probes.add(r, next.off)
+				if probes.tail == nil && tail == nil {
+					full() // a probe block filled, with no gateway row after the full blocks
+				}
 			}
 			continue
 		}
@@ -243,8 +257,7 @@ func readLogSnapshot() *logSnapshot {
 			next.blocks = append(next.blocks, tail.freeze())
 			tail = nil
 			clear(routes)
-			next.full = logFull{n: len(next.blocks), off: next.off, hash: fmt.Sprintf("%x", sum.Sum(nil)), digest: marshalLogHash(sum),
-				first: next.first, firstOwn: next.firstOwn, keyProviders: maps.Clone(next.keyProviders), hosts: maps.Clone(next.hosts)}
+			full()
 		}
 	}
 	if tail != nil {
