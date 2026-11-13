@@ -1,6 +1,7 @@
 package uninstall
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,26 +22,33 @@ func dataHome() string {
 // unregisterScheme takes out the desktop entry the app made for magpie://
 // links while it runs exe, or an exe that is gone, and its icon with it.
 func unregisterScheme(exe string) error {
-	entry := filepath.Join(dataHome(), "applications", "magpie.desktop")
+	_, err := removeEntry("magpie-ccswitch.desktop", exe)
+	gone, err2 := removeEntry("magpie.desktop", exe)
+	if gone {
+		_ = os.Remove(filepath.Join(dataHome(), "icons", "hicolor", "256x256", "apps", "magpie.png"))
+	}
+	return errors.Join(err, err2)
+}
+
+// removeEntry takes out one of the app's desktop entries while it runs exe,
+// or an exe that is gone.
+func removeEntry(name, exe string) (bool, error) {
+	entry := filepath.Join(dataHome(), "applications", name)
 	b, err := os.ReadFile(entry)
 	if err != nil {
-		return nil
+		return false, nil
 	}
 	for _, l := range strings.Split(string(b), "\n") {
 		if run, ok := strings.CutPrefix(l, "Exec="); ok {
 			run = strings.TrimSuffix(run, " %u")
 			if run != exe {
 				if _, err := os.Stat(run); err == nil {
-					return nil // another magpie's
+					return false, nil // another magpie's
 				}
 			}
 		}
 	}
-	if err := os.Remove(entry); err != nil {
-		return err
-	}
-	_ = os.Remove(filepath.Join(dataHome(), "icons", "hicolor", "256x256", "apps", "magpie.png"))
-	return nil
+	return true, os.Remove(entry)
 }
 
 // webData is WebKitGTK's folder for the app's pages (named after the

@@ -31,6 +31,11 @@ func TestImportIsReadOnce(t *testing.T) {
 	if rec, _ := get(id); rec.Code != 404 {
 		t.Fatalf("second read: %d", rec.Code)
 	}
+	// a relay's CC Switch link opens the same confirmation
+	id = stashImport("ccswitch://v1/import?resource=provider&app=claude&name=My%20Relay&endpoint=https%3A%2F%2Frelay.example&apiKey=sk-r")
+	if rec, in := get(id); rec.Code != 200 || in.Error != "" || in.Provider.ID != "my-relay" || in.Provider.Anthropic != "https://relay.example" || in.Provider.Key != "sk-r" {
+		t.Fatalf("%d %+v", rec.Code, in)
+	}
 	if _, in := get(stashImport("magpie://import?name=x")); in.Error == "" {
 		t.Fatal("a bad link reported no error")
 	}
@@ -67,5 +72,8 @@ func TestImportLink(t *testing.T) {
 	}
 	if ImportLink([]string{"MAGPIE://import?preset=x"}) == "" {
 		t.Fatal("missed an upper-case link")
+	}
+	if ImportLink([]string{"ccswitch://v1/import?resource=provider&app=claude&name=x"}) == "" {
+		t.Fatal("missed a CC Switch link")
 	}
 }

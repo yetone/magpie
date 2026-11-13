@@ -11,6 +11,28 @@ import (
 	"github.com/yetone/magpie/internal/testenv"
 )
 
+// fakeDesktopTools puts update-desktop-database and an xdg-mime that
+// remembers the defaults it is given and answers `query default` with them,
+// each call logged to calls (names only, or with arguments).
+func fakeDesktopTools(t *testing.T, bin, calls string, args bool) {
+	t.Helper()
+	t.Setenv("MAGPIE_SCHEME_TEST_CALLS", calls)
+	t.Setenv("PATH", bin)
+	for _, name := range []string{"update-desktop-database", "xdg-mime"} {
+		log := `printf '%s\n' '` + name + `'`
+		if args {
+			log = `printf '%s\n' '` + name + `' "$@"`
+		}
+		script := "#!/bin/sh\n" + log + ` >> "$MAGPIE_SCHEME_TEST_CALLS"` + "\n"
+		if name == "xdg-mime" {
+			script += `f="$MAGPIE_SCHEME_TEST_CALLS.${3##*/}"` + "\n" + // PATH holds only these two, so shell builtins
+				`[ "$1" = query ] && { [ -f "$f" ] && read -r v < "$f" && echo "$v"; exit 0; }` + "\n" +
+				`[ "$1" = default ] && echo "$2" > "$f"` + "\n"
+		}
+		testenv.Program(t, filepath.Join(bin, name), script)
+	}
+}
+
 func TestRegisterScheme(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -35,12 +57,7 @@ func TestRegisterScheme(t *testing.T) {
 				t.Fatal(err)
 			}
 			calls := filepath.Join(root, "calls")
-			t.Setenv("MAGPIE_SCHEME_TEST_CALLS", calls)
-			t.Setenv("PATH", bin)
-			for _, name := range []string{"update-desktop-database", "xdg-mime"} {
-				script := "#!/bin/sh\nprintf '%s\\n' '" + name + "' \"$@\" >> \"$MAGPIE_SCHEME_TEST_CALLS\"\n"
-				testenv.Program(t, filepath.Join(bin, name), script)
-			}
+			fakeDesktopTools(t, bin, calls, true)
 			dir := filepath.Join(data, "applications")
 			path := filepath.Join(dir, "magpie.desktop")
 			const old = "[Desktop Entry]\nExec=/usr/bin/magpie %u\nMimeType=x-scheme-handler/magpie;\n"
@@ -84,7 +101,13 @@ func TestRegisterScheme(t *testing.T) {
 			if err := registerScheme(); err != nil {
 				t.Fatal(err)
 			}
-			want := "update-desktop-database\n" + dir + "\nxdg-mime\ndefault\nmagpie.desktop\nx-scheme-handler/magpie\n"
+			// ccswitch:// links are claimed too, asked first, and on the second
+			// run only asked
+			udd := "update-desktop-database\n" + dir + "\n"
+			want := udd + "xdg-mime\ndefault\nmagpie.desktop\nx-scheme-handler/magpie\n" +
+				"xdg-mime\nquery\ndefault\nx-scheme-handler/ccswitch\n" +
+				udd + "xdg-mime\ndefault\nmagpie-ccswitch.desktop\nx-scheme-handler/ccswitch\n" +
+				"xdg-mime\nquery\ndefault\nx-scheme-handler/ccswitch\n"
 			if got, err := os.ReadFile(calls); err != nil || string(got) != want {
 				t.Fatalf("registration calls: %q, want %q (%v)", got, want, err)
 			}
@@ -120,11 +143,7 @@ func TestRegisterSchemeBindsAnOlderEntry(t *testing.T) {
 		t.Fatal(err)
 	}
 	calls := filepath.Join(root, "calls")
-	t.Setenv("MAGPIE_SCHEME_TEST_CALLS", calls)
-	t.Setenv("PATH", bin)
-	for _, name := range []string{"update-desktop-database", "xdg-mime"} {
-		testenv.Program(t, filepath.Join(bin, name), "#!/bin/sh\nprintf '%s\\n' '"+name+"' >> \"$MAGPIE_SCHEME_TEST_CALLS\"\n")
-	}
+	fakeDesktopTools(t, bin, calls, false)
 	exe, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
@@ -149,7 +168,7 @@ func TestRegisterSchemeBindsAnOlderEntry(t *testing.T) {
 		t.Fatal(err)
 	}
 	checkDesktopBinding(t, data, string(got))
-	if c, err := os.ReadFile(calls); err != nil || string(c) != "update-desktop-database\nxdg-mime\n" {
+	if c, err := os.ReadFile(calls); err != nil || string(c) != "update-desktop-database\nxdg-mime\nxdg-mime\nupdate-desktop-database\nxdg-mime\nxdg-mime\n" {
 		t.Fatalf("registered %q, want once (%v)", c, err)
 	}
 }
@@ -200,5 +219,36 @@ func TestKeepWebData(t *testing.T) {
 				t.Fatalf("%s left behind: %v", from, err)
 			}
 		})
+	}
+}
+
+// CC Switch installed here keeps ccswitch:// links: magpie leaves the
+// desktop's default for the scheme alone, and writes no entry for it.
+func TestRegisterSchemeLeavesCCSwitchItsLinks(t *testing.T) {
+	t.Setenv("FLATPAK_ID", "")
+	root := t.TempDir()
+	data := filepath.Join(root, "data")
+	t.Setenv("XDG_DATA_HOME", data)
+	bin := filepath.Join(root, "bin")
+	if err := os.Mkdir(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	calls := filepath.Join(root, "calls")
+	fakeDesktopTools(t, bin, calls, true)
+	if err := os.WriteFile(calls+".ccswitch", []byte("cc-switch.desktop\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := registerScheme(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(data, "applications", ccSwitchEntry)); !os.IsNotExist(err) {
+		t.Fatalf("an entry for ccswitch:// was written: %v", err)
+	}
+	if c, _ := os.ReadFile(calls); strings.Contains(string(c), "default\nmagpie-ccswitch.desktop") {
+		t.Fatalf("took the default from CC Switch: %q", c)
+	}
+	// magpie's own scheme is still registered
+	if _, err := os.Stat(filepath.Join(data, "applications", "magpie.desktop")); err != nil {
+		t.Fatal(err)
 	}
 }

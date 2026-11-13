@@ -11,7 +11,8 @@ import (
 	"github.com/yetone/magpie/internal/provider"
 )
 
-// An import link (magpie://import?…, see provider.ParseImport) is parsed
+// An import link (magpie://import?… or ccswitch://v1/import?…, see
+// provider.ParseImport) is parsed
 // here, parked under a random id, and the window opens on the Providers tab
 // with that id; the page fetches it once and asks the user before saving
 // anything.
@@ -44,10 +45,11 @@ func stashImport(link string) string {
 	return id
 }
 
-// ImportLink is the link among a launch's arguments, if any.
+// ImportLink is the link among a launch's arguments, if any: a magpie:// one,
+// or a ccswitch:// one, which relays put on their pages for CC Switch.
 func ImportLink(args []string) string {
 	for _, a := range args {
-		if strings.HasPrefix(strings.ToLower(a), provider.Scheme+":") {
+		if l := strings.ToLower(a); strings.HasPrefix(l, provider.Scheme+":") || strings.HasPrefix(l, provider.CCSwitchScheme+":") {
 			return a
 		}
 	}

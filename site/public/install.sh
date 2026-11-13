@@ -286,6 +286,16 @@ if [ -n "$uninstall" ]; then
       if [ -f "$apps/magpie.desktop" ] && { [ "$run" = "$exe" ] || [ ! -e "$run" ]; }; then
         gone "$apps/magpie.desktop"
       fi
+      # the entry for ccswitch:// links, on the same terms, and its default
+      cc=$(runs "$apps/magpie-ccswitch.desktop" Exec)
+      if [ -f "$apps/magpie-ccswitch.desktop" ] && { [ "$cc" = "$exe" ] || [ ! -e "$cc" ]; }; then
+        gone "$apps/magpie-ccswitch.desktop"
+        list="$config/mimeapps.list"
+        if [ -f "$list" ] && grep -qx 'x-scheme-handler/ccswitch=magpie-ccswitch\.desktop;\{0,1\}' "$list"; then
+          grep -vx 'x-scheme-handler/ccswitch=magpie-ccswitch\.desktop;\{0,1\}' "$list" > "$list.magpie-new" || true
+          mv "$list.magpie-new" "$list"
+        fi
+      fi
       # with no menu entry (this one, or the one magpie uninstall took),
       # what came with it: the icon, the magpie:// default xdg-mime set
       # (that line only) and the menu's cache when it lists nothing else

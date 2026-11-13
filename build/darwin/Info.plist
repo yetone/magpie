@@ -20,6 +20,10 @@
 			<key>CFBundleURLName</key><string>com.yetone.magpie.import</string>
 			<key>CFBundleURLSchemes</key><array><string>magpie</string></array>
 		</dict>
+		<dict>
+			<key>CFBundleURLName</key><string>com.yetone.magpie.ccswitch</string>
+			<key>CFBundleURLSchemes</key><array><string>ccswitch</string></array>
+		</dict>
 	</array>
 	<key>NSHumanReadableCopyright</key><string>yetone</string>
 </dict>

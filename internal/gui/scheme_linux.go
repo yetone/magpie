@@ -61,7 +61,7 @@ Terminal=false
 `
 	if old, err := os.ReadFile(path); err == nil && strings.Contains(string(old), "Exec="+exe+" %u") && strings.Contains(string(old), "x-scheme-handler/magpie") &&
 		strings.Contains(string(old), "\nStartupWMClass="+programName+"\n") {
-		return iconErr
+		return errors.Join(iconErr, registerCCSwitch(dir, exe))
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
@@ -70,7 +70,44 @@ Terminal=false
 		return err
 	}
 	_ = proc.Command("update-desktop-database", dir).Run()
-	return errors.Join(iconErr, proc.Command("xdg-mime", "default", "magpie.desktop", "x-scheme-handler/magpie").Run())
+	return errors.Join(iconErr, proc.Command("xdg-mime", "default", "magpie.desktop", "x-scheme-handler/magpie").Run(), registerCCSwitch(dir, exe))
+}
+
+// ccSwitchEntry is the desktop entry that claims ccswitch:// links, apart
+// from magpie's own so that it can be left out.
+const ccSwitchEntry = "magpie-ccswitch.desktop"
+
+// registerCCSwitch lets magpie open ccswitch:// links, the one-click import
+// links relays make for CC Switch, but only when no other app has them: CC
+// Switch installed here keeps its links. The desktop's default for the
+// scheme is asked first; it is set to this entry only when empty or already
+// this entry. No icon or window class of its own: it is never shown.
+func registerCCSwitch(dir, exe string) error {
+	const mime = "x-scheme-handler/ccswitch"
+	out, _ := proc.Command("xdg-mime", "query", "default", mime).Output()
+	if def := strings.TrimSpace(string(out)); def != "" && def != ccSwitchEntry {
+		return nil
+	}
+	path := filepath.Join(dir, ccSwitchEntry)
+	entry := `[Desktop Entry]
+Type=Application
+Name=magpie (ccswitch:// links)
+Exec=` + exe + ` %u
+NoDisplay=true
+MimeType=` + mime + `;
+Terminal=false
+`
+	if old, err := os.ReadFile(path); err == nil && string(old) == entry && strings.TrimSpace(string(out)) == ccSwitchEntry {
+		return nil
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, []byte(entry), 0o644); err != nil {
+		return err
+	}
+	_ = proc.Command("update-desktop-database", dir).Run()
+	return proc.Command("xdg-mime", "default", ccSwitchEntry, mime).Run()
 }
 
 // installIcon puts magpie's icon where the entry's Icon=magpie is looked

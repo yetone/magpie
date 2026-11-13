@@ -318,6 +318,7 @@ href = <span class="s">"https://usemagpie.ai/import#"</span> + urlencode({
       <tr><td>Linux</td><td>デスクトップエントリ（<code>x-scheme-handler/magpie</code>）で登録します。インストーラが書き込み、初回起動時にも再度書き込みます。</td></tr>
       <tr><td>ターミナル</td><td><code>magpie import &lt;リンク&gt;</code> が同じ概要を表示し、追加前に確認します。</td></tr>
     </table></div>
+    <p><b>CC Switch のリンク。</b>magpie は、リレーが CC Switch 向けに作る <code>ccswitch://v1/import?resource=provider&amp;…</code> リンクも開きます（<code>app</code>、<code>name</code>、<code>endpoint</code>、<code>apiKey</code>、<code>apiFormat</code>、<code>model</code>、または base64 の <code>config</code>）。確認は同じです。取り込むのはプロバイダーだけで、プロンプト、MCP、スキルは対象外です。ほかのアプリがスキームを持っていない場合にだけ登録するため、CC Switch があればそちらが開きます（両方が宣言できる macOS ではシステムが選びます）。</p>
     <p>インポートリンクには magpie 0.1.8 以降が必要です。magpie がすでに起動している場合、リンクはそのインスタンスに渡され、ウィンドウが前面に表示されます。</p>
   </article>
 </main>
