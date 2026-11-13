@@ -6120,6 +6120,9 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 	// on after
 	ua := agentUA(ctx, in)
 	req.Header.Set("User-Agent", userAgentFor(p, ua))
+	if v := mistralAffinity(p, in, conv.Session); v != "" {
+		req.Header.Set(mistralAffinityHeader, v)
+	}
 	if to == provider.Anthropic {
 		req.Header.Set("anthropic-version", "2023-06-01")
 		for _, h := range []string{"anthropic-version", "anthropic-beta"} {
@@ -8609,6 +8612,33 @@ func ownCacheKey(p provider.Provider) bool {
 
 func isMistral(p provider.Provider) bool {
 	return p.Preset == "mistral" || p.Host() == "api.mistral.ai"
+}
+
+// mistralAffinityHeader is the header Mistral routes a conversation's
+// requests by, to the server that holds its KV cache. Mistral's own Vibe
+// sends it every turn (its CHANGELOG: "KV cache warming via x-affinity";
+// vibe/_runtime_config.py request_headers), and pi-ai's
+// buildMistralHeaders sets it from the session id unless the model's or
+// the call's headers name one (daoche_wuzui on X).
+const mistralAffinityHeader = "x-affinity"
+
+// mistralAffinity is the x-affinity a request to Mistral's API goes with:
+// the client's own, as it sent it, else a hash of its session or
+// conversation, never the id itself, the same for every turn of it. Empty
+// for any other vendor, and for a request with no conversation to name.
+// The user's own headers for the provider are put on after it.
+func mistralAffinity(p provider.Provider, in http.Header, session string) string {
+	if !isMistral(p) || p.Account != nil || p.IsPlugin() {
+		return ""
+	}
+	if v := strings.TrimSpace(in.Get(mistralAffinityHeader)); v != "" {
+		return v[:min(len(v), 128)]
+	}
+	if session == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte("mistral-affinity\x00" + session))
+	return hex.EncodeToString(sum[:16])
 }
 
 // withMistralCacheKey gives a Chat body bound for Mistral the
