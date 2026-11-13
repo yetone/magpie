@@ -1298,6 +1298,16 @@ each one.
     days, and it went red on macos CI at dbb2e5dd2 in a shape the issue
     hadn't named (Millis == FirstText at :264). It was ported unchanged
     as ff865b47a, the CI shape reproduced on mica with a 240ms hold.
+  - A size budget raised to fit: 2f34649a6 (Sign in on another
+    computer) was pushed 328 bytes over coreScriptBudget, so it and
+    4b3402035 are red at their own trees. dd9b2bcef then raised the
+    budget by exactly what was over, saying no page was left to move it
+    to, the reason 11-12's four raises gave. That is three raises today
+    (5a44051eb's +168 moved a hook out first; this one moved nothing).
+    The guard is sub-second over `git show` and is run before the push.
+  - A record that points elsewhere: 2f34649a6's body is "Run: see push
+    notes", and 8f82e08b4's "(see below)" has nothing below it; neither
+    says whether what it ran passed. A pointer is not a record (10-14).
 - **Done right on 10-17.** The retire stack (0f1666b38 to de671719a)
   diffed staticcheck's U1000 against its base for dead code, b98f906b1
   was red on the old code for an own-account gap, and 8 subscriptions
