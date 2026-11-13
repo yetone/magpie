@@ -9598,7 +9598,7 @@ function drawEditor(p, presetID) {
     const cx = input(draft.contexts || "", t("e.g. 128k · or gpt-6=1m, comma separated"));
     advIn.append(...field(t("Context window"), contextPicks(p, cx), t("How long a request the models take, told to the agents; empty leaves it to the vendor and models.dev")));
     advIn.append(...outputField());
-    advIn.append(...compactField());
+    advIn.append(...compactField(p));
     if (p.carriesCompaction) advIn.append(...nativeCompactionField(() => true)[0]);
     advIn.append(...field(t("Fallback"), renderFallback(p), fallbackHint(p)));
     const proxies = el("div", "stack");
@@ -10107,7 +10107,7 @@ function drawEditor(p, presetID) {
     if (!decideOnly(p || pr)) advIn.append(...field(t("Context window"), contextPicks(p, cx), t("How long a request the models take, told to the agents; empty leaves it to the vendor and models.dev")));
     if (!decideOnly(p || pr)) advIn.append(...outputField());
     if (!decideOnly(p || pr)) {
-      advIn.append(...compactField());
+      advIn.append(...compactField(p));
       const [row, refresh] = nativeCompactionField(carriesCompaction);
       advIn.append(...row);
       showCompaction = refresh;
@@ -10423,7 +10423,7 @@ function contextsText(cx) {
 function contextPicks(p, cx) {
   cx.classList.add("contexts");
   const size = (n) => contextsText({ "*": n });
-  const picks = [128e3, 200e3, 256e3, 400e3, 512e3, 1e6].map((n) => ({ label: size(n).toUpperCase(), value: size(n) }));
+  const picks = [128e3, 200e3, 256e3, 400e3, 512e3, 1e6];
   // above the window its vendor says, not the one set here: a model set to
   // its most still offers it
   const big = (p?.models || []).filter((m) => m.max > ("listed" in m ? m.listed || 0 : m.context || 0));
@@ -10438,57 +10438,49 @@ function contextPicks(p, cx) {
       title: big.map((m) => `${m.id}: ${size(m.max).toUpperCase()}`).join("\n"), value, most: true,
     });
   }
-  const row = el("div", "cxpicks");
-  const same = sameContexts;
-  const light = () => {
-    for (const [i, b] of [...row.children].entries()) {
-      const v = picks[i].value;
-      b.classList.toggle("on", !!cx.value.trim() && same(cx.value, typeof v === "function" ? v() : v));
-    }
-  };
-  for (const pk of picks) {
-    const b = el("button", "cxpick" + (pk.most ? " most" : ""), pk.label);
-    b.type = "button";
-    if (pk.title) b.title = pk.title;
-    b.onclick = () => {
-      cx.value = typeof pk.value === "function" ? pk.value() : pk.value;
-      draft.contexts = cx.value;
-      light();
-      limitsSaid();
-    };
-    row.append(b);
-  }
-  cx.oninput = () => { draft.contexts = cx.value; light(); limitsSaid(); };
-  light();
-  const wrap = el("div", "cxfield");
-  wrap.append(cx, row);
-  return wrap;
+  return sizePicks(cx, "contexts", picks, null, limitsSaid);
 }
 
 // limitsSaid: Model settings' rows follow Advanced
 const limitsSaid = () => { for (const f of Object.values(draft?.onLimits || {})) f(); };
 
+// sizePicks: a field's usual sizes as chips under it (or picks of its own,
+// whose value is a function); a chip sets its size for all the models.
+// Compact at's (given p), with models to name, opens All models and each
+// model instead, so several get one size at once (Yanzhongixuy on X).
+function sizePicks(box, key, ns, p, after = () => {}) {
+  const row = el("div", "cxpicks"), now = () => parseContexts(box.value).map;
+  const picks = ns.map((n) => n.value ? n : { n, label: contextsText({ "*": n }).toUpperCase(), value: () => contextsText({ "*": n }) });
+  const light = () => picks.forEach((pk, i) => row.children[i].classList.toggle("on", !!box.value.trim() && (p && Object.values(now() || {}).includes(pk.n) || sameContexts(box.value, pk.value()))));
+  const put = (v) => { box.value = draft[key] = v; light(); after(); };
+  for (const pk of picks) {
+    const b = el("button", "cxpick" + (pk.most ? " most" : ""), pk.label), n = pk.n;
+    b.type = "button";
+    if (pk.title) b.title = pk.title;
+    b.onclick = () => {
+      const map = now(), ids = [...new Set([...(p?.models?.length ? servedIds(p) : []), ...Object.keys(map || {})])].filter((id) => id !== "*");
+      if (!p || !ids.length || !map) return put(pk.value());
+      const set = (on) => {
+        const m = now() || {};
+        for (const id of ["*", ...ids]) if (on.includes(id)) m[id] = n; else if (m[id] === n) delete m[id];
+        put(contextsText(m));
+      };
+      openProtoMenu(b, [{ v: "*", name: "All models" }, ...ids.map((id) => ({ v: id, name: id, literalName: true }))], ["*", ...ids].filter((id) => map[id] === n), set, t("Compact at {n}", { n: pk.label }), "", "left", true, ids.length > 8 ? "Search models" : "");
+    };
+    row.append(b);
+  }
+  box.oninput = () => { draft[key] = box.value; light(); after(); };
+  light();
+  const wrap = el("div", "cxfield");
+  wrap.append(box, row);
+  return wrap;
+}
+
 // outputField: the editor's Max output, set as the window is (ARNO, #875)
 function outputField() {
   const ox = input(draft.outputs || "", t("e.g. 32k · or gpt-6=128k, comma separated"));
   ox.classList.add("outputs");
-  const sizes = [8e3, 16e3, 32e3, 64e3, 128e3].map((n) => contextsText({ "*": n }));
-  const row = el("div", "cxpicks");
-  const same = sameContexts;
-  const light = () => {
-    for (const [i, b] of [...row.children].entries()) b.classList.toggle("on", !!ox.value.trim() && same(ox.value, sizes[i]));
-  };
-  for (const v of sizes) {
-    const b = el("button", "cxpick", v.toUpperCase());
-    b.type = "button";
-    b.onclick = () => { ox.value = v; draft.outputs = v; light(); limitsSaid(); };
-    row.append(b);
-  }
-  ox.oninput = () => { draft.outputs = ox.value; light(); limitsSaid(); };
-  light();
-  const wrap = el("div", "cxfield");
-  wrap.append(ox, row);
-  return field(t("Max output"), wrap, t("The most a reply may hold, told to the agents as their max tokens and sent as max_tokens on Anthropic's API when the agent names none; empty leaves it to the vendor and models.dev"));
+  return field(t("Max output"), sizePicks(ox, "outputs", [8e3, 16e3, 32e3, 64e3, 128e3], null, limitsSaid), t("The most a reply may hold, told to the agents as their max tokens and sent as max_tokens on Anthropic's API when the agent names none; empty leaves it to the vendor and models.dev"));
 }
 
 // nativeCompactionField: Codex's own compaction on the provider (#1099),
@@ -10506,25 +10498,10 @@ function nativeCompactionField(show) {
 // compactField is the editor's Compact at (#876): where Codex and Claude
 // Code compact a conversation on its models when their window is longer,
 // one for all of them and model=size for one, as the window is set.
-function compactField() {
+function compactField(p) {
   const cp = input(draft.compacts || "", t("e.g. 500k · or deepseek-v4-flash=272k, comma separated"));
   cp.classList.add("compacts");
-  const sizes = [128e3, 200e3, 272e3, 500e3, 1e6].map((n) => contextsText({ "*": n }));
-  const row = el("div", "cxpicks");
-  const same = sameContexts;
-  const light = () => {
-    for (const [i, b] of [...row.children].entries()) b.classList.toggle("on", !!cp.value.trim() && same(cp.value, sizes[i]));
-  };
-  for (const v of sizes) {
-    const b = el("button", "cxpick", v.toUpperCase());
-    b.type = "button";
-    b.onclick = () => { cp.value = v; draft.compacts = v; light(); };
-    row.append(b);
-  }
-  cp.oninput = () => { draft.compacts = cp.value; light(); };
-  light();
-  const wrap = el("div", "cxfield");
-  wrap.append(cp, row);
+  const wrap = sizePicks(cp, "compacts", [128e3, 200e3, 272e3, 500e3, 1e6], p);
   return field(t("Compact at"), wrap, t("Where Codex, Claude Code and Grok Build compact a long conversation on these models; empty follows Long conversations, in their settings on the Agents page (else in Settings), and a size at or above a model's window runs it to its whole window"));
 }
 

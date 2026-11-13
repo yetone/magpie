@@ -9,8 +9,10 @@
 // owner merged the two, 11-12), takes a size of its own beside Compact at /
 // Full window; a typed size posts settings/agent-compact for that agent with
 // it, and no click or typing scrolls the page. The editor's Compact at
-// says that is where its empty value follows (#3425).
-// English and Chinese, Chromium and WebKit; no backend, the API is faked here.
+// says that is where its empty value follows (#3425). A size's chip, with
+// models to name, opens a menu of All models and each model, so several get
+// one size at once (Yanzhongixuy on X), at a phone's width too.
+// English and Chinese (the chip's menu in every language), Chromium and WebKit; no backend, the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -66,17 +68,20 @@ function serve(lang, posts) {
 }
 
 const words = {
-  en: { field: "Compact at", save: "Save", bad: "Compact at: lots is not a number of tokens like 272k", at: (n) => `Compact at ${n}`, full: "Full window", follows: "empty follows Long conversations, in their settings on the Agents page (else in Settings)", notSettings: "Settings → Long conversations" },
-  zh: { field: "压缩阈值", save: "保存", bad: "压缩阈值：lots 不是 272k 这样的 token 数", at: (n) => `${n} 时压缩`, full: "完整窗口", follows: "留空按 Agent 页里它们设置中的「长对话」（否则在「设置」里）", notSettings: "设置 → 长对话" },
+  en: { all: "All models", head: (n) => `Compact at ${n}`, field: "Compact at", save: "Save", bad: "Compact at: lots is not a number of tokens like 272k", at: (n) => `Compact at ${n}`, full: "Full window", follows: "empty follows Long conversations, in their settings on the Agents page (else in Settings)", notSettings: "Settings → Long conversations" },
+  "zh-TW": { all: "全部模型", head: (n) => `${n} 時壓縮`, save: "儲存" },
+  ja: { all: "すべてのモデル", head: (n) => `${n} で圧縮`, save: "保存" },
+  de: { all: "Alle Modelle", head: (n) => `Bei ${n} komprimieren`, save: "Speichern" },
+  zh: { all: "全部模型", head: (n) => `${n} 时压缩`, field: "压缩阈值", save: "保存", bad: "压缩阈值：lots 不是 272k 这样的 token 数", at: (n) => `${n} 时压缩`, full: "完整窗口", follows: "留空按 Agent 页里它们设置中的「长对话」（否则在「设置」里）", notSettings: "设置 → 长对话" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
-  for (const lang of ["en", "zh"]) {
+  for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) {
     const w = words[lang];
-    const open = async (t, view, height = 720) => {
+    const open = async (t, view, height = 720, width = 900) => {
       const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || "chromium" }));
       t.after(() => browser.close());
-      const page = await (await browser.newContext({ viewport: { width: 900, height }, reducedMotion: "reduce" })).newPage();
+      const page = await (await browser.newContext({ viewport: { width, height }, reducedMotion: "reduce" })).newPage();
       page.setDefaultTimeout(5000);
       page.setDefaultNavigationTimeout(60000);
       const errors = [], posts = [];
@@ -87,7 +92,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       return { page, errors, posts };
     };
 
-    test(`${engine} ${lang}: a provider's compaction threshold is set in its editor`, async (t) => {
+    if (w.field) test(`${engine} ${lang}: a provider's compaction threshold is set in its editor`, async (t) => {
       const { page, errors, posts } = await open(t, "providers");
       await page.locator('.row.provider[data-id="deepseek"]').click();
       assert(await page.getByText(w.field, { exact: true }).isVisible(), "the field is there");
@@ -118,7 +123,52 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.deepEqual(errors, []);
     });
 
-    test(`${engine} ${lang}: Long conversations compacts at a size the user types`, async (t) => {
+    for (const width of [900, 400]) test(`${engine} ${lang} ${width}px: a size's chip gives it to the models ticked`, async (t) => {
+      const { page, errors, posts } = await open(t, "providers", 720, width);
+      await page.locator('.row.provider[data-id="deepseek"]').click();
+      const box = page.locator("input.compacts");
+      const picks = page.locator("input.compacts + .cxpicks .cxpick");
+      // flash is at 272K, so its chip is lit, and 500K for all of them
+      assert.equal(await picks.filter({ hasText: "272K" }).evaluate((b) => b.classList.contains("on")), true);
+      assert.equal(await picks.filter({ hasText: "128K" }).evaluate((b) => b.classList.contains("on")), false);
+      await picks.filter({ hasText: "272K" }).scrollIntoViewIfNeeded();
+      const top = await page.evaluate(() => document.scrollingElement.scrollTop);
+      await picks.filter({ hasText: "272K" }).click();
+      const menu = page.locator(".proto-menu");
+      await menu.waitFor();
+      assert.equal(await menu.locator(".pm-head").textContent(), w.head("272K"));
+      assert.deepEqual(await menu.locator(".pm-name").allTextContents(), [w.all, "deepseek-v4-flash", "deepseek-v4-pro"]);
+      const item = (name) => menu.locator(".pm-item").filter({ has: page.locator(".pm-name", { hasText: new RegExp(`^${name}$`) }) });
+      const ticked = () => menu.locator('.pm-item[aria-checked="true"] .pm-name').allTextContents();
+      assert.deepEqual(await ticked(), ["deepseek-v4-flash"]);
+      assert.equal(await menu.locator("select").count() + await page.locator(".cxfield select").count(), 0, "no native select");
+      await item("deepseek-v4-pro").click();
+      assert.equal(await box.inputValue(), "500k, deepseek-v4-flash=272k, deepseek-v4-pro=272k");
+      await item(w.all).click();
+      assert.equal(await box.inputValue(), "272k, deepseek-v4-flash=272k, deepseek-v4-pro=272k");
+      await item("deepseek-v4-flash").click();
+      assert.equal(await box.inputValue(), "272k, deepseek-v4-pro=272k");
+      assert.deepEqual(await ticked(), [w.all, "deepseek-v4-pro"]);
+      assert(await menu.isVisible(), "the menu stays open while ticking");
+      const r = await menu.boundingBox();
+      assert(r.x >= 0 && r.x + r.width <= width, "the menu fits the window");
+      assert.equal(await page.evaluate(() => document.scrollingElement.scrollTop), top, "ticking scrolled the page");
+      await page.keyboard.press("Escape");
+      await menu.waitFor({ state: "detached" });
+      // another size leaves the models at 272K as they are
+      await picks.filter({ hasText: "1M" }).click();
+      await item("deepseek-v4-flash").click();
+      assert.equal(await box.inputValue(), "272k, deepseek-v4-flash=1m, deepseek-v4-pro=272k");
+      await page.keyboard.press("Escape");
+      await menu.waitFor({ state: "detached" });
+      await page.getByRole("button", { name: w.save, exact: true }).click();
+      await page.waitForFunction(() => !document.querySelector("input.compacts"));
+      assert.deepEqual(posts.map((p) => p.path), ["/api/provider/save"]);
+      assert.deepEqual(posts[0].body.compacts, { "*": 272000, "deepseek-v4-flash": 1000000, "deepseek-v4-pro": 272000 });
+      assert.deepEqual(errors, []);
+    });
+
+    if (w.field) test(`${engine} ${lang}: Long conversations compacts at a size the user types`, async (t) => {
       const { page, errors, posts } = await open(t, "agents");
       await openAgentSettings(page, "claude");
       const row = page.locator('.row.agent-compact[data-agent="claude"]');
