@@ -1628,6 +1628,8 @@ func saved() {
 		saving.Wait()
 	}
 	saving.Unlock()
+	ccFamilyWrites.Wait()
+	ccRestWrites.Wait()
 }
 
 // saveHook, when a test sets it, runs before each save is written.
@@ -1983,6 +1985,7 @@ func Reset() {
 	mu.Lock()
 	defer mu.Unlock()
 	saved()
+	ccFamiliesForget()
 	cache, loaded = nil, false
 	cacheGeneration++
 	forgetKeptStats()

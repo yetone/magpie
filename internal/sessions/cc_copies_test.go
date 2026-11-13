@@ -475,6 +475,48 @@ func TestClaudeForkedSessionsSubagentIsCounted(t *testing.T) {
 // replies of 10 in; the branch holds one of them, after the summary, and
 // went on with one of its own.
 func TestClaudeCopyBeforeACompactionIsCounted(t *testing.T) {
+	ccCompactedBranchFixture(t)
+	want := []string{ccCompacted, ccBranch}
+	slices.Sort(want)
+	if got := ccRows("claude"); !slices.Equal(got, want) {
+		t.Fatalf("rows = %v, want the session and the branch under it, %v", got, want)
+	}
+	ccWantBranches(t, ccCompacted, ccBranch)
+	days, sessions := ccStatTokens(t)
+	if days.Input != 80 || sessions.Input != 80 {
+		t.Errorf("tokens in = %d (days), %d (sessions); want 80: 70 of the session, 10 the branch's own", days.Input, sessions.Input)
+	}
+}
+
+// What a branch holds that its session doesn't is kept on disk, so a start
+// after one that read it counts the same and reads no file's uuids again
+// (#2278).
+func TestClaudeBranchRestKeptAcrossStarts(t *testing.T) {
+	ccCompactedBranchFixture(t)
+	if days, sessions := ccStatTokens(t); days.Input != 80 || sessions.Input != 80 {
+		t.Fatalf("tokens in = %d (days), %d (sessions); want 80", days.Input, sessions.Input)
+	}
+	for start := range 2 {
+		Reset()
+		mu.Lock()
+		clear(ccUUIDMemo)
+		mu.Unlock()
+		if days, sessions := ccStatTokens(t); days.Input != 80 || sessions.Input != 80 {
+			t.Errorf("start %d: tokens in = %d (days), %d (sessions); want 80", start, days.Input, sessions.Input)
+		}
+		mu.Lock()
+		read := len(ccUUIDMemo)
+		mu.Unlock()
+		if read != 0 {
+			t.Errorf("start %d read the uuids of %d files", start, read)
+		}
+	}
+}
+
+// ccCompactedBranchFixture is compacted.jsonl as it was when
+// compacted-branch-on.jsonl was branched from it, and that branch.
+func ccCompactedBranchFixture(t *testing.T) {
+	t.Helper()
 	claude, _ := setup(t)
 	ccForkFixture(t, claude,
 		[2]string{"compacted.jsonl", ccCompacted},
@@ -500,16 +542,6 @@ func TestClaudeCopyBeforeACompactionIsCounted(t *testing.T) {
 		t.Fatal(err)
 	}
 	Reset()
-	want := []string{ccCompacted, ccBranch}
-	slices.Sort(want)
-	if got := ccRows("claude"); !slices.Equal(got, want) {
-		t.Fatalf("rows = %v, want the session and the branch under it, %v", got, want)
-	}
-	ccWantBranches(t, ccCompacted, ccBranch)
-	days, sessions := ccStatTokens(t)
-	if days.Input != 80 || sessions.Input != 80 {
-		t.Errorf("tokens in = %d (days), %d (sessions); want 80: 70 of the session, 10 the branch's own", days.Input, sessions.Input)
-	}
 }
 
 // Of two forks that went on from the same start, the one a /branch names
@@ -551,4 +583,50 @@ func TestClaudeBranchNamesItsSession(t *testing.T) {
 	}
 	Reset()
 	ccWantBranches(t, ccForkOther, ccForkOn)
+}
+
+// What a group of files that start alike came to is kept on disk, so a
+// start after one that judged it reads none of their uuids again, and a
+// file of it that changed has it judged again (#2278).
+func TestClaudeFamilyKeptAcrossStarts(t *testing.T) {
+	claude, _ := setup(t)
+	ccForkFixture(t, claude,
+		[2]string{"original.jsonl", ccOriginal},
+		[2]string{"original.jsonl", ccCopyIDs[0]},
+		[2]string{"fork-on.jsonl", ccForkOn})
+	if got := ccRows("claude"); !slices.Equal(got, []string{ccForkOn}) {
+		t.Fatalf("rows = %v, want the fork only", got)
+	}
+	Reset()
+	mu.Lock()
+	clear(ccUUIDMemo)
+	mu.Unlock()
+	if got := ccRows("claude"); !slices.Equal(got, []string{ccForkOn}) {
+		t.Fatalf("after a start, rows = %v, want the fork only", got)
+	}
+	mu.Lock()
+	read := len(ccUUIDMemo)
+	mu.Unlock()
+	if read != 0 {
+		t.Errorf("a start read the uuids of %d files of a group judged before", read)
+	}
+	// the copy goes on with a turn of its own: a branch now
+	b, err := os.ReadFile(filepath.Join("testdata", "claude-forks", "fork-other.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(claude, "projects", "-w-proj", ccCopyIDs[0]+".jsonl")
+	if err := os.WriteFile(p, []byte(strings.ReplaceAll(string(b), ccForkOther, ccCopyIDs[0])), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	at := time.Now().Add(-10 * time.Minute)
+	if err := os.Chtimes(p, at, at); err != nil {
+		t.Fatal(err)
+	}
+	Reset()
+	want := []string{ccForkOn, ccCopyIDs[0]}
+	slices.Sort(want)
+	if got := ccRows("claude"); !slices.Equal(got, want) {
+		t.Fatalf("after the copy went on, rows = %v, want %v", got, want)
+	}
 }
