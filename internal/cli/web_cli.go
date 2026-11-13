@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/url"
@@ -230,6 +231,7 @@ func serveCmd(args []string) error {
 		}
 	}
 	proc.UserPath() // as magpie web's (#3803)
+	proc.KeepReaping(context.Background())
 	if web == "" {
 		return serve()
 	}
