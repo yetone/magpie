@@ -3,6 +3,7 @@ package agent
 import (
 	"encoding/json"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/yetone/magpie/internal/provider"
@@ -45,8 +46,9 @@ func TestCodexCatalogOffersUnknownModelsLevels(t *testing.T) {
 		for _, l := range m.Levels {
 			ls = append(ls, l.Effort)
 		}
-		if len(ls) != 3 || ls[0] != "low" || ls[1] != "medium" || ls[2] != "high" || m.Default == nil {
-			t.Errorf("%s offers %v (default %v), want low, medium, high", m.Slug, ls, m.Default)
+		// and Ultra, which Codex sends as high, the top of them (pingqipai3 on X)
+		if !slices.Equal(ls, []string{"low", "medium", "high", "ultra"}) || m.Default == nil {
+			t.Errorf("%s offers %v (default %v), want low, medium, high, ultra", m.Slug, ls, m.Default)
 		}
 	}
 	if seen != 3 {

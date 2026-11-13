@@ -87,7 +87,7 @@ func TestCodexOffersLevelsForUnknownModels(t *testing.T) {
 		if e.Slug != "xjai/model-test" {
 			continue
 		}
-		if len(e.Levels) != 3 || e.Default == nil || *e.Default != "medium" || !e.Summaries {
+		if len(e.Levels) != 4 || e.Levels[3].Effort != "ultra" || e.Default == nil || *e.Default != "medium" || !e.Summaries {
 			t.Errorf("model-test's entry: %s", b)
 		}
 		return

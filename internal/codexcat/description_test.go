@@ -45,8 +45,9 @@ func TestCodexListedLevelsSayDescription(t *testing.T) {
 		"relay/glm-5.3": {"low": "Fastest", "medium": "Medium", "high": "High"},
 		// one the vendor doesn't list, made for an effort of the user's
 		"relay/kimi": {"low": "Low", "xhigh": "Extra High"},
-		// magpie's own entry: a description said all along
-		"or/deepseek-v4": {"low": "", "max": ""},
+		// magpie's own entry: a description said all along, Codex's
+		// Ultra after its levels (TestUltraOnOtherVendorsModels)
+		"or/deepseek-v4": {"low": "", "max": "", "ultra": ""},
 		// none listed and none asked for: nothing to describe, no panic
 		"relay/plain": {},
 	}

@@ -59,7 +59,9 @@ func TestCodexCustomProviderModelHasEfforts(t *testing.T) {
 		}
 		got[m.Slug] = strings.Join(ls, ",") + " / " + d
 	}
-	if got["volc/glm-5.3-flash"] != "low,high,max / low" {
+	// Ultra after its own levels: Codex sends a model's top level for it
+	// (codexcat.ultraHere; pingqipai3 on X)
+	if got["volc/glm-5.3-flash"] != "low,high,max,ultra / low" {
 		t.Errorf("glm-5.3-flash: %q", got["volc/glm-5.3-flash"])
 	}
 	// a model no one says reasons keeps none

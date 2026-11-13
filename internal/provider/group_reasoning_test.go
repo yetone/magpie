@@ -211,9 +211,10 @@ func TestGroupQuietMemberKeepsCodexEffortControl(t *testing.T) {
 		for _, l := range m.Levels {
 			got = append(got, l.Effort)
 		}
-		want := cmp.Or(effort, "high") // DefaultEffort: medium, else high
-		if !slices.Equal(got, levels) || m.Default != want {
-			t.Errorf("new sessions at %q: levels %v, default %q; want %v, %q", effort, got, m.Default, levels, want)
+		want := cmp.Or(effort, "high")              // DefaultEffort: medium, else high
+		ls := append(slices.Clone(levels), "ultra") // Codex's list ends with ultra
+		if !slices.Equal(got, ls) || m.Default != want {
+			t.Errorf("new sessions at %q: levels %v, default %q; want %v, %q", effort, got, m.Default, ls, want)
 		}
 	}
 }

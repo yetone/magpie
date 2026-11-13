@@ -76,10 +76,15 @@ func TestCodexCatalogDeepSeekAsDeepSeekSays(t *testing.T) {
 		if e["shell_type"] != "unified_exec" || e["support_verbosity"] != false || e["default_verbosity"] != nil {
 			t.Errorf("%s: shell %v, verbosity %v/%v; another vendor's entry changed", slug, e["shell_type"], e["support_verbosity"], e["default_verbosity"])
 		}
-		for _, k := range []string{"default_reasoning_summary", "multi_agent_version", "supports_image_detail_original"} {
+		for _, k := range []string{"default_reasoning_summary", "supports_image_detail_original"} {
 			if v, ok := e[k]; ok {
 				t.Errorf("%s: %s %v; another vendor's entry changed", slug, k, v)
 			}
+		}
+		// V2 only for the Ultra a model that reasons offers
+		// (TestUltraOnOtherVendorsModels)
+		if v, ok := e["multi_agent_version"]; ok && v != "v2" {
+			t.Errorf("%s: multi_agent_version %v", slug, v)
 		}
 	}
 }

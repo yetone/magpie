@@ -103,10 +103,14 @@ func TestCodexCatalogToolSearch(t *testing.T) {
 	if e := full.Models[0]; e["context_window"] != float64(996147) || e["auto_compact_token_limit"] != nil || e["max_context_window"] != nil {
 		t.Errorf("full context: %v", e)
 	}
-	for _, off := range []string{"tool_mode", "use_responses_lite", "multi_agent_version", "model_messages"} {
+	for _, off := range []string{"tool_mode", "use_responses_lite", "model_messages"} {
 		if v, ok := e[off]; ok {
 			t.Errorf("%s = %v", off, v)
 		}
+	}
+	// V2 for the Ultra it offers (TestUltraOnOtherVendorsModels)
+	if v := e["multi_agent_version"]; v != "v2" {
+		t.Errorf("multi_agent_version = %v", v)
 	}
 }
 

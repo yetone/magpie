@@ -65,8 +65,10 @@ func TestCodexCatalogRelaysKnownModelsLevels(t *testing.T) {
 		"relay/sol-of-mine":            sol,
 		// Codex's own catalog stops Luna at max
 		"relay/gpt-6-luna-2026-09-22": {"none", "low", "medium", "high", "xhigh", "max"},
-		"relay/glm-5.3-flash":         {"low", "high", "max"},
-		"relay/model-x-2026-01-01":    {"low", "medium", "high"},
+		// another vendor's model is offered Ultra after its own levels,
+		// which Codex sends as its top one (pingqipai3 on X)
+		"relay/glm-5.3-flash":      {"low", "high", "max", "ultra"},
+		"relay/model-x-2026-01-01": {"low", "medium", "high", "ultra"},
 	}
 	seen := map[string]bool{}
 	for _, m := range got.Models {

@@ -56,8 +56,10 @@ func TestCodexCatalogKeepsWhatTheUserAdded(t *testing.T) {
 		if m1 == nil || m1["supports_reasoning_summaries"] != true || m1["default_reasoning_summary"] != "detailed" {
 			t.Errorf("%s: the user's keys are gone: %v %v", when, m1["supports_reasoning_summaries"], m1["default_reasoning_summary"])
 		}
-		if _, ok := m1["multi_agent_version"]; ok {
-			t.Errorf("%s: a version magpie no longer writes stayed", when)
+		// magpie writes v2 for a model it offers Ultra (pingqipai3 on X),
+		// never the user's v1 back
+		if v, ok := m1["multi_agent_version"]; ok && v != "v2" {
+			t.Errorf("%s: a version magpie no longer writes stayed: %v", when, v)
 		}
 		if m1["base_instructions"] == nil || m1["supports_parallel_tool_calls"] != true {
 			t.Errorf("%s: magpie's own keys are gone", when)

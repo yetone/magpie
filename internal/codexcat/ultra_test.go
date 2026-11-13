@@ -63,3 +63,51 @@ func TestUltraEffortAsCodexOwnEntry(t *testing.T) {
 		}
 	}
 }
+
+// pingqipai3 on X: Codex offered Ultra on no model of another vendor's, so
+// a Claude, DeepSeek or GLM lead never handed work to Codex's agents
+// unasked. Codex sends a model its own top level for Ultra (max, or the
+// highest below it) and is proactive with its agents at Ultra in V2 alone,
+// so each model of another vendor's that reasons offers Ultra after its
+// levels, at V2, its default still one of its own levels. An OpenAI model
+// keeps OpenAI's word (Luna stops at max), a model that doesn't reason and
+// one whose lead seals its subagents' tasks (a ChatGPT account's group,
+// a relay of the ChatGPT backend) get none.
+func TestUltraOnOtherVendorsModels(t *testing.T) {
+	v1Home(t, `{"etag":"W/\"a\"","models":[]}`)
+	ms := []catalog.Model{
+		{ID: "anthropic/claude-opus-4-8", Name: "Claude Opus", Efforts: []string{"low", "medium", "high", "xhigh", "max"}},
+		{ID: "zhipu/glm-5.3", Name: "GLM-5.3", Efforts: []string{"low", "high"}},
+		{ID: "deepseek/deepseek-v4-pro", Name: "DeepSeek V4 Pro", Efforts: []string{"high", "max"}},
+		{ID: "group/mixed", Name: "mixed", Efforts: []string{"low", "medium", "high"}},
+		{ID: "copilot/gpt-6-luna", Name: "GPT-6 Luna", Efforts: []string{"low", "high", "max"}},
+		{ID: "relay/o4-mini", Name: "o4-mini", Efforts: []string{"low", "high"}},
+		{ID: "relay/gpt-6-astra", Name: "sealed", Efforts: []string{"low", "high", "max"}, Seals: true},
+		{ID: "group/fast", Name: "fast", Efforts: []string{"low", "high"}, Fast: true},
+		{ID: "kimi/kimi-k3", Name: "Kimi K3"},
+	}
+	var got struct {
+		Models []map[string]any `json:"models"`
+	}
+	if err := json.Unmarshal(Catalog(ms), &got); err != nil {
+		t.Fatal(err)
+	}
+	ultra := map[string]bool{"anthropic/claude-opus-4-8": true, "zhipu/glm-5.3": true, "deepseek/deepseek-v4-pro": true, "group/mixed": true}
+	for _, m := range got.Models {
+		slug := m["slug"].(string)
+		var levels []string
+		for _, l := range m["supported_reasoning_levels"].([]any) {
+			levels = append(levels, l.(map[string]any)["effort"].(string))
+		}
+		has := len(levels) > 0 && levels[len(levels)-1] == "ultra"
+		if has != ultra[slug] {
+			t.Errorf("%s: levels %v, Ultra wanted %v", slug, levels, ultra[slug])
+		}
+		if ultra[slug] && m["multi_agent_version"] != "v2" {
+			t.Errorf("%s: multi_agent_version %v, want v2", slug, m["multi_agent_version"])
+		}
+		if d, _ := m["default_reasoning_level"].(string); d == "ultra" {
+			t.Errorf("%s: default level ultra", slug)
+		}
+	}
+}

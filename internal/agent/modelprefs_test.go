@@ -74,7 +74,8 @@ func TestModelNameAndLevelsReachAgentFiles(t *testing.T) {
 	for _, e := range cx.Models[0].Efforts {
 		levels = append(levels, e.Effort)
 	}
-	if strings.Join(levels, ",") != "low,high" {
+	// and Ultra after them, which Codex sends as high (pingqipai3 on X)
+	if strings.Join(levels, ",") != "low,high,ultra" {
 		t.Fatalf("codex levels: %v", levels)
 	}
 
