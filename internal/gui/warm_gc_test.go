@@ -2,9 +2,11 @@ package gui
 
 import (
 	"math"
+	"os"
 	"runtime"
 	"runtime/debug"
 	"runtime/metrics"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -243,4 +245,37 @@ func TestSteadyGCRetunesAfterACollection(t *testing.T) {
 	}
 	undo()
 	retuned()
+}
+
+// A read under a tight GC runs on tightProcs Ps, and the last of two at
+// once ends puts back Go's default; a GOMAXPROCS the user set is kept.
+func TestTightGCNarrowsProcs(t *testing.T) {
+	defer debug.SetGCPercent(debug.SetGCPercent(100))
+	if runtime.NumCPU() <= tightProcs {
+		t.Skipf("%d CPUs: nothing to narrow", runtime.NumCPU())
+	}
+	if os.Getenv("GOMAXPROCS") != "" {
+		t.Skip("GOMAXPROCS is set for this run")
+	}
+	def := runtime.GOMAXPROCS(0)
+	first := tightenGC()
+	second := tightenGC()
+	if p := runtime.GOMAXPROCS(0); p != tightProcs {
+		t.Fatalf("two reads on %d Ps, want %d", p, tightProcs)
+	}
+	first()
+	if p := runtime.GOMAXPROCS(0); p != tightProcs {
+		t.Errorf("one read still in flight on %d Ps, want %d", p, tightProcs)
+	}
+	second()
+	if p := runtime.GOMAXPROCS(0); p != def {
+		t.Errorf("after both reads %d Ps, want Go's default %d", p, def)
+	}
+
+	t.Setenv("GOMAXPROCS", strconv.Itoa(def))
+	underTightGC(func() {
+		if p := runtime.GOMAXPROCS(0); p != def {
+			t.Errorf("the user's GOMAXPROCS=%d: read on %d Ps", def, p)
+		}
+	})
 }
