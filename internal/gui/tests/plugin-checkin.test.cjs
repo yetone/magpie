@@ -71,8 +71,8 @@ const quotas = () => [
   { provider: "codex", name: "Codex", icon: "openai", plan: "Plus", windows: [{ name: "5 hours", used: 20 }] },
 ];
 
-function serve(lang, asked, more = []) {
-  const settings = { theme: "light", lang, quotaLeft: false, currency: "usd", pluginCheckins: { fakeco: false },
+function serve(lang, asked, more = [], gateway = false) {
+  const settings = { theme: "light", lang, quotaLeft: false, currency: "usd", pluginCheckins: { fakeco: false }, web: true, gatewayOn: gateway,
     checkinPlugins: [{ id: "fakeco", name: "FakeCo", on: false, checkins: [
       { user: "ann", by: "plugin:fakeco", vendor: "FakeCo", day: today, outcome: "claimed", credit: 50, streak: 3 },
       { user: "bob", by: "plugin:fakeco", vendor: "FakeCo", day: today, outcome: "captcha" },
@@ -80,7 +80,7 @@ function serve(lang, asked, more = []) {
   return async (route) => {
     const url = new URL(route.request().url());
     const json = (data) => route.fulfill({ json: data });
-    if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:true};` });
+    if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:true${gateway ? ",gateway:true" : ""}};` });
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
     if (url.pathname === "/api/state") {
       // stateJSON embeds settings.Settings; only settingsJSON adds this list.
@@ -188,6 +188,29 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator(`.editor .prov-prefs .ci-plugin[data-provider="${id}"]`).waitFor();
         assert.equal(await page.locator(`.editor .prov-prefs .ci-plugin[data-provider="${other}"]`).count(), 0, "only its own");
       }
+      assert.deepEqual(errors, []);
+    });
+
+    // #1065 (wolfing88, magpie in Docker): magpie web serving other
+    // computers' agents still checks in with its own plugin accounts, so the
+    // provider's editor keeps the check-in there too
+    test(`${engine} ${lang}: a plugin's check-in in its provider's editor in gateway mode`, async (t) => {
+      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+      t.after(() => browser.close());
+      const page = await (await browser.newContext({ viewport: { width: 900, height: 900 }, reducedMotion: "reduce" })).newPage();
+      page.setDefaultTimeout(5000);
+      page.setDefaultNavigationTimeout(60000);
+      const errors = [];
+      page.on("pageerror", (e) => { if (engine === "webkit" && /due to access control checks/.test(e.message)) return; errors.push(e.message); }); // a goto in WebKit can cut off a fetch (#1350)
+      await page.route("**/*", serve(lang, [], [], true));
+      await watchSettingsReads(page);
+      await openProvPrefs(page, "fakeco");
+      await settingsDrawn(page);
+      assert.equal(await page.evaluate(() => gatewayMode), true, "the page is in gateway mode");
+      const row = page.locator('.editor .prov-prefs .ci-plugin[data-provider="fakeco"] > .row.pref:first-child');
+      await row.waitFor();
+      assert.match(await row.locator(".name").innerText(), /FakeCo/);
+      assert.match((await row.locator(".sub").innerText()).replace(/\s+/g, " "), w.sub);
       assert.deepEqual(errors, []);
     });
 
