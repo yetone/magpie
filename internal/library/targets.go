@@ -154,6 +154,21 @@ func targetOf(a *agent.Agent) *Target {
 		t.Skills = filepath.Join(a.Dir, "skills")
 		return t
 	}
+	if strings.HasPrefix(a.ID, "claude#") {
+		// another Claude Code config folder (agent.claudeDirAgents), the
+		// isolated Desktop's Code tab's among them (xMopf7RF on X): Claude
+		// Code run with CLAUDE_CONFIG_DIR there reads CLAUDE.md and skills
+		// in it, and its MCP servers from the .claude.json in it; the
+		// default ~/.claude's are in ~/.claude.json beside it
+		t.Instructions = filepath.Join(a.Dir, "CLAUDE.md")
+		t.Skills = filepath.Join(a.Dir, "skills")
+		mcp := filepath.Join(a.Dir, ".claude.json")
+		if filepath.Clean(a.Dir) == filepath.Join(h, ".claude") {
+			mcp = filepath.Join(h, ".claude.json")
+		}
+		t.MCP = &mcpFile{Path: mcp, Format: fmtClaude}
+		return t
+	}
 	if n := a.SharedName(); n != a.Name {
 		// the files are another app's too (the Cursor editor's ~/.cursor):
 		// named for both, not for the CLI alone
@@ -605,6 +620,14 @@ func targetOf(a *agent.Agent) *Target {
 		if t.Desktop = desktopSkillRoots(a.Dir); len(t.Desktop) > 0 {
 			t.Skills = filepath.Join(t.Desktop[0], "skills")
 		}
+	case agent.DesktopTwinID:
+		// Claude Magpie, the isolated Desktop: its servers in the one file
+		// it reads, its Cowork skills in its own skills-plugin, neither
+		// the user's own Desktop's (xMopf7RF on X)
+		t.MCP = &mcpFile{Path: a.Path, Format: fmtDesktop}
+		if t.Desktop = desktopSkillRootsIn([]string{a.Dir}); len(t.Desktop) > 0 {
+			t.Skills = filepath.Join(t.Desktop[0], "skills")
+		}
 	default:
 		if a.Plugin != "" {
 			return pluginTarget(a)
@@ -909,6 +932,10 @@ func apps() []*agent.Agent {
 	out := []*agent.Agent{
 		agent.DesktopApp(home, dir, filepath.Join(dir, "claude_desktop_config.json")),
 	}
+	// Claude Magpie, the isolated Desktop, an app of its own (xMopf7RF on X)
+	if tw := agent.DesktopTwinApp(home); tw != nil {
+		out = append(out, tw)
+	}
 	// Kiro CLI (#4769) is no agent magpie wires a model into, but the
 	// library can give it skills, MCP servers and instructions. It is
 	// found by the kiro-cli program alone — PATH, ~/.local/bin, Kiro
@@ -1187,6 +1214,14 @@ func noPlace(a *agent.Agent, kind, what string) string {
 		// with the Claude account, not in a file; its Code tab is Claude
 		// Code, which reads Claude Code's CLAUDE.md
 		return "Claude Desktop keeps its instructions in its own settings, with your Claude account, not in a file magpie can write; its Code tab runs Claude Code, which reads Claude Code's · give them to claude"
+	case a.ID == agent.DesktopTwinID && kind == "instructions":
+		// as Claude Desktop, and its Code tab is Claude Code on the
+		// folder Claude Magpie.app names: its own, or ~/.claude
+		to := "claude"
+		if iso, ok := agent.DesktopIsolatedHere(); ok && iso.Claude {
+			to = "claude#" + strings.TrimPrefix(filepath.Base(iso.ClaudeDir), ".claude-")
+		}
+		return fmt.Sprintf("%s keeps its instructions in its own settings, not in a file magpie can write; its Code tab runs Claude Code, which reads that Claude Code's · give them to %s", a.Name, to)
 	case a.Plugin != "":
 		return fmt.Sprintf("%s's plugin (%s) says no place for %s: its agent.library.%s names none", a.Name, plugin.Name(a.Plugin), what, kind)
 	}

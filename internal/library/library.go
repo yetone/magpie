@@ -215,7 +215,8 @@ func load() (*Library, error) {
 	if l.Applied == nil {
 		l.Applied = map[string]*Applied{}
 	}
-	l.heal() // magpie's own servers run this computer's magpie (self_here.go)
+	l.heal()      // magpie's own servers run this computer's magpie (self_here.go)
+	l.carryTwin() // Claude Magpie keeps what it was given as Claude Desktop (desktop_twin.go)
 	return l, nil
 }
 

@@ -114,8 +114,15 @@ func TestClaudeDesktopIsolatedMovesThere(t *testing.T) {
 	if a.Notice() != noticeClaudedesktopIsolated.String() {
 		t.Errorf("notice %q", a.Notice())
 	}
-	if got := DesktopConfigs3p(home); got[len(got)-1] != iso.config3p {
-		t.Errorf("3p configs %v miss %s", got, iso.config3p)
+	// the library gives the twin servers of its own, not the user's
+	// Desktop's (xMopf7RF on X)
+	for _, p := range DesktopConfigs3p(home) {
+		if p == iso.config3p {
+			t.Errorf("3p configs %v have the twin's %s", DesktopConfigs3p(home), iso.config3p)
+		}
+	}
+	if tw := DesktopTwinApp(home); tw == nil || tw.Path != iso.config3p || tw.Dir != iso.dir3p || !tw.Detected() {
+		t.Errorf("the twin's app %+v, want %s, here", tw, iso.config3p)
 	}
 	// off magpie and on again, while isolated: only Claude-Magpie-3p
 	if err := a.Field("provider").Set(""); err != nil {

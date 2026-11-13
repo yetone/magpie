@@ -399,3 +399,25 @@ func reopenIsolated(ctx context.Context, a *Agent, r restartable, exe string) er
 	}
 	return nil
 }
+
+// DesktopTwinID is the id the library knows Claude Magpie, the isolated
+// Desktop, by.
+const DesktopTwinID = "claude-desktop#magpie"
+
+// DesktopTwinApp is Claude Magpie, the isolated Desktop (desktopiso), as
+// an app of its own to the library, as an Android app's twin is (xMopf7RF
+// on X): its MCP servers in Claude-Magpie-3p's claude_desktop_config.json,
+// the only file it reads them from, and its Cowork skills in that folder's
+// skills-plugin, neither shared with the user's own Desktop. nil where it
+// can't be (only on a Mac); here only while it is on and its folder there.
+func DesktopTwinApp(home string) *Agent {
+	p, ok := desktopIsolatedSet(desktopdir.OS, home, os.Getenv)
+	if !ok {
+		return nil
+	}
+	return &Agent{
+		ID: DesktopTwinID, Name: desktopiso.Name, Icon: "claude-color",
+		Dir: p.dir3p, Path: p.config3p,
+		detect: func() bool { return desktopIsolatedOn() && isDir(p.dir3p) },
+	}
+}

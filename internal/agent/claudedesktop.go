@@ -120,15 +120,12 @@ func desktopUsualSets(goos, home string, getenv func(string) string) []desktopPa
 // DesktopConfigs3p are the claude_desktop_config.json files Claude Desktop
 // reads in its 3p mode: there its whole userData is Claude-3p, its MCP
 // servers too (%LOCALAPPDATA%\Claude-3p on Windows, and the MSIX package's;
-// Claude-3p beside Claude elsewhere), and the isolated Desktop's
-// Claude-Magpie-3p on a Mac, whose only file it is (the library gives it
-// the servers where that folder is).
+// Claude-3p beside Claude elsewhere). The isolated Desktop's
+// Claude-Magpie-3p is not one of them: the library gives it servers of
+// its own (DesktopTwinApp).
 func DesktopConfigs3p(home string) []string {
 	var out []string
 	for _, p := range desktopUsualSets(desktopdir.OS, home, os.Getenv) {
-		out = append(out, p.config3p)
-	}
-	if p, ok := desktopIsolatedSet(desktopdir.OS, home, os.Getenv); ok {
 		out = append(out, p.config3p)
 	}
 	return out

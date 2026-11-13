@@ -39,9 +39,24 @@ const desktopManifest = "manifest.json"
 
 // desktopSkillRoots are the skills-plugin folders of every account Claude
 // Desktop has, in its own folder and Claude-3p's alike: each one with a
-// manifest.json or the plugin's plugin.json.
+// manifest.json or the plugin's plugin.json. Claude Magpie's folder, the
+// isolated Desktop's, is not one of them: that app is given skills of its
+// own (agent.DesktopTwinApp, xMopf7RF on X).
 func desktopSkillRoots(desktopDir string) []string {
-	dirs := append([]string{desktopDir}, desktopdir.Everywhere()...)
+	home, _ := os.UserHomeDir()
+	twin := desktopdir.Isolated(desktopdir.OS, home)
+	var dirs []string
+	for _, d := range append([]string{desktopDir}, desktopdir.Everywhere()...) {
+		if twin == "" || filepath.Clean(d) != filepath.Clean(twin) {
+			dirs = append(dirs, d)
+		}
+	}
+	return desktopSkillRootsIn(dirs)
+}
+
+// desktopSkillRootsIn are the skills-plugin folders of every account in
+// dirs, Desktop's userData folders.
+func desktopSkillRootsIn(dirs []string) []string {
 	var out []string
 	seen := map[string]bool{}
 	for _, d := range dirs {
