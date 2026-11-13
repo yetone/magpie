@@ -13,6 +13,7 @@ import (
 	"github.com/yetone/magpie/internal/backup"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // ErrOff is a Restore, Undo or SetAuto asked for with sync off.
@@ -210,7 +211,17 @@ func Upload(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		b := local
+		// a part not synced goes as the server last had it, when this
+		// computer read it whole before, else unset: never this computer's,
+		// and never an empty one over what the others have when it can be helped
+		b := c.only(local)
+		if st := loadState(); st.Key == stateKey(c) && len(c.left()) > 0 {
+			if prev, err := backup.Open(cached(st.Sum), c.Passphrase); err == nil {
+				for _, p := range c.left() {
+					take(&b, prev, p)
+				}
+			}
+		}
 		b.Created, b.App = time.Now().UTC(), "magpie"
 		sealed, err := backup.Seal(b, c.Passphrase)
 		if err != nil {
@@ -281,16 +292,77 @@ func Undo() ([]string, error) {
 	return back, err
 }
 
-// syncs is whether part goes to the server with c.
+// syncs is whether part goes to the server with c. A part that doesn't
+// stays as it is on each computer: never brought in, never taken up.
 func (c Config) syncs(part string) bool {
-	return (part != "agents" || c.Agents) && (part != "library" || c.library())
+	switch part {
+	case "providers":
+		return yes(c.Providers)
+	case "settings":
+		return yes(c.Settings)
+	case "profiles":
+		return yes(c.Profiles)
+	case "agents":
+		return c.Agents
+	case "library":
+		return c.library()
+	case "memory":
+		return c.memoryOn()
+	}
+	return true
+}
+
+// Synced is the parts c syncs, in Parts' order, memory last.
+func (c Config) Synced() []string {
+	var out []string
+	for _, p := range append(slices.Clone(Parts), "memory") {
+		if c.syncs(p) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// left is the parts of Parts c doesn't sync.
+func (c Config) left() []string {
+	var out []string
+	for _, p := range Parts {
+		if !c.syncs(p) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// only is b with the parts c doesn't sync as a new magpie has them
+// (unset): what goes up to a server with none of its own. Another
+// computer that syncs such a part then puts its own there on joining, as
+// with any unset part (#5642), and none is brought down from this one.
+// Agents, library and memory are left out by collect already.
+func (c Config) only(b backup.Bundle) backup.Bundle {
+	if !c.syncs("providers") {
+		b.Providers, b.Groups, b.Icons, b.Order, b.GroupOrder = nil, nil, nil, nil, nil
+		b.Searches, b.Plugins, b.Proxies = nil, nil, nil
+	}
+	if !c.syncs("settings") {
+		s := settings.Defaults()
+		b.Settings, b.GatewayKeys, b.AccountGroups = &s, nil, nil
+	}
+	if !c.syncs("profiles") {
+		b.Profiles = nil
+	}
+	return b
 }
 
 func withKeys(c Config) Config { c.Keys = true; return c }
 
 // keepHere seals this computer's setup, keys and all, into the sync
 // folder before a restore replaces it; the path. The newest few are kept.
-func keepHere(c Config) (string, error) {
+func keepHere(c Config) (string, error) { return keepSealed(c, "before-restore") }
+
+// keepSealed seals this computer's setup, keys and all, into the sync
+// folder as <time>-<tag>; the path. The newest 5 so tagged are kept.
+func keepSealed(c Config, tag string) (string, error) {
 	b, err := collect(withKeys(c))
 	if err != nil {
 		return "", err
@@ -303,12 +375,12 @@ func keepHere(c Config) (string, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}
-	name := filepath.Join(dir, time.Now().Format("2006-01-02-150405")+"-before-restore"+backup.Ext)
+	name := filepath.Join(dir, time.Now().Format("2006-01-02-150405.000")+"-"+tag+backup.Ext)
 	if err := edit.WriteAtomic(name, sealed); err != nil {
 		return "", err
 	}
 	os.Chmod(name, 0o600)
-	old, _ := filepath.Glob(filepath.Join(dir, "*-before-restore"+backup.Ext))
+	old, _ := filepath.Glob(filepath.Join(dir, "*-"+tag+backup.Ext))
 	slices.Sort(old)
 	for len(old) > 5 {
 		os.Remove(old[0])

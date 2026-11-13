@@ -173,6 +173,7 @@
     <a href="#setup">开启同步</a>
     <a href="#services">三种存储</a>
     <a href="#keep">某台电脑保留自己的设置</a>
+    <a href="#pick">选择同步内容、预览、撤销</a>
     <a href="#backup">一次性备份和恢复</a>
   </aside>
 
@@ -201,6 +202,11 @@ magpie github                   # where it syncs to and how the last sync went</
     <p>在三种之间切换时，另外两种的设置和凭据会保留，方便切回来；同一时间只用一种。</p>
     <h2 id="keep"><a class="anchor" href="#keep">某台电脑保留自己的设置</a></h2>
     <p>在一台电脑上改了 Agent 的模型，其他电脑会跟着改。如果同步改了某台电脑上的值，你又在那台电脑上改了回去，那台电脑就保留自己的：别的电脑的选择不再改它，它的选择也只留在它自己这里，其他内容照常同步。<span class="ui">仅本机保留</span> 列出这些字段，点 <span class="ui">跟随其他电脑</span> 就重新用同步的值。</p>
+    <h2 id="pick"><a class="anchor" href="#pick">选择同步内容、预览、撤销</a></h2>
+    <p>在同步表单的 <span class="ui">同步内容</span> 里，取消勾选每台电脑要各自保留的部分：供应商、设置、Agent 的模型、资源库或记忆（配置档、用量和登录在 <span class="ui">高级</span> 里）。没勾选的部分既不上传也不下载：这台电脑保留自己的，服务器上保留其他电脑的。之后再勾上，就像第一次同步那样加入，这台电脑原来的会先存进同步文件夹。<span class="ui">预览同步</span> 会逐项列出哪些会同步到这台电脑、哪些会传到服务器，什么都不改；在那里点 <span class="ui">立即同步</span>，只有这期间没有变化时才会执行。<span class="ui">撤销上次同步</span> 会把上次同步带来的内容恢复成之前的样子，只在这台电脑上。</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="sy-pick">复制</button><pre id="sy-pick">magpie webdav set providers=no settings=no agents=no   # 只同步资源库和记忆
+magpie webdav preview                                 # 现在同步会改什么
+magpie webdav undo-sync                               # 撤销上次同步带来的内容</pre></div>
     <h2 id="backup"><a class="anchor" href="#backup">一次性备份和恢复</a></h2>
     <p>不想开同步，只是搬到新电脑，就用加密备份文件：</p>
     <div class="code"><span class="lang">终端</span><button class="copy" data-copy="sy-backup">复制</button><pre id="sy-backup">magpie backup                               # writes magpie.magpie-backup, asks for a passphrase twice

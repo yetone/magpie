@@ -173,6 +173,7 @@
     <a href="#setup">同期をオンにする</a>
     <a href="#services">3 種類のストレージ</a>
     <a href="#keep">1 台だけ自分の値を保つ</a>
+    <a href="#pick">同期するものを選ぶ・プレビュー・取り消し</a>
     <a href="#backup">一度きりのバックアップと復元</a>
   </aside>
 
@@ -201,6 +202,11 @@ magpie github                   # where it syncs to and how the last sync went</
     <p>3 種類を切り替えても、ほかの設定と認証情報は戻すときのために残ります。同期するのは一度に 1 つです。</p>
     <h2 id="keep"><a class="anchor" href="#keep">1 台だけ自分の値を保つ</a></h2>
     <p>あるコンピュータでエージェントのモデルを変えると、ほかのコンピュータにも届きます。同期で変わった値をそのコンピュータで元に戻すと、そのコンピュータは自分の値を保ちます。ほかの選択でもう変わらず、その選択もそこだけに残り、ほかのものは同期を続けます。<span class="ui">このコンピュータだけで保持</span> にそのフィールドが並び、<span class="ui">ほかのコンピュータに合わせる</span> で同期の値に戻ります。</p>
+    <h2 id="pick"><a class="anchor" href="#pick">同期するものを選ぶ・プレビュー・取り消し</a></h2>
+    <p>同期フォームの <span class="ui">同期するもの</span> で、コンピュータごとに自分の値を保ちたいもののチェックを外します：プロバイダー、設定、エージェントのモデル、ライブラリ、メモリ（プロファイル・使用量・サインインは <span class="ui">詳細設定</span> にあります）。チェックのないものは送りも受け取りもしません。このコンピュータは自分の値を、サーバーはほかのコンピュータの値を保ちます。あとでチェックし直すと初回の同期のように加わり、このコンピュータの値は先に同期フォルダに保存されます。<span class="ui">同期をプレビュー</span> は、何も変えずに、こちらに来るものとサーバーへ行くものを項目ごとに示します。そこでの <span class="ui">今すぐ同期</span> は、その間に何も変わっていないときだけ同期します。<span class="ui">前回の同期を取り消す</span> は、前回の同期で入ってきたものをこのコンピュータでだけ元に戻します。</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="sy-pick">コピー</button><pre id="sy-pick">magpie webdav set providers=no settings=no agents=no   # ライブラリとメモリだけ同期
+magpie webdav preview                                 # いま同期すると何が変わるか
+magpie webdav undo-sync                               # 前回の同期で入ったものを戻す</pre></div>
     <h2 id="backup"><a class="anchor" href="#backup">一度きりのバックアップと復元</a></h2>
     <p>同期せず新しいコンピュータに移るだけなら、暗号化バックアップファイルを使います。</p>
     <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="sy-backup">コピー</button><pre id="sy-backup">magpie backup                               # writes magpie.magpie-backup, asks for a passphrase twice

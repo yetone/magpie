@@ -647,3 +647,12 @@ func signCodexIn(l savedLogin) (bool, error) {
 	}
 	return true, nil
 }
+
+// Count is how many sign-ins the plan puts in or removes.
+func (p SignInPlan) Count() int {
+	n := len(p.put) + len(p.remove)
+	if p.codex != nil {
+		n++
+	}
+	return n
+}

@@ -25,9 +25,12 @@ const webdavUsage = `usage:
                                           the same on every computer through a WebDAV folder (a folder named
                                           magpie is made in it), and sync at once; asks for the password
                                           (with a user) and the passphrase
-  magpie webdav set k=v…                  change it: address, user, keys, agents, library, usage, sign-ins (yes|no);
+  magpie webdav set k=v…                  change it: address, user, providers, settings, profiles, keys, agents,
+                                          library, memory, usage, sign-ins (yes|no);
                                           password= and passphrase= ask for a new one
   magpie webdav now                       sync now (the gateway also syncs by itself while it runs: see auto)
+  magpie webdav preview                   what syncing now would change, here and on the server; nothing is changed
+  magpie webdav undo-sync [anyway]        put back what the last sync brought in, on this computer only
   magpie webdav auto off|3|15|30|60       how often the gateway syncs by itself, in minutes; off: only when asked
   magpie webdav follow on|off             on: this computer takes the server's setup on every sync and sends
                                           none of its own; a change made here is replaced, a copy kept in the
@@ -47,6 +50,9 @@ const webdavUsage = `usage:
               again; user= alone for a server that asks for no sign-in. An app password where the server
               has them
   keys        no: providers go without their API keys, and each computer keeps its own
+  providers, settings, profiles, agents, library, memory
+              no: that part stays as it is on each computer, never brought in nor sent up; e.g.
+              providers=no settings=no profiles=no agents=no syncs only the library and memory
   usage       yes: this computer's usage goes up too, a file a day, sealed, and the Usage page counts
               the other computers' that share theirs, each named
   sign-ins    yes: the subscriptions' accounts and the plugins' sign-ins go too, sealed with the
@@ -74,9 +80,12 @@ const s3Usage = `usage:
                                           Cloudflare R2, Backblaze B2, MinIO, a NAS…), in <prefix>/magpie/,
                                           and sync at once; asks for the secret and the passphrase
   magpie s3 set k=v…                      change it: address, bucket, prefix, endpoint, region, access-key-id,
-                                          path-style, keys, agents, library, usage, sign-ins (yes|no); secret= and
+                                          path-style, providers, settings, profiles, keys, agents, library, memory,
+                                          usage, sign-ins (yes|no); secret= and
                                           passphrase= ask for a new one
   magpie s3 now                           sync now (the gateway also syncs by itself while it runs: see auto)
+  magpie s3 preview                       what syncing now would change, here and on the server; nothing is changed
+  magpie s3 undo-sync [anyway]            put back what the last sync brought in, on this computer only
   magpie s3 auto off|3|15|30|60           how often the gateway syncs by itself, in minutes; off: only when asked
   magpie s3 follow on|off                 on: this computer takes the server's setup on every sync and sends
                                           none of its own; a change made here is replaced, a copy kept in the
@@ -98,6 +107,8 @@ const s3Usage = `usage:
               only used with the endpoint and access key it was given for: change either and it is asked
               for again
   keys        no: providers go without their API keys, and each computer keeps its own
+  providers, settings, profiles, agents, library, memory
+              no: that part stays as it is on each computer, never brought in nor sent up
   usage       yes: this computer's usage goes up too, a file a day, sealed, and the Usage page counts
               the other computers' that share theirs, each named
   sign-ins    yes: the subscriptions' accounts and the plugins' sign-ins go too, sealed with the
@@ -118,8 +129,11 @@ const githubUsage = `usage:
   magpie github                           whether sync is on, where to, and how the last sync went
   magpie github on github://owner/repo[/folder] [branch=…] [keys=no] [agents=no] [library=no]
                                           keep the encrypted setup in an existing GitHub repository; asks for a token and passphrase
-  magpie github set k=v…                  change it: address, branch, keys, agents, library, usage, sign-ins (yes|no)
+  magpie github set k=v…                  change it: address, branch, providers, settings, profiles, keys, agents,
+                                          library, memory, usage, sign-ins (yes|no)
   magpie github now                       sync now
+  magpie github preview                   what syncing now would change, here and on the server; nothing is changed
+  magpie github undo-sync [anyway]        put back what the last sync brought in, on this computer only
   magpie github auto off|3|15|30|60       how often the gateway syncs by itself, in minutes
   magpie github follow on|off             on: this computer takes the repository's setup and sends none of its own
   magpie github restore                   make this computer's setup the repository's; what is here is kept first
@@ -136,6 +150,8 @@ const githubUsage = `usage:
   passphrase the same on every computer; GitHub only ever receives the sealed file.
   sign-ins   yes: the subscriptions' accounts and the plugins' sign-ins go too, sealed with the
              passphrase. Off unless set
+  providers, settings, profiles, agents, library, memory
+             no: that part stays as it is on each computer, never brought in nor sent up
 `
 
 // syncKind is magpie webdav's, magpie s3's or magpie github's server.
@@ -226,6 +242,34 @@ func syncCmd(k syncKind, args []string) error {
 			fmt.Printf("put back: %s\n", strings.Join(parts, ", "))
 		}
 		return nil
+	case "preview":
+		if _, ok := davsync.Load(); !ok {
+			return fmt.Errorf("%s sync is off: %s", k.name, k.turnOn())
+		}
+		p, err := davsync.Preview(context.Background())
+		if err != nil {
+			return err
+		}
+		printPlan(p, k)
+		return nil
+	case "undo-sync":
+		if _, ok := davsync.Load(); !ok {
+			return fmt.Errorf("%s sync is off: %s", k.name, k.turnOn())
+		}
+		force := len(args) == 2 && args[1] == "anyway"
+		if len(args) > 2 || len(args) == 2 && !force {
+			return fmt.Errorf("magpie %s undo-sync [anyway]", k.cmd)
+		}
+		parts, err := davsync.UndoSync(force)
+		var since *davsync.ChangedSince
+		if errors.As(err, &since) {
+			return fmt.Errorf("%s changed here since that sync: magpie %s undo-sync anyway puts back what was there before it, a copy of now kept first", partNames(since.Parts), k.cmd)
+		}
+		if err != nil {
+			return err
+		}
+		fmt.Printf("put back as before the last sync, on this computer only: %s\n", partNames(parts))
+		return nil
 	case "upload":
 		if _, ok := davsync.Load(); !ok {
 			return fmt.Errorf("%s sync is off: %s", k.name, k.turnOn())
@@ -273,7 +317,8 @@ func syncSet(k syncKind, args []string, on bool) error {
 		if !on {
 			return fmt.Errorf("%s sync is on, not %s: magpie %s set changes it; %s", c.Kind(), k.name, strings.ToLower(c.Kind()), k.turnOn())
 		}
-		next := davsync.Config{Passphrase: c.Passphrase, Keys: c.Keys, Agents: c.Agents, Library: c.Library, Usage: c.Usage, SignIns: c.SignIns}
+		next := davsync.Config{Passphrase: c.Passphrase, Keys: c.Keys, Agents: c.Agents, Library: c.Library, Memory: c.Memory, Usage: c.Usage, SignIns: c.SignIns,
+			Providers: c.Providers, Settings: c.Settings, Profiles: c.Profiles}
 		if o, ok := c.Kept(k.name); ok { // its server, as it was kept when sync moved from it
 			next.URL, next.User, next.Endpoint, next.Region, next.PathStyle, next.Branch = o.URL, o.User, o.Endpoint, o.Region, o.PathStyle, o.Branch
 		}
@@ -326,7 +371,8 @@ func syncSet(k syncKind, args []string, on bool) error {
 			} else {
 				askPhrase = true
 			}
-		case key == "keys", key == "agents", key == "library", key == "usage", key == "sign-ins", key == "path-style" && k.cmd == "s3":
+		case key == "keys", key == "agents", key == "library", key == "usage", key == "sign-ins", key == "path-style" && k.cmd == "s3",
+			key == "providers", key == "settings", key == "profiles", key == "memory":
 			if v != "yes" && v != "no" {
 				return fmt.Errorf("%s=yes|no, not %q", key, v)
 			}
@@ -342,15 +388,23 @@ func syncSet(k syncKind, args []string, on bool) error {
 				c.Usage = yes
 			case "sign-ins":
 				c.SignIns = yes
+			case "providers":
+				c.Providers = &yes
+			case "settings":
+				c.Settings = &yes
+			case "profiles":
+				c.Profiles = &yes
+			case "memory":
+				c.Memory = &yes
 			default:
 				c.Library = &yes
 			}
 		case k.cmd == "s3":
-			return fmt.Errorf("unknown field %q (address, bucket, prefix, endpoint, region, access-key-id, secret, passphrase, path-style, keys, agents, library, usage, sign-ins)", key)
+			return fmt.Errorf("unknown field %q (address, bucket, prefix, endpoint, region, access-key-id, secret, passphrase, path-style, providers, settings, profiles, keys, agents, library, memory, usage, sign-ins)", key)
 		case k.cmd == "github":
-			return fmt.Errorf("unknown field %q (address, branch, token, passphrase, keys, agents, library, usage, sign-ins)", key)
+			return fmt.Errorf("unknown field %q (address, branch, token, passphrase, providers, settings, profiles, keys, agents, library, memory, usage, sign-ins)", key)
 		default:
-			return fmt.Errorf("unknown field %q (address, user, password, passphrase, keys, agents, library, usage, sign-ins)", key)
+			return fmt.Errorf("unknown field %q (address, user, password, passphrase, providers, settings, profiles, keys, agents, library, memory, usage, sign-ins)", key)
 		}
 	}
 	if bucket != nil || prefix != nil {
@@ -505,16 +559,26 @@ func syncShow(k syncKind) error {
 		fmt.Println(bold.Render("WebDAV sync"), v.URL, muted.Render(strings.Join(who, " · ")))
 	}
 
-	what := []string{"providers without their API keys"}
-	if v.Keys {
-		what[0] = "providers with their API keys"
+	var what []string
+	if v.Providers && v.Keys {
+		what = append(what, "providers with their API keys")
+	} else if v.Providers {
+		what = append(what, "providers without their API keys")
 	}
-	what = append(what, "settings", "profiles")
+	if v.Settings {
+		what = append(what, "settings")
+	}
+	if v.Profiles {
+		what = append(what, "profiles")
+	}
 	if v.Agents {
 		what = append(what, "agents' models")
 	}
 	if v.Library {
 		what = append(what, "library")
+	}
+	if v.Memory {
+		what = append(what, "memory")
 	}
 	if v.Usage {
 		what = append(what, "usage")
@@ -523,6 +587,9 @@ func syncShow(k syncKind) error {
 		what = append(what, "sign-ins")
 	}
 	fmt.Println("  syncs", strings.Join(what, ", "))
+	if left := leftOut(v); len(left) > 0 {
+		fmt.Println(muted.Render("  stays as it is on each computer: " + strings.Join(left, ", ")))
+	}
 	if o := v.Other; o != nil {
 		if o.Kind == "s3" {
 			fmt.Println(muted.Render("  S3 " + o.URL + " is kept, not synced to: magpie s3 on moves back to it"))
@@ -565,6 +632,9 @@ func syncShow(k syncKind) error {
 		}
 		fmt.Println(muted.Render("  The copies replaced are kept in " + tilde(dir) + " (magpie restore opens one; magpie " + cmd + " dismiss clears this)"))
 	}
+	if a := v.Applied; a != nil {
+		fmt.Println(muted.Render("  The last sync brought in " + partNames(a.Parts) + " " + syncWhen(a.At) + " (magpie " + cmd + " undo-sync puts back what was here)"))
+	}
 	if v.FollowServer {
 		fmt.Println("  follows the server: takes its setup, sends none of its own (magpie " + cmd + " follow off syncs both ways)")
 	}
@@ -584,6 +654,59 @@ func syncWhen(t time.Time) string {
 		return t.Format("at 15:04")
 	}
 	return t.Format("2006-01-02 15:04")
+}
+
+// leftOut is the parts v doesn't sync, as Settings names them.
+func leftOut(v davsync.View) []string {
+	var out []string
+	for _, p := range []struct {
+		on   bool
+		name string
+	}{{v.Providers, "providers"}, {v.Settings, "settings"}, {v.Profiles, "profiles"}, {v.Agents, "agents' models"}, {v.Library, "library"}, {v.Memory, "memory"}} {
+		if !p.on {
+			out = append(out, p.name)
+		}
+	}
+	return out
+}
+
+// printPlan says what a sync would do now.
+func printPlan(p davsync.Plan, k syncKind) {
+	if p.Empty {
+		fmt.Println("The server has no file yet: this computer's setup goes up.")
+		return
+	}
+	do := map[string]string{"in": "comes in from the server", "up": "goes up to the server", "same": "the same on both", "off": "not synced: stays as it is here"}
+	changes := 0
+	for _, pp := range p.Parts {
+		line := "  " + partNames([]string{pp.Part}) + ": " + do[pp.Do]
+		if pp.Replaces {
+			line += ", replacing a change made here (a copy is kept)"
+		}
+		fmt.Println(line)
+		if pp.Do == "in" || pp.Do == "up" {
+			changes++
+		}
+		for _, it := range pp.Items {
+			fmt.Println(muted.Render("      " + it.Change + " " + it.Kind + " " + it.Name))
+		}
+	}
+	if m := p.Memory; m != nil {
+		fmt.Printf("  memory: %d in, %d up\n", m.In, m.Up)
+		changes++
+	}
+	if p.SignIns > 0 {
+		fmt.Printf("  sign-ins: %d change here\n", p.SignIns)
+		changes++
+	}
+	if len(p.PluginsGone) > 0 {
+		fmt.Println("  plugins removed here, as another computer removed them:", strings.Join(p.PluginsGone, ", "))
+	}
+	if changes == 0 {
+		fmt.Println(muted.Render("  nothing would change"))
+	} else {
+		fmt.Println(muted.Render("  magpie " + k.cmd + " now syncs; magpie " + k.cmd + " undo-sync puts back what it brought in"))
+	}
 }
 
 // partNames are davsync's parts, as Settings names them.

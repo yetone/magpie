@@ -85,7 +85,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await form.waitFor({ state: "visible" });
       const labels = async () => (await form.locator(":scope > label:visible").allTextContents()).filter(Boolean);
       // WebDAV is the one picked at first, S3's fields not shown
-      assert.deepEqual(await labels(), zh ? ["同步到", "地址", "用户", "密码", "口令", "同时同步"] : ["Sync to", "Address", "User", "Password", "Passphrase", "Also sync"]);
+      assert.deepEqual(await labels(), zh ? ["同步到", "地址", "用户", "密码", "口令", "同步内容"] : ["Sync to", "Address", "User", "Password", "Passphrase", "What syncs"]);
       await form.locator(":scope > div").nth(1).locator("input").fill("https://dav.example.com/dav/");
 
       // picking S3 moves nothing on the page
@@ -101,8 +101,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.waitForTimeout(250);
       assert.equal(await top(), before, "picking S3 must not scroll the page");
       assert.deepEqual(await labels(), zh
-        ? ["同步到", "接口地址", "存储桶", "前缀", "区域", "Access Key", "Secret", "口令", "同时同步"]
-        : ["Sync to", "Endpoint", "Bucket", "Prefix", "Region", "Access key", "Secret", "Passphrase", "Also sync"]);
+        ? ["同步到", "接口地址", "存储桶", "前缀", "区域", "Access Key", "Secret", "口令", "同步内容"]
+        : ["Sync to", "Endpoint", "Bucket", "Prefix", "Region", "Access key", "Secret", "Passphrase", "What syncs"]);
       // every label fits its column
       for (const l of await form.locator(":scope > label:visible").all()) {
         assert.equal(await l.evaluate((e) => e.scrollWidth <= e.clientWidth + 1), true, await l.textContent());

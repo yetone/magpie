@@ -176,6 +176,7 @@ async function api(path, body, heads, signal) {
       setTimeout(() => configBlockedAsk(data.blocked), 0);
     }
     if (data?.why) err.why = data.why; // a failed move's reason, said in the reader's language
+    if (data?.changed) err.changed = data.changed; // an undo's parts changed since (davsync/undo-sync)
     if (data?.said) err.message = t(data.said, data); // an i18n.js key (api.go)
     // an account the agent is signed in to, refused removal while it has
     // another: said in the reader's language
@@ -20352,17 +20353,14 @@ async function renderSync(v) {
   };
   const btn = (label, fn, cls = "text") => { const b = el("button", cls, label); b.onclick = fn; return b; };
   const toggle = (id) => () => { syncOpen = syncOpen === id ? "" : id; renderSync(); };
-  const parts = (ps) => ps.map((p) => t({ providers: "providers", settings: "settings", profiles: "profiles", agents: "agents' models", library: "library", memory: "memory", usage: "usage", signins: "sign-ins" }[p])).join(t(", "));
+  const parts = window.syncParts = (ps) => ps.map((p) => t({ providers: "providers", settings: "settings", profiles: "profiles", agents: "agents' models", library: "library", memory: "memory", usage: "usage", signins: "sign-ins" }[p])).join(t(", "));
 
   // off: what it would keep the same, from the view's toggles (none: all on)
-  const goes = ["settings", "profiles"];
-  if (v.agents !== false) goes.push("agents");
-  if (v.library !== false) goes.push("library");
-  if (v.memory !== false) goes.push("memory");
+  const goes = ["settings", "profiles", "agents", "library", "memory"].filter((p) => v[p] !== false);
   if (v.usage) goes.push("usage");
   if (v.signIns) goes.push("signins");
-  let line = t("Keeps {parts} the same on every computer", {
-    parts: t(v.keys === false ? "providers without their API keys" : "providers with their API keys") + t(", ") + parts(goes) });
+  const provs = v.providers === false ? [] : [t(v.keys === false ? "providers without their API keys" : "providers with their API keys")];
+  let line = t("Keeps {parts} the same on every computer", { parts: [...provs, parts(goes)].filter(Boolean).join(t(", ")) });
   const s3 = v.on && v.kind === "s3";
   const github = v.on && v.kind === "github";
   if (v.on) {
@@ -20424,6 +20422,9 @@ async function renderSync(v) {
   }
   if (syncOpen === "dav") box.append(syncFile("davForm", v));
   if (v.on) {
+    // the parts left out of sync, Preview a sync and Undo the last sync
+    // (#6428), in syncfiles.js
+    syncFile("askPreviewRows", box.appendChild(el("div")), v, sub);
     // how often it syncs by itself, or never: a free 坚果云 account is
     // allowed only so many requests (#847)
     const every = v.auto ?? 3;

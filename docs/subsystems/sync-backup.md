@@ -21,8 +21,11 @@ clone a working tree or synchronize arbitrary files.
   branch or using the repository's default.
 - [`backup.go`](../../internal/backup/backup.go) owns bundle contents and
   sealing. Sync divides the setup into providers, settings, profiles, agents
-  and library. Provider keys, agent models, library and usage have their own
-  inclusion switches.
+  and library. Each part, provider keys, memory, usage and sign-ins have
+  their own inclusion switches (`Config.syncs`).
+- [`plan.go`](../../internal/davsync/plan.go) previews a sync (`Preview`,
+  `PreviewWith`), runs the one previewed (`SyncPreviewed`) and undoes the
+  last sync that brought parts in (`UndoSync`).
 - [`usage.go`](../../internal/davsync/usage.go) shares separately sealed usage
   and quota files through a remote's `files` interface.
 - [`restore.go`](../../internal/davsync/restore.go) replaces local parts from
@@ -195,6 +198,54 @@ configurations and clients. Only the active server is used. Empty credential
 fields reuse a saved credential only for its matching account; GitHub
 restricts reuse to the same owner/repo. Branch or prefix changes within that
 repository can keep the token. The branch is part of the sync state key.
+
+## What syncs, preview and undo
+
+#6428 (jinpwng on X): sync only the library and memory, keep each
+computer's providers, settings and models, see what a sync changes before
+it does, and take it back.
+
+- **What syncs.** `Config.Providers`, `Settings` and `Profiles` are
+  `*bool`, nil meaning synced, so a `sync.json` from before the choice
+  syncs every part as it did. `Agents`, `Library`, `Memory`, `Usage` and
+  `SignIns` were switches already. A part left out (`Config.syncs` false)
+  is neither read from nor written to the file: this computer keeps its
+  own, the server keeps the others' (a first computer puts none of it up,
+  which a joining one reads as `unset`). The Settings form shows
+  Providers (with their API keys under it), Settings, Agents' models,
+  Library and Memory; Profiles, Usage and Sign-ins sit under a folded
+  Advanced, open when one of them is set away from its default. The form
+  sends a part's choice only when it is off or was off, so saving an old
+  setup leaves it nil. The setup text carries the choice, and the CLI's
+  `set providers=no settings=no profiles=no` sets it. The Sync row says
+  which parts stay on each computer (`sync-left`).
+- **Turned back on.** `state.Off` is the parts the last sync left out. One
+  turned back on is joined like a first sync (`rejoin`, `again` in
+  `syncOnce`): the server's comes here, this computer's kept in the sync
+  folder, and an `unset` one on the server leaves this computer's
+  (`TestSyncPartTurnedBackOn`).
+- **Preview.** `syncOnce` with a `*Plan` runs the same merge and returns
+  before any write, here or on the server. A part's plan says `in`, `up`,
+  `same` or `off`, whether it replaces a change made here (`replaces`), and
+  its items added, removed or changed; memory, sign-ins and plugins removed
+  by another computer are counted. `Plan.Token` hashes what the sync would
+  do; `SyncPreviewed(token)` runs only while a new plan has the same token,
+  else `ErrPlanChanged` and the GUI shows the new plan. A preview from the
+  form (`PreviewWith`) is of the unsaved setup, and its Save and sync is
+  the form's ordinary save, without a token. Reached by Settings → Sync →
+  Preview a sync, the form's Preview, `/api/davsync/preview`,
+  `/api/davsync/sync-previewed` and `magpie <webdav|s3|github> preview`.
+- **Undo.** A sync that brings parts in keeps this computer's setup first
+  (`keepSealed`, as a join does) and records `state.Applied`. `UndoSync`
+  puts those parts back from that file, after keeping what is here now.
+  A part changed here since the sync is `*ChangedSince` (HTTP 409 with
+  `changed`), written over only with `force` (Undo anyway, `undo-sync
+  anyway`). The undo stays on this computer: `state.Local` is set to the
+  undone parts' hashes, so the next sync sends nothing and the server keeps
+  the others' (`TestUndoSync`). A change made here later is an ordinary
+  local change, and that whole part goes up. `/api/davsync/undo-sync`,
+  Settings → Sync → Undo the last sync, `magpie <kind> undo-sync`.
+  Restore's Undo (`davsync/undo`) is unchanged: it undoes a Restore.
 
 ## Backups by themselves
 

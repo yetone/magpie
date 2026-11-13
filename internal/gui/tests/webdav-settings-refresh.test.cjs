@@ -117,8 +117,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       sync.value = { on: true, kind: "webdav", url: "https://dav.example.com/dav/", user: "me", passwordSet: true, passphraseSet: true,
         keys: true, agents: false, library: false };
       await focus();
-      assert.equal(await settle(async () => (await first.locator(".sub").textContent()) === (zh ? "尚未同步 · dav.example.com" : "Not synced yet · dav.example.com")), true,
+      assert.equal(await settle(async () => (await first.locator(".sub.say").textContent()) === (zh ? "尚未同步 · dav.example.com" : "Not synced yet · dav.example.com")), true,
         "the row must say what the CLI left, not what the page first read");
+      // and the parts it left out, under it (#6428)
+      assert.equal(await first.locator(".sync-left").textContent(), zh ? "每台电脑各自保留：agent 的模型、资源库" : "Stays as it is on each computer: agents' models, library");
       assert.equal(await first.locator(".name").textContent(), zh ? "WebDAV 同步" : "WebDAV sync");
 
       // the form's ticks come from that fresh view
@@ -135,7 +137,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       sync.value = { on: true, kind: "s3", url: "s3://bucket/prefix", endpoint: "https://s3.example.com", region: "auto",
         user: "key-id", passwordSet: true, passphraseSet: true, keys: true, agents: true, library: true };
       await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
-      assert.equal(await settle(async () => (await first.locator(".sub").textContent()) === (zh ? "尚未同步 · s3://bucket/prefix · s3.example.com" : "Not synced yet · s3://bucket/prefix · s3.example.com")), true,
+      assert.equal(await settle(async () => (await first.locator(".sub.say").textContent()) === (zh ? "尚未同步 · s3://bucket/prefix · s3.example.com" : "Not synced yet · s3://bucket/prefix · s3.example.com")), true,
         "an S3 setup changed behind the window must reach the page too");
       assert.equal(await first.locator(".name").textContent(), zh ? "S3 同步" : "S3 sync");
 

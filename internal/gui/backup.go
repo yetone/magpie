@@ -215,6 +215,43 @@ func backupRoutes(mux *http.ServeMux, w Windows) {
 			err = busy(davsync.SyncNow(ctx)) // how it went is in the status
 		case "now":
 			err = busy(davsync.SyncNow(ctx))
+		case "preview": // what syncing would do (#6428): the setup saved, or the form's when one is sent
+			var in struct{ Form *davsync.Config }
+			var p davsync.Plan
+			if err = json.NewDecoder(r.Body).Decode(&in); err != nil && !errors.Is(err, io.EOF) {
+				fail(rw, err)
+				return
+			}
+			if in.Form != nil {
+				p, err = davsync.PreviewWith(ctx, *in.Form)
+			} else {
+				p, err = davsync.Preview(ctx)
+			}
+			if err != nil {
+				fail(rw, err)
+				return
+			}
+			writeJSON(rw, p)
+			return
+		case "sync-previewed": // the sync a preview showed, nothing else
+			var in struct{ Token string }
+			if err = json.NewDecoder(r.Body).Decode(&in); err == nil {
+				if err = davsync.SyncPreviewed(ctx, in.Token); !errors.Is(err, davsync.ErrPlanChanged) {
+					err = busy(err) // how it went is in the status
+				}
+			}
+		case "undo-sync": // the parts the last sync brought in, as they were before it
+			var in struct{ Force bool }
+			if err = json.NewDecoder(r.Body).Decode(&in); err == nil {
+				_, err = davsync.UndoSync(in.Force)
+			}
+			var since *davsync.ChangedSince
+			if errors.As(err, &since) { // the page asks before writing over them
+				rw.Header().Set("Content-Type", "application/json")
+				rw.WriteHeader(http.StatusConflict)
+				json.NewEncoder(rw).Encode(map[string]any{"error": err.Error(), "changed": since.Parts})
+				return
+			}
 		case "off":
 			err = davsync.Off()
 		case "dismiss":

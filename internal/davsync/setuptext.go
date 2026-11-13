@@ -26,12 +26,17 @@ type Setup struct {
 	Region    string `json:"region,omitempty"`
 	PathStyle bool   `json:"pathStyle,omitempty"`
 	Branch    string `json:"branch,omitempty"`
-	Keys      bool   `json:"keys"`
-	Agents    bool   `json:"agents"`
-	Library   bool   `json:"library"`
-	Memory    bool   `json:"memory"`
-	Usage     bool   `json:"usage,omitempty"`
-	SignIns   bool   `json:"signIns,omitempty"`
+	// Providers, Settings and Profiles are false when left out of sync;
+	// nil, as from a magpie before they could be, is synced.
+	Providers *bool `json:"providers,omitempty"`
+	Settings  *bool `json:"settings,omitempty"`
+	Profiles  *bool `json:"profiles,omitempty"`
+	Keys      bool  `json:"keys"`
+	Agents    bool  `json:"agents"`
+	Library   bool  `json:"library"`
+	Memory    bool  `json:"memory"`
+	Usage     bool  `json:"usage,omitempty"`
+	SignIns   bool  `json:"signIns,omitempty"`
 }
 
 // ErrSetupOff is SetupText with sync off: there is nothing to copy.
@@ -56,7 +61,7 @@ func SetupText() (string, error) {
 	}
 	b, err := json.Marshal(Setup{URL: c.URL, User: c.User, Password: c.Password, Endpoint: c.Endpoint, Region: c.Region,
 		PathStyle: c.PathStyle, Branch: c.Branch, Keys: c.Keys, Agents: c.Agents, Library: c.library(), Memory: c.memoryOn(),
-		Usage: c.Usage, SignIns: c.SignIns})
+		Usage: c.Usage, SignIns: c.SignIns, Providers: offOnly(c.Providers), Settings: offOnly(c.Settings), Profiles: offOnly(c.Profiles)})
 	if err != nil {
 		return "", err
 	}
@@ -65,6 +70,15 @@ func SetupText() (string, error) {
 		return "", err
 	}
 	return SetupPrefix + base64.RawURLEncoding.EncodeToString(sealed), nil
+}
+
+// offOnly is b as a setup carries it: false, or nil for synced.
+func offOnly(b *bool) *bool {
+	if yes(b) {
+		return nil
+	}
+	f := false
+	return &f
 }
 
 // setupBody is the setup's text after its prefix, to the first character

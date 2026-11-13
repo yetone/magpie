@@ -173,6 +173,7 @@
     <a href="#setup">Turn it on</a>
     <a href="#services">Three kinds of storage</a>
     <a href="#keep">A computer keeping its own</a>
+    <a href="#pick">Pick what syncs, preview, undo</a>
     <a href="#backup">A one-off backup and restore</a>
   </aside>
 
@@ -201,6 +202,11 @@ magpie github                   # where it syncs to and how the last sync went</
     <p>Switching between the three keeps the others' settings and credentials for switching back; one syncs at a time.</p>
     <h2 id="keep"><a class="anchor" href="#keep">A computer keeping its own</a></h2>
     <p>A change to an agent's model on one computer reaches the others. When sync changes one on a computer and you set it back there, that computer keeps its own: the others' picks no longer change it, and its picks stay there, while everything else keeps syncing. <span class="ui">Kept on this computer</span> lists those fields, and <span class="ui">Follow the others</span> takes the synced value again.</p>
+    <h2 id="pick"><a class="anchor" href="#pick">Pick what syncs, preview, undo</a></h2>
+    <p>Under <span class="ui">What syncs</span> in the sync's form, untick what each computer should keep as its own: providers, settings, agents' models, the library or memory (profiles, usage and sign-ins are under <span class="ui">Advanced</span>). A part not ticked is neither sent nor taken: this computer keeps its own, and the server keeps the others'. Ticked again later, it is joined like a first sync, with this computer's copy kept in the sync folder first. <span class="ui">Preview a sync</span> lists what would come here and what would go to the server, item by item, before anything changes; <span class="ui">Sync now</span> there runs that sync only if nothing changed since. <span class="ui">Undo the last sync</span> puts back what the last sync brought in, on this computer only.</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="sy-pick">Copy</button><pre id="sy-pick">magpie webdav set providers=no settings=no agents=no   # only the library and memory sync
+magpie webdav preview                                 # what syncing now would change
+magpie webdav undo-sync                               # put back what the last sync brought in</pre></div>
     <h2 id="backup"><a class="anchor" href="#backup">A one-off backup and restore</a></h2>
     <p>For a move to a new computer without sync, use an encrypted backup file:</p>
     <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="sy-backup">Copy</button><pre id="sy-backup">magpie backup                               # writes magpie.magpie-backup, asks for a passphrase twice

@@ -194,13 +194,20 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const box = (label) => form.locator(":scope > label:visible", { hasText: new RegExp("^" + label + "$") }).locator("xpath=following-sibling::div[1]").locator("input");
         await box(lang === "zh" ? "口令" : "Passphrase").fill("correct horse");
         await toEnd();
+        // Usage is under the form's Advanced, folded while nothing in it is set
+        const adv = form.locator("details.sync-advanced");
+        assert.equal(await adv.evaluate((d) => d.open), false, "Advanced open with nothing in it set");
+        await adv.locator("summary").evaluate((e) => e.scrollIntoView({ block: "center" }));
+        await adv.locator("summary").click();
         const tick = form.locator("label.tick", { hasText: w.tick });
         // Back up by itself's rows under the form put the tick, at the
         // page's end, under Settings' held tabs: bring it into the open
         await tick.evaluate((e) => e.scrollIntoView({ block: "center" }));
         assert.equal(await tick.locator("input").isChecked(), false, "off unless picked");
         const top = () => p.locator("#view-settings").evaluate((v) => v.scrollTop);
-        const at = await top();
+        // the fold just opened: measure once the page has stopped moving
+        let at = await top();
+        for (let i = 0; i < 50; i++) { await p.waitForTimeout(60); const now = await top(); if (now === at) break; at = now; }
         await tick.click();
         await p.waitForTimeout(200);
         assert.equal(await top(), at, "the tick moved the page");

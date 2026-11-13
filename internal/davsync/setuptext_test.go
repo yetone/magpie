@@ -82,3 +82,23 @@ func writeSetup(t *testing.T, c Config) {
 		t.Fatal(err)
 	}
 }
+
+// A setup that leaves providers and settings out of sync (#6428) opens on
+// the next computer with them left out too; one that syncs them says
+// nothing, so a setup from before the choice opens the same.
+func TestSetupTextCarriesWhatStaysHere(t *testing.T) {
+	newComputer(t).use(t)
+	no := false
+	writeSetup(t, Config{URL: "https://dav.example.com/dav/", User: "me", Password: "pw", Passphrase: "correct horse", Providers: &no, Settings: &no})
+	text, err := SetupText()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := OpenSetupText(text, "correct horse")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Providers == nil || *s.Providers || s.Settings == nil || *s.Settings || s.Profiles != nil {
+		t.Fatalf("opened providers %v, settings %v, profiles %v", s.Providers, s.Settings, s.Profiles)
+	}
+}

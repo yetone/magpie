@@ -162,6 +162,19 @@ func TestWebdavCmd(t *testing.T) {
 	if c, _ := davsync.Load(); c.Agents || c.Keys || c.Password != "pw" || c.Passphrase != "correct horse" || c.URL != first.url {
 		t.Fatalf("set: %+v", c)
 	}
+	// providers and settings can stay as they are on each computer (#6428)
+	if err := webdavCmd([]string{"set", "providers=no", "settings=no"}); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := davsync.Load(); c.Providers == nil || *c.Providers || c.Settings == nil || *c.Settings || c.Profiles != nil {
+		t.Fatalf("set providers=no settings=no: %+v", c)
+	}
+	if err := webdavCmd([]string{"set", "providers=yes", "settings=yes"}); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := davsync.Load(); c.Providers != nil && !*c.Providers {
+		t.Fatalf("set providers=yes: %+v", c)
+	}
 	// an address with = in it, bare: the same server, so the password stays
 	if err := webdavCmd([]string{"set", first.url + "?k=v"}); err != nil {
 		t.Fatal(err)

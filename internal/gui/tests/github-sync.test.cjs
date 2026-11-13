@@ -87,7 +87,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const form = list.locator(".sync-form");
       await form.locator(".segs .opt", { hasText: "GitHub" }).click();
       const labels = (await form.locator(":scope > label:visible").allTextContents()).filter(Boolean);
-      assert.deepEqual(labels, ["Sync to", "Repository", "Branch", "Folder", "GitHub token", "Passphrase", "Also sync"].map(tr));
+      assert.deepEqual(labels, ["Sync to", "Repository", "Branch", "Folder", "GitHub token", "Passphrase", "What syncs"].map(tr));
       assert.ok((await form.textContent()).includes(tr("Empty uses the repository's default branch. Empty repositories are initialized by the first sync; other branches must already exist.")));
       const box = (label) => form.locator(":scope > label:visible", { hasText: new RegExp("^" + label + "$") }).locator("xpath=following-sibling::div[1]").locator("input");
       const L = { repo: tr("Repository"), folder: tr("Folder"), token: tr("GitHub token"), phrase: tr("Passphrase") };
