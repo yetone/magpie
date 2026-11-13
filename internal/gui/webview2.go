@@ -95,6 +95,31 @@ func webView2Args(env string) (disabled, enabled, other []string) {
 	return disabled, enabled, other
 }
 
+// isolateSandboxedFrames is the Chromium feature that runs a sandboxed
+// frame in a process of its own. WebView2 157 has it on, and Wails
+// (v3.0.0-beta.24) registers its WebResourceRequested filter with
+// AddWebResourceRequestedFilter, which isn't raised for the requests
+// such a frame makes: a plugin's page or panel (pluginpages.js, sandbox
+// allow-scripts) got its index.html, but its bridge.js, scripts and
+// stylesheet went out to the network as http://wails.localhost/... and
+// failed with ERR_CONNECTION_REFUSED, so the page never said hello and
+// showed "This page stopped working" (Mute06162 on X, 0.1.4066). Wails'
+// request cancellation took the frame for a worker too, and logged
+// "Worker request cancellation setup: The parameter is incorrect."
+const isolateSandboxedFrames = "IsolateSandboxedIframes"
+
+// sharedFrameProcess is disabled with isolateSandboxedFrames first, so a
+// sandboxed frame stays in its window's process, where Wails serves its
+// requests. The frame keeps its sandbox: an opaque origin, its own policy
+// (pagePolicy), no way to the window but messages. A user who enables
+// the feature in WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS keeps it on.
+func sharedFrameProcess(disabled, enabled []string) []string {
+	if slices.Contains(enabled, isolateSandboxedFrames) {
+		return disabled
+	}
+	return addFeatures([]string{isolateSandboxedFrames}, strings.Join(disabled, ","))
+}
+
 // addFeatures adds a comma list's features to have, each once.
 func addFeatures(have []string, list string) []string {
 	for _, f := range strings.Split(strings.Trim(list, `"`), ",") {

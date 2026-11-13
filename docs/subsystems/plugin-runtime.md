@@ -351,6 +351,18 @@ starts a Bun host.
   images and fonts the page loads itself. index.html's manifest link asks
   with `crossorigin="use-credentials"`. `TestPluginPageWebComesAsOneDocument`,
   `plugin-page-cookie-proxy.test.cjs`.
+- **The frame's process on Windows.** WebView2 157 runs a sandboxed frame
+  in a process of its own (Chromium's `IsolateSandboxedIframes`), and
+  Wails' `WebResourceRequested` filter isn't raised for that process's
+  requests: a page got its index.html, but its bridge.js, scripts and
+  stylesheet went to the network as `http://wails.localhost/...` and were
+  refused, so every page and panel said it didn't answer (Mute06162 on X,
+  0.1.4066). Wails' request cancellation also logged "Worker request
+  cancellation setup: The parameter is incorrect" for the frame.
+  `windowsOptions` starts WebView2 with the feature disabled
+  (`sharedFrameProcess`), unless the user enables it in
+  `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`; the frame keeps its sandbox and
+  opaque origin. `TestWebView2KeepsPluginFramesInTheWindowProcess`.
 - **Slots.** A page names a slot with `<div class="plugin-slot"
   data-slot="…" hidden>` in its markup, or app.js draws one with
   `magpie.slot(name, context)` ([`pluginpages.js`](../../internal/gui/assets/pluginpages.js)).
