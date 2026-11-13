@@ -298,3 +298,61 @@ func TestClientName(t *testing.T) {
 		}
 	}
 }
+
+// Over stdio, as over HTTP, memory_context says who the server takes the
+// agent for and which project, and a save names another project's folder
+// (#6392, Norethcy on X): the real gateway, behind magpie mcp memory.
+func TestMemoryBridgeContextAndProject(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	gw := httptest.NewServer(gateway.New().Handler())
+	defer gw.Close()
+	d := t.TempDir()
+	repo := func(name string) string {
+		dir := filepath.Join(d, name)
+		if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		cfg := "[remote \"origin\"]\n\turl = https://github.com/someone/" + name + ".git\n"
+		if err := os.WriteFile(filepath.Join(dir, ".git", "config"), []byte(cfg), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return dir
+	}
+	here, target := repo("organizer"), repo("target")
+	// the relay sends lines at once, so the search goes in a second run
+	byID := map[string]string{}
+	for _, calls := range []string{
+		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"memory_context","arguments":{}}}` + "\n" +
+			`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"memory_save","arguments":{"text":"Builds run on mote","kind":"fact","project":"../target"}}}`,
+		`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"memory_search","arguments":{"scope":"project","project":"` + filepath.ToSlash(target) + `"}}}`,
+	} {
+		in := strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"codex","version":"memory-migration"}}}` + "\n" +
+			`{"jsonrpc":"2.0","method":"notifications/initialized"}` + "\n" + calls + "\n")
+		var out bytes.Buffer
+		if err := serveMemory(in, &out, gw.URL, here); err != nil {
+			t.Fatal(err)
+		}
+		for _, l := range strings.Split(strings.TrimSpace(out.String()), "\n") {
+			var m struct{ ID json.RawMessage }
+			json.Unmarshal([]byte(l), &m)
+			byID[string(m.ID)] = l
+		}
+	}
+	for id, want := range map[string]string{
+		"2": `Agent: codex (from the client named at magpie mcp memory's initialize)`,
+		"3": `this project (github.com/someone/target)`,
+		"4": `(looked in: project github.com/someone/target)`,
+	} {
+		if !strings.Contains(byID[id], want) {
+			t.Fatalf("call %s: %s, want %q", id, byID[id], want)
+		}
+	}
+	if !strings.Contains(byID["2"], "Project: github.com/someone/organizer") || !strings.Contains(byID["4"], "Builds run on mote") {
+		t.Fatalf("answers: %v", byID)
+	}
+}

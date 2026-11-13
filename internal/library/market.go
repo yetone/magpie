@@ -242,7 +242,8 @@ func visionServer() MarketServer {
 const memoryServerName = "magpie-memory"
 
 // memoryServer is Magpie Memory: what is known about the user, kept by
-// magpie for every agent, as memory_search, memory_save and memory_forget,
+// magpie for every agent, as memory_search, memory_save, memory_forget and
+// memory_context,
 // through `magpie mcp memory`, which passes each call to the gateway's
 // MemoryMCPPath with the folder the agent started it in. It is there to be
 // shared and costs nothing, so, unlike magpie's other servers, it is given

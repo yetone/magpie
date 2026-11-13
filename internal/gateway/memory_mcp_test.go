@@ -314,3 +314,86 @@ func TestMemoryMCPAgentFromTheSessionsInitialize(t *testing.T) {
 		t.Fatal("memoryAgent")
 	}
 }
+
+// A migration run from one project keeps memories for another and can
+// check where they went (#6392, Norethcy on X): memory_search and
+// memory_save take a project (a folder, absolute or under the caller's,
+// or a key memory knows), every answer names the agent and project it
+// used, and memory_context says who the caller is taken for and how.
+func TestMemoryMCPProjectArgumentAndContext(t *testing.T) {
+	fresh(t)
+	h := lanGuard(New().Handler())
+	d := t.TempDir()
+	here := gitRepo(t, filepath.Join(d, "organizer"), "https://github.com/someone/organizer.git")
+	target := gitRepo(t, filepath.Join(d, "target"), "https://github.com/someone/target.git")
+	codex := []string{MemoryClientHeader, "codex-mcp-client", MemoryCwdHeader, here}
+
+	said, bad := memPost(t, h, memorySaveTool, `{"text":"Builds run on mote","kind":"fact","project":`+quotedQuery(target)+`}`, codex...)
+	if bad || !strings.Contains(said, "this project (github.com/someone/target)") {
+		t.Fatalf("save into a folder's project: %s", said)
+	}
+	if all, _, _ := memory.All(); all[0].Scope != "project:github.com/someone/target" || all[0].Sources[0].Dir != target {
+		t.Fatalf("kept %+v", all[0])
+	}
+	// its key, and a folder relative to the caller's, name it too
+	if said, bad := memPost(t, h, memorySaveTool, `{"text":"Releases are tagged after a green run","kind":"procedure","project":"github.com/someone/target"}`, codex...); bad || !strings.Contains(said, "(github.com/someone/target)") {
+		t.Fatalf("save by key: %s", said)
+	}
+	if said, bad := memPost(t, h, memorySearchTool, `{"scope":"project","project":"../target"}`, codex...); bad || !strings.Contains(said, "Builds run on mote") || !strings.Contains(said, "Releases are tagged") || !strings.Contains(said, "(looked in: project github.com/someone/target)") {
+		t.Fatalf("search by relative folder: %s", said)
+	}
+	// the caller's own project has none of them, and says which it is
+	if said, _ := memPost(t, h, memorySearchTool, `{"scope":"project"}`, codex...); strings.Contains(said, "mote") || !strings.Contains(said, "project github.com/someone/organizer") {
+		t.Fatalf("own project: %s", said)
+	}
+	if said, _ := memPost(t, h, memorySearchTool, `{"query":"mote"}`, codex...); !strings.Contains(said, "Nothing remembered matches") || !strings.Contains(said, "(looked in: everywhere, project github.com/someone/organizer, agent codex)") {
+		t.Fatalf("all, here: %s", said)
+	}
+	// what can't be: an unknown project, a project with another scope
+	for args, want := range map[string]string{
+		`{"text":"x","project":` + quotedQuery(filepath.Join(d, "nowhere")) + `}`: "isn't a folder",
+		`{"text":"x","project":"nothing-like-it"}`:                                "neither a folder here nor a project memory knows",
+		`{"text":"x","scope":"global","project":"target"}`:                        "goes with scope project",
+		`{"text":"x","scope":"agent","project":"../target"}`:                      "goes with scope project",
+	} {
+		if said, bad := memPost(t, h, memorySaveTool, args, codex...); !bad || !strings.Contains(said, want) {
+			t.Fatalf("%s: %v %s", args, bad, said)
+		}
+	}
+
+	// memory_context: the agent and the project, how each was found
+	w := mcpPostTo(h, MemoryMCPPath, "127.0.0.1:50000", `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"memory_context","arguments":{}}}`, append(codex, "Accept", "application/json")...)
+	var res struct {
+		Result struct {
+			Content []struct{ Text string } `json:"content"`
+			Context struct {
+				Agent   struct{ ID, From string }
+				Project struct {
+					Key, Scope, Folder, From string
+				}
+				Scopes []string
+			} `json:"structuredContent"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatalf("%v: %s", err, w.Body.String())
+	}
+	ctx := res.Result.Context
+	if ctx.Agent.ID != "codex" || !strings.Contains(ctx.Agent.From, "initialize") || ctx.Project.Key != "github.com/someone/organizer" || ctx.Project.Folder != here || ctx.Project.From != "the folder the client runs in" ||
+		strings.Join(ctx.Scopes, " ") != "global project:github.com/someone/organizer agent:codex agent:codex-mcp-client" || !strings.Contains(res.Result.Content[0].Text, "Agent: codex") {
+		t.Fatalf("context: %s", w.Body.String())
+	}
+	said, bad = memPost(t, h, memoryContextTool, `{"project":"target"}`, codex...)
+	if bad || !strings.Contains(said, "Project: github.com/someone/target (target), from the project argument") {
+		t.Fatalf("context in another project: %s", said)
+	}
+	// nothing known: it says so, and how to make it known
+	if said, bad := memPost(t, h, memoryContextTool, `{}`, "User-Agent", "curl/8"); bad || !strings.Contains(said, "Agent: unknown") || !strings.Contains(said, "Project: none") {
+		t.Fatalf("context of no one: %s", said)
+	}
+	// the tool is listed, read-only
+	w = mcpPostTo(h, MemoryMCPPath, "127.0.0.1:50000", `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, "Accept", "application/json")
+	if !strings.Contains(w.Body.String(), `"name":"memory_context"`) || strings.Count(w.Body.String(), `"project":{`) != 3 {
+		t.Fatalf("tools: %s", w.Body.String())
+	}
+}

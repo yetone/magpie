@@ -85,7 +85,7 @@ func OwnMCPTools(ctx context.Context) []OwnMCPServer {
 		case imageServerName:
 			s.Tools = []string{GenerateImageTool, GenerateVideoTool, GenerationResultTool}
 		case memoryServerName:
-			s.Tools = []string{memorySearchTool, memorySaveTool, memoryForgetTool}
+			s.Tools = []string{memorySearchTool, memorySaveTool, memoryForgetTool, memoryContextTool}
 		case "magpie-tools":
 			ts, _ := servedTools(ctx)
 			for _, t := range ts {

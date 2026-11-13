@@ -3,8 +3,10 @@ package gateway
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -19,7 +21,8 @@ import (
 
 // magpie's memory (internal/memory) is an MCP server every agent can mount,
 // so what one agent learns of the user, another knows: memory_search,
-// memory_save and memory_forget, Streamable HTTP at MemoryMCPPath, served
+// memory_save, memory_forget and memory_context (who the caller is taken
+// for), Streamable HTTP at MemoryMCPPath, served
 // as SearchMCPPath is (serveMCP), to the agents on this computer alone.
 // The Library gives it as `magpie mcp memory`, which passes each message on with the folder the
 // agent started it in (MemoryCwdHeader) and the client's name from its
@@ -42,9 +45,10 @@ const (
 )
 
 const (
-	memorySearchTool = "memory_search"
-	memorySaveTool   = "memory_save"
-	memoryForgetTool = "memory_forget"
+	memorySearchTool  = "memory_search"
+	memorySaveTool    = "memory_save"
+	memoryForgetTool  = "memory_forget"
+	memoryContextTool = "memory_context"
 )
 
 const memoryServerName = "magpie-memory"
@@ -74,11 +78,12 @@ func memoryMCPTools() []any {
 			"inputSchema": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"query": map[string]any{"type": "string", "description": "What to look for, in a few words"},
-					"scope": map[string]any{"type": "string", "enum": []string{"all", "project", "global"}, "description": "project: this project's memories; global: those for every project; all (default): both, and yours"},
-					"kind":  map[string]any{"type": "string", "description": "Only memories of this kind: " + memoryKinds},
-					"tags":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Only memories with every one of these tags"},
-					"limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 50, "default": 10},
+					"query":   map[string]any{"type": "string", "description": "What to look for, in a few words"},
+					"scope":   map[string]any{"type": "string", "enum": []string{"all", "project", "global"}, "description": "project: this project's memories; global: those for every project; all (default): both, and yours"},
+					"kind":    map[string]any{"type": "string", "description": "Only memories of this kind: " + memoryKinds},
+					"project": map[string]any{"type": "string", "description": "Another project than the one you work in: its folder on this computer (absolute, or relative to yours), or its key as memory_context shows it (github.com/owner/repo)"},
+					"tags":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Only memories with every one of these tags"},
+					"limit":   map[string]any{"type": "integer", "minimum": 1, "maximum": 50, "default": 10},
 				},
 			},
 			"annotations": map[string]any{"readOnlyHint": true, "openWorldHint": false},
@@ -91,12 +96,13 @@ func memoryMCPTools() []any {
 			"inputSchema": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"text":  map[string]any{"type": "string", "description": "The memory, one self-contained fact or instruction"},
-					"kind":  map[string]any{"type": "string", "enum": memory.Kinds, "description": "profile: who the user is; preference: how they like things; rule: what must or must not be done; reference: where something is; fact: something true of a project; procedure: how something is done; episode: a decision or event worth recalling"},
-					"scope": map[string]any{"type": "string", "enum": []string{"project", "global", "agent"}, "description": "project: holds only in this project (default for facts, references, procedures and episodes); global: holds everywhere (default for profile, preference and rule); agent: only for you"},
-					"tags":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "A few words to find it by (a topic, a tool, a language)"},
-					"why":   map[string]any{"type": "string", "description": "Why it holds, when the user said, so it can be judged later"},
-					"id":    map[string]any{"type": "string", "description": "A memory's id, to change that memory rather than save a new one"},
+					"text":    map[string]any{"type": "string", "description": "The memory, one self-contained fact or instruction"},
+					"kind":    map[string]any{"type": "string", "enum": memory.Kinds, "description": "profile: who the user is; preference: how they like things; rule: what must or must not be done; reference: where something is; fact: something true of a project; procedure: how something is done; episode: a decision or event worth recalling"},
+					"scope":   map[string]any{"type": "string", "enum": []string{"project", "global", "agent"}, "description": "project: holds only in this project (default for facts, references, procedures and episodes); global: holds everywhere (default for profile, preference and rule); agent: only for you"},
+					"tags":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "A few words to find it by (a topic, a tool, a language)"},
+					"why":     map[string]any{"type": "string", "description": "Why it holds, when the user said, so it can be judged later"},
+					"id":      map[string]any{"type": "string", "description": "A memory's id, to change that memory rather than save a new one"},
+					"project": map[string]any{"type": "string", "description": "Another project than the one you work in: its folder on this computer (absolute, or relative to yours), or its key as memory_context shows it (github.com/owner/repo)"},
 				},
 				"required": []string{"text"},
 			},
@@ -112,6 +118,16 @@ func memoryMCPTools() []any {
 				"required":   []string{"id"},
 			},
 			"annotations": map[string]any{"readOnlyHint": false, "destructiveHint": true, "idempotentHint": true, "openWorldHint": false},
+		},
+		map[string]any{
+			"name":        memoryContextTool,
+			"title":       "Memory context",
+			"description": "Says who the memory server takes you for: the agent \"only for you\" is kept for, the project \"this project\" means, how each was found, and where a search looks. Check it before saving or moving memories for an agent or a project.",
+			"inputSchema": map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"project": map[string]any{"type": "string", "description": "A project to check instead of the one you work in, as memory_search and memory_save take it"}},
+			},
+			"annotations": map[string]any{"readOnlyHint": true, "openWorldHint": false},
 		},
 	}
 }
@@ -150,14 +166,25 @@ func (s *Server) memoryMCPCall(r *http.Request, m mcpMessage) (any, map[string]a
 		var said string
 		var err error
 		switch p.Name {
+		case memorySearchTool, memorySaveTool, memoryContextTool:
+			if c, err = c.inProject(a.Project); err != nil {
+				return toolResult(err.Error(), true), nil
+			}
+		}
+		switch p.Name {
 		case memorySearchTool:
 			said, err = memorySearch(c, a)
 		case memorySaveTool:
 			said, err = memorySave(c, a)
 		case memoryForgetTool:
 			said, err = memoryForget(a)
+		case memoryContextTool:
+			said, ctx := memoryContext(c)
+			res := toolResult(said, false)
+			res["structuredContent"] = ctx
+			return res, nil
 		default:
-			return nil, map[string]any{"code": -32602, "message": "unknown tool " + p.Name + ": this server has " + memorySearchTool + ", " + memorySaveTool + " and " + memoryForgetTool}
+			return nil, map[string]any{"code": -32602, "message": "unknown tool " + p.Name + ": this server has " + memorySearchTool + ", " + memorySaveTool + ", " + memoryForgetTool + " and " + memoryContextTool}
 		}
 		if err != nil {
 			return toolResult(err.Error(), true), nil
@@ -176,6 +203,9 @@ type memoryArgs struct {
 	Why   string    `json:"why"`
 	ID    string    `json:"id"`
 	Limit flexCount `json:"limit"`
+	// Project is another project than the caller's: a folder, or a
+	// project's key (memoryCaller.inProject)
+	Project string `json:"project"`
 }
 
 // flexTags are tags as a model may write them: a list, or one string of
@@ -213,6 +243,10 @@ type memoryCaller struct {
 	agent   string
 	project *memory.Project
 	dir     string
+	// how the agent and the project were found, for memory_context
+	agentFrom, projectFrom string
+	// asked is the project argument the call named ("" for none)
+	asked bool
 }
 
 // memoryCallerOf is the caller of r: the agent its key or User-Agent
@@ -234,34 +268,40 @@ func memoryCallerOf(r *http.Request, rawMeta json.RawMessage) memoryCaller {
 	// the client the hub or `magpie mcp memory` names first: their own
 	// requests go under magpie's key and a Go User-Agent
 	c := memoryCaller{}
-	for _, name := range []string{extra.Client, r.Header.Get(MemoryClientHeader)} {
+	for i, name := range []string{extra.Client, r.Header.Get(MemoryClientHeader)} {
 		if c.agent == "" && strings.TrimSpace(name) != "" {
 			c.agent = memoryAgent(usage.AgentOf(name))
+			c.agentFrom = []string{"the client the MCP router names", "the client named at magpie mcp memory's initialize"}[i]
 		}
 	}
 	if c.agent == "" {
-		c.agent = memoryAgent(callerOf(r).agent)
+		if c.agent = memoryAgent(callerOf(r).agent); c.agent != "" {
+			c.agentFrom = "the request's key or User-Agent"
+		}
 	}
 	if c.agent == "" {
 		// the client the session's initialize named (#6392): Codex's
 		// HTTP client says nothing of itself but there
-		c.agent = memoryClients.of(r.Header.Get("Mcp-Session-Id"))
+		if c.agent = memoryClients.of(r.Header.Get("Mcp-Session-Id")); c.agent != "" {
+			c.agentFrom = "the client named at this session's initialize"
+		}
 	}
 	if !local(r) {
 		return c
 	}
 	var dirs []string
+	var from string
 	if extra.Roots != nil {
 		// behind the hub: its roots, none when the agent has none
-		dirs = rootDirs(*extra.Roots)
+		dirs, from = rootDirs(*extra.Roots), "the roots the MCP router names"
 	} else if d := strings.TrimSpace(r.Header.Get(MemoryCwdHeader)); d != "" {
-		dirs = []string{d}
+		dirs, from = []string{d}, "the folder the client runs in"
 	} else {
-		dirs = rootDirs(hubRoots(r, meta))
+		dirs, from = rootDirs(hubRoots(r, meta)), "the agent's roots or its Codex thread"
 	}
 	for _, d := range dirs {
 		if p := memory.ProjectOf(d); p != nil {
-			c.project, c.dir = p, d
+			c.project, c.dir, c.projectFrom = p, d, from
 			break
 		}
 	}
@@ -300,6 +340,130 @@ func rootDirs(uris []string) []string {
 	return out
 }
 
+// inProject is c in the project a call names (memoryArgs.Project): a
+// folder on this computer, absolute or under the caller's own, or the key
+// (or the one name) of a project memory knows. "" leaves c as it is.
+// Behind the router or stdio the folder is the caller's, so a migration
+// run from one project can keep memories for another, and say which.
+func (c memoryCaller) inProject(arg string) (memoryCaller, error) {
+	arg = strings.TrimSpace(arg)
+	if arg == "" {
+		return c, nil
+	}
+	folder := func(d string) (memoryCaller, bool) {
+		st, err := os.Stat(d)
+		if err != nil || !st.IsDir() {
+			return c, false
+		}
+		p := memory.ProjectOf(d)
+		if p == nil {
+			return c, false
+		}
+		c.project, c.dir, c.projectFrom, c.asked = p, d, "the project argument (a folder)", true
+		return c, true
+	}
+	if filepath.IsAbs(arg) {
+		if out, ok := folder(filepath.Clean(arg)); ok {
+			return out, nil
+		}
+		return c, searchMCPError(fmt.Sprintf("project %q isn't a folder on this computer", arg))
+	}
+	_, known, err := memory.All()
+	if err != nil {
+		return c, fmt.Errorf("memory can't be read now: %v", err)
+	}
+	key := strings.TrimPrefix(arg, "project:")
+	var byName []*memory.Project
+	for k, p := range known {
+		if strings.EqualFold(k, key) {
+			byName = []*memory.Project{p}
+			break
+		}
+		if strings.EqualFold(p.Name, key) {
+			byName = append(byName, p)
+		}
+	}
+	if len(byName) == 1 {
+		p := byName[0]
+		c.project, c.dir, c.projectFrom, c.asked = &memory.Project{Key: p.Key, Name: p.Name, Roots: p.Roots}, "", "the project argument (a key)", true
+		if len(p.Roots) > 0 {
+			c.dir = p.Roots[len(p.Roots)-1]
+		}
+		return c, nil
+	}
+	if c.dir != "" {
+		if out, ok := folder(filepath.Join(c.dir, arg)); ok {
+			return out, nil
+		}
+	}
+	if len(byName) > 1 {
+		var keys []string
+		for _, p := range byName {
+			keys = append(keys, p.Key)
+		}
+		slices.Sort(keys)
+		return c, searchMCPError(fmt.Sprintf("project %q names %d projects: give one's key (%s)", arg, len(keys), strings.Join(keys, ", ")))
+	}
+	keys := slices.Sorted(maps.Keys(known))
+	if len(keys) > 10 {
+		keys = append(keys[:10], "…")
+	}
+	have := "none yet"
+	if len(keys) > 0 {
+		have = strings.Join(keys, ", ")
+	}
+	return c, searchMCPError(fmt.Sprintf("project %q is neither a folder here nor a project memory knows (it knows %s)", arg, have))
+}
+
+// memoryContext is who the server takes c for, and where its searches
+// look: as text, and as an object for a script to check.
+func memoryContext(c memoryCaller) (string, map[string]any) {
+	scopes, _ := c.scopes("")
+	ctx := map[string]any{"server": map[string]any{"name": memoryServerName, "version": Version}, "scopes": scopes}
+	var b strings.Builder
+	if c.agent != "" {
+		ctx["agent"] = map[string]any{"id": c.agent, "from": c.agentFrom}
+		fmt.Fprintf(&b, "Agent: %s (from %s); scope agent keeps memories for it alone.\n", c.agent, c.agentFrom)
+	} else {
+		ctx["agent"] = nil
+		b.WriteString("Agent: unknown. Nothing named the client: an MCP client names itself at initialize (clientInfo.name) on this session; until then scope agent can't be used.\n")
+	}
+	if c.project != nil {
+		p := map[string]any{"key": c.project.Key, "name": c.project.Name, "scope": memory.ScopeOf(c.project), "from": c.projectFrom}
+		if c.dir != "" {
+			p["folder"] = c.dir
+		}
+		ctx["project"] = p
+		fmt.Fprintf(&b, "Project: %s (%s), from %s", c.project.Key, c.project.Name, c.projectFrom)
+		if c.dir != "" {
+			fmt.Fprintf(&b, ", folder %s", c.dir)
+		}
+		b.WriteString("; scope project keeps memories there.\n")
+	} else {
+		ctx["project"] = nil
+		b.WriteString("Project: none. No folder of yours is known here: give memory_search and memory_save a project (a folder, or a key), or run magpie mcp memory in the project's folder.\n")
+	}
+	fmt.Fprintf(&b, "A search with scope all looks in: %s.\nmagpie-memory %s", strings.Join(scopes, ", "), Version)
+	return b.String(), ctx
+}
+
+// whereSaid is where a search for c looked, the last line of its answer.
+func (c memoryCaller) whereSaid(scopes []string) string {
+	var parts []string
+	for _, s := range scopes {
+		switch {
+		case s == memory.Global:
+			parts = append(parts, "everywhere")
+		case strings.HasPrefix(s, "project:"):
+			parts = append(parts, "project "+strings.TrimPrefix(s, "project:"))
+		case s == "agent:codex-mcp-client" && c.agent == "codex":
+		case strings.HasPrefix(s, "agent:"):
+			parts = append(parts, "agent "+strings.TrimPrefix(s, "agent:"))
+		}
+	}
+	return "(looked in: " + strings.Join(parts, ", ") + ")"
+}
+
 // scopes are the scopes a search for c looks in.
 func (c memoryCaller) scopes(which string) ([]string, error) {
 	proj := memory.ScopeOf(c.project)
@@ -318,6 +482,9 @@ func (c memoryCaller) scopes(which string) ([]string, error) {
 		}
 		return out, nil
 	case "global":
+		if c.asked {
+			return nil, searchMCPError("a project goes with scope project or all, not global")
+		}
 		return []string{memory.Global}, nil
 	case "project":
 		if proj == "" {
@@ -353,16 +520,17 @@ func memorySearch(c memoryCaller, a memoryArgs) (string, error) {
 	}
 	if len(hits) == 0 {
 		if strings.TrimSpace(a.Query) == "" {
-			return "Nothing is remembered here yet.", nil
+			return "Nothing is remembered here yet. " + c.whereSaid(scopes), nil
 		}
-		return "Nothing remembered matches " + quotedQuery(a.Query) + ".", nil
+		return "Nothing remembered matches " + quotedQuery(a.Query) + ". " + c.whereSaid(scopes), nil
 	}
 	var b strings.Builder
 	for _, h := range hits {
 		b.WriteString(memoryLine(h.Memory, c))
 		b.WriteString("\n")
 	}
-	return strings.TrimSpace(b.String()), nil
+	b.WriteString(c.whereSaid(scopes))
+	return b.String(), nil
 }
 
 // memoryLine is one memory as an agent reads it: its id, kind, where it
@@ -371,9 +539,9 @@ func memoryLine(m *memory.Memory, c memoryCaller) string {
 	where := "everywhere"
 	switch {
 	case strings.HasPrefix(m.Scope, "agent:"):
-		where = "only for you"
+		where = "only for you (" + strings.TrimPrefix(m.Scope, "agent:") + ")"
 	case strings.HasPrefix(m.Scope, "project:"):
-		where = "this project"
+		where = "this project (" + strings.TrimPrefix(m.Scope, "project:") + ")"
 		if s := memory.ScopeOf(c.project); s != m.Scope {
 			where = "project " + strings.TrimPrefix(m.Scope, "project:")
 		}
@@ -415,6 +583,15 @@ func memorySave(c memoryCaller, a memoryArgs) (string, error) {
 		in.Why = &w
 	}
 	which := strings.ToLower(strings.TrimSpace(a.Scope))
+	if c.asked {
+		// a project named is where the memory goes
+		if which == "" {
+			which = "project"
+		}
+		if which != "project" {
+			return "", searchMCPError("a project goes with scope project, not " + which)
+		}
+	}
 	if which == "" && a.ID == "" {
 		which = "global"
 		if c.project != nil && !slices.Contains([]string{"", memory.Profile, memory.Preference, memory.Rule}, kind) {
@@ -443,6 +620,12 @@ func memorySave(c memoryCaller, a memoryArgs) (string, error) {
 		in.Scope = &scope
 	}
 	if id := strings.TrimSpace(a.ID); id != "" {
+		if scope != "" && scope == memory.ScopeOf(c.project) {
+			// its name and folders, for the Memory tab
+			if err := memory.NoteProject(c.project); err != nil {
+				return "", err
+			}
+		}
 		m, err := memory.Edit(id, in, false)
 		if err != nil {
 			return "", err
