@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -63,6 +64,7 @@ func readDirectory(path string) []os.DirEntry {
 		}
 		return nil
 	}
+	entries = compactEntries(path, entries)
 	directoryCache.Lock()
 	if len(directoryCache.entries) >= 16384 {
 		directoryCache.entries = map[string]directoryEntry{}
@@ -70,6 +72,36 @@ func readDirectory(path string) []os.DirEntry {
 	directoryCache.entries[path] = directoryEntry{mod, size, at, entries}
 	directoryCache.Unlock()
 	return entries
+}
+
+// keptEntry is a kept listing's entry. A listing is kept as long as its
+// folder doesn't change, ~16k of them across a long Claude Code history, so
+// they sit in one array its entries point into: os.ReadDir gives each its
+// own allocation, and the slice it returns room to grow (#2278).
+type keptEntry struct {
+	dir, name string
+	typ       fs.FileMode
+}
+
+func (e *keptEntry) Name() string               { return e.name }
+func (e *keptEntry) IsDir() bool                { return e.typ.IsDir() }
+func (e *keptEntry) Type() fs.FileMode          { return e.typ }
+func (e *keptEntry) Info() (fs.FileInfo, error) { return os.Lstat(filepath.Join(e.dir, e.name)) }
+func (e *keptEntry) String() string             { return fs.FormatDirEntry(e) }
+
+// compactEntries is entries, read from dir, held as keptEntry. Not on
+// Windows, whose entries carry what Info answers and keptEntry would stat for.
+func compactEntries(dir string, entries []os.DirEntry) []os.DirEntry {
+	if runtime.GOOS == "windows" {
+		return entries
+	}
+	all := make([]keptEntry, len(entries))
+	out := make([]os.DirEntry, len(entries))
+	for i, e := range entries {
+		all[i] = keptEntry{dir, e.Name(), e.Type()}
+		out[i] = &all[i]
+	}
+	return out
 }
 
 // unreadDirectory is what a folder lists as when reading it failed with
