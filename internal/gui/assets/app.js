@@ -12573,6 +12573,7 @@ async function startSignIn(agent, risky, site, o = {}) {
     if (site) body.site = site;
     if (o.user) body.user = o.user;
     if (o.proxy != null) body.proxy = o.proxy;
+    if (o.linkOnly) body.linkOnly = true;
     signing = { ...(await api("signin", body)), ...keep };
     if (web && signing.url && !signing.linkOnly) {
       const id = signing.id;
@@ -13694,6 +13695,8 @@ function renderAccounts(a, p) {
       imp.title = importSay(a.agent).from;
       list.append(imp);
     }
+    // the link alone, to open where the account can sign in (Wing8Aqua on X)
+    if (a.agent === "claude" || a.agent === "codex") list.append(addRow(t("Sign in on another computer…"), () => startSignIn(a.agent, false, undefined, { linkOnly: true })));
     if (a.agent === "claude") list.append(addRow(t("Add an account by setup-token…"), startClaudeToken));
     // last of them, and no plus: it adds nothing (the owner, 11-12)
     if (sub.importable && (a.agent === "claude" || a.agent === "codex")) list.append(addRow(t("Export accounts to a file…"), () => startExport(a.agent), EXPORT_GLYPH));

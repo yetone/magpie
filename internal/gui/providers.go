@@ -3251,6 +3251,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// account's (#1663); none picked, the one its requests go through
 			Proxy *string
 			User  string // the account signed in to again
+			// LinkOnly keeps this sign-in to its link: the page is not opened
+			// here, to be copied to a browser on another computer
+			LinkOnly bool
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			fail(rw, err)
@@ -3263,7 +3266,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 		}
 		// one that installs a CLI first has no URL yet: the window opens it
 		// once there is one
-		writeJSON(rw, openSignIn(w, st))
+		writeJSON(rw, openSignIn(w, st, in.LinkOnly))
 	})
 	mux.HandleFunc("GET /api/signin/{id}", func(rw http.ResponseWriter, r *http.Request) {
 		st, ok := provider.SignInStatus(r.PathValue("id"))

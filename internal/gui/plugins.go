@@ -869,7 +869,7 @@ func pluginRoutes(mux *http.ServeMux, w Windows) {
 			fail(rw, err)
 			return
 		}
-		writeJSON(rw, openSignIn(w, st))
+		writeJSON(rw, openSignIn(w, st, false))
 	})
 }
 

@@ -91,7 +91,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         if (lang === "en") {
           const strings = await page.evaluate(() => [...document.querySelectorAll(".editor .accts .pool-ends label")].map((l) => l.title));
           const keys = ["Don't go to fallbacks when every account is at its cap", "Check usage again near a cap", "No cap on {users}: used to 100% of each window",
-            "On: once every account in use is at its cap, requests get 429 instead of going to the fallbacks.",
+            "Off: once every account in use is at its cap, requests go on to this provider's fallbacks (other providers or keys). On: they get 429 and nothing else is tried.",
             "On: an account near its cap has its usage read again before a request. One whose usage can't be read is held."];
           assert.deepEqual(strings, keys.slice(3));
           const missing = await page.evaluate((ks) => ["zh", "zh-TW", "ja", "de"].flatMap((l) => ks.filter((k) => !I18N[l][k]).map((k) => `${l}: ${k}`)), keys);

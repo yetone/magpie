@@ -3346,9 +3346,10 @@ type signInOpened struct {
 
 // openSignIn opens an account sign-in's page, unless the user keeps those
 // pages to a browser of their own (settings.SignInLinkOnly), and says how
-// it went for signInOpened.
-func openSignIn(w Windows, st provider.SignInState) signInOpened {
-	if settings.Load().SignInLinkOnly {
+// it went for signInOpened. linkOnly is this sign-in alone kept to its link
+// (the window's "Sign in on another computer"), whatever the setting.
+func openSignIn(w Windows, st provider.SignInState, linkOnly bool) signInOpened {
+	if linkOnly || settings.Load().SignInLinkOnly {
 		return signInOpened{SignInState: st, LinkOnly: true}
 	}
 	var failed string
