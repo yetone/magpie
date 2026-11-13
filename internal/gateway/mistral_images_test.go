@@ -2,7 +2,9 @@ package gateway
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -62,8 +64,8 @@ func replyFor(path string) (string, string) {
 }
 
 // Past 20 images a request to Mistral loses its oldest ones to a short
-// text, on the Chat route and on the Responses route Codex uses; the
-// newest 20 and every turn's text stay. The same conversation to another
+// text, ten at a time (mistralImageStep), on the Chat route and on the
+// Responses route Codex uses; the newest and every turn's text stay. The same conversation to another
 // vendor goes with every image, and one of 20 or fewer is untouched.
 func TestMistralImageLimit(t *testing.T) {
 	for _, route := range []struct {
@@ -87,16 +89,16 @@ func TestMistralImageLimit(t *testing.T) {
 			if code != 200 {
 				t.Fatalf("%d: %s", code, body)
 			}
-			if n := sentImages(f); n != 20 {
-				t.Errorf("%d images sent, want 20", n)
+			if n := sentImages(f); n != 16 {
+				t.Errorf("%d images sent, want 16", n)
 			}
 			sent := string(f.got)
-			for _, want := range []string{"shot 0", "shot 5", "shot 25", "AAAA25", "AAAA6"} {
+			for _, want := range []string{"shot 0", "shot 5", "shot 25", "AAAA25", "AAAA10"} {
 				if !strings.Contains(sent, want) {
 					t.Errorf("sent lacks %q: %s", want, sent)
 				}
 			}
-			if strings.Contains(sent, `AAAA5"`) || !strings.Contains(sent, mistralImagesLeft) {
+			if strings.Contains(sent, `AAAA9"`) || !strings.Contains(sent, mistralImagesLeft) {
 				t.Errorf("oldest image kept or no placeholder: %s", sent)
 			}
 			// within the limit: unchanged
@@ -124,4 +126,42 @@ func TestMistralImageLimit(t *testing.T) {
 			t.Errorf("responses %d: %d images, %s", code, sentImages(f), body)
 		}
 	})
+}
+
+// regain4125 on X: a Codex conversation reading a screenshot a turn, past
+// 20 of them, missed Mistral's prompt cache on nearly all of its 400K
+// tokens at every turn, as the cut moved by one image each time and
+// changed the prompt from the oldest kept image on. Each turn's request
+// is the one before with the new turn added, until the cut moves ten
+// images later, and never more than 20 images go.
+func TestMistralImageLimitKeepsPrefix(t *testing.T) {
+	messages := func(n int) []string {
+		var q struct {
+			Messages []json.RawMessage `json:"messages"`
+		}
+		if err := json.Unmarshal(mistralImageLimit([]byte(chatShots(n))), &q); err != nil {
+			t.Fatal(err)
+		}
+		out := make([]string, len(q.Messages))
+		for i, m := range q.Messages {
+			out[i] = string(m)
+		}
+		return out
+	}
+	moved := 0
+	prev := messages(20)
+	for n := 21; n <= 60; n++ {
+		cur := messages(n)
+		if got := strings.Count(strings.Join(cur, ","), `data:image/png`); got > mistralMaxImages {
+			t.Fatalf("%d shots: %d images sent", n, got)
+		}
+		if !slices.Equal(cur[:len(prev)], prev) {
+			moved++
+		}
+		prev = cur
+	}
+	// the cut moves at 21, 31, 41 and 51 shots
+	if moved != 4 {
+		t.Fatalf("prefix changed on %d of 40 turns, want 4", moved)
+	}
 }
