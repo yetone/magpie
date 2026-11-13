@@ -3679,6 +3679,19 @@ body:not(.side-nav) #addSheet > .row-head.stuck::before { box-shadow: 0 1px 0 va
 /* a provider's Routing and Stays, with "unsaved" beside a pick not saved yet */
 .route-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
 .route-pick > .hint { margin: 0; }
+/* In turn, drawn (app.js rotateFigure): quiet greys from the theme's own
+   tokens, an account told by its letter and its shade */
+.rot-wrap { margin-top: 8px; max-width: 100%; overflow-x: auto; }
+.rot-fig { display: block; max-width: 100%; height: auto; font-family: var(--font); }
+.rot-fig .rot-track { fill: var(--card-2); stroke: var(--line); }
+.rot-fig .rot-link { stroke: var(--line); stroke-width: 1.5; }
+.rot-fig .rot-l { font-size: 9px; font-weight: 600; fill: var(--card); }
+.rot-fig .rot-l.rot-c { fill: var(--fg); }
+.rot-fig .rot-acct.rot-a, .rot-fig .rot-call.rot-a { fill: var(--fg-2); }
+.rot-fig .rot-acct.rot-b, .rot-fig .rot-call.rot-b { fill: var(--muted); }
+.rot-fig .rot-acct.rot-c, .rot-fig .rot-call.rot-c { fill: var(--faint); }
+.rot-fig .rot-key { fill: none; stroke: var(--muted); }
+.rot-fig .rot-legend { font-size: 9.5px; fill: var(--muted); }
 .thumb.still { transition: none; }
 .link { font-size: 12px; color: var(--accent); padding: 3px 4px; white-space: nowrap; }
 .link:hover { text-decoration: underline; text-underline-offset: 2px; }

@@ -104,7 +104,8 @@ const groupUsage = `usage:
            order   the first model until it can't answer, then the next
            drain   one account or key until it is used up, then the next, and stays there: an
                    earlier one that renews meanwhile doesn't take the requests back
-           rotate  each conversation's next turn goes to the next member's account or key
+           rotate  each message you send goes to the next member's account or key, its tool calls
+                   staying with it; with stays=session a whole conversation stays on one
            usage   the account or key with the most of its allowance left first
            pace    the account with the most of its week left per hour until it renews first, so less
                    of a week is lost at its reset
