@@ -8636,6 +8636,8 @@ If nothing opens, no app on this computer handles Cherry Studio’s links yet: o
 
 Cherry Studio lists a provider’s models from `/v1/models`, so the magpie provider offers every model magpie has, named `provider/model` (for example `deepseek/deepseek-v4-pro`). Add the ones you want to the magpie provider in Cherry Studio, and choose them in a chat like any other model.
 
+The list has magpie’s image and video models too. Cherry Studio knows most of them by name (gpt-image-2, Gemini’s image models, Imagen, Seedream, Grok Imagine…) and offers them on its Paintings page, not in a chat. For one it doesn’t know, open the model’s settings in the magpie provider and tick image generation.
+
 A provider you add in magpie later shows up the next time Cherry Studio fetches the list; there is nothing to change in Cherry Studio. Several accounts behind one model, rest periods after a 429 and failover work as they do for every agent.
 
 ## From a terminal
@@ -10369,6 +10371,7 @@ An MCP server is either a command (a program the agent starts, such as `npx …`
 - **Single tools off..** You can turn off tools one by one for Codex, Gemini CLI, Crush, Hermes Agent, Claude Code and OpenCode, each in its own setting. Every other agent gets the whole server.
 - **Sign-in..** A server that needs OAuth is signed in to once, in magpie. Agents then reach it through magpie’s gateway at `/mcp/<name>`.
 - **This computer only..** Turn off Sync to your other computers for a server that should stay here (`magpie library mcp local <name> on`).
+- **Another command here..** For a synced server whose program sits elsewhere on this computer (a Mac and WSL), click Use another command on this computer under its command. Its name, agents and note still sync; your other computers keep running theirs (`magpie library mcp here <name> <command…>`).
 
 With the [MCP router](https://usemagpie.ai/docs/mcp-router) on, each agent gets one server named `magpie` in place of these entries, and magpie runs each command server once for all of them. It is off by default.
 
@@ -11029,7 +11032,7 @@ On this machine the gateway takes any key. Send `magpie-<your-app-id>` (`Authori
 
 ### Models
 
-`GET /v1/models` lists what the user has turned on: `id` (`provider/model`, or a routing group’s name, sent as it is), `display_name`, `owned_by` (the provider), `reasoning` and `supported_reasoning_levels` (`[{"effort":"low"},…]`, and the same as plain names in `reasoning_levels`), `context_window` and `max_output_tokens` when known, and `modalities` when magpie knows whether it takes images. List them from there rather than shipping a list: the user adds and removes providers in magpie. Reasoning is asked in your API’s own field (`reasoning_effort`, `reasoning.effort`, Anthropic’s `thinking` or `output_config.effort`). `?format=text` gives the ids one a line. The list holds chat models alone: ask for image and video models with `?kind=image,video` (or `?kind=all`). Each is marked `"kind": "image"` or `"video"` and is made on `/v1/images/generations` or `/v1/videos`, not a chat route.
+`GET /v1/models` lists what the user has turned on: `id` (`provider/model`, or a routing group’s name, sent as it is), `display_name`, `owned_by` (the provider), `reasoning` and `supported_reasoning_levels` (`[{"effort":"low"},…]`, and the same as plain names in `reasoning_levels`), `context_window` and `max_output_tokens` when known, and `modalities` when magpie knows whether it takes images. List them from there rather than shipping a list: the user adds and removes providers in magpie. Reasoning is asked in your API’s own field (`reasoning_effort`, `reasoning.effort`, Anthropic’s `thinking` or `output_config.effort`). `?format=text` gives the ids one a line. The list holds chat models alone: ask for image and video models with `?kind=image,video` (or `?kind=all`). Each is marked `"kind": "image"` or `"video"` and is made on `/v1/images/generations` or `/v1/videos`, not a chat route. Cherry Studio, which can’t ask and tells an image model from a chat one by its id, is listed every kind.
 
 A vendor’s own fields: `/v1/images/generations` and `/v1/videos` take OpenAI’s fields and pass the others on to a vendor that takes them, such as Volcengine Ark’s `content` (reference video and audio, `draft_task`), `ratio`, `resolution`, `duration: -1`, `tools`, `watermark` and `sequential_image_generation`, and a video’s answer carries Ark’s own fields (`content.last_frame_url`, `usage`). For the rest of a vendor’s API use `/v1/magpie/native/<provider>/<path>`: `GET`, `POST`, `PUT`, `PATCH` or `DELETE`, with `<path>` joined to the provider’s host (not its base URL), in the vendor’s own shape on the user’s key for that provider, a stream as it comes; Ark’s task list is `GET /v1/magpie/native/ark/api/v3/contents/generations/tasks`. It serves a provider added with an API key, not a subscription or sign-in, and Ark’s short paths (`images/generations`, `contents/generations/tasks`) still work under the key’s base. It takes the same gateway key as every route, and a key held to models, accounts or a budget is refused it.
 
