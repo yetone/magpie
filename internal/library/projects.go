@@ -60,11 +60,6 @@ type Project struct {
 	// Trees are the project's folder in each other worktree of its git
 	// repository, given the project's set, with what magpie put in each
 	Trees []*Project `json:"trees,omitempty"`
-	// Subagents are the library's subagents the project has, and for which
-	// agents; AgentFiles the files magpie wrote for them, by their hash
-	// (project_subagents.go)
-	Subagents  map[string][]string `json:"subagents,omitempty"`
-	AgentFiles []SubagentFile      `json:"agentFiles,omitempty"`
 }
 
 // projectSkillsDirs is where, in a project, each agent reads skills of its
@@ -138,7 +133,7 @@ func (l *Library) syncProjects(res *Result) {
 
 func (l *Library) syncProject(p *Project, res *Result) {
 	if fi, err := os.Stat(p.Dir); err != nil || !fi.IsDir() {
-		if len(p.Skills) > 0 || len(p.Servers) > 0 || len(p.Subagents) > 0 || len(p.ServersOff) > 0 || len(p.SkillsOff) > 0 || p.holds() {
+		if len(p.Skills) > 0 || len(p.Servers) > 0 || len(p.ServersOff) > 0 || len(p.SkillsOff) > 0 || p.holds() {
 			res.Problems = append(res.Problems, Problem{Agent: p.Dir, What: "project:", Error: "the folder is gone"})
 		}
 		return
@@ -213,7 +208,6 @@ func (l *Library) syncFolder(p *Project, res *Result, hubs map[string]*Server) {
 		res.Problems = append(res.Problems, Problem{Agent: p.Dir, What: "project:" + what, Error: err.Error()})
 	})
 	l.syncSkillsOff(p, fail)
-	l.syncProjectSubagents(p, func(what string, err error) { fail(what, err) })
 	p.tidy()
 }
 
@@ -230,9 +224,10 @@ func (p *Project) keepOutOfGit() error {
 	if !ok {
 		return nil
 	}
-	entries := p.ignored()
+	entries := slices.Concat(p.Placed, p.MadeFiles)
 	for _, t := range p.Trees {
-		entries = append(entries, t.ignored()...)
+		entries = append(entries, t.Placed...)
+		entries = append(entries, t.MadeFiles...)
 	}
 	return p.writeExclude(g, entries)
 }
@@ -470,7 +465,7 @@ func RemoveProject(dir string, keep bool) (*Result, error) {
 			l.Projects = slices.DeleteFunc(l.Projects, func(x *Project) bool { return x == p })
 			return nil
 		}
-		p.Skills, p.Servers, p.ServersOff, p.SkillsOff, p.Subagents = nil, nil, nil, nil, nil
+		p.Skills, p.Servers, p.ServersOff, p.SkillsOff = nil, nil, nil, nil
 		l.syncProject(p, &Result{})
 		if !p.holds() && p.Claude == nil && !slices.ContainsFunc(p.Trees, (*Project).holds) {
 			l.Projects = slices.DeleteFunc(l.Projects, func(x *Project) bool { return x == p })
@@ -553,13 +548,8 @@ type ProjectView struct {
 	SkillsOff  map[string][]string `json:"skillsOff"`
 	// Trees are the project's folder in the repository's other git
 	// worktrees, which follow it
-	Trees []string `json:"trees,omitempty"`
-	// Subagents are the library's subagents the project has, for the
-	// agents named
-	Subagents map[string][]string `json:"subagents"`
-	// AgentFiles are the project's files magpie wrote for them
-	AgentFiles []string `json:"agentFiles"`
-	Missing    bool     `json:"missing,omitempty"` // the folder is gone
+	Trees   []string `json:"trees,omitempty"`
+	Missing bool     `json:"missing,omitempty"` // the folder is gone
 	// Problems are, by skill ("" for the project's own), what couldn't be done
 	Problems map[string]string `json:"problems,omitempty"`
 }
@@ -584,14 +574,6 @@ func projectViews(l *Library, problems []Problem) []ProjectView {
 		}
 		for k, a := range p.SkillsOff {
 			v.SkillsOff[k] = append([]string{}, a...)
-		}
-		v.AgentFiles = []string{}
-		for _, f := range p.AgentFiles {
-			v.AgentFiles = append(v.AgentFiles, f.Path)
-		}
-		v.Subagents = map[string][]string{}
-		for k, a := range p.Subagents {
-			v.Subagents[k] = append([]string{}, a...)
 		}
 		for _, t := range p.Trees {
 			v.Trees = append(v.Trees, t.Dir)

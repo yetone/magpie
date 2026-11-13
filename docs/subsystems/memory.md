@@ -193,7 +193,14 @@ further (`State.Since`), unless a range is picked.
   range reads at once; a bad level or range is a 400,
   `TestDistillRangeAndEffortRoutes`) and
   `POST /api/memory/distill/run`. The row polls every 2s while a run
-  goes and reloads the memories when it ends.
+  goes and reloads the memories when it ends. Search by meaning's row
+  polls the same way while the model downloads or memories wait to be
+  read. A poll that reads nothing new draws nothing; one that does
+  redraws its own row only (`redrawRow`), and the whole tab only when the
+  memories changed. A render keeps an editor that was open (`.lib-detail`
+  with the same `data-detail`) from playing its entrance again
+  (Nietzsche_Li on X: the open memory jittered every 2s;
+  `library-memory-steady.test.cjs`).
 
 ### Dreaming
 

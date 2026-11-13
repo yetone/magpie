@@ -1,7 +1,6 @@
 package uninstall
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,14 +12,10 @@ import (
 
 const schemeKey = `Software\Classes\magpie`
 
-// unregisterScheme takes out the magpie:// and ccswitch:// handlers the app
-// registered while they open exe, or an exe that is gone.
+// unregisterScheme takes out the magpie:// handler the app registered
+// while it opens exe, or an exe that is gone.
 func unregisterScheme(exe string) error {
-	return errors.Join(removeSchemeKey(schemeKey, exe), removeSchemeKey(`Software\Classes\ccswitch`, exe))
-}
-
-func removeSchemeKey(key, exe string) error {
-	k, err := registry.OpenKey(registry.CURRENT_USER, key+`\shell\open\command`, registry.QUERY_VALUE)
+	k, err := registry.OpenKey(registry.CURRENT_USER, schemeKey+`\shell\open\command`, registry.QUERY_VALUE)
 	if err != nil {
 		return nil
 	}
@@ -32,7 +27,7 @@ func removeSchemeKey(key, exe string) error {
 		}
 	}
 	for _, sub := range []string{`\shell\open\command`, `\shell\open`, `\shell`, `\DefaultIcon`, ``} {
-		if err := registry.DeleteKey(registry.CURRENT_USER, key+sub); err != nil && err != registry.ErrNotExist {
+		if err := registry.DeleteKey(registry.CURRENT_USER, schemeKey+sub); err != nil && err != registry.ErrNotExist {
 			return err
 		}
 	}

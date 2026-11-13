@@ -3,14 +3,14 @@ package agent
 import (
 	"encoding/json"
 	"os"
+	"regexp"
 
 	"github.com/yetone/magpie/internal/edit"
-	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // piMagpieExt matches a Pi package source for the pi-magpie extension:
 // npm:pi-magpie, npm:pi-magpie@0.1.6, or a path or git source ending in it.
-var piMagpieExt = lazyre.New(`(^|[:/\\])pi-magpie(@[^/\\]*)?(#.*)?$`)
+var piMagpieExt = regexp.MustCompile(`(^|[:/\\])pi-magpie(@[^/\\]*)?(#.*)?$`)
 
 // piMagpieInstalled says Pi's settings.json lists the pi-magpie extension
 // in "packages". It serves provider "magpie" from magpie's live catalog,

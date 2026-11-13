@@ -282,6 +282,8 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 
 /* an agent's instructions, opened */
 .lib-detail { padding: 4px 14px 14px 50px; background: var(--card-2); display: flex; flex-direction: column; gap: 8px; border-top: 0 !important; animation: content-in .2s var(--ease); }
+/* open before the render that drew it again: no second entrance */
+.lib-detail.kept { animation: none; }
 .lib-lab { font-size: 11.5px; color: var(--muted); }
 .lib-detail .lib-aside { margin: 0; }
 .lib-acts { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
@@ -796,10 +798,6 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-plugin > .who { flex-basis: 240px; }
 .lib-plugin.off .name, .lib-plugin.off .lib-subagentdesc { opacity: .55; }
 .lib-plugin .lib-plparts, .lib-plpick .lib-plparts { white-space: normal; overflow-wrap: anywhere; }
-.lib-pldetail > :is(p, details, .hint), .lib-pldetail .ebody > :is(p, details, .hint) { grid-column: 1 / -1; margin: 0; }
-.lib-pldetail p { font-size: 12.5px; line-height: 1.5; }
-.lib-pldetail .lib-plgroup > summary { cursor: pointer; font-size: 12.5px; color: var(--fg-2); }
-.lib-pldetail .lib-plgroup .lib-plnames { margin-top: 4px; font-size: 12px; }
 .lib-pldetail .lib-plnames, .lib-pldetail .lib-plsource { white-space: normal; overflow-wrap: anywhere; }
 .lib-subagentedit .lib-menu { max-width: 100%; height: 28px; color: var(--fg); }
 .lib-subagentedit .lib-menu > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
