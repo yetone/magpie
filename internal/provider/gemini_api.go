@@ -54,10 +54,26 @@ func geminiVersioned(u string) string {
 // on X). A base with a path of its own (/v1beta, a relay's /gemini) is
 // asked as typed.
 func GeminiAsked(u string) string {
-	if u == "" {
-		return ""
+	if u == "" || geminiKept(u) {
+		return u
 	}
 	return geminiVersioned(u)
+}
+
+// geminiKept reports, without allocating, that geminiVersioned would give u
+// back as it is: a scheme, a path of its own with no trailing slash, query,
+// fragment or /models, and no space around it. Host asks Base(Gemini) on
+// every look (TestHostBuildsNoList), and a saved base is already this.
+func geminiKept(u string) bool {
+	if strings.TrimSpace(u) != u || strings.HasSuffix(u, "/") || strings.ContainsAny(u, "?#") || strings.Contains(u, "/models") {
+		return false
+	}
+	i := strings.Index(u, "://")
+	if i <= 0 {
+		return false
+	}
+	j := strings.IndexByte(u[i+3:], '/')
+	return j > 0
 }
 
 // GeminiPath is the path under a Gemini base model is asked at: streamed as
