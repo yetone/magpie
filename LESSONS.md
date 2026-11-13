@@ -334,6 +334,9 @@ every user.**
 - dccfefdf7 (#2635) made an imported skill follow the app's versioned
   folder. Skills imported before keep the stale link, and only the
   reporter was told to import again.
+- Done right on 11-13: 873a5caa2 (Edward4226, #2961) wrote new launch
+  agents as Standard, and 58ea9cade mended the Background ones already
+  installed the same day.
 - Seen 1× (2026-10-17).
 
 ## The user's own files and settings
