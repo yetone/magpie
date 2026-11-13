@@ -264,6 +264,21 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 		}
 		writeJSON(rw, p)
 	})
+	// the subagents at an address: a repository, a folder in one, a file,
+	// a folder here (subagent_import.go); nothing is written
+	mux.HandleFunc("POST /api/library/subagents/probe", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ Source string }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		p, err := library.ProbeSubagents(in.Source)
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, p)
+	})
 	// which skills GitHub has changed: the page as it is, each skill from
 	// there carrying what the check found of it
 	mux.HandleFunc("POST /api/library/skills/check", func(rw http.ResponseWriter, r *http.Request) {
@@ -795,6 +810,8 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			res, err = library.SubagentAgentsSet(in.Name, in.Agents)
 		case "subagents/remove":
 			res, err = library.RemoveSubagents([]string{in.Name})
+		case "subagents/import":
+			res, err = library.ImportSubagents(in.Source, in.Paths, in.Agents)
 		case "skills/install":
 			res, err = library.InstallSkills(in.Source, in.Paths, in.Agents)
 		case "skills/create":

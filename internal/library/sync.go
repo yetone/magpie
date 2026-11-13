@@ -52,6 +52,9 @@ type Result struct {
 	// weren't GitHub's, kept with the backups
 	Linked     []string `json:"linked,omitempty"`
 	LinkedKept []string `json:"linkedKept,omitempty"`
+	// Subagents is, for subagents imported from a repository, what was
+	// added, updated, had already, and left as changed here
+	Subagents *SubagentsImported `json:"subagents,omitempty"`
 	// dropped are the servers taken out of an agent's config, as it had
 	// them, whose processes go once no agent runs them (mcp_reap.go)
 	dropped []*Server

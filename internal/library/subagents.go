@@ -62,6 +62,10 @@ type Subagent struct {
 	Skills []string `json:"skills,omitempty"`
 	MCP    []string `json:"mcp,omitempty"`
 	Agents []string `json:"agents"`
+	// From is the file it was imported from, its Path the file's in the
+	// repository, and FromHash what it said then (subagent_import.go)
+	From     *Source `json:"from,omitempty"`
+	FromHash string  `json:"fromHash,omitempty"`
 }
 
 // SubagentFile is a file magpie wrote for a subagent, and the hash of what
@@ -407,11 +411,15 @@ func SaveSubagent(old string, s Subagent) (*Result, error) {
 		if s.Name != old && l.subagent(s.Name) != nil {
 			return fmt.Errorf("the library already has a subagent called %s", s.Name)
 		}
+		s.From, s.FromHash = nil, ""
 		if old != "" {
 			i := slices.IndexFunc(l.Subagents, func(x *Subagent) bool { return x.Name == old })
 			if i < 0 {
 				return fmt.Errorf("no subagent called %s", old)
 			}
+			// where it was imported from stays, its edits telling an
+			// import again to leave it alone
+			s.From, s.FromHash = l.Subagents[i].From.clone(), l.Subagents[i].FromHash
 			l.Subagents = slices.Delete(l.Subagents, i, i+1)
 			if old != s.Name {
 				l.renameProjectSubagents(old, s.Name)

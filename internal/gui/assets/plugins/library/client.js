@@ -677,6 +677,19 @@ magpie.plugin("library", (ctx) => {
   // agent written that isn't one of them had it taken out (#332).
   function report(res, done, given) {
     if (!res) return;
+    // subagents imported from a repository (subagent_import.go)
+    const sa = res.subagents;
+    if (sa) {
+      const n = sa.added?.length || 0, parts = [];
+      if (n) parts.push(n === 1 ? t("1 subagent imported") : t("{count} subagents imported", { count: n }));
+      if (sa.updated?.length) parts.push(t("updated: {names}", { names: sa.updated.join(", ") }));
+      if (sa.had?.length) parts.push(t("already in the library: {names}", { names: sa.had.join(", ") }));
+      if (sa.kept?.length) parts.push(t("changed here, left as they are: {names}", { names: sa.kept.join(", ") }));
+      const warn = res.problems?.length;
+      if (warn) { const p = res.problems[0]; parts.push(t("{agent}: {error}", { agent: tilde(nameOf(p.agent)), error: p.error })); }
+      status(parts.join(" · "), warn ? "warn" : "ok", warn ? 10000 : 6000);
+      return;
+    }
     // an update that found its source without the skill: said so, not
     // as done or failed (スライム on Discord)
     if (res.gone?.length) {
@@ -4767,6 +4780,7 @@ magpie.plugin("library", (ctx) => {
     const all = subagentAgents();
     const subs = lib.subagents || [];
     pickingFor("subagents", []);
+    body.append(subagentFind());
     if (!subs.length) {
       body.append(empty(t("No subagents in the library yet"), t("Add one, and pick the agents that can hand it a task."), button(t("＋ Add a subagent"), "action", () => editSubagent(null))));
     } else {
@@ -4791,6 +4805,119 @@ magpie.plugin("library", (ctx) => {
     const skip = all.filter((a) => subagentAgentOf(a.id).no);
     if (skip.length) body.append(el("p", "lib-aside lib-subagents-no", t("magpie can't give subagents to {agents} yet: their chips are greyed, and say why.", { agents: skip.map((a) => a.name).join(", ") })));
     if (!agentless() && (subs.length || lib.projects.length)) renderProjects(body, "subagents");
+  }
+
+  // subagents from a repository (CHENGJIAHEGOXIS on X): a link to one,
+  // a folder or a file in one, or a folder here; each Markdown file with
+  // a name and a description is one (library/subagent_import.go)
+  let saProbe = null;    // { source, found, pick:Set, agents, filter } or { source, error }
+  let saProbing = false;
+  const saPickable = (x) => !x.state || x.state === "update";
+
+  function subagentFind() {
+    const card = el("div", "list lib-card lib-install lib-safind");
+    const line = el("div", "lib-find");
+    const inp = el("input");
+    inp.type = "text";
+    inp.dataset.lib = "sasource";
+    inp.placeholder = t("owner/repo, a GitHub or GitLab link, any git repository's address, or a folder on this computer");
+    inp.spellcheck = false;
+    inp.autocomplete = "off";
+    inp.value = saProbe?.source || "";
+    const go = button(saProbing ? t("Looking…") : t("Find subagents"), "action", () => find());
+    go.disabled = saProbing;
+    if (saProbing) go.classList.add("busy");
+    inp.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") find(); else if (e.key === "Escape" && saProbe) { saProbe = null; render(); } };
+    line.append(glyph(GLYPH.search, "lib-mini"), inp, go);
+    card.append(line);
+    async function find() {
+      const src = inp.value.trim();
+      if (!src || saProbing) return;
+      saProbing = true;
+      saProbe = { source: src };
+      render();
+      try {
+        const f = await api("library/subagents/probe", { source: src });
+        const fresh = f.candidates.filter(saPickable);
+        saProbe = { source: src, found: f, pick: new Set((fresh.length <= 3 ? fresh : []).map((c) => c.path)), agents: subagentAgents().filter((a) => !subagentBlocked(a)).map((a) => a.id), filter: "" };
+      } catch (e) {
+        saProbe = { source: src, error: e.message };
+      }
+      saProbing = false;
+      render();
+    }
+    if (saProbe?.error) card.append(el("div", "lib-err", saProbe.error));
+    if (saProbe?.found) card.append(subagentPicks(saProbe));
+    return card;
+  }
+
+  function subagentPicks(p) {
+    const box = el("div", "lib-probe");
+    const c = p.found.candidates;
+    const left = (p.found.left || []).map((x) => el("div", "lib-none lib-left", t("{path} left out: {error}", { path: x.path, error: x.error })));
+    const head = el("div", "lib-probehead");
+    const src = p.found.kind === "github" ? "github.com/" + p.found.source.replace(/^https?:\/\/(www\.)?github\.com\//, "")
+      : p.found.kind === "git" ? p.found.source.replace(/^https:\/\//, "") : tilde(p.found.source);
+    head.append(el("span", "note", c.length === 1 ? t("1 subagent in {src}", { src }) : t("{count} subagents in {src}", { count: c.length, src })));
+    head.append(el("span", "grow"));
+    const fresh = c.filter(saPickable);
+    if (fresh.length > 1) {
+      const allOn = fresh.every((x) => p.pick.has(x.path));
+      head.append(button(allOn ? t("Select none") : t("Select all"), "", () => { for (const x of fresh) allOn ? p.pick.delete(x.path) : p.pick.add(x.path); render(); }));
+    }
+    box.append(head);
+    if (c.length > 8) {
+      const f = el("input", "lib-filter");
+      f.type = "text";
+      f.dataset.lib = "safilter";
+      f.placeholder = t("Filter…");
+      f.value = p.filter;
+      f.oninput = () => { p.filter = f.value; drawList(); };
+      f.onkeydown = (e) => e.stopPropagation();
+      box.append(f);
+    }
+    const list = el("div", "lib-picks");
+    const drawList = () => {
+      list.replaceChildren();
+      const q = p.filter.toLowerCase();
+      for (const x of c) {
+        if (q && !(x.name + " " + x.description + " " + x.path).toLowerCase().includes(q)) continue;
+        const r = el("label", "lib-pick lib-sapick" + (saPickable(x) ? "" : " dim"));
+        const cb = el("input");
+        cb.type = "checkbox";
+        cb.checked = p.pick.has(x.path);
+        cb.disabled = !saPickable(x);
+        cb.onchange = () => { if (cb.checked) p.pick.add(x.path); else p.pick.delete(x.path); syncGo(); };
+        const w = el("span", "who");
+        w.append(el("span", "name mono", x.as || x.name), el("span", "sub", x.description));
+        r.append(cb, w);
+        if (x.state === "have") r.append(tag(t("in the library"), ""));
+        else if (x.state === "update") r.append(tag(t("Changed upstream"), "lib-as", t("Importing it again updates its description and prompt, and keeps its agents.")));
+        else if (x.state === "edited") r.append(tag(t("Changed here"), "lib-as", t("You changed it here, so importing it again leaves it as it is.")));
+        else if (x.as) r.append(tag(t("adds as {name}", { name: x.as }), "lib-as", t("The library has another subagent called {name}. This one goes in beside it as {as}.", { name: x.name, as: x.as })));
+        list.append(r);
+      }
+    };
+    drawList();
+    box.append(list, ...left);
+    if (!c.length) return box;
+    const foot = el("div", "lib-probefoot");
+    const agentsBox = el("div");
+    const drawAgents = () => agentsBox.replaceChildren(agentChips(subagentAgents(), p.agents, (n) => { p.agents = n; drawAgents(); }, { names: false, all: true, blocked: subagentBlocked }));
+    drawAgents();
+    foot.append(el("span", "note", t("for")), agentsBox, el("span", "grow"));
+    foot.append(button(t("Cancel"), "", () => { saProbe = null; render(); }));
+    const go = button("", "primary", async () => {
+      go.disabled = true;
+      go.textContent = t("Importing…");
+      if (await change("subagents/import", { source: p.source, paths: [...p.pick], agents: p.agents.filter((id) => !subagentBlocked(agentOf(id) || { id })) })) { saProbe = null; render(); }
+      else { go.disabled = false; syncGo(); }
+    });
+    const syncGo = () => { const n = p.pick.size; go.textContent = n === 1 ? t("Import 1 subagent") : t("Import {count} subagents", { count: n }); go.disabled = !n; };
+    syncGo();
+    foot.append(go);
+    box.append(foot);
+    return box;
   }
 
   function subagentRow(s, all) {

@@ -414,6 +414,7 @@ var notYet = map[string]string{
 	"POST /api/library/skills/check":             L,  // library.go
 	"POST /api/library/skills/probe":             L,  // library.go
 	"POST /api/library/plugins/probe":            L,  // library.go
+	"POST /api/library/subagents/probe":          L,  // library.go
 	"GET /api/memory":                            L,  // memory.go
 	"POST /api/memory":                           L,  // memory.go
 	"POST /api/memory/digest":                    L,  // memory.go

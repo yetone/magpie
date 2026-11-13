@@ -142,6 +142,7 @@ func Collect() (*Bundle, error) {
 		c := *s
 		c.Skills, c.MCP = slices.Sorted(slices.Values(s.Skills)), slices.Sorted(slices.Values(s.MCP))
 		c.Agents = orNone(slices.Sorted(slices.Values(s.Agents)))
+		c.From = s.From.clone()
 		subs = append(subs, &c)
 	}
 	b.Subagents = &subs
@@ -631,6 +632,7 @@ func Put(b *Bundle) (*Result, error) {
 			for _, s := range *b.Subagents {
 				c := *s
 				c.Skills, c.MCP, c.Agents = slices.Clone(s.Skills), slices.Clone(s.MCP), slices.Clone(orNone(s.Agents))
+				c.From = s.From.clone()
 				subs = append(subs, &c)
 			}
 			l.Subagents = subs

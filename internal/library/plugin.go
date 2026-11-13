@@ -675,31 +675,46 @@ func resolvePluginRoot(input string) (root, tmp string, err error) {
 		}
 		return dir, "", nil
 	}
+	root, tmp, _, err = fetchSourceRoot(input)
+	if err != nil {
+		return "", "", err
+	}
+	if fi, err := os.Stat(root); err != nil || !fi.IsDir() {
+		os.RemoveAll(tmp)
+		return "", "", fmt.Errorf("%s isn't a folder", input)
+	}
+	return root, tmp, nil
+}
+
+// fetchSourceRoot downloads the GitHub or git repository input names, whole,
+// and gives back the folder or file in it the link points to, the download
+// to remove after, and the repository with the path in it.
+func fetchSourceRoot(input string) (root, tmp string, src Source, err error) {
 	sweepStaleDownloads()
 	src, ok := githubSource(input)
 	if !ok {
-		var err error
 		if src, ok, err = gitSource(input); err != nil {
-			return "", "", err
+			return "", "", Source{}, err
 		} else if !ok {
-			return "", "", errors.New("that's neither a git repository's link (GitHub, GitLab or another host) nor a folder's full path")
+			return "", "", Source{}, errors.New("that's neither a git repository's link (GitHub, GitLab or another host) nor a folder's full path")
 		}
 	}
 	path := src.Path
 	src.Path = ""
 	tmp, err = fetch(src)
 	if err != nil {
-		return "", "", err
+		return "", "", Source{}, err
 	}
+	src.Path = path
 	if path == "" {
-		return tmp, tmp, nil
+		return tmp, tmp, src, nil
 	}
 	sub, ok := inside(tmp, path)
-	if fi, err := os.Stat(sub); !ok || err != nil || !fi.IsDir() {
+	if _, err := os.Stat(sub); !ok || err != nil {
 		os.RemoveAll(tmp)
-		return "", "", fmt.Errorf("%s has no folder %s", src.Repo, path)
+		return "", "", Source{}, fmt.Errorf("%s has no folder %s", src.Repo, path)
 	}
-	return sub, tmp, nil
+	return sub, tmp, src, nil
 }
 
 // findPlugins reads the plugins at root: a marketplace's entries, or the
