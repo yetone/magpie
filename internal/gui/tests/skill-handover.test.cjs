@@ -19,6 +19,7 @@ const HOME = "/Users/tnt";
 const SH = `${HOME}/.agents/skills`;
 const agent = (id, name) => ({ id, name, icon: "", skills: `${HOME}/.${id}/skills` });
 const lib = (st) => ({
+  sharedSkills: !!st.shared,
   dir: `${HOME}/.magpie/library`, backups: `${HOME}/.magpie/backups`, home: HOME,
   agents: [agent("claude", "Claude Code"), agent("codex", "Codex"), agent("gemini", "Gemini CLI")],
   instructions: { agents: [] }, servers: [], foundServers: [], projects: [], foundSkills: [], newSkills: [],
@@ -127,6 +128,25 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert((await sheet.locator(".lib-confirm").first().textContent()).includes(w.link), "the link's folder isn't named");
         await sheet.locator(".bar button", { hasText: w.cancel }).click();
         await sheet.waitFor({ state: "detached" });
+
+        // with every skill kept in ~/.agents/skills by the setting (ConatusMoon2222
+        // on X) the sheet says that setting goes off; without it, it doesn't
+        assert(!said.includes("~/.agents/skills now"), "the sheet names the setting while it is off");
+        if (lang === "en") {
+          st.shared = true;
+          await page.reload();
+          await page.locator('button[data-view="library"]').click();
+          await row("orca").waitFor();
+          await row("orca").locator(".lib-handover").click();
+          await sheet.waitFor();
+          assert.match((await sheet.locator(".lib-confirm").allTextContents()).join(" "), /That setting goes off: magpie's links there are taken away/);
+          await sheet.locator(".bar button", { hasText: w.cancel }).click();
+          await sheet.waitFor({ state: "detached" });
+          st.shared = false;
+          await page.reload();
+          await page.locator('button[data-view="library"]').click();
+          await row("orca").waitFor();
+        }
 
         // moved: one post, the row's button gone, and said
         await one.click();

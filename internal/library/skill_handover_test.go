@@ -262,3 +262,36 @@ func TestSharedUnderAnotherName(t *testing.T) {
 		t.Error("goose isn't given the library's")
 	}
 }
+
+// ConatusMoon2222 on X: with every skill kept in ~/.agents/skills by the
+// setting, handing skills over left magpie's links there (the sync made
+// them again). The setting goes off, magpie's links go, the user's own
+// entries stay.
+func TestHandOverWithSharedSetting(t *testing.T) {
+	h := sandbox(t)
+	noGoose(t, h)
+	shared := filepath.Join(h, ".agents/skills")
+	ext := filepath.Join(h, "aimer-skills/grilling")
+	skill(t, ext, "grilling", "Grill")
+	symlink(t, ext, filepath.Join(shared, "grilling"))
+	ok(t)(ImportSkill("grilling"))
+	ok(t)(SetSkillsWhere(SkillsInShared))
+	// a skill of the library's the setting linked into the shared folder
+	ok(t)(CreateSkill("other", "Other", nil))
+	own := filepath.Join(shared, "handmade")
+	skill(t, own, "handmade", "Mine")
+
+	ok(t)(HandOverSkills([]string{"grilling"}))
+	if _, err := os.Lstat(filepath.Join(shared, "grilling")); !os.IsNotExist(err) {
+		t.Fatalf("a link is left in ~/.agents/skills: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(shared, "other")); !os.IsNotExist(err) {
+		t.Errorf("magpie's link to another skill is left: %v", err)
+	}
+	if !realFolder(own) {
+		t.Error("the user's own folder went")
+	}
+	if v, err := Read(nil); err != nil || v.SharedSkills {
+		t.Error("the setting is still on")
+	}
+}
