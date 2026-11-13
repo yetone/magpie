@@ -71,9 +71,9 @@ func readLive(provider string) (liveFile, error) {
 			return f, err
 		}
 		f.key = liveKey(b, f.Since != nil)
-		mendKinds(f.Models)
+		mendKinds(f.Models, f.Base)
 		for _, side := range f.Sides {
-			mendKinds(side)
+			mendKinds(side, f.Base)
 		}
 		f.byID = map[string][]Model{}
 		for _, m := range Chat(f.Models) {
@@ -87,9 +87,17 @@ func readLive(provider string) (liveFile, error) {
 // OpenCode Go list kept with media types ("image/jpeg") said its models
 // took no image until it was fetched again, so a model that sees is told
 // so from the first read after the update, not the next fetch.
-func mendKinds(ms []Model) {
+//
+// A list saved while DrawsID read grok-imagine-video as an image model
+// (it says "imagine") is read as namesVideo reads it now, from the first
+// read, not the next fetch (iceloon on X): a video model where the list
+// is xAI's own, else one to talk to that the user can mark.
+func mendKinds(ms []Model, base string) {
 	for i := range ms {
 		m := &ms[i]
+		if m.Draws && namesVideo(m.ID) && !slices.Contains(m.OutputModalities, "image") && !slices.Contains(m.OutputModalities, "text") {
+			m.Draws, m.Films = false, xaiFilms(base, m.ID)
+		}
 		if m.InputModalities == nil {
 			continue
 		}
@@ -99,6 +107,16 @@ func mendKinds(ms []Model) {
 			m.ImageInput, m.Images = &yes, true
 		}
 	}
+}
+
+// xaiFilms is whether id, on the list fetched at base, is one of xAI's
+// own video models: a grok-imagine-video listed by api.x.ai, which makes
+// it at its videos API (POST /v1/videos/generations) as the gateway asks
+// it there (gateway filmsXAI). A relay's is no video model until its list
+// or the user says so (#1399), since it may not serve one.
+func xaiFilms(base, id string) bool {
+	u, err := url.Parse(strings.TrimSpace(base))
+	return err == nil && strings.EqualFold(u.Hostname(), "api.x.ai") && strings.HasPrefix(strings.ToLower(id), "grok-imagine-video")
 }
 
 // LiveKey names the list saved for provider by what it holds, not by
@@ -865,7 +883,9 @@ func fetchPage(ctx context.Context, url, key string, anthropic bool, headers map
 		// Seedance sat among its chat models, not under Video models);
 		// OpenAI's sora ids, whose bare list marks no kind and says no
 		// modalities at all (#4954)
-		films := r.Kind == "video" || r.Kind == "" && (r.Domain == "VideoGeneration" || slices.Contains(outs, "video") && !slices.Contains(outs, "text")) || FilmsID(id)
+		// and xAI's own grok-imagine-video, which its list marks as
+		// nothing (xaiFilms)
+		films := r.Kind == "video" || r.Kind == "" && (r.Domain == "VideoGeneration" || slices.Contains(outs, "video") && !slices.Contains(outs, "text")) || FilmsID(id) || r.Kind == "" && xaiFilms(url, id)
 		drawer := !films && !decision && (DrawsID(id) && !strings.Contains(strings.ToLower(id), "deep-research") || r.Kind == "image" ||
 			r.Kind == "" && (r.Domain == "ImageGeneration" || slices.Contains(outs, "image") && !slices.Contains(outs, "text")))
 		// and none the list says answers without text (Ark's 3D models)

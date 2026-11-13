@@ -995,9 +995,32 @@ func asOurs(b []byte, p provider.Provider, id string) (map[string]any, error) {
 }
 
 // filmsOpenAI is whether p makes videos at an OpenAI-shaped videos API:
-// another magpie, or a provider whose model list marks video models.
+// another magpie, or a provider whose model list marks video models, but
+// for xAI's own API (filmsXAI), which has none.
 func filmsOpenAI(p provider.Provider) bool {
-	return p.IsRemoteMagpie() || len(customVideomakers(p)) > 0 && !isArk(p)
+	return p.IsRemoteMagpie() || len(customVideomakers(p)) > 0 && !isArk(p) && !xaiHost(p)
+}
+
+// xaiHost is whether p is a provider set up with a key for xAI's own API.
+func xaiHost(p provider.Provider) bool {
+	return p.Account == nil && !p.IsRemoteMagpie() && p.VendorHost() == "api.x.ai"
+}
+
+// filmsXAI is whether p makes model's videos at xAI's own API, as a Grok
+// subscription's backend does: xAI starts a grok-imagine-video* at
+// /v1/videos/generations, answers with its request_id and says how it goes
+// at /v1/videos/<request_id> (docs.x.ai, Video Generation). It has no
+// OpenAI-shaped POST /v1/videos: that answers 404 "No handler found on
+// route". Its video models were listed as image models until their ids
+// were read as video ones (iceloon on X).
+func filmsXAI(p provider.Provider, model string) bool {
+	return xaiHost(p) && strings.HasPrefix(model, grokVideoFamily)
+}
+
+// grokVideosRoot is the root Grok's videos API is under: a Grok
+// subscription's Responses base, or an xAI key's API.
+func grokVideosRoot(p provider.Provider) string {
+	return strings.TrimRight(cmp.Or(p.Base(provider.Responses), videoBase(p)), "/")
 }
 
 // remoteVideoURL is where another magpie, or a provider's OpenAI-shaped
@@ -1012,7 +1035,7 @@ func (s *Server) videoStatus(ctx context.Context, p provider.Provider, vendorID 
 		return s.minimaxVideoStatus(ctx, p, vendorID)
 	}
 	var st videoState
-	at := strings.TrimRight(p.Base(provider.Responses), "/") + "/videos/" + url.PathEscape(vendorID)
+	at := grokVideosRoot(p) + "/videos/" + url.PathEscape(vendorID)
 	ark := p.Preset == "volcengine" || isArk(p)
 	if ark {
 		at = arkTasks(p) + "/" + url.PathEscape(vendorID)
@@ -1279,8 +1302,9 @@ func (s *Server) startVideo(ctx context.Context, r *http.Request, p provider.Pro
 		}
 		p, keys = cs[0].p, cs[1:]
 		// an Ark key's video is a task of that key's account: its id names
-		// the key, as a plan's does, and it is asked after there
-		onKey = isArk(p)
+		// the key, as a plan's does, and it is asked after there; an xAI
+		// key's request likewise
+		onKey = isArk(p) || filmsXAI(p, model)
 	} else if makesMiniMaxVideo(p, model) {
 		// on the first key a chat for the model would go to that the
 		// calling key may use, the next while one's plan doesn't make H3
@@ -1315,16 +1339,17 @@ func (s *Server) startVideo(ctx context.Context, r *http.Request, p provider.Pro
 	if msg := f.arkOnly(); msg != "" && !volcengine && !v.remote {
 		return v, 400, errors.New(msg)
 	}
-	v.custom = !v.remote && !volcengine && filmsCustom(p, model)
+	xai := !v.remote && filmsXAI(p, model)
+	v.custom = !v.remote && !volcengine && !xai && filmsCustom(p, model)
 	minimax := !v.remote && !v.custom && makesMiniMaxVideo(p, model)
 	// any grok-imagine-video*, not only those listed: the vendor's newer ones work before magpie names them
-	if !v.remote && !v.custom && !volcengine && !minimax && (!drawsGrok(p) || !strings.HasPrefix(model, grokVideoFamily)) {
+	if !v.remote && !v.custom && !volcengine && !minimax && !xai && (!drawsGrok(p) || !strings.HasPrefix(model, grokVideoFamily)) {
 		v.unfit = true
-		return v, 400, fmt.Errorf(`%s/%s can't make videos: magpie makes videos with a Grok subscription's grok-imagine-video, Volcengine Agent Plan's or an Ark key's Seedance models, a MiniMax API key's MiniMax-H3 models, another magpie's, and a provider's models its own model list marks "kind": "video" or that you mark a Video model (right-click the model in the provider's editor: Makes…)`, p.ID, model)
+		return v, 400, fmt.Errorf(`%s/%s can't make videos: magpie makes videos with a Grok subscription's or an xAI API key's grok-imagine-video, Volcengine Agent Plan's or an Ark key's Seedance models, a MiniMax API key's MiniMax-H3 models, another magpie's, and a provider's models its own model list marks "kind": "video" or that you mark a Video model (right-click the model in the provider's editor: Makes…)`, p.ID, model)
 	}
 	// another magpie is asked at its videos API, which says itself what
 	// it can't make
-	at, field := strings.TrimRight(p.Base(provider.Responses), "/")+"/videos/generations", "request_id"
+	at, field := grokVideosRoot(p)+"/videos/generations", "request_id"
 	var body []byte
 	switch {
 	case v.remote, v.custom:

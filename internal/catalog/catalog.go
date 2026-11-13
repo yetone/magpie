@@ -2211,6 +2211,9 @@ func draws(m mdModel) bool {
 // -fast) draw only, on its images API (lileo0668 on Discord).
 func DrawsID(id string) bool {
 	id = strings.ToLower(id)
+	if FilmsID(id) || namesVideo(id) {
+		return false
+	}
 	for _, w := range []string{"image", "imagen", "imagine", "dall-e", "flux", "seedream", "cogview", "stable-diffusion", "sdxl", "wanx", "kolors", "hidream", "banana", "sensenova-u1"} {
 		if strings.Contains(id, w) {
 			return true
@@ -2225,6 +2228,9 @@ func DrawsID(id string) bool {
 // generators (Hy-Image-3.5-preview) draw on its images API too (#4913).
 func ImagesAPI(id string) bool {
 	id = strings.ToLower(id)
+	if FilmsID(id) || namesVideo(id) {
+		return false
+	}
 	for _, w := range []string{"gpt-image", "chatgpt-image", "dall-e", "imagen", "imagine", "qwen-image", "wanx", "wan2", "seedream", "cogview", "flux", "stable-diffusion", "sdxl", "kolors", "hidream", "sensenova-u1", "hy-image", "h3-image"} {
 		if strings.Contains(id, w) {
 			return true
@@ -2244,6 +2250,20 @@ func ImagesAPI(id string) bool {
 // (video_minimax.go), and a model the user says makes videos (#1399).
 func FilmsID(id string) bool {
 	return strings.Contains(strings.ToLower(id), "sora")
+}
+
+// namesVideo is whether a model's id has the word video, t2v or i2v in
+// it: no image model, whatever else the id says. grok-imagine-video says
+// "imagine", which DrawsID and ImagesAPI read as an image model, so a Grok
+// channel's video models were listed under its Image models, where nothing
+// could mark them Video (iceloon on X); wanx2.1-t2v and wan2.5-i2v were
+// read the same way. It makes no video model of them (#1399: a relay may
+// not serve its videos API): they stay among the models to talk to, where
+// the user marks them Video, unless the list says their kind
+// (xaiFilms for xAI's own). A word, not a substring: cogvideox stays.
+func namesVideo(id string) bool {
+	words := strings.FieldsFunc(strings.ToLower(id), func(r rune) bool { return (r < 'a' || r > 'z') && (r < '0' || r > '9') })
+	return slices.ContainsFunc(words, func(w string) bool { return w == "video" || w == "t2v" || w == "i2v" })
 }
 
 // PointsToImagesAPI is whether a vendor's refusal of a chat request names
