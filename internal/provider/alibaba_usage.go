@@ -25,6 +25,11 @@ package provider
 // personal plan's API is known; the Qwen AI platform's and Qwen Cloud's
 // plans sit behind a console of their own that takes a browser sign-in, so
 // they have no card (#5829).
+//
+// A RAM user's key is refused by the console (BailianGateway.Team.
+// NotAuthorised) until the main account grants what Alibaba's Token Plan
+// docs list for RAM users (aliRAMHint); the same API serves the main
+// account and RAM users, the bl CLI has no other route for them.
 
 import (
 	"bytes"
@@ -54,6 +59,12 @@ const (
 	aliUsageAPI   = "zeldaHttp.apikeyMgr./tokenplan/personal/api/v2/usage"
 	aliPlanName   = "Token Plan"
 	aliKeyHint    = "check the AccessKey ID and Secret in the provider's editor (Alibaba Cloud console → AccessKey), and that the account may use Model Studio"
+	// aliRAMHint is what Alibaba asks of a RAM user's key for the Token
+	// Plan (Token Plan → Permissions and usage → RAM user authorization):
+	// two system policies the Bailian and ModelStudio ones don't include,
+	// and a permission given in Model Studio's own console. Without the
+	// last the console answers BailianGateway.Team.NotAuthorised (#6506).
+	aliRAMHint = "a RAM user's AccessKey needs, from the main account: the AliyunTokenPlanReadOnlyAccess and AliyunBSSReadOnlyAccess system policies in the RAM console (AliyunBailian* and AliyunModelStudio* policies don't cover the Token Plan), and the Administrator or Subscribe Plan permission for this RAM user on the Account Management page of the Model Studio (Bailian) console. Or use the main account's own AccessKey"
 	// aliTokenTTL is how long a console token is kept before a new one is
 	// made; one the console refuses is made again at once
 	aliTokenTTL = 20 * time.Minute
@@ -343,6 +354,7 @@ func aliGateway(ctx context.Context, token string, site aliSite) ([]byte, error)
 		Data struct {
 			Success   *bool           `json:"success"`
 			ErrorCode json.RawMessage `json:"errorCode"`
+			ErrorMsg  json.RawMessage `json:"errorMsg"`
 			DataV2    json.RawMessage `json:"DataV2"`
 		} `json:"data"`
 	}
@@ -355,7 +367,10 @@ func aliGateway(ctx context.Context, token string, site aliSite) ([]byte, error)
 		case strings.Contains(code, "NotLogined"):
 			return nil, errAliNotLogged
 		case strings.Contains(code, "NotAuthorised"), strings.Contains(code, "NotAuthorized"):
-			return nil, fmt.Errorf("Alibaba Cloud's console: %s: this RAM user isn't authorised in Model Studio's workspace; add it there in the Alibaba Cloud console, or use the account's own access key", code)
+			return nil, fmt.Errorf("Alibaba Cloud's console: %s: %s", code, aliRAMHint)
+		}
+		if msg := strings.TrimSpace(strings.Trim(string(env.Data.ErrorMsg), `"`)); msg != "" && msg != "null" {
+			return nil, fmt.Errorf("Alibaba Cloud's console: %s: %s", code, msg)
 		}
 		return nil, fmt.Errorf("Alibaba Cloud's console: %s", code)
 	}

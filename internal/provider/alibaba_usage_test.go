@@ -188,3 +188,38 @@ func TestAliPlanQuotas(t *testing.T) {
 		t.Errorf("keyless: %+v", a)
 	}
 }
+
+// #6506 (FuturePrayer, hkxhkxhkx on X): a RAM user's key that had every
+// AliyunBailian* and AliyunModelStudio* policy got BailianGateway.Team.
+// NotAuthorised, and the card said only "add it there in the Alibaba Cloud
+// console". It now names what Alibaba's Token Plan docs ask for a RAM user:
+// the two Token Plan and billing policies, and the permission on Model
+// Studio's Account Management page. Another refusal keeps the console's own
+// errorMsg.
+func TestAliGatewayRAMNotAuthorised(t *testing.T) {
+	reply := `{"code":"200","data":{"success":false,"errorCode":"BailianGateway.Team.NotAuthorised","errorMsg":"team not authorised","requestId":"r1"}}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Host") != "bailian-cs.console.aliyun.com" {
+			t.Errorf("asked %s", r.Header.Get("X-Host"))
+		}
+		io.WriteString(w, reply)
+	}))
+	defer srv.Close()
+	old := http.DefaultClient.Transport
+	http.DefaultClient.Transport = rewrite{srv}
+	t.Cleanup(func() { http.DefaultClient.Transport = old })
+
+	_, err := aliGateway(context.Background(), "tok", aliSites["cn-beijing"])
+	if err == nil {
+		t.Fatal("no error")
+	}
+	for _, want := range []string{"BailianGateway.Team.NotAuthorised", "AliyunTokenPlanReadOnlyAccess", "AliyunBSSReadOnlyAccess", "Account Management", "Administrator or Subscribe Plan", "main account's own AccessKey"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("%q doesn't say %q", err, want)
+		}
+	}
+	reply = `{"code":"200","data":{"success":false,"errorCode":"BailianGateway.Something.Else","errorMsg":"something else went wrong"}}`
+	if _, err := aliGateway(context.Background(), "tok", aliSites["cn-beijing"]); err == nil || err.Error() != "Alibaba Cloud's console: BailianGateway.Something.Else: something else went wrong" {
+		t.Errorf("other refusal: %v", err)
+	}
+}
