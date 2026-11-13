@@ -13,3 +13,8 @@ func webViewVisible(*application.WebviewWindow, bool) error { return nil }
 func reloadWebView(*application.WebviewWindow) error { return nil }
 
 func awaitBrowserGone() {}
+
+// The screen coming back is watched on Windows only (screenback_windows.go).
+func watchScreenBack() {}
+
+var appWndProc func(hwnd uintptr, msg uint32, wParam, lParam uintptr) (uintptr, bool)

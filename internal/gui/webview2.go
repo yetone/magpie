@@ -68,6 +68,13 @@ var webView2Words = map[string][2]string{
 			"Die Download-Seite jetzt öffnen?"},
 }
 
+// webViewOcclusion is Chromium's tracking of whether a window is covered,
+// turned off for magpie's windows (windowsOptions): when it is wrong, as
+// for a window shown while the screen is locked or the display off, the
+// page stays white (screenback_windows.go). A hidden or minimised window is
+// told so by Wails (put_IsVisible) without it.
+const webViewOcclusion = "CalculateNativeWinOcclusion"
+
 // webView2Args sorts what the user put in WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS
 // (webview2env.Args) into Wails' three options, which it passes as the
 // app's own arguments: the features to disable, the ones to enable, and
@@ -118,6 +125,16 @@ func sharedFrameProcess(disabled, enabled []string) []string {
 		return disabled
 	}
 	return addFeatures([]string{isolateSandboxedFrames}, strings.Join(disabled, ","))
+}
+
+// occlusionOff adds webViewOcclusion to the disabled features, after the
+// user's own; a user who enables it in WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS
+// keeps it on.
+func occlusionOff(disabled, enabled []string) []string {
+	if slices.Contains(enabled, webViewOcclusion) {
+		return disabled
+	}
+	return addFeatures(disabled, webViewOcclusion)
 }
 
 // addFeatures adds a comma list's features to have, each once.

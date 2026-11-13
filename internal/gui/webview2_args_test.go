@@ -43,14 +43,14 @@ func TestWebView2ArgsMergeTheUsers(t *testing.T) {
 		name, env string
 		want      []string
 	}{
-		{"none set", "", []string{"--disable-features=msSmartScreenProtection,IsolateSandboxedIframes"}},
+		{"none set", "", []string{"--disable-features=msSmartScreenProtection,IsolateSandboxedIframes,CalculateNativeWinOcclusion"}},
 		{"the reporter's", "--disable-features=RendererCodeIntegrity",
-			[]string{"--disable-features=msSmartScreenProtection,IsolateSandboxedIframes,RendererCodeIntegrity"}},
+			[]string{"--disable-features=msSmartScreenProtection,IsolateSandboxedIframes,RendererCodeIntegrity,CalculateNativeWinOcclusion"}},
 		{"twice, with magpie's own and a repeat", `--disable-features=A,msSmartScreenProtection --disable-features="B, A"`,
-			[]string{"--disable-features=msSmartScreenProtection,IsolateSandboxedIframes,A,B"}},
+			[]string{"--disable-features=msSmartScreenProtection,IsolateSandboxedIframes,A,B,CalculateNativeWinOcclusion"}},
 		{"enable and others kept", "  --enable-features=X,Y\t--remote-debugging-port=9333 --proxy-server=\"http://h:1 x\" --enable-features=Y,Z --lang=de ",
-			[]string{"--disable-features=msSmartScreenProtection,IsolateSandboxedIframes", "--enable-features=X,Y,Z", "--remote-debugging-port=9333", `--proxy-server="http://h:1 x"`, "--lang=de"}},
-		{"a bare switch", "--disable-features", []string{"--disable-features=msSmartScreenProtection,IsolateSandboxedIframes"}},
+			[]string{"--disable-features=msSmartScreenProtection,IsolateSandboxedIframes,CalculateNativeWinOcclusion", "--enable-features=X,Y,Z", "--remote-debugging-port=9333", `--proxy-server="http://h:1 x"`, "--lang=de"}},
+		{"a bare switch", "--disable-features", []string{"--disable-features=msSmartScreenProtection,IsolateSandboxedIframes,CalculateNativeWinOcclusion"}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			was := webview2env.Args
@@ -126,6 +126,41 @@ func TestWebView2KeepsPluginFramesInTheWindowProcess(t *testing.T) {
 	}
 }
 
+// aquaarboraurum on X: a window shown while the screen is locked can stay
+// white once Chromium's occlusion tracking has taken it as covered.
+// magpie's WebView2 starts with the tracking off, once only; a user who
+// turns it on keeps it.
+func TestWebView2OcclusionTrackingOff(t *testing.T) {
+	was := webview2env.Args
+	t.Cleanup(func() { webview2env.Args = was })
+	for _, c := range []struct {
+		env     string
+		off, on int
+	}{
+		{"", 1, 0},
+		{"--disable-features=CalculateNativeWinOcclusion,A", 1, 0},
+		{"--enable-features=CalculateNativeWinOcclusion", 0, 1},
+	} {
+		webview2env.Args = c.env
+		args := wailsBrowserArgs(windowsOptions())
+		var off, on int
+		for _, a := range args {
+			k, v, _ := strings.Cut(a, "=")
+			for _, f := range strings.Split(v, ",") {
+				if f == "CalculateNativeWinOcclusion" && k == "--disable-features" {
+					off++
+				}
+				if f == "CalculateNativeWinOcclusion" && k == "--enable-features" {
+					on++
+				}
+			}
+		}
+		if off != c.off || on != c.on {
+			t.Errorf("%q: WebView2 starts with %q: occlusion tracking disabled %d times, enabled %d, want %d and %d", c.env, args, off, on, c.off, c.on)
+		}
+	}
+}
+
 // Nothing in the defaults turns renderer code integrity off: only a user
 // who asks for it gets it (#2753).
 func TestWebView2KeepsCodeIntegrityByDefault(t *testing.T) {
@@ -157,7 +192,7 @@ func TestWebView2ArgsSurviveWailsInit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("child: %v\n%s", err, out)
 	}
-	if !strings.Contains(string(out), `disabled=["IsolateSandboxedIframes" "RendererCodeIntegrity"]`) {
+	if !strings.Contains(string(out), `disabled=["IsolateSandboxedIframes" "RendererCodeIntegrity" "CalculateNativeWinOcclusion"]`) {
 		t.Fatalf("the started value didn't reach the options:\n%s", out)
 	}
 	t.Logf("%s", strings.SplitN(string(out), "\n", 2)[0])

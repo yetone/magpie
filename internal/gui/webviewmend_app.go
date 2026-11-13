@@ -5,6 +5,7 @@ package gui
 import (
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -123,16 +124,33 @@ func (h *host) remakeWindow(w *application.WebviewWindow) {
 }
 
 // mendOnWake draws the open windows again after the computer wakes: a GPU
-// that lost its device while asleep can leave WebView2's surface white.
+// that lost its device while asleep can leave WebView2's surface white. And
+// when the screen comes back without a sleep, unlocked or the display on
+// again (screenBackFrom, Windows only): a window first shown while nobody
+// could see it may keep a white surface (aquaarboraurum on X, after each
+// restart to update, which AutoRestart makes while the user is away).
 func (h *host) mendOnWake() {
 	h.app.Event.OnApplicationEvent(events.Common.SystemDidWake, func(*application.ApplicationEvent) {
-		application.InvokeAsync(func() {
-			for _, w := range []*application.WebviewWindow{h.main, h.panel} {
-				if w != nil && windowOpen(w) {
-					log.Printf("webview (%s window): the computer woke; drawing it again", w.Name())
-					redrawShown(w)
-				}
-			}
-		})
+		application.InvokeAsync(func() { h.redrawOpen("the computer woke") })
 	})
+	back := func(why string) { application.InvokeAsync(func() { h.redrawOpen(why) }) }
+	screenBack.Store(&back)
+	h.app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
+		application.InvokeAsync(watchScreenBack)
+	})
+}
+
+// screenBack is what the screen coming back does (mendOnWake), nil until
+// the app is up.
+var screenBack atomic.Pointer[func(why string)]
+
+// redrawOpen draws each open window again (redrawShown), saying why in the
+// log; on the main thread.
+func (h *host) redrawOpen(why string) {
+	for _, w := range []*application.WebviewWindow{h.main, h.panel} {
+		if w != nil && windowOpen(w) {
+			log.Printf("webview (%s window): %s; drawing it again", w.Name(), why)
+			redrawShown(w)
+		}
+	}
 }
