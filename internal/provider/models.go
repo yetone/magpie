@@ -2409,6 +2409,9 @@ func (p Provider) listPriceIn(c priceCats, model string) (catalog.Price, bool, i
 	if pr, ok := p.remotePrice(model); ok {
 		return pr, true, pricedOwn
 	}
+	if pr, ok := p.copilotListPrice(model); ok {
+		return pr, true, pricedOwn
+	}
 	if p.clineFreeModel(model) || p.kiloFreeModel(model) || p.codexReviewFree(model) {
 		// served at no cost: not at the price of the model it is free of
 		return catalog.Price{}, true, pricedOwn

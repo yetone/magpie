@@ -1353,6 +1353,17 @@ var copilotAPIHeaders = func() map[string]string {
 	return h
 }()
 
+// copilotModelsVersion is the API version the editors' sign-in asks
+// /models at: the one Copilot Chat 0.68's @vscode/copilot-api (0.5.2)
+// sends on every Copilot API request it makes, Models among them, over
+// networking.ts's 2026-01-09. At 2026-01-09 Copilot lists a model with a
+// long-context tier at its default tier alone (claude-opus-5.5's
+// max_prompt_tokens 200000); from 2026-06-01 on at its whole window
+// (1000000) with billing.token_prices' default and long_context tiers
+// (gtliuu on X). Chat requests keep copilotAPIHeaders' version: Copilot
+// served a 240K prompt above the default tier at either.
+const copilotModelsVersion = "2026-08-01"
+
 type copilotSession struct {
 	Token     string `json:"token"`
 	ExpiresAt int64  `json:"expires_at"`
@@ -1793,6 +1804,10 @@ func copilotModels(ctx context.Context, app copilotApp) ([]catalog.Model, error)
 	for k, v := range s.headers() {
 		req.Header.Set(k, v)
 	}
+	if !s.direct {
+		// the CLI's own version lists the tiers already
+		req.Header.Set("X-GitHub-Api-Version", copilotModelsVersion)
+	}
 	res, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		return nil, err
@@ -1810,7 +1825,8 @@ func copilotModels(ctx context.Context, app copilotApp) ([]catalog.Model, error)
 			Fallback  bool     `json:"is_chat_fallback"`
 			Endpoints []string `json:"supported_endpoints"`
 			Billing   *struct {
-				Premium bool `json:"is_premium"`
+				Premium bool               `json:"is_premium"`
+				Prices  copilotTokenPrices `json:"token_prices"`
 			} `json:"billing"`
 			Capabilities struct {
 				Type     string `json:"type"`
@@ -1887,11 +1903,15 @@ func copilotModels(ctx context.Context, app copilotApp) ([]catalog.Model, error)
 		default:
 			continue // not the account's to enable: it answers 403
 		}
-		out = append(out, catalog.Model{ID: m.ID, Name: m.Name, Efforts: m.Capabilities.Supports.Efforts, APIs: copilotAPIs(m.Endpoints),
+		mm := catalog.Model{ID: m.ID, Name: m.Name, Efforts: m.Capabilities.Supports.Efforts, APIs: copilotAPIs(m.Endpoints),
 			// the prompt this account's Copilot takes for the model (936K
 			// for gemini-4-carbon), not models.dev's window for the id
 			// (1048576): over it Copilot answers 400 (codealc on X)
-			Context: catalog.Window(m.Capabilities.Limits.Prompt)})
+			Context: catalog.Window(m.Capabilities.Limits.Prompt)}
+		if m.Billing != nil {
+			m.Billing.Prices.apply(&mm)
+		}
+		out = append(out, mm)
 	}
 	// Auto, which Copilot's clients offer every account beside the models
 	// it lists, and the only choice a Student plan has: an account whose
@@ -1925,4 +1945,108 @@ func copilotDrawsModel(typ, id string) bool {
 		return false
 	}
 	return catalog.DrawsID(id)
+}
+
+// copilotTier is one tier of a Copilot model's billing.token_prices, from
+// API version 2026-06-01 on: prices in AIUs a batch_size of tokens (one
+// AIU a hundredth of a dollar), up to the tier's prompt. 2026-06-01 names
+// the cache read and the prompt cache_price and context_max, 2026-08-01
+// cache_read_price and max_prompt_tokens.
+type copilotTier struct {
+	Input        float64 `json:"input_price"`
+	Output       float64 `json:"output_price"`
+	CacheRead    float64 `json:"cache_read_price"`
+	Cache        float64 `json:"cache_price"`
+	CacheWrite   float64 `json:"cache_write_price"`
+	CacheWrite1h float64 `json:"cache_write_1h_price"`
+	Prompt       int     `json:"max_prompt_tokens"`
+	ContextMax   int     `json:"context_max"`
+}
+
+func (t copilotTier) prompt() int {
+	if t.Prompt > 0 {
+		return t.Prompt
+	}
+	return t.ContextMax
+}
+
+func (t copilotTier) cacheRead() float64 {
+	if t.CacheRead > 0 {
+		return t.CacheRead
+	}
+	return t.Cache
+}
+
+// samePrice is Copilot Chat's test for a long tier that costs nothing
+// more (languageModelAccess.ts drops such a tier).
+func (t copilotTier) samePrice(o copilotTier) bool {
+	return t.Input == o.Input && t.Output == o.Output && t.cacheRead() == o.cacheRead() &&
+		t.CacheWrite == o.CacheWrite && t.CacheWrite1h == o.CacheWrite1h
+}
+
+type copilotTokenPrices struct {
+	Batch   float64      `json:"batch_size"`
+	Default *copilotTier `json:"default"`
+	Long    *copilotTier `json:"long_context"`
+}
+
+// apply sets m's window and price from its Copilot tiers, the way Copilot
+// Chat picks them: a long tier at the default's prices makes the whole
+// window the one agents are told (claude-opus-5.5's 1M); a long tier
+// that costs more keeps the default tier's prompt as the window and the
+// long one as the most it may be raised to (gpt-6-luna's 272K and 872K),
+// priced by a Tier above the default's prompt. With no tiers listed (an
+// older version's flat prices) m is left as it is.
+func (tp copilotTokenPrices) apply(m *catalog.Model) {
+	d := tp.Default
+	if d == nil {
+		return
+	}
+	long := tp.Long
+	// the whole window is the prompt the model's limits say Copilot
+	// takes, else the long tier's: grok-4.7's long tier says 500000 while
+	// Copilot takes 372000
+	full := m.Context
+	if full == 0 && long != nil {
+		full = catalog.Window(long.prompt())
+	}
+	if long != nil && long.samePrice(*d) {
+		m.Context = full
+		long = nil
+	}
+	if long != nil {
+		if w := catalog.Window(d.prompt()); w > 0 && w < full {
+			m.Context, m.MaxContext = w, full
+		}
+	}
+	if d.Input == 0 && d.Output == 0 {
+		// gpt-4.1's all-zero list, batch_size 0: no price, not a free one
+		return
+	}
+	batch := tp.Batch
+	if batch <= 0 {
+		batch = 1e6
+	}
+	usd := func(aiu float64) float64 { return aiu * (1e6 / batch) / 100 }
+	p := &catalog.Price{Input: usd(d.Input), Output: usd(d.Output), CacheRead: usd(d.cacheRead()),
+		CacheWrite: usd(d.CacheWrite), CacheWrite1h: usd(d.CacheWrite1h)}
+	if long != nil && m.MaxContext > 0 {
+		p.Tiers = []catalog.Tier{{Above: m.Context, Input: usd(long.Input), Output: usd(long.Output),
+			CacheRead: usd(long.cacheRead()), CacheWrite: usd(long.CacheWrite), CacheWrite1h: usd(long.CacheWrite1h)}}
+	}
+	m.Price = p
+}
+
+// copilotListPrice is what Copilot's own /models listed the model at for
+// this account (billing.token_prices), with its long-context tier.
+func (p Provider) copilotListPrice(model string) (catalog.Price, bool) {
+	if p.ID != "copilot" {
+		return catalog.Price{}, false
+	}
+	for _, m := range p.liveByID(model) {
+		if m.Price != nil {
+			return *m.Price, true
+		}
+	}
+	return catalog.Price{}, false
 }
