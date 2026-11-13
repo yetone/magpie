@@ -701,22 +701,7 @@ func magpieProviderJSONAt(shape, catalog, gw string) any {
 		}
 		return map[string]any{"type": "openai", "name": "magpie", "base_url": gw + "/v1", "api_key": keyAt(gw), "models": ms}
 	case "pi":
-		var ms []map[string]any
-		for _, m := range models {
-			ms = append(ms, piModelJSON(piAsked(catalog, m), gw, true))
-		}
-		if ms == nil {
-			ms = []map[string]any{}
-		}
-		// Pi names its session to a provider only when asked to:
-		// sendSessionAffinityHeaders has it send it on Chat
-		// (x-session-affinity, session_id) and Anthropic's Messages API
-		// (x-session-affinity). On Responses it sends session_id anyway.
-		// Without it a turn of Pi's on Chat or Messages reached the gateway
-		// with no session: its usage had none and "Record gateway
-		// conversations" kept none of it (akic404 on Discord).
-		return map[string]any{"name": "magpie", "baseUrl": gw + "/v1", "api": "openai-completions", "apiKey": keyAt(gw),
-			"compat": map[string]any{"sendSessionAffinityHeaders": true}, "models": ms}
+		return piProviderOn(catalog, models, gw, "")
 	}
 	return nil
 }
@@ -882,6 +867,15 @@ func piAsked(agentID string, m catalog.Model) catalog.Model {
 // baseUrl); without it the model is left on the provider's
 // openai-completions (Pencil, pencil.go).
 func piModelJSON(m catalog.Model, gw string, native bool) map[string]any {
+	return piModelOn(m, gw, native, "")
+}
+
+// piModelOn is piModelJSON for a provider block whose api the user picked
+// in Pi's row (piProtocolField): on is that api, every model asked on it,
+// "" for each on its own as piModelJSON has it. A model on the provider's
+// api names none of its own; on anthropic-messages each names the gateway's
+// root, as Anthropic's SDK adds the /v1 the provider's baseUrl has.
+func piModelOn(m catalog.Model, gw string, native bool, on string) map[string]any {
 	// reasoning lets Pi offer its thinking levels for the model: as
 	// /v1/models says it (provider.Entry.Thinks), so one that thinks with
 	// no levels magpie knows (Trae CN's kimi-k3-max, #2380) is offered
@@ -898,6 +892,14 @@ func piModelJSON(m catalog.Model, gw string, native bool) map[string]any {
 	// told so: Pi would otherwise ask it for a thinking budget,
 	// which it turns away.
 	switch {
+	case on == "openai-completions":
+	case on == "openai-responses":
+		e["compat"] = map[string]any{"supportsStrictMode": true}
+	case on == "anthropic-messages":
+		e["api"], e["baseUrl"] = on, gw
+		if gateway.AdaptiveThinking(m.ID) {
+			e["compat"] = map[string]any{"forceAdaptiveThinking": true}
+		}
 	case !native:
 	case slices.Contains(m.APIs, string(provider.Responses)):
 		// strict left out of a tool of a turn asked there is taken as a
@@ -917,7 +919,12 @@ func piModelJSON(m catalog.Model, gw string, native bool) map[string]any {
 	if m.Images {
 		e["input"] = []string{"text", "image"}
 	}
-	if levels := piThinkingLevels(m.Efforts, e["api"] == "anthropic-messages" && gateway.ThinksOnlyWhenAsked(m.ID)); levels != nil {
+	// the api it is asked on, its own or the provider's
+	api := e["api"]
+	if api == nil && on != "" {
+		api = on
+	}
+	if levels := piThinkingLevels(m.Efforts, api == "anthropic-messages" && gateway.ThinksOnlyWhenAsked(m.ID)); levels != nil {
 		// on google-generative-ai Pi resolves a level through the map to
 		// one of Gemini's four (pi-ai's resolveGoogleThinkingLevel) and
 		// throws before sending on any other name, so a level the model
@@ -946,9 +953,9 @@ func piModelJSON(m catalog.Model, gw string, native bool) map[string]any {
 	if m.Price != nil {
 		e["cost"] = map[string]any{"input": m.Price.Input, "output": m.Price.Output, "cacheRead": m.Price.CacheRead, "cacheWrite": m.Price.CacheWrite}
 	}
-	if c := piPromptCache(e["api"], m.ID); c != nil {
+	if c := piPromptCache(api, m.ID); c != nil {
 		e["promptCache"] = c
-	} else if native && e["api"] == nil {
+	} else if native && (api == nil || api == "openai-completions") {
 		// a routing group has no api of its own (a Messages-only group stays
 		// on Chat, provider.GroupAPI), and went out with no promptCache, which
 		// stops Pi's cacheWarming with "cache lifetime unavailable" (#5037)
@@ -1553,6 +1560,12 @@ func piLikeKeyed(at place, id, name, dir string, key func() string) *Agent {
 	startup := func() string { return piStartup(path, pairGet(get, "defaultProvider", "defaultModel")()) }
 	block := piBlockKept(modelsPath, func() any {
 		b := magpieProviderJSONAt("pi", id, at.gw()).(map[string]any)
+		if id == "pi" {
+			// the protocol picked in its row (pi_protocol.go)
+			if on := piProtocol(at); on != "" {
+				b = piProviderOn(id, magpieModels(id), at.gw(), on)
+			}
+		}
 		b["apiKey"] = key()
 		return b
 	})
@@ -1590,7 +1603,7 @@ func piLikeKeyed(at place, id, name, dir string, key func() string) *Agent {
 	if id == "pi" {
 		telemetry = piTelemetry(at, path)
 	}
-	return &Agent{
+	a := &Agent{
 		Telemetry: telemetry,
 		ID:        id, Name: name, Icon: id, Bin: id, Dir: dir, Path: path, Spelled: prefixed,
 		Restore: before.restore,
@@ -1710,6 +1723,11 @@ func piLikeKeyed(at place, id, name, dir string, key func() string) *Agent {
 			},
 		},
 	}
+	// the protocol it asks magpie's models on (pi_protocol.go)
+	if id == "pi" {
+		a.Fields = append(a.Fields, piProtocolField(at, modelsPath, writeMagpie, viaExt))
+	}
+	return a
 }
 
 func goose(home, cfg string) *Agent { return gooseIn(here(home), cfg) }

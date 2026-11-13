@@ -516,7 +516,7 @@ function renderAgents() {
     const wide = (f) => f.label === "model" || f.label === "large" || f.label === "executor" || f.label === "planner";
     // a field with nothing to pick and nothing set isn't drawn (#1499)
     const none = (f) => (f.key === "effort" || toggled(f) || f.label === "subagents" || f.label === "gateway" || f.label === SUB_EFFORT || f.label === SUB_MODEL || f.label === AUTO_MODE || f.label === ADVISOR || f.label === MEMORIES || f.label === COMPACT_MODEL || f.label === "sign-in" || f.key === "small" || asideAccount(a, f)) && !f.options.length && !f.value;
-    const shownFields = a.fields.filter((f) => !grouped(a, f) && !none(f) && !codexOwnSub(a, f) && !codexRowed(a, f) && !hermesBot(f) && !ompAdvisorKey(f));
+    const shownFields = a.fields.filter((f) => !grouped(a, f) && !none(f) && !codexOwnSub(a, f) && !codexRowed(a, f) && !hermesBot(f) && !ompAdvisorKey(f) && !protocolField(f));
     const tiers = tierMenu(a);
     if (tiers) shownFields.push(tiers);
     const sorted = shownFields.sort((x, y) => wide(y) - wide(x) || extra(x) - extra(y));
@@ -2275,6 +2275,17 @@ function connectPanel(a, { fields, fieldBtn }) {
     // an agent whose list doesn't take magpie's names has none
     if (!a.noNames) { const v = kv(t("Provider in model names")), put = () => v.append(line(agentSuffixPick(a))); window.agentSuffixPick ? put() : import("./agentsuffix.js").then(put, () => {}); }
   }
+  // which API magpie's models are asked on, in the app's menu; an api
+  // typed in its file by hand shows as it is (xiaomanweiman on X)
+  const f = a.fields.find(protocolField);
+  if (f?.options.length) {
+    const b = el("button", "field ag-pick ag-protocol"), c = el("span", "chev");
+    b.append(el("span", "v" + (f.value ? "" : " empty"), t(optionFor(f, f.value)?.label || f.value)), c);
+    c.append(svg(CHEV, 11, 1.7));
+    b.dataset.key = f.key;
+    b.onclick = (ev) => openPicker(a, f, b, ev);
+    kv(t("Protocol"), line(b));
+  }
   // what a new session starts on: optional, the agent's own last pick
   // unset; Codex's is the very value its /model picks, so one choice
   // the model it starts on is on the row; what goes with it here
@@ -3959,6 +3970,9 @@ const codexSub = (a) => kindOf(a) === "codex" && a.fields.some((f) => f.label ==
 const codexOwnSub = (a, f) => f.label === "subagents" && codexSub(a);
 // named rows in Codex's settings: no square too (the owner, 10-25)
 const hermesBot = (f) => f.key.startsWith("profile:");
+// Pi's protocol, the api magpie's models are asked on (pi_protocol.go): a
+// row of its own in the opened row, not a control on the row
+const protocolField = (f) => f.label === "protocol";
 const codexRowed = (a, f) => a.id === "codex" && !gatewayMode && (f.label === SUB_MODEL || f.label === MEMORIES);
 // Lead's pick ("") takes the model the lead names; Same as the lead holds
 // every subagent to the lead's own (cleverpigo on X)
@@ -5380,7 +5394,7 @@ function renderList() {
     if (hasIcons) li.append(optionIcon(o));
     const words = el("span", "option-words");
     // a choice of magpie's own (Codex's sign-in) reads in the page's language
-    const own = pick.field.label === "sign-in";
+    const own = pick.field.label === "sign-in" || protocolField(pick.field);
     words.append(el("span", "v", own ? t(o.label || o.value) : o.label || o.value));
     const tell = tellTag(o.tell);
     if (tell) words.append(tell);
