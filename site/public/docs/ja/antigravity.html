@@ -203,6 +203,7 @@ magpie agy deepseek/deepseek-v4-pro            # agy を DeepSeek で</pre></div
 
     <h2 id="google"><a class="anchor" href="#google">Google サインイン</a></h2>
     <p>ゲートウェイを使うと、Antigravity は Google サインインを使わず、バックエンドも Google に問い合わせません。Google がアカウントに有効にしている機能、実験や <code>/boost</code>、<code>/teamwork</code>、<code>/plugin</code>、<code>/generative_ui</code> などのコマンドは、magpie につないでいる間は使えません。行を magpie から外すと戻ります。</p>
+    <p>あなた自身のサインインでアプリに出ていたモデルも、モデル一覧から消えます。magpie で使い続けるには、<span class="ui">Providers</span> タブの Antigravity サブスクリプションで同じ Google アカウントにサインインしてください。そのモデルがアプリの一覧に並び、そのアカウントのクォータで動きます。そこに追加した他の Google アカウントも同じです。</p>
 
     <h2 id="agy"><a class="anchor" href="#agy">agy CLI</a></h2>
     <p><code>agy</code> は自分の行でつながない限り、アプリのゲートウェイに従います。自分の行でつなぐと Gemini API で magpie を使います：magpie はモデルを agy の <code>~/.gemini/antigravity-cli/settings.json</code> の横の <code>magpie-settings.json</code> に置き、そのセッションだけそのファイル、<code>GOOGLE_GEMINI_BASE_URL</code>、<code>GEMINI_API_KEY</code>、<code>--model</code> を付けて agy を起動します。<code>agy</code> と打つだけで動くように、agy が magpie のモデルを使う間、magpie は各シェルのプロファイルに <code>agy</code> という関数を追加します。それより前に開いたターミナルでは、行に表示されるコマンドを使ってください。あなたの <code>settings.json</code> はそのままなので、<code>agy remote-control</code> は引き続き Google サインインで動きます。</p>

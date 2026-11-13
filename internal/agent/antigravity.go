@@ -30,6 +30,10 @@ package agent
 // experiments and the commands behind them (/boost, /teamwork, /plugin,
 // /generative_ui: YujunT46308), is off while it's on magpie. Nothing in
 // the file keeps both; noticeAntigravity says so where it is connected.
+// The models its own sign-in gave it (Code Assist's fetchAvailableModels)
+// leave its picker with it: with no account under magpie's Antigravity
+// subscription, noticeAntigravityOwn says how to have them back, through
+// the gateway on that account's quota (T_t__biu on X).
 //
 // The same file is read by agy (Antigravity's CLI) too, below its own
 // ~/.gemini/antigravity-cli/settings.json: an agy connected on its own row
@@ -303,10 +307,13 @@ func antigravity(home string) *Agent {
 		// the names its catalog gives them (antigravityCatalog)
 		ListsModels: true,
 		Notice: func() string {
-			if wired() {
-				return noticeAntigravity.String()
+			if !wired() {
+				return ""
 			}
-			return ""
+			if len(provider.Logins("antigravity")) == 0 {
+				return noticeAntigravity.String() + " " + noticeAntigravityOwn.String()
+			}
+			return noticeAntigravity.String()
 		},
 		Sync: func() error {
 			w, ok := on()
@@ -445,6 +452,7 @@ func antigravityTidy(path string) error {
 // what antigravity says after a change (notice.go)
 var (
 	noticeAntigravity      = newNotice("Antigravity reads its gateway at start-up — restart Antigravity to use magpie's models. On a gateway it uses no Google sign-in, so what Google turns on for your account (its experiments, and commands such as /boost, /teamwork, /plugin and /generative_ui) is gone while it's on magpie; turning it off here gives that back. An agy not connected on its own row follows it too.")
+	noticeAntigravityOwn   = newNotice("The models your own Google sign-in gives Antigravity leave its list too; sign that Google account in under magpie's Antigravity subscription and they come back, on that account's quota.")
 	noticeAntigravityAdmin = newNotice("Antigravity's {path} sets a gateway of its own, which wins over ~/.antigravity/settings.json, so it doesn't reach magpie")
 	noticeAntigravityEnv   = newNotice("AGY_LLM_GATEWAY_URL is set to {url}, which wins over ~/.antigravity/settings.json, so Antigravity started with it doesn't reach magpie")
 )

@@ -203,6 +203,7 @@ magpie agy deepseek/deepseek-v4-pro            # agy 用 DeepSeek</pre></div>
 
     <h2 id="google"><a class="anchor" href="#google">你的 Google 登录</a></h2>
     <p>走网关时，Antigravity 不使用 Google 登录，它的后端也不再请求 Google。Google 为你的账号开启的功能，包括实验功能和 <code>/boost</code>、<code>/teamwork</code>、<code>/plugin</code>、<code>/generative_ui</code> 等命令，在接入 magpie 期间不可用。把那一行从 magpie 取消即可恢复。</p>
+    <p>你自己的登录给应用的模型也会从它的模型列表里消失。想在 magpie 上用回它们，就在 <span class="ui">Providers</span> 页的 Antigravity 订阅下登录同一个 Google 账号：它的模型会出现在应用的列表里，用的是该账号的额度；在那里加的其他 Google 账号也一样。</p>
 
     <h2 id="agy"><a class="anchor" href="#agy">agy CLI</a></h2>
     <p>除非在自己那一行接入，<code>agy</code> 会跟随应用的网关。在自己那一行接入时，它通过 Gemini API 使用 magpie：magpie 把它的模型放在 <code>magpie-settings.json</code>，与 agy 自己的 <code>~/.gemini/antigravity-cli/settings.json</code> 并排，并在启动 agy 时为这次会话带上该文件、<code>GOOGLE_GEMINI_BASE_URL</code>、<code>GEMINI_API_KEY</code> 和 <code>--model</code>。为了让直接输入 <code>agy</code> 就能用，agy 使用 magpie 模型期间，magpie 会在每个 shell 的配置文件里添加一个名为 <code>agy</code> 的函数。之前已打开的终端，请用那一行给出的命令。你的 <code>settings.json</code> 保持不变，所以 <code>agy remote-control</code> 仍然用你的 Google 登录。</p>
