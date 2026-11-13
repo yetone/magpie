@@ -5,8 +5,10 @@
 // The build comes from where Anthropic's installer (claude.ai/install.sh)
 // takes it: the release's manifest.json names each platform's SHA-256 and
 // size, and the binary is checked against both before it is kept. It is
-// kept in magpie's cache folder, not on PATH, so it stands in for no agent:
-// it is only what the bridge and the sign-in run. While magpie serves, it
+// kept in magpie's cache folder, not on PATH: it is what the bridge, the
+// sign-in and `magpie claude` run, and the Agents page doesn't take
+// ~/.claude for an uninstall's leftover while it is here (agent's
+// cliHeld). While magpie serves, it
 // keeps that download at the newest release (KeepCurrent), as Claude
 // Code's own updater would, which magpie's runs turn off.
 package claudecode

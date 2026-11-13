@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/yetone/magpie/internal/claudecode"
 	"github.com/yetone/magpie/internal/testenv"
 )
 
@@ -173,6 +174,14 @@ func TestCLIMissingSharedFolders(t *testing.T) {
 		{"claude", ".claude", func(t *testing.T, home, _ string) {
 			mkdirT(t, jetBrainsDirFor(home))
 		}, false},
+		// the Claude Code magpie downloaded, no other (Wing8Aqua on X)
+		{"claude", ".claude", func(t *testing.T, _, _ string) {
+			writeT(t, filepath.Join(claudecode.Root(), "2.1.400", exe("claude")), "")
+		}, false},
+		// a version folder without its binary is no download
+		{"claude", ".claude", func(t *testing.T, _, _ string) {
+			mkdirT(t, filepath.Join(claudecode.Root(), "2.1.400"))
+		}, true},
 		{"codex", ".codex", nil, true},
 		{"codex", ".codex", func(t *testing.T, home, _ string) {
 			mkdirT(t, filepath.Join(home, ".vscode-server", "extensions", "openai.chatgpt-26.5.1"))
@@ -207,6 +216,7 @@ func TestCLIMissingSharedFolders(t *testing.T) {
 		t.Setenv("USERPROFILE", home)
 		t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
 		t.Setenv("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))
+		t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 		t.Setenv("PATH", t.TempDir())
 		apps := noApps(t)
 		dir := filepath.Join(home, c.folder)
