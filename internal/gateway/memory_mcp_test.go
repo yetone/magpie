@@ -276,3 +276,33 @@ func TestMemorySearchDatesInLocalTime(t *testing.T) {
 		t.Fatalf("an old UTC memory: %s", said)
 	}
 }
+
+// Codex over HTTP names itself at initialize alone (#6392, Norethcy on X):
+// its calls carry no agent's User-Agent, and an agent-scoped memory said
+// the server couldn't tell who it was. The session's initialize is kept,
+// and every name Codex goes by is Codex.
+func TestMemoryMCPAgentFromTheSessionsInitialize(t *testing.T) {
+	fresh(t)
+	h := lanGuard(New().Handler())
+	for _, name := range []string{"codex", "codex-mcp-client", "codex-tui"} {
+		init := `{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"` + name + `","version":"1"}}}`
+		w := mcpPostTo(h, MemoryMCPPath, "127.0.0.1:50000", init, "User-Agent", "curl/8", "Accept", "application/json")
+		sid := w.Header().Get("Mcp-Session-Id")
+		if sid == "" {
+			t.Fatalf("%s: no session: %s", name, w.Body.String())
+		}
+		save := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"memory_save","arguments":{"kind":"procedure","scope":"agent","text":"only for ` + name + `"}}}`
+		w = mcpPostTo(h, MemoryMCPPath, "127.0.0.1:50000", save, "User-Agent", "curl/8", "Accept", "application/json", "Mcp-Session-Id", sid)
+		if m := readMCP(t, w); m.Result.IsError || !strings.Contains(m.Result.Content[0].Text, "only for you") {
+			t.Fatalf("%s: %s", name, w.Body.String())
+		}
+	}
+	// another client's session is not Codex's, and none still can't tell
+	w := mcpPostTo(h, MemoryMCPPath, "127.0.0.1:50000", `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"memory_save","arguments":{"scope":"agent","text":"x"}}}`, "User-Agent", "curl/8", "Accept", "application/json", "Mcp-Session-Id", "magpie-other")
+	if m := readMCP(t, w); !m.Result.IsError || !strings.Contains(m.Result.Content[0].Text, "which agent") {
+		t.Fatalf("unknown session: %s", w.Body.String())
+	}
+	if memoryAgent("codex-mcp-client") != "codex" || memoryAgent("claude-code") == "codex" {
+		t.Fatal("memoryAgent")
+	}
+}

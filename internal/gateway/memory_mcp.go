@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	// search by meaning, when switched on (memory.Semantic)
@@ -119,6 +120,7 @@ func memoryMCPTools() []any {
 func (s *Server) memoryMCPCall(r *http.Request, m mcpMessage) (any, map[string]any) {
 	switch m.Method {
 	case "initialize":
+		rememberMemoryClient(r, m)
 		return map[string]any{
 			"protocolVersion": mcpVersion(m),
 			"capabilities":    map[string]any{"tools": map[string]any{}},
@@ -240,6 +242,11 @@ func memoryCallerOf(r *http.Request, rawMeta json.RawMessage) memoryCaller {
 	if c.agent == "" {
 		c.agent = memoryAgent(callerOf(r).agent)
 	}
+	if c.agent == "" {
+		// the client the session's initialize named (#6392): Codex's
+		// HTTP client says nothing of itself but there
+		c.agent = memoryClients.of(r.Header.Get("Mcp-Session-Id"))
+	}
 	if !local(r) {
 		return c
 	}
@@ -264,7 +271,12 @@ func memoryCallerOf(r *http.Request, rawMeta json.RawMessage) memoryCaller {
 // memoryAgent is id when it names an agent: not magpie itself, nor an
 // HTTP library (curl, Go's), which says nothing of which agent; else "".
 func memoryAgent(id string) string {
-	l := strings.ToLower(id)
+	l := strings.ToLower(strings.TrimSpace(id))
+	if strings.HasPrefix(l, "codex") {
+		// codex-mcp-client, codex-tui, codex_cli_rs: Codex, as `magpie
+		// mcp memory` and the sessions know it
+		return "codex"
+	}
 	if l == "" || l == "magpie" || l == "other" || l == "go-http-client" || usage.IsLibrary(l) {
 		return ""
 	}
@@ -475,3 +487,83 @@ func memoryStamp(t time.Time) string { return t.In(memoryZone()).Format("2006-01
 // tests, which must never swap time.Local itself (every goroutine still
 // running reads it, so the swap is a race).
 var memoryZone = func() *time.Location { return time.Local }
+
+// memoryClients are the agents the clients of the memory server named at
+// initialize, by Mcp-Session-Id: a client of the HTTP route says who it is
+// there alone, and its calls carry no User-Agent of an agent's (#6392).
+var memoryClients = &sessionClients{m: map[string]sessionClient{}}
+
+type sessionClient struct {
+	agent string
+	at    time.Time
+}
+
+type sessionClients struct {
+	mu sync.Mutex
+	m  map[string]sessionClient
+}
+
+const (
+	memoryClientsKept = 1024
+	memoryClientsFor  = 24 * time.Hour
+)
+
+func (c *sessionClients) set(sid, agent string) {
+	if sid == "" || agent == "" {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	now := time.Now()
+	if len(c.m) >= memoryClientsKept {
+		for k, v := range c.m {
+			if now.Sub(v.at) > memoryClientsFor {
+				delete(c.m, k)
+			}
+		}
+		for k := range c.m {
+			if len(c.m) < memoryClientsKept {
+				break
+			}
+			delete(c.m, k)
+		}
+	}
+	c.m[sid] = sessionClient{agent, now}
+}
+
+func (c *sessionClients) of(sid string) string {
+	if sid == "" {
+		return ""
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.m[sid].agent
+}
+
+// rememberMemoryClient keeps the client name an initialize gave under the
+// session it was given (or sent on).
+func rememberMemoryClient(r *http.Request, m mcpMessage) {
+	var p struct {
+		ClientInfo struct {
+			Name string `json:"name"`
+		} `json:"clientInfo"`
+	}
+	if json.Unmarshal(m.Params, &p) != nil {
+		return
+	}
+	agent := memoryAgent(usage.AgentOf(p.ClientInfo.Name))
+	sid := r.Header.Get("Mcp-Session-Id")
+	if x, _ := r.Context().Value(mcpExchangeKey{}).(*mcpExchange); x != nil && sid == "" {
+		sid = x.w.Header().Get("Mcp-Session-Id")
+	}
+	memoryClients.set(sid, agent)
+}
+
+// RunClient names the agent behind a request to /mcp/run/<server>, the
+// route only Codex is given: what its headers say, else Codex.
+func RunClient(r *http.Request) string {
+	if a := memoryAgent(agentOf(r)); a != "" {
+		return a
+	}
+	return "codex"
+}
