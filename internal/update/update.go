@@ -1140,7 +1140,7 @@ func RelaunchArgs(window bool, view string) []string {
 }
 
 // AwaitPredecessor blocks, for a while at most, until the magpie that
-// relaunched this one has exited.
+// relaunched this one has exited; on Windows its WebView2 too (awaitGone).
 func AwaitPredecessor() {
 	reportStarted() // first: the one that started this waits for it
 	pid, err := strconv.Atoi(os.Getenv("MAGPIE_REPLACES"))
@@ -1148,9 +1148,7 @@ func AwaitPredecessor() {
 	if err != nil || pid <= 0 {
 		return
 	}
-	for deadline := time.Now().Add(20 * time.Second); time.Now().Before(deadline) && alive(pid); {
-		time.Sleep(100 * time.Millisecond)
-	}
+	awaitGone(pid)
 }
 
 type progressKey struct{}
