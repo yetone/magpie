@@ -21,7 +21,6 @@ import (
 	"slices"
 	"strings"
 	"sync/atomic"
-	"time"
 )
 
 // LabsPath is where Sync keeps models.dev's lab catalog (models.json),
@@ -59,34 +58,34 @@ func readLabs() map[string]mdModel {
 
 // syncLabs fetches the lab catalog into LabsPath, written whole through a
 // rename. A failed fetch keeps the one kept before.
-func syncLabs(ctx context.Context) error {
+func syncLabs(ctx context.Context) (bool, error) {
 	u := labsURL()
 	if u == "" {
-		return nil
+		return false, nil
 	}
 	labsTried.Store(true)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
-		return err
+		return false, err
 	}
 	req.Header.Set("User-Agent", "magpie")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("models.dev labs: %s", resp.Status)
+		return false, fmt.Errorf("models.dev labs: %s", resp.Status)
 	}
 	b, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
 	if err != nil {
-		return err
+		return false, err
 	}
 	var probe map[string]mdModel
 	if err := json.Unmarshal(b, &probe); err != nil || len(probe) == 0 {
-		return fmt.Errorf("models.dev labs: unexpected payload")
+		return false, fmt.Errorf("models.dev labs: unexpected payload")
 	}
-	return writeWhole(LabsPath(), b, time.Time{})
+	return keepFetched(LabsPath(), b)
 }
 
 // labsMissing says the provider catalog is magpie's own but no lab catalog

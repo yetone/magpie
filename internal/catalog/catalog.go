@@ -880,15 +880,21 @@ func syncLock(ctx context.Context, onlyIfMissing bool) error {
 		return fmt.Errorf("models.dev: unexpected payload")
 	}
 	// written whole through a rename: a reader never sees it half
-	// written, and a failed write keeps the last good copy
-	if err := writeWhole(CachePath(), b, time.Time{}); err != nil {
+	// written, and a failed write keeps the last good copy. The same
+	// bytes again are only dated now: a Claude account's list asks for a
+	// fetch every 45 minutes (Asked), and each one forgot the parsed
+	// catalog and rewrote every agent's list for nothing changed.
+	changed, err := keepFetched(CachePath(), b)
+	if err != nil {
 		return err
 	}
 	// the lab catalog beside it is best effort: without it the provider
 	// catalog answers alone, and one kept before is kept
-	_ = syncLabs(ctx)
-	Reset()
-	Touched() // names, reasoning levels and context windows may be others
+	labsChanged, _ := syncLabs(ctx)
+	if changed || labsChanged {
+		Reset()
+		Touched() // names, reasoning levels and context windows may be others
+	}
 	return nil
 }
 
