@@ -417,6 +417,10 @@ type Weighed struct {
 	// NoCredits: held at 100% (Capped), a Codex account the user set not
 	// to spend its credits once its allowance is used up
 	NoCredits bool `json:"noCredits,omitempty"`
+	// ExtraUsage: beside NoCredits, a Claude account held so as it is set
+	// not to spend extra usage, or its extra usage is at the cap set on
+	// its Usage credits (provider.ClaudeExtraUsage)
+	ExtraUsage bool `json:"extraUsage,omitempty"`
 	// Unread: held (Capped) by a careful provider as its usage can't be
 	// told, why: not read yet, the read failed, or too old near its cap
 	// (provider.Provider.CapCareful)

@@ -494,6 +494,15 @@ type Settings struct {
 	// real Claude Code, its billing line and identity line kept; off, as by
 	// default, the run is the shape every Claude Code run has.
 	ClaudeLeanPrompt bool `json:"claudeLeanPrompt,omitempty"`
+	// ClaudeNoExtraUsage keeps magpie from sending a Claude subscription
+	// account a request once a plan window that stops it is used up,
+	// where Anthropic would go on on the account's extra usage (usage
+	// credits bought beyond the plan, baksili_ on X): routing holds it at
+	// 100% of that window, as a Codex account set not to spend its
+	// credits (CodexNoCredits), and the user's other accounts, groups and
+	// fallbacks take the request. Off, as by default, such an account is
+	// sent requests and Anthropic decides whether extra usage pays.
+	ClaudeNoExtraUsage bool `json:"claudeNoExtraUsage,omitempty"`
 	// ClaudePrintMode runs a Claude subscription's Claude Code as `claude
 	// -p` always. Off, as by default, a model request runs in Claude
 	// Code's interactive mode, as a person runs it, and never as -p: the

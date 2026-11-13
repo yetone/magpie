@@ -82,6 +82,17 @@ func ClaudeWarmed() map[string]time.Time { return codexWarmedIn(claudeWarmPath()
 // while settings say to, each with one request send makes.
 func KeepClaudeWindowsWarm(ctx context.Context, send func(ctx context.Context, configDir string) error) {
 	w := codexWarmer{path: claudeWarmPath(), now: time.Now, usage: claudeWarmUsage, send: warmClaudeLogin(send),
-		expect: claudeWindowsExpected, warmed: claudeWarmedNow}
+		expect: claudeWindowsExpected, warmed: claudeWarmedNow, held: claudeHeldFull}
 	keepWarm(ctx, "claude", w, func() (string, []string) { s := settings.Load(); return s.ClaudeWarmup, s.ClaudeWarmAts })
+}
+
+// claudeHeldFull says whether the Claude account user, read as q, is held at 100% of
+// a used-up window rather than spending extra usage: set so for every
+// account (ClaudeExtraUsage), or its extra usage at the cap set on its
+// Usage credits (Allowance.extraCapped).
+func claudeHeldFull(user string, q SubscriptionQuota, now time.Time) bool {
+	if !ClaudeExtraUsage() {
+		return true
+	}
+	return allowanceOf(q.Windows, now).extraCapped("", AccountCapsOf("claude", user), now).Credits
 }

@@ -58,6 +58,7 @@ func TestQuotaSpanCarriesEveryWindowField(t *testing.T) {
 		"resetSecs": "made into resetsAt from the report's now",
 		"family":    "the Usage page's grouping of per-model windows",
 		"credits":   "routing's (Allowance.OnCredits)",
+		"extra":     "routing's (Allowance.extraCapped)",
 		"capped":    "the GUI's cap marks (WithCapped)",
 		"capsSome":  "the GUI's cap marks (WithCapped)",
 		"capId":     "the GUI's cap marks (WithCapped)",

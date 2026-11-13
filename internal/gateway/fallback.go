@@ -112,7 +112,9 @@ func (c candidate) unmasked() bool { return provider.UnmaskedBy(c.redact, c.p) }
 // capHold is how an account is held at its usage cap: the cap of the
 // fullest window at or past its own cap, that window's share used, and when the last such window
 // renews (zero when one doesn't say). noCredits: it is a Codex account
-// held at 100% as it is set not to spend its credits (cap is 100 then).
+// held at 100% as it is set not to spend its credits (cap is 100 then),
+// or with extra a Claude account as it is set not to spend extra usage
+// (provider.ClaudeExtraUsage) or its extra usage is at its cap.
 type capHold struct {
 	cap  int
 	used float64
@@ -122,6 +124,7 @@ type capHold struct {
 	unit          string
 	back          time.Time
 	noCredits     bool
+	extra         bool
 	// unread: held by a careful provider as its usage can't be told, why
 	// (carefulDoubt), cap then the account's own
 	unread string
@@ -991,7 +994,8 @@ func ownRouting(p provider.Provider, g provider.Group) bool {
 
 // capHeld is how the account acct of p is held at its usage cap for
 // model at now — a window at or past its own cap, else the account's — or
-// at 100% as a Codex account set not to spend its credits; nil when
+// at 100% as a Codex account set not to spend its credits or a Claude
+// account not to spend extra usage; nil when
 // nothing holds it or every window is below its share. Its windows
 // are those last read (allowances), as smart routing weighs them.
 func capHeld(p, acct provider.Provider, model string, now time.Time) *capHold {
@@ -1021,7 +1025,7 @@ func capHeld(p, acct provider.Provider, model string, now time.Time) *capHold {
 		}
 		return nil
 	}
-	return &capHold{cap: h.Cap, used: h.Used, back: h.Back, noCredits: h.Credits, amount: h.Amount, count: h.Count, unit: h.Unit}
+	return &capHold{cap: h.Cap, used: h.Used, back: h.Back, noCredits: h.Credits, extra: h.Credits && a.Agent == "claude", amount: h.Amount, count: h.Count, unit: h.Unit}
 }
 
 // cappedError says why a request for model went nowhere when every account
@@ -1049,15 +1053,15 @@ func cappedError(model string, ws []Weighed, now time.Time) (string, time.Time) 
 		return msg + "; and " + strings.Join(spends, "; ") + " (to use it, " + spendAdvice + ")", soonest
 	}
 	if unread(ws) {
-		return fmt.Sprintf("usage cap reached: every account that serves %q is held at the usage cap set on it in magpie, or held as its usage can't be told right now — %s. magpie reads it again at the next request and uses it once it is under its cap; %s, or turn off Check usage near the cap (Providers → the provider's accounts, or magpie provider pool <id> --careful off)", model, strings.Join(held, "; "), heldAdvice(capped, noCredits)), soonest
+		return fmt.Sprintf("usage cap reached: every account that serves %q is held at the usage cap set on it in magpie, or held as its usage can't be told right now — %s. magpie reads it again at the next request and uses it once it is under its cap; %s, or turn off Check usage near the cap (Providers → the provider's accounts, or magpie provider pool <id> --careful off)", model, strings.Join(held, "; "), heldAdvice(ws)), soonest
 	}
 	switch {
 	case !noCredits:
-		return fmt.Sprintf("usage cap reached: every account that serves %q is held at the usage cap set on it in magpie — %s. magpie uses it again once that window renews; %s", model, strings.Join(held, "; "), heldAdvice(capped, noCredits)), soonest
+		return fmt.Sprintf("usage cap reached: every account that serves %q is held at the usage cap set on it in magpie — %s. magpie uses it again once that window renews; %s", model, strings.Join(held, "; "), heldAdvice(ws)), soonest
 	case !capped:
-		return fmt.Sprintf("usage limit reached: every account that serves %q has used up its allowance and is set in magpie not to spend its credits — %s. magpie uses it again once that window renews; %s", model, strings.Join(held, "; "), heldAdvice(capped, noCredits)), soonest
+		return fmt.Sprintf("usage limit reached: every account that serves %q has used up its allowance and is set in magpie not to spend %s — %s. magpie uses it again once that window renews; %s", model, notSpent(ws), strings.Join(held, "; "), heldAdvice(ws)), soonest
 	}
-	return fmt.Sprintf("usage limit reached: every account that serves %q is held by magpie — %s. magpie uses it again once that window renews; %s", model, strings.Join(held, "; "), heldAdvice(capped, noCredits)), soonest
+	return fmt.Sprintf("usage limit reached: every account that serves %q is held by magpie — %s. magpie uses it again once that window renews; %s", model, strings.Join(held, "; "), heldAdvice(ws)), soonest
 }
 
 // checkpointCappedError is cappedError for a request whose native
@@ -1066,8 +1070,7 @@ func cappedError(model string, ws []Weighed, now time.Time) (string, time.Time) 
 // not because they are held too (#2517).
 func checkpointCappedError(model string, cp checkpointWriter, ws []Weighed, now time.Time) (string, time.Time) {
 	held, soonest := heldReasons(ws, now)
-	capped, noCredits := heldBy(ws)
-	return fmt.Sprintf("usage limit reached on the one account this conversation can go to — %s. The conversation was compacted natively by %s, and only that key or account can read the compaction it sealed, so magpie doesn't send it to another account that serves %q, which would refuse it; the routing mode and how conversations stay don't change that. magpie uses it again once that window renews; %s, or start a new conversation", strings.Join(held, "; "), cp.Who, model, heldAdvice(capped, noCredits)), soonest
+	return fmt.Sprintf("usage limit reached on the one account this conversation can go to — %s. The conversation was compacted natively by %s, and only that key or account can read the compaction it sealed, so magpie doesn't send it to another account that serves %q, which would refuse it; the routing mode and how conversations stay don't change that. magpie uses it again once that window renews; %s, or start a new conversation", strings.Join(held, "; "), cp.Who, model, heldAdvice(ws)), soonest
 }
 
 // heldReasons is what holds each account of ws held at a share, and the
@@ -1088,6 +1091,9 @@ func heldReasons(ws []Weighed, now time.Time) ([]string, time.Time) {
 		}
 		if w.NoCredits {
 			s = fmt.Sprintf("%s (%s) has used up a usage window and is set not to spend its credits", w.Name, w.Who)
+			if w.ExtraUsage {
+				s = fmt.Sprintf("%s (%s) has used up a usage window and is set not to spend extra usage", w.Name, w.Who)
+			}
 		}
 		if w.Unread != "" {
 			s = fmt.Sprintf("%s (%s) is held, as %s and its provider is set to check usage near the cap", w.Name, w.Who, w.Unread)
@@ -1147,15 +1153,48 @@ func spendPeriod(period string, since *time.Time, now time.Time) string {
 	return "for today"
 }
 
-// heldAdvice is how to go on now past what heldBy says holds.
-func heldAdvice(capped, noCredits bool) string {
-	switch {
-	case !noCredits:
+// heldAdvice is how to go on now past what heldBy says holds, by what
+// ws holds back from being spent: a Codex account's credits, a Claude
+// account's extra usage, or both.
+func heldAdvice(ws []Weighed) string {
+	capped, noCredits := heldBy(ws)
+	if !noCredits {
 		return "raise or lift the cap in magpie (Providers → the account's cap, or magpie provider account-cap)"
-	case !capped:
-		return "to go on now, if an account holds credits, let it spend them (Usage → the account's Use credits, or magpie quota credits <account> on)"
 	}
-	return "to go on now, raise or lift a cap (Providers → the account's cap, or magpie provider account-cap) or, if an account holds credits, let it spend them (Usage → the account's Use credits, or magpie quota credits <account> on)"
+	credits, extra := heldSpends(ws)
+	var let []string
+	if credits {
+		let = append(let, "if an account holds credits, let it spend them (Usage → the account's Use credits, or magpie quota credits <account> on)")
+	}
+	if extra {
+		let = append(let, "let a Claude account spend extra usage (Providers → Claude → Advanced → Spend extra usage on, or magpie settings set claudeNoExtraUsage off) or lift the cap on its Usage credits")
+	}
+	if !capped {
+		return "to go on now, " + strings.Join(let, ", or ")
+	}
+	return "to go on now, raise or lift a cap (Providers → the account's cap, or magpie provider account-cap) or " + strings.Join(let, ", or ")
+}
+
+// heldSpends says what the accounts of ws held at 100% are held from
+// spending: a Codex account's credits, a Claude account's extra usage.
+func heldSpends(ws []Weighed) (credits, extra bool) {
+	for _, w := range ws {
+		if w.Capped > 0 && w.NoCredits {
+			credits, extra = credits || !w.ExtraUsage, extra || w.ExtraUsage
+		}
+	}
+	return credits, extra
+}
+
+// notSpent names what heldSpends says ws's accounts don't spend.
+func notSpent(ws []Weighed) string {
+	switch credits, extra := heldSpends(ws); {
+	case extra && credits:
+		return "its credits or extra usage"
+	case extra:
+		return "extra usage"
+	}
+	return "its credits"
 }
 
 // heldBy says what holds the accounts of ws held at a share: a usage cap
@@ -1176,9 +1215,9 @@ func checkpointCappedRecord(ws []Weighed) string {
 	case !noCredits:
 		return "native compaction's account at its usage cap"
 	case !capped:
-		return "native compaction's account held: set not to spend its credits"
+		return "native compaction's account held: set not to spend " + notSpent(ws)
 	}
-	return "native compaction's account held: at its usage cap or set not to spend its credits"
+	return "native compaction's account held: at its usage cap or set not to spend " + notSpent(ws)
 }
 
 // cappedRecord is the call's record of the same refusal as cappedError,
@@ -1194,9 +1233,9 @@ func cappedRecord(ws []Weighed) string {
 	case !noCredits:
 		return "every account at its usage cap"
 	case !capped:
-		return "every account held: set not to spend its credits"
+		return "every account held: set not to spend " + notSpent(ws)
 	}
-	return "every account held: at its usage cap or set not to spend its credits"
+	return "every account held: at its usage cap or set not to spend " + notSpent(ws)
 }
 
 // unread says whether one of ws is held as its usage can't be told
@@ -1245,7 +1284,7 @@ func barredOf(cs []candidate, q provider.Provider, fallback bool, from provider.
 		w := weighed(c, q, weighing{}, fallback, from)
 		w.Unlisted, w.Via = true, via
 		if h := c.capped; h != nil {
-			w.Capped, w.Used, w.NoCredits, w.Unread = h.cap, h.used, h.noCredits, h.unread
+			w.Capped, w.Used, w.NoCredits, w.ExtraUsage, w.Unread = h.cap, h.used, h.noCredits, h.extra, h.unread
 			w.CapAmount, w.CapCount, w.CapUnit = h.amount, h.count, h.unit
 			if sp := h.spend; sp != nil {
 				w.SpendCap, w.Spent, w.SpendPeriod = sp.usd, sp.spent, sp.period

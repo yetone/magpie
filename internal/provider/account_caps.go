@@ -521,9 +521,13 @@ func (a Allowance) CapHeld(model string, caps WindowCaps, now time.Time) *CapHol
 		return nil
 	}
 	model = strings.ToLower(model)
+	caps = a.extraCapped(model, caps, now)
 	var h *CapHold
 	unknown, byCap := false, false
 	for _, l := range a.capLimits(model) {
+		if l.extra {
+			continue // held by extraCapped's 100%, not by itself
+		}
 		share, credits, amount := caps.limitShare(l.Name, l.Of, l.aside)
 		if !past(share, amount, l.Used, l.Amount) {
 			continue
@@ -558,6 +562,29 @@ func (a Allowance) CapHeld(model string, caps WindowCaps, now time.Time) *CapHol
 	return h
 }
 
+// extraCapped is caps with Credits set — the account held at 100% of any
+// plan window with no cap of its own, as ClaudeNoExtraUsage holds it —
+// when a counts model with a Claude account's extra usage (Limit.extra)
+// at or past a cap the user set on it, not renewed since: what the plan
+// has left is still used, and no more extra usage is spent.
+func (a Allowance) extraCapped(model string, caps WindowCaps, now time.Time) WindowCaps {
+	if caps.Credits {
+		return caps
+	}
+	for _, l := range a.capLimits(model) {
+		if !l.extra {
+			continue
+		}
+		share, _, amount := caps.limitShare(l.Name, l.Of, l.aside)
+		if !past(share, amount, l.Used, l.Amount) || !l.Resets.IsZero() && !l.Resets.After(now) {
+			continue
+		}
+		caps.Credits = true
+		return caps
+	}
+	return caps
+}
+
 // NearCap says whether an allowance, as last known, has some window
 // counting model within points of its own share of caps (or past it) at
 // now, not renewed since: a careful provider reads such an account again
@@ -568,6 +595,7 @@ func (a Allowance) NearCap(model string, caps WindowCaps, points float64, now ti
 		return false
 	}
 	model = strings.ToLower(model)
+	caps = a.extraCapped(model, caps, now)
 	for _, l := range a.capLimits(model) {
 		share, _, amount := caps.limitShare(l.Name, l.Of, l.aside)
 		if share <= 0 || l.Used < share-points && (amount <= 0 || l.Amount < amount) {

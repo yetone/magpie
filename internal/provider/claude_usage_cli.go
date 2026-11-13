@@ -147,7 +147,7 @@ func claudeExtraWindow(lines []string) (QuotaWindow, bool) {
 		if err1 != nil || err2 != nil || limit <= 0 {
 			continue
 		}
-		return QuotaWindow{Name: "Usage credits", Used: math.Min(100, spent/limit*100), Aside: true,
+		return QuotaWindow{Name: "Usage credits", Used: math.Min(100, spent/limit*100), Aside: true, Extra: true,
 			Amount: spent, Limit: limit, Unit: strings.ToUpper(m[3])}, true
 	}
 	return QuotaWindow{}, false

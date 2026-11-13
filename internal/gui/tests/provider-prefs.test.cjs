@@ -91,6 +91,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await openProvPrefs(page, "claude");
         assert.equal(await box.locator("#claudeWarmList").count(), 1, "Claude's warm-up");
         assert(await box.locator("#claudeRunList #claudeLeanRow").isVisible(), "Claude's short system prompt");
+        assert(await box.locator("#claudeRunList #claudeExtraRow").isVisible(), "Claude's extra usage");
         assert.equal(await box.locator("#codexWarmList, #codexResetList").count(), 0);
 
         await openProvPrefs(page, "workbuddy");

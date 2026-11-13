@@ -101,6 +101,11 @@ type QuotaWindow struct {
 	// (Allowance.OnCredits); kept
 	// with the reading, so one shown from before still says it.
 	Credits bool `json:"credits,omitempty"`
+	// Extra is set on a Claude account's "Usage credits" window
+	// (claudeExtraWindow): the extra usage Anthropic bills past the plan,
+	// set aside. A cap the user sets on it holds the account at 100% of a
+	// plan window once reached (Allowance.extraCapped), never outright.
+	Extra bool `json:"extra,omitempty"`
 	// Capped is set, for the GUI only (WithCapped), on a window an
 	// account's usage cap counts: neither Aside nor unlimited. One model's
 	// own counts for that model (CapHeld), so it is marked like the rest.

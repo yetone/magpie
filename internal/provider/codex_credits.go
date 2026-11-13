@@ -117,10 +117,16 @@ func SetCodexCreditsMode(user, mode string) error {
 // HoldCaps is the shares of its windows at which routing holds the
 // account user of p, of agent, as used up: its usage cap and its windows'
 // own (account_caps.go), and for a Codex account set not to spend its
-// credits 100% of any window with no cap. Holds() is false when nothing
-// holds it before the vendor does.
+// credits, or a Claude account set not to spend extra usage
+// (claude_extra.go), 100% of any window with no cap. Holds() is false
+// when nothing holds it before the vendor does.
 func HoldCaps(p Provider, agent, user string) WindowCaps {
 	c := p.CapsOf(user)
-	c.Credits = agent == "codex" && user != "" && !CodexCredits(user)
+	switch agent {
+	case "codex":
+		c.Credits = user != "" && !CodexCredits(user)
+	case "claude":
+		c.Credits = !ClaudeExtraUsage()
+	}
 	return c
 }
