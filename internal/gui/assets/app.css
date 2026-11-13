@@ -1427,6 +1427,12 @@ body.masked :hover > .acct-eye, body.masked .pq-card:hover .acct-eye, body.maske
 .us-hid .us-showall { align-self: flex-start; margin: 4px 0 0 2px; font-size: 11.5px; }
 .us-hid .us-showall[hidden] { display: none; }
 #quotaHid .row.stat .who { flex: 1 1 auto; min-width: 0; }
+/* the switched-off providers' check-ins (wxkwxk666 on X) */
+#quotaOff .row.stat .who { flex: 1 1 auto; min-width: 0; }
+#quotaOff .wb-checkin { margin-top: 3px; }
+#quotaOff .ci-acct { flex: none; margin-right: -4px; }
+.quota-head .us-ciall { font-variant-numeric: tabular-nums; }
+.quota-head .us-ciall:disabled { color: var(--muted); }
 .row.stat.hid > :not(.us-unhide) { opacity: .55; }
 .usage-note { padding: 10px 4px 2px; font-size: 11px; color: var(--faint); user-select: text; -webkit-user-select: text; }
 .usage-clear { margin: 0; padding: 2px 0 6px; }

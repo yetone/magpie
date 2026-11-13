@@ -1328,6 +1328,7 @@ function hiddenQuotas() {
 // renderQuotaHid: the line under the cards saying how many are hidden,
 // opening them, each with Unhide, and Show all
 function renderQuotaHid() {
+  renderQuotaOff();
   const hb = $("#quotaHid");
   const cards = hiddenQuotas(), rowList = hiddenRowList();
   const hidden = [...cards, ...rowList];
@@ -1374,6 +1375,108 @@ function renderQuotaHid() {
     r.append(who, b);
     hl.append(r);
   }
+}
+// The switched-off providers' accounts a daily check-in reaches, in a
+// folded line at the cards' end (wxkwxk666 on X: 禁用的供应商也要能签到):
+// the page leaves their cards out and the daily check-in leaves them
+// alone, so each is checked in here by hand, which switches nothing on.
+// Asked again whenever the cards come in.
+let offCards = [], offFor = null, offOpen = false, ciAllAt = "";
+function loadOffCards() {
+  return api("usage/checkins/off").then((qs) => { offCards = Array.isArray(qs) ? qs : []; renderQuotaOff(); }, () => {});
+}
+// offSay: an off account's check-in, never saying the daily check-in
+// will ask again, which it doesn't for a switched-off provider
+function offSay(q) {
+  if (!checkinDue({ ...q, checkinOff: false })) return checkinRow(q, false, offCards);
+  const r = q.checkin, bad = r?.day === wbToday() && r.outcome === "failed";
+  const row = el("div", "wb-checkin"), say = el("span", "ci-say");
+  say.append(el("i", "ci-dot" + (bad ? " bad" : "")), el("span", "", t(bad ? "Check-in failed" : "Not checked in yet today") + (bad && r.msg ? " · " + r.msg : "")));
+  row.append(say);
+  return row;
+}
+function renderQuotaOff() {
+  if (quotas && quotas !== offFor) { offFor = quotas; loadOffCards(); }
+  const hb = $("#quotaOff");
+  hb.hidden = !offCards.length;
+  if (offCards.length) $("#quotaHead").hidden = false;
+  renderCheckinAll();
+  if (!offCards.length) return;
+  const line = hb.querySelector(".us-hidline"), hl = hb.querySelector(".list");
+  line.replaceChildren(el("span", "", t("Switched off · {n}", { n: offCards.length })), svg(CHEV, 11, 1.6));
+  line.title = t("Providers you switched off: magpie doesn't check them in by itself. Checking in here leaves them off.");
+  line.setAttribute("aria-expanded", String(offOpen));
+  line.onclick = () => { offOpen = !offOpen; renderQuotaOff(); };
+  hl.hidden = !offOpen;
+  hl.replaceChildren();
+  if (!offOpen) return;
+  for (const q of offCards) {
+    const r = el("div", "row stat acts us-offrow");
+    r.dataset.key = q.checkinKey;
+    r.append(icon(q.icon));
+    const who = el("div", "who");
+    who.append(el("div", "name", quotaName(q)), el("div", "sub", q.alias || q.user || ""), offSay(q));
+    r.append(who);
+    if (checkinDue({ ...q, checkinOff: false })) {
+      const b = el("button", "text ci-acct", t("Check in"));
+      b.type = "button";
+      b.onclick = async (e) => {
+        e.stopPropagation();
+        try { window.ciNowSend || await import(new URL("checkinnow.js", document.baseURI).href); } catch (err) { return statusErr(err); }
+        ciNowSend({ key: q.checkinKey, user: q.user }, q.checkinBy || "", (o) => {
+          b.disabled = !!o.busy;
+          b.classList.toggle("busy", !!o.busy);
+          if (!o.busy) loadOffCards();
+        });
+      };
+      r.append(b);
+    }
+    hl.append(r);
+  }
+}
+// renderCheckinAll: Check in all at the allowances' head, for every
+// account any check-in reaches, a switched-off provider's too; it shows
+// how far a press has got
+function renderCheckinAll() {
+  const b = $("#usageCheckinAll");
+  b.hidden = ![...(quotas || []), ...offCards].some((q) => q.checkins && !q.from);
+  b.textContent = ciAllAt || t("Check in all");
+  b.disabled = !!ciAllAt;
+  b.classList.toggle("busy", !!ciAllAt);
+  b.title = t("Check in every account not checked in today, those of switched-off providers too; no provider is switched on");
+  b.onclick = (e) => { e.stopPropagation(); checkinAll(); };
+}
+// checkinAll checks in, three at a time, each account not checked in
+// today, once each, leaving every switch as it is; what came of it is
+// said once all have answered
+async function checkinAll() {
+  if (ciAllAt) return;
+  const seen = new Set(), due = [];
+  for (const q of [...(quotas || []), ...offCards]) {
+    const k = (q.checkinBy || "") + "\0" + q.checkinKey;
+    if (q.from || !q.checkinKey || seen.has(k) || !checkinDue({ ...q, checkinOff: false })) continue;
+    seen.add(k);
+    due.push(q);
+  }
+  if (!due.length) return status(t("Every account is checked in today"), "ok");
+  const rs = [];
+  let n = 0;
+  const step = () => { ciAllAt = t("Checking in {i}/{n}…", { i: rs.length, n: due.length }); renderCheckinAll(); };
+  step();
+  const next = async () => {
+    while (n < due.length) {
+      const q = due[n++];
+      try { rs.push(await api("usage/checkin-account", { by: q.checkinBy || "", key: q.checkinKey })); } catch { rs.push({ outcome: "failed" }); }
+      step();
+    }
+  };
+  await Promise.all([next(), next(), next()]);
+  ciAllAt = "";
+  const said = checkinPressSaid(rs);
+  status(said.text, said.bad ? "err" : "ok");
+  renderCheckinAll();
+  loadQuotas();
+  loadOffCards();
 }
 // hideQuotaRows hides a card's rows from the Overview, or has them back:
 // drawn at once, put back if the save fails

@@ -389,6 +389,16 @@ func usageRoutes(mux *http.ServeMux, w Windows) {
 		}
 		writeJSON(rw, rs[0])
 	})
+	// the accounts a check-in reaches whose provider is switched off, for
+	// the Usage page's folded Switched off group (wxkwxk666 on X): asks
+	// nothing, switches nothing on
+	mux.HandleFunc("GET /api/usage/checkins/off", func(rw http.ResponseWriter, r *http.Request) {
+		qs := provider.OffCheckins()
+		if qs == nil {
+			qs = []provider.SubscriptionQuota{}
+		}
+		writeJSON(rw, qs)
+	})
 	// what was left of each window over time, for the quota cards' curves
 	// (#651); ?days= back
 	mux.HandleFunc("GET /api/usage/quotas/history", func(rw http.ResponseWriter, r *http.Request) {
