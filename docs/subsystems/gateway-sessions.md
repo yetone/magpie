@@ -134,7 +134,8 @@ reads only the agent shown and the agents with gateway sessions (#2776).
 It answers before a first read of a long history (hey_boyce on X: the page
 stood on its placeholder rows on its first open). A file it would read whole
 (no parse kept, an older index, a file written over, or a Claude Code or
-Codex parse that can't be read on after a restart) is read behind the
+Codex parse that can't be read on after a restart because its window
+wasn't kept on disk) is read behind the
 answer once more than `quickBytes` (32 MB) of them is waiting; until then its
 row stands on the parse kept, or on a glance at its first 256 KB (id,
 folder, first prompt, start) and, for Claude Code, the titles in its last
@@ -144,6 +145,21 @@ glance is never saved in the index (`savable`) nor taken by a refresh as a
 parse (`parsed`). See
 [`internal/sessions/manage_quick.go`](../../internal/sessions/manage_quick.go),
 `TestManageAnswersBeforeFirstReads` and `sessions-pending-fill.test.cjs`.
+A file being written (changed within the hour, `workingRevision`) keeps
+what its reads have seen on disk with where they stopped, so after a
+restart the next line it gains is read on from there, not from its first
+line. A Claude Code session's is in `sessions.json` and its shard's `.rev`
+file (#3493). A Codex rollout's summary window goes in
+`codex-windows/<hash>.gob` beside `sessions.json`, written with it and
+taken away once the cache drops that window, and its calls' window
+(`cxRun`) in the shard's `.rev` file. Each names the parser and window
+versions it was written by, the size, offset and content hash of its read,
+and is taken only when all match. Before this, the first line a 100 MB
+rollout gained after a restart had it read whole twice, 2.2 s of the
+Sessions list on an M5 and over ten seconds on a slower Windows PC
+(shangyuan0818 on X). See
+[`internal/sessions/codex_window.go`](../../internal/sessions/codex_window.go)
+and `TestCodexSessionReadOnAfterRestart`.
 A Claude Code session's folder is its first line's `cwd`, unless
 Claude Code's `/cd` moved it: the file goes to the new folder's project
 directory with a `{"type":"relocated","relocatedCwd":…}` line, while the

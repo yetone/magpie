@@ -427,7 +427,7 @@ func readCalls(f file) *callFile {
 	if st.Claude != nil && (old == nil || old.Claude == nil) && !workingRevision(f.mod.UnixNano(), time.Now()) {
 		st = st.withoutRevisions()
 	}
-	if err == nil && (f.agent == "claude" || f.agent == "claude-desktop") {
+	if err == nil && (f.agent == "claude" || f.agent == "claude-desktop" || f.agent == "codex") {
 		writeCallRevisions(st)
 	}
 
@@ -538,8 +538,8 @@ func (r *callsRide) finish(off int64, err error) {
 		if st.Claude != nil && !workingRevision(f.mod.UnixNano(), time.Now()) {
 			st = st.withoutRevisions()
 		}
-		writeCallRevisions(st)
 	}
+	writeCallRevisions(st)
 	st.dirty = nil
 	if r.claude {
 		// on disk only: a Sessions read keeps no calls (readCalls loads them)

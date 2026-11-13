@@ -57,7 +57,7 @@ func readsWhole(f file, old *state) bool {
 		return true
 	}
 	if f.agent == "codex" && old.Codex == nil {
-		return true
+		return !codexWindowKept(f, old)
 	}
 	return p.claude && old.Claude == nil
 }

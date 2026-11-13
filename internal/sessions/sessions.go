@@ -1669,6 +1669,7 @@ func writeCache(c *save) {
 		return
 	}
 	ok = true
+	writeCodexWindows(c.Files)
 }
 
 // refresh parses those of want that changed since their parse was kept, a
@@ -1768,13 +1769,16 @@ func refresh(want, all []file) {
 				j := &jobs[i]
 				// its file's calls lock is taken before a read slot, as
 				// readCalls takes them
-				calls := callsAlong(j.f, j.old)
+				// a rollout's window kept on disk: its calls are read on
+				// too, by readCalls, rather than ride a read from the start
+				old := codexWindowed(j.f, j.old)
+				calls := callsAlong(j.f, old)
 				release := readSlot()
 				end := readBegin()
 				if parseHook != nil {
 					parseHook()
 				}
-				j.parsed = parseWith(j.f, j.old, calls)
+				j.parsed = parseWith(j.f, old, calls)
 				end()
 				release()
 				if j.parsed.Agent != j.f.agent {
@@ -2331,8 +2335,10 @@ func parseRead(f file, old *state, calls *callsRide) *state {
 			calls.release()
 		}
 	}()
-	// Summary caches contain aggregates only. After a restart, a changed
-	// Codex file rebuilds its transient response index from the source.
+	// sessions.json keeps aggregates only, and a rollout's window beside it
+	// (codex_window.go). A changed rollout with no window of its read kept
+	// rebuilds it from the source.
+	old = codexWindowed(f, old)
 	if f.agent == "codex" && old != nil && old.Codex == nil {
 		old = nil
 	}

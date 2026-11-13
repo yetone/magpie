@@ -11,11 +11,12 @@ import (
 )
 
 // TestPlainRolloutReadOnceForSessionsAndCalls: a plain rollout read from
-// its first line, at a start with nothing kept or after a restart once it
-// grew (neither read keeps its Codex window on disk), has its calls read on
-// the summary's own pass, as a packed one has. Read apart, a cold start
+// its first line, at a start with nothing kept, has its calls read on the
+// summary's own pass, as a packed one has. Read apart, a cold start
 // read every rollout twice: 3.5 GB of reads for 1.7 GB of real rollouts
-// (#4369). A rollout read on from where it was is read by each as before.
+// (#4369). A rollout read on from where it was, in the same run or after a
+// restart (its windows are kept on disk, codex_window.go), is read on by
+// each as before.
 func TestPlainRolloutReadOnceForSessionsAndCalls(t *testing.T) {
 	_, codex := setup(t)
 	long := filepath.Join(codex, "sessions", "2026", "09", "21", "rollout-2026-09-21T10-00-00-0190aaaa-1111-7222-8333-444455556666.jsonl")
@@ -134,16 +135,21 @@ func TestPlainRolloutReadOnceForSessionsAndCalls(t *testing.T) {
 	}
 	same("an append", got)
 
-	// grown while magpie was closed: neither read keeps its window on
-	// disk, so both read it from its first line, on one pass
+	// grown while magpie was closed: both windows are kept on disk, so
+	// each read goes on from where it was
 	forget()
 	run()
 	grow(42, 43)
 	Reset()
 	counted()
 	got = run()
-	if offs := got.scans[long]; len(got.scans) != 1 || len(offs) != 1 || offs[0] != 0 {
-		t.Errorf("grown after a restart: %v scanned, want the long rollout once from 0", got.scans)
+	if len(got.scans) != 1 || len(got.scans[long]) == 0 {
+		t.Errorf("grown after a restart: %v scanned, want the long rollout only", got.scans)
+	}
+	for _, off := range got.scans[long] {
+		if off == 0 {
+			t.Errorf("grown after a restart: the long rollout read again from its first line: %v", got.scans[long])
+		}
 	}
 	same("grown after a restart", got)
 }
