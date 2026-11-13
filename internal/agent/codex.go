@@ -2129,6 +2129,14 @@ func codexIn(at place) *Agent {
 			if err := failover(); err != nil {
 				return err
 			}
+			// a magpie model the user has since unchecked in its
+			// provider's list: Codex, the app and the CLI, goes on to the
+			// provider's first pick, as picking it here does (pickedInstead)
+			if m := get("model"); isMagpie(m) {
+				if to := pickedInstead("codex", m); to != "" {
+					return set(to)
+				}
+			}
 			// magpie API on one of Codex's own models, as an older magpie
 			// left it unwired: wired again, as picking it does now (#701);
 			// not one the user disconnected, which this left the same

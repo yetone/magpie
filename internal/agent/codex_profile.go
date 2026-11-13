@@ -168,6 +168,10 @@ func codexProfileIn(at place) *Agent {
 				}
 				return nil
 			}
+			// a model the user has since unchecked in its provider's list
+			if to := pickedInstead("codex", get("model")); to != "" {
+				return put(to)
+			}
 			t, _ := edit.GetTOMLTable(path, table)
 			if t["base_url"] != at.v1() || t["experimental_bearer_token"] != codexKeptToken(path, table, at.gwKey()) {
 				return put(get("model"))
