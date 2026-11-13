@@ -1745,7 +1745,13 @@ var zenModelGone = lazyre.New(`(^|[\s:"])Model [^"\s]+ is not supported("|\s*$)`
 // client at all — WorkBuddy's "Illegal API invocation from an unapproved
 // channel" to a chat opening with another agent's own system prompt — a
 // refusal of the provider, not of the request, another member may serve.
-var refusedWords = lazyre.New(`(?i)unapproved channel|illegal api invocation`)
+// The AutoClaw plugin's 406 says it in its own words: "AutoClaw refuses
+// chats whose system prompt carries another agent's identity line …, so an
+// unknown one needs another provider in this group". Read as anything
+// else, the group stopped at AutoClaw, and its six other members, which
+// take the same prompt, were never asked (plugins#1094: ZCode's subagent
+// line).
+var refusedWords = lazyre.New(`(?i)unapproved channel|illegal api invocation|system prompt carries another agent's identity line`)
 
 // promptRefused says a vendor answered with that refusal: the agent's
 // prompt, not the account, is at fault.
@@ -2016,6 +2022,11 @@ func retryable(status int, body []byte) bool {
 		// quotaWords' is in it, so a group never asked the account with
 		// 6,467 points and the empty one was never rested (#4095,
 		// mycf_711)
+		return true
+	case status >= 400 && status < 500 && refusedWords.Match(body):
+		// the vendor turning the agent's prompt away, at whatever 4xx it
+		// picks: the AutoClaw plugin's 406 (plugins#1094) as much as
+		// WorkBuddy's 400. Another member may take the same prompt
 		return true
 	case status == 400, status == 422:
 		return quotaWords.Match(body) || unservedWords.Match(body) || refusedWords.Match(body) || shapeWords.Match(body) || unsaidWords.Match(body) || regionWords.Match(body) || zhipuImageRefusal.Match(body) || wrongEndpoint(status, body) ||
