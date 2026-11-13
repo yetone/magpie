@@ -867,6 +867,12 @@ failure behind it.**
 **Keep the issue open until the reporter's case works. Reopen when they say
 it doesn't.**
 - On #876 the reporter couldn't reopen it themselves and had to file #888.
+- 11-13: #6482 (notarisation 403, "a required agreement is missing")
+  was closed at 08:22 UTC on one green release. The 403 kept coming
+  back between greens, and a notarytool timeout followed, so v0.1.4034,
+  4035, 4036, 4038 and 4042 were tagged and never published, with each
+  mirror-release left waiting. An intermittent fault is closed after a
+  run of releases, not one.
 - Don't close as not-planned what the owner hasn't ruled on. #769 and #871
   were reversed.
 - Done right on 10-07: #1050, #1053, #1063 and #958 shipped a fix and stayed
