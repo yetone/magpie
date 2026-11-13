@@ -780,6 +780,12 @@ cause:
 - A cancelled run tests nothing. On 10-14 nine pushes in ten minutes
   cancelled each other's runs, and 3c4b4dc97 never had a run of its own;
   its red showed first at 84f14e555.
+  - 11-13: 459d668b3 (#6428) edited docs/sync.html and did not run
+    `node llms-full.mjs`. site's "llms-full.txt is current" test went
+    red at 21:05. Every Test run after it was cancelled by the next
+    push until d5585933f's run finished at ~01:45 with the red. A docs
+    page change runs site/worker.test.mjs, because llms-full.txt is
+    built from those pages (fixed in 3d8860010).
   - 10-28: of main's last 58 Test runs, 49 were cancelled by the next
     push. 0b99b8fbe's new allocation bound went red in macOS's Race job
     (sync.Pool lets go under -race) at 25df3187b, the first run after it
