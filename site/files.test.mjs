@@ -203,6 +203,21 @@ test("mirror: a kept release the feeds no longer name still gets its bundles, fo
   assert.deepEqual(asked, []);
 });
 
+test("mirror: one statement signing every file is asked for once a release, not once a file", async () => {
+  const env = { RELEASES: bucket() };
+  const names = ["a", "b", "c"];
+  const rel = { version: "0.1.3982", assets: Object.fromEntries(names.map((n) => [n, { sha256: sha(n) }])) };
+  const statement = { subject: names.map((n) => ({ name: n, digest: { sha256: sha(n) } })) };
+  const bundle = { dsseEnvelope: { payload: btoa(JSON.stringify(statement)) } };
+  const asked = [];
+  const attest = async (h) => (asked.push(h), [bundle]);
+  const done = await mirror(env, [rel], async (n) => new Response(n), Date.now, attest);
+  assert.ok(done.copied.includes("v0.1.3982/attestations.jsonl"));
+  assert.equal(asked.length, 1);
+  const res = await ask(env, "/files/v0.1.3982/attestations.jsonl");
+  assert.deepEqual((await res.text()).trimEnd().split("\n").map((l) => JSON.parse(l)), [bundle]);
+});
+
 test("mirror: a release from before the attestations is not asked for any", async () => {
   const env = { RELEASES: bucket() };
   const rel = { version: "0.1.3890", assets: { a: { sha256: sha("A") } } };

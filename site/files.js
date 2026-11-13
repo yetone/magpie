@@ -170,8 +170,12 @@ export async function mirror(env, rels, open, now = Date.now, attest = null) {
 // the next run asks again rather than keep a list with holes in it.
 async function keepBundles(env, tag, rel, attest) {
   const lines = new Set();
+  // release CI signs every file in one statement, so the first answer
+  // covers the rest: GitHub's API is asked once a release, not once a file
+  // (unsigned, it allows 60 an hour to an IP the worker shares)
+  const covered = new Set();
   for (const [name, a] of Object.entries(rel.assets)) {
-    if (!a.sha256) continue;
+    if (!a.sha256 || covered.has(a.sha256)) continue;
     let got = null;
     try {
       got = await attest(a.sha256);
@@ -182,7 +186,10 @@ async function keepBundles(env, tag, rel, attest) {
       console.log("r2 attest: none for", tag, name);
       return false;
     }
-    for (const b of got) lines.add(JSON.stringify(b));
+    for (const b of got) {
+      lines.add(JSON.stringify(b));
+      for (const h of subjects(b)) covered.add(h);
+    }
   }
   if (!lines.size) return false;
   try {
@@ -193,6 +200,16 @@ async function keepBundles(env, tag, rel, attest) {
   } catch (e) {
     console.log("r2 attest: put", tag, String(e));
     return false;
+  }
+}
+
+// subjects is the sha256 of each file a Sigstore bundle's statement names.
+export function subjects(b) {
+  try {
+    const st = JSON.parse(atob(b.dsseEnvelope.payload));
+    return (st.subject || []).map((x) => x.digest && x.digest.sha256).filter(Boolean);
+  } catch {
+    return [];
   }
 }
 
