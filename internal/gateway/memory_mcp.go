@@ -441,7 +441,7 @@ func memoryContext(c memoryCaller) (string, map[string]any) {
 		b.WriteString("; scope project keeps memories there.\n")
 	} else {
 		ctx["project"] = nil
-		b.WriteString("Project: none. No folder of yours is known here: give memory_search and memory_save a project (a folder, or a key), or run magpie mcp memory in the project's folder.\n")
+		b.WriteString("Project: none. None of your folders is known here: give memory_search and memory_save a project (a folder, or a key), or run magpie mcp memory in the project's folder.\n")
 	}
 	fmt.Fprintf(&b, "A search with scope all looks in: %s.\nmagpie-memory %s", strings.Join(scopes, ", "), Version)
 	return b.String(), ctx
