@@ -239,7 +239,17 @@ var Levels = []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"
 // levels aren't known, any of Levels, which it is given; none takes them
 // away.
 func SetModelEfforts(ref string, efforts []string) error {
-	return touchedIf(setModelEfforts(ref, efforts))
+	_, err := ChangeModelEfforts(ref, efforts)
+	return err
+}
+
+// ChangeModelEfforts is SetModelEfforts, saying whether anything changed:
+// levels already kept, or every level a model offers already, change
+// nothing, which the caller says rather than a tick over nothing saved
+// (@czhhcz on X).
+func ChangeModelEfforts(ref string, efforts []string) (bool, error) {
+	changed, err := setModelEfforts(ref, efforts)
+	return changed, touchedIf(changed, err)
 }
 
 func setModelEfforts(ref string, efforts []string) (bool, error) {

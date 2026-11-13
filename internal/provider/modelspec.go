@@ -117,6 +117,21 @@ func (p Provider) ParseLevels(model, v string) (levels []string, off bool, err e
 // take it). Every part is checked before anything is written, so a bad
 // one writes nothing; the agents are told once, after them all.
 func SetModelSpec(ref string, c SpecChange) error {
+	_, err := ChangeModelSpec(ref, c)
+	return err
+}
+
+// ChangeModelSpec is SetModelSpec, saying whether anything changed: a
+// spec the model goes by already (every reasoning level it has, a window
+// it was given) saves nothing, which the caller says rather than "saved"
+// (@czhhcz on X).
+func ChangeModelSpec(ref string, c SpecChange) (bool, error) {
+	var did bool
+	err := setModelSpec(ref, c, &did)
+	return did, err
+}
+
+func setModelSpec(ref string, c SpecChange, did *bool) error {
 	if c.Empty() {
 		return errors.New("say what to change: --context, --output, --vision or --reasoning")
 	}
@@ -210,6 +225,7 @@ func SetModelSpec(ref string, c SpecChange) error {
 			return touchedIf(changed, err)
 		}
 	}
+	*did = changed || saved
 	return touchedIf(changed && !saved, nil)
 }
 

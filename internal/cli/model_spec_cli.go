@@ -103,10 +103,17 @@ func modelSpec(args []string) error {
 	if c.Empty() {
 		return showSpec(ref)
 	}
-	if err := provider.SetModelSpec(ref, c); err != nil {
+	changed, err := provider.ChangeModelSpec(ref, c)
+	if err != nil {
 		return err
 	}
-	fmt.Println(green.Render("✓"), muted.Render("saved"))
+	if changed {
+		fmt.Println(green.Render("✓"), muted.Render("saved"))
+	} else {
+		// it goes by these already: a tick over nothing saved read as a
+		// set that took (@czhhcz on X)
+		fmt.Println(muted.Render("nothing changed"), faint.Render("· it goes by these already"))
+	}
 	return showSpec(ref)
 }
 

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"fmt"
 	"maps"
 	"slices"
@@ -325,6 +326,9 @@ func modelEfforts(args []string) error {
 		} else {
 			fmt.Println(muted.Render("· all offered"))
 		}
+		if p.KnownBorrowed(model) {
+			fmt.Println(faint.Render(borrowedLine(p, model)))
+		}
 		return nil
 	}
 	var levels []string
@@ -335,8 +339,27 @@ func modelEfforts(args []string) error {
 			}
 		}
 	}
-	if err := provider.SetModelEfforts(id, levels); err != nil {
+	changed, err := provider.ChangeModelEfforts(id, levels)
+	if err != nil {
 		return err
+	}
+	if !changed {
+		// nothing saved: say so, and why, rather than a tick (@czhhcz on
+		// X took "✓ offers every level it has" for a set that took)
+		switch kept, narrowed := p.ModelEfforts()[model]; {
+		case given && len(all) > 0:
+			fmt.Println(muted.Render(id+" already offers "+strings.Join(all, ", ")), faint.Render("· nothing changed"))
+		case given:
+			fmt.Println(muted.Render(id+" has no reasoning levels given"), faint.Render("· nothing changed"))
+		case narrowed:
+			fmt.Println(muted.Render(id+" already offers only "+strings.Join(kept, ", ")), faint.Render("· nothing changed"))
+		default:
+			fmt.Println(muted.Render(id+" already offers every level it has, "+strings.Join(all, ", ")), faint.Render("· nothing changed"))
+			if p.KnownBorrowed(model) {
+				fmt.Println(faint.Render(borrowedLine(p, model)))
+			}
+		}
+		return nil
 	}
 	if given {
 		if all = p.Efforts(model); len(all) > 0 {
@@ -352,6 +375,15 @@ func modelEfforts(args []string) error {
 		fmt.Println(green.Render("✓"), id, muted.Render("offers every level it has"), faint.Render(strings.Join(all, ", ")))
 	}
 	return nil
+}
+
+// borrowedLine says where a model's levels come from when its provider's
+// list names none for it (Provider.KnownBorrowed): a relay's /v1/models
+// with reasoning_levels: [] listed five for a Claude model, and the user
+// had no way to tell magpie sends them all the same (@czhhcz on X).
+func borrowedLine(p *provider.Provider, model string) string {
+	return "  · " + cmp.Or(p.Name, p.ID) + "'s list names no reasoning levels for " + model +
+		": these are the model's own from models.dev, which magpie fits requests to · off sends it no reasoning field"
 }
 
 // modelPrice shows what a provider's model is counted at, or sets what the

@@ -2208,6 +2208,31 @@ func (p Provider) Known(model string) []string {
 	return p.knownElsewhere(model)
 }
 
+// KnownBorrowed reports whether the model's levels (Known) are not its
+// provider's word but borrowed for its id (borrowedEfforts): its list
+// names none for it — a relay's /v1/models with reasoning_levels: [] or
+// no levels at all — and models.dev has none for that vendor, so it is
+// asked at the levels its maker, or the others serving it, give it
+// (@czhhcz on X: `magpie model efforts` listed five for a relay's Claude
+// model whose list said none, and didn't say where they came from).
+func (p Provider) KnownBorrowed(model string) bool {
+	for _, m := range p.Available() {
+		if m.ID == model {
+			if m.EffortsBorrowed {
+				return len(m.Efforts) > 0
+			}
+			return len(m.Efforts) == 0 && m.Provider == "" && len(borrowedEfforts(m.ID)) > 0
+		}
+	}
+	if p.ID == "devin" && devinEffortOf(model) != "" {
+		return false
+	}
+	if _, ok := catalog.ListedBy(p.Catalogs(), model); ok {
+		return false
+	}
+	return len(borrowedEfforts(model)) > 0
+}
+
 // knownElsewhere are the reasoning levels of a model the provider's list
 // doesn't have — one of the vendor's own its list leaves out (a preview),
 // or typed in: the vendor's word on it, before the others'.
