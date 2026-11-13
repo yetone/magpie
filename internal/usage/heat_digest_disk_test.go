@@ -121,3 +121,43 @@ func TestSourceDigestsKeptAcrossStarts(t *testing.T) {
 		t.Fatalf("kept %d, want 1", got.len())
 	}
 }
+
+// The serials a turn met go when idle, after what was made is written:
+// the next key hashes nothing again.
+func TestDigestTurnsGoWhenIdle(t *testing.T) {
+	pageHome(t)
+	cut := time.Date(2026, 9, 28, 0, 0, 0, 0, time.UTC)
+	d := heatDiskRef{root: "r", meta: "m"}
+	c := &rowChunk{serial: 1<<63 | 7}
+	c.Source.Agent, c.Source.Key, c.Source.Path = "codex", "k", "/s/7"
+	c.add(Row{Record: Record{Time: cut.Add(-time.Hour), Agent: "codex", Model: "m", Input: 3}}, "msg", 1, false)
+	sourceDigests.Lock()
+	sourceDigests.by, sourceDigests.last, sourceDigests.made = nil, nil, nil
+	sourceDigestsDisk.path, sourceDigestsDisk.kept, sourceDigestsDisk.mapped = "", nil, nil
+	sourceDigests.Unlock()
+	key := func() (string, int) {
+		sourceDigests.Lock()
+		was := sourceDigestsHashed
+		sourceDigests.Unlock()
+		k, ok := heatSettledKey(d, cut, time.Time{}, Filter{}, nil, [3][]*rowChunk{{c}}, heatSum{})
+		if !ok {
+			t.Fatal("not named")
+		}
+		sourceDigests.Lock()
+		defer sourceDigests.Unlock()
+		return k, sourceDigestsHashed - was
+	}
+	first, _ := key()
+	if n := dropDigestTurns(); n == 0 {
+		t.Fatal("no serials let go")
+	}
+	sourceDigests.Lock()
+	by, last := sourceDigests.by, sourceDigests.last
+	sourceDigests.Unlock()
+	if by != nil || last != nil {
+		t.Fatalf("kept %d and %d serials when idle", len(by), len(last))
+	}
+	if again, n := key(); n != 0 || again != first {
+		t.Fatalf("after idle: hashed %d, key %s, was %s", n, again, first)
+	}
+}

@@ -203,6 +203,7 @@ func sourceDigest(c *rowChunk, rows *chunkRows) [sha256.Size]byte {
 	}
 	d.by[c.serial] = struct{}{}
 	d.Unlock()
+	derivedUsed() // by and last go when idle (dropDigestTurns)
 	return sum
 }
 

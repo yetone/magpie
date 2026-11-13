@@ -78,6 +78,24 @@ func dropDerived() int {
 	heatBefores.by = nil
 	heatBefores.Unlock()
 	n += dropEffortPeriods()
+	n += dropDigestTurns()
+	return n
+}
+
+// dropDigestTurns lets go of the serials sourceDigest met this turn and
+// the one before (577 KB of a real history's idle heap). They only order
+// which digests heat-digests.bin keeps first when there are more than it
+// holds; what was made is written out before they go.
+func dropDigestTurns() int {
+	sourceDigestsSave()
+	d := &sourceDigests
+	d.Lock()
+	defer d.Unlock()
+	if len(d.made) != 0 { // made meanwhile: written with them next time
+		return 0
+	}
+	n := len(d.by) + len(d.last)
+	d.by, d.last = nil, nil
 	return n
 }
 
