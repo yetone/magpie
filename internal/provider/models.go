@@ -2397,6 +2397,9 @@ func (p Provider) listPriceIn(c priceCats, model string) (catalog.Price, bool, i
 	if pr, ok := p.grokFastPrice(model); ok {
 		return pr, true, pricedOwn
 	}
+	if pr, ok := p.openDesignSamePrice(model); ok {
+		return pr, true, pricedOwn
+	}
 	// the names on the stack: made for each model priced, they were
 	// 1.5 MB of forty Providers asks
 	var buf [4]string
@@ -2612,6 +2615,31 @@ func (p Provider) grokFastPrice(model string) (catalog.Price, bool) {
 		return catalog.Price{}, false
 	}
 	return pr.Times(GrokFastTimes), true
+}
+
+// openDesignSame are the Open Design plugin's ids of a model it serves
+// under another of its ids too, on another schedule: deepseek-v4.1-flash-eco
+// is DeepSeek V4.1 Flash on the low-priority, high-quota schedule, the same
+// weights ("Yes, same weights as DeepSeek V4.1 Flash", Open Design on X,
+// read 2026-11-13; the plugin's models.mjs seeds it as the same model). No
+// catalog lists the -eco id, so its calls had no estimated cost (#6352,
+// Winnie7572 on X).
+var openDesignSame = map[string]string{"deepseek-v4.1-flash-eco": "deepseek-v4.1-flash"}
+
+// openDesignSamePrice is an Open Design model's price as the model it is
+// the same as (openDesignSame), on the Open Design plugin only: elsewhere
+// an -eco id is another vendor's to price.
+func (p Provider) openDesignSamePrice(model string) (catalog.Price, bool) {
+	if p.PluginProvider() != "opendesign" {
+		return catalog.Price{}, false
+	}
+	m := strings.ToLower(strings.TrimSpace(model))
+	m = strings.TrimPrefix(m, "opendesign/")
+	base, ok := openDesignSame[m]
+	if !ok {
+		return catalog.Price{}, false
+	}
+	return p.ListPrice(base)
 }
 
 // GrokFastTimes is how many times its model's price xAI sells a Grok

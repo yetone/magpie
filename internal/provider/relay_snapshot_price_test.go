@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/plugin"
 )
 
 // A relay that serves DeepSeek's V4.1 Flash under the id the maker's
@@ -43,6 +44,45 @@ func TestRelayDeepSeekSnapshotCanonicalPriced(t *testing.T) {
 	for _, m := range []string{"deepseek-v4.1-flash-0000", "other-v4.1-flash", "deepseek-v4.1-flash-turbo"} {
 		if pr, ok := EffectivePrice("opendesign", m); ok {
 			t.Errorf("opendesign/%s priced %+v", m, pr)
+		}
+	}
+}
+
+// Open Design's deepseek-v4.1-flash-eco is DeepSeek V4.1 Flash on its eco
+// schedule, the same weights, so its estimated cost is V4.1 Flash's (#6352,
+// Winnie7572 on X). Only on the Open Design plugin: the id elsewhere, or
+// any other -eco id, stays unpriced.
+func TestOpenDesignEcoPricedAsFlash(t *testing.T) {
+	claudeHome(t)
+	b, err := os.ReadFile("testdata/models_dev_opendesign.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755)
+	os.WriteFile(catalog.CachePath(), b, 0o644)
+	catalog.Reset()
+	t.Cleanup(catalog.Reset)
+	od := Provider{ID: "opendesign", Name: "Open Design", Account: &Account{plugin: &plugin.Provider{ID: "opendesign"}}}
+	flash, ok := od.ListPrice("deepseek-v4.1-flash")
+	if !ok || flash.Input != 0.15 || flash.Output != 0.6 || flash.CacheRead != 0.003 {
+		t.Fatalf("opendesign deepseek-v4.1-flash: %+v %v", flash, ok)
+	}
+	for _, m := range []string{"deepseek-v4.1-flash-eco", "DeepSeek-V4.1-Flash-Eco", "opendesign/deepseek-v4.1-flash-eco"} {
+		if pr, ok := od.ListPrice(m); !ok || pr.Input != flash.Input || pr.Output != flash.Output || pr.CacheRead != flash.CacheRead {
+			t.Errorf("opendesign %s: %+v %v; want V4.1 Flash's %+v", m, pr, ok, flash)
+		}
+	}
+	if pr, ok := od.ListPrice("deepseek-v4-pro-eco"); ok {
+		t.Errorf("opendesign deepseek-v4-pro-eco priced %+v", pr)
+	}
+	// no other vendor's id changes
+	for _, p := range []Provider{
+		{ID: "relay", Chat: "https://relay.example/v1"},
+		{ID: "opendesign"},
+		{ID: "other", Account: &Account{plugin: &plugin.Provider{ID: "other"}}},
+	} {
+		if pr, ok := p.ListPrice("deepseek-v4.1-flash-eco"); ok {
+			t.Errorf("%s deepseek-v4.1-flash-eco priced %+v", p.ID, pr)
 		}
 	}
 }
