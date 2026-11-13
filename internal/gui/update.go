@@ -68,13 +68,19 @@ type updater struct {
 	fetch bool
 	// keep: the check under way leaves a version downloaded and waiting
 	// as it is, as the clock's does (freshen)
-	keep    bool
-	asked   time.Time // when the feed was last asked, by the clock or a click
-	done    int64     // downloading: bytes so far, of total (0 when unknown)
-	total   int64
-	step    string     // downloading: the step under way (update.StepDownload, …)
-	rate    []progMark // downloading: the last few seconds' progress, for its speed
-	onReady func(version string)
+	keep bool
+	// forRestart: the check under way is a restart's (recheck); what it
+	// downloads is staged at restartStaged, and a restart up to
+	// freshAfter later goes into it without asking the feed again
+	// (elis_pina on X)
+	forRestart    bool
+	restartStaged time.Time
+	asked         time.Time // when the feed was last asked, by the clock or a click
+	done          int64     // downloading: bytes so far, of total (0 when unknown)
+	total         int64
+	step          string     // downloading: the step under way (update.StepDownload, …)
+	rate          []progMark // downloading: the last few seconds' progress, for its speed
+	onReady       func(version string)
 	// the waiting update's notes follow the pages' language (freecss on
 	// Discord): the one they last asked in, else the app's
 	lang     string    // the pages' language, "" before one asked
@@ -339,11 +345,17 @@ func (u *updater) download() bool {
 // downloaded it whole while the user waited, which made the download done
 // ahead of time no use (canlee886 on X). The new version's first check,
 // seconds after it starts, downloads whatever is newer by then.
+//
+// A version this asking itself downloaded is restarted into as it is too,
+// for freshAfter. The header's Update restarts once its download is in,
+// and that restart asked the feed again; magpie had released again while
+// a slow download came in, so it downloaded once more, every time, and
+// never restarted (elis_pina on X, on Windows).
 func (u *updater) recheck(asked bool) {
 	if u.keepsStaged(settings.Load()) {
 		return
 	}
-	u.ask(asked, false)
+	u.askFor(asked, false, true)
 }
 
 // ask asks the feed and waits for it a little while (recheckTicks of
@@ -351,10 +363,13 @@ func (u *updater) recheck(asked bool) {
 // Settings' NoAutoDownload says. keep leaves a version downloaded and
 // waiting as it is, as the clock's check does: a newer one found is not
 // downloaded in its place.
-func (u *updater) ask(fetch, keep bool) {
+func (u *updater) ask(fetch, keep bool) { u.askFor(fetch, keep, false) }
+
+// askFor is ask; forRestart, a restart's (recheck).
+func (u *updater) askFor(fetch, keep, forRestart bool) {
 	if u.begin() {
 		u.mu.Lock()
-		u.fetch, u.keep = fetch, keep
+		u.fetch, u.keep, u.forRestart = fetch, keep, forRestart
 		u.mu.Unlock()
 		go u.run()
 	}
@@ -367,12 +382,16 @@ func (u *updater) ask(fetch, keep bool) {
 }
 
 // keepsStaged is whether a restart goes into the version downloaded and
-// waiting without asking the feed again: downloads are automatic and one
-// is ready (recheck).
+// waiting without asking the feed again: one is ready, and downloads are
+// automatic or a restart's asking downloaded it under freshAfter ago
+// (recheck).
 func (u *updater) keepsStaged(s settings.Settings) bool {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	return !s.NoAutoDownload && u.state == "ready" && u.staged != ""
+	if u.state != "ready" || u.staged == "" {
+		return false
+	}
+	return !s.NoAutoDownload || !u.restartStaged.IsZero() && time.Since(u.restartStaged) < freshAfter
 }
 
 // askedOver is whether the feed was last asked over d ago.
@@ -457,7 +476,7 @@ func (u *updater) begin() bool {
 	if u.state == "checking" || u.state == "downloading" {
 		return false
 	}
-	u.state, u.err, u.retry, u.mirror, u.network, u.asked, u.byClock, u.fetch, u.keep = "checking", "", false, "", false, time.Now(), false, false, false
+	u.state, u.err, u.retry, u.mirror, u.network, u.asked, u.byClock, u.fetch, u.keep, u.forRestart = "checking", "", false, "", false, time.Now(), false, false, false, false
 	return true
 }
 
@@ -584,7 +603,8 @@ func (u *updater) run() {
 	}
 	// an older download is replaced by this one: until it is in, there is
 	// nothing to install
-	u.state, u.done, u.total, u.staged, u.step, u.rate = "downloading", 0, 0, "", "", nil
+	u.state, u.done, u.total, u.staged, u.step, u.rate, u.restartStaged = "downloading", 0, 0, "", "", nil, time.Time{}
+	forRestart := u.forRestart
 	u.mu.Unlock()
 	ctx = update.WithProgress(ctx, func(done, total int64) {
 		u.mu.Lock()
@@ -610,6 +630,9 @@ func (u *updater) run() {
 		return
 	}
 	u.state, u.staged = "ready", staged
+	if forRestart {
+		u.restartStaged = time.Now()
+	}
 	if u.onReady != nil {
 		go u.onReady(rel.Version)
 	}

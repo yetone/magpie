@@ -359,3 +359,44 @@ func TestRestartTakesTheDownloadWaiting(t *testing.T) {
 		t.Fatalf("Settings' Check: %+v, %d downloads", j, f.downloads.Load())
 	}
 }
+
+// elis_pina on X, on Windows: the header's Update downloaded to 100% and
+// then downloaded again, over and over. The pill restarts once a click's
+// download is in; that restart asked the feed, magpie had released again
+// while the download came in, so it downloaded the newer one, and the
+// restart after that asked again. Here each restart finds a newer release
+// out: the restart after the one its own asking downloaded goes into that
+// download, and the feed is asked again only once it is freshAfter old.
+func TestRestartAfterItsDownloadDoesNotAskAgain(t *testing.T) {
+	f := newFreshFeed(t)
+	downloadsOnClick(t)
+	u := freshUpdater(t, true)
+	u.check()
+	u.download() // the pill's "found": a click downloads, then restarts
+	if j := settled(t, u); j.State != "ready" || j.Latest != "0.1.11" || f.downloads.Load() != 1 {
+		t.Fatalf("Download update: %+v, %d downloads", j, f.downloads.Load())
+	}
+	// released while the download came in: the restart takes the newer
+	f.latest.Store("0.1.12")
+	postInstall(t, &quitCount{})
+	if j := settled(t, u); j.State != "ready" || j.Latest != "0.1.12" || f.downloads.Load() != 2 {
+		t.Fatalf("the first restart: %+v, %d downloads", j, f.downloads.Load())
+	}
+	// released again while that one came in; the pill restarts again
+	for i, v := range []string{"0.1.13", "0.1.14", "0.1.15"} {
+		f.latest.Store(v)
+		asked := f.asked.Load()
+		j := postInstall(t, &quitCount{})
+		if j.State != "ready" || j.Latest != "0.1.12" || f.downloads.Load() != 2 || f.asked.Load() != asked {
+			t.Fatalf("restart %d, %s out: %+v, %d downloads, the feed asked %d times", i+2, v, j, f.downloads.Load(), f.asked.Load()-asked)
+		}
+	}
+	// a restart freshAfter later asks for the newest again (coeo91)
+	u.mu.Lock()
+	u.restartStaged = time.Now().Add(-freshAfter)
+	u.mu.Unlock()
+	postInstall(t, &quitCount{})
+	if j := settled(t, u); j.State != "ready" || j.Latest != "0.1.15" || f.downloads.Load() != 3 {
+		t.Fatalf("a restart later: %+v, %d downloads", j, f.downloads.Load())
+	}
+}
