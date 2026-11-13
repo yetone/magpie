@@ -322,6 +322,11 @@ var codexApp struct {
 	// one has to start (codexAppBackWait after the last end)
 	ended  map[int]bool
 	backBy time.Time
+	// endedAt: when the last of them was ended
+	endedAt time.Time
+	// changedAt: when the app-servers in stale were last listed for a
+	// change
+	changedAt time.Time
 	// why: what made the app-servers in stale stale, said in the log line
 	// when they are ended, so a crash a user reports can be put down to
 	// an account switch, a route change or a used-up account (#4550)
@@ -442,7 +447,22 @@ func codexAppSwitched(spent, byMagpie bool) {
 // KeepCodexAppOnItsProvider runs codexAppStep every codexAppEvery till
 // ctx ends. busy says how many of Codex's requests are in flight through
 // magpie and when the last ended.
+//
+// A Codex request this magpie didn't serve is one the magpie before it
+// may still be serving: a magpie that hands the gateway over (an update)
+// lets the requests in flight finish in the old one, and the new one saw
+// none of them. Its start counts as a Codex request ended then, so a
+// reply streaming from the old one isn't cut short by the new one's
+// first look.
 func KeepCodexAppOnItsProvider(ctx context.Context, busy func() (int, time.Time)) {
+	started := time.Now()
+	held := func() (int, time.Time) {
+		n, last := busy()
+		if last.Before(started) {
+			last = started
+		}
+		return n, last
+	}
 	t := time.NewTicker(codexAppEvery)
 	defer t.Stop()
 	for {
@@ -450,7 +470,7 @@ func KeepCodexAppOnItsProvider(ctx context.Context, busy func() (int, time.Time)
 		case <-ctx.Done():
 			return
 		case now := <-t.C:
-			codexAppStep(ctx, now, busy)
+			codexAppStep(ctx, now, held)
 		}
 	}
 }
@@ -583,6 +603,7 @@ func codexAppStep(ctx context.Context, now time.Time, busy func() (int, time.Tim
 		}
 		c.spent = c.spent || into
 		c.seen, c.route, c.out, c.switched, c.auto = true, route, out, false, false
+		c.changedAt = now
 		c.stale, c.stuck = map[int]int{}, false
 		for _, p := range pids {
 			c.stale[p] = 0
@@ -632,8 +653,15 @@ func codexAppStep(ctx context.Context, now time.Time, busy func() (int, time.Tim
 		}
 	}
 	n = len(c.stale)
+	endedAt := c.endedAt
 	c.Unlock()
 	if none {
+		// a Codex request through magpie since the end came from an
+		// app-server magpie didn't list: the app has one, and is never
+		// quit and opened under it
+		if inFlight, last := busy(); inFlight > 0 || last.After(endedAt) {
+			return nil
+		}
 		if codexAppGotNone(ctx) {
 			c.Lock()
 			c.stuck = true
@@ -658,16 +686,27 @@ func codexAppStep(ctx context.Context, now time.Time, busy func() (int, time.Tim
 	for p := range c.stale {
 		stale = append(stale, p)
 	}
-	spent := c.spent
+	spent, changedAt := c.spent, c.changedAt
 	c.Unlock()
 	if codexTurnRunning(home, now, codexServersSince(stale)) {
-		if !spent || now.Sub(last) < codexTurnStuckAfter || !codexSessionsQuiet(home, now, codexTurnStuckAfter) {
+		// a turn Codex went on with through magpie after the change is
+		// served, by a routing group's fallback or magpie's takeover, and
+		// is not stuck however long a tool in it runs: only a turn that
+		// sent nothing since is (Norethcy on X: the reply a group's
+		// fallback served after the ChatGPT account ran out was cut short)
+		goneOn := last.After(changedAt.Add(codexAppIdle))
+		if !spent || goneOn || now.Sub(last) < codexTurnStuckAfter || !codexSessionsQuiet(home, now, codexTurnStuckAfter) {
 			return nil
 		}
 		log.Printf("codex: a Codex turn left open on the used-up account has done nothing for %s; restarting the Codex app's app-server past it", codexTurnStuckAfter)
 	}
 	if CodexBeforeAppEnd != nil {
 		CodexBeforeAppEnd(home)
+	}
+	// a request Codex began while the turn was looked for, or the open
+	// chats moved, is in flight now: the end waits for the next look
+	if inFlight, again := busy(); inFlight > 0 || again.After(last) {
+		return nil
 	}
 	var ended []int
 	c.Lock()
@@ -689,7 +728,7 @@ func codexAppStep(ctx context.Context, now time.Time, busy func() (int, time.Tim
 		if c.ended == nil {
 			c.ended = map[int]bool{}
 		}
-		c.ended[p], c.backBy = true, now.Add(codexAppBackWait)
+		c.ended[p], c.backBy, c.endedAt = true, now.Add(codexAppBackWait), now
 	}
 	if len(ended) > 0 {
 		log.Printf("codex: ended the Codex app's app-server %v for the app to start another: %s", ended, c.why)
@@ -875,38 +914,81 @@ func codexSessionsQuietListed(dir string, now time.Time, d time.Duration) (quiet
 // then counted as no turn, and its app-server was ended under it.
 func sessionFileInfo(path string) (fs.FileInfo, error) { return os.Lstat(path) }
 
-// sessionTurnTail is how much of a session file's end sessionTurnOpen reads.
+// sessionTurnTail is how much of a session file sessionTurnOpen reads at
+// a time, from its end back.
 const sessionTurnTail = 512 << 10
+
+// sessionTurnMarks are the session lines that start and end a turn.
+var (
+	sessionTurnStarted = []byte(`"type":"task_started"`)
+	sessionTurnEnds    = [][]byte{[]byte(`"type":"task_complete"`), []byte(`"type":"turn_aborted"`)}
+)
 
 // sessionTurnOpen is whether the session file at path ends inside a turn
 // started at since or later. A file that can't be read, or a turn whose
 // start can't be read, counts as open: a turn cut short costs more than
 // an app greyed a few seconds more.
+//
+// The file is read back from its end until the last line that starts or
+// ends a turn. Only its last 512 KB were read, and a turn that had
+// written more since it started (a tool's long output, an image, a turn
+// going on for an hour: the owner's run 22 MB) read as no turn at all,
+// so the app's app-server was ended under it as soon as Codex had sent
+// nothing through magpie for codexAppIdle, while a tool ran between two
+// of its requests (Norethcy on X: the turn a routing group's fallback
+// served after the ChatGPT account ran out was cut short).
 func sessionTurnOpen(path string, since time.Time) bool {
 	f, err := os.Open(path)
 	if err != nil {
 		return !errors.Is(err, fs.ErrNotExist)
 	}
 	defer f.Close()
-	if info, err := f.Stat(); err == nil && info.Size() > sessionTurnTail {
-		if _, err := f.Seek(info.Size()-sessionTurnTail, io.SeekStart); err != nil {
-			return true
-		}
-	}
-	b, err := io.ReadAll(f)
+	info, err := f.Stat()
 	if err != nil {
 		return true
 	}
-	started := bytes.LastIndex(b, []byte(`"type":"task_started"`))
-	ended := max(bytes.LastIndex(b, []byte(`"type":"task_complete"`)), bytes.LastIndex(b, []byte(`"type":"turn_aborted"`)))
-	if started <= ended {
-		return false
+	// each read reaches into the next one's bytes by a mark's length less
+	// one, so a mark across the two is found whole
+	over := int64(len(sessionTurnEnds[0]))
+	buf := make([]byte, min(info.Size(), sessionTurnTail+over))
+	for end := info.Size(); end > 0; {
+		from := max(end-sessionTurnTail, 0)
+		b := buf[:min(end+over, info.Size())-from]
+		if _, err := f.ReadAt(b, from); err != nil && !errors.Is(err, io.EOF) {
+			return true
+		}
+		started := bytes.LastIndex(b, sessionTurnStarted)
+		ended := -1
+		for _, m := range sessionTurnEnds {
+			ended = max(ended, bytes.LastIndex(b, m))
+		}
+		switch {
+		case started < 0 && ended < 0:
+			end = from
+			continue
+		case started <= ended:
+			return false
+		case since.IsZero():
+			return true
+		}
+		at, ok := sessionTurnStartTime(f, from+int64(started))
+		return !ok || !at.Before(since.Add(-codexTurnSlack))
 	}
-	if since.IsZero() {
-		return true
+	return false
+}
+
+// sessionTurnStartTime is the time of the line holding a turn's start at
+// offset off of f, read with the bytes around it: the line may begin
+// before the bytes sessionTurnOpen found it in, or end after them.
+func sessionTurnStartTime(f *os.File, off int64) (time.Time, bool) {
+	const around = 16 << 10
+	from := max(off-around, 0)
+	b := make([]byte, off-from+around)
+	n, err := f.ReadAt(b, from)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return time.Time{}, false
 	}
-	at, ok := sessionLineTime(b, started)
-	return !ok || !at.Before(since.Add(-codexTurnSlack))
+	return sessionLineTime(b[:n], int(off-from))
 }
 
 // sessionLineTime is the "timestamp" of the session file line holding
