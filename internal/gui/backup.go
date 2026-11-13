@@ -241,6 +241,27 @@ func backupRoutes(mux *http.ServeMux, w Windows) {
 			err = busy(davsync.Follow(ctx))
 		case "reveal":
 			err = w.OpenFolder(filepath.Join(settings.Dir(), "sync"))
+		case "setup-text": // this setup as text sealed with its passphrase, to paste on another computer
+			text, err := davsync.SetupText()
+			if err != nil {
+				fail(rw, err)
+				return
+			}
+			writeJSON(rw, map[string]string{"text": text})
+			return
+		case "setup-open": // a setup pasted from another computer, for the form: nothing is saved
+			var in struct{ Text, Passphrase string }
+			if err = json.NewDecoder(r.Body).Decode(&in); err != nil {
+				fail(rw, err)
+				return
+			}
+			s, err := davsync.OpenSetupText(in.Text, in.Passphrase)
+			if err != nil {
+				fail(rw, err)
+				return
+			}
+			writeJSON(rw, s)
+			return
 		default:
 			http.NotFound(rw, r)
 			return

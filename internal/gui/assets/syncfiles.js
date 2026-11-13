@@ -82,10 +82,63 @@ window.davForm = function (v) {
   show();
   const off = v.on ? el("button", "text danger", t("Turn off")) : el("span");
   const cancel = el("button", "text", t("Cancel"));
-  const say = syncBar(ed, "", off, el("span", "grow"), cancel, save);
+  // this setup as text, for another computer (WJaunita45604 on X): sealed
+  // with the passphrase, which the text never holds
+  const copySetup = v.on ? el("button", "text sync-copy", t("Copy setup")) : el("span");
+  const said = syncBar(ed, "", off, copySetup, el("span", "grow"), cancel, save);
+  const say = (msg, note) => { said(msg); ed.querySelector(".editor-error").classList.toggle("note", !!note); };
+  copySetup.onclick = async () => {
+    try {
+      const r = await api("davsync/setup-text", {});
+      await copy(r.text, t("Sync setup"), copySetup, t("Sync setup copied: the server and its password, sealed with your passphrase. On the other computer, paste it into this form and type the same passphrase."));
+    } catch (e) { say(t(e.message)); }
+  };
+  // a setup copied on another computer, pasted in any field here, fills
+  // the form once the passphrase it was sealed with is typed
+  let pasted = "";
+  const fill = (s) => {
+    kind = /^s3:\/\//i.test(s.url) ? "s3" : /^github:\/\//i.test(s.url) ? "github" : "webdav";
+    if (kind === "s3") {
+      const m = /^s3:\/\/([^/]*)\/?(.*)$/i.exec(s.url);
+      bucket.value = m[1]; prefix.value = m[2];
+      endpoint.value = s.endpoint || ""; region.value = s.region || ""; keyID.value = s.user || ""; secret.value = s.password || ""; pathStyle.checked = !!s.pathStyle;
+    } else if (kind === "github") {
+      const m = /^github:\/\/([^/]+\/[^/]+)\/?(.*)$/i.exec(s.url);
+      repo.value = m?.[1] || ""; ghPrefix.value = m?.[2] || ""; branch.value = s.branch || ""; token.value = s.password || "";
+    } else { url.value = s.url; user.value = s.user || ""; pass.value = s.password || ""; }
+    keys.checked = !!s.keys; agents.checked = !!s.agents; lib.checked = !!s.library; mem.checked = !!s.memory; use.checked = !!s.usage; si.checked = !!s.signIns;
+    siSay.hidden = !si.checked;
+    // the kind picked as a click on it would, its thumb moved too
+    to[1].querySelector(`.segs [data-seg="${kind}"]`)?.click();
+    show();
+  };
+  const openPasted = async () => {
+    if (!pasted) return true;
+    if (!phrase.value) {
+      say(t("Type the passphrase sync uses on the other computer: the pasted setup is sealed with it"), true);
+      phrase.focus();
+      return false;
+    }
+    try {
+      fill(await api("davsync/setup-open", { text: pasted, passphrase: phrase.value }));
+      pasted = "";
+      say(t("Filled in from the pasted setup."), true);
+      return true;
+    } catch (e) { say(t(e.message)); return false; }
+  };
+  ed.addEventListener("paste", (e) => {
+    const text = e.clipboardData?.getData("text") || "";
+    if (!text.includes("magpie-sync:")) return;
+    e.preventDefault();
+    pasted = text;
+    openPasted();
+  });
+  phrase.addEventListener("keydown", (e) => { if (e.key === "Enter" && pasted) openPasted(); });
+  phrase.addEventListener("change", () => { if (pasted) openPasted(); });
   cancel.onclick = () => { syncOpen = ""; renderSync(); };
   off.onclick = async () => { syncOpen = ""; renderSync(await api("davsync/off", {}).catch(() => null) || undefined); };
   save.onclick = async () => {
+    if (!(await openPasted())) return;
     const b = bucket.value.trim(), p = prefix.value.trim().replace(/^\/+|\/+$/g, "");
     if (kind === "s3" && !b) return say(t("Name the bucket"));
     const repository = repo.value.trim().replace(/^https:\/\/github\.com\//i, "").replace(/\/+$/, "").replace(/\.git$/i, "");
