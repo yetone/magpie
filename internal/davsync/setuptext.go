@@ -4,10 +4,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"regexp"
 	"strings"
 
 	"github.com/yetone/magpie/internal/backup"
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // SetupPrefix begins a sync setup copied as text (WJaunita45604 on X: one
@@ -70,7 +70,7 @@ func SetupText() (string, error) {
 // setupBody is the setup's text after its prefix, to the first character
 // that can't be in it: line breaks and spaces a chat or a mail wrapped it
 // with are in it, and taken out after.
-var setupBody = regexp.MustCompile(`^[A-Za-z0-9_\-+/=\s]*`)
+var setupBody = lazyre.New(`^[A-Za-z0-9_\-+/=\s]*`)
 
 // OpenSetupText opens what SetupText gave, with the passphrase it was sealed
 // with. Text before the setup, and line breaks a chat put in it, are skipped.
