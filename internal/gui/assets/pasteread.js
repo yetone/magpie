@@ -6,7 +6,7 @@
 // base URL, key and model; a stand-in key ($KEY, <API_KEY>) is the
 // placeholder; null if it isn't curl
 window.curlOf = function curlOf(text) {
-  let s = String(text || "").trim();
+  let s = pasteClean(text);
   const head = /^curl(?:\.exe)?(?=\s)/i.exec(s);
   if (!head) return null;
   const cmd = /\^[ \t]*\r?\n/.test(s), ps = /`[ \t]*\r?\n/.test(s) || /^curl\.exe/i.test(s);
@@ -88,17 +88,26 @@ window.curlOf = function curlOf(text) {
 window.envOf = function envOf(text) {
   const vars = {};
   const put = (k, v) => { if (typeof v === "string" && v.trim() && !(k in vars)) vars[k] = v.trim(); };
-  const body = String(text || "").trim();
+  const body = pasteClean(text);
+  // JSON whole, or a piece of one: "env": {…} or its lines, a comma after the last
   let json = null;
-  try { json = JSON.parse(body); } catch {}
+  for (const b of [body, "{" + body + "}"]) {
+    try { json = JSON.parse(b.replace(/,\s*([}\]])/g, "$1").replace(/,\s*$/, "")); break; } catch {}
+  }
   const walk = (o, depth) => {
     if (!o || typeof o !== "object" || depth > 3) return;
     for (const [k, v] of Object.entries(o)) { if (typeof v === "string") put(k, v); else walk(v, depth + 1); }
   };
   if (json) walk(json, 0);
   else {
-    for (const line of body.split(/\r?\n/)) {
-      const m = /^\s*(?:export\s+|set\s+|setx\s+|env\s+|\$env:)?([A-Za-z_][A-Za-z0-9_]*)\s*(?:=|\s)\s*(.*?)\s*;?\s*$/i.exec(line);
+    for (let line of body.split(/\r\n?|\n/)) {
+      // cmd's set "NAME=value"
+      line = line.replace(/^(\s*set\s+)"([^"]*)"\s*$/i, "$1$2");
+      // two or more on one line: export A="…" export B="…", A=… B=… claude,
+      // or the lines a one-line box ran together
+      const many = [...line.matchAll(/(?:\b(?:export|set|setx)\s+|\$env:)?\b([A-Za-z_][A-Za-z0-9_]*)\s*=\s*("[^"]*"|'[^']*'|[^\s"';&]+)/gi)];
+      if (many.length > 1) { for (const [, k, v] of many) put(k, v.replace(/^(["'])(.*)\1$/, "$2")); continue; }
+      const m = /^\s*(?:export\s+|set\s+|setx\s+|env\s+|\$env:)?["']?([A-Za-z_][A-Za-z0-9_]*)["']?\s*(?:=|:|\s)\s*(.*?)\s*[;,]?\s*$/i.exec(line);
       if (!m) continue;
       const q = /^(["'])(.*)\1$/.exec(m[2]);
       put(m[1], q ? q[2] : m[2].replace(/\s+#.*$/, ""));
@@ -148,6 +157,52 @@ window.envOf = function envOf(text) {
     out.name = siteName(out.base);
   }
   return out;
+};
+
+// pasteClean undoes what a web page or a chat does to text copied from it:
+// zero-width characters and a BOM inside the names, no-break and ideographic
+// spaces, full-width = and :, and curly quotes
+function pasteClean(text) {
+  return String(text || "").replace(/[\u200b-\u200d\u2060\ufeff]/g, "").replace(/[\u00a0\u2000-\u200a\u202f\u3000]/g, " ")
+    .replace(/＝/g, "=").replace(/：/g, ":").replace(/[“”„]/g, '"').replace(/[‘’]/g, "'").trim();
+}
+
+// pastedProvider opens a new custom provider from a vendor's setup pasted
+// into a search box: the Add sheet's, and Providers' own, the one in sight
+// once there are providers (WJaunita45604 on X: v0.1.4044 read only the
+// first). Env lines, JSON, plain "address + key" lines or a curl command
+// give the name, URL, API and key; the site's icon is asked for with the URL
+// and name only, and the key goes nowhere but the draft. A setup with no
+// address still opens, saying so. False for text that is no setup.
+window.pastedProvider = function pastedProvider(text) {
+  const c = window.curlOf(text) || window.envOf(text);
+  const bases = c?.bases || (c?.api && c.base ? [[c.api, c.base]] : []);
+  // a word after KEY or TOKEN ("token plan") is no key
+  if (!c || !bases.length && !(/^\S{8,}$/.test(c.key) || c.placeholder)) return false;
+  const name = c.name || siteName(c.base) || t("Custom provider");
+  const d = { id: slug(name), name, preset: "", chat: "", responses: "", anthropic: "", decide: "", catalog: "", key: c.key, api: c.api || "openai", chosen: [], extra: c.model ? [c.model] : [], headers: [], icon: "" };
+  for (const [a, base] of bases) d[apiField[a]] = base;
+  editing = { custom: true }; draft = d; presetQuery = "";
+  renderProviders();
+  const took = bases.map(([a]) => t("Base URL") + " (" + t(API_NAMES[a]) + ")");
+  if (c.key) took.push(t("API key"));
+  if (c.model) took.push(t("model {model}", { model: c.model }));
+  const notes = took.length ? [t("Filled in from the pasted text: {what}.", { what: took.join(" · ") })] : [];
+  if (!bases.length) notes.push(t("The pasted text gives no web address: type the base URL."));
+  if (c.urlHole) notes.push(t("Replace {part} in the base URL.", { part: c.urlHole }));
+  if (c.placeholder) notes.push(t("Its key, {key}, only stands for one: paste your own API key.", { key: c.placeholder }));
+  const note = notes.join(" ");
+  editorError(note, "note");
+  // the site's own icon, when it has one; the draft may be gone by then, and
+  // the note stays while it is still in sight
+  if (bases.length) api("icons/favicon", { url: bases[0][1], name }).then((r) => {
+    if (draft !== d || !r?.icon) return;
+    const shown = document.querySelector(".editor .editor-error.note")?.textContent === note;
+    d.icon = r.icon;
+    renderProviders(true);
+    if (shown) editorError(note, "note");
+  }).catch(() => {});
+  return true;
 };
 
 // standIn: a key a page gives only to stand for the reader's own

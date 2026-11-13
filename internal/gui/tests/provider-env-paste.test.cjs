@@ -45,8 +45,8 @@ function serve(lang, posts) {
 }
 
 const words = {
-  en: { add: "Add", find: "Find a vendor, or paste a URL and key…", note: "Filled in from the pasted text: Base URL (Anthropic compatible) · API key." },
-  zh: { add: "添加", find: "查找供应商，或粘贴地址和密钥…", note: "已从粘贴的文本填入：API 地址 (Anthropic 兼容) · API 密钥。" },
+  en: { add: "Add", find: "Find a vendor, or paste a URL and key…", note: "Filled in from the pasted text: Base URL (Anthropic compatible) · API key.", noURL: "no web address" },
+  zh: { add: "添加", find: "查找供应商，或粘贴地址和密钥…", note: "已从粘贴的文本填入：API 地址 (Anthropic 兼容) · API 密钥。", noURL: "没有网址" },
 };
 const launch = (engine) => engine === "webkit" ? webkit.launch() : chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || "chromium" });
 
@@ -98,6 +98,27 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     for (const s of ["DATABASE_URL=postgres://db/x\nGITHUB_TOKEN=ghp_0123456789abcdef", "HTTPS_PROXY=http://127.0.0.1:7890", "see https://example.com for docs"]) {
       assert.equal(await page.evaluate((x) => envOf(x), s), null, JSON.stringify(s));
     }
+    // as people paste it (WJaunita45604 on X, v0.1.4044): two exports on
+    // one line, a one-line box's run-together lines, Windows' forms, a
+    // web page's no-break and zero-width spaces, full-width signs and curly
+    // quotes, a piece of settings.json
+    const pasted = {
+      oneLine: `export XXX_BASE_URL="https://relay.foo.com/anthropic" export XXXAUTH_TOKEN="${own}"`,
+      glued: `export ANTHROPIC_BASE_URL="https://relay.foo.com/anthropic"export ANTHROPIC_AUTH_TOKEN="${own}"`,
+      command: `ANTHROPIC_BASE_URL=https://relay.foo.com/anthropic ANTHROPIC_API_KEY=${own} claude`,
+      crlf: `export ANTHROPIC_BASE_URL='https://relay.foo.com/anthropic'\r\nexport ANTHROPIC_API_KEY='${own}'\r\n`,
+      cmdQuoted: `set "ANTHROPIC_BASE_URL=https://relay.foo.com/anthropic"\r\nset "ANTHROPIC_AUTH_TOKEN=${own}"`,
+      ps: `$env:ANTHROPIC_BASE_URL="https://relay.foo.com/anthropic"; $env:ANTHROPIC_AUTH_TOKEN="${own}"`,
+      web: `export\u00a0ANTHROPIC_\u200bBASE_URL=“https://relay.foo.com/anthropic”\nexport\u00a0ANTHROPIC_AUTH_TOKEN\uff1d\u201c${own}\u201d\u200b`,
+      envPiece: `"env": {\n  "ANTHROPIC_BASE_URL": "https://relay.foo.com/anthropic",\n  "ANTHROPIC_AUTH_TOKEN": "${own}",\n},`,
+      envLines: `"ANTHROPIC_BASE_URL": "https://relay.foo.com/anthropic",\n"ANTHROPIC_AUTH_TOKEN": "${own}"`,
+    };
+    for (const [name, text] of Object.entries(pasted)) {
+      const c = await page.evaluate((s) => envOf(s), text);
+      assert.deepEqual([c?.api, c?.base, c?.key, c?.name], ["anthropic", "https://relay.foo.com/anthropic", own, "Foo"], name);
+    }
+    const openai = await page.evaluate((s) => envOf(s), `export OPENAI_BASE_URL=https://api.relay.io/v1 export OPENAI_API_KEY=${own}`);
+    assert.deepEqual([openai.api, openai.base, openai.key], ["openai", "https://api.relay.io/v1", own]);
     assert.deepEqual(await page.evaluate(() => ["https://open.bigmodel.cn/api/paas/v4", "https://api.example.co.uk/v1", "http://127.0.0.1:8888/v1"].map(siteName)), ["Bigmodel", "Example", "127.0.0.1"]);
   });
 
@@ -147,6 +168,93 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(body.anthropic, "https://api.moonshot.cn/anthropic");
       assert.equal(body.key, own);
       assert.equal(body.name, "Moonshot");
+      assert.deepEqual(errors, []);
+    });
+
+    test(`${engine} ${lang} ${width}px: a setup pasted into Providers' own search opens a provider`, async (t) => {
+      const browser = await launch(engine);
+      t.after(() => browser.close());
+      const page = await (await browser.newContext({ viewport: { width, height: 800 }, reducedMotion: "reduce" })).newPage();
+      page.setDefaultTimeout(5000);
+      page.setDefaultNavigationTimeout(60000);
+      const errors = [], posts = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      await page.route("**/*", serve(lang, posts));
+      const w = words[lang];
+      const ed = page.locator(".editor");
+      const key = ed.locator(".pair input[type=password]").first();
+      const q = page.locator("#pvQ");
+      const paste = (text) => q.evaluate((i, s) => {
+        i.focus();
+        const dt = new DataTransfer();
+        dt.setData("text/plain", s);
+        const e = new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true });
+        i.dispatchEvent(e);
+        return e.defaultPrevented;
+      }, text);
+      await page.goto("http://magpie.test/?view=providers");
+      await page.waitForFunction(() => typeof pastedProvider === "function");
+      // the box in sight once there are providers, not the Add sheet's
+      assert.equal(await page.locator("#addSheet").isHidden(), true);
+      assert.equal(await paste("plain"), false);
+      assert.equal(await paste("token plan"), false);
+      assert.equal(await ed.count(), 0);
+      assert.equal(await paste(forms.export), true);
+      await ed.waitFor();
+      assert.equal(await ed.locator(".base-url").inputValue(), "https://api.moonshot.cn/anthropic");
+      assert.equal(await ed.locator(".base-apis .opt.on").getAttribute("data-api"), "anthropic");
+      assert.equal(await key.inputValue(), own);
+      assert.equal(await ed.locator("input[placeholder]").first().inputValue(), "Moonshot");
+      assert.equal((await ed.locator(".editor-error.note").textContent()).trim(), w.note);
+      assert.equal(await q.inputValue(), "");
+      await ed.locator(":scope > .bar").getByRole("button", { name: w.add, exact: true }).click();
+      for (let i = 0; i < 60 && !posts.some((p) => p.path === "/api/provider/save"); i++) await page.waitForTimeout(50);
+      const body = posts.find((p) => p.path === "/api/provider/save")?.body;
+      assert.equal(body?.anthropic, "https://api.moonshot.cn/anthropic");
+      assert.equal(body?.key, own);
+      assert.ok(!JSON.stringify(posts.filter((p) => p.path !== "/api/provider/save")).includes(own), "the key is sent only when saved");
+      assert.deepEqual(errors, []);
+    });
+
+    test(`${engine} ${lang} ${width}px: a paste the box took without its event's text still opens a provider`, async (t) => {
+      const browser = await launch(engine);
+      t.after(() => browser.close());
+      const page = await (await browser.newContext({ viewport: { width, height: 800 }, reducedMotion: "reduce" })).newPage();
+      page.setDefaultTimeout(5000);
+      page.setDefaultNavigationTimeout(60000);
+      const errors = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      await page.route("**/*", serve(lang, []));
+      const w = words[lang];
+      const ed = page.locator(".editor");
+      await page.goto("http://magpie.test/?view=providers");
+      await page.locator("#addProvider").click();
+      await page.waitForFunction(() => typeof pastedProvider === "function");
+      // a one-line box runs the lines together; no paste event text to read
+      const flat = `export ANTHROPIC_BASE_URL="https://api.moonshot.cn/anthropic"export ANTHROPIC_AUTH_TOKEN="${own}"`;
+      await page.locator("#addSheet .find").evaluate((i, s) => {
+        i.focus();
+        i.value = s;
+        i.dispatchEvent(new InputEvent("input", { inputType: "insertFromPaste", bubbles: true }));
+      }, flat);
+      await ed.waitFor();
+      assert.equal(await ed.locator(".base-url").inputValue(), "https://api.moonshot.cn/anthropic");
+      assert.equal(await ed.locator(".pair input[type=password]").first().inputValue(), own);
+      // the tweet's own example has no address: it opens, saying so
+      await page.goto("http://magpie.test/?view=providers");
+      await page.locator("#addProvider").click();
+      await page.waitForFunction(() => typeof pastedProvider === "function");
+      const took = await page.locator("#addSheet .find").evaluate((i, s) => {
+        const dt = new DataTransfer();
+        dt.setData("text/plain", s);
+        const e = new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true });
+        i.dispatchEvent(e);
+        return e.defaultPrevented;
+      }, `export xxx_BASE_URL="example-xx" export xxxAUTH_TOKEN="sk-xxxxxxxxxxxx"`);
+      assert.equal(took, true);
+      await ed.waitFor();
+      assert.equal(await ed.locator(".base-url").inputValue(), "");
+      assert.match(await ed.locator(".editor-error.note").textContent(), new RegExp(w.noURL));
       assert.deepEqual(errors, []);
     });
 

@@ -6088,6 +6088,13 @@ $("#foldOff").onclick = () => {
 let providersBehind = false;
 // the readers of a pasted curl command or environment lines (pasteread.js)
 const pasteLoad = () => import("./pasteread.js").catch(() => {});
+// a vendor's setup pasted into a search box opens a custom provider
+// (pastedProvider); a paste with no text in its event, or before the reader
+// loaded, is read from what the box took
+const setupPaste = (q) => {
+  q.addEventListener("paste", (e) => window.pastedProvider?.(e.clipboardData?.getData("text") || "") && e.preventDefault());
+  q.addEventListener("input", (e) => /^insertFrom(Paste|Drop)/.test(e.inputType) && pasteLoad().then(() => window.pastedProvider?.(q.value) && (q.value = "", q.dispatchEvent(new Event("input")))));
+};
 function renderProviders(quiet) {
   pasteLoad();
   if (accountArranging || providerArranging) { accountRenderPending = true; return; }
@@ -6314,6 +6321,7 @@ function findProviders() {
   const q = $("#pvQ");
   if (q) {
     q.oninput = () => { pvQuery = q.value.trim().toLowerCase(); findProviders(); };
+    setupPaste(q);
     q.onkeydown = (e) => {
       if (e.key !== "Escape" || !q.value) return;
       e.preventDefault();
@@ -7135,21 +7143,7 @@ function renderAdd() {
     if (q.value) { q.value = presetQuery = ""; drawTiles(); } else if (providers.providers.length) closeAddSheet();
   };
   q.oninput = () => { presetQuery = q.value; drawTiles(); };
-  // environment lines from a vendor's page (envOf) pasted here open a custom
-  // provider with the name, URL, API and key they give, and the icon of the
-  // site (WJaunita45604 on X); the key goes nowhere but into the draft
-  q.onpaste = (e) => {
-    const c = window.envOf?.(e.clipboardData?.getData("text") || "");
-    if (!c || !c.bases.length) return;
-    e.preventDefault();
-    const name = c.name || t("Custom provider");
-    const d = { id: slug(name), name, preset: "", chat: "", responses: "", anthropic: "", decide: "", catalog: "", key: c.key, api: c.api, chosen: [], extra: c.model ? [c.model] : [], headers: [], icon: "" };
-    for (const [a, base] of c.bases) d[apiField[a]] = base;
-    editing = { custom: true }; draft = d; presetQuery = "";
-    renderProviders();
-    // the site's own icon, when it has one; the draft may be gone by then
-    api("icons/favicon", { url: c.base, name }).then((r) => draft === d && r?.icon && (d.icon = r.icon, renderProviders(true))).catch(() => {});
-  };
+  setupPaste(q);
   const c = el("button", "text custom" + (editing?.custom ? " on" : ""));
   c.append(svg(PLUS, 11, 1.8), t("Custom provider"));
   c.dataset.pick = "custom";
