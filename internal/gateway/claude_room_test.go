@@ -446,3 +446,60 @@ func TestClaudeNoRoomPassesOnAndRestsNobody(t *testing.T) {
 	}
 	noneRested(t, "claude")
 }
+
+// A lead conversation waiting on its subagents' Task calls holds a Claude
+// Code doing nothing, and each subagent needs one of its own: once the
+// lead has waited roomParkLongest, a subagent waiting for room has its
+// place, well before parkLongest and claudeRoomWait. Kept until
+// parkLongest, the lead held the room while its subagents waited 2
+// minutes and were answered 503 (Wing8Aqua on X). A lead parked less
+// than that keeps its run.
+func TestClaudeRoomLetsALeadWaitingOnSubagentsGo(t *testing.T) {
+	fakeClaudeCalling(t)
+	freshRoom(t, 1)
+	oldWait, oldLook, oldPark := claudeRoomWait, roomLook, roomParkLongest
+	roomLook = 20 * time.Millisecond
+	t.Cleanup(func() { claudeRoomWait, roomLook, roomParkLongest = oldWait, oldLook, oldPark })
+
+	t.Run("parked past roomParkLongest", func(t *testing.T) {
+		claudeRoomWait = 30 * time.Second // parkLongest's 5 minutes would run past it
+		roomParkLongest = 100 * time.Millisecond
+		s := New()
+		t.Cleanup(s.subscription.abortAll)
+		lead := askForCall(t, s, context.Background(), "lead: start three subagents")
+		if lead == 0 {
+			return
+		}
+		began := time.Now()
+		sub := askForCall(t, s, context.Background(), "subagent 1: read the code")
+		if sub == 0 {
+			return
+		}
+		if waited := time.Since(began); waited > 15*time.Second {
+			t.Fatalf("the subagent waited %s for room", waited)
+		}
+		if leftover([]int{lead}, 3*time.Second) != 0 {
+			t.Fatal("the lead's Claude Code still runs beside the subagent's, 1 may")
+		}
+	})
+	t.Run("parked a moment", func(t *testing.T) {
+		claudeRoomWait = 300 * time.Millisecond
+		roomParkLongest = time.Hour
+		s := New()
+		t.Cleanup(s.subscription.abortAll)
+		lead := askForCall(t, s, context.Background(), "lead: read a file")
+		if lead == 0 {
+			return
+		}
+		p := provider.Provider{ID: "claude", Account: &provider.Account{Agent: "claude", User: "u"}}
+		body := `{"model":"claude-sonnet-5","max_tokens":100,"messages":[{"role":"user","content":"another conversation"}]}`
+		var u Usage
+		code, msg := s.serveClaudeSubscription(httptest.NewRecorder(), httptest.NewRequest("POST", "/v1/messages", strings.NewReader(body)), provider.Anthropic, p, "claude-sonnet-5", []byte(body), &u)
+		if code != 503 || !strings.Contains(msg, claudeNoRoomSaid) {
+			t.Fatalf("%d %s", code, msg)
+		}
+		if !alive(lead) {
+			t.Fatal("a run waiting on a tool call made a moment ago was let go")
+		}
+	})
+}

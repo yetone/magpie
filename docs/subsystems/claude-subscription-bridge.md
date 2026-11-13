@@ -1446,11 +1446,17 @@ An ask that finds no room (`take`):
    as a run pushed past `idleMost` is, so its conversation's next turn
    resumes it (`--resume`) and is told only the new messages.
 2. otherwise lets go of the run parked longest on tool results, once it has
-   waited `parkLongest`. Busy runs, and runs waiting on tool calls made
-   recently, are never let go.
+   waited `roomParkLongest` (1 minute, shorter than `claudeRoomWait`). A
+   lead conversation waits on its parallel subagents' Task calls for as
+   long as they work, and each subagent needs a Claude Code of its own:
+   kept until `parkLongest` (5 minutes), the lead held a place while a
+   subagent waited 2 minutes and got the 503 (Wing8Aqua on X, a 768 MiB
+   `memory.high` that holds 4). The lead's results then go to a new run
+   told the whole conversation. Busy runs, and runs waiting on tool calls
+   made within the minute, are never let go.
 3. otherwise waits for one to end: woken when a process exits or a run
    goes idle (`nudge`), and it looks again every `roomLook` (5s) for a
-   parked run that has come to wait `parkLongest`.
+   parked run that has come to wait `roomParkLongest`.
 
 A run being ended counts as `leaving`, so several waiting asks don't each
 let one go for the same room. After `claudeRoomWait` (2 minutes), or once

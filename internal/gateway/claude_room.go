@@ -26,9 +26,9 @@ import (
 // nothing bounded how many ran: a 512 MiB service had 2 busy runs and 14
 // starting at once, and the kernel killed them (#2956). A new one waits for
 // room (take): an idle run is let go for it first, its session shelved for
-// its next turn, then one waiting parkLongest on tool results; with neither,
-// it waits for one to end, claudeRoomWait at most, and is answered 503,
-// which routing passes to the next account or provider.
+// its next turn, then one waiting roomParkLongest on tool results; with
+// neither, it waits for one to end, claudeRoomWait at most, and is answered
+// 503, which routing passes to the next account or provider.
 type claudeRoomT struct {
 	mu sync.Mutex
 	// live is how many Claude Code processes run; leaving how many of them
@@ -262,7 +262,7 @@ func (c *claudeRoomT) take(ctx context.Context, what string) (func(left bool), e
 		select {
 		case <-freed:
 		case <-time.After(roomLook):
-			// a run parked since before comes to have waited parkLongest
+			// a run parked since before comes to have waited roomParkLongest
 		case <-deadline:
 			log.Printf("claude: %s found no room in %s", what, claudeRoomWait)
 			return nil, &claudeFull{live: live, most: most, why: why, waited: claudeRoomWait}
@@ -283,6 +283,19 @@ func (c *claudeRoomT) leave() {
 // roomLook is how often an ask waiting for room looks again for a run to
 // let go, unasked.
 var roomLook = 5 * time.Second
+
+// roomParkLongest is how long a run waiting on its caller's tool results
+// is kept while an ask waits for room: less than claudeRoomWait, so an ask
+// can have it. A lead conversation waits on its parallel subagents' Task
+// calls for as long as they work, and each subagent is a conversation of
+// its own that needs a Claude Code: kept until parkLongest (5 minutes),
+// the lead held a place while its subagents waited 2 minutes for one and
+// were answered 503 ("4 Claude Code processes are running … none ended
+// within 2m0s", Wing8Aqua on X, a 768 MiB magpie.service). Let go, the
+// lead's results go to a new run told the whole conversation, as past
+// parkLongest; a tool that answers within the minute (a read, a command)
+// keeps its run.
+var roomParkLongest = time.Minute
 
 // nudge has the asks waiting for room look again: a run has come to wait
 // for its next turn.
@@ -310,14 +323,16 @@ func (c *claudeRoomT) release(left bool) {
 // letGoForRoom lets go of one run for room, of any bridge: the one idle
 // longest, its session shelved for its conversation's next turn as when
 // more than idleMost wait, else the one waiting longest on tool results
-// past parkLongest. It says whether it found one. Busy runs, and those
-// waiting on tool calls made recently, are kept.
+// past roomParkLongest (parkLongest when that is shorter). It says whether
+// it found one. Busy runs, and those waiting on tool calls made recently,
+// are kept.
 func letGoForRoom(most int) bool {
 	var idle, parked *subscriptionRun
 	var parkedAt time.Time
 	var idleBridge *subscriptionBridge
 	var idleKey string
 	now := time.Now()
+	parkMost := min(parkLongest, roomParkLongest)
 	bridges.Range(func(k, _ any) bool {
 		b := k.(*subscriptionBridge)
 		b.mu.Lock()
@@ -330,7 +345,7 @@ func letGoForRoom(most int) bool {
 			run.mu.Lock()
 			at, closed, killed := run.parkedAt, run.closed, run.killed
 			run.mu.Unlock()
-			if !closed && !killed && !at.IsZero() && now.Sub(at) >= parkLongest && (parked == nil || at.Before(parkedAt)) {
+			if !closed && !killed && !at.IsZero() && now.Sub(at) >= parkMost && (parked == nil || at.Before(parkedAt)) {
 				parked, parkedAt = run, at
 			}
 		}
