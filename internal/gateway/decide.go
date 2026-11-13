@@ -25,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/usage"
 )
@@ -931,7 +932,8 @@ func withModelEffort(proto provider.Protocol, body []byte, model, effort string)
 // for effort, as model takes it, keeping includeThoughts as asked: a
 // Gemini 2.5 a budget in its range (vertexBudgets; it turns a level away),
 // a Gemini 3 a level of low..high (none takes xhigh or max, and it can't
-// stop thinking, so none is low), a Gemini before 2.5 nothing, as it
+// stop thinking, so none is low; above high only where the catalog lists
+// it, Gemini 4 Hydrogen's xhigh), a Gemini before 2.5 nothing, as it
 // doesn't think. Another model (agy asking an OpenAI one on Gemini's API)
 // is asked the level itself, which the translation reads, and none as a
 // budget of 0. Antigravity CLI's own request sends thinkingBudget -1, or
@@ -998,7 +1000,15 @@ func withGeminiEffort(body []byte, model, effort string) []byte {
 				level = "low"
 			}
 		case at > slices.Index(effortRank, "high"):
-			level = "high"
+			// above high only where the model lists such a level: Gemini
+			// 4 Hydrogen takes xhigh, every Gemini before it high at most
+			fit := "high"
+			if ls := catalog.EffortsOf(m); len(ls) > 0 {
+				if l := catalog.NearestEffort(level, ls); slices.Index(effortRank, l) > slices.Index(effortRank, "high") {
+					fit = l
+				}
+			}
+			level = fit
 		}
 		tc["thinkingLevel"] = level
 	case level == "none":

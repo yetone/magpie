@@ -4,6 +4,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -117,6 +119,35 @@ func TestAgyAgentEffort(t *testing.T) {
 	}
 	if got := asked("agy", pro); !same(got, asSent) {
 		t.Errorf("taken off: sent %s, want %s", got.Raw, asSent)
+	}
+}
+
+// A Gemini that lists a level above high (Gemini 4 Hydrogen's xhigh, as
+// Google's model page and models.dev give it) is sent it, and max goes as
+// its nearest, xhigh; a Gemini listing high at most (Carbon), or none, is
+// still sent high (#6452).
+func TestWithGeminiEffortAboveHigh(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755)
+	if err := os.WriteFile(catalog.CachePath(), []byte(`{"google-vertex":{"models":{
+	  "gemini-4-hydrogen":{"id":"gemini-4-hydrogen","reasoning":true,"reasoning_options":[{"type":"effort","values":["low","medium","high","xhigh"]}]},
+	  "gemini-4-carbon":{"id":"gemini-4-carbon","reasoning":true,"reasoning_options":[{"type":"effort","values":["low","medium","high"]}]}}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	catalog.Reset()
+	t.Cleanup(catalog.Reset)
+	for _, c := range []struct{ model, effort, want string }{
+		{"gemini-4-hydrogen", "xhigh", "xhigh"},
+		{"gemini-4-hydrogen", "max", "xhigh"},
+		{"gemini-4-hydrogen", "high", "high"},
+		{"gemini-4-carbon", "xhigh", "high"},
+		{"gemini-4-carbon", "max", "high"},
+		{"gemini-3.9-unlisted", "max", "high"},
+	} {
+		out := withGeminiEffort([]byte(`{"contents":[]}`), c.model, c.effort)
+		if got := gjson.GetBytes(out, "generationConfig.thinkingConfig.thinkingLevel").String(); got != c.want {
+			t.Errorf("%s at %s: %s, want %s", c.model, c.effort, got, c.want)
+		}
 	}
 }
 
