@@ -31,7 +31,9 @@ func TestGrokEffortListPrice(t *testing.T) {
 	for _, id := range []string{"grok-4.7", "grok-4.7-low", "grok-4.7-medium", "grok-4.7-high", "grok-4.7-xhigh",
 		"GROK-4.7-High", "x-ai/grok-4.7-xhigh", "grok-4.6-minimal",
 		// a model at a window of its own (#1608)
-		"grok-4.7@500k", "grok-4.6@500k"} {
+		"grok-4.7@500k", "grok-4.6@500k",
+		// a relay's name of grok-4.7 (catalog's renamed), at an effort
+		"cursor-grok-4.7-high"} {
 		for name, price := range map[string]func(string) (catalog.Price, bool){"MakerPrice": MakerPrice, "ListPrice": grok.ListPrice} {
 			pr, ok := price(id)
 			if !ok || pr.Input != 2 || pr.Output != 6 || pr.CacheRead != 0.5 {
@@ -41,14 +43,18 @@ func TestGrokEffortListPrice(t *testing.T) {
 	}
 	for _, id := range []string{"grok-4.7-fast", "grok-4.7-low-fast", "grok-4.7-xhigh-fast", "grok-4.7-build",
 		"grok-4.7-build-fast", "grok-4.7-mini", "grok-4.7-mini-high", "grok-4.7-max",
-		// only Grok's ids are read this way
-		"gpt-6-astra-high", "cursor-grok-4.7-high", "grok-4.7-build@500k"} {
+		"grok-4.7-build@500k"} {
 		if pr, ok := grok.ListPrice(id); ok {
 			t.Errorf("ListPrice(%q) = %+v; want unpriced", id, pr)
 		}
 		if pr, ok := MakerPrice(id); ok {
 			t.Errorf("MakerPrice(%q) = %+v; want unpriced", id, pr)
 		}
+	}
+	// an effort is read off any id, not only Grok's
+	// (TestEffortIDPricedAsItsModel)
+	if pr, ok := grok.ListPrice("gpt-6-astra-high"); !ok || pr.Input != 10 || pr.Output != 50 {
+		t.Errorf("ListPrice(gpt-6-astra-high) = %+v, %v; want gpt-6-astra's $10/$50", pr, ok)
 	}
 	// a window is read off any id, not only Grok's: the Cursor plugin's
 	// sized ids (TestCursorWindowIDsPricedAsTheirModel)

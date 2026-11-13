@@ -3159,12 +3159,39 @@ func byIDOrWasIn(all []Provider, id string) (Provider, bool) {
 	return Provider{}, false
 }
 
-// grokEffort is a reasoning effort a Grok id is named at ("grok-4.7-low",
-// "grok-4.7-xhigh"): the levels Grok's own model list gives grok-4.7, the
-// words Cursor spells its ids in. A fast one ("grok-4.7-low-fast") doesn't
-// match: fast is a model of its own (cursor_models.go), and no catalog
-// prices it.
-var grokEffort = lazyre.New(`^((?:.*/)?grok-[0-9][^/]*?)-(?:minimal|low|medium|high|xhigh|extra-high)$`)
+// effortBase is the model an id is named at a reasoning effort of
+// ("grok-4.7-low", Antigravity's gemini-4-argon-high and
+// claude-opus-5-5-high, Cursor's gpt-5.3-codex-xhigh): the id without
+// its effort, and whether it named one. Only the words an effort is
+// spelled in: -max and -none are not read, as -max names models of their
+// own at prices of their own (gpt-5.1-codex-max, qwen3.8-max). The model
+// left must name a version (a digit in its last part), so a name whose
+// size is a word (mistral-medium, vision-medium) is not taken for an
+// effort of another. A fast one ("grok-4.7-low-fast") doesn't match: fast
+// is a model of its own (cursor_models.go). No regexp, for the same
+// reason as below: every model of every provider's list is priced on
+// each Providers poll.
+func effortBase(l string) (string, bool) {
+	i := strings.LastIndexByte(l, '-')
+	if i <= 0 {
+		return "", false
+	}
+	base, effort := l[:i], l[i+1:]
+	if (effort == "high" || effort == "low") && strings.HasSuffix(base, "-extra") {
+		base = base[:len(base)-len("-extra")] // Antigravity's extra-high, extra-low
+	} else {
+		switch effort {
+		case "minimal", "low", "medium", "high", "xhigh":
+		default:
+			return "", false
+		}
+	}
+	last := base[strings.LastIndexByte(base, '/')+1:]
+	if !strings.ContainsAny(last, "0123456789") {
+		return "", false
+	}
+	return base, true
+}
 
 // grokWindow is a Grok id offered at a context window of its own
 // ("grok-4.7@500k", the grok plugin's windowsOf): the same model, asked for
@@ -3184,9 +3211,10 @@ var modelWindow = lazyre.New(`^([^@]+)@[0-9]+[km]$`)
 // pricedNames are the ids a model is priced by, in order: its own, then,
 // for an id at a window (claude-opus-5-5@300k, grok-4.7@500k), the model
 // it is that window of (modelWindow), so a Cursor account's sized ids are
-// priced as their model and not left without a cost (RyuJeXu on X); for a
-// Grok id named at an effort, the model it is that effort of — the same
-// model, at the same price (#224). Codex Auto Review uses GPT-5.6 Luna
+// priced as their model and not left without a cost (RyuJeXu on X); for an
+// id named at an effort, the model it is that effort of (effortBase) — the
+// same model, at the same price (#224 for Grok's; Antigravity's
+// gemini-4-argon-high, stockAAAAA on X). Codex Auto Review uses GPT-5.6 Luna
 // according to OpenAI's rate card (2026-09-30):
 // https://help.openai.com/en/articles/11481834-chatgpt-rate-card-business-enterpriseedu-credit-based-pricing
 // This is a list-price estimate, not evidence of a response's served model.
@@ -3210,16 +3238,15 @@ func pricedNamesTo(dst []string, model string) []string {
 			out = append(out, m[1])
 		}
 	}
-	// both patterns name grok-, for the same reason
-	if !strings.Contains(l, "grok-") {
-		return out
+	// a Grok window the id names without a k (grok-4.7@131072): the
+	// pattern names grok-, for the same reason
+	if strings.Contains(l, "grok-") {
+		if m := grokWindow.FindStringSubmatch(l); m != nil && !slices.Contains(out, m[1]) {
+			out = append(out, m[1])
+		}
 	}
-	// a Grok window the id names without a k (grok-4.7@131072)
-	if m := grokWindow.FindStringSubmatch(l); m != nil && !slices.Contains(out, m[1]) {
-		out = append(out, m[1])
-	}
-	if m := grokEffort.FindStringSubmatch(l); m != nil {
-		out = append(out, m[1])
+	if base, ok := effortBase(l); ok {
+		out = append(out, base)
 	}
 	return out
 }
