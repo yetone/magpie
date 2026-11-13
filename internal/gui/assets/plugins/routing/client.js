@@ -3371,8 +3371,12 @@ function routingPage(part) {
     ctxShown = r.id;
     const card = ctxBox.firstElementChild;
     const draw = card?.ctxUpdate && (still || !pinned) ? card.ctxUpdate : (r, o) => ctxBox.replaceChildren(window.ctxCard(r, o));
+    // the session's last answered request before this one, with usage:
+    // its cache stands for a request under way's till that one is read
+    const prev = !r.done && series ? sessionReqs.filter((x) => same(x) && x.done && x.id < r.id && x.usage?.length).sort((a, b) => b.id - a.id)[0] : null;
     draw(r, {
       still, series, tab: ctxTab, place: "routing", foldable: true,
+      session: sk || r.conv || undefined, prev,
       open: ctxFor === r.id, onFold: () => { ctxFor = 0; },
       onTab: (id) => { ctxTab = id; },
       crumbs: [agentName(r.agent), sess && (sess.length > cut ? sess.slice(0, cut - 2) + "…" : sess), "#" + r.id],

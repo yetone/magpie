@@ -394,7 +394,9 @@
 
   // ctxCard draws a route's prompt. opts: series (the session's prompts,
   // [{id, tokens, time}]), onPoint (a point of it clicked), cache ({read,
-  // total}, when the route carries no usage), crumbs (the footer's path),
+  // total}, when the route carries no usage), session (the key of the
+  // session it is of), prev (that session's last answered request, whose
+  // cache a request under way shows), crumbs (the footer's path),
   // place (for its width: see cardWidth). The card's ctxUpdate(r, opts)
   // draws another route in it, keeping the nodes that are the same (grid
   // cells too), so nothing flashes and the grid keeps its height.
@@ -822,12 +824,19 @@
 
       const cache = cacheOf(r) || opts.cache;
       // another agent or session drawn in the card has no last request's
-      // cache to show: its place stays, with a dash till it is read
-      const whose = r.agent + " " + (opts.series?.[0]?.id ?? "");
+      // cache to show: its place stays, with a dash till it is read. The
+      // session is the caller's key for it (opts.session), not its line's
+      // first request: Routing keeps the latest 60 requests, so in a long
+      // session that first one moved on with each new request, and every
+      // request under way showed "—" (shenggxhz on X, Codex in T3 Code)
+      const whose = r.agent + " " + (opts.session ?? opts.series?.[0]?.id ?? "");
       if (whose !== cacheWhose) lastCache = null;
       cacheWhose = whose;
+      // opened while a request is under way, the session's last answered
+      // request is the cache to show till this one's is read
+      if (!lastCache && opts.prev) lastCache = cacheOf(opts.prev);
       const known = cache && p.counted !== false ? cache : null;
-      if (known || cacheShown) {
+      if (known || cacheShown || (live && lastCache)) {
         // once shown, the cache keeps its place, so nothing under it moves
         // up and back down. A request under way has read no cache yet:
         // the last request's stays, dimmed and named as the last one's,
