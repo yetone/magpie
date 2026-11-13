@@ -175,7 +175,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const tabs = page.locator("#nav button[data-plugin-page]");
         assert.equal(await tabs.count(), 4, where);
         assert.equal(await page.evaluate(() => { const h = document.querySelector("#nav .nav-gl[data-plugin-pages]"); return [...h.parentElement.children].indexOf(h) > [...h.parentElement.querySelectorAll("button[data-view='plugins']")].map((b) => [...b.parentElement.children].indexOf(b))[0]; }), true, `${where}: after the built-in pages`);
-        assert.equal(await tabs.first().locator("img.nav-ic").getAttribute("src"), `/_magpie/plugin/${GLANCE}/icon.svg`, where);
+        assert.equal(await tabs.first().locator(".nav-ic img").getAttribute("src"), `/_magpie/plugin/${GLANCE}/icon.svg`, where);
         // titled in the window's language, else by its title
         assert.equal(await tabs.first().locator("span").textContent(), TITLES[lang] || "Usage glance", `${where}: the tab's title`);
         if (lang === "de") {

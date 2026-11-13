@@ -190,12 +190,16 @@
     b.dataset.view = e.key;
     b.dataset.pluginPage = "";
     if (e.icon) {
-      const img = document.createElement("img");
-      img.className = "nav-ic";
+      // a mark in one near-black or near-white tone, as a currentColor
+      // SVG is in an <img> (black), is drawn in the tab's own ink, as the
+      // built-in pages' marks are (shannnnnks on X: Day card's was black
+      // on the dark sidebar); a coloured picture is drawn as it is
+      const box = el("i", "nav-ic nav-pic"), img = el("img");
       img.src = e.icon;
       img.alt = "";
-      img.width = img.height = 16;
-      b.append(img);
+      box.append(img);
+      b.append(box);
+      toneCheck(img);
     } else {
       const s = svg(PUZZLE, 16, 1.5);
       s.classList.add("nav-ic");

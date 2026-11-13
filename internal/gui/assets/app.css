@@ -396,6 +396,9 @@ body:not(.side-nav) #nav button[data-view="groups"], body.side-nav .rt-togroups 
    tabs under it, Settings and the gateway at the foot; the same #nav that
    is the header's tabs otherwise */
 .nav-gl, .nav-ic, .side-l, .crumb { display: none; }
+.nav-pic { width: 16px; height: 16px; }
+.nav-pic > * { display: block; width: 100%; height: 100%; object-fit: contain; }
+.nav-pic > .mask { background: currentColor; -webkit-mask: var(--i) center / contain no-repeat; mask: var(--i) center / contain no-repeat; }
 /* at any width the reader picks it (app.js layoutNav); in a narrow window
    it gives the page more of the room */
 body.side-nav { --side-w: 212px; padding-left: var(--side-w); }
