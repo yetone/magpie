@@ -447,6 +447,9 @@ func TestWrongEndpoint(t *testing.T) {
 		// WandAPI's 404 (equinox0253 on X), and a missing model's
 		{404, `{"error":{"message":"模型 gpt-6.1-sol 不支持当前入口协议","type":"new_api_error"}}`, true},
 		{404, `{"error":{"message":"模型 gpt-6.1-sol 不存在","type":"new_api_error"}}`, false},
+		// WandAPI's 404 for gpt-6.1-terra, its 181 bytes as sent (equinox0253
+		// on X, 11-13): the entry protocol named in other words
+		{404, wandAPINoSource, true},
 		// new-api's words for a model no channel serves (written from
 		// memory, not from the report): the model, not the API
 		{400, `{"error":{"message":"当前分组 default 下对于模型 gone 无可用渠道"}}`, false},

@@ -149,6 +149,12 @@ func TestNoChannelWithNothingElseIsTheError(t *testing.T) {
 	}
 }
 
+// wandAPINoSource is WandAPI's 404 to Claude Code's /v1/messages for
+// gpt-6.1-terra, byte for byte as its 181 bytes were (equinox0253 on X,
+// 11-13): no channel, no model named, the entry protocol in other words
+// than gpt-6.1-sol's "不支持当前入口协议".
+const wandAPINoSource = `{"type":"error","error":{"type":"not_found_error","message":"当前没有能承接该入口协议的货源，请联系管理员为端点补充入口格式或配置协议适配。"}}`
+
 // WandAPI answers 404 where New API answers 503 (equinox0253 on X). The
 // fallback follows the body's shape (New API's model_not_found code, its
 // message naming the group), not the status alone: a 404 of any other kind
@@ -164,6 +170,7 @@ func TestNoChannelAs404FromAFork(t *testing.T) {
 		// tweet's screenshot reads it
 		{"entry protocol", `{"error":{"message":"模型 gpt-6.1-sol 不支持当前入口协议","type":"new_api_error","code":"model_not_found"}}`, true},
 		{"entry protocol, Anthropic's shape", `{"type":"error","error":{"type":"invalid_request_error","message":"模型 gpt-6.1-sol 不支持当前入口协议"}}`, true},
+		{"entry protocol, no source (gpt-6.1-terra)", wandAPINoSource, true},
 		{"missing model", `{"error":{"message":"The model gpt-6.1-sol does not exist or you do not have access to it.","type":"invalid_request_error","code":"model_not_found"}}`, false},
 		{"wrong base URL", `404 page not found`, false},
 	} {
