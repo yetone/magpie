@@ -1315,6 +1315,9 @@ each one.
     moved into rotfig.js first) and b942a872b +236 ("no page left").
     Five raises on 11-13, +2,145 bytes (ee1553913 +1,112 at 00:11); none moved code out
     of the core beyond its own hook. #2710's growth rate is still unset.
+    Done right the same afternoon: d06d2383a moved the connect-address
+    save and the typed certificate into tlscerts.js and met the budget
+    with no raise, so "no page left" had a page.
   - A record that points elsewhere: 2f34649a6's body is "Run: see push
     notes", and 8f82e08b4's "(see below)" has nothing below it; neither
     says whether what it ran passed. A pointer is not a record (10-14).
