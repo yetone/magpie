@@ -1107,10 +1107,14 @@ type cUsage struct {
 		ReasoningTokens int `json:"reasoning_tokens"`
 	} `json:"completion_tokens_details,omitempty"`
 	// what others say was read from their cache, when prompt_tokens_details
-	// doesn't: DeepSeek's hits, Moonshot's cached_tokens, and Anthropic's
-	// own names from relays in front of Claude
+	// doesn't: DeepSeek's hits, Moonshot's cached_tokens, Mistral's
+	// num_cached_tokens (its older top-level count, which its API still
+	// sends beside or instead of prompt_tokens_details, counted in
+	// prompt_tokens as OpenAI's is), and Anthropic's own names from relays
+	// in front of Claude
 	PromptCacheHitTokens     int `json:"prompt_cache_hit_tokens"`
 	CachedTokens             int `json:"cached_tokens"`
+	NumCachedTokens          int `json:"num_cached_tokens"`
 	CacheReadInputTokens     int `json:"cache_read_input_tokens"`
 	CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
 	// Credit is what WorkBuddy says the request cost in its plan's credits
@@ -1137,7 +1141,7 @@ func (u cUsage) usage() Usage {
 	if d := u.PromptTokensDetails; d != nil {
 		out.CacheRead, out.CacheWrite = d.CachedTokens, d.CacheWriteTokens
 	}
-	for _, n := range []int{u.PromptCacheHitTokens, u.CachedTokens} {
+	for _, n := range []int{u.PromptCacheHitTokens, u.CachedTokens, u.NumCachedTokens} {
 		if out.CacheRead == 0 {
 			out.CacheRead = n
 		}

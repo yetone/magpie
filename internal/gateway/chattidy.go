@@ -63,8 +63,8 @@ import (
 //
 // And a usage that tells the cache only in another vendor's names
 // (Anthropic's cache_read_input_tokens from a relay in front of a model,
-// DeepSeek's prompt_cache_hit_tokens or Moonshot's cached_tokens beside a
-// 0 in prompt_tokens_details) is told in OpenAI's too (openAIUsage): the
+// DeepSeek's prompt_cache_hit_tokens, Mistral's num_cached_tokens or
+// Moonshot's cached_tokens beside a 0 in prompt_tokens_details) is told in OpenAI's too (openAIUsage): the
 // gateway counted the hit, but an agent on pi-ai (DeepSeek Harness), which
 // reads prompt_tokens_details.cached_tokens first, showed none.
 //
@@ -175,13 +175,13 @@ var (
 	usageField        = []byte(`"usage"`)
 	cachedTokensField = []byte(`"cached_tokens"`)
 	// the names other than OpenAI's that cUsage reads a cache in
-	otherCacheFields = [][]byte{[]byte(`"prompt_cache_hit_tokens"`),
+	otherCacheFields = [][]byte{[]byte(`"prompt_cache_hit_tokens"`), []byte(`"num_cached_tokens"`),
 		[]byte(`"cache_read_input_tokens"`), []byte(`"cache_creation_input_tokens"`)}
 )
 
 // mayMendUsage reports whether b has a usage that may tell its cache in
 // names other than OpenAI's, which openAIUsage may have to tell again:
-// DeepSeek's or Anthropic's, or Moonshot's top-level cached_tokens beside
+// DeepSeek's, Mistral's or Anthropic's, or Moonshot's top-level cached_tokens beside
 // prompt_tokens_details' own. A usage in OpenAI's names alone, every
 // OpenAI reply, is left unread.
 func mayMendUsage(b []byte) bool {
@@ -198,7 +198,7 @@ func mayMendUsage(b []byte) bool {
 
 // openAIUsage is a Chat usage whose cache cUsage reads in names other than
 // OpenAI's (Anthropic's from a relay, DeepSeek's prompt_cache_hit_tokens,
-// Moonshot's cached_tokens), told in OpenAI's as well: what was read in
+// Mistral's num_cached_tokens, Moonshot's cached_tokens), told in OpenAI's as well: what was read in
 // prompt_tokens_details.cached_tokens, what was written in its
 // cache_write_tokens (OpenRouter's), and prompt_tokens counting both, as
 // OpenAI's does. An agent reads prompt_tokens_details first, pi-ai (DeepSeek

@@ -101,6 +101,8 @@ func TestAgentReadsCacheTokensOnEveryRoute(t *testing.T) {
 		{"chat-deepseek", provider.Chat, 0},
 		{"chat-zero-details", provider.Chat, 0},
 		{"chat-moonshot", provider.Chat, 0},
+		{"chat-mistral", provider.Chat, 0},
+		{"chat-mistral-zero-details", provider.Chat, 0},
 		{"responses", provider.Responses, 0},
 		{"gemini", provider.Gemini, 0},
 	}
@@ -156,6 +158,7 @@ func TestOpenAIUsageLeavesOpenAIsAlone(t *testing.T) {
 		`{"prompt_tokens":352,"completion_tokens":7,"total_tokens":359,"prompt_tokens_details":{"cached_tokens":300}}`,
 		`{"prompt_tokens":52,"completion_tokens":7,"total_tokens":59}`,
 		`{"prompt_tokens":52,"completion_tokens":7,"total_tokens":59,"prompt_tokens_details":{"cached_tokens":0},"prompt_cache_hit_tokens":0}`,
+		`{"prompt_tokens":52,"completion_tokens":7,"total_tokens":59,"num_cached_tokens":0}`,
 		`null`,
 		`"x"`,
 	} {
@@ -183,6 +186,7 @@ func TestMayMendUsageOnlyOtherNames(t *testing.T) {
 		`{"usage":{"prompt_tokens":352,"prompt_tokens_details":{"cached_tokens":300}}}`:                   false,
 		`{"usage":{"prompt_tokens":352}}`:                                                                 false,
 		`{"usage":{"prompt_tokens":352,"prompt_cache_hit_tokens":300}}`:                                   true,
+		`{"usage":{"prompt_tokens":352,"num_cached_tokens":300}}`:                                         true,
 		`{"usage":{"prompt_tokens":12,"cache_read_input_tokens":300}}`:                                    true,
 		`{"usage":{"prompt_tokens":352,"prompt_tokens_details":{"cached_tokens":0},"cached_tokens":300}}`: true,
 		`{"choices":[],"prompt_cache_hit_tokens":300}`:                                                    false,
