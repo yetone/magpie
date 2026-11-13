@@ -1331,7 +1331,8 @@ each one.
     (each moved its feature into a lazy file and kept the import), and
     287a1ffa2 +225, putting back the Hermes profiles section that
     1d60b165c had moved out of the core while the Agents rows still drew
-    it. Eight raises on 11-13, +2,631 bytes. A move out of the core
+    it. a95a7a1cd +397 (per-key price rates) made nine raises on
+    11-13, +3,028 bytes. A move out of the core
     first checks every caller of what it moves, or the budget comes back
     with the code.
   - A record that points elsewhere: 2f34649a6's body is "Run: see push
