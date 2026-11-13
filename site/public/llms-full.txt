@@ -1133,6 +1133,8 @@ It puts back the `model` and `small_model` OpenCode had before magpie, and takes
 
 **By provider:** [DeepSeek](https://usemagpie.ai/docs/deepseek) · [Kimi and Kimi Code](https://usemagpie.ai/docs/kimi) · [GLM Coding Plan](https://usemagpie.ai/docs/glm) · [Volcengine Ark](https://usemagpie.ai/docs/volcengine) · [Tencent Cloud](https://usemagpie.ai/docs/tencent-cloud) · [Baidu Qianfan](https://usemagpie.ai/docs/baidu-qianfan) · [SiliconFlow](https://usemagpie.ai/docs/siliconflow) · [ModelScope](https://usemagpie.ai/docs/modelscope) · [Huawei Cloud MaaS](https://usemagpie.ai/docs/huaweicloud) · [Xiaomi MiMo](https://usemagpie.ai/docs/xiaomi-mimo) · [StepFun](https://usemagpie.ai/docs/stepfun) · [LongCat](https://usemagpie.ai/docs/longcat) · [Qwen](https://usemagpie.ai/docs/qwen) · [MiniMax](https://usemagpie.ai/docs/minimax) · [Anthropic](https://usemagpie.ai/docs/anthropic) · [OpenAI](https://usemagpie.ai/docs/openai) · [Gemini](https://usemagpie.ai/docs/gemini) · [Grok](https://usemagpie.ai/docs/grok) · [Mistral](https://usemagpie.ai/docs/mistral) · [OpenRouter](https://usemagpie.ai/docs/openrouter) · [GitHub Copilot](https://usemagpie.ai/docs/copilot) · [Ollama](https://usemagpie.ai/docs/ollama)
 
+[OpenCode Go and ClinePass in Claude Code, Codex and other agents](https://usemagpie.ai/docs/coding-plans)
+
 ## FAQ
 
 ### How do I use DeepSeek in OpenCode?
@@ -10072,6 +10074,75 @@ A provider pricing a model at 0 on all four counts. It is that provider's price 
 Put it in a routing group with a paid model, the free one first. When it is limited or fails, the group's next member answers.
 
 Related: [NVIDIA NIM in Claude Code, Codex and other agents](https://usemagpie.ai/docs/nvidia), [OpenRouter in Claude Code, Codex, Gemini CLI and OpenCode](https://usemagpie.ai/docs/openrouter). If something fails, see [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting) or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+
+---
+
+Source: https://usemagpie.ai/docs/coding-plans
+
+# OpenCode Go and ClinePass in Claude Code, Codex and other agents
+
+OpenCode Go and ClinePass are monthly plans for open coding models: OpenCode Go at $10 a month, ClinePass at $9.99. magpie's `opencode-go` and `clinepass` presets bring them to Claude Code, Codex, OpenCode and other agents, not only their own clients.
+
+## Add it
+
+1. **Get a key..** OpenCode Go's at opencode.ai/auth, ClinePass's at app.cline.bot.
+2. **Add it..** Pick OpenCode Go or ClinePass in the app and paste the key into API key, or from the CLI:
+
+```
+magpie provider add opencode-go 
+magpie provider add clinepass 
+magpie models
+```
+
+The presets have the addresses set. An OpenCode Go or ClinePass provider set up in OpenCode becomes its preset when imported.
+
+## Use it in an agent
+
+Model ids are `provider/model`; ClinePass's own ids start with `cline-pass/`.
+
+```
+magpie claude opencode-go/
+magpie codex clinepass/cline-pass/glm-5.3
+```
+
+When Claude Code, Codex or Gemini CLI speaks another protocol than the plan's, magpie translates.
+
+## OpenCode Go
+
+- OpenCode Go serves each model on one protocol of three and turns it away on the other two ("Model does not support this protocol"). magpie sends each as OpenCode does: GPT, Grok and Muse Spark on Responses, Claude, MiniMax and some Qwen on Anthropic Messages, Gemini on Gemini's API, the rest on Chat Completions.
+- Chat and Responses are at `https://opencode.ai/inference/go/openai/v1`, Messages at `https://opencode.ai/inference/go/anthropic` and Gemini at `https://opencode.ai/inference/go/google/v1beta`, as Go's docs give them. An OpenCode Go provider saved with the old addresses is moved to these.
+- Quota shows the plan's three windows, 5 hours, 7 days and Month: how much is used and when each resets.
+
+## ClinePass
+
+- Chat Completions is at `https://api.cline.bot/api/v1`. Cline's API lists only its paid models, not the plan's, so magpie takes the models from the list Cline's own clients use: the plan's, plus Cline's free models; paid models are left out.
+- Cline's free models (ids starting `cline-free/`) cost nothing and are apart from ClinePass's quota. They answer Cline's own clients alone, so magpie sends the headers Cline's desktop app sends.
+- When that list can't be had, magpie asks the API's own list, with the free models as Cline's desktop app last listed them.
+
+## Notes
+
+- When a plan is limited or used up, put it in a routing group with other providers and the group's next member answers. See [Round robin and failover across accounts, keys and providers](https://usemagpie.ai/docs/routing-groups).
+- Prices, quotas and models are as OpenCode's and Cline's own pages say, and change.
+
+## FAQ
+
+### Can Claude Code use OpenCode Go?
+
+Yes. Add it with magpie provider add opencode-go and your key, and ask for opencode-go/. magpie sends each model on the protocol Go serves it on, translating when needed.
+
+### OpenCode Go says Model does not support this protocol. What now?
+
+The model went to the wrong protocol. magpie picks each model's protocol as OpenCode does: add it with the opencode-go preset, and a provider saved with the old addresses is moved to the new ones.
+
+### Can I use ClinePass outside Cline?
+
+Yes. Add it with magpie provider add clinepass and a Cline key; the plan's models and Cline's free ones are in every agent's picker.
+
+### Where do I see what is left of OpenCode Go?
+
+magpie's Quota page shows OpenCode Go's 5-hour, 7-day and monthly windows, with what is used and when each resets.
+
+Related: [Use DeepSeek, Kimi, GLM or your Claude and ChatGPT subscription in OpenCode](https://usemagpie.ai/docs/opencode-models), [Cline on any model](https://usemagpie.ai/docs/cline), [Quota left on every subscription and key](https://usemagpie.ai/docs/quota). If something fails, see [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting) or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
