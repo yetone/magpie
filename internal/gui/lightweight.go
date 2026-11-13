@@ -58,6 +58,7 @@ func (h *host) makeMain(url string) *application.WebviewWindow {
 	})
 	h.zoomWhenLoaded(w)
 	lowWhileHidden(w)
+	h.mendWebView(w)
 	if runtime.GOOS == "windows" {
 		w.OnWindowEvent(events.Common.WindowRuntimeReady, func(*application.WindowEvent) { w.ExecJS(frameOnlyResizeJS) })
 	}
@@ -130,6 +131,7 @@ func (h *host) makePanel() *application.WebviewWindow {
 	w := h.app.Window.NewWithOptions(po)
 	h.zoomWhenLoaded(w)
 	lowWhileHidden(w)
+	h.mendWebView(w)
 	if h.tray != nil {
 		h.tray.AttachWindow(w).WindowOffset(6)
 	}

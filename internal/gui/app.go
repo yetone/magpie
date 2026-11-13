@@ -721,6 +721,7 @@ func Run(version string, showMain bool, link string) error {
 	markReady := func() { h.readyOnce.Do(func() { close(h.ready) }) }
 	if runtime.GOOS == "windows" {
 		h.main.OnWindowEvent(events.Windows.WebViewNavigationCompleted, func(*application.WindowEvent) { markReady() })
+		h.mendOnWake()
 	} else {
 		h.app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
 			if runtime.GOOS != "darwin" {
