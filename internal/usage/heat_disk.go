@@ -143,6 +143,7 @@ func heatSettledKey(d heatDiskRef, cut, since time.Time, f Filter, identities ma
 			hashRows(h, rows.of(c))
 		}
 	}
+	sourceDigestsSave()
 	return fmt.Sprintf("%x", h.Sum(nil)), true
 }
 
@@ -172,14 +173,23 @@ func sourceDigest(c *rowChunk, rows *chunkRows) [sha256.Size]byte {
 	if !ok {
 		sum, ok = d.last[c.serial]
 	}
-	d.Unlock()
 	if !ok {
+		sourceDigestsLoad()
+		sum, ok = sourceDigestsDisk.kept.get(c.serial)
+	}
+	d.Unlock()
+	made := !ok
+	if made {
 		h := sha256.New()
 		io.WriteString(h, c.Source.Agent+"\x00"+c.Source.Key+"\x00")
 		hashRows(h, rows.of(c))
 		copy(sum[:], h.Sum(nil))
 	}
 	d.Lock()
+	if made {
+		sourceDigestsHashed++
+		sourceDigestsDisk.dirty = true
+	}
 	if d.by == nil || len(d.by) >= sourceDigestsKept {
 		d.last, d.by = d.by, map[uint64][sha256.Size]byte{}
 	}
