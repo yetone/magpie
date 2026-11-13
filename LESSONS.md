@@ -1327,6 +1327,13 @@ each one.
     Done right the same afternoon: d06d2383a moved the connect-address
     save and the typed certificate into tlscerts.js and met the budget
     with no raise, so "no page left" had a page.
+    The afternoon added three more: 6bc0d1e20 +180 and 5a2d0ff47 +81
+    (each moved its feature into a lazy file and kept the import), and
+    287a1ffa2 +225, putting back the Hermes profiles section that
+    1d60b165c had moved out of the core while the Agents rows still drew
+    it. Eight raises on 11-13, +2,631 bytes. A move out of the core
+    first checks every caller of what it moves, or the budget comes back
+    with the code.
   - A record that points elsewhere: 2f34649a6's body is "Run: see push
     notes", and 8f82e08b4's "(see below)" has nothing below it; neither
     says whether what it ran passed. A pointer is not a record (10-14).
