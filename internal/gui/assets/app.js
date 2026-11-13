@@ -7160,6 +7160,8 @@ function renderAdd() {
   };
   q.oninput = () => { presetQuery = q.value; drawTiles(); };
   setupPaste(q);
+  // its hint never cut off (addfloat.js wholeHint)
+  import("./addfloat.js").then(() => wholeHint(q, t("Find a provider")), () => {});
   const c = el("button", "text custom" + (editing?.custom ? " on" : ""));
   c.append(svg(PLUS, 11, 1.8), t("Custom provider"));
   c.dataset.pick = "custom";

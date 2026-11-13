@@ -3501,12 +3501,20 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .sheet .row-head .custom { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); }
 .sheet .row-head .custom:hover, .sheet .row-head .custom.on { color: var(--accent); background: var(--accent-soft); }
 .sheet .add-tools { display: flex; align-items: center; gap: 6px; min-width: 0; }
+/* the search as wide as its hint (app.js wholeHint) */
+#addSheet .add-tools > .find { width: var(--hint-w, 160px); max-width: 100%; }
 /* narrow: the tools on a line of their own */
 @media (max-width: 760px) {
   .sheet .row-head { flex-wrap: wrap; height: auto; row-gap: 8px; }
   .sheet .row-head::after { content: ""; order: 1; flex-basis: 100%; }
   .sheet .add-tools { order: 2; flex: 1 1 100%; }
   .sheet .row-head .find { flex: 1; width: auto; min-width: 0; }
+}
+/* phone-wide: the search keeps room for its short hint (app.js wholeHint),
+   and Import… goes to the next line rather than cut it */
+@media (max-width: 760px) {
+  #addSheet .add-tools:not(.afloat) { flex-wrap: wrap; row-gap: 8px; }
+  #addSheet .add-tools:not(.afloat) > .find { min-width: min(100%, var(--hint-s, 0px)); }
 }
 /* scrolled out of sight beside the sidebar, the tools show in the title
    bar's empty right, where Settings' search is (app.js addToolsFloat) */
@@ -3517,7 +3525,7 @@ body.side-nav #addSheet .add-tools.afloat {
 }
 body.side-nav.mac #addSheet .add-tools.afloat { padding-top: calc(2px / var(--zoom, 1)); }
 body.side-nav #addSheet .add-tools.afloat > * { pointer-events: auto; --wails-draggable: no-drag; flex: none; }
-body.side-nav #addSheet .add-tools.afloat > .find { flex: 0 1 180px; min-width: 120px; }
+body.side-nav #addSheet .add-tools.afloat > .find { flex: 0 1 var(--hint-w, 180px); min-width: 120px; }
 /* a narrow window has no room in its bar: the sheet's head stays at the
    top while the sheet is under it, as Settings' does */
 body:not(.side-nav) #addSheet > .row-head { position: sticky; top: 0; z-index: 5; --bleed-l: 12px; --bleed-r: 12px; }

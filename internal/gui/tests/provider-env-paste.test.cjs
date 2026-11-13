@@ -146,8 +146,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       await page.goto("http://magpie.test/?view=providers");
       await page.locator("#addProvider").click();
-      // the box says it takes a pasted URL and key
-      assert.equal(await page.locator("#addSheet .find").getAttribute("placeholder"), w.find);
+      // the box says it takes a pasted URL and key; where its row has no
+      // room for that whole, it says the shorter hint (app.js wholeHint)
+      await page.waitForFunction(() => document.querySelector("#addSheet .find")?.style.getPropertyValue("--hint-w"));
+      const hint = await page.locator("#addSheet .find").getAttribute("placeholder");
+      if (width >= 900) assert.equal(hint, w.find);
+      else assert([w.find, await page.evaluate(() => t("Find a provider"))].includes(hint), hint);
       // text that isn't env lines is typed as before
       assert.equal(await paste(page.locator("#addSheet .find"), "moonshot"), false);
       assert.equal(await paste(page.locator("#addSheet .find"), forms.export), true);
