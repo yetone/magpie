@@ -965,6 +965,12 @@ standards since 10-18, widened to a worktree and its logs. See
   other file is a stale tree** (11-11, 11-12, 11-13). On 11-13 8c7328f3a
   (remote quotas) wrote 21 files back to 35aaaa4b9^ and took out three
   commits; 926b1e7df put them back.
+  Again later on 11-13: 1f05c311d (memory tab) was a `git reset
+  --soft` of an older worktree onto fresh origin/main, and undid 45
+  files from 610ae1f54..c1312ac15 (49 in its --stat for a 4-file fix).
+  c2fd48782 restored them a minute later, byte for byte (`git diff
+  --stat c1312ac15 c2fd48782` is the fix's 4 files), before any tag.
+  Never `reset --soft` onto a newer base; rebase the commit instead.
 - **A red's issue is read to its last comment, and a patch on it is
   taken first** (10-12, 10-17, 10-27, 10-28). On 10-28 JoeyWu-tech's
   #3568 patch sat three days until CI went red on it again (11c427eaa).
