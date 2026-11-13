@@ -1568,9 +1568,15 @@ func drawerObjects(r *http.Request) []map[string]any {
 				"owned_by": p.ID, "display_name": name, "magpie_label": name + " · " + p.Name,
 				"modalities": map[string]any{"input": []string{"text"}, "output": []string{"image"}},
 				"magpie_via": catalog.ViaHere(m.Via)}
+			// the endpoints it is drawn through, in new-api's words, which
+			// Cherry Studio's new-api provider reads its kind from
+			// (listModels.ts newApiFetcher): image-generation first
+			ends := []string{"image-generation"}
 			if m.Images {
 				o["modalities"] = map[string]any{"input": []string{"text", "image"}, "output": []string{"image"}}
+				ends = append(ends, "image-edit")
 			}
+			o["supported_endpoint_types"] = ends
 			out = append(out, o)
 		}
 	}
@@ -1595,8 +1601,9 @@ func videomakerObjects(r *http.Request) []map[string]any {
 			name := cmp.Or(m.Name, m.ID)
 			out = append(out, map[string]any{"id": p.ID + "/" + m.ID, "object": "model", "type": "model", "kind": "video", "created": 0,
 				"owned_by": p.ID, "display_name": name, "magpie_label": name + " · " + p.Name,
-				"modalities": map[string]any{"input": []string{"text", "image"}, "output": []string{"video"}},
-				"magpie_via": catalog.ViaHere(m.Via)})
+				"modalities":               map[string]any{"input": []string{"text", "image"}, "output": []string{"video"}},
+				"supported_endpoint_types": []string{"openai-video"},
+				"magpie_via":               catalog.ViaHere(m.Via)})
 		}
 	}
 	return out
@@ -1641,10 +1648,21 @@ func catalogFor(r *http.Request) []provider.Entry {
 // Cherry Studio's, ZCode's pasted ?format=text) would offer an image model
 // in their chat pickers (axelburks on Discord asked for them here). A kind
 // it doesn't know is refused, not read as none.
+//
+// Cherry Studio is the exception: it can't ask, and it tells an image model
+// from a chat one itself. Its provider of magpie (an OpenAI-compatible one)
+// reads only each id, then looks the id's last segment up in its own model
+// registry (provider-registry's models.json, by normalizeModelId), which
+// marks gpt-image-2, dall-e-3, the gemini-*-image, imagen, seedream and
+// grok-imagine models as image generation: those go to its Paintings page,
+// not its chat picker (isNonChatModel). Without them listed, Paintings had
+// no model of magpie's (pingqipai3 on X). So it is listed every kind.
 func listKinds(r *http.Request) (chat, image, video bool, err error) {
 	q, ok := r.URL.Query()["kind"]
 	if !ok {
-		return true, false, false, nil
+		// a list of ids pasted somewhere (?format=text) stays chat models
+		media := cherryStudio(r) && r.URL.Query().Get("format") != "text"
+		return true, media, media, nil
 	}
 	for _, v := range q {
 		for k := range strings.SplitSeq(v, ",") {
@@ -1663,6 +1681,14 @@ func listKinds(r *http.Request) (chat, image, video bool, err error) {
 		}
 	}
 	return chat, image, video, nil
+}
+
+// cherryStudio is a request of Cherry Studio's: with the key magpie's link
+// gives it (agentOf), or a key the user typed in by hand, by its User-Agent,
+// Electron's own with the app's name in it ("Mozilla/5.0 (…)
+// CherryStudio/2.1.2 Chrome/… Electron/…").
+func cherryStudio(r *http.Request) bool {
+	return agentOf(r) == "cherrystudio" || strings.Contains(r.Header.Get("User-Agent"), "CherryStudio/")
 }
 
 func (s *Server) models(w http.ResponseWriter, r *http.Request) {

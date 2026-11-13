@@ -14,7 +14,7 @@ import (
 // caller asks: ?kind=image,video (or all), each marked by its "kind". No
 // agent's list, the plain one, Claude Desktop's, Claude Science's,
 // Cursor's, OpenCode's or the ids of ?format=text, gains an image or a
-// video model.
+// video model. Cherry Studio's does (TestModelsListMediaForCherryStudio).
 func TestModelsListMediaOnlyWhenAsked(t *testing.T) {
 	grokSignedIn(t)
 	newGrokMedia(t)
@@ -45,14 +45,18 @@ func TestModelsListMediaOnlyWhenAsked(t *testing.T) {
 	agents := map[string]map[string]string{
 		"plain":          nil,
 		"opencode":       {"User-Agent": "opencode/1.2.3"},
-		"cherry":         {"User-Agent": "CherryStudio/1.5"},
 		"claude-desktop": {"User-Agent": "Mozilla/5.0 (Macintosh) Claude/1.2.3 Chrome/130"},
 		"science":        {"X-Anthropic-Surface": "operon", "User-Agent": "Anthropic/JS 0.60.0"},
 		"cursor":         {"User-Agent": "Cursor-CLI/1.0"},
 		"magpie-key":     {"Authorization": "Bearer magpie-acme"},
+		// Cherry Studio's list has them, its text list (a paste) not
+		"cherry-text": {"User-Agent": cherryUA},
 	}
 	for name, header := range agents {
 		rows := list("/v1/models", header)
+		if name == "cherry-text" {
+			rows = nil
+		}
 		if len(rows) == 0 && name == "plain" {
 			t.Fatalf("plain list is empty")
 		}
@@ -97,6 +101,59 @@ func TestModelsListMediaOnlyWhenAsked(t *testing.T) {
 	for _, bad := range []string{"images", "embedding", "", "chat,"} {
 		if code, body := get("/v1/models?kind="+bad, nil); code != 400 {
 			t.Errorf("kind=%q: %d %s", bad, code, body)
+		}
+	}
+}
+
+// Cherry Studio 2.x's User-Agent, Electron's default with the app's name in
+// it, as Cherry Studio 2.1.2 sends it.
+const cherryUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) CherryStudio/2.1.2 Chrome/146.0.7680.65 Electron/44.2.0 Safari/537.36"
+
+// pingqipai3 on X: with magpie as a provider in Cherry Studio, its image
+// models weren't there to pick. Cherry can't ask for ?kind=, and reads an
+// image model's kind itself (its model registry, by the id's last
+// segment), so its plain list, by its User-Agent or by the key magpie's
+// Cherry link gives it, has the image and video models, each with the
+// endpoints a new-api provider of Cherry's reads; its chat models stay.
+func TestModelsListMediaForCherryStudio(t *testing.T) {
+	grokSignedIn(t)
+	newGrokMedia(t)
+	h := New().Handler()
+	type row struct {
+		ID, Kind  string
+		Endpoints []string `json:"supported_endpoint_types"`
+	}
+	for name, header := range map[string]map[string]string{
+		"user-agent": {"User-Agent": cherryUA},
+		"cherry 1.x": {"User-Agent": "CherryStudio/1.5"},
+		"link's key": {"Authorization": "Bearer magpie-cherrystudio"},
+	} {
+		r := httptest.NewRequest("GET", "/v1/models", nil)
+		for k, v := range header {
+			r.Header.Set(k, v)
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		var l struct{ Data []row }
+		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &l) != nil {
+			t.Fatalf("%s: %d %s", name, w.Code, w.Body)
+		}
+		got := map[string]row{}
+		chat := 0
+		for _, m := range l.Data {
+			got[m.ID] = m
+			if m.Kind == "" {
+				chat++
+			}
+		}
+		if chat == 0 {
+			t.Errorf("%s: no chat models", name)
+		}
+		if m := got["grok/grok-imagine-image"]; m.Kind != "image" || len(m.Endpoints) == 0 || m.Endpoints[0] != "image-generation" {
+			t.Errorf("%s: image model %+v", name, m)
+		}
+		if m := got["grok/grok-imagine-video"]; m.Kind != "video" || !slices.Equal(m.Endpoints, []string{"openai-video"}) {
+			t.Errorf("%s: video model %+v", name, m)
 		}
 	}
 }

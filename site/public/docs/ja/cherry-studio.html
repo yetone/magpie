@@ -204,6 +204,7 @@
 
     <h2 id="models"><a class="anchor" href="#models">モデルを選ぶ</a></h2>
     <p>Cherry Studio はプロバイダのモデル一覧を <code>/v1/models</code> から取得するので、magpie プロバイダには magpie のすべてのモデルが <code>プロバイダ/モデル</code> の名前（例：<code>deepseek/deepseek-v4-pro</code>）で並びます。使いたいモデルを Cherry Studio の magpie プロバイダに追加し、チャットでほかのモデルと同じように選びます。</p>
+    <p>一覧には magpie の画像・動画モデルも入ります。Cherry Studio はその多く（gpt-image-2、Gemini の画像モデル、Imagen、Seedream、Grok Imagine…）を名前で見分け、チャットではなく<span class="ui">ペイント</span>ページに出します。見分けられないモデルは、magpie プロバイダでそのモデルの設定を開き、画像生成にチェックを入れます。</p>
     <p>あとで magpie に追加したプロバイダは、Cherry Studio が次に一覧を取得したときに出ます。Cherry Studio 側の変更は要りません。一つのモデルの裏の複数アカウント、429 後の休止、フェイルオーバーは、ほかのエージェントと同じように働きます。</p>
 
     <h2 id="cli"><a class="anchor" href="#cli">ターミナルから</a></h2>

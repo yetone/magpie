@@ -64,7 +64,9 @@ API's own field (`reasoning_effort`, `reasoning.effort`, Anthropic's
 line. The list holds chat models only. Ask for image and video models
 with `?kind=image,video` (or `?kind=chat,image,video`, or `?kind=all`).
 Each of them is marked `"kind": "image"` or `"kind": "video"` and goes to
-`/v1/images/generations` or `/v1/videos`, never to a chat route.
+`/v1/images/generations` or `/v1/videos`, never to a chat route. Cherry
+Studio, which can't ask and tells an image model from a chat one by its
+id, is listed every kind.
 
 **A vendor's own fields.** `/v1/images/generations` and `/v1/videos`
 take OpenAI's fields and pass the others on to a vendor that takes them:
