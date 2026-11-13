@@ -104,26 +104,42 @@ window.envOf = function envOf(text) {
       put(m[1], q ? q[2] : m[2].replace(/\s+#.*$/, ""));
     }
   }
-  const base = /^(ANTHROPIC|OPENAI|GEMINI|GOOGLE_GEMINI)_(?:BASE_URL|API_BASE|API_URL|BASE|ENDPOINT)$/i;
-  const keyOf = /^(ANTHROPIC|OPENAI|GEMINI|GOOGLE)_(?:AUTH_TOKEN|API_KEY)$/i;
-  const modelOf = /^(ANTHROPIC|OPENAI|GEMINI)_MODEL$/i;
-  const apiOf = (name) => /^ANTHROPIC/i.test(name) ? "anthropic" : /^OPENAI/i.test(name) ? "openai" : "gemini";
+  // a vendor's own names say no API (DEEPSEEK_BASE_URL, MY_RELAY_API_KEY,
+  // a bare BASE_URL): the URL says it, else it is OpenAI's chat
+  const base = /^(?:(\w+?)_)?(?:BASE_URL|API_BASE|API_URL|API_BASE_URL|BASE|ENDPOINT|URL|HOST|API_HOST)$/i;
+  const keyOf = /^(?:(\w+?)_)?(?:AUTH_TOKEN|API_KEY|API_TOKEN|ACCESS_TOKEN|KEY|TOKEN|SECRET_KEY|APIKEY)$/i;
+  const modelOf = /^(?:(\w+?)_)?MODEL$/i;
+  const named = /^(ANTHROPIC|CLAUDE|OPENAI|GEMINI|GOOGLE_GEMINI|GOOGLE)$/i;
+  const apiOf = (prefix, u) => /^(ANTHROPIC|CLAUDE)$/i.test(prefix) ? "anthropic" : /^OPENAI$/i.test(prefix) ? "openai" : /^(GEMINI|GOOGLE_GEMINI|GOOGLE)$/i.test(prefix) ? "gemini" : urlAPI(u);
   const out = { url: "", api: "", base: "", bases: [], urlHole: "", key: "", placeholder: "", model: "", name: "" };
-  for (const [k, v] of Object.entries(vars)) {
-    if (base.test(k)) {
-      const api = apiOf(k);
+  // the names that say their API first, so OPENAI_BASE_URL wins over a URL
+  const prefix = (k) => (base.exec(k) || keyOf.exec(k) || [])[1] || "";
+  const order = Object.entries(vars).sort(([a], [b]) => named.test(prefix(b)) - named.test(prefix(a)));
+  let seen = 0;
+  for (const [k, v] of order) {
+    let m;
+    if ((m = base.exec(k)) && !/PROXY$/i.test(k)) {
+      const known = named.test(m[1] || "");
+      // a vendor's own name is read only for a web address: DATABASE_URL isn't one
+      if (!known && !/^https?:\/\//i.test(v)) continue;
+      seen++;
       // a host written without its scheme is https
       const u = /^[a-z][a-z0-9+.-]*:\/\//i.test(v) ? v : /^[^\s/]+\.[^\s/]+|^localhost\b/i.test(v) ? "https://" + v : "";
+      const api = apiOf(m[1] || "", u);
       if (!u || out.bases.some(([a]) => a === api)) continue;
       // …/v1/chat/completions given whole is cut back to the base
       const cut = u.replace(/\/+$/, "").replace(/\/(?:chat\/completions|messages|responses)$/i, "");
       out.bases.push([api, respellURL(cut, api)]);
-    } else if (keyOf.test(k)) {
+    } else if ((m = keyOf.exec(k)) && !/^(GITHUB|GH|NPM|AWS|HF|HUGGINGFACE|SLACK|DISCORD)$/i.test(m[1] || "")) {
+      seen++;
       if (out.key || out.placeholder) continue;
-      if (/^\$|^%\w+%$|^<.*>$|^\{\{.*\}\}$|^\[.*\]$|your[_-]?|api[_-]?key|x{6,}|\.\.\.|…/i.test(v)) out.placeholder = v;
+      if (standIn(v)) out.placeholder = v;
       else out.key = v;
     } else if (modelOf.test(k) && !out.model) out.model = v;
   }
+  // no URL in the names: the lines may still give one plainly
+  if (!out.bases.length) { const p = plainOf(body); if (p) return p; }
+  if (!seen) return null;
   if (!out.bases.length && !out.key && !out.placeholder) return null;
   if (out.bases.length) {
     [out.api, out.base] = out.bases[0];
@@ -133,6 +149,42 @@ window.envOf = function envOf(text) {
   }
   return out;
 };
+
+// standIn: a key a page gives only to stand for the reader's own
+const standIn = (v) => /^\$|^%\w+%$|^<.*>$|^\{\{.*\}\}$|^\[.*\]$|your[_-]?|api[_-]?key|x{6,}|\.\.\.|…/i.test(v);
+
+// urlAPI: the API a base URL with nothing else to say it serves —
+// Anthropic's for a path naming it (…/anthropic, /claude), else OpenAI's chat
+const urlAPI = (u) => /\/(anthropic|claude)(\/|$)/i.test(String(u).replace(/^\w+:\/\/[^/]+/, "")) ? "anthropic" : "openai";
+
+// plainOf reads a base URL and a key given as plain lines, as a relay's
+// page or a chat hands them over: "Base URL: https://…" over "Key: sk-…",
+// or the two on one line. Both are needed, or it is no setup: a URL alone
+// is a search, a key alone is a key. It gives what envOf does.
+function plainOf(text) {
+  const s = String(text || "");
+  if (s.length > 4000 || /^\s*curl\b/i.test(s)) return null;
+  const um = /https?:\/\/[^\s"'<>，。；、]+/i.exec(s);
+  if (!um) return null;
+  const u = um[0].replace(/[),.;:]+$/, "");
+  const rest = s.slice(0, um.index) + " " + s.slice(um.index + um[0].length);
+  // a labelled key first (key, token, 密钥, 令牌), then a word that looks like one
+  const labelled = /(?:key|token|secret|密钥|令牌|秘钥)\s*[:：=]?\s*["'`]?([A-Za-z0-9][\w.\-~+/=]{11,})/i.exec(rest);
+  let key = labelled?.[1] || "";
+  if (!key) {
+    for (const w of rest.split(/[\s"'`,，;；|]+/)) {
+      const x = w.replace(/^[^\w]+|[^\w=]+$/g, "");
+      if (/^(sk|ak|pk|rk|cr|ms|tp|fk|key)[-_]/i.test(x) && x.length >= 12 || /^[A-Za-z0-9][\w.\-]{31,}$/.test(x) && /\d/.test(x) && /[a-z]/i.test(x)) { key = x; break; }
+    }
+  }
+  if (!key) return null;
+  const cut = u.replace(/\/+$/, "").replace(/\/(?:chat\/completions|messages|responses)$/i, "");
+  const api = urlAPI(cut);
+  const base = respellURL(cut, api);
+  const out = { url: base, api, base, bases: [[api, base]], urlHole: "", key: "", placeholder: "", model: "", name: siteName(base) };
+  if (standIn(key)) out.placeholder = key; else out.key = key;
+  return out;
+}
 
 // siteName is what to call the provider at a URL: the name in its host,
 // api.moonshot.cn → Moonshot, open.bigmodel.cn → Bigmodel; an address

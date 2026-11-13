@@ -7125,7 +7125,7 @@ function renderAdd() {
   if (!adding) return editing && typeof editing === "object" ? renderEditor(null, editing.preset) : null;
   const head = el("div", "row-head");
   head.append(el("span", "label", t(providers.providers.length ? "Add a provider" : "Add your first provider")), el("span", "grow"));
-  const q = input(presetQuery, t("Find a vendor…"));
+  const q = input(presetQuery, t("Find a vendor, or paste a URL and key…"));
   q.className = "find";
   // Escape empties the search, then closes the sheet; it never hides the tray
   q.onkeydown = (e) => {
@@ -7148,11 +7148,7 @@ function renderAdd() {
     editing = { custom: true }; draft = d; presetQuery = "";
     renderProviders();
     // the site's own icon, when it has one; the draft may be gone by then
-    api("icons/favicon", { url: c.base, name }).then((r) => {
-      if (draft !== d || !r?.icon) return;
-      d.icon = r.icon;
-      renderProviders(true);
-    }).catch(() => {});
+    api("icons/favicon", { url: c.base, name }).then((r) => draft === d && r?.icon && (d.icon = r.icon, renderProviders(true))).catch(() => {});
   };
   const c = el("button", "text custom" + (editing?.custom ? " on" : ""));
   c.append(svg(PLUS, 11, 1.8), t("Custom provider"));

@@ -45,8 +45,8 @@ function serve(lang, posts) {
 }
 
 const words = {
-  en: { add: "Add", note: "Filled in from the pasted text: Base URL (Anthropic compatible) · API key." },
-  zh: { add: "添加", note: "已从粘贴的文本填入：API 地址 (Anthropic 兼容) · API 密钥。" },
+  en: { add: "Add", find: "Find a vendor, or paste a URL and key…", note: "Filled in from the pasted text: Base URL (Anthropic compatible) · API key." },
+  zh: { add: "添加", find: "查找供应商，或粘贴地址和密钥…", note: "已从粘贴的文本填入：API 地址 (Anthropic 兼容) · API 密钥。" },
 };
 const launch = (engine) => engine === "webkit" ? webkit.launch() : chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || "chromium" });
 
@@ -78,6 +78,26 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     for (const s of ["", "sk-a\nsk-b", "https://api.moonshot.cn/v1", "PATH=/usr/bin\nHOME=/root", "export FOO=bar"]) {
       assert.equal(await page.evaluate((x) => envOf(x), s), null, JSON.stringify(s));
     }
+    // a vendor's own names, a bare BASE_URL, JSON's snake_case and plain
+    // lines (WJaunita45604's XXX_BASE_URL): the URL says the API
+    const more = {
+      [`export XXX_BASE_URL="https://relay.foo.com/anthropic"\nexport XXX_AUTH_TOKEN="${own}"`]: ["anthropic", "https://relay.foo.com/anthropic", "Foo"],
+      [`export DEEPSEEK_BASE_URL=https://api.deepseek.com\nexport DEEPSEEK_API_KEY=${own}`]: ["openai", "https://api.deepseek.com/v1", "Deepseek"],
+      [`BASE_URL=https://api.relay.io/v1\nAPI_KEY=${own}`]: ["openai", "https://api.relay.io/v1", "Relay"],
+      [JSON.stringify({ base_url: "https://api.relay.io/v1", api_key: own })]: ["openai", "https://api.relay.io/v1", "Relay"],
+      [`Base URL: https://api.relay.io/v1\nAPI Key: ${own}`]: ["openai", "https://api.relay.io/v1", "Relay"],
+      [`地址：https://api.relay.cn/v1/chat/completions\n密钥：${own}`]: ["openai", "https://api.relay.cn/v1", "Relay"],
+      [`https://api.relay.io/claude ${own}`]: ["anthropic", "https://api.relay.io/claude", "Relay"],
+    };
+    for (const [text, [api, base, name]] of Object.entries(more)) {
+      const c = await page.evaluate((s) => envOf(s), text);
+      assert.deepEqual([c?.api, c?.base, c?.key, c?.name], [api, base, own, name], text);
+    }
+    // a URL whose name says no API is read only as a web address; another
+    // service's token is no provider's key
+    for (const s of ["DATABASE_URL=postgres://db/x\nGITHUB_TOKEN=ghp_0123456789abcdef", "HTTPS_PROXY=http://127.0.0.1:7890", "see https://example.com for docs"]) {
+      assert.equal(await page.evaluate((x) => envOf(x), s), null, JSON.stringify(s));
+    }
     assert.deepEqual(await page.evaluate(() => ["https://open.bigmodel.cn/api/paas/v4", "https://api.example.co.uk/v1", "http://127.0.0.1:8888/v1"].map(siteName)), ["Bigmodel", "Example", "127.0.0.1"]);
   });
 
@@ -105,6 +125,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       await page.goto("http://magpie.test/?view=providers");
       await page.locator("#addProvider").click();
+      // the box says it takes a pasted URL and key
+      assert.equal(await page.locator("#addSheet .find").getAttribute("placeholder"), w.find);
       // text that isn't env lines is typed as before
       assert.equal(await paste(page.locator("#addSheet .find"), "moonshot"), false);
       assert.equal(await paste(page.locator("#addSheet .find"), forms.export), true);
