@@ -18,8 +18,7 @@ func (h *host) glidePanel(height int, g Glide) bool {
 	go stepGlide(g, from, height, func() bool { return h.glides.Load() == gen }, func(v int) {
 		application.InvokeSync(func() {
 			if h.panel == w { // not let go meanwhile (lightweight mode)
-				w.SetSize(h.panelW(), v)
-				_ = h.tray.PositionWindow(w, 6)
+				h.sizeOpenPanel(w, h.panelW(), v)
 			}
 		})
 	})

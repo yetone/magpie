@@ -233,10 +233,11 @@ func (h *host) fitPanel(height int, g Glide) {
 		return
 	}
 	h.glides.Add(1)
-	h.panel.SetSize(h.panelW(), height)
 	if windowOpen(h.panel) {
-		_ = h.tray.PositionWindow(h.panel, 6)
+		h.sizeOpenPanel(h.panel, h.panelW(), height)
+		return
 	}
+	h.panel.SetSize(h.panelW(), height)
 }
 
 // zoom is the text size the pages are drawn at, as a factor.
@@ -302,10 +303,11 @@ func (h *host) zoomWindows() {
 		return
 	}
 	setPageZoom(h.panel, z)
-	h.panel.SetSize(w, ht)
 	if windowOpen(h.panel) {
-		_ = h.tray.PositionWindow(h.panel, 6)
+		h.sizeOpenPanel(h.panel, w, ht)
+		return
 	}
+	h.panel.SetSize(w, ht)
 }
 
 // windowsOptions are the app's Windows options. Portable, WebView2 keeps
