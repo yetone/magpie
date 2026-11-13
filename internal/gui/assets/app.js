@@ -6489,15 +6489,7 @@ function unmovedLine(p) {
       providers = await api("provider/move", { id: p.id });
       delete unmovedSaid[p.id];
       renderProviders();
-      const now = providers.providers.find((x) => x.id === p.id);
-      const accts = now?.account?.logins?.length || 0, models = (now?.models || []).filter((x) => x.on).length;
-      saidMoved(t("{name} now runs on its plugin — {accounts}, {models}.", {
-        name: p.name,
-        accounts: t(accts === 1 ? "{n} account" : "{n} accounts", { n: accts }),
-        models: t(models === 1 ? "{n} model" : "{n} models", { n: models }),
-      }));
-      state = await api("state");
-      renderAgents();
+      await movedSay(p);
     } catch (e) {
       unmovedSaid[p.id] = { why: moveWhy({ why: e.why, error: e.message }, p) };
       renderMovable();
@@ -12575,12 +12567,7 @@ async function startSignIn(agent, risky, site, o = {}) {
     if (o.proxy != null) body.proxy = o.proxy;
     if (o.linkOnly) body.linkOnly = true;
     signing = { ...(await api("signin", body)), ...keep };
-    if (web && signing.url && !signing.linkOnly) {
-      const id = signing.id;
-      openSignInPage(signing.url).catch((e) => {
-        if (signing?.id === id) { signing = { ...signing, openError: e.message }; renderProviders(); }
-      });
-    }
+    if (web && signing.url && !signing.linkOnly) signInPage(signing.url);
     renderProviders();
     followSignIn(signing.id);
   } catch (e) {
@@ -12601,6 +12588,13 @@ function openSignInPage(url) {
   return Promise.resolve(null);
 }
 
+// the sign-in's page opened; a page that can't open said in its sign-in
+function signInPage(url, id = signing.id) {
+  openSignInPage(url).catch((e) => {
+    if (signing?.id === id) { signing = { ...signing, openError: e.message }; renderProviders(); }
+  });
+}
+
 async function followSignIn(id) {
   while (signing?.id === id && signingOpen()) {
     await new Promise((r) => setTimeout(r, 800));
@@ -12610,9 +12604,7 @@ async function followSignIn(id) {
     if (st.state === "waiting" || st.state === "installing") {
       // the CLI it needed is in: now the vendor's page can open
       if (signing.state === "installing" && st.state === "waiting" && st.url && !st.opened && !signing.linkOnly) {
-        openSignInPage(st.url).catch((e) => {
-          if (signing?.id === id) { signing = { ...signing, openError: e.message }; renderProviders(); }
-        });
+        signInPage(st.url, id);
       }
       if (signing.state !== st.state || signing.url !== st.url || signing.code !== st.code) { signing = { ...st, ...signingKept() }; renderProviders(); }
       continue;
@@ -12696,12 +12688,7 @@ async function startPluginSignIn(sub, method, inputs = {}, o = {}) {
     if (o.proxy != null) body.proxy = o.proxy;
     signing = { ...(await api("plugin-signin", body)), ...keep };
     // opened: the plugin's own CLI opened the page already (Grok Build's)
-    if (web && signing.url && !signing.opened && !signing.linkOnly) {
-      const id = signing.id;
-      openSignInPage(signing.url).catch((e) => {
-        if (signing?.id === id) { signing = { ...signing, openError: e.message }; renderProviders(); }
-      });
-    }
+    if (web && signing.url && !signing.opened && !signing.linkOnly) signInPage(signing.url);
     renderProviders();
     followSignIn(signing.id);
   } catch (e) {
@@ -13234,17 +13221,18 @@ function renderSigning(sub) {
     form.append(url, submit);
     tt.append(form, why);
   }
+  // the row of other ways, made when the first one goes in
+  const acts = () => tt.querySelector(".acts") || tt.appendChild(el("span", "acts"));
   const keyWay = sub.plugin && signing.method != null && !signing.pasteCode && !signing.pasteKey && signing.state === "waiting"
     ? (sub.plugin.methods || []).findIndex((m) => m.type === "api") : -1;
   if (keyWay >= 0 && keyWay !== signing.method && !(sub.moved && sub.importable)) {
-    const acts = tt.querySelector(".acts") || tt.appendChild(el("span", "acts"));
     const k = el("button", "link", t("Use an API key instead"));
     k.title = t("If the page can't reach magpie (it runs on a server or in Docker)");
     k.onclick = () => {
       stopSignIn();
       startPluginSignIn(sub, keyWay);
     };
-    acts.append(k);
+    acts().append(k);
   }
   // a moved subscription goes straight to its plugin's usual way (#777:
   // one click, as the built-in did); ways other than that one and the key
@@ -13252,30 +13240,27 @@ function renderSigning(sub) {
   const others = sub.plugin && sub.moved && signing.state === "waiting"
     ? (sub.plugin.methods || []).filter((_, i) => i !== signing.method && i !== keyWay).length : 0;
   if (others) {
-    const acts = tt.querySelector(".acts") || tt.appendChild(el("span", "acts"));
     const other = el("button", "link other-ways", t("Other ways to sign in…"));
     other.onclick = () => {
       stopSignIn();
       signing = { agent: sub.agent, state: "method" };
       renderProviders();
     };
-    acts.append(other);
+    acts().append(other);
   }
   if (sub.agent === "codex" && !sub.plugin && signing.state === "waiting")
-    (tt.querySelector(".acts") || tt.appendChild(el("span", "acts"))).append(codexWay(sub, signing.site === "device", { user: signing.forUser, proxy: signing.picked }));
+    acts().append(codexWay(sub, signing.site === "device", { user: signing.forUser, proxy: signing.picked }));
   if (sub.importable) {
     // an account another tool is signed in to comes in from its file
     const imp = el("button", "link", importSay(sub.agent).instead || t("Import from a file instead…"));
     imp.title = importSay(sub.agent).from;
     imp.onclick = () => startImport(sub.agent);
-    const acts = tt.querySelector(".acts") || tt.appendChild(el("span", "acts"));
-    acts.append(imp);
+    acts().append(imp);
   }
   if (sub.agent === "claude") {
     const tok = el("button", "link", t("Use a setup-token instead…"));
     tok.onclick = () => startClaudeToken();
-    const acts = tt.querySelector(".acts") || tt.appendChild(el("span", "acts"));
-    acts.append(tok);
+    acts().append(tok);
   }
   // the one way to put it away (#526): a Close beside Open again did what
   // this does, two buttons for one thing
@@ -15526,15 +15511,7 @@ function renderMove(p) {
       delete moveSaid[p.id];
       draft = null; // the provider changed under it
       renderProviders(); // the editor stays open, turned over, where it was
-      const now = providers.providers.find((x) => x.id === p.id);
-      const accts = now?.account?.logins?.length || 0, models = (now?.models || []).filter((x) => x.on).length;
-      saidMoved(t("{name} now runs on its plugin — {accounts}, {models}.", {
-        name: p.name,
-        accounts: t(accts === 1 ? "{n} account" : "{n} accounts", { n: accts }),
-        models: t(models === 1 ? "{n} model" : "{n} models", { n: models }),
-      }));
-      state = await api("state");
-      renderAgents();
+      await movedSay(p);
     } catch (e) {
       moveSaid[p.id] = { state: m.state, why: t("It stays built-in: {error}", { error: moveWhy({ why: e.why, error: e.message }, p) }) };
       if (!box.isConnected) return renderProviders();
@@ -15607,6 +15584,18 @@ function doneSaving(b) {
   if (b.dataset.label !== undefined) { b.textContent = b.dataset.label; delete b.dataset.label; }
 }
 
+// a move done: what now runs on the plugin said, the agents read again
+async function movedSay(p) {
+  const now = providers.providers.find((x) => x.id === p.id);
+  const accts = now?.account?.logins?.length || 0, models = (now?.models || []).filter((x) => x.on).length;
+  saidMoved(t("{name} now runs on its plugin — {accounts}, {models}.", {
+    name: p.name,
+    accounts: t(accts === 1 ? "{n} account" : "{n} accounts", { n: accts }),
+    models: t(models === 1 ? "{n} model" : "{n} models", { n: models }),
+  }));
+  state = await api("state");
+  renderAgents();
+}
 // saidMoved says what was done, and which agents it moved off models it
 // took away (a provider switched off or removed, the last account signed
 // out: #200), each to the same model elsewhere or back to its default.
