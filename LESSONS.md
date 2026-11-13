@@ -1313,8 +1313,8 @@ each one.
     The guard is sub-second over `git show` and is run before the push.
     Two more raises followed before 13:00: c2a1d80fc +333 (its figure
     moved into rotfig.js first) and b942a872b +236 ("no page left").
-    Five raises on 11-13, +1,355 bytes; none moved code out of the core
-    beyond the hook it added. #2710's growth rate is still unset.
+    Five raises on 11-13, +2,145 bytes (ee1553913 +1,112 at 00:11); none moved code out
+    of the core beyond its own hook. #2710's growth rate is still unset.
   - A record that points elsewhere: 2f34649a6's body is "Run: see push
     notes", and 8f82e08b4's "(see below)" has nothing below it; neither
     says whether what it ran passed. A pointer is not a record (10-14).
