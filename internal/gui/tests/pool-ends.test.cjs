@@ -53,10 +53,10 @@ function serve(lang, first, posts) {
 }
 
 const label = {
-  en: ["Stop when every account is at its cap", "Check usage again near a cap", "No cap on spare@example.com: used to 100% of each window"],
-  zh: ["所有账号都到上限时停止", "接近上限时重新读取用量", "spare@example.com 没有上限：每个窗口都会用到 100%"],
-  ja: ["すべてのアカウントが上限に達したら止める", "上限に近づいたら使用量を読み直す", "spare@example.com には上限がありません：各ウィンドウを 100% まで使います"],
-  de: ["Anhalten, wenn jedes Konto sein Limit erreicht hat", "Nutzung nahe am Limit neu lesen", "Kein Limit für spare@example.com: jedes Fenster wird bis 100 % genutzt"],
+  en: ["Don't go to fallbacks when every account is at its cap", "Check usage again near a cap", "No cap on spare@example.com: used to 100% of each window"],
+  zh: ["所有账号都到上限时，不转备用", "接近上限时重新读取用量", "spare@example.com 没有上限：每个窗口都会用到 100%"],
+  ja: ["すべてのアカウントが上限に達したら、フォールバックへ送らない", "上限に近づいたら使用量を読み直す", "spare@example.com には上限がありません：各ウィンドウを 100% まで使います"],
+  de: ["Bei Limit aller Konten nicht auf Fallbacks ausweichen", "Nutzung nahe am Limit neu lesen", "Kein Limit für spare@example.com: jedes Fenster wird bis 100 % genutzt"],
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -90,7 +90,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await page.locator(".editor .accts .auto-switch.pool-ends, .editor .accts .auto-switch .pool-ends").count(), 0, "apart from the auto-switch box");
         if (lang === "en") {
           const strings = await page.evaluate(() => [...document.querySelectorAll(".editor .accts .pool-ends label")].map((l) => l.title));
-          const keys = ["Stop when every account is at its cap", "Check usage again near a cap", "No cap on {users}: used to 100% of each window",
+          const keys = ["Don't go to fallbacks when every account is at its cap", "Check usage again near a cap", "No cap on {users}: used to 100% of each window",
             "On: once every account in use is at its cap, requests get 429 instead of going to the fallbacks.",
             "On: an account near its cap has its usage read again before a request. One whose usage can't be read is held."];
           assert.deepEqual(strings, keys.slice(3));
