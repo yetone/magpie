@@ -788,9 +788,75 @@ function usageTokensPick() {
       // the tab it was picked on follows; the pick lives on the Overview's
       // and the Sessions tab's tokens tiles (#2591)
       (usageTab === "sessions" ? renderSessions : renderUsage)();
+      // and the account cards' whole-window estimates (holdsLine)
+      if (usageTab !== "sessions" && quotas) renderQuotas();
     }, "Token totals", "sess-menu");
   };
   return b;
+}
+
+// holdsLine: a window's whole (WindowHolds), how in its tooltip. With a
+// baseCost (#5861, no long-context premium) its figure switches every card.
+let holdsBase = kept("holdsBase", false);
+function holdsCostText(h, prov) {
+  const c = fmtCost({ cost: holdsBase ? h.baseCost : h.cost }, prov);
+  return holdsBase ? t("≈ {cost} base", { cost: c }) : t("≈ {cost} API", { cost: c });
+}
+function holdsLine(h, prov) {
+  const cost = (c) => fmtCost({ cost: c }, prov);
+  const line = el("span", "quota-holds");
+  const r = h.routed || {};
+  // with the tokens tiles' "with cache" pick, the cache's tokens, read and
+  // written, scaled by the same share used (Anotiaww on X)
+  const cache = usageWithCache && h.used > 0 ? Math.round(((r.cacheRead || 0) + (r.cacheWrite || 0)) * 100 / h.used) : 0;
+  const tokens = fmtN(h.tokens + cache);
+  line.append(el("span", "", t(usageWithCache ? "Whole ≈ {n} tokens with cache" : "Whole ≈ {n} tokens", { n: tokens }) + (h.priced ? " ·" : "")));
+  const two = h.priced && h.baseCost > 0;
+  if (two) {
+    const b = el("button", "quota-holds-cost", holdsCostText(h, prov));
+    b.type = "button";
+    b._holds = h;
+    b._prov = prov;
+    b.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      holdsBase = !holdsBase;
+      keep("holdsBase", holdsBase);
+      for (const o of document.querySelectorAll(".quota-holds-cost")) if (o._holds) o.textContent = holdsCostText(o._holds, o._prov);
+    };
+    line.append(" ", b);
+  } else if (h.priced) line.append(" ", el("span", "", "≈ " + cost(h.cost)));
+  line.title = [
+    usageWithCache ? (h.priced ? t("The whole window ≈ {tokens} tokens, cache read and written included, ≈ {cost} at API list prices", { tokens, cost: cost(h.cost) })
+      : t("The whole window ≈ {tokens} tokens, cache read and written included; some of its models have no API price", { tokens }))
+      : h.priced ? t("The whole window ≈ {tokens} tokens of input and output, ≈ {cost} at API list prices", { tokens, cost: cost(h.cost) })
+      : t("The whole window ≈ {tokens} tokens of input and output; some of its models have no API price", { tokens }),
+    ...(two ? [
+      t("≈ {cost} at base rates, without long-context premiums: for comparing cycles", { cost: cost(h.baseCost) }),
+      t("Neither is an official dollar allowance or a fixed quota; click the figure to switch"),
+    ] : []),
+    t("Reckoned from what magpie routed through this account in this window: {tokens} tokens in {calls} calls, {cache} cache reads, over the {used} the vendor says is used", { tokens: fmtN(r.tokens || 0), calls: r.calls || 0, cache: fmtN(r.cacheRead || 0), used: Math.round(h.used) + "%" }),
+    t("Only magpie's calls are counted: if this account is also used elsewhere, this reads low"),
+    t("A heavier model fills a window sooner: this holds for the models used so far"),
+  ].join("\n");
+  return line;
+}
+
+// holdsWhy: why a whole isn't told (provider.Holds*); one not listed says nothing.
+const holdsWhy = {
+  low: () => t("Under {n}% of it is used: a rounded share that small is too coarse to scale up", { n: 5 }),
+  clock: () => t("Its reset time isn't known, so neither is when it began"),
+  log: () => t("It began before magpie's request log, so some of its calls weren't seen"),
+  none: () => t("magpie hasn't routed a call through this account in it yet"),
+  credits: () => t("A call in it may have been paid from credits or extra usage, not from the window"),
+};
+// holdsUnknownLine: a window whose whole the server couldn't reckon
+// (#2045): "not enough data", muted, and why in its tooltip, where it said
+// nothing before and a reader couldn't tell a gap from a fault.
+function holdsUnknownLine(why) {
+  const line = el("span", "quota-holds-why", t("Whole: not enough data"));
+  line.title = t("The whole window can't be estimated from magpie's calls yet") + "\n" + holdsWhy[why]();
+  return line;
 }
 
 function renderUsage() {

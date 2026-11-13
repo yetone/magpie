@@ -29,7 +29,7 @@ const quotas = [
     { name: "Credits", used: 30, holdsWhy: "clock" },
   ] },
 ];
-function serve(lang, cards = quotas) {
+function serve(lang, cards = quotas, summary) {
   const settings = { lang, theme: "light", currency: "usd", chineseUnits: lang.startsWith("zh") };
   const state = { agents: [], profiles: [], settings };
   return async (r) => {
@@ -44,6 +44,7 @@ function serve(lang, cards = quotas) {
     if (url.pathname === "/api/groups") return json({ models: [], groups: [], pools: [] });
     if (url.pathname === "/api/providers") return json({ providers: [], presets: [], excluded: [], gateway: { running: true, window: true, url: "http://127.0.0.1:3999" } });
     if (url.pathname === "/api/usage/quotas") return json(cards);
+    if (url.pathname === "/api/usage" && summary) return json(summary);
     if (url.pathname === "/api/plugins") return json({ plugins: [] });
     if (url.pathname.startsWith("/api/")) return json({});
     const file = path.join(assets, url.pathname === "/" ? "index.html" : url.pathname);
@@ -239,6 +240,80 @@ for (const [name, engine] of [["webkit", webkit], ["chromium", chromium]]) {
           assert.ok(got[0].text.length > 0 && got[0].title.split("\n").length === 5, `${at}: the kept whole's tooltip says which window: ${got[0].title}`);
           assert.ok(got[0].title.split("\n")[0].length > 0 && got[1].title.split("\n").length === 4, `${at}: a window with its own says nothing: ${got[1].title}`);
           await page.close();
+        }
+      }
+    } finally { await browser.close(); }
+  });
+}
+
+// Anotiaww on X: the whole-window estimate follows the Overview's tokens
+// pick. With cache, it adds the cache read and written magpie routed in the
+// window, scaled by the same share used, and says so on the line and in the
+// tooltip; picked on the tokens tile, the cards follow at once, the pick is
+// kept for the next load, and picked back the line is as it was.
+const cacheCard = [{ provider: "claude", name: "Claude Code", icon: "claude-color", plan: "max", user: "dee@example.com", windows: [
+  { name: "5 hours", used: 20, resetsAt: soon(2), holds: (() => { const h = holds(12345678, 85.4321, 20); h.routed.cacheWrite = 1000000; return h; })() },
+] }];
+// 12345678 in and out, and (52345678 + 1000000) cache over 20% used
+const withCacheTokens = 12345678 + (52345678 + 1000000) * 5;
+const summary = { calls: 30, errors: 0, input: 5000000, output: 2000000, reasoning: 0, cache_read: 90000000, cache_write: 0, unpriced: 0, cost: 0, bucket: "day",
+  series: [{ label: "Oct 15", time: new Date().toISOString(), calls: 30, input: 5000000, output: 2000000, cache_read: 90000000, cache_write: 0, cost: 0 }],
+  path: "~/.config/magpie/usage.jsonl", agents: [], models: [], accounts: [], callerKeys: [] };
+const withCache = {
+  en: { line: (n) => `Whole ≈ ${n} tokens with cache`, tip: "cache read and written included" },
+  zh: { line: (n) => `整窗 ≈ ${n} tokens（含缓存）`, tip: "含缓存读取与写入" },
+  "zh-TW": { line: (n) => `整窗 ≈ ${n} tokens（含快取）`, tip: "含快取讀取與寫入" },
+  ja: { line: (n) => `枠全体 ≈ ${n} トークン（キャッシュ込み）`, tip: "キャッシュの読み取りと書き込みを含む" },
+  de: { line: (n) => `Gesamt ≈ ${n} Tokens mit Cache`, tip: "Cache-Lesen und -Schreiben eingerechnet" },
+};
+
+for (const [name, engine] of [["webkit", webkit], ["chromium", chromium]]) {
+  test(`${name}: the whole follows the tokens tile's with-cache pick, in every language`, async () => {
+    const browser = await engine.launch();
+    try {
+      for (const lang of Object.keys(withCache)) {
+        for (const width of [360, 1000]) {
+          const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce" });
+          const page = await context.newPage();
+          page.setDefaultTimeout(5000);
+          page.setDefaultNavigationTimeout(60000);
+          await page.route("**/*", serve(lang, cacheCard, summary));
+          await page.goto("http://magpie.test/?view=usage");
+          await page.locator(".subscription-card .quota-holds").first().waitFor();
+          await page.locator("#stats .kpi .kpi-pick").first().waitFor();
+          const at = `${lang} ${width}px`;
+          const read = () => page.locator(".quota-holds").first().evaluate((l) => {
+            const card = l.closest(".subscription-card").getBoundingClientRect(), b = l.getBoundingClientRect();
+            return { text: l.textContent, title: l.title, inCard: b.left >= card.left - 1 && b.right <= card.right + 1,
+              cut: [...l.children].some((s) => s.scrollWidth > s.clientWidth + 1 || s.getBoundingClientRect().right > card.right + 1) };
+          });
+          const plain = await read();
+          assert.equal(plain.text, want[lang].line + " · ≈ $85.43", at);
+          assert.ok(!plain.title.includes(withCache[lang].tip), at);
+          const n = await page.evaluate((v) => fmtN(v), withCacheTokens);
+          // picked With cache on the tokens tile: the card follows at once
+          await page.locator("#stats .kpi .kpi-pick").first().click();
+          const menu = page.locator(".proto-menu:visible");
+          await menu.waitFor();
+          await menu.locator(".pm-item").nth(1).click();
+          await page.waitForFunction((t) => document.querySelector(".quota-holds")?.textContent.startsWith(t), withCache[lang].line(n));
+          let got = await read();
+          assert.equal(got.text, withCache[lang].line(n) + " · ≈ $85.43", at);
+          assert.ok(got.title.split("\n")[0].includes(withCache[lang].tip) && got.title.split("\n")[0].includes(n), `${at}: ${got.title}`);
+          assert.equal(got.title.split("\n").length, 4, at);
+          assert.ok(got.inCard && !got.cut, `${at}: ${JSON.stringify(got)}`);
+          // kept for the next load
+          await page.reload();
+          await page.locator(".subscription-card .quota-holds").first().waitFor();
+          assert.equal((await read()).text, withCache[lang].line(n) + " · ≈ $85.43", `${at}: not kept`);
+          // and back without: as it was
+          await page.locator("#stats .kpi .kpi-pick").first().click();
+          await page.locator(".proto-menu:visible").waitFor();
+          await page.locator(".proto-menu:visible .pm-item").nth(0).click();
+          await page.waitForFunction((t) => document.querySelector(".quota-holds")?.textContent === t, plain.text);
+          got = await read();
+          assert.deepEqual([got.text, got.title], [plain.text, plain.title], at);
+          await context.close();
         }
       }
     } finally { await browser.close(); }

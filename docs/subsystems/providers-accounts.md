@@ -368,7 +368,9 @@ premium, so cycles whose calls' sizes differ compare on that figure. It is
 sent only when it differs from `Cost`; the card's figure is then a button that
 switches every card, past cycles too, between the two, kept in the browser
 (`holdsBase`, `quota-holds.test.cjs`,
-`TestWindowHoldsBaseCostLeavesOutLongContextPremiums`). See
+`TestWindowHoldsBaseCostLeavesOutLongContextPremiums`). `Tokens` counts input
+and output; with the Usage page's tokens pick on *With cache* the card adds
+`Routed.CacheRead` and `CacheWrite` over the same share used (`holdsLine`). See
 `TestWindowHoldsDryAgainAfterReset`, `TestWindowHoldsUsesObservedRefillStart`
 and `TestHistoricalWindowHoldsUsesEachWindowsOwnReading`.
 

@@ -14,7 +14,8 @@ import (
 
 // WindowHolds is a window's whole allowance reckoned from magpie's own
 // calls: Tokens of input and output (cache traffic aside, as the Usage
-// page counts tokens) and, when every call's model has an API list price,
+// page counts tokens unless its pick is With cache, when the card adds
+// Routed's cache over Used itself) and, when every call's model has an API list price,
 // Cost at those prices (cache reads and writes at the vendor's own rates).
 // Routed is what magpie routed through the account in the window so far,
 // up to when the share was read, and Used that share. A call made with the
