@@ -1292,6 +1292,12 @@ each one.
     checked at the pushed head without a build.
   - ee1553913 wrote its "+1,112" budget reason twice in one comment for
     one raise. A reason that is in the line twice reads as two raises.
+  - A patch on a red's issue taken first: yinwu01 posted 86e12bbd on
+    #5948 (TestGroupFailoverTimesEachTry, a fixed 80ms gap) on 11-10,
+    with every injected red written out. Nobody ported it for three
+    days, and it went red on macos CI at dbb2e5dd2 in a shape the issue
+    hadn't named (Millis == FirstText at :264). It was ported unchanged
+    as ff865b47a, the CI shape reproduced on mica with a 240ms hold.
 - **Done right on 10-17.** The retire stack (0f1666b38 to de671719a)
   diffed staticcheck's U1000 against its base for dead code, b98f906b1
   was red on the old code for an own-account gap, and 8 subscriptions
