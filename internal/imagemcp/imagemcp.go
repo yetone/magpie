@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -525,6 +526,9 @@ func (s *server) generate(raw json.RawMessage, used *string, c caller) (string, 
 	if len(out.Data) == 0 {
 		return "", errors.New("no image came back")
 	}
+	// the reply's bytes are the images' base64 a second time: what is read
+	// from here is the strings parsed out of them, each dropped once decoded
+	defer debug.FreeOSMemory()
 	// an image that was drawn, and paid for, is never dropped unsaid: one
 	// that can't be had is answered by where the vendor keeps it, beside
 	// those saved (#1576)
@@ -537,6 +541,7 @@ func (s *server) generate(raw json.RawMessage, used *string, c caller) (string, 
 				lost = append(lost, fmt.Sprintf("image %d came back broken: %v", i+1, err))
 				continue
 			}
+			out.Data[i].B64 = ""
 		case d.URL != "":
 			if img, mt, err = gateway.FetchImage(context.Background(), gateway.PublicClient(), d.URL); err != nil {
 				lost = append(lost, fmt.Sprintf("image %d was drawn but couldn't be downloaded (%v); the vendor keeps it at %s for a while: download it from there", i+1, err, d.URL))

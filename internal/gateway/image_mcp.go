@@ -14,6 +14,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"runtime/debug"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -195,10 +199,20 @@ type imageJob struct {
 }
 
 type imageFile struct {
-	data      []byte
+	path      string // the bytes, on disk: a kept image is never held in memory
+	size      int
 	mime, key string
 	made      time.Time
+	mem       []byte // only when the file couldn't be written
 }
+
+// imageFilesDir is the folder kept images are written to, emptied the first
+// time it is used in a run (the store is lost at a restart, and so are its URLs).
+var imageFilesDir = sync.OnceValue(func() string {
+	d := filepath.Join(settings.Dir(), "image-mcp")
+	os.RemoveAll(d)
+	return d
+})
 
 func (s *Server) imageMCP(w http.ResponseWriter, r *http.Request) {
 	serveMCP(w, r, "magpie's image generation", imageServerName, visionMCPBody, s.imageMCPCall)
@@ -361,6 +375,9 @@ func (s *Server) imageMCPDrawn(rec *replyRecorder, key, base string) map[string]
 	if rec.code() != http.StatusOK {
 		return toolResult("no image: "+imageMCPSaid(rec.body.Bytes()), true)
 	}
+	// the recorded reply is the images' base64 once more: the strings
+	// parsed out of it are what is read from here
+	rec.body = bytes.Buffer{}
 	if len(out.Data) == 0 {
 		return toolResult("no image came back", true)
 	}
@@ -377,6 +394,7 @@ func (s *Server) imageMCPDrawn(rec *replyRecorder, key, base string) map[string]
 				lost = append(lost, fmt.Sprintf("image %d came back broken: %v", i+1, err))
 				continue
 			}
+			out.Data[i].B64 = "" // each image's base64 goes as it is decoded
 		case d.URL != "":
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 			img, mt, err = FetchImage(ctx, PublicClient(), d.URL)
@@ -616,6 +634,9 @@ func (s *Server) imageMCPStart(key string, use *mcpUse, draw func() map[string]a
 		defer st.running.Done()
 		defer close(j.done)
 		j.result = draw()
+		// a drawing holds the reply, its copies and the images for a moment:
+		// give the heap back to the system at once, as it is not asked again
+		debug.FreeOSMemory()
 	}()
 	return j
 }
@@ -650,17 +671,49 @@ func (s *Server) imageMCPKeepFile(img []byte, mt, key string) string {
 		st.secret = make([]byte, 32)
 		rand.Read(st.secret)
 	}
-	st.files[name] = &imageFile{data: img, mime: mt, key: key, made: made}
+	// on disk: images held for an hour in memory were up to 256 MB of the
+	// process's, for as long as no new image pushed them out
+	dir := imageFilesDir()
+	path := filepath.Join(dir, name)
+	if err := os.MkdirAll(dir, 0o700); err != nil || os.WriteFile(path, img, 0o600) != nil {
+		path = ""
+	}
+	f := &imageFile{path: path, size: len(img), mime: mt, key: key, made: made}
+	if path == "" {
+		f.mem = img
+	}
+	st.files[name] = f
 	at := name + "?" + imageTokenParam + "=" + imageFileToken(st.secret, name, key, made.Add(imageMCPKeep).Unix())
 	st.order = append(st.order, name)
 	st.bytes += len(img)
 	for len(st.order) > 1 && (st.bytes > imageMCPFilesMost || time.Since(st.files[st.order[0]].made) > imageMCPKeep) {
 		old := st.order[0]
 		st.order = st.order[1:]
-		st.bytes -= len(st.files[old].data)
-		delete(st.files, old)
+		st.drop(old)
 	}
+	// and gone at its hour even when no image follows it
+	time.AfterFunc(imageMCPKeep+time.Minute, func() {
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		if f := st.files[name]; f != nil {
+			st.order = slices.DeleteFunc(st.order, func(n string) bool { return n == name })
+			st.drop(name)
+		}
+	})
 	return at
+}
+
+// drop forgets the file name and removes its bytes; under st.mu.
+func (st *imageMCPStore) drop(name string) {
+	f := st.files[name]
+	if f == nil {
+		return
+	}
+	st.bytes -= f.size
+	delete(st.files, name)
+	if f.path != "" {
+		os.Remove(f.path)
+	}
 }
 
 // imageTokenParam is the query parameter of a file's URL that holds its
@@ -752,7 +805,17 @@ func (s *Server) imageMCPFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "private, max-age=3600")
 	// ranges, which a player asks a video in (Safari only plays an MP4
 	// served so)
-	http.ServeContent(w, r, "", f.made, bytes.NewReader(f.data))
+	if f.path == "" {
+		http.ServeContent(w, r, "", f.made, bytes.NewReader(f.mem))
+		return
+	}
+	file, err := os.Open(f.path)
+	if err != nil {
+		http.Error(w, "no such image", http.StatusNotFound)
+		return
+	}
+	defer file.Close()
+	http.ServeContent(w, r, "", f.made, file)
 }
 
 // imageMCPBase is the address the agent reaches the gateway at, for the
