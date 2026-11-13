@@ -207,6 +207,7 @@ magpie library sync     # 重新写进各个 Agent</pre>
       <li><b>单独关掉工具。</b>Codex、Gemini CLI、Crush、Hermes Agent、Claude Code 和 OpenCode 可以逐个关掉工具，各自写进自己的设置。其他 Agent 拿到的是整个服务器。</li>
       <li><b>登录。</b>需要 OAuth 的服务器只在 magpie 里登录一次，之后 Agent 通过 magpie 网关的 <code>/mcp/&lt;name&gt;</code> 访问它。</li>
       <li><b>只在这台电脑。</b>不想同步到别处的服务器，关掉 <span class="ui">同步到其他电脑</span>（<code>magpie library mcp local &lt;name&gt; on</code>）。</li>
+      <li><b>这台电脑用另一条命令。</b>同步的服务器在这台电脑上的程序路径不同（比如 Mac 和 WSL），点命令下方的 <span class="ui">在这台电脑上用另一条命令</span>。名称、Agent 和备注照常同步，其他电脑仍运行它们自己的命令（<code>magpie library mcp here &lt;name&gt; &lt;命令…&gt;</code>）。</li>
     </ul>
     <p>打开 <a href="/docs/zh/mcp-router">MCP 路由</a> 后，每个 Agent 只拿到一个名为 <code>magpie</code> 的服务器来代替这些条目，命令型服务器由 magpie 为所有 Agent 只运行一份。它默认关闭。</p>
 

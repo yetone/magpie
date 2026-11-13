@@ -207,6 +207,7 @@ magpie library sync     # エージェントに書き直す</pre>
       <li><b>ツールごとのオフ。</b>Codex、Gemini CLI、Crush、Hermes Agent、Claude Code、OpenCode では、ツールを 1 つずつオフにでき、それぞれの設定に書かれます。ほかのエージェントにはサーバー全体が渡ります。</li>
       <li><b>サインイン。</b>OAuth が必要なサーバーは magpie で一度だけサインインします。エージェントは magpie のゲートウェイの <code>/mcp/&lt;name&gt;</code> 経由で使います。</li>
       <li><b>このコンピュータだけ。</b>ここに置いておくサーバーは <span class="ui">ほかのコンピュータと同期</span> をオフにします（<code>magpie library mcp local &lt;name&gt; on</code>）。</li>
+      <li><b>ここでは別のコマンド。</b>同期したサーバーのプログラムがこのコンピュータでは別の場所にある（Mac と WSL など）ときは、コマンドの下の <span class="ui">このコンピュータでは別のコマンドを使う</span> をクリックします。名前、エージェント、メモはそのまま同期され、ほかのコンピュータは自分のコマンドを実行し続けます（<code>magpie library mcp here &lt;name&gt; &lt;コマンド…&gt;</code>）。</li>
     </ul>
     <p><a href="/docs/ja/mcp-router">MCP ルーター</a> をオンにすると、各エージェントにはこれらのエントリの代わりに <code>magpie</code> という 1 つのサーバーが渡り、コマンドのサーバーは magpie がすべてのエージェントのために 1 回だけ動かします。既定ではオフです。</p>
 

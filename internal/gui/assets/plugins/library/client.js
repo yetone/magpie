@@ -4106,7 +4106,23 @@ magpie.plugin("library", (ctx) => {
       const g = el("div", "lib-grid");
       if (d.transport === "stdio") {
         const line = lineBox([d.command, ...(d.args || [])].filter((x, i) => i > 0 || x).map(quote).join(" "), "npx -y @modelcontextprotocol/server-github", (v) => { const w = words(v); d.command = w[0] || ""; d.args = w.slice(1); });
-        g.append(...field(t("Command"), line, t("The command and its arguments, as you'd type them")));
+        // a synced server can run its own command here (#3836, #6426;
+        // jinpwng on X: one server on a Mac and in WSL, each with its own
+        // path). Its name, agents and note stay the one server; d.shared
+        // is what the other computers run, the line this computer's
+        const cmdBox = el("div", "lib-cmdbox");
+        cmdBox.append(line);
+        const synced = d.shared ? [d.shared.command, ...(d.shared.args || [])].map(quote).join(" ") : "";
+        if (s && s.transport === "stdio" && !d.local && !s.plugin) {
+          cmdBox.append(d.shared
+            ? button(t("Use the synced command"), "lib-addpair", () => { Object.assign(d, { command: d.shared.command, args: [...(d.shared.args || [])], env: { ...(d.shared.env || {}) } }); d.shared = null; draw(); })
+            : button(t("Use another command on this computer"), "lib-addpair", () => {
+              d.shared = { command: s.shared?.command || s.command, args: [...((s.shared || s).args || [])], env: { ...((s.shared || s).env || {}) } };
+              draw();
+              slot.querySelector(".lib-cmd")?.focus();
+            }));
+        }
+        g.append(...field(t("Command"), cmdBox, d.shared ? t("This computer's own, with its environment below. Your other computers run {cmd}", { cmd: synced }) : t("The command and its arguments, as you'd type them")));
         g.append(...field(t("Environment"), pairs(d.env, "GITHUB_TOKEN", t("value"), (v) => { d.env = v; drawAgents(); }), refHint()));
       } else {
         const url = field2(d.url, "https://example.com/mcp", (v) => { d.url = v.trim(); signBox?.redraw(); });
@@ -4158,7 +4174,7 @@ magpie.plugin("library", (ctx) => {
     // a sign-in's to be of it
     const send = async () => {
       const body = { old: s ? s.name : "", server: { name: d.name, transport: d.transport, agents: d.agents, startupTimeout: d.startupTimeout || 0, local: !!d.local, hub: d.hub || "", note: d.note || "" } };
-      if (d.transport === "stdio") Object.assign(body.server, { command: d.command, args: d.args, env: d.env });
+      if (d.transport === "stdio") Object.assign(body.server, { command: d.command, args: d.args, env: d.env, shared: d.local ? null : d.shared || null });
       else Object.assign(body.server, { url: d.url, headers: d.headers, oauth: d.transport === "http" && d.oauth?.clientId ? d.oauth : null });
       take(await api("library/servers/save", body));
       const was = s;

@@ -27,6 +27,8 @@ const libraryUsage = `magpie library                     what the library gives 
   magpie library mcp agents <name> <a,b…|none>
   magpie library mcp local <name> on|off   keep it to this computer: a sync or a backup never carries it, and one
                                      coming in neither takes it away nor puts another computer's in its place
+  magpie library mcp here <name> <command args…> | off   start a synced server with this command on this computer alone,
+                                     the others keeping the synced one (its name, agents and note still sync); off goes back to it
   magpie library mcp off|on <name>   take it from every agent, project and app, keeping its settings; on gives it back as it was
   magpie library mcp rm <name>
   magpie library mcp router on|off   give each agent one MCP server, magpie, in place of the library's (magpie runs them, once for every agent)
@@ -170,6 +172,25 @@ func libraryCmd(args []string) error {
 					fmt.Println(green.Render("✓"), rest[1], "is kept to this computer: a sync or a backup never carries it")
 				} else {
 					fmt.Println(green.Render("✓"), rest[1], "goes with the library again at the next sync")
+				}
+				return nil
+			}
+		case len(rest) >= 3 && rest[0] == "here" && !strings.HasPrefix(rest[1], "-"):
+			// this computer's own command for a synced server (#3836, #6426)
+			cmd := rest[2:]
+			if len(cmd) > 0 && cmd[0] == "--" {
+				cmd = cmd[1:]
+			}
+			if len(rest) == 3 && rest[2] == "off" {
+				cmd = nil
+			} else if len(cmd) == 0 {
+				return fmt.Errorf("usage:\n  %s", libraryUsage)
+			}
+			if res, err = library.ServerHere(rest[1], cmd); err == nil && len(res.Changed) == 0 && len(res.Problems) == 0 {
+				if cmd == nil {
+					fmt.Println(green.Render("✓"), rest[1], "runs the synced command here again")
+				} else {
+					fmt.Println(green.Render("✓"), rest[1], "runs", strings.Join(cmd, " "), "on this computer; your other computers keep the synced command")
 				}
 				return nil
 			}
@@ -494,6 +515,9 @@ func libraryStatus() error {
 		fmt.Printf("  %s %s → %s\n", bold.Render(s.Name), muted.Render(what), on(s.Agents))
 		if s.Local {
 			fmt.Println("   ", muted.Render("not synced: a sync never carries it to your other computers · magpie library mcp local "+s.Name+" off"))
+		}
+		if sh := s.Shared; sh != nil {
+			fmt.Println("   ", muted.Render("this computer's own command; the others run "+strings.TrimSpace(sh.Command+" "+strings.Join(sh.Args, " "))+" · magpie library mcp here "+s.Name+" off"))
 		}
 		if s.Hub == library.HubDirect {
 			fmt.Println("   ", muted.Render("direct: each agent's own entry, never through the hub · magpie library mcp hub "+s.Name+" shared"))

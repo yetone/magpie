@@ -207,6 +207,7 @@ magpie library sync     # write it into the agents again</pre>
       <li><b>Single tools off.</b> You can turn off tools one by one for Codex, Gemini CLI, Crush, Hermes Agent, Claude Code and OpenCode, each in its own setting. Every other agent gets the whole server.</li>
       <li><b>Sign-in.</b> A server that needs OAuth is signed in to once, in magpie. Agents then reach it through magpie’s gateway at <code>/mcp/&lt;name&gt;</code>.</li>
       <li><b>This computer only.</b> Turn off <span class="ui">Sync to your other computers</span> for a server that should stay here (<code>magpie library mcp local &lt;name&gt; on</code>).</li>
+      <li><b>Another command here.</b> For a synced server whose program sits elsewhere on this computer (a Mac and WSL), click <span class="ui">Use another command on this computer</span> under its command. Its name, agents and note still sync; your other computers keep running theirs (<code>magpie library mcp here &lt;name&gt; &lt;command…&gt;</code>).</li>
     </ul>
     <p>With the <a href="/docs/mcp-router">MCP router</a> on, each agent gets one server named <code>magpie</code> in place of these entries, and magpie runs each command server once for all of them. It is off by default.</p>
 

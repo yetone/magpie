@@ -41,7 +41,9 @@ func (l *Library) carriedServers() []*Server {
 func (l *Library) putServers(in []*Server) {
 	own := map[string]bool{}
 	servers := []*Server{}
+	here := map[string]*Server{}
 	for _, s := range l.MCP {
+		here[s.Name] = s
 		if s.Local {
 			own[s.Name] = true
 			servers = append(servers, s)
@@ -53,6 +55,9 @@ func (l *Library) putServers(in []*Server) {
 		c.Local = false // only this computer says what is its own
 		c.Bridge = ""   // and which of its providers a server is
 		c.Agents = slices.Sorted(slices.Values(orNone(s.Agents)))
+		// this computer's own start stays, what came in its synced one
+		// (mcp_here.go)
+		keepStart(&c, here[c.Name])
 		if own[c.Name] {
 			l.Away = append(l.Away, &c)
 		} else {
@@ -90,6 +95,9 @@ func ServerLocal(name string, on bool) (*Result, error) {
 			return fmt.Errorf("no server called %s", name)
 		}
 		s.Local = on
+		if on {
+			s.Shared = nil // its command is this computer's alone now
+		}
 		return nil
 	})
 }

@@ -112,7 +112,9 @@ func Collect() (*Bundle, error) {
 	// a server kept to this computer stays out; another computer's by its
 	// name, which a sync brought, goes on as it came (mcp_local.go)
 	for _, s := range sorted(l.carriedServers(), func(s *Server) string { return s.Name }) {
-		c := *carried(s) // magpie's own by name, each computer's own binary
+		// magpie's own by name, each computer's own binary; a server
+		// started its own way here goes with the synced start (mcp_here.go)
+		c := *carried(carriedStart(s))
 		c.Agents = orNone(slices.Sorted(slices.Values(s.Agents)))
 		b.MCP = append(b.MCP, &c)
 	}

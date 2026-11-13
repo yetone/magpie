@@ -434,6 +434,10 @@ func saveServer(old *library.Server, line string) tea.Cmd {
 			// and whether it is kept to this computer, and out of the hub,
 			// and the user's note on it
 			s.Agents, s.Env, s.Headers, s.OAuth, s.StartupTimeout, s.Local, s.Hub, s.Note = old.Agents, old.Env, old.Headers, old.OAuth, old.StartupTimeout, old.Local, old.Hub, old.Note
+			// and the synced command, when this computer runs its own
+			// (the line typed is this computer's then; check drops it
+			// for a URL)
+			s.Shared = old.Shared
 		}
 		return libCmd(func() (*library.Result, error) { return library.SaveServer(was, s) }, done)()
 	}
