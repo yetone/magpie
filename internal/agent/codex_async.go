@@ -89,10 +89,60 @@ var codexReaders = func(at place) []CodexReader {
 			out = append(out, CodexReader{Kind: "app", Version: installedVersion(filepath.Join(dir, "resources", "codex"))})
 		}
 	}
-	if extensionHere(at.home, "openai.chatgpt") {
-		out = append(out, CodexReader{Kind: "ide"})
+	return append(out, extensionCodexReaders(at.home)...)
+}
+
+// extensionCodexReaders are the Codexes the editors' OpenAI extension
+// (openai.chatgpt) carries, one per installed copy, in VS Code's
+// ~/.vscode/extensions, VS Code Server's, and each fork's (Cursor,
+// Windsurf, VSCodium, …). The extension ships its codex at
+// <ext>/bin/<target>/codex, with the version in the codex-package.json
+// beside it ("0.169.0-alpha.11.1" in chatgpt 26.51111 on Linux and
+// Windows alike); one whose version can't be read is "" (unknown, not old).
+// A copy the editor marked obsolete (.obsolete) is not run any more.
+func extensionCodexReaders(home string) []CodexReader {
+	var out []CodexReader
+	es, err := os.ReadDir(home)
+	if err != nil {
+		return nil
+	}
+	for _, e := range es {
+		if !strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		root := filepath.Join(home, e.Name(), "extensions")
+		xs, err := os.ReadDir(root)
+		if err != nil {
+			continue
+		}
+		var obsolete map[string]bool
+		if b, err := os.ReadFile(filepath.Join(root, ".obsolete")); err == nil {
+			json.Unmarshal(b, &obsolete)
+		}
+		for _, x := range xs {
+			n := strings.ToLower(x.Name())
+			if !x.IsDir() || !strings.HasPrefix(n, "openai.chatgpt-") || obsolete[x.Name()] {
+				continue
+			}
+			out = append(out, CodexReader{Kind: "ide", Version: extensionCodexVersion(filepath.Join(root, x.Name()))})
+		}
 	}
 	return out
+}
+
+// extensionCodexVersion is the version in an extension copy's
+// codex-package.json (bin/<target>/, or bin/), "" when none is readable.
+func extensionCodexVersion(dir string) string {
+	paths, _ := filepath.Glob(filepath.Join(dir, "bin", "*", "codex-package.json"))
+	paths = append(paths, filepath.Join(dir, "bin", "codex-package.json"))
+	for _, p := range paths {
+		if b, err := os.ReadFile(p); err == nil {
+			if m := codexPackageVersionRe.FindSubmatch(b); m != nil {
+				return strings.TrimSpace(string(m[1]))
+			}
+		}
+	}
+	return ""
 }
 
 var codexPackageVersionRe = lazyre.New(`"version"\s*:\s*"([^"]+)"`)

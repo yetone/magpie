@@ -363,3 +363,55 @@ func TestCodexAsyncConfigLoadsInRealCodex(t *testing.T) {
 		})
 	}
 }
+
+// The editor extension carries its own codex, with its version in the
+// codex-package.json beside it (#X: HermanHongbb on X, Fedora, the
+// extension in VS Code and Cursor, both newer than the gate). The reader was
+// made with no version, so it was always "unknown" and held the table (and
+// the threshold) out. A version that is newer passes; one that can't be
+// read stays unknown, not old.
+func TestExtensionCodexVersionRead(t *testing.T) {
+	home := t.TempDir()
+	put := func(rel, body string) {
+		p := filepath.Join(home, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pkg := func(v string) string {
+		return `{"layoutVersion": 1, "version": "` + v + `", "entrypoint": "bin/codex"}`
+	}
+	put(".vscode/extensions/openai.chatgpt-26.51111.21308-linux-x64/bin/linux-x86_64/codex-package.json", pkg("0.164.0-alpha.11.1"))
+	put(".vscode-server/extensions/openai.chatgpt-26.5908.1-linux-x64/bin/linux-x86_64/codex-package.json", pkg("0.167.0-alpha.4.1"))
+	put(".cursor/extensions/openai.chatgpt-26.1-win32-x64/bin/windows-x86_64/codex-package.json", pkg("0.169.0"))
+	put(".windsurf/extensions/openai.chatgpt-26.2-linux-x64/bin/linux-x86_64/codex", "binary only")
+	put(".vscode-oss/extensions/openai.chatgpt-25.1-linux-x64/bin/linux-x86_64/codex-package.json", pkg("0.100.0"))
+	put(".vscode-oss/extensions/.obsolete", `{"openai.chatgpt-25.1-linux-x64": true}`)
+	put(".vscode/extensions/other.ext-1/bin/x/codex-package.json", pkg("0.1.0"))
+
+	got := map[string]int{}
+	for _, r := range extensionCodexReaders(home) {
+		if r.Kind != "ide" {
+			t.Errorf("kind %q", r.Kind)
+		}
+		got[r.Version]++
+	}
+	want := map[string]int{"0.164.0-alpha.11.1": 1, "0.167.0-alpha.4.1": 1, "0.169.0": 1, "": 1}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for v, n := range want {
+		if got[v] != n {
+			t.Fatalf("got %v, want %v", got, want)
+		}
+	}
+
+	// what the gate makes of them: only the unreadable one holds the table
+	blocked := codexAsyncBlocked(extensionCodexReaders(home))
+	if len(blocked) != 1 || blocked[0].Version != "" {
+		t.Errorf("blocked %v, want only the one of unknown version", blocked)
+	}
+}
