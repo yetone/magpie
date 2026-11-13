@@ -1413,6 +1413,7 @@ function connectLine(a, kind) {
     else say(t("Not connected · {agent} uses its own settings", { agent: a.name }));
     if (sw) line.append(sw.button);
     if (a.appRestart) line.append(appRestart(a));
+    if (a.isolated && !a.isolated.on) line.append(isoLazy("desktopTwinBtn", a));
     return line;
   }
   if (a.native) {
@@ -1969,8 +1970,8 @@ const desktopIsolatedLine = (iso) => agSwitchLine("ag-isolated", !!iso.on, "Clau
   status(on ? t("Open Claude Magpie from Applications") : t("Claude Magpie removed"), "ok");
 });
 
-// isoLazy: Claude Magpie's Advanced fold (#6459), drawn by
-// claudemagpie.js, imported the first time it shows
+// isoLazy: Claude Magpie's twin button and its Advanced fold
+// (#6459), drawn by claudemagpie.js, imported the first time either shows
 const isoLazy = (f, x, at = el("span")) => (at.hidden = 1, import("./claudemagpie.js").then(() => at.replaceWith(window[f](x)), () => {}), at);
 
 const desktopLongestLine = () => agSwitchLine("ag-longest", !!state.settings?.desktopLongest, t("Only each model's largest window"), t("A model of 1M or more is listed once, as its 1M entry. Quit and reopen Claude Desktop after a change."), async (on) => {
