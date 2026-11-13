@@ -175,3 +175,145 @@ func TestAnthropicKeyGatedModelDescribed(t *testing.T) {
 		t.Errorf("entry = id %s name %q default %q context %d output %d efforts %v", e.ID, e.Name, e.Default, e.Context, e.Output, e.Efforts)
 	}
 }
+
+// #6418's fixture (pwn2ooown): models.dev's anthropic list with Sonnet 5.5
+// alone, a .claude.json whose legacy caches are empty, and Claude Code
+// 2.1.323's version-2 catalog with Fable 5.2, in the shape the issue gives
+// it and named as Claude Code names it on a Mac (organizationUuid, then the
+// first 12 hex of sha256(accountUuid)).
+const (
+	fableOrg     = "00000000-0000-4000-8000-000000000002"
+	fableAccount = "00000000-0000-4000-8000-000000000001"
+	fableCatalog = `{"version": 2, "fetchedAt": 1763100000000, "staleAt": 1763103600000,
+ "catalog": {"surface": "cc", "config": {"id": "cc", "models": [{
+   "id": "claude-fable-5-2", "name": "Fable 5.2", "short_name": "Fable", "section": "main",
+   "runtime": {"max_input_tokens": 1000000, "max_output_tokens": 128000,
+               "effort_levels": ["low", "medium", "high"], "default_effort": "medium"}
+ }], "provider_alias_targets": {}, "settings_vocabulary": {}},
+   "state": {"id": "cc", "model": "claude-fable-5-2", "thinking": {"type": "effort", "effort": "medium"}}}}`
+)
+
+func fableCatalogs(t *testing.T, home string) {
+	t.Helper()
+	put := func(path, s string) {
+		os.MkdirAll(filepath.Dir(path), 0o755)
+		if err := os.WriteFile(path, []byte(s), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put(catalog.CachePath(), `{"anthropic": {"id": "anthropic", "name": "Anthropic", "npm": "@ai-sdk/anthropic",
+ "env": ["ANTHROPIC_API_KEY"], "models": {"claude-sonnet-5-5": {"id": "claude-sonnet-5-5", "name": "Claude Sonnet 5.5",
+ "release_date": "2026-09-28", "limit": {"context": 1000000, "output": 128000},
+ "modalities": {"input": ["text"], "output": ["text"]}}}}}`)
+	put(catalog.LabsPath(), `{}`)
+	catalog.Reset()
+	t.Cleanup(catalog.Reset)
+	writeFile(t, filepath.Join(home, ".claude.json"), map[string]any{
+		"oauthAccount":                map[string]any{"emailAddress": "catalog-repro@example.com", "accountUuid": fableAccount, "organizationUuid": fableOrg},
+		"additionalModelOptionsCache": []any{}, "additionalModelOptionsAnsweredAt": time.Now().UnixMilli(),
+		"modelAccessCache": []any{}, "additionalModelCostsCache": map[string]any{},
+	})
+	filememo.Forget()
+}
+
+// A model Claude Code 2.1.323+ keeps only in its version-2 model catalog,
+// not in .claude.json's legacy caches nor in models.dev's anthropic list,
+// is on the account's list with the catalog's name, window and levels; a
+// catalog of another account in the same folder adds nothing, and a
+// catalog halfway through being written is what it said last (#6418).
+func TestClaudeCodeCatalogV2Models(t *testing.T) {
+	home := claudeHome(t)
+	claudeSignIn(t, home, time.Now().Add(time.Hour))
+	claudeBase = "http://127.0.0.1:1" // asked nothing
+	fableCatalogs(t, home)
+	dir := filepath.Join(home, ".claude", "cache", "model-catalog")
+	write := func(name, s string) {
+		os.MkdirAll(dir, 0o755)
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(s), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		filememo.Forget()
+	}
+	listed := func() []catalog.Model {
+		t.Helper()
+		ForgetAccounts()
+		p, ok := find(All(), "claude")
+		if !ok || p.Account == nil {
+			t.Fatal("no Claude account")
+		}
+		return p.Available()
+	}
+	if ids := modelIDs(listed()); slices.Contains(ids, "claude-fable-5-2") || !slices.Contains(ids, "claude-sonnet-5-5") {
+		t.Fatalf("baseline: %v", ids)
+	}
+
+	// another account's catalog (same org, another accountUuid) is not this one's
+	other := claudeCatalogName(fableOrg, "00000000-0000-4000-8000-000000000009")
+	write(other, fableCatalog)
+	if ids := modelIDs(listed()); slices.Contains(ids, "claude-fable-5-2") {
+		t.Fatalf("another account's catalog listed: %v", ids)
+	}
+	os.Remove(filepath.Join(dir, other))
+
+	own := claudeCatalogName(fableOrg, fableAccount)
+	if want := fableOrg + "-" + "11e594f48195" + "-cc.json"; own != want {
+		// sha256("00000000-0000-4000-8000-000000000001")[:12]
+		t.Fatalf("catalog name %s, want %s", own, want)
+	}
+	write(own, fableCatalog)
+	ms := listed()
+	i := slices.IndexFunc(ms, func(m catalog.Model) bool { return m.ID == "claude-fable-5-2" })
+	if i < 0 {
+		t.Fatalf("Fable 5.2 from the version-2 catalog not listed: %v", modelIDs(ms))
+	}
+	if m := ms[i]; m.Name != "Fable 5.2" || m.Context != 1_000_000 || m.Output != 128_000 || !m.Reasoning || !slices.Equal(m.Efforts, []string{"low", "medium", "high"}) {
+		t.Errorf("Fable 5.2 = %+v", m)
+	}
+	if own := modelIDs(ClaudeCodeModels()); !slices.Contains(own, "claude-fable-5-2") {
+		t.Errorf("Claude Code's own picker lacks it: %v", own)
+	}
+	if has, ok := claudeLists("catalog-repro@example.com", "claude-fable-5-2"); !ok || !has {
+		t.Errorf("claudeLists = %v %v", has, ok)
+	}
+
+	// halfway through a write: what it said last, not no models
+	write(own, fableCatalog[:120])
+	if ids := modelIDs(listed()); !slices.Contains(ids, "claude-fable-5-2") {
+		t.Errorf("a half-written catalog dropped Fable 5.2: %v", ids)
+	}
+	os.Remove(filepath.Join(dir, own))
+	filememo.Forget()
+	if ids := modelIDs(listed()); slices.Contains(ids, "claude-fable-5-2") {
+		t.Errorf("a catalog gone still lists Fable 5.2: %v", ids)
+	}
+
+	// a saved account's own config directory keeps its catalog there
+	saved := "saved@example.com"
+	sdir := claudeAccountDir(saved)
+	writeFile(t, filepath.Join(sdir, ".claude.json"), map[string]any{
+		"oauthAccount": map[string]any{"emailAddress": saved, "accountUuid": "acct-saved", "organizationUuid": "org-saved"},
+	})
+	os.MkdirAll(filepath.Join(sdir, "cache", "model-catalog"), 0o755)
+	os.WriteFile(filepath.Join(sdir, "cache", "model-catalog", claudeCatalogName("org-saved", "acct-saved")), []byte(fableCatalog), 0o600)
+	filememo.Forget()
+	if ids := modelIDs(claudeModels()); !slices.Contains(ids, "claude-fable-5-2") {
+		t.Errorf("a saved account's catalog not read: %v", ids)
+	}
+	if cm, ok := claudeModelsOf(saved); !ok || !slices.ContainsFunc(cm.extra, func(x claudeExtra) bool { return x.id == "claude-fable-5-2" }) {
+		t.Errorf("claudeModelsOf(saved) = %+v %v", cm, ok)
+	}
+}
+
+// A model-catalog file of a version or surface not known here is not
+// taken as a catalog with no models.
+func TestClaudeCatalogUnknownShape(t *testing.T) {
+	for _, s := range []string{`{"version":3,"catalog":{"surface":"cc","config":{"models":[]}}}`, `{"version":2,"catalog":{"surface":"web","config":{"models":[]}}}`, `{"version":2}`, `{"version":2,"catalog":`} {
+		if _, err := parseClaudeCatalog([]byte(s)); err == nil {
+			t.Errorf("%s parsed", s)
+		}
+	}
+	c, err := parseClaudeCatalog([]byte(fableCatalog))
+	if err != nil || len(c.models) != 1 || c.models[0].id != "claude-fable-5-2" {
+		t.Fatalf("%+v %v", c, err)
+	}
+}
