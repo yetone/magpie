@@ -26,7 +26,7 @@ func TestSourceDigestsKeptAcrossStarts(t *testing.T) {
 	restart := func() {
 		sourceDigests.Lock()
 		sourceDigests.by, sourceDigests.last, sourceDigests.made = nil, nil, nil
-		sourceDigestsDisk.path, sourceDigestsDisk.kept = "", nil
+		sourceDigestsDisk.path, sourceDigestsDisk.kept, sourceDigestsDisk.mapped = "", nil, nil
 		sourceDigests.Unlock()
 	}
 	key := func(cs ...*rowChunk) (string, int) {
@@ -54,10 +54,22 @@ func TestSourceDigestsKeptAcrossStarts(t *testing.T) {
 	if len(sourceDigests.made) != 0 || sourceDigestsDisk.kept.len() != 2 {
 		t.Fatalf("after a save: %d made, %d kept", len(sourceDigests.made), sourceDigestsDisk.kept.len())
 	}
+	if mapsFiles && sourceDigestsDisk.mapped == nil {
+		t.Fatal("after a save the digests are kept as encoded, not from the file written")
+	}
 	sourceDigests.Unlock()
 	restart()
 	if again, n := key(chunk(1<<63|1, 10), chunk(1<<63|2, 20)); n != 0 || again != first {
 		t.Fatalf("started again, hashed %d chunks, key %s, was %s", n, again, first)
+	}
+	// what was read is the file mapped, not a copy in the heap
+	if mapsFiles {
+		sourceDigests.Lock()
+		m, kept := sourceDigestsDisk.mapped, sourceDigestsDisk.kept
+		sourceDigests.Unlock()
+		if m == nil || kept.len() != 2 || &kept[0] != &m.data[len(m.data)-len(kept)] {
+			t.Fatalf("kept %d digests, mapped %v: not read from the mapped file", kept.len(), m != nil)
+		}
 	}
 	// a start that met one file keeps the other's for the next
 	restart()

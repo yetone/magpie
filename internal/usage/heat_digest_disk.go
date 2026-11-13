@@ -28,6 +28,11 @@ var sourceDigestsDisk struct {
 	path  string     // where kept was read from
 	kept  digestList // as read: no map of 17k entries beside sourceDigests'
 	dirty bool       // a digest was made that isn't on disk
+	// mapped holds the file kept is read from, where the system maps
+	// files: its pages are the file's, not the heap's, and a lookup
+	// touches a few of them. The file is 40 bytes a digest, up to
+	// 2*sourceDigestsKept of them (5MB), each kept in the heap before.
+	mapped *diskMapping
 }
 
 // sourceDigestsHashed counts the chunks sourceDigest hashed, for tests.
@@ -80,11 +85,33 @@ func sourceDigestsLoad() {
 		return
 	}
 	sourceDigestsDisk.path, sourceDigestsDisk.kept, sourceDigestsDisk.dirty = p, nil, false
+	sourceDigestsDisk.mapped = nil
+	if m, ok := mapDiskFile(p); ok {
+		if l := decodeSourceDigests(m.data, requestDiskBinary()); l != nil {
+			sourceDigestsDisk.kept, sourceDigestsDisk.mapped = l, m
+		}
+		return
+	}
 	b, err := os.ReadFile(p)
 	if err != nil {
 		return
 	}
 	sourceDigestsDisk.kept = decodeSourceDigests(b, requestDiskBinary())
+}
+
+// keepMapped reads kept again from p as just written, mapped: the bytes
+// encoded are let go of. Kept as encoded when the file isn't b (another
+// write since) or can't be mapped. Under sourceDigests' lock.
+func keepMapped(p string, b []byte) {
+	if sourceDigestsDisk.path != p || len(sourceDigestsDisk.kept) == 0 || &sourceDigestsDisk.kept[0] != &b[len(b)-len(sourceDigestsDisk.kept)] {
+		return // kept is no longer what b holds
+	}
+	m, ok := mapDiskFile(p)
+	if !ok || !bytes.Equal(m.data, b) {
+		return
+	}
+	sourceDigestsDisk.kept = decodeSourceDigests(m.data, requestDiskBinary())
+	sourceDigestsDisk.mapped = m
 }
 
 // decodeSourceDigests is b's digests when b was written for code, nil
@@ -191,19 +218,25 @@ func sourceDigestsSave() {
 		return
 	}
 	w.wrote = gen
-	writeFileRenamed(p, b)
+	if !writeFileRenamed(p, b) || !mapsFiles {
+		return
+	}
+	d.Lock()
+	keepMapped(p, b)
+	d.Unlock()
 }
 
 // writeFileRenamed writes b to p through a temp file renamed over it.
-func writeFileRenamed(p string, b []byte) {
+// It reports whether p is b now.
+func writeFileRenamed(p string, b []byte) bool {
 	saveAsks() // the asks its rows were made of first (catalogBase)
 	dir := filepath.Dir(p)
 	if os.MkdirAll(dir, 0o700) != nil {
-		return
+		return false
 	}
 	tmp, err := os.CreateTemp(dir, ".heat-digests-*")
 	if err != nil {
-		return
+		return false
 	}
 	_, err = tmp.Write(b)
 	if cerr := tmp.Close(); err == nil {
@@ -211,5 +244,7 @@ func writeFileRenamed(p string, b []byte) {
 	}
 	if err != nil || os.Rename(tmp.Name(), p) != nil {
 		os.Remove(tmp.Name())
+		return false
 	}
+	return true
 }
