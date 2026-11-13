@@ -1650,6 +1650,18 @@ func ForgetLogin(agent, user string) error {
 	if pp, ok := pluginOfAgent(agent); ok {
 		return forgetPluginLogin(pp, user)
 	}
+	if agent == "claude" {
+		// nor while a run is in the account's own directory: magpie's own
+		// (a /usage, a warm-up) ends first, and another magpie process's
+		// is refused past the wait (#4532's run marks) — the removal here
+		// would take the directory from under that run (#3254)
+		mu := claudeDirRun(user)
+		mu.Lock()
+		defer mu.Unlock()
+		if err := waitClaudeRuns(user); err != nil {
+			return err
+		}
+	}
 	switch agent {
 	case "copilot":
 		return forgetCopilotLogin(user)
