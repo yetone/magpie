@@ -3441,6 +3441,15 @@ since the signature has held; the log says the file went unattested. A
 (`gh attestation trusted-root`, first line) when Sigstore rotates its public
 good keys; until then a new chain fails as "not attested".
 
+The same bundles are kept on R2 (`site/files.js`, `keepBundles`): the five-minute
+cron asks that API for each file's digest of a release from v0.1.3891 on and,
+once every file has one, writes `<tag>/attestations.jsonl` (a bundle to a line),
+served at `https://usemagpie.ai/files/<tag>/attestations.jsonl` and checked with
+`gh attestation verify <file> -R yetone/magpie-releases --bundle
+attestations.jsonl`. It is not a release asset (the release's count is
+unchanged), is written only whole, and is pruned with its tag. The updater does
+not read it yet; it still asks GitHub's API (ArcticLampyrid on X).
+
 The feed hands the app that `SHA256SUMS` and signature (`signed`). The app
 checks the signature against its key, takes every file's SHA-256 from the
 signed list, and refuses the update when the signature is missing or does not

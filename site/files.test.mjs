@@ -151,3 +151,38 @@ test("mirror: without the bucket, or with R2 failing, nothing is copied and noth
   env.RELEASES.fail = true;
   assert.deepEqual(await mirror(env, [{ version: "1", assets: { a: { sha256: "x" } } }], async () => new Response("a")), { copied: [], failed: [] });
 });
+
+test("mirror: a release's attestation bundles land in R2 as attestations.jsonl, once, and only whole (ArcticLampyrid on X)", async () => {
+  const env = { RELEASES: bucket() };
+  const rel = { version: "0.1.3891", assets: { a: { sha256: sha("A") }, b: { sha256: sha("B") } } };
+  const open = async (name) => new Response(name === "a" ? "A" : "B");
+  const asked = [];
+  let missing = sha("B");
+  const attest = async (h) => {
+    asked.push(h);
+    return h === missing ? null : [{ mediaType: "bundle", for: h }];
+  };
+  // one file has none yet: nothing is written, the next run asks again
+  let done = await mirror(env, [rel], open, Date.now, attest);
+  assert.deepEqual(done.failed, ["v0.1.3891/attestations.jsonl"]);
+  assert.equal(env.RELEASES.objs.has("v0.1.3891/attestations.jsonl"), false);
+  missing = "";
+  done = await mirror(env, [rel], open, Date.now, attest);
+  assert.deepEqual(done.copied, ["v0.1.3891/attestations.jsonl"]);
+  const res = await ask(env, "/files/v0.1.3891/attestations.jsonl");
+  assert.equal(res.status, 200);
+  const lines = (await res.text()).trimEnd().split("\n").map((l) => JSON.parse(l));
+  assert.deepEqual(lines.map((l) => l.for).sort(), [sha("A"), sha("B")].sort());
+  // held: it is not asked for again
+  asked.length = 0;
+  await mirror(env, [rel], open, Date.now, attest);
+  assert.deepEqual(asked, []);
+});
+
+test("mirror: a release from before the attestations is not asked for any", async () => {
+  const env = { RELEASES: bucket() };
+  const rel = { version: "0.1.3890", assets: { a: { sha256: sha("A") } } };
+  let asked = 0;
+  await mirror(env, [rel], async () => new Response("A"), Date.now, async () => (asked++, []));
+  assert.equal(asked, 0);
+});

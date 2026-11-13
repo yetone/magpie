@@ -519,7 +519,14 @@ async function keepFiles(ctx, env) {
     const to = a.api && (await located(a.api, env));
     return to ? fetch(to, { headers: UA }) : res;
   };
-  const done = await mirror(env, rels, open);
+  // the attestation bundles GitHub holds for a digest, in R2 beside the files
+  const attest = async (sha256) => {
+    const res = await api(`attestations/sha256:${sha256}`, env);
+    if (!res.ok) return null;
+    const j = await res.json();
+    return (j.attestations || []).map((x) => x.bundle).filter(Boolean);
+  };
+  const done = await mirror(env, rels, open, Date.now, attest);
   if (done.copied.length || done.failed.length) console.log("r2", JSON.stringify(done));
 }
 
