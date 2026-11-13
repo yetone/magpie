@@ -8,12 +8,14 @@ package cli
 // do are the ones an agent gets, and nothing else is started (#3318).
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"os"
@@ -105,6 +107,14 @@ func (g *toolGateway) do(method, path string, body []byte) (*http.Response, erro
 	}
 	r.Header.Set("Authorization", "Bearer "+gateway.Token)
 	r.Header.Set("User-Agent", toolAgent)
+	if body != nil {
+		// the folder it runs in, as `magpie mcp memory` names it: the
+		// memory server's project (--scope project), and no roots/list
+		// asked of it to find one (#6049)
+		if d, err := os.Getwd(); err == nil {
+			r.Header.Set(gateway.MemoryCwdHeader, d)
+		}
+	}
 	res, err := g.client.Do(r)
 	if err != nil {
 		return nil, errNoMagpie{g.base, err}
@@ -122,6 +132,9 @@ func (g *toolGateway) rpc(path, method string, params any) (json.RawMessage, err
 		return nil, err
 	}
 	defer res.Body.Close()
+	if mt, _, _ := mime.ParseMediaType(res.Header.Get("Content-Type")); res.StatusCode == http.StatusOK && mt == "text/event-stream" {
+		return g.readStream(path, res.Body, g.next)
+	}
 	data, err := io.ReadAll(io.LimitReader(res.Body, 512<<20))
 	if err != nil {
 		return nil, fmt.Errorf("the answer from %s was cut off: %w", g.base, err)
@@ -132,12 +145,22 @@ func (g *toolGateway) rpc(path, method string, params any) (json.RawMessage, err
 	case res.StatusCode != http.StatusOK:
 		return nil, fmt.Errorf("the magpie at %s answered %s: %s", g.base, res.Status, strings.TrimSpace(string(data)))
 	}
-	var m struct {
-		Result json.RawMessage `json:"result"`
-		Error  *struct {
-			Message string `json:"message"`
-		} `json:"error"`
-	}
+	return g.answerOf(data)
+}
+
+// rpcMessage is one JSON-RPC message from a server: a response, or a
+// request or notification of its own.
+type rpcMessage struct {
+	ID     json.RawMessage `json:"id"`
+	Method string          `json:"method"`
+	Result json.RawMessage `json:"result"`
+	Error  *struct {
+		Message string `json:"message"`
+	} `json:"error"`
+}
+
+func (g *toolGateway) answerOf(data []byte) (json.RawMessage, error) {
+	var m rpcMessage
 	if err := json.Unmarshal(data, &m); err != nil {
 		return nil, fmt.Errorf("what %s answered isn't JSON-RPC: is it magpie? (%v)", g.base, err)
 	}
@@ -145,6 +168,84 @@ func (g *toolGateway) rpc(path, method string, params any) (json.RawMessage, err
 		return nil, errors.New(m.Error.Message)
 	}
 	return m.Result, nil
+}
+
+// readStream reads a call answered as an event stream (MCP Streamable
+// HTTP): the server may ask the client something first on it, as the
+// memory server asks roots/list, and sends the call's own result after.
+// Each ask is answered at once, so the server doesn't wait on it.
+func (g *toolGateway) readStream(path string, body io.Reader, id int) (json.RawMessage, error) {
+	sc := bufio.NewScanner(io.LimitReader(body, 512<<20))
+	sc.Buffer(make([]byte, 64<<10), 512<<20)
+	var data []byte
+	flush := func() (json.RawMessage, bool, error) {
+		d := bytes.TrimSpace(data)
+		data = nil
+		if len(d) == 0 {
+			return nil, false, nil
+		}
+		var m rpcMessage
+		if err := json.Unmarshal(d, &m); err != nil {
+			return nil, true, fmt.Errorf("what %s answered isn't JSON-RPC: is it magpie? (%v)", g.base, err)
+		}
+		switch {
+		case m.Method != "" && len(m.ID) > 0:
+			g.answerServer(path, m)
+		case m.Method == "" && string(m.ID) == strconv.Itoa(id):
+			r, err := g.answerOf(d)
+			return r, true, err
+		}
+		return nil, false, nil
+	}
+	for sc.Scan() {
+		line := sc.Text()
+		if line == "" {
+			if r, done, err := flush(); done {
+				return r, err
+			}
+			continue
+		}
+		if v, ok := strings.CutPrefix(line, "data:"); ok {
+			if len(data) > 0 {
+				data = append(data, '\n')
+			}
+			data = append(data, strings.TrimPrefix(v, " ")...)
+		}
+	}
+	if r, done, err := flush(); done {
+		return r, err
+	}
+	if err := sc.Err(); err != nil {
+		return nil, fmt.Errorf("the answer from %s was cut off: %w", g.base, err)
+	}
+	return nil, fmt.Errorf("the answer from %s ended before the call's result", g.base)
+}
+
+// answerServer answers what a server asked on a call's stream: roots/list
+// is the folder magpie tool runs in; anything else, which a terminal
+// can't do, is refused.
+func (g *toolGateway) answerServer(path string, ask rpcMessage) {
+	reply := map[string]any{"jsonrpc": "2.0", "id": ask.ID}
+	d, err := os.Getwd()
+	if ask.Method == "roots/list" && err == nil {
+		reply["result"] = map[string]any{"roots": []any{map[string]any{"uri": fileURI(d), "name": filepath.Base(d)}}}
+	} else {
+		reply["error"] = map[string]any{"code": -32601, "message": "magpie tool doesn't answer " + ask.Method}
+	}
+	b, _ := json.Marshal(reply)
+	if res, err := g.do(http.MethodPost, path, b); err == nil {
+		io.Copy(io.Discard, res.Body)
+		res.Body.Close()
+	}
+}
+
+// fileURI is the file:// URI of folder dir: file:///C:/p for C:\p.
+func fileURI(dir string) string {
+	p := filepath.ToSlash(dir)
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	return (&url.URL{Scheme: "file", Path: p}).String()
 }
 
 // fetch is a file the gateway made, at u's path on the gateway asked: a
