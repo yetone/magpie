@@ -1544,7 +1544,20 @@ func piLikeKeyed(at place, id, name, dir string, key func() string) *Agent {
 	if id == "pi" {
 		extension = func() error { return piExtensionSynced(dir, modelsPath, at.v1(), key()) }
 	}
+	// the pi-magpie extension serves provider "magpie" live, so Pi's
+	// models.json block is not written and magpie's own stale one goes
+	// (pimagpie.go)
+	viaExt := func() bool { return id == "pi" && piMagpieInstalled(path) }
 	writeMagpie := func() error {
+		if viaExt() {
+			if err := dropPiBlock(modelsPath, func() string {
+				return wiringOff(name, modelsPath, func(k string) (string, bool) { return edit.GetJSON(modelsPath, "providers."+magpieID+"."+k) },
+					"baseUrl", at.v1(), "apiKey", key())
+			}); err != nil {
+				return err
+			}
+			return extension()
+		}
 		if err := edit.SetJSON(modelsPath, edit.KV{Path: "providers." + magpieID, Value: block()}); err != nil {
 			return err
 		}
@@ -1567,12 +1580,19 @@ func piLikeKeyed(at place, id, name, dir string, key func() string) *Agent {
 			if p, _ := get("defaultProvider"); p != magpieID {
 				return ""
 			}
+			if viaExt() {
+				return ""
+			}
 			return wiringOff(name, modelsPath, func(k string) (string, bool) { return edit.GetJSON(modelsPath, "providers."+magpieID+"."+k) },
 				"baseUrl", at.v1(), "apiKey", key())
 		},
 		ListOnly: true,
 		Sync: func() error {
-			if err := syncJSON(modelsPath, "providers."+magpieID, block); err != nil {
+			if viaExt() {
+				if err := writeMagpie(); err != nil { // drops the stale block
+					return err
+				}
+			} else if err := syncJSON(modelsPath, "providers."+magpieID, block); err != nil {
 				return err
 			}
 			if err := extension(); err != nil {
