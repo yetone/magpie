@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/yetone/magpie/internal/sessions"
 )
@@ -142,5 +143,30 @@ func TestCodexEffortPeriodsKeptApart(t *testing.T) {
 		if n := paired[len(paired)-1]; n >= first[p] {
 			t.Fatalf("%s started again, paired %d of %d: %v", p, n, first[p], paired)
 		}
+	}
+}
+
+// The effort read back from effort-v1.json is kept: its entries share one
+// string for each model and effort name, not a copy each (#2278).
+func TestCodexEffortNamesReadOnce(t *testing.T) {
+	pageHome(t)
+	sums := map[string][]sessions.ModelEffort{
+		"a": {{Model: "gpt-5", Effort: "high"}, {Model: "gpt-5", Effort: "low"}},
+		"b": {{Model: "gpt-5", Effort: "high"}},
+	}
+	if err := effortDiskWrite("k", time.Time{}, time.Time{}, sums); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := effortDiskRead("k")
+	if !ok || len(got["a"]) != 2 || len(got["b"]) != 1 {
+		t.Fatalf("read %v %v", got, ok)
+	}
+	a, b := got["a"][0], got["b"][0]
+	if a.Model != "gpt-5" || a.Effort != "high" {
+		t.Fatalf("read %+v", a)
+	}
+	if unsafe.StringData(a.Model) != unsafe.StringData(b.Model) || unsafe.StringData(a.Effort) != unsafe.StringData(b.Effort) ||
+		unsafe.StringData(a.Model) != unsafe.StringData(got["a"][1].Model) {
+		t.Fatal("each entry has its own copy of a name")
 	}
 }

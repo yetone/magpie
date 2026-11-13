@@ -78,10 +78,30 @@ func effortDiskEntries() []effortDiskEntry {
 func effortDiskRead(key string) (map[string][]sessions.ModelEffort, bool) {
 	for _, e := range effortDiskEntries() {
 		if e.Key == key {
+			internEffortNames(e.Sums)
 			return e.Sums, true
 		}
 	}
 	return nil, false
+}
+
+// internEffortNames makes the sums' model and effort names one string
+// each: the JSON gave every entry its own copy, and the sums are kept, a
+// few names over ~20k entries on a long Codex history (#2278).
+func internEffortNames(sums map[string][]sessions.ModelEffort) {
+	seen := map[string]string{}
+	one := func(s string) string {
+		if k, ok := seen[s]; ok {
+			return k
+		}
+		seen[s] = s
+		return s
+	}
+	for _, list := range sums {
+		for i := range list {
+			list[i].Model, list[i].Effort = one(list[i].Model), one(list[i].Effort)
+		}
+	}
 }
 
 // effortDiskWrite keeps sums under key, in place of the entry of the same
