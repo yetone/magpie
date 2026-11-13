@@ -585,7 +585,7 @@ var ownPrice catalog.Price
 // one whose other models alone would stand for this call's, prices
 // nothing (#4278).
 func Pricer() func(Record) *catalog.Price {
-	prices := map[[5]string]*catalog.Price{}
+	prices := map[[6]string]*catalog.Price{}
 	// each provider's rate windows as the same read of the prices saw
 	// them: the windows are held once (BasePriceIn), each record's rate
 	// read at its own time (provider.RateAt), so a window that opens
@@ -602,7 +602,10 @@ func Pricer() func(Record) *catalog.Price {
 			served = ""
 		}
 		id := r.priceID()
-		k := [5]string{id, r.Model, served, r.SessionProvider, r.Effort}
+		// a key that bills at its own rate (provider.KeyPriceRates) prices
+		// its calls apart from the provider's other keys
+		key := r.ProviderKeyID
+		k := [6]string{id, r.Model, served, r.SessionProvider, r.Effort, key}
 		if pr, ok := prices[k]; ok {
 			return atWindow(pr, windows[id], r.Time)
 		}
@@ -618,15 +621,15 @@ func Pricer() func(Record) *catalog.Price {
 			if v, ok, ws = provider.UserBasePriceIn(s, id, r.Model); !ok {
 				// the model that ran is priced as itself, what the vendor
 				// billed; with none, the asked-for one's price stands
-				if v, ok, ws = provider.BasePriceIn(s, id, served); !ok {
-					v, ok, ws = provider.BasePriceIn(s, id, r.Model)
+				if v, ok, ws = provider.BaseKeyPriceIn(s, id, key, served); !ok {
+					v, ok, ws = provider.BaseKeyPriceIn(s, id, key, r.Model)
 				}
 			}
 		} else {
-			v, ok, ws = provider.BasePriceIn(s, id, r.Model)
+			v, ok, ws = provider.BaseKeyPriceIn(s, id, key, r.Model)
 		}
 		if !ok && served != "" {
-			v, ok, ws = provider.BasePriceIn(s, id, served)
+			v, ok, ws = provider.BaseKeyPriceIn(s, id, key, served)
 		}
 		if ok {
 			pr = &v

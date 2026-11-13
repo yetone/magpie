@@ -687,6 +687,7 @@ func ReplaceKey(id, keyRef, key string) (was, now string, err error) {
 	moveKeyed(p.AccountWindowCaps, keyRef, now)
 	moveKeyed(p.AccountWindowAmounts, keyRef, now)
 	moveKeyed(p.KeyOwnBalances, keyRef, now)
+	moveKeyed(p.KeyPriceRates, keyRef, now)
 	return keyRef, now, Save(*p)
 }
 

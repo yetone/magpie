@@ -7983,7 +7983,7 @@ document.addEventListener("click", (e) => {
 // which opens it: none hides behind a fold
 function advancedSet(d, p) {
   return (d.headers || []).some(([k]) => (k || "").trim()) || !!(d.extraBody || "").trim() || !!(d.replyHeaders || d.passHeaders || "").trim() ||
-    !!d.proxyMode || Object.values(d.accountProxies || {}).some((x) => x?.mode) ||
+    !!d.proxyMode || Object.values(d.accountProxies || {}).some((x) => x?.mode) || Object.values(d.keyPriceRates || {}).some((v) => String(v).trim()) ||
     [d.concurrency, d.maxAccounts, d.queueLimit, d.queueWait, d.maxRPM, d.priceRate, d.contexts, d.outputs, d.compacts].some((v) => String(v ?? "").trim()) ||
     !!d.rateWindows?.length ||
     !!(d.searches || d.authHeader || d.passUserAgent === false || d.unredacted || d.countFree || d.billing || d.pinUpstream || d.nativeCompaction || d.balanceToken || d.limitRestOff || d.noBalanceProbe || d.http1 || d.socket || d.imageFilesOff || d.passErrors || d.clientCert || d.serverCA || d.serverPin || d.resolve) ||
@@ -7996,7 +7996,8 @@ function priceRateError(ed) {
 function concurrencyDraft(p) {
   return { concurrency: p?.maxConcurrency == null ? "" : String(p.maxConcurrency), priceRate: p?.priceRate ? String(p.priceRate) : "",
     queueLimit: p?.queueLimit ? String(p.queueLimit) : "", queueWait: p?.queueWait ? String(p.queueWait) : "",
-    maxRPM: p?.maxRPM ? String(p.maxRPM) : "", maxAccounts: p?.maxAccounts == null ? "" : String(p.maxAccounts) };
+    maxRPM: p?.maxRPM ? String(p.maxRPM) : "", maxAccounts: p?.maxAccounts == null ? "" : String(p.maxAccounts),
+    keyPriceRates: { ...p?.keyPriceRates } };
 }
 // queueOfDraft: { queueLimit, queueWait, maxRPM } as saved, 0 for none, or { bad }
 function queueOfDraft() {
@@ -8097,13 +8098,15 @@ function keyProxyPicker(p) {
 }
 // proxyLines: a line for each account or key, keys folded as keyFold
 // does (@NetRozee on X); a key not drawn keeps its proxy.
-function proxyLines(items, hint, foldKeys) {
+// A key's own price rate draws its lines here too (keyrates.js):
+// lineOf draws one, own says it has a value of its own, cls is the box's.
+function proxyLines(items, hint, foldKeys, { lineOf = proxyLine, own = (it) => !!draft.accountProxies[it.k]?.mode, cls = "acct-proxies" } = {}) {
   if (items.length < 2) return null;
   draft.accountProxies = draft.accountProxies || {};
-  const box = el("div", "acct-proxies");
+  const box = el("div", cls);
   const tail = el("div", "hint", t(hint));
   if (!foldKeys || items.length <= KEYS_FOLD) {
-    for (const it of items) box.append(proxyLine(it));
+    for (const it of items) box.append(lineOf(it));
     box.append(tail);
     return box;
   }
@@ -8113,8 +8116,7 @@ function proxyLines(items, hint, foldKeys) {
     for (const n of [...box.childNodes]) if (n !== tools && n !== tail) n.remove();
     const add = (n) => box.insertBefore(n, tail);
     if (q === null) {
-      const own = (it) => !!draft.accountProxies[it.k]?.mode;
-      for (const it of items.filter((it, i) => i < KEYS_FIRST || own(it)).slice(0, KEYS_PAGE)) add(proxyLine(it));
+      for (const it of items.filter((it, i) => i < KEYS_FIRST || own(it)).slice(0, KEYS_PAGE)) add(lineOf(it));
       const more = el("button", "text acct-proxy-more", t("All {n} keys", { n: items.length }));
       more.type = "button";
       more.onclick = () => { q = ""; openTools(); draw(); tools.querySelector("input").focus(NO_SCROLL); };
@@ -8122,7 +8124,7 @@ function proxyLines(items, hint, foldKeys) {
       return;
     }
     const matched = items.filter((it) => keyMatches(it.info, q));
-    for (const it of matched.slice(0, KEYS_PAGE)) add(proxyLine(it));
+    for (const it of matched.slice(0, KEYS_PAGE)) add(lineOf(it));
     if (!matched.length) add(el("div", "hint acct-proxy-none", t("No key matches")));
     else if (matched.length > KEYS_PAGE) add(el("div", "hint acct-proxy-rest", t("{n} more — type to narrow them down", { n: matched.length - KEYS_PAGE })));
   };
@@ -8199,6 +8201,9 @@ function accountProxiesOfDraft() {
   }
   return { map: out };
 }
+
+// a key's own price rate (@tnt12231 on X), in keyrates.js
+const keyRateField = (p, at = el("span")) => p?.keyList?.length > 1 ? (import("./keyrates.js").then(() => at.replaceWith(...keyPriceRateField(p)), () => {}), [at]) : [];
 
 // headers as ordered [name, value, json?] rows that survive a redraw; headersOf folds them back
 function headerRows(obj) {
@@ -9863,7 +9868,7 @@ function drawEditor(p, presetID) {
   if (perKey) proxies.append(perKey);
   advIn.append(...field(t("Proxy"), proxies));
   advIn.append(...concurrencyField(p));
-  advIn.append(...priceRateField(), ...countFreeField(), ...billingField(), ...rateWindowsField());
+  advIn.append(...priceRateField(), ...keyRateField(p), ...countFreeField(), ...billingField(), ...rateWindowsField());
 
   if (p?.cline || (isNew && pr?.id === "clinepass")) advIn.append(...upstreamField());
 
@@ -10362,6 +10367,7 @@ function drawEditor(p, presetID) {
     Object.assign(body, queue);
     body.priceRate = priceRateOfDraft();
     if (body.priceRate === undefined) return priceRateError(ed);
+    if ((body.keyPriceRates = self.keyPriceRates?.(ed)) === null) return;
     body.rateWindows = self.rateWindowsOfDraft?.();
     if (body.rateWindows === false) return rateWindowsError(ed);
     if (p && priceTypedError(ed)) return;

@@ -2872,11 +2872,19 @@ func priceIn(s settings.Settings, all []Provider, providerID, model string, at t
 // pricing many records holds both and multiplies the rates itself, as
 // the usage ledger's Pricer does, so one read serves every time of day.
 func BasePriceIn(s settings.Settings, providerID, model string) (catalog.Price, bool, []RateWindow) {
+	return BaseKeyPriceIn(s, providerID, "", model)
+}
+
+// BaseKeyPriceIn is BasePriceIn for a call the provider's key keyID sent:
+// at the key's own price rate when it has one (KeyPriceRates, @tnt12231
+// on X), else the provider's. An empty keyID, or one the provider doesn't
+// rate apart, is BasePriceIn.
+func BaseKeyPriceIn(s settings.Settings, providerID, keyID, model string) (catalog.Price, bool, []RateWindow) {
 	p, known := byIDOrWas(providerID)
 	if !known {
 		p = Provider{ID: providerID}
 	}
-	pr, ok := priceOf(s, p, known, model, time.Time{})
+	pr, ok := priceOf(s, p.atKeyRate(keyID), known, model, time.Time{})
 	return pr, ok, p.RateWindows
 }
 
@@ -2918,12 +2926,16 @@ func priceOf(s settings.Settings, p Provider, known bool, model string, at time.
 
 // PriceAt is what a call to model at p costs when made at at, as Usage
 // counts one made then: EffectivePriceAt for p as the caller holds it (a
-// routing group's member), its Peak still set, for the caller to apply
+// routing group's member, at the rate of the key it holds), its Peak still set, for the caller to apply
 // with Price.In and tell whether it did. A model served at no cost there
 // (FreeModel) costs nothing.
 func (p Provider) PriceAt(s settings.Settings, model string, at time.Time) (catalog.Price, bool) {
 	if p.FreeModel(model) {
 		return catalog.Price{}, true
+	}
+	// a key that bills at its own rate (KeyPriceRates) is priced at it
+	if p.Account == nil && p.Key != "" {
+		p = p.atKeyRate(keyID(p.Key))
 	}
 	return priceOf(s, p, true, model, at)
 }

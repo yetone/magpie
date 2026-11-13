@@ -3573,6 +3573,13 @@ body:not(.side-nav) #addSheet > .row-head.stuck::before { box-shadow: 0 1px 0 va
 .editor .plugin-option .segs { flex: none; }
 .editor .acct-proxy .who { font-size: 12px; font-weight: 500; color: var(--fg-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .editor .acct-proxies > .hint { margin-top: 0; }
+/* a key's own price rate (@tnt12231 on X): its name, then the rate */
+.editor .key-rates { display: grid; gap: 8px; margin-top: 4px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+.editor .key-rates > .hint { margin-top: 0; }
+.editor .key-rates > .acct-proxy-more { justify-self: start; }
+.editor .key-rate { display: grid; grid-template-columns: minmax(0, 1fr) 96px; align-items: center; gap: 8px; min-width: 0; }
+.editor .key-rate .who { font-size: 12px; font-weight: 500; color: var(--fg-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.editor .key-rate input { min-width: 0; width: 100%; }
 /* past eight keys their lines fold behind All N keys, opened with a filter */
 .editor .acct-proxy-tools { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .editor .acct-proxy-tools .acct-proxy-filter { flex: 1 1 auto; min-width: 0; }

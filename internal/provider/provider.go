@@ -592,6 +592,11 @@ type Provider struct {
 	// key's card shows it less what magpie priced its calls at since
 	// (see key_balance_own.go).
 	KeyOwnBalances map[string]OwnBalance `json:"keyOwnBalances,omitempty"`
+	// KeyPriceRates is, for a provider of API keys, the price rate of each
+	// key that bills at its own (@tnt12231 on X: one relay, keys in groups
+	// at 0.5× and 1.2×), by its KeyID. A key not in it bills at PriceRate
+	// (see key_rate.go).
+	KeyPriceRates map[string]float64 `json:"keyPriceRates,omitempty"`
 
 	// BalanceURL, when set, is where the vendor tells what is left on a
 	// key, asked with the key the way a chat request carries it; BalancePath
@@ -999,6 +1004,7 @@ func (p Provider) clone() Provider {
 	p.AccountNames = maps.Clone(p.AccountNames)
 	p.KeySpendCaps = maps.Clone(p.KeySpendCaps)
 	p.KeyOwnBalances = maps.Clone(p.KeyOwnBalances)
+	p.KeyPriceRates = maps.Clone(p.KeyPriceRates)
 	if p.AccountWindowCaps != nil {
 		m := make(map[string]map[string]int, len(p.AccountWindowCaps))
 		for k, v := range p.AccountWindowCaps {
@@ -1863,6 +1869,7 @@ func normalize(p Provider) Provider {
 	p.AccountNames = normalAccountNames(p.AccountNames)
 	p.KeySpendCaps = normalKeySpendCaps(p.KeySpendCaps)
 	p.KeyOwnBalances = normalKeyOwnBalances(p.KeyOwnBalances)
+	p.KeyPriceRates = normalKeyPriceRates(p.KeyPriceRates)
 	if len(p.Models) > 0 {
 		p.NoModels = false // a pick is no longer Select none
 	}
