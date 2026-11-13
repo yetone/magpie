@@ -1180,6 +1180,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	devRoutes(mux)
 	pluginPageRoutes(mux, isWeb(w))
 	feedbackRoutes(mux)
+	appearanceRoutes(mux)
 	// boot.js hands the page the saved language and theme before it paints:
 	// they came only with the settings, so the tabs showed English first
 	mux.HandleFunc("GET /boot.js", func(rw http.ResponseWriter, r *http.Request) {
@@ -1266,10 +1267,19 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		if th, ok := omarchyTheme(); ok {
 			boot["omarchy"] = th
 		}
+		// and the accent and wallpaper of the user's own (appearance.go),
+		// drawn before the first paint
+		boot["look"] = lookKey(s)
 		b, _ := json.Marshal(boot)
 		rw.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 		rw.Header().Set("Cache-Control", "no-store")
-		rw.Write(append(append([]byte("window.bootPrefs = "), b...), ";\n"...))
+		out := append(append([]byte("window.bootPrefs = "), b...), ";\n"...)
+		if css := lookCSS(s); css != "" {
+			c, _ := json.Marshal(css)
+			out = append(out, `(function(){var e=document.createElement("style");e.id="lookCSS";e.textContent=`...)
+			out = append(append(out, c...), ";document.head.appendChild(e)})();\n"...)
+		}
+		rw.Write(out)
 	})
 	// the Omarchy theme as it is now, asked again every few seconds so a
 	// theme picked in Omarchy's menu reaches the page at once; null off Omarchy

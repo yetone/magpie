@@ -75,9 +75,17 @@ type Settings struct {
 	// NoBird keeps magpie's bird off the loading skeletons and the
 	// Plugins page's README, for a small server where its watch for them
 	// is work enough to matter (Yayoi_no_yume on X). Off means shown.
-	NoBird bool   `json:"noBird,omitempty"`
-	Lang   string `json:"lang,omitempty"` // system | en | zh
-	Tray   string `json:"tray,omitempty"` // what clicking the tray icon opens: panel | window
+	NoBird bool `json:"noBird,omitempty"`
+	// Accent is the colour picked for magpie's buttons, links and
+	// selection, as #rrggbb; "" keeps magpie's own (CHENGJIAHEGOXIS on
+	// X). Each theme draws it as dark or light as its text needs.
+	Accent string `json:"accent,omitempty"`
+	// Wallpaper is when the picture behind the window's pages was saved,
+	// in Unix milliseconds, 0 for none. The picture itself is the file
+	// WallpaperPath, set and removed on its own route.
+	Wallpaper int64  `json:"wallpaper,omitempty"`
+	Lang      string `json:"lang,omitempty"` // system | en | zh
+	Tray      string `json:"tray,omitempty"` // what clicking the tray icon opens: panel | window
 	// PanelShortcut is the key combination that opens the tray's quick
 	// panel from any app (ben hanks on Discord), as Wails names it
 	// ("Cmd+Shift+M"); "" is none, the default, so nothing clashes until
@@ -1505,6 +1513,13 @@ var DefaultTextSize = func() int {
 	return 100
 }
 
+// validAccent is an Accent other than magpie's own: a colour as #rrggbb.
+var validAccent = capre.MustCompile(`^#[0-9A-Fa-f]{6}$`, 7)
+
+// WallpaperPath is the picture behind the window's pages, as it was
+// chosen, in magpie's folder.
+func WallpaperPath() string { return appdir.Join(Dir(), "wallpaper") }
+
 var validTerminalBundleID = capre.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.-]*$`, 255)
 
 // providerID is how a provider's id is spelled: lower-case letters, digits
@@ -2425,6 +2440,9 @@ func saveOwn(s Settings, recording, reads bool) error {
 	s = s.settleDock().normal()
 	if !slices.Contains(Themes, s.Theme) {
 		return fmt.Errorf("theme must be one of %v, not %q", Themes, s.Theme)
+	}
+	if s.Accent != "" && !validAccent.MatchString(s.Accent) {
+		return fmt.Errorf("accent must be a colour as #rrggbb, not %q", s.Accent)
 	}
 	if !slices.Contains(Langs, s.Lang) {
 		return fmt.Errorf("language must be one of %v, not %q", Langs, s.Lang)

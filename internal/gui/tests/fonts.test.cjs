@@ -236,6 +236,12 @@ for (const [engine, runtime] of engines) {
     const browser = await runtime.launch();
     try {
       const { page, errors } = await open(browser, "zh", { viewport: { width: 560, height: 620 } });
+      // the reader scrolls the row well into the short window, as Playwright's
+      // click would otherwise scroll it in itself, by a pixel, and that is no reader's
+      await page.mouse.move(280, 300);
+      await page.mouse.wheel(0, 200);
+      await page.waitForFunction(() => document.querySelector("#view-settings").scrollTop > 0);
+      await page.waitForFunction(() => new Promise(r => { const v = document.querySelector("#view-settings"), a = v.scrollTop; setTimeout(() => r(v.scrollTop === a), 150); }));
       const top = await page.locator("#view-settings").evaluate(e => e.scrollTop);
       await page.locator("#uiFontRow .font-family").click();
       const menu = page.locator(".font-menu");

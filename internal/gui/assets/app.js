@@ -19564,6 +19564,9 @@ function applyPrefs(s, rate) {
     // tooltip says which mode it was drawn in
     for (const b of document.querySelectorAll(".quota-curve:not(.balance-curve)")) b.title = quotaCurveTitle();
   }
+  // an accent or picture of the user's own (appearance.go), when not the one drawn
+  const look = (s.accent || "") + "," + (s.wallpaper || "");
+  if (look !== (applyPrefs.look ??= window.bootPrefs?.look ?? ",")) applyPrefs.look = look, import("./appearance.js").then(() => lookPaint(), () => {});
   applyPrefs.ready = true;
   // accounts hidden while personal data is masked, until chosen otherwise
   window.hideAccounts?.follow(!!s.redactPersonal);
@@ -20047,12 +20050,7 @@ function renderSettings() {
   prefsBase = keep;
   renderFonts(s);
   $("#themeSegs").replaceChildren(segs(THEMES.map(([id, name]) => [id, t(name)]), s.theme, (theme) => savePrefs({ ...keep, theme })));
-  $("#colorblindSegs").title = t("Colorblind-safe chart colors, and each allowance window's line in a dash of its own");
-  $("#colorblindSegs").replaceChildren(segsOO(s.colorblind, (v) => savePrefs({ ...keep, colorblind: v })));
-  $("#reduceMotionSegs").title = t("Animations stand still, as with the system's Reduce Motion, so magpie keeps the computer less busy");
-  $("#reduceMotionSegs").replaceChildren(segsOO(s.reduceMotion, (v) => savePrefs({ ...keep, reduceMotion: v })));
-  $("#birdSegs").title = t("magpie's bird hops on what is still loading; Off keeps it away, and magpie stops looking for it");
-  $("#birdSegs").replaceChildren(segsOO(!s.noBird, (v) => savePrefs({ ...keep, noBird: !v })));
+  window.drawLook ? drawLook(s, keep) : import("./appearance.js").then(() => drawLook(s, keep), () => {});
   renderLangPick(s, keep);
   renderGatewayMode(s);
   window.renderNavPages ? renderNavPages() : import("./navpages.js").then(() => renderNavPages(), () => {});
@@ -22834,7 +22832,7 @@ function dockChoice(s) {
 
 // prefsKeep is what the settings page sends of s, all of it each time.
 function prefsKeep(s) {
-  return { theme: s.theme, colorblind: !!s.colorblind, reduceMotion: !!s.reduceMotion, noBird: !!s.noBird, lang: s.lang, tray: s.tray, dock: !!s.dock, dockWindow: !!s.dockWindow, dockNever: !!s.dockNever, lightweight: s.lightweight, keepAwake: !!s.keepAwake, keepAwakeDisplay: !!s.keepAwakeDisplay, noWSLAgents: !!s.noWSLAgents, quitNoAsk: !!s.quitNoAsk, restoreOnQuit: !!s.restoreOnQuit, proxy: s.proxy || "", pluginProxy: s.pluginProxy || "", updateProxy: s.updateProxy || "", updateSource: s.updateSource || "",
+  return { theme: s.theme, accent: s.accent || "", colorblind: !!s.colorblind, reduceMotion: !!s.reduceMotion, noBird: !!s.noBird, lang: s.lang, tray: s.tray, dock: !!s.dock, dockWindow: !!s.dockWindow, dockNever: !!s.dockNever, lightweight: s.lightweight, keepAwake: !!s.keepAwake, keepAwakeDisplay: !!s.keepAwakeDisplay, noWSLAgents: !!s.noWSLAgents, quitNoAsk: !!s.quitNoAsk, restoreOnQuit: !!s.restoreOnQuit, proxy: s.proxy || "", pluginProxy: s.pluginProxy || "", updateProxy: s.updateProxy || "", updateSource: s.updateSource || "",
     sessionTerminal: s.sessionTerminal || "",
     uiFont: s.uiFont || null, codeFont: s.codeFont || null,
     otel: s.otel || {},

@@ -231,6 +231,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 	was.RouterAllTools = true                         // the Library's servers/hub-tools
 	was.BusyLoad = 150                                // the Routing page's busy-load
 	was.MTLS = true                                   // Network and sharing's settings/mtls
+	was.Wallpaper = 1700000000000                     // Settings > General's Background image, appearance/wallpaper
 	was.HTTPS = true                                  // Network and sharing's settings/https
 	// Settings > Usage's Bark row has its own route (settings/bark)
 	was.BarkServer, was.BarkKey, was.BarkDaily = "https://bark.example.com", "kept", "21:30"

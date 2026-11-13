@@ -28,7 +28,7 @@ import (
 // written.
 var Keys = []string{
 	// Appearance
-	"theme", "colorblind", "reduceMotion", "noBird", "lang", "uiFont", "codeFont",
+	"theme", "accent", "colorblind", "reduceMotion", "noBird", "lang", "uiFont", "codeFont",
 	// the tray, the Dock and this computer
 	"tray", "dock", "dockWindow", "dockNever", "lightweight", "keepAwake", "keepAwakeDisplay",
 	"noWSLAgents", "sessionTerminal", "signInLinkOnly", "quitNoAsk", "restoreOnQuit",
@@ -234,6 +234,10 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	if _, sent := fields["reduceMotion"]; !sent {
 		in.ReduceMotion = cur.ReduceMotion
 	}
+	// nor the accent colour, which pages before it never sent
+	if _, sent := fields["accent"]; !sent {
+		in.Accent = cur.Accent
+	}
 	// nor whether the loading bird is kept off
 	if _, sent := fields["noBird"]; !sent {
 		in.NoBird = cur.NoBird
@@ -287,6 +291,7 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	in.PluginOptions = cur.PluginOptions     // set on its own (plugin-option)
 	in.CheckinOff = cur.CheckinOff           // set on its own (checkin-account)
 	settings.CarryPerModel(&in, &cur)
+	in.Wallpaper = cur.Wallpaper // set on its own (appearance/wallpaper)
 	in.LAN, in.LANKey = cur.LAN, cur.LANKey
 	in.LANKeyID = cur.LANKeyID
 	// Bark has its own route (bark); the page never sees its key
