@@ -196,6 +196,7 @@ func sourceDigestsSave() {
 
 // writeFileRenamed writes b to p through a temp file renamed over it.
 func writeFileRenamed(p string, b []byte) {
+	saveAsks() // the asks its rows were made of first (catalogBase)
 	dir := filepath.Dir(p)
 	if os.MkdirAll(dir, 0o700) != nil {
 		return

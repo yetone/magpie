@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 
@@ -829,12 +830,23 @@ func Reset() {
 	loaded = false
 	built = nil
 	gen++
+	resets.Add(1)
 	mdev, images, windows, outputs, efforts, thinks, names, listed, canonical, labs, normal = nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
 	loadMu.Unlock()
 	if Forget != nil {
 		Forget()
 	}
 }
+
+// resets counts Reset's calls: a catalog read again because it may have
+// changed, not one let go of while idle.
+var resets atomic.Int64
+
+// Resets is how many times the catalog was forgotten for one that may
+// differ (Reset). What was asked of the catalog before may be answered
+// otherwise after, though the file's key (CacheKey) is the same: Sync
+// writes the file first and resets after.
+func Resets() int64 { return resets.Load() }
 
 // Sync downloads the models.dev catalog into CachePath. It serializes with
 // itself so a background refresh and a manual one cannot interleave writes.

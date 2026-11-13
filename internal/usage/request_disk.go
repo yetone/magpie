@@ -92,13 +92,13 @@ func sourceKey(src embed.FS, salt string) string {
 // and read back through: TestRequestDiskNamesTheCodeOfItsRows finds them
 // from its roots, and fails when one is missing or another isn't one.
 //
-//go:embed block_price.go client_agents.go codex_actors.go codex_identity.go gateway_alias.go ledger.go request_disk.go request_disk_map_other.go request_disk_map_unix.go request_page.go request_snapshot.go request_spill.go served.go session_provider.go usage.go
+//go:embed block_price.go catalog_asks.go client_agents.go codex_actors.go codex_identity.go gateway_alias.go ledger.go request_disk.go request_disk_map_other.go request_disk_map_unix.go request_page.go request_snapshot.go request_spill.go served.go session_provider.go usage.go
 var rowSource embed.FS
 
 // logSource is the files a log is read into blocks, kept and read back
 // through, found as rowSource's are.
 //
-//go:embed block_price.go client_agents.go codex_actors.go codex_identity.go ledger.go log_change_darwin.go log_change_linux.go log_change_other.go log_change_windows.go log_disk.go log_file.go log_file_other.go log_index.go probes.go refset.go request_cells.go request_disk.go request_disk_map_other.go request_disk_map_unix.go request_page.go request_snapshot.go served.go usage.go
+//go:embed block_price.go catalog_asks.go client_agents.go codex_actors.go codex_identity.go ledger.go log_change_darwin.go log_change_linux.go log_change_other.go log_change_windows.go log_disk.go log_file.go log_file_other.go log_index.go probes.go refset.go request_cells.go request_disk.go request_disk_map_other.go request_disk_map_unix.go request_page.go request_snapshot.go served.go usage.go
 var logSource embed.FS
 
 // requestDiskLeast is how many session files must want reading before the
@@ -400,6 +400,7 @@ func (idx *requestIndex) fromDisk(want map[string]sessions.CallSource) {
 // toDisk writes chunks, and the entries of the file before it for the
 // paths in on that chunks doesn't hold, as the file for root and meta.
 func toDisk(root, meta string, chunks map[string]*rowChunk, on map[string]bool) error {
+	saveAsks() // the asks its rows were made of first (catalogBase)
 	path, binary := requestDiskPath(), requestDiskBinary()
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err

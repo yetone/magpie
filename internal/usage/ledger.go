@@ -609,48 +609,11 @@ func Pricer() func(Record) *catalog.Price {
 		if pr, ok := prices[k]; ok {
 			return atWindow(pr, windows[id], r.Time)
 		}
-		var pr *catalog.Price
-		var v catalog.Price
-		var ws []provider.RateWindow
-		var ok bool
-		// the swap the ledger marks: the reply named another model than
-		// asked, no rename of it (#5340)
-		if servedInstead(wires, id, r.Model, r.Effort, served) {
-			// a price the user set for the model asked for still says what
-			// that model costs them, a zero included
-			if v, ok, ws = provider.UserBasePriceIn(s, id, r.Model); !ok {
-				// the model that ran is priced as itself, what the vendor
-				// billed; with none, the asked-for one's price stands
-				if v, ok, ws = provider.BaseKeyPriceIn(s, id, key, served); !ok {
-					v, ok, ws = provider.BaseKeyPriceIn(s, id, key, r.Model)
-				}
-			}
-		} else {
-			v, ok, ws = provider.BaseKeyPriceIn(s, id, key, r.Model)
-		}
-		if !ok && served != "" {
-			v, ok, ws = provider.BaseKeyPriceIn(s, id, key, served)
-		}
-		if ok {
-			pr = &v
+		a := priceAsk{ID: id, Model: r.Model, Served: served, SessionProvider: r.SessionProvider, Effort: r.Effort, Key: key, Unknown: r.Provider == UnknownProvider}
+		pr, ws := basePriceIn(s, wires, a)
+		noteAsk(a.ask(), priceAnswer(pr, ws))
+		if pr != nil {
 			windows[id] = ws
-		} else if r.Provider == UnknownProvider && r.SessionProvider != "" {
-			// A session file's usage entry names the provider the call went
-			// through (omp's model_usage: provider openrouter, model
-			// typesafe/jev-1.14, #4278), which its billing provider, the
-			// unknown one, never says. The name is the file's word for the
-			// route, not an account of ours, so it prices only what the
-			// catalog itself lists under it: this very model id, at that
-			// provider, at a price. A provider models.dev doesn't know, a
-			// model it lists that provider without, and a listing with no
-			// price are none: the row stays unpriced, its CSV cost empty,
-			// rather than priced at another entry's guess.
-			if v, ok := catalog.PriceOf(r.SessionProvider, r.Model); ok {
-				pr = &v
-				// the failed lookup's windows are the billing provider's,
-				// not the session provider's: none holds for this price
-				ws = nil
-			}
 		}
 		if pr == nil {
 			catalog.Missing() // models.dev may list it by now
@@ -658,6 +621,62 @@ func Pricer() func(Record) *catalog.Price {
 		prices[k] = pr
 		return atWindow(pr, ws, r.Time)
 	}
+}
+
+// priceAsk is what Pricer prices a record by, less its time: the base
+// price and rate windows answer it, and every record that asks the same
+// is priced the same.
+type priceAsk struct {
+	ID, Model, Served, SessionProvider, Effort, Key string
+	Unknown                                         bool
+}
+
+// basePriceIn is a's price before its time's rate window, and the
+// provider's windows, as Pricer finds it: nil when none is known.
+func basePriceIn(s settings.Settings, wires map[string]string, a priceAsk) (*catalog.Price, []provider.RateWindow) {
+	var pr *catalog.Price
+	var v catalog.Price
+	var ws []provider.RateWindow
+	var ok bool
+	// the swap the ledger marks: the reply named another model than
+	// asked, no rename of it (#5340)
+	if servedInstead(wires, a.ID, a.Model, a.Effort, a.Served) {
+		// a price the user set for the model asked for still says what
+		// that model costs them, a zero included
+		if v, ok, ws = provider.UserBasePriceIn(s, a.ID, a.Model); !ok {
+			// the model that ran is priced as itself, what the vendor
+			// billed; with none, the asked-for one's price stands
+			if v, ok, ws = provider.BaseKeyPriceIn(s, a.ID, a.Key, a.Served); !ok {
+				v, ok, ws = provider.BaseKeyPriceIn(s, a.ID, a.Key, a.Model)
+			}
+		}
+	} else {
+		v, ok, ws = provider.BaseKeyPriceIn(s, a.ID, a.Key, a.Model)
+	}
+	if !ok && a.Served != "" {
+		v, ok, ws = provider.BaseKeyPriceIn(s, a.ID, a.Key, a.Served)
+	}
+	if ok {
+		pr = &v
+	} else if a.Unknown && a.SessionProvider != "" {
+		// A session file's usage entry names the provider the call went
+		// through (omp's model_usage: provider openrouter, model
+		// typesafe/jev-1.14, #4278), which its billing provider, the
+		// unknown one, never says. The name is the file's word for the
+		// route, not an account of ours, so it prices only what the
+		// catalog itself lists under it: this very model id, at that
+		// provider, at a price. A provider models.dev doesn't know, a
+		// model it lists that provider without, and a listing with no
+		// price are none: the row stays unpriced, its CSV cost empty,
+		// rather than priced at another entry's guess.
+		if v, ok := catalog.PriceOf(a.SessionProvider, a.Model); ok {
+			pr = &v
+			// the failed lookup's windows are the billing provider's,
+			// not the session provider's: none holds for this price
+			ws = nil
+		}
+	}
+	return pr, ws
 }
 
 // servedInstead reports whether the vendor answered a call on model with

@@ -129,6 +129,14 @@ func ListedAs(prov, model, served string) bool {
 	if prov == "" || model == "" || served == "" {
 		return false
 	}
+	ok := listedAsNow(prov, model, served)
+	// a provider's list can come of the catalog: the request index's
+	// rows hold the answer (catalogBase)
+	noteAsk(listedAsk(prov, model, served), boolAnswer(ok))
+	return ok
+}
+
+func listedAsNow(prov, model, served string) bool {
 	n := listedNames(prov)[model]
 	return n != "" && n != model && SameSpelled(n, served)
 }

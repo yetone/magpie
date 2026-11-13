@@ -107,6 +107,7 @@ func internEffortNames(sums map[string][]sessions.ModelEffort) {
 // effortDiskWrite keeps sums under key, in place of the entry of the same
 // since, through a file renamed over the last.
 func effortDiskWrite(key string, cut, since time.Time, sums map[string][]sessions.ModelEffort) error {
+	saveAsks() // the asks its rows were made of first (catalogBase)
 	all := []effortDiskEntry{{Key: key, Cut: cut, Since: since, Sums: sums}}
 	for _, o := range effortDiskEntries() {
 		if o.Key != key && !o.Since.Equal(since) && len(all) < effortDiskPeriods {

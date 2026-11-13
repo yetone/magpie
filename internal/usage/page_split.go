@@ -391,6 +391,7 @@ func pageDiskPart(e pageDiskEntry) *chunkPart {
 // pageDiskWrite keeps part, a page's cells before cut from since, under
 // key with the pages written last, through a file renamed over the last.
 func pageDiskWrite(key string, cut, since time.Time, part *chunkPart) error {
+	saveAsks() // the asks its rows were made of first (catalogBase)
 	e := pageDiskEntry{Key: key, Cut: cut, Since: since, At: time.Now(), Kept: part.kept, First: part.first, Cells: make([]pageDiskCell, len(part.cells)), Speeds: part.speeds, Big: part.big}
 	for i := range part.cells {
 		c := &part.cells[i]
