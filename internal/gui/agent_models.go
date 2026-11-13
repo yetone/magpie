@@ -61,6 +61,10 @@ type agentModelJSON struct {
 	// Own: one of Codex's own, a ChatGPT account's, which Codex lists
 	// ahead of magpie's until the user puts them in an order (#855)
 	Own bool `json:"own,omitempty"`
+	// Kept: the agent's visibility (magpie visible) keeps it out of its
+	// lists, so it is off; ticked, the list sends it as widen, and its
+	// provider or group is listed (whysugarsweet on X)
+	Kept bool `json:"kept,omitempty"`
 }
 
 // takesCatalog reports whether an agent picks among magpie's catalog: some
@@ -198,13 +202,19 @@ func usedBy(a *agent.Agent, vals map[string]string, e provider.Entry) bool {
 
 func agentModelList(a *agent.Agent) []agentModelJSON {
 	id := a.ListsFor()
-	listed, _ := provider.ListedFor(id)
+	listed, kept := provider.ListedFor(id)
 	off := provider.ModelOff(id)
 	vals := a.Values()
 	out := []agentModelJSON{}
-	for _, e := range listed {
+	// the ones its visibility keeps after the rest, off, so a provider
+	// added after the agent was narrowed is still in its list to tick
+	n := len(listed)
+	for i, e := range append(listed, kept...) {
 		m := agentModelJSON{ID: e.ID, Name: e.Name, Group: e.Provider.Name, Icon: e.Provider.Icon, Context: e.Context,
 			Hidden: off(e.ID), InUse: usedBy(a, vals, e), Own: id == "codex" && provider.CodexOwn(e)}
+		if i >= n {
+			m.Hidden, m.Kept = true, true
+		}
 		if m.Name == "" {
 			m.Name = e.Model
 		}
@@ -284,6 +294,9 @@ func agentModelsAPI(mux *http.ServeMux) {
 			Only   *bool
 			// OwnHidden, sent as ownHidden
 			OwnHidden *bool
+			// Widen: models its visibility keeps that were ticked, whose
+			// providers or groups it is shown from now on
+			Widen []string
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			fail(rw, err)
@@ -323,8 +336,18 @@ func agentModelsAPI(mux *http.ServeMux) {
 			answer()
 			return
 		}
+		if err := provider.Widen(id, in.Widen); err != nil {
+			fail(rw, err)
+			return
+		}
 		used := map[string]bool{}
-		listed := agentModelList(a)
+		// what the visibility still keeps is neither picked nor taken out:
+		// it isn't listed
+		keptID := map[string]bool{}
+		listed := slices.DeleteFunc(agentModelList(a), func(m agentModelJSON) bool {
+			keptID[m.ID] = m.Kept
+			return m.Kept
+		})
 		for _, m := range listed {
 			used[m.ID] = m.InUse
 		}
@@ -369,7 +392,7 @@ func agentModelsAPI(mux *http.ServeMux) {
 		} else {
 			hidden = in.Hidden
 		}
-		hidden = slices.DeleteFunc(slices.Clone(hidden), func(s string) bool { return used[s] })
+		hidden = slices.DeleteFunc(slices.Clone(hidden), func(s string) bool { return used[s] || keptID[s] })
 		if err := provider.SetHiddenModels(id, hidden); err != nil {
 			fail(rw, err)
 			return

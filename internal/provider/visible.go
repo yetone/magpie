@@ -264,6 +264,55 @@ func sortedIDs(ids []string) []string {
 	return keep
 }
 
+// Widen lets agent's visibility give it these entries, of those it keeps
+// now (whysugarsweet on X: Claude Desktop narrowed to five providers, set
+// from the terminal, never listed OpenCode Go added later, and the Agents
+// page's list had no way to it): each one's provider, or its group, is
+// added to the names the agent is narrowed to, so the provider's other
+// models are listed too, for its list to show or not. When nothing is
+// kept after, the agent is narrowed no more. An id not kept is passed by.
+func Widen(agent string, ids []string) error {
+	agent = strings.ToLower(strings.TrimSpace(agent))
+	if agent == "" {
+		return errors.New("no agent")
+	}
+	names, narrowed := VisibleTo(agent)
+	if !narrowed || len(ids) == 0 {
+		return nil
+	}
+	_, kept := ListedFor(agent)
+	added := false
+	for _, e := range kept {
+		if !slices.Contains(ids, e.ID) {
+			continue
+		}
+		n := e.Provider.ID
+		if e.Group != "" {
+			n = e.Group
+		}
+		if !slices.ContainsFunc(names, func(v string) bool { return strings.EqualFold(v, n) }) {
+			names, added = append(names, n), true
+		}
+	}
+	if !added {
+		return nil
+	}
+	s := settings.Load()
+	if slices.ContainsFunc(kept, func(e Entry) bool { return !Shows(names, e) }) {
+		if s.Visible == nil {
+			s.Visible = map[string][]string{}
+		}
+		s.Visible[agent] = names
+	} else {
+		delete(s.Visible, agent)
+	}
+	if err := settings.Save(s); err != nil {
+		return err
+	}
+	catalog.Touched()
+	return nil
+}
+
 // SetHiddenModels takes these entries out of agent's lists, and puts back
 // every other; none shows it every model its visibility gives it. The
 // agents that keep the models in files of their own are told.

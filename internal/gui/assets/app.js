@@ -3510,6 +3510,13 @@ async function openAgentModels(a, anchor, ev) {
   const me = agentModels = { a, anchor, box, saving: Promise.resolve(), changed: false };
   const save = () => {
     me.changed = true;
+    // one its visibility kept, ticked, has the agent shown its provider
+    // (or its group): the provider's others are listed from then on, off
+    // until ticked (whysugarsweet on X)
+    const widen = models.filter((m) => m.kept && !m.hidden).map((m) => m.id);
+    for (const w of models.filter((m) => m.kept && !m.hidden)) {
+      for (const m of models) if (m.kept && (m === w || w.group !== ROUTING_GROUPS && m.group === w.group)) m.kept = false;
+    }
     const hidden = models.filter((m) => m.hidden).map((m) => m.id);
     me.hidden = new Set(hidden);
     // by whose they are, as the state counts them, for a connected row's chips
@@ -3521,7 +3528,9 @@ async function openAgentModels(a, anchor, ev) {
       g.n++;
     }
     const names = models.filter((m) => !m.hidden).slice(0, 3).map((m) => m.name);
-    const count = { shown: models.length - hidden.length, listed: models.length, by, names };
+    const listed = models.filter((m) => !m.kept).length;
+    // a kept one is off and not listed: it counts in neither
+    const count = { shown: models.length - hidden.length, listed, by, names };
     me.count = a.models = count;
     // the line under the name counts them, a menu's button names them; an
     // opened row is drawn again
@@ -3535,7 +3544,13 @@ async function openAgentModels(a, anchor, ev) {
     // shown only its picks, the ones ticked are what is sent: a model that
     // came since the list was opened isn't among them, so it stays off
     const body = only ? { shown: models.filter((m) => !m.hidden).map((m) => m.id) } : { hidden };
+    if (widen.length) body.widen = widen;
     me.saving = me.saving.then(() => api("agent-models/" + encodeURIComponent(a.id), body))
+      .then((r) => {
+        if (!widen.length || !r?.models) return;
+        const still = new Map(r.models.map((m) => [m.id, !!m.kept]));
+        for (const m of models) if (still.has(m.id)) m.kept = still.get(m.id);
+      })
       .catch(statusErr);
   };
   onlySw.onclick = (e) => {
