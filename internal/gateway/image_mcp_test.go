@@ -530,3 +530,27 @@ func TestImageMCPIsServed(t *testing.T) {
 		t.Fatalf("apis: %d %s", w.Code, w.Body.String())
 	}
 }
+
+// an SVG a vendor drew is served so that a browser opening its link runs
+// nothing in it: the gateway's origin is one a local page reaches without
+// a key, so script there could spend the user's subscriptions
+func TestImageMCPSVGRunsNothing(t *testing.T) {
+	s, _ := easeled(t)
+	h := lanGuard(s.Handler())
+	svg := []byte(`<svg xmlns="http://www.w3.org/2000/svg"><script>fetch("/v1/models")</script></svg>`)
+	s.imageStore.mu.Lock()
+	if s.imageStore.files == nil {
+		s.imageStore.files = map[string]*imageFile{}
+	}
+	s.imageStore.files["a.svg"] = &imageFile{mime: "image/svg+xml", mem: svg, size: len(svg), made: time.Now()}
+	s.imageStore.files["a.png"] = &imageFile{mime: "image/png", mem: pngBytes, size: len(pngBytes), made: time.Now()}
+	s.imageStore.mu.Unlock()
+	w := imageGet(h, "127.0.0.1:5000", "http://127.0.0.1:3425"+ImageMCPFiles+"a.svg")
+	csp := w.Header().Get("Content-Security-Policy")
+	if w.Code != 200 || w.Body.String() != string(svg) || !strings.Contains(csp, "default-src 'none'") || !strings.Contains(csp, "sandbox") || strings.Contains(csp, "script-src") {
+		t.Fatalf("svg: %d %v", w.Code, w.Header())
+	}
+	if w := imageGet(h, "127.0.0.1:5000", "http://127.0.0.1:3425"+ImageMCPFiles+"a.png"); w.Code != 200 || w.Header().Get("Content-Security-Policy") != "" {
+		t.Fatalf("png: %d %v", w.Code, w.Header())
+	}
+}

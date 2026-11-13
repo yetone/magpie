@@ -803,6 +803,12 @@ func (s *Server) imageMCPFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", f.mime)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "private, max-age=3600")
+	if strings.HasPrefix(f.mime, "image/svg") {
+		// a vendor's SVG opened on its own runs nothing: script in it
+		// would be on the gateway's own origin, which a local page may
+		// ask without a key (as the GUI's SVG icons are served)
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")
+	}
 	// ranges, which a player asks a video in (Safari only plays an MP4
 	// served so)
 	if f.path == "" {
