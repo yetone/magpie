@@ -401,6 +401,8 @@ type AgentView struct {
 	ProjectSkills string `json:"projectSkills,omitempty"`
 	// ProjectMCP is the file, in a project, it reads MCP servers from
 	ProjectMCP string `json:"projectMCP,omitempty"`
+	// ProjectSubagents is the folder in a project it reads subagents from
+	ProjectSubagents string `json:"projectSubagents,omitempty"`
 	// ProjectNoSSE: its project file can't take a server over SSE
 	ProjectNoSSE bool `json:"projectNoSSE,omitempty"`
 	// ProjectOff and ProjectSkillOff: a server, or a skill, it has from
@@ -624,7 +626,7 @@ func readView(problems []Problem, glance bool) (*View, error) {
 	v := &View{Agents: []AgentView{}, Servers: []ServerView{}, Skills: []SkillView{}, FoundSkills: []FoundSkill{}, Instructions: l.instructionsView(targets, asleep), Dir: Dir(), Backups: BackupDir(), CopySkills: l.CopySkills, SharedSkills: l.SharedSkills, SharedDir: sharedSkillsDir(), MCPHub: l.MCPHub, SkillRouter: l.SkillRouter, HubPath: gateway.HubMCPPath, HubNote: settings.Shared().RouterNote, HubName: gateway.HostName(), HubAllTools: settings.Shared().RouterAllTools, Partial: glance}
 	for _, t := range targets {
 		av := AgentView{ID: t.Agent.ID, Name: t.Agent.Name, Icon: t.Agent.Icon, Instructions: t.Instructions, Skills: t.Skills,
-			SkillsAlso: t.SkillsAlso, Note: t.Note, MCPVia: t.MCPVia, ProjectSkills: ProjectSkillsDir(t.Agent.ID), ProjectMCP: ProjectMCPFile(t.Agent.ID),
+			SkillsAlso: t.SkillsAlso, Note: t.Note, MCPVia: t.MCPVia, ProjectSkills: ProjectSkillsDir(t.Agent.ID), ProjectMCP: ProjectMCPFile(t.Agent.ID), ProjectSubagents: ProjectSubagentsDir(t.Agent.ID),
 			ProjectOff: slices.Contains(projectOffAgents, t.Agent.ID), ProjectSkillOff: slices.Contains(projectSkillOffAgents, t.Agent.ID),
 			ProjectNoSSE: ProjectNoSSE(t.Agent.ID)}
 		if t.Skills != "" {

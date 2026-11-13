@@ -413,6 +413,9 @@ func SaveSubagent(old string, s Subagent) (*Result, error) {
 				return fmt.Errorf("no subagent called %s", old)
 			}
 			l.Subagents = slices.Delete(l.Subagents, i, i+1)
+			if old != s.Name {
+				l.renameProjectSubagents(old, s.Name)
+			}
 		}
 		s.Skills = slices.Compact(slices.Sorted(slices.Values(s.Skills)))
 		s.MCP = slices.Compact(slices.Sorted(slices.Values(s.MCP)))
