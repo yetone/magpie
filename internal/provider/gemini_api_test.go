@@ -219,3 +219,30 @@ func TestGeminiBaseSavedAsTyped(t *testing.T) {
 		t.Errorf("openai bases changed: %q %q", got.Chat, got.Responses)
 	}
 }
+
+// A relay's bare host, kept as typed (TestGeminiBase), is asked at its
+// /v1beta, as Google's SDKs ask one; a base with a path is asked as typed
+// (equinox0253 on X). The model list, a model's test and the gateway all
+// ask at Base(Gemini).
+func TestGeminiAsked(t *testing.T) {
+	for in, want := range map[string]string{
+		"":                               "",
+		"https://api.wandapi.ai":         "https://api.wandapi.ai/v1beta",
+		"https://api.wandapi.ai/":        "https://api.wandapi.ai/v1beta",
+		"http://127.0.0.1:8080":          "http://127.0.0.1:8080/v1beta",
+		"https://api.wandapi.ai/v1beta":  "https://api.wandapi.ai/v1beta",
+		"https://relay.example/gemini":   "https://relay.example/gemini",
+		"https://relay.example/proxy/v1": "https://relay.example/proxy/v1",
+		"https://generativelanguage.googleapis.com/v1beta": "https://generativelanguage.googleapis.com/v1beta",
+	} {
+		if got := GeminiAsked(in); got != want {
+			t.Errorf("GeminiAsked(%q) = %q, want %q", in, got, want)
+		}
+		if got := (Provider{Gemini: in}).Base(Gemini); got != want {
+			t.Errorf("Base(Gemini) of %q = %q, want %q", in, got, want)
+		}
+	}
+	if got, _ := tiny(Provider{Gemini: "https://api.wandapi.ai"}, Gemini, "gemini-3.8-flash"); got != "https://api.wandapi.ai/v1beta/models/gemini-3.8-flash:generateContent" {
+		t.Errorf("a model's test asks %s", got)
+	}
+}

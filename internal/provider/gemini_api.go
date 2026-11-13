@@ -46,6 +46,20 @@ func geminiVersioned(u string) string {
 	return u
 }
 
+// GeminiAsked is the base a Gemini API is asked at: the saved base, and a
+// bare host given /v1beta, as Google's SDKs add the version to a base_url
+// with no path. GeminiBase keeps a relay's root as typed (JNDliuliuM on X),
+// so the version is added here, where a request goes: WandAPI's
+// https://api.wandapi.ai was asked at /models/… and refused (equinox0253
+// on X). A base with a path of its own (/v1beta, a relay's /gemini) is
+// asked as typed.
+func GeminiAsked(u string) string {
+	if u == "" {
+		return ""
+	}
+	return geminiVersioned(u)
+}
+
 // GeminiPath is the path under a Gemini base model is asked at: streamed as
 // server-sent events (alt=sse) when stream, else one JSON reply.
 func GeminiPath(model string, stream bool) string {

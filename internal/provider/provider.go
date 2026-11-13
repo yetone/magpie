@@ -2180,7 +2180,7 @@ func (p Provider) Base(proto Protocol) string {
 		if p.IsVertex() {
 			return p.vertexBase()
 		}
-		return p.Gemini
+		return GeminiAsked(p.Gemini)
 	}
 	return ""
 }
