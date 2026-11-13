@@ -311,6 +311,10 @@ func (c memoryCaller) scopes(which string) ([]string, error) {
 		}
 		if c.agent != "" {
 			out = append(out, "agent:"+c.agent)
+			if c.agent == "codex" {
+				// kept under Codex's MCP client name before it was Codex
+				out = append(out, "agent:codex-mcp-client")
+			}
 		}
 		return out, nil
 	case "global":

@@ -120,7 +120,7 @@ func TestMemoryMCPSharedAcrossAgents(t *testing.T) {
 	}
 	hits, _ := memory.Search(memory.Query{Text: "Answer in Chinese"})
 	m, _ := memory.Get(hits[0].ID)
-	if len(m.Sources) != 2 || m.Sources[1].Agent != usage.AgentOf("codex-mcp-client") {
+	if len(m.Sources) != 2 || m.Sources[1].Agent != "codex" {
 		t.Fatalf("sources %+v", m.Sources)
 	}
 }
@@ -301,6 +301,14 @@ func TestMemoryMCPAgentFromTheSessionsInitialize(t *testing.T) {
 	w := mcpPostTo(h, MemoryMCPPath, "127.0.0.1:50000", `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"memory_save","arguments":{"scope":"agent","text":"x"}}}`, "User-Agent", "curl/8", "Accept", "application/json", "Mcp-Session-Id", "magpie-other")
 	if m := readMCP(t, w); !m.Result.IsError || !strings.Contains(m.Result.Content[0].Text, "which agent") {
 		t.Fatalf("unknown session: %s", w.Body.String())
+	}
+	// what Codex's stdio client saved as its client name earlier is still found
+	old, kind, text := "agent:codex-mcp-client", "procedure", "kept before the rename"
+	if _, _, err := memory.Save(memory.Input{Kind: &kind, Scope: &old, Text: &text}, memory.FromAgent, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if said, _ := memSend(t, h, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"memory_search","arguments":{"query":"kept before the rename"}}}`, "User-Agent", "curl/8", MemoryClientHeader, "codex"); !strings.Contains(said, "kept before the rename") {
+		t.Fatalf("earlier agent memory lost: %s", said)
 	}
 	if memoryAgent("codex-mcp-client") != "codex" || memoryAgent("claude-code") == "codex" {
 		t.Fatal("memoryAgent")
