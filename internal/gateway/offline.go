@@ -126,7 +126,9 @@ func hostsOf(p provider.Provider) []string {
 
 // otherHosts is up to three hosts of providers other than p, reached
 // directly as p was, that tell whether the network is up: not p's own,
-// nor one reached through a proxy, nor a near one.
+// nor one reached through a proxy or at addresses of the user's choosing
+// (Resolve: dialled by name here, it may not resolve on a managed
+// network that works), nor a near one.
 func otherHosts(p provider.Provider) []string {
 	own := map[string]bool{}
 	for _, h := range hostsOf(p) {
@@ -134,7 +136,7 @@ func otherHosts(p provider.Provider) []string {
 	}
 	var out []string
 	for _, o := range provider.All() {
-		if o.ID == p.ID || o.Proxy != "" {
+		if o.ID == p.ID || o.Proxy != "" || len(o.Resolve) > 0 {
 			continue
 		}
 		for _, h := range hostsOf(o) {

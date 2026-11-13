@@ -32,6 +32,17 @@ func (p Provider) TakesClientCert() bool {
 	return p.Account == nil && (p.Preset == "" || p.IsRemoteMagpie()) && !p.IsVertex() && hasEndpoint(p) && !subscriptionID(p.ID)
 }
 
+// TakesResolve is whether the provider may have its hosts connected to
+// addresses of the user's choosing (Resolve): one the user added with a base
+// URL of its own, as TakesInsecureTLS, and a preset's at a host of its own
+// (PinHosts' rule, never the vendor's), so a managed network's gateway can
+// stand in for a company's relay. A subscription's or a plugin's account
+// never does: a plugin's requests are made by its host, which has no way
+// to be told where to connect.
+func (p Provider) TakesResolve() bool {
+	return p.TakesInsecureTLS() || p.TakesClientCert() || len(p.PinHosts()) > 0
+}
+
 // PinHosts are the base URLs a trusted server certificate (ServerPin) is
 // taken at: every endpoint of a provider that takes a client certificate
 // (TakesClientCert), and of a preset's only the https:// addresses the user

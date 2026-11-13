@@ -513,6 +513,19 @@ type Provider struct {
 	// usual. Taken where TakesClientCert is; see Via and PeekServerCert.
 	ServerPin string `json:"serverPin,omitempty"`
 
+	// Resolve connects a host name of the provider's own base URLs to
+	// the places listed, as curl's --resolve does (quantum_lsfc on X: a
+	// managed network sends some domains to an internal L4 SNI gateway,
+	// an IP in the base URL fails, and /etc/hosts can't be edited): only
+	// the TCP connection moves, the URL's name stays for TLS and Host. A
+	// place is an IP address (with a port if it has its own) or
+	// "dns:<name>", looked up at each connection; they are tried in
+	// order, and when none connects the name is dialled as usual. Not
+	// used through a proxy, which connects to the name itself. Taken where
+	// TakesResolve is; a plugin's requests are made by its host, which has
+	// no way to be told. See netproxy.WithResolve and CheckResolve.
+	Resolve map[string][]string `json:"resolve,omitempty"`
+
 	// Proxy is the proxy magpie's requests to this provider go through
 	// (#237: Codex through one, a vendor at home without): "" follows
 	// the global one (Settings' Proxy, the environment's, the system's),
@@ -1307,6 +1320,16 @@ func Save(p Provider) error {
 		}
 		if p.InsecureTLS && !p.TakesInsecureTLS() {
 			return fmt.Errorf("%s is a preset's: only a provider you added with your own base URL can skip the certificate check", p.Name)
+		}
+		if len(p.Resolve) > 0 {
+			if !p.TakesResolve() {
+				return fmt.Errorf("%s: a connect address is only for a provider you added with a base URL of its own, or a preset you pointed at your own server", p.ID)
+			}
+			r, err := netproxy.CheckResolve(p.Resolve)
+			if err != nil {
+				return fmt.Errorf("%s: %w", p.ID, err)
+			}
+			p.Resolve = r
 		}
 		if p.HTTP1 && !p.TakesInsecureTLS() {
 			return fmt.Errorf("%s is a preset's: only a provider you added with your own base URL can be held to HTTP/1.1", p.Name)

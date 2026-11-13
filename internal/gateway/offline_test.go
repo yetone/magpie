@@ -138,3 +138,27 @@ func forgetNetwork() {
 	offlineSeen.at, offlineSeen.off = time.Time{}, false
 	offlineSeen.Unlock()
 }
+
+// A provider connected to addresses of the user's choosing (Resolve) is
+// dialled by its name here, which a managed network that works may not
+// resolve: its host says nothing of the network, as a proxied one's.
+func TestOtherHostsSkipResolved(t *testing.T) {
+	fresh(t)
+	for _, p := range []provider.Provider{
+		{ID: "mine", Name: "Mine", Key: "k", Models: []string{"m"}, Chat: "https://own.example.com/v1"},
+		{ID: "gw", Name: "Gw", Key: "k", Models: []string{"m"}, Chat: "https://api.corp.example.com/v1", Resolve: map[string][]string{"api.corp.example.com": {"10.0.0.1"}}},
+		{ID: "open", Name: "Open", Key: "k", Models: []string{"m"}, Chat: "https://api.open.example.com/v1"},
+	} {
+		if err := provider.Save(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	wasNear := nearHost
+	t.Cleanup(func() { nearHost = wasNear })
+	nearHost = func(string) bool { return false }
+	me, _ := provider.Find("mine")
+	got := otherHosts(*me)
+	if len(got) != 1 || got[0] != "api.open.example.com:443" {
+		t.Errorf("otherHosts = %v, want only the provider with no rule", got)
+	}
+}

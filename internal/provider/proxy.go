@@ -18,6 +18,8 @@ import (
 // (InsecureTLS) has its own hosts' taken as they are, no other host's,
 // and one whose server certificate the user trusted (ServerPin) has them
 // taken with that certificate alone;
+// one with connect addresses (Resolve) has its hosts' connections made
+// there;
 // one asked to be spoken HTTP/1.1 to (HTTP1) is, at its own hosts alone;
 // one whose turns go over the Responses WebSocket (Socket) has them go
 // there, at its Responses URL alone (SocketTurn).
@@ -28,6 +30,9 @@ func (p Provider) Via(ctx context.Context) context.Context {
 	}
 	if p.HTTP1 && p.TakesInsecureTLS() {
 		ctx = netproxy.WithHTTP1(ctx, p.UncheckedHosts()...)
+	}
+	if len(p.Resolve) > 0 && p.TakesResolve() {
+		ctx = netproxy.WithResolve(ctx, p.Resolve)
 	}
 	cert, key, ca := p.ClientCert, p.ClientKey, p.ServerCA
 	if !p.TakesClientCert() {
