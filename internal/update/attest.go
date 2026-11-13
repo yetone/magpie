@@ -1,6 +1,7 @@
 package update
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"encoding/hex"
@@ -10,6 +11,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -64,6 +66,23 @@ import (
 //
 // Someone who can only drop the API call downgrades an update to the
 // ed25519 check, never below it.
+//
+// Where the bundles come from (ArcticLampyrid on X): a file the feed names
+// on the site (usemagpie.ai/files/<tag>/<file>, a copy on R2) has its
+// release's bundles asked of the same place first,
+// /files/<tag>/attestations.jsonl, a bundle to a line, which the site's
+// cron copies from this API (site/files.js). The site is only transport:
+// its bundles go through the same verifyBundle, against the same embedded
+// root, identity and signed digest, so it can't make a bad one pass.
+//   - The site has none (a tag pruned from R2 redirects to GitHub, whose
+//     release has no such asset; a redirect is not followed), can't be
+//     reached, or sends no bundle: a miss, and the API is asked as before.
+//   - The site's bundles fail: the API is asked too, and a valid bundle
+//     there is enough. When the API can't be read, or Settings' update
+//     source is the site alone, that is a refusal, not unknown: a bundle
+//     was had and failed.
+//   - Settings' update source is GitHub: the file comes from github.com,
+//     and so do its bundles, from the API alone.
 
 // firstAttested is the first release whose files carry an attestation
 // (yetone/magpie-releases 9213fbd).
@@ -77,6 +96,14 @@ var attestRootJSON []byte
 
 // attestAPI is the address of the attestation API; a var for tests.
 var attestAPI = "https://api.github.com"
+
+// attestSite is where a file the feed names on Site has its release's
+// bundles asked first; a var for tests.
+var attestSite = Site
+
+// siteBundles is the name of a release's bundles on the site
+// (site/files.js BUNDLES).
+const siteBundles = "attestations.jsonl"
 
 // attestID is the identity a bundle must show; a var for tests.
 var attestID = struct{ SAN, Issuer, Repo string }{
@@ -102,7 +129,7 @@ func attestedFile(ctx context.Context, a Asset, name string) error {
 	if !a.attest {
 		return nil
 	}
-	err := attestation(ctx, a.SHA256)
+	err := attestation(ctx, a)
 	if err == nil {
 		return nil
 	}
@@ -114,28 +141,105 @@ func attestedFile(ctx context.Context, a Asset, name string) error {
 	return fmt.Errorf("%s: %w; not installed", name, err)
 }
 
-func attestation(ctx context.Context, digest string) error {
+func attestation(ctx context.Context, a Asset) error {
 	if os.Getenv("MAGPIE_UPDATE_FEED") != "" {
 		return nil
 	}
-	if Source() == settings.UpdateSourceSite {
-		return errUnknown{errors.New("Settings' update source is the site alone, which never asks GitHub")}
-	}
-	sum, err := hex.DecodeString(digest)
+	sum, err := hex.DecodeString(a.SHA256)
 	if err != nil || len(sum) != 32 {
-		return fmt.Errorf("%w: the checksum %q is not a SHA-256", errUnattested, digest)
+		return fmt.Errorf("%w: the checksum %q is not a SHA-256", errUnattested, a.SHA256)
 	}
-	raws, err := fetchAttestations(ctx, strings.ToLower(digest))
+	// the site's copy of the release's bundles, when the file comes from it
+	var siteErr error
+	if u := siteBundlesURL(a); u != "" {
+		if raws := fetchSiteBundles(ctx, u); len(raws) > 0 {
+			if siteErr = verifyAny(raws, sum); siteErr == nil {
+				return nil
+			}
+			siteErr = fmt.Errorf("the bundles from %s fail: %v", hostOf(u), siteErr)
+		}
+	}
+	if Source() == settings.UpdateSourceSite {
+		if siteErr != nil {
+			return fmt.Errorf("%w: %v", errUnattested, siteErr)
+		}
+		return errUnknown{errors.New("Settings' update source is the site alone, which never asks GitHub, and the site has no bundles for it")}
+	}
+	raws, err := fetchAttestations(ctx, strings.ToLower(a.SHA256))
 	if err != nil {
+		var u errUnknown
+		if siteErr != nil && errors.As(err, &u) {
+			return fmt.Errorf("%w: %v, and GitHub's couldn't be read (%v)", errUnattested, siteErr, u.err)
+		}
 		return err
 	}
+	if last := verifyAny(raws, sum); last != nil {
+		return fmt.Errorf("%w: %v", errUnattested, last)
+	}
+	if siteErr != nil {
+		log.Printf("update: %s; GitHub's held", siteErr)
+	}
+	return nil
+}
+
+// verifyAny is nil when one of raws attests sum, else the last failure.
+func verifyAny(raws []json.RawMessage, sum []byte) error {
 	var last error
 	for _, raw := range raws {
 		if last = verifyBundle(raw, sum); last == nil {
 			return nil
 		}
 	}
-	return fmt.Errorf("%w: %v", errUnattested, last)
+	return last
+}
+
+// siteBundlesURL is the address of the bundles of a's release on the site,
+// "" when a isn't downloaded from there.
+func siteBundlesURL(a Asset) string {
+	if Source() == settings.UpdateSourceGitHub {
+		return ""
+	}
+	rest, ok := strings.CutPrefix(a.URL, Site+"/files/")
+	if !ok {
+		return ""
+	}
+	tag, _, ok := strings.Cut(rest, "/")
+	if !ok || tag == "" {
+		return ""
+	}
+	return attestSite + "/files/" + url.PathEscape(tag) + "/" + siteBundles
+}
+
+// fetchSiteBundles reads the site's attestations.jsonl at u, nil on any
+// miss. A tag the site no longer keeps is a redirect to GitHub's release,
+// which has no such file; it is not followed, and the API is asked instead.
+func fetchSiteBundles(ctx context.Context, u string) []json.RawMessage {
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return nil
+	}
+	c := *client
+	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	res, err := c.Do(req)
+	if err != nil {
+		return nil
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return nil
+	}
+	body, err := io.ReadAll(io.LimitReader(res.Body, 4<<20))
+	if err != nil {
+		return nil
+	}
+	var raws []json.RawMessage
+	for _, line := range bytes.Split(body, []byte("\n")) {
+		line = bytes.TrimSpace(line)
+		if len(line) > 0 && line[0] == '{' && json.Valid(line) {
+			raws = append(raws, json.RawMessage(line))
+		}
+	}
+	return raws
 }
 
 // fetchAttestations asks GitHub for the bundles attesting digest. The

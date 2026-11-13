@@ -63,7 +63,7 @@ func logged(t *testing.T) *bytes.Buffer {
 
 func TestAttestationOfARealBundleHolds(t *testing.T) {
 	attestServer(t, 200, attestFixture(t))
-	if err := attestation(context.Background(), attestedSums); err != nil {
+	if err := attestation(context.Background(), Asset{SHA256: attestedSums}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -72,7 +72,7 @@ func TestAttestationOfARealBundleHolds(t *testing.T) {
 // outside them is not attested. A bundle that attests other bytes is not an attestation of this file.
 func TestAttestationOfAnotherDigestRefused(t *testing.T) {
 	attestServer(t, 200, attestFixture(t))
-	err := attestation(context.Background(), otherDigest)
+	err := attestation(context.Background(), Asset{SHA256: otherDigest})
 	if !errors.Is(err, errUnattested) {
 		t.Fatalf("got %v", err)
 	}
@@ -94,7 +94,7 @@ func TestAttestationTamperedRefused(t *testing.T) {
 	sig["sig"] = s[:10] + string(flip) + s[11:]
 	body, _ := json.Marshal(doc)
 	attestServer(t, 200, body)
-	if err := attestation(context.Background(), attestedSums); !errors.Is(err, errUnattested) {
+	if err := attestation(context.Background(), Asset{SHA256: attestedSums}); !errors.Is(err, errUnattested) {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -103,7 +103,7 @@ func TestAttestationTamperedRefused(t *testing.T) {
 func TestAttestationEditedPayloadRefused(t *testing.T) {
 	body := bytes.Replace(attestFixture(t), []byte(`"payloadType"`), []byte(`"payloadType": "x", "payloadTypeWas"`), 1)
 	attestServer(t, 200, body)
-	if err := attestation(context.Background(), attestedSums); !errors.Is(err, errUnattested) {
+	if err := attestation(context.Background(), Asset{SHA256: attestedSums}); !errors.Is(err, errUnattested) {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -122,12 +122,12 @@ func TestAttestationWrongIdentityRefused(t *testing.T) {
 		"another issuer":   {old.SAN, old.Repo, "https://accounts.example.com"},
 	} {
 		attestID.SAN, attestID.Repo, attestID.Issuer = c.san, c.repo, c.issuer
-		if err := attestation(context.Background(), attestedSums); !errors.Is(err, errUnattested) {
+		if err := attestation(context.Background(), Asset{SHA256: attestedSums}); !errors.Is(err, errUnattested) {
 			t.Errorf("%s: got %v", name, err)
 		}
 	}
 	attestID = old
-	if err := attestation(context.Background(), attestedSums); err != nil {
+	if err := attestation(context.Background(), Asset{SHA256: attestedSums}); err != nil {
 		t.Fatalf("the real identity: %v", err)
 	}
 }
@@ -185,7 +185,7 @@ func TestAttestationUnknownGoesOnAndSaysSo(t *testing.T) {
 // refused, and a bundle that fails after an unknown answer is still refused.
 func TestAttestationUnknownIsNotVerified(t *testing.T) {
 	attestServer(t, 503, nil)
-	err := attestation(context.Background(), attestedSums)
+	err := attestation(context.Background(), Asset{SHA256: attestedSums})
 	var u errUnknown
 	if err == nil || !errors.As(err, &u) {
 		t.Fatalf("got %v", err)
