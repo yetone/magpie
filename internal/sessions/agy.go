@@ -41,9 +41,10 @@ import (
 // preview (what the app lists the conversation as: the user's own words
 // until it has a title, the title after) and workspace_uris, a JSON list
 // of file:// URIs. The Antigravity app's language server is agy's, and
-// keeps the same database in its own data folder (antigravity_app.go). The steps name no model, so
-// a conversation's tokens are counted under "agy", as its calls are left
-// with no model. `agy --conversation <id>` picks one up again, from any
+// keeps the same database in its own data folder (antigravity_app.go). The steps name no model:
+// a conversation's tokens are counted under the model its database,
+// conversations/<id>.db, names for each step (agyStepModels), as its calls
+// are, and under "agy" when it names none. `agy --conversation <id>` picks one up again, from any
 // folder; started on magpie's gateway, it needs the variables and --model
 // the agent's row gives (AgyStart).
 
@@ -229,9 +230,20 @@ func agyFilesIn(dir string) []file {
 	for i := range out {
 		id := strings.TrimPrefix(out[i].key, "agy:")
 		has[id] = true
+		rev := ""
 		if r, ok := rows[id]; ok {
 			out[i].w().agy = &r
-			out[i].w().rev = agyRev(r)
+			rev = agyRev(r)
+		}
+		// the conversation's database names its steps' models, and may
+		// be written after the transcript
+		for _, p := range agyDBFiles(out[i].path) {
+			if fi, err := os.Stat(p); err == nil {
+				rev += "\x00" + strconv.FormatInt(fi.ModTime().UnixNano(), 10) + ":" + strconv.FormatInt(fi.Size(), 10)
+			}
+		}
+		if rev != "" {
+			out[i].w().rev = rev
 		}
 	}
 	for id, r := range rows {
@@ -285,11 +297,22 @@ type agyCarry struct {
 type agyCounted struct {
 	Date   string `json:"d"`
 	Tokens Tokens `json:"t"`
+	// Model is the model the step's tokens are counted under, "" for
+	// agyModel
+	Model string `json:"m,omitempty"`
 }
 
-// agyModel is the name a conversation's tokens are counted under: agy's
-// steps name no model.
+// agyModel is the name a step's tokens are counted under when its
+// conversation's database names no model for it.
 const agyModel = "agy"
+
+// agyModelOr is the name a step of model m is counted under.
+func agyModelOr(m string) string {
+	if m == "" {
+		return agyModel
+	}
+	return m
+}
 
 // parseAgy reads a transcript, on from where the read before left off when
 // the file has only grown (agy appends a step at a time).
@@ -320,10 +343,29 @@ func parseAgy(f file, old *state) *state {
 	} else {
 		s = &state{}
 	}
+	// the database is read once a read has a model's step to count
+	var models map[int]string
+	read := false
+	model := func(step int) string {
+		if !read {
+			models, read = agyStepModels(agyConversationDB(f.path)), true
+		}
+		return models[step]
+	}
 	end, err := scanAt(f.path, off, nil, func(b []byte, _, _ int64) bool {
-		agyCount(s, &c, b)
+		agyCount(s, &c, b, model)
 		return true
 	})
+	// a model the database names after its step was counted (or a read
+	// before this one counted under agyModel) moves the step's tokens
+	for i, was := range c.Steps {
+		if m := model(i); m != "" && m != was.Model {
+			s.dropUse(was.Date, agyModelOr(was.Model), was.Tokens)
+			s.use(was.Date, m, was.Tokens)
+			was.Model = m
+			c.Steps[i] = was
+		}
+	}
 	c.Tail = nil
 	if err == nil {
 		c.Tail = markTail(f.path, end, 0, end)
@@ -337,8 +379,9 @@ func parseAgy(f file, old *state) *state {
 	return s
 }
 
-// agyCount counts one step of a transcript.
-func agyCount(s *state, c *agyCarry, b []byte) {
+// agyCount counts one step of a transcript, under the model model names
+// for its index.
+func agyCount(s *state, c *agyCarry, b []byte, model func(int) string) {
 	var l agyLine
 	if json.Unmarshal(b, &l) != nil || l.Step == nil {
 		return
@@ -354,14 +397,15 @@ func agyCount(s *state, c *agyCarry, b []byte) {
 			t.CacheRead = *l.CacheRead
 		}
 		if was, ok := c.Steps[i]; ok {
-			s.dropUse(was.Date, agyModel, was.Tokens)
+			s.dropUse(was.Date, agyModelOr(was.Model), was.Tokens)
 		}
 		if !t.zero() {
 			if c.Steps == nil {
 				c.Steps = map[int]agyCounted{}
 			}
-			c.Steps[i] = agyCounted{dateOf(at), t}
-			s.use(dateOf(at), agyModel, t)
+			m := model(i)
+			c.Steps[i] = agyCounted{dateOf(at), t, m}
+			s.use(dateOf(at), agyModelOr(m), t)
 		} else {
 			delete(c.Steps, i)
 		}

@@ -45,7 +45,7 @@ func TestAgyCalls(t *testing.T) {
 			t.Errorf("call %d: %v %s %+v, want %s %s %+v", i, c.Time, c.Session, c.Tokens, w.at, w.session, w.tokens)
 		}
 		if c.Model != "" {
-			t.Errorf("call %d names model %q, which agy's step doesn't", i, c.Model)
+			t.Errorf("call %d names model %q, with no database of its conversation", i, c.Model)
 		}
 		if c.Msg == "" {
 			t.Errorf("call %d: no step id to count it once by", i)

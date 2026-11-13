@@ -1464,7 +1464,9 @@ const cacheVersion = 29
 // (a parse kept from before has none, under the same row revision).
 // dsh 3: the ids of its newest turn's messages (TurnConvs), which a
 // request still answering carried and has no reply id for yet.
-var parseVersions = map[string]int{"codex": 3, "zcode": 1, "dsh": 3, "antigravity": 2}
+// agy 1: a step's tokens are counted under the model its conversation's
+// database names (agyStepModels), not "agy".
+var parseVersions = map[string]int{"codex": 3, "zcode": 1, "dsh": 3, "antigravity": 2, "agy": 1}
 
 type cacheFile struct {
 	Version int    `json:"version"`
