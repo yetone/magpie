@@ -203,7 +203,8 @@ func (u *updater) waitFor(gen int) {
 		switch st := u.json().State; {
 		case in:
 		case st == "ready":
-			// a newer version out since is downloaded first, and waited for
+			// with Settings' NoAutoDownload, a newer version out since is
+			// downloaded first, and waited for (recheck)
 			waitRecheck(u, asked)
 			if u.asking() || u.json().State != "ready" {
 				continue
@@ -257,8 +258,9 @@ func (u *updater) autoTick(s settings.Settings) {
 // gateway busy it waits for it to be idle (#577), and a click while it
 // waits restarts at once. The feed is asked first, as the page's restart
 // asks it (coeo91 on Discord: the tray restarted into the version the
-// last check found): a newer version out since is downloaded, and the
-// restart waits for it.
+// last check found): with Settings' NoAutoDownload a newer version out
+// since is downloaded, and the restart waits for it; with downloads
+// automatic the one waiting is restarted into (recheck).
 func (u *updater) restartAsked(restart func() bool) {
 	if waiting, _ := u.waitingFor(); !waiting && !u.idle() {
 		u.waitIdle(restart, true)

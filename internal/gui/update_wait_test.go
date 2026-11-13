@@ -163,8 +163,11 @@ func TestRestartWhenIdle(t *testing.T) {
 }
 
 // Versions out while a restart waits collapse into the newest: the restart
-// is into the last one, downloaded once the gateway is idle, not into each.
+// is into the last one, downloaded once the gateway is idle, not into each,
+// for a click's restart with downloads on a click (with them automatic the
+// one waiting is restarted into: TestRestartTakesTheDownloadWaiting).
 func TestRestartWhenIdleIntoTheNewest(t *testing.T) {
+	sandboxHome(t)
 	busy := &fakeBusy{}
 	u := &updater{}
 	quick(t, busy, u)
@@ -198,6 +201,7 @@ func TestRestartWhenIdleIntoTheNewest(t *testing.T) {
 	if j := u.json(); j.State != "ready" || j.Latest != "0.1.11" {
 		t.Fatalf("%+v", j)
 	}
+	downloadsOnClick(t)
 	busy.set(gateway.Busy{Requests: 1})
 	into := make(chan string, 4)
 	u.waitIdle(func() bool {
@@ -205,7 +209,7 @@ func TestRestartWhenIdleIntoTheNewest(t *testing.T) {
 		into <- u.latest.Version
 		u.mu.Unlock()
 		return true
-	}, false)
+	}, true)
 	latest.Store("0.1.12")
 	time.Sleep(30 * time.Millisecond)
 	latest.Store("0.1.13")

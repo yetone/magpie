@@ -77,9 +77,12 @@ func TestUpdateNotesRoute(t *testing.T) {
 
 // The dialog asks the feed again when it was last asked a while ago (#910,
 // Moody-Sin: it stopped at v0.1.1020, downloaded hours before, with
-// v0.1.1024 out): the newest release is the one it names, with the notes
-// of every release up to it.
+// v0.1.1024 out). With downloads automatic the version downloaded is what
+// the restart goes into at once (canlee886 on X), so that is the one it
+// names, with the notes of every release up to it; the new version's
+// first check takes v0.1.1024.
 func TestUpdateNotesAskTheFeedAgain(t *testing.T) {
+	sandboxHome(t)
 	feedAsked := 0
 	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		feedAsked++
@@ -100,8 +103,7 @@ func TestUpdateNotesAskTheFeedAgain(t *testing.T) {
 	updates.mu.Lock()
 	oldState, oldStaged, oldIn, oldLatest, oldAsked, oldV := updates.state, updates.staged, updates.notesIn, updates.latest, updates.asked, Version
 	Version = "0.1.1010"
-	// downloaded hours ago; this test's updater can't replace the app, so
-	// the newer release is left "available" rather than downloaded
+	// downloaded hours ago
 	updates.state, updates.staged, updates.notesIn = "ready", filepath.Join(t.TempDir(), "staged"), "en"
 	updates.latest, updates.asked = &update.Release{Version: "0.1.1020", Notes: "- twenty"}, time.Now().Add(-3*time.Hour)
 	updates.mu.Unlock()
@@ -121,8 +123,8 @@ func TestUpdateNotesAskTheFeedAgain(t *testing.T) {
 		json.Unmarshal(rw.Body.Bytes(), &out)
 		return out
 	}
-	if j := get(); j.Latest != "0.1.1024" || len(j.Releases) != 2 || j.Releases[0].Version != "0.1.1024" {
-		t.Fatalf("stale: %+v", j)
+	if j := get(); j.Latest != "0.1.1020" || feedAsked != 1 || len(j.Releases) != 1 || j.Releases[0].Version != "0.1.1020" {
+		t.Fatalf("stale: %+v, feed asked %d", j, feedAsked)
 	}
 
 	// asked a moment ago: not again
@@ -162,14 +164,15 @@ func TestUpdateRecheckTakesNotesLate(t *testing.T) {
 		updates.latest = &update.Release{Version: "0.1.1224", Notes: held, URL: "https://example.invalid/v0.1.1224"}
 		updates.mu.Unlock()
 	}
+	// the dialog's look at a stale feed, the version downloaded the newest
 	hold("")
-	updates.recheck(false)
+	updates.freshen()
 	if j := updates.json(); j.State != "ready" || j.Latest != "0.1.1224" || !strings.Contains(j.Notes, "twenty-four") || j.URL == "" {
 		t.Fatalf("empty notes not taken from the recheck: %+v", j)
 	}
 
 	hold("- held")
-	updates.recheck(false)
+	updates.freshen()
 	if j := updates.json(); j.Notes != "- held" {
 		t.Fatalf("held notes replaced: %+v", j)
 	}

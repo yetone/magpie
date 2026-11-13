@@ -65,7 +65,10 @@ type updater struct {
 	// fetch: the check under way is a click on Download update, which
 	// downloads what it finds whatever Settings' NoAutoDownload says; with
 	// it on, any other check stops at found (#2296)
-	fetch   bool
+	fetch bool
+	// keep: the check under way leaves a version downloaded and waiting
+	// as it is, as the clock's does (freshen)
+	keep    bool
 	asked   time.Time // when the feed was last asked, by the clock or a click
 	done    int64     // downloading: bytes so far, of total (0 when unknown)
 	total   int64
@@ -323,16 +326,35 @@ func (u *updater) download() bool {
 }
 
 // recheck asks the feed again before a restart into what was downloaded,
-// so a newer version out since is the one restarted into. It waits for
-// the feed a little while (recheckTicks of recheckTick); a newer version
-// is then downloading. asked is a click on Restart to update, which asks
-// for the newest: with Settings' NoAutoDownload on too, a newer version
-// out since is downloaded and restarted into, not the one the last check
+// with Settings' NoAutoDownload on, so a newer version out since is the
+// one restarted into. It waits for the feed a little while (recheckTicks
+// of recheckTick); a newer version is then downloading. asked is a click
+// on Restart to update, which asks for the newest: a newer version out
+// since is downloaded and restarted into, not the one the last check
 // found (coeo91 on Discord).
+//
+// With downloads automatic (the default) a version downloaded and waiting
+// is restarted into as it is, and the feed isn't asked: magpie releases
+// many times a day, so the click found a newer one nearly every time and
+// downloaded it whole while the user waited, which made the download done
+// ahead of time no use (canlee886 on X). The new version's first check,
+// seconds after it starts, downloads whatever is newer by then.
 func (u *updater) recheck(asked bool) {
+	if u.keepsStaged(settings.Load()) {
+		return
+	}
+	u.ask(asked, false)
+}
+
+// ask asks the feed and waits for it a little while (recheckTicks of
+// recheckTick). fetch is a click's: what is found is downloaded whatever
+// Settings' NoAutoDownload says. keep leaves a version downloaded and
+// waiting as it is, as the clock's check does: a newer one found is not
+// downloaded in its place.
+func (u *updater) ask(fetch, keep bool) {
 	if u.begin() {
 		u.mu.Lock()
-		u.fetch = asked
+		u.fetch, u.keep = fetch, keep
 		u.mu.Unlock()
 		go u.run()
 	}
@@ -342,6 +364,15 @@ func (u *updater) recheck(asked bool) {
 		}
 		time.Sleep(recheckTick)
 	}
+}
+
+// keepsStaged is whether a restart goes into the version downloaded and
+// waiting without asking the feed again: downloads are automatic and one
+// is ready (recheck).
+func (u *updater) keepsStaged(s settings.Settings) bool {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return !s.NoAutoDownload && u.state == "ready" && u.staged != ""
 }
 
 // askedOver is whether the feed was last asked over d ago.
@@ -372,13 +403,18 @@ func (u *updater) asking() bool {
 const freshAfter = 5 * time.Minute
 
 // freshen asks the feed again, as recheck does, when a version downloaded
-// waits and the feed was last asked over freshAfter ago (#910).
+// waits and the feed was last asked over freshAfter ago (#910). With
+// downloads automatic recheck leaves the one waiting, which is what the
+// dialog then names and the restart goes into (canlee886 on X).
 func (u *updater) freshen() {
 	u.mu.Lock()
 	stale := u.state == "ready" && u.staged != "" && time.Since(u.asked) >= freshAfter
 	u.mu.Unlock()
 	if stale {
-		u.recheck(false) // the dialog asks for nothing to be downloaded
+		// the dialog asks for nothing to be downloaded; with downloads
+		// automatic it names the one waiting, which the restart goes
+		// into, and takes the notes the feed has for it now (#649)
+		u.ask(false, !settings.Load().NoAutoDownload)
 	}
 }
 
@@ -421,7 +457,7 @@ func (u *updater) begin() bool {
 	if u.state == "checking" || u.state == "downloading" {
 		return false
 	}
-	u.state, u.err, u.retry, u.mirror, u.network, u.asked, u.byClock, u.fetch = "checking", "", false, "", false, time.Now(), false, false
+	u.state, u.err, u.retry, u.mirror, u.network, u.asked, u.byClock, u.fetch, u.keep = "checking", "", false, "", false, time.Now(), false, false, false
 	return true
 }
 
@@ -487,10 +523,12 @@ func (u *updater) run() {
 	// Nor is one by the clock's check: magpie releases many times a day,
 	// so each check found a newer one and downloaded it whole (40 to 95
 	// MB) in place of the one waiting, every check until a restart, on
-	// the user's proxy too (iiiiiimone on X). Whatever restarts into it
-	// asks the feed first (recheck, waitRecheck), and fetches the newest
-	// then; quitting puts in the one waiting.
-	if u.staged != "" && u.latest != nil && (err != nil || !update.Newer(rel.Version, u.latest.Version) || hold || u.byClock) {
+	// the user's proxy too (iiiiiimone on X). With downloads automatic a
+	// restart goes into the one waiting and the new version's first check
+	// fetches anything newer (recheck, keep, canlee886 on X); with them on
+	// a click, a restart asks the feed first and fetches the newest then.
+	// Quitting puts in the one waiting.
+	if u.staged != "" && u.latest != nil && (err != nil || !update.Newer(rel.Version, u.latest.Version) || hold || u.byClock || u.keep) {
 		u.state = "ready" // what was downloaded is still the latest
 		// the feed found it before it had its notes (the site, kept from
 		// GitHub's API, reads them from the releases feed, which can lag

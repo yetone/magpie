@@ -31,6 +31,7 @@ type freshFeed struct {
 	srv       *httptest.Server
 	latest    atomic.Value
 	downloads atomic.Int32
+	asked     atomic.Int32 // the feed's answers
 	mu        sync.Mutex
 	hold      chan struct{}
 }
@@ -58,6 +59,7 @@ func newFreshFeed(t *testing.T) *freshFeed {
 		if hold != nil {
 			<-hold
 		}
+		f.asked.Add(1)
 		v := f.latest.Load().(string)
 		json.NewEncoder(w).Encode(update.Release{Version: v, URL: "https://example.invalid/v" + v, Assets: map[string]update.Asset{
 			update.BinaryAsset(): {URL: "http://" + r.Host + "/asset", Size: int64(len(body)), SHA256: hex.EncodeToString(sum[:])},
@@ -93,6 +95,17 @@ func freshUpdater(t *testing.T, exe bool) *updater {
 		t.Cleanup(func() { pending.Store(nil) })
 	}
 	return u
+}
+
+// downloadsOnClick turns Settings' Download updates automatically off,
+// in a HOME of the test's own (newFreshFeed's, or sandboxHome's).
+func downloadsOnClick(t *testing.T) {
+	t.Helper()
+	s := settings.Load()
+	s.NoAutoDownload = true
+	if err := settings.Save(s); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // settled waits for u's check or download to end.
@@ -140,11 +153,7 @@ func postInstall(t *testing.T, w Windows) updateJSON {
 // restarts into it, rather than into 0.1.11.
 func TestRestartClickTakesTheNewest(t *testing.T) {
 	f := newFreshFeed(t)
-	s := settings.Load()
-	s.NoAutoDownload = true
-	if err := settings.Save(s); err != nil {
-		t.Fatal(err)
-	}
+	downloadsOnClick(t)
 	u := freshUpdater(t, true)
 	u.check()
 	if j := u.json(); j.State != "found" || j.Latest != "0.1.11" {
@@ -169,9 +178,10 @@ func TestRestartClickTakesTheNewest(t *testing.T) {
 	}
 }
 
-// A feed slower than the restart's wait for it: the restart doesn't go
-// into the download it has, which the answer may have made old; it says
-// it is checking, and the answer, once in, is downloaded.
+// A feed slower than the restart's wait for it, with downloads on a
+// click: the restart doesn't go into the download it has, which the
+// answer may have made old; it says it is checking, and the answer, once
+// in, is downloaded.
 func TestRestartWaitsForTheFeed(t *testing.T) {
 	f := newFreshFeed(t)
 	u := freshUpdater(t, true)
@@ -182,6 +192,7 @@ func TestRestartWaitsForTheFeed(t *testing.T) {
 	if j := u.json(); j.State != "ready" || j.Latest != "0.1.11" {
 		t.Fatalf("the check: %+v", j)
 	}
+	downloadsOnClick(t)
 	f.latest.Store("0.1.12")
 	hold := make(chan struct{})
 	f.mu.Lock()
@@ -201,7 +212,8 @@ func TestRestartWaitsForTheFeed(t *testing.T) {
 }
 
 // The tray's Restart to update asks the feed as the page's does: with
-// 0.1.12 out since, it is downloaded and restarted into, once.
+// downloads on a click and 0.1.12 out since, it is downloaded and
+// restarted into, once.
 func TestTrayRestartTakesTheNewest(t *testing.T) {
 	busy := &fakeBusy{}
 	u := freshUpdater(t, true)
@@ -209,6 +221,7 @@ func TestTrayRestartTakesTheNewest(t *testing.T) {
 	waitRecheck = (*updater).recheck
 	f := newFreshFeed(t)
 	u.check()
+	downloadsOnClick(t)
 	if j := u.json(); j.State != "ready" || j.Latest != "0.1.11" {
 		t.Fatalf("the check: %+v", j)
 	}
@@ -260,5 +273,89 @@ func TestAvailableOpensTheNewestPage(t *testing.T) {
 	defer w.mu.Unlock()
 	if want := []string{"https://example.invalid/v0.1.11", "https://example.invalid/v0.1.12"}; strings.Join(w.urls, " ") != strings.Join(want, " ") {
 		t.Fatalf("opened %q, want %q", w.urls, want)
+	}
+}
+
+// canlee886 on X: with downloads automatic, the version downloaded ahead
+// of time is what Restart to update goes into, at once: magpie releases
+// many times a day, so asking the feed at the click found a newer one
+// nearly every time and downloaded it whole while the user waited. The
+// page's click, the tray's, the restart Settings' AutoRestart waits for
+// and the dialog that shows the update all leave the one waiting, with
+// nothing downloaded again; the clock's next check is what takes the
+// newer one (here, the new version's first).
+func TestRestartTakesTheDownloadWaiting(t *testing.T) {
+	busy := &fakeBusy{}
+	u := freshUpdater(t, true)
+	quick(t, busy, u)
+	waitRecheck = (*updater).recheck
+	f := newFreshFeed(t)
+	u.checkByClock()
+	if j := u.json(); j.State != "ready" || j.Latest != "0.1.11" || f.downloads.Load() != 1 {
+		t.Fatalf("the clock's check: %+v, %d downloads", j, f.downloads.Load())
+	}
+	f.latest.Store("0.1.12")
+	asked := f.asked.Load()
+	unchanged := func(what string) {
+		t.Helper()
+		if j := u.json(); j.State != "ready" || j.Latest != "0.1.11" || f.downloads.Load() != 1 || u.staged == "" {
+			t.Fatalf("%s: %+v, %d downloads", what, j, f.downloads.Load())
+		}
+	}
+
+	// the page's Restart to update: no wait on the feed, nothing downloaded
+	if j := postInstall(t, &quitCount{}); j.State != "ready" || j.Latest != "0.1.11" {
+		t.Fatalf("the page's click: %+v", j)
+	}
+	unchanged("the page's click")
+	if n := f.asked.Load(); n != asked {
+		t.Fatalf("the click asked the feed %d times", n-asked)
+	}
+
+	// the tray's, at once into the one waiting
+	into := make(chan string, 4)
+	restart := func() bool {
+		u.mu.Lock()
+		into <- u.latest.Version
+		u.mu.Unlock()
+		return true
+	}
+	u.restartAsked(restart)
+	select {
+	case v := <-into:
+		if v != "0.1.11" {
+			t.Fatalf("the tray restarted into %s", v)
+		}
+	default:
+		t.Fatalf("the tray didn't restart at once: %+v", u.json())
+	}
+	unchanged("the tray's click")
+
+	// AutoRestart's wait, once the gateway is idle
+	u.waitIdle(restart, false)
+	select {
+	case v := <-into:
+		if v != "0.1.11" {
+			t.Fatalf("AutoRestart restarted into %s", v)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("AutoRestart never restarted: %+v", u.json())
+	}
+	unchanged("AutoRestart")
+
+	// the dialog, its feed stale: asked again, the one waiting named
+	u.mu.Lock()
+	u.asked = time.Now().Add(-time.Hour)
+	u.mu.Unlock()
+	u.freshen()
+	if n := f.asked.Load(); n == asked {
+		t.Fatal("the dialog didn't ask the stale feed again")
+	}
+	unchanged("the dialog")
+
+	// a check asked for in Settings still takes the newest
+	u.check()
+	if j := settled(t, u); j.State != "ready" || j.Latest != "0.1.12" || f.downloads.Load() != 2 {
+		t.Fatalf("Settings' Check: %+v, %d downloads", j, f.downloads.Load())
 	}
 }

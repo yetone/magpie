@@ -15,8 +15,11 @@ import (
 )
 
 // A version downloaded and waiting for a restart gives way to a newer one
-// out since, so the restart goes straight to the latest.
+// out since, so the restart goes straight to the latest, with downloads on
+// a click (with them automatic it is restarted into as it is:
+// TestRestartTakesTheDownloadWaiting).
 func TestUpdateStagedGivesWayToNewer(t *testing.T) {
+	sandboxHome(t)
 	body := []byte("new magpie")
 	sum := sha256.Sum256(body)
 	var latest atomic.Value
@@ -63,7 +66,8 @@ func TestUpdateStagedGivesWayToNewer(t *testing.T) {
 	t.Setenv("MAGPIE_UPDATE_FEED", srv.URL)
 	// 0.1.13 out: that is the one it restarts into
 	latest.Store("0.1.13")
-	u.recheck(false)
+	downloadsOnClick(t)
+	u.recheck(true)
 	for u.json().State == "downloading" || u.json().State == "checking" {
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -75,9 +79,11 @@ func TestUpdateStagedGivesWayToNewer(t *testing.T) {
 // The clock's check, with a version downloaded and waiting, doesn't
 // download a newer one out since: magpie releases many times a day, and
 // each check downloaded the whole app again on the user's proxy
-// (iiiiiimone on X). A check asked for, and the feed asked again before a
-// restart, still fetch the newest.
+// (iiiiiimone on X). Nor does the feed asked again before a restart, with
+// downloads automatic (canlee886 on X). A check asked for still fetches
+// the newest.
 func TestUpdateClockLeavesWaitingDownload(t *testing.T) {
+	sandboxHome(t)
 	body := []byte("new magpie")
 	sum := sha256.Sum256(body)
 	var latest atomic.Value
@@ -119,18 +125,15 @@ func TestUpdateClockLeavesWaitingDownload(t *testing.T) {
 			t.Fatalf("%s out: %+v, %d downloads", v, j, downloads.Load())
 		}
 	}
-	// the feed asked again before a restart: the newest is fetched
-	u.recheck(false)
-	for u.json().State == "downloading" || u.json().State == "checking" {
-		time.Sleep(10 * time.Millisecond)
-	}
-	if j := u.json(); j.State != "ready" || j.Latest != "0.1.14" || downloads.Load() != 2 {
+	// the restart's recheck: the one waiting is what it goes into
+	u.recheck(true)
+	if j := u.json(); j.State != "ready" || j.Latest != "0.1.11" || downloads.Load() != 1 {
 		t.Fatalf("recheck: %+v, %d downloads", j, downloads.Load())
 	}
-	// and so is it on a check asked for
+	// a check asked for takes the newest
 	latest.Store("0.1.15")
 	u.check()
-	if j := u.json(); j.State != "ready" || j.Latest != "0.1.15" || downloads.Load() != 3 {
+	if j := u.json(); j.State != "ready" || j.Latest != "0.1.15" || downloads.Load() != 2 {
 		t.Fatalf("check: %+v, %d downloads", j, downloads.Load())
 	}
 }
