@@ -1563,9 +1563,9 @@ func (t *tracked) Read(p []byte) (int, error) {
 func stalledAt(got []byte, quiet time.Duration) string {
 	where := fmt.Sprintf("%s had come, and nothing more for the last %s", sizeOf(len(got)), quiet.Round(time.Second))
 	switch {
-	case bytes.Contains(got, []byte(`"b64_json"`)):
+	case bodyHas(got, `"b64_json"`):
 		return "it was sending the image itself as b64_json; " + where
-	case bytes.Contains(got, []byte(`"url"`)):
+	case bodyHas(got, `"url"`):
 		return "it was answering with the image's url, not the image; " + where
 	}
 	return "what came doesn't yet say whether the image was coming as a url or as b64_json; " + where

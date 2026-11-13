@@ -200,11 +200,11 @@ func (t *intTidy) flush() []byte {
 func (t *intTidy) carries(b []byte) bool {
 	switch t.proto {
 	case provider.Responses:
-		return bytes.Contains(b, []byte(`function_call`))
+		return bodyHas(b, `function_call`)
 	case provider.Chat:
-		return bytes.Contains(b, []byte(`"tool_calls"`))
+		return bodyHas(b, `"tool_calls"`)
 	case provider.Anthropic:
-		return bytes.Contains(b, []byte(`"tool_use"`)) || bytes.Contains(b, []byte(`"input_json_delta"`))
+		return bodyHas(b, `"tool_use"`) || bodyHas(b, `"input_json_delta"`)
 	}
 	return false
 }

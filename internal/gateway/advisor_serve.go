@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -50,7 +49,7 @@ const advisorUses = 3
 // it serves on p's model on API to: Claude Code asked for one, the
 // upstream doesn't run it itself, and magpie serves its model.
 func advisedHere(p provider.Provider, from, to provider.Protocol, model string, body []byte, wires map[string]string) bool {
-	if from != provider.Anthropic || !bytes.Contains(body, []byte(`"advisor_`)) {
+	if from != provider.Anthropic || !bodyHas(body, `"advisor_`) {
 		return false
 	}
 	adv := ""

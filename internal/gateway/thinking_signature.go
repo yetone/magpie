@@ -77,7 +77,7 @@ func (t *sigFieldTidy) lines(b []byte) []byte {
 		}
 		body := bytes.TrimRight(line, "\r\n")
 		data, ok := bytes.CutPrefix(body, []byte("data:"))
-		if !ok || !bytes.Contains(data, thinkingType) || !bytes.Contains(data, []byte("content_block_start")) {
+		if !ok || !bytes.Contains(data, thinkingType) || !bodyHas(data, "content_block_start") {
 			out = append(out, line...)
 			continue
 		}

@@ -130,7 +130,7 @@ func (f *firstToken) mark(d time.Duration, n int) {
 // The end of a reply (Responses' response.completed, which says the whole
 // reply again) carries none.
 func flowContent(ev []byte) bool {
-	return bytes.Contains(ev, []byte("delta")) || bytes.Contains(ev, []byte(`"parts"`))
+	return bodyHas(ev, "delta") || bodyHas(ev, `"parts"`)
 }
 
 // flowMs is how long the content of a reply took to come from its decode's
@@ -195,8 +195,8 @@ func timingKind(ev []byte) (content, text, reasoning, hidden bool) {
 	}
 	// only deltas, a tool call's start and Gemini's parts carry any: the
 	// rest go by unread
-	if len(data) == 0 || !(bytes.Contains(data, []byte("delta")) || bytes.Contains(data, []byte(`"parts"`)) ||
-		bytes.Contains(data, []byte("content_block_start")) || bytes.Contains(data, []byte("output_item.added")) || bytes.Contains(data, []byte("encrypted_content"))) {
+	if len(data) == 0 || !(bodyHas(data, "delta") || bodyHas(data, `"parts"`) ||
+		bodyHas(data, "content_block_start") || bodyHas(data, "output_item.added") || bodyHas(data, "encrypted_content")) {
 		return false, false, false, hidden
 	}
 	var v struct {

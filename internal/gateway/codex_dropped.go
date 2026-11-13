@@ -106,5 +106,5 @@ func edgeSaidDrop(status int, head []byte) bool {
 // codexReset says a failure is a large request's reset codexDropped read:
 // no account's fault, and asked again.
 func codexReset(status int, body []byte) bool {
-	return status == http.StatusServiceUnavailable && bytes.Contains(body, []byte(codexResetSaid))
+	return status == http.StatusServiceUnavailable && bodyHas(body, codexResetSaid)
 }

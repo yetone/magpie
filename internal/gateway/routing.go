@@ -134,7 +134,7 @@ func plainUnavailable(c candidate, status int, body []byte) bool {
 	}
 	return failureOf(c, status, body) == failOther && !vendorOverloaded(status, body) &&
 		!modelRefused(status, body) && !codexReset(status, body) && !protectionRefused(status, body) &&
-		!bytes.Contains(body, []byte(didNotStream)) && refusalWords(status, body) != ""
+		!bodyHas(body, didNotStream) && refusalWords(status, body) != ""
 }
 
 // idRun is a run in an error's words that differs from one try to the
@@ -569,7 +569,7 @@ func carriedStatus(status int, body []byte) int {
 // failure says why a reply failed.
 func failure(status int, body []byte) string {
 	status = carriedStatus(status, body)
-	if status == http.StatusBadGateway && (proxyDown.Match(body) || bytes.Contains(body, []byte(closedUnsentWords)) || bytes.Contains(body, []byte(stalledWords))) {
+	if status == http.StatusBadGateway && (proxyDown.Match(body) || bodyHas(body, closedUnsentWords) || bodyHas(body, stalledWords)) {
 		// the proxy didn't take the connection, or the network closed
 		// each new one before the request was sent (errClosedUnsent):
 		// nothing reached the vendor, and the account is as good as it
@@ -597,7 +597,7 @@ func failure(status int, body []byte) string {
 		// Kimi's "exceeded model token limit" is the conversation's
 		// length, not the plan's
 		return failOther
-	case status == 402 && usedUpWords.Match(body) && !creditWords.Match(body) && !bytes.Contains(body, []byte("insufficient_quota")):
+	case status == 402 && usedUpWords.Match(body) && !creditWords.Match(body) && !bodyHas(body, "insufficient_quota"):
 		// a 402 that says a usage limit and nothing of money is out of
 		// quota, not of credit: Factory's "You've reached your weekly
 		// standard usage limit (resets in …). Switch to Droid Core …" is
@@ -605,7 +605,7 @@ func failure(status int, body []byte) string {
 		// account out of credit it rested Droid Core with it (#1979)
 		return failQuota
 	case status == 402, creditWords.Match(body) && (status != 429 || brokeWords.Match(body)),
-		bytes.Contains(body, []byte("insufficient_quota")) && !minuteRate(body):
+		bodyHas(body, "insufficient_quota") && !minuteRate(body):
 		return failCredit
 	case status == 429 && resetsWhen.Match(body):
 		// out until the time it names, in whichever language it said so:
@@ -729,7 +729,7 @@ func grokBalanceOut(p provider.Provider, status int, body []byte) bool {
 // plugin puts it (provider.ZCodeRestrictedHint, plugins#348). magpie's own
 // words, which no vendor says, so they are read whoever answered.
 func restrictedSaid(status int, body []byte) bool {
-	return status >= 400 && (bytes.Contains(body, []byte(provider.WBRestrictedHint)) || bytes.Contains(body, []byte(provider.ZCodeRestrictedHint)))
+	return status >= 400 && (bodyHas(body, provider.WBRestrictedHint) || bodyHas(body, provider.ZCodeRestrictedHint))
 }
 
 // restrictedRefused says p's vendor restricted the account: magpie's words
@@ -1449,7 +1449,7 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 		// account alike (mimi001234); none is set aside
 		return Rest{Why: why, Status: status, By: "off", Until: now}
 	}
-	if status == http.StatusBadGateway && bytes.Contains(body, []byte(openCodeBare)) {
+	if status == http.StatusBadGateway && bodyHas(body, openCodeBare) {
 		// OpenCode's bare 400 (openCodeBareRefusal, #3740) is about the
 		// request, not the key: the key's other requests go through, so
 		// none is set aside and the failure counts nowhere

@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"slices"
 	"strings"
 
@@ -252,7 +251,7 @@ func autoModeClassifierBody(model string, body []byte) []byte {
 // Claude Code's auto mode classifier asking about an action. The bytes
 // are looked at before the body is parsed: every request passes here.
 func autoModeClassifierAsk(body []byte) bool {
-	if !bytes.Contains(body, []byte("<transcript>")) || !bytes.Contains(body, []byte("<block>")) && !bytes.Contains(body, []byte("<severity>")) {
+	if !bodyHas(body, "<transcript>") || !bodyHas(body, "<block>") && !bodyHas(body, "<severity>") {
 		return false
 	}
 	req, err := parseAnthropic(body)

@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"cmp"
 	"encoding/json"
 	"fmt"
@@ -173,7 +172,7 @@ func searchFound(tools []rTool) string {
 // Codex as unsealed (callTo's encrypted_function_args), so an upstream that
 // honours the mark must not seal them (#613).
 func unsealed(schema json.RawMessage) json.RawMessage {
-	if !bytes.Contains(schema, []byte(`"encrypted"`)) {
+	if !bodyHas(schema, `"encrypted"`) {
 		return schema
 	}
 	var v any
@@ -208,7 +207,7 @@ func unsealed(schema json.RawMessage) json.RawMessage {
 // "encrypted" (MultiAgentV2's spawn_agent message): an upstream that
 // honours the mark answers the call with that argument sealed.
 func asksSealing(body []byte) bool {
-	if !bytes.Contains(body, []byte(`"encrypted"`)) {
+	if !bodyHas(body, `"encrypted"`) {
 		return false
 	}
 	var q struct {
@@ -245,7 +244,7 @@ func asksSealing(body []byte) bool {
 	}
 	marked := func(schema json.RawMessage) bool {
 		var v any
-		return bytes.Contains(schema, []byte(`"encrypted"`)) && decodeJSON(schema, &v) == nil && mark(v)
+		return bodyHas(schema, `"encrypted"`) && decodeJSON(schema, &v) == nil && mark(v)
 	}
 	for _, t := range q.Tools {
 		if marked(t.Parameters) {
@@ -740,7 +739,7 @@ func toolResultItem(t string) bool {
 // whole exchanges stays where it is, and a request with nothing inside a
 // run comes back byte for byte.
 func joinToolRuns(body []byte) []byte {
-	if !bytes.Contains(body, []byte(`_call"`)) {
+	if !bodyHas(body, `_call"`) {
 		return body
 	}
 	var q map[string]json.RawMessage
@@ -936,7 +935,7 @@ func orphanedToolOutputs(body []byte) []byte {
 // orphanedToolOutputs, and one naming a call another request carried
 // (previous_response_id) stays as it is.
 func pairToolItems(body []byte) []byte {
-	if !bytes.Contains(body, []byte(`_call"`)) {
+	if !bodyHas(body, `_call"`) {
 		return body
 	}
 	var q map[string]json.RawMessage
@@ -1012,7 +1011,7 @@ func pairToolItems(body []byte) []byte {
 // pages, never what they said, and the reply after it says what was
 // found, so nothing the model read is lost.
 func withoutSearchCalls(body []byte) []byte {
-	if !bytes.Contains(body, []byte(`"web_search_call"`)) {
+	if !bodyHas(body, `"web_search_call"`) {
 		return body
 	}
 	var q map[string]json.RawMessage
@@ -1156,8 +1155,8 @@ func replaysReasoning(model, host string) bool {
 // be passed back to the API" (#1104, #1592, #1822). A body with nothing to
 // give comes back byte for byte.
 func withReasoningText(body []byte) []byte {
-	if !bytes.Contains(body, []byte(`"reasoning"`)) && !bytes.Contains(body, []byte(`_call"`)) &&
-		!bytes.Contains(body, []byte(`_output"`)) {
+	if !bodyHas(body, `"reasoning"`) && !bodyHas(body, `_call"`) &&
+		!bodyHas(body, `_output"`) {
 		return body
 	}
 	var q map[string]json.RawMessage

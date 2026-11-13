@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"strings"
 
 	"github.com/tidwall/gjson"
@@ -27,7 +26,7 @@ func grokToolPatterns(p provider.Provider, to provider.Protocol, body []byte) []
 	if p.VendorHost() != "api.x.ai" && !grokModel(gjson.GetBytes(body, "model").String()) {
 		return body
 	}
-	if !bytes.Contains(body, []byte(`"pattern"`)) {
+	if !bodyHas(body, `"pattern"`) {
 		return body
 	}
 	return toolPatterns(body, ecmaClassForRust)

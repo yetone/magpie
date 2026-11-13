@@ -44,7 +44,7 @@ func (s *Server) foldsRoots(p provider.Provider, model string, proto provider.Pr
 // tools' parameters (a Messages tool's input_schema) have an object root,
 // and whether any was changed.
 func objectRootsBody(proto provider.Protocol, body []byte) ([]byte, bool) {
-	if (proto != provider.Chat && proto != provider.Responses && proto != provider.Anthropic) || !bytes.Contains(body, []byte(`Of"`)) {
+	if (proto != provider.Chat && proto != provider.Responses && proto != provider.Anthropic) || !bodyHas(body, `Of"`) {
 		return body, false
 	}
 	dec := json.NewDecoder(bytes.NewReader(body))

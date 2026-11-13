@@ -479,7 +479,7 @@ func prevElsewhere(r *http.Request, p provider.Provider, body []byte, force bool
 		return body
 	}
 	n := a.total - a.fresh
-	if n <= 0 || !bytes.Contains(body, []byte(`"id"`)) {
+	if n <= 0 || !bodyHas(body, `"id"`) {
 		return body
 	}
 	var q map[string]json.RawMessage

@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -235,7 +234,7 @@ func withoutRefusedCarry(ctx context.Context, p provider.Provider, req *Request)
 // when any of it wasn't already, so that asking again leaves something
 // out.
 func refuseCarried(key, who string, from provider.Protocol, body []byte) bool {
-	if from == provider.Responses || !bytes.Contains(body, []byte(reasonTail)) {
+	if from == provider.Responses || !bodyHas(body, reasonTail) {
 		return false
 	}
 	req, err := parseRequest(from, body, false, true)

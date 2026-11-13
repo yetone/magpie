@@ -980,7 +980,7 @@ func geminiCompat(host, model string) bool {
 // thinking's type, and where the gateway and every other Chat API read it.
 // A request that says reasoning_effort itself is left as it is.
 func thinkingEffort(body []byte) []byte {
-	if !bytes.Contains(body, []byte(`"effort"`)) {
+	if !bodyHas(body, `"effort"`) {
 		return body
 	}
 	var v struct {
@@ -1004,7 +1004,7 @@ func thinkingEffort(body []byte) []byte {
 // for every route, and no field an upstream doesn't know. A
 // prompt_cache_key the body has already is the one kept.
 func cacheKeyCamel(body []byte) []byte {
-	if !bytes.Contains(body, []byte(`"promptCacheKey"`)) {
+	if !bodyHas(body, `"promptCacheKey"`) {
 		return body
 	}
 	dec := json.NewDecoder(bytes.NewReader(body))
@@ -1067,7 +1067,7 @@ func refusesThinkingConfig(status int, body []byte) bool {
 		return false
 	}
 	b := bytes.ToLower(body)
-	return bytes.Contains(b, []byte("extra_body")) || bytes.Contains(b, []byte("thinking")) || bytes.Contains(b, []byte("include_thoughts"))
+	return bodyHas(b, "extra_body") || bodyHas(b, "thinking") || bodyHas(b, "include_thoughts")
 }
 
 // aiStudioThinking is the thinking_config asking Gemini for its thoughts at

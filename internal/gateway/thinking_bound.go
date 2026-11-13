@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -99,7 +98,7 @@ func (s *Server) refuseThinking(owner string, keys []string) {
 // refused before; an assistant message left with nothing goes too. A body
 // with none of them goes byte for byte.
 func (s *Server) withoutRefusedThinking(p provider.Provider, body []byte) []byte {
-	if !bytes.Contains(body, []byte(`thinking"`)) {
+	if !bodyHas(body, `thinking"`) {
 		return body
 	}
 	owner := thinkingOwner(p)
@@ -251,7 +250,7 @@ func (s *Server) withoutForeignThinking(p provider.Provider, body []byte) []byte
 }
 
 func withoutForeignThinking(p provider.Provider, body []byte) []byte {
-	if !bytes.Contains(body, []byte(`"signature"`)) && !thinkingTyped.Match(body) {
+	if !bodyHas(body, `"signature"`) && !thinkingTyped.Match(body) {
 		return body
 	}
 	model := modelOf(body)

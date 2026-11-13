@@ -573,7 +573,7 @@ func (o *ollamaWriter) finish() {
 // that says "options" is left as it came, and a body without the word is
 // not read at all.
 func withoutOllamaOptions(body []byte) []byte {
-	if !bytes.Contains(body, []byte(`"options"`)) {
+	if !bodyHas(body, `"options"`) {
 		return body
 	}
 	return withoutTopMember(body, "options")

@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"context"
 	"net/http"
 	"slices"
@@ -71,8 +70,8 @@ func busy(status int, body []byte) bool {
 	switch {
 	case busyStatus(status):
 		return failure(status, body) == failOther && !protectionRefused(status, body) &&
-			!bytes.Contains(body, []byte(didNotStream)) &&
-			!bytes.Contains(body, []byte(cutVoidWords)) &&
+			!bodyHas(body, didNotStream) &&
+			!bodyHas(body, cutVoidWords) &&
 			!queued(body)
 	case status == 429:
 		return failure(status, body) == failRate && !creditWords.Match(wordsOf(body)) && !walled(body)

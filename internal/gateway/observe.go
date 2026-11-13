@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"context"
 	"net/http"
 	"strings"
@@ -90,7 +89,7 @@ func inferredKind(in http.Header, from provider.Protocol, body []byte) string {
 // your most recent action in 3-5 words."). The bytes are looked at first:
 // every request passes here.
 func agentSummaryAsk(body []byte) bool {
-	if !bytes.Contains(body, []byte("3-5 words")) {
+	if !bodyHas(body, "3-5 words") {
 		return false
 	}
 	req, err := parseAnthropic(body)

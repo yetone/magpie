@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"log"
@@ -60,7 +59,7 @@ const claudeNoRoomSaid = "Claude Code processes are running, as many as may run 
 // claudeNoRoom says whether a failed reply is the bridge's 503 for a full
 // claudeRoom.
 func claudeNoRoom(status int, body []byte) bool {
-	return status == 503 && bytes.Contains(body, []byte(claudeNoRoomSaid))
+	return status == 503 && bodyHas(body, claudeNoRoomSaid)
 }
 
 func (e *claudeFull) Error() string {

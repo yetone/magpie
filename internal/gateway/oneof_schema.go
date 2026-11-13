@@ -20,7 +20,7 @@ func toolOneOfAsAnyOf(p provider.Provider, to provider.Protocol, body []byte) []
 	if !(p.IsCline() || p.IsKilo() || provider.HostOf(p.Base(to)) == "openrouter.ai") {
 		return body
 	}
-	if !bytes.Contains(body, []byte(`"oneOf"`)) {
+	if !bodyHas(body, `"oneOf"`) {
 		return body
 	}
 	tools := gjson.GetBytes(body, "tools")

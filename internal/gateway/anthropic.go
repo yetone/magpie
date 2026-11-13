@@ -345,7 +345,7 @@ func readAdvised(body []byte, clientMarks, facts, advised bool) (*Request, error
 // turnEffort is the last effort a message of an Anthropic request carries
 // in its own output_config; "" when none does.
 func turnEffort(body []byte) string {
-	if !bytes.Contains(body, []byte(`"output_config"`)) {
+	if !bodyHas(body, `"output_config"`) {
 		return ""
 	}
 	last := ""
@@ -404,7 +404,7 @@ func anthropicReplaysThinking(host, model string) bool {
 // group that falls from Claude to DeepSeek sends both (#1611). Every other
 // message, and a body with nothing to change, goes byte for byte.
 func withThinkingOnToolTurns(body []byte) []byte {
-	if !bytes.Contains(body, []byte(`"tool_use"`)) && !bytes.Contains(body, []byte(`"redacted_thinking"`)) {
+	if !bodyHas(body, `"tool_use"`) && !bodyHas(body, `"redacted_thinking"`) {
 		return body
 	}
 	var q map[string]json.RawMessage
@@ -2007,7 +2007,7 @@ func newID() string {
 // to every request offering it (#646). A schema that has none is sent as
 // it came.
 func objectSchema(schema json.RawMessage) json.RawMessage {
-	if !bytes.Contains(schema, []byte(`Of"`)) {
+	if !bodyHas(schema, `Of"`) {
 		return schema
 	}
 	var m map[string]any

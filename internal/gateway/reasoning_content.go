@@ -129,7 +129,7 @@ func (t *reasoningTidy) flush() []byte {
 }
 
 func (t *reasoningTidy) lines(b []byte) []byte {
-	if !bytes.Contains(b, []byte(`"reasoning"`)) {
+	if !bodyHas(b, `"reasoning"`) {
 		return append([]byte(nil), b...)
 	}
 	var out []byte
@@ -142,7 +142,7 @@ func (t *reasoningTidy) lines(b []byte) []byte {
 		}
 		body := bytes.TrimRight(line, "\r\n")
 		data, ok := bytes.CutPrefix(body, []byte("data:"))
-		if !ok || !bytes.Contains(data, []byte(`"reasoning"`)) {
+		if !ok || !bodyHas(data, `"reasoning"`) {
 			out = append(out, line...)
 			continue
 		}

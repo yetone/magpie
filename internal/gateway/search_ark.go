@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"encoding/json"
 
 	"github.com/yetone/magpie/internal/provider"
@@ -58,7 +57,7 @@ func includeTaken(host, v string) bool {
 // with neither, goes as it came.
 func forArkSearch(p provider.Provider, body []byte) []byte {
 	if p.Account != nil || provider.HostOf(p.Base(provider.Responses)) != arkHost ||
-		!bytes.Contains(body, []byte("web_search")) && !bytes.Contains(body, []byte(`"include"`)) {
+		!bodyHas(body, "web_search") && !bodyHas(body, `"include"`) {
 		return body
 	}
 	q, err := rawObject(body)

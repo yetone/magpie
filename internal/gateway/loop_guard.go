@@ -149,7 +149,7 @@ func (g *loopGuard) feed(b []byte) (loopTrip, bool) {
 // eventWords is what one event of a reply says, in any protocol: its
 // reasoning and its text. Calls, starts, stops and usage say nothing here.
 func eventWords(ev []byte) (think, text string) {
-	if !bytes.Contains(ev, []byte(`delta`)) && !bytes.Contains(ev, []byte(`candidates`)) {
+	if !bodyHas(ev, `delta`) && !bodyHas(ev, `candidates`) {
 		return "", "" // most events that aren't content, without reading them
 	}
 	var data []byte

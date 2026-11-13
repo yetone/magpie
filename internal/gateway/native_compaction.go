@@ -48,7 +48,7 @@ const (
 // compactionTriggerIn says whether a Responses request's input holds
 // Codex's compaction_trigger.
 func compactionTriggerIn(body []byte) bool {
-	if !bytes.Contains(body, []byte(`"compaction_trigger"`)) {
+	if !bodyHas(body, `"compaction_trigger"`) {
 		return false
 	}
 	for _, it := range getIn(body, "input").Array() {
@@ -63,7 +63,7 @@ func compactionTriggerIn(body []byte) bool {
 // a Responses request's input that a vendor sealed: magpie's own
 // ("magpie1:") are text by the time a request is sent, and aren't.
 func sealedCompactions(body []byte) []string {
-	if !bytes.Contains(body, []byte(`"compaction`)) {
+	if !bodyHas(body, `"compaction`) {
 		return nil
 	}
 	var out []string
@@ -602,7 +602,7 @@ func (c *compactionWatch) sealed() string {
 	}
 	for line := range bytes.SplitSeq(b, []byte("\n")) {
 		data, ok := bytes.CutPrefix(bytes.TrimSpace(line), []byte("data:"))
-		if !ok || !bytes.Contains(data, []byte(`"compaction`)) {
+		if !ok || !bodyHas(data, `"compaction`) {
 			continue
 		}
 		ev := gjson.ParseBytes(bytes.TrimSpace(data))

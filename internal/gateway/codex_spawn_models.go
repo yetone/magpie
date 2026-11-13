@@ -44,7 +44,7 @@ type spawnChoice struct{ slug, name string }
 // spawn_agent tool naming every model of the catalog that Codex was handed
 // there, not only the first five. lead is the request's model.
 func spawnAgentModels(r *http.Request, body []byte, lead string, codexPath bool) []byte {
-	if !bytes.Contains(body, []byte(`"spawn_agent"`)) || !bytes.Contains(body, []byte("Available model overrides")) {
+	if !bodyHas(body, `"spawn_agent"`) || !bodyHas(body, "Available model overrides") {
 		return body
 	}
 	choices := spawnChoices(r, lead, codexPath)
@@ -70,7 +70,7 @@ func spawnAgentModels(r *http.Request, body []byte, lead string, codexPath bool)
 	// in a tool_search_output, not in tools (Gearclickist on Discord, after
 	// v0.1.1214). Codex sends that output as it got it on every turn, so
 	// it is widened the same way on each.
-	if input, found, _ := topMember(body, "input"); found && bytes.Contains(input, []byte("tool_search_output")) {
+	if input, found, _ := topMember(body, "input"); found && bodyHas(input, "tool_search_output") {
 		if in, ok := moreSpawnInput(input, choices); ok {
 			set["input"] = in
 		}
@@ -95,7 +95,7 @@ func moreSpawnInput(input []byte, choices []spawnChoice) ([]byte, bool) {
 	for raw[i] != ']' {
 		at := i
 		i = skipJSONValue(raw, i)
-		if el := raw[at:i]; el[0] == '{' && bytes.Contains(el, []byte("tool_search_output")) {
+		if el := raw[at:i]; el[0] == '{' && bodyHas(el, "tool_search_output") {
 			if it, ok := moreSpawnItem(el, choices); ok {
 				out = append(append(out, raw[last:at]...), it...)
 				last = i

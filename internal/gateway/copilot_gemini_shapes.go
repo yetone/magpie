@@ -412,7 +412,7 @@ func derefLocal(top map[string]any, ref string) map[string]any {
 		return nil
 	}
 	raw, err := json.Marshal(target)
-	if err != nil || bytes.Contains(raw, []byte(`"$ref"`)) {
+	if err != nil || bodyHas(raw, `"$ref"`) {
 		return nil
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))

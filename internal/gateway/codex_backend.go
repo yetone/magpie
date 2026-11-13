@@ -1718,7 +1718,7 @@ func codexAccountOut(status int, body []byte) bool {
 	if status == http.StatusUnauthorized {
 		return false
 	}
-	if status == http.StatusForbidden && bytes.Contains(body, []byte("usage_not_included")) {
+	if status == http.StatusForbidden && bodyHas(body, "usage_not_included") {
 		return true
 	}
 	switch failure(status, body) {
@@ -2886,7 +2886,7 @@ func refusesInput(status int, b []byte) bool {
 // request goes back 400 "Item with id 'rs_…' not found" (#1008); its
 // summary was the model's notes to itself, which no model reads back.
 func withoutBareReasoning(body []byte) []byte {
-	if !bytes.Contains(body, []byte(`"reasoning"`)) || !anyInputItem(body, func(it []byte) bool {
+	if !bodyHas(body, `"reasoning"`) || !anyInputItem(body, func(it []byte) bool {
 		r := reasoningOf(it)
 		return r.typeOK && r.encOK && r.reasoning && !r.sealed
 	}) {
@@ -3040,7 +3040,7 @@ func refusesReasoningText(status int, b, body []byte) bool {
 // than its text, so the item goes, as codexInput leaves it out for one of
 // Codex's own models.
 func withoutReasoningText(body []byte) []byte {
-	if !bytes.Contains(body, []byte(`"reasoning"`)) || !anyInputItem(body, func(it []byte) bool {
+	if !bodyHas(body, `"reasoning"`) || !anyInputItem(body, func(it []byte) bool {
 		r := reasoningOf(it)
 		return r.typeOK && r.contentOK && r.reasoning && r.text
 	}) {
@@ -3103,7 +3103,7 @@ func refusesCitationOffsets(status int, b []byte) bool {
 // with it. Such an annotation goes; the text, and a citation with its
 // offsets, stay as they came.
 func withoutOffsetlessCitations(body []byte) []byte {
-	if !bytes.Contains(body, []byte(`"annotations"`)) || !anyInputItem(body, itemCitesWithoutOffsets) {
+	if !bodyHas(body, `"annotations"`) || !anyInputItem(body, itemCitesWithoutOffsets) {
 		return body
 	}
 	q, err := rawObject(body)
@@ -3173,7 +3173,7 @@ func withoutOffsetlessCitations(body []byte) []byte {
 // output_text annotation without the offsets OpenAI's schema wants, read
 // as the scan reads it, without decoding the conversation.
 func itemCitesWithoutOffsets(it []byte) bool {
-	if !bytes.Contains(it, []byte(`"annotations"`)) {
+	if !bodyHas(it, `"annotations"`) {
 		return false
 	}
 	for _, part := range elementsOf(memberOrNil(it, "content")) {
@@ -3206,7 +3206,7 @@ var openaiItemPrefix = map[string]string{
 // call's output names it by as it was, and the rest of the request byte
 // for byte.
 func callItemIDs(body []byte) []byte {
-	if !bytes.Contains(body, []byte(`"tool_search_call"`)) && !bytes.Contains(body, []byte(`"custom_tool_call"`)) {
+	if !bodyHas(body, `"tool_search_call"`) && !bodyHas(body, `"custom_tool_call"`) {
 		return body
 	}
 	if !anyInputItem(body, func(it []byte) bool {
@@ -3388,7 +3388,7 @@ var itemKindPrefix = map[string]string{
 // with each other character as "_"; a call's call_id, which its output
 // names it by, stays as it was.
 func plainItemIDs(body []byte) []byte {
-	if !bytes.Contains(body, []byte(`"id"`)) {
+	if !bodyHas(body, `"id"`) {
 		return body
 	}
 	if !anyInputItem(body, func(it []byte) bool {
@@ -3639,7 +3639,7 @@ func keepsAccessPrograms(p provider.Provider, in http.Header) bool {
 // withoutAccessPrograms is body without its top-level access_programs, the
 // rest byte for byte (withoutTopMember).
 func withoutAccessPrograms(body []byte) []byte {
-	if !bytes.Contains(body, []byte(`"access_programs"`)) {
+	if !bodyHas(body, `"access_programs"`) {
 		return body
 	}
 	return withoutTopMember(body, "access_programs")
@@ -3693,7 +3693,7 @@ func forVendorChanges(body []byte) bool {
 // takes developer alone, never comes here. The message stays where it
 // stood, so a thread's cached prefix keeps its shape (#502).
 func developerItemsAsSystem(body []byte) []byte {
-	if !bytes.Contains(body, []byte(`"developer"`)) {
+	if !bodyHas(body, `"developer"`) {
 		return body
 	}
 	var q map[string]json.RawMessage

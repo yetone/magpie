@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"sort"
@@ -57,29 +58,42 @@ func stdBase64(s string) (string, bool) {
 // isn't a multiple of four. Standard base64 of an image has '+' or '/'
 // every few dozen characters, which ends a URL-safe run, and prose has
 // spaces; a body it says yes to wrongly is only walked for nothing.
+//
+// It looks back from each quote, not at every byte: a run ends a string
+// only there, and prose stops the look a word back. Its byte-by-byte walk
+// took ~2 ms of each 2 MB request (BenchmarkLargeRequest).
 func mayHoldOddBase64(body []byte) bool {
 	const least = 64
-	start, odd := -1, false
-	for i, c := range body {
-		switch {
-		case c >= 'A' && c <= 'Z', c >= 'a' && c <= 'z', c >= '0' && c <= '9', c == '+', c == '/', c == '=':
-			if start < 0 {
-				start, odd = i, false
+	for i := 0; ; i++ {
+		q := bytes.IndexByte(body[i:], '"')
+		if q < 0 {
+			return false
+		}
+		i += q
+		start, odd := i, false
+		for start > 0 {
+			k := base64Class[body[start-1]]
+			if k == 0 {
+				break
 			}
-		case c == '-' || c == '_':
-			if start < 0 {
-				start = i
-			}
-			odd = true
-		default:
-			if start >= 0 && c == '"' && i-start >= least && (odd || (i-start)%4 != 0) {
-				return true
-			}
-			start = -1
+			odd = odd || k == 2
+			start--
+		}
+		if i-start >= least && (odd || (i-start)%4 != 0) {
+			return true
 		}
 	}
-	return false
 }
+
+// base64Class is 1 for a byte of standard base64 (with '='), 2 for one
+// only URL-safe base64 has, 0 for the rest.
+var base64Class = func() (t [256]uint8) {
+	for _, c := range []byte("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=") {
+		t[c] = 1
+	}
+	t['-'], t['_'] = 2, 2
+	return t
+}()
 
 // stdBase64Body is the body with each image's inline base64, and each
 // Gemini inlineData part's whatever its type (a PDF, a recording), written

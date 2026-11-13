@@ -107,7 +107,7 @@ func (s *Server) fitUserBetas(p provider.Provider, h http.Header) {
 // bodyBetas fits a body's anthropic_beta list, as Bedrock's InvokeModel
 // takes betas, the way betas fits the header's.
 func (s *Server) bodyBetas(p provider.Provider, body []byte) []byte {
-	if !bytes.Contains(body, []byte(`"anthropic_beta"`)) {
+	if !bodyHas(body, `"anthropic_beta"`) {
 		return body
 	}
 	list := gjson.GetBytes(body, "anthropic_beta")

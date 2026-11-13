@@ -1736,7 +1736,7 @@ func codeAssistModelMissing(p provider.Provider, status int, body []byte) bool {
 	if p.Account.Agent != "antigravity" && p.Account.Agent != "gemini" {
 		return false
 	}
-	return bytes.Contains(body, []byte("NOT_FOUND")) || bytes.Contains(bytes.ToLower(body), []byte("not found"))
+	return bodyHas(body, "NOT_FOUND") || bytes.Contains(bytes.ToLower(body), []byte("not found"))
 }
 
 // retiredWords are how a vendor says the model is retired, though its
@@ -2235,7 +2235,7 @@ var transportWords = lazyre.New(`(?i)dial (tcp|udp)|connectex|wsarecv|wsasend|i/
 // broke off or said nothing.
 func transportFailed(body []byte) bool {
 	return transportWords.Match(body) || bytes.Contains(body, []byte(errEndedShort.Error())) ||
-		bytes.Contains(body, []byte(didNotStream)) || magpieSaid(string(body))
+		bodyHas(body, didNotStream) || magpieSaid(string(body))
 }
 
 // noteHeld keeps n as the most prompt tokens the provider's model has
@@ -2344,14 +2344,14 @@ func passing(status int, header http.Header, body []byte, again int) (time.Durat
 	case wait > longestPause:
 		return 0, false
 	case busyStatus(status):
-		if bytes.Contains(body, []byte(didNotStream)) || bytes.Contains(body, []byte(cutVoidWords)) {
+		if bodyHas(body, didNotStream) || bodyHas(body, cutVoidWords) {
 			// a void cut at its length fails the same every ask: the
 			// budget went to reasoning, and mostly would again — the same
 			// one asked again would burn it twice over before the error
 			// (#2972). A group's next member still is.
 			return 0, false
 		}
-		if bytes.Contains(body, []byte(emptyReply)) {
+		if bodyHas(body, emptyReply) {
 			// a model that answered nothing was asked again in place
 			// already (emptyRetries); asking the whole request again as
 			// often as a vendor's outage multiplied the two, nine asks of a
@@ -3491,9 +3491,9 @@ func (h *holdWriter) refusalAfter(b []byte) {
 // too — the cost of missing one, a call the agent would run beside the
 // next member's, is the greater.
 func mayCall(b []byte) bool {
-	return bytes.Contains(b, []byte(`"tool_calls"`)) ||
-		bytes.Contains(b, []byte(`"tool_use"`)) ||
-		bytes.Contains(b, []byte(`"function_call"`))
+	return bodyHas(b, `"tool_calls"`) ||
+		bodyHas(b, `"tool_use"`) ||
+		bodyHas(b, `"function_call"`)
 }
 
 // mayRefuse is whether an event may be the safety filter's refusal, by the
@@ -3868,7 +3868,7 @@ func (h *holdWriter) started() bool {
 // for a reply wanted whole (wantWhole), no answer (#2274). A filter's
 // reason is a refusal, read before this (streamEvent).
 func endedIncomplete(ev []byte) (string, bool) {
-	if !bytes.Contains(ev, []byte("incomplete")) {
+	if !bodyHas(ev, "incomplete") {
 		return "", false
 	}
 	var data []byte
@@ -4248,7 +4248,7 @@ func streamEvent(ev []byte) (kind, status int, msg string) {
 					thinks = true // its reasoning, said to nobody yet
 					continue
 				}
-				if json.Unmarshal(p, &part) != nil || part.Text != "" || !bytes.Contains(p, []byte(`"text"`)) {
+				if json.Unmarshal(p, &part) != nil || part.Text != "" || !bodyHas(p, `"text"`) {
 					return eventContent, 0, "" // text, or a call
 				}
 			}
@@ -4274,7 +4274,7 @@ func streamEvent(ev []byte) (kind, status int, msg string) {
 		// safety buffering, moderation, a verification it recommends.
 		// Taken for content, it let the stream through, and the
 		// response.failed bio_policy after it went to Codex (#248)
-		if bytes.Contains(data, []byte(`"safety_buffering"`)) {
+		if bodyHas(data, `"safety_buffering"`) {
 			return eventBuffering, 0, ""
 		}
 		return eventLead, 0, ""

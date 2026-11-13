@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"cmp"
 	"context"
 	"net/http"
@@ -37,7 +36,7 @@ type searchTally struct {
 func (t *searchTally) see(proto provider.Protocol, b []byte) {
 	switch proto {
 	case provider.Anthropic:
-		if !bytes.Contains(b, []byte("server_tool_use")) {
+		if !bodyHas(b, "server_tool_use") {
 			return
 		}
 		v := gjson.ParseBytes(b)
@@ -49,7 +48,7 @@ func (t *searchTally) see(proto provider.Protocol, b []byte) {
 			t.said = max(t.said, int(u.Get("server_tool_use.web_search_requests").Int()))
 		}
 	case provider.Responses:
-		if !bytes.Contains(b, []byte("web_search_call")) {
+		if !bodyHas(b, "web_search_call") {
 			return
 		}
 		v := gjson.ParseBytes(b)

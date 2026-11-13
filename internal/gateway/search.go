@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"cmp"
 	"context"
 	"encoding/json"
@@ -285,7 +284,7 @@ var searchHosts = map[provider.Protocol][]string{
 func searchAsked(proto provider.Protocol, body []byte) bool {
 	// bytes, not string(body): each conversion copied the whole body, three
 	// times a request (a 200KB body: 640KB and 3ms)
-	if !bytes.Contains(body, []byte("web_search")) && !bytes.Contains(body, []byte("oogle_search")) && !bytes.Contains(body, []byte("googleSearch")) {
+	if !bodyHas(body, "web_search") && !bodyHas(body, "oogle_search") && !bodyHas(body, "googleSearch") {
 		return false
 	}
 	req, err := parse(proto, body)

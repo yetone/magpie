@@ -82,7 +82,7 @@ func (w *signInWriter) Write(b []byte) (int, error) {
 		}
 		code := w.held
 		w.held = 0
-		if code != http.StatusUnauthorized && (code != http.StatusForbidden || !bytes.Contains(b, []byte("OAuth token has been revoked"))) {
+		if code != http.StatusUnauthorized && (code != http.StatusForbidden || !bodyHas(b, "OAuth token has been revoked")) {
 			// any other error, at its status
 			if xAPIKey.Match(b) {
 				b = xAPIKey.ReplaceAll(b, []byte("API key"))

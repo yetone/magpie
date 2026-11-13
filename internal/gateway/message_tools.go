@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"encoding/json"
 
 	"github.com/tidwall/gjson"
@@ -27,7 +26,7 @@ import (
 // tools. A request with no message tools, or one that doesn't parse, is
 // as it came.
 func liftMessageTools(body []byte) []byte {
-	if !bytes.Contains(body, []byte(`"tools"`)) {
+	if !bodyHas(body, `"tools"`) {
 		return body
 	}
 	if len(gjson.GetBytes(body, "messages.#.tools").Array()) == 0 {

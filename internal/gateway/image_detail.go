@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"encoding/json"
 
 	"github.com/yetone/magpie/internal/provider"
@@ -29,7 +28,7 @@ func takesOriginalDetail(p provider.Provider) bool {
 // "original" sent as "high", the closest an API without it has, as a Chat
 // upstream is sent it (chatDetail); the body as it came when it has none.
 func originalAsHigh(body []byte) []byte {
-	if !bytes.Contains(body, []byte(`"original"`)) {
+	if !bodyHas(body, `"original"`) {
 		return body
 	}
 	out, err := walkImages(provider.Responses, body, func(im imageAt) (json.RawMessage, error) {

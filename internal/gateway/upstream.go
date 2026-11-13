@@ -21,7 +21,7 @@ import (
 // choice's content is the model's, and providerAttempts inside routing
 // lists every provider tried, not the one that answered.
 func upstreamOf(b []byte) string {
-	if !bytes.Contains(b, []byte(`"provider"`)) && !bytes.Contains(b, []byte(`"finalProvider"`)) {
+	if !bodyHas(b, `"provider"`) && !bodyHas(b, `"finalProvider"`) {
 		return ""
 	}
 	type routed struct {
@@ -71,7 +71,7 @@ func upstreamOf(b []byte) string {
 // what the upstream said of it — a relay's "end_turn" after a few words,
 // or nothing at all (蓝猫 on Discord). "" when this one says none.
 func upstreamStop(b []byte) string {
-	if !bytes.Contains(b, []byte(`stop_reason"`)) && !bytes.Contains(b, []byte(`finish_reason"`)) && !bytes.Contains(b, []byte(`"response.`)) {
+	if !bodyHas(b, `stop_reason"`) && !bodyHas(b, `finish_reason"`) && !bodyHas(b, `"response.`) {
 		return ""
 	}
 	var v struct {

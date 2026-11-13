@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"encoding/json"
 
 	"github.com/tidwall/gjson"
@@ -55,7 +54,7 @@ func claudePart(block json.RawMessage, summary Part) Part {
 // redacted) goes. Every other item, and a body with none, goes byte for
 // byte.
 func withoutClaudeSeals(body []byte) []byte {
-	if !bytes.Contains(body, []byte(claudeseal.Mark)) {
+	if !bodyHas(body, claudeseal.Mark) {
 		return body
 	}
 	var q map[string]json.RawMessage

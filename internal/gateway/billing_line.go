@@ -43,7 +43,7 @@ func dropsBillingLine(p provider.Provider, to provider.Protocol, model, wire str
 // it. Everything else goes as it was sent, byte for byte; a body without
 // the line is body itself.
 func withoutBillingLine(body []byte) []byte {
-	if !bytes.Contains(body, []byte("x-anthropic-billing-header:")) {
+	if !bodyHas(body, "x-anthropic-billing-header:") {
 		return body
 	}
 	sys := gjson.GetBytes(body, "system")

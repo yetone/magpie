@@ -397,7 +397,7 @@ func ServedAt(base string) Served {
 		Serves  string `json:"serves"`
 	}
 	if decodeJSON(b, &info) != nil || info.Name != "magpie" {
-		return Served{Running: bytes.Contains(b, []byte(`"magpie"`)), Window: bytes.Contains(b, []byte(`"window":true`))}
+		return Served{Running: bodyHas(b, `"magpie"`), Window: bodyHas(b, `"window":true`)}
 	}
 	return Served{Running: true, Window: info.Window, Version: info.Version, Pid: info.Pid, Serves: info.Serves}
 }
@@ -2298,7 +2298,7 @@ func (s *Server) handle(from provider.Protocol) http.HandlerFunc {
 			// which magpie points here, #1301): the summary is magpie's to
 			// make, as on CodexPath, and magpie's summaries go back as text;
 			// a provider set to compact natively is asked Codex's own (#1099)
-			if bytes.Contains(body, []byte(`"compaction`)) {
+			if bodyHas(body, `"compaction`) {
 				var compact bool
 				if body, compact = codexInputAs(body, true, s.nativeCompactionFor(modelOf(body))); compact {
 					s.codexCompact(w, r, body)
@@ -3012,7 +3012,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// a video for a model its list says takes none is turned away, not
 	// left out for the model to answer the words alone (#6135); a group's
 	// members are picked by it below
-	if !isGroup && bytes.Contains(body, []byte("video")) && noVideo(p.ID, model) && hasCurrentVideo(from, body) {
+	if !isGroup && bodyHas(body, "video") && noVideo(p.ID, model) && hasCurrentVideo(from, body) {
 		call.Status, call.Error = 400, "model does not support video input"
 		writeError(w, from, 400, videoRefused(call.Model, ""))
 		turnedAway()
@@ -8769,7 +8769,7 @@ func cacheKeyOf(in http.Header, req *Request) string {
 // doesn't take — Gemini's "Unknown name", Mistral's extra_forbidden,
 // Groq's "unsupported" — by the field's name in the error.
 func refusesField(status int, body []byte, field string) bool {
-	return badRequest(status) && bytes.Contains(body, []byte(field))
+	return badRequest(status) && bodyHas(body, field)
 }
 
 // hourMarksRefused is an upstream that turned away the hour-long cache
@@ -8779,7 +8779,7 @@ const hourMarksRefused = "cache_control.ttl"
 // hourMarksRefusal is a 400 over a cache mark's ttl: a relay that knows no
 // ttl, or a 1h mark after a 5m one.
 func hourMarksRefusal(status int, b []byte) bool {
-	return badRequest(status) && bytes.Contains(b, []byte("ttl")) && bytes.Contains(b, []byte("cache_control"))
+	return badRequest(status) && bodyHas(b, "ttl") && bodyHas(b, "cache_control")
 }
 
 // tierField is the client's service tier as a request carries it upstream
@@ -9947,7 +9947,7 @@ func rewriteModel(body []byte, model string) []byte {
 // accepts, but other Chat Completions backends (DeepSeek among them) reject
 // the whole request; every backend accepts system, OpenAI included.
 func developerAsSystem(body []byte) []byte {
-	if !bytes.Contains(body, []byte(`"developer"`)) {
+	if !bodyHas(body, `"developer"`) {
 		return body
 	}
 	dec := json.NewDecoder(bytes.NewReader(body))
@@ -10712,7 +10712,7 @@ func withFields(body []byte, fields map[string]any) []byte {
 // max_completion_tokens in place of max_tokens, as Bedrock's OpenAI
 // endpoint takes it: its GPT models turn max_tokens away (#176).
 func asCompletionTokens(body []byte) []byte {
-	if !bytes.Contains(body, []byte(`"max_tokens"`)) {
+	if !bodyHas(body, `"max_tokens"`) {
 		return body
 	}
 	dec := json.NewDecoder(bytes.NewReader(body))
@@ -10777,7 +10777,7 @@ func refusesLoneToolChoice(p provider.Provider) bool {
 // withoutLoneToolChoice leaves out a tool_choice sent with no tools; with
 // none to choose from it says nothing.
 func withoutLoneToolChoice(body []byte) []byte {
-	if !bytes.Contains(body, []byte(`"tool_choice"`)) {
+	if !bodyHas(body, `"tool_choice"`) {
 		return body
 	}
 	var q struct {

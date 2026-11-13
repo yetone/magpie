@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"cmp"
 	"fmt"
 	"mime"
@@ -99,7 +98,7 @@ func currentVideo(r *Request) bool {
 // hasCurrentVideo is currentVideo of a body as the client sent it. Most
 // bodies name no video at all and are not parsed.
 func hasCurrentVideo(from provider.Protocol, body []byte) bool {
-	if !bytes.Contains(body, []byte("video")) {
+	if !bodyHas(body, "video") {
 		return false
 	}
 	req, err := parse(from, body)

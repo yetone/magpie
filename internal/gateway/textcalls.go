@@ -976,8 +976,8 @@ func (t *textCallTidy) line(line []byte) []byte {
 // written into its text, for a request that offered names: one of
 // textCallMarks' words is in it, however its JSON escapes the brackets.
 func mayWriteCalls(b []byte, names map[string]bool) bool {
-	return names != nil && (bytes.Contains(b, []byte("tool_call")) || bytes.Contains(b, []byte("DSML")) ||
-		bytes.Contains(b, []byte("invoke name=")) || bytes.Contains(b, []byte("function_calls")))
+	return names != nil && (bodyHas(b, "tool_call") || bodyHas(b, "DSML") ||
+		bodyHas(b, "invoke name=") || bodyHas(b, "function_calls"))
 }
 
 // wholeTextCalls reads the calls written into the content of a whole Chat

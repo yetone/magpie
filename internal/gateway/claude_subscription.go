@@ -4006,7 +4006,7 @@ type lockedWriter struct{ run *subscriptionRun }
 func (w *lockedWriter) Write(p []byte) (int, error) {
 	// the interactive mode's helper says on its own line why it ended
 	// (claudetui.Run)
-	if bytes.Contains(p, []byte("claude-tui: ")) {
+	if bodyHas(p, "claude-tui: ") {
 		for _, l := range strings.Split(string(p), "\n") {
 			if why, ok := strings.CutPrefix(l, "claude-tui: "); ok {
 				log.Printf("claude: %s", why)

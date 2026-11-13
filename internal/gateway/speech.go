@@ -144,7 +144,7 @@ func speechUsage(tail []byte) (int, int) {
 	for i := len(lines) - 1; i >= 0; i-- {
 		l := bytes.TrimSpace(lines[i])
 		l = bytes.TrimSpace(bytes.TrimPrefix(l, []byte("data:")))
-		if !bytes.Contains(l, []byte(`"usage"`)) {
+		if !bodyHas(l, `"usage"`) {
 			continue
 		}
 		var a struct {

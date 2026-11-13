@@ -8,7 +8,6 @@ package gateway
 // doesn't offer Ultrafast is asked for priority in its place.
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"strings"
@@ -89,7 +88,7 @@ func noteWireTier(ctx context.Context, to provider.Protocol, body []byte) {
 // an Anthropic usage's service_tier. "" when it says none, which is never
 // read as the tier that was asked.
 func upstreamTier(b []byte) string {
-	if !bytes.Contains(b, []byte(`"service_tier"`)) {
+	if !bodyHas(b, `"service_tier"`) {
 		return ""
 	}
 	var v struct {

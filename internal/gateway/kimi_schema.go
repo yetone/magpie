@@ -26,7 +26,7 @@ func kimiToolEnumTypes(p provider.Provider, to provider.Protocol, body []byte) [
 	if !isKimi(p, to) {
 		return body
 	}
-	if !bytes.Contains(body, []byte(`"enum"`)) && !bytes.Contains(body, []byte(`"const"`)) {
+	if !bodyHas(body, `"enum"`) && !bodyHas(body, `"const"`) {
 		return body
 	}
 	tools := gjson.GetBytes(body, "tools")
@@ -302,7 +302,7 @@ func leadingInt(s string) (int, string) {
 // ref to nowhere, or never ends, leaves its schemas as they were. Written
 // in place, like kimiToolEnumTypes', after which it runs.
 func kimiToolRefTypes(p provider.Provider, to provider.Protocol, body []byte) []byte {
-	if !isKimi(p, to) || !bytes.Contains(body, []byte(`"$ref"`)) {
+	if !isKimi(p, to) || !bodyHas(body, `"$ref"`) {
 		return body
 	}
 	tools := gjson.GetBytes(body, "tools")

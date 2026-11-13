@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"encoding/json"
 	"strings"
 
@@ -30,7 +29,7 @@ import (
 // advisor's model is the client's to name, and the vendor runs it on the
 // user's account, so a key held to some models is held here too.
 func advisorTools(body []byte, p provider.Provider, upstream string, wires map[string]string, allowed func(model string) bool) []byte {
-	if !bytes.Contains(body, []byte(`"advisor_`)) {
+	if !bodyHas(body, `"advisor_`) {
 		return body
 	}
 	tools := gjson.GetBytes(body, "tools")
@@ -158,7 +157,7 @@ func advisorGoneIn(text string) (string, bool) {
 // tools, which Claude Code answers "No such tool available: advisor"
 // (JackChou on Discord).
 func withoutAdvisor(raw json.RawMessage, gone map[string]bool) (json.RawMessage, bool) {
-	if len(gone) == 0 || !bytes.Contains(raw, []byte("dvisor")) {
+	if len(gone) == 0 || !bodyHas(raw, "dvisor") {
 		return raw, false
 	}
 	var msgs []map[string]json.RawMessage

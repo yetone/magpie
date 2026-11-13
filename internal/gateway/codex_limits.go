@@ -181,7 +181,7 @@ func (t *codexLimitsTap) look() {
 		line := bytes.TrimSpace(t.buf[:i])
 		t.buf = t.buf[i+1:]
 		data, ok := bytes.CutPrefix(line, []byte("data:"))
-		if !ok || !bytes.Contains(data, []byte(`"codex.rate_limits"`)) {
+		if !ok || !bodyHas(data, `"codex.rate_limits"`) {
 			continue
 		}
 		if ls := codexEventLimits(bytes.TrimSpace(data), time.Now()); len(ls) > 0 {

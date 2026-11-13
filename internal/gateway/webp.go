@@ -38,8 +38,8 @@ var zhipuImageRefusal = lazyre.New(`必须传入file_id、file_url、file_data�
 // the base64 of a RIFF file's head, wherever its base64 starts (a webp
 // sent under another type is one too, as a HEIC sent as image/jpeg is).
 func mayHoldWebP(body []byte) bool {
-	return bytes.Contains(body, []byte("image/webp")) || bytes.Contains(body, []byte(`image\/webp`)) ||
-		bytes.Contains(body, []byte("UklG"))
+	return bodyHas(body, "image/webp") || bodyHas(body, `image\/webp`) ||
+		bodyHas(body, "UklG")
 }
 
 // webpAsJPEG is the body with each webp in it written again as JPEG (PNG

@@ -237,8 +237,8 @@ func (s *toolScan) add(p []byte) {
 				break
 			}
 		}
-		s.ended = s.ended || bytes.Contains(b, []byte("data: [DONE]")) || bytes.Contains(b, []byte("data:[DONE]")) ||
-			bytes.Contains(b, []byte("event: message_stop")) || bytes.Contains(b, []byte("event:message_stop"))
+		s.ended = s.ended || bodyHas(b, "data: [DONE]") || bodyHas(b, "data:[DONE]") ||
+			bodyHas(b, "event: message_stop") || bodyHas(b, "event:message_stop")
 	}
 	keep := min(len(b), 64) // longer than any value with its colon and spaces
 	s.tail = append(s.tail[:0:0], b[len(b)-keep:]...)

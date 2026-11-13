@@ -190,8 +190,8 @@ func googleExtra(sig string) map[string]any {
 // A signature another provider gave (foreignSignature) goes to none, nor
 // does any when keep is false (signatureRefused: asked again without).
 func chatCallSignatures(body []byte, gemini bool, by string, keep bool) []byte {
-	signed := bytes.Contains(body, []byte(sigMark))
-	if !signed && !(gemini && bytes.Contains(body, []byte(`"tool_calls"`))) {
+	signed := bodyHas(body, sigMark)
+	if !signed && !(gemini && bodyHas(body, `"tool_calls"`)) {
 		return body
 	}
 	return editMessages(body, []string{"tool_calls", "tool_call_id"}, func(m map[string]json.RawMessage) bool {

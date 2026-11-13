@@ -188,7 +188,7 @@ func (s *Server) withoutRefusedShapes(p provider.Provider, body []byte) []byte {
 	if !s.fits(p.ID, shapeSafeguards, provider.Anthropic) && gjson.GetBytes(body, "safeguards").Exists() {
 		body = withoutFields(body, "safeguards")
 	}
-	if !bytes.Contains(body, []byte(`"display"`)) && !bytes.Contains(body, []byte(`"output_config"`)) {
+	if !bodyHas(body, `"display"`) && !bodyHas(body, `"output_config"`) {
 		return body
 	}
 	if d := gjson.GetBytes(body, "thinking.display"); d.Exists() {
@@ -230,7 +230,7 @@ func withDisplay(body []byte, all bool) []byte {
 
 // hasTurnEffort is a request with an output_config on one of its messages.
 func hasTurnEffort(body []byte) bool {
-	if !bytes.Contains(body, []byte(`"output_config"`)) {
+	if !bodyHas(body, `"output_config"`) {
 		return false
 	}
 	found := false
@@ -284,7 +284,7 @@ func withoutTurnEffort(body []byte) []byte {
 // none (a turn's effort alone) is left out. The other messages stay as they
 // were sent.
 func withSystemOnTop(body []byte) []byte {
-	if !bytes.Contains(body, []byte(`"system"`)) {
+	if !bodyHas(body, `"system"`) {
 		return body
 	}
 	var v struct {
@@ -366,7 +366,7 @@ func deferredBlock(typ string) bool {
 // blocks refuses there too (#5404). A tool_reference inside a tool_result
 // (ToolSearch's older answer) is not one.
 func hasDeferredTools(body []byte) bool {
-	if !bytes.Contains(body, []byte(`"tool_addition"`)) && !bytes.Contains(body, []byte(`"tool_removal"`)) && !bytes.Contains(body, []byte(`"tool_reference"`)) && !bytes.Contains(body, []byte(`"tool_definition"`)) {
+	if !bodyHas(body, `"tool_addition"`) && !bodyHas(body, `"tool_removal"`) && !bodyHas(body, `"tool_reference"`) && !bodyHas(body, `"tool_definition"`) {
 		return false
 	}
 	found := false
@@ -527,7 +527,7 @@ func toolLoadedText(name string) string {
 // toolRefs are the tools a tool_result's content names in tool_reference
 // blocks, as Claude Code's ToolSearch answers, in their order.
 func toolRefs(content json.RawMessage) []string {
-	if !bytes.Contains(content, []byte(`"tool_reference"`)) {
+	if !bodyHas(content, `"tool_reference"`) {
 		return nil
 	}
 	var names []string
@@ -557,7 +557,7 @@ func refsOnly(c gjson.Result) bool {
 // hasRefsOnlyResult is a request with a tool_result holding only
 // tool_reference blocks.
 func hasRefsOnlyResult(body []byte) bool {
-	if !bytes.Contains(body, []byte(`"tool_reference"`)) {
+	if !bodyHas(body, `"tool_reference"`) {
 		return false
 	}
 	found := false
@@ -648,7 +648,7 @@ func withRefsSaid(body []byte) []byte {
 // refsRefused is a refusal that names tool_reference other than as what
 // the endpoint expected.
 func refsRefused(errBody []byte) bool {
-	if !bytes.Contains(errBody, []byte("tool_reference")) {
+	if !bodyHas(errBody, "tool_reference") {
 		return false
 	}
 	return refsNamed.Match(refsExpected.ReplaceAll(errBody, nil))
@@ -657,7 +657,7 @@ func refsRefused(errBody []byte) bool {
 // hasResultRefs is a request with a tool_reference block in a
 // tool_result's content.
 func hasResultRefs(body []byte) bool {
-	if !bytes.Contains(body, []byte(`"tool_reference"`)) {
+	if !bodyHas(body, `"tool_reference"`) {
 		return false
 	}
 	found := false

@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"encoding/json"
 
 	"github.com/tidwall/gjson"
@@ -21,7 +20,7 @@ import (
 // type), one with no name, and a request that doesn't parse are as they
 // came; a tool's other fields stay beside its function.
 func shapeChatTools(body []byte) []byte {
-	if !bytes.Contains(body, []byte(`"tools"`)) {
+	if !bodyHas(body, `"tools"`) {
 		return body
 	}
 	tools := gjson.GetBytes(body, "tools")

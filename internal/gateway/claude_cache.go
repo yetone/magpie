@@ -96,7 +96,7 @@ func wantsClientCache(r *http.Request, from provider.Protocol) bool {
 // for its marks.
 func classifierClientCache(from provider.Protocol, body []byte) bool {
 	return from == provider.Anthropic &&
-		bytes.Contains(body, []byte("cache_control")) &&
+		bodyHas(body, "cache_control") &&
 		autoModeClassifierAsk(body)
 }
 

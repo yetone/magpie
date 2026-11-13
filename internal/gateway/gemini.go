@@ -181,7 +181,7 @@ func geminiRequest(r *Request, model, agent string) (map[string]any, error) {
 // (#934). The values that are the caller's own — a call's args, a
 // result's response, the schemas — keep their keys as they are.
 func geminiCamel(body []byte) []byte {
-	if !bytes.Contains(body, []byte("_")) {
+	if !bodyHas(body, "_") {
 		return body
 	}
 	dec := json.NewDecoder(bytes.NewReader(body))

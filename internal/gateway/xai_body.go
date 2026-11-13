@@ -50,7 +50,7 @@ func xaiBody(p provider.Provider, proto provider.Protocol, body []byte) []byte {
 // withoutNullReasoningContent is a Responses body with the null content of
 // a reasoning item gone (#3392).
 func withoutNullReasoningContent(body []byte) []byte {
-	if !bytes.Contains(body, []byte(`"reasoning"`)) || !bytes.Contains(body, []byte(`"content"`)) {
+	if !bodyHas(body, `"reasoning"`) || !bodyHas(body, `"content"`) {
 		return body
 	}
 	dec := json.NewDecoder(bytes.NewReader(body))
@@ -85,7 +85,7 @@ func withoutNullReasoningContent(body []byte) []byte {
 // folded into the top-level system, its text and blocks as they came
 // (#3392).
 func systemTurnsFolded(body []byte) []byte {
-	if !bytes.Contains(body, []byte(`"messages"`)) || !bytes.Contains(body, []byte(`"system"`)) {
+	if !bodyHas(body, `"messages"`) || !bodyHas(body, `"system"`) {
 		return body
 	}
 	dec := json.NewDecoder(bytes.NewReader(body))
@@ -153,7 +153,7 @@ func systemTurnsFolded(body []byte) []byte {
 // input_schema (Anthropic), parameters (Responses) and function's
 // parameters (chat).
 func withoutNullToolRequired(body []byte) []byte {
-	if !bytes.Contains(body, []byte(`"tools"`)) || !bytes.Contains(body, []byte(`"required"`)) {
+	if !bodyHas(body, `"tools"`) || !bodyHas(body, `"required"`) {
 		return body
 	}
 	dec := json.NewDecoder(bytes.NewReader(body))

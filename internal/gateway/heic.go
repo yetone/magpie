@@ -76,11 +76,11 @@ var heicEncode = encodeHEIC
 // mayHoldHEIC is whether the body may have a HEIC in it: an image/heic or
 // image/heif type, or the base64 of an HEVC still's ftyp.
 func mayHoldHEIC(body []byte) bool {
-	if bytes.Contains(body, []byte("image/hei")) || bytes.Contains(body, []byte(`image\/hei`)) {
+	if bodyHas(body, "image/hei") || bodyHas(body, `image\/hei`) {
 		return true
 	}
 	for rest := body; ; {
-		i := bytes.Index(rest, []byte("eXB"))
+		i := bodyIndex(rest, "eXB")
 		if i < 0 {
 			return false
 		}

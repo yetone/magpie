@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
@@ -978,7 +977,7 @@ const desktopTitlePrompt = "You write short session titles."
 // desktopTitle: the request's system prompt is Desktop's title prompt, as a
 // string (Desktop's client) or one of its text blocks (Claude Code's).
 func desktopTitle(body []byte) bool {
-	if !bytes.Contains(body, []byte(desktopTitlePrompt)) {
+	if !bodyHas(body, desktopTitlePrompt) {
 		return false
 	}
 	var v struct {
@@ -1017,7 +1016,7 @@ func small(body []byte) bool {
 // hasTools: the request offers the model tools (Anthropic's, Chat's and
 // Responses' "tools" alike).
 func hasTools(body []byte) bool {
-	if !bytes.Contains(body, []byte(`"tools"`)) {
+	if !bodyHas(body, `"tools"`) {
 		return false
 	}
 	var v struct {

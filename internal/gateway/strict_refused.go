@@ -33,7 +33,7 @@ const toolStrictRefused = "tools[].strict"
 // its function tools (a Responses namespace's included), and whether any
 // was.
 func withoutToolStrict(proto provider.Protocol, body []byte) ([]byte, bool) {
-	if (proto != provider.Chat && proto != provider.Responses) || !bytes.Contains(body, []byte(`"strict"`)) {
+	if (proto != provider.Chat && proto != provider.Responses) || !bodyHas(body, `"strict"`) {
 		return body, false
 	}
 	dec := json.NewDecoder(bytes.NewReader(body))

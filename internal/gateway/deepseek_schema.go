@@ -23,7 +23,7 @@ func deepseekToolPatterns(p provider.Provider, to provider.Protocol, body []byte
 	if p.VendorPreset() != "deepseek" && provider.HostOf(p.Base(to)) != "api.deepseek.com" && p.VendorHost() != "api.deepseek.com" {
 		return body
 	}
-	if !bytes.Contains(body, []byte(`\\0`)) {
+	if !bodyHas(body, `\\0`) {
 		return body
 	}
 	return toolPatterns(body, unicodeNullEscape)
@@ -193,7 +193,7 @@ func deepseekTokenField(p provider.Provider, to provider.Protocol, body []byte) 
 	if to != provider.Chat || p.VendorPreset() != "deepseek" && provider.HostOf(p.Base(to)) != "api.deepseek.com" && p.VendorHost() != "api.deepseek.com" && !deepseekModel(gjson.GetBytes(body, "model").String()) {
 		return body
 	}
-	if !bytes.Contains(body, []byte(`"max_completion_tokens"`)) || gjson.GetBytes(body, "max_tokens").Exists() {
+	if !bodyHas(body, `"max_completion_tokens"`) || gjson.GetBytes(body, "max_tokens").Exists() {
 		return body
 	}
 	v := gjson.GetBytes(body, "max_completion_tokens")

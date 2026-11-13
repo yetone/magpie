@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"encoding/json"
 	"strconv"
 	"unicode/utf8"
@@ -34,7 +33,7 @@ func customToolRefused(model string) string { return "custom tools\x00" + model 
 // among its tools, in a namespace there, or in an input item that carries
 // tools (Responses Lite's additional_tools, a tool search's output).
 func hasCustomTool(body []byte) bool {
-	if !bytes.Contains(body, []byte(`"custom"`)) {
+	if !bodyHas(body, `"custom"`) {
 		return false
 	}
 	var m map[string]any

@@ -29,7 +29,7 @@ import (
 // namespacedIn is the namespaced functions a Responses request offers or
 // has called, by the flat name Grok is given them under.
 func namespacedIn(body []byte) map[string]nsTool {
-	if !bytes.Contains(body, []byte(`"namespace"`)) {
+	if !bodyHas(body, `"namespace"`) {
 		return nil
 	}
 	var q struct {
@@ -174,7 +174,7 @@ func (t *nsTidy) restore(data []byte) ([]byte, bool) {
 // carries reports whether b may hold a call restore names again: a
 // function call, or a custom tool's to one renamed.
 func (t *nsTidy) carries(b []byte) bool {
-	return bytes.Contains(b, []byte(`"function_call"`)) || t.back != nil && bytes.Contains(b, []byte(`"custom_tool_call"`))
+	return bodyHas(b, `"function_call"`) || t.back != nil && bodyHas(b, `"custom_tool_call"`)
 }
 
 // call names a function_call to a namespaced function by its name and
