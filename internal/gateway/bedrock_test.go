@@ -134,6 +134,9 @@ func TestBedrockRoutes(t *testing.T) {
 	up.mu.Lock()
 	defer up.mu.Unlock()
 	for _, c := range up.calls {
+		if !sentByTest(c.head, "ABSK-test") {
+			continue
+		}
 		if c.path != "/anthropic/v1/messages" && c.path != "/openai/v1/chat/completions" {
 			t.Errorf("asked at %s", c.path)
 		}

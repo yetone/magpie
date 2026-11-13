@@ -129,6 +129,9 @@ func TestQianfanTokenPlanRoutes(t *testing.T) {
 	up.mu.Lock()
 	defer up.mu.Unlock()
 	for _, c := range up.calls {
+		if !sentByTest(c.head, "bce-v3-test") {
+			continue
+		}
 		if !strings.HasPrefix(c.path, "/v2/tokenplan/personal/") && !strings.HasPrefix(c.path, "/anthropic/tokenplan/personal/") {
 			t.Errorf("asked at %s", c.path)
 		}

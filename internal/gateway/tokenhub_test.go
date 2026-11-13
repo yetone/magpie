@@ -145,10 +145,22 @@ func TestTencentTokenHubRoutes(t *testing.T) {
 			up.mu.Lock()
 			defer up.mu.Unlock()
 			for _, c := range up.calls {
+				if !sentByTest(c.head, "sk-tokenhub-test") {
+					continue
+				}
 				if c.path != "/v1/chat/completions" && c.path != "/v1/responses" && c.path != "/v1/messages" {
 					t.Errorf("asked at %s", c.path)
 				}
 			}
 		})
 	}
+}
+
+// sentByTest tells a request the gateway sent with the test's key from one
+// any other program on the machine sent to the fake's loopback port: a herdr
+// client's /ws/herdr reached TestTencentTokenHubRoutes' upstream on the
+// Linux box and turned it red (#6535). The checks of every path asked judge
+// only the former.
+func sentByTest(h http.Header, key string) bool {
+	return h.Get("Authorization") == "Bearer "+key || h.Get("x-api-key") == key
 }
