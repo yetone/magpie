@@ -52,17 +52,23 @@ func (l digestList) at(i int) (uint64, []byte) {
 	return binary.LittleEndian.Uint64(e), e[8:]
 }
 
-func (l digestList) get(serial uint64) (sum [sha256.Size]byte, ok bool) {
+// find is serial's index in l.
+func (l digestList) find(serial uint64) (int, bool) {
 	i := sort.Search(l.len(), func(i int) bool { s, _ := l.at(i); return s >= serial })
 	if i == l.len() {
-		return sum, false
+		return i, false
 	}
-	s, b := l.at(i)
-	if s != serial {
-		return sum, false
+	s, _ := l.at(i)
+	return i, s == serial
+}
+
+func (l digestList) get(serial uint64) (sum [sha256.Size]byte, ok bool) {
+	i, ok := l.find(serial)
+	if ok {
+		_, b := l.at(i)
+		copy(sum[:], b)
 	}
-	copy(sum[:], b)
-	return sum, true
+	return sum, ok
 }
 
 // sourceDigestsLoad reads the kept digests, once for each place they are
@@ -104,9 +110,11 @@ func decodeSourceDigests(b []byte, code string) digestList {
 	return l
 }
 
-// encodeSourceDigests writes the sets' digests and kept's for code, the
-// first set's first, at most limit of them.
-func encodeSourceDigests(code string, limit int, kept digestList, sets ...map[uint64][sha256.Size]byte) []byte {
+// encodeSourceDigests writes, for code, the digests of the serials the
+// sets name, the first set's first, then the rest of kept's, at most limit
+// of them. A serial's digest is made's, or kept's; one in neither is left
+// out.
+func encodeSourceDigests(code string, limit int, kept digestList, made map[uint64][sha256.Size]byte, sets ...map[uint64]struct{}) []byte {
 	type one struct {
 		serial uint64
 		sum    []byte
@@ -114,10 +122,17 @@ func encodeSourceDigests(code string, limit int, kept digestList, sets ...map[ui
 	var all []one
 	seen := map[uint64]bool{}
 	for _, s := range sets {
-		for serial, sum := range s {
-			if !seen[serial] && len(all) < limit {
+		for serial := range s {
+			if seen[serial] || len(all) >= limit {
+				continue
+			}
+			if sum, ok := made[serial]; ok {
 				seen[serial] = true
 				all = append(all, one{serial, append([]byte(nil), sum[:]...)})
+			} else if i, ok := kept.find(serial); ok {
+				seen[serial] = true
+				_, sum := kept.at(i)
+				all = append(all, one{serial, sum})
 			}
 		}
 	}
@@ -160,7 +175,11 @@ func sourceDigestsSave() {
 	// this run's first, then those kept from before it it hasn't met (a
 	// query of a few files keeps the rest): a file gone falls out once
 	// two turns' worth are made
-	b := encodeSourceDigests(requestDiskBinary(), 2*sourceDigestsKept, sourceDigestsDisk.kept, d.by, d.last)
+	code := requestDiskBinary()
+	b := encodeSourceDigests(code, 2*sourceDigestsKept, sourceDigestsDisk.kept, d.made, d.by, d.last)
+	// what is written is what is kept: the digests made are in it
+	sourceDigestsDisk.kept = decodeSourceDigests(b, code)
+	d.made = nil
 	p := sourceDigestsDisk.path
 	w := &sourceDigestWrites
 	w.made++

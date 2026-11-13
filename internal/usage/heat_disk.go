@@ -151,7 +151,13 @@ func heatSettledKey(d heatDiskRef, cut, since time.Time, f Filter, identities ma
 // serial: those of the keys made since the last turn, and before it.
 var sourceDigests struct {
 	sync.Mutex
-	by, last map[uint64][sha256.Size]byte
+	// by and last are the serials used since the last turn, and before it,
+	// which the kept file holds first. Their digests are in made, or in
+	// what was kept on disk: not a map of 17k digests beside the list read
+	// (#2278).
+	by, last map[uint64]struct{}
+	// made are the digests hashed that aren't kept on disk yet
+	made map[uint64][sha256.Size]byte
 }
 
 // sourceDigestsKept is how many digests a turn holds, more than the
@@ -169,10 +175,7 @@ const sourceDigestsKept = 1 << 16
 func sourceDigest(c *rowChunk, rows *chunkRows) [sha256.Size]byte {
 	d := &sourceDigests
 	d.Lock()
-	sum, ok := d.by[c.serial]
-	if !ok {
-		sum, ok = d.last[c.serial]
-	}
+	sum, ok := d.made[c.serial]
 	if !ok {
 		sourceDigestsLoad()
 		sum, ok = sourceDigestsDisk.kept.get(c.serial)
@@ -189,11 +192,15 @@ func sourceDigest(c *rowChunk, rows *chunkRows) [sha256.Size]byte {
 	if made {
 		sourceDigestsHashed++
 		sourceDigestsDisk.dirty = true
+		if d.made == nil {
+			d.made = map[uint64][sha256.Size]byte{}
+		}
+		d.made[c.serial] = sum
 	}
 	if d.by == nil || len(d.by) >= sourceDigestsKept {
-		d.last, d.by = d.by, map[uint64][sha256.Size]byte{}
+		d.last, d.by = d.by, map[uint64]struct{}{}
 	}
-	d.by[c.serial] = sum
+	d.by[c.serial] = struct{}{}
 	d.Unlock()
 	return sum
 }
