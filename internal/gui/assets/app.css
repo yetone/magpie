@@ -2866,8 +2866,8 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .row.model .minfo .mi-ctx, .rt-gedit .fbrow .minfo .mi-ctx { font-variant-numeric: tabular-nums; }
 /* the image chip holds a glyph, not a line of text: it is given the text
    chips' 16px line as its height, so it stands as tall as they do (nb5p) */
-.row.model .minfo .mi-img, .rt-gedit .fbrow .minfo .mi-img { padding: 0 4px; height: 16px; box-sizing: border-box; }
-.row.model .minfo .mi-img svg, .rt-gedit .fbrow .minfo .mi-img svg { display: block; }
+.row.model .minfo :is(.mi-img, .mi-media), .rt-gedit .fbrow .minfo :is(.mi-img, .mi-media) { padding: 0 4px; height: 16px; box-sizing: border-box; }
+.row.model .minfo :is(.mi-img, .mi-media) svg, .rt-gedit .fbrow .minfo :is(.mi-img, .mi-media) svg { display: block; }
 .provider .pswitch { margin-left: 8px; }
 .editor .off-note { grid-column: 1 / -1; }
 .editor .self-note label.tick { margin-top: 6px; }

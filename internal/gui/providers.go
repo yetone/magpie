@@ -68,6 +68,9 @@ type modelJSON struct {
 	Same  string   `json:"same,omitempty"`  // the model the user said it is the same as, for the groups magpie finds (#583)
 	Merge string   `json:"merge,omitempty"` // what those groups merge it by when the user says nothing; absent when ID
 	Kind  string   `json:"kind,omitempty"`  // what the user said it makes: image or video (#1399)
+	// Inputs are the media beyond text and images its source listed it
+	// takes, video and audio (catalog.Model.InputModalities; pingqipai3 on X)
+	Inputs []string `json:"inputs,omitempty"`
 	// Headers are the request headers the user gave the model, sent after
 	// the provider's (provider.SetModelHeaders)
 	Headers map[string]string `json:"headers,omitempty"`
@@ -708,9 +711,23 @@ type gwGroupJSON struct {
 	// output its members all hold
 	Efforts []string `json:"efforts,omitempty"`
 	Images  bool     `json:"images,omitempty"`
+	Inputs  []string `json:"inputs,omitempty"` // video and audio, when one of its models takes them (provider.Entry.Inputs)
 	Context int      `json:"context,omitempty"`
 	Output  int      `json:"output,omitempty"`
 	Members []string `json:"members,omitempty"` // the models it sends to, provider/model, in its order
+}
+
+// mediaInputs is which of video and audio a model's input kinds hold, in
+// that order: what the Gateway list shows beside its images (images have
+// their own flag, and pdf and text go without saying).
+func mediaInputs(kinds []string) []string {
+	var out []string
+	for _, k := range []string{"video", "audio"} {
+		if slices.Contains(catalog.Kinds(kinds), k) {
+			out = append(out, k)
+		}
+	}
+	return out
 }
 
 type excludedJSON struct {
@@ -1100,7 +1117,7 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 			images = said
 		}
 		window := p.WindowIn(m, set)
-		j := modelJSON{ID: m.ID, Name: m.Name, Efforts: provider.EffortsOf(m), On: on, Context: window, Output: provider.OutputWithin(window, p.ReplyLimitIn(m, set)), Listed: provider.ListedWindow(m), ListedOutput: provider.OutputWithin(provider.ListedWindow(m), p.ReplyLimitIn(m, settings.Settings{})), Max: m.MaxContext, Free: m.Free, Rate: m.Rate, RateWas: m.RateWas, Images: images, ImageSet: imageSet, Own: own, Best: newest[m.ID]}
+		j := modelJSON{ID: m.ID, Name: m.Name, Efforts: provider.EffortsOf(m), On: on, Context: window, Output: provider.OutputWithin(window, p.ReplyLimitIn(m, set)), Listed: provider.ListedWindow(m), ListedOutput: provider.OutputWithin(provider.ListedWindow(m), p.ReplyLimitIn(m, settings.Settings{})), Max: m.MaxContext, Free: m.Free, Rate: m.Rate, RateWas: m.RateWas, Images: images, ImageSet: imageSet, Own: own, Best: newest[m.ID], Inputs: mediaInputs(m.InputModalities)}
 		list, listed, free := pricer.Prices(set, m.ID)
 		j.Zero = !m.Free && free
 		// a plugin reports a model's load by its own id, not one the user
@@ -1434,7 +1451,7 @@ func providersState() providersJSON {
 		}
 		// its lists are [] when empty, never null, which the page can't
 		// read as a list (#1585)
-		g := gwGroupJSON{ID: e.ID, Name: e.Name, Icons: append([]string{}, e.Icons...), Providers: []string{}, Efforts: e.Efforts, Images: e.Images, Context: e.Context, Output: e.PublishedOutput()}
+		g := gwGroupJSON{ID: e.ID, Name: e.Name, Icons: append([]string{}, e.Icons...), Providers: []string{}, Efforts: e.Efforts, Images: e.Images, Inputs: mediaInputs(e.Inputs), Context: e.Context, Output: e.PublishedOutput()}
 		if _, ms, ok := findGroup(e.ID); ok {
 			for _, m := range ms {
 				if id := m.Provider.ID + "/" + m.Model; !slices.Contains(g.Members, id) {

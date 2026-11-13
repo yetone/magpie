@@ -534,6 +534,27 @@ function envSnippet(vars) {
   return vars.map(([k, v]) => (snipWin() ? `$env:${k}=${psHeader(v)}` : `export ${k}=${shQuote(v)}`)).join("\n");
 }
 
+// The row's chips (modelInfo) with video and audio after the image one,
+// when its source listed them (pingqipai3 on X); a group's are any one of
+// its models', as its images are. Their tooltip lines follow the images'
+// one, the second of modelInfo's.
+const MEDIA_GLYPH = { video: "M2 4.5h8.5v7H2zM10.5 7l3.5-2v6l-3.5-2", audio: "M3 6.5v3M5.5 4.5v7M8 2.5v11M10.5 4.5v7M13 6.5v3" };
+function mediaInfo(m) {
+  const box = modelInfo(m);
+  const kinds = ["video", "audio"].filter((k) => m.inputs?.includes(k));
+  if (!kinds.length) return box;
+  const ctx = box.querySelector(".mi-ctx");
+  const lines = box.title.split("\n");
+  for (const k of kinds) {
+    const c = el("span", "badge mi-media mi-" + k);
+    c.append(svg(MEDIA_GLYPH[k], 11, 1.4));
+    box.insertBefore(c, ctx);
+  }
+  lines.splice(2, 0, ...kinds.map((k) => t(k === "video" ? (m.group ? "Accepts video (one of its models does)" : "Accepts video") : m.group ? "Accepts audio (one of its models does)" : "Accepts audio")));
+  box.title = lines.join("\n");
+  return box;
+}
+
 // every exposed model, as the ids agents use
 function gatewayModels() {
   // the routing groups first, as the agents' pickers list them
@@ -541,7 +562,7 @@ function gatewayModels() {
   // every model off the list
   const out = (providers.gateway.groups || []).filter((g) => g && typeof g.id === "string").map((g) => ({ id: g.id, name: g.name || g.id, icons: g.icons || [], group: true,
     provider: { name: [t("routing group"), (g.providers || []).join(", ")].filter(Boolean).join(" · ") },
-    efforts: g.efforts || [], images: !!g.images, context: g.context, output: g.output, members: g.members || [] }));
+    efforts: g.efforts || [], images: !!g.images, inputs: g.inputs || [], context: g.context, output: g.output, members: g.members || [] }));
   // a provider switched off is skipped: the gateway refuses its models, so
   // they are not ids an agent can use, and listing them here would show a
   // model the picker's own list, the Gateway count and the Connect example
@@ -551,7 +572,7 @@ function gatewayModels() {
   // levels aren't known (given) offers only those it was given; one sent
   // no reasoning field (reasonless) offers none
   const offered = (m) => m.reasonless ? [] : m.kept?.length || m.given ? m.kept || [] : m.efforts || [];
-  for (const p of providers.providers) { if (p.off) continue; for (const m of p.models) if (m.on) out.push({ id: `${p.id}/${m.id}`, name: m.name, provider: p, context: m.context, output: m.output, efforts: offered(m), images: !!m.images }); }
+  for (const p of providers.providers) { if (p.off) continue; for (const m of p.models) if (m.on) out.push({ id: `${p.id}/${m.id}`, name: m.name, provider: p, context: m.context, output: m.output, efforts: offered(m), images: !!m.images, inputs: m.inputs || [] }); }
   return out;
 }
 
@@ -727,7 +748,7 @@ function renderGatewayModels() {
     const name = el("div", "name", m.id);
     if (namedFree(m.id, m.name)) name.append(freeBadge(false));
     who.append(name, el("div", "sub", m.name && m.name !== m.id.split("/")[1] ? `${m.name} · ${m.provider.name}` : m.provider.name));
-    row.append(m.group ? stackIcon(m.icons) : icon(m.provider.icon || "generic"), who, modelInfo(m), copyBtn(m.id, t("Model id")));
+    row.append(m.group ? stackIcon(m.icons) : icon(m.provider.icon || "generic"), who, mediaInfo(m), copyBtn(m.id, t("Model id")));
     row.title = t("Use this model in the snippets");
     // a decision model is put in System One's snippets, any other in the
     // other APIs'; the API follows the model clicked
