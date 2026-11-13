@@ -3377,7 +3377,7 @@ function routingPage(part) {
     const prev = !r.done && series ? sessionReqs.filter((x) => same(x) && x.done && x.id < r.id && x.usage?.length).sort((a, b) => b.id - a.id)[0] : null;
     draw(r, {
       still, series, tab: ctxTab, place: "routing", foldable: true,
-      session: sk || r.conv || undefined, prev,
+      session: sk || r.conv || series?.[0]?.id, prev,
       open: ctxFor === r.id, onFold: () => { ctxFor = 0; },
       onTab: (id) => { ctxTab = id; },
       crumbs: [agentName(r.agent), sess && (sess.length > cut ? sess.slice(0, cut - 2) + "…" : sess), "#" + r.id],

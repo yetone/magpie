@@ -92,7 +92,7 @@
 
   // the cache a route's vendor read: its last answer's usage
   function cacheOf(r) {
-    const u = r.usage?.[r.usage.length - 1];
+    const u = r?.usage?.[r.usage.length - 1];
     // a vendor that counts no cache has none to show, not 0% (#3464)
     if (!u || u.cache_unknown) return null;
     const total = (u.in || 0) + (u.cache_read || 0) + (u.cache_write || 0);
@@ -805,12 +805,10 @@
       k.append(el("span", "", t("Context used")));
       if (window) {
         const [tone, word] = health(full);
-        const h = el("span", "ctx-health " + tone, t(word));
-        k.append(h);
+        k.append(el("span", "ctx-health " + tone, t(word)));
       }
       const big = el("div", "ctx-big");
-      big.append(num("b", "", p.tokens));
-      big.append(el("span", "", window ? "/ " + fmtK(window) + " " + t("tokens") : t("tokens")));
+      big.append(num("b", "", p.tokens), el("span", "", window ? "/ " + fmtK(window) + " " + t("tokens") : t("tokens")));
       const sub = el("div", "ctx-sub");
       if (window) {
         const bits = [t("{pct} full", { pct: pct(full) })];
@@ -829,14 +827,14 @@
       // first request: Routing keeps the latest 60 requests, so in a long
       // session that first one moved on with each new request, and every
       // request under way showed "—" (shenggxhz on X, Codex in T3 Code)
-      const whose = r.agent + " " + (opts.session ?? opts.series?.[0]?.id ?? "");
+      const whose = r.agent + " " + opts.session;
       if (whose !== cacheWhose) lastCache = null;
       cacheWhose = whose;
       // opened while a request is under way, the session's last answered
       // request is the cache to show till this one's is read
-      if (!lastCache && opts.prev) lastCache = cacheOf(opts.prev);
+      lastCache ||= cacheOf(opts.prev);
       const known = cache && p.counted !== false ? cache : null;
-      if (known || cacheShown || (live && lastCache)) {
+      if (known || cacheShown || lastCache) {
         // once shown, the cache keeps its place, so nothing under it moves
         // up and back down. A request under way has read no cache yet:
         // the last request's stays, dimmed and named as the last one's,
@@ -844,7 +842,7 @@
         // request flashed it to "—" and an empty bar, the dash against
         // 命中). Nothing to show is said in words, with no bar
         const shown = known || (live ? lastCache : null);
-        const c = el("div", "ctx-stat ctx-cache" + (!known && shown ? " was" : shown ? "" : " none"));
+        const c = el("div", "ctx-stat ctx-cache" + (known ? "" : shown ? " was" : " none"));
         c.append(el("div", "ctx-k", t("Prompt cache")));
         const cb = el("div", "ctx-big");
         cb.append(el("b", "", shown ? hitPct(shown.read / shown.total) : "—"), el("span", "", t("hit")));
