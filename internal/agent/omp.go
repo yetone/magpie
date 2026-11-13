@@ -406,6 +406,31 @@ func ompAt(at place, dir string, entry func() ompProviderEntry) *Agent {
 		}
 		return nil
 	}
+	// a model picked for the advisor is one the user wants reviewing: omp
+	// runs none while advisor.enabled is unset (its default is off), so the
+	// pick turns it on then (#6408, #5019), and the role reset takes back
+	// what the pick turned on. One the user set either way stays theirs
+	advisor := slices.IndexFunc(roles, func(f Field) bool { return f.Key == "advisor" })
+	setAdvisor := roles[advisor].Set
+	roles[advisor].Set = func(v string) error {
+		if err := setAdvisor(v); err != nil {
+			return err
+		}
+		if v == "" {
+			if unstash(ompAdvisorTurnedOn(path)) != "" && ompAdvisorOn(path) == "true" {
+				return edit.DelYAML(path, "advisor.enabled")
+			}
+			return nil
+		}
+		if ompAdvisorOn(path) != "" {
+			return nil
+		}
+		if err := edit.SetYAML(path, edit.KV{Path: "advisor.enabled", Value: true}); err != nil {
+			return err
+		}
+		stash(map[string]string{ompAdvisorTurnedOn(path): "1"})
+		return nil
+	}
 	// each role but the default one has a thinking level of its own, the
 	// ":level" omp reads off the end of the role's model
 	// (splitThinkingSuffix, resolveModelRoleValue): #1397, the slow role at
@@ -534,7 +559,7 @@ func ompAt(at place, dir string, entry func() ompProviderEntry) *Agent {
 			}
 			return ""
 		},
-		Fields: append(fields, Field{
+		Fields: append(append(fields, Field{
 			// the thinking level sessions start with, as omp's settings save
 			// it; unset omp takes high. auto has omp pick a level each turn:
 			// not a level a model lists, so it is offered here and kept out of
@@ -549,7 +574,7 @@ func ompAt(at place, dir string, entry func() ompProviderEntry) *Agent {
 				return edit.SetYAML(path, edit.KV{Path: "defaultThinkingLevel", Value: v})
 			},
 			Options: func(map[string]string) []Option { return static(append([]string{"auto"}, ompEfforts...)...) },
-		}),
+		}), ompAdvisorFields(path)...),
 	}
 }
 
