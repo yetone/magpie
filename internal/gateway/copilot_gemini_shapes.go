@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"reflect"
 	"sort"
+	"strings"
 
 	"github.com/tidwall/gjson"
 	"github.com/yetone/magpie/internal/provider"
@@ -30,7 +31,10 @@ import (
 //   - prefixItems (or items as a list): items, the one schema the positions
 //     share, or an anyOf of them.
 //
-// A nested oneOf is left: Copilot's Gemini takes it (#4374). A schema with
+// Disjoint object unions (Codex's create_thread target) fold the same way,
+// since Copilot's Gemini takes a nested oneOf with 200 but drops its
+// branches, and the model answers with a string. A nested oneOf a client
+// wrote is left (#4374). A schema with
 // none of the six goes byte for byte as it came, and only Copilot's Gemini
 // on chat is touched.
 func copilotGeminiToolShapes(p provider.Provider, to provider.Protocol, body []byte) []byte {
@@ -55,7 +59,7 @@ func copilotGeminiToolShapes(p provider.Provider, to provider.Protocol, body []b
 		}
 		for _, k := range []string{"parameters", "input_schema"} {
 			if root, ok := m[k].(map[string]any); ok {
-				changed = shapeForGemini(root, true) || changed
+				changed = shapeForGemini(root, true, root) || changed
 			}
 		}
 	}
@@ -74,28 +78,28 @@ func copilotGeminiToolShapes(p provider.Provider, to provider.Protocol, body []b
 
 // shapeForGemini rewrites schema s in place, below first, and says whether
 // it changed anything.
-func shapeForGemini(s map[string]any, root bool) bool {
+func shapeForGemini(s map[string]any, root bool, top map[string]any) bool {
 	changed := false
 	// children first, so a union is judged on branches already fit
 	for _, k := range []string{"properties", "patternProperties", "$defs", "definitions"} {
 		if m, ok := s[k].(map[string]any); ok {
 			for _, v := range m {
 				if c, ok := v.(map[string]any); ok {
-					changed = shapeForGemini(c, false) || changed
+					changed = shapeForGemini(c, false, top) || changed
 				}
 			}
 		}
 	}
 	for _, k := range []string{"items", "additionalProperties", "not", "contains"} {
 		if c, ok := s[k].(map[string]any); ok {
-			changed = shapeForGemini(c, false) || changed
+			changed = shapeForGemini(c, false, top) || changed
 		}
 	}
 	for _, k := range []string{"anyOf", "oneOf", "allOf", "prefixItems", "items"} {
 		if l, ok := s[k].([]any); ok {
 			for _, v := range l {
 				if c, ok := v.(map[string]any); ok {
-					changed = shapeForGemini(c, false) || changed
+					changed = shapeForGemini(c, false, top) || changed
 				}
 			}
 		}
@@ -111,12 +115,19 @@ func shapeForGemini(s map[string]any, root bool) bool {
 		if _, isSchema := s["items"].(map[string]any); !isSchema {
 			s["items"] = tupleItems(tuple)
 			if m, ok := s["items"].(map[string]any); ok {
-				shapeForGemini(m, false)
+				shapeForGemini(m, false, top)
 			}
 		}
 		if s["type"] == nil {
 			s["type"] = "array"
 		}
+		changed = true
+	}
+
+	// an array with no items: Vertex behind Copilot turns it away, and the
+	// untyped items are typed after (geminiTypes)
+	if s["type"] == "array" && s["items"] == nil {
+		s["items"] = map[string]any{}
 		changed = true
 	}
 
@@ -148,7 +159,7 @@ func shapeForGemini(s map[string]any, root bool) bool {
 			flattenRootUnion(s, "anyOf", alts)
 			changed = true
 		} else {
-			changed = mergeUnion(s, "anyOf", alts) || changed
+			changed = mergeUnion(s, "anyOf", alts, top) || changed
 		}
 	}
 
@@ -224,7 +235,7 @@ func flattenRootUnion(s map[string]any, key string, alts []any) {
 // mergeUnion folds an anyOf whose branches share one type (null apart) into
 // one schema, and drops one with a branch that has no type. It says whether
 // it changed s.
-func mergeUnion(s map[string]any, key string, alts []any) bool {
+func mergeUnion(s map[string]any, key string, alts []any, top map[string]any) bool {
 	var typed []map[string]any
 	nullable := false
 	typ := ""
@@ -233,6 +244,14 @@ func mergeUnion(s map[string]any, key string, alts []any) bool {
 		if m == nil {
 			delete(s, key)
 			return true
+		}
+		if ref, ok := m["$ref"].(string); ok {
+			// a branch that is a local reference is the schema it names, so
+			// the union is judged on what the model will fill in
+			if r := derefLocal(top, ref); r != nil {
+				shapeForGemini(r, false, top)
+				m = r
+			}
 		}
 		t, _ := m["type"].(string)
 		if t == "null" {
@@ -256,7 +275,13 @@ func mergeUnion(s map[string]any, key string, alts []any) bool {
 		typed = append(typed, m)
 	}
 	if len(typed) == 0 || len(typed) == 1 && nullable {
-		return false // a nullable single schema is what Copilot's Gemini takes
+		// a nullable single schema is what Copilot's Gemini takes, but not
+		// with a type written beside the union (400 invalid request body)
+		if _, has := s["type"]; has && len(typed) == 1 {
+			delete(s, "type")
+			return true
+		}
+		return false
 	}
 	merged := map[string]any{}
 	for _, m := range typed {
@@ -269,8 +294,10 @@ func mergeUnion(s map[string]any, key string, alts []any) bool {
 				}
 				pm, _ := v.(map[string]any)
 				for n, pv := range pm {
-					if _, has := props[n]; !has {
+					if have, has := props[n]; !has {
 						props[n] = pv
+					} else {
+						props[n] = joinEnums(have, pv)
 					}
 				}
 				merged[k] = props
@@ -364,4 +391,77 @@ func guessType(m map[string]any) string {
 		return "string"
 	}
 	return ""
+}
+
+// derefLocal is a copy of the schema a local reference ("#/$defs/X" or
+// "#/definitions/X") names in top, nil when it is anything else or the
+// copy refers on (a cycle is never followed).
+func derefLocal(top map[string]any, ref string) map[string]any {
+	var defs any
+	switch {
+	case strings.HasPrefix(ref, "#/$defs/"):
+		defs, ref = top["$defs"], strings.TrimPrefix(ref, "#/$defs/")
+	case strings.HasPrefix(ref, "#/definitions/"):
+		defs, ref = top["definitions"], strings.TrimPrefix(ref, "#/definitions/")
+	default:
+		return nil
+	}
+	m, _ := defs.(map[string]any)
+	target, _ := m[ref].(map[string]any)
+	if target == nil {
+		return nil
+	}
+	raw, err := json.Marshal(target)
+	if err != nil || bytes.Contains(raw, []byte(`"$ref"`)) {
+		return nil
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	var out map[string]any
+	if dec.Decode(&out) != nil {
+		return nil
+	}
+	return out
+}
+
+// joinEnums is the property two branches both name: when both are string
+// enums, one with the values of each (a discriminator's "project" and
+// "none"); a branch without an enum takes any value, so the enum goes.
+func joinEnums(a, b any) any {
+	am, _ := a.(map[string]any)
+	bm, _ := b.(map[string]any)
+	if am == nil || bm == nil || am["type"] != bm["type"] {
+		return a
+	}
+	ae, bem := asList(am["enum"]), asList(bm["enum"])
+	_, aHas := am["enum"]
+	_, bHas := bm["enum"]
+	if aHas != bHas {
+		out := map[string]any{}
+		for k, v := range am {
+			if k != "enum" {
+				out[k] = v
+			}
+		}
+		return out
+	}
+	if !aHas {
+		return a
+	}
+	out := map[string]any{}
+	for k, v := range am {
+		out[k] = v
+	}
+	joined := append([]any{}, ae...)
+	for _, e := range bem {
+		dup := false
+		for _, x := range joined {
+			dup = dup || reflect.DeepEqual(x, e)
+		}
+		if !dup {
+			joined = append(joined, e)
+		}
+	}
+	out["enum"] = joined
+	return out
 }

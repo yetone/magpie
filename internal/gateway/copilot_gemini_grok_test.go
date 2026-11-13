@@ -41,21 +41,18 @@ const copilotUnionsRequest = `{"model":"copilot/gemini-3.8-flash","stream":true,
                "required":["type"],"additionalProperties":false}]}},
       "required":["target"],"additionalProperties":false}}]}`
 
-// TestCopilotGeminiTakesCodexUnionsAsOneOf: Copilot's Gemini turned every
-// tool-bearing turn of Codex's away 400 "invalid request body" (#4374,
-// #3931's comparisons: the same request with the disjoint unions as oneOf
-// came back 200). What Copilot's Gemini rejects is the anyOf, so a
-// provably disjoint one goes as oneOf, which says the same to a model
-// choosing what to call.
-func TestCopilotGeminiTakesCodexUnionsAsOneOf(t *testing.T) {
+// TestCopilotGeminiFoldsCodexUnions: Copilot's Gemini turned every
+// tool-bearing turn of Codex's away 400 on an anyOf of object branches
+// (#4374), and takes a oneOf with 200 but drops its branches, so the model
+// answers with a string (DaVinci42, Novello42 on X). The disjoint branches
+// are folded into the one object they describe, which both take.
+func TestCopilotGeminiFoldsCodexUnions(t *testing.T) {
 	var mu sync.Mutex
 	var sent []string
 	copilotTurnFake(t, map[string]string{
 		"gemini-3.8-flash": `["/chat/completions"]`,
 	}, nil, func(m string, b []byte) bool {
-		// as #3931's live comparisons show: a tool whose schema carries an
-		// object anyOf turns the whole request away, whatever else it says
-		return bytes.Contains(b, []byte(`"anyOf"`))
+		return bytes.Contains(b, []byte(`"anyOf"`)) || bytes.Contains(b, []byte(`"oneOf"`))
 	}, "invalid request body", http.StatusBadRequest, &sent)
 
 	rec := httptest.NewRecorder()
@@ -68,11 +65,93 @@ func TestCopilotGeminiTakesCodexUnionsAsOneOf(t *testing.T) {
 	if len(sent) != 1 {
 		t.Fatalf("Copilot was asked %d times", len(sent))
 	}
-	if strings.Contains(sent[0], `"anyOf"`) {
-		t.Errorf("Codex's disjoint union went to Copilot's Gemini as anyOf, which it turns away: %s", sent[0])
+	if !strings.Contains(sent[0], `"enum":["project","projectless"]`) || !strings.Contains(sent[0], `"project_id"`) {
+		t.Errorf("the union was not folded into one object: %s", sent[0])
 	}
-	if !strings.Contains(sent[0], `"oneOf"`) {
-		t.Errorf("the union went as neither anyOf nor oneOf: %s", sent[0])
+}
+
+// The reporter's four cases (DaVinci42 on #4374, v0.1.3925), each as the
+// chat body they posted.
+func TestCopilotGeminiReporterSchemas(t *testing.T) {
+	cases := []struct{ name, schema, want, not string }{
+		{"disjoint object anyOf", `{"type":"object","properties":{"target":{"anyOf":[
+          {"type":"object","properties":{"type":{"type":"string","enum":["project"]},"projectId":{"type":"string"}},"required":["type","projectId"],"additionalProperties":false},
+          {"type":"object","properties":{"type":{"type":"string","enum":["none"]}},"required":["type"],"additionalProperties":false}]}},"required":["target"]}`,
+			`"target":{"additionalProperties":false,"properties":{"projectId":{"type":"string"},"type":{"enum":["project","none"],"type":"string"}},"required":["type"],"type":"object"}`, `Of"`},
+		{"$ref object anyOf", `{"type":"object","$defs":{"ById":{"type":"object","properties":{"id":{"type":"string"}},"required":["id"]},"ByPath":{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}},
+          "properties":{"target":{"anyOf":[{"$ref":"#/$defs/ById"},{"$ref":"#/$defs/ByPath"}]}},"required":["target"]}`,
+			`"target":{"properties":{"id":{"type":"string"},"path":{"type":"string"}},"type":"object"}`, `"target":{"type":"string"`},
+		{"type beside a nullable anyOf", `{"type":"object","properties":{"x":{"type":"string","anyOf":[{"type":"string"},{"type":"null"}]}}}`,
+			`"x":{"anyOf":[{"type":"string"},{"type":"null"}]}`, `"x":{"type":"string"`},
+		{"bare array", `{"type":"object","properties":{"items":{"type":"array"}}}`,
+			`"items":{"items":{"type":"string"},"type":"array"}`, ``},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var sent []string
+			copilotTurnFake(t, map[string]string{"gemini-3.8-flash": `["/chat/completions"]`}, nil,
+				func(m string, b []byte) bool {
+					var req struct {
+						Tools []struct {
+							Function struct {
+								Parameters any `json:"parameters"`
+							} `json:"function"`
+						} `json:"tools"`
+					}
+					json.Unmarshal(b, &req)
+					bad := false
+					var walk func(v any)
+					walk = func(v any) {
+						switch x := v.(type) {
+						case map[string]any:
+							if _, u := x["anyOf"]; u {
+								if _, ty := x["type"]; ty {
+									bad = true
+								}
+							}
+							if x["type"] == "array" && x["items"] == nil {
+								bad = true
+							}
+							for _, c := range x {
+								walk(c)
+							}
+						case []any:
+							for _, c := range x {
+								walk(c)
+							}
+						}
+					}
+					for _, tl := range req.Tools {
+						walk(tl.Function.Parameters)
+					}
+					return bad
+				}, "invalid request body", http.StatusBadRequest, &sent)
+			req := `{"model":"copilot/gemini-3.8-flash","stream":false,"messages":[{"role":"user","content":"hi"}],
+			"tools":[{"type":"function","function":{"name":"t","parameters":` + c.schema + `}}]}`
+			rec := httptest.NewRecorder()
+			New().Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(req)))
+			if rec.Code != 200 || len(sent) != 1 {
+				t.Fatalf("%d %s", rec.Code, rec.Body.String())
+			}
+			if !strings.Contains(sent[0], c.want) {
+				t.Errorf("want %s in %s", c.want, sent[0])
+			}
+			if c.not != "" && strings.Contains(sent[0], c.not) {
+				t.Errorf("%s in %s", c.not, sent[0])
+			}
+		})
+	}
+}
+
+// Another vendor's Gemini keeps its schema as it came: none of the above is
+// done for it.
+func TestCopilotGeminiShapesLeaveOthersAlone(t *testing.T) {
+	body := `{"model":"gemini-3.8-flash","tools":[{"type":"function","function":{"name":"t","parameters":{"type":"object","properties":{"a":{"type":"array"},"x":{"type":"string","anyOf":[{"type":"string"},{"type":"null"}]}}}}}]}`
+	for _, agent := range []string{"claude", ""} {
+		p := provider.Provider{Account: &provider.Account{Agent: agent}}
+		if got := string(copilotGeminiToolShapes(p, provider.Chat, []byte(body))); got != body {
+			t.Errorf("%q changed: %s", agent, got)
+		}
 	}
 }
 
