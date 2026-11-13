@@ -1107,6 +1107,10 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 		model := modelOf(body)
 		kept.model = model // only a turn is kept alive (overload)
 		effort = requestEffort(provider.Responses, body)
+		// the service tier the body goes out at, on the route and on each
+		// of its tries as the accounts loop's tries say it, so the Routing
+		// page's row tells a /fast turn (priority) apart (Anotiaww on X)
+		tier := bodyTier(provider.Responses, body)
 		seat := Weighed{ID: "codex", Provider: "openai", Name: "OpenAI", Icon: "openai", Who: who, Kind: "account", Agent: "codex", Model: model}
 		link := s.titlePrompts.observe(r, body, metadata, kind, start)
 		captureTitle = link != nil && isTitleKind(kind)
@@ -1121,8 +1125,8 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 			user = on.Account.User
 		}
 		window := cmp.Or(provider.CodexWindow(user, model), catalog.ContextOf(model))
-		tr = s.trace.beginFor(r, Route{turn: turn, window: window, dirOf: dirOf(provider.Responses, body), tools: tools, imageTurn: drawingTurnID(metadata.Turn), imageCaller: codexTurnKey(r, callerOf(r).agent), imageProvider: imageProvider, TitleLink: link, Time: start, Agent: callerOf(r).agent, Session: sessionOf(r.Header), Conv: convOf(r.Header, body), ParentSession: titleParentSession(r.Header, metadata, kind), Kind: kind, Model: model, Effort: effort, Tier: bodyTier(provider.Responses, body), Provider: "openai", Subagent: subagentPickOf(r),
-			Order: []Weighed{seat}, Tries: []Try{{ID: seat.ID, Model: model, Effort: effort, Start: start}}})
+		tr = s.trace.beginFor(r, Route{turn: turn, window: window, dirOf: dirOf(provider.Responses, body), tools: tools, imageTurn: drawingTurnID(metadata.Turn), imageCaller: codexTurnKey(r, callerOf(r).agent), imageProvider: imageProvider, TitleLink: link, Time: start, Agent: callerOf(r).agent, Session: sessionOf(r.Header), Conv: convOf(r.Header, body), ParentSession: titleParentSession(r.Header, metadata, kind), Kind: kind, Model: model, Effort: effort, Tier: tier, Provider: "openai", Subagent: subagentPickOf(r),
+			Order: []Weighed{seat}, Tries: []Try{{ID: seat.ID, Model: model, Effort: effort, Tier: tier, Start: start}}})
 		if m := noteMasked(r, "chat", maskedHits, sentOf(maskedHits, body), tr.ID, "openai", model); m != nil {
 			s.trace.update(tr, func(t *Route) { t.Masked = m })
 		}
@@ -1171,6 +1175,9 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 				if prompt != nil {
 					t.Prompt = prompt.calibrated(promptCounted(t.Usage), window)
 				}
+				// what the reply said it ran at; the ChatGPT backend's
+				// "auto"/"default" tell nothing (servedTierAt)
+				try.TierServed = servedTierAt(provider.HostOf(base), uu.Tier)
 				try.Served, try.Swapped = served, swapped(model, served)
 				t.Served, t.Swapped = try.Served, try.Swapped
 			})
@@ -1206,7 +1213,8 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 		rec := usage.Record{RouteID: tr.ID, Time: began, Agent: callerOf(r).agent, Provider: servedProvider, Host: provider.HostOf(base),
 			ProviderAccount: servedAccount, Model: modelOf(body), Requested: modelOf(body), Effort: effort,
 			Millis: time.Since(began).Milliseconds(), Status: status, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header),
-			Kind: kind, Endpoint: r.URL.Path, HandedOn: true}
+			Kind: kind, Endpoint: r.URL.Path, HandedOn: true,
+			TierAsked: bodyTier(provider.Responses, body), TierSent: bodyTier(provider.Responses, body)}
 		failedWith(&rec, status, msg, "")
 		appendUsage(r, rec)
 		tried = append(tried, fmt.Sprintf("openai: %d %s", status, msg))
@@ -1230,7 +1238,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 		began, nt = time.Now(), &netTrace{}
 		s.trace.update(tr, func(t *Route) {
 			again := t.Tries[0]
-			t.Tries = append(t.Tries, Try{ID: again.ID, Model: again.Model, Effort: again.Effort, Start: began})
+			t.Tries = append(t.Tries, Try{ID: again.ID, Model: again.Model, Effort: again.Effort, Tier: again.Tier, Start: began})
 		})
 		first, titleReply = firstToken{start: start, onFirst: s.trace.firstContent(tr)}, capturedBody{}
 		return true

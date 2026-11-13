@@ -134,3 +134,42 @@ func TestOpenAIAPITierKept(t *testing.T) {
 		}
 	}
 }
+
+// Anotiaww on X: a Codex /fast turn (service_tier "priority") on Codex's
+// own sign-in showed nothing of it on the Routing page. The relayed
+// route, and its try, says the tier the body went out at, the backend's
+// "auto"/"default" left unknown; a turn without /fast says none.
+func TestCodexRelayRouteSaysTier(t *testing.T) {
+	setup(t, provider.Chat, &fake{t: t})
+	chatgpt(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(w, sse(
+			`data: {"type":"response.created","response":{"id":"r1","service_tier":"auto"}}`,
+			`data: {"type":"response.completed","response":{"id":"r1","service_tier":"default","usage":{"input_tokens":9,"output_tokens":2}}}`))
+	})
+	s := New()
+	for i, tier := range []string{"priority", ""} {
+		body := `{"model":"gpt-5.5","stream":true,"input":"hi"}`
+		if tier != "" {
+			body = `{"model":"gpt-5.5","stream":true,"input":"hi","service_tier":"` + tier + `"}`
+		}
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("POST", CodexPath+"/responses", strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer chatgpt-token")
+		s.Handler().ServeHTTP(rec, req)
+		if rec.Code != 200 {
+			t.Fatalf("%q: %d %s", tier, rec.Code, rec.Body)
+		}
+		st := s.Trace(t.Context(), 0, 0)
+		if len(st.Routes) != i+1 {
+			t.Fatalf("%q routes: %+v", tier, st.Routes)
+		}
+		r := st.Routes[len(st.Routes)-1] // in the order they came
+		if r.Order[0].Who != "Codex's own sign-in" || r.Tier != tier || len(r.Tries) != 1 || !r.Tries[0].Done || r.Tries[0].Tier != tier || r.Tries[0].TierServed != "" {
+			t.Errorf("%q route: tier %q order %+v tries %+v", tier, r.Tier, r.Order, r.Tries)
+		}
+		if sr := sessionRouteOf(r); sr.Tier != tier || sr.AskedTier != tier || sr.TierServed != "" {
+			t.Errorf("%q session route: %+v", tier, sr)
+		}
+	}
+}
