@@ -89,14 +89,41 @@ func webView2Prepare() {
 		log.Printf("magpie: WebView2 start %d of %d, after a failure", try+1, webView2Tries)
 		time.Sleep(webView2Backoff(try))
 	}
-	dir := webView2Dir()
+	webView2Ready(webView2Dir(), instanceID(), 30*time.Second)
+}
+
+// webView2Ready waits, up to max, for no other process to hold the
+// profile folder dir. A second launch waits for nothing: the magpie
+// running on this config (instance id) holds the folder for as long as it
+// runs, and Wails hands the launch over to it as the app is made
+// (singleInstance). Waiting there kept the Start menu's magpie from
+// showing the window for 30s (shangyuan0818 on X).
+func webView2Ready(dir, id string, max time.Duration) {
+	if instanceHeld(id) {
+		return
+	}
 	start := time.Now()
-	if !awaitWebView2Folder(func() bool { return webView2Free(dir) }, 30*time.Second, 250*time.Millisecond, time.Sleep) {
-		log.Printf("magpie: WebView2 folder %s is still held by another process after 30s; going on", dir)
+	if !awaitWebView2Folder(func() bool { return webView2Free(dir) }, max, 250*time.Millisecond, time.Sleep) {
+		log.Printf("magpie: WebView2 folder %s is still held by another process after %s; going on", dir, max)
 	} else if d := time.Since(start); d > time.Second {
 		log.Printf("magpie: waited %s for WebView2 folder %s to be free", d.Round(100*time.Millisecond), dir)
 	}
 }
+
+// instanceHeld says whether a magpie with the single instance id runs:
+// Wails holds a mutex named for it from the app's making until the
+// process ends (its single_instance_windows.go).
+func instanceHeld(id string) bool {
+	h, err := windows.OpenMutex(windows.SYNCHRONIZE, false, windows.StringToUTF16Ptr(instanceMutex(id)))
+	if err != nil {
+		return false
+	}
+	windows.CloseHandle(h)
+	return true
+}
+
+// instanceMutex is the name Wails gives the single instance's mutex.
+func instanceMutex(id string) string { return "wails-app-" + id + "-sim" }
 
 // webView2Failed is Wails' ErrorHandler; Wails exits as soon as it
 // returns. It logs the error with what is needed to read it, and for a
