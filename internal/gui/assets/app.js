@@ -13472,8 +13472,11 @@ function renderAccounts(a, p) {
     if (amPill) pill(amPill);
     // its usage cap: the share of each window it is used to at most
     const cap = accountCapOf(p, l.user);
-    // alone, the cap holds back only magpie's (𝕏 on Discord)
-    const direct = l.active && !several && (a.agent === "claude" || a.agent === "codex") ? a.agentName : "";
+    // alone, the cap holds back only magpie's (𝕏 on Discord); Codex
+    // connected, or failing over through magpie, sends its own turns to
+    // the gateway, which holds a lone capped account there and goes on to
+    // the fallbacks (not_4O4 on X)
+    const direct = l.active && !several && (a.agent === "claude" || a.agent === "codex" && !state.agents?.some((x) => x.id == "codex" && (x.wired || x.failover))) ? a.agentName : "";
     if (p) pill(accountCapPill(p, l.user, cap, direct));
     // and each window's own, set on its meter (willz on Discord)
     const capFor = (w) => windowCapOf(p, l.user, w);
@@ -13492,7 +13495,7 @@ function renderAccounts(a, p) {
       (l.accessOnly ? line : tools).append(ao);
     }
     const held = capHeldOf(quota?.[l.user], capFor);
-    if (held) line.append(capHeldNote(held, held.cap, several, direct));
+    if (held) line.append(capHeldNote(held, held.cap, several, direct, !p?.capStop && p?.fallback?.length));
     line.append(el("span", "grow"));
     if (unusable(l)) {
       row.classList.add("signed-out");
@@ -14298,7 +14301,9 @@ function capHeldOf(q, capFor) {
 function directNote(agent) {
   return t("{agent} is signed in to this account and asks its vendor itself, not through magpie, so with no other account on to move it to, {agent} goes on using it past the cap. Add another account, or pick {agent}'s models via magpie, for the cap to hold it", { agent });
 }
-function capHeldNote(held, cap, several, direct) {
+// fallsBack: past every account's cap, requests go on to the provider's
+// fallbacks (Stop at the caps off)
+function capHeldNote(held, cap, several, direct, fallsBack) {
   const back = held.back ? " · " + resetText(new Date(held.back), new Date(held.back).toLocaleString(intlLang())) : "";
   if (direct) {
     const n = el("span", "using acap-held acap-direct", t("At its cap · {agent} still uses it", { agent: direct }));
@@ -14312,13 +14317,13 @@ function capHeldNote(held, cap, several, direct) {
     const n = el("span", "using acap-held", held.back ? t("{names} at its cap · back {in}", { names, in: untilText(held.back) }) : t("{names} at its cap", { names }));
     n.title = t("{names} is at {n}%, past this account's {cap}% cap, so magpie sends the requests it counts to the other accounts until it renews; other models still use this account", { names, n: Math.round(held.used), cap })
       + back
-      + (several ? "" : "\n" + t("With no other account on, those requests are refused with a usage-cap error until then"));
+      + (several ? "" : "\n" + (fallsBack ? t("With no other account on, those requests go to this provider's fallbacks until then") : t("With no other account on, those requests are refused with a usage-cap error until then")));
     return n;
   }
   const n = el("span", "using acap-held", held.back ? t("At its cap · back {in}", { in: untilText(held.back) }) : t("At its cap"));
   n.title = t("A usage window is at {n}%, past this account's {cap}% cap, so magpie counts it as used up and sends requests to the other accounts until that window renews", { n: Math.round(held.used), cap })
     + back
-    + (several ? "" : "\n" + t("With no other account on, requests are refused with a usage-cap error until then"));
+    + (several ? "" : "\n" + (fallsBack ? t("With no other account on, requests go to this provider's fallbacks until then") : t("With no other account on, requests are refused with a usage-cap error until then")));
   return n;
 }
 function capMark(track, w, cap) {
