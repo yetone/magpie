@@ -36,6 +36,13 @@ func remoteCardWanted(p Provider) func(id string) bool {
 	if p.ServesNone() {
 		return func(string) bool { return true }
 	}
+	// only the user's picks narrow the cards. With none picked, what is
+	// exposed is whatever the remote lists, and a provider the remote set to
+	// usage only lists no model, so its cards would be dropped (fcooji on X,
+	// 0.1.3959: Claude Code usage only there, its usage gone here)
+	if len(p.Models) == 0 {
+		return func(string) bool { return true }
+	}
 	ms := p.Exposed()
 	if len(ms) == 0 {
 		return func(string) bool { return true }
