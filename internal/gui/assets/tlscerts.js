@@ -54,11 +54,18 @@ function drawPin(pin, draft, peek, seen) {
 // every one of theirs and Remote magpie's, and a preset's pointed at their
 // own server, never the vendor's own hosts; save has the Save body carry
 // the pin. The client certificate's fields are saved by app.js itself.
+window.tlsTyped = (draft, body) => {
+  for (const k of ["clientCert", "clientKey", "serverCA", "serverPin"]) if (draft[k] != null) body[k] = draft[k].trim();
+  if (draft.resolve) body.resolve = draft.resolve;
+};
+
 window.tlsCertRows = function ({ p, pr, draft, at, certTakes, onHTTPS, addressOf, asTyped, show, save }) {
   if (!at.isConnected) return;
-  const rows = [];
+  const rows = [], saves = [];
+  const keep = (f) => saves.push(f);
+  save((body, own) => { if (!own) for (const f of saves) f(body); if (draft.resolve) body.resolve = draft.resolve; });
   const takes = certTakes() || (p ? !!p.takesServerPin || (!!p.preset && !p.account) : !!pr) && (p?.preset || pr?.id) !== "google-vertex";
-  if (takes) rows.push(pinRow({ p, pr, draft, certTakes, addressOf, asTyped, show, save }));
+  if (takes) rows.push(pinRow({ p, pr, draft, certTakes, addressOf, asTyped, show, save: keep }));
   if (certTakes()) {
     const box = el("div", "client-cert");
     for (const [k, label, hold] of [["clientCert", t("Certificate"), "client.pem"], ["clientKey", t("Key"), "client-key.pem"], ["serverCA", t("Server CA"), "ca.pem"]]) {
