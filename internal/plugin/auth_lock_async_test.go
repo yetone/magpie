@@ -47,26 +47,23 @@ const context = vm.createContext({
 vm.runInContext(source.slice(start, end), context)
 const run = code => vm.runInContext(code, context)
 const lock = authPath + '.lock'
-const sleep = ms => new Promise(r => setTimeout(r, ms))
 
 ;(async () => {
   realFs.writeFileSync(authPath, JSON.stringify({ a: { type: 'api', key: 'k1' } }))
 
-  // another host holds the lock for 600ms
+  // #5271: release from the event loop itself, without counting timer ticks.
   realFs.writeFileSync(lock, '')
-  let ticks = 0
-  const timer = setInterval(() => ticks++, 20)
-  let released = false
-  setTimeout(() => { released = true; try { realFs.unlinkSync(lock) } catch {} }, 600)
-  const t0 = Date.now()
+  const released = new Promise((resolve, reject) => setImmediate(() => {
+    try {
+      assert.ok(realFs.existsSync(lock), 'the event loop ran while the other host still held the lock')
+      assert.equal(JSON.parse(realFs.readFileSync(authPath, 'utf8')).b, undefined, 'the change is still waiting')
+      realFs.unlinkSync(lock)
+      resolve()
+    } catch (e) { reject(e) }
+  }))
   const waiting = run('changeAuth((all) => { all.b = { type: "api", key: "k2" } })')
-  await sleep(300)
-  assert.ok(!released, 'the lock is still held at 300ms')
-  assert.ok(ticks >= 8, 'a timer on the same loop kept running while changeAuth waited for the lock: ' + ticks + ' ticks')
+  await released
   await waiting
-  assert.ok(released, 'the change waited for the lock to be let go')
-  assert.ok(Date.now() - t0 < 5000, 'and did not wait out the stale limit')
-  clearInterval(timer)
   const now = JSON.parse(realFs.readFileSync(authPath, 'utf8'))
   assert.equal(now.b.key, 'k2')
   assert.equal(now.a.key, 'k1', 'the others are kept')
