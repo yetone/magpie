@@ -771,7 +771,17 @@ with the account that answered: Kimi Code's are the ones whose
 `usage.record`s in every agent's `wire.jsonl` under
 `$KIMI_CODE_HOME/sessions` (else `~/.kimi-code`), protocols 1.4 and 1.5;
 a fork repeats its parent's records, so each is keyed by agent, time,
-model and usage and counted once. Pi's and omp's calls are the session
+model and usage and counted once. The Kimi desktop app's Work (Daimon,
+which runs the Kimi Code runtime; CNSA0422 on X,
+[`kimi_work.go`](../../internal/sessions/kimi_work.go)) keeps the same
+files under `<share>/daimon/runtime/kimi-code/home/sessions`, its share
+being `kimi-desktop/daimon-share` in Electron's userData, the absolute
+`shareDir` of `daimon-storage.json` there, or `~/.kimi`; they count as
+Kimi Code's. A record's model there is Daimon's alias, read as its
+`model` in the runtime's `config.toml`, and a call whose alias's provider
+`base_url` is a loopback address (magpie's kimi-desktop plugin bridge) is
+the gateway's. That file is the current setting only
+(`TestKimiWorkCalls`). Pi's and omp's calls are the session
 files' assistant messages, and the calls beside them that Sessions counts
 too ("usage" and omp's "model_usage" entries, a compaction's, a branch
 summary's and a tool result's usage, on the model and provider in use);
