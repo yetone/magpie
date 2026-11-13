@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/yetone/magpie/internal/redact"
 )
@@ -174,5 +175,78 @@ func TestGuardReadsShortChunks(t *testing.T) {
 	}
 	if pf.size() != chunkSize {
 		t.Fatalf("Privacy Filter's chunk is %d bytes", pf.size())
+	}
+}
+
+// A request that waits for every text (masking's strict wait) goes once
+// what it adds is read, and what an earlier request already sent unread
+// is read after it, to the request's bound. Before, it waited for the
+// whole backlog, up to its 15s, on every turn after a resumed history:
+// on a 4-core Linux CPU a 60-turn session waited 15s on each of its
+// first three requests (gaubeebangeel on X, 11-13).
+func TestStrictRequestGoesBeforeTheBacklog(t *testing.T) {
+	r := newReader(t, guardChunk)
+	turns := history(40, 3000) // 120 KB the model hasn't read
+	// the first request runs out of its wait after one chunk, the rest
+	// of the history sent unread
+	ctx, cancel := context.WithCancel(context.Background())
+	r.during = func(int) { cancel() }
+	if _, err := r.find(ctx, turns); err == nil {
+		t.Fatal("the first request read the whole history")
+	}
+	r.during = nil
+	// the next: the history and a turn more, a bound far off. Past the
+	// first chunk (the new turn with it) every read waits for gate.
+	gate := make(chan struct{})
+	before, _ := r.bytes()
+	var reads atomic.Int32
+	r.during = func(int) {
+		if reads.Add(1) > 1 {
+			<-gate
+		}
+	}
+	turns = append(turns, "Alice asked again")
+	type res struct {
+		got [][]redact.Found
+		err error
+	}
+	ch := make(chan res, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		got, err := r.find(ctx, turns)
+		ch <- res{got, err}
+	}()
+	var got res
+	select {
+	case got = <-ch:
+	case <-time.After(20 * time.Second):
+		close(gate)
+		t.Fatal("the request waited for the history an earlier one sent unread")
+	}
+	var p *Partial
+	if !errors.As(got.err, &p) || !errors.Is(got.err, afterSent) {
+		t.Fatalf("the request's answer: %v", got.err)
+	}
+	if last := got.got[len(got.got)-1]; len(last) != 1 {
+		t.Fatalf("what the request added wasn't read: %v", last)
+	}
+	// the backlog is read after it, to the end
+	close(gate)
+	for deadline := time.Now().Add(20 * time.Second); ; {
+		if _, miss := r.known(turns, nil); len(miss) == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the backlog wasn't read after the request")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	// its read is over once the turn is free
+	r.turn <- struct{}{}
+	<-r.turn
+	// 26 texts of 3 KB the history has apart, less the first request's
+	if n, _ := r.bytes(); n-before < 70<<10 {
+		t.Fatalf("read %d bytes after the request", n-before)
 	}
 }

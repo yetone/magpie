@@ -60,8 +60,8 @@ type backend struct {
 	// leaves the model finishing the chunk it is on, so a model that reads
 	// on the CPU has short ones.
 	chunk int
-	// sent are the texts and pieces a Bounded request went without the
-	// model's reading (by hash): what a request sent unread before.
+	// sent are the texts and pieces a request went without the model's
+	// reading (by hash): what a request sent unread before.
 	sent sentSet
 	// queue are the requests waiting for turn, the least left to read
 	// first
@@ -139,17 +139,20 @@ func (b *backend) find(ctx context.Context, texts []string) ([][]redact.Found, e
 	if len(miss) == 0 {
 		return out, nil
 	}
-	// what a Bounded request goes without the model's reading, or with
-	// it, is sent now: what was sent unread before is the backlog
+	// what a request goes without the model's reading, or with it, is
+	// sent now: what was sent unread before is the backlog
 	lenient := IsBounded(ctx)
-	var backlog map[[32]byte]bool
-	if lenient {
-		var ks [][32]byte
-		for _, u := range b.missing(texts, miss, nil) {
-			ks = append(ks, sha256.Sum256([]byte(u)))
-		}
-		backlog = b.sent.mark(ks)
+	var ks [][32]byte
+	for _, u := range b.missing(texts, miss, nil) {
+		ks = append(ks, sha256.Sum256([]byte(u)))
 	}
+	backlog := b.sent.mark(ks)
+	// a request that waits for every text but has a bound (masking's
+	// strict wait) stops waiting once only the backlog is left, and the
+	// backlog is read on after it, to that bound (afterSent)
+	until, early := ctx.Deadline()
+	early = early && !lenient
+	answered := false // early, by find's goroutine
 	// how much of the texts this request has left for the model to read
 	left := func(got map[[32]byte][]redact.Found, miss []int, read int) int {
 		n, old := 0, 0
@@ -160,7 +163,15 @@ func (b *backend) find(ctx context.Context, texts []string) ([][]redact.Found, e
 				n += len(u)
 			}
 		}
-		return n + min(old, max(0, backlogCap-read))
+		switch {
+		case lenient:
+			return n + min(old, max(0, backlogCap-read))
+		case early && !answered:
+			// it waits for what it adds alone: it goes before the
+			// backlog an earlier request reads on into
+			return n
+		}
+		return n + old
 	}
 	if ctx.Err() != nil {
 		return b.partial(ctx, texts)
@@ -183,6 +194,17 @@ func (b *backend) find(ctx context.Context, texts []string) ([][]redact.Found, e
 				<-b.turn
 			}
 		}()
+		// the request is answered once; after an early answer the reading
+		// goes on under rctx, the request's bound without the request
+		answer := func(r result) {
+			if !answered {
+				answered = true
+				done <- r
+			}
+		}
+		rctx := ctx
+		after, stop := context.WithDeadline(context.WithoutCancel(ctx), until)
+		defer stop()
 		// what this call's chunks found, by hash, whatever the cache
 		// lets go of meanwhile
 		got := map[[32]byte][]redact.Found{}
@@ -195,8 +217,8 @@ func (b *backend) find(ctx context.Context, texts []string) ([][]redact.Found, e
 				// a caller that stopped waiting leaves the chunks after
 				// this one: the turn isn't taken again for them (a
 				// select on a free turn and an ended ctx picks either)
-				if ctx.Err() != nil {
-					done <- result{nil, errWaitEnded}
+				if rctx.Err() != nil {
+					answer(result{nil, errWaitEnded})
 					return
 				}
 				// give way to a request waiting for the turn with less
@@ -205,8 +227,8 @@ func (b *backend) find(ctx context.Context, texts []string) ([][]redact.Found, e
 				n := left(got, miss, read)
 				<-b.turn
 				held = false
-				if !b.takeTurn(ctx, n) {
-					done <- result{nil, errWaitEnded}
+				if !b.takeTurn(rctx, n) {
+					answer(result{nil, errWaitEnded})
 					return
 				}
 				held = true
@@ -214,10 +236,14 @@ func (b *backend) find(ctx context.Context, texts []string) ([][]redact.Found, e
 			// the one ahead may have failed: those queued behind it
 			// don't each try again, minutes apiece
 			if err := b.heldBack(); err != nil {
-				done <- result{nil, err}
+				answer(result{nil, err})
 				return
 			}
 			units := b.missing(texts, miss, got)
+			if early && !answered && !slices.ContainsFunc(units, func(u string) bool { return !backlog[sha256.Sum256([]byte(u))] }) {
+				answer(result{slices.Clone(out), &Partial{Missing: len(miss), Of: len(texts), Err: afterSent}})
+				rctx = after
+			}
 			if lenient {
 				// the backlog past its cap is left: its texts go with
 				// what the rules find
@@ -238,21 +264,21 @@ func (b *backend) find(ctx context.Context, texts []string) ([][]redact.Found, e
 				// comes through the cache
 				select {
 				case <-wait:
-				case <-ctx.Done():
-					done <- result{nil, errWaitEnded}
+				case <-rctx.Done():
+					answer(result{nil, errWaitEnded})
 					return
 				}
 				miss = b.still(texts, miss, got, out)
 				continue
 			}
 			if len(chunks) == 0 {
-				done <- result{nil, fmt.Errorf("the local masking model has no text to read for %d texts", len(miss))}
+				answer(result{nil, fmt.Errorf("the local masking model has no text to read for %d texts", len(miss))})
 				return
 			}
 			found, err := classifySafely(b.classify, chunks[:1])
 			if err != nil {
 				release()
-				done <- result{nil, err}
+				answer(result{nil, err})
 				return
 			}
 			b.cache.mu.Lock()
@@ -269,7 +295,7 @@ func (b *backend) find(ctx context.Context, texts []string) ([][]redact.Found, e
 			b.saveSoon()
 			miss = b.still(texts, miss, got, out)
 		}
-		done <- result{out, nil}
+		answer(result{out, nil})
 	}()
 	select {
 	case r := <-done:
@@ -370,6 +396,23 @@ func (r *readingSet) claim(units []string, size int) (chunks []string, parts [][
 
 // errWaitEnded is find's own word that its caller stopped waiting.
 var errWaitEnded = errors.New("the wait ended")
+
+// afterSent is a Partial's Err for a request that waits for every text
+// (masking's strict wait) answered once all that is left is what an
+// earlier request already sent without the model's reading. Such a text
+// goes as it went on the same route (redact's sentSpans): what the model
+// finds in it now changes nothing in it, and only makes known a value to
+// mask in text after it (learnLate). So the request goes, and the model
+// reads on to the request's bound, keeping what it finds for the next
+// one. Before, a resumed or never-read history was read on every request
+// until the strict wait's 15s ran out, newest first: on a 4-core Linux
+// CPU a 60-turn Claude Code session resumed waited 15s, 15s, 15s and 7.8s
+// on its first four requests, each for text the vendor already had
+// (gaubeebangeel on X, 11-13: first tokens at 30-40s with masking on,
+// 10-15s off). On another route (the user picked another provider) such
+// a text has the model's finds of now, and goes with the rules' alone
+// until the model has read it.
+var afterSent = errors.New("what is left was sent before without the model's reading, and is read after the request")
 
 // Partial is Find's error when its caller stopped waiting (ctx ended)
 // before the model had read every text. What Find returns with it is
