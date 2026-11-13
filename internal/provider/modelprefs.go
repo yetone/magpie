@@ -958,6 +958,26 @@ func LabelsFor(agent string, es []Entry) []string {
 	return out
 }
 
+// AgentNamed is the catalog id of the one model the agent of that id's
+// list names name (LabelsFor), for an agent that asks for a model by the
+// name its list shows: WorkBuddy shows a model's id after its name
+// ("GLM-5.3:workbuddy/glm-5.3", elis_pina on X), so with the provider left
+// out of the names it is given the name as the id too. false when no model
+// shown, or more than one, is named so.
+func AgentNamed(agent, name string) (string, bool) {
+	if name == "" {
+		return "", false
+	}
+	shown := catalogKept(agent).shown
+	id, n := "", 0
+	for i, l := range LabelsFor(agent, shown) {
+		if l == name {
+			id, n = shown[i].ID, n+1
+		}
+	}
+	return id, n == 1
+}
+
 // PlainName is the entry's name alone: a remote magpie's model's without
 // the provider its list put after it by that magpie's own setting, which
 // this one's Provider in model names Off leaves out as well (ARNO on

@@ -1949,6 +1949,20 @@ func askedAt(id string) (string, string) {
 	return m, e
 }
 
+// namedFor is the catalog id of the model an agent that is given its
+// models' names as their ids asked for by name: WorkBuddy and WorkBuddy AI
+// (buddyIDs in internal/agent), by their keys.
+func namedFor(r *http.Request, model string) (string, bool) {
+	if model == "" {
+		return "", false
+	}
+	switch agent := agentOf(r); agent {
+	case "workbuddy", "workbuddy-ai":
+		return provider.AgentNamed(agent, model)
+	}
+	return "", false
+}
+
 // estimatedMoved are the built-ins that estimated a count, as their
 // plugins do, moved or beside the built-in (kiro-plugin); Command Code's
 // whatever its plan, as the plugin alone knows a Go key.
@@ -2430,9 +2444,19 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// request is already whole in memory, so keep it as it came, and the
 	// reply goes to a spool as it streams
 	wholeBodies := usage.ObservedBodies() == usage.WholeBodies
+	// WorkBuddy names a model by the name its list shows it under, given
+	// as its id with the provider left out of the names (buddyIDs in
+	// internal/agent): the model of that name, before any other a bare
+	// id would find. The reply keeps the name asked for (askedFor)
+	byName := askedFor
+	if id, ok := namedFor(r, askedFor); ok {
+		body = rewriteModel(body, id)
+		plain = rewriteModel(plain, id)
+		byName = id
+	}
 	// a model asked for at an effort of its own (a Claude Code tier, #536)
 	// is the model, every try of it asked for that effort
-	asked, askedEffort := askedAt(askedFor)
+	asked, askedEffort := askedAt(byName)
 	if askedEffort != "" {
 		body = rewriteModel(body, asked)
 		plain = rewriteModel(plain, asked)

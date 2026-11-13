@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/yetone/magpie/internal/provider"
@@ -264,5 +266,130 @@ func TestWorkBuddyAIWritesItsOwnFolder(t *testing.T) {
 	t.Setenv("WORKBUDDY_CONFIG_DIR", filepath.Join(home, "elsewhere"))
 	if workbuddyAI(home).Path != intl {
 		t.Fatal("WorkBuddy AI followed WORKBUDDY_CONFIG_DIR")
+	}
+}
+
+// WorkBuddy shows a custom model as "name:id" whenever the two differ, so
+// with the provider left out of the names, the name is the id too, and
+// what was set on a model in WorkBuddy stays across the change of its id
+// (elis_pina on X: "GLM-5.3:workbuddy/glm-5.3"). CodeBuddy Code, whose
+// settings.json names a model by its catalog id, keeps it.
+func TestWorkBuddyNamesAreIDsWithoutProvider(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	t.Setenv("WORKBUDDY_CONFIG_DIR", "")
+	if err := provider.Save(provider.Provider{ID: "deepseek", Name: "DeepSeek", Chat: "https://api.deepseek.com/v1", Key: "k", Models: []string{"pro", "flash"}}); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(home, ".workbuddy", "models.json")
+	os.MkdirAll(filepath.Dir(path), 0o755)
+	os.WriteFile(path, []byte(`{"models":[],"availableModels":["x"]}`), 0o600)
+	type doc struct {
+		Models    []map[string]any `json:"models"`
+		Available []string         `json:"availableModels"`
+	}
+	read := func() doc {
+		var d doc
+		b, _ := os.ReadFile(path)
+		if err := json.Unmarshal(b, &d); err != nil {
+			t.Fatalf("%v\n%s", err, b)
+		}
+		return d
+	}
+	write := func(d doc) {
+		b, _ := json.Marshal(d)
+		os.WriteFile(path, b, 0o600)
+	}
+	byName := func(d doc, name string) map[string]any {
+		for _, m := range d.Models {
+			if m["name"] == name {
+				return m
+			}
+		}
+		t.Fatalf("no %q in %v", name, d.Models)
+		return nil
+	}
+	notOnMac(t)
+	a := workbuddy(home)
+	if err := a.Field("provider").Set("magpie"); err != nil {
+		t.Fatal(err)
+	}
+	labels := listLabels("workbuddy")
+	pro := labels["deepseek/pro"]
+	d := read()
+	if m := byName(d, pro); m["id"] != "deepseek/pro" {
+		t.Fatalf("with the provider in the names: %v", m)
+	}
+	byName(d, pro)["disabled"] = true
+	write(d)
+
+	for _, mode := range []string{provider.SuffixOff, provider.SuffixOwn} {
+		if err := provider.SetAgentSuffix("workbuddy", mode); err != nil {
+			t.Fatal(err)
+		}
+		plain := listLabels("workbuddy")["deepseek/pro"]
+		// Own leaves the provider after a name the user did not give
+		if plain == "" || mode == provider.SuffixOff && plain == pro {
+			t.Fatalf("%s: name %q", mode, plain)
+		}
+		if err := a.Sync(); err != nil {
+			t.Fatal(err)
+		}
+		d = read()
+		m := byName(d, plain)
+		if m["id"] != plain || m["disabled"] != true {
+			t.Fatalf("%s: %v", mode, m)
+		}
+		if !slices.Contains(d.Available, plain) || slices.Contains(d.Available, "deepseek/pro") {
+			t.Fatalf("%s: available %v", mode, d.Available)
+		}
+		// the gateway takes the name back to the model
+		if id, ok := provider.AgentNamed("workbuddy", plain); !ok || id != "deepseek/pro" {
+			t.Fatalf("%s: AgentNamed(%q) = %q, %v", mode, plain, id, ok)
+		}
+		if len(d.Models) != 2 {
+			t.Fatalf("%s: %v", mode, d.Models)
+		}
+	}
+	// WorkBuddy AI, the same app, the same
+	if err := provider.SetAgentSuffix("workbuddy-ai", provider.SuffixOff); err != nil {
+		t.Fatal(err)
+	}
+	ai := filepath.Join(home, "workbuddy-ai-models.json")
+	if err := buddyWrite(ai, "workbuddy-ai", true); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(ai); strings.Contains(string(b), `"id": "deepseek/pro"`) {
+		t.Fatalf("workbuddy-ai: %s", b)
+	}
+	// CodeBuddy Code's ids stay the catalog's under its own Off
+	if err := provider.SetAgentSuffix("codebuddy", provider.SuffixOff); err != nil {
+		t.Fatal(err)
+	}
+	cb := filepath.Join(home, "codebuddy-models.json")
+	if err := buddyWrite(cb, "codebuddy", true); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(cb)
+	if !strings.Contains(string(b), `"id": "deepseek/pro"`) {
+		t.Fatalf("codebuddy: %s", b)
+	}
+
+	// back on, the catalog ids, and still off in WorkBuddy
+	if err := provider.SetAgentSuffix("workbuddy", provider.SuffixOn); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	d = read()
+	if m := byName(d, pro); m["id"] != "deepseek/pro" || m["disabled"] != true || len(d.Models) != 2 {
+		t.Fatalf("on again: %v", d.Models)
+	}
+	if _, ok := provider.AgentNamed("workbuddy", "nothing"); ok {
+		t.Fatal("a name no model has")
 	}
 }
