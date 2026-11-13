@@ -106,15 +106,24 @@ async function opening(browser, lang, n) {
     const w = window.__thumbs;
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     w.on = false;
-    // where each thumb is drawn, against the option picked under it
+    // where each shown thumb is drawn, against the option picked under it;
+    // then Advanced opened and every one again (#5886: a control in a
+    // closed Advanced is put when it opens, and Chromium answers
+    // offsetWidth inside the closed one, so shown is checkVisibility's)
     const boxes = [...document.querySelectorAll(".editor .segs")];
     const off = [];
-    for (const box of boxes) {
-      const on = box.querySelector(":scope > .on"), th = box.querySelector(":scope > .thumb");
-      if (!on || !on.offsetWidth) continue;
-      const a = on.getBoundingClientRect(), b = th?.getBoundingClientRect();
-      if (!b || Math.abs(a.left - b.left) > 1 || Math.abs(a.width - b.width) > 1) off.push(`${box.dataset.kind}: option ${a.left.toFixed(1)}+${a.width.toFixed(1)}, thumb ${b ? b.left.toFixed(1) + "+" + b.width.toFixed(1) : "none"}`);
-    }
+    const check = (when) => {
+      for (const box of boxes) {
+        const on = box.querySelector(":scope > .on"), th = box.querySelector(":scope > .thumb");
+        if (!on || !on.checkVisibility()) continue;
+        const a = on.getBoundingClientRect(), b = th?.getBoundingClientRect();
+        if (!b || Math.abs(a.left - b.left) > 1 || Math.abs(a.width - b.width) > 1) off.push(`${when} ${box.dataset.kind}: option ${a.left.toFixed(1)}+${a.width.toFixed(1)}, thumb ${b ? b.left.toFixed(1) + "+" + b.width.toFixed(1) : "none"}`);
+      }
+    };
+    check("shown");
+    for (const d of document.querySelectorAll(".editor details:not([open])")) d.open = true;
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    check("opened");
     return { forced: w.forced, slow: w.slow, boxes: boxes.length, off };
   });
   await context.close();
@@ -136,11 +145,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.deepEqual(many.off, []);
       assert.ok(few.forced > 0, "opening lays the editor out");
       // a frame's observer can land on either side of the count's end, and
-      // the page's own reads (about 240 slow ones in WebKit at either count)
-      // vary by a frame's worth: room for that, none for a read an account,
-      // 120 more here
+      // the page's own reads (about 200 slow ones in WebKit at either count)
+      // vary by the frames the open takes: holdModal reads a few each
+      // frame, and WebKit's 40 sometimes ends ~5 frames sooner (188 against
+      // 208, up to 36 apart on mote). Room for that, none for a read an
+      // account, 120 more here
       assert.ok(many.forced <= few.forced + 24, `forced layouts: ${few.forced} at 40 accounts, ${many.forced} at 160`);
-      assert.ok(many.slow <= few.slow + 24, `offsetLeft/offsetTop/offsetParent/scroll/computed-style reads: ${few.slow} at 40 accounts, ${many.slow} at 160`);
+      assert.ok(many.slow <= few.slow + 60, `offsetLeft/offsetTop/offsetParent/scroll/computed-style reads: ${few.slow} at 40 accounts, ${many.slow} at 160`);
     });
   }
 }
