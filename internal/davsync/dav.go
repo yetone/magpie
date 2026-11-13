@@ -161,7 +161,10 @@ func newDAV(c Config) (*dav, error) {
 		return nil, fmt.Errorf("%q is not a WebDAV address (https://…)", c.URL)
 	}
 	u.Path = strings.TrimRight(u.Path, "/")
-	return &dav{base: u, user: c.User, pass: c.Password, client: syncClient}, nil
+	// a server that asks for Digest instead of Basic is answered (digest.go)
+	client := *syncClient
+	client.Transport = &digestTransport{next: syncClient.Transport}
+	return &dav{base: u, user: c.User, pass: c.Password, client: &client}, nil
 }
 
 func (d *dav) url(parts ...string) string {
