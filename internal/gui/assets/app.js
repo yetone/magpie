@@ -7497,26 +7497,27 @@ function field(label, control, hint, lead) {
   const l = el("label", control.classList?.contains("accts") ? "by-list" : "", label); // on a list's first row
   const wrap = el("div", hint ? "fld" : "");
   wrap.append(control);
-  const inputSelector = "input, select, textarea";
-  const inputs = control.matches(inputSelector) ? [control] : [...control.querySelectorAll(inputSelector)];
-  if (label && inputs.length) {
-    for (const input of inputs) {
-      if (!input.id) input.id = "field-" + ++fieldIDs;
-      if (!input.closest("label") && !input.hasAttribute("aria-label") && !input.hasAttribute("aria-labelledby")) input.setAttribute("aria-label", label);
-    }
-    l.htmlFor = inputs[0].id;
-  }
   if (hint) {
     const lines = [lead && el("div", "hint lead", lead), el("div", "hint expl", hint)].filter(Boolean);
     for (const help of lines) {
       help.id = "field-help-" + ++fieldIDs;
       wrap.append(help);
     }
-    // a screen reader reads the hint, not the lead it repeats
-    const help = lines[lines.length - 1];
-    for (const input of inputs) input.setAttribute("aria-describedby", [input.getAttribute("aria-describedby"), help.id].filter(Boolean).join(" "));
   }
+  fieldInputs(l, control);
   return [l, wrap];
+}
+// a field's inputs named by its label, and described by its hint: a screen
+// reader reads the hint, not the lead it repeats
+function fieldInputs(l, control) {
+  const sel = "input, select, textarea", inputs = control.matches(sel) ? [control] : [...control.querySelectorAll(sel)];
+  const label = l.textContent, help = control.parentElement.querySelector(":scope > .hint:last-child");
+  for (const input of inputs) {
+    if (label && !input.id) input.id = "field-" + ++fieldIDs;
+    if (label && !input.closest("label") && !input.hasAttribute("aria-label") && !input.hasAttribute("aria-labelledby")) input.setAttribute("aria-label", label);
+    if (help) input.setAttribute("aria-describedby", [input.getAttribute("aria-describedby"), help.id].filter(Boolean).join(" "));
+  }
+  if (label && inputs.length) l.htmlFor = inputs[0].id;
 }
 // decimalOf is a number as typed in a price box, a comma taken for the
 // decimal point as some keyboards give it (0,25); NaN for anything else.
@@ -9040,19 +9041,18 @@ function openModal(content, quiet) {
   grow.finished.then(stop, stop);
 }
 // edAligned: a row across an editor starts where its fields do (--ed-at)
-const edAlign = new ResizeObserver((es) => {
-  for (const { target: n } of es) {
-    if (!n.isConnected) { edAlign.unobserve(n); continue; }
-    const cs = getComputedStyle(n.parentElement), cols = cs.gridTemplateColumns.split(" ");
-    const lab = cols.length > 1 ? parseFloat(cols[0]) || 0 : 0;
-    // only when changed; an open fold's later change a frame later, or its
-    // own height change is reported as an observer loop (a page error)
-    const at = (lab && lab + parseFloat(cs.columnGap)) + "px";
-    if (n.style.getPropertyValue("--ed-lab") === lab + "px" && n.style.getPropertyValue("--ed-at") === at) continue;
-    const set = () => { n.style.setProperty("--ed-lab", lab + "px"); n.style.setProperty("--ed-at", at); };
-    if (n.open && n.style.getPropertyValue("--ed-at")) requestAnimationFrame(set); else set();
-  }
-});
+const edAlign = new ResizeObserver((es) => es.forEach((e) => edAlignAt(e.target)));
+function edAlignAt(n) {
+  if (!n.isConnected) return edAlign.unobserve(n);
+  const cs = getComputedStyle(n.parentElement), cols = cs.gridTemplateColumns.split(" ");
+  const lab = cols.length > 1 ? parseFloat(cols[0]) || 0 : 0;
+  // only when changed; an open fold's later change a frame later, or its
+  // own height change is reported as an observer loop (a page error)
+  const at = (lab && lab + parseFloat(cs.columnGap)) + "px";
+  if (n.style.getPropertyValue("--ed-lab") === lab + "px" && n.style.getPropertyValue("--ed-at") === at) return;
+  const set = () => { n.style.setProperty("--ed-lab", lab + "px"); n.style.setProperty("--ed-at", at); };
+  if (n.open && n.style.getPropertyValue("--ed-at")) requestAnimationFrame(set); else set();
+}
 const edAligned = (n) => (edAlign.observe(n), n);
 // frame holds an editor's head and its buttons still while the fields
 // between them scroll.
@@ -13887,10 +13887,33 @@ function loginUsageOf(agent) {
       .then((d) => { u.data = d || {}; }, () => { u.data = u.data || {}; })
       .finally(() => {
         u.at = Date.now(); u.loading = null;
-        if (providers?.providers.find((p) => p.id === editing)?.account?.agent === agent && !document.querySelector(".editor .rename-in, .editor input:focus, .signing.import textarea:focus")) renderProviders(true);
+        redrawAccounts(agent);
       });
   }
   return u.data;
+}
+
+// the readings in: the open editor's accounts drawn again, not the page
+// and the editor around them (#5310); the focus kept on the same control
+// of the same account (by its first class: a refresh pressed is busy), as
+// the readings add controls before it
+function redrawAccounts(agent) {
+  const p = providers?.providers.find((p) => p.id === editing);
+  if (p?.account?.agent !== agent || $(".editor .rename-in, .editor input:focus, .signing.import textarea:focus")) return;
+  const old = !accountArranging && !providerArranging && $("#modal:not(.out) .editor .accts:not(.keys)");
+  if (!old) return renderProviders(true);
+  const f = document.activeElement, id = old.contains(f) && f.closest(".acc")?.dataset.accountId;
+  const same = (l) => [...(l.querySelector(`[data-account-id="${CSS.escape(id)}"]`)?.getElementsByTagName(f.tagName) || [])].filter((x) => x.classList[0] == f.classList[0]);
+  const at = id ? same(old).indexOf(f) : -1, list = renderAccounts(p.account, p), body = old.closest(".ebody"), top = body?.scrollTop;
+  old.replaceWith(list);
+  // the place kept, as a full draw keeps it: the focus taken out moved it (scroll anchoring)
+  if (body) body.scrollTop = top;
+  fieldInputs(list.parentElement.previousElementSibling, list);
+  // given back, not pressed: what was pressed stays held where it was
+  modalRefocus = true;
+  same(list)[at]?.focus(NO_SCROLL);
+  modalRefocus = false;
+  holdModal();
 }
 
 // quotaError says why an allowance can't be read, the raw error in the tooltip.
@@ -19686,6 +19709,8 @@ function mountProvPrefs(slots, agent) {
     slot.hidden = off;
     for (const n of slot.fieldRow) n.hidden = off;
   }
+  // a label shown widens the labels' column, which the folds' sizes don't say
+  document.querySelectorAll(".editor details.more").forEach(edAlignAt);
 }
 function remountProvPrefs() {
   const m = provPrefMount;

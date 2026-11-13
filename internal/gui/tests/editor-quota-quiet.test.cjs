@@ -76,14 +76,15 @@ async function openEditor(browser, lang, id, usage) {
 // the opacity read as its class changes, before any frame, so a frame
 // late under load still sees a swap begin.
 const watch = (page, until) => page.evaluate((until) => {
-  const d = document.querySelector("#modal .dialog"), was = d.querySelector(".ebody");
+  // drawn again: the body, or (#5310) only its accounts list
+  const d = document.querySelector("#modal .dialog"), was = d.querySelector(".ebody"), list = () => d.querySelector(".accts:not(.keys)"), wasList = list();
   const seen = window.seen = { frames: [], atClass: [], at: 0, done: false };
   new MutationObserver(() => seen.atClass.push({ opacity: +getComputedStyle(d).opacity, anims: d.getAnimations().map((a) => a.animationName || "") }))
     .observe(d, { attributes: true, attributeFilter: ["class"] });
   const step = (now) => {
     const body = d.querySelector(".ebody");
     seen.frames.push({ opacity: +getComputedStyle(d).opacity, top: d.getBoundingClientRect().top, scroll: body?.scrollTop });
-    if (!seen.at && (until === "redrawn" ? body && body !== was : d.querySelector(until))) seen.at = now;
+    if (!seen.at && (until === "redrawn" ? body && (body !== was || list() !== wasList) : d.querySelector(until))) seen.at = now;
     if (seen.at && now - seen.at > 400) { seen.done = true; return; }
     requestAnimationFrame(step);
   };
