@@ -720,11 +720,13 @@ func magpieProviderJSONAt(shape, catalog, gw string) any {
 // piBlockKept is theirsKept for magpie's provider in a Pi models.json at
 // path, where a sendSessionAffinityHeaders the file already has, the
 // user's own or pi-cache-optimizer's (#1103), stays as it is, as does a
-// model's maxTokens the user typed there (piOutputsKept).
+// model's maxTokens the user typed there (piOutputsKept), and an api they
+// set for the provider or a model (piAPIsKept).
 func piBlockKept(path string, value func() any) func() any {
 	return theirsKept(path, "providers."+magpieID, func() any {
 		v := value()
 		piOutputsKept(path, v)
+		piAPIsKept(path, v)
 		if _, set := edit.GetJSON(path, "providers."+magpieID+".compat.sendSessionAffinityHeaders"); !set {
 			return v
 		}
