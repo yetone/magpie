@@ -73,6 +73,17 @@ import (
 // result with a text block first, saying which tools are loaded, in the
 // words a translated route tells a model (stringOrText); the references and
 // the tool_use/tool_result pairing stay.
+//
+// An endpoint that reads only text and images in a tool_result refuses the
+// references themselves: "DeepSeek V4.1 supports text and image content
+// only; got 'tool_reference'" (emilochen on X, Claude Code to a DeepSeek
+// V4.1 behind an Anthropic-compatible URL). A provider whose 400 names
+// tool_reference, other than as what it expected, while the request holds
+// one in a tool_result is sent each reference as the text a translated
+// route tells a model (toolLoadedText), and the tools they named without
+// defer_loading, so the model still sees what ToolSearch loaded
+// (withRefsAsText). A translated route (Chat, Responses, Gemini) already
+// carries them as that text (stringOrText).
 
 // The refusals, remembered in unfit under the provider's id as betas are.
 const (
@@ -83,6 +94,7 @@ const (
 	shapeSafeguards = "shape:safeguards"
 	shapeDeferred   = "shape:messages[].content[].tool_addition"
 	shapeRefsOnly   = "shape:tool_result.content=tool_reference"
+	shapeRefs       = "shape:tool_result.content[].tool_reference"
 )
 
 var (
@@ -93,6 +105,12 @@ var (
 	safeguardsRefused   = lazyre.New(`\bsafeguards:? Extra inputs are not permitted`)
 	deferredRefused     = lazyre.New("messages\\[\\d+\\]\\.content: unknown variant `(?:tool_addition|tool_removal|tool_definition|tool_reference)`")
 	refsOnlyRefused     = lazyre.New("missing field `content`")
+	// a refusal of tool_reference in words, not in a request echoed back
+	// (no brace between); refsRefused leaves out one that names it as what
+	// was expected (DeepSeek's "expected `tool_reference`" is about a
+	// tool_definition)
+	refsNamed    = lazyre.New(`(?i)\b(?:got|unknown|unsupported|not supported|invalid|unexpected|not allowed|not permitted|does ?n[o']t support|cannot|can't)\b[^\n{}]{0,40}\btool_reference\b|\btool_reference\b[^\n{}]{0,40}\b(?:not supported|unsupported|not allowed|not permitted|invalid)`)
+	refsExpected = lazyre.New("(?i)expected [`'\"\\\\]*tool_reference\\b")
 )
 
 // knownDisplay is a thinking.display every Anthropic endpoint has taken.
@@ -128,6 +146,18 @@ func (s *Server) refuseShapes(p provider.Provider, errBody, body []byte) bool {
 	if refsOnlyRefused.Match(errBody) && hasRefsOnlyResult(body) {
 		mark(shapeRefsOnly)
 	}
+	if refsRefused(errBody) {
+		// the references in a tool_result themselves; one a deferred
+		// block's refusal names, while such blocks are still sent, is
+		// that refusal's
+		sent := s.withoutRefusedShapes(p, body)
+		if deferredOutUpFront(p, provider.Anthropic, sent) {
+			sent = withoutDeferredTools(sent)
+		}
+		if hasResultRefs(sent) && !(deferredRefused.Match(errBody) && hasDeferredTools(sent)) {
+			mark(shapeRefs)
+		}
+	}
 	// a role refused at a message that is a system one, counted in the
 	// messages as they were sent; a refusal naming a user or assistant
 	// message is over something else
@@ -145,6 +175,9 @@ func (s *Server) refuseShapes(p provider.Provider, errBody, body []byte) bool {
 func (s *Server) withoutRefusedShapes(p provider.Provider, body []byte) []byte {
 	if !s.fits(p.ID, shapeDeferred, provider.Anthropic) {
 		body = withoutDeferredTools(body)
+	}
+	if !s.fits(p.ID, shapeRefs, provider.Anthropic) {
+		body = withRefsAsText(body)
 	}
 	if !s.fits(p.ID, shapeRefsOnly, provider.Anthropic) {
 		body = withRefsSaid(body)
@@ -610,4 +643,163 @@ func withRefsSaid(body []byte) []byte {
 		out = append(out, nb)
 	}
 	return withFields(body, map[string]any{"messages": out})
+}
+
+// refsRefused is a refusal that names tool_reference other than as what
+// the endpoint expected.
+func refsRefused(errBody []byte) bool {
+	if !bytes.Contains(errBody, []byte("tool_reference")) {
+		return false
+	}
+	return refsNamed.Match(refsExpected.ReplaceAll(errBody, nil))
+}
+
+// hasResultRefs is a request with a tool_reference block in a
+// tool_result's content.
+func hasResultRefs(body []byte) bool {
+	if !bytes.Contains(body, []byte(`"tool_reference"`)) {
+		return false
+	}
+	found := false
+	getIn(body, "messages").ForEach(func(_, m gjson.Result) bool {
+		m.Get("content").ForEach(func(_, b gjson.Result) bool {
+			found = b.Get("type").String() == "tool_result" && holdsRef(b.Get("content"))
+			return !found
+		})
+		return !found
+	})
+	return found
+}
+
+// holdsRef is a tool_result's content with a tool_reference block in it.
+func holdsRef(c gjson.Result) bool {
+	if !c.IsArray() || !strings.Contains(c.Raw, `"tool_reference"`) {
+		return false
+	}
+	found := false
+	c.ForEach(func(_, b gjson.Result) bool {
+		found = b.Get("type").String() == "tool_reference"
+		return !found
+	})
+	return found
+}
+
+// withRefsAsText is body with each tool_reference block in a tool_result's
+// content as a text block saying the tool is loaded (toolLoadedText), and
+// the tools they name without defer_loading, offered from the start as the
+// endpoint can't load them by reference. The tool_use/tool_result pairing
+// stays. A body with none is sent as it was.
+func withRefsAsText(body []byte) []byte {
+	if !hasResultRefs(body) {
+		return body
+	}
+	var v struct {
+		Messages []json.RawMessage `json:"messages"`
+		Tools    []json.RawMessage `json:"tools"`
+	}
+	if json.Unmarshal(body, &v) != nil {
+		return body
+	}
+	named := map[string]bool{}
+	out := make([]json.RawMessage, 0, len(v.Messages))
+	for _, raw := range v.Messages {
+		c := gjson.GetBytes(raw, "content")
+		if !c.IsArray() {
+			out = append(out, raw)
+			continue
+		}
+		changed := false
+		blocks := make([]json.RawMessage, 0, len(c.Array()))
+		for _, b := range c.Array() {
+			rc := b.Get("content")
+			if b.Get("type").String() != "tool_result" || !holdsRef(rc) {
+				blocks = append(blocks, json.RawMessage(b.Raw))
+				continue
+			}
+			content := make([]json.RawMessage, 0, len(rc.Array()))
+			for _, r := range rc.Array() {
+				if r.Get("type").String() != "tool_reference" {
+					content = append(content, json.RawMessage(r.Raw))
+					continue
+				}
+				name := r.Get("tool_name").String()
+				if name == "" {
+					continue // names nothing to say
+				}
+				named[name] = true
+				t, err := marshalPlain(map[string]string{"type": "text", "text": toolLoadedText(name)})
+				if err != nil {
+					return body
+				}
+				content = append(content, t)
+			}
+			var m map[string]json.RawMessage
+			if json.Unmarshal([]byte(b.Raw), &m) != nil {
+				return body
+			}
+			cb, err := marshalPlain(content)
+			if err != nil {
+				return body
+			}
+			m["content"] = cb
+			nb, err := marshalPlain(m)
+			if err != nil {
+				return body
+			}
+			blocks = append(blocks, nb)
+			changed = true
+		}
+		if !changed {
+			out = append(out, raw)
+			continue
+		}
+		var m map[string]json.RawMessage
+		if json.Unmarshal(raw, &m) != nil {
+			return body
+		}
+		cb, err := marshalPlain(blocks)
+		if err != nil {
+			return body
+		}
+		m["content"] = cb
+		nb, err := marshalPlain(m)
+		if err != nil {
+			return body
+		}
+		out = append(out, nb)
+	}
+	fields := map[string]any{"messages": out}
+	toolsChanged := false
+	tools := make([]json.RawMessage, 0, len(v.Tools))
+	for _, t := range v.Tools {
+		if !named[gjson.GetBytes(t, "name").String()] || !gjson.GetBytes(t, "defer_loading").Exists() {
+			tools = append(tools, t)
+			continue
+		}
+		var m map[string]json.RawMessage
+		if json.Unmarshal(t, &m) != nil {
+			return body
+		}
+		delete(m, "defer_loading")
+		nt, err := marshalPlain(m)
+		if err != nil {
+			return body
+		}
+		tools = append(tools, nt)
+		toolsChanged = true
+	}
+	if toolsChanged {
+		fields["tools"] = tools
+	}
+	return withFields(body, fields)
+}
+
+// deferredOutUpFront is a provider sent no deferred-tool block from the
+// first ask (withoutDeferredTools), as forwardOnce sends it: Kimi's
+// Anthropic endpoint turns the whole request away with a 400 that names
+// nothing to learn from (#2042), DeepSeek's own takes a tool_addition at
+// no position (#5404), and OpenCode's DeepSeek route hides the refusal
+// behind a 422 "Endpoint is unavailable.".
+func deferredOutUpFront(p provider.Provider, to provider.Protocol, body []byte) bool {
+	return isKimi(p, to) || isDeepSeekAnthropic(p, to) || p.IsOpenCode() && strings.Contains(strings.ToLower(modelOf(body)), "deepseek")
 }
