@@ -923,9 +923,16 @@ type Settings struct {
 	// config folder of its own (#6459, xMopf7RF on X): Claude Magpie.app
 	// starts Desktop with CLAUDE_CONFIG_DIR set to ~/.claude-magpie-desktop,
 	// and magpie writes the windows and capabilities of Desktop's models
-	// there instead of ~/.claude/settings.json. Off by default: the folder
-	// starts with none of ~/.claude's CLAUDE.md, skills, plugins or history.
+	// there instead of ~/.claude/settings.json. The folder starts with none
+	// of ~/.claude's CLAUDE.md, skills, plugins or history. Turned on when
+	// a Claude Magpie is made new (no Claude-Magpie-3p yet) and the user
+	// never chose (xMopf7RF on X: a twin like a phone's app clone); one
+	// made before keeps what it had.
 	DesktopIsolatedClaude bool `json:"desktopIsolatedClaude,omitempty"`
+	// DesktopIsolatedClaudeChosen: the user set DesktopIsolatedClaude
+	// themselves (the Advanced fold, `launcher claude-dir`), so a new
+	// Claude Magpie never turns it on over their off.
+	DesktopIsolatedClaudeChosen bool `json:"desktopIsolatedClaudeChosen,omitempty"`
 	// GuideHidden: the user put away the Agents page's Get started card
 	// (wangye1644294 on X) before finishing it. Kept here, not in the
 	// page's storage, so the panel, the window and a reload agree.

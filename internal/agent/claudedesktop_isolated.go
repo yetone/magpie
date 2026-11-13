@@ -58,23 +58,51 @@ func desktopIsolatedSet(goos, home string, getenv func(string) string) (desktopP
 // sessions there, ~/.claude untouched). The windows and capabilities of
 // Desktop's models, which magpie writes into the settings.json of the
 // Claude Code the Code tab runs (desktopOn in claude.go), go there too,
-// and ~/.claude/settings.json gets none of them. Off by default
-// (settings.DesktopIsolatedClaude): the folder starts with none of
-// ~/.claude's CLAUDE.md, skills, plugins or history.
+// and ~/.claude/settings.json gets none of them. The folder starts with
+// none of ~/.claude's CLAUDE.md, skills, plugins or history. A Claude
+// Magpie made new gets it unless the user chose otherwise
+// (desktopIsoClaudeDefault); one made before keeps what it had.
 
 // desktopIsolatedClaudeOn says the user gave the isolated Desktop's Code
 // tab a folder of its own; a var so a test needs no settings file.
 var desktopIsolatedClaudeOn = func() bool { return settings.Load().DesktopIsolatedClaude }
 
-// saveDesktopIsolatedClaude keeps that choice; a var for tests.
-var saveDesktopIsolatedClaude = func(on bool) error {
+// desktopIsolatedClaudeChosen says the user set that themselves; a var
+// so a test needs no settings file.
+var desktopIsolatedClaudeChosen = func() bool { return settings.Load().DesktopIsolatedClaudeChosen }
+
+// saveDesktopIsolatedClaude keeps that folder on or off, and chosen when
+// the user set it; a var for tests.
+var saveDesktopIsolatedClaude = func(on, chosen bool) error {
 	s, err := settings.LoadChecked()
 	if err != nil {
 		return err
 	}
 	s.DesktopIsolatedClaude = on
+	if chosen {
+		s.DesktopIsolatedClaudeChosen = true
+	}
 	return settings.Save(s)
 }
+
+// desktopIsoClaudeDefault gives a Claude Magpie made new a Claude Code
+// folder of its own, like a phone's app twin (xMopf7RF on X): its Code
+// tab then reads and writes nothing of ~/.claude. Made new is the app
+// off and no Claude-Magpie-3p yet; one made before, with chats in that
+// folder, keeps the ~/.claude its Code tab had, and a choice the user
+// made either way stays theirs.
+func desktopIsoClaudeDefault(iso desktopPaths) error {
+	if desktopIsolatedOn() || isDir(iso.dir3p) || desktopIsolatedClaudeOn() || desktopIsolatedClaudeChosen() {
+		return nil
+	}
+	return saveDesktopIsolatedClaude(true, false)
+}
+
+// desktopIsolatedFrom marks a Claude Magpie that the user's own Desktop's
+// wiring moved into when it was turned on: turning it off moves that
+// back. One made beside a Desktop not on magpie (the twin) leaves the
+// user's own Desktop off magpie when it goes.
+const desktopIsolatedFrom = "claude-desktop.isolated-from-own"
 
 // desktopIsolatedClaudeDir is that folder: ~/.claude-magpie-desktop,
 // beside ~/.claude, so it is a Claude Code row of its own on the Agents
@@ -174,7 +202,7 @@ func SetDesktopIsolatedClaude(home string, on bool) error {
 			return err
 		}
 	}
-	if err := saveDesktopIsolatedClaude(on); err != nil {
+	if err := saveDesktopIsolatedClaude(on, true); err != nil {
 		return err
 	}
 	if desktopiso.Here(home) != "" {
@@ -223,11 +251,15 @@ var saveDesktopIsolated = func(on bool) error {
 }
 
 // SetDesktopIsolated turns the isolated Desktop on or off for home. On:
-// Claude Magpie.app is made, and a Desktop on magpie moves there: the
+// Claude Magpie.app is made (made new, with a Claude Code folder of its
+// own: desktopIsoClaudeDefault), and a Desktop on magpie moves there: the
 // user's own Desktop is put back as it was before magpie (desktopOff),
-// and Claude-Magpie-3p gets magpie's 3p mode. Off: the other way, and the
-// app is taken away; Claude-Magpie-3p itself, with the chats in it, stays.
-// It returns the app's path when on.
+// and Claude-Magpie-3p gets magpie's 3p mode. Off: the app is taken away,
+// and Claude-Magpie-3p goes off magpie; the wiring goes back to the
+// user's own Desktop only if it came from there (desktopIsolatedFrom), so
+// a twin made beside a Desktop not on magpie never puts that one on it.
+// Claude-Magpie-3p itself, with the chats in it, stays. It returns the
+// app's path when on.
 func SetDesktopIsolated(home string, on bool) (string, error) {
 	iso, ok := desktopIsolatedSet(desktopdir.OS, home, os.Getenv)
 	if !ok {
@@ -238,6 +270,9 @@ func SetDesktopIsolated(home string, on bool) (string, error) {
 		app := desktopClaudeApp()
 		if app == "" {
 			return "", ErrDesktopNoApp
+		}
+		if err := desktopIsoClaudeDefault(iso); err != nil {
+			return "", err
 		}
 		if err := os.MkdirAll(iso.dir3p, 0o755); err != nil {
 			return "", err
@@ -264,6 +299,7 @@ func SetDesktopIsolated(home string, on bool) (string, error) {
 					return "", err
 				}
 			}
+			stash(map[string]string{desktopIsolatedFrom: "1"})
 		}
 		if err := saveDesktopIsolated(true); err != nil {
 			return "", err
@@ -272,20 +308,23 @@ func SetDesktopIsolated(home string, on bool) (string, error) {
 		return p, nil
 	}
 	if desktopWired(iso) {
-		desktopAdoptStash(usual)
-		src := desktopLocaleFrom(usual)
-		for _, u := range usual {
-			if src != "" {
-				u.app = src
-			}
-			if err := desktopOn(u); err != nil {
-				return "", err
+		if unstashPeek(desktopIsolatedFrom) != "" {
+			desktopAdoptStash(usual)
+			src := desktopLocaleFrom(usual)
+			for _, u := range usual {
+				if src != "" {
+					u.app = src
+				}
+				if err := desktopOn(u); err != nil {
+					return "", err
+				}
 			}
 		}
 		if err := desktopOff(iso); err != nil {
 			return "", err
 		}
 	}
+	forget(desktopIsolatedFrom)
 	if err := saveDesktopIsolated(false); err != nil {
 		return "", err
 	}
