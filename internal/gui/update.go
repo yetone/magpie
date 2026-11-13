@@ -483,8 +483,14 @@ func (u *updater) run() {
 		}
 	}
 	// a version downloaded on a click stays the one restarted into while
-	// downloads wait for a click: a newer one out since isn't fetched
-	if u.staged != "" && u.latest != nil && (err != nil || !update.Newer(rel.Version, u.latest.Version) || hold) {
+	// downloads wait for a click: a newer one out since isn't fetched.
+	// Nor is one by the clock's check: magpie releases many times a day,
+	// so each check found a newer one and downloaded it whole (40 to 95
+	// MB) in place of the one waiting, every check until a restart, on
+	// the user's proxy too (iiiiiimone on X). Whatever restarts into it
+	// asks the feed first (recheck, waitRecheck), and fetches the newest
+	// then; quitting puts in the one waiting.
+	if u.staged != "" && u.latest != nil && (err != nil || !update.Newer(rel.Version, u.latest.Version) || hold || u.byClock) {
 		u.state = "ready" // what was downloaded is still the latest
 		// the feed found it before it had its notes (the site, kept from
 		// GitHub's API, reads them from the releases feed, which can lag
