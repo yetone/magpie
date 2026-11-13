@@ -45,6 +45,7 @@ func SyncCatalog() {
 	for {
 		// the catalog built once for every agent's lists, not for each
 		// look-up of each (thousands at magpie's start, with 30 providers)
+		ConnectCodexTwins()
 		release := provider.Hold()
 		// and each agent's files looked at once a round, not each time
 		// one is asked about (#1665: settings.json hundreds of times a
