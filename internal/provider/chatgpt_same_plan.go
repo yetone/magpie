@@ -3,6 +3,7 @@ package provider
 import (
 	"cmp"
 	"encoding/json"
+	"maps"
 	"strings"
 )
 
@@ -11,7 +12,9 @@ import (
 // to Codex draw on one plan's five-hour and weekly limits, while only the
 // Codex account's card reads them. A whole-window estimate (usage's
 // WithWindowHolds) over the Codex card counts the chatgpt-api account's
-// calls too, by this.
+// calls too, by this, and routing weighs the chatgpt-api account by the
+// Codex account's reading (samePlanAllowances): unknown, it went after
+// every known account though it spends the same plan (tmr11235 on X).
 
 // SamePlanAccounts maps each ChatGPT API account to the Codex account that
 // is the same ChatGPT account, both as provider + "\x00" + lowercased name,
@@ -85,4 +88,48 @@ func chatgptUserID(toks ...string) string {
 		}
 	}
 	return ""
+}
+
+// samePlanAllowances is own, the ChatGPT API accounts' allowances by user,
+// with each one that is the same ChatGPT account as a Codex one given that
+// Codex account's: one plan, one five hours and one week, which only the
+// Codex sign-in can read. One read of its own stands. own is not changed.
+func samePlanAllowances(own map[string]Allowance) map[string]Allowance {
+	same := SamePlanAccounts()
+	if len(same) == 0 {
+		return own
+	}
+	var codex, out map[string]Allowance
+	for _, l := range sharedLogins() {
+		if l.Agent != ChatGPTAPIID {
+			continue
+		}
+		if _, has := own[l.User]; has {
+			continue
+		}
+		to, ok := same[ChatGPTAPIID+"\x00"+strings.ToLower(l.User)]
+		if !ok {
+			continue
+		}
+		if codex == nil {
+			codex = Allowances("codex")
+		}
+		for u, a := range codex {
+			if "codex\x00"+strings.ToLower(u) != to {
+				continue
+			}
+			if out == nil {
+				out = maps.Clone(own)
+				if out == nil {
+					out = map[string]Allowance{}
+				}
+			}
+			out[l.User] = a
+			break
+		}
+	}
+	if out == nil {
+		return own
+	}
+	return out
 }

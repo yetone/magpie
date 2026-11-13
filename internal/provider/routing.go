@@ -883,8 +883,18 @@ func (l Limit) expiring(u float64, now, ends time.Time) (pace float64, at time.T
 // Allowances is each of an agent's accounts' allowance by user, as last
 // known, asked for again in the background when that was over a minute
 // ago. Only the very first ask waits, and not for long. An account
-// missing is one not known yet.
+// missing is one not known yet. A ChatGPT API account is known by the
+// same ChatGPT account's Codex reading (samePlanAllowances).
 func Allowances(agent string) map[string]Allowance {
+	m := readAllowances(agent)
+	if agent == ChatGPTAPIID {
+		m = samePlanAllowances(m)
+	}
+	return m
+}
+
+// readAllowances is Allowances as agent's own readings tell it.
+func readAllowances(agent string) map[string]Allowance {
 	c := &usedCache
 	c.Lock()
 	if c.m == nil {
@@ -1023,7 +1033,7 @@ func ReadUsageNow(ctx context.Context, agent string, users ...string) bool {
 	}
 	c := &usedCache
 	for range 3 {
-		Allowances(agent)
+		readAllowances(agent)
 		c.Lock()
 		done, back := c.loading[agent], !c.at[agent].IsZero()
 		c.Unlock()
@@ -1131,7 +1141,7 @@ func AwaitAllowance(ctx context.Context, agent, user string) bool {
 		return false
 	}
 	for range 3 {
-		Allowances(agent)
+		readAllowances(agent)
 		c.Lock()
 		done := c.loading[agent]
 		c.Unlock()
