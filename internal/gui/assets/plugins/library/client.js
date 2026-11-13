@@ -3560,10 +3560,10 @@ magpie.plugin("library", (ctx) => {
     try {
       const st = await api("library/mcp-signin", { name });
       if (mcpSigning?.name !== name || mcpSigning.id) return; // canceled
-      if (web && st.url) api("open", { url: st.url }).catch(() => {});
+      if (web && st.url && !st.linkOnly) api("open", { url: st.url }).catch(() => {});
       mcpSigning = { ...st, name };
       signMoved(name);
-      if (st.openError) editServer(s);
+      if (st.openError || st.linkOnly) editServer(s);
       followSignIn(st.id, name);
     } catch (e) {
       if (mcpSigning?.name !== name) return;
@@ -3623,15 +3623,20 @@ magpie.plugin("library", (ctx) => {
       }
       box.append(line);
       // the browser didn't start (#2043): the page to open by hand, rather
-      // than waiting on one that never opened until the sign-in times out
-      if (sg?.state === "waiting" && sg.openError && sg.url) {
-        box.append(el("div", "lib-signin-err", t("magpie couldn't open your browser: {error}. Open the sign-in link below in a browser yourself.", { error: sg.openError })));
+      // than waiting on one that never opened until the sign-in times out;
+      // or the user keeps sign-in pages to a browser of their own
+      // (settings.SignInLinkOnly): the link to copy there, or open here
+      if (sg?.state === "waiting" && (sg.openError || sg.linkOnly) && sg.url) {
+        box.append(sg.linkOnly
+          ? el("div", "note", t("magpie didn't open the sign-in page, as set in Settings. Copy the link below into the browser you sign in with."))
+          : el("div", "lib-signin-err", t("magpie couldn't open your browser: {error}. Open the sign-in link below in a browser yourself.", { error: sg.openError })));
         const link = el("div", "lib-signin-link");
         const u = el("code", "", sg.url);
         u.title = sg.url;
         const cp = copyBtn(sg.url, t("Sign-in link"));
         cp.title = t("Copy link");
         link.append(u, cp);
+        if (sg.linkOnly) link.append(button(t("Open in browser"), "", () => browse(sg.url)));
         box.append(link);
       }
       if (sg?.state === "failed") box.append(el("div", "lib-signin-err", sg.error));
@@ -3661,7 +3666,7 @@ magpie.plugin("library", (ctx) => {
           mcpSigning = { name, state: "starting" };
         }
         const st = await api("library/mcp-signin", typeof label === "string" ? { name, add: true, label } : { name });
-        if (web && st.url) api("open", { url: st.url }).catch(() => {});
+        if (web && st.url && !st.linkOnly) api("open", { url: st.url }).catch(() => {});
         mcpSigning = { ...st, name };
         draw();
         followSignIn(st.id, name);

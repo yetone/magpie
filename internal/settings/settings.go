@@ -523,7 +523,9 @@ type Settings struct {
 	// SignInLinkOnly keeps an account's sign-in page out of the default
 	// browser: the window (and the command line) shows its link to copy
 	// into a browser the user picks, a separate or fingerprint browser
-	// (max2020 on Discord). Off, as by default, the page opens as ever. A
+	// (max2020 on Discord). An MCP server's OAuth sign-in from the Library
+	// is kept to its link too (hkxhkxhkx on X). Off, as by default, the
+	// page opens as ever. A
 	// plugin whose own CLI opens its page (Grok Build on macOS and
 	// Windows) still does: magpie can't stop that.
 	SignInLinkOnly bool `json:"signInLinkOnly,omitempty"`

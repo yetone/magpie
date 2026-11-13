@@ -9,6 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yetone/magpie/internal/library"
+	"github.com/yetone/magpie/internal/mcpauth"
+	"github.com/yetone/magpie/internal/mcpauth/mcpauthtest"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
@@ -83,6 +86,51 @@ func TestSignInLinkOnlyOpensNothing(t *testing.T) {
 			if !linkOnly && (n != 1 || st.LinkOnly) {
 				t.Fatalf("%s: by default its page was opened %d times (linkOnly %v)", way.name, n, st.LinkOnly)
 			}
+		}
+	}
+}
+
+// An MCP server's OAuth sign-in from the Library is kept to its link too
+// when the user keeps sign-in pages to a browser of their own (hkxhkxhkx on
+// X: it opened the default browser whatever the setting). It still starts
+// and gives its link; with the setting off, as by default, it opens once.
+func TestMCPSignInLinkOnlyOpensNothing(t *testing.T) {
+	sandboxHome(t)
+	f := mcpauthtest.New(t)
+	if _, err := library.SaveServer("", library.Server{Name: "cloudflare-api", Transport: "http", URL: f.URL}); err != nil {
+		t.Fatal(err)
+	}
+	for _, linkOnly := range []bool{true, false} {
+		s := settings.Load()
+		s.SignInLinkOnly = linkOnly
+		if err := settings.Save(s); err != nil {
+			t.Fatal(err)
+		}
+		w := &openCounter{}
+		rec := httptest.NewRecorder()
+		Handler(w, nil).ServeHTTP(rec, httptest.NewRequest("POST", "/api/library/mcp-signin", strings.NewReader(`{"name":"cloudflare-api"}`)))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("sign-in: %d %s", rec.Code, rec.Body)
+		}
+		var st struct {
+			ID, URL, State string
+			LinkOnly       bool `json:"linkOnly"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &st); err != nil {
+			t.Fatal(err)
+		}
+		mcpauth.Cancel(st.ID)
+		if st.State != "waiting" || !strings.HasPrefix(st.URL, f.Server.URL) {
+			t.Fatalf("link only %v: not waiting on its page: %+v", linkOnly, st)
+		}
+		w.mu.Lock()
+		n := len(w.opened)
+		w.mu.Unlock()
+		if linkOnly && (n != 0 || !st.LinkOnly) {
+			t.Fatalf("kept to its link, its page was opened %d times (linkOnly %v)", n, st.LinkOnly)
+		}
+		if !linkOnly && (n != 1 || st.LinkOnly) {
+			t.Fatalf("by default its page was opened %d times (linkOnly %v)", n, st.LinkOnly)
 		}
 	}
 }

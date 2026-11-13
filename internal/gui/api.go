@@ -3373,6 +3373,18 @@ func openSignIn(w Windows, st provider.SignInState, linkOnly bool) signInOpened 
 type mcpSignInOpened struct {
 	mcpauth.State
 	OpenError string `json:"openError,omitempty"`
+	LinkOnly  bool   `json:"linkOnly,omitempty"`
+}
+
+// openMCPSignIn is openSignIn for a sign-in to an MCP server: kept to its
+// link when the user keeps sign-in pages to a browser of their own
+// (settings.SignInLinkOnly), as an account's is. It opened the page in the
+// default browser whatever the setting (hkxhkxhkx on X).
+func openMCPSignIn(w Windows, st mcpauth.State) mcpSignInOpened {
+	if settings.Load().SignInLinkOnly {
+		return mcpSignInOpened{State: st, LinkOnly: true}
+	}
+	return mcpSignInOpened{State: st, OpenError: openError(w, st.URL)}
 }
 
 // openError opens url in the browser, and says why it didn't open: "" when
