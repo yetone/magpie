@@ -172,7 +172,16 @@ content before you rest an account.**
   moved managedKey onto access.Named, with a test that fails on the old
   check. c83c0d5f (#1112) kept a pinned MAGPIE_ADDR host while sharing, and
   checked that requests behind Tailscale Serve still count as remote.
-- Seen 1× (2026-10-05).
+- 11-13: db9a5ec7c served Claude Code's advisor tool in magpie and asked
+  the advisor model as magpieChose, which drops the key's models list. The
+  caller names that model in the request, so a key held to some models
+  could reach any other model through it. v0.1.4023 and v0.1.4024 shipped
+  it; 0b38eb21c fixed it 23 minutes later, and found that the native
+  advisor had passed any same-provider Claude model upstream for a held key
+  since before. When a request can name a second model (advisor, a
+  sub-agent, a decision model), that model goes through keyAllows like the
+  first. 0b38eb21c ran `-run` gateway tests only, not the full suite.
+- Seen 2× (2026-10-05, 2026-11-13).
 
 **Scope a privacy or security exemption by where the value sits in the
 protocol, never by a key's name.**
