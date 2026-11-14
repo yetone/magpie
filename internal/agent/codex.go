@@ -1385,8 +1385,14 @@ func codexIn(at place) *Agent {
 	// signed in to (codexUsedUp), for magpie to become Codex's provider
 	// while it does (#540): never with the sign-in kept on ChatGPT
 	// (chatgpt), where the user would rather the Codex app wait for the
-	// account than leave its ChatGPT state
-	out := func() bool { return stashShared()[at.key("codex.login")] != "chatgpt" && codexUsedUp() }
+	// account than leave its ChatGPT state, and never for the account the
+	// user keeps Codex signed in to (codexSignInKept): the takeover has the
+	// app read no account and show "magpie" for the one they picked
+	// (davezfr on X: account 1 out of its allowance and its credits,
+	// picked in Codex's sign-in, showed "magpie"; account 2 showed itself)
+	out := func() bool {
+		return stashShared()[at.key("codex.login")] != "chatgpt" && codexUsedUp() && !codexSignInKept()
+	}
 	dropBase := func() error {
 		forget(at.key("codex.failover"))
 		if !viaBase() {
@@ -3082,6 +3088,10 @@ func codexThreadsLater(dir, p string) {
 var codexUsedUp = func() bool {
 	return provider.CodexUsedUpKnown()
 }
+
+// codexSignInKept reports whether Codex is signed in to the account the
+// user keeps it on (provider.CodexSignInKept). A var so tests can say.
+var codexSignInKept = provider.CodexSignInKept
 
 // codexFailover reports whether Codex is signed in to a ChatGPT account
 // with more of its accounts on in magpie, behind it, and the user hasn't
