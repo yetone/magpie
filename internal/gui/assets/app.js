@@ -9766,7 +9766,8 @@ function drawEditor(p, presetID) {
         took.push(t("Base URL") + " (" + t(API_NAMES[api]) + ")");
       }
     }
-    if (c.key) { key.value = draft.key = c.key; countKeys(); took.push(t("API key")); }
+    // no key box when keys are Accounts: none taken unseen
+    if (c.key && key.isConnected) { key.value = draft.key = c.key; countKeys(); took.push(t("API key")); }
     if (curlModel && c.model) { curlModel(c.model); took.push(t("model {model}", { model: c.model })); }
     if (took.length) notes.push(env ? t("Filled in from the pasted text: {what}.", { what: took.join(" · ") }) : t("Filled in from the curl command: {what}.", { what: took.join(" · ") }));
     if (curlBase && !c.api) notes.push(t("Its URL isn't an address ending in /chat/completions, /messages or /responses: type the base URL."));
