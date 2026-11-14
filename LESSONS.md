@@ -1413,7 +1413,7 @@ each one.
   - No Test run finished green from 63c91cae5 (11-13 21:51 UTC) to
     07a62b373 (11-14 08:34 UTC): 57 runs were cancelled by the next push
     and two went red (TestEffortUpdateRefused, fixed in a4937f8ff;
-    TestStaleLatestIsNotUpToDate, #6575). About 30 commits and 40 tags
+    TestStaleLatestIsNotUpToDate, #6575). 81 commits and 51 releases
     in that time had no CI run of their own, only the mote runs their
     bodies name. A cancelled run tests nothing; when pushes come faster
     than a run takes, someone lets one run finish, or the workflow keeps
