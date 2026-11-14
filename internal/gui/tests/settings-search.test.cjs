@@ -36,7 +36,8 @@ function server(lang, posts, web, { provs = ["codex", "claude"], off = [], built
   return async (route) => {
     const req = route.request(), url = new URL(req.url());
     const json = (data) => route.fulfill({ json: data });
-    if (req.method() !== "GET") posts.push(url.pathname);
+    // the window's in-use signal (any key or click, 10c4dc109) writes no setting (#6133)
+    if (req.method() !== "GET" && url.pathname !== "/api/update/using") posts.push(url.pathname);
     if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:${web},textSize:100,featuresOff:${JSON.stringify(off)}};` });
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
     if (url.pathname === "/api/state") return json({ agents: [], profiles: [], settings: { lang, theme: "light", textSize: 100 }, fx: cur.fx });
