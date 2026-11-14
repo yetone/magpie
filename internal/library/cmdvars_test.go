@@ -2,8 +2,10 @@ package library
 
 import (
 	"context"
+	"maps"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -21,7 +23,11 @@ func TestCmdVarsPerAgent(t *testing.T) {
 	os.Unsetenv("MAGPIE_T_UNSET")
 	lv := loginVars
 	loginVars = func([]string) map[string]string { return nil }
-	t.Cleanup(func() { loginVars = lv })
+	// the home's variable as on a Mac or Linux (Windows':
+	// TestCmdVarsUserProfile)
+	was := cmdOS
+	cmdOS = "linux"
+	t.Cleanup(func() { loginVars, cmdOS = lv, was })
 
 	s := &Server{Name: "x", Transport: "stdio", Command: "$HOME/bin/x",
 		Args: []string{"--notes", "~/notes", "${MAGPIE_T_SET}", "$MAGPIE_T_UNSET", "$1", "a~/b", "~"}}
@@ -70,8 +76,8 @@ func TestCmdVarsPerAgent(t *testing.T) {
 }
 
 // The library keeps $HOME/bin/x as written; Claude Code's file has
-// ${HOME}/bin/x, Codex's this home's path, and a second sync rewrites
-// neither.
+// ${HOME}/bin/x (${USERPROFILE}/bin/x on Windows), Codex's this home's
+// path, and a second sync rewrites neither.
 func TestCmdVarsSync(t *testing.T) {
 	h := sandbox(t)
 	s := Server{Name: "mine", Transport: "stdio", Command: "$HOME/bin/x", Args: []string{"~/notes"},
@@ -87,7 +93,11 @@ func TestCmdVarsSync(t *testing.T) {
 		t.Errorf("the library has %+v", got)
 	}
 	claude := read(t, filepath.Join(h, ".claude.json"))
-	if !strings.Contains(claude, `"${HOME}/bin/x"`) || !strings.Contains(claude, filepath.ToSlash(h)+`/notes"`) && !strings.Contains(claude, strings.ReplaceAll(h, `\`, `\\`)+`/notes"`) {
+	hv := `"${HOME}/bin/x"`
+	if runtime.GOOS == "windows" {
+		hv = `"${USERPROFILE}/bin/x"`
+	}
+	if !strings.Contains(claude, hv) || !strings.Contains(claude, filepath.ToSlash(h)+`/notes"`) && !strings.Contains(claude, strings.ReplaceAll(h, `\`, `\\`)+`/notes"`) {
 		t.Errorf("claude:\n%s", claude)
 	}
 	codex := read(t, filepath.Join(h, ".codex/config.toml"))
@@ -133,5 +143,101 @@ func TestCmdVarsLaunch(t *testing.T) {
 	spec, ok := specOf(&Server{Transport: "stdio", Command: "${HOME}/bin/x", Args: []string{"~/a", "$MAGPIE_T_DIR"}})
 	if want := []string{h + "/a", dir}; !ok || spec.Command != h+"/bin/x" || !slices.Equal(spec.Args, want) {
 		t.Errorf("spec: %+v", spec)
+	}
+}
+
+// 0xBCD18E on X: %USERPROFILE%\AppData\…\pinky.exe in the library, on
+// computers whose users have different names. HOME and USERPROFILE are the
+// home on every system, in each syntax; an agent that reads references is
+// given the home's own variable where it runs; any other %NAME% is a
+// variable on Windows only; a command's environment gets its home put in.
+func TestCmdVarsUserProfile(t *testing.T) {
+	h := t.TempDir()
+	t.Setenv("HOME", h)
+	t.Setenv("USERPROFILE", h)
+	t.Setenv("MAGPIE_T_AD", `C:\AD`)
+	t.Setenv("Y", "set")
+	lv := loginVars
+	loginVars = func([]string) map[string]string { return nil }
+	t.Setenv("TOKEN", "tk")
+	was := cmdOS
+	t.Cleanup(func() { loginVars, cmdOS = lv, was })
+
+	s := &Server{Name: "pinky", Transport: "stdio", Command: `%USERPROFILE%\AppData\Local\Programs\Pinky\pinky.exe`,
+		Args: []string{`~\x`, "$USERPROFILE/y", `%MAGPIE_T_AD%\z`, "%userprofile%", "%Y%", "100%", "%20"},
+		Env:  map[string]string{"CFG": `%USERPROFILE%\c`, "D": "~/d", "T": "${TOKEN}", "P": "50%"}}
+	env := map[string]string{"CFG": h + `\c`, "D": h + "/d", "T": "${TOKEN}", "P": "50%"}
+	for _, c := range []struct {
+		os, name string
+		f        mcpFile
+		want     []string
+	}{
+		{"windows", "codex", mcpFile{Format: fmtCodex},
+			[]string{h + `\AppData\Local\Programs\Pinky\pinky.exe`, h + `\x`, h + "/y", `C:\AD\z`, h, "set", "100%", "%20"}},
+		{"windows", "claude", mcpFile{Format: fmtClaude},
+			[]string{`${USERPROFILE}\AppData\Local\Programs\Pinky\pinky.exe`, h + `\x`, "${USERPROFILE}/y", `${MAGPIE_T_AD}\z`, "${USERPROFILE}", "${Y}", "100%", "%20"}},
+		{"windows", "cursor", mcpFile{Format: fmtCursor},
+			[]string{`${env:USERPROFILE}\AppData\Local\Programs\Pinky\pinky.exe`, h + `\x`, "${env:USERPROFILE}/y", `${env:MAGPIE_T_AD}\z`, "${env:USERPROFILE}", "${env:Y}", "100%", "%20"}},
+		{"darwin", "codex", mcpFile{Format: fmtCodex},
+			[]string{h + `\AppData\Local\Programs\Pinky\pinky.exe`, h + `\x`, h + "/y", `%MAGPIE_T_AD%\z`, h, "%Y%", "100%", "%20"}},
+		{"darwin", "claude", mcpFile{Format: fmtClaude},
+			[]string{`${HOME}\AppData\Local\Programs\Pinky\pinky.exe`, h + `\x`, "${HOME}/y", `%MAGPIE_T_AD%\z`, "${HOME}", "%Y%", "100%", "%20"}},
+		{"linux", "opencode", mcpFile{Format: fmtOpenCode},
+			[]string{`{env:HOME}\AppData\Local\Programs\Pinky\pinky.exe`, h + `\x`, "{env:HOME}/y", `%MAGPIE_T_AD%\z`, "{env:HOME}", "%Y%", "100%", "%20"}},
+		{"linux", "codex", mcpFile{Format: fmtCodex},
+			[]string{h + `\AppData\Local\Programs\Pinky\pinky.exe`, h + `\x`, h + "/y", `%MAGPIE_T_AD%\z`, h, "%Y%", "100%", "%20"}},
+		// an agent in WSL, from Windows: the distro's HOME, no variable of
+		// Windows'
+		{"windows", "claude in WSL", mcpFile{Format: fmtClaude, WSL: true, Home: "/home/me"},
+			[]string{`${HOME}\AppData\Local\Programs\Pinky\pinky.exe`, `/home/me\x`, "${HOME}/y", `%MAGPIE_T_AD%\z`, "${HOME}", "%Y%", "100%", "%20"}},
+	} {
+		t.Run(c.os+" "+c.name, func(t *testing.T) {
+			cmdOS = c.os
+			got := c.f.withCmdVars(s)
+			if have := append([]string{got.Command}, got.Args...); !slices.Equal(have, c.want) {
+				t.Errorf("got  %q\nwant %q", have, c.want)
+			}
+			want := env
+			if c.f.WSL {
+				want = map[string]string{"CFG": `/home/me\c`, "D": "/home/me/d", "T": "${TOKEN}", "P": "50%"}
+			}
+			if !maps.Equal(got.Env, want) {
+				t.Errorf("env %q, want %q", got.Env, want)
+			}
+		})
+	}
+	if s.Command != `%USERPROFILE%\AppData\Local\Programs\Pinky\pinky.exe` || s.Args[0] != `~\x` || s.Env["CFG"] != `%USERPROFILE%\c` {
+		t.Errorf("the library's server was changed: %+v", s)
+	}
+	cmdOS = was
+	// magpie starting it: the home's variables are this home on every
+	// system
+	spec, ok := specOf(s)
+	if !ok || !strings.HasPrefix(spec.Command, h+`\AppData`) || spec.Args[1] != h+"/y" || spec.Args[3] != h || spec.Env["CFG"] != h+`\c` || spec.Env["D"] != h+"/d" {
+		t.Errorf("spec: %+v", spec)
+	}
+}
+
+// The reporter's server: %USERPROFILE% then the program, started by the
+// check (and so the router) on this system.
+func TestCmdVarsUserProfileLaunch(t *testing.T) {
+	fake := fakeStdio(t, "ok", nil)
+	base := filepath.Base(fake.Command)
+	h := t.TempDir()
+	b, err := os.ReadFile(fake.Command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(h, base), b, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", h)
+	t.Setenv("USERPROFILE", h)
+	for _, c := range []string{"%USERPROFILE%" + string(filepath.Separator) + base, "%HOME%/" + base, "$USERPROFILE/" + base} {
+		s := *fake
+		s.Command = c
+		if got := CheckServer(context.Background(), &s); got.State != "ok" || got.Tools != 3 {
+			t.Errorf("%s: %+v", c, got)
+		}
 	}
 }

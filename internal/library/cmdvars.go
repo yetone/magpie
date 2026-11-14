@@ -14,9 +14,21 @@ package library
 // what magpie's environment or a terminal has. A ~ is put in for every
 // agent: none of them reads one. A variable nothing has is left as
 // written.
+//
+// A home is named the same way on every system (0xBCD18E on X: one
+// command on computers whose users have different names): HOME and
+// USERPROFILE are both the home, as $NAME, ${NAME} or Windows' %NAME%,
+// and so is a leading ~ or ~\. An agent that reads references is given
+// the home's own variable where it runs, ${USERPROFILE} on Windows (where
+// an agent seldom has HOME) and ${HOME} elsewhere (where none has
+// USERPROFILE). Any other %NAME% is a variable on Windows only; elsewhere
+// it is left as written, as cmd.exe's syntax means nothing there. In a
+// command's environment a leading ~ and %USERPROFILE% or %HOME% are put
+// in as the home for every agent; $NAME and ${NAME} there are envref.go's.
 
 import (
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -25,18 +37,68 @@ import (
 	"github.com/yetone/magpie/internal/wslrun"
 )
 
-// cmdVar is a variable in a command or an arg: ${NAME} or $NAME.
-var cmdVar = lazyre.New(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)`)
+// cmdVar is a variable in a command or an arg: ${NAME}, $NAME, or
+// %NAME% as cmd.exe writes one (ProgramFiles(x86) has parentheses).
+var cmdVar = lazyre.New(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)|%([A-Za-z_][A-Za-z0-9_()]*)%`)
 
-// hasCmdVars says whether the command or any arg has a variable or a
-// leading ~.
+// cmdOS is the system magpie and the agents it writes for (WSL's aside)
+// run on; a var for tests.
+var cmdOS = runtime.GOOS
+
+// varOf is the name a cmdVar match names, and whether it is %NAME%.
+func varOf(m []string) (string, bool) {
+	if m[3] != "" {
+		return m[3], true
+	}
+	return m[1] + m[2], false
+}
+
+// homeVar says whether a variable is the home: HOME or USERPROFILE, in
+// either case as %NAME%, which Windows reads without one.
+func homeVar(n string, pct bool) bool {
+	if pct {
+		return strings.EqualFold(n, "HOME") || strings.EqualFold(n, "USERPROFILE")
+	}
+	return n == "HOME" || n == "USERPROFILE"
+}
+
+// hasCmdVars says whether the command, an arg or a value of its
+// environment has a variable or a leading ~ to put in.
 func hasCmdVars(s *Server) bool {
 	for _, v := range append([]string{s.Command}, s.Args...) {
 		if cmdVar.MatchString(v) || tildeRest(v) != "" || v == "~" {
 			return true
 		}
 	}
+	return hasHomeEnv(s.Env)
+}
+
+// envHome is a home in a value of a command's environment: %USERPROFILE%
+// or %HOME%, as cmd.exe writes it.
+var envHome = lazyre.New(`(?i)%(?:USERPROFILE|HOME)%`)
+
+// hasHomeEnv says whether a value of env names the home as homeEnv puts
+// it in.
+func hasHomeEnv(env map[string]string) bool {
+	for _, v := range env {
+		if v == "~" || tildeRest(v) != "" || envHome.MatchString(v) {
+			return true
+		}
+	}
 	return false
+}
+
+// homeEnv is env with a leading ~ and each %USERPROFILE% or %HOME% in its
+// values put in as home; env itself when it has none, or no home is known.
+func homeEnv(env map[string]string, home string) map[string]string {
+	if home == "" || !hasHomeEnv(env) {
+		return env
+	}
+	out := make(map[string]string, len(env))
+	for k, v := range env {
+		out[k] = envHome.ReplaceAllLiteralString(homeOf(home, v), home)
+	}
+	return out
 }
 
 // tildeRest is what follows a leading ~/ (or ~\), with its slash; "" for
@@ -88,14 +150,30 @@ func (f *mcpFile) withCmdVars(s *Server) *Server {
 		// the distro's variables aren't magpie's: only its HOME is known
 		look = func(string) (string, bool) { return "", false }
 	}
+	win := cmdOS == "windows" && !f.WSL
+	// the home as the agent reads it where it runs
+	hv := "HOME"
+	if win {
+		hv = "USERPROFILE"
+	}
 	syntax := f.cmdRefs()
 	put := func(v string) string {
 		if syntax != refNone {
-			return toAgent(syntax, homeOf(h, cmdVar.ReplaceAllString(v, "$${$1$2}")))
+			return toAgent(syntax, homeOf(h, cmdVar.ReplaceAllStringFunc(v, func(r string) string {
+				n, pct := varOf(cmdVar.FindStringSubmatch(r))
+				switch {
+				case homeVar(n, pct):
+					return "${" + hv + "}"
+				case pct && !win:
+					return r
+				}
+				return "${" + n + "}"
+			})))
 		}
-		return expandCmd(v, h, look)
+		return expandCmd(v, h, win, look)
 	}
 	c := *s
+	c.Env = homeEnv(s.Env, h)
 	c.Command = put(s.Command)
 	if s.Args != nil {
 		c.Args = make([]string, len(s.Args))
@@ -120,15 +198,18 @@ func homeOf(home, v string) string {
 	return v
 }
 
-// expandCmd is v with a leading ~ and each variable put in: HOME as home,
-// any other as look has it; one it hasn't is left as written.
-func expandCmd(v, home string, look func(string) (string, bool)) string {
+// expandCmd is v with a leading ~ and each variable put in: HOME and
+// USERPROFILE as home, any other as look has it, a %NAME% only on Windows
+// (win); one it hasn't is left as written.
+func expandCmd(v, home string, win bool, look func(string) (string, bool)) string {
 	v = homeOf(home, v)
 	return cmdVar.ReplaceAllStringFunc(v, func(r string) string {
-		m := cmdVar.FindStringSubmatch(r)
-		n := m[1] + m[2]
-		if n == "HOME" && home != "" {
+		n, pct := varOf(cmdVar.FindStringSubmatch(r))
+		if homeVar(n, pct) && home != "" {
 			return home
+		}
+		if pct && !win {
+			return r
 		}
 		if x, ok := look(n); ok {
 			return x
@@ -148,20 +229,21 @@ func lookCmdVar(n string) (string, bool) {
 }
 
 // launchCmd is s's command and args as magpie starts it on this machine,
-// or in distro (whose HOME is distroHome's): each ~ and variable put in.
-func launchCmd(s *Server, distro string) (string, []string) {
+// or in distro (whose HOME is distroHome's), and its environment's home
+// (homeEnv): each ~ and variable put in.
+func launchCmd(s *Server, distro string) (string, []string, map[string]string) {
 	if !hasCmdVars(s) {
-		return s.Command, s.Args
+		return s.Command, s.Args, s.Env
 	}
-	h, look := home(), lookCmdVar
+	h, look, win := home(), lookCmdVar, cmdOS == "windows"
 	if distro != "" {
-		h, look = distroHome(distro), func(string) (string, bool) { return "", false }
+		h, look, win = distroHome(distro), func(string) (string, bool) { return "", false }, false
 	}
 	args := make([]string, len(s.Args))
 	for i, a := range s.Args {
-		args[i] = expandCmd(a, h, look)
+		args[i] = expandCmd(a, h, win, look)
 	}
-	return expandCmd(s.Command, h, look), args
+	return expandCmd(s.Command, h, win, look), args, homeEnv(s.Env, h)
 }
 
 var homes struct {

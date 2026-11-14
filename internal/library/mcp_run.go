@@ -64,11 +64,11 @@ func specOf(s *Server) (runSpec, bool) {
 	if s.Remote() || s.Command == "" {
 		return runSpec{}, false
 	}
-	env, unset := expandAll(s.Env)
+	cmd, args, own := launchCmd(s, "")
+	env, unset := expandAll(own)
 	if len(unset) > 0 {
 		return runSpec{}, false
 	}
-	cmd, args := launchCmd(s, "")
 	return runSpec{Command: cmd, Args: slices.Clone(args), Env: env}, true
 }
 
