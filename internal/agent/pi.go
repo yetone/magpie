@@ -112,11 +112,25 @@ func piStartup(settings, def string) string {
 // as the model field shows it, when it is one of magpie's: what Pi's
 // /thinking lists for the entry magpie writes for it in models.json. nil
 // for any other model, whose levels are Pi's own business.
+//
+// Kept per agent and model as the model lists are (stampedLists): Pi's
+// Values asked it on every Drift of the window's poll, each walking the
+// list and building the model's whole models.json entry, settings read
+// again under it, 23 MB of what three minutes with the window up
+// allocated with real accounts.
 func piOffered(agentID, model string) []string {
 	ref, ok := strings.CutPrefix(model, magpieID+"/")
 	if !ok {
 		return nil
 	}
+	return builtOffered.shared(agentID+"\x00"+ref, func() []string { return piOfferedNow(agentID, ref) })
+}
+
+var builtOffered stampedLists[string]
+
+// piOfferedNow is piOffered built afresh, for ref, the model's id without
+// magpie's provider.
+func piOfferedNow(agentID, ref string) []string {
 	for _, m := range sharedModels(agentID) {
 		if m.ID == ref {
 			return piSupported(piModelJSON(piAsked(agentID, m), "", true))
