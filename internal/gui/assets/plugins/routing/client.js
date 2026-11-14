@@ -1503,6 +1503,7 @@ function routingPage(part) {
     missing: "Claude Code isn't installed on this computer",
     image: "the request has an image known by its URL, which only claude -p takes",
     "third-party": "the interactive mode was turned away over this agent's system prompt",
+    unpasted: "the interactive mode here didn't take the message, or an image pasted into it; the plan counts claude -p at about twice the interactive mode's, and it starts without the interactive run's cache",
     "cache-marks": "the client's cache marks keep history that a fresh interactive run would write again",
   };
   // entryNote: what a try's entry point chip says (Try.Entry)

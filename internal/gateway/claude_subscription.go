@@ -102,6 +102,10 @@ type subscriptionBridge struct {
 	// refused in the interactive mode as a third-party app's, and when:
 	// their turns run as claude -p until thirdPartyFor has passed (#4503)
 	thirdParty sync.Map
+	// unpasted is when, in unix nanoseconds, this machine's interactive
+	// Claude Code last didn't take an image pasted into it: turns with
+	// images run as claude -p until unpastedFor has passed (ok123now)
+	unpasted atomic.Int64
 }
 
 // untrustedFor is how long a caller's folder Claude Code asked to trust
@@ -1210,7 +1214,7 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 	// runs them interactively. A run it can't take is refused, never made
 	// -p: a refused request never ran, and isn't the last run
 	tui, code := claudeTUI(req, binary)
-	if !tui && code != "off" && code != "no-shim" && code != thirdPartyCode && code != cacheMarksCode {
+	if !tui && code != "off" && code != "no-shim" && code != thirdPartyCode && code != unpastedCode && code != cacheMarksCode {
 		cleanup()
 		return nil, nil, &tuiRefusal{claudeTUIErr(claudeNotTUIWhy(req, binary))}
 	}
@@ -1524,6 +1528,7 @@ func claudePrint(req *Request, binary claudeCLI) (code, why string) {
 	}{
 		{urlImages(req.Messages) > 0, "image", "an image known by its URL"},
 		{req.tuiRefused, thirdPartyCode, "Anthropic refused this agent's system prompt in the interactive mode as a third-party app's"},
+		{req.unpasted, unpastedCode, "Claude Code's interactive mode here didn't take this message, or an image pasted into it; the plan counts a -p run at about twice the interactive mode's, and it starts without the interactive run's cache"},
 		{req.clientCache.keptAsPrint(), cacheMarksCode, fmt.Sprintf("the client's cache marks keep %dKB of history, which a fresh interactive run writes again each call", markedHistory(req)>>10)},
 	} {
 		if c.is {
@@ -1833,7 +1838,7 @@ func claudeTUIOn() bool {
 // A -p run made for such a prompt goes on with its turns, as a -p run
 // from before the interactive mode was turned on doesn't.
 func wantTUI(req *Request) bool {
-	return claudeTUIOn() && !req.tuiRefused && !req.clientCache.keptAsPrint()
+	return claudeTUIOn() && !req.tuiRefused && !req.unpasted && !req.clientCache.keptAsPrint()
 }
 
 // claudeNotTUIWhy is why a run isn't the interactive mode.
@@ -7072,14 +7077,15 @@ var ratelimitWindows = map[string]string{
 // on them.
 func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from provider.Protocol, name, model, owner string, body []byte, usage *Usage,
 	start func(ctx context.Context, req *Request) (*subscriptionRun, <-chan Event, error)) (int, string) {
-	return s.serveSubscriptionAs(w, r, from, name, model, owner, body, usage, start, false)
+	return s.serveSubscriptionAs(w, r, from, name, model, owner, body, usage, start, "")
 }
 
-// serveSubscriptionAs is serveSubscription, asPrint for the turn asked
-// again as claude -p after the interactive mode's run was refused as a
-// third-party app's with nothing of the reply said (redoAsPrint).
+// serveSubscriptionAs is serveSubscription, redo the code of a turn asked
+// again as claude -p after the interactive mode's run failed with nothing
+// of the reply said (redoAsPrint): thirdPartyCode, refused as a
+// third-party app's, or unpastedCode, its message not taken there.
 func (s *Server) serveSubscriptionAs(w http.ResponseWriter, r *http.Request, from provider.Protocol, name, model, owner string, body []byte, usage *Usage,
-	start func(ctx context.Context, req *Request) (*subscriptionRun, <-chan Event, error), asPrint bool) (int, string) {
+	start func(ctx context.Context, req *Request) (*subscriptionRun, <-chan Event, error), redo string) (int, string) {
 	var req *Request
 	var err error
 	if name == "Claude Code" && wantsClientCache(r, from) {
@@ -7142,13 +7148,25 @@ func (s *Server) serveSubscriptionAs(w http.ResponseWriter, r *http.Request, fro
 	// interactive mode as a third-party app's runs as claude -p, which is
 	// served it: asked again after the refusal, or of a prompt refused
 	// within thirdPartyFor (#4503)
-	if name == "Claude Code" && claudeTUIOn() && (asPrint || s.subscription.tuiRefused(req)) {
+	if name == "Claude Code" && claudeTUIOn() && (redo == thirdPartyCode || s.subscription.tuiRefused(req)) {
 		req.tuiRefused = true
 		if req.clientCache != nil {
 			req.clientCache.print = true
 		}
 	}
-	if name == "Claude Code" && claudeTUIOn() && !req.tuiRefused && keptByPrint(req) {
+	// a turn whose message the interactive mode didn't take runs as
+	// claude -p, which is sent it whole: asked again after that failure,
+	// or, with images, on a machine whose interactive Claude Code didn't
+	// take an image pasted into it within unpastedFor (ok123now on X:
+	// Windows 10 LTSC, every image turn a 502 the client asked again)
+	if name == "Claude Code" && claudeTUIOn() && !req.tuiRefused &&
+		(redo == unpastedCode || countImages(req.Messages) > 0 && s.subscription.imagesUnpasted()) {
+		req.unpasted = true
+		if req.clientCache != nil {
+			req.clientCache.print = true
+		}
+	}
+	if name == "Claude Code" && claudeTUIOn() && !req.tuiRefused && !req.unpasted && keptByPrint(req) {
 		// the classifier's marks keep more than its fresh interactive
 		// run would write again each call: claude -p keeps them
 		req.clientCache.print, req.clientCache.kept = true, true
@@ -7375,10 +7393,18 @@ func (s *Server) serveSubscriptionAs(w http.ResponseWriter, r *http.Request, fro
 	if req.interactive && thirdPartyIn(msg) {
 		s.subscription.refusedTUI(req)
 	}
+	if req.interactive && strings.Contains(msg, claudetui.ImageNotTaken) {
+		s.subscription.unpasted.Store(time.Now().UnixNano())
+	}
+	if code == redoAsPrint && unpastedSaid(name, msg) {
+		gone()
+		log.Printf("claude: the interactive mode didn't take a turn's message on %s, with nothing of the reply said: asked again as claude -p, which the plan counts at about twice the interactive mode's, with none of its cache (%.200s)", req.Model, msg)
+		return s.serveSubscriptionAs(w, r, from, name, model, owner, body, usage, start, unpastedCode)
+	}
 	if code == redoAsPrint {
 		gone()
 		log.Printf("claude: Anthropic refused an interactive-mode turn on %s as a third-party app's, with nothing of the reply said: asked again as claude -p (#4503)", req.Model)
-		return s.serveSubscriptionAs(w, r, from, name, model, owner, body, usage, start, true)
+		return s.serveSubscriptionAs(w, r, from, name, model, owner, body, usage, start, thirdPartyCode)
 	}
 	return code, msg
 }
@@ -7410,6 +7436,10 @@ func bridgeFailed(name, msg string, status int) (int, string) {
 		return status, msg
 	case quotaSaid(msg):
 		return 429, msg
+	case unpastedSaid(name, msg):
+		// the same message fails the same way on every account and on
+		// every try: a 502 was asked again and again (ok123now on X)
+		return 400, msg
 	case name == "Claude Code" && tooLong(400, msg):
 		return 400, msg + " (Claude Code's own check, before Anthropic was asked: it holds a conversation to its own limit for the account, " +
 			"200K once Anthropic has said the account needs extra usage for long context. " +
@@ -7497,8 +7527,39 @@ const redoAsPrint = -4503
 // code and msg, back as redoAsPrint: Anthropic's third-party refusal, the
 // user's interactive mode still on (Off, every run is -p already), and the
 // client still waiting.
+//
+// So is a message the interactive mode didn't take (unpastedSaid): an
+// image whose pasted path Claude Code left as words, as a console that
+// doesn't pass pasting through leaves it, or a block it doesn't paste.
+// claude -p is sent the message whole.
 func redoable(r *http.Request, name string, req *Request, code int, msg string) bool {
-	return req.interactive && !req.tuiRefused && thirdPartySaid(name, code, msg) && claudeTUIOn() && r.Context().Err() == nil
+	return req.interactive && !req.tuiRefused && !req.unpasted && (thirdPartySaid(name, code, msg) || unpastedSaid(name, msg)) &&
+		claudeTUIOn() && r.Context().Err() == nil
+}
+
+// unpastedSaid is whether a Claude Code run's failure is the interactive
+// mode's helper not getting the turn's message into Claude Code
+// (claudetui.Unpastable).
+func unpastedSaid(name, msg string) bool {
+	return name == "Claude Code" && strings.Contains(msg, claudetui.Unpastable)
+}
+
+// unpastedCode is claudePrint's code for a run that is claude -p because
+// the interactive mode didn't take its message, or, with images, an image
+// on this machine within unpastedFor.
+const unpastedCode = "unpasted"
+
+// unpastedFor is how long turns with images run as claude -p after this
+// machine's interactive Claude Code didn't take an image pasted into it:
+// a console that doesn't pass pasting through stays so, and each try
+// costs a Claude Code's start and pasteWait.
+const unpastedFor = 12 * time.Hour
+
+// imagesUnpasted is whether this machine's interactive Claude Code didn't
+// take an image pasted into it within unpastedFor.
+func (b *subscriptionBridge) imagesUnpasted() bool {
+	at := b.unpasted.Load()
+	return at != 0 && time.Since(time.Unix(0, at)) < unpastedFor
 }
 
 // thirdPartyFor is how long an agent's system prompt Anthropic refused in

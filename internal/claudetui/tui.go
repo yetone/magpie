@@ -763,11 +763,19 @@ func (s *shim) input(r io.Reader) error {
 			pieces, err := s.userPieces(m.Message.Content)
 			if err != nil {
 				s.emit(map[string]any{"type": "result", "subtype": "error_during_execution", "is_error": true, "session_id": s.sid,
-					"result": "this message can't be pasted into Claude Code's interactive mode: " + err.Error()})
+					"result": Unpastable + err.Error()})
 				continue
 			}
 			err = s.send(pieces)
 			s.dropImages()
+			var unpasted *imageUnpasted
+			if errors.As(err, &unpasted) {
+				// the prompt holds the path as words: the turn is told
+				// it failed, for the bridge to ask it as claude -p, and
+				// this Claude Code ends with it
+				s.emit(map[string]any{"type": "result", "subtype": "error_during_execution", "is_error": true, "session_id": s.sid,
+					"result": Unpastable + err.Error()})
+			}
 			if err != nil {
 				return err
 			}
@@ -1362,7 +1370,7 @@ func (s *shim) path(path string) string {
 // returns the number shown.
 func (s *shim) pasteImage(path string, after int) (int, error) {
 	s.clearScreen()
-	if _, err := io.WriteString(s.pty, "\x1b[200~"+path+"\x1b[201~"); err != nil {
+	if _, err := io.WriteString(s.pty, imagePaste(path, imagePad)); err != nil {
 		return 0, err
 	}
 	by := time.After(pasteWait)
@@ -1374,11 +1382,53 @@ func (s *shim) pasteImage(path string, after int) (int, error) {
 		case <-s.changed:
 		case <-time.After(100 * time.Millisecond):
 		case <-by:
-			return 0, fmt.Errorf("Claude Code did not take an image pasted as its path: %s", s.lastScreen())
+			return 0, &imageUnpasted{s.lastScreen()}
 		case <-s.exited:
 			return 0, fmt.Errorf("Claude Code ended (%v): %s", s.exit, s.lastScreen())
 		}
 	}
+}
+
+// imagePad is how long an image's pasted path is made with spaces after
+// it, sent with no bracketed-paste marks: 0 brackets it. Claude Code takes
+// one read of over 800 characters as a paste with or without the marks
+// (2.1.281 and 2.1.316), and a path with spaces after it as the image
+// alone. On Windows Claude Code reads its console as VT input
+// (ENABLE_VIRTUAL_TERMINAL_INPUT, mode 0x208), and Windows 10's conhost
+// (10.0.19041) drops the marks on the way in, leaving the path as words
+// (ok123now on X, Windows 10 LTSC 21H2; #5061, #5205), so there it is sent
+// padded. The same conhost loses 1024-byte blocks of a longer write
+// (#5205), so the padded path stays under that.
+var imagePad = imagePadOS
+
+// imagePaste is what is written to paste an image's path: bracketed, or
+// with spaces after it up to pad characters, one at least.
+func imagePaste(path string, pad int) string {
+	if pad == 0 {
+		return "\x1b[200~" + path + "\x1b[201~"
+	}
+	return path + strings.Repeat(" ", max(1, pad-utf8.RuneCountInString(path)))
+}
+
+// Unpastable begins the error a turn ends in when its message can't be
+// pasted into the interactive mode: a block it doesn't take, or an image
+// whose path Claude Code didn't take as an image (imageUnpasted). The
+// bridge asks such a turn again as claude -p, which is sent the image
+// itself (ok123now on X: a 64x64 PNG on Windows 10 LTSC 21H2 was answered
+// 502, and the client asked again and again).
+const Unpastable = "this message can't be pasted into Claude Code's interactive mode: "
+
+// imageUnpasted is an image's path pasted that the prompt never showed
+// taken as an image within pasteWait: left as words, as a console whose
+// pasting Claude Code can't tell from typing leaves it.
+type imageUnpasted struct{ screen string }
+
+// ImageNotTaken begins imageUnpasted's words: what the bridge keeps, for
+// the machine's next turns with images to run as claude -p.
+const ImageNotTaken = "Claude Code did not take an image pasted as its path"
+
+func (e *imageUnpasted) Error() string {
+	return ImageNotTaken + ": " + e.screen
 }
 
 // imageTaken is the number of the image the prompt shows taken, numbered

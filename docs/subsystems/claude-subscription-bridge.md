@@ -407,7 +407,7 @@ path or isn't macOS, Linux or Windows. Nothing a request asks is refused
 any more (`claudePrint` keeps an image known by its URL, which
 `serveClaudeSubscription` has downloaded before any run, below).
 
-The one exception to "nothing runs as `-p`" with it On is a turn Anthropic
+The first exception to "nothing runs as `-p`" with it On is a turn Anthropic
 refuses in the interactive mode as a third-party app's: a 400 "Third-party
 apps now draw from your extra usage" (#4503), or on a Team or
 Enterprise workspace "draw from extra usage" with no "your" (#5645; both
@@ -427,6 +427,49 @@ with tool results as a `-p` run does (`wantTUI`). A `-p` run's refusal, a
 turn whose reply had begun, and Off are never asked again
 (`thirdPartyRefused` says why). Settings' own value is not changed.
 `claude_tui_refusal_test.go` holds each case.
+
+A second exception is a turn whose message the interactive mode didn't
+take (ok123now on X: magpie v0.1.3901, Windows 10 LTSC 21H2, Claude Code
+2.1.316; text worked, a 64×64 PNG was a 502 every try, and the client
+asked again and again). The helper pastes an image as its file's path,
+and Claude Code takes it as an image only when the paste reaches it as a
+paste; a console that passes it on as typing leaves the path as words,
+and the helper waited out `pasteWait` and ended. The reporter's lead was
+a console that drops the bracketed-paste marks. Claude Code on Windows
+reads its console as VT input (`ENABLE_VIRTUAL_TERMINAL_INPUT`; mode
+0x208 read from a real claude.exe 2.1.316), and it takes one read of over
+800 characters as a paste with or without the marks (`$X=800` in 2.1.316,
+`q6=800` in 2.1.281), a path with spaces after it as the image alone.
+Windows 10's conhost (10.0.19041) does drop the marks on the way in
+(#5061, #5205, measured on 19044 and 19045), and it loses 1024-byte
+blocks of a longer write (#5205). So on Windows the helper sends the
+path with spaces after it up to 900 characters, over Claude Code's 800
+and under 1024 bytes, and no marks (`imagePad`, `imagePaste`,
+`TestImagePasteWindowsLength`); elsewhere it stays bracketed. With a
+real claude.exe 2.1.316 in a ConPTY on Windows 11 26200, the bracketed
+path and the padded one were each taken as `[Image #1]`, and the bare
+path with no marks stayed words, as the reporter saw; the helper itself
+on that claude.exe, padded and bracketed, put the image in the
+transcript. Windows 10 itself is not tried; the padded path doesn't
+need the marks. Long pasted text there still loses blocks (#5205),
+which this doesn't change. If the interactive mode still doesn't take the image, the
+turn goes to `-p` as below, which the plan counts at about twice the
+interactive mode's and which starts without the interactive run's
+cache; the Routing chip's reason says so. Then the helper answers such a
+turn with an error result beginning `claudetui.Unpastable` (the words
+`claudetui.ImageNotTaken` for the image; a block it can't paste begins
+the same), and the helper ends. With nothing of the reply said, `relay`
+hands it back as `redoAsPrint` and the turn is asked again once as `-p`,
+which is sent the image itself (`unpastedSaid`, `Request.unpasted`,
+`claudePrint` code `unpasted`). An image not taken is kept on the bridge
+for 12 hours (`subscriptionBridge.unpasted`, `unpastedFor`): this
+machine's turns with an image anywhere in their messages start as `-p`
+then, and text alone is still the interactive mode's. When the redo can't
+run (Off meanwhile, the client gone) the failure is a 400, not a 502
+(`bridgeFailed`), so neither the client nor the fallback asks it again.
+`claude_tui_unpasted_test.go` holds each case, and
+`TestShimPaddedImageTakenWithoutMarks` the padded paste on a console that
+drops the marks.
 
 The other exception is Claude Code's auto mode classifier when its own
 cache marks keep a long transcript (#5585, #5655; `keptByPrint`,
@@ -2044,7 +2087,8 @@ Each request the bridge answers notes how its run started: `startRun` calls
 last mode and so says nothing of one request. The note rides the request's
 context (`withEntry`, `claude_entry.go`) and `serve` copies it onto the try
 (`Try.Entry` "tui" or "print", `Try.EntryWhy` the `claudePrint` code that
-chose -p: off, os, missing, no-shim, image, third-party, cache-marks). The
+chose -p: off, os, missing, no-shim, image, third-party, unpasted,
+cache-marks). The
 Routing page's request row shows a TUI or -p chip with the reason in its
 title (`entryNote` in the routing plugin's client.js), so the plan cost of
 a request can be told from how it ran (Anotiaww on X,

@@ -244,6 +244,11 @@ type Request struct {
 	// such prompts, with the interactive mode on all the same
 	// (thirdPartyPrint)
 	tuiRefused bool
+	// unpasted, for the Claude bridge, is a request whose message Claude
+	// Code's interactive mode didn't take, or one with images on a
+	// machine where it didn't take an image (ok123now on X): its run is
+	// claude -p, with the interactive mode on all the same
+	unpasted bool
 	// hourMarks has the cache marks magpie adds on Anthropic's Messages
 	// (anthropicBody) last an hour: a Responses client's (Codex's), whose
 	// turns are often more than five minutes apart and whose own vendor

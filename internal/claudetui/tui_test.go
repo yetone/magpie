@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 // The test binary is also the shim (MAGPIE_TUI_TEST=shim) and a fake
@@ -27,6 +28,10 @@ import (
 func TestMain(m *testing.M) {
 	switch os.Getenv("MAGPIE_TUI_TEST") {
 	case "shim":
+		// FAKE_IMAGE_PAD: imagePad, as another system's
+		if pad := os.Getenv("FAKE_IMAGE_PAD"); pad != "" {
+			imagePad, _ = strconv.Atoi(pad)
+		}
 		if err := Run(os.Args[1:]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
@@ -349,6 +354,31 @@ func fakeClaude(args []string) {
 		}
 		take(p, draw)
 	}
+	// pasteEnded takes in a paste that has ended
+	pasteEnded := func(p string) {
+		mu.Lock()
+		taking = true
+		fmt.Print("\r❯ " + drawn.String())
+		mu.Unlock()
+		// FAKE_NO_IMAGE: an image's path pasted stays words, as a
+		// console whose pastes Claude Code can't tell from typing
+		// leaves it (ok123now on X, Windows 10 LTSC 21H2)
+		if b, err := os.ReadFile(strings.TrimSpace(p)); err == nil && strings.HasPrefix(filepath.Base(strings.TrimSpace(p)), "image-") && os.Getenv("FAKE_NO_IMAGE") != "1" {
+			go func() {
+				time.Sleep(200 * time.Millisecond)
+				mu.Lock()
+				defer mu.Unlock()
+				pasted++
+				take(fmt.Sprintf("[Image #%d:%s]", pasted, b), fmt.Sprintf("[Image #%d]", pasted))
+			}()
+			return
+		}
+		if namesImage.MatchString(p) {
+			time.AfterFunc(nameWait, func() { takeText(p) })
+			return
+		}
+		takeText(p)
+	}
 	// retry is what an "r" draws while /usage's panel says it couldn't
 	// load the figures, nil when it says nothing of the kind
 	var retry []byte
@@ -363,34 +393,27 @@ func fakeClaude(args []string) {
 			if _, err := io.ReadFull(r, seq); err != nil {
 				return
 			}
+			// FAKE_DROP_MARKS: the console drops the bracketed-paste
+			// marks, as ok123now's Windows 10 LTSC 21H2 is thought to
+			if os.Getenv("FAKE_DROP_MARKS") == "1" {
+				continue
+			}
 			pasting = string(seq) == "[200~"
 			if pasting {
 				paste.Reset()
 				continue
 			}
-			p := paste.String()
-			mu.Lock()
-			taking = true
-			fmt.Print("\r❯ " + drawn.String())
-			mu.Unlock()
-			if b, err := os.ReadFile(p); err == nil && strings.HasPrefix(filepath.Base(p), "image-") {
-				go func() {
-					time.Sleep(200 * time.Millisecond)
-					mu.Lock()
-					defer mu.Unlock()
-					pasted++
-					take(fmt.Sprintf("[Image #%d:%s]", pasted, b), fmt.Sprintf("[Image #%d]", pasted))
-				}()
-				continue
-			}
-			if namesImage.MatchString(p) {
-				time.AfterFunc(nameWait, func() { takeText(p) })
-				continue
-			}
-			takeText(p)
+			pasteEnded(paste.String())
 			continue
 		case pasting:
 			paste.WriteByte(c)
+			continue
+		case c != '\r' && c != 0x1b && r.Buffered() >= 800:
+			// a read of over 800 characters is a paste, marked or not, as
+			// Claude Code takes one
+			b := make([]byte, r.Buffered())
+			_, _ = io.ReadFull(r, b)
+			pasteEnded(string(c) + string(b))
 			continue
 		case c == 'r' && retry != nil:
 			fakeFrames(retry)
@@ -679,6 +702,63 @@ func TestShimPastesImages(t *testing.T) {
 	left, _ := filepath.Glob(filepath.Join(filepath.Dir(os.Getenv("MAGPIE_TUI_TEST_CFG")), "tmp", imagesPrefix+"*"))
 	if len(left) > 0 {
 		t.Fatalf("the images are left after their message: %v", left)
+	}
+}
+
+// An image whose path Claude Code leaves as words ends the turn in an
+// error that begins Unpastable, which the bridge asks again as claude -p
+// (ok123now on X): it was an exit with no result, a 502 the client asked
+// again and again. The helper ends with it, the prompt holding the path.
+func TestShimImageNotTakenIsUnpastable(t *testing.T) {
+	img := `[{"type":"text","text":"what colour?"},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"` +
+		base64.StdEncoding.EncodeToString([]byte("red")) + `"}}]`
+	out := runShim(t, []string{"FAKE_NO_IMAGE=1"}, append([]string{fakePath(t)}, pArgs...), []string{img}, 2)
+	if out[1]["type"] != "result" || out[1]["is_error"] != true || !strings.HasPrefix(fmt.Sprint(out[1]["result"]), Unpastable+ImageNotTaken) {
+		t.Fatalf("the turn ended %v, want an error beginning %q", out[1], Unpastable+ImageNotTaken)
+	}
+}
+
+// An image's path sent padded, with no bracketed-paste marks, is taken as
+// the image on a console that drops the marks, as Claude Code takes a read
+// of over 800 characters as a paste; bracketed, it stays words there
+// (ok123now on X, Windows 10 LTSC 21H2). Windows sends it padded.
+func TestShimPaddedImageTakenWithoutMarks(t *testing.T) {
+	img := `[{"type":"text","text":"what colour?"},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"` +
+		base64.StdEncoding.EncodeToString([]byte("red")) + `"}}]`
+	out := runShim(t, []string{"FAKE_DROP_MARKS=1", "FAKE_IMAGE_PAD=900"}, append([]string{fakePath(t)}, pArgs...), []string{img}, 3)
+	var said string
+	for _, m := range out[1:] {
+		if m["type"] == "assistant" {
+			b, _ := json.Marshal(m["message"])
+			said = string(b)
+		}
+	}
+	if !strings.Contains(said, `[Image #1:red]`) || strings.Contains(said, imagesPrefix) {
+		t.Fatalf("Claude Code was sent %s, want the image taken: %v", said, out)
+	}
+	bracketed := runShim(t, []string{"FAKE_DROP_MARKS=1", "FAKE_IMAGE_PAD=0"}, append([]string{fakePath(t)}, pArgs...), []string{img}, 2)
+	if r := bracketed[1]; r["type"] != "result" || r["is_error"] != true || !strings.HasPrefix(fmt.Sprint(r["result"]), Unpastable+ImageNotTaken) {
+		t.Fatalf("a bracketed path on a console that drops the marks ended %v, want %q", r, Unpastable+ImageNotTaken)
+	}
+}
+
+// Windows' padded path is one read of over 800 characters, which Claude
+// Code takes as a paste, and under the 1024-byte blocks Windows 10's
+// conhost loses of a longer write (#5205), for a short path, a long one and
+// one with a user name in Chinese.
+func TestImagePasteWindowsLength(t *testing.T) {
+	for _, path := range []string{
+		`C:\x\image-1.png`,
+		`C:\Users\administrator\AppData\Local\Temp\magpie-claude-images-123456-987654321\image-12.png`,
+		`C:\Users\张三丰\AppData\Local\Temp\magpie-claude-images-123456-987654321\image-1.png`,
+	} {
+		w := imagePaste(path, 900)
+		if n := utf8.RuneCountInString(w); n <= 800 || len(w) >= 1024 || strings.TrimRight(w, " ") != path || strings.Contains(w, "\x1b") {
+			t.Errorf("%s padded to %d characters, %d bytes: %q", path, n, len(w), w)
+		}
+	}
+	if w := imagePaste(`C:\x\image-1.png`, 0); w != "\x1b[200~C:\\x\\image-1.png\x1b[201~" {
+		t.Errorf("unpadded = %q, want the path bracketed", w)
 	}
 }
 
