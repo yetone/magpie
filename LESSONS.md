@@ -1454,6 +1454,12 @@ each one.
     bodies name. A cancelled run tests nothing; when pushes come faster
     than a run takes, someone lets one run finish, or the workflow keeps
     the run of the newest tag instead of cancelling it.
+    It happened again the same day: after 1ab2c3984 (11:38 UTC) went
+    green, the only two runs to finish were red (TestInfoSaysMCPHub,
+    fixed in 49f49c41c). Every other run was cancelled up to 221c91fae
+    (16:16 UTC), and the 14 tags v0.1.4171 to v0.1.4184 had no green
+    run behind them. 6bdeedc6f (1,836 lines, a new keyless gateway
+    route) ran only its own tests and has no "Not run" line.
   - A library vendored for an allocation cut: 0caa09b3d copied
     yaml.v3 v3.0.1 into third_party (11,400 lines, go.mod replace) for
     a 7-line emitter change. The review diffed it against the gofmt'd
