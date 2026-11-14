@@ -3428,7 +3428,7 @@ const I18N = {
     "The sign-ins in each backup are sealed with it. Anyone with a backup and the passphrase can use those accounts. Keep it: without it a backup's sign-ins can't be opened.": "每个备份里的登录信息都用它加密。拿到备份和口令的人就能使用这些账号。请记住它：没有它，备份里的登录信息就打不开。",
     "Couldn't share usage: {error}": "用量未能共享：{error}",
     "All computers": "全部电脑", "Other computers": "其他电脑", "Computer": "电脑",
-    "Address": "地址", "User": "用户", "Password": "密码", "Passphrase": "口令", "Also sync": "同时同步",
+    "Address": "地址", "User": "用户", "Password": "密码", "Passphrase": "口令",
     "A folder named magpie is made in it.": "会在其中建一个名为 magpie 的文件夹。",
     "The file is sealed with it on this computer; the server only ever sees it sealed. Keep it: without it the file can't be opened.": "文件在本机用它加密，服务器只能看到加密后的内容。请记住它：没有口令无法打开文件。",
     "Turn on": "开启", "Turn off": "关闭同步",
