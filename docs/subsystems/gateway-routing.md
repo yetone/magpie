@@ -1676,18 +1676,26 @@ first as the page's default) and sent as the `magpie_chat_model` cookie.
   runs with `fetchPage` between rounds, all said to the page as one reply
   in its own shapes (`chatTurn`). Each round goes through the gateway's
   own Messages route, so routing, masking, limits and usage apply as to
-  any agent. The page shows sources only from text blocks' `citations`; a
-  model that names URLs in its text without citing gets no source chips.
+  any agent. A gateway key's MaxConcurrency holds a turn as it holds an
+  agent's request (`keySlotRoutes`, lazy: the rounds' tries take the
+  slot, which `chatInner`'s copy of the context carries), and the speech
+  routes eagerly; the file routes are free. The page shows sources only
+  from text blocks' `citations`; a model that names URLs in its text
+  without citing gets no source chips.
 - Files the page uploads (`/anthropic/v1/files`) are kept in memory for
   the key that uploaded them until magpie restarts: images, PDFs and
   text; Word, PowerPoint and EPUB files are refused.
 - Voice input and read-aloud (`/v1/tools/asr`, `/v1/tools/tts`) use the
   first speech-to-text or text-to-speech model a provider serves, and say
   so when there is none.
+- A LazyCat box's manifest makes `/deepseek-chat` public, as it does the
+  key page, for a key's holder who isn't signed in to the box
+  (docs/reference.md).
 
 Tests: `TestChatPageOpensWithoutAKey`, `TestChatPageConversation`,
 `TestChatPageSearchesAndReadsLinks`, `TestChatPageFiles`,
-`TestTextCallsCitationAfterItsBlock`, `gateway-chat-page.test.cjs`.
+`TestTextCallsCitationAfterItsBlock`, `TestKeyConcurrencyChatPage`,
+`gateway-chat-page.test.cjs`.
 
 ## Turning provider search off
 

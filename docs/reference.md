@@ -3868,6 +3868,7 @@ application:
     - /alpha/search
     - /mcp
     - /me
+    - /deepseek-chat
     - /join
     - /magpie-ca.crt
 services:
