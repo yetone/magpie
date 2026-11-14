@@ -239,6 +239,17 @@ off until switched on under Memory → Tidy up every night.
   by it. A stale memory is archived with the model's reason.
 - An inferred candidate left unreviewed for 30 days (`Unreviewed`) is
   archived as well, with no request needed.
+- Retention (`memory.Prune`, [prune.go](../../internal/memory/prune.go))
+  runs on every hourly tick of `Keep`, with distilling and tidying on or
+  off. A candidate unchanged for 30 days (`memory.Keep`) is archived; an
+  archived or superseded memory unchanged for 30 more is removed. A
+  removal is recorded in `removed`, so a sync from a computer that still
+  holds it doesn't bring it back, and a distilled one's text is dismissed
+  so it isn't proposed again. What the user wrote or pinned
+  (`memory.Fixed`) is never archived or removed by it
+  (`TestPruneKeepsTheUsersAndTheRecent`). Undo keeps a merged memory
+  whose member was removed since: it is all that is left of it
+  (`TestUntidyKeepsAMergeWhoseMemberWasPruned`).
 - A failed request changes nothing and is kept to show
   (`TestDreamFailureChangesNothing`).
 - What the last tidy did is kept in `distill.json` (`changes`). Undo puts

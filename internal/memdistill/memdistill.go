@@ -615,7 +615,8 @@ func keep(fs []found, s sessions.Session, proj *memory.Project, their string) in
 
 // Keep runs Run first after first, then every interval, until ctx ends,
 // and Dream after it when one is due (Dreams); auto gives the automatic
-// model at each run.
+// model at each run. Each tick applies memory's retention first
+// (memory.Prune), distilling on or off.
 func Keep(ctx context.Context, first, interval time.Duration, auto func() string, complete Complete) {
 	t := time.NewTimer(first)
 	defer t.Stop()
@@ -626,6 +627,11 @@ func Keep(ctx context.Context, first, interval time.Duration, auto func() string
 		case <-t.C:
 		}
 		t.Reset(interval)
+		// retention holds whether distilling is on or not: memories saved
+		// by agents leave candidates and archived ones too
+		if _, err := memory.Prune(); err != nil {
+			log.Println("memory: retention:", err)
+		}
 		// switched off (the default): nothing to read, nor a model to
 		// ask. auto picks one from every provider's models, and that
 		// loaded the whole catalog (3.6 MB) for a run that read nothing

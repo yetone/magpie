@@ -171,16 +171,19 @@ func Tidy(p Plan) ([]Change, error) {
 // left so, goes back to the state it had, and a memory a merge made is
 // removed, unless the user has made it theirs since (it stays then, with
 // the ones it was made from back beside it). It returns how many memories
-// came back.
+// came back. A merged memory stays, too, when one it was made from has
+// been removed since (Prune): it is all that is left of it.
 func Untidy(cs []Change) (int, error) {
 	n := 0
 	err := change(func(f *file) error {
 		t := now()
 		for i := len(cs) - 1; i >= 0; i-- {
 			c := cs[i]
+			gone := false // a member retention removed since (Prune)
 			for k, id := range c.IDs {
 				m := find(f, id)
 				if m == nil || k >= len(c.Was) {
+					gone = true
 					continue
 				}
 				if c.Action == Merged && m.Status == Superseded && m.SupersededBy == c.Into || c.Action == SetAside && m.Status == Archived {
@@ -188,7 +191,9 @@ func Untidy(cs []Change) (int, error) {
 					n++
 				}
 			}
-			if c.New {
+			// the merged memory is all that is left of a member removed
+			// since: it stays
+			if c.New && !gone {
 				f.Memories = slices.DeleteFunc(f.Memories, func(m *Memory) bool {
 					if m.ID == c.Into && !Fixed(m) {
 						removed(f, m.ID)
