@@ -143,7 +143,23 @@ func googleAccount(p provider.Provider) bool {
 // only a request that declares none (searchesFor). One that does is given
 // magpie's search, which the account answers itself (ownSearcher, #757).
 func codeAssistSearches(p provider.Provider, proto provider.Protocol, model string) bool {
-	return proto == provider.CodeAssist && googleAccount(p) && searchModel(model)
+	return proto == provider.CodeAssist && (googleAccount(p) || googlePlugin(p)) && searchModel(model)
+}
+
+// googlePlugin is a plugin whose models are spoken to on Code Assist
+// (its npm @ai-sdk/google) at Google's own host: the Antigravity plugin's
+// account asks daily-cloudcode-pa.googleapis.com, which runs googleSearch
+// for Gemini as a built-in Google sign-in's Code Assist does. Left to
+// magpie's search, a Gemini client's googleSearch never reached it, and
+// the web_search function magpie offered in its place kept the client's
+// URL context out too (daoche_wuzui on X). A plugin at another host is
+// not known to.
+func googlePlugin(p provider.Provider) bool {
+	if !p.IsPlugin() || p.Base(provider.CodeAssist) == "" {
+		return false
+	}
+	h := strings.ToLower(provider.HostOf(p.PluginAPI()))
+	return h == "googleapis.com" || strings.HasSuffix(h, ".googleapis.com")
 }
 
 // geminiKeySearches is a provider asked with a key at Google AI Studio's

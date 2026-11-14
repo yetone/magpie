@@ -145,6 +145,15 @@ func PluginForTest(id, pluginID string) Provider {
 	return Provider{ID: id, Account: &Account{Agent: "plugin", User: id, plugin: &pp}}
 }
 
+// PluginAtForTest is PluginForTest for a plugin whose provider says its
+// requests go to api and whose models speak Code Assist.
+func PluginAtForTest(id, pluginID, api string) Provider {
+	p := PluginForTest(id, pluginID)
+	p.Account.plugin.API = api
+	p.Account.codeAssist = pluginBase + pluginID
+	return p
+}
+
 // PluginProvider is the id OpenCode knows the plugin's provider p is by
 // (grok, kiro), whatever magpie names it; "" for one no plugin gives.
 func (p Provider) PluginProvider() string {

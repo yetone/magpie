@@ -1857,6 +1857,18 @@ sign-in (5), by googleSearch, and like one is `Own`: its own models search
 first whoever is named. Before, it searched for its own models only and
 the picker never listed it (cocoasoda on Discord,
 `TestAIStudioKeySearchesForOthers`).
+Gemini's other tools of its own a client offers (`urlContext`,
+`codeExecution`, `googleMaps` and the rest, `Request.GoogleTools`, from a
+Gemini client's `tools` or the same objects among a Chat request's,
+`chatGoogleTool`) go on as sent to a Gemini model on Code Assist, the
+Gemini API and Vertex (`buildCodeAssistSent`), beside googleSearch and,
+like it, only when no function is declared; Claude on Antigravity gets
+none. A plugin whose provider is at `*.googleapis.com` on Code Assist
+(Antigravity's, `googlePlugin`) searches by googleSearch as a Google
+sign-in does. Code Gemini ran comes back as text in fences (`ranCode`),
+and a search reaches a Gemini client as `groundingMetadata` (`grounding`).
+Before, all three were dropped on every translated route (daoche_wuzui on
+X, `TestGeminiClientKeepsGoogleTools`).
 A ChatGPT account (Codex's sign-in, `codexSearches`) searches for another
 model by the ChatGPT backend's own search, `POST <CodexBase>/alpha/search`,
 the request Codex's web.run sends by itself with no model turn

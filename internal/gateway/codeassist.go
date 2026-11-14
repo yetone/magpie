@@ -658,10 +658,18 @@ func buildCodeAssistSent(r *Request, sent, agent string) []byte {
 		}
 		fc["mode"] = mode
 		req["toolConfig"] = map[string]any{"functionCallingConfig": fc}
-	} else if r.WebSearch {
+	} else if google := googleToolsFor(r, sent); r.WebSearch || len(google) > 0 {
 		// Google's own search, which Code Assist runs on Gemini as long as
-		// no function is declared beside it (codeAssistSearches)
-		req["tools"] = []map[string]any{{"googleSearch": map[string]any{}}}
+		// no function is declared beside it (codeAssistSearches), and the
+		// client's other Google tools (URL context, code execution)
+		var tools []any
+		if r.WebSearch {
+			tools = append(tools, map[string]any{"googleSearch": map[string]any{}})
+		}
+		for _, t := range google {
+			tools = append(tools, t)
+		}
+		req["tools"] = tools
 	}
 
 	gen := map[string]any{}
@@ -711,6 +719,16 @@ func buildCodeAssistSent(r *Request, sent, agent string) []byte {
 	}
 	b, _ := json.Marshal(map[string]any{"model": sent, "request": req})
 	return b
+}
+
+// googleToolsFor are the client's Google tools (GoogleTools) the model
+// sent is given: Gemini's, not Claude's or GPT-OSS's on Antigravity nor an
+// image model's, which turn Google's tools away (searchModel).
+func googleToolsFor(r *Request, sent string) []json.RawMessage {
+	if len(r.GoogleTools) == 0 || !searchModel(sent) {
+		return nil
+	}
+	return r.GoogleTools
 }
 
 // dropSecondAnswers leaves out a tool result whose call an earlier result
@@ -1563,6 +1581,11 @@ func (d *codeAssistDecoder) decode(data string, emit func(Event)) error {
 				// reasoning above (#620)
 				d.flush(emit)
 				emit(Event{Kind: KImage, Name: p.InlineData.MimeType, Text: p.InlineData.Data})
+			case p.ExecutableCode != nil || p.CodeExecutionResult != nil:
+				// what Google's codeExecution ran and gave back, as text
+				// in the answer: no other API has a part for code Google
+				// ran, and left out the answer read as if it had none
+				d.text(ranCode(p), emit)
 			case p.Text != "" || p.Signature != "":
 				d.text(p.Text, emit)
 				if p.Signature != "" {
@@ -1616,6 +1639,24 @@ func (d *codeAssistDecoder) decode(data string, emit func(Event)) error {
 		d.usage = nil
 	}
 	return nil
+}
+
+// ranCode is a part of Google's codeExecution as text: the code in a
+// fence named for its language, what it printed in a plain one, and an
+// outcome other than OUTCOME_OK said beside it.
+func ranCode(p gPart) string {
+	if c := p.ExecutableCode; c != nil {
+		return "\n```" + strings.ToLower(c.Language) + "\n" + strings.TrimRight(c.Code, "\n") + "\n```\n"
+	}
+	r := p.CodeExecutionResult
+	var b strings.Builder
+	if r.Outcome != "" && r.Outcome != "OUTCOME_OK" {
+		b.WriteString("\n" + r.Outcome + ":")
+	}
+	if out := strings.TrimRight(r.Output, "\n"); out != "" {
+		b.WriteString("\n```\n" + out + "\n```\n")
+	}
+	return b.String()
 }
 
 // Gemini's own tools live in a namespace, default_api, and a model now and

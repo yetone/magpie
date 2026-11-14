@@ -12,9 +12,11 @@ import (
 	"path"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/tidwall/gjson"
 	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 )
@@ -182,9 +184,22 @@ func readChat(body []byte, facts bool) (*Request, error) {
 	}
 	r.System = strings.Join(sys, "\n\n")
 	r.WebSearch = len(c.WebSearchOptions) > 0 && string(c.WebSearchOptions) != "null"
-	for _, t := range c.Tools {
+	for i, t := range c.Tools {
 		if strings.HasPrefix(t.Type, "web_search") {
 			r.WebSearch = true
+		}
+		if t.Function.Name == "" {
+			// Google's own tools as Gemini spells them, which LiteLLM's
+			// and Gemini's other OpenAI-shaped clients send among the
+			// tools — {"googleSearch":{}}, {"url_context":{}} — or by
+			// type, {"type":"url_context"}: googleSearch is the web
+			// search, the rest go on to a Gemini upstream (GoogleTools).
+			// Read as functions, they went out as tools with no name.
+			if search, kept, ok := chatGoogleTool(gjson.GetBytes(body, "tools."+strconv.Itoa(i))); ok {
+				r.WebSearch = r.WebSearch || search
+				r.GoogleTools = append(r.GoogleTools, kept...)
+				continue
+			}
 		}
 		if t.Type != "" && t.Type != "function" {
 			continue
@@ -1786,4 +1801,29 @@ func renderChat(res Result, model string) []byte {
 		"choices": []map[string]any{{"index": 0, "message": msg, "finish_reason": stopToChat(res.Stop)}},
 		"usage":   res.Usage.chat()})
 	return b
+}
+
+// chatGoogleTool reads a Chat request's tool that is one of Google's own,
+// keyed by its name ({"googleSearch":{}}) or typed with it
+// ({"type":"url_context"}, its settings under the same name if any): ok
+// when it is one.
+func chatGoogleTool(t gjson.Result) (search bool, kept []json.RawMessage, ok bool) {
+	var m map[string]json.RawMessage
+	if !t.IsObject() || json.Unmarshal([]byte(t.Raw), &m) != nil {
+		return false, nil, false
+	}
+	if typ := snakeToCamel(t.Get("type").String()); typ != "" {
+		if !googleSearchTools[typ] && !googleToolNames[typ] {
+			return false, nil, false
+		}
+		v := m[t.Get("type").String()]
+		if len(v) == 0 {
+			v = m[typ]
+		}
+		search, kept = googleTools(map[string]json.RawMessage{typ: v}, true)
+		return search, kept, true
+	}
+	delete(m, "type")
+	search, kept = googleTools(m, true)
+	return search, kept, search || len(kept) > 0
 }
