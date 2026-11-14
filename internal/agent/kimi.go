@@ -21,6 +21,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pelletier/go-toml/v2"
+
 	"github.com/yetone/magpie/internal/edit"
 )
 
@@ -364,8 +366,128 @@ func kimiIn(at place) *Agent {
 			Options: func(cur map[string]string) []Option {
 				return withVia(kimiOwnOptions(path, cur["model"]), "kimi", magpieID+"/")
 			},
-		}},
+		}, kimiThinkingField(path, legacy, at.cold)},
 	}, path)
+}
+
+// kimiThinkingField is the thinking level Kimi Code starts its sessions
+// at (@apple_test_src on X: every other agent had one). The new Kimi Code
+// keeps it in [thinking] (packages/agent-core-v2's ThinkingConfigSchema):
+// enabled = false for off, else effort, the level its own /model saves
+// beside default_model (persistModelSelection, thinkingEffortToConfig);
+// with neither it starts each model at the model's default_effort. A level
+// the model doesn't have starts it at its default too. kimi-cli has only
+// thinking on or off, its top-level default_thinking. A stopped WSL
+// distro's (cold) levels are the common ones: reading its config would
+// start it again (#3896).
+func kimiThinkingField(path string, legacy, cold bool) Field {
+	if legacy {
+		return Field{
+			Key: "effort", Label: "thinking",
+			Get: func() string {
+				switch v, _ := edit.GetTOMLTop(path, "default_thinking"); v {
+				case "true":
+					return "on"
+				case "false":
+					return "off"
+				}
+				return ""
+			},
+			Set: func(v string) error {
+				if v == "" {
+					return edit.DelTOMLTop(path, "default_thinking")
+				}
+				return edit.SetTOMLTop(path, edit.KV{Path: "default_thinking", Value: v != "off"})
+			},
+			Options: func(map[string]string) []Option { return static("off", "on") },
+		}
+	}
+	return Field{
+		Key: "effort", Label: "thinking",
+		Get: func() string {
+			t, _ := edit.GetTOMLTable(path, "thinking")
+			if t["enabled"] == "false" {
+				return "off"
+			}
+			return t["effort"]
+		},
+		Set: func(v string) error {
+			switch v {
+			case "":
+				if err := edit.DelTOMLKey(path, "thinking", "effort"); err != nil {
+					return err
+				}
+				return edit.DelTOMLKey(path, "thinking", "enabled")
+			case "off":
+				// as Kimi Code's own off: the level stays for the next on
+				return edit.SetTOMLKey(path, "thinking", "enabled", false)
+			}
+			if err := edit.SetTOMLKey(path, "thinking", "enabled", true); err != nil {
+				return err
+			}
+			return edit.SetTOMLKey(path, "thinking", "effort", v)
+		},
+		Options: func(cur map[string]string) []Option {
+			if cold {
+				return static(kimiCommonLevels...)
+			}
+			return kimiThinkingOptions(path, cur["model"])
+		},
+	}
+}
+
+// kimiCommonLevels are the levels offered for a model whose own aren't known.
+var kimiCommonLevels = []string{"off", "low", "medium", "high"}
+
+// kimiThinkingOptions are the levels Kimi Code offers for model, the key
+// of a model table in its config at path: off, then its support_efforts
+// (its [overrides]' when they say), Default being the model's
+// default_effort; off alone for a model that thinks with no levels, and
+// none for one that doesn't think. A model the config doesn't describe
+// (Kimi Code's own sign-in's, from its catalog) gets the common levels.
+func kimiThinkingOptions(path, model string) []Option {
+	type levels struct {
+		Capabilities   []string `toml:"capabilities"`
+		SupportEfforts []string `toml:"support_efforts"`
+		DefaultEffort  string   `toml:"default_effort"`
+	}
+	var doc struct {
+		Models map[string]struct {
+			levels
+			Overrides *levels `toml:"overrides"`
+		} `toml:"models"`
+	}
+	b, err := edit.Read(path)
+	if err != nil || toml.Unmarshal(edit.TrimBOM(b), &doc) != nil {
+		return static(kimiCommonLevels...)
+	}
+	m, ok := doc.Models[model]
+	if !ok {
+		return static(kimiCommonLevels...)
+	}
+	efforts, def, caps := m.SupportEfforts, m.DefaultEffort, m.Capabilities
+	if o := m.Overrides; o != nil {
+		if o.SupportEfforts != nil {
+			efforts = o.SupportEfforts
+		}
+		if o.DefaultEffort != "" {
+			def = o.DefaultEffort
+		}
+		if o.Capabilities != nil {
+			caps = o.Capabilities
+		}
+	}
+	if len(efforts) == 0 && !slices.Contains(caps, "thinking") && !slices.Contains(caps, "always_thinking") {
+		return nil
+	}
+	var out []Option
+	if slices.Contains(efforts, def) {
+		out = append(out, Option{Value: "", Note: "Kimi Code's default for the model: " + def, Takes: def})
+	}
+	if !slices.Contains(caps, "always_thinking") {
+		out = append(out, Option{Value: "off"})
+	}
+	return append(out, static(efforts...)...)
 }
 
 // kimiOwnOptions are the models of the user's own in Kimi's config: its
