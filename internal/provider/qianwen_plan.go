@@ -43,7 +43,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -51,6 +50,7 @@ import (
 
 	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/lastgood"
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 const (
@@ -328,7 +328,7 @@ func CancelQianwenSignIn(id string) {
 	}
 }
 
-var qianwenStatusWord = regexp.MustCompile(`(?i)expired|access_denied|slow_down`)
+var qianwenStatusWord = lazyre.New(`(?i)expired|access_denied|slow_down`)
 
 // qianwenWait asks the platform whether the user approved the sign-in,
 // until they have, refused, or the page ran out, and keeps it.
