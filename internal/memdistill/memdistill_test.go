@@ -519,3 +519,33 @@ func TestStopEndsTheRun(t *testing.T) {
 		t.Fatalf("%+v %v", res, err)
 	}
 }
+
+// Switched off, the background reads ask no model: picking one loads
+// every provider's models, the whole catalog. Switched on, they do.
+func TestKeepOffAsksNoModel(t *testing.T) {
+	newSandbox(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	asked := make(chan struct{}, 1)
+	done := make(chan struct{})
+	t.Cleanup(func() { cancel(); <-done })
+	go func() {
+		defer close(done)
+		Keep(ctx, time.Millisecond, time.Millisecond, func() string {
+			select {
+			case asked <- struct{}{}:
+			default:
+			}
+			return "m/x"
+		}, nil)
+	}()
+	// a hundred rounds, at least, of 1ms each while off
+	select {
+	case <-asked:
+		t.Fatal("switched off, it asked for a model")
+	case <-time.After(100 * time.Millisecond):
+	}
+	if _, err := change(func(s *State) { s.On = true }); err != nil {
+		t.Fatal(err)
+	}
+	<-asked // the round after, waited on and not timed
+}

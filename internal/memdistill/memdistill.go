@@ -626,6 +626,12 @@ func Keep(ctx context.Context, first, interval time.Duration, auto func() string
 		case <-t.C:
 		}
 		t.Reset(interval)
+		// switched off (the default): nothing to read, nor a model to
+		// ask. auto picks one from every provider's models, and that
+		// loaded the whole catalog (3.6 MB) for a run that read nothing
+		if st, err := Load(); err == nil && !st.On {
+			continue
+		}
 		if _, err := Run(ctx, auto(), complete); err != nil && !errors.Is(err, ErrRunning) {
 			log.Println("memory: reading conversations:", err) // and in the Memory tab
 		}
