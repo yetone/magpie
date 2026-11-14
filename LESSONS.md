@@ -1409,7 +1409,15 @@ each one.
     11ddf076b (15:46) made it four, +326 for the Qwen platform sign-in,
     though it put the field and its wait in qianwenplan.js first.
     07a62b373 (16:34) a fifth, +72 for Copy all keys, the row itself in
-    keyrates.js: +968 bytes in a day, each raise "no page to move it to".
+    keyrates.js. 80a315a70 (17:00) a sixth, +83 for the hidden page's
+    cache release: +1,051 bytes in a day, each raise "no page to move it
+    to".
+  - Chosen packages again: 11ddf076b (Qwen platform sign-in) ran
+    provider, gui and cli, not ./..., and its package-level regexp left
+    TestNoEagerPackageRegexps (root package) red on main from 15:46 to
+    16:55 (05d25d8dc). The same guard went red the same morning from the
+    yaml.v3 copy. A new file that adds a package-level value runs the
+    guards that walk the tree, which only ./... reaches.
   - No Test run finished green from 63c91cae5 (11-13 21:51 UTC) to
     07a62b373 (11-14 08:34 UTC): 57 runs were cancelled by the next push
     and two went red (TestEffortUpdateRefused, fixed in a4937f8ff;
