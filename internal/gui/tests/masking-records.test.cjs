@@ -42,6 +42,7 @@ function summary(days) {
     by: { rule: 7, model: 4 },
     agents: [{ name: "claude", n: 30, distinct: 8 }, { name: "codex", n: 12, distinct: 3 }],
     providers: [{ name: "anthropic", n: 30, distinct: 8 }, { name: "openai", n: 12, distinct: 3 }],
+    checked: [{ name: "claude", looked: 40, masked: 8 }, { name: "codex", looked: 12, masked: 1, whole: 2 }],
     values: [
       { p: KEY, kind: "API_KEY", by: "rule", head: "sk-p", len: 24, n: 14, requests: 5, last: ago(60e3) },
       { p: NAME, kind: "PERSON", by: "model", head: "", len: 3, n: 6, requests: 3, last: ago(3600e3) },
@@ -76,7 +77,7 @@ function serve(lang, sum, asked, opts = {}) {
     const json = (data) => route.fulfill({ json: data });
     if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:true};` });
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
-    if (url.pathname === "/api/state") return json({ agents: [{ id: "claude", name: "Claude Code", icon: "claudecode-color", fields: [] }, { id: "codex", name: "Codex", icon: "codex-color", fields: [] }], profiles: [], settings });
+    if (url.pathname === "/api/state") return json({ agents: [{ id: "claude", name: "Claude Code", icon: "claudecode-color", fields: [] }, { id: "codex", name: "Codex", icon: "codex-color", fields: [] }, { id: "pi", name: "Pi", fields: [] }], profiles: [], settings });
     if (url.pathname === "/api/settings") {
       if (req.method() === "POST") { asked.push("settings " + req.postData()); Object.assign(settings, JSON.parse(req.postData())); }
       return json(settings);
@@ -101,7 +102,7 @@ function serve(lang, sum, asked, opts = {}) {
     }
     if (url.pathname === "/api/masking/summary") {
       const s = sum(+url.searchParams.get("days"));
-      return json(cleared ? { ...s, days: s.days.map((d) => ({ ...d, requests: 0, n: 0, distinct: 0 })), requests: 0, n: 0, distinct: 0, blocked: 0, kinds: [], by: {}, agents: [], providers: [], values: [] } : s);
+      return json(cleared ? { ...s, days: s.days.map((d) => ({ ...d, requests: 0, n: 0, distinct: 0 })), requests: 0, n: 0, distinct: 0, blocked: 0, kinds: [], by: {}, agents: [], providers: [], values: [], checked: [] } : s);
     }
     if (url.pathname === "/api/masking/records") {
       asked.push(url.search);
@@ -236,12 +237,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const bird = await card.locator(".msk-hub svg").boundingBox();
         assert(Math.abs(bird.x + bird.width / 2 - (hub.x + hub.width / 2)) < 1 && Math.abs(bird.y + bird.height / 2 - (hub.y + hub.height / 2)) < 1, "the bird in the middle of its ring");
         // each agent and provider with its logo
-        assert.deepEqual(await card.locator(".mo-node .ic").evaluateAll((ns) => ns.map((n) => n.dataset.icon)), ["claudecode-color", "codex-color", "anthropic", "openai"]);
+        assert.deepEqual(await card.locator(".mo-flow .mo-node .ic").evaluateAll((ns) => ns.map((n) => n.dataset.icon)), ["claudecode-color", "codex-color", "anthropic", "openai"]);
         // on both sides the logo first, then the name; a side's logos in one
         // column and its names on one edge; every logo on a disc of one size
         // (bare, a logo that fills its box and one that doesn't read as two
         // sizes)
-        const nodes = await card.locator(".mo-node:not(:disabled)").evaluateAll((ns) => ns.map((b) => {
+        const nodes = await card.locator(".mo-flow .mo-node:not(:disabled)").evaluateAll((ns) => ns.map((b) => {
           const ic = b.querySelector(".ic").getBoundingClientRect(), nm = b.querySelector(".nm").getBoundingClientRect();
           return { side: b.parentElement.classList.contains("agent") ? "agent" : "provider", ic: { x: ic.x, w: ic.width, h: ic.height, r: getComputedStyle(b.querySelector(".ic")).borderRadius }, nm: nm.x };
         }));
@@ -551,6 +552,54 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 // strict masking had kept many records): Cancel sends nothing, Clear posts
 // once and the page reads again to nothing; a failed clear says why and
 // lists what is still there
+// an agent whose requests carried nothing to mask has no record, and the
+// card says it was checked all the same, its requests counted, as the
+// list does once it is picked (eiyuuzaki2333 on X: Pi's calls on the
+// Gateway page, only dsh's on this one); one sent as written to a model
+// set to go unmasked says so
+const piChecked = (d) => ({ ...summary(d), checked: [{ name: "pi", looked: 128, masked: 0, whole: 3 }, { name: "claude", looked: 40, masked: 8 }, { name: "other", looked: 2, masked: 0 }] });
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) {
+    for (const width of lang === "en" ? [1100, 640] : [640]) {
+      test(`${engine} ${lang} ${width}px: an agent with nothing masked shows as checked`, async (t) => {
+        const { browser, page, errors, asked } = await open(engine, lang, width, piChecked);
+        t.after(() => browser.close());
+        const chips = page.locator("#maskCard .msk-checked .mo-node");
+        await chips.first().waitFor();
+        assert.deepEqual(await chips.evaluateAll((ns) => ns.map((n) => n.dataset.agent)), ["pi", "claude", "other"]);
+        const pi = chips.nth(0);
+        assert.equal(await pi.locator(".nm").innerText(), "Pi");
+        const says = await pi.locator(".ct").innerText();
+        assert.match(says, /128/);
+        assert.match(says, /3/);
+        if (lang === "en") {
+          assert.equal(says, "128 checked · none to mask · 3 sent as written");
+          assert.equal(await chips.nth(1).locator(".ct").innerText(), "40 checked · 8 masked");
+          assert.equal(await chips.nth(2).locator(".nm").innerText(), "Other");
+        } else for (const w of ["checked", "none to mask", "sent as written", "Other"]) assert(!(await page.locator("#maskCard .msk-checked").innerText()).includes(w), `${w} left in English`);
+        assert(await chips.nth(2).isDisabled(), "requests no agent was named for have no records to list");
+        assert.deepEqual(await wide(page), { page: false, over: [] });
+        await shot(page, `checked-${engine}-${lang}-${width}`);
+        // picked, the list says what was checked rather than a bare empty
+        await stillClick(page, pi);
+        await until(() => asked.some((a) => a.includes("agent=pi")));
+        const none = page.locator("#maskList .msk-none", { hasText: "128" });
+        await none.waitFor();
+        const said = await none.innerText();
+        assert.match(said, /128/);
+        assert.match(said, /Pi/);
+        if (lang === "en") assert.equal(said, "128 requests from Pi checked, and none carried anything to mask");
+        else for (const w of ["requests from", "none carried", "Nothing masked"]) assert(!said.includes(w), `${w} left in English: ${said}`);
+        assert.equal(await page.locator("#maskCard .msk-checked .mo-node.on").getAttribute("data-agent"), "pi");
+        // and the agent picker has it, records or not
+        assert.match(await page.locator("#maskList .msk-bar .sess-pick").first().innerText(), /Pi/);
+        assert.deepEqual(await wide(page), { page: false, over: [] });
+        assert.deepEqual(errors, []);
+      });
+    }
+  }
+}
+
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) {
     for (const width of [1100, 640]) {

@@ -1392,7 +1392,15 @@ func TestCodexOwnSignInKeepsItsMaskingTime(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", CodexPath+"/responses", strings.NewReader(`{"model":"gpt-5.5","stream":true,"input":"hi"}`))
 	req.Header.Set("Authorization", "Bearer chatgpt-token")
+	req.Header.Set("User-Agent", "codex_cli_rs/0.140.0")
+	who := agentOf(req) // as its record would name it
+	looked := checkedOf(who).Looked
 	s.Handler().ServeHTTP(rec, req)
+	// and is counted as looked over for the Masking page, nothing masked
+	// in it (eiyuuzaki2333 on X)
+	if c := checkedOf(who); c.Looked != looked+1 || c.Whole != 0 {
+		t.Fatalf("Codex's turn counted %+v, %d before", c, looked)
+	}
 	st := s.Trace(t.Context(), 0, 0)
 	if rec.Code != 200 || len(st.Routes) != 1 {
 		t.Fatalf("%d %+v", rec.Code, st.Routes)

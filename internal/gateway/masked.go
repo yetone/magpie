@@ -112,6 +112,19 @@ func noteMaskedUntil(r *http.Request, what string, h maskHits, sent string, rout
 	return m, done
 }
 
+// noteChecked counts r's turn (a chat turn, or a native API call) for
+// the Masking page while masking is on for it (maskrec.Checked): looked
+// over, and whether it changed something (h, which noteMasked records),
+// or sent as written (whole) to a model the user set to go unmasked. A turn with nothing to mask has no
+// record, and without the count an agent's page read the same as one
+// never masked (eiyuuzaki2333 on X).
+func noteChecked(r *http.Request, whole bool, h maskHits) {
+	if !redactionWantedFor(r.Context()) {
+		return
+	}
+	maskrec.Checked(callerOf(r).agent, !whole, h.n > 0 || len(h.hits) > 0)
+}
+
 // noteBlocked records a request held back for a value the user set to
 // block: what it had, nothing of what it would have sent.
 func noteBlocked(h maskHits) {

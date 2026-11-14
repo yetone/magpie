@@ -243,7 +243,8 @@ func settle(r Record, provider, model string) {
 }
 
 // Clear deletes every record kept: each day's file, and what memory has
-// of them (their snips, the requests' text). A day goes whole, never
+// of them (their snips, the requests' text), and each agent's counts of
+// turns looked over (checked.go). A day goes whole, never
 // rewritten, so nothing is left half-cleared for a reader; a request still
 // going is written to a new day's file once it is done. A day that can't
 // be removed stays, and is named in the error. What a placeholder stood
@@ -261,6 +262,7 @@ func Clear() error {
 		delete(store.days, d.path)
 	}
 	store.snips, store.sent, store.sentBytes = nil, nil, 0
+	errs = append(errs, clearChecked()...)
 	return errors.Join(errs...)
 }
 

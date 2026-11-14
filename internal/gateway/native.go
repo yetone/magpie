@@ -144,8 +144,8 @@ func (s *Server) nativeArk(w http.ResponseWriter, r *http.Request, p provider.Pr
 			return
 		}
 		// as nativeAny's: one the user set to go unmasked goes as written
+		var hits maskHits
 		if !p.SkipsRedaction() {
-			var hits maskHits
 			if err := maskStrings(r.Context(), obj, &hits); err != nil { // fails closed
 				fail(maskStatus(err), err.Error())
 				return
@@ -155,6 +155,7 @@ func (s *Server) nativeArk(w http.ResponseWriter, r *http.Request, p provider.Pr
 				noteMasked(r, "native", hits, string(b), 0, p.ID, model)
 			}
 		}
+		noteChecked(r, p.SkipsRedaction(), hits)
 		body, _ = json.Marshal(obj)
 	}
 	w, done := restoring(w)
@@ -396,6 +397,7 @@ func (s *Server) nativeAny(w http.ResponseWriter, r *http.Request, p provider.Pr
 			fail(http.StatusForbidden, msg)
 			return
 		}
+		var hits maskHits
 		if redactionWantedFor(r.Context()) && !p.SkipsRedaction() {
 			var v any
 			dec := json.NewDecoder(bytes.NewReader(body))
@@ -406,7 +408,6 @@ func (s *Server) nativeAny(w http.ResponseWriter, r *http.Request, p provider.Pr
 			}
 			// the value inside a list, so a lone string is masked as well
 			box := []any{v}
-			var hits maskHits
 			if err := maskStrings(r.Context(), box, &hits); err != nil { // fails closed
 				fail(maskStatus(err), err.Error())
 				return
@@ -424,6 +425,7 @@ func (s *Server) nativeAny(w http.ResponseWriter, r *http.Request, p provider.Pr
 				noteMasked(r, "native", hits, string(body), 0, p.ID, call.Model)
 			}
 		}
+		noteChecked(r, p.SkipsRedaction(), hits)
 	}
 	if masked {
 		var done func()

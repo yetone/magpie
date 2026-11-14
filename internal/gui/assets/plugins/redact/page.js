@@ -59,7 +59,7 @@ function maskLoad(force) {
   maskBusyDays = days;
   const p = maskBusy = api("masking/summary?days=" + days).then((sum) => {
     if (days !== maskDays) return;
-    maskSum = { days: [], kinds: [], agents: [], providers: [], values: [], by: {}, n: 0, distinct: 0, requests: 0, ...(sum || {}) };
+    maskSum = { days: [], kinds: [], agents: [], providers: [], values: [], checked: [], by: {}, n: 0, distinct: 0, requests: 0, ...(sum || {}) };
     maskSumDays = days;
     maskAt = Date.now();
   }).catch(() => {}).finally(() => { if (maskBusy === p) maskBusy = null; });
@@ -173,6 +173,7 @@ function drawMaskCard() {
   if (move && sum.n) maskCountUp(num, sum.n);
   if (sum.agents.length && sum.providers.length) band.append(maskFlow(sum, move));
   else band.append(maskNone());
+  if (sum.checked?.length) box.append(maskChecked(sum));
   if (move) for (const [i, n] of [...band.children].entries()) n.animate([{ opacity: 0, transform: "translateY(6px)", filter: "blur(6px)" }, {}], { duration: 900, delay: i * 120, easing: "cubic-bezier(.2, .7, .1, 1)", fill: "backwards" });
 }
 
@@ -209,6 +210,31 @@ function maskNone() {
   link.onclick = (e) => openSettingsAt(e, "privacy");
   box.append(" ", link);
   return box;
+}
+// maskChecked: each agent's requests masking looked over before they
+// left, something masked in them or not, and those sent as written to a
+// model set to go unmasked. A request with nothing to mask has no record,
+// so without it an agent read the same here as one never masked
+// (eiyuuzaki2333 on X: Pi's calls on the Gateway page, only dsh's here)
+function maskChecked(sum) {
+  const row = el("div", "msk-checked");
+  for (const c of sum.checked.slice(0, 8)) {
+    const other = c.name === "other", who = other ? { name: t("Other") } : maskWho(c.name, "agent");
+    const b = el("button", "mo-node" + (maskL.agent === c.name ? " on" : ""));
+    b.type = "button";
+    b.dataset.agent = c.name;
+    const says = [];
+    if (c.looked) says.push(t("{n} checked", { n: fmtN(c.looked) }), c.masked ? t("{n} masked", { n: fmtN(c.masked) }) : t("none to mask"));
+    if (c.whole) says.push(t("{n} sent as written", { n: fmtN(c.whole) }));
+    const tx = el("span", "tx");
+    tx.append(el("span", "nm", who.name), el("span", "ct", says.join(" · ")));
+    b.append(icon(who.icon || "generic"), tx);
+    // a request no agent was named for has no record of its own to show
+    if (other) b.disabled = true;
+    else b.onclick = () => maskNarrow({ agent: maskL.agent === c.name ? "" : c.name });
+    row.append(b);
+  }
+  return row;
 }
 // the way off, beside the way on (ZekeXiao on X: "脱敏好像只有一个打开
 // 开关，不能关？"). Both switches go off at once. Your own words mask with neither
@@ -471,7 +497,10 @@ function drawMaskList() {
       sessPick(b, all, maskL[key], opts, head, (v) => maskNarrow({ [key]: v || "" }));
       bar.append(b);
     };
-    pick("agent", "Every agent", "Agent", (sum?.agents || []).map((a) => ({ v: a.name, name: maskWho(a.name, "agent").name })));
+    // an agent masking looked over with nothing to mask has no record,
+    // and is in the list too
+    const agents = [...new Set([...(sum?.agents || []), ...(sum?.checked || [])].map((a) => a.name))].filter((n) => n && n !== "other");
+    pick("agent", "Every agent", "Agent", agents.map((n) => ({ v: n, name: maskWho(n, "agent").name })));
     pick("provider", "Every provider", "Provider", (sum?.providers || []).map((p) => ({ v: p.name, name: maskWho(p.name, "provider").name })));
   }
   box.append(bar);
@@ -550,7 +579,7 @@ async function maskClear() {
 function maskRequestList(box) {
   const filtered = maskL.facet || maskL.kind || maskL.agent || maskL.provider;
   if (maskL.error) return void box.append(el("div", "msk-none err", t(maskL.error)));
-  if (!maskL.records.length) return void box.append(el("div", "msk-none", maskL.busy || !maskL.read ? t("Loading…") : filtered ? t("Nothing masked matches these filters") : t("Nothing masked yet")));
+  if (!maskL.records.length) return void box.append(el("div", "msk-none", maskL.busy || !maskL.read ? t("Loading…") : maskNoneChecked() || (filtered ? t("Nothing masked matches these filters") : t("Nothing masked yet"))));
   let day = "", list = null;
   for (const r of maskL.records) {
     const d = new Date(r.t).toDateString();
@@ -564,6 +593,17 @@ function maskRequestList(box) {
     }
     list.append(maskRecordRow(r));
   }
+}
+// maskNoneChecked: with no record to list, the requests masking looked
+// over and found nothing in, for the agent picked or for all
+function maskNoneChecked() {
+  if (maskL.facet || maskL.kind || maskL.provider || maskSumDays !== maskDays) return "";
+  const cs = (maskSum?.checked || []).filter((c) => !maskL.agent || c.name === maskL.agent);
+  const n = cs.reduce((a, c) => a + c.looked, 0);
+  if (!n || cs.some((c) => c.masked)) return "";
+  if (!maskL.agent) return t(n === 1 ? "1 request checked, and it carried nothing to mask" : "{n} requests checked, and none carried anything to mask", { n: fmtN(n) });
+  const name = maskWho(maskL.agent, "agent").name;
+  return t(n === 1 ? "1 request from {name} checked, and it carried nothing to mask" : "{n} requests from {name} checked, and none carried anything to mask", { n: fmtN(n), name });
 }
 // who to whom, an icon where there is one
 function maskRoute(into, r) {

@@ -72,6 +72,8 @@
 .mo-dot.out { fill: var(--accent); }
 .mo-cap { margin-top: 8px; text-align: center; font-size: 11px; letter-spacing: .12em; color: var(--muted); }
 .mo-node.on { background: var(--accent-soft); }
+.msk-checked { display: flex; flex-wrap: wrap; gap: 2px 6px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.msk-checked .mo-node { max-width: 100%; }
 .mo-node .nm { line-height: 16px; }
 .mo-node .ct { line-height: 13px; }
 .msk-hub { position: absolute; left: 50%; top: 50%; width: 30px; height: 30px; margin: -15px 0 0 -15px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--card); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent), 0 0 0 5px var(--card); color: var(--accent); }

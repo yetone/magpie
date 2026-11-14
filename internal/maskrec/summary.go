@@ -133,6 +133,9 @@ type Summary struct {
 	Providers []Count        `json:"providers"`
 	Values    []Seen         `json:"values"` // the most masked first, at most topValues
 	Since     string         `json:"since,omitempty"`
+	// Checked: each agent's turns masking looked over, or that went as
+	// written to a model set to go unmasked, nothing masked or not
+	Checked []Looked `json:"checked"`
 }
 
 const topValues = 60
@@ -150,6 +153,7 @@ func Sum(days int) Summary {
 	if fs := files(dir); len(fs) > 0 {
 		out.Since = fs[0].day
 	}
+	var dayNames []string
 	vals := map[string]*Seen{}
 	kinds := map[string]*Count{}
 	kindVals := map[string]map[string]bool{}
@@ -157,6 +161,7 @@ func Sum(days int) Summary {
 	whom := map[string]map[string]int{}
 	for i := days - 1; i >= 0; i-- {
 		d := now.AddDate(0, 0, -i).Format(dayForm)
+		dayNames = append(dayNames, d)
 		var a *dayAgg
 		if inTest() {
 			a = memDay(d)
@@ -218,6 +223,7 @@ func Sum(days int) Summary {
 	out.Kinds = ranked(out.Kinds)
 	out.Agents = counts(who)
 	out.Providers = counts(whom)
+	out.Checked = lookedOver(dayNames)
 	return out
 }
 
