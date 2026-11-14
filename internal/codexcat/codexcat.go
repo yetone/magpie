@@ -426,13 +426,16 @@ func entriesAt(ms []catalog.Model, after int, effort string) []any {
 		}
 		if c := m.Context; c > 0 {
 			// the model's or its provider's threshold, else the one for
-			// every model (#876); one at or above c is its whole window.
+			// every model (#876), which by default holds an OpenAI model
+			// to the window Codex's own catalog does (Working: GPT-6.1
+			// Terra's 500K, @flower__daisy on X); one at or above c is
+			// its whole window.
 			// A DeepSeek model too, though DeepSeek's own Codex setup
 			// compacts at none of its 1M: magpie's 272K came of a
 			// DeepSeek report (e950eb080: turns of ~550K waited 70-90s
 			// for a first token), and Full window or the model's own
 			// Compact at gives it the whole window
-			w := work.Working(c)
+			w := Working(work, m.ID, c)
 			if m.Compact > 0 {
 				w = min(c, m.Compact)
 			}
@@ -440,7 +443,7 @@ func entriesAt(ms []catalog.Model, after int, effort string) []any {
 			if w < c {
 				e.AutoCompact = &w
 			}
-		} else if w := cmp.Or(m.Compact, work.Compact()); w > 0 {
+		} else if w := cmp.Or(m.Compact, unknownWorking(work, m.ID)); w > 0 {
 			// a window magpie doesn't know (a relay listing none, a
 			// model models.dev lacks): Codex compacts at no point on an
 			// entry with neither a window nor a limit, and after the

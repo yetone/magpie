@@ -35,6 +35,7 @@ import (
 	"github.com/yetone/magpie/internal/autostart"
 	"github.com/yetone/magpie/internal/bark"
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/codexcat"
 	"github.com/yetone/magpie/internal/desktopiso"
 	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/fonts"
@@ -849,7 +850,7 @@ func codexWindowUnder(st settings.Settings, model string) *codexRunWindow {
 	if !ok && strings.HasPrefix(model, provider.GroupPrefix) {
 		e, ok = provider.EntryOf(model)
 	}
-	if !ok || e.Context <= 0 || provider.CompactFor(st, e, provider.GroupFinder()) > 0 || st.Working(e.Context) < e.Context {
+	if !ok || e.Context <= 0 || provider.CompactFor(st, e, provider.GroupFinder()) > 0 || codexcat.Working(st, e.ID, e.Context) < e.Context {
 		return nil
 	}
 	return &codexRunWindow{Model: model, Window: e.Context, Size: tokensSize(e.Context)}

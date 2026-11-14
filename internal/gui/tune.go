@@ -6,6 +6,7 @@ package gui
 // config has now, and putting one in, or back, on their say.
 
 import (
+	"cmp"
 	"encoding/json"
 	"hash/fnv"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/agent"
+	"github.com/yetone/magpie/internal/codexcat"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/sessions"
 	"github.com/yetone/magpie/internal/settings"
@@ -281,7 +283,8 @@ func pricedWeights(st settings.Settings) tune.Weigh {
 // (window 0): the largest prompt it had been sent was taken for its
 // window, and a 1M model set to compact at 750K was offered no more than
 // 412K (zhemu on Discord). Codex's own models, outside magpie's catalog,
-// run to 272K or the largest prompt seen, as before.
+// run to the window Codex's catalog gives them (codexcat.OwnWindow, 272K
+// when it has none) or the largest prompt seen.
 func codexWindow(calls []tune.Call, st settings.Settings, entries []provider.Entry, find func(string) (provider.Group, []provider.Member, bool)) (window, told int, own string, apart []tuneOwn) {
 	byID := make(map[string]provider.Entry, len(entries))
 	for _, e := range entries {
@@ -296,7 +299,9 @@ func codexWindow(calls []tune.Call, st settings.Settings, entries []provider.Ent
 		e, ok := byID[strings.TrimPrefix(m, "magpie/")]
 		switch {
 		case !ok:
-			window = max(window, 272000, p)
+			// Codex's own model: the window its catalog gives it (GPT-6.1
+			// Terra's 500K), else 272K
+			window = max(window, cmp.Or(codexcat.OwnWindow(m), 272000), p)
 		case e.Context <= 0:
 			unknown = true
 		default:
@@ -307,7 +312,7 @@ func codexWindow(calls []tune.Call, st settings.Settings, entries []provider.Ent
 				held = max(held, at)
 				continue
 			}
-			at := st.Working(e.Context)
+			at := codexcat.Working(st, e.ID, e.Context)
 			if n := provider.CompactFor(st, e, find); n > 0 {
 				at = min(e.Context, n)
 			}
