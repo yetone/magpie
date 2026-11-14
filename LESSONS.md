@@ -1379,6 +1379,28 @@ each one.
     it. Six times in this file now, so a line here is not reaching the
     sessions that add a regexp. A guard that only the root package runs
     belongs in a check every push runs, or beside each package's tests.
+- **11-14, criteria still missed.**
+  - The sub-second guard left out again: 92e760f3d (per-key model tag)
+    ran its chosen GUI files, queued the full suite and pushed before
+    it finished. keysTag took the core 421 bytes over coreScriptBudget,
+    and main was red about an hour (#6518). The full suite found it
+    afterwards. TestCoreScriptBudget runs in a second over `git show`;
+    it is run before every push that touches the GUI's scripts, not
+    left to a suite that finishes after the push.
+  - Two sessions fixed #6518 at once. One had said on the issue that
+    it was taking it; f1f34d624 landed the same move without reading
+    the issue first, and the other's work was dropped. Read the
+    issue's last comment before starting on a red, as well as git log.
+  - A test that checks a duration to the millisecond:
+    TestLiveVisibleReasoningFixture set start to now minus at_ms, then
+    see read the clock again, so any pause between the two showed up in
+    the result. macOS CI read 6790 for 6789 (e730a14dc). d6cb40475 bounds it
+    by the time that really passed, red with a 3ms stall on the old
+    code. A test that sets a time from the clock and then reads the
+    clock again allows the time in between.
+  - Done right: f1f34d624 met the budget with no raise, moving keysTag
+    into keyrates.js, which is loaded exactly when a model can have a
+    key tag.
 - **Done right on 10-17.** The retire stack (0f1666b38 to de671719a)
   diffed staticcheck's U1000 against its base for dead code, b98f906b1
   was red on the old code for an own-account gap, and 8 subscriptions
