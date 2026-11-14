@@ -1032,6 +1032,11 @@ func thinkingConfig(r *Request, model string, claude bool, at string) map[string
 			case effort == "medium" && (strings.Contains(m, "flash") || gen > 3):
 				level = "medium"
 			}
+			// a variant at xhigh (Gemini 4 Hydrogen) is asked at xhigh, which
+			// Google lists for it; a model with no such variant stays at high
+			if at == "xhigh" {
+				level = "xhigh"
+			}
 			tc["thinkingLevel"] = level
 		}
 		return tc
