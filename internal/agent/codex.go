@@ -1715,17 +1715,22 @@ func codexIn(at place) *Agent {
 		if err := dropProvider(); err != nil {
 			return "", err
 		}
-		was := unstash(at.key("codex.model"))
+		// the originals are read and stay stashed until the write that puts
+		// them back has gone through: one that fails leaves them stashed
+		// for the next try (#4258). The model is the caller's to take out:
+		// its write, where there is one, comes after unroute.
+		peeked := peek(at.key("codex.model"), at.key("codex.provider"), at.key("codex.catalog"), at.key("codex.effort_set"), at.key("codex.effort"))
+		was := peeked[at.key("codex.model")]
 		// what was there before magpie is put back only where magpie's
 		// change still stands: a key the user set by hand since keeps
 		// theirs (yhwangl on X)
 		var back []edit.KV
-		if p := unstash(at.key("codex.provider")); p != "" && p != magpieID && get("model_provider") == "" {
+		if p := peeked[at.key("codex.provider")]; p != "" && p != magpieID && get("model_provider") == "" {
 			back = append(back, edit.KV{Path: "model_provider", Value: p})
 		}
 		// the catalog of the user's own put back while its file is there:
 		// one removed since would keep Codex from loading its config
-		if c := unstash(at.key("codex.catalog")); c != "" && !ownCatalog(c) && !deskCatalog(c) && !theirListGone(c) && (get("model_catalog_json") == "" || deskCatalog(get("model_catalog_json"))) {
+		if c := peeked[at.key("codex.catalog")]; c != "" && !ownCatalog(c) && !deskCatalog(c) && !theirListGone(c) && (get("model_catalog_json") == "" || deskCatalog(get("model_catalog_json"))) {
 			back = append(back, edit.KV{Path: "model_catalog_json", Value: c})
 		}
 		// the effort, where it is still one magpie set: picked on the
@@ -1736,13 +1741,13 @@ func codexIn(at place) *Agent {
 			id = "codex"
 		}
 		ours := map[string]bool{"": true}
-		if set := unstash(at.key("codex.effort_set")); set != "" {
+		if set := peeked[at.key("codex.effort_set")]; set != "" {
 			ours[set] = true
 		}
 		if r := appliedOf(id).Fields["effort"]; r != "" {
 			ours[r] = true
 		}
-		if e := unstash(at.key("codex.effort")); e != "" && ours[get("model_reasoning_effort")] {
+		if e := peeked[at.key("codex.effort")]; e != "" && ours[get("model_reasoning_effort")] {
 			back = append(back, edit.KV{Path: "model_reasoning_effort", Value: e})
 		}
 		if len(back) > 0 {
@@ -1750,6 +1755,15 @@ func codexIn(at place) *Agent {
 				return "", err
 			}
 		}
+		// what was put back is taken out of the stash; the model stays for
+		// the caller's write
+		taken := make(map[string]string, len(peeked))
+		for k, v := range peeked {
+			if k != at.key("codex.model") {
+				taken[k] = v
+			}
+		}
+		forgetValues(taken)
 		return was, nil
 	}
 	set := func(v string) error {
@@ -1921,6 +1935,9 @@ func codexIn(at place) *Agent {
 		if err := edit.SetTOMLTop(path, edit.KV{Path: "model", Value: v}); err != nil {
 			return err
 		}
+		// the user's pick replaces the model the stash kept: given up once
+		// the write has gone through (#4258)
+		forget(at.key("codex.model"))
 		if err := failover(); err != nil {
 			return err
 		}

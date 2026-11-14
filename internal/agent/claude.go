@@ -1603,8 +1603,16 @@ func claudeIn(at place) *Agent {
 	}
 	putClouds := func() error {
 		var back []edit.KV
+		// the originals are read and stay stashed until the write that puts
+		// them back has gone through: one that fails leaves them for the
+		// next try (#4258)
+		keys := make([]string, 0, len(agentenv.ClaudeProviders))
 		for _, k := range agentenv.ClaudeProviders {
-			raw := unstash(cloudKey(k))
+			keys = append(keys, cloudKey(k))
+		}
+		peeked := peek(keys...)
+		for _, k := range agentenv.ClaudeProviders {
+			raw := peeked[cloudKey(k)]
 			if raw == "" || !json.Valid([]byte(raw)) {
 				continue
 			}
@@ -1615,9 +1623,16 @@ func claudeIn(at place) *Agent {
 			back = append(back, edit.KV{Path: "env." + k, Value: json.RawMessage(raw)})
 		}
 		if len(back) == 0 {
+			// nothing of theirs to put back: what was peeked is given up,
+			// as it was when it was taken out up front
+			forgetValues(peeked)
 			return nil
 		}
-		return edit.SetJSON(path, back...)
+		if err := edit.SetJSON(path, back...); err != nil {
+			return err
+		}
+		forgetValues(peeked)
+		return nil
 	}
 	// unroute takes magpie's endpoint and models out of Claude Code's env
 	// and puts back the endpoint and token the stash kept from before magpie
@@ -1691,20 +1706,30 @@ func claudeIn(at place) *Agent {
 			}
 		}
 		forget(advisorKey)
-		was := unstash(at.key("claude.model"))
+		// the originals are read and stay stashed until the write that puts
+		// them back has gone through: one that fails leaves them stashed
+		// for the next try (#4258). The model is the caller's to take out:
+		// its write, where there is one, comes after unroute.
+		stashKeys := make([]string, 0, len(claudeOwnEnv)+3)
+		stashKeys = append(stashKeys, at.key("claude.model"), at.key("claude.base_url"), at.key("claude.auth_token"))
+		for _, k := range claudeOwnEnv {
+			stashKeys = append(stashKeys, at.key("claude.env."+k))
+		}
+		peeked := peek(stashKeys...)
+		was := peeked[at.key("claude.model")]
 		var back []edit.KV
 		for _, k := range claudeOwnEnv {
 			// one the user set again since is theirs as it is
 			// one of magpie's kept by an older magpie as the user's is no
 			// model of their endpoint's (roswellcsy on X)
-			if v := unstash(at.key("claude.env." + k)); v != "" && rawEnv(k) == "" && !(contains(claudeModelEnv, k) && claudeMagpieModel(v)) {
+			if v := peeked[at.key("claude.env."+k)]; v != "" && rawEnv(k) == "" && !(contains(claudeModelEnv, k) && claudeMagpieModel(v)) {
 				back = append(back, edit.KV{Path: "env." + k, Value: v})
 			}
 		}
-		if u := unstash(at.key("claude.base_url")); u != "" {
+		if u := peeked[at.key("claude.base_url")]; u != "" {
 			back = append(back, edit.KV{Path: "env.ANTHROPIC_BASE_URL", Value: u})
 		}
-		if t := unstash(at.key("claude.auth_token")); t != "" {
+		if t := peeked[at.key("claude.auth_token")]; t != "" {
 			back = append(back, edit.KV{Path: "env.ANTHROPIC_AUTH_TOKEN", Value: t})
 		}
 		if len(back) > 0 {
@@ -1712,6 +1737,15 @@ func claudeIn(at place) *Agent {
 				return "", err
 			}
 		}
+		// what was put back is taken out of the stash; the model stays for
+		// the caller's write
+		taken := make(map[string]string, len(peeked))
+		for k, v := range peeked {
+			if k != at.key("claude.model") {
+				taken[k] = v
+			}
+		}
+		forgetValues(taken)
 		return was, nil
 	}
 	var writeTiers func(main string, tiers map[string]string) error
@@ -1734,11 +1768,18 @@ func claudeIn(at place) *Agent {
 					keys = append(keys, "env."+k)
 				}
 			}
+			if err := edit.DelJSON(path, keys...); err != nil {
+				return err
+			}
+			// the stashed values go once the write that takes magpie's out
+			// has gone through (#4258): the model the user had is given up
+			// for Claude Code's own default here, and the endpoint and token
+			// unroute put back are already out of the stash
 			forget(at.key("claude.model"), at.key("claude.base_url"), at.key("claude.auth_token"), mainKey, wroteAt, aboutKey)
 			for _, k := range claudeOwnEnv {
 				forget(at.key("claude.env." + k))
 			}
-			return edit.DelJSON(path, keys...)
+			return nil
 		}
 		if isMagpie(v) {
 			if !routed() {
@@ -1830,7 +1871,13 @@ func claudeIn(at place) *Agent {
 		if _, err := unroute(); err != nil {
 			return err
 		}
-		return edit.SetJSON(path, edit.KV{Path: "model", Value: v})
+		if err := edit.SetJSON(path, edit.KV{Path: "model", Value: v}); err != nil {
+			return err
+		}
+		// the user's pick replaces the model the stash kept: given up once
+		// the write has gone through (#4258)
+		forget(at.key("claude.model"))
+		return nil
 	}
 
 	// mainWord is the main model as settings.json's "model" says it. A
@@ -2435,7 +2482,10 @@ func claudeIn(at place) *Agent {
 			if err != nil {
 				return err
 			}
-			forget(at.key("claude.model"), at.key("claude.base_url"), at.key("claude.auth_token"), mainKey, wroteAt, aboutKey)
+			// the model stays stashed until the write below has put it back
+			// or given it up (#4258); the endpoint and token unroute put
+			// back are already out of the stash
+			forget(at.key("claude.base_url"), at.key("claude.auth_token"), mainKey, wroteAt, aboutKey)
 			for _, k := range claudeOwnEnv {
 				forget(at.key("claude.env." + k))
 			}
@@ -2453,9 +2503,15 @@ func claudeIn(at place) *Agent {
 			// the model left alone where magpie had none to take over
 			switch {
 			case was != "" && !isMagpie(was):
-				return edit.SetJSON(path, edit.KV{Path: "model", Value: was})
+				if err := edit.SetJSON(path, edit.KV{Path: "model", Value: was}); err != nil {
+					return err
+				}
+				forget(at.key("claude.model"))
 			case isMagpie(get()):
-				return edit.DelJSON(path, "model")
+				if err := edit.DelJSON(path, "model"); err != nil {
+					return err
+				}
+				forget(at.key("claude.model"))
 			}
 			return nil
 		},

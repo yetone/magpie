@@ -121,3 +121,41 @@ func unstash(key string) string {
 	}
 	return v
 }
+
+// peek reads stashed values without taking them out, for a change that
+// writes the config first and only then takes the originals out of the
+// stash (#4258): a write that fails leaves them stashed for the next try.
+func peek(keys ...string) map[string]string {
+	stashMu.Lock()
+	defer stashMu.Unlock()
+	m := stashLoad()
+	out := make(map[string]string, len(keys))
+	for _, k := range keys {
+		if v := m[k]; v != "" {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// forgetValues takes peeked values out of the stash once the write that
+// replaces them has gone through, each only while it is still the one
+// peeked: a value written since, here or by another magpie, stays stashed.
+func forgetValues(peeked map[string]string) {
+	if len(peeked) == 0 {
+		return
+	}
+	stashMu.Lock()
+	defer stashMu.Unlock()
+	m := stashLoad()
+	dropped := false
+	for k, v := range peeked {
+		if m[k] == v {
+			delete(m, k)
+			dropped = true
+		}
+	}
+	if dropped {
+		stashWrite(m)
+	}
+}
