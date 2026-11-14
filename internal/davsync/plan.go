@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/backup"
+	"github.com/yetone/magpie/internal/library"
 	"github.com/yetone/magpie/internal/memory"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
@@ -275,6 +276,19 @@ func itemsOf(b backup.Bundle, p string) map[string]item {
 			// billion-context's own config is one file, shown by its name
 			if k == "bili" {
 				out["bili\x00"] = item{Kind: "file", Name: "billion-context.json", Raw: string(v)}
+				continue
+			}
+			// Claude Code's own plugins: each marketplace by its name, each
+			// plugin by its id
+			if k == "claudePlugins" {
+				var cp library.ClaudePlugins
+				json.Unmarshal(v, &cp)
+				for name, m := range cp.Marketplaces {
+					out["claudeMarketplace\x00"+name] = item{Kind: "claudeMarketplace", Name: name, Raw: string(m)}
+				}
+				for _, id := range cp.Enabled {
+					out["claudePlugin\x00"+id] = item{Kind: "claudePlugin", Name: id, Raw: "true"}
+				}
 				continue
 			}
 			flatten(out, k, x)

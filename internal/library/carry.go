@@ -49,6 +49,12 @@ type Bundle struct {
 	// this computer has none or it can't be read, and in a bundle from a
 	// magpie before it was carried: Put keeps this computer's then.
 	Bili *string `json:"bili,omitempty"`
+	// ClaudePlugins are the marketplaces and plugins installed in Claude
+	// Code itself (claude_plugins.go). nil when there are none, or they
+	// can't be read, and in a bundle from a magpie before them: Put adds
+	// nothing then. Put only adds, so one computer's never takes away
+	// another's.
+	ClaudePlugins *ClaudePlugins `json:"claudePlugins,omitempty"`
 }
 
 // CarriedSkill is a skill with its folder's files.
@@ -171,6 +177,7 @@ func Collect() (*Bundle, error) {
 	}
 	b.Env = &envs
 	b.Bili = carriedBili()
+	b.ClaudePlugins = carriedClaudePlugins()
 	return b, nil
 }
 
@@ -701,6 +708,11 @@ func Put(b *Bundle) (*Result, error) {
 			}
 			biliWrote = wrote
 		}
+		if b.ClaudePlugins != nil {
+			if err := putClaudePlugins(b.ClaudePlugins, kept); err != nil {
+				return err
+			}
+		}
 		return nil
 	})
 	if err == nil && biliWrote {
@@ -781,8 +793,8 @@ func isDir(p string) bool {
 }
 
 // Changed is when the library was last changed: library.json, or a file
-// of its own (links not followed), or billion-context.json, which a
-// sync carries with it.
+// of its own (links not followed), or billion-context.json or Claude
+// Code's plugin records, which a sync carries with it.
 func Changed() time.Time {
 	var t time.Time
 	if fi, err := os.Stat(path()); err == nil {
@@ -790,6 +802,9 @@ func Changed() time.Time {
 	}
 	if b := biliChanged(); b.After(t) {
 		t = b
+	}
+	if c := claudePluginsChanged(); c.After(t) {
+		t = c
 	}
 	filepath.WalkDir(Dir(), func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
