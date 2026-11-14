@@ -47,6 +47,7 @@ var adminRoutes = []adminRoute{
 	{pattern: "POST /signin/{id}/callback"},
 	{pattern: "GET /gateway-keys", to: "/caller-keys"},
 	{pattern: "GET /gateway-keys/models", to: "/caller-keys/models"},
+	{pattern: "GET /gateway-keys/account-windows", to: "/caller-keys/account-windows"},
 	{pattern: "GET /gateway-keys/mcp", to: "/caller-keys/mcp"},
 	{pattern: "POST /gateway-keys/{action}", to: "/caller-keys/{action}", actions: adminKeyActions},
 	{pattern: "GET /account-groups"},

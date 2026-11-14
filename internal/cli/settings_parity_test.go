@@ -197,6 +197,7 @@ var cliForRoute = map[string]string{
 	"POST /api/davsync/{action}":           "magpie webdav",
 	"GET /api/caller-keys":                 "magpie gateway-key list",
 	"POST /api/caller-keys/{action}":       "magpie gateway-key",
+	"GET /api/caller-keys/account-windows": "magpie quota", // the windows `gateway-key limit <id> account` takes
 	"GET /api/account-groups":              "magpie gateway-key groups",
 	"POST /api/account-groups/{action}":    "magpie gateway-key groups",
 	"GET /api/groups":                      "magpie groups",

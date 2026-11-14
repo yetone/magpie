@@ -159,6 +159,9 @@ function fixture(lang, theme, events, options = {}) {
       { name: "magpie-browser", title: "Magpie Browser", tools: ["browser"], own: true },
       { name: "github", tools: ["create_issue", "search_code"] },
     ] });
+    // the subscription accounts' windows a key's limit can follow (ljayic
+    // on X): options.accountWindows is the test's own list
+    if (url.pathname === "/api/caller-keys/account-windows") return json({ windows: options.accountWindows || [] });
     if (url.pathname.startsWith("/api/caller-keys/")) {
       const action = url.pathname.split("/").at(-1), body = req.postDataJSON();
       events.push({ action, body });
@@ -189,7 +192,10 @@ function fixture(lang, theme, events, options = {}) {
         // what a key has used is the fixture's; a new limit starts unused
         const usedOf = (l) => {
           const span = l.period === "hours" ? l.hours * 36e5 : (l.days || 1) * 864e5;
-          return { period: l.period, days: l.days, hours: l.hours, start: new Date().toISOString(), reset: new Date(Date.now() + span).toISOString(),
+          // an account's window resets when the window listed for it does
+          const w = l.period === "account" && (options.accountWindows || []).find((w) => w.account === l.account && w.window === l.accountWindow);
+          return { period: l.period, days: l.days, hours: l.hours, start: w ? w.start : new Date().toISOString(), reset: w ? w.reset : new Date(Date.now() + span).toISOString(),
+            ...(l.period === "account" ? { account: l.account, accountWindow: l.accountWindow } : {}),
             calls: 0, tokens: 0, cost: 0, tokenLimit: l.tokens, costLimit: l.cost, tokensLeft: l.tokens, costLeft: l.cost, spent: false,
             ...(l.models ? { models: l.models } : {}) };
         };

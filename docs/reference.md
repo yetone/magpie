@@ -683,6 +683,7 @@ magpie gateway-key limit <id> week --tokens 2m --cost 5   # its own limit
 magpie gateway-key limit <id> list     # each limit, used, left and reset
 magpie gateway-key limit <id> 10d --tokens 5m   # every 10 days, from now
 magpie gateway-key limit <id> total --cost 300  # $300 in total, until reset
+magpie gateway-key limit <id> account --account codex/me@example.com --window 5h --tokens 2m   # with that account's 5 hours
 magpie gateway-key limit <id> 5h --tokens 200k  # every 5 hours, from now
 magpie gateway-key limit <id> add week --cost 20   # one more limit; all must pass
 magpie gateway-key limit <id> add month --cost 20 --model openai/*   # a limit of only OpenAI's models
@@ -710,7 +711,16 @@ N from 1 to 3650) or every N hours (#2102; N from 1 to 8760, such as 5 for
 a subscription's 5-hour pace), or **in total** (`total`, @Cyrus_4433 on X):
 a limit that never resets by the clock, counted from when it is set and
 started again only by **Reset usage** (`magpie gateway-key limit <id> total
---cost 300`); its 429 says it stays refused until it is reset or raised. An N-day or N-hour cycle starts when the
+--cost 300`); its 429 says it stays refused until it is reset or raised. Or it follows **an account's window** (`account`, ljayic on X): one
+subscription account's own 5 hours, week or month, starting and resetting
+when that account's last reading says its window does (Gateway keys → the
+key's limit → Window → An account's window, then the account's window; CLI
+`--account <provider>/<account> --window <name>`). When that window can't
+be read (no reading yet, or its reset has passed with none since), the
+limit isn't reset or lifted: it counts from the reset that passed (or from
+when the limit was set), its row says it resets with the account's window,
+and a refused call is told to retry in 5 minutes while magpie reads the
+accounts again. An N-day or N-hour cycle starts when the
 limit is set and runs N×24 or N hours, then the next one starts where it
 ended, so a restart, a time-zone change or a daylight-saving shift doesn't
 move it. Changing only
@@ -1142,7 +1152,7 @@ can't drift:
 | `POST provider/{action}` | `save`, `delete`, `on`, `off`, `name`, `efforts`, `images`, `arrange`, `route`, `affinity`, `sink`, `usefirst`, `test`, `models`, `list`, and each key's or account's setting (`accountcap`, `accountname`, `windowcap`, `accountweight`, `keyspendcap`, `keyexpiring`, …) |
 | `POST keys/{action}`, `POST login/{action}`, `GET login/usage` | a provider's keys, and its signed-in accounts |
 | `POST signin` `{"agent": …}`, `GET signin/{id}`, `POST signin/{id}/cancel`, `POST signin/{id}/callback` | OAuth sign-in: the answer holds the vendor's page and the code to type there. Nothing is opened on this computer and no password is taken |
-| `GET gateway-keys[/models\|/mcp]`, `POST gateway-keys/{action}` | gateway keys: `add-key`, `rename-key`, `rotate-key`, `limit-key`, `models-key`, `accounts-key`, `mcp-key`, `access-key`, `on-key`, `off-key`, `remove-key`, … |
+| `GET gateway-keys[/models\|/mcp\|/account-windows]`, `POST gateway-keys/{action}` | gateway keys: `add-key`, `rename-key`, `rotate-key`, `limit-key`, `models-key`, `accounts-key`, `mcp-key`, `access-key`, `on-key`, `off-key`, `remove-key`, … |
 | `GET account-groups`, `POST account-groups/{action}` | named account groups |
 | `GET routing-groups`, `GET routing-groups/{id}` | the Routing page's groups and combos, as the app shows them; one by its id or `group/<id>` |
 | `POST routing-groups/create`, `POST routing-groups/update` | a group or combo made, or changed: `create` takes the editor's body (`name`, `members`, …) and is 409 for an id in use; `update` takes `id` and only the fields to change, the rest kept (`from` and a new `id` rename it, and the combos naming it follow) |

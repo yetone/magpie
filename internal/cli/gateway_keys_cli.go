@@ -119,7 +119,7 @@ func gatewayKeysTo(out io.Writer, args []string) error {
 		args = args[:2]
 	}
 	if (action == "list" && len(args) != 1) || (action != "list" && len(args) != 2) {
-		return fmt.Errorf("usage: magpie gateway-key list | add <name> [--key <value> | --key -] [--read-only] | rotate <id> [--key <value> | --key -] | remove <id> | limit <id> [list | off | reset [<n>] | remove <n> | [add] day|week|month|total|<N>d|<N>h [--tokens N] [--cost USD] [--cache-reads] [--model <provider>/<model>|<provider>/* ...]] | models <id> [all | <provider>/<model>|<provider>/*|re:<regexp> ...] | aliases <id> [none | <name>=<provider>/<model> ...] | accounts <id> [all | <provider>/<account>|<provider>/<key id> ...] | quotas <id> [on | off] | concurrency <id> [<n> | off] | tier <id> [follow | standard | fast | ultrafast] | redact <id> [follow | on | off] | mcp <id> [all | none | <server>|<server>/<tool> ...] | access <id> [read-only | full] | move <id> <place> | issue --ttl <duration> [--name <name>] [--models a,b] [--accounts a,b] [--tokens N] [--cost USD] [--read-only] [--from <id>] | issuer <id> [on | off] | oidc [list | add --key <id> --repo owner/name … | remove <rule id>]")
+		return fmt.Errorf("usage: magpie gateway-key list | add <name> [--key <value> | --key -] [--read-only] | rotate <id> [--key <value> | --key -] | remove <id> | limit <id> [list | off | reset [<n>] | remove <n> | [add] day|week|month|total|<N>d|<N>h|account [--account <provider>/<account> --window <name>] [--tokens N] [--cost USD] [--cache-reads] [--model <provider>/<model>|<provider>/* ...]] | models <id> [all | <provider>/<model>|<provider>/*|re:<regexp> ...] | aliases <id> [none | <name>=<provider>/<model> ...] | accounts <id> [all | <provider>/<account>|<provider>/<key id> ...] | quotas <id> [on | off] | concurrency <id> [<n> | off] | tier <id> [follow | standard | fast | ultrafast] | redact <id> [follow | on | off] | mcp <id> [all | none | <server>|<server>/<tool> ...] | access <id> [read-only | full] | move <id> <place> | issue --ttl <duration> [--name <name>] [--models a,b] [--accounts a,b] [--tokens N] [--cost USD] [--read-only] [--from <id>] | issuer <id> [on | off] | oidc [list | add --key <id> --repo owner/name … | remove <rule id>]")
 	}
 	switch action {
 	case "list", "add", "rotate", "remove":
@@ -195,7 +195,7 @@ func gatewayKeysTo(out io.Writer, args []string) error {
 //
 //	magpie gateway-key limit <id> [list]                what it has used of each limit
 //	magpie gateway-key limit <id> off                   no limit
-//	magpie gateway-key limit <id> day|week|month|total|<N>d|<N>h [--tokens N] [--cost USD] [--cache-reads]
+//	magpie gateway-key limit <id> day|week|month|total|<N>d|<N>h|account [--account <provider>/<account> --window <name>] [--tokens N] [--cost USD] [--cache-reads]
 //	                                                    its only limit, or the one of several with that window
 //	magpie gateway-key limit <id> add <window> [--tokens N] [--cost USD] [--cache-reads] [--model openai/*]
 //	                                                    one more limit; a request passes only while every one has something left
@@ -207,7 +207,7 @@ func gatewayKeysTo(out io.Writer, args []string) error {
 // one model or provider under one key, the key's other models served once
 // it is spent.
 func gatewayKeyLimit(out io.Writer, args []string) error {
-	usage := fmt.Errorf("usage: magpie gateway-key limit <id> [off | reset [<n>] | remove <n> | [add] day|week|month|total|<N>d|<N>h [--tokens N] [--cost USD] [--cache-reads] [--model <provider>/<model>|<provider>/* ...]]")
+	usage := fmt.Errorf("usage: magpie gateway-key limit <id> [off | reset [<n>] | remove <n> | [add] day|week|month|total|<N>d|<N>h|account [--account <provider>/<account> --window <name>] [--tokens N] [--cost USD] [--cache-reads] [--model <provider>/<model>|<provider>/* ...]]")
 	if len(args) == 0 {
 		return usage
 	}
@@ -293,7 +293,8 @@ func gatewayKeyLimit(out io.Writer, args []string) error {
 			if len(have) > 1 {
 				v, _ := lim.Valid()
 				n := slices.IndexFunc(have, func(l *access.Limit) bool {
-					return v != nil && l.Period == v.Period && l.Days == v.Days && l.Hours == v.Hours && l.Scope() == v.Scope()
+					return v != nil && l.Period == v.Period && l.Days == v.Days && l.Hours == v.Hours && l.Scope() == v.Scope() &&
+						strings.EqualFold(l.Account, v.Account) && strings.EqualFold(l.AccountWindow, v.AccountWindow)
 				})
 				if n < 0 {
 					return fmt.Errorf("%s has %d limits and none %s%s: add one with `magpie gateway-key limit %s add %s ...`, or take one off with `remove <n>`", keys[i].Name, len(have), perPhrase(v), onModels(v), id, args[1])
@@ -324,12 +325,16 @@ func gatewayKeyLimit(out io.Writer, args []string) error {
 	for n, st := range all {
 		if len(all) > 1 {
 			fmt.Fprintf(w, "\t\n")
-			fmt.Fprintf(w, "Limit %d\t%s, all must have something left\n", n+1, perPhrase(&access.Limit{Period: st.Period, Days: st.Days, Hours: st.Hours}))
+			fmt.Fprintf(w, "Limit %d\t%s, all must have something left\n", n+1, perPhrase(statusLimit(st)))
 		}
 		if len(st.Models) > 0 {
 			fmt.Fprintf(w, "Models\t%s: only their calls count, and only requests for them are refused once it is spent\n", strings.Join(st.Models, ", "))
 		}
-		fmt.Fprintf(w, "Window\tthis %s, %s – %s (local time)\n", (&access.Limit{Period: st.Period, Days: st.Days, Hours: st.Hours}).Per(), st.Start.Format("2006-01-02 15:04"), st.Reset.Format("2006-01-02 15:04"))
+		ends := st.Reset.Format("2006-01-02 15:04")
+		if st.ResetUnknown {
+			ends = "when the account's window resets (not readable now; counted from the earliest it can have begun)"
+		}
+		fmt.Fprintf(w, "Window\tthis %s, %s – %s (local time)\n", statusLimit(st).Per(), st.Start.Format("2006-01-02 15:04"), ends)
 		if st.TokenLimit > 0 {
 			counted := "input, output and cache writes"
 			if st.CacheReads {
@@ -353,6 +358,8 @@ func gatewayKeyLimit(out io.Writer, args []string) error {
 			until := st.Reset.Format("2006-01-02 15:04")
 			if st.Period == "total" {
 				until = "the limit is reset or raised"
+			} else if st.ResetUnknown {
+				until = "the account's window resets"
 			}
 			state = "spent: requests are refused until " + until
 			if len(st.Models) > 0 {
@@ -379,7 +386,15 @@ func perPhrase(l *access.Limit) string {
 	if l.Period == "total" {
 		return "in total"
 	}
+	if l.Period == "account" {
+		return "per " + l.Per()
+	}
 	return "per " + l.Period
+}
+
+// statusLimit is the window of the limit st is the status of.
+func statusLimit(st budget.Status) *access.Limit {
+	return &access.Limit{Period: st.Period, Days: st.Days, Hours: st.Hours, Account: st.Account, AccountWindow: st.AccountWindow}
 }
 
 // onModels is " on <models>" for a limit of some models, "" for one of the
@@ -395,7 +410,7 @@ func onModels(l *access.Limit) string {
 // --cost and --cache-reads.
 func parseKeyLimit(window string, rest []string, usage error) (*access.Limit, error) {
 	lim := &access.Limit{Period: window}
-	if window == "day" || window == "week" || window == "month" || window == "total" {
+	if window == "day" || window == "week" || window == "month" || window == "total" || window == "account" {
 		// a period by its name: month ends in an h, and is no count of hours
 	} else if n, ok := strings.CutSuffix(window, "d"); ok {
 		days, err := strconv.Atoi(n)
@@ -411,7 +426,7 @@ func parseKeyLimit(window string, rest []string, usage error) (*access.Limit, er
 		}
 		lim = &access.Limit{Period: "hours", Hours: hours}
 	} else if !slices.Contains(access.Periods, lim.Period) || lim.Period == "days" || lim.Period == "hours" {
-		return nil, fmt.Errorf("a limit's period is day, week, month, total, <N>d (every N days) or <N>h (every N hours), not %q", lim.Period)
+		return nil, fmt.Errorf("a limit's period is day, week, month, total, <N>d (every N days), <N>h (every N hours) or account (an account's window), not %q", lim.Period)
 	}
 	for i := 0; i < len(rest); i++ {
 		flag, val, has := strings.Cut(rest[i], "=")
@@ -446,6 +461,19 @@ func parseKeyLimit(window string, rest []string, usage error) (*access.Limit, er
 			}
 		case "--cache-reads":
 			lim.CacheReads = true
+		case "--account", "--window":
+			v, err := next()
+			if err != nil {
+				return nil, err
+			}
+			if lim.Period != "account" {
+				return nil, fmt.Errorf("%s is for an account limit: limit <id> account --account <provider>/<account> --window <name>", flag)
+			}
+			if flag == "--account" {
+				lim.Account = v
+			} else {
+				lim.AccountWindow = v
+			}
 		case "--model", "--models":
 			v, err := next()
 			if err != nil {
@@ -462,6 +490,9 @@ func parseKeyLimit(window string, rest []string, usage error) (*access.Limit, er
 	}
 	if !lim.Limited() {
 		return nil, fmt.Errorf("say --tokens, --cost or both, or off for no limit")
+	}
+	if lim.Period == "account" && (lim.Account == "" || lim.AccountWindow == "") {
+		return nil, fmt.Errorf("an account limit names the account and its window: --account codex/me@example.com --window 5h")
 	}
 	return lim, nil
 }
@@ -615,9 +646,13 @@ func limitWords(k access.Key, now time.Time) string {
 		if st.CostLimit > 0 {
 			parts = append(parts, fmt.Sprintf("$%.2f/$%.2f", st.Cost, st.CostLimit))
 		}
-		s := strings.Join(parts, " ") + " " + perPhrase(&access.Limit{Period: st.Period, Days: st.Days, Hours: st.Hours}) + onModels(&access.Limit{Models: st.Models})
+		s := strings.Join(parts, " ") + " " + perPhrase(statusLimit(st)) + onModels(&access.Limit{Models: st.Models})
 		if st.Spent {
-			s += " (spent until " + st.Reset.Format("01-02 15:04") + ")"
+			if st.ResetUnknown {
+				s += " (spent until the account's window resets)"
+			} else {
+				s += " (spent until " + st.Reset.Format("01-02 15:04") + ")"
+			}
 		}
 		each = append(each, s)
 	}

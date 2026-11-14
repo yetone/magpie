@@ -2,6 +2,7 @@ package access
 
 import (
 	"github.com/yetone/magpie/internal/dayzone"
+	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 
 	"errors"
@@ -45,6 +46,13 @@ type Limit struct {
 	// members outside it. None, the whole key, as every limit from
 	// before this.
 	Models []string `json:"models,omitempty"`
+	// Account and AccountWindow are an "account" limit's window
+	// (ljayic on X): the window of that name ("5h", "Weekly") of one
+	// subscription account ("codex/me@example.com", as a key's accounts
+	// are written), so the key's budget starts again when the account's
+	// does. Empty for the others.
+	Account       string `json:"account,omitempty"`
+	AccountWindow string `json:"accountWindow,omitempty"`
 }
 
 // Scoped: l counts only some models' calls (Limit.Models).
@@ -117,7 +125,8 @@ func (k *Key) setLimits(ls []Limit) {
 // sameWindow: l and o count in the same window, so two limits of one key
 // that do are one limit with two caps.
 func (l *Limit) sameWindow(o *Limit) bool {
-	return l.Period == o.Period && l.Days == o.Days && l.Hours == o.Hours
+	return l.Period == o.Period && l.Days == o.Days && l.Hours == o.Hours &&
+		strings.EqualFold(l.Account, o.Account) && provider.WindowCapID(l.AccountWindow) == provider.WindowCapID(o.AccountWindow)
 }
 
 // sameLimit: l and o count the same calls in the same window, so a key
@@ -129,9 +138,12 @@ func (l *Limit) sameLimit(o *Limit) bool {
 
 // Periods are the windows a limit can be set for.
 //
-// "total" never resets by the calendar: it counts from when it was set,
-// or last reset, and only a reset starts it again.
-var Periods = []string{"day", "week", "month", "days", "hours", "total"}
+// "account" follows one subscription account's window (Account,
+// AccountWindow): it starts and resets when that window does, as the
+// account's last reading tells. "total" never resets by the calendar: it
+// counts from when it was set, or last reset, and only a reset starts it
+// again.
+var Periods = []string{"day", "week", "month", "days", "hours", "account", "total"}
 
 // MaxDays is the longest "days" cycle, ten years.
 const MaxDays = 3650
@@ -173,6 +185,12 @@ func (l *Limit) Valid() (*Limit, error) {
 	switch v.Period {
 	case "day", "week", "month", "total":
 		v.Days, v.Hours = 0, 0
+	case "account":
+		v.Days, v.Hours = 0, 0
+		v.Account, v.AccountWindow = strings.TrimSpace(v.Account), strings.TrimSpace(v.AccountWindow)
+		if pid, user, ok := strings.Cut(v.Account, "/"); !ok || pid == "" || user == "" || v.AccountWindow == "" {
+			return nil, errors.New("A limit that follows an account's window names the account, like codex/me@example.com, and the window, like 5h")
+		}
 	case "days":
 		v.Hours = 0
 		if v.Days < 1 || v.Days > MaxDays {
@@ -184,7 +202,10 @@ func (l *Limit) Valid() (*Limit, error) {
 			return nil, fmt.Errorf("A limit's cycle is a whole number of hours from 1 to %d", MaxHours)
 		}
 	default:
-		return nil, errors.New("A limit's period is day, week, month, total, every N days or every N hours")
+		return nil, errors.New("A limit's period is day, week, month, total, every N days, every N hours or an account's window")
+	}
+	if v.Period != "account" {
+		v.Account, v.AccountWindow = "", ""
 	}
 	v.Cost = math.Round(v.Cost*1e4) / 1e4
 	ms, err := CleanModels(v.Models)
@@ -204,9 +225,12 @@ func (l *Limit) Valid() (*Limit, error) {
 }
 
 // Per is the window as a sentence ends it: "day", "week", "month",
-// "total", "10-day cycle" or "5-hour cycle".
+// "total", "10-day cycle", "5-hour cycle" or "codex/me@example.com 5h
+// window".
 func (l *Limit) Per() string {
 	switch l.Period {
+	case "account":
+		return l.Account + " " + l.AccountWindow + " window"
 	case "days":
 		return fmt.Sprintf("%d-day cycle", l.Days)
 	case "hours":
@@ -224,10 +248,12 @@ func (l *Limit) Counts(model string) bool {
 // sinceOf is the Since a limit set as next keeps, with prev the key's
 // limit before: its own while the period and cycle stay the same (a new
 // cap doesn't restart the window), else a new cycle from now for "days"
-// and "hours" and for "total", and none for a calendar period.
+// and "hours" and for "total" and "account" (an account's window counts
+// from when the limit was set, the calls before it in that window
+// aside), and none for a calendar period.
 func sinceOf(prev, next *Limit, now time.Time) time.Time {
-	cyclic := next.cycle() > 0 || next.Period == "total"
-	if prev != nil && prev.Period == next.Period && prev.Days == next.Days && prev.Hours == next.Hours && (!cyclic || !prev.Since.IsZero()) {
+	cyclic := next.cycle() > 0 || next.Period == "total" || next.Period == "account"
+	if prev != nil && prev.sameWindow(next) && (!cyclic || !prev.Since.IsZero()) {
 		return prev.Since
 	}
 	if cyclic {
@@ -247,6 +273,9 @@ var epoch = time.Unix(0, 0)
 // in it.
 func (l *Limit) Window(now time.Time) (start, reset time.Time) {
 	loc := now.Location()
+	if l.Period == "account" {
+		return l.accountWindow(now)
+	}
 	if l.Period == "total" {
 		// counted from when it was set or reset (a hand-written one with
 		// no Since, from the epoch), and never ends: the reset a refusal
@@ -295,4 +324,37 @@ func Window(period string, now time.Time) (start, reset time.Time) {
 	default:
 		return time.Date(y, m, d, 0, 0, 0, 0, loc), time.Date(y, m, d+1, 0, 0, 0, 0, loc)
 	}
+}
+
+// accountWindow is an "account" limit's window at now: the account's own,
+// from its last reading (provider.AccountWindow), begun no earlier than
+// the limit was set or reset.
+//
+// When that window isn't known (no reading, the read failing, its reset
+// passed with no reading since), reset is zero, "unknown", and the
+// window is taken to have begun at the latest time known to be no later
+// than its real start: the reset that passed, else when the limit was
+// set or reset. That counts every call of the real window and maybe a
+// few before it, never fewer: the key is held a little early rather
+// than let through on a guess, and it is never reset on one. It starts
+// again once a reading tells the new window.
+func (l *Limit) accountWindow(now time.Time) (start, reset time.Time) {
+	loc := now.Location()
+	s, end, known := provider.AccountWindow(l.Account, l.AccountWindow, now)
+	since := l.Since
+	if since.Before(epoch) {
+		since = epoch
+	}
+	if !known {
+		start = since
+		if s.After(start) && !s.After(now) {
+			start = s
+		}
+		return start.In(loc), time.Time{}
+	}
+	start = s
+	if since.After(start) && since.Before(end) {
+		start = since
+	}
+	return start.In(loc), end.In(loc)
 }

@@ -2,6 +2,7 @@ package gui
 
 import (
 	"cmp"
+	"context"
 	"encoding/json"
 	"net/http"
 	"slices"
@@ -75,6 +76,20 @@ func callerKeyRoutes(mux *http.ServeMux) {
 			return
 		}
 		writeJSON(w, map[string]any{"keys": withLimits(keys), "accountNames": provider.AccountNames(), "accountGroups": accountGroupsJSON()})
+	})
+	// the subscription accounts' windows a key's limit can follow
+	// (ljayic on X): each one's 5 hours, week or month, from the cards as
+	// last read; an account not read yet is read meanwhile, waited for a
+	// few seconds at most
+	mux.HandleFunc("GET /api/caller-keys/account-windows", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		ctx, cancel := context.WithTimeout(r.Context(), 4*time.Second)
+		defer cancel()
+		out := provider.KeyWindows(ctx, time.Now())
+		if out == nil {
+			out = []provider.KeyWindow{}
+		}
+		writeJSON(w, map[string]any{"windows": out})
 	})
 	// the models a key may be held to (#882), and the accounts and keys
 	// (#905): the routing groups, then each provider's models, then its

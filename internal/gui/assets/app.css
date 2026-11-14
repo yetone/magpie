@@ -3255,6 +3255,8 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 #gatewayKeys .klf .klf-period, #gatewayKeys .klf .klf-pick { width: 100%; max-width: none; height: 28px; justify-content: space-between; color: var(--fg); }
 #gatewayKeys .klf.with-days { grid-template-columns: minmax(0, 1fr) minmax(0, 0.6fr) minmax(0, 1fr) minmax(0, 1fr); }
 #gatewayKeys .klf-days[hidden] { display: none; }
+#gatewayKeys .klf-acct { grid-column: span 2; }
+#gatewayKeys .klf-acct[hidden] { display: none; }
 #gatewayKeys .klf-models { grid-column: 1 / -1; }
 #gatewayKeys .klf .klf-pick > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .editor .headers.aliases .pair .alias-pick { flex: 6; max-width: none; min-width: 0; height: 27px; justify-content: space-between; }

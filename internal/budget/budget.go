@@ -21,6 +21,16 @@
 //     size in tokens (4 bytes a token) plus the key's mean output per
 //     call this window. A request is let in while used + reserved is
 //     under the cap, so parallel requests overshoot by about one call.
+//   - A limit can follow one subscription account's window ("account",
+//     ljayic on X): it starts and resets when the account's 5 hours or
+//     week does, as the account's last reading says (provider
+//     .AccountWindow). While that isn't known (no reading, the read
+//     failing, the window over with no reading since), the reset is
+//     unknown and the window counts from the latest time known to be no
+//     later than its start (the reset that passed, else when the limit
+//     was set or reset): never fewer calls than the real window, so the
+//     key is never let through or reset on a guess. A key refused then
+//     is told to try again in five minutes (unknownRetry).
 //   - A key can have several limits, each in its own window (#2227: 5
 //     hours and a week, as a subscription's): a request is let in only
 //     while every one has something left, and its reservation is held
@@ -270,11 +280,42 @@ type Status struct {
 	CostLeft   float64 `json:"costLeft"`
 	// Spent: the key is refused until Reset
 	Spent bool `json:"spent"`
+	// Account and AccountWindow are an "account" limit's window
+	// (access.Limit); ResetUnknown says its reset isn't known now, and
+	// Reset is zero.
+	Account       string `json:"account,omitempty"`
+	AccountWindow string `json:"accountWindow,omitempty"`
+	ResetUnknown  bool   `json:"resetUnknown,omitempty"`
+}
+
+// unknownRetry is how long a client refused by a limit whose reset isn't
+// known is told to wait: the accounts are read again meanwhile.
+const unknownRetry = 5 * time.Minute
+
+// resetsLater: a reset of a resets after b's; an unknown one (zero)
+// after every known one.
+func resetsLater(a, b time.Time) bool {
+	if a.IsZero() || b.IsZero() {
+		return a.IsZero() && !b.IsZero()
+	}
+	return a.After(b)
+}
+
+// windowsAt is each of ls's window at now. An account's window reads the
+// account's last reading, so it is asked before state is held.
+func windowsAt(ls []*access.Limit, now time.Time) (starts, resets []time.Time) {
+	starts = make([]time.Time, len(ls))
+	resets = make([]time.Time, len(ls))
+	for i, l := range ls {
+		starts[i], resets[i] = l.Window(now)
+	}
+	return starts, resets
 }
 
 func status(keyID string, l *access.Limit, s *sums, h *held, reset time.Time) Status {
 	st := Status{Period: l.Period, Days: l.Days, Hours: l.Hours, Start: s.start, Reset: reset, Calls: s.calls, Tokens: s.tokens(l), Cost: s.cost, Unpriced: s.unpriced,
-		TokenLimit: l.Tokens, CostLimit: l.Cost, CacheReads: l.CacheReads, Models: l.Models}
+		TokenLimit: l.Tokens, CostLimit: l.Cost, CacheReads: l.CacheReads, Models: l.Models,
+		Account: l.Account, AccountWindow: l.AccountWindow, ResetUnknown: reset.IsZero()}
 	if h != nil {
 		st.InFlight, st.Reserved, st.ReservedCost = h.n, h.tokens, h.cost
 	}
@@ -324,12 +365,14 @@ func AllOf(keys []access.Key, now time.Time) [][]Status {
 	}
 	out := make([][]Status, len(keys))
 	wants := make([][]*want, len(keys))
+	resets := make([][]time.Time, len(keys))
 	byKey := map[string][]*want{} // by the key a call is recorded under, or issued under
 	var all []*want
 	for i, k := range keys {
 		seen := map[window]*want{}
 		for _, l := range k.Limits() {
-			start, _ := l.Window(now)
+			start, reset := l.Window(now)
+			resets[i] = append(resets[i], reset)
 			w := window{slot(k.ID), start.Unix(), l.Scope()}
 			x := seen[w]
 			if x == nil {
@@ -438,8 +481,7 @@ func AllOf(keys []access.Key, now time.Time) [][]Status {
 	for i, k := range keys {
 		for j, l := range k.Limits() {
 			x := wants[i][j]
-			_, reset := l.Window(now)
-			out[i] = append(out[i], status(k.ID, l, x.total, state.held[x.w], reset))
+			out[i] = append(out[i], status(k.ID, l, x.total, state.held[x.w], resets[i][j]))
 		}
 	}
 	return out
@@ -476,7 +518,7 @@ func Binding(all []Status) *Status {
 				b = st
 			}
 		case st.Spent:
-			if st.Reset.After(b.Reset) {
+			if resetsLater(st.Reset, b.Reset) {
 				b = st
 			}
 		case st.share() > b.share():
@@ -527,17 +569,35 @@ func (r *Refusal) Error() string {
 	if r.Period == "total" {
 		return fmt.Sprintf("magpie gateway key %q has used %s%s of its total limit; it stays refused until the limit is reset or raised", r.Key, what, on)
 	}
+	if r.Period == "account" && r.Reset.IsZero() {
+		return fmt.Sprintf("magpie gateway key %q has used %s%s for this %s window of %s; it resets when that window does, which magpie can't read now",
+			r.Key, what, on, r.AccountWindow, r.Account)
+	}
+	if r.Period == "account" {
+		return fmt.Sprintf("magpie gateway key %q has used %s%s for this %s window of %s; it resets at %s",
+			r.Key, what, on, r.AccountWindow, r.Account, r.Reset.Format("2006-01-02 15:04 MST"))
+	}
 	return fmt.Sprintf("magpie gateway key %q has used %s%s for this %s; it resets at %s",
 		r.Key, what, on, (&access.Limit{Period: r.Period, Days: r.Days, Hours: r.Hours}).Per(), r.Reset.Format("2006-01-02 15:04 MST"))
 }
 
-// RetryAfter is how long until the window resets, in whole seconds.
+// RetryAfter is how long until the window resets, in whole seconds;
+// five minutes when that isn't known (unknownRetry).
 func (r *Refusal) RetryAfter(now time.Time) int {
+	if r.Reset.IsZero() {
+		return int(unknownRetry / time.Second)
+	}
 	return max(int(r.Reset.Sub(now).Seconds()+0.999), 1)
 }
 
-// ResetAt is when the window resets.
-func (r *Refusal) ResetAt() time.Time { return r.Reset }
+// ResetAt is when the window resets; when that isn't known, when to ask
+// again (unknownRetry from now).
+func (r *Refusal) ResetAt() time.Time {
+	if r.Reset.IsZero() {
+		return time.Now().Add(unknownRetry)
+	}
+	return r.Reset
+}
 
 // Limiter is Reserve as the gateway's budget point asks it
 // (gwbudget.Limiter); plugins/budget serves it.
@@ -583,9 +643,11 @@ func reserve(who access.Identity, body int64, model string, now time.Time) (rele
 	if who.KeyID == "" || len(who.Limits()) == 0 {
 		return func() {}, nil
 	}
+	all := who.Limits()
+	allStarts, allResets := windowsAt(all, now)
 	state.Lock()
 	defer state.Unlock()
-	ls, starts, resets, ss := windowsOf(who, now, func(l *access.Limit) bool { return !l.Scoped() || scopeHas(l, served) })
+	ls, starts, resets, ss := windowsOf(who.KeyID, all, allStarts, allResets, func(l *access.Limit) bool { return !l.Scoped() || scopeHas(l, served) })
 	if len(ls) == 0 {
 		return func() {}, nil
 	}
@@ -600,7 +662,7 @@ func reserve(who access.Identity, body int64, model string, now time.Time) (rele
 			ht, hc = h.tokens, h.cost
 		}
 		if (l.Tokens > 0 && s.tokens(l)+ht >= l.Tokens) || (l.Cost > 0 && s.cost+hc >= l.Cost) {
-			if refused == nil || resets[i].After(refused.Reset) {
+			if refused == nil || resetsLater(resets[i], refused.Reset) {
 				refused = &Refusal{Status: status(who.KeyID, l, s, h, resets[i]), Key: who.KeyName}
 			}
 		}
@@ -720,9 +782,11 @@ func spentOf(who access.Identity, now time.Time) []access.SpentScope {
 	if who.KeyID == "" || !slices.ContainsFunc(who.Limits(), (*access.Limit).Scoped) {
 		return nil
 	}
+	all := who.Limits()
+	allStarts, allResets := windowsAt(all, now)
 	state.Lock()
 	defer state.Unlock()
-	ls, starts, resets, ss := windowsOf(who, now, (*access.Limit).Scoped)
+	ls, starts, resets, ss := windowsOf(who.KeyID, all, allStarts, allResets, (*access.Limit).Scoped)
 	var out []access.SpentScope
 	for i, l := range ls {
 		s, h := ss[i], state.held[window{slot(who.KeyID), starts[i].Unix(), l.Scope()}]
@@ -733,25 +797,20 @@ func spentOf(who access.Identity, now time.Time) []access.SpentScope {
 		}
 		if (l.Tokens > 0 && s.tokens(l)+ht >= l.Tokens) || (l.Cost > 0 && s.cost+hc >= l.Cost) {
 			r := &Refusal{Status: status(who.KeyID, l, s, h, resets[i]), Key: who.KeyName}
-			out = append(out, access.SpentScope{Models: s.models, Reset: resets[i], Why: r.Error()})
+			out = append(out, access.SpentScope{Models: s.models, Reset: r.ResetAt(), Why: r.Error()})
 		}
 	}
 	return out
 }
 
-// windowsOf is who's limits that keep holds, each with its window's start
-// and reset and its sums. The sums of every limit are asked for, the ones
-// left out too: sumsFor lets go of a window no limit asked for counts in,
-// and a request of one model would read another's limit's again from the
-// ledger on the next. Called with state held.
-func windowsOf(who access.Identity, now time.Time, keep func(*access.Limit) bool) (ls []*access.Limit, starts, resets []time.Time, ss []*sums) {
-	all := who.Limits()
-	allStarts := make([]time.Time, len(all))
-	allResets := make([]time.Time, len(all))
-	for i, l := range all {
-		allStarts[i], allResets[i] = l.Window(now)
-	}
-	allSums := sumsFor(who.KeyID, all, allStarts)
+// windowsOf is the limits all of keyID's that keep holds, each with its
+// window's start and reset (windowsAt) and its sums. The sums of every
+// limit are asked for, the ones left out too: sumsFor lets go of a window
+// no limit asked for counts in, and a request of one model would read
+// another's limit's again from the ledger on the next. Called with state
+// held.
+func windowsOf(keyID string, all []*access.Limit, allStarts, allResets []time.Time, keep func(*access.Limit) bool) (ls []*access.Limit, starts, resets []time.Time, ss []*sums) {
+	allSums := sumsFor(keyID, all, allStarts)
 	for i, l := range all {
 		if keep(l) {
 			ls = append(ls, l)
