@@ -1430,6 +1430,15 @@ each one.
     leave by downloading by hand. When both boxes are busy, a change to
     the update path waits for a full run, or takes it on the Windows or
     Linux box; a full disk on a run box is cleared, not worked around.
+  - Pushed before its own suite finished, "at the coordinator's ask":
+    32c830fc1 (TUI language, +1,293 lines) and 106a24b95 (skills update
+    by themselves). Both suites later came back with only the known
+    #6648 red, and 32c830fc1's result went on #6649, a CLI feature
+    issue nobody reading the commit would find. A coordinator's hurry
+    doesn't stand in for the run: wait for it, or push and then put the
+    result where the commit points (its own issue, named in the body).
+    106a24b95 did what the updater lesson above asks: with mote at
+    load 167 it ran the full suite in WSL instead of skipping it.
   - No Test run finished green from 63c91cae5 (11-13 21:51 UTC) to
     07a62b373 (11-14 08:34 UTC): 57 runs were cancelled by the next push
     and two went red (TestEffortUpdateRefused, fixed in a4937f8ff;
