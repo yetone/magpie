@@ -663,6 +663,17 @@ func buildCodeAssistSent(r *Request, sent, agent string) []byte {
 						parts = append(parts, im)
 					}
 				}
+				// the recordings it returned follow as its images do; a
+				// Claude model on Antigravity hears none, and has the
+				// note toolOutput ended the text with
+				if !(ag && claude) {
+					for _, a := range p.Audio {
+						if a.Data != "" {
+							toolImage[len(parts)] = true
+							parts = append(parts, geminiInline(a.MediaType, a.Data))
+						}
+					}
+				}
 			}
 			// thinking isn't sent back: its signatures belong to whoever
 			// made them, and Google turns away ones it didn't

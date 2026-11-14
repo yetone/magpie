@@ -335,7 +335,7 @@ func resultSum(p Part) string {
 		b.WriteString("error\x00")
 	}
 	b.WriteString(steadyResult(p.Text))
-	for _, im := range p.Images {
+	for _, im := range append(slices.Clone(p.Images), p.Audio...) {
 		b.WriteString("\x00" + im.MediaType + im.Data + im.URL)
 	}
 	return b.String()

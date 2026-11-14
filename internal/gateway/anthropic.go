@@ -246,8 +246,8 @@ func readAdvised(body []byte, clientMarks, facts, advised bool) (*Request, error
 						msg.Parts = append(msg.Parts, Part{Kind: ToolResult, CallID: anthropicInID(b.ToolUseID)})
 						break
 					}
-					out, images := toolOutput(b.Content)
-					msg.Parts = append(msg.Parts, Part{Kind: ToolResult, CallID: anthropicInID(b.ToolUseID), Text: out, Images: images, IsError: b.IsError, Loads: toolRefs(b.Content), block: true})
+					out, images, audio := toolOutput(b.Content)
+					msg.Parts = append(msg.Parts, Part{Kind: ToolResult, CallID: anthropicInID(b.ToolUseID), Text: out, Images: images, Audio: audio, IsError: b.IsError, Loads: toolRefs(b.Content), block: true})
 				case "thinking":
 					msg.Parts = append(msg.Parts, Part{Kind: Thinking, Text: b.Thinking, Signature: b.Signature, block: true})
 				case "server_tool_use":

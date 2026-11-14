@@ -34,3 +34,55 @@ func TestAudioType(t *testing.T) {
 		}
 	}
 }
+
+// toolAudioChat is a Chat conversation whose tool message returns a
+// recording, as Parlevent_'s client sends one: text and input_audio parts.
+func toolAudioChat(model, audio string) string {
+	return `{"model":"` + model + `","messages":[` +
+		`{"role":"user","content":"听一下录音"},` +
+		`{"role":"assistant","content":null,"tool_calls":[{"id":"call_1","type":"function","function":{"name":"record","arguments":"{}"}}]},` +
+		`{"role":"tool","tool_call_id":"call_1","content":[{"type":"text","text":"recorded"},{"type":"input_audio","input_audio":{"data":"` + audio + `","format":"wav"}}]}]}`
+}
+
+// A recording a tool returned in a Chat tool message reaches a Gemini
+// upstream as inlineData after the functionResponse, as its images do.
+// toolOutput read only text and images, so it was dropped (Parlevent_ on
+// X, after TestChatAudioReachesGemini's fix for a user's audio).
+func TestChatToolAudioReachesGemini(t *testing.T) {
+	fresh(t)
+	noVision(t)
+	gem, gemUp := videoUp(t)
+	saveVideoProvider(t, provider.Provider{ID: "gem", Name: "Gem", Gemini: gemUp.URL + "/v1beta", Key: "k", Models: []string{"v", "t", "u"}}, gemUp.URL+"/v1beta")
+	s := New()
+	const audio = "UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA="
+	rec := serveVideo(s, "/v1/chat/completions", toolAudioChat("gem/u", audio))
+	bodies, _ := gem.sent()
+	if rec.Code != 200 || len(bodies) != 1 {
+		t.Fatalf("%d %s; upstream %v", rec.Code, rec.Body.String(), bodies)
+	}
+	b := bodies[0]
+	resp, inline := strings.Index(b, `"functionResponse"`), strings.Index(b, `{"inlineData":{"data":"`+audio+`","mimeType":"audio/wav"}}`)
+	if resp < 0 || inline < resp {
+		t.Errorf("the tool's audio isn't inlineData after its response: %s", b)
+	}
+}
+
+// Every other upstream is told of the recording in the result's text and
+// is never handed it as an image, which Chat, Responses and Messages would
+// turn away with a 400.
+func TestToolAudioToldElsewhere(t *testing.T) {
+	const audio = "UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA="
+	r, err := parseChat([]byte(toolAudioChat("m", audio)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string][]byte{
+		"chat":      buildChat(r, "m", "api.example.com", false),
+		"responses": buildResponses(r, "m", "api.example.com", false),
+		"messages":  buildAnthropic(r, "m"),
+	} {
+		if s := string(body); strings.Contains(s, audio) || !strings.Contains(s, `recorded\n[attachment audio/wav]`) {
+			t.Errorf("%s: %s", name, s)
+		}
+	}
+}

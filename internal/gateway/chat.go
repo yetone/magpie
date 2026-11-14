@@ -178,8 +178,8 @@ func readChat(body []byte, facts bool) (*Request, error) {
 				r.Messages = append(r.Messages, Message{Role: "user", Parts: []Part{{Kind: ToolResult, CallID: m.ToolCallID}}})
 				continue
 			}
-			out, images := toolOutput(m.Content)
-			r.Messages = append(r.Messages, Message{Role: "user", Parts: []Part{{Kind: ToolResult, CallID: m.ToolCallID, Text: out, Images: images}}})
+			out, images, audio := toolOutput(m.Content)
+			r.Messages = append(r.Messages, Message{Role: "user", Parts: []Part{{Kind: ToolResult, CallID: m.ToolCallID, Text: out, Images: images, Audio: audio}}})
 		}
 	}
 	r.System = strings.Join(sys, "\n\n")
