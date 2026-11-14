@@ -327,7 +327,7 @@ func TestWSLListFails(t *testing.T) {
 // requests it made. None of them opens the stopped distro, which would
 // start it: its fields read as last seen, and the next look neither probes
 // #2341: wsl.exe failing to say which distros run (a hung WSL times out
-// after 10s, under wsl's lock) is asked again only after
+// after 10s) is asked again only after
 // wslRunningFailedAge, not every wslRunningAge; an answer still lasts only
 // wslRunningAge.
 func TestWSLRunningFailedKept(t *testing.T) {

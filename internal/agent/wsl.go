@@ -1210,8 +1210,12 @@ func wslHomes() []sessions.WSLHome {
 	if !wslLooks() {
 		return nil
 	}
+	return wslHomesOf(wslDistros())
+}
+
+func wslHomesOf(ds []distro) []sessions.WSLHome {
 	var out []sessions.WSLHome
-	for _, d := range wslDistros() {
+	for _, d := range ds {
 		if d.Root == "" || d.Home == "" {
 			continue
 		}
@@ -1255,10 +1259,14 @@ var wslAntigravityDirs = []string{".gemini/antigravity", ".gemini/antigravity-in
 // copilotWSLDirs are the Copilot CLI's folders, as magpie opens them (where
 // a link leads, #4502), in the running distros it was found in, for
 // provider to read its sign-in in; none off Windows. A stopped distro is
-// left out: reading it would start it.
+// left out: reading it would start it. It is asked on a request's path
+// (provider's accounts), so it waits for WSL at most wslRunningWait.
 func copilotWSLDirs() []string {
+	if !wslLooks() {
+		return nil
+	}
 	var out []string
-	for _, h := range wslHomes() {
+	for _, h := range wslHomesOf(wslDistrosWithin(wslRunningWait)) {
 		if h.Running && wslHasCopilot(h.Distro) {
 			out = append(out, h.Open(filepath.Join(h.Home, wslCopilotDir)))
 		}
@@ -1301,8 +1309,7 @@ const (
 	// which would start it again (TJHHHH on Discord)
 	wslRunningAge = 3 * time.Second
 	// wslRunningFailedAge is how long wsl.exe failing to say is kept: each
-	// ask that times out holds wsl's lock, and so the GUI, for 10s, and
-	// leaves a wsl.exe behind (#2341)
+	// ask that times out takes 10s and leaves a wsl.exe behind (#2341)
 	wslRunningFailedAge = 30 * time.Second
 )
 
@@ -1371,12 +1378,34 @@ var wslRun = func(timeout time.Duration, args ...string) ([]byte, error) {
 	return out, err
 }
 
-// wslRoot is where magpie opens a running distro's / from; a var for tests.
+// wslRootWait is how long wslRoot waits for Windows to open a distro's
+// /: a stat of WSL's file share can't be cancelled, and hangs while WSL
+// does. A var for tests.
+var wslRootWait = 5 * time.Second
+
+// wslStat is os.Stat, for wslRoot; a var for tests.
+var wslStat = os.Stat
+
+// wslRoot is where magpie opens a running distro's / from, "" when
+// Windows didn't open it within wslRootWait (the probe failed, and is
+// tried again in wslRetryAge); a var for tests.
 var wslRoot = func(name string) string {
-	if _, err := os.Stat(`\\wsl.localhost\` + name + `\`); err == nil {
-		return `\\wsl.localhost\` + name
+	ok, stat := make(chan bool, 1), wslStat
+	go func() {
+		_, err := stat(`\\wsl.localhost\` + name + `\`)
+		ok <- err == nil
+	}()
+	t := time.NewTimer(wslRootWait)
+	defer t.Stop()
+	select {
+	case found := <-ok:
+		if found {
+			return `\\wsl.localhost\` + name
+		}
+		return `\\wsl$\` + name // before Windows 11 / WSL 0.50
+	case <-t.C:
+		return ""
 	}
-	return `\\wsl$\` + name // before Windows 11 / WSL 0.50
 }
 
 // wslHungPath, while recent, says a wsl.exe listing timed out: each
@@ -1405,39 +1434,48 @@ func wslHung(hung bool) {
 
 func wslStatePath() string { return filepath.Join(filepath.Dir(provider.Path()), "wsl.json") }
 
-func wslDistros() []distro {
+// wslRefreshMu is held by the one refresh of what magpie knows of WSL
+// (wslRefresh) at a time. wsl.exe and the distros' files are asked while
+// it is held, never under wsl's own lock: that is taken only to read and
+// write what they said. A probe, a listing or an open of a distro's /
+// that hangs held wsl's lock before, so the GUI listing agents, a
+// request's stand-in and Copilot's sign-in all waited on a hung wsl.exe,
+// and the gateway sent 504s after 30s (vsoullai on X, #6167).
+var wslRefreshMu sync.Mutex
+
+// wslRefresh lists the distros again when the list is older than
+// wslListAge, asks which run, and probes the running ones not probed yet.
+func wslRefresh() {
+	wslRefreshMu.Lock()
+	defer wslRefreshMu.Unlock()
 	wsl.Lock()
-	defer wsl.Unlock()
-	if wsl.seen == nil {
-		wsl.seen, wsl.probed, wsl.failed = map[string]*distro{}, map[string]bool{}, map[string]time.Time{}
-		if b, err := os.ReadFile(wslStatePath()); err == nil {
-			json.Unmarshal(b, &wsl.seen)
-		}
-		wslForgetOldBins()
-	}
-	if time.Since(wsl.at) > wslListAge {
-		if wsl.at.IsZero() && wslHungLately() {
-			// another magpie waited out a hung wsl.exe moments ago: a
-			// command doesn't wait 10s more (this one lists again in a minute)
-			wsl.names, wsl.listed = nil, false
-		} else {
+	wslLoadLocked()
+	list := time.Since(wsl.at) > wslListAge
+	// another magpie waited out a hung wsl.exe moments ago: a command
+	// doesn't wait 10s more (this one lists again in a minute)
+	skip := list && wsl.at.IsZero() && wslHungLately()
+	wsl.Unlock()
+	if list {
+		var names []string
+		var listed bool
+		if !skip {
 			start := time.Now()
-			wsl.names, wsl.listed = wslList("-l", "-q")
-			wslHung(!wsl.listed && time.Since(start) >= wslHungAfter)
+			names, listed = wslList("-l", "-q")
+			wslHung(!listed && time.Since(start) >= wslHungAfter)
 		}
-		wsl.at = time.Now()
-		if !wsl.listed || len(wsl.names) == 0 {
+		wsl.Lock()
+		wsl.names, wsl.listed, wsl.at = names, listed, time.Now()
+		if !listed || len(names) == 0 {
 			// none to run: a wsl.exe that couldn't list them isn't asked
-			// again which run, another timeout under the lock the GUI waits on
-			wsl.running, wsl.runOK, wsl.runAt = map[string]bool{}, wsl.listed, time.Now()
+			// again which run
+			wsl.running, wsl.runOK, wsl.runAt = map[string]bool{}, listed, time.Now()
 		}
+		wsl.Unlock()
 	}
-	wslRunningLocked()
-	installed := map[string]bool{}
-	cfg := wslConfig()
-	var out []distro
+	wslRunningWithin(-1)
+	wsl.Lock()
+	var probe []string
 	for _, n := range wsl.names {
-		installed[n] = true
 		// a distro that stopped is probed again once it runs: WSL may have
 		// been restarted meanwhile in another networking mode
 		if !wsl.running[n] {
@@ -1445,41 +1483,126 @@ func wslDistros() []distro {
 		}
 		if wsl.running[n] && !wsl.probed[n] {
 			if t, ok := wsl.failed[n]; !ok || time.Since(t) > wslRetryAge {
-				if d := wslProbe(n); d == nil {
-					wsl.failed[n] = time.Now()
-				} else {
-					wsl.probed[n] = true
-					if wslKept(*d) {
-						if old := wsl.seen[n]; old != nil {
-							d.Values = old.Values
-							d.Was = wslWas(old.Was, old.Gateway, d.Gateway)
-						}
-						wsl.seen[n] = d
-					} else {
-						delete(wsl.seen, n)
-					}
-					wsl.dirty = true
-				}
+				probe = append(probe, n)
 			}
 		}
+	}
+	wsl.Unlock()
+	for _, n := range probe {
+		d := wslProbe(n)
+		wsl.Lock()
+		if d == nil {
+			wsl.failed[n] = time.Now()
+		} else {
+			wsl.probed[n] = true
+			if wslKept(*d) {
+				if old := wsl.seen[n]; old != nil {
+					d.Values = old.Values
+					d.Was = wslWas(old.Was, old.Gateway, d.Gateway)
+				}
+				wsl.seen[n] = d
+			} else {
+				delete(wsl.seen, n)
+			}
+			wsl.dirty = true
+		}
+		wsl.Unlock()
+	}
+	wsl.Lock()
+	defer wsl.Unlock()
+	// an unregistered distro is forgotten
+	if wsl.listed {
+		installed := map[string]bool{}
+		for _, n := range wsl.names {
+			installed[n] = true
+		}
+		for n := range wsl.seen {
+			if !installed[n] {
+				delete(wsl.seen, n)
+				wsl.dirty = true
+			}
+		}
+	}
+	wslSaveLocked()
+}
+
+// wslLoadLocked reads wsl.json the first time it is wanted.
+func wslLoadLocked() {
+	if wsl.seen != nil {
+		return
+	}
+	wsl.seen, wsl.probed, wsl.failed = map[string]*distro{}, map[string]bool{}, map[string]time.Time{}
+	if b, err := os.ReadFile(wslStatePath()); err == nil {
+		json.Unmarshal(b, &wsl.seen)
+	}
+	wslForgetOldBins()
+}
+
+// wslDistros are the distros agents were found in, after a refresh
+// (wslRefresh), which this waits for: for the GUI and what runs in the
+// background. A request's path takes wslDistrosWithin.
+func wslDistros() []distro {
+	wslRefresh()
+	return wslKnown()
+}
+
+// wslBg is the refresh wslDistrosWithin started, while it runs.
+var wslBg struct {
+	sync.Mutex
+	done chan struct{}
+}
+
+// wslDistrosWithin is wslDistros waiting at most wait for the refresh,
+// one at a time in the background: what is known then is answered, and
+// a distro whose running wsl.exe hasn't said in time is taken as stopped.
+func wslDistrosWithin(wait time.Duration) []distro {
+	wslBg.Lock()
+	if wslBg.done == nil {
+		done := make(chan struct{})
+		wslBg.done = done
+		go func() {
+			wslRefresh()
+			wslBg.Lock()
+			wslBg.done = nil
+			wslBg.Unlock()
+			close(done)
+		}()
+	}
+	done := wslBg.done
+	wslBg.Unlock()
+	t := time.NewTimer(wait)
+	defer t.Stop()
+	select {
+	case <-done:
+	case <-t.C:
+	}
+	return wslKnown()
+}
+
+// wslKnown are the distros as last refreshed, each with whether it runs:
+// none does while wsl.exe is being asked and its last answer is older
+// than wslRunningAge.
+func wslKnown() []distro {
+	asking := wslRunAsking()
+	cfg := wslConfig()
+	wsl.Lock()
+	wslLoadLocked()
+	known := !asking || wslRunFreshLocked()
+	var out []distro
+	for _, n := range wsl.names {
 		d := wsl.seen[n]
 		if d == nil {
 			continue
 		}
 		c := *d
-		c.Running = wsl.running[n]
+		c.Running = known && wsl.running[n]
 		c.up = func() bool { return wslUp(n) }
-		c.mirror(cfg)
 		out = append(out, c)
 	}
-	// an unregistered distro is forgotten
-	for n := range wsl.seen {
-		if wsl.listed && !installed[n] {
-			delete(wsl.seen, n)
-			wsl.dirty = true
-		}
+	wsl.Unlock()
+	for i := range out {
+		out[i].mirror(cfg)
 	}
-	wslSaveLocked()
 	return out
 }
 
@@ -1522,25 +1645,86 @@ func wslForgetOldBins() {
 	}
 }
 
-// wslRunningLocked lists the running distros again (wsl.exe -l --running,
-// which starts none) when the last list is older than wslRunningAge. When
-// wsl.exe can't say, none is taken to run: a distro is never opened on a
-// guess.
-func wslRunningLocked() {
+// wslRunAsk is the wsl.exe -l --running in flight, and when it started.
+// It is asked outside wsl's lock, once at a time however many wait on it.
+var wslRunAsk struct {
+	sync.Mutex
+	done  chan struct{}
+	start time.Time
+}
+
+// wslRunningWait is how long what reads a distro's files waits for
+// wsl.exe to say which run, from when it was asked: one that hangs is
+// taken as running none, and a stand-in, a request's or Copilot's
+// sign-in, goes without the distro's files rather than waiting out its
+// 10s (vsoullai on X, #6167). A var for tests.
+var wslRunningWait = 2 * time.Second
+
+// wslRunFreshLocked is whether which distros run is as wsl.exe said at
+// most wslRunningAge ago (wslRunningFailedAge when it couldn't say).
+func wslRunFreshLocked() bool {
 	age := wslRunningAge
 	if !wsl.runOK {
 		age = wslRunningFailedAge
 	}
-	if !wsl.runAt.IsZero() && time.Since(wsl.runAt) <= age {
-		return
+	return !wsl.runAt.IsZero() && time.Since(wsl.runAt) <= age
+}
+
+// wslRunAsking is whether wsl.exe is being asked which distros run.
+func wslRunAsking() bool {
+	wslRunAsk.Lock()
+	defer wslRunAsk.Unlock()
+	return wslRunAsk.done != nil
+}
+
+// wslRunningWithin lists the running distros again (wsl.exe -l
+// --running, which starts none) when the last list is older than
+// wslRunningAge, and waits for the answer at most wait from when it was
+// asked (a negative wait: until wsl.exe answers or times out). false:
+// wsl.exe hasn't said in time, and none is to be taken to run. When
+// wsl.exe can't say, none is taken to run either: a distro is never
+// opened on a guess. Never called under wsl's lock.
+func wslRunningWithin(wait time.Duration) bool {
+	wsl.Lock()
+	fresh := wslRunFreshLocked()
+	wsl.Unlock()
+	if fresh {
+		return true
 	}
-	run, ok := wslList("-l", "--running", "-q")
-	wsl.runOK = ok
-	wsl.running = map[string]bool{}
-	for _, n := range run {
-		wsl.running[n] = true
+	wslRunAsk.Lock()
+	if wslRunAsk.done == nil {
+		done := make(chan struct{})
+		wslRunAsk.done, wslRunAsk.start = done, time.Now()
+		go func() {
+			run, ok := wslList("-l", "--running", "-q")
+			wsl.Lock()
+			wsl.runOK = ok
+			wsl.running = map[string]bool{}
+			for _, n := range run {
+				wsl.running[n] = true
+			}
+			wsl.runAt = time.Now()
+			wsl.Unlock()
+			wslRunAsk.Lock()
+			wslRunAsk.done = nil
+			wslRunAsk.Unlock()
+			close(done)
+		}()
 	}
-	wsl.runAt = time.Now()
+	done, start := wslRunAsk.done, wslRunAsk.start
+	wslRunAsk.Unlock()
+	if wait < 0 {
+		<-done
+		return true
+	}
+	t := time.NewTimer(time.Until(start.Add(wait)))
+	defer t.Stop()
+	select {
+	case <-done:
+		return true
+	case <-t.C:
+		return false
+	}
 }
 
 // wslUp is whether distro runs, as wsl.exe said at most wslRunningAge ago:
@@ -1548,9 +1732,11 @@ func wslRunningLocked() {
 // catalog synced, requests counted, sessions listed) asks it first, so a
 // distro stopped since its agent was made isn't started again.
 func wslUp(distro string) bool {
+	if !wslRunningWithin(wslRunningWait) {
+		return false
+	}
 	wsl.Lock()
 	defer wsl.Unlock()
-	wslRunningLocked()
 	return wsl.running[distro]
 }
 
@@ -1623,7 +1809,7 @@ func wslLastSeen(name, key string) string {
 
 // wslReady are the distros running now that the probe found kind in, each
 // with its mirrored networking settled, ready for a read of its files.
-// Only magpie's memory of them and which run (wslRunningLocked) are
+// Only magpie's memory of them and which run (wslRunningWithin) are
 // asked — nothing is probed, and a stopped distro is never opened.
 // Detection off (wslLooks) reads none: a request's stand-in asks wsl.exe
 // nothing, which on a machine without WSL would answer with a console
@@ -1632,8 +1818,10 @@ func wslReady(kind string) []distro {
 	if !wslLooks() {
 		return nil
 	}
+	if !wslRunningWithin(wslRunningWait) {
+		return nil
+	}
 	wsl.Lock()
-	wslRunningLocked()
 	var ds []distro
 	for _, n := range wsl.names {
 		if d := wsl.seen[n]; d != nil && wsl.running[n] && wslKindOf(kind).found(*d) {
@@ -1667,8 +1855,10 @@ func wslClaudeClassifier(model string) string {
 	if !wslLooks() {
 		return ""
 	}
+	if !wslRunningWithin(wslRunningWait) {
+		return ""
+	}
 	wsl.Lock()
-	wslRunningLocked()
 	var ds []distro
 	for _, n := range wsl.names {
 		if d := wsl.seen[n]; d != nil && wsl.running[n] && wslKindOf("claude").found(*d) {
@@ -1824,7 +2014,9 @@ func wslProbe(name string) *distro {
 		return nil
 	}
 	if wslKept(*d) {
-		d.Root = wslRoot(name)
+		if d.Root = wslRoot(name); d.Root == "" {
+			return nil
+		}
 	}
 	return d
 }

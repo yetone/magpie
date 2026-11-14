@@ -26,10 +26,12 @@ var wslExec = func(distro string, argv ...string) ([]byte, error) {
 // distroAt is the running distro local, a path as magpie opens it, is in:
 // under its root, or under where one of its Links leads (distro.native).
 func distroAt(local string) (distro, bool) {
+	// a command run in a stopped distro would start it (wslUp)
+	if !wslRunningWithin(wslRunningWait) {
+		return distro{}, false
+	}
 	wsl.Lock()
 	defer wsl.Unlock()
-	// a command run in a stopped distro would start it (wslUp)
-	wslRunningLocked()
 	for name, d := range wsl.seen {
 		if d == nil || d.Root == "" || !wsl.running[name] {
 			continue

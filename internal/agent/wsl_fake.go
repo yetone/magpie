@@ -29,10 +29,13 @@ func FakeWSL(probes, roots map[string]string) func() {
 		names = append(names, n)
 	}
 	list := []byte(strings.Join(names, "\n"))
+	var stoppedMu sync.Mutex // wsl.exe is asked outside wsl's lock
 	stopped := map[string]bool{}
 	fakeStop = func(name string, stop bool) {
-		wsl.Lock()
+		stoppedMu.Lock()
 		stopped[name] = stop
+		stoppedMu.Unlock()
+		wsl.Lock()
 		wsl.runAt = time.Time{}
 		wsl.Unlock()
 	}
@@ -46,11 +49,13 @@ func FakeWSL(probes, roots map[string]string) func() {
 			return list, nil
 		case "-l --running -q":
 			var run []string
+			stoppedMu.Lock()
 			for _, n := range names {
 				if !stopped[n] {
 					run = append(run, n)
 				}
 			}
+			stoppedMu.Unlock()
 			return []byte(strings.Join(run, "\n")), nil
 		}
 		if len(args) > 2 && args[0] == "-d" {
