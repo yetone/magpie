@@ -39,8 +39,9 @@ import (
 
 const (
 	prevTTL = 6 * time.Hour
-	// prevCap bounds the bytes kept, counted as each turn adds them: a
-	// turn's history is the earlier turn's items, shared, not copied
+	// prevCap bounds the bytes kept: a turn's history is an earlier
+	// turn's items, shared, not copied, and bytes several turns share are
+	// counted once, for as long as any of them is kept (prevChunk)
 	prevCap = 256 << 20
 	// prevReplyMax is the most of one reply read for its output
 	prevReplyMax = 64 << 20
@@ -53,7 +54,12 @@ type prevTurn struct {
 	key   prevKey
 	items []json.RawMessage // input, then the response's output
 	own   int               // bytes this turn added to what it follows
-	at    time.Time
+	// the buffers items' bytes lie in, in order: chunks[j] holds
+	// items[ends[j-1]:ends[j]]. None (a turn made whole) is one of own
+	// bytes.
+	chunks []*prevChunk
+	ends   []int
+	at     time.Time
 	// the provider that keeps it too, if one does: the id it gave it
 	// and which provider and key (prevRoute)
 	upstreamID, route string
@@ -61,6 +67,10 @@ type prevTurn struct {
 	// (prevRoute), kept or not; empty for a translated reply
 	made string
 }
+
+// prevChunk is one buffer kept turns' items lie in, counted in the
+// store's size while a kept turn holds it.
+type prevChunk struct{ size, refs int }
 
 type prevStore struct {
 	mu    sync.Mutex
@@ -105,7 +115,14 @@ func (s *prevStore) put(t *prevTurn) {
 	}
 	t.at = s.now()
 	s.m[t.key] = s.order.PushFront(t)
-	s.size += t.own
+	if t.chunks == nil {
+		t.chunks, t.ends = []*prevChunk{{size: t.own}}, []int{len(t.items)}
+	}
+	for _, c := range t.chunks {
+		if c.refs++; c.refs == 1 {
+			s.size += c.size
+		}
+	}
 	for s.size > s.cap {
 		s.drop(s.order.Back())
 	}
@@ -119,7 +136,80 @@ func (s *prevStore) drop(e *list.Element) {
 	t := e.Value.(*prevTurn)
 	s.order.Remove(e)
 	delete(s.m, t.key)
-	s.size -= t.own
+	for _, c := range t.chunks {
+		if c.refs--; c.refs == 0 {
+			s.size -= c.size
+		}
+	}
+}
+
+// prevShareLook is how many of the newest kept turns of a scope a turn's
+// input is held against for bytes to share.
+const prevShareLook = 4
+
+// kept is the turn fresh is kept as, after prior's items when the
+// request named that earlier turn. Otherwise the leading items one of the
+// newest kept turns of scope holds the same bytes of share that turn's,
+// and the rest are copied out of the body into one new chunk. A client that sends
+// its whole conversation each turn and names no earlier response (one
+// not saying store false, as AI SDK clients) had each turn kept as a
+// whole copy: a 2 MB conversation filled the 256 MB cap in ~128 turns and
+// held it for prevTTL, and copied 2 MB a request to do it.
+func (s *prevStore) kept(scope string, prior *prevTurn, fresh []json.RawMessage) *prevTurn {
+	t := &prevTurn{}
+	var share *prevTurn
+	n := 0
+	if prior != nil {
+		share, n = prior, len(prior.items)
+	} else if len(fresh) > 0 {
+		var near []*prevTurn
+		s.mu.Lock()
+		for e, seen := s.order.Front(), 0; e != nil && len(near) < prevShareLook && seen < 64; e, seen = e.Next(), seen+1 {
+			if k := e.Value.(*prevTurn); k.key.scope == scope && len(k.items) > 0 {
+				near = append(near, k)
+			}
+		}
+		s.mu.Unlock()
+		// what a kept turn holds is never written, so it is read
+		// unlocked; one dropped meanwhile is counted again by put
+		for _, k := range near {
+			m := 0
+			for m < len(k.items) && m < len(fresh) && bytes.Equal(k.items[m], fresh[m]) {
+				m++
+			}
+			if m > n {
+				share, n = k, m
+			}
+		}
+	}
+	if share != nil {
+		t.items = share.items[:n:n]
+		for j, c := range share.chunks {
+			if j > 0 && share.ends[j-1] >= n {
+				break
+			}
+			t.chunks, t.ends = append(t.chunks, c), append(t.ends, min(share.ends[j], n))
+		}
+		if prior == nil {
+			fresh = fresh[n:]
+		}
+	}
+	t.add(ownItems(fresh))
+	return t
+}
+
+// add puts items, held by none yet, after t's own as one new chunk.
+func (t *prevTurn) add(items []json.RawMessage) {
+	size := 0
+	for _, it := range items {
+		size += len(it)
+	}
+	t.items = append(t.items[:len(t.items):len(t.items)], items...)
+	t.own += size
+	if size > 0 {
+		t.chunks = append(t.chunks[:len(t.chunks):len(t.chunks)], &prevChunk{size: size})
+		t.ends = append(t.ends[:len(t.ends):len(t.ends)], len(t.items))
+	}
 }
 
 // prevScope is whose responses a request may name: its gateway key, the
@@ -239,12 +329,13 @@ func previousResponse(w http.ResponseWriter, r *http.Request, from provider.Prot
 	scope := prevScope(r)
 	ask := &prevAsk{}
 	var prior []json.RawMessage
+	var priorTurn *prevTurn
 	if raw := q["previous_response_id"]; len(raw) > 0 && !bytes.Equal(raw, []byte("null")) {
 		var id string
 		if json.Unmarshal(raw, &id) == nil && id != "" {
 			ask.id = id
 			if t, ok := prevResponses.get(prevKey{scope, id}); ok {
-				prior = t.items
+				prior, priorTurn = t.items, t
 				ask.known, ask.upstreamID, ask.route, ask.made = true, t.upstreamID, t.route, t.made
 			}
 		}
@@ -277,18 +368,12 @@ func previousResponse(w http.ResponseWriter, r *http.Request, from provider.Prot
 		// it is (remote_delta.go)
 		w.Header().Set(KeptTurnHeader, "1")
 	}
-	// what this turn adds: its input, copied out of the body. A view held
-	// the whole body, tools and instructions with it, on every turn kept,
+	// what this turn adds: its input, copied out of the body but for
+	// what a kept turn holds the same bytes of (kept). A view held the
+	// whole body, tools and instructions with it, on every turn kept,
 	// while own counted only the items, so the cap bounded far less than
 	// was held.
-	kept := ownItems(fresh)
-	if ask.known {
-		kept = append(prior[:len(prior):len(prior)], kept...)
-	}
-	own := 0
-	for _, it := range fresh {
-		own += len(it)
-	}
+	kept := prevResponses.kept(scope, priorTurn, fresh)
 	if ask.id == "" {
 		// the answer note is wanted for a request naming none too
 		r = r.WithContext(context.WithValue(r.Context(), prevAskKey{}, ask))
@@ -309,10 +394,8 @@ func previousResponse(w http.ResponseWriter, r *http.Request, from provider.Prot
 		if !ok {
 			return
 		}
-		for _, it := range output {
-			own += len(it)
-		}
-		t := &prevTurn{key: prevKey{scope, id}, items: append(kept, output...), own: own}
+		t := &prevTurn{key: prevKey{scope, id}, items: kept.items, own: kept.own, chunks: kept.chunks, ends: kept.ends}
+		t.add(output)
 		ask.mu.Lock()
 		if ask.answered != "" {
 			t.upstreamID, t.route = id, ask.answered
