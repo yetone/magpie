@@ -143,6 +143,21 @@ func LatestEvery(ctx context.Context, lang string) (*Release, error) {
 	return latestAt(ctx, withLang(Feed(), lang), lang)
 }
 
+// LatestStable is the Stable channel's release, whatever Settings'
+// channel: what a fresh install compares itself with, to stay on Stable
+// when it is Stable's version (the site's Stable download). Only the site
+// knows it, so a failed feed is never answered from GitHub.
+func LatestStable(ctx context.Context) (*Release, error) {
+	u, err := url.Parse(Feed())
+	if err != nil {
+		return nil, err
+	}
+	q := u.Query()
+	q.Set("channel", settings.UpdateStable)
+	u.RawQuery = q.Encode()
+	return latestFrom(ctx, u.String(), "")
+}
+
 func latestAt(ctx context.Context, feed, lang string) (*Release, error) {
 	if githubOnly() {
 		return githubLatest(ctx, lang)

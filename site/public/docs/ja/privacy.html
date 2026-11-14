@@ -234,7 +234,7 @@
     <h2 id="site"><a class="anchor" href="#site">usemagpie.ai に見えるもの</a></h2>
     <p>magpie はプライバシー設定にかかわらず、どのアプリも自分の更新サーバーに尋ねるのと同じように、自分のサイトにいくつか尋ねます。どのリクエストにもインストール ID やアカウントは付きません。</p>
     <ul>
-      <li><code>/api/latest</code>：更新情報。<code>noAutoUpdate</code> がオンでなければ 6 時間ごと。<code>?lang=</code> であなたの言語のノートを取ります。<span class="ui">設定</span> → <span class="ui">情報</span> → <span class="ui">アップデートチャネル</span>が安定版なら <code>?channel=stable</code> も付けます。どちらもあなたが誰かは含みません。<code>/api/notes</code> は更新後の「新機能」です。</li>
+      <li><code>/api/latest</code>：更新情報。<code>noAutoUpdate</code> がオンでなければ 6 時間ごと。<code>?lang=</code> であなたの言語のノートを取ります。<span class="ui">設定</span> → <span class="ui">情報</span> → <span class="ui">アップデートチャネル</span>が安定版なら <code>?channel=stable</code> も付けます。新しくインストールした magpie も一度 <code>?channel=stable</code> を尋ね、自分が安定版なら安定版にとどまります。どちらもあなたが誰かは含みません。<code>/api/notes</code> は更新後の「新機能」です。</li>
       <li><code>/files/&lt;バージョン&gt;/&lt;ファイル&gt;</code>：更新とインストーラがダウンロードするリリースファイルで、Cloudflare R2 から配信されます。サイトにないファイルは github.com へ転送されます。何も計測しません。</li>
       <li><code>/api/partners</code>：プロバイダー追加シートのパートナー一覧。6 時間ごと。パートナーが載っている間、10 回に 1 回の取得を Cloudflare が示す国とともに <code>magpie partners fetch</code> として数えます。</li>
       <li><code>/go/&lt;パートナー&gt;/site</code> と <code>/go/&lt;パートナー&gt;/keys</code>：パートナーの公式サイトとキーのページへのリンクをブラウザーで開くと、移動の前に <code>magpie partner go</code>（どのパートナーか、どのリンクか、地域、国）として数えます。</li>

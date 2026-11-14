@@ -234,7 +234,7 @@
     <h2 id="site"><a class="anchor" href="#site">usemagpie.ai 能看到什么</a></h2>
     <p>magpie 会向自己的网站请求几样东西，不受隐私设置影响，就像任何应用访问自己的更新服务器。这些请求都不带安装 ID 或账号。</p>
     <ul>
-      <li><code>/api/latest</code>：更新信息，每 6 小时一次（开了 <code>noAutoUpdate</code> 则不请求），带 <code>?lang=</code> 取对应语言的说明；<span class="ui">设置</span> → <span class="ui">关于</span> → <span class="ui">更新渠道</span>选了稳定版时还带 <code>?channel=stable</code>。两者都不含你是谁。<code>/api/notes</code> 在更新后给出“新功能”。</li>
+      <li><code>/api/latest</code>：更新信息，每 6 小时一次（开了 <code>noAutoUpdate</code> 则不请求），带 <code>?lang=</code> 取对应语言的说明；<span class="ui">设置</span> → <span class="ui">关于</span> → <span class="ui">更新渠道</span>选了稳定版时还带 <code>?channel=stable</code>；新安装的 magpie 也会请求一次 <code>?channel=stable</code>，若自己就是稳定版，便留在稳定版。两者都不含你是谁。<code>/api/notes</code> 在更新后给出“新功能”。</li>
       <li><code>/files/&lt;版本&gt;/&lt;文件&gt;</code>：更新和安装脚本下载的发布文件，由 Cloudflare R2 提供；站点上没有的文件会转到 github.com。不做任何统计。</li>
       <li><code>/api/partners</code>：添加供应商页的合作伙伴列表，每 6 小时一次。在有合作伙伴上架时，每十次拉取记一次 <code>magpie partners fetch</code> 事件，附 Cloudflare 给出的国家。</li>
       <li><code>/go/&lt;合作伙伴&gt;/site</code> 和 <code>/go/&lt;合作伙伴&gt;/keys</code>：在浏览器里打开合作伙伴的官网和 Key 页面链接时，先记一次 <code>magpie partner go</code>（哪个合作伙伴、哪个链接、地区、国家），再跳转。</li>

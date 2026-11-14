@@ -154,7 +154,9 @@ func (n *whatsNew) start() {
 	dir := settings.Dir()
 	b, _ := os.ReadFile(filepath.Join(dir, lastRunFile))
 	last := strings.TrimSpace(string(b))
-	after, show := update.ShowNotes(last, Version, last == "" && usedBefore(dir))
+	used := usedBefore(dir)
+	after, show := update.ShowNotes(last, Version, last == "" && used)
+	freshInstall.Store(last == "" && !used) // takeStable
 	// a restart to update into this version: its notes wait in Settings
 	mark := filepath.Join(dir, updatedInAppFile)
 	m, err := os.ReadFile(mark)

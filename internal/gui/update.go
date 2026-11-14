@@ -491,6 +491,7 @@ func (u *updater) run() {
 	ctx := context.Background()
 	cctx, cancel := context.WithTimeout(ctx, checkWait)
 	defer cancel()
+	takeStable(cctx) // a fresh install of Stable's version stays on Stable
 	s := settings.Load()
 	u.mu.Lock()
 	lang := u.lang
