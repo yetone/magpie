@@ -37,3 +37,36 @@ window.pmInstalled = function ({ es, st, everything, entryOf, kindOf, srcOf, nam
     pop: srcs.length > 1 ? originButton(st.src, null, (v) => { st.src = v; drawBody(); }) : null,
   };
 };
+
+// what a failed install left in plugins/ that no plugin is installed as:
+// Bun installs each again with every plugin, and one it can't install
+// failed them all (agency-agents, CHENGJIAHEGOXIS on X). Each can be
+// removed here, below Installed's list, empty or not.
+window.pmLeftovers = function (body, mine, logo, act, busy) {
+  const ls = mine?.leftovers || [];
+  if (!ls.length) return;
+  const box = el("section", "pm-sec pm-leftovers");
+  const h = el("div", "pm-sechead");
+  h.append(el("h3", "", t("Not used by any plugin")));
+  const list = el("div", "list pm-list");
+  for (const x of ls) {
+    const r = el("div", "row pm-row");
+    r.dataset.leftover = x.name;
+    const who = el("div", "who");
+    const nm = el("div", "name");
+    nm.append(el("span", "", x.name));
+    if (x.version) nm.append(el("span", "pm-ver", "v" + x.version));
+    who.append(nm);
+    const val = el("div", "val");
+    const key = "leftover:" + x.name;
+    const rm = el("button", "text quiet", busy.get(key) === "leftover" ? t("Removing…") : t("Remove"));
+    rm.title = x.spec;
+    rm.disabled = busy.size > 0;
+    rm.onclick = () => act(key, "leftover", { spec: x.name });
+    val.append(rm);
+    r.append(logo("", false), who, val);
+    list.append(r);
+  }
+  box.append(h, list);
+  body.append(box);
+};

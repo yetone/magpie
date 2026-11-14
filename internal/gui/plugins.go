@@ -236,6 +236,10 @@ type pluginsJSON struct {
 	// Registry is the npm registry plugins are installed from and npm's
 	// answers asked of, and where it came from (plugin.Registry)
 	Registry plugin.RegistryInUse `json:"registry"`
+	// Leftovers are plugins/'s dependencies no plugin is installed as (a
+	// failed install's, from before magpie took them out), each with a
+	// Remove: Bun installs every one again at every install
+	Leftovers []plugin.Leftover `json:"leftovers"`
 }
 
 // registryJSON is plugin.Registry with its file's path as the page shows it.
@@ -248,7 +252,10 @@ func registryJSON() plugin.RegistryInUse {
 }
 
 func pluginsState(ctx context.Context, w Windows) pluginsJSON {
-	s := pluginsJSON{Plugins: []pluginEntryJSON{}, Bun: plugin.HasBun(), BunVer: plugin.BunInUse(), Movable: provider.MoveCandidates(), Picker: w != nil && !isWeb(w), Mirror: settings.Shared().ChinaMirror, Registry: registryJSON()}
+	s := pluginsJSON{Plugins: []pluginEntryJSON{}, Bun: plugin.HasBun(), BunVer: plugin.BunInUse(), Movable: provider.MoveCandidates(), Picker: w != nil && !isWeb(w), Mirror: settings.Shared().ChinaMirror, Registry: registryJSON(), Leftovers: plugin.Leftovers()}
+	if s.Leftovers == nil {
+		s.Leftovers = []plugin.Leftover{}
+	}
 	l := plugin.Load()
 	errs := map[string]string{}
 	names := map[string][]string{}
@@ -594,6 +601,7 @@ var (
 	removePlugin  = provider.RemovePlugin
 	updatePlugins = plugin.Update
 	upgradePlugin = plugin.Upgrade
+	dropLeftover  = plugin.RemoveLeftover
 )
 
 func pluginRoutes(mux *http.ServeMux, w Windows) {
@@ -783,6 +791,8 @@ func pluginRoutes(mux *http.ServeMux, w Windows) {
 			err = plugin.SetOptions(in.Spec, in.Options)
 		case "prefer":
 			err = plugin.Prefer(in.Spec, in.Provider)
+		case "leftover":
+			err = dropLeftover(ctx, in.Spec)
 		default:
 			http.NotFound(rw, r)
 			return

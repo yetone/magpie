@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"net/http"
@@ -143,6 +144,9 @@ func fakeBun(args []string) error {
 			lock[name] = commit
 		}
 	case "remove":
+		if os.Getenv("MAGPIE_FAKE_BUN_NOREMOVE") == "1" {
+			return errors.New("error: lockfile had changes, but lockfile is frozen")
+		}
 		for _, n := range args[2:] {
 			delete(deps, n)
 			delete(lock, n)
@@ -157,7 +161,18 @@ func fakeBun(args []string) error {
 		return err
 	}
 	b, _ = json.Marshal(lock)
-	return os.WriteFile("fake.lock", b, 0o644)
+	if err := os.WriteFile("fake.lock", b, 0o644); err != nil {
+		return err
+	}
+	// as bun does on Windows with a file of a package's copy held open:
+	// package.json written, then every command fails over that package
+	// while it is a dependency (CHENGJIAHEGOXIS's agency-agents)
+	if n := os.Getenv("MAGPIE_FAKE_BUN_BUSY"); n != "" && deps[n] != "" {
+		fmt.Println("bun add v1.4.2 (fake)")
+		fmt.Println("EBUSY: failed copying files from cache to destination for package " + n)
+		return errors.New("exit 1")
+	}
+	return nil
 }
 
 // fakeFetch clones spec's repository and puts the package in it at

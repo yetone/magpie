@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"maps"
 	"os"
 	"os/exec"
@@ -88,7 +89,13 @@ func runBun(ctx context.Context, bun string, args ...string) ([]byte, error) {
 	mendPackageJSON()
 	defer mendPackageJSON()
 	mendDist(ctx, bun)
-	return bunCommand(ctx, bun, Dir(), args...).CombinedOutput()
+	out, err := bunCommand(ctx, bun, Dir(), args...).CombinedOutput()
+	// a dependency no plugin is installed as that Bun couldn't install
+	// fails every command: taken out, and the command run again
+	if err != nil && len(dropBroken(&bunRunError{err, string(out)})) > 0 {
+		out, err = bunCommand(ctx, bun, Dir(), args...).CombinedOutput()
+	}
+	return out, err
 }
 
 // mendPackageJSON cuts what follows plugins/package.json's object off. Bun
@@ -415,6 +422,7 @@ func add(ctx context.Context, spec, version string) (Entry, error) {
 	if spec == "" {
 		return Entry{}, errors.New("no plugin given")
 	}
+	defer beingAdded(spec)()
 	// the package each plugin is before the install, which may take a git
 	// one's name over (one repository in place of another, or of npm's)
 	was := map[string]string{}
@@ -453,12 +461,18 @@ func add(ctx context.Context, spec, version string) (Entry, error) {
 		// installed just now for this, and nothing loads it: taken out again
 		if !IsPath(spec) && !slices.Contains(slices.Collect(maps.Values(was)), Name(spec)) {
 			if bun, berr := Bun(ctx); berr == nil {
-				_, _ = runBun(ctx, bun, "remove", "--ignore-scripts", Name(spec))
+				_ = removeDep(ctx, bun, Name(spec))
 			}
 		}
 		return Entry{}, err
 	}
 	if err := ensurePi(ctx, Target(spec)); err != nil {
+		// nothing loads it without pi's agent: taken out again, as above
+		if !IsPath(spec) && !slices.Contains(slices.Collect(maps.Values(was)), Name(spec)) {
+			if bun, berr := Bun(ctx); berr == nil {
+				_ = removeDep(ctx, bun, Name(spec))
+			}
+		}
 		return Entry{}, err
 	}
 	listMu.Lock()
@@ -622,8 +636,10 @@ func Remove(ctx context.Context, name string) error {
 		return err
 	}
 	if !IsPath(e.Spec) {
-		if bun, err := Bun(ctx); err == nil {
-			_, _ = runBun(ctx, bun, "remove", "--ignore-scripts", Name(e.Spec))
+		// another entry of the same package (a folder's spec aside) still
+		// needs it
+		if bun, err := Bun(ctx); err == nil && !slices.ContainsFunc(l.Plugins, func(x Entry) bool { return !IsPath(x.Spec) && Name(x.Spec) == Name(e.Spec) }) {
+			_ = removeDep(ctx, bun, Name(e.Spec))
 		}
 	}
 	Restart()
@@ -766,7 +782,19 @@ func install(ctx context.Context, spec string) error {
 	// before (#2954)
 	_ = refreshGitCache(ctx, spec)
 	mendDist(ctx, bun)
+	before := depsNow()
 	err = bunAdd(ctx, bun, spec)
+	// Bun writes the dependency into package.json before it installs, and
+	// exits 1 with it there when any package fails, this one or another.
+	// One no plugin is installed as (a failed add's, before this was
+	// put back) failed every add after it: taken out, and the add tried
+	// again
+	var gone []string
+	if err != nil {
+		if gone = dropBroken(err, spec); len(gone) > 0 {
+			err = bunAdd(ctx, bun, spec)
+		}
+	}
 	// a @magpie-community package or version npm doesn't have (a new
 	// one waits for an owner to publish it there) comes from the
 	// community repo's dist branch; one Bun's minimumReleaseAge holds
@@ -775,15 +803,26 @@ func install(ctx context.Context, spec string) error {
 	var ue *BunUnstartableError
 	if name, version, ok := distWanted(spec); ok && err != nil && !minAge.MatchString(err.Error()) && !errors.As(err, &ue) {
 		if derr := installDist(ctx, bun, name, version); derr != nil {
-			return fmt.Errorf("%w (and from the community repo's dist branch: %v)", err, derr)
+			err = fmt.Errorf("%w (and from the community repo's dist branch: %v)", err, derr)
+		} else {
+			err = nil
 		}
+	}
+	// another plugin's package Bun couldn't install, and this one in: the
+	// add is done, and that plugin's row says what is wrong with it
+	if err != nil && othersFailed(err, spec) {
+		log.Printf("plugins: %s installed; Bun couldn't install %s: %v", spec, strings.Join(failedOf(err), ", "), err)
 		err = nil
 	}
-	if err == nil {
-		pruneDist()
-		pruneInstallCache()
+	if err != nil {
+		// nothing of a failed add stays: a dependency left in package.json
+		// is installed again at every bun command, and no plugin lists it
+		before.undo(gone)
+		return err
 	}
-	return err
+	pruneDist()
+	pruneInstallCache()
+	return nil
 }
 
 // bunAdd adds spec to plugins/ with bun, its scripts left unrun.
@@ -797,7 +836,7 @@ func bunAdd(ctx context.Context, bun, spec string) error {
 		if ue := wontLoad(bun, err); ue != nil {
 			return fmt.Errorf("bun add %s: %w", spec, ue)
 		}
-		return fmt.Errorf("bun add %s: %v: %s", spec, cantStart(bun, err), lastLines(string(out), 6))
+		return &bunRunError{fmt.Errorf("bun add %s: %v: %s", spec, cantStart(bun, err), lastLines(string(out), 6)), string(out)}
 	}
 	return nil
 }

@@ -1032,7 +1032,7 @@
     // the search field keeps its focus: only the body is redrawn while
     // typing, and the GitHub section's field is kept in it
     if (tab === "installed" || tab === "builtin" || !listings) body.replaceChildren();
-    if (tab === "installed") return drawInstalled();
+    if (tab === "installed") return drawInstalled(), window.pmLeftovers?.(body, mine, logo, act, busy);
     if (tab === "builtin") return drawBuiltin();
     if (failedList && !listings) {
       body.append(el("p", "pm-empty", t("Couldn't load the plugins: {error}", { error: failedList })));
