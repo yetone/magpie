@@ -217,6 +217,7 @@ var cliForRoute = map[string]string{
 	"GET /api/login/usage":                 "magpie quota",
 	"GET /api/providers":                   "magpie providers",
 	"POST /api/provider/{action}":          "magpie provider",
+	"POST /api/providers/delete":           "magpie provider rm",
 	"GET /api/sessions/reads":              "magpie sessions read",
 	"POST /api/sessions/reads":             "magpie sessions read",
 	"GET /api/sessions":                    "magpie sessions",
