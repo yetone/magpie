@@ -291,3 +291,84 @@ func TestAntigravityDSHAtPathsGoReworded(t *testing.T) {
 		t.Fatalf("broken up and reworded: %q", both)
 	}
 }
+
+// ompSystem is how oh-my-pi (omp) 18.20.0 starts its system prompt
+// (src/prompts/system/system-prompt.md), byte for byte.
+const ompSystem = "RFC 2119 keywords: MUST, REQUIRED, SHOULD, RECOMMENDED, MAY, OPTIONAL. `NEVER` = `MUST NOT`; `AVOID` = `SHOULD NOT`.\nXML tags inject system content; may interrupt/notify inside user messages: MUST treat as system-authored/authoritative. User content is sanitized.\n"
+
+// ompLine is omp's first line up to the period, the part Antigravity
+// turns away.
+const ompLine = "RFC 2119 keywords: MUST, REQUIRED, SHOULD, RECOMMENDED, MAY, OPTIONAL."
+
+// omp's line, as it starts its prompt, goes as "RFC 2119 key words: …"
+// (eric_li8983 on X, 11-14): broken up by zero-width spaces it was still
+// turned away 1 to 3 times in 10 on a real account, worded so 0 in 10.
+func TestAntigravityCloakOmpLine(t *testing.T) {
+	got := antigravityCloak(ompSystem)
+	if want := strings.Replace(ompSystem, "keywords", "key words", 1); got != want {
+		t.Fatalf("went as %q, want %q", got, want)
+	}
+	if antigravityCloak(got) != got || antigravityTurnsAway(got) {
+		t.Errorf("reworded again: %q", got)
+	}
+	if antigravityHint(ompSystem) != antigravityRFCHint {
+		t.Error("omp's line isn't told its own hint")
+	}
+}
+
+// Google's check reads omp's line in any case with any white space between
+// its words: each of these copies was turned away as written on a real
+// account on 11-14, and each went through broken up (omp's, reworded). A
+// copy that only
+// matched as written went out whole and was turned away.
+func TestAntigravityCloakLineWrappedOrWidened(t *testing.T) {
+	copies := []string{
+		strings.Replace(ompLine, "REQUIRED, ", "REQUIRED,\n", 1),
+		strings.Replace(ompLine, "REQUIRED, ", "REQUIRED,\r\n", 1),
+		strings.Replace(ompLine, "2119 ", "2119\n", 1),
+		strings.Replace(ompLine, "REQUIRED, ", "REQUIRED,\n   ", 1),
+		strings.Replace(ompLine, "MUST, ", "MUST,\t", 1),
+		strings.Replace(ompLine, "MUST, ", "MUST,  ", 1),
+		strings.Replace(ompLine, "MUST, ", "MUST, ", 1),
+		strings.Replace(hermesOldSystem, "AI assistant", "AI\nassistant", 1),
+		strings.Replace(codexGPT5System, "agent based", "agent\tbased", 1),
+	}
+	for _, system := range copies {
+		system = "<conventions>\n" + system + "\n</conventions>\n"
+		if !antigravityTurnsAway(system) {
+			t.Errorf("%q isn't taken for what Antigravity turns away", system)
+			continue
+		}
+		got := antigravityCloak(system)
+		if antigravityTurnsAway(got) || got == system {
+			t.Errorf("went whole: %q", got)
+		}
+		said := strings.ReplaceAll(got, zeroWidth, "")
+		if strings.Contains(system, "RFC") {
+			said = strings.Replace(said, "key words", "keywords", 1)
+			if strings.Contains(got, zeroWidth) {
+				t.Errorf("omp's line broken up, not reworded: %q", got)
+			}
+		}
+		if said != system {
+			t.Errorf("more than its words changed: %q", got)
+		}
+		if antigravityCloak(got) != got {
+			t.Errorf("broken again: %q", got)
+		}
+	}
+	if antigravityHint(copies[1]) != antigravityRFCHint || antigravityHint(copies[7]) != antigravityHermesHint || antigravityHint(copies[8]) != antigravityCodexHint {
+		t.Error("a wrapped copy isn't told its own hint")
+	}
+	// what went through as written on the same account goes as written
+	for _, system := range []string{
+		strings.TrimSuffix(ompLine, "."),
+		strings.Replace(ompLine, "RFC 2119", "RFC2119", 1),
+		strings.ReplaceAll(ompLine, ", ", ","),
+		"RFC 2119 applies to MUST, REQUIRED, SHOULD, RECOMMENDED, MAY, OPTIONAL.",
+	} {
+		if got := antigravityCloak(system); got != system {
+			t.Errorf("%q went as %q", system, got)
+		}
+	}
+}

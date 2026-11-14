@@ -8,6 +8,7 @@ import (
 	"maps"
 	"net/http"
 	"reflect"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -57,9 +58,8 @@ func accountAgent(p provider.Provider) string {
 // when the user has the prompt sent as written, or Google turns away one
 // that was broken up, so no one chases a quota that isn't spent.
 func antigravityTurnsAway(system string) bool {
-	low := strings.ToLower(system)
-	for _, line := range agTurnedAway {
-		if strings.Contains(low, line) {
+	for _, re := range agTurnedAwayRes {
+		if re.MatchString(system) {
 			return true
 		}
 	}
@@ -103,20 +103,76 @@ var agTurnedAway = []string{
 	"you are codex, an agent based on gpt-5",
 	"you are codex, a coding agent based on gpt-5",
 	"hermes agent, an intelligent ai assistant created by nous research",
+	agRFCLine,
+}
+
+// agRFCLine is the line oh-my-pi (omp) starts its system prompt with, and
+// its advisor's and live mode's (omp 18.20.0), which Antigravity turns away
+// as it does the others (eric_li8983 on X, 11-14).
+const agRFCLine = "rfc 2119 keywords: must, required, should, recommended, may, optional."
+
+// agRFCSaidAs is how omp's line goes: "key words", RFC 2119's own term,
+// for its "keywords". A copy broken up by zero-width spaces, like the other
+// lines, was turned away 1 to 3 times in 10 on a real account on 11-14,
+// with U+200B, U+2060 or a soft hyphen alike, while "key words" went
+// through 10 of 10, and the model reads the same rule in it.
+var agRFCSaidAs = lazyre.New(`(?i)(key)(words)`)
+
+// agSpace is a run of white space as Google's check reads it: on a real
+// account on 11-14 omp's line was turned away just as well wrapped after
+// any comma, with CRLF, a tab, two spaces or a no-break space between two
+// of its words, so only a match that allows these finds every copy. Go's
+// \s is ASCII only; this is JavaScript's \s, which the antigravity plugin
+// matches with. U+200B is not in it, so a line already broken up isn't
+// one any more.
+const agSpace = `[\s\v\p{Zs}\x{2028}\x{2029}\x{feff}]+`
+
+// agLineRe matches line in any case with any run of white space between
+// its words.
+func agLineRe(line string) *lazyre.RE {
+	words := strings.Split(line, " ")
+	for i, w := range words {
+		words[i] = regexp.QuoteMeta(w)
+	}
+	return lazyre.New("(?i)" + strings.Join(words, agSpace))
+}
+
+// agTurnedAwayRes are agTurnedAway's lines as agLineRe matches them, in
+// the same order.
+var agTurnedAwayRes = func() []*lazyre.RE {
+	res := make([]*lazyre.RE, len(agTurnedAway))
+	for i, line := range agTurnedAway {
+		res[i] = agLineRe(line)
+	}
+	return res
+}()
+
+// agSays says whether system carries line, one of agTurnedAway's.
+func agSays(system, line string) bool {
+	return agSaysRe(line).MatchString(system)
+}
+
+// agSaysRe is line's agTurnedAwayRes; line is one of agTurnedAway's.
+func agSaysRe(line string) *lazyre.RE {
+	return agTurnedAwayRes[slices.Index(agTurnedAway, line)]
 }
 
 // antigravityTurnsCodexAway says whether system carries Codex's GPT-5
 // identity line that Antigravity turns away.
 func antigravityTurnsCodexAway(system string) bool {
-	low := strings.ToLower(system)
-	return strings.Contains(low, "you are codex, an agent based on gpt-5") ||
-		strings.Contains(low, "you are codex, a coding agent based on gpt-5")
+	return agSays(system, "you are codex, an agent based on gpt-5") ||
+		agSays(system, "you are codex, a coding agent based on gpt-5")
 }
 
 // antigravityTurnsHermesAway says whether system carries Hermes Agent's
 // earlier default persona that Antigravity turns away.
 func antigravityTurnsHermesAway(system string) bool {
-	return strings.Contains(strings.ToLower(system), "hermes agent, an intelligent ai assistant created by nous research")
+	return agSays(system, "hermes agent, an intelligent ai assistant created by nous research")
+}
+
+// antigravityTurnsRFCAway says whether system carries omp's RFC 2119 line.
+func antigravityTurnsRFCAway(system string) bool {
+	return agSays(system, agRFCLine)
 }
 
 // agReworded are paragraphs Antigravity takes but answers badly, each with
@@ -156,27 +212,19 @@ const zeroWidth = "\u200b"
 // (a real account, Claude Code 2.1.316's prompt, @shzutbi1 on X), while the
 // same lines with two breaks in every word were answered.
 // A line already broken up (the antigravity-cloak plugin's) isn't one any
-// more and is left alone.
+// more and is left alone. omp's RFC 2119 line is said as agRFCSaidAs says
+// instead, with every white space in it as it was.
 func antigravityCloak(system string) string {
 	if !antigravityTurnsAway(system) {
 		return system
 	}
-	// lower-casing keeps every byte offset here: each line is ASCII, and
-	// a match is found in low at the offset it has in system only while
-	// the two are the same length, which ToLower can change outside ASCII
-	low := strings.ToLower(system)
-	if len(low) != len(system) {
-		low = asciiLower(system)
-	}
+	system = agSaysRe(agRFCLine).ReplaceAllStringFunc(system, func(m string) string {
+		return agRFCSaidAs.ReplaceAllString(m, "$1 $2")
+	})
 	var at []int
-	for _, line := range agTurnedAway {
-		for i := 0; ; {
-			j := strings.Index(low[i:], line)
-			if j < 0 {
-				break
-			}
-			at = append(at, agBreaks(low, i+j, i+j+len(line))...)
-			i += j + len(line)
+	for _, re := range agTurnedAwayRes {
+		for _, m := range re.FindAllStringIndex(system, -1) {
+			at = append(at, agBreaks(system, m[0], m[1])...)
 		}
 	}
 	slices.Sort(at)
@@ -216,17 +264,6 @@ func agBreaks(s string, from, to int) []int {
 
 func agAlnum(c byte) bool {
 	return 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9'
-}
-
-// asciiLower lower-cases only ASCII letters, keeping every byte where it is.
-func asciiLower(s string) string {
-	b := []byte(s)
-	for i, c := range b {
-		if 'A' <= c && c <= 'Z' {
-			b[i] = c + 'a' - 'A'
-		}
-	}
-	return string(b)
 }
 
 // antigravityRefuses is what Antigravity says when it turns such a request
@@ -289,6 +326,10 @@ const antigravityCodexHint = "Antigravity answers this 429 to Codex's own system
 // persona (routing/client.js AG_HERMES).
 const antigravityHermesHint = "Antigravity answers this 429 to Hermes Agent's earlier default persona (its SOUL.md) whatever quota is left, so it is not a quota and waiting won't help; Hermes' current default persona goes through, so put it in SOUL.md, or use another provider for these chats"
 
+// antigravityRFCHint is the hint for omp's RFC 2119 line, word for word
+// what the antigravity plugin says (RFC_HINT; routing/client.js AG_RFC).
+const antigravityRFCHint = "Antigravity answers this 429 to the line \"RFC 2119 keywords: MUST, REQUIRED, SHOULD, RECOMMENDED, MAY, OPTIONAL.\" that starts oh-my-pi (omp)'s system prompt, and to any prompt that has it, whatever quota is left, so it is not a quota and waiting won't help; magpie sends that line as \"RFC 2119 key words: …\", which goes through, so this one came from a copy of it that was worded another way"
+
 // antigravityHint is the hint for what Antigravity turned away with system
 // as its system instruction.
 func antigravityHint(system string) string {
@@ -297,6 +338,9 @@ func antigravityHint(system string) string {
 	}
 	if antigravityTurnsHermesAway(system) {
 		return antigravityHermesHint
+	}
+	if antigravityTurnsRFCAway(system) {
+		return antigravityRFCHint
 	}
 	return antigravityTurnedAwayHint
 }
