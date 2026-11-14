@@ -757,13 +757,28 @@ var googleToS = lazyre.New(`(?i)disabled in this account for violation of Terms 
 // refused, every ten minutes for good. Another vendor's same words are its
 // own, and aren't read so.
 func googleSuspended(p provider.Provider, status int, body []byte) bool {
-	if status != http.StatusForbidden {
-		return false
-	}
-	if a := accountAgent(p); a != "antigravity" && a != "gemini" {
+	if status != http.StatusForbidden || !googleSignIn(p) {
 		return false
 	}
 	return googleToS.Match(wordsOf(body))
+}
+
+// googleSignIn says p is signed in to Google's Code Assist with a Google
+// account: the built-in Antigravity or Gemini CLI account, or the
+// community plugin's that does the same, the Antigravity plugin's (OAuth)
+// or agy-cli's (Google's own agy program). A plugin account's Agent is
+// "plugin", so a suspended plugin account was read as an unknown failure
+// and asked again every few minutes (plugins#1148).
+func googleSignIn(p provider.Provider) bool {
+	switch accountAgent(p) {
+	case "antigravity", "gemini":
+		return true
+	}
+	switch p.PluginProvider() {
+	case "antigravity", "agy-cli":
+		return true
+	}
+	return false
 }
 
 // isWorkBuddy is whether p is a WorkBuddy account, either build's: the

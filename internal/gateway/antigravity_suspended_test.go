@@ -107,12 +107,18 @@ func TestAntigravitySuspendedAloneRests(t *testing.T) {
 	}
 }
 
-// Only Google's suspension of a Google sign-in is read so: another 403 from
-// Antigravity, and the same words from a key's relay, fail as before.
+// Only Google's suspension of a Google sign-in is read so, the built-in's or
+// a Google plugin's: another 403 from Antigravity, and the same words from a
+// key's relay or another plugin, fail as before.
 func TestAntigravitySuspendedIsGooglesAlone(t *testing.T) {
 	ag := candidate{p: provider.Provider{ID: "antigravity", Account: &provider.Account{Agent: "antigravity", User: "u"}}}
 	gem := candidate{p: provider.Provider{ID: "gemini", Account: &provider.Account{Agent: "gemini", User: "u"}}}
 	key := candidate{p: provider.Provider{ID: "relay", Key: "k"}}
+	// the community plugins that sign in to Google (plugins#1148), and
+	// another plugin, whose same words are its own
+	agPlugin := candidate{p: provider.PluginForTest("antigravity", "antigravity")}
+	agy := candidate{p: provider.PluginForTest("agy-cli", "agy-cli")}
+	other := candidate{p: provider.PluginForTest("kiro", "kiro")}
 	said := "Antigravity: This service has been disabled in this account for violation of Terms of Service. Please submit an appeal to continue using this product."
 	for _, c := range []struct {
 		c      candidate
@@ -126,6 +132,11 @@ func TestAntigravitySuspendedIsGooglesAlone(t *testing.T) {
 		{ag, 403, `{"error":{"code":403,"message":"The caller does not have permission","status":"PERMISSION_DENIED"}}`, failOther},
 		{ag, 400, antigravitySuspended, failOther},
 		{key, 403, antigravitySuspended, failOther},
+		{agPlugin, 403, antigravitySuspended, failRestricted},
+		{agy, 403, said, failRestricted},
+		{agPlugin, 403, `{"error":{"code":403,"message":"The caller does not have permission","status":"PERMISSION_DENIED"}}`, failOther},
+		{agPlugin, 400, antigravitySuspended, failOther},
+		{other, 403, antigravitySuspended, failOther},
 	} {
 		if got := failureOf(c.c, c.status, []byte(c.body)); got != c.want {
 			t.Errorf("%s %d %s: %s, want %s", c.c.p.ID, c.status, c.body, got, c.want)
