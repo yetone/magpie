@@ -30,6 +30,8 @@ type entry struct {
 	// (Hold), and in which of Forget's generations
 	checked time.Time
 	gen     uint64
+	// touched says it was read since sweepIdle last looked
+	touched bool
 }
 
 // memoKey is a parse's place in seen: kind and path apart, not joined
@@ -62,7 +64,36 @@ var (
 	missing = map[string]missingFile{}
 	// stats counts the looks at the disk, for tests
 	stats int
+	// sweptAt is when sweepIdle last ran
+	sweptAt time.Time
 )
+
+// idleFor is how long a parse is kept unread, at least, before it is let
+// go: a read idleFor after the last sweep drops what wasn't read since,
+// so a parse goes between idleFor and twice that after its last read
+// (later, while nothing reads at all). What is read once, at start up
+// (RenameLegacy's look at every agent's config, ~2 MB of a tray-only
+// magpie's 12.8 MB live heap), was kept for the life of the process;
+// what a poll reads stays. Swept on a read, not a timer: a timer armed
+// inside a test's synctest bubble is the bubble's (see endWaits).
+const idleFor = 5 * time.Minute
+
+// sweepIdle lets go of the parses not read since it last ran, when that
+// was idleFor ago; mu is held.
+func sweepIdle(now time.Time) {
+	if now.Sub(sweptAt) < idleFor {
+		return
+	}
+	sweptAt = now
+	for k, e := range seen {
+		if !e.touched {
+			delete(seen, k)
+			continue
+		}
+		e.touched = false
+		seen[k] = e
+	}
+}
 
 type missingFile struct {
 	err     error
@@ -184,7 +215,12 @@ func read[T any](kind, path string, parse func([]byte) (T, error), held bool) (T
 	var zero T
 	key := memoKey{kind, path}
 	mu.Lock()
+	sweepIdle(time.Now())
 	e, ok := seen[key]
+	if ok && !e.touched {
+		e.touched = true
+		seen[key] = e
+	}
 	if ok && held && holds > 0 && e.raw == nil && e.gen == gen && time.Since(e.checked) < heldFor {
 		mu.Unlock()
 		return e.v.(T), nil
@@ -277,7 +313,7 @@ func parsed[T any](key memoKey, fi os.FileInfo, b []byte, parse func([]byte) (T,
 		return zero, err
 	}
 	mu.Lock()
-	e := entry{mod: fi.ModTime(), size: fi.Size(), v: v}
+	e := entry{mod: fi.ModTime(), size: fi.Size(), v: v, touched: true}
 	if time.Since(e.mod) <= settled {
 		e.raw = b
 	} else if holds > 0 && g == gen {
