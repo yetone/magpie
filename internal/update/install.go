@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // The Windows app is one exe with no installer, and the site's download
@@ -38,10 +39,22 @@ import (
 // administrator, and its login item and PATH are the user's own, so a
 // copy in Program Files would need an administrator for every update.
 //
+// A copy still named as the site's download (magpie-windows-amd64.exe,
+// magpie-windows-amd64 (1).exe) is a download wherever it is kept: a
+// browser set to save into D:\下载, or a download moved into a folder of
+// the user's own and updated in place there. Run like that, a deleted
+// download was a deleted magpie, and each copy opened was an app of its
+// own to Windows, with its own Start menu and taskbar entries
+// (@XBJNTMs2mDbsvPH on X). So it asks the same question the first time.
+// Cancel there is kept (HKCU\Software\magpie, NotInstalled): that copy
+// runs where it is from then on and is never asked about again. Outside
+// a download folder it is only ever installed through the dialog, which
+// the user sees.
+//
 // It is left alone, and runs where it is as before, when it runs from
-// anywhere else (a folder the user chose: D:\Tools, a USB drive), when it
-// is portable (a data folder or .portable file beside it, appdir), or
-// with MAGPIE_NO_INSTALL=1.
+// anywhere else under a name of its own (D:\Tools\magpie.exe, a USB
+// drive), when it is portable (a data folder or .portable file beside
+// it, appdir), or with MAGPIE_NO_INSTALL=1.
 
 // NoInstallEnv, set to 1, keeps a magpie run from Downloads there.
 const NoInstallEnv = "MAGPIE_NO_INSTALL"
@@ -75,7 +88,31 @@ var (
 	// chosen); recordDir keeps it
 	recordedDir = readInstallDir
 	recordDir   = writeInstallDir
+	// declinedExe is the download kept outside a download folder that
+	// the user would rather not install (Cancel); declineExe keeps it
+	declinedExe = readDeclined
+	declineExe  = writeDeclined
 )
+
+// downloadName is the name the site's Windows download has, with the
+// suffix a browser adds to a second one: magpie-windows-amd64.exe,
+// magpie-windows-arm64 (1).exe.
+var downloadName = lazyre.New(`(?i)^magpie-windows-(amd64|arm64)\b[^\\/]*\.exe$`)
+
+// isDownload says whether exe is a download Settle installs: one in a
+// folder downloads land in, or one kept elsewhere under the download's
+// name that the user hasn't declined to install. ask is whether the
+// latter can be asked about; it is never installed unasked.
+func isDownload(exe string, ask bool) bool {
+	if downloadFolder(filepath.Dir(exe)) {
+		return true
+	}
+	if !ask || !downloadName.MatchString(filepath.Base(exe)) {
+		return false
+	}
+	d := declinedExe()
+	return d == "" || !samePath(exe, d)
+}
 
 // AskFolder, when set, asks the user where to install the download,
 // offering suggest, a folder: it answers the folder chosen, which check
@@ -218,13 +255,19 @@ func Settle() (from, to string) {
 // exe where it is.
 func settle(exe string) (string, error) {
 	to, ok := installed()
-	if to == "" || samePath(exe, to) || !downloadFolder(filepath.Dir(exe)) || portableData() != "" {
+	if to == "" || samePath(exe, to) || !isDownload(exe, ok || AskFolder != nil) || portableData() != "" {
 		return "", nil
 	}
 	if !ok {
 		dir := filepath.Dir(to)
 		if AskFolder != nil {
 			if dir = AskFolder(dir, Installable); dir == "" {
+				if !downloadFolder(filepath.Dir(exe)) {
+					// kept where the user put it: not asked again
+					if err := declineExe(exe); err != nil {
+						log.Println("install: keeping the answer:", err)
+					}
+				}
 				return "", nil
 			}
 		}
@@ -403,7 +446,7 @@ func forwards(exe string) bool {
 		return false
 	}
 	to, ok := installed()
-	return ok && !samePath(exe, to) && downloadFolder(filepath.Dir(exe)) && portableData() == ""
+	return ok && !samePath(exe, to) && isDownload(exe, true) && portableData() == ""
 }
 
 // samePath says whether two paths name the same file, Windows' way: in

@@ -1144,6 +1144,15 @@ and `update-wait.test.cjs`.
 
 There is no installer: the Windows exe opened from Downloads, the Desktop
 or a temp folder installs itself (`update.Settle`, called from `gui.Run`).
+So does one still named as the site's download (`magpie-windows-amd64.exe`,
+`… (1).exe`; `downloadName`) anywhere else, as a browser saving to
+`D:\下载` or a download moved into a folder and updated in place there
+leaves it, but only through the dialog below, never unasked: run there,
+deleting the download deleted magpie, and every copy opened was an app of
+its own to Windows (@XBJNTMs2mDbsvPH on X). Cancel on such a copy is kept
+(`HKCU\Software\magpie` `NotInstalled`, the exe's path): it runs where it
+is from then on, is not asked about again and never opens the installed
+one in its place. A copy renamed (`D:\Tools\magpie.exe`) is left alone.
 The first time, with nothing installed, it asks where in Windows' task
 dialog (`installDialog` in
 [`installdir_windows.go`](../../internal/gui/installdir_windows.go)): the
@@ -1161,7 +1170,9 @@ stop its updates. Cancel runs the exe where it is. The shortcut, App
 Paths, autostart, the `magpie://` scheme, PATH and self-update all take
 the running exe's folder, so they follow the choice. Uninstall forgets
 the record (`update.ForgetInstallDir`) and leaves the program where it
-is, as before. See `TestSettleInstallsWhereTheUserChose`,
+is, as before. See `TestSettleAsksAboutADownloadKeptElsewhere`,
+`TestSettleDeclinedElsewhereIsKept`, `TestDeclinedRecord`,
+`TestSettleInstallsWhereTheUserChose`,
 `TestSettleOffersTheChosenFolderAgain`, `TestInstallableRefuses` in
 [`install_test.go`](../../internal/update/install_test.go) and
 `TestInstallWordsEveryLanguage`.

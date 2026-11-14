@@ -18,6 +18,7 @@ type installFixture struct {
 	placed                       []string // folders installCLI was asked to put on PATH
 	portable                     string
 	record                       string   // the folder chosen, as HKCU\Software\magpie keeps it
+	declined                     string   // the copy kept uninstalled, as HKCU\Software\magpie keeps it
 	asked                        []string // what AskFolder was offered
 }
 
@@ -39,8 +40,10 @@ func newInstallFixture(t *testing.T) *installFixture {
 	}
 	saved := []any{installTarget, downloadFolder, fileVersion, portableData, webViewHome, installCLI}
 	wasRead, wasWrite, wasAsk := recordedDir, recordDir, AskFolder
+	wasDeclined, wasDecline := declinedExe, declineExe
 	t.Cleanup(func() {
 		recordedDir, recordDir, AskFolder = wasRead, wasWrite, wasAsk
+		declinedExe, declineExe = wasDeclined, wasDecline
 		installTarget = saved[0].(func() string)
 		downloadFolder = saved[1].(func(string) bool)
 		fileVersion = saved[2].(func(string) uint64)
@@ -66,6 +69,8 @@ func newInstallFixture(t *testing.T) *installFixture {
 	}
 	recordedDir = func() string { return f.record }
 	recordDir = func(dir string) error { f.record = dir; return nil }
+	declinedExe = func() string { return f.declined }
+	declineExe = func(exe string) error { f.declined = exe; return nil }
 	AskFolder = nil
 	return f
 }
@@ -134,11 +139,13 @@ func TestSettleInstallsADownload(t *testing.T) {
 	}
 }
 
-// A copy kept anywhere the user chose, or a portable one, runs where it
-// is and installs nothing; so does one run with MAGPIE_NO_INSTALL=1.
+// A copy kept anywhere the user chose under a name of its own, or a
+// portable one, runs where it is and installs nothing; so does one run
+// with MAGPIE_NO_INSTALL=1.
 func TestSettleLeavesAChosenPlace(t *testing.T) {
 	f := newInstallFixture(t)
-	tools := filepath.Join(filepath.Dir(f.downloads), "Tools", "magpie-windows-amd64.exe")
+	f.ask(t, filepath.Dir(f.to))
+	tools := filepath.Join(filepath.Dir(f.downloads), "Tools", "magpie.exe")
 	if err := os.MkdirAll(filepath.Dir(tools), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -156,8 +163,8 @@ func TestSettleLeavesAChosenPlace(t *testing.T) {
 	if to, err := settle(f.to); to != "" || err != nil {
 		t.Fatalf("the installed copy opens %q (%v)", to, err)
 	}
-	if exists(f.to) {
-		t.Fatal("installed though it shouldn't have been")
+	if exists(f.to) || len(f.asked) != 0 {
+		t.Fatalf("installed or asked (%q) though it shouldn't have been", f.asked)
 	}
 	t.Setenv(NoInstallEnv, "1")
 	if from, to := Settle(); from != "" || to != "" {
@@ -570,5 +577,85 @@ func TestInstallableRefuses(t *testing.T) {
 	}
 	if err := Installable(filepath.Join(ro, "magpie")); err != ErrNeedsAdmin {
 		t.Fatalf("a folder that can't be made: %v", err)
+	}
+}
+
+// A copy still named as the download, kept in a folder downloads don't
+// land in as far as magpie knows (a browser saving to D:\下载, a download
+// moved into D:\Tools and updated in place there), is a download too
+// (@XBJNTMs2mDbsvPH on X): it asks, and installed, it opens the installed
+// copy, as a download in Downloads does. Without a dialog to ask in it
+// is never installed.
+func TestSettleAsksAboutADownloadKeptElsewhere(t *testing.T) {
+	for _, name := range []string{"magpie-windows-amd64.exe", "magpie-windows-arm64 (1).exe", "MAGPIE-WINDOWS-AMD64(2).EXE"} {
+		t.Run(name, func(t *testing.T) {
+			f := newInstallFixture(t)
+			kept := filepath.Join(filepath.Dir(f.downloads), "下载", name)
+			if err := os.MkdirAll(filepath.Dir(kept), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(kept, []byte("MZ kept"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if to, err := settle(kept); to != "" || err != nil || exists(f.to) {
+				t.Fatalf("installed with no dialog to ask in: %q, %v", to, err)
+			}
+			f.ask(t, filepath.Dir(f.to))
+			to, err := settle(kept)
+			if err != nil || to != f.to {
+				t.Fatalf("settle = %q, %v; want the installed %q", to, err, f.to)
+			}
+			if len(f.asked) != 1 || readString(t, f.to) != "MZ kept" || readString(t, kept) != "MZ kept" {
+				t.Fatalf("asked %q; installed %v; the copy kept: %q", f.asked, exists(f.to), readString(t, kept))
+			}
+			// opened again, it opens the installed one with no question,
+			// and leaves the command to it
+			if to, err := settle(kept); err != nil || to != f.to || len(f.asked) != 1 {
+				t.Fatalf("second start: %q, %v, asked %q", to, err, f.asked)
+			}
+			if !forwards(kept) {
+				t.Fatal("the copy kept elsewhere doesn't count as forwarding")
+			}
+		})
+	}
+}
+
+// Cancel on a copy kept outside a download folder is kept: it runs where
+// it is from then on, is never asked about again, and never opens an
+// installed magpie in its place. Another copy is asked about still, and
+// a download in Downloads as before.
+func TestSettleDeclinedElsewhereIsKept(t *testing.T) {
+	f := newInstallFixture(t)
+	kept := filepath.Join(filepath.Dir(f.downloads), "Tools", "magpie-windows-amd64.exe")
+	if err := os.MkdirAll(filepath.Dir(kept), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(kept, []byte("MZ kept"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	f.ask(t, "")
+	if to, err := settle(kept); to != "" || err != nil {
+		t.Fatalf("settle = %q, %v after Cancel", to, err)
+	}
+	if !samePath(f.declined, kept) || len(f.asked) != 1 {
+		t.Fatalf("declined %q, asked %q", f.declined, f.asked)
+	}
+	if to, err := settle(kept); to != "" || err != nil || len(f.asked) != 1 {
+		t.Fatalf("asked again: %q, %v, %q", to, err, f.asked)
+	}
+	// a Cancel in Downloads isn't kept: that one is asked each time
+	if to, _ := settle(f.exe); to != "" || len(f.asked) != 2 || !samePath(f.declined, kept) {
+		t.Fatalf("Downloads: %q, asked %q, declined %q", to, f.asked, f.declined)
+	}
+	f.installed(t, "MZ installed", 0)
+	if to, err := settle(kept); to != "" || err != nil || forwards(kept) {
+		t.Fatalf("the declined copy opens %q (%v)", to, err)
+	}
+	other := filepath.Join(filepath.Dir(kept), "magpie-windows-amd64 (1).exe")
+	if err := os.WriteFile(other, []byte("MZ other"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if to, err := settle(other); to != f.to || err != nil {
+		t.Fatalf("another copy opens %q (%v), want the installed one", to, err)
 	}
 }
