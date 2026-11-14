@@ -150,7 +150,9 @@ func writeCards(w http.ResponseWriter, r *http.Request, s *quotaScope) {
 	if s == nil && provider.ReckonHolds != nil {
 		cs = provider.ReckonHolds(cs, time.Now())
 	}
-	writeJSON(w, 200, map[string]any{"object": "list", "data": cs})
+	// with what routing reads of each window, so the other magpie can
+	// weigh this one by them (#6708)
+	writeJSON(w, 200, map[string]any{"object": "list", "data": provider.ToldRouting(cs)})
 }
 
 // quotas is qs as the key may be told them. A window's whole (Holds,

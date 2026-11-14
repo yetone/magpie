@@ -201,6 +201,9 @@ func ReadAllCards(ctx context.Context) {
 var remoteCardCache struct {
 	sync.Mutex
 	m map[string]remoteCardsRead
+	// gen counts the times the cards were forgotten (a test's
+	// ForgetRemoteCardsForTest): a read asked before isn't kept after
+	gen int
 }
 
 type remoteCardsRead struct {
@@ -223,6 +226,7 @@ func ForgetRemoteCardsForTest() {
 	c := &remoteCardCache
 	c.Lock()
 	c.m = nil
+	c.gen++
 	c.Unlock()
 	k := &remoteKeyCache
 	k.Lock()
@@ -391,11 +395,18 @@ func refreshRemote(ctx context.Context, p Provider, card, user string) {
 // that comes back after one asked later is not kept over it, so a slow
 // answer from before the key was held can't bring its cards back.
 func keepRemoteCards(id string, asked time.Time, cards []SubscriptionQuota, err error) remoteCardsRead {
+	return keepRemoteCardsOf(id, -1, asked, cards, err)
+}
+
+// keepRemoteCardsOf is keepRemoteCards for a read asked while the cards
+// were of generation gen (remoteCardCache.gen; -1, whichever): one asked
+// before they were forgotten isn't kept.
+func keepRemoteCardsOf(id string, gen int, asked time.Time, cards []SubscriptionQuota, err error) remoteCardsRead {
 	c := &remoteCardCache
 	c.Lock()
 	defer c.Unlock()
 	r := c.m[id]
-	if asked.Before(r.at) {
+	if asked.Before(r.at) || gen >= 0 && gen != c.gen {
 		return r
 	}
 	r.at = asked
@@ -405,8 +416,9 @@ func keepRemoteCards(id string, asked time.Time, cards []SubscriptionQuota, err 
 	case err != nil:
 		r.err = err.Error()
 	default:
-		// a card that came back round isn't kept, nor told again
-		r.cards, r.err, r.held = withoutLoops(cards), "", false
+		// a card that came back round isn't kept, nor told again; what
+		// the remote told for routing is laid on the windows (#6708)
+		r.cards, r.err, r.held = withRouting(withoutLoops(cards)), "", false
 	}
 	if c.m == nil {
 		c.m = map[string]remoteCardsRead{}
