@@ -3131,7 +3131,7 @@ function routingPage(part) {
           : b === "sooner" && soon ? quota(w, "{n} used · renews in {d} · one renewing sooner goes first", "{n} left · renews in {d} · one renewing sooner goes first", { d: dur(soon - n) })
           : b === "expires" && soon ? quota(w, "{n} used · renews in {d} · one whose credits expire sooner goes first", "{n} left · renews in {d} · one whose credits expire sooner goes first", { d: dur(soon - n) })
           : soon ? quota(w, "{n} used · renews in {d}", "{n} left · renews in {d}", { d: dur(soon - n) }) : quota(w, "{n} used", "{n} left");
-      } else if (w.kind === "account") s = (!day && winsOf(w)[0]) || t("what's left not known yet");
+      } else if (w.kind === "account") s = (!day && winsOf(w)[0]) || (!day && cardError(w) ? t("Allowance unavailable — hover for why") : t("what's left not known yet"));
       else if (w.routing === "usage") s = t("{n} tokens lately", { n: tokens(w.tokens || 0) });
       else if (w.aside) s = t("{api} only · after the others", { api: API[w.speaks] || w.speaks || t("any API") });
       else if (w.speaks) s = t("{api} only", { api: API[w.speaks] || w.speaks });
@@ -3158,7 +3158,7 @@ function routingPage(part) {
       // (#1835): the row says the fullest one while idle and what it is
       // doing while it answers, and a second line on every seat would
       // crowd the stage. Live only, as the list's are (winsOf).
-      const tip = [w.id, ...(day ? [] : winsOf(w))].join("\n");
+      const tip = [w.id, ...(day ? [] : [...winsOf(w), cardError(w)].filter(Boolean))].join("\n");
       if (row.li.title !== tip) row.li.title = tip;
       const bar = w.known && !w.free && w.balance == null;
       row.li.classList.toggle("nobar", !bar);
@@ -4806,11 +4806,22 @@ function routingPage(part) {
   // when there is none, or it holds no windows. Nothing is read for it:
   // the readings are app.js's quotas, as the Usage page has them.
   function cardOf(w) {
+    const q = cardFor(w);
+    return q && !q.error && q.windows?.length ? q : null;
+  }
+  function cardFor(w) {
     if (w.kind !== "account" || !Array.isArray(quotas)) return null;
     const user = (w.who || "").trim().toLowerCase();
     const mine = quotas.filter((q) => !q.from && q.kind === "subscription" && (q.provider === w.agent || q.provider === w.provider));
-    const q = mine.find((q) => (q.user || "").trim().toLowerCase() === user) || (mine.length === 1 && !mine[0].user ? mine[0] : null);
-    return q && !q.error && q.windows?.length ? q : null;
+    return mine.find((q) => (q.user || "").trim().toLowerCase() === user) || (mine.length === 1 && !mine[0].user ? mine[0] : null);
+  }
+  // cardError: why the Usage page could not read the account, when its
+  // card says so (iamforu_ on X: an antigravity-bridge account whose
+  // plugin failed to read its usage read "not known yet" on Routing,
+  // with no word of why, while Usage had the reason)
+  function cardError(w) {
+    const q = cardFor(w);
+    return q && !cardOf(w) && q.error ? String(q.error) : "";
   }
   // foldQuota: what a fold's accounts have left together, from the Usage
   // page's readings (mergeQuotas), as its strip of all of a provider's
@@ -5075,7 +5086,7 @@ function routingPage(part) {
       // a provider's own row: its model, the provider's name is the heading
       if (w.kind === "provider") name.append(el("b", "", w.model || w.name));
       else name.append(el("b", "", who(w)), el("span", "", planName(w.plan) || (w.kind === "key" ? t("API key") : "")));
-      let st, cls = "", asOf = "", carded = false;
+      let st, cls = "", asOf = "", carded = false, readError = "";
       const resting = a.rest && at(a.rest.until) > n, grid = winsBy.get(a);
       // its models resting alone, while the account answers its others:
       // a line of their own, naming them, under what the account has left
@@ -5099,6 +5110,7 @@ function routingPage(part) {
         // read what it has left: that is said, not "not known" (X)
         const card = day ? [] : winsOf(w);
         if (card.length) { st = card[0]; carded = true; }
+        else if (!day && (readError = cardError(w))) st = t("Allowance unavailable — hover for why");
         else st = t("what's left not known yet");
       } else st = "";
       const tally = el("div", "tally");
@@ -5122,6 +5134,7 @@ function routingPage(part) {
       const figure = !!st && (resting || w.known || w.unlisted || w.noURL || carded);
       if (resting && restTip(a.rest)) stEl.title = restTip(a.rest);
       else if (figure && (ws.length || asOf)) stEl.title = [...ws.map((x) => x.text), asOf].filter(Boolean).join("\n");
+      else if (readError) stEl.title = readError;
       row.append(name, stEl);
       if (grid) {
         // one line a window: its short name, a bar, what is used or left,
