@@ -61,10 +61,12 @@ func TestRoundTrip(t *testing.T) {
 	if Save(Settings{}) != nil || Load().TextSize != DefaultTextSize() {
 		t.Fatalf("default text size: %+v", Load())
 	}
-	if Save(Settings{TextSize: 125}) != nil || Load().TextSize != 125 {
-		t.Fatal("text size not kept")
+	for _, n := range []int{115, 120, 125} {
+		if Save(Settings{TextSize: n}) != nil || Load().TextSize != n {
+			t.Fatalf("text size %d not kept", n)
+		}
 	}
-	for _, bad := range []int{90, 120, 300, -1} {
+	for _, bad := range []int{90, 105, 130, 300, -1} {
 		if Save(Settings{TextSize: bad}) == nil {
 			t.Fatalf("text size %d accepted", bad)
 		}

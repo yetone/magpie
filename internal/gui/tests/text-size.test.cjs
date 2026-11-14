@@ -1,8 +1,8 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // The Text size setting (Settings → Preferences, Ctrl/Cmd + − 0): a pick
 // posts to /api/settings/text-size and stays picked after a reload (boot.js
-// carries it); the shortcuts step through 100/110/125/150% and back, in the
-// window and the tray panel, and a click on the control never scrolls the
+// carries it); the shortcuts step through 100/110/115/120/125/150% and
+// back, in the window and the tray panel, and a click on the control never scrolls the
 // page. The zoom itself is the webview's (Go), so here it is as a browser
 // zoomed: the window's points over the zoom in CSS pixels, deviceScaleFactor
 // the zoom — and at 150% nothing in any view runs off to the side, the Mac
@@ -139,7 +139,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const segs = page.locator("#textSizeSegs .opt");
         await segs.first().waitFor();
         assert.equal((await page.locator("#textSizeRow .name").textContent()).trim(), name);
-        assert.deepEqual((await segs.allTextContents()).map((s) => s.trim()), ["100%", "110%", "125%", "150%"]);
+        assert.deepEqual((await segs.allTextContents()).map((s) => s.trim()), ["100%", "110%", "115%", "120%", "125%", "150%"]);
         assert.equal(await segs.nth(0).evaluate((b) => b.classList.contains("on")), true, "100% starts picked");
         // the name alone (1ooogle on X), the keys in the choices' tooltip
         assert.equal(await page.locator("#textSizeRow .sub").count(), 0);
@@ -151,7 +151,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         for (let i = 0; i < 20 && !(await settingsTop(page)); i++) { await page.mouse.wheel(0, 30); await page.waitForTimeout(20); }
         const before = await settingsTop(page);
         assert(before > 0, "the settings list must scroll");
-        await segs.nth(2).click();
+        await segs.nth(4).click();
         await page.locator("#textSizeSegs .opt.on", { hasText: "125%" }).waitFor();
         await page.waitForTimeout(300);
         assert.equal(await settingsTop(page), before, "picking a text size must not scroll the settings page");
@@ -195,11 +195,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const mod = await page.evaluate(() => /^Mac/.test(navigator.platform) ? "Meta" : "Control");
         await page.locator("#view-agents").waitFor();
         assert.equal(await zoomVar(page), "1.1");
-        await page.keyboard.press(mod + "+Equal");
+        // the steps between 110 and 125 (WeltAn_X on X: 110 small, 125
+        // crowded at 4K and 200%), one at a time
+        for (const n of ["1.15", "1.2", "1.25"]) {
+          await page.keyboard.press(mod + "+Equal");
+          await page.waitForFunction((n) => getComputedStyle(document.documentElement).getPropertyValue("--zoom").trim() === n, n);
+        }
+        await page.keyboard.press(mod + "+Minus");
         await page.waitForTimeout(200);
         await page.keyboard.press(mod + "+Digit0");
         await page.waitForTimeout(200);
-        assert.deepEqual(posts, [125, 100]);
+        assert.deepEqual(posts, [115, 120, 125, 120, 100]);
         assert.deepEqual(page.errors, []);
         await page.context().close();
       });
