@@ -2506,13 +2506,14 @@ func claudeIn(at place) *Agent {
 				if err := edit.SetJSON(path, edit.KV{Path: "model", Value: was}); err != nil {
 					return err
 				}
-				forget(at.key("claude.model"))
 			case isMagpie(get()):
 				if err := edit.DelJSON(path, "model"); err != nil {
 					return err
 				}
-				forget(at.key("claude.model"))
 			}
+			// put back, given up, or none to take over: the stash keeps no
+			// model past a Disconnect that went through
+			forget(at.key("claude.model"))
 			return nil
 		},
 		// the catalog's models, with their levels, as Claude Code is told
