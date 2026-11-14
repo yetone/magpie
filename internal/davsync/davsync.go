@@ -1344,6 +1344,20 @@ func syncOnce(ctx context.Context, c Config, st *state, pv *Plan) error {
 			rejoin = append(rejoin, p)
 		}
 	}
+	// a state written before Off was recorded (#3356): the last sync left
+	// a part out but wrote no mark of it, and all it left of the part here
+	// is the nothing-hash a left-out part carries. One that holds something
+	// of its own now joins like one turned back on, its older content never
+	// taken as a change here over the server's newer one.
+	nothing := hashes(backup.Bundle{})
+	for _, p := range Parts {
+		if !c.syncs(p) || slices.Contains(rejoin, p) || st.Local == nil {
+			continue
+		}
+		if st.Local[p] == nothing[p] && L[p] != st.Local[p] && !unset(local, p) {
+			rejoin = append(rejoin, p)
+		}
+	}
 	if unchanged {
 		if maps.Equal(L, st.Local) && !follow && !moved && len(rejoin) == 0 {
 			return nil // nothing changed on either side
