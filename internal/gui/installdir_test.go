@@ -47,3 +47,27 @@ func TestInstallWordsEveryLanguage(t *testing.T) {
 		t.Error("a language without words isn't English")
 	}
 }
+
+// TestInstallQuestionNeedsSomeoneToAnswer: a CI runner's start (any CI
+// service's CI variable) or one on a desktop no one sees is never asked
+// where to install, so nothing waits on a dialog with the gateway not
+// up yet (v0.1.4160's release check); a person's start is asked.
+func TestInstallQuestionNeedsSomeoneToAnswer(t *testing.T) {
+	for _, c := range []struct {
+		ci      string
+		visible bool
+		asked   bool
+	}{
+		{"", true, true},
+		{"false", true, true},
+		{"0", true, true},
+		{"true", true, false},
+		{"True", true, false},
+		{"1", true, false},
+		{"", false, false},
+	} {
+		if why := unanswerable(c.ci, c.visible); (why == "") != c.asked {
+			t.Errorf("CI=%q visible=%v: unanswerable = %q, want asked %v", c.ci, c.visible, why, c.asked)
+		}
+	}
+}

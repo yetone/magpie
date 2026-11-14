@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"log"
+	"os"
 	"path/filepath"
 	"runtime"
 	"syscall"
@@ -19,8 +20,22 @@ import (
 )
 
 // askInstallFolder has update.Settle ask where to install, in the
-// reader's language.
+// reader's language, when someone is there to answer. The question comes
+// before anything else starts, the gateway included: Install opens the
+// installed copy in this one's place. So a start no one can answer (a
+// CI runner, a service, a start over SSH) is never asked, or it would
+// wait on a dialog no one sees with no gateway behind it: v0.1.4160 to
+// v0.1.4166's release check started dist\magpie-windows-amd64.exe, which
+// 14807bcf2 made a download to ask about, and the gateway never came
+// up. Unasked, a copy kept outside Downloads runs where it is and
+// nothing is recorded for it; one in Downloads installs as it did
+// before there was a question.
 func askInstallFolder() {
+	if why := unanswerable(os.Getenv("CI"), visibleDesktop()); why != "" {
+		update.AskFolder = nil
+		log.Println("install: not asking where to install:", why)
+		return
+	}
 	update.AskFolder = func(suggest string, check func(string) error) string {
 		w := installWordsFor(trayLang(settings.Shared().Lang, systemLang))
 		var out string
@@ -78,7 +93,28 @@ func installDialog(w installWords, dir string, check func(string) error) string 
 	}
 }
 
+// visibleDesktop says whether this process's window station is one a
+// person sees (WSF_VISIBLE): not a service's, nor an SSH session's. True
+// when it can't be told, so the question is asked as before.
+func visibleDesktop() bool {
+	ws, _, _ := procGetWinStation.Call()
+	if ws == 0 {
+		return true
+	}
+	// USEROBJECTFLAGS: fInherit, fReserved (BOOLs), dwFlags
+	var flags struct{ inherit, reserved, flags uint32 }
+	var n uint32
+	const uoiFlags, wsfVisible = 1, 1
+	ok, _, _ := procGetUserObjInfo.Call(ws, uoiFlags, uintptr(unsafe.Pointer(&flags)), unsafe.Sizeof(flags), uintptr(unsafe.Pointer(&n)))
+	if ok == 0 {
+		return true
+	}
+	return flags.flags&wsfVisible != 0
+}
+
 var (
+	procGetWinStation  = windows.NewLazySystemDLL("user32.dll").NewProc("GetProcessWindowStation")
+	procGetUserObjInfo = windows.NewLazySystemDLL("user32.dll").NewProc("GetUserObjectInformationW")
 	comctl32           = windows.NewLazySystemDLL("comctl32.dll")
 	procTaskDialogIndi = comctl32.NewProc("TaskDialogIndirect")
 	procSHCreateItem   = windows.NewLazySystemDLL("shell32.dll").NewProc("SHCreateItemFromParsingName")

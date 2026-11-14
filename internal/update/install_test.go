@@ -613,8 +613,9 @@ func TestSettleAsksAboutADownloadKeptElsewhere(t *testing.T) {
 			if to, err := settle(kept); err != nil || to != f.to || len(f.asked) != 1 {
 				t.Fatalf("second start: %q, %v, asked %q", to, err, f.asked)
 			}
-			if !forwards(kept) {
-				t.Fatal("the copy kept elsewhere doesn't count as forwarding")
+			// forwarding is Windows' alone, as for a download in Downloads
+			if forwards(kept) != (runtime.GOOS == "windows") {
+				t.Fatalf("forwards(%s) = %v on %s", kept, forwards(kept), runtime.GOOS)
 			}
 		})
 	}

@@ -1170,7 +1170,14 @@ stop its updates. Cancel runs the exe where it is. The shortcut, App
 Paths, autostart, the `magpie://` scheme, PATH and self-update all take
 the running exe's folder, so they follow the choice. Uninstall forgets
 the record (`update.ForgetInstallDir`) and leaves the program where it
-is, as before. See `TestSettleAsksAboutADownloadKeptElsewhere`,
+is, as before. The question comes before anything starts, the gateway
+included, since Install opens the installed copy in this one's place; so
+a start no one can answer is never asked (`unanswerable`): `CI` set (any
+CI service's), or a window station no one sees (a service, SSH). Such a
+copy kept outside Downloads runs where it is, nothing recorded; one in
+Downloads installs to the default as with no dialog. v0.1.4160 to
+v0.1.4166's release check waited on the dialog with no gateway
+(`TestNoInstallQuestionOnCI`). See `TestSettleAsksAboutADownloadKeptElsewhere`,
 `TestSettleDeclinedElsewhereIsKept`, `TestDeclinedRecord`,
 `TestSettleInstallsWhereTheUserChose`,
 `TestSettleOffersTheChosenFolderAgain`, `TestInstallableRefuses` in

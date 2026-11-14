@@ -5,6 +5,7 @@ package gui
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/yetone/magpie/internal/update"
 )
@@ -79,4 +80,20 @@ func (w installWords) refusal(dir string, err error) string {
 		return fmt.Sprintf(w.downloads, dir)
 	}
 	return fmt.Sprintf(w.failed, dir, err)
+}
+
+// unanswerable says why the install question would go unanswered, ""
+// when someone can answer it: ci is the CI variable every CI service
+// sets (GitHub's, GitLab's, Azure's: true or 1), visible whether the
+// desktop is one a person sees (installdir_windows.go).
+func unanswerable(ci string, visible bool) string {
+	switch strings.ToLower(strings.TrimSpace(ci)) {
+	case "", "0", "false", "no":
+	default:
+		return "CI=" + ci
+	}
+	if !visible {
+		return "no one sees this desktop"
+	}
+	return ""
 }
