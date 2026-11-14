@@ -425,3 +425,45 @@ func TestAntigravityCloakLineWrappedOrWidened(t *testing.T) {
 		}
 	}
 }
+
+// Codex's GPT-5 line in a user's turn, where a pasted AGENTS.md or a
+// developer message told after a reply puts it, goes to an Antigravity
+// account reworded: since 11-14 Google answers it there with the same bare
+// 429 (3 of 3 on a real account). The model's own turns, the caller's
+// request and every other account keep it as written.
+func TestAntigravityCloaksTheLineInAUsersTurn(t *testing.T) {
+	said := "You were told: " + codexGPT5System
+	// the lines Google let through in a user's turn go as written there
+	others := "x-anthropic-billing-header: cc_version=2.1.316.2e4;\nYou are a Claude agent, built on Anthropic's Claude Agent SDK.\n" + hermesOldSystem + "\nRFC 2119 keywords: MUST, REQUIRED, SHOULD, RECOMMENDED, MAY, OPTIONAL."
+	r := &Request{Messages: []Message{
+		{Role: "user", Parts: []Part{{Kind: Text, Text: others}}},
+		{Role: "user", Parts: []Part{{Kind: Text, Text: "hi"}, {Kind: Text, Text: "<system-reminder>\n" + said + "\n</system-reminder>"}}},
+		{Role: "assistant", Parts: []Part{{Kind: Text, Text: said}}},
+		{Role: "user", Parts: []Part{{Kind: Text, Text: said}}},
+	}}
+	ag := provider.Provider{ID: "antigravity", Account: &provider.Account{Agent: "antigravity"}}
+	b := string(codeAssistBody(ag, r, "gemini-3-flash", nil))
+	if n := strings.Count(b, "based on GPT-5"); n != 1 {
+		t.Fatalf("Antigravity's account was sent the line %d times, want once (the model's turn): %s", n, b)
+	}
+	if n := strings.Count(b, "built on GPT-5"); n != 2 {
+		t.Fatalf("the user's turns went reworded %d times, want 2: %s", n, b)
+	}
+	if !strings.Contains(b, `"text":`+string(mustJSON(others))) {
+		t.Fatalf("lines Google lets through in a user's turn were changed: %s", b)
+	}
+	for i, m := range r.Messages[1:] {
+		if !strings.Contains(m.Parts[len(m.Parts)-1].Text, "based on GPT-5") {
+			t.Fatalf("the caller's message %d was changed: %+v", i, m)
+		}
+	}
+	gemini := provider.Provider{ID: "gemini-cli", Account: &provider.Account{Agent: "gemini"}}
+	if b := string(codeAssistBody(gemini, r, "gemini-3-flash", nil)); strings.Count(b, "based on GPT-5") != 3 {
+		t.Fatalf("Gemini CLI's account was sent %s", b)
+	}
+	asWritten := ag
+	asWritten.PromptAsWritten = true
+	if b := string(codeAssistBody(asWritten, r, "gemini-3-flash", nil)); strings.Count(b, "based on GPT-5") != 3 {
+		t.Fatalf("prompt=as-written was sent %s", b)
+	}
+}

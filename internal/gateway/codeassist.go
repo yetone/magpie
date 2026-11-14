@@ -52,9 +52,9 @@ func accountAgent(p provider.Provider) string {
 // antigravityTurnsAway: a system prompt Antigravity answers with a 429
 // "Resource has been exhausted (e.g. check quota)" whatever the quota left:
 // one that carries a line of agTurnedAway anywhere in the system
-// instruction, in any case, is turned away on every model, while the same
-// words in a message go through (#666). magpie rewords those lines before
-// they go (antigravityCloak); this still tells the refusal for what it is
+// instruction, in any case, is turned away on every model (#666), and since
+// 11-14 Codex's GPT-5 line in a user's turn too. magpie rewords those lines
+// before they go (antigravityCloak, antigravityCloakMessages); this still tells the refusal for what it is
 // when the user has the prompt sent as written, or Google turns away a copy
 // someone broke up with invisible characters, so no one chases a quota that
 // isn't spent.
@@ -249,12 +249,36 @@ func antigravityCloak(system string) string {
 	if !antigravityTurnsAway(system) {
 		return system
 	}
+	return agCloakLines(system, nil)
+}
+
+// agUserTurnedAway are the lines of agTurnedAway Antigravity also turns
+// away in a user's turn: since 11-14 Codex's GPT-5 lines there got a bare
+// 429 "Resource has been exhausted" 3 of 3 on a real account, where a
+// pasted AGENTS.md or a developer message told after a reply
+// (<system-reminder>) puts them, and went through reworded. The others went
+// through as written there, 3 of 3 each, and so did all of them in the
+// model's turns and in tool results.
+var agUserTurnedAway = func() []bool {
+	only := make([]bool, len(agTurnedAway))
+	for i, line := range agTurnedAway {
+		only[i] = strings.HasPrefix(line, "you are codex, ")
+	}
+	return only
+}()
+
+// agCloakLines is antigravityCloak over the lines of agTurnedAway only says
+// to reword, or over all of them when only is nil.
+func agCloakLines(system string, only []bool) string {
 	type match struct {
 		from, to int
 		as       func(string) string
 	}
 	var at []match
 	for i, re := range agTurnedAwayRes {
+		if only != nil && !only[i] {
+			continue
+		}
 		for _, m := range re.Regexp().FindAllStringIndex(system, -1) {
 			at = append(at, match{m[0], m[1], agSaidAs[i]})
 		}
@@ -273,6 +297,41 @@ func antigravityCloak(system string) string {
 	}
 	b.WriteString(system[prev:])
 	return b.String()
+}
+
+// antigravityCloakMessages is msgs with each line of agUserTurnedAway in
+// the text of a user's turn said as agSaidAs says, and whether any was. The
+// model's own turns, tool results and every other line are left as they
+// are, and msgs itself is never changed.
+func antigravityCloakMessages(msgs []Message) ([]Message, bool) {
+	var out []Message
+	for i, m := range msgs {
+		if m.Role == "assistant" {
+			continue
+		}
+		var parts []Part
+		for j, pt := range m.Parts {
+			if pt.Kind != Text {
+				continue
+			}
+			t := agCloakLines(pt.Text, agUserTurnedAway)
+			if t == pt.Text {
+				continue
+			}
+			if parts == nil {
+				parts = slices.Clone(m.Parts)
+			}
+			parts[j].Text = t
+		}
+		if parts == nil {
+			continue
+		}
+		if out == nil {
+			out = slices.Clone(msgs)
+		}
+		out[i].Parts = parts
+	}
+	return out, out != nil
 }
 
 // antigravityRefuses is what Antigravity says when it turns such a request
@@ -406,6 +465,11 @@ func codeAssistBody(p provider.Provider, r *Request, model string, wires map[str
 		if cloaked := antigravityReword(antigravityCloak(r.System)); cloaked != r.System {
 			rc := *r
 			rc.System = cloaked
+			r = &rc
+		}
+		if msgs, ok := antigravityCloakMessages(r.Messages); ok {
+			rc := *r
+			rc.Messages = msgs
 			r = &rc
 		}
 	}
