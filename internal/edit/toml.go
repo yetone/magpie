@@ -550,7 +550,11 @@ func tomlTablesOf(path string) ([]tomlTableSpan, error) {
 func tomlFileOf(path string) (tomlFile, error) {
 	doc, err := filememo.Read("toml file", path, func(b []byte) (tomlFile, error) {
 		tomlParses.Add(1)
-		doc, err := parseTOMLFile(splitLines(string(TrimBOM(b))))
+		// the parser reads the file's own bytes: joining the lines back
+		// together and converting that to bytes copied the whole file
+		// twice more on every parse
+		src := TrimBOM(b)
+		doc, err := parseTOMLSource(src, splitLines(string(src)))
 		if err != nil {
 			return tomlFile{}, fmt.Errorf("%s: %w", path, err)
 		}
@@ -625,8 +629,14 @@ type tomlFile struct {
 // parseTOMLFile is parseTOMLTables with the top-level keys too, located the
 // same way: a key's range covers its whole value, however many lines it takes.
 func parseTOMLFile(lines []string) (tomlFile, error) {
+	return parseTOMLSource([]byte(strings.Join(lines, "\n")), lines)
+}
+
+// parseTOMLSource is parseTOMLFile of src, whose lines (split at "\n") are
+// lines: the caller that already holds the text passes it, not a copy.
+func parseTOMLSource(src []byte, lines []string) (tomlFile, error) {
 	p := unstable.Parser{KeepComments: true}
-	p.Reset([]byte(strings.Join(lines, "\n")))
+	p.Reset(src)
 	shapeOf := tomlShaper(lines)
 	root := tomlTableSpan{to: len(lines)}
 	var tables []tomlTableSpan
