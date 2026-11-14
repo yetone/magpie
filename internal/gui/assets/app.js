@@ -5306,19 +5306,6 @@ function tellTag(tell) {
   return tell ? el("span", "mtell", tell) : null;
 }
 
-// keysTag: which of a provider's keys list a model, when not all of them
-// do (cliddO11 on X): the key's name, two named, or how many; none when
-// every key lists it
-function keysTag(p, m) {
-  const ids = m.keys || [];
-  if (!ids.length) return null;
-  const n = m.keyCount || ids.length;
-  const names = ids.map((id) => { const k = p.keyList?.find((x) => x.id === id); return k ? k.name || k.masked : id; });
-  const tag = el("span", "badge mkey", n <= 2 ? names.join(" · ") : t("{n} keys", { n }));
-  tag.title = t("Listed by {keys} only", { keys: names.join(", ") + (n > names.length ? " …" : "") });
-  return tag;
-}
-
 // contextTag: the small grey 1M by a model that holds a million tokens or
 // more (Cursor's names said it, and no longer do); the usual 128K–400K
 // aren't marked, as nearly every model has one of those; nor is a name
@@ -11490,8 +11477,8 @@ function renderModels(p) {
       c.append(el("span", "", m.name && m.name !== m.id ? m.name : m.id));
       const tell = tellTag(tells.get(m.id));
       if (tell) c.append(tell);
-      const kt = keysTag(p, m);
-      if (kt) c.append(kt);
+      // which keys list it, when not all do (keysTag, in keyrates.js)
+      if (m.keys) import("./keyrates.js").then(() => c.append(keysTag(p, m)), () => {});
       // one the plan serves at no cost to it (WorkBuddy's x0.00 credits)
       // or one its vendor names free (#185), or lists at $0
       const free = m.free || m.zero || namedFree(m.id, m.name);

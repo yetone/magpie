@@ -49,3 +49,17 @@ window.keyPriceRates = function (ed) {
   }
   return map;
 };
+
+// keysTag: which of a provider's keys list a model, when not all of them
+// do (cliddO11 on X): the key's name, two named, or how many; none when
+// every key lists it. The server sends keys only for a provider with two
+// or more on, the same providers this file is loaded for.
+window.keysTag = function (p, m) {
+  const ids = m.keys || [];
+  if (!ids.length) return null;
+  const n = m.keyCount || ids.length;
+  const names = ids.map((id) => { const k = p.keyList?.find((x) => x.id === id); return k ? k.name || k.masked : id; });
+  const tag = el("span", "badge mkey", n <= 2 ? names.join(" · ") : t("{n} keys", { n }));
+  tag.title = t("Listed by {keys} only", { keys: names.join(", ") + (n > names.length ? " …" : "") });
+  return tag;
+};
