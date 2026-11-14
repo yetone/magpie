@@ -241,11 +241,11 @@ func tint(base, c rgb, k float64) rgb {
 }
 
 // depth is how far past the dark theme's background c is toward black,
-// 0 for a colour as light as it or lighter, 1 for black: a pick darker
-// than the theme's own ground asks for a darker theme (CHENGJIAHEGOXIS on
-// X: black, Graphite and Default drew the same grey grounds, 「尤其是黑色
-// 始终一直是灰色」). On the light theme, the same for a pick lighter than
-// its background, toward white.
+// 0 for a colour as light as it or lighter, 1 for black, where lifted
+// starts its ink (CHENGJIAHEGOXIS on X: black's ink was Graphite's grey,
+// 「尤其是黑色始终一直是灰色」). On the light theme, the same for a pick
+// lighter than its background, toward white. The dark grounds go down by
+// darkness, which reads a colour's lightness as the eye does.
 func depth(c rgb, dark bool) float64 {
 	g := (c[0] + c[1] + c[2]) / 3
 	if dark {
@@ -256,19 +256,57 @@ func depth(c rgb, dark bool) float64 {
 	return max(0, g-ref) / (255 - ref)
 }
 
+// lightness is c's OKLab lightness, 0 for black and 1 for white: how
+// light a colour looks, whatever its hue. A deep navy's mean channel is
+// as high as the dark theme's grey, but it looks far darker than it.
+func lightness(c rgb) float64 {
+	lin := func(v float64) float64 {
+		v /= 255
+		if v <= 0.04045 {
+			return v / 12.92
+		}
+		return math.Pow((v+0.055)/1.055, 2.4)
+	}
+	r, g, b := lin(c[0]), lin(c[1]), lin(c[2])
+	l := math.Cbrt(0.4122214708*r + 0.5363325363*g + 0.0514459929*b)
+	m := math.Cbrt(0.2119034982*r + 0.6806995451*g + 0.1073969566*b)
+	s := math.Cbrt(0.0883024619*r + 0.2817188376*g + 0.6299787005*b)
+	return 0.2104542553*l + 0.7936177850*m - 0.0040720468*s
+}
+
+// darkLight is the lightness under which a pick is a dark colour, one
+// the dark theme's grounds go down toward: Graphite (#52525b) and every
+// preset are lighter, a deep navy or a near black are darker.
+const darkLight = 0.4
+
+// darkness is how far c is toward black past darkLight: 0 for Graphite
+// or any lighter colour, 1 for black (CHENGJIAHEGOXIS on X: the darkest
+// navy of the system's picker drew the same grey page as Graphite, 「感觉
+// 是有浅灰存在，所以导致深变浅」).
+func darkness(c rgb) float64 {
+	return max(0, darkLight-lightness(c)) / darkLight
+}
+
 // ground is one of the theme's grounds once c is picked: tinted with c's
-// hue, and, on the dark theme, as much darker as c is darker than the
-// theme's background, so black draws a black page with its cards, menus
-// and lines the same steps above it. The light theme's grounds keep their
-// lightness: a white pick there would melt its white cards into the page.
+// hue, and, on the dark theme, as much darker as c is a dark colour
+// (darkness), so black draws a black page with its cards, menus and
+// lines the same steps above it, and a deep navy a near-black navy one.
+// As it goes down the ground loses app.css's own cool grey, so black's
+// page is #000000, Chrome's and the system's black, not a blue-black
+// (「纯黑……感觉色对不上」), and the pick's hue counts for more, so a dark
+// colour's page is that colour's and not grey. The light theme's grounds
+// keep their lightness: a white pick there would melt its white cards
+// into the page.
 func ground(base, c rgb, dark bool) rgb {
 	if !dark {
 		return tint(base, c, lightTint)
 	}
-	out := tint(base, c, darkTint)
-	d := depth(c, true) * (darkBg[0] + darkBg[1] + darkBg[2]) / 3
+	d := darkness(c)
+	mean := (base[0] + base[1] + base[2]) / 3
+	out := tint(base.mix(rgb{mean, mean, mean}, d), c, darkTint+d*0.25)
+	step := d * (darkBg[0] + darkBg[1] + darkBg[2]) / 3
 	for i := range out {
-		out[i] = max(0, out[i]-d)
+		out[i] = max(0, out[i]-step)
 	}
 	return out
 }

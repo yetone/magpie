@@ -278,8 +278,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(graphite.body, own.body, "Graphite keeps the grey page");
       if (dark) {
         assert.equal(blk.body, rgbOf(varOf("#000000", "--bg", true)), "black's page");
-        const [r, g, b] = blk.body.match(/\d+/g).map(Number);
-        assert.ok(r + g + b <= 9, `black's page is black, not ${blk.body}`);
+        // #000000, as Chrome's and the system's black, not a blue-black
+        // (「纯黑……感觉色对不上」)
+        assert.equal(blk.body, "rgb(0, 0, 0)", "black's page is black");
         assert.equal(blk.list, rgbOf(varOf("#000000", "--card", true)), "Settings' list is on black's card");
         assert.notEqual(blk.list, blk.body, "the card stands a step above the page");
         // its ink is light, and the page's text reads on it
@@ -290,6 +291,20 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       }
       // the chosen swatch is black's own, drawn black
       assert.deepEqual(await chosen(page), ["own:#000000"]);
+      // the darkest navy of the system's picker draws a near-black navy
+      // page, not Graphite's grey (「感觉是有浅灰存在，所以导致深变浅」)
+      await page.locator("#accentPick .swatch.own input").evaluate((i) => { i.value = "#191047"; i.dispatchEvent(new Event("change", { bubbles: true })); });
+      await page.waitForFunction((w) => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() === w, want("#191047"));
+      const navy = await look();
+      if (dark) {
+        assert.equal(navy.body, rgbOf(varOf("#191047", "--bg", true)), "navy's page");
+        const [r, g, b] = navy.body.match(/\d+/g).map(Number);
+        const [gr] = graphite.body.match(/\d+/g).map(Number);
+        assert.ok(r + g + b < gr * 3 * 0.75 && b - r >= 8, `navy's page is a dark navy, not ${navy.body}`);
+        assert.equal(navy.list, rgbOf(varOf("#191047", "--card", true)), "Settings' list is on navy's card");
+      } else {
+        assert.equal(navy.body, rgbOf(varOf("#191047", "--bg", false)), "the light page keeps its lightness");
+      }
       assert.deepEqual(errors, []);
     });
   }
