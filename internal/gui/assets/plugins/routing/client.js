@@ -4182,10 +4182,14 @@ function routingPage(part) {
           const { prompt, read } = promptOf(r);
           if (prompt) { s.prompt += prompt; s.read += read; s.cached++; }
           const d = !noAnswer(outcome(r)[1]) && decodeOf(r, r.ms, r.ttft, r.firstText);
-          if (d) { s.decodeMs += d.w; s.decodeOut += d.n; s.timed++; }
+          // the same replies over their whole time too, the wait for the
+          // first token and the reasoning in: what a tool that times the
+          // whole request reads (@verymoes on X: CC Switch's ≈77 and
+          // opencode's 76.7 beside this 142)
+          if (d) { s.decodeMs += d.w; s.decodeOut += d.n; s.timed++; s.wholeMs += r.ms; s.wholeOut += r.out; }
         }
         return s;
-      }, { cost: 0, tokens: 0, priced: 0, unpriced: 0, running: 0, completed: 0, prompt: 0, read: 0, cached: 0, decodeMs: 0, decodeOut: 0, timed: 0 });
+      }, { cost: 0, tokens: 0, priced: 0, unpriced: 0, running: 0, completed: 0, prompt: 0, read: 0, cached: 0, decodeMs: 0, decodeOut: 0, timed: 0, wholeMs: 0, wholeOut: 0 });
       setText(x.arrow, open ? "▾" : "▸");
       // Background workers have their own IDs. Label groups made entirely
       // for one purpose without renaming a chat that also made helper calls.
@@ -4231,7 +4235,8 @@ function routingPage(part) {
       if (g.key && visibleMetrics.includes("cache") && total.prompt) meta.push(metricElement(["cache-hit", "Avg. cache", hitPct(total.read / total.prompt),
         t("Total cache reads divided by total prompt tokens; larger prompts carry more weight") + "\n" + coverage(total.cached)]));
       if (g.key && visibleMetrics.includes("speed") && total.decodeMs) meta.push(metricElement(["speed", "Avg. speed", t("{n} tok/s", { n: Math.round(total.decodeOut * 1000 / total.decodeMs) }),
-        t("Total output tokens divided by total decode time; excludes waiting and replies without usable timing") + ". " + t("A reply that reasoned counts only its answer, from its first text: the reasoning was written before the stream showed it") + ". " + t("No answer text: speed includes reasoning only when visible reasoning streamed; hidden reasoning has no speed") + "\n" + coverage(total.timed)]));
+        tipLines(t("Total output tokens divided by the time from each reply's first token to its end; the wait for the first token, and replies without usable timing, are left out") + ". " + t("A reply that reasoned counts only its answer, from its first text: the reasoning was written before the stream showed it") + ". " + t("No answer text: speed includes reasoning only when visible reasoning streamed; hidden reasoning has no speed"),
+          total.wholeMs ? t("Over each request's whole time, the wait for the first token and the reasoning counted: {n} tok/s", { n: Math.round(total.wholeOut * 1000 / total.wholeMs) }) : "", coverage(total.timed))]));
       const metaSig = JSON.stringify([bits, tokenHelp, meta.map((e) => [e.textContent, e.title])]);
       if (x.meta.dataset.sig !== metaSig) { x.meta.replaceChildren(...meta); x.meta.dataset.sig = metaSig; }
       const credits = routeCredits(g.rows);

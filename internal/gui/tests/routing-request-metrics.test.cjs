@@ -126,6 +126,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.doesNotMatch(await unknown.locator(".summary").textContent(), /token|—/, "a session without token counts has no fake zero or dash");
       assert.equal(await group.locator(".cache-hit .v").textContent(), "63%", "cache average is weighted by prompt tokens, not by request count");
       assert.match(await group.locator(".speed .v").textContent(), /^133 /, "speed is output divided by summed decode windows, not the mean of individual speeds");
+      // the same six replies over their whole time, the wait for the first
+      // token in, as tools that time the whole request read it (@verymoes
+      // on X): 4,000 tokens over 82 s
+      const speedTip = await group.locator(".speed").getAttribute("title");
+      assert.match(speedTip, lang === "zh" ? /不计等待首个 token 的时间/ : /the wait for the first token, and replies without usable timing, are left out/, "the tooltip says the wait for the first token is left out");
+      assert.match(speedTip, lang === "zh" ? /全程时间.*：49 token\/秒/ : /whole time.*: 49 tok\/s/, "the tooltip gives the speed over the whole time too");
       assert.match(await group.locator(".cache-hit").getAttribute("title"), /9.*11|11.*9/, "unknown and unfinished requests are excluded and coverage is disclosed");
       assert.match(await group.locator(".rt-token-total").getAttribute("title"), /11.*12|12.*11/, "session token breakdown discloses missing records");
       await group.click();
