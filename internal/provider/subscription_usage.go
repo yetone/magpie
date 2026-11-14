@@ -418,7 +418,7 @@ func visibleQuotas(all []SubscriptionQuota) []SubscriptionQuota {
 		}
 		if q.Provider == "gemini" || q.Provider == "antigravity" {
 			if chosen == nil {
-				chosen = exposedIDs("gemini", "antigravity")
+				chosen = keptExposedIDs("gemini", "antigravity")
 			}
 			var base func(string) string
 			if q.Provider == "antigravity" {
@@ -436,6 +436,47 @@ func visibleQuotas(all []SubscriptionQuota) []SubscriptionQuota {
 		out = append(out, q)
 	}
 	return out
+}
+
+// keptExposed is exposedIDs for Gemini's and Antigravity's quotas, kept
+// while StampNow stays the same, and no longer than exposedFor. The tray
+// reads usage every few minutes, and building it each time loaded the
+// whole catalog (5.6 MB of a tray-only magpie's 12.8 MB live heap) before
+// catalog's loadIdle could let it go.
+var keptExposed struct {
+	sync.Mutex
+	ids   map[string]map[string]bool
+	key   string
+	stamp Stamp
+	at    time.Time
+}
+
+// exposedFor bounds how long keptExposed is trusted across what a Stamp
+// can't see: a model retired by its date, another app's account file.
+const exposedFor = 30 * time.Minute
+
+// exposedBuilds counts keptExposedIDs' builds, for a test.
+var exposedBuilds atomic.Int64
+
+// keptExposedIDs is exposedIDs(ids...), built again only after a change
+// or for other ids. What it gives is shared: read only.
+func keptExposedIDs(ids ...string) map[string]map[string]bool {
+	key := strings.Join(ids, "\x00")
+	now := StampNow()
+	keptExposed.Lock()
+	defer keptExposed.Unlock()
+	if keptExposed.ids != nil && keptExposed.key == key && keptExposed.stamp == now && time.Since(keptExposed.at) < exposedFor {
+		return keptExposed.ids
+	}
+	exposedBuilds.Add(1)
+	built := exposedIDs(ids...)
+	// a change while it was built: the next read builds it again
+	if StampNow() == now {
+		keptExposed.ids, keptExposed.key, keptExposed.stamp, keptExposed.at = built, key, now, time.Now()
+	} else {
+		keptExposed.ids = nil
+	}
+	return built
 }
 
 // exposedIDs is, for each provider of ids, the models magpie offers from
