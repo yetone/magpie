@@ -1510,6 +1510,19 @@ each one.
     and run each package that has one. The review's own first run
     of it was piped through tail and lost which package failed; the
     rerun went to a log file.
+- **11-15, criteria still missed.**
+  - A red filed as "red on main" is bisected before anyone ships past
+    it. 2bb201162 (11-12) dropped `&& key.isConnected` from the
+    editor's paste reader, so a curl pasted into a keyed provider's
+    Base URL saved its key unseen over the provider's own. It ran 92
+    provider-* GUI files; key-box-once, which says exactly that, isn't
+    named provider-*, and went red. #6424 then filed it as "red on
+    origin/main", and #6709 lists it among 111 red files, both with no
+    cause. The review bisected it in two runs (10/10 at the parent,
+    0/10 at 2bb201162) and fixed it in a2a49c204. Choose GUI files by
+    what the change touches (grep the tests for its selectors and
+    words), not by name; and a red on main has a first bad commit,
+    which `git bisect` finds faster than a list grows.
 - **Done right on 10-17.** The retire stack (0f1666b38 to de671719a)
   diffed staticcheck's U1000 against its base for dead code, b98f906b1
   was red on the old code for an own-account gap, and 8 subscriptions
