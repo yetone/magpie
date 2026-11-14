@@ -478,6 +478,7 @@ var zh = map[string]string{
 	"advisor model":      "顾问模型",
 	"account":            "账号",
 	"auto mode":          "自动模式",
+	"permission mode":    "权限模式",
 	"opus effort":        "opus 推理强度",
 	"sonnet effort":      "sonnet 推理强度",
 	"haiku effort":       "haiku 推理强度",
