@@ -341,6 +341,36 @@ test("latest?channel=stable: unknown (503, never kept) without a ledger that rea
   assert.equal((await ask("/api/latest?channel=stable", broken)).status, 503);
 });
 
+test("download/stable: a platform's link goes to that file of Stable's release; /download stays the newest (fishmagic80 on X)", async () => {
+  const now = Date.now();
+  GITHUB = [
+    { version: "0.1.4", published: iso(now - 3600e3), notes: "- newest" },
+    { version: "0.1.2", published: iso(now - 12 * DAY), notes: "- stable one" },
+    { version: "0.1.1", published: iso(now - 13 * DAY), notes: "- old" },
+  ];
+  const env = { LEDGER: kv() };
+  await keepLedger(env, now);
+  store.clear();
+  const go = (path, e = env) => worker.fetch(new Request("https://usemagpie.ai" + path), e, ctx);
+  for (const path of ["/download/stable/linux", "/download/stable/linux-amd64", "/download/stable/magpie-linux-amd64"]) {
+    const res = await go(path);
+    assert.equal(res.status, 302, path);
+    assert.match(res.headers.get("Location"), /0\.1\.2/, path);
+  }
+  const newest = await go("/download/linux");
+  assert.equal(newest.status, 302);
+  assert.match(newest.headers.get("Location"), /0\.1\.4/);
+  // a file the release hasn't
+  assert.equal((await go("/download/stable/nothing-like-it")).status, 404);
+  // Stable unknown: said so, never kept
+  for (const e of [{}, { LEDGER: Object.assign(kv(), { broken: true }) }]) {
+    store.clear();
+    const res = await go("/download/stable/linux", e);
+    assert.equal(res.status, 503);
+    assert.equal(res.headers.get("Cache-Control"), "no-store");
+  }
+});
+
 test("notes: a range older than the hundred newest is read on from the ledger, one list", async () => {
   const now = Date.now();
   // 250 releases an hour apart: the API's first page has the newest 100

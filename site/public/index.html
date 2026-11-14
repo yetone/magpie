@@ -244,6 +244,16 @@ html[data-os="windows"] .btn .os-windows, html[data-os="linux"] .btn .os-linux {
 .plats span { color: var(--ink3); font-size: 12.5px; justify-self: end; }
 .plats a { color: var(--ink2); text-decoration: none; }
 .plats a:hover { color: var(--ink); text-decoration: underline; }
+/* Latest or Stable: which release the platform links download */
+.chan { display: inline-flex; gap: 2px; margin-top: 40px; padding: 3px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg2); }
+.chan button { display: inline-flex; align-items: baseline; gap: 6px; height: 30px; padding: 0 12px; border: 0; border-radius: 7px; background: transparent; color: var(--ink3); font: inherit; font-size: 13px; cursor: pointer; transition: background-color .15s ease, color .15s ease; }
+.chan button b { font-weight: 500; color: var(--ink2); transition: color .15s ease; }
+.chan button[aria-pressed="true"] { background: var(--card); color: var(--ink2); box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.chan button[aria-pressed="true"] b { color: var(--ink); }
+@media (hover: hover) and (pointer: fine) { .chan button:hover b { color: var(--ink); } }
+.chan button:focus-visible { outline: 2px solid var(--ink3); outline-offset: 1px; }
+.chan + .plats { margin-top: 16px; }
+.chan[hidden], .to-stable[hidden] { display: none; }
 footer { border-top: 1px solid var(--line); padding: 28px 0 40px; font-size: 13.5px; color: var(--ink3); }
 footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; }
 footer .links { margin-left: auto; display: flex; gap: 20px; }
@@ -443,7 +453,7 @@ footer a:hover { color: var(--ink); }
         </a>
         <a class="btn ghost" href="#cli" data-i18n="hero.term">Install from terminal</a>
       </div>
-      <div class="meta"><span class="ver" data-i18n="hero.free">Free</span> · <a href="https://github.com/yetone/magpie" data-i18n="hero.oss">Open source</a> · <span class="os-note">macOS 12+ · <a class="alt" href="/download/mac-intel">Intel Mac</a></span> · <a href="#get" data-i18n="hero.other">Windows &amp; Linux</a></div>
+      <div class="meta"><span class="ver" data-i18n="hero.free">Free</span><span class="to-stable" hidden> · <a href="#get"><span data-i18n="chan.stable">Stable</span> <span class="stable-v"></span></a></span> · <a href="https://github.com/yetone/magpie" data-i18n="hero.oss">Open source</a> · <span class="os-note">macOS 12+ · <a class="alt" href="/download/mac-intel">Intel Mac</a></span> · <a href="#get" data-i18n="hero.other">Windows &amp; Linux</a></div>
     </div>
     <div class="shot">
       <img loading="lazy" class="pick for-light" src="/img/picker-light.png" width="440" height="555" data-i18n-attr="alt:alt.picker" alt="Codex's model picker in magpie, listing DeepSeek, Kimi and GLM models">
@@ -740,6 +750,10 @@ magpie tui                             <span class="c" data-i18n="cli.c.tui"># t
     <h2 data-i18n="fin.h2">Every agent. Every model.</h2>
     <p class="sub" style="margin:0 auto 32px" data-i18n="fin.sub">Free, open source, native. For macOS, Windows and Linux.</p>
     <div class="cta"><a class="btn dl" href="/download"><span class="dl-label" data-i18n="dl.mac">Download for Mac</span></a><a class="btn ghost" href="https://github.com/yetone/magpie"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg> <span data-i18n="fin.gh">View on GitHub</span></a></div>
+    <div class="chan" role="group" data-i18n-attr="aria-label:chan.label" aria-label="Release" hidden>
+      <button type="button" data-ch="latest" aria-pressed="true"><b data-i18n="chan.latest">Latest</b><span class="v"></span></button>
+      <button type="button" data-ch="stable" aria-pressed="false" data-i18n-attr="title:chan.title" title="One version a week, after three days of use"><b data-i18n="chan.stable">Stable</b><span class="v"></span></button>
+    </div>
     <div class="plats" id="get">
       <div><b>macOS</b><span data-i18n="plat.mac">11 or later</span><a href="/download/mac-arm64">Apple Silicon</a><a href="/download/mac-intel">Intel</a></div>
       <div><b>Windows</b><span data-i18n="plat.win">10 or later</span><a href="/download/windows-amd64">x64</a><a href="/download/windows-arm64">ARM</a></div>
@@ -836,10 +850,30 @@ magpie tui                             <span class="c" data-i18n="cli.c.tui"># t
   };
   try { navigator.userAgentData?.getHighEntropyValues(["architecture"]).then((v) => setArch(v.architecture)).catch(() => {}); } catch {}
 
-  fetch("/api/latest").then((r) => (r.ok ? r.json() : null)).then((rel) => {
+  // The newest version, and Stable's beside it (fishmagic80 on X): the
+  // platform links download either; the hero's Stable link picks Stable.
+  const feed = (q) => fetch("/api/latest" + q).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  const chan = document.querySelector(".chan");
+  const plats = [...document.querySelectorAll(".plats a")].map((a) => [a, a.getAttribute("href").replace("/download/", "")]);
+  const pick = (ch) => {
+    chan.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.ch === ch)));
+    plats.forEach(([a, p]) => (a.href = (ch === "stable" ? "/download/stable/" : "/download/") + p));
+  };
+  chan.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => pick(b.dataset.ch)));
+  Promise.all([feed(""), feed("?channel=stable")]).then(([rel, st]) => {
     if (!rel) return;
     document.querySelectorAll(".ver").forEach((e) => (e.textContent = T("Version ", "版本 ", "バージョン ", "Version ") + rel.version));
-  }).catch(() => {});
+    if (!st || !st.version || st.version === rel.version) return;
+    chan.querySelector('[data-ch="latest"] .v').textContent = rel.version;
+    document.querySelectorAll('[data-ch="stable"] .v, .stable-v').forEach((e) => (e.textContent = st.version));
+    chan.hidden = false;
+    document.querySelector(".final > .meta").hidden = true; // the choice names both versions
+    document.querySelectorAll(".to-stable").forEach((e) => {
+      e.hidden = false;
+      e.querySelector("a").addEventListener("click", () => pick("stable"));
+    });
+    if (location.hash === "#stable") { pick("stable"); chan.scrollIntoView({ block: "center" }); }
+  });
 })();
 </script>
 <script>

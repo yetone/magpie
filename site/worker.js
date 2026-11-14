@@ -33,6 +33,8 @@
 //   /download/windows      the Windows app (x64);  /download/windows-arm64
 //   /download/linux        the Linux app (x86-64); /download/linux-arm64
 //   /download/<file>       any file of the newest release, by name
+//   /download/stable, /download/stable/<platform or file>
+//                          the same from the Stable channel's release
 //   /files/<tag>/<file>    a release's file from R2 (files.js), the feed's
 //                          url and /download's for the files R2 holds;
 //                          GitHub's own address for any it doesn't
@@ -148,12 +150,16 @@ export default {
     if (dl) return detour(ctx, env, dl[1], dl[2]);
     if (url.pathname.startsWith(RELAY)) return relay(req, url);
     if (url.pathname === "/download" || url.pathname.startsWith("/download/")) {
-      const want = url.pathname.split("/")[2] || "mac-arm64";
-      const got = await latest(ctx, env);
+      // /download/stable/...: the same from the Stable channel's release
+      // (the home page's Stable choice, fishmagic80 on X)
+      const parts = url.pathname.split("/");
+      const onStable = parts[2] === "stable";
+      const want = parts[onStable ? 3 : 2] || "mac-arm64";
+      const got = onStable ? await stable(ctx, env, Date.now()).catch(() => null) : await latest(ctx, env);
       const rel = got && (await fromR2(ctx, env, got.rel));
       const asset = rel && rel.assets && rel.assets[SHORT[want] || want];
-      if (!asset) return new Response("not found\n", { status: 404 });
-      if (req.method === "GET") ctx.waitUntil(capture("magpie site download", { link: want, file: SHORT[want] || want, client: client(req), country: country(req) }));
+      if (!asset) return new Response(onStable && !got ? "the stable version isn't known yet\n" : "not found\n", { status: onStable && !got ? 503 : 404, headers: NO_STORE });
+      if (req.method === "GET") ctx.waitUntil(capture("magpie site download", { link: onStable ? "stable/" + want : want, file: SHORT[want] || want, client: client(req), country: country(req) }));
       return Response.redirect(asset.url, 302);
     }
     // crawlers and old browsers ask for /favicon.ico whatever the page links
