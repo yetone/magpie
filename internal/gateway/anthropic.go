@@ -228,9 +228,16 @@ func readAdvised(body []byte, clientMarks, facts, advised bool) (*Request, error
 				case "document":
 					// a PDF, say, as the client sent it: dropped whole
 					// before, it reached the model only when the request
-					// was relayed as sent (#5452)
-					if b.Source != nil {
-						msg.Parts = append(msg.Parts, Part{Kind: File, MediaType: b.Source.MediaType, Data: b.Source.Data, URL: b.Source.URL, block: true})
+					// was relayed as sent (#5452). A text source carries
+					// the document's words, not base64: they go as text
+					switch {
+					case b.Source == nil:
+					case b.Source.Type == "text":
+						msg.Parts = append(msg.Parts, Part{Kind: Text, Text: b.Source.Data, block: true})
+					case b.Source.Type == "base64" && b.Source.Data != "":
+						msg.Parts = append(msg.Parts, Part{Kind: File, MediaType: b.Source.MediaType, Data: b.Source.Data, block: true})
+					case b.Source.URL != "":
+						msg.Parts = append(msg.Parts, Part{Kind: File, MediaType: b.Source.MediaType, URL: b.Source.URL, block: true})
 					}
 				case "tool_use":
 					msg.Parts = append(msg.Parts, Part{Kind: ToolCall, ID: anthropicInID(b.ID), Name: b.Name, Args: b.Input, block: true})
@@ -1022,23 +1029,16 @@ func anthropicBody(r *Request, model, host string, replay bool) []byte {
 					rest = append(rest, b)
 					break
 				}
-				if p.Data != "" {
-					// the file itself, in Messages' own tongue (#5452)
+				if p.MediaType == "application/pdf" && p.Data != "" {
+					// the file itself, in Messages' own tongue (#5452): a
+					// base64 document takes a PDF only, so any other file
+					// is still told of rather than turned away with a 400
 					rest = append(rest, aBlock{Type: "document", Source: &struct {
 						Type      string `json:"type"`
 						MediaType string `json:"media_type,omitempty"`
 						Data      string `json:"data,omitempty"`
 						URL       string `json:"url,omitempty"`
 					}{Type: "base64", MediaType: p.MediaType, Data: p.Data}})
-				} else if strings.HasPrefix(p.URL, "http") {
-					// a document by its URL — Anthropic's url source takes
-					// http(s), not a cloud-storage scheme (#5452)
-					rest = append(rest, aBlock{Type: "document", Source: &struct {
-						Type      string `json:"type"`
-						MediaType string `json:"media_type,omitempty"`
-						Data      string `json:"data,omitempty"`
-						URL       string `json:"url,omitempty"`
-					}{Type: "url", URL: p.URL}})
 				} else {
 					rest = append(rest, aBlock{Type: "text", Text: attachmentText(p)})
 				}

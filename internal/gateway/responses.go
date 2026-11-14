@@ -1423,9 +1423,11 @@ func buildResponses(r *Request, model, host string, rejectTemp bool) []byte {
 				}
 				content = append(content, map[string]any{"type": t, "text": p.Text})
 			case File:
-				if m.Role != "assistant" && p.Data != "" {
-					// the file itself, in Responses' own tongue (#5452)
-					content = append(content, map[string]any{"type": "input_file", "file_data": "data:" + p.MediaType + ";base64," + p.Data})
+				if m.Role != "assistant" && p.MediaType == "application/pdf" && p.Data != "" {
+					// the file itself, in Responses' own tongue (#5452):
+					// file_data goes with a filename, and a PDF is the
+					// file every Responses model reads
+					content = append(content, map[string]any{"type": "input_file", "filename": "document.pdf", "file_data": "data:" + p.MediaType + ";base64," + p.Data})
 				} else {
 					// a file only referenced (a Gemini fileUri, another
 					// host's file id) is told of: Responses' file_id is

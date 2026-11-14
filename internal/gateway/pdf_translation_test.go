@@ -112,3 +112,53 @@ func TestChatFileRidesToResponsesAndAnthropic(t *testing.T) {
 		t.Fatalf("anthropic body carries the placeholder text:\n%s", out)
 	}
 }
+
+// Only a PDF goes as a file: Anthropic's base64 document takes a PDF
+// alone, so a .docx sent as one would turn the whole turn away with a
+// 400 (#934). Any other file is still told of, on both upstreams.
+func TestOnlyAPDFGoesAsAFile(t *testing.T) {
+	r, err := parseChat([]byte(`{"model":"m","messages":[{"role":"user","content":[{"type":"file","file":{"filename":"notes.csv","file_data":"data:text/csv;base64,YSxiCg=="}}]}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, out := range map[string][]byte{"responses": buildResponses(r, "m", "upstream.test", false), "anthropic": buildAnthropic(r, "m")} {
+		if strings.Contains(string(out), `"input_file"`) || strings.Contains(string(out), `"document"`) {
+			t.Fatalf("%s body sent a csv as a file:\n%s", name, out)
+		}
+		if !strings.Contains(string(out), "[attachment text/csv]") {
+			t.Fatalf("%s body lost the csv's note:\n%s", name, out)
+		}
+	}
+}
+
+// A Responses input_file with file_data carries a filename, as OpenAI's
+// shape has it.
+func TestResponsesFileHasAFilename(t *testing.T) {
+	r, err := parseChat([]byte(`{"model":"m","messages":[{"role":"user","content":[{"type":"file","file":{"filename":"doc.pdf","file_data":"data:application/pdf;base64,` + pdfB64 + `"}}]}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out := buildResponses(r, "m", "upstream.test", false); !strings.Contains(string(out), `"filename":"document.pdf"`) {
+		t.Fatalf("input_file without a filename:\n%s", out)
+	}
+}
+
+// A document whose source is text carries its words, not base64: they go
+// on as text, never as a PDF's inline data. One given only by URL is told
+// of, not fetched by another vendor.
+func TestAnthropicDocumentTextAndURLSources(t *testing.T) {
+	r, err := readAnthropic([]byte(`{"model":"m","max_tokens":64,"messages":[{"role":"user","content":[{"type":"document","source":{"type":"text","media_type":"text/plain","data":"the plain words"}},{"type":"document","source":{"type":"url","url":"https://example.invalid/a.pdf"}}]}]}`), false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := string(buildResponses(r, "m", "upstream.test", false))
+	if !strings.Contains(out, "the plain words") || strings.Contains(out, `"input_file"`) {
+		t.Fatalf("text document not carried as text:\n%s", out)
+	}
+	if !strings.Contains(out, "[attachment : https://example.invalid/a.pdf]") {
+		t.Fatalf("url document not told of:\n%s", out)
+	}
+	if a := string(buildAnthropic(r, "m")); strings.Contains(a, `"url":"https://example.invalid/a.pdf"`) && strings.Contains(a, `"document"`) {
+		t.Fatalf("url document sent as a document:\n%s", a)
+	}
+}
