@@ -53,10 +53,11 @@ func accountAgent(p provider.Provider) string {
 // "Resource has been exhausted (e.g. check quota)" whatever the quota left:
 // one that carries a line of agTurnedAway anywhere in the system
 // instruction, in any case, is turned away on every model, while the same
-// words in a message go through (#666). magpie breaks those lines up before
+// words in a message go through (#666). magpie rewords those lines before
 // they go (antigravityCloak); this still tells the refusal for what it is
-// when the user has the prompt sent as written, or Google turns away one
-// that was broken up, so no one chases a quota that isn't spent.
+// when the user has the prompt sent as written, or Google turns away a copy
+// someone broke up with invisible characters, so no one chases a quota that
+// isn't spent.
 func antigravityTurnsAway(system string) bool {
 	for _, re := range agTurnedAwayRes {
 		if re.MatchString(system) {
@@ -89,16 +90,17 @@ func antigravityTurnsAway(system string) bool {
 //     goes through, and so does today's "You are Hermes Agent, built by
 //     Nous Research."
 //
-// Each is broken up before it goes by zero-width spaces (antigravityCloak),
-// which Google lets through. A break after only a line's first letter was
-// turned away again on 11-11 for Claude Code's two lines, so each word has
-// two. Codex's and Hermes' lines went through as written on 11-11 too, and
-// are still broken up: that costs nothing and a Codex thread that is
-// refused again says why. A mention of the Claude Agent SDK elsewhere
-// ("running within the Claude Agent SDK") goes through as written, and is
-// sent so.
+// Each goes reworded with the same meaning (agSaidAs). Until 11-14 they
+// went broken up by zero-width spaces, which Google let through; since then
+// its check reads past invisible characters: two U+200B in each word, one
+// after every character, or U+2060 instead, every line here was turned away
+// 5 of 5 on a real account, and Claude Desktop's Code tab, which sends the
+// billing line and whose subagents send the Agent SDK's line, got nothing
+// but the refusal (hc295971796 on X, 11-14). Each rewording went through 5
+// of 5. A mention of the Claude Agent SDK elsewhere ("running within the
+// Claude Agent SDK") goes through as written, and is sent so.
 var agTurnedAway = []string{
-	"x-anthropic-billing-header:",
+	agBillingLine,
 	"built on anthropic's claude agent sdk",
 	"you are codex, an agent based on gpt-5",
 	"you are codex, a coding agent based on gpt-5",
@@ -111,31 +113,73 @@ var agTurnedAway = []string{
 // as it does the others (eric_li8983 on X, 11-14).
 const agRFCLine = "rfc 2119 keywords: must, required, should, recommended, may, optional."
 
-// agRFCSaidAs is how omp's line goes: "key words", RFC 2119's own term,
-// for its "keywords". A copy broken up by zero-width spaces, like the other
-// lines, was turned away 1 to 3 times in 10 on a real account on 11-14,
-// with U+200B, U+2060 or a soft hyphen alike, while "key words" went
-// through 10 of 10, and the model reads the same rule in it.
-var agRFCSaidAs = lazyre.New(`(?i)(key)(words)`)
+// agSaidAs is how each line of agTurnedAway goes, in the same order, given
+// the line as it was matched with its invisible characters taken out and
+// its white space as it was:
+//   - Claude Code's billing line not at all, to the end of its line: it is
+//     Anthropic's, and no Antigravity model reads anything in it;
+//   - the Agent SDK's "built on Anthropic's Claude Agent SDK" as "built on
+//     the Claude Agent SDK by Anthropic";
+//   - Codex's "based on GPT-5" as "built on GPT-5";
+//   - Hermes' "created by Nous Research" as "built by Nous Research", as
+//     Hermes' current persona says it;
+//   - omp's "keywords" as "key words", RFC 2119's own term (10 of 10 on
+//     11-14, eric_li8983 on X, while a broken-up copy was turned away 1 to
+//     3 times in 10).
+var agSaidAs = []func(string) string{
+	func(string) string { return "" },
+	func(m string) string { return agSDKSaidAs.ReplaceAllString(m, "${1}the${2}${3} by Anthropic") },
+	func(m string) string { return agBasedOn.ReplaceAllString(m, "built${1}on") },
+	func(m string) string { return agBasedOn.ReplaceAllString(m, "built${1}on") },
+	func(m string) string { return agCreatedBy.ReplaceAllString(m, "built${1}by") },
+	func(m string) string { return agRFCSaidAs.ReplaceAllString(m, "$1 $2") },
+}
+
+// each white space as agSpace has it, which Go's \s is not
+var (
+	agSDKSaidAs = lazyre.New(`(?i)^(built` + agSpace + `on` + agSpace + `)anthropic's(` + agSpace + `)(claude` + agSpace + `agent` + agSpace + `sdk)$`)
+	agBasedOn   = lazyre.New(`(?i)based(` + agSpace + `)on`)
+	agCreatedBy = lazyre.New(`(?i)created(` + agSpace + `)by`)
+	agRFCSaidAs = lazyre.New(`(?i)(key)(words)`)
+)
 
 // agSpace is a run of white space as Google's check reads it: on a real
 // account on 11-14 omp's line was turned away just as well wrapped after
 // any comma, with CRLF, a tab, two spaces or a no-break space between two
 // of its words, so only a match that allows these finds every copy. Go's
 // \s is ASCII only; this is JavaScript's \s, which the antigravity plugin
-// matches with. U+200B is not in it, so a line already broken up isn't
-// one any more.
+// matches with.
 const agSpace = `[\s\v\p{Zs}\x{2028}\x{2029}\x{feff}]+`
 
-// agLineRe matches line in any case with any run of white space between
-// its words.
+// agInvisible are the characters Google's check reads past since 11-14:
+// a line broken up by them is turned away as the line itself.
+const agInvisible = `[\x{00ad}\x{180e}\x{200b}-\x{200f}\x{2060}-\x{2064}\x{feff}]`
+
+var agInvisibleRe = lazyre.New(agInvisible)
+
+// agLineRe matches line in any case, with any run of white space between
+// its words and any invisible characters inside them, so a copy someone
+// broke up (an older magpie, the antigravity-cloak middleware before 0.1.7)
+// is found as the line. Claude Code's billing line is matched to the end of
+// its line, since it goes whole.
 func agLineRe(line string) *lazyre.RE {
 	words := strings.Split(line, " ")
 	for i, w := range words {
-		words[i] = regexp.QuoteMeta(w)
+		var cs []string
+		for _, c := range w {
+			cs = append(cs, regexp.QuoteMeta(string(c)))
+		}
+		words[i] = strings.Join(cs, agInvisible+"*")
 	}
-	return lazyre.New("(?i)" + strings.Join(words, agSpace))
+	src := "(?i)" + strings.Join(words, agInvisible+"*"+agSpace+agInvisible+"*")
+	if line == agBillingLine {
+		src += `[^\n]*\n?`
+	}
+	return lazyre.New(src)
 }
+
+// agBillingLine is Claude Code's billing line, as agTurnedAway has it.
+const agBillingLine = "x-anthropic-billing-header:"
 
 // agTurnedAwayRes are agTurnedAway's lines as agLineRe matches them, in
 // the same order.
@@ -196,74 +240,39 @@ func antigravityReword(system string) string {
 	return system
 }
 
-// zeroWidth is what antigravityCloak puts inside a line Antigravity turns
-// away: U+200B, which the model reads past and Google's check doesn't.
-const zeroWidth = "\u200b"
-
-// antigravityCloak is system with each line of agTurnedAway in it broken up
-// by zero-width spaces, wherever and in whatever case it is, and every other
-// word as the agent wrote it: what an Antigravity account's system
-// instruction is sent as, unless the user has it sent as written
-// (Provider.PromptAsWritten). Inside a line, every run of three or more
-// letters or digits gets one after its first and one after its second
-// character. One after the first letter only (what this did until 11-11)
-// stopped working: Google's check then turned "x\u200b-anthropic-billing-
-// header:" and "b\u200built on Anthropic's Claude Agent SDK" away again
-// (a real account, Claude Code 2.1.316's prompt, @shzutbi1 on X), while the
-// same lines with two breaks in every word were answered.
-// A line already broken up (the antigravity-cloak plugin's) isn't one any
-// more and is left alone. omp's RFC 2119 line is said as agRFCSaidAs says
-// instead, with every white space in it as it was.
+// antigravityCloak is system with each line of agTurnedAway in it said as
+// agSaidAs says, wherever and in whatever case it is, broken up by
+// invisible characters or not, and every other word as the agent wrote it:
+// what an Antigravity account's system instruction is sent as, unless the
+// user has it sent as written (Provider.PromptAsWritten).
 func antigravityCloak(system string) string {
 	if !antigravityTurnsAway(system) {
 		return system
 	}
-	system = agSaysRe(agRFCLine).ReplaceAllStringFunc(system, func(m string) string {
-		return agRFCSaidAs.ReplaceAllString(m, "$1 $2")
-	})
-	var at []int
-	for _, re := range agTurnedAwayRes {
-		for _, m := range re.FindAllStringIndex(system, -1) {
-			at = append(at, agBreaks(system, m[0], m[1])...)
+	type match struct {
+		from, to int
+		as       func(string) string
+	}
+	var at []match
+	for i, re := range agTurnedAwayRes {
+		for _, m := range re.Regexp().FindAllStringIndex(system, -1) {
+			at = append(at, match{m[0], m[1], agSaidAs[i]})
 		}
 	}
-	slices.Sort(at)
-	at = slices.Compact(at)
+	slices.SortFunc(at, func(a, b match) int { return a.from - b.from })
 	var b strings.Builder
-	b.Grow(len(system) + len(at)*len(zeroWidth))
+	b.Grow(len(system))
 	prev := 0
-	for _, i := range at {
-		b.WriteString(system[prev:i])
-		b.WriteString(zeroWidth)
-		prev = i
+	for _, m := range at {
+		if m.from < prev {
+			continue
+		}
+		b.WriteString(system[prev:m.from])
+		b.WriteString(m.as(agInvisibleRe.Regexp().ReplaceAllString(system[m.from:m.to], "")))
+		prev = m.to
 	}
 	b.WriteString(system[prev:])
 	return b.String()
-}
-
-// agBreaks are the offsets in s[from:to] a zero-width space goes at: after
-// the first and after the second character of every run of three or more
-// ASCII letters or digits.
-func agBreaks(s string, from, to int) []int {
-	var at []int
-	for i := from; i < to; {
-		j := i
-		for j < to && agAlnum(s[j]) {
-			j++
-		}
-		if j-i >= 3 {
-			at = append(at, i+1, i+2)
-		}
-		if j == i {
-			j++
-		}
-		i = j
-	}
-	return at
-}
-
-func agAlnum(c byte) bool {
-	return 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9'
 }
 
 // antigravityRefuses is what Antigravity says when it turns such a request
@@ -390,7 +399,7 @@ func codeAssistBody(p provider.Provider, r *Request, model string, wires map[str
 	model = p.OwnModelID(model)
 	sent := codeAssistID(model, r.Effort, p.Account.Agent)
 	if p.Account.Agent == "antigravity" && !p.PromptAsWritten {
-		// the lines Google turns away, broken up, and the paragraphs
+		// the lines Google turns away, and the paragraphs
 		// it answers badly, reworded; the request the
 		// caller holds keeps the system prompt as written, which the
 		// refusal is told against (antigravityTurnedAway)

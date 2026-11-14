@@ -49,8 +49,8 @@ const providerUsage = `usage:
                                           over its keys or accounts (fast: the one that answered fastest lately first;
                                           drain: one until it is used up, then the next, never back to an earlier one);
                                           prompt=as-written sends Antigravity the system prompt exactly as written;
-                                          prompt=default, the default, breaks up the lines Google answers with a
-                                          false 429 (Codex's, Claude Code's, Hermes' old persona) with a zero-width space
+                                          prompt=default, the default, rewords the lines Google answers with a
+                                          false 429 (Codex's, Claude Code's, Hermes' old persona, oh-my-pi's)
                                           additional-tools=on sends a tool Claude Code's tool search loads to its
                                           Responses API where it was loaded (an additional_tools item, which
                                           keeps the cache); OpenAI's API and a ChatGPT (Codex) account do so by
@@ -1301,8 +1301,8 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 		case "prompt":
 			// as-written: Antigravity's subscription is sent the system
 			// prompt exactly as the agent wrote it, the lines Google turns
-			// away with a 429 included; default breaks those lines up
-			// with a zero-width space (Provider.PromptAsWritten)
+			// away with a 429 included; default rewords those lines
+			// (Provider.PromptAsWritten)
 			switch strings.ToLower(v) {
 			case "as-written", "as-sent", "on", "yes":
 				p.PromptAsWritten = true
