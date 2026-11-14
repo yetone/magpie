@@ -2,9 +2,11 @@ package sessions
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -236,5 +238,127 @@ func TestOpenMausBotReadAgainWhenItChanges(t *testing.T) {
 	s := ombManaged(t, ombTeam)
 	if s.Messages != 3 || s.Title != "The team" {
 		t.Errorf("team not read again: %+v", s)
+	}
+}
+
+// ombParts is a transcript's parts as role/kind/name: text, for a
+// comparison that reads as the conversation does.
+func ombParts(t *testing.T, s Session) []string {
+	t.Helper()
+	tr, err := TranscriptOf(s)
+	if err != nil {
+		t.Fatalf("TranscriptOf(%s): %v", s.ID, err)
+	}
+	var out []string
+	for _, p := range tr.Parts {
+		out = append(out, p.Role+"/"+p.Kind+"/"+p.Name+": "+p.Text)
+	}
+	return out
+}
+
+// An OpenMausBot conversation is shown as the app shows it (@qingqingdilaiP
+// on X: the row had no Show conversation): the person's messages, the
+// bot's lines and the tool its turn ran with what it answered, in order,
+// and not the turn's digest. It is found by its id as the page asks, its
+// Markdown and a search read the same rows, and the database is only read.
+func TestOpenMausBotTranscript(t *testing.T) {
+	setup(t)
+	dir := filepath.Join(t.TempDir(), "omb")
+	t.Setenv("OMB_DATA_DIR", dir)
+	ombFixture(t, dir)
+	db := filepath.Join(dir, "messages.db")
+	before, err := os.ReadFile(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, id := range []string{ombFruits, ombTeam} {
+		if s := ombSession(t, List(0), id); !s.Transcript {
+			t.Errorf("%s: no conversation to show: %+v", id, s)
+		}
+		if m := ombManaged(t, id); !m.Transcript {
+			t.Errorf("%s on the Sessions page: no conversation to show", id)
+		}
+	}
+	team, ok := Find("openmausbot", ombTeam)
+	if !ok {
+		t.Fatal("Find(openmausbot, team) found nothing")
+	}
+	got := ombParts(t, team)
+	want := []string{
+		"user/text/: TOOL: who is on the team?",
+		"assistant/text/: Checking the team.",
+		"assistant/tool_use/agents_list_bots: agents_list_bots",
+	}
+	if len(got) != 5 || !slices.Equal(got[:3], want) || !strings.HasPrefix(got[3], "tool/tool_result/agents_list_bots: {") ||
+		!strings.Contains(got[3], "Bots you can reach") || got[4] != "assistant/text/: Hello from the fake model, reply 2." {
+		t.Errorf("team transcript:\n%s", strings.Join(got, "\n"))
+	}
+	fruits, ok := Find("openmausbot", ombFruits)
+	if !ok {
+		t.Fatal("Find(openmausbot, fruits) found nothing")
+	}
+	if got, want := ombParts(t, fruits), []string{
+		"user/text/: Say hi, then list three fruits",
+		"assistant/text/: Hello from the fake model, reply 2.",
+		"user/text/: 你好，再说一次",
+		"assistant/text/: Hello from the fake model, reply 3.",
+	}; !slices.Equal(got, want) {
+		t.Errorf("fruits transcript:\n%s", strings.Join(got, "\n"))
+	}
+
+	var md bytes.Buffer
+	if err := WriteMarkdown(&md, fruits, "OpenMausBot"); err != nil || !strings.Contains(md.String(), "你好，再说一次") || !strings.Contains(md.String(), "reply 3.") {
+		t.Errorf("Markdown (%v):\n%s", err, md.String())
+	}
+	for q, want := range map[string]bool{"再说一次": true, "reply 3": true, "no such words": false} {
+		if _, found, err := SearchSession(context.Background(), fruits, NeedleOf(q)); err != nil || found != want {
+			t.Errorf("search %q: found %v (%v), want %v", q, found, err, want)
+		}
+	}
+
+	after, err := os.ReadFile(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Error("showing an OpenMausBot conversation changed its database")
+	}
+}
+
+// A tool OpenMausBot kept the arguments of is shown with them; a line the
+// app adds itself (a notice, an activity of no turn's item) is not said.
+// The rows are written as OpenMausBot writes them (server/index.js's
+// item.started and item.completed, cloud-credit-moves.js's notice).
+func TestOpenMausBotTranscriptToolsAndNotices(t *testing.T) {
+	setup(t)
+	dir := filepath.Join(t.TempDir(), "omb")
+	t.Setenv("OMB_DATA_DIR", dir)
+	ombFixture(t, dir)
+	db, err := sql.Open("sqlite", filepath.Join(dir, "messages.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	add := func(id string, at int64, js string) {
+		t.Helper()
+		if _, err := db.Exec(`INSERT INTO messages (thread_id, id, at, role, kind, text, json) VALUES (?, ?, ?, 'bot', 'activity', NULL, ?)`, ombTeam, id, at, js); err != nil {
+			t.Fatal(err)
+		}
+	}
+	add("notice", 1794638536500, `{"id":"notice","at":1794638536500,"role":"bot","kind":"activity","tool":{"name":"notice: Scout moved to another engine","ok":true}}`)
+	add("read", 1794638536600, `{"id":"read","at":1794638536600,"role":"bot","kind":"activity","tool":{"name":"read_file","spoken":"reading a file","summary":"notes.md","input":{"path":"notes.md"},"itemId":"call_2","ok":false,"output":"no such file"},"turnId":"68914cf1-5ffb-49d6-ae64-88cf1b5cd435"}`)
+	team, ok := Find("openmausbot", ombTeam)
+	if !ok {
+		t.Fatal("Find(openmausbot, team) found nothing")
+	}
+	got := ombParts(t, team)
+	if len(got) != 7 || got[5] != "assistant/tool_use/read_file: {\n  \"path\": \"notes.md\"\n}" || got[6] != "tool/tool_result/read_file: no such file" {
+		t.Errorf("team transcript:\n%s", strings.Join(got, "\n"))
+	}
+	for _, p := range got {
+		if strings.Contains(p, "notice") {
+			t.Errorf("OpenMausBot's own notice was said: %q", p)
+		}
 	}
 }

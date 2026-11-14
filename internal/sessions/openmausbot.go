@@ -2,6 +2,7 @@ package sessions
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/provider"
 )
 
 // OpenMausBot (milind-soni/OpenMausBot, a chat app whose bots run on agent
@@ -362,4 +364,71 @@ func parseOpenMausBot(f file) *state {
 		s.use(dateOf(t), strings.TrimSpace(u.Model), Tokens{Input: max(0, u.Input-cached-written), Output: max(0, u.Output), CacheRead: cached, CacheWrite: written})
 	}
 	return s
+}
+
+// ombTranscript reads a conversation as OpenMausBot shows it, in one read
+// transaction: the person's messages, the bot's lines (an options card's
+// words too, as MausBot's first message is one), and each tool a turn ran
+// with what it was given and what it answered. A line OpenMausBot itself
+// adds (a notice, a queue or engine move) is an activity with no item of
+// a turn and isn't said; nor is a turn's digest, which repeats the reply.
+func ombTranscript(s Session, add func(bool, Part) bool) error {
+	i := strings.LastIndex(s.Path, "#")
+	if i < 0 || s.ID == "" {
+		return ErrNoTranscript
+	}
+	db, err := provider.OpenReadOnly(s.Path[:i])
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	rows, err := tx.Query("SELECT role, kind, COALESCE(text, ''), json FROM messages WHERE thread_id = ? ORDER BY at, rowid", s.ID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var role, kind, text, raw string
+		if err := rows.Scan(&role, &kind, &text, &raw); err != nil {
+			return err
+		}
+		more := true
+		switch {
+		case role == "user" && kind == "text":
+			more = add(true, textPart("user", text))
+		case role == "bot" && (kind == "text" || kind == "options"):
+			more = add(false, Part{Role: "assistant", Kind: "text", Text: text})
+		case role == "bot" && kind == "activity":
+			var m struct {
+				Tool struct {
+					Name    string          `json:"name"`
+					Summary string          `json:"summary"`
+					Input   json.RawMessage `json:"input"`
+					Output  json.RawMessage `json:"output"`
+					ItemID  string          `json:"itemId"`
+				} `json:"tool"`
+			}
+			if json.Unmarshal([]byte(raw), &m) != nil || m.Tool.Name == "" || m.Tool.ItemID == "" {
+				continue
+			}
+			in := pretty(m.Tool.Input)
+			if strings.TrimSpace(in) == "" || in == "null" {
+				// OpenMausBot kept no arguments: its one-line summary, else the name
+				in = cmp.Or(m.Tool.Summary, m.Tool.Name)
+			}
+			more = add(false, Part{Role: "assistant", Kind: "tool_use", Name: m.Tool.Name, Text: in})
+			if more && len(m.Tool.Output) > 0 && string(m.Tool.Output) != "null" {
+				more = add(true, Part{Role: "tool", Kind: "tool_result", Name: m.Tool.Name, Text: resultText(m.Tool.Output)})
+			}
+		}
+		if !more {
+			return nil
+		}
+	}
+	return rows.Err()
 }
