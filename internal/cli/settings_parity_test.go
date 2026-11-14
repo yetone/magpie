@@ -253,6 +253,7 @@ var notYet = map[string]string{
 	"GET /api/appearance/wallpaper":              W,  // appearance.go
 	"POST /api/appearance/wallpaper":             W,  // appearance.go: the picture comes from the window's file picker
 	"GET /api/quit":                              W,  // api.go: the window's Quit question
+	"POST /api/page-away":                        W,  // api.go: the page says it went from view, so its caches can go
 	"GET /api/remote":                            W,  // remote.go: another magpie opened in a window of the app
 	"POST /api/remote":                           W,  // remote.go
 	"POST /api/remote/forget":                    W,  // remote.go
