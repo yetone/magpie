@@ -536,14 +536,22 @@ recorded as a prediction failure (`noPrediction`).
   the newest `heldKept` (5) kept. It has the time, version and system,
   method and path, the model and agent, how long it was held, each kind
   of known wait and its time ("(under way)" for the one it was in), the
-  body room's state, the requests in flight and every goroutine's stack
-  (function names and lines, no values; 128 KB at most, one dump for a
-  burst within 10s). Never the body or headers. Its file name is
+  body room's state, the requests in flight, where the request itself
+  stood (`stood at:`, the first of magpie's own functions on its
+  handler's stack and what it waited in, and that stack in full under
+  "where this request stood", ahead of the rest: `watchUnrouted` keeps
+  the handler's goroutine id, `heldOwn` finds it in a dump of every
+  goroutine and strips the argument words and pc offsets; the log line
+  says it as "standing at", wilsonxuuuu on X: a report pasted cut before
+  the stacks said 30s in no known wait and nothing more) and every
+  goroutine's stack (function names and lines, no values; 128 KB at
+  most, one dump for a burst within 10s). Never the body or headers. Its file name is
   `Route.Held`; the Routing page's story of that request has Copy Report
   (`GET /api/gateway/held/{name}`, only a report's own name is read) and,
   in the app, Open Folder (`POST /api/gateway/held/reveal`). The 504 and
   the log line say where it is. `TestUnroutedHeldReportSaved`,
-  `TestHeldReportsKeptAndNamed`, `routing-held-report.test.cjs`.
+  `TestHeldReportsKeptAndNamed`, `TestHeldReportSaysWhereItStood`,
+  `TestHeldOfFindsItsGoroutine`, `routing-held-report.test.cjs`.
   `TestUnroutedRequestShownThenAnswered`, `TestUnroutedShownGivesWayToItsRoute`,
   `TestUnroutedUnknownHoldAnsweredSooner`, `TestUnroutedSlowBodyNotCutOff`,
   `TestUnroutedMaskingNotCutOff`, `TestUnroutedSlotWaitNotCutOff`,

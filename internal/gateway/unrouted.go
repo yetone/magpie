@@ -266,6 +266,11 @@ type unroutedHold struct {
 	mexcused time.Duration
 	mdue     bool
 	most     *time.Timer
+	// gid is its handler's goroutine, whose own stack the report puts
+	// first (heldOwn): a report cut short, or pasted in part, still says
+	// where the request itself stood (wilsonxuuuu on X: 30s in no wait
+	// magpie knew of, the stacks cut from the tweet)
+	gid uint64
 }
 
 type unroutedKey struct{}
@@ -614,7 +619,7 @@ func (s *Server) watchUnrouted(w http.ResponseWriter, r *http.Request, f *inflig
 		return w, r, func() {}
 	}
 	ctx, cancel := context.WithCancelCause(r.Context())
-	u := &unroutedHold{s: s, f: f, w: newHeldWriter(w), cancel: cancel, agent: callerFrom(r).agent, saved: make(chan struct{})}
+	u := &unroutedHold{s: s, f: f, w: newHeldWriter(w), cancel: cancel, agent: callerFrom(r).agent, saved: make(chan struct{}), gid: goroutineID()}
 	// The timers and the context reach u through held alone, let go as
 	// the handler returns. A stopped timer is not gone: the runtime keeps
 	// it, and its func, in the timer heap of the P that set it until its
@@ -748,7 +753,8 @@ func (u *unroutedHold) giveUp(unknown bool) {
 	who := cmpOr(u.agent, cmpOr(f.agent, "?"))
 	said := cmpOr(where, " not masking it")
 	waits := u.waitsSaid()
-	report := u.s.heldReport(u, held, status, who, asked, said)
+	own := heldOwn(u.gid)
+	report := u.s.heldReport(u, held, status, who, asked, said, own)
 	// Saved before it is answered too, so the route the answer finds
 	// names it (#4200); out of f.mu, as it is a file written.
 	name, err := writeHeld(report)
@@ -796,7 +802,7 @@ func (u *unroutedHold) giveUp(unknown bool) {
 		(*hook)(u)
 	}
 	u.cancel(errUnrouted)
-	log.Printf("gateway: %s %s for %s from %s held %s before routing,%s%s; stopped with %d%s%s", u.r.Method, u.r.URL.Path, cmpOr(asked, "?"), who, held, said, waits, status, saved, unroutedStacks())
+	log.Printf("gateway: %s %s for %s from %s held %s before routing,%s%s, standing at %s; stopped with %d%s%s", u.r.Method, u.r.URL.Path, cmpOr(asked, "?"), who, held, said, waits, cmpOr(own.at, "?"), status, saved, unroutedStacks())
 }
 
 // unroutedMsg is the error of a request held for held before routing:

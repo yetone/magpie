@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -118,7 +119,7 @@ func HeldReport(name string) (string, error) {
 }
 
 // heldReport is the report of u's request, held for held and stopped.
-func (s *Server) heldReport(u *unroutedHold, held time.Duration, status int, who, asked, where string) string {
+func (s *Server) heldReport(u *unroutedHold, held time.Duration, status int, who, asked, where string, own heldStack) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "magpie held a request before routing it, and stopped it with %d\n\n", status)
 	fmt.Fprintf(&b, "time: %s\n", time.Now().UTC().Format(time.RFC3339))
@@ -128,6 +129,9 @@ func (s *Server) heldReport(u *unroutedHold, held time.Duration, status int, who
 	fmt.Fprintf(&b, "agent: %s\n", who)
 	fmt.Fprintf(&b, "held: %s,%s\n", held, where)
 	fmt.Fprintf(&b, "known waits:%s\n", cmpOr(strings.TrimPrefix(u.waitsSaid(), ";"), " none"))
+	// the step that held it, by name, though it is no wait magpie knows
+	// of: the first of magpie's own functions on its handler's stack
+	fmt.Fprintf(&b, "stood at: %s\n", cmpOr(own.at, "? (its goroutine not found)"))
 	// a slow body from a body that stopped coming: what had come, and
 	// when the last of it did
 	fmt.Fprintf(&b, "body read: %s\n", u.bodySaid())
@@ -138,6 +142,9 @@ func (s *Server) heldReport(u *unroutedHold, held time.Duration, status int, who
 	n := len(s.active.m)
 	s.active.mu.Unlock()
 	fmt.Fprintf(&b, "requests in flight: %d\n", n)
+	if own.stack != "" {
+		fmt.Fprintf(&b, "\nwhere this request stood:\n%s\n", own.stack)
+	}
 	fmt.Fprintf(&b, "\nwhere every goroutine stood:\n%s", heldStacks())
 	return b.String()
 }
@@ -190,4 +197,97 @@ func heldStacks() string {
 	}
 	heldStacksAt, heldStacksLast = time.Now(), b.String()
 	return heldStacksLast
+}
+
+// heldStack is where a held request's handler stood: its stack, with no
+// values, and at, the first of magpie's own functions on it with what it
+// waited in ("gateway.(*Server).serveAgent (sync.Mutex.Lock, 2 minutes)").
+type heldStack struct {
+	stack string
+	at    string
+}
+
+// heldOwnMost bounds the dump heldOwn looks for one goroutine in.
+const heldOwnMost = 64 << 20
+
+// heldModule is magpie's own functions' prefix.
+const heldModule = "github.com/yetone/magpie/internal/"
+
+// heldArgs is a frame's argument words, and heldPC its pc offset: values,
+// which a report never holds.
+var (
+	heldArgs = lazyre.New(`\([^()]*\)$`)
+	heldPC   = lazyre.New(` \+0x[0-9a-f]+$`)
+)
+
+// goroutineID is the calling goroutine's id, as its stack names it.
+func goroutineID() uint64 {
+	var buf [64]byte
+	n := runtime.Stack(buf[:], false)
+	rest, ok := strings.CutPrefix(string(buf[:n]), "goroutine ")
+	if !ok {
+		return 0
+	}
+	id, _, _ := strings.Cut(rest, " ")
+	v, _ := strconv.ParseUint(id, 10, 64)
+	return v
+}
+
+// heldOwn is where goroutine gid stands now; zero when it isn't found.
+func heldOwn(gid uint64) heldStack {
+	if gid == 0 {
+		return heldStack{}
+	}
+	buf := make([]byte, 1<<20)
+	for {
+		n := runtime.Stack(buf, true)
+		if n < len(buf) || len(buf) >= heldOwnMost {
+			buf = buf[:n]
+			break
+		}
+		buf = make([]byte, 2*len(buf))
+	}
+	return heldOf(string(buf), gid)
+}
+
+// heldOf is goroutine gid's stack in dump, every goroutine's as
+// runtime.Stack writes them.
+func heldOf(dump string, gid uint64) heldStack {
+	head := fmt.Sprintf("goroutine %d [", gid)
+	i := 0
+	if !strings.HasPrefix(dump, head) {
+		j := strings.Index(dump, "\n"+head)
+		if j < 0 {
+			return heldStack{}
+		}
+		i = j + 1
+	}
+	block := dump[i:]
+	if j := strings.Index(block, "\n\n"); j >= 0 {
+		block = block[:j]
+	}
+	lines := strings.Split(strings.TrimRight(block, "\n"), "\n")
+	state := ""
+	if l := lines[0]; strings.HasSuffix(l, "]:") {
+		state = l[len(head) : len(l)-2]
+	}
+	var out heldStack
+	for k, l := range lines {
+		switch {
+		case k == 0:
+		case strings.HasPrefix(l, "\t"):
+			l = heldPC.ReplaceAllString(l, "")
+		default:
+			l = heldArgs.ReplaceAllString(l, "")
+			if fn, ok := strings.CutPrefix(l, heldModule); ok && out.at == "" && !strings.HasPrefix(l, "created by ") {
+				out.at = fn
+				if state != "" {
+					out.at += " (" + state + ")"
+				}
+			}
+		}
+		lines[k] = l
+	}
+	out.stack = strings.Join(lines, "\n")
+	return out
 }
