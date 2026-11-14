@@ -36,6 +36,7 @@ import (
 	"github.com/yetone/magpie/internal/autostart"
 	"github.com/yetone/magpie/internal/bark"
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/desktopiso"
 	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/fonts"
 	"github.com/yetone/magpie/internal/fx"
@@ -236,6 +237,9 @@ type agentJSON struct {
 	// Isolated: Claude Desktop's Claude Magpie app (#5671), only where it
 	// can be (macOS): whether it is on, and the app
 	Isolated *agent.DesktopIsolated `json:"isolated,omitempty"`
+	// TwinCode: this Claude Code folder is Claude Magpie's Code tab's,
+	// which is on magpie through Claude Magpie (agent.DesktopTwinCode)
+	TwinCode bool `json:"twinCode,omitempty"`
 	// Telemetry: the agent's own telemetry to its vendor, where magpie
 	// knows the switch for it (agent/telemetry.go)
 	Telemetry *agent.TelemetryState `json:"telemetry,omitempty"`
@@ -3314,7 +3318,18 @@ func state() stateJSON {
 		if a.ID == "claude-desktop" && a.WSL == "" {
 			if iso, ok := agent.DesktopIsolatedHere(); ok {
 				aj.Isolated = &iso
+				// while Claude Magpie is on, the row's switch wires it
+				// alone (desktopSets) and the user's own Desktop stays
+				// signed in with Anthropic: the row is Claude Magpie's.
+				// Named Claude Desktop, it read as if their own Desktop
+				// had been connected (xMopf7RF on X, 0.1.4111)
+				if iso.On {
+					aj.Name = desktopiso.Name
+				}
 			}
+		}
+		if !aj.Wired && agent.DesktopTwinCode(a) {
+			aj.TwinCode = true
 		}
 		if a.Telemetry != nil {
 			// Settings › Privacy's switch for every agent reaches one

@@ -450,3 +450,48 @@ func TestClaudeMagpieOwnFolderKeepsWhatWasSet(t *testing.T) {
 		})
 	}
 }
+
+// After Use Claude Magpie (xMopf7RF on X, 0.1.4111), the Claude Code row
+// of Claude Magpie's Code tab folder is that tab's, on magpie through
+// Claude Magpie (DesktopTwinCode): not before Claude Magpie is wired, not
+// for ~/.claude's row or another folder's, not once Claude Magpie is off.
+func TestClaudeMagpieCodeTabRowIsOnThroughIt(t *testing.T) {
+	home, _ := desktopWindowSandbox(t)
+	old := desktopdir.OS
+	desktopdir.OS = "darwin"
+	t.Cleanup(func() { desktopdir.OS = old })
+	_, iso, _, _ := isolatedFakes(t, home)
+	other := filepath.Join(home, ".claude-work")
+	if err := os.MkdirAll(other, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	desktopWrite(t, filepath.Join(other, "settings.json"), `{}`)
+	rows := func() map[string]bool {
+		out := map[string]bool{}
+		for _, a := range append([]*Agent{claude(home)}, claudeDirAgents(home)...) {
+			out[a.ID] = DesktopTwinCode(a)
+		}
+		return out
+	}
+	if _, err := SetDesktopIsolated(home, true); err != nil {
+		t.Fatal(err)
+	}
+	if got := rows(); got["claude#magpie-desktop"] || got["claude"] || got["claude#work"] {
+		t.Fatalf("on magpie before Claude Magpie is wired: %v", got)
+	}
+	if err := claudeDesktop(home).Field("provider").Set("magpie"); err != nil {
+		t.Fatal(err)
+	}
+	if !desktopWired(iso) {
+		t.Fatal("Claude Magpie not wired")
+	}
+	if got := rows(); !got["claude#magpie-desktop"] || got["claude"] || got["claude#work"] {
+		t.Fatalf("wired: %v", got)
+	}
+	if _, err := SetDesktopIsolated(home, false); err != nil {
+		t.Fatal(err)
+	}
+	if got := rows(); got["claude#magpie-desktop"] {
+		t.Fatalf("Claude Magpie off: %v", got)
+	}
+}

@@ -121,6 +121,27 @@ func desktopCodeDir(home string) string {
 	return desktopIsolatedClaudeDir(home)
 }
 
+// DesktopTwinCode says a is the Claude Code row of Claude Magpie's Code
+// tab folder (#6459) while Claude Magpie is on magpie. That tab runs its
+// Claude Code with the provider managed by the host, so its requests go
+// to magpie through Claude Magpie's own gateway whatever the row's
+// settings.json says: the row isn't "not connected, on its own settings"
+// then (xMopf7RF on X, 0.1.4111: right after Use Claude Magpie it read so,
+// as if Claude Magpie had been left off).
+func DesktopTwinCode(a *Agent) bool {
+	// the settings read only for a claude# row: asked of every row
+	if a.WSL != "" || !strings.HasPrefix(a.ID, "claude#") {
+		return false
+	}
+	home, _ := os.UserHomeDir()
+	d := desktopCodeDir(home)
+	if d == "" || a.ID != "claude#"+claudeDirName(filepath.Base(d)) {
+		return false
+	}
+	iso, ok := desktopIsolatedSet(desktopdir.OS, home, os.Getenv)
+	return ok && desktopWired(iso)
+}
+
 // desktopIsoClaudeArg is the folder Claude Magpie.app is made with: its
 // own while the user turned it on, "" for ~/.claude.
 func desktopIsoClaudeArg(home string) string {

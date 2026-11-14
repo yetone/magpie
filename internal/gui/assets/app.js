@@ -1405,6 +1405,8 @@ function connectLine(a, kind) {
     else if (sw?.p.switchOnly) say(t("Not connected · switching accounts only"));
     // with Claude Magpie made, connecting wires it, not the user's own Desktop (desktopSets; xMopf7RF on X)
     else if (a.isolated?.on) say(t("Not connected · connecting puts Claude Magpie on magpie; your own Claude Desktop stays signed in with Anthropic"));
+    // Claude Magpie's Code tab folder, the tab on magpie through Claude Magpie (agent.DesktopTwinCode; xMopf7RF on X)
+    else if (a.twinCode) say(t("On magpie through Claude Magpie"), "on");
     else if (CONNECT_BEFORE[kindOf(a)]) say(t(CONNECT_BEFORE[kindOf(a)]));
     else if (src === "sub") say(t("Not connected · now on its Claude subscription"));
     else if (src === "chatgpt") say(t("Not connected · now signed in with ChatGPT · OpenAI's models stay available once connected"));
