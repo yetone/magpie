@@ -27,6 +27,8 @@
      tab's chosen option. The text's own, graphite as a Mac's sidebar is,
      until an accent of the user's own takes it (appearance.go accentVars) */
   --mark: var(--fg);
+  /* the surface under it, a thumb or a chosen tab's ground, is left unset:
+     each keeps its own grey (var(--mark-fill, …)) until an accent tints it */
   --green: #189a58;
   --green-soft: #e4f6ec;
   --red: #d64545;
@@ -281,7 +283,7 @@ body:not(.window.linux) #winclose { display: none; }
   display: inline-flex; padding: 2px; border-radius: 8px;
   /* no grey track behind the tabs: only the open one's thumb */
 }
-.seg > .thumb { border-radius: 6px; background: var(--seg-thumb); box-shadow: var(--seg-edge); }
+.seg > .thumb { border-radius: 6px; background: var(--mark-fill, var(--seg-thumb)); box-shadow: var(--seg-edge); }
 body.panel .seg { display: none; }
 .seg button { position: relative; z-index: 1; white-space: nowrap; height: 24px; padding: 0 12px; border-radius: 6px; font-size: 12.5px; color: var(--ctl-fg); transition: color .18s var(--ease), transform .14s var(--ease); }
 .seg button.on { color: var(--mark); }
@@ -3229,7 +3231,7 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 #gatewayKeys .klf-which { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
 #gatewayKeys .klf-tab { height: 24px; padding: 0 10px; border-radius: 6px; font-size: 12px; color: var(--ctl-fg); white-space: nowrap; }
 #gatewayKeys .klf-tab:hover:not(.on) { color: var(--fg-2); }
-#gatewayKeys .klf-tab.on { color: var(--mark); background: var(--seg-thumb); box-shadow: var(--seg-edge); }
+#gatewayKeys .klf-tab.on { color: var(--mark); background: var(--mark-fill, var(--seg-thumb)); box-shadow: var(--seg-edge); }
 @media (max-width: 520px) { #gatewayKeys .klf, #gatewayKeys .klf.with-days { grid-template-columns: 1fr; } #gatewayKeys .klf-used { flex-wrap: wrap; } }
 /* the models a key may use (#882): a long model's id is cut, and the
    badge gives way first on a narrow window */
@@ -3720,7 +3722,7 @@ body:not(.side-nav) #addSheet > .row-head.stuck::before { box-shadow: 0 1px 0 va
 .opt:hover:not(.on) { color: var(--fg-2); }
 .thumb {
   position: absolute; top: 2px; bottom: 2px; left: 0; width: 0; border-radius: 6px;
-  background: var(--card); box-shadow: 0 1px 2px rgba(0, 0, 0, .12), 0 0 0 .5px rgba(0, 0, 0, .06);
+  background: var(--mark-fill, var(--card)); box-shadow: 0 1px 2px rgba(0, 0, 0, .12), 0 0 0 .5px rgba(0, 0, 0, .06);
   transition: opacity .15s; /* the glide is slide()'s, which only it starts */
   pointer-events: none;
 }
@@ -4011,7 +4013,7 @@ body:not(.side-nav) #addSheet > .row-head.stuck::before { box-shadow: 0 1px 0 va
 .warm-tabs { display: flex; align-items: center; gap: 2px; margin-left: -7px; }
 .warm-tabs button { height: 22px; padding: 0 7px; border-radius: 6px; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); transition: color .12s, background-color .12s; }
 .warm-tabs button:hover:not(.on) { color: var(--fg-2); }
-.warm-tabs button.on { color: var(--mark); background: var(--pill); }
+.warm-tabs button.on { color: var(--mark); background: var(--mark-fill, var(--pill)); }
 .warm-tabs button[hidden] { display: none; }
 /* the page's parts (#471): a tab each at the top in the same look, a line
    more when they don't fit across (a narrow window, a larger text size),
@@ -4761,7 +4763,7 @@ body.panel .modal { padding: 16px 12px; }
 .editor.importapps .apptabs { display: flex; gap: 4px; padding: 3px; border-radius: 10px; background: var(--pill); overflow-x: auto; scrollbar-width: none; }
 .editor.importapps .apptab { flex: 1 1 0; min-width: max-content; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 6px 12px; border-radius: 7px; font-size: 12.5px; font-weight: 500; color: var(--muted); white-space: nowrap; }
 .editor.importapps .apptab:hover { color: var(--fg); }
-.editor.importapps .apptab.on { background: var(--card); color: var(--mark); box-shadow: 0 1px 2px rgba(0,0,0,.18); }
+.editor.importapps .apptab.on { background: var(--mark-fill, var(--card)); color: var(--mark); box-shadow: 0 1px 2px rgba(0,0,0,.18); }
 .editor.importapps .apptab.missing .applogo { filter: grayscale(1); opacity: .5; }
 .editor.importapps .apptab .count { min-width: 16px; padding: 0 5px; border-radius: 8px; font-size: 10.5px; line-height: 16px; text-align: center; color: var(--fg-2); background: var(--line); }
 .editor.importapps .apptab.missing .count { background: none; color: var(--faint); }
@@ -4979,7 +4981,7 @@ body.window .row.agent .who.with-models { flex-wrap: wrap; row-gap: 0; }
 .am-search:focus-within { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent); }
 .am-seg { display: inline-flex; flex: none; padding: 2px; border-radius: 8px; background: var(--seg-track); }
 .am-seg button { height: 24px; padding: 0 9px; border: 0; border-radius: 6px; background: none; color: var(--ctl-fg); font: inherit; font-size: 12px; cursor: pointer; transition: background-color .15s, color .15s; }
-.am-seg button.on { background: var(--seg-thumb); color: var(--mark); box-shadow: var(--seg-edge); }
+.am-seg button.on { background: var(--mark-fill, var(--seg-thumb)); color: var(--mark); box-shadow: var(--seg-edge); }
 .am-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 2px; }
 /* the providers down the left (蓝猫 on Discord), the models of the one
    picked beside them, each scrolling on its own */
@@ -5422,7 +5424,7 @@ body .row.agent .ag-prefs .row.pref .who { display: block; }
 .rate-win { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .rate-win .day-chips { display: flex; gap: 2px; }
 .rate-win .day-chip { min-width: 24px; height: 24px; padding: 0 4px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--muted); font: inherit; font-size: 11px; }
-.rate-win .day-chip.on { color: var(--mark); background: var(--seg-thumb); box-shadow: var(--seg-edge); }
+.rate-win .day-chip.on { color: var(--mark); background: var(--mark-fill, var(--seg-thumb)); box-shadow: var(--seg-edge); }
 .rate-win input { width: 64px; height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--card); color: var(--fg); font: inherit; font-size: 12px; }
 .rate-win .rate-rate { width: 56px; }
 .rate-win .rate-dash { color: var(--muted); }

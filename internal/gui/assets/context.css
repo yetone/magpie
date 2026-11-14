@@ -425,7 +425,7 @@ i.dot.free { background: var(--k-free); box-shadow: inset 0 0 0 1px color-mix(in
 .ctx-look-b { display: inline-grid; place-items: center; width: 24px; height: 20px; padding: 0; border: 0; border-radius: 5px; background: none; color: var(--faint); cursor: pointer; transition: background-color .2s ease, color .2s ease, box-shadow .2s ease; }
 .ctx-look-b svg { fill: currentColor; }
 .ctx-look-b:hover { color: var(--fg-2); }
-.ctx-look-b.on { background: var(--card); color: var(--fg); box-shadow: 0 1px 2px rgba(0, 0, 0, .12), 0 0 0 .5px color-mix(in srgb, var(--fg) 10%, transparent); }
+.ctx-look-b.on { background: var(--mark-fill, var(--card)); color: var(--mark); box-shadow: 0 1px 2px rgba(0, 0, 0, .12), 0 0 0 .5px color-mix(in srgb, var(--fg) 10%, transparent); }
 
 /* an image the request carried, in its text */
 .ctx-pic { display: block; width: fit-content; max-width: 100%; margin: 4px 0 2px; padding: 0; border: 0; border-radius: 10px; overflow: hidden; background: color-mix(in srgb, var(--fg) 4%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--fg) 9%, transparent); cursor: zoom-in; transform-origin: top left; opacity: 0; transition: opacity .25s ease; }

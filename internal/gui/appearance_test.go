@@ -84,7 +84,7 @@ func TestAccentSetting(t *testing.T) {
 // Whatever colour is picked, the accent drawn reads as text on the
 // theme's background and cards, and the text on it reads too.
 func TestAccentReadable(t *testing.T) {
-	re := regexp.MustCompile(`--accent:(#[0-9a-f]{6});--accent-soft:(#[0-9a-f]{6});--accent-fg:(#[0-9a-f]{6});--sel:#[0-9a-f]{6};--mark:(#[0-9a-f]{6})$`)
+	re := regexp.MustCompile(`--accent:(#[0-9a-f]{6});--accent-soft:(#[0-9a-f]{6});--accent-fg:(#[0-9a-f]{6});--sel:#[0-9a-f]{6};--mark:(#[0-9a-f]{6});--mark-fill:(#[0-9a-f]{6})$`)
 	for _, pick := range []string{"#ffffff", "#000000", "#ffff00", "#00ff00", "#0d9488", "#2563eb", "#ea580c", "#52525b", "#808080", "#1a1a1e", "#f4f4f6"} {
 		c, _ := parseHex(pick)
 		for _, dark := range []bool{false, true} {
@@ -110,15 +110,27 @@ func TestAccentReadable(t *testing.T) {
 			// a colour picked showed nowhere on Settings), and reads as text
 			// on every surface a chosen option sits on
 			mark, _ := parseHex(m[4])
-			on := []rgb{lightBg, white, lightPick}
+			// and on the tinted thumb under it (「主题深色依然还是灰色」)
+			fill, _ := parseHex(m[5])
+			on := []rgb{lightBg, white, lightPick, fill}
 			if dark {
-				on = []rgb{darkBg, darkCard, darkPick}
+				on = []rgb{darkBg, darkCard, darkPick, fill}
 			}
 			for _, bg := range on {
 				if r := contrast(mark, bg); r < 4.4 {
 					t.Errorf("%s dark=%v: chosen ink %s on %s is %.2f:1", pick, dark, m[4], bg.hex(), r)
 				}
 			}
+		}
+	}
+	// the chosen thumb is tinted with the colour in both themes, not left
+	// grey (CHENGJIAHEGOXIS on X, 「主题深色依然还是灰色」)
+	for _, dark := range []bool{false, true} {
+		c, _ := parseHex("#7c3aed")
+		m := re.FindStringSubmatch(accentVars(c, dark))
+		f, _ := parseHex(m[5])
+		if f[2]-f[1] < 12 {
+			t.Errorf("dark=%v: the chosen thumb %s is still grey", dark, m[5])
 		}
 	}
 	// a colour that reads already is drawn as picked

@@ -134,6 +134,9 @@ var (
 	// the header switch's thumb (--seg-thumb over --seg-track)
 	lightPick = rgb{0xe9, 0xe9, 0xee}
 	darkPick  = rgb{0x4c, 0x4c, 0x52}
+	// the dark theme's chosen thumb before it is tinted (--mark-fill): the
+	// header switch's thumb as it reads over the page
+	darkFill = rgb{0x3a, 0x3a, 0x3f}
 	// how much of the theme's background lies over the picture
 	wallVeil = "color-mix(in srgb,var(--bg) 84%,transparent)"
 )
@@ -147,21 +150,34 @@ func accentOn(c rgb, dark bool) rgb {
 	return inkOn(c, black, lightBg)
 }
 
-// inkOn is c moved toward toward just enough to read as text on against.
-func inkOn(c, toward, against rgb) rgb {
+// inkOn is c moved toward toward just enough to read as text on each of
+// against.
+func inkOn(c, toward rgb, against ...rgb) rgb {
+	reads := func(o rgb) bool {
+		for _, bg := range against {
+			if contrast(o, bg) < accentInk {
+				return false
+			}
+		}
+		return true
+	}
 	out := c
-	for p := 0.0; p <= 1 && contrast(out, against) < accentInk; p += 0.02 {
+	for p := 0.0; p <= 1 && !reads(out); p += 0.02 {
 		out = c.mix(toward, p)
 	}
 	return out
 }
 
 // accentVars are the theme's --accent, its soft fill, the text on it, the
-// selection, and --mark, from c. --mark is the ink of what is chosen (the
-// open page's sidebar icon, a switch's or tab's chosen option), magpie's
-// own text colour without an accent of the user's, as a Mac's Graphite:
-// without it a colour picked showed nowhere on Settings, nor on most pages
-// (CHENGJIAHEGOXIS on X, 「选中任意强调色没反应」).
+// selection, --mark and --mark-fill, from c. --mark is the ink of what is
+// chosen (the open page's sidebar icon, a switch's or tab's chosen
+// option), magpie's own text colour without an accent of the user's, as a
+// Mac's Graphite: without it a colour picked showed nowhere on Settings,
+// nor on most pages (CHENGJIAHEGOXIS on X, 「选中任意强调色没反应」).
+// --mark-fill is the ground under it, a segmented control's thumb or a
+// chosen tab's, tinted with the colour: a grey thumb under a coloured word
+// still read as grey in the dark theme (「主题深色依然还是灰色」). It is
+// unset without an accent, so each keeps its own grey there.
 func accentVars(c rgb, dark bool) string {
 	a := accentOn(c, dark)
 	fg := white
@@ -169,12 +185,14 @@ func accentVars(c rgb, dark bool) string {
 		fg = rgb{0x14, 0x14, 0x1a}
 	}
 	soft, sel := white.mix(a, 0.09), white.mix(a, 0.11)
-	mark := inkOn(c, black, lightPick)
+	fill := white.mix(a, 0.12)
+	mark := inkOn(c, black, lightPick, fill)
 	if dark {
 		soft, sel = darkBg.mix(a, 0.14), darkBg.mix(a, 0.2)
-		mark = inkOn(c, white, darkPick)
+		fill = darkFill.mix(a, 0.26)
+		mark = inkOn(c, white, darkPick, fill)
 	}
-	return fmt.Sprintf("--accent:%s;--accent-soft:%s;--accent-fg:%s;--sel:%s;--mark:%s", a.hex(), soft.hex(), fg.hex(), sel.hex(), mark.hex())
+	return fmt.Sprintf("--accent:%s;--accent-soft:%s;--accent-fg:%s;--sel:%s;--mark:%s;--mark-fill:%s", a.hex(), soft.hex(), fg.hex(), sel.hex(), mark.hex(), fill.hex())
 }
 
 // appearanceRoutes serve the look's stylesheet and the wallpaper, and take

@@ -22,11 +22,13 @@ const assets = path.resolve(__dirname, "../assets");
 // a 1×1 PNG
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
 // as appearance.go's lookCSS draws it: the light theme's, then the dark
-// one's, --mark the ink of what is chosen
+// one's, --mark the ink of what is chosen and --mark-fill the thumb under it
 const DARK = { "#0d9488": "#5cc9bd", "#db2777": "#f08cbd", "#7c3aed": "#c4a6f8" };
-const accentCSS = (a) => (a ? `html:not(.omarchy):root{--accent:${a};--accent-soft:#e6f4f2;--accent-fg:#ffffff;--sel:#e1f1ef;--mark:${a}}
-@media (prefers-color-scheme: dark){html:not(.omarchy):root:not([data-theme="light"]){--accent:${DARK[a] || a};--accent-soft:#1a2c2e;--accent-fg:#14141a;--sel:#1a3435;--mark:${DARK[a] || a}}}
-html:not(.omarchy):root[data-theme="dark"]{--accent:${DARK[a] || a};--accent-soft:#1a2c2e;--accent-fg:#14141a;--sel:#1a3435;--mark:${DARK[a] || a}}` : "");
+const FILL = { "#0d9488": ["#e2efee", "#325354"], "#db2777": ["#f9e5ee", "#664155"], "#7c3aed": ["#efe7fd", "#55486e"] };
+const fill = (a, dark) => (FILL[a] || ["#eeeeee", "#444444"])[dark ? 1 : 0];
+const accentCSS = (a) => (a ? `html:not(.omarchy):root{--accent:${a};--accent-soft:#e6f4f2;--accent-fg:#ffffff;--sel:#e1f1ef;--mark:${a};--mark-fill:${fill(a)}}
+@media (prefers-color-scheme: dark){html:not(.omarchy):root:not([data-theme="light"]){--accent:${DARK[a] || a};--accent-soft:#1a2c2e;--accent-fg:#14141a;--sel:#1a3435;--mark:${DARK[a] || a};--mark-fill:${fill(a, 1)}}}
+html:not(.omarchy):root[data-theme="dark"]{--accent:${DARK[a] || a};--accent-soft:#1a2c2e;--accent-fg:#14141a;--sel:#1a3435;--mark:${DARK[a] || a};--mark-fill:${fill(a, 1)}}` : "");
 
 function serve(st, log) {
   const settings = () => ({ lang: "en", theme: "light", searchVendors: [], searchAPIs: [], ...st });
@@ -156,6 +158,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const sel = ["#themeSegs .opt.on", "#birdSegs .opt.on", "body.side-nav #prefs.on svg"];
       const before = await settled(page, sel);
       same(before, before.fg, "magpie's own look: what is chosen is in the text's ink");
+      // 「主题深色依然还是灰色」: the chosen option's thumb is tinted too,
+      // and is its own grey, exactly as before, with no accent
+      const thumbs = ["#themeSegs .segs > .thumb", "#birdSegs .segs > .thumb", "#reduceMotionSegs .segs > .thumb"];
+      const grounds = () => page.evaluate((sel) => sel.map((s) => { const e = document.querySelector(s); return e ? getComputedStyle(e).backgroundColor : "missing " + s; }), thumbs);
+      const card = await page.evaluate(() => { const p = document.createElement("i"); p.style.background = "var(--card)"; document.body.append(p); const c = getComputedStyle(p).backgroundColor; p.remove(); return c; });
+      assert.deepEqual(await grounds(), thumbs.map(() => card), "magpie's own look: the thumb is the card's grey");
+      const rgbOf = (h) => `rgb(${parseInt(h.slice(1, 3), 16)}, ${parseInt(h.slice(3, 5), 16)}, ${parseInt(h.slice(5, 7), 16)})`;
       for (const [v, light] of [["#0d9488", "#0d9488"], ["#db2777", "#db2777"]]) {
         await page.locator(`#accentPick .swatch[data-accent="${v}"]`).click();
         const want = theme === "dark" ? DARK[v] : light;
@@ -163,11 +172,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const r = await settled(page, sel);
         assert.notEqual(r.mark, r.fg);
         same(r, r.mark, `${v}: what is chosen is in the colour picked`);
+        assert.deepEqual(await grounds(), thumbs.map(() => rgbOf(fill(v, theme === "dark"))), `${v}: the chosen thumb is tinted`);
       }
       await page.locator('#accentPick .swatch[data-accent=""]').click();
       await page.waitForFunction(() => !document.getElementById("lookCSS")?.textContent);
       const back = await settled(page, sel);
       same(back, back.fg, "back to magpie's own");
+      assert.deepEqual(await grounds(), thumbs.map(() => card), "back to magpie's own thumb");
       assert.deepEqual(errors, []);
     });
 
