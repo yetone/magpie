@@ -894,26 +894,34 @@ See `TestGatewayPauseAndResume`, `TestGatewayPauseRollsBack`,
 `TestGatewayResumesOnWire`, `TestGatewayPauseFileUnreadable`,
 `TestTrayMenuLabels` and `gateway-pause.test.cjs`.
 
-### The Update pill waits until it is news
+### The Update pill and its 3-day ×
 
-A release comes every few minutes, so a newer one is nearly always out and
-downloaded, and a pill lit for each was never out (certhon520, jkd6688,
-Yuyuaneth and milianxinqi on X, 11-12). The header's Update pill (window and
-tray panel alike) lights only when `/api/update` has no `quiet`:
-this version has been behind for `update.Quiet` (3 days, the Stable
-channel's soak), counted from the first newer version seen and kept across
-restarts in `update-behind.json` (`update.Behind`, for the version running,
-so an update starts it over), or an urgent release is out (a line starting
-"**Urgent release:**" in the latest's notes, or in any release between this
-one and it, `urgentBetween`). An urgent release lights the pill at once and
-a dismissal does not hide it. Dismissing with the × hides that version and
-starts the quiet over (`quietAgain`), so the pill is not back with the next
-release. The pill waiting changes nothing else: Settings › Version, the
-tray's Restart to update, quitting and Restart automatically work at any
-time. Plugin updates have their own dot on Plugins, which lights only for
-a plugin that does not update by itself. See `TestPillWaitsForTheQuiet`,
-`TestUrgentLightsThePillAtOnce`, `TestDismissalStartsTheQuietOver`,
-`TestUpdateQuietUntilBehindAWhile` and `update-quiet.test.cjs`.
+The header's Update pill (window and tray panel alike) lights as soon as a
+newer version is downloaded and waiting (`ready`), found with downloads off
+(`found`) or out where magpie can't download it (`available`), unless
+`/api/update` says `quiet`. A release comes every few minutes, so the ×
+(or a right-click) that hid the pill only until the next version had it
+back within minutes (certhon520, jkd6688, Yuyuaneth and milianxinqi on X,
+11-12): it now also hushes it for `update.Quiet` (3 days, the Stable
+channel's soak) across the releases out meanwhile (`quietAgain`,
+`update.QuietAgain`), kept across restarts in `update-behind.json`
+(`update.Behind.Hushed`, for the version running, so an update starts
+afresh). Settings › Update button says "Hidden for 3 days" while it holds,
+with Show again (`unhush`, `update.Unhush`, an empty `update-skip`).
+Nothing else holds the pill. From 0.1.3879 to 0.1.4179 a quiet was also
+counted from the first newer version seen; with a release every few
+minutes it started over on each update, so a downloaded update waited
+with no pill for days (visamzh and normalcoder_ on X, 11-14). Those
+versions' notes keep that time as `since`, which is never read as a
+dismissal. An urgent release (a line starting "**Urgent release:**" in the
+latest's notes, or in any release between this one and it,
+`urgentBetween`) lights the pill through a dismissal. Settings › Version,
+the tray's Restart to update, quitting and Restart automatically work at
+any time. Plugin updates have their own dot on Plugins, which lights only
+for a plugin that does not update by itself. See
+`TestPillLightsWhenANewerVersionIsOut`, `TestUrgentLightsThePillAtOnce`,
+`TestDismissalHoldsForTheQuiet`, `TestUpdateQuietUntilBehindAWhile`,
+`update-quiet.test.cjs` and `update-hide.test.cjs`.
 
 ### A restart to update hands the gateway over
 

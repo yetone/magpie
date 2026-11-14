@@ -8,10 +8,12 @@ import (
 	"github.com/yetone/magpie/internal/update"
 )
 
-// "红点都快焊死了" (certhon520 and others on X): with a release every few
-// minutes, a downloaded update was always there and the header's pill was
-// always lit. /api/update says quiet for a version not behind for long,
-// and not quiet for an urgent one.
+// /api/update says quiet only while the pill's dismissal holds ("红点都快
+// 焊死了", certhon520 and others on X: its x hid it only until the next
+// release, minutes later), and never for an urgent release. A version
+// that is only behind, a download waiting or one found, is not quiet: the
+// pill shows (visamzh and normalcoder_ on X, 11-14: it never came while a
+// quiet counted from the first newer version started over on each update).
 func TestUpdateQuietUntilBehindAWhile(t *testing.T) {
 	h := t.TempDir()
 	t.Setenv("HOME", h)
@@ -28,11 +30,14 @@ func TestUpdateQuietUntilBehindAWhile(t *testing.T) {
 		state string
 		quiet bool
 	}{
-		{"just found", update.Behind{Base: "0.1.100", Since: now.Add(-time.Hour)}, "ready", true},
-		{"behind for days", update.Behind{Base: "0.1.100", Since: now.Add(-update.Quiet - time.Minute)}, "ready", false},
-		{"urgent at once", update.Behind{Base: "0.1.100", Since: now, Urgent: "0.1.104"}, "ready", false},
-		{"found, held download", update.Behind{Base: "0.1.100", Since: now}, "found", true},
-		{"up to date says nothing", update.Behind{Base: "0.1.100", Since: now}, "latest", false},
+		{"downloaded, waiting", update.Behind{Base: "0.1.100"}, "ready", false},
+		{"found, downloads off", update.Behind{Base: "0.1.100"}, "found", false},
+		{"out, no download here", update.Behind{Base: "0.1.100"}, "available", false},
+		{"dismissed an hour ago", update.Behind{Base: "0.1.100", Hushed: now.Add(-time.Hour)}, "ready", true},
+		{"dismissed, found", update.Behind{Base: "0.1.100", Hushed: now.Add(-time.Hour)}, "found", true},
+		{"dismissed days ago", update.Behind{Base: "0.1.100", Hushed: now.Add(-update.Quiet - time.Minute)}, "ready", false},
+		{"urgent through a dismissal", update.Behind{Base: "0.1.100", Hushed: now, Urgent: "0.1.104"}, "ready", false},
+		{"up to date says nothing", update.Behind{Base: "0.1.100", Hushed: now}, "latest", false},
 	} {
 		u := &updater{state: c.state, behind: c.b, latest: &update.Release{Version: "0.1.105"}}
 		if got := u.json().Quiet; got != c.quiet {

@@ -2,6 +2,7 @@ package update
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -15,32 +16,34 @@ func behindHome(t *testing.T) {
 	t.Setenv("APPDATA", h+"/AppData")
 }
 
-// Releases come every few minutes, so the header's pill (users on X,
-// 11-12: "always lit") waits until this version has been behind for Quiet.
-func TestPillWaitsForTheQuiet(t *testing.T) {
+// "右上角的更新按钮不见了" (visamzh, normalcoder_ on X, 11-14): the pill
+// waited for this version to be behind for Quiet, counted from the first
+// newer version seen. With a release every few minutes that clock started
+// over on each update, so a downloaded update waited with no pill for days.
+// Being behind lights it at once; only a dismissal holds it, for Quiet.
+func TestPillLightsWhenANewerVersionIsOut(t *testing.T) {
 	behindHome(t)
-	t0 := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
-	b := NoteBehind("0.1.100", "0.1.101", false, t0)
-	if b.Lit("0.1.100", t0.Add(time.Minute)) {
-		t.Error("lit a minute after the first newer version")
+	t0 := time.Date(2026, 11, 14, 9, 0, 0, 0, time.UTC)
+	b := NoteBehind("0.1.4174", "0.1.4176", false)
+	if !b.Lit("0.1.4174", t0) {
+		t.Fatal("not lit when a newer version is out")
 	}
-	// ten newer versions later, the clock still runs from the first
-	for i := 2; i < 12; i++ {
-		b = NoteBehind("0.1.100", "0.1.1"+string(rune('0'+i%10))+"0", false, t0.Add(time.Duration(i)*time.Hour))
+	for i := 0; i < 10; i++ {
+		b = NoteBehind("0.1.4174", "0.1.4180", false)
 	}
-	if b.Lit("0.1.100", t0.Add(Quiet-time.Minute)) {
-		t.Error("lit before the quiet passed")
+	if !b.Lit("0.1.4174", t0.Add(time.Minute)) || !ReadBehind("0.1.4174").Lit("0.1.4174", t0.Add(time.Minute)) {
+		t.Error("newer versions seen again put the pill out")
 	}
-	if !b.Lit("0.1.100", t0.Add(Quiet)) {
-		t.Error("not lit once the quiet passed")
+	// a note an older magpie (0.1.3879 to 0.1.4179) kept, "since" the first
+	// newer version: it was never a dismissal
+	if err := os.MkdirAll(filepath.Dir(behindFile()), 0o755); err != nil {
+		t.Fatal(err)
 	}
-	// the clock is kept across a restart without an update
-	if !ReadBehind("0.1.100").Lit("0.1.100", t0.Add(Quiet)) {
-		t.Error("the note was not kept")
+	if err := writeFileForTest(behindFile(), `{"base":"0.1.4174","since":"`+t0.Format(time.RFC3339)+`"}`); err != nil {
+		t.Fatal(err)
 	}
-	// updated: the note is for the version it was
-	if ReadBehind("0.1.200").Lit("0.1.200", t0.Add(10*Quiet)) {
-		t.Error("a note for another version counted")
+	if !ReadBehind("0.1.4174").Lit("0.1.4174", t0.Add(time.Hour)) {
+		t.Error("an old first-seen note held the pill")
 	}
 }
 
@@ -49,11 +52,11 @@ func TestPillWaitsForTheQuiet(t *testing.T) {
 func TestUrgentLightsThePillAtOnce(t *testing.T) {
 	behindHome(t)
 	t0 := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
-	b := NoteBehind("0.1.100", "0.1.105", true, t0)
+	b := NoteBehind("0.1.100", "0.1.105", true)
 	if !b.Lit("0.1.100", t0) {
 		t.Fatal("an urgent release did not light the pill")
 	}
-	b = NoteBehind("0.1.100", "0.1.106", false, t0.Add(time.Hour))
+	b = NoteBehind("0.1.100", "0.1.106", false)
 	if !b.Lit("0.1.100", t0.Add(time.Hour)) {
 		t.Error("a later plain release put out the urgent one's pill")
 	}
@@ -64,39 +67,45 @@ func TestUrgentLightsThePillAtOnce(t *testing.T) {
 	if b.Lit("0.1.105", t0) && b.Urgent != "0.1.105" {
 		t.Error("urgent not kept")
 	}
-	if (Behind{Base: "0.1.105", Urgent: "0.1.105", Since: t0}).Lit("0.1.105", t0) {
+	if (Behind{Base: "0.1.105", Urgent: "0.1.105", Hushed: t0}).Lit("0.1.105", t0) {
 		t.Error("lit for an urgent release already running")
 	}
 }
 
-// A dismissal holds for the quiet, not only until the next release.
-func TestDismissalStartsTheQuietOver(t *testing.T) {
+// A dismissal holds for the quiet, not only until the next release, and is
+// kept across a restart; Show again lifts it; an update starts afresh.
+func TestDismissalHoldsForTheQuiet(t *testing.T) {
 	behindHome(t)
 	t0 := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
-	NoteBehind("0.1.100", "0.1.101", false, t0)
-	later := t0.Add(Quiet + time.Hour)
-	if !ReadBehind("0.1.100").Lit("0.1.100", later) {
-		t.Fatal("not lit after the quiet")
-	}
-	b := QuietAgain("0.1.100", later)
-	if b.Lit("0.1.100", later.Add(Quiet-time.Minute)) {
+	NoteBehind("0.1.100", "0.1.101", false)
+	b := QuietAgain("0.1.100", t0)
+	NoteBehind("0.1.100", "0.1.102", false)
+	if b.Lit("0.1.100", t0.Add(Quiet-time.Minute)) || ReadBehind("0.1.100").Lit("0.1.100", t0.Add(Quiet-time.Minute)) {
 		t.Error("lit again before the quiet passed after a dismissal")
 	}
-	if !b.Lit("0.1.100", later.Add(Quiet)) {
+	if !ReadBehind("0.1.100").Lit("0.1.100", t0.Add(Quiet)) {
 		t.Error("never lit again")
+	}
+	if !Unhush("0.1.100").Lit("0.1.100", t0.Add(time.Minute)) || !ReadBehind("0.1.100").Lit("0.1.100", t0.Add(time.Minute)) {
+		t.Error("Show again did not bring it back")
+	}
+	QuietAgain("0.1.100", t0)
+	if !ReadBehind("0.1.102").Lit("0.1.102", t0.Add(time.Minute)) {
+		t.Error("a dismissal on another version counted")
 	}
 }
 
-// An unreadable note is unknown: it starts the quiet, it doesn't light.
+// An unreadable note is unknown: a dismissal it held is lost, and the pill
+// shows (Settings > Version offers the update either way).
 func TestUnreadableBehindNoteIsNone(t *testing.T) {
 	behindHome(t)
 	t0 := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
-	writeBehind(Behind{Base: "0.1.100", Since: t0})
+	writeBehind(Behind{Base: "0.1.100", Hushed: t0})
 	if err := writeFileForTest(behindFile(), "{half"); err != nil {
 		t.Fatal(err)
 	}
-	if ReadBehind("0.1.100").Lit("0.1.100", t0.Add(10*Quiet)) {
-		t.Error("a half-written note lit the pill")
+	if b := ReadBehind("0.1.100"); !b.Hushed.IsZero() || b.Urgent != "" {
+		t.Errorf("a half-written note read as %+v", b)
 	}
 }
 

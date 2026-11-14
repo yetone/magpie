@@ -1890,6 +1890,8 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		s.UpdateSkip = strings.TrimSpace(in.Version)
 		if s.UpdateSkip != "" {
 			updates.quietAgain() // a dismissal holds for the quiet, not only the next release
+		} else {
+			updates.unhush() // Show again
 		}
 		if err := settings.Save(s); err != nil {
 			fail(rw, err)
