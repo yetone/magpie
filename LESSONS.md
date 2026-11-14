@@ -1477,6 +1477,23 @@ each one.
   - Done right: f1f34d624 met the budget with no raise, moving keysTag
     into keyrates.js, which is loaded exactly when a model can have a
     key tag.
+- **11-14, criteria still missed.**
+  - The suite: a new route meets every guard that lists routes.
+    TestEveryRouteHasACommandOrIsNamed went red for a new GUI route
+    five times in five days (e8fbee60e, 65f1fdd1d, 5d54a990d, the MCP
+    account route, 90efddaba). 6bdeedc6f's /deepseek-chat routes, run
+    with their own tests only, left TestKeySlotEveryRoute and
+    TestLazyCatManifestListsTheClientRoutes red. The first was a real gap:
+    a key capped at one slot could run a chat page turn beside an agent's
+    request (#6688, cd030691a). 0b8c4bfc3's new field left
+    TestEveryWordHasZh red (e9fcc6229). A change that adds a route or a
+    label runs internal/cli, internal/gateway and internal/tui whole.
+  - A red with an issue still needs an owner. #6677 was red on main for
+    about three hours. A session that met it commented "Not taking it"
+    and shipped past it, and the review fixed it in 4c86b0ab4. The four
+    earlier issues for the same test (#5946, #6359, #6516, #6202) stayed
+    open after their fixes. Close an issue in the commit that fixes it
+    (`Fixes #N`).
 - **Done right on 10-17.** The retire stack (0f1666b38 to de671719a)
   diffed staticcheck's U1000 against its base for dead code, b98f906b1
   was red on the old code for an own-account gap, and 8 subscriptions
