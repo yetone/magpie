@@ -114,7 +114,7 @@ func proxied() http.RoundTripper {
 type updateProxy struct{ http.RoundTripper }
 
 func (u updateProxy) RoundTrip(req *http.Request) (*http.Response, error) {
-	if c := strings.TrimSpace(settings.Load().UpdateProxy); c != "" && netproxy.Choice(req.Context()) == "" {
+	if c := strings.TrimSpace(settings.Shared().UpdateProxy); c != "" && netproxy.Choice(req.Context()) == "" {
 		req = req.WithContext(netproxy.With(req.Context(), c))
 	}
 	return u.RoundTripper.RoundTrip(req)

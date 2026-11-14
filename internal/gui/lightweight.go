@@ -35,12 +35,12 @@ func (h *host) makeMain(url string) *application.WebviewWindow {
 	minW, minH := windowMin(z, 0, 0)
 	width, height := openSize(settings.Load().Window, minW, minH)
 	state := application.WindowStateNormal
-	if runtime.GOOS == "linux" && settings.Load().WindowMaximised {
+	if runtime.GOOS == "linux" && settings.Shared().WindowMaximised {
 		state = application.WindowStateMaximised
 	}
 	// Windows' title bar in the page's colour from the first frame; the
 	// page keeps it so as its theme changes (TintTitleBar)
-	winOpts, winBg := windowChrome(cmp.Or(os.Getenv("MAGPIE_THEME"), settings.Load().Theme))
+	winOpts, winBg := windowChrome(cmp.Or(os.Getenv("MAGPIE_THEME"), settings.Shared().Theme))
 	w := h.app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:             "main",
 		Title:            "magpie",
@@ -410,7 +410,7 @@ func (h *host) placeAt(w *application.WebviewWindow) (maximise bool) {
 		}
 		fitted = false
 	}
-	return settings.Load().WindowMaximised && !fitted
+	return settings.Shared().WindowMaximised && !fitted
 }
 
 // putBack moves the main window, not shown yet, to where it was last left

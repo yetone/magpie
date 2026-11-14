@@ -55,7 +55,7 @@ var loginEnv = proc.LoginEnvKnown
 // registry the user set is never put behind magpie's switch (timwangdev
 // on X: plugins from a custom npm registry).
 func Registry() RegistryInUse {
-	if u, err := CleanRegistry(settings.Load().NPMRegistry); err == nil && u != "" {
+	if u, err := CleanRegistry(settings.Shared().NPMRegistry); err == nil && u != "" {
 		return RegistryInUse{URL: u, From: FromMagpie}
 	}
 	if r, ok := userRegistry(); ok {

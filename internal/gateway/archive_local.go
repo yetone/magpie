@@ -30,7 +30,7 @@ var ErrNotArchived = errors.New("not in the archive on this computer")
 // LocalArchiveCap is how large the archive on this computer grows, in
 // bytes: settings' RequestArchiveLocalMB, a GiB unless set.
 func LocalArchiveCap() int64 {
-	mb := settings.Load().RequestArchiveLocalMB
+	mb := settings.Shared().RequestArchiveLocalMB
 	if mb <= 0 {
 		mb = 1024
 	}

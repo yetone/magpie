@@ -3819,7 +3819,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			report = nil
 		}
 		cacheReportTry(hw, report)
-		if streams && !settings.Load().NoLoopGuard {
+		if streams && !settings.Shared().NoLoopGuard {
 			// a reply stuck in a loop is ended, not let run to its limit
 			// (#1359)
 			hw.loop = &loopGuard{}

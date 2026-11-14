@@ -261,5 +261,5 @@ func traeCheckinAccounts() []traeAccount {
 // KeepTraeCheckedIn checks the Trae CN accounts in each day while settings
 // say to, as KeepWorkBuddyCheckedIn does WorkBuddy's.
 func KeepTraeCheckedIn(ctx context.Context) {
-	keepCheckedIn(ctx, "trae", newTraeCheckiner(traeCheckinAccounts), func() bool { return settings.Load().TraeCheckin })
+	keepCheckedIn(ctx, "trae", newTraeCheckiner(traeCheckinAccounts), func() bool { return settings.Shared().TraeCheckin })
 }

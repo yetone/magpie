@@ -248,7 +248,7 @@ func registryJSON() plugin.RegistryInUse {
 }
 
 func pluginsState(ctx context.Context, w Windows) pluginsJSON {
-	s := pluginsJSON{Plugins: []pluginEntryJSON{}, Bun: plugin.HasBun(), BunVer: plugin.BunInUse(), Movable: provider.MoveCandidates(), Picker: w != nil && !isWeb(w), Mirror: settings.Load().ChinaMirror, Registry: registryJSON()}
+	s := pluginsJSON{Plugins: []pluginEntryJSON{}, Bun: plugin.HasBun(), BunVer: plugin.BunInUse(), Movable: provider.MoveCandidates(), Picker: w != nil && !isWeb(w), Mirror: settings.Shared().ChinaMirror, Registry: registryJSON()}
 	l := plugin.Load()
 	errs := map[string]string{}
 	names := map[string][]string{}

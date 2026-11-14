@@ -409,7 +409,7 @@ func Run(version string, showMain bool, link string) error {
 	// the pages open at the saved text size: Windows' and Linux's webviews
 	// take it as they are made (the Zoom options below), the Mac's once
 	// the app has started (applyZoom)
-	h.textSize.Store(int64(settings.Load().TextSize))
+	h.textSize.Store(int64(settings.Shared().TextSize))
 	zoom := h.zoom()
 	go stats.Run(version, "app")
 	handler := devShell(h)
@@ -428,7 +428,7 @@ func Run(version string, showMain bool, link string) error {
 	}
 	// a quiet start joins the Dock once started (below): Wails activates
 	// an app that starts in it
-	policy := dockPolicy(settings.Load().Dock && !quiet)
+	policy := dockPolicy(settings.Shared().Dock && !quiet)
 	webView2Prepare()
 	h.app = application.New(application.Options{
 		// Windows and Linux start a new process for a magpie:// link (or a
@@ -502,7 +502,7 @@ func Run(version string, showMain bool, link string) error {
 		// Command-Q asks first while agents are connected (quitask.go). The
 		// role's item sends terminate:, which logging out and shutting down
 		// send too, so it is replaced rather than the app's ShouldQuit set
-		appQuit = askingQuit(appMenu, trayText(trayLang(settings.Load().Lang, systemLang), "Quit magpie"), func() { go h.AskQuit() })
+		appQuit = askingQuit(appMenu, trayText(trayLang(settings.Shared().Lang, systemLang), "Quit magpie"), func() { go h.AskQuit() })
 		h.app.Menu.Set(appMenu)
 	}
 	if Started != nil {
@@ -538,7 +538,7 @@ func Run(version string, showMain bool, link string) error {
 	onFonts = h.fontsChanged
 
 	// the menu in the page's language, relabelled when that changes (#301)
-	labels := trayMenuLabels(trayLang(settings.Load().Lang, systemLang), version, "", pausedNow())
+	labels := trayMenuLabels(trayLang(settings.Shared().Lang, systemLang), version, "", pausedNow())
 	menu := h.app.NewMenu()
 	open := menu.Add(labels.open).OnClick(func(*application.Context) { h.ShowMain("") })
 	menu.AddSeparator()
@@ -575,9 +575,9 @@ func Run(version string, showMain bool, link string) error {
 	quit := menu.Add(labels.quit).OnClick(func(*application.Context) { go h.AskQuit() })
 	var ready string // the version waiting for a restart; on the main thread
 	relabel := func() {
-		l := trayMenuLabels(trayLang(settings.Load().Lang, systemLang), version, ready, pausedNow())
+		l := trayMenuLabels(trayLang(settings.Shared().Lang, systemLang), version, ready, pausedNow())
 		if waiting, b := updates.waitingFor(); waiting && ready != "" {
-			l.restart = trayRestartNow(trayLang(settings.Load().Lang, systemLang), b)
+			l.restart = trayRestartNow(trayLang(settings.Shared().Lang, systemLang), b)
 		}
 		open.SetLabel(l.open)
 		pause.SetLabel(l.pause)
@@ -709,7 +709,7 @@ func Run(version string, showMain bool, link string) error {
 		if runtime.GOOS == "darwin" {
 			go h.flap()
 		}
-		if settings.Load().Tray == "window" {
+		if settings.Shared().Tray == "window" {
 			h.ShowMain("")
 			return
 		}
@@ -754,7 +754,7 @@ func Run(version string, showMain bool, link string) error {
 			view = uninstallView
 		}
 		h.whenReady(func() { h.ShowMain(view) })
-	} else if quiet && settings.Load().Dock {
+	} else if quiet && settings.Shared().Dock {
 		// kept out of the Dock to start (Mac options above), it joins
 		// now without coming to the front
 		h.whenReady(func() { setDock(true, false) })

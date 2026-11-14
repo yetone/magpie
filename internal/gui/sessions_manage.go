@@ -127,7 +127,7 @@ func sessionManageRoutes(mux *http.ServeMux, w Windows) {
 			fail(rw, err)
 			return
 		}
-		writeJSON(rw, map[string]bool{"recording": settings.Load().GatewayConversations})
+		writeJSON(rw, map[string]bool{"recording": settings.Shared().GatewayConversations})
 	})
 	// speeds: each session's output speed now (gateway.Speeds), for the
 	// page's curves while it is open. Not under /api/sessions, which
@@ -164,7 +164,7 @@ func sessionManageRoutes(mux *http.ServeMux, w Windows) {
 			// asks first when nothing is decided (asked false)
 			Reads readsJSON `json:"reads"`
 		}{Reads: readsNow(), Agents: []manageAgentJSON{}, Sessions: []managedJSON{}, Terminal: runtime.GOOS == "darwin" && !isWeb(w),
-			Trash: trashJSON(looks), TrashDir: tilde(sessions.TrashDir()), Recording: settings.Load().GatewayConversations,
+			Trash: trashJSON(looks), TrashDir: tilde(sessions.TrashDir()), Recording: settings.Shared().GatewayConversations,
 			Recorded: sessions.HasGatewayConversations()}
 		out.Home, _ = os.UserHomeDir()
 		want := r.URL.Query().Get("agent")

@@ -1549,7 +1549,7 @@ func claudeMachineWhy(binary claudeCLI) (code, why string) {
 		{!claudeTUIRuns, "no-shim", "no shim"},
 		{runtime.GOOS != "darwin" && runtime.GOOS != "linux" && runtime.GOOS != "windows", "os", runtime.GOOS},
 		{binary.wsl == nil && binary.path == "", "missing", "no Claude Code path"},
-		{settings.Load().ClaudePrintMode, "off", "the interactive mode is turned off"},
+		{settings.Shared().ClaudePrintMode, "off", "the interactive mode is turned off"},
 	} {
 		if c.is {
 			return c.code, c.why
@@ -1830,7 +1830,7 @@ func (c claudeCLI) tuiEnv(env []string, configDir string) []string {
 // Claude Code's interactive mode, and never as -p: the user hasn't turned
 // it off (ClaudePrintMode), and magpie has its shim (claudeTUIRuns).
 func claudeTUIOn() bool {
-	return claudeTUIRuns && !settings.Load().ClaudePrintMode
+	return claudeTUIRuns && !settings.Shared().ClaudePrintMode
 }
 
 // wantTUI is whether req's run is to be the interactive mode: it is on,
@@ -7123,7 +7123,7 @@ func (s *Server) serveSubscriptionAs(w http.ResponseWriter, r *http.Request, fro
 	}
 	// a client that places its own cache marks keeps Claude Code's prompt:
 	// its system marks are placed in the run's first message (#1717)
-	req.leanPrompt = name == "Claude Code" && req.clientCache == nil && settings.Load().ClaudeLeanPrompt
+	req.leanPrompt = name == "Claude Code" && req.clientCache == nil && settings.Shared().ClaudeLeanPrompt
 	// the tools of a caller on another computer run there, not where
 	// Claude Code runs (envUnknownNote)
 	req.remoteCaller = !local(r)

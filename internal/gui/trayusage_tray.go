@@ -155,7 +155,7 @@ func (h *host) trayCellClick(id string) {
 	if id == "" {
 		return
 	}
-	if settings.Load().Tray == "window" {
+	if settings.Shared().Tray == "window" {
 		h.ShowMain(quotaView(id))
 		return
 	}

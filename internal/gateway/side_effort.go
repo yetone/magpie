@@ -83,7 +83,7 @@ func searchEffort(p provider.Provider, model string) string {
 	if model == "" || model == codexSearchModel {
 		return ""
 	}
-	return sideEffort(p.ID+"/"+model, settings.Load().SearcherEffort)
+	return sideEffort(p.ID+"/"+model, settings.Shared().SearcherEffort)
 }
 
 // SearchEffortNow is the level the searcher in use is asked at, when one

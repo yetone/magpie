@@ -24,7 +24,7 @@ import (
 // listed by it.
 
 // BareModelIDs says whether /v1/models lists models by their bare ids too.
-func BareModelIDs() bool { return settings.Load().BareModelIDs }
+func BareModelIDs() bool { return settings.Shared().BareModelIDs }
 
 // SetBareModelIDs turns settings.BareModelIDs on or off. The list is built
 // for each request, so the next one has the bare ids, or goes without

@@ -29,7 +29,7 @@ func webView2Check(app *application.App) bool {
 		return true
 	}
 	log.Printf("magpie: no Microsoft Edge WebView2 Runtime, which magpie's windows need; install it from %s, or use magpie web / magpie tui", webView2Page)
-	title, body := webView2Notice(trayLang(settings.Load().Lang, systemLang))
+	title, body := webView2Notice(trayLang(settings.Shared().Lang, systemLang))
 	if webView2Box(title, body) == idYes {
 		if err := windows.ShellExecute(0, windows.StringToUTF16Ptr("open"), windows.StringToUTF16Ptr(webView2Page), nil, nil, windows.SW_SHOWNORMAL); err != nil {
 			log.Println("magpie: opening the WebView2 page:", err)
@@ -148,7 +148,7 @@ func webView2Failed(app *application.App, err error) {
 			return
 		}
 	}
-	title, body := webView2FailedNotice(trayLang(settings.Load().Lang, systemLang), err.Error(), ver)
+	title, body := webView2FailedNotice(trayLang(settings.Shared().Lang, systemLang), err.Error(), ver)
 	procMessageBoxW.Call(0,
 		uintptr(unsafe.Pointer(windows.StringToUTF16Ptr(body))),
 		uintptr(unsafe.Pointer(windows.StringToUTF16Ptr(title))),

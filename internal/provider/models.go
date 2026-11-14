@@ -4192,7 +4192,7 @@ func outputKeyOf(id string) (string, error) {
 		return "", errorf("name a model as provider/model, not %q", id)
 	}
 	key := pid + "/" + model
-	if _, under := settings.Load().ModelOutputs[key]; under {
+	if _, under := settings.Shared().ModelOutputs[key]; under {
 		return key, nil
 	}
 	if p, ok := byIDOrWas(pid); ok {

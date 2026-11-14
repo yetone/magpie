@@ -22,7 +22,7 @@ type modelPriceJSON struct {
 
 func anyModelPrice(model string) modelPriceJSON {
 	out := modelPriceJSON{Model: model}
-	if m, ok := settings.Load().ModelPrices[provider.AnyPriceKey(model)]; ok {
+	if m, ok := settings.Shared().ModelPrices[provider.AnyPriceKey(model)]; ok {
 		if p, bad := m.Price(); bad == "" {
 			out.Price = &p
 		}

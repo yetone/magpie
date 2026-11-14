@@ -57,7 +57,7 @@ func canSearchFor(p provider.Provider) bool {
 // or an AI Studio key's own Gemini (geminiKeySearches). Never with provider search Off in Settings (#1483), which
 // leaves the search APIs alone, nor with plugins/search off.
 func searchesOwn(p provider.Provider) bool {
-	if !searchServed() || settings.Load().Searcher == "off" {
+	if !searchServed() || settings.Shared().Searcher == "off" {
 		return false
 	}
 	return provider.KimiCodeSearch(p) != "" || glmSearches(p) || wbSearches(p) || (googleAccount(p) || geminiKeySearches(p)) && searcherModel(p) != ""

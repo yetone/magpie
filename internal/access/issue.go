@@ -324,7 +324,7 @@ func ScopeBrowser(id string) error {
 		return ErrNoKey
 	}
 	k := &keys[i]
-	if k.LAN || k.ID == settings.Load().LANKeyID {
+	if k.LAN || k.ID == settings.Shared().LANKeyID {
 		return errors.New("The sharing key is given to magpie's own agents, so it can't be held to Magpie Browser")
 	}
 	if k.Browser && k.ReadOnly && !k.Issues {
@@ -356,7 +356,7 @@ func identityOf(k Key, keys []Key, now time.Time) (Identity, error) {
 	who := Identity{KeyID: k.ID, KeyName: k.Name, Limit: k.Limit, More: k.More, Models: HeldModels(k.Models, k.Accounts), Aliases: k.Aliases, AccountModels: len(k.Models) == 0 && picksAccounts(k.Accounts), Accounts: k.Accounts, MCP: k.MCP, Quotas: k.Quotas, ReadOnly: k.ReadOnly, Browser: k.Browser, Admin: adminOf(k), Expires: k.Expires, Issues: k.Issues && k.Issuer == "" && !k.Browser, MaxConcurrency: k.MaxConcurrency, ServiceTier: k.ServiceTier, Redact: k.Redact}
 	// the default key as Default tells it: marked LAN, or the id the
 	// settings name (settings read only for an unmarked key)
-	who.Default = k.LAN || (k.ID != "" && settings.Load().LANKeyID == k.ID)
+	who.Default = k.LAN || (k.ID != "" && settings.Shared().LANKeyID == k.ID)
 	if who.Default {
 		who.Admin = ""
 	}

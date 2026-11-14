@@ -113,7 +113,7 @@ func searchesNow() []string {
 	switch {
 	case by == "":
 		return apis
-	case settings.Load().SearchFirst == settings.SearchFirstAPI:
+	case settings.Shared().SearchFirst == settings.SearchFirstAPI:
 		return append(apis, by)
 	}
 	return append([]string{by}, apis...)

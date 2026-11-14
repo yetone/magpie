@@ -64,7 +64,7 @@ func withAgentWindows(s settings.Settings, agent string, es []Entry) []Entry {
 
 // AgentContexts are the windows agent (its list id, Agent.ListsFor) was set.
 func AgentContexts(agent string) map[string]int {
-	return maps.Clone(settings.Load().AgentContexts[agentKey(agent)])
+	return maps.Clone(settings.Shared().AgentContexts[agentKey(agent)])
 }
 
 // SetAgentContexts gives agent the windows in cs, replacing those it had;

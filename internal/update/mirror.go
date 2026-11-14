@@ -81,7 +81,7 @@ func notProxy(proxy string) string {
 func mirrorOf(ctx context.Context) string {
 	m, _ := ctx.Value(mirrorKey{}).(string)
 	if m == "" {
-		m = strings.TrimSpace(settings.Load().UpdateMirror)
+		m = strings.TrimSpace(settings.Shared().UpdateMirror)
 	}
 	if m == "off" || m == "direct" {
 		return ""

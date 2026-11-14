@@ -22,7 +22,7 @@ import (
 // reader's language.
 func askInstallFolder() {
 	update.AskFolder = func(suggest string, check func(string) error) string {
-		w := installWordsFor(trayLang(settings.Load().Lang, systemLang))
+		w := installWordsFor(trayLang(settings.Shared().Lang, systemLang))
 		var out string
 		done := make(chan struct{})
 		// COM and the dialogs on a thread of their own, which ends with

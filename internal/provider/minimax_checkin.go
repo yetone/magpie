@@ -313,5 +313,5 @@ func miniMaxSiteAccounts(site string, pp plugin.Provider) []miniMaxAccount {
 // KeepMiniMaxCheckedIn checks the MiniMax Code accounts in each day while
 // settings say to, as KeepTraeCheckedIn does Trae CN's.
 func KeepMiniMaxCheckedIn(ctx context.Context) {
-	keepCheckedIn(ctx, "minimax", newMiniMaxCheckiner(miniMaxCheckinAccounts), func() bool { return settings.Load().MiniMaxCheckin })
+	keepCheckedIn(ctx, "minimax", newMiniMaxCheckiner(miniMaxCheckinAccounts), func() bool { return settings.Shared().MiniMaxCheckin })
 }

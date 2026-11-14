@@ -51,7 +51,7 @@ var turnAfter = func() time.Duration {
 	if TurnDone == nil {
 		return 0
 	}
-	return time.Duration(settings.Load().TurnDoneAlert) * time.Second
+	return time.Duration(settings.Shared().TurnDoneAlert) * time.Second
 }
 
 // turnStale: a session with nothing for this long starts its next turn

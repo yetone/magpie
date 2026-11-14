@@ -46,7 +46,7 @@ func desktopLANURLs() []string {
 // (the first, where the network's address changed since), else the gateway's
 // own on loopback.
 func desktopGateway() string {
-	pick := settings.Load().DesktopGateway
+	pick := settings.Shared().DesktopGateway
 	if pick == "" {
 		return gateway.URL()
 	}
@@ -115,7 +115,7 @@ func desktopGatewayField(ps []desktopPaths, apply func() error) Field {
 // machines reach the gateway at (gateway.LANURLs, or the one Desktop is
 // pointed at), as a profile exported here holds it.
 func desktopOurAddress(a *url.URL) bool {
-	for _, l := range append(gateway.LANURLs(), settings.Load().DesktopGateway) {
+	for _, l := range append(gateway.LANURLs(), settings.Shared().DesktopGateway) {
 		u, err := url.Parse(l)
 		if err == nil && u.Hostname() == a.Hostname() && portOf(u) == portOf(a) {
 			return true

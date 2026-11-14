@@ -72,7 +72,7 @@ func (e *claudeFull) Error() string {
 // what says so: the user's claudeRunsMost, else what this machine's memory
 // holds (claudeMemRuns), else 0, no bound.
 func claudeRunsMost() (int, string) {
-	if n := settings.Load().ClaudeRunsMost; n > 0 {
+	if n := settings.Shared().ClaudeRunsMost; n > 0 {
 		return n, "claudeRunsMost in settings"
 	}
 	return claudeMemRuns()

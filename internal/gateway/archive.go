@@ -59,7 +59,7 @@ const archiveQueue = 16
 // is read whole into memory once, for its secrets to be taken out, while
 // its call is uploaded, one call at a time.
 func archiveLimit() int64 {
-	mb := settings.Load().RequestArchiveMaxMB
+	mb := settings.Shared().RequestArchiveMaxMB
 	if mb <= 0 {
 		mb = 32
 	}

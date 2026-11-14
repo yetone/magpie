@@ -49,7 +49,7 @@ const (
 // glmSearches is whether p is a GLM Coding Plan that searches for its own
 // models first: one with a plan's key, while Settings names no searcher.
 func glmSearches(p provider.Provider) bool {
-	return provider.ZhipuSearches(p) && strings.TrimSpace(settings.Load().Searcher) == ""
+	return provider.ZhipuSearches(p) && strings.TrimSpace(settings.Shared().Searcher) == ""
 }
 
 // glmSearch asks p's GLM Coding Plan's search MCP server, with each of its

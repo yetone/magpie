@@ -658,7 +658,7 @@ func pluginLogin(ctx context.Context, name, method string) error {
 		if a.URL != "" {
 			// the user may keep sign-in pages to a browser of their own; a
 			// page the plugin's CLI opened itself is open either way
-			linkOnly := settings.Load().SignInLinkOnly && !a.Opened
+			linkOnly := settings.Shared().SignInLinkOnly && !a.Opened
 			if linkOnly {
 				fmt.Println("Open this link in the browser you sign in with:")
 			} else {

@@ -169,7 +169,7 @@ func MostNotes() int {
 // ban risk, lost data) as soon as it is out. usemagpie.ai chooses it from
 // the release list (site/worker.js, "The Stable channel"); a release is
 // urgent when a line of its notes starts with "**Urgent release:**".
-func Stable() bool { return settings.Load().UpdateChannel == settings.UpdateStable }
+func Stable() bool { return settings.Shared().UpdateChannel == settings.UpdateStable }
 
 // withChannel is feed asking for Stable's release on the Stable channel,
 // and feed as it is on every version.

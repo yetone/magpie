@@ -1605,7 +1605,7 @@ func refreshLive(ctx context.Context) {
 // network by MAGPIE_ADDR (a server, a Docker image), it takes others with
 // an enabled gateway key.
 func keyNote() string {
-	if settings.Load().LAN || gateway.OnNetwork() {
+	if settings.Shared().LAN || gateway.OnNetwork() {
 		if gateway.InContainer() {
 			return "(anything works inside the container; from its host and other machines, an enabled gateway key — magpie gateway-key add <name>)"
 		}

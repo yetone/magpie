@@ -412,7 +412,7 @@ func pageLang(r *http.Request) string {
 	if l := askedLang(r); l != "" {
 		return l
 	}
-	return notesLang(trayLang(settings.Load().Lang, systemLang))
+	return notesLang(trayLang(settings.Shared().Lang, systemLang))
 }
 
 // askedLang is the language a page names (?lang=): zh for any Chinese, en

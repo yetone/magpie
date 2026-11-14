@@ -43,7 +43,7 @@ func gatewayMode(web bool) (bool, string) {
 	if !web {
 		return false, ""
 	}
-	switch m := settings.Load().GatewayMode; m {
+	switch m := settings.Shared().GatewayMode; m {
 	case "on", "off":
 		return m == "on", m
 	}

@@ -577,7 +577,7 @@ func codexWarmAtOf() map[string]string {
 // CodexWarmAtOf is user's own time of day to start its 5-hour window at,
 // "off" for none; false when it follows settings' CodexWarmAts.
 func CodexWarmAtOf(user string) (string, bool) {
-	at, ok := settings.Load().CodexWarmAtOf[strings.ToLower(strings.TrimSpace(user))]
+	at, ok := settings.Shared().CodexWarmAtOf[strings.ToLower(strings.TrimSpace(user))]
 	return at, ok
 }
 

@@ -399,7 +399,7 @@ func LANSecret() string {
 	// not shared, the usual case, is told by the settings alone, before
 	// the lock: taken first, every agent's sync (keeping) made and locked
 	// caller-keys.json.lock, ~100 times in a start's first 20s (#1665)
-	if !settings.Load().LAN {
+	if !settings.Shared().LAN {
 		return ""
 	}
 	mu.Lock()
@@ -561,7 +561,7 @@ func Update(action string, in Change) (string, error) {
 		if i < 0 {
 			return "", errors.New("Key not found")
 		}
-		defaultKey := keys[i].LAN || keys[i].ID == settings.Load().LANKeyID
+		defaultKey := keys[i].LAN || keys[i].ID == settings.Shared().LANKeyID
 		if defaultKey {
 			keys[i].LAN = true
 		}

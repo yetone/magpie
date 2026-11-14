@@ -171,7 +171,7 @@ func showModelAPI(ref string) error {
 	if err != nil {
 		return err
 	}
-	saved, had := settings.Load().ModelAPIs[p.ID+"/"+model]
+	saved, had := settings.Shared().ModelAPIs[p.ID+"/"+model]
 	if !provider.ServesModel(*p, model) && !had {
 		return fmt.Errorf("%s has no model %s (magpie provider models %s lists them)", p.ID, model, p.ID)
 	}

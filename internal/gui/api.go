@@ -1837,7 +1837,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			Refused string `json:"refused,omitempty"`
 		}
 		if err := agent.SetTelemetryAll(in.Off); err != nil {
-			if settings.Load().AgentTelemetryOff != in.Off {
+			if settings.Shared().AgentTelemetryOff != in.Off {
 				fail(rw, err)
 				return
 			}
@@ -2128,7 +2128,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			fail(rw, err)
 			return
 		}
-		pct := settings.Load().CodexAsyncCompactPercent
+		pct := settings.Shared().CodexAsyncCompactPercent
 		if in.Percent != nil {
 			pct = *in.Percent
 		}
@@ -3413,7 +3413,7 @@ type signInOpened struct {
 // it went for signInOpened. linkOnly is this sign-in alone kept to its link
 // (the window's "Sign in on another computer"), whatever the setting.
 func openSignIn(w Windows, st provider.SignInState, linkOnly bool) signInOpened {
-	if linkOnly || settings.Load().SignInLinkOnly {
+	if linkOnly || settings.Shared().SignInLinkOnly {
 		return signInOpened{SignInState: st, LinkOnly: true}
 	}
 	var failed string
@@ -3435,7 +3435,7 @@ type mcpSignInOpened struct {
 // (settings.SignInLinkOnly), as an account's is. It opened the page in the
 // default browser whatever the setting (hkxhkxhkx on X).
 func openMCPSignIn(w Windows, st mcpauth.State) mcpSignInOpened {
-	if settings.Load().SignInLinkOnly {
+	if settings.Shared().SignInLinkOnly {
 		return mcpSignInOpened{State: st, LinkOnly: true}
 	}
 	if u, err := url.Parse(st.URL); st.URL != "" && (err != nil || !mcpauth.WebURL(u)) {

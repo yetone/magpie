@@ -44,7 +44,7 @@ func modelTierCmd(args []string) error {
 	if err := provider.SetModelTier(p.ID+"/"+model, val); err != nil {
 		return err
 	}
-	fmt.Printf("%s/%s: %s\n", p.ID, model, tierWord(settings.Load().ModelTiers[p.ID+"/"+model]))
+	fmt.Printf("%s/%s: %s\n", p.ID, model, tierWord(settings.Shared().ModelTiers[p.ID+"/"+model]))
 	return nil
 }
 

@@ -100,7 +100,7 @@ func searchFor(ctx context.Context) *CallFor {
 // can search for it. Never for magpie's own searcher request, which is
 // the provider's search.
 func magpieSearches(ctx context.Context, p provider.Provider) bool {
-	return !searching(ctx) && settings.Load().SearchAll && canSearchFor(p)
+	return !searching(ctx) && settings.Shared().SearchAll && canSearchFor(p)
 }
 
 // searchesItself says whether the provider searches the web by itself when
@@ -321,7 +321,7 @@ func searchedForIt(ctx context.Context, p provider.Provider, from provider.Proto
 // themselves, with a small model of theirs, as searching needs no more.
 // An explicit "off" leaves only the search APIs.
 func searcher() (provider.Provider, string, bool) {
-	if settings.Load().Searcher == "off" {
+	if settings.Shared().Searcher == "off" {
 		return provider.Provider{}, "", false
 	}
 	if p, m, why := chosenSearcher(); why == "" && p != nil {
@@ -433,7 +433,7 @@ const (
 // its small model, as when none is named. Nil when none is named or
 // provider search is explicitly off.
 func chosenSearcher() (*provider.Provider, string, string) {
-	return namedSearcher(settings.Load().Searcher)
+	return namedSearcher(settings.Shared().Searcher)
 }
 
 // namedSearcher is chosenSearcher of v, a searcher as Settings writes it.
@@ -773,14 +773,14 @@ func (s *Server) webSearch(ctx context.Context, query string) (string, []Hit, er
 	if !searchServed() {
 		return "", nil, errSearchOff
 	}
-	if settings.Load().Searcher == "off" {
+	if settings.Shared().Searcher == "off" {
 		if len(provider.SearchAPIs()) == 0 {
 			return "", nil, errNoSearcher
 		}
 		return s.apiSearch(ctx, query)
 	}
 	var errs []error
-	apiFirst := settings.Load().SearchFirst == settings.SearchFirstAPI && len(provider.SearchAPIs()) > 0
+	apiFirst := settings.Shared().SearchFirst == settings.SearchFirstAPI && len(provider.SearchAPIs()) > 0
 	if apiFirst {
 		said, hits, err := s.apiSearch(ctx, query)
 		if err == nil {

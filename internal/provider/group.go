@@ -155,7 +155,7 @@ const (
 func (g Group) Waits() time.Duration {
 	n := g.Patience
 	if n == 0 {
-		n = settings.Load().GroupPatience
+		n = settings.Shared().GroupPatience
 	}
 	switch {
 	case n < 0:
@@ -178,7 +178,7 @@ func (g Group) FirstTokenOr() int {
 	if g.FirstToken != 0 {
 		return g.FirstToken
 	}
-	return settings.Load().GroupFirstToken
+	return settings.Shared().GroupFirstToken
 }
 
 // Sinks is whether one of the group's accounts or keys rate limited with
@@ -186,7 +186,7 @@ func (g Group) FirstTokenOr() int {
 // NoSink, else the default for every group (settings' GroupSink). Whether
 // its routing can sink at all is the gateway's to say.
 func (g Group) Sinks() bool {
-	return g.Sink || !g.NoSink && settings.Load().GroupSink
+	return g.Sink || !g.NoSink && settings.Shared().GroupSink
 }
 
 // ContextSmallest is a group's Context when agents are told the window of

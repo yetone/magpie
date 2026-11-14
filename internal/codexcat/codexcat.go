@@ -996,7 +996,7 @@ var SignInPlan func() string
 // plan's allowance), so there it follows the session as Codex's other
 // side calls do. A plan magpie can't read keeps Codex's pick.
 func AutoReviewModel() string {
-	v := settings.Load().CodexAutoReview
+	v := settings.Shared().CodexAutoReview
 	if v == "" && SignInPlan != nil && strings.EqualFold(strings.TrimSpace(SignInPlan()), "free") {
 		return settings.CodexAutoReviewSession
 	}

@@ -60,7 +60,7 @@ func modelID(args []string) error {
 	if replaced != "" {
 		fmt.Println(muted.Render("  " + replaced + " had that id: it is listed by its own again"))
 	}
-	if n := strings.TrimSpace(settings.Load().ModelWires[p.ID+"/"+id]); n != "" {
+	if n := strings.TrimSpace(settings.Shared().ModelWires[p.ID+"/"+id]); n != "" {
 		fmt.Println(muted.Render("  a wire name of yours is set for " + p.ID + "/" + id + ": it is asked for as " + n + " (magpie model wire --reset takes it off)"))
 	}
 	return nil

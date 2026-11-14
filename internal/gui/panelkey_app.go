@@ -23,13 +23,13 @@ func (h *host) startPanelKey(before int) {
 	onPanelShortcut = h.bindPanelKey
 	go func() {
 		<-h.ready
-		s := settings.Load().PanelShortcut
+		s := settings.Shared().PanelShortcut
 		if s == "" || !panelKeysState().Can {
 			return
 		}
 		if h.bindPanelKey(s) != nil && before != 0 {
 			awaitExit(before, handedOffWait)
-			if settings.Load().PanelShortcut == s {
+			if settings.Shared().PanelShortcut == s {
 				_ = h.bindPanelKey(s)
 			}
 		}
@@ -56,7 +56,7 @@ func (h *host) bindPanelKey(s string) error {
 			if old != "" && old != s && gs.Register(old, h.panelKeyPressed) == nil {
 				h.panelKey = old
 			}
-			if s == settings.Load().PanelShortcut {
+			if s == settings.Shared().PanelShortcut {
 				panelKeyTaken.Store(s)
 			}
 			if strings.Contains(err.Error(), "already registered") {

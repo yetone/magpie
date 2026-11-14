@@ -28,4 +28,4 @@ import "github.com/yetone/magpie/internal/settings"
 // ClaudeExtraUsage says whether magpie sends a Claude account requests
 // once its plan is used up, for Anthropic to bill as extra usage: true
 // unless the user turned it off.
-func ClaudeExtraUsage() bool { return !settings.Load().ClaudeNoExtraUsage }
+func ClaudeExtraUsage() bool { return !settings.Shared().ClaudeNoExtraUsage }

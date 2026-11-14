@@ -53,7 +53,7 @@ func (p Provider) modelOf(ctx context.Context) string {
 
 // ModelHeaders are the headers the user gave provider pid's model.
 func ModelHeaders(pid, model string) map[string]string {
-	return settings.Load().ModelHeaders[pid+"/"+model]
+	return settings.Shared().ModelHeaders[pid+"/"+model]
 }
 
 // headersFor are p's Headers with model's after them: a name of the

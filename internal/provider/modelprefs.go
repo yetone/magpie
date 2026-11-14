@@ -181,7 +181,7 @@ func PriceKey(pid, model string) (string, bool) {
 		return AnyPriceKey(model), false
 	}
 	key := pid + "/" + model
-	if _, under := settings.Load().ModelPrices[key]; under {
+	if _, under := settings.Shared().ModelPrices[key]; under {
 		_, there := byIDOrWas(pid)
 		return key, there
 	}
@@ -1011,7 +1011,7 @@ func SuffixModeFor(agent string) string { return suffixModeOf(settings.Load(), a
 
 // AgentSuffix is the agent's own mode, "" when it follows every agent's.
 func AgentSuffix(agent string) string {
-	return settings.Load().AgentSuffix[suffixKey(agent)]
+	return settings.Shared().AgentSuffix[suffixKey(agent)]
 }
 
 // suffixKey is the id an agent's own mode is kept by: a WSL copy and a
@@ -1517,7 +1517,7 @@ func DropUpstreamName(key string) (bool, error) {
 // already (splitModelRef), so nothing depends on it yet.
 func HasUpstreamName(key string) bool {
 	key = strings.TrimPrefix(strings.TrimSpace(key), "magpie/")
-	_, ok := settings.Load().ModelWires[key]
+	_, ok := settings.Shared().ModelWires[key]
 	return ok
 }
 

@@ -1311,7 +1311,7 @@ var wslOn = runtime.GOOS == "windows"
 
 // wslLooks is whether magpie looks in WSL on its own: there is WSL, and
 // Settings' Detect agents in WSL is on (#1264).
-func wslLooks() bool { return wslOn && !settings.Load().NoWSLAgents }
+func wslLooks() bool { return wslOn && !settings.Shared().NoWSLAgents }
 
 // wslRun runs wsl.exe; a var for tests.
 // wslReachScript asks, inside a distro, whether anything answers at $1

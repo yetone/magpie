@@ -178,7 +178,7 @@ func (c checkiner) checkinNow(ctx context.Context, soon bool) []WorkBuddyCheckin
 func checkinGate(now time.Time) time.Time {
 	t := now.In(beijing)
 	start := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, beijing)
-	h, m, ok := settings.Clock(settings.Load().CheckinAt)
+	h, m, ok := settings.Clock(settings.Shared().CheckinAt)
 	if !ok {
 		return start
 	}

@@ -11,7 +11,7 @@ import "github.com/yetone/magpie/internal/settings"
 // version inside it and every file's hash from it. MAGPIE_UPDATE_FEED, a
 // test's feed, is never overridden by it.
 func Source() string {
-	switch s := settings.Load().UpdateSource; s {
+	switch s := settings.Shared().UpdateSource; s {
 	case settings.UpdateSourceSite, settings.UpdateSourceGitHub:
 		return s
 	}

@@ -847,8 +847,8 @@ func modelCompact(args []string) error {
 // (settings.ContextCap).
 func modelContextCap(args []string) error {
 	if len(args) == 0 {
-		if n := settings.Load().ContextCap; n > 0 {
-			fmt.Println(bold.Render(tokenCount(n)), muted.Render(map[bool]string{true: "· no model is told a longer window, one you set for it or its provider included · magpie model context-cap own", false: "· no model is told a longer window, unless you set one for it or its provider · magpie model context-cap all"}[settings.Load().ContextCapAll]), muted.Render("· magpie model context-cap off"))
+		if n := settings.Shared().ContextCap; n > 0 {
+			fmt.Println(bold.Render(tokenCount(n)), muted.Render(map[bool]string{true: "· no model is told a longer window, one you set for it or its provider included · magpie model context-cap own", false: "· no model is told a longer window, unless you set one for it or its provider · magpie model context-cap all"}[settings.Shared().ContextCapAll]), muted.Render("· magpie model context-cap off"))
 		} else {
 			fmt.Println("off", muted.Render("· every model takes its own window · magpie model context-cap <size>"))
 		}
@@ -1239,7 +1239,7 @@ func modelOutput(args []string) error {
 		// the command the user is after
 		if !dropped {
 			wid, _, _ := strings.Cut(key, "/")
-			if settings.Load().ModelOutputs[wid+"/*"] > 0 {
+			if settings.Shared().ModelOutputs[wid+"/*"] > 0 {
 				return fmt.Errorf("%s has no reply limit of its own; what every model of this provider answers with is what you set for %s, which %s takes away",
 					key, wid+"/*", resetCommand("output", wid+"/*"))
 			}

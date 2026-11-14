@@ -1507,7 +1507,7 @@ func providersState() providersJSON {
 	}
 	cat, models := provider.CatalogGroups()
 	s.Gateway = gatewayJSON{URL: gateway.URL(), OnNetwork: gateway.OnNetwork(), Models: models, Calls: []gateway.Call{}, Groups: []gwGroupJSON{}}
-	s.Gateway.LAN = settings.Load().LAN || s.Gateway.OnNetwork
+	s.Gateway.LAN = settings.Shared().LAN || s.Gateway.OnNetwork
 	if s.Gateway.LAN {
 		s.Gateway.LANURLs = gateway.LANURLs()
 		s.Gateway.LANPublic = gateway.PublicURLs(s.Gateway.LANURLs)

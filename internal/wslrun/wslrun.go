@@ -71,7 +71,7 @@ const findAge = time.Minute
 // Detect agents in WSL off, or when no running distro has it.
 func Find(name string) (Tool, bool) {
 	// Settings' Detect agents in WSL, off, looks in no distro (#1264)
-	if !On || settings.Load().NoWSLAgents {
+	if !On || settings.Shared().NoWSLAgents {
 		return Tool{}, false
 	}
 	found.Lock()

@@ -286,7 +286,7 @@ func Videomaker() string {
 // names when magpie can't make videos with it any more, so that
 // AutoVideomaker's makes them in its place, as DrawerMissing is Image
 // generation's. "" when none is named or it resolves.
-func VideomakerMissing() string { return VideomakerMissingOf(settings.Load().VideoGen) }
+func VideomakerMissing() string { return VideomakerMissingOf(settings.Shared().VideoGen) }
 
 // VideomakerMissingOf is v, a Video generation pick, when magpie can't
 // make videos with it: its provider is gone, off or decide-only, or no

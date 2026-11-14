@@ -34,7 +34,7 @@ const NPMMirror = npmMirror
 
 // China is whether the Plugins page's 「国内镜像」 switch is on
 // (settings.ChinaMirror); a var for tests.
-var China = func() bool { return settings.Load().ChinaMirror }
+var China = func() bool { return settings.Shared().ChinaMirror }
 
 // chinaFirst is the mirror in China asked before raw with the switch on,
 // "" when there is none. Only mirrors that serve the same bytes as the

@@ -49,7 +49,7 @@ func Off() bool {
 			return true
 		}
 	}
-	return settings.Load().NoStats
+	return settings.Shared().NoStats
 }
 
 // Run sends the day's event while magpie runs, as what ("app", "serve"): at
@@ -96,7 +96,7 @@ func Send(ctx context.Context, version, what string, now time.Time) error {
 		"arch":    runtime.GOARCH,
 	}
 	var uses []map[string]any
-	if !settings.Load().NoUsageStats {
+	if !settings.Shared().NoUsageStats {
 		u := usage()
 		active["agents"] = len(u.Agents)
 		active["providers"] = len(u.Providers)
@@ -137,7 +137,7 @@ func Send(ctx context.Context, version, what string, now time.Time) error {
 	if res.StatusCode/100 != 2 {
 		return fmt.Errorf("stats: %s", res.Status)
 	}
-	if !settings.Load().NoUsageStats {
+	if !settings.Shared().NoUsageStats {
 		provider.PartnerCountsSent(now)
 		// Discover's counts; the day's event went, so this isn't tried
 		// again till tomorrow when it fails

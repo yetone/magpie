@@ -495,7 +495,7 @@ func addAccount(agentID string) error {
 			return fmt.Errorf("sign-in didn't finish: %s", st.Error)
 		}
 	}
-	linkOnly := settings.Load().SignInLinkOnly
+	linkOnly := settings.Shared().SignInLinkOnly
 	if linkOnly {
 		// the user keeps sign-in pages to a browser of their own
 		fmt.Println("Open this link in the browser you sign in with:")

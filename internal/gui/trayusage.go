@@ -33,7 +33,7 @@ import (
 // more than the Usage page asks them: their answers are cached for a
 // minute, and this reads the cache.
 func trayUsageEvery() time.Duration {
-	return time.Duration(settings.Load().TrayUsageEvery) * time.Minute
+	return time.Duration(settings.Shared().TrayUsageEvery) * time.Minute
 }
 
 // trayCardID names a card for settings.TrayUsage: its provider, and the
@@ -408,7 +408,7 @@ func trayUsageCards(ctx context.Context, lang string, ids []string) []provider.S
 		}
 		if currency == "" {
 			currency, rate = trayCurrency()
-			noCost = settings.Load().TrayNoCost
+			noCost = settings.Shared().TrayNoCost
 		}
 		cards = append(cards, trayTotalCard(lang, id, trayMoney(trayTotalSum(p), noCost), currency, rate))
 	}
@@ -580,7 +580,7 @@ func trayIdleTip(lang string, t usage.Totals, currency string, rate float64) str
 }
 
 // trayChineseUnits is Settings' 万/亿 choice, read when a count is said.
-var trayChineseUnits = func() bool { return settings.Load().ChineseUnits }
+var trayChineseUnits = func() bool { return settings.Shared().ChineseUnits }
 
 // trayCount is a count as the Usage page says it (fmtN in app.js): 133M,
 // 1.2M, 456K, 8.2K, 950; with Settings' 万/亿 units and magpie in Chinese,

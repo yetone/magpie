@@ -613,7 +613,7 @@ func wbPluginAccounts(pp plugin.Provider) []wbAccount {
 // settings say to: two minutes after it starts, every wbCheckinEvery after
 // that, and as the Beijing day turns, until ctx ends.
 func KeepWorkBuddyCheckedIn(ctx context.Context) {
-	keepCheckedIn(ctx, "workbuddy", newWBCheckiner(), func() bool { return settings.Load().WorkBuddyCheckin })
+	keepCheckedIn(ctx, "workbuddy", newWBCheckiner(), func() bool { return settings.Shared().WorkBuddyCheckin })
 }
 
 // keepCheckedIn runs c while on says to. The clock is looked at every

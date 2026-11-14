@@ -44,7 +44,7 @@ var Env = []string{"GITHUB_TOKEN", "GH_TOKEN"}
 // set in Settings, none: the user chose that one over the environment's,
 // and the page says requests go without a token till it is replaced.
 func Token() (token, from string) {
-	if t := strings.TrimSpace(settings.Load().GitHubToken); t != "" {
+	if t := strings.TrimSpace(settings.Shared().GitHubToken); t != "" {
 		if isRefused(t) {
 			return "", ""
 		}
@@ -98,7 +98,7 @@ func markSettingsRefused(t string) {
 // that field is changed or magpie restarts, so a stale token costs the user
 // the 5,000 an hour it was for and not every check (#3926).
 func SettingsRefused() (time.Time, bool) {
-	now := strings.TrimSpace(settings.Load().GitHubToken)
+	now := strings.TrimSpace(settings.Shared().GitHubToken)
 	settingsRefused.Lock()
 	defer settingsRefused.Unlock()
 	if settingsRefused.t == "" || now != settingsRefused.t {

@@ -152,7 +152,7 @@ func With(ctx context.Context, choice string) context.Context {
 // vendors without). Its "" leaves ctx as it is, so they follow the
 // global proxy as every other request does.
 func Downloads(ctx context.Context) context.Context {
-	if c := strings.TrimSpace(settings.Load().PluginProxy); c != "" {
+	if c := strings.TrimSpace(settings.Shared().PluginProxy); c != "" {
 		return With(ctx, c)
 	}
 	return ctx
@@ -161,7 +161,7 @@ func Downloads(ctx context.Context) context.Context {
 // EnvDownloads is Env for a program magpie starts to download plugins
 // (bun add and update, git): plugin downloads' proxy (Downloads), or,
 // when that names none, Env's.
-func EnvDownloads(env []string) []string { return EnvWith(settings.Load().PluginProxy, env) }
+func EnvDownloads(env []string) []string { return EnvWith(settings.Shared().PluginProxy, env) }
 
 // Choice is the proxy ctx names (With), "" when it names none — for a CLI
 // run on a provider's behalf, whose *_PROXY is set from it (EnvWith).
@@ -379,7 +379,7 @@ func (d *dispatch) CloseIdleConnections() {
 
 // For is the proxy a request to u goes through; nil means direct.
 func For(u *url.URL) (*url.URL, error) {
-	switch s := strings.TrimSpace(settings.Load().Proxy); s {
+	switch s := strings.TrimSpace(settings.Shared().Proxy); s {
 	case "direct":
 		return nil, nil
 	case "":
@@ -416,7 +416,7 @@ func EnvWith(choice string, env []string) []string {
 	var bypass []string
 	s := strings.TrimSpace(choice)
 	if s == "" {
-		s = strings.TrimSpace(settings.Load().Proxy)
+		s = strings.TrimSpace(settings.Shared().Proxy)
 	}
 	if settings.IsProxyRef(s) {
 		// a saved proxy that is gone: the CLI goes nowhere, not direct
@@ -508,7 +508,7 @@ func Parse(s string) (*url.URL, error) {
 // Describe says, for the settings page, what a request to u would use.
 func Describe() (proxy, source string) {
 	defer func() { proxy = Redact(proxy) }()
-	switch s := strings.TrimSpace(settings.Load().Proxy); s {
+	switch s := strings.TrimSpace(settings.Shared().Proxy); s {
 	case "direct":
 		return "", "off"
 	case "":

@@ -131,7 +131,7 @@ func OwnUnready(name string) string {
 		if _, ok := drawer(); ok {
 			return ""
 		}
-		if settings.Load().ImageGen == "off" {
+		if settings.Shared().ImageGen == "off" {
 			return "Image generation is off in Settings → Models → Images: its tools say so until a model is picked there"
 		}
 		return "No model that draws images is set up yet: it draws once a provider with an image model is added, and says so until then"

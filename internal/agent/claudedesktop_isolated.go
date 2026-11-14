@@ -29,7 +29,7 @@ const desktopIsolatedKey = ".isolated"
 
 // desktopIsolatedOn says the user turned the isolated Desktop on; a var so
 // a test needs no settings file.
-var desktopIsolatedOn = func() bool { return settings.Load().DesktopIsolated }
+var desktopIsolatedOn = func() bool { return settings.Shared().DesktopIsolated }
 
 // desktopIsolatedSet is the isolated Desktop's folders on goos: its
 // userData and its 3p folder are one, Claude-Magpie-3p. The language and
@@ -65,11 +65,11 @@ func desktopIsolatedSet(goos, home string, getenv func(string) string) (desktopP
 
 // desktopIsolatedClaudeOn says the user gave the isolated Desktop's Code
 // tab a folder of its own; a var so a test needs no settings file.
-var desktopIsolatedClaudeOn = func() bool { return settings.Load().DesktopIsolatedClaude }
+var desktopIsolatedClaudeOn = func() bool { return settings.Shared().DesktopIsolatedClaude }
 
 // desktopIsolatedClaudeChosen says the user set that themselves; a var
 // so a test needs no settings file.
-var desktopIsolatedClaudeChosen = func() bool { return settings.Load().DesktopIsolatedClaudeChosen }
+var desktopIsolatedClaudeChosen = func() bool { return settings.Shared().DesktopIsolatedClaudeChosen }
 
 // saveDesktopIsolatedClaude keeps that folder on or off, and chosen when
 // the user set it; a var for tests.

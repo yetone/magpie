@@ -31,7 +31,7 @@ func codexTitlesTo(h http.Header, body []byte, ours bool, session func() string)
 	if !isTitleKind(requestCallKind(h, requestSessionMetadata(h, body))) {
 		return ""
 	}
-	if to := settings.Load().CodexTitles; to != "" {
+	if to := settings.Shared().CodexTitles; to != "" {
 		return to
 	}
 	return codexSideTo(body, ours, session)
@@ -88,7 +88,7 @@ func codexDescriptionsTo(h http.Header, body []byte, ours bool, session func() s
 	if !isDescriptionKind(requestCallKind(h, requestSessionMetadata(h, body))) {
 		return ""
 	}
-	if to := settings.Load().CodexDescriptions; to != "" {
+	if to := settings.Shared().CodexDescriptions; to != "" {
 		return to
 	}
 	// Codex on a magpie model gets no schema upstream (#743), so an empty
@@ -262,7 +262,7 @@ func codexPredictionsTo(h http.Header, body []byte, ours bool, session func() st
 	if !isPredictionKind(requestCallKind(h, requestSessionMetadata(h, body))) {
 		return ""
 	}
-	if to := settings.Load().CodexPredictions; to != "" {
+	if to := settings.Shared().CodexPredictions; to != "" {
 		return to
 	}
 	// the app asks on the thread's model, but one of Codex's own when the
@@ -311,7 +311,7 @@ func (s *Server) codexTitle(w http.ResponseWriter, r *http.Request, body []byte,
 	}
 	ctx := context.WithValue(r.Context(), titleCheckKey{}, check)
 	ctx = context.WithValue(ctx, titleShapeKey{}, &shape)
-	if to == settings.Load().CodexTitles {
+	if to == settings.Shared().CodexTitles {
 		// the model picked for titles in magpie's settings, not by the
 		// caller's key (#882)
 		ctx = magpieChose(ctx)
@@ -442,7 +442,7 @@ func (s *Server) codexPrediction(w http.ResponseWriter, r *http.Request, body []
 		return ""
 	}
 	ctx := context.WithValue(r.Context(), titleCheckKey{}, check)
-	if to == settings.Load().CodexPredictions {
+	if to == settings.Shared().CodexPredictions {
 		ctx = magpieChose(ctx)
 	}
 	s.serve(rec, r.WithContext(ctx), provider.Responses, codexSideEffort(withModel(body, to), to))

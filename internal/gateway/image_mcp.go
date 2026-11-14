@@ -276,7 +276,7 @@ func (s *Server) imageMCPCall(r *http.Request, m mcpMessage) (any, map[string]an
 // imageGenOff is the tools' answer while Settings turned image generation
 // off, which turns video off with it.
 func imageGenOff() (map[string]any, bool) {
-	if settings.Load().ImageGen != "off" {
+	if settings.Shared().ImageGen != "off" {
 		return nil, false
 	}
 	return toolResult("Image generation is off in magpie: pick a model for it in Settings → Models → Images → Image generation", true), true

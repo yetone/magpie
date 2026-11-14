@@ -160,7 +160,7 @@ func toGuard() {
 	}
 	g := pii.Of(pii.AstrLinkGuard)
 	g.Download(func() {
-		if settings.Load().RedactModelName == "" && settings.UseRedactModel(pii.AstrLinkGuard) == nil {
+		if settings.Shared().RedactModelName == "" && settings.UseRedactModel(pii.AstrLinkGuard) == nil {
 			pii.Of(pii.PrivacyFilter).Stop()
 			g.Warm()
 		}

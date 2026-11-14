@@ -286,5 +286,5 @@ func qoderCheckinAccounts() []qoderCheckinAcct {
 // KeepQoderCheckedIn checks the Qoder accounts in each day while settings
 // say to, as KeepTraeCheckedIn does Trae CN's.
 func KeepQoderCheckedIn(ctx context.Context) {
-	keepCheckedIn(ctx, "qoder", newQoderCheckiner(qoderCheckinAccounts, time.Now), func() bool { return settings.Load().QoderCheckin })
+	keepCheckedIn(ctx, "qoder", newQoderCheckiner(qoderCheckinAccounts, time.Now), func() bool { return settings.Shared().QoderCheckin })
 }

@@ -62,7 +62,7 @@ func Rewire(as []*Agent) (moved []string, err error) {
 func Rekey(as []*Agent) (moved []string, err error) {
 	var away []*Agent
 	for _, a := range as {
-		if a.Gateway != nil && (onAnotherMachine(a.Gateway()) || a.ID == "claude-desktop" && settings.Load().DesktopGateway != "") {
+		if a.Gateway != nil && (onAnotherMachine(a.Gateway()) || a.ID == "claude-desktop" && settings.Shared().DesktopGateway != "") {
 			away = append(away, a)
 		}
 	}

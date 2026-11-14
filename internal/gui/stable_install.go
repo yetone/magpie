@@ -34,7 +34,7 @@ func takeStable(ctx context.Context) {
 	if !freshInstall.Load() {
 		return
 	}
-	if !update.Released(Version) || settings.Load().UpdateChannel != "" {
+	if !update.Released(Version) || settings.Shared().UpdateChannel != "" {
 		freshInstall.Store(false)
 		return
 	}

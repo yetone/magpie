@@ -52,7 +52,7 @@ var toolResultMarks = map[provider.Protocol][][]byte{
 // stoppedToolLoop answers r here when its conversation is stuck in a tool
 // loop, and says whether it did.
 func (s *Server) stoppedToolLoop(w http.ResponseWriter, r *http.Request, from provider.Protocol, body []byte) bool {
-	if settings.Load().NoLoopGuard || !mayLoop(from, body) {
+	if settings.Shared().NoLoopGuard || !mayLoop(from, body) {
 		return false
 	}
 	req, err := parse(from, tailOf(from, body))
