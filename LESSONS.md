@@ -1403,8 +1403,9 @@ each one.
     move it to", hours after f1f34d624 found room by moving keysTag
     out. The owner hasn't set a growth rate (#2710), so a raise still
     moves something out first.
-    dc85a7ca5 then added +12 for AIGoCode's logo in pngIcons, nothing
-    moved out either.
+    dc85a7ca5 then added +12 for AIGoCode's logo in pngIcons, and
+    27c998aba +491 for costs in each provider's currency, nothing moved
+    out either: three raises by 11:00, +570 bytes.
   - Done right: f1f34d624 met the budget with no raise, moving keysTag
     into keyrates.js, which is loaded exactly when a model can have a
     key tag.
