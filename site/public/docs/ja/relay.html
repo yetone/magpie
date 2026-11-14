@@ -69,7 +69,7 @@
      "name": "magpie で API 中継サービスを使えますか？",
      "acceptedAnswer": {
       "@type": "Answer",
-      "text": "使えます。AiHubMix・PipeLLM・302.AI・CherryIN・鱼鱼连线はキーを入れるだけのプリセットで、ほかの中継は magpie provider add で OpenAI 互換と Anthropic 互換のアドレスを指定します。"
+      "text": "使えます。AiHubMix・PipeLLM・302.AI・CherryIN・鱼鱼连线・AIGoCodeはキーを入れるだけのプリセットで、ほかの中継は magpie provider add で OpenAI 互換と Anthropic 互換のアドレスを指定します。"
      }
     },
     {
@@ -183,7 +183,7 @@
     <p class="lede">中継サービスは 1 つのキーで多くのベンダーのモデルを売り、価格もモデル名も独自のことがよくあります。magpie は中継を 1 つのプロバイダーとして扱い、エージェントは <code>中継/モデル</code> で使えます。価格・名前・コンテキスト長は中継の実際に合わせて設定できます。</p>
     <h2 id="add"><a class="anchor" href="#add">中継を追加する</a></h2>
     <ol class="steps">
-      <li><b>プリセットの中継。</b>AiHubMix・PipeLLM・302.AI・CherryIN・鱼鱼连线はプリセットで、<span class="ui">APIキー</span> を入れるだけです。鱼鱼连线は Auto・Global・China Mainland の回線も選べます。</li>
+      <li><b>プリセットの中継。</b>AiHubMix・PipeLLM・302.AI・CherryIN・鱼鱼连线・AIGoCodeはプリセットで、<span class="ui">APIキー</span> を入れるだけです。鱼鱼连线は Auto・Global・China Mainland の回線も選べます。</li>
       <li><b>そのほかの中継。</b>アドレスを指定します。<code>url=</code> は OpenAI 互換、<code>anthropic=</code> は Anthropic 互換で、両方あれば両方、Responses に別アドレスがあれば <code>responses=</code> も加えます。</li>
     </ol>
     <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="relay-add">コピー</button><pre id="relay-add">magpie presets
@@ -215,7 +215,7 @@ magpie provider auto-include relay 'gpt-*' 're:claude-.*'</pre></div>
 
     <h2 id="faq"><a class="anchor" href="#faq">よくある質問</a></h2>
     <h3>magpie で API 中継サービスを使えますか？</h3>
-    <p>使えます。AiHubMix・PipeLLM・302.AI・CherryIN・鱼鱼连线はキーを入れるだけのプリセットで、ほかの中継は magpie provider add で OpenAI 互換と Anthropic 互換のアドレスを指定します。</p>
+    <p>使えます。AiHubMix・PipeLLM・302.AI・CherryIN・鱼鱼连线・AIGoCodeはキーを入れるだけのプリセットで、ほかの中継は magpie provider add で OpenAI 互換と Anthropic 互換のアドレスを指定します。</p>
     <h3>中継経由の Claude モデルでキャッシュが効かないのはなぜ？</h3>
     <p>多くの中継は Chat で cache_control を落とします。中継の Anthropic アドレスを指定すれば、magpie は Claude モデルを Messages に送り、キャッシュと思考が保たれます。</p>
     <h3>中継が割引価格のとき、費用を正しく数えるには？</h3>

@@ -69,7 +69,7 @@
      "name": "Can magpie use an API relay?",
      "acceptedAnswer": {
       "@type": "Answer",
-      "text": "Yes. AiHubMix, PipeLLM, 302.AI, CherryIN and 鱼鱼连线 are presets that take a key; any other relay is added with magpie provider add and its OpenAI- and Anthropic-compatible addresses."
+      "text": "Yes. AiHubMix, PipeLLM, 302.AI, CherryIN, 鱼鱼连线 and AIGoCode are presets that take a key; any other relay is added with magpie provider add and its OpenAI- and Anthropic-compatible addresses."
      }
     },
     {
@@ -183,7 +183,7 @@
     <p class="lede">A relay sells many vendors' models on one key, often at its own prices and under its own model names. magpie treats a relay as a provider: an agent asks for <code>relay/model</code>, and prices, names and windows can be set to what the relay really does.</p>
     <h2 id="add"><a class="anchor" href="#add">Add a relay</a></h2>
     <ol class="steps">
-      <li><b>A preset relay.</b>AiHubMix, PipeLLM, 302.AI, CherryIN and 鱼鱼连线 are presets: give an <span class="ui">API key</span>. 鱼鱼连线 also takes an Auto, Global or China Mainland line.</li>
+      <li><b>A preset relay.</b>AiHubMix, PipeLLM, 302.AI, CherryIN, 鱼鱼连线 and AIGoCode are presets: give an <span class="ui">API key</span>. 鱼鱼连线 also takes an Auto, Global or China Mainland line.</li>
       <li><b>Any other relay.</b>Give its addresses: <code>url=</code> for an OpenAI-compatible base, <code>anthropic=</code> for an Anthropic-compatible one, both when it has both, and <code>responses=</code> when Responses has an address of its own.</li>
     </ol>
     <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="relay-add">Copy</button><pre id="relay-add">magpie presets
@@ -215,7 +215,7 @@ magpie provider auto-include relay 'gpt-*' 're:claude-.*'</pre></div>
 
     <h2 id="faq"><a class="anchor" href="#faq">FAQ</a></h2>
     <h3>Can magpie use an API relay?</h3>
-    <p>Yes. AiHubMix, PipeLLM, 302.AI, CherryIN and 鱼鱼连线 are presets that take a key; any other relay is added with magpie provider add and its OpenAI- and Anthropic-compatible addresses.</p>
+    <p>Yes. AiHubMix, PipeLLM, 302.AI, CherryIN, 鱼鱼连线 and AIGoCode are presets that take a key; any other relay is added with magpie provider add and its OpenAI- and Anthropic-compatible addresses.</p>
     <h3>Why does caching miss for Claude models through a relay?</h3>
     <p>Many relays drop cache_control on Chat. Give the relay's Anthropic address, and magpie sends Claude models to Messages, keeping caching and thinking.</p>
     <h3>The relay sells at a discount. How do I count the right cost?</h3>

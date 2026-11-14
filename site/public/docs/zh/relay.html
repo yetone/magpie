@@ -69,7 +69,7 @@
      "name": "magpie 能接 API 中转站吗？",
      "acceptedAnswer": {
       "@type": "Answer",
-      "text": "能。AiHubMix、PipeLLM、302.AI、CherryIN、鱼鱼连线是预设，填 Key 即可；其他中转站用 magpie provider add 填 OpenAI 兼容地址和 Anthropic 兼容地址。"
+      "text": "能。AiHubMix、PipeLLM、302.AI、CherryIN、鱼鱼连线、AIGoCode是预设，填 Key 即可；其他中转站用 magpie provider add 填 OpenAI 兼容地址和 Anthropic 兼容地址。"
      }
     },
     {
@@ -183,7 +183,7 @@
     <p class="lede">中转站用一把 Key 卖很多家的模型，价格常常和官方不一样，模型名也常常带着自己的前缀。magpie 把中转站当成一个供应商：Agent 里写 <code>中转站/模型</code> 就能用，价格、模型名和窗口都可以按中转站的实际情况改。</p>
     <h2 id="add"><a class="anchor" href="#add">添加中转站</a></h2>
     <ol class="steps">
-      <li><b>内置的中转站。</b>AiHubMix、PipeLLM、302.AI、CherryIN、鱼鱼连线已经是预设，填一把 <span class="ui">API 密钥</span> 就行。鱼鱼连线还可以选 Auto、Global 或 China Mainland 线路。</li>
+      <li><b>内置的中转站。</b>AiHubMix、PipeLLM、302.AI、CherryIN、鱼鱼连线、AIGoCode已经是预设，填一把 <span class="ui">API 密钥</span> 就行。鱼鱼连线还可以选 Auto、Global 或 China Mainland 线路。</li>
       <li><b>其他中转站。</b>填它的地址：<code>url=</code> 是 OpenAI 兼容的地址，<code>anthropic=</code> 是 Anthropic 兼容的地址，两个都有就都填；另有单独 Responses 地址的再加 <code>responses=</code>。</li>
     </ol>
     <div class="code"><span class="lang">终端</span><button class="copy" data-copy="relay-add">复制</button><pre id="relay-add">magpie presets
@@ -215,7 +215,7 @@ magpie provider auto-include relay 'gpt-*' 're:claude-.*'</pre></div>
 
     <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
     <h3>magpie 能接 API 中转站吗？</h3>
-    <p>能。AiHubMix、PipeLLM、302.AI、CherryIN、鱼鱼连线是预设，填 Key 即可；其他中转站用 magpie provider add 填 OpenAI 兼容地址和 Anthropic 兼容地址。</p>
+    <p>能。AiHubMix、PipeLLM、302.AI、CherryIN、鱼鱼连线、AIGoCode是预设，填 Key 即可；其他中转站用 magpie provider add 填 OpenAI 兼容地址和 Anthropic 兼容地址。</p>
     <h3>通过中转站用 Claude 模型，缓存为什么不命中？</h3>
     <p>很多中转站在 Chat 接口上会丢掉 cache_control。填上中转站的 Anthropic 地址，magpie 就把 Claude 模型都发到 Messages，缓存和思考都能保住。</p>
     <h3>中转站打折，花费怎么算才对？</h3>

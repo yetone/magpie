@@ -31,12 +31,13 @@ var planPresets = map[string]bool{
 
 // unsaidPresets are vendors and relays whose one endpoint takes a plan's
 // keys and pay as you go's alike, or that are free, so magpie can't say
-// which a key is (MiniMax's Coding Plan keys, ModelScope's daily quota),
+// which a key is (MiniMax's Coding Plan keys, ModelScope's daily quota,
+// an AIGoCode key spending its plan and then its balance),
 // and decision models, which bill as their own provider does.
 var unsaidPresets = map[string]bool{
 	"minimax": true, "minimax-cn": true, "ollama-cloud": true, "modelscope": true,
 	"nvidia": true, "longcat": true, "commandcode": true,
-	"typesafe": true, "vercel-jev": true, "cloudflare-jev": true,
+	"typesafe": true, "vercel-jev": true, "cloudflare-jev": true, "aigocode": true,
 	"bailian-decision": true, "qwen-decision": true, "volcengine-decision": true,
 }
 

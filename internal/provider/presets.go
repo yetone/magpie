@@ -679,6 +679,15 @@ var presets = []PresetDef{
 			{ID: "global", Name: "Global", Chat: "https://global.yylx.io/v1", Anthropic: "https://global.yylx.io"},
 			{ID: "cn", Name: "China Mainland", Chat: "https://cn.yylx.io/v1", Anthropic: "https://cn.yylx.io"},
 		}},
+	// a sub2api relay (MindfulReturn on X, 11-14): one root for every
+	// protocol, as its docs/api page gives it, Chat and Responses at /v1
+	// and Messages at the root; a key serves its group's models alone,
+	// which /v1/models lists, and its balance is sub2api's /v1/usage
+	// (balance_probe.go). Its site carries the invite AIGoCode sponsors
+	// magpie with, as Kimi's do.
+	{ID: "aigocode", Name: "AIGoCode", Icon: "aigocode", Kind: KindRelay,
+		Chat: "https://api.aigocode.dev/v1", Responses: "https://api.aigocode.dev/v1", Anthropic: "https://api.aigocode.dev",
+		Website: "https://www.aigocode.net/invite/MAGPIE?utm_source=magpie&utm_medium=app", KeysURL: "https://www.aigocode.net/dashboard/keys"},
 
 	// Jev answers no conversation: it decides which of a routing group's
 	// models takes a turn, and how hard it thinks
