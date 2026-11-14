@@ -101,3 +101,49 @@ func TestHeldCountsPageReads(t *testing.T) {
 		}
 	}
 }
+
+// The app's page gone away (closed or hidden) has the Sessions page's
+// stats let go pageAwayFor later, not the minutes the idle timers take;
+// a page read since it went away keeps them.
+func TestPageAwayLetsStatsGo(t *testing.T) {
+	forgetStats()
+	t.Cleanup(forgetStats)
+	old := pageAwayFor
+	pageAwayFor = 20 * time.Millisecond
+	t.Cleanup(func() {
+		pageAway.Lock()
+		if pageAway.t != nil {
+			pageAway.t.Stop()
+			pageAway.t = nil
+		}
+		pageAway.Unlock()
+		pageAwayFor = old
+		pageReads.Lock()
+		if pageReads.due != nil {
+			pageReads.due.Stop()
+			pageReads.due = nil
+		}
+		pageReads.Unlock()
+	})
+	kept := func() bool {
+		statsMemo.Lock()
+		defer statsMemo.Unlock()
+		return statsMemo.m[0] != nil
+	}
+
+	// read again after it went away: kept
+	statsFor(0)
+	awayPage()
+	readingPage()()
+	time.Sleep(100 * time.Millisecond)
+	if !kept() {
+		t.Fatal("stats let go though a page read them after it went away")
+	}
+
+	awayPage()
+	for deadline := time.Now().Add(10 * time.Second); kept(); time.Sleep(5 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("stats still kept after the page went away")
+		}
+	}
+}

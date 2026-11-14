@@ -584,3 +584,55 @@ func TestRequestTrimGivesBackTheMap(t *testing.T) {
 	idx.chunks["/s/kept"] = c // the map is usable after
 	runtime.KeepAlive(keys)
 }
+
+// ForgetPages lets the chunks go at once, the idle timers an hour off,
+// and stops them; the next ask reads them back.
+func TestForgetPagesLetsChunksGoAtOnce(t *testing.T) {
+	pageHome(t)
+	now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
+	oldIdle, oldForget := requestIdle, requestForget
+	t.Cleanup(func() {
+		requestCache.Lock()
+		requestIdle, requestForget = oldIdle, oldForget
+		requestCache.Unlock()
+	})
+	cacheBudget(t, 1<<30)
+	requestCache.Lock()
+	requestIdle, requestForget = time.Hour, time.Hour
+	requestCache.Unlock()
+	dir := filepath.Join(sessions.CodexDir(), "sessions")
+	os.MkdirAll(dir, 0700)
+	for i := range 3 {
+		meta := fmt.Sprintf(`{"type":"session_meta","payload":{"id":"s%d","model_provider":"custom"}}`, i) + "\n" + `{"type":"turn_context","payload":{"model":"m"}}` + "\n"
+		line := fmt.Sprintf(`{"timestamp":%q,"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":10,"output_tokens":1},"last_token_usage":{"input_tokens":10,"output_tokens":1}}}}`+"\n", now.Add(-time.Duration(i)*time.Minute).Format(time.RFC3339Nano))
+		os.WriteFile(filepath.Join(dir, fmt.Sprintf("rollout-2026-09-30T00-00-0%d-s%d.jsonl", i, i)), []byte(meta+line), 0600)
+	}
+	ask := func() {
+		if p := QueryPage(All, Filter{}, 0, 100); p.Total != 3 {
+			t.Fatalf("total %d, want 3", p.Total)
+		}
+	}
+	ask()
+	requestCache.Lock()
+	had, armed := len(requestCache.chunks), requestCache.idle != nil
+	requestCache.Unlock()
+	if had != 3 || !armed {
+		t.Fatalf("after an ask: %d chunks, idle timer armed %v; want 3, true", had, armed)
+	}
+	if !ForgetPages() {
+		t.Fatal("ForgetPages says nothing went")
+	}
+	requestCache.Lock()
+	left, idle := len(requestCache.chunks), requestCache.idle
+	requestCache.Unlock()
+	if left != 0 || idle != nil {
+		t.Fatalf("after ForgetPages: %d chunks, idle timer %v; want 0, nil", left, idle)
+	}
+	ask() // read back from the file of them, the idle timer armed again
+	requestCache.Lock()
+	armed = requestCache.idle != nil
+	requestCache.Unlock()
+	if !armed {
+		t.Fatal("an ask after ForgetPages armed no idle timer")
+	}
+}

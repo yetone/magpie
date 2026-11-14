@@ -86,3 +86,51 @@ func releaseIfPagesRest() {
 	}
 	debug.FreeOSMemory()
 }
+
+// pageAwayFor is how long after the app's page says it has gone away
+// (closed, or its window or tab hidden: /api/page-away) what its Sessions
+// and Usage pages keep goes, unless a page asked for them meanwhile. The
+// idle timers each page's caches have (statsIdle, requestIdle, then
+// requestForget, derivedIdle) took 5 to 10 minutes between them: a real
+// history's window closed after a minute held 123 MB, 76 MB three minutes
+// later, and was back to the tray's 52 MB only after ten. A tab looked away
+// from for less than this keeps them, and so does a second one still open.
+var pageAwayFor = 30 * time.Second
+
+var pageAway struct {
+	sync.Mutex
+	t  *time.Timer
+	at time.Time
+}
+
+// awayPage arms forgetAwayPage for pageAwayFor from now.
+func awayPage() {
+	pageAway.Lock()
+	defer pageAway.Unlock()
+	pageAway.at = time.Now()
+	if pageAway.t != nil {
+		pageAway.t.Reset(pageAwayFor)
+		return
+	}
+	pageAway.t = time.AfterFunc(pageAwayFor, forgetAwayPage)
+}
+
+// forgetAwayPage lets go of the Sessions and Usage pages' caches when no
+// read of theirs has been in flight, or ended, since the page went away.
+func forgetAwayPage() {
+	pageAway.Lock()
+	at := pageAway.at
+	pageAway.t = nil
+	pageAway.Unlock()
+	pageReads.Lock()
+	asked := pageReads.n != 0 || pageReads.last.After(at)
+	pageReads.Unlock()
+	if asked {
+		return
+	}
+	stats := letGoStats()
+	if usage.ForgetPages() || stats {
+		usage.ReleaseScratch()
+		debug.FreeOSMemory()
+	}
+}

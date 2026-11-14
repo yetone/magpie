@@ -122,3 +122,27 @@ func dropEffortPeriods() int {
 	}
 	return n
 }
+
+// ForgetPages lets go at once of what the Requests page and its heatmap
+// keep for their next ask: the chunks (as requestForget does) and what is
+// kept of each by its serial (as derivedIdle does). The app calls it once
+// its page has gone away, closed or hidden, so that what a visit read
+// goes in seconds, not the 7 minutes the idle timers take; the next visit
+// reads the chunks back from the file of them. Says whether anything went.
+func ForgetPages() bool {
+	idx := &requestCache
+	idx.Lock()
+	n := len(idx.chunks)
+	if idx.idle != nil {
+		idx.idle.Stop()
+		idx.idle = nil
+	}
+	if idx.forget != nil {
+		idx.forget.Stop()
+		idx.forget = nil
+	}
+	idx.trim(0)
+	idx.Unlock()
+	n += dropDerived()
+	return n > 0
+}
