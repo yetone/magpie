@@ -329,6 +329,18 @@ func trayCardText(lang string, q provider.SubscriptionQuota, now time.Time, left
 		}
 		long = append(long, line)
 	}
+	// a wallet beside the windows (Kimi Code's booster, "Extra usage"):
+	// what is left on it, as the card's line under its rings says it
+	for _, w := range q.Windows {
+		if w.Balance == nil {
+			continue
+		}
+		amt := strconv.FormatFloat(math.Round(*w.Balance*100)/100, 'f', -1, 64)
+		if u := pageWord(lang, w.Unit); u != "" {
+			amt += " " + u
+		}
+		long = append(long, trayWindowName(lang, w.Name)+" "+trayText(lang, "%s left", amt))
+	}
 	return strings.Join(short, " · "), q.Name + "\n" + strings.Join(long, "\n") + trayAsOf(lang, q)
 }
 
