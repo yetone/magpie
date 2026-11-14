@@ -2294,7 +2294,7 @@ magpie doesn’t use OpenRouter’s Responses API. An agent that speaks Response
 - **Where it comes from..** magpie fetches the list from `https://openrouter.ai/api/v1/models`, which gives each model’s context length. Names, reasoning levels and prices come from the `openrouter` catalog on models.dev.
 - **Which models agents see..** OpenRouter lists hundreds. Unless you pick some, magpie shows agents the first 24 OpenRouter lists, newest first. Pick the rest in the provider’s model list, or turn on Best in family to keep only the newest of each family.
 - **New models..** `auto-include` rules expose matching models now and each one a later fetch lists for the first time, and `refresh-every` has magpie fetch the list again by itself.
-- **Image models..** OpenRouter’s `/models` lists text models only, so magpie reads image models such as FLUX, Seedream, Riverflow, Recraft and GPT Image from `/api/v1/images/models`. Choose one in Settings → Models → Images.
+- **Image models..** OpenRouter’s `/models` lists text models only, so magpie reads image models such as FLUX, Seedream, Riverflow, Recraft and GPT Image, and their free variants, from `/api/v1/models?output_modalities=image`. Choose one in Settings → Models → Images.
 - **Decision models..** OpenRouter’s decision models (`liquid/d1`, `cloudflare/clef`, `~typesafe/jev-latest`…) are listed too, so a routing group can classify turns with the same key.
 
 ```

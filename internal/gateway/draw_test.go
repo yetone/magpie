@@ -370,16 +370,18 @@ func TestOpenRouterImageOnlyModelsDrawAtItsImageAPI(t *testing.T) {
 	if err := catalog.SaveLive("openrouter", "https://openrouter.ai/api/v1", []catalog.Model{
 		{ID: "sourceful/riverflow-v2-fast", Draws: true, OutputModalities: []string{"image"}},
 		{ID: "recraft/recraft-v4-vector", Draws: true, OutputModalities: []string{"image"}},
+		{ID: "recraft/recraft-v4.1-flash-v2:free", Draws: true, OutputModalities: []string{"image"}},
 		{ID: "google/gemini-2.5-flash-image", Draws: true, OutputModalities: []string{"image", "text"}},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	p, _ := provider.Find("openrouter")
 	for model, want := range map[string]drawVia{
-		"sourceful/riverflow-v2-fast":   viaImages,
-		"recraft/recraft-v4-vector":     viaImages,
-		"google/gemini-2.5-flash-image": viaChat,
-		"openai/gpt-5-image":            viaChat,
+		"sourceful/riverflow-v2-fast":        viaImages,
+		"recraft/recraft-v4-vector":          viaImages,
+		"recraft/recraft-v4.1-flash-v2:free": viaImages,
+		"google/gemini-2.5-flash-image":      viaChat,
+		"openai/gpt-5-image":                 viaChat,
 	} {
 		if got := viaFor(*p, model); got != want {
 			t.Errorf("%s: %s, want %s", model, got, want)
@@ -410,6 +412,12 @@ func TestOpenRouterImageOnlyModelsDrawAtItsImageAPI(t *testing.T) {
 				t.Errorf("%s: %s = %v, want %v (%v)", size, k, got[k], want[k], got)
 			}
 		}
+	}
+	// a variant (AllenH__ on X) is asked by its own id, ":free" and all
+	got, path = nil, ""
+	code, _, raw := postImages(t, s, "/v1/images/generations", "application/json", `{"model":"openrouter/recraft/recraft-v4.1-flash-v2:free","prompt":"a magpie"}`)
+	if code != http.StatusOK || path != "/api/v1/images" || got["model"] != "recraft/recraft-v4.1-flash-v2:free" {
+		t.Fatalf("the free Recraft: %d at %q as %v: %s", code, path, got["model"], raw)
 	}
 }
 

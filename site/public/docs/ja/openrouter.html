@@ -233,7 +233,7 @@ magpie provider test openrouter</pre></div>
       <li><b>一覧の出どころ。</b>magpie は <code>https://openrouter.ai/api/v1/models</code> から一覧を取ります。各モデルのコンテキスト長もここから読みます。モデル名・推論レベル・価格は models.dev の <code>openrouter</code> カタログから来ます。</li>
       <li><b>ツールに見えるモデル。</b>OpenRouter のモデルは何百もあります。自分で選ばない限り、magpie は OpenRouter の一覧の先頭 24 個（新しい順）をツールに見せます。残りはプロバイダのモデル一覧で選ぶか、<span class="ui">系列の最新のみ</span> をオンにして各系列の最新だけに絞ります。</li>
       <li><b>新しいモデル。</b><code>auto-include</code> のルールに合うモデルはすぐに加わり、あとで一覧に初めて載ったものも加わります。<code>refresh-every</code> を設定すると、magpie が一覧を自分で取り直します。</li>
-      <li><b>画像モデル。</b>OpenRouter の <code>/models</code> にはテキストモデルしか載らないので、FLUX・Seedream・Riverflow・Recraft・GPT Image などの画像モデルは <code>/api/v1/images/models</code> から読みます。<span class="ui">設定 → モデル → 画像</span> で選びます。</li>
+      <li><b>画像モデル。</b>OpenRouter の <code>/models</code> にはテキストモデルしか載らないので、FLUX・Seedream・Riverflow・Recraft・GPT Image などの画像モデルとその無料版は <code>/api/v1/models?output_modalities=image</code> から読みます。<span class="ui">設定 → モデル → 画像</span> で選びます。</li>
       <li><b>判定モデル。</b>OpenRouter の判定モデル（<code>liquid/d1</code>、<code>cloudflare/clef</code>、<code>~typesafe/jev-latest</code> など）も一覧に入るので、ルーティンググループは同じキーで各ターンを分類できます。</li>
     </ul>
     <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="ex-models">コピー</button><pre id="ex-models">magpie provider models openrouter +anthropic/claude-opus-5.5   # 一つ追加で見せる

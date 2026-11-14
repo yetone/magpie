@@ -233,7 +233,7 @@ magpie provider test openrouter</pre></div>
       <li><b>列表从哪来。</b>magpie 从 <code>https://openrouter.ai/api/v1/models</code> 拉取列表，里面有每个模型的上下文长度。模型名、推理档位和价格来自 models.dev 上的 <code>openrouter</code> 目录。</li>
       <li><b>工具能看到哪些模型。</b>OpenRouter 列出的模型有几百个。你没挑选时，magpie 给工具展示 OpenRouter 列表里的前 24 个（它按从新到旧排）。其余的可以在供应商的模型列表里勾选，也可以打开 <span class="ui">每系最新</span>，每个系列只留最新的一个。</li>
       <li><b>新模型。</b><code>auto-include</code> 规则会立刻加入匹配的模型，以后拉取列表时新出现的匹配模型也会自动加入；<code>refresh-every</code> 让 magpie 定期自己重新拉取列表。</li>
-      <li><b>图像模型。</b>OpenRouter 的 <code>/models</code> 只列文本模型，所以 magpie 从 <code>/api/v1/images/models</code> 读取 FLUX、Seedream、Riverflow、Recraft、GPT Image 等图像模型。在 <span class="ui">设置 → 模型 → 图像</span> 里选用。</li>
+      <li><b>图像模型。</b>OpenRouter 的 <code>/models</code> 只列文本模型，所以 magpie 从 <code>/api/v1/models?output_modalities=image</code> 读取 FLUX、Seedream、Riverflow、Recraft、GPT Image 等图像模型及其免费版本。在 <span class="ui">设置 → 模型 → 图像</span> 里选用。</li>
       <li><b>决策模型。</b>OpenRouter 的决策模型（<code>liquid/d1</code>、<code>cloudflare/clef</code>、<code>~typesafe/jev-latest</code>……）也会列出来，路由分组可以用同一个 Key 给每一轮做分类。</li>
     </ul>
     <div class="code"><span class="lang">终端</span><button class="copy" data-copy="ex-models">复制</button><pre id="ex-models">magpie provider models openrouter +anthropic/claude-opus-5.5   # 多展示一个
