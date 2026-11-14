@@ -484,6 +484,10 @@ var notYet = map[string]string{
 	"POST /api/signin/export":                    P,  // providers.go
 	"POST /api/stepfun/{id}/session":             P,  // providers.go
 	"POST /api/stepfun/{id}/signout":             P,  // providers.go
+	"GET /api/qianwen/{id}/signin":               P,  // providers.go
+	"POST /api/qianwen/{id}/signin":              P,  // providers.go
+	"POST /api/qianwen/{id}/signin/cancel":       P,  // providers.go
+	"POST /api/qianwen/{id}/signout":             P,  // providers.go
 	"GET /api/speeds":                            U,  // sessions_manage.go: the Sessions row's speed curve
 	"GET /api/sessions/manage":                   U,  // sessions_manage.go
 	"GET /api/sessions/search":                   U,  // sessions_manage.go

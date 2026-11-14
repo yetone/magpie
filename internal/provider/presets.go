@@ -412,10 +412,10 @@ var presets = []PresetDef{
 	// token-plan.maas.qianwenaiapi.com, and on Alibaba Cloud Bailian
 	// (bailian.console.aliyun.com) at token-plan.cn-beijing.maas.aliyuncs.com
 	// (#1506). The models given are the plans' text models as their
-	// overviews list them, for when the host gives no list. Only the
-	// two at aliyuncs.com have a way to read the plan's credits, with the
-	// account's AccessKey (alibaba_usage.go); the Qwen AI platform's console
-	// takes a browser sign-in (#5829).
+	// overviews list them, for when the host gives no list. The two at
+	// aliyuncs.com read the plan's credits with the account's AccessKey
+	// (alibaba_usage.go); the Qwen AI platform's with a sign-in to the
+	// platform, as its own QianWen CLI does (qianwen_plan.go).
 	{ID: "qwen-token-plan", Name: "Qwen Token Plan", Short: "Qwen Plan", Icon: "qwen-color", Kind: KindVendor,
 		Chat: "https://token-plan.maas.qianwenaiapi.com/compatible-mode/v1", Anthropic: "https://token-plan.maas.qianwenaiapi.com/apps/anthropic",
 		Note:    "Qwen AI platform · subscription",

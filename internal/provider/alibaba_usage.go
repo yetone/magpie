@@ -22,9 +22,10 @@ package provider
 //
 // The gateway has no public documentation: the fields are read as the
 // client does, from whichever per<N><Unit> pairs the reply has. Only the
-// personal plan's API is known; the Qwen AI platform's and Qwen Cloud's
-// plans sit behind a console of their own that takes a browser sign-in, so
-// they have no card (#5829).
+// personal plan's API is known. The Qwen AI platform's plan is read the
+// same way at its own console, with a sign-in to the platform instead of
+// an access key (qianwen_plan.go); Qwen Cloud's sits behind a console that
+// takes a browser sign-in, so it has no card (#5829).
 //
 // A RAM user's key is refused by the console (BailianGateway.Team.
 // NotAuthorised) until the main account grants what Alibaba's Token Plan
@@ -324,20 +325,40 @@ func aliMintToken(ctx context.Context, ak, sk string, site aliSite, now time.Tim
 // aliGateway asks the console's usage API with token and gives the
 // business data of the reply (data.DataV2.data.data).
 func aliGateway(ctx context.Context, token string, site aliSite) ([]byte, error) {
+	u := "https://" + site.gateway + "/cli/api.json?action=" + site.action + "&product=sfm_bailian&api=" + url.QueryEscape(aliUsageAPI)
+	return aliAskUsage(ctx, token, aliConsole{url: u, region: site.region, site: "BAILIAN_ALIYUN", who: "Alibaba Cloud's console", denied: aliRAMHint})
+}
+
+// aliConsole is a console gateway the Token Plan's usage API is asked
+// at: Alibaba Cloud's (aliGateway) or the Qwen AI platform's
+// (qianwen_plan.go), which answer alike.
+type aliConsole struct {
+	url, region string
+	site        string // cornerstoneParam's consoleSite
+	who         string // the console, as an error names it
+	denied      string // what to do when the console says NotAuthorised
+	ua          string // the User-Agent its own client sends, if any
+}
+
+// aliAskUsage posts the usage API's form to the console with token, and
+// gives the reply's business data.
+func aliAskUsage(ctx context.Context, token string, c aliConsole) ([]byte, error) {
 	params, _ := json.Marshal(map[string]any{
 		"Api": aliUsageAPI, "V": "1.0",
 		"Data": map[string]any{"cornerstoneParam": map[string]any{
-			"protocol": "V2", "console": "ONE_CONSOLE", "productCode": "p_efm", "switchUserType": 3, "consoleSite": "BAILIAN_ALIYUN"}},
+			"protocol": "V2", "console": "ONE_CONSOLE", "productCode": "p_efm", "switchUserType": 3, "consoleSite": c.site}},
 	})
-	form := url.Values{"params": {string(params)}, "region": {site.region}}
-	u := "https://" + site.gateway + "/cli/api.json?action=" + site.action + "&product=sfm_bailian&api=" + url.QueryEscape(aliUsageAPI)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader([]byte(form.Encode())))
+	form := url.Values{"params": {string(params)}, "region": {c.region}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.url, bytes.NewReader([]byte(form.Encode())))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "*/*")
+	if c.ua != "" {
+		req.Header.Set("User-Agent", c.ua)
+	}
 	res, err := Keyed(http.DefaultClient).Do(req)
 	if err != nil {
 		return nil, err
@@ -348,7 +369,7 @@ func aliGateway(ctx context.Context, token string, site aliSite) ([]byte, error)
 		return nil, err
 	}
 	if res.StatusCode >= 300 {
-		return nil, fmt.Errorf("Alibaba Cloud's console: %s: %s", res.Status, volcHead(raw))
+		return nil, fmt.Errorf("%s: %s: %s", c.who, res.Status, volcHead(raw))
 	}
 	var env struct {
 		Data struct {
@@ -359,20 +380,20 @@ func aliGateway(ctx context.Context, token string, site aliSite) ([]byte, error)
 		} `json:"data"`
 	}
 	if json.Unmarshal(raw, &env) != nil {
-		return nil, fmt.Errorf("Alibaba Cloud's console answered in a form magpie doesn't know: %s", volcHead(raw))
+		return nil, fmt.Errorf("%s answered in a form magpie doesn't know: %s", c.who, volcHead(raw))
 	}
 	if env.Data.Success != nil && !*env.Data.Success && len(env.Data.ErrorCode) > 0 {
 		code := strings.Trim(string(env.Data.ErrorCode), `"`)
 		switch {
 		case strings.Contains(code, "NotLogined"):
 			return nil, errAliNotLogged
-		case strings.Contains(code, "NotAuthorised"), strings.Contains(code, "NotAuthorized"):
-			return nil, fmt.Errorf("Alibaba Cloud's console: %s: %s", code, aliRAMHint)
+		case c.denied != "" && (strings.Contains(code, "NotAuthorised") || strings.Contains(code, "NotAuthorized")):
+			return nil, fmt.Errorf("%s: %s: %s", c.who, code, c.denied)
 		}
 		if msg := strings.TrimSpace(strings.Trim(string(env.Data.ErrorMsg), `"`)); msg != "" && msg != "null" {
-			return nil, fmt.Errorf("Alibaba Cloud's console: %s: %s", code, msg)
+			return nil, fmt.Errorf("%s: %s: %s", c.who, code, msg)
 		}
-		return nil, fmt.Errorf("Alibaba Cloud's console: %s", code)
+		return nil, fmt.Errorf("%s: %s", c.who, code)
 	}
 	// the reply holds it in two envelopes, one less in some replies
 	var node json.RawMessage = env.Data.DataV2

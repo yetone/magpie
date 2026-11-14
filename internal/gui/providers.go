@@ -319,6 +319,9 @@ type providerJSON struct {
 	// a StepFun provider's Step Plan windows, told only to a platform
 	// sign-in: which site's, and whether one is kept
 	StepPlan *stepPlanJSON `json:"stepPlan,omitempty"`
+	// a Qwen AI platform Token Plan's windows, told only to a sign-in on
+	// the platform: whether magpie has one, and whose
+	QianwenPlan *qianwenPlanJSON `json:"qianwenPlan,omitempty"`
 	// a Zhipu or Z.ai key's team, for a team's GLM Coding Plan (#236):
 	// set, if empty, for those providers alone, which the editor asks it of
 	ZhipuTeam *provider.ZhipuTeam `json:"zhipuTeam,omitempty"`
@@ -568,6 +571,13 @@ type stepPlanJSON struct {
 	SignedIn    bool   `json:"signedIn"`
 	URL         string `json:"url"`
 	Bookmarklet string `json:"bookmarklet"`
+}
+
+// qianwenPlanJSON: whether magpie has a sign-in to the Qwen AI platform
+// for the provider, and its account
+type qianwenPlanJSON struct {
+	SignedIn bool   `json:"signedIn"`
+	Account  string `json:"account,omitempty"`
 }
 
 type accountJSON struct {
@@ -1012,6 +1022,9 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 	}
 	if site := provider.StepFunSite(p); site != "" {
 		out.StepPlan = &stepPlanJSON{site, provider.StepFunSignedIn(p.ID), provider.StepFunSignInURL(site), provider.StepFunBookmarklet()}
+	}
+	if provider.QianwenPlan(p) {
+		out.QianwenPlan = &qianwenPlanJSON{provider.QianwenSignedIn(p.ID), provider.QianwenAccount(p.ID)}
 	}
 	out.Key.Set = p.Key != ""
 	out.Key.Masked = provider.Mask(p.Key)
@@ -3557,6 +3570,62 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			return
 		}
 		if err := provider.SignOutStepFun(id); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeProvidersJSON(rw, providersState())
+	})
+	// the Qwen AI platform's Token Plan windows: a sign-in to the
+	// platform, approved in the user's browser, the provider's own
+	qianwenOf := func(rw http.ResponseWriter, r *http.Request) (string, bool) {
+		p, err := provider.Find(r.PathValue("id"))
+		if err != nil || !provider.QianwenPlan(*p) {
+			http.NotFound(rw, r)
+			return "", false
+		}
+		return p.ID, true
+	}
+	mux.HandleFunc("POST /api/qianwen/{id}/signin", func(rw http.ResponseWriter, r *http.Request) {
+		id, ok := qianwenOf(rw, r)
+		if !ok {
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+		defer cancel()
+		u, err := provider.StartQianwenSignIn(ctx, id)
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, struct {
+			URL string `json:"url"`
+		}{u})
+	})
+	mux.HandleFunc("GET /api/qianwen/{id}/signin", func(rw http.ResponseWriter, r *http.Request) {
+		id, ok := qianwenOf(rw, r)
+		if !ok {
+			return
+		}
+		state, why := provider.QianwenSignInState(id)
+		writeJSON(rw, struct {
+			State string `json:"state"`
+			Error string `json:"error,omitempty"`
+		}{state, why})
+	})
+	mux.HandleFunc("POST /api/qianwen/{id}/signin/cancel", func(rw http.ResponseWriter, r *http.Request) {
+		id, ok := qianwenOf(rw, r)
+		if !ok {
+			return
+		}
+		provider.CancelQianwenSignIn(id)
+		rw.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("POST /api/qianwen/{id}/signout", func(rw http.ResponseWriter, r *http.Request) {
+		id, ok := qianwenOf(rw, r)
+		if !ok {
+			return
+		}
+		if err := provider.SignOutQianwen(id); err != nil {
 			fail(rw, err)
 			return
 		}

@@ -6,7 +6,8 @@ package provider
 // Vibe, StepFun's Step Plan, Volcengine Ark's Coding and Agent Plans and
 // Tencent Cloud's Token Plan 企业版 — has windows of allowance like a
 // subscription's, which the vendor tells to the key (StepFun only to a
-// sign-in, stepfun_plan.go; Volcengine and Tencent Cloud only to the
+// sign-in, stepfun_plan.go, as is the Qwen AI platform's Token Plan,
+// qianwen_plan.go; Volcengine and Tencent Cloud only to the
 // account's access key, volcengine_usage.go and tencent_usage.go): the
 // Usage page shows them beside the subscriptions'.
 
@@ -888,6 +889,8 @@ func PlanQuotas(ctx context.Context) []SubscriptionQuota {
 	go func() { tencent <- tencentPlanQuotas(ctx) }()
 	ali := make(chan []SubscriptionQuota, 1)
 	go func() { ali <- aliPlanQuotas(ctx) }()
+	qianwen := make(chan []SubscriptionQuota, 1)
+	go func() { qianwen <- qianwenPlanQuotas(ctx) }()
 	wg.Wait()
 	out := []SubscriptionQuota{}
 	for i, q := range got {
@@ -897,8 +900,9 @@ func PlanQuotas(ctx context.Context) []SubscriptionQuota {
 			out = append(out, *q)
 		}
 	}
-	// StepFun's, Volcengine's, Tencent's and Alibaba's, read just now too
-	for _, qs := range [][]SubscriptionQuota{<-stepfun, <-volc, <-tencent, <-ali} {
+	// StepFun's, Volcengine's, Tencent's, Alibaba's and the Qwen AI
+	// platform's, read just now too
+	for _, qs := range [][]SubscriptionQuota{<-stepfun, <-volc, <-tencent, <-ali, <-qianwen} {
 		for _, q := range qs {
 			out = append(out, readNow(q))
 		}
