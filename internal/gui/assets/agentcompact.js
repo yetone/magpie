@@ -150,8 +150,59 @@ function claudeAttributionRow(list) {
   return row;
 }
 
+// The user's own settings of the agent's (agent.Field.Own: Claude Code's
+// permission mode, EricChenChannel on X), seldom changed, so folded under
+// Advanced after the sheet's list; written in the agent's own config, never
+// taken back when magpie lets go of the agent.
+function ownFieldsFold(list, a) {
+  const own = a.own || [];
+  if (!own.length) return;
+  queueMicrotask(() => {
+    if (!list.parentNode) return;
+    list.parentNode.querySelector(":scope > .own-fields")?.remove();
+    const fold = el("details", "prefs-more own-fields");
+    const inner = el("div", "list prefs");
+    fold.append(el("summary", "", t("Advanced")), inner);
+    for (const f of own) {
+      const label = f.label[0].toUpperCase() + f.label.slice(1);
+      const row = el("div", "row pref own-field");
+      row.dataset.key = f.key;
+      const who = el("div", "who"), val = el("div", "val");
+      who.append(el("div", "name", t(label)));
+      row.append(who, val);
+      const draw = (cur) => {
+        const opts = [{ v: "", name: "Not set", note: "" }, ...f.options.map((o) => ({ v: o.value, name: o.label || o.value, note: o.note || "" }))];
+        const known = opts.find((o) => o.v === cur);
+        const b = el("button", "sess-pick");
+        b.type = "button";
+        b.setAttribute("aria-label", t(label));
+        b.setAttribute("aria-haspopup", "menu");
+        b.setAttribute("aria-expanded", "false");
+        b.append(el("span", "", known ? t(known.name) : cur), svg(CHEV, 11, 1.6));
+        b.onclick = (e) => {
+          e.stopPropagation();
+          if (b.classList.contains("open")) return closeProtoMenu();
+          openProtoMenu(b, opts, cur, (v) => {
+            if (v === cur) return;
+            api("set", { agent: a.id, field: f.key, value: v }).then((ns) => {
+              state = ns;
+              if (row.isConnected) draw(v);
+              status(t("Takes effect when {agent} next starts", { agent: a.name }), "ok");
+            }, (err) => status(t(err.message), "err"));
+          }, label, "sess-menu", "right");
+        };
+        val.replaceChildren(b);
+      };
+      draw(f.value || "");
+      inner.append(row);
+    }
+    list.after(fold);
+  });
+}
+
 // Its own context windows come in the same sheet, last (agentwindow.js).
 window.agentCompactFill = function (list, a, ids) {
   if (ids.includes("fullContextRow")) compactFill(list, a);
+  ownFieldsFold(list, a);
   if (a.fields.length) import("./agentwindow.js").then(() => agentWindowFill(list, a), () => {});
 };

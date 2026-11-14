@@ -2418,6 +2418,11 @@ func claudeIn(at place) *Agent {
 			return claudeViaMagpie(false)
 		},
 	})
+	// permission mode: the mode a new session starts in, Claude Code's own
+	// permissions.defaultMode (EricChenChannel on X). The user's setting,
+	// not magpie's wiring (Own): written only when picked here, and
+	// nothing magpie does takes it out or puts it back.
+	fields = append(fields, claudePermissionField(path))
 	// its sign-in while it runs through magpie: magpie's key, or its own
 	// claude.ai sign-in kept (loginKey), where the gateway takes any key
 	fields = append(fields, Field{
@@ -3335,4 +3340,42 @@ func inMagpieWork(m map[string]json.RawMessage) bool {
 	base := strings.TrimRight(project, `/\`)
 	base = base[strings.LastIndexAny(base, `/\`)+1:]
 	return base == "magpie-claude-work" || strings.HasPrefix(base, "magpie-claude-work-")
+}
+
+// claudePermissionModes are the modes Claude Code's permissions.defaultMode
+// takes (2.1.316), each with the name its own /permissions gives it.
+var claudePermissionModes = []Option{
+	{Value: "default", Label: "Default", Note: "asks before each edit and command"},
+	{Value: "acceptEdits", Label: "Accept edits", Note: "edits files without asking"},
+	{Value: "plan", Label: "Plan mode", Note: "reads and plans, changes nothing"},
+	{Value: "auto", Label: "Auto", Note: "a classifier lets safe actions through"},
+	{Value: "dontAsk", Label: "Don't ask", Note: "refuses what isn't allowed, never asks"},
+	{Value: "bypassPermissions", Label: "Bypass permissions", Note: "runs everything without asking"},
+}
+
+// claudePermissionField is the permission mode Claude Code at path starts
+// a new session in. Bypass permissions also records the consent Claude
+// Code otherwise asks for (skipDangerousModePermissionPrompt), without
+// which it ignores the mode at launch; empty takes the mode out, back to
+// Claude Code's own default, and leaves a consent given before.
+func claudePermissionField(path string) Field {
+	return Field{
+		Key: "permission_mode", Label: "permission mode", Quiet: true, Own: true,
+		Get: jsonGet(path, "permissions.defaultMode"),
+		Set: func(v string) error {
+			v = strings.TrimSpace(v)
+			if v == "" {
+				return edit.DelJSON(path, "permissions.defaultMode")
+			}
+			if !slices.ContainsFunc(claudePermissionModes, func(o Option) bool { return o.Value == v }) {
+				return fmt.Errorf("permission mode: Claude Code has no mode %q", v)
+			}
+			kv := []edit.KV{{Path: "permissions.defaultMode", Value: v}}
+			if v == "bypassPermissions" {
+				kv = append(kv, edit.KV{Path: "skipDangerousModePermissionPrompt", Value: true})
+			}
+			return edit.SetJSON(path, kv...)
+		},
+		Options: func(map[string]string) []Option { return slices.Clone(claudePermissionModes) },
+	}
 }

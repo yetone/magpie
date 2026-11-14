@@ -82,8 +82,21 @@ func takesCatalog(fields []fieldJSON) bool {
 
 // agentFields are an agent's pickers as the Agents page draws them.
 func agentFields(a *agent.Agent, vals map[string]string) []fieldJSON {
+	return fieldsOf(a, vals, false)
+}
+
+// ownFields are its settings of the user's own (agent.Field.Own), which
+// its Settings fold under Advanced and no picker draws.
+func ownFields(a *agent.Agent, vals map[string]string) []fieldJSON {
+	return fieldsOf(a, vals, true)
+}
+
+func fieldsOf(a *agent.Agent, vals map[string]string, own bool) []fieldJSON {
 	out := []fieldJSON{}
 	for _, f := range a.Fields {
+		if f.Own != own {
+			continue
+		}
 		opts := a.Picks(f, vals)
 		if opts == nil {
 			opts = []agent.Option{}

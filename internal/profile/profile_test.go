@@ -264,3 +264,21 @@ func TestRename(t *testing.T) {
 		t.Errorf("an unreadable profiles.json was written over: %v", err)
 	}
 }
+
+// A profile is magpie's routing, not the user's own settings of an agent:
+// Claude Code's permission mode is neither saved in one nor written by one
+// (EricChenChannel on X: bypassPermissions kept coming back as it was).
+func TestProfileLeavesPermissionMode(t *testing.T) {
+	h := sandbox(t)
+	path := filepath.Join(h, ".claude/settings.json")
+	write(t, path, `{"permissions": {"defaultMode": "bypassPermissions"}}`)
+	if _, ok := Fields()["claude.permission_mode"]; ok {
+		t.Error("a profile keeps the permission mode")
+	}
+	if _, err := ApplyFields(map[string]string{"claude.permission_mode": "default"}); err != nil {
+		t.Fatal(err)
+	}
+	if s := read(t, path); !strings.Contains(s, "bypassPermissions") {
+		t.Errorf("a profile wrote the permission mode:\n%s", s)
+	}
+}

@@ -129,7 +129,10 @@ func (a *Agent) Apply(key, v string) error {
 			record(a.ID, k, now[k])
 		}
 	}
-	record(a.ID, f.Key, f.Get())
+	// the user's own setting isn't magpie's to put back or take out
+	if !f.Own {
+		record(a.ID, f.Key, f.Get())
+	}
 	// magpie picked in by the user's own hand (magpie model, a pick in
 	// the CLI) connects it again
 	if a.Wired() {
@@ -405,7 +408,8 @@ func (m *valueMemo) in(a *Agent, f Field, v string, vals map[string]string, opts
 // magpieValueIn is magpieValue reading a field's options from opts, made
 // for the same vals; nil reads them anew.
 func magpieValueIn(a *Agent, f Field, v string, vals map[string]string, opts fieldOptions) bool {
-	if v == "" {
+	// the user's own setting (a permission mode) is never one of magpie's
+	if v == "" || f.Own {
 		return false
 	}
 	v, _, one := a.split(v)
@@ -618,7 +622,8 @@ func (a *Agent) Pick(key, v string) error {
 		}
 		return a.Apply(key, value)
 	}
-	if f := a.Field(key); f != nil && !a.Wired() {
+	// the user's own setting never connects the agent to magpie
+	if f := a.Field(key); f != nil && !f.Own && !a.Wired() {
 		vals := a.Values()
 		vals[key] = v
 		if v == magpieID || magpieValue(a, *f, v, vals) {
@@ -934,6 +939,9 @@ func (a *Agent) Disconnect() (err error) {
 		}
 	}
 	for _, f := range a.Fields {
+		if f.Own {
+			continue
+		}
 		vals := a.Values()
 		v := vals[f.Key]
 		// set by magpie: as it set it, or its group by the model's name
@@ -960,6 +968,10 @@ func (a *Agent) Disconnect() (err error) {
 		}
 	}
 	for _, f := range a.Fields {
+		// the user's own setting is as they left it, not as it was at connect
+		if f.Own {
+			continue
+		}
 		if w := was[f.Key]; w != "" && after[f.Key] == "" && w != magpieID && !magpieValue(a, f, w, was) {
 			if err := f.Set(w); err != nil {
 				return fmt.Errorf("%s: %w", f.Label, err)

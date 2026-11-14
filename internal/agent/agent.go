@@ -116,6 +116,12 @@ type Field struct {
 	// ("model" for Claude Code's tiers and subagents): a profile's details
 	// say so, and Drift reads the field as on that one's model (#1050).
 	Follows string
+	// Own fields are the user's own settings of the agent's, never
+	// magpie's wiring (Claude Code's permission mode): magpie writes one
+	// only when the user picks it, so Disconnect, Reapply and a restore
+	// leave it as it is, and a profile neither keeps nor writes it. A
+	// value the user then sets in the agent itself stays theirs.
+	Own bool
 }
 
 // Agent is one supported coding agent.

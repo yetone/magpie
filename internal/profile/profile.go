@@ -152,6 +152,10 @@ func Fields() map[string]string {
 	p := map[string]string{}
 	for _, a := range agent.Detected() {
 		for k, v := range a.Values() {
+			// the user's own setting of the agent's isn't a profile's
+			if f := a.Field(k); f != nil && f.Own {
+				continue
+			}
 			p[a.ID+"."+k] = v
 		}
 	}
@@ -315,7 +319,8 @@ func ApplyFields(p map[string]string) (int, error) {
 			continue
 		}
 		f := a.Field(field)
-		if f == nil {
+		// one saved before a field was the user's own isn't written over it
+		if f == nil || f.Own {
 			continue
 		}
 		v := wanted(a, f.Key, p[k])
@@ -366,7 +371,7 @@ func InUse(p Profile, agents []*agent.Agent, now map[string]map[string]string) b
 			continue
 		}
 		f := a.Field(k[i+1:])
-		if f == nil {
+		if f == nil || f.Own {
 			continue
 		}
 		cur, ok := now[a.ID][f.Key]
