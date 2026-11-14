@@ -78,27 +78,48 @@ func (l *Library) takeEdits(targets []*Target, res *Result) {
 			}
 			edits = append(edits, edit{t.Agent.ID, p, at})
 		}
-		// the shared copy too (#4958): an edit made in ~/.agents/skills,
-		// where no link could be made (Windows without the right to), is
-		// the library's to take as one in an agent's copy is — before
-		// syncShared sets the stale copy aside. An agent whose own folder
-		// that is has had its copy read above.
+		// a copy outside an agent's own folder: an edit made there is the
+		// library's to take as one in an agent's copy is
+		// (a project's that can't be read is said by its sync, as one)
+		other := func(agent, p string) {
+			if seen[realDir(p)] || !ours(p, s.Name) || linked(p) {
+				return
+			}
+			seen[realDir(p)] = true
+			made, ok := copiedAt(p)
+			if !ok {
+				return
+			}
+			at, err := changedAt(p)
+			switch {
+			case err != nil:
+				if agent != "project" {
+					failed(agent, s.Name, p, err)
+				}
+			case !at.After(made):
+				if l.untouched == nil {
+					l.untouched = map[string]bool{}
+				}
+				l.untouched[p] = true
+			case !sameTree(p, lib):
+				edits = append(edits, edit{agent, p, at})
+			}
+		}
+		// the shared copy (#4958), in ~/.agents/skills where no link could
+		// be made (Windows without the right to), before syncShared sets
+		// the stale copy aside. An agent whose own folder that is has had
+		// its copy read above.
 		if !seen[realDir(sharedSkillsDir())] {
-			p := filepath.Join(sharedSkillsDir(), s.Name)
-			if ours(p, s.Name) && !linked(p) {
-				made, ok := copiedAt(p)
-				if ok {
-					at, err := changedAt(p)
-					switch {
-					case err != nil:
-						failed("agents", s.Name, p, err)
-					case !at.After(made):
-						if l.untouched == nil {
-							l.untouched = map[string]bool{}
-						}
-						l.untouched[p] = true
-					case !sameTree(p, lib):
-						edits = append(edits, edit{"agents", p, at})
+			other("agents", filepath.Join(sharedSkillsDir(), s.Name))
+		}
+		// a project's copies: of a project that takes copies, and those
+		// of an agent that skips a junction (#6610), where a link was
+		// edited in place in the library's own folder
+		for _, p := range l.Projects {
+			for _, f := range append([]*Project{p}, p.Trees...) {
+				for _, e := range f.Placed {
+					if filepath.Base(filepath.FromSlash(e)) == s.Name {
+						other("project", filepath.Join(f.Dir, filepath.FromSlash(e)))
 					}
 				}
 			}

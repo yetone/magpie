@@ -46,3 +46,46 @@ func TestJunctionIsALink(t *testing.T) {
 		t.Errorf("a failed junction left %s: %v", q, err)
 	}
 }
+
+// #6610: Antigravity skips a junction, so its junction from an older
+// magpie is made a copy, a real folder (not ModeIrregular to a Go walk),
+// in its own folder and in a project's .agents/skills.
+func TestJunctionBlindJunctionBecomesCopy(t *testing.T) {
+	h, cfg := antigravity(t)
+	src := filepath.Join(h, "src/skills")
+	skill(t, filepath.Join(src, "pdf"), "pdf", "Read PDFs")
+	ok(t)(InstallSkills(src, []string{"pdf"}, []string{"agy"}))
+	proj := filepath.Join(t.TempDir(), "app")
+	write(t, filepath.Join(proj, ".git", "HEAD"), "ref: refs/heads/main\n")
+	ok(t)(AddProject(proj))
+	ok(t)(ProjectSkill(proj, "pdf", []string{"agy"}))
+	ps := []string{filepath.Join(cfg, "skills/pdf"), filepath.Join(proj, ".agents/skills/pdf")}
+	for _, p := range ps {
+		if err := os.RemoveAll(p); err != nil {
+			t.Fatal(err)
+		}
+		if err := junction(skillDir("pdf"), p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ok(t)(Sync())
+	for _, p := range ps {
+		fi, err := os.Lstat(p)
+		if err != nil || !fi.IsDir() || fi.Mode()&(os.ModeIrregular|os.ModeSymlink) != 0 || !ours(p, "pdf") {
+			t.Errorf("%s: %v %v", p, fi, err)
+			continue
+		}
+		es, err := os.ReadDir(filepath.Dir(p))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range es {
+			if e.Name() == "pdf" && !e.IsDir() {
+				t.Errorf("%s: a walk doesn't see a folder: %v", p, e.Type())
+			}
+		}
+		if _, err := os.Stat(filepath.Join(p, "SKILL.md")); err != nil {
+			t.Error(err)
+		}
+	}
+}

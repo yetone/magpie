@@ -722,6 +722,11 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 		if s == nil || !t.readsSharedDir() || realDir(t.Skills) == shared {
 			return false
 		}
+		// a link there is no skill to an agent that skips a junction
+		// (skipsJunctions): it gets its own copy
+		if skipsJunctions(id) && linked(filepath.Join(sharedSkillsDir(), s.Name)) {
+			return false
+		}
 		// the library's skill is kept in the shared folder itself (brought
 		// in from there): every agent reading it has it, ticked or not (#595)
 		if sharedHas(s.Name) || l.inSharedHere(s) {

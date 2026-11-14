@@ -121,7 +121,7 @@ func relink(agent, p, name string) (bool, error) {
 func (l *Library) behind(targets []*Target) map[string][]string {
 	out := map[string][]string{}
 	for _, t := range targets {
-		if t.Skills == "" || t.Desktop != nil || t.Agent.WSL != "" || l.howOf(t.Agent.ID) != HowCopy {
+		if t.Skills == "" || t.Desktop != nil || t.Agent.WSL != "" || l.howOf(t.Agent.ID) != HowCopy && !skipsJunctions(t.Agent.ID) {
 			continue
 		}
 		for _, s := range l.Skills {

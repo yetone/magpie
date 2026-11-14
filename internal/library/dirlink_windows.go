@@ -13,9 +13,11 @@ import (
 
 // dirLink makes link a link to the folder target. Windows lets a user make
 // a symlink only with Developer Mode on or as an administrator (#973);
-// without that it is a junction, which every user can make and every
-// program follows as it does a symlink to a folder. A junction can't point
-// at a network share: that is still the symlink's error.
+// without that it is a junction, which every user can make and most
+// programs follow as they do a symlink to a folder; a Go program's walk
+// may not, so the agents that skip one get copies (skipsJunctions). A
+// junction can't point at a network share: that is still the symlink's
+// error.
 func dirLink(target, link string) error {
 	err := os.Symlink(target, link)
 	if err == nil || !errors.Is(err, windows.ERROR_PRIVILEGE_NOT_HELD) {

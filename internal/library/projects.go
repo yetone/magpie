@@ -162,13 +162,20 @@ func (l *Library) syncFolder(p *Project, res *Result, hubs map[string]*Server) {
 		res.Problems = append(res.Problems, Problem{Agent: p.Dir, What: "project:" + name, Error: err.Error()})
 	}
 	want := map[string]string{} // entry → the skill
+	// the entries given as copies: all of them in a project that takes
+	// copies, else those an agent reads that skips a junction
+	// (skipsJunctions), which is magpie's link on Windows without the
+	// right to make a symlink
+	copies := map[string]bool{}
 	for name, agents := range p.Skills {
 		if l.skill(name) == nil {
 			continue
 		}
 		for _, id := range agents {
 			if d := ProjectSkillsDir(id); d != "" {
-				want[d+"/"+name] = name
+				e := d + "/" + name
+				want[e] = name
+				copies[e] = copies[e] || p.Copy || skipsJunctions(id)
 			}
 		}
 	}
@@ -195,7 +202,7 @@ func (l *Library) syncFolder(p *Project, res *Result, hubs map[string]*Server) {
 	})
 	for _, e := range entries {
 		name := want[e]
-		switch err := p.place(e, name); {
+		switch err := p.place(e, name, copies[e]); {
 		case err == nil:
 			placed = append(placed, e)
 		case errors.Is(err, errForeign):
@@ -241,7 +248,7 @@ var errForeign = errors.New("not magpie's")
 
 // place puts a skill at e in the project: a link to the library's, or a
 // copy made again whenever the library's differs from it.
-func (p *Project) place(e, name string) error {
+func (p *Project) place(e, name string, asCopy bool) error {
 	abs := filepath.Join(p.Dir, filepath.FromSlash(e))
 	if fi, err := os.Lstat(abs); err == nil {
 		if !ours(abs, name) {
@@ -249,7 +256,7 @@ func (p *Project) place(e, name string) error {
 		}
 		link := linkEntry(fi)
 		// a copy stands for a link on Windows without the right to make one
-		if !p.Copy && link {
+		if !asCopy && link {
 			return nil
 		}
 		if !link {
@@ -257,7 +264,7 @@ func (p *Project) place(e, name string) error {
 			if err != nil {
 				return err
 			}
-			if (p.Copy || runtime.GOOS == "windows") && current {
+			if (asCopy || runtime.GOOS == "windows") && current {
 				return nil
 			}
 		}
@@ -265,7 +272,7 @@ func (p *Project) place(e, name string) error {
 	if err := p.mkdirs(filepath.Dir(abs)); err != nil {
 		return err
 	}
-	if !p.Copy {
+	if !asCopy {
 		if err := unlink(abs); err != nil {
 			return err
 		}
