@@ -388,8 +388,9 @@ func until(lang string, d time.Duration) string {
 
 // trayUsageCards are the cards settings.TrayUsages names, in its order,
 // among the Usage page's (cached as there), and magpie's own totals it
-// names (trayTotal); one gone is left out. The vendors aren't asked when
-// only totals are named.
+// names (trayTotal); one gone is left out, and so is one the Usage page's
+// Overview hides, as are the rows it hides (trayShown). The vendors aren't
+// asked when only totals are named.
 func trayUsageCards(ctx context.Context, lang string, ids []string) []provider.SubscriptionQuota {
 	if len(ids) == 0 {
 		return nil
@@ -412,7 +413,36 @@ func trayUsageCards(ctx context.Context, lang string, ids []string) []provider.S
 		}
 		cards = append(cards, trayTotalCard(lang, id, trayMoney(trayTotalSum(p), noCost), currency, rate))
 	}
-	return trayPick(cards, ids, time.Now())
+	return trayShown(cards, ids, time.Now(), settings.Shared())
+}
+
+// trayShown is trayPick less what the Usage page's Overview hides
+// (settings.UsageCardsHidden, UsageWindowsHidden): a card hidden there
+// showed on in the menu bar, its tooltip and Windows' tray figure, though
+// the Overview and the tray panel left it out (onkashiko on X). The cells
+// ticked are kept, so a card shown again comes back to its cell. A named
+// cell takes the account's card the Overview still shows (its balance,
+// say, with its plan hidden); a cell following the account in use picks
+// that account among them all, as before, and is left empty when its card
+// is hidden, rather than moving to another account.
+func trayShown(cards []provider.SubscriptionQuota, ids []string, now time.Time, s settings.Settings) []provider.SubscriptionQuota {
+	if len(s.UsageCardsHidden)+len(s.UsageWindowsHidden) == 0 {
+		return trayPick(cards, ids, now)
+	}
+	shown := provider.ShownQuotas(cards, s)
+	var out []provider.SubscriptionQuota
+	for _, id := range ids {
+		if !strings.HasSuffix(id, trayInUse) {
+			out = append(out, trayPick(shown, []string{id}, now)...)
+			continue
+		}
+		for _, q := range trayPick(cards, []string{id}, now) {
+			if !provider.QuotaCardHidden(q, s) {
+				out = append(out, provider.QuotaRowsShown(q, s))
+			}
+		}
+	}
+	return out
 }
 
 // trayTotal starts the id of a card of magpie's own count instead of a
