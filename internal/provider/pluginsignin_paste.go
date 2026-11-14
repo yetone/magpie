@@ -35,21 +35,31 @@ var pastedPluginWait = 30 * time.Second
 // loopbackPorts are the ports on this machine a sign-in page sends the
 // browser back to, as its address names them: a redirect address on
 // localhost (redirect_uri, Trae's auth_callback_url, Command Code's
-// callback) or a bare port (Zed's native_app_port).
+// callback) or a bare port (Zed's native_app_port). A page that is a login
+// first, with the sign-in page as where it goes next (CodeArts'
+// international station puts its authorize address, port and all, in
+// service=), is read through to that page.
 func loopbackPorts(page string) []string {
-	u, err := url.Parse(page)
-	if err != nil {
-		return nil
-	}
 	var ports []string
-	add := func(p string) {
-		if p != "" && !slices.Contains(ports, p) {
+	readPorts(page, 2, func(p string) {
+		if !slices.Contains(ports, p) {
 			ports = append(ports, p)
 		}
+	})
+	return ports
+}
+
+// readPorts gives add each port page names, and reads the web addresses
+// in its query the same way, depth pages deep.
+func readPorts(page string, depth int, add func(string)) {
+	u, err := url.Parse(page)
+	if err != nil {
+		return
 	}
 	for k, vs := range u.Query() {
 		for _, v := range vs {
-			if r, err := url.Parse(v); err == nil && r.Scheme == "http" && isLoopback(r.Hostname()) {
+			r, err := url.Parse(v)
+			if err == nil && r.Scheme == "http" && isLoopback(r.Hostname()) {
 				p := r.Port()
 				if p == "" {
 					p = "80"
@@ -59,10 +69,13 @@ func loopbackPorts(page string) []string {
 			}
 			if strings.Contains(strings.ToLower(k), "port") && isPort(v) {
 				add(v)
+				continue
+			}
+			if err == nil && depth > 1 && (r.Scheme == "https" || r.Scheme == "http") && r.Host != "" {
+				readPorts(v, depth-1, add)
 			}
 		}
 	}
-	return ports
 }
 
 func isPort(v string) bool {

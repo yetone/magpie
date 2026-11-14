@@ -88,7 +88,11 @@ func TestLoopbackPorts(t *testing.T) {
 		"https://app.kiro.dev/signin?state=s&redirect_uri=http%3A%2F%2Flocalhost%3A3128&redirect_from=KiroIDE": "3128",
 		"https://www.trae.ai/authorization?auth_callback_url=http%3A%2F%2F127.0.0.1%3A6001%2Fauthorize":        "6001",
 		"https://zed.dev/native_app_signin?native_app_port=7002&native_app_public_key=k":                       "7002",
-		"https://zcode.z.ai/x?redirect_uri=https%3A%2F%2Fzcode.z.ai%2Fapp%2Foauth%2Flogin":                     "",
+		// CodeArts' international station: a login page first, the
+		// authorize page (and its port) in service= (#1090)
+		"https://auth.huaweicloud.com/authui/login?site=intl&locale=en-us&service=" + url.QueryEscape("https://codearts.ap-southeast-1.huaweicloud.com/portal/authorize?theme=t&client_id=c&port=37093&code_challenge=x"): "37093",
+		"https://codearts.huaweicloud.com/portal/authorize?theme=t&client_id=c&port=37094&code_challenge=x":                                                                                                               "37094",
+		"https://zcode.z.ai/x?redirect_uri=https%3A%2F%2Fzcode.z.ai%2Fapp%2Foauth%2Flogin":                                                                                                                                "",
 		"https://github.com/login/device": "",
 	} {
 		if got := strings.Join(loopbackPorts(page), ","); got != want {
