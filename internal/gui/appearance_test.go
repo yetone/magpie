@@ -221,3 +221,149 @@ func TestWallpaperStampWithoutFile(t *testing.T) {
 		t.Fatalf("magpie's own look drew: %s", css)
 	}
 }
+
+// A colour of the user's own tints the theme's grounds, not only what is
+// chosen: the dark theme read as grey with a purple picked (CHENGJIAHEGOXIS
+// on X, 「目前我个人感觉深色比较灰」, then 「依然没变」 on v0.1.4116 with the
+// thumbs tinted). magpie's own look, and a grey pick, keep app.css's grey.
+func TestAccentTintsGrounds(t *testing.T) {
+	vars := func(css, sel string) map[string]string {
+		i := strings.Index(css, sel+"{")
+		if i < 0 {
+			t.Fatalf("no %s in %s", sel, css)
+		}
+		body := css[i+len(sel)+1:]
+		body = body[:strings.IndexByte(body, '}')]
+		out := map[string]string{}
+		for _, kv := range strings.Split(body, ";") {
+			if k, v, ok := strings.Cut(kv, ":"); ok {
+				out[k] = v
+			}
+		}
+		return out
+	}
+	if css := lookCSS(settings.Settings{}); css != "" {
+		t.Fatalf("magpie's own look draws %q", css)
+	}
+	css := lookCSS(settings.Settings{Accent: "#7c3aed"})
+	for _, c := range []struct {
+		sel      string
+		surfaces []surface
+	}{
+		{`html:not(.omarchy):root`, lightSurfaces},
+		{`html:not(.omarchy):root[data-theme="dark"]`, darkSurfaces},
+		{`html:not(.omarchy):root:not([data-theme="light"])`, darkSurfaces},
+		{`html:not(.omarchy):root[data-theme="light"] body.panel`, lightPanelSurfaces},
+		{`html:not(.omarchy):root:not([data-theme="dark"]) body.panel`, lightPanelSurfaces},
+		{`html:not(.omarchy):root[data-theme="dark"] body.panel`, darkPanelSurfaces},
+		{`html:not(.omarchy):root:not([data-theme="light"]) body.panel`, darkPanelSurfaces},
+	} {
+		v := vars(css, c.sel)
+		for _, s := range c.surfaces {
+			got, ok := parseHex(v[s.name])
+			if !ok {
+				t.Fatalf("%s: no %s in %v", c.sel, s.name, v)
+			}
+			// purple: more blue than green, and about as light as before
+			if got[2]-got[1] < 6 {
+				t.Errorf("%s %s: %s is still grey (was %s)", c.sel, s.name, got.hex(), s.base.hex())
+			}
+			if r := contrast(got, s.base); r > 1.1 {
+				t.Errorf("%s %s: %s is not as light as %s", c.sel, s.name, got.hex(), s.base.hex())
+			}
+		}
+	}
+	if !strings.Contains(vars(css, `html:not(.omarchy):root[data-theme="dark"]`)["--pop-bg"], "rgba(") {
+		t.Errorf("the dark theme's menus keep their grey: %s", css)
+	}
+	// a grey pick leaves the grounds as they were
+	g, _ := parseHex("#808080")
+	for _, s := range darkSurfaces {
+		if got := tint(s.base, g, darkTint); got.hex() != s.base.hex() {
+			t.Errorf("grey tints %s: %s", s.name, got.hex())
+		}
+	}
+	// text and the accent read on the tinted grounds, for any pick
+	for _, pick := range []string{"#ffffff", "#000000", "#ffff00", "#00ff00", "#ff0000", "#0000ff", "#7c3aed", "#0d9488", "#db2777"} {
+		c, _ := parseHex(pick)
+		for _, dark := range []bool{false, true} {
+			surfaces, k, fg, accent := lightSurfaces, lightTint, rgb{0x1c, 0x1c, 0x21}, accentOn(c, false)
+			if dark {
+				surfaces, k, fg, accent = darkSurfaces, darkTint, rgb{0xed, 0xed, 0xf1}, accentOn(c, true)
+			}
+			for _, s := range surfaces {
+				if strings.HasPrefix(s.name, "--line") || s.name == "--seg-track" {
+					continue
+				}
+				bg := tint(s.base, c, k)
+				if r := contrast(fg, bg); r < 7 {
+					t.Errorf("%s dark=%v: text on %s %s is %.2f:1", pick, dark, s.name, bg.hex(), r)
+				}
+				if s.name == "--bg" || s.name == "--card" {
+					if r := contrast(accent, bg); r < 4.4 {
+						t.Errorf("%s dark=%v: accent %s on %s %s is %.2f:1", pick, dark, accent.hex(), s.name, bg.hex(), r)
+					}
+				}
+			}
+		}
+	}
+}
+
+// The grounds tinted are app.css's own, so a theme changed there is
+// changed here too.
+func TestTintBasesAreAppCSS(t *testing.T) {
+	b, err := os.ReadFile("assets/app.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	css := string(b)
+	block := func(sel string) string {
+		i := strings.Index(css, sel+" {")
+		if i < 0 {
+			t.Fatalf("no %q in app.css", sel)
+		}
+		s := css[i:]
+		return s[:strings.IndexByte(s, '}')]
+	}
+	for _, c := range []struct {
+		sel      string
+		surfaces []surface
+	}{
+		{":root", lightSurfaces},
+		{`:root[data-theme="dark"]`, darkSurfaces},
+		{`:root[data-theme="light"] body.panel`, lightPanelSurfaces},
+		{`:root[data-theme="dark"] body.panel`, darkPanelSurfaces},
+	} {
+		blk := block(c.sel)
+		for _, s := range c.surfaces {
+			if !regexp.MustCompile(regexp.QuoteMeta(s.name) + `:\s*` + s.base.hex() + `;`).MatchString(blk) {
+				t.Errorf("%s: app.css's %s is not %s", c.sel, s.name, s.base.hex())
+			}
+		}
+	}
+	if !strings.Contains(block(`:root[data-theme="dark"]`), "--pop-bg: rgba(38, 38, 43, .96)") {
+		t.Errorf("app.css's dark --pop-bg is not rgba(38, 38, 43, .96)")
+	}
+}
+
+// The GUI test's stand-in server hands the page lookCSS's own stylesheet
+// for the colours it picks (tests/fixtures/look-accents.json). UPDATE=1
+// writes it again.
+func TestLookFixture(t *testing.T) {
+	want := map[string]string{}
+	for _, a := range []string{"#0d9488", "#db2777", "#7c3aed"} {
+		want[a] = lookCSS(settings.Settings{Accent: a})
+	}
+	b, _ := json.MarshalIndent(want, "", "  ")
+	b = append(b, '\n')
+	const path = "tests/fixtures/look-accents.json"
+	if os.Getenv("UPDATE") == "1" {
+		if err := os.WriteFile(path, b, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(got, b) {
+		t.Fatalf("%s is not lookCSS's (UPDATE=1 go test -run TestLookFixture writes it): %v", path, err)
+	}
+}
