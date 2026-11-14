@@ -294,6 +294,12 @@ func claudeSavedDir(user string) (string, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}
+	// the sign-in that was there is out first, so the one the saved login
+	// has is the directory's only holder: an older one left in the
+	// directory's keychain item would shadow the fresh file on a Mac, and
+	// be read back over it the next look. Nothing there, this removes
+	// nothing.
+	clearClaudeDir(dir)
 	if err := writePrivate(filepath.Join(dir, ".credentials.json"), append(b, '\n')); err != nil {
 		return "", err
 	}
@@ -429,6 +435,17 @@ func syncClaudeDir(l *savedLogin) (has, changed bool, err error) {
 	c, ok := readClaudeDir(claudeAccountDir(l.User))
 	switch {
 	case ok:
+		// a directory sign-in older than the saved one (#6391): the
+		// directory was made again behind a switch (#4750) and the holder
+		// the agent itself runs on refreshed meanwhile, so the directory's
+		// is spent. Taking it would replace the fresh sign-in with the
+		// spent one, and the next refresh in the directory would empty it,
+		// the account signed out. has=false has claudeSavedDir make the
+		// directory from the saved one instead, as when it holds none.
+		if old, ook := parseClaudeCredentials(l.Auth); ook && old.OAuth.ExpiresAt > 0 &&
+			c.OAuth.ExpiresAt > 0 && c.OAuth.ExpiresAt < old.OAuth.ExpiresAt {
+			return false, false, nil
+		}
 		changed, err = takeClaudeDir(l, c)
 		return true, changed, err
 	case c.cleared():
