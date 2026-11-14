@@ -152,7 +152,8 @@ func TestSpawnAgentNamesEveryModel(t *testing.T) {
 }
 
 // searchedSpawnDescription is the description of the spawn_agent a
-// tool_search_output in a Responses request body hands the model, or of
+// tool_search_output or an additional_tools item in a Responses request
+// body hands the model, or of
 // the one among its tools when the request was translated (and the
 // searched tools put there), "" when it has neither.
 func searchedSpawnDescription(t *testing.T, body []byte) string {
@@ -167,7 +168,7 @@ func searchedSpawnDescription(t *testing.T, body []byte) string {
 		t.Fatalf("%v: %.300s", err, body)
 	}
 	for _, it := range q.Input {
-		if it.Type == "tool_search_output" {
+		if it.Type == "tool_search_output" || it.Type == "additional_tools" {
 			b, _ := json.Marshal(map[string]json.RawMessage{"tools": it.Tools})
 			if d := spawnDescription(t, b); d != "" {
 				return d

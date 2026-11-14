@@ -44,7 +44,8 @@ type spawnChoice struct{ slug, name string }
 // spawn_agent tool naming every model of the catalog that Codex was handed
 // there, not only the first five. lead is the request's model.
 func spawnAgentModels(r *http.Request, body []byte, lead string, codexPath bool) []byte {
-	if !bodyHas(body, `"spawn_agent"`) || !bodyHas(body, "Available model overrides") {
+	listed := bodyHas(body, `"spawn_agent"`) && bodyHas(body, "Available model overrides")
+	if !listed && !hasSpawnCatalog(body) {
 		return body
 	}
 	choices := spawnChoices(r, lead, codexPath)
@@ -55,13 +56,17 @@ func spawnAgentModels(r *http.Request, body []byte, lead string, codexPath bool)
 	// change are decoded and put back, the rest of the body (the
 	// conversation) left as it is: decoding the whole body and encoding it
 	// again walked the conversation twice a request (#3394).
-	tools, _, ok := topMember(body, "tools")
+	// A Lite request (one of OpenAI's own models, use_responses_lite) has
+	// no tools member: its tools are in the input
+	tools, found, ok := topMember(body, "tools")
 	if !ok {
 		return body
 	}
 	set := map[string][]byte{}
-	if t, ok := moreSpawnTools(tools, choices); ok {
-		set["tools"] = t
+	if found {
+		if t, ok := moreSpawnTools(tools, choices); ok {
+			set["tools"] = t
+		}
 	}
 	// A model that can search tools is handed spawn_agent only when it
 	// searches for it: Codex defers its multi-agent V1 tools behind
@@ -69,8 +74,13 @@ func spawnAgentModels(r *http.Request, body []byte, lead string, codexPath bool)
 	// supports_search_tool), and the tool comes back in the conversation,
 	// in a tool_search_output, not in tools (Gearclickist on Discord, after
 	// v0.1.1214). Codex sends that output as it got it on every turn, so
-	// it is widened the same way on each.
-	if input, found, _ := topMember(body, "input"); found && bodyHas(input, "tool_search_output") {
+	// it is widened the same way on each. A Lite request hands the model
+	// the tools it doesn't defer in an additional_tools input item, which
+	// is where Codex 0.169 has spawn_agent in multi-agent V2; and with
+	// features.model_catalog_in_context the models are in a
+	// <model_catalog> developer message, not in spawn_agent at all
+	// (@m0eaki on X, Codex 0.169).
+	if input, found, _ := topMember(body, "input"); found && (bodyHas(input, "tool_search_output") || bodyHas(input, "additional_tools") || hasSpawnCatalog(input)) {
 		if in, ok := moreSpawnInput(input, choices); ok {
 			set["input"] = in
 		}
@@ -95,7 +105,7 @@ func moreSpawnInput(input []byte, choices []spawnChoice) ([]byte, bool) {
 	for raw[i] != ']' {
 		at := i
 		i = skipJSONValue(raw, i)
-		if el := raw[at:i]; el[0] == '{' && bodyHas(el, "tool_search_output") {
+		if el := raw[at:i]; el[0] == '{' && (bodyHas(el, "tool_search_output") || bodyHas(el, "additional_tools") || hasSpawnCatalog(el)) {
 			if it, ok := moreSpawnItem(el, choices); ok {
 				out = append(append(out, raw[last:at]...), it...)
 				last = i
@@ -111,16 +121,22 @@ func moreSpawnInput(input []byte, choices []spawnChoice) ([]byte, bool) {
 	return append(out, raw[last:]...), true
 }
 
-// moreSpawnItem is el, an input item, when it is a tool_search_output whose
-// spawn_agent can name more choices, written again naming them.
+// moreSpawnItem is el, an input item, when it is a tool_search_output or
+// an additional_tools item whose spawn_agent can name more choices, or a
+// developer message with Codex's <model_catalog>, written again naming
+// them.
 func moreSpawnItem(el []byte, choices []spawnChoice) ([]byte, bool) {
 	var it map[string]json.RawMessage
 	if json.Unmarshal(el, &it) != nil {
 		return nil, false
 	}
-	var kind string
+	var kind, role string
 	json.Unmarshal(it["type"], &kind)
-	if kind != "tool_search_output" {
+	json.Unmarshal(it["role"], &role)
+	if kind == "message" && role == "developer" {
+		return moreSpawnCatalog(it, choices)
+	}
+	if kind != "tool_search_output" && kind != "additional_tools" {
 		return nil, false
 	}
 	tools, ok := moreSpawnTools(it["tools"], choices)
@@ -214,20 +230,7 @@ func moreSpawnModels(t map[string]json.RawMessage, choices []spawnChoice) bool {
 	if json.Unmarshal(t["parameters"], &params) != nil || params.Properties["model"] == nil {
 		return false
 	}
-	var lines []string
-	for _, c := range choices {
-		if strings.Contains(desc, "`"+c.slug+"`") {
-			continue
-		}
-		line := "- `" + c.slug + "`"
-		if c.name != "" && c.name != c.slug {
-			line += ": " + c.name
-		}
-		lines = append(lines, line)
-		if len(lines) == spawnMost {
-			break
-		}
-	}
+	lines := spawnLines(desc, choices)
 	if len(lines) == 0 {
 		return false
 	}
@@ -249,6 +252,74 @@ func moreSpawnModels(t map[string]json.RawMessage, choices []spawnChoice) bool {
 	add := "\n" + spawnMore + "\n" + strings.Join(lines, "\n")
 	t["description"] = rawJSON(desc[:end] + add + desc[end:])
 	return true
+}
+
+// spawnLines is a "- `slug`: name" line for each of choices that text,
+// Codex's list of models, doesn't name, spawnMost at most.
+func spawnLines(text string, choices []spawnChoice) []string {
+	var lines []string
+	for _, c := range choices {
+		if strings.Contains(text, "`"+c.slug+"`") {
+			continue
+		}
+		line := "- `" + c.slug + "`"
+		if c.name != "" && c.name != c.slug {
+			line += ": " + c.name
+		}
+		lines = append(lines, line)
+		if len(lines) == spawnMost {
+			break
+		}
+	}
+	return lines
+}
+
+// spawnCatalog opens the developer message part in which Codex, with
+// features.model_catalog_in_context, lists the models spawn_agent may be
+// set to (codex-rs core/src/context/world_state/model_catalog.rs), its
+// first five as well, in place of spawn_agent's description.
+const spawnCatalog = "<model_catalog>"
+
+// hasSpawnCatalog says b, JSON, may hold a <model_catalog> listing: as Codex
+// writes it, or with its angle brackets escaped, as Go's encoder writes a
+// body magpie has written again (withModel).
+func hasSpawnCatalog(b []byte) bool {
+	return bodyHas(b, spawnCatalog) || bodyHas(b, `\u003cmodel_catalog\u003e`)
+}
+
+// moreSpawnCatalog is it, a developer message, with each of its
+// <model_catalog> listings naming choices too, ahead of its closing tag;
+// false when it has none to widen. One saying the listing no longer
+// applies names no model and is left as it is.
+func moreSpawnCatalog(it map[string]json.RawMessage, choices []spawnChoice) ([]byte, bool) {
+	var parts []map[string]json.RawMessage
+	if json.Unmarshal(it["content"], &parts) != nil {
+		return nil, false
+	}
+	changed := false
+	for _, p := range parts {
+		var text string
+		json.Unmarshal(p["text"], &text)
+		end := strings.LastIndex(text, "</model_catalog>")
+		if !strings.HasPrefix(text, spawnCatalog) || end < 0 || !strings.Contains(text, "\n- `") || strings.Contains(text, spawnMore) {
+			continue
+		}
+		lines := spawnLines(text, choices)
+		if len(lines) == 0 {
+			continue
+		}
+		head := text[:end]
+		if !strings.HasSuffix(head, "\n") {
+			head += "\n"
+		}
+		p["text"] = rawJSON(head + spawnMore + "\n" + strings.Join(lines, "\n") + "\n" + text[end:])
+		changed = true
+	}
+	if !changed {
+		return nil, false
+	}
+	it["content"] = rawJSON(parts)
+	return rawJSON(it), true
 }
 
 // spawnChoices is the models of the catalog Codex was handed, at CodexPath
