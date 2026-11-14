@@ -4,10 +4,11 @@
 // that is only reachable through a proxy hangs until the agent gives up.
 //
 // In order: the proxy set in magpie's settings (or "direct" for none), the
-// usual *_PROXY variables, then the system's proxy (macOS network
-// settings, Windows Internet Options, a Linux desktop's GNOME gsettings or
-// KDE kioslaverc). Loopback is never proxied, nor, unless a provider has a
-// proxy of its own, a host on the user's own network (lan.go).
+// usual *_PROXY variables, the system's proxy (macOS network settings,
+// Windows Internet Options, a Linux desktop's GNOME gsettings or KDE
+// kioslaverc), then the login shell's *_PROXY (shell.go). Loopback is
+// never proxied, nor, unless a provider has a proxy of its own, a host on
+// the user's own network (lan.go).
 package netproxy
 
 import (
@@ -390,7 +391,10 @@ func For(u *url.URL) (*url.URL, error) {
 		return p, err
 	}
 	sys := System()
-	if sys.URL == "" || bypassed(u.Hostname(), sys.Bypass) {
+	if sys.URL == "" {
+		return fromShell(u), nil
+	}
+	if bypassed(u.Hostname(), sys.Bypass) {
 		return nil, nil
 	}
 	return Parse(sys.URL)
@@ -435,10 +439,12 @@ func EnvWith(choice string, env []string) []string {
 			}
 		}
 		sys := System()
-		if sys.URL == "" {
-			return env
-		}
 		p, bypass = sys.URL, sys.Bypass
+		if p == "" {
+			if p, bypass = shellProxy(); p == "" {
+				return env
+			}
+		}
 	default:
 		u, err := Parse(s)
 		if err != nil {
@@ -521,6 +527,9 @@ func Describe() (proxy, source string) {
 	}
 	if sys := System(); sys.URL != "" {
 		return sys.URL, "system"
+	}
+	if p := fromShell(u); p != nil {
+		return p.String(), "environment"
 	}
 	return "", "none"
 }

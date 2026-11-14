@@ -110,11 +110,14 @@ func TestLoginEnvProxyVarsNotSet(t *testing.T) {
 	exec.Command(sh, "-c", ":").Run()
 	login.Lock()
 	dirs, vars, at := login.dirs, login.vars, login.at
+	said := loginSaid.Load()
 	login.dirs, login.vars, login.at = nil, nil, time.Time{}
+	loginSaid.Store(nil)
 	login.Unlock()
 	t.Cleanup(func() {
 		login.Lock()
 		login.dirs, login.vars, login.at = dirs, vars, at
+		loginSaid.Store(said)
 		login.Unlock()
 	})
 
@@ -132,6 +135,13 @@ func TestLoginEnvProxyVarsNotSet(t *testing.T) {
 	}
 	if got := LoginEnv("ALL_PROXY"); got != "" {
 		t.Fatalf("ALL_PROXY = %q, want none", got)
+	}
+	// netproxy reads them on every request, without waiting on the shell
+	if got := LoginEnvSaid("HTTP_PROXY"); got != "http://127.0.0.1:7890" {
+		t.Fatalf("LoginEnvSaid(HTTP_PROXY) = %q, want the profile's", got)
+	}
+	if got := LoginEnvSaid("no_proxy"); got != "localhost,127.0.0.1" {
+		t.Fatalf("LoginEnvSaid(no_proxy) = %q, want the profile's", got)
 	}
 }
 

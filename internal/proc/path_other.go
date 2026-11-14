@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yetone/magpie/internal/agentenv"
@@ -51,6 +52,7 @@ func UserPath() {
 			addPath(filepath.SplitList(p))
 			login.Lock()
 			login.dirs, login.vars, login.at = filepath.SplitList(p), vars, time.Now()
+			loginSaid.Store(&vars)
 			login.Unlock()
 		}
 	}()
@@ -96,6 +98,7 @@ func LoginPath() []string {
 		return nil
 	}
 	login.dirs, login.vars, login.at = filepath.SplitList(p), vars, time.Now()
+	loginSaid.Store(&vars)
 	return login.dirs
 }
 
@@ -138,6 +141,19 @@ func LoginEnvKnown(k string) string {
 	login.Lock()
 	defer login.Unlock()
 	return login.vars[k]
+}
+
+// loginSaid is login.vars as last stored, for LoginEnvSaid.
+var loginSaid atomic.Pointer[map[string]string]
+
+// LoginEnvSaid is LoginEnvKnown without the lock: LoginPath holds it while
+// the shell answers, which may take seconds, and netproxy reads the
+// shell's proxy on every request magpie makes.
+func LoginEnvSaid(k string) string {
+	if m := loginSaid.Load(); m != nil {
+		return (*m)[k]
+	}
+	return ""
 }
 
 // UserBinDirs are the folders a user's command-line tools are installed in

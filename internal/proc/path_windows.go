@@ -99,6 +99,9 @@ func LoginEnv(string) string { return "" }
 // LoginEnvKnown is "" on Windows too (LoginEnv).
 func LoginEnvKnown(string) string { return "" }
 
+// LoginEnvSaid is "" on Windows too (LoginEnv).
+func LoginEnvSaid(string) string { return "" }
+
 // ShellPath is LoginPath on Windows: PowerShell and cmd both take the
 // registry's PATH.
 func ShellPath(string) []string { return LoginPath() }
