@@ -162,7 +162,7 @@ func (l *Library) wanted(agent string) string {
 }
 
 // memoryDigest is memory's published digest for the agent, "" when
-// NoMemory, or memory.json can't be read (syncInstructions writes nothing
+// NoMemory, or memory can't be read (syncInstructions writes nothing
 // then: unknown, not empty).
 func (l *Library) memoryDigest(id string) string {
 	if l.Instructions.NoMemory {

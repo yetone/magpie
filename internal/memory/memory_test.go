@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -38,12 +39,12 @@ func save(t *testing.T, text, kind, scope string, tags ...string) *Memory {
 func TestSaveKeepsTheLocalZone(t *testing.T) {
 	at := fresh(t)
 	*at = time.Date(2026, 11, 11, 4, 30, 0, 0, time.FixedZone("CST", 8*3600))
-	save(t, "Answer in Chinese", Preference, Global)
-	b, err := os.ReadFile(Path())
+	m := save(t, "Answer in Chinese", Preference, Global)
+	b, err := os.ReadFile(filepath.Join(Dir(), m.ID+".md"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(b), `"updated": "2026-11-11T04:30:00+08:00"`) && !strings.Contains(string(b), `"updated":"2026-11-11T04:30:00+08:00"`) {
+	if !strings.Contains(string(b), "updated: \"2026-11-11T04:30:00+08:00\"") && !strings.Contains(string(b), "updated: 2026-11-11T04:30:00+08:00\n") {
 		t.Fatalf("not saved in the local zone: %s", b)
 	}
 }
@@ -148,17 +149,25 @@ func TestUnreadableFileIsNeverWrittenOver(t *testing.T) {
 	}
 }
 
-// The last good generation is read when the file is cut short.
-func TestCutShortFileReadFromItsBackup(t *testing.T) {
+// meta.json cut short is read from its last good generation, and the
+// memories are still each its own file.
+func TestCutShortMetaReadFromItsBackup(t *testing.T) {
 	fresh(t)
 	save(t, "first", Fact, Global)
-	save(t, "second", Fact, Global) // keeps the first generation as .bak
-	if err := os.WriteFile(Path(), []byte(`{"memo`), 0o600); err != nil {
+	if err := Decline("k1"); err != nil {
+		t.Fatal(err)
+	}
+	save(t, "second", Fact, Global) // keeps the generation with k1 as .bak
+	if err := os.WriteFile(filepath.Join(Dir(), "meta.json"), []byte(`{"vers`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	all, _, err := All()
-	if err != nil || len(all) != 1 || all[0].Text != "first" {
-		t.Fatalf("read %v, %v; want the backup's one memory", all, err)
+	if err != nil || len(all) != 2 {
+		t.Fatalf("read %v, %v; want both memories", all, err)
+	}
+	b, err := Collect()
+	if err != nil || !slices.Contains(b.Declined, "k1") {
+		t.Fatalf("meta not read from its backup: %+v %v", b, err)
 	}
 }
 

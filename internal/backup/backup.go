@@ -293,7 +293,7 @@ func Collect(keys bool, app string) (Bundle, error) {
 	if !keys && b.Library != nil {
 		b.Library.WithoutSecrets(Secret)
 	}
-	// a memory.json that can't be read stops it too: unknown, not none
+	// memory that can't be read stops it too: unknown, not none
 	if b.Memory, err = memory.Collect(); err != nil {
 		return b, fmt.Errorf("memory: %w", err)
 	}

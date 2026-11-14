@@ -18,7 +18,7 @@ func memSave(t *testing.T, text, kind, scope string) {
 
 // Memory's published digest is written into a ticked agent's part after
 // the shared text, with what is kept for that agent alone; an agent not
-// ticked gets none. A save shows only once published, and a memory.json
+// ticked gets none. A save shows only once published, and memory
 // that can't be read leaves the part as it was (unknown, not empty).
 // NoMemory leaves the digest out.
 func TestMemoryDigestInInstructions(t *testing.T) {
@@ -29,8 +29,8 @@ func TestMemoryDigestInInstructions(t *testing.T) {
 	if res, err := PublishMemory(true); err != nil || res != nil {
 		t.Fatalf("nothing kept, but published: %+v %v", res, err)
 	}
-	if _, err := os.Stat(memory.Path()); err == nil {
-		t.Fatal("a due publish with nothing kept wrote memory.json")
+	if _, err := os.Stat(memory.Dir()); err == nil {
+		t.Fatal("a due publish with nothing kept wrote memory")
 	}
 
 	memSave(t, "Answer in Chinese.", memory.Preference, memory.Global)
@@ -51,26 +51,27 @@ func TestMemoryDigestInInstructions(t *testing.T) {
 		t.Errorf("claude isn't ticked, but was given memory:\n%s", readMaybe(c))
 	}
 
-	// memory.json unreadable: the part is left as it is
+	// memory unreadable: the part is left as it is
 	memSave(t, "Use tabs.", memory.Preference, memory.Global)
 	if _, err := memory.Publish(); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(memory.Path(), []byte("{not json"), 0o600); err != nil {
+	meta := filepath.Join(memory.Dir(), "meta.json")
+	if err := os.WriteFile(meta, []byte("{not json"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	os.Remove(memory.Path() + ".bak")
+	os.Remove(meta + ".bak")
 	res, err := changeInstructions(func(*Library) error { return nil })
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := read(t, codex); got != s {
-		t.Fatalf("an unreadable memory.json changed the part:\n%s", got)
+		t.Fatalf("unreadable memory changed the part:\n%s", got)
 	}
 	if len(res.Problems) == 0 {
-		t.Errorf("an unreadable memory.json wasn't said: %+v", res)
+		t.Errorf("unreadable memory wasn't said: %+v", res)
 	}
-	if err := os.Remove(memory.Path()); err != nil {
+	if err := os.RemoveAll(memory.Dir()); err != nil {
 		t.Fatal(err)
 	}
 

@@ -8,14 +8,47 @@ Library → Instructions, and the Library's Memory tab.
 
 ## Source of truth
 
-`memory.json` in magpie's config folder ([internal/memory/memory.go](../../internal/memory/memory.go)).
+The `memory` folder in magpie's config folder, one Markdown file per memory
+([internal/memory/store.go](../../internal/memory/store.go)):
 
-- One writer at a time across magpies (`filelock`), written through a temp
-  file, the last good generation kept beside it (`lastgood`).
-- A file that can't be read is unknown, never empty: nothing is written
-  over it, searches fail, and `Digest` returns an error so the instructions
-  keep what the agent has (`TestUnreadableFileIsNeverWrittenOver`,
-  `TestCutShortFileReadFromItsBackup`).
+- `<id>.md` is the memory: its fields as YAML front matter, its text as the
+  body. The file is the memory; everything else is beside it.
+- `meta.json` holds what isn't one memory's: projects, the published
+  digest, dismissed texts, deletions, declined suggestions, when a search
+  last returned each memory and how often (so a search never rewrites a
+  memory's file, `TestUseDoesNotRewriteTheMemory`), and the hash of each
+  file as magpie last wrote it.
+- `index.json` is a cache of the parsed files by size and mtime: gone or
+  garbled, memory reads the same (`TestIndexIsOnlyACache`).
+- `journal.json` holds a change to more than one file (a merge, a sync)
+  before any is written; a change cut off halfway is finished by the next
+  read (`TestCutOffChangeIsFinished`). A journal that can't be read is an
+  error.
+
+Rules:
+
+- One writer at a time across magpies (`filelock`, `memory.lock`), each file
+  written through a temp file, and only the files that changed. The last
+  good meta.json is kept beside it (`lastgood`).
+- A file whose hash isn't the one magpie wrote was edited (or added) by
+  hand: it is the user's (origin user, `Edited`), so a tidy leaves it and an
+  agent's change synced from another computer never writes over it
+  (`TestHandEditIsTheUsers`). A file with no front matter is a fact that
+  holds everywhere, its name its id (`TestHandAddedFileIsAMemory`). A file
+  edited by hand while magpie changes or removes it is left as the user
+  wrote it (`TestHandEditDuringAChangeStays`,
+  `TestHandEditDuringARemoveStays`).
+- A memory file that can't be parsed is unknown: left out, never written
+  over nor removed, sync included, and read again once fixed
+  (`TestBrokenFileIsLeftAsItIs`). A meta.json that can't be read is
+  unknown, never empty: nothing is written, searches fail, and `Digest`
+  returns an error so the instructions keep what the agent has
+  (`TestUnreadableFileIsNeverWrittenOver`,
+  `TestCutShortMetaReadFromItsBackup`).
+- `memory.json`, where memory was kept before, is moved into the folder on
+  the first read, all of it under one journal, and kept as
+  `memory.json.migrated` (`TestMemoryJSONIsMovedIn`). One that can't be
+  read is an error, and nothing is written.
 
 A memory is one short text (`MaxText` runes) with:
 
@@ -161,7 +194,7 @@ further (`State.Since`), unless a range is picked.
   and the row says how many (`State.Left`) (`TestBacklogReadAtOnce`,
   `TestStopEndsTheRun`). Before, every run read 10, and 400 took 40
   hours (RealZeroP27 on X).
-- State is `distill.json` beside `memory.json` (`memdistill.Path`):
+- State is `distill.json` beside the `memory` folder (`memdistill.Path`):
   the switch, the model, the reasoning level, the range, the
   conversations done, and the last run's time, counts, error and how
   many it left. A
@@ -307,14 +340,14 @@ meaning, since it downloads a model (~135 MB).
 
 Memory goes to another computer in a backup file (the scheduled backups
 too) and in sync (WebDAV, S3, GitHub), merged memory by memory, never one
-computer's memory.json over the other's.
+computer's memory over the other's.
 [sync.go](../../internal/memory/sync.go) owns it.
 
 - What goes (`memory.Bundle`, `Collect`): the memories in every state, the
   projects, the dismissed distilled texts, the suggestions turned down and
   the deletions. The digest published into the agents' instructions and the
   vectors (memembed) are this computer's own and are made again after a
-  change. A memory.json that can't be read stops the backup or sync instead
+  change. Memory that can't be read stops the backup or sync instead
   of going as no memory (`TestCollectUnreadableIsAnError`,
   `TestCollectStopsOnUnreadableMemory`).
 - Merging (`Combine`, the same either way round): of two copies of one

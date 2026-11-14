@@ -39,11 +39,15 @@ type Bundle struct {
 	Declined  []string             `json:"declined,omitempty"`
 }
 
-// Collect is this computer's memory, to carry: nil when memory.json isn't
-// there, an error when it is and can't be read (a failed read is unknown:
-// a backup of it as nothing would say there was nothing).
+// Collect is this computer's memory, to carry: nil when there is none (no
+// Dir, no memory.json to move in), an error when it can't be read (a failed read is
+// unknown: a backup of it as nothing would say there was nothing). A
+// memory whose file can't be read is left out: absent from a bundle is not
+// removed (Combine), so no other computer drops it for that.
 func Collect() (*Bundle, error) {
-	if _, err := os.Stat(Path()); errors.Is(err, fs.ErrNotExist) {
+	_, e1 := os.Stat(Path())
+	_, e2 := os.Stat(Dir())
+	if errors.Is(e1, fs.ErrNotExist) && errors.Is(e2, fs.ErrNotExist) {
 		return nil, nil
 	}
 	f, err := view()
@@ -209,8 +213,8 @@ func later(x, y *Memory) bool {
 	return string(jx) > string(jy)
 }
 
-// Put merges b into memory here (Combine), writing memory.json only when
-// that changes it. It reports whether it did; a file here that can't be
+// Put merges b into memory here (Combine), writing only when that
+// changes it. It reports whether it did; a file here that can't be
 // read is an error, and nothing is written over it.
 func Put(b *Bundle) (changed bool, err error) {
 	if b == nil {

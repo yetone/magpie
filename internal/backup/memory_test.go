@@ -2,6 +2,7 @@ package backup
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -73,7 +74,7 @@ func TestBackupMergesMemory(t *testing.T) {
 	}
 }
 
-// A memory.json that can't be read stops the backup: carried as no
+// Memory that can't be read stops the backup: carried as no
 // memory, it would say there was none.
 func TestCollectStopsOnUnreadableMemory(t *testing.T) {
 	home(t)
@@ -81,16 +82,17 @@ func TestCollectStopsOnUnreadableMemory(t *testing.T) {
 	if b, err := Collect(true, "test"); err != nil || b.Memory == nil || len(b.Memory.Memories) != 1 {
 		t.Fatalf("collect: %+v, %v", b.Memory, err)
 	}
-	if err := os.WriteFile(memory.Path(), []byte(`{"memories":[{"id":"m_1`), 0o600); err != nil {
+	meta := filepath.Join(memory.Dir(), "meta.json")
+	if err := os.WriteFile(meta, []byte(`{"projects":{"p`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	os.Remove(lastgood.Bak(memory.Path()))
+	os.Remove(lastgood.Bak(meta))
 	if _, err := Collect(true, "test"); err == nil || !strings.Contains(err.Error(), "memory") {
-		t.Fatalf("Collect read a memory.json that can't be read: %v", err)
+		t.Fatalf("Collect read memory that can't be read: %v", err)
 	}
-	// and no memory.json is no memory, not an error
-	os.Remove(memory.Path())
+	// and no memory is no memory, not an error
+	os.RemoveAll(memory.Dir())
 	if b, err := Collect(true, "test"); err != nil || b.Memory != nil {
-		t.Fatalf("no memory.json: %+v, %v", b.Memory, err)
+		t.Fatalf("no memory: %+v, %v", b.Memory, err)
 	}
 }

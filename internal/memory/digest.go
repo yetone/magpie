@@ -147,7 +147,7 @@ func PublishDue() (bool, error) {
 // Digest is the published digest an agent is given: the global part, the
 // agent's own, and each project's under the folders it was seen in, held
 // to the whole budget, the projects with the newest memories first. ""
-// when there is nothing, or memory.json can't be read (unknown: the
+// when there is nothing, or memory can't be read (unknown: the
 // caller keeps what the agent has).
 func Digest(agent string) (string, error) {
 	f, err := cached()

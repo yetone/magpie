@@ -185,7 +185,8 @@ repository and `magpie github upload`, rather than WebDAV's recovery path.
 A local file that is there but can't be read is unknown, never empty or the
 defaults. `backup.Collect` stops on an unreadable providers.json (with its groups
 and order), settings.json (`settings.LoadChecked`: unreadable, or
-not parsing with no good `.bak`) or library.json, and on a gateway key
+not parsing with no good `.bak`), library.json or memory (its meta.json, see
+[Memory](memory.md#source-of-truth)), and on a gateway key
 store that fails to export. A backup, an export and a sync all end with that
 error, nothing sealed or pushed; the sync's status shows it. A missing or
 empty settings.json is still none (`TestCollectStopsOnUnreadableSettings`,
