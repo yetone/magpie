@@ -2749,6 +2749,9 @@ type holdWriter struct {
 	// upstreamKeys are the headers of the vendor's reply heardUpstream put
 	// in header (#4145)
 	upstreamKeys []string
+	// tierStamp, on a try for another magpie, says on the reply's header
+	// the tier the request went out at (stampTier), once it has a status
+	tierStamp func(http.Header)
 
 	// over, when another candidate stands behind the try, reads what
 	// passes before its answer begins for a refusal to hand to the next
@@ -2802,6 +2805,9 @@ func (h *holdWriter) writeHeader(code int) {
 		return
 	}
 	h.status = code
+	if h.tierStamp != nil {
+		h.tierStamp(h.header)
+	}
 	if h.hold && code >= 400 {
 		return
 	}

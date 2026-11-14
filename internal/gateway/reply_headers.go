@@ -41,7 +41,7 @@ func heardReply(ctx context.Context, p provider.Provider, res *http.Response) {
 	if !ok || res == nil || s.id != p.ID {
 		return
 	}
-	s.put(p.PassedReplyHeaders(res.Header))
+	s.put(tierThere(p, res.Header, p.PassedReplyHeaders(res.Header)))
 }
 
 // passReplyHeaders puts what the vendor's reply res passes on into dst,

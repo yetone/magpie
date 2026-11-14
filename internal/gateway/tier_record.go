@@ -8,8 +8,10 @@ package gateway
 // doesn't offer Ultrafast is asked for priority in its place.
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
+	"net/http"
 	"strings"
 
 	"github.com/tidwall/gjson"
@@ -117,4 +119,89 @@ func upstreamTier(b []byte) string {
 		}
 	}
 	return ""
+}
+
+// A reply passed back to another magpie (a Remote magpie provider there)
+// says the tier the request went to its vendor at here, and whether the
+// vendor's own word in the body tells anything. That magpie records them
+// as its own: its request goes to this one at the tier it asked, this
+// one's Fast or a key's tier may send another, and the body's
+// "default" from the ChatGPT backend is no tier at all (JackyFill on X: a
+// Codex turn sent as Fast by the remote magpie was recorded "default" on
+// the magpie Codex asked).
+const (
+	// tierSentHeader is the tier the reply's request went to the vendor
+	// at, as the log keeps it (Record.TierSent); tierNone for none
+	tierSentHeader = "X-Magpie-Tier-Sent"
+	// tierUnsaidHeader is "1" when the reply's "auto"/"default" tell
+	// nothing (servedTierAt)
+	tierUnsaidHeader = "X-Magpie-Tier-Unsaid"
+	tierNone         = "none"
+)
+
+// stampTier says on h, a try's reply header to another magpie, the tier
+// sent went to p at, and whether p's "auto"/"default" tell nothing. Those
+// p is a remote magpie that said them stand: they are its vendor's.
+func stampTier(h http.Header, p provider.Provider, sent string) {
+	if !p.IsRemoteMagpie() || h.Get(tierSentHeader) == "" {
+		h.Set(tierSentHeader, cmp.Or(sent, tierNone))
+	}
+	if !p.IsRemoteMagpie() {
+		h.Del(tierUnsaidHeader)
+	}
+	if servedTierAt(p.VendorHost(), "default") == "" {
+		h.Set(tierUnsaidHeader, "1")
+	}
+}
+
+// tierThere adds to passed, the headers of a remote magpie's reply that go
+// to the try, what it said of its tier (stampTier). Only a remote magpie's
+// are read: a vendor's X-Magpie- headers are never taken.
+func tierThere(p provider.Provider, got, passed http.Header) http.Header {
+	if !p.IsRemoteMagpie() {
+		return passed
+	}
+	sent, unsaid := tierWord(got.Get(tierSentHeader)), got.Get(tierUnsaidHeader) == "1"
+	if sent == "" && !unsaid {
+		return passed
+	}
+	if passed == nil {
+		passed = http.Header{}
+	}
+	if sent != "" {
+		passed.Set(tierSentHeader, sent)
+	}
+	if unsaid {
+		passed.Set(tierUnsaidHeader, "1")
+	}
+	return passed
+}
+
+// sentThere is the tier a remote magpie's reply says it sent its vendor
+// (tierThere); ok false when it said none, as a magpie before it didn't.
+func (h *holdWriter) sentThere() (string, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	v := h.header.Get(tierSentHeader)
+	if v == tierNone {
+		return "", true
+	}
+	return v, v != ""
+}
+
+// servedThere is t, the tier a reply from p said, unknown ("") where p is
+// a remote magpie whose vendor's "auto"/"default" tell nothing.
+func servedThere(w http.ResponseWriter, p provider.Provider, t string) string {
+	if t != "auto" && t != "default" || !p.IsRemoteMagpie() {
+		return t
+	}
+	if hw, ok := w.(*holdWriter); ok {
+		hw.mu.Lock()
+		unsaid := hw.header.Get(tierUnsaidHeader) == "1"
+		hw.mu.Unlock()
+		if unsaid {
+			return ""
+		}
+	}
+	return t
 }
