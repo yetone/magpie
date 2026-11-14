@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 )
@@ -84,5 +85,48 @@ func TestSearchMCPSchemaOffersScope(t *testing.T) {
 	}
 	if strings.Contains(strings.ToLower(searchMCPSchema(5)), "magpie") {
 		t.Fatal("the schema names magpie")
+	}
+}
+
+// An image search's output, as a real Plus account answered one on
+// 2026-11-15 (testdata/codex-image-search.json, image_query "golden gate
+// bridge"), puts each rule straight after its page's last word. Its twelve
+// images were read as one page, so a count past 1 gave one image (LBM_OASIG
+// on X).
+func TestImageSearchGivesTheCount(t *testing.T) {
+	b, err := os.ReadFile("testdata/codex-image-search.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reply codexSearchReply
+	if err := json.Unmarshal(b, &reply); err != nil || reply.Output == nil {
+		t.Fatal(err)
+	}
+	for _, n := range []int{1, 5, 12} {
+		pages := codexPages(*reply.Output, reply, n)
+		if len(pages) != n {
+			t.Fatalf("count %d: %d pages", n, len(pages))
+		}
+		seen := map[string]bool{}
+		for _, p := range pages {
+			img, _, _ := strings.Cut(p.Text, "\n")
+			if !strings.HasPrefix(img, "Image: https://") || strings.Contains(p.Text, "-----") || seen[img] {
+				t.Fatalf("count %d: %+v", n, p)
+			}
+			seen[img] = true
+		}
+	}
+	if pages := codexPages(*reply.Output, reply, 5); pages[1].URL != "https://www.worldatlas.com/articles/the-7-wonders-of-california.html" {
+		t.Fatalf("second page %+v", pages[1])
+	}
+}
+
+// A longer line of dashes in a page's text is not a rule.
+func TestCodexBlocksKeepLongDashLines(t *testing.T) {
+	rule := strings.Repeat("-", 80) + "\n"
+	long := strings.Repeat("-", 100) + "\n"
+	got := codexBlocks("A (https://a.example)\ntext\n" + long + "more" + rule + "B (https://b.example)\nb")
+	if len(got) != 2 || !strings.Contains(got[0], long+"more") || !strings.HasPrefix(got[1], "B ") {
+		t.Fatalf("%q", got)
 	}
 }

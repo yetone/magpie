@@ -2059,6 +2059,9 @@ instead of `search_query` for `images`, `settings.filters`,
 searcher is asked the sites as `site:` and `-site:` operators in the query
 (`searchScoped`, at the top of `webSearch`) and ignores the rest. Image
 results come back as pages whose text starts "Image: <url>" (`imageSaid`).
+The output is cut into pages at each line of 80 dashes (`codexBlocks`),
+which often follows a page's last word with no line break: an image
+search always does. `TestImageSearchGivesTheCount`.
 `TestSearchScopeReachesCodexSearch`, `TestSearchScopeOperatorsForOtherSearchers`.
 
 ## How many results a search is answered with

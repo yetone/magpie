@@ -82,6 +82,32 @@ type codexSearchReply struct {
 // codexSearchRule is the line between the pages of a search's output.
 var codexSearchRule = "\n" + strings.Repeat("-", 80) + "\n"
 
+// codexBlocks are a search's output cut at its rules. A rule doesn't
+// always start a line: a real image search (2026-11-15) put every rule
+// straight after its page's last word ("…beauty.----…----\n"), and a page
+// search after some, so cutting only at "\n"+rule read twelve images as
+// one. A rule is 80 dashes ending a line with no dash before them, so a
+// longer line of dashes in a page's text is no rule.
+func codexBlocks(output string) []string {
+	dashes := strings.Repeat("-", 80) + "\n"
+	var blocks []string
+	from, at := 0, 0
+	for {
+		i := strings.Index(output[at:], dashes)
+		if i < 0 {
+			break
+		}
+		i += at
+		at = i + len(dashes)
+		if i > 0 && output[i-1] == '-' {
+			continue
+		}
+		blocks = append(blocks, output[from:i])
+		from = at
+	}
+	return append(blocks, output[from:])
+}
+
 // codexSearchBy searches with a ChatGPT account: by the backend's search,
 // then, when it fails, by the account's small model.
 func (s *Server) codexSearchBy(ctx context.Context, p provider.Provider, query string) (string, []Hit, error) {
@@ -212,7 +238,7 @@ func codexPages(output string, out codexSearchReply, n int) []foundPage {
 		}
 	}
 	var pages []foundPage
-	for _, block := range strings.Split(output, codexSearchRule) {
+	for _, block := range codexBlocks(output) {
 		head, rest, _ := strings.Cut(strings.TrimSpace(block), "\n")
 		title, link := head, ""
 		if i := strings.LastIndex(head, " ("); i >= 0 && strings.HasSuffix(head, ")") {
