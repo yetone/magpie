@@ -142,3 +142,76 @@ func TestSpawnAgentNamesEveryModelInCodex0169(t *testing.T) {
 		}
 	}
 }
+
+// An app that runs `codex app-server` names Codex's requests after itself:
+// Codex makes the host's clientInfo.name its originator and the head of
+// its User-Agent (codex-rs app-server initialize_processor.rs,
+// set_default_originator). LobeHub's desktop app runs Codex 0.169.0 so,
+// with magpie as its provider at /v1, and its lead saw only Codex's first
+// five models of a catalog of 13 (@m0eaki on X): the gate named only
+// Codex's own names. Any host's Codex turn carries the headers Codex puts
+// on every turn (x-codex-window-id, x-codex-turn-metadata), and is
+// widened by them; a request with neither and an app's name is left as
+// it came.
+func TestSpawnAgentNamesEveryModelForAnAppServerHost(t *testing.T) {
+	var models []string
+	for i := 1; i <= 12; i++ {
+		models = append(models, fmt.Sprintf("m%d", i))
+	}
+	f := &fake{t: t, reply: sse(`data: {"type":"response.created","response":{"id":"r1"}}`,
+		`data: {"type":"response.completed","response":{"id":"r1","usage":{"input_tokens":9,"output_tokens":2}}}`)}
+	up := setup(t, provider.Responses, f)
+	if err := provider.Save(provider.Provider{ID: "fake", Name: "Fake", Key: "k", Responses: up.URL + "/v1", Models: models}); err != nil {
+		t.Fatal(err)
+	}
+	post := func(t *testing.T, body []byte, h map[string]string) {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("POST", "/v1/responses", strings.NewReader(string(body)))
+		for k, v := range h {
+			req.Header.Set(k, v)
+		}
+		New().Handler().ServeHTTP(rec, req)
+		if rec.Code != 200 {
+			t.Fatalf("%d %s", rec.Code, rec.Body.String())
+		}
+	}
+	// what Codex 0.169.0 sends under LobeHub's app-server
+	lobehub := map[string]string{
+		"User-Agent":        "lobehub-desktop/0.169.0 (Mac OS 26.5.0; arm64) unknown (lobehub-desktop; 2.1.40)",
+		"originator":        "lobehub-desktop",
+		"session_id":        "019e1a2b-3c4d-7e5f-8a9b-0c1d2e3f4a5b",
+		"x-codex-window-id": "019e1a2b-3c4d-7e5f-8a9b-0c1d2e3f4a5b:0",
+	}
+	shapes := []struct {
+		name, file string
+		listing    func(t *testing.T, body []byte) string
+	}{
+		{"spawn_agent in tools", "codex-0.162.0.json", spawnDescription},
+		{"V2, spawn_agent in additional_tools", "codex-0.169.0-v2-lite.json", searchedSpawnDescription},
+		{"model_catalog_in_context", "codex-0.169.0-model-catalog.json", modelCatalogText},
+		{"spawn_agent searched", "codex-0.169.0-tool-search.json", searchedSpawnDescription},
+	}
+	for _, sh := range shapes {
+		b, err := os.ReadFile("testdata/workdir/" + sh.file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b = withModel(b, "fake/m1")
+		t.Run(sh.name+", LobeHub's Codex", func(t *testing.T) {
+			post(t, b, lobehub)
+			l := sh.listing(t, f.got)
+			for _, m := range models {
+				if !strings.Contains(l, "- `fake/"+m+"`") {
+					t.Fatalf("doesn't name fake/%s:\n%s", m, l)
+				}
+			}
+		})
+		t.Run(sh.name+", an app's request without Codex's turn headers", func(t *testing.T) {
+			post(t, b, map[string]string{"User-Agent": lobehub["User-Agent"], "originator": "lobehub-desktop"})
+			if l := sh.listing(t, f.got); strings.Contains(l, spawnMore) {
+				t.Fatalf("widened:\n%s", l)
+			}
+		})
+	}
+}

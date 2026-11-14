@@ -101,7 +101,7 @@ func agentOf(r *http.Request) string {
 // runs Codex as its own engine and names it after itself (Lody) is
 // counted as that app.
 func codexForClaudeCode(h http.Header) bool {
-	if h.Get("X-Codex-Window-Id") == "" && h.Get("X-Codex-Turn-Metadata") == "" {
+	if !codexTurnHeaders(h) {
 		return false
 	}
 	for _, v := range []string{h.Get("User-Agent"), h.Get("Originator")} {
@@ -110,6 +110,27 @@ func codexForClaudeCode(h http.Header) bool {
 		}
 	}
 	return false
+}
+
+// codexTurnHeaders is whether h carries the headers Codex puts on every
+// Responses turn it sends, to any provider and whoever runs it
+// (x-codex-window-id, x-codex-turn-metadata: codex-rs core/src/
+// responses_metadata.rs compatibility_headers). Its User-Agent and
+// originator are the name of whatever runs it: `codex app-server` takes
+// its host's clientInfo.name for both (initialize_processor.rs,
+// set_default_originator), so LobeHub's is "lobehub-desktop/0.169.0 (…)
+// (lobehub-desktop; …)" and names no Codex at all.
+func codexTurnHeaders(h http.Header) bool {
+	return h.Get("X-Codex-Window-Id") != "" || h.Get("X-Codex-Turn-Metadata") != ""
+}
+
+// codexRuns is whether r is a turn the Codex binary sent: by its token or
+// its own names (fromCodex), or, run by an app under the app's name, by
+// the headers Codex puts on every turn. Only for what Codex alone reads
+// (its spawn_agent's list): what is sent upstream as Codex's own, to a
+// relay that checks it (codexAsSent), stays with fromCodex.
+func codexRuns(r *http.Request) bool {
+	return fromCodex(r.Header) || agentOf(r) == "codex" || codexTurnHeaders(r.Header)
 }
 
 // startedByAgent says whether a request is from no agent magpie knows but
@@ -2245,11 +2266,14 @@ func (s *Server) handle(from provider.Protocol) http.HandlerFunc {
 		}
 		// Codex with magpie as its provider: spawn_agent names every
 		// model a subagent may be put on, not only Codex's first five
-		// (Gearclickist on Discord)
-		if from == provider.Responses && (fromCodex(r.Header) || agentOf(r) == "codex") {
+		// (Gearclickist on Discord), Codex run by an app under the app's
+		// own name too (LobeHub's app-server, @m0eaki on X)
+		if from == provider.Responses && codexRuns(r) {
 			body = spawnAgentModels(r, body, model, false)
-			// the service tier set for Codex, in place of the one it
-			// asked (codexTiered)
+		}
+		// the service tier set for Codex, in place of the one it asked
+		// (codexTiered)
+		if from == provider.Responses && (fromCodex(r.Header) || agentOf(r) == "codex") {
 			body = codexTiered(r, body, model)
 		}
 		// the service tier the gateway key is set to, over the client's
