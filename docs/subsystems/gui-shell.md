@@ -382,7 +382,14 @@ from the same `quotaFill` and `quotaText` as the cards, so Used/Left turns
 both) and the rest of an account's windows in a last column; a failed read
 and a balance say so across the windows. A head sorts by it (most used first
 for a window, A first for a name), again the other way, a third time back
-to the cards' order; accounts with nothing in that column stay last. It
+to the cards' order; accounts with nothing in that column stay last.
+A column is what its windows are of, not their names (`columnOf`;
+normalcoder_ on X: Antigravity's "Gemini · 5 hours" sat in the last column
+beside an empty Gemini one). A pooled window goes to its pool's column
+(`poolWord`, "Claude & GPT" under Claude), naming its window in the cell;
+any other window goes by its span (`spanOf`: "Weekly", "7 days" and "7d"
+share one column, headed by the name most rows use, a number on a tie),
+and a window with no span by its name. It
 scrolls in its own box at a narrow width, the subscription held at the left.
 See `usage-quota-table.test.cjs`.
 
