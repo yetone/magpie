@@ -366,8 +366,12 @@ func SetPageOptions(spec string, opts map[string]any) error {
 	if w, only := Window(t); w == nil || !only {
 		return SetOptions(spec, opts)
 	}
+	// under plugins.json's lock too, as SetOptions is: another magpie's
+	// change saved meanwhile stands (#4666)
+	listFileMu.Lock()
 	listMu.Lock()
 	defer listMu.Unlock()
+	defer listFileMu.Unlock()
 	l := Load()
 	i := indexOf(l, spec)
 	if i < 0 {

@@ -1,6 +1,9 @@
 package plugin
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -108,5 +111,68 @@ func TestPluginPreferKeepsWhatAnotherMagpieSetMeanwhile(t *testing.T) {
 	}
 	if b == nil || !b.Off {
 		t.Errorf("p-b off = %v, want what the other magpie saved kept", b)
+	}
+}
+
+// A plugin that is only a page has its options set by SetPageOptions
+// itself, not through SetOptions: it is under plugins.json's lock too.
+func TestPluginPageOptionsKeepWhatAnotherMagpieSetMeanwhile(t *testing.T) {
+	storeSandbox(t)
+	dir := filepath.Join(t.TempDir(), "page-only")
+	if err := os.MkdirAll(filepath.Join(dir, "page"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "page", "index.html"), []byte("<p>hi</p>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"name":"page-only","magpie":{"page":{"title":"P","file":"page/index.html"}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if w, only := Window(dir); w == nil || !only {
+		t.Fatalf("the fixture is no page-only plugin: %+v only=%v", w, only)
+	}
+	spec, _ := json.Marshal(dir)
+	writeList(t, `{"plugins":[{"spec":`+string(spec)+`},{"spec":"p-b","options":{"x":1}}]}`)
+	unlock, held := filelock.Lock(listPath()+".lock", filelock.Wait)
+	if !held {
+		t.Skip("this file system holds no locks")
+	}
+	defer unlock()
+	done := make(chan error, 1)
+	go func() { done <- SetPageOptions(dir, map[string]any{"ours": true}) }()
+	time.Sleep(300 * time.Millisecond)
+	select {
+	case err := <-done:
+		t.Fatalf("SetPageOptions went on while another magpie held plugins.json's lock (err %v)", err)
+	default:
+	}
+	other := Load()
+	for i := range other.Plugins {
+		if other.Plugins[i].Spec == "p-b" {
+			other.Plugins[i].Options = map[string]any{"theirs": float64(1)}
+		}
+	}
+	if err := save(other); err != nil {
+		t.Fatal(err)
+	}
+	unlock()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	l := Load()
+	var a, b *Entry
+	for i := range l.Plugins {
+		switch l.Plugins[i].Spec {
+		case dir:
+			a = &l.Plugins[i]
+		case "p-b":
+			b = &l.Plugins[i]
+		}
+	}
+	if a == nil || a.Options["ours"] != true {
+		t.Errorf("the page plugin's options = %v, want ours kept", a)
+	}
+	if b == nil || b.Options["theirs"] != float64(1) {
+		t.Errorf("p-b's options = %v, want what the other magpie saved kept", b)
 	}
 }
