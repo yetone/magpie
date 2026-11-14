@@ -578,6 +578,10 @@ var (
 	// images are the models, by bare id, most of the providers serving
 	// them say take images (a few mislabel a text model)
 	images map[string]bool
+	// inputs are what the models take, by bare id, as most of the
+	// providers serving them list it: Gemini's audio, video and pdf beside
+	// text and images
+	inputs map[string][]string
 	// windows are the models' context windows, by bare id, as most of the
 	// providers serving them give it
 	windows map[string]int
@@ -667,6 +671,7 @@ func loadGen() (map[string]mdProvider, int) {
 					named := map[string]map[string]int{}
 					sizes, outs := map[string]map[int]int{}, map[string]map[int]int{}
 					levels := map[string]map[string]int{}
+					kinds := map[string]map[string]int{}
 					voted := map[string]bool{}
 					spelt := map[string]int{}
 					listed = map[string]bool{}
@@ -712,6 +717,16 @@ func loadGen() (map[string]mdProvider, int) {
 							votes[who]++
 						} else {
 							votes[who]--
+						}
+						if x.Modalities.Input != nil {
+							l := strings.Join(kindOrder(Kinds(x.Modalities.Input)), ",")
+							if kinds[who] == nil {
+								kinds[who] = map[string]int{}
+							}
+							if k := by + "\x00" + who + "\x00in\x00" + l; !voted[k] {
+								voted[k] = true
+								kinds[who][l]++
+							}
 						}
 						if w := x.window(); w > 0 {
 							if sizes[who] == nil {
@@ -785,6 +800,12 @@ func loadGen() (map[string]mdProvider, int) {
 					for id, by := range outs {
 						outputs[id] = mostGiven(by)
 					}
+					inputs = map[string][]string{}
+					for id, by := range kinds {
+						if l := mostListed(by); l != "" {
+							inputs[id] = strings.Split(l, ",")
+						}
+					}
 					efforts = map[string][]string{}
 					for id, by := range levels {
 						efforts[id] = strings.Split(mostListed(by), ",")
@@ -831,7 +852,7 @@ func Reset() {
 	built = nil
 	gen++
 	resets.Add(1)
-	mdev, images, windows, outputs, efforts, thinks, names, listed, canonical, labs, normal = nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
+	mdev, images, inputs, windows, outputs, efforts, thinks, names, listed, canonical, labs, normal = nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
 	loadMu.Unlock()
 	if Forget != nil {
 		Forget()
@@ -1462,6 +1483,35 @@ func SeesImages(id string) bool {
 	load()
 	v, _ := lookup(id, images)
 	return v
+}
+
+// InputsOf is what models.dev says a model of this id takes (text, image,
+// audio, video, pdf), as most of the providers it lists serving it do,
+// found as SeesImages finds it; nil when it doesn't know the model. The
+// list is shared: the caller only reads it.
+func InputsOf(id string) []string {
+	load()
+	v, _ := lookup(id, inputs)
+	return v
+}
+
+// kindOrder is a list of kinds in one order, text, image, audio, video
+// and pdf first, so two providers listing the same kinds apart vote alike.
+func kindOrder(ks []string) []string {
+	rank := func(k string) int {
+		if i := slices.Index([]string{"text", "image", "audio", "video", "pdf"}, k); i >= 0 {
+			return i
+		}
+		return 5
+	}
+	out := slices.Clone(ks)
+	slices.SortStableFunc(out, func(a, b string) int {
+		if ra, rb := rank(a), rank(b); ra != rb {
+			return ra - rb
+		}
+		return strings.Compare(a, b)
+	})
+	return out
 }
 
 // ContextOf is the context window models.dev gives a model of this id, as

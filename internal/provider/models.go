@@ -3628,6 +3628,19 @@ func entriesOf(of func(Provider) bool, off func(pid, model string) bool) []Entry
 	return out
 }
 
+// InputsOf is what a model takes: what its source listed, else, when its
+// source said nothing of its input, what models.dev says the model takes
+// wherever it is served, as images are read (catalog.SeesImages). A Gemini
+// model a list gave bare (Vertex AI's, a relay's) was said to take text
+// and image alone, never its audio (Parlevent_ on X). The list may be
+// shared: the caller only reads it.
+func InputsOf(m catalog.Model) []string {
+	if m.InputModalities != nil || m.ImageInput != nil {
+		return m.InputModalities
+	}
+	return catalog.InputsOf(m.ID)
+}
+
 // entryFor is one of a provider's models as the catalog carries it: the
 // window and the reply limit a request on it is routed and metered against,
 // with what the user set taken over the vendor's list and models.dev.
@@ -3653,7 +3666,7 @@ func sharedEntry(p *Provider, m catalog.Model, s settings.Settings) Entry {
 	name := cmp.Or(m.Name, m.ID)
 	e := Entry{ID: p.ID + "/" + m.ID, Model: m.ID, Family: p.Family, Name: name, Efforts: effortsOf(m), Provider: p,
 		Images: images, ImageInput: imageInput, Context: ctx, WindowSet: p.ContextOf(m.ID) > 0, MaxContext: m.MaxContext, Output: output, OutputSet: outputOf(s, p.ID, m.ID) > 0, Free: m.Free, Rate: m.Rate, RateWas: m.RateWas, Tiers: m.Tiers, Released: m.Released,
-		Inputs: m.InputModalities, Outputs: m.OutputModalities, Codex: m.Codex,
+		Inputs: InputsOf(m), Outputs: m.OutputModalities, Codex: m.Codex,
 		AlwaysThinks: m.AlwaysThinks, DynamicTools: m.DynamicTools, DefaultEffort: m.DefaultEffort}
 	if lv, ok := catalog.CodexLevels(m.Codex); ok {
 		// the levels the vendor lists the model at in Codex's shape are
