@@ -118,10 +118,12 @@ func screenBackFrom(msg uint32, wParam, lParam uintptr) string {
 	return ""
 }
 
-// appWndProc is the app's WndProcInterceptor (windowsOptions): the screen
+// appWndProc is the app's WndProcInterceptor (windowsOptions): a window
+// not being shown for the user isn't activated (hookNoActivate), the screen
 // coming back draws the windows again, and the screens are read
-// (screensWndProc). Neither keeps a message from Wails but the screens'.
+// (screensWndProc). None keeps a message from Wails but the screens'.
 var appWndProc = func(hwnd uintptr, msg uint32, wParam, lParam uintptr) (uintptr, bool) {
+	hookNoActivate(hwnd)
 	if why := screenBackFrom(msg, wParam, lParam); why != "" {
 		if f := screenBack.Load(); f != nil {
 			(*f)(why)

@@ -347,12 +347,15 @@ const spaceSettle = 500 * time.Millisecond
 // was last; on the main thread. It moves only while being shown: left on,
 // activating magpie in any way (the Dock, Command-Tab) would pull the open
 // window off its own Space onto the user's (#1252). Without focus, it is
-// shown and left behind the app the user is in (a restart by itself).
+// shown and left behind the app the user is in (a restart by itself),
+// asking nothing of the user (showQuietly).
 func showHere(w *application.WebviewWindow, focus bool) {
 	setMovesToActiveSpace(w, true)
-	showWebview(w)
 	if focus {
+		showWebview(w)
 		w.Focus()
+	} else {
+		showQuietly(w)
 	}
 	time.AfterFunc(spaceSettle, func() {
 		application.InvokeAsync(func() { setMovesToActiveSpace(w, false) })

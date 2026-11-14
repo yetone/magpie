@@ -20,9 +20,10 @@ const wpfRestoreToMaximized = 0x0002
 // showMinimised puts w, placed and not shown yet, onto the taskbar as a
 // window minimised there: neither shown on screen nor activated, so the
 // app the user is in keeps the keyboard. Wails' Show (SW_SHOW) would
-// activate it. Restored, it comes back where it was put, maximised if
-// maximise, its page shown (TestRestartMinimisedComesBackMinimised). On
-// the main thread.
+// activate it, and so does SW_SHOWMINNOACTIVE, which quietly turns
+// down. Restored, it comes back where it was put, maximised if maximise,
+// its page shown (TestRestartMinimisedComesBackMinimised). On the main
+// thread.
 func showMinimised(w *application.WebviewWindow, maximise bool) {
 	hwnd := w32.HWND(uintptr(w.NativeWindow()))
 	wp := w32.WINDOWPLACEMENT{}
@@ -40,7 +41,9 @@ func showMinimised(w *application.WebviewWindow, maximise bool) {
 	} else {
 		wp.Flags &^= wpfRestoreToMaximized
 	}
-	if !w32.SetWindowPlacement(hwnd, &wp) {
+	var placed bool
+	quietly(uintptr(hwnd), func() { placed = w32.SetWindowPlacement(hwnd, &wp) })
+	if !placed {
 		showHere(w, false)
 		if maximise {
 			w.Maximise()

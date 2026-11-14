@@ -79,7 +79,8 @@ func init() {
 	// the page says every 50ms whether it is visible
 	seen := make(chan string, 1024)
 	app := application.New(application.Options{
-		Name: "magpie minimised restart regression",
+		Name:    "magpie minimised restart regression",
+		Windows: windowsOptions(),
 		Assets: application.AssetOptions{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path == "/vis" {
 				select {

@@ -91,7 +91,6 @@ func TestRestartedWindowIsDrawn(t *testing.T) {
 var (
 	procPrintWindow            = user32.NewProc("PrintWindow")
 	procWindowFromPoint        = user32.NewProc("WindowFromPoint")
-	procGetAncestor            = user32.NewProc("GetAncestor")
 	procCreateCompatibleDC     = windows.NewLazySystemDLL("gdi32.dll").NewProc("CreateCompatibleDC")
 	procCreateCompatibleBitmap = windows.NewLazySystemDLL("gdi32.dll").NewProc("CreateCompatibleBitmap")
 	procSelectObject           = windows.NewLazySystemDLL("gdi32.dll").NewProc("SelectObject")
