@@ -72,7 +72,7 @@ func sharedBalanceHist(cards []SubscriptionQuota) balanceHist {
 		if sharesAccountBalance(q) {
 			balanceHistMu.Lock()
 			defer balanceHistMu.Unlock()
-			return readBalanceHist()
+			return balanceHistShared() // shareBalances only reads it
 		}
 	}
 	return nil

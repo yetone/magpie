@@ -28,6 +28,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/lastgood"
 	"github.com/yetone/magpie/internal/lazyre"
 )
@@ -75,14 +76,32 @@ var balanceHistMu sync.Mutex
 
 func balanceHistPath() string { return filepath.Join(filepath.Dir(Path()), "balance-history.json") }
 
-func readBalanceHist() balanceHist {
-	h := balanceHist{}
-	if b, err := os.ReadFile(balanceHistPath()); err == nil {
+// balanceHistShared is the file as last parsed, while it is unchanged
+// (filememo): every usage read gives each balance its trend from it, and
+// the file runs to hundreds of KB. It is shared: never changed.
+func balanceHistShared() balanceHist {
+	h, err := filememo.Read("balance-history", balanceHistPath(), func(b []byte) (balanceHist, error) {
+		h := balanceHist{}
 		if json.Unmarshal(b, &h) != nil || h == nil {
-			return balanceHist{}
+			return balanceHist{}, nil
 		}
+		return h, nil
+	})
+	if err != nil || h == nil {
+		return balanceHist{}
 	}
 	return h
+}
+
+// readBalanceHist is the file for a caller to change and write: a copy of
+// balanceHistShared, each key's points its own.
+func readBalanceHist() balanceHist {
+	h := balanceHistShared()
+	out := make(balanceHist, len(h))
+	for k, pts := range h {
+		out[k] = slices.Clone(pts)
+	}
+	return out
 }
 
 func writeBalanceHist(h balanceHist) {
@@ -242,7 +261,7 @@ func noteBalanceHistory(qs []SubscriptionQuota, now time.Time) {
 			continue
 		}
 		if h == nil {
-			h = readBalanceHist()
+			h = balanceHistShared() // read only from here on
 		}
 		key := quotaHistKey(q.Provider, q.User)
 		cs := balanceCurrencies(q.Balance)
