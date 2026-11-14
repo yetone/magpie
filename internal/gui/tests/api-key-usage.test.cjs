@@ -97,7 +97,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         : { addButton: "Add", first: "Make first", remove: "Remove", failed: "Failed", all: "All gateway keys" };
       await page.goto("http://magpie.test/?view=providers");
       await page.locator(".row.provider", { hasText: "Relay" }).click();
-      assert.equal(await page.locator(".accts .acc:not(.add)").count(), 2);
+      assert.equal(await page.locator(".accts .acc:not(.add):not(.keys-copy-all)").count(), 2);
       await page.locator(".accts .acc.add").click();
       await page.locator(".acc.adding .kf input").nth(0).fill("Backup");
       await page.locator(".acc.adding .kf input").nth(1).fill("test-new");

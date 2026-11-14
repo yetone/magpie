@@ -3,6 +3,7 @@ package provider
 import (
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -60,5 +61,30 @@ func TestAddKeys(t *testing.T) {
 	}
 	if k := p.KeyList()[1]; p.RestKey(k) != "bulk#"+KeyID("k2") {
 		t.Fatalf("rest key %q", p.RestKey(k))
+	}
+}
+
+// AllKeys gives every key a provider holds, on or off, in its list's
+// order, each once, for another magpie to take in with SplitKeys
+// (@emilochen on X); a signed-in account has none.
+func TestAllKeys(t *testing.T) {
+	h := t.TempDir()
+	t.Setenv("HOME", h)
+	t.Setenv("USERPROFILE", h)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
+	if err := Save(Provider{ID: "bulk", Name: "Bulk", Chat: "https://example.invalid/v1", Key: "k1", KeyName: "Team",
+		Keys: []KeyAccount{{Key: "k2", Off: true}, {Name: "Spare", Key: "k3", Protocol: Anthropic}, {Key: "k1"}}}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := AllKeys("bulk")
+	if want := []string{"k1", "k2", "k3"}; err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %q, %v", got, err)
+	}
+	if !reflect.DeepEqual(SplitKeys(strings.Join(got, "\n")), got) {
+		t.Fatal("what it gives is not what Paste several reads")
+	}
+	if _, err := AllKeys("nope"); err == nil {
+		t.Fatal("no provider: no error")
 	}
 }

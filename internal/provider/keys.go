@@ -268,6 +268,36 @@ func SplitKeys(text string) []string {
 	return out
 }
 
+// AllKeys is every key a provider holds, on or off, in the order its
+// list shows them, each once: what Copy all keys and `magpie provider
+// keys <id>` give, one a line, for another magpie's Paste several or
+// `magpie provider keys <id> add` to take (@emilochen on X: one
+// provider's keys from this computer to a magpie in the cloud). Only
+// the keys go: their names, protocols and plans are this magpie's.
+// A signed-in account has none to give.
+func AllKeys(id string) ([]string, error) {
+	p, err := Find(id)
+	if err != nil {
+		return nil, err
+	}
+	if p.Account != nil {
+		return nil, errors.New("a signed-in account has no keys")
+	}
+	var out []string
+	seen := map[string]bool{}
+	add := func(k string) {
+		if k = strings.TrimSpace(k); k != "" && !seen[k] {
+			seen[k] = true
+			out = append(out, k)
+		}
+	}
+	add(p.Key)
+	for _, k := range p.Keys {
+		add(k.Key)
+	}
+	return out, nil
+}
+
 // AddKeys saves several keys at once, on, after the ones the provider has,
 // with the protocol given: those it has already are passed over. added is
 // how many were new, had how many it had.

@@ -1968,6 +1968,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// the provider's (#474)
 			Account string   `json:"account"`
 			Allow   []string `json:"allow"`
+			// AllKeys, for key: every key the provider holds, one a line,
+			// for Copy all keys (provider.AllKeys)
+			AllKeys bool `json:"allKeys"`
 			// Cap, for accountcap: the share (1–99) of its windows the
 			// account is used to at most, 0 for no cap; for windowcap, the
 			// share of Window alone (1–99, 100 for none on it), 0 to have
@@ -2682,7 +2685,18 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// the saved key, for the editor's Show button; it never
 			// leaves this machine (the panel is served on loopback).
 			// With Account, the key of that id: each of several keys'
-			// rows copies its own (#1480).
+			// rows copies its own (#1480). With AllKeys, every one of
+			// them, one a line, as Paste several takes them in another
+			// magpie (@emilochen on X); never logged.
+			if req.AllKeys {
+				keys, err := provider.AllKeys(in.ID)
+				if err != nil {
+					fail(rw, err)
+					return
+				}
+				writeJSON(rw, map[string]any{"key": strings.Join(keys, "\n"), "count": len(keys)})
+				return
+			}
 			if req.Account != "" {
 				k, err := provider.KeyOf(in.ID, req.Account)
 				if err != nil {

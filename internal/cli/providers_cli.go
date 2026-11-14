@@ -76,6 +76,8 @@ const providerUsage = `usage:
                                           asked once, nothing read into them, no other provider tried;
                                           errors=magpie, the default, has magpie handle them
   magpie provider key <id> <key>          change the API key
+  magpie provider keys <id> [add [key…|-]]   print every key, one a line, or add keys (as words,
+                                          or one a line on stdin), to carry them to another magpie
   magpie provider icon <id> <file|name>   give a custom provider a picture (PNG, JPEG, SVG…) or a built-in icon
   magpie provider fallback <id> <provider/model>…   where requests go when it's out of quota or down (none clears)
   magpie provider models <id> [ids…]      fetch the vendor's model list, or choose which models to expose:
@@ -688,6 +690,8 @@ func providerCmd(args []string) error {
 		return spendCapCmd(rest)
 	case "key-rate", "key-rates":
 		return keyRateCmd(rest)
+	case "keys":
+		return keysCmd(rest, os.Stdin, os.Stdout)
 	case "account-weight", "account-weights":
 		return accountWeightCmd(rest)
 	case "queue":

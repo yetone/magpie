@@ -3004,12 +3004,12 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .acc.new { animation: sub-in .3s var(--ease-out); }
 .acc.new .dot { animation: copy-pop .3s var(--ease-out); }
 @keyframes sub-in { from { opacity: 0; transform: translateY(-4px); background: var(--pill-hover); } }
-.acc.add { width: 100%; color: var(--fg-2); background: none; border: 0 solid var(--line-2); cursor: default; }
-.acc + .acc.add { border-top-width: 1px; }
-.acc.add .dot { box-shadow: inset 0 0 0 1.5px var(--faint); border-radius: 50%; }
-.acc.add .n { font-weight: 450; }
-.acc.add:hover { background: var(--card-2); color: var(--fg); }
-.acc.add:hover .dot { box-shadow: inset 0 0 0 1.5px var(--fg); color: var(--fg); }
+.acc.add, .acc.keys-copy-all { width: 100%; color: var(--fg-2); background: none; border: 0 solid var(--line-2); cursor: default; }
+.acc + .acc.add, .acc + .acc.keys-copy-all { border-top-width: 1px; }
+.acc.add .dot, .acc.keys-copy-all .dot { box-shadow: inset 0 0 0 1.5px var(--faint); border-radius: 50%; }
+.acc.add .n, .acc.keys-copy-all .n { font-weight: 450; }
+.acc.add:hover, .acc.keys-copy-all:hover { background: var(--card-2); color: var(--fg); }
+.acc.add:hover .dot, .acc.keys-copy-all:hover .dot { box-shadow: inset 0 0 0 1.5px var(--fg); color: var(--fg); }
 
 /* a long list of keys, folded (361 on Discord): All N keys opens it on a
    filter, removing many at once, and a page of rows */

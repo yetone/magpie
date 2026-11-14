@@ -63,3 +63,16 @@ window.keysTag = function (p, m) {
   tag.title = t("Listed by {keys} only", { keys: names.join(", ") + (n > names.length ? " …" : "") });
   return tag;
 };
+// Copy all keys (@emilochen on X): every key of the provider, one a line,
+// for Paste several in another magpie; each key's row still copies its
+// own. Not .add: that is the one row that adds.
+window.copyAllKeysRow = function (p) {
+  const all = addRow(t("Copy all {n} keys", { n: p.keyList.length }), async () => {
+    try {
+      const r = await api("provider/key", { id: p.id, allKeys: true });
+      copy(r.key, "", null, t("{n} keys copied, one a line — paste them into Paste several in another magpie", { n: r.count }));
+    } catch (err) { statusErr(err); }
+  }, COPY_ICON);
+  all.classList.replace("add", "keys-copy-all");
+  return [all];
+};
