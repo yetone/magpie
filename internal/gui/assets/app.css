@@ -1040,6 +1040,12 @@ body.panel .row.pref.flash { border-radius: 10px; }
 .qt .qt-acct { min-width: 120px; max-width: 220px; color: var(--fg-2); }
 .qt .subscription-account { margin: 0; font-size: 12px; }
 .qt .qt-acct .quota-of, .qt .qt-acct .quota-seat { color: var(--muted); }
+/* the name over its account, seat and shared keys, a line each with the
+   cell's whole width (normalcoder_ on X: side by side, a long one was cut);
+   the eye stays on the first line */
+.qt .qt-acct .subscription-account { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 4px; row-gap: 1px; }
+.qt .qt-acct .subscription-account > * { grid-column: 1; }
+.qt .qt-acct .subscription-account > .acct-eye { grid-column: 2; grid-row: 1; }
 .qt-win { display: grid; gap: 4px; }
 .qt-win + .qt-win { margin-top: 8px; }
 .qt-fig { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
