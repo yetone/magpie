@@ -19,7 +19,7 @@ func TestLoopsCountedPerModel(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
-	now := time.Now()
+	now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local)) // midnight never falls between a call and Today (#6486)
 	at := func(m int) string { return now.Add(time.Duration(m-10) * time.Second).Format(time.RFC3339Nano) }
 	lines := []string{
 		// two replies of kimi ended for looping, as the gateway logs them:

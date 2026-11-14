@@ -14,7 +14,7 @@ import (
 // alias, a row for a model that is none, its cost counted twice. A call under
 // a model of the agent's own stays (it never went through the gateway).
 func TestAliasCallsAreTheGatewaysNotDirect(t *testing.T) {
-	now := time.Now()
+	now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local)) // midnight never falls between a call and Today (#6486)
 	tk := sessions.Tokens{Input: 120, Output: 40}
 	logs := []sessions.Call{
 		{Time: now.Add(-1 * time.Minute), Agent: "claude-desktop", Session: "s1", Model: "magpie-7416897221.anthropic.claude-opus-5-5", Tokens: tk},
