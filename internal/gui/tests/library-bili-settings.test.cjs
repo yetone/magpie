@@ -2,7 +2,8 @@
 // billion-context.json's settings in the Library's billion-context tab
 // (@Luxzinw on X): below the agents, the summary model with its switch,
 // fold only when nudged, and the nudge step in front; the compression
-// philosophy under Advanced, folded until opened. Each change posts only
+// philosophy and the compression markers' switch (@JamesYu32 on X:
+// compress.visibilityMarkers) under Advanced, folded until opened. Each change posts only
 // what changed to /api/library/bili/settings, and the status says whether
 // the running billion-context reloaded it. The model is picked from the
 // app's menu (never a <select>): magpie's models and the file's own
@@ -35,7 +36,7 @@ const MODELS = [
 const settings = (st) => st.bad
   ? { path: `${HOME}/.config/billion-context/billion-context.json`, bad: "billion-context.json isn't JSON billion-context can read", targets: [], recipes: [], models: MODELS }
   : { path: `${HOME}/.config/billion-context/billion-context.json`, growth: st.growth, nudge: st.nudge, summary: st.summary, targets: st.targets,
-    recipes: ["claude/claude-haiku"], philosophy: st.philosophy, risk: !!st.philosophy, reloaded: st.reloaded, running: 1, models: MODELS };
+    recipes: ["claude/claude-haiku"], philosophy: st.philosophy, risk: !!st.philosophy, markers: st.markers, reloaded: st.reloaded, running: 1, models: MODELS };
 
 function server(lang, st) {
   return async (route) => {
@@ -56,6 +57,7 @@ function server(lang, st) {
       if ("target" in c) st.targets = [c.target, ...st.targets.filter((x) => x !== c.target)];
       if ("summary" in c) st.summary = c.summary;
       if ("philosophy" in c) st.philosophy = c.philosophy;
+      if ("markers" in c) st.markers = c.markers;
       st.reloaded = 1;
       return route.fulfill({ json: settings(st) });
     }
@@ -99,7 +101,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     });
     for (const lang of LANGS) for (const width of [1100, 420]) {
       await t.test(`${lang} ${width}`, async () => {
-        const st = { growth: 0, nudge: false, summary: false, targets: [], philosophy: "", posts: [], reloaded: 0 };
+        const st = { growth: 0, nudge: false, summary: false, targets: [], philosophy: "", markers: true, posts: [], reloaded: 0 };
         const ctx = await browser.newContext({ viewport: { width, height: 900 } });
         const page = await ctx.newPage();
         page.setDefaultTimeout(5000);
@@ -157,7 +159,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForFunction(() => document.querySelector("#view-library .lib-bili-phil textarea")?.value === "Keep every file path verbatim." && !document.querySelector("#view-library .lib-bili-phil textarea").disabled);
         assert.deepEqual(st.posts.at(-1), { philosophy: "Keep every file path verbatim." });
         assert.equal(await more.evaluate((d) => d.open), true, "Advanced closed again on its own");
-        assert.equal(st.posts.length, 4);
+
+        // Advanced: the compression markers, on by default, switched off
+        const mk = v.locator(".lib-bili-marks .lib-switch");
+        assert.equal(await mk.getAttribute("aria-checked"), "true");
+        const mname = (await v.locator(".lib-bili-marks .name").textContent()).trim();
+        if (lang !== "en") assert.notEqual(mname, "Show compression markers");
+        await mk.click();
+        await page.waitForFunction(() => document.querySelector("#view-library .lib-bili-marks .lib-switch")?.getAttribute("aria-checked") === "false");
+        assert.deepEqual(st.posts.at(-1), { markers: false });
+        assert.equal(await more.evaluate((d) => d.open), true, "Advanced closed again on its own");
+        assert.equal(st.posts.length, 5);
 
         const sideways = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
         assert(sideways <= 0, `the page scrolls sideways by ${sideways}px`);

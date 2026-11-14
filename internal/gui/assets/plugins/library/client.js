@@ -2013,6 +2013,17 @@ magpie.plugin("library", (ctx) => {
 
     const more = el("details", "lib-more lib-bili-more");
     more.append(el("summary", "", t("Advanced")));
+    // compress.visibilityMarkers: the 📦/❌ lines after a fold, which
+    // some models imitate (@JamesYu32 on X)
+    const marks = el("div", "list lib-list lib-bili-marks");
+    const mk = toggle(s.markers !== false, t("Show compression markers"), (v) => biliChange({ markers: v }));
+    mk.disabled = biliSetBusy;
+    const mr = el("div", "row lib-row");
+    const mw = el("div", "who");
+    mw.append(el("div", "name", t("Show compression markers")));
+    mr.append(mw, el("span", "grow"), mk);
+    marks.append(mr);
+    more.append(marks);
     const ph = el("div", "lib-bili-phil");
     ph.append(el("div", "name", t("Compression philosophy")));
     const ta = el("textarea", "lib-text small");

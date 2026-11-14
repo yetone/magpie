@@ -950,6 +950,7 @@ input.lib-memq:focus, input.lib-memtags:focus, input.lib-memwhy:focus { border-c
 .lib-bili-more > summary:hover { color: var(--fg); }
 .lib-bili-more > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .lib-bili-more > summary, .lib-bili-more > summary::before { transition: none; } }
+.lib-bili-more > .lib-bili-marks { margin: 8px 0 0 15px; }
 .lib-bili-phil { display: grid; gap: 6px; padding: 8px 0 0 15px; }
 .lib-bili-phil > .name { font-size: 12.5px; color: var(--fg-2); }
 .lib-bili-phil .lib-acts { justify-content: flex-end; }

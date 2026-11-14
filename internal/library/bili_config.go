@@ -344,6 +344,10 @@ type BiliSettings struct {
 	// only with compress.acknowledgePromptsRisk (Risk)
 	Philosophy string `json:"philosophy"`
 	Risk       bool   `json:"risk"`
+	// Markers is compress.visibilityMarkers: the 📦/❌ lines bili adds
+	// after a compress, decompress or search_context call runs, on unless
+	// the file turns them off
+	Markers bool `json:"markers"`
 	// Reloaded of Running are the bilis that read a change again, of the
 	// ones running here
 	Reloaded int `json:"reloaded,omitempty"`
@@ -364,7 +368,7 @@ func ReadBiliSettings() (*BiliSettings, error) {
 }
 
 func biliSettingsOf(p, text string) *BiliSettings {
-	s := &BiliSettings{Path: p, Targets: []string{}, Recipes: []string{}}
+	s := &BiliSettings{Path: p, Targets: []string{}, Recipes: []string{}, Markers: true}
 	r, ok := biliParse(text)
 	if !ok {
 		s.Bad = "billion-context.json isn't JSON billion-context can read"
@@ -382,6 +386,8 @@ func biliSettingsOf(p, text string) *BiliSettings {
 	}
 	s.Philosophy = c.Get("prompts.compressPhilosophy").String()
 	s.Risk = c.Get("acknowledgePromptsRisk").Bool()
+	// bili takes only a boolean here; anything else isn't false to it
+	s.Markers = c.Get("visibilityMarkers").Type != gjson.False
 	r.Get("providers").ForEach(func(k, v gjson.Result) bool {
 		name := k.String()
 		if name == biliRecipe && biliOurs(r) || !v.IsObject() || !v.Get("baseUrl").Exists() && !v.Get("api").Exists() {
@@ -415,6 +421,9 @@ type BiliChange struct {
 	// Philosophy "" takes it out; one set turns acknowledgePromptsRisk on,
 	// which bili needs to use it
 	Philosophy *string `json:"philosophy"`
+	// Markers false turns compress.visibilityMarkers off; true takes the
+	// setting out, back to bili's default, which shows them
+	Markers *bool `json:"markers"`
 }
 
 // SetBiliSettings changes billion-context.json and has the bilis running
@@ -514,6 +523,13 @@ func setBiliSettings(p string, c BiliChange) (string, error) {
 		} else {
 			set = append(set, edit.KV{Path: "compress.prompts.compressPhilosophy", Value: ph},
 				edit.KV{Path: "compress.acknowledgePromptsRisk", Value: true})
+		}
+	}
+	if c.Markers != nil {
+		if *c.Markers {
+			del = append(del, "compress.visibilityMarkers")
+		} else {
+			set = append(set, edit.KV{Path: "compress.visibilityMarkers", Value: false})
 		}
 	}
 	// a key taken out of nothing changes nothing; PatchJSON would refuse it

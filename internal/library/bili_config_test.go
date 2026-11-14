@@ -293,6 +293,43 @@ func TestBiliSettingsChanged(t *testing.T) {
 	}
 }
 
+// TestBiliMarkersSwitch (@JamesYu32 on X: a switch for visibilityMarkers):
+// compress.visibilityMarkers reads as on until the file says false, the
+// switch writes false where bili reads it (CONFIGURATION.md, 0.1.213),
+// keeps the rest of the file, and turning it back on takes the key out to
+// bili's default rather than leaving a value magpie chose. A provider's or
+// model's own setting is the user's and stays as it is.
+func TestBiliMarkersSwitch(t *testing.T) {
+	h, _ := biliSandbox(t, "4567")
+	write(t, biliCfgPath(h), biliFileFixture)
+	if s := biliMust[*BiliSettings](t)(ReadBiliSettings()); !s.Markers {
+		t.Fatal("markers read as off with nothing set")
+	}
+	off, on := false, true
+	s := biliMust[*BiliSettings](t)(SetBiliSettings(BiliChange{Markers: &off}))
+	r := biliJSON(t, biliCfgPath(h))
+	if v := r.Get("compress.visibilityMarkers"); v.Type != gjson.False || s.Markers {
+		t.Fatalf("not turned off: %s (read back %v)", r.Get("compress").Raw, s.Markers)
+	}
+	if !strings.Contains(read(t, biliCfgPath(h)), "// my summary models") || !r.Get("retained").Bool() {
+		t.Error("the rest of the file wasn't kept")
+	}
+	s = biliMust[*BiliSettings](t)(SetBiliSettings(BiliChange{Markers: &on}))
+	if biliJSON(t, biliCfgPath(h)).Get("compress.visibilityMarkers").Exists() || !s.Markers {
+		t.Error("turning markers back on left the key in")
+	}
+	// a provider's own setting is left alone, and a non-boolean bili
+	// rejects is not read as off
+	write(t, biliCfgPath(h), `{"compress":{"visibilityMarkers":"no"},"providers":{"x":{"compress":{"visibilityMarkers":false}}}}`)
+	if s := biliMust[*BiliSettings](t)(ReadBiliSettings()); !s.Markers {
+		t.Error(`"no" read as off`)
+	}
+	biliMust[*BiliSettings](t)(SetBiliSettings(BiliChange{Markers: &off}))
+	if r := biliJSON(t, biliCfgPath(h)); r.Get("providers.x.compress.visibilityMarkers").Type != gjson.False || r.Get("compress.visibilityMarkers").Type != gjson.False {
+		t.Errorf("got %s", r.Raw)
+	}
+}
+
 // TestBiliSettingsRefused: what bili would refuse, and so turn its whole
 // compress section off over, is never written: an out-of-range step, a
 // summary switched on with no model, a recipe of the user's named magpie,
