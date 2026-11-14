@@ -289,7 +289,10 @@ func siteOf(s string) string {
 // the user's dotfiles rather than where the skill came from.
 func gitRepoOf(dir string) string {
 	h := realDir(home())
-	for i := 0; i < 4 && dir != "" && dir != h; i++ {
+	// a skill's own folder and four above it: a probe finds skills as
+	// far as four folders into a repository (candidates), and a checkout's
+	// skills/team/writing/poem is traced from poem up to the checkout
+	for i := 0; i < 5 && dir != "" && dir != h; i++ {
 		if p := filepath.Dir(dir); p == h && strings.HasPrefix(filepath.Base(dir), ".") {
 			return ""
 		}

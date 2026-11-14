@@ -254,9 +254,10 @@ func (l *Library) foldBeside() []string {
 				continue
 			}
 		case sameRepo(t.Source, *s.Source):
-			// from another folder of that repository, which a check found
-			// it no longer has: moved into a group there
-			if t.Gone == "" || t.Source.Path == s.Source.Path {
+			// the same folder of that repository (added once as owner/repo
+			// and once by its git address), or another folder of it, which
+			// a check found it no longer has: moved into a group there
+			if t.Source.Path != s.Source.Path && t.Gone == "" {
 				continue
 			}
 		default:

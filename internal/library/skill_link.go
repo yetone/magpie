@@ -93,18 +93,18 @@ func tracedTo(r string, src Source) bool {
 }
 
 // sameRepo is whether a skill's source is the repository src is, at any
-// folder of it.
+// folder of it. A GitHub repository added by its git address
+// (git@github.com:owner/repo.git) is the one added as owner/repo: taken
+// for another, each of its skills went in beside itself under the owner's
+// name (Refeccd on X).
 func sameRepo(a *Source, src Source) bool {
-	if a == nil || a.Kind != src.Kind {
+	if a == nil || !a.remote() || !src.remote() {
 		return false
 	}
-	switch src.Kind {
-	case "github":
+	if a.Kind == "github" && src.Kind == "github" {
 		return strings.EqualFold(a.Repo, src.Repo)
-	case "git":
-		return sameGitRepo(a.Repo, src.Repo)
 	}
-	return false
+	return sameGitRepo(a.Repo, src.Repo)
 }
 
 // repoRoot is the folder a repository was fetched to, from where the

@@ -1,7 +1,10 @@
 package library
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -218,4 +221,176 @@ func TestSkillBesideAnotherStays(t *testing.T) {
 	if len(l.Skills) != 2 || l.skill("review-team") == nil {
 		t.Fatalf("the library has %d skills", len(l.Skills))
 	}
+}
+
+// A copy an earlier magpie left beside itself (review-team) is folded
+// back on the next read of the library, with no change made: upgrading
+// alone had left it there (Refeccd on X, "并没有修好").
+func TestSkillBesideItselfFoldsOnRead(t *testing.T) {
+	h := sandbox(t)
+	addr, _ := groupedRepo(t)
+	write(t, filepath.Join(skillDir("review"), "SKILL.md"), "---\nname: review\ndescription: Code review\n---\nv1\n")
+	write(t, filepath.Join(skillDir("review-team"), "SKILL.md"), "---\nname: review-team\ndescription: Review code\n---\nv2\n")
+	// saved as the old install left it, not through a change (which folds)
+	l, err := load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := Source{Kind: "git", Repo: addr, Path: "coding/review"}
+	dir := skillDir("review-team")
+	l.Skills = append(l.Skills, &Skill{Name: "review", From: addr, Agents: []string{"claude"}},
+		&Skill{Name: "review-team", Called: "review", Source: &src, Agents: []string{"codex"}, Hash: hashDir(dir), Own: ownHash(dir)})
+	if err := l.save(); err != nil {
+		t.Fatal(err)
+	}
+
+	v, err := Read(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, s := range v.Skills {
+		names = append(names, s.Name)
+	}
+	if !slices.Equal(names, []string{"review"}) {
+		t.Fatalf("the page shows %v", names)
+	}
+	l, _ = load()
+	if s := l.skill("review"); s == nil || s.Source == nil || s.Source.Path != "coding/review" || !slices.Equal(s.Agents, []string{"claude", "codex"}) {
+		t.Fatalf("review is %+v", s)
+	}
+	if _, err := os.Lstat(skillDir("review-team")); err == nil {
+		t.Error("review-team is still in the library's folder")
+	}
+	// the agents follow in the same read
+	if got := read(t, filepath.Join(h, ".codex/skills/review/SKILL.md")); !strings.Contains(got, "v2") {
+		t.Errorf("codex's review: %q", got)
+	}
+	if _, err := os.Lstat(filepath.Join(h, ".codex/skills/review-team")); err == nil {
+		t.Error("codex still has review-team")
+	}
+}
+
+// gitHubBothWays serves files as refeccd/grouped-skills' tarball, and
+// maps git@github.com:refeccd/grouped-skills.git to a git repository of
+// the same files. The repository is these tests' own: tooBig remembers a
+// repository for the whole run, and other tests mark owner/repo too big.
+func gitHubBothWays(t *testing.T, files map[string]string) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(tarball(t, files))
+	}))
+	t.Cleanup(srv.Close)
+	old := tarballURL
+	tarballURL = func(repo, ref string) string { return srv.URL + "/" + repo + "/" + ref }
+	t.Cleanup(func() { tarballURL = old })
+	addr, _ := gitRepo(t, files)
+	ssh := "git@github.com:refeccd/grouped-skills.git"
+	write(t, os.Getenv("GIT_CONFIG_GLOBAL"), "[url \""+addr+"\"]\n\tinsteadOf = "+ssh+"\n")
+	return ssh
+}
+
+var groupedFiles = map[string]string{
+	"skills/writing/blog/SKILL.md":  "---\nname: blog\ndescription: Write blog posts\n---\nv1\n",
+	"skills/coding/review/SKILL.md": "---\nname: review\ndescription: Review code\n---\nv1\n",
+}
+
+// A GitHub repository added as owner/repo, then by its git address: the
+// same repository, whose skills the library has, not others by their
+// names (they went in as blog-refeccd and review-refeccd).
+func TestGitHubRepoByGitAddressIsHad(t *testing.T) {
+	sandbox(t)
+	ssh := gitHubBothWays(t, groupedFiles)
+	paths := []string{"skills/writing/blog", "skills/coding/review"}
+	ok(t)(InstallSkills("refeccd/grouped-skills", paths, []string{"claude"}))
+	p, err := ProbeSkills(ssh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range p.Candidates {
+		if !c.Have {
+			t.Errorf("%s isn't had", c.Path)
+		}
+	}
+	noSuffix(t, p, 2)
+	r := ok(t)(InstallSkills(ssh, paths, []string{"claude"}))
+	if len(r.Installed) != 0 || len(r.Had) != 2 {
+		t.Errorf("installed %v had %v", r.Installed, r.Had)
+	}
+	noSuffix(t, p, 2)
+}
+
+// What that left before: blog-refeccd, from the git address, beside blog
+// from refeccd/grouped-skills. They are one skill, and fold back on the next read.
+func TestGitHubCopyByGitAddressFoldsBack(t *testing.T) {
+	sandbox(t)
+	ssh := gitHubBothWays(t, groupedFiles)
+	ok(t)(InstallSkills("refeccd/grouped-skills", []string{"skills/writing/blog"}, []string{"claude"}))
+	write(t, filepath.Join(skillDir("blog-refeccd"), "SKILL.md"), "---\nname: blog-refeccd\ndescription: Write blog posts\n---\nv1\n")
+	l, _ := load()
+	src := Source{Kind: "git", Repo: ssh, Path: "skills/writing/blog"}
+	dir := skillDir("blog-refeccd")
+	l.Skills = append(l.Skills, &Skill{Name: "blog-refeccd", Called: "blog", Source: &src, Agents: []string{"codex"}, Hash: hashDir(dir), Own: ownHash(dir)})
+	if err := l.save(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Read(nil); err != nil {
+		t.Fatal(err)
+	}
+	l, _ = load()
+	if len(l.Skills) != 1 {
+		t.Fatalf("the library has %d skills", len(l.Skills))
+	}
+	if s := l.skill("blog"); s == nil || s.Called != "" || !slices.Equal(s.Agents, []string{"claude", "codex"}) {
+		t.Fatalf("blog is %+v", s)
+	}
+}
+
+// A checkout whose skills are four folders into it (skills/team/writing/
+// poem), linked into an agent and taken into the library, then its
+// repository added: each skill is traced to the checkout's origin and
+// links, the one the user edited too, rather than going in beside itself.
+func TestCheckoutSkillFourDeepIsTraced(t *testing.T) {
+	h := sandbox(t)
+	const depth = "skills/team/writing"
+	addr, _ := gitRepo(t, map[string]string{
+		depth + "/blog/SKILL.md": "---\nname: blog\ndescription: Write blog posts\n---\nv1\n",
+		depth + "/poem/SKILL.md": "---\nname: poem\ndescription: Write poems\n---\nv1\n",
+	})
+	pretty := "https://git.example.com/team/sub/skills.git"
+	write(t, os.Getenv("GIT_CONFIG_GLOBAL"), "[url \""+addr+"\"]\n\tinsteadOf = "+pretty+"\n")
+	co := filepath.Join(h, "code", "skills")
+	if out, err := exec.Command(realGit, "clone", "-q", addr, co).CombinedOutput(); err != nil {
+		t.Fatal(err, string(out))
+	}
+	if out, err := exec.Command(realGit, "-C", co, "remote", "set-url", "origin", pretty).CombinedOutput(); err != nil {
+		t.Fatal(err, string(out))
+	}
+	// edited, so its description is no longer the repository's
+	write(t, filepath.Join(co, depth, "poem", "SKILL.md"), "---\nname: poem\ndescription: my poems\n---\nmine\n")
+	for _, n := range []string{"blog", "poem"} {
+		if err := os.MkdirAll(filepath.Join(h, ".claude", "skills"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(filepath.Join(co, depth, n), filepath.Join(h, ".claude", "skills", n)); err != nil {
+			t.Skip("no symlinks here:", err)
+		}
+	}
+	ok(t)(ImportSkills([]string{"blog", "poem"}))
+	p, err := ProbeSkills(pretty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range p.Candidates {
+		if !c.Links {
+			t.Errorf("%s doesn't link", c.Path)
+		}
+	}
+	noSuffix(t, p, 2)
+	r := ok(t)(InstallSkills(pretty, []string{depth + "/blog", depth + "/poem"}, []string{"claude"}))
+	if !slices.Equal(r.Linked, []string{"blog", "poem"}) {
+		t.Errorf("linked %v installed %v", r.Linked, r.Installed)
+	}
+	noSuffix(t, p, 2)
 }

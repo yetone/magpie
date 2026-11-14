@@ -1551,18 +1551,14 @@ func installChange(f func(l *Library, in *installed) error) (*Result, error) {
 // fromSameSource is whether the library's skill came from where the one
 // being installed comes from: that repository's folder, or that folder.
 func fromSameSource(s *Skill, src Source, path, from string) bool {
-	if s.Source == nil || s.Source.Kind != src.Kind {
+	if s.Source == nil {
 		return false
 	}
-	switch src.Kind {
-	case "github":
-		return strings.EqualFold(s.Source.Repo, src.Repo) && s.Source.Path == path
-	case "git":
-		return sameGitRepo(s.Source.Repo, src.Repo) && s.Source.Path == path
-	case "folder":
-		return realDir(s.Source.Dir) == realDir(from)
+	if src.remote() {
+		// GitHub's owner/repo and its git address are one repository
+		return sameRepo(s.Source, src) && s.Source.Path == path
 	}
-	return false
+	return src.Kind == "folder" && s.Source.Kind == "folder" && realDir(s.Source.Dir) == realDir(from)
 }
 
 // installFrom adds the skills at those paths of a probe's source to the
