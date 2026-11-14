@@ -1494,6 +1494,13 @@ each one.
     earlier issues for the same test (#5946, #6359, #6516, #6202) stayed
     open after their fixes. Close an issue in the commit that fixes it
     (`Fixes #N`).
+  - A `-run` of the new tests is not a run of the package. d50ae6fcb
+    changed three files in internal/usage and ran only its two new
+    tests. 93762f968, the next commit, changed the same package, and
+    its record is from a run at 442964d70, before d50ae6fcb. Their
+    pushed pair first ran together in the review (go test
+    ./internal/usage ./internal/usageapi at 93762f968: ok). Run the
+    changed package whole, at the head being pushed.
 - **Done right on 10-17.** The retire stack (0f1666b38 to de671719a)
   diffed staticcheck's U1000 against its base for dead code, b98f906b1
   was red on the old code for an own-account gap, and 8 subscriptions
