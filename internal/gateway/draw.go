@@ -1347,7 +1347,7 @@ func restDrawer(c candidate, code int, msg string) {
 		// as the reply's headers told it, not quotaRest's guess
 		d, r.By = min(heard.Resets.Sub(now), longestQuota), "resets"
 	}
-	r.Until = now.Add(d)
+	r.Until = onWall(now.Add(d))
 	restingUntil.Lock()
 	restingUntil.m[r.Key] = r.Until
 	restingUntil.note[r.Key] = r

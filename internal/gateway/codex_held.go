@@ -84,7 +84,7 @@ func noteCodexHold(who string, status int, header http.Header, body []byte) {
 			windows[k] = slices.Clone(vs)
 		}
 	}
-	codexHolds.m[who] = codexHold{until: now.Add(d), status: status, why: why, body: append([]byte(nil), body...), ctype: header.Get("Content-Type"), codex: windows}
+	codexHolds.m[who] = codexHold{until: onWall(now.Add(d)), status: status, why: why, body: append([]byte(nil), body...), ctype: header.Get("Content-Type"), codex: windows}
 }
 
 // codexHeld is who's hold, while it lasts.

@@ -296,7 +296,7 @@ func (b *subscriptionBridge) keepForReset(run *subscriptionRun, req *Request, ow
 	}
 	now := time.Now()
 	s := &savedSession{session: cut, sessions: sessions, owner: owner, conv: conv, key: key, tools: tools,
-		at: now, until: now.Add(quotaShelfFor(owner, msg, now)), tui: tui, appended: appended, cachePrefix: prefix}
+		at: now, until: onWall(now.Add(quotaShelfFor(owner, msg, now))), tui: tui, appended: appended, cachePrefix: prefix}
 	b.mu.Lock()
 	if old := b.shelf[key]; old != nil {
 		go old.discard()

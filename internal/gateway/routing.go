@@ -1741,7 +1741,7 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	} else if a == nil && why != failOther && why != failVerify && why != failRestricted {
 		staleKeyAllowance(c.p) // a key that reads its windows, too
 	}
-	r.Until = now.Add(d)
+	r.Until = onWall(now.Add(d))
 	if a := c.p.Account; a != nil {
 		r.agent, r.user = a.UsageAgent(), a.User
 	} else if why == failQuota {
@@ -2056,7 +2056,7 @@ func restSlow(c candidate, now time.Time) (Rest, bool) {
 	if run.n > slowRests {
 		by = "backoff"
 	}
-	r := Rest{Why: failSlow, Status: http.StatusGatewayTimeout, Until: now.Add(d), By: by, Failures: run.n, Key: id, Model: c.model}
+	r := Rest{Why: failSlow, Status: http.StatusGatewayTimeout, Until: onWall(now.Add(d)), By: by, Failures: run.n, Key: id, Model: c.model}
 	if a := c.p.Account; a != nil {
 		r.agent, r.user = a.UsageAgent(), a.User
 	}
