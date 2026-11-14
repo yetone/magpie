@@ -19,7 +19,7 @@ func TestNoteCodexUsedUp(t *testing.T) {
 		now  bool
 		told int
 	}{{false, 0}, {true, 1}, {true, 1}, {false, 2}, {false, 2}} {
-		noteCodexUsedUp(c.now)
+		noteCodexUsedUp(c.now, c.now)
 		if told != c.told {
 			t.Fatalf("step %d (used up %v): told %d times, want %d", i, c.now, told, c.told)
 		}

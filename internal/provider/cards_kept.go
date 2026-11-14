@@ -119,11 +119,12 @@ func withAccountReadings(cards []SubscriptionQuota) []SubscriptionQuota {
 	}
 	read := map[string]SubscriptionQuota{}
 	c := &loginUsageCache
+	now := time.Now()
 	c.Lock()
 	for _, l := range ls {
 		k := l.Agent + "/" + strings.ToLower(l.User)
 		if e, ok := c.m[k]; ok {
-			read[k] = e.read
+			read[k] = e.asOf(now).read
 		}
 	}
 	c.Unlock()

@@ -56,6 +56,32 @@ func (e loginUsageEntry) state() readState {
 	return readState{at: at}
 }
 
+// asOf is e as it stands at now: a hold whose used-up window has started
+// again since the reading is over (holdEnded). The cache keeps a reading
+// as it was made, and with allowances read only when asked, or for the
+// catalog sync (CodexUsedUpKnown), one made hours before is handed back:
+// a Codex account that had run out read as held past its reset, and once
+// Codex was signed in to it again magpie was made its provider for it
+// (codex.out), the Codex app showing "magpie" for its account (davezfr on
+// X).
+//
+// A window whose reset had passed when the reading was made says nothing
+// against the vendor's word then (rate_limit.allowed false): only a reset
+// since the reading ends its hold.
+func (e loginUsageEntry) asOf(now time.Time) loginUsageEntry {
+	read := e.at
+	if !e.readAt.IsZero() {
+		read = e.readAt
+	}
+	if holdEnded(e.q, read, now) {
+		e.q.Held = false
+	}
+	if holdEnded(e.read, read, now) {
+		e.read.Held = false
+	}
+	return e
+}
+
 // loginRead is an account's allowance being read: whoever asks for it
 // meanwhile waits for it rather than asking the vendor again.
 type loginRead struct {
@@ -251,7 +277,7 @@ var noteHistoryWrite = noteQuotaHistory
 // allows, rather than asked for again — the vendors' endpoints are
 // rate limited, and two readings a moment apart told an account two ways.
 func loginReading(ctx context.Context, l Login) loginUsageEntry {
-	e := cachedLoginReading(ctx, l)
+	e := cachedLoginReading(ctx, l).asOf(time.Now())
 	if l.Agent == "codex" {
 		// what magpie spent of its resets, as of now: a reading kept from
 		// before one was spent still says it was
@@ -634,7 +660,7 @@ func loginReadingKnown(l Login) (loginUsageEntry, bool) {
 	c.Lock()
 	defer c.Unlock()
 	e, ok := c.m[key]
-	return e, ok
+	return e.asOf(time.Now()), ok
 }
 
 // codexLoginAuth is the auth.json of a ChatGPT account magpie knows: the

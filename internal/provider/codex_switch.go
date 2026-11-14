@@ -631,9 +631,14 @@ var codexWasUsedUp atomic.Bool
 // room again: the Codex app sends nothing at all for an account that is
 // out, a magpie model's turn included, so the agent package then makes
 // magpie Codex's provider, and puts it back beside the sign-in after
-// (#540). Only a change is told.
-func noteCodexUsedUp(now bool) {
-	if codexWasUsedUp.Swap(now) != now {
+// (#540). Only a change is told: from the last look's answer, or from
+// known, what CodexUsedUpKnown said before this look read again, which
+// is what the sync last went by. Codex signed in by hand to an account
+// whose kept reading said held made magpie its provider at that sync,
+// and the look's fresh "room" was the same as its last answer (for the
+// account Codex was on before), so nothing told the sync again.
+func noteCodexUsedUp(known, now bool) {
+	if codexWasUsedUp.Swap(now) != now || known != now {
 		catalog.Touched()
 	}
 }
@@ -683,6 +688,8 @@ func KeepOnAnAccountWithRoom(ctx context.Context) {
 		}
 		now := time.Now()
 		readCodex := codexDue(now, codexNext, codexWasIdle)
+		// what the sync last went by, before this look reads again
+		known := readCodex && CodexUsedUpKnown()
 		for _, agent := range switchedAgents {
 			if agent == "codex" && !readCodex {
 				continue
@@ -694,7 +701,7 @@ func KeepOnAnAccountWithRoom(ctx context.Context) {
 		syncClaudeProxyEnvNow()
 		if readCodex {
 			c, cancel := context.WithTimeout(ctx, time.Minute)
-			noteCodexUsedUp(CodexUsedUp(c))
+			noteCodexUsedUp(known, CodexUsedUp(c))
 			restartCodexAppLeftOnSpent(c)
 			cancel()
 			var codexEvery time.Duration

@@ -167,17 +167,22 @@ func (c *lastQuotasT) reading(key string) (SubscriptionQuota, bool) {
 	out, ok := c.reported(key)
 	if ok {
 		now := time.Now()
-		// as read, before any window started again (none had by the zero
-		// time)
-		wasUp := usedUp(out, time.Time{})
-		out.Windows = elapsed(out.Windows, now)
-		// a hold that came with a window used up ends when that window
-		// starts again; one with no window used up stands till a fresh read
-		if out.Held && wasUp && !usedUp(out, now) {
+		if holdEnded(out, time.Time{}, now) {
 			out.Held = false
 		}
+		out.Windows = elapsed(out.Windows, now)
 	}
 	return out, ok
+}
+
+// holdEnded is whether q's hold, read at read, is over at now: one that
+// came with a window used up ends when that window starts again. One with
+// no window used up stands till a fresh read. A kept reading, on disk
+// (reading) or in memory (loginUsageEntry.asOf), says nothing of a window
+// that started again since it was read. A zero read is the reading as the
+// vendor gave it, every window as it was then.
+func holdEnded(q SubscriptionQuota, read, now time.Time) bool {
+	return q.Held && usedUp(q, read) && !usedUp(q, now)
 }
 
 // reported is the dated snapshot, without treating a passed reset as a

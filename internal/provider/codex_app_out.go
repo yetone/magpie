@@ -39,12 +39,14 @@ var codexRecheck struct {
 // for tests.
 var codexReadNow = func(user string) {
 	StaleAllowance("codex", user)
+	// what the sync last went by, before this read changes it
+	known := CodexUsedUpKnown()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	if _, err := SwitchWhenSpent(ctx, "codex"); err != nil {
 		log.Printf("codex: switching to an account with room: %v", err)
 	}
-	noteCodexUsedUp(CodexUsedUp(ctx))
+	noteCodexUsedUp(known, CodexUsedUp(ctx))
 }
 
 // CodexMayBeUsedUp is a reply's word that user's ChatGPT account may be
