@@ -939,6 +939,32 @@ for a plugin that does not update by itself. See
 `TestDismissalHoldsForTheQuiet`, `TestUpdateQuietUntilBehindAWhile`,
 `update-quiet.test.cjs` and `update-hide.test.cjs`.
 
+### When an update downloads
+
+With downloads automatic (`NoAutoDownload` off, the default), a version
+magpie finds is downloaded at once, in the background, by whichever check
+found it: the clock's (`checkByClock`, 5 s after start, then every
+`UpdateEvery`), Check now, the Version row's refresh of a stale "latest"
+(`refreshLatest`), or a page asking in another language (`relang` sees a
+newer version and starts the clock's check). A newer version found while
+one is downloaded and waiting replaces it. Only these leave the waiting
+copy as it is: a restart's own check and the update dialog's (`keep`:
+`recheck`, `freshen`), so a click on Update restarts at once into what it
+names (canlee886 on X, 0.1.4051); a restart waiting for the gateway to go
+idle (`waiting`); and downloads on a click. From 0.1.4051 to 0.1.4207 the
+clock's check also kept the waiting copy, so every newer version waited
+for a click (canlee886 on X, 11-15).
+
+One download runs at a time (`begin` refuses a check while one is under
+way). A check that comes meanwhile sets `again` (`supersede`), and once
+the download is in the feed is asked again; a newer version then takes
+its place. The minute loop also fetches what was left behind
+(`fetchDue`): a `found` version once downloads are automatic again, and a
+failed download (`error` with `retry`) after `retryAfter` (30 minutes),
+not at the next `UpdateEvery`. See `TestUpdateClockFetchesNewerThanWaiting`,
+`TestUpdateCheckDuringDownloadTakesNewer`,
+`TestUpdateWaitingRestartKeepsItsDownload` and `TestUpdateFetchDue`.
+
 ### A restart to update hands the gateway over
 
 On a Mac and on Linux, a restart into a downloaded update (the Update pill,

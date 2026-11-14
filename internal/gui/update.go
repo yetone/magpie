@@ -66,9 +66,13 @@ type updater struct {
 	// downloads what it finds whatever Settings' NoAutoDownload says; with
 	// it on, any other check stops at found (#2296)
 	fetch bool
-	// keep: the check under way leaves a version downloaded and waiting
-	// as it is, as the clock's does (freshen)
-	keep    bool
+	// keep: the check under way is a restart's, which leaves a version
+	// downloaded and waiting as it is (freshen)
+	keep bool
+	// again: a check came while a download was under way (one download
+	// at a time); once that one is in, the feed is asked again, and a
+	// newer version found then takes its place
+	again   bool
 	asked   time.Time // when the feed was last asked, by the clock or a click
 	done    int64     // downloading: bytes so far, of total (0 when unknown)
 	total   int64
@@ -196,10 +200,10 @@ func (u *updater) start() {
 		// restarts into, nothing (#4938)
 		for backendCtx.Err() == nil {
 			u.mu.Lock()
-			last := u.asked
+			last, st, retry := u.asked, u.state, u.retry
 			u.mu.Unlock()
 			s := settings.Load()
-			if updateDue(s, last, time.Now()) {
+			if now := time.Now(); updateDue(s, last, now) || fetchDue(s, st, retry, last, now) {
 				u.checkByClock()
 			}
 			u.autoTick(s)
@@ -207,6 +211,29 @@ func (u *updater) start() {
 		}
 	}()
 }
+
+// fetchDue is whether a version already found is fetched by itself now,
+// before the clock's next check: with downloads automatic nothing found
+// waits for a click (canlee886 on X). A version said found while
+// downloads were off is downloaded once they are on, and one whose
+// download failed is tried again retryAfter after the last try, not six
+// hours later with the header's Update offering it meanwhile.
+func fetchDue(s settings.Settings, state string, retry bool, last, now time.Time) bool {
+	if s.NoAutoUpdate || s.NoAutoDownload {
+		return false
+	}
+	switch state {
+	case "found":
+		return true
+	case "error":
+		return retry && now.Sub(last) >= retryAfter
+	}
+	return false
+}
+
+// retryAfter is how long a failed download waits before it is tried
+// again by itself.
+const retryAfter = 30 * time.Minute
 
 // bundleOf and executable are update.Bundle and update.Executable; tests
 // stand in for them.
@@ -296,7 +323,22 @@ type packagedJSON struct {
 func (u *updater) check() {
 	if u.begin() {
 		u.run()
+	} else {
+		u.supersede()
 	}
+}
+
+// supersede notes a check that came while a download is under way: one
+// download runs at a time, and the one under way is finished rather than
+// thrown away (a slow network would never finish one, with a release
+// every few minutes); once it is in the feed is asked again, and a newer
+// version out since is downloaded in its place.
+func (u *updater) supersede() {
+	u.mu.Lock()
+	if u.state == "downloading" {
+		u.again = true
+	}
+	u.mu.Unlock()
 }
 
 // checkByClock is check, by the clock rather than a click: a version this
@@ -307,6 +349,8 @@ func (u *updater) checkByClock() {
 		u.byClock = true
 		u.mu.Unlock()
 		u.run()
+	} else {
+		u.supersede()
 	}
 }
 
@@ -351,9 +395,9 @@ func (u *updater) recheck(asked bool) {
 
 // ask asks the feed and waits for it a little while (recheckTicks of
 // recheckTick). fetch is a click's: what is found is downloaded whatever
-// Settings' NoAutoDownload says. keep leaves a version downloaded and
-// waiting as it is, as the clock's check does: a newer one found is not
-// downloaded in its place.
+// Settings' NoAutoDownload says. keep, a restart's, leaves a version
+// downloaded and waiting as it is: a newer one found is not downloaded in
+// its place.
 func (u *updater) ask(fetch, keep bool) {
 	if u.begin() {
 		u.mu.Lock()
@@ -521,17 +565,22 @@ func (u *updater) run() {
 			rel, lang = u.latest, u.notesIn
 		}
 	}
-	// a version downloaded on a click stays the one restarted into while
-	// downloads wait for a click: a newer one out since isn't fetched.
-	// Nor is one by the clock's check: magpie releases many times a day,
-	// so each check found a newer one and downloaded it whole (40 to 95
-	// MB) in place of the one waiting, every check until a restart, on
-	// the user's proxy too (iiiiiimone on X). With downloads automatic a
-	// restart goes into the one waiting and the new version's first check
-	// fetches anything newer (recheck, keep, canlee886 on X), and so with
-	// them on a click (sakamotokurome on X). Quitting puts in the one
-	// waiting.
-	if u.staged != "" && u.latest != nil && (err != nil || !update.Newer(rel.Version, u.latest.Version) || hold || u.byClock || u.keep) {
+	// A version downloaded and waiting gives way to a newer one found, by
+	// the clock's check or any other: with downloads automatic, a version
+	// magpie knows is out is downloaded at once, not left for a click
+	// (canlee886 on X: "为何能检测到最新版本的更新，却不直接下载"). From
+	// 0.1.4051 to 0.1.4207 the clock's check left the one waiting, so the
+	// newer one was fetched only by the next version's first check. It
+	// stays when:
+	// - downloads wait for a click (hold): the one clicked for is the one
+	//   restarted into, and nothing more is fetched (iiiiiimone on X,
+	//   whose proxy is billed by traffic, turns them off);
+	// - the check is a restart's (keep, recheck): the restart goes into
+	//   the one waiting at once, and the new version's first check
+	//   fetches anything newer (canlee886, sakamotokurome on X);
+	// - a restart waits for the gateway to be idle into it (waiting).
+	// Quitting puts in the one waiting.
+	if u.staged != "" && u.latest != nil && (err != nil || !update.Newer(rel.Version, u.latest.Version) || hold || u.keep || u.waiting) {
 		u.state = "ready" // what was downloaded is still the latest
 		// the feed found it before it had its notes (the site, kept from
 		// GitHub's API, reads them from the releases feed, which can lag
@@ -607,6 +656,8 @@ func (u *updater) run() {
 		staged, err = update.StageBinary(ctx, rel)
 	}
 	u.mu.Lock()
+	again := u.again
+	u.again = false
 	if err != nil {
 		log.Println("update:", err)
 		u.state, u.err, u.retry, u.mirror, u.network = "error", err.Error(), true, update.MirrorOf(err), update.Network(err)
@@ -615,6 +666,9 @@ func (u *updater) run() {
 	u.state, u.staged = "ready", staged
 	if u.onReady != nil {
 		go u.onReady(rel.Version)
+	}
+	if again {
+		go u.checkByClock() // a check came meanwhile (supersede)
 	}
 }
 
@@ -829,10 +883,17 @@ func (u *updater) relang(version, lang string) {
 		return
 	}
 	u.mu.Lock()
-	defer u.mu.Unlock()
 	if u.latest == nil || u.latest.Version != version || rel.Version != version {
+		newer := u.latest != nil && update.Newer(rel.Version, u.latest.Version)
+		u.mu.Unlock()
+		if newer && !settings.Load().NoAutoUpdate {
+			// the feed names a newer version than the one held: it is
+			// checked for, and so downloaded, now (canlee886 on X)
+			u.checkByClock()
+		}
 		return // a check since has its own
 	}
+	defer u.mu.Unlock()
 	c := *u.latest // the download may still be reading the one held
 	c.Notes = rel.Notes
 	u.latest, u.notesIn = &c, lang
