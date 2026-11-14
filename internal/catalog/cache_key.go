@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"sync"
 	"time"
@@ -45,12 +46,18 @@ func fileKey(path string) string {
 	if ok && k.size == st.Size() && k.mod.Equal(st.ModTime()) {
 		return k.key
 	}
-	b, err := os.ReadFile(path)
+	// hashed as it is read: the catalog is ~6 MB, and holding it whole
+	// for its sum added that much to the start's peak
+	h := sha256.New()
+	f, err := os.Open(path)
+	if err == nil {
+		_, err = io.Copy(h, f)
+		f.Close()
+	}
 	if err != nil {
 		return fmt.Sprintf("stat:%d:%d", st.Size(), st.ModTime().UnixNano())
 	}
-	sum := sha256.Sum256(b)
-	key := hex.EncodeToString(sum[:])
+	key := hex.EncodeToString(h.Sum(nil))
 	fileKeys.Lock()
 	fileKeys.m[path] = keyedFile{size: st.Size(), mod: st.ModTime(), key: key}
 	fileKeys.Unlock()

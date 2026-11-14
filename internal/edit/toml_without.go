@@ -33,8 +33,9 @@ func tomlUnder(raw []byte, name string, group bool) (rest []byte, groups map[str
 	var p unstable.Parser
 	p.Reset(raw)
 	var out []byte
-	kept := 0  // where the text kept since the last cut starts; -1 while cutting
-	from := -1 // where the table being cut starts
+	cut := false // a table under name was found
+	kept := 0    // where the text kept since the last cut starts; -1 while cutting
+	from := -1   // where the table being cut starts
 	key := ""
 	end := func(at int) {
 		if from >= 0 && group {
@@ -65,10 +66,10 @@ func tomlUnder(raw []byte, name string, group bool) (rest []byte, groups map[str
 			}
 			continue
 		}
+		cut = true
 		if kept >= 0 {
-			if out == nil {
-				out = make([]byte, 0, len(raw))
-			}
+			// out grows to what is kept, not raw's size: Codex's
+			// config is 1.5 MB of projects around a few KB of the rest
 			out = append(out, raw[kept:at]...)
 			kept = -1
 		}
@@ -79,12 +80,15 @@ func tomlUnder(raw []byte, name string, group bool) (rest []byte, groups map[str
 			bare = true
 		}
 	}
-	if p.Error() != nil || out == nil {
+	if p.Error() != nil || !cut {
 		return raw, nil, false
 	}
 	end(len(raw))
 	if kept >= 0 {
 		out = append(out, raw[kept:]...)
+	}
+	if out == nil {
+		out = []byte{}
 	}
 	return out, groups, bare
 }

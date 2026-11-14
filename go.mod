@@ -126,3 +126,5 @@ require (
 )
 
 replace github.com/santhosh-tekuri/jsonschema/v6 => ./third_party/jsonschema
+
+replace gopkg.in/yaml.v3 => ./third_party/yaml.v3
