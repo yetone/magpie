@@ -339,6 +339,14 @@ immutable with no WAL log, from a copy with one; a plain read-only open
 made `-wal` and `-shm` in Cindy's folder while it was closed), and one that
 can't be read, or a stopped WSL distro's, is unknown, never "not added"
 (`TestCindyHasClosedWALAndUnreadable`, `TestImportStatusUnreadableIsUnknown`).
+Cindy names each model its import's `modelsUrl` lists by `display_name`
+before `name` (`parseModelsListResponse` in its app, 0.1.94), so
+`/v1/models` asked with Cindy's key gives `display_name` the name the
+agents' lists use (`provider.LabelsFor("cindy", …)`: its provider's after
+it, by Cindy's Provider in model names, and a name the user gave kept);
+plain, three providers' GLM-5.3-Flash read the same in its picker
+(cdredfox on X, `TestCindyDiscoveryNamesModelsApart`). Another client's
+`display_name` stays the name alone.
 Reopening the link lets Lody handle duplicates.
 Bub requires its separately installed ACP plugin.
 

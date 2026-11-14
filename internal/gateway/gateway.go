@@ -1808,6 +1808,13 @@ func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 				if agent == "dsh" {
 					m["name"] = labels[i]
 				}
+				// for Cindy: the same name as its display_name, which its
+				// model discovery (parseModelsListResponse) names a row by
+				// before name, so magpie's GLM-5.3-Flash of three providers
+				// read three times the same in its picker (cdredfox on X)
+				if agent == "cindy" {
+					m["display_name"] = labels[i]
+				}
 				if agent == "cursor-local" {
 					cursorLocalModel(m, e)
 				}
