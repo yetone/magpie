@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/yetone/magpie/internal/catalog"
@@ -93,6 +94,85 @@ export function connect({ gateway, model, models }) {
 	for _, k := range []string{"id", "name", "context", "output", "images", "efforts"} {
 		if _, ok := seen.Model[k]; !ok {
 			t.Errorf("model lost %q:\n%s", k, file.Seen)
+		}
+	}
+}
+
+// An agent plugin's connect is given magpie's decision models as
+// decisionModels, apart from models (baranwang on X: a plugin wiring
+// magpie's judging models into its agent had no way to learn them):
+// each with its id, its provider and the gateway paths it is asked on,
+// a routing group of them too, and none of them in models, which agents
+// offer for a conversation.
+func TestPluggedConnectSeesDecisionModels(t *testing.T) {
+	home := pluggedHome(t, `
+export const agent = { id: "judged", name: "Judged", config: "~/.judged.json", model: "model" };
+export function connect({ models, decisionModels }) {
+  return { "seen": JSON.stringify({ models, decisionModels }) };
+}
+`)
+	// no request reaches it: connect is only told of it
+	if err := provider.Save(provider.Provider{ID: "mixed", Name: "Mixed", Key: "k", Chat: "http://127.0.0.1:9/v1", Decide: "http://127.0.0.1:9/v1", Models: []string{"deepseek-v4.1-flash", "typesafe/jev"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.SaveGroup(provider.Group{ID: "judges", Name: "Judges", Members: []string{"mixed/typesafe/jev"}}); err != nil {
+		t.Fatal(err)
+	}
+	a, err := Find("judged")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Field("model").Set("magpie/deepseek/pro"); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(home, ".judged.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file struct{ Seen string }
+	if err := json.Unmarshal(b, &file); err != nil {
+		t.Fatalf("%v:\n%s", err, b)
+	}
+	type decider struct {
+		ID        string   `json:"id"`
+		Name      string   `json:"name"`
+		Provider  string   `json:"provider"`
+		Group     bool     `json:"group"`
+		Endpoints []string `json:"endpoints"`
+	}
+	var seen struct {
+		Models   []struct{ ID string } `json:"models"`
+		Deciders []decider             `json:"decisionModels"`
+	}
+	if err := json.Unmarshal([]byte(file.Seen), &seen); err != nil {
+		t.Fatalf("%v:\n%s", err, file.Seen)
+	}
+	byID := map[string]decider{}
+	for _, d := range seen.Deciders {
+		byID[d.ID] = d
+	}
+	want := []string{"/v1/systemone", "/v1/decisions"}
+	jev, ok := byID["mixed/typesafe/jev"]
+	if !ok || jev.Provider != "mixed" || jev.Group || jev.Name == "" || !slices.Equal(jev.Endpoints, want) {
+		t.Errorf("decisionModels' mixed/typesafe/jev = %+v (found %v), want provider mixed, a name, endpoints %v:\n%s", jev, ok, want, file.Seen)
+	}
+	g, ok := byID[provider.GroupPrefix+"judges"]
+	if !ok || !g.Group || g.Name != "Judges" || !slices.Equal(g.Endpoints, want) {
+		t.Errorf("decisionModels' group = %+v (found %v), want group Judges on %v:\n%s", g, ok, want, file.Seen)
+	}
+	chat := false
+	for _, m := range seen.Models {
+		if m.ID == "mixed/typesafe/jev" || m.ID == provider.GroupPrefix+"judges" {
+			t.Errorf("models has decision model %s:\n%s", m.ID, file.Seen)
+		}
+		chat = chat || m.ID == "mixed/deepseek-v4.1-flash"
+	}
+	if !chat {
+		t.Errorf("models lost mixed's chat model:\n%s", file.Seen)
+	}
+	for _, d := range seen.Deciders {
+		if d.ID == "deepseek/pro" || d.ID == "mixed/deepseek-v4.1-flash" {
+			t.Errorf("decisionModels has chat model %s", d.ID)
 		}
 	}
 }

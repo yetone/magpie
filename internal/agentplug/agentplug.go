@@ -17,6 +17,10 @@
 //
 // and it runs in moejs in magpie's own process, as gateway middleware
 // does: there is no Node here, so a package it imports is bundled into it.
+// connect's input also has decisionModels, magpie's decision models and
+// their routing groups, which models (chat models) leaves out, each with
+// the gateway paths it is asked on (internal/agent's
+// pluggedDecisionModels).
 //
 // An agent whose model is picked in the agent itself (Raycast's own
 // picker, among the models connect writes) leaves model out: it is connect

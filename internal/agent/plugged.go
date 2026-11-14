@@ -509,7 +509,10 @@ func plugged(at place, p *agentplug.Agent) *Agent {
 		in := map[string]any{
 			"gateway": map[string]any{"url": at.gw(), "v1": at.v1(), "key": gk},
 			"models":  models,
-			"agent":   map[string]any{"id": id, "config": f.path},
+			// magpie's decision models, apart from the chat models agents
+			// offer for a conversation (pluggedDecisionModels)
+			"decisionModels": pluggedDecisionModels(id),
+			"agent":          map[string]any{"id": id, "config": f.path},
 		}
 		if bf != nil {
 			in["agent"].(map[string]any)["base"] = bf.path
