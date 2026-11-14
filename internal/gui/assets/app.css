@@ -1063,6 +1063,12 @@ body.panel .row.pref.flash { border-radius: 10px; }
    before ends with (normalcoder_ on X: a check-in row or magpie's own
    requests, which no list of row kinds named, ran two accounts together) */
 .subscription-card.several > :not(.subscription-head, .quota-all) + .subscription-account { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line); }
+/* of several accounts, each a card of its own inside the provider's
+   (normalcoder_ on X: a hairline alone didn't tell them apart); a
+   provider's keys, a balance a line, keep the hairline above */
+.subscription-acct { min-width: 0; padding: 6px 9px 7px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--card-2); }
+.subscription-acct + .subscription-acct { margin-top: 5px; }
+.subscription-acct > :last-child { margin-bottom: 0; }
 .subscription-account .user { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* an account the user named (#1515): the name, then the account and the
    key plan it stands in for, muted, giving their room up first */
@@ -1071,7 +1077,7 @@ body.panel .row.pref.flash { border-radius: 10px; }
 .subscription-head .quota-alias, .subscription-head .quota-seat { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--fg-2); }
 /* an account of several in brief (ARNO): its windows' names, figures and
    bars, closer to the next (its line where a full one's is, so a fold keeps it in place); its fold at the row's end */
-.subscription-card.several .subscription-account.brief:not(:nth-child(2)) { padding-top: 7px; }
+.subscription-card.several > .subscription-account.brief:not(:nth-child(2)) { padding-top: 7px; }
 .subscription-account.brief { margin-bottom: 4px; }
 .quota-acct-fold { align-self: center; display: inline-grid; place-items: center; flex: none; width: 18px; height: 18px; margin: -2px -5px -2px -3px; padding: 0; border-radius: 4px; color: var(--faint); transition: background .12s, color .12s; }
 .subscription-account :is(.user, .acct-eye) + .quota-acct-fold { margin-left: auto; }
@@ -1240,7 +1246,7 @@ body.panel .row.pref.flash { border-radius: 10px; }
 .wb-checkin[data-state="ok"] .ci-say { color: var(--fg-2); }
 .wb-checkin .text { flex: none; font-size: 11px; padding: 2px 7px; }
 .wb-checkin .ci-auto { margin-left: auto; }
-.subscription-card.several .wb-checkin { margin-bottom: 6px; }
+.subscription-card.several > .wb-checkin { margin-bottom: 6px; }
 .wb-checkin .ci-auto.on { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
 .quota-balance { display: flex; align-items: baseline; gap: 6px; font-size: 10.5px; color: var(--muted); }
 .quota-windows + .quota-balance { margin-top: 9px; }
@@ -1402,19 +1408,17 @@ body.masked :hover > .acct-eye, body.masked .pq-card:hover .acct-eye, body.maske
 .row.stat .us-more:focus-visible { opacity: 1; }
 .row.stat .us-more.open { opacity: 1; background: var(--pill); color: var(--fg); }
 @media (hover: none) { .row.stat .us-more { opacity: 1; margin: 0 -4px 0 -2px; } }
-/* a Usage card's ⋯, its menu (jen_celeus on X): at the head's end, over what
-   ends there, on the card's colour, so the head at rest is laid out as it
-   was; where nothing hovers it is always shown, with room kept for it */
-.subscription-head { position: relative; }
+/* a Usage card's ⋯, its menu (jen_celeus on X): at the head's end, shown as
+   the card is hovered, and always where nothing hovers. Room is kept for it
+   either way: drawn over what ends there, it hid the end of "Show the other
+   accounts in brief" (normalcoder_ on X) */
+.subscription-head { position: relative; padding-right: 18px; }
 .subscription-head .us-more { position: absolute; top: 50%; right: -6px; width: 22px; height: 22px; margin-top: -11px; background: var(--card); opacity: 0; transition: opacity .12s, background .12s, color .12s; }
 .subscription-head .us-more:hover { background: var(--pill); }
 .subscription-card:hover .subscription-head .us-more { opacity: 1; }
 .subscription-head .us-more:focus-visible { opacity: 1; }
 .subscription-head .us-more.open { opacity: 1; background: var(--pill); color: var(--fg); }
-@media (hover: none) {
-  .subscription-head { padding-right: 18px; }
-  .subscription-head .us-more { opacity: 1; }
-}
+@media (hover: none) { .subscription-head .us-more { opacity: 1; } }
 .row.stat .us-unhide { flex: none; margin-right: -4px; }
 /* the action's room comes out of the name's, which ends in "…" */
 .row.stat.acts .who { flex-shrink: 1; }

@@ -1414,6 +1414,8 @@ function quotaCardMore(card, subs) {
 }
 function quotaCardMenu(target, card, subs, from) {
   let part = [...card.children].find((c) => c.contains(target));
+  // an account's own card in the provider's: its first row names it
+  if (part?.classList.contains("subscription-acct")) part = part.firstElementChild;
   while (part && !part.classList.contains("subscription-account") && !part.classList.contains("subscription-head")) part = part.previousElementSibling;
   const who = part?.classList.contains("subscription-account") && subs.find((q) => trayCardID(q) === part.dataset.card);
   const of = who ? [who] : subs;
