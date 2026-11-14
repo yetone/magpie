@@ -1422,6 +1422,14 @@ each one.
     time: it ran gui and usage, and its new POST /api/page-away left
     internal/cli's TestEveryRouteHasACommandOrIsNamed red until
     69946f43c (17:48). A new route runs internal/cli too.
+  - The updater shipped on chosen packages: 14807bcf2 and 943404477
+    (18:20, Restart to update and Windows downloads) say the full suite
+    wasn't run because mote was at load 126 to 142 and mica's disk was
+    full (114 MB free, 172 GB of stale ~/runs copies; the review cleared
+    them). Saying so is right, but an updater bug is one users can only
+    leave by downloading by hand. When both boxes are busy, a change to
+    the update path waits for a full run, or takes it on the Windows or
+    Linux box; a full disk on a run box is cleared, not worked around.
   - No Test run finished green from 63c91cae5 (11-13 21:51 UTC) to
     07a62b373 (11-14 08:34 UTC): 57 runs were cancelled by the next push
     and two went red (TestEffortUpdateRefused, fixed in a4937f8ff;
