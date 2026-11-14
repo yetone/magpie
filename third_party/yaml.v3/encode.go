@@ -24,6 +24,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 )
@@ -299,12 +300,22 @@ func isBase60Float(s string) (result bool) {
 		return false
 	}
 	// Do the full match.
-	return base60float.MatchString(s)
+	return base60float().MatchString(s)
 }
 
 // From http://yaml.org/type/float.html, except the regular expression there
 // is bogus. In practice parsers do not enforce the "\.[0-9_]*" suffix.
-var base60float = regexp.MustCompile(`^[-+]?[0-9][0-9_]*(?::[0-5]?[0-9])+(?:\.[0-9_]*)?$`)
+var (
+	base60floatOnce sync.Once
+	base60floatRE   *regexp.Regexp
+)
+
+// base60float is compiled the first time it is used, not when a program
+// using yaml starts.
+func base60float() *regexp.Regexp {
+	base60floatOnce.Do(func() { base60floatRE = regexp.MustCompile(`^[-+]?[0-9][0-9_]*(?::[0-5]?[0-9])+(?:\.[0-9_]*)?$`) })
+	return base60floatRE
+}
 
 // isOldBool returns whether s is bool notation as defined in YAML 1.1.
 //

@@ -21,6 +21,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -121,7 +122,17 @@ func resolvableTag(tag string) bool {
 	return false
 }
 
-var yamlStyleFloat = regexp.MustCompile(`^[-+]?(\.[0-9]+|[0-9]+(\.[0-9]*)?)([eE][-+]?[0-9]+)?$`)
+var (
+	yamlStyleFloatOnce sync.Once
+	yamlStyleFloatRE   *regexp.Regexp
+)
+
+// yamlStyleFloat is compiled the first time it is used, not when a program
+// using yaml starts.
+func yamlStyleFloat() *regexp.Regexp {
+	yamlStyleFloatOnce.Do(func() { yamlStyleFloatRE = regexp.MustCompile(`^[-+]?(\.[0-9]+|[0-9]+(\.[0-9]*)?)([eE][-+]?[0-9]+)?$`) })
+	return yamlStyleFloatRE
+}
 
 func resolve(tag string, in string) (rtag string, out interface{}) {
 	tag = shortTag(tag)
@@ -201,7 +212,7 @@ func resolve(tag string, in string) (rtag string, out interface{}) {
 			if err == nil {
 				return intTag, uintv
 			}
-			if yamlStyleFloat.MatchString(plain) {
+			if yamlStyleFloat().MatchString(plain) {
 				floatv, err := strconv.ParseFloat(plain, 64)
 				if err == nil {
 					return floatTag, floatv
