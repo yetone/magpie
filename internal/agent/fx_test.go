@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/yetone/magpie/internal/edit"
@@ -170,4 +173,109 @@ func TestFxKeepsTheUsersSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 	check("pick")
+}
+
+// @beillusyn on X: models through magpie had no effort to pick in fx, so
+// each was asked at its vendor's default. An fx that reads a model's
+// reasoning_efforts (0.0.17 on) gets each model's levels, weakest first,
+// asked as reasoning_effort; an older fx refuses a key it doesn't know and
+// with it the whole settings file, so one older or of no known version
+// gets none. fx's own effort setting, the user's, is left alone.
+func TestFxEfforts(t *testing.T) {
+	home := keptEffortHome(t)
+	path := filepath.Join(home, ".fx", "settings.json")
+	os.MkdirAll(filepath.Dir(path), 0o755)
+	os.WriteFile(path, []byte(`{"effort":"low","workspaces":{"/w":{"effort":"high"}}}`), 0o644)
+	version := "0.0.17"
+	was := fxVersion
+	fxVersion = func(string) string { return version }
+	t.Cleanup(func() { fxVersion = was })
+
+	a := fx(home)
+	if err := a.Field("model").Set("magpie/think/deep"); err != nil {
+		t.Fatal(err)
+	}
+	levels := func(model string) (string, bool) {
+		return edit.GetJSONRaw(path, "providers.magpie.model_metadata."+strings.ReplaceAll(model, ".", `\.`)+".reasoning_efforts")
+	}
+	if got, _ := levels("think/deep"); got != `{"none":{"reasoning_effort":"none"},"low":{"reasoning_effort":"low"},"high":{"reasoning_effort":"high"}}` {
+		t.Errorf("deep's levels: %s\n%s", got, readFile(path))
+	}
+	if got, _ := levels("think/wide"); got != `{"low":{"reasoning_effort":"low"},"medium":{"reasoning_effort":"medium"},"high":{"reasoning_effort":"high"}}` {
+		t.Errorf("wide's levels: %s", got)
+	}
+	if e, _ := edit.GetJSON(path, "effort"); e != "low" {
+		t.Errorf("the user's effort: %q", e)
+	}
+	if e, _ := edit.GetJSON(path, "workspaces./w.effort"); e != "high" {
+		t.Errorf("the user's workspace effort: %q", e)
+	}
+
+	for _, v := range []string{"0.0.16", ""} {
+		version = v
+		if err := a.Sync(); err != nil {
+			t.Fatal(err)
+		}
+		if got, ok := levels("think/deep"); ok {
+			t.Errorf("fx %q given levels it refuses: %s", v, got)
+		}
+		if raw := readFile(path); strings.Contains(raw, "reasoning_efforts") || !strings.Contains(raw, `"think/deep"`) {
+			t.Errorf("fx %q:\n%s", v, raw)
+		}
+	}
+	version = "0.0.18"
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := levels("think/deep"); !ok {
+		t.Errorf("a later fx given no levels:\n%s", readFile(path))
+	}
+}
+
+// A level's name fx refuses (its words for no level, a space) is left out,
+// and so is each past its sixteen; a model without levels gets none.
+func TestFxEffortNames(t *testing.T) {
+	got, _ := json.Marshal(fxEfforts([]string{"high", "auto", "Default", "very high", "low", "high"}))
+	if string(got) != `{"low":{"reasoning_effort":"low"},"high":{"reasoning_effort":"high"}}` {
+		t.Errorf("levels: %s", got)
+	}
+	var many []string
+	for i := range 20 {
+		many = append(many, "l"+strconv.Itoa(i))
+	}
+	if n := len(fxEfforts(many)); n != fxMaxEfforts {
+		t.Errorf("%d levels", n)
+	}
+	if fxEfforts(nil) != nil {
+		t.Error("levels for a model without them")
+	}
+}
+
+// The fx found is the agent only when it says a 0.x version: the JSON
+// viewer, also fx, is 30 on, and an fx the installer put in ~/.local/bin
+// comes before the one on PATH.
+func TestFxVersionIsTheAgents(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fx runs on macOS and Linux")
+	}
+	home := t.TempDir()
+	bin := t.TempDir()
+	t.Setenv("PATH", bin)
+	local := filepath.Join(home, ".local", "bin", "fx")
+	viewer := filepath.Join(bin, "fx")
+	testenv.Program(t, viewer, "#!/bin/sh\n")
+	says := map[string]string{}
+	wasRun := runVersion
+	runVersion = func(b string) string { return says[filepath.Base(filepath.Dir(b))+"/"+filepath.Base(b)] }
+	t.Cleanup(func() { runVersion = wasRun })
+	says[filepath.Base(bin)+"/fx"] = "39.2.0"
+	if v := fxVersion(home); v != "" {
+		t.Errorf("the JSON viewer taken for fx: %q", v)
+	}
+	os.MkdirAll(filepath.Dir(local), 0o755)
+	testenv.Program(t, local, "#!/bin/sh\n#local\n")
+	says["bin/fx"] = "0.0.17"
+	if v := fxVersion(home); v != "0.0.17" {
+		t.Errorf("the installer's fx: %q", v)
+	}
 }

@@ -7,8 +7,10 @@ package agent
 // provider "magpie", keyless (auth none), speaking chat completions, with
 // the catalog as its model_metadata; a model through magpie is
 // "magpie/<provider>/<model>" here, provider "magpie" and models.magpie
-// "<provider>/<model>" in fx's settings. fx sends no effort to a provider
-// of the user's own, so there is no effort to pick.
+// "<provider>/<model>" in fx's settings. Each model's reasoning levels go
+// in its reasoning_efforts, which fx 0.0.17 on lists in /effort and Ctrl+T
+// and sends as reasoning_effort; with none picked ("default") it sends
+// none. fx's own effort setting, one for every provider, stays the user's.
 
 import (
 	"encoding/json"
@@ -19,11 +21,76 @@ import (
 
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/gateway"
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // fxMaxModels is how many models fx takes in a provider's model_metadata;
 // past it fx refuses the whole settings file.
 const fxMaxModels = 256
+
+// fxEffortsSince is the first fx that reads a model's reasoning_efforts
+// (src/core/config/configured_provider.zig). An older one refuses a key
+// it doesn't know in model_metadata, and with it the whole settings file.
+const fxEffortsSince = "0.0.17"
+
+// fxMaxEfforts is how many levels fx takes for one model; past it fx
+// refuses the settings file.
+const fxMaxEfforts = 16
+
+// fxEffortName is a level's name as fx takes it: letters, digits, -, _
+// and ., and never auto, adaptive or default, its words for no level.
+var fxEffortName = lazyre.New(`^[A-Za-z0-9._-]{1,64}$`)
+
+// fxVersion is the version of the fx agent at home: the installer's
+// ~/.local/bin/fx, else the fx on PATH. A version that isn't 0.x is
+// another program's (the JSON viewer's fx is 30 on); "" when unknown. A
+// var so tests can set it.
+var fxVersion = func(home string) string {
+	for _, bin := range []string{filepath.Join(home, ".local", "bin", "fx"), binAt("fx")} {
+		if bin == "" || !isFile(bin) {
+			continue
+		}
+		if v := installedVersion(bin); strings.HasPrefix(v, "0.") {
+			return v
+		}
+	}
+	return ""
+}
+
+// fxTakesEfforts says whether fx at version v reads reasoning_efforts. One
+// whose version isn't known is taken for an older one: a key it refuses
+// costs every setting it has, a level left out only the pick.
+func fxTakesEfforts(v string) bool {
+	return v != "" && !Newer(fxEffortsSince, v)
+}
+
+// fxVersion is fx's version at the place: a distro's as its probe found it
+// (none is asked yet, so "": #6636), this machine's asked of its binary.
+func (p place) fxVersion() string {
+	if p.spell != nil {
+		return p.version
+	}
+	return fxVersion(p.home)
+}
+
+// fxEfforts is a model's reasoning_efforts for fx: each level the catalog
+// gives it, weakest first as fx lists them, asked as reasoning_effort; nil
+// for a model without levels.
+func fxEfforts(efforts []string) orderedJSON {
+	var out orderedJSON
+	for _, e := range gateway.ByStrength(efforts) {
+		switch strings.ToLower(e) {
+		case "auto", "adaptive", "default":
+			continue
+		}
+		if !fxEffortName.MatchString(e) || len(out) == fxMaxEfforts || slices.ContainsFunc(out, func(p jsonPair) bool { return p.k == e }) {
+			continue
+		}
+		out = append(out, jsonPair{e, map[string]any{"reasoning_effort": e}})
+	}
+	return out
+}
 
 func fx(home string) *Agent { return fxIn(here(home)) }
 
@@ -33,7 +100,9 @@ func fxIn(at place) *Agent {
 	dir := at.join(".fx")
 	path := filepath.Join(dir, "settings.json")
 	// magpie's provider, with what the user set on it in fx kept
-	fxProvider := func(cur string) any { return fxKept(path, fxProviderAt(cur, at.v1())) }
+	fxProvider := func(cur string) any {
+		return fxKept(path, fxProviderAt(cur, at.v1(), fxTakesEfforts(at.fxVersion())))
+	}
 	get := func(k string) string { v, _ := edit.GetJSON(path, k); return v }
 	// the provider fx talks to; unset, it is Vercel's AI Gateway
 	prov := func() string {
@@ -148,8 +217,8 @@ func fxModels(path string) map[string]string {
 // fxProviderAt is magpie's entry in settings.json's providers, for an fx
 // reaching the gateway's /v1 at v1. Its model_metadata is what fx's model
 // picker lists: the catalog, the model in use first so it is never the one
-// cut at fx's limit.
-func fxProviderAt(cur, v1 string) map[string]any {
+// cut at fx's limit. efforts: fx reads each model's reasoning levels.
+func fxProviderAt(cur, v1 string, efforts bool) map[string]any {
 	all := magpieModels("fx")
 	slices.SortStableFunc(all, func(a, b catalog.Model) int {
 		switch {
@@ -172,6 +241,9 @@ func fxProviderAt(cur, v1 string) map[string]any {
 		// fx refuses an output limit that isn't below the context window
 		if m.Output > 0 && (m.Context == 0 || m.Output < m.Context) {
 			e["max_output_tokens"] = m.Output
+		}
+		if levels := fxEfforts(m.Efforts); efforts && len(levels) > 0 {
+			e["reasoning_efforts"] = levels
 		}
 		ms[m.ID] = e
 	}
