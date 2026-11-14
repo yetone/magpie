@@ -2,6 +2,9 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "{n} client": "{n} 个客户端",
+    "{n} clients": "{n} 个客户端",
+    "Clients under 1% of the tokens, idle for 3 days or past the top 20. Their calls still count in every total.": "token 不到总量 1%、3 天未使用或排在前 20 名之后的客户端。它们的调用仍计入每一项总计。",
     "What the bytes sent upstream were made of": "发往上游的字节由什么组成",
     "≈ {size} a request": "每个请求约 {size}",
     "Each request sends the whole conversation again, with the system prompt and the tools' definitions, so a request's bytes grow with its context.": "每个请求都会把整段对话连同系统提示词和工具定义重新发送一遍，所以一个请求的字节数随上下文增长。",
@@ -291,6 +294,9 @@ magpie.strings({
     "Sent upstream as {to}, as the agent spoke it": "以 {to} 协议发往上游，与 agent 所用协议相同",
   },
   "zh-TW": {
+    "{n} client": "{n} 個用戶端",
+    "{n} clients": "{n} 個用戶端",
+    "Clients under 1% of the tokens, idle for 3 days or past the top 20. Their calls still count in every total.": "token 不到總量 1%、3 天未使用或排在前 20 名之後的用戶端。它們的呼叫仍計入每一項總計。",
     "What the bytes sent upstream were made of": "傳往上游的位元組由什麼組成",
     "≈ {size} a request": "每個請求約 {size}",
     "Each request sends the whole conversation again, with the system prompt and the tools' definitions, so a request's bytes grow with its context.": "每個請求都會把整段對話連同系統提示詞和工具定義重新傳送一遍，所以一個請求的位元組數隨上下文增長。",
@@ -580,6 +586,9 @@ magpie.strings({
     "Sent upstream as {to}, as the agent spoke it": "以 {to} 協議發往上游，與 agent 所用協議相同",
   },
   ja: {
+    "{n} client": "{n} 個のクライアント",
+    "{n} clients": "{n} 個のクライアント",
+    "Clients under 1% of the tokens, idle for 3 days or past the top 20. Their calls still count in every total.": "トークンが 1% 未満で、3 日間使われていないか上位 20 位より下のクライアント。その呼び出しはすべての合計に含まれます。",
     "What the bytes sent upstream were made of": "上流へ送ったバイトの内訳",
     "≈ {size} a request": "1 リクエストあたり約 {size}",
     "Each request sends the whole conversation again, with the system prompt and the tools' definitions, so a request's bytes grow with its context.": "各リクエストは会話全体をシステムプロンプトとツール定義ごと送り直すため、リクエストのバイト数はコンテキストとともに増えます。",
@@ -869,6 +878,9 @@ magpie.strings({
     "Sent upstream as {to}, as the agent spoke it": "エージェントと同じ {to} で上流へ送信",
   },
   de: {
+    "{n} client": "{n} Client",
+    "{n} clients": "{n} Clients",
+    "Clients under 1% of the tokens, idle for 3 days or past the top 20. Their calls still count in every total.": "Clients unter 1 % der Tokens, seit 3 Tagen ungenutzt oder nach den ersten 20. Ihre Aufrufe zählen weiter in jeder Summe mit.",
     "What the bytes sent upstream were made of": "Woraus die an den Upstream gesendeten Bytes bestehen",
     "≈ {size} a request": "≈ {size} pro Anfrage",
     "Each request sends the whole conversation again, with the system prompt and the tools' definitions, so a request's bytes grow with its context.": "Jede Anfrage sendet die ganze Unterhaltung erneut, samt Systemprompt und Tool-Definitionen, daher wachsen die Bytes einer Anfrage mit ihrem Kontext.",

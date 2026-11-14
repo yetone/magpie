@@ -1442,6 +1442,15 @@ body.masked :hover > .acct-eye, body.masked .pq-card:hover .acct-eye, body.maske
 .us-hid .us-showall { align-self: flex-start; margin: 4px 0 0 2px; font-size: 11.5px; }
 .us-hid .us-showall[hidden] { display: none; }
 #quotaHid .row.stat .who { flex: 1 1 auto; min-width: 0; }
+/* the Agents list's small, idle clients, folded into one Other row */
+.row.stat.us-other { cursor: default; }
+.row.stat.us-other .us-other-chev { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 16px; height: 16px; color: var(--muted); }
+.row.stat.us-other .us-other-chev svg { transition: transform .15s cubic-bezier(.23, 1, .32, 1); }
+.row.stat.us-other[aria-expanded="true"] .us-other-chev svg { transform: rotate(90deg); }
+.row.stat.us-other .who .name { color: var(--fg-2); }
+.us-folded { display: flex; flex-direction: column; margin-left: 12px; border-top: 1px solid var(--line-2); }
+.us-folded .us-folded-more { align-self: flex-start; margin: 4px 0 0 2px; font-size: 11.5px; }
+@media (prefers-reduced-motion: reduce) { .row.stat.us-other .us-other-chev svg { transition: none; } }
 /* the switched-off providers' check-ins (wxkwxk666 on X) */
 #quotaOff .row.stat .who { flex: 1 1 auto; min-width: 0; }
 #quotaOff .wb-checkin { margin-top: 3px; }

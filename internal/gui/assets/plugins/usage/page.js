@@ -909,6 +909,42 @@ function holdsUnknownLine(why) {
   return line;
 }
 
+// The Agents list folds the clients that are small and idle into one
+// Other row (WJaunita45604 on X: dozens of randomly named test clients of
+// ~10K tokens each, every one a row laid out again at each refresh, slowed
+// the page down). A client folds when it is past the 5 with the most
+// tokens, under 1% of the period's tokens, and either has made no call in
+// the last 3 days or is past the top 20; two or more fold, or none do.
+// Their sum is the Other row's, so every total stays exact.
+const USAGE_FOLD_TOP = 5, USAGE_FOLD_LONG = 20, USAGE_FOLD_SHARE = 0.01, USAGE_FOLD_IDLE = 3 * 864e5;
+const USAGE_OTHER_PAGE = 100;
+let usageOtherOpen = false, usageOtherShown = USAGE_OTHER_PAGE;
+function usageFoldAgents(groups, total, now = Date.now()) {
+  const rank = new Map([...groups].sort((a, b) => usageTokens(b) - usageTokens(a)).map((g, i) => [g, i]));
+  const idle = (g) => {
+    const at = Date.parse(g.last || "");
+    return at > 0 && now - at >= USAGE_FOLD_IDLE;
+  };
+  const folds = (g) => {
+    const i = rank.get(g);
+    return i >= USAGE_FOLD_TOP && usageTokens(g) < USAGE_FOLD_SHARE * total && (i >= USAGE_FOLD_LONG || idle(g));
+  };
+  const folded = groups.filter(folds);
+  if (folded.length < 2) return { kept: groups, folded: [] };
+  return { kept: groups.filter((g) => !folds(g)), folded };
+}
+// usageSum adds groups' counts up, as one group
+function usageSum(groups) {
+  const add = (s, g) => {
+    for (const [k, v] of Object.entries(g)) {
+      if (typeof v === "number") s[k] = (s[k] || 0) + v;
+      else if (k === "own" && v) s.own = add(s.own || {}, v);
+    }
+    return s;
+  };
+  return groups.reduce(add, {});
+}
+
 function renderUsage() {
   const u = usage;
   const view = $("#view-usage");
@@ -992,61 +1028,66 @@ function renderUsage() {
   fitChartLabels();
 
   const total = Math.max(1, usageTokens(u));
-  const list = (id, groups, act) => {
+  // list draws a list's rows anew; more adds what follows them while the
+  // logos drawn before are still kept
+  const list = (id, groups, act, more) => {
     const box = typeof id === "string" ? $("#" + id) : id;
     keepIcons(box); // a logo made again blinks (keepIcons)
     box.replaceChildren();
-    for (const g of groups) {
-      const r = el("div", "row stat");
-      r.dataset.id = g.id || "";
-      r.append(icon(g.icon || "generic"));
-      const who = el("div", "who");
-      who.append(el("div", "name" + (g.name ? "" : " faint"), g.name || t("account not recorded")));
-      const sub = [];
-      if (g.sub) sub.push(g.sub);
-      sub.push(t(g.calls === 1 ? "{n} call" : "{n} calls", { n: g.calls }));
-      // what the calls cost in their plan's credits, as the replies said
-      // (WorkBuddy's 积分): an account's, a model's, an agent's (lcyksp
-      // on Discord), not only their tokens
-      if (g.credited) sub.push(ledCredits(g).textContent);
-      // magpie's own calls apart from the agents' (#1839): magpie's row
-      // says it is, and a model's, a key's or an account's how many of
-      // its calls were
-      if (id === "usageAgents" && g.id === "magpie") who.firstChild.append(ownBadge());
-      else if (g.own?.calls) sub.push(ownCalls(g.own.calls));
-      if (g.errors) sub.push(t("{n} failed", { n: g.errors }));
-      // of those, the replies magpie ended stuck in a loop (#1858)
-      if (g.loops) sub.push(t("{n} looped", { n: g.loops }));
-      if (g.retried) sub.push(t("{n} answered on a retry", { n: g.retried }));
-      // how long the streamed replies took to begin, and how fast they
-      // wrote after (#196)
-      if (g.timed) {
-        sub.push(t("TTFT {ms}", { ms: ledTook(Math.round(g.ttft_ms / g.timed)) }));
-      }
-      const gs = ledGroupSpeed(g);
-      if (gs) sub.push(gs.text);
-      const subLine = el("div", "sub", sub.join(" · "));
-      if (g.own?.calls) subLine.title = ownWhy();
-      who.append(subLine);
-      r.append(who);
-      const share = el("div", "share");
-      const fill = el("i");
-      fill.style.width = Math.max(1.5, 100 * usageTokens(g) / total).toFixed(1) + "%";
-      share.append(fill);
-      share.title = t("{n}% of tokens", { n: Math.round(100 * usageTokens(g) / total) });
-      r.append(share);
-      const num = el("div", "num");
-      // how much of its prompt came from the cache, counted as the cache
-      // read tile counts it (#925)
-      const hitRate = cacheHitOf(g);
-      const hit = g.cache_read && hitRate !== null ? " · " + t("hit rate {p}", { p: hitPct(hitRate) }) : "";
-      num.append(el("b", "", fmtN(usageTokens(g))), el("small", "", t("{a} in · {b} out", { a: fmtN(g.input), b: fmtN(g.output) }) + (g.cache_read ? " · " + t("{n} cached", { n: fmtN(g.cache_read) }) : "") + hit));
-      r.append(num);
-      r.append(el("div", "cost", fmtCost(g, g.provider) ? "≈" + fmtCost(g, g.provider) : ""));
-      if (act) act(r, g);
-      box.append(r);
-    }
+    for (const g of groups) box.append(row(id, g, act));
+    if (more) more(box);
     keptIcons = null;
+    return box;
+  };
+  const row = (id, g, act) => {
+    const r = el("div", "row stat");
+    r.dataset.id = g.id || "";
+    r.append(icon(g.icon || "generic"));
+    const who = el("div", "who");
+    who.append(el("div", "name" + (g.name ? "" : " faint"), g.name || t("account not recorded")));
+    const sub = [];
+    if (g.sub) sub.push(g.sub);
+    sub.push(t(g.calls === 1 ? "{n} call" : "{n} calls", { n: g.calls }));
+    // what the calls cost in their plan's credits, as the replies said
+    // (WorkBuddy's 积分): an account's, a model's, an agent's (lcyksp
+    // on Discord), not only their tokens
+    if (g.credited) sub.push(ledCredits(g).textContent);
+    // magpie's own calls apart from the agents' (#1839): magpie's row
+    // says it is, and a model's, a key's or an account's how many of
+    // its calls were
+    if (id === "usageAgents" && g.id === "magpie") who.firstChild.append(ownBadge());
+    else if (g.own?.calls) sub.push(ownCalls(g.own.calls));
+    if (g.errors) sub.push(t("{n} failed", { n: g.errors }));
+    // of those, the replies magpie ended stuck in a loop (#1858)
+    if (g.loops) sub.push(t("{n} looped", { n: g.loops }));
+    if (g.retried) sub.push(t("{n} answered on a retry", { n: g.retried }));
+    // how long the streamed replies took to begin, and how fast they
+    // wrote after (#196)
+    if (g.timed) {
+      sub.push(t("TTFT {ms}", { ms: ledTook(Math.round(g.ttft_ms / g.timed)) }));
+    }
+    const gs = ledGroupSpeed(g);
+    if (gs) sub.push(gs.text);
+    const subLine = el("div", "sub", sub.join(" · "));
+    if (g.own?.calls) subLine.title = ownWhy();
+    who.append(subLine);
+    r.append(who);
+    const share = el("div", "share");
+    const fill = el("i");
+    fill.style.width = Math.max(1.5, 100 * usageTokens(g) / total).toFixed(1) + "%";
+    share.append(fill);
+    share.title = t("{n}% of tokens", { n: Math.round(100 * usageTokens(g) / total) });
+    r.append(share);
+    const num = el("div", "num");
+    // how much of its prompt came from the cache, counted as the cache
+    // read tile counts it (#925)
+    const hitRate = cacheHitOf(g);
+    const hit = g.cache_read && hitRate !== null ? " · " + t("hit rate {p}", { p: hitPct(hitRate) }) : "";
+    num.append(el("b", "", fmtN(usageTokens(g))), el("small", "", t("{a} in · {b} out", { a: fmtN(g.input), b: fmtN(g.output) }) + (g.cache_read ? " · " + t("{n} cached", { n: fmtN(g.cache_read) }) : "") + hit));
+    r.append(num);
+    r.append(el("div", "cost", fmtCost(g, g.provider) ? "≈" + fmtCost(g, g.provider) : ""));
+    if (act) act(r, g);
+    return r;
   };
   // a client hidden from the Agents list (ikunbots on X: curl,
   // Go-http-client, python-httpx beside the agents in use) is left out of
@@ -1055,7 +1096,7 @@ function renderUsage() {
   const hid = new Set(state.settings?.usageAgentsHidden || []);
   const agents = usageSorted(u.agents, "agents");
   const hidden = agents.filter((g) => hid.has(g.id));
-  list("usageAgents", agents.filter((g) => !hid.has(g.id)), (r, g) => {
+  const agentAct = (r, g) => {
     r.classList.add("acts");
     const b = el("button", "icon us-more");
     b.type = "button";
@@ -1084,6 +1125,47 @@ function renderUsage() {
     b.onclick = (e) => { e.stopPropagation(); menu(); };
     r.oncontextmenu = (e) => { e.preventDefault(); menu(); };
     r.querySelector(".share").after(b);
+  };
+  // the small clients idle for days fold into one Other row at the
+  // list's foot (usageFoldAgents), drawn only while it is open
+  const { kept, folded } = usageFoldAgents(agents.filter((g) => !hid.has(g.id)), total);
+  if (!folded.length) usageOtherOpen = false;
+  list("usageAgents", kept, agentAct, (box) => {
+    if (!folded.length) return;
+    // a page at a time: every row drawn is laid out again at each refresh.
+    // The folded rows are made before the Other row, so their logos are
+    // the ones kept from the last draw
+    let inner = null;
+    if (usageOtherOpen) {
+      const shown = folded.slice(0, usageOtherShown);
+      inner = el("div", "us-folded");
+      for (const g of shown) inner.append(row("usageAgents", g, agentAct));
+      if (folded.length > shown.length) {
+        const more = el("button", "text us-folded-more", t("Show {n} more", { n: folded.length - shown.length }));
+        more.type = "button";
+        more.onclick = (e) => { e.stopPropagation(); usageOtherShown += USAGE_OTHER_PAGE; renderUsage(); };
+        inner.append(more);
+      }
+    }
+    const other = row("usageAgents", { ...usageSum(folded), id: "", name: t("Other"), sub: t(folded.length === 1 ? "{n} client" : "{n} clients", { n: folded.length }), icon: "generic" });
+    other.classList.add("us-other");
+    const chev = el("span", "us-other-chev");
+    chev.append(svg(CHEV_R, 11, 1.6));
+    other.firstChild.replaceWith(chev);
+    other.tabIndex = 0;
+    other.setAttribute("role", "button");
+    other.setAttribute("aria-expanded", String(usageOtherOpen));
+    other.title = t("Clients under 1% of the tokens, idle for 3 days or past the top 20. Their calls still count in every total.");
+    const flip = () => {
+      usageOtherOpen = !usageOtherOpen;
+      usageOtherShown = USAGE_OTHER_PAGE;
+      renderUsage();
+      $("#usageAgents .us-other")?.focus({ preventScroll: true });
+    };
+    other.onclick = flip;
+    other.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); flip(); } };
+    box.append(other);
+    if (inner) box.append(inner);
   });
   const hb = $("#usageAgentsHid");
   hb.hidden = !hidden.length;
