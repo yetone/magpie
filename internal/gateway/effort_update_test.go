@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -72,7 +73,15 @@ func effortCodexAccount(t *testing.T, f *fake) {
 	auth := fmt.Sprintf(`{"auth_mode":"chatgpt","tokens":{"id_token":%q,"access_token":%q,"refresh_token":"r","account_id":"acct-1"}}`,
 		claims(map[string]any{"email": "me@example.com"}), claims(map[string]any{"exp": time.Now().Add(time.Hour).Unix()}))
 	os.WriteFile(filepath.Join(home, ".codex", "auth.json"), []byte(auth), 0o600)
-	up := httptest.NewServer(f)
+	// Only the turns reach f: the account's model list (a GET, no body)
+	// is fetched in the background and would overwrite what f got.
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/responses") {
+			http.NotFound(w, r)
+			return
+		}
+		f.ServeHTTP(w, r)
+	}))
 	t.Cleanup(up.Close)
 	old := provider.CodexBase
 	provider.CodexBase = up.URL + "/backend-api/codex"
