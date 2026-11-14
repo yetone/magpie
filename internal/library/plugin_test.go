@@ -241,3 +241,54 @@ func View0(t *testing.T) *View {
 	}
 	return v
 }
+
+// @AXmake110 on X: the Claude plugins page shows a chip for each Claude
+// Code config folder (claude#magpie-desktop), and turning the plugin off
+// for one answered `agent "claude#magpie-desktop": not an agent's id`.
+// Every route that takes an agent's id takes a profile's: the plugin's
+// agents, an agent's own instructions and how it is given skills.
+func TestLibraryTakesAProfilesAgentID(t *testing.T) {
+	h := sandbox(t)
+	pluginAgents(t, h)
+	write(t, filepath.Join(h, ".claude-magpie-desktop/settings.json"), "{}\n")
+	const prof = "claude#magpie-desktop"
+	src := filepath.Join(t.TempDir(), "acme")
+	writePlugin(t, src)
+	ok(t)(InstallPlugins(src, nil, []string{"claude", prof}))
+	skill := filepath.Join(h, ".claude-magpie-desktop/skills/tdd")
+	if _, err := os.Lstat(skill); err != nil {
+		t.Fatalf("the profile's skill: %v", err)
+	}
+
+	// off for the profile alone
+	ok(t)(PluginAgents("acme-kit", []string{"claude"}))
+	if _, err := os.Lstat(skill); err == nil {
+		t.Errorf("the skill stays in the profile it was turned off for")
+	}
+	if _, err := os.Lstat(filepath.Join(h, ".claude/skills/tdd")); err != nil {
+		t.Errorf("claude's own skill went too: %v", err)
+	}
+	// and on again
+	ok(t)(PluginAgents("acme-kit", []string{"claude", prof}))
+	if _, err := os.Lstat(skill); err != nil {
+		t.Errorf("on again: %v", err)
+	}
+
+	ok(t)(SetSkillHow(prof, HowCopy))
+	extra := "Answer in Chinese."
+	ok(t)(SaveInstructions(InstructionsChange{Extra: map[string]*string{prof: &extra}}))
+	if got := strings.TrimSpace(read(t, extraPath(prof))); got != extra {
+		t.Errorf("the profile's own instructions: %q", got)
+	}
+
+	for _, id := range []string{"claude", "codex@wsl:Ubuntu-24.04", prof, "hermes#work", "omp#work@wsl:Ubuntu"} {
+		if err := checkAgent(id); err != nil {
+			t.Errorf("%s refused: %v", id, err)
+		}
+	}
+	for _, id := range []string{"claude#", "#work", "claude#../x", "claude#a/b", `claude#a\b`, "claude#a#b", "claude#.x"} {
+		if checkAgent(id) == nil {
+			t.Errorf("%q taken for an agent's id", id)
+		}
+	}
+}

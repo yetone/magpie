@@ -314,12 +314,19 @@ func checkName(kind, name string) error {
 }
 
 // An agent's id is a name, or one in a WSL distro's
-// (codex@wsl:Ubuntu-24.04): distroRe is the distro's name.
+// (codex@wsl:Ubuntu-24.04): distroRe is the distro's name. Either can be
+// one of the agent's profiles, agent#profile (claude#magpie-desktop, a
+// Claude Code config folder; hermes#work, omp#work): the Library's pages
+// show those as agents of their own, so every route that takes an agent
+// takes them (@AXmake110 on X: a plugin couldn't be turned off for
+// claude#magpie-desktop). distroRe is the profile's name too: a plain
+// file name, as the id names files of the agent's (fileName).
 var distroRe = capre.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`, 64)
 
 func checkAgent(id string) error {
 	name, distro, wsl := strings.Cut(id, "@wsl:")
-	if !nameRe.MatchString(name) || wsl && !distroRe.MatchString(distro) {
+	name, profile, prof := strings.Cut(name, "#")
+	if !nameRe.MatchString(name) || prof && !distroRe.MatchString(profile) || wsl && !distroRe.MatchString(distro) {
 		return fmt.Errorf("agent %q: not an agent's id", id)
 	}
 	return nil
