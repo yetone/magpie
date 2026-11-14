@@ -569,7 +569,8 @@ func smallModel(p provider.Provider, keep func(catalog.Model) bool) string {
 // ready true; else smallModel of them all, and ready false. A model out
 // of its allowance is only picked when every other is (#1801: Image
 // recognition kept describing with an account out of its allowance, each
-// image refused 429).
+// image refused 429), and so is one whose every account has to be signed
+// in again (provider.SignInNeeded).
 func smallReady(p provider.Provider, keep func(catalog.Model) bool, from provider.Protocol) (string, bool) {
 	c, ready := smallReadyOf(p, smallCands(p, keep), from)
 	return c.id, ready
@@ -587,7 +588,10 @@ func smallReadyOf(p provider.Provider, cs []smallCand, from provider.Protocol) (
 	now := time.Now()
 	for _, c := range cs {
 		if _, spent := spentModel(p, c.id, from, now); !spent {
-			return c, true
+			// every account of p signed out, none is asked: a Claude
+			// sign-in Anthropic refused stayed Image recognition's first
+			// pick, and each image failed on it (@freefcw on X)
+			return c, !p.SignInNeeded()
 		}
 	}
 	return cs[0], false

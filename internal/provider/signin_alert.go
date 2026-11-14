@@ -52,6 +52,32 @@ func needsSignIn(agent string, isPlugin bool, lapsed string) bool {
 	return agent == "claude" || agent == "copilot" || isPlugin || signInGone.MatchString(lapsed)
 }
 
+// SignInNeeded says every account of p in use has to be signed in again,
+// as the Providers page shows it (needsSignIn): a model of p is asked of
+// none of them, each refused for its sign-in. False when one is usable,
+// or none is in use or known.
+func (p Provider) SignInNeeded() bool {
+	a := p.Account
+	if a == nil {
+		return false
+	}
+	agent, isPlugin := a.Agent, false
+	if _, ok := PluginOf(p.ID); ok && p.IsPlugin() {
+		agent, isPlugin = p.ID, true // its accounts go by the provider's id
+	}
+	used := false
+	for _, l := range Logins(agent) {
+		if !l.On && !l.Active {
+			continue
+		}
+		if !needsSignIn(a.Agent, isPlugin, l.Lapsed) {
+			return false
+		}
+		used = true
+	}
+	return used
+}
+
 // claudeEndsWithin is how long before a Claude sign-in ends it is told of:
 // Claude Code's own warning's three days.
 const claudeEndsWithin = 3 * 24 * time.Hour
