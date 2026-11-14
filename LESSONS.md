@@ -1501,6 +1501,15 @@ each one.
     pushed pair first ran together in the review (go test
     ./internal/usage ./internal/usageapi at 93762f968: ok). Run the
     changed package whole, at the head being pushed.
+  - A new value in a list that tests loop over meets every one of
+    them. 6256d9956 added "account" to access.Periods and ran
+    internal/access, budget, provider, cli and gui, but not
+    internal/gateway, where TestKeyLimitReservationsStayInTheirWindow
+    runs every period and went red (#6706, 2f5e75515). Before
+    pushing, grep the tests for the list's name (`access.Periods`)
+    and run each package that has one. The review's own first run
+    of it was piped through tail and lost which package failed; the
+    rerun went to a log file.
 - **Done right on 10-17.** The retire stack (0f1666b38 to de671719a)
   diffed staticcheck's U1000 against its base for dead code, b98f906b1
   was red on the old code for an own-account gap, and 8 subscriptions
