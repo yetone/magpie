@@ -17,8 +17,15 @@ func TestCursorIsCursorCLI(t *testing.T) {
 	if got := a.SharedName(); got != "Cursor" {
 		t.Errorf("SharedName = %q, want Cursor", got)
 	}
-	// every other agent keeps one name
+	// Copilot CLI's ~/.copilot is GitHub Copilot's, read by VS Code and
+	// the JetBrains plugin too; every other agent keeps one name
 	for _, b := range All() {
+		if b.ID == "copilot" {
+			if b.Name != "Copilot CLI" || b.SharedName() != "GitHub Copilot" {
+				t.Errorf("copilot: Name %q, SharedName %q", b.Name, b.SharedName())
+			}
+			continue
+		}
 		if b.ID != "cursor" && b.SharedName() != b.Name {
 			t.Errorf("%s: SharedName %q, Name %q", b.ID, b.SharedName(), b.Name)
 		}

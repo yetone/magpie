@@ -100,7 +100,7 @@ func TestEffortFields(t *testing.T) {
 	}
 
 	writeFile(t, filepath.Join(home, ".copilot", "settings.json"), `{"model":"gpt-5.5","contextTier":"long"}`)
-	setEffort(t, copilot(home), "xhigh", `"contextTier"`)
+	setEffort(t, copilot(home, filepath.Join(home, ".config")), "xhigh", `"contextTier"`)
 
 	cr := crush(home, cfg)
 	os.MkdirAll(filepath.Dir(cr.Path), 0o755)

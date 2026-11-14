@@ -379,6 +379,11 @@ type Agent struct {
 	// ~/.cursor (MCP servers, skills, hooks, chats) is the Cursor editor's
 	// too, so the Library and Sessions call it Cursor (SharedName).
 	shared string
+	// sharedApp, when set, reports whether an app of the vendor's that
+	// reads the shared folder is here, the folder or not: VS Code and
+	// GitHub Copilot's JetBrains plugin read ~/.copilot's
+	// copilot-instructions.md before anything has made the folder.
+	sharedApp func() bool
 	// pathOwn, when set, says whether the file at Path is this agent's,
 	// not one another tool wrote there first: a JetBrains plugin's
 	// settings.json in Qoder CN's folder (#1495).
@@ -446,7 +451,15 @@ func (a *Agent) SharedName() string {
 // but what the other app reads there too, the Library's MCP servers and
 // skills, is still given.
 func (a *Agent) SharedHere() bool {
-	return a.shared != "" && a.WSL == "" && a.Dir != "" && !Taken(a.Dir) && agentDir(a.Dir)
+	return a.shared != "" && a.WSL == "" && a.Dir != "" && !Taken(a.Dir) && (agentDir(a.Dir) || a.SharedRead())
+}
+
+// SharedRead reports whether an app of the agent's vendor that reads its
+// shared folder is here (sharedApp): VS Code, or GitHub Copilot's JetBrains
+// plugin, for Copilot CLI's ~/.copilot. A folder left by the CLI's
+// uninstall is then no leftover: that app still reads it.
+func (a *Agent) SharedRead() bool {
+	return a.shared != "" && a.WSL == "" && a.Dir != "" && a.sharedApp != nil && !Taken(a.Dir) && a.sharedApp()
 }
 
 // Detected reports whether the agent seems to be installed or configured.

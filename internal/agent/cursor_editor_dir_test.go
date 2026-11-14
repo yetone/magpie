@@ -43,9 +43,10 @@ func TestCursorFolderFromTheEditorIsNotTheCLI(t *testing.T) {
 	if cursor(t.TempDir()).SharedHere() {
 		t.Error("SharedHere with no ~/.cursor")
 	}
-	// only Cursor CLI shares its folder
+	// only Cursor CLI and Copilot CLI (~/.copilot, which VS Code's and the
+	// JetBrains plugin's Copilot read) share their folders
 	for _, b := range All() {
-		if b.ID != "cursor" && b.shared != "" {
+		if b.ID != "cursor" && b.ID != "copilot" && b.shared != "" {
 			t.Errorf("%s shares its folder too: %q", b.ID, b.shared)
 		}
 	}

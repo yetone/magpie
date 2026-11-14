@@ -34,7 +34,7 @@ func copilotSandbox(t *testing.T) (*Agent, string) {
 	home := effortHome(t)
 	t.Setenv("COPILOT_HOME", "")
 	t.Setenv("COPILOT_PROVIDERS_CONFIG", "")
-	return copilot(home), filepath.Join(home, ".copilot", "providers.json")
+	return copilot(home, filepath.Join(home, ".config")), filepath.Join(home, ".copilot", "providers.json")
 }
 
 // Connecting Copilot CLI to magpie's model writes the provider Copilot reads
@@ -151,7 +151,7 @@ func TestCopilotSyncCheckAndEnv(t *testing.T) {
 	other := filepath.Join(t.TempDir(), "mine.json")
 	t.Setenv("COPILOT_PROVIDERS_CONFIG", other)
 	home := t.TempDir()
-	cp2 := copilot(home)
+	cp2 := copilot(home, filepath.Join(home, ".config"))
 	if err := cp2.Field("model").Set("magpie/deepseek/flash"); err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +160,7 @@ func TestCopilotSyncCheckAndEnv(t *testing.T) {
 	}
 	t.Setenv("COPILOT_PROVIDERS_CONFIG", "")
 	t.Setenv("COPILOT_HOME", filepath.Join(home, "ch"))
-	if got := copilot(home).Path; got != filepath.Join(home, "ch", "settings.json") {
+	if got := copilot(home, filepath.Join(home, ".config")).Path; got != filepath.Join(home, "ch", "settings.json") {
 		t.Fatalf("COPILOT_HOME ignored: %s", got)
 	}
 }

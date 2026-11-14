@@ -325,7 +325,7 @@ func onMachineAll(home, cfg string) []*Agent {
 		copilotJetBrains(home),
 		air(home, cfg),
 		airIDE(home, cfg),
-		copilot(home),
+		copilot(home, cfg),
 		crush(home, cfg),
 		dsh(home),
 		dsbot(home),
@@ -1864,7 +1864,7 @@ func cursor(home string) *Agent {
 	}
 }
 
-func copilot(home string) *Agent {
+func copilot(home, cfg string) *Agent {
 	dir := filepath.Join(home, ".copilot")
 	// COPILOT_HOME moves the whole folder, settings.json and providers.json
 	// with it (Copilot's `copilot help environment`)
@@ -1898,6 +1898,14 @@ func copilot(home string) *Agent {
 		// folder says nothing of the CLI: its settings.json or the copilot
 		// command does (#1495)
 		dirShared: true,
+		// and they read its copilot-instructions.md as the user's own
+		// instructions (VS Code's promptsServiceImpl, the JetBrains
+		// plugin's getCopilotCliHomePath): the Library's row is GitHub
+		// Copilot's, kept with VS Code or the plugin alone here
+		shared: "GitHub Copilot",
+		sharedApp: func() bool {
+			return copilotJBInstalled(home) || vscode(home, cfg).Detected() || vscodeInsidersAgent(home, cfg).Detected()
+		},
 		// VS Code 1.143 ships a copilot launcher of its own in
 		// bin\copilot-shim in its install folder, which is on the user's
 		// PATH, and running it only asks for the CLI to be installed

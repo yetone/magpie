@@ -31,13 +31,13 @@ func TestCopilotLauncherFromAnEditorIsNotTheCLI(t *testing.T) {
 	install := filepath.Join(t.TempDir(), "Microsoft VS Code")
 	writeAt(t, filepath.Join(install, "resources", "app", "product.json"), `{"nameShort":"Visual Studio Code"}`)
 	put(filepath.Join(install, "bin", "copilot-shim"))
-	if copilot(home).Detected() {
+	if copilot(home, filepath.Join(home, ".config")).Detected() {
 		t.Error("VS Code's copilot launcher is taken for the Copilot CLI")
 	}
-	if bin, _ := copilot(home).cliBin(); bin != "" {
+	if bin, _ := copilot(home, filepath.Join(home, ".config")).cliBin(); bin != "" {
 		t.Errorf("the CLI looked for is %s, the launcher", bin)
 	}
-	if bin := copilot(home).BinPath(); bin != "" {
+	if bin := copilot(home, filepath.Join(home, ".config")).BinPath(); bin != "" {
 		t.Errorf("the agent's program is %s, the launcher", bin)
 	}
 	// a Mac's editor keeps its launcher inside the app proper, whose
@@ -45,12 +45,12 @@ func TestCopilotLauncherFromAnEditorIsNotTheCLI(t *testing.T) {
 	app := filepath.Join(t.TempDir(), "Visual Studio Code.app", "Contents", "Resources", "app")
 	writeAt(t, filepath.Join(app, "product.json"), `{"applicationName":"code"}`)
 	put(filepath.Join(app, "bin", "copilot-shim"))
-	if copilot(home).Detected() {
+	if copilot(home, filepath.Join(home, ".config")).Detected() {
 		t.Error("the editor app's copilot launcher is taken for the Copilot CLI")
 	}
 	// a launcher in the editor's bin, no shim folder of its own
 	put(filepath.Join(install, "bin"))
-	if copilot(home).Detected() {
+	if copilot(home, filepath.Join(home, ".config")).Detected() {
 		t.Error("a copilot launcher in the editor's bin is taken for the Copilot CLI")
 	}
 	// the CLI itself, where a user's installs put it, still is one
@@ -60,10 +60,10 @@ func TestCopilotLauncherFromAnEditorIsNotTheCLI(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", cli)
-	if !copilot(home).Detected() {
+	if !copilot(home, filepath.Join(home, ".config")).Detected() {
 		t.Error("the copilot command on PATH no longer finds the Copilot CLI")
 	}
-	if bin, _ := copilot(home).cliBin(); bin == "" {
+	if bin, _ := copilot(home, filepath.Join(home, ".config")).cliBin(); bin == "" {
 		t.Error("the copilot command on PATH no longer stands for the CLI")
 	}
 	// a product.json further up than an editor keeps one, as a folder of
@@ -77,7 +77,7 @@ func TestCopilotLauncherFromAnEditorIsNotTheCLI(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", npm)
-	if !copilot(home).Detected() {
+	if !copilot(home, filepath.Join(home, ".config")).Detected() {
 		t.Error("a product.json far above the CLI's folder makes the CLI an editor's launcher")
 	}
 	if runtime.GOOS == "windows" {
@@ -90,7 +90,7 @@ func TestCopilotLauncherFromAnEditorIsNotTheCLI(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", links)
-	if copilot(home).Detected() {
+	if copilot(home, filepath.Join(home, ".config")).Detected() {
 		t.Error("a link to the editor's launcher is taken for the Copilot CLI")
 	}
 }
@@ -119,10 +119,10 @@ func TestCopilotLauncherBesideTheBuildsHashFolderIsNotTheCLI(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", shim)
-	if copilot(home).Detected() {
+	if copilot(home, filepath.Join(home, ".config")).Detected() {
 		t.Error("VS Code 1.144's copilot launcher is taken for the Copilot CLI")
 	}
-	if bin, _ := copilot(home).cliBin(); bin != "" {
+	if bin, _ := copilot(home, filepath.Join(home, ".config")).cliBin(); bin != "" {
 		t.Errorf("the CLI looked for is %s, the launcher", bin)
 	}
 	// a folder beside bin that no commit's short hash names, holding a
@@ -131,7 +131,7 @@ func TestCopilotLauncherBesideTheBuildsHashFolderIsNotTheCLI(t *testing.T) {
 	// launcher reads as the CLI again, as it did before
 	writeAt(t, filepath.Join(install, "workshop", "resources", "app", "product.json"), `{"nameShort":"Visual Studio Code"}`)
 	os.RemoveAll(filepath.Join(install, "2c33b50b16"))
-	if !copilot(home).Detected() {
+	if !copilot(home, filepath.Join(home, ".config")).Detected() {
 		t.Error("a folder beside bin that is no build's hash counts as an editor's install")
 	}
 }

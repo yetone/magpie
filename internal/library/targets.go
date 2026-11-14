@@ -997,8 +997,11 @@ func targetsAsleep(gone bool) ([]*Target, []*agent.Agent) {
 		}
 		// an uninstall that left the folder behind (#2177, #2173): the
 		// Agents page calls the agent gone and offers none of its settings,
-		// since nothing reads them; the library gives nothing to it either
-		if !gone && a.CLIMissing() {
+		// since nothing reads them; the library gives nothing to it either,
+		// unless an app of its vendor's reads the folder too: VS Code's
+		// Copilot reads ~/.copilot's copilot-instructions.md with no
+		// Copilot CLI here
+		if !gone && a.CLIMissing() && !a.SharedRead() {
 			continue
 		}
 		if isAsleep(a) {
