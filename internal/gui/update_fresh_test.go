@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/update"
 )
@@ -148,9 +147,10 @@ func postInstall(t *testing.T, w Windows) updateJSON {
 	return j
 }
 
-// With Settings' Download updates automatically off, 0.1.11 downloaded on
-// a click and 0.1.12 out since: Restart to update downloads 0.1.12 and
-// restarts into it, rather than into 0.1.11.
+// With Settings' Download updates automatically off, 0.1.11 found by a
+// check and 0.1.12 out since: a click on Download update downloads
+// 0.1.12, not the version the last check found, and Restart to update
+// then goes into it with nothing downloaded again.
 func TestRestartClickTakesTheNewest(t *testing.T) {
 	f := newFreshFeed(t)
 	downloadsOnClick(t)
@@ -159,39 +159,29 @@ func TestRestartClickTakesTheNewest(t *testing.T) {
 	if j := u.json(); j.State != "found" || j.Latest != "0.1.11" {
 		t.Fatalf("the check: %+v", j)
 	}
-	u.download()
-	if j := settled(t, u); j.State != "ready" || j.Latest != "0.1.11" || f.downloads.Load() != 1 {
+	f.latest.Store("0.1.12")
+	postInstall(t, &quitCount{})
+	if j := settled(t, u); j.State != "ready" || j.Latest != "0.1.12" || f.downloads.Load() != 1 {
 		t.Fatalf("Download update: %+v, %d downloads", j, f.downloads.Load())
 	}
-	f.latest.Store("0.1.12")
-	j := postInstall(t, &quitCount{})
-	if j.State == "ready" && j.Latest == "0.1.11" {
-		t.Fatalf("Restart to update went into the version the last check found: %+v", j)
-	}
-	if j := settled(t, u); j.State != "ready" || j.Latest != "0.1.12" || f.downloads.Load() != 2 {
-		t.Fatalf("after the click: %+v, %d downloads", j, f.downloads.Load())
-	}
-	// nothing newer: the click restarts into what is downloaded, not
-	// downloading it again
-	if j := postInstall(t, &quitCount{}); j.State != "ready" || j.Latest != "0.1.12" || f.downloads.Load() != 2 {
+	if j := postInstall(t, &quitCount{}); j.State != "ready" || j.Latest != "0.1.12" || f.downloads.Load() != 1 {
 		t.Fatalf("the newest downloaded: %+v, %d downloads", j, f.downloads.Load())
 	}
 }
 
-// A feed slower than the restart's wait for it, with downloads on a
-// click: the restart doesn't go into the download it has, which the
-// answer may have made old; it says it is checking, and the answer, once
-// in, is downloaded.
+// A restart with nothing downloaded waiting (another magpie put the
+// update in) asks the feed first; one slower than the restart's wait for
+// it has the route say it is checking, and the answer, once in, is
+// downloaded.
 func TestRestartWaitsForTheFeed(t *testing.T) {
 	f := newFreshFeed(t)
 	u := freshUpdater(t, true)
 	oldTicks, oldTick := recheckTicks, recheckTick
 	recheckTicks, recheckTick = 3, time.Millisecond
 	t.Cleanup(func() { recheckTicks, recheckTick = oldTicks, oldTick })
-	u.check()
-	if j := u.json(); j.State != "ready" || j.Latest != "0.1.11" {
-		t.Fatalf("the check: %+v", j)
-	}
+	u.mu.Lock()
+	u.state, u.latest = "ready", &update.Release{Version: "0.1.11"}
+	u.mu.Unlock()
 	downloadsOnClick(t)
 	f.latest.Store("0.1.12")
 	hold := make(chan struct{})
@@ -206,49 +196,8 @@ func TestRestartWaitsForTheFeed(t *testing.T) {
 	if j.State != "checking" {
 		t.Fatalf("restarted before the feed answered: %+v", j)
 	}
-	if j := settled(t, u); j.State != "ready" || j.Latest != "0.1.12" || f.downloads.Load() != 2 {
+	if j := settled(t, u); j.State != "ready" || j.Latest != "0.1.12" || f.downloads.Load() != 1 {
 		t.Fatalf("the answer: %+v, %d downloads", j, f.downloads.Load())
-	}
-}
-
-// The tray's Restart to update asks the feed as the page's does: with
-// downloads on a click and 0.1.12 out since, it is downloaded and
-// restarted into, once.
-func TestTrayRestartTakesTheNewest(t *testing.T) {
-	busy := &fakeBusy{}
-	u := freshUpdater(t, true)
-	quick(t, busy, u)
-	waitRecheck = (*updater).recheck
-	f := newFreshFeed(t)
-	u.check()
-	downloadsOnClick(t)
-	if j := u.json(); j.State != "ready" || j.Latest != "0.1.11" {
-		t.Fatalf("the check: %+v", j)
-	}
-	f.latest.Store("0.1.12")
-	into := make(chan string, 4)
-	u.restartAsked(func() bool {
-		u.mu.Lock()
-		into <- u.latest.Version
-		u.mu.Unlock()
-		return true
-	})
-	select {
-	case v := <-into:
-		if v != "0.1.12" {
-			t.Fatalf("the tray restarted into %s with 0.1.12 out", v)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatalf("never restarted: %+v", u.json())
-	}
-	if n := f.downloads.Load(); n != 2 {
-		t.Fatalf("%d downloads", n)
-	}
-	// the gateway busy: the restart waits, as before (#577)
-	busy.set(gateway.Busy{Requests: 1})
-	u.restartAsked(func() bool { into <- "busy"; return true })
-	if w, _ := u.waitingFor(); !w {
-		t.Fatal("restarted with a request in flight")
 	}
 }
 
@@ -365,8 +314,8 @@ func TestRestartTakesTheDownloadWaiting(t *testing.T) {
 // download is in; that restart asked the feed, magpie had released again
 // while the download came in, so it downloaded the newer one, and the
 // restart after that asked again. Here each restart finds a newer release
-// out: the restart after the one its own asking downloaded goes into that
-// download, and the feed is asked again only once it is freshAfter old.
+// out: every one goes into the download the click made, and the feed is
+// not asked.
 func TestRestartAfterItsDownloadDoesNotAskAgain(t *testing.T) {
 	f := newFreshFeed(t)
 	downloadsOnClick(t)
@@ -376,27 +325,92 @@ func TestRestartAfterItsDownloadDoesNotAskAgain(t *testing.T) {
 	if j := settled(t, u); j.State != "ready" || j.Latest != "0.1.11" || f.downloads.Load() != 1 {
 		t.Fatalf("Download update: %+v, %d downloads", j, f.downloads.Load())
 	}
-	// released while the download came in: the restart takes the newer
-	f.latest.Store("0.1.12")
-	postInstall(t, &quitCount{})
-	if j := settled(t, u); j.State != "ready" || j.Latest != "0.1.12" || f.downloads.Load() != 2 {
-		t.Fatalf("the first restart: %+v, %d downloads", j, f.downloads.Load())
-	}
-	// released again while that one came in; the pill restarts again
-	for i, v := range []string{"0.1.13", "0.1.14", "0.1.15"} {
+	// released while the download came in, and again after each restart
+	for i, v := range []string{"0.1.12", "0.1.13", "0.1.14"} {
 		f.latest.Store(v)
 		asked := f.asked.Load()
 		j := postInstall(t, &quitCount{})
-		if j.State != "ready" || j.Latest != "0.1.12" || f.downloads.Load() != 2 || f.asked.Load() != asked {
-			t.Fatalf("restart %d, %s out: %+v, %d downloads, the feed asked %d times", i+2, v, j, f.downloads.Load(), f.asked.Load()-asked)
+		if j.State != "ready" || j.Latest != "0.1.11" || f.downloads.Load() != 1 || f.asked.Load() != asked {
+			t.Fatalf("restart %d, %s out: %+v, %d downloads, the feed asked %d times", i+1, v, j, f.downloads.Load(), f.asked.Load()-asked)
 		}
 	}
-	// a restart freshAfter later asks for the newest again (coeo91)
-	u.mu.Lock()
-	u.restartStaged = time.Now().Add(-freshAfter)
-	u.mu.Unlock()
-	postInstall(t, &quitCount{})
-	if j := settled(t, u); j.State != "ready" || j.Latest != "0.1.15" || f.downloads.Load() != 3 {
-		t.Fatalf("a restart later: %+v, %d downloads", j, f.downloads.Load())
+}
+
+// sakamotokurome on X: "重启能不能跟更新分开，我本来下载一个新版本了，点击restart，
+// 结果它又跑去下载了". With Settings' Download updates automatically off,
+// 0.1.11 was downloaded on a click; by the time Restart to update was
+// clicked 0.1.12 was out, and the click downloaded 0.1.12 whole instead of
+// putting in what was on disk. A version downloaded and waiting is what
+// every restart goes into, on a click's download too: the page's Restart
+// to update, the tray's and the wait for an idle gateway, with the feed
+// not asked and nothing downloaded again. The new version's first check
+// is what finds 0.1.12.
+func TestRestartPutsInTheClickedDownload(t *testing.T) {
+	busy := &fakeBusy{}
+	u := freshUpdater(t, true)
+	quick(t, busy, u)
+	waitRecheck = (*updater).recheck
+	f := newFreshFeed(t)
+	downloadsOnClick(t)
+	u.check()
+	if j := u.json(); j.State != "found" || j.Latest != "0.1.11" {
+		t.Fatalf("the check: %+v", j)
 	}
+	u.download()
+	if j := settled(t, u); j.State != "ready" || j.Latest != "0.1.11" || f.downloads.Load() != 1 {
+		t.Fatalf("Download update: %+v, %d downloads", j, f.downloads.Load())
+	}
+	f.latest.Store("0.1.12")
+	asked := f.asked.Load()
+	unchanged := func(what string) {
+		t.Helper()
+		if j := settled(t, u); j.State != "ready" || j.Latest != "0.1.11" || f.downloads.Load() != 1 || u.staged == "" || f.asked.Load() != asked {
+			t.Fatalf("%s: %+v, %d downloads, the feed asked %d times", what, j, f.downloads.Load(), f.asked.Load()-asked)
+		}
+	}
+
+	// the page's Restart to update restarts at once into 0.1.11
+	if j := postInstall(t, &quitCount{}); j.State != "ready" || j.Latest != "0.1.11" {
+		t.Fatalf("the page's click: %+v", j)
+	}
+	unchanged("the page's click")
+
+	// the tray's
+	into := make(chan string, 4)
+	restart := func() bool {
+		u.mu.Lock()
+		into <- u.latest.Version
+		u.mu.Unlock()
+		return true
+	}
+	u.restartAsked(restart)
+	select {
+	case v := <-into:
+		if v != "0.1.11" {
+			t.Fatalf("the tray restarted into %s", v)
+		}
+	default:
+		t.Fatalf("the tray didn't restart at once: %+v", u.json())
+	}
+	unchanged("the tray's click")
+
+	// a click's restart that waited for the gateway to be idle
+	u.waitIdle(restart, true)
+	select {
+	case v := <-into:
+		if v != "0.1.11" {
+			t.Fatalf("the wait restarted into %s", v)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("the wait never restarted: %+v", u.json())
+	}
+	unchanged("the wait")
+
+	// the dialog that shows the update, its feed stale, names 0.1.11 still
+	u.mu.Lock()
+	u.asked = time.Now().Add(-time.Hour)
+	u.mu.Unlock()
+	u.freshen()
+	asked = f.asked.Load()
+	unchanged("the dialog")
 }

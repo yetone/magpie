@@ -162,11 +162,11 @@ func TestRestartWhenIdle(t *testing.T) {
 	}
 }
 
-// Versions out while a restart waits collapse into the newest: the restart
-// is into the last one, downloaded once the gateway is idle, not into each,
-// for a click's restart with downloads on a click (with them automatic the
-// one waiting is restarted into: TestRestartTakesTheDownloadWaiting).
-func TestRestartWhenIdleIntoTheNewest(t *testing.T) {
+// Versions out while a click's restart waits for the gateway don't change
+// what it goes into: the one downloaded and waiting, with downloads on a
+// click too, and nothing downloaded again (sakamotokurome on X). The new
+// version's first check finds the newer ones.
+func TestRestartWhenIdleIntoTheWaiting(t *testing.T) {
 	sandboxHome(t)
 	busy := &fakeBusy{}
 	u := &updater{}
@@ -216,13 +216,13 @@ func TestRestartWhenIdleIntoTheNewest(t *testing.T) {
 	busy.set(gateway.Busy{})
 	select {
 	case v := <-into:
-		if v != "0.1.13" {
+		if v != "0.1.11" {
 			t.Fatalf("restarted into %s", v)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatalf("never restarted: %+v", u.json())
 	}
-	if j := u.json(); j.State != "ready" || j.Latest != "0.1.13" {
+	if j := u.json(); j.State != "ready" || j.Latest != "0.1.11" || u.staged == "" {
 		t.Fatalf("%+v", j)
 	}
 }

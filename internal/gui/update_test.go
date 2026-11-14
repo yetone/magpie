@@ -11,13 +11,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/update"
 )
 
 // A version downloaded and waiting for a restart gives way to a newer one
-// out since, so the restart goes straight to the latest, with downloads on
-// a click (with them automatic it is restarted into as it is:
-// TestRestartTakesTheDownloadWaiting).
+// out since when a check is asked for (Settings' Check). A restart doesn't
+// ask, with downloads on a click too: it goes into the one waiting
+// (TestRestartPutsInTheClickedDownload).
 func TestUpdateStagedGivesWayToNewer(t *testing.T) {
 	sandboxHome(t)
 	body := []byte("new magpie")
@@ -64,10 +65,21 @@ func TestUpdateStagedGivesWayToNewer(t *testing.T) {
 		t.Fatalf("%+v", j)
 	}
 	t.Setenv("MAGPIE_UPDATE_FEED", srv.URL)
-	// 0.1.13 out: that is the one it restarts into
+	// 0.1.13 out: the restart's recheck leaves 0.1.11, with downloads on
+	// a click too; a check asked for, downloads automatic, takes 0.1.13
 	latest.Store("0.1.13")
+	u.recheck(true)
 	downloadsOnClick(t)
 	u.recheck(true)
+	if j := u.json(); j.State != "ready" || j.Latest != "0.1.11" || downloads.Load() != 1 || u.staged == "" {
+		t.Fatalf("the restart's recheck: %+v, %d downloads", j, downloads.Load())
+	}
+	s := settings.Load()
+	s.NoAutoDownload = false
+	if err := settings.Save(s); err != nil {
+		t.Fatal(err)
+	}
+	u.check()
 	for u.json().State == "downloading" || u.json().State == "checking" {
 		time.Sleep(10 * time.Millisecond)
 	}

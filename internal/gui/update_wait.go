@@ -80,8 +80,8 @@ var gatewayBusy = func() gateway.Busy {
 	return gateway.Busy{}
 }
 
-// waitRecheck asks the feed again before the restart (updater.recheck),
-// asked when a click armed the wait.
+// waitRecheck is updater.recheck before the restart, asked when a click
+// armed the wait: the feed is asked only with nothing downloaded waiting.
 var waitRecheck = (*updater).recheck
 
 // idleAt is whether b leaves nothing for a restart at now to cut short.
@@ -203,8 +203,9 @@ func (u *updater) waitFor(gen int) {
 		switch st := u.json().State; {
 		case in:
 		case st == "ready":
-			// with Settings' NoAutoDownload, a newer version out since is
-			// downloaded first, and waited for (recheck)
+			// the version downloaded and waiting is gone into as it is;
+			// with none (another magpie put it in), the feed is asked
+			// (recheck)
 			waitRecheck(u, asked)
 			if u.asking() || u.json().State != "ready" {
 				continue
@@ -256,11 +257,9 @@ func (u *updater) autoTick(s settings.Settings) {
 
 // restartAsked is the tray's Restart to update, restart doing it. With the
 // gateway busy it waits for it to be idle (#577), and a click while it
-// waits restarts at once. The feed is asked first, as the page's restart
-// asks it (coeo91 on Discord: the tray restarted into the version the
-// last check found): with Settings' NoAutoDownload a newer version out
-// since is downloaded, and the restart waits for it; with downloads
-// automatic the one waiting is restarted into (recheck).
+// waits restarts at once. It goes through recheck as the page's restart
+// does: the version downloaded and waiting is restarted into as it is,
+// and only with none is the feed asked first (coeo91 on Discord).
 func (u *updater) restartAsked(restart func() bool) {
 	if waiting, _ := u.waitingFor(); !waiting && !u.idle() {
 		u.waitIdle(restart, true)
