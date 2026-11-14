@@ -1087,6 +1087,16 @@ func (s *Server) routes() *routeMux {
 	// another magpie looking for it at a new address (remote_prove.go)
 	mux.HandleFunc("POST "+provider.RemoteProvePath, s.prove)
 	mux.HandleFunc("GET "+KeyPagePath, s.keyPage)
+	// DeepSeek's chat page (deepseek-ai/chat-demo), served with any of
+	// magpie's models, its search and link reading magpie's (chatpage.go)
+	mux.HandleFunc("GET "+ChatPagePath, s.chatPage)
+	mux.HandleFunc("GET "+ChatPagePath+"/{path...}", s.chatPage)
+	mux.HandleFunc("GET "+ChatPagePath+"/models", s.chatPageModels)
+	mux.HandleFunc("POST "+ChatPagePath+"/anthropic/v1/messages", s.chatMessages)
+	mux.HandleFunc("POST "+ChatPagePath+"/anthropic/v1/files", s.chatFileUpload)
+	mux.HandleFunc("DELETE "+ChatPagePath+"/anthropic/v1/files/{id}", s.chatFileDelete)
+	mux.HandleFunc("POST "+ChatPagePath+"/v1/tools/asr", s.chatASR)
+	mux.HandleFunc("POST "+ChatPagePath+"/v1/tools/tts", s.chatTTS)
 	mux.HandleFunc("GET "+CAPath, s.caFile)
 	mux.HandleFunc("GET "+keyPageData, s.keyInfo)
 	// the join page, where another computer that knows the join password

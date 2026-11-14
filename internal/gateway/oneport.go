@@ -31,6 +31,8 @@ var clientPrefixes = []string{
 	// the key page (KeyPagePath): a key's holder opens it at the address
 	// they give their agents
 	KeyPagePath,
+	// DeepSeek's chat page (ChatPagePath), at the same address
+	ChatPagePath,
 	// and the join page (JoinPagePath), at the same address
 	JoinPagePath,
 	// and magpie's CA (CAPath), which the other computer fetches from the

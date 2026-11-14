@@ -620,7 +620,7 @@ func lanGuard(next http.Handler) http.Handler {
 		// opened before the key it asks for is typed; its data isn't
 		// magpie's CA, too: public, and fetched before the computer
 		// asking trusts magpie's https:// (https.go)
-		if remote && (keyPageOpen(r) || caFileOpen(r)) {
+		if remote && (keyPageOpen(r) || caFileOpen(r) || chatPageOpen(r)) {
 			next.ServeHTTP(w, r)
 			return
 		}
