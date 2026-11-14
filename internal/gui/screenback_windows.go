@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"unsafe"
 
+	"github.com/wailsapp/wails/v3/pkg/w32"
 	"golang.org/x/sys/windows"
 )
 
@@ -123,7 +124,11 @@ func screenBackFrom(msg uint32, wParam, lParam uintptr) string {
 // coming back draws the windows again, and the screens are read
 // (screensWndProc). None keeps a message from Wails but the screens'.
 var appWndProc = func(hwnd uintptr, msg uint32, wParam, lParam uintptr) (uintptr, bool) {
-	hookNoActivate(hwnd)
+	if msg == w32.WM_DESTROY && hwnd == ownMainThreadWindow() {
+		unhookNoActivate()
+	} else {
+		hookNoActivate(hwnd)
+	}
 	if why := screenBackFrom(msg, wParam, lParam); why != "" {
 		if f := screenBack.Load(); f != nil {
 			(*f)(why)

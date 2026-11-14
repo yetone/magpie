@@ -454,6 +454,7 @@ func Run(version string, showMain bool, link string) error {
 		// leaves both to it: the failover goes on through the new one, and
 		// so do the threads.
 		OnShutdown: func() {
+			unhookNoActivate()
 			proc.EndProbes()
 			if handedOver.Load() {
 				return
@@ -784,6 +785,7 @@ func Run(version string, showMain bool, link string) error {
 	if ownPage {
 		startAppPage(h, gw)
 	}
+	defer unhookNoActivate()
 	return h.app.Run()
 }
 

@@ -64,6 +64,22 @@ func hookNoActivate(hwnd uintptr) {
 	})
 }
 
+// unhookNoActivate takes the WH_CBT hook off Wails' main thread before the
+// process exits (#6705): left on while ExitProcess runs LdrShutdownProcess,
+// msctf's FLS cleanup destroys the thread's IME message window, which
+// dispatches HCBT_DESTROYWND into noActivateCBT while g1 is inside
+// runtime.exit(0)'s stdcall. noActivateCBT's CallNextHookEx syscall clears
+// g1.syscallsp, so cgocallbackg's exitsyscall throws "exitsyscall: syscall
+// frame is no longer valid", and fatalthrow's runtime.exit(2) self-deadlocks
+// on runtime.finlock, leaving the process wedged with one thread holding the
+// single-instance mutex and WebView2 profile (#5922, #6678).
+func unhookNoActivate() {
+	if noActivateHook != 0 {
+		w32.UnhookWindowsHookEx(noActivateHook)
+		noActivateHook = 0
+	}
+}
+
 func noActivateCBT(code int, wParam w32.WPARAM, lParam w32.LPARAM) w32.LRESULT {
 	if code == hcbtActivate && quietActivation(wParam) {
 		return 1
