@@ -101,6 +101,9 @@ func direct(p Period, now time.Time, rows []Row) Summary {
 		s.Totals.addRow(r)
 		id := ReportedAs(r.Agent)
 		put(agents, id, Group{ID: id}, r)
+		if a := agents[id]; r.Time.After(a.Last) {
+			a.Last = r.Time
+		}
 		model := r.Model
 		if alias != nil {
 			model = alias(model)

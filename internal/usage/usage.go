@@ -1014,6 +1014,10 @@ type Group struct {
 	Host string `json:"host,omitempty"`
 	// Agent is the agent a session is of (sessions only).
 	Agent string `json:"agent,omitempty"`
+	// Last is when the group's newest call in the period was made (agents
+	// only): the Usage page folds a small client idle for days into one
+	// "Other" row (WJaunita45604 on X: dozens of test clients).
+	Last time.Time `json:"last,omitzero"`
 	Totals
 	// Own is the share of these calls magpie made by itself (Record.ByMagpie):
 	// a routing classifier's, a web search's or an image description's,

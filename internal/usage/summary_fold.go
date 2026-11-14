@@ -238,7 +238,11 @@ func (c *summaryCounts) add(u *summaryRun, k *summaryKeying, r Record) {
 		c.series[i].add(r, pr)
 	}
 	id := ReportedAs(r.Agent) // one kept before magpie knew the agent by name
-	c.agents.at(id, func() Group { return Group{ID: id} }).add(r, pr)
+	a := c.agents.at(id, func() Group { return Group{ID: id} })
+	a.add(r, pr)
+	if r.Time.After(a.Last) {
+		a.Last = r.Time
+	}
 	model := r.Model
 	if u.alias != nil {
 		model = u.alias(model)
