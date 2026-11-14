@@ -82,12 +82,16 @@ function renderPort(s) {
 // renderBareIds: Model ids without the provider (settings.bareModelIDs,
 // love1sbug on X, moving from CLIProxyAPI): the gateway's /v1/models
 // lists each model by its own id as well, gpt-5.6-sol beside
-// codex/gpt-5.6-sol. Posted on its own; off by default.
+// codex/gpt-5.6-sol. Only lists it by that id alone, in place of the
+// provider/model ids it stands for (settings.bareModelIDsOnly, qQianye on
+// X: a Docker magpie's client listed every model twice, and a gateway has
+// no Agents page to pick models on). Posted on its own; off by default.
 function renderBareIds(s) {
   renderBusyLoad(s); // Models › Routing's row
   renderContextCap(s);
-  $("#bareIdsSegs").replaceChildren(segs([[false, t("Off")], [true, t("On")]], !!s.bareModelIDs, (on) =>
-    writingPrefs(api("settings/bare-ids", { on })).then((ns) => { prefs = state.settings = ns; renderSettings(); })
+  const now = !s.bareModelIDs ? "off" : s.bareModelIDsOnly ? "only" : "on";
+  $("#bareIdsSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")], ["only", t("Only")]], now, (v) =>
+    writingPrefs(api("settings/bare-ids", { on: v !== "off", only: v === "only" })).then((ns) => { prefs = state.settings = ns; renderSettings(); })
       .catch((e) => { status(t(e.message), "err"); renderSettings(); })));
 }
 

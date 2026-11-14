@@ -826,6 +826,12 @@ type Settings struct {
 	// "codex/gpt-5.6-sol"), for clients moved from another proxy that ask
 	// for bare ids (love1sbug on X; provider.BareEntries). Off by default.
 	BareModelIDs bool `json:"bareModelIDs,omitempty"`
+	// BareModelIDsOnly, with BareModelIDs, has the list give a model its
+	// bare id in place of the provider/model ids it stands for, not beside
+	// them (qQianye on X: a client of a Docker magpie listed every model
+	// twice, and a gateway has no Agents page to pick models on). A
+	// provider/model id the bare one doesn't reach stays (provider.BareOnly).
+	BareModelIDsOnly bool `json:"bareModelIDsOnly,omitempty"`
 	// CodexAgentsV1 has the OpenAI models magpie hands Codex — the ChatGPT
 	// account's own, their codex/ ids, the groups one is in, and those a
 	// provider that seals as that backend does serves (catalog.Model.Seals:

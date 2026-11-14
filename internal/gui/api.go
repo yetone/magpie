@@ -1917,14 +1917,15 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		writeJSON(rw, settingsState())
 	})
 	// whether the gateway's /v1/models lists each model by its id without
-	// the provider as well (settings.BareModelIDs, love1sbug on X)
+	// the provider as well (settings.BareModelIDs, love1sbug on X), or
+	// with only, by that id alone (BareModelIDsOnly, qQianye on X)
 	mux.HandleFunc("POST /api/settings/bare-ids", func(rw http.ResponseWriter, r *http.Request) {
-		var in struct{ On bool }
+		var in struct{ On, Only bool }
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			fail(rw, err)
 			return
 		}
-		if err := provider.SetBareModelIDs(in.On); err != nil {
+		if err := provider.SetBareIDs(in.On, in.Only); err != nil {
 			fail(rw, err)
 			return
 		}

@@ -26,15 +26,29 @@ import (
 // BareModelIDs says whether /v1/models lists models by their bare ids too.
 func BareModelIDs() bool { return settings.Shared().BareModelIDs }
 
-// SetBareModelIDs turns settings.BareModelIDs on or off. The list is built
-// for each request, so the next one has the bare ids, or goes without
-// them; no agent's file names a model by one, so none is written again.
-func SetBareModelIDs(on bool) error {
+// BareOnly says whether /v1/models lists a model by its bare id in place
+// of the provider/model ids it stands for (settings.BareModelIDsOnly;
+// qQianye on X), not beside them. See OnlyBare.
+func BareOnly() bool {
+	s := settings.Shared()
+	return s.BareModelIDs && s.BareModelIDsOnly
+}
+
+// SetBareModelIDs turns settings.BareModelIDs on, beside the provider/model
+// ids, or off.
+func SetBareModelIDs(on bool) error { return SetBareIDs(on, false) }
+
+// SetBareIDs sets settings.BareModelIDs to on and BareModelIDsOnly to only
+// (which off clears). The list is built for each request, so the next one
+// has the bare ids, or goes without them; no agent's file names a model by
+// one, so none is written again.
+func SetBareIDs(on, only bool) error {
+	only = on && only
 	s := settings.Load()
-	if s.BareModelIDs == on {
+	if s.BareModelIDs == on && s.BareModelIDsOnly == only {
 		return nil
 	}
-	s.BareModelIDs = on
+	s.BareModelIDs, s.BareModelIDsOnly = on, only
 	return settings.Save(s)
 }
 
@@ -107,4 +121,42 @@ func BareEntry(shown []Entry, id string) (Entry, bool) {
 		}
 	}
 	return Entry{}, false
+}
+
+// OnlyBare is the list of shown with bare ids alone (BareOnly): each Bare
+// of bares in the place of the first row it stands for, and the other
+// rows it stands for left out. A Bare stands for the row a request for it
+// reaches (a routing group found for the model, auto/glm-5.3, is that
+// model's under another prefix), and for a provider's row of the same
+// model when the request reaches that model: by that group, or by the
+// provider first in the Providers order serving it by that id. A row it
+// doesn't reach (a vendor/model id that names another provider of the
+// user's, so a request for it goes there) and any other group's row stay,
+// by their ids, so no model is lost from the list. Each row is its index
+// in shown, and the bare id it is listed by, or "".
+func OnlyBare(shown []Entry, bares []Bare) (rows []int, ids []string) {
+	by := make(map[string]int, len(bares))
+	reached := make(map[int]int, len(bares))
+	for i, b := range bares {
+		by[b.ID] = i
+		reached[b.Of] = i
+	}
+	placed := make([]bool, len(bares))
+	for j, e := range shown {
+		i, ok := reached[j]
+		if !ok && e.Group == "" {
+			if i, ok = by[e.Model]; ok {
+				to := shown[bares[i].Of]
+				ok = to.Group != "" || to.Model == e.Model
+			}
+		}
+		switch {
+		case !ok:
+			rows, ids = append(rows, j), append(ids, "")
+		case !placed[i]:
+			placed[i] = true
+			rows, ids = append(rows, bares[i].Of), append(ids, bares[i].ID)
+		}
+	}
+	return rows, ids
 }

@@ -199,3 +199,123 @@ func TestBareModelIDsShared(t *testing.T) {
 		t.Fatalf("held key's bare ids %v, want %v", got, want)
 	}
 }
+
+// qQianye on X, a Docker magpie with several WorkBuddy accounts: the
+// client on their own computer listed every model as provider/model, and
+// a gateway has no Agents page to pick its models on. With Model ids
+// without the provider on Only, the list gives each model its bare id in
+// place of the provider/model rows it stands for, where the first of them
+// was; a row the bare id doesn't reach (b/vendor/m9, whose bare id names
+// the provider vendor) keeps its id, the routing group magpie found for
+// glm-5.3 (auto/glm-5.3) is listed by glm-5.3 alone, a key held to b/* keeps b/glm-5.3
+// (its bare id would reach a), another magpie is listed as before, and a
+// request by a provider/model id is still served by that provider.
+func TestBareModelIDsOnly(t *testing.T) {
+	fresh(t)
+	for _, p := range []provider.Provider{
+		{ID: "a", Name: "A", Key: "k", Models: []string{"glm-5.3", "only-a"}},
+		{ID: "b", Name: "B", Key: "k", Models: []string{"glm-5.3", "only-b", "vendor/m9"}},
+		{ID: "vendor", Name: "Vendor", Key: "k", Models: []string{"m1"}},
+	} {
+		f := &fake{t: t, ctype: "application/json", reply: `{"id":"from-` + p.ID + `","choices":[{"index":0,"message":{"role":"assistant","content":"hi"},"finish_reason":"stop"}]}`}
+		up := httptest.NewServer(f)
+		t.Cleanup(up.Close)
+		p.Chat = up.URL + "/v1"
+		if err := provider.Save(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	keys, secrets := newCaller(t, "Held")
+	if _, err := access.Update("models-key", access.Change{Key: keys[0].ID, Models: []string{"b/*"}}); err != nil {
+		t.Fatal(err)
+	}
+	get := func(secret string, magpie bool) []string {
+		r := httptest.NewRequest("GET", "/v1/models", nil)
+		if secret != "" {
+			r.Header.Set("Authorization", "Bearer "+secret)
+		}
+		if magpie {
+			r.Header.Set(provider.DrawersHeader, "1")
+		}
+		return listedIDs(t, r)
+	}
+	chat := func(model string) string {
+		rec := httptest.NewRecorder()
+		New().Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/v1/chat/completions",
+			strings.NewReader(`{"model":"`+model+`","messages":[{"role":"user","content":"hi"}]}`)))
+		if rec.Code != 200 {
+			t.Fatalf("%s: %d %s", model, rec.Code, rec.Body.String())
+		}
+		return rec.Header().Get("X-Magpie-Provider")
+	}
+	// the provider's rows of each model, in the list's order
+	provided := func(ids []string) []string {
+		var out []string
+		for _, id := range ids {
+			if slices.Contains([]string{"auto/glm-5.3", "a/glm-5.3", "a/only-a", "b/glm-5.3", "b/only-b", "b/vendor/m9", "vendor/m1"}, id) {
+				out = append(out, id)
+			}
+		}
+		return out
+	}
+
+	for _, found := range []bool{true, false} {
+		if err := provider.SetAutoGroups(found); err != nil {
+			t.Fatal(err)
+		}
+		if err := provider.SetBareModelIDs(false); err != nil {
+			t.Fatal(err)
+		}
+		before := get("", false)
+		if err := provider.SetBareIDs(true, true); err != nil {
+			t.Fatal(err)
+		}
+		got := get("", false)
+		if p := provided(got); !slices.Equal(p, []string{"b/vendor/m9"}) {
+			t.Fatalf("found groups %v: Only listed the provider's rows %v in %v", found, p, got)
+		}
+		// each bare id once, where its first provider/model row was
+		var want []string
+		seen := map[string]bool{}
+		for _, id := range before {
+			if bare, ok := map[string]string{"auto/glm-5.3": "glm-5.3", "a/glm-5.3": "glm-5.3", "b/glm-5.3": "glm-5.3", "a/only-a": "only-a", "b/only-b": "only-b", "vendor/m1": "m1"}[id]; ok {
+				if !seen[bare] {
+					seen[bare] = true
+					want = append(want, bare)
+				}
+				continue
+			}
+			want = append(want, id)
+		}
+		if !slices.Equal(got, want) {
+			t.Fatalf("found groups %v: Only listed %v, want %v (from %v)", found, got, want, before)
+		}
+		if by := chat("glm-5.3"); by != "a" {
+			t.Fatalf("glm-5.3 answered by %q", by)
+		}
+		if by := chat("b/glm-5.3"); by != "b" {
+			t.Fatalf("b/glm-5.3, no longer listed, answered by %q", by)
+		}
+	}
+	// Claude Code's discovery, which leaves out a bare row it wouldn't keep
+	// when the model's full row is listed: here that row is gone, so each
+	// model is listed by its alias, none lost
+	r := httptest.NewRequest("GET", "/v1/models?limit=1000", nil)
+	r.Header.Set("User-Agent", "claude-code/2.1.316")
+	r.Header.Set("anthropic-version", "2023-06-01")
+	if got, all := listedIDs(t, r), get("", false); len(got) != len(all) {
+		t.Fatalf("Claude Code's discovery listed %v of %v", got, all)
+	}
+	if got := get("", true); !slices.Contains(got, "a/glm-5.3") || slices.Contains(got, "glm-5.3") {
+		t.Fatalf("another magpie was listed %v", got)
+	}
+	if got := provided(get(secrets[0], false)); !slices.Equal(got, []string{"b/glm-5.3", "b/vendor/m9"}) {
+		t.Fatalf("held key's provider rows %v", got)
+	}
+	if err := provider.SetBareModelIDs(true); err != nil {
+		t.Fatal(err)
+	}
+	if got := provided(get("", false)); !slices.Contains(got, "a/glm-5.3") || !slices.Contains(got, "vendor/m1") {
+		t.Fatalf("On after Only lists the provider's rows %v", got)
+	}
+}

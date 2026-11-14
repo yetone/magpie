@@ -2,8 +2,10 @@
 // Settings › Network and sharing › Model ids without the provider (love1sbug
 // on X: apps moved from CLIProxyAPI ask for gpt-5.6-sol, and magpie's
 // /v1/models only gave codex/gpt-5.6-sol): off by default; On posts
-// settings/bare-ids on its own and lights On, Off posts it back, and neither
-// click scrolls the Settings page. The row is drawn in gateway mode too,
+// settings/bare-ids on its own and lights On, Only (qQianye on X: a Docker
+// magpie's client listed every model twice, and a gateway has no Agents
+// page) posts it with only, Off posts it back, and no click scrolls the
+// Settings page. The row is drawn in gateway mode too,
 // which is where such apps are. Every language, Chromium and WebKit, at a
 // narrow and a wide window; no backend, the API is faked here.
 const assert = require("node:assert/strict");
@@ -44,7 +46,7 @@ function server(lang, gateway, posted) {
     if (url.pathname === "/api/settings/bare-ids") {
       const body = req.postDataJSON();
       posted.push(["bare-ids", body]);
-      cur = { ...cur, bareModelIDs: body.on };
+      cur = { ...cur, bareModelIDs: body.on, bareModelIDsOnly: body.on && body.only };
       return json(cur);
     }
     if (url.pathname === "/api/settings") {
@@ -62,11 +64,11 @@ function server(lang, gateway, posted) {
 }
 
 const want = {
-  en: { name: "Model ids without the provider", off: "Off", on: "On", sub: "gpt-5.6-sol beside codex/gpt-5.6-sol" },
-  zh: { name: "不带供应商的模型 ID", off: "关闭", on: "开启", sub: "codex/gpt-5.6-sol 旁的 gpt-5.6-sol" },
-  "zh-TW": { name: "不帶供應商的模型 ID", off: "關閉", on: "開啟", sub: "codex/gpt-5.6-sol 旁的 gpt-5.6-sol" },
-  ja: { name: "プロバイダなしのモデル ID", off: "オフ", on: "オン", sub: "codex/gpt-5.6-sol の隣に gpt-5.6-sol" },
-  de: { name: "Modell-IDs ohne Anbieter", off: "Aus", on: "An", sub: "gpt-5.6-sol neben codex/gpt-5.6-sol" },
+  en: { name: "Model ids without the provider", off: "Off", on: "On", only: "Only", sub: "gpt-5.6-sol beside codex/gpt-5.6-sol" },
+  zh: { name: "不带供应商的模型 ID", off: "关闭", on: "开启", only: "仅此", sub: "codex/gpt-5.6-sol 旁的 gpt-5.6-sol" },
+  "zh-TW": { name: "不帶供應商的模型 ID", off: "關閉", on: "開啟", only: "僅此", sub: "codex/gpt-5.6-sol 旁的 gpt-5.6-sol" },
+  ja: { name: "プロバイダなしのモデル ID", off: "オフ", on: "オン", only: "のみ", sub: "codex/gpt-5.6-sol の隣に gpt-5.6-sol" },
+  de: { name: "Modell-IDs ohne Anbieter", off: "Aus", on: "An", only: "Nur", sub: "gpt-5.6-sol neben codex/gpt-5.6-sol" },
 };
 const view = (page) => page.locator("#view-settings").evaluate((v) => v.scrollTop);
 
@@ -103,7 +105,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert(await row.isVisible(), "the row is drawn");
         assert.equal((await row.locator(".name").textContent()).trim(), w.name);
         assert((await row.locator(".sub").textContent()).includes(w.sub), "the sub says what it does");
-        assert.deepEqual((await segs.allTextContents()).map((s) => s.trim()), [w.off, w.on]);
+        assert.deepEqual((await segs.allTextContents()).map((s) => s.trim()), [w.off, w.on, w.only]);
         assert.equal(await segs.nth(0).evaluate((b) => b.classList.contains("on")), true, "off by default");
         assert.equal(await page.locator("#bareIdsRow select").count(), 0, "no native select");
         const border = await row.evaluate((r) => getComputedStyle(r).borderLeftWidth);
@@ -126,13 +128,20 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator("#bareIdsSegs .opt.on", { hasText: w.on }).waitFor();
         await page.waitForTimeout(400);
         assert.equal(await view(page), before, "the click scrolled the page");
-        assert.deepEqual(posted, [["bare-ids", { on: true }]]);
+        assert.deepEqual(posted, [["bare-ids", { on: true, only: false }]]);
+
+        // bare ids alone: Only lights, and alone
+        await segs.nth(2).click();
+        await page.locator("#bareIdsSegs .opt.on", { hasText: w.only }).waitFor();
+        assert.equal(await page.locator("#bareIdsSegs .opt.on").count(), 1);
+        assert.deepEqual(posted.at(-1), ["bare-ids", { on: true, only: true }]);
+        assert.equal(await view(page), before, "the click scrolled the page");
 
         // back off
         await segs.nth(0).click();
         await page.locator("#bareIdsSegs .opt.on", { hasText: w.off }).waitFor();
-        assert.deepEqual(posted.at(-1), ["bare-ids", { on: false }]);
-        assert.equal(posted.length, 2);
+        assert.deepEqual(posted.at(-1), ["bare-ids", { on: false, only: false }]);
+        assert.equal(posted.length, 3);
         assert.equal(await view(page), before, "the click scrolled the page");
         assert.deepEqual(errors, []);
       });

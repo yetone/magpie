@@ -1775,13 +1775,32 @@ func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 			// moved from another proxy asks for gpt-5.6-sol (love1sbug on X).
 			// Never for another magpie, whose provider would list each twice.
 			// Each row is the entry the bare id reaches, its label that one's.
-			rows, ids := slices.Clip(shown), map[int]string{}
+			//
+			// Or by its bare id alone, in place of the provider/model ids
+			// it stands for, when the user asked for that
+			// (settings.BareModelIDsOnly): a client of a Docker magpie
+			// listed every model twice, and a gateway has no Agents page
+			// to pick its models on (qQianye on X)
+			rows, ids, only := slices.Clip(shown), map[int]string{}, false
 			if !magpie && provider.BareModelIDs() {
-				labels = slices.Clip(labels)
-				for _, b := range provider.BareEntries(shown) {
-					ids[len(rows)] = b.ID
-					rows = append(rows, shown[b.Of])
-					labels = append(labels, labels[b.Of])
+				bares := provider.BareEntries(shown)
+				if only = provider.BareOnly(); only {
+					at, bare := provider.OnlyBare(shown, bares)
+					was := labels
+					rows, labels = make([]provider.Entry, len(at)), make([]string, len(at))
+					for i, j := range at {
+						rows[i], labels[i] = shown[j], was[j]
+						if bare[i] != "" {
+							ids[i] = bare[i]
+						}
+					}
+				} else {
+					labels = slices.Clip(labels)
+					for _, b := range bares {
+						ids[len(rows)] = b.ID
+						rows = append(rows, shown[b.Of])
+						labels = append(labels, labels[b.Of])
+					}
 				}
 			}
 			// for Claude Code's Gateway Model Discovery: an id it keeps
@@ -1795,7 +1814,8 @@ func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 					m["id"] = id
 				}
 				if discovers {
-					if m["id"] = claudeCodeListed(who, e, m["id"].(string), bare); m["id"] == "" {
+					// with bare ids alone, a bare row is the model's only one
+					if m["id"] = claudeCodeListed(who, e, m["id"].(string), bare && !only); m["id"] == "" {
 						continue
 					}
 				}
