@@ -1418,6 +1418,10 @@ each one.
     16:55 (05d25d8dc). The same guard went red the same morning from the
     yaml.v3 copy. A new file that adds a package-level value runs the
     guards that walk the tree, which only ./... reaches.
+    80a315a70 (17:00, the hidden page's cache release) did it a third
+    time: it ran gui and usage, and its new POST /api/page-away left
+    internal/cli's TestEveryRouteHasACommandOrIsNamed red until
+    69946f43c (17:48). A new route runs internal/cli too.
   - No Test run finished green from 63c91cae5 (11-13 21:51 UTC) to
     07a62b373 (11-14 08:34 UTC): 57 runs were cancelled by the next push
     and two went red (TestEffortUpdateRefused, fixed in a4937f8ff;
