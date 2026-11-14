@@ -1363,7 +1363,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	mux.HandleFunc("GET /api/drift", func(rw http.ResponseWriter, r *http.Request) {
 		out := map[string]*agent.Drift{}
 		for _, a := range agent.DetectedIn(heldAgents()) {
-			if d := a.Drift(); d != nil {
+			if d := a.DriftShown(); d != nil {
 				out[a.ID] = d
 			}
 		}

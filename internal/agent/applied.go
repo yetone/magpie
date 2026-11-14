@@ -173,6 +173,22 @@ var started = time.Now()
 // A field moved from one magpie model to another (the agent's own picker)
 // isn't drift; one moved off magpie is.
 func (a *Agent) Drift() *Drift {
+	return a.drift(nil)
+}
+
+// DriftShown is Drift for the window's poll, which only shows it: whether
+// a value is one of magpie's models is remembered per value while
+// provider.StampNow stays the same, shownValuesFor at most. Each poll
+// asked every field's whole option list for it, built again once a
+// minute: 27 MB of the 50 MB a magpie with real accounts allocated in
+// three minutes with the window up. What the stamp can't see (a provider
+// resting, a model retired by its date) shows within shownValuesFor;
+// Reapply, rewiring and a launch ask Drift, which reads them now.
+func (a *Agent) DriftShown() *Drift {
+	return a.drift(&shownValues)
+}
+
+func (a *Agent) drift(memo *valueMemo) *Drift {
 	if a.Native != nil {
 		s := a.Native.Read()
 		if s.Provider == "invalid" {
@@ -185,11 +201,17 @@ func (a *Agent) Drift() *Drift {
 	}
 	vals := a.Values()
 	opts := fieldOptions{}
+	valueIn := func(a *Agent, f Field, v string, vals map[string]string, opts fieldOptions) bool {
+		if memo == nil {
+			return magpieValueIn(a, f, v, vals, opts)
+		}
+		return memo.in(a, f, v, vals, opts)
+	}
 	// the field on one of magpie's models: where drift shows, and what
 	// setting it again sets
 	on, onMagpie := a.Fields[0], false
 	for _, f := range a.Fields {
-		if magpieValueIn(a, f, vals[f.Key], vals, opts) {
+		if valueIn(a, f, vals[f.Key], vals, opts) {
 			on, onMagpie = f, true
 			break
 		}
@@ -223,7 +245,7 @@ func (a *Agent) Drift() *Drift {
 		if now == "" && f.Follows != "" {
 			now = vals[f.Follows]
 		}
-		if !ok || picked || now == want || !magpieValueIn(a, f, want, vals, opts) || magpieValueIn(a, f, now, vals, opts) || sameGroup(want, now) {
+		if !ok || picked || now == want || !valueIn(a, f, want, vals, opts) || valueIn(a, f, now, vals, opts) || sameGroup(want, now) {
 			continue
 		}
 		return &Drift{Kind: "replaced", Field: f.Key, Now: vals[f.Key], Want: want,
@@ -325,6 +347,59 @@ func (o fieldOptions) of(f Field, vals map[string]string) []Option {
 		o[f.Key] = opts
 	}
 	return opts
+}
+
+// valueMemo remembers magpieValueIn's answers (DriftShown).
+type valueMemo struct {
+	sync.Mutex
+	stamp provider.Stamp
+	at    time.Time
+	m     map[string]bool
+}
+
+var shownValues valueMemo
+
+// shownValuesFor is how long DriftShown keeps an answer while
+// provider.StampNow says nothing changed.
+const shownValuesFor = 5 * time.Minute
+
+func (m *valueMemo) in(a *Agent, f Field, v string, vals map[string]string, opts fieldOptions) bool {
+	if v == "" {
+		return false
+	}
+	var k strings.Builder
+	k.WriteString(a.ID + "\x00" + f.Key + "\x00" + v)
+	keys := make([]string, 0, len(vals))
+	for kk := range vals {
+		keys = append(keys, kk)
+	}
+	slices.Sort(keys)
+	for _, kk := range keys {
+		k.WriteString("\x00" + kk + "=" + vals[kk])
+	}
+	key := k.String()
+	stamp := provider.StampNow()
+	m.Lock()
+	if m.stamp != stamp || time.Since(m.at) >= shownValuesFor || len(m.m) > 512 {
+		m.stamp, m.at, m.m = stamp, time.Now(), nil
+	}
+	yes, ok := m.m[key]
+	m.Unlock()
+	if ok {
+		return yes
+	}
+	// the stamp is read before the answer: a change while it is moves it
+	// past the one kept, and the next call asks again
+	yes = magpieValueIn(a, f, v, vals, opts)
+	m.Lock()
+	if m.stamp == stamp {
+		if m.m == nil {
+			m.m = map[string]bool{}
+		}
+		m.m[key] = yes
+	}
+	m.Unlock()
+	return yes
 }
 
 // magpieValueIn is magpieValue reading a field's options from opts, made
