@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"net/url"
 	"path"
-	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -23,6 +22,7 @@ import (
 
 	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -211,7 +211,7 @@ func (s *Server) chatPageModels(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"object": "list", "data": data, "default": chatDefaultModel(shown)})
 }
 
-var chatFlash = regexp.MustCompile(`(?i)deepseek.*flash`)
+var chatFlash = lazyre.New(`(?i)deepseek.*flash`)
 
 // chatDefaultModel is the model the page chats with when its picker chose
 // none: a DeepSeek flash model, as the page asks for, else the first.
@@ -450,9 +450,9 @@ func (s *Server) chatTTS(w http.ResponseWriter, r *http.Request) {
 }
 
 var (
-	mdLink   = regexp.MustCompile(`!?\[([^\]]*)\]\([^)]*\)`)
-	mdMarks  = regexp.MustCompile("(?m)^\\s{0,3}(#{1,6}\\s+|>\\s?|[-*+]\\s+|\\d+\\.\\s+)|[*_`~]+")
-	mdFences = regexp.MustCompile("(?s)```[^\n]*\n(.*?)```")
+	mdLink   = lazyre.New(`!?\[([^\]]*)\]\([^)]*\)`)
+	mdMarks  = lazyre.New("(?m)^\\s{0,3}(#{1,6}\\s+|>\\s?|[-*+]\\s+|\\d+\\.\\s+)|[*_`~]+")
+	mdFences = lazyre.New("(?s)```[^\n]*\n(.*?)```")
 )
 
 // plainOfMarkdown is markdown as it is read aloud: no marks, a link's
