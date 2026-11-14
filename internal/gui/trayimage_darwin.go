@@ -51,6 +51,8 @@ static void mpRowFontInfo(int rows, CGFloat *size, CGFloat *weight, int *mono, C
 	}
 }
 
+static NSImage *mpGlyph(NSImage *im, BOOL *tile);
+
 // mpCells reads the cells Go sends into dictionaries the drawing keeps.
 static NSArray *mpCells(mpTrayCell *cells, int n) {
 	NSMutableArray *out = [NSMutableArray arrayWithCapacity:n];
@@ -59,7 +61,18 @@ static NSArray *mpCells(mpTrayCell *cells, int n) {
 		if (cells[i].icon != NULL && cells[i].iconLen > 0) {
 			NSImage *im = [[NSImage alloc] initWithData:[NSData dataWithBytes:cells[i].icon length:cells[i].iconLen]];
 			// an SVG an older system can't read comes back as nothing, or empty
-			if (im != nil && im.representations.count > 0) c[@"icon"] = im;
+			if (im != nil && im.representations.count > 0) {
+				// the logo is masked once, here, and only its small mask
+				// kept: the decoded logo (often a large PNG) goes now, and
+				// each redraw (every show, every flap frame) only tints it
+				BOOL tile = NO;
+				NSImage *glyph = mpGlyph(im, &tile);
+				if (glyph != nil) {
+					c[@"glyph"] = glyph;
+					c[@"tile"] = @(tile);
+					[glyph release];
+				}
+			}
 			[im release];
 		}
 		c[@"id"] = [NSString stringWithUTF8String:cells[i].id ? cells[i].id : ""];
@@ -121,9 +134,13 @@ static void mpTinted(NSImage *im, NSRect r) {
 // the rest isn't (Codex's white glyph on a blue tile is the tile with the
 // glyph cut out); a logo that is all one light colour keeps its whole
 // shape. Logos come with any margin round them in their files, so the
-// shape is cut to its own bounds and fitted to r, centred: each as large
-// as the next, a solid tile (fuller to the eye) a little smaller.
-static void mpMasked(NSImage *im, NSRect r) {
+// shape is cut to its own bounds (mpGlyph, once per logo) and fitted to
+// r, centred (mpMasked, each draw): each as large as the next, a solid
+// tile (fuller to the eye) a little smaller.
+//
+// mpGlyph returns the cut shape, retained, or nil; tile says whether it is
+// a solid tile.
+static NSImage *mpGlyph(NSImage *im, BOOL *tile) {
 	const int n = 128; // 14pt at more than any backing scale, margin and all
 	size_t stride = n * 4;
 	unsigned char *px = calloc(n * stride, 1);
@@ -132,7 +149,7 @@ static void mpMasked(NSImage *im, NSRect r) {
 	CGColorSpaceRelease(cs);
 	if (bm == NULL) {
 		free(px);
-		return;
+		return nil;
 	}
 	// its own shape, not stretched to a square
 	NSSize is = im.size;
@@ -170,24 +187,42 @@ static void mpMasked(NSImage *im, NSRect r) {
 	CGImageRef whole = CGBitmapContextCreateImage(bm);
 	CGContextRelease(bm);
 	free(px);
-	if (whole == NULL) return;
+	if (whole == NULL) return nil;
 	if (x1 < x0) {
 		CGImageRelease(whole);
-		return;
+		return nil;
 	}
 	// what the shape fills of its bounds, before the cut
 	CGRect box = CGRectMake(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
-	CGImageRef mask = CGImageCreateWithImageInRect(whole, box);
+	// a copy of the box alone, so the whole 128x128 bitmap goes with whole
+	CGImageRef sub = CGImageCreateWithImageInRect(whole, box);
 	CGImageRelease(whole);
-	if (mask == NULL) return;
-	CGFloat side = r.size.width * (solid > box.size.width * box.size.height * 0.8 ? 0.9 : 1);
-	CGFloat f = side / MAX(box.size.width, box.size.height);
-	NSSize sz = NSMakeSize(box.size.width * f, box.size.height * f);
-	NSRect fit = NSMakeRect(NSMidX(r) - sz.width / 2, NSMidY(r) - sz.height / 2, sz.width, sz.height);
-	NSImage *glyph = [[NSImage alloc] initWithCGImage:mask size:sz];
+	if (sub == NULL) return nil;
+	CGImageRef mask = NULL;
+	CGColorSpaceRef ms = CGColorSpaceCreateDeviceRGB();
+	CGContextRef mc = CGBitmapContextCreate(NULL, (size_t)box.size.width, (size_t)box.size.height, 8, 0, ms, (CGBitmapInfo)kCGImageAlphaPremultipliedLast);
+	CGColorSpaceRelease(ms);
+	if (mc != NULL) {
+		CGContextDrawImage(mc, CGRectMake(0, 0, box.size.width, box.size.height), sub);
+		mask = CGBitmapContextCreateImage(mc);
+		CGContextRelease(mc);
+	}
+	CGImageRelease(sub);
+	if (mask == NULL) return nil;
+	*tile = solid > box.size.width * box.size.height * 0.8;
+	NSImage *glyph = [[NSImage alloc] initWithCGImage:mask size:NSMakeSize(box.size.width, box.size.height)];
 	CGImageRelease(mask);
+	return glyph;
+}
+
+static void mpMasked(NSImage *glyph, BOOL tile, NSRect r) {
+	NSSize box = glyph.size;
+	if (box.width <= 0 || box.height <= 0) return;
+	CGFloat side = r.size.width * (tile ? 0.9 : 1);
+	CGFloat f = side / MAX(box.width, box.height);
+	NSSize sz = NSMakeSize(box.width * f, box.height * f);
+	NSRect fit = NSMakeRect(NSMidX(r) - sz.width / 2, NSMidY(r) - sz.height / 2, sz.width, sz.height);
 	mpTinted(glyph, fit);
-	[glyph release];
 }
 
 // mpRows draws a cell's digits in its column from x: the digits (cap
@@ -229,9 +264,9 @@ static void mpDraw(NSArray *cells, NSImage *bird, CGFloat h) {
 		x += mpLead(c, first) - mpLogo - mpLogoGap;
 		first = NO;
 		NSRect logo = NSMakeRect(x, round((h - mpLogo) / 2), mpLogo, mpLogo);
-		NSImage *icon = c[@"icon"];
-		if (icon != nil) {
-			mpMasked(icon, logo);
+		NSImage *glyph = c[@"glyph"];
+		if (glyph != nil) {
+			mpMasked(glyph, [c[@"tile"] boolValue], logo);
 		} else {
 			// no logo: the name's first letter in a ring
 			NSBezierPath *ring = [NSBezierPath bezierPathWithRoundedRect:NSInsetRect(logo, 0.75, 0.75) xRadius:3.5 yRadius:3.5];
