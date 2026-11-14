@@ -505,14 +505,13 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 					names[id] = p.Name
 					call := map[string]any{"id": id, "type": "function",
 						"function": map[string]any{"name": p.Name, "arguments": argsString(p)}}
-					if gemini {
-						// a later call of a signed step goes without: Gemini
-						// signs the first
-						if sig := p.Signature; sig != "" {
-							call["extra_content"] = googleExtra(sig)
-						} else if !signed {
-							call["extra_content"] = googleExtra(skipSignature)
-						}
+					if sig := p.Signature; sig != "" && (gemini || r.signer != "" && signerOf(sig) == r.signer) {
+						// Gemini's, or a relay's that gave it there
+						call["extra_content"] = googleExtra(sig)
+					} else if gemini && !signed {
+						// a later call of a signed step goes without:
+						// Gemini signs the first
+						call["extra_content"] = googleExtra(skipSignature)
 					}
 					calls = append(calls, call)
 				case Thinking:

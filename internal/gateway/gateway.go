@@ -6945,7 +6945,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	if err != nil {
 		return writeError(w, proto, 502, p.Name+": "+err.Error()), err.Error(), true
 	}
-	if res.StatusCode == http.StatusBadRequest && (proto == provider.Chat || proto == provider.Gemini) && signaturesReach(p, proto, upstream) {
+	if res.StatusCode == http.StatusBadRequest && (proto == provider.Chat || proto == provider.Gemini) && (signaturesReach(p, proto, upstream) || proto == provider.Chat && bodyHasBytes(body, thoughtSignatureField)) {
 		// a signature Google won't take (signatureRefused), one given
 		// before magpie noted whose it was: asked again once without
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
@@ -6954,7 +6954,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		if signatureRefused.Match(b) {
 			bare := geminiBodySignatures(body, p.ID, false)
 			if proto == provider.Chat {
-				bare = chatCallSignatures(body, true, p.ID, false)
+				bare = chatCallSignatures(body, geminiCompat(p.VendorHost(), upstream), p.ID, false)
 			}
 			if !bytes.Equal(bare, body) {
 				body = bare
@@ -7434,7 +7434,12 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		whole = &chatWhole{names: chatToolNames(body)}
 	}
 	var sigs *sigTidy
-	if proto == provider.Chat && geminiCompat(p.VendorHost(), model) {
+	if proto == provider.Chat && (sse || whole != nil || geminiCompat(p.VendorHost(), model)) {
+		// a call a Chat upstream signed, Gemini's API or a relay serving
+		// Gemini under any host (Mamba_asr on X): its id carries the
+		// signature, which goes back to that upstream (chatCallSignatures).
+		// A reply that is neither a stream nor held whole already
+		// (chatWhole) isn't held for it, past Gemini's own
 		sigs = &sigTidy{sse: sse, by: p.ID}
 	} else if proto == provider.Gemini {
 		// a Gemini client keeps the signatures itself: noted as p's
@@ -8580,7 +8585,7 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 				continue
 			}
 		}
-		if res.StatusCode == http.StatusBadRequest && signaturesReach(p, to, model) && signatureRefused.Match(b) {
+		if res.StatusCode == http.StatusBadRequest && (signaturesReach(p, to, model) || to == provider.Chat && signsOwn(req, p.ID)) && signatureRefused.Match(b) {
 			// a signature Google won't take (a client changed it, or
 			// another provider gave it before magpie noted whose it was):
 			// the calls waved through instead, for this request
@@ -9664,6 +9669,11 @@ func buildFor(p provider.Provider, proto provider.Protocol, r *Request, model st
 		// of in words (#6135)
 		c := *r
 		c.videoOff = true
+		r = &c
+	}
+	if proto == provider.Chat && r.signer != p.ID {
+		c := *r
+		c.signer = p.ID
 		r = &c
 	}
 	return build(proto, r, model, buildHost(p), p.RejectsTemperature(model))

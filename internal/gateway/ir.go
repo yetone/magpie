@@ -260,6 +260,10 @@ type Request struct {
 	// video (videoInput): a video of an earlier turn is told of in words
 	// (attachmentText) where it would go as a video block (video_input.go)
 	videoOff bool
+	// signer, on a request built for chat completions, is the provider
+	// it goes to: a tool call's Gemini signature that provider gave goes
+	// back to it in extra_content, whatever its host (buildChat)
+	signer string
 	// draws asks the model for images beside text: a drawing asked on
 	// Gemini's API of a model not named for images (drawCodeAssist).
 	draws bool
