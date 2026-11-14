@@ -1372,7 +1372,7 @@ func apiError(b []byte, fallback string) string {
 	// a body in no shape known is shown as it is, cut short, so what the
 	// vendor said isn't lost; other markup (an XML error, a page's
 	// fragment) by its words, its tags taken out
-	s := strings.Join(strings.Fields(string(b)), " ")
+	s := strings.Join(strings.Fields(QuotedReply(b)), " ")
 	if strings.HasPrefix(s, "<") {
 		if s = MarkupText(b); s == "" {
 			return fallback

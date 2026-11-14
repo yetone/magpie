@@ -305,7 +305,7 @@ func copilotAutoRoute(ctx context.Context, app copilotApp, s copilotSession, bas
 	case res.StatusCode/100 != 2:
 		return copilotAutoSession{}, APIError(b, res.Status), false
 	case json.Unmarshal(b, &v) != nil || v.Token == "" || v.Selected.ID == "":
-		return copilotAutoSession{}, "picked no model: " + clipLine(string(b)), false
+		return copilotAutoSession{}, "picked no model: " + clipLine(QuotedReply(b)), false
 	case copilotRefuses(app.Token, v.Selected.ID):
 		return copilotAutoSession{}, "picked " + v.Selected.ID + ", which the account was refused", true
 	}

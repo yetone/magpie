@@ -30,6 +30,7 @@ package provider
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -51,6 +52,7 @@ import (
 	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/lastgood"
 	"github.com/yetone/magpie/internal/lazyre"
+	"github.com/yetone/magpie/internal/redact"
 )
 
 const (
@@ -296,7 +298,7 @@ func StartQianwenSignIn(ctx context.Context, id string) (string, error) {
 			return // a newer sign-in, or one cancelled
 		}
 		if err != nil {
-			f.state, f.err = "failed", err.Error()
+			f.state, f.err = "failed", redact.Scrub(err.Error())
 			return
 		}
 		f.state = "done"
@@ -348,16 +350,7 @@ func qianwenWait(ctx context.Context, id, clientID, token, verifier string, ever
 		}
 		code, raw, err := qianwenPost(ctx, u, "", nil, "")
 		status := ""
-		var r struct {
-			Data struct {
-				Status      string
-				Credentials *struct {
-					AccessToken string
-					ExpireTime  any
-					User        *struct{ ID, Email, AliyunID string }
-				}
-			}
-		}
+		var r qianwenReply
 		switch {
 		case err != nil:
 			if ctx.Err() != nil {
@@ -374,27 +367,21 @@ func qianwenWait(ctx context.Context, id, clientID, token, verifier string, ever
 				return fmt.Errorf("the Qwen AI platform: %d %s", code, volcHead(raw))
 			}
 		default:
-			if json.Unmarshal(raw, &r) != nil {
+			var ok bool
+			if r, ok = readQianwenReply(raw); !ok {
 				return fmt.Errorf("the Qwen AI platform answered in a form magpie doesn't know: %s", volcHead(raw))
 			}
-			status = strings.ToLower(r.Data.Status)
-			if status == "" {
-				status = "authorization_pending"
-			}
+			status = r.status
 		}
 		switch status {
 		case "authorization_pending":
 		case "slow_down":
 			every += every
 		case "complete":
-			c := r.Data.Credentials
-			if c == nil || c.AccessToken == "" {
+			if r.access == "" {
 				return errors.New("the Qwen AI platform approved the sign-in but gave no token: sign in again")
 			}
-			s := qianwenSession{Access: c.AccessToken, Expires: qianwenTime(c.ExpireTime), ClientID: clientID}
-			if c.User != nil {
-				s.Email, s.User = c.User.Email, c.User.ID
-			}
+			s := qianwenSession{Access: r.access, Expires: qianwenTime(r.expires), ClientID: clientID, Email: r.email, User: r.user}
 			qianwenMu.Lock()
 			all := loadQianwen()
 			all[id] = s
@@ -414,10 +401,67 @@ func qianwenWait(ctx context.Context, id, clientID, token, verifier string, ever
 	}
 }
 
+// qianwenReply is the platform's answer to a device/token poll, as the
+// QianWen CLI 1.10.0 reads it (ul and ll in its dist/bin/qianwen.js):
+// Data.Status, else status, else authorization_pending; the access token
+// from Data.Credentials.AccessToken, else credentials.access_token; its
+// end from ExpireTime, else expire_time; who from User{Id, Email}, else
+// user{id, email}. There is no refresh token: one the reply carries is
+// not read, as the CLI reads none.
+type qianwenReply struct {
+	status, access string
+	expires        any
+	user, email    string
+}
+
+// readQianwenReply reads raw as the CLI's JSON.parse and ?? chains do: by
+// each name as written, a value of a type it doesn't expect taken as
+// absent, never failing the whole reply. Decoding into a struct failed a
+// complete sign-in (@imthe99galaxy on X, v0.1.4159): encoding/json matches
+// names whatever their case and fails on a value of another type, where
+// the CLI looks at the names it wants alone. false when raw is no JSON
+// object.
+func readQianwenReply(raw []byte) (qianwenReply, bool) {
+	d := json.NewDecoder(bytes.NewReader(bytes.TrimPrefix(raw, []byte("\xef\xbb\xbf"))))
+	d.UseNumber()
+	var top map[string]any
+	if d.Decode(&top) != nil || top == nil {
+		return qianwenReply{}, false
+	}
+	obj := func(m map[string]any, k string) map[string]any { v, _ := m[k].(map[string]any); return v }
+	str := func(m map[string]any, k string) string {
+		switch v := m[k].(type) {
+		case string:
+			return v
+		case json.Number:
+			return v.String()
+		}
+		return ""
+	}
+	data, creds, alt := obj(top, "Data"), obj(obj(top, "Data"), "Credentials"), obj(top, "credentials")
+	r := qianwenReply{status: strings.ToLower(cmp.Or(str(data, "Status"), str(top, "status"), "authorization_pending"))}
+	r.access = cmp.Or(str(creds, "AccessToken"), str(alt, "access_token"))
+	if v, ok := creds["ExpireTime"]; ok && v != nil {
+		r.expires = v
+	} else {
+		r.expires = alt["expire_time"]
+	}
+	if u := obj(creds, "User"); u != nil {
+		r.user, r.email = str(u, "Id"), str(u, "Email")
+	} else if u := obj(alt, "user"); u != nil {
+		r.user, r.email = str(u, "id"), str(u, "email")
+	}
+	return r, true
+}
+
 // qianwenTime reads ExpireTime as the client's Date.parse would: a date
 // and time, or a number of seconds or milliseconds; zero when it can't.
 func qianwenTime(v any) time.Time {
 	switch x := v.(type) {
+	case json.Number:
+		if f, err := x.Float64(); err == nil {
+			return qianwenTime(f)
+		}
 	case float64:
 		if t, ok := stepfunTime(x); ok {
 			return t

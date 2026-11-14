@@ -396,3 +396,107 @@ func TestQianwenTime(t *testing.T) {
 }
 
 func strconvInt(n int64) string { b, _ := json.Marshal(n); return string(b) }
+
+// TestQianwenSignInReadsEveryCompleteForm: a complete sign-in is taken in
+// every form the QianWen CLI takes it. The reporter's (@imthe99galaxy on
+// X, v0.1.4159) began as below; magpie quoted the rest unread. Each form
+// is read by the names the CLI reads, whatever else the reply holds.
+func TestQianwenSignInReadsEveryCompleteForm(t *testing.T) {
+	qianwenHome(t)
+	f := newFakeQianwen(t)
+	const head = `{"Data":{"Status":"complete","Credentials":{"User":{"Id":"1355664028184579"},"ExpireTime":"2026-11-16T10:33:07Z","AccessToken":"RACvIlWJhWxaUYewyXHz_SgmSyiLPM_L0ONnalpn1AC*Wdmhz0"`
+	expires := time.Date(2026, 11, 16, 10, 33, 7, 0, time.UTC)
+	for name, c := range map[string]struct {
+		reply    string
+		user     string
+		access   string
+		expires  time.Time
+		hasEmail string
+	}{
+		"the reporter's, with a refresh token": {head + `,"RefreshToken":"RAR-refresh","RefreshExpireTime":"2026-12-16T10:33:07Z","TokenType":"Bearer"},"RequestId":"x"},"RequestId":"01A1D9AA","Success":true}`, "1355664028184579", "RACvIlWJhWxaUYewyXHz_SgmSyiLPM_L0ONnalpn1AC*Wdmhz0", expires, ""},
+		"the reporter's, no refresh token":     {head + `}},"Success":true}`, "1355664028184579", "RACvIlWJhWxaUYewyXHz_SgmSyiLPM_L0ONnalpn1AC*Wdmhz0", expires, ""},
+		// encoding/json matched these names whatever their case, and failed
+		// on a value of another type; the CLI reads the names it wants alone
+		"a number where a word was":    {`{"Data":{"Status":"complete","Credentials":{"User":{"Id":1355664028184579,"AliyunId":12,"Email":null},"ExpireTime":1794825187,"AccessToken":"a2"}},"Success":true}`, "1355664028184579", "a2", time.Unix(1794825187, 0), ""},
+		"another field of a like name": {`{"Data":{"Status":"complete","Credentials":{"AccessToken":"a3","accessToken":{"kind":"x"},"user":7,"User":{"Id":"u3","Email":"e@x.com"}},"status":1},"data":[]}`, "u3", "a3", time.Time{}, "e@x.com"},
+		"the CLI's other form":         {`{"status":"COMPLETE","credentials":{"access_token":"a4","expire_time":"2026-11-16T10:33:07Z","user":{"id":"u4","email":"f@x.com"}}}`, "u4", "a4", expires, "f@x.com"},
+		"a byte order mark before it":  {"\xef\xbb\xbf" + head + `}}}`, "1355664028184579", "RACvIlWJhWxaUYewyXHz_SgmSyiLPM_L0ONnalpn1AC*Wdmhz0", expires, ""},
+	} {
+		f.mu.Lock()
+		f.polls, f.lastCode, f.last = 1, 200, c.reply
+		f.mu.Unlock()
+		if _, err := StartQianwenSignIn(context.Background(), "p"); err != nil {
+			t.Fatal(err)
+		}
+		if s, why := waitQianwen(t, "p"); s != "done" {
+			t.Errorf("%s: %s %s", name, s, why)
+			continue
+		}
+		s, _ := qianwenSignIn("p")
+		if s.Access != c.access || s.User != c.user || s.Email != c.hasEmail || !s.Expires.Equal(c.expires) {
+			t.Errorf("%s: kept %+v", name, s)
+		}
+		if err := SignOutQianwen("p"); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// TestQianwenErrorsQuoteNoToken: a reply magpie can't read is quoted in
+// the error with its tokens out — the reporter posted the error, and the
+// live access token in it, on X.
+func TestQianwenErrorsQuoteNoToken(t *testing.T) {
+	qianwenHome(t)
+	f := newFakeQianwen(t)
+	const secret = "RACvIlWJhWxaUYewyXHz_SgmSyiLPM_L0ONnalpn1ACWdmhz0Qq"
+	for name, reply := range map[string]string{
+		"no object":     `[{"Data":{"Status":"complete","Credentials":{"AccessToken":"` + secret + `"}}}]`,
+		"cut short":     `{"Data":{"Status":"complete","Credentials":{"AccessToken":"` + secret + `"`,
+		"unknown state": `{"Data":{"Status":"weird","Credentials":{"AccessToken":"` + secret + `","RefreshToken":"` + secret + `x"}}}`,
+	} {
+		f.mu.Lock()
+		f.polls, f.lastCode, f.last = 0, 200, reply
+		f.mu.Unlock()
+		if _, err := StartQianwenSignIn(context.Background(), "p"); err != nil {
+			t.Fatal(err)
+		}
+		s, why := waitQianwen(t, "p")
+		if s != "failed" || strings.Contains(why, secret[:20]) {
+			t.Errorf("%s: %s %q", name, s, why)
+		}
+	}
+	for _, raw := range []string{
+		`{"code":"500","data":{"cliAccessToken":"` + secret + `"}}`,
+		`{"Credentials":{"AccessToken":"` + secret + `","ExpireTime":"2026-11-16T10:33:07Z"}}`,
+		`{"access_token":"` + secret + `","refresh_token":"` + secret + `","client_secret":"` + secret + `"}`,
+		`not json, access_token=` + secret,
+	} {
+		for _, said := range []string{volcHead([]byte(raw)), APIError([]byte(raw), "400 Bad Request"), QuotedReply([]byte(raw))} {
+			if strings.Contains(said, secret[:20]) {
+				t.Errorf("a token quoted: %s", said)
+			}
+		}
+	}
+	// what isn't a secret is still quoted, for the error to say something
+	if said := volcHead([]byte(`{"Code":"Throttling","Message":"Request was denied due to flow control.","RequestId":"01A1D9AA"}`)); !strings.Contains(said, "flow control") || !strings.Contains(said, "01A1D9AA") {
+		t.Errorf("lost the words: %s", said)
+	}
+}
+
+// TestSignInFailureQuotesNoToken: every sign-in, a built-in's or a
+// plugin's, ends in finish, and a failure's words leave it without a token
+// the vendor's reply put in them.
+func TestSignInFailureQuotesNoToken(t *testing.T) {
+	const secret = "RACvIlWJhWxaUYewyXHz_SgmSyiLPM_L0ONnalpn1ACWdmhz0Qq"
+	for _, why := range []string{
+		`the token endpoint answered in a form magpie doesn't know: {"Data":{"Credentials":{"AccessToken":"` + secret + `"}}}`,
+		`refused: access_token=` + secret,
+		`{"refresh_token":"` + secret + `","error":"x"}`,
+	} {
+		s := &signInFlow{done: make(chan struct{})}
+		s.finish(SignInState{State: "failed", Error: why})
+		if got := s.st.Error; strings.Contains(got, secret[:20]) || got == "" {
+			t.Errorf("%q", got)
+		}
+	}
+}

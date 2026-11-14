@@ -180,9 +180,10 @@ func volcPlanQuota(ctx context.Context, p Provider, action, plan, region string)
 	return q
 }
 
-// volcHead is the head of a reply, for a card to say what was answered.
+// volcHead is the head of a reply, for a card to say what was answered,
+// its secrets taken out (QuotedReply).
 func volcHead(raw []byte) string {
-	s := strings.TrimSpace(string(raw))
+	s := strings.TrimSpace(QuotedReply(raw))
 	if len(s) > 300 {
 		s = s[:300] + "…"
 	}

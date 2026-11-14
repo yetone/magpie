@@ -42,6 +42,7 @@ import (
 	"github.com/yetone/magpie/internal/filelock"
 	"github.com/yetone/magpie/internal/lastgood"
 	"github.com/yetone/magpie/internal/netproxy"
+	"github.com/yetone/magpie/internal/redact"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/steady"
 )
@@ -918,7 +919,13 @@ func register(ctx context.Context, m meta, redirect string) (id, secret, method 
 		return "", "", "", ErrClientRefused
 	}
 	if resp.StatusCode/100 != 2 {
-		return "", "", "", fmt.Errorf("registering magpie with the server's sign-in failed (%d): %s", resp.StatusCode, strings.TrimSpace(string(rb)))
+		// the reply is quoted with its secrets out: a registration's
+		// answer may carry a client_secret, and the error is shown and logged
+		said := strings.TrimSpace(string(redact.ScrubJSON(rb)))
+		if r := []rune(said); len(r) > 300 {
+			said = string(r[:300]) + "…"
+		}
+		return "", "", "", fmt.Errorf("registering magpie with the server's sign-in failed (%d): %s", resp.StatusCode, said)
 	}
 	var out struct {
 		ID     string `json:"client_id"`
