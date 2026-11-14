@@ -669,7 +669,10 @@ magpie.plugin("sessions", (ctx) => {
     if (out.refused.length) {
       const first = out.refused[0], s = data.sessions.find((x) => x.id === first.id);
       const active = out.refused.filter((r) => r.active);
+      // one that can't move at all says why, and what can be done instead
+      const stuck = out.refused.find((r) => r.stuck), ss = stuck && data.sessions.find((x) => x.id === stuck.id);
       status(active.length ? t(active.length === 1 ? "{title} is still being written to; close it in {agent} and try again in a minute" : "{n} sessions are still being written to; close them in {agent} and try again in a minute", { title: s?.title || first.id, n: active.length, agent: "Codex" })
+        : stuck ? t("{title} can't be moved: Codex keeps its history by byte and has no record of it in its database to move it by. It stays on {from}, unchanged, and Codex lists it when it uses {from} again. To clear it from here, delete it: it goes to magpie's trash and can be restored.", { title: ss?.title || stuck.id, from: stuck.from })
         : (s?.title || first.id) + ": " + first.error, "err");
     }
     return out;

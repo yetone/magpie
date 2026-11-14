@@ -351,10 +351,14 @@ func sessionManageRoutes(mux *http.ServeMux, w Windows) {
 			fail(rw, err)
 			return
 		}
+		// stuck: a session that can't move at all (sessions.StuckError),
+		// from the provider it stays on
 		type refused struct {
 			ID     string `json:"id"`
 			Error  string `json:"error"`
 			Active bool   `json:"active"`
+			Stuck  bool   `json:"stuck,omitempty"`
+			From   string `json:"from,omitempty"`
 		}
 		out := struct {
 			Moved   []sessions.CodexMove `json:"moved"`
@@ -363,7 +367,12 @@ func sessionManageRoutes(mux *http.ServeMux, w Windows) {
 		for _, m := range in.Moves {
 			mv, err := sessions.MoveCodexProvider(m.ID, m.To)
 			if err != nil {
-				out.Refused = append(out.Refused, refused{ID: m.ID, Error: err.Error(), Active: errors.Is(err, sessions.ErrActive)})
+				r := refused{ID: m.ID, Error: err.Error(), Active: errors.Is(err, sessions.ErrActive)}
+				var stuck *sessions.StuckError
+				if errors.As(err, &stuck) {
+					r.Stuck, r.From = true, stuck.From
+				}
+				out.Refused = append(out.Refused, r)
 				continue
 			}
 			mv.Backup = tilde(mv.Backup)

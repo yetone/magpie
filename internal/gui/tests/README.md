@@ -1651,6 +1651,12 @@ each back to the provider it had. No click moves the page, no left-border
 accent, every string in Chinese, Japanese and German. Chromium and WebKit,
 English and Chinese, API faked.
 
+`sessions-codex-provider-stuck.test.cjs` checks the refusal of a Codex
+session that can't move at all (a paginated rollout with no row in Codex's
+database, @xMopf7RF on X): the status says why, that it stays on its
+provider, and that Delete clears it into magpie's trash. All five
+languages, 900px and 420px, Chromium and WebKit, API faked.
+
 `sessions-toolbar.test.cjs` uses ten agents to check that fitting tabs stay
 visible at 1800px, while 900, 660 and 320px windows use a compact agent menu.
 Resizing keeps the current agent; search and Trash fit, the menu fits the
