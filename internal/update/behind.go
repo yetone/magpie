@@ -31,7 +31,7 @@ const Quiet = 72 * time.Hour
 type Behind struct {
 	Base string `json:"base"`
 	// Hushed is when the pill was last dismissed: the quiet runs from it.
-	// (0.1.3879 to 0.1.4179 kept "since", the first newer version seen,
+	// (0.1.3879 to 0.1.4181 kept "since", the first newer version seen,
 	// and held the pill for it; a note of theirs is for their own version,
 	// so it is never read as a dismissal.)
 	Hushed time.Time `json:"hushed,omitempty"`

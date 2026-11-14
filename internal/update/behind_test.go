@@ -34,7 +34,7 @@ func TestPillLightsWhenANewerVersionIsOut(t *testing.T) {
 	if !b.Lit("0.1.4174", t0.Add(time.Minute)) || !ReadBehind("0.1.4174").Lit("0.1.4174", t0.Add(time.Minute)) {
 		t.Error("newer versions seen again put the pill out")
 	}
-	// a note an older magpie (0.1.3879 to 0.1.4179) kept, "since" the first
+	// a note an older magpie (0.1.3879 to 0.1.4181) kept, "since" the first
 	// newer version: it was never a dismissal
 	if err := os.MkdirAll(filepath.Dir(behindFile()), 0o755); err != nil {
 		t.Fatal(err)

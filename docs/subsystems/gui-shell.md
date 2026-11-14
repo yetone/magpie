@@ -908,7 +908,7 @@ channel's soak) across the releases out meanwhile (`quietAgain`,
 (`update.Behind.Hushed`, for the version running, so an update starts
 afresh). Settings › Update button says "Hidden for 3 days" while it holds,
 with Show again (`unhush`, `update.Unhush`, an empty `update-skip`).
-Nothing else holds the pill. From 0.1.3879 to 0.1.4179 a quiet was also
+Nothing else holds the pill. From 0.1.3879 to 0.1.4181 a quiet was also
 counted from the first newer version seen; with a release every few
 minutes it started over on each update, so a downloaded update waited
 with no pill for days (visamzh and normalcoder_ on X, 11-14). Those
