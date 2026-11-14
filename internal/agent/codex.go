@@ -450,7 +450,14 @@ func codexIn(at place) *Agent {
 		if c == deskRef || c == at.native(deskPath) {
 			return true
 		}
-		return at.spell == nil && !filepath.IsAbs(c) && filepath.Clean(filepath.Join(dir, c)) == filepath.Clean(deskPath)
+		if at.spell != nil {
+			return false
+		}
+		// an absolute c spelled with / on Windows, as ownCatalog (#4785)
+		if !filepath.IsAbs(c) {
+			c = filepath.Join(dir, c)
+		}
+		return filepath.Clean(c) == filepath.Clean(deskPath)
 	}
 	deskGone := func() bool {
 		_, err := os.Stat(deskPath)
