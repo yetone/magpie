@@ -1457,6 +1457,16 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 		// connection (regionFresh)
 		return Rest{Why: why, Status: status, By: "off", Until: now}
 	}
+	if status == http.StatusForbidden && provider.HarnessOnly(wordsOf(body)) {
+		// OpenRouter serving a free model only to the agent apps it lists
+		// (provider.HarnessOnly): the app the request came from was
+		// turned away, not the key, whose other models answer as before,
+		// nor the model, which another agent's request may be served. Read
+		// as the key's 403 it set every OpenRouter model aside
+		// (Wade111999 on X); none is set aside and the failure counts
+		// nowhere
+		return Rest{Why: why, Status: status, By: "off", Until: now}
+	}
 	if status == http.StatusBadRequest && signatureRefused.Match(wordsOf(body)) {
 		// Google turned a thought signature away as one it didn't give
 		// (signatureRefused): the history's doing, not the account's. A

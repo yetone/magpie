@@ -1167,6 +1167,9 @@ func APIError(b []byte, fallback string) string {
 	if cmdGoNoAPI.Match(b) {
 		return apiError(b, fallback) + " — " + CommandCodeGoHint
 	}
+	if harnessOnly.Match(b) && !bytes.Contains(b, []byte(HarnessOnlyHint)) {
+		return apiError(b, fallback) + " — " + HarnessOnlyHint
+	}
 	return apiError(b, fallback)
 }
 
