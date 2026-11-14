@@ -378,13 +378,6 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
                 await current.locator("#claudeLeanRow").evaluate((r) => r.remove());
                 await current.waitForTimeout(350);
               }
-              // Replies' Claude Code's interactive mode row is new: until
-              // BASE_REF has it, the page is compared with the row taken
-              // out; claude-tui-setting.test.cjs covers the row.
-              if (view === "settings" && !baselineFile("app.js").includes("claudeTuiRow")) {
-                await current.locator("#claudeTuiRow").evaluate((r) => r.remove());
-                await current.waitForTimeout(350);
-              }
               // The Routing page's Settings › button is new: until BASE_REF
               // has it, the page is compared with the button taken out;
               // settings-places.test.cjs covers it.
