@@ -295,6 +295,18 @@ call magpie had routed was counted again as a local session's whatever
 provider id ZCode wrote beside it (nori_tsukiji on X). Verification:
 `TestZCodeCallsPairWithTheGatewaysRecords`.
 
+The Claude subscription bridge's own Claude Code runs save their sessions
+in a Claude folder the readers list (the user's own, or a saved account's
+under `claude-accounts`), often in the caller's project. They aren't the
+user's: the gateway recorded each call under the agent that asked, and
+nothing paired the session file's call with that record, so every call was
+counted twice, once as "Claude Code · Local session" (iwinux on X). Their
+ids are the bridge's (`bridgesid`, see
+[the bridge](claude-subscription-bridge.md#the-runs-working-folder-clientworkdir)),
+and `listCCFiles` leaves such a session and its sub-agents' files out of
+every listing: calls, the ledger, the Sessions page, traces and WSL.
+Verification: `TestBridgeSessionsAreNotLocal`.
+
 A ZCode session's name is the app's: its task index
 (`v2/tasks-index.sqlite` in the data folder, `tasks.title` by `task_id`,
 the session's id) holds what the app shows and what the user renamed it to,

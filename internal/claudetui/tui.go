@@ -19,7 +19,6 @@ package claudetui
 import (
 	"bufio"
 	"bytes"
-	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -39,6 +38,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/bridgesid"
 	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/wslrun"
 )
@@ -151,16 +151,23 @@ func Run(args []string) error {
 	}
 	args = interactiveArgs(pargs[len(wslArgs(wsl)):])
 	s := &shim{out: os.Stdout, changed: make(chan struct{}, 1), rowsCh: make(chan struct{}, 1), exited: make(chan struct{}), readDone: make(chan struct{}), wsl: wsl, listed: mcpListed(args)}
-	resume := ""
+	resume, named := "", ""
 	for i, a := range args {
 		if a == "--resume" && i+1 < len(args) {
 			resume = args[i+1]
 		}
+		if a == "--session-id" && i+1 < len(args) {
+			named = args[i+1]
+		}
 	}
 	if resume != "" {
 		s.sid = resume
+	} else if named != "" {
+		// the bridge's own id, which the local-session readers know
+		// (bridgesid)
+		s.sid = named
 	} else {
-		s.sid = newUUID()
+		s.sid = bridgesid.New()
 		args = append(args, "--session-id", s.sid)
 	}
 	s.projects = filepath.Join(configDir(), "projects")
@@ -1601,14 +1608,6 @@ func (s *shim) turnOver() {
 	s.rowsMu.Lock()
 	s.busy = false
 	s.rowsMu.Unlock()
-}
-
-func newUUID() string {
-	var b [16]byte
-	_, _ = rand.Read(b[:])
-	b[6] = b[6]&0x0f | 0x40
-	b[8] = b[8]&0x3f | 0x80
-	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
 }
 
 // interactiveArgs are `claude -p` arguments made the interactive mode's:

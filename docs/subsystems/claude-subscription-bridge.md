@@ -1669,6 +1669,25 @@ removed there by its id, when it ends or is discarded (`removeSession`).
 A session that a stopped gateway left there, and its temp files, stay
 there as the user's own sessions do; a sweep can't tell them apart.
 
+Every session a run saves is named by `bridgesid.New`: a new run's
+(`--session-id`, in `-p` and in the interactive mode, whose helper keeps
+the id it is given), a replayed transcript's (`replaySession`) and a
+branch's copy (`cutSession`). The id is a version 4 UUID whose last six
+bytes are a keyed hash of its first ten, the key a random file of this
+computer's (`<config>/claude-bridge-session-key`), so to Anthropic, which
+Claude Code tells the session id, it is as random as any. The
+local-session readers (`listCCFiles` in `internal/sessions`, through
+`bridgesid.Is`) leave such a session and its sub-agents' files out: read
+as a session of the user's Claude Code, each call the gateway counted
+under the agent that asked was listed and counted again as "Claude Code ·
+Local session", in the request log, the usage ledger, cost totals and
+the Sessions page (iwinux on X). A session saved before 11-14 has a plain
+random id and is still read until it is removed (when its run ends, or
+by the sweep); a stopped gateway's leftover in a caller's folder stays
+until the user removes it. `TestClaudeRunSessionsAreTheBridges`,
+`TestClaudeCutSessionIsTheBridges` and `TestBridgeSessionsAreNotLocal`
+hold it.
+
 ## Files a run leaves
 
 - Its session: `<config>/projects/<work project>/<session>.jsonl`, for

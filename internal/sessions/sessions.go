@@ -35,6 +35,7 @@ import (
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/bridgesid"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/dirent"
 	"github.com/yetone/magpie/internal/lazyre"
@@ -902,6 +903,14 @@ func joinedIs(s, a, b string, sep ...byte) bool {
 	return len(s) == len(a)+1+len(b) && s[len(a)] == c && s[:len(a)] == a && s[len(a)+1:] == b
 }
 
+// bridged says id is the session of a Claude Code run the Claude
+// subscription bridge started (bridgesid.Is), not one of the user's: the
+// gateway counts every call of it already, under the agent that asked, and
+// read here too it was counted again as a local session's (iwinux on X).
+// It is the id alone that tells, so it holds wherever the run saved it: an
+// account's folder or the user's own, a caller's project or magpie's, WSL.
+func bridged(agent, id string) bool { return agent == "claude" && bridgesid.Is(id) }
+
 func listCCFiles(agent, dir string) []file {
 	projects := filepath.Join(dir, "projects")
 	watch(dir) // statFiles reads only the projects that changed
@@ -929,10 +938,13 @@ func listCCFiles(agent, dir string) []file {
 		root := filepath.Join(projects, project.Name())
 		for _, e := range readDirectory(root) {
 			if !e.IsDir() && strings.HasSuffix(e.Name(), ".jsonl") {
+				if bridged(agent, strings.TrimSuffix(e.Name(), ".jsonl")) {
+					continue
+				}
 				path, key := names.of(root, e.Name(), agent, strings.TrimSuffix(e.Name(), ".jsonl"))
 				f := file{agent: agent, key: key, path: path, main: true}
 				out = append(out, f)
-			} else if dirent.IsFolder(root, e) {
+			} else if dirent.IsFolder(root, e) && !bridged(agent, e.Name()) {
 				path := filepath.Join(root, e.Name())
 				subs := filepath.Join(path, "subagents")
 				for _, sub := range readDirectory(subs) {

@@ -61,6 +61,7 @@ import (
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/bridgesid"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/claudecode"
 	"github.com/yetone/magpie/internal/claudetui"
@@ -1166,7 +1167,14 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 	if from != nil {
 		args = append(args, "--resume", from.session)
 		fromLen = from.size()
-	} else if hasReply(req.Messages) {
+	} else {
+		// a session of the bridge's names itself so (bridgesid): the
+		// local-session readers leave it out, as the gateway counts its
+		// calls already (iwinux on X: each call listed twice, once as
+		// Claude Code's local session)
+		args = append(args, "--session-id", bridgesid.New())
+	}
+	if from == nil && hasReply(req.Messages) {
 		// no run had the conversation: this one is told it whole, in one
 		// message, its earlier turns marked as such (renderClaudePrompt)
 		log.Printf("claude: a new Claude Code is told the whole conversation: %d messages, %d images, the last turn marked as the one to answer", len(req.Messages), countImages(req.Messages))
@@ -3184,7 +3192,7 @@ func cutSessionWhere(dirs []string, sid, what string, at func(b []byte, last boo
 			if end <= 0 {
 				continue
 			}
-			id := newUUID()
+			id := bridgesid.New() // the copy is the bridge's too
 			lines := bytes.ReplaceAll(b[:end], []byte(`"sessionId":"`+sid+`"`), []byte(`"sessionId":"`+id+`"`))
 			// a name no one has: nothing reads it before the run starts
 			path := filepath.Join(dir, id+".jsonl")

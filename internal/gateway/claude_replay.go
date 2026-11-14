@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/yetone/magpie/internal/bridgesid"
 )
 
 // replaySession is a saved session written for a conversation no run has
@@ -55,7 +57,7 @@ func replaySession(dirs []string, work, model string, req *Request) *savedSessio
 	for _, b := range blocks {
 		delete(b, "cache_control")
 	}
-	sid, user, assistant := newUUID(), newUUID(), newUUID()
+	sid, user, assistant := bridgesid.New(), newUUID(), newUUID()
 	at := time.Now().UTC()
 	line := func(parent any, uuid, kind string, message map[string]any, at time.Time) []byte {
 		b, _ := json.Marshal(map[string]any{
