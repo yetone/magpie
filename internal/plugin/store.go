@@ -784,17 +784,6 @@ func install(ctx context.Context, spec string) error {
 	mendDist(ctx, bun)
 	before := depsNow()
 	err = bunAdd(ctx, bun, spec)
-	// Bun writes the dependency into package.json before it installs, and
-	// exits 1 with it there when any package fails, this one or another.
-	// One no plugin is installed as (a failed add's, before this was
-	// put back) failed every add after it: taken out, and the add tried
-	// again
-	var gone []string
-	if err != nil {
-		if gone = dropBroken(err, spec); len(gone) > 0 {
-			err = bunAdd(ctx, bun, spec)
-		}
-	}
 	// a @magpie-community package or version npm doesn't have (a new
 	// one waits for an owner to publish it there) comes from the
 	// community repo's dist branch; one Bun's minimumReleaseAge holds
@@ -803,7 +792,8 @@ func install(ctx context.Context, spec string) error {
 	var ue *BunUnstartableError
 	if name, version, ok := distWanted(spec); ok && err != nil && !minAge.MatchString(err.Error()) && !errors.As(err, &ue) {
 		if derr := installDist(ctx, bun, name, version); derr != nil {
-			err = fmt.Errorf("%w (and from the community repo's dist branch: %v)", err, derr)
+			// both wrapped: what Bun said at either try is read (failedOf)
+			err = fmt.Errorf("%w (and from the community repo's dist branch: %w)", err, derr)
 		} else {
 			err = nil
 		}
@@ -817,7 +807,7 @@ func install(ctx context.Context, spec string) error {
 	if err != nil {
 		// nothing of a failed add stays: a dependency left in package.json
 		// is installed again at every bun command, and no plugin lists it
-		before.undo(gone)
+		before.undo()
 		return err
 	}
 	pruneDist()
@@ -825,9 +815,25 @@ func install(ctx context.Context, spec string) error {
 	return nil
 }
 
-// bunAdd adds spec to plugins/ with bun, its scripts left unrun.
-// installMu held.
-func bunAdd(ctx context.Context, bun, spec string) error {
+// bunAdd adds spec to plugins/ with bun, its scripts left unrun. keep
+// are more packages the add is for (a dist tarball's: its spec is a
+// path). installMu held.
+//
+// Bun writes the dependency into package.json before it installs, and
+// exits 1 with it there when any package fails, this one or another. One
+// no plugin is installed as (a failed add's, before that was put back)
+// failed every add after it: taken out, and the add tried again. Here, so
+// every add has it: the dist branch's too (CHENGJIAHEGOXIS on X, v0.1.4205:
+// GoAnyAPI, not on npm, failed from dist over agency-agents).
+func bunAdd(ctx context.Context, bun, spec string, keep ...string) error {
+	err := bunAddOnce(ctx, bun, spec)
+	if err != nil && len(dropBroken(err, append([]string{spec}, keep...)...)) > 0 {
+		err = bunAddOnce(ctx, bun, spec)
+	}
+	return err
+}
+
+func bunAddOnce(ctx context.Context, bun, spec string) error {
 	out, err := bunCommand(ctx, bun, Dir(), "add", "--ignore-scripts", spec).CombinedOutput()
 	if err != nil {
 		if hint := missingLibs(string(out)); hint != "" {

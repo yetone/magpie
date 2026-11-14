@@ -1,6 +1,8 @@
 package plugin
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -105,6 +107,34 @@ func fakeBun(args []string) error {
 				return nil // as bun: the lock's commit stays
 			}
 		}
+		// a package npm doesn't have, as Bun 1.4.4 says it: nothing written
+		if n := os.Getenv("MAGPIE_FAKE_BUN_NPM404"); n != "" && !IsPath(spec) && Name(spec) == n {
+			fmt.Println("bun add v1.4.4 (38afee6c8)")
+			fmt.Println("Resolving dependencies")
+			fmt.Println("Resolved, downloaded and extracted [1]")
+			fmt.Println("error: GET https://registry.npmjs.org/" + strings.Replace(n, "/", "%2f", 1) + " - 404")
+			return errors.New("exit 1")
+		}
+		// a tarball of plugins/dist (installDist): the package it holds
+		if IsPath(spec) && strings.HasSuffix(spec, ".tgz") {
+			name, v, err := fakeTarball(spec)
+			if err != nil {
+				return err
+			}
+			at := filepath.Join("node_modules", filepath.FromSlash(name))
+			if err := os.MkdirAll(at, 0o755); err != nil {
+				return err
+			}
+			b, _ := json.Marshal(map[string]string{"name": name, "version": v, "main": "index.js"})
+			if err := os.WriteFile(filepath.Join(at, "index.js"), []byte("export default async () => ({})\n"), 0o644); err != nil {
+				return err
+			}
+			if err := os.WriteFile(filepath.Join(at, "package.json"), b, 0o644); err != nil {
+				return err
+			}
+			deps[name] = spec
+			break
+		}
 		if !IsGit(spec) {
 			name := Name(spec)
 			at := filepath.Join("node_modules", filepath.FromSlash(name))
@@ -167,12 +197,46 @@ func fakeBun(args []string) error {
 	// as bun does on Windows with a file of a package's copy held open:
 	// package.json written, then every command fails over that package
 	// while it is a dependency (CHENGJIAHEGOXIS's agency-agents)
+	// ($MAGPIE_FAKE_BUN_BUSY_SAYS: Bun's whole output instead)
 	if n := os.Getenv("MAGPIE_FAKE_BUN_BUSY"); n != "" && deps[n] != "" {
+		if says := os.Getenv("MAGPIE_FAKE_BUN_BUSY_SAYS"); says != "" {
+			fmt.Print(says)
+			return errors.New("exit 1")
+		}
 		fmt.Println("bun add v1.4.2 (fake)")
 		fmt.Println("EBUSY: failed copying files from cache to destination for package " + n)
 		return errors.New("exit 1")
 	}
 	return nil
+}
+
+// fakeTarball is the name and version of the package in the tarball at
+// path.
+func fakeTarball(path string) (name, version string, err error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", "", err
+	}
+	defer f.Close()
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		return "", "", err
+	}
+	tr := tar.NewReader(gz)
+	for {
+		h, err := tr.Next()
+		if err != nil {
+			return "", "", fmt.Errorf("%s has no package/package.json: %v", path, err)
+		}
+		if h.Name != "package/package.json" {
+			continue
+		}
+		var p struct{ Name, Version string }
+		if err := json.NewDecoder(tr).Decode(&p); err != nil {
+			return "", "", err
+		}
+		return p.Name, p.Version, nil
+	}
 }
 
 // fakeFetch clones spec's repository and puts the package in it at

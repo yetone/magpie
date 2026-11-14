@@ -134,6 +134,69 @@ func TestAnotherPluginsFailureDoesNotFailAdd(t *testing.T) {
 	}
 }
 
+// goanyapi is CHENGJIAHEGOXIS's plugin: not on npm yet, so it is added
+// from the community repo's dist branch.
+const goanyapi = "@magpie-community/tools-goanyapi"
+
+// goanyapiBusy is what Bun 1.4.4 said adding GoAnyAPI's dist tarball on
+// the reporter's Windows (v0.1.4205's error, its lines as Bun prints
+// them): "Unexpected:", not "EBUSY:", and GoAnyAPI itself installed.
+const goanyapiBusy = "bun add v1.4.4 (38afee6c8)\nResolving dependencies\nResolved, downloaded and extracted [1]\n" +
+	"Unexpected: failed copying files from cache to destination for package agency-agents\n\n" +
+	"installed @magpie-community/tools-goanyapi@./dist/magpie-community-tools-goanyapi-0.1.1.tgz\n\n" +
+	"Failed to install 2 packages\n[38.00ms] done\n"
+
+// goanyapiSandbox is depsSandbox with npm having no GoAnyAPI and the dist
+// branch its 0.1.1, and Bun failing over busy as the reporter's did.
+func goanyapiSandbox(t *testing.T, deps map[string]string, list, busy string) {
+	t.Helper()
+	depsSandbox(t, deps, list)
+	npmHasNothing(t)
+	fakeDist(t, map[string][]string{goanyapi: {"0.1.1"}}, false)
+	t.Setenv("MAGPIE_FAKE_BUN_NPM404", goanyapi)
+	t.Setenv("MAGPIE_FAKE_BUN_BUSY", busy)
+	t.Setenv("MAGPIE_FAKE_BUN_BUSY_SAYS", strings.ReplaceAll(goanyapiBusy, "agency-agents", busy))
+}
+
+// The reporter's case on v0.1.4205: GoAnyAPI isn't on npm, and its add
+// from the dist branch failed over the leftover, which only the npm add
+// was cleared of. Every add has it: the dist branch's too.
+func TestLeftoverDoesNotFailADistAdd(t *testing.T) {
+	goanyapiSandbox(t, map[string]string{agency: "github:msitarzewski/agency-agents"}, `{"plugins":[]}`, agency)
+	const spec = goanyapi + "@latest"
+	if _, err := AddExact(ctxMinute(t), spec); err != nil {
+		t.Fatalf("add from dist failed over a leftover no plugin needs: %v", err)
+	}
+	d := depsOf(t)
+	if _, in := d[agency]; in {
+		t.Fatalf("the leftover is still a dependency: %v", d)
+	}
+	if d[goanyapi] != "./dist/magpie-community-tools-goanyapi-0.1.1.tgz" {
+		t.Fatalf("GoAnyAPI isn't a dependency at its dist tarball: %v", d)
+	}
+	if !slices.ContainsFunc(Load().Plugins, func(e Entry) bool { return Name(e.Spec) == goanyapi }) {
+		t.Fatalf("GoAnyAPI not listed: %+v", Load().Plugins)
+	}
+}
+
+// Another listed plugin's package Bun can't install fails no add from the
+// dist branch either, once the add's own package went in ("installed
+// …"): what Bun said there is read, not only the npm try's 404.
+func TestAnotherPluginsFailureDoesNotFailADistAdd(t *testing.T) {
+	const other = "opencode-other-auth"
+	goanyapiSandbox(t, map[string]string{other: other + "@1.0.0"}, `{"plugins":[{"spec":"`+other+`@1.0.0"}]}`, other)
+	if _, err := AddExact(ctxMinute(t), goanyapi+"@latest"); err != nil {
+		t.Fatalf("add from dist failed over another plugin's package: %v", err)
+	}
+	d := depsOf(t)
+	if d[other] != other+"@1.0.0" {
+		t.Fatalf("a listed plugin's dependency was taken out: %v", d)
+	}
+	if d[goanyapi] == "" {
+		t.Fatalf("GoAnyAPI isn't a dependency: %v", d)
+	}
+}
+
 // Removing a plugin takes its dependency out though bun remove fails
 // (which installs every other dependency again, and one of them can fail
 // it): ignored, it stayed, a leftover.
@@ -210,6 +273,8 @@ func TestBunFailed(t *testing.T) {
 		"\x1b[31merror\x1b[0m: failed copying files from cache to destination for package <b>@scope/pkg<r>\n":                                         {"@scope/pkg"},
 		"EACCES: Permission denied while installing opencode-x-auth\nEBUSY: failed copying files from cache to destination for package agency-agents": {"opencode-x-auth", agency},
 		"error: GET https://registry.npmjs.org/x - 404":                                                                                               nil,
+		goanyapiBusy: {agency},
+		strings.ReplaceAll(goanyapiBusy, "\n", "\r\n"): {agency},
 	} {
 		if got := bunFailed(out); !slices.Equal(got, want) {
 			t.Errorf("bunFailed(%q) = %v, want %v", out, got, want)

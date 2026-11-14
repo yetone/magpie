@@ -282,13 +282,30 @@ func (e *bunRunError) Error() string { return e.err.Error() }
 func (e *bunRunError) Unwrap() error { return e.err }
 
 // failedOf is the packages err, a bun command's failure, says Bun
-// couldn't install.
+// couldn't install: at every try it wraps (an add from npm, then from the
+// dist branch).
 func failedOf(err error) []string {
-	var be *bunRunError
-	if errors.As(err, &be) {
-		return bunFailed(be.out)
+	var names []string
+	var walk func(error)
+	walk = func(err error) {
+		switch e := err.(type) {
+		case nil:
+		case *bunRunError:
+			for _, n := range bunFailed(e.out) {
+				if !slices.Contains(names, n) {
+					names = append(names, n)
+				}
+			}
+		case interface{ Unwrap() []error }:
+			for _, w := range e.Unwrap() {
+				walk(w)
+			}
+		case interface{ Unwrap() error }:
+			walk(e.Unwrap())
+		}
 	}
-	return nil
+	walk(err)
+	return names
 }
 
 // depsState is plugins/package.json's dependencies and bun.lock before
@@ -314,9 +331,10 @@ func depsNow() depsState {
 
 // undo puts back what a failed bun add wrote: a dependency it added is
 // taken out with its folder, one it changed goes back to the spec it had,
-// and bun.lock to what it was. One known to be broken (gone) since stays
-// gone. installMu held.
-func (s depsState) undo(gone []string) {
+// and bun.lock to what it was. One taken out since (a leftover Bun
+// couldn't install) isn't in package.json now, and stays out. installMu
+// held.
+func (s depsState) undo() {
 	if !s.ok {
 		return
 	}
@@ -331,7 +349,7 @@ func (s depsState) undo(gone []string) {
 		switch {
 		case !had:
 			added = append(added, n)
-		case was != v && !slices.Contains(gone, n):
+		case was != v:
 			back[n] = was
 		}
 	}

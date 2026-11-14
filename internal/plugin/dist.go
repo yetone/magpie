@@ -350,7 +350,7 @@ func installDist(ctx context.Context, bun, name, version string) error {
 		os.Remove(tmp.Name())
 		return werr
 	}
-	return bunAdd(ctx, bun, "./dist/"+file)
+	return bunAdd(ctx, bun, "./dist/"+file, name)
 }
 
 // pruneDist takes out the tarballs in plugins/dist that neither
