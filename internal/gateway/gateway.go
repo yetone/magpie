@@ -888,7 +888,11 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	go filememo.Watch(freshCtx, pluginrt.Path(), settings.Path(), provider.Path(), plugin.ListPath(), plugin.ToolsPath(), access.Path())
 	go pluginrt.KeepFresh(freshCtx, filememo.OthersEvery, settings.Path(), provider.Path(), plugin.ListPath(), plugin.ToolsPath(), access.Path())
 	// and the MCP hub's servers that the Library no longer gives are ended
-	go keepHubPruned(freshCtx)
+	// It reads MCPHub, which a test swaps, so the gateway's end waits for
+	// it: once ListenAndServe has returned, nothing it started still looks.
+	pruned := make(chan struct{})
+	go func() { defer close(pruned); keepHubPruned(freshCtx) }()
+	defer func() { stopFresh(); <-pruned }()
 	srv := &http.Server{Handler: s.closesWhenHandedOff(s.Front()), ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 5 * time.Minute, ConnState: s.unread.note}
 	// the magpie serving the gateway, and only it, keeps the saved accounts
 	// signed in, so two never refresh one sign-in at once
