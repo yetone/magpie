@@ -4,6 +4,7 @@
 // works. {name} slots are filled by t(str, vars).
 const I18N = {
   zh: {
+    "Calls": "调用次数",
     "Cards": "卡片",
     "Table": "表格",
     "Quick check": "快速检测",
@@ -5264,6 +5265,7 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "这份报告已经不在了：magpie 只保留最近 5 份。",
   },
   "zh-TW": {
+    "Calls": "呼叫次數",
     "Cards": "卡片",
     "Table": "表格",
     "Quick check": "快速檢測",
@@ -10508,6 +10510,7 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "這份報告已經不在了：magpie 只保留最近 5 份。",
   },
   ja: {
+    "Calls": "呼び出し数",
     "Cards": "カード",
     "Table": "表",
     "Quick check": "クイックチェック",
@@ -15754,6 +15757,7 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "このレポートはもう残っていません。magpie は最新の 5 件だけを保存します。",
   },
   de: {
+    "Calls": "Aufrufe",
     "Cards": "Karten",
     "Table": "Tabelle",
     "Quick check": "Schnelltest",

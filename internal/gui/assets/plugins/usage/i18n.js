@@ -2,6 +2,8 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "Order by": "排序方式",
+    "Order this list": "给这个列表排序",
     "Model speed": "模型速度",
     "Medians of the answered requests that wrote {n} tokens or more": "写出 {n} 个及以上 token 的已完成请求的中位数",
     "Set price…": "设置价格…",
@@ -280,6 +282,8 @@ magpie.strings({
     "Sent upstream as {to}, as the agent spoke it": "以 {to} 协议发往上游，与 agent 所用协议相同",
   },
   "zh-TW": {
+    "Order by": "排序方式",
+    "Order this list": "排序這個列表",
     "Model speed": "模型速度",
     "Medians of the answered requests that wrote {n} tokens or more": "寫出 {n} 個及以上 token 的已完成請求的中位數",
     "Set price…": "設定價格…",
@@ -558,6 +562,8 @@ magpie.strings({
     "Sent upstream as {to}, as the agent spoke it": "以 {to} 協議發往上游，與 agent 所用協議相同",
   },
   ja: {
+    "Order by": "並べ替え",
+    "Order this list": "この一覧を並べ替える",
     "Model speed": "モデルの速度",
     "Medians of the answered requests that wrote {n} tokens or more": "{n} トークン以上を出力した完了リクエストの中央値",
     "Set price…": "価格を設定…",
@@ -836,6 +842,8 @@ magpie.strings({
     "Sent upstream as {to}, as the agent spoke it": "エージェントと同じ {to} で上流へ送信",
   },
   de: {
+    "Order by": "Sortieren nach",
+    "Order this list": "Diese Liste sortieren",
     "Model speed": "Modelltempo",
     "Medians of the answered requests that wrote {n} tokens or more": "Mediane der beantworteten Anfragen mit mindestens {n} Tokens",
     "Set price…": "Preis festlegen…",

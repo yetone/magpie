@@ -2677,6 +2677,11 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .gw-keys .gw-key-more:is(:hover, .open) { color: var(--fg); }
 #view-gateway .row-head, #view-usage .row-head { margin: 14px 0 6px; padding: 0 2px; }
 #view-usage .row-head.quota-head { margin: 6px 0 6px; }
+#view-usage .row-head .us-sort { display: inline-flex; align-items: center; gap: 3px; max-width: 50%; padding: 1px 4px; border-radius: 5px; font-size: 11px; color: var(--muted); transition: background .12s ease, color .12s ease; }
+#view-usage .row-head .us-sort > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#view-usage .row-head .us-sort svg { flex: none; }
+#view-usage .row-head .us-sort.open { background: var(--pill); color: var(--fg-2); }
+@media (hover: hover) and (pointer: fine) { #view-usage .row-head .us-sort:hover { background: var(--pill); color: var(--fg-2); } }
 #view-gateway .row-head .note { font-size: 11px; color: var(--faint); }
 /* providers switched off, folded below the ones on */
 #view-providers .off-head { margin: 14px 0 6px; padding: 0 2px; flex: none; }

@@ -731,6 +731,7 @@ function mountUsageFolds() {
   if (toSet) toSet.onclick = (e) => openSettingsAt(e, "usage", "#quotaLeftRow");
   for (const b of $$("#usagePane .row-head .fold[data-fold]")) {
     b.prepend(svg(CHEV_R, 11, 1.6));
+    b.after(el("span", "grow us-sort-gap"), usageSortPick(b.dataset.fold));
     b.onclick = () => {
       const id = b.dataset.fold;
       if (usageFolded.has(id)) usageFolded.delete(id); else usageFolded.add(id);
@@ -748,8 +749,57 @@ function showUsageFolds() {
     const id = b.dataset.fold, folded = usageFolded.has(id);
     b.setAttribute("aria-expanded", String(!folded));
     b.title = t(USAGE_FOLD_TITLES[id][folded ? 0 : 1]);
+    // a folded list has nothing to order
+    const pick = b.parentElement.querySelector(".us-sort");
+    if (pick) pick.hidden = folded;
     for (const box of USAGE_FOLDS[id]) $("#" + box)?.classList.toggle("folded", folded);
   }
+}
+
+// The Overview's lists are a ranking (onducoder on X: 能为 agent、模型、
+// 网关密钥、账号的消耗量增加一个排序): most tokens first, as the server
+// sends them, or by cost, by calls or by name, a pick at the right of each
+// list's heading, kept across a reload (magpie.usageSort, a list's name to
+// its order). Tokens count as the tokens tile counts them, the cache in or
+// out; an unpriced row's cost is unknown and goes last by cost.
+const USAGE_SORTS = [["tokens", "Tokens"], ["cost", "Cost"], ["calls", "Calls"], ["name", "Name"]];
+let usageSort = {};
+try { usageSort = JSON.parse(localStorage.getItem("magpie.usageSort") || "{}") || {}; } catch {}
+const usageSortOf = (id) => USAGE_SORTS.some(([v]) => v === usageSort[id]) ? usageSort[id] : "tokens";
+function usageSorted(groups, id) {
+  const by = usageSortOf(id);
+  // the server sends each list most tokens first (cache left out)
+  if (by === "tokens" && !usageWithCache) return groups;
+  const name =(g) => g.name || g.id || "";
+  const cost = (g) => typeof g.cost === "number" && !(g.unpriced && !g.cost) ? g.cost : -1;
+  const key = { tokens: (g) => usageTokens(g), cost, calls: (g) => g.calls || 0 }[by];
+  return [...groups].sort((a, b) => {
+    if (by === "name") return !a.name - !b.name || name(a).localeCompare(name(b), intlLang(), { numeric: true, sensitivity: "base" });
+    return key(b) - key(a) || usageTokens(b) - usageTokens(a) || (b.calls || 0) - (a.calls || 0);
+  });
+}
+function usageSortPick(id) {
+  const b = el("button", "us-sort");
+  b.type = "button";
+  b.dataset.sort = id;
+  b.setAttribute("aria-haspopup", "menu");
+  const paint = () => {
+    const by = usageSortOf(id);
+    b.replaceChildren(el("span", "", t(USAGE_SORTS.find(([v]) => v === by)[1])), svg(CHEV, 10, 1.6));
+  };
+  paint();
+  b.title = t("Order this list");
+  b.onclick = (e) => {
+    e.stopPropagation();
+    if (b.classList.contains("open")) return closeProtoMenu();
+    openProtoMenu(b, USAGE_SORTS.map(([v, name]) => ({ v, name, note: "" })), usageSortOf(id), (v) => {
+      if (v === "tokens") delete usageSort[id]; else usageSort[id] = v;
+      try { localStorage.setItem("magpie.usageSort", JSON.stringify(usageSort)); } catch {}
+      paint();
+      if (usage) renderUsage();
+    }, "Order by", "sess-menu", "right");
+  };
+  return b;
 }
 
 // usageParts: a line of counts, each kept whole in a span of its own and
@@ -1003,8 +1053,9 @@ function renderUsage() {
   // it, and only of it: the totals, the chart and every share above still
   // count its calls. One line under the list says how many, and opens them.
   const hid = new Set(state.settings?.usageAgentsHidden || []);
-  const hidden = u.agents.filter((g) => hid.has(g.id));
-  list("usageAgents", u.agents.filter((g) => !hid.has(g.id)), (r, g) => {
+  const agents = usageSorted(u.agents, "agents");
+  const hidden = agents.filter((g) => hid.has(g.id));
+  list("usageAgents", agents.filter((g) => !hid.has(g.id)), (r, g) => {
     r.classList.add("acts");
     const b = el("button", "icon us-more");
     b.type = "button";
@@ -1052,7 +1103,7 @@ function renderUsage() {
   });
   // a model's usage cleared (CrazyMouse_TT on X: a local model deployed
   // again, its requests, speed and cache wanted from nothing)
-  list("usageModels", u.models, (r, g) => {
+  list("usageModels", usageSorted(u.models, "models"), (r, g) => {
     if (!g.model) return;
     r.classList.add("acts");
     const b = el("button", "icon us-more");
@@ -1070,8 +1121,8 @@ function renderUsage() {
     r.oncontextmenu = (e) => { e.preventDefault(); menu(); };
     r.querySelector(".share").after(b);
   });
-  list("usageAccounts", u.accounts || []);
-  list("usageKeys", u.callerKeys || []);
+  list("usageAccounts", usageSorted(u.accounts || [], "accounts"));
+  list("usageKeys", usageSorted(u.callerKeys || [], "keys"));
   $("#usageNote").textContent = t("Counted from the providers' own usage reports on every call through the gateway · {path}", { path: u.path });
   const clear = $("#usageClear");
   clear.hidden = false;

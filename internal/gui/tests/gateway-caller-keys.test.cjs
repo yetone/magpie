@@ -61,7 +61,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator("#usageKeys .row").last().waitFor();
       assert.equal(await page.locator("#usageKeys .row").count(), 3);
       assert.match(await page.locator("#usageKeys").textContent(), /Laptop/);
-      assert.equal(await page.locator("#usageKeysHead").textContent(), lang === "zh" ? "网关密钥" : "Gateway keys");
+      assert.equal(await page.locator("#usageKeysHead .label").textContent(), lang === "zh" ? "网关密钥" : "Gateway keys");
       assert.equal(await page.locator("#usageCallerKeys").count(), 0, "there is only one API key section");
       await page.locator(":is(#usageTab .opt, .nav-s):visible", { hasText: new RegExp("^" + w.requests + "(?!\\p{L})", "u") }).click();
       await page.locator("#ledKey").click();

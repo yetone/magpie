@@ -85,7 +85,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // Overview: one row per provider and account, the unrecorded one named so
       await page.locator("#usageAccounts .row").first().waitFor();
       assert.equal(await page.locator("#usageAccountsHead").isHidden(), false);
-      assert.equal((await page.locator("#usageAccountsHead").textContent()).trim(), w.head);
+      assert.equal((await page.locator("#usageAccountsHead .label").textContent()).trim(), w.head);
       assert.deepEqual(await page.locator("#usageAccounts .name").allTextContents(), ["a@example.com", "b@example.com", w.none, "a@example.com"]);
       assert.deepEqual(await page.locator("#usageAccounts .sub").evaluateAll((s) => s.map((x) => x.textContent.split(" · ")[0])), ["Codex", "Codex", "Codex", "Claude"]);
       assert.deepEqual(await page.locator("#usageAccounts .cost").allTextContents(), ["≈$3.75", "≈$2.50", "≈$2.50", "≈$1.25"]);

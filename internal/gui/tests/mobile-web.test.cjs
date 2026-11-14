@@ -364,6 +364,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
                 });
                 await current.waitForTimeout(350);
               }
+              // Usage's lists' order picks are new (onducoder on X): until
+              // BASE_REF has them, they are taken out; usage-sort.test.cjs
+              // covers them.
+              if (view === "usage" && !baselineFile("plugins/usage/page.js").toString().includes("function usageSortPick")) {
+                await current.evaluate(() => { for (const b of document.querySelectorAll("#usagePane .row-head .us-sort, #usagePane .row-head .us-sort-gap")) b.remove(); });
+                await current.waitForTimeout(350);
+              }
               // Replies' Short Claude system prompt row is new: until BASE_REF
               // has it, the page is compared with the row taken out;
               // claude-lean-prompt-setting.test.cjs covers the row.
