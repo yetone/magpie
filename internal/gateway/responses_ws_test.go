@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -177,6 +178,112 @@ func create(prev, input string, extra ...string) string {
 		f += "," + e
 	}
 	return f + "}"
+}
+
+// A response.create streams whatever it says of stream (#5291):
+// OpenAI's WebSocket mode doesn't use the HTTP field, so a client leaves
+// it out, and the turn went to the provider unstreamed, its reply coming
+// back whole at the end. The provider here holds its reply open after
+// the first delta, which must reach the client before it finishes.
+func TestResponsesSocketStreamsWithoutStreamField(t *testing.T) {
+	fresh(t)
+	for _, path := range []string{"/v1/responses", "/responses"} {
+		for _, stream := range []string{"", `"stream":false,`} {
+			name := path + " " + cmp.Or(stream, "no stream")
+			finish := make(chan struct{}, 1)
+			u := &respUp{}
+			u.reply = func(w http.ResponseWriter, r *http.Request, n int) {
+				item := `{"type":"message","id":"msg_1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"hello"}]}`
+				response := `{"id":"resp_up1","object":"response","status":"completed","output":[` + item + `],"usage":{"input_tokens":300,"output_tokens":50,"total_tokens":350}}`
+				if !gjson.GetBytes(u.body(n-1), "stream").Bool() {
+					w.Header().Set("Content-Type", "application/json")
+					io.WriteString(w, response)
+					return
+				}
+				w.Header().Set("Content-Type", "text/event-stream")
+				io.WriteString(w, sse(
+					`data: {"type":"response.created","response":{"id":"resp_up1","object":"response","status":"in_progress","output":[]}}`,
+					`data: {"type":"response.output_item.added","output_index":0,"item":{"type":"message","id":"msg_1","role":"assistant","status":"in_progress","content":[]}}`,
+					`data: {"type":"response.output_text.delta","item_id":"msg_1","output_index":0,"content_index":0,"delta":"hello"}`))
+				w.(http.Flusher).Flush()
+				select {
+				case <-finish:
+				case <-r.Context().Done():
+					return
+				}
+				io.WriteString(w, sse(
+					`data: {"type":"response.output_item.done","output_index":0,"item":`+item+`}`,
+					`data: {"type":"response.completed","response":`+response+`}`))
+			}
+			sockUp(t, u)
+			_, ts := sockServer(t)
+			c, _, err := dialSock(t, ts, path, nil)
+			if err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
+			c.send(`{"type":"response.create","model":"fake/m1",` + stream + `"store":false,"input":[` + userHi + `]}`)
+			got, err := c.until("response.output_text.delta", "response.completed", "response.failed", "error")
+			if err != nil {
+				close(finish)
+				t.Fatalf("%s: waiting for a text delta: %v after %v", name, err, got)
+			}
+			if delta := last(got); delta.Get("type").String() != "response.output_text.delta" || delta.Get("delta").String() != "hello" {
+				close(finish)
+				t.Fatalf("%s: no text delta before the upstream completed: %v", name, got)
+			}
+			finish <- struct{}{}
+			got, err = c.until("response.completed", "response.failed", "error")
+			if err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
+			end := last(got)
+			if end.Get("type").String() != "response.completed" || end.Get("response.output.0.content.0.text").String() != "hello" || end.Get("response.usage.total_tokens").Int() != 350 {
+				t.Fatalf("%s: completed reply: %v", name, got)
+			}
+			if !gjson.GetBytes(u.body(0), "stream").Bool() {
+				t.Errorf("%s: upstream body %s", name, u.body(0))
+			}
+		}
+	}
+}
+
+// The same on Codex's own route (#5291): a frame without stream reaches
+// the ChatGPT backend as a streamed turn.
+func TestCodexSocketStreamsWithoutStreamField(t *testing.T) {
+	setup(t, provider.Chat, &fake{t: t})
+	bodies := make(chan []byte, 1)
+	chatgpt(t, func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		select {
+		case bodies <- b:
+		default:
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		item := `{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ok"}]}`
+		io.WriteString(w, sse(
+			`data: {"type":"response.created","response":{"id":"resp_c1"}}`,
+			`data: {"type":"response.output_item.done","output_index":0,"item":`+item+`}`,
+			`data: {"type":"response.completed","response":{"id":"resp_c1","usage":{"input_tokens":9,"output_tokens":2}}}`))
+	})
+	_, ts := sockServer(t)
+	h := http.Header{"Authorization": {"Bearer chatgpt-token"}, "Chatgpt-Account-Id": {"acct-1"},
+		"Openai-Beta": {"responses_websockets=2026-02-06"}, "User-Agent": {"codex_cli_rs/0.166.0"}}
+	c, _, err := dialSock(t, ts, CodexPath+"/responses", h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := c.turn(`{"type":"response.create","model":"gpt-5.5","store":false,"input":[` + userHi + `]}`)
+	if last(got).Get("type").String() != "response.completed" {
+		t.Fatalf("%v", got)
+	}
+	select {
+	case b := <-bodies:
+		if !gjson.GetBytes(b, "stream").Bool() {
+			t.Errorf("sent to ChatGPT unstreamed: %s", b)
+		}
+	default:
+		t.Fatal("nothing reached ChatGPT")
+	}
 }
 
 // Codex's socket is served (#4058): the upgrade is taken on each

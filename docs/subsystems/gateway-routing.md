@@ -2917,7 +2917,12 @@ serves it on `/v1/responses`, `/responses` and the Codex backend's
   stands for: the upgrade's own request (URL, Host, address, headers but
   the socket's own and `OpenAI-Beta: responses_websockets`) with the frame
   as its body, `type`, `previous_response_id` and `generate` taken out, and
-  `client_metadata`'s turn state and responses-lite flag as the
+  `stream: true` set on the internal HTTP request. OpenAI's
+  [WebSocket mode](https://developers.openai.com/api/docs/guides/websocket-mode)
+  does not use the HTTP `stream` field: a client omitting it still gets
+  incremental events before the reply completes
+  (`TestResponsesSocketStreamsWithoutStreamField`).
+  `client_metadata`'s turn state and responses-lite flag become the
   `X-Codex-Turn-State` and `X-OpenAI-Internal-Codex-Responses-Lite`
   headers Codex sends over HTTP. It goes through the whole handler the
   upgrade came in on (`socketEntry`, outside `Front` and `Handler`), so

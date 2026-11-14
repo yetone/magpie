@@ -492,6 +492,8 @@ func (rs *responsesSocket) turn(ctx context.Context, t *socketTurnRun, frame []b
 	delete(q, "type")
 	delete(q, "previous_response_id")
 	delete(q, "generate")
+	// WebSocket mode is always streamed; clients omit the HTTP stream field.
+	q["stream"] = json.RawMessage("true")
 	body, err := turnBody(q, input)
 	if err != nil {
 		rs.writeError(ctx, http.StatusBadRequest, "invalid_request_error", "invalid_json", err.Error(), "")
