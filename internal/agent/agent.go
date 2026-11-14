@@ -235,15 +235,15 @@ type Agent struct {
 	// is that group's (#750).
 	Routed func() bool
 	// FailingOver reports an agent that isn't connected whose requests
-	// still go through magpie's gateway, for account failover alone (Codex
-	// signed in to ChatGPT with more of its accounts on in magpie, #1385):
-	// the Agents page says so and what turns it off, and the gateway lists
-	// it only its own models.
+	// still go through magpie's gateway, for account failover alone: what
+	// a magpie from before wrote in Codex's config by itself (#1385), till
+	// Sync takes it out (TylerBai_loveai on X). The Agents page says so,
+	// and the gateway lists it only its own models.
 	FailingOver func() bool
 	// EndFailover takes out what account failover wrote, for magpie
 	// quitting: left there, the agent would be pointed at a gateway that
 	// no longer answers, and retry till magpie is open again (Leon920717
-	// on X). The next start's Sync writes it again.
+	// on X).
 	EndFailover func() error
 	// TakeLeftovers takes out what magpie wrote that no Disconnect could
 	// name: an address at magpie's gateway whose marks are gone (magpie's

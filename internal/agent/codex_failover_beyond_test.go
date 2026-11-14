@@ -17,7 +17,8 @@ import (
 // the same to it) is never pointed at the gateway's Codex path for account
 // failover either: from there the gateway takes a named key alone, so the
 // turn failover handed magpie came back a 401 — the shape #2145 took out
-// of the joined case, still written by failover for a Codex not connected.
+// of the joined case. No Codex not connected is pointed there now
+// (TestCodexNotConnectedStaysOffMagpie); one written before goes.
 func TestCodexFailoverBeyondLoopbackNotWritten(t *testing.T) {
 	claims := func(m map[string]any) string {
 		b, _ := json.Marshal(m)

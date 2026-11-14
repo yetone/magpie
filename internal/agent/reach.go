@@ -187,7 +187,7 @@ func chainsToGateway(v, want string) bool {
 }
 
 // magpieAsked is magpieAt waited for, for a write: base, not asked yet, is
-// asked now (probedNow, as codexProxyOK asks a proxy), so what the write
+// asked now (probedNow), so what the write
 // reads after is magpie's answer there. Unasked, surelyMagpie is no, and
 // the first write in a magpie just started, the CLI's, took a proxy to
 // magpie for the user's own endpoint (#1985). One answered before, at any

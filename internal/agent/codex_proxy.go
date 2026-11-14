@@ -43,10 +43,9 @@ import (
 // magpie opened from the Dock has neither, so the login shell's are asked
 // (proc.LoginEnv), over magpie's own.
 //
-// So before magpie hands Codex's requests to the gateway uninvited (account
-// failover), and while it has them, it asks the way Codex would go: through
-// which proxy, and whether a request sent through it reaches magpie (Drift
-// kind "proxied").
+// So while magpie has Codex's requests, it asks the way Codex would go:
+// through which proxy, and whether a request sent through it reaches
+// magpie (Drift kind "proxied").
 
 // codexProxyEnv, codexSystemProxy and codexProxyOS are what codexProxyFor
 // reads, and loginEnv what codexEnv does; vars so tests can say.
@@ -243,13 +242,6 @@ func codexThroughProxy(cfg, base string) (ok, known bool, proxy, from string) {
 	}
 	ok, known = probed("proxy "+proxy+" "+base, func() bool { return proxyProbe(base, proxy) })
 	return ok, known, proxy, from
-}
-
-// codexProxyOK is codexThroughProxy waited for: whether Codex gets to the
-// gateway at base, a proxy in its way tried now when it hasn't been.
-func codexProxyOK(cfg, base string) bool {
-	proxy, _ := codexProxyFor(cfg, base)
-	return proxy == "" || probedNow("proxy "+proxy+" "+base, func() bool { return proxyProbe(base, proxy) })
 }
 
 // codexProxiedDetail says what keeps Codex off magpie through proxy, and

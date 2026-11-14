@@ -13,12 +13,10 @@ import (
 )
 
 // #1907 (foobra): two ChatGPT accounts, both on in magpie, for Codex
-// Desktop and the CLI alone, not for the gateway. With more accounts on,
-// magpie points Codex at the gateway to fail over between them (#1385);
-// switch-only takes that base URL out, so Codex goes straight to OpenAI and
-// magpie only switches its sign-in, and nothing puts it back while it is
-// on. Off again, failover writes it back. A base URL the user wrote by hand
-// is theirs, and stays either way (#856).
+// Desktop and the CLI alone, not for the gateway. Codex isn't connected, so
+// it goes straight to OpenAI whether switch-only is on or off, and magpie
+// only switches its sign-in; a base URL the user wrote by hand is theirs,
+// and stays either way (#856).
 func TestCodexSwitchOnlyKeepsCodexOffTheGateway(t *testing.T) {
 	claims := func(m map[string]any) string {
 		b, _ := json.Marshal(m)
@@ -38,53 +36,34 @@ func TestCodexSwitchOnlyKeepsCodexOffTheGateway(t *testing.T) {
 	os.WriteFile(filepath.Join(filepath.Dir(provider.Path()), "logins.json"), b, 0o600)
 
 	cx := codex(home)
-	if err := cx.Sync(); err != nil {
-		t.Fatal(err)
-	}
-	if cfg := read(); !strings.Contains(cfg, "openai_base_url") || !cx.FailingOver() {
-		t.Fatalf("not the reporter's state, failing over %v:\n%s", cx.FailingOver(), cfg)
-	}
-
-	if err := provider.SetSwitchOnly("codex", true); err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i < 2; i++ {
+	for _, only := range []bool{false, true, false} {
+		if err := provider.SetSwitchOnly("codex", only); err != nil {
+			t.Fatal(err)
+		}
 		if err := cx.Sync(); err != nil {
 			t.Fatal(err)
 		}
 		if cfg := read(); strings.Contains(cfg, "openai_base_url") || !strings.Contains(cfg, `model = "gpt-5.5"`) {
-			t.Fatalf("switch-only, sync %d:\n%s", i, cfg)
+			t.Fatalf("switch-only %v:\n%s", only, cfg)
 		}
 		if cx.FailingOver() || cx.FailoverSaid() != "" || CodexOwnOnly() {
-			t.Fatalf("switch-only, sync %d: failing over %v, said %q, own only %v", i, cx.FailingOver(), cx.FailoverSaid(), CodexOwnOnly())
+			t.Fatalf("switch-only %v: failing over %v, said %q, own only %v", only, cx.FailingOver(), cx.FailoverSaid(), CodexOwnOnly())
 		}
 	}
 
-	if err := provider.SetSwitchOnly("codex", false); err != nil {
-		t.Fatal(err)
-	}
-	if err := cx.Sync(); err != nil {
-		t.Fatal(err)
-	}
-	if cfg := read(); !strings.Contains(cfg, "openai_base_url") || !cx.FailingOver() {
-		t.Fatalf("switch-only off, failing over %v:\n%s", cx.FailingOver(), cfg)
-	}
-
-	// the user's own base URL, switch-only on: theirs, kept
-	if err := cx.EndFailover(); err != nil {
-		t.Fatal(err)
-	}
-	forget("codex.failover")
+	// the user's own base URL: theirs, kept, switch-only on or off
 	base := codexGatewayURL()
 	cfg := filepath.Join(home, ".codex", "config.toml")
 	os.WriteFile(cfg, []byte("model = \"gpt-5.5\"\nopenai_base_url = \""+base+"\"\n"), 0o644)
-	if err := provider.SetSwitchOnly("codex", true); err != nil {
-		t.Fatal(err)
-	}
-	if err := cx.Sync(); err != nil {
-		t.Fatal(err)
-	}
-	if got := read(); !strings.Contains(got, `openai_base_url = "`+base+`"`) {
-		t.Fatalf("the user's base URL taken away:\n%s", got)
+	for _, only := range []bool{true, false} {
+		if err := provider.SetSwitchOnly("codex", only); err != nil {
+			t.Fatal(err)
+		}
+		if err := cx.Sync(); err != nil {
+			t.Fatal(err)
+		}
+		if got := read(); !strings.Contains(got, `openai_base_url = "`+base+`"`) {
+			t.Fatalf("switch-only %v: the user's base URL taken away:\n%s", only, got)
+		}
 	}
 }

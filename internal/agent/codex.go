@@ -1560,69 +1560,28 @@ func codexIn(at place) *Agent {
 		}
 		forget(at.key("codex.lent"))
 	}
-	// Codex on one of its own models goes through magpie too while more of
-	// its ChatGPT accounts are on there, so one out of its allowance hands
-	// the turn to the next; with none, or once the user disconnected Codex,
-	// it goes straight to OpenAI again
+	// A Codex that isn't connected goes straight to OpenAI on its own
+	// sign-in, however many of its ChatGPT accounts are on in magpie.
+	// magpie once pointed it at the gateway by itself for account failover
+	// (#1385) while another of its accounts was on, so an unconnected
+	// Codex's every request went through magpie, the row saying not
+	// connected, until a Disconnect the user had no reason to look for
+	// (TylerBai_loveai on X). Failover between the accounts comes with
+	// connecting Codex. What failover wrote goes as Sync next runs: the
+	// base URL it marked (codex.failover), or CC Switch's OpenAI mirror it
+	// pointed at magpie (codex.mirror_failover). A base URL the user wrote
+	// by hand, unmarked, is theirs and stays (#856).
 	failover := func() error {
 		if wired() || asProvider() {
 			return nil
 		}
-		p := get("model_provider")
-		mirror := isCCSwitchMirror(p)
-		if !mirror {
-			_ = dropMirrorFailover()
+		if err := dropMirrorFailover(); err != nil {
+			return err
 		}
-		if p != "" && p != "openai" && !mirror {
+		if stashShared()[at.key("codex.failover")] != "1" {
 			return nil
 		}
-		// a Codex that reaches the gateway from another machine is never
-		// pointed at the Codex path: the gateway takes a named key there,
-		// so the turn failover handed it came back a 401 (#2145)
-		on := !disconnected() && codexFailover() && !onAnotherMachine(at.gw())
-		// failover is magpie's own idea, not the user's: never handed
-		// Codex's requests while a proxy they'd go through doesn't pass
-		// them on to magpie, which would have every turn fail with 502
-		// (codex_proxy.go); one written before goes again
-		if on && at.spell == nil && !codexProxyOK(path, at.gw()) {
-			on = false
-		}
-		if mirror {
-			t, _ := edit.GetTOMLTable(path, "model_providers."+p)
-			hasGateway := t["base_url"] == at.codexURL()
-			switch {
-			case on && !hasGateway:
-				if err := edit.SetTOMLKey(path, "model_providers."+p, "base_url", at.codexURL()); err != nil {
-					return err
-				}
-				stash(map[string]string{at.key("codex.mirror_failover"): p})
-			case !on && hasGateway:
-				if err := edit.DelTOMLKey(path, "model_providers."+p, "base_url"); err != nil {
-					return err
-				}
-				forget(at.key("codex.mirror_failover"))
-			}
-			return nil
-		}
-		// the base URL failover wrote is marked (codex.failover), and only
-		// that one goes again: one the user wrote in config.toml by hand,
-		// to have Codex's own models go through magpie, stays (#856: it was
-		// gone again each time magpie started). One already there while
-		// failover is on is taken as failover's, as a magpie from before
-		// the mark wrote it.
-		owned := stashShared()[at.key("codex.failover")] == "1"
-		switch {
-		case on && !viaBase():
-			if err := edit.SetTOMLTop(path, edit.KV{Path: "openai_base_url", Value: at.codexURL()}); err != nil {
-				return err
-			}
-			stash(map[string]string{at.key("codex.failover"): "1"})
-		case on && !owned:
-			stash(map[string]string{at.key("codex.failover"): "1"})
-		case !on && viaBase() && owned:
-			return dropBase()
-		}
-		return nil
+		return dropBase()
 	}
 	// failingOver: Codex reaches magpie for account failover alone, by the
 	// base URL failover wrote (codex.failover) or by CC Switch's OpenAI
@@ -1655,12 +1614,12 @@ func codexIn(at place) *Agent {
 			to, through = p, t["base_url"] == at.codexURL() || t["base_url"] == at.v1()
 		}
 		// beside its sign-in on one of magpie's models, not joined, one of
-		// its own picked here takes magpie out (set, #940) unless failover
-		// puts the base URL back: it said via magpie, and the pick went
-		// straight to OpenAI with nothing asked (NancyTom18 on X)
+		// its own picked here takes magpie out (set, #940): it said via
+		// magpie, and the pick went straight to OpenAI with nothing asked
+		// (NancyTom18 on X)
 		ownThrough := through
 		if through && (p == "" || p == "openai") && beside() && !asProvider() && !api() &&
-			!(joined() && chatGPT()) && !(codexFailover() && !disconnected()) {
+			!(joined() && chatGPT()) {
 			ownThrough = false
 		}
 		say := func(own []Option) []Option {

@@ -104,7 +104,7 @@ func codexChatGPTAuth(email, acct string) map[string]any {
 
 // paynezhuang on Discord: Codex signed in to ChatGPT, with another of the
 // user's ChatGPT accounts on in magpie. magpie's first start pointed Codex
-// at the gateway for failover; the user switched Codex on, then chose
+// at the gateway for failover then; the user switched Codex on, then chose
 // "Disconnect from magpie", and after each update and restart Codex had
 // magpie's base URL in config.toml again. A disconnect is the user's say:
 // no start brings it back, with ChatGPT sign-in or magpie API, until the
@@ -120,9 +120,11 @@ func TestCodexDisconnectStaysWithAccountsOn(t *testing.T) {
 			os.MkdirAll(filepath.Dir(provider.Path()), 0o755)
 			os.WriteFile(filepath.Join(filepath.Dir(provider.Path()), "logins.json"), b, 0o600)
 			cx := codex(home)
-			// magpie's first start: failover points Codex at the gateway
+			// magpie's first start: a magpie from before pointed Codex at
+			// the gateway for failover then; Codex not connected stays off
+			// it now (TylerBai_loveai on X)
 			SyncCatalog()
-			if cfg := read(); !strings.Contains(cfg, "openai_base_url") {
+			if cfg := read(); strings.Contains(cfg, "openai_base_url") {
 				t.Fatalf("first start, two accounts on:\n%s", cfg)
 			}
 			if login != "" {

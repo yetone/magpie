@@ -1099,7 +1099,7 @@ func switchOnlyCmd(args []string) error {
 		case id == "codex" && on:
 			fmt.Println("on · magpie only switches Codex's sign-in; its requests go straight to OpenAI")
 		case id == "codex":
-			fmt.Println("off · with more of its accounts on, Codex's requests go through magpie to fail over between them")
+			fmt.Println("off · while Codex is connected, its requests go through magpie to fail over between its accounts")
 		case on:
 			fmt.Println("on · magpie only switches Claude Code's sign-in; it serves no requests on the Claude accounts")
 		default:
@@ -1124,7 +1124,7 @@ func switchOnlyCmd(args []string) error {
 	case id == "codex" && on:
 		fmt.Println(green.Render("✓"), "magpie only switches Codex's sign-in to an account with room; its requests go straight to OpenAI. A Codex app or session already open stays on its account until it is opened again.")
 	case id == "codex":
-		fmt.Println(green.Render("✓"), "with more of its accounts on, Codex's requests go through magpie to fail over between them again")
+		fmt.Println(green.Render("✓"), "while Codex is connected, its requests go through magpie to fail over between its accounts again")
 	case on:
 		fmt.Println(green.Render("✓"), "magpie only switches Claude Code's sign-in to an account with room; it serves no requests on the Claude accounts. A Claude Code session already open stays on its account until it is started again.")
 	default:

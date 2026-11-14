@@ -61,7 +61,7 @@ const strings = [
   "Only switch {agent}'s sign-in",
   "When an account is used up, magpie signs {agent} in to the next one, and requests go straight to OpenAI. Open {agent} sessions keep their account until reopened.",
   "magpie only switches {agent}'s sign-in; its requests go straight to OpenAI",
-  "{agent}'s requests go through magpie to fail over to your other accounts again",
+  "A connected {agent} fails over to your other accounts through magpie again",
 ];
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
