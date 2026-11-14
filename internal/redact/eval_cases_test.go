@@ -62,6 +62,19 @@ var evalCases = []evalCase{
 		Keep: []evalValue{{V: "0x004EA5E0", Kind: "ACCOUNT"}, {V: "0x0058C210", Kind: "ACCOUNT"}},
 	},
 	{
+		ID: "bilibili-bvids", From: "jimlee0824v2 on X",
+		Text: "import urllib.request, json\n\nbvs = [\n    'BV1f94c6uEr3', 'BV1bqx76wEUM', 'BV1hWar6SEVP',\n    'BV1bAxg6GEX8', 'BV1VMnk68E9Q',\n    'BV1JvaW6JEMb',\n    'BV19gp16kEAc',\n    'BV1kLn36WEN6', 'BV1wvJB6aEp5'\n]\n\nfor bv in bvs:\n    url = f'https://api.bilibili.com/x/web-interface/view?bvid={bv}'",
+		Keep: []evalValue{{V: "BV1f94c6uEr3", Kind: "SECRET"}, {V: "BV1bqx76wEUM", Kind: "SECRET"}, {V: "BV1hWar6SEVP", Kind: "SECRET"},
+			{V: "BV1bAxg6GEX8", Kind: "SECRET"}, {V: "BV1VMnk68E9Q", Kind: "SECRET"}, {V: "BV1JvaW6JEMb", Kind: "SECRET"},
+			{V: "BV19gp16kEAc", Kind: "SECRET"}, {V: "BV1kLn36WEN6", Kind: "SECRET"}, {V: "BV1wvJB6aEp5", Kind: "SECRET"}},
+	},
+	{
+		ID: "video-links", From: "jimlee0824v2 on X",
+		Text: "参考这几个视频：https://www.bilibili.com/video/BV1VMnk68E9Q/ 、老的 av170001，还有 https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI 和 https://youtu.be/aqz-KE-bpKQ",
+		Keep: []evalValue{{V: "BV1VMnk68E9Q", Kind: "SECRET"}, {V: "av170001", Kind: "ACCOUNT"}, {V: "dQw4w9WgXcQ", Kind: "SECRET"},
+			{V: "PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI", Kind: "SECRET"}, {V: "aqz-KE-bpKQ", Kind: "SECRET"}},
+	},
+	{
 		ID: "url-userinfo", From: "#3538",
 		Text: "DATABASE_URL=postgres://app:hunter2pass@db.acme-corp.cn:5432/orders",
 		Mask: []evalValue{{V: "hunter2pass", Kind: "SECRET"}},

@@ -133,6 +133,71 @@
 			}
 		]
 	},
+	"bilibili-bvids": {
+		"text": "9676d7499353f242",
+		"found": [
+			{
+				"Start": 42,
+				"End": 54,
+				"Label": "account_number",
+				"score": 0.5316396951675415
+			},
+			{
+				"Start": 58,
+				"End": 70,
+				"Label": "secret",
+				"score": 0.9852209687232971
+			},
+			{
+				"Start": 74,
+				"End": 86,
+				"Label": "secret",
+				"score": 0.991255521774292
+			},
+			{
+				"Start": 94,
+				"End": 106,
+				"Label": "secret",
+				"score": 0.9925815463066101
+			},
+			{
+				"Start": 110,
+				"End": 122,
+				"Label": "secret",
+				"score": 0.9928242564201355
+			},
+			{
+				"Start": 130,
+				"End": 142,
+				"Label": "secret",
+				"score": 0.9921749234199524
+			},
+			{
+				"Start": 150,
+				"End": 162,
+				"Label": "secret",
+				"score": 0.9932796359062195
+			},
+			{
+				"Start": 170,
+				"End": 182,
+				"Label": "secret",
+				"score": 0.9932944178581238
+			},
+			{
+				"Start": 186,
+				"End": 198,
+				"Label": "secret",
+				"score": 0.9930053353309631
+			},
+			{
+				"Start": 230,
+				"End": 282,
+				"Label": "private_url",
+				"score": 0.5869995951652527
+			}
+		]
+	},
 	"card": {
 		"text": "7387f43ca5ce5824",
 		"found": [
@@ -759,6 +824,35 @@
 	"user-path": {
 		"text": "007eeda2f5ba95d3",
 		"found": []
+	},
+	"video-links": {
+		"text": "45a5bdcb03ac26ca",
+		"found": [
+			{
+				"Start": 24,
+				"End": 68,
+				"Label": "private_url",
+				"score": 0.9962197542190552
+			},
+			{
+				"Start": 79,
+				"End": 87,
+				"Label": "account_number",
+				"score": 0.9276061654090881
+			},
+			{
+				"Start": 97,
+				"End": 180,
+				"Label": "private_url",
+				"score": 0.9961463212966919
+			},
+			{
+				"Start": 185,
+				"End": 213,
+				"Label": "private_url",
+				"score": 0.9962778687477112
+			}
+		]
 	},
 	"zh-contact": {
 		"text": "5d654b2bbdd23aa1",

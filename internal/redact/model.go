@@ -316,6 +316,9 @@ func modelFits(s string, a, b int, kind string, args bool) bool {
 		return false
 	}
 	v := s[a:b]
+	if publicID(s, a, b) {
+		return false
+	}
 	if evmRe.MatchString(v) {
 		// a wallet's or a contract's address (0x and 40 hex digits) is
 		// public, on its chain for anyone to read, and the vendor's model
@@ -385,6 +388,27 @@ func modelFits(s string, a, b int, kind string, args bool) bool {
 		return wordByte(v[0]) && !modCacheRe.MatchString(v) && !inUserinfo(s, a)
 	}
 	return true
+}
+
+// publicID says s[a:b] is a video's id on a public site, an id anyone
+// with the link reads, which the vendor's model needs as written to look
+// the video up: a Bilibili BV id (BV1VMnk68E9Q) or av number, and a
+// YouTube video's, playlist's or channel's id in its link. The local
+// model took BV ids in a list a script was to fetch for secrets, and
+// five of nine went as {{SECRET_…}} (jimlee0824v2 on X). A BV id is known
+// by its own shape; a YouTube id has none (11 of base64url's letters, as
+// a key's piece may be), so only what is before it in its link says it
+// is one. A key that has either shape is still the rules' when its name
+// is before it (api_key=…).
+func publicID(s string, a, b int) bool {
+	v := s[a:b]
+	if bvidRe.MatchString(v) {
+		return true
+	}
+	if !youtubeID.MatchString(v) {
+		return false
+	}
+	return youtubeAt.MatchString(s[max(0, a-160):a])
 }
 
 // programWords says v, which the model took for a person's or a place's,
@@ -915,6 +939,14 @@ var (
 	// 0x004EA5E0). A key written so is longer (0x and 64 hex digits) and
 	// is masked still.
 	hexLiteral = lazyre.New(`^0[xX][0-9a-fA-F]{1,16}$`)
+	// a Bilibili video's id: BV1 and nine base58 characters
+	// (BV1VMnk68E9Q), or its older av and a number (av170001)
+	bvidRe = lazyre.New(`^BV1[1-9A-HJ-NP-Za-km-z]{9}$|^(?i:av)[1-9]\d{0,11}$`)
+	// what is before a YouTube video's, playlist's or channel's id in its
+	// link: watch?v=, list=, youtu.be/, /shorts/, /embed/, /live/,
+	// /channel/
+	youtubeAt = lazyre.New(`(?i)(?:^|[^a-z0-9.-])(?:(?:www|m|music)\.)?(?:(?:youtube|youtube-nocookie)\.com/(?:(?:watch|playlist)\?(?:[^\s"'<>&]*&)*(?:v|list)=|(?:shorts|embed|live|v|channel)/)|youtu\.be/)$`)
+	youtubeID = lazyre.New(`^[A-Za-z0-9_-]{10,64}$`)
 	// a time of day in words the model took for a passphrase (release
 	// about 17:05Z)
 	clockIn   = lazyre.New(`(?:^|\s)\d{1,2}:\d{2}(?::\d{2})?Z?(?:\s|$)`)

@@ -195,6 +195,65 @@
 			}
 		]
 	},
+	"bilibili-bvids": {
+		"text": "9676d7499353f242",
+		"found": [
+			{
+				"Start": 42,
+				"End": 54,
+				"Label": "account_number",
+				"score": 0.9999904036521912
+			},
+			{
+				"Start": 58,
+				"End": 70,
+				"Label": "account_number",
+				"score": 0.9999867081642151
+			},
+			{
+				"Start": 74,
+				"End": 86,
+				"Label": "account_number",
+				"score": 0.916449785232544
+			},
+			{
+				"Start": 94,
+				"End": 106,
+				"Label": "account_number",
+				"score": 0.9981630444526672
+			},
+			{
+				"Start": 110,
+				"End": 122,
+				"Label": "account_number",
+				"score": 0.9999914169311523
+			},
+			{
+				"Start": 130,
+				"End": 142,
+				"Label": "account_number",
+				"score": 0.9999295473098755
+			},
+			{
+				"Start": 150,
+				"End": 162,
+				"Label": "account_number",
+				"score": 0.9885242581367493
+			},
+			{
+				"Start": 170,
+				"End": 182,
+				"Label": "account_number",
+				"score": 0.999966561794281
+			},
+			{
+				"Start": 186,
+				"End": 198,
+				"Label": "account_number",
+				"score": 0.9600074291229248
+			}
+		]
+	},
 	"card": {
 		"text": "7387f43ca5ce5824",
 		"found": []
@@ -1074,6 +1133,17 @@
 				"End": 116,
 				"Label": "private_url",
 				"score": 0.9207233190536499
+			}
+		]
+	},
+	"video-links": {
+		"text": "45a5bdcb03ac26ca",
+		"found": [
+			{
+				"Start": 21,
+				"End": 72,
+				"Label": "private_url",
+				"score": 0.9987955689430237
 			}
 		]
 	},
