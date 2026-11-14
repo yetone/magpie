@@ -107,8 +107,15 @@ func (t *anthropicTextCalls) event(ev []byte) []byte {
 			Text string `json:"text"`
 		}
 		decodeJSON(m["delta"], &d)
-		if !t.text || index != t.idx || d.Type != "text_delta" {
+		if !t.text || index != t.idx {
 			return ev
+		}
+		if d.Type != "text_delta" {
+			// a line's citations (citations_delta), which come before its
+			// text: after the block's start, which a client needs first
+			out := t.startHeld
+			t.startHeld = nil
+			return append(out, ev...)
 		}
 		s := t.pending + d.Text
 		t.pending = ""
