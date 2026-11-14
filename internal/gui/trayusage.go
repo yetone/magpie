@@ -23,7 +23,8 @@ import (
 // Settings → Allowances in the menu bar: the windows of the subscriptions and
 // plans ticked there, beside the tray icon, for keeping an eye on them
 // without opening magpie. The Mac's menu bar draws each as its logo with
-// its two windows stacked, "42%" over "18%", side by side (trayimage), or
+// its two windows stacked, "42%" over "18%", side by side (trayimage), and
+// every window of a card with more in columns of two, or
 // as the windows alone, a thin line between cards, when Settings turns the
 // logos off; a tray elsewhere gets them as text ("42% · 18% | 10% · 5%"), Windows' in
 // the icon's tooltip only, having no room for any.
@@ -327,9 +328,6 @@ func trayCardText(lang string, q provider.SubscriptionQuota, now time.Time, left
 			line += " · " + trayText(lang, "resets in %s", until(lang, at.Sub(now)))
 		}
 		long = append(long, line)
-	}
-	if len(short) > 2 {
-		short = short[:2]
 	}
 	return strings.Join(short, " · "), q.Name + "\n" + strings.Join(long, "\n") + trayAsOf(lang, q)
 }
@@ -734,7 +732,7 @@ func trayName(q provider.SubscriptionQuota) string {
 
 // trayCell is a card as the Mac's menu bar draws it: its logo, and its
 // label's parts stacked, the shortest window over the longer ("42%" over
-// "18%"), or its balance alone.
+// "18%"), in columns of two when it has more, or its balance alone.
 type trayCell struct {
 	ID     string // stable provider/account identity, captured with the drawn cell
 	Icon   []byte // the logo as the Usage page has it (SVG or PNG); nil for none

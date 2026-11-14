@@ -38,14 +38,14 @@ func TestTrayUsageText(t *testing.T) {
 		t.Errorf("id %q", id)
 	}
 
-	// no lengths known: the vendor's order, two at most, clamped, its own count
+	// no lengths known: the vendor's order, every window (jen_celeus on X), clamped, its own count
 	q = provider.SubscriptionQuota{Provider: "zcode", Name: "ZCode", Windows: []provider.QuotaWindow{
 		{Name: "5 小时", Used: 120, Display: "1.2k / 1k"},
 		{Name: "Weekly", Used: -3, ResetSecs: 90},
 		{Name: "Monthly", Used: 1},
 	}}
 	label, tip = trayUsageText(q, now, false, false)
-	if label != "100% · 0%" {
+	if label != "100% · 0% · 1%" {
 		t.Errorf("label %q", label)
 	}
 	if want := "ZCode\n5 小时 1.2k / 1k · 100% used\nWeekly 0% used · resets in 2m\nMonthly 1% used"; tip != want {

@@ -16,16 +16,19 @@ typedef struct {
 	int plain; // no logo: the rows alone, a thin line before
 	const char *id;
 	const char *letter;
-	const char *rows; // one or two, a newline between
+	const char *rows; // one or more, a newline between
 } mpTrayCell;
 
 // Metrics, in points: the menu bar is 22 high (24 beside a notch), and a
 // cell is a 14pt logo with its two windows beside it, stacked as small
-// digits, each window's figures right-aligned over the other's. A cell
+// digits, each window's figures right-aligned over the other's. A card
+// with more windows than two (Antigravity's four, jen_celeus on X) has
+// them in columns of two, mpColGap apart, the first two over each other
+// as before, then the next two, the shortest windows first. A cell
 // without its logo is the digits alone, a hairline mpSepGap either side
 // between it and the one before.
 static const CGFloat mpLogo = 14, mpLogoGap = 3, mpCellGap = 8, mpBirdGap = 2, mpRowGap = 3.5,
-	mpPlainGap = 3, mpSepGap = 5, mpSep = 1, mpSepHigh = 13;
+	mpColGap = 4, mpPlainGap = 3, mpSepGap = 5, mpSep = 1, mpSepHigh = 13;
 
 // mpRowFont is the digits' font, in the weight the menu bar's other
 // figures use (Surge's speeds, iStat Menus'): two stacked rows in the small
@@ -79,19 +82,28 @@ static NSArray *mpCells(mpTrayCell *cells, int n) {
 		c[@"mono"] = @(cells[i].mono != 0);
 		c[@"plain"] = @(cells[i].plain != 0);
 		c[@"letter"] = [NSString stringWithUTF8String:cells[i].letter ? cells[i].letter : ""];
-		NSArray *rows = [[NSString stringWithUTF8String:cells[i].rows ? cells[i].rows : ""] componentsSeparatedByString:@"\n"];
-		if (rows.count > 2) rows = [rows subarrayWithRange:NSMakeRange(0, 2)];
-		c[@"rows"] = rows;
+		c[@"rows"] = [[NSString stringWithUTF8String:cells[i].rows ? cells[i].rows : ""] componentsSeparatedByString:@"\n"];
 		[out addObject:c];
 	}
 	return out;
 }
 
-static CGFloat mpColumn(NSDictionary *c) {
+// mpColWidth is the width of column j of a cell's digits: its rows 2j
+// and 2j+1, or the one row of a card with one window.
+static CGFloat mpColWidth(NSDictionary *c, NSUInteger j) {
 	NSArray *rows = c[@"rows"];
 	NSDictionary *attrs = @{NSFontAttributeName: mpRowFont((int)rows.count)};
 	CGFloat w = 0;
-	for (NSString *r in rows) w = MAX(w, ceil([r sizeWithAttributes:attrs].width));
+	for (NSUInteger i = 2 * j; i < MIN(rows.count, 2 * j + 2); i++) w = MAX(w, ceil([rows[i] sizeWithAttributes:attrs].width));
+	return w;
+}
+
+// mpColumn is the width of a cell's digits: its columns of two rows each,
+// mpColGap between them.
+static CGFloat mpColumn(NSDictionary *c) {
+	NSUInteger n = ([c[@"rows"] count] + 1) / 2;
+	CGFloat w = 0;
+	for (NSUInteger j = 0; j < n; j++) w += (j ? mpColGap : 0) + mpColWidth(c, j);
 	return w;
 }
 
@@ -225,21 +237,27 @@ static void mpMasked(NSImage *glyph, BOOL tile, NSRect r) {
 	mpTinted(glyph, fit);
 }
 
-// mpRows draws a cell's digits in its column from x: the digits (cap
-// height) centred as a block, each row right-aligned; drawAtPoint takes the
-// line's top, its baseline an ascender below.
+// mpRows draws a cell's digits from x, in columns of two rows: the digits
+// (cap height) of a column centred as a block, each row right-aligned in
+// its column (a third window alone in its column sits on the top line);
+// drawAtPoint takes the line's top, its baseline an ascender below.
 static void mpRows(NSDictionary *c, CGFloat x, CGFloat h, NSColor *ink) {
 	NSArray *rows = c[@"rows"];
 	NSFont *f = mpRowFont((int)rows.count);
 	NSDictionary *a = @{NSFontAttributeName: f, NSForegroundColorAttributeName: ink};
-	CGFloat col = mpColumn(c);
+	NSUInteger lines = MIN(rows.count, (NSUInteger)2);
 	CGFloat cap = f.capHeight;
-	CGFloat top = (h - (cap * rows.count + mpRowGap * (rows.count - 1))) / 2;
-	for (NSUInteger i = 0; i < rows.count; i++) {
-		NSString *r = rows[i];
-		CGFloat base = top + cap * (i + 1) + mpRowGap * i;
-		CGFloat w = [r sizeWithAttributes:a].width;
-		[r drawAtPoint:NSMakePoint(x + col - w, base - f.ascender) withAttributes:a];
+	CGFloat top = (h - (cap * lines + mpRowGap * (lines - 1))) / 2;
+	for (NSUInteger j = 0; 2 * j < rows.count; j++) {
+		CGFloat col = mpColWidth(c, j);
+		for (NSUInteger i = 2 * j; i < MIN(rows.count, 2 * j + 2); i++) {
+			NSString *r = rows[i];
+			NSUInteger line = i - 2 * j;
+			CGFloat base = top + cap * (line + 1) + mpRowGap * line;
+			CGFloat w = [r sizeWithAttributes:a].width;
+			[r drawAtPoint:NSMakePoint(x + col - w, base - f.ascender) withAttributes:a];
+		}
+		x += col + mpColGap;
 	}
 }
 

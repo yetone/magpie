@@ -93,7 +93,7 @@ func TestTrayModelWindows(t *testing.T) {
 	q.Windows = slices.DeleteFunc(q.Windows, func(w provider.QuotaWindow) bool { return w.Pool != "" })
 	q.Windows[3].Used = 40 // Gemini 3 Flash, the family's tightest
 	cells, _, tip := trayCardsView("en", []provider.SubscriptionQuota{q}, now, false, false, nil)
-	if len(cells) != 1 || !slices.Equal(cells[0].Rows, []string{"100%", "100%"}) {
+	if len(cells) != 1 || !slices.Equal(cells[0].Rows, []string{"100%", "100%", "40%"}) {
 		t.Fatalf("cells %+v", cells)
 	}
 	for _, s := range []string{"Claude Opus 4.6 (Thinking) 100% used", "Gemini 3 Flash 40% used", "GPT-OSS · GPT-OSS 120B"} {
