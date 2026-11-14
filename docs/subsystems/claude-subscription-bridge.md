@@ -1586,7 +1586,14 @@ It knows four ways of naming it:
 - Claude Code: "Primary working directory: X";
 - Codex: `<cwd>X</cwd>`;
 - OpenCode: "Working directory: X";
-- pi: "Current working directory: X".
+- pi: "Current working directory: X", and from pi 1.x a `<cwd>` section
+  with the folder on a line of its own (`<cwd>\nX\n</cwd>`).
+
+The path's `&`, `<` and `>` may come as entities (Codex, Claude Code) and
+are read as the characters. A `<cwd>` read only on one line missed pi
+1.x's: its runs started in magpie's shared folder under the temp folder,
+and its model was told both folders (fysly on X), so `clientWorkDir` reads
+`<cwd>` as the folder rules' `workDirIn` does.
 
 The first text counts, not the last, so a conversation keeps one folder.
 Claude Code says a move (`cd`) as a later "# Environment update" message,

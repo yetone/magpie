@@ -40,6 +40,7 @@ import (
 	"errors"
 	"fmt"
 	"hash"
+	"html"
 	"io"
 	"io/fs"
 	"log"
@@ -611,7 +612,7 @@ func clientNamedWorkPlace(req *Request) (dir string, inTurns bool) {
 		}
 		for _, m := range re.FindAllStringSubmatch(t, -1) {
 			for _, g := range m[1:] {
-				g = strings.Trim(strings.TrimSpace(g), "`'\"")
+				g = strings.Trim(strings.TrimSpace(html.UnescapeString(g)), "`'\"")
 				if g = wasDir.ReplaceAllString(g, ""); g != "" {
 					dir, inTurns = g, turn
 				}
@@ -653,8 +654,12 @@ func clientNamedWorkPlace(req *Request) (dir string, inTurns bool) {
 // is, on a line of its own: Claude Code's, in its instructions (" - Primary
 // working directory: /x", a moved folder as "Primary working directory: /y
 // (was /x)"), on a --bare run just "CWD: /x"; OpenCode's, in its <env>;
-// pi's ("Current working directory:"); Codex's and pi's <cwd>.
-var clientSaidWorkDir = lazyre.New(`(?m)^\s*(?:-\s*)?(?:Primary working directory|Working directory|Current working directory|CWD): *([^\r\n]+)$|<cwd>([^<\r\n]+)</cwd>`)
+// pi's ("Current working directory:"); Codex's <cwd> on its line, and
+// pi 1.x's, whose <cwd> holds the folder on a line of its own
+// ("<cwd>\n/x\n</cwd>"): read only on one line, pi's runs started in
+// magpie's temp folder and its model was told both (fysly on X). The
+// path's &, < and > come as entities (workDirIn reads them the same way).
+var clientSaidWorkDir = lazyre.New(`(?m)^\s*(?:-\s*)?(?:Primary working directory|Working directory|Current working directory|CWD): *([^\r\n]+)$|<cwd>\s*([^<\r\n]+?)\s*</cwd>`)
 
 // clientTurnWorkDir is where a caller says its working directory is in a
 // turn of the conversation, on a line of its own: Codex's
@@ -663,7 +668,7 @@ var clientSaidWorkDir = lazyre.New(`(?m)^\s*(?:-\s*)?(?:Primary working director
 // message of its own, and --bare's "CWD:" is its whole system prompt, so
 // their forms are not read in a turn: a line a user message quotes —
 // Claude Code's or anyone's — is no caller's word.
-var clientTurnWorkDir = lazyre.New(`(?m)^\s*(?:-\s*)?(?:Working directory|Current working directory): *([^\r\n]+)$|<cwd>([^<\r\n]+)</cwd>`)
+var clientTurnWorkDir = lazyre.New(`(?m)^\s*(?:-\s*)?(?:Working directory|Current working directory): *([^\r\n]+)$|<cwd>\s*([^<\r\n]+?)\s*</cwd>`)
 
 func evalSymlinks(path string) string {
 	if p, err := filepath.EvalSymlinks(path); err == nil {

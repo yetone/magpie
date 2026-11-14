@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"encoding/json"
+	"html"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -161,17 +162,29 @@ func TestClaudeWorkDirSymlinkIsAvoided(t *testing.T) {
 // said in the first text that says one counting. The caller's folder keeps sessions of its own, which are
 // never swept, and its repository's status is not added to the prompt.
 func TestClaudeRunsInTheCallersWorkDir(t *testing.T) {
-	for _, c := range []struct{ name, said string }{
-		{"Claude Code", "# Environment\nYou have been invoked in the following environment: \n - Primary working directory: %s\n - Is a git repository: true\n"},
-		{"Codex", "<environment_context>\n  <cwd>%s</cwd>\n  <shell>zsh</shell>\n</environment_context>"},
-		{"OpenCode", "<env>\n  Working directory: %s\n  Is directory a git repo: yes\n</env>"},
-		{"pi", "Current date: 2026-10-26\nCurrent working directory: %s"},
-		{"said twice", " - Primary working directory: /nowhere/at/all\nlater:\n - Primary working directory: %s"},
+	for _, c := range []struct {
+		name, said, folder string
+		escaped            bool // the path's &, < and > as entities
+	}{
+		{name: "Claude Code", said: "# Environment\nYou have been invoked in the following environment: \n - Primary working directory: %s\n - Is a git repository: true\n"},
+		{name: "Codex", said: "<environment_context>\n  <cwd>%s</cwd>\n  <shell>zsh</shell>\n</environment_context>"},
+		{name: "Codex, a folder written as entities", said: "<environment_context>\n  <cwd>%s</cwd>\n  <shell>zsh</shell>\n</environment_context>", folder: "R&D<x>", escaped: true},
+		{name: "OpenCode", said: "<env>\n  Working directory: %s\n  Is directory a git repo: yes\n</env>"},
+		{name: "pi", said: "Current date: 2026-10-26\nCurrent working directory: %s"},
+		// pi 1.4's buildSystemPromptSections, each section its own tag,
+		// joined with a blank line; the folder on a line of its own
+		// (fysly on X: the model was told magpie's temp folder too)
+		{name: "pi 1.x", said: "You are an expert coding assistant operating inside pi, a coding agent harness.\n\n<tools>\n- read: Read file contents\n</tools>\n\n<rules>\n- Be concise in your responses\n</rules>\n\n<cwd>\n%s\n</cwd>"},
+		{name: "said twice", said: " - Primary working directory: /nowhere/at/all\nlater:\n - Primary working directory: %s"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			var proj, old string
 			dirs, work, s, env, told := claudeWorkDirsTold(t, nil, func(home string) string {
-				proj = filepath.Join(home, "proj")
+				folder := c.folder
+				if folder == "" {
+					folder = "proj"
+				}
+				proj = filepath.Join(home, folder)
 				if err := os.MkdirAll(proj, 0o755); err != nil {
 					t.Fatal(err)
 				}
@@ -187,7 +200,11 @@ func TestClaudeRunsInTheCallersWorkDir(t *testing.T) {
 				}
 				then := time.Now().Add(-48 * time.Hour)
 				_ = os.Chtimes(old, then, then)
-				return strings.ReplaceAll(c.said, "%s", proj)
+				said := proj
+				if c.escaped {
+					said = html.EscapeString(proj)
+				}
+				return strings.ReplaceAll(c.said, "%s", said)
 			})
 			proj = evalSymlinks(proj)
 			if len(dirs) != 2 || dirs[0] != proj || dirs[1] != proj {
