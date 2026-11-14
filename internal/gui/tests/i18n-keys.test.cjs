@@ -45,7 +45,8 @@ test("a plugin's words are its own", () => {
     for (const e of fs.readdirSync(d, { withFileTypes: true })) {
       const p = path.join(d, e.name);
       if (e.isDirectory()) {
-        if (!["node_modules", ".git", "site", "tests", "testdata", "docs"].includes(e.name)) walk(p);
+        // third_party is vendored code, which says nothing to the window
+        if (!["node_modules", ".git", "site", "tests", "testdata", "docs", "third_party"].includes(e.name)) walk(p);
       } else if (/\.(go|js|html|css)$/.test(e.name) && e.name !== "i18n.js") {
         let text = fs.readFileSync(p, "utf8");
         // a comment line says nothing to the window: Go's "(View routing,
