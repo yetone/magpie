@@ -63,6 +63,10 @@ type Library struct {
 	// that reads it (usrname1833, skills_shared.go). This computer's
 	// own: Collect doesn't carry it
 	SharedSkills bool `json:"sharedSkills,omitempty"`
+	// AutoUpdateSkills fetches again by itself each skill its GitHub or
+	// git repository has changed (0xYaCo on X, skill_autoupdate.go). This
+	// computer's own: Collect doesn't carry it
+	AutoUpdateSkills bool `json:"autoUpdateSkills,omitempty"`
 	// MCPHub gives each agent that can reach it magpie's one MCP server,
 	// which hands each call on to the library's servers ticked for it, in
 	// place of their own entries (#2679, mcp_hub.go)

@@ -5328,7 +5328,7 @@ magpie.plugin("library", (ctx) => {
       drawSkills(box, all);
       body.append(box);
       // under the list, so the skills stay where they were above it
-      if (all.length) body.append(skillHowBar(), skillWhereBar(), ...skillRouterPart());
+      if (all.length) body.append(skillHowBar(), skillWhereBar(), ...skillAutoPart(), ...skillRouterPart());
       if (picking) body.append(pickBar(all));
     }
     if (lib.newSkills?.length) renderNewSkills(body);
@@ -6876,6 +6876,23 @@ magpie.plugin("library", (ctx) => {
       ? t("Every skill on here is linked into ~/.agents/skills too: each agent that reads that folder has every skill, whatever is ticked. The files stay in the library.")
       : t("Each agent gets the skills ticked for it, in its own folder.")));
     return bar;
+  }
+
+  // Updates by themselves (0xYaCo on X): with the switch on, magpie checks
+  // the skills from GitHub and git repositories as this page does and
+  // fetches again each one changed there; one changed here keeps its
+  // Update button (skill_autoupdate.go). Only with such a skill to update.
+  function skillAutoPart() {
+    if (!lib.autoUpdateSkills && !lib.skills.some((s) => s.kind === "github" || s.kind === "git")) return [];
+    const list = el("div", "list lib-list lib-hublist lib-skillauto");
+    const row = el("div", "row lib-row lib-hub");
+    const who = el("div", "who");
+    who.append(el("div", "name", t("Update by themselves")));
+    who.append(el("div", "sub wraps", t("Fetch skills from GitHub and git again when they change there. One you changed here stays as it is.")));
+    row.append(glyph(GLYPH.down), who, toggle(!!lib.autoUpdateSkills, t("Update by themselves"), (on) =>
+      change("skills/auto-update", { on }, on ? t("Skills update by themselves now") : t("Skills wait for you to update them now"))));
+    list.append(row);
+    return [list];
   }
 
   // The skill router: each agent is given one skill, magpie-skills, whose

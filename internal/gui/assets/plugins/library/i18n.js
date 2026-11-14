@@ -2,6 +2,10 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "Update by themselves": "自动更新",
+    "Fetch skills from GitHub and git again when they change there. One you changed here stays as it is.": "GitHub 和 git 上的技能有改动时自动重新获取。你在这里改过的技能保持不变。",
+    "Skills update by themselves now": "技能现在会自动更新",
+    "Skills wait for you to update them now": "技能现在等你手动更新",
     "＋ Add account": "＋ 添加账号",
     "Account {n}": "账号 {n}",
     "New skill": "新建技能",
@@ -1041,6 +1045,10 @@ magpie.strings({
     "{name} read again from its source": "已重新从来源读取 {name}",
   },
   "zh-TW": {
+    "Update by themselves": "自動更新",
+    "Fetch skills from GitHub and git again when they change there. One you changed here stays as it is.": "GitHub 和 git 上的技能有變動時自動重新取得。你在這裡改過的技能保持不變。",
+    "Skills update by themselves now": "技能現在會自動更新",
+    "Skills wait for you to update them now": "技能現在等你手動更新",
     "＋ Add account": "＋ 新增帳號",
     "Account {n}": "帳號 {n}",
     "New skill": "新增技能",
@@ -2080,6 +2088,10 @@ magpie.strings({
     "{name} read again from its source": "已重新從來源讀取 {name}",
   },
   ja: {
+    "Update by themselves": "自動で更新",
+    "Fetch skills from GitHub and git again when they change there. One you changed here stays as it is.": "GitHub や git でスキルが変わったら自動で取得し直します。ここで変更したスキルはそのままです。",
+    "Skills update by themselves now": "スキルは自動で更新されるようになりました",
+    "Skills wait for you to update them now": "スキルは手動で更新するようになりました",
     "＋ Add account": "＋ アカウントを追加",
     "Account {n}": "アカウント {n}",
     "New skill": "新しいスキル",
@@ -3119,6 +3131,10 @@ magpie.strings({
     "{name} read again from its source": "{name} をソースから読み直しました",
   },
   de: {
+    "Update by themselves": "Selbst aktualisieren",
+    "Fetch skills from GitHub and git again when they change there. One you changed here stays as it is.": "Skills von GitHub und git neu laden, wenn sie sich dort ändern. Ein hier geänderter Skill bleibt, wie er ist.",
+    "Skills update by themselves now": "Skills aktualisieren sich jetzt selbst",
+    "Skills wait for you to update them now": "Skills warten jetzt, bis du sie aktualisierst",
     "＋ Add account": "＋ Konto hinzufügen",
     "Account {n}": "Konto {n}",
     "New skill": "Neuer Skill",
