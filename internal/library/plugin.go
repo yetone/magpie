@@ -38,9 +38,12 @@ import (
 // agent here can take (slash commands, LSP servers, hooks that aren't a
 // command) are listed in Left, never silently dropped.
 //
-// ${CLAUDE_PLUGIN_ROOT} in a command, argument, header or value is the
-// bundle's folder; ${CLAUDE_PLUGIN_DATA} a folder of its own that stays
-// across updates.
+// ${CLAUDE_PLUGIN_ROOT} in a command, argument, header or value, a skill's
+// SKILL.md or a subagent's prompt is the bundle's folder;
+// ${CLAUDE_PLUGIN_DATA} a folder of its own that stays across updates. A
+// hook's program that reads either from its environment is given the
+// folder as a literal, and a command server both in its env
+// (plugin_env.go).
 
 // Plugin is a plugin the library keeps.
 type Plugin struct {
@@ -208,11 +211,7 @@ func readPlugin(dir, hint string, over map[string]any) (*plLoaded, error) {
 		return nil, errors.New("the plugin has no name")
 	}
 	p := &plLoaded{name: name, description: strings.Join(strings.Fields(plStr(man["description"])), " "), version: plStr(man["version"])}
-	root, data := pluginDir(name), pluginData(name)
-	sub := func(s string) string {
-		return strings.NewReplacer("${CLAUDE_PLUGIN_ROOT}", root, "$CLAUDE_PLUGIN_ROOT", root,
-			"${CLAUDE_PLUGIN_DATA}", data, "$CLAUDE_PLUGIN_DATA", data).Replace(s)
-	}
+	root, sub := pluginDir(name), pluginSub(name)
 	leave := func(what, why string) { p.left = append(p.left, PluginLeft{What: what, Why: why}) }
 
 	// skills
@@ -277,6 +276,7 @@ func readPlugin(dir, hint string, over map[string]any) (*plLoaded, error) {
 			leave("agent "+strings.TrimSuffix(filepath.Base(f), filepath.Ext(f)), err.Error())
 			continue
 		}
+		s.Prompt = sub(s.Prompt)
 		p.agents = append(p.agents, s)
 	}
 
@@ -303,6 +303,9 @@ func readPlugin(dir, hint string, over map[string]any) (*plLoaded, error) {
 	}
 	for _, doc := range mcpDocs {
 		servers, left := serversOf(doc, sub)
+		for _, s := range servers {
+			pluginServerEnv(s, name)
+		}
 		p.servers = append(p.servers, servers...)
 		p.left = append(p.left, left...)
 	}
@@ -557,7 +560,7 @@ func plHooksOf(doc map[string]any, bundle, root string, sub func(string) string,
 					left = append(left, PluginLeft{What: ev + " hook", Why: "a hook of type " + t + " isn't a command: agents take commands only"})
 					continue
 				}
-				cmd := sub(quoteRoot(plStr(hm["command"]), root))
+				cmd := sub(quoteRoot(pluginEnvRefs(plStr(hm["command"]), bundle), root))
 				if cmd == "" {
 					continue
 				}
@@ -1053,6 +1056,11 @@ func installPlugin(l *Library, pl *plLoaded, dir, input, pick string, agents []s
 			return nil, err
 		}
 		if err := copyDir(rel(s.dir), skillDir(n)); err != nil {
+			os.RemoveAll(skillDir(n))
+			skip("skill "+s.name, err.Error())
+			continue
+		}
+		if err := pluginSkillText(skillDir(n), pl.name); err != nil {
 			os.RemoveAll(skillDir(n))
 			skip("skill "+s.name, err.Error())
 			continue
