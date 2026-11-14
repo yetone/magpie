@@ -897,7 +897,7 @@ func silentAssistantsOut(body []byte) []byte {
 		return body
 	}
 	var q map[string]json.RawMessage
-	if decodeJSON(body, &q) != nil || !anySilentAssistant(q["messages"]) {
+	if decodeJSONView(body, &q) != nil || !anySilentAssistant(q["messages"]) {
 		return body
 	}
 	dec := json.NewDecoder(bytes.NewReader(q["messages"]))
@@ -1028,7 +1028,10 @@ func withoutMessageReasoning(body []byte, fields []string) []byte {
 // editMessages hands each message of a Chat request whose JSON names any
 // of fields to edit, and puts back those edit reports it changed; every
 // other message keeps its bytes. The body comes back as it was if nothing
-// changed.
+// changed. What it decodes shares body's bytes (decodeJSONView): an edit
+// replaces a member, never writes into one, and keeps none past its
+// return, and a changed body is marshalled anew. A copy of each level
+// was ~3.8 MB a request for a 2 MB Chat conversation.
 func editMessages(body []byte, fields []string, edit func(m map[string]json.RawMessage) bool) []byte {
 	has := false
 	for _, f := range fields {
@@ -1038,17 +1041,17 @@ func editMessages(body []byte, fields []string, edit func(m map[string]json.RawM
 		return body
 	}
 	var q map[string]json.RawMessage
-	if decodeJSON(body, &q) != nil {
+	if decodeJSONView(body, &q) != nil {
 		return body
 	}
 	var msgs []json.RawMessage
-	if decodeJSON(q["messages"], &msgs) != nil {
+	if decodeJSONView(q["messages"], &msgs) != nil {
 		return body
 	}
 	changed := false
 	for i, raw := range msgs {
 		var m map[string]json.RawMessage
-		if decodeJSON(raw, &m) != nil || !edit(m) {
+		if decodeJSONView(raw, &m) != nil || !edit(m) {
 			continue
 		}
 		if nb, err := marshalPlain(m); err == nil {
