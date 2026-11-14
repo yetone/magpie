@@ -33,13 +33,17 @@ type fakeBili struct {
 	runs  []string
 	last  map[string]string // each file as bili last wrote it
 	proxy string
+	tools []string // the programs each run was told of
 }
 
 func newFakeBili(t *testing.T, h string) *fakeBili {
 	f := &fakeBili{t: t, h: h, on: map[string]bool{}, last: map[string]string{}, proxy: "http://127.0.0.1:18787/bili/"}
 	path, run := biliPath, biliRun
 	biliPath = func() string { return filepath.Join(h, ".local", "bin", "bili") }
-	biliRun = func(_ string, _ time.Duration, args ...string) (string, error) { return f.run(args...) }
+	biliRun = func(_ string, tools []string, _ time.Duration, args ...string) (string, error) {
+		f.tools = append(f.tools, tools...)
+		return f.run(args...)
+	}
 	t.Cleanup(func() { biliPath, biliRun = path, run })
 	return f
 }
