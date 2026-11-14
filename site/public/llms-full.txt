@@ -9862,7 +9862,7 @@ A relay sells many vendors' models on one key, often at its own prices and under
 
 ## Add a relay
 
-1. **A preset relay..** AiHubMix, PipeLLM, 302.AI, CherryIN and 鱼鱼连线 are presets: give an API key. 鱼鱼连线 also takes an Auto, Global or China Mainland line.
+1. **A preset relay..** AiHubMix, PipeLLM, 302.AI, CherryIN, 鱼鱼连线 and AIGoCode are presets: give an API key. 鱼鱼连线 also takes an Auto, Global or China Mainland line.
 2. **Any other relay..** Give its addresses: `url=` for an OpenAI-compatible base, `anthropic=` for an Anthropic-compatible one, both when it has both, and `responses=` when Responses has an address of its own.
 
 ```
@@ -9922,7 +9922,7 @@ magpie provider auto-include relay 'gpt-*' 're:claude-.*'
 
 ### Can magpie use an API relay?
 
-Yes. AiHubMix, PipeLLM, 302.AI, CherryIN and 鱼鱼连线 are presets that take a key; any other relay is added with magpie provider add and its OpenAI- and Anthropic-compatible addresses.
+Yes. AiHubMix, PipeLLM, 302.AI, CherryIN, 鱼鱼连线 and AIGoCode are presets that take a key; any other relay is added with magpie provider add and its OpenAI- and Anthropic-compatible addresses.
 
 ### Why does caching miss for Claude models through a relay?
 
