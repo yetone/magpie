@@ -234,7 +234,7 @@ function renderGatewayKeys() {
     tick.onclick = () => gatewayKeyAction(k.off ? "on-key" : "off-key", { key: k.id });
     // the copy sits by the key it copies (the owner: stranded among the
     // badges it read as nobody's); Rotate and Remove wait in the row's menu
-    row.append(tick, gatewayRename(k), el("span", "plan mono", k.masked), copyCallerKeyBtn(k), el("span", "grow"), ...(k.browser ? [gatewayBrowserTag()] : k.readOnly ? [gatewayReadOnlyTag()] : []), gatewayModelsBadge(k), ...gatewayKeptOutBadge(k), ...gatewayMCPBadge(k), gatewayQuotasBadge(k), ...(k.browser || k.readOnly ? [] : [gatewayConcurrencyBadge(k), gatewayTierBadge(k), gatewayRedactBadge(k)]), gatewayLimitBadge(k), gatewayKeyMore(k));
+    row.append(tick, gatewayRename(k), el("span", "plan mono", k.masked), copyCallerKeyBtn(k), el("span", "grow"), ...(k.browser ? [gatewayBrowserTag()] : k.readOnly ? [gatewayReadOnlyTag()] : k.admin && gatewayKeyCanAdmin(k) ? [gatewayAdminTag(k)] : []), gatewayModelsBadge(k), ...gatewayKeptOutBadge(k), ...gatewayMCPBadge(k), gatewayQuotasBadge(k), ...(k.browser || k.readOnly ? [] : [gatewayConcurrencyBadge(k), gatewayTierBadge(k), gatewayRedactBadge(k)]), gatewayLimitBadge(k), gatewayKeyMore(k));
     const under = gatewayLimit?.id === k.id ? [gatewayLimitEditor(k)] : keyUsed(k).map((u) => gatewayLimitLine(k, u));
     if (under.length) row.classList.add("with-limit"), row.append(...under);
     list.append(row);
@@ -350,10 +350,41 @@ function gatewayKeyMore(k) {
       ...(k.browser || k.readOnly ? [] : [{ name: "Model names", icon: MCP_GLYPH, run: () => gatewayAliasesAsk(k) }]),
       ...(k.browser ? [] : [{ name: "Keep accounts out", icon: KEEP_OUT_GLYPH, run: () => gatewayKeptOutPick(k, more) }]),
       { name: "Rotate key", icon: ROTATE_GLYPH, run: () => askGatewayKey(k, true) },
+      // the management API (#6307, ljayic on X), seldom set, so under
+      // Advanced; only a key the user made can hold it (access's adminOf)
+      ...(gatewayKeyCanAdmin(k) ? [{ name: "Advanced", icon: ADVANCED_GLYPH, run: () => gatewayAdminPick(k, more) }] : []),
       { name: "Remove", icon: REMOVE_GLYPH, sep: true, run: () => askGatewayKey(k, false) },
     ]);
   };
   return more;
+}
+
+const ADVANCED_GLYPH = "M2.5 4.5h6M11.5 4.5h2M2.5 11.5h2M7.5 11.5h6M10 3v3M6 10v3";
+// gatewayKeyCanAdmin: a key the management API may be given, as access's
+// adminOf holds it: not the sharing key, a read-only or Browser key, nor
+// an issued or expiring one
+function gatewayKeyCanAdmin(k) {
+  return !k.lan && !k.browser && !k.readOnly && !k.issuer && !k.expires;
+}
+// gatewayAdminPick sets how the key may use the management API
+// (/v1/magpie/admin/): not at all, from this computer, or from any
+async function gatewayAdminPick(k, anchor) {
+  const opts = [
+    { v: "", name: "Off" },
+    { v: "local", name: "From this computer" },
+    { v: "any", name: "From any computer" },
+  ];
+  openProtoMenu(anchor, opts, k.admin || "", async (v) => {
+    if (v === (k.admin || "")) return;
+    const out = await gatewayKeyAction("admin-key", { key: k.id, admin: v });
+    if (out) status(t(v === "any" ? "{name} can manage magpie from any computer" : v ? "{name} can manage magpie from this computer" : "{name} can't manage magpie", { name: k.name }), "ok");
+  }, "Management API", "sess-menu");
+}
+// a key that can manage magpie says so in its row, always
+function gatewayAdminTag(k) {
+  const tag = el("span", "amodels key-readonly key-admin set", t("Manages magpie"));
+  tag.title = t(k.admin === "any" ? "This key can change magpie's providers, keys and routing groups, from any computer" : "This key can change magpie's providers, keys and routing groups, from this computer");
+  return tag;
 }
 
 const EYE_GLYPH = "M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8zM8 9.9a1.9 1.9 0 1 0 0-3.8 1.9 1.9 0 0 0 0 3.8z";
