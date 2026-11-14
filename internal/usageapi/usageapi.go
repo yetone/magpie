@@ -279,6 +279,10 @@ type Ledger struct {
 	By      map[string][]Share `json:"by"`
 	ChartBy map[string][]Share `json:"chartBy,omitempty"`
 	Day     string             `json:"day,omitempty"`
+	// Provider is the one provider the filter keeps, if any: every cost
+	// of the page is of its calls alone, so a page whose currency is "by
+	// provider" shows them in what that provider sells in
+	Provider string `json:"provider,omitempty"`
 	usage.Totals
 	// Through and Direct: the rows the gateway served, and the rows read
 	// from the agents' own session files, which it never saw. Totals is
@@ -412,6 +416,7 @@ func LedgerPage(p usage.Period, f usage.Filter, offset, limit int) Ledger {
 	out.Purposes = l.Purposes
 	out.BigWrite = l.Big
 	out.Day = f.Day
+	out.Provider = f.Provider
 	out.CallerKeys = inKeyOrder(callerGroups(usage.Summary{CallerKeys: l.CallerKeys}))
 	callerLabels := map[string]string{}
 	for _, g := range out.CallerKeys {

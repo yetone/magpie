@@ -2514,7 +2514,7 @@ function renderLedgerDash(l) {
   }
   // and how fast it flows now, while requests are in flight (ledFlow)
   strip.lastChild.append(ledFlowLine());
-  const c = fmtCost(l);
+  const c = fmtCost(l, l.provider);
   // the count in the words the quick panel uses too, the whole sentence on
   // hover (tenacious_eagle on Discord)
   block("Cost", c ? "≈" + c : "—", line(l.unpriced ? unpricedCalls(l.unpriced) : t("effective prices")), c ? "cost" : "", l.unpriced ? unpricedCallsWhy(l.unpriced) : "");
@@ -2794,7 +2794,8 @@ function ledHeatTip(x) {
     return tip;
   }
   const parts = [t("{n} tokens", { n: fmtN(x.tokens) }), t(x.calls === 1 ? "{n} request" : "{n} requests", { n: ledNum(x.calls) })];
-  const c = fmtCost(x);
+  // of one provider's calls, while the filters keep only its
+  const c = fmtCost(x, new URLSearchParams(ledHeat?.want).get("provider") || "");
   if (c) parts.push("≈" + c);
   const order = { tokens: 0, calls: 1, cost: 2 }[ledHeatMetric];
   if (order && parts[order]) parts.unshift(...parts.splice(order, 1)); // the metric shown first
@@ -3259,7 +3260,7 @@ function renderLedger() {
   renderPeriod();
   renderArchive();
 
-  costHead(fmtCost(l), l.unpriced ? unpricedCalls(l.unpriced) : "", unpricedCallsWhy(l.unpriced));
+  costHead(fmtCost(l, l.provider), l.unpriced ? unpricedCalls(l.unpriced) : "", unpricedCallsWhy(l.unpriced));
 
   // the filters: choices seen in the period, and failures alone
   sessPick($("#ledPurpose"), "All purposes", ledPurpose, purposeOptions(l.purposes || [], ledPurpose), "Purpose", (v) => { ledPurpose = v; ledOwn("purpose"); ledOffset = 0; loadLedger().catch((e) => status(e.message, "err")); });
