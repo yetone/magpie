@@ -956,9 +956,7 @@ func (t *Totals) plus(d *Totals) {
 	t.FloorOut += d.FloorOut
 	t.FloorMs += d.FloorMs
 	t.FloorN += d.FloorN
-	t.UpBytes += d.UpBytes
-	t.DownBytes += d.DownBytes
-	t.ImageFilesSaved += d.ImageFilesSaved
+	t.plusBytes(d)
 }
 
 // FloorAgents are the agents whose session files time a call from what

@@ -2067,6 +2067,11 @@ function ledDetail(r) {
   // DeepSeek's image files kept out of it (#5407); a row from before has
   // none of them, and says nothing
   if (r.up_bytes > 0) add("Sent upstream", fmtBytes(r.up_bytes));
+  // and what it was made of, for a row whose body magpie read
+  if (r.up_bytes > 0 && r.up_parts) {
+    const p = ledUpParts({ up_bytes: r.up_bytes, up_measured: r.up_bytes, up_system: r.up_parts.system, up_tools: r.up_parts.tools, up_images: r.up_parts.images });
+    add("Made of", LED_UP_PARTS.filter(([k]) => p[k] > 0).map(([k, label]) => t(label) + " " + fmtBytes(p[k])).join(" · "));
+  }
   if (r.down_bytes > 0) add("Received", fmtBytes(r.down_bytes));
   // and how many images they were, for a row that kept it (matrix0487)
   if (r.image_files_saved > 0) add("Saved by image files", r.image_files > 0 ? t(r.image_files === 1 ? "{size} ({n} image)" : "{size} ({n} images)", { size: fmtBytes(r.image_files_saved), n: ledNum(r.image_files) }) : fmtBytes(r.image_files_saved));
@@ -2329,11 +2334,114 @@ function drawLedSpeed(l) {
   box.append(head, scroll);
 }
 
+// ---- what the bytes sent upstream were made of (theforeveriris on X:
+// "8.6 GB up from plain-text projects?"). Every request sends the whole
+// conversation again, so a request's bytes are about its context; the
+// card says so, splits the bytes of the requests whose body magpie read
+// into the system prompt, the tools' definitions, images and the
+// conversation, and lists them by agent and by model, each with its bytes
+// a request. Opened from the ↑ on the Requests card, kept open as left.
+let ledUpOpen = false;
+try { ledUpOpen = localStorage.getItem("magpie.ledUp") === "1"; } catch {}
+const LED_UP_PARTS = [
+  ["conv", "Conversation", "c1"],
+  ["tools", "Tool definitions", "c2"],
+  ["system", "System prompt", "c3"],
+  ["images", "Images", "c4"],
+  ["rest", "Not measured", ""],
+];
+function ledUpParts(x) {
+  const sys = x.up_system || 0, tools = x.up_tools || 0, images = x.up_images || 0;
+  const measured = Math.min(x.up_measured || 0, x.up_bytes || 0);
+  return { conv: Math.max(0, measured - sys - tools - images), tools, system: sys, images, rest: Math.max(0, (x.up_bytes || 0) - measured) };
+}
+const ledUpEach = (x) => (x.up_calls > 0 ? (x.up_bytes || 0) / x.up_calls : 0);
+function drawLedUp(l, entering) {
+  const box = $("#ledUp");
+  box.hidden = !ledUpOpen || !(l.up_bytes > 0);
+  box.replaceChildren();
+  if (box.hidden) return;
+  const head = el("div", "led-bar");
+  head.append(el("b", "led-spd-t", t("Sent upstream")), el("span", "grow"));
+  const each = ledUpEach(l);
+  if (each) head.append(el("span", "led-up-each", t("≈ {size} a request", { size: fmtBytes(each) })));
+  const close = el("button", "text led-up-x", "×");
+  close.type = "button";
+  close.setAttribute("aria-label", t("Close"));
+  close.onclick = () => ledUpToggle(false);
+  head.append(close);
+  const note = el("p", "led-up-note", t("Each request sends the whole conversation again, with the system prompt and the tools' definitions, so a request's bytes grow with its context."));
+  const parts = ledUpParts(l);
+  const bar = el("div", "led-up-bar");
+  bar.setAttribute("role", "img");
+  const legend = el("div", "led-up-legend");
+  const said = [];
+  for (const [key, label, c] of LED_UP_PARTS) {
+    const n = parts[key];
+    if (!(n > 0)) continue;
+    const share = n / l.up_bytes;
+    const seg = el("i", "led-up-seg " + key);
+    if (c) seg.style.background = "var(--" + c + ")";
+    seg.style.flexGrow = String(share);
+    seg.title = t(label) + ": " + fmtBytes(n) + " (" + (100 * share).toFixed(1) + "%)";
+    bar.append(seg);
+    const item = el("span", "led-up-key " + key);
+    const dot = el("i", "dot");
+    if (c) dot.style.background = "var(--" + c + ")";
+    item.append(dot, el("span", "", t(label)), el("b", "", fmtBytes(n)), el("span", "pc", (100 * share < 1 ? "<1" : Math.round(100 * share)) + "%"));
+    if (key === "rest") item.title = t("Requests whose body magpie didn't read: a Responses WebSocket's turns, and bodies it couldn't take apart");
+    legend.append(item);
+    said.push(t(label) + " " + fmtBytes(n));
+  }
+  bar.setAttribute("aria-label", said.join(", "));
+  const lists = el("div", "led-up-lists");
+  for (const [dim, title] of [["agent", "Agent"], ["model", "Model"]]) {
+    const rows = (l.by?.[dim] || []).filter((s) => s.up_bytes > 0).sort((a, b) => b.up_bytes - a.up_bytes);
+    if (!rows.length) continue;
+    const table = el("table", "led-spd led-up-by");
+    const hr = el("tr");
+    hr.append(el("th", "nm", t(title)), el("th", "n", t("Bytes sent")), el("th", "n", t("Per request")));
+    const thead = el("thead");
+    thead.append(hr);
+    const body = el("tbody");
+    const top = rows[0].up_bytes;
+    for (const s of rows.slice(0, 8)) {
+      const tr = el("tr");
+      const nm = el("td", "nm");
+      const name = s.name || s.id || "—";
+      nm.append(el("span", "", dim === "agent" ? t(name) : name));
+      nm.title = name;
+      const meter = el("i", "led-up-meter");
+      meter.style.width = (100 * s.up_bytes / top).toFixed(1) + "%";
+      nm.append(meter);
+      tr.append(nm, el("td", "", fmtBytes(s.up_bytes)), el("td", ledUpEach(s) ? "" : "faint", ledUpEach(s) ? fmtBytes(ledUpEach(s)) : "—"));
+      body.append(tr);
+    }
+    table.append(thead, body);
+    lists.append(table);
+  }
+  box.append(head, note, bar, legend, lists);
+  if (entering && box.animate) {
+    const still = calm();
+    box.animate([{ opacity: 0, transform: still ? "none" : "translateY(-4px)" }, { opacity: 1, transform: "none" }], { duration: 200, easing: "cubic-bezier(.23, 1, .32, 1)" });
+  }
+}
+let ledUpLast = null;
+function ledUpToggle(open) {
+  ledUpOpen = open;
+  try { localStorage.setItem("magpie.ledUp", open ? "1" : "0"); } catch {}
+  for (const b of document.querySelectorAll("#ledKpi .led-up-open")) b.setAttribute("aria-expanded", String(open));
+  if (ledUpLast) drawLedUp(ledUpLast, open);
+  if (!open) $("#ledKpi .led-up-open")?.focus({ preventScroll: true });
+}
+
 function renderLedgerDash(l) {
   const dash = $("#ledDash");
   dash.hidden = !l.total && !l.day;
   if (dash.hidden) return;
   drawLedSpeed(l);
+  ledUpLast = l;
+  drawLedUp(l);
   const total = allTokens(l);
   // of the calls whose vendor counted the cache: none when no call's was (#3464)
   const rate = cacheHitOf(l);
@@ -2391,6 +2499,17 @@ function renderLedgerDash(l) {
     const io = line(...usageParts(["↑ " + fmtBytes(l.up_bytes || 0), "↓ " + fmtBytes(l.down_bytes || 0), ...(l.image_files_saved > 0 ? [t("{n} saved by image files", { n: fmtBytes(l.image_files_saved) })] : [])]));
     io.classList.add("parts", "led-io");
     io.title = t("Sent upstream") + ": " + ledNum(l.up_bytes || 0) + " B\n" + t("Received") + ": " + ledNum(l.down_bytes || 0) + " B";
+    // the ↑ opens what those bytes were made of (drawLedUp)
+    if (l.up_bytes > 0) {
+      const up = io.firstElementChild;
+      const b = el("button", "led-jump led-up-open", up.textContent);
+      b.type = "button";
+      b.title = t("What the bytes sent upstream were made of");
+      b.setAttribute("aria-controls", "ledUp");
+      b.setAttribute("aria-expanded", String(ledUpOpen));
+      b.onclick = () => ledUpToggle(!ledUpOpen);
+      up.replaceChildren(b);
+    }
     strip.lastChild.append(io);
   }
   // and how fast it flows now, while requests are in flight (ledFlow)

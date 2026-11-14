@@ -1089,8 +1089,9 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 	captureTitle := false
 	effort := "" // the reasoning Codex asked for, which goes on as it is
 	end := func(status int, msg string, tokens, out int) {}
-	var tools *toolScan // whether the reply calls a tool, for a turn's end
-	var live *liveRow   // the reply counted as it reaches Codex (live.go)
+	var sentPrompt *Prompt // what the body was made of, read at end (upParts)
+	var tools *toolScan    // whether the reply calls a tool, for a turn's end
+	var live *liveRow      // the reply counted as it reaches Codex (live.go)
 	if rest != "/responses" {
 		// no route of its own (a compaction, a memory): recorded alone
 		noteMasked(r, "chat", maskedHits, sentOf(maskedHits, body), 0, "openai", modelOf(body))
@@ -1142,6 +1143,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 				replyDigest = titleReplyDigest(titleReply.buf.Bytes(), nil)
 			}
 			prompt := promptRead() // outside the trace's lock, which reading it takes
+			sentPrompt = prompt
 			s.trace.update(tr, func(t *Route) {
 				// what masking took: magpie's own time isn't split here
 				t.Masking = maskingMs(r.Context(), 0)
@@ -1676,6 +1678,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 	if up := upBytesOf(r.Context()); up != nil {
 		rec.UpBytes, rec.PlainBytes, rec.Socket = up.wire, up.plain, up.socket
 		rec.DownBytes = up.downOf()
+		rec.UpParts = upParts(sentPrompt, up)
 	}
 	appendUsage(r, rec)
 }

@@ -34,7 +34,7 @@ import (
 // history again on its first start, the cold start's peak (#2278). Raise
 // it with any change to what a row counts as; TestSettledCountedAsVersioned
 // fails until it is raised.
-const settledCountVersion = "4"
+const settledCountVersion = "5"
 
 func heatDiskPath() string {
 	return filepath.Join(filepath.Dir(sessions.CachePath()), "heat-v1.json")
@@ -249,10 +249,14 @@ func hashRows(h hash.Hash, c *rowChunk) {
 		b = binary.AppendVarint(b, p.RouteID)
 		b = binary.AppendUvarint(b, math.Float64bits(p.Cost))
 		b = binary.AppendUvarint(b, math.Float64bits(p.Credits))
-		for _, v := range [...]int32{p.Millis, p.TTFT, p.FirstText, p.Sent, p.Flow, p.FirstReasoning, p.Own, p.Retried, p.Queued, p.Masking, p.Status, int32(p.Tries), p.UpBytes, p.DownBytes, p.FilesSaved} {
+		for _, v := range [...]int32{p.Millis, p.TTFT, p.FirstText, p.Sent, p.Flow, p.FirstReasoning, p.Own, p.Retried, p.Queued, p.Masking, int32(p.Status), int32(p.Tries), p.UpBytes, p.DownBytes, p.FilesSaved} {
 			b = binary.AppendVarint(b, int64(v))
 		}
 		b = binary.AppendUvarint(b, uint64(p.Flags))
+		if p.Flags&rowUpParts != 0 {
+			// only where kept, so a row from before hashes as it did
+			b = append(b, p.upMix[:]...)
+		}
 		if len(b) > 30<<10 {
 			h.Write(b)
 			b = b[:0]

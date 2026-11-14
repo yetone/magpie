@@ -101,6 +101,9 @@ func (c *rowChunk) encode(keep func([]byte) bool) ([]byte, []*time.Location) {
 		put(uint64(p.DownBytes))
 		put(uint64(int64(p.FilesSaved)))
 		put(uint64(p.ImageFiles))
+		if p.Flags&rowUpParts != 0 {
+			put(uint64(p.upMix[0]) | uint64(p.upMix[1])<<8 | uint64(p.upMix[2])<<16)
+		}
 		if p.Flags&rowCredits != 0 {
 			put(math.Float64bits(p.Credits))
 		}
@@ -301,11 +304,16 @@ func (c *rowChunk) unpackReusing(dst *rowChunk, into []packedRow, strs []string,
 		p.Sent, p.Flow = msOf(int64(take())), msOf(int64(take()))
 		p.Own, p.Retried, p.Queued = msOf(int64(take())), msOf(int64(take())), msOf(int64(take()))
 		p.FirstReasoning = msOf(int64(take()))
-		p.Cost, p.Status, p.Flags = math.Float64frombits(take()), int32(take()), uint16(take())
-		p.Tries = int16(take())
+		p.Cost, p.Status, p.Flags = math.Float64frombits(take()), int16(take()), uint16(take())
+		p.Tries = uint8(take())
 		p.Masking = int32(take())
 		p.UpBytes, p.DownBytes, p.FilesSaved = int32(take()), int32(take()), int32(take())
 		p.ImageFiles = int16(take())
+		p.upMix = [3]uint8{}
+		if p.Flags&rowUpParts != 0 {
+			m := take()
+			p.upMix = [3]uint8{uint8(m), uint8(m >> 8), uint8(m >> 16)}
+		}
 		p.Credits = 0
 		if p.Flags&rowCredits != 0 {
 			p.Credits = math.Float64frombits(take())

@@ -151,7 +151,7 @@ func TestRowImageFilesKept(t *testing.T) {
 		if a.ImageFiles != 3 || a.ImageFilesSaved != 10_000_000 || a.Tries != 2 {
 			t.Fatalf("%d: read back %d images, saved %d, %d tries", i, a.ImageFiles, a.ImageFilesSaved, a.Tries)
 		}
-		if b.ImageFiles != math.MaxInt16 || b.Tries != math.MaxInt16 {
+		if b.ImageFiles != math.MaxInt16 || b.Tries != math.MaxUint8 {
 			t.Fatalf("%d: past the most read back %d images, %d tries", i, b.ImageFiles, b.Tries)
 		}
 		if old.ImageFiles != 0 {

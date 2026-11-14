@@ -5626,6 +5626,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		if up := upBytesOf(r.Context()); up != nil {
 			rec.UpBytes, rec.PlainBytes, rec.Socket = up.wire, up.plain, up.socket
 			rec.DownBytes, rec.ImageFilesSaved, rec.ImageFiles = up.downOf(), up.saved, up.images
+			rec.UpParts = upParts(prompt, up)
 		}
 		failedWith(&rec, call.Status, call.Error, call.Usage.ErrType)
 		withBodies(&rec, &call)

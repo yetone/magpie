@@ -1494,6 +1494,25 @@ body.masked :hover > .acct-eye, body.masked .pq-card:hover .acct-eye, body.maske
 .led-strip .meter { height: 5px; margin-top: 8px; border-radius: 3px; background: var(--pill); overflow: hidden; }
 .led-strip .meter i { display: block; height: 100%; border-radius: 3px; background: var(--green); }
 .led-trend { padding: 10px 14px 10px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+/* what the bytes sent upstream were made of, opened from the Requests card's ↑ */
+.led-up { margin-top: 10px; padding: 10px 14px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+.led-up[hidden] { display: none; }
+.led-up .led-bar { align-items: center; }
+.led-up-each { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.led-up-x { margin-left: 6px; font-size: 16px; line-height: 1; padding: 0 4px; color: var(--muted); }
+.led-up-note { margin: 4px 0 10px; font-size: 12px; color: var(--muted); }
+.led-up-bar { display: flex; gap: 2px; height: 8px; border-radius: 4px; overflow: hidden; background: var(--pill); }
+.led-up-seg { display: block; min-width: 2px; flex-basis: 0; }
+.led-up-seg.rest { background: var(--pill); }
+.led-up-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 8px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.led-up-key { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.led-up-key .dot { width: 8px; height: 8px; border-radius: 2px; background: var(--pill); }
+.led-up-key b { font-weight: 600; }
+.led-up-key .pc, .led-up-key.rest { color: var(--muted); }
+.led-up-lists { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 4px 24px; margin-top: 12px; }
+.led-up-by td.nm { position: relative; }
+.led-up-by td.nm > span { display: block; overflow: hidden; text-overflow: ellipsis; }
+.led-up-meter { display: block; height: 2px; margin-top: 3px; border-radius: 1px; background: var(--c1); opacity: .55; }
 .led-speed { margin-top: 10px; padding: 10px 14px 6px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
 .led-speed[hidden] { display: none; }
 .led-spd-t { font-size: 13px; font-weight: 600; }

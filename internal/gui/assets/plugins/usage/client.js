@@ -78,6 +78,7 @@ magpie.plugin("usage", (ctx) => {
     <p class="usage-note" id="ledScope" data-t>Gateway and session-log calls; local rejections excluded from totals.</p>
     <div class="led-dash" id="ledDash" hidden>
       <div class="led-strip" id="ledKpi"></div>
+      <section class="led-up" id="ledUp" hidden></section>
       <section class="led-trend">
         <div class="led-bar">
           <div class="segs" id="ledMetric"></div>

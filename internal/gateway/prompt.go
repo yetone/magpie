@@ -52,7 +52,22 @@ type Prompt struct {
 	Held  bool         `json:"held,omitempty"`
 	Turns int          `json:"turns,omitempty"` // the user's turns in it
 	Parts []PromptPart `json:"parts"`
+	// sent is what the body's bytes were made of (sentSizes), for the
+	// ledger row's Record.UpParts; never written to the routing history
+	sent sentSizes
 }
+
+// sentSizes is a body's bytes by what they were, as the builder read the
+// pieces it already had in hand: the agent's own prompt and its
+// instructions (system, skills, memory), the tools' definitions, the
+// images and documents sent inline, and all it read (the rest is the
+// conversation, and the JSON around it). Counting them is a length added
+// per piece, no second read of the body (#upload).
+type sentSizes struct{ system, tools, images, all int }
+
+// size is how many bytes a piece took in the body: its raw JSON, its
+// text, an image's source, a sealed piece's size.
+func (pc *PromptPiece) size() int { return len(pc.raw) + len(pc.img) + len(pc.Text) + pc.Size }
 
 // PromptPart is one kind of what a prompt holds.
 type PromptPart struct {
@@ -111,6 +126,11 @@ type promptBuilder struct {
 	// (itemKey), for PromptText; off when only the sizes are read
 	keep   bool
 	pieces map[string][]PromptPiece
+	// sent: the pieces' bytes by what they were (sentSizes); again off
+	// while one tool result is shared among the files it read (result),
+	// so its bytes count once
+	sent  sentSizes
+	again bool
 }
 
 // PromptPiece is a stretch of an item's text as the request sent it: a
@@ -172,6 +192,18 @@ func (b *promptBuilder) add(kind, name, tag string, tokens int, pc PromptPiece) 
 	}
 	it.N++
 	it.Tokens += tokens
+	if !b.again {
+		n := pc.size()
+		b.sent.all += n
+		switch {
+		case tag == "image":
+			b.sent.images += n
+		case kind == PartSystem || kind == PartSkills || kind == PartMemory:
+			b.sent.system += n
+		case kind == PartTools:
+			b.sent.tools += n
+		}
+	}
 	if b.keep {
 		b.pieces[kind+"\x00"+key] = append(b.pieces[kind+"\x00"+key], pc)
 	}
@@ -188,7 +220,7 @@ func (b *promptBuilder) chat(tokens int, pc PromptPiece) {
 func (b *promptBuilder) newTurn() { b.turn++ }
 
 func (b *promptBuilder) prompt() *Prompt {
-	p := &Prompt{Held: b.held, Turns: b.turn, Parts: []PromptPart{}}
+	p := &Prompt{Held: b.held, Turns: b.turn, Parts: []PromptPart{}, sent: b.sent}
 	for _, kind := range partOrder {
 		m := b.parts[kind]
 		if len(m) == 0 {
@@ -611,8 +643,10 @@ func (b *promptBuilder) result(callID string, tokens int, pc PromptPiece) {
 			if !readTools[c.name] {
 				tag = "shell"
 			}
+			b.again = i > 0
 			b.add(PartFiles, f, tag, n, pc)
 		}
+		b.again = false
 		return
 	}
 	b.add(PartResults, c.name, "result", tokens, pc)

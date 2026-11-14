@@ -93,16 +93,20 @@ type packedRow struct {
 	Sent, Flow, FirstReasoning int32
 	Own, Retried, Queued       int32
 	Masking                    int32 // ms (Record.Masking)
-	Status                     int32
-	// Tries and ImageFiles in 16 bits, so the row is no larger than its
-	// 152 bytes before the count was kept: neither comes near 32767
-	// (smallOf)
-	Tries, ImageFiles int16
 	// the bytes up and down (Record.UpBytes, DownBytes, ImageFilesSaved),
 	// in 32 bits as Masking: 2GiB is past any request a vendor takes
 	UpBytes, DownBytes, FilesSaved int32
-	Flags                          uint16
-	zone                           uint16
+	// Status and ImageFiles in 16 bits, and Tries in 8, so the row is no
+	// larger than its 152 bytes before the counts and upMix were kept:
+	// no status passes 32767, no request 32767 images or 255 tries
+	// (smallOf, tinyOf)
+	Status, ImageFiles int16
+	Flags              uint16
+	zone               uint16
+	Tries              uint8
+	// upMix is Record.UpParts, each part's share of UpBytes in 255ths
+	// (upMixOf), where Flags has rowUpParts
+	upMix [3]uint8
 }
 
 // rowZones are the zones rows' times are in, by a row's zone; 0 is the
@@ -226,6 +230,26 @@ const rowCacheUnknown = 8192
 
 // rowSocket is the Flags bit of Record.Socket.
 const rowSocket = 16384
+
+// rowUpParts marks a row that kept what its bytes up were made of
+// (Record.UpParts, packedRow.upMix).
+const rowUpParts = 32768
+
+// upMixOf is u's parts as shares of up in 255ths, for a packed row: a
+// part rounds to the nearest 255th of the request, so the sums of many
+// rows stay within a fraction of a percent.
+func upMixOf(u *UpParts, up int) (m [3]uint8) {
+	for i, n := range [3]int{u.System, u.Tools, u.Images} {
+		m[i] = uint8(min(max((n*255+up/2)/up, 0), 255))
+	}
+	return m
+}
+
+// upPartsOf is what upMixOf kept, as bytes of up.
+func upPartsOf(m [3]uint8, up int) *UpParts {
+	part := func(i int) int { return up * int(m[i]) / 255 }
+	return &UpParts{System: part(0), Tools: part(1), Images: part(2)}
+}
 
 type rowChunk struct {
 	Archive   []byte
@@ -356,7 +380,7 @@ func (c *rowChunk) add(r Row, msg string, order int64, failed bool) {
 		c.Bytes += int64(len(s) + 48)
 		return id
 	}
-	p := packedRow{Tokens: [6]int32{tokensOf(int64(r.Input)), tokensOf(int64(r.Output)), tokensOf(int64(r.CacheRead)), tokensOf(int64(r.CacheWrite)), tokensOf(int64(r.Reasoning)), tokensOf(int64(r.CacheWrite1h))}, Millis: msOf(r.Millis), TTFT: msOf(r.TTFT), FirstText: msOf(r.FirstText), FirstReasoning: msOf(r.FirstReasoning), Sent: msOf(r.Sent), Flow: msOf(r.Flow), Own: msOf(r.Own), Masking: int32(min(r.Masking, math.MaxInt32)), Retried: msOf(r.Retried), Queued: msOf(r.Queued), Order: order, RouteID: r.RouteID, Cost: r.Cost, Status: int32(r.Status), Tries: smallOf(r.Tries), ImageFiles: smallOf(r.ImageFiles), UpBytes: bytesOf(r.UpBytes), DownBytes: bytesOf(r.DownBytes), FilesSaved: bytesOf(r.ImageFilesSaved)}
+	p := packedRow{Tokens: [6]int32{tokensOf(int64(r.Input)), tokensOf(int64(r.Output)), tokensOf(int64(r.CacheRead)), tokensOf(int64(r.CacheWrite)), tokensOf(int64(r.Reasoning)), tokensOf(int64(r.CacheWrite1h))}, Millis: msOf(r.Millis), TTFT: msOf(r.TTFT), FirstText: msOf(r.FirstText), FirstReasoning: msOf(r.FirstReasoning), Sent: msOf(r.Sent), Flow: msOf(r.Flow), Own: msOf(r.Own), Masking: int32(min(r.Masking, math.MaxInt32)), Retried: msOf(r.Retried), Queued: msOf(r.Queued), Order: order, RouteID: r.RouteID, Cost: r.Cost, Status: smallOf(r.Status), Tries: tinyOf(r.Tries), ImageFiles: smallOf(r.ImageFiles), UpBytes: bytesOf(r.UpBytes), DownBytes: bytesOf(r.DownBytes), FilesSaved: bytesOf(r.ImageFilesSaved)}
 	p.setTime(r.Time)
 	var t [rowTexts]uint32
 	for i, s := range rowText(&r) {
@@ -387,6 +411,10 @@ func (c *rowChunk) add(r Row, msg string, order int64, failed bool) {
 	}
 	if r.Socket {
 		p.Flags |= rowSocket
+	}
+	if r.UpParts != nil && p.UpBytes > 0 {
+		p.Flags |= rowUpParts
+		p.upMix = upMixOf(r.UpParts, int(p.UpBytes))
 	}
 	if failed {
 		p.Flags |= 16
@@ -435,12 +463,20 @@ func smallOf(n int) int16 {
 	return int16(max(min(n, math.MaxInt16), 0))
 }
 
+// tinyOf is a count of tries in a packed row's 8 bits, as smallOf.
+func tinyOf(n int) uint8 {
+	return uint8(max(min(n, math.MaxUint8), 0))
+}
+
 func (c *rowChunk) row(i int) Row {
 	p := &c.Rows[i]
 	r := Row{Record: Record{RouteID: p.RouteID, Time: p.Time(), Input: int(p.Tokens[0]), Output: int(p.Tokens[1]), CacheRead: int(p.Tokens[2]), CacheWrite: int(p.Tokens[3]), CacheWrite1h: int(p.Tokens[5]), Reasoning: int(p.Tokens[4]), Millis: int64(p.Millis), TTFT: int64(p.TTFT), FirstText: int64(p.FirstText), FirstReasoning: int64(p.FirstReasoning), ReasoningHidden: p.Flags&rowReasoningHidden != 0, CacheUnknown: p.Flags&rowCacheUnknown != 0, Socket: p.Flags&rowSocket != 0, Sent: int64(p.Sent), Flow: int64(p.Flow), Own: int64(p.Own), Masking: int64(p.Masking), Retried: int64(p.Retried), Queued: int64(p.Queued), Status: int(p.Status), Tries: int(p.Tries), UpBytes: int(p.UpBytes), DownBytes: int(p.DownBytes), ImageFilesSaved: int(p.FilesSaved), ImageFiles: int(p.ImageFiles), HandedOn: p.Flags&rowHandedOn != 0, Rejected: p.Flags&4 != 0, SessionOfficialLogin: p.Flags&8 != 0}, Cost: p.Cost, Priced: p.Flags&1 != 0, Swapped: p.Flags&2 != 0, Routed: p.Flags&32 != 0}
 	if p.Flags&rowCredits != 0 {
 		credits := p.Credits
 		r.Credits = &credits
+	}
+	if p.Flags&rowUpParts != 0 && p.UpBytes > 0 {
+		r.UpParts = upPartsOf(p.upMix, int(p.UpBytes))
 	}
 	if p.Flags&rowCompactionKnown != 0 {
 		compacted := p.Flags&rowCompaction != 0

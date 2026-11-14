@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 	"sync/atomic"
+
+	"github.com/yetone/magpie/internal/usage"
 )
 
 // upBytes is what a request's tries sent up to the vendor, kept in the
@@ -172,3 +174,17 @@ func (d *downCount) Read(b []byte) (int, error) {
 
 // downOf is the reply bytes counted so far (upBytes.down).
 func (u *upBytes) downOf() int { return int(u.down.Load()) }
+
+// upParts is what a request's bytes up were made of (usage.UpParts): the
+// parts of the body the prompt was read from, each scaled to what went on
+// the wire, so a compressed or retried request's parts sum to its bytes
+// as its whole does. None when the body wasn't read (p nil), nothing
+// went, the last try went over a kept socket (its bytes a delta, not the
+// body) or images went by file (the bytes no longer the body's).
+func upParts(p *Prompt, u *upBytes) *usage.UpParts {
+	if p == nil || u == nil || u.wire <= 0 || u.socket || u.images > 0 || p.sent.all <= 0 {
+		return nil
+	}
+	of := func(n int) int { return int(int64(n) * int64(u.wire) / int64(p.sent.all)) }
+	return &usage.UpParts{System: of(p.sent.system), Tools: of(p.sent.tools), Images: of(p.sent.images)}
+}
