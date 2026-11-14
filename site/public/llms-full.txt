@@ -10275,6 +10275,29 @@ magpie update mirror off
 
 In the app, Settings' Download source row has Use a mirror… for a Mirror address, and Remove mirror to go back. No mirror is used unless you give one. On a network that lets GitHub through and not usemagpie.ai, nothing needs setting: the update comes from GitHub, its signature checked.
 
+## Download source and Update source in Settings
+
+Two rows in the app's Settings decide where an update comes from. Neither needs changing on a network that reaches usemagpie.ai.
+
+| Setting | Choice | What the update is downloaded from |
+| --- | --- | --- |
+| About › Download source | `usemagpie.ai` (the default) | usemagpie.ai, and github.com when that fails. |
+|  | Use a mirror… | usemagpie.ai, and the mirror when that fails, in place of github.com. Remove mirror goes back. |
+| Network and sharing › Update source | Automatic (the default) | usemagpie.ai's release list and files, and GitHub's when the site can't be reached. |
+|  | usemagpie.ai only | usemagpie.ai alone, never GitHub, so a mirror is never used. |
+|  | GitHub only | github.com alone (through the mirror when one is set), never usemagpie.ai. |
+
+### What a mirror's address is
+
+A mirror here is a GitHub download proxy: a site that fetches any github.com link put after its own address, as in `https://mirror.example/https://github.com/yetone/magpie-releases/releases/download/…`. Type only the part before `https://github.com`, a full `https://` address such as `https://mirror.example/`. Public GitHub download proxies work this way; `gh-proxy.com`, the one `MAGPIE_MIRRORS` falls back to, is one of them. magpie names no mirror of its own and vouches for none: whichever you use, the file is checked against usemagpie.ai's checksum and the release's signature, and one that doesn't match is not installed.
+
+### When to use one
+
+- An update stalls or fails with a timeout or `EOF`, and both usemagpie.ai and github.com are slow or blocked where you are (often in mainland China): set a mirror.
+- usemagpie.ai is slow and GitHub is fast: pick GitHub only, no mirror needed.
+- You have a proxy: put it in Network and sharing › App updates instead; a mirror is for when you have none.
+- A download that failed through the mirror says so, and offers to download from GitHub instead, which removes the mirror.
+
 ## MAGPIE_MIRRORS: a mirror after a failure
 
 Another way is off by default. With `MAGPIE_MIRRORS=on`, the official source is tried first, and a mirror only after a network error, HTTP 429, HTTP 5xx or GitHub's rate-limit 403. The defaults are `registry.npmmirror.com` for npm and `gh-proxy.com` for GitHub; `MAGPIE_NPM_REGISTRY` and `MAGPIE_GITHUB_MIRROR` replace them:

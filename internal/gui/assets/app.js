@@ -20051,6 +20051,8 @@ function setUpdateMirror(mirror) {
   return writingPrefs(api("settings/update-mirror", { mirror }))
     .then((ns) => { prefs = ns; mirrorEditing = false; mirrorDraft = mirrorErr = ""; renderSettings(); status(t("Saved"), "ok", 1500); return ns; });
 }
+// Use a mirror… and Change open the field from mirroredit.js
+const editMirror = (r, s, v) => import("./mirroredit.js").then(() => { mirrorEditing = true; mirrorDraft = v; renderUpdateMirror(r, s); }, statusErr);
 function renderUpdateMirror(r, s) {
   r.classList.add("update-mirror-row");
   const who = r.querySelector(".who"), val = r.querySelector(".val");
@@ -20061,37 +20063,24 @@ function renderUpdateMirror(r, s) {
   const m = s.updateMirror || "";
   sub.textContent = mirrorErr || (m ? t("Updates are downloaded from usemagpie.ai, and through this mirror when that fails, each checked against usemagpie.ai's checksum")
     : t("Updates are downloaded from usemagpie.ai, and from GitHub when that fails; a mirror can stand in for GitHub where it is slow"));
+  // the docs' Mirrors page says which mirror and how (WeltAn_X on X)
+  const more = el("button", "sub-more", t("How mirrors work"));
+  more.onclick = () => api("open", { url: "https://usemagpie.ai/docs/" + ({ zh: "zh/", "zh-TW": "zh/", ja: "ja/" }[locale] || "") + "mirrors#settings" }).catch(() => {});
+  sub.append(" ", more);
   sub.classList.toggle("err", !!mirrorErr);
   sub.title = t("The update and its checksum always come from usemagpie.ai; a file from the mirror that doesn't match it is not installed.");
-  if (!mirrorEditing) {
-    if (m) {
-      const official = el("button", "text", t("Remove mirror"));
-      official.onclick = () => setUpdateMirror("").catch(statusTErr);
-      const change = el("button", "text", t("Change"));
-      change.onclick = () => { mirrorEditing = true; mirrorDraft = m; renderUpdateMirror(r, s); };
-      val.append(el("code", "", m), change, official);
-    } else {
-      const add = el("button", "text", t("Use a mirror…"));
-      add.onclick = () => { mirrorEditing = true; mirrorDraft = ""; renderUpdateMirror(r, s); };
-      val.append(el("code", "", "usemagpie.ai"), add);
-    }
-    return;
+  if (mirrorEditing) return mirrorEdit(r, s, sub, val);
+  if (m) {
+    const official = el("button", "text", t("Remove mirror"));
+    official.onclick = () => setUpdateMirror("").catch(statusTErr);
+    const change = el("button", "text", t("Change"));
+    change.onclick = () => editMirror(r, s, m);
+    val.append(el("code", "", m), change, official);
+  } else {
+    const add = el("button", "text", t("Use a mirror…"));
+    add.onclick = () => editMirror(r, s, "");
+    val.append(el("code", "", "usemagpie.ai"), add);
   }
-  const i = input(mirrorDraft, "https://mirror.example/");
-  i.className = "words update-mirror-input";
-  i.setAttribute("aria-label", t("Mirror address"));
-  i.oninput = () => { mirrorDraft = i.value; };
-  const save = el("button", "text", t("Save"));
-  save.onclick = () => {
-    const v = i.value.trim();
-    if (!v) return i.focus(NO_SCROLL);
-    setUpdateMirror(v).catch((e) => { mirrorErr = t(e.message); statusTErr(e); renderSettings(); });
-  };
-  const cancel = el("button", "text", t("Cancel"));
-  cancel.onclick = () => { mirrorEditing = false; mirrorDraft = mirrorErr = ""; renderUpdateMirror(r, s); };
-  i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") save.onclick(); else if (e.key === "Escape") cancel.onclick(); };
-  val.append(i, cancel, save);
-  queueMicrotask(() => { if (i.isConnected && document.activeElement !== i) i.focus(NO_SCROLL); });
 }
 
 function renderSettings() {

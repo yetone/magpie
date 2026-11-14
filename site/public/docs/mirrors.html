@@ -171,6 +171,7 @@
     <a href="#overview">What it is</a>
     <a href="#plugins">The Plugins page's Mirrors in China</a>
     <a href="#update">Installs and updates through a mirror or proxy</a>
+    <a href="#settings">Download source and Update source</a>
     <a href="#fallback">MAGPIE_MIRRORS: a mirror after a failure</a>
     <a href="#safe">Is a mirror safe</a>
   </aside>
@@ -193,6 +194,20 @@ magpie update --mirror https://mirror.example/
 magpie update mirror https://mirror.example/   # every update, the app's too
 magpie update mirror off</pre></div>
     <p>In the app, Settings' <span class="ui">Download source</span> row has <span class="ui">Use a mirror…</span> for a <span class="ui">Mirror address</span>, and <span class="ui">Remove mirror</span> to go back. No mirror is used unless you give one. On a network that lets GitHub through and not usemagpie.ai, nothing needs setting: the update comes from GitHub, its signature checked.</p>
+    <h2 id="settings"><a class="anchor" href="#settings">Download source and Update source in Settings</a></h2>
+    <p>Two rows in the app's Settings decide where an update comes from. Neither needs changing on a network that reaches usemagpie.ai.</p>
+    <div class="table-wrap"><table class="loose">
+      <tr><th>Setting</th><th>Choice</th><th>What the update is downloaded from</th></tr>
+      <tr><td><span class="ui">About › Download source</span></td><td><code>usemagpie.ai</code> (the default)</td><td>usemagpie.ai, and github.com when that fails.</td></tr>
+      <tr><td></td><td><span class="ui">Use a mirror…</span></td><td>usemagpie.ai, and the mirror when that fails, in place of github.com. <span class="ui">Remove mirror</span> goes back.</td></tr>
+      <tr><td><span class="ui">Network and sharing › Update source</span></td><td><span class="ui">Automatic</span> (the default)</td><td>usemagpie.ai's release list and files, and GitHub's when the site can't be reached.</td></tr>
+      <tr><td></td><td><span class="ui">usemagpie.ai only</span></td><td>usemagpie.ai alone, never GitHub, so a mirror is never used.</td></tr>
+      <tr><td></td><td><span class="ui">GitHub only</span></td><td>github.com alone (through the mirror when one is set), never usemagpie.ai.</td></tr>
+    </table></div>
+    <h3>What a mirror's address is</h3>
+    <p>A mirror here is a GitHub download proxy: a site that fetches any github.com link put after its own address, as in <code>https://mirror.example/https://github.com/yetone/magpie-releases/releases/download/…</code>. Type only the part before <code>https://github.com</code>, a full <code>https://</code> address such as <code>https://mirror.example/</code>. Public GitHub download proxies work this way; <code>gh-proxy.com</code>, the one <code>MAGPIE_MIRRORS</code> falls back to, is one of them. magpie names no mirror of its own and vouches for none: whichever you use, the file is checked against usemagpie.ai's checksum and the release's signature, and one that doesn't match is not installed.</p>
+    <h3>When to use one</h3>
+    <ul><li>An update stalls or fails with a timeout or <code>EOF</code>, and both usemagpie.ai and github.com are slow or blocked where you are (often in mainland China): set a mirror.</li><li>usemagpie.ai is slow and GitHub is fast: pick <span class="ui">GitHub only</span>, no mirror needed.</li><li>You have a proxy: put it in <span class="ui">Network and sharing › App updates</span> instead; a mirror is for when you have none.</li><li>A download that failed through the mirror says so, and offers to download from GitHub instead, which removes the mirror.</li></ul>
     <h2 id="fallback"><a class="anchor" href="#fallback">MAGPIE_MIRRORS: a mirror after a failure</a></h2>
     <p>Another way is off by default. With <code>MAGPIE_MIRRORS=on</code>, the official source is tried first, and a mirror only after a network error, HTTP 429, HTTP 5xx or GitHub's rate-limit 403. The defaults are <code>registry.npmmirror.com</code> for npm and <code>gh-proxy.com</code> for GitHub; <code>MAGPIE_NPM_REGISTRY</code> and <code>MAGPIE_GITHUB_MIRROR</code> replace them:</p>
     <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="mi-env">Copy</button><pre id="mi-env">MAGPIE_MIRRORS=on \

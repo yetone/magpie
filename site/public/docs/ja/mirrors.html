@@ -167,10 +167,11 @@
 
 <main class="wrap doc">
   <aside class="toc">
-    <p>Mirrors</p>
+    <p>中国のミラー</p>
     <a href="#overview">概要</a>
     <a href="#plugins">プラグインページの中国のミラー</a>
     <a href="#update">インストールとアップデートをミラーやプロキシ経由で</a>
+    <a href="#settings">ダウンロード元とアップデート元</a>
     <a href="#fallback">MAGPIE_MIRRORS：失敗したらミラー</a>
     <a href="#safe">ミラーは安全か</a>
   </aside>
@@ -193,6 +194,20 @@ magpie update --mirror https://mirror.example/
 magpie update mirror https://mirror.example/   # every update, the app's too
 magpie update mirror off</pre></div>
     <p>アプリでは、設定の <span class="ui">ダウンロード元</span> の行で <span class="ui">ミラーを使う…</span> から <span class="ui">ミラーのアドレス</span> を入れ、<span class="ui">ミラーをやめる</span> で戻します。指定しなければミラーは使いません。GitHub には届き usemagpie.ai には届かないネットワークでは設定は不要で、アップデートは GitHub から取り、署名を確かめます。</p>
+    <h2 id="settings"><a class="anchor" href="#settings">設定のダウンロード元とアップデート元</a></h2>
+    <p>アプリの設定の 2 つの行で、アップデートの取得先が決まります。usemagpie.ai に届くネットワークなら、どちらも変える必要はありません。</p>
+    <div class="table-wrap"><table class="loose">
+      <tr><th>設定</th><th>選択</th><th>アップデートの取得先</th></tr>
+      <tr><td><span class="ui">情報 › ダウンロード元</span></td><td><code>usemagpie.ai</code>（既定）</td><td>usemagpie.ai から。失敗したら github.com から。</td></tr>
+      <tr><td></td><td><span class="ui">ミラーを使う…</span></td><td>usemagpie.ai から。失敗したら github.com の代わりにミラーから。<span class="ui">ミラーをやめる</span> で戻します。</td></tr>
+      <tr><td><span class="ui">ネットワークと共有 › アップデート元</span></td><td><span class="ui">自動</span>（既定）</td><td>usemagpie.ai のリリース一覧とファイル。サイトに届かないときは GitHub のもの。</td></tr>
+      <tr><td></td><td><span class="ui">usemagpie.ai のみ</span></td><td>usemagpie.ai だけ。GitHub には行かないので、ミラーも使いません。</td></tr>
+      <tr><td></td><td><span class="ui">GitHub のみ</span></td><td>github.com だけ（ミラーがあればミラー経由）。usemagpie.ai には行きません。</td></tr>
+    </table></div>
+    <h3>ミラーのアドレスとは</h3>
+    <p>ここでのミラーは GitHub ダウンロードプロキシです。自分のアドレスの後ろに github.com のリンクをそのまま付けると、そのファイルを取ってきます（例：<code>https://mirror.example/https://github.com/yetone/magpie-releases/releases/download/…</code>）。入力するのは <code>https://github.com</code> より前の部分、<code>https://mirror.example/</code> のような完全な <code>https://</code> アドレスです。公開の GitHub ダウンロードプロキシはこの形で、<code>MAGPIE_MIRRORS</code> が使う <code>gh-proxy.com</code> もその一つです。magpie は独自のミラーを持たず、どれも保証しません。どのミラーでも、ファイルは usemagpie.ai のチェックサムとリリースの署名で確かめられ、一致しなければインストールされません。</p>
+    <h3>ミラーを使うとき</h3>
+    <ul><li>アップデートが止まる、タイムアウトや <code>EOF</code> で失敗する、そして usemagpie.ai も github.com も遅いか届かない（中国本土でよくあります）：ミラーを設定します。</li><li>usemagpie.ai が遅く GitHub が速い：<span class="ui">GitHub のみ</span> を選びます。ミラーは不要です。</li><li>プロキシがある：<span class="ui">ネットワークと共有 › アプリのアップデート</span> に入れます。ミラーはプロキシがないときのものです。</li><li>ミラー経由のダウンロードが失敗すると、ミラーのせいだと表示され、GitHub から取り直す（ミラーを外す）ボタンが出ます。</li></ul>
     <h2 id="fallback"><a class="anchor" href="#fallback">MAGPIE_MIRRORS：失敗したらミラー</a></h2>
     <p>もう 1 つの方法は既定でオフです。<code>MAGPIE_MIRRORS=on</code> にすると、まず公式のソースを試し、ネットワークエラー・HTTP 429・HTTP 5xx・GitHub のレート制限の 403 のときだけミラーを使います。既定のミラーは npm が <code>registry.npmmirror.com</code>、GitHub が <code>gh-proxy.com</code> で、<code>MAGPIE_NPM_REGISTRY</code> と <code>MAGPIE_GITHUB_MIRROR</code> で置き換えられます。</p>
     <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="mi-env">コピー</button><pre id="mi-env">MAGPIE_MIRRORS=on \

@@ -4396,6 +4396,9 @@ input.words.remote-key { width: 160px; }
 .prefs .row.rule-editing .val.rule-add { flex-wrap: wrap; row-gap: 6px; }
 .prefs .row.rule-editing .rule-tail { display: flex; align-items: center; gap: 6px; flex: 1 1 240px; min-width: 0; }
 .row.pref .sub.err { color: var(--red); white-space: normal; }
+/* Download source's way to the docs' Mirrors page, quiet in its line */
+.row.pref .sub .sub-more { padding: 0; color: var(--fg-2); text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 40%, transparent); text-underline-offset: 2px; cursor: pointer; transition: color .15s ease; }
+.row.pref .sub .sub-more:hover { color: var(--fg); }
 /* Warm up now's line holds a vendor's reason, which can be one long word */
 .row.warm-now .sub { white-space: normal; overflow-wrap: anywhere; }
 .warm-at { display: flex; align-items: center; gap: 8px; margin-left: auto; flex: none; }

@@ -167,10 +167,11 @@
 
 <main class="wrap doc">
   <aside class="toc">
-    <p>Mirrors</p>
+    <p>国内镜像</p>
     <a href="#overview">是什么</a>
     <a href="#plugins">插件页的国内镜像开关</a>
     <a href="#update">安装和更新走镜像或代理</a>
+    <a href="#settings">下载源和更新源</a>
     <a href="#fallback">MAGPIE_MIRRORS：失败后再用镜像</a>
     <a href="#safe">镜像安全吗</a>
   </aside>
@@ -193,6 +194,20 @@ magpie update --mirror https://mirror.example/
 magpie update mirror https://mirror.example/   # every update, the app's too
 magpie update mirror off</pre></div>
     <p>在桌面应用里，设置的 <span class="ui">下载源</span> 一栏点 <span class="ui">使用镜像…</span>，填 <span class="ui">镜像地址</span>；点 <span class="ui">不用镜像</span> 就改回去。不填就不用任何镜像。如果网络能连 GitHub、连不上 usemagpie.ai，不用设置，更新会自动改从 GitHub 下载并验证签名。</p>
+    <h2 id="settings"><a class="anchor" href="#settings">设置里的下载源和更新源</a></h2>
+    <p>应用设置里有两项决定更新从哪里下载。能正常访问 usemagpie.ai 的网络，两项都不用改。</p>
+    <div class="table-wrap"><table class="loose">
+      <tr><th>设置项</th><th>选项</th><th>更新从哪里下载</th></tr>
+      <tr><td><span class="ui">关于 › 下载源</span></td><td><code>usemagpie.ai</code>（默认）</td><td>从 usemagpie.ai 下载，失败时改从 github.com 下载。</td></tr>
+      <tr><td></td><td><span class="ui">使用镜像…</span></td><td>从 usemagpie.ai 下载，失败时经这个镜像下载，代替 github.com。点 <span class="ui">不用镜像</span> 改回去。</td></tr>
+      <tr><td><span class="ui">网络与共享 › 更新源</span></td><td><span class="ui">自动</span>（默认）</td><td>用 usemagpie.ai 的版本列表和文件，网站连不上时改用 GitHub 的。</td></tr>
+      <tr><td></td><td><span class="ui">仅 usemagpie.ai</span></td><td>只用 usemagpie.ai，不去 GitHub，所以也不会用到镜像。</td></tr>
+      <tr><td></td><td><span class="ui">仅 GitHub</span></td><td>只用 github.com（设了镜像就经镜像），不去 usemagpie.ai。</td></tr>
+    </table></div>
+    <h3>镜像地址填什么</h3>
+    <p>这里的镜像指 GitHub 下载加速代理：把完整的 github.com 链接接在它自己的地址后面就能下载，例如 <code>https://mirror.example/https://github.com/yetone/magpie-releases/releases/download/…</code>。只填 <code>https://github.com</code> 前面的部分，即完整的 <code>https://</code> 地址，如 <code>https://mirror.example/</code>。公开的 GitHub 下载加速代理都是这种用法，<code>MAGPIE_MIRRORS</code> 默认用的 <code>gh-proxy.com</code> 就是其中之一。magpie 不内置、也不担保任何镜像：无论用哪个，文件都要对上 usemagpie.ai 的校验和和发布签名，对不上就不会安装。</p>
+    <h3>什么时候用镜像</h3>
+    <ul><li>更新卡住，或报超时、<code>EOF</code>，而且 usemagpie.ai 和 github.com 在你那里都慢或连不上（国内常见）：设一个镜像。</li><li>usemagpie.ai 慢、GitHub 快：选 <span class="ui">仅 GitHub</span>，不用镜像。</li><li>你有代理：填到 <span class="ui">网络与共享 › 应用更新</span>，不必用镜像；镜像是给没有代理的情况用的。</li><li>经镜像下载失败时，magpie 会说明是镜像的问题，并提供“改用官方下载”，点了就去掉镜像重新下载。</li></ul>
     <h2 id="fallback"><a class="anchor" href="#fallback">MAGPIE_MIRRORS：失败后再用镜像</a></h2>
     <p>另一种方式默认关闭。设置 <code>MAGPIE_MIRRORS=on</code> 后，magpie 先请求官方源，只有遇到网络错误、HTTP 429、HTTP 5xx 或 GitHub 的限流 403 才改用镜像。默认镜像是 npm 的 <code>registry.npmmirror.com</code> 和 GitHub 的 <code>gh-proxy.com</code>，可以用 <code>MAGPIE_NPM_REGISTRY</code> 和 <code>MAGPIE_GITHUB_MIRROR</code> 换成你自己的：</p>
     <div class="code"><span class="lang">终端</span><button class="copy" data-copy="mi-env">复制</button><pre id="mi-env">MAGPIE_MIRRORS=on \
