@@ -33,6 +33,9 @@ type Bundle struct {
 	// carried, which knew nothing of this computer's: Put keeps them. Collect
 	// always sets it, empty too, so taking the last one out is carried.
 	Subagents *[]*Subagent `json:"subagents,omitempty"`
+	// Commands are nil in a bundle from a magpie before slash commands,
+	// as Subagents are: Put keeps this computer's.
+	Commands *[]*Command `json:"commands,omitempty"`
 	// Hooks are nil in a bundle from a magpie before they were carried,
 	// as Subagents are: Put keeps this computer's. Applied.Hooks, the
 	// entries magpie wrote into each agent here, stays out.
@@ -146,6 +149,13 @@ func Collect() (*Bundle, error) {
 		subs = append(subs, &c)
 	}
 	b.Subagents = &subs
+	cmds := []*Command{}
+	for _, c := range sorted(l.Commands, func(c *Command) string { return c.Name }) {
+		x := *c
+		x.Agents = orNone(slices.Sorted(slices.Values(c.Agents)))
+		cmds = append(cmds, &x)
+	}
+	b.Commands = &cmds
 	hooks := []*Hook{}
 	for _, h := range sorted(l.Hooks, func(h *Hook) string { return h.Name }) {
 		c := *h
@@ -309,6 +319,22 @@ func (b *Bundle) check() error {
 				return fmt.Errorf("the subagent %s twice", s.Name)
 			}
 			seen[s.Name] = true
+		}
+	}
+	if b.Commands != nil {
+		seen := map[string]bool{}
+		for _, c := range *b.Commands {
+			if c == nil {
+				return fmt.Errorf("an empty slash command")
+			}
+			// the agents are left as they come, as a subagent's are
+			if !commandNameRe.MatchString(c.Name) {
+				return fmt.Errorf("the slash command name %q", c.Name)
+			}
+			if seen[c.Name] {
+				return fmt.Errorf("the slash command %s twice", c.Name)
+			}
+			seen[c.Name] = true
 		}
 	}
 	if b.Env != nil {
@@ -636,6 +662,16 @@ func Put(b *Bundle) (*Result, error) {
 				subs = append(subs, &c)
 			}
 			l.Subagents = subs
+		}
+		// slash commands the same way: Applied.Commands decides
+		if b.Commands != nil {
+			cmds := []*Command{}
+			for _, c := range *b.Commands {
+				x := *c
+				x.Agents = slices.Clone(orNone(c.Agents))
+				cmds = append(cmds, &x)
+			}
+			l.Commands = cmds
 		}
 		// the same for hooks: Applied.Hooks decides, entry by entry,
 		// what magpie takes out of each agent's file here

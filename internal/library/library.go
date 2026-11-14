@@ -35,6 +35,9 @@ type Library struct {
 	// Subagents are agents of their own the agents ticked for each can
 	// hand a task to (subagents.go, #2283)
 	Subagents []*Subagent `json:"subagents,omitempty"`
+	// Commands are slash commands the agents ticked for each are given
+	// (commands.go)
+	Commands []*Command `json:"commands,omitempty"`
 	// Plugins are the Claude Code plugins kept as one item each: its
 	// skills, servers, hooks and subagents are the items above marked
 	// with its name (plugin.go)
@@ -160,6 +163,9 @@ type Applied struct {
 	// Subagents are the files magpie wrote for the subagents, each with
 	// the hash of what it wrote: one changed since is the user's
 	Subagents []SubagentFile `json:"subagents,omitempty"`
+	// Commands are the files magpie wrote for the slash commands, kept as
+	// Subagents are
+	Commands []SubagentFile `json:"commands,omitempty"`
 	// Startup is, for each server, the startup timeout magpie wrote in its
 	// entry (Codex's startup_timeout_sec): one there other than this is
 	// the user's
@@ -183,7 +189,7 @@ type Applied struct {
 func (a *Applied) empty() bool {
 	return !a.Instructions && a.InstrHash == "" && len(a.MCP) == 0 && len(a.Skills) == 0 &&
 		len(a.ToolsOff) == 0 && len(a.ToolRules) == 0 && len(a.Hooks) == 0 && len(a.Env) == 0 &&
-		len(a.Subagents) == 0 && len(a.Startup) == 0 && len(a.Picked) == 0 && !a.Router && len(a.RouterRules) == 0
+		len(a.Subagents) == 0 && len(a.Commands) == 0 && len(a.Startup) == 0 && len(a.Picked) == 0 && !a.Router && len(a.RouterRules) == 0
 }
 
 var mu lock // one change at a time, from the page or the CLI's process
@@ -246,6 +252,10 @@ func (l *Library) save() error {
 	sort.Slice(l.Subagents, func(i, j int) bool { return l.Subagents[i].Name < l.Subagents[j].Name })
 	for _, s := range l.Subagents {
 		s.Agents = orNone(s.Agents)
+	}
+	sort.Slice(l.Commands, func(i, j int) bool { return l.Commands[i].Name < l.Commands[j].Name })
+	for _, c := range l.Commands {
+		c.Agents = orNone(c.Agents)
 	}
 	// an entry with nothing in it is no record of what magpie wrote, and
 	// is not kept: a sync that only looked at an agent used to leave one

@@ -5,7 +5,7 @@
 // The sections a page's list is cut into, by tab id: a section none of whose
 // tabs shows has no name (app.js navSubs), as does a list of one section.
 window.NAV_SUB_GROUPS = {
-  library: { instructions: "Every agent", memory: "Every agent", mcp: "Every agent", skills: "Every agent", hooks: "Every agent", env: "Every agent", subagents: "Every agent", plugins: "One agent", pi: "One agent", rtk: "magpie", bili: "magpie" },
+  library: { instructions: "Every agent", memory: "Every agent", mcp: "Every agent", skills: "Every agent", hooks: "Every agent", env: "Every agent", subagents: "Every agent", commands: "Every agent", plugins: "One agent", pi: "One agent", rtk: "magpie", bili: "magpie" },
 };
 // the tabs [tab, its place in the strip, its section's name where one starts],
 // in sections in order, each in the strip's order
@@ -27,6 +27,8 @@ window.NAV_SUB_IC = {
     hooks: "M10.5 2.5v6.5a3 3 0 0 1-6 0V7.5 M3 9l1.5-1.5L6 9",
     env: "M5.5 3.5h-1.5v9h1.5 M10.5 3.5h1.5v9h-1.5 M6.5 8h3",
     subagents: "M6 3a2.2 2.2 0 1 0 0 4.4A2.2 2.2 0 0 0 6 3z M2 13c.5-2.2 2-3.4 4-3.4s3.5 1.2 4 3.4 M11.5 7.5a1.5 1.5 0 1 0 0 .01 M10.2 12.5c.3-1.3 1.1-2 2.3-2s1.6.5 1.9 1.4",
+    // a slash in a key, as a command is typed
+    commands: "M4.5 3h7A1.5 1.5 0 0 1 13 4.5v7a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 3 11.5v-7A1.5 1.5 0 0 1 4.5 3z M9.6 5.4l-3.2 5.2",
     rtk: "M2.5 3.5h11v9h-11z M5 6.5l1.5 1.5L5 9.5 M8.5 9.5h2.5",
     bili: "M8 2v4 M6 4.2 8 6l2-1.8 M8 14v-4 M6 11.8 8 10l2 1.8 M3 8h10",
     pi: "M8 2.5l5 2.5v6L8 13.5 3 11V5z M3 5l5 2.5L13 5 M8 7.5v6",

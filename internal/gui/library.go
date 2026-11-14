@@ -702,6 +702,7 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			Env         library.EnvVar // a variable saved
 			// a subagent saved (#2283)
 			Subagent library.Subagent
+			Command  library.Command
 			Agent    string            // the agent whose own skill is in the library's way
 			App      string            // the app the MCP hub is added to (servers/hub-open)
 			Note     string            // what the MCP router says of itself (servers/hub-note), or a skill's note (skills/note)
@@ -810,6 +811,12 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			res, err = library.SubagentAgentsSet(in.Name, in.Agents)
 		case "subagents/remove":
 			res, err = library.RemoveSubagents([]string{in.Name})
+		case "commands/save":
+			res, err = library.SaveCommand(in.Old, in.Command)
+		case "commands/agents":
+			res, err = library.CommandAgentsSet(in.Name, in.Agents)
+		case "commands/remove":
+			res, err = library.RemoveCommands([]string{in.Name})
 		case "subagents/import":
 			res, err = library.ImportSubagents(in.Source, in.Paths, in.Agents)
 		case "skills/install":

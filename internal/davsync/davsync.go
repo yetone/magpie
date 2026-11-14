@@ -956,6 +956,11 @@ func hashes(b backup.Bundle) map[string]string {
 		c.Subagents = nil
 		lib = &c
 	}
+	if lib != nil && lib.Commands != nil && len(*lib.Commands) == 0 { // as before them, without one
+		c := *lib
+		c.Commands = nil
+		lib = &c
+	}
 	if lib != nil && lib.Hooks != nil && len(*lib.Hooks) == 0 { // as before them, without one
 		c := *lib
 		c.Hooks = nil
@@ -1029,7 +1034,7 @@ func unset(b backup.Bundle, p string) bool {
 			}
 		}
 		return len(l.MCP) == 0 && len(l.Skills) == 0 &&
-			(l.Subagents == nil || len(*l.Subagents) == 0) && (l.Hooks == nil || len(*l.Hooks) == 0) &&
+			(l.Subagents == nil || len(*l.Subagents) == 0) && (l.Commands == nil || len(*l.Commands) == 0) && (l.Hooks == nil || len(*l.Hooks) == 0) &&
 			(l.Bili == nil || strings.TrimSpace(*l.Bili) == "")
 	}
 	return false

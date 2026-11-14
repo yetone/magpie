@@ -810,6 +810,13 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-subagentedit .lib-subagentdescin, .lib-subagentedit .lib-subagentprompt { width: 100%; box-sizing: border-box; resize: none; font: inherit; font-size: 12.5px; line-height: 1.45; }
 .lib-subagentedit .lib-subagentprompt { max-height: 40vh; overflow-y: auto; }
 .lib-subagentedit .hint:empty { display: none; }
+/* a slash command's row: its /name in mono, its description under it;
+   its editor's prompt a box that grows */
+.lib-command > .who { flex-basis: 240px; }
+.lib-command .lib-commanddesc { font-size: 12px; line-height: 1.45; color: var(--fg); white-space: normal; overflow-wrap: anywhere; margin-top: 1px; }
+.lib-commandedit .lib-commanddescin, .lib-commandedit .lib-commandprompt { width: 100%; box-sizing: border-box; resize: none; font: inherit; font-size: 12.5px; line-height: 1.45; }
+.lib-commandedit .lib-commandprompt { max-height: 40vh; overflow-y: auto; }
+.lib-commandedit .hint:empty { display: none; }
 
 /* a chip whose agent has the item whatever is ticked (it reads
    ~/.agents/skills itself, #595): lit, as it has it, with a lock on its

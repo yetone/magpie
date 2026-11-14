@@ -52,6 +52,8 @@ magpie.plugin("library", (ctx) => {
     hook: "M10.5 2.5v6.5a3 3 0 0 1-6 0V7.5 M3 9l1.5-1.5L6 9",
     // a person with a second, smaller one it hands work to
     subagent: "M6 3a2.2 2.2 0 1 0 0 4.4A2.2 2.2 0 0 0 6 3z M2 13c.5-2.2 2-3.4 4-3.4s3.5 1.2 4 3.4 M11.5 7.5a1.5 1.5 0 1 0 0 .01 M10.2 12.5c.3-1.3 1.1-2 2.3-2s1.6.5 1.9 1.4",
+    // a slash in a key, as a command is typed
+    command: "M4.5 3h7A1.5 1.5 0 0 1 13 4.5v7a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 3 11.5v-7A1.5 1.5 0 0 1 4.5 3z M9.6 5.4l-3.2 5.2",
     // a clock with an arrow going back round it, as macOS draws backups
     backup: "M3.2 8a4.8 4.8 0 1 0 1.4-3.4 M2.8 2.6v2.4h2.4 M8 5.3V8l1.9 1.2",
     power: "M8 2.5v5 M4.7 4.6a4.8 4.8 0 1 0 6.6 0",
@@ -528,7 +530,7 @@ magpie.plugin("library", (ctx) => {
   // What All did, said of the item: on for how many of the agents it went
   // to, and which of them couldn't be given it, and why.
   function reportAll(v, me) {
-    const what = ({ servers: "mcp:", hooks: "hook:", env: "env:", subagents: "subagent:" }[me.list] || "skill:") + me.name;
+    const what = ({ servers: "mcp:", hooks: "hook:", env: "env:", subagents: "subagent:", commands: "command:" }[me.list] || "skill:") + me.name;
     const shown = [...me.box.children].filter((x) => isChip(x) && !cannot(x)).flatMap((x) => idsOf(x).filter((id) => !x.dataset.fixed?.split("\t").includes(id)));
     const n = shown.filter((id) => me.want.includes(id)).length;
     const bad = (v.result?.problems || []).filter((p) => p.what === what && shown.includes(p.agent));
@@ -805,7 +807,7 @@ magpie.plugin("library", (ctx) => {
       ul.append(li);
     }
     if (ul.childElementCount) card.append(ul);
-    const tabNames = { instructions: t("Instructions"), mcp: t("MCP servers"), skills: t("Skills"), hooks: t("Hooks"), env: t("Environment variables"), subagents: t("Subagents"), plugins: t("Claude plugins") };
+    const tabNames = { instructions: t("Instructions"), mcp: t("MCP servers"), skills: t("Skills"), hooks: t("Hooks"), env: t("Environment variables"), subagents: t("Subagents"), commands: t("Slash commands"), plugins: t("Claude plugins") };
     const others = Object.keys(away).filter((k) => k in tabNames);
     if (others.length) {
       const more = el("div", "lib-problems-away");
@@ -841,7 +843,7 @@ magpie.plugin("library", (ctx) => {
   }
   // the tab a problem is about; "" is one shown on every tab
   function problemTab(what) {
-    return { instructions: "instructions", mcp: "mcp", skill: "skills", skills: "skills", project: "skills", hook: "hooks", hooks: "hooks", env: "env", subagent: "subagents", plugin: "plugins" }[what.split(":")[0]] || "";
+    return { instructions: "instructions", mcp: "mcp", skill: "skills", skills: "skills", project: "skills", hook: "hooks", hooks: "hooks", env: "env", subagent: "subagents", command: "commands", plugin: "plugins" }[what.split(":")[0]] || "";
   }
   function problemWhat(what) {
     const [kind, ...rest] = what.split(":");
@@ -851,6 +853,7 @@ magpie.plugin("library", (ctx) => {
     if (kind === "skill") return t("Skill {name}", { name });
     if (kind === "hook") return t("Hook {name}", { name });
     if (kind === "subagent") return t("Subagent {name}", { name });
+    if (kind === "command") return t("Slash command {name}", { name: "/" + name });
     if (kind === "project") return name ? t("Skill {name}", { name }) : t("The project");
     return what;
   }
@@ -955,6 +958,7 @@ magpie.plugin("library", (ctx) => {
       ["hooks", t("Hooks") + n("hooks")],
       ["env", t("Environment variables") + n("env")],
       ["subagents", t("Subagents") + n("subagents")],
+      ["commands", t("Slash commands") + n("commands")],
       ["plugins", t("Claude plugins") + n("plugins")],
       ["rtk", "RTK"],
       ["bili", "billion-context"],
@@ -1018,7 +1022,7 @@ magpie.plugin("library", (ctx) => {
     if (agentless()) tab = "mcp";
     // Pi's tab only while a Pi is here; the pick is kept for when one is
     else if (tab === "pi" && !hasPi()) tab = "instructions";
-    const head = libHead({ mcp: lib.servers.length, skills: lib.skills.length, hooks: (lib.hooks || []).length, env: (lib.env || []).length, subagents: (lib.subagents || []).length, plugins: (lib.plugins || []).length });
+    const head = libHead({ mcp: lib.servers.length, skills: lib.skills.length, hooks: (lib.hooks || []).length, env: (lib.env || []).length, subagents: (lib.subagents || []).length, commands: (lib.commands || []).length, plugins: (lib.plugins || []).length });
     page.append(head);
     head.classList.toggle("stuck", top > 0);
     // what changed in a tab is drawn in place: only another tab (or the
@@ -1038,6 +1042,7 @@ magpie.plugin("library", (ctx) => {
     else if (tab === "hooks") renderHooks(body);
     else if (tab === "env") renderEnv(body);
     else if (tab === "subagents") renderSubagents(body);
+    else if (tab === "commands") renderCommands(body);
     else if (tab === "plugins") renderPlugins(body);
     else renderSkills(body);
     page.append(body);
@@ -1074,7 +1079,7 @@ magpie.plugin("library", (ctx) => {
     if (JSON.stringify(follow) !== JSON.stringify(was) && lib && page.isConnected) render();
   }
   function followNote() {
-    const part = tab === "memory" ? "memory" : ["instructions", "mcp", "skills", "hooks", "env", "subagents", "plugins"].includes(tab) ? "library" : "";
+    const part = tab === "memory" ? "memory" : ["instructions", "mcp", "skills", "hooks", "env", "subagents", "commands", "plugins"].includes(tab) ? "library" : "";
     if (!part || !follow?.[part]) return null;
     const p = el("p", "lib-intro lib-follow", t("This computer follows the server: what you change here is replaced by the next sync.") + " ");
     const go = button(t("Sync settings"), "link", (e) => openSettingsAt(e, "sync", "#syncList .sync-follows"));
@@ -5069,6 +5074,132 @@ magpie.plugin("library", (ctx) => {
     modal = { save, dirty: () => JSON.stringify(d) !== original };
     openLib(ed);
     if (!s) requestAnimationFrame(() => name.focus());
+  }
+
+  // ---------- slash commands ----------
+
+  // A slash command (miantiao_me on X) is a prompt typed as /name in an
+  // agent: the words after the name go where it says $ARGUMENTS, and the
+  // first, second… of them where it says $1, $2…. It is kept once and
+  // written into each agent picked, as that agent's own command file in
+  // its own folder and shape (commands.go). Codex is listed, greyed: it
+  // reads custom prompts no more.
+  const commandAgentOf = (id) => (lib.commandAgents || []).find((x) => x.id === id);
+  const commandAgents = () => shownAgents().filter((a) => commandAgentOf(a.id));
+  // why a can't be given a slash command, or ""
+  const commandBlocked = (a) => {
+    const ca = commandAgentOf(a.id);
+    if (ca && !ca.no) return "";
+    if (ca?.wsl) return t("magpie gives slash commands only to agents on this computer, not yet to {agent} in WSL", { agent: a.name });
+    if (a.id === "codex") return t("Codex reads custom prompts no more: its skills took their place");
+    return t("{agent} reads no slash commands magpie can write", { agent: a.name });
+  };
+  // a prompt that takes words by their place ($1, $2…; $0 is none)
+  const usesArgs = (p) => /\$(?!0(?![0-9]))[0-9]+/.test(p || "");
+  // the agents of ids that take only $ARGUMENTS
+  const noArgs = (all, ids) => all.filter((a) => ids.includes(a.id) && !commandBlocked(a) && !commandAgentOf(a.id).args);
+
+  function renderCommands(body) {
+    body.append(intro(t("A slash command is a prompt you type as /name in an agent. Add it once and magpie writes it into each agent you pick, as that agent's own command.")));
+    const all = commandAgents();
+    const cmds = lib.commands || [];
+    if (!cmds.length) {
+      body.append(empty(t("No slash commands in the library yet"), t("Add one, and pick the agents that get it."), button(t("＋ Add a slash command"), "action", () => editCommand(null))));
+    } else {
+      const list = el("div", "list lib-list");
+      list.append(...[...cmds].sort((a, b) => a.name.localeCompare(b.name)).map((c) => commandRow(c, all)));
+      body.append(list);
+      const after = el("div", "after-list");
+      after.append(button(t("＋ Add slash command"), "", () => editCommand(null)));
+      body.append(after);
+    }
+    const noPlace = [...new Set(cmds.filter((c) => usesArgs(c.prompt)).flatMap((c) => noArgs(all, c.agents || [])))];
+    if (noPlace.length) body.append(el("p", "lib-aside lib-commands-noargs", t("{agents} take only $ARGUMENTS, all the words at once: a command that uses $1, $2… isn't written for them.", { agents: noPlace.map((a) => a.name).join(", ") })));
+    const skip = all.filter((a) => commandAgentOf(a.id).no);
+    if (skip.length) body.append(el("p", "lib-aside lib-commands-no", t("magpie can't give slash commands to {agents}: their chips are greyed, and say why.", { agents: skip.map((a) => a.name).join(", ") })));
+  }
+
+  function commandRow(c, all) {
+    const row = el("div", "row lib-row click lib-command");
+    const who = el("div", "who");
+    who.append(el("div", "name mono", "/" + c.name));
+    if (c.description) who.append(el("div", "lib-commanddesc", c.description));
+    row.append(glyph(GLYPH.command), who,
+      agentChips(all, c.agents, chipsChange("commands/agents", c.name, "commands", (x) => commandRow(x, all)), { problems: c.problems, blocked: commandBlocked, all: true }));
+    row.onclick = () => editCommand(c);
+    row.title = t("Edit {name}", { name: "/" + c.name });
+    return row;
+  }
+
+  function editCommand(c) {
+    const all = commandAgents();
+    const d = c ? { name: c.name, description: c.description || "", prompt: c.prompt, agents: [...(c.agents || [])] }
+      : { name: "", description: "", prompt: "", agents: all.filter((a) => !commandBlocked(a)).map((a) => a.id) };
+    const ed = el("div", "editor lib-editor lib-commandedit");
+    const head = el("div", "ehead");
+    head.append(glyph(GLYPH.command), el("b", "", c ? "/" + c.name : t("New slash command")));
+    ed.append(head);
+    const err = el("div", "editor-error");
+    const name = field2(d.name, t("e.g. review"), (v) => { d.name = v.trim(); });
+    name.classList.add("mono");
+    ed.append(...field(t("Name"), name, t("Typed as /name: lowercase letters, digits, - and _")));
+    const box = (cls, value, placeholder, rows, max, onEnter) => {
+      const ta = el("textarea", "lib-text small " + cls);
+      ta.value = value;
+      ta.placeholder = placeholder;
+      ta.spellcheck = false;
+      ta.rows = rows;
+      ta.maxLength = max;
+      ta.onkeydown = (e) => { e.stopPropagation(); if (e.isComposing || e.keyCode === 229) return; if (e.key === "Escape") closeLibModal(); else if (onEnter && e.key === "Enter" && modal?.save) { e.preventDefault(); modal.save(); } };
+      autosize(ta, rows * 20);
+      return ta;
+    };
+    // one line, as the agents list it (library.SaveCommand joins its
+    // lines), so Enter saves; the prompt's Enter is a new line
+    const desc = box("lib-commanddescin", d.description, t("e.g. Review a diff for bugs"), 1, 1000, true);
+    desc.oninput = () => { d.description = desc.value; };
+    ed.append(...field(t("Description"), desc));
+    const prompt = box("lib-commandprompt", d.prompt, t("Review $ARGUMENTS for bugs. Report only what is wrong."), 6, 100000, false);
+    const argsHint = el("div", "hint lib-commandhint-args");
+    prompt.oninput = () => { d.prompt = prompt.value; drawHint(); };
+    const [pl, pw] = field(t("Prompt"), prompt, t("$ARGUMENTS is what you type after the name; $1, $2… its first, second… word"));
+    pw.append(argsHint);
+    ed.append(pl, pw);
+    const agentsBox = el("div");
+    ed.append(...field(t("Agents"), agentsBox));
+    ed.append(err);
+    function drawHint() {
+      const no = usesArgs(d.prompt) ? noArgs(all, d.agents) : [];
+      argsHint.textContent = no.length ? t("Not written for {agents} while it uses $1, $2…: they take only $ARGUMENTS", { agents: no.map((a) => a.name).join(", ") }) : "";
+    }
+    function drawAgents() {
+      agentsBox.replaceChildren(agentChips(all, d.agents, (next) => { d.agents = next; drawAgents(); }, { names: true, blocked: commandBlocked, all: true }));
+      drawHint();
+    }
+    drawAgents();
+
+    const bar = el("div", "bar");
+    if (c) bar.append(button(t("Remove from the library"), "danger", async () => {
+      if (!await confirmRemoval("/" + c.name, "It will be removed from the library and the agents it was given to.")) return;
+      if (await change("commands/remove", { name: c.name }, t("{name} is out of the library and the agents it was given to", { name: "/" + c.name }))) closeLibModal(true);
+    }));
+    bar.append(el("span", "grow"), button(t("Cancel"), "", closeLibModal));
+    const save = async () => {
+      err.textContent = "";
+      try {
+        const command = { name: d.name.replace(/^\//, ""), description: d.description.trim(), prompt: d.prompt, agents: d.agents.filter((id) => !commandBlocked(agentOf(id) || { id })) };
+        take(await api("library/commands/save", { old: c ? c.name : "", command }));
+        report(lib.result, c ? t("{name} saved", { name: "/" + command.name }) : "");
+        closeLibModal(true);
+        render();
+      } catch (e) { err.textContent = e.message; }
+    };
+    bar.append(button(c ? t("Save") : t("Add"), "primary", save));
+    ed.append(bar);
+    const original = JSON.stringify(d);
+    modal = { save, dirty: () => JSON.stringify(d) !== original };
+    openLib(ed);
+    if (!c) requestAnimationFrame(() => name.focus());
   }
 
   // ---------- Claude plugins ----------
