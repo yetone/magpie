@@ -1406,6 +1406,15 @@ each one.
     dc85a7ca5 then added +12 for AIGoCode's logo in pngIcons, and
     27c998aba +491 for costs in each provider's currency, nothing moved
     out either: three raises by 13:00, +570 bytes.
+  - A library vendored for an allocation cut: 0caa09b3d copied
+    yaml.v3 v3.0.1 into third_party (11,400 lines, go.mod replace) for
+    a 7-line emitter change. The review diffed it against the gofmt'd
+    upstream: only those 7 lines differ. Footprint moved 59 -> 58 MB,
+    within run-to-run spread; the gain is ~24 MB of short-lived
+    allocations on a catalog change. The cost stays: an upstream fix
+    reaches magpie only when someone copies it over by hand
+    (MAGPIE.md says how), and the full suite wasn't run. A vendored
+    fork names its measured gain against that cost, and runs the suite.
   - Done right: f1f34d624 met the budget with no raise, moving keysTag
     into keyrates.js, which is loaded exactly when a model can have a
     key tag.
