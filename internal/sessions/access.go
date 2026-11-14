@@ -244,6 +244,7 @@ func Found() []string {
 	add("cursor", filepath.Join(CursorDir(), "chats"), filepath.Join(cursorDataDir(), "projects"), cursorEditorDB())
 	add("hermes", HermesDirs()...)
 	add("alma", almaDB())
+	add("openmausbot", ombDB())
 	add("minimax-code", minimaxSessions())
 	kimi := []string{kimiSessions()}
 	for _, sh := range kimiWorkShares() {

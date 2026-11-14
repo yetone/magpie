@@ -33,7 +33,7 @@ import (
 // Discord). agy's conversation_summaries.db and jetbox_summaries_proto.pb,
 // which it keeps open, keep the row, and agy lists no conversation whose
 // files are gone, as a restore brings it back to its /resume list.
-// Hermes's and Alma's are rows in a database the agent keeps open and
+// Hermes's, Alma's and OpenMausBot's are rows in a database the agent keeps open and
 // writes, so they are only listed, and so are OpenCode's and ZCode's, and
 // Cline's, whose sessions.db lists a session whose files are gone. Grok
 // Build's are folders, but it copies each session's text into
