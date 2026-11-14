@@ -152,7 +152,9 @@ func TestAntigravityCodexHintIsTheRoutingPages(t *testing.T) {
 	if !strings.Contains(string(b), quote(antigravityCodexHint)) {
 		t.Fatal("plugins/routing/client.js doesn't know the note the gateway adds to Antigravity's refusal of Codex's prompt")
 	}
-	if !strings.Contains(string(b), quote(antigravityHermesHint)) {
-		t.Fatal("plugins/routing/client.js doesn't know the note the gateway adds to Antigravity's refusal of Hermes' old persona")
+	for _, hint := range []string{antigravityHermesHint, antigravityOpenCodeHint, antigravityCodexCLIHint, antigravityPiHint, antigravityRFCHint} {
+		if !strings.Contains(string(b), quote(hint)) {
+			t.Fatalf("plugins/routing/client.js doesn't know the note %.60q", hint)
+		}
 	}
 }

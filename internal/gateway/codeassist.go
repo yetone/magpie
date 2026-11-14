@@ -86,9 +86,19 @@ func antigravityTurnsAway(system string) bool {
 //   - Hermes Agent's earlier default persona (its SOUL.md until Hermes
 //     replaced it: "You are Hermes Agent, an intelligent AI assistant
 //     created by Nous Research. …"), which a SOUL.md the user edited keeps
-//     (zgoodz on X, 10-27). The line without "Research", "AI" or "Hermes"
-//     goes through, and so does today's "You are Hermes Agent, built by
-//     Nous Research."
+//     (zgoodz on X, 10-27). Since 11-14 it is turned away with "built by"
+//     too, and as "You're Hermes Agent, …" with "created by", 3 of 3 each;
+//   - since the evening of 11-14 (Lmohn39 and ZhouYimingsjtu on X), 3 of 3
+//     or 5 of 5 each on a real account, on gemini-3-flash and
+//     claude-sonnet-4-6 alike: "You are Hermes Agent" (today's persona,
+//     "You are Hermes Agent, built by Nous Research.", and the earlier
+//     one), "You are OpenCode" (each of OpenCode 2.0.25's prompts), "You
+//     are a coding agent running in the Codex CLI" (Codex 0.165's prompt for
+//     a model it has none of its own for) and "a coding assistant running
+//     inside pi" (pi 1.5.0's default prompt). Codex's prompt for GPT-6,
+//     Claude Code's, Gemini CLI's, Qwen Code's, Cline's, Kilo's, goose's,
+//     Amp's, Droid's, Kimi CLI's, Aider's and Cursor's went through as
+//     written.
 //
 // Each goes reworded with the same meaning (agSaidAs). Until 11-14 they
 // went broken up by zero-width spaces, which Google let through; since then
@@ -104,8 +114,12 @@ var agTurnedAway = []string{
 	"built on anthropic's claude agent sdk",
 	"you are codex, an agent based on gpt-5",
 	"you are codex, a coding agent based on gpt-5",
-	"hermes agent, an intelligent ai assistant created by nous research",
+	"an intelligent ai assistant created by nous research",
 	agRFCLine,
+	"you are hermes agent",
+	"you are opencode",
+	"you are a coding agent running in the codex cli",
+	"a coding assistant running inside pi",
 }
 
 // agRFCLine is the line oh-my-pi (omp) starts its system prompt with, and
@@ -125,7 +139,12 @@ const agRFCLine = "rfc 2119 keywords: must, required, should, recommended, may, 
 //     Hermes' current persona says it;
 //   - omp's "keywords" as "key words", RFC 2119's own term (10 of 10 on
 //     11-14, eric_li8983 on X, while a broken-up copy was turned away 1 to
-//     3 times in 10).
+//     3 times in 10);
+//   - "You are Hermes Agent", "You are OpenCode" and Codex CLI's line as
+//     "You're …" (5 of 5 each; Hermes' earlier persona with "built by" as
+//     well, 5 of 5);
+//   - pi's "running inside pi" as "running within pi" (5 of 5 on both
+//     models).
 var agSaidAs = []func(string) string{
 	func(string) string { return "" },
 	func(m string) string { return agSDKSaidAs.ReplaceAllString(m, "${1}the${2}${3} by Anthropic") },
@@ -133,7 +152,14 @@ var agSaidAs = []func(string) string{
 	func(m string) string { return agBasedOn.ReplaceAllString(m, "built${1}on") },
 	func(m string) string { return agCreatedBy.ReplaceAllString(m, "built${1}by") },
 	func(m string) string { return agRFCSaidAs.ReplaceAllString(m, "$1 $2") },
+	agYoure,
+	agYoure,
+	agYoure,
+	func(m string) string { return agInside.ReplaceAllString(m, "within") },
 }
+
+// agYoure is m, which starts "You are", starting "You're" instead.
+func agYoure(m string) string { return agYouAre.ReplaceAllString(m, "${1}'re") }
 
 // each white space as agSpace has it, which Go's \s is not
 var (
@@ -141,6 +167,8 @@ var (
 	agBasedOn   = lazyre.New(`(?i)based(` + agSpace + `)on`)
 	agCreatedBy = lazyre.New(`(?i)created(` + agSpace + `)by`)
 	agRFCSaidAs = lazyre.New(`(?i)(key)(words)`)
+	agYouAre    = lazyre.New(`(?i)^(you)` + agSpace + `are`)
+	agInside    = lazyre.New(`(?i)inside`)
 )
 
 // agSpace is a run of white space as Google's check reads it: on a real
@@ -209,9 +237,9 @@ func antigravityTurnsCodexAway(system string) bool {
 }
 
 // antigravityTurnsHermesAway says whether system carries Hermes Agent's
-// earlier default persona that Antigravity turns away.
+// persona, today's or the earlier one, that Antigravity turns away.
 func antigravityTurnsHermesAway(system string) bool {
-	return agSays(system, "hermes agent, an intelligent ai assistant created by nous research")
+	return agSays(system, "you are hermes agent") || agSays(system, "an intelligent ai assistant created by nous research")
 }
 
 // antigravityTurnsRFCAway says whether system carries omp's RFC 2119 line.
@@ -390,9 +418,22 @@ const antigravityTurnedAwayHint = "Antigravity answers this 429 to the system pr
 // and a new one on the Antigravity model is sent magpie's own.
 const antigravityCodexHint = "Antigravity answers this 429 to Codex's own system prompt for GPT-5 models whatever quota is left, so it is not a quota and waiting won't help; a Codex chat begun on a GPT model keeps that prompt after a model switch or a fork, so start a new chat on this model"
 
-// antigravityHermesHint is the hint for Hermes Agent's earlier default
-// persona (routing/client.js AG_HERMES).
-const antigravityHermesHint = "Antigravity answers this 429 to Hermes Agent's earlier default persona (its SOUL.md) whatever quota is left, so it is not a quota and waiting won't help; Hermes' current default persona goes through, so put it in SOUL.md, or use another provider for these chats"
+// antigravityHermesHint is the hint for Hermes Agent's persona, today's or
+// the earlier one, word for word what the antigravity plugin says
+// (HERMES_HINT; routing/client.js AG_HERMES).
+const antigravityHermesHint = "Antigravity answers this 429 to Hermes Agent's default persona (\"You are Hermes Agent, …\" in its SOUL.md), the current one and the earlier one alike, whatever quota is left, so it is not a quota and waiting won't help; magpie sends it as \"You're Hermes Agent, …\", which goes through, so start SOUL.md another way, or use another provider for these chats"
+
+// antigravityOpenCodeHint is the hint for OpenCode's prompts (OPENCODE_HINT;
+// routing/client.js AG_OPENCODE).
+const antigravityOpenCodeHint = "Antigravity answers this 429 to OpenCode's system prompt (\"You are OpenCode, …\") whatever quota is left, so it is not a quota and waiting won't help; magpie sends that line as \"You're OpenCode, …\", which goes through, so use another provider for these chats, or put one after Antigravity in a routing group"
+
+// antigravityCodexCLIHint is the hint for Codex's prompt for a model it has
+// none of its own for (CODEX_CLI_HINT; routing/client.js AG_CODEX_CLI).
+const antigravityCodexCLIHint = "Antigravity answers this 429 to Codex's prompt for a model it has none of its own for (\"You are a coding agent running in the Codex CLI\") whatever quota is left, so it is not a quota and waiting won't help; magpie sends that line as \"You're …\", which goes through, so use another provider for these chats, or put one after Antigravity in a routing group"
+
+// antigravityPiHint is the hint for pi's default prompt (PI_HINT;
+// routing/client.js AG_PI).
+const antigravityPiHint = "Antigravity answers this 429 to pi's default system prompt (\"You are a coding assistant running inside pi\") whatever quota is left, so it is not a quota and waiting won't help; magpie sends that line as \"running within pi\", which goes through, so give pi a system prompt of your own (--system-prompt) or use another provider for these chats"
 
 // antigravityRFCHint is the hint for omp's RFC 2119 line, word for word
 // what the antigravity plugin says (RFC_HINT; routing/client.js AG_RFC).
@@ -404,8 +445,17 @@ func antigravityHint(system string) string {
 	if antigravityTurnsCodexAway(system) {
 		return antigravityCodexHint
 	}
+	if agSays(system, "you are a coding agent running in the codex cli") {
+		return antigravityCodexCLIHint
+	}
 	if antigravityTurnsHermesAway(system) {
 		return antigravityHermesHint
+	}
+	if agSays(system, "you are opencode") {
+		return antigravityOpenCodeHint
+	}
+	if agSays(system, "a coding assistant running inside pi") {
+		return antigravityPiHint
 	}
 	if antigravityTurnsRFCAway(system) {
 		return antigravityRFCHint
