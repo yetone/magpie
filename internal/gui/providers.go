@@ -105,6 +105,44 @@ type modelJSON struct {
 	// vendor's list's, else models.dev's, within Listed; Model settings'
 	// Max output shows it when none is set (sayagoodbyeplz on Discord)
 	ListedOutput int `json:"listedOutput,omitempty"` // absent when Output
+	// Keys are the ids of the provider's keys in use whose own list has
+	// the model, in the keys' order, when some of them don't (cliddO11 on
+	// X): absent when every key lists it. At most keysShown, with KeyCount
+	// how many there are when more.
+	Keys     []string `json:"keys,omitempty"`
+	KeyCount int      `json:"keyCount,omitempty"`
+}
+
+// keysShown is the most key ids a model of the editor names: past that the
+// editor says how many, and a provider of a thousand keys sends no list of
+// them with each model.
+const keysShown = 6
+
+// keysApart is which of on (the provider's keys in use, in order; at is
+// each one's place in it) listed a model, by listed (catalog.Model.Keys),
+// and how many: none when every one of them did or none did, or when on is
+// a single key.
+func keysApart(listed, on []string, at map[string]int) ([]string, int) {
+	if len(on) < 2 || len(listed) == 0 {
+		return nil, 0
+	}
+	idx := make([]int, 0, len(listed))
+	for _, id := range listed {
+		if i, ok := at[id]; ok {
+			idx = append(idx, i)
+		}
+	}
+	slices.Sort(idx)
+	idx = slices.Compact(idx)
+	if len(idx) == 0 || len(idx) == len(on) {
+		return nil, 0
+	}
+	n := len(idx)
+	ids := make([]string, 0, min(n, keysShown))
+	for _, i := range idx[:min(n, keysShown)] {
+		ids = append(ids, on[i])
+	}
+	return ids, n
 }
 
 type providerJSON struct {
@@ -1116,6 +1154,17 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 	// each model's provider/model ref, made once: the settings' maps and
 	// every agent's hidden list are looked up by it
 	var refs []string
+	// the keys in use, whose lists say which model each has (fetchPerKey)
+	var onKeys []string
+	for _, k := range out.KeyList {
+		if k.On {
+			onKeys = append(onKeys, k.ID)
+		}
+	}
+	keyAt := make(map[string]int, len(onKeys))
+	for i, id := range onKeys {
+		keyAt[id] = i
+	}
 	named := func(m catalog.Model, on bool) modelJSON {
 		ref := p.ID + "/" + m.ID
 		refs = append(refs, ref)
@@ -1132,6 +1181,9 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 		j := modelJSON{ID: m.ID, Name: m.Name, Efforts: provider.EffortsOf(m), On: on, Context: window, Output: provider.OutputWithin(window, p.ReplyLimitIn(m, set)), Listed: provider.ListedWindow(m), ListedOutput: provider.OutputWithin(provider.ListedWindow(m), p.ReplyLimitIn(m, settings.Settings{})), Max: m.MaxContext, Free: m.Free, Rate: m.Rate, RateWas: m.RateWas, Images: images, ImageSet: imageSet, Own: own, Best: newest[m.ID], Inputs: mediaInputs(m.InputModalities)}
 		list, listed, free := pricer.Prices(set, m.ID)
 		j.Zero = !m.Free && free
+		if j.Keys, j.KeyCount = keysApart(m.Keys, onKeys, keyAt); j.KeyCount == len(j.Keys) {
+			j.KeyCount = 0
+		}
 		// a plugin reports a model's load by its own id, not one the user
 		// lists it by (axelburks on Discord)
 		ownID := p.OwnModelID(m.ID)
