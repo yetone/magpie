@@ -303,8 +303,19 @@ function renderGateway() {
     : t("start it with magpie serve, or open magpie at login")));
   if (gatewayFix.err && gatewayFix.when === gatewayFixWhen(g)) who.append(el("div", "sub old err", gatewayFix.err));
   box.append(mark, who);
+  // DeepSeek's chat page, served by the gateway with its models, search
+  // and link reading (chatpage.go)
   const fix = gatewayFixButton(g, older);
-  if (fix) box.append(fix);
+  if (g.running && !older && !g.paused) {
+    const chat = el("button", "text action gw-chat", t("Chat page"));
+    const url = (web && g.publicURL || g.url) + "/deepseek-chat/";
+    chat.onclick = () => api("open", { url }).catch(statusErr);
+    // the two together, so a narrow card wraps them as one
+    const acts = el("span", "gw-acts");
+    acts.append(chat);
+    if (fix) acts.append(fix);
+    box.append(acts);
+  } else if (fix) box.append(fix);
 }
 
 // Share on local network, set on the page that hands out its keys (the

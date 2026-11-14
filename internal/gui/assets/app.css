@@ -2661,7 +2661,10 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .gw .sub.err { color: var(--red); overflow-wrap: anywhere; }
 /* the take-over / restart button: bordered, so it reads as a button on the
    card in either theme (leslie_luo on Discord: in dark mode it didn't) */
-.gw .gw-fix { display: inline-flex; flex: none; height: auto; min-height: 27px; max-width: 100%; margin: 0 0 0 auto; padding: 4px 10px; white-space: normal; text-align: left; }
+.gw :is(.gw-fix, .gw-chat) { display: inline-flex; flex: none; height: auto; min-height: 27px; max-width: 100%; margin: 0 0 0 auto; padding: 4px 10px; white-space: normal; text-align: left; }
+/* the chat page (chatpage.go) and the restart button, wrapped as one */
+.gw .gw-acts { display: flex; flex: none; flex-wrap: wrap; justify-content: flex-end; gap: 6px; max-width: 100%; margin-left: auto; }
+.gw .gw-acts > * { margin: 0; }
 /* Share on local network, on the card under the state, and the addresses
    the gateway answers on: one quiet line each, the copy beside it */
 #gatewayLan { border-top: 1px solid var(--line-2); }
@@ -4752,7 +4755,8 @@ body.panel .modal { padding: 16px 12px; }
   body.web .row.gw { flex-wrap: wrap; }
   body.web .row.gw > .who { flex: 1 1 0; min-width: 0; }
   body.web .row.gw .sub { white-space: normal; }
-  body.web .row.gw > .gw-fix { order: 2; margin-left: 39px; max-width: calc(100% - 39px); }
+  body.web .row.gw > :is(.gw-fix, .gw-acts) { order: 2; margin-left: 39px; max-width: calc(100% - 39px); }
+  body.web .row.gw > .gw-acts { justify-content: flex-start; }
   body.web .call { flex-wrap: wrap; height: auto; min-height: 24px; padding: 3px 6px; }
   body.web .call > .m { order: 2; margin-left: 20px; min-width: 0; }
   body.web .call > .p { order: 3; }
