@@ -563,6 +563,21 @@ button.rt-session { cursor: pointer; }
    figure of its own, the rest of it on hover */
 .rt-act .wins { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-2); font-size: 11px; font-variant-numeric: tabular-nums; }
 .rt-act .wins span + span { margin-left: 12px; }
+/* every window of a subscription account, a line each, alike on every
+   row (zwm_vincent on X): short name, bar, used or left, reset, in
+   columns that start at one place down the list */
+.rt-act .wq { display: grid; font-size: 11px; line-height: 17px; color: var(--fg-2); font-variant-numeric: tabular-nums; }
+.rt-act .wq > div { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; }
+.rt-act .wq span { min-width: 0; white-space: nowrap; }
+.rt-act .wq .k { flex: 0 0 var(--wk, 3ch); overflow: hidden; }
+.rt-act .wq .b { flex: 0 0 28px; }
+.rt-act .wq .v { flex: 0 0 auto; min-width: var(--wv, 0); }
+.rt-act .wq .r { flex: 1 0 auto; min-width: var(--wr, 0); max-width: 100%; overflow: hidden; text-overflow: ellipsis; text-align: right; }
+.rt-act .wq .k, .rt-act .wq .r { color: var(--muted); }
+.rt-act .wq .quota-track { height: 3px; }
+/* rows too narrow for a bar beside what is used (slim, set by
+   client.js): the figures alone */
+.rt-acts:where(.slim) .wq .b { display: none; }
 .rt-act .tally { display: flex; gap: 0 10px; overflow: hidden; white-space: nowrap; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 .rt-act .tally > span { flex: none; }
 .rt-act .tally > span:last-child { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }

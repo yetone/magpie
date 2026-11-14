@@ -1,12 +1,17 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // #1833: the Routing page's Accounts and keys list shows a subscription
 // account's windows each (Claude's 5 hours and 7 days), with when each
-// resets, as the Usage page read them, on hover over its one figure: its card matched by the agent the
-// account is signed in to and its user, whatever their case. Nothing new
-// is read for it: opening Routing asks /api/usage/quotas in the ordinary
-// way, never ?asked=1. An account with no card of its own (another
-// computer's card for the same user is not its) shows none. In every
-// language, at a window's width and at 420px, in both engines.
+// resets, as the Usage page read them: its card matched by the agent the
+// account is signed in to and its user, whatever their case. zwm_vincent
+// on X: a row showed only the window routing went by, 5 hours on one and
+// 7 days on the next, the other on hover. Every row now shows each window
+// on a line of its own, its short name, a bar, what is used and when it
+// resets, each starting at the same place on every row; the whole of each
+// on hover. Nothing new is read for it: opening Routing asks
+// /api/usage/quotas in the ordinary way, never ?asked=1. An account with
+// no card of its own (another computer's card for the same user is not
+// its) shows none. In every language, at a window's width and at 420px,
+// in both engines.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -19,6 +24,8 @@ const iso = (ms) => new Date(ms).toISOString();
 const accts = [
   { id: "claude", provider: "claude", name: "Claude", who: "work@example.com", kind: "account", agent: "claude", model: "claude-opus-5", known: true, used: 40, plan: "Max" },
   { id: "claude@spare", provider: "claude", name: "Claude", who: "spare@example.com", kind: "account", agent: "claude", model: "claude-opus-5", known: false, plan: "Pro" },
+  // routing went by its week: the row says both windows all the same
+  { id: "claude@team", provider: "claude", name: "Claude", who: "team@example.com", kind: "account", agent: "claude", model: "claude-opus-5", known: true, used: 70, usedWindow: "7 days", plan: "Max" },
 ];
 const route = {
   id: 7, seq: 7, time: iso(now - 2000), agent: "claude", model: "claude-opus-5", provider: "claude", done: true, status: 200, ms: 900, tokens: 1500,
@@ -28,6 +35,10 @@ const cards = [
   { provider: "claude", name: "Claude", kind: "subscription", user: "Work@Example.com", plan: "Max", windows: [
     { name: "5 hours", used: 40, resetsAt: iso(now + 130 * 60e3) },
     { name: "7 days", used: 12, resetsAt: iso(now + 73 * 3600e3) },
+  ] },
+  { provider: "claude", name: "Claude", kind: "subscription", user: "team@example.com", plan: "Max", windows: [
+    { name: "5 hours", used: 5, resetsAt: iso(now + 250 * 60e3) },
+    { name: "7 days", used: 70, resetsAt: iso(now + 30 * 3600e3) },
   ] },
   // another computer's reading of the spare account: not this one's
   { provider: "claude", name: "Claude · Home", kind: "subscription", user: "spare@example.com", from: "Home", windows: [{ name: "5 hours", used: 90 }] },
@@ -64,6 +75,14 @@ const words = {
   ja: ["5 時間 使用済み 40% · 2 時間後にリセット", "7 日 使用済み 12% · 3 日後にリセット"],
   de: ["5 Stunden 40% verbraucht · Reset in 2 Std.", "7 Tage 12% verbraucht · Reset in 3 T."],
 };
+// each window's line, its short name, what is used and when it resets
+const lines = {
+  en: { work: [["5h", "40% used", "resets in 2h"], ["7d", "12% used", "resets in 3d"]], team: [["5h", "5% used", "resets in 4h"], ["7d", "70% used", "resets in 30h"]] },
+  zh: { work: [["5h", "已用 40%", "2 小时后重置"], ["7d", "已用 12%", "3 天后重置"]], team: [["5h", "已用 5%", "4 小时后重置"], ["7d", "已用 70%", "30 小时后重置"]] },
+  "zh-TW": { work: [["5h", "已用 40%", "2 小時後重置"], ["7d", "已用 12%", "3 天后重置"]], team: [["5h", "已用 5%", "4 小時後重置"], ["7d", "已用 70%", "30 小時後重置"]] },
+  ja: { work: [["5h", "使用済み 40%", "2 時間後にリセット"], ["7d", "使用済み 12%", "3 日後にリセット"]], team: [["5h", "使用済み 5%", "4 時間後にリセット"], ["7d", "使用済み 70%", "30 時間後にリセット"]] },
+  de: { work: [["5h", "40% verbraucht", "Reset in 2 Std."], ["7d", "12% verbraucht", "Reset in 3 T."]], team: [["5h", "5% verbraucht", "Reset in 4 Std."], ["7d", "70% verbraucht", "Reset in 30 Std."]] },
+};
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   test(`${engine}: an account in Accounts and keys shows its windows, as Usage read them`, async (t) => {
@@ -82,15 +101,47 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             await page.route("**/*", serve(lang, asks));
             await page.goto("http://magpie.test/?view=routing");
             const act = page.locator(".rt-act", { hasText: "work@example.com" }).first();
-            // the one figure routing went by, the windows each on hover over
-            // it: a card keeps one line of what is left (ferock4669 on
-            // Discord), and when it was read comes last on hover (danzi002)
-            await page.waitForFunction((want) => [...document.querySelectorAll(".rt-act")].some((e) => e.textContent.includes("work@example.com") && (e.querySelector(".st")?.title || "").split("\n").slice(0, 2).join("\n") === want), words[lang].join("\n"));
-            assert.ok(await act.locator(".st").isVisible());
-            assert.equal(await act.locator(".wins").count(), 0);
+            const team = page.locator(".rt-act", { hasText: "team@example.com" }).first();
+            // each window a line of its own on every row, whichever one
+            // routing went by
+            const said = (row) => row.locator(".wq > div").evaluateAll((ls) => ls.map((l) => [...l.querySelectorAll("span.k, span.v, span.r")].map((e) => e.textContent)));
+            await page.waitForFunction(() => [...document.querySelectorAll(".rt-act")].filter((e) => e.querySelectorAll(".wq > div").length === 2).length === 2);
+            assert.deepEqual(await said(act), lines[lang].work);
+            assert.deepEqual(await said(team), lines[lang].team);
+            for (const row of [act, team]) {
+              assert.equal(await row.locator(".st").isVisible(), false, "no one figure besides the windows");
+              assert.equal(await row.locator(".wins").count(), 0);
+              assert.equal(await row.locator(":scope > .bar").count(), 0, "a bar each window, not one for the row");
+              assert.equal(await row.locator(".wq .quota-track").count(), 2);
+            }
+            // the bars say what the windows say
+            assert.deepEqual(await act.locator(".wq .quota-track i").evaluateAll((is) => is.map((i) => i.style.width)), ["40%", "12%"]);
+            // the whole of each window on hover, the day it resets told
+            const tip = await act.locator(".wq").getAttribute("title");
+            assert.ok(tip.startsWith(words[lang][0].split(" · ")[0]), tip);
+            assert.equal(tip.split("\n").length >= 2, true, tip);
+            // each part starts at one place on every row, and on every line
+            // of a row, and each reset ends at one place, on the line of
+            // what is used or, where the row is too narrow, under it, on
+            // every line alike (a line's parts measured from its row's left
+            // edge)
+            const cols = (row) => row.locator(".wq > div").evaluateAll((ls) => ls.map((l) => {
+              const left = l.closest(".rt-act").getBoundingClientRect().left, top = l.getBoundingClientRect().top;
+              const [k, b, v, r] = [...l.children].map((c) => c.getBoundingClientRect());
+              return [k.left, b.width ? b.left : -1, v.left, r.right, r.top - top, v.top - top].map((x, i) => Math.round(i < 4 && x !== -1 ? x - left : x));
+            }));
+            const [a, b] = [await cols(act), await cols(team)];
+            assert.deepEqual(a[1], a[0]);
+            assert.deepEqual(b[0], a[0]);
+            assert.deepEqual(b[1], a[0]);
+            assert.equal(a[0][5] <= 2, true, `${lang} at ${width}: what is used is on the window's first line: ${a[0]}`);
+            // nothing in a line is cut short at either width
+            const cut = await page.locator(".wq span").evaluateAll((ss) => ss.filter((s) => s.scrollWidth > s.clientWidth + 1).map((s) => s.textContent));
+            assert.deepEqual(cut, [], `${lang} at ${width}: cut ${cut.join(", ")}`);
             const spare = page.locator(".rt-act", { hasText: "spare@example.com" }).first();
             await spare.waitFor();
             assert.equal(await spare.locator(".wins").count(), 0);
+            assert.equal(await spare.locator(".wq").count(), 0);
             // nothing in the row runs past the list
             const over = await act.evaluate((e) => Math.max(e.scrollWidth - e.clientWidth, document.documentElement.scrollWidth - innerWidth));
             assert.ok(over <= 1, `${lang} at ${width}: ${over}px past`);
@@ -98,6 +149,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             assert.ok(asks.every((s) => !s.includes("asked")), "never an asked read: " + asks.join(", "));
             assert.deepEqual(errors, []);
           } finally {
+            if (process.env.ARTIFACT_DIR) {
+              await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
+              const p = ctx.pages()[0];
+              await p?.setViewportSize({ width, height: 2400 }).catch(() => {});
+              await p?.waitForTimeout(300).catch(() => {});
+              const box = await p?.locator(".rt-acts").first().evaluate((e) => { const r = e.getBoundingClientRect(); return { x: Math.max(0, r.left - 8), y: Math.max(0, r.top - 8), width: r.width + 16, height: r.height + 16 }; }).catch(() => null);
+              if (box) await p.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `windows-${engine}-${lang}-${width}.png`), clip: box }).catch(() => {});
+            }
             await ctx.close();
           }
         });

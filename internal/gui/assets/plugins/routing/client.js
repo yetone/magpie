@@ -329,6 +329,13 @@ function routingPage(part) {
     });
   }).observe(node);
   byWidth(box, { max560: (w) => w <= 560, max720: (w) => w <= 720 });
+  // rows too narrow for a window's bar beside what is used and its name
+  // (the accounts' list in columns a phone's width shares): measured on
+  // a row, when the list's size changes, never as it ticks
+  new ResizeObserver(() => {
+    const r = acts.querySelector(".rt-act");
+    if (r && r.clientWidth) requestAnimationFrame(() => acts.classList.toggle("slim", r.clientWidth < 215));
+  }).observe(acts);
   byWidth(list, { max460: (w) => w <= 460, max560: (w) => w <= 560 });
   byWidth(more, { max520: (w) => w <= 520 });
   for (const col of [colA, colB]) byWidth(col, { max440: (w) => w <= 440, max760: (w) => w <= 760 });
@@ -4835,9 +4842,20 @@ function routingPage(part) {
   // winsOf: each of an account's windows, as the Usage page's card names
   // it: "5 hours 40% used · resets in 2h"
   function winsOf(w) {
+    return winParts(w).map((p) => p.text);
+  }
+  // winParts: the same windows in parts, for the accounts' list to lay out
+  // alike on every row (zwm_vincent on X: one row said its 5 hours, the
+  // next its week): the window's short name, what is used or left, and
+  // when it resets
+  function winParts(w) {
     const q = cardOf(w);
-    return q ? (familyWindows(q.windows) || []).map((x) => t(x.name) + " " + quotaText(x)
-      + (x.resetsAt ? " · " + resetInText(new Date(x.resetsAt)) : "")) : [];
+    return q ? (familyWindows(q.windows) || []).map((x) => {
+      const at = x.resetsAt ? new Date(x.resetsAt) : null, v = quotaText(x);
+      return { x, q, k: shortWindow(x.name), v, r: at ? resetInText(at) : "",
+        text: t(x.name) + " " + v + (at ? " · " + resetInText(at) : ""),
+        tip: t(x.name) + " " + v + (at ? " · " + resetText(at) : "") };
+    }) : [];
   }
 
   // remoteWinsOf: the windows of the accounts signed in on another
@@ -4996,6 +5014,19 @@ function routingPage(part) {
       const u = inUse.get(a.w.provider);
       if (!u || a.last > u.last) inUse.set(a.w.provider, a);
     }
+    // each subscription account's windows, laid out alike on every row
+    // (zwm_vincent on X): the short names' column as wide as the widest,
+    // so what is left and when it resets start at one place down the list.
+    // A wallet keeps its one line, with what of it lapses first
+    const winsBy = new Map(), chw = (s) => [...s].reduce((n, c) => n + (c.charCodeAt(0) > 0x2e7f ? 2 : 1), 0);
+    let wk = 0, wv = 0, wr = 0;
+    for (const a of list) {
+      if (day || a.w.kind !== "account" || a.w.balance != null) continue;
+      const ps = winParts(a.w);
+      if (!ps.length) continue;
+      winsBy.set(a, ps);
+      for (const p of ps) { wk = Math.max(wk, chw(p.k)); wv = Math.max(wv, chw(p.v)); wr = Math.max(wr, chw(p.r)); }
+    }
     for (const a of list) {
       const w = a.w;
       let opened = false;
@@ -5045,7 +5076,7 @@ function routingPage(part) {
       if (w.kind === "provider") name.append(el("b", "", w.model || w.name));
       else name.append(el("b", "", who(w)), el("span", "", planName(w.plan) || (w.kind === "key" ? t("API key") : "")));
       let st, cls = "", asOf = "", carded = false;
-      const resting = a.rest && at(a.rest.until) > n;
+      const resting = a.rest && at(a.rest.until) > n, grid = winsBy.get(a);
       // its models resting alone, while the account answers its others:
       // a line of their own, naming them, under what the account has left
       const parts = resting ? [] : [...a.mrests].filter(([, x]) => at(x.rest.until) > n)
@@ -5053,6 +5084,8 @@ function routingPage(part) {
       if (resting) { st = restSay(a.rest); cls = "rest"; }
       else if (w.unlisted) { st = unlistedWord(w); cls = "left"; }
       else if (w.noURL) st = noURLWord(w);
+      // its windows each, below, say what the one figure would
+      else if (grid) { st = ""; if (w.known) asOf = t("as of {time}", { time: clock(a.at) }); }
       else if (w.known) {
         const soon = usedRenews(w);
         st = soon && soon <= n ? quota(w, "{n} used at {time}; it has renewed since", "{n} left at {time}; it has renewed since", { time: clock(a.at) })
@@ -5085,11 +5118,37 @@ function routingPage(part) {
       // the Usage page read them (#1833): the figure is the one window
       // routing went by, the others on hover and on the Usage page. Live
       // only: a kept day's requests were weighed by readings long gone.
-      const ws = day ? [] : [...winsOf(w).map((text) => ({ text })), ...remoteWinsOf(w)];
+      const ws = day ? [] : [...(grid ? [] : winsOf(w).map((text) => ({ text }))), ...remoteWinsOf(w)];
       const figure = !!st && (resting || w.known || w.unlisted || w.noURL || carded);
       if (resting && restTip(a.rest)) stEl.title = restTip(a.rest);
       else if (figure && (ws.length || asOf)) stEl.title = [...ws.map((x) => x.text), asOf].filter(Boolean).join("\n");
       row.append(name, stEl);
+      if (grid) {
+        // one line a window: its short name, a bar, what is used or left,
+        // when it resets; each as wide as the widest down the list, so
+        // they start (and the reset ends) at one place on every row, kept
+        // there when a window has no bar or no reset. Where the row is too
+        // narrow for the reset, it goes under, on every row alike. Each in
+        // full on hover, with the day and time it resets
+        const box = el("div", "wq");
+        box.style.setProperty("--wk", wk + 1 + "ch");
+        box.style.setProperty("--wv", wv + "ch");
+        box.style.setProperty("--wr", wr + "ch");
+        for (const p of grid) {
+          const line = el("div");
+          let bar = el("span", "b");
+          if (!quotaNoShare(p.x)) {
+            bar = el("span", "b quota-track" + (p.x.used >= 90 ? " full" : ""));
+            const fi = el("i");
+            fi.style.width = quotaFill(p.x) + "%";
+            bar.append(fi);
+          }
+          line.append(el("span", "k", p.k), bar, el("span", "v", p.v), el("span", "r", p.r));
+          box.append(line);
+        }
+        box.title = [...grid.map((p) => p.tip), grid[0].q.asOf ? asOfText(grid[0].q) : asOf].filter(Boolean).join("\n");
+        row.append(box);
+      }
       if (parts.length) {
         const r0 = parts[0][1].rest;
         const part = el("div", "st rest part", `${parts.map(([m]) => m).join(", ")} · ${restSay(r0)}`);
@@ -5140,7 +5199,7 @@ function routingPage(part) {
         again.onclick = () => signInAgain(w);
         fix.append(again);
       }
-      if (w.known && w.balance == null) {
+      if (w.known && w.balance == null && !grid) {
         const bar = el("div", "bar quota-track"), bi = el("i");
         bi.style.width = fill(w);
         bar.append(bi);
@@ -5153,7 +5212,7 @@ function routingPage(part) {
       // failing with no answer. How it fares is that line where it has no
       // other, and on hover, unless it is the reader's to fix.
       const act = signIn || (!a.ok && fails.length > 0) || (resting && (a.rest.why === "restricted" || a.rest.why === "verify"));
-      const said = !!st || (ws.length > 0 && !figure);
+      const said = !!st || !!grid || (ws.length > 0 && !figure);
       row.classList.toggle("act", act);
       row.classList.toggle("rest", !act && !!resting);
       row.classList.toggle("on", !act && inUse.get(w.provider) === a);

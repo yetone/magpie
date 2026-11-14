@@ -3,9 +3,9 @@
 // "what's left not known yet" in Routing's Accounts and keys while the Usage
 // page read its allowance. Every window of a pooled Cursor plan is set aside
 // (it can't stop the account), so routing weighs no figure for it, and the
-// row said nothing was known. It now says the card's first window, as the
-// Usage page read it, the rest on hover; the unknown line stays for an
-// account with no card. Every language, 1100 and 420px, both engines.
+// row said nothing was known. It now says the card's windows, a line each
+// (zwm_vincent on X), as the Usage page read them, in full on hover; the
+// unknown line stays for an account with no card. Every language, 1100 and 420px, both engines.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -85,14 +85,20 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             // it: a card keeps one line of what is left (ferock4669 on
             // Discord), and when it was read comes last on hover (danzi002)
             await act.waitFor();
-            // the card's first window is the row's figure, the second on hover
-            await page.waitForFunction((want) => [...document.querySelectorAll(".rt-act")].some((e) => e.textContent.includes("work@example.com") && e.querySelector(".st")?.textContent === want), words[lang][0]);
-            assert.equal((await act.locator(".st").getAttribute("title")).split("\n").slice(0, 2).join("\n"), words[lang].join("\n"));
+            // the card's windows, a line each, in full on hover
+            await page.waitForFunction(() => [...document.querySelectorAll(".rt-act")].some((e) => e.textContent.includes("work@example.com") && e.querySelectorAll(".wq > div").length === 2));
+            const lines = await act.locator(".wq > div").evaluateAll((ls) => ls.map((l) => [l.querySelector(".v").textContent, l.querySelector(".r").textContent].join(" · ")));
+            // what is used and when it resets, the window's name ("5 hours")
+            // shortened to its column
+            assert.deepEqual(lines, words[lang].map((x) => x.split(" ").slice(2).join(" ")));
+            assert.equal((await act.locator(".wq").getAttribute("title")).split("\n").slice(0, 2).map((x) => x.split(" · ")[0]).join("\n"), words[lang].map((x) => x.split(" · ")[0]).join("\n"));
             assert.equal(await act.locator(".wins").count(), 0);
+            assert.equal(await act.locator(".st").isVisible(), false, "not unknown");
             // no card of its own (another computer's isn't this one's): unknown
             const spare = page.locator(".rt-act", { hasText: "spare@example.com" }).first();
             await spare.waitFor();
-            assert.notEqual(await spare.locator(".st").textContent(), words[lang][0]);
+            assert.ok(await spare.locator(".st").isVisible(), "unknown, as before");
+            assert.equal(await spare.locator(".wq").count(), 0);
             assert.equal(await spare.locator(".wins").count(), 0);
             // nothing in the row runs past the list
             const over = await act.evaluate((e) => Math.max(e.scrollWidth - e.clientWidth, document.documentElement.scrollWidth - innerWidth));
