@@ -76,3 +76,39 @@ func TestIdleParsesLetGoAndComeBackFromDisk(t *testing.T) {
 		}
 	}
 }
+
+// A page gone from view lets the parses go at once (ForgetParses), read
+// just now or not, and the next read has them back from sessions.json; a
+// save not on disk yet still keeps them.
+func TestForgetParsesLetsGoAtOnce(t *testing.T) {
+	setup(t)
+	before := List(0)
+	if len(before) == 0 {
+		t.Fatal("no sessions listed")
+	}
+	saved()
+	cacheKept.last.Store(time.Now().UnixNano())
+
+	saving.Lock()
+	saving.failed = true
+	saving.Unlock()
+	if ForgetParses() || !loaded {
+		t.Fatal("the parses were let go while the last save had failed")
+	}
+	saving.Lock()
+	saving.failed = false
+	saving.Unlock()
+
+	if !ForgetParses() || loaded || len(cache) != 0 {
+		t.Fatalf("parses read just now kept: loaded %v, %d in memory", loaded, len(cache))
+	}
+	if ForgetParses() {
+		t.Fatal("ForgetParses said it let go with nothing loaded")
+	}
+	var parses atomic.Int32
+	parseHook = func() { parses.Add(1) }
+	t.Cleanup(func() { parseHook = nil })
+	if after := List(0); len(after) != len(before) || parses.Load() != 0 {
+		t.Fatalf("%d sessions after (%d before), %d files read again", len(after), len(before), parses.Load())
+	}
+}

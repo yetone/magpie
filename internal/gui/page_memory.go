@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yetone/magpie/internal/sessions"
 	"github.com/yetone/magpie/internal/usage"
 )
 
@@ -129,7 +130,8 @@ func forgetAwayPage() {
 		return
 	}
 	stats := letGoStats()
-	if usage.ForgetPages() || stats {
+	parses := stats && sessions.ForgetParses()
+	if usage.ForgetPages() || stats || parses {
 		usage.ReleaseScratch()
 		debug.FreeOSMemory()
 	}

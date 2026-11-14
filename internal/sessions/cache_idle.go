@@ -62,14 +62,30 @@ func cacheIdleCheck() {
 // dropIdleCache lets go of the parses in memory when nothing is reading
 // or about to change them, once what was parsed since the last save is
 // on disk. It says whether it did, or there was nothing to let go.
-func dropIdleCache() bool {
+func dropIdleCache() bool { return dropCache(cacheIdle) }
+
+// ForgetParses lets the parses go now, not cacheIdle after the last read:
+// the app's page has gone from view and asked nothing since (the gui's
+// pageAwayFor). What a page opened on the app's start had the warm-up
+// parse (~40 MB live for a real history) otherwise stayed three minutes
+// after it closed. It says whether they went, or there were none.
+func ForgetParses() bool {
+	mu.Lock()
+	had := loaded
+	mu.Unlock()
+	return had && dropCache(0)
+}
+
+// dropCache is dropIdleCache with the time nothing must have read the
+// parses for: idle, or none at all.
+func dropCache(idle time.Duration) bool {
 	saved() // what the next read loads is what is in memory now
 	mu.Lock()
 	defer mu.Unlock()
 	if !loaded {
 		return true
 	}
-	if time.Since(time.Unix(0, cacheKept.last.Load())) < cacheIdle {
+	if idle > 0 && time.Since(time.Unix(0, cacheKept.last.Load())) < idle {
 		return false // read while the save was written
 	}
 	saving.Lock()
