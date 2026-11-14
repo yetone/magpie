@@ -26,6 +26,9 @@ var (
 	predecessorMax = 60 * time.Second
 	// predecessorWebMax is how long its WebView2's processes may take after
 	predecessorWebMax = 30 * time.Second
+	// stuckFor is how long the magpie before may sit with one thread left
+	// before it is taken for stuck in its exit and ended (stuckExiting)
+	stuckFor = time.Second
 )
 
 // awaitGone waits for the magpie that relaunched this one to exit, and then
@@ -34,7 +37,10 @@ func awaitGone(pid int) {
 	start := time.Now()
 	// the magpie first: while its handle is open its pid is no other's, so
 	// the processes naming it their parent are its own
-	self, err := windows.OpenProcess(windows.SYNCHRONIZE, false, uint32(pid))
+	self, err := windows.OpenProcess(windows.SYNCHRONIZE|windows.PROCESS_TERMINATE, false, uint32(pid))
+	if err != nil {
+		self, err = windows.OpenProcess(windows.SYNCHRONIZE, false, uint32(pid))
+	}
 	if err != nil {
 		return // gone already; its WebView2 can't be told apart from another's
 	}
@@ -46,7 +52,7 @@ func awaitGone(pid int) {
 			defer windows.CloseHandle(h)
 		}
 	}
-	if !waitHandle(self, predecessorMax) {
+	if !awaitExit(self, uint32(pid), predecessorMax) {
 		logPredecessor("the magpie before (%d) is still running after %s; going on", pid, predecessorMax)
 		return
 	}
@@ -63,6 +69,68 @@ func awaitGone(pid int) {
 	case time.Since(start) > time.Second:
 		logPredecessor("waited %s for the magpie before (%d) and its %d WebView2 processes to end", time.Since(start).Round(100*time.Millisecond), pid, len(webs))
 	}
+}
+
+// awaitExit waits up to limit for the magpie before (h, pid) to end. One
+// that sits with a single thread left is stuck in its exit: ExitProcess
+// has ended every other thread and a DLL's detach on the last one waits
+// for one of them, forever, while the process still holds the gateway's
+// port and the WebView2 profile this one is about to open (BESTLJP0412
+// on X: after an update's restart the window was "Not Responding" and the
+// old magpie sat there with one thread). Nothing of it is left to finish,
+// so it is ended.
+func awaitExit(h windows.Handle, pid uint32, limit time.Duration) bool {
+	deadline := time.Now().Add(limit)
+	var oneSince time.Time
+	for {
+		left := time.Until(deadline)
+		if left <= 0 {
+			return false
+		}
+		if waitHandle(h, min(left, 250*time.Millisecond)) {
+			return true
+		}
+		if !stuckExiting(pid) {
+			oneSince = time.Time{}
+			continue
+		}
+		if oneSince.IsZero() {
+			oneSince = time.Now()
+			continue
+		}
+		if time.Since(oneSince) < stuckFor {
+			continue
+		}
+		logPredecessor("the magpie before (%d) is stuck in its exit with one thread left; ending it", pid)
+		if err := windows.TerminateProcess(h, 1); err != nil {
+			logPredecessor("ending the magpie before (%d): %v", pid, err)
+			oneSince = time.Time{}
+			continue
+		}
+		return waitHandle(h, max(time.Until(deadline), 5*time.Second))
+	}
+}
+
+// stuckExiting says whether pid has a single thread left: a Go program
+// running has several (the scheduler's monitor at least), so one left is
+// ExitProcess under way.
+func stuckExiting(pid uint32) bool { return threads(pid) == 1 }
+
+// threads is how many threads pid has, 0 when it isn't found.
+func threads(pid uint32) uint32 {
+	snap, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
+	if err != nil {
+		return 0
+	}
+	defer windows.CloseHandle(snap)
+	var e windows.ProcessEntry32
+	e.Size = uint32(unsafe.Sizeof(e))
+	for err = windows.Process32First(snap, &e); err == nil; err = windows.Process32Next(snap, &e) {
+		if e.ProcessID == pid {
+			return e.Threads
+		}
+	}
+	return 0
 }
 
 func logPredecessor(format string, a ...any) {

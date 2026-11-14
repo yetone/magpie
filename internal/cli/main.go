@@ -260,8 +260,9 @@ func Main(v string) {
 		if msg := err.Error(); msg != "" {
 			fmt.Fprintln(os.Stderr, "magpie:", msg)
 		}
-		os.Exit(code)
+		endProcess(code)
 	}
+	endProcess(0)
 }
 
 // runTUI runs the TUI, which quits on Ctrl+C and SIGTERM itself once it

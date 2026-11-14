@@ -1005,6 +1005,21 @@ of its drain and `quitGrace` (3 minutes) after, whatever holds its quit up
 left lived on hidden for three hours, writing and fetching beside the new
 one.
 
+On Windows there is no handover: the new version is started with
+`MAGPIE_REPLACES` (`relaunchBinary`) and waits in `update.AwaitPredecessor`
+(`awaitGone` in
+[`predecessor_windows.go`](../../internal/update/predecessor_windows.go))
+for the old magpie, up to 60s, and then for its msedgewebview2 processes,
+before it opens the gateway's port and the WebView2 profile. The old one
+ends through `endProcess` ([`exit_windows.go`](../../internal/cli/exit_windows.go)),
+`TerminateProcess` on itself rather than `os.Exit`'s `ExitProcess`, whose
+DLL detaches (WebView2's, COM's) can wait forever on a thread it already
+ended, leaving a process with one thread on port 3425 and the profile and
+the new window "Not Responding" (BESTLJP0412 on X). A predecessor that
+still sits with one thread for a second (an older version, stuck so) is
+ended by the new one (`awaitExit`). See `TestEndProcessSkipsAStuckDetach`
+and `TestAwaitGoneEndsAMagpieStuckInItsExit` (Windows).
+
 Two magpies never show at once. On a Mac the old one lets go of its
 instance lock before it gives the socket (`releaseInstance`), so the new
 one's `runningAlready` takes it, and once the ack comes the old one hides

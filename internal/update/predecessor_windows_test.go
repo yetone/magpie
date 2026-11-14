@@ -6,10 +6,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/sys/windows"
 )
 
 // The magpie before is gone but its WebView2 isn't yet: the start waits
@@ -35,6 +38,23 @@ func init() {
 		}
 		os.Stdout.WriteString("ready\n")
 		io.Copy(io.Discard, os.Stdin) // the test lets it go
+		os.Exit(0)
+	case "stuck": // quits into a DLL detach that never returns
+		runtime.LockOSThread()
+		k := windows.NewLazySystemDLL("kernel32.dll")
+		sleep := k.NewProc("Sleep")
+		if sleep.Find() != nil {
+			os.Exit(9)
+		}
+		// a fiber-local storage callback runs on ExitProcess's last thread:
+		// Sleep(INFINITE)
+		idx, _, _ := k.NewProc("FlsAlloc").Call(sleep.Addr())
+		if idx == 0xFFFFFFFF {
+			os.Exit(9)
+		}
+		if ok, _, _ := k.NewProc("FlsSetValue").Call(idx, 0xFFFFFFFF); ok == 0 {
+			os.Exit(9)
+		}
 		os.Exit(0)
 	case "web": // arg: the file it writes as it ends
 		time.Sleep(3 * time.Second)
@@ -91,5 +111,50 @@ func TestAwaitGoneWaitsForTheOldWebView(t *testing.T) {
 	AwaitPredecessor()
 	if _, err := os.Stat(done); err != nil {
 		t.Fatalf("the start went on after %s, while the old magpie's WebView2 still ran", time.Since(start).Round(time.Millisecond))
+	}
+}
+
+// The magpie before stuck in its exit, one thread left on the gateway's
+// port and the WebView2 profile, is ended rather than waited for until the
+// new one goes on beside it and hangs (BESTLJP0412 on X, 0.1.4179 to
+// 0.1.4193: "Not Responding" after an update's restart). Its stand-in quits
+// into a fiber-local storage callback that sleeps forever, which
+// ExitProcess runs on its last thread as it would a DLL's detach.
+func TestAwaitGoneEndsAMagpieStuckInItsExit(t *testing.T) {
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := exec.Command(self, "-test.run=^$")
+	old.Env = append(os.Environ(), testPredecessorEnv+"=stuck")
+	if err := old.Start(); err != nil {
+		t.Fatal(err)
+	}
+	exited := make(chan struct{})
+	go func() { old.Wait(); close(exited) }()
+	t.Cleanup(func() {
+		old.Process.Kill()
+		<-exited
+	})
+	pid := uint32(old.Process.Pid)
+	for deadline := time.Now().Add(10 * time.Second); threads(pid) != 1; time.Sleep(50 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("the old magpie never got stuck in its exit: %d threads", threads(pid))
+		}
+	}
+	saved := predecessorMax
+	predecessorMax = 20 * time.Second
+	t.Cleanup(func() { predecessorMax = saved })
+	t.Setenv("MAGPIE_REPLACES", strconv.Itoa(old.Process.Pid))
+	start := time.Now()
+	AwaitPredecessor()
+	took := time.Since(start)
+	select {
+	case <-exited:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("the start went on after %s with the old magpie still stuck in its exit", took.Round(time.Millisecond))
+	}
+	if took >= predecessorMax {
+		t.Fatalf("waited the whole %s for a magpie stuck in its exit", predecessorMax)
 	}
 }
