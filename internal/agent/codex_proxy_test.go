@@ -95,6 +95,11 @@ func TestCodexProxyFor(t *testing.T) {
 		// the system says direct, and the environment isn't asked (codex-cli
 		// 0.162.1 with HTTP_PROXY set sent nothing to it)
 		{"respect: no system proxy, env not read", respect, map[string]string{"HTTP_PROXY": clash}, netproxy.Proxy{}, "darwin", ""},
+		// #4147: magpie reads GNOME's proxy on Linux, which Codex's reqwest
+		// never does; only the environment counts there
+		{"Linux desktop proxy not read", plain, nil, netproxy.Proxy{URL: clash, HTTP: clash}, "linux", ""},
+		{"Linux desktop proxy, HTTP_PROXY", plain, map[string]string{"HTTP_PROXY": socks}, netproxy.Proxy{URL: clash, HTTP: clash}, "linux", socks},
+		{"respect: Linux desktop proxy not read", respect, nil, netproxy.Proxy{URL: clash, HTTP: clash}, "linux", ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

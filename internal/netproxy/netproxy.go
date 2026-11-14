@@ -5,9 +5,9 @@
 //
 // In order: the proxy set in magpie's settings (or "direct" for none), the
 // usual *_PROXY variables, then the system's proxy (macOS network
-// settings, Windows Internet Options). Loopback is never proxied, nor,
-// unless a provider has a proxy of its own, a host on the user's own
-// network (lan.go).
+// settings, Windows Internet Options, a Linux desktop's GNOME gsettings or
+// KDE kioslaverc). Loopback is never proxied, nor, unless a provider has a
+// proxy of its own, a host on the user's own network (lan.go).
 package netproxy
 
 import (

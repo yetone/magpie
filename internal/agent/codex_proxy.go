@@ -56,6 +56,16 @@ var (
 	loginEnv         = proc.LoginEnv
 )
 
+// codexSystem is the system proxy as Codex reads one: macOS' and
+// Windows' only. On Linux reqwest has no system proxy but *_PROXY, while
+// magpie reads the desktop's (GNOME's gsettings, KDE's kioslaverc, #4147).
+func codexSystem() netproxy.Proxy {
+	if codexProxyOS != "darwin" && codexProxyOS != "windows" {
+		return netproxy.Proxy{}
+	}
+	return codexSystemProxy()
+}
+
 // codexEnv is k as Codex has it: the login shell's, else magpie's own.
 func codexEnv(k string) string {
 	if v := loginEnv(k); v != "" {
@@ -93,7 +103,7 @@ func codexProxyFor(cfg, base string) (proxy, from string) {
 		// set there Codex goes direct, HTTP_PROXY or not (the environment's
 		// count only when the system can't be read; tried with codex-cli
 		// 0.162.1)
-		sys := codexSystemProxy()
+		sys := codexSystem()
 		if sys.URL == "" || systemBypassed(host, sys.Bypass) {
 			return "", ""
 		}
@@ -124,7 +134,7 @@ func codexProxyFor(cfg, base string) (proxy, from string) {
 	// bypass list without it, goes around them
 	p, k := env(httpKeys...)
 	no, _ := env("NO_PROXY", "no_proxy")
-	sys := codexSystemProxy()
+	sys := codexSystem()
 	if p == "" && sys.HTTP != "" {
 		p, k = sys.HTTP, systemProxyName()
 	}
