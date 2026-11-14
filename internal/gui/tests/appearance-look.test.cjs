@@ -249,6 +249,51 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     });
   }
 
+  // CHENGJIAHEGOXIS on X, on v0.1.4124: 「这三个颜色……都显示是一样的」,
+  // 「尤其是黑色始终一直是灰色」. Default, Graphite and a black of their own
+  // drew the same grey page, and black's ink was Graphite's grey. Black now
+  // draws a black page on the dark theme with a light ink of its own, and
+  // black ink on the light theme; Graphite keeps the grey page.
+  for (const theme of ["light", "dark"]) {
+    test(`${engine}: ${theme}, Default, Graphite and black are three looks`, async (t) => {
+      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+      t.after(() => browser.close());
+      const dark = theme === "dark";
+      const rgbOf = (h) => `rgb(${parseInt(h.slice(1, 3), 16)}, ${parseInt(h.slice(3, 5), 16)}, ${parseInt(h.slice(5, 7), 16)})`;
+      const { page, errors } = await open(browser, { theme }, 1200);
+      await page.waitForFunction(() => document.body.classList.contains("side-nav"));
+      const look = () => page.evaluate(() => {
+        const bg = (e) => (e ? getComputedStyle(e).backgroundColor : "missing");
+        return { body: getComputedStyle(document.body).backgroundColor, list: bg(document.querySelector("#setPage-general .list.prefs")), accent: getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() };
+      });
+      const want = (v) => varOf(v, "--accent", dark);
+      const own = await look();
+      await page.locator('#accentPick .swatch[data-accent="#52525b"]').click();
+      await page.waitForFunction((w) => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() === w, want("#52525b"));
+      const graphite = await look();
+      await page.locator("#accentPick .swatch.own input").evaluate((i) => { i.value = "#000000"; i.dispatchEvent(new Event("change", { bubbles: true })); });
+      await page.waitForFunction((w) => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() === w, want("#000000"));
+      const blk = await look();
+      assert.deepEqual(new Set([own.accent, graphite.accent, blk.accent]).size, 3, `three inks: ${own.accent} ${graphite.accent} ${blk.accent}`);
+      assert.equal(graphite.body, own.body, "Graphite keeps the grey page");
+      if (dark) {
+        assert.equal(blk.body, rgbOf(varOf("#000000", "--bg", true)), "black's page");
+        const [r, g, b] = blk.body.match(/\d+/g).map(Number);
+        assert.ok(r + g + b <= 9, `black's page is black, not ${blk.body}`);
+        assert.equal(blk.list, rgbOf(varOf("#000000", "--card", true)), "Settings' list is on black's card");
+        assert.notEqual(blk.list, blk.body, "the card stands a step above the page");
+        // its ink is light, and the page's text reads on it
+        assert.ok(parseInt(blk.accent.slice(1, 3), 16) > 0xc0, `black's ink is light, not ${blk.accent}`);
+      } else {
+        assert.equal(blk.accent, "#000000", "black is black ink on the light theme");
+        assert.equal(blk.body, own.body, "the light page keeps its ground");
+      }
+      // the chosen swatch is black's own, drawn black
+      assert.deepEqual(await chosen(page), ["own:#000000"]);
+      assert.deepEqual(errors, []);
+    });
+  }
+
   test(`${engine}: a look boot.js drew is not asked for again`, async (t) => {
     const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
     t.after(() => browser.close());
