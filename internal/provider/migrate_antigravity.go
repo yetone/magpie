@@ -16,7 +16,7 @@ import (
 func init() {
 	movers["antigravity"] = &mover{
 		pkg:    "@magpie-community/opencode-antigravity-auth",
-		min:    "0.1.13", // Codex's GPT-5 line goes reworded in a user's turn too, turned away there since 11-14 (0.1.12 rewords instead of zero-width, 0.1.11 omp's "key words", 0.1.0 ported the built-in)
+		min:    "0.1.14", // Gemini 4's late INVALID_ARGUMENT, a bare line in the stream, is asked again and says it isn't a region block (0.1.13 Codex's GPT-5 line reworded in a user's turn, 0.1.12 rewords instead of zero-width, 0.1.11 omp's "key words", 0.1.0 ported the built-in)
 		agents: []string{"antigravity"},
 		out: func() ([]Moving, error) {
 			var out []Moving
