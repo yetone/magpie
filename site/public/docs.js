@@ -1,14 +1,14 @@
-// The docs' contents, language menu and reading position, shared by every
-// language. Each page's aside.toc lists its own sections; this adds the other
+// The docs' contents, language menu, search and reading position, shared by
+// every language. Each page's aside.toc lists its own sections; this adds the other
 // pages around them, follows the reading position, and on a phone turns the
 // list into a menu under a bar that names the section being read.
 (() => {
   const lang = (document.documentElement.lang || "en").slice(0, 2);
   const L = {
-    en: { docs: "Docs", contents: "Contents" },
-    zh: { docs: "文档", contents: "目录" },
-    ja: { docs: "ドキュメント", contents: "目次" },
-  }[lang] || { docs: "Docs", contents: "Contents" };
+    en: { docs: "Docs", contents: "Contents", search: "Search" },
+    zh: { docs: "文档", contents: "目录", search: "搜索" },
+    ja: { docs: "ドキュメント", contents: "目次", search: "検索" },
+  }[lang] || { docs: "Docs", contents: "Contents", search: "Search" };
   const clean = (p) => p.replace(/\.html$/, "").replace(/\/+$/, "") || "/";
   const el = (tag, cls, text) => {
     const e = document.createElement(tag);
@@ -28,8 +28,46 @@
       a.addEventListener("click", () => { document.cookie = "lang=" + a.hreflang + "; path=/; max-age=31536000; samesite=lax"; });
     });
     document.addEventListener("click", (e) => { if (!langBtn.parentNode.contains(e.target)) langOpen(false); });
-    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !langs.hidden) { langOpen(false); langBtn.focus(); } });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !e.defaultPrevented && !langs.hidden) { langOpen(false); langBtn.focus(); } });
   }
+
+  // search: docs-search.js (the dialog and the finding) and the index load
+  // the first time it is wanted, a pointer over the button already starting
+  // them; / or Cmd/Ctrl+K opens it from anywhere but a field
+  const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+  let engine = null;
+  const want = () => engine || (engine = new Promise((ok, no) => {
+    const s = document.createElement("script");
+    s.src = "/docs-search.js";
+    s.onload = () => (window.docsSearch ? ok(window.docsSearch) : no(new Error("docs-search")));
+    s.onerror = () => { engine = null; no(new Error("docs-search")); };
+    document.head.append(s);
+  }));
+  const warm = () => want().then((d) => d.load()).catch(() => {});
+  const openSearch = (from) => want().then((d) => d.open(from)).catch(() => {});
+  const searchBtn = (cls) => {
+    const b = el("button", "icon-btn search" + (cls ? " " + cls : ""));
+    b.type = "button";
+    b.setAttribute("aria-label", L.search);
+    b.title = L.search + " (" + (mac ? "⌘K" : "Ctrl+K") + ")";
+    b.setAttribute("aria-haspopup", "dialog");
+    b.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="7" cy="7" r="4.75"/><path d="M10.5 10.5 14 14"/></svg>';
+    b.addEventListener("click", () => openSearch(b));
+    b.addEventListener("pointerenter", warm, { once: true });
+    b.addEventListener("focus", warm, { once: true });
+    return b;
+  };
+  const navLangs = document.querySelector("body > nav .langs");
+  if (navLangs) navLangs.before(searchBtn("in-nav"));
+  document.addEventListener("keydown", (e) => {
+    if (e.defaultPrevented || e.isComposing) return;
+    const k = e.key.toLowerCase();
+    const typing = e.target.closest && e.target.closest("input, textarea, select, [contenteditable]:not([contenteditable=false])");
+    if ((k === "k" && (mac ? e.metaKey : e.ctrlKey) && !e.altKey && !e.shiftKey) || (e.key === "/" && !typing && !e.metaKey && !e.ctrlKey && !e.altKey)) {
+      e.preventDefault();
+      openSearch(document.activeElement);
+    }
+  });
 
   // contents: every docs page, this one's sections under it
   const toc = document.querySelector("aside.toc");
@@ -70,6 +108,8 @@
   label.textContent = title;
   const scrim = el("div", "toc-scrim");
   scrim.hidden = true;
+  // a phone's nav has no room for another button; its bar does
+  bar.querySelector(".wrap").append(searchBtn("in-bar"));
   document.querySelector("body > nav").after(bar);
   document.body.append(scrim);
 
@@ -82,7 +122,7 @@
   btn.addEventListener("click", () => show(!toc.classList.contains("open")));
   scrim.addEventListener("click", () => show(false));
   toc.addEventListener("click", (e) => { if (e.target.closest("a")) show(false); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && toc.classList.contains("open")) { show(false); btn.focus(); } });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !e.defaultPrevented && toc.classList.contains("open")) { show(false); btn.focus(); } });
   matchMedia("(min-width: 901px)").addEventListener("change", (m) => { if (m.matches) show(false); });
 
   // scroll the list itself, never the page, to keep the current section shown
