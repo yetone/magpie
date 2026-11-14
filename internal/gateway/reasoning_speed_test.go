@@ -366,14 +366,22 @@ func TestLiveVisibleReasoningFixture(t *testing.T) {
 	if err = json.Unmarshal(b, &sample); err != nil {
 		t.Fatal(err)
 	}
+	// see reads the wall clock after start is set, so the first event lands
+	// at its at_ms plus however long that took: a millisecond more on a busy
+	// machine (6790/6789 on macOS CI), so the bound is what really passed.
 	f := firstToken{}
-	for _, e := range sample.Events {
+	var slack int64
+	for i, e := range sample.Events {
 		delta, _ := json.Marshal(e.Delta)
-		f.start = time.Now().Add(-time.Duration(e.At) * time.Millisecond)
+		set := time.Now()
+		f.start = set.Add(-time.Duration(e.At) * time.Millisecond)
 		f.see([]byte(`data: {"choices":[{"delta":{"reasoning_content":` + string(delta) + `}}]}` + "\n\n"))
+		if i == 0 {
+			slack = time.Since(set).Milliseconds() + 1
+		}
 	}
-	if f.reasoningMs(provider.Chat) != sample.Events[0].At {
-		t.Fatalf("live reasoning fixture lost its start: %d/%d", f.reasoningMs(provider.Chat), sample.Events[0].At)
+	if got, at := f.reasoningMs(provider.Chat), sample.Events[0].At; got < at || got > at+slack {
+		t.Fatalf("live reasoning fixture lost its start: %d/%d (+%d ms passing)", got, at, slack)
 	}
 	// its 731 ms came after a 6.8 s wait, which tells no speed: under a
 	// second after a wait over four times longer reads as a reply let go
