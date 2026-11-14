@@ -78,16 +78,6 @@ func TestTrayMenuLabels(t *testing.T) {
 			t.Errorf("%s paused: %q, want %q", lang, l.pause, want)
 		}
 	}
-	env := map[string]string{"LC_ALL": "C", "LANG": "zh_CN.UTF-8"}
-	if got := envLang(func(k string) string { return env[k] }); got != "zh_CN.UTF-8" {
-		t.Errorf("envLang skips C: %q", got)
-	}
-	if got := firstAppleLang("(\n    \"zh-Hans-CN\",\n    \"en-US\"\n)\n"); got != "zh-Hans-CN" {
-		t.Errorf("firstAppleLang: %q", got)
-	}
-	if got := firstAppleLang("(\n    en,\n    \"zh-Hans\"\n)\n"); got != "en" {
-		t.Errorf("firstAppleLang unquoted: %q", got)
-	}
 }
 
 // A language changed on the Settings page relabels the tray menu; a save

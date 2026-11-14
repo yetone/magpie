@@ -61,9 +61,9 @@ func (m model) sessShown() []sessions.Session {
 // agent (RustCats on X), magpie reads no agent's sessions, and says how.
 func sessNothing() string {
 	if !sessions.SettleReads().Asked {
-		return "magpie reads no agent's session history until you allow it · magpie sessions read on all (or on <agent>), or the app's Sessions page"
+		return tr("magpie reads no agent's session history until you allow it · magpie sessions read on all (or on <agent>), or the app's Sessions page")
 	}
-	return "nothing in this range · Claude Code's, Codex's, OpenCode's and Pi's sessions on this computer show up here"
+	return tr("nothing in this range · Claude Code's, Codex's, OpenCode's and Pi's sessions on this computer show up here")
 }
 
 func sessFilter(all []sessions.Session, days int, model, folder string, now time.Time) []sessions.Session {
@@ -143,11 +143,11 @@ func (m model) updateSessions(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // page back when the agent quits.
 func resumeSession(s sessions.Session) tea.Cmd {
 	if s.Resume == "" {
-		return func() tea.Msg { return flashMsg{text: "this session can't be resumed from here"} }
+		return func() tea.Msg { return flashMsg{text: tr("this session can't be resumed from here")} }
 	}
 	// the shell's own "no such directory" is gone with the screen it was on
 	if fi, err := os.Stat(s.Cwd); s.Cwd != "" && (err != nil || !fi.IsDir()) {
-		return func() tea.Msg { return flashMsg{text: "its folder " + tildePath(s.Cwd) + " isn't there any more"} }
+		return func() tea.Msg { return flashMsg{text: trf("its folder %s isn't there any more", tildePath(s.Cwd))} }
 	}
 	run := sessions.ResumeNow(s)
 	c := proc.Command("sh", "-c", run)
@@ -156,9 +156,9 @@ func resumeSession(s sessions.Session) tea.Cmd {
 	}
 	return tea.ExecProcess(c, func(err error) tea.Msg {
 		if err != nil {
-			return flashMsg{text: "resume: " + err.Error()}
+			return flashMsg{text: trf("resume: %s", err.Error())}
 		}
-		return flashMsg{text: "back from the session", ok: true}
+		return flashMsg{text: tr("back from the session"), ok: true}
 	})
 }
 
@@ -166,19 +166,19 @@ func resumeSession(s sessions.Session) tea.Cmd {
 // the other filter.
 func (m *model) openSessPick(folder bool) {
 	r := m.sstats.Sum(m.smodel, m.sfolder)
-	all, shares, crumb := allModels, r.Models, "model"
+	all, shares, crumb := tr(allModels), r.Models, tr("model")
 	if folder {
-		all, shares, crumb = allFolders, r.Folders, "folder"
+		all, shares, crumb = tr(allFolders), r.Folders, tr("folder")
 	}
 	items := []agent.Option{{Value: all}}
 	for _, s := range shares {
 		if s.Name != "" {
-			items = append(items, agent.Option{Value: s.Name, Note: fmtTokens(s.Spent()) + " tokens"})
+			items = append(items, agent.Option{Value: s.Name, Note: trf("%s tokens", fmtTokens(s.Spent()))})
 		}
 	}
 	m.pk = picker{
-		crumbs: []string{"sessions", crumb},
-		input:  newInput("filter"),
+		crumbs: []string{tr("sessions"), crumb},
+		input:  newInput(tr("filter")),
 		items:  items,
 		onPick: func(v string) tea.Cmd {
 			if v == all {
@@ -210,20 +210,20 @@ func sessBar(rng int, model, folder string, stats bool) string {
 	var tabs []string
 	for i, r := range sessRanges {
 		if i == rng {
-			tabs = append(tabs, sPill.Render(r.name))
+			tabs = append(tabs, sPill.Render(tr(r.name)))
 		} else {
-			tabs = append(tabs, sMuted.Render(" "+r.name+" "))
+			tabs = append(tabs, sMuted.Render(" "+tr(r.name)+" "))
 		}
 	}
 	filter := func(v, all string) string {
 		if v == "" {
-			return sMuted.Render(all)
+			return sMuted.Render(tr(all))
 		}
 		return sNameOn.Render(v)
 	}
-	view := sNameOn.Render("sessions") + sFaint.Render(" · stats")
+	view := sNameOn.Render(tr("sessions")) + sFaint.Render(" · "+tr("stats"))
 	if stats {
-		view = sFaint.Render("sessions · ") + sNameOn.Render("stats")
+		view = sFaint.Render(tr("sessions")+" · ") + sNameOn.Render(tr("stats"))
 	}
 	return strings.Join(tabs, " ") + "    " + filter(model, allModels) + sFaint.Render(" · ") + filter(tildePath(folder), allFolders) + "    " + view
 }
@@ -238,7 +238,7 @@ func sessListLines(list []sessions.Session, agents []*agent.Agent, rng int, mode
 	add("")
 	if len(list) == 0 {
 		if model != "" || folder != "" {
-			add(sMuted.Render("no session matches · x clears the filters"))
+			add(sMuted.Render(tr("no session matches · x clears the filters")))
 		} else {
 			add(sMuted.Render(sessNothing()))
 		}
@@ -256,7 +256,7 @@ func sessListLines(list []sessions.Session, agents []*agent.Agent, rng int, mode
 		if s.Cost > 0 {
 			c = sOK.Render(fmtCost(usage.Totals{Cost: s.Cost, Unpriced: s.Unpriced}))
 		} else if s.Spent() > 0 {
-			c = sFaint.Render("no price")
+			c = sFaint.Render(tr("no price"))
 		}
 		where := filepath.Base(s.Cwd)
 		if s.Cwd == "" {
@@ -264,10 +264,10 @@ func sessListLines(list []sessions.Session, agents []*agent.Agent, rng int, mode
 		}
 		title := strings.Join(strings.Fields(s.Title), " ")
 		if title == "" {
-			title = "(untitled)"
+			title = tr("(untitled)")
 		}
 		rows[i] = row{sessAgo(s.Last, now), cmp.Or(names[s.Agent], s.Agent), trunc(where, 24), fmtTokens(s.Spent()), c, title}
-		wn, ww, wf, wt = max(wn, len(rows[i].when)), max(ww, lipgloss.Width(rows[i].who)), max(wf, lipgloss.Width(rows[i].where)), max(wt, len(rows[i].tokens))
+		wn, ww, wf, wt = max(wn, lipgloss.Width(rows[i].when)), max(ww, lipgloss.Width(rows[i].who)), max(wf, lipgloss.Width(rows[i].where)), max(wt, lipgloss.Width(rows[i].tokens))
 	}
 	visible := max(3, height-11) // the header, the bar, the arrows, the command and the footer around them
 	start := 0
@@ -276,7 +276,7 @@ func sessListLines(list []sessions.Session, agents []*agent.Agent, rng int, mode
 	}
 	start = max(0, min(start, len(list)-visible))
 	if start > 0 {
-		add(sFaint.Render(fmt.Sprintf("↑ %d more", start)))
+		add(sFaint.Render(trf("↑ %d more", start)))
 	}
 	for i := start; i < len(list) && i < start+visible; i++ {
 		r := rows[i]
@@ -291,11 +291,11 @@ func sessListLines(list []sessions.Session, agents []*agent.Agent, rng int, mode
 		out = append(out, pad+line)
 	}
 	if rest := len(list) - start - visible; rest > 0 {
-		add(sFaint.Render(fmt.Sprintf("↓ %d more", rest)))
+		add(sFaint.Render(trf("↓ %d more", rest)))
 	}
 	if sel < len(list) && list[sel].Resume != "" {
 		add("")
-		add(sFaint.Render(trunc("↵ runs "+list[sel].Resume, max(20, width-2))))
+		add(sFaint.Render(trunc(trf("↵ runs %s", list[sel].Resume), max(20, width-2))))
 	}
 	return out
 }
@@ -305,13 +305,13 @@ func sessAgo(t, now time.Time) string {
 	d := now.Sub(t)
 	switch {
 	case d < time.Minute:
-		return "just now"
+		return tr("just now")
 	case d < time.Hour:
-		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+		return trf("%dm ago", int(d.Minutes()))
 	case d < 48*time.Hour:
-		return fmt.Sprintf("%dh ago", int(d.Hours()))
+		return trf("%dh ago", int(d.Hours()))
 	case d < 60*24*time.Hour:
-		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+		return trf("%dd ago", int(d.Hours()/24))
 	}
 	return t.In(time.Local).Format("2006-01-02")
 }
@@ -327,13 +327,13 @@ func sessLines(st sessions.Stats, rng int, model, folder string, byCost bool, wi
 	r := st.Sum(model, folder)
 	if r.Spent() == 0 && r.CacheRead == 0 {
 		if model != "" || folder != "" {
-			add(sMuted.Render("no session matches · x clears the filters"))
+			add(sMuted.Render(tr("no session matches · x clears the filters")))
 		} else {
 			add(sMuted.Render(sessNothing()))
 		}
 		return out
 	}
-	c := sFaint.Render("no price")
+	c := sFaint.Render(tr("no price"))
 	if r.Cost > 0 {
 		c = sOK.Render(fmtCost(usage.Totals{Cost: r.Cost, Unpriced: len(r.Unpriced)}))
 	}
@@ -341,16 +341,16 @@ func sessLines(st sessions.Stats, rng int, model, folder string, byCost bool, wi
 	// of all the prompts came to: Input leaves out what was read from the
 	// cache and what was written to it
 	if p := r.Input + r.CacheRead + r.CacheWrite; r.CacheRead > 0 && p > 0 {
-		hit = sMuted.Render(" (" + usage.HitPct(float64(r.CacheRead)/float64(p)) + " hit)")
+		hit = sMuted.Render(" " + trf("(%s hit)", usage.HitPct(float64(r.CacheRead)/float64(p))))
 	}
 	active := sessions.Duration(r.Active)
 	if r.Active >= 0 {
-		active += sMuted.Render(fmt.Sprintf(" on %d day%s", r.DaysUsed, plural(r.DaysUsed)))
+		active += sMuted.Render(" " + trf("on %d day%s", r.DaysUsed, plural(r.DaysUsed)))
 	} else {
-		active += sMuted.Render(" not kept by model")
+		active += sMuted.Render(" " + tr("not kept by model"))
 	}
-	add(sName.Render(fmtTokens(r.Spent())+" tokens") + sMuted.Render(" · ") + c + sMuted.Render(" · cache read ") + sText.Render(fmtTokens(r.CacheRead)) + hit + sMuted.Render(" · active ") + sText.Render(active))
-	add(sMuted.Render("in " + fmtTokens(r.Input) + "  out " + fmtTokens(r.Output) + "  cache write " + fmtTokens(r.CacheWrite)))
+	add(sName.Render(trf("%s tokens", fmtTokens(r.Spent()))) + sMuted.Render(" · ") + c + sMuted.Render(" · "+tr("cache read")+" ") + sText.Render(fmtTokens(r.CacheRead)) + hit + sMuted.Render(" · "+tr("active")+" ") + sText.Render(active))
+	add(sMuted.Render(trf("in %s  out %s  cache write %s", fmtTokens(r.Input), fmtTokens(r.Output), fmtTokens(r.CacheWrite))))
 	add("")
 
 	chart := sessChart(r.Days, byCost, width, 6)
@@ -366,7 +366,7 @@ func sessLines(st sessions.Stats, rng int, model, folder string, byCost bool, wi
 		if len(ss) == 0 {
 			return
 		}
-		add(sFaint.Render(head))
+		add(sFaint.Render(tr(head)))
 		w := 0
 		for _, s := range ss[:min(len(ss), room)] {
 			w = max(w, lipgloss.Width(name(s.Name)))
@@ -377,10 +377,10 @@ func sessLines(st sessions.Stats, rng int, model, folder string, byCost bool, wi
 		}
 		for i, s := range ss {
 			if i == room {
-				add(sFaint.Render(fmt.Sprintf("and %d more · f and M pick one", len(ss)-room)))
+				add(sFaint.Render(trf("and %d more · f and M pick one", len(ss)-room)))
 				break
 			}
-			sc := sFaint.Render("no price")
+			sc := sFaint.Render(tr("no price"))
 			if s.Cost > 0 {
 				sc = sOK.Render(fmtCost(usage.Totals{Cost: s.Cost}))
 			}
@@ -394,7 +394,7 @@ func sessLines(st sessions.Stats, rng int, model, folder string, byCost bool, wi
 	if folder == "" {
 		table("folders", r.Folders, func(s string) string {
 			if s == "" {
-				return "(no folder)"
+				return tr("(no folder)")
 			}
 			return trunc(tildePath(s), 48)
 		})
@@ -469,17 +469,17 @@ func sessChart(days []sessions.DayTotal, byCost bool, width, height int) []strin
 		top = fmtCost(usage.Totals{Cost: peak})
 	}
 	lines[0] += "  " + sFaint.Render(top)
-	unit := "a day"
+	unit := tr("a day")
 	if step == 7 {
-		unit = "a week"
+		unit = tr("a week")
 	} else if step > 1 {
-		unit = fmt.Sprintf("%d days", step)
+		unit = trf("%d days", step)
 	}
-	lines[height-1] += "  " + sFaint.Render(map[bool]string{false: "tokens", true: "cost"}[byCost]+" · "+unit)
+	lines[height-1] += "  " + sFaint.Render(tr(map[bool]string{false: "tokens", true: "cost"}[byCost])+" · "+unit)
 	span := len(bs) + (len(bs)-1)*len(gap)
 	first, last := shortDate(bs[0].date), shortDate(bs[len(bs)-1].date)
 	under := first
-	if n := span - len(first) - len(last); n > 0 {
+	if n := span - lipgloss.Width(first) - lipgloss.Width(last); n > 0 {
 		under += strings.Repeat(" ", n) + last
 	}
 	return append(lines, sFaint.Render(under))
@@ -490,7 +490,7 @@ func shortDate(d string) string {
 	if err != nil {
 		return d
 	}
-	return t.Format("Jan 2")
+	return t.Format(tr("Jan 2"))
 }
 
 func tildePath(p string) string {

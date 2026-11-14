@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -62,11 +61,11 @@ func keepGateway(connected bool) string {
 	switch {
 	case err == nil && st.Installed:
 		if err := k.start(); err == nil {
-			return "magpie: the gateway goes on in magpie's service (magpie daemon status)"
+			return tr("magpie: the gateway goes on in magpie's service (magpie daemon status)")
 		}
 	case err == nil && !k.removed():
 		if err := k.install(); err == nil {
-			msg := "magpie: the gateway goes on in magpie's service, which now starts with this system or your login, so agents connected to magpie reach it with magpie tui closed; magpie daemon uninstall removes it"
+			msg := tr("magpie: the gateway goes on in magpie's service, which now starts with this system or your login, so agents connected to magpie reach it with magpie tui closed; magpie daemon uninstall removes it")
 			if l := k.linger(); l != "" {
 				msg += " (" + l + ")"
 			}
@@ -75,13 +74,13 @@ func keepGateway(connected bool) string {
 	}
 	pid, log, err := k.background()
 	if err != nil {
-		return gatewayGoneNote() + " (couldn't start magpie serve in the background: " + err.Error() + ")"
+		return gatewayGoneNote() + " " + trf("(couldn't start magpie serve in the background: %s)", err.Error())
 	}
-	msg := fmt.Sprintf("magpie: the gateway goes on in the background (magpie serve, pid %d, log %s) until this system stops", pid, log)
+	msg := trf("magpie: the gateway goes on in the background (magpie serve, pid %d, log %s) until this system stops", pid, log)
 	if wslHere() {
-		msg += "; for it to start with WSL, turn systemd on with [boot] systemd=true in /etc/wsl.conf and run magpie daemon install"
+		msg += tr("; for it to start with WSL, turn systemd on with [boot] systemd=true in /etc/wsl.conf and run magpie daemon install")
 	} else {
-		msg += "; magpie daemon install starts it with the system"
+		msg += tr("; magpie daemon install starts it with the system")
 	}
 	return msg
 }
@@ -92,7 +91,7 @@ func keepGateway(connected bool) string {
 // which nothing ever starts (#3756): the note says the switch that has the
 // terminal hand the gateway on instead.
 func atLoginNote() string {
-	return gatewayGoneNote() + "; magpie opens at login and serves it then. Where no desktop logs in here, `magpie autostart off` has magpie tui hand it on as it quits"
+	return gatewayGoneNote() + tr("; magpie opens at login and serves it then. Where no desktop logs in here, `magpie autostart off` has magpie tui hand it on as it quits")
 }
 
 // BackgroundLog is the log of a magpie serve that magpie tui left

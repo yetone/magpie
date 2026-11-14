@@ -44,11 +44,11 @@ func (m *model) reloadLibrary() {
 	}
 	m.libView = v
 	m.libAgents = v.Agents
-	ins := libRow{kind: "instructions", name: "shared instructions"}
+	ins := libRow{kind: "instructions", name: tr("shared instructions")}
 	if lines := strings.TrimRight(v.Instructions.Shared, "\n"); strings.TrimSpace(lines) == "" {
-		ins.about = "none yet · e writes them"
+		ins.about = tr("none yet · e writes them")
 	} else {
-		ins.about = fmt.Sprintf("%d line%s", strings.Count(lines, "\n")+1, plural(strings.Count(lines, "\n")+1))
+		ins.about = trf("%d line%s", strings.Count(lines, "\n")+1, plural(strings.Count(lines, "\n")+1))
 	}
 	for _, a := range v.Instructions.Agents {
 		if a.On {
@@ -65,20 +65,20 @@ func (m *model) reloadLibrary() {
 			what = strings.TrimSpace(s.Command + " " + strings.Join(s.Args, " "))
 		}
 		if s.Local {
-			what = "not synced · " + what
+			what = tr("not synced") + " · " + what
 		}
 		m.lib = append(m.lib, libRow{kind: "mcp", name: s.Name, about: what, on: s.Agents, bad: len(s.Problems)})
 	}
 	for _, s := range v.Skills {
 		r := libRow{kind: "skill", name: s.Name, about: s.Description, on: s.Agents, bad: len(s.Problems)}
 		if s.Missing {
-			r.about, r.bad = "its folder is gone", r.bad+1
+			r.about, r.bad = tr("its folder is gone"), r.bad+1
 		} else if s.Gone != "" {
-			r.about, r.bad = "removed from "+s.Source+" · d takes it out", r.bad+1
+			r.about, r.bad = trf("removed from %s · d takes it out", s.Source), r.bad+1
 		}
 		if s.OffHere {
 			// ticked agents are other computers' too; none gets it here
-			r.about = "off on this computer · magpie library skill on-here " + s.Name
+			r.about = trf("off on this computer · magpie library skill on-here %s", s.Name)
 		}
 		m.lib = append(m.lib, r)
 	}
@@ -92,9 +92,9 @@ func (m *model) reloadLibrary() {
 		r := libRow{kind: "rtk", name: "RTK"}
 		switch {
 		case rv.Path == "":
-			r.about = "not installed · " + rv.URL
+			r.about = tr("not installed") + " · " + rv.URL
 		case rv.Gain != nil:
-			r.about = fmt.Sprintf("%s · %s tokens saved", rv.Version, fmtTokens(int(rv.Gain.Saved)))
+			r.about = trf("%s · %s tokens saved", rv.Version, fmtTokens(int(rv.Gain.Saved)))
 		default:
 			r.about = rv.Version
 		}
@@ -139,8 +139,8 @@ func (m model) updateLibrary(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.openLibAdd()
 		return m, nil
 	case "s":
-		m.flash, m.flashOK = "writing the library into the agents…", true
-		return m, libCmd(library.Sync, "synced")
+		m.flash, m.flashOK = tr("writing the library into the agents…"), true
+		return m, libCmd(library.Sync, tr("synced"))
 	}
 	if n == 0 {
 		return m, nil
@@ -152,9 +152,9 @@ func (m model) updateLibrary(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "instructions", "mcp", "skill", "rtk":
 			m.openLibAgents(r)
 		case "found-mcp", "found-skill":
-			m.flash, m.flashOK = "i brings "+r.name+" into the library, for magpie to give it to other agents too", true
+			m.flash, m.flashOK = trf("i brings %s into the library, for magpie to give it to other agents too", r.name), true
 			if !r.own {
-				m.flash += "; d takes it out of every agent that has it"
+				m.flash += "; " + tr("d takes it out of every agent that has it")
 			}
 		}
 	case "e":
@@ -168,19 +168,19 @@ func (m model) updateLibrary(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if r.kind != "skill" {
 			return m, nil
 		}
-		m.flash, m.flashOK = "fetching "+r.name+" from GitHub again…", true
+		m.flash, m.flashOK = trf("fetching %s from GitHub again…", r.name), true
 		return m, libCmd(func() (*library.Result, error) {
 			res, err := library.UpdateSkill(r.name, false)
 			var gone *library.GoneError
 			if errors.As(err, &gone) {
 				// removed from its source: kept till the user takes it out
-				err = fmt.Errorf("%w · d takes it out", err)
+				err = fmt.Errorf("%w · %s", err, tr("d takes it out"))
 			}
 			return res, err
-		}, "updated "+r.name)
+		}, trf("updated %s", r.name))
 	case "i":
 		if r.own {
-			m.flash, m.flashOK = r.name+" is put there by the agent's app itself, each time it starts: it stays as it is", false
+			m.flash, m.flashOK = trf("%s is put there by the agent's app itself, each time it starts: it stays as it is", r.name), false
 			return m, nil
 		}
 		var do func(string) (*library.Result, error)
@@ -192,7 +192,7 @@ func (m model) updateLibrary(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		default:
 			return m, nil
 		}
-		return m, libCmd(func() (*library.Result, error) { return do(r.name) }, "brought "+r.name+" into the library")
+		return m, libCmd(func() (*library.Result, error) { return do(r.name) }, trf("brought %s into the library", r.name))
 	case "d":
 		var do func(string) (*library.Result, error)
 		switch r.kind {
@@ -204,7 +204,7 @@ func (m model) updateLibrary(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			do = library.RemoveFoundSkill
 		case "found-mcp":
 			if r.own {
-				m.flash, m.flashOK = r.name+" is put there by the agent's app itself, each time it starts: it stays as it is", false
+				m.flash, m.flashOK = trf("%s is put there by the agent's app itself, each time it starts: it stays as it is", r.name), false
 				return m, nil
 			}
 			do = library.RemoveFoundServer
@@ -213,17 +213,17 @@ func (m model) updateLibrary(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		if m.confirm != "library/"+r.kind+"/"+r.name {
 			m.confirm = "library/" + r.kind + "/" + r.name
-			m.flash, m.flashOK = "press d again to take "+r.name+" out of the library and every agent", false
+			m.flash, m.flashOK = trf("press d again to take %s out of the library and every agent", r.name), false
 			switch r.kind {
 			case "found-skill":
-				m.flash = "press d again to take " + r.name + " out of every agent that has it, kept with the backups"
+				m.flash = trf("press d again to take %s out of every agent that has it, kept with the backups", r.name)
 			case "found-mcp":
-				m.flash = "press d again to take " + r.name + " out of every agent that has it, their files kept with the backups"
+				m.flash = trf("press d again to take %s out of every agent that has it, their files kept with the backups", r.name)
 			}
 			return m, nil
 		}
 		m.confirm = ""
-		return m, libCmd(func() (*library.Result, error) { return do(r.name) }, "removed "+r.name)
+		return m, libCmd(func() (*library.Result, error) { return do(r.name) }, trf("removed %s", r.name))
 	}
 	return m, nil
 }
@@ -244,20 +244,20 @@ func libCmd(do func() (*library.Result, error), done string) tea.Cmd {
 func libSaid(res *library.Result, done string) (string, bool) {
 	// an install of skills the library had already added none
 	if len(res.Installed) == 0 && len(res.Had) > 0 {
-		done = strings.Join(res.Had, ", ") + " in the library already"
+		done = trf("%s in the library already", strings.Join(res.Had, ", "))
 	}
 	// a skill from a folder, linked to the one installed (skill_link.go)
 	if len(res.Installed) == 0 && len(res.Linked) > 0 {
-		done = strings.Join(res.Linked, ", ") + " updates from GitHub now"
+		done = trf("%s updates from GitHub now", strings.Join(res.Linked, ", "))
 	}
 	if len(res.LinkedKept) > 0 {
-		done += " · files of their own kept with the backups: " + strings.Join(res.LinkedKept, ", ")
+		done += " · " + trf("files of their own kept with the backups: %s", strings.Join(res.LinkedKept, ", "))
 	}
 	for _, p := range res.Skipped {
-		done += " · " + strings.TrimPrefix(p.What, "skill:") + " skipped: " + p.Error
+		done += " · " + trf("%s skipped: %s", strings.TrimPrefix(p.What, "skill:"), p.Error)
 	}
 	if len(res.Changed) > 0 {
-		done += " · written into " + strings.Join(res.Changed, ", ")
+		done += " · " + trf("written into %s", strings.Join(res.Changed, ", "))
 	}
 	for _, p := range res.Problems {
 		done += " · " + p.Agent + ": " + p.Error
@@ -270,9 +270,9 @@ func libSaid(res *library.Result, done string) (string, bool) {
 func (m model) libOptions(r libRow) []agent.Option {
 	var out []agent.Option
 	add := func(id, name string) {
-		note := "○ off"
+		note := "○ " + tr("off")
 		if slices.Contains(r.on, id) {
-			note = "● on"
+			note = "● " + tr("on")
 		}
 		out = append(out, agent.Option{Value: id, Note: note + "  " + name})
 	}
@@ -294,12 +294,12 @@ func (m model) libOptions(r libRow) []agent.Option {
 // openLibAgents lists the agents a row can go to; enter gives it to one or
 // takes it away, and the list stays open.
 func (m *model) openLibAgents(r libRow) {
-	crumbs := []string{"library", r.name, "agents"}
+	crumbs := []string{tr("library"), r.name, tr("agents")}
 	m.pk = picker{
 		crumbs: crumbs,
-		input:  newInput("filter agents"),
+		input:  newInput(tr("filter agents")),
 		items:  m.libOptions(r),
-		empty:  "no agent here has a place for it",
+		empty:  tr("no agent here has a place for it"),
 		toggle: func(id string) ([]agent.Option, string, bool) {
 			on := !slices.Contains(r.on, id)
 			var (
@@ -317,9 +317,9 @@ func (m *model) openLibAgents(r libRow) {
 						r.on = append(r.on, a.ID)
 					}
 				}
-				text = "RTK " + map[bool]string{true: "on", false: "off"}[on] + " for " + m.libName(id)
+				text = trf("RTK %s for %s", map[bool]string{true: tr("on"), false: tr("off")}[on], m.libName(id))
 				if len(v.Restart) > 0 {
-					text += " · restart " + strings.Join(v.Restart, ", ") + " for it to take effect"
+					text += " · " + trf("restart %s for it to take effect", strings.Join(v.Restart, ", "))
 				}
 			} else {
 				agents := slices.Clone(r.on)
@@ -344,11 +344,11 @@ func (m *model) openLibAgents(r libRow) {
 					return nil, err.Error(), false
 				}
 				r.on = agents
-				verb := "given to "
+				said := trf("%s given to %s", r.name, m.libName(id))
 				if !on {
-					verb = "taken from "
+					said = trf("%s taken from %s", r.name, m.libName(id))
 				}
-				text, ok = libSaid(&library.Result{Problems: res.Problems}, r.name+" "+verb+m.libName(id))
+				text, ok = libSaid(&library.Result{Problems: res.Problems}, said)
 			}
 			return m.libOptions(r), text, ok
 		},
@@ -361,25 +361,25 @@ func (m *model) openLibAgents(r libRow) {
 // openLibAdd picks what to add: an MCP server, or skills.
 func (m *model) openLibAdd() {
 	m.pk = picker{
-		crumbs: []string{"library", "add"},
-		input:  newInput("filter"),
+		crumbs: []string{tr("library"), tr("add")},
+		input:  newInput(tr("filter")),
 		items: []agent.Option{
-			{Value: "mcp server", Note: "a URL, or a command it runs"},
-			{Value: "skills", Note: "from GitHub, GitLab or any git repository, or a folder on this machine"},
+			{Value: tr("mcp server"), Note: tr("a URL, or a command it runs")},
+			{Value: tr("skills"), Note: tr("from GitHub, GitLab or any git repository, or a folder on this machine")},
 		},
 		onPick: func(v string) tea.Cmd {
 			return func() tea.Msg {
-				if v == "skills" {
-					in := newInput("owner/repo, a GitHub or GitLab link, a git address (git@host:group/repo.git), or a folder's full path")
+				if v == tr("skills") {
+					in := newInput(tr("owner/repo, a GitHub or GitLab link, a git address (git@host:group/repo.git), or a folder's full path"))
 					in.CharLimit = 400
-					return askMsg{ask{crumbs: []string{"library", "add", "skills"}, input: in,
-						hint:    "magpie looks there for skills, then you pick one",
+					return askMsg{ask{crumbs: []string{tr("library"), tr("add"), tr("skills")}, input: in,
+						hint:    tr("magpie looks there for skills, then you pick one"),
 						onEnter: probeCmd}}
 				}
-				in := newInput("<name> <url | command args…>")
+				in := newInput(tr("<name> <url | command args…>"))
 				in.CharLimit = 400
-				return askMsg{ask{crumbs: []string{"library", "add", "mcp server"}, input: in,
-					hint:    "e.g. context7 https://mcp.context7.com/mcp · fs npx -y @modelcontextprotocol/server-filesystem ~/code\nthen ↵ on it gives it to agents",
+				return askMsg{ask{crumbs: []string{tr("library"), tr("add"), tr("mcp server")}, input: in,
+					hint:    trf("e.g. %s", "context7 https://mcp.context7.com/mcp · fs npx -y @modelcontextprotocol/server-filesystem ~/code") + "\n" + tr("then ↵ on it gives it to agents"),
 					onEnter: func(line string) tea.Cmd { return saveServer(nil, line) }}}
 			}
 		},
@@ -406,12 +406,12 @@ func (m *model) openServer(name string) {
 	if old.Command != "" {
 		line = strings.Join(append([]string{old.Name, old.Command}, old.Args...), " ")
 	}
-	in := newInput("<name> <url | command args…>")
+	in := newInput(tr("<name> <url | command args…>"))
 	in.CharLimit = 400
 	in.SetValue(line)
 	in.CursorEnd()
-	m.openAsk(ask{crumbs: []string{"library", name, "edit"}, input: in,
-		hint:    "its env, headers and agents stay as they are",
+	m.openAsk(ask{crumbs: []string{tr("library"), name, tr("edit")}, input: in,
+		hint:    tr("its env, headers and agents stay as they are"),
 		onEnter: func(line string) tea.Cmd { return saveServer(old, line) }})
 }
 
@@ -421,15 +421,15 @@ func saveServer(old *library.Server, line string) tea.Cmd {
 	return func() tea.Msg {
 		words := strings.Fields(line)
 		if len(words) < 2 {
-			return flashMsg{text: "a name, then a URL or a command"}
+			return flashMsg{text: tr("a name, then a URL or a command")}
 		}
 		s, err := library.ServerOf(words[0], words[1:])
 		if err != nil {
 			return flashMsg{text: err.Error()}
 		}
-		was, done := "", "added "+s.Name+" · ↵ on it gives it to agents"
+		was, done := "", trf("added %s · ↵ on it gives it to agents", s.Name)
 		if old != nil {
-			was, done = old.Name, "saved "+s.Name
+			was, done = old.Name, trf("saved %s", s.Name)
 			// and its OAuth app and startup timeout, which only the GUI edits
 			// and whether it is kept to this computer, and out of the hub,
 			// and the user's note on it
@@ -464,16 +464,16 @@ func (m *model) openProbe(p *library.Probe) {
 		note := c.Description
 		switch {
 		case c.Have && c.As != "":
-			note = "in the library as " + c.As + " · " + note
+			note = trf("in the library as %s", c.As) + " · " + note
 		case c.Have:
-			note = "in the library already · " + note
+			note = tr("in the library already") + " · " + note
 		case c.Links:
 			// the library's by its name came from a folder: this one
 			// takes its place, and it updates from GitHub from then on
-			note = "links the library's to GitHub · " + note
+			note = tr("links the library's to GitHub") + " · " + note
 		case c.As != "":
 			// another skill from elsewhere has its name
-			note = "adds as " + c.As + " · " + note
+			note = trf("adds as %s", c.As) + " · " + note
 		}
 		v := c.Path
 		if v == "" {
@@ -482,17 +482,17 @@ func (m *model) openProbe(p *library.Probe) {
 		items = append(items, agent.Option{Value: v, Note: c.Name + "  " + trunc(note, 80)})
 	}
 	m.pk = picker{
-		crumbs: []string{"library", "add", "skills", p.Source},
-		input:  newInput("filter skills"),
+		crumbs: []string{tr("library"), tr("add"), tr("skills"), p.Source},
+		input:  newInput(tr("filter skills")),
 		items:  items,
-		empty:  "no skills there: a skill is a folder with a SKILL.md",
+		empty:  tr("no skills there: a skill is a folder with a SKILL.md"),
 		onPick: func(path string) tea.Cmd {
 			if path == "." {
 				path = ""
 			}
 			return libCmd(func() (*library.Result, error) {
 				return library.InstallSkills(p.Source, []string{path}, []string{})
-			}, "added the skill · ↵ on it gives it to agents")
+			}, tr("added the skill · ↵ on it gives it to agents"))
 		},
 	}
 	m.pk.refilter()
@@ -508,7 +508,7 @@ func (m *model) openProbe(p *library.Probe) {
 		left = append(left, fmt.Sprintf("%s (%d MB)", name, l.Size>>20))
 	}
 	if len(left) > 0 {
-		m.flash = "too big to install, over 200 MB a skill: " + strings.Join(left, ", ")
+		m.flash = trf("too big to install, over 200 MB a skill: %s", strings.Join(left, ", "))
 	}
 }
 
@@ -554,7 +554,7 @@ func editInstructions() tea.Cmd {
 			return editedMsg{err: err}
 		}
 		if string(b) == v.Shared {
-			return flashMsg{text: "the instructions are as they were", ok: true}
+			return flashMsg{text: tr("the instructions are as they were"), ok: true}
 		}
 		return editedMsg{text: string(b)}
 	})
@@ -563,7 +563,7 @@ func editInstructions() tea.Cmd {
 func saveInstructions(text string) tea.Cmd {
 	return libCmd(func() (*library.Result, error) {
 		return library.SaveInstructions(library.InstructionsChange{Shared: &text})
-	}, "instructions saved")
+	}, tr("instructions saved"))
 }
 
 func (m model) viewLibrary() string {
@@ -576,16 +576,16 @@ func (m model) viewLibrary() string {
 	}
 	nameW := 0
 	for _, r := range m.lib {
-		nameW = max(nameW, len([]rune(r.name)))
+		nameW = max(nameW, lipgloss.Width(r.name))
 	}
 	nameW = min(nameW, 32)
 	heads := map[string]string{
-		"instructions": "instructions · what every agent reads before a conversation",
-		"mcp":          "mcp servers · a adds one, e changes it",
-		"skill":        "skills · a adds some from GitHub or a folder, u fetches one from GitHub again",
-		"found-mcp":    "mcp servers in your agents, not in the library",
-		"found-skill":  "skills in your agents, not in the library",
-		"rtk":          "rtk · its hook in each agent, by RTK's own installer",
+		"instructions": tr("instructions · what every agent reads before a conversation"),
+		"mcp":          tr("mcp servers · a adds one, e changes it"),
+		"skill":        tr("skills · a adds some from GitHub or a folder, u fetches one from GitHub again"),
+		"found-mcp":    tr("mcp servers in your agents, not in the library"),
+		"found-skill":  tr("skills in your agents, not in the library"),
+		"rtk":          tr("rtk · its hook in each agent, by RTK's own installer"),
 	}
 	// the rows around the cursor, as many as fit
 	visible := max(4, m.h-6)
@@ -632,10 +632,10 @@ func (m model) viewLibrary() string {
 		on := sMuted.Render(strings.Join(agents, ", "))
 		switch {
 		case r.own:
-			on = sFaint.Render(strings.Join(agents, ", ") + "'s own")
+			on = sFaint.Render(trf("%s's own", strings.Join(agents, ", ")))
 		case len(agents) == 0 && strings.HasPrefix(r.kind, "found-"):
 		case len(agents) == 0:
-			on = sFaint.Render("no agent")
+			on = sFaint.Render(tr("no agent"))
 		}
 		line := pad + marker + name + "  " + on
 		if r.bad > 0 {
@@ -649,15 +649,26 @@ func (m model) viewLibrary() string {
 		b.WriteString(line + "\n")
 		lines++
 	}
-	b.WriteString("\n" + pad + "  " + sFaint.Render("kept in "+tilde(m.libView.Dir)))
+	b.WriteString("\n" + pad + "  " + sFaint.Render(trf("kept in %s", tilde(m.libView.Dir))))
 	return b.String()
 }
 
-// trunc cuts s to n runes, with an ellipsis.
+// trunc cuts s to n columns, with an ellipsis: a Chinese character takes
+// two.
 func trunc(s string, n int) string {
 	s = strings.Join(strings.Fields(s), " ")
-	if r := []rune(s); len(r) > n {
-		return string(r[:max(1, n-1)]) + "…"
+	if lipgloss.Width(s) <= n {
+		return s
 	}
-	return s
+	var b strings.Builder
+	w := 0
+	for _, r := range s {
+		rw := lipgloss.Width(string(r))
+		if b.Len() > 0 && w+rw > n-1 {
+			break
+		}
+		b.WriteRune(r)
+		w += rw
+	}
+	return b.String() + "…"
 }

@@ -73,35 +73,35 @@ var routings = []string{"", provider.Ordered, provider.Rotate, provider.LeastUse
 func routingName(v string) string {
 	switch v {
 	case provider.Ordered:
-		return "in order"
+		return tr("in order")
 	case provider.Rotate:
-		return "rotate"
+		return tr("rotate")
 	case provider.LeastUsed:
-		return "least used"
+		return tr("least used")
 	case provider.Pace:
-		return "weekly pace"
+		return tr("weekly pace")
 	case provider.Weighted:
-		return "by weight"
+		return tr("by weight")
 	case provider.FreeFirst:
-		return "free first"
+		return tr("free first")
 	case provider.Fastest:
-		return "speed first"
+		return tr("speed first")
 	case provider.Cheapest:
-		return "cheapest first"
+		return tr("cheapest first")
 	case provider.Drain:
-		return "until used up"
+		return tr("until used up")
 	case provider.FreeExpiring:
-		return "free, soonest to expire"
+		return tr("free, soonest to expire")
 	case provider.Manual:
-		return "manual"
+		return tr("manual")
 	}
-	return "smart"
+	return tr("smart")
 }
 
 // groupRouting is how a group routes: a manual one names its pick.
 func groupRouting(g provider.Group) string {
 	if g.Routing == provider.Manual {
-		return "manual → " + g.Picked()
+		return tr("manual") + " → " + g.Picked()
 	}
 	return routingName(g.Routing)
 }
@@ -109,15 +109,15 @@ func groupRouting(g provider.Group) string {
 func staysName(v string) string {
 	switch v {
 	case provider.AffinitySession:
-		return "stays the session"
+		return tr("stays the session")
 	case provider.AffinityTurn:
-		return "stays a turn"
+		return tr("stays a turn")
 	case provider.AffinityOff:
-		return "never stays"
+		return tr("never stays")
 	case provider.AffinityStrict:
-		return "stays strictly"
+		return tr("stays strictly")
 	}
-	return "stays auto"
+	return tr("stays auto")
 }
 
 // saveGroup changes one group and saves it: one magpie found becomes the
@@ -126,7 +126,7 @@ func saveGroup(id string, change func(*provider.Group) error, done string) tea.C
 	return func() tea.Msg {
 		g, ok := findGroup(id)
 		if !ok {
-			return flashMsg{text: "no group " + id}
+			return flashMsg{text: trf("no group %s", id)}
 		}
 		if err := change(&g); err != nil {
 			return flashMsg{text: err.Error()}
@@ -178,8 +178,8 @@ func (m model) updateGroups(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "n":
-		m.openAsk(ask{crumbs: []string{"routing", "new"}, input: newInput("the group's name, e.g. opus-anywhere"),
-			hint: "then pick its first model; agents choose it as group/<id>",
+		m.openAsk(ask{crumbs: []string{tr("routing"), tr("new")}, input: newInput(tr("the group's name, e.g. opus-anywhere")),
+			hint: tr("then pick its first model; agents choose it as group/<id>"),
 			onEnter: func(name string) tea.Cmd {
 				return func() tea.Msg { return pickMsg{newGroup: name} }
 			}})
@@ -195,11 +195,11 @@ func (m model) updateGroups(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				if err := provider.ShowGroup(g.ID); err != nil {
 					return flashMsg{text: err.Error()}
 				}
-				return flashMsg{text: "brought " + g.ID + " back", ok: true}
+				return flashMsg{text: trf("brought %s back", g.ID), ok: true}
 			}
 		}
 		if key != "r" {
-			m.flash, m.flashOK = g.ID+" was removed · u brings it back", false
+			m.flash, m.flashOK = trf("%s was removed · u brings it back", g.ID), false
 		}
 		return m, nil
 	}
@@ -208,11 +208,11 @@ func (m model) updateGroups(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.gid, m.gsel = g.ID, 0
 		m.mode = modeGroup
 	case "o":
-		return m, saveGroup(g.ID, nextRouting, g.Name+" routing changed")
+		return m, saveGroup(g.ID, nextRouting, trf("%s routing changed", g.Name))
 	case "d":
 		if m.confirm != "group/"+g.ID {
 			m.confirm = "group/" + g.ID
-			m.flash, m.flashOK = "press d again to remove "+g.Name, false
+			m.flash, m.flashOK = trf("press d again to remove %s", g.Name), false
 			return m, nil
 		}
 		m.confirm = ""
@@ -220,7 +220,7 @@ func (m model) updateGroups(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if err := provider.DeleteGroup(g.ID); err != nil {
 				return flashMsg{text: err.Error()}
 			}
-			return flashMsg{text: "removed " + g.Name, ok: true}
+			return flashMsg{text: trf("removed %s", g.Name), ok: true}
 		}
 	}
 	return m, nil
@@ -248,7 +248,7 @@ func memberOptions(skip []string, self string) []agent.Option {
 			}
 			note := e.Name
 			if e.Group != "" {
-				note = "group · " + e.Name
+				note = tr("group") + " · " + e.Name
 			}
 			out = append(out, agent.Option{Value: e.ID, Note: note})
 		}
@@ -257,7 +257,7 @@ func memberOptions(skip []string, self string) []agent.Option {
 		// those of a provider's picks, as the Routing view's picker offers
 		for _, e := range provider.OfferedDeciders(nil) {
 			if !slices.Contains(skip, e.ID) {
-				out = append(out, agent.Option{Value: e.ID, Note: e.Name + " · decision model"})
+				out = append(out, agent.Option{Value: e.ID, Note: e.Name + " · " + tr("decision model")})
 			}
 		}
 	}
@@ -266,16 +266,16 @@ func memberOptions(skip []string, self string) []agent.Option {
 
 func (m *model) openMemberPicker(p pickMsg) {
 	var skip []string
-	crumbs := []string{"routing", p.newGroup, "first model"}
-	empty := "magpie has no models yet · add a provider first"
+	crumbs := []string{tr("routing"), p.newGroup, tr("first model")}
+	empty := tr("magpie has no models yet · add a provider first")
 	if p.group != "" {
 		g, _ := findGroup(p.group)
-		skip, crumbs = g.Members, []string{"routing", g.Name, "add a model"}
-		empty = "every model magpie has is in it"
+		skip, crumbs = g.Members, []string{tr("routing"), g.Name, tr("add a model")}
+		empty = tr("every model magpie has is in it")
 	}
 	m.pk = picker{
 		crumbs: crumbs,
-		input:  newInput("filter models and groups"),
+		input:  newInput(tr("filter models and groups")),
 		items:  memberOptions(skip, p.group),
 		relist: func() []agent.Option { return memberOptions(skip, p.group) },
 		empty:  empty,
@@ -284,14 +284,14 @@ func (m *model) openMemberPicker(p pickMsg) {
 				return saveGroup(p.group, func(g *provider.Group) error {
 					g.Members = append(g.Members, id)
 					return nil
-				}, id+" added")
+				}, trf("%s added", id))
 			}
 			return func() tea.Msg {
 				g := provider.Group{Name: p.newGroup, Members: []string{id}}
 				if err := provider.SaveGroup(g); err != nil {
 					return flashMsg{text: err.Error()}
 				}
-				return flashMsg{text: "made group " + p.newGroup + " · ↵ on it adds more models", ok: true}
+				return flashMsg{text: trf("made group %s · ↵ on it adds more models", p.newGroup), ok: true}
 			}
 		},
 	}
@@ -313,20 +313,20 @@ func (m *model) openClassifier(g provider.Group) {
 			}
 			note := e.Name
 			if e.ID == g.Classifier {
-				note = "● now · " + note
+				note = "● " + tr("now") + " · " + note
 			}
 			items = append(items, agent.Option{Value: e.ID, Note: note})
 		}
 		return items
 	}
 	m.pk = picker{
-		crumbs: []string{"routing", g.Name, "classifier"},
-		input:  newInput("filter models · best a small fast one without reasoning"),
+		crumbs: []string{tr("routing"), g.Name, tr("classifier")},
+		input:  newInput(tr("filter models · best a small fast one without reasoning")),
 		items:  list(),
 		relist: list,
-		empty:  "magpie has no models yet · add a provider first",
+		empty:  tr("magpie has no models yet · add a provider first"),
 		onPick: func(id string) tea.Cmd {
-			return saveGroup(g.ID, func(g *provider.Group) error { g.Classifier = id; return nil }, g.Name+" classifies with "+id)
+			return saveGroup(g.ID, func(g *provider.Group) error { g.Classifier = id; return nil }, trf("%s classifies with %s", g.Name, id))
 		},
 	}
 	m.pk.refilter()
@@ -346,17 +346,17 @@ or pause=<model> time=… days=… agents=… folders=… except-folders=…: th
 func (m *model) openRule(g provider.Group, i int) {
 	in := newInput("use=<model> tokens=200k …")
 	in.CharLimit = 400
-	crumbs := []string{"routing", g.Name, "new rule"}
+	crumbs := []string{tr("routing"), g.Name, tr("new rule")}
 	if i >= 0 {
 		in.SetValue(g.Rules[i].Line())
 		in.CursorEnd()
-		crumbs[2] = fmt.Sprintf("rule %d", i+1)
+		crumbs[2] = trf("rule %d", i+1)
 	}
-	m.openAsk(ask{crumbs: crumbs, input: in, hint: ruleHint + "\nits models: " + strings.Join(g.Members, ", "),
+	m.openAsk(ask{crumbs: crumbs, input: in, hint: tr(ruleHint) + "\n" + trf("its models: %s", strings.Join(g.Members, ", ")),
 		onEnter: func(line string) tea.Cmd {
-			done := "rule added"
+			done := tr("rule added")
 			if i >= 0 {
-				done = fmt.Sprintf("rule %d changed", i+1)
+				done = trf("rule %d changed", i+1)
 			}
 			return saveGroup(g.ID, func(g *provider.Group) error { return putRule(g, i, line) }, done)
 		}})
@@ -422,12 +422,12 @@ func (m model) updateGroup(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, saveGroup(g.ID, func(g *provider.Group) error {
 				g.Rules[from-n], g.Rules[to-n] = g.Rules[to-n], g.Rules[from-n]
 				return nil
-			}, fmt.Sprintf("rule %d moved to %d", from-n+1, to-n+1))
+			}, trf("rule %d moved to %d", from-n+1, to-n+1))
 		}
 		return m, saveGroup(g.ID, func(g *provider.Group) error {
 			g.Members[from], g.Members[to] = g.Members[to], g.Members[from]
 			return nil
-		}, g.Members[from]+" moved")
+		}, trf("%s moved", g.Members[from]))
 	}
 	switch key {
 	case "esc", "q":
@@ -454,7 +454,7 @@ func (m model) updateGroup(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "c":
 		if !slices.ContainsFunc(g.Rules, func(r provider.Rule) bool { return r.Intent != "" }) {
-			m.flash, m.flashOK = g.Name+" has no rule with an intent to classify for · n adds one", false
+			m.flash, m.flashOK = trf("%s has no rule with an intent to classify for · n adds one", g.Name), false
 			return m, nil
 		}
 		m.openClassifier(g)
@@ -466,14 +466,14 @@ func (m model) updateGroup(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		id := g.Members[m.gsel]
 		if key == "F" {
 			fast := !g.IsFast(id)
-			said := " not fast"
+			said := trf("%s not fast", id)
 			if fast {
-				said = " fast"
+				said = trf("%s fast", id)
 			}
 			return m, saveGroup(g.ID, func(g *provider.Group) error {
 				g.SetMemberFast(id, fast)
 				return nil
-			}, id+said)
+			}, said)
 		}
 		model, effort := provider.MemberEffort(id)
 		_, acct := provider.MemberAccount(id) // on its own account still
@@ -481,36 +481,36 @@ func (m model) updateGroup(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, saveGroup(g.ID, func(g *provider.Group) error {
 			g.RenameMember(id, to)
 			return nil
-		}, to+" set")
+		}, trf("%s set", to))
 	case "o":
-		return m, saveGroup(g.ID, nextRouting, g.Name+" routing changed")
+		return m, saveGroup(g.ID, nextRouting, trf("%s routing changed", g.Name))
 	case "s":
-		return m, saveGroup(g.ID, nextStays, g.Name+" affinity changed")
+		return m, saveGroup(g.ID, nextStays, trf("%s affinity changed", g.Name))
 	case "f":
-		in := newInput("a tag, e.g. relay")
+		in := newInput(tr("a tag, e.g. relay"))
 		in.SetValue(g.Family)
-		m.openAsk(ask{crumbs: []string{"routing", g.Name, "family"}, input: in, empty: true,
-			hint: "agents can be shown only some families: magpie visible <agent> <family>",
+		m.openAsk(ask{crumbs: []string{tr("routing"), g.Name, tr("family")}, input: in, empty: true,
+			hint: tr("agents can be shown only some families: magpie visible <agent> <family>"),
 			onEnter: func(v string) tea.Cmd {
-				return saveGroup(g.ID, func(g *provider.Group) error { g.Family = v; return nil }, g.Name+" family "+dash(v))
+				return saveGroup(g.ID, func(g *provider.Group) error { g.Family = v; return nil }, trf("%s family %s", g.Name, dash(v)))
 			}})
 		m.back = modeGroup
 	case "N":
-		in := newInput("your own word on it, e.g. office key only")
+		in := newInput(tr("your own word on it, e.g. office key only"))
 		in.SetValue(g.Note)
-		m.openAsk(ask{crumbs: []string{"routing", g.Name, "note"}, input: in, empty: true,
-			hint: "shown under its name; empty clears it",
+		m.openAsk(ask{crumbs: []string{tr("routing"), g.Name, tr("note")}, input: in, empty: true,
+			hint: tr("shown under its name; empty clears it"),
 			onEnter: func(v string) tea.Cmd {
-				return saveGroup(g.ID, func(g *provider.Group) error { g.Note = v; return nil }, g.Name+" note "+dash(provider.CleanNote(v)))
+				return saveGroup(g.ID, func(g *provider.Group) error { g.Note = v; return nil }, trf("%s note %s", g.Name, dash(provider.CleanNote(v))))
 			}})
 		m.back = modeGroup
 	case "x":
-		in := newInput("tokens, e.g. 200k · empty for its models' own")
+		in := newInput(tr("tokens, e.g. 200k · empty for its models' own"))
 		if g.Context > 0 {
 			in.SetValue(fmt.Sprint(g.Context))
 		}
-		m.openAsk(ask{crumbs: []string{"routing", g.Name, "context"}, input: in, empty: true,
-			hint: "how long a request agents are told the group takes, rather than its largest model's",
+		m.openAsk(ask{crumbs: []string{tr("routing"), g.Name, tr("context")}, input: in, empty: true,
+			hint: tr("how long a request agents are told the group takes, rather than its largest model's"),
 			onEnter: func(v string) tea.Cmd {
 				return saveGroup(g.ID, func(g *provider.Group) error {
 					if v == "" {
@@ -520,28 +520,28 @@ func (m model) updateGroup(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					n, err := provider.ParseTokens(v)
 					g.Context = n
 					return err
-				}, g.Name+" context "+dash(v))
+				}, trf("%s context %s", g.Name, dash(v)))
 			}})
 		m.back = modeGroup
 	case "l":
-		in := newInput("e.g. low,medium,high,xhigh · empty for those its models share")
+		in := newInput(tr("e.g. low,medium,high,xhigh · empty for those its models share"))
 		in.SetValue(strings.Join(g.Levels, ","))
-		m.openAsk(ask{crumbs: []string{"routing", g.Name, "levels"}, input: in, empty: true,
-			hint: "the reasoning levels agents are offered: " + strings.Join(provider.Levels, ", ") + "; a model without the one asked is sent its nearest",
+		m.openAsk(ask{crumbs: []string{tr("routing"), g.Name, tr("levels")}, input: in, empty: true,
+			hint: trf("the reasoning levels agents are offered: %s; a model without the one asked is sent its nearest", strings.Join(provider.Levels, ", ")),
 			onEnter: func(v string) tea.Cmd {
 				return saveGroup(g.ID, func(g *provider.Group) error {
 					var err error
 					g.Levels, err = provider.CleanLevels(strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == ' ' }))
 					return err
-				}, g.Name+" levels "+dash(v))
+				}, trf("%s levels %s", g.Name, dash(v)))
 			}})
 		m.back = modeGroup
 	case "R":
-		in := newInput("the group's new id")
+		in := newInput(tr("the group's new id"))
 		in.SetValue(g.ID)
 		in.CursorEnd()
-		m.openAsk(ask{crumbs: []string{"routing", g.Name, "rename"}, input: in,
-			hint: "agents pick it as group/<id>: those on it, and the groups that have it in them, follow",
+		m.openAsk(ask{crumbs: []string{tr("routing"), g.Name, tr("rename")}, input: in,
+			hint: tr("agents pick it as group/<id>: those on it, and the groups that have it in them, follow"),
 			onEnter: func(to string) tea.Cmd {
 				return func() tea.Msg {
 					if _, err := agent.RenameGroup(g.ID, to); err != nil {
@@ -556,7 +556,7 @@ func (m model) updateGroup(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			i := m.gsel - n
 			if m.confirm != fmt.Sprintf("rule/%d", i) {
 				m.confirm = fmt.Sprintf("rule/%d", i)
-				m.flash, m.flashOK = fmt.Sprintf("press d again to remove rule %d", i+1), false
+				m.flash, m.flashOK = trf("press d again to remove rule %d", i+1), false
 				return m, nil
 			}
 			m.confirm = ""
@@ -564,21 +564,21 @@ func (m model) updateGroup(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, saveGroup(g.ID, func(g *provider.Group) error {
 				g.Rules = slices.Delete(g.Rules, i, i+1)
 				return nil
-			}, fmt.Sprintf("rule %d removed", i+1))
+			}, trf("rule %d removed", i+1))
 		}
 		if n == 0 {
 			return m, nil
 		}
 		id := g.Members[m.gsel]
 		if n == 1 {
-			m.flash, m.flashOK = "a group needs a model in it · d on the routing list removes the group", false
+			m.flash, m.flashOK = tr("a group needs a model in it · d on the routing list removes the group"), false
 			return m, nil
 		}
 		if m.confirm != "member/"+id {
 			m.confirm = "member/" + id
-			m.flash, m.flashOK = "press d again to take "+id+" out", false
+			m.flash, m.flashOK = trf("press d again to take %s out", id), false
 			if slices.ContainsFunc(g.Rules, func(r provider.Rule) bool { _, kept := r.Without(id); return !kept }) {
-				m.flash += " and its rules"
+				m.flash += tr(" and its rules")
 			}
 			return m, nil
 		}
@@ -595,7 +595,7 @@ func (m model) updateGroup(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			g.Rules = rules
 			return nil
-		}, id+" taken out")
+		}, trf("%s taken out", id))
 	}
 	return m, nil
 }
@@ -615,7 +615,7 @@ func (m model) viewGroups() string {
 	b.WriteString(m.header())
 	b.WriteString("\n\n")
 	if len(m.groups) == 0 {
-		b.WriteString(pad + "  " + sMuted.Render("no routing groups yet · n makes one"))
+		b.WriteString(pad + "  " + sMuted.Render(tr("no routing groups yet · n makes one")))
 		return b.String()
 	}
 	nameW, idW := 0, 0
@@ -630,7 +630,7 @@ func (m model) viewGroups() string {
 	for i := start; i < min(len(m.groups), start+visible); i++ {
 		g := m.groups[i]
 		if i == m.shown {
-			b.WriteString("\n" + pad + "  " + sFaint.Render("removed · found by magpie, taken away: u brings one back") + "\n")
+			b.WriteString("\n" + pad + "  " + sFaint.Render(tr("removed · found by magpie, taken away: u brings one back")) + "\n")
 		}
 		marker, name := "  ", sName.Render(padRight(dash(g.Name), nameW))
 		if g.Hidden {
@@ -645,25 +645,25 @@ func (m model) viewGroups() string {
 			continue
 		}
 		listed, off := m.listedMembers(g)
-		notes := []string{fmt.Sprintf("%d model%s", len(listed), plural(len(listed))), groupRouting(g)}
+		notes := []string{trf("%d model%s", len(listed), plural(len(listed))), groupRouting(g)}
 		if off > 0 {
-			notes = append(notes, fmt.Sprintf("%d switched off", off))
+			notes = append(notes, trf("%d switched off", off))
 		}
 		if g.Affinity != "" {
 			notes = append(notes, staysName(g.Affinity))
 		}
 		if len(g.Rules) > 0 {
-			notes = append(notes, fmt.Sprintf("%d rule%s", len(g.Rules), plural(len(g.Rules))))
+			notes = append(notes, trf("%d rule%s", len(g.Rules), plural(len(g.Rules))))
 		}
 		if g.Family != "" {
-			notes = append(notes, "family "+g.Family)
+			notes = append(notes, trf("family %s", g.Family))
 		}
 		if g.Auto {
-			notes = append(notes, "found")
+			notes = append(notes, tr("found"))
 		}
 		members := strings.Join(listed, " → ")
 		if len(g.Match) > 0 {
-			notes = append(notes, fmt.Sprintf("%d pattern%s", len(g.Match), plural(len(g.Match))))
+			notes = append(notes, trf("%d pattern%s", len(g.Match), plural(len(g.Match))))
 		}
 		line += "  " + sText.Render(strings.Join(notes, " · "))
 		if room := m.w - lipgloss.Width(line) - 4; room > 10 {
@@ -677,27 +677,27 @@ func (m model) viewGroups() string {
 func (m model) viewGroup() string {
 	g, _ := m.group()
 	var b strings.Builder
-	b.WriteString(m.header("routing", g.Name))
+	b.WriteString(m.header(tr("routing"), g.Name))
 	b.WriteString("\n\n")
 	head := []string{g.Ref(), groupRouting(g), staysName(g.Affinity)}
 	if g.Context > 0 {
-		head = append(head, "context "+fmtTokens(g.Context))
+		head = append(head, trf("context %s", fmtTokens(g.Context)))
 	}
 	if len(g.Levels) > 0 {
-		head = append(head, "levels "+strings.Join(g.Levels, "/"))
+		head = append(head, trf("levels %s", strings.Join(g.Levels, "/")))
 	}
 	if g.Family != "" {
-		head = append(head, "family "+g.Family)
+		head = append(head, trf("family %s", g.Family))
 	}
 	if g.Auto {
-		head = append(head, "found by magpie: a change makes it yours")
+		head = append(head, tr("found by magpie: a change makes it yours"))
 	}
 	b.WriteString(pad + "  " + sMuted.Render(strings.Join(head, " · ")) + "\n")
 	if g.Note != "" {
 		b.WriteString(pad + "  " + sText.Render(trunc(g.Note, max(m.w-8, 10))) + "\n")
 	}
 	b.WriteString("\n")
-	b.WriteString(pad + "  " + sFaint.Render("models · the first that can take a request gets it") + "\n")
+	b.WriteString(pad + "  " + sFaint.Render(tr("models · the first that can take a request gets it")) + "\n")
 	hits := provider.PatternHits(g)
 	memFrom, memTo, ruleFrom, ruleTo := groupWindow(len(g.Members), len(g.Rules), m.gsel, m.groupRows(g, len(hits)))
 	for i := memFrom; i < memTo; i++ {
@@ -707,31 +707,31 @@ func (m model) viewGroup() string {
 			marker, name = sCursor.Render("▸ "), sNameOn.Render(id)
 		}
 		if g.IsFast(id) {
-			name += sMuted.Render(" · fast")
+			name += sMuted.Render(" · " + tr("fast"))
 		}
 		if slices.Contains(g.Matched, id) {
-			name += sMuted.Render(" · by pattern")
+			name += sMuted.Render(" · " + tr("by pattern"))
 		}
 		if m.memberOff(id) {
-			name += sMuted.Render(" · switched off: skipped until it is on again")
+			name += sMuted.Render(" · " + tr("switched off: skipped until it is on again"))
 		}
 		b.WriteString(pad + marker + sFaint.Render(fmt.Sprintf("%d  ", i+1)) + name + "\n")
 	}
 	// patterns find models in the catalog each time (#766): how many now,
 	// and one that finds none said so rather than left an empty list
 	if len(hits) > 0 {
-		b.WriteString("\n" + pad + "  " + sFaint.Render("patterns · every model they match now, after those named") + "\n")
+		b.WriteString("\n" + pad + "  " + sFaint.Render(tr("patterns · every model they match now, after those named")) + "\n")
 		for _, h := range hits {
-			n := sMuted.Render(fmt.Sprintf(" · %d model%s", h.Models, plural(h.Models)))
+			n := sMuted.Render(" · " + trf("%d model%s", h.Models, plural(h.Models)))
 			if h.Models == 0 {
-				n = sBad.Render(" · matches nothing now")
+				n = sBad.Render(" · " + tr("matches nothing now"))
 			}
 			b.WriteString(pad + "     " + sText.Render(h.Pattern) + n + "\n")
 		}
 	}
-	b.WriteString("\n" + pad + "  " + sFaint.Render("rules · as a turn begins, the first that matches sends it to its model first; a pause leaves its model out while it holds") + "\n")
+	b.WriteString("\n" + pad + "  " + sFaint.Render(tr("rules · as a turn begins, the first that matches sends it to its model first; a pause leaves its model out while it holds")) + "\n")
 	if len(g.Rules) == 0 {
-		b.WriteString(pad + "  " + sMuted.Render("none · n adds one") + "\n")
+		b.WriteString(pad + "  " + sMuted.Render(tr("none · n adds one")) + "\n")
 	}
 	for i := ruleFrom; i < ruleTo; i++ {
 		r := g.Rules[i]
@@ -742,15 +742,15 @@ func (m model) viewGroup() string {
 		}
 		arrow := " → "
 		if r.Pause {
-			arrow = " → pause "
+			arrow = " → " + tr("pause") + " "
 		}
 		if r.UseEffort != "" {
-			use += sMuted.Render(" at ") + sText.Render(r.UseEffort)
+			use += sMuted.Render(" "+tr("at")+" ") + sText.Render(r.UseEffort)
 		}
 		b.WriteString(pad + marker + sFaint.Render(fmt.Sprintf("%d  ", i+1)) + sMuted.Render(strings.Join(r.Conditions(), " · ")+arrow) + use + "\n")
 	}
 	if slices.ContainsFunc(g.Rules, func(r provider.Rule) bool { return r.Intent != "" }) {
-		b.WriteString("\n" + pad + "  " + sFaint.Render("classifier ") + sText.Render(dash(g.Classifier)) + sFaint.Render(" · tells which intent a message is") + "\n")
+		b.WriteString("\n" + pad + "  " + sFaint.Render(tr("classifier")+" ") + sText.Render(dash(g.Classifier)) + sFaint.Render(" · "+tr("tells which intent a message is")) + "\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
 }

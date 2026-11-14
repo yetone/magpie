@@ -82,15 +82,15 @@ func serveGateway(ctx context.Context) (wait func()) {
 // nothing else to say: served here, or why agents can't reach it.
 func gatewayStatus() string {
 	if gw.here.Load() {
-		return sMuted.Render("● gateway " + gateway.URL() + " · served while magpie tui is open")
+		return sMuted.Render("● " + trf("gateway %s · served while magpie tui is open", gateway.URL()))
 	}
 	if e := gw.err.Load(); e != nil && *e != "" {
-		return sBad.Render("✗ ") + sText.Render("gateway not running: "+*e)
+		return sBad.Render("✗ ") + sText.Render(trf("gateway not running: %s", *e))
 	}
 	return ""
 }
 
 // gatewayGoneNote is said as the terminal quits having served the gateway.
 func gatewayGoneNote() string {
-	return "magpie: the gateway stopped with magpie tui; agents connected to magpie reach it while magpie tui, magpie web or magpie serve runs"
+	return tr("magpie: the gateway stopped with magpie tui; agents connected to magpie reach it while magpie tui, magpie web or magpie serve runs")
 }

@@ -1,4 +1,4 @@
-package gui
+package uilang
 
 import (
 	"os"
@@ -6,13 +6,13 @@ import (
 	"github.com/yetone/magpie/internal/proc"
 )
 
-// systemLang is the first of the Mac's preferred languages, the one the
+// System is the first of the Mac's preferred languages, the one the
 // page's navigator.language is; an app opened from Finder has no LANG.
-func systemLang() string {
+func System() string {
 	if out, err := proc.Command("defaults", "read", "-g", "AppleLanguages").Output(); err == nil {
 		if l := firstAppleLang(string(out)); l != "" {
 			return l
 		}
 	}
-	return envLang(os.Getenv)
+	return Env(os.Getenv)
 }
