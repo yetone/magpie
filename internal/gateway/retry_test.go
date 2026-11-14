@@ -168,7 +168,7 @@ func TestStreamErrorBeforeContentFailsOver(t *testing.T) {
 		{`: keep-alive`, eventLead},
 		{`data: {"id":"c","choices":[{"index":0,"delta":{"role":"assistant","content":""}}]}`, eventLead},
 		{`data: {"id":"c","choices":[{"index":0,"delta":{"content":"hi"}}]}`, eventContent},
-		{`data: {"id":"c","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`, eventContent},
+		{`data: {"id":"c","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`, eventEmptyEnd},
 		{`data: {"id":"c","choices":[{"index":0,"delta":{},"finish_reason":"error"}]}`, eventError},
 		{`data: {"error":{"message":"upstream failed"}}`, eventError},
 		{`event: response.created` + "\n" + `data: {"type":"response.created","response":{"id":"r"}}`, eventLead},

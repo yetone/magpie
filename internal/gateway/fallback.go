@@ -2753,6 +2753,13 @@ type holdWriter struct {
 	// the tier the request went out at (stampTier), once it has a status
 	tierStamp func(http.Header)
 
+	// emptyFails: a routing group's member stands behind the try, and a
+	// reply of it that ends having said nothing at all fails it, for that
+	// member to answer instead (emptyEnded, #6712); spoke says the held
+	// reply has said something, read whole (wantWhole) past its first
+	// content
+	emptyFails, spoke bool
+
 	// over, when another candidate stands behind the try, reads what
 	// passes before its answer begins for a refusal to hand to the next
 	// one in the same stream (refusalHandover); handedOver says it was
@@ -3215,7 +3222,18 @@ func (h *holdWriter) scan() {
 			// protocol's terminator after it; an error above cannot.
 			h.failure, h.failMsg, h.refused = status, msg, true
 			return
+		case eventEmptyEnd:
+			if h.emptyFails && !h.spoke && !h.thinking {
+				// nothing said, not even reasoning, and the reply over:
+				// its usage and terminator may follow, which nobody gets
+				h.failure, h.failMsg = http.StatusBadGateway, emptyEnded
+				if h.stop != nil {
+					h.stop()
+				}
+				return
+			}
 		}
+		h.spoke = true
 		if h.wantWhole {
 			if why, ok := endedIncomplete(rest[:end]); ok {
 				h.failure, h.failMsg = http.StatusBadGateway, why
@@ -3597,8 +3615,15 @@ func (h *holdWriter) settle() {
 	if !h.whole {
 		return
 	}
-	if msg, ok := refusedReply(h.held.Bytes()); ok {
+	msg, refused, empty := readWhole(h.held.Bytes())
+	if refused {
 		h.failure, h.failMsg, h.refused = refusedStatus, msg, true
+		return
+	}
+	if empty && h.emptyFails && h.status < 400 {
+		// a reply given whole that said nothing at all (emptyEnded), read
+		// in the same parse as for a refusal
+		h.failure, h.failMsg = http.StatusBadGateway, emptyEnded
 		return
 	}
 	if h.status < 400 {
@@ -3933,7 +3958,45 @@ const (
 	eventRefusalError // the filter's error event: canceled like eventError
 	eventBuffering    // a lead saying the reply is held back for safety checks
 	eventThinking     // reasoning, before anything is said: a refusal may yet end it
+	// eventEmptyEnd is a reply's end as it ends a whole turn — a stop,
+	// not a cut at its length nor a filter's — in an event that says
+	// nothing itself. The hold reads one only before anything was said
+	// (scan): such a reply answered nothing at all (#6712, emptyEnded)
+	eventEmptyEnd
 )
+
+// emptyEnded is what a try whose reply ended with nothing in it at all —
+// no text, no reasoning, no call — fails with while a routing group's
+// next member stands behind it (holdWriter.emptyFails, #6712): the
+// empty reply's error, which the group answers with its next member and
+// rests nobody for (#1221). aistudio2api, behind the magpie-gemini-web
+// plugin, ended a 200 stream with only its role chunk and finish_reason
+// "stop" when Google's every regeneration came back malformed, and the
+// try stood as answered, the agent's turn ending with no reply and the
+// group's agy-cli and google never asked. The last member's goes as it
+// came: a reply meant to be empty ends there, asked of each member once.
+const emptyEnded = emptyReply + ": it ended with nothing in it"
+
+// endsEmptyChat, endsEmptyAnthropic and endsEmptyGemini tell whether a
+// stop reason ends a turn a reply had nothing in (eventEmptyEnd): not one
+// cut at its length (answersNothing) nor one a filter or an error ended,
+// which say why themselves.
+func endsEmptyChat(fin string) bool {
+	_, filtered := filterReasons[fin]
+	return fin != "" && fin != "length" && fin != "error" && !filtered
+}
+
+func endsEmptyAnthropic(stop string) bool {
+	switch stop {
+	case "end_turn", "stop_sequence", "tool_use":
+		return true
+	}
+	return false
+}
+
+func endsEmptyGemini(fin string) bool {
+	return fin == "STOP"
+}
 
 // refusedStatus is what a refusal with nothing said is answered as: a
 // request the agent is told not to send again as it is, rather than a
@@ -4222,6 +4285,9 @@ func streamEvent(ev []byte) (kind, status int, msg string) {
 		if json.Unmarshal(v.Delta, &d) == nil && d.StopReason == "refusal" {
 			return eventRefusal, refusedStatus, refusedDetail(d.StopReason, d.StopDetails)
 		}
+		if endsEmptyAnthropic(d.StopReason) {
+			return eventEmptyEnd, 0, ""
+		}
 	case typ == "response.incomplete" || typ == "response.completed" && v.Response.Status == "incomplete":
 		if d := v.Response.IncompleteDetails; d != nil {
 			if r, ok := filterReasons[d.Reason]; ok {
@@ -4238,6 +4304,9 @@ func streamEvent(ev []byte) (kind, status int, msg string) {
 		// beside it — so nothing of the try has reached the agent, and
 		// the failure is still held for the group's next candidate
 		return eventError, streamStatus(emptyCompleted), emptyCompleted
+	case typ == "response.completed" && v.Response.Status == "completed":
+		// a reply's end; read before anything was said, it said nothing
+		return eventEmptyEnd, 0, ""
 	case typ == "" && v.Candidates != nil:
 		// a Gemini chunk
 		if r, ok := filterReasons[v.PromptFeedback.BlockReason]; ok {
@@ -4260,6 +4329,9 @@ func streamEvent(ev []byte) (kind, status int, msg string) {
 			}
 			if r, ok := filterReasons[c.FinishReason]; ok {
 				return refusal(r)
+			}
+			if !thinks && endsEmptyGemini(c.FinishReason) {
+				return eventEmptyEnd, 0, ""
 			}
 			if c.FinishReason != "" {
 				return eventContent, 0, ""
@@ -4317,6 +4389,9 @@ func streamEvent(ev []byte) (kind, status int, msg string) {
 					// taken for content it went to the agent and the try
 					// stood as a success
 					return eventError, streamStatus(finishFailed), finishFailed
+				}
+				if !thinks && endsEmptyChat(*c.FinishReason) {
+					return eventEmptyEnd, 0, ""
 				}
 				return eventContent, 0, ""
 			}
@@ -4545,6 +4620,15 @@ func refusedCode(data string) string {
 // "refusal", Chat's finish_reason "content_filter", Responses' incomplete
 // for content_filter, Gemini's SAFETY — with no text or call in it.
 func refusedReply(b []byte) (string, bool) {
+	msg, refused, _ := readWhole(b)
+	return msg, refused
+}
+
+// readWhole reads a whole reply, not streamed, once: whether it is a
+// refusal with nothing said (refusedReply), and whether it is a turn
+// ended with nothing in it at all — no text, no reasoning, no call — as
+// a stream's eventEmptyEnd is (#6712).
+func readWhole(b []byte) (msg string, refused, empty bool) {
 	var v struct {
 		// Anthropic's
 		StopReason  string          `json:"stop_reason"`
@@ -4554,8 +4638,10 @@ func refusedReply(b []byte) (string, bool) {
 		Choices []struct {
 			FinishReason string `json:"finish_reason"`
 			Message      struct {
-				Content   any   `json:"content"`
-				ToolCalls []any `json:"tool_calls"`
+				Content          any    `json:"content"`
+				ToolCalls        []any  `json:"tool_calls"`
+				ReasoningContent string `json:"reasoning_content"`
+				Reasoning        string `json:"reasoning"`
 			} `json:"message"`
 		} `json:"choices"`
 		// Responses'
@@ -4576,33 +4662,63 @@ func refusedReply(b []byte) (string, bool) {
 		} `json:"promptFeedback"`
 	}
 	if json.Unmarshal(b, &v) != nil {
-		return "", false
+		return "", false, false
 	}
 	none := func(ps []streamPart) bool {
 		return !slices.ContainsFunc(ps, streamPart.said)
 	}
 	if r, ok := filterReasons[v.StopReason]; ok && r == "refusal" && none(v.Content) {
-		return refusedDetail(r, v.StopDetails), true
+		return refusedDetail(r, v.StopDetails), true, false
 	}
 	for _, c := range v.Choices {
 		if r, ok := filterReasons[c.FinishReason]; ok && (c.Message.Content == nil || c.Message.Content == "") && len(c.Message.ToolCalls) == 0 {
-			return refusedNote(r), true
+			return refusedNote(r), true, false
 		}
 	}
 	if d := v.IncompleteDetails; v.Status == "incomplete" && d != nil && none(v.Output) {
 		if r, ok := filterReasons[d.Reason]; ok {
-			return refusedNote(r), true
+			return refusedNote(r), true, false
 		}
 	}
 	if r, ok := filterReasons[v.PromptFeedback.BlockReason]; ok {
-		return refusedNote(r), true
+		return refusedNote(r), true, false
 	}
 	for _, c := range v.Candidates {
 		if r, ok := filterReasons[c.FinishReason]; ok && len(c.Content.Parts) == 0 {
-			return refusedNote(r), true
+			return refusedNote(r), true, false
 		}
 	}
-	return "", false
+	switch {
+	case endsEmptyAnthropic(v.StopReason):
+		empty = none(v.Content)
+	case len(v.Choices) > 0:
+		empty = true
+		for _, c := range v.Choices {
+			m := c.Message
+			if !endsEmptyChat(c.FinishReason) || m.Content != nil && m.Content != "" || len(m.ToolCalls) > 0 || m.ReasoningContent != "" || m.Reasoning != "" {
+				empty = false
+			}
+		}
+	case v.Status == "completed" && v.Output != nil:
+		empty = none(v.Output)
+	case len(v.Candidates) > 0:
+		empty = true
+		for _, c := range v.Candidates {
+			if !endsEmptyGemini(c.FinishReason) || slices.ContainsFunc(c.Content.Parts, geminiPartSays) {
+				empty = false
+			}
+		}
+	}
+	return "", false, empty
+}
+
+// geminiPartSays tells whether a Gemini part has anything in it: text,
+// reasoning, or anything that isn't text (a call, an image).
+func geminiPartSays(p json.RawMessage) bool {
+	var part struct {
+		Text string `json:"text"`
+	}
+	return json.Unmarshal(p, &part) != nil || part.Text != "" || !bodyHas(p, `"text"`)
 }
 
 // errorReply says whether a reply that came whole under a success status

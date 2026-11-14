@@ -3837,6 +3837,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		// a compaction's summary is held to its end, for a cut or an
 		// error halfway to go to the next candidate (#2274)
 		hw.wantWhole = wantWhole && !pass
+		// a group member's reply that said nothing at all goes to the
+		// next member while one is left (emptyEnded, #6712); the last
+		// one's goes as it came
+		hw.emptyFails = isGroup && !last && !pass
 		// Claude's and GPT's reasoning is held for a refusal after it only
 		// while another candidate could answer instead: the last one's
 		// refusal isn't asked again, so holding it only kept a lone relay's
