@@ -17659,17 +17659,18 @@ function renderPanelQuota(lazy) {
     fit();
     return;
   }
-  // what the arranging hid is left out, but for the one a menu bar cell
+  // what the arranging hid is left out, and what the Usage page hid, its
+  // cards and their rows (onkashiko on X), but for the one a menu bar cell
   // was clicked for
   const hidden = new Set(state.settings?.panelUsageHidden || []);
   const peek = (q) => !!panelPeek && (trayCardID(q) === panelPeek || q.balanceCard === panelPeek || q.provider === panelPeek);
-  const away = new Set(subs.filter((q) => hidden.has(q.provider) && !peek(q)).map((q) => q.provider));
+  const { cards, away } = panelPageCut(subs, peek, hidden);
   // a balance, or a vendor's every account, at 0: behind the foot's button
-  const zero = new Set(subs.filter((q) => quotaAtZero(q) && !peek(q)));
+  const zero = new Set(cards.filter((q) => quotaAtZero(q) && !peek(q)));
   let atZero = 0;
   // the sections in order: a vendor's accounts, or a run of balances
   const parts = [], groups = new Map();
-  for (const q of subs) {
+  for (const q of cards) {
     if (away.has(q.provider)) continue;
     // a balance with windows (Command Code's credits beside its 5-hour and
     // weekly windows) is the windows' card; a balance alone, a figure

@@ -3206,7 +3206,11 @@ press *Arrange* at the foot of the panel's tab and move the rows there. The
 same *Arrange* hides a subscription from the panel's tab (*Hide*, *Show*
 puts it back), and the tab's foot says how many are hidden. Hiding is the
 panel's only: routing, caps, the Usage page and the menu bar's own cells
-still have it, and a menu bar cell for it still opens its card. Both are
+still have it, and a menu bar cell for it still opens its card. A card or
+quota row hidden on the Usage page (its card's *Hide from Overview*) is left
+out of the panel's tab too, and of `magpie tui`'s Usage page; a
+subscription hidden there whole shows as hidden in the panel's *Arrange*,
+whose *Show* brings it back on the Usage page too. Both are
 kept in magpie's settings (`usageOrder`, `panelUsageHidden`). Which
 allowances the menu bar itself shows beside its icon is picked in Settings.
 The same list has *Tokens and cost today* and *Tokens and cost, last 7

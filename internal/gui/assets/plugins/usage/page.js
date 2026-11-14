@@ -1299,10 +1299,10 @@ async function hideUsageAgent(id, hide) {
 //
 // An allowance card can be hidden from the Overview (whqtian_07012 on
 // Discord: StepFun's plan card wanted, its balance card not), from the
-// card's own menu (quotaCardMenus). Only from this page: routing, caps and
-// the counting never hear of it, the tray panel's Allowances tab has its
-// own (Arrange), and a menu bar cell asking for a hidden card shows it
-// until the page is left. Each is kept by its tray card id and its kind
+// card's own menu (quotaCardMenus). Only from what is shown: routing, caps
+// and the counting never hear of it, the tray panel's Allowances tab leaves
+// it out too (panelPageCut, onkashiko on X), and a menu bar cell asking for
+// a hidden card shows it until the page is left. Each is kept by its tray card id and its kind
 // (cardHideKey), in magpie's settings (usageCardsHidden), so every window
 // and magpie web agree; one line at the section's end says how many, and
 // has them back.
@@ -5266,4 +5266,25 @@ if (mode === "window" && params.get("view") === "usage") {
   const u = new URL(location.href);
   for (const k of ["tab", "provider", "agent", "computer", "card", "purpose", "via", "period"]) u.searchParams.delete(k);
   history.replaceState(null, "", u);
+}
+
+// The tray panel's Allowances tab leaves out what this page hides
+// (onkashiko on X): cards are the ones it draws, their hidden rows gone and
+// the cards hidden left out but for one peek asks for; gone says whether
+// this page hides a vendor's every card, which the panel's Arrange calls
+// hidden; away is the vendors the panel leaves out, those and the ones its
+// own Arrange hid (hidden). Here, not in the core, as page.js is in every
+// window.
+function panelPageCut(subs, peek = () => false, hidden = new Set()) {
+  const all = subs.map(withoutHiddenRows), hid = hiddenCards();
+  const off = (q) => hid.has(cardHideKey(q));
+  const gone = (p) => all.every((q) => q.provider !== p || off(q));
+  const away = new Set(all.filter((q) => (hidden.has(q.provider) || gone(q.provider)) && !peek(q)).map((q) => q.provider));
+  return { gone, away, cards: all.filter((q) => !off(q) || peek(q)) };
+}
+
+// usageCardsHidden with a vendor's every card shown again, for the panel's
+// Arrange showing one this page hid
+function cardsShownFor(p) {
+  return (state.settings.usageCardsHidden || []).filter((k) => k.split("|")[0] !== p);
 }

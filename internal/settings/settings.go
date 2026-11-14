@@ -1042,7 +1042,8 @@ type Settings struct {
 	// PanelUsageHidden are the subscriptions, by provider id, that the tray
 	// panel's Allowances tab leaves out (H20 on Discord). It is what the
 	// panel shows, nothing more: routing, caps, the Usage page and the menu
-	// bar's cells still have them. The panel's order is UsageOrder.
+	// bar's cells still have them. The panel's order is UsageOrder, and it
+	// leaves out what UsageCardsHidden and UsageWindowsHidden do too.
 	PanelUsageHidden []string `json:"panelUsageHidden,omitempty"`
 	// UsageAgentsHidden are the clients, by the id the ledger records them
 	// under ("curl", "Go-http-client", an agent's id), that the Usage page's
@@ -1053,15 +1054,17 @@ type Settings struct {
 	// leaves out (whqtian_07012 on Discord), each as its tray card id (the
 	// provider id, then "|" and the account when there is one) and "|plan"
 	// or "|balance", so StepFun's balance card goes while its plan card
-	// stays. Only what that page shows: routing, caps, counting, the tray
-	// panel (PanelUsageHidden is its own) and the menu bar's cells keep them.
+	// stays. Only what is shown: the tray panel's Allowances tab and the
+	// TUI's Usage page leave them out too (onkashiko on X), while routing,
+	// caps, counting and the menu bar's cells keep them.
 	UsageCardsHidden []string `json:"usageCardsHidden,omitempty"`
 	// UsageWindowsHidden are the quota rows of an allowance card that the
 	// Overview leaves out (wangshaowei39 on X: Antigravity's Claude & GPT
 	// rows unwanted), each as the provider id, "|" and the row's group: a
 	// pool's or a model family's name, else the window's name. Every
 	// account of the provider alike. A card is never left with none: when
-	// every row is named, all show. Only what that page shows.
+	// every row is named, all show. Only what is shown, there, in the tray
+	// panel and in the TUI's Usage page.
 	UsageWindowsHidden []string `json:"usageWindowsHidden,omitempty"`
 	// ClientAgents counts a client magpie doesn't know as one of the agents
 	// it does, on the Usage and Sessions pages (#1958, NorethSea): a bridge

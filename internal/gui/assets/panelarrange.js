@@ -17,10 +17,11 @@ window.panelArrange = function panelArrange(subs) {
   const hidden = new Set(state.settings?.panelUsageHidden || []);
   const list = el("div", "pq-alist");
   const seen = new Set();
+  const gone = panelPageCut(subs).gone;
   for (const q of subs) {
     if (seen.has(q.provider)) continue;
     seen.add(q.provider);
-    const off = hidden.has(q.provider);
+    const page = gone(q.provider), off = page || hidden.has(q.provider);
     const row = el("div", "pq-arow" + (off ? " put-away" : ""));
     row.dataset.key = q.provider;
     const h = el("button", "ag-handle pq-ahandle");
@@ -46,7 +47,7 @@ window.panelArrange = function panelArrange(subs) {
     pill.type = "button";
     pill.setAttribute("aria-pressed", String(!off));
     pill.title = t(off ? "Show {name} in this panel" : "Hide {name} from this panel", { name: q.name });
-    pill.onclick = () => hidePanelUsage(q.provider, !off);
+    pill.onclick = () => hidePanelUsage(q.provider, !off, page);
     row.append(h, el("span", "pq-aname", q.name), off ? el("span", "pq-hidden", t("Hidden")) : "", pill);
     list.append(row);
   }
@@ -55,20 +56,23 @@ window.panelArrange = function panelArrange(subs) {
 };
 
 // hidePanelUsage hides a subscription from the panel's Allowances tab, or
-// shows it again: drawn at once, put back if the save fails.
-async function hidePanelUsage(key, hide) {
+// shows it again: drawn at once, put back if the save fails. One the Usage
+// page hides every card of (page) is shown there again too, as the panel
+// leaves out what that page hides (onkashiko on X).
+async function hidePanelUsage(key, hide, page) {
   const prev = state.settings;
   const cur = (prev.panelUsageHidden || []).filter((k) => k !== key);
   const panelHidden = hide ? [...cur, key] : cur;
-  state.settings = { ...prev, panelUsageHidden: panelHidden };
+  const cardsHidden = !hide && page ? cardsShownFor(key) : void 0;
+  state.settings = { ...prev, panelUsageHidden: panelHidden, ...(cardsHidden && { usageCardsHidden: cardsHidden }) };
   const again = () => {
     renderPanelQuota();
     $(`#panelQuota .pq-arow[data-key="${CSS.escape(key)}"] .pq-show`)?.focus(NO_SCROLL);
   };
   again();
   try {
-    const s = await api("usage/arrange", { panelHidden });
-    state.settings = { ...state.settings, panelUsageHidden: s.panelUsageHidden || [] };
+    const s = await api("usage/arrange", { panelHidden, cardsHidden });
+    state.settings = { ...state.settings, panelUsageHidden: s.panelUsageHidden || [], usageCardsHidden: s.usageCardsHidden || [] };
   } catch (e) {
     state.settings = prev;
     again();

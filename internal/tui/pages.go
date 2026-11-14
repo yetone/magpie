@@ -879,7 +879,7 @@ var readQuotas = func(asked bool) ([]provider.SubscriptionQuota, bool) {
 func quotasCmd(asked bool, gen int) tea.Cmd {
 	return func() tea.Msg {
 		qs, reading := readQuotas(asked)
-		return quotaMsg{qs: qs, reading: reading, gen: gen}
+		return quotaMsg{qs: usageShown(qs, settings.Load()), reading: reading, gen: gen}
 	}
 }
 
