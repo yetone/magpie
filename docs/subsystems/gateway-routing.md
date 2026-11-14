@@ -1463,7 +1463,7 @@ told its own calls and limit alone:
 | `GET /v1/magpie/concurrency` | requests in flight per account |
 | `POST`/`GET /v1/magpie/keys`, `DELETE /v1/magpie/keys/{id}` | short-lived keys, above |
 | `POST /v1/magpie/keys/oidc` | an OIDC token traded for a short-lived key, above |
-| `/v1/magpie/admin/…` | the management API: the app's provider, account, gateway-key and account-group handlers for a key with `Key.Admin`, below |
+| `/v1/magpie/admin/…` | the management API: the app's provider, account, gateway-key, account-group and routing-group handlers for a key with `Key.Admin`, below |
 
 ### The management API
 
@@ -1485,7 +1485,15 @@ key. A key action through the API on another key that has `Admin`
 secret, or set one the caller chose, so a `local` key would get an `any`
 one or take over a peer's. The caller's own key is its to change. The route is in `readOnlyRefused`, so a read-only key never reaches
 it. The handlers are built with no window, so a sign-in opens no browser.
-Routing Groups and sign-in export are not in it yet (#6307).
+Routing Groups go to `/api/groups` (`adminGroupActions`; `found` and `skip`
+are left out, as they set this computer's agents), with
+`routing-groups/{id...}` (an id may be `group/<id>`), `create` and `update`
+of the API's own in front: `update` reads the stored group, lays the body's
+fields over it and hands that to the same `save` (`adminGroupWrite`), so
+`provider.SaveGroup` checks every write the page's does
+(`TestAdminAPIRoutingGroups`, `TestAdminAPIRoutingGroupsGuarded`). The app
+sets `Key.Admin` from a key's menu, Advanced (`gatewayAdminPick`,
+`gateway-key-admin.test.cjs`). Sign-in export is left out (#6307).
 
 ### Route events for a display
 

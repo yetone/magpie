@@ -10648,7 +10648,7 @@ The key is issued under the rule’s gateway key and held to it like any other i
 
 ## Management API
 
-Providers, accounts, gateway keys and account groups can be managed with no hand-edited file, by a key you allow to. Allow it from the command line (not through the API: a key can't give another more than it has):
+Providers, accounts, gateway keys, account groups and routing groups can be managed with no hand-edited file, by a key you allow to. Allow it from the key’s menu in the app, under Advanced, or from the command line (not through the API: a key can't give another more than it has):
 
 ```
 magpie gateway-key add automation
@@ -10659,7 +10659,7 @@ curl -s -X POST http://127.0.0.1:3425/v1/magpie/admin/gateway-keys/add-key \
   -H "Authorization: Bearer $KEY" -d '{"name":"ci"}'
 ```
 
-It answers the same as the app’s own pages do, under `/v1/magpie/admin/`: `GET providers`, `POST provider/{save,delete,on,off,name,…}`, `POST keys/…` (a provider’s keys), `GET`/`POST gateway-keys[/{add-key,rename-key,limit-key,models-key,remove-key,…}]`, `GET`/`POST account-groups[/…]`, and `POST signin` with `{"agent":…}`, which answers the vendor’s page and the code to type there, never a password; open it on a computer with a browser. A saved key and a gateway key’s secret are never told again, and what changes this computer’s apps is not served.
+It answers the same as the app’s own pages do, under `/v1/magpie/admin/`: `GET providers`, `POST provider/{save,delete,on,off,name,…}`, `POST keys/…` (a provider’s keys), `GET`/`POST gateway-keys[/{add-key,rename-key,limit-key,models-key,remove-key,…}]`, `GET`/`POST account-groups[/…]`, `GET routing-groups[/{id}]` and `POST routing-groups/{create,update,delete,switch,…}` (the Routing page’s groups and combos, checked as the app checks them; `update` changes only the fields you send), and `POST signin` with `{"agent":…}`, which answers the vendor’s page and the code to type there, never a password; open it on a computer with a browser. A saved key and a gateway key’s secret are never told again, and what changes this computer’s apps is not served. Sign-ins are not exported: that would hand out every account’s secrets.
 
 A key that is read-only, the extension’s, issued or short-lived, or the sharing key, can’t have it. A web page can’t call it, with a key or without (any request with `Origin` or `Sec-Fetch-*` is refused), and nor can a request under another name for this computer. Shared over the network, only a key set to `any` gets in.
 

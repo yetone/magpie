@@ -1144,14 +1144,22 @@ can't drift:
 | `POST signin` `{"agent": …}`, `GET signin/{id}`, `POST signin/{id}/cancel`, `POST signin/{id}/callback` | OAuth sign-in: the answer holds the vendor's page and the code to type there. Nothing is opened on this computer and no password is taken |
 | `GET gateway-keys[/models\|/mcp]`, `POST gateway-keys/{action}` | gateway keys: `add-key`, `rename-key`, `rotate-key`, `limit-key`, `models-key`, `accounts-key`, `mcp-key`, `access-key`, `on-key`, `off-key`, `remove-key`, … |
 | `GET account-groups`, `POST account-groups/{action}` | named account groups |
+| `GET routing-groups`, `GET routing-groups/{id}` | the Routing page's groups and combos, as the app shows them; one by its id or `group/<id>` |
+| `POST routing-groups/create`, `POST routing-groups/update` | a group or combo made, or changed: `create` takes the editor's body (`name`, `members`, …) and is 409 for an id in use; `update` takes `id` and only the fields to change, the rest kept (`from` and a new `id` rename it, and the combos naming it follow) |
+| `POST routing-groups/{action}` | the Routing page's own: `save`, `delete` (`id` or `ids`; refused while a combo names it), `copy`, `switch`, `arrange`, `pick`, `defaults`, `template`, `share`, `import`, `show` |
 
-Bodies are the app's own JSON. A route or action not listed is a 404. Never
+Bodies are the app's own JSON, and each is checked as the app checks it (a
+member a provider doesn't serve, an account it doesn't have, a combo of
+itself are 400). A member may name one account, `provider/model#<account>`.
+A route or action not listed is a 404: Routing's `found` and `skip`, which
+set this computer's agents, are not served. Never
 served: a provider's saved key, a gateway key's secret after its `add-key` or
 `rotate-key` answer, exporting sign-ins, and what changes this computer's
 other apps (moving, showing, restarting).
 
 Who may call it: a gateway key set with `magpie gateway-key admin <id>
-local|any`. `local` is from this computer only; `any` also from the network
+local|any`, or in the app from the key's menu, Advanced (Off, From this
+computer, From any computer); such a key says Manages magpie in its row. `local` is from this computer only; `any` also from the network
 when sharing is on. Only a key the user made can have it: a read-only,
 Magpie Browser, issued or expiring key, and the default sharing key, can't,
 and the API can't set the level on any key, so it can't raise its own
@@ -1160,9 +1168,9 @@ caller. A request with no key is 401, a key without the level 403
 any request with `Origin` (`null`, a foreign page, a listed page or
 `*.localhost` among them) or `Sec-Fetch-*` is 403, and so is one that
 reached loopback under another name (a rebound page's GET has neither).
-Answers are `Cache-Control: no-store`. This first part leaves out Routing
-Groups (the Routing page) and the import and export of sign-ins; they are
-tracked in [#6307](https://github.com/yetone/magpie/issues/6307).
+Answers are `Cache-Control: no-store`. The import and export of sign-ins
+is left out on purpose: it would hand a script every account's secrets
+([#6307](https://github.com/yetone/magpie/issues/6307)).
 
 ### Embeddings and rerank
 
