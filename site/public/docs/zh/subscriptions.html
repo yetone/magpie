@@ -247,7 +247,7 @@
     <h2 id="accounts"><a class="anchor" href="#accounts">多账号与自动切换</a></h2>
     <ul>
       <li><b>再加一个账号。</b>再点一次 Claude 或 ChatGPT 卡片，或再运行一次 <code>magpie accounts add</code>。每个账号都列在这个供应商下面。</li>
-      <li><b>把请求分给多个账号。</b>展开供应商那一行，勾选要用的每个账号。<span class="ui">路由</span> 决定请求怎么分：默认的 <span class="ui">智能</span> 会发给还有额度、且额度最先重置的账号；另外还有 <span class="ui">按顺序</span>、<span class="ui">用完再换</span>、<span class="ui">轮流</span>、<span class="ui">用量少的优先</span>、<span class="ui">到期前用完</span>、<span class="ui">按权重</span>（比如 Max 账号设 5、Pro 账号设 1）和 <span class="ui">速度优先</span>。</li>
+      <li><b>把请求分给多个账号。</b>展开供应商那一行，勾选要用的每个账号。<span class="ui">路由</span> 决定请求怎么分：默认的 <span class="ui">智能</span> 会发给还有额度、且额度最先重置的账号；另外还有 <span class="ui">按顺序</span>、<span class="ui">用完再换</span>、<span class="ui">轮流</span>、<span class="ui">用量少的优先</span>、<span class="ui">按配速</span>、<span class="ui">按权重</span>（比如 Max 账号设 5、Pro 账号设 1）和 <span class="ui">速度优先</span>。</li>
       <li><b>用完了自动换。</b>供应商的 <span class="ui">备用</span> 列出额度用完、被限流或不可用时改用的模型。</li>
       <li><b>两个订阅里的同一个模型。</b>Claude 订阅和 Copilot 里的 Claude Opus 会自动合成一个组 <code>auto/&lt;model&gt;</code>，选它就能两边一起用。</li>
       <li><b>看还剩多少。</b><code>magpie accounts</code> 列出每个账号和它的额度用了多少。</li>
