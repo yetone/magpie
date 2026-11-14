@@ -188,8 +188,26 @@
 .rt-accts li.rt-fold:focus { outline: none; }
 .rt-accts li.rt-fold:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
 .rt-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px 20px; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid var(--line); }
-.rt-cap { flex: 1 1 20em; margin: 0; min-height: 3em; display: flex; align-items: center; font-size: 13px; line-height: 1.45; color: var(--fg); }
+.rt-cap { flex: 1 1 20em; margin: 0; min-height: 54px; display: flex; align-items: center; font-size: 13px; line-height: 1.45; color: var(--fg); }
 .rt-cap.in { animation: rtin .4s ease-out; }
+/* a try's answer in the caption (answered): who, model and effort over
+   its figures, each in a column of its own whatever the others say, as
+   the counts beside it are (Puremilk_chun on X) */
+.rt-done { flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 3px 14px; }
+.rt-done > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rt-done > .who { grid-column: span 2; font-size: 12px; line-height: 17px; font-weight: 560; }
+.rt-done > .mdl { grid-column: span 2; font-size: 12px; line-height: 17px; color: var(--fg-2); }
+.rt-done > .effort-of { font-size: 12px; line-height: 17px; color: var(--muted); }
+.rt-done > .fig { display: flex; flex-direction: column; font-size: 11px; line-height: 14px; color: var(--muted); }
+.rt-done > .fig > * { overflow: hidden; text-overflow: ellipsis; }
+.rt-done > .fig b { font-size: 15px; line-height: 19px; font-weight: 650; letter-spacing: -.01em; color: var(--fg); font-variant-numeric: tabular-nums; }
+.rt-done > .fig b small { line-height: 0; font-size: 11px; font-weight: 500; letter-spacing: 0; color: var(--fg-2); }
+/* a narrow stage (max720, set by client.js): three to a line, in the
+   same places on every answer */
+:where(.rt.max720) .rt-done { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+:where(.rt.max720) .rt-done > .who { grid-column: span 2; }
+:where(.rt.max720) .rt-done > .mdl { grid-column: 1 / -1; grid-row: 2; }
+.rt-done > .fig.none b { color: var(--faint); font-weight: 400; }
 @keyframes rtin { from { opacity: 0; transform: translateY(4px); } }
 .rt-stats { display: flex; gap: 18px; font-size: 11px; color: var(--muted); }
 .rt-stats > span { display: flex; flex-direction: column; }

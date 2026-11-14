@@ -328,7 +328,7 @@ function routingPage(part) {
       for (const [cls, fits] of Object.entries(marks)) node.classList.toggle(cls, fits(w));
     });
   }).observe(node);
-  byWidth(box, { max560: (w) => w <= 560 });
+  byWidth(box, { max560: (w) => w <= 560, max720: (w) => w <= 720 });
   byWidth(list, { max460: (w) => w <= 460, max560: (w) => w <= 560 });
   byWidth(more, { max520: (w) => w <= 520 });
   for (const col of [colA, colB]) byWidth(col, { max440: (w) => w <= 440, max760: (w) => w <= 760 });
@@ -1452,6 +1452,41 @@ function routingPage(part) {
   }
 
   // a try in words, and how its reasoning came to differ from the agent's
+  // answered: what the caption shows of a try that answered, its
+  // figures each in a place of its own (Puremilk_chun on X: a sentence
+  // whose length and line breaks moved with every value had the reader
+  // look for each one again): who, on which model and at what effort over
+  // the time it took, its tokens, its first token, its speed and how much
+  // of its prompt the cache held. A figure not told is a dash in its place,
+  // so the others stay where they are. The sentence is on hover, and in
+  // the list of steps below.
+  function answered(r, i) {
+    const tr = r.tries[i], w = tried(r, tr), text = tryWhy(r, i);
+    const card = () => {
+      const box = el("div", "rt-done");
+      const model = w ? (tr.auto?.length ? `${w.model} → ${tr.auto[tr.auto.length - 1].model}` : w.model) : tr.model || "";
+      box.append(el("b", "who", w ? who(w) : tr.id), el("span", "mdl", model || ""), el("span", "effort-of", tr.effort || ""));
+      const v = speedOf(r, tr.ms, tr.ttft, tr.firstText, tr.flow, tr.firstReasoning || 0, tr.reasoningHidden || false);
+      const { prompt, read } = promptOf(r);
+      for (const [value, label] of [
+        [tr.ms ? took(tr.ms) : "", "Duration"],
+        [r.tokens ? tokens(r.tokens) : "", "Tokens"],
+        [tr.ttft ? took(tr.ttft) : "", "First token"],
+        [v ? t("{n} tok/s", { n: Math.round(v) }) : "", "Speed"],
+        [prompt ? hitPct(read / prompt) : "", "Cache"],
+      ]) {
+        const f = el("span", "fig" + (value ? "" : " none"));
+        // the number large, its unit beside it small: "40 tok/s"
+        const b = el("b"), m = value && /^([\d.,]+) (\S.*)$/.exec(value);
+        if (m) b.append(m[1], el("small", "", " " + m[2]));
+        else b.textContent = value || "—";
+        f.append(b, el("span", "", t(label)));
+        box.append(f);
+      }
+      return box;
+    };
+    return { text, card };
+  }
   function tryWhy(r, i) {
     const tr = r.tries[i], said = trySaid(r, i);
     // a prompt turned away is turned away at every level: the level is no part of it
@@ -2032,7 +2067,14 @@ function routingPage(part) {
     if (capQ.length > 3) capQ.shift();
     kick();
   }
-  function show(c) { capLo = !!c.lo; cap.textContent = c.s; rerun(cap, "in", "rtin"); capAt = performance.now(); }
+  // a caption is words, or a try's answer laid out (answered), its words
+  // on hover
+  function show(c) {
+    capLo = !!c.lo;
+    if (c.s.card) { cap.replaceChildren(c.s.card()); cap.title = c.s.text; }
+    else { cap.textContent = c.s; cap.removeAttribute("title"); }
+    rerun(cap, "in", "rtin"); capAt = performance.now();
+  }
 
   // curve is a wire's S from (x0, y0) to (x3, y3), its bends at mx: one
   // cubic, cut into exact pieces of it about 1000 px tall (the middle ones
@@ -5380,7 +5422,7 @@ function routingPage(part) {
           await until(() => g !== gen || rt().done);
           if (g !== gen) break;
           r = rt();
-          say(tryWhy(r, i), true);
+          say(answered(r, i), true);
           renderAll();
           dot.classList.add("back");
           dot.setAttribute("r", 4);
@@ -5772,7 +5814,7 @@ function routingPage(part) {
     // the mode line above already says what plays here; a caption saying
     // it again was one more line to read (yujezhang on X, 11-10)
     capQ = [];
-    cap.textContent = "";
+    cap.textContent = ""; cap.removeAttribute("title");
     log.hidden = true;
     renderHist(); // none live, but the days the history keeps are still there to look at
     layout();
