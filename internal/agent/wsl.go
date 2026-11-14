@@ -894,8 +894,12 @@ func wslFound(d distro) bool {
 }
 
 // wslKept is whether magpie keeps a distro it probed: one of wslKinds is
-// there, or the Copilot CLI's folder, whose sign-in it reads (#723).
-func wslKept(d distro) bool { return wslFound(d) || d.Has["dir:"+wslCopilotDir] }
+// there, or the Copilot CLI's folder, whose sign-in it reads (#723), or
+// the Antigravity app's data, whose sessions it reads.
+func wslKept(d distro) bool {
+	return wslFound(d) || d.Has["dir:"+wslCopilotDir] ||
+		slices.ContainsFunc(wslAntigravityDirs, func(dir string) bool { return d.Has["dir:"+dir] })
+}
 
 // ListsFor is whose model lists an agent's are (provider.CatalogFor): its
 // own id's, or, for one in a WSL distro, its Windows twin's (claude for
@@ -1197,7 +1201,8 @@ func wslAgentsOf(ds []distro) []*Agent {
 	return out
 }
 
-// wslHomes are the distros agents (or the Copilot CLI's folder, wslKept)
+// wslHomes are the distros agents (or the Copilot CLI's folder, or the
+// Antigravity app's data, wslKept)
 // were found in, each user's home as magpie
 // opens it, for internal/sessions to read their sessions in; none off
 // Windows. A stopped distro's is its home as last probed.
@@ -1234,6 +1239,18 @@ func wslAnswered() bool {
 // agent magpie sets up, but a sign-in it uses (provider.CopilotWSLDirs),
 // so a distro that has only it is kept as one agents are found in (#723).
 const wslCopilotDir = ".copilot"
+
+// wslAntigravityDirs are the Antigravity app's data folders under a
+// distro's $HOME. The Windows app connected to a WSL distro runs its
+// language server there (`$HOME/.antigravity-server/bin/<version>/
+// language_server`, started through wsl.exe with --app_data_dir
+// antigravity, Antigravity 2.x's dist/wsl.js), which keeps the
+// conversations in the distro's ~/.gemini/antigravity, not Windows'
+// (@guyng35955 on X: no usage for Antigravity connected to WSL Ubuntu).
+// Not an agent magpie sets up, but sessions it reads
+// (sessions.wslAgents), so a distro that has only them is kept as one
+// agents are found in.
+var wslAntigravityDirs = []string{".gemini/antigravity", ".gemini/antigravity-insiders"}
 
 // copilotWSLDirs are the Copilot CLI's folders, as magpie opens them (where
 // a link leads, #4502), in the running distros it was found in, for
@@ -1763,6 +1780,9 @@ var wslProbeScript = sync.OnceValue(func() string {
 		}
 	}
 	s += `[ -d "$HOME/` + wslCopilotDir + `" ] && echo dir:` + wslCopilotDir + `; `
+	for _, dir := range wslAntigravityDirs {
+		s += `[ -d "$HOME/` + dir + `" ] && echo dir:` + dir + `; `
+	}
 	// where each agent folder that leads elsewhere leads (distro.open):
 	// "link:.codex /mnt/c/Users/me/.codex", or "link:.codex" alone where
 	// readlink -f couldn't say

@@ -7,12 +7,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/yetone/magpie/internal/dirent"
-	"github.com/yetone/magpie/internal/provider"
 )
 
 // The Antigravity app's (the desktop IDE's, agent "antigravity") own
@@ -82,19 +82,26 @@ func antigravityConversations() string {
 // have their own prefix so a UUID present in both stores is two sessions
 // with separate summaries and call ids. Stable's existing ids stay the same.
 func antigravityFiles() []file {
-	out := antigravityFilesIn(antigravityConversations())
-	insiders := antigravityFilesIn(filepath.Join(AntigravityInsidersDir(), "conversations"))
-	for i := range insiders {
-		insiders[i].key = "antigravity:insiders-" + strings.TrimPrefix(insiders[i].key, "antigravity:")
+	return append(antigravityFilesIn(antigravityConversations(), runtime.GOOS),
+		antigravityInsiders(filepath.Join(AntigravityInsidersDir(), "conversations"), runtime.GOOS)...)
+}
+
+// antigravityInsiders are the Insiders app's conversation databases in dir,
+// keyed apart from stable's.
+func antigravityInsiders(dir, goos string) []file {
+	out := antigravityFilesIn(dir, goos)
+	for i := range out {
+		out[i].key = "antigravity:insiders-" + strings.TrimPrefix(out[i].key, "antigravity:")
 	}
-	return append(out, insiders...)
+	return out
 }
 
 // antigravityFilesIn are the conversation databases in dir. A file's size
 // and time are the database's and its write-ahead log's together, so a
 // write that is in the log alone still reads the conversation again; rev
-// is its summary row, so a title the app gives it later does too.
-func antigravityFilesIn(dir string) []file {
+// is its summary row, so a title the app gives it later does too. The
+// row's folders are read as goos names them ("linux" in a WSL distro).
+func antigravityFilesIn(dir, goos string) []file {
 	if !Reads("antigravity") {
 		return nil
 	}
@@ -102,7 +109,7 @@ func antigravityFilesIn(dir string) []file {
 	if len(entries) == 0 {
 		return nil
 	}
-	rows := agySummariesOf(filepath.Dir(dir))
+	rows := agySummariesOn(filepath.Dir(dir), goos)
 	var out []file
 	for _, e := range entries {
 		id, ok := strings.CutSuffix(e.Name(), ".db")
@@ -148,11 +155,11 @@ var errAgApp = errors.New("antigravity: unreadable metadata")
 // A call whose response id came before is the later step of that response,
 // and replaces it.
 func antigravityRead(path string) ([]agAppCall, error) {
-	db, err := provider.OpenReadOnly(path)
+	db, done, err := openAppStore(path)
 	if err != nil {
 		return nil, err
 	}
-	defer db.Close()
+	defer done()
 	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, err

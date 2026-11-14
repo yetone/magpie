@@ -16,6 +16,7 @@ import (
 
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/lazyre"
+	"github.com/yetone/magpie/internal/provider"
 )
 
 // Cursor's CLI (cursor-agent) keeps a chat in a folder of its own under its
@@ -208,6 +209,30 @@ func OpenUntouched(path string) (db *sql.DB, closeDB func(), err error) {
 		return nil, nil, err
 	}
 	return db, func() { db.Close(); os.RemoveAll(tmp) }, nil
+}
+
+// openAppStore opens another app's SQLite database at path to read it:
+// read only, in place; or, in a WSL distro read through \\wsl.localhost
+// (or \\wsl$), as OpenUntouched does. SQLite can't take the locks a WAL
+// database needs over that share, so an open in place there answers
+// SQLITE_BUSY, every time, after its busy_timeout (the Antigravity app
+// connected to WSL, @guyng35955 on X; tried on Windows 11). done closes it.
+func openAppStore(path string) (db *sql.DB, done func(), err error) {
+	if onWSLShare(path) {
+		return OpenUntouched(path)
+	}
+	db, err = provider.OpenReadOnly(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	return db, func() { db.Close() }, nil
+}
+
+// onWSLShare is whether path is in a WSL distro, read through Windows'
+// share of it.
+func onWSLShare(path string) bool {
+	p := strings.ToLower(strings.ReplaceAll(path, `\`, "/"))
+	return strings.HasPrefix(p, "//wsl.localhost/") || strings.HasPrefix(p, "//wsl$/")
 }
 
 // openSQLite opens the SQLite database at p, with query as its URI's.

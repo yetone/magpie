@@ -13,8 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/yetone/magpie/internal/provider"
 )
 
 // Antigravity CLI's (agy's) calls (#2097, parkavenue9639: a call agy made
@@ -61,16 +59,22 @@ func AgyDir() string {
 func agyCallFiles() []file {
 	out := agyTranscripts(AgyDir())
 	for i := range out {
-		for _, p := range agyDBFiles(out[i].path) {
-			if fi, err := os.Stat(p); err == nil {
-				out[i].size += fi.Size()
-				if fi.ModTime().After(out[i].mod.Time()) {
-					out[i].mod = modOf(fi.ModTime())
-				}
+		agyCallStat(&out[i])
+	}
+	return out
+}
+
+// agyCallStat adds the transcript f's conversation database and its
+// write-ahead log to f's size and time, as a call source.
+func agyCallStat(f *file) {
+	for _, p := range agyDBFiles(f.path) {
+		if fi, err := os.Stat(p); err == nil {
+			f.size += fi.Size()
+			if fi.ModTime().After(f.mod.Time()) {
+				f.mod = modOf(fi.ModTime())
 			}
 		}
 	}
-	return out
 }
 
 // agyConversationDB is the database of the conversation whose transcript
@@ -94,11 +98,11 @@ func agyStepModels(path string) map[int]string {
 	if _, err := os.Stat(path); err != nil {
 		return nil
 	}
-	db, err := provider.OpenReadOnly(path)
+	db, done, err := openAppStore(path)
 	if err != nil {
 		return nil
 	}
-	defer db.Close()
+	defer done()
 	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil

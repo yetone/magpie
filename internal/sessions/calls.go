@@ -345,8 +345,9 @@ func callSourcesWith(codex []file) []file { return callSourcesInto(nil, codex) }
 func callSourcesInto(out []file, codex []file) []file {
 	lists := append(callFileLists(codex), openCodeCallFiles(), zcodeCallFiles(), dshCallFiles(),
 		minimaxCallFiles(), kimiCallFiles(), wslFiles("kimi"), piCallFiles(), codebuddyCallFiles(), workbuddyAIFiles(),
-		agyCallFiles(),                        // #2097
-		antigravityCallFiles(),                // #2190
+		agyCallFiles(),                               // #2097
+		antigravityCallFiles(),                       // #2190
+		wslFiles("antigravity"), wslCallFiles("agy"), // @guyng35955 on X
 		devinCallFiles(),                      // aohan0905 on X
 		workbuddyCallFiles(), grokCallFiles()) // #4423
 	if out == nil {

@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/dirent"
-	"github.com/yetone/magpie/internal/provider"
 )
 
 // Antigravity CLI's (agy's) conversations, on the Sessions page (RickyWei on
@@ -74,7 +73,11 @@ type agySummaryRead struct {
 }
 
 // agySummariesOf are the rows of the conversation_summaries.db in dir.
-func agySummariesOf(dir string) map[string]agySummary {
+func agySummariesOf(dir string) map[string]agySummary { return agySummariesOn(dir, runtime.GOOS) }
+
+// agySummariesOn is agySummariesOf with the folders the rows name read as
+// goos names them: "linux" for a WSL distro's, read from Windows.
+func agySummariesOn(dir, goos string) map[string]agySummary {
 	path := filepath.Join(dir, "conversation_summaries.db")
 	rev := ""
 	for _, p := range []string{path, path + "-wal"} {
@@ -90,7 +93,7 @@ func agySummariesOf(dir string) map[string]agySummary {
 	if seen && was.rev == rev {
 		return was.rows
 	}
-	rows, ok := readAgySummaries(path)
+	rows, ok := readAgySummaries(path, goos)
 	if !ok {
 		return was.rows
 	}
@@ -103,18 +106,21 @@ func agySummariesOf(dir string) map[string]agySummary {
 
 // readAgySummaries opens the database for the one read and closes it: it
 // is read again only when it changed.
-func readAgySummaries(path string) (map[string]agySummary, bool) {
-	db, err := provider.OpenReadOnly(path)
+func readAgySummaries(path, goos string) (map[string]agySummary, bool) {
+	db, done, err := openAppStore(path)
 	if err != nil {
 		return nil, false
 	}
-	defer db.Close()
-	return agyRows(db)
+	defer done()
+	return agyRowsOn(db, goos)
 }
 
 // agyRows reads the rows; a database made before preview was a column is
 // read without it.
-func agyRows(db *sql.DB) (map[string]agySummary, bool) {
+func agyRows(db *sql.DB) (map[string]agySummary, bool) { return agyRowsOn(db, runtime.GOOS) }
+
+// agyRowsOn is agyRows with the folders read as goos names them.
+func agyRowsOn(db *sql.DB, goos string) (map[string]agySummary, bool) {
 	rows, err := db.Query("SELECT conversation_id, title, preview, workspace_uris, last_modified_time FROM conversation_summaries")
 	if err != nil {
 		rows, err = db.Query("SELECT conversation_id, title, '', workspace_uris, last_modified_time FROM conversation_summaries")
@@ -135,7 +141,7 @@ func agyRows(db *sql.DB) (map[string]agySummary, bool) {
 		json.Unmarshal([]byte(ws.String), &uris)
 		s := agySummary{Title: t.String, Preview: p.String, Last: agyTime(last)}
 		for _, u := range uris {
-			if s.Cwd = agyFolder(u, runtime.GOOS); s.Cwd != "" {
+			if s.Cwd = agyFolder(u, goos); s.Cwd != "" {
 				break
 			}
 		}
@@ -211,18 +217,19 @@ func agyTranscripts(dir string) []file {
 // agyFiles are agy's conversations on this computer, each with its row of
 // conversation_summaries.db: rev is that row, so a title agy writes after
 // the transcript reads the conversation again, and only that one.
-func agyFiles() []file { return agyFilesIn(AgyDir()) }
+func agyFiles() []file { return agyFilesIn(AgyDir(), runtime.GOOS) }
 
-// agyFilesIn is agyFiles of the agy data folder dir. A conversation with a
+// agyFilesIn is agyFiles of the agy data folder dir, whose rows name
+// folders as goos does. A conversation with a
 // row and no transcript (#1718: agy keeps each one's
 // steps in conversations/<id>.db too, protobuf this doesn't read) is
 // listed from its row alone: its title, folder and time, and no tokens.
-func agyFilesIn(dir string) []file {
+func agyFilesIn(dir, goos string) []file {
 	if !Reads("agy") {
 		return nil
 	}
 	out := agyTranscripts(dir)
-	rows := agySummariesOf(dir)
+	rows := agySummariesOn(dir, goos)
 	if len(out) == 0 && len(rows) == 0 {
 		return nil
 	}
