@@ -276,6 +276,21 @@ func TestKeyLimitReservationsStayInTheirWindow(t *testing.T) {
 				if period == "days" {
 					lim.Days, lim.Since = 3, at.Add(-50*time.Hour)
 				}
+				if period == "account" {
+					// the account's 5 hours, read: each begins where the last ended
+					// (a window not read holds its reservations, internal/budget's
+					// account_test.go)
+					lim.Account, lim.AccountWindow = "codex/me@example.com", "5h"
+					origin := at.Add(-2 * time.Hour)
+					t.Cleanup(provider.AccountWindowVia(func(_, _ string, now time.Time) (time.Time, time.Time, bool) {
+						n := now.Sub(origin) / (5 * time.Hour)
+						if now.Before(origin) {
+							n--
+						}
+						start := origin.Add(n * 5 * time.Hour)
+						return start, start.Add(5 * time.Hour), true
+					}))
+				}
 				_, after := lim.Window(at)
 				before := after.Add(-time.Second)
 				reserve := func(at time.Time) func() {
