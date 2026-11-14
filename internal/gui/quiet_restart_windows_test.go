@@ -20,6 +20,7 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
+	"github.com/wailsapp/wails/v3/pkg/w32"
 	"golang.org/x/sys/windows"
 
 	"github.com/yetone/magpie/internal/proc"
@@ -240,6 +241,21 @@ func restartDrawPage(loaded chan<- struct{}, seen chan<- string) http.Handler {
 	})
 }
 
+// userFront brings the window titled title to the front as the user's
+// own key press and click would: a key is input this process sent, which
+// lets it give the foreground away (SetForegroundWindow's rules).
+func userFront(title string) {
+	t, _ := windows.UTF16PtrFromString(title)
+	hwnd := w32.FindWindowW(nil, t)
+	if hwnd == 0 {
+		return
+	}
+	const vkF15, keyUp = 0x7E, 0x2 // a key nothing answers
+	w32.KeybdEvent(vkF15, 0, 0, 0)
+	w32.KeybdEvent(vkF15, 0, keyUp, 0)
+	w32.SetForegroundWindow(hwnd)
+}
+
 // restartDrawOld is the magpie before: its window up and drawn, it starts
 // the new one as update's launch does and quits.
 func restartDrawOld(mode string, report func(string, ...any)) {
@@ -282,11 +298,18 @@ func restartDrawOld(mode string, report func(string, ...any)) {
 				}
 				other := uint32(ps.Process.Pid)
 				os.Setenv("MAGPIE_TEST_OTHER_PID", strconv.Itoa(int(other)))
-				for deadline := time.Now().Add(20 * time.Second); ; time.Sleep(100 * time.Millisecond) {
+				for deadline, click := time.Now().Add(20*time.Second), time.Now().Add(time.Second); ; time.Sleep(100 * time.Millisecond) {
 					var pid uint32
 					windows.GetWindowThreadProcessId(windows.GetForegroundWindow(), &pid)
 					if pid == other {
 						break
+					}
+					// Windows lets the form take the front only while this
+					// process may (it ends in front no matter what came
+					// before it): the user puts it there, as a click would
+					if time.Now().After(click) {
+						userFront("other app")
+						click = time.Now().Add(time.Second)
 					}
 					if time.Now().After(deadline) {
 						fail("old: the other app never came to the front")
