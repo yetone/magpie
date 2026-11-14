@@ -1775,6 +1775,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			http.NotFound(rw, r)
 			return
 		}
+		if ctype == "" {
+			ctype = assetType(f)
+		}
 		if ctype != "" {
 			rw.Header().Set("Content-Type", ctype)
 		}

@@ -439,6 +439,7 @@ func servePluginPage(rw http.ResponseWriter, r *http.Request, web bool) {
 		http.NotFound(rw, r)
 		return
 	}
+	servedAs(rw, file)
 	http.ServeContent(rw, r, filepath.Base(file), st.ModTime(), f)
 }
 
