@@ -835,6 +835,9 @@ type providersJSON struct {
 	Had   int `json:"had,omitempty"`
 	// Removed: of the keys removed at once (keys/remove-many), how many.
 	Removed int `json:"removed,omitempty"`
+	// Unremoved: of the providers removed at once (providers/delete), the
+	// ones left, each with why
+	Unremoved []unremovedJSON `json:"unremoved,omitempty"`
 	// FileError is why providers.json can't be read (provider.FileError):
 	// the page says so over what is listed, which is then the signed-in
 	// accounts alone, never "add your first provider".
@@ -842,6 +845,12 @@ type providersJSON struct {
 	// Fetching: accounts' lists are still being asked for
 	// (provider.FetchingNew); the page asks again until they are in
 	Fetching bool `json:"fetching,omitempty"`
+}
+
+// unremovedJSON is a provider providers/delete couldn't remove, and why.
+type unremovedJSON struct {
+	ID    string `json:"id"`
+	Error string `json:"error"`
 }
 
 // agentModel is the model an agent is on, as magpie's catalog names it.
@@ -1722,6 +1731,53 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			return
 		}
 		writeProvidersJSON(rw, providersState())
+	})
+	// several providers removed at once (eiyuuzaki2333 on X: many relays
+	// added, removed one at a time), each by provider.Delete as the
+	// editor's Remove does, with the agents on their models moved once,
+	// after the last (agent.Reseat), not through the others going too.
+	// One that can't be removed is left and named in Unremoved; none
+	// removed at all is refused as the editor's Remove is.
+	mux.HandleFunc("POST /api/providers/delete", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			IDs []string `json:"ids"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		var ids []string
+		for _, id := range in.IDs {
+			if id != "" && !slices.Contains(ids, id) {
+				ids = append(ids, id)
+			}
+		}
+		if len(ids) == 0 {
+			fail(rw, errors.New("no provider picked"))
+			return
+		}
+		var unremoved []unremovedJSON
+		moved, err := agent.Reseat(func() error {
+			var first error
+			for _, id := range ids {
+				if err := provider.Delete(id); err != nil {
+					unremoved = append(unremoved, unremovedJSON{ID: id, Error: err.Error()})
+					first = cmp.Or(first, err)
+				}
+			}
+			if len(unremoved) == len(ids) {
+				return first
+			}
+			return nil
+		})
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		st := providersState()
+		st.Moved, st.Unremoved = moved, unremoved
+		writeJSON(rw, st)
+		keepProviders(st) // as a provider action's: the panel's switch draws it
 	})
 	// a picture for a provider, picked in the editor: kept by content before
 	// the provider is saved, which then points at it. The page sends it as

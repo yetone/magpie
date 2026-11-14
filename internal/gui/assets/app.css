@@ -2723,6 +2723,19 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .rt-mask svg { width: 13px; height: 13px; flex: none; }
 .rt-mask[aria-pressed="true"] { color: var(--fg-2); }
 #view-providers .pv-q { flex: 0 1 220px; min-width: 120px; }
+/* Select (eiyuuzaki2333 on X): a box on every row, and over the list a bar
+   that stays in view as it scrolls: all or none, how many, Remove, Done.
+   While picking, a row neither opens nor drags, and nothing is added. */
+#view-providers .pv-select { flex: none; }
+#view-providers .pv-sel { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; gap: 10px; min-height: 40px; margin: 0 0 8px; padding: 6px 8px 6px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); flex: none; }
+#view-providers .pv-sel .note { font-size: 12px; color: var(--fg-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+#view-providers .pv-sel input, #view-providers .pv-pickbox { margin: 0; flex: none; accent-color: var(--fg); }
+#view-providers .row.pv-pick { cursor: default; user-select: none; -webkit-user-select: none; }
+#view-providers .row.pv-pick.picked { background: var(--card-2); }
+#view-providers.pv-picking .after-list, #view-providers.pv-picking #addSheet, #view-providers.pv-picking #providerDiscovery { display: none; }
+/* a confirmation's list of what it removes, by name */
+.action-confirm .confirm-names { margin: 12px 0 0; padding: 8px 12px; max-height: 168px; overflow-y: auto; list-style: none; border-radius: 8px; background: var(--card-2); color: var(--fg); font-size: 12.5px; line-height: 1.7; white-space: normal; }
+.action-confirm .confirm-names li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #view-providers .pv-none { margin: 18px 2px; }
 #view-providers .off-head .fold:disabled { cursor: default; opacity: 1; }
 @media (max-width: 520px) { #view-providers .pv-q { flex: 1 1 100%; } }
