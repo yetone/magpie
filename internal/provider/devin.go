@@ -199,13 +199,30 @@ type DevinFamily struct {
 	Models  []catalog.Model
 }
 
+// devinRouter says id is Adaptive or Fusion (the family or its model, in
+// any case): they route between models inside Devin's own agent, and
+// Devin's chat API answers either with 502 "no API providers are
+// available". The plugin leaves them out of its list (parseFamilies).
+func devinRouter(id string) bool {
+	id = strings.ToLower(strings.TrimSpace(id))
+	return id == "adaptive" || id == "fusion"
+}
+
+// withoutDevinRouters is ids less Adaptive and Fusion.
+func withoutDevinRouters(ids []string) []string {
+	if !slices.ContainsFunc(ids, devinRouter) {
+		return ids
+	}
+	return slices.DeleteFunc(slices.Clone(ids), devinRouter)
+}
+
 // devinModelsFlatten is the family list as a flat catalog: the family's
 // follow-newest id, then each of its variants. Adaptive and Fusion, which
 // route between models inside Devin's own agent, aren't served by the API.
 func devinModelsFlatten(families []DevinFamily) []catalog.Model {
 	var out []catalog.Model
 	for _, f := range families {
-		if id := strings.ToLower(f.UID); id == "adaptive" || id == "fusion" {
+		if devinRouter(f.UID) {
 			continue
 		}
 		// Devin's own numbers, which its list gives each variant and the family

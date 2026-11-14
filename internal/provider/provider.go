@@ -1918,6 +1918,13 @@ func normalize(p Provider) Provider {
 		p.BaseAPI = ""
 	}
 	p.Models = cleanList(p.Models)
+	if p.ID == "devin" {
+		// picked from the built-in's list before its API was served
+		// (ce8d0e065), which had Adaptive and Fusion: Devin's chat API
+		// serves neither, and they were listed, and refused, ever after
+		p.Models = withoutDevinRouters(p.Models)
+		p.Delisted = withoutDevinRouters(p.Delisted)
+	}
 	p.Fallback = cleanList(p.Fallback)
 	// a provider saved under an id a preset carried before (presetAliases:
 	// qianfan's first day's, Tencent Cloud's plan and TokenHub's two) is
