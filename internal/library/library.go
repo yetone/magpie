@@ -384,6 +384,7 @@ func changeLocked(f func(l *Library) error) (*Result, error) {
 	if err := f(l); err != nil {
 		return nil, err
 	}
+	l.foldBeside() // a skill that went in beside itself (skill_beside.go)
 	l.settleAway()
 	l.heal() // a server f brought in, from another computer too
 	if err := l.save(); err != nil {

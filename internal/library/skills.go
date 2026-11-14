@@ -1460,7 +1460,7 @@ func probeSkills(input, name string) (*Probe, error) {
 				if followsHere(s, p.src, from) {
 					p.Candidates[i].Links = true
 				} else if p.src.remote() {
-					p.Candidates[i].As = l.freeSkillName(c.Name, p.src)
+					p.Candidates[i].As = l.besideName(c.Name, p.src, c.Path)
 				} else {
 					// a folder of the user's isn't added beside it
 					// (installFrom): shown as had by that name, as before
@@ -1596,11 +1596,18 @@ func installFrom(l *Library, p *Probe, paths, agents []string, shown bool, in *i
 			// is that skill, and updates from there from now on (as
 			// noteFrom binds it when probed): another by that name from
 			// elsewhere goes in beside it, not in its place
-			if s.Source == nil && src.Kind == "github" && !linked(skillDir(s.Name)) {
+			if s.Source == nil && src.remote() && !linked(skillDir(s.Name)) {
 				if _, err := l.linkSkill(s, src, c.Path, from, nil); err != nil {
 					in.skip(c.Name, err)
 					continue
 				}
+			}
+			// moved to a group of its repository: it updates from there
+			if s.Source.remote() && s.Source.Path != c.Path && movedIn(s, src, c, from) {
+				moved := *s.Source
+				moved.Path = c.Path
+				s.Source, s.Gone = &moved, ""
+				forgetCheck(s.Name)
 			}
 			in.had = append(in.had, s.Name)
 			l.offered(p, c.Path, shown)
@@ -1628,7 +1635,7 @@ func installFrom(l *Library, p *Probe, paths, agents []string, shown bool, in *i
 				in.skip(c.Name, fmt.Errorf("the library already has another skill called %s, left as it is: give this one another name in its SKILL.md to add it beside it", c.Name))
 				continue
 			}
-			name = l.freeSkillName(c.Name, src)
+			name = l.besideName(c.Name, src, c.Path)
 		}
 		dir := skillDir(name)
 		// something by that name in the library's folder that the

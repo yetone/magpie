@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	slash "path" // a repository's paths, always with /
 	"path/filepath"
+	"slices"
 	"strings"
+	"time"
 )
 
 // Two skills from different places can go by one name: anthropics/skills'
@@ -30,7 +33,45 @@ func (l *Library) hadSkill(src Source, c Candidate, from string) *Skill {
 	if s := l.skill(c.Name); s != nil && s.Source == nil && sameTree(skillDir(s.Name), from) {
 		return s
 	}
+	if s := l.skill(c.Name); s != nil && movedIn(s, src, c, from) {
+		return s
+	}
 	return nil
+}
+
+// movedIn is whether the library's skill s, by the name of the one at
+// from, is that skill moved to another folder of its repository: the
+// repository put its skills in groups since (skills/pdf to
+// skills/documents/pdf), and its old folder isn't there any more. Taken
+// for another skill, it went in beside itself under its owner's name
+// (Refeccd on X).
+func movedIn(s *Skill, src Source, c Candidate, from string) bool {
+	if !sameRepo(s.Source, src) || s.Called != "" || s.Source.Path == c.Path {
+		return false
+	}
+	// only a folder the fetch had: one fetched as far as src.Path holds
+	// nothing of the rest of the repository
+	if src.Path != "" && s.Source.Path != src.Path && !strings.HasPrefix(s.Source.Path, src.Path+"/") {
+		return false
+	}
+	return goneFrom(repoRoot(from, c.Path), s.Source.Path)
+}
+
+// besideName is the name the skill at path of src goes in beside the
+// library's skill called name by. One from another folder of the same
+// repository takes that folder's name, which tells the two apart, where
+// the owner both have would not (skills/writing/blog beside
+// skills/coding/blog is blog-writing); one from elsewhere takes its
+// source's (freeSkillName).
+func (l *Library) besideName(name string, src Source, path string) string {
+	if s := l.skill(name); s != nil && sameRepo(s.Source, src) {
+		if dir := slash.Dir(path); dir != "." && dir != "" {
+			if n := withSuffix(name, slash.Base(dir)); n != "" && !l.skillNameTaken(n) {
+				return n
+			}
+		}
+	}
+	return l.freeSkillName(name, src)
 }
 
 // skillNameTaken is whether the library has a skill called name, or its
@@ -184,4 +225,78 @@ func (s *Skill) fetchedHash(from string) string {
 		return ""
 	}
 	return hashDir(dir)
+}
+
+// foldBeside puts back together a skill that went in beside itself
+// (Refeccd on X): installed from a repository the library's skill by its
+// name was traced to, or moved into a group of, it was taken for another
+// skill and kept as name-owner. The skill by the name it was called keeps
+// its name and takes the copy's files, source and agents, its own files
+// going to the backups when they differ (linkSkill); the copy, by then
+// the same, goes to the backups too. A skill kept beside one from
+// elsewhere, which was right, stays as it is. It gives the names it put
+// back together.
+func (l *Library) foldBeside() []string {
+	var folded []string
+	tr := &tracer{}
+	for _, s := range slices.Clone(l.Skills) {
+		if s.Called == "" || s.Called == s.Name || !s.Source.remote() {
+			continue
+		}
+		t := l.skill(s.Called)
+		if t == nil || t.Called != "" {
+			continue
+		}
+		switch {
+		case !t.Source.remote():
+			// the library's own, traced to that repository
+			if r := tr.repoOf(t); r == "" || !tracedTo(r, *s.Source) {
+				continue
+			}
+		case sameRepo(t.Source, *s.Source):
+			// from another folder of that repository, which a check found
+			// it no longer has: moved into a group there
+			if t.Gone == "" || t.Source.Path == s.Source.Path {
+				continue
+			}
+		default:
+			continue
+		}
+		if err := l.foldInto(t, s); err != nil {
+			continue
+		}
+		folded = append(folded, t.Name)
+	}
+	return folded
+}
+
+// foldInto is foldBeside for t, the skill by the name s was called.
+func (l *Library) foldInto(t, s *Skill) error {
+	// s's files, named as t is
+	tmp := skillDir("." + t.Name + ".fold")
+	os.RemoveAll(tmp)
+	defer os.RemoveAll(tmp)
+	if err := copyDir(skillDir(s.Name), tmp); err != nil {
+		return err
+	}
+	if err := nameSkill(tmp, t.Name); err != nil {
+		return err
+	}
+	src, commit := *s.Source, s.Commit
+	if _, err := l.linkSkill(t, src, src.Path, tmp, s.Agents); err != nil {
+		return err
+	}
+	if t.Commit == "" {
+		t.Commit = commit
+	}
+	t.Gone = ""
+	for _, p := range l.Projects {
+		if agents, ok := p.Skills[s.Name]; ok {
+			if p.Skills[t.Name] == nil {
+				p.Skills[t.Name] = agents
+			}
+			delete(p.Skills, s.Name)
+		}
+	}
+	return removeSkill(l, s.Name, time.Now().Format("2006-01-02_15-04-05.000"))
 }

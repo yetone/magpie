@@ -1,6 +1,7 @@
 package library
 
 import (
+	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -25,15 +26,20 @@ import (
 // does). One traced to another repository, or one of the user's own that
 // describes something else, is another skill by that name, and goes in
 // beside it (skill_beside.go, TestInstallSetPutsAnotherByTheSameNameBeside).
+//
+// A git repository on another host is followed as GitHub is (Refeccd on
+// X): a skill the Library groups with gitlab.example.com/team/skills, from
+// the skills CLI's lock or a checkout of it, went in beside itself as
+// name-team when that repository was added, every skill of it.
 func followsHere(s *Skill, src Source, from string) bool {
-	if src.Kind != "github" || s.Source.remote() || s.Called != "" {
+	if !src.remote() || s.Source.remote() || s.Called != "" {
 		return false
 	}
 	// where it is traced to: CC Switch's record, the skills CLI's lock,
 	// the git checkout its folder is in, or the repository it was grouped
 	// with (skill_from.go)
 	if r := (&tracer{}).repoOf(s); r != "" {
-		return strings.EqualFold(r, src.Repo)
+		return tracedTo(r, src)
 	}
 	here, ok := readMeta(skillDir(s.Name))
 	there, ok2 := readMeta(from)
@@ -47,16 +53,21 @@ func followsHere(s *Skill, src Source, from string) bool {
 func (l *Library) linkSkill(s *Skill, src Source, path, from string, agents []string) (kept bool, err error) {
 	src.Path = path
 	dir := skillDir(s.Name)
+	// a git repository's skill updates from the commit it was fetched at
+	commit := ""
+	if src.Kind == "git" {
+		commit = gitHeadOf(repoRoot(from, path))
+	}
 	if linked(dir) || !sameTree(dir, from) {
 		kept = !linked(dir)
-		up := &skillUpdate{name: s.Name, src: &src, adopt: true, from: from}
+		up := &skillUpdate{name: s.Name, src: &src, adopt: true, from: from, commit: commit}
 		if err := up.apply(l, Targets()); err != nil {
 			return false, err
 		}
 	} else {
 		// its files are the source's already: only where it updates from
 		// is new
-		s.Hash, s.Own, s.Commit = hashDir(dir), ownHash(dir), ""
+		s.Hash, s.Own, s.Commit = hashDir(dir), ownHash(dir), commit
 		forgetCheck(s.Name)
 	}
 	s.Source, s.From, s.Gone = &src, "", ""
@@ -66,4 +77,44 @@ func (l *Library) linkSkill(s *Skill, src Source, path, from string, agents []st
 		}
 	}
 	return kept, nil
+}
+
+// tracedTo is whether r, the repository a skill is traced to (owner/repo
+// for GitHub, host/path for another host, as repoOf gives it), is src's.
+func tracedTo(r string, src Source) bool {
+	switch src.Kind {
+	case "github":
+		return strings.EqualFold(r, src.Repo)
+	case "git":
+		k := remoteRepo(src.Repo)
+		return k != "" && strings.EqualFold(r, k) || strings.EqualFold(strings.TrimSuffix(r, ".git"), strings.TrimSuffix(src.Repo, ".git"))
+	}
+	return false
+}
+
+// sameRepo is whether a skill's source is the repository src is, at any
+// folder of it.
+func sameRepo(a *Source, src Source) bool {
+	if a == nil || a.Kind != src.Kind {
+		return false
+	}
+	switch src.Kind {
+	case "github":
+		return strings.EqualFold(a.Repo, src.Repo)
+	case "git":
+		return sameGitRepo(a.Repo, src.Repo)
+	}
+	return false
+}
+
+// repoRoot is the folder a repository was fetched to, from where the
+// skill at path in it is: from less path's folders.
+func repoRoot(from, path string) string {
+	if path == "" {
+		return from
+	}
+	for range strings.Split(path, "/") {
+		from = filepath.Dir(from)
+	}
+	return from
 }
