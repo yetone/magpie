@@ -1406,6 +1406,8 @@ each one.
     dc85a7ca5 then added +12 for AIGoCode's logo in pngIcons, and
     27c998aba +491 for costs in each provider's currency, nothing moved
     out either: three raises by 13:00, +570 bytes.
+    11ddf076b (15:46) made it four, +326 for the Qwen platform sign-in,
+    though it put the field and its wait in qianwenplan.js first.
   - A library vendored for an allocation cut: 0caa09b3d copied
     yaml.v3 v3.0.1 into third_party (11,400 lines, go.mod replace) for
     a 7-line emitter change. The review diffed it against the gofmt'd
@@ -1415,6 +1417,11 @@ each one.
     reaches magpie only when someone copies it over by hand
     (MAGPIE.md says how), and the full suite wasn't run. A vendored
     fork names its measured gain against that cost, and runs the suite.
+    The suite would have caught it: TestNoEagerPackageRegexps walks the
+    whole tree, and was red on main from 0caa09b3d until fc75d90af
+    patched yaml.v3 a second time. ea6470cb7 had left third_party out of
+    i18n-keys instead. Decide once which guards a vendored tree answers
+    to, and put that in its MAGPIE.md.
   - Done right: f1f34d624 met the budget with no raise, moving keysTag
     into keyrates.js, which is loaded exactly when a model can have a
     key tag.
