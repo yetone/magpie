@@ -710,6 +710,13 @@ cause:
   test was being written. Checking `git log` isn't enough while both are
   working; say on an issue, or file one, that you are on it before you
   start.
+  - 11-14: again. TestInfoSaysMCPHub went red on ubuntu's -race CI at
+    3dbbb173e with no issue filed. The review's loop wrote a fix
+    (ListenAndServe waits for keepHubPruned) and spent a 30-minute
+    gateway -race run on it, while another session wrote the same fix
+    and pushed it as 49f49c41c. Neither said it was on it. The review's
+    copy was dropped. File the red (or comment on its issue) before the
+    first edit, and `git fetch` before a long run as well as after.
 - 10-12/10-13: #1794 got four "seen again" comments before anyone took
   it (fixed in 6ae6b3402), and #1543 was seen three times with no owner
   (097479dab). A comment that a red came back is not work on it: take it
