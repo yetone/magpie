@@ -842,6 +842,15 @@ cause:
     for three days, and it went red on ubuntu CI again at 0a7633136. It
     was ported unchanged as 11c427eaa. Now in the code standards (a
     red's issue is read to its last comment, 77898391d).
+  - 11-15: a claim with no work behind it holds a red as long as no
+    comment at all. #2903 ("the plugin answered no response", ubuntu
+    race) was claimed on 10-19 ("I'm on it: finding the cause by
+    injecting the ordering"), with nothing after it for four weeks. It
+    came back at 139a6be2b in a second test, TestPluginServesSystemOne.
+    #6368 (macOS EBADF in internal/sessions) went from "Still mine" to
+    "I am not taking it" with no cause found. A claim that has had no
+    commit or finding for a day is no claim. Whoever next sees the red
+    takes it, or says on the issue that it is unowned.
 - 10-27: the #1794 pattern on a third day. internal/provider has died
   on main since 10-25 in TestUnreadLoginsWriteErrorsKeepCredentials
   (#3632, a synctest fatal, 2 of 2 on mote at 4b0a32e0f). The issue has
