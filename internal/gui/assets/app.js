@@ -6510,12 +6510,18 @@ function renderMovable() {
   const ids = ps.map((p) => p.id).join(",");
   const unmoved = providers.unmoved || [], wd = providers.withdrawn || [];
   const noSubs = !!(state?.settings?.noAccountDiscovery || prefs?.noAccountsEnv);
-  box.hidden = (!ps.length || hid === ids) && !unmoved.length && !wd.length && !noSubs;
+  // the line moving Antigravity's accounts to agy is in agymove.js,
+  // imported when there are any (@tongzhenbao on X); while it is drawn it
+  // says what the withdrawn plugin's line would, with the Move itself
+  const agy = providers.agyMove?.length && (window.agyMoveLine ? agyMoveLine() : void import("./agymove.js").then(renderMovable, () => {}));
+  box.hidden = (!ps.length || hid === ids) && !unmoved.length && !wd.length && !noSubs && !agy;
   if (noSubs) box.append(discoveryOffLine());
   for (const p of unmoved) box.append(unmovedLine(p));
+  if (agy) box.append(agy);
   // a plugin magpie gives nobody new (plugin.WithdrawnOf): it still
   // works, and its user is told the risk and what to use instead
   for (const w of wd) {
+    if (agy && w.id === "antigravity") continue;
     const go = el("button", "text action", t("Use {name}", { name: w.instead }));
     go.onclick = () => openPlugins("agy");
     box.append(depLine("withdrawn", t("{name}'s plugin can get your account suspended", { name: w.name }), t("Google suspends accounts it sees used outside its own app. {name} runs your own agy instead.", { name: w.instead }), go));

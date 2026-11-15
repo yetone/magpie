@@ -2,6 +2,7 @@ package gui
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -105,5 +106,48 @@ func TestMoveBackRefused(t *testing.T) {
 	mux.ServeHTTP(rec, httptest.NewRequest("POST", "/api/provider/moveback", strings.NewReader(`{"id":"zed"}`)))
 	if rec.Code < 400 || !strings.Contains(rec.Body.String(), "retired") || moved {
 		t.Fatalf("%d %s moved=%v", rec.Code, rec.Body.String(), moved)
+	}
+}
+
+// Move on the Antigravity line brings the retired plugin's accounts into
+// agy-cli, going on though the page closes, and the reply says what
+// happened to each account (@tongzhenbao on X).
+func TestToAgyMovesAndSaysEachAccount(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	t.Setenv("PATH", t.TempDir())
+	old := moveToAgy
+	t.Cleanup(func() { moveToAgy = old })
+	going := false
+	moveToAgy = func(ctx context.Context) ([]provider.ImportedAccount, error) {
+		_, deadline := ctx.Deadline()
+		going = ctx.Err() == nil && deadline
+		return []provider.ImportedAccount{{User: "a@x.com", Status: "added"}, {User: "b@x.com", Status: "failed", Error: "agy couldn't sign in with it"}}, nil
+	}
+	mux := http.NewServeMux()
+	providerRoutes(mux, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // the page went away
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest("POST", "/api/provider/toagy", strings.NewReader(`{}`)).WithContext(ctx))
+	if rec.Code != 200 || !going {
+		t.Fatalf("%d going=%v %s", rec.Code, going, rec.Body.String())
+	}
+	var st struct {
+		AgyMoved []provider.ImportedAccount `json:"agyMoved"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &st); err != nil || len(st.AgyMoved) != 2 || st.AgyMoved[1].Error == "" {
+		t.Fatalf("%v %s", err, rec.Body.String())
+	}
+	moveToAgy = func(context.Context) ([]provider.ImportedAccount, error) {
+		return nil, fmt.Errorf("no Antigravity account is left to move")
+	}
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest("POST", "/api/provider/toagy", strings.NewReader(`{}`)))
+	if rec.Code < 400 || !strings.Contains(rec.Body.String(), "left to move") {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
 	}
 }
