@@ -4,7 +4,9 @@
 // named ("CLI 0.130.0", "App 26.930.31730"), the update pill still beside
 // the CLI's; with the app alone, the app's; an agent with no app is as it
 // was. At the window's narrow width the name keeps its room. No backend: the
-// API is faked here.
+// API is faked here. Beside the app's version the pill says it updates the
+// CLI: "Update to 0.2.2-rc.1" beside "App 0.2.2-rc.2" read as a step back
+// (roger1huh on X, DeepSeek Harness).
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -61,11 +63,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     };
     const vers = (page, id) => page.locator(`${row(id)} .ag-ver`).allTextContents();
 
-    for (const [lang, cli, app, tip] of [
-      ["en", "CLI 0.130.0", "App 26.930.31730", /The Codex app 26\.930\.31730\. It reads the same settings as the CLI: connecting Codex here connects both/],
-      ["zh", "CLI 0.130.0", "App 26.930.31730", /Codex App 26\.930\.31730。它和 CLI 读同一份设置：在这里接入 Codex，两者都会接入/],
-      ["ja", "CLI 0.130.0", "アプリ 26.930.31730", /Codex アプリ 26\.930\.31730。CLI と同じ設定を読むので/],
-      ["de", "CLI 0.130.0", "App 26.930.31730", /Codex-App 26\.930\.31730\. Sie liest dieselben Einstellungen wie die CLI/],
+    for (const [lang, cli, app, pill, tip] of [
+      ["en", "CLI 0.130.0", "App 26.930.31730", "Update CLI to 0.131.0", /The Codex app 26\.930\.31730\. It reads the same settings as the CLI: connecting Codex here connects both/],
+      ["zh", "CLI 0.130.0", "App 26.930.31730", "更新 CLI 到 0.131.0", /Codex App 26\.930\.31730。它和 CLI 读同一份设置：在这里接入 Codex，两者都会接入/],
+      ["zh-TW", "CLI 0.130.0", "App 26.930.31730", "更新 CLI 到 0.131.0", /Codex App 26\.930\.31730。它和 CLI 讀同一份設定：在這裡接入 Codex，兩者都會接入/],
+      ["ja", "CLI 0.130.0", "アプリ 26.930.31730", "CLI を 0.131.0 にアップデート", /Codex アプリ 26\.930\.31730。CLI と同じ設定を読むので/],
+      ["de", "CLI 0.130.0", "App 26.930.31730", "CLI auf 0.131.0 aktualisieren", /Codex-App 26\.930\.31730\. Sie liest dieselben Einstellungen wie die CLI/],
     ]) {
       await t.test(lang + ": both, each named, the pill beside the CLI's", async () => {
         const page = await open(lang, BOTH);
@@ -74,6 +77,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // the pill comes after the CLI's version, before the app's
         const order = await page.locator(`${row("codex")} .ag-cli > *`).evaluateAll((xs) => xs.map((x) => x.classList.contains("ag-app") ? "app" : x.classList.contains("ag-up") ? "pill" : "cli"));
         assert.deepEqual(order, ["cli", "pill", "app"]);
+        // the pill says it updates the CLI, never read against the app's
+        assert.equal(await page.locator(`${row("codex")} .ag-up`).getAttribute("aria-label"), pill);
         // an agent with no app: its version alone, as before
         assert.deepEqual(await vers(page, "gemini"), ["0.60.0"]);
         // name, versions and pill on one line
@@ -85,6 +90,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.close();
       });
     }
+
+    await t.test("a CLI with no app: the pill says only the version", async () => {
+      const page = await open("en", { codex: { ...BOTH.codex, app: undefined } });
+      assert.equal(await page.locator(`${row("codex")} .ag-up`).getAttribute("aria-label"), "Update to 0.131.0");
+      await page.close();
+    });
 
     await t.test("the app alone: its version, no pill", async () => {
       const page = await open("en", APP_ONLY);

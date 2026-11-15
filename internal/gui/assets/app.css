@@ -830,6 +830,13 @@ body.window .row.agent .who .ag-cli { flex: 0 1 auto; overflow: hidden; }
    and gone where the pill keeps only its arrow */
 .ag-app { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 @container (max-width: 250px) { body.window .row.agent .ag-app { display: none; } }
+/* beside the app's version the pill says "Update CLI to …", longer, so
+   there it keeps only its arrow, and the app's version goes, sooner */
+@container (max-width: 360px) {
+  body.window .row.agent .ag-cli.with-app .ag-up { padding: 0 6px; }
+  body.window .row.agent .ag-cli.with-app .ag-up > span,
+  body.window .row.agent .ag-cli.with-app .ag-app { display: none; }
+}
 .ag-offpath { flex: 0 1 auto; min-width: 0; }
 @container (max-width: 250px) { body.window .row.agent .ag-offpath { display: none; } }
 .ag-here { flex: 0 1 auto; min-width: 0; }

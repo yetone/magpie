@@ -2552,6 +2552,7 @@ function cliTag(a) {
   // the desktop app (the Codex app, #1334): its version, which updates
   // itself; one connection serves the app and the CLI
   if (c.app) {
+    box.classList.add("with-app");
     const v = el("span", "ag-ver ag-app", t("App {v}", { v: c.app }));
     v.title = t("The {agent} app {v}. It reads the same settings as the CLI: connecting {agent} here connects both", { agent: a.name, v: c.app });
     box.append(v);
@@ -2569,7 +2570,9 @@ function cliTag(a) {
 function paintCLIButton(b, c, busy) {
   b.classList.toggle("busy", busy);
   b.setAttribute("aria-busy", String(busy));
-  const text = busy ? t("Updating…") : t("Update to {v}", { v: c.latest });
+  // beside its app's version, it says it updates the CLI: "Update to
+  // 0.2.2-rc.1" next to "App 0.2.2-rc.2" read as a step back (roger1huh on X)
+  const text = busy ? t("Updating…") : t(c.app ? "Update CLI to {v}" : "Update to {v}", { v: c.latest });
   // named even where a tight row shows only the arrow
   b.setAttribute("aria-label", text);
   b.replaceChildren(svg(busy ? CLI_SPIN : CLI_UP, 11, 1.8), el("span", "", text));
