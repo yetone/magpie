@@ -27,7 +27,11 @@ export async function onRequest(body, ctx) {
 }
 export async function onResponse(reply, ctx) {
   await new Promise(resolve => setTimeout(resolve, 12000));
-  if (!ctx.signal.aborted) fs.writeFileSync(ctx.options.output, JSON.stringify(reply));
+  if (ctx.signal.aborted) return;
+  // written beside and renamed in: writeFileSync creates the file empty
+  // before it writes, and the loop below read it then ("captured ", #6019)
+  fs.writeFileSync(ctx.options.output + ".tmp", JSON.stringify(reply));
+  fs.renameSync(ctx.options.output + ".tmp", ctx.options.output);
 }`)
 	if err := SetOptions(spec, map[string]any{"gatewayTimeoutMs": 15000, "output": output}); err != nil {
 		t.Fatal(err)
