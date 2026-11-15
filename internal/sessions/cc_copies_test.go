@@ -1,10 +1,12 @@
 package sessions
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -628,5 +630,114 @@ func TestClaudeFamilyKeptAcrossStarts(t *testing.T) {
 	slices.Sort(want)
 	if got := ccRows("claude"); !slices.Equal(got, want) {
 		t.Fatalf("after the copy went on, rows = %v, want %v", got, want)
+	}
+}
+
+// A long session resumed into copies (each a whole copy of it, ~100 MB
+// a file for the reporter's sessions, on X) goes on in one file, the one
+// the copies are kept in. A turn added to it is read on its own: the
+// copies, which didn't change, are not read again, neither for their
+// uuids (ccFamily) nor for what they hold that it doesn't (ccRest), and
+// the turn is counted.
+func TestClaudeKeeperTurnReadsNoCopy(t *testing.T) {
+	claude, _ := setup(t)
+	ccForkFixture(t, claude,
+		[2]string{"original.jsonl", ccOriginal},
+		[2]string{"original.jsonl", ccCopyIDs[0]},
+		[2]string{"fork-on.jsonl", ccForkOn})
+	if got := ccRows("claude"); !slices.Equal(got, []string{ccForkOn}) {
+		t.Fatalf("rows = %v, want the fork only", got)
+	}
+	before, _ := ccStatTokens(t)
+	proj := filepath.Join(claude, "projects", "-w-proj")
+	keeper := filepath.Join(proj, ccForkOn+".jsonl")
+	turn := func(n int) {
+		t.Helper()
+		id := fmt.Sprintf("0c0c0c0c-0000-4000-8000-%012d", n)
+		line := `{"parentUuid":null,"isSidechain":false,"message":{"id":"msg_turn_` + id + `","type":"message","role":"assistant","model":"claude-opus-5-5","content":[{"type":"text","text":"more"}],"stop_reason":"end_turn","usage":{"input_tokens":1000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":5}},"type":"assistant","uuid":"` + id + `","timestamp":"` + time.Now().Add(-time.Duration(10-n)*time.Minute).UTC().Format(time.RFC3339Nano) + `","sessionId":"` + ccForkOn + `","cwd":"/w/proj"}` + "\n"
+		f, err := os.OpenFile(keeper, os.O_APPEND|os.O_WRONLY, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.WriteString(line); err != nil {
+			t.Fatal(err)
+		}
+		f.Close()
+		at := time.Now().Add(-time.Duration(10-n) * time.Minute)
+		if err := os.Chtimes(keeper, at, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var hmu sync.Mutex
+	var whole []string // files read from their start
+	scanHook = func(p string, off int64) {
+		if off == 0 && strings.HasPrefix(p, proj) {
+			hmu.Lock()
+			whole = append(whole, filepath.Base(p))
+			hmu.Unlock()
+		}
+	}
+	t.Cleanup(func() { scanHook = nil })
+	for n := 1; n <= 2; n++ {
+		turn(n)
+		hmu.Lock()
+		whole = nil
+		hmu.Unlock()
+		if got := ccRows("claude"); !slices.Equal(got, []string{ccForkOn}) {
+			t.Fatalf("turn %d: rows = %v, want the fork only", n, got)
+		}
+		days, _ := ccStatTokens(t)
+		if want := before.Input + n*1000; days.Input != want {
+			t.Errorf("turn %d: tokens in = %d, want %d", n, days.Input, want)
+		}
+		hmu.Lock()
+		got := whole
+		hmu.Unlock()
+		if len(got) > 0 {
+			t.Errorf("turn %d read files whole again: %v", n, got)
+		}
+	}
+}
+
+// When the file a branch is kept in grows with a message the branch held
+// on its own, that message is counted once still: the branch's own part
+// is read again, not kept as it was (ccRest).
+func TestClaudeKeeperTurnTheBranchHeldIsCountedOnce(t *testing.T) {
+	ccCompactedBranchFixture(t)
+	if days, _ := ccStatTokens(t); days.Input != 80 {
+		t.Fatalf("tokens in = %d, want 80", days.Input)
+	}
+	claude := os.Getenv("CLAUDE_CONFIG_DIR")
+	proj := filepath.Join(claude, "projects", "-w-proj")
+	b, err := os.ReadFile(filepath.Join(proj, ccBranch+".jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var own string
+	for _, l := range strings.SplitAfter(string(b), "\n") {
+		if strings.Contains(l, `"type":"assistant"`) && strings.Contains(l, `"input_tokens"`) {
+			own = l
+		}
+	}
+	if own == "" {
+		t.Fatal("the branch has no reply")
+	}
+	p := filepath.Join(proj, ccCompacted+".jsonl")
+	fi, err := os.Stat(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.OpenFile(p, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.WriteString(strings.ReplaceAll(own, ccBranch, ccCompacted))
+	f.Close()
+	at := fi.ModTime().Add(time.Minute)
+	if err := os.Chtimes(p, at, at); err != nil {
+		t.Fatal(err)
+	}
+	if days, sessions := ccStatTokens(t); days.Input != 80 || sessions.Input != 80 {
+		t.Errorf("tokens in = %d (days), %d (sessions); want 80, the branch's reply counted once", days.Input, sessions.Input)
 	}
 }

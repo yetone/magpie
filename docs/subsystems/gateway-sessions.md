@@ -1230,6 +1230,19 @@ the session itself was hidden as a fork's copy. See
 `TestClaudeCopyBeforeACompactionIsCounted`; the fixtures in
 `testdata/claude-forks` are Claude Code 2.1.312's own files.
 
+A group's verdict is kept on disk by its files' sizes and times
+(`cc_family_memo.go`), and each copy's rest by both files. While the
+process runs, the uuids read of a group's files stay in memory, a group
+found on disk included, so when the keeper grows (the live session the
+copies were made of) the group is judged on the added lines only. A copy
+that didn't change keeps its rest while the keeper only grew and holds
+none of the rest's messages; one it now holds has the rest read again. A
+long session resumed into copies of ~100 MB each re-read every copy whole
+on each turn, a second or more per change on the Sessions page (on X).
+After a start, the first change to such a group still reads each file's
+uuids once. See `TestClaudeKeeperTurnReadsNoCopy` and
+`TestClaudeKeeperTurnTheBranchHeldIsCountedOnce`.
+
 A session whose agent keeps its subagents' conversations beside its own
 lists them in `subagents` on the sessions API (`/api/sessions`, `one`, `manage`; #2261,
 [`subagents.go`](../../internal/sessions/subagents.go)), only for agents with
