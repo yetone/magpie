@@ -605,6 +605,9 @@ body.side-nav :is(#usageTab, #view-library .lib-tabs, #view-plugins .lib-tabs, #
 .side-toggle .st-pane { fill: currentColor; opacity: .32; transition: opacity .2s var(--ease); }
 body:not(.side-nav) .side-toggle .st-pane { opacity: 0; }
 @media (prefers-reduced-motion: reduce) { .side-toggle .st-pane { transition: none; } }
+/* the window kept on top (app.js renderOnTop): pressed, its pin filled */
+.icon.pin .pin-body { fill: currentColor; fill-opacity: 0; transition: fill-opacity .16s ease; }
+.icon.pin.on .pin-body { fill-opacity: 1; }
 /* the two layouts trade places as one motion (app.js navMorph): the sidebar
    slides in from the window's edge or back to it, each page's tab flies to
    its place in the other, and the page moves over, together. Each piece is

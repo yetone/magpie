@@ -1275,6 +1275,11 @@ type Settings struct {
 	// minimised; not at all under Wayland, where a window can't place
 	// itself. gui's openAt moves it onto a screen there now.
 	WindowAt []int `json:"windowAt,omitempty"`
+	// OnTop keeps the main window above other apps' windows, pinned from
+	// its title bar's pin (NovaStudiosss on X: Usage and Routing watched
+	// while working elsewhere). This computer's own, as the window's size
+	// and place are.
+	OnTop bool `json:"onTop,omitempty"`
 }
 
 // ModelPrice is the price of one model as the user states it. Each part is a
@@ -1786,7 +1791,7 @@ func (s *Settings) KeepOwn(cur Settings) {
 	s.UpdateProxy, s.UpdateProxyCustom = cur.UpdateProxy, cur.UpdateProxyCustom
 	s.UpdateSource = cur.UpdateSource
 	s.WindowMaximised, s.KeepAwake, s.KeepAwakeDisplay = cur.WindowMaximised, cur.KeepAwake, cur.KeepAwakeDisplay
-	s.WindowAt = cur.WindowAt
+	s.WindowAt, s.OnTop = cur.WindowAt, cur.OnTop
 	s.TrayUsages, s.TrayUsage, s.TrayUsageEvery, s.TrayNoLogos, s.TrayNoBird, s.TrayPace, s.TrayNoCost = cur.TrayUsages, cur.TrayUsage, cur.TrayUsageEvery, cur.TrayNoLogos, cur.TrayNoBird, cur.TrayPace, cur.TrayNoCost
 	s.TrayWindows, s.TrayNoNumber, s.TrayCurrency = cur.TrayWindows, cur.TrayNoNumber, cur.TrayCurrency
 	s.GatewayMode = cur.GatewayMode
@@ -2339,6 +2344,18 @@ func SetQuitNoAsk(on bool) error {
 		return err
 	}
 	s.QuitNoAsk = on
+	return save(s, false)
+}
+
+// SetOnTop sets OnTop alone, from what the file holds now; a file that
+// can't be read is left as it is.
+func SetOnTop(on bool) error {
+	defer lockFile()()
+	s, err := loadChecked()
+	if err != nil {
+		return err
+	}
+	s.OnTop = on
 	return save(s, false)
 }
 

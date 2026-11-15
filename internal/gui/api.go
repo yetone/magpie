@@ -1249,6 +1249,12 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		if s.NoBird {
 			boot["noBird"] = true
 		}
+		// and the title bar's pin, where the window can be kept on top
+		// (ontop.go): shown, and pressed, from the first paint
+		if pinnable(w) {
+			boot["pin"] = true
+			boot["onTop"] = s.OnTop
+		}
 		// a browser tab keeps its own font choice (fonts.js)
 		if !isWeb(w) {
 			boot["uiFont"], boot["codeFont"] = s.UIFont, s.CodeFont
@@ -3212,6 +3218,15 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			w.HidePanel()
 		case "main":
 			w.ShowMain(mainView(r.URL.Query()))
+		case "ontop":
+			// the title bar's pin (ontop.go)
+			on := r.URL.Query().Get("on") == "1"
+			if err := pinMain(w, on); err != nil {
+				fail(rw, err)
+				return
+			}
+			writeJSON(rw, map[string]bool{"onTop": on})
+			return
 		case "quit":
 			// the question's "Don't ask again" (noAsk=1, zhujiu on
 			// Discord) is saved before the quit; a save that fails keeps

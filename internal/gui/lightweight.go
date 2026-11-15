@@ -41,6 +41,8 @@ func (h *host) makeMain(url string) *application.WebviewWindow {
 	// Windows' title bar in the page's colour from the first frame; the
 	// page keeps it so as its theme changes (TintTitleBar)
 	winOpts, winBg := windowChrome(cmp.Or(os.Getenv("MAGPIE_THEME"), settings.Shared().Theme))
+	// pinned above other windows, as the title bar's pin left it (ontop.go)
+	onTop := settings.Load().OnTop && canOnTop(runtime.GOOS, os.Getenv)
 	w := h.app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:             "main",
 		Title:            "magpie",
@@ -52,6 +54,7 @@ func (h *host) makeMain(url string) *application.WebviewWindow {
 		Zoom:             z,
 		Hidden:           true,
 		StartState:       state,
+		AlwaysOnTop:      onTop,
 		Mac:              mainMacWindow(),
 		Windows:          winOpts,
 		BackgroundColour: winBg,

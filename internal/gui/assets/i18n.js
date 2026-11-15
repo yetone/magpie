@@ -4,6 +4,8 @@
 // works. {name} slots are filled by t(str, vars).
 const I18N = {
   zh: {
+    "Keep on top": "窗口置顶",
+    "Stop keeping on top": "取消置顶",
     "Calls": "调用次数",
     "Cards": "卡片",
     "Table": "表格",
@@ -5331,6 +5333,8 @@ const I18N = {
     "runs everything without asking": "所有操作都直接运行，不询问",
   },
   "zh-TW": {
+    "Keep on top": "視窗置頂",
+    "Stop keeping on top": "取消置頂",
     "Calls": "呼叫次數",
     "Cards": "卡片",
     "Table": "表格",
@@ -10642,6 +10646,8 @@ const I18N = {
     "runs everything without asking": "所有操作都直接執行，不詢問",
   },
   ja: {
+    "Keep on top": "最前面に固定",
+    "Stop keeping on top": "最前面の固定を解除",
     "Calls": "呼び出し数",
     "Cards": "カード",
     "Table": "表",
@@ -15955,6 +15961,8 @@ const I18N = {
     "runs everything without asking": "すべて確認せずに実行する",
   },
   de: {
+    "Keep on top": "Im Vordergrund halten",
+    "Stop keeping on top": "Nicht mehr im Vordergrund halten",
     "Calls": "Aufrufe",
     "Cards": "Karten",
     "Table": "Tabelle",

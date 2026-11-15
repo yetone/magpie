@@ -40,8 +40,8 @@ The settings part carries the user's preferences, but not what is only about
 one computer. [`Settings.KeepOwn`](../../internal/settings/settings.go) puts
 those back from this computer's settings whenever a sync, a join, a Restore,
 an Undo or a backup file brings settings in, and `hashes` blanks them, so
-changing one is no change to push. They are: the window's size and whether it
-was maximised, the fonts, the proxy, the gateway's port, sharing on the local
+changing one is no change to push. They are: the window's size, whether it
+was maximised and whether it is kept on top (`OnTop`), the fonts, the proxy, the gateway's port, sharing on the local
 network (`LAN`) and the addresses let in to it (`AllowIPs`), the private
 hosts magpie may download from (`FetchPrivate`), the Dock, gateway
 mode, keeping awake, lightweight windows, WSL lookups, account discovery, when

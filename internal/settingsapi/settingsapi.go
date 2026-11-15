@@ -275,6 +275,7 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	}
 	in.AgentOrder, in.AgentsHidden, in.AgentsShown, in.AgentsHere = cur.AgentOrder, cur.AgentsHidden, cur.AgentsShown, cur.AgentsHere
 	in.Window, in.WindowMaximised, in.WindowAt = cur.Window, cur.WindowMaximised, cur.WindowAt // the window's own, as it was last resized and moved
+	in.OnTop = cur.OnTop                                                                       // and pinned on top, by its title bar's pin (window/ontop)
 	// and what other pages keep here: which models an agent is shown, and
 	// everything the user said of a model anywhere else in the app, set on
 	// its own. The per-model maps are carried whole rather than named one
