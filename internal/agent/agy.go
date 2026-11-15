@@ -25,6 +25,10 @@ package agent
 // stays the user's, and a plain agy, and `agy remote-control` or
 // --remote-control through the function, run on their Google sign-in.
 //
+// A model that takes two or more of low, medium and high is listed once
+// more per level, "magpie/<ref>:<level>" with that thinkingLevel, the
+// thinking depth picked in agy's /model (agyLevels).
+//
 // So that typing agy just works (bestony on Discord: the command was
 // copied at each start), magpie puts a function named agy in the profile
 // of each shell the user has, between "# >>> magpie agy >>>" and
@@ -42,6 +46,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 
@@ -238,7 +243,8 @@ func agyIn(at place) *Agent {
 	settingsModel, overModel := jsonGet(path, "model"), jsonGet(over, "model")
 	provider := jsonGet(over, "modelProvider")
 	// the model is magpie's while its own file names one; a settings.json
-	// still wired by an older magpie says so too, until migrate moves it
+	// still wired by an older magpie says so too, until migrate moves it.
+	// It is the custom model's key, a level's (agyLevelKey) too.
 	get := func() string {
 		if m := overModel(); usesMagpie(m) {
 			return m
@@ -269,6 +275,9 @@ func agyIn(at place) *Agent {
 		ms := ownModels()
 		for _, m := range sharedModels("agy") {
 			ms[magpieID+"/"+m.ID] = map[string]string{"apiProvider": "API_PROVIDER_GOOGLE_GEMINI", "modelName": m.ID}
+			for _, l := range agyLevels(m.Efforts) {
+				ms[agyLevelKey(magpieID+"/"+m.ID, l)] = map[string]string{"apiProvider": "API_PROVIDER_GOOGLE_GEMINI", "modelName": m.ID, "thinkingLevel": l}
+			}
 		}
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
@@ -283,11 +292,24 @@ func agyIn(at place) *Agent {
 	}
 	// migrate takes what an older magpie wrote into settings.json out of
 	// it, the user's model and provider back; it returns the model that
-	// was magpie's there, "" when settings.json was never wired
+	// was magpie's there, "" when settings.json was never wired.
+	//
+	// While magpie's own file is on one of magpie's, a model of magpie's
+	// in settings.json is not an older magpie's: it is agy's /model, which
+	// writes the pick into settings.json, --settings or not. That pick is
+	// kept in magpie's file (it is what agy starts on next) and
+	// settings.json's model goes back to what it was when magpie was
+	// switched on (connect.was), or out of it. The old stash is never read
+	// for it: one left from an older magpie, or none, put a stale model and
+	// provider into settings.json or took the user's out of it
+	// (LolingVerse on X).
 	migrate := func() (string, error) {
 		m := settingsModel()
 		if !usesMagpie(m) {
 			return "", nil
+		}
+		if usesMagpie(overModel()) {
+			return m, put("model", agyConnectWas())
 		}
 		if err := put("modelProvider", unstash(stashProvider)); err != nil {
 			return m, err
@@ -412,13 +434,14 @@ func agyIn(at place) *Agent {
 		},
 		Fields: []Field{{
 			Key: "model", Label: "model",
-			Get: get,
+			// a level's custom model is its model's, the level agy's
+			Get: func() string { return agyLevelOf(get()) },
 			Set: func(v string) error {
 				if _, err := migrate(); err != nil {
 					return err
 				}
 				cur := overModel()
-				if ref, ok := strings.CutPrefix(v, magpieID+"/"); ok && isMagpie(ref) {
+				if ref, ok := strings.CutPrefix(agyLevelOf(v), magpieID+"/"); ok && isMagpie(ref) {
 					if err := writeOver(v); err != nil {
 						return err
 					}
@@ -461,6 +484,57 @@ func agyIn(at place) *Agent {
 			},
 		}, agyEffortField(func() bool { return !at.cold && usesMagpie(get()) })},
 	}
+}
+
+// agyLevelNames are the levels a custom model of agy's takes as its
+// thinkingLevel, weakest first: agy 1.5.9 takes low, medium and high
+// ("customModels %q: ignoring thinkingLevel %q (want low, medium, or
+// high)") and asks the model at it (generationConfig.thinkingConfig.
+// thinkingLevel), which the gateway asks for over the row's
+// (agyLevelAsked).
+var agyLevelNames = []string{"low", "medium", "high"}
+
+// agyLevels are the levels of efforts agy's custom models can ask, weakest
+// first: none unless two or more, as one is no choice.
+func agyLevels(efforts []string) []string {
+	var out []string
+	for _, l := range agyLevelNames {
+		if slices.ContainsFunc(efforts, func(e string) bool { return strings.EqualFold(e, l) }) {
+			out = append(out, l)
+		}
+	}
+	if len(out) < 2 {
+		return nil
+	}
+	return out
+}
+
+// agyLevelKey is the key of the custom model that asks key's model at
+// level. agy's /effort is turned away for every custom model, one with a
+// thinkingLevel too ("Effort isn't adjustable for …", agy 1.5.9), and its
+// /model lists custom models by key, so each level is one of its own
+// there (LolingVerse on X: no thinking depth in agy).
+func agyLevelKey(key, level string) string { return key + ":" + level }
+
+// agyLevelOf is the key of the model a level's custom model asks: key
+// without its level; key as it is otherwise.
+func agyLevelOf(key string) string {
+	i := strings.LastIndex(key, ":")
+	if i < 0 || !slices.Contains(agyLevelNames, key[i+1:]) || !usesMagpie(key) {
+		return key
+	}
+	return key[:i]
+}
+
+// agyConnectWas is the model agy was on when magpie was switched on for
+// it, when it was the user's own; "" otherwise.
+func agyConnectWas() string {
+	var was map[string]string
+	json.Unmarshal([]byte(unstashPeek("agy.connect.was")), &was)
+	if m := was["model"]; !usesMagpie(m) {
+		return m
+	}
+	return ""
 }
 
 // agyEffortField is effortField for agy.
