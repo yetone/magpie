@@ -78,7 +78,16 @@ var (
 // pathBuns are the Buns on this machine to fall back on: the one on PATH,
 // and the one Bun's installer puts in ~/.bun/bin, which an app started
 // from the Dock or Finder doesn't have on PATH. A var for tests.
+//
+// None in a test binary testenv isolated: its sandbox has no Bun of its
+// own, and the developer's or CI's Bun on PATH would start a real host
+// from any test that asks a plugin, which no test ends (#6761: a host
+// TestPluginEmptyKeyKeyAsked started took a later test's sign-out to its
+// own HOME). A test of the fallback sets pathBuns itself.
 var pathBuns = func() []string {
+	if os.Getenv(testSandbox) != "" {
+		return nil
+	}
 	var out []string
 	if p, err := exec.LookPath(bunExe()); err == nil {
 		out = append(out, p)
@@ -88,6 +97,10 @@ var pathBuns = func() []string {
 	}
 	return out
 }
+
+// testSandbox is testenv.Marker, which plugin can't import outside its
+// tests: set in a test binary testenv isolated.
+const testSandbox = "MAGPIE_TEST_SANDBOX"
 
 // bunFetch is one download of a Bun, run in the background.
 type bunFetch struct {
