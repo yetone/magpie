@@ -303,7 +303,8 @@ var exactVersion = lazyre.New(`^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z
 // installDist installs the package's version from the dist branch: its
 // tarball fetched, checked against the index's sha512, kept in
 // plugins/dist (bun.lock names it there, and a later bun add installs it
-// again from it), and added with bun. It says the version it added (at
+// again from it), and added with bun, the copy Bun made checked against it
+// (addDist). It says the version it added (at
 // "latest", the branch's newest), "" when it got no further than knowing
 // the branch has none. installMu held.
 func installDist(ctx context.Context, bun, name, version string) (string, error) {
@@ -352,7 +353,7 @@ func installDist(ctx context.Context, bun, name, version string) (string, error)
 		os.Remove(tmp.Name())
 		return version, werr
 	}
-	return version, bunAdd(ctx, bun, "./dist/"+file, name)
+	return version, addDist(ctx, bun, name, file, b)
 }
 
 // pruneDist takes out the tarballs in plugins/dist that neither

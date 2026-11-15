@@ -49,7 +49,7 @@ func offSandbox(t *testing.T) string {
 	bunCommand = func(ctx context.Context, bun, dir string, args ...string) *exec.Cmd {
 		cmd := exec.CommandContext(ctx, self, args...)
 		cmd.Dir = dir
-		cmd.Env = append(os.Environ(), "MAGPIE_FAKE_BUN=1", "MAGPIE_FAKE_BUN_LOG="+log)
+		cmd.Env = append(os.Environ(), "MAGPIE_FAKE_BUN=1", "MAGPIE_FAKE_BUN_LOG="+log, "BUN_INSTALL_CACHE_DIR="+installCacheDir())
 		return cmd
 	}
 	t.Cleanup(func() { bunCommand = orig })
