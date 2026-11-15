@@ -5566,7 +5566,11 @@ func renderCachedParts(blocks []map[string]any, text *strings.Builder, parts []P
 		case File:
 			text.WriteString(attachmentText(p))
 		case Thinking:
-			text.WriteString(p.Text)
+			// A reply's thinking (and redacted_thinking) is never told as
+			// words: written as the assistant's text in the history, it
+			// reached the model as earlier reasoning pasted into a user
+			// message, which Anthropic refused as reasoning extraction,
+			// and every run started anew after that told it again (#6623)
 		case ToolCall:
 			name := p.Name
 			if offered[name] {

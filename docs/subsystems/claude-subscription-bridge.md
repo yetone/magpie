@@ -1163,7 +1163,13 @@ history to the 1h cache at 2×.
    after the last reply that calls no tool, `historyEnd`) in
    `<current_turn>` (#1365). Told as one stretch of Human:/Assistant: text,
    earlier images read as just sent. A first turn, or messages with no
-   reply among them, are told as before. `start` logs "a new Claude Code
+   reply among them, are told as before. A reply's thinking and
+   redacted_thinking are never told as words, here, in the messages since
+   a reply (`renderClaudeTurn`) or in a resumed transcript
+   (`renderCachedParts`): written as the assistant's text, earlier
+   reasoning reached the model in a user message, Anthropic refused it as
+   `reasoning_extraction`, and every run started anew told it again
+   (#6623). `start` logs "a new Claude Code
    is told the whole conversation" with the message and image counts.
    Claude Code notes every image of the message after it, so after the
    turn to answer: `[Image: source: …/images/N.png]` where it keeps the
