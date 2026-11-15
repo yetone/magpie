@@ -1050,7 +1050,13 @@ ended, leaving a process with one thread on port 3425 and the profile and
 the new window "Not Responding" (BESTLJP0412 on X). A predecessor that
 still sits with one thread for a second (an older version, stuck so) is
 ended by the new one (`awaitExit`). See `TestEndProcessSkipsAStuckDetach`
-and `TestAwaitGoneEndsAMagpieStuckInItsExit` (Windows).
+and `TestAwaitGoneEndsAMagpieStuckInItsExit` (Windows). One cause of that
+one thread was magpie's own: the no-activate hook, left on while
+`ExitProcess` ran, was called from its FLS cleanup and wedged the exit
+(#6705). It is taken off as the app shuts down (`unhookNoActivate`).
+`endProcess` and `awaitExit` stay: for the other detaches, for an
+`os.Exit` while the app still runs (Wails' on a fatal error), and for
+versions before the fix.
 
 Two magpies never show at once. On a Mac the old one lets go of its
 instance lock before it gives the socket (`releaseInstance`), so the new

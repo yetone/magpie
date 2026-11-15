@@ -52,7 +52,7 @@ func init() {
 		os.Exit(9)
 	}
 	appWndProc(hwnd, w32.WM_NULL, 0, 0)
-	if noActivateHook == 0 {
+	if noActivateHook.Load() == 0 {
 		os.Stderr.WriteString("noActivateHook was not installed")
 		os.Exit(9)
 	}
