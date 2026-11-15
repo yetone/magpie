@@ -91,6 +91,8 @@ var Vars = []string{
 	"KUN_DATA_DIR",
 	// AstrBot's root, the folder holding its data/ (else ~/.astrbot, the desktop app's)
 	"ASTRBOT_ROOT",
+	// Dim alpha's folder (dima), ~/.dimcode-alpha without it
+	"DIMCODE_HOME",
 	// Mistral Vibe's folder (config.toml, skills, AGENTS.md), ~/.vibe without it
 	"VIBE_HOME",
 	// jcode's folder, ~/.jcode without it

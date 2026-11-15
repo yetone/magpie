@@ -104,3 +104,72 @@ func TestAgyRun(t *testing.T) {
 		t.Fatalf("no agy: %v", err)
 	}
 }
+
+// `magpie dim run`, what the function dima runs: the dima on PATH with
+// the variables Dim documents for an OpenAI-compatible endpoint while
+// magpie's dim.json names a magpie model, every argument dima's (a
+// subcommand first, so no --model is put before it); as it is otherwise.
+func TestDimRun(t *testing.T) {
+	home := helpHome(t)
+	t.Setenv("DIM_API_KEY", "users-own")
+	t.Setenv("DIM_MODEL", "")
+	var bin, name string
+	var args, env []string
+	oldExec, oldLook := startExec, startLook
+	t.Cleanup(func() { startExec, startLook = oldExec, oldLook })
+	startExec = func(b, n string, a, e []string) error {
+		bin, name, args, env = b, n, a, e
+		return nil
+	}
+	real := filepath.Join(home, "bin", "dima")
+	startLook = func(b string) (string, error) {
+		if b != "dima" {
+			return "", errors.New("looked for " + b)
+		}
+		return real, nil
+	}
+	envOf := func(k string) []string {
+		var out []string
+		for _, kv := range env {
+			if strings.HasPrefix(kv, k+"=") {
+				out = append(out, strings.TrimPrefix(kv, k+"="))
+			}
+		}
+		return out
+	}
+	file := filepath.Join(home, ".config", "magpie", "dim.json")
+	os.MkdirAll(filepath.Dir(file), 0o755)
+	os.WriteFile(file, []byte(`{"model": "magpie/deepseek/pro"}`), 0o644)
+	for _, in := range [][]string{nil, {"exec", "-p", "hi"}, {"--help"}} {
+		if _, err := runOut(t, append([]string{"dim", "run"}, in...)...); err != nil {
+			t.Fatal(err)
+		}
+		if bin != real || name != "dima" || !slices.Equal(args, in) {
+			t.Fatalf("dim run %v: %s %s %v", in, bin, name, args)
+		}
+		for k, want := range map[string]string{
+			"DIM_BASE_URL": gateway.URL() + "/v1", "DIM_API_FORMAT": "openai-compatible",
+			"DIM_API_KEY": gateway.TokenFor("dim"), "DIM_MODEL": "deepseek/pro",
+		} {
+			if got := envOf(k); !slices.Equal(got, []string{want}) {
+				t.Fatalf("%s = %v, want %s", k, got, want)
+			}
+		}
+		if c, o := envOf("DIM_MAX_CONTEXT_TOKENS"), envOf("DIM_MAX_OUTPUT_TOKENS"); len(c) != 1 || len(o) != 1 || c[0] == "0" || o[0] == "0" {
+			t.Fatalf("limits %v %v", c, o)
+		}
+	}
+	out, err := runOut(t, "dim", "env")
+	if err != nil || !strings.Contains(out, "DIM_API_FORMAT=openai-compatible\n") || !strings.HasSuffix(out, "model=magpie/deepseek/pro\n") {
+		t.Fatalf("dim env: %q %v", out, err)
+	}
+
+	// off magpie: dima as it is, with the user's own environment
+	os.Remove(file)
+	if _, err := runOut(t, "dim", "run", "exec", "-p", "hi"); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(args, []string{"exec", "-p", "hi"}) || !slices.Equal(envOf("DIM_API_KEY"), []string{"users-own"}) || len(envOf("DIM_API_FORMAT")) != 0 {
+		t.Fatalf("off magpie: %v %v", args, envOf("DIM_API_KEY"))
+	}
+}

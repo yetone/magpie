@@ -301,6 +301,7 @@ func onMachineAll(home, cfg string) []*Agent {
 		codex(home),
 		gemini(home),
 		agy(home),
+		dim(home),
 		antigravity(home),
 		opencode(home, cfg),
 		openChamber(home, cfg),
