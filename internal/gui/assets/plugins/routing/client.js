@@ -6581,6 +6581,23 @@ function routingPage(part) {
     }
     return lines;
   }
+  // the quota lines folded away from every group, as kept in this window
+  // (Sdsi134a on X: with many plans the list grew long); shown, as before,
+  // until the toolbar's Hide plans is clicked
+  let gPlansHid = false;
+  try { gPlansHid = localStorage.getItem("magpie.routingGroupPlans") === "hidden"; } catch {}
+  function plansButton() {
+    const b = el("button", "text rt-gplans", t(gPlansHid ? "Show plans" : "Hide plans"));
+    b.type = "button";
+    b.title = t("What is left of each provider's accounts, under every group");
+    b.onclick = () => {
+      gPlansHid = !gPlansHid;
+      try { localStorage.setItem("magpie.routingGroupPlans", gPlansHid ? "hidden" : "shown"); } catch {}
+      b.textContent = t(gPlansHid ? "Show plans" : "Hide plans");
+      gList.classList.toggle("rt-noplans", gPlansHid);
+    };
+    return b;
+  }
   function drawGroups() {
     groupsQuotas = typeof quotas === "undefined" ? undefined : quotas;
     // the ones switched off are listed after the ones on, each part in the
@@ -6615,6 +6632,9 @@ function routingPage(part) {
     // in a click (provider.Templates). Cards while the user has no group of
     // their own, a menu by New group after
     const own = all.some((g) => !g.auto), tpls = groups.templates || [];
+    // shown when a group has a line to fold, after the rows are drawn
+    const plans = gSel ? null : plansButton();
+    if (plans) head.push(plans);
     if (!gSel) {
       if (own && tpls.length) head.push(templateButton(tpls));
       const imp = el("button", "text rt-gimportbtn", t("Import"));
@@ -6673,6 +6693,8 @@ function routingPage(part) {
       rows.push(h);
     }
     // the import box's text stays in the page as the list is drawn again
+    if (plans) plans.hidden = !rows.some((r) => r.querySelector?.(".rt-gquota"));
+    gList.classList.toggle("rt-noplans", gPlansHid);
     const was = slotsOf();
     replaceKeeping(gList, rows);
     morphSlots(was);

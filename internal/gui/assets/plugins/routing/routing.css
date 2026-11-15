@@ -300,6 +300,8 @@
 :is(#view-routing, #view-groups) .row-head .note { font-size: 11px; color: var(--faint); margin-left: 8px; }
 #view-routing .row-head .rt-livedot + .note { margin-left: 8px; }
 .rt-gnew { display: inline-flex; align-items: center; gap: 4px; }
+/* the toolbar's Hide plans: every group's quota lines folded */
+.rt-groups.rt-noplans .rt-gquota { display: none; }
 /* the groups page's toolbar: the filter first, then how many */
 .rt-gsec > .row-head:first-child .rt-gfilter { flex: 0 1 300px; width: auto; margin: 0; }
 .rt-gsec > .row-head:first-child .rt-gcount { margin-left: 10px; white-space: nowrap; }
