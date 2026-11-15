@@ -43,7 +43,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -51,6 +50,7 @@ import (
 
 	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/lastgood"
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // qianfanConsole is Baidu Cloud's console, a var for tests.
@@ -191,8 +191,8 @@ func renameQianfan(from, to string) error {
 
 var (
 	// a copied cURL command's cookies: -b '…' or -H 'Cookie: …'
-	qianfanCurlB      = regexp.MustCompile(`(?:^|\s)(?:-b|--cookie)\s+(?:'([^']*)'|"([^"]*)"|\$'([^']*)')`)
-	qianfanCurlHeader = regexp.MustCompile(`(?i)(?:-H|--header)\s+(?:'cookie:\s*([^']*)'|"cookie:\s*([^"]*)"|\$'cookie:\s*([^']*)')`)
+	qianfanCurlB      = lazyre.New(`(?:^|\s)(?:-b|--cookie)\s+(?:'([^']*)'|"([^"]*)"|\$'([^']*)')`)
+	qianfanCurlHeader = lazyre.New(`(?i)(?:-H|--header)\s+(?:'cookie:\s*([^']*)'|"cookie:\s*([^"]*)"|\$'cookie:\s*([^']*)')`)
 )
 
 // qianfanCookie is the Cookie header in what the user pasted: what the
@@ -208,7 +208,7 @@ func qianfanCookie(text string) (string, error) {
 		text = in.Cookie
 	} else if strings.HasPrefix(text, "curl ") {
 		var found string
-		for _, re := range []*regexp.Regexp{qianfanCurlHeader, qianfanCurlB} {
+		for _, re := range []*lazyre.RE{qianfanCurlHeader, qianfanCurlB} {
 			if m := re.FindStringSubmatch(text); m != nil {
 				found = m[1] + m[2] + m[3]
 				break
