@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
@@ -248,7 +249,7 @@ func TestIntentNotAskedWhenItCantMatter(t *testing.T) {
 	g, ms, _ := provider.FindGroup("group/r")
 	img := &Request{Messages: []Message{{Role: "user", Parts: []Part{{Kind: Image}}}}}
 	asked := 0
-	hit := ruleFor("img", g, ms, img, "claude", func(string, []string, before, bool, string) (verdict, error) {
+	hit := ruleFor("img", g, ms, img, "claude", func(access.Identity, string, []string, before, bool, string) (verdict, error) {
 		asked++
 		return verdict{Intent: "debugging"}, nil
 	}, "")

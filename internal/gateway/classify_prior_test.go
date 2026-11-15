@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 )
@@ -192,7 +193,7 @@ func TestChatClassifierIsToldWhatCameBefore(t *testing.T) {
 func TestClassifyKeepsAnAnswerPerTurnBefore(t *testing.T) {
 	resetClassified(t)
 	n := 0
-	ask := func(_ string, _ []string, prev before, _ bool, _ string) (verdict, error) {
+	ask := func(_ access.Identity, _ string, _ []string, prev before, _ bool, _ string) (verdict, error) {
 		n++
 		return verdict{Intent: prev.User}, nil
 	}
@@ -205,7 +206,7 @@ func TestClassifyKeepsAnAnswerPerTurnBefore(t *testing.T) {
 		{before{User: "design the sync protocol"}, false},
 		{before{User: "design the sync protocol", Reply: "Here is a plan."}, false},
 	} {
-		v, cached, err := classify(ask, t.Name(), []string{"rename a variable", "design the sync protocol"}, c.prev, false, "继续")
+		v, cached, err := classify(ask, access.Identity{}, t.Name(), []string{"rename a variable", "design the sync protocol"}, c.prev, false, "继续")
 		if err != nil || cached != c.cached || v.Intent != c.prev.User {
 			t.Fatalf("%+v: %+v cached %v %v", c.prev, v, cached, err)
 		}

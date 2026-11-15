@@ -25,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
@@ -53,8 +54,10 @@ var classifyUnit = time.Second
 // classifier asks a model which of intents text is — the intent, or ""
 // for none of them — and, when effort, how much reasoning the turn wants. prev is what
 // the conversation's turn before was said to be: a message that only
-// carries on from it is the same.
-type classifier func(model string, intents []string, prev before, effort bool, text string) (verdict, error)
+// carries on from it is the same. held is the accounts the group asking
+// holds the call to (classifierHeld): its question is the group's spend,
+// so it goes on the group's accounts as the turn does (AWilsonPeng on X).
+type classifier func(held access.Identity, model string, intents []string, prev before, effort bool, text string) (verdict, error)
 
 // before is what the classifier said of a conversation's turn before, and
 // what was said in it (turnBefore): a short follow-up (继续, fix that) says
@@ -149,7 +152,16 @@ func cutShort(model string, wait, full time.Duration) error {
 // classifier that failed is left to rest for classifyRest rather than
 // making every turn wait out its timeout. Concurrent calls asking the
 // same question share the answer in flight.
-func classify(ask classifier, model string, intents []string, prev before, effort bool, text string) (v verdict, cached bool, err error) {
+//
+// An answer is the same on whichever account it was asked, so held
+// doesn't part the answers kept; a failure is the accounts' it was asked
+// on, so one account's limit rests the classifier for the groups held to
+// it alone.
+func classify(ask classifier, held access.Identity, model string, intents []string, prev before, effort bool, text string) (v verdict, cached bool, err error) {
+	rest := model
+	if len(held.Accounts) > 0 {
+		rest += "\x00" + strings.Join(held.Accounts, "\x00")
+	}
 	h := sha256.New()
 	h.Write([]byte(model + "\x00" + strings.ToLower(strings.Join(intents, "\x00")) + "\x00" + prev.Intent + "\x00" + prev.Effort + "\x00" + prev.User + "\x00" + prev.Reply + "\x00" + strconv.FormatBool(effort) + "\x00" + text))
 	key := hex.EncodeToString(h.Sum(nil))
@@ -164,7 +176,7 @@ func classify(ask classifier, model string, intents []string, prev before, effor
 		<-c.done
 		return c.v, c.err == nil, c.err
 	}
-	if f, ok := classified.failed[model]; ok && now.Sub(f.at) < classifyRest {
+	if f, ok := classified.failed[rest]; ok && now.Sub(f.at) < classifyRest {
 		classified.Unlock()
 		return verdict{}, false, fmt.Errorf("%s failed %s ago (%s); not asked again for now", model, now.Sub(f.at).Round(time.Second), f.err)
 	}
@@ -178,14 +190,14 @@ func classify(ask classifier, model string, intents []string, prev before, effor
 		close(c.done)
 		classified.Unlock()
 	}()
-	v, err = ask(model, intents, prev, effort, text)
+	v, err = ask(held, model, intents, prev, effort, text)
 	classified.Lock()
 	defer classified.Unlock()
 	c.err = err
 	if err != nil {
 		f := classifyFailure{err: err.Error(), at: time.Now()}
 		if !errors.As(err, new(answerError)) && !errors.As(err, new(waitSpent)) {
-			classified.failed[model] = f
+			classified.failed[rest] = f
 		}
 		if was, ok := classified.last[model]; !ok || was.err != f.err {
 			// said once in the log, not at every turn it fails the same way
@@ -195,7 +207,7 @@ func classify(ask classifier, model string, intents []string, prev before, effor
 		return verdict{}, false, err
 	}
 	c.v = v
-	delete(classified.failed, model)
+	delete(classified.failed, rest)
 	delete(classified.last, model)
 	classified.m[key] = classifiedAs{v: v, at: time.Now()}
 	if len(classified.m) > 4096 {
@@ -446,13 +458,13 @@ func classifierEffortField(model string) string { return "classifier effort\x00"
 // relay that knows no reasoning_effort, one that takes none of the
 // levels — is asked again without it, as before, and from then on: the
 // classifier answers wherever it did.
-func (s *Server) askLeast(wait time.Duration, model string, body func(effort string) []byte) (string, error) {
+func (s *Server) askLeast(wait time.Duration, held access.Identity, model string, body func(effort string) []byte) (string, error) {
 	effort := classifyEffort(model)
 	p, m, ok := provider.Resolve(model)
 	if effort != "" && ok && !s.fits(p.ID, classifierEffortField(m), provider.Chat) {
 		effort = ""
 	}
-	a, err := s.askChat(wait, model, body(effort))
+	a, err := s.askChat(wait, held, model, body(effort))
 	var f chatFailed
 	if effort == "" || !errors.As(err, &f) {
 		return a, err
@@ -461,7 +473,7 @@ func (s *Server) askLeast(wait time.Duration, model string, body func(effort str
 		return a, err
 	}
 	s.markUnfit(p.ID, classifierEffortField(m), provider.Chat)
-	return s.askChat(wait, model, body(""))
+	return s.askChat(wait, held, model, body(""))
 }
 
 // chatFailed is a classifier's answer that was an error, with its status
@@ -484,7 +496,12 @@ type chatFailed struct {
 func (s *Server) askWaited(ctx context.Context) classifier {
 	var mu sync.Mutex
 	var until time.Time
-	return func(model string, intents []string, prev before, effort bool, text string) (verdict, error) {
+	// the caller's accounts (a gateway key's, the group the request names)
+	// hold its classifier's calls too, as they hold magpie's other calls
+	// for it (accountHolds): only the accounts, not the key's models, as
+	// the classifier is the group's pick, not the caller's
+	caller := access.Caller(ctx)
+	return func(held access.Identity, model string, intents []string, prev before, effort bool, text string) (verdict, error) {
 		mu.Lock()
 		now := time.Now()
 		if until.IsZero() {
@@ -496,7 +513,8 @@ func (s *Server) askWaited(ctx context.Context) classifier {
 			return verdict{}, waitSpent{fmt.Errorf("%s not asked: the request's classifier wait of %s was spent by the routing group above", model, classifyTimeout())}
 		}
 		defer noteWait(ctx, "decision model")()
-		return s.askClassifierIn(left, model, intents, prev, effort, text)
+		who := access.Identity{Accounts: caller.Accounts, Group: caller.Group}.HeldToGroup(held.Group, held.Accounts)
+		return s.askClassifierIn(left, who, model, intents, prev, effort, text)
 	}
 }
 
@@ -505,17 +523,18 @@ func (s *Server) askWaited(ctx context.Context) classifier {
 // intents the message is and, when effort, how hard the turn is, each in a
 // call of its own, at once.
 func (s *Server) askClassifier(model string, intents []string, prev before, effort bool, text string) (verdict, error) {
-	return s.askClassifierIn(classifyTimeout(), model, intents, prev, effort, text)
+	return s.askClassifierIn(classifyTimeout(), access.Identity{}, model, intents, prev, effort, text)
 }
 
 // askClassifierIn is askClassifier given wait to answer in, all of the
-// classifier's wait or what a request has left of it (askWaited).
-func (s *Server) askClassifierIn(wait time.Duration, model string, intents []string, prev before, effort bool, text string) (verdict, error) {
+// classifier's wait or what a request has left of it (askWaited), held
+// to who's accounts, when it names any.
+func (s *Server) askClassifierIn(wait time.Duration, who access.Identity, model string, intents []string, prev before, effort bool, text string) (verdict, error) {
 	if p, m, ok := provider.Resolve(model); ok && p.DecidesModel(m) {
-		return s.askDecider(wait, p, m, intents, prev, effort, text)
+		return s.askDecider(wait, who, p, m, intents, prev, effort, text)
 	}
 	// a group of decision models: each in turn (decide_group.go)
-	if v, ok, err := s.askDecisionGroup(wait, model, intents, prev, effort, text); ok {
+	if v, ok, err := s.askDecisionGroup(wait, who, model, intents, prev, effort, text); ok {
 		return v, err
 	}
 	var v verdict
@@ -526,7 +545,7 @@ func (s *Server) askClassifierIn(wait time.Duration, model string, intents []str
 		go func() {
 			defer wg.Done()
 			var a string
-			if a, ierr = s.askLeast(wait, model, func(effort string) []byte { return classifyBody(model, effort, intents, prev, text) }); ierr == nil {
+			if a, ierr = s.askLeast(wait, who, model, func(effort string) []byte { return classifyBody(model, effort, intents, prev, text) }); ierr == nil {
 				v.Intent, v.Said, ierr = readIntent(a, intents)
 			}
 		}()
@@ -536,7 +555,7 @@ func (s *Server) askClassifierIn(wait time.Duration, model string, intents []str
 		go func() {
 			defer wg.Done()
 			var a string
-			if a, eerr = s.askLeast(wait, model, func(effort string) []byte { return effortBody(model, effort, prev, text) }); eerr == nil {
+			if a, eerr = s.askLeast(wait, who, model, func(effort string) []byte { return effortBody(model, effort, prev, text) }); eerr == nil {
 				v.Effort, v.Score, eerr = readEffort(a)
 			}
 		}()
@@ -605,7 +624,9 @@ func readEffort(answer string) (string, float64, error) {
 
 // askChat sends a chat model body through the gateway and returns its
 // answer's text, if it comes in wait.
-func (s *Server) askChat(wait time.Duration, model string, body []byte) (string, error) {
+// held, when it names accounts, holds it to them, as heldByGroup does a
+// request through a group.
+func (s *Server) askChat(wait time.Duration, held access.Identity, model string, body []byte) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), wait)
 	defer cancel()
 	r, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://magpie/v1/chat/completions", nil)
@@ -614,6 +635,9 @@ func (s *Server) askChat(wait time.Duration, model string, body []byte) (string,
 	}
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("User-Agent", RouterAgent)
+	if len(held.Accounts) > 0 {
+		r = r.WithContext(access.WithIdentity(r.Context(), held))
+	}
 	w := httptest.NewRecorder()
 	s.serve(w, r, provider.Chat, body)
 	if ctx.Err() != nil {

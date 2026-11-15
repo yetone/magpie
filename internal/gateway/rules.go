@@ -7,6 +7,7 @@ package gateway
 // meanwhile.
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -351,7 +353,7 @@ func ruleFor(key string, g provider.Group, ms []provider.Member, req *Request, a
 			c.Error = "the message has no words to classify"
 		default:
 			t0 := time.Now()
-			v, cached, err := classify(ask, g.Classifier, intents, prev, effort, text)
+			v, cached, err := classify(ask, classifierHeld(g, ms), g.Classifier, intents, prev, effort, text)
 			classifiedFor(g.ID, g.Classifier, err)
 			v.Intent = intentOf(v, g) // the group's own sure of an intent (#5101)
 			c.Intent, c.Said, c.Cached, c.Ms = v.Intent, v.Said, cached, int(time.Since(t0).Milliseconds())
@@ -948,4 +950,35 @@ func pausedError(asked string, paused []provider.Paused) string {
 		bits = append(bits, fmt.Sprintf("%s (%s: %s)", p.Member, by, strings.Join(p.When, " · ")))
 	}
 	return fmt.Sprintf("every model of %s is paused now by its rules: %s; change the rules on Magpie's Routing page, or ask again when they end", asked, strings.Join(bits, ", "))
+}
+
+// classifierHeld is the accounts g holds its classifier's calls to: its
+// own (Group.Accounts), and, when the classifier is one of its members
+// that names its account (Member.Account), that account — every one of
+// them, when the model is a member once for each of several. The
+// classifier's questions are the group's spend as much as its turns are
+// (AWilsonPeng on X: GPT-6 Luna held to one of two ChatGPT accounts, its
+// classifier its own member GPT-6-Luna · Codex, which asked on both). A
+// group, as the classifier, holds itself to its own when it is asked.
+func classifierHeld(g provider.Group, ms []provider.Member) access.Identity {
+	name := cmp.Or(g.Name, g.ID)
+	who := access.Identity{}.HeldToGroup(name, g.Accounts)
+	if provider.IsGroupRef(g.Classifier) {
+		return who
+	}
+	p, model, ok := provider.Resolve(g.Classifier)
+	if !ok {
+		return who
+	}
+	var pinned []string
+	for _, m := range ms {
+		if m.Provider.ID != p.ID || m.Model != model {
+			continue
+		}
+		if m.Account == "" {
+			return who // on any account the group allows
+		}
+		pinned = append(pinned, m.Account)
+	}
+	return who.HeldToGroup(name, pinned)
 }
