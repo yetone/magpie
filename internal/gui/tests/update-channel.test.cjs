@@ -18,9 +18,9 @@ const assets = path.resolve(__dirname, "../assets");
 const words = {
   en: { name: "Update channel", every: "Every version", stable: "Stable", auto: "Automatic updates", off: "Off",
     everySub: "Every version as soon as it is out", stableSub: "One version a week" },
-  zh: { name: "更新渠道", every: "每个版本", stable: "稳定版", auto: "自动更新", off: "关闭", everySub: "每个版本一发布就更新", stableSub: "每周一个版本" },
-  "zh-TW": { name: "更新管道", every: "每個版本", stable: "穩定版", auto: "自動更新", off: "關閉", everySub: "每個版本一發布就更新", stableSub: "每週一個版本" },
-  ja: { name: "アップデートチャネル", every: "すべてのバージョン", stable: "安定版", auto: "自動アップデート", off: "オフ", everySub: "新しいバージョンが出るたびに更新します", stableSub: "週に 1 回" },
+  zh: { name: "更新渠道", every: "尝鲜版", stable: "稳定版", auto: "自动更新", off: "关闭", everySub: "每个新版本一发布就更新", stableSub: "每周一个版本" },
+  "zh-TW": { name: "更新管道", every: "搶先版", stable: "穩定版", auto: "自動更新", off: "關閉", everySub: "每個新版本一發布就更新", stableSub: "每週一個版本" },
+  ja: { name: "アップデートチャネル", every: "先行版", stable: "安定版", auto: "自動アップデート", off: "オフ", everySub: "新しいバージョンが出るたびに更新します", stableSub: "週に 1 回" },
   de: { name: "Update-Kanal", every: "Jede Version", stable: "Stabil", auto: "Automatische Updates", off: "Aus", everySub: "Jede Version, sobald sie erscheint", stableSub: "Eine Version pro Woche" },
 };
 

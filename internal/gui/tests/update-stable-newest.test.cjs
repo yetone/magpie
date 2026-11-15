@@ -19,9 +19,9 @@ const assets = path.resolve(__dirname, "../assets");
 
 const words = {
   en: { newest: "Up to date on Stable · 0.1.410 is out on Every version", stable: "Up to date on Stable", every: "Up to date", go: "Switch to Every version" },
-  zh: { newest: "稳定版已是最新 · 每个版本已有 0.1.410", stable: "稳定版已是最新", every: "已是最新", go: "改为每个版本" },
-  "zh-TW": { newest: "穩定版已是最新 · 每個版本已有 0.1.410", stable: "穩定版已是最新", every: "已是最新", go: "改為每個版本" },
-  ja: { newest: "安定版では最新です · すべてのバージョンでは 0.1.410 が出ています", stable: "安定版では最新です", every: "最新です", go: "すべてのバージョンに切り替える" },
+  zh: { newest: "稳定版已是最新 · 尝鲜版已有 0.1.410", stable: "稳定版已是最新", every: "已是最新", go: "改用尝鲜版" },
+  "zh-TW": { newest: "穩定版已是最新 · 搶先版已有 0.1.410", stable: "穩定版已是最新", every: "已是最新", go: "改用搶先版" },
+  ja: { newest: "安定版では最新です · 先行版では 0.1.410 が出ています", stable: "安定版では最新です", every: "最新です", go: "先行版に切り替える" },
   de: { newest: "Aktuell auf Stabil · Unter Jede Version ist 0.1.410 erschienen", stable: "Aktuell auf Stabil", every: "Aktuell", go: "Zu Jede Version wechseln" },
 };
 
