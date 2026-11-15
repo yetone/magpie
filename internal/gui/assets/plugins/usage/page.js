@@ -5492,3 +5492,105 @@ function packUsageNow(list) {
     for (const part of card.children) usagePack.observe(part);
   }
 }
+
+// The allowances' trend pick in the page's head, and what a curve under a
+// card reads out on a hover; app.js draws the curves.
+const QUOTA_RANGES = [["off", "Off", "No curves on the cards"], ["2d", "2 days", "The last two days"], ["cycle", "Cycle", "The current cycle, from the window's start to its reset"], ["7d", "7 days", ""], ["30d", "30 days", ""]];
+// renderQuotaTrend: the allowances' head's pick of the curves' range, there
+// once some account has readings to draw
+function renderQuotaTrend() {
+  const b = $("#quotaTrend");
+  if (!b || b.nextElementSibling?.classList.contains("qt-days")) return;
+  b.hidden = !quotas?.some((q) => !q.error && (quotaLines(q).length || q.balanceTrend?.points?.length > 1));
+  if (b.hidden) return;
+  b.classList.toggle("set", quotaRange !== "off");
+  b.replaceChildren(el("span", "", t("Trends: {range}", { range: quotaRangeName(quotaRange) })), svg(CHEV, 11, 1.6));
+  b.title = t("What was left over time, under each account's meters");
+  b.onclick = (e) => {
+    e.stopPropagation();
+    if (b.classList.contains("open")) return closeProtoMenu();
+    const opts = QUOTA_RANGES.map(([v, name, note]) => ({ v, name, note }));
+    // a number of days typed before is listed beside the presets
+    if (!opts.some((o) => o.v === quotaRange)) opts.push({ v: quotaRange, name: quotaRangeName(quotaRange), literalName: true, note: "" });
+    opts.push({ v: "days", name: "Other number of days…", note: "" });
+    openProtoMenu(b, opts, quotaRange, (v) => v === "days" ? quotaDaysField(b) : setQuotaRange(v), "Left over time", "sess-menu");
+  };
+}
+
+// quotaDaysField: the trend head's button as a field for a number of days,
+// 1 to 45; Enter picks it, Escape or a bad number leaves the range as it was
+function quotaDaysField(b) {
+  const i = input(quotaDays(quotaRange) ? String(quotaDays(quotaRange)) : "", "1–" + QUOTA_DAYS_MAX, "text");
+  i.className = "rename-in qt-days";
+  i.inputMode = "numeric";
+  i.setAttribute("aria-label", t("Days back, 1 to {n}", { n: QUOTA_DAYS_MAX }));
+  let done = false;
+  const finish = (save) => {
+    if (done) return;
+    done = true;
+    const s = i.value.trim(), n = Number(s);
+    i.remove();
+    b.hidden = false;
+    if (save && s && !(Number.isInteger(n) && n >= 1 && n <= QUOTA_DAYS_MAX)) status(t("A number of days from 1 to {n}", { n: QUOTA_DAYS_MAX }), "err");
+    else if (save && s) setQuotaRange(n + "d");
+    b.focus(NO_SCROLL);
+  };
+  // the Enter is used up here: let through, it would press the button that
+  // focus goes back to and open its menu again
+  i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); finish(e.key === "Enter"); } };
+  i.onblur = () => finish(true);
+  b.hidden = true;
+  b.after(i);
+  i.focus(NO_SCROLL);
+  i.select();
+}
+
+// curveHover: a curve's readings nearest the pointer, each line's with its
+// figure and when it was read (shangyuan0818 on X), from what box.hover says
+// was drawn last; a mouse's alone, a touch is the click that zooms
+function curveHover(box, g, W, H) {
+  const tip = el("div", "qc-tip");
+  tip.hidden = true;
+  const hot = sv("line", { y1: 0, y2: H, class: "qc-hot" });
+  box.append(tip);
+  // the curve's own tooltip (what the dashes mean) waits while it is read
+  let title = null;
+  const hide = () => {
+    tip.hidden = true;
+    hot.remove();
+    if (title != null && !box.title) box.title = title;
+    title = null;
+  };
+  g.addEventListener("pointerleave", hide);
+  g.addEventListener("pointermove", (e) => {
+    const h = box.hover;
+    if (e.pointerType === "touch" || !h) return hide();
+    const r = g.getBoundingClientRect();
+    const at = h.x0 + ((e.clientX - r.left) / r.width) * (h.x1 - h.x0);
+    // each line's reading nearest the pointer, of those drawn
+    const near = h.lines.map((l) => {
+      let best = null;
+      for (const p of l.points) if (p.at >= h.x0 && p.at <= h.x1 && (!best || Math.abs(p.at - at) < Math.abs(best.at - at))) best = p;
+      return best && { l, p: best };
+    }).filter(Boolean);
+    if (!near.length) return hide();
+    const first = near.reduce((a, b) => Math.abs(b.p.at - at) < Math.abs(a.p.at - at) ? b : a);
+    const x = ((first.p.at - h.x0) / (h.x1 - h.x0)) * W;
+    hot.setAttribute("x1", x);
+    hot.setAttribute("x2", x);
+    if (!hot.isConnected) g.append(hot);
+    tip.replaceChildren(el("b", "", quotaCycleDate(first.p.at)));
+    for (const { l, p } of near) {
+      const row = el("div"), sw = el("i");
+      sw.style.background = l.color;
+      row.append(sw, el("span", "", l.label), el("em", "", l.text(p)));
+      tip.append(row);
+    }
+    tip.hidden = false;
+    if (box.title) { title = box.title; box.removeAttribute("title"); }
+    // beside the pointer, on whichever side has room
+    const bx = box.getBoundingClientRect(), px = r.left - bx.left + (x / W) * r.width, w = tip.offsetWidth;
+    tip.style.left = Math.max(0, px + 12 + w > bx.width ? px - w - 12 : px + 12) + "px";
+    tip.style.top = r.top - bx.top + "px";
+  });
+}

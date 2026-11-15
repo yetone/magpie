@@ -1243,6 +1243,16 @@ body.panel .row.pref.flash { border-radius: 10px; }
 .qc-line.qc-short { stroke-width: 1.25; opacity: .7; }
 .qc-even { stroke-width: 1; stroke-dasharray: 3 3; opacity: .45; vector-effect: non-scaling-stroke; }
 .qc-now { stroke: var(--faint); stroke-width: 1; stroke-dasharray: 1 2; vector-effect: non-scaling-stroke; }
+.qc-hot { stroke: var(--muted); stroke-width: 1; vector-effect: non-scaling-stroke; pointer-events: none; }
+.quota-curve { position: relative; }
+.quota-curve .qc-tip { position: absolute; z-index: 3; min-width: 140px; max-width: 240px; padding: 7px 9px 6px; background: var(--pop-bg); border-radius: 9px; box-shadow: var(--shadow); font-size: 11px; color: var(--fg); pointer-events: none; }
+.quota-curve .qc-tip b { display: block; margin-bottom: 3px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.quota-curve .qc-tip div { display: flex; align-items: center; gap: 6px; line-height: 1.6; }
+.quota-curve .qc-tip div span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quota-curve .qc-tip i { width: 7px; height: 7px; border-radius: 2px; flex: none; }
+.quota-curve .qc-tip em { margin-left: auto; padding-left: 10px; font-style: normal; font-variant-numeric: tabular-nums; }
+.quota-head .qt-days { width: 64px; height: 24px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--card); color: var(--fg); font-size: 12px; outline: none; }
+.quota-head .qt-days:focus { border-color: var(--accent); }
 .quota-curve .qc-axis { display: flex; justify-content: space-between; gap: 8px; margin-top: 3px; font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .quota-curve .qc-legend { display: flex; flex-wrap: wrap; gap: 3px 12px; margin-top: 5px; font-size: 10.5px; color: var(--muted); }
 /* a key never breaks inside: a long name ends in … rather than its % on a line of its own */
