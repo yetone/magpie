@@ -49,12 +49,13 @@ type updater struct {
 	mirror   string      // error: the mirror the failed download came through (#893)
 	network  bool        // error: the network broke the download off (update.Network)
 	staged   string
-	// stable: latest was found on Settings' Stable channel; newest, the
-	// newest release on every version when that is newer than this one
-	// and Stable has nothing newer (ylspcm on X)
-	stable bool
-	newest string
-	aside  string // Windows: where install moved the running exe, to put back
+	// channel: the channel latest was found on, Settings' Stable or Daily
+	// ("" every version); newest, the newest release on every version when
+	// that is newer than this one and the channel has nothing newer
+	// (ylspcm on X)
+	channel string
+	newest  string
+	aside   string // Windows: where install moved the running exe, to put back
 	// in a .app: its binary, where this process started from
 	bundleExe string
 	// a version this computer wouldn't start (Smart App Control, #894),
@@ -134,9 +135,10 @@ type updateJSON struct {
 	// row says so in the app's language instead of the raw error
 	Network bool   `json:"network,omitempty"`
 	Error   string `json:"error,omitempty"`
-	// Channel: "stable" when the answer is Settings' Stable channel's;
-	// latest on it, Newest is the newest version out on every version,
-	// when newer than this one: Stable's "up to date" isn't the newest
+	// Channel: "stable" or "daily" when the answer is Settings' Stable or
+	// Daily channel's; latest on it, Newest is the newest version out on
+	// every version, when newer than this one: the channel's "up to date"
+	// isn't the newest
 	Channel string `json:"channel,omitempty"`
 	Newest  string `json:"newest,omitempty"`
 	Done    int64  `json:"done,omitempty"` // downloading: bytes so far
@@ -529,15 +531,18 @@ func (u *updater) run() {
 	if lang == "" {
 		lang = notesLang(trayLang(s.Lang, systemLang))
 	}
-	stable := s.UpdateChannel == settings.UpdateStable
+	channel := s.UpdateChannel
+	if channel != settings.UpdateStable && channel != settings.UpdateDaily {
+		channel = ""
+	}
 	rel, err := update.LatestIn(cctx, lang)
-	// Stable has nothing newer than this one: the newest on every version
+	// Stable or Daily has nothing newer than this one: the newest on every version
 	// is asked too, which the version row names. A bare "Up to date" on
 	// Stable, with newer releases out, read as the check being wrong, and
 	// the app was installed again by hand each time (ylspcm on X). Asked
 	// before u.mu, which the pages' reads need.
 	newest := ""
-	if stable && err == nil && !update.Newer(rel.Version, Version) {
+	if channel != "" && err == nil && !update.Newer(rel.Version, Version) {
 		if every, e := update.LatestEvery(cctx, lang); e == nil && update.Newer(every.Version, Version) {
 			newest = every.Version
 		}
@@ -546,9 +551,9 @@ func (u *updater) run() {
 	defer u.mu.Unlock()
 	u.newest = newest
 	if err == nil && u.latest != nil && update.Newer(u.latest.Version, rel.Version) {
-		if stable != u.stable {
+		if channel != u.channel {
 			// an older version than the one found before, on another
-			// channel: Settings' Update channel went to Stable since
+			// channel: Settings' Update channel went to Stable or Daily since
 			// (ssharpcc on X). What was downloaded from every version
 			// isn't put in, and the version found is the feed's again, as
 			// if never found.
@@ -597,7 +602,7 @@ func (u *updater) run() {
 		u.state, u.err = "error", err.Error()
 		return
 	}
-	u.latest, u.notesIn, u.stable = rel, lang, stable
+	u.latest, u.notesIn, u.channel = rel, lang, channel
 	if update.Released(Version) && update.Newer(rel.Version, Version) {
 		u.behind = update.NoteBehind(Version, rel.Version, update.UrgentIn(rel.Notes))
 		if u.behind.Urgent == "" {
@@ -772,8 +777,8 @@ func (u *updater) jsonIn(lang string) updateJSON {
 		}
 	}
 	j := updateJSON{State: u.state, Current: Version, Error: u.err, Retry: u.retry}
-	if u.stable && u.latest != nil {
-		j.Channel = settings.UpdateStable
+	if u.channel != "" && u.latest != nil {
+		j.Channel = u.channel
 		if u.state == "latest" {
 			j.Newest = u.newest
 		}

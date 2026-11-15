@@ -69,7 +69,7 @@ var Choices = map[string][]string{
 	"claudeWarmup":   {"off", "week", "all"},
 	"trayUsageEvery": ints(settings.TrayEvery),
 	"dayStart":       {"0", "1", "2", "3", "4", "5", "6"},
-	"updateChannel":  {settings.UpdateStable},
+	"updateChannel":  {settings.UpdateStable, settings.UpdateDaily},
 	"updateSource":   {settings.UpdateSourceSite, settings.UpdateSourceGitHub},
 	"updateEvery":    ints(settings.UpdateEveries),
 	"searchFirst":    {settings.SearchFirstModel, settings.SearchFirstAPI},

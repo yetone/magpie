@@ -724,12 +724,11 @@ magpie runs a gateway on your computer, at `127.0.0.1:3425`. It speaks the OpenA
 | ChatGPT (Plus, Pro, Business) | `codex/…` | `magpie accounts add codex` |
 | GitHub Copilot | `copilot/…` | `magpie accounts add copilot` |
 | Gemini (Code Assist) | `gemini/…` | `magpie accounts add gemini` |
-| Antigravity | `antigravity/…` | `magpie accounts add antigravity` |
 
 - **Claude..** Requests on a Claude subscription run through the Claude Code installed on your computer, so keep it installed.
 - **Copilot..** Copilot gives you a code to enter on GitHub’s page. For GitHub Enterprise on its own domain: `magpie accounts add copilot --host <name>.ghe.com`.
 - **Gemini..** This is Gemini CLI’s Google sign-in. Google answers it only for a Code Assist Standard or Enterprise account with a Google Cloud project of its own; `magpie accounts project gemini <email> <project>` names the project.
-- **Antigravity..** Its sign-in gives Antigravity’s Claude and Gemini models.
+- **Antigravity..** Install Antigravity (local agy CLI) from Plugins (`magpie plugin add @magpie-community/opencode-agy-cli-auth`). It runs the agy CLI you installed and signed in to, so Google sees agy’s own requests. Signing in to Antigravity in magpie directly is retired: Google bans accounts used that way.
 
 Other subscriptions are added as plugins, from magpie’s Plugins page; see [Plugins](https://usemagpie.ai/docs/plugins).
 
@@ -10730,7 +10729,7 @@ Run magpie on a server or a NAS that has no desktop: its gateway serves your mod
 
 | **Image** | `ghcr.io/yetone/magpie`, for `linux/amd64` and `linux/arm64` |
 | --- | --- |
-| **Tags** | `latest` (the newest release), `daily` (the newest release as of 20:00 UTC, moved once a day), `stable` (the desktop app's Stable channel: a release a week, out three days first, or an urgent one at once), `0.1.1150` (one release), `0.1`, `edge` (every change on `main`) |
+| **Tags** | `latest` (the newest release), `daily` (the desktop app's Daily channel: once a day at 20:00 UTC, the newest release whose CI run passed, or an urgent one at once), `stable` (the desktop app's Stable channel: a release a week, out three days first, or an urgent one at once), `0.1.1150` (one release), `0.1`, `edge` (every change on `main`) |
 | **Ports** | `3425` the gateway agents call; `3430` the browser UI, when the container runs `magpie web`; it answers the gateway’s `/v1` routes too, so a reverse proxy needs only this port |
 | **Volume** | `/config`: providers, keys, sign-ins, plugins and usage |
 | **User** | nonroot (uid 65532) |
@@ -12170,7 +12169,7 @@ The app writes a log of what it did, `app.log`, in `~/Library/Logs/magpie` on ma
 
 magpie asks its own site for a few things, whatever the privacy settings say, as any app asks its update server. None of these requests carries the install id or an account.
 
-- `/api/latest`: the update feed, every 6 hours unless `noAutoUpdate` is on, with `?lang=` for the notes in your language, and `?channel=stable` when Settings → About → Update channel is Stable; a fresh install asks `?channel=stable` once too, to stay on Stable when it is Stable’s version. Neither says who you are. `/api/notes` gives What’s new after an update.
+- `/api/latest`: the update feed, every 6 hours unless `noAutoUpdate` is on, with `?lang=` for the notes in your language, and `?channel=stable` or `?channel=daily` when Settings → About → Update channel is Stable or Daily; a fresh install asks `?channel=stable` once too, to stay on Stable when it is Stable’s version. Neither says who you are. `/api/notes` gives What’s new after an update.
 - `/files/<version>/<file>`: the release files an update and the installer download, served from Cloudflare R2. A file the site doesn’t hold is sent on to github.com. Nothing is counted.
 - `/api/partners`: the add sheet’s partner list, every 6 hours. One fetch in ten is counted as a `magpie partners fetch` event, with the country Cloudflare gives, while a partner is listed.
 - `/go/<partner>/site` and `/go/<partner>/keys`: a partner’s website and key-page links, opened in your browser, are counted (the partner, which link, a region, a country) as `magpie partner go` before you are sent on.

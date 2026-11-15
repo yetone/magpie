@@ -107,33 +107,40 @@ func updateMirrorCmd(args []string) error {
 	return nil
 }
 
-// updateChannelCmd is `magpie update channel [stable|every]`: which
-// versions an update is offered (settings.UpdateChannel, ssharpcc on X):
-// Stable, one a week and an urgent one at once, or every version as it
-// comes out. With none, it says which.
+// updateChannelCmd is `magpie update channel [stable|daily|every]`: which
+// versions an update is offered (settings.UpdateChannel, ssharpcc and
+// fishmagic80 on X): Stable, one a week and an urgent one at once; Daily,
+// one a day that passed its tests and an urgent one at once; or every
+// version as it comes out. With none, it says which.
 func updateChannelCmd(args []string) error {
 	s := settings.Load()
 	if len(args) > 1 {
-		return fmt.Errorf("magpie update channel takes stable or every")
+		return fmt.Errorf("magpie update channel takes stable, daily or every")
 	}
 	if len(args) == 1 {
 		switch strings.ToLower(strings.TrimSpace(args[0])) {
 		case "stable":
 			s.UpdateChannel = settings.UpdateStable
+		case "daily":
+			s.UpdateChannel = settings.UpdateDaily
 		case "every", "all":
 			s.UpdateChannel = ""
 		default:
-			return fmt.Errorf("magpie update channel takes stable or every, not %q", args[0])
+			return fmt.Errorf("magpie update channel takes stable, daily or every, not %q", args[0])
 		}
 		if err := settings.Save(s); err != nil {
 			return err
 		}
 	}
-	if s.UpdateChannel == settings.UpdateStable {
-		fmt.Println("update channel: stable", muted.Render("· a version a week, the newest out three days as the week began, and an urgent one at once · magpie update channel every: each one as it comes out"))
+	switch s.UpdateChannel {
+	case settings.UpdateStable:
+		fmt.Println("update channel: stable", muted.Render("· a version a week, the newest out three days as the week began, and an urgent one at once · magpie update channel daily: one a day · every: each one as it comes out"))
+		return nil
+	case settings.UpdateDaily:
+		fmt.Println("update channel: daily", muted.Render("· a version a day, the newest that passed its tests, and an urgent one at once · magpie update channel stable: one a week · every: each one as it comes out"))
 		return nil
 	}
-	fmt.Println("update channel: every version", muted.Render("· each one as it comes out · magpie update channel stable: one a week, an urgent one at once"))
+	fmt.Println("update channel: every version", muted.Render("· each one as it comes out · magpie update channel daily: one a day · stable: one a week; an urgent one at once on both"))
 	return nil
 }
 
@@ -220,8 +227,8 @@ func updateCmd(args []string) error {
 	}
 	if !update.Newer(rel.Version, version) {
 		if update.Released(version) {
-			if update.Stable() {
-				fmt.Println(green.Render("✓"), "magpie", version, muted.Render("is up to date on the stable channel (stable is "+rel.Version+")"))
+			if ch := update.Channel(); ch != "" {
+				fmt.Println(green.Render("✓"), "magpie", version, muted.Render("is up to date on the "+ch+" channel ("+ch+" is "+rel.Version+")"))
 			} else {
 				fmt.Println(green.Render("✓"), "magpie", version, muted.Render("is the latest"))
 			}

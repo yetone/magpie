@@ -138,6 +138,17 @@ func TestWhatsNewKeyedByChannel(t *testing.T) {
 	if got := notesKey("zh"); got != "zh|stable" {
 		t.Fatalf("stable: %q", got)
 	}
+	s.UpdateChannel = settings.UpdateDaily
+	if err := settings.Save(s); err != nil {
+		t.Fatal(err)
+	}
+	if got := notesKey("zh"); got != "zh|daily" {
+		t.Fatalf("daily: %q", got)
+	}
+	s.UpdateChannel = settings.UpdateStable
+	if err := settings.Save(s); err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("MAGPIE_NOTES_FEED", "http://127.0.0.1:1/") // never the real one
 	oldV := Version
 	Version = "0.1.100"
@@ -241,8 +252,11 @@ func TestStableUpToDateNamesNewest(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		asked.Add(1)
 		v := "0.1.13"
-		if r.URL.Query().Get("channel") == "stable" {
+		switch r.URL.Query().Get("channel") {
+		case "stable":
 			v = "0.1.11"
+		case "daily":
+			v = "0.1.12"
 		}
 		json.NewEncoder(w).Encode(update.Release{Version: v})
 	}))
@@ -283,6 +297,17 @@ func TestStableUpToDateNamesNewest(t *testing.T) {
 	if j := row(); j["state"] != "latest" || j["channel"] != "stable" || j["newest"] != nil {
 		t.Fatalf("stable, the newest installed: %v", j)
 	}
+	// Daily (fishmagic80 on X): the same, under its own name
+	channel(settings.UpdateDaily)
+	Version = "0.1.12"
+	if j := row(); j["state"] != "latest" || j["channel"] != "daily" || j["newest"] != "0.1.13" {
+		t.Fatalf("daily, 0.1.13 out: %v", j)
+	}
+	Version = "0.1.11"
+	if j := row(); j["state"] != "available" || j["latest"] != "0.1.12" || j["channel"] != "daily" {
+		t.Fatalf("daily, behind it: %v", j)
+	}
+	Version = "0.1.13"
 	channel("")
 	before := asked.Load()
 	if j := row(); j["state"] != "latest" || j["channel"] != nil || j["newest"] != nil || asked.Load()-before != 1 {

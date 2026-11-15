@@ -3415,7 +3415,8 @@ release page's redirect when the API is rate-limited), with its
 check as the feed's: the ed25519 signature against the key built into the
 binary, the version in the signed message, each file's hash from the signed
 list. A release read this way must be signed whatever its version. The
-Stable channel and a `MAGPIE_UPDATE_FEED` of your own don't fall back.
+Stable and Daily channels and a `MAGPIE_UPDATE_FEED` of your own don't
+fall back.
 
 Settings → Network → *Update source* (`"updateSource"` in settings.json,
 `magpie settings set updateSource github`, this computer's own) chooses where an
@@ -3424,9 +3425,9 @@ usemagpie.ai, then GitHub. `site` (usemagpie.ai only) never goes to GitHub,
 for the release or for a file. `github` (GitHub only) reads the release from
 `yetone/magpie-releases` without asking the feed, and downloads files from
 github.com (through a `--mirror` when one is given, then GitHub's API route);
-usemagpie.ai is not asked. On the Stable channel the list of releases is only
-the site's, so `github` still reads it from the feed and downloads from
-GitHub. A `MAGPIE_UPDATE_FEED` of your own is never overridden. Every source
+usemagpie.ai is not asked. On the Stable and Daily channels the release is
+only the site's pick, so `github` still reads it from the feed and downloads
+from GitHub. A `MAGPIE_UPDATE_FEED` of your own is never overridden. Every source
 is held to the same signature and hashes (`Release.verify`).
 
 Release files are downloaded from usemagpie.ai's copy on Cloudflare R2
@@ -3531,11 +3532,23 @@ trusted to the site over HTTPS and the SHA-256 the site gives.
 
 ### Update channel
 
-magpie takes every version as it comes out unless you choose Stable, in
-*Settings → About → Update channel* or with `magpie update channel stable`
+magpie takes every version as it comes out unless you choose Daily or
+Stable, in *Settings → About → Update channel* or with
+`magpie update channel daily` or `magpie update channel stable`
 (`magpie update channel every` goes back; `magpie update channel` prints
-the one in use). It is saved as `"updateChannel": "stable"` in
-settings.json, and the app and `magpie update` both follow it.
+the one in use). It is saved as `"updateChannel": "daily"` or `"stable"`
+in settings.json, and the app and `magpie update` both follow it.
+
+Daily is one version a day. Each day at 20:00 UTC it becomes the newest
+release out by then whose Test run on `main` passed (the run on the
+release's own commit) and that has all of its 17 files; a day with no
+such release keeps the day before's. A release marked urgent goes to Daily
+at once. What's new lists every version since yours as one list, and the
+Version row names the newest out on Every version as it does on Stable.
+The site works it out every quarter hour
+(`https://usemagpie.ai/api/latest?channel=daily`,
+`usemagpie.ai/download/daily/<platform>`); the Docker image's `daily` tag
+follows it.
 
 Stable is one version a week. Each Monday at 00:00 UTC it becomes the
 newest release that had been out for three days by then (Friday 00:00
@@ -3834,9 +3847,11 @@ VPN such as Tailscale or WireGuard; a reverse proxy or tunnel forwarding to
 Magpie over loopback needs a gateway key from its clients, as the network does.
 
 The image's tags: `latest` is the newest release, and magpie releases
-several times a day. `daily` is the newest release as of 20:00 UTC, moved
-once a day (`.github/workflows/docker-daily.yml`), for Renovate or
-Watchtower to update at most daily (with Renovate, pin its digest);
+several times a day. `daily` is the desktop app's Daily channel: once a
+day at 20:00 UTC, the newest release whose CI run passed, or an urgent one
+at once (`.github/workflows/docker-daily.yml` follows
+`usemagpie.ai/api/latest?channel=daily`), for Renovate or Watchtower to
+update at most daily (with Renovate, pin its digest);
 `stable` is the desktop app's Stable channel, one a week. `0.1.N` is one
 release, `0.1` the newest of its line, and `edge` every change on `main`.
 

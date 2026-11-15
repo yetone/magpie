@@ -8,6 +8,10 @@
 //                          the same for Settings' Stable channel: a release a
 //                          week, an urgent one at once ("The Stable channel"
 //                          below), with channel and urgent; 503 while unknown
+//   /api/latest?channel=daily
+//                          the same for the Daily channel: the newest release
+//                          with a green CI run and all its files, picked once
+//                          a day at 20:00 UTC ("The Daily channel" below)
 //   /api/notes?after=&upto=&limit= {releases: [{version, notes, url, published}]}, newest
 //                          first: what changed since the version an app last ran
 //                          Both take ?lang=zh for the notes in Chinese, where a
@@ -35,6 +39,8 @@
 //   /download/<file>       any file of the newest release, by name
 //   /download/stable, /download/stable/<platform or file>
 //                          the same from the Stable channel's release
+//   /download/daily, /download/daily/<platform or file>
+//                          the same from the Daily channel's release
 //   /files/<tag>/<file>    a release's file from R2 (files.js), the feed's
 //                          url and /download's for the files R2 holds;
 //                          GitHub's own address for any it doesn't
@@ -96,11 +102,12 @@ export default {
     }
     if (url.pathname === "/api/latest") {
       const lang = url.searchParams.get("lang");
-      // Settings' Stable channel; any other channel, or none, is every
-      // version as it comes out
-      if (url.searchParams.get("channel") === "stable") {
-        const got = await stable(ctx, env, Date.now());
-        if (!got) return json({ error: "the stable version isn't known yet" }, 503, NO_STORE);
+      // Settings' Stable and Daily channels; any other channel, or none,
+      // is every version as it comes out
+      const ch = url.searchParams.get("channel");
+      if (CHANNELS[ch]) {
+        const got = await CHANNELS[ch](ctx, env, Date.now());
+        if (!got) return json({ error: `the ${ch} version isn't known yet` }, 503, NO_STORE);
         return json({ ...(await fromR2(ctx, env, got.rel)), notes: inLang(got.rel.notes, lang) }, 200, cacheFor(got));
       }
       const got = await latest(ctx, env);
@@ -150,16 +157,16 @@ export default {
     if (dl) return detour(ctx, env, dl[1], dl[2]);
     if (url.pathname.startsWith(RELAY)) return relay(req, url);
     if (url.pathname === "/download" || url.pathname.startsWith("/download/")) {
-      // /download/stable/...: the same from the Stable channel's release
-      // (the home page's Stable choice, fishmagic80 on X)
+      // /download/stable/... and /download/daily/...: the same from that
+      // channel's release (the home page's Stable choice, fishmagic80 on X)
       const parts = url.pathname.split("/");
-      const onStable = parts[2] === "stable";
-      const want = parts[onStable ? 3 : 2] || "mac-arm64";
-      const got = onStable ? await stable(ctx, env, Date.now()).catch(() => null) : await latest(ctx, env);
+      const ch = CHANNELS[parts[2]] ? parts[2] : "";
+      const want = parts[ch ? 3 : 2] || "mac-arm64";
+      const got = ch ? await CHANNELS[ch](ctx, env, Date.now()).catch(() => null) : await latest(ctx, env);
       const rel = got && (await fromR2(ctx, env, got.rel));
       const asset = rel && rel.assets && rel.assets[SHORT[want] || want];
-      if (!asset) return new Response(onStable && !got ? "the stable version isn't known yet\n" : "not found\n", { status: onStable && !got ? 503 : 404, headers: NO_STORE });
-      if (req.method === "GET") ctx.waitUntil(capture("magpie site download", { link: onStable ? "stable/" + want : want, file: SHORT[want] || want, client: client(req), country: country(req) }));
+      if (!asset) return new Response(ch && !got ? `the ${ch} version isn't known yet\n` : "not found\n", { status: ch && !got ? 503 : 404, headers: NO_STORE });
+      if (req.method === "GET") ctx.waitUntil(capture("magpie site download", { link: ch ? ch + "/" + want : want, file: SHORT[want] || want, client: client(req), country: country(req) }));
       return Response.redirect(asset.url, 302);
     }
     // crawlers and old browsers ask for /favicon.ico whatever the page links
@@ -206,12 +213,13 @@ export default {
     return beacon(await withWall(await env.ASSETS.fetch(req), env, url));
   },
   // the crons (wrangler.jsonc's triggers): every quarter hour the ledger
-  // the Stable channel is chosen from and Discover's old counts pruned, every five minutes the newest and
-  // the Stable release's files into R2
+  // the Stable channel is chosen from, then the day's Daily pick, and
+  // Discover's old counts pruned; every five minutes the newest, the
+  // Stable and the Daily release's files into R2
   async scheduled(event, env, ctx) {
     if (event.cron === MIRROR_CRON) ctx.waitUntil(keepFiles(ctx, env));
     else {
-      ctx.waitUntil(keepLedger(env, Date.now()));
+      ctx.waitUntil(keepLedger(env, Date.now()).catch((e) => console.log("ledger", String(e))).then(() => keepDaily(env, Date.now())));
       ctx.waitUntil(prunePlugins(env));
     }
   },
@@ -514,6 +522,8 @@ async function keepFiles(ctx, env) {
   if (got) rels.push(got.rel);
   const st = await stable(ctx, env, Date.now()).catch((e) => console.log("r2: stable", String(e)));
   if (st) rels.push(st.rel);
+  const dy = await daily(ctx, env, Date.now()).catch((e) => console.log("r2: daily", String(e)));
+  if (dy && !rels.some((r) => r.version === dy.rel.version)) rels.push(dy.rel);
   const open = async (name, a, tag) => {
     let res = null;
     try {
@@ -731,9 +741,10 @@ async function releases(ctx, env) {
 // A hundred releases are a day or so of magpie, so the list GitHub's API
 // gives in one ask doesn't reach a week back. The ledger does: a KV
 // namespace (LEDGER) the cron fills every quarter hour, its "index" every
-// release of the last LEDGER_DAYS ({v, p: published, u: urgent}, newest
-// first) and "notes:<UTC day>" each day's notes by version, which
-// /api/notes reads for a range older than the hundred newest. Without the
+// release of the last LEDGER_DAYS ({v, p: published, u: urgent, a: how
+// many files}, newest first) and "notes:<UTC day>" each day's notes by
+// version, which /api/notes reads for a range older than the hundred
+// newest. Without the
 // ledger, or one that doesn't reach back to the week's cut, Stable isn't
 // known and the feed says so (503) rather than guess. The Docker image's
 // stable tag follows this feed (.github/workflows/docker-stable.yml).
@@ -801,6 +812,14 @@ async function stable(ctx, env, now) {
   if (!ix) return null;
   const pick = stableOf(ix.list.map((r) => ({ version: r.v, published: r.p, urgent: !!r.u })), now);
   if (!pick) return null;
+  return channelRelease(ctx, env, "stable", pick);
+}
+
+// channelRelease is a channel's pick ({version, published, urgent}) as a
+// release, condensed as latest's is and kept under the channel's name:
+// from GitHub's API, or, when it says no, the files from SHA256SUMS and
+// the notes from the ledger.
+async function channelRelease(ctx, env, channel, pick) {
   const tag = "v" + pick.version;
   let rel = await fromAPI(env, "releases/tags/" + tag);
   let degraded = !!rel && detoured(rel);
@@ -811,10 +830,169 @@ async function stable(ctx, env, now) {
     degraded = true;
   }
   if (!rel) return null;
-  const got = { rel: { ...rel, channel: "stable", urgent: !!pick.urgent }, degraded };
-  remember(ctx, "stable", got, degraded ? BRIEF : TTL);
+  const got = { rel: { ...rel, channel, urgent: !!pick.urgent }, degraded };
+  remember(ctx, channel, got, degraded ? BRIEF : TTL);
   return got;
 }
+
+// The Daily channel (fishmagic80 on X, a Docker user): Stable is a week
+// behind, so a plugin that needs a newer magpie doesn't work there, and
+// the newest is many releases a day. /api/latest?channel=daily is the
+// update feed between them, chosen here and never by hand:
+//
+//   - once a day, at DAILY_HOUR UTC (04:00 in China), Daily becomes the
+//     newest release out by then that has all RELEASE_FILES files and
+//     whose own CI run (yetone/magpie's Test workflow, on the push of its
+//     tagged commit) has passed by the time the pick is made;
+//   - an urgent release is Daily as soon as it is out, as on Stable,
+//     until a daily pick passes it.
+//
+// The quarter-hour cron makes the pick (keepDaily) once the day's cut has
+// passed and keeps it in the ledger as "daily": {cut, v}. A release with
+// no run of its own (a push of several commits runs the newest alone; a
+// newer push replaces a run that hasn't started) or a red one is passed
+// over. When nothing in reach qualifies the last pick stays, so Daily
+// never goes back. Until the first pick it isn't known (503). The Docker
+// image's daily tag follows this feed (.github/workflows/docker-daily.yml).
+const DAILY_HOUR = 20;
+export const RELEASE_FILES = 17; // the dmgs, zips, apps, CLIs, SHA256SUMS and its signature
+const SOURCE = "yetone/magpie"; // where the tags and their CI runs are
+const DAILY_ASKS = 6; // tag lookups (ten versions each) one pick makes at most
+
+// dayCut is the DAILY_HOUR:00 UTC on or before now, in ms.
+export function dayCut(now) {
+  const d = new Date(now);
+  const c = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), DAILY_HOUR);
+  return c > now ? c - DAY : c;
+}
+
+// dailyOf is the Daily pick at cut among list ([{version, published,
+// files, green}], any order): the newest out by cut with every file and a
+// green run. null when none is.
+export function dailyOf(list, cut) {
+  let pick = null;
+  for (const r of list) {
+    if (!(Date.parse(r.published) <= cut) || !(r.files >= RELEASE_FILES) || !r.green) continue;
+    if (!pick || newer(r.version, pick.version)) pick = r;
+  }
+  return pick;
+}
+
+// srcApi asks GitHub's API about yetone/magpie, with the GITHUB_TOKEN
+// secret where one is set, and without it when the token isn't let in
+// there (a token made for magpie-releases alone).
+async function srcApi(path, env) {
+  const url = `https://api.github.com/repos/${SOURCE}/${path}`;
+  const headers = { ...UA, Accept: "application/vnd.github+json" };
+  if (env && env.GITHUB_TOKEN) {
+    const res = await fetch(url, { headers: { ...headers, Authorization: `Bearer ${env.GITHUB_TOKEN}` } });
+    if (res.ok || ![401, 403, 404].includes(res.status)) return res;
+  }
+  return fetch(url, { headers });
+}
+
+// greenRuns is the commits the Test workflow passed on main, as a Set,
+// or null when GitHub can't say.
+async function greenRuns(env) {
+  try {
+    const res = await srcApi("actions/workflows/test.yml/runs?branch=main&event=push&status=success&per_page=100", env);
+    if (!res.ok) {
+      console.log("daily: runs", res.status);
+      return null;
+    }
+    const j = await res.json();
+    return new Set((j.workflow_runs || []).filter((r) => r.conclusion === "success").map((r) => r.head_sha));
+  } catch (e) {
+    console.log("daily: runs", String(e));
+    return null;
+  }
+}
+
+// keepDaily is the quarter-hour cron's Daily pick, made once a cut: the
+// ledger's releases out by the cut, newest first, each looked up as its
+// tag's commit (ten tags an ask, at most DAILY_ASKS asks) until one has
+// all its files and a green run. Nothing written while GitHub or the
+// ledger can't say: the next run tries again.
+export async function keepDaily(env, now) {
+  const kv = env && env.LEDGER;
+  if (!kv) return;
+  const cut = dayCut(now);
+  let had;
+  try {
+    had = await kv.get("daily", { type: "json" });
+  } catch (e) {
+    console.log("daily: read", String(e));
+    return;
+  }
+  if (had && Date.parse(had.cut) >= cut) return;
+  const ix = await readIndex(env);
+  if (!ix) return;
+  const out = ix.list
+    .filter((r) => Date.parse(r.p) <= cut && r.a >= RELEASE_FILES && (!had || !had.v || newer(r.v, had.v)))
+    .sort((a, b) => (newer(a.v, b.v) ? -1 : newer(b.v, a.v) ? 1 : 0));
+  let pick = null;
+  if (out.length) {
+    const green = await greenRuns(env);
+    if (!green) return;
+    const shas = new Map(); // version: commit
+    const groups = new Set();
+    for (const r of out) {
+      const group = r.v.slice(0, -1); // 0.1.422 holds 0.1.4220 to 0.1.4229
+      if (!groups.has(group)) {
+        if (groups.size >= DAILY_ASKS) break;
+        groups.add(group);
+        let refs;
+        try {
+          const res = await srcApi(`git/matching-refs/tags/v${group}`, env);
+          if (!res.ok) {
+            console.log("daily: tags", group, res.status);
+            return;
+          }
+          refs = await res.json();
+        } catch (e) {
+          console.log("daily: tags", group, String(e));
+          return;
+        }
+        // a lightweight tag names its commit; an annotated one isn't read
+        for (const t of refs) if (t.object && t.object.type === "commit") shas.set(t.ref.replace(/^refs\/tags\/v/, ""), t.object.sha);
+      }
+      const sha = shas.get(r.v);
+      pick = dailyOf([{ version: r.v, published: r.p, files: r.a, green: !!sha && green.has(sha) }], cut);
+      if (pick) break;
+    }
+  }
+  const v = pick ? pick.version : had && had.v;
+  if (!v) {
+    console.log("daily: nothing in reach passed", new Date(cut).toISOString());
+    return;
+  }
+  await kv.put("daily", JSON.stringify({ cut: new Date(cut).toISOString(), v, at: new Date(now).toISOString() }));
+}
+
+// daily is the Daily release, condensed as latest's is: {rel, degraded},
+// or null when it isn't known. An urgent release newer than the day's
+// pick is Daily at once.
+async function daily(ctx, env, now) {
+  const hit = await cached("daily");
+  if (hit && hit.rel && hit.rel.version) return hit;
+  if (!env || !env.LEDGER) return null;
+  let had;
+  try {
+    had = await env.LEDGER.get("daily", { type: "json", cacheTtl: 60 });
+  } catch (e) {
+    console.log("daily", String(e));
+    return null;
+  }
+  if (!had || !had.v) return null;
+  const ix = await readIndex(env, 60);
+  if (!ix) return null;
+  let pick = { version: had.v, published: (ix.list.find((r) => r.v === had.v) || {}).p, urgent: false };
+  for (const r of ix.list) if (r.u && Date.parse(r.p) <= now && newer(r.v, pick.version)) pick = { version: r.v, published: r.p, urgent: true };
+  return channelRelease(ctx, env, "daily", pick);
+}
+
+// CHANNELS are the update feed's channels other than every version.
+const CHANNELS = { stable, daily };
 
 // fromLedger is the notes of the releases the ledger has older than below
 // (every one when null), after after (exclusive, "" for any) up to upto,
@@ -863,7 +1041,7 @@ export async function keepLedger(env, now) {
     }
     const rels = (await res.json())
       .filter((r) => !r.draft && !r.prerelease)
-      .map((r) => ({ version: r.tag_name.replace(/^v/, ""), notes: r.body || "", published: r.published_at }));
+      .map((r) => ({ version: r.tag_name.replace(/^v/, ""), notes: r.body || "", published: r.published_at, files: (r.assets || []).length }));
     if (rels.length < 100) bottom = true;
     for (const r of rels) got.set(r.version, r);
     return rels;
@@ -893,7 +1071,9 @@ export async function keepLedger(env, now) {
     // the feed's date is when the release was last edited: the API's, or
     // the one the ledger has, is when it came out
     const was = merged.get(r.version);
-    merged.set(r.version, { v: r.version, p: !first && was ? was.p : r.published, u: urgentIn(r.notes) });
+    // a: how many files it has, from the API (the feed doesn't say)
+    const a = r.files !== undefined ? r.files : was && was.a;
+    merged.set(r.version, { v: r.version, p: !first && was ? was.p : r.published, u: urgentIn(r.notes), ...(a !== undefined ? { a } : {}) });
   }
   const list = [...merged.values()]
     .filter((r) => r.v && Date.parse(r.p) >= keep)

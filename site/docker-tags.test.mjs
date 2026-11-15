@@ -1,7 +1,8 @@
 // node --test site/: the Docker image's tags the docs name are tags a
 // workflow writes. magpie releases many times a day, and a Renovate user
-// had a PR for each one (YaoFur on X): daily moves once a day, by
-// .github/workflows/docker-daily.yml, and is in the docs in every language.
+// had a PR for each one (YaoFur on X): daily is the Daily channel's
+// release, moved once a day by .github/workflows/docker-daily.yml, and is
+// in the docs in every language.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
@@ -34,13 +35,13 @@ test("every tag the docs name is one a workflow writes", () => {
   }
 });
 
-test("daily moves once a day, to latest's image, without a build", () => {
+test("daily follows the Daily channel's feed, without a build", () => {
   const y = read("../.github/workflows/docker-daily.yml");
-  const crons = [...y.matchAll(/cron:\s*'([^']+)'/g)].map((m) => m[1]);
-  assert.equal(crons.length, 1, "one schedule");
-  const [min, hour, dom, mon, dow] = crons[0].split(/\s+/);
-  assert.ok(/^\d+$/.test(min) && /^\d+$/.test(hour) && dom === "*" && mon === "*" && dow === "*", "once a day: " + crons[0]);
-  assert.match(y, /imagetools create -t "\$IMAGE:daily" "\$IMAGE:latest"/);
+  // the feed moves once a day (site/worker.js's keepDaily); the workflow
+  // only copies the image it names, by version
+  assert.match(y, /FEED: https:\/\/usemagpie\.ai\/api\/latest\?channel=daily/);
+  assert.match(y, /imagetools create -t "\$IMAGE:daily" "\$IMAGE:\$V"/);
+  assert.doesNotMatch(y, /\$IMAGE:latest/);
   assert.doesNotMatch(y, /build-push-action|docker (buildx )?build\s/);
-  assert.doesNotMatch(y, /workflow_run|push:|tags:/, "only the clock (and a click) moves it");
+  assert.doesNotMatch(y, /push:|tags:/, "never a push of its own");
 });

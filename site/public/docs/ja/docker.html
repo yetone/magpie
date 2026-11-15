@@ -150,7 +150,7 @@
 
     <div class="table-wrap"><table>
       <tr><td><b>イメージ</b></td><td><code>ghcr.io/yetone/magpie</code>（<code>linux/amd64</code> と <code>linux/arm64</code>）</td></tr>
-      <tr><td><b>タグ</b></td><td><code>latest</code>（最新リリース）、<code>daily</code>（毎日 20:00 UTC にその時点の最新リリースへ移る。1 日 1 回だけ）、<code>stable</code>（デスクトップ版の Stable チャンネルと同じ：公開から 3 日たったリリースが週に 1 つ、緊急リリースはすぐ）、<code>0.1.1150</code>（特定のリリース）、<code>0.1</code>、<code>edge</code>（<code>main</code> の変更ごと）</td></tr>
+      <tr><td><b>タグ</b></td><td><code>latest</code>（最新リリース）、<code>daily</code>（デスクトップ版の Daily チャンネルと同じ：毎日 20:00 UTC に、その時点で CI に通った最新リリースへ移る。1 日 1 回だけ、緊急リリースはすぐ）、<code>stable</code>（デスクトップ版の Stable チャンネルと同じ：公開から 3 日たったリリースが週に 1 つ、緊急リリースはすぐ）、<code>0.1.1150</code>（特定のリリース）、<code>0.1</code>、<code>edge</code>（<code>main</code> の変更ごと）</td></tr>
       <tr><td><b>ポート</b></td><td><code>3425</code> はエージェントが呼ぶゲートウェイ、<code>3430</code> はコンテナが <code>magpie web</code> を動かすときのブラウザ UI。ゲートウェイの <code>/v1</code> ルートにも応えるので、リバースプロキシはこのポートだけで足ります</td></tr>
       <tr><td><b>ボリューム</b></td><td><code>/config</code>：プロバイダ、キー、サインイン、プラグイン、使用量</td></tr>
       <tr><td><b>ユーザー</b></td><td>nonroot（uid 65532）</td></tr>

@@ -269,8 +269,8 @@ func (n *whatsNew) get(ctx context.Context, all bool, lang string) whatsNewJSON 
 // language, and the channel, whose cap on how many are shown (MostNotes)
 // differs.
 func notesKey(lang string) string {
-	if update.Stable() {
-		return lang + "|" + settings.UpdateStable
+	if ch := update.Channel(); ch != "" {
+		return lang + "|" + ch
 	}
 	return lang
 }

@@ -44,17 +44,17 @@ var siteFeed = Site + "/api/latest"
 const maxSmall = 1 << 20
 
 // fallsBack says whether a failed feed goes on to GitHub: the default
-// feed, not the Stable channel, and not an ask already cancelled.
+// feed, not the Stable or Daily channel, and not an ask already cancelled.
 func fallsBack(ctx context.Context) bool {
-	return ctx.Err() == nil && Feed() == siteFeed && !Stable() && Source() == ""
+	return ctx.Err() == nil && Feed() == siteFeed && !Picked() && Source() == ""
 }
 
 // githubOnly says whether the release is read from GitHub alone, with no
 // try at the feed: Settings' GitHub only, on the default feed and not on
-// Stable (whose release only the site knows; its files still come from
-// GitHub).
+// Stable or Daily (whose release only the site knows; its files still come
+// from GitHub).
 func githubOnly() bool {
-	return Feed() == siteFeed && !Stable() && Source() == settings.UpdateSourceGitHub
+	return Feed() == siteFeed && !Picked() && Source() == settings.UpdateSourceGitHub
 }
 
 // githubLatest is the newest release as GitHub gives it, verified.

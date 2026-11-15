@@ -4275,6 +4275,10 @@ input.words.window-in { width: 96px; font-variant-numeric: tabular-nums; }
 /* the masking rules' add row: its words in full, then on a line of their
    own a name, prefix or regex, the match taking the room left, Add */
 .row.pref.rule-row { flex-wrap: wrap; row-gap: 8px; }
+/* three channels: the switch goes under its name when the row is narrow */
+.row.pref.update-channel-row { flex-wrap: wrap; row-gap: 8px; }
+.row.pref.update-channel-row .who { flex: 1 1 14em; min-width: 0; }
+.prefs .row.pref.update-channel-row .val { max-width: 100%; }
 .row.pref.rule-row .who { flex: 1 1 100%; }
 .row.pref.rule-row .sub { white-space: normal; }
 /* Busy models last: six choices don't fit beside their words in a phone-wide

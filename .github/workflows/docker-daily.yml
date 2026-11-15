@@ -1,15 +1,23 @@
 name: Docker daily
 
-# ghcr.io/yetone/magpie:daily is the newest release's image, moved once a
-# day: magpie releases many times a day, and Renovate opened a PR for each
-# one (YaoFur on X, "改成每天凌晨更新一次"). At 20:00 UTC (04:00 in
-# China) it points :daily at whatever :latest is then, by digest; it never
-# builds, and never touches latest, stable, edge or a version's tags.
-# Releases themselves go out as fast as ever.
+# ghcr.io/yetone/magpie:daily is the image of the Daily channel's release
+# (Settings › Update channel › Daily; fishmagic80 on X, YaoFur's Renovate
+# before that): once a day, the newest release out by 20:00 UTC (04:00 in
+# China) whose own CI run passed and that has all its files, or an urgent
+# one at once. Which release that is, is decided in one place only,
+# site/worker.js's keepDaily, and served at /api/latest?channel=daily. This
+# only reads that answer and points :daily at the image already built for
+# that version (docker.yml); it never builds, and never touches latest,
+# stable, edge or a version's tags. While the feed can't be read the tag
+# stays where it was. Releases themselves go out as fast as ever.
 
 on:
   schedule:
-    - cron: '0 20 * * *'
+    - cron: '53 * * * *'
+  # a release's image is pushed: an urgent one is Daily at once
+  workflow_run:
+    workflows: [Docker]
+    types: [completed]
   workflow_dispatch:
 
 concurrency:
@@ -18,10 +26,11 @@ concurrency:
 
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/magpie
+  FEED: https://usemagpie.ai/api/latest?channel=daily
 
 jobs:
   daily:
-    if: github.repository == 'yetone/magpie'
+    if: github.repository == 'yetone/magpie' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -35,19 +44,28 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
-      - name: Point daily at the newest release's image
+      - name: Point daily at the Daily release's image
         run: |
           set -euo pipefail
+          if ! BODY=$(curl -fsS --retry 3 --max-time 30 "$FEED"); then
+            echo "::warning::the Daily feed couldn't be read; $IMAGE:daily stays where it was"
+            exit 0
+          fi
+          V=$(jq -r '.version // empty' <<<"$BODY")
+          if [[ ! "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::warning::the Daily feed named no release ($V); $IMAGE:daily stays where it was"
+            exit 0
+          fi
           # an image is the platforms' manifests in it, however its index
           # is written
           digest() { docker buildx imagetools inspect "$1" --format '{{json .}}' | jq -er '[.manifest.manifests[]?.digest] | sort | join(",") | select(. != "")'; }
-          WANT=$(digest "$IMAGE:latest") # no latest image is a red run
+          WANT=$(digest "$IMAGE:$V") # no image for the Daily release is a red run
           HAVE=$(digest "$IMAGE:daily" 2>/dev/null || true)
           if [[ "$HAVE" == "$WANT" ]]; then
-            echo "$IMAGE:daily is latest already ($WANT)"
+            echo "$IMAGE:daily is $V already ($WANT)"
             exit 0
           fi
-          docker buildx imagetools create -t "$IMAGE:daily" "$IMAGE:latest"
+          docker buildx imagetools create -t "$IMAGE:daily" "$IMAGE:$V"
           GOT=$(digest "$IMAGE:daily")
-          echo "$IMAGE:daily is now latest ($GOT, was ${HAVE:-none})"
+          echo "$IMAGE:daily is now $V ($GOT, was ${HAVE:-none})"
           test "$GOT" == "$WANT"
