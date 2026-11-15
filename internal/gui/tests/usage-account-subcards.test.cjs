@@ -137,6 +137,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // --- the table
         await page.locator("#quotaView .opt", { hasText: TABLE[lang] }).click();
         await page.waitForSelector("#subscriptionUsage .qt tbody tr");
+        // a provider's accounts fold under its row (#6740): open each
+        while (await page.locator('.qt-fold[aria-expanded="false"]').count()) await page.locator('.qt-fold[aria-expanded="false"]').first().click();
         const table = await page.evaluate(() => {
           const heads = [...document.querySelectorAll(".qt thead th")].map((x) => x.textContent.replace(/[↑↓]/g, "").trim());
           const rows = Object.fromEntries([...document.querySelectorAll(".qt tbody tr")].map((tr) => [
@@ -167,7 +169,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         }
         // sorting by the Gemini column reads the pooled row by its fuller window
         await page.locator(".qt thead th .qt-sort", { hasText: "Gemini" }).click();
-        const firstRow = await page.$eval(".qt tbody tr:nth-child(1) .qt-acct", (x) => x.textContent.trim());
+        assert.equal(await page.$eval(".qt tbody tr:nth-child(1)", (x) => x.className + " " + x.dataset.provider), "qt-group antigravity", "the provider with Gemini first");
+        const firstRow = await page.$eval(".qt tbody tr:nth-child(2) .qt-acct", (x) => x.textContent.trim());
         assert.equal(firstRow, "bare1@example.com", "40% before the pooled row's 23%");
         if (shots) await page.screenshot({ path: path.join(shots, `table-${engine}-${lang}-${width}.png`), fullPage: true });
 

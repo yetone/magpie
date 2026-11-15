@@ -82,14 +82,22 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator("#quotaView .opt", { hasText: TABLE[lang] }).click();
         await page.waitForSelector("#subscriptionUsage .qt tbody tr");
         assert.equal(await page.locator("#subscriptionUsage .subscription-card").count(), 0);
-        // a row an account (a card's several accounts are rows too)
+        // a row a provider, its several accounts folded under it (#6740)
         const accounts = quotas.length;
-        assert.equal(await page.locator(".qt tbody tr").count(), accounts);
+        assert.equal(await page.locator(".qt tbody tr").count(), 7);
+        assert.equal(await page.locator(".qt tbody tr.qt-group").count(), 3);
         const heads = await page.$$eval(".qt thead th", (ths) => ths.map((x) => x.textContent.trim()));
         assert.equal(heads.length, 2 + 4 + 1, `${heads}`);
         // the cards' figures, the same readings
-        const row = await page.$eval('.qt tbody tr:nth-child(1)', (tr) => tr.innerText.replace(/\s+/g, " "));
-        assert.match(row, /Codex/);
+        const nth = (n) => page.$eval(`.qt tbody tr:nth-child(${n})`, (tr) => tr.innerText.replace(/\s+/g, " "));
+        // Codex's five accounts: their windows' mean share
+        const group = await nth(1);
+        assert.match(group, /Codex/);
+        assert.match(group, /34%/);
+        assert.match(group, /45%/);
+        while (await page.locator('.qt-fold[aria-expanded="false"]').count()) await page.locator('.qt-fold[aria-expanded="false"]').first().click();
+        assert.equal(await page.locator(".qt tbody tr").count(), accounts + 3);
+        const row = await nth(2);
         assert.match(row, /a@example\.com/);
         assert.match(row, /20%/);
         assert.match(row, /40%/);
@@ -104,22 +112,28 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.reload();
         await page.waitForSelector("#subscriptionUsage .qt tbody tr");
         assert.equal(await page.locator("#quotaView .opt.on").innerText(), TABLE[lang]);
+        assert.equal(await page.locator(".qt tbody tr").count(), accounts + 3, "the open providers stay open");
 
         // sorted by a window: the most used first, again the least, then the cards' order
-        const first = () => page.$eval(".qt tbody tr:nth-child(1)", (tr) => tr.innerText.replace(/\s+/g, " "));
+        // a provider by its accounts' mean, its accounts among themselves
+        const first = () => nth(1);
         const fiveHours = page.locator(".qt thead th.qt-w .qt-sort").first();
         await fiveHours.click();
-        assert.match(await first(), /b@example\.com/);
+        assert.match(await first(), /j@example\.com/, "Z.ai's 64% over Codex's 34%");
+        assert.match(await nth(2), /Codex/);
+        assert.match(await nth(3), /b@example\.com/);
         assert.equal(await page.locator('.qt thead th[aria-sort="descending"]').count(), 1);
         await page.locator(".qt thead th.qt-w .qt-sort").first().click();
-        assert.match(await first(), /l@example\.com/, "ascending: unused first");
+        assert.match(await first(), /Claude Code/, "ascending: Claude Code's 31% first");
+        assert.match(await nth(2), /g@example\.com/);
         assert.equal(await page.locator('.qt thead th[aria-sort="ascending"]').count(), 1);
         await page.locator(".qt thead th.qt-w .qt-sort").first().click();
-        assert.match(await first(), /a@example\.com/, "back to the cards' order");
+        assert.match(await first(), /Codex/, "back to the cards' order");
+        assert.match(await nth(2), /a@example\.com/);
         assert.equal(await page.locator('.qt thead th[aria-sort]:not([aria-sort="none"])').count(), 0);
         // by account, A first
         await page.locator(".qt thead th.qt-acct .qt-sort").click();
-        assert.match(await first(), /a@example\.com/);
+        assert.match(await nth(2), /a@example\.com/);
 
         // the page itself never scrolls sideways; the table scrolls in its box
         const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -142,11 +156,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     t.after(() => browser.close());
     const page = await (await browser.newContext({ viewport: { width: 1100, height: 800 }, reducedMotion: "reduce" })).newPage();
     page.setDefaultTimeout(5000);
-    await page.addInitScript(() => localStorage.setItem("magpie.quotaView", '"table"'));
+    await page.addInitScript(() => { localStorage.setItem("magpie.quotaView", '"table"'); localStorage.setItem("magpie.quotaTableOpen", '["codex"]'); });
     await page.route("**/*", serve("en", true));
     await page.goto("http://magpie.test/?view=usage");
     await page.waitForSelector("#subscriptionUsage .qt tbody tr");
-    const row = await page.$eval(".qt tbody tr:nth-child(1)", (tr) => tr.innerText.replace(/\s+/g, " "));
+    assert.match(await page.$eval(".qt tbody tr:nth-child(1)", (tr) => tr.innerText.replace(/\s+/g, " ")), /66%/, "Codex's accounts' mean left");
+    const row = await page.$eval(".qt tbody tr:nth-child(2)", (tr) => tr.innerText.replace(/\s+/g, " "));
     assert.match(row, /80%/);
     assert.match(row, /60%/);
   });

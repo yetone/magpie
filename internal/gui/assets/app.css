@@ -1062,6 +1062,16 @@ body.panel .row.pref.flash { border-radius: 10px; }
 .qt-name { font-weight: 400; color: var(--muted); }
 .qt-reset { font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .qt .qt-msg { color: var(--muted); }
+/* a provider's accounts under its row, folded until it is clicked (#6740) */
+.qt-group { cursor: pointer; }
+.qt-fold { padding: 0; font: inherit; color: inherit; text-align: left; background: none; border: 0; cursor: pointer; }
+.qt-fold .chev { display: inline-flex; width: 10px; color: var(--muted); }
+.qt-fold[aria-expanded="true"] .chev { transform: rotate(90deg); }
+.qt .qt-count { color: var(--muted); white-space: nowrap; text-transform: none; }
+/* beside a provider's chevron, every row's icon and plan line up */
+.qt.grouped tr:not(.qt-group) .qt-id::before { content: ""; width: 10px; flex: none; }
+.qt.grouped .plan { margin-left: 37px; }
+.qt .qt-kid .qt-sub > .plan:first-child { margin-top: 0; }
 .subscription-card { padding: 10px 12px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); min-width: 0; }
 /* a card's captions (resets, the period, a curve's dates) read at 4.5:1 or
    better on the card, below its figures (Jiabubu on Discord): light's

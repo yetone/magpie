@@ -394,9 +394,17 @@ beside an empty Gemini one). A pooled window goes to its pool's column
 (`poolWord`, "Claude & GPT" under Claude), naming its window in the cell;
 any other window goes by its span (`spanOf`: "Weekly", "7 days" and "7d"
 share one column, headed by the name most rows use, a number on a tie),
-and a window with no span by its name. It
+and a window with no span by its name. A provider with several accounts
+(grouped as its card groups them) is one row (jay68xu on X, #6740): its
+name, how many accounts, and each column's share averaged over the accounts
+that have one; its accounts are rows under it, without the provider's name
+again, folded until the row is clicked. What is open is kept by provider in
+localStorage `magpie.quotaTableOpen`. Sorting orders providers by that mean
+(a name or account by its first account) and accounts within each. A column
+no row fills is left out (Account when no account is named; the window
+columns and Other only exist when some row has one). It
 scrolls in its own box at a narrow width, the subscription held at the left.
-See `usage-quota-table.test.cjs`.
+See `usage-quota-table.test.cjs` and `usage-table-groups.test.cjs`.
 
 ### The Sessions page's folders
 

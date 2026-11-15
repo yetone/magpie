@@ -59,6 +59,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForSelector("#quotaView .opt");
         await page.locator("#quotaView .opt", { hasText: TABLE[lang] }).click();
         await page.waitForSelector("#subscriptionUsage .qt tbody tr");
+        // Codex's two accounts are under its row (#6740)
+        await page.locator('.qt-group[data-provider="codex"]').click();
+        await page.waitForSelector(".qt tbody tr.qt-kid");
 
         const cell = (user) => page.evaluate((user) => {
           const tr = [...document.querySelectorAll(".qt tbody tr")].find((r) => r.querySelector(".qt-acct")?.textContent.includes(user));
