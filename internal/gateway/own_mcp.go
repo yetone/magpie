@@ -51,6 +51,8 @@ func ownMCP() []OwnMCP {
 	}
 	// memory is always there: it needs no model
 	out = append(out, OwnMCP{memoryServerName, "Magpie Memory", MemoryMCPPath})
+	// and so are the sessions: it reads what Settings › Sessions allows
+	out = append(out, OwnMCP{sessionsServerName, "Magpie Sessions", SessionsMCPPath})
 	if gwtool.Served(gwtool.PluginTools) {
 		// a note that can't be read says nothing: the server is listed,
 		// and its tools/list tells
@@ -86,6 +88,8 @@ func OwnMCPTools(ctx context.Context) []OwnMCPServer {
 			s.Tools = []string{GenerateImageTool, GenerateVideoTool, GenerationResultTool}
 		case memoryServerName:
 			s.Tools = []string{memorySearchTool, memorySaveTool, memoryForgetTool, memoryContextTool}
+		case sessionsServerName:
+			s.Tools = []string{sessionsSearchTool, sessionsReadTool}
 		case "magpie-tools":
 			ts, _ := servedTools(ctx)
 			for _, t := range ts {

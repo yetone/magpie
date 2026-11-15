@@ -25,6 +25,22 @@
 /* where a session said what was searched for, the words themselves marked */
 .row .sub.sm-hit { color: var(--fg-2); }
 .sm-hit mark { background: var(--accent-soft); color: var(--fg); border-radius: 3px; padding: 0 1px; font-weight: 500; }
+/* a hit's words open the conversation at them */
+button.sub.sm-hit { display: block; width: 100%; height: auto; margin: 1px 0 0; padding: 0; border: 0; background: none; font: inherit; font-size: 11.5px; line-height: inherit; text-align: left; cursor: pointer; border-radius: 0; }
+@media (hover: hover) and (pointer: fine) { button.sub.sm-hit:hover { color: var(--fg); background: none; } }
+/* the same words in other agents' sessions, after the agent's own */
+.sm-else-head { min-height: 32px; gap: 8px; }
+.sm-else-head .name { flex: 1; font-size: 12px; font-weight: 500; color: var(--faint); }
+.sm-else-head .note { flex: none; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.sm-else > .row + .row { border-top: 1px solid var(--line-2); }
+button.row.sm-else-row { width: 100%; gap: 10px; text-align: left; cursor: pointer; font: inherit; color: inherit; }
+.sm-else-row > svg, .sm-else-row > img { flex: none; width: 16px; height: 16px; }
+.sm-else-row .who { display: flex; flex-direction: column; min-width: 0; }
+.sm-else-row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the message a search opened the conversation at, and its words */
+.sess-talk .sess-found { border-radius: 8px; box-shadow: 0 0 0 1px var(--accent-soft); }
+::highlight(sess-found) { background: var(--accent-soft); color: var(--fg); }
+.sess-from { margin-bottom: 8px; }
 .sm-bar { gap: 8px; padding: 0 11px; }
 .sm-bar .grow { flex: 1; }
 .sm-bar .sm-delete, .sm-bar .sm-empty { display: inline-flex; align-items: center; gap: 5px; }

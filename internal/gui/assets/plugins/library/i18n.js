@@ -2,6 +2,7 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "Pick the agents that may search and read what was said in your other sessions.": "选择可以搜索、阅读你其他会话内容的 Agent。",
     "Update by themselves": "自动更新",
     "Fetch skills from GitHub and git again when they change there. One you changed here stays as it is.": "GitHub 和 git 上的技能有改动时自动重新获取。你在这里改过的技能保持不变。",
     "Skills update by themselves now": "技能现在会自动更新",
@@ -1077,6 +1078,7 @@ magpie.strings({
     "{name} read again from its source": "已重新从来源读取 {name}",
   },
   "zh-TW": {
+    "Pick the agents that may search and read what was said in your other sessions.": "選擇可以搜尋、閱讀你其他會話內容的 Agent。",
     "Update by themselves": "自動更新",
     "Fetch skills from GitHub and git again when they change there. One you changed here stays as it is.": "GitHub 和 git 上的技能有變動時自動重新取得。你在這裡改過的技能保持不變。",
     "Skills update by themselves now": "技能現在會自動更新",
@@ -2152,6 +2154,7 @@ magpie.strings({
     "{name} read again from its source": "已重新從來源讀取 {name}",
   },
   ja: {
+    "Pick the agents that may search and read what was said in your other sessions.": "ほかのセッションで話した内容を検索して読める Agent を選びます。",
     "Update by themselves": "自動で更新",
     "Fetch skills from GitHub and git again when they change there. One you changed here stays as it is.": "GitHub や git でスキルが変わったら自動で取得し直します。ここで変更したスキルはそのままです。",
     "Skills update by themselves now": "スキルは自動で更新されるようになりました",
@@ -3227,6 +3230,7 @@ magpie.strings({
     "{name} read again from its source": "{name} をソースから読み直しました",
   },
   de: {
+    "Pick the agents that may search and read what was said in your other sessions.": "Wähle die Agents, die durchsuchen und lesen dürfen, was in deinen anderen Sitzungen gesagt wurde.",
     "Update by themselves": "Selbst aktualisieren",
     "Fetch skills from GitHub and git again when they change there. One you changed here stays as it is.": "Skills von GitHub und git neu laden, wenn sie sich dort ändern. Ein hier geänderter Skill bleibt, wie er ist.",
     "Skills update by themselves now": "Skills aktualisieren sich jetzt selbst",

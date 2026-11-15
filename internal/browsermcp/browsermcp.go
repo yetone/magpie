@@ -14,6 +14,8 @@
 // folder the agent started it in, for the project its memories are kept
 // for, and the client name the agent gave at initialize, for which agent
 // it is.
+// `magpie mcp sessions` is the sessions' (gateway.SessionsMCPPath): what
+// was said in every agent's sessions on this computer.
 package browsermcp
 
 import (
@@ -68,6 +70,21 @@ func RunMemory(args []string) error {
 	}
 	wd, _ := os.Getwd()
 	return serveMemory(os.Stdin, os.Stdout, gatewayBase(), wd)
+}
+
+// RunSessions serves the sessions MCP server on stdin and stdout until
+// stdin ends.
+func RunSessions(args []string) error {
+	if len(args) > 0 {
+		return fmt.Errorf("magpie mcp sessions takes no arguments")
+	}
+	return serveSessions(os.Stdin, os.Stdout, gatewayBase())
+}
+
+// serveSessions passes each line to the gateway's sessions server. A
+// search while the index is first made reads for a few seconds.
+func serveSessions(in io.Reader, out io.Writer, base string) error {
+	return relay(in, &bridge{base: base, path: gateway.SessionsMCPPath, title: "Magpie Sessions", client: &http.Client{Timeout: time.Minute}, out: out})
 }
 
 func gatewayBase() string {

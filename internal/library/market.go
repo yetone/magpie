@@ -100,6 +100,7 @@ var featured = []MarketServer{
 	searchServer(),
 	visionServer(),
 	memoryServer(),
+	sessionsServer(),
 	evermeServer(),
 	nowledgeServer(),
 	remoteServer("context7", "Context7", "Upstash", gh("upstash"), "https://mcp.context7.com/mcp",
@@ -251,6 +252,22 @@ const memoryServerName = "magpie-memory"
 func memoryServer() MarketServer {
 	return localServer(memoryServerName, "Magpie Memory", "Magpie", "https://usemagpie.ai/favicon.png", "https://usemagpie.ai",
 		"Memory shared by every agent: your preferences, rules and what each project needs, kept in Magpie. Agents search it before asking again, and save what you ask them to remember.", magpieCommand, []string{"mcp", "memory"})
+}
+
+// sessionsServerName is the name Magpie Sessions' server is written
+// under, the name the gateway's own sessions server goes by (ownMCP).
+const sessionsServerName = "magpie-sessions"
+
+// sessionsServer is Magpie Sessions: what was said in every agent's
+// sessions on this computer, as search_sessions and read_session, through
+// `magpie mcp sessions`, which passes each call to the gateway's
+// SessionsMCPPath (cryingLiu on X). An agent given it reads the user's
+// other conversations, so it is given only to the agents picked for it.
+func sessionsServer() MarketServer {
+	m := localServer(sessionsServerName, "Magpie Sessions", "Magpie", "https://usemagpie.ai/favicon.png", "https://usemagpie.ai",
+		"Search and read what was said in every agent's sessions on this computer: an earlier conversation, decision or fix, from Claude Code, Codex or any agent Magpie reads.", magpieCommand, []string{"mcp", "sessions"})
+	m.OptIn = true
+	return m
 }
 
 // evermeServer is EverMe's memory (EverMind-AI/EverMe, @everme/memory-mcp,
@@ -441,7 +458,7 @@ func serverKey(s *Server) string {
 	if s.Remote() {
 		return strings.TrimSuffix(strings.ToLower(s.URL), "/")
 	}
-	if len(s.Args) == 2 && s.Args[0] == "mcp" && (s.Args[1] == "image" || s.Args[1] == "browser" || s.Args[1] == "search" || s.Args[1] == "vision" || s.Args[1] == "memory") {
+	if len(s.Args) == 2 && s.Args[0] == "mcp" && (s.Args[1] == "image" || s.Args[1] == "browser" || s.Args[1] == "search" || s.Args[1] == "vision" || s.Args[1] == "memory" || s.Args[1] == "sessions") {
 		return "magpie mcp " + s.Args[1] // magpie's own, wherever its binary is
 	}
 	uv := progName(s.Command) == "uvx"

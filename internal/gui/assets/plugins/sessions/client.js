@@ -29,6 +29,13 @@ magpie.plugin("sessions", (ctx) => {
   let found = null;       // { agent, needle, hits: Map(id -> hit), busy, cut, unread, searched, total, error }
   let searchCtl = null;
   let searchT = 0;
+  // elsewhere is the same words in every other agent's sessions, from
+  // magpie's index of what was said (cryingLiu on X): { needle, hits,
+  // indexed, total, busy }, read again while the index is still being made
+  let elsewhere = null;
+  let elseCtl = null;
+  let elseT = 0;
+  const ELSE_MORE = 20;
   const SEARCH_WAIT = 300;
   const needleOf = (q) => q.trim().split(/\s+/).filter(Boolean).join(" ").toLowerCase();
   let trashOn = false;
@@ -250,8 +257,10 @@ magpie.plugin("sessions", (ctx) => {
       searchCtl?.abort();
       searchCtl = null;
       found = null;
+      elseSoon("");
       return;
     }
+    elseSoon(needle);
     if (found && found.agent === data.agent && found.needle === needle && !found.busy && !found.error) return;
     searchCtl?.abort();
     searchCtl = null;
@@ -271,6 +280,77 @@ magpie.plugin("sessions", (ctx) => {
     }, SEARCH_WAIT);
   }
 
+  // elseSoon searches every agent's sessions for needle (none in gateway
+  // mode, where no agent's files here are read), once typing pauses, and
+  // again a few seconds on while magpie's index has sessions to read yet
+  function elseSoon(needle, again = 0) {
+    clearTimeout(elseT);
+    if (!needle || data?.reads?.gateway) {
+      elseCtl?.abort();
+      elseCtl = null;
+      elsewhere = null;
+      return;
+    }
+    if (!again && elsewhere?.needle === needle && !elsewhere.error) return;
+    elseCtl?.abort();
+    elseCtl = null;
+    const mine = elsewhere = again ? elsewhere : { needle, hits: [], busy: true };
+    elseT = setTimeout(async () => {
+      const ctl = elseCtl = new AbortController();
+      try {
+        const r = await api(`sessions/said?q=${encodeURIComponent(needle)}&limit=${ELSE_MORE + 10}`, undefined, undefined, ctl.signal);
+        if (elsewhere !== mine) return;
+        elsewhere = { needle, busy: false, hits: r?.hits || [], indexed: r?.indexed || 0, total: r?.total || 0, listing: !!r?.listing };
+        if ((elsewhere.listing || elsewhere.indexed < elsewhere.total) && again < 40) {
+          const now = elsewhere;
+          elseT = setTimeout(() => { if (elsewhere === now) { elsewhere = { ...now }; elseSoon(needle, again + 1); } }, 3000);
+        }
+      } catch (e) {
+        if (ctl.signal.aborted || elsewhere !== mine) return;
+        elsewhere = { needle, busy: false, hits: [], error: e.message };
+      }
+      if (elseCtl === ctl) elseCtl = null;
+      if (view === "sessions" && !trashOn) redrawList();
+    }, again ? 0 : SEARCH_WAIT);
+  }
+  // the hits elsewhere shown with the agent shown: those of other agents
+  const elseHits = () => elsewhere && elsewhere.needle === needleOf(query) && data ? elsewhere.hits.filter((h) => h.agent !== data.agent).slice(0, ELSE_MORE) : [];
+
+  // elseBox is the sessions of other agents that said what was searched
+  // for; a click shows the conversation at the words
+  function elseBox() {
+    const f = elsewhere && elsewhere.needle === needleOf(query) ? elsewhere : null;
+    const hits = elseHits();
+    const still = f && !f.busy && (f.listing || f.indexed < f.total);
+    if (!f || (!hits.length && !still)) return null;
+    const box = el("div", "list sm-else");
+    const h = el("div", "row sm-else-head");
+    h.append(el("span", "name", t("Other agents")));
+    if (still) h.append(el("span", "note", f.listing ? t("Indexing sessions…") : t("Indexing {n} of {total} sessions…", { n: f.indexed, total: f.total })));
+    box.append(h);
+    for (const x of hits) {
+      const r = el("button", "row sess sm-else-row");
+      r.type = "button";
+      r.dataset.agent = x.agent;
+      r.dataset.id = x.id;
+      r.setAttribute("aria-haspopup", "dialog");
+      const a = agentOf(x.agent);
+      const who = el("span", "who");
+      const s = { agent: x.agent, id: x.id, title: x.title || x.id };
+      who.append(el("span", "name", x.title || t("(no prompt)")),
+        el("span", "sub", [a.name, x.last ? ago(x.last) : "", x.wsl ? "WSL " + x.wsl : "", x.cwd || ""].filter(Boolean).join(" · ")),
+        hitLine(x.hit));
+      r.append(icon(a.icon), who);
+      r.onclick = (e) => {
+        e.stopPropagation();
+        if (window.getSelection()?.toString()) return;
+        talkSheet(s, null, f.needle);
+      };
+      box.append(r);
+    }
+    return box;
+  }
+
   // what the search is doing, above the list, when it says more than the
   // rows do
   function searchNote() {
@@ -287,11 +367,21 @@ magpie.plugin("sessions", (ctx) => {
     return p;
   }
 
-  // the words round where a session said what was searched for
-  function hitLine(h) {
-    const d = el("div", "sub sm-hit");
+  // the words round where a session said what was searched for; given
+  // its session, a click shows the conversation there
+  function hitLine(h, s) {
+    const d = el(s ? "button" : "div", "sub sm-hit");
     d.append(h.before || "", el("mark", "", h.match), h.after || "");
     d.title = (h.before || "") + h.match + (h.after || "");
+    if (s) {
+      d.type = "button";
+      d.setAttribute("aria-haspopup", "dialog");
+      d.onclick = (e) => {
+        e.stopPropagation();
+        if (window.getSelection()?.toString()) return;
+        talkSheet(s, null, needleOf(query));
+      };
+    }
     return d;
   }
 
@@ -815,8 +905,10 @@ magpie.plugin("sessions", (ctx) => {
     folderBoxes.clear();
     const note = searchNote();
     if (note) tree.append(note);
+    const others = elseBox();
     if (!list.length) {
       if (!search()?.busy) tree.append(el("div", "empty-state", query ? t("No session matches.") : t("No sessions yet")));
+      if (others) tree.append(others);
       return;
     }
     const q = query.trim();
@@ -834,6 +926,7 @@ magpie.plugin("sessions", (ctx) => {
       tree.append(box);
     }
     if (rest.length) tree.append(othersBox(rest, q));
+    if (others) tree.append(others);
     toFocus();
   }
 
@@ -1090,7 +1183,7 @@ magpie.plugin("sessions", (ctx) => {
     // nothing of it otherwise (the group of them is one)
     if (zcodeDraft(s)) r.title = s.cwd;
     const hit = hitOf(s);
-    if (hit) who.append(hitLine(hit));
+    if (hit) who.append(hitLine(hit, s.transcript ? s : null));
     // what it spent, as the Usage page's list shows it
     r.append(who, ...sessSpent(s));
     r.append(speedCell(s));
@@ -1381,8 +1474,8 @@ magpie.plugin("sessions", (ctx) => {
 
   // drawTalk fills box with what was said in a session, read from the
   // agent's own file when it is first shown (only read, never written)
-  function drawTalk(box, s, sub = "") {
-    const k = s.agent + "/" + s.id + (sub ? "/" + sub : "");
+  function drawTalk(box, s, sub = "", find = "") {
+    const k = s.agent + "/" + s.id + (sub ? "/" + sub : "") + (find ? "?" + find : "");
     const got = talks.get(k);
     if (!got) {
       box.replaceChildren(el("p", "cx-none", t("Reading…")));
@@ -1394,10 +1487,10 @@ magpie.plugin("sessions", (ctx) => {
         talks.set(k, value);
         if (!talkOpen.has(k)) return;
         for (const currentBox of document.querySelectorAll(".sess-talk")) {
-          if (currentBox.dataset.talk === k) drawTalk(currentBox, s, sub);
+          if (currentBox.dataset.talk === k) drawTalk(currentBox, s, sub, find);
         }
       };
-      api("sessions/transcript?agent=" + encodeURIComponent(s.agent) + "&id=" + encodeURIComponent(s.id) + (sub ? "&sub=" + encodeURIComponent(sub) : ""))
+      api("sessions/transcript?agent=" + encodeURIComponent(s.agent) + "&id=" + encodeURIComponent(s.id) + (sub ? "&sub=" + encodeURIComponent(sub) : "") + (find ? "&find=" + encodeURIComponent(find) : ""))
         .then((tr) => finish({ tr }), (err) => finish({ err: err.message }));
       return;
     }
@@ -1405,11 +1498,13 @@ magpie.plugin("sessions", (ctx) => {
     if (got.err) { box.replaceChildren(el("p", "cx-none", got.err)); talks.delete(k); return; }
     const parts = got.tr?.parts || [];
     const out = [];
+    // read from where the words were said, the start left out
+    if (got.tr?.from > 0) out.push(el("p", "cx-none sess-from", t(got.tr.from === 1 ? "{n} earlier message not shown" : "{n} earlier messages not shown", { n: got.tr.from })));
     if (!parts.length) out.push(el("p", "cx-none", t(got.tr?.source === "gateway" ? "No saved gateway content for this session" : "Nothing was said here")));
     // each reply names its model once, at its first part, and again
     // only where the model changes inside it (#2253): the model its own
     // line in the agent's file names, so none where the file names none
-    let said = "", fresh = true;
+    let said = "", fresh = true, foundOne = false;
     for (const p of parts) {
       let model = "";
       if (p.role === "assistant") {
@@ -1419,6 +1514,7 @@ magpie.plugin("sessions", (ctx) => {
       } else if (p.role === "user") fresh = true;
       const said1 = ledSaid(p, model);
       if (p.role === "user" && (!p.kind || p.kind === "text")) said1.dataset.turn = "1";
+      if (find && !foundOne && (!p.kind || p.kind === "text" || p.kind === "context") && needleOf(p.text || "").includes(find)) { said1.classList.add("sess-found"); foundOne = true; }
       out.push(said1);
     }
     if (got.tr?.cut) out.push(el("p", "cx-none", t("There was more than is shown here")));
@@ -1433,9 +1529,10 @@ magpie.plugin("sessions", (ctx) => {
   // long to get around). A turn is what the user said; the sheet scrolls
   // to it, with no animation, as a key pressed many times would.
   const NAV = { top: "M4 3.5h8M8 13V6.5M5 9 8 6l3 3", prev: "M4.5 10 8 6.5l3.5 3.5", next: "M4.5 6 8 9.5 11.5 6", bottom: "M4 12.5h8M8 3v6.5M5 7 8 10l3-3" };
-  function talkSheet(s, sa) {
-    const k = s.agent + "/" + s.id + (sa ? "/" + sa.id : "");
+  function talkSheet(s, sa, find = "") {
+    const k = s.agent + "/" + s.id + (sa ? "/" + sa.id : "") + (find ? "?" + find : "");
     talkOpen.add(k);
+    if (globalThis.CSS?.highlights) CSS.highlights.delete("sess-found");
     const ed = el("div", "editor sess-sheet wide");
     const head = el("div", "ehead");
     const nav = (name, label) => {
@@ -1485,10 +1582,40 @@ magpie.plugin("sessions", (ctx) => {
     let queued = 0;
     body.addEventListener("scroll", () => { if (!queued) queued = requestAnimationFrame(() => { queued = 0; sync(); }); });
     box.addEventListener("talkdrawn", sync);
-    box.again = () => drawTalk(box, s, sa ? sa.id : "");
+    // opened at a search's words: the sheet starts at the message that
+    // said them, once, as it is first drawn
+    let toFound = !!find;
+    box.addEventListener("talkdrawn", () => {
+      const at1 = toFound && box.querySelector(".sess-found");
+      if (!at1) return;
+      toFound = false;
+      markFound(at1, find);
+      go(Math.max(0, at(at1) - SLACK));
+    });
+    box.again = () => drawTalk(box, s, sa ? sa.id : "", find);
     box.again();
     sync();
     body.focus({ preventScroll: true });
+  }
+
+  // markFound marks the words searched for in the message n where the
+  // browser can (CSS Custom Highlight API), never changing what is drawn
+  function markFound(n, find) {
+    if (typeof Highlight === "undefined" || !CSS.highlights) return;
+    const words = find.split(" ").filter(Boolean);
+    const ranges = [];
+    const walk = document.createTreeWalker(n, NodeFilter.SHOW_TEXT);
+    for (let tn = walk.nextNode(); tn && ranges.length < 50; tn = walk.nextNode()) {
+      const low = tn.data.toLowerCase();
+      for (const w of words) {
+        for (let i = low.indexOf(w); i >= 0 && ranges.length < 50; i = low.indexOf(w, i + w.length)) {
+          const r = new Range();
+          try { r.setStart(tn, i); r.setEnd(tn, i + w.length); } catch { continue; }
+          ranges.push(r);
+        }
+      }
+    }
+    if (ranges.length) CSS.highlights.set("sess-found", new Highlight(...ranges));
   }
 
   function askRelocate(from, wsl) {

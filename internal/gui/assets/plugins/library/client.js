@@ -8731,6 +8731,8 @@ magpie.plugin("library", (ctx) => {
       go.onclick = async (e) => { if (await closeLibModal()) openSettingsAt(e, "models", "#searchList .row"); };
       hint.append(" ", go);
       ed.append(hint);
+    } else if (x.name === "magpie-sessions") {
+      ed.append(el("p", "mk-hint", t("Pick the agents that may search and read what was said in your other sessions.")));
     } else if (x.name === "magpie-vision") {
       ed.append(el("p", "mk-hint", t("Pick the agents that may read images with it: each image goes to the Image recognition model set in Settings → Models → Images, and costs what that model charges.")));
     } else if (x.optIn) ed.append(el("p", "mk-hint", t("Pick the agents that may generate images: each image costs what the model set in Settings → Models → Images charges.")));

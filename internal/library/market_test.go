@@ -501,6 +501,40 @@ func TestMemoryServerInDiscover(t *testing.T) {
 	}
 }
 
+// Magpie Sessions is offered beside magpie's other servers but, since an
+// agent given it reads the user's other conversations, only to the agents
+// picked for it; it acts as this computer's user, and a copy at another
+// path is the same server.
+func TestSessionsServerInDiscover(t *testing.T) {
+	sandbox(t)
+	list, err := MarketServers("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(list, func(m MarketServer) bool { return m.ID == sessionsServerName && m.OptIn }) {
+		t.Fatalf("%s not in Discover as opt-in: %+v", sessionsServerName, list)
+	}
+	ok(t)(InstallServer(sessionsServerName, nil, []string{"claude"}))
+	l, err := load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := l.server(sessionsServerName)
+	if s == nil || strings.Join(s.Agents, ",") != "claude" || !filepath.IsAbs(s.Command) || strings.Join(s.Args, " ") != "mcp sessions" {
+		t.Fatalf("added as %+v", s)
+	}
+	if !hereOnly(s) {
+		t.Fatal("the sessions server is offered to other computers")
+	}
+	other := Server{Name: "said", Transport: "stdio", Command: "/opt/other/magpie", Args: []string{"mcp", "sessions"}}
+	if serverKey(&other) != serverKey(s) {
+		t.Fatalf("keys %q and %q", serverKey(&other), serverKey(s))
+	}
+	if mem := (Server{Name: "m", Transport: "stdio", Command: s.Command, Args: []string{"mcp", "memory"}}); serverKey(&mem) == serverKey(s) {
+		t.Fatal("memory and sessions share a key")
+	}
+}
+
 // EverMe and Nowledge Mem are offered as memory sources, each added in one
 // step with what its own docs give (OipsAnthony on X).
 func TestThirdPartyMemoryServers(t *testing.T) {

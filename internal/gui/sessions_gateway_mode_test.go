@@ -111,6 +111,14 @@ func TestGatewayModeListsNoOwnSessions(t *testing.T) {
 	if b := ok("GET", "/api/sessions/transcript?agent=claude&id="+local, ""); !strings.Contains(b, "secret plan") {
 		t.Fatalf("gateway mode off: the local transcript: %s", b)
 	}
+	// every agent's sessions searched at once, and one read where the
+	// words were said
+	if b := ok("GET", "/api/sessions/said?q=secret+plan", ""); !strings.Contains(b, `"id":"`+local+`"`) || !strings.Contains(b, `"agent":"claude"`) {
+		t.Fatalf("gateway mode off: every agent's search: %s", b)
+	}
+	if b := ok("GET", "/api/sessions/transcript?agent=claude&id="+local+"&find=secret+plan", ""); !strings.Contains(b, "secret plan") {
+		t.Fatalf("gateway mode off: the transcript at the words: %s", b)
+	}
 	if b := ok("GET", "/api/sessions/stats?days=0", ""); !strings.Contains(b, `"claude"`) {
 		t.Fatalf("gateway mode off: stats leave out Claude Code: %s", b)
 	}
@@ -185,6 +193,7 @@ func TestGatewayModeListsNoOwnSessions(t *testing.T) {
 		t.Fatalf("gateway mode: the gateway's Markdown: %s", b)
 	}
 	ownLeft("search", ok("GET", "/api/sessions/search?agent=claude&q=secret", ""))
+	ownLeft("every agent's search", ok("GET", "/api/sessions/said?q=secret", ""))
 	if b := ok("GET", "/api/sessions/search?agent=pi&q=remotely", ""); !strings.Contains(b, remote) {
 		t.Fatalf("gateway mode: search leaves out the gateway's session: %s", b)
 	}

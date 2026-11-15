@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -285,6 +286,19 @@ func sessionManageRoutes(mux *http.ServeMux, w Windows) {
 	mux.HandleFunc("GET /api/sessions/search", func(rw http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		writeJSON(rw, searchSessions(r.Context(), q.Get("agent"), q.Get("q"), searchBudget))
+	})
+	// said is the sessions of every agent (or ?agent='s) whose
+	// conversation says ?q=, from the index of what was said in them
+	// (sessions.SearchSaid): the Sessions page's hits in other agents.
+	mux.HandleFunc("GET /api/sessions/said", func(rw http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		limit, _ := strconv.Atoi(q.Get("limit"))
+		found, err := sessions.SearchSaid(r.Context(), sessions.NeedleOf(q.Get("q")), q.Get("agent"), min(max(limit, 1), 100))
+		if err != nil && !errors.Is(err, sessions.ErrNoWords) {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, saidJSONOf(found))
 	})
 	// delete moves the sessions named to magpie's trash, one by one; one
 	// still being written is left, and said so. One seen only through the
@@ -572,6 +586,36 @@ func searchSessions(ctx context.Context, agentID, query string, budget time.Dura
 	sort.Slice(hits, func(i, j int) bool { return hits[i].i < hits[j].i })
 	for _, f := range hits {
 		out.Hits = append(out.Hits, searchHitJSON{ID: jobs[f.i].s.ID, Hit: f.hit})
+	}
+	return out
+}
+
+// saidJSON is what the page shows of a search over every agent
+// (sessions.SearchSaid): of each session, what its row says.
+type saidJSON struct {
+	Hits    []saidHitJSON `json:"hits"`
+	Indexed int           `json:"indexed"`
+	Total   int           `json:"total"`
+	Cut     bool          `json:"cut,omitempty"`
+	Listing bool          `json:"listing,omitempty"`
+}
+
+type saidHitJSON struct {
+	Agent      string       `json:"agent"`
+	ID         string       `json:"id"`
+	Title      string       `json:"title,omitempty"`
+	Cwd        string       `json:"cwd,omitempty"`
+	Last       time.Time    `json:"last"`
+	WSL        string       `json:"wsl,omitempty"`
+	Transcript bool         `json:"transcript"`
+	Hit        sessions.Hit `json:"hit"`
+}
+
+func saidJSONOf(f sessions.SaidFound) saidJSON {
+	out := saidJSON{Hits: make([]saidHitJSON, 0, len(f.Hits)), Indexed: f.Indexed, Total: f.Total, Cut: f.Cut, Listing: f.Listing}
+	for _, h := range f.Hits {
+		s := h.Session
+		out.Hits = append(out.Hits, saidHitJSON{Agent: s.Agent, ID: s.ID, Title: s.Title, Cwd: s.Cwd, Last: s.Last, WSL: s.WSL, Transcript: true, Hit: h.Hit})
 	}
 	return out
 }

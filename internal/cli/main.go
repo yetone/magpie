@@ -420,6 +420,9 @@ func run(args []string) error {
 			if len(args) > 1 && args[1] == "memory" {
 				return browsermcp.RunMemory(args[2:])
 			}
+			if len(args) > 1 && args[1] == "sessions" {
+				return browsermcp.RunSessions(args[2:])
+			}
 			return imagemcp.Run(args[1:])
 		case "claude-mcp-helper": // internal: stdio MCP subprocess spawned by Claude Code
 			return claudebridge.RunMCP(args[1:])

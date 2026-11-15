@@ -499,6 +499,7 @@ var notYet = map[string]string{
 	"GET /api/speeds":                            U,  // sessions_manage.go: the Sessions row's speed curve
 	"GET /api/sessions/manage":                   U,  // sessions_manage.go
 	"GET /api/sessions/search":                   U,  // sessions_manage.go
+	"GET /api/sessions/said":                     U,  // sessions_manage.go: every agent's sessions; agents have the sessions MCP server
 	"POST /api/sessions/codex-provider":          U,  // sessions_manage.go
 	"POST /api/sessions/delete":                  U,  // sessions_manage.go
 	"POST /api/sessions/purge":                   U,  // sessions_manage.go

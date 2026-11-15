@@ -336,7 +336,12 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 		}
 		// sub: one of its subagents, found among those the session lists
 		// (#2261)
+		// find: the words a search found in it, so that the part they
+		// are in is among those read (a long session's is cut)
 		read := sessions.TranscriptOf
+		if find := sessions.NeedleOf(q.Get("find")); find != "" {
+			read = func(s sessions.Session) (sessions.Transcript, error) { return sessions.TranscriptAt(s, find) }
+		}
 		if sub := q.Get("sub"); sub != "" {
 			read = func(s sessions.Session) (sessions.Transcript, error) { return sessions.SubagentTranscript(s, sub) }
 		}

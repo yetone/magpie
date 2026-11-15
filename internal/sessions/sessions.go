@@ -1996,8 +1996,10 @@ func pricer() func(string) *catalog.Price {
 	}
 }
 
-// Reset forgets the kept parses, in memory only.
+// Reset forgets the kept parses, in memory only, and closes the index of
+// what was said, so a test's HOME can go.
 func Reset() {
+	ForgetSaid()
 	desktopTitles.Lock()
 	desktopTitles.names, desktopTitles.last = nil, nil
 	desktopTitles.Unlock()
