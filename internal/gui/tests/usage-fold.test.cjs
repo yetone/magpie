@@ -100,7 +100,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.deepEqual(by("Codex"), { name: "Codex", full: ["one@example.com"], brief: ["two@example.com"], meters: 2, resets: 0, more: w.full1 });
       assert.equal(by("ZCode").more, null, "one account: no button");
       assert.deepEqual([by("ZCode").full, by("ZCode").brief], [["solo@example.com"], []]);
-      assert.equal(await page.locator("#subscriptionUsage > [data-key=zcode] .quota-acct-fold").count(), 0, "one account: no fold");
+      assert.equal(await page.locator("#subscriptionUsage > [data-key=zcode] .subscription-account .quota-acct-fold").count(), 0, "one account: no fold on its row");
+      assert.equal(await page.locator("#subscriptionUsage > [data-key=zcode] .subscription-head > .quota-acct-fold").count(), 1, "one account: the card's fold in its head");
 
       // opening it doesn't move the page
       const view = page.locator("#view-usage");

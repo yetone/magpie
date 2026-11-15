@@ -1097,8 +1097,11 @@ body.panel .row.pref.flash { border-radius: 10px; }
 .subscription-account.brief { margin-bottom: 4px; }
 .quota-acct-fold { align-self: center; display: inline-grid; place-items: center; flex: none; width: 18px; height: 18px; margin: -2px -5px -2px -3px; padding: 0; border-radius: 4px; color: var(--faint); transition: background .12s, color .12s; }
 .subscription-account :is(.user, .acct-eye) + .quota-acct-fold { margin-left: auto; }
+/* one account's card folds from its head's end, before its ⋯ (PILIHU2023 on X) */
+.subscription-head > .quota-acct-fold { margin-left: auto; }
+.subscription-head > :is(.plan, .quota-every, .quota-sum) ~ .quota-acct-fold { margin-left: 2px; }
 .quota-acct-fold:hover { background: var(--pill); color: var(--fg-2); }
-.quota-acct-fold svg { transform: rotate(180deg); transition: transform .15s ease-out; }
+.quota-acct-fold svg { transform: rotate(180deg); transition: transform .15s var(--ease-out); }
 .quota-acct-fold[aria-expanded="false"] svg { transform: none; }
 @media (prefers-reduced-motion: reduce) { .quota-acct-fold svg { transition: none; } }
 .quota-windows.brief { row-gap: 5px; }
