@@ -99,7 +99,12 @@ func RunIn(m *testing.M, setup func(home string)) int {
 	if setup != nil {
 		setup(home)
 	}
-	return m.Run()
+	code := m.Run()
+	if err := eagerHere(); err != nil {
+		fmt.Fprintln(os.Stderr, "testenv:", err)
+		return 1
+	}
+	return code
 }
 
 // Isolate points the home and the config, cache and data folders into a

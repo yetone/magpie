@@ -1,15 +1,13 @@
 package main
 
 import (
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"io/fs"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/yetone/magpie/internal/lazyre"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // TestAllLazyPatternsCompile compiles every regexp the binary's packages
@@ -25,7 +23,8 @@ func TestAllLazyPatternsCompile(t *testing.T) {
 // (or regexp.Compile) outside a function: every package's init runs on
 // every launch, `magpie statusline` on each Claude Code message included,
 // so such a pattern is compiled for a path most launches never take. Use
-// lazyre.New, which compiles on first use.
+// lazyre.New, which compiles on first use. Each package that runs its
+// tests through testenv checks its own files too (testenv.eagerHere).
 func TestNoEagerPackageRegexps(t *testing.T) {
 	var bad []string
 	err := filepath.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
@@ -41,28 +40,7 @@ func TestNoEagerPackageRegexps(t *testing.T) {
 		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
-		fset := token.NewFileSet()
-		f, err := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
-		if err != nil {
-			return nil // not this test's to judge
-		}
-		for _, d := range f.Decls {
-			gd, ok := d.(*ast.GenDecl)
-			if !ok || gd.Tok != token.VAR {
-				continue
-			}
-			ast.Inspect(gd, func(n ast.Node) bool {
-				if _, ok := n.(*ast.FuncLit); ok {
-					return false
-				}
-				if se, ok := n.(*ast.SelectorExpr); ok {
-					if id, ok := se.X.(*ast.Ident); ok && id.Name == "regexp" && (se.Sel.Name == "MustCompile" || se.Sel.Name == "Compile" || se.Sel.Name == "MustCompilePOSIX") {
-						bad = append(bad, fset.Position(se.Pos()).String())
-					}
-				}
-				return true
-			})
-		}
+		bad = append(bad, testenv.EagerRegexps(path)...)
 		return nil
 	})
 	if err != nil {

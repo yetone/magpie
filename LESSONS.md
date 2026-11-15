@@ -1436,6 +1436,14 @@ each one.
     f97415bc0. Its body lists the gui tests and vet it ran, and neither
     guard's package. A new package-level var runs `go test .`; a new
     route runs internal/cli's parity test.
+    11-15: 8f3f7a46a (Qianfan Token Plan) put two package-level regexps
+    in internal/provider and ran provider, gui and cli, so the root guard
+    was red on ubuntu CI until 022ffd09e. Done since, as 11-12 asked:
+    testenv's TestMain checks the package's own files after its tests
+    (testenv.eagerHere), so the 65 packages that run through testenv,
+    every one this guard caught before among them, fail their own run,
+    a `-run` of one test included. Broken by hand: a probe file in
+    internal/update failed `go test -run NoSuchTest ./internal/update`.
 - **11-13, criteria still missed.**
   - A budget's pass recorded at a tree it wasn't run at: 5a0e0378c's
     body says TestCoreScriptBudget passed "rebased on 7583ed65c", but
