@@ -435,6 +435,21 @@ ok except gateway" stops being a normal run record.
   goes through would hold it.
 - Seen 2× (2026-10-16, 2026-10-17).
 
+**A quiet `go test ./...` log is not a hang until a package's own time
+says so.** go test prints packages in order, so one slow package holds
+back every line after it, and the log moves in bursts.
+- 705d67efc (11-15) called 0dbdc7481's macOS Test step hung: nothing
+  past internal/libc for 44 minutes. The next run was cancelled at 53
+  minutes for the same reason, and its log showed the step had just
+  finished. internal/library reported 264s but printed at 02:33, so it
+  had started 47 minutes into the step. The step was slow, not stuck
+  (#5267).
+- Before you cancel, compare the last burst's time with the reported
+  seconds of the packages that came before it. go 1.26 waits only 5s for
+  a test binary's pipes once the binary exits, so a lingering child
+  can't explain a silence.
+- Seen 1× (2026-11-15).
+
 **A suite's log is kept whole until its reds are named.**
 - 5b12407e8 (10-17) piped a full run through tail, lost which
   internal/gateway test failed at 2559s, and shipped with an unnamed red.
