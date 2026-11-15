@@ -418,6 +418,19 @@ TestSettingsSaveKeepsWhatItDoesNotSend (internal/gui) every setting.
   the work already runs.
 - Seen 2× (2026-11-11, 2026-11-15).
 
+**A byte-for-byte check of a stream allows what the protocol allows,
+and its failure message counts against what it compared.**
+- TestPassthroughResponsesBigLastEvent compared a 2MB stream byte for
+  byte. On macOS CI at 2d106b5c1 it took 5.83s, past keepHeldEvery, and
+  the agent was kept alive with one `: keepalive` comment, which every SSE
+  client skips. The message said "17 bytes added", counted against the
+  raw reply, not the renamed one it compared, so the 12-byte keepalive
+  looked like a 17-byte `"model":"fake/m1"`. Fixed in fff0755b5,
+  reproduced by setting keepHeldEvery to 1ms (red 3 of 3 on the old test).
+- A stream test leaves out SSE comments at a line's start. A failure names
+  the byte where the bodies part and what each side has there.
+- Seen 1× (2026-11-15).
+
 **A full run gives the slow packages room.** `go test ./...` at the default
 10m timeout times out in internal/gateway (#2108), and under load in
 internal/provider and internal/agent. Use -timeout 45m, so "every package
