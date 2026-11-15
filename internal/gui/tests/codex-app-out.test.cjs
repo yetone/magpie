@@ -9,7 +9,11 @@
 // names browser use, which the Codex app's Chrome control loses with
 // magpie its provider, and the row opened offers Keep on ChatGPT right
 // there, posted as the sign-in's Always ChatGPT (eddie.zhan on Discord:
-// browser use said it had no permission). Every language, both engines,
+// browser use said it had no permission). It names the phone connection
+// too: the Codex app ties "Connect your phone" to its ChatGPT account, which
+// it doesn't read while magpie is the provider (Mugenrikka on X: the phone
+// stopped connecting and the profile was gone, with nothing saying why or
+// that Keep on ChatGPT has them back). Every language, both engines,
 // wide and narrow. No backend, the API is faked.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -26,11 +30,11 @@ const codex = (appOut) => ({
 });
 
 const words = {
-  en: { until: "On magpie until", reset: "On magpie until the reset", stuck: "quit and reopen the Codex app", off: "cloud tasks", browser: "browser use", keep: "Keep on ChatGPT" },
-  zh: { until: "由 magpie 接管至", reset: "由 magpie 接管至额度重置", stuck: "退出并重新打开 Codex 应用", off: "云端任务", browser: "浏览器操作", keep: "保持 ChatGPT" },
-  "zh-TW": { until: "由 magpie 接管至", reset: "由 magpie 接管至額度重設", stuck: "結束並重新開啟 Codex 應用", off: "雲端任務", browser: "瀏覽器操作", keep: "保持 ChatGPT" },
-  ja: { until: "まで magpie が処理", reset: "リセットまで magpie が処理", stuck: "Codex アプリを終了して開き直して", off: "クラウドタスク", browser: "ブラウザ操作", keep: "ChatGPT のまま" },
-  de: { until: "Über magpie bis", reset: "Über magpie bis zum Zurücksetzen", stuck: "beende die Codex-App", off: "Cloud-Aufgaben", browser: "Browser-Nutzung", keep: "Bei ChatGPT bleiben" },
+  en: { until: "On magpie until", reset: "On magpie until the reset", stuck: "quit and reopen the Codex app", off: "cloud tasks", browser: "browser use", phone: "its phone connection", keep: "Keep on ChatGPT" },
+  zh: { until: "由 magpie 接管至", reset: "由 magpie 接管至额度重置", stuck: "退出并重新打开 Codex 应用", off: "云端任务", browser: "浏览器操作", phone: "手机连接", keep: "保持 ChatGPT" },
+  "zh-TW": { until: "由 magpie 接管至", reset: "由 magpie 接管至額度重設", stuck: "結束並重新開啟 Codex 應用", off: "雲端任務", browser: "瀏覽器操作", phone: "手機連線", keep: "保持 ChatGPT" },
+  ja: { until: "まで magpie が処理", reset: "リセットまで magpie が処理", stuck: "Codex アプリを終了して開き直して", off: "クラウドタスク", browser: "ブラウザ操作", phone: "スマートフォンとの接続", keep: "ChatGPT のまま" },
+  de: { until: "Über magpie bis", reset: "Über magpie bis zum Zurücksetzen", stuck: "beende die Codex-App", off: "Cloud-Aufgaben", browser: "Browser-Nutzung", phone: "Verbindung zum Handy", keep: "Bei ChatGPT bleiben" },
 };
 
 function serve(lang, agents, sets = []) {
@@ -86,7 +90,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             assert.ok(text.includes(w[kind]), `${JSON.stringify(text)} lacks ${JSON.stringify(w[kind])}`);
             assert.doesNotMatch(text, /\{\w+\}/);
             const title = await page.locator(`${row} .ag-st-t`).getAttribute("title");
-            assert.ok(title && title.includes(w.off) && title.includes(w.browser), "the hover says what is off, browser use too: " + title);
+            assert.ok(title && title.includes(w.off) && title.includes(w.browser) && title.includes(w.phone), "the hover says what is off, browser use and the phone connection too: " + title);
             assert.ok(title.includes(w.keep), "the hover names Keep on ChatGPT: " + title);
             assert.ok(title.includes("spent@example.com"), "the hover names the account: " + title);
             assert.doesNotMatch(title, /\{\w+\}/);
@@ -95,7 +99,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             const said = page.locator(`${row} .ag-app-out`);
             await said.waitFor();
             const s = await said.textContent();
-            assert.ok(s.includes(w.off) && s.includes(w.browser), "the row opened says what is off, browser use too: " + s);
+            assert.ok(s.includes(w.off) && s.includes(w.browser) && s.includes(w.phone), "the row opened says what is off, browser use and the phone connection too: " + s);
             assert.doesNotMatch(s, /\{\w+\}/);
             const side = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
             assert.ok(side <= 1, "scrolls sideways: " + side);

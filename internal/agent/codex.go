@@ -631,7 +631,11 @@ func codexIn(at place) *Agent {
 	// no token for a provider that is magpie, and the Codex app (ChatGPT.app
 	// 26.1021) switches to an identity of no account: its ChatGPT mode's
 	// chats and projects ("Work") are gone, as are Chrome control and cloud
-	// tasks, while magpie's models still answer (Qyburn3 on X). With it the
+	// tasks, while magpie's models still answer (Qyburn3 on X), and so is
+	// "Connect your phone" (remote control) and the profile: ChatGPT.app
+	// 26.1029 takes a getAuthStatus with no authMethod and
+	// requiresOpenaiAuth false as an "execution-storage" identity, not a
+	// ChatGPT one (Mugenrikka on X). With it the
 	// app keeps the account, and Codex still sends magpie's key
 	// (experimental_bearer_token) to magpie, no ChatGPT-Account-ID, its
 	// tools the same (image_gen kept): tried with ChatGPT.app 26.1021 and

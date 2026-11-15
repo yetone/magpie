@@ -22,11 +22,11 @@ const codex = (appBack) => ({
 });
 
 const words = {
-  en: { line: "Back on ChatGPT", why: "no usage", proj: "projects", restart: "Restart", done: "Codex app-server restarted" },
-  zh: { line: "已回到 ChatGPT", why: "用量", proj: "项目", restart: "重启", done: "Codex 的 app-server 已重启" },
-  "zh-TW": { line: "已回到 ChatGPT", why: "用量", proj: "專案", restart: "重啟", done: "Codex 的 app-server 已重新啟動" },
-  ja: { line: "ChatGPT に戻りました", why: "使用量", proj: "プロジェクト", restart: "再起動", done: "Codex の app-server を再起動しました" },
-  de: { line: "Wieder bei ChatGPT", why: "keine Nutzung", proj: "Projekte", restart: "Neu starten", done: "App-Server von Codex neu gestartet" },
+  en: { line: "Back on ChatGPT", why: "no usage", proj: "projects", phone: "no phone connection", restart: "Restart", done: "Codex app-server restarted" },
+  zh: { line: "已回到 ChatGPT", why: "用量", proj: "项目", phone: "手机连接", restart: "重启", done: "Codex 的 app-server 已重启" },
+  "zh-TW": { line: "已回到 ChatGPT", why: "用量", proj: "專案", phone: "手機連線", restart: "重啟", done: "Codex 的 app-server 已重新啟動" },
+  ja: { line: "ChatGPT に戻りました", why: "使用量", proj: "プロジェクト", phone: "スマートフォンとの接続", restart: "再起動", done: "Codex の app-server を再起動しました" },
+  de: { line: "Wieder bei ChatGPT", why: "keine Nutzung", proj: "Projekte", phone: "Verbindung zum Handy", restart: "Neu starten", done: "App-Server von Codex neu gestartet" },
 };
 
 function serve(lang, posts) {
@@ -93,6 +93,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
               assert.ok(s.includes(w.why), "the row opened says why: " + s);
               // what the reporter missed: the app's ChatGPT projects (Herzz____ on X)
               assert.ok(s.includes(w.proj), "the row opened names the projects: " + s);
+              // and the phone connection, which comes back with the account (Mugenrikka on X)
+              assert.ok(s.includes(w.phone), "the row opened names the phone connection: " + s);
               assert.doesNotMatch(s, /\{\w+\}/);
               go = page.locator(`${row} .ag-app-back + .ag-vl button`);
               await page.waitForFunction(() => {
