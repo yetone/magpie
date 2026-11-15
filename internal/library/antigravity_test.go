@@ -154,3 +154,57 @@ func TestAntigravityAppTarget(t *testing.T) {
 		t.Errorf("project skills: %q", ProjectSkillsDir("antigravity"))
 	}
 }
+
+// vizmoe42 on X: agy switched on in Instructions, and no GEMINI.md in
+// ~/.gemini/config. The Antigravity app, here too and switched off, reads
+// the same file, and its write took agy's part out again at once. One
+// switched on keeps the file it shares with one switched off, whichever
+// comes first; the one off doesn't call the part "edited"; and a file the
+// old write left empty is written again by the next sync, the switch left
+// as it was.
+func TestAntigravitySharedInstructionsFile(t *testing.T) {
+	for _, on := range []string{"agy", "antigravity"} {
+		t.Run(on, func(t *testing.T) {
+			h, cfg := antigravity(t)
+			write(t, filepath.Join(h, ".gemini/antigravity/agyhub_summaries_proto.pb"), "x")
+			p := filepath.Join(cfg, "GEMINI.md")
+			for _, id := range []string{"agy", "antigravity"} {
+				if tg := targetByID(id); tg == nil || tg.Instructions != p {
+					t.Fatalf("%s: %+v", id, tg)
+				}
+			}
+			want := blockBegin + "\nUse tabs.\n" + blockEnd + "\n"
+			shared := "Use tabs."
+			ok(t)(SaveInstructions(InstructionsChange{Shared: &shared, Agents: []string{on}}))
+			if s := read(t, p); s != want {
+				t.Fatalf("after the switch:\n%q", s)
+			}
+			ok(t)(Sync())
+			if s := read(t, p); s != want {
+				t.Fatalf("after a sync:\n%q", s)
+			}
+			v, err := ReadInstructions()
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, a := range v.Agents {
+				if (a.Agent == "agy" || a.Agent == "antigravity") && (a.Edited || a.On != (a.Agent == on)) {
+					t.Errorf("row %+v", a)
+				}
+			}
+
+			// as the old write left it: the part taken out, the file empty
+			write(t, p, "")
+			ok(t)(Sync())
+			if s := read(t, p); s != want {
+				t.Fatalf("a sync didn't write the emptied file again:\n%q", s)
+			}
+
+			// both off: the part goes
+			ok(t)(SaveInstructions(InstructionsChange{Agents: []string{}}))
+			if s := read(t, p); s != "" {
+				t.Errorf("both off:\n%q", s)
+			}
+		})
+	}
+}

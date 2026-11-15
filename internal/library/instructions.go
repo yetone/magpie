@@ -208,8 +208,9 @@ func PublishMemory(due bool) (*Result, error) {
 	if b == nil {
 		b = newBackups()
 	}
-	for _, t := range Targets() {
-		l.syncInstructions(t, b, res, true)
+	all := Targets()
+	for _, t := range all {
+		l.syncInstructions(t, all, b, res, true)
 	}
 	res.Backup = b.dir
 	if b.dir != "" {
@@ -332,8 +333,10 @@ func (l *Library) instructionsLost() bool {
 // them, and the parts out there are then the only copy left (#5709, where
 // a start-up apply with an empty Library wiped nine agents' files). It is
 // a write of the page — a take-back, made with the library as the user
-// left it — that takes a part out.
-func (l *Library) syncInstructions(t *Target, b *backups, res *Result, auto bool) {
+// left it — that takes a part out. A file other agents in all read too is
+// written for the one of them switched on (instrOwner), never emptied by
+// another switched off.
+func (l *Library) syncInstructions(t *Target, all []*Target, b *backups, res *Result, auto bool) {
 	if res.unreached(t) {
 		return
 	}
@@ -342,6 +345,14 @@ func (l *Library) syncInstructions(t *Target, b *backups, res *Result, auto bool
 	}
 	id := t.Agent.ID
 	a := l.applied(id)
+	if o := l.instrOwner(t, all); o != "" && o != id {
+		// the file is the part of another agent that reads it, switched
+		// on: Antigravity's app, switched off, took agy's part out of
+		// ~/.gemini/config/GEMINI.md they both read, as soon as agy's
+		// was written (vizmoe42 on X)
+		a.Instructions, a.InstrHash = false, ""
+		return
+	}
 	if slices.Contains(l.Instructions.Agents, id) {
 		// a text that can't be read is unknown, not empty: writing what
 		// is left would take the agent's part out or cut it down (#5709)
@@ -443,6 +454,30 @@ func (l *Library) syncInstructions(t *Target, b *backups, res *Result, auto bool
 	res.changed(id)
 }
 
+// instrOwner is the agent whose part the file t's instructions are in
+// holds when it is also the file of other agents in all: the first of
+// them switched on, "" when none is. Antigravity's app and agy both read
+// ~/.gemini/config/GEMINI.md; one switched off takes nothing out of the
+// file the other is switched on for.
+func (l *Library) instrOwner(t *Target, all []*Target) string {
+	p := filepath.Clean(t.Instructions)
+	for _, o := range all {
+		if o.Instructions != "" && o.Field == t.Field && filepath.Clean(o.Instructions) == p && slices.Contains(l.Instructions.Agents, o.Agent.ID) {
+			return o.Agent.ID
+		}
+	}
+	return ""
+}
+
+// wantedIn is what the file t's instructions are in is to hold: the part
+// of the agent switched on for it (instrOwner), else t's agent's own.
+func (l *Library) wantedIn(t *Target, all []*Target) string {
+	if o := l.instrOwner(t, all); o != "" {
+		return l.wanted(o)
+	}
+	return l.wanted(t.Agent.ID)
+}
+
 // AgentInstructions is one agent's instructions file as the page shows it.
 type AgentInstructions struct {
 	Agent    string `json:"agent"`
@@ -510,7 +545,7 @@ func (l *Library) instructionsView(targets []*Target, asleep []*agent.Agent) *In
 		if o := own(file); o != "" {
 			ai.Own = strings.Count(o, "\n") + 1
 		}
-		if _, have, _, ok := split(file); ok && have != l.wanted(id) && !l.isSetFile(t.Instructions) {
+		if _, have, _, ok := split(file); ok && have != l.wantedIn(t, targets) && !l.isSetFile(t.Instructions) {
 			ai.Edited = true
 		}
 		if t.Override != "" && readText(t.Override) != "" {
@@ -570,8 +605,9 @@ func changeInstructions(f func(l *Library) error) (*Result, error) {
 	if b == nil {
 		b = newBackups()
 	}
-	for _, t := range Targets() {
-		l.syncInstructions(t, b, res, false)
+	all := Targets()
+	for _, t := range all {
+		l.syncInstructions(t, all, b, res, false)
 	}
 	res.Backup = b.dir
 	if b.dir != "" {
