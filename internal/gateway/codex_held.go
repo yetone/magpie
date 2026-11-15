@@ -56,7 +56,11 @@ func codexHoldKey(base string, on *provider.Provider) string {
 
 // noteCodexHold holds who after ChatGPT refused a turn with res's 429,
 // when it named for how long (vendorSaidWhen), as rateRest reads it.
-func noteCodexHold(who string, status int, header http.Header, body []byte) {
+// onCredits: the account goes on past its allowance on credits
+// (relayOnCredits), so one refused as out of it is held only a moment, as
+// the accounts loop rests one (fallbackCooldown, "credits"), not until
+// the window renews with its credits unspent.
+func noteCodexHold(who string, status int, header http.Header, body []byte, onCredits bool) {
 	if who == "" || status != http.StatusTooManyRequests || !vendorSaidWhen(header, body) {
 		return
 	}
@@ -67,6 +71,9 @@ func noteCodexHold(who string, status int, header http.Header, body []byte) {
 	now := time.Now()
 	d := retryAfter(header, now)
 	d = max(d, min(resetsNoted(header, now), longestQuota), min(resetsAt(body, now), longestQuota))
+	if onCredits && why == failQuota {
+		d = min(d, fallbackCooldown)
+	}
 	if d <= 0 {
 		return
 	}

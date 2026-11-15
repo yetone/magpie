@@ -962,7 +962,7 @@ func readAllowances(agent string) map[string]Allowance {
 				}
 				c.read[key] = st
 			}
-			var renewed, restarts []string
+			var renewed, restarts, credits []string
 			for user, a := range all {
 				key := agent + "/" + strings.ToLower(user)
 				if c.renewed[key] > began {
@@ -978,6 +978,11 @@ func readAllowances(agent string) map[string]Allowance {
 					}
 					if a.startedAgain(was.a, was.at, share, now) {
 						restarts = append(restarts, user)
+					}
+					if a.OnCredits() && !was.a.OnCredits() {
+						// credits it was not read to hold: bought once
+						// its allowance ran out (NoteCodexCredits)
+						credits = append(credits, user)
 					}
 				}
 				c.seen[key] = reading{a, now}
@@ -1012,6 +1017,11 @@ func readAllowances(agent string) map[string]Allowance {
 			}
 			for _, user := range restarts {
 				tellStarted(agent, user)
+			}
+			for _, user := range credits {
+				if agent != "codex" || CodexCredits(user) {
+					tellCredits(agent, user)
+				}
 			}
 			close(done)
 		})

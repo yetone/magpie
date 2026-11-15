@@ -2,7 +2,9 @@ package provider
 
 import (
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -156,4 +158,129 @@ func heardAllowance(a Allowance, heard []CodexLimit) Allowance {
 		}
 	}
 	return out
+}
+
+// CodexGoesOnCredits is whether a ChatGPT account goes on past its
+// allowance on credits, told as Codex reads them (/wham/usage's credits,
+// the x-codex-credits-* headers, a codex.rate_limits event's credits):
+// unlimited, or holding them (has_credits) — a balance said and spent (0
+// or less) is none left, whatever has_credits says. A balance not said,
+// or not a number, is held.
+func CodexGoesOnCredits(has, unlimited bool, balance string) bool {
+	if unlimited {
+		return true
+	}
+	if !has {
+		return false
+	}
+	n, err := strconv.ParseFloat(strings.TrimSpace(balance), 64)
+	return err != nil || n > 0
+}
+
+// NoteCodexCredits keeps what a reply said of the credits of agent's
+// account user (agent as its usage is read): whether it goes on past its
+// allowance on them (CodexGoesOnCredits). ChatGPT says it on every reply,
+// the 429 that turns a turn away as out of its allowance too, and Codex
+// reads it there (codex-api's parse_credits_snapshot) — /wham/usage alone,
+// read once a minute or failing, left an account that had bought credits
+// benched as used up until its window renewed, days on, where Codex by
+// itself went on on them (@123xtv03k on X). Turned on, those OnCredits
+// asked are told, once the account is let spend them (CodexCredits).
+func NoteCodexCredits(agent, user string, on bool) {
+	if user == "" {
+		return
+	}
+	key := agent + "/" + strings.ToLower(user)
+	was := false
+	c := &loginUsageCache
+	c.Lock()
+	if e, ok := c.m[key]; ok {
+		for _, w := range e.q.Windows {
+			was = was || w.Credits
+		}
+		e.q.Windows = creditsWindows(e.q.Windows, on)
+		if e.read.Error == "" {
+			e.read.Windows = creditsWindows(e.read.Windows, on)
+		}
+		if on && agent == "codex" {
+			// the Codex app holds no account with credits (codexHeld)
+			e.q.Held, e.read.Held = false, false
+		}
+		c.m[key] = e
+	}
+	c.Unlock()
+	u := &usedCache
+	u.Lock()
+	m := u.m[agent]
+	for name, a := range m {
+		if !strings.EqualFold(name, user) {
+			continue
+		}
+		was = was || a.OnCredits()
+		a = creditsAllowance(a, on)
+		kept := make(map[string]Allowance, len(m))
+		for k, v := range m {
+			kept[k] = v
+		}
+		kept[name] = a
+		u.m[agent] = kept
+		break
+	}
+	if h, ok := u.heard[key]; ok {
+		u.heard[key] = heardOnly{h.user, creditsAllowance(h.a, on)}
+	}
+	u.Unlock()
+	if on && !was && (agent != "codex" || CodexCredits(user)) {
+		tellCredits(agent, user)
+	}
+}
+
+// creditsWindows is ws, copied, each window that counts every model told
+// whether the account goes on past it on credits.
+func creditsWindows(ws []QuotaWindow, on bool) []QuotaWindow {
+	out := make([]QuotaWindow, len(ws))
+	copy(out, ws)
+	for i := range out {
+		if !out[i].Aside && out[i].Model == "" {
+			out[i].Credits = on
+		}
+	}
+	return out
+}
+
+// creditsAllowance is creditsWindows for an allowance as routing keeps it.
+func creditsAllowance(a Allowance, on bool) Allowance {
+	out := make(Allowance, len(a))
+	copy(out, a)
+	for i := range out {
+		if out[i].Model == "" && out[i].matches == nil {
+			out[i].Credits = on
+		}
+	}
+	return out
+}
+
+// OnCredits asks f to be told of a ChatGPT account found to go on past its
+// allowance on credits it was not known to hold (NoteCodexCredits, or a
+// reading of its usage), and let spend them: what held it as out of its
+// allowance holds it no more.
+func OnCredits(f func(agent, user string)) {
+	creditsHooks.Lock()
+	creditsHooks.fs = append(creditsHooks.fs, f)
+	creditsHooks.Unlock()
+}
+
+var creditsHooks struct {
+	sync.Mutex
+	fs []func(agent, user string)
+}
+
+// tellCredits tells those OnCredits asked.
+func tellCredits(agent, user string) {
+	creditsHooks.Lock()
+	fs := creditsHooks.fs
+	creditsHooks.Unlock()
+	for _, f := range fs {
+		f(agent, user)
+	}
 }

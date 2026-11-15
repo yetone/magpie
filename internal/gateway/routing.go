@@ -939,9 +939,40 @@ func liftRests(agent, user string, vendorTill bool) {
 	}
 }
 
+// creditsKnown lifts the rests out of its allowance of a ChatGPT account
+// found to go on past it on credits (provider.OnCredits), whatever time
+// the refusal named: a turn turned away before magpie knew of the credits
+// — bought once the plan ran out, or its reading failed or not come yet —
+// rested the account until its window renewed, days on, while Codex by
+// itself goes on on them (@123xtv03k on X). A rate limit's rest, or one
+// out of the credits themselves, stands; so does Codex's own hold of a
+// relayed turn for them.
+func creditsKnown(agent, user string) {
+	if agent != "codex" {
+		return
+	}
+	restingUntil.Lock()
+	now := time.Now()
+	for k, r := range restingUntil.note {
+		if r.agent != agent || !strings.EqualFold(r.user, user) || !(r.Why == failQuota || r.By == "window") {
+			continue
+		}
+		delete(restingUntil.m, k)
+		delete(restingUntil.note, k)
+		liftedLocked(k, now)
+	}
+	restingUntil.Unlock()
+	codexHolds.Lock()
+	if h, ok := codexHolds.m[strings.ToLower(user)]; ok && h.why == failQuota {
+		delete(codexHolds.m, strings.ToLower(user))
+	}
+	codexHolds.Unlock()
+}
+
 func init() {
 	provider.OnRenewed(renewed)
 	provider.OnStarted(restarted)
+	provider.OnCredits(creditsKnown)
 }
 
 // staleAllowance is provider.StaleAllowance, swapped in tests.

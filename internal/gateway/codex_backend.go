@@ -1342,6 +1342,13 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 				// row, to sign in again (#1793)
 				noteSignIn(ctx, on.Account, req, res)
 			}
+			if rest == "/responses" && res.StatusCode == http.StatusTooManyRequests {
+				if acct, ok := codexRelayedAccount(base, r.Header, on); ok {
+					// what the refusal says of the account's credits, for
+					// asking again on them below (heardCodexCredits)
+					heardCodexCredits(acct, res.Header)
+				}
+			}
 			if !creditsAsked && rest == "/responses" && base != codexAPIBase && res.StatusCode == http.StatusTooManyRequests && relayOnCredits(on) {
 				// the account holds credits and was refused as out of its
 				// allowance: ChatGPT may turn away the turn that uses the
@@ -1467,7 +1474,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 			res.Body = io.NopCloser(bytes.NewReader(msg))
 			// its credits and resets looked at above, a 429 that names
 			// when the account is back holds it till then (codexHolds)
-			noteCodexHold(holdKey, res.StatusCode, res.Header, msg)
+			noteCodexHold(holdKey, res.StatusCode, res.Header, msg, relayOnCredits(on))
 			if overload && codexBusy(res.StatusCode, msg) && s.codexFallsBack(r, body) {
 				// still too busy once asked again: the fallbacks answer
 				said := provider.APIError(msg, res.Status)

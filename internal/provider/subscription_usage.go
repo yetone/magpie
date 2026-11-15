@@ -1220,17 +1220,7 @@ func codexWindows(ctx context.Context, token, accountID string) (plan string, ou
 // or less) is none left, whatever has_credits says.
 func codexGoesOnCredits(u codexUsage) bool {
 	c := u.Credits
-	if c == nil {
-		return false
-	}
-	if c.Unlimited {
-		return true
-	}
-	if !c.Has {
-		return false
-	}
-	n, err := strconv.ParseFloat(strings.TrimSpace(c.Balance), 64)
-	return err != nil || n > 0
+	return c != nil && CodexGoesOnCredits(c.Has, c.Unlimited, c.Balance)
 }
 
 // codexUsage is what /wham/usage tells of a ChatGPT account.

@@ -1,6 +1,8 @@
 package provider
 
 import (
+	"slices"
+	"sync"
 	"testing"
 	"time"
 )
@@ -184,5 +186,128 @@ func TestNoteCodexLimitsKnowsAnUnreadAccount(t *testing.T) {
 	failed()
 	if _, ok := readAgain()["me@example.com"]; ok {
 		t.Fatal("what a reply told outlived the reading that replaced it")
+	}
+}
+
+// creditsTold records the accounts OnCredits tells of, from now on.
+func creditsTold(t *testing.T) func() []string {
+	t.Helper()
+	var mu sync.Mutex
+	var told []string
+	on := true
+	OnCredits(func(agent, user string) {
+		mu.Lock()
+		defer mu.Unlock()
+		if on {
+			told = append(told, agent+"/"+user)
+		}
+	})
+	t.Cleanup(func() { mu.Lock(); on = false; mu.Unlock() })
+	return func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		out := slices.Clone(told)
+		told = nil
+		return out
+	}
+}
+
+// @123xtv03k on X: a ChatGPT account whose plan ran out goes on on credits
+// it bought, which Codex reads from every reply, the refusal too. What a
+// reply says of them is routing's and the Usage page's at once, held by
+// the Codex app no more, and those OnCredits asked are told when it is
+// newly so — not again, not when it says none, and not for an account
+// set not to spend them.
+func TestNoteCodexCreditsKeepsThem(t *testing.T) {
+	isolate(t)
+	resetUsed(t)
+	told := creditsTold(t)
+	now := time.Now()
+	five, week := now.Add(2*time.Hour), now.Add(4*24*time.Hour)
+	usedCache.Lock()
+	usedCache.m["codex"] = map[string]Allowance{
+		"Me@example.com":    {{Used: 100, Resets: five, Span: 5 * time.Hour}, {Used: 100, Resets: week, Span: 7 * 24 * time.Hour}},
+		"spare@example.com": {{Used: 20, Resets: five, Span: 5 * time.Hour}},
+	}
+	usedCache.at["codex"] = now
+	usedCache.Unlock()
+	loginUsageCache.Lock()
+	loginUsageCache.m = map[string]loginUsageEntry{"codex/me@example.com": {at: now,
+		q: SubscriptionQuota{Provider: "codex", Held: true, Windows: []QuotaWindow{
+			{Name: "5 hours", Used: 100, ResetsAt: &five, Span: 5 * time.Hour},
+			{Name: "7 days", Used: 100, ResetsAt: &week, Span: 7 * 24 * time.Hour}}}}}
+	loginUsageCache.Unlock()
+
+	NoteCodexCredits("codex", "me@example.com", true)
+	m := Allowances("codex")
+	if !m["Me@example.com"].OnCredits() || m["spare@example.com"].OnCredits() {
+		t.Fatalf("after the reply: %+v", m)
+	}
+	loginUsageCache.Lock()
+	e := loginUsageCache.m["codex/me@example.com"]
+	loginUsageCache.Unlock()
+	if e.q.Held || !e.q.Windows[0].Credits || !e.q.Windows[1].Credits {
+		t.Fatalf("the Usage page's reading: held %v, %+v", e.q.Held, e.q.Windows)
+	}
+	if got := told(); !slices.Equal(got, []string{"codex/me@example.com"}) {
+		t.Fatalf("told %v", got)
+	}
+	NoteCodexCredits("codex", "me@example.com", true)
+	if got := told(); len(got) != 0 {
+		t.Fatalf("told again: %v", got)
+	}
+	NoteCodexCredits("codex", "me@example.com", false)
+	if Allowances("codex")["Me@example.com"].OnCredits() {
+		t.Fatal("a reply saying none left it on its credits")
+	}
+	if err := SetCodexCredits("me@example.com", false); err != nil {
+		t.Fatal(err)
+	}
+	NoteCodexCredits("codex", "me@example.com", true)
+	if got := told(); len(got) != 0 {
+		t.Fatalf("told of an account set not to spend them: %v", got)
+	}
+}
+
+// Credits bought after the plan ran out show first in a reading: routing
+// is told (OnCredits) as the reading finds them, not only when a reply
+// says so.
+func TestReadingTellsCreditsBought(t *testing.T) {
+	signIn(t)
+	rememberLogins(true)
+	resetUsed(t)
+	told := creditsTold(t)
+	readAgain := func(credits bool) {
+		five := time.Now().Add(2 * time.Hour)
+		loginUsageCache.Lock()
+		loginUsageCache.m = map[string]loginUsageEntry{"codex/me@example.com": {at: time.Now(),
+			q: SubscriptionQuota{Provider: "codex", Windows: []QuotaWindow{{Name: "5 hours", Used: 100, ResetsAt: &five, Span: 5 * time.Hour, Credits: credits}}}}}
+		loginUsageCache.Unlock()
+		usedCache.Lock()
+		usedCache.at["codex"] = time.Time{}
+		usedCache.Unlock()
+		Allowances("codex")
+		for {
+			usedCache.Lock()
+			done := usedCache.loading["codex"]
+			usedCache.Unlock()
+			if done == nil {
+				break
+			}
+			<-done
+		}
+	}
+	readAgain(false)
+	readAgain(false)
+	if got := told(); len(got) != 0 {
+		t.Fatalf("told with no credits: %v", got)
+	}
+	readAgain(true)
+	if got := told(); !slices.Equal(got, []string{"codex/me@example.com"}) {
+		t.Fatalf("told %v", got)
+	}
+	readAgain(true)
+	if got := told(); len(got) != 0 {
+		t.Fatalf("told again: %v", got)
 	}
 }
