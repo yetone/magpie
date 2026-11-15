@@ -897,6 +897,12 @@ cause:
     push until d5585933f's run finished at ~01:45 with the red. A docs
     page change runs site/worker.test.mjs, because llms-full.txt is
     built from those pages (fixed in 3d8860010).
+    Again 11-15: 256910f17 changed the Antigravity entry in the
+    subscriptions docs, ran Go and GUI tests but not site/, and its own
+    run was cancelled; cli (linux/amd64) went red at 2d106b5c1 (fixed
+    in 25ad34f42). Twice in three days: a change under site/public/docs
+    ends with `node llms-full.mjs` and `node --test site/*.test.mjs`
+    from the repo root, as test.yml runs it.
   - 10-28: of main's last 58 Test runs, 49 were cancelled by the next
     push. 0b99b8fbe's new allocation bound went red in macOS's Race job
     (sync.Pool lets go under -race) at 25df3187b, the first run after it
