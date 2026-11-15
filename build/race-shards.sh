@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # race-shards.sh DIR BIN N [FLAGS]: runs the tests of BIN, a package's test
-# binary (go test -c), from the package's DIR in N processes at once, and
+# binary (go test -c, with -race or without: CI's Test step runs the
+# gateway's plain binary through it too, #2191), from the package's DIR in N
+# processes at once, and
 # fails if any test process does. FLAGS go to every process. A package's
 # tests run one at a time unless they call t.Parallel, which t.Setenv rules
 # out, so the gateway's suite under the race detector keeps one core busy;

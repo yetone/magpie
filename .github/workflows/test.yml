@@ -65,11 +65,19 @@ jobs:
         with:
           bun-version: 1.4.2
 
-      # internal/gateway takes 450-600s on macOS runners, and go test's
-      # default 10m timed it out in 3 of 8 finished main runs (#2108).
+      # internal/gateway's tests run one at a time (t.Setenv rules out
+      # t.Parallel): 892s on mote for 4286 tests on 11-15, none over 20s,
+      # 965s on macOS CI, and past the 30m alarm on f1c9014cd with no test
+      # hung (#2191). It grew from 450-600s on 10-28, so a longer timeout
+      # would only be met again. Its plain run goes in chunks, one process
+      # per core, as the Race step's does; the other packages run as before.
       - name: Test
         if: runner.os != 'Windows'
-        run: go test -timeout 30m -tags "${{ steps.tags.outputs.tags }}" ./...
+        shell: bash
+        run: |
+          go test -timeout 30m -tags "${{ steps.tags.outputs.tags }}" $(go list -tags "${{ steps.tags.outputs.tags }}" ./... | grep -v '/internal/gateway$')
+          go test -c -o "$RUNNER_TEMP/gateway.test" -tags "${{ steps.tags.outputs.tags }}" ./internal/gateway/
+          build/race-shards.sh internal/gateway "$RUNNER_TEMP/gateway.test" "$(getconf _NPROCESSORS_ONLN)" -test.timeout=20m
 
       # Windows skips the Test step above, so the two plugin stderr tests run
       # here. The end-to-end one needs bun on PATH; without it it skips.
