@@ -114,6 +114,14 @@
     </button>
   </div>
 </header>
+<!-- Windows: the header is the window's title bar (app.css .wincap), and
+     these are its minimise, maximise and close, drawn as Windows draws
+     them (app.js magpieCaption) -->
+<div class="wincap" id="wincap" style="--wails-draggable:no-drag">
+  <button type="button" data-cap="min" data-tt="Minimize" tabindex="-1">&#xE921;</button>
+  <button type="button" data-cap="max" data-tt="Maximize" tabindex="-1">&#xE922;</button>
+  <button type="button" data-cap="close" data-tt="Close" tabindex="-1">&#xE8BB;</button>
+</div>
 
 <nav class="ptabs" id="ptabs" hidden>
   <button type="button" data-ptab="agents"><span data-t>Agents</span><em id="ptabN"></em></button>

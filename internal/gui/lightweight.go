@@ -8,6 +8,7 @@ import (
 	"os"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -55,6 +56,7 @@ func (h *host) makeMain(url string) *application.WebviewWindow {
 		Hidden:           true,
 		StartState:       state,
 		AlwaysOnTop:      onTop,
+		Frameless:        mainFrameless(runtime.GOOS),
 		Mac:              mainMacWindow(),
 		Windows:          winOpts,
 		BackgroundColour: winBg,
@@ -62,8 +64,20 @@ func (h *host) makeMain(url string) *application.WebviewWindow {
 	h.zoomWhenLoaded(w)
 	lowWhileHidden(w)
 	h.mendWebView(w)
-	if runtime.GOOS == "windows" {
-		w.OnWindowEvent(events.Common.WindowRuntimeReady, func(*application.WindowEvent) { w.ExecJS(frameOnlyResizeJS) })
+	if mainFrameless(runtime.GOOS) {
+		// the page's caption buttons follow the window's maximised state
+		// (captionJS); a resize that changes it says so, once
+		var maxed atomic.Bool
+		w.OnWindowEvent(events.Common.WindowRuntimeReady, func(*application.WindowEvent) {
+			m := w.IsMaximised()
+			maxed.Store(m)
+			w.ExecJS(captionJS(m))
+		})
+		w.OnWindowEvent(events.Common.WindowDidResize, func(*application.WindowEvent) {
+			if m := w.IsMaximised(); maxed.Swap(m) != m {
+				w.ExecJS(captionJS(m))
+			}
+		})
 	}
 	// A resize is kept once it settles (settle): the size, or that the
 	// window is maximised. Nothing is kept of a window not placed and shown

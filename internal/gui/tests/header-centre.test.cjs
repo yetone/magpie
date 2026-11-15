@@ -41,8 +41,10 @@ const settled = (page) => page.evaluate(() => new Promise((r) => requestAnimatio
 const header = (page) => page.evaluate(() => {
   const top = document.querySelector(".top"), r = top.getBoundingClientRect();
   const n = document.querySelector("#nav").getBoundingClientRect(), a = document.querySelector(".actions").getBoundingClientRect();
-  // the layout's button, shown, is what the tabs sit after
-  const lead = document.querySelector("#sideToggle"), from = lead.offsetParent ? lead.getBoundingClientRect().right : r.left;
+  // what the tabs sit after, as fitTop finds it: the brand where it shows
+  // (Windows' header is its title bar, 258a14 on X), else the layout's button
+  const lead = [document.querySelector(".brand"), document.querySelector("#sideToggle")].find((e) => e.offsetParent);
+  const from = lead ? lead.getBoundingClientRect().right : r.left;
   return {
     cls: top.className, update: !document.querySelector("#update").hidden,
     off: n.left + n.width / 2 - innerWidth / 2, left: n.left - from, right: a.left - n.right,
@@ -58,10 +60,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       if (errors.length) console.log(errors);
       await browser.close();
     });
-    for (const lang of ["zh", "en"]) for (const zoom of [1, 1.1, 1.25]) {
-      await t.test(`${lang} at ${Math.round(zoom * 100)}%`, async () => {
+    // Windows, whose header is its title bar with the caption buttons at its
+    // right (258a14 on X), and Linux, whose header has nothing past its own
+    for (const platform of ["Win32", "Linux x86_64"]) for (const lang of ["zh", "en"]) for (const zoom of [1, 1.1, 1.25]) {
+      await t.test(`${platform} ${lang} at ${Math.round(zoom * 100)}%`, async () => {
         const ctx = await browser.newContext({ viewport: { width: Math.round(1100 / zoom), height: 600 }, deviceScaleFactor: zoom });
-        await ctx.addInitScript(() => { Object.defineProperty(Navigator.prototype, "platform", { get: () => "Win32" }); });
+        await ctx.addInitScript((p) => { Object.defineProperty(Navigator.prototype, "platform", { get: () => p }); }, platform);
         const page = await ctx.newPage();
         page.on("pageerror", (e) => errors.push(e.message));
         await page.route("**/*", server(lang));
@@ -88,7 +92,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           // the closer tabs are tried in the middle before the row
           if (h.cls.includes("cramped") && !h.cls.includes("inrow")) middle += 1000;
         }
-        assert(middle > 1000, `the closer tabs were never in the middle (${middle})`);
+        // Windows' caption buttons leave English no width where the closer
+        // tabs fit in the middle: they go from the middle to the row
+        if (!(platform === "Win32" && lang === "en")) assert(middle > 1000, `the closer tabs were never in the middle (${middle})`);
         assert(inrow > 0, "the narrowest windows never put the tabs in the row");
         await ctx.close();
       });

@@ -3,6 +3,7 @@
 package gui
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -30,18 +31,27 @@ func mainMacWindow() application.MacWindow {
 	}
 }
 
-// frameOnlyResizeJS leaves resizing the main window on Windows to its own
-// frame. Wails' page script arms a resize along every edge inside the page
-// (SM_CYSIZEFRAME pixels, its drag.ts) whenever the window is resizable on
-// Windows, frame or no frame; meant for a frameless window, in the framed
-// main window it made the top of the page, under the title bar, drag the
-// window's height too (shangyuan0818 on Discord). Its switch is turned off,
-// and kept off: Wails turns it on again once its script is ready, which may
-// come before this or after. Linux and the Mac never arm it on a framed
-// window.
-const frameOnlyResizeJS = `(()=>{const w=window._wails;if(!w||typeof w.setResizable!=="function")return;` +
-	`if(!w.setResizable.frameOnly){const f=w.setResizable;w.setResizable=()=>f(false);w.setResizable.frameOnly=true}` +
-	`w.setResizable(false)})();`
+// mainFrameless: the main window on Windows has no title bar of its own.
+// The page's header is its title bar, as on the Mac, so a wallpaper or the
+// page's colour runs to the top of the window instead of under a separate
+// strip (258a14 on X); the page draws minimise, maximise and close
+// (#wincap). Wails keeps the frame's styles, so the window still snaps,
+// casts its shadow and has rounded corners on Windows 11.
+func mainFrameless(goos string) bool { return goos == "windows" }
+
+// captionJS tells the page whether the window is maximised, and keeps
+// Wails' resize edges inside the page off while it is. A frameless window
+// is resized by those edges (SM_CYSIZEFRAME pixels, Wails' drag.ts), which
+// Wails arms whenever the window is resizable; maximised, they would take
+// the top-right pixel from Close and the top row from the header's drag.
+// Wails turns them on again once its script is ready, which may come
+// before this or after, so its switch is wrapped once and remembers what
+// it was last asked.
+func captionJS(maximised bool) string {
+	return fmt.Sprintf(`(()=>{const m=%t;window.magpieMaximised=m;const w=window._wails;`+
+		`if(w&&typeof w.setResizable==="function"){if(!w.setResizable.edges){const f=w.setResizable,g=v=>{g.on=v;f(!!v&&!window.magpieMaximised)};g.edges=true;g.on=true;w.setResizable=g}w.setResizable(w.setResizable.on)}`+
+		`if(typeof window.magpieCaption==="function")window.magpieCaption(m)})();`, maximised)
+}
 
 type closeAction int
 

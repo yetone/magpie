@@ -2,7 +2,7 @@
 // The header's logo and name: in `magpie web` they're shown whatever the
 // machine, since a browser tab has no title bar of the app's to show them
 // (they were hidden everywhere but a Mac or Linux window); in the Windows
-// window they stay hidden, its title bar already has them.
+// window too, whose header is its title bar now (258a14 on X).
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -33,7 +33,7 @@ const cases = [
   { web: true, platform: "Win32", shown: true },
   { web: true, platform: "MacIntel", shown: true },
   { web: true, platform: "Linux x86_64", shown: true },
-  { web: false, platform: "Win32", shown: false },
+  { web: false, platform: "Win32", shown: true },
   { web: false, platform: "MacIntel", shown: true },
 ];
 

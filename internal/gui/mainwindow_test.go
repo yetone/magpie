@@ -3,6 +3,7 @@
 package gui
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -141,25 +142,51 @@ func TestClosingHidesShownAccounts(t *testing.T) {
 	}
 }
 
-// shangyuan0818 on Discord: on Windows the top of the page, under the
-// title bar, resized the window's height as its frame does. Wails' page
-// script arms that edge whenever it is told the window is resizable, which
-// Wails says once its script is ready, before or after magpie's hook runs;
-// either way, and with the hook run twice, the edge stays off. Its stand-in
-// here keeps what each setResizable call said, as drag.ts does.
-func TestFrameOnlyResizeStaysOff(t *testing.T) {
+// The main window on Windows has no title bar of its own; the page's header
+// is its title bar (258a14 on X: a wallpaper stopped under a white strip).
+// Linux and the Mac keep theirs.
+func TestMainWindowFramelessOnWindowsOnly(t *testing.T) {
+	for goos, want := range map[string]bool{"windows": true, "darwin": false, "linux": false} {
+		if got := mainFrameless(goos); got != want {
+			t.Errorf("mainFrameless(%q) = %v, want %v", goos, got, want)
+		}
+	}
+	src, err := os.ReadFile("lightweight.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(src), "Frameless:        mainFrameless(runtime.GOOS),") {
+		t.Error("makeMain doesn't make the main window by mainFrameless")
+	}
+}
+
+// A frameless window is resized by Wails' edges inside the page, which
+// Wails arms once its script is ready, before or after magpie's hook runs.
+// Restored, they stay on, so the window can be resized; maximised, they
+// stay off whichever came first and however often, so the top-right pixel
+// is Close's and the top row drags. The page hears the state each time.
+// The stand-in keeps what each setResizable call said, as drag.ts does.
+func TestCaptionKeepsEdgesOffWhileMaximised(t *testing.T) {
 	node, err := exec.LookPath("node")
 	if err != nil {
 		t.Fatal("node is needed to run the page's script: ", err)
 	}
-	stub := `const said=[];window._wails={setResizable:v=>said.push(v)};`
+	stub := `const said=[],heard=[];window._wails={setResizable:v=>said.push(v)};window.magpieCaption=m=>heard.push(m);`
 	ready := `window._wails.setResizable(true);` // what Wails runs once its script is ready
-	last := `if(said.at(-1)!==false){console.log(JSON.stringify(said));process.exit(1)}`
+	expect := func(edges, m bool) string {
+		return fmt.Sprintf(`if(said.at(-1)!==%t||heard.at(-1)!==%t||window.magpieMaximised!==%t){console.log(JSON.stringify({said,heard}));process.exit(1)}`, edges, m, m)
+	}
+	max, restored := captionJS(true), captionJS(false)
 	for name, js := range map[string]string{
-		"hook after Wails":  stub + ready + frameOnlyResizeJS + last,
-		"hook before Wails": stub + frameOnlyResizeJS + ready + last,
-		"hook twice":        stub + frameOnlyResizeJS + frameOnlyResizeJS + ready + ready + last,
-		"no runtime":        `const window={};` + frameOnlyResizeJS,
+		"maximised, hook after Wails":  stub + ready + max + expect(false, true),
+		"maximised, hook before Wails": stub + max + ready + expect(false, true),
+		"maximised, hook twice":        stub + max + max + ready + ready + expect(false, true),
+		"restored, hook after Wails":   stub + ready + restored + expect(true, false),
+		"restored, hook before Wails":  stub + restored + ready + expect(true, false),
+		"restored after maximised":     stub + ready + max + restored + expect(true, false),
+		"maximised after restored":     stub + ready + restored + max + expect(false, true),
+		"Wails says not resizable":     stub + restored + `window._wails.setResizable(false);` + restored + expect(false, false),
+		"no runtime":                   `const window={};` + max,
 	} {
 		script := "const window=globalThis;" + js
 		if name == "no runtime" {
@@ -167,7 +194,7 @@ func TestFrameOnlyResizeStaysOff(t *testing.T) {
 		}
 		out, err := exec.Command(node, "-e", script).CombinedOutput()
 		if err != nil {
-			t.Errorf("%s: the page's edge is armed: %v %s", name, err, out)
+			t.Errorf("%s: %v %s", name, err, out)
 		}
 	}
 }

@@ -9,7 +9,7 @@
 // has no page zoom to set, so it is the device scale factor there. A Windows
 // window is swept from 1300 to 700 points at 110 and 125%, with an Update
 // pill waiting: a wider window is never drawn in more than a narrower one,
-// and with room to spare the header is as at 100%. English and Chinese; no
+// and a header with a pixel to spare is as at 100%. English and Chinese; no
 // backend, the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -55,11 +55,28 @@ async function zoomed(engine, zoom, t) {
 }
 
 const settled = (page) => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+// whether the whole header, none of it drawn in, fits with a pixel to spare
+// either side of the tabs, the buttons against the padding give or take
+// #457's hair; Windows' caption buttons sit in the
+// header's right padding (258a14 on X), so no fixed window width says it
+const room = (page) => page.evaluate((all) => {
+  const top = document.querySelector(".top"), was = top.className;
+  top.classList.remove(...all);
+  const shown = (s) => { const e = document.querySelector(s); return e && e.offsetParent ? e : null; };
+  const r = top.getBoundingClientRect(), a = document.querySelector(".actions").getBoundingClientRect();
+  const n = document.querySelector("#nav").getBoundingClientRect();
+  const lead = shown("#navBack") || shown(".brand") || shown("#sideToggle");
+  const left = lead ? lead.getBoundingClientRect().right : r.left + parseFloat(getComputedStyle(top).paddingLeft);
+  const ok = a.right <= r.right - parseFloat(getComputedStyle(top).paddingRight) + 0.5 && left + 9 <= n.left && n.right + 9 <= a.left;
+  top.className = was;
+  return ok;
+}, STEPS);
 const steps = (page) => page.evaluate((all) => all.filter((c) => document.querySelector(".top").classList.contains(c)).length, STEPS);
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   test(engine + ": a zoomed header with room is drawn as at 100%", async (t) => {
     assert(["chromium", "webkit"].includes(engine), "BROWSER must be chromium or webkit");
+    let roomy = 0;
     for (const lang of ["zh", "en"]) for (const zoom of [1.1, 1.25]) {
       await t.test(`${lang} at ${Math.round(zoom * 100)}%`, async (t) => {
         const ctx = await zoomed(engine, zoom, t);
@@ -78,7 +95,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await page.setViewportSize({ width: engine === "webkit" ? Math.round(w / zoom) : w, height: 600 });
           await settled(page);
           const n = await steps(page), at = `${w}pt: ${await page.evaluate(() => document.querySelector(".top").className)}`;
-          if (w >= 1200) assert.equal(n, 0, "the header is drawn in with room to spare at " + at);
+          // beside the sidebar the header has no tabs to fit
+          if (!await page.evaluate(() => document.body.classList.contains("side-nav")) && await room(page)) {
+            roomy++;
+            assert.equal(n, 0, "the header is drawn in with room to spare at " + at);
+          }
           assert(n >= last, "a wider window is drawn in more than a narrower one at " + at);
           last = n;
         }
@@ -86,5 +107,6 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(errors, []);
       });
     }
+    assert(roomy > 0, "no window had room for the whole header");
   });
 }

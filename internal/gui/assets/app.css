@@ -231,7 +231,20 @@ code { font: var(--code-style, normal) var(--code-weight, 400) 11.5px var(--code
 body.window.mac .top { padding-left: calc(96px / var(--zoom, 1)); height: calc(50px / var(--zoom, 1)); padding-top: calc(2px / var(--zoom, 1)); }
 body.window.mac .seg { top: calc(50% + 1px / var(--zoom, 1)); } /* 50% centres in the padding box; the 2px top padding puts the flex row a pixel lower */
 .brand { display: flex; align-items: center; gap: 6px; font-weight: 600; letter-spacing: .01em; }
-body.window:not(.mac):not(.linux):not(.web) .brand { display: none; } /* Windows' title bar above already shows the icon and the name; a browser tab has no title bar of the app's */
+/* Windows' window (html.win from layout.js; not the panel, not the web):
+   the header is the title bar (mainwindow.go mainFrameless), its caption
+   buttons fixed at its right as Windows places them, the header's own
+   tools left of them; over a dialog's backdrop too, so the window can
+   always be closed or moved aside; at Windows' own size whatever the text
+   size, as the Mac's traffic lights */
+.wincap { display: none; }
+.win body.window:not(.web) .top { padding-right: calc(146px / var(--zoom, 1)); }
+.win body.window:not(.web) .wincap { display: flex; position: fixed; z-index: 40; top: 0; right: 0; height: var(--top-h, 46px); }
+.wincap button { width: calc(46px / var(--zoom, 1)); height: 100%; display: grid; place-items: center; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--fg); font: calc(10px / var(--zoom, 1)) "Segoe Fluent Icons", "Segoe MDL2 Assets", sans-serif; transition: background-color .1s ease, color .1s ease; }
+.wincap button:hover { background: color-mix(in srgb, var(--fg) 9%, transparent); }
+.wincap button:active { background: color-mix(in srgb, var(--fg) 6%, transparent); color: color-mix(in srgb, var(--fg) 70%, transparent); }
+.wincap button[data-cap="close"]:hover { background: #c42b1c; color: #fff; }
+.wincap button[data-cap="close"]:active { background: color-mix(in srgb, #c42b1c 90%, transparent); color: rgba(255, 255, 255, .7); }
 /* app.js removes these controls later; keep them out of the first paint too. */
 body.window :is(#open, #openMain, #quit),
 /* one control opens the main window, on the panel's edge nearest the tray
