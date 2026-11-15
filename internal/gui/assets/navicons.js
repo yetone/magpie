@@ -16,6 +16,34 @@ window.navSections = (view, items, t) => {
   return items.map((b, i) => [b, i]).sort(([a], [b]) => ranks.indexOf(grp(a)) - ranks.indexOf(grp(b)))
     .map(([b, i]) => [b, i, named && grp(b) !== sect ? t((sect = grp(b)) || "") : ""]);
 };
+// The open page's row folds its list and unfolds it, as a Mac sidebar's
+// disclosure (hkwok06 on X: Settings' list unrolled, and only another page
+// put it away). Its chevron turns to the list while the list shows; a list
+// folded stays folded, per page, until it is opened again.
+window.navFoldRows = (at, folds, shut) => {
+  for (const r of document.querySelectorAll("#nav button[data-view], #prefs")) {
+    const on = !!folds && r === at;
+    r.classList.toggle("can-fold", on);
+    if (!on) { r.removeAttribute("aria-expanded"); continue; }
+    if (!r.querySelector(":scope > .nav-fold")) {
+      const m = el("i", "nav-fold");
+      m.setAttribute("aria-hidden", "true");
+      m.append(svg("m6.5 4.5 3.5 3.5-3.5 3.5", 12, 1.5));
+      r.append(m);
+    }
+    r.setAttribute("aria-expanded", String(!shut));
+  }
+};
+// v's row clicked: folded or unfolded when its list is the one there, else false
+window.navFold = (v) => {
+  const r = v === "settings" ? $("#prefs") : $(`#nav button[data-view="${v}"]`);
+  if (v !== view || !r?.classList.contains("can-fold")) return false;
+  const f = navList("Folded").filter((x) => x !== v);
+  if (r.getAttribute("aria-expanded") === "true") f.push(v);
+  try { localStorage.setItem("magpie.navFolded", JSON.stringify(f)); } catch { /* this time only */ }
+  navSubs();
+  return true;
+};
 window.NAV_SUB_IC = {
   library: {
     instructions: "M4 2.5h5.5L12 5v8.5H4z M9.5 2.5V5H12 M6 8h4 M6 10.5h3",

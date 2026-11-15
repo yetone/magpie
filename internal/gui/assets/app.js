@@ -23405,7 +23405,7 @@ if (mode === "window") for (const b of $("#nav").querySelectorAll("button[data-v
   b.onpointerdown = (e) => { if (e.button === 0) navTopGo(b, true); };
   b.onpointercancel = () => navTopGo(navTopOn(), true);
   b.onpointerleave = (e) => { if (e.buttons & 1) navTopGo(navTopOn(), true); };
-  b.onclick = () => { show(b.dataset.view).then((went) => { if (!went) navTopGo(navTopOn(), true); }); b.blur(); };
+  b.onclick = () => { if (window.navFold?.(b.dataset.view)) return b.blur(); show(b.dataset.view).then((went) => { if (!went) navTopGo(navTopOn(), true); }); b.blur(); };
 }
 // gateway mode's pages' tabs; the page open, one of them, gives way to Providers
 function setGatewayMode(on) {
@@ -23424,7 +23424,9 @@ function offView(v) {
   if (v === "groups" && !gone("routing")) return "routing";
   return gatewayMode || gone("agents") ? "providers" : "agents";
 }
-const navMine = () => { try { return JSON.parse(localStorage.getItem("magpie.navHidden") || "[]"); } catch { return []; } }; // navpages.js
+// a list the sidebar keeps: the pages hidden (navpages.js), the lists folded (navicons.js navFold)
+const navList = (k) => { try { return JSON.parse(localStorage.getItem("magpie.nav" + k) || "[]"); } catch { return []; } };
+const navMine = () => navList("Hidden");
 function navHides() {
   if (mode !== "window") return;
   for (const b of $("#nav").querySelectorAll("button[data-view]")) b.hidden = (gatewayMode && GATEWAY_HIDES.includes(b.dataset.view)) || featureHides(b) || navMine().includes(b.dataset.view);
@@ -23594,7 +23596,7 @@ async function openSettingsAt(e, tab, row) {
   void row.offsetWidth; // the light goes again on a second click
   row.classList.add("flash");
 }
-$("#prefs").onclick = () => { openSettings(); $("#prefs").blur(); };
+$("#prefs").onclick = () => { window.navFold?.("settings") || openSettings(); $("#prefs").blur(); };
 
 // The header's refresh reads again what the page shown draws (#844)
 function refreshKind() {
@@ -23977,14 +23979,17 @@ function navSubs() {
   const side = sideNav();
   const items = side ? navSubItems(view) : [];
   const at = view === "settings" ? $("#prefs") : nav.querySelector(`button[data-view="${view}"]`);
-  const sig = [side, view, locale, pluginUpdates, ...items.map((b) => b.textContent.trim() + (b.classList.contains("on") ? "*" : ""))].join("|");
+  // the open page's row folds its list (navicons.js navFold), and says so
+  const folds = side && at && items.length > 1, shut = folds && navList("Folded").includes(view);
+  const sig = [side, view, locale, pluginUpdates, shut, ...items.map((b) => b.textContent.trim() + (b.classList.contains("on") ? "*" : ""))].join("|");
   if (sig === navSubsAt) return;
   navSubsAt = sig;
+  window.navFoldRows?.(at, folds, shut);
   let box = document.querySelector(".nav-sub:not(.leaving)");
-  const want = side && at && items.length > 1;
+  const want = folds && !shut;
   const above = at?.id === "prefs";
   if (box && (!want || box.dataset.view !== view || (above ? box.nextElementSibling : box.previousElementSibling) !== at)) { navSubLeave(box); box = null; }
-  if (want && !NAV_SUB_IC) import("./navicons.js").then(() => { navSubsAt = ""; navSubs(); }, () => {});
+  if (folds && !NAV_SUB_IC) import("./navicons.js").then(() => { navSubsAt = ""; navSubs(); }, () => {});
   if (want) {
     const fresh = !box;
     if (fresh) {

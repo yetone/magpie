@@ -489,6 +489,16 @@ body.side-nav #nav > button[data-plugin-page]:is(:hover, .dragging)::before { op
 #nav.sorting > button[data-plugin-page] { transition: transform .22s cubic-bezier(.22, 1, .36, 1); }
 #nav > button[data-plugin-page].dragging { position: relative; z-index: 2; background: var(--card); box-shadow: 0 6px 18px rgba(20, 22, 30, .12), 0 0 0 1px var(--line); transition: none; }
 body.side-nav #nav button.has-dot::after { top: 50%; right: 10px; margin-top: -3px; width: 6px; height: 6px; }
+/* the row whose tabs are listed folds them (navicons.js navFold): a disclosure
+   chevron, as a Mac sidebar's, turned down to its list, or up for
+   Settings', which opens above its row */
+.nav-fold { display: none; }
+body.side-nav :is(#nav button, #prefs).can-fold > .nav-fold { display: flex; flex: none; margin-left: auto; transition: transform .2s var(--ease-out); }
+body.side-nav :is(#nav button, #prefs).can-fold > .nav-fold > svg { width: 12px; height: 12px; margin: 0; color: var(--muted); }
+body.side-nav #nav button.can-fold[aria-expanded="true"] > .nav-fold { transform: rotate(90deg); }
+body.side-nav #prefs.can-fold[aria-expanded="true"] > .nav-fold { transform: rotate(-90deg); }
+body.side-nav #nav button.has-dot.can-fold::after { right: 28px; }
+@media (prefers-reduced-motion: reduce) { .nav-fold { transition: none !important; } }
 /* the open page's tabs, under it on a thin line */
 .nav-sub { position: relative; display: flex; flex-direction: column; gap: 1px; margin: 2px 0 6px 16px; padding-left: 8px; }
 .nav-sub.moving { overflow: hidden; }
