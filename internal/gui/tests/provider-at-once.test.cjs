@@ -132,8 +132,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.match(next, /max-accounts/);
         const look = (e) => { const s = getComputedStyle(e); return { bg: s.backgroundColor, border: s.borderTopColor, radius: s.borderTopLeftRadius, height: s.height }; };
         assert.deepEqual(await box(page).evaluate(look), await page.locator(".editor input.concurrency").evaluate(look), "styled as Concurrency is");
-        const h = await label.evaluate((e) => e.getBoundingClientRect().height);
-        const one = await page.locator(".editor label").first().evaluate((e) => e.getBoundingClientRect().height);
+        // the text's own height: a name beside a field is padded down to its line
+        const text = (e) => { const s = getComputedStyle(e); return e.getBoundingClientRect().height - parseFloat(s.paddingTop) - parseFloat(s.paddingBottom); };
+        const h = await label.evaluate(text);
+        const one = await page.locator(".editor label").first().evaluate(text);
         assert(h <= one + 1, `the label takes ${h}px, one line is ${one}px`);
         const stripes = await box(page).evaluate((e) => { const s = getComputedStyle(e); return parseFloat(s.borderLeftWidth) > parseFloat(s.borderRightWidth) || (parseFloat(s.borderLeftWidth) > 0 && s.borderLeftColor !== s.borderRightColor); });
         assert.equal(stripes, false, "no border stripe");

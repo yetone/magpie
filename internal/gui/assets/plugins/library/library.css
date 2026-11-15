@@ -257,6 +257,9 @@ button.row.lib-hubfolded:hover { background: var(--pill); }
 
 /* the switch */
 .lib-switch { flex: none; position: relative; width: 32px; height: 19px; border-radius: 10px; background: var(--line); transition: background .2s var(--ease); }
+/* an empty line of text at the switch's middle: its baseline is a text
+   line's, so a form row's name sits level with it (form-align.test.cjs) */
+.lib-switch::before { content: "\200b"; font-size: 12px; line-height: 19px; }
 .lib-switch i { position: absolute; top: 2px; left: 2px; width: 15px; height: 15px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .25); transition: transform .22s var(--ease); }
 .lib-switch.on { background: var(--mark); }
 .lib-switch.on i { transform: translateX(13px); background: var(--card); }
@@ -667,6 +670,7 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-tooltxt { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .lib-tool .lib-switch { width: 28px; height: 16px; padding: 0; border: 0; cursor: pointer; }
 .lib-tool .lib-switch i { width: 12px; height: 12px; }
+.lib-tool .lib-switch::before { line-height: 16px; }
 .lib-tool .lib-switch.on i { transform: translateX(12px); }
 .lib-tool.off .lib-tooltxt { opacity: .5; }
 .lib-tool.off .lib-toolname { text-decoration: line-through; }

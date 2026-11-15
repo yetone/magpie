@@ -7556,7 +7556,7 @@ let fieldIDs = 0;
 // (yujezhang on X, 11-10: "界面只保留完成操作必需的信息"). lead is the
 // one short line that stays in sight there: what turning it on costs.
 function field(label, control, hint, lead) {
-  const l = el("label", control.classList?.contains("accts") ? "by-list" : "", label); // on a list's first row
+  const l = el("label", "", label);
   const wrap = el("div", hint ? "fld" : "");
   wrap.append(control);
   if (hint) {
@@ -8680,6 +8680,30 @@ function skelWatch() {
   }, 250);
 }
 skelWatch();
+// A form row whose control starts with a text field is set at its top,
+// its name on the field's first line (app.css, .at-top). Marked here: a
+// :has(+ …) rule held WebKit ~9s a layout on Codex's editor.
+const ROW_GRIDS = ".editor, .modal .editor.framed > .ebody, .editor .more .inner, .connect";
+const TEXTY = "input:not([type=checkbox], [type=radio], [type=hidden], [type=range], [type=color], [type=file]), textarea";
+function textFirst(n) {
+  for (let i = 0; i < 4 && n; i++, n = n.firstElementChild) if (n.matches(TEXTY)) return true;
+  return false;
+}
+function settleRows(recs) {
+  const grids = new Set();
+  for (const r of recs) {
+    const g = r.target.closest?.(ROW_GRIDS);
+    if (g) grids.add(g);
+    for (const n of r.addedNodes) if (n.nodeType === 1) for (const x of n.matches(ROW_GRIDS) ? [n] : n.querySelectorAll(ROW_GRIDS)) grids.add(x);
+  }
+  for (const g of grids) for (const c of g.children) {
+    if (c.tagName !== "LABEL") { c.classList.toggle("at-top", textFirst(c)); continue; }
+    const nx = c.nextElementSibling;
+    c.classList.toggle("at-top", !!nx && textFirst(nx));
+    c.classList.toggle("by-json", !!nx && (nx.matches(".extra-body") || !!nx.querySelector(":scope > .extra-body")));
+  }
+}
+new MutationObserver(settleRows).observe(document.body, { childList: true, subtree: true });
 async function skelBird() {
   skelFlying = true;
   let release;

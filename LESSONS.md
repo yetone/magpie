@@ -547,6 +547,25 @@ the panel and gateway mode.**
   and read the `pageerror` stack before calling a timeout load.
 - Seen 1× (2026-11-13).
 
+**A form's name and its control are lined up by the row, never by a
+padding guessed for one kind of control.** Every editor grid (`.editor`,
+a dialog's body, Advanced's rows, Connect) sets its rows on their first
+baseline; a control with no text of its own (a switch, the icon box)
+carries a text line at its middle. A row that starts with a text field
+is set at its top instead, its name on the field's line (`--field-h`):
+WebKit lays a baseline row out again on every layout, and a focused field
+laid out again scrolls the page back to itself. `form-align.test.cjs`
+measures every label beside its control, in every editor it opens.
+- The owner, 11-12, a second time: Free for me and Redaction sat 4-5px
+  under their ticks. Labels had `padding-top: 5px`, right for a 29px
+  input only; the icon row was 5px off, Extra body and every tick too.
+- A baseline row never takes its baseline from a scroller: at 520px
+  Connect's options wrap instead, since WebKit grew the row 6px each time
+  their scrollbar came and went.
+- A new kind of control in a form row runs form-align.test.cjs, and a new
+  editor is added to it.
+- Seen 1× (2026-11-12).
+
 **Playwright's WebKit is not WebKitGTK.** A GUI change with motion or a new
 browser API is tried in the real Linux app too.
 - 18e82adc6 (10-11) traded the layouts in a view transition. The GUI suite
