@@ -189,7 +189,7 @@ func removeDep(ctx context.Context, bun, name string) error {
 		}
 	}
 	if err != nil {
-		log.Printf("plugins: bun remove %s: %v: %s; taken out of package.json instead", name, err, lastLines(string(out), 3))
+		log.Printf("plugins: bun remove %s: %v: %s; taken out of package.json instead", name, err, bunSaid(string(out), 3))
 	}
 	installMu.Lock()
 	defer installMu.Unlock()
@@ -253,10 +253,26 @@ func dropDeps(names ...string) error {
 	return nil
 }
 
-// bunFailedPkg is a package Bun says it couldn't install: "EBUSY: failed
-// copying files from cache to destination for package <name>", "EACCES:
-// Permission denied while installing <name>".
-var bunFailedPkg = lazyre.New(`(?m)(?:failed [a-z /]+ for package|while installing) (@?[A-Za-z0-9._~-]+(?:/[A-Za-z0-9._~-]+)?)\s*$`)
+// bunFailedPkg is a package Bun says it couldn't install, in each way
+// Bun 1.4.4 (src/install) names one: "EBUSY: failed copying files from
+// cache to destination for package <name>", "EACCES: Permission denied
+// while installing <name>", "Failed to open node_modules folder for <name>
+// in …", "failed to install <name>: the downloaded package was not found
+// in the cache", "failed to link <name>: …", "folder path for package
+// <name> is too long", "refusing to install dependency <name> …",
+// "<err> downloading tarball <name>@<version>", "failed to download
+// <name>@<version>", "<err> extracting tarball from <name>" and
+// "<err> extracting tarball for "<name>"". Only the first two were read,
+// and a failure Bun named the other ways failed an add whose own package
+// went in.
+var bunFailedPkg = lazyre.New(`(?m)(?:(?:failed [a-z /]+ for package|while installing) (` + bunPkgName + `)\s*$` +
+	`|(?:Failed to open node_modules folder for|path for package|refusing to (?:install|link) dependency|extracting tarball from) (` + bunPkgName + `)(?:\s|$)` +
+	`|failed to (?:install|link) (` + bunPkgName + `):` +
+	`|(?:downloading tarball|failed to download) (` + bunPkgName + `)@` +
+	`|extracting tarball for "(` + bunPkgName + `)")`)
+
+// bunPkgName is a package's name as Bun writes it in a message.
+const bunPkgName = `@?[A-Za-z0-9._~-]+(?:/[A-Za-z0-9._~-]+)?`
 
 var ansi = lazyre.New(`\x1b\[[0-9;]*m|</?[a-z]>`)
 
@@ -265,8 +281,10 @@ func bunFailed(out string) []string {
 	out = ansi.ReplaceAllString(out, "")
 	var names []string
 	for _, m := range bunFailedPkg.FindAllStringSubmatch(out, -1) {
-		if n := strings.TrimRight(m[1], "."); !slices.Contains(names, n) {
-			names = append(names, n)
+		for _, n := range m[1:] {
+			if n = strings.TrimRight(n, "."); n != "" && !slices.Contains(names, n) {
+				names = append(names, n)
+			}
 		}
 	}
 	return names
@@ -433,10 +451,17 @@ func dropBroken(err error, also ...string) []string {
 
 // othersFailed is whether err, a failed bun add of spec, is only another
 // package's failure, spec's own package installed: the add of it is done,
-// and the plugin Bun couldn't install says so in its own row.
-func othersFailed(err error, spec string) bool {
+// and the plugin Bun couldn't install says so in its own row. want is
+// the version the add was for, "" when that isn't known (a tag or a
+// range): with it, the package is to be in at that version, and a failure
+// that names no package is another's too, as Bun names a package of its
+// own it couldn't install. Bun names some failures in words magpie doesn't
+// read, and printed one that way before "Saved lockfile" with GoAnyAPI
+// installed from the dist branch at the version asked, and the add failed
+// (CHENGJIAHEGOXIS on X, v0.1.4210: "Failed to install 1 package").
+func othersFailed(err error, spec, want string) bool {
 	failed := failedOf(err)
-	if len(failed) == 0 {
+	if len(failed) == 0 && want == "" {
 		return false
 	}
 	name := Name(spec)
@@ -447,5 +472,5 @@ func othersFailed(err error, spec string) bool {
 		return false
 	}
 	v, known := installedVersion(name)
-	return known && v != ""
+	return known && v != "" && (want == "" || v == want)
 }

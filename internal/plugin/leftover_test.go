@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -158,6 +159,96 @@ func goanyapiSandbox(t *testing.T, deps map[string]string, list, busy string) {
 	t.Setenv("MAGPIE_FAKE_BUN_BUSY_SAYS", strings.ReplaceAll(goanyapiBusy, "agency-agents", busy))
 }
 
+// goanyapiUnnamed is what Bun 1.4.4 said adding GoAnyAPI's dist tarball
+// on the reporter's Windows on v0.1.4210, its lines as the error showed
+// them: GoAnyAPI installed, a package failed, and the line naming it was
+// cut off by the error's last-lines (its header lines are Bun's own).
+const goanyapiUnnamed = "bun add v1.4.4 (38afee6c8)\nResolving dependencies\nResolved, downloaded and extracted [1]\n" +
+	"Saved lockfile\n\n" +
+	"installed @magpie-community/tools-goanyapi@./dist/magpie-community-tools-goanyapi-0.1.1.tgz\n\n" +
+	"1 package removed [26.00ms]\nFailed to install 1 package\n"
+
+// The reporter's case on v0.1.4210: from the dist branch, GoAnyAPI went
+// in at the version asked and Bun failed over a package in words magpie
+// doesn't read. The add is done: Bun names a package of its own it
+// couldn't install.
+func TestUnnamedFailureDoesNotFailADistAdd(t *testing.T) {
+	goanyapiSandbox(t, nil, `{"plugins":[]}`, goanyapi)
+	t.Setenv("MAGPIE_FAKE_BUN_BUSY_SAYS", goanyapiUnnamed)
+	if _, err := AddExact(ctxMinute(t), goanyapi+"@latest"); err != nil {
+		t.Fatalf("add from dist failed with GoAnyAPI in: %v", err)
+	}
+	if d := depsOf(t); d[goanyapi] != "./dist/magpie-community-tools-goanyapi-0.1.1.tgz" {
+		t.Fatalf("GoAnyAPI isn't a dependency at its dist tarball: %v", d)
+	}
+	if !slices.ContainsFunc(Load().Plugins, func(e Entry) bool { return Name(e.Spec) == goanyapi }) {
+		t.Fatalf("GoAnyAPI not listed: %+v", Load().Plugins)
+	}
+}
+
+// A failure that names the add's own package still fails it, and so does
+// one that names none when the package isn't in at the version asked.
+func TestOthersFailedNeedsTheAddsOwnVersion(t *testing.T) {
+	depsSandbox(t, map[string]string{goanyapi: "./dist/magpie-community-tools-goanyapi-0.1.1.tgz", "opencode-other-auth": "opencode-other-auth@1.0.0"}, `{"plugins":[]}`)
+	at := filepath.Join(Dir(), "node_modules", filepath.FromSlash(goanyapi))
+	if err := os.MkdirAll(at, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(at, "package.json"), []byte(`{"name":"`+goanyapi+`","version":"0.1.0"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	unnamed := &bunRunError{errors.New("bun add"), goanyapiUnnamed}
+	own := &bunRunError{errors.New("bun add"), "EBUSY: failed copying files from cache to destination for package " + goanyapi}
+	other := &bunRunError{errors.New("bun add"), "EBUSY: failed copying files from cache to destination for package opencode-other-auth"}
+	spec := goanyapi + "@latest"
+	for _, c := range []struct {
+		err  error
+		want string
+		ok   bool
+	}{
+		{unnamed, "0.1.0", true},
+		{unnamed, "0.1.1", false}, // an older copy is not the add's
+		{unnamed, "", false},      // no version to check it against
+		{own, "0.1.0", false},
+		{other, "0.1.0", true},
+		{other, "0.1.1", false},
+		{other, "", true},
+	} {
+		if got := othersFailed(c.err, spec, c.want); got != c.ok {
+			t.Errorf("othersFailed(%q, want %q) = %v, want %v", c.err.(*bunRunError).out, c.want, got, c.ok)
+		}
+	}
+}
+
+// A failed bun add's error says which package Bun couldn't install: the
+// line naming it came before the last lines, which alone were shown.
+func TestBunAddErrorSaysWhatFailed(t *testing.T) {
+	out := "bun add v1.4.4 (38afee6c8)\r\nResolving dependencies\r\nResolved, downloaded and extracted [1]\r\n" +
+		"Unexpected: failed copying files from cache to destination for package opencode-held-auth\r\n" +
+		goanyapiUnnamed[strings.Index(goanyapiUnnamed, "Saved"):]
+	got := bunSaid(out, 6)
+	for _, w := range []string{"for package opencode-held-auth", "installed " + goanyapi, "Failed to install 1 package"} {
+		if !strings.Contains(got, w) {
+			t.Errorf("bunSaid = %q, missing %q", got, w)
+		}
+	}
+	if strings.Contains(got, "\n\n") || strings.Contains(got, "\r") || strings.Contains(got, "Resolving") {
+		t.Errorf("bunSaid = %q: blank lines, CRs or lines before the failure", got)
+	}
+}
+
+// A leftover Bun names in another of its ways is taken out too.
+func TestLeftoverNamedOtherwiseIsTakenOut(t *testing.T) {
+	goanyapiSandbox(t, map[string]string{agency: "github:msitarzewski/agency-agents"}, `{"plugins":[]}`, agency)
+	t.Setenv("MAGPIE_FAKE_BUN_BUSY_SAYS", "bun add v1.4.4 (38afee6c8)\nerror: Failed to open node_modules folder for agency-agents in C:\\p\\node_modules\nFailed to install 1 package\n")
+	if _, err := AddExact(ctxMinute(t), goanyapi+"@latest"); err != nil {
+		t.Fatalf("add failed over a leftover: %v", err)
+	}
+	if _, in := depsOf(t)[agency]; in {
+		t.Fatalf("the leftover is still a dependency: %v", depsOf(t))
+	}
+}
+
 // The reporter's case on v0.1.4205: GoAnyAPI isn't on npm, and its add
 // from the dist branch failed over the leftover, which only the npm add
 // was cleared of. Every add has it: the dist branch's too.
@@ -275,6 +366,19 @@ func TestBunFailed(t *testing.T) {
 		"error: GET https://registry.npmjs.org/x - 404":                                                                                               nil,
 		goanyapiBusy: {agency},
 		strings.ReplaceAll(goanyapiBusy, "\n", "\r\n"): {agency},
+		goanyapiUnnamed: nil,
+		// each other way Bun 1.4.4 names a package it couldn't install
+		"error: Failed to open node_modules folder for \x1b[31m@scope/pkg\x1b[0m in C:\\x\\node_modules\r\n":    {"@scope/pkg"},
+		"error: failed to install <b>agency-agents<r>: the downloaded package was not found in the cache":       {agency},
+		"error: failed to link <b>opencode-x-auth<r>: EPERM":                                                    {"opencode-x-auth"},
+		"error: failed to link into C:\\x\\node_modules\\.bin: EPERM":                                           nil,
+		"ENAMETOOLONG: folder path for package <b>agency-agents<r> is too long":                                 {agency},
+		"error: refusing to install dependency <b>evil<r> with unsafe folder path \"../x\"":                     {"evil"},
+		"error: GET https://codeload.github.com/a/b - 404 downloading tarball <b>agency-agents@github:a/b#1<r>": {agency},
+		"error: failed to download <b>@scope/pkg@1.0.0<r>":                                                      {"@scope/pkg"},
+		"error: ENOENT extracting tarball from <b>opencode-x-auth<r>":                                           {"opencode-x-auth"},
+		"error: Unexpected extracting tarball for \"@scope/pkg\": bad (at byte 1 of 2)":                         {"@scope/pkg"},
+		"Failed to install 1 package": nil,
 	} {
 		if got := bunFailed(out); !slices.Equal(got, want) {
 			t.Errorf("bunFailed(%q) = %v, want %v", out, got, want)
