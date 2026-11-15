@@ -417,7 +417,10 @@ function httpsSays(m) {
 function renderHTTPS(s, asked) {
   const box = $("#httpsList");
   if (!box) return;
-  if (!asked) api("settings/https").then((h) => { httpsState = h; renderHTTPS(prefs, true); }).catch(() => {});
+  // asked while the rows can show, and again once the saved switch moves
+  // from what it said: every Settings draw asking cost a request a draw,
+  // and a page's write counts read it as a write (#6709)
+  if (!asked && s && (s.lan || s.onNetwork || s.https) && (!httpsState || !httpsState.on !== !s.https)) api("settings/https").then((h) => { httpsState = h; renderHTTPS(prefs, true); }).catch(() => {});
   const h = httpsState;
   if (!s || !h || (!s.lan && !s.onNetwork && !h.on)) return void box.replaceChildren();
   const post = (what, body) => writingPrefs(api("settings/https" + what, body))
