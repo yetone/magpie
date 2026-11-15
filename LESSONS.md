@@ -1565,6 +1565,13 @@ each one.
     +7,559 bytes, 12 raises on 11-13 alone, each "no page to move it
     to". Recording each raise here hasn't slowed them; the bound needs
     a rate the owner sets, or a raise that moves out as much (#2710).
+  - A "seen again" is still not work on it, a third time (#1794 on
+    10-12, #2444 on 10-17): #5052 (account-eye) had six comments, the
+    last naming the likely cause and "I'm not taking this", and 2e1c0a377
+    shipped past it and four usage-fold reds on #6003 the same way.
+    Instrumented, every red was a detached button; 17d230d65 fixed it
+    in one helper, 240 of 240 green in 8 parallel runs. When a comment
+    can name the cause, the fix is usually shorter than the comment.
 - **Done right on 10-17.** The retire stack (0f1666b38 to de671719a)
   diffed staticcheck's U1000 against its base for dead code, b98f906b1
   was red on the old code for an own-account gap, and 8 subscriptions
