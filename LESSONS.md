@@ -662,6 +662,31 @@ started under the old one.**
   before it (`-run '^(first half|Target)$'`) instead of rerunning.
 - Seen 2× (2026-10-17, 2026-11-15).
 
+**A request the page sends on its own is looked for in every GUI test
+that counts the page's requests, before it lands.**
+- 4623f5419 (11-10) had every Settings draw send `GET
+  /api/settings/https`. GUI tests count anything under `/api/settings/`
+  as a write, so checkin-now-account and panel-shortcut went red in both
+  engines and every language (2 of 42). Its record ran chosen GUI files
+  and called the reds "the same at base". Fixed in 47ce008da, which also
+  stops the request on draws that show no HTTPS rows.
+- 80a315a70 (11-14) sent `POST /api/page-away` when the page is hidden.
+  WebKit fires that mid-test, and agent-bulk-visibility's count read 6
+  for 5 in WebKit until 38e60d744. e430e2750 had made the same fix for
+  `/api/update/using` on 11-11, file by file.
+- Both helped leave #6709 at 111 red files on main. With half the GUI
+  suite red, a commit's "the same reds on main" says nothing about its
+  own change.
+- Grep `internal/gui/tests` for files that count posts or writes
+  (`posts.push`, `'write'`, `startsWith("/api/settings/")`) and run them
+  all. A route the page calls on every draw also costs a request per
+  draw; ask it only while what it fills can show (#6781).
+- When a cause is suspected for many reds, measure its share (the same
+  files with and without it) before saying so on the issue. The
+  page-away beacon was first named on #6709 as the likely cause; with
+  and without it, 30 of the files gave 640 and 641 reds.
+- Seen 1× (2026-11-15).
+
 **A test that breaks a shared file puts its bytes back, and its cleanup
 checks the write.**
 - ea3dee96a (10-16) had TestFetchPrivateEntries write "{not json" to the
