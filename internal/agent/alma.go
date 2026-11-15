@@ -14,7 +14,10 @@ package agent
 //	                                 imageGen.model the same ("" for Auto)
 //
 // magpie is one provider there, named magpie, of type openai at the
-// gateway's /v1; choosing one of its models makes it Alma's default model,
+// gateway's /v1, under the id of Alma's own Magpie preset (almaPresetID);
+// a Magpie the user set up in Alma first is used in its place, and kept
+// when magpie is switched off (almaMade). Choosing one of its models
+// makes it Alma's default model,
 // and the model magpie draws with Alma's image generation model when Alma
 // has none picked (almaSetImage).
 // Alma not running is no error: there is nothing to read or keep current.
@@ -490,8 +493,16 @@ func almaWire() (string, error) {
 	p := almaMagpie(ps)
 	if p == nil {
 		var made almaProvider
-		if err := almaDo("POST", "/api/providers", map[string]any{"name": magpieID, "type": "openai",
-			"apiKey": almaKey(), "baseURL": gatewayV1(), "enabled": true}, &made); err != nil {
+		body := map[string]any{"name": magpieID, "type": "openai",
+			"apiKey": almaKey(), "baseURL": gatewayV1(), "enabled": true, "icon": almaPresetID}
+		// under the id of Alma's own Magpie preset, so Alma's Providers
+		// page shows it as that preset, set up, and offers no second one
+		// (realLemonawa on X); a provider of that id already there, at
+		// another address, is the user's, and keeps it
+		if !slices.ContainsFunc(ps, func(o almaProvider) bool { return o.ID == almaPresetID }) {
+			body["id"] = almaPresetID
+		}
+		if err := almaDo("POST", "/api/providers", body, &made); err != nil {
 			return "", err
 		}
 		if made.ID == "" {
@@ -506,6 +517,11 @@ func almaWire() (string, error) {
 		}
 		p = &made
 	} else if p.BaseURL != gatewayV1() || !p.Enabled {
+		if !p.Enabled && !almaMade(p) {
+			// a Magpie of the user's own in Alma, turned off: off again
+			// when magpie is (almaSet)
+			stash(map[string]string{almaWasOff: p.ID})
+		}
 		if err := almaDo("PUT", "/api/providers/"+p.ID, map[string]any{"baseURL": gatewayV1(),
 			"apiKey": almaKey(), "enabled": true}, nil); err != nil {
 			return "", err
@@ -515,6 +531,24 @@ func almaWire() (string, error) {
 	}
 	return p.ID, almaSyncModels(p)
 }
+
+// almaPresetID is the id of Alma's own Magpie provider, its preset on
+// the Providers page and in its quick setup: {"id":"magpie","name":"Magpie",
+// "type":"custom","apiFormat":"openai-chat","icon":"magpie","apiKey":
+// "magpie-alma","baseURL":"http://127.0.0.1:3425/v1"} (provPredefBody in
+// Alma's desktop-native/internal/app/settings_providers_detail.go, and
+// NewProvidersSettings.tsx). Alma takes a provider of this id as that
+// preset set up, and offers it again while none has it.
+const almaPresetID = "magpie"
+
+// almaWasOff, in the stash, is the id of the user's own Magpie provider in
+// Alma that magpie turned on to use it, for turning it off again.
+const almaWasOff = "alma.wasoff"
+
+// almaMade says p is the provider magpie made in Alma: magpie names its
+// own magpie, and Alma's preset is Magpie. One the user made, the preset or
+// one of their own pointed at the gateway, magpie uses, and never removes.
+func almaMade(p *almaProvider) bool { return p.Name == magpieID }
 
 // almaKey is the key magpie's provider in Alma is given. Alma's requests
 // carry the AI SDK's User-Agent and nothing of Alma's, so the key is how
@@ -700,6 +734,18 @@ func almaSet(v string) (err error) {
 				return err
 			}
 		}
+		if !almaMade(p) {
+			// the user's own Magpie in Alma (its preset, set up there
+			// first): Alma no longer starts on it, and it stays, as it
+			// was before magpie used it
+			if stashShared()[almaWasOff] == p.ID {
+				if err := almaDo("PUT", "/api/providers/"+p.ID, map[string]any{"enabled": false}, nil); err != nil {
+					return err
+				}
+				forget(almaWasOff)
+			}
+			return nil
+		}
 		return almaDo("DELETE", "/api/providers/"+p.ID, nil, nil)
 	}
 	if ref, ok := strings.CutPrefix(v, magpieID+"/"); ok {
@@ -831,6 +877,11 @@ func alma() *Agent {
 			}
 			p := almaMagpie(ps)
 			if p == nil {
+				return nil
+			}
+			if !almaMade(p) && stashShared()["alma"+disconnectedKey] == "1" {
+				// the user's own Magpie in Alma, with magpie switched off
+				// for Alma: left as the user keeps it
 				return nil
 			}
 			if err := almaKeyed(p); err != nil {
