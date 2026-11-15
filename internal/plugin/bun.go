@@ -242,22 +242,27 @@ func wontLoad(bun string, err error) *BunUnstartableError {
 
 // Bun is the bun to run plugins with: $MAGPIE_BUN when set, else the one
 // magpie downloaded and keeps up to date, downloading it now when there
-// is none yet.
+// is none yet (tried again when a download failed before), for as long as
+// ctx lets it wait. The download goes on in the background when ctx ends
+// first (bunready.go); the plugin host asks hostBun, which waits less.
 func Bun(ctx context.Context) (string, error) {
 	if b := os.Getenv("MAGPIE_BUN"); b != "" {
 		return b, nil
 	}
-	bunMu.Lock()
-	defer bunMu.Unlock()
-	v := inUseLocked()
-	exe := bunExeOf(v)
-	if haveBun(v) {
+	v, exe, ok := bunAtHand()
+	if ok {
 		return exe, nil
 	}
-	if err := downloadBun(ctx, v, exe); err != nil {
-		return "", fmt.Errorf("downloading Bun %s to run plugins: %w", v, err)
+	f := fetchBun(v, exe, true)
+	select {
+	case <-f.done:
+		if f.err != nil {
+			return "", fmt.Errorf("downloading Bun %s to run plugins: %w", v, f.err)
+		}
+		return f.got, nil
+	case <-ctx.Done():
+		return "", f.notReady(ctx.Err())
 	}
-	return exe, nil
 }
 
 // HasBun is whether a Bun is at hand without a download.

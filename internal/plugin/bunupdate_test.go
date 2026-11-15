@@ -67,8 +67,8 @@ func bunReleases(t *testing.T, exe []byte) *atomic.Int32 {
 	return &asked
 }
 
-// bunHome gives the test its own magpie folders, no $MAGPIE_BUN, and Bun's
-// newest release as given.
+// bunHome gives the test its own magpie folders, no $MAGPIE_BUN, no Bun
+// on PATH taken, and Bun's newest release as given.
 func bunHome(t *testing.T, latest string, published time.Time) {
 	t.Helper()
 	dir := t.TempDir()
@@ -81,6 +81,10 @@ func bunHome(t *testing.T, latest string, published time.Time) {
 	old := bunLatest
 	bunLatest = func(context.Context) (string, time.Time, error) { return latest, published, nil }
 	t.Cleanup(func() { bunLatest = old })
+	// nor a Bun on the machine's PATH to fall back on
+	oldPath := pathBuns
+	pathBuns = func() []string { return nil }
+	t.Cleanup(func() { pathBuns = oldPath })
 }
 
 func stubTry(t *testing.T, f func(exe, v string) error) {

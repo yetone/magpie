@@ -697,6 +697,8 @@ func Settle() {
 	// answered with these
 	UseCached(nil)
 	cancelCatalogSyncs()
+	// nor a Bun download, which writes in the test's folder
+	endBunFetches()
 }
 
 // Cached is the plugins' providers as last asked, without starting the

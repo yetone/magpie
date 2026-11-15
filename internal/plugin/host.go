@@ -667,8 +667,41 @@ func Clashes(loaded []Loaded) map[string][]Clash {
 	return out
 }
 
+// hostLock is a lock a caller stops waiting for when its context ends: a
+// host starting holds it while its Bun downloads (bunReadyWait at most),
+// and a request is not held past its own deadline behind that (#6735).
+type hostLock chan struct{}
+
+func (l hostLock) Lock() { l <- struct{}{} }
+
+func (l hostLock) TryLock() bool {
+	select {
+	case l <- struct{}{}:
+		return true
+	default:
+		return false
+	}
+}
+
+func (l hostLock) LockCtx(ctx context.Context) error {
+	select {
+	case l <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (l hostLock) Unlock() {
+	select {
+	case <-l:
+	default:
+		panic("plugin: unlock of unlocked hostMu")
+	}
+}
+
 var (
-	hostMu  sync.Mutex
+	hostMu  = make(hostLock, 1)
 	current *host
 	// generation counts the hosts started, so a caller can tell a
 	// restart happened (the provider cache is then stale)
@@ -970,7 +1003,12 @@ func hostScript(name string, js []byte) (string, error) {
 // when there is none.
 func get(ctx context.Context) (*host, error) {
 	checkList()
-	hostMu.Lock()
+	if err := hostMu.LockCtx(ctx); err != nil {
+		if e := bunNotReadyNow(err); e != nil {
+			return nil, e
+		}
+		return nil, fmt.Errorf("waiting for the plugin host: %w", err)
+	}
 	defer hostMu.Unlock()
 	return getLocked(ctx)
 }
@@ -998,7 +1036,7 @@ func getLocked(ctx context.Context) (*host, error) {
 }
 
 func start(ctx context.Context) (*host, error) {
-	bun, err := Bun(ctx)
+	bun, err := hostBun(ctx)
 	if err != nil {
 		return nil, err
 	}
