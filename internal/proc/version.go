@@ -142,3 +142,17 @@ func shimVersion(real string) string {
 	}
 	return p.Version
 }
+
+// PackageVersion is the version of the npm package the CLI at bin is a
+// file of, or that the npm shim at bin starts, read from its package.json
+// without running anything; "" when bin is in no package.
+func PackageVersion(bin string) string {
+	real, err := RealPath(bin)
+	if err != nil {
+		real = bin
+	}
+	if v := npmVersion(real); v != "" {
+		return v
+	}
+	return shimVersion(real)
+}

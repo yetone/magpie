@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/yetone/magpie/internal/lazyre"
@@ -139,4 +140,62 @@ func bunBin() string {
 		return filepath.Join(d, "bin")
 	}
 	return ""
+}
+
+// FindTools is every program for the command-line tool name this machine
+// has, in the order FindTool ranks them: each of PATH's folders, then the
+// folders a user's tools are installed in. One program found twice (a
+// link to it in two folders) is given once, where it comes first; a
+// version manager's wrapper script is given as the program it runs
+// (Unwrap). A machine can have two: a Claude Code installed with npm in
+// two Node versions, the first on PATH an old one `claude update` no
+// longer reaches (zi_xiang5806 on X). Kept as FindTool's answer is.
+func FindTools(name string) []string {
+	a := looked("findall\x00"+name, func() lookAnswer {
+		dirs := pathDirs()
+		if hung := hungDirs(dirs); hung != nil {
+			dirs = slices.DeleteFunc(slices.Clone(dirs), func(d string) bool { return hung[d] })
+		}
+		var found []string
+		seen := map[string]bool{}
+		add := func(p string) {
+			if p == "" {
+				return
+			}
+			key := p
+			if r, err := RealPath(p); err == nil {
+				key = r
+			}
+			if !seen[key] {
+				seen[key] = true
+				found = append(found, p)
+			}
+		}
+		if mayBeIn(name, dirs) {
+			for _, d := range dirs {
+				if d == "" || d == "." {
+					continue
+				}
+				if p, err := execLookPath(filepath.Join(d, name)); err == nil {
+					add(p)
+				}
+			}
+		}
+		if more := findDirs(); mayBeIn(name, more) {
+			for _, d := range more {
+				add(toolIn(name, runtime.GOOS, []string{d}))
+			}
+		}
+		return lookAnswer{path: strings.Join(found, "\x00")}
+	})
+	if a.path == "" {
+		return nil
+	}
+	var out []string
+	for _, p := range strings.Split(a.path, "\x00") {
+		if p = Unwrap(name, p); !slices.Contains(out, p) {
+			out = append(out, p)
+		}
+	}
+	return out
 }

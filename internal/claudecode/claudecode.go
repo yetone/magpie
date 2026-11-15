@@ -34,7 +34,6 @@ import (
 	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/libc"
 	"github.com/yetone/magpie/internal/netproxy"
-	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/stall"
 )
 
@@ -92,10 +91,10 @@ func newer(a, b string) bool {
 }
 
 // Find is the Claude Code to run on this machine: the user's own (on PATH
-// or where its installers put it, proc.FindTool), else the one magpie
-// downloaded; "" when there is neither.
+// or where its installers put it, the newest of them: Own), else the one
+// magpie downloaded; "" when there is neither.
 func Find() string {
-	if p := proc.FindTool("claude"); p != "" {
+	if p := Own(); p != "" {
 		return p
 	}
 	p, _ := Downloaded()

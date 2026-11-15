@@ -10,7 +10,7 @@ meet it.
 ## Which Claude Code runs
 
 `claudeBinary` (and the sign-in's `claudeExecutable`) take
-`claudecode.Find`: the machine's own `claude` (`proc.FindTool`), else the
+`claudecode.Find`: the machine's own `claude` (`claudecode.Own`), else the
 one `magpie claude-code install` downloaded into
 `<cache>/claude-code/<version>/` (`internal/claudecode`), else, on Windows,
 one in WSL. The download is Anthropic's native build from
@@ -31,6 +31,24 @@ magpie downloaded none, when the machine has its own `claude`, or when
 `DISABLE_AUTOUPDATER` is set for magpie (alextjy on Discord: a container's
 download stayed at its first version across image updates). A failed look
 keeps the download as it is and is logged.
+
+When the machine has more than one `claude` (`proc.FindTools`: every
+folder of PATH, then where installers put it), `claudecode.Own` runs the
+newest: an old npm install first on PATH and the one `claude update`
+updated after it (zi_xiang5806 on X) ran 2.1.38, which has no
+`auth login --claudeai`. The first is passed over only for one whose
+version is known and newer; a version that can't be read is unknown, not
+old. Each version is first read where it is installed, running nothing
+(`installedVersion`: npm's package.json, the native installer's
+`versions/<version>`, Homebrew's `Caskroom/claude-code/<version>`). Only
+when one is known that way is another asked with `--version`
+(`VersionOf`, kept per file until it changes, an unreadable one for a
+minute); with none known, or one `claude`, nothing is run, so a script
+named `claude` (a test's fake) is never run for its version. The
+Agents page still shows the first on PATH, the one a terminal runs. A
+sign-in whose Claude Code says "unknown option" or "unknown command" says
+it is too old, with its version and path, and how to update it
+(`claudeTooOld`).
 
 A run is started with `--dangerously-skip-permissions` (`claudeCLIArgs`):
 its only tools are magpie's MCP ones, answered by the client, and

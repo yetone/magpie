@@ -6,8 +6,6 @@ import (
 	"log"
 	"os"
 	"time"
-
-	"github.com/yetone/magpie/internal/proc"
 )
 
 // When KeepCurrent first looks, and how often after that; vars for tests.
@@ -21,7 +19,7 @@ var keep = struct {
 	own    func() string
 	latest func(context.Context) (Release, error)
 }{
-	own:    func() string { return proc.FindTool("claude") },
+	own:    Own,
 	latest: Latest,
 }
 

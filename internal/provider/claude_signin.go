@@ -229,6 +229,9 @@ func startClaudeSignIn(s *signInFlow) error {
 		if n := len(tail); n > 0 {
 			msg = tail[n-1]
 		}
+		if old := claudeTooOld(cli, tail); old != "" {
+			msg = old
+		}
 		if err == nil {
 			l, lerr := claudeSignedIn(cli, dir, s.proxy)
 			if lerr == nil {
@@ -431,4 +434,32 @@ func (s *signInFlow) claudePaste(raw string) error {
 		return errors.New(st.Error)
 	}
 	return errors.New("the sign-in was canceled")
+}
+
+// claudeTooOld is what a sign-in says when the Claude Code it ran doesn't
+// know `auth login --claudeai`: that Claude Code is too old, which one, and
+// how to update it, rather than its own "error: unknown option
+// '--claudeai'" (zi_xiang5806 on X: 2.1.38 first on PATH). "" when what it
+// said is something else.
+func claudeTooOld(cli claudeCLI, said []string) string {
+	var why string
+	for _, l := range said {
+		if lo := strings.ToLower(l); strings.Contains(lo, "unknown option") || strings.Contains(lo, "unknown command") {
+			why = l
+			break
+		}
+	}
+	if why == "" {
+		return ""
+	}
+	which := "Claude Code"
+	if cli.wsl != nil {
+		which += " in WSL (" + cli.wsl.Distro + ")"
+	} else if cli.path != "" {
+		if v := claudecode.VersionOf(cli.path); v != "" {
+			which += " " + v
+		}
+		which += " at " + cli.path
+	}
+	return fmt.Sprintf("%s is too old to sign in to Claude (it said %q): update it with `claude update`, or `npm install -g @anthropic-ai/claude-code@latest` when npm installed it, then try again", which, why)
 }

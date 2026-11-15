@@ -128,3 +128,43 @@ func TestToolInNPMShShimAlone(t *testing.T) {
 		t.Errorf("linux: %q", got)
 	}
 }
+
+// Every claude on the machine is found, first on PATH first, one program
+// linked from two folders once, and FindTool's is the first of them: an
+// old npm install first on PATH and a newer one after it (zi_xiang5806
+// on X) are both there to choose from.
+func TestFindTools(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix names")
+	}
+	d := t.TempDir()
+	a, b, c := filepath.Join(d, "a"), filepath.Join(d, "b"), filepath.Join(d, "c")
+	for _, x := range []string{a, b, c} {
+		os.MkdirAll(x, 0o755)
+	}
+	os.WriteFile(filepath.Join(a, "claude"), []byte("#!/bin/sh\n"), 0o755)
+	os.WriteFile(filepath.Join(b, "claude"), []byte("#!/bin/sh\n"), 0o644) // not a program
+	os.WriteFile(filepath.Join(c, "claude"), []byte("#!/bin/sh\n# c\n"), 0o755)
+	os.Symlink(filepath.Join(a, "claude"), filepath.Join(b, "link"))
+	os.Symlink(filepath.Join(a, "claude"), filepath.Join(c, "claude-a"))
+	t.Setenv("PATH", strings.Join([]string{a, b, c}, string(os.PathListSeparator)))
+	Forget()
+	t.Cleanup(Forget)
+	want := []string{filepath.Join(a, "claude"), filepath.Join(c, "claude")}
+	if got := FindTools("claude"); !slices.Equal(got, want) {
+		t.Errorf("FindTools = %q, want %q", got, want)
+	}
+	if got := FindTool("claude"); got != want[0] {
+		t.Errorf("FindTool = %q, want %q", got, want[0])
+	}
+	// a link in a later folder to the first is the same program
+	os.Remove(filepath.Join(c, "claude"))
+	os.Symlink(filepath.Join(a, "claude"), filepath.Join(c, "claude"))
+	Forget()
+	if got := FindTools("claude"); !slices.Equal(got, want[:1]) {
+		t.Errorf("a link to the same program: FindTools = %q", got)
+	}
+	if got := FindTools("nope"); got != nil {
+		t.Errorf("FindTools(nope) = %q", got)
+	}
+}

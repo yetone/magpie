@@ -13,7 +13,6 @@ import (
 
 	"github.com/yetone/magpie/internal/claudecode"
 	"github.com/yetone/magpie/internal/gateway"
-	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/settings"
 )
 
@@ -214,7 +213,7 @@ var claudeCode = struct {
 	install    func(context.Context, claudecode.Release, func(int64)) (string, error)
 	gateway    func() string // the running magpie's gateway, asked for its runs
 }{
-	own:        func() string { return proc.FindTool("claude") },
+	own:        claudecode.Own,
 	downloaded: claudecode.Downloaded,
 	latest:     claudecode.Latest,
 	install:    claudecode.Install,
