@@ -126,11 +126,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const two = acct("codex", "two@example.com");
       // wheeled to, as a reader would (the page holds still for a script's
       // scroll): packed into columns (#860), Codex's card is under ZCode's,
-      // past this short window's foot
+      // past this short window's foot. It stops above Scroll to top's
+      // floater, which shows once the page scrolls (d5dc8eecc), as a reader
+      // clicks what isn't under it (it caught WebKit's click, #6003)
       const wheelTo = async (l) => {
         for (let i = 0; i < 20; i++) {
           const y = (await l.boundingBox()).y;
-          if (y > 60 && y + 40 < 300) break;
+          const foot = await page.evaluate(() => document.querySelector(".view-ends.on")?.getBoundingClientRect().top ?? innerHeight);
+          if (y > 60 && y + 40 < foot) break;
           await page.mouse.wheel(0, y > 60 ? 60 : -60);
           await page.waitForTimeout(150);
         }
