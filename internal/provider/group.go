@@ -226,6 +226,13 @@ type Group struct {
 	Placed   []string `json:"placed,omitempty"`
 	Routing  string   `json:"routing,omitempty"`  // as Provider.Routing, over all the members' keys and accounts; or Manual
 	Affinity string   `json:"affinity,omitempty"` // as Provider.Affinity
+	// RoutedAt is when the user last changed Routing (SaveGroup): a
+	// conversation the group last answered before it is routed the new
+	// way at its next turn under Stays: Auto, whatever its old member
+	// cached, as a reorder of a provider's accounts is (NoteReordered;
+	// #6708: picked by hand to A, then Use before expiry, the
+	// conversation stayed on A by a 2.8k-token cache)
+	RoutedAt time.Time `json:"routedAt,omitzero"`
 	// Sink is Provider.Sink over the group's members' accounts and keys
 	// together: one rate limited with quota left goes behind every other
 	// member's. Not for "rotate" or Manual.
@@ -1273,6 +1280,19 @@ func FindGroupAlso(id string, also func(p Provider, model string) bool) (Group, 
 }
 
 // groupOf is the group of an id among all, unless it was removed.
+// GroupRoutedAt is when the user last changed group id's routing
+// (Group.RoutedAt); the zero time when never, or no such group. It reads
+// the groups held for the catalog, no copy made: the gateway asks it once
+// a request to a group.
+func GroupRoutedAt(id string) time.Time {
+	for _, g := range sharedGroups() {
+		if g.ID == id && !g.Hidden {
+			return g.RoutedAt
+		}
+	}
+	return time.Time{}
+}
+
 func groupOf(all []Group, id string) (Group, bool) {
 	for _, g := range all {
 		if g.ID == id && !g.Hidden {
@@ -2018,6 +2038,9 @@ func SaveGroup(g Group) error {
 	for i := range f.Groups {
 		if f.Groups[i].ID == g.ID {
 			g.Disabled = f.Groups[i].Disabled && !f.Groups[i].Hidden
+			if g.RoutedAt = f.Groups[i].RoutedAt; g.Routing != f.Groups[i].Routing {
+				g.RoutedAt = time.Now().UTC()
+			}
 			f.Groups[i] = g
 			return store(f)
 		}

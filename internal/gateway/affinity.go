@@ -576,12 +576,13 @@ func affine(scope, mode string, rotate, spread, inOrder, hoursOver bool, in http
 	if had && time.Since(st.at) > stickKeep {
 		had = false
 	}
-	if had && mode == "" && !a.Within && reorderedSince(st, cs) {
+	if had && mode == "" && !a.Within && (reorderedSince(st, cs) || reroutedSince(scope, st)) {
 		// the user put the accounts in another order after this
 		// conversation was last answered: the order they chose counts at
 		// its next turn, whatever the old answerer cached (Richyisaflower
-		// on X: B moved above A, the conversation went on to A). Session
-		// and Strict, the user's own, and a turn under way keep it
+		// on X: B moved above A, the conversation went on to A); or
+		// changed the group's routing (#6708). Session and Strict, the
+		// user's own, and a turn under way keep it
 		had = false
 	}
 	if had {
@@ -1568,6 +1569,14 @@ func cacheHolds(st stick, p provider.Provider) bool {
 // reorderedSince: the user changed the order of the accounts of the
 // provider that last answered st after it did. Only that provider's
 // reorder counts: one of another provider's moves no conversation here.
+// reroutedSince says whether the user changed the routing of the group
+// scope is (Group.RoutedAt) after the conversation was last answered: the
+// new routing counts at its next turn, as a reorder does (#6708).
+func reroutedSince(scope string, st stick) bool {
+	gid, ok := strings.CutPrefix(scope, provider.GroupPrefix)
+	return ok && st.at.Before(provider.GroupRoutedAt(gid))
+}
+
 func reorderedSince(st stick, cs []candidate) bool {
 	for _, c := range cs {
 		if c.who() == st.who {
