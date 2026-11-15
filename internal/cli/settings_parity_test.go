@@ -337,6 +337,7 @@ var notYet = map[string]string{
 	"POST /api/settings/update-skip":             S2, // api.go
 	"POST /api/settings/workbuddy-checkin":       S2, // api.go
 	"POST /api/usage/arrange":                    W,  // api.go
+	"POST /api/warm-all":                         A,  // api.go: All accounts warms every account in use (5bd41301b)
 	"POST /api/warm-now":                         A,  // api.go
 	"POST /api/window/{action}":                  W,  // api.go
 	"GET /api/autobackup":                        S2, // backup.go: Back up by itself
