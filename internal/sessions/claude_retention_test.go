@@ -2,7 +2,6 @@ package sessions
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,14 +26,16 @@ func TestQoderUsageAfterWindowLoss(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					var c map[string]any
-					dec := json.NewDecoder(bytes.NewReader(b))
-					dec.UseNumber()
-					if err := dec.Decode(&c); err != nil {
+					files, ok := decodeCache(b, zone())
+					if !ok || files[path] == nil {
+						t.Fatalf("cache file: %q", b)
+					}
+					files[path].Claude = nil
+					var w bytes.Buffer
+					if err := encodeCache(&w, cacheFile{Version: cacheVersion, Zone: zone(), Parsers: parseVersions, Files: files}); err != nil {
 						t.Fatal(err)
 					}
-					delete(c["files"].(map[string]any)[path].(map[string]any), "claude")
-					b, _ = json.Marshal(c)
+					b = w.Bytes()
 					if err := os.WriteFile(CachePath(), b, 0o644); err != nil {
 						t.Fatal(err)
 					}

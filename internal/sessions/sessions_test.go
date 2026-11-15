@@ -187,9 +187,8 @@ func TestIncremental(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var kept cacheFile
-	if json.Unmarshal(b, &kept) != nil || kept.Version != cacheVersion || kept.Files[path] == nil {
-		t.Fatalf("cache file: %s", b)
+	if kept, ok := decodeCache(b, zone()); !ok || kept[path] == nil {
+		t.Fatalf("cache file: %q", b)
 	}
 	fi, _ := os.Stat(path)
 	raw, _ := os.ReadFile(path)

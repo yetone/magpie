@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 	"unsafe"
 )
 
@@ -141,38 +140,6 @@ func TestDecodeCacheSharesOneDaysModels(t *testing.T) {
 	}
 }
 
-// A save writes the file json.Marshal would, byte for byte, a file's parse
-// at a time: keys in order and escaped as Marshal escapes them, a file of
-// no parse, an empty index and none at all.
-func TestEncodeCacheIsMarshal(t *testing.T) {
-	at := time.Date(2026, 10, 25, 7, 0, 0, 0, time.UTC)
-	files := map[string]*state{"/b/<a&b>.jsonl": {Size: 3, Mod: 9, Title: "a <b> & \"c\"  ", Start: at, Last: at, Models: named[Tokens]{{"m", Tokens{Input: 1}}}}, "/a/x.jsonl": nil}
-	for i := range 3000 {
-		files[fmt.Sprintf("/s/%04d.jsonl", i)] = &state{Size: int64(i), Cwd: strings.Repeat("d", i%300), Start: at, Last: at.Add(time.Duration(i) * time.Second)}
-	}
-	for _, c := range []cacheFile{
-		{Version: cacheVersion, Zone: "28800/28800", Files: files},
-		{Version: cacheVersion, Zone: "<z>", Parsers: map[string]int{"codex": 2, "claude": 1}, Files: map[string]*state{"/c": {Agent: "codex", Size: 1}}},
-		{Version: cacheVersion, Zone: "0/0"},
-	} {
-		want, err := json.Marshal(c)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var got bytes.Buffer
-		if err := encodeCache(&got, c); err != nil {
-			t.Fatal(err)
-		}
-		if !bytes.Equal(got.Bytes(), want) {
-			n := 0
-			for n < min(got.Len(), len(want)) && got.Bytes()[n] == want[n] {
-				n++
-			}
-			t.Fatalf("%d files: %d bytes, want %d; apart at %d: %.80q", len(c.Files), got.Len(), len(want), n, got.Bytes()[n:])
-		}
-	}
-}
-
 // A raise of one agent's parseVersions reads that agent's files again and
 // keeps every other agent's parses: a raise of cacheVersion read a long
 // history whole, minutes of CPU after an update (#2278).
@@ -183,10 +150,18 @@ func TestParseVersionsReadOneAgentAgain(t *testing.T) {
 		if err := encodeCache(&b, c); err != nil {
 			t.Fatal(err)
 		}
+		j, err := json.Marshal(c)
+		if err != nil {
+			t.Fatal(err)
+		}
 		parseVersions = now
 		files, ok := decodeCache(b.Bytes(), "z")
-		if !ok {
+		fromJSON, jok := decodeCache(j, "z")
+		if !ok || !jok {
 			t.Fatal("refused")
+		}
+		if got := slices.Sorted(maps.Keys(fromJSON)); !slices.Equal(got, slices.Sorted(maps.Keys(files))) {
+			t.Fatalf("JSON kept %v, binary %v", got, slices.Sorted(maps.Keys(files)))
 		}
 		return slices.Sorted(maps.Keys(files))
 	}

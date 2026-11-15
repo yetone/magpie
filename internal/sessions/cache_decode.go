@@ -1,10 +1,7 @@
 package sessions
 
 import (
-	"bytes"
 	"encoding/json"
-	"io"
-	"maps"
 	"runtime"
 	"slices"
 	"strings"
@@ -16,11 +13,15 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-// decodeCache is the kept file b as json.Unmarshal reads it, with the files
+// decodeCache is the kept file b, in the binary form (cache_binary.go) or
+// as json.Unmarshal reads the JSON one an older magpie wrote, with the files
 // decoded on a few goroutines: one Unmarshal of a long history's 40MB took
 // 320 to 440ms of every start (#3493). False when b isn't valid JSON, is of
 // another version or zone, or a file's parse doesn't decode.
 func decodeCache(b []byte, zone string) (map[string]*state, bool) {
+	if isBinaryCache(b) {
+		return decodeCacheBinary(b, zone)
+	}
 	if !gjson.ValidBytes(b) {
 		return nil, false
 	}
@@ -35,14 +36,6 @@ func decodeCache(b []byte, zone string) (map[string]*state, bool) {
 		was[k.String()] = int(v.Int())
 		return true
 	})
-	// a parse of no named agent stands only when no agent's version moved
-	unnamed := true
-	for a, v := range was {
-		unnamed = unnamed && parseVersions[a] == v
-	}
-	for a, v := range parseVersions {
-		unnamed = unnamed && was[a] == v
-	}
 	var keys, raws []string
 	head[2].ForEach(func(k, v gjson.Result) bool {
 		keys = append(keys, strings.Clone(k.String()))
@@ -87,65 +80,27 @@ func decodeCache(b []byte, zone string) (map[string]*state, bool) {
 	for i, k := range keys {
 		files[k] = parsed[i] // a key given twice is its last, as Unmarshal has it
 	}
+	return keepCurrent(files, was), true
+}
+
+// keepCurrent is files without the parses made by another version of
+// their agent's parser than parseVersions, which are read again; was is
+// parseVersions as files were kept.
+func keepCurrent(files map[string]*state, was map[string]int) map[string]*state {
+	// a parse of no named agent stands only when no agent's version moved
+	unnamed := true
+	for a, v := range was {
+		unnamed = unnamed && parseVersions[a] == v
+	}
+	for a, v := range parseVersions {
+		unnamed = unnamed && was[a] == v
+	}
 	for k, p := range files {
-		// made by another version of its agent's parser: read again
 		if p != nil && (p.Agent == "" && !unnamed || p.Agent != "" && was[p.Agent] != parseVersions[p.Agent]) {
 			delete(files, k)
 		}
 	}
-	return files, true
-}
-
-// encodeCache writes c as json.Marshal does, a file's parse at a time: one
-// Marshal of a long history's 23MB grew its buffer to twice that, ~85MB a
-// save, and a save follows every refresh that read a changed file.
-func encodeCache(w io.Writer, c cacheFile) error {
-	var b bytes.Buffer
-	enc := json.NewEncoder(&b)
-	// put appends v as Marshal has it: Encode ends it with a newline
-	put := func(v any) error {
-		if err := enc.Encode(v); err != nil {
-			return err
-		}
-		b.Truncate(b.Len() - 1)
-		return nil
-	}
-	if err := put(struct {
-		Version int            `json:"version"`
-		Zone    string         `json:"zone"`
-		Parsers map[string]int `json:"parsers,omitempty"`
-	}{c.Version, c.Zone, c.Parsers}); err != nil {
-		return err
-	}
-	b.Truncate(b.Len() - 1)
-	b.WriteString(`,"files":`)
-	if c.Files == nil {
-		b.WriteString("null}")
-		_, err := w.Write(b.Bytes())
-		return err
-	}
-	b.WriteByte('{')
-	for i, k := range slices.Sorted(maps.Keys(c.Files)) {
-		if i > 0 {
-			b.WriteByte(',')
-		}
-		if err := put(k); err != nil {
-			return err
-		}
-		b.WriteByte(':')
-		if err := put(c.Files[k]); err != nil {
-			return err
-		}
-		if b.Len() >= 256<<10 {
-			if _, err := w.Write(b.Bytes()); err != nil {
-				return err
-			}
-			b.Reset()
-		}
-	}
-	b.WriteString("}}")
-	_, err := w.Write(b.Bytes())
-	return err
+	return files
 }
 
 // share has st's strings that many files repeat held once: an agent run

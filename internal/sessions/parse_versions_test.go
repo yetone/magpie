@@ -42,14 +42,7 @@ func TestParseVersionRaiseReadsThatAgentAlone(t *testing.T) {
 	}
 
 	// as an older magpie left it: no agent named, no versions
-	b, err := os.ReadFile(CachePath())
-	if err != nil {
-		t.Fatal(err)
-	}
-	var c cacheFile
-	if err := json.Unmarshal(b, &c); err != nil {
-		t.Fatal(err)
-	}
+	c := savedIndex(t)
 	for _, s := range c.Files {
 		if s != nil {
 			if s.Agent == "" {
@@ -59,7 +52,8 @@ func TestParseVersionRaiseReadsThatAgentAlone(t *testing.T) {
 		}
 	}
 	c.Parsers = nil
-	if b, err = json.Marshal(c); err != nil {
+	b, err := json.Marshal(c)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(CachePath(), b, 0o644); err != nil {

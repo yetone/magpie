@@ -1514,9 +1514,15 @@ func loadCache() {
 	saved() // the kept file as the last save left it
 	if b, done, err := readCacheFile(CachePath()); err == nil {
 		files, ok := decodeCache(b, z)
+		old := !isBinaryCache(b)
 		done()
 		if ok {
 			cache = files
+			if old {
+				// an older magpie's JSON: written again in the binary
+				// form, or it stays JSON until a file changes
+				saveCache()
+			}
 		}
 	}
 }

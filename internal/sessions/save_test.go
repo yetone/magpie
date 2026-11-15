@@ -1,8 +1,6 @@
 package sessions
 
 import (
-	"encoding/json"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -43,12 +41,7 @@ func TestSaveBehindTheRead(t *testing.T) {
 	// the save lands once let go, and a new load waits for it
 	let()
 	Saved()
-	b, err := os.ReadFile(CachePath())
-	if err != nil {
-		t.Fatal(err)
-	}
-	var kept cacheFile
-	if json.Unmarshal(b, &kept) != nil || len(kept.Files) == 0 {
-		t.Fatalf("cache file: %.200s", b)
+	if kept := savedIndex(t); len(kept.Files) == 0 {
+		t.Fatal("no files kept")
 	}
 }
