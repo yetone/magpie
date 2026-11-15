@@ -83,8 +83,18 @@ var remoteRouteReads struct {
 // asks only when it weighs p against another, so a request to one Remote
 // magpie alone sends it nothing more.
 func RemoteAllowance(p Provider, model string, ask bool) (a Allowance, inner string, ok bool) {
+	a, inner, _, ok = RemoteSeat(p, model, ask)
+	return a, inner, ok
+}
+
+// RemoteSeat is RemoteAllowance, with whether the account its allowance
+// is of is signed in to a free plan there: a subscription's card whose
+// plan FreePlan names free. Free quota by expiry spends it before a paid
+// one, as it does an account of this magpie's own (#6708: weighRouted
+// asked only Account.Plan, which a Remote magpie has none of).
+func RemoteSeat(p Provider, model string, ask bool) (a Allowance, inner string, free, ok bool) {
 	if !p.IsRemoteMagpie() || p.Key == "" || p.Anthropic == "" {
-		return nil, "", false
+		return nil, "", false, false
 	}
 	id := remoteCardsID(p)
 	c := &remoteCardCache
@@ -95,17 +105,17 @@ func RemoteAllowance(p Provider, model string, ask bool) (a Allowance, inner str
 		askRemoteForRouting(p, id)
 	}
 	if r.held || len(r.cards) == 0 {
-		return nil, "", false
+		return nil, "", false, false
 	}
 	now := time.Now()
 	for path := model; ; {
 		i := strings.LastIndex(path, "/")
 		if i <= 0 {
-			return nil, "", false
+			return nil, "", false, false
 		}
 		path = path[:i]
 		inner = model[len(path)+1:]
-		best, bestUsed := Allowance(nil), 0.0
+		best, bestUsed, bestFree := Allowance(nil), 0.0, false
 		for _, q := range r.cards {
 			if q.Provider != path || !q.routable || q.Error != "" || q.Held {
 				continue
@@ -115,11 +125,11 @@ func RemoteAllowance(p Provider, model string, ask bool) (a Allowance, inner str
 				continue
 			}
 			if u, _ := qa.For(inner, now); best == nil || u < bestUsed {
-				best, bestUsed = qa, u
+				best, bestUsed, bestFree = qa, u, q.Kind == "subscription" && FreePlan(q.Plan)
 			}
 		}
 		if best != nil {
-			return best, inner, true
+			return best, inner, bestFree, true
 		}
 	}
 }
