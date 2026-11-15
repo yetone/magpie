@@ -165,7 +165,7 @@ func TestTrayImageMonoLogos(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"codex-color", "claude-color", "gemini-color", "zcode", "alma"} {
+	for _, name := range []string{"codex-color", "claude-color", "gemini-color", "zcode", "alma", "antigravity-color", "workbuddy-color"} {
 		icon, _ := trayIconFile(name)
 		for _, dark := range []bool{false, true} {
 			b, _, _ := trayImagePNG([]trayCell{{Icon: icon, Rows: []string{"5%", "7%"}}}, bird, 22, 2, dark, true)
@@ -201,7 +201,7 @@ func TestTrayImageLogoSizes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"codex-color", "claude-color", "gemini-color", "zcode", "alma", "kimi", "openai", "deepseek-color", "qwen-color", "minimax-color"} {
+	for _, name := range []string{"codex-color", "claude-color", "gemini-color", "zcode", "alma", "kimi", "openai", "deepseek-color", "qwen-color", "minimax-color", "antigravity-color", "workbuddy-color"} {
 		icon, mono := trayIconFile(name)
 		b, _, _ := trayImagePNG([]trayCell{{Icon: icon, Mono: mono, Rows: []string{"5%", "7%"}}}, bird, 22, 2, false, false)
 		img, err := png.Decode(bytes.NewReader(b))
