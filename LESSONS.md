@@ -1553,6 +1553,13 @@ each one.
     what the change touches (grep the tests for its selectors and
     words), not by name; and a red on main has a first bad commit,
     which `git bisect` finds faster than a list grows.
+  - A new API route runs internal/cli. 5bd41301b (warm-all) added
+    POST /api/warm-all and ran `-run 'WarmAll|WarmNow|...'` in
+    internal/provider only, so TestEveryRouteHasACommandOrIsNamed,
+    which names every route, was red on main from the push.
+    9cd5f3652 saw it an hour later and filed #6724 but shipped past
+    it; 72418591f named the route. A route, a setting or a command
+    reaches internal/cli's parity tests: run that package (43s).
 - **Done right on 10-17.** The retire stack (0f1666b38 to de671719a)
   diffed staticcheck's U1000 against its base for dead code, b98f906b1
   was red on the old code for an own-account gap, and 8 subscriptions
