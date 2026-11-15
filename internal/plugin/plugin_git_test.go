@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha512"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -222,8 +223,10 @@ func fakeBun(args []string) error {
 // tarball (@T@sha512-<32 hex>@@@1) when there is none, and copied from
 // that entry, whatever it holds. A copy over a folder holding .held (a
 // file of the old copy held open, as on Windows) isn't made, and held
-// says so; $MAGPIE_FAKE_BUN_HELD=1 is a hold that doesn't end, and
-// $MAGPIE_FAKE_BUN_LOSE a file that never reaches the copy.
+// says so; $MAGPIE_FAKE_BUN_HELD=1 is a copy it can never make (the
+// reporter's, v0.1.4241), and $MAGPIE_FAKE_BUN_LOSE a file that never
+// reaches the copy. A copy whose .bun-tag is the tarball's integrity is
+// taken as installed and never copied over.
 func fakeDistAdd(path string) (name string, held bool, err error) {
 	tgz, err := os.ReadFile(path)
 	if err != nil {
@@ -267,6 +270,11 @@ func fakeDistAdd(path string) (name string, held bool, err error) {
 		os.Symlink(entry, filepath.Join(link, filepath.Base(entry)))
 	}
 	at := filepath.Join("node_modules", filepath.FromSlash(name))
+	// a copy whose .bun-tag is the tarball's integrity is installed, as
+	// Bun 1.4.4 checks a tarball's copy, and left as it is
+	if tag, err := os.ReadFile(filepath.Join(at, ".bun-tag")); err == nil && string(tag) == "sha512-"+base64.StdEncoding.EncodeToString(sum[:]) {
+		return name, false, nil
+	}
 	if _, err := os.Stat(filepath.Join(at, ".held")); err == nil || os.Getenv("MAGPIE_FAKE_BUN_HELD") == "1" {
 		return name, true, nil
 	}
