@@ -271,6 +271,28 @@ func codexCreate(body []byte) []byte {
 	return append(out, rest...)
 }
 
+// withoutClientMetadata is body with key gone from its client_metadata,
+// every other byte as it was, and body itself when it has no such key.
+func withoutClientMetadata(body []byte, key string) []byte {
+	cm := gjson.GetBytes(body, "client_metadata")
+	if !cm.IsObject() || cm.Index <= 0 || !cm.Get(gjson.Escape(key)).Exists() {
+		return body
+	}
+	have := map[string]any{}
+	if json.Unmarshal([]byte(cm.Raw), &have) != nil {
+		return body
+	}
+	delete(have, key)
+	raw, err := json.Marshal(have)
+	if err != nil {
+		return body
+	}
+	out := make([]byte, 0, len(body))
+	out = append(out, body[:cm.Index]...)
+	out = append(out, raw...)
+	return append(out, body[cm.Index+len(cm.Raw):]...)
+}
+
 // withClientMetadata is body with meta's keys set in its client_metadata,
 // every other byte as it was.
 func withClientMetadata(body []byte, meta map[string]string) ([]byte, bool) {

@@ -152,6 +152,43 @@ func TestCodexBodyAsCodexSendsIt(t *testing.T) {
 	}
 }
 
+// A Responses Lite turn, as Codex 0.165 sends it (its system prompt as
+// developer items, its tools in an additional_tools item, no instructions),
+// goes without instructions and without a reasoning summary it didn't ask
+// for, as Codex itself sends it to chatgpt.com.
+func TestCodexBodyLiteGetsNoInstructions(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CODEX_HOME", dir)
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	os.WriteFile(filepath.Join(dir, "models_cache.json"), []byte(`{"models":[{"slug":"gpt-6-astra","model_messages":{"instructions_template":"You are Codex, a coding agent.\n{{ personality }}"}}]}`), 0o644)
+	for name, body := range map[string]string{
+		"additional_tools": `{"model":"gpt-6-astra","reasoning":{"effort":"high"},"input":[
+		  {"type":"additional_tools","tools":[{"type":"function","name":"exec_command","parameters":{"type":"object"}}]},
+		  {"type":"message","role":"developer","content":[{"type":"input_text","text":"You are Codex, a coding agent."}]},
+		  {"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]}]}`,
+		"all_turns": `{"model":"gpt-6-astra","reasoning":{"effort":"high","context":"all_turns"},"input":[
+		  {"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]}]}`,
+	} {
+		var m map[string]any
+		out := codexBody([]byte(body))
+		if err := json.Unmarshal(out, &m); err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := m["instructions"]; ok {
+			t.Errorf("%s: instructions added: %s", name, out)
+		}
+		if _, ok := m["reasoning"].(map[string]any)["summary"]; ok {
+			t.Errorf("%s: summary added: %s", name, out)
+		}
+	}
+	// a request that isn't Lite still gets Codex's
+	var m map[string]any
+	json.Unmarshal(codexBody([]byte(`{"model":"gpt-6-astra","reasoning":{"effort":"high"},"input":"hi"}`)), &m)
+	if m["instructions"] != "You are Codex, a coding agent.\n{{ personality }}" || m["reasoning"].(map[string]any)["summary"] != "auto" {
+		t.Fatalf("%v", m)
+	}
+}
+
 // A conversation whose client names none gets a key of its own, the same on
 // every turn; a client's own key stays.
 func TestCodexPromptCacheKey(t *testing.T) {

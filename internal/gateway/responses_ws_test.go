@@ -670,6 +670,65 @@ func TestResponsesSocketDrains(t *testing.T) {
 	}
 }
 
+// Codex continues a turn on its socket by previous_response_id and sends
+// no turn state, the socket being the turn's routing; magpie sends each
+// request on whole, so the state the turn's last reply said goes with it,
+// as Codex sends it over HTTP. A new turn starts without it.
+func TestCodexSocketKeepsTurnState(t *testing.T) {
+	setup(t, provider.Chat, &fake{t: t})
+	var mu sync.Mutex
+	var heads []http.Header
+	n := 0
+	chatgpt(t, func(w http.ResponseWriter, r *http.Request) {
+		io.ReadAll(r.Body)
+		mu.Lock()
+		heads = append(heads, r.Header.Clone())
+		n++
+		id := fmt.Sprintf("resp_k%d", n)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("X-Codex-Turn-State", "ts-"+id)
+		item := `{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ok"}]}`
+		io.WriteString(w, sse(
+			`data: {"type":"response.created","response":{"id":"`+id+`"}}`,
+			`data: {"type":"response.output_item.done","output_index":0,"item":`+item+`}`,
+			`data: {"type":"response.completed","response":{"id":"`+id+`","usage":{"input_tokens":9,"output_tokens":2}}}`))
+	})
+	_, ts := sockServer(t)
+	h := http.Header{"Authorization": {"Bearer chatgpt-token"}, "Chatgpt-Account-Id": {"acct-1"},
+		"Openai-Beta": {"responses_websockets=2026-02-06"}, "User-Agent": {"codex_cli_rs/0.165.0"}}
+	c, _, err := dialSock(t, ts, CodexPath+"/responses", h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	frame := func(prev, turn, input string) string {
+		f := `{"type":"response.create","model":"gpt-5.5","stream":true,"store":false,"input":[` + input + `],` +
+			`"client_metadata":{"turn_id":"` + turn + `"}`
+		if prev != "" {
+			f += `,"previous_response_id":"` + prev + `"`
+		}
+		return f + "}"
+	}
+	prev := ""
+	for _, turn := range []string{"t1", "t1", "t2"} {
+		got := c.turn(frame(prev, turn, userHi))
+		if last(got).Get("type").String() != "response.completed" {
+			t.Fatalf("%v", got)
+		}
+		prev = last(got).Get("response.id").String()
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(heads) != 3 {
+		t.Fatalf("%d calls", len(heads))
+	}
+	for i, want := range []string{"", "ts-resp_k1", ""} {
+		if got := heads[i].Get("X-Codex-Turn-State"); got != want {
+			t.Errorf("request %d: turn state %q, want %q", i+1, got, want)
+		}
+	}
+}
+
 // Codex's own route serves its socket too: each turn goes to the ChatGPT
 // backend as Codex's HTTP turn would, the sign-in, the turn state and the
 // whole conversation with it, and the reply's headers come back as the
@@ -764,6 +823,11 @@ func TestCodexSocketServed(t *testing.T) {
 	if hd.Get("Authorization") != "Bearer chatgpt-token" || hd.Get("Chatgpt-Account-Id") != "acct-1" ||
 		hd.Get("X-Codex-Turn-State") != "ts-prev" || strings.Contains(hd.Get("Openai-Beta"), "responses_websockets") {
 		t.Errorf("headers %v", hd)
+	}
+	// the state in the header alone, which goes on to its account only
+	if gjson.GetBytes(bodies[1], "client_metadata.x-codex-turn-state").Exists() ||
+		gjson.GetBytes(bodies[1], "client_metadata.ws_request_header_x_openai_internal_codex_responses_lite").String() != "true" {
+		t.Errorf("client_metadata: %s", gjson.GetBytes(bodies[1], "client_metadata").Raw)
 	}
 }
 

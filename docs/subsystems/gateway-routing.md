@@ -3029,7 +3029,15 @@ serves it on `/v1/responses`, `/responses` and the Codex backend's
   (`TestResponsesSocketStreamsWithoutStreamField`).
   `client_metadata`'s turn state and responses-lite flag become the
   `X-Codex-Turn-State` and `X-OpenAI-Internal-Codex-Responses-Lite`
-  headers Codex sends over HTTP. It goes through the whole handler the
+  headers Codex sends over HTTP; the turn state goes as the header only,
+  taken out of the body's `client_metadata`. Codex continues a turn on a
+  socket by `previous_response_id` and sends no turn state, so the socket
+  keeps the state the last reply of a turn gave and sends it with that
+  turn's next request (`client_metadata.turn_id` the same), as Codex over
+  HTTP does (`TestCodexSocketKeepsTurnState`). The pooled Codex route does
+  the same per account and turn (`codex_turnstate.go`): a state goes back
+  only to the account that issued it, never to the next account after a
+  failover (`TestCodexPoolTurnStateStaysWithItsAccount`). It goes through the whole handler the
   upgrade came in on (`socketEntry`, outside `Front` and `Handler`), so
   the allow list, `rebound`, the key, `corsGuard`, `keyLimited`, routing,
   failover, usage and the log judge every turn as an HTTP one: a key

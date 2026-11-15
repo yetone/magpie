@@ -8,8 +8,10 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -664,6 +666,94 @@ func TestCodexPoolForwardsCodexHeaders(t *testing.T) {
 	b, _ := os.ReadFile(filepath.Join(filepath.Dir(provider.Path()), "usage.jsonl"))
 	if !strings.Contains(string(b), `"kind":"guardian"`) {
 		t.Errorf("usage log: %s", b)
+	}
+}
+
+// The turn state a pool account's reply says goes back to that account
+// with the turn's later requests, as Codex's own client sends it; Codex
+// never hears it through the pool, so magpie keeps it by the turn. Without
+// it each tool call of a turn was a new turn there, admitted again
+// (legeling567 on X: 529s on Astra through magpie, none with Codex's own
+// sign-in). Another account, another turn, and a state no reply said get
+// the request without it.
+func TestCodexPoolTurnStateStaysWithItsAccount(t *testing.T) {
+	codexSignedIn(t, "spare@example.com")
+	var mu sync.Mutex
+	var heads []http.Header
+	refuse1 := false
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.ReadAll(r.Body)
+		acct := r.Header.Get("chatgpt-account-id")
+		mu.Lock()
+		heads = append(heads, r.Header.Clone())
+		n, no := len(heads), refuse1 && acct == "acct-1"
+		mu.Unlock()
+		if no {
+			w.WriteHeader(429)
+			io.WriteString(w, `{"error":{"type":"usage_limit_reached","message":"The usage limit has been reached","resets_in_seconds":7200}}`)
+			return
+		}
+		w.Header().Set("X-Codex-Turn-State", "state-"+acct+"-"+strconv.Itoa(n))
+		io.WriteString(w, sse(
+			`data: {"type":"response.created","response":{"id":"r1","model":"gpt-5.5"}}`,
+			`data: {"type":"response.output_text.delta","delta":"pong"}`,
+			`data: {"type":"response.completed","response":{"id":"r1","usage":{"input_tokens":7,"output_tokens":1}}}`))
+	}))
+	t.Cleanup(up.Close)
+	was := provider.CodexBase
+	provider.CodexBase = up.URL + "/backend-api/codex"
+	t.Cleanup(func() { provider.CodexBase = was })
+
+	s := New()
+	ask := func(state, turn string) []http.Header {
+		t.Helper()
+		mu.Lock()
+		n := len(heads)
+		mu.Unlock()
+		body := `{"model":"gpt-5.5","stream":true,"input":"ping"`
+		if turn != "" {
+			body += `,"client_metadata":{"thread_id":"th-1","turn_id":"` + turn + `"}`
+		}
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("POST", CodexPath+"/responses", strings.NewReader(body+"}"))
+		req.Header.Set("Authorization", "Bearer chatgpt-token")
+		req.Header.Set("chatgpt-account-id", "acct-1")
+		req.Header.Set("User-Agent", "codex_cli_rs/0.165.0")
+		if state != "" {
+			req.Header.Set("x-codex-turn-state", state)
+		}
+		s.Handler().ServeHTTP(rec, req)
+		if rec.Code != 200 || !strings.Contains(rec.Body.String(), "pong") {
+			t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(heads[n:])
+	}
+	one := func(what string, got []http.Header, acct, state string) {
+		t.Helper()
+		if len(got) != 1 || got[0].Get("chatgpt-account-id") != acct || got[0].Get("x-codex-turn-state") != state {
+			t.Fatalf("%s: %v", what, got)
+		}
+	}
+	// the turn's first request: acct-1 serves it and says its state
+	one("first", ask("", "t1"), "acct-1", "")
+	// the turn's next request goes to acct-1 with it, Codex having sent none
+	one("same turn", ask("", "t1"), "acct-1", "state-acct-1-1")
+	// one Codex sends itself goes on when acct-1's reply said it
+	one("sent", ask("state-acct-1-2", ""), "acct-1", "state-acct-1-2")
+	one("made up", ask("made-up", ""), "acct-1", "")
+	one("another turn", ask("", "t2"), "acct-1", "")
+	// acct-1 out: acct-2 gets the turn without acct-1's state
+	mu.Lock()
+	refuse1 = true
+	mu.Unlock()
+	got := ask("", "t1")
+	if len(got) != 2 || got[0].Get("chatgpt-account-id") != "acct-1" || got[1].Get("chatgpt-account-id") != "acct-2" {
+		t.Fatalf("moved: %v", got)
+	}
+	if got[0].Get("x-codex-turn-state") == "" || got[1].Get("x-codex-turn-state") != "" {
+		t.Errorf("state on the wrong account: %v", got)
 	}
 }
 

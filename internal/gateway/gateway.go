@@ -6427,6 +6427,15 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 	if err := p.Sign(ctx, req, to, body); err != nil {
 		return nil, err
 	}
+	// the turn's routing goes on to the account that was given it, as
+	// Codex's own client sends it (codex_turnstate.go)
+	turnAcct, turnOf := codexTurnAccount(p, req.Header), ""
+	if turnAcct != "" {
+		turnOf = codexTurnOf(in, body)
+	}
+	if v := codexTurnStateOf(in, turnAcct, turnOf); v != "" {
+		req.Header.Set("X-Codex-Turn-State", v)
+	}
 	// a sign-in its vendor revoked isn't sent again: the next member is
 	// asked, and the agent told to sign in again (#1793)
 	if why, ok := provider.RevokedSignIn(p.Account, req); ok {
@@ -6499,6 +6508,7 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 	}
 	// what a Codex account's reply says it has used, for its cap (#1295)
 	heardCodexLimits(p, res)
+	heardCodexTurnState(turnAcct, turnOf, res)
 	noteSignIn(ctx, p.Account, req, res)
 	return res, nil
 }
