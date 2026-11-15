@@ -2,7 +2,8 @@
 // swang20201 on X (v0.1.3375, Docker gateway mode): an installed MCP server
 // in Library could only be removed. Each server row has a switch: off
 // posts servers/on {on:false}, says the settings are kept, and the row
-// shows dimmed with its agent chips out of reach; on posts {on:true} and
+// shows dimmed with its agent chips out of reach, under the fold of the
+// ones turned off; on posts {on:true} and
 // the row is as it was. The switch doesn't open the editor. In the app
 // with an agent at 1100px and a browser in gateway mode at 420px, every
 // language, both engines: no sideways scroll, no native select.
@@ -121,6 +122,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForFunction((x) => document.querySelector("#status")?.textContent === x, w("{name} is off; its settings are kept", { name: "notes" }));
         assert.deepEqual(st.sent, [{ name: "notes", on: false }]);
         await page.waitForFunction(() => document.querySelector('#view-library .lib-server[data-server="notes"]')?.classList.contains("off"));
+        // turned off, it is under the fold below the ones on, folded at first
+        // (library-mcp-off-fold): opened to see it
+        assert.equal(await v.locator(".lib-offhead .fold").getAttribute("aria-expanded"), "false");
+        await v.locator(".lib-offhead .fold").click();
         const offRow = v.locator('.lib-server[data-server="notes"]');
         assert.equal(await offRow.locator(":scope > .lib-switch").getAttribute("aria-checked"), "false");
         assert.equal(await page.locator("#modal").evaluate((m) => !m.hidden && m.getBoundingClientRect().height > 0).catch(() => false), false, `${where}: the switch opened the editor`);

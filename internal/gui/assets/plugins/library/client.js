@@ -1055,7 +1055,7 @@ magpie.plugin("library", (ctx) => {
     else if (tab === "plugins") renderPlugins(body);
     else renderSkills(body);
     page.append(body);
-    for (const n of body.querySelectorAll(".row-head .note")) n.title = n.textContent;
+    for (const n of body.querySelectorAll(".row-head .note")) if (!n.closest(".fold")) n.title = n.textContent;
     for (const d of page.querySelectorAll(".lib-detail[data-detail]")) if (had.has(d.dataset.detail)) d.classList.add("kept");
     for (const f of fits.splice(0)) f();
     page.scrollTop = top;
@@ -2780,6 +2780,8 @@ magpie.plugin("library", (ctx) => {
   const remote = (s) => s.transport === "http" || s.transport === "sse";
   const reaches = (s) => (a) => !a || (!(remote(s) && a.noRemote) && !(s.transport === "sse" && a.noSSE) && !(envRefs(s) && a.noEnvRefs));
 
+  let serversOffFolded = true; // the servers turned off, folded below the ones on
+  try { serversOffFolded = localStorage.getItem("magpie.offServersOpen") !== "1"; } catch {}
   function renderServers(body) {
     body.append(intro(agentless()
       ? t("Add the servers other apps should reach, and turn on the MCP router: they connect at its address, from another computer with a gateway key.")
@@ -2794,8 +2796,41 @@ magpie.plugin("library", (ctx) => {
       if (agentless()) body.append(...hubPart());
     } else {
       const list = el("div", "list lib-list");
+      // turned off, they fold away below the ones on, as Providers' do
+      // (hzlxb on X), folded at first and remembered; while picking, the
+      // fold stays open, for every server picked to be in sight
+      const offList = el("div", "list lib-list lib-offlist");
+      offList.id = "lib-offServers";
+      const offHead = el("div", "row-head off-head lib-offhead");
+      const fold = el("button", "fold");
+      fold.type = "button";
+      fold.setAttribute("aria-controls", offList.id);
+      const offCount = el("span", "note");
+      fold.append(svg(CHEV_R, 11, 1.6), el("span", "label", t("Servers turned off")), offCount);
+      offHead.append(fold);
+      const syncFold = () => {
+        const offs = offList.childElementCount, open = !!picking || !serversOffFolded;
+        offHead.hidden = !offs;
+        list.hidden = offs > 0 && !list.childElementCount;
+        offList.hidden = !offs || !open;
+        offCount.textContent = offs || "";
+        fold.disabled = !!picking;
+        fold.setAttribute("aria-expanded", String(open));
+        fold.title = t(open ? "Fold the servers turned off away" : "Show the servers turned off");
+      };
+      fold.onclick = (e) => {
+        e.stopPropagation();
+        serversOffFolded = !serversOffFolded;
+        try { localStorage.setItem("magpie.offServersOpen", serversOffFolded ? "0" : "1"); } catch {}
+        syncFold();
+      };
       // in the order the reader picked (#481), A→Z till then
-      const fill = () => list.replaceChildren(...[...lib.servers].sort(byName(sortOf("libServers"))).map((s) => serverRow(s, all)));
+      const fill = () => {
+        const sorted = [...lib.servers].sort(byName(sortOf("libServers")));
+        list.replaceChildren(...sorted.filter((s) => !s.hidden).map((s) => serverRow(s, all)));
+        offList.replaceChildren(...sorted.filter((s) => s.hidden).map((s) => serverRow(s, all)));
+        syncFold();
+      };
       // one heading over the list, with what the skills' has (#1027): the
       // order, Select, every server on or off for every agent shown, one
       // agent's (#475, or out of a hidden one) and every server out
@@ -2815,7 +2850,7 @@ magpie.plugin("library", (ctx) => {
         body.append(rh);
       }
       fill();
-      body.append(list);
+      body.append(list, offHead, offList);
       if (picking) body.append(pickBar(all));
       const after = el("div", "after-list");
       after.append(button(t("＋ Add server"), "", () => editServer(null)));
