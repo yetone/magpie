@@ -530,18 +530,9 @@ push.**
   testdata.
 - Seen 1× (2026-10-10).
 
-**A check that a value is gone looks past text magpie generates.**
-- 6c099edd's redact test checked that "ops" was gone by substring. The
-  placeholder's random suffix spelled it ({{HOSTNAME_mlopsiy3}}) on macOS
-  CI. f0453192 strips placeholders before the check, in its sibling
-  TestMask too.
-- 11-10: TestSearchAPIFailureKeepsNoURL looked for its query's "4410"
-  in usage.jsonl by substring. A random port (127.0.0.1:44105, #5616)
-  and then a route_id (1794294410888, run 42771382484) held it, and
-  main went red. Gaoshou101's patch, posted on #5616 three days before,
-  made the query letters only (17b9b5b03). A word a test looks for
-  can't be spelled by a port, an id, a time or a hash.
-- Seen 2× (2026-10-10, 2026-11-10).
+**A check that a value is gone looks past text magpie generates** is
+in the code standards since 11-16. See
+[Moved to the code standards](#moved-to-the-code-standards).
 
 **A script Settings loads runs in every mode the GUI has: the window,
 the panel and gateway mode.**
@@ -1110,6 +1101,13 @@ standards since 10-18, widened to a worktree and its logs. See
 
 ## Moved to the code standards
 
+- **A check that a value is gone looks past text magpie or the test
+  made up** (10-10, 11-10, 11-15). On 11-15 TestMoreKinds checked that
+  the user name "ops" was gone, and the made-up name for it, eight
+  letters from a key new each run, was zpxopsat: ubuntu CI red at
+  500f39886. #4345 had the same red on mote on 11-12, filed as "passes
+  on rerun" with its output lost. A probe that searched for a key whose
+  made-up name spells "ops" (key 2207: dopsubnz) made it red every run.
 - **A commit's `--stat` names only the files its change touched; any
   other file is a stale tree** (11-11, 11-12, 11-13). On 11-13 8c7328f3a
   (remote quotas) wrote 21 files back to 35aaaa4b9^ and took out three
