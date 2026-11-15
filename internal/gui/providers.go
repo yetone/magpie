@@ -322,6 +322,10 @@ type providerJSON struct {
 	// a Qwen AI platform Token Plan's windows, told only to a sign-in on
 	// the platform: whether magpie has one, and whose
 	QianwenPlan *qianwenPlanJSON `json:"qianwenPlan,omitempty"`
+	// a Baidu Qianfan Token Plan Personal's month, told only to a sign-in
+	// on Baidu Cloud's console, brought from the user's browser as
+	// StepFun's is: whether one is kept, and where and how to get one
+	QianfanPlan *stepPlanJSON `json:"qianfanPlan,omitempty"`
 	// a Zhipu or Z.ai key's team, for a team's GLM Coding Plan (#236):
 	// set, if empty, for those providers alone, which the editor asks it of
 	ZhipuTeam *provider.ZhipuTeam `json:"zhipuTeam,omitempty"`
@@ -1034,6 +1038,9 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 	}
 	if provider.QianwenPlan(p) {
 		out.QianwenPlan = &qianwenPlanJSON{provider.QianwenSignedIn(p.ID), provider.QianwenAccount(p.ID)}
+	}
+	if provider.QianfanPlan(p) {
+		out.QianfanPlan = &stepPlanJSON{"", provider.QianfanSignedIn(p.ID), provider.QianfanSignInURL, provider.QianfanBookmarklet()}
 	}
 	out.Key.Set = p.Key != ""
 	out.Key.Masked = provider.Mask(p.Key)
@@ -3640,6 +3647,45 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			return
 		}
 		if err := provider.SignOutStepFun(id); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeProvidersJSON(rw, providersState())
+	})
+	// Baidu Qianfan's Token Plan Personal: the console session the user
+	// copied from their browser, the provider's own
+	qianfanOf := func(rw http.ResponseWriter, r *http.Request) (*provider.Provider, bool) {
+		p, err := provider.Find(r.PathValue("id"))
+		if err != nil || !provider.QianfanPlan(*p) {
+			http.NotFound(rw, r)
+			return nil, false
+		}
+		return p, true
+	}
+	mux.HandleFunc("POST /api/qianfan/{id}/session", func(rw http.ResponseWriter, r *http.Request) {
+		p, ok := qianfanOf(rw, r)
+		if !ok {
+			return
+		}
+		var in struct{ Text string }
+		if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+		defer cancel()
+		if err := provider.SaveQianfanPaste(p.Via(ctx), p.ID, in.Text); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeProvidersJSON(rw, providersState())
+	})
+	mux.HandleFunc("POST /api/qianfan/{id}/signout", func(rw http.ResponseWriter, r *http.Request) {
+		p, ok := qianfanOf(rw, r)
+		if !ok {
+			return
+		}
+		if err := provider.SignOutQianfan(p.ID); err != nil {
 			fail(rw, err)
 			return
 		}

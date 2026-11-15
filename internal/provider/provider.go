@@ -1805,12 +1805,15 @@ func Delete(id string) error {
 	if err := store(f); err != nil {
 		return err
 	}
-	// its StepFun and Qwen AI platform sign-ins go with it, not to a
-	// provider added later under the same id
+	// its StepFun, Qwen AI platform and Baidu Cloud console sign-ins go
+	// with it, not to a provider added later under the same id
 	if err := forgetStepFun(id); err != nil {
 		return err
 	}
-	return forgetQianwen(id)
+	if err := forgetQianwen(id); err != nil {
+		return err
+	}
+	return forgetQianfan(id)
 }
 
 // keyOptional is true for a server on this computer or on the user's own

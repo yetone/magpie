@@ -10087,7 +10087,9 @@ function drawEditor(p, presetID) {
 
   // a Step Plan's windows are told only to a StepFun sign-in
   if (p?.stepPlan) ed.append(...field(t("Step Plan allowances"), renderStepPlan(p.stepPlan, p.id), t("A key tells only the balance. The Step Plan's 5-hour, weekly and credit windows are told only to a StepFun sign-in: bring yours here once and magpie keeps it (for 30 days), used for nothing else.")));
-  // and a Qwen AI platform plan's to a sign-in there, in qianwenplan.js
+  // a Baidu Qianfan Token Plan's to a console sign-in (qianfanplan.js), and
+  // a Qwen AI platform plan's to a sign-in there (qianwenplan.js)
+  if (p?.qianfanPlan) { const at = el("span"); ed.append(at); import("./qianfanplan.js").then(() => at.replaceWith(...qianfanPlanField(p)), () => {}); }
   if (p?.qianwenPlan) { const at = el("span"); ed.append(at); import("./qianwenplan.js").then(() => at.replaceWith(...qianwenPlanField(p)), () => {}); }
 
   // a team's GLM Coding Plan windows need its org and project (#236)
@@ -12934,29 +12936,32 @@ function renderPluginAsk(sub) {
   return box;
 }
 
-// renderStepPlan: StepFun's platform sign-in by bookmarklet, per provider id
-function renderStepPlan(sp, id) {
+// renderStepPlan: StepFun's platform sign-in by bookmarklet, per provider
+// id; n names another vendor's sign-in brought the same way (Baidu Qianfan's)
+function renderStepPlan(sp, id, n) {
+  n ||= { route: "stepfun", bm: "magpie · StepFun", state: t("Signed in · the Usage page shows the Step Plan"),
+    open: t("Sign in to StepFun in your browser ↗"), ok: t("Signed in to StepFun") };
   const box = el("div", "stepplan");
   if (sp.signedIn) {
     const row = el("div", "pair");
     const side = el("div", "side");
     const out = el("button", "text", t("Sign out"));
     out.onclick = async () => {
-      try { providers = await api("stepfun/" + encodeURIComponent(id) + "/signout", {}); renderProviders(); } catch (e) { statusErr(e); }
+      try { providers = await api(n.route + "/" + encodeURIComponent(id) + "/signout", {}); renderProviders(); } catch (e) { statusErr(e); }
     };
     side.append(out);
-    row.append(el("span", "state", t("Signed in · the Usage page shows the Step Plan")), side);
+    row.append(el("span", "state", n.state), side);
     box.append(row);
     return box;
   }
   const steps = el("ol", "steps");
   const s1 = el("li");
-  const open = el("button", "link", t("Sign in to StepFun in your browser ↗"));
+  const open = el("button", "link", n.open);
   open.onclick = () => api("open", { url: sp.url });
   s1.append(open);
   const s2 = el("li");
   // dragged to the bookmarks bar it is a bookmark; a click here does nothing
-  const bm = el("a", "bookmarklet", "magpie · StepFun");
+  const bm = el("a", "bookmarklet", n.bm);
   bm.href = sp.bookmarklet;
   bm.onclick = (e) => e.preventDefault();
   const cp = el("button", "link", t("copy it"));
@@ -12970,9 +12975,9 @@ function renderStepPlan(sp, id) {
     if (!paste.value.trim()) return;
     go.disabled = paste.disabled = true;
     try {
-      providers = await api("stepfun/" + encodeURIComponent(id) + "/session", { text: paste.value });
+      providers = await api(n.route + "/" + encodeURIComponent(id) + "/session", { text: paste.value });
       renderProviders();
-      status(t("Signed in to StepFun"), "ok");
+      status(n.ok, "ok");
     } catch (e) {
       go.disabled = paste.disabled = false;
       statusErr(e);
@@ -14060,6 +14065,9 @@ function quotaError(err, q) {
   if (/^this plan's usage is read with the account's access key/.test(err)) return t("This plan's usage needs the account's AccessKey ID and Secret — give them in the provider's settings");
   // a Qwen AI platform plan (qianwen_plan.go)
   if (/^(this plan's usage is told only to a sign-in on|signed out of) the Qwen AI platform/.test(err)) return t("This plan's usage needs a sign-in to the Qwen AI platform — sign in in the provider's settings");
+  // a Baidu Qianfan Token Plan Personal (qianfan_plan.go)
+  if (/^signed out of the Baidu Cloud console/.test(err)) return t("Signed out of the Baidu Cloud console — bring a new sign-in in the provider's settings");
+  if (/^this Baidu Cloud account has no Token Plan Personal$/.test(err)) return t("This Baidu Cloud account has no Token Plan Personal");
   // ZCode with no plan left, not a failed read (#1001)
   if (/^this account has no GLM Coding Plan, and ZCode's Start Plan has ended or was never started$/.test(err)) return t("ZCode: no GLM Coding Plan, and no free Start Plan — subscribe to a GLM Coding Plan to use this account");
   // an OpenCode Go key's windows (planquota.go)

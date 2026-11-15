@@ -18,6 +18,7 @@ func TestUnreadStateKeptAside(t *testing.T) {
 		write func()
 	}{
 		{"stepfun-auth.json", stepfunPath, func() { saveStepFun(map[string]stepfunSession{"cn": {}}) }},
+		{"qianfan-auth.json", qianfanPath, func() { saveQianfan(map[string]qianfanSession{"baidu-qianfan": {}}) }},
 		{"login-returns.json", loginReturnsPath, func() { setLoginReturn("codex", loginReturn{Back: "a", To: "b"}) }},
 		{"quota-history.json", quotaHistPath, func() { writeQuotaHist(quotaHist{}) }},
 		{"balance-history.json", balanceHistPath, func() { writeBalanceHist(balanceHist{}) }},

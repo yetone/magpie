@@ -101,11 +101,15 @@ func Rename(from, to string) error {
 	if err := store(f); err != nil {
 		return err
 	}
-	// so are its StepFun and Qwen AI platform sign-ins, kept by provider id
+	// so are its StepFun, Qwen AI platform and Baidu Cloud console
+	// sign-ins, kept by provider id
 	if err := renameStepFun(from, to); err != nil {
 		return err
 	}
 	if err := renameQianwen(from, to); err != nil {
+		return err
+	}
+	if err := renameQianfan(from, to); err != nil {
 		return err
 	}
 	s := settings.Load()
