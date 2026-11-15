@@ -627,6 +627,21 @@ checks the write.**
   Restore with the bytes read before, or give the test its own HOME.
 - Seen 1× (2026-11-13).
 
+**A change to which tests share a process runs a pairing check on the
+package-global state they leave.**
+- 0dbdc7481 (11-15) ran internal/gateway's plain Test step in chunks as
+  Race does, green on mote's 12 workers. On CI the chunks held other
+  tests, and TestEffortChangeKeepsTheCache started held by a Codex
+  usage-limit rest that six tests left in restingUntil (#6717): its
+  helper set a home without fresh(t), and fresh only cleared rests at a
+  test's start. 6e0b8113d clears them at the end too, and in every
+  helper that sets a home itself; the six pairs were red before it.
+- A green split proves only that split. Run each test that records
+  package state with the one that reads it, in one process
+  (`-run '^(A|B)$'`), and clear the state in a t.Cleanup where it is
+  made.
+- Seen 1× (2026-11-15).
+
 **A value put in a request's context lives as long as anything that
 holds the context, a stopped timer included.**
 - #5250: TestSocketTurnBodiesFreed kept 1 of 12 turn bodies in full
