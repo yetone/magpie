@@ -482,6 +482,9 @@ func feedLoad() {
 	feed.entries = map[string]*feedEntry{}
 	feed.seq, feed.floor, feed.lines, feed.memo = 0, 0, 0, nil
 	feed.failure = nil
+	// a journal read anew hasn't been pruned: when the last one was is
+	// another journal's, and a clock behind it would hold this one's prune off
+	feed.pruned = time.Time{}
 	fresh := func() {
 		feed.entries = map[string]*feedEntry{}
 		feed.seq, feed.floor, feed.lines = 0, 0, 0

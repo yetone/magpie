@@ -38,7 +38,9 @@ func carryPath() string { return filepath.Join(filepath.Dir(provider.Path()), "w
 // (they are only a fallback), and is written over when the next is told.
 func carryLoad() map[string]carried {
 	if p := carryPath(); carry.m == nil || carry.path != p {
-		carry.path, carry.m, carry.dirty = p, map[string]carried{}, false
+		// a new file has never been written: what was last written went to
+		// the old one, so the next save mustn't wait on it
+		carry.path, carry.m, carry.dirty, carry.wroteAt = p, map[string]carried{}, false, time.Time{}
 		if b, err := os.ReadFile(p); err == nil {
 			var m map[string]carried
 			if json.Unmarshal(b, &m) == nil && m != nil {
