@@ -3,7 +3,8 @@
    played by the gateway's own trace. */
 .rt { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px 12px; margin: 0 0 18px; }
 .rt-top { display: flex; flex-direction: column; gap: 3px; }
-.rt-what { font-size: 13px; color: var(--muted); }
+.rt-toprow { display: flex; align-items: flex-start; gap: 8px; }
+.rt-what { font-size: 13px; color: var(--muted); flex: 1; min-width: 0; }
 .rt-what b { color: var(--fg); font-weight: 600; }
 .rt-mode { margin: 0; font-size: 12.5px; color: var(--fg-2); line-height: 1.45; }
 /* the agents' and magpie's columns at least 124px, and as wide as their
@@ -458,6 +459,8 @@ button.rt-session { cursor: pointer; }
 .rt-purpose.open svg { transform: rotate(180deg); }
 .rt-metric-pick { display: inline-flex; align-items: center; gap: 3px; height: 24px; margin-left: 6px; }
 .rt-metric-pick.open svg { transform: rotate(180deg); }
+.rt-depth { display: inline-flex; align-items: center; gap: 5px; flex: none; margin: -3px -7px -3px 0; }
+.rt-depth svg { flex: none; }
 .rt-fold-all { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; margin-left: 2px; }
 .pop.proto-menu.rt-metric-menu { width: 190px; max-width: calc(100vw - 16px); background: var(--card); }
 .rt-metric-menu .pm-item { align-items: center; }

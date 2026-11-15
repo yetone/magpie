@@ -79,7 +79,21 @@ function routingPage(part) {
   const top = el("div", "rt-top");
   const what = el("div", "rt-what");
   const mode = el("p", "rt-mode");
-  top.append(what, mode);
+  // how far the stage opens (openTo), picked at the head's end
+  const depthPick = el("button", "text rt-depth"), depthWord = el("span", "", t("Expand"));
+  depthPick.type = "button";
+  depthPick.id = "rtDepth";
+  depthPick.setAttribute("aria-haspopup", "menu");
+  depthPick.setAttribute("aria-expanded", "false");
+  depthWord.dataset.t = "";
+  depthWord.dataset.en = "Expand";
+  depthPick.dataset.tt = "Expand routes to";
+  depthPick.title = t("Expand routes to");
+  depthPick.innerHTML = '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 6 3-3 3 3M5 10l3 3 3-3"/></svg>';
+  depthPick.append(depthWord);
+  const topRow = el("div", "rt-toprow");
+  topRow.append(what, depthPick);
+  top.append(topRow, mode);
   const stage = el("div", "rt-stage");
   const wires = document.createElementNS(NS, "svg");
   wires.setAttribute("class", "rt-wires");
@@ -1812,10 +1826,49 @@ function routingPage(part) {
   const isOpen = (k, dflt) => keysShut.has(k) ? false : keysOpen.has(k) ? true : dflt;
   function keepOpen(k, open) {
     if (open) { keysOpen.add(k); keysShut.delete(k); } else { keysOpen.delete(k); keysShut.add(k); }
+    keepFolds();
+  }
+  function keepFolds() {
     try {
       localStorage.setItem("magpie.routingKeysOpen", JSON.stringify([...keysOpen]));
       localStorage.setItem("magpie.routingFolded", JSON.stringify([...keysShut]));
     } catch {}
+  }
+  // How far the stage opens (ipsikent on X: often only which model a
+  // route uses matters, not which provider's account): "" as above, long
+  // lists folded; "models" folds every provider's accounts and keys, two
+  // or more, into their one row; "accounts" opens each. Both open every
+  // group in the group. Picked from the
+  // stage head's Expand, kept in localStorage magpie.routingDepth. Picking
+  // one forgets what the reader opened or folded on the stage, so every
+  // row follows it at once; a row clicked after is kept as before.
+  const DEPTHS = [["", "Automatic", "Long lists start folded, short ones open"],
+    ["models", "Models", "A row for each provider's model, its accounts and keys folded into it"],
+    ["accounts", "Accounts", "A row for each account and key"]];
+  let openTo = "";
+  try { openTo = localStorage.getItem("magpie.routingDepth") || ""; } catch {}
+  if (!DEPTHS.some(([v]) => v === openTo)) openTo = "";
+  // a stage fold of n accounts (acct) or keys starts open?
+  const foldStartsOpen = (acct, n) => openTo === "accounts" || !openTo && acct && n < LONG;
+  // how many side by side fold: two already when only models are shown
+  const foldAt = () => openTo === "models" ? 2 : FOLD_AT;
+  {
+    depthPick.onclick = (e) => {
+      e.stopPropagation();
+      if (depthPick.classList.contains("open")) return closeProtoMenu();
+      openProtoMenu(depthPick, DEPTHS.map(([v, name, title]) => ({ v, name, note: "", title: t(title) })), openTo, (v) => {
+        openTo = v;
+        try { if (v) localStorage.setItem("magpie.routingDepth", v); else localStorage.removeItem("magpie.routingDepth"); } catch {}
+        // the stage's own: Accounts and keys' sums (provider/@, provider/*) stay
+        const own = (k) => !/\/[@*]$/.test(k);
+        keysOpen = new Set([...keysOpen].filter((k) => !own(k)));
+        keysShut = new Set([...keysShut].filter((k) => !own(k)));
+        keepFolds();
+        const rs = staged();
+        if (rs.length) steady(() => rebuild(rs, false));
+        render();
+      }, "Expand routes to", "rt-depth-menu", "right");
+    };
   }
   const agents = new Map(); // agent → { node, ic, name, sub, wire }
   let sets = [];            // the account sets on the stage, in the order they came
@@ -2822,10 +2875,10 @@ function routingPage(part) {
     const foldOf = new Map();
     let run = [];
     const flush = () => {
-      if (run.length >= FOLD_AT) {
+      if (run.length >= foldAt()) {
         const w = rows.get(run[0]).w, f = foldNode(foldKey(w, rows.get(run[0]).path), w), acct = w.kind === "account";
         f.ids = run;
-        shut(f, isOpen(f.pk, acct && run.length < LONG),
+        shut(f, isOpen(f.pk, foldStartsOpen(acct, run.length)),
           acct ? "Fold these accounts into one row" : "Fold these keys into one row", acct ? "Show each account" : "Show each key");
         for (const id of run) foldOf.set(id, f);
       }
@@ -2860,7 +2913,7 @@ function routingPage(part) {
           // a route's heading starts open, whatever its length: a second
           // agent coming shouldn't fold the first's rows away
           if (way) shut(s, isOpen(s.pk, true), "Fold this route into one row", "Show where this route goes");
-          else shut(s, isOpen(s.pk, under.get(key) < LONG), "Fold this group into one row", "Show what this group routes to");
+          else shut(s, isOpen(s.pk, openTo ? true : under.get(key) < LONG), "Fold this group into one row", "Show what this group routes to");
           els.push(s.li);
         }
         // folded: what it routes to is its heading's

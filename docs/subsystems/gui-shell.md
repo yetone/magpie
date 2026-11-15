@@ -240,6 +240,17 @@ keys and `provider/model@` for accounts on the stage, `provider/*` and
 gateway's order and choice of seat don't change. Two stay two rows. See
 `routing-keys-fold.test.cjs` and `routing-group-fold.test.cjs`.
 
+How far the stage opens is the reader's to pick (ipsikent on X: often only
+which model a route uses matters). Expand, at the end of the stage's top
+line (`#rtDepth`, `DEPTHS`, `openTo`), offers Automatic (as above), Models
+(two or more accounts or keys of a provider fold, `foldAt`, and start
+folded) and Accounts (every fold starts open). Both open every group in
+the group. It is kept in localStorage `magpie.routingDepth`, and picking
+one forgets what was opened or folded on the stage (the keys without a
+trailing `/@` or `/*`), so every row follows it at once; a row clicked
+after it is kept as before. Accounts and keys isn't changed by it. See
+`routing-depth.test.cjs`.
+
 ### Routing account windows
 
 A subscription account's row in Accounts and keys shows the one figure

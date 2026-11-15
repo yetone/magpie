@@ -2,6 +2,10 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "Expand routes to": "路由展开到",
+    "Long lists start folded, short ones open": "长列表先折叠，短的展开",
+    "A row for each provider's model, its accounts and keys folded into it": "每个供应商的模型一行，账号和密钥折叠在里面",
+    "A row for each account and key": "每个账号和密钥各一行",
     "Turn on Routing": "开启路由",
     "Their page is on Routing, which is off": "它们的页面在路由里，而路由已关闭",
     "sign-in refused (answered since)": "登录曾被拒（之后已应答）",
@@ -757,6 +761,10 @@ magpie.strings({
     "Bound to some keys, the group is theirs alone: any other gateway key neither sees it in its model list nor can use it. A request from this computer without a key still can.": "绑定到某些密钥后，这个组只归它们用：其他网关密钥既不会在模型列表里看到它，也用不了它。本机不带密钥的请求仍然可以用。",
   },
   "zh-TW": {
+    "Expand routes to": "路由展開到",
+    "Long lists start folded, short ones open": "長列表先摺疊，短的展開",
+    "A row for each provider's model, its accounts and keys folded into it": "每個供應商的模型一行，帳號和金鑰摺疊在裡面",
+    "A row for each account and key": "每個帳號和金鑰各一行",
     "Turn on Routing": "開啟路由",
     "Their page is on Routing, which is off": "它們的頁面在路由裡，而路由已關閉",
     "sign-in refused (answered since)": "登入曾被拒（之後已應答）",
@@ -1512,6 +1520,10 @@ magpie.strings({
     "Bound to some keys, the group is theirs alone: any other gateway key neither sees it in its model list nor can use it. A request from this computer without a key still can.": "綁定到某些金鑰後，這個組只歸它們用：其他閘道金鑰既不會在模型列表裡看到它，也用不了它。本機不帶金鑰的請求仍然可以用。",
   },
   ja: {
+    "Expand routes to": "ルートの展開",
+    "Long lists start folded, short ones open": "長いリストは折りたたみ、短いものは展開",
+    "A row for each provider's model, its accounts and keys folded into it": "プロバイダーのモデルごとに1行、アカウントとキーはその中に折りたたみ",
+    "A row for each account and key": "アカウントとキーごとに1行",
     "Turn on Routing": "ルーティングをオンにする",
     "Their page is on Routing, which is off": "ページはルーティングの中にあり、ルーティングはオフです",
     "sign-in refused (answered since)": "サインイン拒否（その後は応答あり）",
@@ -2267,6 +2279,10 @@ magpie.strings({
     "Bound to some keys, the group is theirs alone: any other gateway key neither sees it in its model list nor can use it. A request from this computer without a key still can.": "キーを紐づけると、このグループはそのキー専用になります。ほかのゲートウェイキーではモデル一覧に表示されず、使うこともできません。このコンピューターからキーなしで送るリクエストは引き続き使えます。",
   },
   de: {
+    "Expand routes to": "Routen aufklappen bis",
+    "Long lists start folded, short ones open": "Lange Listen zugeklappt, kurze offen",
+    "A row for each provider's model, its accounts and keys folded into it": "Eine Zeile je Modell eines Anbieters, seine Konten und Schlüssel darin zugeklappt",
+    "A row for each account and key": "Eine Zeile je Konto und Schlüssel",
     "Turn on Routing": "Weiterleitung einschalten",
     "Their page is on Routing, which is off": "Ihre Seite liegt unter Weiterleitung, und die ist aus",
     "sign-in refused (answered since)": "Anmeldung abgelehnt (seitdem beantwortet)",
