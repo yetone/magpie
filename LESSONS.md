@@ -408,7 +408,15 @@ TestSettingsSaveKeepsWhatItDoesNotSend (internal/gui) every setting.
   Both bodies say what they ran; neither ran `go test ./internal/cli`
   (40s). The same day three commits that each fit the core's script
   budget at their own base left it 4 bytes over together (61a93b531).
-- Seen 1× (2026-11-11).
+- 11-15: 261f48226 (Disconnect and quit) added POST /api/quit/disconnect
+  and ran internal/gui and five GUI files, not internal/cli. The CLI
+  guard was red on ubuntu and macOS CI at 0ffb21f83 (#6786). After
+  this rule had been written and missed again, the check moved to the
+  package GUI changes do run: internal/gui's
+  TestEveryRouteIsNamedForTheCLI fails on a route that the CLI's list
+  doesn't name. When a rule keeps being missed, put its check where
+  the work already runs.
+- Seen 2× (2026-11-11, 2026-11-15).
 
 **A full run gives the slow packages room.** `go test ./...` at the default
 10m timeout times out in internal/gateway (#2108), and under load in
