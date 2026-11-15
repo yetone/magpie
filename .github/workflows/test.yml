@@ -71,8 +71,14 @@ jobs:
       # hung (#2191). It grew from 450-600s on 10-28, so a longer timeout
       # would only be met again. Its plain run goes in chunks, one process
       # per core, as the Race step's does; the other packages run as before.
+      # A step cap as well: on 0dbdc7481's macOS run internal/library printed
+      # nothing for 44 minutes past go test's own -timeout 30m (no panic, no
+      # stack, #5267), and main's later runs queued behind it until it was
+      # cancelled by hand. Test took 11 minutes on ubuntu there and 31 on
+      # macOS the run before; the cap leaves room for a slow macOS runner.
       - name: Test
         if: runner.os != 'Windows'
+        timeout-minutes: 75
         shell: bash
         run: |
           go test -timeout 30m -tags "${{ steps.tags.outputs.tags }}" $(go list -tags "${{ steps.tags.outputs.tags }}" ./... | grep -v '/internal/gateway$')
