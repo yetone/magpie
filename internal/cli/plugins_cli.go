@@ -604,7 +604,8 @@ func pluginLogin(ctx context.Context, name, method string) error {
 		// window's sign-in installs it (#2223: Grok Build in Docker)
 		if name := pluginSignInCLI.missing(pp.ID); name != "" {
 			fmt.Println(amber.Render("!"), name, "isn't installed here: "+pp.Name+" signs in through it. Installing it, as its vendor's installer does…")
-			if err := pluginSignInCLI.install(ctx, pp.ID); err != nil {
+			// through the proxy the sign-in and the provider's requests take
+			if err := pluginSignInCLI.install(provider.Via(ctx, provider.PluginID(pp.ID)), pp.ID); err != nil {
 				return err
 			}
 			fmt.Println(green.Render("✓"), name, "installed")

@@ -220,7 +220,13 @@ func installCLI(ctx context.Context, c agentCLI) error {
 		if msg == "" {
 			msg = err.Error()
 		}
+		if manual == "" {
+			return errorf("installing %s failed (%s); install it yourself, then sign in again", c.Name, msg)
+		}
 		return errorf("installing %s failed (%s); install it yourself with `%s`, then sign in again", c.Name, msg, manual)
+	}
+	if manual == "" {
+		return errorf("the %s installer finished, but magpie can't find it; install it yourself, then sign in again", c.Name)
 	}
 	return errorf("the %s installer finished, but magpie can't find it; install it yourself with `%s`, then sign in again", c.Name, manual)
 }

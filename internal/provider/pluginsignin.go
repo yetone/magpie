@@ -39,7 +39,9 @@ func StartPluginSignInWith(id string, method int, inputs map[string]string, o Si
 	var installing context.Context
 	if install {
 		s.st.State, s.st.Installing = "installing", cli.Name
-		installing, s.stop = context.WithCancel(context.Background())
+		// through the proxy the sign-in takes: a plugin's own installer
+		// downloads with the plugin's fetch (plugin.InstallCLI)
+		installing, s.stop = context.WithCancel(s.via(context.Background()))
 	} else if err := s.pluginBegin(id, method, inputs); err != nil {
 		return SignInState{}, err
 	}
@@ -75,8 +77,10 @@ func StartPluginSignInWith(id string, method int, inputs map[string]string, o Si
 var pluginRunsCLI = map[string]bool{"grok": true}
 
 // pluginCLI is the vendor CLI a plugin's sign-in (OpenCode's id) runs
-// through and this machine lacks: a moved built-in's, or one in
-// pluginRunsCLI.
+// through and this machine lacks: a moved built-in's, one in
+// pluginRunsCLI, or one the plugin says it installs itself (auth.cli,
+// plugin.CLI). The last is how agy-cli has agy installed in a container,
+// as Claude's sign-in downloads Claude Code there (niuniu_8964 on X).
 func pluginCLI(id string) (agentCLI, bool) {
 	if PluginServes(PluginID(id)) {
 		return missingCLI(PluginID(id))
@@ -84,7 +88,33 @@ func pluginCLI(id string) (agentCLI, bool) {
 	if pluginRunsCLI[id] {
 		return missingCLI(id)
 	}
+	if pp, ok := PluginOf(PluginID(id)); ok && pp.CLI != nil {
+		c := ownCLI(id, *pp.CLI)
+		if c.find() == "" {
+			return c, true
+		}
+	}
 	return agentCLI{}, false
+}
+
+// ownCLI is the CLI a plugin installs itself, as an agentCLI: found when
+// the plugin says it is installed, installed by the plugin. A plugin that
+// can't be asked counts it as there: its authorize says what is missing,
+// as it did before it could install anything.
+func ownCLI(id string, c plugin.CLI) agentCLI {
+	return agentCLI{
+		Name: c.Name,
+		find: func() string {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if in, err := plugin.CLIInstalled(ctx, id); err == nil && !in {
+				return ""
+			}
+			return c.Name
+		},
+		native: func(ctx context.Context) error { return plugin.InstallCLI(ctx, id) },
+		manual: c.Manual,
+	}
 }
 
 // PluginCLIMissing is the name of the vendor CLI a plugin's sign-in runs

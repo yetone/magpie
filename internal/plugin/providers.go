@@ -211,6 +211,11 @@ type Provider struct {
 	Importable  bool              `json:"importable,omitempty"`
 	ImportFrom  string            `json:"importFrom,omitempty"`
 	ImportFroms map[string]string `json:"importFroms,omitempty"`
+	// CLI is the vendor CLI the plugin runs through and can install itself
+	// (auth.cli, magpie's own hook): a sign-in on a machine without it,
+	// magpie in a container above all, installs it first (CLIInstalled,
+	// InstallCLI). nil for a plugin that names none.
+	CLI *CLI `json:"cli,omitempty"`
 	// MaxConcurrency is how many requests the plugin says each of its
 	// accounts takes at once (magpie's own field, which OpenCode ignores:
 	// the auth hook's maxConcurrency, else package.json's
@@ -1102,6 +1107,32 @@ func ImportFiles(ctx context.Context, provider string, texts []string) ([]Import
 		return nil, err
 	}
 	return r.Results, nil
+}
+
+// CLI is a vendor CLI a plugin can install: its name, and how a person
+// installs it, told when the plugin's install fails ("" for none said).
+type CLI struct {
+	Name   string `json:"name"`
+	Manual string `json:"manual,omitempty"`
+}
+
+// CLIInstalled asks the plugin whether the CLI its Provider.CLI names is
+// on this machine.
+func CLIInstalled(ctx context.Context, provider string) (bool, error) {
+	var r struct {
+		Installed bool `json:"installed"`
+	}
+	if err := Call(ctx, "cliInstalled", map[string]any{"provider": provider}, &r); err != nil {
+		return false, err
+	}
+	return r.Installed, nil
+}
+
+// InstallCLI has the plugin install the CLI its Provider.CLI names,
+// through the proxy ctx carries; it returns once the plugin says it is
+// there, or why not.
+func InstallCLI(ctx context.Context, provider string) error {
+	return Call(ctx, "installCli", map[string]any{"provider": provider, "proxy": proxyOf(ctx)}, nil)
 }
 
 // SignOut forgets one account of the provider's, every one when account

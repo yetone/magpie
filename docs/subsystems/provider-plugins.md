@@ -409,3 +409,25 @@ file…" shows for every importable plugin subscription, moved built-ins
 included (`pluginSubs`, `subOf`, `importSay` in app.js). The vendor check
 (refresh, account lookup) is the plugin's, as its sign-in is. Tests:
 `TestPluginImportFiles`, `tests/plugin-import.test.cjs`.
+
+### The vendor CLI a plugin installs
+
+A plugin that runs its vendor's CLI may declare magpie-only `auth.cli`:
+`name` (shown as "Installing {name}…"), `installed()` (whether it is on
+this machine), `install({ signal })` (installs it, resolving once it is
+there) and `manual` (how a person installs it, told when the install
+fails). Before, such a plugin's sign-in failed with "install it first",
+which a magpie in a container can't do (niuniu_8964 on X: agy-cli in
+Docker); only a moved built-in's or a `pluginRunsCLI` plugin's CLI was
+installed by magpie. The host lists the CLI on the provider (`cliOf` in
+`host.js`, `plugin.Provider.CLI`) and answers `cliInstalled` and
+`installCli` (`plugin.CLIInstalled`, `plugin.InstallCLI`), the install
+through the sign-in's proxy and given up with it. `pluginCLI` in
+[`pluginsignin.go`](../../internal/provider/pluginsignin.go) asks the
+plugin (`ownCLI`), so the sign-in installs it first as a moved
+built-in's does (`installCLI`, at most 10 minutes), and so does
+`magpie plugin login` (`PluginCLIMissing`, `InstallPluginCLI`). A plugin
+that can't be asked counts the CLI as there, and its authorize says what
+is missing, as before. Where the CLI goes and how it is kept current is
+the plugin's. Tests: `TestPluginInstallsItsCLI`,
+`TestPluginSignInInstallsItsCLI`.

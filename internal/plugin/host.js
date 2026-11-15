@@ -2623,6 +2623,9 @@ function rowOf(id, a, keys, stored, p, own) {
     // its accounts can be brought in from a file (auth.import), and which
     // file that is, as the plugin says it
     ...importOf(a.auth),
+    // the vendor CLI its sign-in and requests run through, which magpie
+    // installs with the plugin's own installer when it isn't there
+    ...cliOf(a.auth),
     icon: iconOf(a),
     usage: typeof a.auth.usage === "function",
     checkin: typeof a.auth.checkin === "function",
@@ -2889,6 +2892,46 @@ function importOf(auth) {
   const from = shown(auth.importFrom, 300)
   const froms = inLanguages(auth.importFroms, 300)
   return { importable: true, ...(from ? { importFrom: from } : {}), ...(froms ? { importFroms: froms } : {}) }
+}
+
+// ---- the vendor CLI a plugin runs through ------------------------------------
+
+// A plugin that runs its vendor's CLI may say how to install it (magpie's
+// own hook, which OpenCode ignores), so a machine without it, magpie in a
+// container above all, gets it from magpie's sign-in rather than a shell:
+//   auth.cli.name: the CLI, as the sign-in names it ("Installing {name}…").
+//   auth.cli.installed(): whether it is on this machine now.
+//   auth.cli.install({ signal }): installs it, resolving once it is there;
+//     magpie's sign-in starts this when installed() is false, then asks
+//     the method's authorize.
+//   auth.cli.manual: how a person installs it, told when install fails.
+function cliOf(auth) {
+  const c = auth?.cli
+  if (!c || typeof c !== "object" || typeof c.installed !== "function" || typeof c.install !== "function") return {}
+  const name = shown(c.name, 80)
+  if (!name) return {}
+  const manual = shown(c.manual, 300)
+  return { cli: { name, ...(manual ? { manual } : {}) } }
+}
+
+function cliHook(provider) {
+  const c = authOf(provider).cli
+  if (!cliOf({ cli: c }).cli) throw new Error(`${provider} names no CLI to install`)
+  return c
+}
+
+async function cliInstalled({ provider }) {
+  return { installed: (await cliHook(provider).installed()) === true }
+}
+
+// installCli runs the plugin's installer through the proxy the
+// subscription's requests take (#1663), ended when magpie gives it up
+async function installCli({ provider, proxy }, signal) {
+  const c = cliHook(provider)
+  const step = via.run(proxy ?? "", () => c.install({ signal }))
+  await (signal ? bounded(Promise.resolve(step), signal) : step)
+  if (signal?.aborted) throw new DOMException("the install was cancelled", "AbortError")
+  return null
 }
 
 async function importFiles({ provider, texts, proxy }, signal) {
@@ -3610,6 +3653,8 @@ const handlers = {
   search: runSearch,
   apiKey,
   importFiles,
+  cliInstalled,
+  installCli,
   load,
   usage,
   checkin,
