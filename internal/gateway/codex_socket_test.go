@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/coder/websocket"
 	"github.com/tidwall/gjson"
@@ -50,6 +51,9 @@ type fakeSocketBackend struct {
 	// whole has its HTTP reply run to response.completed
 	path  string
 	whole bool
+	// hold is how long a turn waits before its first frame, as the
+	// backend thinking before it answers
+	hold time.Duration
 }
 
 func (f *fakeSocketBackend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -87,6 +91,7 @@ func (f *fakeSocketBackend) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			f.mu.Lock()
 			f.sockets = append(f.sockets, turn)
 			f.mu.Unlock()
+			time.Sleep(f.hold)
 			for _, fr := range f.frames(turn) {
 				if c.Write(r.Context(), websocket.MessageText, []byte(fr)) != nil {
 					return

@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/http/httptrace"
 	"strconv"
 	"strings"
 	"sync"
@@ -422,15 +423,22 @@ func (t codexSocket) turn(req *http.Request, k *codexKept, msg []byte, shape *co
 		}
 		return err
 	}
+	trace := socketTrace(req, reused)
 	if err := k.c.Write(req.Context(), websocket.MessageText, msg); err != nil {
 		k.close()
 		return nil, ended(err)
 	}
 	wroteSocket(req.Context(), len(msg))
+	if trace != nil && trace.WroteRequest != nil {
+		trace.WroteRequest(httptrace.WroteRequestInfo{})
+	}
 	header := k.header.Clone()
 	body := &codexSocketBody{c: k.c, ctx: req.Context(), k: k, shape: shape}
-	for range codexSocketPrelude {
+	for i := range codexSocketPrelude {
 		frame, err := body.frame()
+		if i == 0 && err == nil && trace != nil && trace.GotFirstResponseByte != nil {
+			trace.GotFirstResponseByte()
+		}
 		if err != nil {
 			body.Close()
 			// nothing of the reply has been handed on yet
@@ -482,6 +490,33 @@ func (t codexSocket) turn(req *http.Request, k *codexKept, msg []byte, shape *co
 		ContentLength: -1,
 		Request:       req,
 	}, nil
+}
+
+// socketTrace tells req's client trace (TryNet, the usage record's
+// split) of the turn going out on the socket, as Go's client tells it of
+// an HTTP request: a turn on a kept socket is a request on an open
+// connection, which has no handshake of its own, and the frames' first is
+// the reply's first byte. Without it a kept socket's turn, nearly every
+// Codex turn after a conversation's first, wrote no request the trace
+// saw, and the Routing page's "Where the time went" said only its
+// masking (buhaodeshiyehao on X, Codex through Lody). On a new socket
+// the handshake went through the client and the trace has its DNS,
+// connect and TLS; the socket is the connection, got once the handshake
+// is answered, so the handshake's round trip is the wait for it. The
+// caller tells it WroteRequest once the message is written, and
+// GotFirstResponseByte at the first frame.
+func socketTrace(req *http.Request, reused bool) *httptrace.ClientTrace {
+	trace := httptrace.ContextClientTrace(req.Context())
+	if trace == nil {
+		return nil
+	}
+	if reused && trace.GetConn != nil {
+		trace.GetConn(req.URL.Host)
+	}
+	if trace.GotConn != nil {
+		trace.GotConn(httptrace.GotConnInfo{Reused: reused})
+	}
+	return trace
 }
 
 // codexSocketEnded is the turn going over HTTP after the socket ended,
