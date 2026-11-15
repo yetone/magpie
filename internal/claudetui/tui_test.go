@@ -1063,7 +1063,9 @@ func TestShimEndsAtItsCallersDeadline(t *testing.T) {
 			// them up: "showed no prompt in the 2.8s" at load 13-20, and
 			// in other full runs (#5079). A run that ended at it with no
 			// prompt shown, before Claude Code drew what the case is about,
-			// says nothing of the case, and runs again with twice the time.
+			// says nothing of the case, and runs again with twice the time;
+			// so does one that ended after the prompt but before the case's
+			// screen was drawn (the banner case, "❯ /usage" alone).
 			// One whose screen has it is told as it is: the helper misread it.
 			for wait := 3 * time.Second; ; wait *= 2 {
 				start := time.Now()
@@ -1073,8 +1075,8 @@ func TestShimEndsAtItsCallersDeadline(t *testing.T) {
 				if err == nil || strings.Contains(out, `"type":"result"`) {
 					t.Fatalf("ended %v, wrote %q", err, out)
 				}
-				notUp := strings.Contains(stderr, "claude-tui: Claude Code showed no prompt in the ") &&
-					(c.screen == "" || !strings.Contains(stderr, c.screen))
+				notUp := c.screen == "" && strings.Contains(stderr, "claude-tui: Claude Code showed no prompt in the ") ||
+					c.screen != "" && !strings.Contains(stderr, c.screen)
 				if notUp && wait < 12*time.Second {
 					t.Logf("not up in %s, again with %s: %q", wait, 2*wait, stderr)
 					continue
