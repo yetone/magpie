@@ -2455,6 +2455,9 @@ func (p Provider) listPriceIn(c priceCats, model string) (catalog.Price, bool, i
 	if p.pluginFree(model) {
 		return catalog.Price{}, true, pricedOwn
 	}
+	if f, ok := mythosFable(model); ok {
+		return p.listPriceIn(c, f)
+	}
 	return catalog.Price{}, false, pricedOwn
 }
 
@@ -2783,6 +2786,9 @@ func MakerPrice(model string) (catalog.Price, bool) {
 		if pr, ok := makerListPrice(m); ok {
 			return pr, true
 		}
+	}
+	if f, ok := mythosFable(model); ok {
+		return MakerPrice(f)
 	}
 	return catalog.Price{}, false
 }
@@ -3254,6 +3260,22 @@ func pricedNamesTo(dst []string, model string) []string {
 	return out
 }
 
+// mythosFable is the Fable of a Mythos id's version (claude-mythos-5.2 ->
+// claude-fable-5.2), the price of a Mythos nothing prices
+// (shangyuan0818 on X): Anthropic gives Mythos 5.1 Fable 5.1's per-token
+// pricing and Mythos 5 Fable 5's, and models.dev's azure lists
+// claude-mythos-5 at claude-fable-5's. It is the last place looked, so a
+// price for the Mythos itself (a catalog's, what Anthropic told Claude
+// Code, a plugin's) always comes first.
+func mythosFable(model string) (string, bool) {
+	l := strings.ToLower(strings.TrimSpace(model))
+	i := strings.Index(l, "claude-mythos-")
+	if i < 0 {
+		return "", false
+	}
+	return l[:i] + "claude-fable-" + l[i+len("claude-mythos-"):], true
+}
+
 // PricedName is the catalog ID used for a list-price estimate. Prefer a
 // directly listed model before falling back to a documented alias.
 func PricedName(model string) string {
@@ -3261,6 +3283,11 @@ func PricedName(model string) string {
 	for _, name := range n {
 		if _, ok := makerListPrice(name); ok {
 			return name
+		}
+	}
+	if f, ok := mythosFable(model); ok {
+		if _, ok := MakerPrice(f); ok {
+			return PricedName(f)
 		}
 	}
 	return n[len(n)-1]
