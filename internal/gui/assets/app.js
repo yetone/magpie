@@ -4797,7 +4797,17 @@ function openPicker(agent, field, anchor, ev, only) {
   // high); its group stays as `home` for the rail (#1229)
   const groups = [...new Set(options.map((o) => o.group).filter(Boolean))];
   const i = options.findIndex((o) => o.value === cur);
-  if (!effortPicker && !field.menu && i > 0) { const [c] = options.splice(i, 1); options.unshift({ ...c, group: "", home: c.group }); }
+  // Lifted out of its section, a model another provider lists by the same
+  // name, in any case, says whose it is (renderList): WorkBuddy AI's
+  // Deepseek-V4.1-Flash on top read as WorkBuddy's DeepSeek-V4.1-Flash,
+  // and WorkBuddy AI's section, Hy4 alone, as if magpie had dropped it
+  // (ADNANYURTSEVER3 on X).
+  if (!effortPicker && !field.menu && i > 0) {
+    const [c] = options.splice(i, 1);
+    const name = (c.label || "").toLowerCase();
+    const whose = !!name && !!c.group && c.group !== ROUTING_GROUPS && options.some((o) => o.group && o.group !== c.group && (o.label || "").toLowerCase() === name);
+    options.unshift({ ...c, group: "", home: c.group, whose });
+  }
   else if (i < 0 && cur && !only) options.unshift({ value: cur, note: t("current value") });
   // the agent's own default: magpie's wiring comes out and the key is removed
   if (FOLLOWS_MODEL.includes(field.label)) {
@@ -5438,6 +5448,7 @@ function renderList() {
     const path = pathTag(o);
     if (path) { words.append(path); note = note.replace(/(^| · )via magpie$/, ""); }
     if (q && o.group && !note) note = o.group;
+    if (o.whose && pick.groupFilter !== o.home && !note.split(" · ").includes(o.home)) note = note ? o.home + " · " + note : o.home;
     // a note cut off by its ellipsis reads whole on hover (#907)
     if (note) { const n = el("span", "n", note); n.title = note; words.append(n); }
     li.append(words);
