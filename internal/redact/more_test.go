@@ -93,7 +93,10 @@ func TestMoreKinds(t *testing.T) {
 			t.Errorf("%q: %d masked, want %d: %q", c.in, n, len(c.gone), out)
 		}
 		for _, g := range c.gone {
-			if strings.Contains(unmarked(out), g.value) {
+			// The made-up name is eight random letters, a new key each
+			// run, and can spell a short user name: "ops" was still in
+			// "zpxopsat@…" on ubuntu CI at 500f39886 (#4345).
+			if strings.Contains(strings.ReplaceAll(unmarked(out), standInOf(g.value), ""), g.value) {
 				t.Errorf("%q: %q still in %q", c.in, g.value, out)
 			}
 			p := placeholder(g.kind, g.value)
