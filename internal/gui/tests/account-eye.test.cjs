@@ -75,7 +75,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     const scrolled = (page) => page.evaluate(() => [window.scrollY, ...[...document.querySelectorAll("*")].filter((e) => e.scrollTop > 0).map((e) => `${e.className}:${e.scrollTop}`)].join(" "));
     const wide = (page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     const stripes = (page, sel) => page.evaluate((sel) => [...document.querySelectorAll(sel)].map((e) => getComputedStyle(e).borderLeftWidth).filter((b) => parseFloat(b) > 1), sel);
-    const opacity = (loc) => loc.evaluate((e) => getComputedStyle(e).display === "none" ? "none" : getComputedStyle(e).opacity);
+    // a re-render can replace the card between the locator's resolve and
+    // the read, and a detached element's computed display is '' (#5052):
+    // read again, which resolves the locator afresh, until it is attached
+    const opacity = async (loc) => {
+      for (let i = 0; ; i++) {
+        const v = await loc.evaluate((e) => !e.isConnected ? null : getComputedStyle(e).display === "none" ? "none" : getComputedStyle(e).opacity);
+        if (v !== null || i === 20) return v ?? "detached";
+      }
+    };
     // what of an element is in sight: its text and every tooltip in it
     const seen = (loc) => loc.evaluate((e) => [e.textContent, ...[e, ...e.querySelectorAll("[title]")].map((x) => x.title || "")].join(" | "));
     // a sentence and a tooltip elsewhere in the window naming both accounts
