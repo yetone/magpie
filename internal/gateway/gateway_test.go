@@ -100,10 +100,14 @@ func setup(t *testing.T, proto provider.Protocol, f *fake) *httptest.Server {
 }
 
 // noRests lifts every rest the package's tests have recorded.
+// noRests clears the package's rests: what rests, why, and what was
+// lifted. They are package-global, so a rest one test records holds the
+// next test's account of the same key in the same process (#6717).
 func noRests() {
 	restingUntil.Lock()
 	restingUntil.m = map[string]time.Time{}
 	restingUntil.note = map[string]Rest{}
+	restingUntil.lifted = map[string]time.Time{}
 	restingUntil.Unlock()
 	codexHolds.Lock()
 	codexHolds.m = nil

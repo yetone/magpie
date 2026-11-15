@@ -31,6 +31,8 @@ func piTwoTurns(t *testing.T, socket bool) {
 	if socket {
 		socketOn(t)
 	}
+	noRests() // a rest an earlier test left must not hold this account (#6717)
+	t.Cleanup(noRests)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)

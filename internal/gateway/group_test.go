@@ -40,12 +40,10 @@ func fresh(t *testing.T) {
 	t.Setenv("USERPROFILE", home) // Windows finds the home there
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	restingUntil.Lock()
-	restingUntil.m = map[string]time.Time{}
-	restingUntil.Unlock()
-	codexHolds.Lock()
-	codexHolds.m = nil
-	codexHolds.Unlock()
+	// a rest recorded here is let go when the test ends too: the next test
+	// in the process may not come through fresh (#6717)
+	noRests()
+	t.Cleanup(noRests)
 	sticks.Lock()
 	sticks.m = map[string]stick{}
 	sticks.Unlock()

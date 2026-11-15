@@ -33,6 +33,8 @@ var backendLeads = sse(
 // backend at f, as the ChatGPT answers come from there.
 func leadSignIn(t *testing.T, f http.Handler) {
 	t.Helper()
+	noRests() // a rest an earlier test left must not hold this account (#6717)
+	t.Cleanup(noRests)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)

@@ -60,6 +60,8 @@ func sentShape(t *testing.T, b []byte) (effort, key string, input []string) {
 
 func effortCodexAccount(t *testing.T, f *fake) {
 	t.Helper()
+	noRests() // a rest an earlier test left must not hold this account (#6717)
+	t.Cleanup(noRests)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
