@@ -1,4 +1,4 @@
-// Settings › Network's Update source (RootSir and Sakugar_ on X): where an
+// Settings › About's Update source (RootSir and Sakugar_ on X): where an
 // update is read and downloaded from, one menu button as the language's is.
 // app.js imports this when the page is drawn, so it weighs nothing on the
 // core. "" is automatic; site never goes to GitHub, github never to

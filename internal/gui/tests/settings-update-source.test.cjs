@@ -1,6 +1,7 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
-// Update source (RootSir and Sakugar_ on X): Settings › Network has a menu
-// button under App updates' proxy. Automatic, usemagpie.ai only and GitHub
+// Update source (RootSir and Sakugar_ on X): Settings › About has a menu
+// button right under Download source, with the other update settings, and
+// Network no longer has it (WeltAn_X on X). Automatic, usemagpie.ai only and GitHub
 // only each save updateSource alone (""/"site"/"github"), in the app's menu
 // and in every language.
 const assert = require("node:assert/strict");
@@ -65,12 +66,25 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const posts = [], errors = [];
         page.on("pageerror", (e) => errors.push(e.message));
         await page.route("**/*", server(lang, posts));
-        await page.goto("http://magpie.test/?view=settings&tab=network");
-        const row = page.locator("#updateSourceRow");
+        await page.goto("http://magpie.test/?view=settings&tab=about");
+        const row = page.locator("#about > #updateSourceRow");
         await row.getByText(l.row, { exact: true }).waitFor();
+        assert.equal(await page.locator("#updateSourceRow").count(), 1, "one Update source row");
+        assert.equal(await page.locator("#setPage-network #updateSourceRow, #setPage-network #updateSourcePick").count(), 0, "not on Network");
+        assert(await row.evaluate((r) => r.previousElementSibling?.classList.contains("update-mirror-row")), "right under Download source");
         assert.equal(await row.locator("select").count(), 0, "no native select");
         const pick = page.locator("#updateSourcePick");
         assert.equal(await pick.textContent(), l.auto);
+        // About is long: scrolled to by the wheel, as a reader does (a
+        // scroll Playwright makes isn't the reader's, and a save's redraw
+        // puts the view back where the reader left it)
+        await page.locator("#view-settings").hover();
+        for (let i = 0; i < 40; i++) {
+          const box = await row.boundingBox(), v = await page.locator("#view-settings").boundingBox();
+          if (box.y >= v.y + 4 && box.y + box.height <= v.y + v.height - 4) break;
+          await page.mouse.wheel(0, 180);
+          await page.waitForTimeout(16);
+        }
         const choose = async (name, want) => {
           const count = posts.length;
           const response = page.waitForResponse((r) => r.url().endsWith("/api/settings") && r.request().method() === "POST");

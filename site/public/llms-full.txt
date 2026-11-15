@@ -10282,7 +10282,7 @@ Two rows in the app's Settings decide where an update comes from. Neither needs 
 | --- | --- | --- |
 | About › Download source | `usemagpie.ai` (the default) | usemagpie.ai, and github.com when that fails. |
 |  | Use a mirror… | usemagpie.ai, and the mirror when that fails, in place of github.com. Remove mirror goes back. |
-| Network and sharing › Update source | Automatic (the default) | usemagpie.ai's release list and files, and GitHub's when the site can't be reached. |
+| About › Update source | Automatic (the default) | usemagpie.ai's release list and files, and GitHub's when the site can't be reached. |
 |  | usemagpie.ai only | usemagpie.ai alone, never GitHub, so a mirror is never used. |
 |  | GitHub only | github.com alone (through the mirror when one is set), never usemagpie.ai. |
 

@@ -3418,7 +3418,7 @@ list. A release read this way must be signed whatever its version. The
 Stable and Daily channels and a `MAGPIE_UPDATE_FEED` of your own don't
 fall back.
 
-Settings → Network → *Update source* (`"updateSource"` in settings.json,
+Settings → About → *Update source* (`"updateSource"` in settings.json,
 `magpie settings set updateSource github`, this computer's own) chooses where an
 update comes from. Automatic (empty, the default) is what is described here:
 usemagpie.ai, then GitHub. `site` (usemagpie.ai only) never goes to GitHub,

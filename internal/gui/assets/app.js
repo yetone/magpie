@@ -20180,6 +20180,13 @@ function renderSettings() {
   row(t("Restart automatically"), s.noAutoUpdate ? t("While automatic updates are on") : t("Once an update is downloaded, restarts into it without cutting off an agent's request"), "",
     segsOO(s.autoRestart, (v) => savePrefs({ ...keep, autoRestart: v }))).classList.add("update-restart-row", ...(s.noAutoUpdate ? ["off"] : []));
   renderUpdateMirror(row(t("Download source"), "", ""), s);
+  // beside Download source, both where an update comes from (WeltAn_X on X)
+  const src = el("button", "sess-pick pref-pick");
+  Object.assign(src, { type: "button", id: "updateSourcePick" });
+  src.setAttribute("aria-haspopup", "menu");
+  src.setAttribute("aria-expanded", "false");
+  row(t("Update source"), "", "", src).id = "updateSourceRow";
+  import("./updatesource.js").then(() => src.isConnected && updateSourcePick(s, keep), statusErr);
   const open = el("button", "text", t("Open"));
   open.onclick = () => api("settings/reveal", {}).catch(statusErr);
   // portable (a data folder beside magpie, #508): everything is in there
@@ -20791,7 +20798,6 @@ function renderProxy(s, keep) {
   });
   renderProxyCheck(s, row);
   renderPluginProxy(s, keep);
-  import("./updatesource.js").then(() => updateSourcePick(s, keep), statusErr);
 }
 const proxyState = { custom: false };
 // plugin downloads' proxy (JonahFu on X); plugins' vendor requests follow the one above
