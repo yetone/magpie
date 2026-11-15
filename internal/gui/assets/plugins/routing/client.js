@@ -7803,6 +7803,16 @@ function routingPage(part) {
         sw.onclick = () => { d.off = off ? d.off.filter((x) => x !== id) : [...d.off, id]; draw(); };
         if (off) row.classList.add("muted");
         row.append(sw, memberHandle(id, i, row), memberIcon(id), n, el("span", "grow"));
+        // the row drags too, from its logo and the room around its words
+        // (NovaStudiosss on X: the number alone went unfound, so Up and
+        // Down were all there was). Its words still select, as the
+        // accounts' rows do, and its controls stay controls.
+        row.classList.add("rt-mrow");
+        row.onpointerdown = (e) => {
+          if (groupArranging || e.target.closest("button, input, textarea, a, [contenteditable=true], .n > *")) return;
+          const rows = [...list.children].filter((r) => r.querySelector(".rt-mhandle"));
+          groupArranging = dragRows(e, row, row, list, rows, (to) => moveMember(i, to), () => {}, arranged);
+        };
         // what the model is, in the same chips the Gateway page's list says it
         // in (modelInfo): its reasoning levels, whether it sees images and the
         // window it holds. A group mixing members that see images with ones

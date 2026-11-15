@@ -843,6 +843,10 @@ body.window .rt-gedit > .bar { --vfoot: 8px; }
 .rt-gedit .fbl.sorting { user-select: none; -webkit-user-select: none; }
 .rt-gedit .fbl.sorting > .fbrow { transition: transform .22s cubic-bezier(.22, 1, .36, 1); }
 .rt-gedit .fbl.sorting .rt-mhandle { cursor: grabbing; }
+/* a member's row drags from its room around the words too */
+.rt-gedit .fbrow.rt-mrow { cursor: grab; touch-action: pan-y; }
+.rt-gedit .fbrow.rt-mrow .n > * { cursor: auto; }
+.rt-gedit .fbl.sorting > .fbrow.dragging { cursor: grabbing; }
 .rt-gedit .fbl > .fbrow.dragging { position: relative; z-index: 2; background: var(--card); box-shadow: 0 6px 18px rgba(20, 22, 30, .12), 0 0 0 1px var(--line); border-radius: 8px; transition: none; }
 @media (prefers-reduced-motion: reduce) { .rt-gedit .fbl.sorting > .fbrow { transition: none; } }
 .rt-gedit .fbrow.muted > :not(.rt-mon):not(.text) { opacity: .45; }
