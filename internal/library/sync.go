@@ -55,6 +55,9 @@ type Result struct {
 	// Subagents is, for subagents imported from a repository, what was
 	// added, updated, had already, and left as changed here
 	Subagents *SubagentsImported `json:"subagents,omitempty"`
+	// Commands is, for slash commands imported from the agents, what was
+	// added and the library's own given to more agents
+	Commands *CommandsImported `json:"commands,omitempty"`
 	// dropped are the servers taken out of an agent's config, as it had
 	// them, whose processes go once no agent runs them (mcp_reap.go)
 	dropped []*Server

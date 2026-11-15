@@ -43,6 +43,9 @@ type Command struct {
 	Description string   `json:"description"`
 	Prompt      string   `json:"prompt"`
 	Agents      []string `json:"agents"`
+	// Taken are, by agent, the agent's own files it was imported from
+	// (command_import.go): this computer's, never carried or shown
+	Taken map[string]*TakenFile `json:"taken,omitempty"`
 }
 
 // commandNameRe is a name each agent takes as one command of its folder:
@@ -211,12 +214,21 @@ func (l *Library) syncCommands(t *Target, b *backups, res *Result) {
 	}
 	var files []ownFile
 	for _, c := range want {
+		path, body, taken := takenFor(c, id, sp)
+		if body != nil {
+			// the user's own file it was imported from, as it was
+			files = append(files, ownFile{name: c.Name, path: path, body: func() []byte { return body }})
+			continue
+		}
 		if !sp.args && usesArgs(c.Prompt) {
 			// not written: what magpie wrote of it before goes
 			res.fail(id, "command:"+c.Name, noArgs(t.Agent.Name))
 			continue
 		}
-		files = append(files, ownFile{name: c.Name, path: sp.path(c.Name), body: func() []byte { return sp.render(c) }})
+		if !taken {
+			path = sp.path(c.Name)
+		}
+		files = append(files, ownFile{name: c.Name, path: path, body: func() []byte { return sp.render(c) }})
 	}
 	a.Commands = syncOwnFiles(t, "command", a.Commands, files, b, res)
 }
@@ -236,10 +248,16 @@ func SaveCommand(old string, c Command) (*Result, error) {
 		if c.Name != old && l.command(c.Name) != nil {
 			return fmt.Errorf("the library already has a slash command called %s", c.Name)
 		}
+		c.Taken = nil
 		if old != "" {
 			i := slices.IndexFunc(l.Commands, func(x *Command) bool { return x.Name == old })
 			if i < 0 {
 				return fmt.Errorf("no slash command called %s", old)
+			}
+			if c.Name == old {
+				// the files it was imported from stay where they are,
+				// as they were while it says what it did
+				c.Taken = l.Commands[i].Taken
 			}
 			l.Commands = slices.Delete(l.Commands, i, i+1)
 		}
@@ -331,7 +349,7 @@ func (l *Library) commandsView(targets []*Target, asleep []*agent.Agent, of func
 	views := []CommandView{}
 	for _, c := range l.Commands {
 		x := *c
-		x.Agents = orNone(x.Agents)
+		x.Agents, x.Taken = orNone(x.Agents), nil
 		cv := CommandView{Command: &x, Problems: of("command:" + c.Name)}
 		for id, a := range l.Applied {
 			for _, f := range a.Commands {

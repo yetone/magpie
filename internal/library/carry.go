@@ -159,6 +159,7 @@ func Collect() (*Bundle, error) {
 	for _, c := range sorted(l.Commands, func(c *Command) string { return c.Name }) {
 		x := *c
 		x.Agents = orNone(slices.Sorted(slices.Values(c.Agents)))
+		x.Taken = nil // files here, this computer's own
 		cmds = append(cmds, &x)
 	}
 	b.Commands = &cmds
@@ -676,6 +677,12 @@ func Put(b *Bundle) (*Result, error) {
 			for _, c := range *b.Commands {
 				x := *c
 				x.Agents = slices.Clone(orNone(c.Agents))
+				// the files this computer's was imported from stay its
+				// own: written as they were while it says the same
+				x.Taken = nil
+				if have := l.command(c.Name); have != nil {
+					x.Taken = have.Taken
+				}
 				cmds = append(cmds, &x)
 			}
 			l.Commands = cmds

@@ -422,6 +422,8 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-find input { flex: 1; min-width: 0; height: 28px; border: 0; outline: none; background: none; font-size: 13px; color: var(--fg); }
 .lib-find input::placeholder { color: var(--faint); }
 .lib-find .text.busy { color: var(--muted); }
+.lib-find .lib-findnote { flex: 1; min-width: 0; font-size: 13px; color: var(--muted); }
+.lib-pick .lib-cmdfrom { -webkit-line-clamp: 1; }
 .lib-err { padding: 0 14px 10px 36px; font-size: 12px; color: var(--red); line-height: 1.45; overflow-wrap: anywhere; }
 .lib-probe { border-top: 1px solid var(--line-2); padding: 8px 8px 8px; display: flex; flex-direction: column; gap: 6px; animation: content-in .22s var(--ease); }
 .lib-probehead { display: flex; align-items: center; gap: 6px; padding: 0 4px; }

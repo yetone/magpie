@@ -692,6 +692,15 @@ magpie.plugin("library", (ctx) => {
       status(parts.join(" · "), warn ? "warn" : "ok", warn ? 10000 : 6000);
       return;
     }
+    // slash commands imported from the agents (command_import.go)
+    const ci = res.commands;
+    if (ci) {
+      const n = (ci.added?.length || 0) + (ci.joined?.length || 0), parts = [n === 1 ? t("1 slash command imported") : t("{count} slash commands imported", { count: n })];
+      const warn = res.problems?.length;
+      if (warn) { const p = res.problems[0]; parts.push(t("{agent}: {error}", { agent: tilde(nameOf(p.agent)), error: p.error })); }
+      status(parts.join(" · "), warn ? "warn" : "ok", warn ? 10000 : 6000);
+      return;
+    }
     // an update that found its source without the skill: said so, not
     // as done or failed (スライム on Discord)
     if (res.gone?.length) {
@@ -5103,6 +5112,7 @@ magpie.plugin("library", (ctx) => {
     body.append(intro(t("A slash command is a prompt you type as /name in an agent. Add it once and magpie writes it into each agent you pick, as that agent's own command.")));
     const all = commandAgents();
     const cmds = lib.commands || [];
+    body.append(commandFind());
     if (!cmds.length) {
       body.append(empty(t("No slash commands in the library yet"), t("Add one, and pick the agents that get it."), button(t("＋ Add a slash command"), "action", () => editCommand(null))));
     } else {
@@ -5117,6 +5127,116 @@ magpie.plugin("library", (ctx) => {
     if (noPlace.length) body.append(el("p", "lib-aside lib-commands-noargs", t("{agents} take only $ARGUMENTS, all the words at once: a command that uses $1, $2… isn't written for them.", { agents: noPlace.map((a) => a.name).join(", ") })));
     const skip = all.filter((a) => commandAgentOf(a.id).no);
     if (skip.length) body.append(el("p", "lib-aside lib-commands-no", t("magpie can't give slash commands to {agents}: their chips are greyed, and say why.", { agents: skip.map((a) => a.name).join(", ") })));
+  }
+
+  // the slash commands the user already made in their agents (miantiao_me
+  // on X: "can the ones I made in Pi be imported?"), each agent's own
+  // files read as magpie's (library/command_import.go); importing keeps
+  // each file as it is, the agents it came from ticked
+  let cmdProbe = null;    // { found, pick:Set, filter } or { error }
+  let cmdProbing = false;
+  const cmdPickable = (x) => x.state !== "taken";
+
+  function commandFind() {
+    const card = el("div", "list lib-card lib-install lib-cmdfind");
+    const line = el("div", "lib-find");
+    const go = button(cmdProbing ? t("Looking…") : t("Find in agents"), "action", () => find());
+    go.disabled = cmdProbing;
+    if (cmdProbing) go.classList.add("busy");
+    line.append(glyph(GLYPH.search, "lib-mini"), el("span", "lib-findnote", t("Slash commands you made in your agents")), go);
+    card.append(line);
+    async function find() {
+      if (cmdProbing) return;
+      cmdProbing = true;
+      cmdProbe = null;
+      render();
+      try {
+        const f = await api("library/commands/probe", {});
+        // ticked: each new name's first, one of those saying different things
+        const pick = new Set(), names = new Set();
+        for (const x of f.candidates) if (!x.state && !names.has(x.name)) { names.add(x.name); pick.add(x.path); }
+        cmdProbe = { found: f, pick, filter: "" };
+      } catch (e) {
+        cmdProbe = { error: e.message };
+      }
+      cmdProbing = false;
+      render();
+    }
+    if (cmdProbe?.error) card.append(el("div", "lib-err", cmdProbe.error));
+    if (cmdProbe?.found) card.append(commandPicks(cmdProbe));
+    return card;
+  }
+
+  function commandPicks(p) {
+    const box = el("div", "lib-probe");
+    const c = p.found.candidates;
+    const left = (p.found.left || []).map((x) => el("div", "lib-none lib-left", t("{path} left out: {error}", { path: tilde(x.path), error: x.error })));
+    const head = el("div", "lib-probehead");
+    head.append(el("span", "note", !c.length ? t("No slash commands of your own in your agents") : c.length === 1 ? t("1 slash command in your agents") : t("{count} slash commands in your agents", { count: c.length })));
+    head.append(el("span", "grow"));
+    if (!c.length) {
+      head.append(button(t("Close"), "", () => { cmdProbe = null; render(); }));
+      box.append(head, ...left);
+      return box;
+    }
+    box.append(head);
+    if (c.length > 8) {
+      const f = el("input", "lib-filter");
+      f.type = "text";
+      f.dataset.lib = "cmdfilter";
+      f.placeholder = t("Filter…");
+      f.value = p.filter;
+      f.oninput = () => { p.filter = f.value; drawList(); };
+      f.onkeydown = (e) => e.stopPropagation();
+      box.append(f);
+    }
+    const list = el("div", "lib-picks");
+    const drawList = () => {
+      list.replaceChildren();
+      const q = p.filter.toLowerCase();
+      for (const x of c) {
+        const from = x.agents.map((id) => agentOf(id)?.name || id).join(" · ");
+        if (q && !(x.name + " " + x.description + " " + from).toLowerCase().includes(q)) continue;
+        const r = el("label", "lib-pick lib-cmdpick" + (cmdPickable(x) ? "" : " dim"));
+        const cb = el("input");
+        cb.type = "checkbox";
+        cb.checked = p.pick.has(x.path);
+        cb.disabled = !cmdPickable(x);
+        cb.onchange = () => {
+          if (cb.checked) {
+            // one of those called the same
+            for (const y of c) if (y.name === x.name) p.pick.delete(y.path);
+            p.pick.add(x.path);
+          } else p.pick.delete(x.path);
+          drawList();
+          syncGo();
+        };
+        const w = el("span", "who");
+        w.append(el("span", "name mono", "/" + x.name));
+        if (x.description) w.append(el("span", "sub", x.description));
+        w.append(el("span", "sub lib-cmdfrom", from));
+        r.append(cb, w);
+        if (x.state === "taken") r.append(tag(t("Name taken"), "lib-as", t("The library has another slash command called /{name}, so this one stays in the agent as it is.", { name: x.name })));
+        else if (x.clash) r.append(tag(t("Differs by agent"), "lib-as", t("/{name} says something else in another agent: pick one.", { name: x.name })));
+        else if (x.state === "same") r.append(tag(t("in the library"), "", t("The library has it saying the same: importing it gives it to these agents too.")));
+        list.append(r);
+      }
+    };
+    drawList();
+    box.append(list, ...left);
+    const foot = el("div", "lib-probefoot");
+    foot.append(el("span", "grow"), button(t("Cancel"), "", () => { cmdProbe = null; render(); }));
+    const go = button("", "primary", async () => {
+      go.disabled = true;
+      go.textContent = t("Importing…");
+      if (await change("commands/import", { paths: [...p.pick] })) { cmdProbe = null; render(); }
+      else { go.disabled = false; syncGo(); }
+    });
+    const syncGo = () => { const n = p.pick.size; go.textContent = n === 1 ? t("Import 1 slash command") : t("Import {count} slash commands", { count: n }); go.disabled = !n; };
+    syncGo();
+    foot.append(go);
+    box.append(foot);
+    return box;
   }
 
   function commandRow(c, all) {

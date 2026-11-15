@@ -279,6 +279,16 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 		}
 		writeJSON(rw, p)
 	})
+	// the slash commands the agents here have of their own
+	// (command_import.go); nothing is written
+	mux.HandleFunc("POST /api/library/commands/probe", func(rw http.ResponseWriter, r *http.Request) {
+		p, err := library.ProbeCommands()
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, p)
+	})
 	// which skills GitHub has changed: the page as it is, each skill from
 	// there carrying what the check found of it
 	mux.HandleFunc("POST /api/library/skills/check", func(rw http.ResponseWriter, r *http.Request) {
@@ -817,6 +827,8 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			res, err = library.CommandAgentsSet(in.Name, in.Agents)
 		case "commands/remove":
 			res, err = library.RemoveCommands([]string{in.Name})
+		case "commands/import":
+			res, err = library.ImportCommands(in.Paths)
 		case "subagents/import":
 			res, err = library.ImportSubagents(in.Source, in.Paths, in.Agents)
 		case "skills/install":
