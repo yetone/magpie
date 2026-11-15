@@ -1949,11 +1949,16 @@ func (p Provider) PicksOf(avail []catalog.Model) []string {
 // released up to the newest of them, and a model released after it is the
 // new one. A provider of keys has no such rule: its picks without
 // PickedFrom are served as they are (yuancjun: one old model picked of a
-// relay's ten served all ten).
+// relay's ten served all ten). A remote magpie's routing group made
+// there since is served beside any picks: picking some of its models
+// isn't leaving out the groups its user goes on making, and each one hid
+// until ticked by hand (KoiLx0 on X: office/group/opus missing from the
+// agents' picker). A group listed at Save and left unpicked stays out.
 func (p Provider) withNewlyListed(picks []string, avail []catalog.Model) []string {
 	if len(avail) == 0 {
 		return picks
 	}
+	remote := p.IsRemoteMagpie()
 	picked := make(map[string]bool, len(picks))
 	for _, id := range picks {
 		picked[id] = true
@@ -1985,15 +1990,23 @@ func (p Provider) withNewlyListed(picks []string, avail []catalog.Model) []strin
 		}
 		isNew = func(m catalog.Model) bool { return m.Released > newest }
 	}
-	var added []string
+	var added, groups []string
+	partial := false
 	for _, m := range avail {
 		if picked[m.ID] {
 			continue
 		}
 		if !isNew(m) {
-			return picks // one the user saw and left unpicked
+			partial = true // one the user saw and left unpicked
+			continue
 		}
 		added = append(added, m.ID)
+		if remote && strings.HasPrefix(m.ID, GroupPrefix) {
+			groups = append(groups, m.ID)
+		}
+	}
+	if partial {
+		added = groups
 	}
 	if len(added) == 0 {
 		return picks
