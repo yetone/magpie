@@ -353,3 +353,56 @@ func TestWithFastWire(t *testing.T) {
 		}
 	}
 }
+
+// The tier a member on a provider the user added goes at (KoiLx0 on X: a
+// relay that serves Ultrafast), for each of the group's speeds and the
+// provider's extra body, whichever API the agent spoke. The extra body's
+// service_tier fills in a member not sent fast; sent fast, the member is
+// never sent slower than the extra body asks (its Ultrafast stays), and
+// sent Ultrafast it is asked for it; a forced "!service_tier" goes over
+// all of them as it says.
+func TestFastMemberOwnProviderExtraTier(t *testing.T) {
+	cases := []struct {
+		name  string
+		extra provider.ExtraBody
+		fast  bool
+		ultra bool
+		want  any
+	}{
+		{"usual, no extra", nil, false, false, nil},
+		{"usual, extra ultrafast", provider.ExtraBody{"service_tier": json.RawMessage(`"ultrafast"`)}, false, false, "ultrafast"},
+		{"fast, extra ultrafast", provider.ExtraBody{"service_tier": json.RawMessage(`"ultrafast"`)}, true, false, "ultrafast"},
+		{"ultrafast, no extra", nil, true, true, "ultrafast"},
+		{"ultrafast, extra ultrafast", provider.ExtraBody{"service_tier": json.RawMessage(`"ultrafast"`)}, true, true, "ultrafast"},
+		{"fast, extra flex", provider.ExtraBody{"service_tier": json.RawMessage(`"flex"`)}, true, false, "priority"},
+		{"fast, forced flex", provider.ExtraBody{"!service_tier": json.RawMessage(`"flex"`)}, true, false, "flex"},
+		{"ultrafast, forced priority", provider.ExtraBody{"!service_tier": json.RawMessage(`"priority"`)}, true, true, "priority"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			s, up := fasted(t)
+			p, _ := provider.Find("rl")
+			p.ExtraBody = c.extra
+			if err := provider.Save(*p); err != nil {
+				t.Fatal(err)
+			}
+			g := provider.Group{ID: "f", Name: "F", Members: []string{"rl/gpt-6.1-sol"}, Routing: provider.Ordered}
+			if c.fast {
+				g.Fast = []string{"rl/gpt-6.1-sol"}
+			}
+			if c.ultra {
+				g.Ultra = []string{"rl/gpt-6.1-sol"}
+			}
+			if err := provider.SaveGroup(g); err != nil {
+				t.Fatal(err)
+			}
+			for _, a := range fastAsks {
+				postProto(t, s, a.path, a.body)
+				host, path, _, body := up.last(t)
+				if host != "relay.example" || body["service_tier"] != c.want {
+					t.Errorf("%s: sent to %s%s service_tier %v, want %v: %v", a.name, host, path, body["service_tier"], c.want, body)
+				}
+			}
+		})
+	}
+}

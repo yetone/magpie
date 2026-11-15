@@ -4105,8 +4105,14 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			attemptBody = withFast(from, attemptBody)
 		}
 		// a pick sent Ultrafast (#1954) asks for it in OpenAI's words; in
-		// Claude's, which have none, the try carries it (withUltra)
-		ultra := fast && c.ultra && !ownFast
+		// Claude's, which have none, the try carries it (withUltra). So
+		// does one sent fast on a provider whose extra body asks for
+		// Ultrafast itself (KoiLx0 on X): fast is never sent slower than
+		// the user asked of the provider, and a tier the extra body forces
+		// ("!service_tier") goes over both as it says (WithExtraBody). On
+		// a provider the user added by its address it is asked for as its
+		// Fast is (OwnFast), and turned away, asked again without it
+		ultra := fast && (c.ultra || extraUltra(c.p))
 		if ultra && (from == provider.Chat || from == provider.Responses) {
 			attemptBody = withFields(attemptBody, map[string]any{"service_tier": "ultrafast"})
 		}
@@ -8291,12 +8297,16 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			r.OwnTier, req = own, &r
 		}
 		// a member or pick the user sent fast on a provider they added is
-		// asked for priority on its OpenAI API whatever API the agent
+		// asked for priority (ultrafast, sent Ultrafast) on its OpenAI API whatever API the agent
 		// spoke (#1615); one that turned the field away isn't (own is
 		// false then)
 		if req.OwnTier && req.Tier == "" && isOwnFast(ctx) && (to == provider.Chat || to == provider.Responses) {
+			tier := "priority"
+			if isUltra(ctx) {
+				tier = "ultrafast" // a member sent Ultrafast there
+			}
 			r := *req
-			r.Tier, req = "priority", &r
+			r.Tier, req = tier, &r
 		}
 		// a pick sent Ultrafast from an agent on Claude's API, whose words
 		// for it are speed "fast" (#1954): on the ChatGPT backend alone

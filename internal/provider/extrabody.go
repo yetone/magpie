@@ -189,6 +189,28 @@ func (p Provider) WithExtraBody(body []byte, c Conversation) []byte {
 	return bytes.TrimSuffix(out.Bytes(), []byte("\n"))
 }
 
+// ExtraTier is the service_tier the provider's extra body asks for, and
+// whether it is forced ("!service_tier"); "" when it names none, or not as
+// a string. A group's member, or an agent's pick, sent fast on the
+// provider is sent at it when it is Ultrafast: fast is never sent slower
+// than the user asked of the provider (the gateway's member tries).
+func (p Provider) ExtraTier() (tier string, forced bool) {
+	if _, takes := p.extraBodyTakes(); !takes {
+		return "", false
+	}
+	for k, raw := range p.ExtraBody {
+		n, f := extraName(k)
+		if n != "service_tier" {
+			continue
+		}
+		var v string
+		if json.Unmarshal(raw, &v) == nil {
+			return strings.TrimSpace(v), f
+		}
+	}
+	return "", false
+}
+
 // withSession is v with ${sessionId}, ${threadId} and ${subagentId} in its
 // strings, at any depth, as c's ids.
 func withSession(v any, c Conversation) any {

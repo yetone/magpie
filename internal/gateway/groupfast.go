@@ -67,6 +67,13 @@ func isOwnFast(ctx context.Context) bool {
 	return v
 }
 
+// extraUltra reports whether p's extra body asks for Ultrafast itself
+// (provider.ExtraTier), which a member or pick sent fast on it is sent at.
+func extraUltra(p provider.Provider) bool {
+	tier, _ := p.ExtraTier()
+	return tier == "ultrafast"
+}
+
 // ultraKey marks a try of a pick sent Ultrafast (#1954) from an agent on
 // Claude's API: its speed "fast" goes to the ChatGPT backend as Ultrafast
 // (forwardTranslated), on an account that offers it.

@@ -8,7 +8,8 @@
 // reasoning is changed stays fast under its new id, while one taken out
 // leaves it. A GPT model on a provider the user added by its address
 // (ownFast, #1615) has the toggle too, off until clicked, and its title says
-// fast is asked of the provider. In English and Chinese, Chromium and WebKit.
+// fast is asked of the provider; one OpenAI offers Ultrafast on (ultraOK)
+// goes on to Ultrafast, and its title says that is asked for. In English and Chinese, Chromium and WebKit.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -22,21 +23,25 @@ const models = [
   { id: "rl/glm-5", name: "glm-5", providerName: "Relay", icon: "generic" },
   // a GPT model on a provider the user added by its address (#1615)
   { id: "rl/o4-mini", name: "o4-mini", providerName: "Relay", icon: "generic", canFast: true, ownFast: true },
+  // one OpenAI offers Ultrafast on (KoiLx0 on X)
+  { id: "rl/gpt-6.2-sol", name: "gpt-6.2-sol", providerName: "Relay", icon: "generic", canFast: true, ownFast: true, ultraOK: true },
 ];
-const members = ["oa/gpt-6.1-sol:high", "an/claude-opus-5-5", "rl/glm-5", "rl/o4-mini"];
+const members = ["oa/gpt-6.1-sol:high", "an/claude-opus-5-5", "rl/glm-5", "rl/o4-mini", "rl/gpt-6.2-sol"];
 const groups = () => ({
   models, pools: [],
   groups: [{ id: "sol", name: "Sol", members, fast: ["oa/gpt-6.1-sol:high"], routing: "order", ready: true,
-    memberInfo: members.map((id) => ({ id, ready: true, fast: id === "oa/gpt-6.1-sol:high", canFast: id !== "rl/glm-5", ownFast: id === "rl/o4-mini" })) }],
+    memberInfo: members.map((id) => ({ id, ready: true, fast: id === "oa/gpt-6.1-sol:high", canFast: id !== "rl/glm-5", ownFast: id.startsWith("rl/") && id !== "rl/glm-5", ultraOK: id === "rl/gpt-6.2-sol" })) }],
 });
 
 const words = {
   en: { edit: "Edit", save: "Save", fast: "Fast", std: "Standard speed", label: "gpt-6.1-sol · high reasoning · fast", remove: "Remove",
     ownOff: 'Sent as the agent asks; click to ask your provider for OpenAI\'s fast mode (service_tier "priority")',
-    ownOn: 'Asked for OpenAI\'s fast mode (service_tier "priority") whatever the agent asks: quicker, at a higher price, where your provider serves it. One that turns it away is asked without it' },
+    ownOn: 'Asked for OpenAI\'s fast mode (service_tier "priority") whatever the agent asks: quicker, at a higher price, where your provider serves it. One that turns it away is asked without it',
+    ultra: "Ultrafast", ownUltra: 'Asked for service_tier "ultrafast" whatever the agent asks, where your provider serves it. One that turns it away is asked without it. Click to send it at the usual speed' },
   zh: { edit: "编辑", save: "保存", fast: "快速", std: "标准速度", label: "gpt-6.1-sol · high 推理强度 · 快速", remove: "移除",
     ownOff: '按代理的请求发送；点击向你的服务商请求 OpenAI 的快速模式（service_tier "priority"）',
-    ownOn: '无论代理怎么请求，都向服务商请求 OpenAI 的快速模式（service_tier "priority"）：服务商支持时更快，价格更高。服务商拒绝这个字段时，会去掉它再请求一次' },
+    ownOn: '无论代理怎么请求，都向服务商请求 OpenAI 的快速模式（service_tier "priority"）：服务商支持时更快，价格更高。服务商拒绝这个字段时，会去掉它再请求一次',
+    ultra: "极速", ownUltra: '无论 Agent 要求什么，都向你的服务商请求极速（service_tier "ultrafast"），前提是它支持；不接受的会改为不带该字段重新请求。点一下改回标准速度' },
 };
 
 function serve(lang, posts) {
@@ -131,6 +136,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await fast("o4-mini").click();
       assert.equal(await fast("o4-mini").textContent(), w.fast);
       assert.equal(await fast("o4-mini").getAttribute("title"), w.ownOn);
+      await fast("o4-mini").click();
+      assert.equal(await fast("o4-mini").textContent(), w.std, "no Ultrafast where OpenAI offers none");
+      await fast("o4-mini").click();
+      // usual -> fast -> Ultrafast on the one OpenAI offers it on
+      await fast("gpt-6.2-sol").click();
+      assert.equal(await fast("gpt-6.2-sol").textContent(), w.fast);
+      await fast("gpt-6.2-sol").click();
+      assert.equal(await fast("gpt-6.2-sol").textContent(), w.ultra);
+      assert.equal(await fast("gpt-6.2-sol").getAttribute("title"), w.ownUltra);
 
       const b = ed.locator("button.primary", { hasText: w.save });
       await page.mouse.move(550, 600);
@@ -142,8 +156,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.mouse.click(bb.x + bb.width / 2, bb.y + bb.height / 2);
       await page.waitForFunction(() => !document.querySelector(".rt-gedit"));
       const sent = posts.find((p) => p.path === "/api/groups/save");
-      assert.deepEqual(sent.body.members, ["oa/gpt-6.1-sol:xhigh", "rl/glm-5", "rl/o4-mini"]);
-      assert.deepEqual(sent.body.fast, ["oa/gpt-6.1-sol:xhigh", "rl/o4-mini"]);
+      assert.deepEqual(sent.body.members, ["oa/gpt-6.1-sol:xhigh", "rl/glm-5", "rl/o4-mini", "rl/gpt-6.2-sol"]);
+      assert.deepEqual(sent.body.fast, ["oa/gpt-6.1-sol:xhigh", "rl/o4-mini", "rl/gpt-6.2-sol"]);
+      assert.deepEqual(sent.body.ultra, ["rl/gpt-6.2-sol"]);
 
       const missing = await page.evaluate(() => [
         "fast", "Fast", "Standard speed", "Sent in its vendor's fast mode, as the group says",
@@ -151,6 +166,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         "Sent at its vendor's usual speed; click to send it in fast mode",
         'Asked for OpenAI\'s fast mode (service_tier "priority") whatever the agent asks: quicker, at a higher price, where your provider serves it. One that turns it away is asked without it',
         'Sent as the agent asks; click to ask your provider for OpenAI\'s fast mode (service_tier "priority")',
+        'Asked for service_tier "ultrafast" whatever the agent asks, where your provider serves it. One that turns it away is asked without it. Click to send it at the usual speed',
         "{model} is asked for OpenAI's fast mode for {agent}, where your provider serves it. Click to send it as {agent} asks",
         'Ask your provider for OpenAI\'s fast mode (service_tier "priority") on {model} for {agent}: quicker, at a higher price, where it serves it',
       ].filter((k) => !I18N.zh[k] || !I18N["zh-TW"][k] || !I18N.ja[k] || !I18N.de[k]));

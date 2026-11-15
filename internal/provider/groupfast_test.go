@@ -1,6 +1,8 @@
 package provider
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -137,5 +139,48 @@ func TestSaveGroupFast(t *testing.T) {
 		if err == nil || !(strings.Contains(err.Error(), "no fast mode") || strings.Contains(err.Error(), "takes no :fast")) {
 			t.Errorf("%s: %v", m, err)
 		}
+	}
+}
+
+// A GPT model on a provider the user added by its address can be sent
+// Ultrafast where OpenAI offers it on the model (KoiLx0 on X): Codex's own
+// entry for it lists the tier, as Codex itself is offered it there. Not on
+// a model Codex's entry gives Fast alone, nor one it has no entry for, nor
+// on another vendor's model.
+func TestCanUltraOwnProvider(t *testing.T) {
+	fastHome(t)
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+	rl, _ := Find("rl")
+	oa, _ := Find("oa")
+	if UltraOn(*rl, "gpt-6.1-sol", nil) {
+		t.Fatal("Ultrafast with no list saying so")
+	}
+	cache := `{"etag":"e1","models":[
+		{"slug":"gpt-6.1-sol","description":"x","service_tiers":[{"id":"priority","name":"Fast"},{"id":"ultrafast","name":"Ultra Fast"}]},
+		{"slug":"gpt-6.1-mini","description":"x","service_tiers":[{"id":"priority","name":"Fast"}]}]}`
+	if err := os.WriteFile(filepath.Join(codexHome, "models_cache.json"), []byte(cache), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		p     Provider
+		model string
+		want  bool
+	}{
+		{*rl, "gpt-6.1-sol", true},
+		{*rl, "openai/GPT-6.1-sol-2026-05-01", true},
+		{*rl, "gpt-6.1-mini", false},
+		{*rl, "gpt-7", false},
+		{*rl, "claude-opus-5-5", false},
+		// OpenAI's own API offers no Ultrafast
+		{*oa, "gpt-6.1-sol", false},
+	} {
+		if got := UltraOn(c.p, c.model, nil); got != c.want {
+			t.Errorf("%s/%s: Ultrafast %v, want %v", c.p.ID, c.model, got, c.want)
+		}
+	}
+	// one of Codex's accounts listing it says so too
+	if !UltraOn(*rl, "gpt-7", map[string]bool{"gpt-7": true}) {
+		t.Error("an account's Ultrafast not taken")
 	}
 }

@@ -637,6 +637,56 @@ func agentsEffort(own map[string]map[string]any, m catalog.Model) string {
 	return ef
 }
 
+// ownSlug is the slug of Codex's own entry for a model a provider the user
+// added by its address serves: openai/GPT-6-sol-2026-05-01 is gpt-6-sol.
+func ownSlug(id string) string {
+	slug := strings.ToLower(id)
+	if i := strings.LastIndex(slug, "/"); i >= 0 {
+		slug = slug[i+1:]
+	}
+	return datedSuffix.ReplaceAllString(slug, "")
+}
+
+// OwnOffers reports whether Codex's own entry for the model a provider the
+// user added by its address serves (ownSlug) lists tier, as ownTiers offers
+// Codex that tier on it: a routing group may send the model at it too
+// (KoiLx0 on X: Ultrafast on a relay of OpenAI's models). Read through
+// filememo, as a list asks it of every model.
+func OwnOffers(id, tier string) bool {
+	tiers, _ := filememo.Read("codex own tiers", catalog.CodexModelsCache(), parseOwnTiers)
+	return slices.Contains(tiers[ownSlug(id)], tier)
+}
+
+// parseOwnTiers is each of Codex's own entries' service tier ids, by slug;
+// one magpie added to the cache is not Codex's own.
+func parseOwnTiers(b []byte) (map[string][]string, error) {
+	var cache struct {
+		ETag   string `json:"etag"`
+		Models []struct {
+			Slug        string `json:"slug"`
+			Description string `json:"description"`
+			Tiers       []struct {
+				ID string `json:"id"`
+			} `json:"service_tiers"`
+		} `json:"models"`
+	}
+	if err := json.Unmarshal(b, &cache); err != nil {
+		return nil, err
+	}
+	out := map[string][]string{}
+	for _, m := range cache.Models {
+		if m.Slug == "" || catalog.MagpieAdded(cache.ETag, m.Slug, m.Description) {
+			continue
+		}
+		for _, t := range m.Tiers {
+			if t.ID != "" {
+				out[m.Slug] = append(out[m.Slug], t.ID)
+			}
+		}
+	}
+	return out, nil
+}
+
 // gptModel is an OpenAI model's id, as a relay may serve it: gpt-6-sol, o4.
 var gptModel = lazyre.New(`^(gpt-|o\d)`)
 
@@ -645,11 +695,7 @@ var gptModel = lazyre.New(`^(gpt-|o\d)`)
 // relay, a dated snapshot), Ultrafast among them where the entry has it;
 // Fast on another GPT model; none on any other.
 func ownTiers(own map[string]map[string]any, m catalog.Model) []tier {
-	slug := strings.ToLower(m.ID)
-	if i := strings.LastIndex(slug, "/"); i >= 0 {
-		slug = slug[i+1:]
-	}
-	slug = datedSuffix.ReplaceAllString(slug, "")
+	slug := ownSlug(m.ID)
 	if raw, ok := own[slug]["service_tiers"].([]any); ok {
 		var ts []tier
 		for _, r := range raw {

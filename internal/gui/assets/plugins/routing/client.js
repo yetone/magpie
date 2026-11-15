@@ -7832,7 +7832,7 @@ function routingPage(part) {
             fb.setAttribute("aria-pressed", String(on));
             // on a provider the user added (provider.OwnFast, #1615) it is
             // only asked for: magpie can't know the provider serves it
-            fb.title = ultra ? t("Sent Ultrafast where the account offers it, and fast where it doesn't, whatever the agent asks. Click to send it at the usual speed")
+            fb.title = ultra ? t(m.ownFast ? "Asked for service_tier \"ultrafast\" whatever the agent asks, where your provider serves it. One that turns it away is asked without it. Click to send it at the usual speed" : "Sent Ultrafast where the account offers it, and fast where it doesn't, whatever the agent asks. Click to send it at the usual speed")
               : m.ownFast
               ? (on ? t("Asked for OpenAI's fast mode (service_tier \"priority\") whatever the agent asks: quicker, at a higher price, where your provider serves it. One that turns it away is asked without it") : t("Sent as the agent asks; click to ask your provider for OpenAI's fast mode (service_tier \"priority\")"))
               : (on ? t(m.ultraOK ? "Sent in its vendor's fast mode whatever the agent asks: quicker, at a higher price. Click to send it Ultrafast, where the account offers it" : "Sent in its vendor's fast mode whatever the agent asks: quicker, at a higher price") : t("Sent at its vendor's usual speed; click to send it in fast mode"));
