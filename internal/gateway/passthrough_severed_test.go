@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -291,8 +292,16 @@ func TestPassthroughResponsesBigLastEvent(t *testing.T) {
 	f := &fake{reply: reply}
 	setup(t, "responses", f)
 	code, body := post(t, "/v1/responses", `{"model":"fake/m1","stream":true,"input":"hi"}`)
-	if code != 200 || body != namedAs(reply, "fake/m1") {
-		t.Fatalf("a whole stream with a big last event was changed: %d, %d bytes added", code, len(body)-len(reply))
+	// a stream held past keepHeldEvery (5s; 5.83s on macOS CI at
+	// 2d106b5c1) has its agent kept alive with a comment at a line's
+	// start, which is no change to the reply: only those are left out
+	kept := regexp.MustCompile(`(?m)^: keepalive\n`).ReplaceAllString(body, "")
+	if want := namedAs(reply, "fake/m1"); code != 200 || kept != want {
+		i := 0
+		for i < len(kept) && i < len(want) && kept[i] == want[i] {
+			i++
+		}
+		t.Fatalf("a whole stream with a big last event was changed: %d, %d bytes added; from byte %d it has %q where it should have %q", code, len(kept)-len(want), i, kept[i:min(len(kept), i+80)], want[i:min(len(want), i+80)])
 	}
 }
 
