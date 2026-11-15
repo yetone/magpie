@@ -109,7 +109,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const tiles = await p.locator(".kpi").allTextContents();
           assert(tiles.some((x) => x.includes(r90)), tiles.join(" | "));
 
-          // the requests: 90.0% with one left out, and the Kiro call's cache
+          // the requests: 90.00% with one left out, and the Kiro call's cache
           // cells say nothing counted rather than 0
           await p.locator(":is(#usageTab .opt, .nav-s):visible").nth(1).click();
           const rows = p.locator(".led tbody tr.led-row");
@@ -119,7 +119,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             return b && { v: b.querySelector(".v").textContent, sub: b.querySelector(".sub")?.textContent || "" };
           }, await say("Cache hit rate"));
           assert(card, "a Cache hit rate card");
-          assert.equal(card.v, "90.0%");
+          assert.equal(card.v, "90.00%");
           assert.equal(card.sub, leftOut);
           const cells = await p.locator(".led").evaluate((tb, [w, r]) => {
             const heads = [...tb.tHead.rows[0].cells].map((c) => c.textContent);

@@ -86,7 +86,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.match(await rows.nth(0).locator(".speed .v").textContent(), lang === "zh" ? /^100 token\/秒$/ : /^100 tok\/s$/);
         assert.match(await rows.nth(1).locator(".cache-hit .v").textContent(), /0%$/);
         assert.match(await rows.nth(2).locator(".cache-hit .v").textContent(), /100%$/);
-        assert.equal(await rows.nth(1).locator(".cost").textContent(), "≈$0.000", "known zero cost remains visible");
+        assert.equal(await rows.nth(1).locator(".cost").textContent(), "$0.000", "known zero cost remains visible");
         assert.equal(await rows.nth(3).locator(".cache-hit").count(), 0, "legacy totals cannot establish a cache rate");
         assert.equal(await rows.nth(4).locator(".cache-hit").count(), 0, "output is not part of the prompt");
         for (const i of [5, 9, 10, 11]) assert.equal(await rows.nth(i).locator(".speed").count(), 0, `row ${i} has no output speed`);

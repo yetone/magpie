@@ -88,7 +88,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal((await page.locator("#usageAccountsHead .label").textContent()).trim(), w.head);
       assert.deepEqual(await page.locator("#usageAccounts .name").allTextContents(), ["a@example.com", "b@example.com", w.none, "a@example.com"]);
       assert.deepEqual(await page.locator("#usageAccounts .sub").evaluateAll((s) => s.map((x) => x.textContent.split(" · ")[0])), ["Codex", "Codex", "Codex", "Claude"]);
-      assert.deepEqual(await page.locator("#usageAccounts .cost").allTextContents(), ["≈$3.75", "≈$2.50", "≈$2.50", "≈$1.25"]);
+      assert.deepEqual(await page.locator("#usageAccounts .cost").allTextContents(), ["$3.75", "$2.50", "$2.50", "$1.25"]);
       // no coloured stripe down a row's side
       assert(await page.locator("#usageAccounts .row").evaluateAll((rs) => rs.every((r) => parseFloat(getComputedStyle(r).borderLeftWidth) === 0)));
 

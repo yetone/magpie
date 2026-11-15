@@ -2,7 +2,7 @@
 // Usage's sum at the head's right is never cut (#1599, sean908): in the
 // window, between 640px and the width the tabs, the periods with Custom
 // named and the refresh need, the sum was the one thing to give way, and
-// ≈$0.001 read "≈$0.". At every width from a phone's to a wide window the
+// $0.001 read "$0.". At every width from a phone's to a wide window the
 // sum is whole and on the page, and the page never scrolls sideways.
 // English, Chinese, Japanese and German, Chromium and WebKit; no backend,
 // the API is faked here.
@@ -73,7 +73,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           if (!b) return JSON.stringify({ text: cost.textContent }); // redrawn: not a sum yet
           const c = cost.getBoundingClientRect(), s = b.getBoundingClientRect();
           const got = { head: cost.parentElement.className, text: b.textContent, sum: [s.left, s.right], box: [c.left, c.right], wide: document.documentElement.scrollWidth, inner: innerWidth };
-          const whole = got.text === "≈$0.001" && got.sum[1] <= got.box[1] + 0.5 && got.sum[0] >= got.box[0] - 0.5 && got.sum[1] <= got.inner && got.wide <= got.inner;
+          const whole = got.text === "$0.001" && got.sum[1] <= got.box[1] + 0.5 && got.sum[0] >= got.box[0] - 0.5 && got.sum[1] <= got.inner && got.wide <= got.inner;
           return whole ? "" : JSON.stringify(got);
         };
         // the head is fitted a frame or two after a resize: given a few

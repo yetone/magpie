@@ -72,8 +72,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const group = page.locator("button.rt-session").filter({ hasText: "Codex · conversation-a" });
       assert.equal(await page.locator(".rt-session").count(), 4, "identical IDs from different agents must not merge");
       assert.match(await group.locator(".summary").textContent(), lang === "zh" ? /3 个请求.*6.0k/ : /3 requests.*6.0k/);
-      assert.equal(await group.locator(".cost").textContent(), "≈$0.030+", "partial totals must be marked");
-      assert.equal(await page.locator("button.rt-session").filter({ hasText: "Claude Code" }).locator(".cost").textContent(), "≈$0.000", "zero price is known");
+      assert.equal(await group.locator(".cost").textContent(), "$0.030+", "partial totals must be marked");
+      assert.equal(await page.locator("button.rt-session").filter({ hasText: "Claude Code" }).locator(".cost").textContent(), "$0.000", "zero price is known");
       assert.equal(await page.locator(".rt-session", { hasText: lang === "zh" ? "未提供会话标识" : "No session ID" }).locator(".cost").isVisible(), false, "unknown cost is omitted for legacy requests");
       assert.equal(await page.locator(".rt-req").count(), 6);
 
@@ -86,13 +86,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       for (let i = 0; i < 50 && !feed.next; i++) await page.waitForTimeout(20);
       assert(feed.next, "long poll started");
       feed.next([req(7, "codex", "conversation-a", 0.01)]);
-      await page.waitForFunction(() => [...document.querySelectorAll("button.rt-session")].some((e) => e.textContent.includes("≈$0.040+")));
+      await page.waitForFunction(() => [...document.querySelectorAll("button.rt-session")].some((e) => e.textContent.includes("$0.040+")));
       assert.equal(await group.getAttribute("aria-expanded"), "false");
       assert(await group.evaluate((e, previous) => e === previous, handle), "live update replaced the heading");
 
       // Currency changes redraw routing costs using the existing formatter.
       await page.evaluate(() => { currency = "cny"; fx = { rate: 7, at: null, stale: false }; renderCosts(); });
-      assert.equal(await group.locator(".cost").textContent(), "≈¥0.280+");
+      assert.equal(await group.locator(".cost").textContent(), "¥0.280+");
       await group.click();
       assert.equal(await page.locator(".rt-req").count(), 7);
       await page.locator(".rt-group-by button").first().click();
@@ -155,7 +155,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const memoryName = lang === "zh" ? "后台记忆整理" : "Background memory task";
       assert.equal(await group("memory-a").locator(".nm").textContent(), `Codex · ${memoryName}`);
       assert.equal(await group("memory-b").locator(".nm").textContent(), `Codex · ${memoryName}`);
-      assert.equal(await group("memory-a").locator(".cost").textContent(), "≈$0.070");
+      assert.equal(await group("memory-a").locator(".cost").textContent(), "$0.070");
       assert.match(await group("memory-a").locator(".summary").textContent(), lang === "zh" ? /2 个请求/ : /2 requests/);
       assert.match(await group("memory-a").locator(".nm").getAttribute("title"), lang === "zh" ? /回答结束后.*继续/ : /continue after a chat finishes/);
       assert.equal(await group("chat").locator(".nm").textContent(), "Codex · Chat title");
@@ -170,7 +170,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       for (let i = 0; i < 50 && !feed.next; i++) await page.waitForTimeout(20);
       assert(feed.next, "long poll started");
       feed.next([{ ...req(11, "codex", "memory-a", 0.01), kind: "memory_consolidation" }]);
-      await page.waitForFunction(() => [...document.querySelectorAll("button.rt-session .cost")].some((e) => e.textContent === "≈$0.080"));
+      await page.waitForFunction(() => [...document.querySelectorAll("button.rt-session .cost")].some((e) => e.textContent === "$0.080"));
       assert.equal(await memory.getAttribute("aria-expanded"), "false");
       assert(await memory.evaluate((e, previous) => e === previous, handle), "labeling must preserve the heading through live updates");
       assert.equal(await group("memory-b").getAttribute("aria-expanded"), "true");
@@ -237,7 +237,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.match(tooltip, lang === "zh" ? /后台.*提示词建议.*安全检查/ : /suggested prompts.*in the background.*checked them for safety/);
         assert(tooltip.endsWith((lang === "zh" ? "会话 ID" : "Session id") + ": " + id), "tooltip retains the group's own session ID");
       }
-      assert.equal(await group("suggestions-a").locator(".cost").textContent(), "≈$0.030");
+      assert.equal(await group("suggestions-a").locator(".cost").textContent(), "$0.030");
       assert.equal(await group("named-suggestions").locator(".nm").textContent(), "Codex · Named suggestions");
       assert.equal(await group("mixed").locator(".nm").textContent(), "Codex · mixed");
       assert.equal(await group("named-chat").locator(".nm").textContent(), "Codex · Chat title");
@@ -267,7 +267,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     await group.waitFor();
     assert.equal(await page.locator(".rt-session").count(), 3);
     assert.match(await group.locator(".summary").textContent(), /2 个请求/);
-    assert.equal(await group.locator(".cost").textContent(), "≈$0.042");
+    assert.equal(await group.locator(".cost").textContent(), "$0.042");
     assert.equal(await page.locator(".rt-req .kind").filter({ hasText: "标题" }).count(), 2);
     await group.click();
     assert.equal(await page.locator(".rt-req").count(), 2, "only this parent and its title fold together");
@@ -280,7 +280,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     assert.equal(await named.getAttribute("aria-expanded"), "false", "late title must not reset folding");
     assert(await named.evaluate((e, previous) => e === previous, handle));
     assert.match(await named.locator(".nm").getAttribute("title"), /main-a/);
-    assert.equal(await named.locator(".cost").textContent(), "≈$0.042");
+    assert.equal(await named.locator(".cost").textContent(), "$0.042");
     assert.equal(await page.locator("button.rt-session").filter({ hasText: "main-b" }).count(), 1, "unknown names retain ID");
     await page.waitForTimeout(50);
     for (let i = 0; i < 50 && !feed.next; i++) await page.waitForTimeout(20);
@@ -345,17 +345,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       t.after(async () => { feed.next?.([]); await browser.close(); });
       await page.goto("http://magpie.test/?view=routing");
       await page.locator(".rt-req").nth(3).waitFor();
-      assert.equal(await page.locator(".rt-req").filter({ hasText: "model-a" }).locator(".cost").textContent(), "≈$0.000+", "a zero-priced attempt plus an unknown attempt retains its amount");
+      assert.equal(await page.locator(".rt-req").filter({ hasText: "model-a" }).locator(".cost").textContent(), "$0.000+", "a zero-priced attempt plus an unknown attempt retains its amount");
       await page.locator(".rt-group-by button").nth(1).click();
       const group = (name) => page.locator("button.rt-session").filter({ hasText: name });
-      assert.equal(await group("Codex · partial").locator(".cost").textContent(), "≈$0.000+");
+      assert.equal(await group("Codex · partial").locator(".cost").textContent(), "$0.000+");
       assert.match(await group("Codex · partial").locator(".summary").textContent(), lang === "zh" ? /^1 个请求/ : /^1 request ·/);
-      assert.equal(await group("Codex · mixed").locator(".cost").textContent(), "≈$0.000+", "a free request plus an unknown request is a partial zero estimate");
+      assert.equal(await group("Codex · mixed").locator(".cost").textContent(), "$0.000+", "a free request plus an unknown request is a partial zero estimate");
       assert.match(await group("Codex · mixed").locator(".summary").textContent(), lang === "zh" ? /^2 个请求/ : /^2 requests ·/);
       assert.equal(await group("Claude Code · unknown").locator(".cost").isVisible(), false, "all unknown costs are omitted");
       await page.evaluate(() => { currency = "cny"; fx = { rate: 7, at: null, stale: false }; renderCosts(); });
-      assert.equal(await group("Codex · mixed").locator(".cost").textContent(), "≈¥0.000+");
-      assert.equal(await page.locator(".rt-req").filter({ hasText: "model-a" }).locator(".cost").textContent(), "≈¥0.000+");
+      assert.equal(await group("Codex · mixed").locator(".cost").textContent(), "¥0.000+");
+      assert.equal(await page.locator(".rt-req").filter({ hasText: "model-a" }).locator(".cost").textContent(), "¥0.000+");
     });
   }
 }
@@ -401,7 +401,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await group(title.session).count(), 0);
       assert.equal(await parent.locator(".nm").textContent(), "Codex · 完成标题关联测试");
       if (main.priced && title.priced) {
-        const cost = await page.evaluate((amount) => "≈" + fmtCost({ cost: amount, unpriced: 0 }), main.cost + title.cost);
+        const cost = await page.evaluate((amount) => fmtCost({ cost: amount, unpriced: 0 }), main.cost + title.cost);
         assert.equal(await parent.locator(".cost").textContent(), cost, "helper cost joins the original chat total");
       }
       assert.match(await parent.locator(".summary").textContent(), lang === "zh" ? /2 个请求/ : /2 requests/);
@@ -482,7 +482,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await (await scrolledTo(mixed ? "chat-801" : "chat-1")).locator(".nm").textContent(), `Codex · Applied chat-${mixed ? 801 : 1}`);
         await page.evaluate(() => { document.querySelector(".rt-reqs").scrollTop = 0; });
         await page.waitForFunction(() => [...document.querySelectorAll(".rt-session .nm")].some((e) => e.textContent === "Codex · Applied opened-chat"));
-        assert.equal(await group("opened-chat").locator(".cost").textContent(), "≈$0.010");
+        assert.equal(await group("opened-chat").locator(".cost").textContent(), "$0.010");
         const batches = titleRequests.filter((input) => input.day === day);
         assert(batches.length > 0, "history refresh never ran");
         assert(batches.every((input) => input.ids.length <= 2000 && input.routeIds.length <= 2000), "API batch exceeded the ID limit");
@@ -522,7 +522,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       for (let i = 0; i < 50 && !feed.next; i++) await page.waitForTimeout(20);
       assert(feed.next, "long poll started");
       feed.next([...fixture, req(4, "claude", uuid, 0.02)]);
-      await page.waitForFunction(() => [...document.querySelectorAll("button.rt-session")].some((e) => e.textContent.includes("≈$0.030")));
+      await page.waitForFunction(() => [...document.querySelectorAll("button.rt-session")].some((e) => e.textContent.includes("$0.030")));
       assert.equal(await named.count(), 1, "a live update keeps the name");
       assert.deepEqual(errors, []);
     });

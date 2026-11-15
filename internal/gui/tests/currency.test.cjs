@@ -92,7 +92,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // the Usage page shows $ by default
         await page.goto("http://magpie.test/?view=usage");
         await page.locator("#usageCost b").waitFor();
-        assert.equal((await page.locator("#usageCost b").textContent()).trim(), "≈$12.34", "usd is the default");
+        assert.equal((await page.locator("#usageCost b").textContent()).trim(), "$12.34", "usd is the default");
 
         // Settings: the currency row, its rate in the tooltip
         await page.locator("#prefs").click();
@@ -138,7 +138,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // the Usage page now shows ¥, at the fixed rate (12.34 * 7.2)
         await page.locator('[data-view="usage"]').click();
         await page.waitForTimeout(200);
-        assert.equal((await page.locator("#usageCost b").textContent()).trim(), "≈¥88.85");
+        assert.equal((await page.locator("#usageCost b").textContent()).trim(), "¥88.85");
 
         // and back to Settings, ¥ CNY is still picked after a reload
         await page.reload();
@@ -189,7 +189,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // no visit to Settings first: the Usage page at start is in ¥
         await page.goto("http://magpie.test/?view=usage");
         await page.locator("#usageCost b").waitFor();
-        assert.equal((await page.locator("#usageCost b").textContent()).trim(), "≈¥88.85", "cny at the rate state gave");
+        assert.equal((await page.locator("#usageCost b").textContent()).trim(), "¥88.85", "cny at the rate state gave");
 
         // Settings agrees
         await page.locator("#prefs").click();
@@ -200,7 +200,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // and back on Usage, still ¥
         await page.locator('[data-view="usage"]').click();
         await page.waitForTimeout(200);
-        assert.equal((await page.locator("#usageCost b").textContent()).trim(), "≈¥88.85");
+        assert.equal((await page.locator("#usageCost b").textContent()).trim(), "¥88.85");
 
         assert.deepEqual(errors, []);
         await context.close();

@@ -252,7 +252,7 @@ async function usageFits(page) {
     return bad;
   });
   assert.deepEqual(bad, []);
-  for (const selector of ["#usageAgents .cost", "#usageModels .cost"]) assert.match(await page.locator(selector).first().textContent(), /≈\$12\.34/);
+  for (const selector of ["#usageAgents .cost", "#usageModels .cost"]) assert.match(await page.locator(selector).first().textContent(), /^\$12\.34$/);
 }
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {

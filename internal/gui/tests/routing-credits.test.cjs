@@ -81,7 +81,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // newest first: none said, priced and said, then the two credited alone
         const cost = (i) => rows.nth(i).locator(".cost-metric");
         assert.equal(await cost(0).count(), 0, "a reply that said no credits and has no price shows no cost, as before");
-        assert.equal(await cost(1).locator(".v").textContent(), `≈$0.010 · ${w.n(num(lang, 2))}`);
+        assert.equal(await cost(1).locator(".v").textContent(), `$0.010 · ${w.n(num(lang, 2))}`);
         assert.equal(await cost(2).locator(".v").textContent(), w.n(num(lang, 0.25)), "no known price: the credits alone, never a dash");
         assert.equal(await cost(3).locator(".v").textContent(), w.n(num(lang, 1.5)));
         assert.match(await cost(3).getAttribute("title"), w.one);
@@ -96,7 +96,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await sum.isVisible(), true, "a session of credits alone shows them");
         assert.equal(await sum.textContent(), w.n(num(lang, 1.75)));
         assert.match(await sum.getAttribute("title"), w.some);
-        assert.equal(await group("s-priced").locator(".cost").textContent(), `≈$0.010 · ${w.n(num(lang, 2))}`);
+        assert.equal(await group("s-priced").locator(".cost").textContent(), `$0.010 · ${w.n(num(lang, 2))}`);
         assert.equal(await group("s-none").locator(".cost").isVisible(), false, "a session that said none reads as before");
 
         const fit = await page.evaluate(() => ({ client: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));

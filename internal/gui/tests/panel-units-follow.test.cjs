@@ -1,7 +1,7 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // The tray panel follows Settings' units (blrbrzkj on Discord, two
 // screenshots: Settings said ¥ 人民币 and 中文（万 / 亿）, the panel's Usage
-// tab still ≈$7.18 and 16M). The panel is open on its Usage tab while
+// tab still $7.18 and 16M). The panel is open on its Usage tab while
 // Settings, in the window, picks another currency and number units; when
 // the panel is shown again it reads the settings again, and its cost, its
 // counts and its chart's axis say what was picked, not what was picked
@@ -105,14 +105,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await p.locator("#panelUsage .pu-card .led-chart svg").waitFor();
         let s = await shown(p);
         assert.equal(s.tokens, "1.54B", lang + ": K/M/B at first");
-        assert.equal(s.cost, "≈$26.40", lang + ": $ at first");
+        assert.equal(s.cost, "$26.40", lang + ": $ at first");
 
         // Settings, in the window, picks ¥ and 万 / 亿
         store.cur = { ...store.cur, currency: "cny", chineseUnits: true };
         await hideAndShow(p, store);
         await p.waitForFunction(() => /¥/.test(document.querySelectorAll("#panelUsage .pu-tot .blk .v")[2]?.textContent || ""), null, { timeout: 3000 }).catch(() => {});
         s = await shown(p);
-        assert.equal(s.cost, "≈¥185", lang + ": the cost in yuan once Settings picks ¥, got " + s.cost);
+        assert.equal(s.cost, "¥184.80", lang + ": the cost in yuan once Settings picks ¥, got " + s.cost);
         if (chinese) {
           assert.equal(s.tokens, "15.4 " + (lang === "zh" ? "亿" : "億"), lang + ": the tokens in 万/亿, got " + s.tokens);
           assert(s.axis.some((x) => /万|萬/.test(x)), lang + ": the chart's axis in 万, got " + s.axis);
@@ -125,7 +125,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await hideAndShow(p, store);
         await p.waitForFunction(() => /\$/.test(document.querySelectorAll("#panelUsage .pu-tot .blk .v")[2]?.textContent || ""), null, { timeout: 3000 }).catch(() => {});
         s = await shown(p);
-        assert.equal(s.cost, "≈$26.40", lang + ": back in dollars, got " + s.cost);
+        assert.equal(s.cost, "$26.40", lang + ": back in dollars, got " + s.cost);
         assert.equal(s.tokens, "1.54B", lang + ": back in K/M/B, got " + s.tokens);
         assert(!s.axis.some((x) => /万|萬|亿|億/.test(x)), lang + ": the axis back in K/M/B, got " + s.axis);
         assert.deepEqual(errors, []);
@@ -136,7 +136,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 }
 
 // The currency alone (dLdgKyRd on Discord, v0.1.3025: the panel's Usage tab
-// ≈$12.36 while the Usage page said ≈¥82.61). The test above picks ¥ and
+// $12.36 while the Usage page said ¥82.61). The test above picks ¥ and
 // 万 / 亿 together, and the units' change redrew the panel while the
 // currency's alone didn't; nor was a panel drawn before the state came
 // ever redrawn. Each way the panel gets its currency: its first open, with
@@ -180,7 +180,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await o.p.locator("#panelUsage .pu-card .led-chart svg").waitFor();
         for (let i = 0; i < 100 && store.stateReads === 0; i++) await o.p.waitForTimeout(20);
         await o.p.waitForTimeout(500); // the state is in
-        await costBecomes(o.p, "≈¥185", lang + ": first open, the state after the usage");
+        await costBecomes(o.p, "¥184.80", lang + ": first open, the state after the usage");
         assert.deepEqual(o.errors, []);
         await o.ctx.close();
 
@@ -188,15 +188,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         store = { cur: { ...units, currency: "usd" }, stateReads: 0 };
         o = await openPanel(browser, lang, store, width, "stats");
         await o.p.locator("#panelUsage .pu-card .led-chart svg").waitFor();
-        await costBecomes(o.p, "≈$26.40", lang + ": $ at first");
+        await costBecomes(o.p, "$26.40", lang + ": $ at first");
         store.cur = { ...store.cur, currency: "cny" };
         await hideAndShow(o.p, store);
-        await costBecomes(o.p, "≈¥185", lang + ": reopened after ¥ was picked alone");
+        await costBecomes(o.p, "¥184.80", lang + ": reopened after ¥ was picked alone");
         store.cur = { ...store.cur, currency: "usd" };
         const before = store.stateReads;
         await o.p.evaluate(() => window.dispatchEvent(new Event("focus")));
         for (let i = 0; i < 100 && store.stateReads === before; i++) await o.p.waitForTimeout(20);
-        await costBecomes(o.p, "≈$26.40", lang + ": focused after $ was picked again");
+        await costBecomes(o.p, "$26.40", lang + ": focused after $ was picked again");
         assert.deepEqual(o.errors, []);
         await o.ctx.close();
 
@@ -209,7 +209,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await o.p.waitForTimeout(100);
         await o.p.locator('[data-ptab="stats"]').click();
         await o.p.locator("#panelUsage .pu-card .led-chart svg").waitFor();
-        await costBecomes(o.p, "≈¥185", lang + ": its Usage tab picked after ¥");
+        await costBecomes(o.p, "¥184.80", lang + ": its Usage tab picked after ¥");
         assert.deepEqual(o.errors, []);
         await o.ctx.close();
       });

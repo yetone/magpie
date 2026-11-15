@@ -119,9 +119,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           // dollars everywhere by default
           await page.goto("http://magpie.test/?view=usage");
           await page.locator("#usageModels .row").first().waitFor();
-          assert.equal(await totalCost(page), "≈$3.00");
-          assert.equal(await modelCost(page, "deepseek-chat"), "≈$1.00");
-          assert.equal(await modelCost(page, "gpt-5"), "≈$2.00");
+          assert.equal(await totalCost(page), "$3.00");
+          assert.equal(await modelCost(page, "deepseek-chat"), "$1.00");
+          assert.equal(await modelCost(page, "gpt-5"), "$2.00");
 
           // Settings: the third choice, and no "Totals in" row until it is picked
           await toSettings(page);
@@ -145,9 +145,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
           // Usage: DeepSeek in yuan (1 × 7.2), OpenAI and the total in dollars
           await toUsage(page);
-          assert.equal(await modelCost(page, "deepseek-chat"), "≈¥7.20");
-          assert.equal(await modelCost(page, "gpt-5"), "≈$2.00");
-          assert.equal(await totalCost(page), "≈$3.00");
+          assert.equal(await modelCost(page, "deepseek-chat"), "¥7.20");
+          assert.equal(await modelCost(page, "gpt-5"), "$2.00");
+          assert.equal(await totalCost(page), "$3.00");
 
           // totals in yuan: the sum goes ¥, each provider keeps its own
           await toSettings(page);
@@ -157,9 +157,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.equal(saved.at(-1).totalCurrency, "cny");
           assert.equal(saved.at(-1).currency, "provider", "picking the totals' currency keeps By provider");
           await toUsage(page);
-          assert.equal(await totalCost(page), "≈¥21.60");
-          assert.equal(await modelCost(page, "deepseek-chat"), "≈¥7.20");
-          assert.equal(await modelCost(page, "gpt-5"), "≈$2.00");
+          assert.equal(await totalCost(page), "¥21.60");
+          assert.equal(await modelCost(page, "deepseek-chat"), "¥7.20");
+          assert.equal(await modelCost(page, "gpt-5"), "$2.00");
 
           // the menu bar's currency, set apart from the totals' (onkashiko's
           // second ask): folded under Advanced, closed while unset
@@ -183,15 +183,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.equal(saved.at(-1).totalCurrency, "cny", "the menu bar's pick leaves the totals'");
           assert.equal(saved.at(-1).currency, "provider");
           await toUsage(page);
-          assert.equal(await totalCost(page), "≈¥21.60", "the menu bar's pick leaves the Usage page's totals");
+          assert.equal(await totalCost(page), "¥21.60", "the menu bar's pick leaves the Usage page's totals");
 
           // after a restart, straight onto Usage: the same
           await page.reload();
           await page.locator("#usageModels .row").first().waitFor();
           await page.waitForTimeout(200);
-          assert.equal(await totalCost(page), "≈¥21.60");
-          assert.equal(await modelCost(page, "deepseek-chat"), "≈¥7.20");
-          assert.equal(await modelCost(page, "gpt-5"), "≈$2.00");
+          assert.equal(await totalCost(page), "¥21.60");
+          assert.equal(await modelCost(page, "deepseek-chat"), "¥7.20");
+          assert.equal(await modelCost(page, "gpt-5"), "$2.00");
 
           // a set menu bar currency opens Advanced, so it is seen
           await toSettings(page);
@@ -203,8 +203,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await page.locator("#currencySegs .opt").nth(0).click();
           await page.locator("#totalCurrencyRow").waitFor({ state: "hidden" });
           await toUsage(page);
-          assert.equal(await modelCost(page, "deepseek-chat"), "≈$1.00");
-          assert.equal(await totalCost(page), "≈$3.00");
+          assert.equal(await modelCost(page, "deepseek-chat"), "$1.00");
+          assert.equal(await totalCost(page), "$3.00");
 
           assert.deepEqual(errors, []);
           await context.close();

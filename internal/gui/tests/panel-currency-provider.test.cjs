@@ -87,7 +87,7 @@ const BROWSERS = process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "web
 // each ranked row's name and value
 const rankOf = (p, box) => p.locator(box + " button.rk").evaluateAll((rs) => Object.fromEntries(rs.map((r) => [r.querySelector(".rk-nm").textContent, r.querySelector(".rk-val").textContent])));
 // each ranked row's name and the cost in its second line (by tokens)
-const subOf = (p, box) => p.locator(box + " button.rk").evaluateAll((rs) => Object.fromEntries(rs.map((r) => [r.querySelector(".rk-nm").textContent, (r.querySelector(".rk-b").textContent.match(/≈([$¥][\d.]+)/) || [])[1]])));
+const subOf = (p, box) => p.locator(box + " button.rk").evaluateAll((rs) => Object.fromEntries(rs.map((r) => [r.querySelector(".rk-nm").textContent, (r.querySelector(".rk-b").textContent.match(/([$¥][\d.]+)/) || [])[1]])));
 const axisOf = (p, box) => p.locator(box + " svg text.axis").first().textContent();
 // the chart's tooltip over the one busy hour: each row's name and value, the total's last
 async function tipOf(p, box) {
@@ -122,7 +122,7 @@ for (const engine of BROWSERS) {
         // by tokens: each provider's cost under it, in what it sells in
         assert.deepEqual(await subOf(p, box), { DeepSeek: "¥7.20", OpenAI: "$2.00", SiliconFlow: "¥3.60" }, `${width}px`);
         // the total across them in the Totals in currency, dollars
-        assert.equal(await p.locator(box + " .pu-tot .v.cost").textContent(), "≈$3.50");
+        assert.equal(await p.locator(box + " .pu-tot .v.cost").textContent(), "$3.50");
 
         // by cost: the ranking's figures too; the axis is a sum, in dollars
         await p.locator(box + " .pu-card .led-bar .segs:not(.pu-split) .opt").nth(1).click();
@@ -144,7 +144,7 @@ for (const engine of BROWSERS) {
         await p.locator(box + " .led-rank .rk", { hasText: "DeepSeek" }).click();
         await p.waitForFunction(() => document.querySelector("#panelUsage .rk-nm")?.textContent === "deepseek-v4" && !document.querySelector("#panelUsage.pu-loading"));
         assert.equal(asked.at(-1).get("provider"), "deepseek");
-        assert.equal(await p.locator(box + " .pu-tot .v.cost").textContent(), "≈¥7.20");
+        assert.equal(await p.locator(box + " .pu-tot .v.cost").textContent(), "¥7.20");
         assert.deepEqual(await rankOf(p, box), { "deepseek-v4": "¥7.20" });
         assert.match(await axisOf(p, box), /^¥/);
 
@@ -194,7 +194,7 @@ for (const engine of BROWSERS) {
         // OpenAI picked: the whole page is its calls, in dollars
         await p.locator("#ledSplit .opt").nth(2).click();
         await p.locator(box + " button.rk", { hasText: "OpenAI" }).click();
-        await p.waitForFunction(() => document.querySelector("#usageCost b")?.textContent === "≈$2.00");
+        await p.waitForFunction(() => document.querySelector("#usageCost b")?.textContent === "$2.00");
         assert.equal(asked.at(-1).get("provider"), "openai");
         await p.waitForFunction(() => /^\$/.test(document.querySelector("#ledChart svg text.axis")?.textContent || ""));
         assert.deepEqual(errors, []);

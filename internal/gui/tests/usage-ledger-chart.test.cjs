@@ -158,7 +158,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(await p.locator("#ledKpi .k").allTextContents(), w.strip);
         assert.equal(await p.locator("#ledKpi .blk").nth(0).getAttribute("title"), Math.round(allTokens).toLocaleString(lang === "zh" ? "zh-CN" : "en"));
         const rate = TOTALS.cache_read / (TOTALS.input + TOTALS.cache_write + TOTALS.cache_read);
-        assert.equal(await p.locator("#ledKpi .blk").nth(3).locator(".v").textContent(), (100 * rate).toFixed(1) + "%");
+        assert.equal(await p.locator("#ledKpi .blk").nth(3).locator(".v").textContent(), (100 * rate).toFixed(2) + "%");
         assert.equal(parseFloat(await p.locator("#ledKpi .blk").nth(3).locator(".meter i").evaluate((i) => i.style.width)), parseFloat((100 * rate).toFixed(1)));
         assert.equal(await p.locator("#ledKpi .blk").nth(1).locator(".v").textContent(), String(TOTALS.calls));
 
