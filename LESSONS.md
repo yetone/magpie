@@ -439,23 +439,6 @@ ok except gateway" stops being a normal run record.
   package.
 - Seen 1× (2026-10-14).
 
-**One full suite runs on a machine at a time.**
-- On 10-16 one session ran three suites at once (a 150m agent and
-  gateway run, a full ./... run and an agent-only run) beside others, at
-  load 300 to 400. Every full suite timed out, so no record said the
-  suite passed, and the Cursor mover's one-line min waited ~3h behind
-  them (#2557).
-- Done right from the evening on: a751f5282 and later commits ran
-  "through suite-lock", one suite per machine, and their records say ok.
-- 10-17: at 10:07 the box had three `go test ./...` runs, ~35 GUI
-  runners and over 100 browsers from several sessions, at load 313.
-  d4a1b9baa's GUI run was killed at its 30s bar, ebf3f48f7's shared Go
-  cache had files trimmed mid-run by another run, internal/agent took
-  50 to 58 minutes (#2544), and dccfefdf7's eight AppKit tests were
-  killed (#2645). The rule lives in this file only; a lock every suite
-  goes through would hold it.
-- Seen 2× (2026-10-16, 2026-10-17).
-
 **A quiet `go test ./...` log is not a hang until a package's own time
 says so.** go test prints packages in order, so one slow package holds
 back every line after it, and the log moves in bursts.
@@ -1120,6 +1103,10 @@ standards since 10-18, widened to a worktree and its logs. See
 
 ## Moved to the code standards
 
+- **One full suite runs on a machine at a time** (10-16, 10-17, 11-16).
+  On 11-16 64c426158 ran the GUI suite on mica beside another session's
+  full suite, was pushed with it still running, and named its 90 reds by
+  page, not by issue.
 - **A check that a value is gone looks past text magpie or the test
   made up** (10-10, 11-10, 11-15). On 11-15 TestMoreKinds checked that
   the user name "ops" was gone, and the made-up name for it, eight
