@@ -420,6 +420,9 @@ func Add(ctx context.Context, spec string) (Entry, error) {
 	if err != nil {
 		return Entry{}, err
 	}
+	if err := RefuseWithdrawn(ctx, spec); err != nil {
+		return Entry{}, err
+	}
 	return add(ctx, spec, "")
 }
 

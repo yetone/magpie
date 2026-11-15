@@ -330,8 +330,9 @@ var retiredBuiltins = map[string]bool{
 	"devin":           true,
 	CommandCodePlanID: true,
 	// Google bans accounts it sees on Code Assist through Antigravity's
-	// own client (the owner, 11-15): the plugin's 0.2.0 sends nothing and
-	// points to Antigravity (local agy CLI), which drives the user's agy
+	// own client (the owner, 11-15): the built-in asks Google nothing, and
+	// its plugin serves the users who have it, withdrawn for anyone new
+	// (plugin.WithdrawnOf), who are pointed to Antigravity (local agy CLI)
 	"antigravity": true,
 }
 
@@ -697,7 +698,9 @@ func move(ctx context.Context, id string, mv *mover) (err error) {
 		return fmt.Errorf("no %s account to move", id)
 	}
 	had := pluginListed(mv.pkg)
-	if err := installPlugin(ctx, mv.pkg, mv.min); err != nil {
+	// the user's own accounts: a package withdrawn for anyone new is
+	// still theirs (plugin.KeepWithdrawn)
+	if err := installPlugin(plugin.KeepWithdrawn(ctx), mv.pkg, mv.min); err != nil {
 		return installFailed(mv.pkg, err)
 	}
 	installed := !had
@@ -1135,7 +1138,7 @@ func keepMovedCurrent(ctx context.Context) {
 		if mv.min == "" {
 			continue
 		}
-		if err := installPlugin(ctx, mv.pkg, mv.min); err != nil {
+		if err := installPlugin(plugin.KeepWithdrawn(ctx), mv.pkg, mv.min); err != nil {
 			log.Printf("updating %s's plugin: %s", id, err)
 		}
 	}

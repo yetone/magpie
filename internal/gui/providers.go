@@ -830,6 +830,9 @@ type providersJSON struct {
 	// Unmoved are the retired built-ins whose accounts haven't moved onto
 	// their plugins yet, served by nothing until they do, with why
 	Unmoved []provider.MoveCandidate `json:"unmoved,omitempty"`
+	// Withdrawn are the plugins this magpie still has that magpie gives
+	// to nobody new, for the page to say the risk and what to use instead
+	Withdrawn []plugin.Withdrawal `json:"withdrawn,omitempty"`
 	// Moved is the agents the change moved off models it stopped serving
 	// (agent.Reseat), for the page to say so.
 	Moved []agent.Move `json:"moved,omitempty"`
@@ -1480,6 +1483,7 @@ func providersState() providersJSON {
 			s.Unmoved = append(s.Unmoved, c)
 		}
 	}
+	s.Withdrawn = plugin.WithdrawnKept()
 	if err := provider.FileError(); err != nil {
 		s.FileError = err.Error()
 	}

@@ -6508,22 +6508,23 @@ function renderMovable() {
   let hid = "";
   try { hid = localStorage.getItem("magpie.deprecatedHidden") || ""; } catch {}
   const ids = ps.map((p) => p.id).join(",");
-  const unmoved = providers.unmoved || [];
+  const unmoved = providers.unmoved || [], wd = providers.withdrawn || [];
   const noSubs = !!(state?.settings?.noAccountDiscovery || prefs?.noAccountsEnv);
-  box.hidden = (!ps.length || hid === ids) && !unmoved.length && !noSubs;
+  box.hidden = (!ps.length || hid === ids) && !unmoved.length && !wd.length && !noSubs;
   if (noSubs) box.append(discoveryOffLine());
   for (const p of unmoved) box.append(unmovedLine(p));
+  // a plugin magpie gives nobody new (plugin.WithdrawnOf): it still
+  // works, and its user is told the risk and what to use instead
+  for (const w of wd) {
+    const go = el("button", "text action", t("Use {name}", { name: w.instead }));
+    go.onclick = () => openPlugins("agy");
+    box.append(depLine("withdrawn", t("{name}'s plugin can get your account suspended", { name: w.name }), t("Google suspends accounts it sees used outside its own app. {name} runs your own agy instead.", { name: w.instead }), go));
+  }
   if (!ps.length || hid === ids) return;
   const names = ps.map((p) => p.name).join(t(", "));
   // one quiet line over the list, as calm as its rows: an amber dot, what
   // happened and why, and the two answers on the right (the owner: 这个太丑了 —
   // it was a tinted box with a tile, a badge, three lines and a purple button)
-  const card = el("div", "deprecation");
-  card.setAttribute("role", "note");
-  const body = el("div", "dep-body");
-  body.append(el("div", "dep-head", ps.length > 1 ? t("These built-in subscriptions are deprecated: {names}", { names }) : t("{name}'s built-in subscription is deprecated", { name: names })),
-    el("p", "dep-why", [t(DEPRECATED_WHY), t("Moving keeps your accounts, models and agents as they are.")].join(locale === "zh" || locale === "zh-TW" || locale === "ja" ? "" : " ")));
-  const acts = el("div", "dep-acts");
   const hide = el("button", "text", t("Not now"));
   hide.title = t("Hide this until another deprecated subscription is signed in");
   hide.onclick = () => { try { localStorage.setItem("magpie.deprecatedHidden", ids); } catch {} renderMovable(); };
@@ -6533,24 +6534,25 @@ function renderMovable() {
     if (ps.length > 1) { openPlugins(); return; }
     editing = ps[0].id; draft = null; renderProviders();
   };
-  acts.append(hide, review);
-  card.append(el("span", "dep-dot"), body, acts);
-  box.append(card);
+  box.append(depLine("", ps.length > 1 ? t("These built-in subscriptions are deprecated: {names}", { names }) : t("{name}'s built-in subscription is deprecated", { name: names }), [t(DEPRECATED_WHY), t("Moving keeps your accounts, models and agents as they are.")].join(locale === "zh" || locale === "zh-TW" || locale === "ja" ? "" : " "), hide, review));
 }
 
 // discoveryOffLine: subscription accounts are off in Settings › Privacy,
 // so none of them works; said here, with the way to the switch
 function discoveryOffLine() {
-  const card = el("div", "deprecation discovery-off");
-  card.setAttribute("role", "note");
-  const body = el("div", "dep-body");
-  body.append(el("div", "dep-head", t("Subscription accounts are off")),
-    el("p", "dep-why", prefs?.noAccountsEnv ? t("Off for this run: MAGPIE_NO_ACCOUNTS is set") : t("magpie reads none of your agents' sign-ins, so no subscription works. API-key providers work as before.")));
-  const acts = el("div", "dep-acts");
   const go = el("button", "text action", t("Settings › Privacy"));
   go.onclick = (e) => openSettingsAt(e, "privacy", "#discoveryList .row");
-  acts.append(go);
-  card.append(el("span", "dep-dot"), body, acts);
+  return depLine("discovery-off", t("Subscription accounts are off"), prefs?.noAccountsEnv ? t("Off for this run: MAGPIE_NO_ACCOUNTS is set") : t("magpie reads none of your agents' sign-ins, so no subscription works. API-key providers work as before."), go);
+}
+
+// depLine: one quiet line over the Providers list: an amber dot, what
+// happened and why, and its buttons on the right
+function depLine(kind, head, why, ...acts) {
+  const card = el("div", "deprecation " + kind), body = el("div", "dep-body"), a = el("div", "dep-acts");
+  card.setAttribute("role", "note");
+  body.append(el("div", "dep-head", head), el("p", "dep-why", why));
+  a.append(...acts);
+  card.append(el("span", "dep-dot"), body, a);
   return card;
 }
 
@@ -6559,15 +6561,8 @@ function discoveryOffLine() {
 // An amber dot, what happened and why, and the move, tried again here.
 const unmovedSaid = {}; // provider id → { busy } or { why }
 function unmovedLine(p) {
-  const card = el("div", "deprecation unmoved");
-  card.setAttribute("role", "note");
-  card.dataset.id = p.id;
-  const body = el("div", "dep-body");
   const said = unmovedSaid[p.id];
   const why = said?.why || moveWhy(p, p);
-  body.append(el("div", "dep-head", t("{name}'s built-in subscription is retired, and its accounts haven't moved to its plugin yet", { name: p.name })),
-    el("p", "dep-why", why ? t("Nothing serves them until they move: {error}", { error: why }) : t("Nothing serves them until they move. Moving keeps your accounts, models and agents as they are.")));
-  const acts = el("div", "dep-acts");
   const b = el("button", "text action", said?.busy || (why ? t("Try again") : t("Move to the plugin")));
   b.title = p.package; // the npm package: for the curious, not the sentence
   b.disabled = b.classList.toggle("busy", !!said?.busy);
@@ -6584,8 +6579,8 @@ function unmovedLine(p) {
       renderMovable();
     }
   };
-  acts.append(b);
-  card.append(el("span", "dep-dot"), body, acts);
+  const card = depLine("unmoved", t("{name}'s built-in subscription is retired, and its accounts haven't moved to its plugin yet", { name: p.name }), why ? t("Nothing serves them until they move: {error}", { error: why }) : t("Nothing serves them until they move. Moving keeps your accounts, models and agents as they are."), b);
+  card.dataset.id = p.id;
   return card;
 }
 

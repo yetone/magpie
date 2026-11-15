@@ -80,16 +80,20 @@ Two cases decide it:
   subscription in the table above is retired (10-17; Antigravity 11-15);
   gates ask `provider.PluginServes(id)` (moved or retired). Gemini CLI
   (`gemini`) and the agy agent stay built in.
-- **Antigravity is off entirely** (the owner, 11-15): Google bans
-  accounts it sees on Code Assist through Antigravity's own client, the
-  built-in's way and the plugin's alike. The built-in's code is still in
-  the tree, but `googleLogins` lists nothing once the plugin serves it, so
-  it asks Google for nothing; the mover reads `googleSavedLogins`. The
-  plugin's 0.2.0 (the mover's min) sends nothing either: every request
-  gets a 410 "retired" naming Antigravity (local agy CLI),
-  `@magpie-community/opencode-agy-cli-auth`, which runs the user's own
-  agy over ACP, and it left the registry. Don't bring either route back.
-  The route's tests serve it again through
+- **Antigravity's plugin is withdrawn for anyone new** (the owner, 11-15:
+  正在使用的继续正常，加个提示，新用户不让下载): Google bans accounts it
+  sees on Code Assist through Antigravity's own client. The built-in's code
+  is still in the tree, but `googleLogins` lists nothing once the plugin
+  serves it, so it asks Google for nothing; the mover reads
+  `googleSavedLogins`. The plugin (0.2.1, the mover's min) serves as
+  before for whoever has it, and the Providers page tells them the risk
+  and points to Antigravity (local agy CLI),
+  `@magpie-community/opencode-agy-cli-auth`, which runs the user's own agy
+  over ACP (`withdrawn` in `/api/providers`). `plugin.Add` turns it away
+  for anyone who doesn't have it listed (`plugin.RefuseWithdrawn`); the
+  mover installs it for the user's own accounts under
+  `plugin.KeepWithdrawn`, and it left the registry. Don't offer it to
+  anyone new. The built-in route's tests serve it again through
   `provider.AntigravityBuiltinForTest()` until its code is taken out
   (#6723).
 
