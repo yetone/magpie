@@ -216,10 +216,13 @@ first in its line, with a bar under it like an account row's (`foldQuota`,
 chen2652 on Discord): the Usage page's readings of its accounts (`cardOf`)
 put together by quotaall.js's `mergeQuotas`, the same as the Usage page's
 "All N accounts" strip, its tightest window that says a share as the figure
-and the bar, every window and when the first of them resets on hover. Only
+and the bar, then when that window first starts again, the soonest of the
+accounts' ("renews in 2h", as an account's row says it; Sdsi134a on X),
+every window and when the first of them resets on hover. Only
 when every account in it was read, none is free, and all are on one plan;
-otherwise, and while the fold is open or a kept day is shown, it says
-nothing of it and each account's row has its own. See
+otherwise, while the fold is open or a kept day is shown, and while the
+groups page's Hide plans is on (`plansHidden`, `magpie.routingGroupPlans`),
+it says nothing of it and each account's row has its own. See
 `routing-fold-accounts-together.test.cjs`.
 
 A group in the group's heading (`li.rt-sub`, `subNode`) folds the same way
@@ -246,8 +249,10 @@ routing went by, and each of its windows, with when each resets
 of its own (a remote's, or an account not read yet) shows its windows as
 its one line instead (`.wins`, cut to one line, all of it on hover).
 `cardOf` in [`plugins/routing/client.js`](../../internal/gui/assets/plugins/routing/client.js) matches
-the route's account to app.js's `quotas`: a `subscription` card of this
-computer (no `from`) whose provider is the account's `agent` (a plugin's
+the route's account to app.js's `quotas`: a card of this computer (no
+`from`) whose `kind` is `subscription` or none (`/api/usage/quotas` sends
+this computer's cards with no kind; only a remote's are told one, so asking
+for `subscription` alone matched none in the app) whose provider is the account's `agent` (a plugin's
 provider id) or its provider, and whose user is the account's, ignoring
 case. `winsOf` names them with `familyWindows`, `quotaText` and
 `resetInText`. Nothing new is read: opening Routing asks

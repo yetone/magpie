@@ -7,6 +7,11 @@
 // Accounts on different plans are not put together: their fold is as it
 // was. In every language, at a window's width and at 420px, in both
 // engines. ARTIFACT_DIR keeps a screenshot of each folded stage.
+// The cards are as /api/usage/quotas sends this computer's: no kind
+// (Sdsi134a on X: a kind asked for matched none of them, and the fold said
+// nothing). The figure says when its window starts again, the soonest of
+// the accounts', as an account's own row does; Hide plans on the groups
+// page (magpie.routingGroupPlans) folds the figure and the bar away.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -25,7 +30,7 @@ const route = {
   id: 7, seq: 7, time: iso(now - 2000), agent: "claude", model: "m-1", provider: "same", done: true, status: 200, ms: 900, tokens: 1500,
   order: accts, tries: [{ id: accts[0].id, model: "m-1", start: iso(now - 2000), done: true, ms: 800, status: 200 }],
 };
-const card = (provider, user, plan, five, seven, reset) => ({ provider, name: provider, kind: "subscription", user, plan, windows: [
+const card = (provider, user, plan, five, seven, reset) => ({ provider, name: provider, user, plan, windows: [
   { name: "5 hours", used: five, resetsAt: iso(now + reset * 60e3) },
   { name: "7 days", used: seven, resetsAt: iso(now + 73 * 3600e3) },
 ] });
@@ -58,13 +63,14 @@ function serve(lang) {
   };
 }
 
-// the fold's figure: the 5 hours window, the mean of 20, 40 and 60
+// the fold's figure: the 5 hours window, the mean of 20, 40 and 60, and
+// when the first of them starts again (2h 10m)
 const words = {
-  en: ["5 hours 40% used", "The mean of 3 accounts on one plan"],
-  zh: ["5 小时 已用 40%", "同一套餐 3 个账号的平均值"],
-  "zh-TW": ["5 小時 已用 40%", "同一方案 3 個帳號的平均值"],
-  ja: ["5 時間 使用済み 40%", "同じプランの 3 アカウントの平均"],
-  de: ["5 Stunden 40% verbraucht", "Mittelwert von 3 Konten mit demselben Tarif"],
+  en: ["5 hours 40% used", "The mean of 3 accounts on one plan", /^renews in \S/],
+  zh: ["5 小时 已用 40%", "同一套餐 3 个账号的平均值", /\S后重置$/],
+  "zh-TW": ["5 小時 已用 40%", "同一方案 3 個帳號的平均值", /\S後重置$/],
+  ja: ["5 時間 使用済み 40%", "同じプランの 3 アカウントの平均", /\S 後に更新$/],
+  de: ["5 Stunden 40% verbraucht", "Mittelwert von 3 Konten mit demselben Tarif", /^erneuert sich in \S/],
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -104,6 +110,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             assert.ok(!s.open && s.bar, JSON.stringify(s));
             assert.equal(s.fill, "40%");
             assert.ok(s.text.startsWith(words[lang][0] + " · "), s.text);
+            assert.match(s.text.split(" · ")[1], words[lang][2], s.text);
             if (words[lang][1]) assert.ok(s.tip.includes(words[lang][1]), s.tip);
             assert.ok(s.tip.split("\n").length >= 3, "each window and how it was put together, on hover: " + s.tip);
             // no account is named in it
@@ -117,6 +124,22 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             // nothing runs past the list
             const over = await same.evaluate((e) => Math.max(e.scrollWidth - e.clientWidth, document.documentElement.scrollWidth - innerWidth));
             assert.ok(over <= 1, `${lang} at ${width}: ${over}px past`);
+            // Hide plans: the figure and the bar go, the fold's count stays
+            await page.evaluate(() => localStorage.setItem("magpie.routingGroupPlans", "hidden"));
+            await same.click();
+            await page.waitForFunction(() => document.querySelectorAll(".rt-accts > li.rt-fold.open").length === 1);
+            await same.click();
+            await page.waitForFunction(() => document.querySelectorAll(".rt-accts > li.rt-fold:not(.open)").length === 2);
+            let h = await look(same);
+            assert.ok(!h.open && !h.bar && !h.text.includes(words[lang][0]), "hidden plans: " + JSON.stringify(h));
+            // shown again: back
+            await page.evaluate(() => localStorage.setItem("magpie.routingGroupPlans", "shown"));
+            await same.click();
+            await page.waitForFunction(() => document.querySelectorAll(".rt-accts > li.rt-fold.open").length === 1);
+            await same.click();
+            await page.waitForFunction(([w]) => [...document.querySelectorAll(".rt-accts > li.rt-fold:not(.open) em")].some((e) => e.textContent.startsWith(w)), [words[lang][0]]);
+            h = await look(same);
+            assert.ok(!h.open && h.bar && h.fill === "40%", "shown again: " + JSON.stringify(h));
             // open again: the figure and the bar go
             await same.click();
             await page.waitForFunction(() => document.querySelectorAll(".rt-accts > li.rt-fold.open").length === 1);

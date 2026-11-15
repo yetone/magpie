@@ -4812,7 +4812,11 @@ function routingPage(part) {
   function cardFor(w) {
     if (w.kind !== "account" || !Array.isArray(quotas)) return null;
     const user = (w.who || "").trim().toLowerCase();
-    const mine = quotas.filter((q) => !q.from && q.kind === "subscription" && (q.provider === w.agent || q.provider === w.provider));
+    // this computer's own cards come with no kind (SubscriptionQuota.Kind
+    // is "" here, only a remote magpie's are told one), so asking for
+    // "subscription" matched none of them in the app (Sdsi134a on X: a
+    // fold of three accounts on one plan said nothing of what was left)
+    const mine = quotas.filter((q) => !q.from && (q.kind || "subscription") === "subscription" && (q.provider === w.agent || q.provider === w.provider));
     return mine.find((q) => (q.user || "").trim().toLowerCase() === user) || (mine.length === 1 && !mine[0].user ? mine[0] : null);
   }
   // cardError: why the Usage page could not read the account, when its
@@ -4823,6 +4827,11 @@ function routingPage(part) {
     const q = cardFor(w);
     return q && !cardOf(w) && q.error ? String(q.error) : "";
   }
+  // plansHidden: the groups page's Hide plans was clicked (kept in
+  // localStorage, so the Routing page's fold reads it too)
+  function plansHidden() {
+    try { return localStorage.getItem("magpie.routingGroupPlans") === "hidden"; } catch { return false; }
+  }
   // foldQuota: what a fold's accounts have left together, from the Usage
   // page's readings (mergeQuotas), as its strip of all of a provider's
   // accounts says it: only when every account in it was read, and all are
@@ -4830,8 +4839,10 @@ function routingPage(part) {
   // have is left out (mergeQuotas). The tightest window that says a share
   // is the figure and the bar; the rest, and when the first of them
   // starts again, are on hover. Null when nothing adds up.
+  // Hide plans on the groups page (magpie.routingGroupPlans) folds these
+  // away too: the user asked for no plans on this page
   function foldQuota(ms) {
-    if (ms.length < 2 || ms.some((m) => m.w.free)) return null;
+    if (ms.length < 2 || ms.some((m) => m.w.free) || plansHidden()) return null;
     const cards = ms.map((m) => cardOf(m.w));
     if (cards.some((q) => !q) || new Set(cards).size !== cards.length) return null;
     if (new Set(cards.map((q) => q.plan || "")).size > 1) return null;
@@ -4843,8 +4854,11 @@ function routingPage(part) {
     const top = bar || ws[0];
     const line = (w) => t(w.name) + " " + quotaText(w);
     const soon = ws.map((w) => w.firstReset).filter(Boolean).sort()[0];
+    // when the figure's window starts again, the soonest of the accounts',
+    // as an account's own row says it
+    const back = top.firstReset ? Date.parse(top.firstReset) - now() : 0;
     return {
-      text: line(top), bar,
+      text: line(top) + (back > 0 ? " · " + t("renews in {d}", { d: dur(back) }) : ""), bar,
       tip: tipLines(...ws.map(line),
         t(top.how === "p" ? "The mean of {n} accounts on one plan" : top.how === "u" ? "Unlimited on each of {n} accounts" : "Added up over {n} accounts", { n: top.accounts }),
         soon && t("The first of them starts again {when}", { when: resetClock(new Date(soon)) })),
@@ -6584,8 +6598,7 @@ function routingPage(part) {
   // the quota lines folded away from every group, as kept in this window
   // (Sdsi134a on X: with many plans the list grew long); shown, as before,
   // until the toolbar's Hide plans is clicked
-  let gPlansHid = false;
-  try { gPlansHid = localStorage.getItem("magpie.routingGroupPlans") === "hidden"; } catch {}
+  let gPlansHid = plansHidden();
   function plansButton() {
     const b = el("button", "text rt-gplans", t(gPlansHid ? "Show plans" : "Hide plans"));
     b.type = "button";
