@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"net/http"
 	"net/url"
@@ -71,9 +72,13 @@ func readLive(provider string) (liveFile, error) {
 			return f, err
 		}
 		f.key = liveKey(b, f.Since != nil)
+		// a list saved before Unique was: each model once from its first
+		// read, not from its next fetch
+		f.Models = Unique(f.Models)
 		mendKinds(f.Models, f.Base)
-		for _, side := range f.Sides {
-			mendKinds(side, f.Base)
+		for b, side := range f.Sides {
+			f.Sides[b] = Unique(side)
+			mendKinds(f.Sides[b], f.Base)
 		}
 		f.byID = map[string][]Model{}
 		for _, m := range Chat(f.Models) {
@@ -154,7 +159,7 @@ func liveKey(b []byte, dropFetched bool) string {
 }
 
 // LiveByID are the models of Live with this id, in the list's order
-// (a list may name one twice): what a look through Live finds, without
+// (one since Unique; a slice for the callers that read it so): what a look through Live finds, without
 // the list copied for each model asked about.
 func LiveByID(provider, model string) []Model {
 	f, err := readLive(provider)
@@ -290,6 +295,76 @@ func Chat(ms []Model) []Model {
 	return out
 }
 
+// Unique is ms with each model id once (#6582: some APIs list a model
+// more than once, and every copy was a row of its own in the pickers, the
+// gateway's /v1/models and the agents' lists). The first keeps its place,
+// and what it leaves unsaid is taken from the copies after it, as the
+// lookups by id (LiveByID's callers) already took the first copy that
+// said it: a name other than the id, a window, an output cap, levels, a
+// price, the APIs, tiers, the magpies on its way and the keys that list
+// it. ms comes back as it is when no id is in it twice.
+func Unique(ms []Model) []Model {
+	if len(ms) < 2 {
+		return ms
+	}
+	at := make(map[string]int, len(ms))
+	dup := false
+	for _, m := range ms {
+		if _, ok := at[m.ID]; ok {
+			dup = true
+			break
+		}
+		at[m.ID] = 0
+	}
+	if !dup {
+		return ms
+	}
+	clear(at)
+	out := make([]Model, 0, len(ms))
+	for _, m := range ms {
+		i, ok := at[m.ID]
+		if !ok {
+			at[m.ID] = len(out)
+			out = append(out, m)
+			continue
+		}
+		k := &out[i]
+		if (k.Name == "" || k.Name == k.ID) && m.Name != "" {
+			k.Name = m.Name
+		}
+		if k.Context == 0 {
+			k.Context = m.Context
+		}
+		if k.Output == 0 {
+			k.Output = m.Output
+		}
+		if len(k.Efforts) == 0 {
+			k.Efforts = m.Efforts
+		}
+		if k.Price == nil {
+			k.Price = m.Price
+		}
+		if len(k.APIs) == 0 {
+			k.APIs = m.APIs
+		}
+		if len(k.Tiers) == 0 {
+			k.Tiers = m.Tiers
+		}
+		if len(k.Via) == 0 {
+			k.Via = m.Via
+		}
+		if k.ImageInput == nil && m.ImageInput != nil {
+			k.ImageInput, k.Images = m.ImageInput, m.Images
+		}
+		for _, key := range m.Keys {
+			if !slices.Contains(k.Keys, key) {
+				k.Keys = append(slices.Clip(k.Keys), key)
+			}
+		}
+	}
+	return out
+}
+
 // SaveLive stores a fetched list; an empty list forgets it.
 func SaveLive(provider, base string, models []Model) error {
 	return saveLive(provider, base, "", models, nil)
@@ -369,6 +444,15 @@ func saveLive(provider, base, asked string, models []Model, sides map[string][]M
 	}
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		return err
+	}
+	// each model once, in the list and in each endpoint's part (Unique),
+	// whichever way the list was fetched
+	models = Unique(models)
+	if sides != nil {
+		sides = maps.Clone(sides)
+		for b, ms := range sides {
+			sides[b] = Unique(ms)
+		}
 	}
 	now := time.Now()
 	f := liveFile{Fetched: now, Base: base, Models: models, Sides: sides, Kinded: true,
@@ -703,7 +787,8 @@ func fetchOne(ctx context.Context, url, key string, anthropic bool, headers map[
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	// a model the list (or its pages) names more than once is one model
+	return Unique(out), nil
 }
 
 // Paged asks a model list that pages for every page of itself: page asks

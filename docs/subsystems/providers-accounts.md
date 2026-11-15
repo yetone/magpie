@@ -206,7 +206,18 @@ A signed-in account's model list exists only at its vendor (the ChatGPT backend'
 3. **Sign.** For each try, `Sign` gives the request its auth. A token about to expire is refreshed first, and the rotated tokens go back to their one holder: the agent's store, or `logins.json` for an account standing behind it.
 4. **Allowance.** Usage endpoints are rate limited, so `SubscriptionUsage` caches its results: a cached copy comes back at once and a stale one is refreshed in the background. When an account's windows start again, `OnRenewed` tells the gateway so a resting account can come back: a Codex reset spent (`renewedNow`), or a reading routing takes (`Allowances`, as the agent the account's usage is read under, `claude` or `plugin:<id>`) that finds the account full till sooner than the last did (`renewedFrom`, the rule a key's reading goes by): the whole account, or a pool of some models with the whole account's windows over it. A window used below `SpentShareOf` its routing, or whose reset passed, is full no more; one full with its reset not known is full for good. A Claude account is back as soon as a new `/usage` or the reset passing shows the window it was out of started again, not when the time Claude Code's refusal named comes; its five hours started again in a week used up tells nothing. A first reading, a failed one, one read alike, or one leaving the full window out tells nothing, and a reset spent is told once, by `renewedNow`. A key's reading that finds a window it was full in (at `SpentShareOf` its routing) full no more, or full till sooner, tells it too, as agent `""` and the key's `KeyAllowanceID`, so a key out of its limit is back once the limit is raised or its usage reset; a first reading, a failed one, or one that finds it fuller tells nothing. An account refused for its quota has its agent's allowances read again at the next ask (`StaleAllowance`). A reading already out then was asked before the refusal: what it read is kept, as not read, so the ask after it lands reads again, as `StaleKeyAllowance` does for a key.
 
-A provider's fetched model list keeps the upstream ids and order. Display
+A provider's fetched model list keeps the upstream ids and order, each id
+once: a list that names a model more than once (#6582) keeps the first
+copy, in its place, with what it leaves unsaid (a name other than the id,
+window, output, levels, price, APIs, tiers, `magpie_via`, keys) taken from
+the copies after it (`catalog.Unique`). It runs where every list passes:
+the parse of an upstream `/models` (`fetchOne`, so the add form's `List`
+too), every save (`saveLive`, the list and each base's part, whoever
+fetched it), and every read, so a list saved before reads each id once
+without a fetch (`readLive`). The pickers, `/v1/models` and the agents'
+lists are built from those (`TestFetchedListNamesEachModelOnce`,
+`TestSavedListNamesEachModelOnce`, `TestProviderListsEachModelOnce`). A
+plugin's list is its plugin's, keyed by id there. Display
 names prefer `magpie_label`, then `display_name`, then a `name` without a
 vendor-style `: ` prefix, then the id
 ([`live.go`](../../internal/catalog/live.go), `fetchOne`). OpenRouter's
