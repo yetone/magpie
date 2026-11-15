@@ -29,8 +29,8 @@ for (const engine of process.env.BROWSER ? [process.env.BROWSER] : ['chromium', 
       await page.route('**/*', async (route) => {
         const req = route.request(), url = new URL(req.url());
         const json = (data) => route.fulfill({ json: data });
-        // the window saying it is in use (update/using) is not the page's doing
-        if (req.method() === 'POST' && url.pathname !== '/api/update/using') posts.push([url.pathname, req.postDataJSON()]);
+        // the window saying it is in use (update/using), or that it went from view (page-away), is not the page's doing
+        if (req.method() === 'POST' && url.pathname !== '/api/update/using' && url.pathname !== '/api/page-away') posts.push([url.pathname, req.postDataJSON()]);
         if (url.pathname === '/boot.js') return route.fulfill({ contentType: 'text/javascript', body: `window.bootPrefs = ${JSON.stringify({lang, theme, web:true})};` });
         if (url.pathname === '/wails/runtime.js') return route.fulfill({ contentType: 'text/javascript', body: 'export const Window = {};' });
         if (url.pathname === '/api/state') return json(state);

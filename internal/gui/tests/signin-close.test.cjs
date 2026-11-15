@@ -167,7 +167,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const missing = await page.evaluate(() => ["Stop waiting for this sign-in"].filter((k) => !I18N.zh[k]));
       assert.deepEqual(missing, []);
       // a Windows window tints its title bar to the page (6927bedfc), which changes nothing; so does the "in use" ping a click sends (10c4dc109)
-      assert.deepEqual(ctl.other.filter((o) => o.startsWith("POST") && !o.includes("/api/open") && !o.includes("/api/window/titlebar") && !o.includes("/api/update/using")), [], "nothing else was changed");
+      assert.deepEqual(ctl.other.filter((o) => o.startsWith("POST") && !o.includes("/api/open") && !o.includes("/api/window/titlebar") && !o.includes("/api/update/using") && !o.includes("/api/page-away")), [], "nothing else was changed");
       assert.deepEqual(errors, []);
     });
   }

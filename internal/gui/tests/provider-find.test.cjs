@@ -63,8 +63,8 @@ function fixture(lang) {
       providers.providers = order.map((id) => providers.providers.find((p) => p.id === id));
       return json(providers);
     }
-    // the window saying it is in use (update/using) is not the page's doing
-    if (request.method() !== "GET" && url.pathname !== "/api/update/using") posted.push(url.pathname);
+    // the window saying it is in use (update/using), or that it went from view (page-away), is not the page's doing
+    if (request.method() !== "GET" && url.pathname !== "/api/update/using" && url.pathname !== "/api/page-away") posted.push(url.pathname);
     if (url.pathname === "/api/providers") return json(providers);
     if (url.pathname === "/api/groups") return json({ groups: [] });
     if (url.pathname === "/api/plugins") return json({ plugins: [] });
