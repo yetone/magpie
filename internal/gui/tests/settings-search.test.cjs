@@ -137,6 +137,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await seen(page, "#trayUsagePick"), false);
         assert.equal(await seen(page, "#provPrefLinks .agent-pref-link"), false, "no provider's link for currency");
 
+        // the update check's interval says it is about updates (jen_celeus
+        // on X: "更新" didn't find it)
+        const upd = { en: "update", zh: "更新", "zh-TW": "更新", ja: "アップデート", de: "update" }[lang];
+        await type(page, upd);
+        assert(await seen(page, ".update-every-row"), `"${upd}" finds the update check's interval`);
+        assert((await state(page)).parts.includes("about"), "under About");
+
         // the warm-ups, in their providers' editors now: a link for each
         // provider that has one, named as the Add sheet names the
         // subscription (ChatGPT for Codex's, Claude for Claude Code's), and the

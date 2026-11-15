@@ -20248,7 +20248,7 @@ function renderSettings() {
   // kept in place while off, dimmed, its height the same (a row or a line
   // taken away would shorten the page under the click), for when they are
   // turned on again
-  row(t("Check every"), s.noAutoUpdate ? t("While automatic updates are on") : t("How often magpie looks for a newer version"), "",
+  row(t("Update check interval"), s.noAutoUpdate ? t("While automatic updates are on") : t("How often magpie looks for a newer version"), "",
     segs(UPDATE_EVERY.map((m) => [m, m < 60 ? t("{n} min", { n: m }) : t("{n} h", { n: m / 60 })]), s.updateEvery || 360,
       (updateEvery) => savePrefs({ ...keep, updateEvery }))).classList.add("update-every-row", ...(s.noAutoUpdate ? ["off"] : []));
   // which versions an update offers (ssharpcc on X): every one as it comes

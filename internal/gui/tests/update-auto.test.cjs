@@ -1,6 +1,6 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // Settings → Automatic updates turns magpie's own update checks (and the
-// downloads they start) off and on, and Check every picks how often they
+// downloads they start) off and on, and Update check interval picks how often they
 // run: 30 min, 1 h, 6 h (the default, nothing set) or 24 h (#472). Off, the
 // interval stays, dimmed, kept for when it is on again, and the version
 // row, not asked yet, says so and offers Check, which asks the backend.
@@ -21,10 +21,10 @@ const { watchSettingsReads, settingsDrawn, openPart } = require("./reader.cjs");
 const assets = path.resolve(__dirname, "../assets");
 
 const words = {
-  en: { auto: "Automatic updates", every: "Check every", off: "Off", on: "On", m30: "30 min", h6: "6 h", h24: "24 h",
+  en: { auto: "Automatic updates", every: "Update check interval", off: "Off", on: "On", m30: "30 min", h6: "6 h", h24: "24 h",
     version: "Version", check: "Check", isOff: "Automatic updates are off", latest: "Up to date", whileOn: "While automatic updates are on", often: "How often magpie looks for a newer version",
     what: "Checks for a newer magpie by itself", signed: "ed25519", attested: "Sigstore" },
-  zh: { auto: "自动更新", every: "检查间隔", off: "关闭", on: "开启", m30: "30 分钟", h6: "6 小时", h24: "24 小时",
+  zh: { auto: "自动更新", every: "检查更新间隔", off: "关闭", on: "开启", m30: "30 分钟", h6: "6 小时", h24: "24 小时",
     version: "版本", check: "检查", isOff: "自动更新已关闭", latest: "已是最新", whileOn: "自动更新开启时生效", often: "magpie 多久检查一次新版本",
     what: "自动检查 magpie 新版本", signed: "ed25519", attested: "Sigstore" },
 };
