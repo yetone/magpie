@@ -19,6 +19,7 @@ import (
 
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/codexcat"
+	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/testenv"
 )
 
@@ -325,8 +326,21 @@ func claudeHome(t *testing.T) string {
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	// a plugin host is this test's HOME's: one an earlier test left up
+	// would answer a sign-out in that test's files, not these (#6761), so
+	// none is up before, and the one this test starts ends with it
+	stopPluginHost()
+	t.Cleanup(stopPluginHost)
 	forgetClaudeCredential()
 	return home
+}
+
+// stopPluginHost stops a plugin host that is up, so the next call starts
+// one under the HOME it is made in.
+func stopPluginHost() {
+	if plugin.Running() {
+		plugin.Restart()
+	}
 }
 
 func TestClaudeAccountIsProvider(t *testing.T) {
