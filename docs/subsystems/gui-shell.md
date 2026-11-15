@@ -185,6 +185,48 @@ filter only when that request is excluded. Usage's purpose picker remains a
 single choice sent to the ledger API. See `purpose-filter.test.cjs` and
 `routing-purpose-state.test.cjs`.
 
+### Routing group lookup caches
+
+The routing script's `groupIndexOf` in
+[`plugins/routing/client.js`](../../internal/gui/assets/plugins/routing/client.js)
+lazily indexes the current `/api/groups` response by model, group and account
+ID and caches parsed member IDs. Exact model IDs take precedence over
+reasoning suffixes; duplicate IDs retain the first match, as array lookup did.
+A new response replaces the indexes on the next lookup. The maps reference
+response objects, not copies. They serve both Routing and Routing groups,
+and are released after both pages have been out of sight for five minutes
+(including a hidden browser tab); returning cancels expiry. A later lookup
+rebuilds them from current data. This changes no saved configuration or
+routing behavior. `group-index.test.cjs` checks lookup work, member semantics,
+data replacement and expiry with a controlled clock.
+
+`hayMatches` caches each group's lower-case search text in that same cache.
+Queries retain AND and substring matching over group names, IDs, refs,
+patterns and member labels (including accounts, reasoning and fast/free).
+Changing the language discards the text cache; a new groups response also
+invalidates it, including model/provider/account renames and membership
+changes. Default routing settings and quota readings do not affect search
+text. `group-search-cache.test.cjs` verifies reuse and invalidation.
+
+The group's input event and Escape use `drawGroups`' filter-only path:
+matching cards are retained, unmatched cards detached and reused if the
+query changes back. The toolbar, settings and provider pools are left in
+place, and an open editor and import text keep their live DOM and draft.
+Bulk selection still drops groups outside the query and rebuilds its
+selection controls for the shown list. A data, language, settings or quota
+redraw discards the row cache; filtering also falls back to a full redraw
+when the data or language changed since the last one. A filter-only draw
+does not mark new quota readings as painted: after the input loses focus,
+the usual quota tick refreshes the cards. Detached cards are
+released with the lookup cache after five minutes away. This is display
+only; saving, ordering and routing semantics are unchanged.
+The Hide plans button follows the filtered cards: it appears only when a
+shown card has a quota line, and its folded choice survives filtering.
+`group-filter-render.test.cjs` exercises node reuse, drafts and expiry with
+4,000 models in both browser engines and all five languages; existing
+`filter-ime`, `group-pick-filter`, `group-bulk-remove`, `group-arrange`,
+`group-import-replace` and `group-morph` tests cover their neighboring flows.
+
 ### Routing mode chip
 
 The stage's chip and the Accounts and keys heading in

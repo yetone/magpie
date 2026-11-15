@@ -40,7 +40,7 @@ const words = {
   de: { hide: "Tarife ausblenden", show: "Tarife zeigen" },
 };
 
-function serve(lang, web, withQuotas) {
+function serve(lang, web, withQuotas, extraGroups = []) {
   const state = { agents: [{ id: "claude", name: "Claude Code", path: "/test/claude", fields: [] }], profiles: [], settings: { lang, theme: "light" } };
   return async (r) => {
     const url = new URL(r.request().url());
@@ -54,7 +54,7 @@ function serve(lang, web, withQuotas) {
       return json({ mine: true, now: new Date().toISOString(), seq: 0, totals: { requests: 0, rerouted: 0, errors: 0 }, routes: [] });
     }
     if (url.pathname === "/api/gateway/history") return json({ cut: false, days: [], routes: [] });
-    if (url.pathname === "/api/groups") return json({ models, pools: [], deciders: [], found: true, groups, templates });
+    if (url.pathname === "/api/groups") return json({ models, pools: [], deciders: [], found: true, groups: [...groups, ...extraGroups], templates });
     if (url.pathname === "/api/usage/quotas") return json(withQuotas ? quotas : []);
     if (url.pathname === "/api/providers") return json({ providers: [], presets: [], excluded: [], gateway: { running: true, window: true, url: "http://127.0.0.1:3999" } });
     if (url.pathname.startsWith("/api/")) return json({});
@@ -62,6 +62,35 @@ function serve(lang, web, withQuotas) {
     const contentType = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png" }[path.extname(file)];
     await r.fulfill({ body: await fs.readFile(file), contentType });
   };
+}
+
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  test(`${engine}: filtering updates the plans button while preserving cached cards and the folded choice`, async (t) => {
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    t.after(() => browser.close());
+    const page = await browser.newPage({ viewport: { width: 1280, height: 700 }, reducedMotion: "reduce" });
+    page.setDefaultTimeout(10000);
+    const errors = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    const extra = [{ id: "plain", name: "Plain group", members: ["c/x"], ready: true, memberInfo: info(["c/x"]) }];
+    await page.route("**/*", serve("en", false, true, extra));
+    await page.goto("http://magpie.test/?view=groups");
+    const card = page.locator('.rt-group[data-id="mine"]'), btn = page.locator(".rt-gplans"), q = page.locator("input.rt-gfilter");
+    await card.locator(".rt-gquota").first().waitFor({ timeout: boot });
+    await card.evaluate((e) => { window.keptPlanCard = e; });
+    await btn.click();
+    assert.equal(await card.locator(".rt-gquota").first().isVisible(), false);
+    await q.fill("Plain group");
+    assert.equal(await btn.isVisible(), false);
+    await q.fill("Mine");
+    assert.equal(await btn.isVisible(), true);
+    assert.equal((await btn.textContent()).trim(), "Show plans");
+    assert.equal(await card.evaluate((e) => e === window.keptPlanCard), true);
+    assert.equal(await card.locator(".rt-gquota").first().isVisible(), false);
+    await btn.click();
+    assert.equal(await card.locator(".rt-gquota").first().isVisible(), true);
+    assert.deepEqual(errors, []);
+  });
 }
 
 // the page's boot under the whole suite's load (#3478)
