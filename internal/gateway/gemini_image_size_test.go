@@ -82,6 +82,7 @@ func TestImagesAPISizeReachesTheGeminiAPI(t *testing.T) {
 // (TestGeminiImageConfigReachesCodeAssist), inside Code Assist's envelope
 // too. None asked, none sent, as before.
 func TestImagesAPISizeReachesCodeAssist(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	rec := &asksKept{}
 	s, _ := antigravityGroupFor(t, []string{"u@example.com"}, agDrawer, func(w http.ResponseWriter, r *http.Request) {
 		rec.keep(r)

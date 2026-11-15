@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"github.com/yetone/magpie/internal/provider"
 	"io"
 	"net"
 	"net/http"
@@ -170,6 +171,7 @@ func antigravityOnEdge(t *testing.T, users []string, v *edgeVendor) *Server {
 // 400, while a new connection was answered. The next account now goes out
 // on a new connection and answers, and the account refused rests not.
 func TestAntigravityRegionRefusalAsksTheNextOnANewConnection(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	v := newEdgeVendor(t, true, googleRegion400)
 	s := antigravityOnEdge(t, []string{"u1@example.com", "u2@example.com"}, v)
 	code, out := turnOn(t, s, directTurn("You are a helpful assistant.", false))
@@ -200,6 +202,7 @@ func TestAntigravityRegionRefusalAsksTheNextOnANewConnection(t *testing.T) {
 // #5182: the only account, refused for where the request came from, is
 // asked again a moment later, on a new connection, and answers.
 func TestAntigravityRegionRefusalAsksTheLastAgain(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	pause := retryPause
 	retryPause = time.Millisecond
 	t.Cleanup(func() { retryPause = pause })
@@ -222,6 +225,7 @@ func TestAntigravityRegionRefusalAsksTheLastAgain(t *testing.T) {
 // (restAfter), and counts no failure: the account is asked first again.
 // A 500 on the same account still rests it as before.
 func TestRegionRefusalRestsNoAccount(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	for _, body := range []string{googleRegion400, antigravityRegion400} {
 		s, askedUsage := antigravityTurnedAwayGroup(t, []string{"u1@example.com", "u2@example.com"}, func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
@@ -272,6 +276,7 @@ func TestRegionRefusalRestsNoAccount(t *testing.T) {
 // nobody rests, and the agent is told Google's regional restriction on
 // the model, at the 400 it doesn't retry.
 func TestRegionRefusalOfTheModelEndsAfterOneMoreAsk(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	pause := retryPause
 	retryPause = time.Millisecond
 	t.Cleanup(func() { retryPause = pause })

@@ -21,6 +21,7 @@ import (
 // "hi" built by the translator in the account's envelope, and says what
 // the vendor answered — a word, or its refusal.
 func TestAntigravityModelTest(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	fresh(t)
 	dir := filepath.Dir(provider.Path())
 	if err := os.MkdirAll(dir, 0o700); err != nil {

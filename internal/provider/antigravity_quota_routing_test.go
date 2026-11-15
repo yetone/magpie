@@ -8,6 +8,7 @@ import (
 // Routing sees the same model family the picker offers, including when
 // quota is read before the live model catalog has been saved.
 func TestAntigravityQuotaRoutesBaseModel(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	f := &fakeGoogle{
 		load: `{"cloudaicompanionProject":"test-project"}`,
 		models: `{"models":{

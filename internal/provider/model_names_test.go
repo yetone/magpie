@@ -142,6 +142,7 @@ func TestPickedNamesAvoidCollisions(t *testing.T) {
 // Picking a subset must not refill names Available deliberately left as ids.
 // Unlisted picks still reserve all listed names and ids, even if not picked.
 func TestPickedNamesKeepListed(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	home := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))

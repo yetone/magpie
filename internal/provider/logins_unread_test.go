@@ -82,6 +82,7 @@ func TestUnreadLoginsWriteErrorsKeepCredentials(t *testing.T) {
 // Valid JSON can still be unreadable as saved accounts. On a cold start,
 // adding an account must keep those original credentials in a backup.
 func TestUnreadLoginsFieldTypesKeptBeforeWrite(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	for _, tc := range []struct {
 		name string
 		text string
@@ -130,6 +131,7 @@ func TestUnreadLoginsFieldTypesKeptBeforeWrite(t *testing.T) {
 }
 
 func TestReadableLoginsNotKeptAside(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	googleSandbox(t, &fakeGoogle{})
 	for _, u := range []string{"a@x.com", "b@x.com"} {
 		if err := addGoogleLogin("antigravity", u, "", googleAuth{RefreshToken: "1//" + u, Project: "p"}); err != nil {
@@ -152,6 +154,7 @@ func TestReadableLoginsNotKeptAside(t *testing.T) {
 // else) was read as no accounts, and the next account added wrote the
 // file anew with that one alone: every saved sign-in gone.
 func TestUnreadLoginsNotWrittenOver(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	googleSandbox(t, &fakeGoogle{})
 	for _, u := range []string{"a@x.com", "b@x.com"} {
 		if err := addGoogleLogin("antigravity", u, "", googleAuth{RefreshToken: "1//" + u, Project: "p"}); err != nil {

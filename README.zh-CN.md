@@ -168,7 +168,7 @@ Agent 会把读到的东西放进提示词：一个 `.env`、一份配置、一�
 
 - **Claude**：驱动本机真正的 `claude` 程序，通过 MCP 桥接你的 Agent 的工具
 - **Codex / ChatGPT**：你的 ChatGPT 订阅里的模型，给所有其他 Agent 用
-- **GitHub Copilot**、**Gemini（Code Assist）**、**Antigravity**、**Grok（SuperGrok）** 等等
+- **GitHub Copilot**、**Gemini（Code Assist）**、**Antigravity**（经你自己的 agy CLI）、**Grok（SuperGrok）** 等等
 - **任何 OpenCode 登录插件或 pi 包**，直接从 npm 安装
 
 **每日预热**会在你选定的时间，或者上一个窗口刚重置时，启动每个 Claude 和 ChatGPT 账号的 5 小时窗口。
@@ -213,7 +213,6 @@ Agent 会把读到的东西放进提示词：一个 `.env`、一份配置、一�
 
 ```sh
 magpie plugin add opencode-gemini-auth   # npm 上的 OpenCode 插件
-magpie plugin add pi-antigravity         # pi 包，同样的方式
 magpie plugin login google-plugin        # 在 magpie 里走它自己的登录流程
 ```
 

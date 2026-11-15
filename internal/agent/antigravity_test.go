@@ -60,6 +60,7 @@ func antigravityFile(t *testing.T, path string) map[string]json.RawMessage {
 // model list come back when it is turned off, and what else the file holds
 // is never touched.
 func TestAntigravityGateway(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	home := antigravityHome(t)
 	path := filepath.Join(home, ".antigravity", "settings.json")
 	if !slices.ContainsFunc(All(), func(x *Agent) bool { return x.ID == "antigravity" && x.Name == "Antigravity" }) {

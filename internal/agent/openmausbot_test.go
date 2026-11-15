@@ -436,6 +436,7 @@ func ombSaves(t *testing.T, path string, engine json.RawMessage) {
 // picked; no catalog change follows, so before KeepOpenMausBotListed
 // nothing wrote magpie's list again.
 func TestOpenMausBotListWrittenAgain(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	home := syncHome(t)
 	stashHome(t)
 	ombRelay(t)

@@ -86,6 +86,7 @@ func loginRoutingUsers(p *Provider) []string {
 }
 
 func TestAccountOrderSideLoginsAllRoutingModes(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	googleSandbox(t, &fakeGoogle{})
 	users := []string{"a@example.test", "b@example.test", "c@example.test", "off@example.test"}
 	for _, user := range users {

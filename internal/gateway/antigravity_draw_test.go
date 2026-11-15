@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"github.com/yetone/magpie/internal/provider"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -47,6 +48,7 @@ func drawOn(t *testing.T, s *Server) (int, string) {
 // spent account while the next had its quota (01huadalang on Discord:
 // several accounts, one's image quota spent, no move to the next).
 func TestAntigravityDrawingOutOfQuotaInsideTheReplyGoesOn(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	s, asked := antigravityDrawers(t, func(w http.ResponseWriter) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		io.WriteString(w, sse("data: "+antigravityQuota))
@@ -62,6 +64,7 @@ func TestAntigravityDrawingOutOfQuotaInsideTheReplyGoesOn(t *testing.T) {
 // Any other error said inside the reply is no account's quota, and the
 // drawing still ends there: the next account isn't asked, nothing rests.
 func TestAntigravityDrawingOtherErrorInsideTheReplyStays(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	s, asked := antigravityDrawers(t, func(w http.ResponseWriter) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		io.WriteString(w, sse(`data: {"error":{"code":500,"message":"Internal error encountered.","status":"INTERNAL"}}`))
@@ -82,6 +85,7 @@ func TestAntigravityDrawingOtherErrorInsideTheReplyStays(t *testing.T) {
 // drawing asks the account that still has its quota first, where before
 // every drawing asked the spent one again, and its text models stay in.
 func TestAntigravityDrawingQuotaRestsTheImageModel(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	for _, tc := range []struct {
 		name  string
 		spent func(w http.ResponseWriter)

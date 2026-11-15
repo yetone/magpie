@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"encoding/json"
+	"github.com/yetone/magpie/internal/provider"
 	"strings"
 	"testing"
 )
@@ -12,6 +13,7 @@ import (
 // An enum of blanks alone, and a blank const, go without their enum; a
 // number in an enum still drops it whole.
 func TestPlainSchemaDropsBlankEnumValues(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	in := `{"type":"object","properties":{"StatusMessage":{"type":"object","properties":{"operationStatus":{"allOf":[{"enum":["processing","warning","error",""],"type":"string","x-enum-varnames":["EndpointOperationStatusProcessing","EndpointOperationStatusWarning","EndpointOperationStatusError","EndpointOperationStatusDone"]}],"description":"'', 'error', 'processing'","example":"error"}}},` +
 		`"blank":{"type":"string","enum":[""," "]},"c":{"type":"string","const":""},"n":{"enum":["a",1,""]}}}`
 	var got struct {

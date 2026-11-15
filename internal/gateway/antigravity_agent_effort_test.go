@@ -22,6 +22,7 @@ import (
 // as the variant at that level, told that level; with none picked they go
 // as before, and another agent's requests never take its pick.
 func TestAntigravityAgentEffort(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	fresh(t)
 	logins := []map[string]any{{
 		"agent": "antigravity", "user": "a@example.com", "on": true,

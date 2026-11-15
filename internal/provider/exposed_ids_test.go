@@ -6,6 +6,7 @@ import "testing"
 // providers only: every other provider's, each account's and plugin's,
 // was built on each usage read for nothing.
 func TestExposedIDsBuildsOnlyTheProvidersAsked(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	isolate(t)
 	for _, p := range []Provider{
 		{ID: "asked", Name: "Asked", Key: "k", Chat: "http://127.0.0.1:1/v1", Models: []string{"gemini-a"}},
@@ -28,6 +29,7 @@ func TestExposedIDsBuildsOnlyTheProvidersAsked(t *testing.T) {
 // providers whose quotas are narrowed are built once while nothing changes, so the catalog they
 // load can be let go, and again after a change, which reaches the answer.
 func TestKeptExposedIDsBuiltOncePerChange(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	isolate(t)
 	keptExposed.Lock()
 	keptExposed.ids = nil

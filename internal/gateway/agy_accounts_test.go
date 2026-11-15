@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"github.com/yetone/magpie/internal/provider"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -26,6 +27,7 @@ func agyCLITurn(t *testing.T, s *Server, model string) (int, string) {
 // quota is spent is passed over for the next, and the turn after asks the
 // one with quota first, while agy itself stays on one model.
 func TestAgyUsesEveryAntigravityAccount(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	var asked []string
 	s, _ := antigravityGroupFor(t, []string{"u1@example.com", "u2@example.com"}, "m", func(w http.ResponseWriter, r *http.Request) {
 		who := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")

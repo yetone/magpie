@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"encoding/json"
+	"github.com/yetone/magpie/internal/provider"
 	"reflect"
 	"testing"
 
@@ -18,6 +19,7 @@ const rgSchema = `{"type":"object","properties":{"pattern":{"type":"string"},"cu
 // {"type":"string"} and Claude there answered 400 "tools.4.custom.
 // input_schema.type: Input should be 'object'".
 func TestAntigravityRootOneOfKeepsObject(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	got := plainSchema(json.RawMessage(rgSchema))
 	var parameters map[string]any
 	if err := json.Unmarshal(got, &parameters); err != nil {
@@ -32,6 +34,7 @@ func TestAntigravityRootOneOfKeepsObject(t *testing.T) {
 // The same tool through the route the reporter took: an OpenAI Chat
 // declaration, parseChat, then the Antigravity body.
 func TestAntigravityChatToolRootOneOfKeepsObject(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	r, err := parseChat([]byte(`{"model":"m","messages":[{"role":"user","content":"hi"}],"tools":[{"type":"function","function":{"name":"rg","description":"search","parameters":` + rgSchema + `}}]}`))
 	if err != nil {
 		t.Fatal(err)
@@ -53,6 +56,7 @@ func TestAntigravityChatToolRootOneOfKeepsObject(t *testing.T) {
 // member does; a null branch makes it nullable. A union with nothing of
 // its own beside it is still read as its first branch that isn't null.
 func TestPlainSchemaUnionKeepsOwnShape(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	for _, c := range []struct{ name, in, want string }{
 		{"root oneOf", rgSchema,
 			`{"type":"object","properties":{"pattern":{"type":"string"},"cursor":{"type":"string"}}}`},
@@ -98,6 +102,7 @@ func TestPlainSchemaUnionKeepsOwnShape(t *testing.T) {
 // the upstreams that refuse a root union), keeps the same tool an object
 // with both its fields: its constraint-only branches are passed over.
 func TestObjectSchemaRootOneOfKeepsObject(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	ps := gjson.ParseBytes(objectSchema(json.RawMessage(rgSchema)))
 	if ps.Get("type").String() != "object" || !ps.Get("properties.pattern").Exists() || !ps.Get("properties.cursor").Exists() || ps.Get("oneOf").Exists() || ps.Get("required").Exists() {
 		t.Fatalf("got %s", ps.Raw)

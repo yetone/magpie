@@ -26,6 +26,7 @@ const antigravitySuspended = `{"error":{"code":403,"message":"This service has b
 // unknown failure that doubled to ten and had it asked, and refused, every
 // ten minutes for good.
 func TestAntigravitySuspendedRestsAsRestricted(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	var asked []string
 	s, askedUsage := antigravityGroupFor(t, []string{"u1@example.com", "u2@example.com"}, "gemini-3.8-flash", func(w http.ResponseWriter, r *http.Request) {
 		who := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
@@ -75,6 +76,7 @@ func TestAntigravitySuspendedRestsAsRestricted(t *testing.T) {
 // Google's own words; lifted on the Routing page (an appeal went through),
 // it is asked again.
 func TestAntigravitySuspendedAloneRests(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	n, back := 0, false
 	s, _ := antigravityGroupFor(t, []string{"u1@example.com"}, "gemini-3.8-flash", func(w http.ResponseWriter, r *http.Request) {
 		n++
@@ -111,6 +113,7 @@ func TestAntigravitySuspendedAloneRests(t *testing.T) {
 // a Google plugin's: another 403 from Antigravity, and the same words from a
 // key's relay or another plugin, fail as before.
 func TestAntigravitySuspendedIsGooglesAlone(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	ag := candidate{p: provider.Provider{ID: "antigravity", Account: &provider.Account{Agent: "antigravity", User: "u"}}}
 	gem := candidate{p: provider.Provider{ID: "gemini", Account: &provider.Account{Agent: "gemini", User: "u"}}}
 	key := candidate{p: provider.Provider{ID: "relay", Key: "k"}}

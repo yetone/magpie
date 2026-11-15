@@ -17,6 +17,7 @@ import (
 // no accounts. Its last good generation, kept beside it, is read instead,
 // and the user told.
 func TestZeroedLoginsReadFromBackup(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	googleSandbox(t, &fakeGoogle{})
 	lastgood.Reset()
 	t.Cleanup(lastgood.Reset)
@@ -71,6 +72,7 @@ func TestZeroedLoginsReadFromBackup(t *testing.T) {
 // With no backup, a zeroed logins.json is copied aside before an account
 // added writes over it.
 func TestZeroedLoginsWithoutBackupKeptAside(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	googleSandbox(t, &fakeGoogle{})
 	lastgood.Reset()
 	t.Cleanup(lastgood.Reset)

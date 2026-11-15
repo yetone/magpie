@@ -16,6 +16,7 @@ import (
 // part of a model's own name (-max, mistral-medium) is not taken for an
 // effort of another model.
 func TestEffortIDPricedAsItsModel(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)

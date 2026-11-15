@@ -13,6 +13,7 @@ import (
 // of text names them with their pool in place of the models' own, as the
 // built-in's quota did.
 func TestPluginWindowsKeepPoolAndFamily(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	week := float64(7 * 24 * 3600)
 	q := quotaOfPlugin(SubscriptionQuota{Provider: "antigravity", User: "a@gmail.com"}, plugin.Usage{Windows: []plugin.UsageWindow{
 		{Name: "Gemini 3.8 Flash", Model: "gemini-3.8-flash", Family: "gemini", Pool: "Gemini", Used: fptr(20), Span: week},

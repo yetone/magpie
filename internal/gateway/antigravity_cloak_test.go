@@ -126,6 +126,7 @@ func unsaid(got string) string {
 // SDK's line reworded, and the copy magpie sent until 11-14, which Google
 // turned away 5 of 5 that day, goes the same way.
 func TestAntigravityCloakClaudeCode2316(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	want := "You are a Claude agent, built on the Claude Agent SDK by Anthropic.\n"
 	for _, entry := range []string{"sdk-cli", "claude-desktop"} {
 		system := "x-anthropic-billing-header: cc_version=2.1.316.2e4; cc_entrypoint=" + entry + ";\nYou are a Claude agent, built on Anthropic's Claude Agent SDK.\n"
@@ -147,6 +148,7 @@ func TestAntigravityCloakClaudeCode2316(t *testing.T) {
 }
 
 func TestAntigravityCloakRewordsEveryLineItTurnsAway(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	for _, system := range []string{
 		"You are a Claude agent, built on Anthropic's Claude Agent SDK.",
 		codexGPT5System,
@@ -208,6 +210,7 @@ func TestAntigravityCloakRewordsEveryLineItTurnsAway(t *testing.T) {
 }
 
 func TestAntigravityHermesHint(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	if antigravityHint(hermesOldSystem) != antigravityHermesHint {
 		t.Error("Hermes' old persona isn't told its own hint")
 	}
@@ -287,6 +290,7 @@ func codexAGPost(s *Server, body string) (int, string) {
 // user can turn on, they are refused as before, told why at a status the
 // agent doesn't retry.
 func TestAntigravityAnswersHermesAndCodexByDefault(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	var sent string
 	s, _ := antigravityGroupFor(t, []string{"u@example.com"}, "gemini-3-flash", fakeGoogle(&sent))
 
@@ -336,6 +340,7 @@ func TestAntigravityAnswersHermesAndCodexByDefault(t *testing.T) {
 // CLI's own sign-in, on the same Code Assist envelope, and every other
 // provider are sent the prompt as the agent wrote it.
 func TestOnlyAntigravityIsSentThePromptReworded(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	r := &Request{System: hermesOldSystem + "\n" + codexGPT5System, Messages: []Message{{Role: "user", Parts: []Part{{Kind: Text, Text: "hi"}}}}}
 	gemini := provider.Provider{ID: "gemini-cli", Account: &provider.Account{Agent: "gemini"}}
 	if b := string(codeAssistBody(gemini, r, "gemini-3-flash", nil)); !strings.Contains(b, "You are Hermes Agent, an intelligent") || strings.Contains(b, `​`) || strings.Contains(b, zeroWidth) {
@@ -367,6 +372,7 @@ func TestOnlyAntigravityIsSentThePromptReworded(t *testing.T) {
 // DeepSeek Harness's paragraph on @ paths goes to an Antigravity account
 // reworded, and to every other provider as written (plugins#1028).
 func TestAntigravityDSHAtPathsGoReworded(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	dsh := agReworded[0][0]
 	r := &Request{System: "You are DeepSeek Harness.\n\n" + dsh + "\n\nBe brief.", Messages: []Message{{Role: "user", Parts: []Part{{Kind: Text, Text: "hi"}}}}}
 	ag := provider.Provider{ID: "antigravity", Account: &provider.Account{Agent: "antigravity"}}
@@ -409,6 +415,7 @@ const ompLine = "RFC 2119 keywords: MUST, REQUIRED, SHOULD, RECOMMENDED, MAY, OP
 // (eric_li8983 on X, 11-14): broken up by zero-width spaces it was
 // turned away on a real account, worded so 0 in 10.
 func TestAntigravityCloakOmpLine(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	got := antigravityCloak(ompSystem)
 	if want := strings.Replace(ompSystem, "keywords", "key words", 1); got != want {
 		t.Fatalf("went as %q, want %q", got, want)
@@ -426,6 +433,7 @@ func TestAntigravityCloakOmpLine(t *testing.T) {
 // account on 11-14, and each goes reworded. A copy that only matched as
 // written went out whole and was turned away.
 func TestAntigravityCloakLineWrappedOrWidened(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	copies := []string{
 		strings.Replace(ompLine, "REQUIRED, ", "REQUIRED,\n", 1),
 		strings.Replace(ompLine, "REQUIRED, ", "REQUIRED,\r\n", 1),
@@ -479,6 +487,7 @@ func TestAntigravityCloakLineWrappedOrWidened(t *testing.T) {
 // 429 (3 of 3 on a real account). The model's own turns, the caller's
 // request and every other account keep it as written.
 func TestAntigravityCloaksTheLineInAUsersTurn(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	said := "You were told: " + codexGPT5System
 	// the lines Google let through in a user's turn go as written there
 	others := "x-anthropic-billing-header: cc_version=2.1.316.2e4;\nYou are a Claude agent, built on Anthropic's Claude Agent SDK.\n" + hermesOldSystem + "\nRFC 2119 keywords: MUST, REQUIRED, SHOULD, RECOMMENDED, MAY, OPTIONAL."

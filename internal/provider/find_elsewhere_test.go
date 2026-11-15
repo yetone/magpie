@@ -12,6 +12,7 @@ import (
 // Discord: `magpie provider refresh antigravity` found no Antigravity, which
 // the window showed signed in); without the variable it says nothing more.
 func TestFindSaysFilesAreElsewhere(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	h := t.TempDir()
 	t.Setenv("HOME", h)
 	t.Setenv("USERPROFILE", h)

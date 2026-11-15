@@ -11,6 +11,7 @@ import (
 // came back with the kept windows and no User, and 768 of 1,440
 // Antigravity accounts each drew a card of its own on the Usage page).
 func TestAccountReadingNamed(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	restart := func() {
 		lastQuotas.Lock()

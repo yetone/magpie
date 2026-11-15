@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"fmt"
+	"github.com/yetone/magpie/internal/provider"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -19,6 +20,7 @@ const codexGPT5System = "You are Codex, an agent based on GPT-5. You and the use
 // with the same 429 it gives Claude Code's prompt, in any case; the lines
 // it answers were each tried on a real Antigravity account (10-27).
 func TestAntigravityTurnsAwayCodexsGPT5Prompt(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	for _, system := range []string{
 		codexGPT5System,
 		"You are Codex, a coding agent based on GPT-5. You and the user share the same workspace.",
@@ -79,6 +81,7 @@ func codexAGTurn(switched, search bool) string {
 // Codex is told why at a status it doesn't retry, Antigravity is asked
 // once, and the account doesn't rest.
 func TestAntigravityTurnsCodexsGPT5ThreadAwayOnce(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	for _, c := range []struct{ switched, search bool }{{false, false}, {true, false}, {false, true}, {true, true}} {
 		switched, search := c.switched, c.search
 		t.Run(fmt.Sprintf("switched=%v,search=%v", switched, search), func(t *testing.T) {
@@ -125,6 +128,7 @@ func TestAntigravityTurnsCodexsGPT5ThreadAwayOnce(t *testing.T) {
 // In a group, the next Codex turn carrying that prompt skips Antigravity
 // as Claude Code's does, and the skip says Codex's hint.
 func TestAntigravityForeseesCodexsGPT5Prompt(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	asked := 0
 	s, _ := antigravityTurnedAwayGroup(t, []string{"u@example.com"}, func(w http.ResponseWriter, r *http.Request) {
 		asked++
@@ -145,6 +149,7 @@ func TestAntigravityForeseesCodexsGPT5Prompt(t *testing.T) {
 }
 
 func TestAntigravityCodexHintIsTheRoutingPages(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	b, err := os.ReadFile(filepath.Join("..", "gui", "assets", "plugins", "routing", "client.js"))
 	if err != nil {
 		t.Fatal(err)

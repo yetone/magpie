@@ -111,6 +111,7 @@ const codeAssistNotFound = `{"error":{"code":404,"message":"Requested entity was
 // Gemini 4 on one Antigravity account of several). The Routing page has
 // it asked, not "unlisted, skipped", and the first rests for that model.
 func TestUnlistedAccountAskedAfterModelRefused(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	s, turn, asked := unlistedArgon(t, map[string]string{
 		"a@example.com": `{"models":{"gemini-3.8-flash":{},"gemini-4-argon":{"displayName":"Gemini 4 Argon"}}}`,
 		"b@example.com": `{"models":{"gemini-3.8-flash":{}}}`,
@@ -142,6 +143,7 @@ func TestUnlistedAccountAskedAfterModelRefused(t *testing.T) {
 // bodies) leaves the accounts whose list lacks it alone, as before: they
 // would only refuse it too.
 func TestUnlistedAccountNotAskedForOtherRefusals(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	for _, c := range []struct {
 		name, body string
 		code       int
@@ -168,6 +170,7 @@ func TestUnlistedAccountNotAskedForOtherRefusals(t *testing.T) {
 // A gateway key held to some accounts (#905) isn't given an unlisted
 // account it may not use: the refusal reaches its agent, as before.
 func TestUnlistedAccountHeldFromKey(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	_, turn, asked := unlistedArgon(t, map[string]string{
 		"a@example.com": `{"models":{"gemini-3.8-flash":{},"gemini-4-argon":{"displayName":"Gemini 4 Argon"}}}`,
 		"b@example.com": `{"models":{"gemini-3.8-flash":{}}}`,
@@ -187,6 +190,7 @@ func TestUnlistedAccountHeldFromKey(t *testing.T) {
 // The unlisted account is asked before the provider's Fallback: it is the
 // same model on the same subscription, which the fallback is not.
 func TestUnlistedAccountBeforeFallback(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	_, turn, asked := unlistedArgon(t, map[string]string{
 		"a@example.com": `{"models":{"gemini-3.8-flash":{},"gemini-4-argon":{"displayName":"Gemini 4 Argon"}}}`,
 		"b@example.com": `{"models":{"gemini-3.8-flash":{}}}`,

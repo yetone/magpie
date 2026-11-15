@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"github.com/yetone/magpie/internal/provider"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +17,7 @@ import (
 // conversation (vhjjkkhg on X: 8 to 9 tries, 10+ minutes, from Alma on
 // Responses). No account rests for it.
 func TestEmptyReplyOnTwoAccountsEndsTheRequest(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	users := []string{"u1@example.com", "u2@example.com", "u3@example.com", "u4@example.com", "u5@example.com"}
 	for _, path := range []string{"/v1/responses", "/v1/chat/completions"} {
 		t.Run(path, func(t *testing.T) {

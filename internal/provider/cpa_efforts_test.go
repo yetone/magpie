@@ -24,6 +24,7 @@ import (
 // every list Codex and the ChatGPT app are handed; one whose base magpie
 // doesn't know still takes none, and a vendor's own word stays its own.
 func TestCPAVariantModelsBorrowLevels(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)

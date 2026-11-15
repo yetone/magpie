@@ -266,6 +266,7 @@ func TestModelIDServingAndPrice(t *testing.T) {
 // the account's own say of it is: the account's picks kept from before,
 // and the variant an Antigravity family goes out as at an effort.
 func TestModelIDAtAnAccount(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	prefsHome(t)
 	if err := os.MkdirAll(filepath.Dir(catalog.LivePath("antigravity")), 0o755); err != nil {
 		t.Fatal(err)

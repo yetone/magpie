@@ -168,7 +168,7 @@ An agent you're signed in to is a subscription with models behind it, so magpie 
 
 - **Claude**: drives the real local `claude` binary and bridges your agent's tools over MCP
 - **Codex / ChatGPT**: your ChatGPT plan's models, in every other agent
-- **GitHub Copilot**, **Gemini (Code Assist)**, **Antigravity**, **Grok (SuperGrok)** and more
+- **GitHub Copilot**, **Gemini (Code Assist)**, **Antigravity** (through your own agy CLI), **Grok (SuperGrok)** and more
 - **Any OpenCode auth plugin or pi package** from npm
 
 **Daily warm-up** starts each Claude and ChatGPT account's 5-hour window at the times you choose, or the moment the last one resets.
@@ -213,7 +213,6 @@ A conversation **stays with the account that answered it** while the vendor's pr
 
 ```sh
 magpie plugin add opencode-gemini-auth   # an OpenCode plugin from npm
-magpie plugin add pi-antigravity         # a pi package, the same way
 magpie plugin login google-plugin        # its own sign-in flow, in magpie
 ```
 

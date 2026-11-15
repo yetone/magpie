@@ -31,6 +31,7 @@ var antigravityListed = []catalog.Model{
 // those levels; a model with one id, or only a name like another's,
 // stays as Antigravity lists it.
 func TestCollapseAntigravityModels(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	var got []string
 	for _, m := range collapseAntigravityModels(antigravityListed) {
 		got = append(got, m.ID+"|"+m.Name+"|"+strings.Join(m.Efforts, ","))
@@ -92,6 +93,7 @@ func TestCollapseAntigravityModels(t *testing.T) {
 // ids: each is the model magpie offers for it now, once, where it was;
 // the rest stay.
 func TestAntigravityLegacyPicks(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
@@ -134,6 +136,7 @@ func TestAntigravityLegacyPicks(t *testing.T) {
 // id its model's with "(Tiered)" (EZN7L2C3, #955: agy's list showed
 // magpie/antigravity/gemini-3.6-flash-tiered), any other its id.
 func TestAntigravityUnnamedModels(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	raw := []catalog.Model{
 		{ID: "gemini-3.6-flash-high", Name: "Gemini 3.6 Flash (High)"},
 		{ID: "gemini-3.6-flash-low", Name: "Gemini 3.6 Flash (Low)"},

@@ -12,6 +12,7 @@ import (
 // A rollout can give the first account 4.6 and another enabled account
 // 5.5. Refresh must discover both, and routing must know who lists each.
 func TestAntigravityModelsAcrossAccounts(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	replies := map[string]string{
 		"project-old": `{"models":{"gemini-3.8-flash":{},"claude-opus-4-6-thinking":{"displayName":"Claude Opus 4.6 (Thinking)"},"gpt-oss-120b-medium":{}},
 			"agentModelSorts":[{"groups":[{"modelIds":["gemini-3.8-flash","claude-opus-4-6-thinking","gpt-oss-120b-medium"]}]}]}`,
@@ -120,6 +121,7 @@ func TestAntigravityModelsAcrossAccounts(t *testing.T) {
 // The merge keeps each account's own order: a model only a later account
 // has goes right after the model before it in that account's list.
 func TestMergeAntigravityOrder(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	ids := func(ss ...string) []catalog.Model {
 		var out []catalog.Model
 		for _, s := range ss {

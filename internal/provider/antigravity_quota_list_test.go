@@ -17,6 +17,7 @@ import (
 // account made preferred is needed for the picker, routing or its bar.
 // An account switched off changes nothing.
 func TestAntigravityQuotaReadingListsNewModels(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	replies := map[string]string{
 		"project-a":   `{"models":{"gemini-3.8-flash":{"quotaInfo":{"remainingFraction":1}},"gemini-4-argon-disabled":{"displayName":"Gemini 4 Argon","disabled":true}}}`,
 		"project-b":   `{"models":{"gemini-3.8-flash":{"quotaInfo":{"remainingFraction":1}}}}`,

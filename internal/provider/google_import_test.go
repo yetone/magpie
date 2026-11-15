@@ -14,6 +14,7 @@ import (
 )
 
 func TestParseGoogleImportFormats(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	cases := []struct {
 		name, data string
 		want       []googleImport // n and err not compared unless set
@@ -118,6 +119,7 @@ func (f *fakeGoogleImport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func TestImportGoogleAccounts(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	googleSandbox(t, &fakeGoogle{})
 	f := &fakeGoogleImport{users: map[string]string{"1//a": "a@x.com", "1//b": "b@x.com", "1//c": "c@x.com", "1//n": "nouser"}}
 	srv := httptest.NewServer(f)

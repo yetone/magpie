@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>在任意 Agent 中使用 Claude、ChatGPT、GitHub Copilot 订阅 · magpie</title>
-<meta name="description" content="在 magpie 里登录一次 Claude、ChatGPT、GitHub Copilot、Gemini Code Assist 或 Antigravity，就能在 Claude Code、Codex、Gemini CLI、OpenCode 等 Agent 里用它的模型，支持多账号轮换和自动切换。">
+<meta name="description" content="在 magpie 里登录一次 Claude、ChatGPT、GitHub Copilot或 Gemini Code Assist，就能在 Claude Code、Codex、Gemini CLI、OpenCode 等 Agent 里用它的模型，支持多账号轮换和自动切换。">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#fafafa">
 <script>
@@ -35,7 +35,7 @@
 <link rel="stylesheet" href="/docs.css">
 <meta property="og:site_name" content="magpie">
 <meta property="og:title" content="在任意 Agent 中使用 Claude Pro/Max、ChatGPT Plus/Pro、GitHub Copilot 订阅">
-<meta property="og:description" content="在 magpie 里登录一次 Claude、ChatGPT、GitHub Copilot、Gemini Code Assist 或 Antigravity，就能在 Claude Code、Codex、Gemini CLI、OpenCode 等 Agent 里用它的模型，支持多账号轮换和自动切换。">
+<meta property="og:description" content="在 magpie 里登录一次 Claude、ChatGPT、GitHub Copilot或 Gemini Code Assist，就能在 Claude Code、Codex、Gemini CLI、OpenCode 等 Agent 里用它的模型，支持多账号轮换和自动切换。">
 <meta property="og:image" content="https://usemagpie.ai/img/og.png">
 <meta property="og:url" content="https://usemagpie.ai/docs/zh/subscriptions">
 <meta name="twitter:card" content="summary_large_image">
@@ -46,7 +46,7 @@
   {
    "@type": "TechArticle",
    "headline": "在任意 Agent 中使用 Claude Pro/Max、ChatGPT Plus/Pro、GitHub Copilot 订阅",
-   "description": "在 magpie 里登录一次 Claude、ChatGPT、GitHub Copilot、Gemini Code Assist 或 Antigravity，就能在 Claude Code、Codex、Gemini CLI、OpenCode 等 Agent 里用它的模型，支持多账号轮换和自动切换。",
+   "description": "在 magpie 里登录一次 Claude、ChatGPT、GitHub Copilot或 Gemini Code Assist，就能在 Claude Code、Codex、Gemini CLI、OpenCode 等 Agent 里用它的模型，支持多账号轮换和自动切换。",
    "inLanguage": "zh-CN",
    "url": "https://usemagpie.ai/docs/zh/subscriptions",
    "about": {
@@ -215,13 +215,12 @@
       <tr><td>ChatGPT（Plus、Pro、Business）</td><td><code>codex/…</code></td><td><code>magpie accounts add codex</code></td></tr>
       <tr><td>GitHub Copilot</td><td><code>copilot/…</code></td><td><code>magpie accounts add copilot</code></td></tr>
       <tr><td>Gemini（Code Assist）</td><td><code>gemini/…</code></td><td><code>magpie accounts add gemini</code></td></tr>
-      <tr><td>Antigravity</td><td><code>antigravity/…</code></td><td><code>magpie accounts add antigravity</code></td></tr>
     </table></div>
     <ul>
       <li><b>Claude。</b>Claude 订阅的请求通过你电脑上安装的 Claude Code 发出，所以要保留 Claude Code。</li>
       <li><b>Copilot。</b>Copilot 会给你一个验证码，在 GitHub 页面上输入。使用自有域名的 GitHub Enterprise：<code>magpie accounts add copilot --host &lt;name&gt;.ghe.com</code>。</li>
       <li><b>Gemini。</b>这是 Gemini CLI 的 Google 登录。Google 只对有自己 Google Cloud 项目的 Code Assist Standard 或 Enterprise 账号提供服务；用 <code>magpie accounts project gemini &lt;邮箱&gt; &lt;项目&gt;</code> 指定项目。</li>
-      <li><b>Antigravity。</b>登录后可以用 Antigravity 的 Claude 和 Gemini 模型。</li>
+      <li><b>Antigravity。</b>在<span class="ui">插件</span>页安装 <span class="ui">Antigravity (local agy CLI)</span>（<code>magpie plugin add @magpie-community/opencode-agy-cli-auth</code>）。它运行你自己安装并登录的 agy CLI，Google 看到的是 agy 自己的请求。在 magpie 里直接登录 Antigravity 已下线：Google 会封这样用的账号。</li>
     </ul>
     <p>其他订阅以插件形式在 magpie 的 <span class="ui">插件</span> 页添加，见 <a href="/docs/zh/plugins">插件</a>。</p>
 

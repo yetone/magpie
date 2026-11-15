@@ -81,6 +81,7 @@ func TestImportBoxFinishesAPastedClaudeCode(t *testing.T) {
 // What isn't a sign-in's end is left to import, and an address among
 // refresh tokens is never sent to the vendor as one.
 func TestImportTellsAddressesFromAccounts(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	for _, s := range []string{
 		`{"tokens":{"refresh_token":"rt_x"}}`,
 		"rt_abc123",

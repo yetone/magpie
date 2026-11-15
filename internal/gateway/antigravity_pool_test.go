@@ -18,6 +18,7 @@ import (
 // Discovery and routing agree when a new model is available only to a
 // secondary account, including the family id clients actually request.
 func TestAntigravityPoolRoutesDiscoveredModels(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	fresh(t)
 	var logins []map[string]any
 	for _, user := range []string{"old", "new"} {

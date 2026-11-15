@@ -40,6 +40,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yetone/magpie/internal/filememo"
@@ -292,7 +293,26 @@ func Movable(id string) bool { return movers[id] != nil }
 // is listed by MoveCandidates with why, until it moves. The built-ins are
 // retired one by one, each with its code (the owner, 10-16: 陆续把内置
 // Provider下线掉), so this is the set retired so far.
-func BuiltinRetired(id string) bool { return Movable(id) && retiredBuiltins[id] }
+func BuiltinRetired(id string) bool {
+	if id == "antigravity" && antigravityBuiltinForTest.Load() > 0 {
+		return false
+	}
+	return Movable(id) && retiredBuiltins[id]
+}
+
+// antigravityBuiltinForTest counts the tests that serve the built-in
+// Antigravity again (AntigravityBuiltinForTest).
+var antigravityBuiltinForTest atomic.Int32
+
+// AntigravityBuiltinForTest serves the built-in Antigravity again until the
+// returned func runs. Its route has served nothing since it was retired on
+// 11-15, and its code is still shared with Gemini CLI's: the tests of that
+// route use this until the code is taken out (#6723).
+func AntigravityBuiltinForTest() func() {
+	antigravityBuiltinForTest.Add(1)
+	var once sync.Once
+	return func() { once.Do(func() { antigravityBuiltinForTest.Add(-1) }) }
+}
 
 // retiredBuiltins are the built-in subscriptions whose code is gone.
 var retiredBuiltins = map[string]bool{
@@ -309,6 +329,10 @@ var retiredBuiltins = map[string]bool{
 	"grok":            true,
 	"devin":           true,
 	CommandCodePlanID: true,
+	// Google bans accounts it sees on Code Assist through Antigravity's
+	// own client (the owner, 11-15): the plugin's 0.2.0 sends nothing and
+	// points to Antigravity (local agy CLI), which drives the user's agy
+	"antigravity": true,
 }
 
 // PluginServes is whether the built-in id's subscription is its plugin's to

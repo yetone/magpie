@@ -17,6 +17,7 @@ import (
 // /v1/models?format=antigravity, is {"list": [...]} in the app's own
 // fields, the models the key may use, each with its window and name.
 func TestAntigravityCatalog(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	setup(t, provider.Anthropic, &fake{})
 	if err := provider.Save(provider.Provider{ID: "ds", Name: "DS", Key: "k", Chat: "http://127.0.0.1:1/v1", Models: []string{"big", "plain"}}); err != nil {
 		t.Fatal(err)
@@ -104,6 +105,7 @@ func TestAntigravityCatalog(t *testing.T) {
 // level it has no word for is left out, and a model with one level left
 // is listed once, as a menu of one is no choice (YujunT46308 on X).
 func TestAntigravityLevels(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	for _, c := range []struct {
 		in, want []string
 	}{
@@ -123,6 +125,7 @@ func TestAntigravityLevels(t *testing.T) {
 // level asked, fitted to the model's, else at medium, as the app's own
 // picker starts one, else its weakest; a model with no levels as it is.
 func TestAntigravityModelStartsOnALevel(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	setup(t, provider.Anthropic, &fake{})
 	if err := provider.Save(provider.Provider{ID: "ds", Name: "DS", Key: "k", Chat: "http://127.0.0.1:1/v1", Models: []string{"three", "two", "plain"}}); err != nil {
 		t.Fatal(err)

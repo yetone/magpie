@@ -117,6 +117,7 @@ func TestBareErrorsHoldsNothingElse(t *testing.T) {
 // that "ended before it was complete". It is the request's fault: the
 // account doesn't rest, and the route books the 400.
 func TestAntigravityBareErrorIsTheVendors(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	for name, reply := range agBareEnds {
 		for _, stream := range []bool{true, false} {
 			t.Run(fmt.Sprintf("%s/stream=%v", name, stream), func(t *testing.T) {

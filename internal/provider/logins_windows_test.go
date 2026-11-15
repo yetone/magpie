@@ -17,6 +17,7 @@ import (
 // that followed left every account out (Packing1 on Discord, Windows 11:
 // 「整行都没了，供应商里面antigravity直接消失了」 after an update).
 func TestLoginsKeptWhileAnotherMagpieWrites(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	googleSandbox(t, &fakeGoogle{})
 	if err := addGoogleLogin("antigravity", "a@x.com", "", googleAuth{RefreshToken: "1//a", Project: "pa"}); err != nil {
 		t.Fatal(err)

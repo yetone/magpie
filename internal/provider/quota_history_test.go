@@ -211,6 +211,7 @@ func TestMergeQuotaHistory(t *testing.T) {
 // the models' windows still aren't. Another measured window set aside for
 // routing keeps its own line too (chowyuan1314, #4612).
 func TestQuotaHistoryKeepsAntigravityPools(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	testenv.SetHome(t, t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t0 := time.Date(2026, 10, 27, 8, 0, 0, 0, time.UTC)

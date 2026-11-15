@@ -16,11 +16,11 @@ import (
 func init() {
 	movers["antigravity"] = &mover{
 		pkg:    "@magpie-community/opencode-antigravity-auth",
-		min:    "0.1.18", // a variant at xhigh (Gemini 4 Hydrogen) is asked at xhigh (plugins#1169); 0.1.14: Gemini 4's late INVALID_ARGUMENT, a bare line in the stream, is asked again and says it isn't a region block (0.1.13 Codex's GPT-5 line reworded in a user's turn, 0.1.12 rewords instead of zero-width, 0.1.11 omp's "key words", 0.1.0 ported the built-in)
+		min:    "0.2.0", // retired: sends nothing, points to Antigravity (local agy CLI) (owner, 11-15); 0.1.18 a variant at xhigh (Gemini 4 Hydrogen) is asked at xhigh (plugins#1169); 0.1.14: Gemini 4's late INVALID_ARGUMENT, a bare line in the stream, is asked again and says it isn't a region block (0.1.13 Codex's GPT-5 line reworded in a user's turn, 0.1.12 rewords instead of zero-width, 0.1.11 omp's "key words", 0.1.0 ported the built-in)
 		agents: []string{"antigravity"},
 		out: func() ([]Moving, error) {
 			var out []Moving
-			for _, l := range googleLogins("antigravity") {
+			for _, l := range googleSavedLogins("antigravity") {
 				a := l.acct.auth
 				if a.RefreshToken == "" {
 					continue

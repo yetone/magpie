@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"github.com/yetone/magpie/internal/provider"
 	"testing"
 
 	"github.com/tidwall/gjson"
@@ -25,6 +26,7 @@ const displayItemsAsk = `{"model":"group/gemini-3-8-flash","max_tokens":32,"mess
 // that has properties an object, whatever its enum or const says: typed
 // from its values, the node went on with items on a string.
 func TestGeminiToolTypesItemsBeforeEnum(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	out := geminiToolTypes([]byte(displayItemsAsk))
 	props := gjson.GetBytes(out, "tools.0.input_schema.properties")
 	if got := props.Get("display.type").String(); got != "array" {
@@ -45,6 +47,7 @@ func TestGeminiToolTypesItemsBeforeEnum(t *testing.T) {
 // sent it, as this version's local magpie passes it on, and as a magpie
 // from before passed it on (display typed "string").
 func TestAntigravityItemsOnlyOnArrays(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	older := `{"model":"group/gemini-3-8-flash","max_tokens":32,"messages":[{"role":"user","content":"hi"}],
  "tools":[{"name":"show","description":"show rows","input_schema":{"type":"object","properties":{
    "display":{"type":"string","description":"columns to display","items":{"type":"string"},"enum":["name","size","date"]},

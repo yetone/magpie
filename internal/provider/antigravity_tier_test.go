@@ -81,6 +81,7 @@ func antigravityModelIDs(t *testing.T, agent string) []string {
 // in entitlement.userTier, as Antigravity's language server does, and the
 // log says what Google answered and what magpie left out.
 func TestAntigravityProAccountNamesItsTier(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	f := &fakeGoogle{load: proLoad, modelsFor: tierModels("g1-pro-tier")}
 	googleSandbox(t, f)
 	buf := captureLog(t)
@@ -109,6 +110,7 @@ func TestAntigravityProAccountNamesItsTier(t *testing.T) {
 // A tier Google won't take from the account is left out: the next is
 // tried, then none, and the refusal is logged.
 func TestAntigravityTierRefusedFallsBack(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	f := &fakeGoogle{load: proLoad, modelsFor: tierModels("standard-tier")}
 	googleSandbox(t, f)
 	buf := captureLog(t)
@@ -143,6 +145,7 @@ func TestAntigravityTierRefusedFallsBack(t *testing.T) {
 // before; one whose project was kept with its sign-in still has its tiers
 // asked for, so a Pro account imported with its project names its plan.
 func TestAntigravityTierFreeAndKeptProject(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	f := &fakeGoogle{
 		load:      `{"currentTier":{"id":"free-tier","name":"Antigravity"},"paidTier":{"id":"free-tier","name":"Antigravity Starter Quota"},"cloudaicompanionProject":"aicode-consumers"}`,
 		modelsFor: tierModels("g1-pro-tier"),
@@ -176,6 +179,7 @@ func TestAntigravityTierFreeAndKeptProject(t *testing.T) {
 // left out of the list for every client; the models beside it, and their
 // ids, are as Google sent them.
 func TestAntigravityDisabledModelLeftOut(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	f := &fakeGoogle{load: `{"currentTier":{"id":"free-tier","name":"Antigravity"},"cloudaicompanionProject":"aicode-consumers"}`, models: `{"models":{
 		"gemini-3.8-flash-high":{"displayName":"Gemini 3.8 Flash (High)","maxTokens":1048576,"quotaInfo":{"remainingFraction":1}},
 		"gemini-4-argon-disabled":{"displayName":"Gemini 4 Argon","maxTokens":1048576,"disabled":true,"quotaInfo":{"remainingFraction":1}},
@@ -203,6 +207,7 @@ func TestAntigravityDisabledModelLeftOut(t *testing.T) {
 // sub2api, Antigravity-Manager), and lists what that gives. Should that
 // fail too, the log says so and the account keeps the list it had.
 func TestAntigravityProInvalidTierAsksWithoutOne(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	const load = `{"currentTier":{"id":"free-tier","name":"Antigravity"},
 		"paidTier":{"id":"g1-pro-tier","name":"Google AI Pro"},
 		"cloudaicompanionProject":"aicode-consumers"}`
@@ -275,6 +280,7 @@ func TestAntigravityProInvalidTierAsksWithoutOne(t *testing.T) {
 // a step no row is written for, it isn't named again for tierRefusedFor,
 // and a list that fails without one is still written down.
 func TestAntigravityRefusedTierAskedOnceAndNoRow(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	const load = `{"currentTier":{"id":"free-tier","name":"Antigravity"},
 		"paidTier":{"id":"g1-pro-tier","name":"Google AI Pro"},
 		"cloudaicompanionProject":"aicode-consumers"}`
@@ -363,6 +369,7 @@ func TestAntigravityRefusedTierAskedOnceAndNoRow(t *testing.T) {
 // A tier refused for a reason other than a 400 (Google down) is named
 // again on the next list.
 func TestAntigravityTierNotRestedForOtherFailures(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	f := &fakeGoogle{load: proLoad, modelsFor: func(body map[string]any) (int, string) {
 		if body["entitlement"] != nil {
 			return 503, `{"error":{"code":503,"message":"The service is currently unavailable.","status":"UNAVAILABLE"}}`
@@ -391,6 +398,7 @@ func TestAntigravityTierNotRestedForOtherFailures(t *testing.T) {
 // Now they are asked again once an hour old, as Gemini CLI's experiments
 // are, and a list names the tier the account has now.
 func TestAntigravityTierAskedAgainAfterUpgrade(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	const free = `{"currentTier":{"id":"free-tier","name":"Antigravity"},"cloudaicompanionProject":"aicode-consumers"}`
 	const ultra = `{"currentTier":{"id":"standard-tier","name":"Antigravity","usesGcpTos":true},
 		"paidTier":{"id":"g1-ultra-tier","name":"Google AI Ultra"},"cloudaicompanionProject":"aicode-consumers"}`

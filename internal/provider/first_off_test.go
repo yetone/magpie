@@ -12,6 +12,7 @@ import (
 // ticked off it hands first to the next ticked account; with no other
 // ticked, it stays, as one account is always used.
 func TestFirstTickedOffHandsFirstOn(t *testing.T) {
+	t.Cleanup(AntigravityBuiltinForTest()) // the retired built-in route
 	claudeHome(t)
 	auth := func(r string) json.RawMessage {
 		b, _ := json.Marshal(googleAuth{RefreshToken: r})

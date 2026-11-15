@@ -227,8 +227,19 @@ type googleLogin struct {
 	acct googleAccount
 }
 
-// googleLogins lists an app's accounts, the first in use first.
+// googleLogins lists an app's accounts the built-in serves, the first in
+// use first: none for one its plugin serves (Antigravity, retired), so
+// nothing here asks Google for its models, usage or requests.
 func googleLogins(agent string) []googleLogin {
+	if PluginServes(agent) {
+		return nil
+	}
+	return googleSavedLogins(agent)
+}
+
+// googleSavedLogins lists an app's saved accounts, the first in use first,
+// served or not: its mover reads them to carry them over.
+func googleSavedLogins(agent string) []googleLogin {
 	own, hasOwn := googleAccount{}, false
 	if agent == "gemini" {
 		own, hasOwn = geminiOwnLogin()

@@ -14,6 +14,7 @@ import (
 // only it rests on that account; the account itself doesn't, and its
 // other models are asked as before.
 func TestCodeAssistMissingModelRestsTheModel(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	const notFound = `{"error":{"code":404,"message":"Requested entity was not found.","status":"NOT_FOUND"}}`
 	s, _ := antigravityGroupFor(t, []string{"u@example.com"}, "argon", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Claude・ChatGPT・GitHub Copilot のサブスクを他のコーディングエージェントで使う · magpie</title>
-<meta name="description" content="Claude、ChatGPT、GitHub Copilot、Gemini Code Assist、Antigravity に magpie で一度サインインすれば、そのモデルを Claude Code、Codex、Gemini CLI、OpenCode などのエージェントで使えます。複数アカウントとフェイルオーバーにも対応。">
+<meta name="description" content="Claude、ChatGPT、GitHub Copilot、Gemini Code Assist に magpie で一度サインインすれば、そのモデルを Claude Code、Codex、Gemini CLI、OpenCode などのエージェントで使えます。複数アカウントとフェイルオーバーにも対応。">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#fafafa">
 <script>
@@ -35,7 +35,7 @@
 <link rel="stylesheet" href="/docs.css">
 <meta property="og:site_name" content="magpie">
 <meta property="og:title" content="Claude Pro/Max・ChatGPT Plus/Pro・GitHub Copilot のサブスクを任意のコーディングエージェントで使う">
-<meta property="og:description" content="Claude、ChatGPT、GitHub Copilot、Gemini Code Assist、Antigravity に magpie で一度サインインすれば、そのモデルを Claude Code、Codex、Gemini CLI、OpenCode などのエージェントで使えます。複数アカウントとフェイルオーバーにも対応。">
+<meta property="og:description" content="Claude、ChatGPT、GitHub Copilot、Gemini Code Assist に magpie で一度サインインすれば、そのモデルを Claude Code、Codex、Gemini CLI、OpenCode などのエージェントで使えます。複数アカウントとフェイルオーバーにも対応。">
 <meta property="og:image" content="https://usemagpie.ai/img/og.png">
 <meta property="og:url" content="https://usemagpie.ai/docs/ja/subscriptions">
 <meta name="twitter:card" content="summary_large_image">
@@ -46,7 +46,7 @@
   {
    "@type": "TechArticle",
    "headline": "Claude Pro/Max・ChatGPT Plus/Pro・GitHub Copilot のサブスクを任意のコーディングエージェントで使う",
-   "description": "Claude、ChatGPT、GitHub Copilot、Gemini Code Assist、Antigravity に magpie で一度サインインすれば、そのモデルを Claude Code、Codex、Gemini CLI、OpenCode などのエージェントで使えます。複数アカウントとフェイルオーバーにも対応。",
+   "description": "Claude、ChatGPT、GitHub Copilot、Gemini Code Assist に magpie で一度サインインすれば、そのモデルを Claude Code、Codex、Gemini CLI、OpenCode などのエージェントで使えます。複数アカウントとフェイルオーバーにも対応。",
    "inLanguage": "ja",
    "url": "https://usemagpie.ai/docs/ja/subscriptions",
    "about": {
@@ -215,13 +215,12 @@
       <tr><td>ChatGPT（Plus、Pro、Business）</td><td><code>codex/…</code></td><td><code>magpie accounts add codex</code></td></tr>
       <tr><td>GitHub Copilot</td><td><code>copilot/…</code></td><td><code>magpie accounts add copilot</code></td></tr>
       <tr><td>Gemini（Code Assist）</td><td><code>gemini/…</code></td><td><code>magpie accounts add gemini</code></td></tr>
-      <tr><td>Antigravity</td><td><code>antigravity/…</code></td><td><code>magpie accounts add antigravity</code></td></tr>
     </table></div>
     <ul>
       <li><b>Claude。</b> Claude サブスクリプションでのリクエストは、コンピューターにインストールされた Claude Code を通じて送られるので、Claude Code はインストールしたままにしてください。</li>
       <li><b>Copilot。</b> Copilot はコードを表示するので、GitHub のページで入力します。独自ドメインの GitHub Enterprise の場合：<code>magpie accounts add copilot --host &lt;name&gt;.ghe.com</code>。</li>
       <li><b>Gemini。</b> これは Gemini CLI の Google サインインです。Google が応じるのは、専用の Google Cloud プロジェクトを持つ Code Assist Standard または Enterprise のアカウントだけです。プロジェクトは <code>magpie accounts project gemini &lt;email&gt; &lt;project&gt;</code> で指定します。</li>
-      <li><b>Antigravity。</b> サインインすると Antigravity の Claude と Gemini のモデルが使えます。</li>
+      <li><b>Antigravity。</b> <span class="ui">プラグイン</span>ページから <span class="ui">Antigravity (local agy CLI)</span> を入れてください（<code>magpie plugin add @magpie-community/opencode-agy-cli-auth</code>）。インストールしてサインインした agy CLI を動かすので、Google には agy 自身のリクエストとして届きます。magpie で Antigravity に直接サインインする方法は終了しました。その使い方をした Google アカウントは停止されます。</li>
     </ul>
     <p>その他のサブスクリプションは、magpie の <span class="ui">Plugins</span> ページからプラグインとして追加します。<a href="/docs/ja/plugins">プラグイン</a>を参照してください。</p>
 

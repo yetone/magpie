@@ -26,6 +26,7 @@ func agyTurn(s *Server) (int, string) {
 // suspended Antigravity accounts, 23 and 22 tries, none answered). Lifted
 // on the Routing page, the account is asked again.
 func TestSuspendedAccountsNotAskedWhileTheyRest(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	var asked []string
 	s, _ := antigravityGroupFor(t, []string{"u1@example.com", "u2@example.com"}, "gemini-3.8-flash", func(w http.ResponseWriter, r *http.Request) {
 		asked = append(asked, strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
@@ -86,6 +87,7 @@ func TestRestrictedLoneAccountNotAskedWhileItRests(t *testing.T) {
 // A refusal of the request's content is not the account's: it rests
 // nobody, and the next request asks the same account again.
 func TestContentRefusalStillAsksTheAccount(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	n := 0
 	s, _ := antigravityGroupFor(t, []string{"u1@example.com"}, "gemini-3.8-flash", func(w http.ResponseWriter, r *http.Request) {
 		n++
@@ -108,6 +110,7 @@ func TestContentRefusalStillAsksTheAccount(t *testing.T) {
 // the account's rest isn't taken anew by each such turn: it ends when it
 // would, rather than never while the conversation goes on.
 func TestSuspendedStrictConversationKeepsItsRest(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
 	var asked []string
 	suspended := false
 	s, _ := antigravityGroupFor(t, []string{"u1@example.com", "u2@example.com"}, "gemini-3.8-flash", func(w http.ResponseWriter, r *http.Request) {
