@@ -2343,6 +2343,21 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		writeJSON(rw, map[string]bool{"ok": true})
 	})
+	// Warm up all: each of a Codex or Claude agent's accounts in use and not
+	// in a window already warmed at once, and what each came to
+	mux.HandleFunc("POST /api/warm-all", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ Agent string }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		rs, err := provider.WarmAll(r.Context(), in.Agent)
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, map[string]any{"results": rs})
+	})
 	// whether a Codex account spends one of its resets by itself once its
 	// week is used up, the Usage card's toggle, set on its own
 	// a Codex account's own daily warm-up time: "06:00", "off", or "" to

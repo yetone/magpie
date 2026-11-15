@@ -26,9 +26,17 @@ func TestWarmNowAPISaysWhy(t *testing.T) {
 		{`{"agent":"claude","user":"nobody@example.com"}`, `no Claude account "nobody@example.com"`},
 		{`{"agent":"copilot","user":"octocat"}`, `"copilot" has no warm-up`},
 		{`{"agent":"codex"}`, `no ChatGPT account ""`},
+		// Warm up all: no account, or no warm-up
+		{`{"agent":"claude","all":true}`, `no Claude account to warm up`},
+		{`{"agent":"codex","all":true}`, `no ChatGPT account to warm up`},
+		{`{"agent":"copilot","all":true}`, `"copilot" has no warm-up`},
 	} {
+		route := "/api/warm-now"
+		if strings.Contains(c.body, `"all"`) {
+			route = "/api/warm-all"
+		}
 		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, httptest.NewRequest("POST", "/api/warm-now", strings.NewReader(c.body)))
+		h.ServeHTTP(rec, httptest.NewRequest("POST", route, strings.NewReader(c.body)))
 		var out struct{ Error string }
 		json.Unmarshal(rec.Body.Bytes(), &out)
 		if rec.Code != 400 || !strings.Contains(out.Error, c.want) {

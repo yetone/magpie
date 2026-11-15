@@ -32,6 +32,10 @@ function serve(lang, asked, codexUsers, claudeUsers) {
       asked.push([b.agent, b.user]);
       return b.user === "a@example.com" ? json({ error: WHY }, 400) : json({ ok: true });
     }
+    if (url.pathname === "/api/warm-all") {
+      asked.push([route.request().postDataJSON().agent, "all"]);
+      return json({ results: ALL });
+    }
     if (url.pathname === "/api/providers") return json(provPrefsProviders(["codex", "claude"], { codex: "Codex", claude: "Claude Code" }));
     if (url.pathname === "/api/groups") return json({ groups: [], models: [] });
     if (url.pathname === "/api/plugins") return json({ plugins: [] });
@@ -42,12 +46,17 @@ function serve(lang, asked, codexUsers, claudeUsers) {
   };
 }
 
+// what POST /api/warm-all says of each account: two warmed, one in its
+// windows already, one turned off (unsaid), one refused
+const ALL = [{ user: "one@example.com" }, { user: "busy@example.com", skip: "running" }, { user: "off@example.com", skip: "off" },
+  { user: "two@example.com" }, { user: "a@example.com", error: WHY }];
+
 const W = {
-  en: { name: "Warm up now", go: "Warm up", pick: "Warm up…", head: "Warm up which account", done: "Warmed up B@Example.com at ", failed: "Couldn't warm up a@example.com: ", own: "Warmed up own@example.com at " },
-  zh: { name: "现在预热", go: "预热", pick: "预热…", head: "预热哪个账号", done: "已预热 B@Example.com，", failed: "a@example.com 预热失败：", own: "已预热 own@example.com，" },
-  "zh-TW": { name: "現在預熱", go: "預熱", pick: "預熱…", head: "預熱哪個帳號", done: "已預熱 B@Example.com，", failed: "a@example.com 預熱失敗：", own: "已預熱 own@example.com，" },
-  ja: { name: "今すぐウォームアップ", go: "ウォームアップ", pick: "ウォームアップ…", head: "ウォームアップするアカウント", done: "B@Example.com をウォームアップしました（", failed: "a@example.com をウォームアップできませんでした: ", own: "own@example.com をウォームアップしました（" },
-  de: { name: "Jetzt vorwärmen", go: "Vorwärmen", pick: "Vorwärmen…", head: "Welches Konto vorwärmen", done: "B@Example.com vorgewärmt, ", failed: "a@example.com konnte nicht vorgewärmt werden: ", own: "own@example.com vorgewärmt, " },
+  en: { name: "Warm up now", go: "Warm up", pick: "Warm up…", head: "Warm up which account", done: "Warmed up B@Example.com at ", failed: "Couldn't warm up a@example.com: ", own: "Warmed up own@example.com at ", all: "All accounts", running: "Already in a window: " },
+  zh: { name: "现在预热", go: "预热", pick: "预热…", head: "预热哪个账号", done: "已预热 B@Example.com，", failed: "a@example.com 预热失败：", own: "已预热 own@example.com，", all: "全部账号", running: "窗口已在计时：" },
+  "zh-TW": { name: "現在預熱", go: "預熱", pick: "預熱…", head: "預熱哪個帳號", done: "已預熱 B@Example.com，", failed: "a@example.com 預熱失敗：", own: "已預熱 own@example.com，", all: "全部帳號", running: "時段已在計時：" },
+  ja: { name: "今すぐウォームアップ", go: "ウォームアップ", pick: "ウォームアップ…", head: "ウォームアップするアカウント", done: "B@Example.com をウォームアップしました（", failed: "a@example.com をウォームアップできませんでした: ", own: "own@example.com をウォームアップしました（", all: "すべてのアカウント", running: "期間はすでに開始済み: " },
+  de: { name: "Jetzt vorwärmen", go: "Vorwärmen", pick: "Vorwärmen…", head: "Welches Konto vorwärmen", done: "B@Example.com vorgewärmt, ", failed: "a@example.com konnte nicht vorgewärmt werden: ", own: "own@example.com vorgewärmt, ", all: "Alle Konten", running: "Zeitfenster läuft bereits: " },
 };
 
 // where the button the reader pressed is on the screen: it stays there while
@@ -102,9 +111,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const menu = page.locator(".proto-menu");
         await menu.waitFor();
         assert.equal((await menu.locator(".pm-head").innerText()).trim(), w.head);
-        assert.deepEqual((await menu.locator(".pm-name").allInnerTexts()).map((s) => s.trim()), ["a@example.com", "B@Example.com"]);
+        assert.deepEqual((await menu.locator(".pm-name").allInnerTexts()).map((s) => s.trim()), [w.all, "a@example.com", "B@Example.com"]);
         assert.deepEqual(asked, [], "the menu opening sent nothing");
-        await menu.locator(".pm-item").nth(1).click();
+        await menu.locator(".pm-item").nth(2).click();
         await page.waitForFunction((s) => document.querySelector("#warmNowSub")?.textContent.startsWith(s), w.done);
         assert.deepEqual(asked, [["codex", "B@Example.com"]], "that account alone, by its name as it is");
         assert.equal(await page.locator("#warmNowSub.err").count(), 0);
@@ -112,7 +121,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
         // refused: the vendor's reason, in red, on the line and in the status
         await go.click();
-        await menu.locator(".pm-item").nth(0).click();
+        await menu.locator(".pm-item").nth(1).click();
         await page.waitForFunction(() => document.querySelector("#warmNowSub.err"));
         assert.equal((await page.locator("#warmNowSub").innerText()).trim(), w.failed + WHY);
         assert.ok((await page.locator("#status").textContent()).includes("usage limit reached"));
@@ -138,6 +147,51 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(asked.at(-1), ["claude", "own@example.com"]);
         assert.equal(asked.length, 3);
         assert.deepEqual(await sideways(page), []);
+        assert.equal(await page.locator("select").count(), 0);
+        assert.deepEqual(errors, []);
+      });
+    }
+  }
+
+  for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) {
+    const w = W[lang];
+    for (const width of [900, 440]) {
+      // Warm up all (CoderMaurice on X): the menu's first item warms every
+      // Claude account in one press (POST /api/warm-all {agent}), and the
+      // row's line says what each came to: the ones warmed, the ones in a
+      // window already, each refusal with its reason, in red; one turned
+      // off goes unsaid
+      test(`${engine} ${lang} ${width}px: Warm up all warms every account at one press`, async (t) => {
+        const browser = await launch(engine);
+        t.after(() => browser.close());
+        const page = await (await browser.newContext({ viewport: { width, height: 800 }, reducedMotion: "reduce" })).newPage();
+        page.setDefaultTimeout(5000);
+        page.setDefaultNavigationTimeout(60000);
+        const errors = [], asked = [];
+        page.on("pageerror", (e) => { if (engine === "webkit" && /due to access control checks/.test(e.message)) return; errors.push(e.message); }); // a goto in WebKit can cut off a fetch (#1350)
+        await page.route("**/*", serve(lang, asked, undefined, ALL.map((r) => r.user)));
+        await openProvPrefs(page, "claude");
+        const row = page.locator(".editor .prov-prefs #claudeWarmNowRow"), go = row.locator("button");
+        await go.waitFor();
+        await inEditor(page, go);
+        assert.equal((await go.innerText()).trim(), w.pick);
+        await go.click();
+        const menu = page.locator(".proto-menu");
+        await menu.waitFor();
+        assert.deepEqual((await menu.locator(".pm-name").allInnerTexts()).map((s) => s.trim()), [w.all, ...ALL.map((r) => r.user)]);
+        await menu.locator(".pm-item").first().click();
+        await page.waitForFunction(() => document.querySelector("#claudeWarmNowSub.err"));
+        assert.deepEqual(asked, [["claude", "all"]], "one request for them all, none one by one");
+        const said = (await page.locator("#claudeWarmNowSub").innerText()).trim();
+        const parts = said.split(" · ");
+        assert.equal(parts.length, 3, said);
+        assert.ok(parts[0].startsWith(w.done.replace("B@Example.com", "one@example.com, two@example.com")), said);
+        assert.equal(parts[1], w.running + "busy@example.com");
+        assert.equal(parts[2], w.failed + WHY);
+        assert.ok(!said.includes("off@example.com"), "an account turned off goes unsaid");
+        assert.equal(await go.isDisabled(), false, "pressable again");
+        assert.deepEqual(await sideways(page), []);
+        if (process.env.ARTIFACT_DIR) await page.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `warm-all-${engine}-${lang}-${width}.png`) });
         assert.equal(await page.locator("select").count(), 0);
         assert.deepEqual(errors, []);
       });

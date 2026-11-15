@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -68,4 +69,93 @@ func WarmNow(ctx context.Context, agent, user string) error {
 	}
 	claudeWarmedNow(ls[i].User)
 	return nil
+}
+
+// WarmAllResult is what Warm up all came to for one account: Skip says why
+// it was left alone ("off" or "running"), Err why its warm-up failed or
+// couldn't be sent; both empty, it was warmed.
+type WarmAllResult struct {
+	User string `json:"user"`
+	Skip string `json:"skip,omitempty"`
+	Err  string `json:"error,omitempty"`
+}
+
+// warmAllAtOnce is how many of Warm up all's requests run together: each
+// Claude one is a Claude Code run.
+const warmAllAtOnce = 3
+
+// WarmAll is Warm up now for each of agent's accounts at once
+// (CoderMaurice on X: one press for several Claude accounts). It sends the
+// warm-up to every account in use (the one the agent is on, or one turned
+// on beside it) whose windows aren't all running already, as the cached
+// reads the Usage page shares tell them. An account turned off or paused,
+// and one already in its windows, are left alone and listed with why; one
+// whose sign-in lapsed is sent nothing and failed, as Warm up now has it.
+func WarmAll(ctx context.Context, agent string) ([]WarmAllResult, error) {
+	name := map[string]string{"codex": "ChatGPT", "claude": "Claude"}[agent]
+	if name == "" {
+		return nil, fmt.Errorf("%q has no warm-up", agent)
+	}
+	ls := Logins(agent)
+	if len(ls) == 0 {
+		return nil, fmt.Errorf("no %s account to warm up", name)
+	}
+	usage := LoginUsage(ctx, agent)
+	return warmAll(ctx, ls, usage, time.Now(), func(ctx context.Context, user string) error { return WarmNow(ctx, agent, user) }), nil
+}
+
+// warmAll is WarmAll on ls read as usage at now, each warm-up sent by send.
+func warmAll(ctx context.Context, ls []Login, usage map[string]SubscriptionQuota, now time.Time, send func(context.Context, string) error) []WarmAllResult {
+	var out []WarmAllResult
+	var due []int
+	for _, l := range ls {
+		if l.User == "" || slices.ContainsFunc(out, func(r WarmAllResult) bool { return strings.EqualFold(r.User, l.User) }) {
+			continue
+		}
+		r := WarmAllResult{User: l.User}
+		switch {
+		case l.Lapsed != "":
+			// as Warm up now says of it
+			r.Err = "needs signing in again: " + l.Lapsed
+		case !l.Active && !l.On || l.Paused:
+			r.Skip = "off"
+		case windowsRunning(usage[l.User], now):
+			r.Skip = "running"
+		default:
+			due = append(due, len(out))
+		}
+		out = append(out, r)
+	}
+	var wg sync.WaitGroup
+	slots := make(chan struct{}, warmAllAtOnce)
+	for _, i := range due {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			slots <- struct{}{}
+			defer func() { <-slots }()
+			if err := send(ctx, out[i].User); err != nil {
+				out[i].Err = err.Error()
+			}
+		}()
+	}
+	wg.Wait()
+	return out
+}
+
+// windowsRunning says whether every one of q's own windows with a span is
+// running as of now, so a warm-up would start none: false when none is
+// known, as for an account never read.
+func windowsRunning(q SubscriptionQuota, now time.Time) bool {
+	n := 0
+	for _, w := range q.Windows {
+		if w.Span <= 0 || w.Aside || w.Text || w.Model != "" || w.Lane != "" {
+			continue
+		}
+		if idle(asOf(w, now), now) {
+			return false
+		}
+		n++
+	}
+	return n > 0
 }
