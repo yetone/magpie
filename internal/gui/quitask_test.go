@@ -2,7 +2,9 @@ package gui
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -222,5 +224,45 @@ func TestRestoreAgentsOnQuit(t *testing.T) {
 	rewireAgentsOnStart()
 	if rewired != 1 {
 		t.Fatalf("a start rewired %d times", rewired)
+	}
+}
+
+// jtbbtnt54249 on X: after Disconnect and quit, every agent's switch was
+// off when magpie opened again. The question's Disconnect and quit now
+// puts the agents back as Put agents back when quitting does, setting on
+// or off (the next start connects them again: agent.RewireOnStart), not
+// with each row's Disconnect, whose mark kept them off for good. One that
+// can't be put back answers an error and nothing quits.
+func TestQuitDisconnectComesBackOnStart(t *testing.T) {
+	sandboxHome(t)
+	old := [...]any{quitDetect, quitRestore}
+	t.Cleanup(func() {
+		quitDetect, quitRestore = old[0].(func() []*agent.Agent), old[1].(func([]*agent.Agent) ([]string, error))
+	})
+	detected := []*agent.Agent{{ID: "codex", Name: "Codex"}, {ID: "claude", Name: "Claude Code"}}
+	quitDetect = func() []*agent.Agent { return detected }
+	var got [][]*agent.Agent
+	var fails error
+	quitRestore = func(as []*agent.Agent) ([]string, error) { got = append(got, as); return []string{"codex"}, fails }
+	quits := 0
+	h := webPageHandler(t, askingHost{webHost{quit: func() { quits++ }}, make(chan struct{}, 1)}, nil)
+
+	r := httptest.NewRecorder()
+	h.ServeHTTP(r, httptest.NewRequest("POST", "/api/quit/disconnect", nil))
+	if r.Code != 200 || len(got) != 1 || len(got[0]) != 2 {
+		t.Fatalf("Disconnect and quit: %d %s, put back %d times", r.Code, r.Body, len(got))
+	}
+	if settings.Load().RestoreOnQuit {
+		t.Fatal("it turned Put agents back when quitting on")
+	}
+	if quits != 0 {
+		t.Fatal("it quit by itself: the page quits after it")
+	}
+
+	fails = errors.New("Claude Code: config is locked")
+	r = httptest.NewRecorder()
+	h.ServeHTTP(r, httptest.NewRequest("POST", "/api/quit/disconnect", nil))
+	if r.Code < 400 || !strings.Contains(r.Body.String(), "Claude Code: config is locked") {
+		t.Fatalf("a failed put back: %d %s", r.Code, r.Body)
 	}
 }

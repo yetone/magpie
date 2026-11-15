@@ -899,9 +899,14 @@ that one keeps serving the agents and the Quit goes on).
   stop while magpie is closed, a note that closing the window keeps magpie
   running (the menu bar on a Mac, the system tray elsewhere), and Disconnect
   and quit, Cancel, and Quit (focused). Quit posts `window/quit?now=1`.
-  Disconnect and quit disconnects each agent in turn, as its row's
-  Disconnect does, and a failure leaves magpie open, named in the status
-  line. With nothing connected any more it quits without drawing.
+  Disconnect and quit posts `quit/disconnect` (`quitDisconnect`), which
+  puts every connected agent back as Put agents back when quitting does
+  (`agent.RestoreOnQuit`, no disconnected mark, recorded in
+  `quit.restored`), so the next start connects them again
+  (`RewireOnStart`), whatever that setting says. Each row's Disconnect,
+  which it used, left a mark that kept every switch off at every start
+  after (jtbbtnt54249 on X). A failure leaves magpie open, named in the
+  status line. With nothing connected any more it quits without drawing.
 - A second Quit within a minute of the question (`quitNow`, `quitAgain`)
   quits, so a window that can't show the question doesn't trap the user.
 - Don't ask again (zhujiu on Discord), a tick above the buttons, unticked

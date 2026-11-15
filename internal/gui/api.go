@@ -3212,6 +3212,15 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	mux.HandleFunc("GET /api/quit", func(rw http.ResponseWriter, r *http.Request) {
 		writeJSON(rw, map[string]any{"agents": quitAgents()})
 	})
+	// the question's Disconnect and quit: the agents put back as Put
+	// agents back when quitting puts them, for this quit (quitDisconnect)
+	mux.HandleFunc("POST /api/quit/disconnect", func(rw http.ResponseWriter, r *http.Request) {
+		if err := quitDisconnect(); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, state())
+	})
 	mux.HandleFunc("POST /api/window/{action}", func(rw http.ResponseWriter, r *http.Request) {
 		switch r.PathValue("action") {
 		case "hide":

@@ -7,8 +7,10 @@
 // says that closing the window keeps magpie running (the menu bar on a
 // Mac, the system tray elsewhere), and offers Quit, Disconnect and quit,
 // and Cancel. Cancel posts nothing; Quit posts window/quit?now=1, which
-// quits without asking again; Disconnect and quit disconnects each agent
-// in turn and then quits, and a disconnect that fails keeps magpie open.
+// quits without asking again; Disconnect and quit posts quit/disconnect,
+// which puts each agent back for the next start to connect again (a row's
+// Disconnect each kept them off at every start after: jtbbtnt54249 on X),
+// and then quits; one that fails keeps magpie open.
 // With nothing connected any more it quits at once. Don't ask again
 // (zhujiu on Discord), above the buttons and unticked, goes with the Quit
 // chosen as noAsk=1 (the server saves settings.QuitNoAsk), and its tooltip
@@ -32,7 +34,7 @@ const keys = [
   "Closing the window keeps magpie running in the menu bar.",
   "Closing the window keeps magpie running in the system tray.",
   "Disconnect and quit",
-  "Puts back each agent's own settings first, so they work without magpie",
+  "Puts back each agent's own settings first, so they work without magpie; magpie connects them again when it opens",
   "Quit",
   "Cancel",
   "Don't ask again",
@@ -51,9 +53,10 @@ function server(lang, posts, o) {
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
     if (url.pathname === "/api/state") return json(state);
     if (url.pathname === "/api/quit") return json({ agents: o.agents });
-    if (req.method() === "POST" && url.pathname.startsWith("/api/agents/disconnect/")) {
+    if (req.method() === "POST" && url.pathname.startsWith("/api/agents/disconnect/")) { posts.push(url.pathname); return json(state); }
+    if (req.method() === "POST" && url.pathname === "/api/quit/disconnect") {
       posts.push(url.pathname);
-      if (o.fail === url.pathname.split("/").pop()) return json({ error: "config is locked" }, 500);
+      if (o.fail) return json({ error: o.fail + ": config is locked" }, 500);
       return json(state);
     }
     if (req.method() === "POST" && url.pathname === "/api/window/quit") { posts.push(url.pathname + url.search); return json({}); }
@@ -138,8 +141,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const [box, bar] = await Promise.all([ask.boundingBox(), ask.locator(".bar").boundingBox()]);
       assert.ok(bar.x >= box.x - 1 && bar.x + bar.width <= box.x + box.width + 1, "the bar fits a narrow window");
       await ask.locator(".bar button", { hasText: await tr("Disconnect and quit") }).click();
-      await until(() => posts.length >= 3);
-      assert.deepEqual(posts, ["/api/agents/disconnect/codex", "/api/agents/disconnect/claude", "/api/window/quit?now=1"]);
+      await until(() => posts.length >= 2);
+      assert.deepEqual(posts, ["/api/quit/disconnect", "/api/window/quit?now=1"], "put back for the next start, not each row's Disconnect");
+      assert.equal(await ask.locator(".bar button", { hasText: await tr("Disconnect and quit") }).getAttribute("title"),
+        await tr("Puts back each agent's own settings first, so they work without magpie; magpie connects them again when it opens"));
     });
 
     test(`${engine} ${lang}: Don't ask again goes with the Quit, narrow too`, async (t) => {
@@ -177,18 +182,18 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await ask.locator("label.quit-never").click();
       await ask.locator(".bar button", { hasText: await tr("Disconnect and quit") }).click();
       await until(() => posts.length >= 2);
-      assert.deepEqual(posts, ["/api/agents/disconnect/codex", "/api/window/quit?now=1&noAsk=1"]);
+      assert.deepEqual(posts, ["/api/quit/disconnect", "/api/window/quit?now=1&noAsk=1"]);
     });
 
     test(`${engine} ${lang}: a disconnect that fails keeps magpie open`, async (t) => {
-      const { page, posts, tr } = await open(t, { agents: two, fail: "codex" });
+      const { page, posts, tr } = await open(t, { agents: two, fail: "Codex" });
       const ask = page.locator(".editor.quit-ask");
       await ask.waitFor();
       const off = ask.locator(".bar button", { hasText: await tr("Disconnect and quit") });
       await off.click();
       await page.locator("#status.err").waitFor();
       assert.match(await page.locator("#status").textContent(), /^Codex: /);
-      assert.deepEqual(posts, ["/api/agents/disconnect/codex"], "nothing after the failed one, no quit");
+      assert.deepEqual(posts, ["/api/quit/disconnect"], "no quit");
       assert.equal(await ask.count(), 1, "the sheet stays");
       assert.ok(await off.isEnabled(), "and can be tried again");
     });
