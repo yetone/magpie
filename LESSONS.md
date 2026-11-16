@@ -919,6 +919,11 @@ cause:
     in 25ad34f42). Twice in three days: a change under site/public/docs
     ends with `node llms-full.mjs` and `node --test site/*.test.mjs`
     from the repo root, as test.yml runs it.
+    A third time 11-16: 9dcec6751 added the S3 archive cap to the docs
+    and ran neither generator. cli (linux/amd64) went red at 023a56373
+    on llms-full.txt and on public/search/*.json, the index b70c45048
+    added on 11-15 (fixed in f5f27070a). Docs pages now feed two
+    generated files: run `node search-index.mjs` too.
   - 10-28: of main's last 58 Test runs, 49 were cancelled by the next
     push. 0b99b8fbe's new allocation bound went red in macOS's Race job
     (sync.Pool lets go under -race) at 25df3187b, the first run after it
