@@ -2,9 +2,12 @@ package davsync
 
 import (
 	"context"
+	"encoding/xml"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -85,4 +88,72 @@ func (b *Bucket) Open(ctx context.Context, name string) (io.ReadCloser, int64, e
 		return nil, 0, s.explain("read", e)
 	}
 	return res.Body, res.ContentLength, nil
+}
+
+// Each calls f with every object under prefix, a name as Put takes it
+// ("archive/"), its name as Put takes it and its size, a page of a
+// thousand at a time.
+func (b *Bucket) Each(ctx context.Context, prefix string, f func(name string, size int64)) error {
+	s := b.at(prefix)
+	base := strings.TrimSuffix(b.s.key, file)
+	token := ""
+	seen := map[string]bool{}
+	for {
+		q := url.Values{"list-type": {"2"}, "prefix": {s.key}}
+		if token != "" {
+			q.Set("continuation-token", token)
+		}
+		u := s.bucketURL()
+		u.RawQuery = strings.ReplaceAll(q.Encode(), "+", "%20")
+		res, err := s.sendTo(ctx, http.MethodGet, u, nil, nil)
+		if err != nil {
+			return err
+		}
+		if res.StatusCode != http.StatusOK {
+			e := readError(res)
+			res.Body.Close()
+			return s.explain("list", e)
+		}
+		var l struct {
+			Contents []struct {
+				Key  string `xml:"Key"`
+				Size int64  `xml:"Size"`
+			} `xml:"Contents"`
+			Truncated bool   `xml:"IsTruncated"`
+			Next      string `xml:"NextContinuationToken"`
+		}
+		err = xml.NewDecoder(io.LimitReader(res.Body, 16<<20)).Decode(&l)
+		res.Body.Close()
+		if err != nil {
+			return err
+		}
+		for _, c := range l.Contents {
+			if name, ok := strings.CutPrefix(c.Key, base); ok && strings.HasPrefix(c.Key, s.key) {
+				f(name, c.Size)
+			}
+		}
+		if !l.Truncated {
+			return nil
+		}
+		if l.Next == "" || seen[l.Next] {
+			return fmt.Errorf("listing %s: incomplete listing (missing or repeated continuation token)", s.where())
+		}
+		seen[l.Next] = true
+		token = l.Next
+	}
+}
+
+// Delete removes what is at name; nothing there is no error.
+func (b *Bucket) Delete(ctx context.Context, name string) error {
+	s := b.at(name)
+	res, err := s.send(ctx, http.MethodDelete, nil, nil)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	if res.StatusCode >= 200 && res.StatusCode < 300 || res.StatusCode == http.StatusNotFound {
+		io.Copy(io.Discard, io.LimitReader(res.Body, 64<<10))
+		return nil
+	}
+	return s.explain("remove", readError(res))
 }

@@ -528,6 +528,9 @@ func run(args []string) error {
 		}
 		return nil, false
 	}
+	// and kept there under its size, a bucket grown before that brought
+	// under it once the gateway starts
+	gateway.WhileServing = append(gateway.WhileServing, gateway.KeepBucketArchiveBounded)
 	if len(args) == 0 {
 		if hasGUI {
 			return runGUI(true, "")

@@ -217,8 +217,8 @@ func saveDownload(dir, stem, ext string, r io.Reader) (string, error) {
 
 // archiveJSON is the request archive as the Usage page shows it: on or
 // off, the bucket it goes to, or, when sync isn't to S3, the folder on this
-// computer and the size it is kept under, and why the last upload or save
-// failed, if it did.
+// computer, the size it is kept under in either, and why the last upload
+// or save failed, if it did.
 type archiveJSON struct {
 	On     bool   `json:"on"`
 	Bucket string `json:"bucket,omitempty"`
@@ -231,7 +231,7 @@ func archiveState() archiveJSON {
 	s := settings.Load()
 	var a archiveJSON
 	if b, ok := davsync.S3Bucket(); ok {
-		a.On, a.Bucket = s.RequestArchive, b.Where()
+		a.On, a.Bucket, a.Cap = s.RequestArchive, b.Where(), gateway.BucketArchiveCap()
 	} else {
 		a.On, a.Folder, a.Cap = s.RequestArchiveLocal, tilde(gateway.LocalArchive().Dir), gateway.LocalArchiveCap()
 	}

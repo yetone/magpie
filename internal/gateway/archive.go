@@ -311,6 +311,9 @@ func upload(j archiveJob) {
 		archiveFailed(j.w.name, err)
 		return
 	}
+	if k, ok := j.w.to.(archiveKeeper); ok {
+		bucketAdded(k, "archive/"+j.w.name+".json", int64(buf.Len())) // kept under its size (archive_bucket.go)
+	}
 	archiveMu.Lock()
 	archiveErr = ""
 	archiveMu.Unlock()

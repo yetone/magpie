@@ -4,7 +4,7 @@
 // turned on; with sync not set up with an s3:// bucket it turns on all the
 // same and keeps calls on this computer, its tooltip the folder and the size
 // they are kept under (CyberCaius on Discord), with one its tooltip says the
-// bucket; a failed upload, or a failed save on this computer, is said
+// bucket and the size kept there; a failed upload, or a failed save on this computer, is said
 // beside it. The Gateway page has no switch
 // any more, and its recent calls show their own bodies with nothing of the
 // archive under them, even one it kept: reading a call back from the archive
@@ -57,7 +57,7 @@ function serve(lang, seen) {
       const body = route.request().postDataJSON();
       seen.push(["switch", body]);
       await new Promise((r) => setTimeout(r, 80));
-      gateway.archive = { on: body.on, ...(seen.bucket ? { bucket: where } : here), ...(body.on && seen.failing ? { error: seen.bucket ? "HTTP 403" : "disk full" } : {}) };
+      gateway.archive = { on: body.on, ...(seen.bucket ? { bucket: where, cap: 1 << 30 } : here), ...(body.on && seen.failing ? { error: seen.bucket ? "HTTP 403" : "disk full" } : {}) };
       return json(gateway.archive);
     }
     if (url.pathname === "/api/archive") {
@@ -82,13 +82,13 @@ const words = {
     name: "Request archive", fetch: "Fetch from archive", failed: "Upload failed", failedWhy: "Last upload failed: HTTP 403",
     notSaved: "Not saved", notSavedWhy: "Last save failed: disk full",
     local: "Keeps each call’s headers and bodies, secrets taken out, on this computer in ~/.config/magpie/request-archive, the oldest removed past 1.1 GB",
-    bucket: "Keeps each call’s headers and bodies, secrets taken out, in bkt/team on https://s3.example.com",
+    bucket: "Keeps each call’s headers and bodies, secrets taken out, in bkt/team on https://s3.example.com, up to 1.1 GB",
   },
   zh: {
     name: "请求存档", fetch: "从存档取回", failed: "上传失败", failedWhy: "上次上传失败：HTTP 403",
     notSaved: "未保存", notSavedWhy: "上次保存失败：disk full",
     local: "每次调用的请求/响应头和正文去除密钥后存到本机的 ~/.config/magpie/request-archive，超过 1.1 GB 时先删除最早的",
-    bucket: "每次调用的请求/响应头和正文去除密钥后存到 bkt/team on https://s3.example.com",
+    bucket: "每次调用的请求/响应头和正文去除密钥后存到 bkt/team on https://s3.example.com，最多 1.1 GB",
   },
 };
 
@@ -204,7 +204,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.deepEqual(border, [], "no left-border accent");
       const missing = await page.evaluate(() => [
         "Request archive", "Upload failed", "Last upload failed: {e}", "Not saved", "Last save failed: {e}",
-        "Keeps each call’s headers and bodies, secrets taken out, in {where}",
+        "Keeps each call’s headers and bodies, secrets taken out, in {where}, up to {size}",
         "Keeps each call’s headers and bodies, secrets taken out, on this computer in {where}, the oldest removed past {size}",
         "Not in the archive on this computer: it is saved just after the call, the oldest are removed past the archive's size, or the save failed (magpie's log says why)",
       ].flatMap((k) => ["zh", "zh-TW", "ja", "de"].filter((l) => !I18N[l][k]).map((l) => l + " " + k)));

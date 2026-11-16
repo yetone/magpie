@@ -156,6 +156,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		GitHubToken:          "ghp_kept",
 		RequestArchive:       true,
 		RequestArchiveMaxMB:  64,
+		RequestArchiveMB:     2048,
 		GatewayConversations: true,
 		QuotaLeft:            true,
 		UsageOrder:           []string{"kimi", "codex"},

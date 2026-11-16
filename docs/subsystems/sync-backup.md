@@ -478,7 +478,19 @@ switch that anyone with the file and the passphrase can use those accounts.
   responses stay actionable errors. Authentication, permission and branch
   failures remain distinct from missing files. Rate limits use sync backoff.
 - The request archive goes to S3 only when sync has a bucket. Its objects are
-  separate from the encrypted setup and usage files. With no bucket the same
+  separate from the encrypted setup and usage files. In the bucket it is kept
+  to `RequestArchiveMB` (1 GiB unless set; synced, as every computer writes
+  the one bucket) by `gateway/archive_bucket.go`: the oldest calls past it
+  are removed, down to a tenth under it. Only names of `ArchiveName`'s shape
+  under `<prefix>/magpie/archive/` are counted or removed, never the backup,
+  usage or another key. The serving magpie lists the archive once, two
+  minutes after it starts, whether the archive is on or off, so a bucket
+  grown before the cap (18 GB in a month for an R2 user on X) is brought
+  under it on update. After that uploads are counted, and the bucket is
+  listed again only once a tenth of the size has been uploaded since
+  (`TestRequestArchiveKeptUnderItsSize`,
+  `TestBucketArchiveBroughtUnderItsSizeAtStart`,
+  `TestBucketArchiveListedPerTenthUploaded`). With no bucket the same
   files are kept on this computer instead (`gateway.DiskArchive`, in
   `<settings.Dir()>/request-archive/<date>/<id>.json`, written through a
   temporary file and renamed, 0600), under its own switch,

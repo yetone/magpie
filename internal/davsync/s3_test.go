@@ -36,6 +36,8 @@ type fakeS3 struct {
 	log                []string // each request: method, and the condition sent
 	onWrite            func()   // runs once, at the next PUT or HEAD (a write's look first), before it is answered
 	sent               int      // the bytes of objects read
+	put                int      // the bytes of objects written
+	lists, deletes     int      // the LISTs and DELETEs answered
 	// reread, when set, is how the server reads a header back before it
 	// checks the signature over it
 	reread func(name, value string) string
@@ -79,6 +81,10 @@ func (f *fakeS3) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
+		if key == "" && r.URL.Query().Get("list-type") == "2" {
+			f.list(w, r.URL.Query().Get("prefix"))
+			return
+		}
 		b, ok := f.objects[key]
 		if !ok {
 			if r.Method == http.MethodHead {
@@ -109,11 +115,49 @@ func (f *fakeS3) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			f.fail(w, http.StatusPreconditionFailed, "PreconditionFailed")
 			return
 		}
+		f.put += len(body)
 		f.store(key, body)
 		w.Header().Set("ETag", f.etags[key])
+	case http.MethodDelete:
+		f.deletes++
+		delete(f.objects, key)
+		delete(f.etags, key)
+		w.WriteHeader(http.StatusNoContent)
 	default:
 		f.fail(w, http.StatusNotImplemented, "NotImplemented")
 	}
+}
+
+// list answers a ListObjectsV2 of prefix, in one page.
+func (f *fakeS3) list(w http.ResponseWriter, prefix string) {
+	f.lists++
+	var keys []string
+	for k := range f.objects {
+		if strings.HasPrefix(k, prefix) {
+			keys = append(keys, k)
+		}
+	}
+	slices.Sort(keys)
+	var b strings.Builder
+	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?><ListBucketResult><IsTruncated>false</IsTruncated>`)
+	for _, k := range keys {
+		fmt.Fprintf(&b, `<Contents><Key>%s</Key><ETag>%s</ETag><Size>%d</Size></Contents>`, k, f.etags[k], len(f.objects[k]))
+	}
+	b.WriteString(`</ListBucketResult>`)
+	w.Header().Set("Content-Type", "application/xml")
+	w.Write([]byte(b.String()))
+}
+
+// stored is the bytes the bucket holds under prefix.
+func (f *fakeS3) stored(prefix string) (n int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for k, b := range f.objects {
+		if strings.HasPrefix(k, prefix) {
+			n += len(b)
+		}
+	}
+	return n
 }
 
 func (f *fakeS3) store(key string, b []byte) {

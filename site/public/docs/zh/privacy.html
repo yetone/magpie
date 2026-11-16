@@ -228,7 +228,7 @@
       <tr><td><code>partner-counts.json</code>（缓存文件夹）</td><td>还没发送的合作伙伴次数，最多保留 14 天</td></tr>
     </table></div>
     <p><code>install-id</code> 和 <code>stats-sent</code> 在 magpie 的文件夹里：macOS 和 Linux 上是 <code>~/.config/magpie</code>，Windows 上是 <code>%USERPROFILE%\.config\magpie</code>，设置了 <code>$XDG_CONFIG_HOME</code> 时是 <code>$XDG_CONFIG_HOME/magpie</code>，便携版则在它的数据文件夹里。<code>partner-counts.json</code> 在 <code>~/.cache/magpie</code>（或 <code>$XDG_CACHE_HOME/magpie</code>，便携版数据文件夹里的 <code>cache</code>）。这些文件都可以删：删掉 <code>install-id</code> 后，下次发送会生成新的随机 ID，你会被算作新用户；关掉计数后，它们都不会再写入。</p>
-    <p>请求存档（<span class="ui">用量</span>页请求列表上方的<span class="ui">请求存档</span>开关）<b>默认关闭</b>。同步没有 S3 存储桶时打开它，每次经过网关的调用的请求头和正文会存到 magpie 文件夹里的 <code>request-archive</code>，一次调用一个文件，只有你的用户能读，密钥按 S3 存档同样的方式遮掉。它最多占 1 GiB（settings.json 里的 <code>requestArchiveLocalMB</code>），超过后先删最早的调用。这个开关只属于这台电脑，同步不会在别的电脑上把它打开。有 S3 存储桶时调用存到桶里，这里不写任何东西。这个文件夹随时可以删。</p>
+    <p>请求存档（<span class="ui">用量</span>页请求列表上方的<span class="ui">请求存档</span>开关）<b>默认关闭</b>。同步没有 S3 存储桶时打开它，每次经过网关的调用的请求头和正文会存到 magpie 文件夹里的 <code>request-archive</code>，一次调用一个文件，只有你的用户能读，密钥按 S3 存档同样的方式遮掉。它最多占 1 GiB（settings.json 里的 <code>requestArchiveLocalMB</code>），超过后先删最早的调用。这个开关只属于这台电脑，同步不会在别的电脑上把它打开。有 S3 存储桶时调用存到桶里（桶里同样最多 1 GiB，<code>requestArchiveMB</code>，超过时先删除最早的），这里不写任何东西。这个文件夹随时可以删。</p>
     <p>应用会把它做了什么写进日志 <code>app.log</code>：macOS 上在 <code>~/Library/Logs/magpie</code>，Windows 上在 <code>%LOCALAPPDATA%\magpie\logs</code>，Linux 上在 <code>~/.local/state/magpie</code>（见 <a href="/docs/zh/start#log">magpie 的日志在哪里？</a>），只有你的用户能读。它记下 magpie 做了什么和遇到的错误，从不记密钥、提示词或回复，除非你发出去，否则只留在你的电脑上。它最多 5 MiB，另留一个更早的 <code>app.old.log</code>。随时可以删。</p>
 
     <h2 id="site"><a class="anchor" href="#site">usemagpie.ai 能看到什么</a></h2>
