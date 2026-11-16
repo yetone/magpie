@@ -65,8 +65,8 @@ const words = {
 // one too old for the feature beside the app of no known version, or the app alone
 const held = {
   en: { old: "Codex CLI 0.162.1, Codex app: the share needs Codex 0.163 or later; until it's updated magpie writes only async_compaction = true, at 65%", unknown: "Codex app: the share needs Codex 0.163 or later; until it's updated magpie writes only async_compaction = true, at 65%" },
-  zh: { old: "Codex CLI 0.162.1, Codex 应用：阈值需要 Codex 0.163 或更新；更新之前 magpie 只写 async_compaction = true，按 65%", unknown: "Codex 应用：阈值需要 Codex 0.163 或更新；更新之前 magpie 只写 async_compaction = true，按 65%" },
-  "zh-TW": { old: "Codex CLI 0.162.1, Codex 應用程式：閾值需要 Codex 0.163 或更新；更新之前 magpie 只寫 async_compaction = true，按 65%", unknown: "Codex 應用程式：閾值需要 Codex 0.163 或更新；更新之前 magpie 只寫 async_compaction = true，按 65%" },
+  zh: { old: "Codex 命令行 0.162.1, Codex 应用：阈值需要 Codex 0.163 或更新；更新之前 magpie 只写 async_compaction = true，按 65%", unknown: "Codex 应用：阈值需要 Codex 0.163 或更新；更新之前 magpie 只写 async_compaction = true，按 65%" },
+  "zh-TW": { old: "Codex 命令列 0.162.1, Codex 應用程式：閾值需要 Codex 0.163 或更新；更新之前 magpie 只寫 async_compaction = true，按 65%", unknown: "Codex 應用程式：閾值需要 Codex 0.163 或更新；更新之前 magpie 只寫 async_compaction = true，按 65%" },
   ja: { old: "Codex CLI 0.162.1, Codex アプリ：しきい値には Codex 0.163 以降が必要です。更新するまで magpie は async_compaction = true だけを書き、65% で圧縮します", unknown: "Codex アプリ：しきい値には Codex 0.163 以降が必要です。更新するまで magpie は async_compaction = true だけを書き、65% で圧縮します" },
   de: { old: "Codex CLI 0.162.1, Codex-App: Die Schwelle braucht Codex 0.163 oder neuer; bis zum Update schreibt magpie nur async_compaction = true, bei 65 %", unknown: "Codex-App: Die Schwelle braucht Codex 0.163 oder neuer; bis zum Update schreibt magpie nur async_compaction = true, bei 65 %" },
 };
