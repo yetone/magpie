@@ -3682,16 +3682,16 @@ body.side-nav #addSheet .add-tools.afloat > * { pointer-events: auto; --wails-dr
 body.side-nav #addSheet .add-tools.afloat > .find { flex: 0 1 var(--hint-w, 180px); min-width: 120px; }
 /* a narrow window has no room in its bar: the sheet's head stays at the
    top while the sheet is under it, as Settings' does */
-body:not(.side-nav) #addSheet > .row-head { position: sticky; top: 0; z-index: 5; --bleed-l: 12px; --bleed-r: 12px; }
-body.window:not(.side-nav) #addSheet > .row-head { top: -2px; --bleed-l: 16px; --bleed-r: 16px; }
+body:not(.side-nav) #addSheet > .row-head { position: sticky; top: 0; z-index: 5; }
+body.window:not(.side-nav) #addSheet > .row-head { top: -2px; }
 body:not(.side-nav) #addSheet > .row-head::before {
   content: ""; position: absolute; z-index: -1; pointer-events: none;
-  top: -6px; bottom: -6px; left: calc(-1 * var(--bleed-l)); right: calc(var(--bar, 0px) - var(--bleed-r));
+  top: -6px; bottom: -6px; left: -6px; right: -6px; border-radius: 0 0 13px 13px;
   background: color-mix(in srgb, var(--bg) 92%, transparent);
   -webkit-backdrop-filter: saturate(1.6) blur(16px); backdrop-filter: saturate(1.6) blur(16px);
-  box-shadow: 0 1px 0 transparent; transition: box-shadow .18s var(--ease);
+  box-shadow: 0 1px 0 transparent; opacity: 0; transition: opacity .18s var(--ease-out), box-shadow .18s var(--ease);
 }
-body:not(.side-nav) #addSheet > .row-head.stuck::before { box-shadow: 0 1px 0 var(--line-2); }
+body:not(.side-nav) #addSheet > .row-head.stuck::before { opacity: 1; box-shadow: 0 1px 0 var(--line-2); }
 @supports not (color: color-mix(in srgb, red 50%, blue)) { body:not(.side-nav) #addSheet > .row-head::before { background: var(--bg); } }
 /* the provider editor, in a dialog */
 /* the label column is as wide as its longest label, so that label starts
@@ -4173,21 +4173,23 @@ body:not(.side-nav) #addSheet > .row-head.stuck::before { box-shadow: 0 1px 0 va
 /* with the tabs across the top (the sidebar has them in the title bar) the
    parts' tabs and the search stay at the top of the page while a long part
    (About) scrolls under them, on the frosted strip the Library's and the
-   Plugins' tabs have (.lib-head), a hairline once something is beneath
-   (#2396). The strip is the head's ::before, reaching over the view's
-   padding and the head's margins so no row shows through above or below
-   it; at the page's top it is the page's own colour, nothing moved. The
+   Plugins' tabs have (.lib-head), shown with a hairline once something is
+   beneath (#2396). The strip is the head's ::before, reaching over the
+   head's margins so no row shows through above or below it, 6px out from
+   the tabs (the first sits 7px out) and the search at the sides as at the
+   foot, rounded by their 7px plus those 6px; at the page's top it is not
+   drawn, nothing moved. The
    window's view is padded 2px at the top: the head stops over it */
-body:not(.side-nav) #view-settings .set-head { position: sticky; top: 0; z-index: 5; --bleed-l: 12px; --bleed-r: 12px; }
-body.window:not(.side-nav) #view-settings .set-head { top: -2px; --bleed-l: 16px; --bleed-r: 16px; }
+body:not(.side-nav) #view-settings .set-head { position: sticky; top: 0; z-index: 5; }
+body.window:not(.side-nav) #view-settings .set-head { top: -2px; }
 body:not(.side-nav) #view-settings .set-head::before {
   content: ""; position: absolute; z-index: -1; pointer-events: none;
-  top: -6px; bottom: -6px; left: calc(-1 * var(--bleed-l)); right: calc(var(--bar, 0px) - var(--bleed-r));
+  top: -6px; bottom: -6px; left: -13px; right: -6px; border-radius: 0 0 13px 13px;
   background: color-mix(in srgb, var(--bg) 92%, transparent);
   -webkit-backdrop-filter: saturate(1.6) blur(16px); backdrop-filter: saturate(1.6) blur(16px);
-  box-shadow: 0 1px 0 transparent; transition: box-shadow .18s var(--ease);
+  box-shadow: 0 1px 0 transparent; opacity: 0; transition: opacity .18s var(--ease-out), box-shadow .18s var(--ease);
 }
-body:not(.side-nav) #view-settings .set-head.stuck::before { box-shadow: 0 1px 0 var(--line-2); }
+body:not(.side-nav) #view-settings .set-head.stuck::before { opacity: 1; box-shadow: 0 1px 0 var(--line-2); }
 @supports not (color: color-mix(in srgb, red 50%, blue)) { body:not(.side-nav) #view-settings .set-head::before { background: var(--bg); } }
 .set-q { flex: 0 1 180px; margin-left: auto; min-width: 120px; }
 .set-searching .set-tabs { display: none; }

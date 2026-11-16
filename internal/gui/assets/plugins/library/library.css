@@ -1,32 +1,33 @@
 /* Library: instructions, MCP servers and skills for every agent. */
 #view-library { gap: 0; }
 /* The tabs stay at the top while the page scrolls under them, on a frosted
-   strip as wide as the view; a hairline shows once something is beneath.
-   The strip's own box keeps to the view's content box and its ::before
-   reaches out over the view's padding (--bleed-l/-r): a box that ran past
-   the content's end edge, by a negative margin, was 16px of sideways
+   strip that shows, with a hairline, once something is beneath. At the
+   page's top nothing is: the strip is not drawn, so over a background
+   picture there is no square box around the rounded tabs (CHENGJIAHEGOXIS
+   on X). Under the tabs it is 4px out from them at the sides and the foot,
+   with the tabs' radius plus those 4px. The strip's own box keeps to the
+   view's content box and only its ::before reaches past it: a box that ran
+   past the content's end edge, by a negative margin, was 16px of sideways
    scroll in macOS 15's WebKit, which leaves a negative margin-end out of
    a flex scroller's scrollable width (#1236). */
 .lib-head {
   position: sticky; top: 0; z-index: 5;
   display: flex; align-items: center; gap: 8px; flex: none;
   margin: 0; padding: 6px 0 4px;
-  --bleed-l: 12px; --bleed-r: 12px;
 }
 .lib-head::before {
   content: ""; position: absolute; z-index: -1; pointer-events: none;
-  top: 0; bottom: 0; left: calc(-1 * var(--bleed-l)); right: calc(var(--bar, 0px) - var(--bleed-r)); /* the bar's room is out of the padding */
+  top: 0; bottom: 0; left: -4px; right: -4px; border-radius: 0 0 11px 11px;
   background: color-mix(in srgb, var(--bg) 92%, transparent);
   -webkit-backdrop-filter: saturate(1.6) blur(16px); backdrop-filter: saturate(1.6) blur(16px);
-  box-shadow: 0 1px 0 transparent; transition: box-shadow .18s var(--ease);
+  box-shadow: 0 1px 0 transparent; opacity: 0; transition: opacity .18s var(--ease-out), box-shadow .18s var(--ease);
 }
 /* the window's view is padded 2px at the top: the strip reaches over it */
-body.window .lib-head { top: -2px; margin: -2px 0 0; padding: 8px 0 4px; --bleed-l: 16px; --bleed-r: 16px; }
+body.window .lib-head { top: -2px; margin: -2px 0 0; padding: 8px 0 4px; }
 @media (max-width: 760px), (pointer: coarse) and (max-width: 1024px) {
   body.web .lib-head {
     flex-wrap: wrap;
     margin: -2px 0 0; padding: 8px 0 4px;
-    --bleed-l: var(--view-left); --bleed-r: var(--view-right);
   }
   body.web .lib-tabs { max-width: 100%; flex-wrap: wrap; }
   body.web .lib-more, body.web .lib-discover, body.web .lib-backups { flex: none; }
@@ -43,7 +44,7 @@ body.window .lib-head { top: -2px; margin: -2px 0 0; padding: 8px 0 4px; --bleed
    tabs wrap onto a second line rather than scroll the view sideways */
 .lib-tabs { max-width: 100%; flex-wrap: wrap; }
 .lib-headacts { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
-.lib-head.stuck::before { box-shadow: 0 1px 0 var(--line-2); }
+.lib-head.stuck::before { opacity: 1; box-shadow: 0 1px 0 var(--line-2); }
 .lib-tabs .opt { height: 24px; padding: 0 12px; font-size: 12.5px; }
 .lib-more, .lib-discover, .lib-backups { display: inline-flex; align-items: center; gap: 5px; }
 .lib-mini { display: inline-grid; place-items: center; color: var(--muted); }
