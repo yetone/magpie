@@ -2136,9 +2136,13 @@ func nextTurn(req *Request, owner string) (string, []Message) {
 type looseTurn struct {
 	key  string
 	turn []turnWords
-	// runs is the turn as lostMedia compares it (#1382): sealed as a run
-	// keeps it, with its words as a request has it
-	runs []heardRun
+	// settings is key without the conversation, and all the conversation
+	// as mediaMoved compares it (#1382): sealed as a run keeps it, with its
+	// words as a request has it. A client may take the images out of any
+	// turn, or send them back, which changes the conversation before the
+	// last turn as key has it.
+	settings string
+	all      []heardRun
 }
 
 // turnWords is a message of a turn as hashMessages reads it: its role,
@@ -2164,10 +2168,12 @@ func newLooseTurn(owner string, req *Request, msgs []Message, sealed bool) *loos
 		}
 	}
 	h := sha256.New()
-	fmt.Fprintf(h, "%s\x00%s\x00%t\x00%t\x00%s\x00%s\x00%t\x00%s\x00%d", owner, req.Model, req.Effort != "", req.ThinkOff, req.ToolChoice, withoutBillingHeader(req.System), req.WebSearch, req.Format.schema(), start)
+	fmt.Fprintf(h, "%s\x00%s\x00%t\x00%t\x00%s\x00%s\x00%t\x00%s", owner, req.Model, req.Effort != "", req.ThinkOff, req.ToolChoice, withoutBillingHeader(req.System), req.WebSearch, req.Format.schema())
 	cacheIdentity(h, req)
+	settings := hex.EncodeToString(h.Sum(nil))
+	fmt.Fprintf(h, "\x00%d", start)
 	hashMessages(h, msgs[:start], nil)
-	l := &looseTurn{key: hex.EncodeToString(h.Sum(nil)), runs: heardRuns(msgs[start:], sealed)}
+	l := &looseTurn{key: hex.EncodeToString(h.Sum(nil)), settings: settings, all: heardRuns(msgs, sealed)}
 	words := messageWords(msgs)
 	for i := start; i < len(msgs); i++ {
 		tools := false
@@ -2182,13 +2188,14 @@ func newLooseTurn(owner string, req *Request, msgs []Message, sealed bool) *loos
 // rewrote says now's turn is the one l kept as a client sends it back:
 // the same messages, calls and results, a user's message no more than cut
 // (a part of it taken out, but not all), and the reply's start (its end
-// taken out, but not all of it); or the same turn with images taken out
-// of it, and only those (lostMedia, #1382).
+// taken out, but not all of it); or the same conversation, with the same
+// settings, whose images were taken out of any turn or put back, and only
+// those (mediaMoved, #1382).
 func (l *looseTurn) rewrote(now *looseTurn) bool {
-	if l.cut(now.turn) {
+	if l.key == now.key && l.cut(now.turn) {
 		return true
 	}
-	return len(now.runs) == len(l.runs) && lostMedia(l.runs, now.runs)
+	return l.settings == now.settings && len(now.all) == len(l.all) && mediaMoved(l.all, now.all)
 }
 
 // cut is rewrote for a client that cut a user's message or the reply.
@@ -2246,12 +2253,12 @@ func (b *subscriptionBridge) rewritten(req *Request, owner string) (*subscriptio
 	var saved *savedSession
 	found := 0
 	for _, r := range b.idle {
-		if r.owned() == owner && r.loose != nil && r.loose.key == l.key && r.loose.rewrote(l) {
+		if r.owned() == owner && r.loose != nil && r.loose.rewrote(l) {
 			run, found = r, found+1
 		}
 	}
 	for _, s := range b.shelf {
-		if s.owner == owner && s.loose != nil && s.loose.key == l.key && s.loose.rewrote(l) {
+		if s.owner == owner && s.loose != nil && s.loose.rewrote(l) {
 			saved, found = s, found+1
 		}
 	}
@@ -3673,8 +3680,9 @@ func (r *subscriptionRun) heard(msgs []Message) {
 // one whole, then the reply and what came since. A client that rewrote it
 // meanwhile — Pi compacting between a tool call and its result, a rewind —
 // sends another, while the run's agent still holds the one it was told.
-// One whose client only took the images out of it (lostMedia, #1382) goes
-// on: the run's agent holds them, and nothing else changed.
+// One whose client only took the images out of it (lostMedia, #1382), or
+// put back those it took out before (mediaMoved), goes on: the run's
+// agent holds them, and nothing else changed.
 func (r *subscriptionRun) follows(msgs []Message) bool {
 	r.mu.Lock()
 	told, runs := r.told, r.toldRuns
@@ -3687,8 +3695,8 @@ func (r *subscriptionRun) follows(msgs []Message) bool {
 	hashMessages(h, msgs, func(int) {
 		found = found || hex.EncodeToString(h.Sum(nil)) == told
 	})
-	if !found && runs != nil && lostMedia(runs, heardRuns(msgs, false)) {
-		log.Printf("claude: tool results go on in their run, the images before them taken out by the client")
+	if !found && runs != nil && mediaMoved(runs, heardRuns(msgs, false)) {
+		log.Printf("claude: tool results go on in their run, the images before them taken out or sent again by the client")
 		return true
 	}
 	return found

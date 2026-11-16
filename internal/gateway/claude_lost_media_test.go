@@ -303,3 +303,127 @@ func TestClaudeToolResultsAfterTheImagesTakenOutGoOn(t *testing.T) {
 		})
 	}
 }
+
+// A long conversation whose earlier turns hold images, a user's and a
+// tool's, which its client takes out of some requests and sends again in
+// others (Yqihotaru on X): each turn whose reply called nothing goes on in
+// the run that had the conversation, told the new turn alone, whichever
+// way the images went since. It was told to a new Claude Code each turn,
+// all of it written to the prompt cache again, the image count of the
+// history flipping between requests.
+func TestClaudeImagesComingAndGoingInEarlierTurnsGoOnInTheRun(t *testing.T) {
+	read := "Read image file [image/png]"
+	// with is the history as the client first had it, without as it sends
+	// it with the images taken out: gone is what stands in their place
+	history := func(images bool, gone string) []string {
+		ask, result, after := piUserParts(piText("这是什么"), piImage()), piResult("call_1", read), []string{piImages(1)}
+		if !images {
+			ask, result, after = piUserParts(piText("这是什么")), piResult("call_1", read), nil
+			if gone != "" {
+				ask = piUserParts(piText("这是什么"), piText(gone))
+				result = piResult("call_1", read+"\n"+gone)
+			} else {
+				after = []string{piUserParts(piText("Attached image(s) from tool result:"))}
+			}
+		}
+		var h []string
+		for i := range 40 {
+			h = append(h, piUser(fmt.Sprintf("第 %d 个问题", i)), piSays(fmt.Sprintf("第 %d 个回答", i)))
+		}
+		h = append(h, ask, piSays("一只猫"), piUser("看看截图"), piCalls("call_1"), result)
+		h = append(h, after...)
+		return append(h, piSays("截图里是一只猫"))
+	}
+	for _, c := range []struct{ name, gone string }{
+		{"taken out with nothing in their place", ""},
+		{"taken out with a line in their place, as Hana does", hanaImageGone},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			h := newReplyHarness(t, "好的")
+			var since []string // the turns after the history
+			for turn, images := range []bool{true, false, true, false, true} {
+				since = append(since, piUser(fmt.Sprintf("more %d", turn)))
+				h.sendChat(append(history(images, c.gone), since...)...)
+				since = append(since, piSays("好的"))
+				if n := len(h.runs()); n != 1 {
+					t.Fatalf("turn %d (images %t): %d runs, want the one that had the conversation", turn, images, n)
+				}
+				if turn == 0 {
+					continue
+				}
+				told := h.toldLast()
+				if !strings.Contains(told, fmt.Sprintf("more %d", turn)) || strings.Contains(told, "第 3 个问题") {
+					t.Fatalf("turn %d: the run was told more than the turn:\n%s", turn, told)
+				}
+			}
+		})
+	}
+}
+
+// Tool results whose conversation has images sent back that the request
+// before had taken out, or taken out again, are the run's: it goes on
+// (follows), told the results alone. Any other change is still not.
+func TestClaudeToolResultsAfterTheImagesSentBackGoOn(t *testing.T) {
+	read := "Read image file [image/png]"
+	steps := func(images bool, gone string, more ...string) []string {
+		ask, result, after := piUserParts(piText("这是什么"), piImage()), piResult("call_1", read), []string{piImages(1)}
+		if !images {
+			ask, result, after = piUserParts(piText("这是什么"), piText(gone)), piResult("call_1", read+"\n"+gone), nil
+		}
+		msgs := append([]string{ask, piSays("一只猫"), piUser("看看截图"), piCalls("call_1"), result}, after...)
+		return append(msgs, more...)
+	}
+	next := []string{piCalls("call_2"), piResult("call_2", "B")}
+	for _, c := range []struct {
+		name      string
+		told, now []string
+		want      bool
+	}{
+		{"sent back", steps(false, hanaImageGone), steps(true, "", next...), true},
+		{"taken out again", steps(true, ""), steps(false, hanaImageGone, next...), true},
+		{"sent back, the user's words changed", steps(false, hanaImageGone), append([]string{piUserParts(piText("这是谁"), piImage())}, steps(true, "", next...)[1:]...), false},
+		{"sent back, the result's text changed", steps(false, hanaImageGone), append([]string{piUserParts(piText("这是什么"), piImage()), piSays("一只猫"), piUser("看看截图"), piCalls("call_1"), piResult("call_1", "Read image file [image/jpeg]"), piImages(1)}, next...), false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			r := &subscriptionRun{}
+			r.heard(piMessages(t, c.told...))
+			if got := r.follows(piMessages(t, c.now...)); got != c.want {
+				t.Fatalf("follows: %t, want %t", got, c.want)
+			}
+		})
+	}
+}
+
+// Images taken out or sent back, and only that, in any turn and either
+// way, are told from every other change (mediaMoved).
+func TestMediaMovedIsOnlyImagesComingAndGoing(t *testing.T) {
+	read := "Read image file [image/png]"
+	gone := read + "\n" + hanaImageGone
+	ask := piUser("看看截图")
+	with := []string{piUserParts(piText("这是什么"), piImage()), piSays("一只猫"), ask, piCalls("call_1"), piResult("call_1", read), piImages(1), piSays("截图")}
+	without := []string{piUserParts(piText("这是什么"), piText(hanaImageGone)), piSays("一只猫"), ask, piCalls("call_1"), piResult("call_1", gone), piSays("截图")}
+	bare := []string{piUserParts(piText("这是什么")), piSays("一只猫"), ask, piCalls("call_1"), piResult("call_1", read), piUserParts(piText("Attached image(s) from tool result:")), piSays("截图")}
+	for _, c := range []struct {
+		name      string
+		kept, now []string
+		want      bool
+	}{
+		{"taken out, a line in their place", with, without, true},
+		{"sent back where a line was", without, with, true},
+		{"sent back where nothing was", bare, with, true},
+		{"taken out, nothing in their place", with, bare, true},
+		{"sent back, the conversation going on", without, append(with[:len(with):len(with)], piUser("more")), true},
+		{"nothing changed", with, with, false},
+		{"sent back, the reply changed", without, append(with[:len(with)-1:len(with)-1], piSays("一只狗")), false},
+		{"sent back, the user's words changed", without, append([]string{piUserParts(piText("这是谁"), piImage())}, with[1:]...), false},
+		{"sent back, a result's text changed", without, []string{with[0], with[1], ask, piCalls("call_1"), piResult("call_1", "Read image file [image/jpeg]"), piImages(1), piSays("截图")}, false},
+		{"a line where no image was", bare[:2], append([]string{piUserParts(piText("这是什么"), piText(hanaImageGone))}, bare[1:2]...), false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			kept, now := heardRuns(piMessages(t, c.kept...), true), heardRuns(piMessages(t, c.now...), false)
+			if got := mediaMoved(kept, now); got != c.want {
+				t.Fatalf("mediaMoved: %t, want %t", got, c.want)
+			}
+		})
+	}
+}

@@ -17,6 +17,11 @@ import (
 // anew, it would write all of it to the prompt cache again, at each step
 // after one that read an image. lostMedia tells this rewrite from any
 // other by its shape, not the client's words for it.
+//
+// A client may also send the images back in a later request, and take
+// them out again in the next (Yqihotaru on X): its history keeps them,
+// and only some of its requests take them out. mediaMoved tells either
+// way apart from any other change, in any turn of the conversation.
 
 // wordPart is a part of a message as hashMessages reads it: its kind and
 // its words, and for a tool result how many images it carried beside them.
@@ -67,14 +72,22 @@ func messageParts(msgs []Message) [][]wordPart {
 
 // heardPart is a wordPart as a run keeps it: the hash and length of its
 // words. words is set only on the conversation compared with what a run
-// kept, which is a request's own.
+// kept, which is a request's own. tail is a tool result's last words, as
+// a run keeps them too: a request that sent the images back has a
+// result's words without the text its client had added in their place,
+// and the kept words are those with it (grown).
 type heardPart struct {
 	kind  Kind
 	n     int
 	sum   [sha256.Size]byte
 	media int
 	words string
+	tail  string
 }
+
+// heardTail is how much of a tool result's words a run keeps: room for
+// the lines a client adds in place of a result's images.
+const heardTail = 2048
 
 // heardRun is a role's messages in a row, as hashMessages runs them
 // together: how a reply is split into messages is left out.
@@ -98,6 +111,8 @@ func heardRuns(msgs []Message, sealed bool) []heardRun {
 			h := heardPart{kind: p.kind, n: len(p.words), sum: sha256.Sum256([]byte(p.words)), media: p.media}
 			if !sealed {
 				h.words = p.words
+			} else if p.kind == ToolResult {
+				h.tail = p.words[max(0, len(p.words)-heardTail):]
 			}
 			r.parts = append(r.parts, h)
 		}
@@ -134,6 +149,33 @@ func lostMedia(was, now []heardRun) bool {
 	return lost > 0
 }
 
+// mediaMoved says now, a request's conversation (heardRuns unsealed), is
+// kept, the one a run had (sealed), with images or files taken out of it
+// or put back into it, as lostMedia tells them, a role's run of messages
+// at a time, and nothing else changed: now may go on after it. A client
+// that keeps its history's images and takes them out of some requests
+// (Yqihotaru on X) sends back what the run had been told, then what it
+// was told the turn before.
+func mediaMoved(kept, now []heardRun) bool {
+	if len(now) < len(kept) {
+		return false
+	}
+	moved := 0
+	for i, k := range kept {
+		if now[i].role != k.role {
+			return false
+		}
+		if n, ok := lostFromRun(k.parts, now[i].parts); ok {
+			moved += n
+		} else if n, ok := lostFromRun(now[i].parts, k.parts); ok {
+			moved += n // put back
+		} else {
+			return false
+		}
+	}
+	return moved > 0
+}
+
 // lostFromRun is lostMedia for a role's run of messages: how many images
 // or files were taken out of was to make now, and whether that is all
 // that changed.
@@ -158,12 +200,12 @@ func lostFromRun(was, now []heardPart) (int, bool) {
 			for j < len(now) && now[j].kind == Text && (next == len(was) || !same(was[next], now[j])) {
 				j++
 			}
-		case w.kind == ToolResult && j < len(now) && now[j].kind == ToolResult && w.media > now[j].media && grown(w, now[j].words):
+		case w.kind == ToolResult && j < len(now) && now[j].kind == ToolResult && w.media > now[j].media && grown(w, now[j]):
 			// its images, text in their place
 			lost += w.media - now[j].media
 			grew = true
 			j++
-		case w.kind == ToolResult && j < len(now) && now[j].kind == ToolResult && w.media == now[j].media && mediaAfter(was, i) && grown(w, now[j].words):
+		case w.kind == ToolResult && j < len(now) && now[j].kind == ToolResult && w.media == now[j].media && mediaAfter(was, i) && grown(w, now[j]):
 			// the images sent after the results, text in their place
 			grew = true
 			j++
@@ -192,10 +234,22 @@ func mediaAfter(was []heardPart, i int) bool {
 
 // same says now's part is w.
 func same(w, now heardPart) bool {
-	return w.kind == now.kind && w.n == len(now.words) && w.sum == sha256.Sum256([]byte(now.words))
+	return w.kind == now.kind && w.n == now.n && w.sum == now.sum
 }
 
-// grown says words are w's with text added to their end.
-func grown(w heardPart, words string) bool {
-	return len(words) > w.n && w.sum == sha256.Sum256([]byte(words[:w.n]))
+// grown says now's words are w's with text added to their end: read from
+// now's words when it has them, else, for a part a run kept (sealed),
+// from w's words and the end of now's (tail).
+func grown(w, now heardPart) bool {
+	if now.n <= w.n {
+		return false
+	}
+	if now.words != "" {
+		return w.sum == sha256.Sum256([]byte(now.words[:w.n]))
+	}
+	d := now.n - w.n
+	if len(w.words) != w.n || d > len(now.tail) {
+		return false
+	}
+	return now.sum == sha256.Sum256([]byte(w.words+now.tail[len(now.tail)-d:]))
 }
