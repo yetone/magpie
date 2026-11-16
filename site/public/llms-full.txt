@@ -9046,7 +9046,7 @@ Stays decides whether a conversation stays with the account or key that answered
 A routing group puts models from different providers together: Opus from a Claude subscription and from Copilot, say, or several free models. An agent picks `group/<id>` as its model, and magpie sends each request as the group's routing and rules say. Groups are under Routing groups on the Routing page; New group makes one.
 
 1. **magpie finds groups by itself.** A model two or more of your providers serve becomes a group of them (auto-<model>), with nothing to set. Switch off Find groups on their own if you don't want them.
-2. **What goes in.** Any model as provider/model, another group (up to 8 deep), or a pattern: `openrouter/*:free` takes in free models the vendor adds later too.
+2. **What goes in.** Any model as provider/model, another group (up to 8 deep), or a pattern: `openrouter/*:free` takes in free models the vendor adds later too. `free:` before a pattern keeps only the models the last catalog marks free, as in `free:workbuddy/*`: the vendor's flag, not a promise of no charge.
 3. **A group's routing.** Besides the ones above, a group can go By weight (each model's weight) or Manual (only the model you pick, with no failover).
 4. **Rules.** Which model a turn goes to first, by its length, an image, the reasoning asked for or the agent.
 
