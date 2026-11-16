@@ -16,17 +16,26 @@ import (
 // hopLog records what a server was asked: each request's body and headers.
 type hopLog struct {
 	mu      sync.Mutex
-	bodies  [][]byte
+	bodies  [][]byte // as the other magpie reads them, decoded
+	wires   [][]byte // as they went
 	headers []http.Header
 }
 
+// add logs r's body, and gives it back as it went.
 func (l *hopLog) add(r *http.Request) []byte {
 	b, _ := io.ReadAll(r.Body)
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.bodies = append(l.bodies, b)
+	l.bodies = append(l.bodies, wireDecoded(r.Header, b))
+	l.wires = append(l.wires, b)
 	l.headers = append(l.headers, r.Header.Clone())
 	return b
+}
+
+func (l *hopLog) wire(i int) []byte {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.wires[i]
 }
 
 func (l *hopLog) n() int {

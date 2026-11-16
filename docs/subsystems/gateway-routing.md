@@ -3260,6 +3260,54 @@ whole conversation every turn. Codex says `store: false`, so
   over the answer the other magpie kept. Tools and instructions still go
   every turn. The other magpie's kept turns are in memory only.
 
+### Bodies to another magpie, against the one before
+
+Every request an agent makes is its whole conversation, and the hop to a
+remote magpie (a cloud or Docker deploy, a shared gateway) carried it
+uncompressed each turn (gaubeebangeel on X, after jixoai/reply9842).
+[`remote_dict.go`](../../internal/gateway/remote_dict.go) sends it as RFC
+9842's Dictionary-Compressed Zstandard turned round for a request, on
+every protocol, in `forwardOnce` (`sendDict`, `dictSend.after`) and, on
+the other magpie, `keptBodyRequests`, between `withCaller` and
+`keyLimited`.
+
+- A request of 16 KB or more to a remote magpie offers its body
+  (`X-Magpie-Keep-Body: dcz`). A magpie keeps it only from a magpie's
+  request (`magpieAsks`), under the caller's key id and connection
+  address (`dictScope`: a LAN key is every LAN computer's), and answers
+  `X-Magpie-Kept-Body: :<sha-256>:`. This side then keeps the body it
+  sent per route (`prevRoute`).
+- The next request to a route whose magpie said it keeps bodies goes as
+  `Content-Encoding: dcz` against the kept body sharing the most content
+  anchors with it (`anchorsOf`: content-defined, so moved content still
+  counts), with `Available-Dictionary` naming it and
+  `X-Magpie-Body-Digest` the SHA-256 of the body itself; with no kept body
+  to share, as plain `zstd`. The "dcz" body is RFC 9842's: the magic, the
+  dictionary's SHA-256, a zstd frame with its checksum and a window of at
+  least 8 MB or 1.25 times the dictionary.
+- A dictionary the other magpie doesn't hold in that scope (restart,
+  evicted, another key or computer), a header that names another, a body
+  that doesn't decode or whose digest differs: 400 with
+  `X-Magpie-Dictionary-Miss` before the body reaches the key limit or a
+  route, and this side sends it again whole and drops the route's kept
+  bodies. A 415 (a magpie gone back to a version from before) does the
+  same, and the route goes uncompressed until it says it keeps bodies
+  again. A magpie from before this never answers the header, so it is
+  sent every body as before.
+- Bounds: bodies up to 48 MB are kept, each for 30 minutes. The other
+  magpie keeps 8 per scope, 96 MB per scope and 256 MB in all, the least
+  lately used going first; this side 8 per route and 128 MB in all. The
+  headers come off every request as it arrives, so no vendor is sent
+  them, and the reply's `X-Magpie-Kept-Body` comes off before it is
+  relayed.
+- Measured (`TestDictSavingOnALongConversation`): two interleaved agent
+  conversations, 80 requests growing to 1.1 MB with a 300 KB screenshot,
+  44.6 MB as they were, 26.4 MB as zstd, 0.64 MB as dcz; the last request
+  1,368 bytes.
+- Not covered: the kept bodies are in memory only on both sides, so the
+  first request after either restarts goes as zstd or whole. Responses on
+  a socket and replies are not compressed.
+
 ### What runs once on a hop to another magpie
 
 A request an agent sends to a Remote magpie passes two gateways, and each

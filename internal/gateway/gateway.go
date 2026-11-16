@@ -1032,7 +1032,7 @@ func (s *Server) Handler() http.Handler {
 	// on (dumpFirst)
 	// a socket's turns go through all of it again (socketEntry); the
 	// agent's Retry-After is bounded on the way out (retryCapped)
-	return socketEntry(s.dumpFirst(retryCapped(s.counted(headerLogged(holdCatalog(corsGuard(callerGuard(readOnlyGuard(mux, withCaller(keyLimited(s.keySlots(mux, mux))))))))))))
+	return socketEntry(s.dumpFirst(retryCapped(s.counted(headerLogged(holdCatalog(corsGuard(callerGuard(readOnlyGuard(mux, withCaller(keptBodyRequests(keyLimited(s.keySlots(mux, mux)))))))))))))
 }
 
 // routes are the client APIs, each by its pattern: readOnlyGuard reads
@@ -6515,6 +6515,11 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 		s.fitUserBetas(p, req.Header)
 	}
 	sent := len(body)
+	// to another magpie, against a body it kept before (remote_dict.go)
+	dict, dsent := sendDict(p, req, body)
+	if dict != nil {
+		sent = dsent
+	}
 	if p.Account != nil && p.Account.Agent == "codex" {
 		// a turn goes zstd-compressed, as Codex's own client sends it;
 		// sent plain, ChatGPT answered a 1.1 MB one 503 (ylorn on X)
@@ -6537,6 +6542,10 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 	res, err := p.Do(s.client, req)
 	// what comes back is counted as it is read, as what went is (#4456)
 	res = gotDown(ctx, res)
+	if dict != nil {
+		// a body the other magpie couldn't decode goes again whole
+		res, err = dict.after(req, res, err, again)
+	}
 	if err == nil && res.StatusCode >= 400 && provider.OpenCodeURL(req.URL.String()) {
 		logOpenCodeRefusal(p, req, res.StatusCode)
 	}

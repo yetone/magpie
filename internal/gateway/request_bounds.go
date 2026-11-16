@@ -162,6 +162,18 @@ func decodedBody(r *http.Request) (io.ReadCloser, error) {
 			return nil, err
 		}
 		rd = &pooledZstd{d}
+	case "dcz":
+		// against a body another magpie sent before (remote_dict.go),
+		// only one keptBodyRequests found for this request
+		dict := dictOf(r.Context())
+		if dict == nil {
+			return nil, fmt.Errorf("%w: magpie can't read a %q body; send it as identity, gzip or zstd", errBodyEncoding, enc)
+		}
+		d, err := dczReader(r.Body, dict)
+		if err != nil {
+			return nil, err
+		}
+		rd = d
 	case "gzip", "x-gzip":
 		g, err := gzip.NewReader(r.Body)
 		if err != nil {
