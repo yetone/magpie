@@ -213,7 +213,7 @@ func TestAliGatewayRAMNotAuthorised(t *testing.T) {
 	if err == nil {
 		t.Fatal("no error")
 	}
-	for _, want := range []string{"BailianGateway.Team.NotAuthorised", "AliyunTokenPlanReadOnlyAccess", "AliyunBSSReadOnlyAccess", "Account Management", "Administrator or Subscribe Plan", "main account's own AccessKey"} {
+	for _, want := range []string{"BailianGateway.Team.NotAuthorised", "AliyunTokenPlanReadOnlyAccess", "AliyunBSSReadOnlyAccess", "Account Management", "Administrator or Subscription plan", "main account's own AccessKey"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("%q doesn't say %q", err, want)
 		}

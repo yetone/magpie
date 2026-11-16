@@ -65,7 +65,7 @@ const (
 	// two system policies the Bailian and ModelStudio ones don't include,
 	// and a permission given in Model Studio's own console. Without the
 	// last the console answers BailianGateway.Team.NotAuthorised (#6506).
-	aliRAMHint = "a RAM user's AccessKey needs, from the main account: the AliyunTokenPlanReadOnlyAccess and AliyunBSSReadOnlyAccess system policies in the RAM console (AliyunBailian* and AliyunModelStudio* policies don't cover the Token Plan), and the Administrator or Subscribe Plan permission for this RAM user on the Account Management page of the Model Studio (Bailian) console. Or use the main account's own AccessKey"
+	aliRAMHint = "a RAM user's AccessKey needs, from the main account: the AliyunTokenPlanReadOnlyAccess and AliyunBSSReadOnlyAccess system policies in the RAM console (AliyunBailian* and AliyunModelStudio* policies don't cover the Token Plan), and the Administrator or Subscription plan permission for this RAM user on the Account Management page of the Model Studio (Bailian) console. Or use the main account's own AccessKey"
 	// aliTokenTTL is how long a console token is kept before a new one is
 	// made; one the console refuses is made again at once
 	aliTokenTTL = 20 * time.Minute
