@@ -173,8 +173,13 @@ func TestProviderSaveClientCert(t *testing.T) {
 		t.Fatalf("saved %q %q", p.ClientCert, p.ServerCA)
 	}
 	info := providerInfo(*p, nil)
-	if !info.TakesClientCert || info.ClientCert != "~/Downloads/magpie-laptop/client.pem" {
+	// shown with the system's separator: "~\Downloads\…" on Windows,
+	// which CertPath reads back the same (#5928)
+	if want := "~" + string(filepath.Separator) + filepath.Join("Downloads", "magpie-laptop", "client.pem"); !info.TakesClientCert || info.ClientCert != want {
 		t.Fatalf("shown %v %q", info.TakesClientCert, info.ClientCert)
+	}
+	if back, err := provider.CertPath(info.ClientCert); err != nil || back != p.ClientCert {
+		t.Fatalf("shown %q reads back as %q (%v), saved %q", info.ClientCert, back, err, p.ClientCert)
 	}
 	if code, out := post(base + `,"from":"home","models":[],"headers":{}}`); code != 200 {
 		t.Fatalf("%d %s", code, out)
