@@ -52,7 +52,7 @@ var bucketKept struct {
 	total   int64  // its bytes, as last listed and uploaded since
 	known   bool
 	pruning bool
-	again   bool // another pass is wanted once this one ends
+	during  map[string]int64 // calls uploaded while a pass runs, by name
 }
 
 // bucketCap is the size; a test's own when set.
@@ -92,6 +92,13 @@ func bucketAdded(k archiveKeeper, kept string, n int64) {
 	if bucketKept.where != k.Where() {
 		bucketKept.where, bucketKept.known = k.Where(), false
 	}
+	if bucketKept.pruning {
+		// the running pass counts it once it ends, unless its listing had
+		// it already
+		bucketKept.during[kept] = n
+		bucketKept.mu.Unlock()
+		return
+	}
 	if bucketKept.known {
 		bucketKept.total += n
 		if bucketKept.total <= bucketCap() {
@@ -111,18 +118,21 @@ func bucketAdded(k archiveKeeper, kept string, n int64) {
 
 // pruneBucketArchive lists the archive in k and removes its oldest calls
 // past the size, down to a tenth under it; never kept, the call just
-// uploaded. One pass at a time: a pass asked for during one runs after it.
+// uploaded. One pass at a time: a call uploaded during one is counted
+// after it when its listing didn't have it, and another pass runs only
+// when that brings the count past the size. Before, any upload during a
+// pass ran another, which mostly listed a bucket the first had just
+// listed: on one CPU a LIST per three calls, not per tenth of the size.
 func pruneBucketArchive(ctx context.Context, k archiveKeeper, kept string) {
 	bucketKept.mu.Lock()
 	if bucketKept.pruning {
-		bucketKept.again = true
 		bucketKept.mu.Unlock()
 		return
 	}
-	bucketKept.pruning = true
+	bucketKept.pruning, bucketKept.during = true, map[string]int64{}
 	bucketKept.mu.Unlock()
 	for {
-		total, err := pruneBucketOnce(ctx, k, kept)
+		total, listed, err := pruneBucketOnce(ctx, k, kept)
 		bucketKept.mu.Lock()
 		if err != nil {
 			log.Printf("request archive: keeping %s under %d MiB: %v", k.Where(), bucketCap()>>20, err)
@@ -130,13 +140,20 @@ func pruneBucketArchive(ctx context.Context, k archiveKeeper, kept string) {
 			// listed is tried again only a tenth of the size later, not
 			// on every upload
 		}
+		unlisted := false
+		for name, n := range bucketKept.during {
+			if !listed[name] {
+				total += n
+				unlisted, kept = true, name
+			}
+		}
+		bucketKept.during = map[string]int64{}
 		bucketKept.where, bucketKept.total, bucketKept.known = k.Where(), total, true
-		if !bucketKept.again || ctx.Err() != nil {
-			bucketKept.pruning, bucketKept.again = false, false
+		if !unlisted || total <= bucketCap() || err != nil || ctx.Err() != nil {
+			bucketKept.pruning, bucketKept.during = false, nil
 			bucketKept.mu.Unlock()
 			return
 		}
-		bucketKept.again = false
 		bucketKept.mu.Unlock()
 	}
 }
@@ -146,23 +163,26 @@ type bucketCall struct {
 	size int64
 }
 
-// pruneBucketOnce is one pass: the archive's bytes after it.
-func pruneBucketOnce(ctx context.Context, k archiveKeeper, kept string) (int64, error) {
+// pruneBucketOnce is one pass: the archive's bytes after it, and the
+// calls its listing had.
+func pruneBucketOnce(ctx context.Context, k archiveKeeper, kept string) (int64, map[string]bool, error) {
 	var calls []bucketCall
 	var total int64
+	listed := map[string]bool{}
 	err := k.Each(ctx, "archive/", func(name string, size int64) {
 		if !archiveObject(name) {
 			return // not one magpie made: never counted, never removed
 		}
 		calls = append(calls, bucketCall{name, size})
+		listed[name] = true
 		total += size
 	})
 	if err != nil {
-		return total, err
+		return total, listed, err
 	}
 	most := bucketCap()
 	if total <= most {
-		return total, nil
+		return total, listed, nil
 	}
 	// "archive/<date>/<HHMMSS>-…" sorts by when the call was made
 	sort.Slice(calls, func(i, j int) bool { return calls[i].name < calls[j].name })
@@ -217,12 +237,12 @@ func pruneBucketOnce(ctx context.Context, k archiveKeeper, kept string) (int64, 
 	wg.Wait()
 	back += unsent
 	if ctx.Err() != nil {
-		return total + back, ctx.Err()
+		return total + back, listed, ctx.Err()
 	}
 	if len(gone) > 0 && back == 0 {
 		log.Printf("request archive: removed the %d oldest calls in %s, kept under %d MiB", len(gone), k.Where(), most>>20)
 	}
-	return total + back, lastErr
+	return total + back, listed, lastErr
 }
 
 // archiveObject says whether name, as the bucket lists it, is a call
