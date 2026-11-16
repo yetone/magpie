@@ -335,6 +335,8 @@ A plugin sign-in magpie gives up on ends in the host too (#5016). The user's Can
 
 Every other call but `init` is cancellable too (#4678): a models list, a usage read or a check magpie stops waiting for (its caller left, or `listWait` ran out) gets an `abort`, and `host.js` aborts the call's signal, which the usage hook gets as `usage(..., { signal })` and the models hook as `signal`. The call stays pending in the host until its handler ends, and nothing it answers after the abort is sent, so a hook still saving a refreshed sign-in finishes before the host may exit. `TestCancelledCallKeepsTheHostTillItsHookEnds` and the other tests in [`plugin_rpc_cancel_test.go`](../../internal/plugin/plugin_rpc_cancel_test.go).
 
+A plugin `fetch` has a bound before its head as well as between its body's bytes (`bodyIdleWait`, 30 minutes, in [`host.go`](../../internal/plugin/host.go); `headRead` for the head). A plugin whose vendor took the request and never answered (the Devin plugin returns its head only with Devin's first words; wu_chong4136 on X waited 10 to 20 minutes) is given up on with an `abort`, and the agent gets the gateway's retryable 502 (an SSE error on a stream) instead of keepalives for as long as the plugin waits. A plugin can bound its own vendor tighter: the Devin plugin gives up after 5 minutes of quiet with a 504 (0.1.45, the Devin mover's `min`).
+
 The GUI's plugin integration includes `subOf`, `pluginSubs`, and `startPluginSignIn`. A change to sign-in or provider presentation must follow these paths as well as the built-in paths it affects.
 
 ## Verification

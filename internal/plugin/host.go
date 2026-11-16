@@ -2183,9 +2183,28 @@ var errBodyClosed = errors.New("the reply's body was closed")
 // is not cut; a dead connection's read ends at the same bound.
 var bodyIdleWait = 30 * time.Minute
 
+// ReplyWaitForTest sets bodyIdleWait, the head's and the body's wait, to d
+// until restore.
+func ReplyWaitForTest(d time.Duration) (restore func()) {
+	old := bodyIdleWait
+	bodyIdleWait = d
+	return func() { bodyIdleWait = old }
+}
+
 // headRead waits for the call's reply head, giving back the answer it read on
 // the way: the body has to end with that answer too, error and all.
+//
+// The head is waited on for bodyIdleWait at most, as the body's silence
+// is: a plugin may answer only once its vendor has sent the reply's first
+// words (the Devin plugin does), so a request its vendor took and never
+// answered left the head unsent, and the gateway kept the agent alive
+// with keepalives and nothing else, for as long as the agent waited
+// (wu_chong4136 on X: 10 to 20 minutes, until the effort or the
+// conversation changed). Given up, the fetch fails with an error that
+// names the wait, which the next account or the agent's retry takes up.
 func (c *call) headRead(ctx context.Context) (head message, answer *message, err error) {
+	idle := time.NewTimer(bodyIdleWait)
+	defer idle.Stop()
 	for {
 		if m, ok := c.pop(); ok {
 			return m, nil, nil
@@ -2216,6 +2235,8 @@ func (c *call) headRead(ctx context.Context) (head message, answer *message, err
 			// the host is gone: no head is coming, so the fetch gives up
 			// rather than waiting on a context that may never end
 			continue
+		case <-idle.C:
+			return message{}, nil, fmt.Errorf("the plugin sent no reply in %s; that fetch was given up on", bodyIdleWait)
 		}
 	}
 }

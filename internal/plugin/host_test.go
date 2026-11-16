@@ -1098,6 +1098,61 @@ func TestHostBodyIdleEndsASilentStream(t *testing.T) {
 	waitFor(t, "the silent call was given up on", func() bool { return !f.registered(id) })
 }
 
+// TestHostHeadWaitEndsAFetchNeverAnswered: a plugin that answers only once
+// its vendor sends the reply's first words (the Devin plugin) leaves the
+// head unsent while a vendor that took the request says nothing, and the
+// gateway kept the agent waiting on keepalives for as long as it would wait
+// (wu_chong4136 on X: 10 to 20 minutes). The head is waited on for
+// bodyIdleWait, as the body's silence is; then the fetch fails with why and
+// the plugin's fetch is aborted, as Fetch settles a failed head read. Before,
+// the head read held until the client cancelled it.
+func TestHostHeadWaitEndsAFetchNeverAnswered(t *testing.T) {
+	f := newFakeHost(t)
+	oldWait := bodyIdleWait
+	bodyIdleWait = 150 * time.Millisecond
+	t.Cleanup(func() { bodyIdleWait = oldWait })
+	id, c := f.begin(t, true)
+	errs := make(chan error, 1)
+	go func() {
+		_, _, err := c.headRead(context.Background())
+		if err != nil {
+			c.settle(err) // as Fetch does
+		}
+		errs <- err
+	}()
+	select {
+	case err := <-errs:
+		if err == nil || !strings.Contains(err.Error(), "sent no reply") {
+			t.Fatalf("a head never sent = %v, want the give-up", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a fetch whose head never came held its reader for ever")
+	}
+	waitFor(t, "the plugin's fetch was aborted", func() bool {
+		for _, m := range f.methods() {
+			if m == "abort" {
+				return true
+			}
+		}
+		return false
+	})
+	waitFor(t, "the call left the host", func() bool { return !f.registered(id) })
+}
+
+// TestHostHeadWaitSparesAHeadInTime: a head that comes inside the wait is
+// read as before, and the body after it is the body's own wait.
+func TestHostHeadWaitSparesAHeadInTime(t *testing.T) {
+	f := newFakeHost(t)
+	oldWait := bodyIdleWait
+	bodyIdleWait = 5 * time.Second
+	t.Cleanup(func() { bodyIdleWait = oldWait })
+	id, c := f.begin(t, true)
+	f.head(id)
+	if _, _, err := c.headRead(context.Background()); err != nil {
+		t.Fatalf("a head in time = %v", err)
+	}
+}
+
 // TestHostBodyIdleSparesAFedStream: the idle wait is between bytes, not the
 // reply's whole length — a stream a chunk comes to every few waits goes on
 // however long it talks, and ends at its answer as before.
