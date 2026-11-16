@@ -673,6 +673,9 @@ type searchAPIJSON struct {
 	Quota bool   `json:"quota,omitempty"`
 	// Off: switched off, kept but never asked (#2286)
 	Off bool `json:"off,omitempty"`
+	// Mix: asked together with the others marked so, their pages merged
+	// (provider.SearchAPI.Mix, #2845)
+	Mix bool `json:"mix,omitempty"`
 	// KeyList is each key in its order, masked, on or off, and resting
 	// (辰林鸭~ on Discord)
 	KeyList []searchKeyJSON `json:"keyList"`
@@ -739,7 +742,7 @@ func searchState(s *settingsJSON) {
 	}
 	s.SearchAPIs, s.SearchVendors = []searchAPIJSON{}, []searchVendorJSON{}
 	for _, a := range provider.StoredSearchAPIs() {
-		j := searchAPIJSON{Vendor: a.Vendor, Name: a.Name(), URL: a.URL, Ready: a.Ready(), Keys: len(a.Keys()), Pick: a.Pick, Quota: gateway.CanReadSearchQuota(a), Off: a.Off}
+		j := searchAPIJSON{Vendor: a.Vendor, Name: a.Name(), URL: a.URL, Ready: a.Ready(), Keys: len(a.Keys()), Pick: a.Pick, Quota: gateway.CanReadSearchQuota(a), Off: a.Off, Mix: a.Mix}
 		if a.Key != "" {
 			j.Key = a.MaskedKey()
 		}
@@ -3054,13 +3057,16 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		writeJSON(rw, settingsState())
 	})
 	// a web search API added, given a new key or address, switched on or
-	// off, or taken away; or the APIs put in a new order (#2286)
+	// off, or taken away; or the APIs put in a new order (#2286); or those
+	// asked together named (Mix: two or more, or none for one at a time,
+	// #2845)
 	mux.HandleFunc("POST /api/settings/search-api", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct {
 			Vendor, Key, URL, Pick string
 			Remove                 bool
 			On                     *bool
 			Arrange                []string
+			Mix                    []string
 			// Append: the keys typed for an API added before go after its
 			// own, which stay, rather than in their place
 			Append bool
@@ -3073,6 +3079,8 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		switch {
 		case in.Arrange != nil:
 			err = provider.ArrangeSearchAPIs(in.Arrange)
+		case in.Mix != nil:
+			err = provider.MixSearchAPIs(in.Mix)
 		case in.Remove:
 			err = provider.RemoveSearchAPI(in.Vendor)
 		case in.On != nil:

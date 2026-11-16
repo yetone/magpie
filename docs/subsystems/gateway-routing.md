@@ -2212,11 +2212,17 @@ keeps the mark, and backup and sync carry it with the rest of the entry. A
 mixed search spends every mixed API's quota, takes as long as the slowest,
 and gives the model up to twice the pages (20 at most). On the CLI, `magpie search mix
 <api>,<api>` and `magpie search mix off` set it, and `magpie search` lists
-a mixed one as mix. Settings' page doesn't show or set it yet.
+a mixed one as mix. In Settings › Models › Web search, Advanced (shown
+with two or more search APIs on, open while some are mixed) has "Ask the
+search APIs": In order, or All at once, which marks every API on
+(`POST /api/settings/search-api` with `mix`, the vendors, or `[]` for none;
+heyiwei5 on X). A mix of only some of them has neither choice on, and its
+line names them.
 
 Covered by `TestSearchAPIsMixedAskedTogether`, `TestSearchAPIsMixedOneDown`,
 `TestSearchAPIsMixedAllDownAsksTheRest`, `TestSearchAPIsMixedCapped`,
-`TestMixSearchAPIs` and `TestSearchCLIMix`.
+`TestMixSearchAPIs`, `TestSearchCLIMix`, `TestSearchAPIsMixedFromSettings`
+and `search-mix.test.cjs`.
 
 ## A search API's keys
 

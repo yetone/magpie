@@ -195,6 +195,32 @@ function renderSearch(s, keep) {
   // where the reader is: gateway mode has no Library, and the Library can
   // be turned off
   mcp.querySelector(".who").append(...libWay("magpie-web-search", t("Give agents Magpie Web Search…"), "search-mcp-lib"));
+  searchMore(asked, set);
+}
+
+// Web search's Advanced: the search APIs asked in order, or all at once
+// with their results merged and repeats left out (#2845's mix, heyiwei5
+// on X). Seldom changed, so folded, and open while some are mixed; with
+// fewer than two on there is nothing to mix. A mix of some of them, made
+// with magpie search mix, has neither choice on, and the line names them.
+function searchMore(asked, set) {
+  const more = $("#searchMore"), list = $("#searchMoreList");
+  list.replaceChildren();
+  more.hidden = asked.length < 2;
+  if (more.hidden) return;
+  const mixed = asked.filter((a) => a.mix);
+  const cur = mixed.length < 2 ? "order" : mixed.length === asked.length ? "all" : "";
+  const r = el("div", "row pref");
+  r.id = "searchMixRow";
+  const who = el("div", "who"), val = el("div", "val");
+  who.append(el("div", "name", t("Ask the search APIs")),
+    el("div", "sub", cur ? t("In order, the next only when one fails or finds nothing; or all at once, their results merged without repeats")
+      : t("Asked together now: {names}", { names: mixed.map((a) => a.name).join(", ") })));
+  val.append(segs([["order", t("In order")], ["all", t("All at once")]], cur,
+    (v) => set({ mix: v === "all" ? asked.map((a) => a.vendor) : [] })));
+  r.append(who, val);
+  list.append(r);
+  if (mixed.length > 1) more.open = true;
 }
 
 // Plugins › Built-in › Web search's own line (featGo): what a model that
