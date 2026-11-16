@@ -38,7 +38,7 @@ func TestQianfanSignInRoutes(t *testing.T) {
 	mux := http.NewServeMux()
 	providerRoutes(mux, nil)
 	plans := func() map[string]struct {
-		SignedIn         bool
+		SignedIn, Ended  bool
 		URL, Bookmarklet string
 	} {
 		t.Helper()
@@ -48,7 +48,7 @@ func TestQianfanSignInRoutes(t *testing.T) {
 			Providers []struct {
 				ID          string
 				QianfanPlan *struct {
-					SignedIn         bool
+					SignedIn, Ended  bool
 					URL, Bookmarklet string
 				}
 			}
@@ -57,7 +57,7 @@ func TestQianfanSignInRoutes(t *testing.T) {
 			t.Fatal(err)
 		}
 		out := map[string]struct {
-			SignedIn         bool
+			SignedIn, Ended  bool
 			URL, Bookmarklet string
 		}{}
 		for _, p := range got.Providers {
@@ -71,6 +71,16 @@ func TestQianfanSignInRoutes(t *testing.T) {
 	if len(got) != 1 || !got["baidu-qianfan"].SignedIn || !strings.HasPrefix(got["baidu-qianfan"].Bookmarklet, "javascript:") ||
 		!strings.HasPrefix(got["baidu-qianfan"].URL, "https://console.bce.baidu.com/") {
 		t.Fatalf("before: %+v", got)
+	}
+	if got["baidu-qianfan"].Ended {
+		t.Fatalf("a sign-in the console takes reads as ended: %+v", got)
+	}
+	// one the console has ended is told, so the editor asks for a new one
+	if err := os.WriteFile(auth, []byte(`{"baidu-qianfan":{"cookie":"BDUSS=x","ended":"2026-11-16T00:00:00Z"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := plans(); !got["baidu-qianfan"].SignedIn || !got["baidu-qianfan"].Ended {
+		t.Fatalf("ended: %+v", got)
 	}
 	for _, id := range []string{"relay", "qianfan-team", "nobody"} {
 		for _, path := range []string{"session", "signout"} {

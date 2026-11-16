@@ -3,7 +3,9 @@
 // Baidu Cloud's console the way StepFun's does (yuushabu_buyinn on X, #5860):
 // the paste posts to /api/qianfan/{id}/session for that provider's id, and a
 // signed-in one's Sign out posts /api/qianfan/{id}/signout. A Qianfan
-// provider without the plan has no such field. In English and Chinese.
+// provider without the plan has no such field. One whose sign-in Baidu
+// ended says so and asks for a new one with the same steps. In English and
+// Chinese.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -15,11 +17,11 @@ const qianfan = (id, name, plan) => ({
   id, name, icon: "baiducloud-color", preset: "baidu-qianfan", chat: "https://qianfan.baidubce.com/v2/tokenplan/personal", responses: "", anthropic: "", catalog: "",
   models: [{ id: "ernie-5.0", name: "ERNIE 5.0", on: true }], agents: [], fallback: [], headers: {},
   key: { set: true, masked: "…ab12" }, keyList: [], balanceToken: { takes: false, set: false }, proxy: "",
-  ...(plan ? { qianfanPlan: { site: "", signedIn: plan === "in", url: "https://console.bce.baidu.com/qianfan/resource/token-plan", bookmarklet: "javascript:void 0" } } : {}),
+  ...(plan ? { qianfanPlan: { site: "", signedIn: plan !== "out", ...(plan === "ended" ? { ended: true } : {}), url: "https://console.bce.baidu.com/qianfan/resource/token-plan", bookmarklet: "javascript:void 0" } } : {}),
 });
 
 function serve(lang, posts) {
-  const providers = { providers: [qianfan("qianfan", "Qianfan Plan", "in"), qianfan("qianfan-2", "Qianfan Work", "out"), qianfan("qianfan-api", "Qianfan API", "")], presets: [], excluded: [], gateway: { running: true, window: true } };
+  const providers = { providers: [qianfan("qianfan", "Qianfan Plan", "in"), qianfan("qianfan-2", "Qianfan Work", "out"), qianfan("qianfan-api", "Qianfan API", ""), qianfan("qianfan-old", "Qianfan Old", "ended")], presets: [], excluded: [], gateway: { running: true, window: true } };
   const state = { agents: [], profiles: [], settings: { lang, theme: "light" } };
   return async (route) => {
     const url = new URL(route.request().url());
@@ -40,7 +42,7 @@ function serve(lang, posts) {
   };
 }
 
-const words = { en: { out: "Sign out", cancel: "Cancel" }, zh: { out: "退出登录", cancel: "取消" } };
+const words = { en: { out: "Sign out", cancel: "Cancel", ended: "Baidu Cloud ended this sign-in" }, zh: { out: "退出登录", cancel: "取消", ended: "百度智能云已结束这次登录" } };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   for (const lang of ["en", "zh"]) {
@@ -82,6 +84,19 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await wait(1);
       assert.equal(posts.length, 2);
       assert.equal(posts[1].path, "/api/qianfan/qianfan/signout");
+      assert.equal(await page.locator(".editor .stepplan .ended").count(), 0);
+
+      // the one Baidu ended says so and takes a new paste, for its own id
+      await page.locator(".editor .bar").getByRole("button", { name: words[lang].cancel, exact: true }).click();
+      await page.locator(".editor").waitFor({ state: "detached" });
+      await page.locator(".row.provider", { hasText: "Qianfan Old" }).click();
+      assert.match(await page.locator(".editor .stepplan .ended").innerText(), new RegExp(words[lang].ended));
+      const again = page.locator(".editor .stepplan input[type=password]");
+      await again.fill("BDUSS=new");
+      await again.press("Enter");
+      await wait(2);
+      assert.equal(posts.length, 3);
+      assert.equal(posts[2].path, "/api/qianfan/qianfan-old/session");
       assert.deepEqual(errors, []);
     });
   }

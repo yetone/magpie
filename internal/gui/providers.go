@@ -575,6 +575,9 @@ type stepPlanJSON struct {
 	SignedIn    bool   `json:"signedIn"`
 	URL         string `json:"url"`
 	Bookmarklet string `json:"bookmarklet"`
+	// Ended: the vendor has ended the kept sign-in, and a new one is asked
+	// for (Baidu Qianfan's alone tells it)
+	Ended bool `json:"ended,omitempty"`
 }
 
 // qianwenPlanJSON: whether magpie has a sign-in to the Qwen AI platform
@@ -1043,13 +1046,13 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 		}
 	}
 	if site := provider.StepFunSite(p); site != "" {
-		out.StepPlan = &stepPlanJSON{site, provider.StepFunSignedIn(p.ID), provider.StepFunSignInURL(site), provider.StepFunBookmarklet()}
+		out.StepPlan = &stepPlanJSON{site, provider.StepFunSignedIn(p.ID), provider.StepFunSignInURL(site), provider.StepFunBookmarklet(), false}
 	}
 	if provider.QianwenPlan(p) {
 		out.QianwenPlan = &qianwenPlanJSON{provider.QianwenSignedIn(p.ID), provider.QianwenAccount(p.ID)}
 	}
 	if provider.QianfanPlan(p) {
-		out.QianfanPlan = &stepPlanJSON{"", provider.QianfanSignedIn(p.ID), provider.QianfanSignInURL, provider.QianfanBookmarklet()}
+		out.QianfanPlan = &stepPlanJSON{"", provider.QianfanSignedIn(p.ID), provider.QianfanSignInURL, provider.QianfanBookmarklet(), provider.QianfanEnded(p.ID)}
 	}
 	out.Key.Set = p.Key != ""
 	out.Key.Masked = provider.Mask(p.Key)

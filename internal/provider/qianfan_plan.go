@@ -26,9 +26,16 @@ package provider
 // the browser's developer tools, where the HttpOnly ones are too. magpie
 // asks the console with it before keeping it, and keeps it in
 // qianfan-auth.json beside providers.json, readable by the user alone, one
-// per provider: two can be two Baidu accounts. The console doesn't renew
-// it for magpie: when Baidu ends it the card says so, and the user brings
-// a new one.
+// per provider: two can be two Baidu accounts. A cookie the console sets
+// in a reply that read the plan is kept, as the browser keeps it, so a
+// session Baidu renews as it is used stays the one magpie holds. When
+// Baidu ends it the card says so, the sign-in is marked ended (Ended), and
+// the provider's editor asks for a new one again; a later read the console
+// takes clears the mark.
+//
+// There is no AccessKey/SecretKey way to this: Baidu's OpenAPI (the
+// Qianfan API catalog, Finance's billing API, the Token Plan Enterprise's
+// seat APIs with an API key) has no read for a Token Plan Personal.
 //
 // The Enterprise plan (tokenplan/team) is read on the console from its
 // seats' admin pages (tokenPlan/seat/admin/overview), not this one; it
@@ -101,6 +108,9 @@ func QianfanBookmarklet() string {
 // Cookie header.
 type qianfanSession struct {
 	Cookie string `json:"cookie"`
+	// Ended is when the console first sent this session to sign in again
+	// (RFC 3339), "" while it takes it
+	Ended string `json:"ended,omitempty"`
 }
 
 var qianfanMu sync.Mutex
@@ -151,10 +161,85 @@ func qianfanSignIn(id string) (qianfanSession, bool) {
 	return s, ok && s.Cookie != ""
 }
 
-// QianfanSignedIn reports whether magpie has a sign-in for the provider.
+// QianfanSignedIn reports whether magpie has a sign-in for the provider,
+// ended or not.
 func QianfanSignedIn(id string) bool {
 	_, ok := qianfanSignIn(id)
 	return ok
+}
+
+// QianfanEnded reports whether the console has ended the provider's
+// sign-in, so the editor asks for a new one.
+func QianfanEnded(id string) bool {
+	s, ok := qianfanSignIn(id)
+	return ok && s.Ended != ""
+}
+
+// noteQianfan records what a read of the console with the provider's
+// cookie said: the session ended, or the cookies its reply set. Nothing is
+// written when the sign-in has changed since (a new paste) or nothing
+// changes.
+func noteQianfan(id, used string, ended bool, set []*http.Cookie) {
+	qianfanMu.Lock()
+	defer qianfanMu.Unlock()
+	all := loadQianfan()
+	s, ok := all[id]
+	if !ok || s.Cookie != used {
+		return
+	}
+	n := s
+	if ended {
+		if n.Ended == "" {
+			n.Ended = time.Now().UTC().Format(time.RFC3339)
+		}
+	} else {
+		n.Ended = ""
+		n.Cookie = mergeQianfanCookies(used, set)
+	}
+	if n == s {
+		return
+	}
+	all[id] = n
+	_ = saveQianfan(all)
+}
+
+// mergeQianfanCookies is the Cookie header with what a console reply set
+// (for the resource's path) put in, as a browser would: a value replaced
+// where it stood, a new one added, one deleted or expired taken out.
+func mergeQianfanCookies(header string, set []*http.Cookie) string {
+	type kv struct{ k, v string }
+	var jar []kv
+	for _, part := range strings.Split(header, ";") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		k, v, _ := strings.Cut(part, "=")
+		jar = append(jar, kv{k, v})
+	}
+	now := time.Now()
+	for _, c := range set {
+		if c.Name == "" || strings.ContainsAny(c.Name+c.Value, ";\r\n") ||
+			c.Path != "" && !strings.HasPrefix(qianfanResourcePath, c.Path) {
+			continue
+		}
+		gone := c.MaxAge < 0 || !c.Expires.IsZero() && !c.Expires.After(now)
+		i := slices.IndexFunc(jar, func(e kv) bool { return e.k == c.Name })
+		switch {
+		case gone && i >= 0:
+			jar = slices.Delete(jar, i, i+1)
+		case gone:
+		case i >= 0:
+			jar[i].v = c.Value
+		default:
+			jar = append(jar, kv{c.Name, c.Value})
+		}
+	}
+	out := make([]string, len(jar))
+	for i, e := range jar {
+		out[i] = e.k + "=" + e.v
+	}
+	return strings.Join(out, "; ")
 }
 
 // SignOutQianfan forgets the provider's sign-in, and no other's.
@@ -232,7 +317,8 @@ func SaveQianfanPaste(ctx context.Context, id, text string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := qianfanResource(ctx, cookie); err != nil {
+	_, set, err := qianfanResource(ctx, cookie)
+	if err != nil {
 		if errors.Is(err, errQianfanSession) {
 			// the bookmarklet sees only the cookies a page may read
 			return errors.New("Baidu's console didn't take that sign-in: copy the Cookie header of the console's tokenPlanPersonal/resource request from your browser's developer tools (Network) and paste it here")
@@ -241,7 +327,7 @@ func SaveQianfanPaste(ctx context.Context, id, text string) error {
 	}
 	qianfanMu.Lock()
 	all := loadQianfan()
-	all[id] = qianfanSession{Cookie: cookie}
+	all[id] = qianfanSession{Cookie: mergeQianfanCookies(cookie, set)}
 	err = saveQianfan(all)
 	qianfanMu.Unlock()
 	forgetPlanQuotas()
@@ -260,11 +346,12 @@ func qianfanClient() *http.Client {
 }
 
 // qianfanResource asks the console for the account's Token Plan Personal
-// as the session, and reads its result.
-func qianfanResource(ctx context.Context, cookie string) (json.RawMessage, error) {
+// as the session, and reads its result and the cookies a reply that read it
+// set.
+func qianfanResource(ctx context.Context, cookie string) (json.RawMessage, []*http.Cookie, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, qianfanConsole+qianfanResourcePath, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	req.Header.Set("Cookie", cookie)
 	req.Header.Set("Accept", "application/json;charset=UTF-8")
@@ -273,16 +360,16 @@ func qianfanResource(ctx context.Context, cookie string) (json.RawMessage, error
 	req.Header.Set("User-Agent", qianfanUA)
 	res, err := qianfanClient().Do(req)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer res.Body.Close()
 	b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 	switch {
 	case res.StatusCode >= 300 && res.StatusCode < 400,
 		res.StatusCode == http.StatusUnauthorized, res.StatusCode == http.StatusForbidden:
-		return nil, errQianfanSession
+		return nil, nil, errQianfanSession
 	case res.StatusCode >= 400:
-		return nil, fmt.Errorf("Baidu's console answered %s", res.Status)
+		return nil, nil, fmt.Errorf("Baidu's console answered %s", res.Status)
 	}
 	var r struct {
 		Success any             `json:"success"`
@@ -293,9 +380,9 @@ func qianfanResource(ctx context.Context, cookie string) (json.RawMessage, error
 	if json.Unmarshal(b, &r) != nil {
 		// a sign-in page served as 200 is a session ended too
 		if strings.Contains(strings.ToLower(string(b[:min(len(b), 2048)])), "<html") {
-			return nil, errQianfanSession
+			return nil, nil, errQianfanSession
 		}
-		return nil, fmt.Errorf("Baidu's console answered what isn't JSON: %s", volcHead(b))
+		return nil, nil, fmt.Errorf("Baidu's console answered what isn't JSON: %s", volcHead(b))
 	}
 	if r.Success != true {
 		msg := strings.TrimSpace(fmt.Sprint(r.Message))
@@ -304,14 +391,14 @@ func qianfanResource(ctx context.Context, cookie string) (json.RawMessage, error
 		}
 		code := strings.ToLower(fmt.Sprint(r.Code))
 		if strings.Contains(code, "login") || strings.Contains(code, "session") || strings.Contains(code, "unauth") {
-			return nil, errQianfanSession
+			return nil, nil, errQianfanSession
 		}
 		if msg == "" || msg == "<nil>" {
 			msg = volcHead(b)
 		}
-		return nil, fmt.Errorf("Baidu's console refused: %s", msg)
+		return nil, nil, fmt.Errorf("Baidu's console refused: %s", msg)
 	}
-	return r.Result, nil
+	return r.Result, res.Cookies(), nil
 }
 
 // qianfanItem is one plan the console lists, its apiKey left out.
@@ -433,7 +520,12 @@ func qianfanPlanQuota(ctx context.Context, p Provider) SubscriptionQuota {
 		q.Error = errQianfanSession.Error()
 		return q
 	}
-	raw, err := qianfanResource(ctx, s.Cookie)
+	raw, set, err := qianfanResource(ctx, s.Cookie)
+	if errors.Is(err, errQianfanSession) {
+		noteQianfan(p.ID, s.Cookie, true, nil)
+	} else if err == nil && (len(set) > 0 || s.Ended != "") {
+		noteQianfan(p.ID, s.Cookie, false, set)
+	}
 	if err != nil {
 		q.Error = err.Error()
 		return q

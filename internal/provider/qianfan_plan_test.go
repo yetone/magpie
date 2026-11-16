@@ -30,6 +30,9 @@ type fakeQianfanConsole struct {
 	cookie atomic.Value // the Cookie header it takes now
 	body   atomic.Value
 	asked  atomic.Int32
+	// renew, when set, is a session the console renews to as it answers:
+	// a reply sets its bce-session, and the old one is taken no longer
+	renew atomic.Value
 }
 
 func newFakeQianfanConsole(t *testing.T) *fakeQianfanConsole {
@@ -46,6 +49,12 @@ func newFakeQianfanConsole(t *testing.T) *fakeQianfanConsole {
 		if r.Header.Get("Cookie") != f.cookie.Load().(string) {
 			http.Redirect(w, r, "https://login.bce.baidu.com/?redirect=x", http.StatusFound)
 			return
+		}
+		if r, _ := f.renew.Load().(string); r != "" {
+			w.Header().Add("Set-Cookie", "bce-session="+r+"; Path=/; Domain=.baidu.com; HttpOnly")
+			w.Header().Add("Set-Cookie", "elsewhere=1; Path=/qianfan/other")
+			f.cookie.Store("BDUSS=bd-1; bce-session=" + r + "; bce-user-info=u-1")
+			f.renew.Store("")
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(f.body.Load().(string)))
@@ -225,5 +234,78 @@ func TestQianfanPlanCard(t *testing.T) {
 	}
 	if err := forgetQianfan("qf2"); err != nil || QianfanSignedIn("qf2") {
 		t.Fatalf("forgotten: %v", err)
+	}
+}
+
+// A session Baidu ends is marked ended, so the editor asks for a new one
+// (QianfanEnded), and the card still says signed out; a new paste, or a
+// read the console takes again, clears the mark. A cookie the console
+// renews in a reply is kept, so the next read goes with it.
+func TestQianfanSessionEnded(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	forgetPlanQuotas()
+	f := newFakeQianfanConsole(t)
+	ctx := context.Background()
+	p := Provider{ID: "baidu-qianfan", Name: "Baidu Qianfan", Key: "bce-v3/k", Chat: "https://qianfan.baidubce.com/v2/tokenplan/personal"}
+	first := f.cookie.Load().(string)
+	if err := SaveQianfanPaste(ctx, p.ID, first); err != nil || QianfanEnded(p.ID) {
+		t.Fatalf("saved: %v", err)
+	}
+
+	// the console renews bce-session in its reply: magpie keeps the new one
+	f.renew.Store("s-2")
+	if q := qianfanPlanQuota(ctx, p); q.Error != "" {
+		t.Fatalf("renewing read: %+v", q)
+	}
+	if got := loadQianfan()[p.ID].Cookie; got != "BDUSS=bd-1; bce-session=s-2; bce-user-info=u-1" {
+		t.Fatalf("renewed cookie kept as %q", got)
+	}
+	if q := qianfanPlanQuota(ctx, p); q.Error != "" || QianfanEnded(p.ID) {
+		t.Fatalf("read after renewal: %+v", q)
+	}
+
+	// Baidu ends it: the card says so, and the editor asks again
+	f.cookie.Store("BDUSS=someone-else")
+	if q := qianfanPlanQuota(ctx, p); q.Error != errQianfanSession.Error() {
+		t.Fatalf("ended: %+v", q)
+	}
+	if !QianfanEnded(p.ID) || !QianfanSignedIn(p.ID) {
+		t.Fatal("an ended sign-in should be kept, marked ended")
+	}
+	ended := loadQianfan()[p.ID].Ended
+	qianfanPlanQuota(ctx, p)
+	if got := loadQianfan()[p.ID].Ended; got != ended {
+		t.Fatalf("the time it ended moved: %q then %q", ended, got)
+	}
+
+	// a new paste is a new sign-in, not ended
+	if err := SaveQianfanPaste(ctx, p.ID, "BDUSS=someone-else"); err != nil || QianfanEnded(p.ID) {
+		t.Fatalf("new paste: %v ended=%v", err, QianfanEnded(p.ID))
+	}
+
+	// a paste made while an older read was out isn't marked by that read
+	noteQianfan(p.ID, first, true, nil)
+	if QianfanEnded(p.ID) {
+		t.Fatal("a read with the old cookie marked the new sign-in ended")
+	}
+}
+
+func TestMergeQianfanCookies(t *testing.T) {
+	past := time.Now().Add(-time.Hour)
+	for _, c := range []struct {
+		set  []*http.Cookie
+		want string
+	}{
+		{nil, "a=1; b=2"},
+		{[]*http.Cookie{{Name: "b", Value: "3"}}, "a=1; b=3"},
+		{[]*http.Cookie{{Name: "c", Value: "4", Path: "/api"}}, "a=1; b=2; c=4"},
+		{[]*http.Cookie{{Name: "a", Value: "", MaxAge: -1}}, "b=2"},
+		{[]*http.Cookie{{Name: "b", Value: "x", Expires: past}}, "a=1"},
+		{[]*http.Cookie{{Name: "c", Value: "4", Path: "/qianfan/other"}}, "a=1; b=2"},
+		{[]*http.Cookie{{Name: "c", Value: "4\r\nX: y"}}, "a=1; b=2"},
+	} {
+		if got := mergeQianfanCookies("a=1; b=2", c.set); got != c.want {
+			t.Errorf("%v: %q, want %q", c.set, got, c.want)
+		}
 	}
 }

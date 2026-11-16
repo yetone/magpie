@@ -3773,6 +3773,7 @@ body:not(.side-nav) #addSheet > .row-head.stuck::before { box-shadow: 0 1px 0 va
 .stepplan .state { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); line-height: 1.4; }
 .stepplan .steps { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: var(--muted); line-height: 1.5; }
 .stepplan .steps .pair { margin-top: 2px; }
+.stepplan .ended { display: block; margin-bottom: 8px; color: var(--fg); }
 .stepplan .bookmarklet { display: inline-block; padding: 1px 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--fg); background: var(--pill); text-decoration: none; cursor: grab; white-space: nowrap; }
 .editor input[type="text"], .editor input[type="password"], .editor input[type="url"], .editor input[type="number"], .acc .kf input, .acc input.rename-in {
   height: 27px; padding: 0 9px; border-radius: 7px;
