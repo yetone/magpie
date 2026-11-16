@@ -18,9 +18,10 @@ import (
 // not.
 func onSystem(t *testing.T, sys, arch string, tr bool) {
 	t.Helper()
-	wasOS, wasArch, wasTr := goos, goarch, translated
-	t.Cleanup(func() { goos, goarch, translated = wasOS, wasArch, wasTr })
+	wasOS, wasArch, wasTr, wasEm := goos, goarch, translated, emulated
+	t.Cleanup(func() { goos, goarch, translated, emulated = wasOS, wasArch, wasTr, wasEm })
 	goos, goarch, translated = sys, arch, func() bool { return tr }
+	emulated = func() bool { return false }
 }
 
 // An Intel magpie under Rosetta updates to Apple silicon's build, the app

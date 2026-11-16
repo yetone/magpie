@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -145,4 +146,53 @@ func TestRosettaKeepsIntelsWhereNoneIsFetched(t *testing.T) {
 	if _, err := os.Stat(exeIn(filepath.Join(dir(), "pf-v9-darwin-amd64"), "pf-serve")); err != nil {
 		t.Fatalf("the Intel pf-serve was deleted: %v", err)
 	}
+}
+
+// onArm runs the test as a magpie for windows-arm64: built for it, or the
+// x64 one updated to it on Windows on Arm (update's arch).
+func onArm(t *testing.T) {
+	t.Helper()
+	was := osArch
+	t.Cleanup(func() { osArch = was })
+	osArch = "windows-arm64"
+}
+
+// pf-serve has no arm64 build: Windows on Arm runs the x64 one, emulated,
+// as it ran the x64 magpie that updated to arm64 there. Before, an arm64
+// magpie had no Privacy Filter, and the x64 one's update left the model
+// on in the settings and "not downloaded".
+func TestArmWindowsRunsX64Serve(t *testing.T) {
+	onArm(t)
+	if target() != "windows-amd64" || !Supported() {
+		t.Fatalf("target = %s, Supported = %v on windows-arm64", target(), Supported())
+	}
+	if !strings.HasSuffix(serveDir(), "-windows-amd64") {
+		t.Fatalf("serveDir = %s, not the x64 pf-serve's", serveDir())
+	}
+	// on the CPU: the x64 pf-serve-vulkan has no x64 Vulkan driver there
+	t.Run("on the CPU", func(t *testing.T) {
+		log := fakeInstall(t, "ok", true)
+		noFullX86(t, true)
+		if !Installed() {
+			t.Fatal("the x64 pf-serve on disk isn't installed")
+		}
+		if _, err := Find([]string{"hi Alice"}); err != nil {
+			t.Fatal(err)
+		}
+		if starts := fakeLines(t, log, "start"); !reflect.DeepEqual(starts, []string{"start pf-serve CPU"}) {
+			t.Fatalf("starts = %q", starts)
+		}
+	})
+	// an emulation without AVX2 ends pf-serve at once: pf-serve-base then
+	t.Run("no AVX2", func(t *testing.T) {
+		log := fakeInstall(t, "noavx2", true)
+		withBase(t)
+		noFullX86(t, true)
+		if _, err := Find([]string{"hi Alice"}); err != nil {
+			t.Fatal(err)
+		}
+		if starts := fakeLines(t, log, "start"); !reflect.DeepEqual(starts, []string{"start pf-serve CPU", "start pf-serve-base CPU"}) {
+			t.Fatalf("starts = %q", starts)
+		}
+	})
 }

@@ -100,19 +100,22 @@ const scoreWords = {
 // where AstrLink Guard runs (yyhhyyyyyy on Discord: it said "on the CPU"
 // while CoreML ran it): CoreML on the device its plan picked, the CPU
 // with CoreML's error after a failed read, the CPU where there's no CoreML,
-// and a slow line with its fix under Rosetta
+// and a slow line with its fix under Rosetta and under Windows on Arm's
+// x64 emulation
 const runWords = {
-  en: { ne: "On, with CoreML on the Neural Engine", gpu: "On, with CoreML on the GPU", ml: "On, with CoreML", failed: "On, on the CPU: CoreML failed (prediction failed)", cpu: "On, on the CPU", rosetta: "On, slowly under Rosetta: the next update installs magpie for Apple silicon" },
-  zh: { ne: "已开启，通过 CoreML 运行在神经网络引擎", gpu: "已开启，通过 CoreML 运行在 GPU", ml: "已开启，通过 CoreML 运行", failed: "已开启，运行在 CPU：CoreML 出错（prediction failed）", cpu: "已开启，运行在 CPU", rosetta: "已开启，但在 Rosetta 下运行较慢：下次更新会装上 Apple 芯片版 magpie" },
-  "zh-TW": { ne: "已開啟，透過 CoreML 執行於神經網路引擎", gpu: "已開啟，透過 CoreML 執行於 GPU", ml: "已開啟，透過 CoreML 執行", failed: "已開啟，執行於 CPU：CoreML 出錯（prediction failed）", cpu: "已開啟，執行於 CPU", rosetta: "已開啟，但在 Rosetta 下執行較慢：下次更新會裝上 Apple 晶片版 magpie" },
-  ja: { ne: "オン、CoreML により Neural Engine で実行中", gpu: "オン、CoreML により GPU で実行中", ml: "オン、CoreML で実行中", failed: "オン、CPU で実行中：CoreML が失敗しました（prediction failed）", cpu: "オン、CPU で実行中", rosetta: "オン、Rosetta で動作中のため低速です。次のアップデートで Apple シリコン版の magpie が入ります" },
-  de: { ne: "An, mit CoreML auf der Neural Engine", gpu: "An, mit CoreML auf der GPU", ml: "An, mit CoreML", failed: "An, auf der CPU: CoreML ist ausgefallen (prediction failed)", cpu: "An, auf der CPU", rosetta: "An, unter Rosetta langsam: das nächste Update installiert magpie für Apple Silicon" },
+  en: { ne: "On, with CoreML on the Neural Engine", gpu: "On, with CoreML on the GPU", ml: "On, with CoreML", failed: "On, on the CPU: CoreML failed (prediction failed)", cpu: "On, on the CPU", rosetta: "On, slowly under Rosetta: the next update installs magpie for Apple silicon", emulated: "On, slowly under x64 emulation: the next update installs magpie for Arm" },
+  zh: { ne: "已开启，通过 CoreML 运行在神经网络引擎", gpu: "已开启，通过 CoreML 运行在 GPU", ml: "已开启，通过 CoreML 运行", failed: "已开启，运行在 CPU：CoreML 出错（prediction failed）", cpu: "已开启，运行在 CPU", rosetta: "已开启，但在 Rosetta 下运行较慢：下次更新会装上 Apple 芯片版 magpie", emulated: "已开启，但在 x64 转译下运行较慢：下次更新会装上 ARM 版 magpie" },
+  "zh-TW": { ne: "已開啟，透過 CoreML 執行於神經網路引擎", gpu: "已開啟，透過 CoreML 執行於 GPU", ml: "已開啟，透過 CoreML 執行", failed: "已開啟，執行於 CPU：CoreML 出錯（prediction failed）", cpu: "已開啟，執行於 CPU", rosetta: "已開啟，但在 Rosetta 下執行較慢：下次更新會裝上 Apple 晶片版 magpie", emulated: "已開啟，但在 x64 模擬下執行較慢：下次更新會裝上 ARM 版 magpie" },
+  ja: { ne: "オン、CoreML により Neural Engine で実行中", gpu: "オン、CoreML により GPU で実行中", ml: "オン、CoreML で実行中", failed: "オン、CPU で実行中：CoreML が失敗しました（prediction failed）", cpu: "オン、CPU で実行中", rosetta: "オン、Rosetta で動作中のため低速です。次のアップデートで Apple シリコン版の magpie が入ります", emulated: "オン、x64 エミュレーションで動作中のため低速です。次のアップデートで ARM 版の magpie が入ります" },
+  de: { ne: "An, mit CoreML auf der Neural Engine", gpu: "An, mit CoreML auf der GPU", ml: "An, mit CoreML", failed: "An, auf der CPU: CoreML ist ausgefallen (prediction failed)", cpu: "An, auf der CPU", rosetta: "An, unter Rosetta langsam: das nächste Update installiert magpie für Apple Silicon", emulated: "An, unter x64-Emulation langsam: das nächste Update installiert magpie für Arm" },
 };
 const runs = {
   ne: { via: "CoreML", device: "Neural Engine" }, gpu: { via: "CoreML", device: "GPU" }, ml: { via: "CoreML" },
   failed: { device: "CPU", gpuError: "prediction failed" }, cpu: { device: "CPU" },
   // the Intel build on Apple silicon (cdredfox on Discord: 150% of a core)
   rosetta: { device: "CPU", rosetta: true },
+  // the x64 build on Windows on Arm (@EV_John_Liu on X)
+  emulated: { device: "CPU", emulated: true },
 };
 
 // Privacy Filter moved to the CPU after its GPU was lost (plugins#853,

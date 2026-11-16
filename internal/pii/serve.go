@@ -175,7 +175,18 @@ type candidate struct {
 // A CPU without what pf-serve is built for runs pf-serve-base, on the
 // CPU alone: pf-serve-vulkan is built like pf-serve, and would end the
 // same way.
+//
+// On Windows on Arm pf-serve runs emulated (onArmWindows): on the CPU,
+// since the x64 pf-serve-vulkan has no x64 Vulkan driver to load there,
+// pf-serve and then pf-serve-base, for an emulation without AVX2.
 func candidates(cpu bool) []candidate {
+	if onArmWindows() {
+		out := []candidate{{exe("pf-serve"), true}}
+		if _, err := os.Stat(exe("pf-serve-base")); err == nil {
+			out = append(out, candidate{exe("pf-serve-base"), true})
+		}
+		return out
+	}
 	if !fullX86() {
 		if _, err := os.Stat(exe("pf-serve-base")); err == nil {
 			return []candidate{{exe("pf-serve-base"), true}}

@@ -176,6 +176,9 @@ type Status struct {
 	// in Go and translated, several times slower than in Apple silicon's
 	// build, which has CoreML too
 	Rosetta bool `json:"rosetta,omitempty"`
+	// Emulated: AstrLink Guard runs in an x64 magpie under Windows on
+	// Arm's emulation, translated as under Rosetta
+	Emulated bool `json:"emulated,omitempty"`
 }
 
 // Now is the model's status.

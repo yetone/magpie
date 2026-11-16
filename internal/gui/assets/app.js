@@ -22180,6 +22180,8 @@ function pmSub(m) {
     if (m.via) return { "Neural Engine": t("On, with CoreML on the Neural Engine"), GPU: t("On, with CoreML on the GPU"), CPU: t("On, with CoreML on the CPU") }[m.device] || t("On, with CoreML");
     // the Intel build on Apple silicon: Go, translated, several times slower
     if (m.rosetta) return t("On, slowly under Rosetta: the next update installs magpie for Apple silicon");
+    // the x64 build on Windows on Arm, emulated
+    if (m.emulated) return t("On, slowly under x64 emulation: the next update installs magpie for Arm");
     if (m.gpuError && m.model === "astrlink-guard") return t("On, on the CPU: CoreML failed ({error})", { error: m.gpuError });
     // Privacy Filter lost the GPU: to its driver resetting it (device
     // lost), or to a fault; the GPU is tried again at gpuAgain

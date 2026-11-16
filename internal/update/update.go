@@ -38,6 +38,7 @@ import (
 	"github.com/yetone/magpie/internal/rosetta"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/source"
+	"github.com/yetone/magpie/internal/winarm"
 )
 
 // Site is magpie's home; its /api/latest is the update feed.
@@ -304,11 +305,13 @@ func parse(v string) *semver {
 // one.
 var GUI bool
 
-// goos and goarch are the system this magpie was built for, and
-// translated says it runs under Rosetta; tests set them.
+// goos and goarch are the system this magpie was built for, translated
+// says it runs under Rosetta, and emulated under Windows on Arm's x64
+// emulation; tests set them.
 var (
 	goos, goarch = runtime.GOOS, runtime.GOARCH
 	translated   = rosetta.Translated
+	emulated     = winarm.Emulated
 )
 
 // arch is the architecture an update installs: this build's, but Apple
@@ -318,8 +321,14 @@ var (
 // fetched the Intel build again. Installing Apple silicon's is the same
 // swap: the zip's magpie.app is renamed over the bundle, signed by the
 // same team (sameSigner), and the bare binary is renamed over itself.
+//
+// The same on Windows: an x64 magpie on an Arm64 computer, emulated,
+// updates to the arm64 exe (@EV_John_Liu on X, "magpie是转译的"). The swap
+// is the x64 one: canStart starts the download, which runs natively there,
+// the running exe is moved aside and the arm64 one renamed in under its
+// name, and magpie.com is written again from the new app's own launcher.
 func arch() string {
-	if goos == "darwin" && goarch == "amd64" && translated() {
+	if goarch == "amd64" && (goos == "darwin" && translated() || goos == "windows" && emulated()) {
 		return "arm64"
 	}
 	return goarch

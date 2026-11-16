@@ -47,3 +47,25 @@ func TestFeedbackBlockHoldsNoPrivateFacts(t *testing.T) {
 		t.Error("an unknown surface is not the app")
 	}
 }
+
+// A build that runs translated says so beside its architecture: an Intel
+// magpie under Rosetta, an x64 one under Windows on Arm's emulation
+// (@EV_John_Liu on X), each of which the next update replaces with the
+// arm64 build. A native one says its architecture alone.
+func TestFeedbackArchSaysTranslated(t *testing.T) {
+	wasR, wasE := underRosetta, emulated
+	t.Cleanup(func() { underRosetta, emulated = wasR, wasE })
+	for _, c := range []struct {
+		ros, em bool
+		want    string
+	}{
+		{false, false, "Arch: " + runtime.GOARCH + "\n"},
+		{true, false, "Arch: " + runtime.GOARCH + " (under Rosetta on arm64)\n"},
+		{false, true, "Arch: " + runtime.GOARCH + " (emulated on arm64)\n"},
+	} {
+		underRosetta, emulated = func() bool { return c.ros }, func() bool { return c.em }
+		if got := diagnostics("app"); !strings.Contains(got, c.want) {
+			t.Errorf("rosetta=%v emulated=%v: block lacks %q:\n%s", c.ros, c.em, c.want, got)
+		}
+	}
+}

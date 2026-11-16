@@ -44,6 +44,8 @@ const (
 //	badmodel     says it couldn't read the model's file, by the name
 //	             it was given
 //	novulkan     as pf-serve-vulkan, says Vulkan is missing; else ok
+//	noavx2       as pf-serve, ends at once as on a CPU (or an emulation)
+//	             without AVX2, SIGILL; else ok
 //	gpuloadhang  on the GPU, never says the model is loaded; else ok
 //	asserts      fails a ggml assert at its first request
 //	gpuhang      on the GPU, never answers a request; else ok
@@ -93,6 +95,9 @@ func fakeServe(mode string) {
 	if strings.IndexFunc(model, func(r rune) bool { return r > 0x7f }) >= 0 || err != nil || mode == "badmodel" {
 		json.NewEncoder(os.Stdout).Encode(map[string]string{"error": "failed to read GGUF: " + model})
 		os.Exit(1)
+	}
+	if mode == "noavx2" && name == "pf-serve" {
+		os.Exit(132)
 	}
 	if mode == "noload" || mode == "novulkan" && name == "pf-serve-vulkan" {
 		json.NewEncoder(os.Stdout).Encode(map[string]string{"error": "can't load " + mode})

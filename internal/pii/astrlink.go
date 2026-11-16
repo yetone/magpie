@@ -344,7 +344,7 @@ func (guardModel) Find(ctx context.Context, texts []string) ([][]redact.Found, e
 }
 
 func (guardModel) Now() Status {
-	s := Status{Model: AstrLinkGuard, Supported: true, Installed: guardInstalled(), Size: guardSize(), Rosetta: translated()}
+	s := Status{Model: AstrLinkGuard, Supported: true, Installed: guardInstalled(), Size: guardSize(), Rosetta: translated(), Emulated: emulated()}
 	gdl.fill(&s)
 	gsrv.mu.Lock()
 	if gsrv.m != nil {

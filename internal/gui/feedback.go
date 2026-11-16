@@ -10,6 +10,8 @@ import (
 
 	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/proc"
+	"github.com/yetone/magpie/internal/rosetta"
+	"github.com/yetone/magpie/internal/winarm"
 )
 
 // FeedbackURL is the post on X where users reply with feedback; Settings ›
@@ -50,6 +52,26 @@ func osVersion() string {
 	return "Linux"
 }
 
+// underRosetta and emulated say this build runs translated: an Intel one
+// on Apple silicon, an x64 one on Windows on Arm. Tests set them.
+var (
+	underRosetta = rosetta.Translated
+	emulated     = winarm.Emulated
+)
+
+// archNote is the architecture this build is for, and the computer's
+// where it runs translated there, which the next update ends (update's
+// arch): a report from such a computer says so, not just "amd64".
+func archNote() string {
+	switch {
+	case underRosetta():
+		return runtime.GOARCH + " (under Rosetta on arm64)"
+	case emulated():
+		return runtime.GOARCH + " (emulated on arm64)"
+	}
+	return runtime.GOARCH
+}
+
 // diagnostics is the block a report starts with. It holds the version, the
 // system, the architecture and where magpie is open, and never an account,
 // a key, a path or a user name: the user pastes it into a public reply.
@@ -60,7 +82,7 @@ func diagnostics(surface string) string {
 	return strings.Join([]string{
 		"magpie " + Version,
 		"OS: " + osVersion(),
-		"Arch: " + runtime.GOARCH,
+		"Arch: " + archNote(),
 		"Opened in: " + surface,
 	}, "\n")
 }

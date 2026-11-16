@@ -422,3 +422,23 @@ func TestGuardNowSaysRosetta(t *testing.T) {
 		t.Error("Privacy Filter says Rosetta, though its pf-serve is Apple silicon's")
 	}
 }
+
+// Now says when AstrLink Guard runs under Windows on Arm's x64 emulation,
+// as under Rosetta: the next update installs the arm64 magpie, where it
+// runs natively. Privacy Filter's pf-serve is x64 on either build, so it
+// says nothing.
+func TestGuardNowSaysEmulated(t *testing.T) {
+	guardSandbox(t)
+	was := emulated
+	t.Cleanup(func() { emulated = was })
+	for _, em := range []bool{false, true} {
+		emulated = func() bool { return em }
+		if st := Of(AstrLinkGuard).Now(); st.Emulated != em || st.Rosetta {
+			t.Errorf("emulated=%v: AstrLink Guard's Emulated = %v, Rosetta = %v", em, st.Emulated, st.Rosetta)
+		}
+	}
+	emulated = func() bool { return true }
+	if st := Of(PrivacyFilter).Now(); st.Emulated {
+		t.Error("Privacy Filter says emulated, though the update leaves its pf-serve x64")
+	}
+}
