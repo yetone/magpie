@@ -15,7 +15,9 @@ package provider
 // swapVersion, encrypted, accounts: [{email, uuid, organizationUuid,
 // organizationName, credentials: {claudeAiOauth: {…}}, config:
 // {oauthAccount: {…}}, alias, kind}]} (see cswapEntry). A bare refresh token
-// a line is taken too. They all sign in with the agents' own OAuth clients, the ones
+// a line is taken too, and for Claude a setup-token a line (what `claude
+// setup-token` prints, sk-ant-oat…): that one is added as the setup-token
+// path adds it (AddClaudeSetupToken), never taken for a refresh token. They all sign in with the agents' own OAuth clients, the ones
 // magpie uses.
 //
 // A ChatGPT one is checked the way a sign-in is finished: its refresh token
@@ -55,6 +57,28 @@ type loginImport struct {
 	// milliseconds, 0 when it doesn't say: a refresh gives a later one,
 	// so it tells which of two sign-ins of one account is the newer
 	expiresAt int64
+	// setupToken: a Claude setup-token pasted on a line of its own
+	// (claude_setup_token.go), added as one, never as a sign-in
+	setupToken string
+}
+
+// bareImport is one token a line (or a JSON string) holds: a refresh
+// token, or for Claude a setup-token. A setup-token is told by its own
+// prefix, so it is never sent anywhere as a refresh token, nor an API key.
+func bareImport(agent, line string) loginImport {
+	tok := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "export "))
+	tok = strings.Trim(strings.TrimPrefix(tok, "CLAUDE_CODE_OAUTH_TOKEN="), `"'`)
+	switch {
+	case strings.HasPrefix(tok, "sk-ant-oat") && agent != "claude":
+		return loginImport{err: "a Claude setup-token, not a ChatGPT sign-in"}
+	case strings.HasPrefix(tok, "sk-ant-oat"), strings.HasPrefix(tok, "sk-ant-api") && agent == "claude":
+		t, err := checkClaudeSetupToken(tok)
+		if err != nil {
+			return loginImport{err: err.Error()}
+		}
+		return loginImport{setupToken: t}
+	}
+	return loginImport{refreshToken: strings.TrimSpace(line)}
 }
 
 // jsonMillis is the number under key, 0 when there is none.
@@ -123,7 +147,7 @@ func parseLoginImport(agent, data string) ([]loginImport, error) {
 				}
 				out = append(out, loginEntry(agent, x))
 			case string:
-				out = append(out, loginImport{refreshToken: strings.TrimSpace(x)})
+				out = append(out, bareImport(agent, x))
 			default:
 				out = append(out, loginImport{err: "not an account"})
 			}
@@ -133,6 +157,10 @@ func parseLoginImport(agent, data string) ([]loginImport, error) {
 		for _, line := range strings.Split(s, "\n") {
 			line = strings.TrimSpace(line)
 			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			if e := bareImport(agent, line); e.refreshToken == "" {
+				out = append(out, e) // a setup-token, or why it isn't one
 				continue
 			}
 			// an address (a sign-in's callback among them) is never sent to
@@ -408,6 +436,9 @@ func importLogins(ctx context.Context, agent string, files []string, accessOnly 
 		if t := loginAccessToken(l); t != "" {
 			haveAccess[t] = l.User
 		}
+		if t := claudeSetupToken(l.Auth); t != "" && agent == "claude" {
+			have["setup:"+t] = l.User
+		}
 	}
 	loginsMu.Unlock()
 
@@ -438,6 +469,15 @@ func importLogins(ctx context.Context, agent string, files []string, accessOnly 
 			out[i] = ImportedAccount{User: name, Status: "failed", Error: "in the files twice"}
 			continue
 		case accessOnly:
+		case e.setupToken != "" && have["setup:"+e.setupToken] != "":
+			out[i] = ImportedAccount{User: have["setup:"+e.setupToken], Status: "exists"}
+			continue
+		case e.setupToken != "":
+			key = "setup:" + e.setupToken
+			if seen[key] {
+				out[i] = ImportedAccount{User: claudeTokenName(e.setupToken), Status: "failed", Error: "in the files twice"}
+				continue
+			}
 		case e.refreshToken == "":
 			out[i] = ImportedAccount{User: name, Status: "failed", Error: "no refresh_token in it"}
 			continue
@@ -458,6 +498,10 @@ func importLogins(ctx context.Context, agent string, files []string, accessOnly 
 			defer cancel()
 			if accessOnly {
 				out[i] = importAccessOnly(e, name, kept)
+				return
+			}
+			if e.setupToken != "" {
+				out[i] = importSetupToken(e.setupToken)
 				return
 			}
 			out[i] = importLogin(c, agent, e, name, kept)
@@ -557,6 +601,18 @@ func importAccessOnly(e loginImport, name string, kept []savedLogin) ImportedAcc
 		return fail(err.Error())
 	}
 	return ImportedAccount{User: l.User, Status: status, Plan: l.Plan}
+}
+
+// importSetupToken adds a pasted Claude setup-token as the setup-token
+// path does: kept for Claude Code's CLAUDE_CODE_OAUTH_TOKEN, nothing asked
+// of Anthropic. Its name is the token's short hash; the token is never
+// said back.
+func importSetupToken(token string) ImportedAccount {
+	user, err := AddClaudeSetupToken(token)
+	if err != nil {
+		return ImportedAccount{User: claudeTokenName(token), Status: "failed", Error: err.Error()}
+	}
+	return ImportedAccount{User: user, Status: "added"}
 }
 
 // claudeImportOlder is why a Claude sign-in in a file wasn't taken.
