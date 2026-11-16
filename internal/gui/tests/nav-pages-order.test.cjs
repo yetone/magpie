@@ -60,6 +60,17 @@ const menuOrder = (page) => page.$$eval(".nav-pages-menu .nav-pages-list .pm-ite
 // imported as the page starts
 const arranged = (page, want) => page.waitForFunction((w) => [...document.querySelectorAll("#nav > button[data-view]:not([data-plugin-page])")].map((b) => b.dataset.view).join() === w.join(), want);
 const kept = (page) => page.evaluate(() => JSON.parse(localStorage.getItem("magpie.navOrder") || "null"));
+// drag v's row by its grip onto the row of onto, through send(type, x, y)
+async function dragBy(page, v, onto, send, down, moving, up, below = false) {
+  const g = await page.locator(`.nav-pages-menu [data-v="${v}"] .grip`).boundingBox();
+  const o = await page.locator(`.nav-pages-menu [data-v="${onto}"]`).boundingBox();
+  const x = g.x + g.width / 2, y0 = g.y + g.height / 2, y1 = below ? o.y + o.height - 2 : o.y + 2;
+  await send(down, x, y0);
+  for (let i = 1; i <= 15; i++) { await send(moving, x, y0 + (y1 - y0) * i / 15); await page.waitForTimeout(16); }
+  await page.waitForTimeout(80);
+  await send(up, x, y1);
+  await page.waitForTimeout(50);
+}
 const move = (list, v, to) => { const o = list.filter((x) => x !== v); o.splice(to, 0, v); return o; };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -132,6 +143,21 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await phone.locator(".nav-pages-pick").tap();
       await phone.waitForSelector(".nav-pages-menu .grip");
       assert.equal(await phone.locator('.nav-pages-menu [data-v="routing"] .grip').isVisible(), true, "a phone shows the grip");
+      // a finger drags a row by its grip (chet030714 on X: it wouldn't move
+      // at all). Playwright can only touch through Chromium's CDP; in WebKit
+      // the grip being there is what is checked.
+      if (engine === "chromium") {
+        const before = await menuOrder(phone);
+        const cdp = await phone.context().newCDPSession(phone);
+        const touch = (type, x, y) => cdp.send("Input.dispatchTouchEvent", { type, touchPoints: type === "touchEnd" ? [] : [{ x, y }] });
+        await dragBy(phone, "masking", before[1], touch, "touchStart", "touchMove", "touchEnd");
+        assert.deepEqual(await menuOrder(phone), move(before, "masking", 1), "a finger dragged Masking up");
+        // and a pen
+        const pen = (type, x, y) => cdp.send("Input.dispatchMouseEvent", { type, x, y, button: "left", buttons: type === "mouseReleased" ? 0 : 1, clickCount: 1, pointerType: "pen" });
+        const now = await menuOrder(phone);
+        await dragBy(phone, "masking", now.at(-1), pen, "mousePressed", "mouseMoved", "mouseReleased", true);
+        assert.deepEqual(await menuOrder(phone), move(now, "masking", now.length - 1), "a pen dragged it to the foot");
+      }
       assert.deepEqual(phone.errors, []);
 
       // a page the kept order doesn't name (new in an update) goes after

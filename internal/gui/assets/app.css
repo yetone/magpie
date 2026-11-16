@@ -3397,6 +3397,8 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 /* apart: Safari before 15.4 drops a whole selector list with :focus-visible in it */
 .nav-pages-menu .pm-item:focus-visible .grip { opacity: 1; }
 @media (hover: none) { .nav-pages-menu .grip { opacity: 1; } }
+/* a finger gets a grip it can find: 40px wide where the pointer is coarse */
+@media (pointer: coarse) { .nav-pages-menu .grip { width: 40px; } }
 .nav-pages-menu .pm-fixed .pm-tick { opacity: .4; }
 .nav-pages-list.sorting { user-select: none; -webkit-user-select: none; }
 .nav-pages-list.sorting > .pm-item { transition: transform .16s cubic-bezier(.23, 1, .32, 1); cursor: grabbing; }

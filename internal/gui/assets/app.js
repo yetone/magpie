@@ -3079,12 +3079,16 @@ function dragScroll(list) {
       : down && y > bounds.bottom - edge ? Math.min(1, (y - bounds.bottom + edge) / edge) : 0;
   } };
 }
-// dragListen: a drag's listeners (letting go saves; Escape, blur, resize cancel)
+// dragListen: a drag's listeners (letting go saves; Escape, blur, resize cancel).
+// A finger or pen is captured by what it pressed, a grip inside the handle
+// too: the handle taking the capture makes that child lose it, and its
+// lostpointercapture bubbles up here, so only the handle's own cancels
+// (chet030714 on X: a page's row couldn't be dragged on a phone).
 function dragListen(handle, move, finish) {
-  const cancel = (ev) => finish(false, ev);
-  const on = [[document, "pointermove", move, { passive: false }], [document, "pointerup", (ev) => finish(true, ev)],
-    [document, "pointercancel", cancel], [handle, "lostpointercapture", cancel], [window, "blur", cancel], [window, "resize", cancel],
-    [document, "keydown", (ev) => { if (ev.key === "Escape") { ev.preventDefault(); ev.stopImmediatePropagation(); finish(false); } }, true]];
+  const cancel = (e) => finish(false, e);
+  const on = [[document, "pointermove", move, { passive: false }], [document, "pointerup", (e) => finish(true, e)],
+    [document, "pointercancel", cancel], [handle, "lostpointercapture", (e) => e.target == handle && cancel(e)], [window, "blur", cancel], [window, "resize", cancel],
+    [document, "keydown", (e) => { if (e.key == "Escape") { e.preventDefault(); e.stopImmediatePropagation(); cancel(); } }, true]];
   for (const [t, n, f, o] of on) t.addEventListener(n, f, o);
   return () => { for (const [t, n, f, o] of on) t.removeEventListener(n, f, o); };
 }
