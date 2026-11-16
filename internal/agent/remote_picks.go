@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -159,15 +160,26 @@ func (a *Agent) connectRemote() (c Connection, ok bool, err error) {
 	return c, a.Wired(), nil
 }
 
-var lastFollow time.Time
+var followed struct {
+	sync.Mutex
+	last time.Time
+}
 
 // FollowRemotePicks puts each connected agent's field that is on a Remote
 // magpie's pick onto that pick's change, at most every FollowRemoteEvery.
 func FollowRemotePicks(ctx context.Context) {
-	if time.Since(lastFollow) < FollowRemoteEvery || !provider.HasPickedMagpie() {
+	if !provider.HasPickedMagpie() {
 		return
 	}
-	lastFollow = time.Now()
+	followed.Lock()
+	due := time.Since(followed.last) >= FollowRemoteEvery
+	if due {
+		followed.last = time.Now()
+	}
+	followed.Unlock()
+	if !due {
+		return
+	}
 	followRemote(ctx)
 }
 
@@ -196,11 +208,105 @@ func followRemote(ctx context.Context) {
 	if len(picks) == 0 {
 		return
 	}
-	for _, a := range DetectedIn(All()) {
+	as := DetectedIn(All())
+	connectFromRemote(as, picks)
+	for _, a := range as {
 		if a.Native != nil || a.Disconnected() || !a.Wired() {
 			continue
 		}
 		a.followRemote(picks)
+	}
+}
+
+// Connecting new agents from a Remote magpie (KoiLx0 on X: each agent
+// still had to be switched on by hand on every client). The remote's
+// editor, under Advanced, has a switch, off by default and kept on this
+// computer alone (remoteConnectKey). While it is on, an agent installed
+// here that the remote has connected, and that isn't connected here, is
+// connected on the follow loop, on the remote's picks.
+//
+//   - An agent the user disconnected here is never connected again: by
+//     the Agents page (its disconnectedKey mark), or by any other hand
+//     once it was connected (autoKey "off": seen connected, then not).
+//   - One a quit put back (RestoreOnQuit) is RewireOnStart's to connect.
+//   - Connecting it by hand again ends the "off": it is followed as any
+//     other from then on.
+
+func remoteConnectKey(provider string) string { return "remote." + provider + ".connectAgents" }
+
+// autoKey records, per agent, what the switch saw: "on" while it is
+// connected, "off" once it was disconnected here.
+func autoKey(id string) string { return id + ".remote.auto" }
+
+// ConnectsAgents reports, by Remote magpie id, whose switch is on.
+func ConnectsAgents() map[string]bool {
+	out := map[string]bool{}
+	const pre, suf = "remote.", ".connectAgents"
+	for k, v := range stashShared() {
+		if v == "1" && strings.HasPrefix(k, pre) && strings.HasSuffix(k, suf) && len(k) > len(pre)+len(suf) {
+			out[k[len(pre):len(k)-len(suf)]] = true
+		}
+	}
+	return out
+}
+
+// SetConnectAgents turns the switch of the Remote magpie id on or off. On,
+// the next follow (FollowRemotePicks) is not waited for.
+func SetConnectAgents(id string, on bool) {
+	if on {
+		stash(map[string]string{remoteConnectKey(id): "1"})
+		followed.Lock()
+		followed.last = time.Time{}
+		followed.Unlock()
+		return
+	}
+	forget(remoteConnectKey(id))
+}
+
+func connectFromRemote(as []*Agent, picks []provider.RemotePicks) {
+	on := ConnectsAgents()
+	if len(on) == 0 {
+		return
+	}
+	var restored []string
+	json.Unmarshal([]byte(stashShared()[quitRestoredKey]), &restored)
+	for _, a := range as {
+		if a.Native != nil || len(a.Fields) == 0 {
+			continue
+		}
+		wanted := false
+		for _, rp := range picks {
+			if on[rp.Provider] && len(rp.Agents[a.ID]) > 0 {
+				wanted = true
+				break
+			}
+		}
+		if !wanted {
+			continue
+		}
+		rec := stashShared()[autoKey(a.ID)]
+		switch {
+		case a.Wired():
+			if rec != "on" {
+				stash(map[string]string{autoKey(a.ID): "on"})
+			}
+			continue
+		case rec == "on" && !slices.Contains(restored, a.ID):
+			// connected, now not: disconnected here, by the user's hand
+			stash(map[string]string{autoKey(a.ID): "off"})
+			continue
+		case rec == "off" || a.Disconnected() || slices.Contains(restored, a.ID):
+			continue
+		}
+		c, err := a.ConnectHow()
+		if err != nil {
+			log.Printf("agent: %s, connected as the remote magpie's: %v", a.Name, err)
+			continue
+		}
+		if a.Wired() {
+			stash(map[string]string{autoKey(a.ID): "on"})
+			log.Printf("agent: %s connected as the remote magpie's (%s)", a.Name, c.How)
+		}
 	}
 }
 

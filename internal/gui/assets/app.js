@@ -8048,7 +8048,7 @@ function advancedSet(d, p) {
     [d.concurrency, d.maxAccounts, d.queueLimit, d.queueWait, d.maxRPM, d.priceRate, d.contexts, d.outputs, d.compacts].some((v) => String(v ?? "").trim()) ||
     !!d.rateWindows?.length ||
     !!(d.searches || d.authHeader || d.passUserAgent === false || d.unredacted || d.countFree || d.billing || d.pinUpstream || d.nativeCompaction || d.balanceToken || d.limitRestOff || d.noBalanceProbe || d.http1 || d.socket || d.imageFilesOff || d.passErrors || d.clientCert || d.serverCA || d.serverPin || d.resolve) ||
-    !!d.fallback?.length || !!p?.balanceToken?.set;
+    !!d.fallback?.length || !!(p?.balanceToken?.set || p?.connectAgents);
 }
 function priceRateError(ed) {
   shown(ed.querySelector("input.price-rate"))?.focus(NO_SCROLL);
@@ -9910,15 +9910,19 @@ function drawEditor(p, presetID) {
   }
   // off when added
   if ((p?.preset || pr?.id) === "remote-magpie" && !p?.account) {
-    const [l, c] = tick(t("Add its MCP servers to the Library"), (draft.libraryMCP ??= !!p?.libraryMCP));
-    l.classList.add("library-mcp");
-    c.onchange = () => (draft.libraryMCP = c.checked);
-    ed.append(...field(t("MCP servers"), l));
-    // KoiLx0 on X
-    const [l2, c2] = tick(t("Use its skills and prompts"), (draft.libraryShared ??= !!p?.libraryShared));
-    l2.classList.add("library-shared");
-    c2.onchange = () => (draft.libraryShared = c2.checked);
-    ed.append(...field(t("Skills and prompts"), l2));
+    // KoiLx0 on X: its skills and prompts; an agent connected there,
+    // installed here, connected here too, one disconnected here stays so
+    // (agent.SetConnectAgents)
+    for (const [k, say, head, to] of [
+      ["libraryMCP", t("Add its MCP servers to the Library"), t("MCP servers"), ed],
+      ["libraryShared", t("Use its skills and prompts"), t("Skills and prompts"), ed],
+      ["connectAgents", t("Connect new agents to this remote"), t("Agents"), advIn],
+    ]) {
+      const [l, c] = tick(say, (draft[k] ??= !!p?.[k]));
+      l.classList.add(k.replace(/(?=[A-Z])/, "-").toLowerCase());
+      c.onchange = () => (draft[k] = c.checked);
+      to.append(...field(head, l));
+    }
   }
   // lcc580 on X
   if ((p?.preset || pr?.id) === "remote-magpie") {
@@ -10412,8 +10416,7 @@ function drawEditor(p, presetID) {
     if (p?.takesListOff) body.listOff = !!draft.listOff;
     if (p) { body.fallback = draft.fallback; body.unlisted = draft.unlisted; body.hiddenDrawers = draft.hiddenDrawers; body.hiddenVideomakers = draft.hiddenVideomakers; body.noModels = noneChosen(); body.bestInFamily = bestChosen(); body.modelPrefs = modelPrefsOfDraft(); Object.assign(body, routingOfDraft(p)); }
     body.searches = !!draft.searches && searchable();
-    if (draft.libraryMCP != null) body.libraryMCP = draft.libraryMCP;
-    if (draft.libraryShared != null) body.libraryShared = draft.libraryShared;
+    for (const k of ["libraryMCP", "libraryShared", "connectAgents"]) if (draft[k] != null) body[k] = draft[k];
     body.pinUpstream = !!draft.pinUpstream;
     if (twoKeyHeaders()) body.authHeader = draft.authHeader || "";
     body.unredacted = !!draft.unredacted;

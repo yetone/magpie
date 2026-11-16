@@ -421,6 +421,9 @@ type providerJSON struct {
 	// read said went wrong or was left as the user's (KoiLx0 on X)
 	LibraryShared bool   `json:"libraryShared,omitempty"`
 	LibraryNote   string `json:"libraryNote,omitempty"`
+	// ConnectAgents: a Remote magpie whose connected agents are
+	// connected here too, those installed here (agent.ConnectsAgents)
+	ConnectAgents bool `json:"connectAgents,omitempty"`
 	// RemoteUpdate: a Remote magpie's word on its last ask to follow
 	// this magpie's version (remoteUpdateNote)
 	RemoteUpdate *remoteUpdateJSON `json:"remoteUpdate,omitempty"`
@@ -1522,6 +1525,7 @@ func providersState() providersJSON {
 	desktop := desktopNumbers(uses)
 	have := map[string]bool{}
 	var remoteMCP map[string]bool // read once, at the first Remote magpie
+	var connects map[string]bool  // the same
 	all := provider.All()
 	// both lists made once at their size: each grown by append was 6 MB of
 	// what forty polls of the Providers page allocated with real accounts
@@ -1539,6 +1543,10 @@ func providersState() providersJSON {
 			info.LibraryMCP = remoteMCP[p.ID]
 			info.LibraryShared = library.BorrowedOn()[p.ID]
 			info.LibraryNote = library.BorrowNote(p.ID)
+			if connects == nil {
+				connects = agent.ConnectsAgents()
+			}
+			info.ConnectAgents = connects[p.ID]
 			info.RemoteUpdate = remoteUpdateNote(p.ID, time.Now())
 		}
 		s.Providers = append(s.Providers, info)
@@ -1979,6 +1987,10 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// LibraryShared, on a Remote magpie, is the switch for its
 			// Library's skills and prompts (library.SetBorrow)
 			LibraryShared *bool `json:"libraryShared"`
+			// ConnectAgents, on a Remote magpie, is the switch that
+			// connects here the agents it has connected
+			// (agent.SetConnectAgents)
+			ConnectAgents *bool `json:"connectAgents"`
 			// CopyOf, with New, is the provider the new one is a copy of
 			// (#268): its key and what else the form doesn't carry are
 			// taken from it when left out
@@ -2716,6 +2728,14 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 						return
 					}
 					askHub = *req.LibraryMCP
+				}
+			}
+			if req.ConnectAgents != nil {
+				if p, err := provider.Find(in.ID); err == nil && p.IsRemoteMagpie() && agent.ConnectsAgents()[in.ID] != *req.ConnectAgents {
+					agent.SetConnectAgents(in.ID, *req.ConnectAgents)
+					if *req.ConnectAgents {
+						go agent.FollowRemotePicks(context.Background())
+					}
 				}
 			}
 			if req.LibraryShared != nil {

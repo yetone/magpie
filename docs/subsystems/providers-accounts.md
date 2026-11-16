@@ -207,6 +207,19 @@ a group made on the remote is a model of its list, offered at once
 (`TestRemoteMagpieNewGroupServedBesidePicks`).
 `TestConnectFollowsTheRemoteMagpiesPicks`, `TestSharedModelsTellsTheRefs`.
 
+An agent installed here that isn't connected is left alone, unless the
+remote's editor has "Connect new agents to this remote" on (Advanced, off
+by default; kept per computer in the stash as
+`remote.<id>.connectAgents`, `agent.SetConnectAgents`). Then the same
+follow connects an agent the remote has connected, on the remote's pick
+(`connectFromRemote`), and records it as `<agent>.remote.auto`. An agent
+the user disconnected here is never connected again: one with the
+Disconnect mark, and one recorded `on` that is no longer connected
+(taken out by hand in its file) is recorded `off`. An agent magpie put
+back on quit (`quit.restored`) is left to RewireOnStart. Connecting it
+by hand records `on` again. `TestRemoteConnectsNewAgents`,
+`TestProviderSaveConnectAgents`.
+
 The CLI and TUI report model-list fetch errors for remote and other mixed providers
 (such as OpenRouter, serving conversation and decision models). Only a
 decision-only provider keeps the separate decision discovery behavior
