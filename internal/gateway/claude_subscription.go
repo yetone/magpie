@@ -61,6 +61,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
+	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/bridgesid"
 	"github.com/yetone/magpie/internal/catalog"
@@ -348,9 +349,14 @@ type subscriptionRun struct {
 	// the run now answers, adviceReq, its nth call made after said. The
 	// run's agent is offered magpie's tools only, never the server tool.
 	// adviceSaid is the reply's words so far, and advised the calls of
-	// it, both counted from the request. Under mu.
+	// it, both counted from the request. asker is the caller of the
+	// request the run answers now: its advisor and web search are asked
+	// as it, held to its key's models, accounts and limits, never as the
+	// run's own MCP call from this computer, which carries no key.
+	// Under mu.
 	advice     func(ctx context.Context, q *Request, said []Part, c Part, n int) (Part, Event)
 	adviceReq  *Request
+	asker      access.Identity
 	adviceSaid []string
 	advised    int
 	// answerName is the interactive mode's answer tool for a request with
@@ -4120,11 +4126,13 @@ func (r *subscriptionRun) emit(ev Event) {
 
 // adviseOn has the run answer the advisor calls of the reply to req, the
 // advisor seeing req's conversation, with advice when req asks for the
-// advisor; a request that doesn't takes it away.
-func (r *subscriptionRun) adviseOn(req *Request, advice func(ctx context.Context, q *Request, said []Part, c Part, n int) (Part, Event)) {
+// advisor; a request that doesn't takes it away. ctx is req's own: the
+// advisor and web search are asked as its caller.
+func (r *subscriptionRun) adviseOn(ctx context.Context, req *Request, advice func(ctx context.Context, q *Request, said []Part, c Part, n int) (Part, Event)) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.advice, r.adviceReq, r.advised, r.adviceSaid = nil, nil, 0, nil
+	r.asker = access.Caller(ctx)
 	if req.Advisor != "" {
 		r.advice, r.adviceReq = advice, req
 	}
@@ -6354,7 +6362,7 @@ func (b *subscriptionBridge) mcpCall(w http.ResponseWriter, r *http.Request) {
 	run.mu.Lock()
 	call.Name = declaredName(run.names, call.Name)
 	search, searchName, answerName := run.search, run.searchName, run.answerName
-	advice := run.advice
+	advice, asker := run.advice, run.asker
 	run.mu.Unlock()
 	if answerName != "" && call.Name == answerName {
 		run.answer(w, call.Arguments)
@@ -6363,11 +6371,13 @@ func (b *subscriptionBridge) mcpCall(w http.ResponseWriter, r *http.Request) {
 	if advice != nil && call.Name == advisorTool {
 		run.mu.Lock()
 		run.advised++
-		q, n := run.adviceReq, run.advised
+		q, n, who := run.adviceReq, run.advised, run.asker
 		said := []Part{{Kind: Text, Text: strings.Join(run.adviceSaid, "")}}
 		run.mu.Unlock()
-		// within the minute its MCP client waits for a call
-		ctx, cancel := context.WithTimeout(r.Context(), 55*time.Second)
+		// within the minute its MCP client waits for a call; asked as the
+		// client's request, held to its key, not as this call from the
+		// run's own Claude Code, which carries none
+		ctx, cancel := context.WithTimeout(access.WithIdentity(r.Context(), who), 55*time.Second)
 		defer cancel()
 		res, ev := advice(ctx, q, said, Part{Kind: ToolCall, ID: call.ToolCallID, Name: advisorTool}, n)
 		run.emit(ev)
@@ -6379,8 +6389,9 @@ func (b *subscriptionBridge) mcpCall(w http.ResponseWriter, r *http.Request) {
 			Query string `json:"query"`
 		}
 		_ = json.Unmarshal(call.Arguments, &a)
-		// within the minute its MCP client waits for a call
-		ctx, cancel := context.WithTimeout(r.Context(), 55*time.Second)
+		// within the minute its MCP client waits for a call; asked as the
+		// client's request, its key's limits holding the searcher's spend
+		ctx, cancel := context.WithTimeout(access.WithIdentity(r.Context(), asker), 55*time.Second)
 		defer cancel()
 		found, hits, err := search(ctx, a.Query)
 		if err != nil {
@@ -7375,7 +7386,7 @@ func (s *Server) serveSubscriptionAs(w http.ResponseWriter, r *http.Request, fro
 			run.mu.Lock()
 			run.allowed = allowedTools(req)
 			run.mu.Unlock()
-			run.adviseOn(req, s.adviceRound)
+			run.adviseOn(r.Context(), req, s.adviceRound)
 			events, err = run.continueWith(withTaskNotices(withSkillBodies(results, req.Messages), req.Messages), saidWithResults(req.Messages), more)
 		}
 		if err != nil {
@@ -7419,7 +7430,7 @@ func (s *Server) serveSubscriptionAs(w http.ResponseWriter, r *http.Request, fro
 				run.answerName, run.answerSchema = answer.Name, answerSchema
 			}
 			run.mu.Unlock()
-			run.adviseOn(req, s.adviceRound)
+			run.adviseOn(r.Context(), req, s.adviceRound)
 		}
 	}
 	if err != nil {

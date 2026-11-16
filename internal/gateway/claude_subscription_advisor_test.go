@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"encoding/json"
 	"net/http/httptest"
 	"strings"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/tidwall/gjson"
 
+	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -72,7 +74,7 @@ func TestClaudeTUIAdvisorAnsweredHere(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.run.adviseOn(q, New().adviceRound)
+	c.run.adviseOn(context.Background(), q, New().adviceRound)
 	first := c.run.segment
 	// a message's blocks are each a row of their own, by its id
 	c.write(tuiRow("msg_a0", `{"type":"text","text":"Let me ask."}`, "tool_use", 4))
@@ -141,4 +143,63 @@ func (c *tuiCalls) adviceCall(id string) mcpToolResult {
 		c.t.Fatalf("the advisor tool said %q: %v", rec.Body.String(), err)
 	}
 	return res
+}
+
+// The advisor a Claude subscription's run calls is asked as the client's
+// request, held to its gateway key, never as the run's own MCP call from
+// this computer, which carries no key. A key held to the subscription's
+// model alone that names another model as its advisor is not given that
+// model through the advisor: the call fails, and the advisor's provider
+// is never asked.
+func TestClaudeTUIAdvisorHeldToTheCallersKey(t *testing.T) {
+	u := advisedSetup(t)
+	c := newTUICalls(t)
+	q, err := bridgeRequest(httptest.NewRequest("POST", "/v1/messages", nil), provider.Anthropic, "Claude Code", []byte(advisorTurn("claude/claude-sonnet-5-5", "adv/adv-pro")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.Advisor != "adv/adv-pro" {
+		t.Fatalf("the advisor is %q", q.Advisor)
+	}
+	held := access.WithIdentity(context.Background(), access.Identity{KeyID: "friend", KeyName: "Friend", Models: []string{"claude/claude-sonnet-5-5"}})
+	c.run.adviseOn(held, q, New().adviceRound)
+	c.write(tuiRow("msg_a0", `{"type":"text","text":"Let me ask."}`, "tool_use", 4))
+	c.write(tuiRow("msg_a1", `{"type":"tool_use","id":"toolu_adv0","name":"mcp__magpie__advisor","input":{}}`, "tool_use", 2))
+	res := c.adviceCall("toolu_adv0")
+	c.write(tuiRow("msg_end", `{"type":"text","text":"Done."}`, "end_turn", 2), tuiDone)
+	if !res.IsError || res.Content[0]["text"] == "Check the tests first." {
+		t.Fatalf("a key held to the subscription's model was advised by adv/adv-pro: %+v", res)
+	}
+	u.mu.Lock()
+	asked := len(u.advisor)
+	u.mu.Unlock()
+	if asked != 0 {
+		t.Fatalf("the advisor's provider was asked %d times for a key that doesn't list it", asked)
+	}
+}
+
+// The run's web search is asked as the client's request too: the
+// searcher's spend counts against the client's gateway key and its limits
+// hold it, never as the run's own MCP call, which carries no key.
+func TestClaudeRunSearchAskedAsTheCaller(t *testing.T) {
+	var asked []access.Identity
+	run := &subscriptionRun{pending: map[string]chan mcpToolResult{}, searchName: "web_search"}
+	run.search = func(ctx context.Context, query string) (string, []Hit, error) {
+		asked = append(asked, access.Caller(ctx))
+		return "found", nil, nil
+	}
+	b := &subscriptionBridge{runs: map[string]*subscriptionRun{"run": run}, calls: map[string]*subscriptionRun{}}
+	friend := access.Identity{KeyID: "friend", KeyName: "Friend", Limit: &access.Limit{Period: "day", Tokens: 700}}
+	q := &Request{Model: "claude/claude-sonnet-5-5"}
+	run.adviseOn(access.WithIdentity(context.Background(), friend), q, New().adviceRound)
+	r := httptest.NewRequest("POST", "/", strings.NewReader(`{"tool_call_id":"toolu_s","name":"web_search","arguments":{"query":"magpie"}}`))
+	r.SetPathValue("token", "run")
+	rec := httptest.NewRecorder()
+	b.mcpCall(rec, r)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "found") {
+		t.Fatalf("the search call was answered %d %s", rec.Code, rec.Body)
+	}
+	if len(asked) != 1 || asked[0].KeyID != "friend" || asked[0].Limit == nil {
+		t.Fatalf("the search was asked as %+v, not the client's key", asked)
+	}
 }
