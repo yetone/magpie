@@ -5,7 +5,8 @@
 // and Test all. A check is one real call the user pays for, so drawing the
 // page calls nothing; a row's Test checks that pipeline alone, and Test all
 // each of them. A row then says ok with the model and how long it took, the
-// vendor's error with its status, or that nothing is set up. Every
+// vendor's error with its status, or that nothing is set up; Web search
+// says each search API's on a line of its own (heyiwei5 on X). Every
 // language; wide and at a phone's width; no backend, the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -34,7 +35,8 @@ const answers = {
   image: { kind: "image", ok: true, model: "openai/gpt-image-2", status: 200, ms: 840 },
   transcription: { kind: "transcription", ok: false, model: "ears/whisper-1", status: 400, ms: 120, error: "Invalid file format." },
   speech: { kind: "speech", ok: false, unset: true, ms: 0, error: "No provider lists a text-to-speech model" },
-  search: { kind: "search", ok: true, ms: 1500 },
+  // heyiwei5 on X: every search API is checked, each on its own line
+  search: { kind: "search", ok: false, ms: 1500, error: "Tavily: 500 Internal Server Error", searches: [{ name: "Exa", ok: true, ms: 1500 }, { name: "Tavily", ok: false, ms: 120, error: "500 Internal Server Error" }] },
 };
 
 // server answers a check only once the test lets it, so a row's busy state
@@ -180,7 +182,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.equal((await line(1).textContent()).trim(), "ears/whisper-1 · 400 · Invalid file format.");
           assert.equal(await line(1).evaluate((e) => e.classList.contains("err")), true, "the vendor's error reads as one");
           assert.equal(await line(1).isVisible(), true, "the error is in sight");
-          assert.equal((await line(3).textContent()).trim(), w.s);
+          // the web search row says each searcher's own result: one ok,
+          // one down, the one down in red and the one ok not
+          const parts = line(3).locator(".pipe-part");
+          assert.deepEqual((await parts.allTextContents()).map((x) => x.trim()), [`Exa · ${w.s}`, "Tavily · 500 Internal Server Error"]);
+          assert.deepEqual(await parts.evaluateAll((ps) => ps.map((p) => p.classList.contains("err"))), [false, true]);
+          const [okColor, badColor] = await parts.evaluateAll((ps) => ps.map((p) => getComputedStyle(p).color));
+          assert.notEqual(okColor, badColor, "the one down reads as down");
+          assert.equal(await line(3).evaluate((e) => e.classList.contains("err")), false, "the row isn't all red for one");
+          assert.equal(await parts.nth(1).isVisible(), true, "each one's line is in sight");
           assert.equal(checks.length, 5, "one call per press, no more");
           assert.equal(await fits(page), 0, "no sideways scroll");
           shots.push([`${lang}-${width}`, await page.screenshot({ fullPage: true })]);

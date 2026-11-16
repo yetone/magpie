@@ -18,10 +18,17 @@ function pipeRun(kind) {
 
 // pipeSaid: what a check found, and whether it is a failure
 function pipeSaid(c) {
+  if (c?.searches?.length) return [c.searches.map(pipePartSaid).map(([text]) => text).join("\n"), !c.ok];
   if (!c || c.busy) return ["", false];
   if (c.ok) return [(c.model ? c.model + " · " : "") + ledTook(c.ms), false];
   if (c.unset) return [t(c.error), false];
   return [(c.model ? c.model + " · " : "") + (c.status ? c.status + " · " : "") + t(c.error || ""), true];
+}
+
+// pipePartSaid: what one searcher's search found in the web search check
+// (heyiwei5 on X: each search API is checked, not only the first)
+function pipePartSaid(r) {
+  return [r.name + " · " + (r.ok ? ledTook(r.ms) : t(r.error || "")), !r.ok];
 }
 
 // pipeCheckFill draws the rows into #pipeCheckList, once, and then each
@@ -54,7 +61,19 @@ window.pipeCheckFill = function () {
     b.disabled = !!c?.busy;
     const [text, bad] = pipeSaid(c);
     line.hidden = !text;
-    line.textContent = line.title = text;
-    line.classList.toggle("err", bad);
+    line.title = text;
+    // the web search check says each searcher's on a line of its own
+    if (c?.searches?.length) {
+      line.replaceChildren(...c.searches.map((r) => {
+        const [said, off] = pipePartSaid(r);
+        const part = el("div", "pipe-part", said);
+        part.classList.toggle("err", off);
+        return part;
+      }));
+      line.classList.remove("err");
+    } else {
+      line.textContent = text;
+      line.classList.toggle("err", bad);
+    }
   }
 };

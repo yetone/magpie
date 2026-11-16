@@ -5,16 +5,18 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
-	"errors"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // Pipelines magpie serves besides chat, each of which Settings › Models
@@ -41,6 +43,19 @@ type PipelineCheck struct {
 	Unset  bool   `json:"unset,omitempty"`
 	Model  string `json:"model,omitempty"`
 	Status int    `json:"status,omitempty"`
+	Millis int64  `json:"ms"`
+	Error  string `json:"error,omitempty"`
+	// Searches is the web search check's part per searcher: the provider
+	// that searches, and each search API on, each asked once
+	// (heyiwei5 on X: a second API was never checked).
+	Searches []SearchCheck `json:"searches,omitempty"`
+}
+
+// SearchCheck is what one searcher's search found in a check: its name,
+// and ok with how long it took, or its error.
+type SearchCheck struct {
+	Name   string `json:"name"`
+	OK     bool   `json:"ok"`
 	Millis int64  `json:"ms"`
 	Error  string `json:"error,omitempty"`
 }
@@ -132,16 +147,9 @@ func (s *Server) CheckPipeline(ctx context.Context, kind string) PipelineCheck {
 		_ = w.Close()
 		s.checkCall(ctx, &c, "/v1/audio/transcriptions", w.FormDataContentType(), form.Bytes())
 	case PipelineSearch:
-		ctx = context.WithValue(ctx, searchForKey{}, &CallFor{Agent: CheckAgent})
-		_, _, err := s.webSearch(withSearchCount(ctx, 1), "magpie")
-		switch {
-		case errors.Is(err, errNoSearcher) || errors.Is(err, errSearchOff):
-			c.Unset, c.Error = true, err.Error()
+		s.checkSearch(ctx, &c)
+		if c.Unset {
 			return c
-		case err != nil:
-			c.Error = err.Error()
-		default:
-			c.OK = true
 		}
 	default:
 		c.Error = "no such pipeline: " + kind
@@ -149,6 +157,81 @@ func (s *Server) CheckPipeline(ctx context.Context, kind string) PipelineCheck {
 	}
 	c.Millis = time.Since(start).Milliseconds()
 	return c
+}
+
+// checkSearch asks every searcher a search may go to once, together: the
+// provider that searches (searcher), unless provider search is off, and
+// each search API on, in the order a search asks them. A search itself
+// stops at the first that answers, so checking it alone said nothing of
+// the rest (heyiwei5 on X). Each is asked by the path a search takes to it
+// (searchBy, askSearchAPIKeys), with no other in its place, so a row's ok
+// is that searcher's own. c is ok when every one is.
+func (s *Server) checkSearch(ctx context.Context, c *PipelineCheck) {
+	ctx = netproxy.With(context.WithValue(ctx, searchForKey{}, &CallFor{Agent: CheckAgent}), "")
+	ctx = withSearchCount(ctx, 1)
+	const query = "magpie"
+	if !searchServed() {
+		c.Unset, c.Error = true, errSearchOff.Error()
+		return
+	}
+	type one struct {
+		name string
+		ask  func(context.Context) error
+	}
+	var ones []one
+	for _, a := range provider.SearchAPIs() {
+		ones = append(ones, one{a.Name(), func(ctx context.Context) error {
+			q, err := maskedQuery(ctx, query, nil)
+			if err != nil {
+				return err
+			}
+			pages, err := s.askSearchAPIKeys(ctx, a, q)
+			if err == nil && len(pages) == 0 {
+				err = errFoundNothing
+			}
+			return err
+		}})
+	}
+	if settings.Shared().Searcher != "off" {
+		if p, model, ok := searcher(); ok {
+			by := one{searcherName(p, model), func(ctx context.Context) error {
+				ctx, cancel := sideDeadline(context.WithValue(ctx, searchingKey{}, true), "search", searchTimeout, searchWaitMost)
+				defer cancel()
+				_, _, err := s.searchBy(ctx, p, model, query, searchEffort(p, model))
+				return err
+			}}
+			if settings.Shared().SearchFirst == settings.SearchFirstAPI {
+				ones = append(ones, by)
+			} else {
+				ones = append([]one{by}, ones...)
+			}
+		}
+	}
+	if len(ones) == 0 {
+		c.Unset, c.Error = true, errNoSearcher.Error()
+		return
+	}
+	c.Searches = make([]SearchCheck, len(ones))
+	var wg sync.WaitGroup
+	for i, o := range ones {
+		wg.Go(func() {
+			start := time.Now()
+			err := o.ask(ctx)
+			r := SearchCheck{Name: o.name, OK: err == nil, Millis: time.Since(start).Milliseconds()}
+			if err != nil {
+				r.Error = err.Error()
+			}
+			c.Searches[i] = r
+		})
+	}
+	wg.Wait()
+	var bad []string
+	for _, r := range c.Searches {
+		if !r.OK {
+			bad = append(bad, r.Name+": "+r.Error)
+		}
+	}
+	c.OK, c.Error = len(bad) == 0, strings.Join(bad, "; ")
 }
 
 // checkCall posts body to the gateway's own route, as CheckAgent, and

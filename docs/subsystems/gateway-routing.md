@@ -2224,6 +2224,23 @@ Covered by `TestSearchAPIsMixedAskedTogether`, `TestSearchAPIsMixedOneDown`,
 `TestMixSearchAPIs`, `TestSearchCLIMix`, `TestSearchAPIsMixedFromSettings`
 and `search-mix.test.cjs`.
 
+## Checking every searcher (Quick check)
+
+Settings › Models › Quick check's Web search row (`POST /api/pipelines/check`
+with `search`, `CheckPipeline`) asks every searcher a search can go to
+once, at the same time (`checkSearch`): the provider that searches
+(`searcher`, through `searchBy`), unless provider search is off, and each
+search API on (`provider.SearchAPIs`, through `askSearchAPIKeys`), in the
+order a search asks them. A search stops at the first that answers, so a
+check made as one search never reached a second API (heyiwei5 on X). No
+searcher stands in for another, and a mixed API is asked alone, so each
+line under the row is that searcher's own: its name and how long it took,
+or its error. The check is ok only when every one is. Nothing set up, or
+the Web search plugin off, says so as before. Each line costs one search
+of that searcher, made only on a press of Test or Test all. Covered by
+`TestCheckSearchAsksEveryAPI`, `TestCheckSearchAsksOnce` and
+`pipeline-check.test.cjs`.
+
 ## A search API's keys
 
 A search API's `key` may hold several keys, separated by commas (#1477).

@@ -3,9 +3,11 @@ package gateway
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -139,5 +141,54 @@ func TestCheckSearchAsksOnce(t *testing.T) {
 	f.mu.Unlock()
 	if c := s.CheckPipeline(context.Background(), PipelineSearch); c.OK || c.Unset || c.Error == "" {
 		t.Fatalf("broken: %+v", c)
+	}
+}
+
+// With several search APIs, the check asks each of them once and says what
+// each found, read as Settings reads it: a search stops at the first that
+// answers, so a check made as a search said ok while the second was down
+// (heyiwei5 on X).
+func TestCheckSearchAsksEveryAPI(t *testing.T) {
+	fresh(t)
+	st := settings.Load()
+	st.Searcher = "off"
+	if err := settings.Save(st); err != nil {
+		t.Fatal(err)
+	}
+	f := newSearchAPIs(t)
+	for _, a := range []provider.SearchAPI{f.api("exa", "exa-k"), f.api("tavily", "tvly-k")} {
+		if err := provider.SetSearchAPI(a); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f.mu.Lock()
+	f.broken = true // tavily, the second
+	f.mu.Unlock()
+	b, _ := json.Marshal(New().CheckPipeline(context.Background(), PipelineSearch))
+	var got struct {
+		OK       bool
+		Unset    bool
+		Searches []struct {
+			Name  string
+			OK    bool
+			Error string
+		}
+	}
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.OK || got.Unset {
+		t.Errorf("a broken API reads as ok: %s", b)
+	}
+	if len(got.Searches) != 2 || got.Searches[0].Name != "Exa" || !got.Searches[0].OK ||
+		got.Searches[1].Name != "Tavily" || got.Searches[1].OK || got.Searches[1].Error == "" {
+		t.Fatalf("each API's own row: %s", b)
+	}
+	f.mu.Lock()
+	asked := slices.Clone(f.asked)
+	f.mu.Unlock()
+	slices.Sort(asked)
+	if !slices.Equal(asked, []string{"exa: magpie", "tavily: magpie"}) {
+		t.Fatalf("one call each: asked %v", asked)
 	}
 }
