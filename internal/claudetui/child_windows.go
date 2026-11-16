@@ -35,7 +35,11 @@ var endSignals = []os.Signal{os.Interrupt, syscall.SIGTERM}
 // ships (conpty.dll, which runs the OpenConsole.exe beside it) keeps them.
 // dsh-cross: a conpty folder beside magpie's executable holding both is
 // used first; without it, the system's.
-type pseudoConsole struct{ create, close *windows.LazyProc }
+type pseudoConsole struct {
+	create, close *windows.LazyProc
+	// system: Windows' own, kernel32's
+	system bool
+}
 
 var console = sync.OnceValue(func() pseudoConsole {
 	if exe, err := os.Executable(); err == nil {
@@ -43,13 +47,24 @@ var console = sync.OnceValue(func() pseudoConsole {
 		if _, err := os.Stat(filepath.Join(dir, "OpenConsole.exe")); err == nil {
 			dll := windows.NewLazyDLL(filepath.Join(dir, "conpty.dll"))
 			if dll.NewProc("CreatePseudoConsole").Find() == nil && dll.NewProc("ClosePseudoConsole").Find() == nil {
-				return pseudoConsole{dll.NewProc("CreatePseudoConsole"), dll.NewProc("ClosePseudoConsole")}
+				return pseudoConsole{dll.NewProc("CreatePseudoConsole"), dll.NewProc("ClosePseudoConsole"), false}
 			}
 		}
 	}
 	k := windows.NewLazySystemDLL("kernel32.dll")
-	return pseudoConsole{k.NewProc("CreatePseudoConsole"), k.NewProc("ClosePseudoConsole")}
+	return pseudoConsole{k.NewProc("CreatePseudoConsole"), k.NewProc("ClosePseudoConsole"), true}
 })
+
+// cutHint is what a message Claude Code didn't get whole (whole.go) is
+// told of where it was lost: on Windows 10's own ConPTY, how to use
+// another (#5205).
+func cutHint() string {
+	if !console().system || windows.RtlGetVersion().BuildNumber >= 22000 {
+		return ""
+	}
+	// short, for the bridge's log line to hold it whole
+	return "; on Windows 10, a conpty folder beside magpie.exe fixes it (#5205)"
+}
 
 func createPseudoConsole(size windows.Coord, in, out windows.Handle, h *windows.Handle) error {
 	r, _, _ := console().create.Call(uintptr(*(*uint32)(unsafe.Pointer(&size))), uintptr(in), uintptr(out), 0, uintptr(unsafe.Pointer(h)))

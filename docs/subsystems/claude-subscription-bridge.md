@@ -493,8 +493,9 @@ path and the padded one were each taken as `[Image #1]`, and the bare
 path with no marks stayed words, as the reporter saw; the helper itself
 on that claude.exe, padded and bracketed, put the image in the
 transcript. Windows 10 itself is not tried; the padded path doesn't
-need the marks. Long pasted text there still loses blocks (#5205),
-which this doesn't change. If the interactive mode still doesn't take the image, the
+need the marks. Long pasted text there still loses blocks (#5205); the
+whole-message check below catches a message cut so.
+If the interactive mode still doesn't take the image, the
 turn goes to `-p` as below, which the plan counts at about twice the
 interactive mode's and which starts without the interactive run's
 cache; the Routing chip's reason says so. Then the helper answers such a
@@ -512,6 +513,23 @@ run (Off meanwhile, the client gone) the failure is a 400, not a 502
 `claude_tui_unpasted_test.go` holds each case, and
 `TestShimPaddedImageTakenWithoutMarks` the padded paste on a console that
 drops the marks.
+
+The helper checks that a message reached Claude
+Code whole (`whole.go`, from 3leg0ocat's patch). It took one as sent once
+a row of it reached the transcript, whatever the row held, so a cut
+message's tail was answered as the message. Now, while a message just sent
+waits for its row, the rows' words (a user row's text, a queued message's)
+are compared with the words pasted, white space, Claude Code's
+`<pasted_content>` tags, `[Image #N]` marks and format characters aside,
+in place with no copy; the paths of images Claude Code says it took
+(`[Image: source: <path>]` meta rows) are left out, and the images are
+counted. What Claude Code answers meanwhile is held (`hold`) for up to
+`wholeWait`. A message that isn't whole ends the turn as `Unpastable`
+before any of its reply, so the bridge asks it again as `-p`, as an image
+not taken; on Windows 10's own ConPTY the error says a `conpty` folder
+fixes it (`cutHint`). `whole_test.go` holds the comparison and the hold,
+and `TestShimCutMessageIsUnpastable` a fake Claude Code that loses a long
+paste's 1024-byte blocks.
 
 The other exception is Claude Code's auto mode classifier when its own
 cache marks keep a long transcript (#5585, #5655; `keptByPrint`,

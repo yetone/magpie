@@ -64,6 +64,8 @@ var (
 type shim struct {
 	outMu sync.Mutex
 	out   io.Writer
+	// held takes what is written meanwhile, nil when none (whole.go)
+	held io.Writer
 
 	// pty is Claude Code's terminal: what it draws is read from it, and
 	// what is typed written to it
@@ -91,6 +93,11 @@ type shim struct {
 	rowsMu sync.Mutex
 	rows   int
 	rowsCh chan struct{}
+	// said is the words of the messages that reached the transcript since
+	// one was sent, to check it whole (whole.go); nil when none is
+	said []heardRow
+	// taken is the image files' paths Claude Code took as images meanwhile
+	taken []string
 	// a turn is going: from a message's row to the turn's end
 	busy bool
 
@@ -729,6 +736,10 @@ func (s *shim) emit(v any) {
 	b, _ := json.Marshal(v)
 	s.outMu.Lock()
 	defer s.outMu.Unlock()
+	if s.held != nil {
+		_, _ = s.held.Write(append(b, '\n'))
+		return
+	}
 	_, _ = s.out.Write(append(b, '\n'))
 }
 
@@ -776,11 +787,12 @@ func (s *shim) input(r io.Reader) error {
 			err = s.send(pieces)
 			s.dropImages()
 			var unpasted *imageUnpasted
-			if errors.As(err, &unpasted) {
+			var cut *messageCut
+			if errors.As(err, &unpasted) || errors.As(err, &cut) {
 				// the prompt holds the path as words: the turn is told
 				// it failed, for the bridge to ask it as claude -p, and
 				// this Claude Code ends with it
-				s.emit(map[string]any{"type": "result", "subtype": "error_during_execution", "is_error": true, "session_id": s.sid,
+				s.tell(map[string]any{"type": "result", "subtype": "error_during_execution", "is_error": true, "session_id": s.sid,
 					"result": Unpastable + err.Error()})
 			}
 			if err != nil {
@@ -1258,11 +1270,16 @@ func pasteClean(text string) string {
 func (s *shim) send(pieces []piece) error {
 	s.rowsMu.Lock()
 	before, busy := s.rows, s.busy
+	s.said = []heardRow{} // kept from now on (heard), till send returns
 	s.rowsMu.Unlock()
+	defer s.heardAll()
+	var pasted strings.Builder // the words pasted, to check them whole
+	images := 0
 	marker := 0
 	for i, p := range pieces {
 		var err error
 		if p.image != "" {
+			images++
 			if marker, err = s.pasteImage(s.path(p.image), marker); err != nil {
 				return err
 			}
@@ -1276,6 +1293,8 @@ func (s *shim) send(pieces []piece) error {
 		if i == 0 && len(pieces) == 1 && strings.TrimSpace(p.text) == "" {
 			p.text = "."
 		}
+		pasted.WriteString(p.text)
+		pasted.WriteByte('\n')
 		s.clearScreen()
 		if _, err := io.WriteString(s.pty, "\x1b[200~"+p.text+"\x1b[201~"); err != nil {
 			return err
@@ -1295,7 +1314,7 @@ func (s *shim) send(pieces []piece) error {
 			sent := s.rows > before
 			s.rowsMu.Unlock()
 			if sent {
-				return nil
+				return s.checkWhole(pasted.String(), images)
 			}
 			select {
 			case <-s.rowsCh:
