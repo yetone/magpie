@@ -1,0 +1,17 @@
+name: EBADF probe
+on:
+  pull_request:
+    paths: ['internal/dirent/**', '.github/workflows/ebadf-probe.yml']
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, macos-14, macos-15]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: sw_vers; go test -count=1 -run TestEBADFProbe -v -timeout 20m ./internal/dirent/

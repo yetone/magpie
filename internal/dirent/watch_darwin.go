@@ -17,6 +17,8 @@ static void direntCallback(ConstFSEventStreamRef s, void *info, size_t n, void *
 
 static dispatch_queue_t direntQueue;
 static FSEventStreamRef direntStream;
+static int direntWatchRoot = 1;
+static void direntSetWatchRoot(int on) { direntWatchRoot = on; }
 
 static int direntStart(char **paths, int n) {
 	if (direntStream != NULL) {
@@ -40,7 +42,7 @@ static int direntStart(char **paths, int n) {
 	}
 	FSEventStreamRef s = FSEventStreamCreate(NULL, direntCallback, NULL, list,
 		kFSEventStreamEventIdSinceNow, 0.01,
-		kFSEventStreamCreateFlagNoDefer | kFSEventStreamCreateFlagWatchRoot);
+		kFSEventStreamCreateFlagNoDefer | (direntWatchRoot ? kFSEventStreamCreateFlagWatchRoot : 0));
 	CFRelease(list);
 	if (s == NULL) {
 		return 0;
@@ -89,6 +91,15 @@ func startWatch(paths []string) bool {
 		}
 	}()
 	return C.direntStart((**C.char)(unsafe.Pointer(&cs[0])), C.int(len(cs))) == 1
+}
+
+// setWatchRoot is a probe switch (#6368).
+func setWatchRoot(on bool) {
+	v := 0
+	if on {
+		v = 1
+	}
+	C.direntSetWatchRoot(C.int(v))
 }
 
 // devOf is the volume fi is on.
