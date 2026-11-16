@@ -142,11 +142,7 @@ func claudeCloud(at place, path string) string {
 	if at.sys != nil {
 		managed = at.sys("/etc/claude-code/managed-settings.json")
 	}
-	dir := filepath.Dir(path)
-	global := filepath.Join(dir, ".claude.json")
-	if dir == at.join(".claude") {
-		global = at.join(".claude.json")
-	}
+	global := claudeGlobal(at, filepath.Dir(path))
 	for _, k := range agentenv.ClaudeProviders {
 		set := false
 		for _, f := range []string{managed, path, global} {
@@ -166,6 +162,53 @@ func claudeCloud(at place, path string) string {
 		}
 	}
 	return ""
+}
+
+// claudeGlobal is the global config of the Claude Code whose folder is dir
+// (its .claude.json), where Claude Code 2.1.316 reads it: a .config.json in
+// the folder that isn't empty, left by an older Claude Code, else
+// .claude.json in $CLAUDE_CONFIG_DIR, else in the home folder.
+func claudeGlobal(at place, dir string) string {
+	if fi, err := os.Stat(filepath.Join(dir, ".config.json")); err == nil && fi.Mode().IsRegular() && fi.Size() > 0 {
+		return filepath.Join(dir, ".config.json")
+	}
+	if dir == at.join(".claude") && (at.dir != "" || at.getenv("CLAUDE_CONFIG_DIR") == "") {
+		return at.join(".claude.json")
+	}
+	return filepath.Join(dir, ".claude.json")
+}
+
+// claudeOnboardMark is what Claude Code keeps in its global config once
+// its first run is done: until then each start opens on the theme picker,
+// then, signed in nowhere, the choice of a sign-in (KoiLx0 on X: Claude
+// Code through magpie still asked for both on a computer it hadn't run on).
+const claudeOnboardMark = "hasCompletedOnboarding"
+
+// claudeOnboard marks Claude Code's first run done in its global config at
+// file, where it isn't marked either way; true when it wrote the mark. A
+// file it can't read or parse is left alone, as is every other key in it.
+func claudeOnboard(file string) bool {
+	if _, has := edit.GetJSON(file, claudeOnboardMark); has {
+		return false
+	}
+	// SetJSON writes nothing to a file it can't read or parse
+	return edit.SetJSON(file, edit.KV{Path: claudeOnboardMark, Value: true}) == nil
+}
+
+// claudeUnonboard takes out the mark claudeOnboard wrote, back to Claude
+// Code as installed, whose first run then signs it in to Anthropic; kept
+// once Claude Code has a sign-in or ran its own first run there since.
+func claudeUnonboard(file string) {
+	v, has := edit.GetJSON(file, claudeOnboardMark)
+	if !has || v != "true" {
+		return
+	}
+	for _, k := range []string{"oauthAccount", "lastOnboardingVersion"} {
+		if _, own := edit.GetJSON(file, k); own {
+			return
+		}
+	}
+	_ = edit.DelJSON(file, claudeOnboardMark)
 }
 
 // claudeTiers are the aliases Claude Code resolves (/model opus, a
@@ -733,6 +776,26 @@ func claudeIn(at place) *Agent {
 		st := stashLoad()
 		u := env("ANTHROPIC_BASE_URL")
 		return has && tok == "" && st[loginKey] == "claudeai" && u != "" && u == st[wroteAt]
+	}
+	// Claude Code's first run, marked done where magpie wires its key in,
+	// so it starts straight into a session (claudeOnboard); claude-magpie's
+	// launch folder is no config folder of Claude Code's. The stash says
+	// magpie wrote the mark, for Unwire to take it out again.
+	onboardKey := at.key("claude.onboarded")
+	onboard := func() {
+		if at.id == ClaudeLaunchID || wiredKey() == "" {
+			return
+		}
+		if claudeOnboard(claudeGlobal(at, filepath.Dir(path))) {
+			stash(map[string]string{onboardKey: "1"})
+		}
+	}
+	unonboard := func() {
+		if stashShared()[onboardKey] == "" {
+			return
+		}
+		claudeUnonboard(claudeGlobal(at, filepath.Dir(path)))
+		forget(onboardKey)
 	}
 	// a tier (or the subagents, "subagent") the user gave a model of their
 	// own, though it is the one it would follow: it stays when the main
@@ -1639,6 +1702,7 @@ func claudeIn(at place) *Agent {
 	// was wired in; it answers the model Claude Code was on then, for
 	// Unwire to go back to
 	unroute := func() (string, error) {
+		unonboard()
 		if err := dropOutput(); err != nil {
 			return "", err
 		}
@@ -2007,6 +2071,7 @@ func claudeIn(at place) *Agent {
 		if err := edit.SetJSON(path, kvs...); err != nil {
 			return err
 		}
+		onboard()
 		if err := writeCompact(); err != nil {
 			return err
 		}
@@ -2531,6 +2596,8 @@ func claudeIn(at place) *Agent {
 				}
 				return desktopOnly()
 			}
+			// connected before magpie marked the first run done
+			onboard()
 			// a switch turned on since, or left by an older magpie
 			if err := dropClouds(); err != nil {
 				return err
