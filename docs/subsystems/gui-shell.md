@@ -1312,7 +1312,10 @@ one in its place. A copy renamed (`D:\Tools\magpie.exe`) is left alone.
 The first time, with nothing installed, it asks where in Windows' task
 dialog (`installDialog` in
 [`installdir_windows.go`](../../internal/gui/installdir_windows.go)): the
-folder, Install, Change… and Cancel, in the tray's language. Change… opens
+folder, Install, Change… and Cancel, in the tray's language, with a footer
+naming the exe it was opened from, which can be deleted once installed:
+the install copies it and never deletes it (@jiangshangmuyun on X: "the
+original is still there"). Change… opens
 the folder picker, and a folder picked gets `magpie` added unless it is
 named that already (`update.InstallDir`). The default is
 `%LOCALAPPDATA%\Programs\magpie`; another folder is recorded at
@@ -1337,8 +1340,8 @@ v0.1.4166's release check waited on the dialog with no gateway
 `TestSettleDeclinedElsewhereIsKept`, `TestDeclinedRecord`,
 `TestSettleInstallsWhereTheUserChose`,
 `TestSettleOffersTheChosenFolderAgain`, `TestInstallableRefuses` in
-[`install_test.go`](../../internal/update/install_test.go) and
-`TestInstallWordsEveryLanguage`.
+[`install_test.go`](../../internal/update/install_test.go),
+`TestInstallWordsEveryLanguage` and `TestInstallDialogSaysTheDownloadCanGo`.
 
 ## Verification
 

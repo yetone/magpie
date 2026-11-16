@@ -18,10 +18,14 @@ import (
 // installWords are the dialog's words in one language: its title, the
 // question, the two buttons, the folder picker's title, and what is said
 // when the folder can't be used: one only an administrator can write
-// to, one downloads land in, and any other failure.
+// to, one downloads land in, and any other failure; and, under it all,
+// that the download it was started from can be deleted once installed
+// (keep): the install copies it and leaves it where it is
+// (@jiangshangmuyun on X found "the original is still there").
 type installWords struct {
 	title, ask, install, change, pick string
 	admin, downloads, failed          string
+	keep                              string
 }
 
 var installText = map[string]installWords{
@@ -31,6 +35,7 @@ var installText = map[string]installWords{
 		admin:     "Only an administrator can write to %s. magpie is installed for you alone and updates itself, so choose a folder of your own.",
 		downloads: "Downloads land in %s. Choose another folder.",
 		failed:    "magpie can't be installed in %s: %v",
+		keep:      "Once magpie is installed, you can delete %s.",
 	},
 	"zh": {
 		title: "magpie", ask: "把 magpie 安装到这个文件夹？", install: "安装", change: "更改…",
@@ -38,6 +43,7 @@ var installText = map[string]installWords{
 		admin:     "只有管理员才能写入 %s。magpie 只为你安装，并会自己更新，请选择一个你自己的文件夹。",
 		downloads: "%s 是下载存放的地方，请选择另一个文件夹。",
 		failed:    "magpie 无法安装到 %s：%v",
+		keep:      "安装完成后，可以删除 %s。",
 	},
 	"zh-TW": {
 		title: "magpie", ask: "把 magpie 安裝到這個資料夾？", install: "安裝", change: "變更…",
@@ -45,6 +51,7 @@ var installText = map[string]installWords{
 		admin:     "只有系統管理員才能寫入 %s。magpie 只為你安裝，並會自己更新，請選擇一個你自己的資料夾。",
 		downloads: "%s 是下載存放的地方，請選擇另一個資料夾。",
 		failed:    "magpie 無法安裝到 %s：%v",
+		keep:      "安裝完成後，可以刪除 %s。",
 	},
 	"ja": {
 		title: "magpie", ask: "このフォルダーに magpie をインストールしますか？", install: "インストール", change: "変更…",
@@ -52,6 +59,7 @@ var installText = map[string]installWords{
 		admin:     "%s に書き込めるのは管理者だけです。magpie はあなた専用にインストールされ、自分で更新するので、あなた自身のフォルダーを選んでください。",
 		downloads: "%s はダウンロードの保存先です。別のフォルダーを選んでください。",
 		failed:    "%s に magpie をインストールできません：%v",
+		keep:      "インストール後は %s を削除してかまいません。",
 	},
 	"de": {
 		title: "magpie", ask: "magpie in diesem Ordner installieren?", install: "Installieren", change: "Ändern…",
@@ -59,6 +67,7 @@ var installText = map[string]installWords{
 		admin:     "Nur ein Administrator darf in %s schreiben. magpie wird nur für Sie installiert und aktualisiert sich selbst, wählen Sie also einen eigenen Ordner.",
 		downloads: "In %s landen Downloads. Wählen Sie einen anderen Ordner.",
 		failed:    "magpie kann nicht in %s installiert werden: %v",
+		keep:      "Nach der Installation können Sie %s löschen.",
 	},
 }
 
@@ -69,6 +78,15 @@ func installWordsFor(lang string) installWords {
 		return w
 	}
 	return installText["en"]
+}
+
+// footer says that exe, the download the dialog was opened from, can be
+// deleted once magpie is installed; "" when exe isn't known.
+func (w installWords) footer(exe string) string {
+	if exe == "" {
+		return ""
+	}
+	return fmt.Sprintf(w.keep, exe)
 }
 
 // refusal is what the dialog says about dir, which check refused with err.

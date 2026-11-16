@@ -48,6 +48,23 @@ func TestInstallWordsEveryLanguage(t *testing.T) {
 	}
 }
 
+// TestInstallDialogSaysTheDownloadCanGo: the install copies the download
+// and leaves it where it was (@jiangshangmuyun on X: "the original is
+// still there"), so the dialog says, in every language, that the file
+// it was opened from can be deleted once installed, naming it.
+func TestInstallDialogSaysTheDownloadCanGo(t *testing.T) {
+	exe := `D:\Tools\magpie-windows-amd64.exe`
+	for lang, w := range installText {
+		got := w.footer(exe)
+		if !strings.Contains(got, exe) || strings.Contains(got, "%!") || strings.Count(got, exe) != 1 {
+			t.Errorf("%s: footer %q doesn't name %s once", lang, got, exe)
+		}
+	}
+	if got := installText["en"].footer(""); got != "" {
+		t.Errorf("no exe known: footer %q, want none", got)
+	}
+}
+
 // TestInstallQuestionNeedsSomeoneToAnswer: a CI runner's start (any CI
 // service's CI variable) or one on a desktop no one sees is never asked
 // where to install, so nothing waits on a dialog with the gateway not

@@ -38,6 +38,10 @@ func askInstallFolder() {
 	}
 	update.AskFolder = func(suggest string, check func(string) error) string {
 		w := installWordsFor(trayLang(settings.Shared().Lang, systemLang))
+		exe, err := update.Executable()
+		if err != nil {
+			exe = ""
+		}
 		var out string
 		done := make(chan struct{})
 		// COM and the dialogs on a thread of their own, which ends with
@@ -45,7 +49,7 @@ func askInstallFolder() {
 		go func() {
 			runtime.LockOSThread()
 			defer close(done)
-			out = installDialog(w, suggest, check)
+			out = installDialog(w, suggest, w.footer(exe), check)
 		}()
 		<-done
 		return out
@@ -58,12 +62,12 @@ const (
 )
 
 // installDialog asks until the user installs in a folder check accepts,
-// or cancels (""). With no dialog to be had, dir is taken, as before
-// there was a choice.
-func installDialog(w installWords, dir string, check func(string) error) string {
+// or cancels (""), with footer under it all. With no dialog to be had,
+// dir is taken, as before there was a choice.
+func installDialog(w installWords, dir, footer string, check func(string) error) string {
 	note := ""
 	for {
-		btn, err := taskDialog(w, dir, note)
+		btn, err := taskDialog(w, dir, note, footer)
 		if err != nil {
 			log.Println("install: the folder dialog:", err)
 			return dir
@@ -122,9 +126,10 @@ var (
 
 // taskDialog shows Windows' task dialog (comctl32 6, which the exe's
 // manifest asks for): the folder under the question, Install, Change…
-// and Cancel, and note, a refusal, with a warning icon above. It answers
-// the button pressed.
-func taskDialog(w installWords, dir, note string) (int, error) {
+// and Cancel, and note, a refusal, with a warning icon above; footer,
+// when there is one, in the dialog's footer. It answers the button
+// pressed.
+func taskDialog(w installWords, dir, note, footer string) (int, error) {
 	if err := procTaskDialogIndi.Find(); err != nil {
 		return 0, err
 	}
@@ -173,6 +178,9 @@ func taskDialog(w installWords, dir, note string) (int, error) {
 		le.PutUint32(cfg[60:], 2)
 		le.PutUint64(cfg[64:], uint64(uintptr(unsafe.Pointer(&buttons[0]))))
 		le.PutUint32(cfg[72:], idInstall)
+		if footer != "" {
+			le.PutUint64(cfg[132:], uint64(str(footer))) // pszFooter
+		}
 		var pressed int32
 		hr, _, _ := procTaskDialogIndi.Call(uintptr(unsafe.Pointer(&cfg[0])), uintptr(unsafe.Pointer(&pressed)), 0, 0)
 		runtime.KeepAlive(cfg)
