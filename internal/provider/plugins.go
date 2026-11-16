@@ -766,7 +766,7 @@ func pluginFetch(pp plugin.Provider, account string, req *http.Request) (*http.R
 	var url string
 	switch {
 	case codeAssist:
-		url = base + "/models/" + api + ":streamGenerateContent?alt=sse"
+		url = base + "/models/" + GeminiModelPath(api) + ":streamGenerateContent?alt=sse"
 	case strings.HasPrefix(rest, "/v1/"):
 		// chat, responses and Anthropic's messages: the AI SDK's base
 		// ends where magpie's /v1 does

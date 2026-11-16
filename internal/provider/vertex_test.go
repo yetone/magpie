@@ -343,7 +343,8 @@ func TestVertexAddress(t *testing.T) {
 	if got := VertexPath("gemini-3.1-pro-preview-customtools"); got != "/publishers/google/models/gemini-3.1-pro-preview-customtools:streamGenerateContent?alt=sse" {
 		t.Errorf("a model's path: %s", got)
 	}
-	if got := VertexPath("tuned/gemini 1?x#y"); got != "/publishers/google/models/tuned%2Fgemini%201%3Fx%23y:streamGenerateContent?alt=sse" {
+	// each segment escaped, the slash kept, as at a Gemini URL (#6695)
+	if got := VertexPath("tuned/gemini 1?x#y"); got != "/publishers/google/models/tuned/gemini%201%3Fx%23y:streamGenerateContent?alt=sse" {
 		t.Errorf("a model with a slash, a space, ? and # in it: %s", got)
 	}
 }

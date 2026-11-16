@@ -2145,7 +2145,7 @@ func (s *Server) drawGemini(ctx context.Context, p provider.Provider, model stri
 	}
 	body, _ := json.Marshal(map[string]any{"contents": []map[string]any{{"role": "user", "parts": parts}}, "generationConfig": cfg})
 	base := strings.TrimSuffix(strings.TrimRight(p.Base(provider.Chat), "/"), "/openai")
-	url := base + "/models/" + model + ":generateContent"
+	url := base + "/models/" + provider.GeminiModelPath(model) + ":generateContent"
 	return s.eachDrawing(d.N, func() (drawn, int, error) {
 		b, code, err := s.send(ctx, p, url, "application/json", body, false)
 		if err != nil {

@@ -236,7 +236,7 @@ func (p Provider) VertexExpress() bool {
 // model goes: streamed, as the gateway asks every one there but a Gemini
 // client's own asked whole (VertexWholePath).
 func VertexPath(model string) string {
-	return "/publishers/google/models/" + url.PathEscape(model) + ":streamGenerateContent?alt=sse"
+	return "/publishers/google/models/" + GeminiModelPath(model) + ":streamGenerateContent?alt=sse"
 }
 
 // VertexPartner is whether model is one of Vertex AI's partner or open
@@ -297,7 +297,7 @@ func VertexClaudeRequest(path string, body []byte) (string, []byte, bool) {
 		if stream {
 			verb = ":streamRawPredict"
 		}
-		at += url.PathEscape(model) + verb
+		at += GeminiModelPath(model) + verb
 		delete(m, "model")
 	}
 	out, err := marshalRaw(m)
@@ -322,7 +322,7 @@ func marshalRaw(m map[string]json.RawMessage) ([]byte, error) {
 // VertexWholePath is where a request for model answered as one JSON body
 // goes.
 func VertexWholePath(model string) string {
-	return "/publishers/google/models/" + url.PathEscape(model) + ":generateContent"
+	return "/publishers/google/models/" + GeminiModelPath(model) + ":generateContent"
 }
 
 // vertexTest is the smallest request for model at a Vertex AI provider:
@@ -341,7 +341,7 @@ func vertexTest(q Provider, model string) (string, string) {
 	case vertexGeneration(m) < 3:
 		think = ""
 	}
-	return q.Base(Gemini) + "/publishers/google/models/" + url.PathEscape(model) + ":generateContent",
+	return q.Base(Gemini) + "/publishers/google/models/" + GeminiModelPath(model) + ":generateContent",
 		`{"contents":[{"role":"user","parts":[{"text":"hi"}]}],"generationConfig":{` + think + `"maxOutputTokens":16}}`
 }
 

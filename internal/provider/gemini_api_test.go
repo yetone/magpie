@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -30,6 +32,54 @@ func TestGeminiBase(t *testing.T) {
 	}
 	if got := GeminiPath("gemini-2.5-flash", false); got != "/models/gemini-2.5-flash:generateContent" {
 		t.Errorf("path %q", got)
+	}
+}
+
+// A namespaced model id keeps its slashes in every Gemini and Vertex AI
+// path, each segment escaped on its own (#6695); Google's own ids are
+// unchanged, and an id whose segments a server could clean into another
+// path (empty, . or ..) stays one escaped segment under models/.
+func TestGeminiModelPathKeepsSlashes(t *testing.T) {
+	for in, want := range map[string]string{
+		"gemini-2.5-pro":             "gemini-2.5-pro",
+		"gemini-3.8-flash-preview":   "gemini-3.8-flash-preview",
+		"claude-sonnet-4-5@20250929": "claude-sonnet-4-5@20250929",
+		"qwen3:8b":                   "qwen3:8b",
+		"example/model-demo":         "example/model-demo",
+		"a/b/c":                      "a/b/c",
+		"ex ample/model?x#y":         "ex%20ample/model%3Fx%23y",
+		"ns/100%":                    "ns/100%25",
+		"../secret":                  "..%2Fsecret",
+		"a/../b":                     "a%2F..%2Fb",
+		"a/./b":                      "a%2F.%2Fb",
+		"a//b":                       "a%2F%2Fb",
+		"/abs":                       "%2Fabs",
+		"trail/":                     "trail%2F",
+	} {
+		if got := GeminiModelPath(in); got != want {
+			t.Errorf("GeminiModelPath(%q) = %q, want %q", in, got, want)
+		}
+	}
+	for got, want := range map[string]string{
+		GeminiPath("example/model-demo", true):         "/models/example/model-demo:streamGenerateContent?alt=sse",
+		GeminiPath("models/example/model-demo", false): "/models/example/model-demo:generateContent",
+		GeminiPath("gemini-2.5-pro", true):             "/models/gemini-2.5-pro:streamGenerateContent?alt=sse",
+		VertexPath("example/model-demo"):               "/publishers/google/models/example/model-demo:streamGenerateContent?alt=sse",
+		VertexWholePath("example/model-demo"):          "/publishers/google/models/example/model-demo:generateContent",
+		VertexWholePath("gemini-2.5-pro"):              "/publishers/google/models/gemini-2.5-pro:generateContent",
+	} {
+		if got != want {
+			t.Errorf("path %q, want %q", got, want)
+		}
+	}
+	// whatever the id, the path stays under models/: cleaning it as a
+	// server or proxy may never leaves the models/ folder
+	for _, id := range []string{"..", "../..", "a/../../b", "./x", "x/.", "..%2F..", "%2e%2e/x"} {
+		p := GeminiPath(id, false)
+		clean := path.Clean(p)
+		if !strings.HasPrefix(clean, "/models/") || !strings.HasSuffix(clean, ":generateContent") {
+			t.Errorf("GeminiPath(%q) = %q cleans to %q, outside /models/", id, p, clean)
+		}
 	}
 }
 
