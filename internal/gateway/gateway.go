@@ -5903,6 +5903,15 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 	if relay && !keep && customOff() {
 		relay, ownAPI = false, true
 	}
+	// and input items a model turned away before (input_kinds.go: a
+	// subagent's agent_message to a server that knows OpenAI's first
+	// items alone)
+	itemsOff := func() bool {
+		return from == provider.Responses && !inCompaction(r.Context()) && !s.fits(p.ID, inputKindsRefused(model), from) && hasOtherItem(body)
+	}
+	if relay && !keep && itemsOff() {
+		relay, ownAPI = false, true
+	}
 	// and a backend that turned a request for one body away because it
 	// only streams (stream_only.go) is asked streamed, translated
 	streamOnly := (from == provider.Chat || from == provider.Responses) && !streamOf(body) && !s.fits(p.ID, streamOnlyRefused(model), from)
@@ -5930,7 +5939,7 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 		// or it turned the custom tools away just now: speak it translated,
 		// except a compaction or a sealed subagent task, which a
 		// translation would leave out
-		if customOff() || !s.fits(p.ID, streamOnlyRefused(model), from) && !streamOf(body) {
+		if customOff() || itemsOff() || !s.fits(p.ID, streamOnlyRefused(model), from) && !streamOf(body) {
 			if keep || sealed {
 				return writeError(w, from, status, msg), msg
 			}
@@ -7107,6 +7116,16 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			// and from then on
 			res.Body.Close()
 			s.markUnfit(p.ID, customToolRefused(model), proto)
+			return res.StatusCode, p.Name + ": " + provider.APIError(b, res.Status), false
+		}
+		if proto == provider.Responses && !inCompaction(r.Context()) && inputKindWords.Match(b) && hasOtherItem(body) {
+			// an input item it has no type for turned away (a local
+			// Qwen server's "Unsupported input item: agent_message",
+			// input_kinds.go): translated on the same API, and so from
+			// then on. A compaction's summary ask has its own way on, the
+			// conversation as text (inputKindRefused)
+			res.Body.Close()
+			s.markUnfit(p.ID, inputKindsRefused(model), proto)
 			return res.StatusCode, p.Name + ": " + provider.APIError(b, res.Status), false
 		}
 		if gather == nil && refusesWhole(proto, body, b) {

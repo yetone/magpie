@@ -136,6 +136,13 @@ func asksCompaction(ctx context.Context) bool {
 	return v
 }
 
+// inCompaction is whether ctx is a summary ask for a compaction, its
+// roles swapped or as sent (askAsSent).
+func inCompaction(ctx context.Context) bool {
+	_, ok := ctx.Value(compactionAskKey{}).(bool)
+	return ok
+}
+
 func askCompaction(r *http.Request) *http.Request {
 	return r.WithContext(context.WithValue(r.Context(), compactionAskKey{}, true))
 }
