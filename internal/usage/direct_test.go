@@ -128,3 +128,36 @@ func TestDirectQoderCallsByCredits(t *testing.T) {
 		}
 	}
 }
+
+// Droid's own sessions are under Direct by Droid (_meouwu on X), a
+// session's total as one call (sessions' calls_droid.go), priced by its
+// model.
+func TestDirectDroidSessionTotals(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755)
+	os.WriteFile(catalog.CachePath(), []byte(`{"anthropic":{"id":"anthropic","models":{"claude-sonnet-4-5-20250929":{"id":"claude-sonnet-4-5-20250929","cost":{"input":3,"output":15}}}}}`), 0o644)
+	catalog.Reset()
+	t.Cleanup(catalog.Reset)
+
+	now := holdClock(t, time.Date(2026, 11, 15, 12, 0, 0, 0, time.Local))
+	old := LogCalls
+	LogCalls = func(time.Time) []sessions.Call {
+		return []sessions.Call{
+			{Time: now.Add(-time.Hour), Agent: "droid", Session: "d1", Model: "claude-sonnet-4-5-20250929", Msg: "droid:d1", Tokens: sessions.Tokens{Input: 30750, Output: 113, CacheRead: 1000}},
+			{Time: now.Add(-2 * time.Hour), Agent: "droid", Session: "d1", Model: "claude-sonnet-4-5-20250929", Msg: "droid:d2", Tokens: sessions.Tokens{Input: 5, Output: 2}},
+		}
+	}
+	t.Cleanup(func() { LogCalls = old })
+
+	d := Direct(Month)
+	if d.Calls != 2 || d.Input != 30755 || d.Output != 115 || d.CacheRead != 1000 || d.Cost == 0 || d.Unpriced != 0 {
+		t.Fatalf("direct totals %+v", d.Totals)
+	}
+	if len(d.Agents) != 1 || d.Agents[0].ID != "droid" || len(d.Sessions) != 1 || d.Sessions[0].ID != "d1" {
+		t.Fatalf("agents %+v sessions %+v", d.Agents, d.Sessions)
+	}
+}

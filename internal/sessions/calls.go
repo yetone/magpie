@@ -333,7 +333,8 @@ func callFileLists(codex []file) [][]file {
 // read whole rather than line by line: OpenCode's (#680) and ZCode's, whose
 // calls are rows of their database or their JSON files; and WorkBuddy's, whose usage lines repeat a reply's id as it
 // goes on, as CodeBuddy Code's do (#1779); and MiniMax Code's, whose messages
-// file a later generation of its history may replace (#1605). Kimi Code's
+// file a later generation of its history may replace (#1605); and Droid's, whose spend is
+// only a running total in each session's settings (calls_droid.go). Kimi Code's
 // (#1607), Pi's and omp's (#1951) and Grok Build's (#4423) are lines of a
 // file only appended to, read on as callFiles' are; DeepSeek Harness's, a
 // file only appended to that may be packed in zstd frames, is read on
@@ -354,6 +355,7 @@ func callSourcesInto(out []file, codex []file) []file {
 		antigravityCallFiles(),                       // #2190
 		wslFiles("antigravity"), wslCallFiles("agy"), // @guyng35955 on X
 		devinCallFiles(),                      // aohan0905 on X
+		droidFiles(),                          // _meouwu on X: its settings' totals (calls_droid.go)
 		workbuddyCallFiles(), grokCallFiles(), // #4423
 		// Claude Code's lines, read by claudeCallLine (eating_dream on X)
 		ccFiles("qoder", QoderDir("qoder")), ccFiles("qoder-cn", QoderDir("qoder-cn")))
