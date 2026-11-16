@@ -1032,12 +1032,31 @@ found it: the clock's (`checkByClock`, 5 s after start, then every
 (`refreshLatest`), or a page asking in another language (`relang` sees a
 newer version and starts the clock's check). A newer version found while
 one is downloaded and waiting replaces it. Only these leave the waiting
-copy as it is: a restart's own check and the update dialog's (`keep`:
-`recheck`, `freshen`), so a click on Update restarts at once into what it
-names (canlee886 on X, 0.1.4051); a restart waiting for the gateway to go
-idle (`waiting`); and downloads on a click. From 0.1.4051 to 0.1.4207 the
-clock's check also kept the waiting copy, so every newer version waited
-for a click (canlee886 on X, 11-15).
+copy as it is: the update dialog's check (`keep`, `freshen`), which names
+it; the clock's check while a restart waits for the gateway to go idle
+(`waiting`); and downloads on a click.
+
+Every restart asks the feed first (`recheck`, `restarting`): the page's
+Restart to update, the tray's, and the restart Settings' AutoRestart or a
+click waits for. A newer version out is downloaded in place of the waiting
+copy and the restart goes into it once it is in; the clock's check runs
+every half hour or more, and magpie releases many times a day, so the
+waiting copy was often behind, and the new version's first check had the
+user update again at once (char1es_lu on X, 11-16). The feed isn't asked
+when the waiting copy is one a restart's own check downloaded or found to
+be the newest (`restartGot`): the header's Update restarts once a click's
+download is in, and asking there again downloaded again and never
+restarted (elis_pina on X). Nor is it asked with downloads on a click
+(`keepsStaged`): the copy clicked for is what goes in (sakamotokurome on
+X). From 0.1.4051 to this change a restart never asked with a copy
+waiting (canlee886 on X); the cost now is that a click may wait for a
+download. The header's Update and the tray restart by themselves once it
+is in; Settings' Version card shows the download, and a second click on
+its Restart to update goes into it without asking again (app.js has no
+room left in its budget for the card to follow by itself). See
+`TestRestartTakesTheNewestOut`, `TestUpdateStagedGivesWayToNewer`,
+`TestRestartAfterItsDownloadDoesNotAskAgain` and
+`TestRestartPutsInTheClickedDownload`.
 
 One download runs at a time (`begin` refuses a check while one is under
 way). A check that comes meanwhile sets `again` (`supersede`), and once

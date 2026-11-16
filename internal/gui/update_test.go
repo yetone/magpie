@@ -16,9 +16,9 @@ import (
 )
 
 // A version downloaded and waiting for a restart gives way to a newer one
-// out since when a check is asked for (Settings' Check). A restart doesn't
-// ask, with downloads on a click too: it goes into the one waiting
-// (TestRestartPutsInTheClickedDownload).
+// out since when a check is asked for (Settings' Check), and when a
+// restart asks (char1es_lu on X). With downloads on a click a restart
+// goes into the one waiting (TestRestartPutsInTheClickedDownload).
 func TestUpdateStagedGivesWayToNewer(t *testing.T) {
 	sandboxHome(t)
 	body := []byte("new magpie")
@@ -65,10 +65,9 @@ func TestUpdateStagedGivesWayToNewer(t *testing.T) {
 		t.Fatalf("%+v", j)
 	}
 	t.Setenv("MAGPIE_UPDATE_FEED", srv.URL)
-	// 0.1.13 out: the restart's recheck leaves 0.1.11, with downloads on
-	// a click too; a check asked for, downloads automatic, takes 0.1.13
+	// 0.1.13 out: the restart's recheck leaves 0.1.11 with downloads on a
+	// click; with them automatic it takes 0.1.13, as a check asked for does
 	latest.Store("0.1.13")
-	u.recheck(true)
 	downloadsOnClick(t)
 	u.recheck(true)
 	if j := u.json(); j.State != "ready" || j.Latest != "0.1.11" || downloads.Load() != 1 || u.staged == "" {
@@ -79,7 +78,7 @@ func TestUpdateStagedGivesWayToNewer(t *testing.T) {
 	if err := settings.Save(s); err != nil {
 		t.Fatal(err)
 	}
-	u.check()
+	u.recheck(true)
 	for u.json().State == "downloading" || u.json().State == "checking" {
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -91,9 +90,8 @@ func TestUpdateStagedGivesWayToNewer(t *testing.T) {
 // The clock's check, with a version downloaded and waiting, downloads a
 // newer one out since in its place: with downloads automatic, a version
 // magpie knows is out is downloaded at once, not when Update is clicked
-// (canlee886 on X). The feed asked again before a restart leaves the one
-// waiting, which the restart goes into at once; with downloads on a click
-// the clock fetches nothing more (iiiiiimone on X).
+// (canlee886 on X). With downloads on a click the clock fetches nothing
+// more (iiiiiimone on X).
 func TestUpdateClockFetchesNewerThanWaiting(t *testing.T) {
 	sandboxHome(t)
 	body := []byte("new magpie")
@@ -142,13 +140,8 @@ func TestUpdateClockFetchesNewerThanWaiting(t *testing.T) {
 			t.Fatalf("%s out: %+v, %d downloads", v, j, downloads.Load())
 		}
 	}
-	// the restart's recheck: the one waiting is what it goes into
-	latest.Store("0.1.14")
-	u.recheck(true)
-	if j := u.json(); j.State != "ready" || j.Latest != "0.1.13" || downloads.Load() != 3 {
-		t.Fatalf("recheck: %+v, %d downloads", j, downloads.Load())
-	}
 	// downloads on a click: the clock leaves the one waiting
+	latest.Store("0.1.14")
 	downloadsOnClick(t)
 	u.checkByClock()
 	if j := u.json(); j.State != "ready" || j.Latest != "0.1.13" || downloads.Load() != 3 || u.staged == "" {

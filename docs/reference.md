@@ -3471,7 +3471,9 @@ signed yet (Windows SmartScreen may ask before the first run). Every build
 keeps itself current: the app
 downloads a new version in the background and installs it when you restart
 (*Restart to Update* in the menu) or quit; `magpie update` does the same from
-a terminal. Every release is on
+a terminal. A restart first asks for a release newer than the one
+downloaded, and downloads that one before it restarts, so you land on the
+newest (unless downloads wait for a click). Every release is on
 [yetone/magpie-releases](https://github.com/yetone/magpie-releases/releases).
 
 ### Signed releases
