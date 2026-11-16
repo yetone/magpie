@@ -381,6 +381,10 @@ func readResponsesFor(body []byte, facts, keepInstructions bool) (*Request, erro
 		// written to the vendor's cache again (Anthropic's system comes
 		// first; a Claude subscription's waiting run is found by it) (#502)
 		replied := false
+		// mode: the conversation's latest Codex collaboration mode block;
+		// sysModes: those lifted into the system prompt (latestModeInSystem)
+		var mode string
+		var sysModes []string
 		var rawItems []json.RawMessage // decoded only for native standalone outputs and sealed reasoning
 		for i, it := range items {
 			if it.Role == "assistant" || strings.HasPrefix(it.Type, "function_call") || strings.HasPrefix(it.Type, "custom_tool_call") || strings.HasPrefix(it.Type, "tool_search") || it.Type == "reasoning" {
@@ -411,6 +415,12 @@ func readResponsesFor(body []byte, facts, keepInstructions bool) (*Request, erro
 					for _, p := range parts {
 						if p.Kind == Text && p.Text != "" {
 							r.systemParts = append(r.systemParts, p.Text)
+						}
+						if isCollaborationMode(p) {
+							mode = p.Text
+							if !replied && !keepInstructions {
+								sysModes = append(sysModes, p.Text)
+							}
 						}
 					}
 				}
@@ -531,6 +541,7 @@ func readResponsesFor(body []byte, facts, keepInstructions bool) (*Request, erro
 				r.Messages = append(r.Messages, Message{Role: "assistant", Parts: []Part{{Kind: Search, ID: it.ID, Text: it.Action.Query, Hits: hits}}})
 			}
 		}
+		r.System = latestModeInSystem(r.System, sysModes, mode)
 	}
 	r.Messages = mergeTurns(r.Messages)
 	sent := len(q.Tools)
@@ -2596,4 +2607,32 @@ func renderResponses(res Result, model string, named map[string]nsTool) []byte {
 		"model": model, "output": output, "usage": res.Usage.responses(), "incomplete_details": incomplete,
 		"parallel_tool_calls": true, "tool_choice": "auto", "tools": []any{}, "error": nil})
 	return b
+}
+
+// isCollaborationMode: p is a Codex collaboration mode block (Default,
+// Plan), a part of a developer message, which says the thread's mode from
+// there on.
+func isCollaborationMode(p Part) bool {
+	return p.Kind == Text && strings.HasPrefix(strings.TrimSpace(p.Text), "<collaboration_mode>")
+}
+
+// latestModeInSystem is system with each collaboration mode block lifted
+// into it (sysModes) saying the conversation's latest mode instead. The
+// system prompt is the history's first developer messages, so it holds
+// the mode the thread started in or was compacted in, and a switch made
+// after a reply goes in its turn as a reminder: the system prompt said
+// Plan mode "until a developer message explicitly ends it", and the
+// Default switch a user turn carried did not end it, so the model kept
+// planning on every turn (#6835 after a compaction in Plan mode, through
+// the Claude subscription's append.md; #6100 on Chat). The system prompt
+// changes when the mode does (a new run for the Claude subscription, a
+// cache write anew), not on every turn. Codex's words are kept; only which
+// of its blocks the prompt carries is the latest.
+func latestModeInSystem(system string, sysModes []string, mode string) string {
+	for _, m := range sysModes {
+		if m != mode {
+			system = strings.ReplaceAll(system, m, mode)
+		}
+	}
+	return system
 }

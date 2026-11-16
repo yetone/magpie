@@ -1097,6 +1097,23 @@ the first message, where its mark holds. Tested by
 `TestClaudeTUIConversationKeepsItsInstructionsWhereTheFirstAskHadThem` and
 `TestClaudeTUIResumedSessionIsGivenItsInstructions`.
 
+A Codex thread's instructions carry its collaboration mode (a
+`<collaboration_mode>` part of a developer message: Default or Plan).
+The Responses read lifts the developer messages before the first reply
+into the system prompt and keeps a later one in its turn as a
+`<system-reminder>` (#502), so the system prompt held the mode the thread
+started in, or was compacted in, for good. After a compaction in Plan
+mode, append.md said Plan "until a developer message explicitly ends it",
+and every switch back to Default was pasted text the model would not take
+from the user: it planned on every turn (#6835; #6100 is the same on a
+Chat provider). Every mode block in the system prompt now says the
+conversation's latest mode (`latestModeInSystem` in `responses.go`), so a
+switch gives the run new instructions, in append.md, in `-p`'s first
+message and in a resumed run alike: one new run per switch, not per turn.
+Codex's words are not changed; the switch stays in its turn too. Tested by
+`TestCollaborationModeInTheSystemIsTheLatest` and
+`TestClaudeRunTakesTheLatestCollaborationMode`.
+
 A request with client cache marks (#1717) is never lean: its system marks
 are placed in the first message. The mode is part of the run's identity
 (`cacheIdentity`, and the tool-results check in `serveSubscription`), so a
