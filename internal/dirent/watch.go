@@ -23,8 +23,9 @@ import (
 // change made before it is heard: it writes a file of its own in a new
 // folder the watch covers, and the system tells changes in the order they were
 // made, so once that write is heard so is every one before it. Anything
-// the watch can't vouch for (it dropped events, a root moved, a volume
-// came or went, a wait ran out, it hasn't started) lists again, and so
+// the watch can't vouch for (it dropped events, a root was moved or
+// replaced, a volume came or went, a wait ran out, it hasn't started)
+// lists again, and so
 // does a listing older than listedFor, should an event never come.
 var watched struct {
 	sync.Mutex
@@ -44,6 +45,7 @@ var watched struct {
 type watchRoot struct {
 	given, real string
 	dev         uint64
+	fi          os.FileInfo // the folder the watch began on
 }
 
 // probe is the folder Watch writes in to know every change before is
@@ -107,6 +109,9 @@ func WatchSince(dir string, mark int) {
 	tried := watched.tried[dir]
 	covered := watched.active && watched.vouched > mark
 	watched.Unlock()
+	if tried && rootMoved(dir) {
+		tried = false
+	}
 	if !tried {
 		if !add(dir) {
 			return
@@ -116,6 +121,40 @@ func WatchSince(dir string, mark int) {
 	if !covered {
 		sync1()
 	}
+}
+
+// rootMoved drops the watch of dir's root when the root is no longer the
+// folder the watch began on, and is whether it did. FSEvents tells of a
+// change in a folder under a root, not of the root itself renamed,
+// removed or put back, so a tree moved in whole under the root's name is
+// heard nowhere. starting is held.
+func rootMoved(dir string) bool {
+	watched.Lock()
+	var r watchRoot
+	for _, x := range watched.roots {
+		if within(dir, x.given) {
+			r = x
+			break
+		}
+	}
+	watched.Unlock()
+	if r.fi == nil {
+		return false
+	}
+	if fi, err := os.Stat(r.given); err == nil && os.SameFile(fi, r.fi) {
+		return false
+	}
+	watched.Lock()
+	defer watched.Unlock()
+	watched.roots = slices.DeleteFunc(slices.Clone(watched.roots), func(x watchRoot) bool { return x.given == r.given })
+	for d := range watched.tried {
+		if within(d, r.given) {
+			delete(watched.tried, d)
+		}
+	}
+	watched.seq++
+	watched.all = watched.seq
+	return true
 }
 
 // starting is held while a watch is made or waited on, outside watched:
@@ -144,7 +183,7 @@ func add(dir string) bool {
 			return true
 		}
 	}
-	roots := append(slices.Clip(watched.roots), watchRoot{dir, real, devOf(fi)})
+	roots := append(slices.Clip(watched.roots), watchRoot{dir, real, devOf(fi), fi})
 	p := watched.probe
 	watched.active = false
 	watched.Unlock()

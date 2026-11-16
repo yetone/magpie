@@ -38,9 +38,12 @@ static int direntStart(char **paths, int n) {
 		CFArrayAppendValue(list, p);
 		CFRelease(p);
 	}
+	// no kFSEventStreamCreateFlagWatchRoot: with it, files other code
+	// had open in the same process came back EBADF (#6368, #6785; 916
+	// in ~1M operations on macOS 15 and 26 CI, none without it). WatchSince
+	// checks the roots itself.
 	FSEventStreamRef s = FSEventStreamCreate(NULL, direntCallback, NULL, list,
-		kFSEventStreamEventIdSinceNow, 0.01,
-		kFSEventStreamCreateFlagNoDefer | kFSEventStreamCreateFlagWatchRoot);
+		kFSEventStreamEventIdSinceNow, 0.01, kFSEventStreamCreateFlagNoDefer);
 	CFRelease(list);
 	if (s == NULL) {
 		return 0;
@@ -65,12 +68,11 @@ import (
 )
 
 // FSEvents' flags that say a folder's word can't be taken alone: events
-// were dropped or merged, a root moved, a volume came or went.
+// were dropped or merged, a volume came or went.
 const heardAll = C.kFSEventStreamEventFlagMustScanSubDirs |
 	C.kFSEventStreamEventFlagUserDropped |
 	C.kFSEventStreamEventFlagKernelDropped |
 	C.kFSEventStreamEventFlagEventIdsWrapped |
-	C.kFSEventStreamEventFlagRootChanged |
 	C.kFSEventStreamEventFlagMount |
 	C.kFSEventStreamEventFlagUnmount
 
