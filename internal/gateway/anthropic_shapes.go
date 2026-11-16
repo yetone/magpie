@@ -202,6 +202,28 @@ func (s *Server) withoutRefusedShapes(p provider.Provider, body []byte) []byte {
 	return body
 }
 
+// withoutForeignDisplay is body without thinking.display when its model
+// isn't a Claude. display says how Claude shows its thinking (summarized,
+// omitted), and only Anthropic's models read it; pi-ai, DeepSeek Harness's
+// client, asks display "summarized" with the budget of every model it
+// takes to reason, and Alibaba Cloud's Anthropic endpoint (Bailian, its
+// Coding Plan) turned the request away with a 400 for a Qwen model
+// (StudyingPython on X). A model named as a Claude however a relay spells
+// it (claudeVersionOf), or with "claude" anywhere in its name, keeps the
+// display it was asked, and so does a body that names no model. The
+// user's own fields for the provider go on after this, so a display they
+// put there themselves is sent.
+func withoutForeignDisplay(body []byte) []byte {
+	if !bodyHas(body, `"display"`) || !gjson.GetBytes(body, "thinking.display").Exists() {
+		return body
+	}
+	m := modelOf(body)
+	if _, _, ok := claudeVersionOf(m); ok || m == "" || strings.Contains(strings.ToLower(m), "claude") {
+		return body
+	}
+	return withDisplay(body, true)
+}
+
 // withDisplay is body with thinking.display left out, or (not all) only a
 // value beyond summarized and omitted: "highlights" as "summarized", the
 // thinking still shown; "updates", or any other, left out, as Claude Code

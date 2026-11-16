@@ -6190,6 +6190,9 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 			// "enabled" (thinkingNeededRefusal): that type it keeps
 			body = adaptiveThinking(body)
 		}
+		// display is Claude's: pi-ai (DeepSeek Harness) asks it of every
+		// model that reasons, and Alibaba Cloud's Qwen turns it away
+		body = withoutForeignDisplay(body)
 		body = s.withoutRefusedShapes(p, body)
 		// the thinking blocks it refused as another conversation's
 		// (thinking_bound.go), every route to it alike
