@@ -1395,6 +1395,9 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 	run.outputs = []*os.File{stdout, stderr}
 	run.reading.Add(2)
 	run.room = room
+	if req.runTold != nil {
+		req.runTold(run)
+	}
 	err = run.launch()
 	launched = err == nil
 	_, _ = stdoutW.Close(), stderrW.Close() // Claude Code has its own
@@ -7459,14 +7462,15 @@ func (s *Server) serveSubscriptionAs(w http.ResponseWriter, r *http.Request, fro
 		}
 	}
 	if run == nil {
-		run, events, err = start(r.Context(), req)
-		if err == nil {
-			// its agent is running already: what it was told is set
-			// under the run's lock, as offers and shelve read it
-			tools := map[string]bool{}
-			for _, t := range req.Tools {
-				tools[t.Name] = true
-			}
+		// what its agent is told is set before the agent starts: the
+		// output reader names a call by it, and Claude Code's first
+		// tool_use could be read before start returned (a deferred tool
+		// handed over cut, on a loaded CI box)
+		tools := map[string]bool{}
+		for _, t := range req.Tools {
+			tools[t.Name] = true
+		}
+		req.runTold = func(run *subscriptionRun) {
 			run.mu.Lock()
 			run.tools = tools
 			if search.Name != "" {
@@ -7476,6 +7480,11 @@ func (s *Server) serveSubscriptionAs(w http.ResponseWriter, r *http.Request, fro
 				run.answerName, run.answerSchema = answer.Name, answerSchema
 			}
 			run.mu.Unlock()
+		}
+		run, events, err = start(r.Context(), req)
+		if err == nil {
+			// a run resumed is told this request's too
+			req.runTold(run)
 			run.adviseOn(r.Context(), req, s.adviceRound)
 		}
 	}

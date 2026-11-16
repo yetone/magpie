@@ -233,6 +233,10 @@ type Request struct {
 	// reply made the calls this request answers after another request
 	// did: its run branches off it there (subscriptionBridge.branch).
 	branch *savedSession
+	// runTold, for the Claude bridge, sets what a run started for this
+	// request is told (its tools, magpie's search and answer tools)
+	// before its agent starts, so the first call it reads is named by them
+	runTold func(*subscriptionRun)
 	// told, for the Claude bridge's interactive mode, is a run's being
 	// told the conversation whole, not given it as a transcript
 	// (replaySession), as after Claude Code couldn't go on from one
