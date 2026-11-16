@@ -381,6 +381,7 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	in.CodexTitles = cur.CodexTitles             // set on its own (codex-titles)
 	in.CodexDescriptions = cur.CodexDescriptions // set on its own (codex-descriptions)
 	in.CodexPredictions = cur.CodexPredictions   // and codex-predictions
+	in.CodexSuggestions = cur.CodexSuggestions   // and codex-suggestions
 	// and so is the model Codex's auto-review runs on (codex-auto-review)
 	in.CodexAutoReview = cur.CodexAutoReview
 	// and the models Codex's and Desktop's subagents are put on, set

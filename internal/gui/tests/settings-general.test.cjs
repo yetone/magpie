@@ -104,7 +104,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       for (const [sel, subs] of rows.bare) assert.deepEqual(subs, [], `${sel}'s row says its name alone`);
       // Long conversations stays here with no Codex or Claude Code, as in
       // this fixture (agent-prefs.test.cjs)
-      assert.equal(await page.locator("#view-settings :is(#codexAgentsV1Row, #codexAsyncRow, #codexTitlesRow, #codexDescriptionsRow, #codexPredictionsRow, #codexAutoReviewRow, #codexMemoriesRow)").count(), 0, "an agent's own settings are on its row");
+      assert.equal(await page.locator("#view-settings :is(#codexAgentsV1Row, #codexAsyncRow, #codexTitlesRow, #codexDescriptionsRow, #codexPredictionsRow, #codexSuggestionsRow, #codexAutoReviewRow, #codexMemoriesRow)").count(), 0, "an agent's own settings are on its row");
       for (const [sel, sub] of rows.kept) {
         assert.equal(typeof sub, "object", `${sel}: ${sub}`);
         assert.ok(sub.text.trim(), `${sel}: ${JSON.stringify(sub)}`);

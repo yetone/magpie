@@ -151,3 +151,45 @@ func TestCodexPredictionsSetting(t *testing.T) {
 		t.Errorf("Codex's own: %d %q", code, settings.Load().CodexPredictions)
 	}
 }
+
+// The model for the Codex app's prompt suggestions (@0xcb198609 on X) is
+// set on its own route and kept by every other save; a model magpie
+// doesn't serve is refused, and "" goes back to Codex's own pick.
+func TestCodexSuggestionsSetting(t *testing.T) {
+	h := t.TempDir()
+	t.Setenv("HOME", h)
+	t.Setenv("USERPROFILE", h)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
+	t.Setenv("APPDATA", filepath.Join(h, "AppData", "Roaming"))
+	t.Setenv("LOCALAPPDATA", filepath.Join(h, "AppData", "Local"))
+	for _, v := range agentenv.Vars {
+		t.Setenv(v, "")
+	}
+	if err := provider.Save(provider.Provider{ID: "fake", Name: "Fake", Key: "k", Models: []string{"m1"}, Chat: "http://127.0.0.1:9/v1"}); err != nil {
+		t.Fatal(err)
+	}
+	call := func(path, body string) (int, map[string]any) {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		Handler(nil, nil).ServeHTTP(rec, httptest.NewRequest("POST", path, strings.NewReader(body)))
+		var out map[string]any
+		json.Unmarshal(rec.Body.Bytes(), &out)
+		return rec.Code, out
+	}
+	code, out := call("/api/settings/codex-suggestions", `{"model":"fake/m1"}`)
+	if code != 200 || out["codexSuggestions"] != "fake/m1" || settings.Load().CodexSuggestions != "fake/m1" {
+		t.Fatalf("model: %d %v", code, out["codexSuggestions"])
+	}
+	if code, _ := call("/api/settings", `{"theme":"dark"}`); code != 200 || settings.Load().CodexSuggestions != "fake/m1" {
+		t.Errorf("another save lost the setting: %q", settings.Load().CodexSuggestions)
+	}
+	for _, bad := range []string{"nope/x", "off", "gpt-6-luna"} {
+		if code, _ := call("/api/settings/codex-suggestions", `{"model":"`+bad+`"}`); code < 400 || settings.Load().CodexSuggestions != "fake/m1" {
+			t.Errorf("%s: %d %q", bad, code, settings.Load().CodexSuggestions)
+		}
+	}
+	if code, _ := call("/api/settings/codex-suggestions", `{"model":""}`); code != 200 || settings.Load().CodexSuggestions != "" {
+		t.Errorf("Codex's own: %d %q", code, settings.Load().CodexSuggestions)
+	}
+}

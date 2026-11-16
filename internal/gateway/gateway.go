@@ -2784,6 +2784,18 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		asked = m
 		move(m, movedDshCompactRested)
 	}
+	// the Codex app's prompt suggestions on the model set for them, not
+	// the one its server names, which falls back to the provider's
+	// default ("auto") on magpie; one the ChatGPT backend's route already
+	// put there is recorded as asked for the model it was
+	if was := suggestionsAskedOf(r); was != "" && was != call.Model {
+		to := call.Model
+		call.Model = was
+		move(to, movedCodexSuggestions)
+	} else if m := codexSuggestionsTo(r, agent, call.Kind, asked); m != "" {
+		asked = m
+		move(m, movedCodexSuggestions)
+	}
 	// a Codex subagent on the model set for Codex's subagents, whatever
 	// its lead asked for (willz on Discord), and a Claude Desktop
 	// subagent's tool turn on the one set for Desktop's; one already put

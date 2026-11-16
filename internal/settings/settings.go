@@ -931,6 +931,12 @@ type Settings struct {
 	// magpie's, not a ChatGPT account's sealed one). "" leaves each on the
 	// session's model.
 	CodexCompactModel string `json:"codexCompactModel,omitempty"`
+	// CodexSuggestions is the model the Codex app's prompt suggestions
+	// (its background ambient_suggestions turn, which reads the project
+	// and connected apps, and their safety check) go on: "" as Codex
+	// sends them, else a model's id (provider/model, group/<id>). Codex's
+	// own Settings › Configuration › Homepage suggestions turns them off.
+	CodexSuggestions string `json:"codexSuggestions,omitempty"`
 	// FullContext has Codex, Claude Code and Grok Build told a model's whole context
 	// window. Off, a window above WorkingWindow is told as WorkingWindow,
 	// so they compact a long conversation there instead of sending ever
@@ -2773,6 +2779,10 @@ func saveOwn(s Settings, recording, reads bool) error {
 	s.CodexCompactModel = strings.TrimSpace(s.CodexCompactModel)
 	if s.CodexCompactModel != "" && !strings.Contains(s.CodexCompactModel, "/") {
 		return fmt.Errorf("the model for Codex's compaction must be a model's id such as deepseek/deepseek-v4, not %q", s.CodexCompactModel)
+	}
+	s.CodexSuggestions = strings.TrimSpace(s.CodexSuggestions)
+	if s.CodexSuggestions != "" && !strings.Contains(s.CodexSuggestions, "/") {
+		return fmt.Errorf("the model for Codex's prompt suggestions must be a model's id such as deepseek/deepseek-v4, not %q", s.CodexSuggestions)
 	}
 	s.DesktopSubagentEffort = strings.ToLower(strings.TrimSpace(s.DesktopSubagentEffort))
 	if e := s.DesktopSubagentEffort; e != "" && (!slices.Contains(catalog.EffortRank, e) || e == "ultra") {

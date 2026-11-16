@@ -21,7 +21,7 @@ const { chromium, webkit } = require("playwright");
 const { watchSettingsReads, agentRow, openAgentSettings } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
-const CODEX = ["codexAgentsV1Row", "codexOpenRow", "codexServiceTierRow", "codexClientRow", "fullContextRow", "codexAsyncRow", "codexTitlesRow", "codexDescriptionsRow", "codexPredictionsRow", "codexAutoReviewRow", "codexMemoriesRow"];
+const CODEX = ["codexAgentsV1Row", "codexOpenRow", "codexServiceTierRow", "codexClientRow", "fullContextRow", "codexAsyncRow", "codexTitlesRow", "codexDescriptionsRow", "codexPredictionsRow", "codexSuggestionsRow", "codexAutoReviewRow", "codexMemoriesRow"];
 // shown in a sheet: every agent's Long conversations gives its place to the
 // agent's own row, one row for one thing (the owner, 11-12)
 const CODEX_SHOWN = CODEX.filter((id) => id !== "fullContextRow");
@@ -108,7 +108,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.goto("http://magpie.test/?view=agents");
         await openAgentSettings(page, "codex");
         const codexBox = '.row.agent[data-id="codex"] .ag-prefs';
-        assert.deepEqual(await shownIn(page, codexBox), CODEX_SHOWN, `${lang} ${width}: Codex's ten`);
+        assert.deepEqual(await shownIn(page, codexBox), CODEX_SHOWN, `${lang} ${width}: Codex's eleven`);
         assert(await ownLong(page, codexBox), `${lang} ${width}: Codex's Long conversations`);
         assert(await page.locator(codexBox).evaluate((b) => b.scrollWidth <= b.clientWidth + 1), `${lang} ${width}: the rows fit the opened row`);
         await noSideScroll(page, `${lang} ${width} Codex`);
@@ -139,7 +139,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await link.getByRole("button", { name: w.open, exact: true }).click();
         await sheet(page).waitFor();
         assert.equal(await sheet(page).locator(".ehead").textContent(), w.sheet);
-        assert.deepEqual(await shownIn(page, "#modal .editor.agent-prefs"), CODEX_SHOWN, `${lang} ${width}: the sheet has Codex's ten`);
+        assert.deepEqual(await shownIn(page, "#modal .editor.agent-prefs"), CODEX_SHOWN, `${lang} ${width}: the sheet has Codex's eleven`);
         assert(await ownLong(page, "#modal .editor.agent-prefs"), `${lang} ${width}: the sheet's Long conversations`);
         assert(await page.locator("#view-agents").isVisible(), "Open goes to the Agents page");
         await page.keyboard.press("Escape");

@@ -301,6 +301,7 @@ var notYet = map[string]string{
 	"POST /api/settings/codex-open":              S2, // api.go
 	"POST /api/settings/codex-predictions":       S2, // api.go
 	"POST /api/settings/codex-reset-lead":        S2, // api.go
+	"POST /api/settings/codex-suggestions":       S2, // api.go
 	"POST /api/settings/codex-titles":            S2, // api.go
 	"POST /api/settings/codex-warm-at":           S2, // api.go
 	"POST /api/settings/cors":                    S2, // api.go

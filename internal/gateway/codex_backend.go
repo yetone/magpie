@@ -158,6 +158,12 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 				s.codexPrediction(w, r, body, to)
 				return
 			}
+			// the app's prompt suggestions on the model set for them
+			// (codexSuggestionsTo), the model asked kept for the trace
+			if to := codexSuggestionsTo(r, agentOf(r), kind, model); to != "" {
+				r = withSuggestionsAsked(r, model)
+				body, model = withModel(body, to), to
+			}
 			// a subagent on one of Codex's own models, put on the model
 			// set for Codex's subagents, a ChatGPT account's in magpie;
 			// the request on the model asked for when it can't be, the

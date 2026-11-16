@@ -12,6 +12,7 @@ import (
 	"github.com/yetone/magpie/internal/codexcat"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
+	"github.com/yetone/magpie/internal/usage"
 )
 
 // codexSignInToken is Codex's ChatGPT sign-in as Codex keeps it, which
@@ -39,7 +40,7 @@ func codexOwnOffMagpie(r *http.Request, body []byte, model string) (to *http.Req
 	}
 	// one of Codex's hidden side calls on its own model that a setting
 	// sends elsewhere — a thread's title or description, a composer
-	// prediction — is magpie's to answer where it stands (codexTitlesTo
+	// prediction, the app's prompt suggestions — is magpie's to answer where it stands (codexTitlesTo
 	// and its siblings, further down handle), never to put on Codex's
 	// ChatGPT sign-in: with no sign-in to be had the request was answered
 	// 404 and Codex named the thread after its first message, whatever the
@@ -132,6 +133,8 @@ func codexSideSet(kind string) bool {
 		return st.CodexDescriptions != ""
 	case isPredictionKind(kind):
 		return st.CodexPredictions != ""
+	case usage.PurposeOf(kind) == "kind:ambient_suggestions":
+		return st.CodexSuggestions != ""
 	}
 	return false
 }

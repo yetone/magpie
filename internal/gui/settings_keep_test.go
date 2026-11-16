@@ -174,6 +174,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		CodexTitles:          "off",
 		CodexDescriptions:    "fake/m1",
 		CodexPredictions:     "off",
+		CodexSuggestions:     "fake/m1",
 		CodexAutoReview:      "fake/m1",
 		CodexSubagentModel:   "codex/gpt-6-astra",
 		CodexServiceTier:     "priority",

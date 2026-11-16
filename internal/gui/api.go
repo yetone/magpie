@@ -2208,6 +2208,28 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		writeJSON(rw, settingsState())
 	})
+	// the model the Codex app's prompt suggestions go on: "" as Codex
+	// sends them, or a model's id (Codex's own setting turns them off)
+	mux.HandleFunc("POST /api/settings/codex-suggestions", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ Model string }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		v := strings.TrimSpace(in.Model)
+		if v != "" {
+			// a model or group magpie lists, not any name under a provider
+			if !slices.ContainsFunc(provider.Served(), func(e provider.Entry) bool { return e.ID == v || e.Group != "" && provider.SameRef(e.ID, v) }) {
+				fail(rw, fmt.Errorf("no model %s for Codex's prompt suggestions", v))
+				return
+			}
+		}
+		if err := provider.SetCodexSuggestionsModel(v); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, settingsState())
+	})
 	// where Codex's requests for a thread's title go (#705): "" as Codex
 	// sends them, "off", or a model's id
 	// the models turned off for every request through magpie (#1867), each

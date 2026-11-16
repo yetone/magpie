@@ -26,6 +26,12 @@ const dshCompactAsk = "You are now acting as a compaction engine for this AI cod
 func dshSetup(t *testing.T) *desktopSubagentUpstream {
 	t.Helper()
 	fresh(t)
+	return fakeServing(t)
+}
+
+// fakeServing is dshSetup's provider in whatever home the test has set up.
+func fakeServing(t *testing.T) *desktopSubagentUpstream {
+	t.Helper()
 	noRests()
 	t.Cleanup(noRests)
 	u := &desktopSubagentUpstream{}
