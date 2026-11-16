@@ -2872,7 +2872,9 @@ async function loadLedHeat() {
   if (view === "usage" && usageTab === "requests") drawLedHeat();
 }
 const ledHeatDate = (s) => { const [y, m, d] = String(s).split("-").map(Number); return new Date(y, m - 1, d); };
-function ledHeatTip(x) {
+// metric: what the heatmap is coloured by, shown first; provider: the one
+// the heatmap is of, whose currency its costs are in, or none
+function ledHeatTip(x, metric = ledHeatMetric, provider = new URLSearchParams(ledHeat?.want).get("provider") || "") {
   const loc = intlLang();
   const tip = el("div");
   tip.append(el("b", "", x.day.toLocaleDateString(loc, { year: "numeric", month: "short", day: "numeric", weekday: "short" })));
@@ -2882,9 +2884,9 @@ function ledHeatTip(x) {
   }
   const parts = [t("{n} tokens", { n: fmtN(x.tokens) }), t(x.calls === 1 ? "{n} request" : "{n} requests", { n: ledNum(x.calls) })];
   // of one provider's calls, while the filters keep only its
-  const c = fmtCost(x, new URLSearchParams(ledHeat?.want).get("provider") || "");
+  const c = fmtCost(x, provider);
   if (c) parts.push(c);
-  const order = { tokens: 0, calls: 1, cost: 2 }[ledHeatMetric];
+  const order = { tokens: 0, calls: 1, cost: 2 }[metric];
   if (order && parts[order]) parts.unshift(...parts.splice(order, 1)); // the metric shown first
   tip.append(el("span", "", parts.join(" · ")));
   return tip;
@@ -2922,40 +2924,8 @@ function drawLedHeat() {
   const shape = [h.from, h.to, locale].join("|");
   let grid = scroll.querySelector(".heat-grid");
   if (!grid || grid.dataset.shape !== shape) {
-    grid = el("div", "heat-grid");
+    grid = heatGridOf(days);
     grid.dataset.shape = shape;
-    grid.setAttribute("role", "img");
-    const names = sessWeekdays();
-    // every row has its place at the edge, named every other day
-    for (let i = 0; i < 7; i++) {
-      const l = el("span", "wd", i % 2 ? "" : names[i]);
-      l.style.gridArea = `${i + 2} / 1`;
-      grid.append(l);
-    }
-    const loc = intlLang();
-    const weeks = Math.ceil(days.length / 7), labels = [];
-    let month = -1;
-    days.forEach((x, i) => {
-      const w = Math.floor(i / 7), wd = i % 7;
-      if (wd === 0 && x.day.getMonth() !== month) {
-        month = x.day.getMonth();
-        // a month mostly gone in the first week is left unnamed, so as not
-        // to crowd out the next one's name, and so is one begun in the last
-        // week, with no room for its name
-        if ((!labels.length || w - labels.at(-1).w >= 3) && !(w === 0 && x.day.getDate() > 14) && w < weeks - 1) {
-          const m = el("span", "mo", x.day.toLocaleDateString(loc, { month: "short" }));
-          labels.push({ m, w });
-          grid.append(m);
-        }
-      }
-      const c = el("i");
-      c.dataset.date = sessISO(x.day);
-      c.style.gridArea = `${wd + 2} / ${w + 2}`;
-      grid.append(c);
-    });
-    // a month's name spans its weeks up to the next name, cut there, so a
-    // long one never widens the grid past its last week
-    labels.forEach(({ m, w }, i) => { m.style.gridArea = `1 / ${w + 2} / 2 / ${(labels[i + 1]?.w ?? weeks) + 2}`; });
     grid.onpointerover = (e) => { if (e.target.dataset?.date) ledHeatShow(e.target); };
     grid.onpointerleave = () => { $("#ledHeatTip").hidden = true; };
     scroll.replaceChildren(grid);
@@ -2987,6 +2957,133 @@ function drawLedHeat() {
   if (!tip.hidden && tip.cell?.isConnected) ledHeatShow(tip.cell);
   else tip.hidden = true;
 }
+// heatGridOf lays days, a Monday first, out as weeks of days, Monday on
+// top: the weekdays named every other row at the edge, a month over the
+// week it begins in, and a cell a day (its date in data-date), to colour
+const heatGridOf = (days) => {
+  const grid = el("div", "heat-grid");
+  grid.setAttribute("role", "img");
+  const names = sessWeekdays();
+  // every row has its place at the edge, named every other day
+  for (let i = 0; i < 7; i++) {
+    const l = el("span", "wd", i % 2 ? "" : names[i]);
+    l.style.gridArea = `${i + 2} / 1`;
+    grid.append(l);
+  }
+  const loc = intlLang();
+  const weeks = Math.ceil(days.length / 7), labels = [];
+  grid.style.setProperty("--wk", weeks);
+  let month = -1;
+  days.forEach((x, i) => {
+    const w = Math.floor(i / 7), wd = i % 7;
+    if (wd === 0 && x.day.getMonth() !== month) {
+      month = x.day.getMonth();
+      // a month mostly gone in the first week is left unnamed, so as not
+      // to crowd out the next one's name, and so is one begun in the last
+      // week, with no room for its name
+      if ((!labels.length || w - labels.at(-1).w >= 3) && !(w === 0 && x.day.getDate() > 14) && w < weeks - 1) {
+        const m = el("span", "mo", x.day.toLocaleDateString(loc, { month: "short" }));
+        labels.push({ m, w });
+        grid.append(m);
+      }
+    }
+    const c = el("i");
+    c.dataset.date = sessISO(x.day);
+    c.style.gridArea = `${wd + 2} / ${w + 2}`;
+    grid.append(c);
+  });
+  // a month's name spans its weeks up to the next name, cut there, so a
+  // long one never widens the grid past its last week
+  labels.forEach(({ m, w }, i) => { m.style.gridArea = `1 / ${w + 2} / 2 / ${(labels[i + 1]?.w ?? weeks) + 2}`; });
+  return grid;
+};
+
+// ---------- the tray panel's heatmap ----------
+//
+// The panel's Usage tab ends in the heatmap's recent weeks (eiyuuzaki2333 on
+// X: a heatmap like GitHub's, "also in the tray form"): as many weeks as its
+// card has room for, Monday on top, of the provider and computer picked
+// above, coloured by the tab's own Tokens / Cost / Requests switch, the days
+// graded among the ones shown. It is /api/usage/heatmap, the Requests tab's,
+// read when a pick changes and otherwise at most once a minute; the tab's
+// own reads every 10s don't wait for it. No calls in its weeks, no card.
+let panelHeat = null, panelHeatAt = 0, panelHeatFlight = null; // flight: the picks being read
+const PANEL_HEAT_EVERY = 60e3;
+function panelHeatWant() {
+  const q = new URLSearchParams();
+  if (panelUseProvider) q.set("provider", panelUseProvider);
+  if (panelUseComputer) q.set("computer", panelUseComputer);
+  return q.toString();
+}
+function panelHeatLoad() {
+  const want = panelHeatWant();
+  if (panelHeatFlight === want) return;
+  if (panelHeat?.want === want && performance.now() - panelHeatAt < PANEL_HEAT_EVERY) return;
+  panelHeatFlight = want;
+  api("usage/heatmap?" + want).then((h) => {
+    if (panelHeatWant() !== want) return; // another pick meanwhile: its own read is on its way
+    panelHeatAt = performance.now();
+    const same = panelHeat?.want === want && JSON.stringify(panelHeat.data) === JSON.stringify(h);
+    panelHeat = { want, data: h };
+    const card = $("#panelUsage .pu-heat");
+    if (same || !card) return;
+    card.replaceWith(panelHeatCard());
+    fit();
+  }).catch(() => {}).finally(() => { if (panelHeatFlight === want) panelHeatFlight = null; });
+}
+// The card, drawn from what was read for the picks shown (nothing yet, or
+// another pick's: hidden), and a read asked for when that is old.
+function panelHeatCard() {
+  const card = el("div", "pu-heat");
+  card.hidden = true;
+  panelHeatLoad();
+  const h = panelHeat?.want === panelHeatWant() ? panelHeat.data : null;
+  const at = new Map((h?.days || []).map((d) => [d.date, d]));
+  if (!h?.to || ![...at.values()].some((d) => d.calls > 0)) return card;
+  // the weeks the panel has room for: the card's content width less the
+  // days' names, at a cell of at least 11px and a 3px gap
+  const room = ($("#panelUsage")?.clientWidth || 400) - 2 * 10 - 30;
+  const weeks = Math.max(8, Math.min(53, Math.floor((room + 3) / 14)));
+  const last = ledHeatDate(h.to), first = new Date(last);
+  first.setDate(first.getDate() - ((last.getDay() + 6) % 7) - 7 * (weeks - 1)); // a Monday
+  const days = [];
+  for (const d = new Date(first); d <= last; d.setDate(d.getDate() + 1)) {
+    const x = at.get(sessISO(d)) || { calls: 0, tokens: 0, cost: 0 };
+    days.push({ ...x, day: new Date(d) });
+  }
+  if (!days.some((x) => x.calls > 0)) return card;
+  const metric = panelUseMetric;
+  const value = (x) => metric === "cost" ? x.cost : metric === "calls" ? x.calls : x.tokens;
+  const lv = sessLevels(days.map(value));
+  const grid = heatGridOf(days);
+  grid.setAttribute("aria-label", t("Usage heatmap"));
+  grid.querySelectorAll("i").forEach((c, i) => {
+    c.className = "l" + lv(value(days[i]));
+    c.day = days[i];
+  });
+  const tip = el("div", "heat-tip");
+  tip.hidden = true;
+  grid.onpointerover = (e) => {
+    const c = e.target;
+    if (!c.day) return;
+    tip.replaceChildren(...ledHeatTip(c.day, metric, panelUseProvider).children);
+    tip.hidden = false;
+    const b = card.getBoundingClientRect(), r = c.getBoundingClientRect();
+    const w = tip.offsetWidth, hgt = tip.offsetHeight;
+    tip.style.left = Math.max(6, Math.min(b.width - w - 6, r.left - b.left + r.width / 2 - w / 2)) + "px";
+    let top = r.top - b.top - hgt - 6;
+    if (top < 4) top = r.bottom - b.top + 6;
+    tip.style.top = top + "px";
+  };
+  grid.onpointerleave = () => { tip.hidden = true; };
+  const head = el("div", "pu-heat-head");
+  head.append(el("b", "", t("Usage heatmap")), sessLegend());
+  card.append(head, grid, tip);
+  card.hidden = false;
+  return card;
+}
+// the tab drawn before this script ran is drawn again, with the card
+if (mode === "panel" && panelUse && panelTab === "stats") renderPanelUse();
 let ledHeatAtEnd = true, ledHeatSetAt = -1;
 const ledHeatSized = new ResizeObserver(() => ledHeatKeepEnd());
 function ledHeatKeepEnd() {

@@ -1716,7 +1716,7 @@ body.masked :hover > .acct-eye, body.masked .pq-card:hover .acct-eye, body.maske
    rule and draws the system's bar under the weeks, not the app's thin thumb
    every other list has (cybercaius on Discord) */
 .heat-scroll { overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; padding-bottom: 4px; }
-.heat-grid { display: grid; grid-template-columns: auto repeat(53, minmax(10px, 1fr)); grid-template-rows: auto repeat(7, auto); gap: 3px; min-width: min-content; max-width: calc(3em + 53 * 21px); font-size: 10px; color: var(--muted); }
+.heat-grid { display: grid; grid-template-columns: auto repeat(var(--wk, 53), minmax(10px, 1fr)); grid-template-rows: auto repeat(7, auto); gap: 3px; min-width: min-content; max-width: calc(3em + var(--wk, 53) * 21px); font-size: 10px; color: var(--muted); }
 .heat-grid i { aspect-ratio: 1; border-radius: 3px; min-width: 0; }
 .heat-grid i:hover { outline: 1px solid var(--fg-2); outline-offset: -1px; }
 /* the days of the week stay at the card's edge as the weeks scroll under them */
@@ -5097,6 +5097,15 @@ body.panel .modal { padding: 16px 12px; }
 .pu-card .led-bar .segs .opt { height: 20px; padding: 0 8px; font-size: 11px; }
 .pu-card .led-chart .plot { height: 124px; }
 .pu-card .led-rank { margin-top: 4px; }
+/* the recent weeks' heatmap under the chart: the weeks fill the card, no
+   sideways scroll, the days' names plain beside them */
+/* the panel's light pills are its cards' white: a quiet day is a shade off it */
+.pu-heat { position: relative; padding: 8px 10px 6px; border-radius: 11px; background: var(--card); box-shadow: var(--card-edge); --pill: color-mix(in srgb, var(--fg) 7%, var(--card)); }
+.pu-heat[hidden] { display: none; }
+.pu-heat-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 1px 0 6px; font-size: 11.5px; }
+.pu-heat-head b { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pu-heat .heat-grid { max-width: none; min-width: 0; padding-bottom: 4px; }
+.pu-heat .heat-grid .wd { position: static; background: none; box-shadow: none; }
 .pu-none { margin: 0; padding: 12px; border-radius: 11px; background: var(--card); box-shadow: var(--card-edge); font-size: 12px; line-height: 1.55; color: var(--muted); }
 .pu-none b { display: block; color: var(--fg); font-weight: 550; }
 .skeleton.pu-sk { height: 52px; border-radius: 11px; }
