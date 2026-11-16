@@ -42,8 +42,11 @@ type Call struct {
 	Upstream  string `json:"upstream,omitempty"`
 	AccountID string `json:"account_id,omitempty"`
 	UserID    string `json:"user_id,omitempty"`
-	Error     string `json:"error,omitempty"`      // Claude: the API error's kind (rate_limit, server_error …); such a call has no tokens
-	ErrorText string `json:"error_text,omitempty"` // its message, the first 400 characters
+	// Credits: what the call cost in its plan's own credits, as the file
+	// says (Qoder's, which writes no tokens of its own models)
+	Credits   *float64 `json:"credits,omitempty"`
+	Error     string   `json:"error,omitempty"`      // Claude: the API error's kind (rate_limit, server_error …); such a call has no tokens
+	ErrorText string   `json:"error_text,omitempty"` // its message, the first 400 characters
 	// Codex: the turn's own figures, set only when the turn made just this call
 	TTFT int64 `json:"ttft_ms,omitempty"`
 	// Compaction is Codex's explicit marker that this response compacted the context.
@@ -335,7 +338,9 @@ func callFileLists(codex []file) [][]file {
 // file only appended to, read on as callFiles' are; DeepSeek Harness's, a
 // file only appended to that may be packed in zstd frames, is read on
 // from the frame it was left in (readDshCalls). Every agent here needs an
-// entry in wholeCallReaders, lineCallReaders or resumeCallReaders.
+// entry in wholeCallReaders, lineCallReaders or resumeCallReaders, but
+// Qoder's and Qoder CN's (qoder.go), whose files are Claude Code's and read
+// as Claude Code's are (ccCallAgent).
 func callSources() []file { return callSourcesWith(codexFiles()) }
 
 // callSourcesWith is callSources with codex the rollouts codexFiles found.
@@ -349,7 +354,9 @@ func callSourcesInto(out []file, codex []file) []file {
 		antigravityCallFiles(),                       // #2190
 		wslFiles("antigravity"), wslCallFiles("agy"), // @guyng35955 on X
 		devinCallFiles(),                      // aohan0905 on X
-		workbuddyCallFiles(), grokCallFiles()) // #4423
+		workbuddyCallFiles(), grokCallFiles(), // #4423
+		// Claude Code's lines, read by claudeCallLine (eating_dream on X)
+		ccFiles("qoder", QoderDir("qoder")), ccFiles("qoder-cn", QoderDir("qoder-cn")))
 	if out == nil {
 		return allowed(distinctOf(lists...))
 	}
@@ -388,7 +395,7 @@ func prepareCalls(f file, old *callFile, owned bool) *callFile {
 	}
 	// Disk shards keep final calls, not message block/tool maps. A changed
 	// Claude source reconstructs its transient revision index after restart.
-	if (f.agent == "claude" || f.agent == "claude-desktop") && old != nil && old.Claude == nil {
+	if ccCallAgent(f.agent) && old != nil && old.Claude == nil {
 		old = nil
 	}
 
@@ -696,8 +703,35 @@ type ccCall struct {
 			CacheRead  int              `json:"cache_read_input_tokens"`
 			CacheWrite int              `json:"cache_creation_input_tokens"`
 			Creation   *ccCacheCreation `json:"cache_creation"`
+			Credits    ccNum            `json:"credits"`
 		} `json:"usage"`
 	} `json:"message"`
+}
+
+// ccNum is a number field that reads as unset when a file holds something
+// else there, so a line is never lost for it.
+type ccNum struct {
+	V   float64
+	Set bool
+}
+
+func (n *ccNum) UnmarshalJSON(b []byte) error {
+	var v float64
+	if json.Unmarshal(b, &v) == nil && !bytes.Equal(b, []byte("null")) {
+		*n = ccNum{v, true}
+	}
+	return nil
+}
+
+// ccCallAgent says whether agent's session files are Claude Code's, its
+// calls read by claudeCallLine: Claude Code's and Desktop's own, and
+// Qoder's (qoder.go), whose lines are Claude Code's.
+func ccCallAgent(agent string) bool {
+	switch agent {
+	case "claude", "claude-desktop", "qoder", "qoder-cn":
+		return true
+	}
+	return false
 }
 
 // claudeCallLine notes the call an assistant line is (a block of) in the
@@ -944,7 +978,15 @@ func claudeCall(st *callFile, b []byte, l *ccCall) {
 		}
 		c.Model = st.str(model)
 		c.Tokens = ccTokens(u.Input, u.Output, u.CacheRead, u.CacheWrite, u.Creation)
-		if c.Tokens.zero() && m.Usage == nil {
+		if u.Credits.Set && (st.Agent == "qoder" || st.Agent == "qoder-cn") {
+			// Qoder writes its own models' replies with every count 0
+			// unless QODER_EXPOSE_TOKEN_USAGE is set (qodercli 1.1.0 on,
+			// the app's worker too), and the credits the reply cost: a
+			// call of no tokens known, counted by what it cost
+			v := u.Credits.V
+			c.Credits = &v
+		}
+		if c.Tokens.zero() && m.Usage == nil && c.Credits == nil {
 			return
 		}
 		if !asked.IsZero() && at.After(asked) {
@@ -957,6 +999,10 @@ func claudeCall(st *callFile, b []byte, l *ccCall) {
 			previous := &st.Calls[i]
 			changed := previous.RequestID != m.Request
 			previous.RequestID = m.Request
+			// Qoder's counts stay 0 while what the reply cost is told
+			if c.Credits != nil && (previous.Credits == nil || *previous.Credits != *c.Credits) {
+				previous.Credits, changed = c.Credits, true
+			}
 			// A new block can finish a reply with unchanged usage. Retain
 			// its duration/content boundary without moving usage across days.
 			if newBlock && m.Usage.Model == c.Model && m.Usage.Tokens == c.Tokens &&

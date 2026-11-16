@@ -427,7 +427,7 @@ func readCalls(f file) *callFile {
 	if st.Claude != nil && (old == nil || old.Claude == nil) && !workingRevision(f.mod.UnixNano(), time.Now()) {
 		st = st.withoutRevisions()
 	}
-	if err == nil && (f.agent == "claude" || f.agent == "claude-desktop" || f.agent == "codex") {
+	if err == nil && (ccCallAgent(f.agent) || f.agent == "codex") {
 		writeCallRevisions(st)
 	}
 

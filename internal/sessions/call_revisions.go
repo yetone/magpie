@@ -73,7 +73,7 @@ func withCallRevisions(old *callFile) *callFile {
 		return old
 	}
 	codex := old.Agent == "codex" && (old.CX == nil || old.CX.Usage == nil)
-	if !codex && (old.Claude != nil || (old.Agent != "claude" && old.Agent != "claude-desktop")) {
+	if !codex && (old.Claude != nil || !ccCallAgent(old.Agent)) {
 		return old
 	}
 	data, err := os.ReadFile(callRevisionsPath(old.Path))

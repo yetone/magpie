@@ -17,7 +17,7 @@ type callContinuation struct {
 // keepCallContinuation is called with callsMu held. Published continuations
 // are immutable; prepareCalls clones them before applying another append.
 func keepCallContinuation(st *callFile) {
-	if st.Agent != "codex" && st.Agent != "claude" && st.Agent != "claude-desktop" {
+	if st.Agent != "codex" && !ccCallAgent(st.Agent) {
 		return
 	}
 	old, exists := callContinuations[st.Path]

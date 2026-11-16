@@ -884,7 +884,14 @@ Code's (#1779; its sessions are on the Sessions page too, from the same
 `TestCodeBuddySessionsListedUnderTheirName`), MiniMax Code's (#1605), Kimi Code's (#1607,
 [`calls_kimi.go`](../../internal/sessions/calls_kimi.go)) and Pi's,
 Raft's Pi agents' and omp's, here and in WSL (#1951,
-[`calls_pi.go`](../../internal/sessions/calls_pi.go)). Each skips the
+[`calls_pi.go`](../../internal/sessions/calls_pi.go)), and Qoder's and
+Qoder CN's (`~/.qoder`, `~/.qoder-cn`), read as Claude Code's are
+(`ccCallAgent`; eating_dream on X). Qoder writes a reply on its own models
+(`auto` among them) with every count 0 unless `QODER_EXPOSE_TOKEN_USAGE`
+is set (qodercli 1.1.0 on, and the app's worker), and with the reply's
+`credits`: such a call has no tokens and no price, and its `Credits` are
+summed as a plan's credits are; a reply written with no usage at all is no
+call (`TestQoderCalls`, `TestDirectQoderCallsByCredits`). Each skips the
 calls the agent made through magpie's own entry, which the gateway logged
 with the account that answered: Kimi Code's are the ones whose
 `usage.record` model begins `magpie/`. Kimi Code's calls are its
