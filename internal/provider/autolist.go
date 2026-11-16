@@ -153,7 +153,7 @@ func CleanAutoInclude(in []string) ([]string, error) {
 		if p == "" || slices.Contains(out, p) {
 			continue
 		}
-		if !IsPattern(p) {
+		if !isIDPattern(p) {
 			return nil, fmt.Errorf("%q is a model's id, not a rule: a rule has a * in it, or starts with %s (magpie provider models <id> +%s picks that one)", p, RegexpPrefix, p)
 		}
 		if _, err := compilePattern(p); err != nil {

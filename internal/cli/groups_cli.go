@@ -95,6 +95,8 @@ const groupUsage = `usage:
            * is any run of characters, / too, over the provider/model id in any case (openrouter/*:free,
            *-free, opencode-zen/*), or re:<regexp> matching the whole id, in any case too (re:openrouter/.*:(free|beta));
            (?-i) in the regexp makes case matter (re:(?-i)openrouter/.*:FREE).
+           free: before a pattern keeps only the models it matches that their last catalog marks free
+           (free:workbuddy/*): the vendor's free flag as last read, not a promise of no charge.
            Quote it for the shell. The group keeps the pattern, not its models: one the vendor adds joins,
            one it drops leaves. The models you name come first, in your order, then those the patterns
            match, in the order magpie models lists them; one both named and matched keeps its named place.

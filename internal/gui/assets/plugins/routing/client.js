@@ -6620,12 +6620,23 @@ function routingPage(part) {
   // id, both in any case (provider.compilePattern). The group keeps them,
   // and the models they match now follow those it names, in the catalog's
   // order (Group.Matched)
-  const isPattern = (s) => s.startsWith("re:") || s.includes("*");
+  // A free: rule (provider.FreePrefix, #5903) keeps, of the models the
+  // rest of it matches, those the last catalog marks free (m.free): never
+  // a $0 price (m.zero), a rate or an id that says free
+  const isPattern = (s) => s.startsWith("re:") || s.startsWith("free:") || s.includes("*");
   function patternRe(p) {
     try {
       if (p.startsWith("re:")) return goRe(p.slice(3));
       return new RegExp("^" + p.split("*").map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*") + "$", "i");
     } catch { return null; }
+  }
+  // patternTest is the models a pattern takes, as provider.compileRule
+  // reads it; null when it is one magpie can't read
+  function patternTest(p) {
+    const free = p.startsWith("free:"), scope = free ? p.slice(5).trim() : p;
+    if (free && (!scope || scope.startsWith("free:"))) return null;
+    const r = patternRe(scope);
+    return r && ((m) => (!free || m.free === true) && r.test(m.id));
   }
   // goRe is a re: pattern's regexp as Go reads it, in any case: Go's
   // leading flag group, "(?-i)" to make case matter, is JS's flags (U,
@@ -6646,11 +6657,11 @@ function routingPage(part) {
   // the models served now the patterns match, but those the group names
   // (at any reasoning): as provider.matchesIn finds them
   function matchedBy(patterns, named) {
-    const res = patterns.map(patternRe).filter(Boolean);
+    const res = patterns.map(patternTest).filter(Boolean);
     const own = new Set(named.map((id) => splitMember(id)[0]));
-    return (groups?.models || []).filter((m) => !own.has(m.id) && res.some((r) => r.test(m.id))).map((m) => m.id);
+    return (groups?.models || []).filter((m) => !own.has(m.id) && res.some((r) => r(m))).map((m) => m.id);
   }
-  const patternCount = (p) => { const r = patternRe(p); return r ? (groups?.models || []).filter((m) => r.test(m.id)).length : 0; };
+  const patternCount = (p) => { const r = patternTest(p); return r ? (groups?.models || []).filter(r).length : 0; };
   const patternWords = (n) => n ? t(n === 1 ? "1 model" : "{n} models", { n }) : t("matches nothing now");
   // what a group keeps of its members: those it names, not those its
   // patterns matched when it was read — they are found again each time
@@ -8283,7 +8294,7 @@ function routingPage(part) {
       const p = pin.value.trim();
       if (!p) return "";
       if (!isPattern(p)) return status(t("A pattern has a * in it, or starts with re:"), "warn"), null;
-      if (!patternRe(p)) return status(t("{pattern} is not a regular expression magpie can read", { pattern: p }), "warn"), null;
+      if (!patternTest(p)) return status(t("{pattern} is not a regular expression magpie can read", { pattern: p }), "warn"), null;
       if (!d.match.includes(p)) d.match.push(p);
       pin.value = "";
       rematch(); drawPats(); draw(); drawRules();
@@ -8296,7 +8307,8 @@ function routingPage(part) {
     pbox.append(plist, padd);
     drawPats();
     const pw = el("div");
-    pw.append(pbox, el("div", "hint", t("Every model a pattern matches is in the group, now and as providers list new ones, after the models above: * is any run of characters in provider/model, re: starts a regular expression.")));
+    pw.append(pbox, el("div", "hint", t("Every model a pattern matches is in the group, now and as providers list new ones, after the models above: * is any run of characters in provider/model, re: starts a regular expression.")),
+      el("div", "hint", t("free: before a pattern keeps the models the last catalog marked free, as in free:workbuddy/*. It is the catalog's flag, not a promise of no charge.")));
     // what few change — patterns, the lists, routing, the waits, the
     // window, how long a conversation stays, reasoning — folded under
     // Advanced below the rules, as a provider's editor folds its own (the

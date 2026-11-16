@@ -3,9 +3,14 @@ package provider
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/plugin"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 func patternHome(t *testing.T) {
@@ -321,5 +326,130 @@ func TestRegexpPatternLookahead(t *testing.T) {
 	}
 	if _, err := CleanAutoInclude([]string{"re:(?!.*flash).*glm.*"}); err != nil {
 		t.Errorf("auto-include lookahead refused: %v", err)
+	}
+}
+
+// freePlugins are WorkBuddy's and Cline's plugins signed in, their models
+// as each lists them (#5903): WorkBuddy's hy4free, hy3 and hy4flash-exp4
+// marked free (its "credits": "x0.00"), glm-5.1 at a rate, one with "free"
+// in its id that isn't marked so, and one at a rate of 0 not marked free.
+func freePlugins(t *testing.T, wb []plugin.Model) {
+	t.Helper()
+	claudeHome(t)
+	t.Setenv("MAGPIE_BUN", "")
+	write := func(name string, v any) {
+		t.Helper()
+		b, _ := json.Marshal(v)
+		os.MkdirAll(settings.Dir(), 0o700)
+		if err := os.WriteFile(filepath.Join(settings.Dir(), name), b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	wbSpec, clSpec := "@magpie-community/opencode-workbuddy-auth", "@magpie-community/opencode-cline-auth"
+	write("plugins.json", map[string]any{"plugins": []map[string]any{{"spec": wbSpec}, {"spec": clSpec}}})
+	write("plugin-auth.json", map[string]map[string]any{"workbuddy": {"type": "api", "key": "wb-1234"}, "cline": {"type": "api", "key": "sk-cline-1234"}})
+	t.Cleanup(func() { plugin.UseCached(nil) })
+	listWorkBuddy(wb)
+}
+
+// listWorkBuddy is the plugins' catalog as read again, WorkBuddy listing wb.
+func listWorkBuddy(wb []plugin.Model) {
+	wbSpec, clSpec := "@magpie-community/opencode-workbuddy-auth", "@magpie-community/opencode-cline-auth"
+	plugin.UseCached([]plugin.Provider{
+		{ID: "workbuddy", Spec: wbSpec, Name: "WorkBuddy", Methods: []plugin.Method{{Type: "api", Label: "API key"}}, Accounts: []plugin.Account{{Key: "workbuddy", Type: "api"}}, Models: wb},
+		{ID: "cline", Spec: clSpec, Name: "Cline", Methods: []plugin.Method{{Type: "api", Label: "API key"}}, Accounts: []plugin.Account{{Key: "cline", Type: "api"}},
+			Models: []plugin.Model{{ID: "cline-free/mimo-v2.6-flash", Name: "MiMo V2.6 Flash (free)", Free: true}}},
+	})
+}
+
+// A group's free: rule (#5903) takes, of the models its scope matches,
+// only those their catalog marks free: within the provider it names, as
+// the catalog was last read. A model at $0, at a rate of 0 or with free in
+// its id is not taken, nor one of another provider; the catalog marking
+// another free, or one free no longer, changes the group with no save, and
+// the patterns that were there before match as they did.
+func TestGroupFreeRule(t *testing.T) {
+	wb := []plugin.Model{
+		{ID: "hy4free", Name: "Hy4 Free", Free: true},
+		{ID: "glm-5.1", Name: "GLM 5.1", Rate: 1},
+		{ID: "hy3", Name: "Hy3", Free: true},
+		{ID: "deepseek-v4-free", Name: "DeepSeek V4 Free"},
+		{ID: "hy-rate0", Name: "Hy Rate 0", Rate: 0},
+		{ID: "hy4flash-exp4", Name: "Hy4 Flash Exp4", Free: true},
+	}
+	freePlugins(t, wb)
+	if err := Save(Provider{ID: "or", Name: "OR", Key: "k", Chat: "http://127.0.0.1:1/v1", Models: []string{"x:free", "y"}}); err != nil {
+		t.Fatal(err)
+	}
+	// a model the user priced at $0 is not one its catalog marks free
+	if err := SetModelPrice("or/y", &catalog.Price{}); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := Find("or"); p == nil || !p.PricedFree(settings.Load(), "y") {
+		t.Fatal("or/y is not priced free: the fixture tests nothing")
+	}
+	for _, g := range []Group{
+		{Name: "WB Free", Members: []string{"free:workbuddy/*"}},
+		{Name: "All Free", Match: []string{"free:*"}},
+		{Name: "WB", Match: []string{"workbuddy/*"}},
+		{Name: "OR Free", Match: []string{"or/*:free"}},
+	} {
+		if err := SaveGroup(g); err != nil {
+			t.Fatalf("%s: %v", g.Name, err)
+		}
+	}
+	wbFree := []string{"workbuddy/hy4free", "workbuddy/hy3", "workbuddy/hy4flash-exp4"}
+	g, _, _ := FindGroup("group/wb-free")
+	if !slices.Equal(g.Match, []string{"free:workbuddy/*"}) || !slices.Equal(g.Members, wbFree) {
+		t.Fatalf("free:workbuddy/*: match %v members %v (served %v)", g.Match, g.Members, IDs())
+	}
+	if got := routedIDs(t, "group/wb-free"); !slices.Equal(got, wbFree) {
+		t.Fatalf("routed: %v", got)
+	}
+	if hits := PatternHits(g); len(hits) != 1 || hits[0].Models != 3 {
+		t.Fatalf("hits: %+v", hits)
+	}
+	if got := routedIDs(t, "group/all-free"); !slices.Equal(got, append(slices.Clone(wbFree), "cline/cline-free/mimo-v2.6-flash")) {
+		t.Fatalf("free:*: %v", got)
+	}
+	// the rules there before are as they were
+	if got := routedIDs(t, "group/wb"); len(got) != len(wb) {
+		t.Fatalf("workbuddy/*: %v", got)
+	}
+	if got := routedIDs(t, "group/or-free"); !slices.Equal(got, []string{"or/x:free"}) {
+		t.Fatalf("or/*:free: %v", got)
+	}
+	// the next catalog: hy3 free no longer, hy5 new and free, hy4free gone
+	listWorkBuddy([]plugin.Model{
+		{ID: "hy3", Name: "Hy3", Rate: 0.5},
+		{ID: "hy4flash-exp4", Name: "Hy4 Flash Exp4", Free: true},
+		{ID: "hy5", Name: "Hy5", Free: true},
+	})
+	if got := routedIDs(t, "group/wb-free"); !slices.Equal(got, []string{"workbuddy/hy4flash-exp4", "workbuddy/hy5"}) {
+		t.Fatalf("after the catalog changed: %v", got)
+	}
+}
+
+// A free: rule is said as a pattern and kept as typed, magpie/ and spaces
+// trimmed; one naming nothing, or free: twice, is refused. A provider's
+// AutoInclude, over ids alone, reads free: as it did before.
+func TestFreeRuleSyntax(t *testing.T) {
+	if !IsPattern("free:workbuddy/hy3") || !IsPattern("free:re:workbuddy/hy.*") {
+		t.Error("IsPattern")
+	}
+	got, err := CleanPatterns([]string{" free: magpie/workbuddy/* ", "free:re:workbuddy/hy.*", "free:workbuddy/*"})
+	if err != nil || !slices.Equal(got, []string{"free:workbuddy/*", "free:re:workbuddy/hy.*"}) {
+		t.Fatalf("clean: %v %v", got, err)
+	}
+	for _, p := range []string{"free:", "free: ", "free:free:x/*", "free:re:x/(a"} {
+		if _, err := CleanPatterns([]string{p}); err == nil {
+			t.Errorf("%q taken", p)
+		}
+	}
+	if !PatternMatches("free:workbuddy/*", "workbuddy/hy3") || PatternMatches("free:workbuddy/*", "cline/hy3") {
+		t.Error("PatternMatches over a free rule's scope")
+	}
+	if _, err := CleanAutoInclude([]string{"free:x"}); err == nil {
+		t.Error("an auto-include rule over ids took free:x")
 	}
 }

@@ -193,7 +193,7 @@
     <p>路由组把不同供应商的模型放在一起，比如官方 Claude 订阅里的 Opus 和 Copilot 里的 Opus，或者几个免费模型。Agent 选 <code>group/&lt;id&gt;</code> 作为模型，magpie 按组的路由方式和规则决定每个请求交给谁。组在 <span class="ui">路由</span> 页的 <span class="ui">路由组</span> 里，用 <span class="ui">新建组</span> 创建。</p>
     <ol class="steps">
       <li><b>magpie 自己会找组</b>两个及以上供应商都提供的模型，自动成为一个组（auto-&lt;模型&gt;），不用设置。不想要可以关掉 <span class="ui">自动创建路由组</span>。</li>
-      <li><b>组里放什么</b>任意模型，用 provider/model 写；也可以放另一个组（最多 8 层），或者用通配符：<code>openrouter/*:free</code> 会把以后新出的免费模型也加进来。</li>
+      <li><b>组里放什么</b>任意模型，用 provider/model 写；也可以放另一个组（最多 8 层），或者用通配符：<code>openrouter/*:free</code> 会把以后新出的免费模型也加进来。模式前加 <code>free:</code> 只保留最近一次目录标为免费的模型，如 <code>free:workbuddy/*</code>；这是厂商目录的标记，不保证不扣费。</li>
       <li><b>组的路由方式</b>除了上面几种，组还有 <span class="ui">按权重</span>（按每个模型的权重）和 <span class="ui">手动</span>（只用你选的那个，不切换）。</li>
       <li><b>规则</b>可以按一轮的长度、是否带图、要求的推理强度或 Agent，决定一轮先交给哪个模型。</li>
     </ol>
