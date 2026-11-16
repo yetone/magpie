@@ -4061,6 +4061,7 @@ body:not(.side-nav) #addSheet > .row-head.stuck::before { opacity: 1; box-shadow
 /* how a model answered Test models: a dot after its name */
 .mchip .tdot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--faint); }
 .mchip .tdot.ok { background: var(--green); }
+.mchip .tdot.queued { background: var(--amber); }
 .mchip .tdot.bad { background: var(--red); -webkit-mask: var(--x-mark) center / contain no-repeat; mask: var(--x-mark) center / contain no-repeat; border-radius: 0; transform: scale(1.5); }
 .mchip .tdot.wait { animation: tdot 1s ease-in-out infinite alternate; }
 @keyframes tdot { to { opacity: .25; } }

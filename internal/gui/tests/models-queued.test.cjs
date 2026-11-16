@@ -1,7 +1,9 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // A plugin's model its vendor has queued (Qoder's "queued the request for
-// ...", Mr7Faith on X) answers its test OK: a green dot whose title says the
-// queue, and Working only keeps it picked.
+// ...", Mr7Faith on X) is no failed test: Working only keeps it picked. But
+// it didn't answer either, and routing gives way at once or ends with the
+// queue's 503, so its dot is the queued one, not green, and the status
+// says the queue, not "answered" (@sufeng1894 on X).
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -24,7 +26,7 @@ const answers = {
   "qwen4-max": { ok: true, ms: 380, protocol: "openai" },
   "deepseek-v4": { ok: false, status: 503, error: "no available channel", protocol: "openai" },
 };
-const KEPT = ["glm-5", "minimax-m3", "qwen4-max"];
+const KEPT = ["glm-5", "qwen4-max"];
 
 function serve(lang, posts) {
   const providers = { providers: [relay], presets: [], excluded: [], gateway: { running: true, window: true } };
@@ -52,7 +54,31 @@ function serve(lang, posts) {
 
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
-  test(`${engine}: a queued model's test is green and says the queue`, async (t) => {
+  test(`${engine}: a queued model's test says the queue, not green`, async (t) => {
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    t.after(() => browser.close());
+    const page = await (await browser.newContext({ viewport: { width: 900, height: 700 }, reducedMotion: "reduce" })).newPage();
+    page.setDefaultTimeout(5000);
+    page.setDefaultNavigationTimeout(60000);
+    const posts = [];
+    await page.route("**/*", serve("en", posts));
+    await page.goto("http://magpie.test/?view=providers");
+    const editor = page.locator("#modal:not([hidden]) .editor");
+    await page.locator(".row.provider", { hasText: "Mixed Relay" }).click();
+    await editor.locator(".mchips .mchip").first().waitFor();
+    await editor.getByRole("button", { name: "Test models", exact: true }).click();
+    await editor.locator(".mchips .tdot.ok").first().waitFor();
+    const chip = editor.locator(".mchips .mchip", { hasText: "glm-5" });
+    assert.equal(await chip.locator(".tdot.ok").count(), 0, "a queued model's dot isn't green");
+    assert.equal(await chip.locator(".tdot.queued").count(), 1);
+    assert.match(await chip.getAttribute("title"), /^Queued at its vendor, not answered: Qoder queued the request for glm-5/);
+    // Working only unpicks the two that failed and keeps the queued one
+    await editor.locator(".works-only").click();
+    for (const id of KEPT) assert.equal(await editor.locator(".mchips .mchip.on", { hasText: id }).count(), 1, id + " stays picked");
+    assert.equal(await editor.locator(".mchips .mchip.on", { hasText: "kimi-k3" }).count(), 0, "a failed one is unpicked");
+  });
+
+  test(`${engine}: a queued model's single test isn't "answered"`, async (t) => {
     const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
     t.after(() => browser.close());
     const page = await (await browser.newContext({ viewport: { width: 900, height: 700 }, reducedMotion: "reduce" })).newPage();
@@ -62,11 +88,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     await page.goto("http://magpie.test/?view=providers");
     const editor = page.locator("#modal:not([hidden]) .editor");
     await page.locator(".row.provider", { hasText: "Mixed Relay" }).click();
-    await editor.locator(".mchips .mchip").first().waitFor();
-    await editor.getByRole("button", { name: "Test models", exact: true }).click();
-    await editor.locator(".mchips .tdot.ok").first().waitFor();
     const chip = editor.locator(".mchips .mchip", { hasText: "glm-5" });
-    assert.equal(await chip.locator(".tdot.ok").count(), 1);
-    assert.match(await chip.getAttribute("title"), /queued the request for glm-5/);
+    await chip.waitFor();
+    await chip.click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Test this model" }).click();
+    await chip.locator(".tdot.queued").waitFor();
+    const said = await page.locator("#status").textContent();
+    assert.match(said, /^glm-5: Queued at its vendor, not answered: Qoder queued/);
+    assert.doesNotMatch(said, /answered in/);
   });
 }
