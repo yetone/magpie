@@ -124,6 +124,10 @@ func renewLogins(ctx context.Context, every time.Duration, atOnce int) []Renewal
 	}
 	ls := readLogins()
 	loginsMu.Unlock()
+	if _, ok := active["claude"]; !ok && claudeSignInUnsure() {
+		// Claude Code's own still, its sign-in read mid-write
+		active["claude"] = claudeHeldUser(ls)
+	}
 	out := []Renewal{}
 	tried := 0
 	for _, l := range ls {

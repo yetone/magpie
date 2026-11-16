@@ -261,6 +261,12 @@ func claudeSavedDir(user string) (string, error) {
 	if i < 0 {
 		return "", fmt.Errorf("no saved claude account %q", user)
 	}
+	if ls[i].Held {
+		// Claude Code's own, though a read just now found it signed in to
+		// none (claudeSignInUnsure): put here too, a second Claude Code
+		// would refresh the refresh token it holds and sign it out
+		return "", fmt.Errorf(errClaudeHeld, user)
+	}
 	if claudeSetupToken(ls[i].Auth) != "" {
 		// no sign-in to put there: the token goes in Claude Code's
 		// environment (ClaudeDirToken)
@@ -542,6 +548,94 @@ const legacyClaudeLogoutLapse = "Claude Code's /logout signed it out (it revokes
 // claudeGoneLapse is why a saved Claude account with no sign-in kept can't
 // be used.
 const claudeGoneLapse = "its sign-in is gone; sign in again"
+
+// errClaudeHeld is why the account Claude Code itself is signed in to gets
+// no config directory of magpie's.
+const errClaudeHeld = "Claude Code itself is signed in to %s; magpie runs it there, not in a folder of its own"
+
+// claudeUnsureGrace is how long a sign-in of Claude Code's that can't be
+// read is taken for one being written. Claude Code on Windows rewrites
+// .credentials.json and .claude.json in place while magpie has the file
+// open (its rename over it gets EPERM), and a read between the truncate
+// and the write finds it empty or cut short. A write takes milliseconds;
+// one unreadable for longer is gone.
+var claudeUnsureGrace = 2 * time.Minute
+
+var claudeUnsure struct {
+	sync.Mutex
+	since time.Time
+}
+
+// claudeSignInUnsure says, once liveLogin found Claude Code signed in to
+// no account, that this isn't known: what it keeps its sign-in in can't be
+// read whole now (claudeSignInUnread), and has been so for less than
+// claudeUnsureGrace. The account it held stays its own meanwhile, neither
+// lapsed (claudeLoggedOut) nor run elsewhere (claudeSavedDir). A sign-in in
+// the Mac's keychain is read whole or not at all, and is left as it was.
+func claudeSignInUnsure() bool {
+	if settings.AccountDiscoveryOff() || claudeKeychain {
+		return false
+	}
+	unread := claudeSignInUnread()
+	claudeUnsure.Lock()
+	defer claudeUnsure.Unlock()
+	if !unread {
+		claudeUnsure.since = time.Time{}
+		return false
+	}
+	now := time.Now()
+	if claudeUnsure.since.IsZero() {
+		claudeUnsure.since = now
+	}
+	return now.Sub(claudeUnsure.since) < claudeUnsureGrace
+}
+
+// claudeSignInUnread says Claude Code's sign-in isn't known to be gone:
+// gone is no credentials file, one Claude Code emptied, `claude auth
+// status` saying it is logged out, or no account named for it. A file
+// that can't be read or isn't whole JSON is one being written, and so is
+// a sign-in read whole now, which a read a moment ago (claudeCredential's)
+// didn't find.
+func claudeSignInUnread() bool {
+	b, err := readAccountFile(claudeCredentialsPath())
+	if err != nil {
+		return !os.IsNotExist(err)
+	}
+	c, ok := parseClaudeCredentials(b)
+	if c.raw == nil {
+		return true
+	}
+	if !ok {
+		return false
+	}
+	user, _, signedOut := claudeIdentity()
+	if signedOut {
+		return false
+	}
+	b, err = os.ReadFile(claudeProfilePath())
+	if err != nil {
+		return !os.IsNotExist(err) || user != ""
+	}
+	var m struct {
+		OAuthAccount map[string]any `json:"oauthAccount"`
+	}
+	if json.Unmarshal(b, &m) != nil {
+		return true
+	}
+	email, _ := m.OAuthAccount["emailAddress"].(string)
+	return strings.TrimSpace(email) != "" || user != ""
+}
+
+// claudeHeldUser is the account Claude Code was signed in to when last
+// looked at, "" for none.
+func claudeHeldUser(ls []savedLogin) string {
+	for _, l := range ls {
+		if l.Agent == "claude" && l.Held {
+			return l.User
+		}
+	}
+	return ""
+}
 
 // claudeLoggedOut marks the account Claude Code held, now that it holds no
 // sign-in, as lapsed: magpie's copy of that account is the same sign-in,

@@ -1051,7 +1051,9 @@ func rememberLogins(force bool) {
 			}
 		}
 		if !ok {
-			if agent == "claude" && claudeLoggedOut(ls) {
+			// half-written as Claude Code rewrites it on Windows: unknown,
+			// not a sign-out (claudeSignInUnsure)
+			if agent == "claude" && !claudeSignInUnsure() && claudeLoggedOut(ls) {
 				changed = true
 			}
 			continue
@@ -1231,6 +1233,12 @@ func loginsNow(agent string) []Login {
 	}
 	var out []Login
 	ls := readLogins()
+	if _, ok := active["claude"]; !ok && claudeSignInUnsure() {
+		// read as Claude Code writes it: the account it held is still its own
+		if u := claudeHeldUser(ls); u != "" {
+			active["claude"] = u
+		}
+	}
 	standIn := ""
 	if _, ok := active["claude"]; !ok {
 		// the one the provider is listed on (claudeStandInAccount), a
