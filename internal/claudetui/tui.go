@@ -1273,6 +1273,8 @@ func (s *shim) send(pieces []piece) error {
 	s.said = []heardRow{} // kept from now on (heard), till send returns
 	s.rowsMu.Unlock()
 	defer s.heardAll()
+	// a row counted (sawRow) while send failed before its check is let out
+	defer s.letHeld()
 	var pasted strings.Builder // the words pasted, to check them whole
 	images := 0
 	marker := 0
@@ -1553,11 +1555,20 @@ func (s *shim) transcript() string {
 // result (renderParts).
 const userMark = "[user message]\n"
 
+// sawRow counts a message's row. While one sent is checked (said isn't
+// nil), what comes after the row is held from here, on the transcript's
+// own reader: the reply is read right after its message's row, and held
+// only once send saw the count, a reply got out before its message was
+// checked whole (#6887).
 func (s *shim) sawRow() {
 	s.rowsMu.Lock()
 	s.rows++
 	s.busy = true
+	checking := s.said != nil
 	s.rowsMu.Unlock()
+	if checking {
+		s.hold()
+	}
 	select {
 	case s.rowsCh <- struct{}{}:
 	default:

@@ -457,10 +457,27 @@ func (s *shim) tell(v any) {
 // quick model answered words cut, its result let out, within the time
 // waited for the message's other rows (wholeWait): the check's error came
 // after the turn had ended (Haiku, 64K on Windows 10's console).
+//
+// What sawRow began holding is kept: a reply read before the check began
+// stays in it. What a failed check dropped (io.Discard) is held anew.
 func (s *shim) hold() {
 	s.outMu.Lock()
-	s.held = new(bytes.Buffer)
+	if _, ok := s.held.(*bytes.Buffer); !ok {
+		s.held = new(bytes.Buffer)
+	}
 	s.outMu.Unlock()
+}
+
+// letHeld lets out what is held for a message that was never checked:
+// send failed after sawRow began holding (a check's own end, unhold, has
+// already ended the hold either way).
+func (s *shim) letHeld() {
+	s.outMu.Lock()
+	defer s.outMu.Unlock()
+	if b, ok := s.held.(*bytes.Buffer); ok {
+		_, _ = s.out.Write(b.Bytes())
+		s.held = nil
+	}
 }
 
 // unhold lets out what was held when the message was whole (err nil),
