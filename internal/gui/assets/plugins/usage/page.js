@@ -608,6 +608,48 @@ function sharedKeysNote(q) {
   s.title = t("One balance for the account these keys share: {keys}", { keys: q.sharedKeys.join(", ") });
   return s;
 }
+// keysSum: the keys' balances added up, written as theirs are ("$12.50"),
+// when each is one amount in the same currency; "" otherwise
+function keysSum(subs) {
+  let total = 0, unit = null;
+  for (const q of subs) {
+    const m = !q.error && !q.balanceParts?.length && (q.balance || "").match(/^([^\d-]*)(-?\d[\d,]*(?:\.\d+)?)(\D*)$/);
+    if (!m) return "";
+    const u = m[1] + "|" + m[3];
+    if (unit != null && u !== unit) return "";
+    unit = u;
+    total += Number(m[2].replace(/,/g, ""));
+  }
+  return balanceAmount(subs[0], total);
+}
+// A key's balance, as Usage last read it, beside the row's models (lyj1115
+// on X: found, but shown on Usage only); several keys' added up as Usage's
+// card adds them, else the key in use's.
+function rowBalance(p) {
+  if (p.account || featuresOff.has("usage")) return "";
+  const cards = sharedBalances((quotas || []).filter((q) => q.provider === p.id && !q.from && q.balance && !q.error));
+  if (cards.length < 2) return cards[0]?.balance || "";
+  const on = p.keyList?.find((k) => k.active), own = on && cards.find((q) => q.user === (on.name || on.masked));
+  return keysSum(cards) || own?.balance || "";
+}
+// markBalances puts it on the rows drawn, after the list or a read of
+// Usage's (app.js)
+function markBalances() {
+  const byId = new Map((providers?.providers || []).map((p) => [p.id, p]));
+  for (const row of document.querySelectorAll("#providers .row.provider[data-id], #offProviders .row.provider[data-id]")) {
+    const sub = row.querySelector(".who > .sub"), p = byId.get(row.dataset.id);
+    if (!sub || !p) continue;
+    const amount = rowBalance(p), had = sub.querySelector(":scope > .pv-bal");
+    if (had?.dataset.amount === amount) continue;
+    had?.remove();
+    if (!amount) continue;
+    const b = el("span", "pv-bal", " · " + amount);
+    b.title = t("Balance") + " " + amount;
+    b.dataset.amount = amount;
+    sub.append(b);
+  }
+}
+
 // the keys' sum's tooltip: an account several keys share counted once
 function keysSumTip(subs) {
   return subs.some((q) => q.sharedKeys) ? t("The balances added up, each account's once") : t("The {n} keys' balances added up", { n: subs.length });
