@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net/url"
 	"slices"
 	"strings"
 
@@ -283,4 +284,25 @@ func ProxyGone(p Provider) string {
 		}
 	}
 	return ""
+}
+
+// ViaRemoteMagpieAt is ctx for a request to u made on behalf of the
+// Remote magpie whose gateway u is on (its scheme and host): Via of that
+// provider, so the Library's connection to its MCP router goes as its
+// model calls do (hhdaxia on X: a client certificate the remote asks for
+// went with the model calls alone). ctx as it is when no Remote magpie
+// is at u.
+func ViaRemoteMagpieAt(ctx context.Context, u *url.URL) context.Context {
+	if u == nil || u.Host == "" {
+		return ctx
+	}
+	for _, p := range All() {
+		if !p.IsRemoteMagpie() || p.Anthropic == "" {
+			continue
+		}
+		if b, err := url.Parse(p.Anthropic); err == nil && strings.EqualFold(b.Scheme, u.Scheme) && strings.EqualFold(b.Host, u.Host) {
+			return p.Via(ctx)
+		}
+	}
+	return ctx
 }

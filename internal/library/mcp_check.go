@@ -24,6 +24,7 @@ import (
 	"github.com/yetone/magpie/internal/mcpauth"
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/proc"
+	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/wslrun"
 )
 
@@ -104,7 +105,21 @@ var checkClient = &http.Client{Transport: checkTransport()}
 func checkTransport() http.RoundTripper {
 	t := http.DefaultTransport.(*http.Transport).Clone()
 	t.Proxy = netproxy.Func
-	return netproxy.Dispatch(t)
+	return viaRemoteMagpie{netproxy.Dispatch(t)}
+}
+
+// viaRemoteMagpie sends a request to a Remote magpie's MCP router through
+// that provider's own transport (provider.Via): its proxy, its client
+// certificate and the server certificate it trusts, as its model calls go.
+// Only the router's path is looked up, so no other server's request reads
+// providers.json.
+type viaRemoteMagpie struct{ next http.RoundTripper }
+
+func (t viaRemoteMagpie) RoundTrip(r *http.Request) (*http.Response, error) {
+	if strings.HasSuffix(strings.TrimRight(r.URL.Path, "/"), gateway.HubMCPAll) {
+		r = r.WithContext(provider.ViaRemoteMagpieAt(r.Context(), r.URL))
+	}
+	return t.next.RoundTrip(r)
 }
 
 // checked is the last check of each server, by name, with what the

@@ -234,7 +234,7 @@ func followedOne(id string) *Provider {
 // as the list is fetched (listHeaders, signRemote), so the list the other
 // magpie compares is the one a fetch is answered.
 func waitRemoteList(ctx context.Context, p Provider, tag string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, (listWaitAsk+20)*time.Second)
+	ctx, cancel := context.WithTimeout(p.Via(ctx), (listWaitAsk+20)*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.Anthropic+"/v1/models", nil)
 	if err != nil {

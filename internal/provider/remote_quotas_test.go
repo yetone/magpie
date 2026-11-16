@@ -67,6 +67,10 @@ func (f *fakePeer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if f.status != 0 {
 		w.WriteHeader(f.status)
+		if f.status == http.StatusForbidden {
+			// the gateway's own word for a magpie that isn't shared
+			w.Write([]byte(`{"error":{"message":"magpie's quotas are told to another machine only when magpie is shared on the local network (Settings → Network and sharing → Share on local network) and the request carries its API key"}}`))
+		}
 		return
 	}
 	if f.held {

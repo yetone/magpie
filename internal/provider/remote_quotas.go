@@ -77,6 +77,33 @@ const errRemoteNotShared = "remote magpie isn't shared; turn on Share on local n
 // usage on any page here, its key held to Claude's models there).
 const errRemoteHeld = "remote magpie tells this key none of its quotas, as it holds the key to a budget, models or accounts; on that computer, turn on Quotas for the key under Gateway keys, and let it use every model of a provider whose usage it is to see"
 
+// remoteRefused is the error of a 403 from p that isn't a key held or
+// read-only: "isn't shared" only when the magpie there says so (its
+// gateway's refusal names sharing on the local network). Any other 403 —
+// a client certificate the remote, or a proxy in front of it, asked for
+// and didn't get (hhdaxia on X: the Usage page said "isn't shared" while
+// its read went without the provider's certificate), an address not on
+// its allow list — is said as the remote said it.
+func remoteRefused(p Provider, res *http.Response, b []byte) error {
+	said := strings.TrimSpace(string(b))
+	var e struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(b, &e) == nil && e.Error.Message != "" {
+		said = e.Error.Message
+	}
+	if strings.Contains(strings.ToLower(said), "shared on the local network") {
+		return errors.New(errRemoteNotShared)
+	}
+	if said == "" || strings.HasPrefix(said, "<") || len(said) > 600 {
+		// an HTML page, most likely a proxy's
+		return fmt.Errorf("%s refused magpie's request (%s), not as a magpie that isn't shared would; a proxy or a client certificate check in front of it may have", remoteName(p), res.Status)
+	}
+	return fmt.Errorf("%s refused magpie's request (%s): %s", remoteName(p), res.Status, said)
+}
+
 // errRemoteKey is a remote magpie that didn't take this provider's key (401).
 const errRemoteKey = "remote magpie didn't take this key; use one of its enabled gateway keys"
 
@@ -529,7 +556,9 @@ func remoteBody(ctx context.Context, p Provider, method, path string, wait time.
 // remoteBodyAs is remoteBody for an answer of up to max bytes, and with
 // noShare as the word for a remote that doesn't have the path.
 func remoteBodyAs(ctx context.Context, p Provider, method, path string, wait time.Duration, max int64, noShare string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(ctx, wait)
+	// through p's own transport, as its model calls go: its proxy, its
+	// client certificate and the server certificate it trusts
+	ctx, cancel := context.WithTimeout(p.Via(ctx), wait)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, method, p.Anthropic+path, nil)
 	if err != nil {
@@ -563,7 +592,7 @@ func remoteBodyAs(ctx context.Context, p Provider, method, path string, wait tim
 		case KeyReadOnlyCode:
 			return nil, fmt.Errorf("%s", errRemoteReadOnly)
 		}
-		return nil, fmt.Errorf("%s", errRemoteNotShared)
+		return nil, remoteRefused(p, res, b)
 	case res.StatusCode == http.StatusUnauthorized:
 		return nil, fmt.Errorf("%s", errRemoteKey)
 	case res.StatusCode < 200 || res.StatusCode >= 300:
