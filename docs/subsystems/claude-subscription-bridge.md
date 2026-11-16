@@ -540,7 +540,7 @@ A JSON schema is answered through an answer tool of magpie's
 (`claude_tui_schema.go`): interactive Claude Code takes `--json-schema`
 and does nothing with it (2.1.316, a real run: its result's
 `structured_output` is null), since its `StructuredOutput` tool is
-`-p`'s alone. `serveClaudeSubscription` compiles the schema
+`-p`'s alone, so an interactive run is given no `--json-schema` at all. `serveClaudeSubscription` compiles the schema
 (`compileAnswerSchema`: draft-07 unless it says otherwise, as `-p` reads
 one; a `$ref` outside itself is refused, never fetched) and adds the
 tool, `StructuredOutput` or a numbered name apart from the client's
@@ -556,6 +556,26 @@ the words around it reach the client (`r.schema`). A real run (haiku,
 fit a `pattern`. A schema the compiler can't take is a 400 before any
 run (`TestClaudeTUISchemaAnswer`, `TestClaudeTUISchemaAskedOnce`,
 `TestAnswerTool`).
+
+No value of a request's goes on a run's command line or in its
+environment over `startValueMax` (`claudetui.StartValueMax`, 16KiB):
+Linux refuses to start a program with one argument or variable over
+128KiB (`MAX_ARG_STRLEN`), Windows a variable over 32K characters. A
+long conversation's safeguards grew past it, and every start, the
+resume and the replay alike, failed `fork/exec …: argument list too
+long`, a 502 for every request after (#6848). The system prompt goes in
+files (`--system-prompt-file`), the messages on standard input, `-p`'s
+safeguards by `apply_flag_settings`, the interactive mode's in
+`guard.json` (above). `-p`'s JSON schema goes in `--json-schema` when it
+fits, else with the `initialize` request (`jsonSchema`, as the Agent SDK
+hands one over; a real 2.1.316 run answered `structured_output` from
+it). Claude Code passes over an `initialize` schema it can't use with
+no word of it, where the flag's exits (#3036), so such a schema is
+compiled first (`compileAnswerSchema`) and refused with a 400 before
+any run. `TestClaudeTUIStartBounded`, `TestClaudePrintStartBounded`,
+`TestClaudePrintSchemaPlaces` and
+`TestTapPutsSafeguardsTooLargeForTheEnvironment` hold it; on Linux the
+old code failed them with the real `argument list too long`.
 
 A first message of any length is pasted: a conversation told whole to
 a new Claude Code (one older than its session, or a client's own) can
@@ -580,8 +600,11 @@ Safeguards are taken, each turn's in every request (#4804). Interactive
 Claude Code reads `CLAUDE_CODE_EXTRA_BODY` from its own environment as
 it builds each request, and nothing outside it changes that once it runs
 (2.1.316: a later `apply_flag_settings` or a rewritten `--settings` file
-changes nothing it sends). `startRun` puts them in its environment, and
-writes the same extra body to `guard.json` in the run's temp folder
+changes nothing it sends). `startRun` puts them in its environment
+(`startSafeguards`: all of them when the extra body fits
+`startValueMax`, else without the parts Claude Code itself sheds,
+`safeguardsKept`, else `[]`, a stand-in Claude Code still sends), and
+writes the whole extra body to `guard.json` in the run's temp folder
 (`guardBody`; every interactive run has the file, `{}` with no
 safeguards), named to the helper by `MAGPIE_CLAUDE_GUARD`
 (`claudetui.GuardEnv`). The helper hands it to Claude Code as WSL reads
@@ -589,8 +612,11 @@ it, and takes it out of the environment otherwise. On each
 `/v1/messages` request whose body is a string with a `safeguards` key,
 `tap.js` reads the file, puts its `safeguards` there in place of Claude
 Code's, and sets `CLAUDE_CODE_EXTRA_BODY` in Claude Code's environment
-to it (the file without its `effort`), so the requests after are built
-with it. A JSON parse and stringify of a 2.1.316 body is byte for byte
+to it (the file without its `effort`) when it fits `envValueMax`
+(`StartValueMax`), so the requests after are built with it. A larger
+one leaves the stand-in there: what Claude Code starts (its MCP
+servers, tools) inherits the variable, and Linux starts nothing with
+one over 128KiB. A JSON parse and stringify of a 2.1.316 body is byte for byte
 the same, so the request is what Claude Code sends with that variable.
 At the first such request, or the first of the main turn's
 (`x-claude-code-request-class: main`), it writes `guard.json.live`. `setSafeguards` replaces the file (temp file and
