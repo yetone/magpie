@@ -343,6 +343,16 @@ type subscriptionRun struct {
 	// client never sees
 	search     func(ctx context.Context, query string) (string, []Hit, error)
 	searchName string
+	// advice answers Claude Code's advisor (advisor_serve.go), which the
+	// client is told of as Anthropic's server tells it: for the request
+	// the run now answers, adviceReq, its nth call made after said. The
+	// run's agent is offered magpie's tools only, never the server tool.
+	// adviceSaid is the reply's words so far, and advised the calls of
+	// it, both counted from the request. Under mu.
+	advice     func(ctx context.Context, q *Request, said []Part, c Part, n int) (Part, Event)
+	adviceReq  *Request
+	adviceSaid []string
+	advised    int
 	// answerName is the interactive mode's answer tool for a request with
 	// a JSON schema (claude_tui_schema.go), its calls checked against
 	// answerSchema, and answerArgs the input of the one that fit, until the
@@ -4074,6 +4084,10 @@ func (r *subscriptionRun) emit(ev Event) {
 		switch ev.Kind {
 		case KStart: // a reply begins
 			r.shown, r.unended = nil, true
+		case KText:
+			if r.adviceReq != nil {
+				r.adviceSaid = append(r.adviceSaid, ev.Text)
+			}
 		case KStop, KError:
 			r.unended = false
 		case KToolStart:
@@ -4101,6 +4115,18 @@ func (r *subscriptionRun) emit(ev Event) {
 	r.mu.Unlock()
 	if ch != nil {
 		ch <- ev
+	}
+}
+
+// adviseOn has the run answer the advisor calls of the reply to req, the
+// advisor seeing req's conversation, with advice when req asks for the
+// advisor; a request that doesn't takes it away.
+func (r *subscriptionRun) adviseOn(req *Request, advice func(ctx context.Context, q *Request, said []Part, c Part, n int) (Part, Event)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.advice, r.adviceReq, r.advised, r.adviceSaid = nil, nil, 0, nil
+	if req.Advisor != "" {
+		r.advice, r.adviceReq = advice, req
 	}
 }
 
@@ -4261,7 +4287,8 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 		r.mu.Lock()
 		called := name
 		name = declaredName(r.names, rest)
-		search := r.search != nil && name == r.searchName || r.answerName != "" && name == r.answerName
+		search := r.search != nil && name == r.searchName || r.answerName != "" && name == r.answerName ||
+			r.advice != nil && name == advisorTool
 		refused := r.allowed != nil && !r.allowed[name]
 		// a tool the client announced but hasn't loaded yet (Claude
 		// Code's deferred tools, told by name in the conversation and
@@ -6327,9 +6354,24 @@ func (b *subscriptionBridge) mcpCall(w http.ResponseWriter, r *http.Request) {
 	run.mu.Lock()
 	call.Name = declaredName(run.names, call.Name)
 	search, searchName, answerName := run.search, run.searchName, run.answerName
+	advice := run.advice
 	run.mu.Unlock()
 	if answerName != "" && call.Name == answerName {
 		run.answer(w, call.Arguments)
+		return
+	}
+	if advice != nil && call.Name == advisorTool {
+		run.mu.Lock()
+		run.advised++
+		q, n := run.adviceReq, run.advised
+		said := []Part{{Kind: Text, Text: strings.Join(run.adviceSaid, "")}}
+		run.mu.Unlock()
+		// within the minute its MCP client waits for a call
+		ctx, cancel := context.WithTimeout(r.Context(), 55*time.Second)
+		defer cancel()
+		res, ev := advice(ctx, q, said, Part{Kind: ToolCall, ID: call.ToolCallID, Name: advisorTool}, n)
+		run.emit(ev)
+		writeJSON(w, 200, mcpToolResult{Content: []map[string]any{{"type": "text", "text": res.Text}}, IsError: res.IsError})
 		return
 	}
 	if search != nil && call.Name == searchName {
@@ -7105,14 +7147,27 @@ func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from 
 	return s.serveSubscriptionAs(w, r, from, name, model, owner, body, usage, start, "")
 }
 
-// serveSubscriptionAs is serveSubscription, redo the code of a turn asked
-// again as claude -p after the interactive mode's run failed with nothing
-// of the reply said (redoAsPrint): thirdPartyCode, refused as a
-// third-party app's, or unpastedCode, its message not taken there.
-func (s *Server) serveSubscriptionAs(w http.ResponseWriter, r *http.Request, from provider.Protocol, name, model, owner string, body []byte, usage *Usage,
-	start func(ctx context.Context, req *Request) (*subscriptionRun, <-chan Event, error), redo string) (int, string) {
-	var req *Request
-	var err error
+// bridgeRequest is the request a Claude subscription's run is told, as
+// serveSubscriptionAs reads it: with the client's cache marks when Claude
+// Code places its own, and with Claude Code's advisor, which magpie runs
+// (advisor_serve.go), when magpie serves the advisor's model.
+func bridgeRequest(r *http.Request, from provider.Protocol, name string, body []byte) (req *Request, err error) {
+	// Claude Code's advisor, run by magpie: the run's agent has no server
+	// tools (advisor_serve.go)
+	advised := name == "Claude Code" && advisedInBridge(from, body)
+	parse := parse
+	if advised {
+		parse = func(from provider.Protocol, body []byte) (*Request, error) {
+			req, err := readAdvised(body, false, false, true)
+			if err != nil {
+				return nil, err
+			}
+			return afterParse(from, body, req)
+		}
+	}
+	parseAnthropicRequest := func(body []byte, clientMarks bool) (*Request, error) {
+		return readAdvised(body, clientMarks, false, advised)
+	}
 	if name == "Claude Code" && wantsClientCache(r, from) {
 		req, err = parseAnthropicRequest(body, true)
 	} else if name == "Claude Code" && classifierClientCache(from, body) {
@@ -7128,6 +7183,16 @@ func (s *Server) serveSubscriptionAs(w http.ResponseWriter, r *http.Request, fro
 	} else {
 		req, err = parse(from, body)
 	}
+	return req, err
+}
+
+// serveSubscriptionAs is serveSubscription, redo the code of a turn asked
+// again as claude -p after the interactive mode's run failed with nothing
+// of the reply said (redoAsPrint): thirdPartyCode, refused as a
+// third-party app's, or unpastedCode, its message not taken there.
+func (s *Server) serveSubscriptionAs(w http.ResponseWriter, r *http.Request, from provider.Protocol, name, model, owner string, body []byte, usage *Usage,
+	start func(ctx context.Context, req *Request) (*subscriptionRun, <-chan Event, error), redo string) (int, string) {
+	req, err := bridgeRequest(r, from, name, body)
 	if err != nil {
 		return writeError(w, from, 400, err.Error()), err.Error()
 	}
@@ -7221,6 +7286,10 @@ func (s *Server) serveSubscriptionAs(w http.ResponseWriter, r *http.Request, fro
 			req.Tools = append(slices.Clone(req.Tools), search)
 		}
 	}
+	// and asks the advisor with magpie's tool, which magpie answers
+	if req.Advisor != "" {
+		req.Tools = append(slices.Clone(req.Tools), advisorToolDef())
+	}
 
 	run, results, how := s.subscription.match(req)
 	// Another request has the run's calls answered, or is answering them,
@@ -7306,6 +7375,7 @@ func (s *Server) serveSubscriptionAs(w http.ResponseWriter, r *http.Request, fro
 			run.mu.Lock()
 			run.allowed = allowedTools(req)
 			run.mu.Unlock()
+			run.adviseOn(req, s.adviceRound)
 			events, err = run.continueWith(withTaskNotices(withSkillBodies(results, req.Messages), req.Messages), saidWithResults(req.Messages), more)
 		}
 		if err != nil {
@@ -7349,6 +7419,7 @@ func (s *Server) serveSubscriptionAs(w http.ResponseWriter, r *http.Request, fro
 				run.answerName, run.answerSchema = answer.Name, answerSchema
 			}
 			run.mu.Unlock()
+			run.adviseOn(req, s.adviceRound)
 		}
 	}
 	if err != nil {

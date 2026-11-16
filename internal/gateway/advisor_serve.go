@@ -49,8 +49,24 @@ const advisorUses = 3
 // it serves on p's model on API to: Claude Code asked for one, the
 // upstream doesn't run it itself, and magpie serves its model.
 func advisedHere(p provider.Provider, from, to provider.Protocol, model string, body []byte, wires map[string]string) bool {
-	if from != provider.Anthropic || !bodyHas(body, `"advisor_`) {
+	adv := advisorAsked(from, body)
+	if adv == "" {
 		return false
+	}
+	if to == provider.Anthropic && anthropicModel.MatchString(provider.UpstreamNameIn(wires, p.ID, model)) {
+		if _, ok := advisorModel(p, adv, wires); ok {
+			return false // Anthropic's server runs it (advisorTools)
+		}
+	}
+	_, _, ok := provider.Resolve(adv)
+	return ok
+}
+
+// advisorAsked is the advisor model a Messages request asks for, or ""
+// when it asks for none or has a tool of its own by the advisor's name.
+func advisorAsked(from provider.Protocol, body []byte) string {
+	if from != provider.Anthropic || !bodyHas(body, `"advisor_`) {
+		return ""
 	}
 	adv := ""
 	for _, t := range gjson.GetBytes(body, "tools").Array() {
@@ -62,16 +78,20 @@ func advisedHere(p provider.Provider, from, to provider.Protocol, model string, 
 			continue
 		}
 		if t.Get("name").String() == advisorTool {
-			return false // a tool of the client's own goes by the name
+			return "" // a tool of the client's own goes by the name
 		}
 	}
+	return adv
+}
+
+// advisedInBridge tells whether magpie runs the advisor of a Messages
+// request a Claude subscription serves through Claude Code: the run's
+// agent is offered magpie's tools only, never Anthropic's server tool, so
+// magpie answers it whenever it serves the advisor's model.
+func advisedInBridge(from provider.Protocol, body []byte) bool {
+	adv := advisorAsked(from, body)
 	if adv == "" {
 		return false
-	}
-	if to == provider.Anthropic && anthropicModel.MatchString(provider.UpstreamNameIn(wires, p.ID, model)) {
-		if _, ok := advisorModel(p, adv, wires); ok {
-			return false // Anthropic's server runs it (advisorTools)
-		}
 	}
 	_, _, ok := provider.Resolve(adv)
 	return ok
@@ -174,7 +194,7 @@ func adviceApart(m Message) []Message {
 }
 
 // advisorAsk is what the advisor model is asked after the conversation.
-const advisorAsk = "You are an advisor reviewing the conversation above, in which an assistant works on the user's task. Give the assistant brief, concrete advice for what to do next: the approach to take, what to check first, and any mistake or risk you see. Write plain text addressed to the assistant; do not call tools."
+const advisorAsk = "You are the advisor the assistant has just consulted. Review the conversation above, in which the assistant works on the user's task, and answer its consultation yourself. Give the assistant brief, concrete advice for what to do next: the approach to take, what to check first, and any mistake or risk you see. Write plain text addressed to the assistant; do not call tools."
 
 // adviceFor is the request the advisor model is asked: the model's own,
 // its system prompt and conversation, with what the model said before the
@@ -189,9 +209,16 @@ func adviceFor(q *Request, said []Part) *Request {
 	c.MaxTokens = 4096
 	c.ToolChoice = "none"
 	c.Tools = slices.DeleteFunc(slices.Clone(q.Tools), func(t Tool) bool { return t.Name == advisorTool })
+	c.System, _ = advisorCut(q.System)
 	var msgs []Message
 	keep := func(m Message) Message {
 		m.Parts = slices.DeleteFunc(slices.Clone(m.Parts), func(p Part) bool { return p.Kind == Thinking })
+		for i, p := range m.Parts {
+			if p.Kind == Text {
+				m.Parts[i].Text, _ = advisorCut(p.Text)
+			}
+		}
+		m.Parts = slices.DeleteFunc(m.Parts, func(p Part) bool { return p.Kind == Text && strings.TrimSpace(p.Text) == "" })
 		return m
 	}
 	for _, m := range q.Messages {

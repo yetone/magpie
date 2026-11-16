@@ -148,6 +148,23 @@ func advisorGoneIn(text string) (string, bool) {
 	return text[:i] + advisorGone + trail + text[end:], true
 }
 
+// advisorCut is text without the advisor's instructions, up to the end of
+// the reminder they are in or of the text, and whether it held them: the
+// advisor model is asked with the executor's conversation (adviceFor), and
+// the executor's instructions to call it, or advisorGone in their place,
+// had it answer as the executor that it has no advisor (#6804).
+func advisorCut(text string) (string, bool) {
+	i := strings.Index(text, advisorNote)
+	if i < 0 {
+		return text, false
+	}
+	end := len(text)
+	if j := strings.Index(text[i:], "</system-reminder>"); j >= 0 {
+		end = i + j
+	}
+	return strings.TrimRight(text[:i], " \t\r\n") + text[end:], true
+}
+
 // withoutAdvisor is a Messages request's messages without what Claude Code
 // put there for an advisor tool that is left out, named in gone: the
 // tool_addition (or tool_removal, tool_reference) naming it, and a message

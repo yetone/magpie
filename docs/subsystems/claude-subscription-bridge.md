@@ -135,6 +135,30 @@ handed over as `mcp__linear__…`. A deferred tool the run's model calls
 by the bare client name (`WebFetch`, `mcp__linear__…`) is the run's
 Claude Code's to answer and is not handed over.
 
+Claude Code's `/advisor` (`advisor_20260301`, sent with
+`CLAUDE_CODE_ENABLE_EXPERIMENTAL_ADVISOR_TOOL`, which the Claude Code
+advisor field writes) is a server tool: the run's Claude Code, offered
+magpie's tools only, can't pass it on, and Anthropic's server would not
+take magpie's id for its model anyway. Before #6804 the bridge read the
+request as a translation without one: the advisor was left out and its
+instructions turned into "The advisor tool is no longer available"
+(`advisorGoneIn`), so `/advisor` did nothing (recih on X, #6813).
+`bridgeRequest` now reads a Claude Code request whose advisor model
+magpie serves (`advisedInBridge`: `provider.Resolve` takes it, the client
+has no `advisor` tool of its own) as `readAdvised` does on a translation:
+`Request.Advisor` is set, the instructions and `tool_addition` stay as
+written, and the echoed `server_tool_use` and `advisor_tool_result` go
+back as the model's call and its result (`adviceApart`). The run is
+offered `advisorToolDef` beside magpie's tools, and `adviseOn` gives the
+run, for this request, `adviceRound`. A call of it is answered in
+`mcpCall`, as web search is: the advisor model is asked with what the
+reply said before the call (`adviceSaid`), within 55 seconds, and three
+calls a reply (`max_uses_exceeded` after). `toolStart` keeps the call
+from the client, which is told `KAdvice`'s `server_tool_use` and
+`advisor_tool_result` as on a translation. Claude Desktop, and an
+advisor model magpie doesn't serve, go as before.
+`TestBridgeRequestKeepsTheAdvisor`, `TestClaudeTUIAdvisorAnsweredHere`.
+
 A turn with `tool_choice` none is offered every tool the client sent, as
 any other turn is (bbfatx on X). Anthropic caches a prompt as tools, then
 system, then messages, so a turn offered fewer tools (a title or summary

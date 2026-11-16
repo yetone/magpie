@@ -177,6 +177,11 @@ func TestAdvisorServedForAVendorModel(t *testing.T) {
 		if !strings.Contains(adv[0], `"hi"`) || !strings.Contains(adv[0], "Let me ask.") || a.Get("tool_choice").String() != "none" {
 			t.Fatalf("stream=%t: advisor asked %s", stream, adv[0])
 		}
+		// and not the executor's instructions to call it, nor that it is
+		// gone: it answered as the executor that it has no advisor (#6804)
+		if strings.Contains(adv[0], "You have access to an `advisor` tool") || strings.Contains(adv[0], advisorGone) {
+			t.Fatalf("stream=%t: the advisor was told of itself: %s", stream, adv[0])
+		}
 		for _, tl := range a.Get("tools").Array() {
 			if tl.Get("function.name").String() == advisorTool {
 				t.Fatalf("stream=%t: the advisor was offered itself: %s", stream, adv[0])
