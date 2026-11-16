@@ -486,7 +486,13 @@ failure "the same on main".
 - TestCursor was red on Windows for 3 days, from 585f7f7d until #1248.
 - 5d0c1dca's 16 and 76 Windows failures were called the same as main.
   Neither was filed. #923 is the open work to run more of the suite there.
-- Seen 1× (2026-10-08).
+- 11-16: filed is not owned. 023a56373 and c6a67dd41 each ran
+  internal/gui on the Windows box and shipped past 10 or 11 reds,
+  "red the same at origin/main" and open. #5928 had sat six days with
+  no comment; it was a one-line test fix (5bd13b802). Before naming a
+  Windows red as filed, read its issue: if nobody has it and the fix is
+  small, it is yours.
+- Seen 2× (2026-10-08, 2026-11-16).
 
 **What telemetry sends is an allow-list, and a change to what is sent
 re-derives every place that discloses it.**
