@@ -102,3 +102,33 @@ func TestVerifyLinkWhole(t *testing.T) {
 		}
 	}
 }
+
+// The agy-cli plugin (plugins packages/agy-cli, usage.mjs verifyRefused)
+// turns agy's bare "Verification Required" ending (kidgpt on X, 11-16) into
+// a 403 in these words: the gateway reads them as Google's verification
+// refusal, rests the account as "verify" with the link when there is one,
+// and passes the words on once, not with its own advice added again.
+func TestAgyCLIVerifyWords(t *testing.T) {
+	const link = "https://accounts.google.com/signin/continue?sarp=1&scc=1&plt=AKgnsbv"
+	const said = `agy bridge: Google wants this account verified before Antigravity serves it again (agy: \"Verification Required\") — this Google account needs to be verified: `
+	for _, c := range []struct{ tail, link string }{
+		{"open " + link + " in a browser signed in to it, verify it, then try again", link},
+		{"open the Antigravity app, or run `agy` in a terminal, signed in to it and do what it asks, then try again", ""},
+	} {
+		fresh(t)
+		body := `{"type":"error","error":{"type":"permission_error","message":"` + said + c.tail + `"}}`
+		a := &scripted{replies: []reply{{403, "application/json", body}}}
+		scriptedOn(t, "a", provider.Chat, a)
+		s := New()
+		code, got := postAs(t, s, "", `{"model":"a/m","messages":[{"role":"user","content":"hi"}]}`)
+		msg := provider.APIError([]byte(got), "")
+		if code != 403 || strings.Count(msg, "needs to be verified") != 1 || !strings.HasSuffix(msg, c.tail) {
+			t.Fatalf("%d: %s", code, msg)
+		}
+		r := s.trace.routes[len(s.trace.routes)-1]
+		try := r.Tries[len(r.Tries)-1]
+		if try.Fail != failVerify || try.Rest == nil || try.Rest.By != "verify" || try.Rest.Link != c.link {
+			t.Fatalf("try %+v rest %+v", try, try.Rest)
+		}
+	}
+}
