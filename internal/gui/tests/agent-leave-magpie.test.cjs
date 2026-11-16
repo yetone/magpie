@@ -109,6 +109,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         "{agent} is connected to magpie · on {model} through magpie, the model it was on",
         "{agent} is connected to magpie · on {model} through magpie: it had no model set, so the first of its own",
         "{agent} is connected to magpie · on {model} through magpie: magpie doesn't serve the model it was on",
+        "{agent} is connected to magpie · on {model}, as on the remote magpie",
         "{agent} is connected to magpie · it stays on its own last pick; magpie's models join its {cmd}",
       ].filter((k) => !I18N.zh[k]));
       assert.deepEqual(missing, [], "every string has its Chinese");

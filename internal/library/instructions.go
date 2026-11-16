@@ -900,6 +900,9 @@ func KeepLinked(ctx context.Context, interval time.Duration) {
 		// the skills and prompts of a Remote magpie's Library, when
 		// switched on (borrow.go)
 		keepBorrowed(ctx)
+		// the models a Remote magpie's agents are on, for the agents
+		// here still on them (agent/remote_picks.go)
+		agent.FollowRemotePicks(ctx)
 		// once a day, what agents saved to memory meanwhile
 		if res, err := PublishMemory(true); err != nil {
 			log.Println("library: memory:", err)

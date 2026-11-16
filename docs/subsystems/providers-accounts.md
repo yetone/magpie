@@ -187,6 +187,26 @@ with none lists none, and no Jev is made up for it. An oMLX, MLX-Serve or
 Ollama provider saved before the preset had a decision base gets its chat
 base as one.
 
+A Remote magpie's agents' models are followed here (KoiLx0 on X: several
+computers on one remote magpie, each setting every agent's models again by
+hand, and again after each change there). The remote tells, for each agent
+connected on it, the catalog ref of each model field at
+`GET /v1/magpie/agent-models` (`provider.RemoteAgentModelsPath`,
+`agent.SharedModels`, asked as the Library is: this computer, or a
+full-access key of a magpie shared on the network). An agent connected here
+starts on those picks where this magpie lists them as `<remote id>/<ref>`
+(How `remote`, after `again` and `joined`; `connectRemote` in
+[`remote_picks.go`](../../internal/agent/remote_picks.go)). A field set
+from the remote, or found on the remote's pick, is recorded
+(`<agent>.<field>.remote` in the stash) and follows the remote's change
+every 5 minutes (`FollowRemotePicks`, from `library.KeepLinked`) while it
+still holds that value; a model the user picks here is theirs, and the
+field is left alone until it is on the remote's pick again. A pick this
+magpie doesn't list is skipped. Routing groups need nothing of their own:
+a group made on the remote is a model of its list, offered at once
+(`TestRemoteMagpieNewGroupServedBesidePicks`).
+`TestConnectFollowsTheRemoteMagpiesPicks`, `TestSharedModelsTellsTheRefs`.
+
 The CLI and TUI report model-list fetch errors for remote and other mixed providers
 (such as OpenRouter, serving conversation and decision models). Only a
 decision-only provider keeps the separate decision discovery behavior

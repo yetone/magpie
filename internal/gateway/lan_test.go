@@ -431,7 +431,7 @@ func TestNetworkGatewayGuardsEveryRoute(t *testing.T) {
 		{"GET", "/muse-code/models"}, {"GET", "/api/hello"},
 		{"GET", "/api/version"}, {"GET", "/api/tags"}, {"POST", "/api/show"},
 		{"GET", "/v1/magpie/quotas"}, {"GET", "/v1/magpie/quotas/history"},
-		{"GET", provider.RemoteCardsPath}, {"POST", provider.RemoteRefreshPath},
+		{"GET", provider.RemoteCardsPath}, {"POST", provider.RemoteRefreshPath}, {"GET", provider.RemoteAgentModelsPath},
 		{"POST", provider.RemoteCodexResetPath + "?user=me@example.com"},
 		{"GET", "/v1/magpie/route?session=s"}, {"GET", "/v1/magpie/concurrency"}, {"GET", "/v1/magpie/limit"},
 		{"POST", "/v1/chat/completions"}, {"POST", "/chat/completions"},
@@ -484,6 +484,16 @@ func TestNetworkGatewayGuardsEveryRoute(t *testing.T) {
 	}
 	if c, b := call("GET", "/v1/models", "127.0.0.1:5000", "Authorization", "Bearer magpie"); c != 200 {
 		t.Fatal("loopback:", c, b)
+	}
+	// the agents' models, to a magpie with this one as its provider
+	was := SharedAgentModels
+	SharedAgentModels = func() ([]byte, error) { return []byte(`{"agents":{"claude":{"model":"group/smart"}}}`), nil }
+	t.Cleanup(func() { SharedAgentModels = was })
+	if c, b := call("GET", provider.RemoteAgentModelsPath, "127.0.0.1:5000"); c != 200 || !strings.Contains(b, "group/smart") {
+		t.Fatal("agent models on loopback:", c, b)
+	}
+	if c, b := call("GET", provider.RemoteAgentModelsPath, "172.17.0.1:40312", "x-api-key", secrets[0]); c != 200 {
+		t.Fatal("agent models with the key:", c, b)
 	}
 }
 

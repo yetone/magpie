@@ -21,6 +21,8 @@ import (
 var readOnlyRefused = []string{
 	// the Library's skills and prompts: a held key is a display, not a client
 	"GET /v1/magpie/library",
+	// the models this computer's agents are on: a client's picks to follow
+	"GET /v1/magpie/agent-models",
 	// model lists and their Ollama spellings: what the key could use
 	"GET /v1/models", "GET /models", "GET /v1/models/{id...}", "GET /muse-code/models",
 	"GET /api/hello", "GET /api/version", "GET /api/tags",
