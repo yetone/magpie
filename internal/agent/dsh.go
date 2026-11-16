@@ -1600,6 +1600,7 @@ func dshSettingsRoute(dir string, on bool, models []catalog.Model, gw string) er
 		if err := dshPutProviders(providers, true, models, gw); err != nil {
 			return err
 		}
+		dshProfilesCompat(dir, providers)
 		if err := dshKeepImported(dir); err != nil {
 			return err
 		}
@@ -1626,6 +1627,7 @@ func dshSettingsRoute(dir string, on bool, models []catalog.Model, gw string) er
 		if err := dshPutProviders(providers, true, models, gw); err != nil {
 			return err
 		}
+		dshProfilesCompat(dir, providers)
 		return edit.SetYAML(path, edit.KV{Path: dshPiRow + ".providers", Value: providers})
 	}
 	if pi.Kind != yaml.MappingNode {
@@ -1640,6 +1642,7 @@ func dshSettingsRoute(dir string, on bool, models []catalog.Model, gw string) er
 		if err := dshPutProviders(providers, on, models, gw); err != nil {
 			return false, false
 		}
+		dshProfilesCompat(dir, providers)
 		if !on && len(providers.Content) == 0 {
 			yamlDelKey(n, "providers")
 		}
@@ -1656,6 +1659,40 @@ func dshSettingsRoute(dir string, on bool, models []catalog.Model, gw string) er
 		// a section left empty by magpie's routes going goes with them
 		return true, len(n.Content) == 0
 	})
+}
+
+// dshProfilesCompat carries the compat switches set by hand on magpie's
+// routes in the profiles' patch lists (dsh's Models page writes them there)
+// into providers, settings.yaml's, as dshKeepCompat does within one file.
+// dsh imports settings.yaml into the profile it starts on (dsh-settings'
+// importLegacyDocument), so a settings.yaml without them took them out of
+// that profile at each start of dsh: a forceAdaptiveThinking added by hand
+// went on restart (#6778). The web profile's are taken first.
+func dshProfilesCompat(dir string, providers *yaml.Node) {
+	for _, f := range dshProfiles(dir) {
+		_, items, err := dshRead(f)
+		if err != nil {
+			continue
+		}
+		i := dshConfigIndex(items, dshPiRow)
+		if i < 0 {
+			continue
+		}
+		n, err := dshNode(items[i])
+		if err != nil {
+			continue
+		}
+		from := yamlKey(yamlKey(n, "config"), "providers")
+		if from == nil || from.Kind != yaml.MappingNode {
+			continue
+		}
+		for _, k := range dshKinds {
+			cur, route := yamlKey(from, k.key), yamlKey(providers, k.key)
+			if cur != nil && cur.Kind == yaml.MappingNode && route != nil && route.Kind == yaml.MappingNode {
+				dshKeepCompat(cur, route)
+			}
+		}
+	}
 }
 
 // dshSettingsAgain gives settings.yaml magpie's routes while the profiles
@@ -1930,7 +1967,10 @@ func dshPutProviders(providers *yaml.Node, on bool, models []catalog.Model, gw s
 // them would fail again after each sync. They stay on the same model of a
 // route still on the same protocol; a model new to the route, or a route
 // whose protocol changed, starts without them. A switch magpie sets itself
-// is put as magpie has it now.
+// is put as magpie has it now, unless it stands false in the file: magpie
+// writes its switches only as true (omitempty), so a false there is the
+// user's, and it stays (forceAdaptiveThinking turned off by hand on a model
+// magpie came to tell to think adaptively, #6778).
 func dshKeepCompat(cur, route *yaml.Node) {
 	api := yamlKey(cur, "api")
 	if api == nil || yamlKey(route, "api") == nil || api.Value != yamlKey(route, "api").Value {
@@ -1956,8 +1996,9 @@ func dshKeepCompat(cur, route *yaml.Node) {
 		}
 		c := yamlMapping(m, "compat")
 		for j := 0; j+1 < len(old[id.Value].Content); j += 2 {
-			if yamlKey(c, old[id.Value].Content[j].Value) == nil {
-				yamlSetKey(c, old[id.Value].Content[j].Value, old[id.Value].Content[j+1])
+			k, v := old[id.Value].Content[j].Value, old[id.Value].Content[j+1]
+			if yamlKey(c, k) == nil || v.Kind == yaml.ScalarNode && v.ShortTag() == "!!bool" && v.Value == "false" {
+				yamlSetKey(c, k, v)
 			}
 		}
 	}
@@ -2044,8 +2085,8 @@ type dshPiModel struct {
 // dshPiCompat is a model's compat switches. On Anthropic's Messages API
 // pi-ai asks a model for a thinking budget unless forceAdaptiveThinking is
 // set, and a Claude that thinks only adaptively turns a budget away. Z.ai's
-// GLM-5.2 and GLM-5.3 are told so too: a budget can't ask them for max
-// (dshKindConfig). On OpenAI's Responses API supportsStrictMode has pi-ai
+// GLM-5.2 and GLM-5.3, and Gemini 3 and later, are told so too: a budget
+// can't ask them for xhigh or max (dshKindConfig, gateway.AsksAdaptively). On OpenAI's Responses API supportsStrictMode has pi-ai
 // say strict: false on an ordinary tool: with strict left out the API
 // normalizes a tool's schema as a strict-mode one, where every property is
 // required, and a tool's optional parameters come back filled (#3055).
@@ -2274,10 +2315,12 @@ func dshKindConfig(k dshKind, models []catalog.Model, api, gw string) dshPiRoute
 		// each switch is magpie's own, put as magpie has it now: a user's
 		// hand-set one of the same name says what magpie writes again says
 		switch {
-		// pi-ai's budget path clamps max to high (16384), so a model that
-		// takes adaptive thinking with its level (Z.ai's GLM-5.3) is asked
-		// adaptively too: pi-ai then sends the level itself, max as max
-		case api == "anthropic-messages" && (gateway.AdaptiveThinking(m.ID) || gateway.AdaptiveWithEffort(m.ID)):
+		// pi-ai's budget path clamps xhigh and max to high (16384), so a
+		// model that takes adaptive thinking with its level (Z.ai's GLM-5.3,
+		// a Gemini 3 or later: #6778) is asked adaptively too: pi-ai then
+		// sends the level itself, max as max (gateway.AsksAdaptively, the
+		// rule Pi's models.json is written by too)
+		case api == "anthropic-messages" && gateway.AsksAdaptively(m.ID):
 			e.Compat = &dshPiCompat{ForceAdaptiveThinking: true}
 		case api == "openai-responses":
 			// by the api the route stands on (the one the user picked in

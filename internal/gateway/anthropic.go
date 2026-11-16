@@ -937,6 +937,26 @@ func outputEffortAt(host, model string) bool {
 // M3.1-Flash isn't, until it is tried (#3496).
 func AdaptiveWithEffort(model string) bool { return glmOutputEffort.MatchString(model) }
 
+// AsksAdaptively is a model an agent on pi-ai (dsh's and Pi's) asks on
+// Anthropic's Messages API with compat.forceAdaptiveThinking: thinking
+// adaptive, its level in output_config.effort. Without the switch pi-ai
+// sends a budget, and its budget path clamps xhigh and max to high's 16384
+// (clampReasoning). It is one of:
+//   - a Claude that thinks only adaptively (AdaptiveThinking), which turns
+//     a budget away;
+//   - Z.ai's GLM-5.2 and GLM-5.3 (AdaptiveWithEffort), whose Max reached
+//     them as high (01huadalang on Discord, 10-24);
+//   - a Gemini 3 or later (geminiGeneration), which is asked a level, never
+//     a budget: geminiLevelBody turns a budget sent to a relay into this
+//     same shape, and agy-cli's plugin reads output_config.effort first. Its
+//     xhigh reached agy-cli/gemini-4-hydrogen as high (#6778).
+//
+// pi-ai still sends thinking disabled for reasoning off with the switch on,
+// so a model that can stop thinking still does.
+func AsksAdaptively(model string) bool {
+	return adaptiveOnly(model) || AdaptiveWithEffort(model) || geminiGeneration(strings.ToLower(model)) >= 3
+}
+
 // glmOutputEffort is effortInOutputConfig's Z.ai half.
 var glmOutputEffort = lazyre.New(`(?i)glm-5\.[23](?:$|[-.:/\[])`)
 

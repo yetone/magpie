@@ -917,14 +917,16 @@ func piModelOn(m catalog.Model, gw string, native bool, on string) map[string]an
 	// Messages API alone to the gateway's /v1/messages (Anthropic's
 	// SDK adds the /v1). A Claude that thinks only adaptively is
 	// told so: Pi would otherwise ask it for a thinking budget,
-	// which it turns away.
+	// which it turns away. So are GLM-5.2/5.3 and Gemini 3 and
+	// later, whose xhigh and max pi-ai's budget clamps to high
+	// (gateway.AsksAdaptively, as dsh's; #6778).
 	switch {
 	case on == "openai-completions":
 	case on == "openai-responses":
 		e["compat"] = map[string]any{"supportsStrictMode": true}
 	case on == "anthropic-messages":
 		e["api"], e["baseUrl"] = on, gw
-		if gateway.AdaptiveThinking(m.ID) {
+		if gateway.AsksAdaptively(m.ID) {
 			e["compat"] = map[string]any{"forceAdaptiveThinking": true}
 		}
 	case !native:
@@ -937,7 +939,7 @@ func piModelOn(m catalog.Model, gw string, native bool, on string) map[string]an
 		e["compat"] = map[string]any{"supportsStrictMode": true}
 	case slices.Contains(m.APIs, string(provider.Anthropic)):
 		e["api"], e["baseUrl"] = "anthropic-messages", gw
-		if gateway.AdaptiveThinking(m.ID) {
+		if gateway.AsksAdaptively(m.ID) {
 			e["compat"] = map[string]any{"forceAdaptiveThinking": true}
 		}
 	case slices.Contains(m.APIs, string(provider.Gemini)):

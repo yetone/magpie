@@ -689,6 +689,12 @@ func ompProviderAt(gw, version string) ompProviderEntry {
 			e.API = "openai-responses"
 		case slices.Contains(m.APIs, string(provider.Anthropic)):
 			e.API, e.BaseURL = "anthropic-messages", gw
+			// not gateway.AsksAdaptively, as dsh and Pi: omp's budget
+			// isn't clamped (xhigh and max are 32768, which the gateway
+			// and agy-cli read as xhigh), and its anthropic-adaptive
+			// turns reasoning off by leaving thinking out at the lowest
+			// effort, which a model that can stop thinking (a GLM)
+			// takes as thinking on (#6778)
 			mode = "budget"
 			if gateway.AdaptiveThinking(m.ID) {
 				mode = "anthropic-adaptive"
