@@ -672,6 +672,26 @@ Two habits from them:
   (a36319d60), and TestCursorEditorCopiedOncePerChange's 100ms linger
   (2efb71ea0).
 
+**What a started process's reader goes by is set before the process
+starts, not after the call that started it returns.**
+- #6887 (11-16): claudetui's shim began holding a reply only once send
+  woke up after the transcript reader counted the row, and the reader
+  wrote the row out first. TestShimCutMessageIsUnpastable, added by
+  efb62fe90 (community), went red on CI three runs in a row before
+  anyone took it. A 50ms sleep before the check turned it red 3 of 3
+  with CI's output; 4c6c3a453 begins the hold on the reader's side.
+- 11-17: the Claude bridge set a run's tools after `start` returned,
+  while Claude Code was already running and its output was being read.
+  On a loaded ubuntu runner the first tool_use was read with no tools
+  set, and a deferred MCP tool was handed over cut
+  (TestClaudeBridgeHandsOverAnUnloadedMagpieTool, run 43919594403).
+  A 50ms sleep before the assignment reproduced it 3 of 3; 43d9aae09
+  sets them before launch.
+- For each field a goroutine reads, ask which goroutine writes it and
+  whether the reader can run first. "Green 30 of 30 locally" is no
+  answer; inject the delay.
+- Seen 1× (2026-11-17).
+
 **A helper that gives a test a new HOME also stops what an earlier test
 started under the old one.**
 - #6761 (11-15): TestRemoveListedAccountLeavesHiddenNamesake was red in
