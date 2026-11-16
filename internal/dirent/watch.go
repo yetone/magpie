@@ -364,12 +364,21 @@ func current(dir string, l Listing) bool {
 	if watched.dirty[dir] >= at.seq {
 		return false
 	}
-	// a change in a root's own folder is word of a change anywhere under
-	// it: Codex appends history.jsonl, closed each time, at each prompt,
-	// while the rollout it writes stays open and unheard
+	// a change in a folder above dir, up to its root's own, is word of a
+	// change in dir: a folder renamed in whole under dir's name is heard
+	// only in the folder that holds it, and Codex appends history.jsonl,
+	// in the root, at each prompt while the rollout it writes stays open
+	// and unheard
 	for _, r := range watched.roots {
-		if (within(dir, r.given) || within(dir, r.real)) && (watched.dirty[r.given] >= at.seq || watched.dirty[r.real] >= at.seq) {
-			return false
+		for _, top := range [2]string{r.given, r.real} {
+			if !within(dir, top) {
+				continue
+			}
+			for p := dir; len(p) > len(top); p = filepath.Dir(p) {
+				if watched.dirty[filepath.Dir(p)] >= at.seq {
+					return false
+				}
+			}
 		}
 	}
 	return true
