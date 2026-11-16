@@ -736,6 +736,10 @@ body:not(.mac):not(.web) .modal .editor.framed > .ebody { overflow-y: scroll; pa
 body.web .modal .editor.framed > .ebody { overflow-y: scroll; }
 .list { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; flex: none; }
 body.panel .list { border: 0; border-radius: 10px; box-shadow: var(--card-edge); }
+/* a Settings card with no rows (Allowed addresses, Client certificates and
+   HTTPS while Share on local network is off) is not drawn: its border was a
+   thin line under the card above (fishmagic80 on X) */
+.set-page .list:empty { display: none; }
 .row { display: flex; align-items: center; gap: 9px; min-height: 40px; padding: 5px 9px 5px 11px; }
 body.window .row { min-height: 48px; padding: 7px 12px 7px 14px; gap: 12px; }
 .row + .row, .editor + .row, .row + .editor { border-top: 1px solid var(--line-2); }
