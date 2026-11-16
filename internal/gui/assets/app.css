@@ -4310,6 +4310,10 @@ img.nav-ic { border-radius: 3px; object-fit: contain; }
 #otelList .otel-env { padding: 12px 14px; border-top: 1px solid var(--line-2); font-size: 11.5px; color: var(--muted); }
 
 .session-terminal-select, .pref-pick { max-width: min(230px, 45%); height: 26px; color: var(--fg); }
+/* inside a row's value box, whose width is its content's, 45% of it would
+   shrink the button to a clipped glyph (jiangshangmuyun on X); the box is
+   held to 60% of the row already */
+.val > .pref-pick { max-width: min(230px, 100%); }
 .session-terminal-select:focus-visible, .pref-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .row.pref .segs { flex: none; margin-left: auto; }
 .proxy-segs { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; margin-left: auto; min-width: 0; max-width: 100%; }

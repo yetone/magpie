@@ -100,8 +100,22 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.equal(posts.at(-1).proxy, "direct", "the global proxy stays as it was");
           await page.waitForFunction((word) => document.querySelector("#updateSourcePick")?.textContent === word, name);
         };
+        // the button is as wide as its name (jiangshangmuyun on X, Windows):
+        // a percentage width inside the row's value box shrank it to a
+        // clipped glyph and the chevron
+        const fits = async (name) => {
+          const m = await pick.evaluate((b) => {
+            const s = b.querySelector("span");
+            return { span: s.getBoundingClientRect().width, text: s.scrollWidth, pick: b.getBoundingClientRect().width };
+          });
+          assert(m.text <= Math.ceil(m.span) + 1, `${name}: the label is clipped (${m.text}px in ${m.span}px, button ${m.pick}px)`);
+          assert(m.span > 0, `${name}: the label shows`);
+        };
+        await fits(l.auto);
         await choose(l.github, "github");
+        await fits(l.github);
         await choose(l.site, "site");
+        await fits(l.site);
         await choose(l.auto, "");
         // the menu ticks the one chosen
         await pick.click();
