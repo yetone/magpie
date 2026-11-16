@@ -110,6 +110,14 @@ type Config struct {
 	// Passphrase: off unless the user turns it on
 	// (provider.MergeSignIns says how two computers' are merged).
 	SignIns bool `json:"signIns,omitempty"`
+	// SignInsExcept are the subscriptions (provider ids) whose sign-ins
+	// this computer leaves out of SignIns (Ethereal499 on X: Claude's, as
+	// Claude is wary of where its accounts are used): theirs here never go
+	// up, the server's are never put in here, and theirs here are kept as
+	// they are, none taken away for the server lacking it. The server's
+	// copy goes on as it was for the computers that sync them. None, as
+	// in a setup made before the choice, leaves none out.
+	SignInsExcept []string `json:"signInsExcept,omitempty"`
 	// Other is the most recently left server, retained for older clients.
 	// Servers holds every inactive kind. Nothing syncs to them.
 	Other *Server `json:"other,omitempty"`
@@ -546,6 +554,9 @@ type View struct {
 	Profiles      bool   `json:"profiles"`
 	Usage         bool   `json:"usage,omitempty"`
 	SignIns       bool   `json:"signIns,omitempty"`
+	// SignInsExcept are the subscriptions whose sign-ins stay out
+	// (Config.SignInsExcept)
+	SignInsExcept []string `json:"signInsExcept,omitempty"`
 	// UsageError is why usage couldn't be shared the last time it was tried
 	UsageError string    `json:"usageError,omitempty"`
 	Last       time.Time `json:"last,omitzero"`
@@ -620,7 +631,7 @@ func Status() View {
 			}
 		}
 	}
-	v.Usage, v.SignIns = c.Usage, c.SignIns
+	v.Usage, v.SignIns, v.SignInsExcept = c.Usage, c.SignIns, c.SignInsExcept
 	if c.Agents {
 		v.Own = ownFields(st)
 	}
@@ -915,6 +926,8 @@ func collect(c Config) (backup.Bundle, error) {
 		if serr := backup.WithSignIns(&b); serr != nil {
 			return b, fmt.Errorf("the sign-ins couldn't be read: %w", serr)
 		}
+		// the subscriptions left out here never go up
+		b.SignIns, _ = b.SignIns.Except(c.SignInsExcept)
 	}
 	return b, err
 }
@@ -1663,7 +1676,11 @@ func syncOnce(ctx context.Context, c Config, st *state, pv *Plan) error {
 	var shared map[string]string
 	if c.SignIns {
 		var plan provider.SignInPlan
-		merged.SignIns, plan, shared = provider.MergeSignIns(local.SignIns, remote.SignIns, st.SignIns)
+		// the server's of the subscriptions left out here: not put in
+		// here, and going on up as they were, for the others
+		theirs, held := remote.SignIns.Except(c.SignInsExcept)
+		merged.SignIns, plan, shared = provider.MergeSignIns(local.SignIns, theirs, st.SignIns)
+		merged.SignIns = merged.SignIns.With(held)
 		if !plan.Empty() {
 			if _, err := provider.ApplySignIns(plan); err != nil {
 				return fmt.Errorf("bringing in the sign-ins: %w", err)

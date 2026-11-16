@@ -143,8 +143,9 @@ func Restore(ctx context.Context) ([]string, error) {
 		}
 		// the server's sign-ins, when they go: put in as a backup's are,
 		// nothing renewed later here written over
-		if c.SignIns && remote.SignIns != nil {
-			if _, err := provider.RestoreSignIns(remote.SignIns); err != nil {
+		// (those of the subscriptions left out here aren't)
+		if theirs, _ := remote.SignIns.Except(c.SignInsExcept); c.SignIns && theirs != nil {
+			if _, err := provider.RestoreSignIns(theirs); err != nil {
 				return fmt.Errorf("bringing in the sign-ins: %w", err)
 			}
 			if local, err = collect(c); err != nil {

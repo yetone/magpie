@@ -52,14 +52,40 @@ window.davForm = function (v) {
   // (qianxunji, curtinp118 on Discord); what it lets in is said beside it
   const [siL, si] = tick(t("Sign-ins: subscription accounts and plugin sign-ins"), !!v.signIns);
   const siSay = el("div", "hint sync-signins-say", t("Another computer that syncs is signed in without signing in again. Anyone with the passphrase and the server's file can use these accounts. An account used on two computers can be signed out on one when the other renews it."));
-  siSay.hidden = !si.checked;
-  si.onchange = () => { siSay.hidden = !si.checked; };
+  // subscriptions whose sign-ins stay on this computer (Ethereal499 on X:
+  // Claude, wary of where it is used): theirs here never go up, the
+  // server's never come in, and none here is taken away
+  let except = [...(v.signInsExcept || [])];
+  const exL = el("div", "sync-sub-tick sync-except");
+  const exPick = el("button", "proto pick");
+  exPick.type = "button";
+  const subName = (id) => providers?.providers?.find((p) => p.id === id)?.name || id;
+  const exPaint = () => {
+    exPick.classList.toggle("set", !!except.length);
+    exPick.replaceChildren(el("span", "", !except.length ? t("None") : except.length > 2 ? t("{n} subscriptions", { n: except.length }) : except.map(subName).join(", ")), svg(CHEV, 11, 1.6));
+  };
+  exPaint();
+  if (except.length && !providers) loadProviders().catch(() => {}).then(exPaint);
+  exPick.onclick = async (e) => {
+    e.stopPropagation();
+    if (exPick.classList.contains("open")) return closeProtoMenu();
+    if (!providers) { exPick.classList.add("busy"); await loadProviders().catch(() => {}); exPick.classList.remove("busy"); if (!exPick.isConnected) return; }
+    const opts = (providers?.providers || []).filter((p) => p.account).map((p) => ({ v: p.id, name: p.name || p.id, note: "", literalName: true }));
+    // one left out that isn't here now stays to be ticked back
+    for (const id of except) if (!opts.some((o) => o.v === id)) opts.push({ v: id, name: id, note: "", literalName: true });
+    if (!opts.length) opts.push({ v: "\x00", name: "No subscriptions yet", note: "" });
+    openProtoMenu(exPick, opts, except, (ids) => { except = ids; exPaint(); }, "Not synced", "", "left", true);
+  };
+  exL.append(el("span", "", t("Not synced")), exPick);
+  const siShow = () => { siSay.hidden = exL.hidden = !si.checked; };
+  siShow();
+  si.onchange = siShow;
   const what = el("div", "stack");
   what.append(provL, keysL, setL, agentsL, libL, memL);
   const adv = el("details", "more advanced sync-advanced");
   adv.open = v.profiles === false || !!v.usage || !!v.signIns;
   const advIn = el("div", "stack");
-  advIn.append(profL, useL, siL, siSay, el("div", "hint", t("Usage goes as a file a day: times, tokens, models and costs, never what was said. Turn it on on each computer that shares its own.")));
+  advIn.append(profL, useL, siL, exL, siSay, el("div", "hint", t("Usage goes as a file a day: times, tokens, models and costs, never what was said. Turn it on on each computer that shares its own.")));
   adv.append(el("summary", "", t("Advanced")), advIn);
   const davFields = [...field(t("Address"), url, t("A folder named magpie is made in it.")),
     ...field(t("User"), user),
@@ -129,7 +155,7 @@ window.davForm = function (v) {
     prov.checked = s.providers !== false; sets.checked = s.settings !== false; prof.checked = s.profiles !== false;
     keysShow();
     if (!prof.checked || use.checked || si.checked) adv.open = true;
-    siSay.hidden = !si.checked;
+    siShow();
     // the kind picked as a click on it would, its thumb moved too
     to[1].querySelector(`.segs [data-seg="${kind}"]`)?.click();
     show();
@@ -177,7 +203,7 @@ window.davForm = function (v) {
     // so a setup from before the choice is saved as it was
     const outs = {};
     for (const [k, c] of [["providers", prov], ["settings", sets], ["profiles", prof]]) if (!c.checked || v[k] === false) outs[k] = c.checked;
-    return { ...where, passphrase: phrase.value, keys: keys.checked, agents: agents.checked, library: lib.checked, memory: mem.checked, ...outs, ...(use.checked || v.usage ? { usage: use.checked } : {}), ...(si.checked || v.signIns ? { signIns: si.checked } : {}) };
+    return { ...where, passphrase: phrase.value, keys: keys.checked, agents: agents.checked, library: lib.checked, memory: mem.checked, ...outs, ...(use.checked || v.usage ? { usage: use.checked } : {}), ...(si.checked || v.signIns ? { signIns: si.checked } : {}), ...(except.length || v.signInsExcept?.length ? { signInsExcept: except } : {}) };
   };
   peek.onclick = async () => {
     if (!(await openPasted())) return;

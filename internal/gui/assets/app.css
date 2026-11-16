@@ -5627,6 +5627,14 @@ body.linux:not(.side-nav) #view-settings .set-head::before,
 body.linux .action-confirm::backdrop { -webkit-backdrop-filter: none; backdrop-filter: none; }
 /* what syncs (#6428): the keys' tick under Providers; a preview's items */
 .editor.sync-form .sync-sub-tick { padding-left: 22px; }
+.editor.sync-form .sync-except { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; }
+.editor.sync-form .sync-except[hidden] { display: none; }
+.sync-except .proto.pick { flex: 0 1 auto; min-width: 0; display: inline-flex; align-items: center; gap: 3px; height: 24px; padding: 0 6px 0 9px; font: inherit; font-size: 12px; color: var(--fg-2); border: 0; border-radius: 7px; background: var(--pill); cursor: default; transition: background .12s, color .12s; }
+.sync-except .proto.pick span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sync-except .proto.pick svg { flex: none; opacity: .7; transition: transform .15s var(--ease); }
+.sync-except .proto.pick.open svg { transform: rotate(180deg); }
+.sync-except .proto.pick:hover, .sync-except .proto.pick.open { color: var(--fg); background: var(--pill-hover); }
+.sync-except .proto.pick.busy { opacity: .6; }
 .sync-preview .sync-items { display: grid; gap: 2px; margin: -2px 0 8px; padding: 6px 10px; border-radius: 8px; background: var(--pill); font-size: 12.5px; max-height: 180px; overflow-y: auto; }
 .sync-preview .sync-item { display: flex; justify-content: space-between; gap: 12px; min-width: 0; }
 .sync-preview .sync-item span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

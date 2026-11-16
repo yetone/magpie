@@ -414,6 +414,17 @@ switch that anyone with the file and the passphrase can use those accounts.
   form says so (`TestMergeSignInsTheLaterRenewedStays`,
   `TestMergeSignInsRemovedOnlyWhenTheOtherSideRemovedIt`,
   `TestApplySignInsKeepsWhatChangedSinceTheMerge`, `sync-signins.test.cjs`).
+- **Left out here** (`Config.SignInsExcept`, provider ids; Ethereal499 on
+  X): under the Sign-ins tick, **Not synced** picks subscriptions whose
+  sign-ins stay on this computer. [`SignIns.Except`](../../internal/provider/signins_except.go)
+  takes them out of what `collect` sends, and out of the server's before
+  `MergeSignIns`, the preview and a Restore, so the server's are never put
+  in and none here is removed for being missing there. `syncOnce` puts the
+  server's ones back with `With`, so the computers that sync them keep
+  them. An id names its `-plugin` sign-ins too. The choice is this
+  computer's: the setup text doesn't carry it, and a setup without it
+  leaves nothing out (`TestSyncSignInsExcept`, `TestSignInsExcept`,
+  `sync-signins-except.test.cjs`; `magpie webdav set sign-ins-except=claude`).
 
 ## GitHub constraints and errors
 

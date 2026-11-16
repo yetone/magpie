@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -59,6 +60,10 @@ const webdavUsage = `usage:
               passphrase, so a computer that syncs is signed in without signing in again. Off unless
               set. Anyone with the passphrase and the server's file can use those accounts. An account
               used on two computers may be signed out on one when the other renews it
+  sign-ins-except
+              the subscriptions whose sign-ins stay on this computer, by id (claude,codex): theirs
+              here never go up, the server's never come in, and nothing here is taken away;
+              none: every one syncs
   first sync  on a computer that had its own setup, each part that differs becomes the server's; what
               was here is kept in the sync folder beside magpie's files, and magpie webdav says so
   moving      magpie webdav on with S3 sync on moves sync to the folder; the bucket, endpoint, access key
@@ -115,6 +120,10 @@ const s3Usage = `usage:
               passphrase, so a computer that syncs is signed in without signing in again. Off unless
               set. Anyone with the passphrase and the server's file can use those accounts. An account
               used on two computers may be signed out on one when the other renews it
+  sign-ins-except
+              the subscriptions whose sign-ins stay on this computer, by id (claude,codex): theirs
+              here never go up, the server's never come in, and nothing here is taken away;
+              none: every one syncs
   moving      magpie s3 on with WebDAV sync on moves sync to the bucket; the WebDAV address, user and
               password are kept, and magpie webdav on alone moves back to them
 
@@ -150,6 +159,8 @@ const githubUsage = `usage:
   passphrase the same on every computer; GitHub only ever receives the sealed file.
   sign-ins   yes: the subscriptions' accounts and the plugins' sign-ins go too, sealed with the
              passphrase. Off unless set
+  sign-ins-except
+             the subscriptions whose sign-ins stay on this computer, by id (claude,codex)
   providers, settings, profiles, agents, library, memory
              no: that part stays as it is on each computer, never brought in nor sent up
 `
@@ -317,7 +328,7 @@ func syncSet(k syncKind, args []string, on bool) error {
 		if !on {
 			return fmt.Errorf("%s sync is on, not %s: magpie %s set changes it; %s", c.Kind(), k.name, strings.ToLower(c.Kind()), k.turnOn())
 		}
-		next := davsync.Config{Passphrase: c.Passphrase, Keys: c.Keys, Agents: c.Agents, Library: c.Library, Memory: c.Memory, Usage: c.Usage, SignIns: c.SignIns,
+		next := davsync.Config{Passphrase: c.Passphrase, Keys: c.Keys, Agents: c.Agents, Library: c.Library, Memory: c.Memory, Usage: c.Usage, SignIns: c.SignIns, SignInsExcept: c.SignInsExcept,
 			Providers: c.Providers, Settings: c.Settings, Profiles: c.Profiles}
 		if o, ok := c.Kept(k.name); ok { // its server, as it was kept when sync moved from it
 			next.URL, next.User, next.Endpoint, next.Region, next.PathStyle, next.Branch = o.URL, o.User, o.Endpoint, o.Region, o.PathStyle, o.Branch
@@ -371,6 +382,16 @@ func syncSet(k syncKind, args []string, on bool) error {
 			} else {
 				askPhrase = true
 			}
+		case key == "sign-ins-except": // ids, comma-separated; none: none left out
+			c.SignInsExcept = nil
+			for _, id := range strings.Split(v, ",") {
+				if strings.EqualFold(strings.TrimSpace(v), "none") {
+					break
+				}
+				if id = strings.TrimSpace(id); id != "" && !slices.Contains(c.SignInsExcept, id) {
+					c.SignInsExcept = append(c.SignInsExcept, id)
+				}
+			}
 		case key == "keys", key == "agents", key == "library", key == "usage", key == "sign-ins", key == "path-style" && k.cmd == "s3",
 			key == "providers", key == "settings", key == "profiles", key == "memory":
 			if v != "yes" && v != "no" {
@@ -400,11 +421,11 @@ func syncSet(k syncKind, args []string, on bool) error {
 				c.Library = &yes
 			}
 		case k.cmd == "s3":
-			return fmt.Errorf("unknown field %q (address, bucket, prefix, endpoint, region, access-key-id, secret, passphrase, path-style, providers, settings, profiles, keys, agents, library, memory, usage, sign-ins)", key)
+			return fmt.Errorf("unknown field %q (address, bucket, prefix, endpoint, region, access-key-id, secret, passphrase, path-style, providers, settings, profiles, keys, agents, library, memory, usage, sign-ins, sign-ins-except)", key)
 		case k.cmd == "github":
-			return fmt.Errorf("unknown field %q (address, branch, token, passphrase, providers, settings, profiles, keys, agents, library, memory, usage, sign-ins)", key)
+			return fmt.Errorf("unknown field %q (address, branch, token, passphrase, providers, settings, profiles, keys, agents, library, memory, usage, sign-ins, sign-ins-except)", key)
 		default:
-			return fmt.Errorf("unknown field %q (address, user, password, passphrase, providers, settings, profiles, keys, agents, library, memory, usage, sign-ins)", key)
+			return fmt.Errorf("unknown field %q (address, user, password, passphrase, providers, settings, profiles, keys, agents, library, memory, usage, sign-ins, sign-ins-except)", key)
 		}
 	}
 	if bucket != nil || prefix != nil {
@@ -585,6 +606,9 @@ func syncShow(k syncKind) error {
 	}
 	if v.SignIns {
 		what = append(what, "sign-ins")
+		if len(v.SignInsExcept) > 0 {
+			what[len(what)-1] += " (not " + strings.Join(v.SignInsExcept, ", ") + ")"
+		}
 	}
 	fmt.Println("  syncs", strings.Join(what, ", "))
 	if left := leftOut(v); len(left) > 0 {

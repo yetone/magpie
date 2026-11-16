@@ -177,7 +177,8 @@ func previewed(pv *Plan, c Config, local, remote, merged backup.Bundle, bringIn,
 		}
 	}
 	if c.SignIns {
-		_, plan, _ := provider.MergeSignIns(local.SignIns, remote.SignIns, prevSignIns)
+		theirs, _ := remote.SignIns.Except(c.SignInsExcept) // the server's left out here: not put in
+		_, plan, _ := provider.MergeSignIns(local.SignIns, theirs, prevSignIns)
 		pv.SignIns = plan.Count()
 	}
 	return nil
