@@ -1,0 +1,9 @@
+{
+  "name": "opencode-provider-with-page",
+  "version": "0.1.0",
+  "main": "./index.mjs",
+  "keywords": ["opencode", "opencode-plugin"],
+  "magpie": {
+    "page": { "file": "page/index.html", "service": { "port": 3478, "option": "diagnosticsPort" } }
+  }
+}

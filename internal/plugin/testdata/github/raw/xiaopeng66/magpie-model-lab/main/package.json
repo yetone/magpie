@@ -1,0 +1,76 @@
+{
+  "name": "magpie-pelican-bench",
+  "version": "1.0.0",
+  "description": "Model Lab for Magpie: compare HTML animations, model fingerprints and candy reasoning, with per-model scheduled tests. 模型实验室：动画、指纹、糖果与自动测试。",
+  "type": "module",
+  "main": "index.mjs",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22",
+    "magpie": ">=0.1.2905"
+  },
+  "files": [
+    "index.mjs",
+    "serve.mjs",
+    "lib",
+    "page",
+    "ui",
+    "vendor",
+    "docs/usage.md",
+    "docs/favorites-guide.md",
+    "docs/publishing.md",
+    "CHANGELOG.md",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "keywords": [
+    "magpie",
+    "magpie-plugin",
+    "magpie-page",
+    "model-lab",
+    "llm",
+    "benchmark",
+    "pelican",
+    "html",
+    "fingerprint",
+    "candy",
+    "scheduled-testing",
+    "模型实验室"
+  ],
+  "magpie": {
+    "name": "模型实验室",
+    "summary": {
+      "zh": "比较鹈鹕动画、模型指纹与糖果推理；按模型设置自动测试，查看成功率、动画长廊和批次历史。",
+      "en": "Compare HTML animations, model fingerprints and candy reasoning. Schedule each model and review success rates, animation galleries and batch history."
+    },
+    "page": {
+      "title": "Model Lab",
+      "titles": {
+        "zh": "模型实验室",
+        "zh-TW": "模型實驗室"
+      },
+      "file": "page/index.html",
+      "icon": "page/icon.png",
+      "service": {
+        "port": 3489,
+        "option": "port"
+      },
+      "keepAlive": true
+    },
+    "actions": [
+      {
+        "id": "fingerprint",
+        "menu": "provider",
+        "title": "Fingerprint",
+        "titles": {
+          "zh": "检测指纹",
+          "zh-TW": "檢測指紋"
+        }
+      }
+    ],
+    "options": {
+      "port": 3489
+    }
+  }
+}

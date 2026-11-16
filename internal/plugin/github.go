@@ -407,6 +407,18 @@ func askTagged(ctx context.Context, last []Tagged) (l []Tagged, whole bool, miss
 	return l, whole, missing, nil
 }
 
+// keyword is whether npm's keywords (a list of strings, anything else
+// none) hold k
+func keyword(kw any, k string) bool {
+	l, _ := kw.([]any)
+	for _, v := range l {
+		if s, ok := v.(string); ok && strings.EqualFold(strings.TrimSpace(s), k) {
+			return true
+		}
+	}
+	return false
+}
+
 // readTagged reads a tagged repository's package.json (on branch), and
 // npm's copy of the package it names: t as it is installed, whether it is
 // kept, and whether that is known (GitHub or npm not answering is not,
@@ -428,7 +440,9 @@ func readTagged(pc context.Context, t Tagged, branch string) (Tagged, bool, bool
 		Main    string          `json:"main"`
 		Exports json.RawMessage `json:"exports"`
 		License any             `json:"license"`
-		Magpie  struct {
+		// npm's keywords, any shape: a list that isn't one names none
+		Keywords any `json:"keywords"`
+		Magpie   struct {
 			Middleware string `json:"middleware"`
 			Agent      string `json:"agent"`
 			Hooks      string `json:"hooks"`
@@ -469,7 +483,12 @@ func readTagged(pc context.Context, t Tagged, branch string) (Tagged, bool, bool
 	// (plugins#737)
 	case strings.TrimSpace(pj.Magpie.Agent) != "":
 		t.Kind = "agent"
-	case !runs && strings.TrimSpace(pj.Magpie.Page.File) != "":
+	// a page with a module of its own (the local service its page
+	// talks to, magpie.page.service) is a page when it says so in its
+	// keywords, as every page in the plugins repository does; a
+	// provider or middleware with a page of settings beside it says
+	// "magpie-page" nowhere and stays what it is (plugins#1226)
+	case strings.TrimSpace(pj.Magpie.Page.File) != "" && (!runs || keyword(pj.Keywords, "magpie-page")):
 		t.Kind = "page"
 	// gateway hooks alone (magpie.hooks) need no entry of their
 	// own, as the host loads them: the hooks file is the one to
