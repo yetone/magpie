@@ -145,3 +145,57 @@ export function connect() { return {}; }`,
 		t.Fatal("written though connect returned nothing")
 	}
 }
+
+// A connect-only plugin may return nothing but an object magpie merges
+// (Lorca's custom:magpie, plugins#1230): its members are what is written,
+// so it connects, reads as connected, and switching it off leaves the file
+// as it was. connect's result was counted after merged() took the object
+// out, so such a plugin was refused with "no keys to write".
+func TestPluggedConnectOnlyMergedOnly(t *testing.T) {
+	home := pluggedHome(t, `
+export const agent = { id: "launcher", config: "~/.launcher/creds.json", format: "json", merge: ["custom.custom:magpie"] };
+export function connect({ gateway, models }) {
+  return { "custom.custom:magpie": { base_url: gateway.v1, api_key: gateway.key, models: models.map((m) => ({ id: m.id })) } };
+}`)
+	path := filepath.Join(home, ".launcher", "creds.json")
+	os.MkdirAll(filepath.Dir(path), 0o755)
+	before := `{"custom":{"custom:mine":{"base_url":"x"}},"theme":"dark"}`
+	os.WriteFile(path, []byte(before), 0o644)
+
+	a, err := Find("launcher")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.ConnectHow(); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(path)
+	var c struct {
+		Custom map[string]struct {
+			BaseURL string `json:"base_url"`
+			APIKey  string `json:"api_key"`
+		}
+	}
+	if err := json.Unmarshal(b, &c); err != nil {
+		t.Fatal(err)
+	}
+	if m := c.Custom["custom:magpie"]; m.BaseURL != gateway.URL()+"/v1" || m.APIKey != gateway.TokenFor("launcher") || c.Custom["custom:mine"].BaseURL != "x" {
+		t.Fatalf("connected: %s", b)
+	}
+	if f := a.Field("provider"); f.Get() != magpieID || !a.Wired() || a.Check() != "" {
+		t.Fatalf("get %q, wired %v, check %q", f.Get(), a.Wired(), a.Check())
+	}
+	if err := a.Unwire(); err != nil {
+		t.Fatal(err)
+	}
+	b, _ = os.ReadFile(path)
+	var got, want any
+	json.Unmarshal(b, &got)
+	json.Unmarshal([]byte(before), &want)
+	if gb, _ := json.Marshal(got); string(gb) != func() string { wb, _ := json.Marshal(want); return string(wb) }() {
+		t.Fatalf("unwired: %s, want %s", b, before)
+	}
+	if a.Wired() {
+		t.Fatal("wired after unwire")
+	}
+}

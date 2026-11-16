@@ -527,8 +527,9 @@ func plugged(at place, p *agentplug.Agent) *Agent {
 		}
 		kvs := merged(out, d.Merge)
 		if only {
-			// nothing written would read as connected all the same
-			if len(out) == 0 {
+			// nothing written would read as connected all the same; a key
+			// connect returned under merge is written too (kvs)
+			if len(out) == 0 && len(kvs) == 0 {
 				return fmt.Errorf("%s: connect returned no keys to write", plugin.Name(p.Spec))
 			}
 		} else {
