@@ -11,6 +11,8 @@ import (
 
 	"golang.org/x/sys/windows"
 
+	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/conptypair"
 	"github.com/yetone/magpie/internal/proc"
 )
 
@@ -30,11 +32,15 @@ var endSignals = []os.Signal{os.Interrupt, syscall.SIGTERM}
 
 // pseudoConsole is where CreatePseudoConsole and ClosePseudoConsole come
 // from. Windows 10's own (conhost 10.0.19041) drops a paste's bracketed
-// paste marks, so Claude Code takes a long message as many pastes and
-// submits a part of it (yetone/magpie#5205); the ConPTY Windows Terminal
-// ships (conpty.dll, which runs the OpenConsole.exe beside it) keeps them.
-// dsh-cross: a conpty folder beside magpie's executable holding both is
-// used first; without it, the system's.
+// paste marks and loses 1024-byte blocks of a long write, so Claude Code
+// takes a long message as many pastes and gets a part of it
+// (yetone/magpie#5205); the ConPTY Windows Terminal ships (conpty.dll,
+// which runs the OpenConsole.exe beside it) keeps them. In order:
+//   - dsh-cross: a conpty folder beside magpie's executable holding both,
+//     the user's own;
+//   - on Windows 10, the pair a release carries (internal/conptypair),
+//     written to magpie's cache and checked against its pins there;
+//   - the system's.
 type pseudoConsole struct {
 	create, close *windows.LazyProc
 	// system: Windows' own, kernel32's
@@ -45,9 +51,17 @@ var console = sync.OnceValue(func() pseudoConsole {
 	if exe, err := os.Executable(); err == nil {
 		dir := filepath.Join(filepath.Dir(exe), "conpty")
 		if _, err := os.Stat(filepath.Join(dir, "OpenConsole.exe")); err == nil {
-			dll := windows.NewLazyDLL(filepath.Join(dir, "conpty.dll"))
-			if dll.NewProc("CreatePseudoConsole").Find() == nil && dll.NewProc("ClosePseudoConsole").Find() == nil {
-				return pseudoConsole{dll.NewProc("CreatePseudoConsole"), dll.NewProc("ClosePseudoConsole"), false}
+			if c, ok := conptyIn(dir); ok {
+				return c
+			}
+		}
+	}
+	if windows.RtlGetVersion().BuildNumber < win11 && conptypair.Bundled() {
+		if cache, err := appdir.SystemCache(); err == nil {
+			if dir, err := conptypair.Ready(cache); err == nil {
+				if c, ok := conptyIn(dir); ok {
+					return c
+				}
 			}
 		}
 	}
@@ -55,11 +69,25 @@ var console = sync.OnceValue(func() pseudoConsole {
 	return pseudoConsole{k.NewProc("CreatePseudoConsole"), k.NewProc("ClosePseudoConsole"), true}
 })
 
+// win11 is Windows 11's first build: the ConPTY of every one since keeps
+// a paste's marks and every block of it.
+const win11 = 22000
+
+// conptyIn is the ConPTY of a folder's conpty.dll, ok when it has both.
+func conptyIn(dir string) (pseudoConsole, bool) {
+	dll := windows.NewLazyDLL(filepath.Join(dir, "conpty.dll"))
+	create, closePC := dll.NewProc("CreatePseudoConsole"), dll.NewProc("ClosePseudoConsole")
+	if create.Find() != nil || closePC.Find() != nil {
+		return pseudoConsole{}, false
+	}
+	return pseudoConsole{create, closePC, false}, true
+}
+
 // cutHint is what a message Claude Code didn't get whole (whole.go) is
 // told of where it was lost: on Windows 10's own ConPTY, how to use
 // another (#5205).
 func cutHint() string {
-	if !console().system || windows.RtlGetVersion().BuildNumber >= 22000 {
+	if !console().system || windows.RtlGetVersion().BuildNumber >= win11 {
 		return ""
 	}
 	// short, for the bridge's log line to hold it whole

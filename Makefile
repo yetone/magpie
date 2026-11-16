@@ -32,7 +32,7 @@ ifeq ($(shell go env GOOS),android)
   TAGS = nogui
 endif
 
-.PHONY: assets-pack build-release build cli install test test-ui app icons release release-cli release-windows release-linux clean dev dev-once
+.PHONY: assets-pack conpty-pair build-release build cli install test test-ui app icons release release-cli release-windows release-linux clean dev dev-once
 
 # A release build embeds the UI's files as one zip instead of the tree
 # (internal/gui/assets_packed.go): a Windows or Linux download is the raw
@@ -40,6 +40,12 @@ endif
 # The zip is not kept in git; every release target makes it first.
 assets-pack:
 	@go run ./build/assetpack internal/gui/assets internal/gui/assets.zip
+
+# The ConPTY a Windows release carries for Windows 10 (internal/conptypair,
+# #5205): Microsoft's, from nuget.org, checked against its pinned hashes and
+# embedded with -tags conptypair.
+conpty-pair:
+	@go run ./build/conpty
 
 # Every build but the test runs takes Go's runtime with the macOS page
 # release of build/darwin/footprint-overlay.sh: with Go's own, heap Go
@@ -114,12 +120,12 @@ release: clean build-release
 	@cp magpie dist/magpie-$(shell go env GOOS)-$(shell go env GOARCH)
 	@$(MAKE) --no-print-directory release-cli
 
-release-cli: assets-pack
+release-cli: assets-pack conpty-pair
 	@mkdir -p dist
 	@$(OVERLAY) for t in $(TARGETS); do \
 		os=$${t%/*}; arch=$${t#*/}; ext=""; [ $$os = windows ] && ext=.exe; \
 		echo "  $$os/$$arch (cli)"; \
-		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build $$F -tags "nogui packedassets" -trimpath -ldflags="$(LDFLAGS)" -o dist/magpie-cli-$$os-$$arch$$ext . || exit 1; \
+		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build $$F -tags "nogui packedassets conptypair" -trimpath -ldflags="$(LDFLAGS)" -o dist/magpie-cli-$$os-$$arch$$ext . || exit 1; \
 	done
 
 # The desktop app for Windows: the system WebView2 needs no cgo, so both
@@ -132,14 +138,14 @@ release-cli: assets-pack
 # commit in them every release wrote a new one though the launcher was the
 # same (TestLauncherSameAtEveryCommit).
 WINVER = $(shell echo $(VERSION) | sed -E 's/^v//; s/[^0-9.].*//')
-release-windows: assets-pack
+release-windows: assets-pack conpty-pair
 	@mkdir -p dist
 	@go run github.com/tc-hib/go-winres@v0.3.3 make --in build/windows/winres.json --arch amd64,arm64 --out rsrc \
 		--file-version "$(or $(WINVER),0.0.0)" --product-version "$(or $(WINVER),0.0.0)"
 	@for arch in amd64 arm64; do \
 		echo "  windows/$$arch (app)"; \
 		CGO_ENABLED=0 GOOS=windows GOARCH=$$arch go build -trimpath -buildvcs=false -ldflags="-s -w" -o internal/update/launcher-$$arch.com ./internal/update/launcher || exit 1; \
-		CGO_ENABLED=0 GOOS=windows GOARCH=$$arch go build -tags production,comlauncher,packedassets -trimpath -ldflags="$(LDFLAGS) -H windowsgui" -o dist/magpie-windows-$$arch.exe . || exit 1; \
+		CGO_ENABLED=0 GOOS=windows GOARCH=$$arch go build -tags production,comlauncher,packedassets,conptypair -trimpath -ldflags="$(LDFLAGS) -H windowsgui" -o dist/magpie-windows-$$arch.exe . || exit 1; \
 	done; rm -f rsrc_windows_*.syso internal/update/launcher-*.com
 
 # The desktop app for Linux links GTK 3 and WebKitGTK 4.1 through cgo, so it
@@ -150,7 +156,7 @@ release-linux: assets-pack
 	@go build -tags "$(TAGS) packedassets" -trimpath -ldflags="$(LDFLAGS)" -o dist/magpie-linux-$(shell go env GOARCH) .
 
 clean:
-	rm -rf magpie magpie.exe magpie.app dist .overlay internal/gui/assets.zip rsrc_windows_*.syso internal/update/launcher-*.com
+	rm -rf magpie magpie.exe magpie.app dist .overlay internal/gui/assets.zip rsrc_windows_*.syso internal/update/launcher-*.com internal/conptypair/amd64 internal/conptypair/arm64
 
 # Development: the UI is served from internal/gui/assets and the window
 # reloads itself when a file there is saved. With fswatch installed, the

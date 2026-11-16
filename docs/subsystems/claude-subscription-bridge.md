@@ -493,8 +493,8 @@ path and the padded one were each taken as `[Image #1]`, and the bare
 path with no marks stayed words, as the reporter saw; the helper itself
 on that claude.exe, padded and bracketed, put the image in the
 transcript. Windows 10 itself is not tried; the padded path doesn't
-need the marks. Long pasted text there still loses blocks (#5205); the
-whole-message check below catches a message cut so.
+need the marks. Long pasted text there lost blocks (#5205); the ConPTY
+below keeps them, and the whole-message check catches what is still cut.
 If the interactive mode still doesn't take the image, the
 turn goes to `-p` as below, which the plan counts at about twice the
 interactive mode's and which starts without the interactive run's
@@ -514,7 +514,24 @@ run (Off meanwhile, the client gone) the failure is a 400, not a 502
 `TestShimPaddedImageTakenWithoutMarks` the padded paste on a console that
 drops the marks.
 
-The helper checks that a message reached Claude
+On Windows 10 the helper doesn't use Windows' own ConPTY when it can
+avoid it (#5205; `console` in `child_windows.go`). In order: a `conpty`
+folder beside magpie.exe holding `conpty.dll` and `OpenConsole.exe`, the
+user's own; then, below build 22000 (`win11`), the pair a release carries
+(`internal/conptypair`): Microsoft.Windows.Console.ConPTY
+1.25.260930003 from nuget.org (MIT, both files signed by Microsoft), the
+version 3leg0ocat ran whole on 19044. The release fetches it
+(`go run ./build/conpty`, `make conpty-pair` before `release-cli` and
+`release-windows`), checks the package against the SHA-512 nuget.org
+publishes and each file against its pinned SHA-256, and embeds the pair
+(`-tags conptypair`, about 1.2MB per Windows binary). At run time
+`conptypair.Ready` writes it to `%LocalAppData%\magpie\conpty\<version>\<arch>`
+(temp file and rename) and checks both files there against their pins
+before `conpty.dll` is loaded; a file that doesn't match is written again.
+Anything that fails leaves the system's ConPTY, as does Windows 11, whose
+own keeps the marks. A dev build has no pair (`conptypair.Bundled`).
+
+Whatever the console, the helper checks that a message reached Claude
 Code whole (`whole.go`, from 3leg0ocat's patch). It took one as sent once
 a row of it reached the transcript, whatever the row held, so a cut
 message's tail was answered as the message. Now, while a message just sent

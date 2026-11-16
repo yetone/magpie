@@ -9,3 +9,5 @@
 /internal/update/launcher-*.com
 /internal/gui/assets.zip
 /.overlay/
+/internal/conptypair/amd64/
+/internal/conptypair/arm64/
