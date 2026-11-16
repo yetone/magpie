@@ -322,7 +322,7 @@ func restartDrawOld(mode string, report func(string, ...any)) {
 				time.Sleep(time.Second)
 			}
 			if strings.HasPrefix(mode, "quiet") {
-				markQuietRestart(strings.Contains(mode, "-min"))
+				markOldQuietRestart(strings.Contains(mode, "-min"))
 			} else {
 				unmarkQuietRestart()
 			}

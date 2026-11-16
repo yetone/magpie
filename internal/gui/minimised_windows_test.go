@@ -20,8 +20,9 @@ import (
 	"github.com/yetone/magpie/internal/settings"
 )
 
-// #3495 (Lemonawa): a restart by itself (Settings' AutoRestart) from a
-// main window minimised on the taskbar brings it back minimised there: up
+// #3495 (Lemonawa): a restart by itself (Settings' AutoRestart) an older
+// magpie makes from a main window minimised on the taskbar brings it back
+// minimised there (this one restarts by itself to the tray alone): up
 // (a later restart and lightweight mode count it so), never shown or made
 // the foreground window on the way, and, restored from the taskbar, back
 // at its size, maximised if it was. A window up and not minimised still
@@ -122,9 +123,9 @@ func init() {
 	}
 	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
 		go func() {
-			// what the old magpie left as it restarted by itself, read as a
-			// start reads it (app.go)
-			markQuietRestart(mode != "shown")
+			// what an older magpie left as it restarted by itself, read as
+			// a start reads it (app.go)
+			markOldQuietRestart(mode != "shown")
 			quiet, minimised := takeQuietRestart()
 			if !quiet || minimised != (mode != "shown") {
 				fail("the mark read back quiet=%v minimised=%v", quiet, minimised)
@@ -201,4 +202,14 @@ func init() {
 		panic(err)
 	}
 	os.Exit(0)
+}
+
+// mainUp says whether the window is up and whether it is minimised, read
+// together on the main thread, as an older magpie's AutoRestart read them.
+func (h *host) mainUp() (up, minimised bool) {
+	application.InvokeSync(func() {
+		up = h.mainShown()
+		minimised = up && h.main.IsMinimised()
+	})
+	return up, minimised
 }

@@ -13,9 +13,9 @@ import (
 )
 
 // A restart magpie makes by itself (Settings' AutoRestart, or `magpie
-// update` run in a terminal) brings the app back as it was, and leaves
-// the user where they were. Its window comes back only if it was up
-// (#2096); now it also takes no focus (xyxyxy_15591 on Discord: "自动更新
+// update` run in a terminal) brings the app back in the tray alone
+// (restartBySelf), and leaves the user where they were. Before, its
+// window came back if it was up (#2096), taking no focus (xyxyxy_15591 on Discord: "自动更新
 // 安装更新之后，不跳出界面"). The window came up in front of the app the
 // user was typing in and took the keyboard, for a restart nobody asked
 // for: the Mac's open brought magpie to the front, its Dock icon joining
@@ -26,10 +26,11 @@ import (
 // its window, if it was up, without Focus or activating (quietShow). The
 // Mac's open is -g as well (update.Relaunch's quiet).
 //
-// A window that was minimised comes back minimised (#3495, Lemonawa):
-// the mark says so ("<seconds> minimised"), and the new one puts it on
-// the taskbar as it was, neither shown nor activated (showMinimised). A
-// mark of the seconds alone, from a version before, is a window up.
+// This version marks the seconds alone, and asks for no window. A version
+// before restarts into this one with its window up as it was, and minimised
+// if it was (#3495, Lemonawa): its mark then says so ("<seconds>
+// minimised"), and this one puts the window on the taskbar as it was,
+// neither shown nor activated (showMinimised).
 
 // quietRestartFile, in magpie's folder, holds when (Unix seconds) a
 // restart by itself began.
@@ -40,22 +41,17 @@ const quietRestartFile = "restart-quiet"
 // mark older than that is a restart that never came back, not this start.
 var quietFor = 10 * time.Minute
 
-// quietMinimisedWord follows the mark's seconds when the window was
-// minimised.
+// quietMinimisedWord follows the mark's seconds when an older version's
+// window was minimised.
 const quietMinimisedWord = "minimised"
 
-// markQuietRestart notes that the restart under way is one by itself, and
-// whether the main window was minimised as it began.
-func markQuietRestart(minimised bool) {
+// markQuietRestart notes that the restart under way is one by itself.
+func markQuietRestart() {
 	dir := settings.Dir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return
 	}
-	stamp := strconv.FormatInt(time.Now().Unix(), 10)
-	if minimised {
-		stamp += " " + quietMinimisedWord
-	}
-	stamp += "\n"
+	stamp := strconv.FormatInt(time.Now().Unix(), 10) + "\n"
 	if err := os.WriteFile(filepath.Join(dir, quietRestartFile), []byte(stamp), 0o644); err != nil {
 		log.Println("quiet restart:", err)
 	}

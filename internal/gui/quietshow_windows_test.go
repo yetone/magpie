@@ -166,7 +166,7 @@ func init() {
 			})
 			// what the old magpie left as it restarted by itself, read as a
 			// start reads it (app.go)
-			markQuietRestart(false)
+			markQuietRestart()
 			quiet, _ := takeQuietRestart()
 			showMain := mode == "window"
 			quietShow.Store(quiet && showMain)

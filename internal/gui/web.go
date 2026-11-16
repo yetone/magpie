@@ -134,7 +134,7 @@ func StartWeb(addr, version string) (*Web, error) {
 	go w.srv.Serve(ln)
 	// Settings' AutoRestart: magpie web runs on as the new version (#2096)
 	updates.autoRestart = func() bool {
-		if restartInto(true, false, "", true, false) {
+		if restartInto(true, false, "", true) {
 			quit()
 			return true
 		}

@@ -1235,7 +1235,18 @@ while the new version starts (#4521). See `TestUpdateInATerminalRestartsTheAppWi
 
 A restart magpie makes by itself (Settings' Restart automatically,
 `magpie update` from a terminal, a Remote magpie's ask, another copy
-replacing this one's binary) also waits while the user is using one of
+replacing this one's binary; `restartBySelf` in
+[`update.go`](../../internal/gui/update.go)) comes back in the tray
+alone, with no window, on every system, and takes no focus
+([`quiet_restart.go`](../../internal/gui/quiet_restart.go)). It used to
+bring the window back when it was up (#2096), minimised if it was
+(#3495), and eating_dream on X, with checks every half hour, had it put
+back over their work after every update. A restart the user clicked
+opens the window as it was. An older version restarting into this one
+still asks for its window as it was, and its mark (`<seconds>
+minimised`) is still read. See `TestRestartBySelfComesBackToTheTray`.
+
+A restart magpie makes by itself also waits while the user is using one of
 magpie's own windows (BESTLJP0412 on X: the window closed and came back
 in the middle of adding a provider, the gateway idle). Every page (the
 window, the tray panel, a browser on `magpie web`) posts

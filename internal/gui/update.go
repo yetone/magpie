@@ -1075,15 +1075,23 @@ func restartFrom(w Windows, view string) bool {
 // Off the Mac, the new one opens its window on view when window is set, and
 // only the tray icon when not; the Mac's always opens its window.
 func restartToUpdate(web, window bool, view string) bool {
-	return restartInto(web, window, view, false, false)
+	return restartInto(web, window, view, false)
 }
 
-// restartInto is restartToUpdate; bySelf, Settings' AutoRestart restarts
-// (#2096), and the Mac's new one too opens only its menu bar icon when no
-// window was up, rather than putting up one the user had closed. The new
-// one, by itself, also takes no focus (quiet_restart.go), and puts the
-// window back minimised when it was (minimised, #3495).
-func restartInto(web, window bool, view string, bySelf, minimised bool) bool {
+// restartBySelf is the restart nobody clicked (Settings' AutoRestart,
+// `magpie update` in a terminal, a Remote magpie's ask, another copy
+// replacing this one's binary): the new version comes back in the tray
+// alone, the window left closed even when it was up (eating_dream on X:
+// every half hour's update put the window back over what they were
+// doing). It came back as it was before (#2096), minimised if it was
+// (#3495); the user opens it from the tray when they want it.
+func restartBySelf() bool { return restartInto(false, false, "", true) }
+
+// restartInto is restartToUpdate; bySelf, a restart nobody clicked, and
+// the Mac's new one too opens only its menu bar icon when no window is
+// asked for. The new one, by itself, also takes no focus
+// (quiet_restart.go).
+func restartInto(web, window bool, view string, bySelf bool) bool {
 	if pending.Load() != nil {
 		return false // a handover under way restarts already
 	}
@@ -1099,7 +1107,7 @@ func restartInto(web, window bool, view string, bySelf, minimised bool) bool {
 	}
 	updatedInApp(version) // its first start leaves the notes to Settings (#525)
 	if bySelf && !web {
-		markQuietRestart(window && minimised) // it comes back without taking focus
+		markQuietRestart() // it comes back without taking focus
 	} else {
 		unmarkQuietRestart() // one asked for comes to the front
 	}

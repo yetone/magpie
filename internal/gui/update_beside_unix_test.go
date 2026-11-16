@@ -46,7 +46,7 @@ func TestUpdateInATerminalRestartsTheAppWithoutCuttingIt(t *testing.T) {
 	updates.self, _ = os.Stat(exe)
 	quit := make(chan struct{})
 	updates.autoRestart = func() bool {
-		if restartInto(false, false, "", true, false) {
+		if restartBySelf() {
 			leave(func() { close(quit) })
 			return true
 		}
