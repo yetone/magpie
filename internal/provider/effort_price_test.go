@@ -84,3 +84,54 @@ func TestEffortIDPricedAsItsModel(t *testing.T) {
 		}
 	}
 }
+
+// ownsh1p on X: Usage showed gemini-4-argon-trial's tokens and no cost.
+// Google gives Gemini 4 Argon to AI Pro trials on eligible devices, the
+// same model, so a gemini- id's -trial is priced as its model, at an
+// effort after it too. Another vendor's -trial is its own offer and stays
+// unpriced.
+func TestGeminiTrialIDPricedAsItsModel(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755)
+	// models.dev's prices on 2026-11-16
+	os.WriteFile(catalog.CachePath(), []byte(`{
+	  "google":{"id":"google","models":{
+	    "gemini-4-argon":{"id":"gemini-4-argon","cost":{"input":2,"output":10,"cache_read":0.1}},
+	    "gemini-4-carbon":{"id":"gemini-4-carbon","cost":{"input":2,"output":10,"cache_read":0.1}}}},
+	  "xai":{"id":"xai","models":{
+	    "grok-4.7":{"id":"grok-4.7","cost":{"input":3,"output":15}}}},
+	  "zhipuai":{"id":"zhipuai","models":{
+	    "glm-5.3":{"id":"glm-5.3","cost":{"input":1,"output":4}}}}}`), 0o644)
+	catalog.Reset()
+	t.Cleanup(catalog.Reset)
+
+	ag := Provider{ID: "antigravity", Name: "Antigravity"}
+	for id, base := range map[string]string{
+		"gemini-4-argon-trial":        "gemini-4-argon",
+		"Gemini-4-Argon-Trial":        "gemini-4-argon",
+		"google/gemini-4-argon-trial": "gemini-4-argon",
+		"gemini-4-carbon-trial":       "gemini-4-carbon",
+		"gemini-4-argon-trial-high":   "gemini-4-argon",
+		"gemini-4-argon-high-trial":   "gemini-4-argon",
+	} {
+		for name, price := range map[string]func(string) (catalog.Price, bool){
+			"MakerPrice": MakerPrice, "antigravity ListPrice": ag.ListPrice} {
+			pr, ok := price(id)
+			if !ok || pr.Input != 2 || pr.Output != 10 || pr.CacheRead != 0.1 {
+				t.Errorf("%s(%q) = %+v, %v; want %s's $2/$10", name, id, pr, ok, base)
+			}
+		}
+		if got := PricedName(id); got != base && got != "google/"+base { // a route's prefix stays
+			t.Errorf("PricedName(%q) = %q, want %q", id, got, base)
+		}
+	}
+	for _, id := range []string{"grok-4.7-trial", "glm-5.3-trial", "gemini-4-argon-trialx", "gemini-4-argon-trial-fast"} {
+		if pr, ok := MakerPrice(id); ok {
+			t.Errorf("MakerPrice(%q) = %+v; want unpriced", id, pr)
+		}
+	}
+}

@@ -3272,10 +3272,47 @@ func pricedNamesTo(dst []string, model string) []string {
 	if base, ok := effortBase(l); ok {
 		out = append(out, base)
 	}
+	if base, ok := geminiTrialBase(l); ok {
+		out = append(out, base)
+		if b, ok := effortBase(base); ok {
+			out = append(out, b)
+		}
+	}
 	if m, ok := antigravityRole(l); ok {
 		out = append(out, m)
 	}
 	return out
+}
+
+// geminiTrialBase is the Gemini model the lower-cased id l is the trial
+// access of (ownsh1p on X: Usage showed gemini-4-argon-trial with tokens and
+// no cost): the id without its -trial, at an effort after it too
+// (gemini-4-argon-trial-high). Google's Antigravity models page
+// (https://antigravity.google/docs/models/, read 2026-11-16) gives Gemini 4
+// Argon to "paid Google AI Pro plans or on trial with eligible premium
+// devices": the same model, reached on a trial, so its calls are estimated
+// at the model's list price as a paid plan's are. Only a gemini- id: a
+// -trial of another vendor's (ZCode's glm-5.3-trial, grok-4.7-trial) is
+// that vendor's own offer and keeps no price it doesn't list.
+func geminiTrialBase(l string) (string, bool) {
+	if !strings.Contains(l, "-trial") {
+		return "", false // every model of every provider's list is priced on each poll
+	}
+	last := l[strings.LastIndexByte(l, '/')+1:]
+	if !strings.HasPrefix(last, "gemini-") {
+		return "", false
+	}
+	if base, ok := strings.CutSuffix(l, "-trial"); ok {
+		return base, true
+	}
+	i := strings.LastIndexByte(l, '-')
+	switch l[i+1:] {
+	case "minimal", "low", "medium", "high", "xhigh":
+		if base, ok := strings.CutSuffix(l[:i], "-trial"); ok {
+			return base + l[i:], true
+		}
+	}
+	return "", false
 }
 
 // antigravityRoles are the ids Antigravity's Orchestrator mode records its
