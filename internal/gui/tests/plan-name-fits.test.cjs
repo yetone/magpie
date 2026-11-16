@@ -24,7 +24,9 @@ const quotas = [
     windows: [{ name: "7 days", used: 20, resetsAt: later }], resets: { count: 2, until: later } },
   { provider: "codex", name: "Codex", icon: "codex-color", user: "second.seat@example.com", plan: "self_serve_business_prolite",
     windows: [{ name: "7 days", used: 7, resetsAt: later }], resets: { count: 1, until: later } },
-  { provider: "codex", name: "Codex", icon: "codex-color", user: "plus.account@example.com", plan: "plus",
+  // shangyuan0818 on X: ChatGPT's $100 Pro, plan_type prolite, read "Pro
+  // Lite", a plan ChatGPT never sold; its app calls it Pro 100
+  { provider: "codex", name: "Codex", icon: "codex-color", user: "pro100.account@example.com", plan: "prolite",
     windows: [{ name: "5 hours", used: 7, resetsAt: later }, { name: "7 days", used: 64, resetsAt: later }], resets: { count: 1, until: later } },
   // a plan id no app has named yet: shown as it comes, and cut
   { provider: "codex", name: "Codex", icon: "codex-color", user: "next.seat@example.com", plan: UNNAMED,
@@ -111,7 +113,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         rows.forEach(({ user, plan, kids }, i) => {
           assert.ok(user.w >= 60, `${at} row ${i}: the account's name is read (${user.w}px of ${user.text})`);
           for (const k of kids) assert.ok(k.inside, `${at} row ${i}: ${k.cls} stays inside the card`);
-          assert.equal(plan.text, ["Business", "Business", "plus", UNNAMED][i], `${at} row ${i}: the plan as ChatGPT names it`);
+          assert.equal(plan.text, ["Business", "Business", "Pro 100", UNNAMED][i], `${at} row ${i}: the plan as ChatGPT names it`);
           assert.equal(plan.title, plan.text, `${at} row ${i}: the plan's tooltip`);
         });
         // "All accounts": its windows by plan, named as the rows name them

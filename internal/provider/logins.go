@@ -226,7 +226,9 @@ func parseLogins(b []byte) ([]savedLogin, error) {
 		// a Max 20x saved before it was named Ultra
 		if out[i].Agent == "claude" && out[i].Plan == "max" {
 			if c, ok := parseClaudeCredentials(out[i].Auth); ok {
-				out[i].Plan = claudePlan(out[i].Plan, c.OAuth.RateLimitTier)
+				var acct map[string]any
+				_ = json.Unmarshal(out[i].Profile, &acct)
+				out[i].Plan = claudePlanShown(out[i].Plan, c.OAuth.RateLimitTier, claudeShownPlan(acct))
 			}
 		}
 	}
@@ -869,12 +871,13 @@ func liveLogin(agent string) (savedLogin, bool) {
 		if signedOut {
 			return savedLogin{}, false
 		}
-		l := savedLogin{Agent: agent, Plan: c.OAuth.plan(), Auth: b}
+		l := savedLogin{Agent: agent, Auth: b}
 		var acct map[string]any
 		if l.User, acct = claudeSignedInUser(c.OAuth.SubscriptionType, plan, user); acct != nil {
 			l.Profile, _ = json.Marshal(acct)
 			l.HeldAs = claudeProfileKey(l.Profile)
 		}
+		l.Plan = claudeLivePlan(c, "", acct)
 		if l.User == "" {
 			return savedLogin{}, false
 		}

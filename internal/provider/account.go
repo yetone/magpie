@@ -438,11 +438,44 @@ type claudeAuth struct {
 // and tells the two apart only by the rate-limit tier.
 func (a claudeAuth) plan() string { return claudePlan(a.SubscriptionType, a.RateLimitTier) }
 
-func claudePlan(sub, tier string) string {
-	if sub == "max" && strings.Contains(tier, "max_20x") {
+func claudePlan(sub, tier string) string { return claudePlanShown(sub, tier, "") }
+
+// claudePlanShown is claudePlan with the name Claude itself shows the
+// plan by: /api/oauth/profile's organization.plan_display_name, which
+// Claude Code keeps as oauthAccount.planDisplayName and shows as
+// "Claude <name>" ("Ultra" for a Max 20x account, none for Max 5x). A
+// known tier decides; the name is read only when the tier doesn't say,
+// so a profile left from another account can't rename this one.
+func claudePlanShown(sub, tier, shown string) string {
+	if sub != "max" {
+		return sub
+	}
+	switch {
+	case strings.Contains(tier, "max_20x"):
+		return "ultra"
+	case strings.Contains(tier, "max_5x"):
+		return "max"
+	case strings.EqualFold(strings.TrimSpace(shown), "ultra"):
 		return "ultra"
 	}
 	return sub
+}
+
+// claudeShownPlan is the plan name in a Claude Code oauthAccount profile.
+func claudeShownPlan(acct map[string]any) string {
+	s, _ := acct["planDisplayName"].(string)
+	return s
+}
+
+// claudeLivePlan is the plan of Claude Code's own sign-in c: the
+// credentials', or `claude auth status`'s when it said one, named by the
+// tier (claudePlanShown); acct is Claude Code's profile, nil when unread.
+func claudeLivePlan(c claudeCredentials, statusPlan string, acct map[string]any) string {
+	sub := c.OAuth.SubscriptionType
+	if statusPlan != "" {
+		sub = statusPlan
+	}
+	return claudePlanShown(sub, c.OAuth.RateLimitTier, claudeShownPlan(acct))
 }
 
 // claudeCredentials keeps the whole credential blob in raw, so refreshing a
@@ -836,14 +869,11 @@ func claudeAccount() (Provider, bool) {
 	if signedOut {
 		return claudeStandInAccount()
 	}
-	plan := c.OAuth.plan()
-	if statusPlan != "" {
-		plan = claudePlan(statusPlan, c.OAuth.RateLimitTier)
-	}
 	// named as its saved login is (liveLogin): it is then the account Logins
 	// flags Active, not served a second time beside itself, and its
 	// allowances and limits are found under its name (#177)
 	user, acct := claudeSignedInUser(c.OAuth.SubscriptionType, statusPlan, user)
+	plan := claudeLivePlan(c, statusPlan, acct)
 	if b, err := c.marshal(); err == nil && user != "" {
 		// by its sign-in when its profile is another's (claudeSignInOwner)
 		l := savedLogin{Agent: "claude", User: user, Auth: b}
