@@ -355,3 +355,95 @@ func TestRealtimeMasked(t *testing.T) {
 	c.Close(websocket.StatusNormalClosure, "")
 	rtClosed(t, u)
 }
+
+// A realtime session is opened by a GET, and a gateway key's limit holds
+// it as it holds a chat: a key with something left opens one, a session
+// that spends the rest is closed, and the key's next session is refused
+// with a 429 before the vendor is asked. With the key limits plugin off,
+// a limited key opens none (503).
+func TestRealtimeHeldToKeyLimit(t *testing.T) {
+	u, _, ts := rtServe(t)
+	t.Setenv("MAGPIE_ADDR", "")
+	t.Setenv("MAGPIE_PUBLIC_URL", "")
+	budget.Forget()
+	pinLimitClock(t)
+	was := realtimeKeyCheck
+	realtimeKeyCheck = 20 * time.Millisecond
+	t.Cleanup(func() { realtimeKeyCheck = was })
+	keys, secrets := newCaller(t, "Capped")
+	setLimit(t, keys[0].ID, &access.Limit{Period: "day", Tokens: 50}) // one response.done is 60 in and 20 out
+	const plan = "/v1/realtime?model=plan/qwen-audio-3.0-realtime-plus"
+	h := http.Header{"X-Test-Remote": {"192.168.1.9:5000"}, "Authorization": {"Bearer " + secrets[0]}}
+
+	c, resp, err := rtDial(t, ts, plan, h)
+	if err != nil {
+		t.Fatalf("a key with its limit unspent: %v %v", err, resp)
+	}
+	rtSend(t, c, websocket.MessageText, `{"type":"response.create"}`)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	for {
+		_, _, err := c.Read(ctx)
+		if err == nil {
+			continue
+		}
+		if st := websocket.CloseStatus(err); st != websocket.StatusPolicyViolation {
+			t.Fatalf("the session that spent the key's limit ended %v (%d), not closed for it", err, st)
+		}
+		break
+	}
+	rtClosed(t, u)
+
+	_, resp, err = rtDial(t, ts, plan, h)
+	if err == nil || resp == nil || resp.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("a spent key's session: %v %v", err, resp)
+	}
+	if n := u.sessions(); n != 1 {
+		t.Fatalf("%d sessions reached the vendor, want only the first", n)
+	}
+
+	withoutLimits(t)
+	setLimit(t, keys[0].ID, &access.Limit{Period: "day", Tokens: 100000})
+	_, resp, err = rtDial(t, ts, plan, h)
+	if err == nil || resp == nil || resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("a limited key with the plugin off: %v %v", err, resp)
+	}
+	if n := u.sessions(); n != 1 {
+		t.Fatalf("a limited key reached the vendor with the plugin off")
+	}
+}
+
+// A key allowed one request at a time holds its slot for as long as its
+// realtime session lasts: a second session waits until the first ends.
+func TestRealtimeHoldsKeySlot(t *testing.T) {
+	u, _, ts := rtServe(t)
+	t.Setenv("MAGPIE_ADDR", "")
+	t.Setenv("MAGPIE_PUBLIC_URL", "")
+	keys, secrets := newCaller(t, "One")
+	if _, err := access.Update("concurrency-key", access.Change{Key: keys[0].ID, MaxConcurrency: 1}); err != nil {
+		t.Fatal(err)
+	}
+	const plan = "/v1/realtime?model=plan/qwen-audio-3.0-realtime-plus"
+	h := http.Header{"X-Test-Remote": {"192.168.1.9:5000"}, "Authorization": {"Bearer " + secrets[0]}}
+	first, resp, err := rtDial(t, ts, plan, h)
+	if err != nil {
+		t.Fatalf("the first session: %v %v", err, resp)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	_, _, err = websocket.Dial(ctx, "ws"+strings.TrimPrefix(ts.URL, "http")+plan, &websocket.DialOptions{HTTPHeader: h})
+	cancel()
+	if err == nil {
+		t.Fatal("a second session opened beside the first on a key allowed one")
+	}
+	if n := u.sessions(); n != 1 {
+		t.Fatalf("%d sessions reached the vendor", n)
+	}
+	first.Close(websocket.StatusNormalClosure, "")
+	rtClosed(t, u)
+	second, resp, err := rtDial(t, ts, plan, h)
+	if err != nil {
+		t.Fatalf("a session after the first ended: %v %v", err, resp)
+	}
+	second.Close(websocket.StatusNormalClosure, "")
+	rtClosed(t, u)
+}

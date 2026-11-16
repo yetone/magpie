@@ -286,7 +286,8 @@ func (s *Server) realtime(w http.ResponseWriter, r *http.Request) {
 	}
 	defer s.realtimes.remove(client)
 
-	// a session opened with a gateway key ends once the key isn't on
+	// a session opened with a gateway key ends once the key isn't on, or
+	// its limit is spent (keyLimited let it in while it had some left)
 	if keyWho := access.Caller(r.Context()); keyWho.KeyID != "" {
 		go func() {
 			t := time.NewTicker(realtimeKeyCheck)
@@ -302,6 +303,16 @@ func (s *Server) realtime(w http.ResponseWriter, r *http.Request) {
 						client.Close(websocket.StatusPolicyViolation, "the gateway key this session was opened with is no longer on")
 						return
 					}
+					if keyWho.Limited() {
+						release, err := reserveFor(keyWho, 0, asked, limitClock())
+						if err != nil {
+							log.Printf("realtime: the gateway key %s can't spend more (%v), so its session to %s is closed", keyWho.KeyName, err, c.p.ID)
+							go up.Close(websocket.StatusPolicyViolation, "")
+							client.Close(websocket.StatusPolicyViolation, trimReason(err.Error()))
+							return
+						}
+						release()
+					}
 				}
 			}
 		}()
@@ -312,6 +323,12 @@ func (s *Server) realtime(w http.ResponseWriter, r *http.Request) {
 	call.Status, call.Millis, call.Usage = status, time.Since(start).Milliseconds(), sess.total
 	call.Error = cmpOr(why, sess.lastErr)
 	s.record(call)
+}
+
+// realtimeUpgrade: r opens a realtime session, a GET that spends as a
+// chat does, so a key's limits and slots hold it (keyLimited, keySlots).
+func realtimeUpgrade(r *http.Request) bool {
+	return r.Method == http.MethodGet && (r.URL.Path == "/v1/realtime" || r.URL.Path == "/realtime") && wantsSocket(r)
 }
 
 // sameOriginSocket: the upgrade has no Origin (a program's client), or

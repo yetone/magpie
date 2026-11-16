@@ -34,15 +34,20 @@ var keySlotFree = []string{
 	"POST " + ChatPagePath + "/anthropic/v1/files", "DELETE " + ChatPagePath + "/anthropic/v1/files/{id}",
 }
 
+// keySlotGets are the GETs that spend as a chat does, so a key's
+// MaxConcurrency holds them: a realtime session's upgrade, its slot held
+// while the session lasts.
+var keySlotGets = []string{"GET /v1/realtime", "GET /realtime"}
+
 // Every route is judged for a key's MaxConcurrency: held (keySlotRoutes)
-// or not (keySlotFree, or a GET's), never both, and keySlotRoutes names
-// only routes the router has.
+// or not (keySlotFree, or a GET's other than keySlotGets), never both, and
+// keySlotRoutes names only routes the router has.
 func TestKeySlotEveryRoute(t *testing.T) {
 	fresh(t)
 	mux := New().routes()
 	for _, p := range mux.patterns {
 		_, held := keySlotRoutes[p]
-		free := slices.Contains(keySlotFree, p) || strings.HasPrefix(p, "GET ") || strings.HasPrefix(p, "OPTIONS ")
+		free := slices.Contains(keySlotFree, p) || strings.HasPrefix(p, "GET ") && !slices.Contains(keySlotGets, p) || strings.HasPrefix(p, "OPTIONS ")
 		if held == free {
 			t.Errorf("route %q is in neither keySlotRoutes nor keySlotFree, or in both: say whether a gateway key's MaxConcurrency holds it", p)
 		}

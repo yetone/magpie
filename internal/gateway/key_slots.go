@@ -76,6 +76,8 @@ var keySlotRoutes = map[string]keySlotKind{
 	"POST /audio/translations":      keySlotEager,
 	"POST /v1/audio/speech":         keySlotEager,
 	"POST /audio/speech":            keySlotEager,
+	"GET /v1/realtime":              keySlotEager, // a session holds its slot while it lasts
+	"GET /realtime":                 keySlotEager,
 	"POST /v1/videos":               keySlotEager,
 	"POST /videos":                  keySlotEager,
 	// DeepSeek's chat page: a turn's rounds go through the Messages
@@ -101,7 +103,7 @@ func keyCapped(who access.Identity) bool {
 func (s *Server) keySlots(mux *routeMux, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		who := access.Caller(r.Context())
-		if !keyCapped(who) || r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions || strings.HasSuffix(r.URL.Path, ":countTokens") {
+		if !keyCapped(who) || r.Method == http.MethodGet && !realtimeUpgrade(r) || r.Method == http.MethodHead || r.Method == http.MethodOptions || strings.HasSuffix(r.URL.Path, ":countTokens") {
 			next.ServeHTTP(w, r)
 			return
 		}

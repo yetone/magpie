@@ -30,7 +30,9 @@ const remoteKeyLimitHeader = "X-Magpie-Limit-Reset"
 // keyLimited holds a gateway key's requests to its limit (#585, see
 // package budget for the rules): one that would go over is refused with a
 // 429 before any provider is asked, saying the key, the limit and when it
-// resets; one let in holds a reservation until it ends. A key with a limit
+// resets; one let in holds a reservation until it ends. A realtime
+// session's upgrade (a GET) is held as a request is, its reservation for
+// as long as the session lasts. A key with a limit
 // while plugins/budget is off is refused with a 503, and nothing is sent. Reads, the
 // bridge's tool callbacks and counting tokens cost nothing and pass.
 //
@@ -46,7 +48,9 @@ func keyLimited(next http.Handler) http.Handler {
 		if who.Issuer != nil {
 			limits = append(slices.Clone(limits), who.Issuer.Limits()...)
 		}
-		if !who.Limited() || r.Method != http.MethodPost || strings.HasPrefix(r.URL.Path, "/_magpie/") || strings.HasPrefix(r.URL.Path, "/mcp/") || r.URL.Path == KeysPath {
+		// a realtime session is opened by a GET and spends as a chat does
+		rt := realtimeUpgrade(r)
+		if !who.Limited() || r.Method != http.MethodPost && !rt || strings.HasPrefix(r.URL.Path, "/_magpie/") || strings.HasPrefix(r.URL.Path, "/mcp/") || r.URL.Path == KeysPath {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -61,7 +65,10 @@ func keyLimited(next http.Handler) http.Handler {
 		size, model := r.ContentLength, ""
 		// a compressed body (#1223) is reserved at its decoded size and model
 		costCap := slices.ContainsFunc(limits, func(l *access.Limit) bool { return l.Cost > 0 })
-		if enc := r.Header.Get("Content-Encoding"); costCap || scoped || size < 0 || (enc != "" && !strings.EqualFold(enc, "identity")) {
+		if rt {
+			// no body: the model is named in the query
+			size, model = 0, strings.TrimSpace(r.URL.Query().Get("model"))
+		} else if enc := r.Header.Get("Content-Encoding"); costCap || scoped || size < 0 || (enc != "" && !strings.EqualFold(enc, "identity")) {
 			// a turn on Codex's own path reads to its own limit (codexBackend)
 			var most int64
 			if strings.HasPrefix(r.URL.Path, CodexPath+"/") {
