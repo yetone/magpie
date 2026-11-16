@@ -89,6 +89,10 @@ func isolate(t testing.TB) {
 	t.Cleanup(func() { downloadClaudeCode = oldDownload })
 	// the machine's own devin, if it has one, is no test's
 	DevinExecutable = func() string { return "" }
+	// nor the login shell's Gemini key (agy's, import_agy.go)
+	oldAgyEnv := agyLoginEnv
+	agyLoginEnv = func(string) string { return "" }
+	t.Cleanup(func() { agyLoginEnv = oldAgyEnv })
 	forgetClaudeCredential()
 	forgetClaudeStatus()
 	devinStatus.forget()

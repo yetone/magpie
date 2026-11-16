@@ -83,6 +83,7 @@ var appReaders = []struct {
 	asked    bool
 }{
 	{"alma", "Alma", almaPath, readAlma, false},
+	{"agy", "Antigravity CLI", agySettingsPath, readAgySettings, false},
 	{"cc-switch", "CC Switch", ccSwitchPath, readCCSwitch, false},
 	{"claude-code", "Claude Code", claudeSettingsPath, readClaudeSettings, false},
 	{"codex", "Codex", codexConfigPath, readCodexConfig, false},

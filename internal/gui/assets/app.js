@@ -10740,9 +10740,10 @@ async function openImportApps(discovered) {
   renderProviders();
 }
 
-// appIcon is an import source's logo; Claude Code, Codex and OpenCode have
-// their marks among the vendor icons rather than an app tile of their own.
-const appIcon = (id) => id === "claude-code" ? "icons/claudecode-color.svg" : id === "codex" ? "icons/codex-color.svg" : id === "opencode" ? "icons/opencode.svg" : `icons/app-${id}.png`;
+// appIcon is an import source's logo; Claude Code, Codex, OpenCode and
+// Antigravity's CLI have their marks among the vendor icons rather than an
+// app tile of their own.
+const appIcon = (id) => "icons/" + ({ "claude-code": "claudecode-color.svg", codex: "codex-color.svg", opencode: "opencode.svg", agy: "antigravity-color.svg" }[id] || `app-${id}.png`);
 
 function renderImportApps(ia) {
   const ed = el("div", "editor new importapps");
