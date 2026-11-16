@@ -171,6 +171,24 @@ func FollowRemotePicks(ctx context.Context) {
 	followRemote(ctx)
 }
 
+// KeepFollowingRemote runs FollowRemotePicks until ctx ends, for a magpie
+// with no app: the app's Library loop runs it there (library.KeepLinked),
+// and a headless `magpie serve` client of a Remote magpie followed its
+// model list and efforts but never a pick changed on the remote (KoiLx0
+// on X).
+func KeepFollowingRemote(ctx context.Context, interval time.Duration) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		FollowRemotePicks(ctx)
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
+}
+
 func followRemote(ctx context.Context) {
 	cctx, cancel := context.WithTimeout(ctx, 2*provider.RemoteAgentModelsWait)
 	picks := remotePicks(cctx, 0)

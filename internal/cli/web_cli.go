@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/daemon"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/gui"
@@ -241,6 +242,8 @@ func serveCmd(args []string) error {
 		return serve()
 	}
 	go stats.Run(version, "serve")
+	// the models a Remote magpie's agents are on, as the app follows them
+	go agent.KeepFollowingRemote(context.Background(), 30*time.Second)
 	w, err := gui.StartWeb(web, version)
 	if err != nil {
 		return err

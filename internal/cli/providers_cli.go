@@ -1728,6 +1728,8 @@ func serve() error {
 	// one's own Remote magpies follow it
 	gateway.SetUpdater(serveUpdateAsked(follow))
 	go provider.KeepRemotesUpdated(ctx, version)
+	// the models a Remote magpie's agents are on, as the app follows them
+	go agent.KeepFollowingRemote(ctx, 30*time.Second)
 	err := s.ListenAndServe(ctx)
 	if exe := follow.restartTo(); exe != "" {
 		// the plugin hosts end, waited for, first, as magpie web's
