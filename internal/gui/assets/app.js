@@ -23392,6 +23392,8 @@ const navList = (k) => { try { return JSON.parse(localStorage.getItem("magpie.na
 const navMine = () => navList("Hidden");
 function navHides() {
   if (mode !== "window") return;
+  // the reader's own order (navorder.js), imported only once there is one
+  window.navArrange ? navArrange() : navList("Order").length && import("./navorder.js").then(navHides, () => {});
   for (const b of $("#nav").querySelectorAll("button[data-view]")) b.hidden = (gatewayMode && GATEWAY_HIDES.includes(b.dataset.view)) || featureHides(b) || navMine().includes(b.dataset.view);
 }
 function applyFeatures(list) {

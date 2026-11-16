@@ -3385,6 +3385,24 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 /* a menu of actions, where nothing is or can be ticked, keeps no room for
    a tick: its items line up with its heading */
 .proto-menu.pm-bare .pm-tick { display: none; }
+/* Settings' Sidebar pages (navpages.js): each page's row is dragged to its
+   place, the grip at its end showing on the row under the pointer, as an
+   iPhone's list being reordered has it; Providers is always shown */
+.nav-pages-list { position: relative; display: grid; gap: 1px; }
+.nav-pages-menu .pm-item { align-items: center; }
+.nav-pages-menu .pm-words { flex: 1; min-width: 0; }
+.nav-pages-menu .grip { flex: none; display: grid; place-items: center; align-self: stretch; width: 26px; margin: -6px -8px -7px 0; touch-action: none; cursor: grab; opacity: 0; transition: opacity .15s ease; }
+.nav-pages-menu .grip::before { content: ""; width: 6px; height: 11px; background: radial-gradient(circle, var(--muted) .9px, transparent 1.2px) 0 0 / 3px 3.75px; }
+.nav-pages-menu .pm-item:is(:hover, .dragging) .grip { opacity: 1; }
+/* apart: Safari before 15.4 drops a whole selector list with :focus-visible in it */
+.nav-pages-menu .pm-item:focus-visible .grip { opacity: 1; }
+@media (hover: none) { .nav-pages-menu .grip { opacity: 1; } }
+.nav-pages-menu .pm-fixed .pm-tick { opacity: .4; }
+.nav-pages-list.sorting { user-select: none; -webkit-user-select: none; }
+.nav-pages-list.sorting > .pm-item { transition: transform .16s cubic-bezier(.23, 1, .32, 1); cursor: grabbing; }
+.nav-pages-list.sorting > .pm-item.dragging { z-index: 2; background: var(--card-2); box-shadow: 0 0 0 1px var(--line); transition: none; will-change: transform; }
+@media (prefers-reduced-motion: reduce) { .nav-pages-list.sorting > .pm-item { transition: none; } }
+.nav-pages-reset { margin-top: 3px; }
 /* a group's heading in a menu of many: it ticks all of its items */
 .proto-menu .pm-group { margin-top: 3px; }
 .proto-menu .pm-group .pm-name { font-size: 11px; font-weight: 600; color: var(--muted); }
