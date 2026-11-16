@@ -1379,7 +1379,7 @@
       renderContext();
       try {
         await api("tune/" + path, { agent, knob, model: a.model || "", value: String(value ?? "") });
-        status(path === "apply" ? t("Saved: {agent} reads it from its next session", { agent: agentLabel(agent) }) : t("Put back"), "ok");
+        status(path != "undo" ? t("Saved: {agent} reads it from its next session", { agent: agentLabel(agent) }) : t("Put back"), "ok");
       } catch (e) {
         statusErr(e);
       }
@@ -1449,13 +1449,17 @@
       b.onclick = go;
       return foot.appendChild(b);
     };
+    // what Codex's config.toml sets before magpie, taken over on the
+    // reader's click (sufeng1894 on X: locked, with no way to adjust it)
+    if (set.take || aset.take) btn(t("Let magpie set it"), () => send("takeover"), " primary ctx-tune-take");
     if (!as) {} else if (aset.locked) cav(t("Background compaction: Codex's config.toml sets {key}, which comes first", { key: aset.locked }));
     else if (as.held?.length) cav(codexHeld(as.held));
     else if (aset.ours && +aset.value === as.percent) {
       verdict.after(el("span", "ctx-chip good ctx-tune-async", t("In the background at {value}", { value: fmtK(as.value) })));
       verdict.nextSibling.prepend(el("i"));
       btn(t("Undo background"), () => send("undo", "", "async_compact"));
-    } else btn(t("Use {value} in the background", { value: fmtK(as.value) }), () => send("apply", as.percent, "async_compact"), " ctx-tune-async").dataset.tt = t("Codex compacts in the background past {pct} of the model's window, about {value} of {window}, while the turn goes on; {now} stays as the foreground limit, for when the background one isn't ready. A Codex feature still under development, 0.163 or later.", { pct: as.percent + "%", value: fmtK(as.value), window: fmtK(as.window), now: show(cur) });
+    // after it, Undo for a share taken over from config.toml
+    } else btn(t("Use {value} in the background", { value: fmtK(as.value) }), () => send("apply", as.percent, "async_compact"), " ctx-tune-async").dataset.tt = t("Codex compacts in the background past {pct} of the model's window, about {value} of {window}, while the turn goes on; {now} stays as the foreground limit, for when the background one isn't ready. A Codex feature still under development, 0.163 or later.", { pct: as.percent + "%", value: fmtK(as.value), window: fmtK(as.window), now: show(cur) }), aset.ours && btn(t("Undo background"), () => send("undo", "", "async_compact"));
     row.append(foot);
     return row;
   }

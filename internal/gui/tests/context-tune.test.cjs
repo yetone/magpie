@@ -750,6 +750,79 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
   });
 }
 
+// sufeng1894 on X: "怎么codex不能手工调整压缩阈值了？" Codex's own
+// model_auto_compact_token_limit (and its background threshold) in
+// config.toml locked the card, and nothing on it said what to do. A lock
+// magpie can take over now has one action, Let magpie set it: the click
+// asks /api/tune/takeover, and the card then adjusts the limit with Use and
+// Undo. A lock with nothing to take (take unset) offers nothing. In both
+// engines, every language, a phone's width and a desk's.
+const takeLabel = { en: "Let magpie set it", zh: "交给 magpie 设置", "zh-TW": "交給 magpie 設定", ja: "magpie に任せる", de: "magpie festlegen lassen" };
+const takeTune = (taken, take) => ({
+  days: 7,
+  agents: [{ agent: "codex", calls: 2808, advice: [
+    { knob: "compact", setting: taken ? { value: "140000", source: "long", ours: true } : { value: "140000", source: "config", locked: "model_auto_compact_token_limit", ...(take ? { take: true } : {}) },
+      compact: { model: "gpt-5.5", current: 140000, window: 400000, best: 85000, cost: 1.4e9, low: 1.02e9, curve: curve(70000, 400000, 85000), facts },
+      async: { percent: 30, value: 120000, window: 400000, setting: taken ? { value: "80", source: "async", ours: true } : { source: "async", locked: "features.async_compaction.model_async_compact_threshold_percent", ...(take ? { take: true } : {}) } } },
+  ] }],
+});
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  test(`${engine}: Codex's own limit in config.toml is handed to magpie on a click`, async (t) => {
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    const errors = [];
+    t.after(() => browser.close());
+    for (const lang of Object.keys(heading)) for (const [width, height] of [[360, 760], [1100, 760]]) {
+      await t.test(`${lang}, ${width}x${height}`, async () => {
+        const ctx = await browser.newContext({ viewport: { width, height }, reducedMotion: "reduce" });
+        await ctx.addInitScript(() => { try { localStorage.setItem("magpie.usageTab", "context"); } catch {} });
+        const page = await ctx.newPage();
+        page.setDefaultTimeout(5000);
+        page.setDefaultNavigationTimeout(60000);
+        page.on("pageerror", (e) => errors.push(e.message));
+        const posts = [];
+        let taken = false, take = false;
+        const base = serve(lang, []);
+        await page.route("**/*", (r) => {
+          const p = new URL(r.request().url()).pathname;
+          if (p === "/api/tune") return r.fulfill({ json: takeTune(taken, take) });
+          if (p.startsWith("/api/tune/")) {
+            posts.push({ path: p, ...JSON.parse(r.request().postData()) });
+            if (p === "/api/tune/takeover") taken = true;
+            return r.fulfill({ json: {} });
+          }
+          return base(r);
+        });
+        await page.goto("http://magpie.test/?view=usage");
+        const row = page.locator(".ctx-tune-row").nth(0);
+        const btn = row.locator(".ctx-tune-foot button.ctx-tune-take");
+        // nothing magpie can take: no action
+        await row.locator(".ctx-tune-caveat").first().waitFor();
+        assert.equal(await btn.count(), 0);
+        assert.equal(await row.locator(".ctx-tune-foot button.primary").count(), 0);
+        take = true;
+        await page.evaluate(() => window.loadContext());
+        await btn.waitFor();
+        // one action for both locks
+        assert.equal(await btn.count(), 1);
+        assert.equal(await btn.innerText(), takeLabel[lang]);
+        const over = await page.evaluate(() => {
+          const view = document.querySelector("#view-usage");
+          return view.scrollWidth > view.clientWidth + 1 ? view.scrollWidth + ">" + view.clientWidth : "";
+        });
+        assert.equal(over, "");
+        assert.deepEqual(posts, []);
+        await btn.click();
+        await btn.waitFor({ state: "detached" });
+        assert.deepEqual(posts, [{ path: "/api/tune/takeover", agent: "codex", knob: "compact", model: "", value: "" }]);
+        assert.equal(await btn.count(), 0);
+        assert.equal(await row.locator(".ctx-tune-caveat.ctx-tune-async").count(), 0);
+        await ctx.close();
+      });
+    }
+    assert.deepEqual(errors, []);
+  });
+}
+
 // hoobnn on Discord (11-01): over 7 or 30 days, Use on Codex's window did
 // nothing. Those ranges held a model with a Compact at of its own (430K),
 // which "Now" was read from, so a Use moved Codex's other models and the

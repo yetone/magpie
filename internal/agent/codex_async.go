@@ -251,7 +251,20 @@ func codexAsyncSync(path, key string, routed, on bool, percent int, tableOK bool
 	if raw := stashShared()[key]; raw != "" {
 		json.Unmarshal([]byte(raw), &st)
 	}
+	// what was written is stashed however the sync ends: a write after
+	// it that fails never leaves magpie's threshold or table in the file
+	// unstashed, where it would read as the user's and lock the setting
 	was := st
+	defer func() {
+		if st != was {
+			if st == (codexAsyncStash{}) {
+				forget(key)
+			} else {
+				b, _ := json.Marshal(st)
+				stash(map[string]string{key: string(b)})
+			}
+		}
+	}()
 	want := routed && on
 	useTable := want && tableOK
 	if !useTable {
@@ -373,14 +386,6 @@ func codexAsyncSync(path, key string, routed, on bool, percent int, tableOK bool
 		}
 	}
 
-	if st != was {
-		if st == (codexAsyncStash{}) {
-			forget(key)
-		} else {
-			b, _ := json.Marshal(st)
-			stash(map[string]string{key: string(b)})
-		}
-	}
 	return nil
 }
 

@@ -405,6 +405,25 @@ func tuneRoutes(mux *http.ServeMux) {
 		}
 		writeJSON(rw, settingsState())
 	})
+	// what Codex's config.toml sets before magpie, taken over on the
+	// user's click (agent.TuneTakeOver): Undo puts it back
+	mux.HandleFunc("POST /api/tune/takeover", func(rw http.ResponseWriter, r *http.Request) {
+		if gatewayRefused(rw) {
+			return
+		}
+		var in change
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		if err := agent.TuneTakeOver("", in.Agent); err != nil {
+			fail(rw, err)
+			return
+		}
+		tuneForget()
+		s, _ := agent.TuneRead("", in.Agent, agent.TuneCompact, "")
+		writeJSON(rw, s)
+	})
 	mux.HandleFunc("POST /api/tune/undo", func(rw http.ResponseWriter, r *http.Request) {
 		if gatewayRefused(rw) {
 			return

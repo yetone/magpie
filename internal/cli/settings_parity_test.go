@@ -527,6 +527,7 @@ var notYet = map[string]string{
 	"POST /api/gateway/unrest":                   U,  // trace.go
 	"GET /api/tune":                              U,  // tune.go
 	"POST /api/tune/apply":                       U,  // tune.go
+	"POST /api/tune/takeover":                    U,  // tune.go
 	"POST /api/tune/undo":                        U,  // tune.go
 	"POST /api/uninstall/finish":                 A,  // uninstall.go
 	"GET /api/usage/checkins/off":                U,  // usage.go: the Usage page's switched-off check-ins; `magpie accounts checkin` does every account

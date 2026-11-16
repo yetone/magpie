@@ -54,6 +54,9 @@ type TuneSetting struct {
 	Locked string `json:"locked,omitempty"`
 	// Ours: tune put Value in, and Undo puts back what was there
 	Ours bool `json:"ours,omitempty"`
+	// Take: what is Locked is one magpie can take over on the user's say
+	// (TuneTakeOver)
+	Take bool `json:"take,omitempty"`
 }
 
 // TuneLong is the Source of a window that is magpie's Long conversations,
@@ -163,24 +166,122 @@ func tuneMigrateCodex(home string) {
 		return
 	}
 	p := tunePlace{path: filepath.Join(here(home).codexHome(), "config.toml"), key: codexCompactKey, toml: true}
-	defer forget(tuneKey("codex", TuneCompact, ""))
 	v, has := p.get()
 	if !has || strings.Trim(v, `"'`) != st.Set {
+		forget(tuneKey("codex", TuneCompact, ""))
 		return
 	}
+	// the stash goes only once the limit is out of the file: one that
+	// couldn't be moved is still magpie's, and tried again at the next
+	// read, never left in the file as if the user had written it
 	if n, err := strconv.Atoi(st.Set); err == nil && n > 0 {
-		s := settings.Load().ForAgent("codex")
-		if s.CompactAt == 0 || s.FullContext || n < s.Compact() {
-			if err := longApply("codex", n); err != nil {
-				return
-			}
+		if err := longApply("codex", codexLongTakes(n)); err != nil {
+			return
 		}
 	}
+	var err error
 	if st.Had {
-		_ = edit.SetTOMLTop(p.path, edit.KV{Path: p.key, Value: tomlRaw(st.Raw)})
-		return
+		err = edit.SetTOMLTop(p.path, edit.KV{Path: p.key, Value: tomlRaw(st.Raw)})
+	} else {
+		err = edit.DelTOMLTop(p.path, p.key)
 	}
-	_ = edit.DelTOMLTop(p.path, p.key)
+	if err == nil {
+		forget(tuneKey("codex", TuneCompact, ""))
+	}
+}
+
+// codexLongTakes is the window Long conversations for Codex has once a
+// limit n from Codex's config.toml is moved into it: n, where Long
+// conversations is at magpie's default or Full window; else the lesser of
+// the two, where Codex compacted with both (it stops at the lesser of the
+// limit and the window it is told), so nothing changes for the user.
+func codexLongTakes(n int) int {
+	s := settings.Load().ForAgent("codex")
+	if s.CompactAt == 0 || s.FullContext {
+		return n
+	}
+	return min(n, s.Compact())
+}
+
+// tuneFileKey stashes the limit the user had in Codex's config.toml when
+// they let magpie set it (TuneTakeOver), as the file had it: Undo writes
+// it back.
+const tuneFileKey = "tune.codex.compact_file"
+
+// TuneTakeOver is the user's say that magpie sets what Codex's config.toml
+// sets before it, the Locked of TuneRead (sufeng1894 on X: the Usage
+// page's Codex card was locked by a model_auto_compact_token_limit, with
+// no way to adjust it from magpie). The limit moves into Long
+// conversations for Codex (codexLongTakes, as tuneMigrateCodex moves
+// tune's own) and out of the file; a background compaction threshold of
+// the user's in [features.async_compaction] becomes Background
+// compaction's, in Settings, and stays in the file as magpie's. Undo puts
+// both back as they were. Nothing of the user's is taken without this.
+func TuneTakeOver(home, agent string) error {
+	if agent != "codex" {
+		return fmt.Errorf("%s has nothing in its config that magpie can take over", agent)
+	}
+	_, limit := codexOwnLimit(home)
+	_, _, async := asyncTakeable(home)
+	if !limit && !async {
+		return fmt.Errorf("Codex's config.toml sets nothing magpie can take over")
+	}
+	if limit {
+		if err := compactTakeOver(home); err != nil {
+			return err
+		}
+	}
+	if async {
+		return asyncTakeOver(home)
+	}
+	return nil
+}
+
+// codexOwnLimit is the model_auto_compact_token_limit Codex's config.toml
+// has at its top, as a token count: ok when there is one magpie can take.
+func codexOwnLimit(home string) (int, bool) {
+	p := tunePlace{path: filepath.Join(here(tuneHome(home)).codexHome(), "config.toml"), key: codexCompactKey, toml: true}
+	v, has := p.get()
+	if !has {
+		return 0, false
+	}
+	n, err := strconv.Atoi(compactValue(strings.Trim(v, `"'`)))
+	return n, err == nil && n > 0
+}
+
+func compactTakeOver(home string) error {
+	p := tunePlace{path: filepath.Join(here(tuneHome(home)).codexHome(), "config.toml"), key: codexCompactKey, toml: true}
+	raw, _ := p.get()
+	n, ok := codexOwnLimit(home)
+	if !ok {
+		return fmt.Errorf("%s = %s is no token count", codexCompactKey, raw)
+	}
+	if err := longApply("codex", codexLongTakes(n)); err != nil {
+		return err
+	}
+	// kept before the key goes, so a write cut short loses nothing
+	stash(map[string]string{tuneFileKey: raw})
+	return edit.DelTOMLTop(p.path, p.key)
+}
+
+// codexLongUndo is Undo on Codex's window in Long conversations: Long
+// conversations as it was, and the limit the user let magpie take
+// (tuneFileKey) back in config.toml, unless either changed since.
+func codexLongUndo(home string) error {
+	ours := longOurs(settings.Load(), "codex")
+	raw := stashShared()[tuneFileKey]
+	if err := longUndo("codex"); err != nil {
+		return err
+	}
+	if raw == "" {
+		return nil
+	}
+	defer forget(tuneFileKey)
+	p := tunePlace{path: filepath.Join(here(tuneHome(home)).codexHome(), "config.toml"), key: codexCompactKey, toml: true}
+	if _, has := p.get(); !ours || has {
+		return nil
+	}
+	return edit.SetTOMLTop(p.path, edit.KV{Path: p.key, Value: tomlRaw(compactValue(strings.Trim(raw, `"'`)))})
 }
 
 // tuneStash is what a setting was before tune put one in.
@@ -275,6 +376,7 @@ func TuneRead(home, agent, knob, model string) (TuneSetting, error) {
 			// the user's own limit: Codex stops at it before the window
 			// magpie tells it
 			s.Value, s.Source, s.Locked = strings.Trim(v, `"'`), "settings", codexCompactKey
+			_, s.Take = codexOwnLimit(home)
 			return s, nil
 		}
 		st := settings.Load()
@@ -487,13 +589,16 @@ func TuneCacheHere(home string) []TuneKnob {
 // the user has changed it since: then it is theirs, and only forgotten.
 func TuneUndo(home, agent, knob, model string) error {
 	if agent == "codex" && knob == TuneAsync {
-		return asyncUndo()
+		return asyncUndo(home)
 	}
 	p, err := tuneWhere(home, agent, knob, model)
 	if err != nil {
 		return err
 	}
 	if cur, _ := TuneRead(home, agent, knob, model); cur.Source == TuneLong {
+		if agent == "codex" {
+			return codexLongUndo(home)
+		}
 		return longUndo(agent)
 	}
 	st, ok := tuneStashed(agent, knob, model)
@@ -568,6 +673,10 @@ type tuneAsyncStash struct {
 	On      bool `json:"on"`
 	Percent int  `json:"percent"`
 	Set     int  `json:"set"`
+	// the threshold, and enabled = true, the user had in config.toml when
+	// they let magpie take it over (asyncTakeOver), which Undo gives back
+	Own        int  `json:"own,omitempty"`
+	OwnEnabled bool `json:"ownEnabled,omitempty"`
 }
 
 func asyncStashed() (tuneAsyncStash, bool) {
@@ -591,6 +700,7 @@ func asyncRead(home string) TuneSetting {
 	out := TuneSetting{Source: TuneAsyncSource}
 	if own := codexAsyncOwn(home); own != "" {
 		out.Locked = own
+		_, _, out.Take = asyncTakeable(home)
 		return out
 	}
 	s := settings.Load()
@@ -626,7 +736,7 @@ func asyncApply(home, value string) error {
 
 // asyncUndo puts Background compaction back as it was before tune, unless
 // the user changed it since: then it is theirs, and only forgotten.
-func asyncUndo() error {
+func asyncUndo(home string) error {
 	st, ok := asyncStashed()
 	if !ok {
 		return fmt.Errorf("magpie didn't set Codex's background compaction")
@@ -635,7 +745,111 @@ func asyncUndo() error {
 	if !asyncOurs(settings.Load()) {
 		return nil
 	}
-	return provider.SetCodexAsyncCompact(st.On, st.Percent)
+	if err := provider.SetCodexAsyncCompact(st.On, st.Percent); err != nil {
+		return err
+	}
+	if st.Own > 0 {
+		return asyncGiveBack(home, st)
+	}
+	return nil
+}
+
+// asyncTakeable is the background compaction threshold of the user's that
+// Codex's config.toml has in its [features.async_compaction] table, the
+// one thing there that keeps magpie's from being read: ok when magpie can
+// take it over (asyncTakeOver). enabled: the table's enabled = true is the
+// user's too.
+func asyncTakeable(home string) (n int, enabled, ok bool) {
+	if codexAsyncOwn(home) != codexAsyncTable+"."+codexAsyncPercent {
+		return 0, false, false
+	}
+	at := here(tuneHome(home))
+	feature, _, err := codexAsyncNow(filepath.Join(at.codexHome(), "config.toml"))
+	t, _ := feature.(map[string]any)
+	p, isInt := t[codexAsyncPercent].(int64)
+	if err != nil || !isInt || p < 1 || p > 100 {
+		return 0, false, false
+	}
+	var cs codexAsyncStash
+	if raw := stashShared()[at.key("codex.async")]; raw != "" {
+		json.Unmarshal([]byte(raw), &cs)
+	}
+	e, _ := t["enabled"].(bool)
+	return int(p), e && !cs.Enabled, true
+}
+
+// asyncTakeOver makes the user's threshold Background compaction's: the
+// setting takes its value, and the config's key is counted as the one
+// magpie wrote (codexAsyncSync's stash), so it is changed and taken out
+// with the setting from now on. Nothing in the file changes.
+func asyncTakeOver(home string) error {
+	n, enabled, ok := asyncTakeable(home)
+	if !ok {
+		return fmt.Errorf("Codex's config.toml sets no background compaction threshold magpie can take over")
+	}
+	s := settings.Load()
+	st, had := asyncStashed()
+	if !had {
+		st = tuneAsyncStash{On: s.CodexAsyncCompact, Percent: s.CodexAsyncCompactPercent}
+	}
+	st.Set, st.Own, st.OwnEnabled = n, n, enabled
+	b, _ := json.Marshal(st)
+	stash(map[string]string{tuneAsyncKey: string(b)})
+	key := here(tuneHome(home)).key("codex.async")
+	var cs codexAsyncStash
+	if raw := stashShared()[key]; raw != "" {
+		json.Unmarshal([]byte(raw), &cs)
+	}
+	cs.Percent = n
+	if enabled {
+		cs.Enabled = true
+	}
+	b, _ = json.Marshal(cs)
+	stash(map[string]string{key: string(b)})
+	return provider.SetCodexAsyncCompact(true, n)
+}
+
+// asyncGiveBack puts the threshold (and enabled = true) the user let magpie
+// take back in config.toml as theirs, unless they changed the file since.
+func asyncGiveBack(home string, st tuneAsyncStash) error {
+	at := here(tuneHome(home))
+	path, key := filepath.Join(at.codexHome(), "config.toml"), at.key("codex.async")
+	var cs codexAsyncStash
+	if raw := stashShared()[key]; raw != "" {
+		json.Unmarshal([]byte(raw), &cs)
+	}
+	feature, _, err := codexAsyncNow(path)
+	if err != nil {
+		return err
+	}
+	if feature != nil {
+		if _, isTable := feature.(map[string]any); !isTable {
+			return nil // the user's own spelling of it since
+		}
+	}
+	t, _ := feature.(map[string]any)
+	if cur, has := t[codexAsyncPercent]; has && (cs.Percent == 0 || cur != int64(cs.Percent)) {
+		return nil // a threshold the user wrote since
+	}
+	if err := edit.SetTOMLKey(path, codexAsyncTable, codexAsyncPercent, st.Own); err != nil {
+		return err
+	}
+	cs.Percent = 0
+	if st.OwnEnabled {
+		if t["enabled"] == nil {
+			if err := edit.SetTOMLKey(path, codexAsyncTable, "enabled", true); err != nil {
+				return err
+			}
+		}
+		cs.Enabled = false
+	}
+	if cs == (codexAsyncStash{}) {
+		forget(key)
+		return nil
+	}
+	b, _ := json.Marshal(cs)
+	stash(map[string]string{key: string(b)})
+	return nil
 }
 
 // ClaudeCacheSet is one of Claude Code's prompt-cache lifetimes as the
