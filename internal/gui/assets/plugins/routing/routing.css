@@ -503,6 +503,13 @@ button.rt-session { cursor: pointer; }
 :where(.rt-more:not(.min1150)) .rt-pgrp.long, .rt-cols.solo .rt-pgrp.long { break-inside: auto; }
 :where(.rt-more:not(.min1150)) .rt-pgrp.long > *, .rt-cols.solo .rt-pgrp.long > * { break-inside: avoid; }
 :where(.rt-more:not(.min1150)) .rt-pgrp.long > .rt-prov, .rt-cols.solo .rt-pgrp.long > .rt-prov { break-after: avoid; }
+/* placed by client.js (packActs) in the columns CSS columns would have
+   them in: CSS columns balanced every row again on each layout, and a
+   window resized over many accounts stuttered (lexrus on X) */
+:where(.rt-more:not(.min1150)) .rt-acts.packed, .rt-cols.solo .rt-acts.packed { columns: auto; position: relative; box-sizing: content-box; height: var(--acts-h, auto); }
+:where(.rt-more:not(.min1150)) .rt-acts.packed > *, .rt-cols.solo .rt-acts.packed > * { position: absolute; left: var(--px, 0); top: var(--py, 0); width: calc(100% / var(--acols, 1)); }
+:where(.rt-more:not(.min1150)) .rt-acts.packed > .long, .rt-cols.solo .rt-acts.packed > .long { height: var(--part-h, auto); }
+:where(.rt-more:not(.min1150)) .rt-acts.packed > .long > *, .rt-cols.solo .rt-acts.packed > .long > * { position: absolute; left: var(--px, 0); top: var(--py, 0); width: 100%; }
 .rt-cols.solo { grid-template-columns: minmax(0, 1fr); }
 .rt-reqs.none { display: block; background: none; border-color: transparent; }
 .rt-reqs.none .empty-state { padding: 14px 12px 18px; font-size: 12px; line-height: 1.6; }
@@ -573,11 +580,15 @@ button.rt-session { cursor: pointer; }
    columns that start at one place down the list */
 .rt-act .wq { display: grid; font-size: 11px; line-height: 17px; color: var(--fg-2); font-variant-numeric: tabular-nums; }
 .rt-act .wq > div { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; }
-.rt-act .wq span { min-width: 0; white-space: nowrap; }
-.rt-act .wq .k { flex: 0 0 var(--wk, 3ch); overflow: hidden; }
+.rt-act .wq span { min-width: 0; }
+/* each part no wider than its row (lexrus on X: a width the provider's
+   widest window asked for, wider than a column, ran the reset over the
+   column beside); one wider than the row goes on a line of its own and
+   breaks between its words there, in full */
+.rt-act .wq .k { flex: 0 0 min(var(--wk, 3ch), 100%); overflow-wrap: anywhere; }
 .rt-act .wq .b { flex: 0 0 28px; }
-.rt-act .wq .v { flex: 0 0 auto; min-width: var(--wv, 0); }
-.rt-act .wq .r { flex: 1 0 auto; min-width: var(--wr, 0); max-width: 100%; overflow: hidden; text-overflow: ellipsis; text-align: right; }
+.rt-act .wq .v { flex: 0 0 auto; min-width: min(var(--wv, 0px), 100%); max-width: 100%; }
+.rt-act .wq .r { flex: 1 0 auto; min-width: min(var(--wr, 0px), 100%); max-width: 100%; text-align: right; }
 .rt-act .wq .k, .rt-act .wq .r { color: var(--muted); }
 .rt-act .wq .quota-track { height: 3px; }
 /* rows too narrow for a bar beside what is used (slim, set by

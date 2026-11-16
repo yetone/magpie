@@ -353,7 +353,20 @@ its own only on a row with nothing else to say or one to act on; on the
 others (`.said`) it is in the tooltip with the models it answered, under
 its id. A folded row of keys or accounts names no models. Columns are
 `min(240px, 40vw)` wide, so a name and its Try now share a line
-(`routing-acts-calm.test.cjs`).
+(`routing-acts-calm.test.cjs`). They aren't CSS columns: `packActs`
+places each provider's box (`.rt-pgrp`) with `--px`/`--py` under
+`.rt-acts.packed`, in order down a column and on into the next, the
+columns' ends as level as they go, and a `.long` box's rows run on into
+the next column, its heading never last in one. CSS columns balanced
+every row again on each layout, ~24ms a layout in WebKit with a hundred
+rows, and dragging the window's edge stuttered (lexrus on X). It places
+on the window's resize, before the frame is drawn, on a render, and a
+frame after a box changes its height. Beside the requests (`min1150`,
+not `solo`) the list is one scrolled column and nothing is placed. An
+account's windows line up with the rows of its own provider (`--wk`,
+`--wv`, `--wr` per provider), and no part runs past its row: a width the
+whole list's widest window asked for ran the resets over the column
+beside. See `routing-account-windows-fit.test.cjs`.
 `renderActs` in
 [`plugins/routing/client.js`](../../internal/gui/assets/plugins/routing/client.js)
 shows the first `ACTS_SHOWN` (8) rows of a longer list and puts the rest

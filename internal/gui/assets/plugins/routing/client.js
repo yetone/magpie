@@ -417,10 +417,93 @@ function routingPage(part) {
       inMetaFit = false;
       for (const [p, top] of kept) if (p.scrollTop !== top) p.scrollTop = top;
     }
-    if (side !== was) more.classList.toggle("min1150", side);
+    if (side !== was) { more.classList.toggle("min1150", side); packActs(); }
   }); };
   let sideW = -1;
   new ResizeObserver(() => { const w = more.clientWidth; if (w && w !== sideW) { sideW = w; sideFit(); } }).observe(more);
+  // The accounts and keys in columns (under the requests, or alone):
+  // each provider's box placed in its column here, in order down one
+  // column and on into the next, the columns' ends as near level as they
+  // go, as CSS columns placed them. CSS columns balanced every row of the
+  // list again on each layout, ~24ms in WebKit for a hundred rows and
+  // several layouts a frame, so dragging the window's edge stuttered
+  // (lexrus on X); placed boxes are laid out as one column's rows are.
+  // A provider's rows long enough to run on into the next column (.long)
+  // go on there as they did, its heading never last in a column: the box
+  // is where its first rows are, and its rows past them are placed from
+  // it. Placed before the frame is laid out (on the window's resize,
+  // after a drawing), so the frame drawn has them where they go; a box
+  // that only changed its height is placed on the next frame.
+  const placed = new WeakMap();
+  const placeAt = (e, left, top) => {
+    const spot = left + "|" + top;
+    if (placed.get(e) === spot) return;
+    placed.set(e, spot);
+    e.style.setProperty("--px", left); e.style.setProperty("--py", top); // read only while placed: a row is position: relative
+  };
+  let packCols = 0, packing = 0;
+  const packActs = () => {
+    if (packing) { cancelAnimationFrame(packing); packing = 0; }
+    const kids = [...acts.children];
+    const inCols = !more.classList.contains("min1150") || hist.classList.contains("solo");
+    if (!inCols || !kids.length) {
+      if (acts.classList.contains("packed")) acts.classList.remove("packed");
+      packCols = 0;
+      return;
+    }
+    const w = acts.clientWidth;
+    if (!w) return; // out of sight: placed as it was
+    // as many as CSS columns of min(240px, 40vw) fit
+    const n = Math.max(1, Math.floor(w / Math.min(240, innerWidth * .4)));
+    if (!acts.classList.contains("packed")) acts.classList.add("packed");
+    if (n !== packCols) { packCols = n; acts.style.setProperty("--acols", String(n)); }
+    // what goes in a column whole: a box, or a long box's rows one by one
+    // (its heading with the row under it), the first with the box's top
+    const units = [];
+    for (const g of kids) {
+      if (!g.classList.contains("long") || !g.children.length) { units.push({ g, es: [], h: g.getBoundingClientRect().height }); continue; }
+      const pad = parseFloat(getComputedStyle(g).paddingTop) || 0;
+      let u = null;
+      for (const e of g.children) {
+        const h = e.getBoundingClientRect().height;
+        if (!u) units.push(u = { g, es: [e], hs: [h], h: pad + h, pad });
+        else if (u.es.length === 1 && u.es[0].classList.contains("rt-prov") && u.g === g) { u.es.push(e); u.hs.push(h); u.h += h; }
+        else units.push(u = { g, es: [e], hs: [h], h, pad: 0 });
+      }
+    }
+    const hs = units.map((u) => u.h);
+    // each column filled to at most cap: the least cap that takes n columns
+    const fill = (cap) => {
+      let c = 0, y = 0;
+      const at = hs.map((h) => { if (y > 0 && y + h > cap + .5) { c++; y = 0; } const p = [c, y]; y += h; return p; });
+      return { at, cols: c + 1 };
+    };
+    let lo = Math.max(...hs), hi = hs.reduce((a, b) => a + b, 0);
+    while (hi - lo > .5) { const mid = (lo + hi) / 2; if (fill(mid).cols <= n) hi = mid; else lo = mid; }
+    const { at } = fill(fill(lo).cols <= n ? lo : hi);
+    const top = parseFloat(getComputedStyle(acts).paddingTop) || 0;
+    let tall = 0, from = null; // from: the long box's own column and top
+    at.forEach(([c, y], i) => {
+      const u = units[i];
+      tall = Math.max(tall, y + u.h);
+      if (!u.es.length) { placeAt(u.g, c * 100 / n + "%", top + y + "px"); return; }
+      if (!from || from.g !== u.g) {
+        from = { g: u.g, c, y };
+        placeAt(u.g, c * 100 / n + "%", top + y + "px");
+      }
+      // the box is as tall as its rows in its own column
+      if (c === from.c) u.g.style.setProperty("--part-h", y + u.h - from.y + "px");
+      let ey = y + u.pad - from.y;
+      u.es.forEach((e, j) => { placeAt(e, (c - from.c) * 100 + "%", ey + "px"); ey += u.hs[j]; });
+    });
+    if (acts.style.getPropertyValue("--acts-h") !== tall + "px") acts.style.setProperty("--acts-h", tall + "px");
+  };
+  // on the next frame: placed in the observer's call, the list's new
+  // height is one WebKit reports as a ResizeObserver loop
+  const packSoon = () => { if (!packing) packing = requestAnimationFrame(packActs); };
+  const packSeen = new ResizeObserver(packSoon);
+  packSeen.observe(actHead);
+  addEventListener("resize", () => { if (shown()) packActs(); });
 
   const path = () => { const p = document.createElementNS(NS, "path"); wires.appendChild(p); return p; };
   const setText = (e, s) => { if (e.textContent !== s) e.textContent = s; };
@@ -5093,17 +5176,23 @@ function routingPage(part) {
       if (!u || a.last > u.last) inUse.set(a.w.provider, a);
     }
     // each subscription account's windows, laid out alike on every row
-    // (zwm_vincent on X): the short names' column as wide as the widest,
-    // so what is left and when it resets start at one place down the list.
-    // A wallet keeps its one line, with what of it lapses first
+    // of its provider (zwm_vincent on X): the short names' column as wide
+    // as the widest, so what is left and when it resets start at one place
+    // down its rows. A provider's own: as wide as the widest of the whole
+    // list, WorkBuddy's "deepseek-v4.1-flash tokens (est.)" made every
+    // window of every provider wider than a column, and the resets ran
+    // over the column beside (lexrus on X). A wallet keeps its one line,
+    // with what of it lapses first
     const winsBy = new Map(), chw = (s) => [...s].reduce((n, c) => n + (c.charCodeAt(0) > 0x2e7f ? 2 : 1), 0);
-    let wk = 0, wv = 0, wr = 0;
+    const widths = new Map(); // a provider → its windows' widest parts, in ch
     for (const a of list) {
       if (day || a.w.kind !== "account" || a.w.balance != null) continue;
       const ps = winParts(a.w);
       if (!ps.length) continue;
       winsBy.set(a, ps);
-      for (const p of ps) { wk = Math.max(wk, chw(p.k)); wv = Math.max(wv, chw(p.v)); wr = Math.max(wr, chw(p.r)); }
+      const m = widths.get(a.w.provider) || { k: 0, v: 0, r: 0 };
+      for (const p of ps) { m.k = Math.max(m.k, chw(p.k)); m.v = Math.max(m.v, chw(p.v)); m.r = Math.max(m.r, chw(p.r)); }
+      widths.set(a.w.provider, m);
     }
     for (const a of list) {
       const w = a.w;
@@ -5210,10 +5299,10 @@ function routingPage(part) {
         // there when a window has no bar or no reset. Where the row is too
         // narrow for the reset, it goes under, on every row alike. Each in
         // full on hover, with the day and time it resets
-        const box = el("div", "wq");
-        box.style.setProperty("--wk", wk + 1 + "ch");
-        box.style.setProperty("--wv", wv + "ch");
-        box.style.setProperty("--wr", wr + "ch");
+        const box = el("div", "wq"), wd = widths.get(w.provider);
+        box.style.setProperty("--wk", wd.k + 1 + "ch");
+        box.style.setProperty("--wv", wd.v + "ch");
+        box.style.setProperty("--wr", wd.r + "ch");
         for (const p of grid) {
           const line = el("div");
           let bar = el("span", "b");
@@ -5346,6 +5435,8 @@ function routingPage(part) {
       return g;
     });
     patch(acts, boxes);
+    for (const g of boxes) { packSeen.observe(g); if (g.classList.contains("long")) for (const e of g.children) packSeen.observe(e); }
+    packActs();
   }
 
   // signInAgain signs the account of seat w in again, in its provider's
