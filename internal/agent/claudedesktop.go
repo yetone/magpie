@@ -203,7 +203,8 @@ func claudeDesktop(home string) *Agent {
 			},
 		}, desktopGatewayField(ps, func() error { return desktopApply(home, ps, magpieID) })}, append(desktopTierFields(home, ps), desktopSubagentField(ps), desktopSubagentEffortField(ps))...),
 		// a Desktop already on magpie gets the import and tool search
-		// policies too (desktopSeedImport, desktopSeedToolSearch), and a
+		// policies too (desktopSeedImport, desktopSeedToolSearch,
+		// desktopSeedPrefer1M), and a
 		// profile for magpie's gateway it applies a key the gateway takes
 		// (desktopKeyApplied)
 		Sync: func() error {
@@ -214,6 +215,9 @@ func claudeDesktop(home string) *Agent {
 						errs = append(errs, err)
 					}
 					if err := desktopSeedToolSearch(p); err != nil {
+						errs = append(errs, err)
+					}
+					if err := desktopSeedPrefer1M(p); err != nil {
 						errs = append(errs, err)
 					}
 					if err := desktopKeyApplied(p); err != nil {
@@ -619,12 +623,13 @@ const (
 	desktopLocale  = "claude-desktop.locale"
 	desktopImport  = "claude-desktop.import"
 	desktopSearch  = "claude-desktop.tool-search"
+	desktopLong    = "claude-desktop.prefer-1m"
 	desktopSSH     = "claude-desktop.ssh-hosts"
 	desktopMCP     = "claude-desktop.mcp"
 	desktopMCPSeen = "claude-desktop.mcp-seen"
 )
 
-var desktopStashKeys = []string{desktopStashed, desktopMode, desktopMode3p, desktopApplied, desktopMade, desktopProfile, desktopLocale, desktopImport, desktopSearch, desktopSSH, desktopMCP, desktopMCPSeen, desktopModelsMark, desktopDiscoveryMark}
+var desktopStashKeys = []string{desktopStashed, desktopMode, desktopMode3p, desktopApplied, desktopMade, desktopProfile, desktopLocale, desktopImport, desktopSearch, desktopLong, desktopSSH, desktopMCP, desktopMCPSeen, desktopModelsMark, desktopDiscoveryMark}
 
 // desktopAdoptStash moves the stash a packaged Desktop's folders got
 // before they had keys of their own (when magpie wrote only one set) onto
@@ -724,6 +729,9 @@ func desktopOn(p desktopPaths) error {
 	if err := desktopSeedToolSearch(p); err != nil {
 		return err
 	}
+	if err := desktopSeedPrefer1M(p); err != nil {
+		return err
+	}
 	// pointed at an address of this computer's for SSH remote sessions,
 	// which 3p mode allows no host for until the profile says so
 	if gw != gateway.URL() {
@@ -820,6 +828,27 @@ func desktopSeedImport(p desktopPaths) error {
 // stays theirs.
 func desktopSeedToolSearch(p desktopPaths) error {
 	return desktopSeedOnce(p, desktopSearch, "toolSearchEnabled", true)
+}
+
+// desktopSeedPrefer1M turns on Desktop's own "Use 1M wherever it's
+// available" (modelPrefer1mContext, 3p only, off by default) in magpie's
+// profile, so a model Desktop offers a 1M entry for is shown by that entry
+// alone and its Code tab hands Claude Code the "[1m]" id. Desktop
+// 5.11492 starts the Code tab's Claude Code with
+// CLAUDE_CODE_MAX_CONTEXT_TOKENS=200000 in its --settings whenever the
+// provider routes models itself, the gateway too (Fcn and Lcn in its
+// app.asar), and those flag settings come before ~/.claude/settings.json,
+// so the window magpie tells Claude Code there (claudeContextEnv) no longer
+// reached it: every model listed by its plain id ran at 200K, a 1M one too
+// (fwxkogaia on X, v0.1.4321). Claude Code takes a "[1m]" id for 1M whatever
+// that variable says (pT in 2.1.322). Desktop offers the 1M entry only for
+// a row whose max_input_tokens is 1M or more (magpie lists none of its rows
+// with supports_1m), so only models of 1M or more change; a smaller one
+// past 200K still runs at Desktop's 200K. Seeded once, as
+// toolSearchEnabled is: the user's own value, false too, or their taking it
+// away since, stays theirs.
+func desktopSeedPrefer1M(p desktopPaths) error {
+	return desktopSeedOnce(p, desktopLong, "modelPrefer1mContext", true)
 }
 
 // desktopSeedOnce writes key in magpie's profile once, where the profile

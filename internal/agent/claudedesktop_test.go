@@ -149,7 +149,7 @@ func TestClaudeDesktopFresh(t *testing.T) {
 		"inferenceGatewayApiKey": "magpie-claude-desktop", "inferenceGatewayAuthScheme": "bearer",
 		"disableDeploymentModeChooser": true, "coworkEgressAllowedHosts": []any{"*"},
 		"claudeAiImport":    map[string]any{"enabled": true, "bannerBehavior": "detect"},
-		"toolSearchEnabled": true,
+		"toolSearchEnabled": true, "modelPrefer1mContext": true,
 	}
 	if prof := desktopJSON(t, p.prof); !reflect.DeepEqual(prof, want) {
 		t.Errorf("profile: %v", prof)
@@ -839,6 +839,64 @@ func TestClaudeDesktopLanguageOddValues(t *testing.T) {
 	}
 	if m := desktopJSON(t, p.config3p); m["deploymentMode"] != "3p" {
 		t.Errorf("takeover stopped: %v", m)
+	}
+}
+
+// fwxkogaia on X (v0.1.4321): Desktop 5.11492 starts its Code tab's Claude
+// Code with CLAUDE_CODE_MAX_CONTEXT_TOKENS=200000 as flag settings on a
+// gateway, over the window magpie writes, so a 1M model picked by its
+// plain entry ran at 200K. Desktop's own modelPrefer1mContext shows such a
+// model by its 1M entry alone, whose "[1m]" id Claude Code takes for 1M.
+// magpie's profile gets it once, on a switch on and from Sync; the user's
+// own value, false too, or their taking it away since, stays theirs.
+func TestClaudeDesktopPrefers1M(t *testing.T) {
+	home, p := desktopSandbox(t)
+	a := claudeDesktop(home)
+	if err := a.Field("provider").Set("magpie"); err != nil {
+		t.Fatal(err)
+	}
+	if got := desktopJSON(t, p.prof)["modelPrefer1mContext"]; got != true {
+		t.Fatalf("switch on: modelPrefer1mContext %v", got)
+	}
+
+	// on magpie before this change: none, no mark
+	prof := desktopJSON(t, p.prof)
+	delete(prof, "modelPrefer1mContext")
+	b, _ := json.Marshal(prof)
+	desktopWrite(t, p.prof, string(b))
+	forget(desktopLong + p.key)
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if got := desktopJSON(t, p.prof)["modelPrefer1mContext"]; got != true {
+		t.Fatalf("Sync on magpie: modelPrefer1mContext %v", got)
+	}
+
+	// the user takes it away in Desktop's window: not written back
+	desktopWrite(t, p.prof, string(b))
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Field("provider").Set("magpie"); err != nil {
+		t.Fatal(err)
+	}
+	if _, has := desktopJSON(t, p.prof)["modelPrefer1mContext"]; has {
+		t.Fatal("seeded again over the user's choice")
+	}
+
+	// the user's own false, seen first: kept
+	if err := edit.SetJSON(p.prof, edit.KV{Path: "modelPrefer1mContext", Value: false}); err != nil {
+		t.Fatal(err)
+	}
+	forget(desktopLong + p.key)
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if got := desktopJSON(t, p.prof)["modelPrefer1mContext"]; got != false {
+		t.Fatalf("the user's modelPrefer1mContext: %v", got)
+	}
+	if a.Check() != "" {
+		t.Fatalf("check %q", a.Check())
 	}
 }
 
