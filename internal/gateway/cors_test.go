@@ -241,6 +241,7 @@ func TestForeignPagesRefused(t *testing.T) {
 		{"POST", "/v1/decisions", `{"model":"plan/m1","input":"hi","questions":[{"type":"predicate","instructions":"is it?"}]}`},
 		{"POST", "/v1/audio/transcriptions", "--b\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nplan/m1\r\n--b--\r\n"},
 		{"POST", "/v1/audio/speech", `{"model":"plan/m1","input":"hi","voice":"coral"}`},
+		{"GET", "/v1/realtime?model=plan/m1", ""},
 		{"POST", "/v1/images/generations", `{"model":"plan/m1","prompt":"hi"}`},
 		{"POST", "/v1/videos", `{"model":"plan/m1","prompt":"hi"}`},
 		{"POST", CodexPath + "/responses", `{"model":"plan/m1","input":"hi"}`},

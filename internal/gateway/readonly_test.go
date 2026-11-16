@@ -56,6 +56,7 @@ var readOnlyRefused = []string{
 	"POST /v1/audio/transcriptions", "POST /audio/transcriptions",
 	"POST /v1/audio/translations", "POST /audio/translations",
 	"POST /v1/audio/speech", "POST /audio/speech",
+	"GET /v1/realtime", "GET /realtime",
 	"POST /v1/videos", "POST /videos", "GET /v1/videos/{id}", "GET /videos/{id}",
 	"GET /v1/videos/{id}/content", "GET /videos/{id}/content",
 	"POST " + NativePath + "{provider}/{path...}", "GET " + NativePath + "{provider}/{path...}", "DELETE " + NativePath + "{provider}/{path...}",

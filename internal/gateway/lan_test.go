@@ -441,6 +441,7 @@ func TestNetworkGatewayGuardsEveryRoute(t *testing.T) {
 		{"POST", "/v1/images/generations"}, {"POST", "/v1/images/edits"},
 		{"POST", "/v1/embeddings"}, {"POST", "/v1/rerank"}, {"POST", "/v1/decisions"},
 		{"POST", "/v1/audio/transcriptions"}, {"POST", "/v1/audio/translations"}, {"POST", "/v1/audio/speech"},
+		{"GET", "/v1/realtime?model=m"}, {"GET", "/realtime?model=m"},
 		{"POST", "/v1/videos"}, {"GET", "/v1/videos/v1"}, {"GET", "/v1/videos/v1/content"},
 		{"POST", "/_magpie/claude-mcp/tok"}, {"POST", "/mcp/neon"},
 		{"POST", CodexPath + "/responses"}, {"GET", CodexCatalogPath},
@@ -450,7 +451,7 @@ func TestNetworkGatewayGuardsEveryRoute(t *testing.T) {
 	call := func(method, path, from string, hdr ...string) (int, string) {
 		r := httptest.NewRequest(method, path, strings.NewReader("{}"))
 		r.RemoteAddr = from
-		if path == "/v1/responses" || path == "/responses" {
+		if path == "/v1/responses" || path == "/responses" || strings.Contains(path, "realtime?") {
 			r.Header.Set("Connection", "Upgrade")
 			r.Header.Set("Upgrade", "websocket")
 			r.Header.Set("Sec-WebSocket-Version", "13")

@@ -3903,6 +3903,7 @@ application:
     - /decisions
     - /audio
     - /videos
+    - /realtime
     - /muse-code/models
     - /backend-api/codex
     - /alpha/search
