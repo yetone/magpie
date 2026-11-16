@@ -158,24 +158,24 @@ func TestClaudeDesktopNamesFollowSuffixMode(t *testing.T) {
 			"relay/deepseek-v4.1-flash":       "DeepSeek V4.1 Flash · Relay",
 			"grok-2/grok-4.6":                 "grok-4.6 · Grok",
 			"kimi/kimi-k3":                    "Nightly · Kimi",
-			"twin/x":                          "Twin · Twinco (twin/x)",
-			"twin/x2":                         "Twin · Twinco (twin/x2)",
+			"twin/x":                          "Twin · Twinco (x)",
+			"twin/x2":                         "Twin · Twinco (x2)",
 		}},
 		{provider.SuffixOwn, map[string]string{
 			"opencode-go/deepseek-v4.1-flash": "DeepSeek V4.1 Flash · OpenCode Go",
 			"relay/deepseek-v4.1-flash":       "DeepSeek V4.1 Flash · Relay",
 			"grok-2/grok-4.6":                 "grok-4.6 · Grok",
 			"kimi/kimi-k3":                    "Nightly",
-			"twin/x":                          "Twin · Twinco (twin/x)",
-			"twin/x2":                         "Twin · Twinco (twin/x2)",
+			"twin/x":                          "Twin · Twinco (x)",
+			"twin/x2":                         "Twin · Twinco (x2)",
 		}},
 		{provider.SuffixOff, map[string]string{
 			"opencode-go/deepseek-v4.1-flash": "DeepSeek V4.1 Flash · OpenCode Go",
 			"relay/deepseek-v4.1-flash":       "DeepSeek V4.1 Flash · Relay",
 			"grok-2/grok-4.6":                 "grok-4.6",
 			"kimi/kimi-k3":                    "Nightly",
-			"twin/x":                          "Twin · Twinco (twin/x)",
-			"twin/x2":                         "Twin · Twinco (twin/x2)",
+			"twin/x":                          "Twin · Twinco (x)",
+			"twin/x2":                         "Twin · Twinco (x2)",
 		}},
 	} {
 		if err := provider.SetSuffixMode(c.mode); err != nil {
@@ -284,9 +284,10 @@ func TestDesktopKnowsMythos(t *testing.T) {
 }
 
 // desktopNames: the agents' list naming (provider.Labels, the Provider in
-// model names setting) with the whole catalog id after two entries that
-// still read the same — Desktop's menu shows the name alone, so two models
-// of one provider named alike stay apart there.
+// model names setting) with the model's own id after two entries that
+// still read the same, the whole catalog id where two providers of one
+// name make that not enough — Desktop's menu shows the name alone, so two
+// models of one provider named alike stay apart there, and short.
 func TestDesktopNames(t *testing.T) {
 	fresh(t)
 	es := []provider.Entry{
@@ -295,14 +296,16 @@ func TestDesktopNames(t *testing.T) {
 		{ID: "c/y", Name: "Y", Provider: &provider.Provider{ID: "c", Name: "C"}},
 		{ID: "d/z", Name: "Z", Provider: &provider.Provider{ID: "d", Name: "D"}},
 		{ID: "d/z2", Name: "Z", Provider: &provider.Provider{ID: "d", Name: "D"}},
+		{ID: "e/w", Name: "W", Provider: &provider.Provider{ID: "e", Name: "E"}},
+		{ID: "e2/w", Name: "W", Provider: &provider.Provider{ID: "e2", Name: "E"}},
 	}
-	if got, want := desktopNames("claude-desktop", es), []string{"X · A", "x · B", "Y · C", "Z · D (d/z)", "Z · D (d/z2)"}; !slices.Equal(got, want) {
+	if got, want := desktopNames("claude-desktop", es), []string{"X · A", "x · B", "Y · C", "Z · D (z)", "Z · D (z2)", "W · E (e/w)", "W · E (e2/w)"}; !slices.Equal(got, want) {
 		t.Fatalf("desktopNames = %q, want %q", got, want)
 	}
 	if err := provider.SetSuffixMode(provider.SuffixOff); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := desktopNames("claude-desktop", es), []string{"X · A", "x · B", "Y", "Z · D (d/z)", "Z · D (d/z2)"}; !slices.Equal(got, want) {
+	if got, want := desktopNames("claude-desktop", es), []string{"X · A", "x · B", "Y", "Z · D (z)", "Z · D (z2)", "W · E (e/w)", "W · E (e2/w)"}; !slices.Equal(got, want) {
 		t.Fatalf("desktopNames (names plain) = %q, want %q", got, want)
 	}
 }

@@ -232,6 +232,71 @@ func TestDesktopInferenceModelsNamed(t *testing.T) {
 	}
 }
 
+// onkashiko on X (Claude Desktop 5.11492): agy-cli's claude-opus-5-5 and
+// another provider's read "Opus 5.5 (…<number>.anthropic.claude-opu…)" in
+// Desktop's menu. Desktop names both after its catalog and tells them
+// apart by the part of the id that differs; only an inferenceModels
+// entry's labelOverride comes before the catalog's name, and Desktop
+// leaves such a label as it is. So while two rows are named after one
+// Claude model, the list is written with no tier picked, each entry
+// labelled as /v1/models names its row ("… · agy-cli"), by its id as it
+// was. One such row alone, or none, writes no list.
+func TestDesktopInferenceModelsCatalogNamesClash(t *testing.T) {
+	setup(t, provider.Anthropic, &fake{})
+	levels := []string{"low", "high", "max"}
+	save := func(p provider.Provider) {
+		t.Helper()
+		if err := provider.Save(p); err != nil {
+			t.Fatal(err)
+		}
+		for _, m := range p.Models {
+			if err := provider.SetModelEfforts(p.ID+"/"+m, levels); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	save(provider.Provider{ID: "agy-cli", Name: "agy-cli", Key: "k", Anthropic: "http://127.0.0.1:1", Models: []string{"claude-opus-5-5", "gemini-4-pro"}})
+	if list, ok := DesktopInferenceModels(); !ok || list != nil {
+		t.Fatalf("one Opus 5.5: %v %v", list, ok)
+	}
+	save(provider.Provider{ID: "relay", Name: "Relay", Key: "k", Anthropic: "http://127.0.0.1:1", Models: []string{"claude-opus-5-5"}})
+	list, ok := DesktopInferenceModels()
+	if !ok || list == nil {
+		t.Fatalf("two Opus 5.5 rows, no list: %v %v", list, ok)
+	}
+	want := map[string]string{"agy-cli/claude-opus-5-5": "agy-cli", "relay/claude-opus-5-5": "Relay"}
+	shown, _ := provider.CatalogFor("claude-desktop")
+	labels := map[string]bool{}
+	for ref, by := range want {
+		var id string
+		for _, e := range shown {
+			if e.ID == ref {
+				id = DesktopID(e)
+			}
+		}
+		if !strings.HasSuffix(id, ".anthropic.claude-opus-5-5") {
+			t.Fatalf("%s listed as %q", ref, id)
+		}
+		var entry map[string]any
+		for _, e := range list {
+			if e["name"] == id {
+				entry = e
+			}
+		}
+		label, _ := entry["labelOverride"].(string)
+		if !strings.Contains(label, by) || strings.Contains(label, "anthropic") || len(label) > 40 {
+			t.Errorf("%s (%s) labelled %q", ref, id, label)
+		}
+		if _, has := entry["anthropicFamilyTier"]; has {
+			t.Errorf("%s tagged with a tier no one picked: %v", ref, entry)
+		}
+		labels[label] = true
+	}
+	if len(labels) != 2 {
+		t.Fatalf("the two Opus 5.5 rows read alike: %v", labels)
+	}
+}
+
 // usage.MagpieAlias reads the alias ids this package lists, so the
 // Usage page counts a call under one as the gateway's own: it must agree with
 // magpieAliasAsked on every form claudeLooking makes.

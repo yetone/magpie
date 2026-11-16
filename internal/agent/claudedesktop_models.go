@@ -15,7 +15,9 @@ import (
 // profile carries inferenceModels (gateway.DesktopInferenceModels): the
 // list Desktop's Code tab hands Claude Code each pick's behavesAs from,
 // so a pick runs with the prompt of the Claude model of its tier
-// (moer2831). Without a pick there is none, and Desktop finds magpie's
+// (moer2831), and while two rows Desktop names after one Claude model of
+// its catalog would read alike (labelOverride, onkashiko on X). Without
+// either there is none, and Desktop finds magpie's
 // models on its own as before. The list is magpie's only while it is what
 // magpie wrote: desktopModelsMark keeps the hash of each list magpie
 // wrote (the one before a write too, until the write is done), and a list

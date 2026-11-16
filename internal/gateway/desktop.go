@@ -429,20 +429,37 @@ func desktopTierAsked(asked string) bool {
 // names setting: on, every name with its provider's after it; own, a name
 // the user gave just as they wrote it; off, names plain — but two of one
 // name keep their provider's, so they stay apart), and where that still
-// leaves two alike (one provider's models named alike) the whole catalog id
-// after it, for Desktop's menu shows the name alone.
+// leaves two alike (one provider's models named alike) the model's own id
+// after it, short as the name already says the provider, or the whole
+// catalog id where that is still not enough (two providers of one name),
+// for Desktop's menu shows the name alone.
 func desktopNames(agent string, entries []provider.Entry) []string {
 	out := provider.LabelsFor(agent, entries)
-	same := map[string]int{}
-	for _, s := range out {
-		same[strings.ToLower(s)]++
+	count := func(names []string) map[string]int {
+		same := map[string]int{}
+		for _, s := range names {
+			same[strings.ToLower(s)]++
+		}
+		return same
 	}
+	same := count(out)
+	short := slices.Clone(out)
 	for i, e := range entries {
 		if same[strings.ToLower(out[i])] > 1 {
-			out[i] += " (" + e.ID + ")"
+			model := e.ID
+			if e.Provider != nil {
+				model = strings.TrimPrefix(e.ID, e.Provider.ID+"/")
+			}
+			short[i] = out[i] + " (" + model + ")"
 		}
 	}
-	return out
+	still := count(short)
+	for i, e := range entries {
+		if short[i] != out[i] && still[strings.ToLower(short[i])] > 1 {
+			short[i] = out[i] + " (" + e.ID + ")"
+		}
+	}
+	return short
 }
 
 // aliased is the catalog id an alias Claude Desktop was given stands for:

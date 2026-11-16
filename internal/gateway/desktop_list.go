@@ -92,8 +92,9 @@ func DesktopTierAliases() map[string][]string {
 }
 
 // DesktopInferenceModels is the inferenceModels list magpie gives Claude
-// Desktop's profile: nil while no model it lists is picked for a tier,
-// when Desktop finds magpie's models on its own (/v1/models). ok is false
+// Desktop's profile: nil while no model it lists is picked for a tier and
+// no two rows read alike there (desktopNamesClash), when Desktop finds
+// magpie's models on its own (/v1/models). ok is false
 // when the picks can't be read: whatever is written stays. A model picked
 // for two tiers is tagged here with the first only; the later tiers are
 // given it through /v1/models (DesktopTierRows), as every entry here is a
@@ -136,10 +137,52 @@ func DesktopInferenceModels() (list []map[string]any, ok bool) {
 		}
 		list = append(list, entry)
 	}
-	if !tagged {
+	if !tagged && !desktopNamesClash(rows) {
 		return nil, true
 	}
 	return list, true
+}
+
+// desktopNamesClash says two of rows are ones Claude Desktop names after
+// the same model of its own catalog (desktopCatalogNamed), so its menu
+// reads them alike whatever their display_name says, and Desktop 5.11492
+// tells them apart by the part of their ids that differs, "Opus 5.5
+// (…5226054409.anthropic.claude-opu…)" (onkashiko on X: agy-cli's and
+// another provider's claude-opus-5-5). Only an entry's labelOverride comes
+// before the catalog's name, and Desktop leaves such an entry's label as
+// it is (xVn in its app.asar, 5.11492: keep), so while two clash the list
+// is written for each row's display_name ("Opus 5.5 · agy-cli"), as while
+// a tier is picked. The ids stay as they are.
+func desktopNamesClash(rows []map[string]any) bool {
+	seen := map[string]bool{}
+	for _, m := range rows {
+		id, _ := m["id"].(string)
+		c := desktopCatalogNamed(id)
+		if c == "" {
+			continue
+		}
+		if seen[c] {
+			return true
+		}
+		seen[c] = true
+	}
+	return false
+}
+
+// desktopCatalogNamed is the Claude model of Desktop's catalog that it
+// names a row of id by, as it reads ids (IC in its app.asar: lowercased,
+// "[1m]" and a Bedrock-style "<profile>.anthropic." prefix and a date taken
+// off), or "" for an id it names by display_name.
+func desktopCatalogNamed(id string) string {
+	m := strings.ToLower(strings.TrimSuffix(id, "[1m]"))
+	if _, rest, ok := strings.Cut(m, desktopClaudeInfix); ok {
+		m = rest
+	}
+	m = desktopDated.ReplaceAllString(m, "")
+	if desktopClaude.MatchString(m) {
+		return m
+	}
+	return ""
 }
 
 // DesktopDiscovers says magpie's Desktop profile has Desktop read
