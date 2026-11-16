@@ -450,6 +450,9 @@ type settingsJSON struct {
 	PublicKind string `json:"publicKind,omitempty"`
 	// MAGPIE_ADDR, when it sets the gateway's address over Settings' port
 	AddrEnv string `json:"addrEnv,omitempty"`
+	// NameEnv is MAGPIE_NAME: what this magpie is called while Settings'
+	// Name is empty (settings.InstanceName)
+	NameEnv string `json:"nameEnv,omitempty"`
 	// MAGPIE_ALLOW_IPS, when it sets the allow list over Settings', and
 	// the list it sets; OnNetwork: MAGPIE_ADDR listens on the network, so
 	// the list is shown even while sharing is off
@@ -866,6 +869,7 @@ func codexWindowUnder(st settings.Settings, model string) *codexRunWindow {
 func settingsState() settingsJSON {
 	s := settingsJSON{Settings: settings.Load(), Version: Version, Dir: tilde(settings.Dir()), Portable: settings.Portable() != "", Gateway: gateway.URL()}
 	s.AddrEnv = os.Getenv("MAGPIE_ADDR")
+	s.NameEnv = settings.EnvName()
 	s.Log = tilde(applog.Current())
 	s.Builtins = builtinsState()
 	s.PanelKeys = panelKeysState()
@@ -1252,6 +1256,15 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		if s.NoBird {
 			boot["noBird"] = true
 		}
+		// and what this magpie is called (Settings' Name, else MAGPIE_NAME),
+		// which a browser tab's title names from the first paint (starballl
+		// on X: several deployed, one title)
+		if n := settings.InstanceName(s); n != "" {
+			boot["name"] = n
+		}
+		if n := settings.EnvName(); n != "" {
+			boot["nameEnv"] = n
+		}
 		// and the title bar's pin, where the window can be kept on top
 		// (ontop.go): shown, and pressed, from the first paint
 		if pinnable(w) {
@@ -1321,6 +1334,13 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		rw.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 		rw.Header().Set("Cache-Control", "no-store")
 		out := append(append([]byte("window.bootPrefs = "), b...), ";\n"...)
+		// a browser tab's title says the name from the first paint, set
+		// here so app.js's core carries no code for it (applyPrefs keeps
+		// it current); the app's windows keep "magpie"
+		if n, ok := boot["name"].(string); ok && isWeb(w) {
+			t, _ := json.Marshal(n + " · magpie")
+			out = append(append(append(out, "document.title = "...), t...), ";\n"...)
+		}
 		if css := lookCSS(s); css != "" {
 			c, _ := json.Marshal(css)
 			out = append(out, `(function(){var e=document.createElement("style");e.id="lookCSS";e.textContent=`...)

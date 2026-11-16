@@ -31,7 +31,7 @@ var Keys = []string{
 	"theme", "accent", "colorblind", "reduceMotion", "noBird", "lang", "uiFont", "codeFont",
 	// the tray, the Dock and this computer
 	"tray", "dock", "dockWindow", "dockNever", "lightweight", "keepAwake", "keepAwakeDisplay",
-	"noWSLAgents", "sessionTerminal", "signInLinkOnly", "quitNoAsk", "restoreOnQuit",
+	"noWSLAgents", "sessionTerminal", "signInLinkOnly", "quitNoAsk", "restoreOnQuit", "name",
 	// the menu bar's allowance cards
 	"trayUsages", "trayUsage", "trayUsageEvery", "trayNoLogos", "trayNoBird", "trayNoNumber", "trayPace", "trayNoCost", "trayWindows",
 	// usage and alerts
@@ -239,6 +239,11 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	// nor the accent colour, which pages before it never sent
 	if _, sent := fields["accent"]; !sent {
 		in.Accent = cur.Accent
+	}
+	// nor what this magpie is called, which pages before it never sent
+	// (starballl on X): a page that leaves it out keeps it
+	if _, sent := fields["name"]; !sent {
+		in.Name = cur.Name
 	}
 	// nor whether the loading bird is kept off
 	if _, sent := fields["noBird"]; !sent {

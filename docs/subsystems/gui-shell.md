@@ -612,6 +612,24 @@ ties. Family changes keep a matching style where possible, otherwise the
 nearest regular face; named variable instances are offered without arbitrary
 axis controls.
 
+### Instance name
+
+A browser tab's title names the magpie it shows (starballl on X: several
+deployed, every tab titled "magpie"): `<name> · magpie`, plain "magpie"
+with none. The name is `settings.Name`, set in Settings › Network and
+sharing › Advanced › Name (`instancename.js`, imported when Settings is
+drawn), else `MAGPIE_NAME` (`settings.InstanceName`, `EnvName`). The env
+var only fills in for an empty field and is never written to the file, so
+a name typed in Settings always wins. `CleanName` keeps it one line of at
+most 60 characters. boot.js passes the name (`name`) and the env's
+(`nameEnv`) and, to a browser tab only, sets `document.title` itself for
+the first paint, so app.js's core carries no code for it; `applyPrefs`
+sets the title again from every settings read. Only a browser page
+(`web`) is retitled; the app's windows keep "magpie". The name is this computer's own
+(`KeepOwn`): sync and a restored backup never bring another magpie's. A
+Settings save that leaves `name` out keeps it (`settingsapi.Merge`). See
+`TestInstanceName*` and `instance-name.test.cjs`.
+
 ### Recent-call bodies
 
 `providersState` in [`providers.go`](../../internal/gui/providers.go) sends

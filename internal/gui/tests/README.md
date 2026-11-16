@@ -2756,6 +2756,17 @@ left border, nothing wider or cut off at 360px, and no such section (nor a
 read of it) in a browser on the page. Every language, Chromium and WebKit,
 with the API faked.
 
+## Instance name
+
+`instance-name.test.cjs` checks a browser tab's title names the magpie it
+shows (starballl on X): "<name> · magpie" from the first paint with
+MAGPIE_NAME's name, the Name field under Settings › Network and sharing ›
+Advanced (closed until a name is set, the variable's name its placeholder),
+a saved name trimmed and in the title at once, a cleared one back to the
+variable's, Advanced open after a reload with a name, nothing wider than
+360px, and the app's own window still "magpie". Every language, Chromium
+and WebKit, with the API faked.
+
 ## Inner scroll boxes keep the wheel
 
 `inner-scroll-contain.test.cjs` wheels a box that scrolls inside a page past

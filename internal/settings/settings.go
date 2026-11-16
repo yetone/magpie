@@ -322,6 +322,11 @@ type Settings struct {
 	// one that runs it (gateway.hubOnDemand; ArvinCharl on X: the tools
 	// filled the context). This computer's own (KeepOwn).
 	RouterAllTools bool `json:"routerAllTools,omitempty"`
+	// Name is what this magpie is called, said in its web page's browser
+	// tab as "<name> · magpie", to tell several deployed ones apart
+	// (starballl on X). "" is MAGPIE_NAME, else none (InstanceName). This
+	// computer's own (KeepOwn): each magpie is named on its own.
+	Name string `json:"name,omitempty"`
 	// Port is the gateway's port on this computer, 0 for DefaultPort.
 	// MAGPIE_ADDR, where it is set, comes first (GatewayAddr).
 	Port int `json:"port,omitempty"`
@@ -1782,7 +1787,7 @@ func (s Settings) Compact() int {
 // place and whether it was maximised, the proxy (and plugin downloads'), the gateway's port, whether it
 // is shared on the local network and the addresses let in to it, the
 // address Claude Desktop is pointed at (DesktopGateway), what
-// its MCP router says of itself, the Dock, gateway mode, whether WSL is
+// its MCP router says of itself, what this magpie is called (Name), the Dock, gateway mode, whether WSL is
 // looked in, whether agents' sign-ins are read, when allowances are read, the terminal app a session resumes
 // in, the quick panel's shortcut, whether the local masking model is on
 // (it is downloaded on this computer alone), how many Claude Code processes may run (its memory),
@@ -1811,6 +1816,7 @@ func (s *Settings) KeepOwn(cur Settings) {
 	s.LAN, s.AllowIPs, s.MTLS, s.HTTPS = cur.LAN, cur.AllowIPs, cur.MTLS, cur.HTTPS
 	s.DesktopGateway = cur.DesktopGateway // an address of this computer
 	s.RouterNote, s.RouterAllTools = cur.RouterNote, cur.RouterAllTools
+	s.Name = cur.Name // what this magpie is called
 	s.FetchPrivate = cur.FetchPrivate
 	s.SessionTerminal = cur.SessionTerminal
 	s.CodexOpen = cur.CodexOpen
@@ -2936,6 +2942,7 @@ func saveOwn(s Settings, recording, reads bool) error {
 }
 
 func (s Settings) normal() Settings {
+	s.Name = CleanName(s.Name)
 	if s.Theme == "" {
 		s.Theme = "system"
 	}

@@ -227,6 +227,7 @@ docker logs magpie</pre>
       <tr><td><code>MAGPIE_ADDR</code></td><td>网关监听的地址。镜像里设为 <code>0.0.0.0:3425</code>，发布的端口才能访问到它。</td></tr>
       <tr><td><code>MAGPIE_PUBLIC_URL</code></td><td>其他机器访问网关用的地址，例如 <code>http://192.168.1.20:3425</code>（宿主机或 NAS 的地址，加发布的端口），或反向代理的 base URL。容器里 magpie 只看得到 Docker 自己的 <code>172.17.x</code> 地址；设置后，它显示和打印的就是该用的地址。</td></tr>
       <tr><td><code>MAGPIE_WEB_KEY</code></td><td>Web 界面的 key，重启后不变（16 个字符以上）</td></tr>
+      <tr><td><code>MAGPIE_NAME</code></td><td>这个 magpie 的名称：浏览器标签页的标题显示为 <code>&lt;名称&gt; · magpie</code>，部署了好几个时用来区分。在页面的 <span class="ui">设置</span> → <span class="ui">网络与共享</span> → <span class="ui">高级</span> → <span class="ui">名称</span> 里设置的名称优先。</td></tr>
       <tr><td><code>MAGPIE_TLS_CERT</code>、<code>MAGPIE_TLS_KEY</code></td><td>挂载进容器的 PEM 证书（后面跟着证书链）和私钥：其他机器只能用 <code>https://</code> 访问网关和 Web 界面，它们发来的明文 HTTP 返回 400。文件变了会重新读取，续期不用重启。只给一个，或文件读不出来，magpie 不会启动。<code>MAGPIE_PUBLIC_URL</code> 也写成 <code>https://</code>。</td></tr>
       <tr><td><code>MAGPIE_ALLOW_IPS</code></td><td>其他机器只能从这些地址访问网关和 Web 界面，写 IP 或 CIDR 网段：<code>203.0.113.7,10.0.0.0/8,2001:db8::/32</code>。其他地址即使带着网关密钥也会得到 403。不设置则所有地址都可访问，各自仍需密钥。见<a href="#allow">允许的地址</a>。</td></tr>
       <tr><td><code>HOME</code>、<code>XDG_CONFIG_HOME</code>、<code>XDG_CACHE_HOME</code>、<code>XDG_DATA_HOME</code>、<code>XDG_STATE_HOME</code></td><td>镜像已设为上面 <code>/config</code> 下的目录，不要改</td></tr>
