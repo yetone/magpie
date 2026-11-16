@@ -124,8 +124,9 @@ func statedCap(errBody []byte, sent int) int {
 	return least
 }
 
-// bodyCaps are the byte caps providers refused requests over, by
-// provider id, for as long as magpie runs.
+// bodyCaps are the caps providers refused requests over, bytes by
+// provider id (or a model's images, image_cap.go), for as long as magpie
+// runs.
 type bodyCaps struct {
 	mu sync.Mutex
 	m  map[string]int
@@ -314,7 +315,12 @@ func historyOf(to provider.Protocol) string {
 // imageWith is the part an image of the protocol is replaced with, ""
 // when part is no image.
 func imageWith(to provider.Protocol, part gjson.Result) string {
-	text, _ := json.Marshal(imageLeftOut)
+	return imageWithText(to, part, imageLeftOut)
+}
+
+// imageWithText is imageWith with the words said in the image's place.
+func imageWithText(to provider.Protocol, part gjson.Result, said string) string {
+	text, _ := json.Marshal(said)
 	switch to {
 	case provider.Responses:
 		if part.Get("type").String() == "input_image" {
@@ -381,6 +387,13 @@ func latestUser(to provider.Protocol, items []gjson.Result) int {
 // be left out: inline ones (of 1 KB or more, which a link never is), not
 // the latest user message's.
 func historyImages(to provider.Protocol, body []byte) []capImage {
+	return bodyImages(to, body, 1<<10, false, imageLeftOut)
+}
+
+// bodyImages are the images of body's history, oldest first, each of
+// least bytes or more, with what said would put in its place; the latest
+// user message's only with all.
+func bodyImages(to provider.Protocol, body []byte, least int, all bool, said string) []capImage {
 	var items []gjson.Result
 	getIn(body, historyOf(to)).ForEach(func(_, it gjson.Result) bool {
 		items = append(items, it)
@@ -394,9 +407,9 @@ func historyImages(to provider.Protocol, body []byte) []capImage {
 			return
 		}
 		if v.IsObject() {
-			if with := imageWith(to, v); with != "" {
+			if with := imageWithText(to, v, said); with != "" {
 				end := v.Index + len(v.Raw)
-				if len(v.Raw) >= 1<<10 && v.Index > 0 && end <= len(body) && string(body[v.Index:end]) == v.Raw {
+				if len(v.Raw) >= least && v.Index > 0 && end <= len(body) && string(body[v.Index:end]) == v.Raw {
 					out = append(out, capImage{at: v.Index, end: end, with: with})
 				}
 				return
@@ -408,7 +421,7 @@ func historyImages(to provider.Protocol, body []byte) []capImage {
 		})
 	}
 	for i, it := range items {
-		if i != keep {
+		if i != keep || all {
 			walk(it, 0)
 		}
 	}

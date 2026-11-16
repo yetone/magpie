@@ -167,7 +167,8 @@ eleven seconds); each callback uses the configured bounded hook timeout. Request
   requests magpie makes on its own call `serve` directly and run no hooks:
   Codex's compaction and its fallback turn, titles, System One's
   classifier, search and vision (#4847). A request over a provider's byte
-  cap is fitted in the gateway itself, not by a hook (`body_cap.go`).
+  cap is fitted in the gateway itself, not by a hook (`body_cap.go`), as is
+  one over a Copilot model's image cap (`image_cap.go`).
 - `internal/gateway/gateway_hooks.go`: bounded response observation and
   `gatewayReply`, a stream made one reply.
 - `internal/gateway/signin_hooks.go`: sign-in events, and

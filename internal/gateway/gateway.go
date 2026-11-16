@@ -567,6 +567,9 @@ type Server struct {
 	// bodyCaps are the byte caps providers refused a request over
 	// (body_cap.go)
 	bodyCaps bodyCaps
+	// imageCaps are the image caps a model refused a request over, by
+	// provider id and model (image_cap.go)
+	imageCaps bodyCaps
 	// codexTurns is the model each Codex last had a turn of its own
 	// answered on, by caller (codexMemoryStandIn)
 	codexTurns sync.Map
@@ -6122,6 +6125,11 @@ func (s *Server) forward(ctx context.Context, p provider.Provider, to provider.P
 		// oldest images left out, or said as a 413 (body_cap.go)
 		res, err = s.refitOverCap(ctx, p, to, path, body, in, res)
 	}
+	if err == nil && res.StatusCode >= 400 {
+		// more images than the model takes: asked again with its oldest
+		// left out (image_cap.go)
+		res, err = s.refitImageCap(ctx, p, to, path, body, in, res)
+	}
 	if err == nil && mantleRoutes(p, to) {
 		res, err = s.mantleReroute(ctx, p, to, path, body, in, res)
 	}
@@ -6198,6 +6206,8 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 	body = kimiLockedSampling(p, to, body)
 	body = clinePin(p, to, body)
 	body = codexImagesFit(p, to, body)
+	// no more images than the model refused more over (image_cap.go)
+	body = s.withinImageCap(p, to, path, body)
 	// the tool turns' thinking a provider's model asked for before
 	// (thinking_back.go)
 	body = s.withThinkingBack(p, to, body)
