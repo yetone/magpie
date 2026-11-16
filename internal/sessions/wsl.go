@@ -181,6 +181,7 @@ var wslSess struct {
 	loaded bool
 	lists  map[string]*wslListing // by distro
 	at     time.Time              // when the last listing started
+	first  time.Time              // when the first listing started: reads wait wslFirstWait from it, in all
 	done   chan struct{}          // the listing under way, nil when none
 	kept   []byte                 // what sessions-wsl.json holds
 }
@@ -188,8 +189,11 @@ var wslSess struct {
 var (
 	// wslRelist is how often the distros' files are listed again
 	wslRelist = 30 * time.Second
-	// wslFirstWait is how long a read waits for the very first listing,
-	// when nothing was kept of one; after it the read goes on without
+	// wslFirstWait is how long reads wait for the very first listing,
+	// when nothing was kept of one, all told from when it started; after
+	// it they go on without. Each read waiting it afresh held the Sessions
+	// page's first open, whose list, stats and overview each read, ~10s
+	// on a hung wsl.exe (shangyuan0818 on X).
 	wslFirstWait = 3 * time.Second
 )
 
@@ -226,18 +230,24 @@ func wslFilesAs(calls bool, agents ...string) []file {
 	if wslSess.done == nil && time.Since(wslSess.at) > wslRelist {
 		done := make(chan struct{})
 		wslSess.done, wslSess.at = done, time.Now()
+		if wslSess.first.IsZero() {
+			wslSess.first = wslSess.at
+		}
 		go wslList(wslSess.gen, done)
 	}
 	wait := wslSess.done
 	if len(wslSess.lists) > 0 {
 		wait = nil // what was found before is read now; the new listing comes next time
 	}
+	left := wslFirstWait - time.Since(wslSess.first)
 	wslSess.Unlock()
-	if wait != nil {
+	if wait != nil && left > 0 {
+		t := time.NewTimer(left)
 		select {
 		case <-wait:
-		case <-time.After(wslFirstWait):
+		case <-t.C:
 		}
+		t.Stop()
 	}
 	want := map[string]bool{}
 	for _, a := range agents {
@@ -480,7 +490,7 @@ func wslReset() {
 	wslSess.Lock()
 	defer wslSess.Unlock()
 	wslSess.gen++
-	wslSess.loaded, wslSess.lists, wslSess.at, wslSess.done, wslSess.kept = false, nil, time.Time{}, nil, nil
+	wslSess.loaded, wslSess.lists, wslSess.at, wslSess.first, wslSess.done, wslSess.kept = false, nil, time.Time{}, time.Time{}, nil, nil
 }
 
 // wslResume is the PowerShell line that resumes a session in a WSL distro

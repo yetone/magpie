@@ -226,7 +226,12 @@ var others = []*Agent{
 // Clients is everyone whose requests the gateway knows by name: every
 // agent, detected or not, and the others. It is what the Usage and
 // Routing views draw a request's client with.
-func Clients() []*Agent { return ClientsIn(All()) }
+//
+// It leaves WSL's distros unasked: their agents are never clients, and a
+// wsl.exe that hangs held the Sessions and Usage pages' first open (Looks)
+// and the gateway's naming of a request's agent for its timeouts, ~10s
+// to 20s (shangyuan0818 on X).
+func Clients() []*Agent { return ClientsIn(local()) }
 
 // ClientsIn is Clients among all, a list of All() the caller has built
 // already.
@@ -246,6 +251,19 @@ func ClientsIn(all []*Agent) []*Agent {
 func All() []*Agent {
 	home, cfg := homes()
 	own := builtins(home, cfg)
+	return append(own, pluggedAgents(home, own, nil)...)
+}
+
+// AllKnown is All() with the agents in WSL's distros as they were last
+// listed: it starts a listing but never waits on wsl.exe, for a page's
+// path (whether the Sessions page reads this machine's sessions), where a
+// hung wsl.exe held the first open for its timeouts (shangyuan0818 on X).
+func AllKnown() []*Agent {
+	home, cfg := homes()
+	own := onMachine(home, cfg)
+	if wslLooks() {
+		own = append(own, wslAgentsOf(wslDistrosWithin(0))...)
+	}
 	return append(own, pluggedAgents(home, own, nil)...)
 }
 

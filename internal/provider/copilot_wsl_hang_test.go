@@ -73,7 +73,11 @@ func TestCopilotWSLHangHoldsNoRequest(t *testing.T) {
 	copilotWSL.at = time.Now().Add(-copilotWSLAge - time.Second)
 	copilotWSL.Unlock()
 
-	bar := copilotWSLWait + 2*time.Second
+	// a read again answers the one before at once, without waiting
+	// copilotWSLWait for it: each wait held the Sessions page's first ask
+	// every copilotWSLAge on a slow WSL (shangyuan0818 on X)
+	copilotWSLWait = 10 * time.Second
+	bar := 2 * time.Second
 	var wg sync.WaitGroup
 	start := time.Now()
 	errs := make(chan string, 13)

@@ -67,7 +67,8 @@ var CopilotWSLDirs func() []string
 var copilotWSLAge = 20 * time.Second
 
 // copilotWSLWait is how long a request waits for a distro's sign-in to
-// be read again, from when that read started: one read at a time, outside
+// be read the first time, from when that read started (a read again
+// answers the last one meanwhile): one read at a time, outside
 // copilotWSL's lock, and a read WSL holds up answers the sign-in read
 // before. Held under the lock, a hung WSL queued every request behind
 // the first, and the gateway sent 504s after 30s (vsoullai on X, #6167).
@@ -121,6 +122,14 @@ func copilotCLILogin() (copilotApp, bool) {
 			c.Unlock()
 			close(done)
 		}()
+	}
+	if !c.at.IsZero() {
+		// what was read before is answered while it is read again: each
+		// read waiting for it held a page's first ask (the Sessions page's,
+		// on a slow WSL) copilotWSLWait every copilotWSLAge (shangyuan0818
+		// on X)
+		defer c.Unlock()
+		return c.app, c.ok
 	}
 	done, start := c.done, c.start
 	c.Unlock()

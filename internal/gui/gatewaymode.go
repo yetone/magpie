@@ -58,8 +58,9 @@ func gatewayMode(web bool) (bool, string) {
 
 // agentsHere says whether an agent is found on this computer, stopping at
 // the first: each agent's check can read app bundles and ask Spotlight.
-// A test's own.
-var agentsHere = func() bool { return slices.ContainsFunc(agent.All(), (*agent.Agent).Detected) }
+// WSL's agents are those last listed: a hung wsl.exe doesn't hold the
+// Sessions page (sessions.Dirs asks this). A test's own.
+var agentsHere = func() bool { return slices.ContainsFunc(agent.AllKnown(), (*agent.Agent).Detected) }
 
 // gatewayModeRoutes: POST /api/settings/gateway-mode {"mode": "on" | "off"
 // | ""} sets Settings' choice, "" leaving it to magpie again.

@@ -151,3 +151,54 @@ func TestWSLRootHangFailsProbe(t *testing.T) {
 		t.Fatalf("root %q", r)
 	}
 }
+
+// shangyuan0818 on X: Usage → Sessions took a fixed ~20s to open on
+// Windows. Its handlers name each row's agent through Looks(), which built
+// Clients() from All(), and All() waited for WSL's distros to be listed:
+// a hung wsl.exe held the first open for its timeouts. WSL's agents are
+// never clients, so neither Clients() nor Looks() asks wsl.exe at all.
+func TestClientsAskNoWSL(t *testing.T) {
+	syncHome(t)
+	t.Cleanup(FakeWSL(map[string]string{"Ubuntu": "home:/home/me\ndir:.codex\n"}, map[string]string{"Ubuntu": t.TempDir()}))
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release); wslSettle() })
+	var mu sync.Mutex
+	var asked []string
+	run := wslRun
+	wslRun = func(d time.Duration, args ...string) ([]byte, error) {
+		mu.Lock()
+		asked = append(asked, strings.Join(args, " "))
+		mu.Unlock()
+		<-release // wsl.exe hangs
+		return run(d, args...)
+	}
+	t.Cleanup(func() { wslRun = run })
+	forgetLooks()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		Clients()
+		Looks()
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Clients() waited on a hung wsl.exe")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(asked) != 0 {
+		t.Fatalf("Clients() asked wsl.exe %q", asked)
+	}
+	mu.Unlock()
+	// whether this computer has agents (the Sessions page's own-sessions
+	// gate) has WSL's agents as last listed, without waiting
+	done = make(chan struct{})
+	go func() { defer close(done); AllKnown() }()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("AllKnown() waited on a hung wsl.exe")
+	}
+	mu.Lock()
+}
