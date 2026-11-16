@@ -97,24 +97,52 @@ type heardRun struct {
 }
 
 // heardRuns is msgs as lostMedia compares them; sealed keeps no words.
+//
+// A reply's texts in a row are one part, their words with no whitespace,
+// as messageWords reads them: the run keeps its reply as the one text it
+// said, and the client as Anthropic's stream told it, a text block for
+// each run of words between thinking blocks (#5705). Compared block by
+// block, the next turn whose client had also taken out an earlier image
+// (omp keeps 5 in a request to a provider it has no budget for) was none
+// the run had, and went to a new Claude Code told all of it from a
+// transcript (Yqihotaru on X). A user's texts stay apart: the text an
+// image left between them is what lostFromRun reads.
 func heardRuns(msgs []Message, sealed bool) []heardRun {
-	var out []heardRun
+	type run struct {
+		role  string
+		parts []wordPart
+	}
+	var runs []run
 	for i, parts := range messageParts(msgs) {
 		if len(parts) == 0 {
 			continue
 		}
-		if len(out) == 0 || out[len(out)-1].role != msgs[i].Role {
-			out = append(out, heardRun{role: msgs[i].Role})
+		if len(runs) == 0 || runs[len(runs)-1].role != msgs[i].Role {
+			runs = append(runs, run{role: msgs[i].Role})
 		}
-		r := &out[len(out)-1]
+		r := &runs[len(runs)-1]
 		for _, p := range parts {
+			if r.role == "assistant" && p.kind == Text {
+				p.words = strings.Join(strings.Fields(p.words), "")
+				if k := len(r.parts) - 1; k >= 0 && r.parts[k].kind == Text {
+					r.parts[k].words += p.words
+					continue
+				}
+			}
+			r.parts = append(r.parts, p)
+		}
+	}
+	out := make([]heardRun, len(runs))
+	for i, r := range runs {
+		out[i].role = r.role
+		for _, p := range r.parts {
 			h := heardPart{kind: p.kind, n: len(p.words), sum: sha256.Sum256([]byte(p.words)), media: p.media}
 			if !sealed {
 				h.words = p.words
 			} else if p.kind == ToolResult {
 				h.tail = p.words[max(0, len(p.words)-heardTail):]
 			}
-			r.parts = append(r.parts, h)
+			out[i].parts = append(out[i].parts, h)
 		}
 	}
 	return out

@@ -1569,6 +1569,21 @@ sends a 90-message conversation five turns, the images of its earlier
 turns taken out and sent back in turn, both with a line in their place
 and with nothing.
 
+`heardRuns` reads an assistant run's texts in a row as one part, their
+words with no whitespace, as `messageWords` does for the keys (#5705):
+the run keeps its reply as the one text it said, while the client sends
+it back as Anthropic's stream told it, a text block for each run of
+words between thinking blocks. Compared block by block, the first turn
+after such a reply whose client had taken out an earlier image was none
+the run had (Yqihotaru on X: omp keeps 5 images in a request to a
+provider it has no budget for, so each turn with a new image takes out
+the oldest; a turn after a reply with tool calls, or a turn without an
+image, matched). A user's texts stay apart, as the text an image left
+between them is what `lostFromRun` reads.
+`TestClaudeOmpImageBudgetGoesOnInItsRun` sends omp's clamped history
+eight turns, with the reply in one block and split by thinking, and an
+image with words, alone, before words, and two at once.
+
 A client that drops the images' message without adding text to a result
 goes on only when that message held images alone, no text. A tool result of an image alone (pi-ai's "(see attached image)")
 whose text is replaced by the line is not this shape, and starts anew.
