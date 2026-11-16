@@ -455,6 +455,10 @@ type providerJSON struct {
 	// how many requests each key or account sends the vendor in any
 	// minute, 0 for no limit (coeo91 on Discord)
 	MaxRPM int `json:"maxRPM,omitempty"`
+	// MaxImages is how many images one request to it may carry, by the
+	// user's word (provider.Provider.MaxImages); set on its own with
+	// max-images
+	MaxImages int `json:"maxImages,omitempty"`
 	// RateWindows are the time-of-day windows it bills at its own rate
 	// (#2463), as the editor opens on them
 	RateWindows []provider.RateWindow `json:"rateWindows,omitempty"`
@@ -984,7 +988,7 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 		Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, UseFirst: p.UseFirst, NoStandIn: p.NoStandIn, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, SwitchOnly: p.SwitchOnly, RestartApp: p.RestartApp, Self: p.SelfAnswered(), KeepSelf: p.KeepSelf, ThisDevice: p.ThisDevice, CapStop: p.CapStop, CapCareful: p.CapCareful, Unlisted: p.Unlisted, NoModels: p.ServesNone(), BestInFamily: p.BestInFamily && len(p.Models) == 0 && !p.NoModels, Off: p.Off, Contexts: p.Contexts,
 		MaxConcurrency: p.MaxConcurrency, PluginConcurrency: p.PluginConcurrency(), MaxAccounts: p.MaxAccounts, PluginAccounts: p.PluginAtOnce(), PriceRate: p.PriceRate, KeyPriceRates: p.KeyPriceRates,
 		RateWindows: p.RateWindows, RateNow: rateNowOf(p, time.Now()),
-		AccountConcurrency: p.AccountConcurrency, AccountWeights: p.AccountWeights, QueueLimit: p.QueueLimit, QueueWait: p.QueueWait, MaxRPM: p.MaxRPM,
+		AccountConcurrency: p.AccountConcurrency, AccountWeights: p.AccountWeights, QueueLimit: p.QueueLimit, QueueWait: p.QueueWait, MaxRPM: p.MaxRPM, MaxImages: p.MaxImages,
 		Outputs: provider.OutputsOf(p.ID), Compacts: provider.CompactsOf(p.ID),
 	}
 	if p.Account != nil && p.Account.Agent == p.ID {
@@ -2657,6 +2661,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 					in.CapStop, in.CapCareful = old.CapStop, old.CapCareful       // capstop, capcareful
 					in.UseFirst = old.UseFirst                                    // usefirst
 					in.NoStandIn = old.NoStandIn                                  // standin
+					in.MaxImages = old.MaxImages                                  // max-images
 					in.Off = old.Off                                              // and this with off and on
 					if in.Contexts == nil {
 						in.Contexts = old.Contexts // a save that doesn't say

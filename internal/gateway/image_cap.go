@@ -27,6 +27,13 @@ import (
 // later requests to that model are fitted the same way before they are
 // sent (forwardOnce). The latest user message is kept whole; when its own
 // images are over the cap, nothing is left out and the refusal goes on.
+//
+// A cap the user sets on a provider (Provider.MaxImages) needs no refusal
+// to know: 100milionseek's and Coarena's APIs take 8 a request and answer
+// the ninth with their own words, which imageCapWords doesn't match, so
+// learning one there never happens. The user's number stands over the
+// learned one and is fitted before the request is sent too.
+//
 // A request under the cap, and every other vendor's, goes as it came.
 
 // imageCapWords are Copilot's words for a request over a model's image
@@ -48,14 +55,23 @@ func imageCapKey(p provider.Provider, body []byte) string {
 	return p.ID + "\x00" + modelOf(body)
 }
 
-// withinImageCap is body as it goes to p: its oldest images left out
-// down to the cap p's model refused more images over, when one is known
-// and body is over it.
+// imageCap is the most images one request to p may carry: the user's own
+// MaxImages, which needs no refusal to know and holds for any vendor,
+// else the cap Copilot's refusals taught that model, 0 for neither.
+func (s *Server) imageCap(p provider.Provider, body []byte) int {
+	if p.MaxImages > 0 {
+		return p.MaxImages
+	}
+	return s.imageCaps.of(imageCapKey(p, body))
+}
+
+// withinImageCap is body as it goes to p: its oldest images left out down
+// to the cap p's model takes, when one is known and body is over it.
 func (s *Server) withinImageCap(p provider.Provider, to provider.Protocol, path string, body []byte) []byte {
-	if !imageCapped(p) || countsTokens(path) {
+	if countsTokens(path) {
 		return body
 	}
-	n := s.imageCaps.of(imageCapKey(p, body))
+	n := s.imageCap(p, body)
 	if n <= 0 {
 		return body
 	}

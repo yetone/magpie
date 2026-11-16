@@ -2,9 +2,11 @@ package gateway
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -129,6 +131,141 @@ func TestCopilotGeminiImagesUnderCapUntouched(t *testing.T) {
 	}
 	if len(sent) != before || refused.Load() != 2 {
 		t.Fatalf("the latest user message's images were left out, or it was asked again (%d refused)", refused.Load())
+	}
+}
+
+// maxImagesFake saves a provider with no account and n as its MaxImages,
+// serving model m1 on a chat URL of its own, and answers every request it
+// gets with a chat stream, keeping the bodies.
+func maxImagesFake(t *testing.T, name string, n int) *[]string {
+	t.Helper()
+	fresh(t)
+	var mu sync.Mutex
+	var bodies []string
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		bodies = append(bodies, string(b))
+		mu.Unlock()
+		w.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(w, sse(
+			`data: {"id":"c1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant","content":"SEEN"}}]}`,
+			`data: {"id":"c1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":1}}`,
+			`data: [DONE]`))
+	}))
+	t.Cleanup(up.Close)
+	if err := provider.Save(provider.Provider{ID: name, Name: name, Key: "k", Chat: up.URL + "/v1", Models: []string{"m1"}, MaxImages: n}); err != nil {
+		t.Fatal(err)
+	}
+	return &bodies
+}
+
+// A provider the user gave a MaxImages fits the request before it is sent,
+// with no refusal first: 100milionseek's and Coarena's 400s name no number
+// imageCapWords can read, so waiting to learn one never ends.
+func TestMaxImagesFitsBeforeSending(t *testing.T) {
+	sent := maxImagesFake(t, "eightmax", 8)
+	s := New()
+	rec := postCapChat(t, s, imageChat("eightmax/m1", 11, 1))
+	if rec.Code != 200 {
+		t.Fatalf("the turn failed: %d %s", rec.Code, rec.Body.String())
+	}
+	if len(*sent) != 1 {
+		t.Fatalf("asked %d times, want 1: there is nothing to learn", len(*sent))
+	}
+	got := (*sent)[0]
+	if n := strings.Count(got, `"type":"image_url"`); n != 8 {
+		t.Errorf("sent %d images, not 8", n)
+	}
+	if strings.Contains(got, "SHOT00") || strings.Contains(got, "SHOT03") || !strings.Contains(got, "SHOT04") {
+		t.Error("not the four oldest images left out")
+	}
+	if strings.Count(got, imageOverCap) != 4 {
+		t.Errorf("the left-out images aren't said: %.300s", got)
+	}
+	if !strings.Contains(got, "SHOT90") || !strings.Contains(got, "the latest ask") {
+		t.Error("the latest user message was changed")
+	}
+	for i := range 11 {
+		if !strings.Contains(got, fmt.Sprintf("look at screen %d", i)) {
+			t.Errorf("text %d is gone", i)
+		}
+	}
+	// the next turn is fitted the same way, still one request
+	if rec := postCapChat(t, s, imageChat("eightmax/m1", 11, 1)); rec.Code != 200 || len(*sent) != 2 {
+		t.Fatalf("the next turn: %d, %d answered", rec.Code, len(*sent))
+	}
+	if n := strings.Count((*sent)[1], `"type":"image_url"`); n != 8 {
+		t.Errorf("the next turn sent %d images, not 8", n)
+	}
+}
+
+// A request at the cap goes as it came, and one whose latest message alone
+// is over it is left alone too: there is no earlier image to leave out.
+// Image for image and text for text, not byte for byte: the gateway sends
+// the vendor the model's own id, not the provider-prefixed one the agent
+// named.
+func TestMaxImagesUnderCapUntouched(t *testing.T) {
+	sent := maxImagesFake(t, "eightmax", 8)
+	s := New()
+	// same says got kept every image was kept: as many as was sent, none
+	// left out for the placeholder
+	same := func(got, was string) bool {
+		return strings.Count(got, `"type":"image_url"`) == strings.Count(was, `"type":"image_url"`) &&
+			!strings.Contains(got, imageOverCap) &&
+			strings.Contains(got, "the latest ask")
+	}
+	at := imageChat("eightmax/m1", 7, 1)
+	if rec := postCapChat(t, s, at); rec.Code != 200 {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	if !same((*sent)[0], at) || !strings.Contains((*sent)[0], "look at screen 0") {
+		t.Fatalf("a request at the cap was changed: %.300s", (*sent)[0])
+	}
+	before := len(*sent)
+	// nine images in the latest message alone and none in history: there
+	// is no earlier image to leave out, so the request goes as it came
+	over := imageChat("eightmax/m1", 0, 9)
+	if rec := postCapChat(t, s, over); rec.Code != 200 {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	if len(*sent) != before+1 || !same((*sent)[len(*sent)-1], over) {
+		t.Fatalf("the latest user message's images were left out: %.300s", (*sent)[len(*sent)-1])
+	}
+	if n := strings.Count((*sent)[len(*sent)-1], `"type":"image_url"`); n != 9 {
+		t.Errorf("the latest message's %d images, not 9", n)
+	}
+}
+
+// The user's number stands over the cap Copilot's refusal taught the same
+// provider's model: the smaller of the two isn't taken.
+func TestMaxImagesStandsOverTheLearnedCap(t *testing.T) {
+	var sent []string
+	var refused atomic.Int32
+	copilotTurnFake(t, map[string]string{"gemini-4-carbon": `["/chat/completions"]`}, nil,
+		overTen(&refused), copilotImageCap, http.StatusBadRequest, &sent)
+	s := New()
+	// Copilot's own refusal teaches 10 first
+	if rec := postCapChat(t, s, imageChat("copilot/gemini-4-carbon", 11, 1)); rec.Code != 200 {
+		t.Fatalf("the turn failed: %d %s", rec.Code, rec.Body.String())
+	}
+	p, err := provider.Find("copilot")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.MaxImages = 4
+	if err := provider.Save(*p); err != nil {
+		t.Fatal(err)
+	}
+	before := len(sent)
+	if rec := postCapChat(t, s, imageChat("copilot/gemini-4-carbon", 11, 1)); rec.Code != 200 {
+		t.Fatalf("the turn failed: %d %s", rec.Code, rec.Body.String())
+	}
+	if len(sent) != before+1 {
+		t.Fatalf("asked %d requests, want 1", len(sent)-before)
+	}
+	if n := strings.Count(sent[len(sent)-1], `"type":"image_url"`); n != 4 {
+		t.Errorf("sent %d images, not the 4 the user set", n)
 	}
 }
 

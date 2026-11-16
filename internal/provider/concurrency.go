@@ -230,6 +230,11 @@ func normalAccountConcurrency(m map[string]int) map[string]int {
 // MaxRPMLimit bounds a limit on requests a minute.
 const MaxRPMLimit = 10000
 
+// MaxImagesLimit bounds a limit on the images one request may carry. No
+// vendor lists more than a few hundred, and a number past this is a typo
+// rather than a cap.
+const MaxImagesLimit = 1000
+
 // RPMLimit is how many requests a minute each of p's keys or accounts may
 // send the vendor, 0 for no limit: the provider's MaxRPM. An account not
 // had from All or AlsoOn (made afresh by its sign-in) carries none of the

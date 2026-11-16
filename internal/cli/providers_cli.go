@@ -207,6 +207,10 @@ const providerUsage = `usage:
        magpie provider set my-relay billing=plan
                                    (marks it on a plan, or billing=payg pay as you go, on Providers and Routing;
                                     billing=auto goes back to magpie's reading of its endpoints)
+       magpie provider set 100milionseek max-images=8
+                                   (the most images one request to it may carry, counted over the whole
+                                    conversation: past it the oldest are left out, each replaced by a line
+                                    of text, the latest message's images kept; max-images=0 clears it)
        magpie provider add "My Relay" url=https://relay.example.com/v1 key=sk-… balance=https://relay.example.com/api/usage/token balance.path='$data.total_available / 500000'
        magpie provider set my-relay balance.path='(1 - credits.monthlyCredits / 70) %'
        magpie provider set my-relay balance.method=POST
@@ -952,6 +956,9 @@ func showProviderAsking(p provider.Provider, ask bool) error {
 	if p.NoStandIn {
 		kv("fallback-for-others", "no"+muted.Render("  never takes another model's request"))
 	}
+	if p.MaxImages > 0 {
+		kv("max-images", strconv.Itoa(p.MaxImages)+muted.Render("  a request past it has its oldest images left out"))
+	}
 	switch b := p.BillingKind(); {
 	case b == "":
 	case p.Billing != "":
@@ -1412,6 +1419,17 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 				return fmt.Errorf("unmasked=yes|no, not %q", v)
 			}
 			p.Unredacted = v == "yes"
+		case "max-images", "maximages":
+			// how many images one request to it may carry (issue #6849:
+			// 100milionseek and Coarena take 8 and refuse the ninth, and
+			// the count is over the whole conversation); past it the
+			// oldest ones are left out, the latest message's kept. 0
+			// leaves it to what a Copilot refusal teaches
+			n, err := strconv.Atoi(strings.TrimSpace(v))
+			if err != nil || n < 0 || n > provider.MaxImagesLimit {
+				return fmt.Errorf("max-images=0..%d, not %q (0 clears it)", provider.MaxImagesLimit, v)
+			}
+			p.MaxImages = n
 		case "fallback-for-others":
 			// no: never a fallback for another model, nor a routing
 			// group's next after one (sonnnnnnnnnnnna on X: a local
