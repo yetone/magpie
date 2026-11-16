@@ -122,8 +122,12 @@ func screenBackFrom(msg uint32, wParam, lParam uintptr) string {
 // appWndProc is the app's WndProcInterceptor (windowsOptions): a window
 // not being shown for the user isn't activated (hookNoActivate), the screen
 // coming back draws the windows again, and the screens are read
-// (screensWndProc). None keeps a message from Wails but the screens'.
+// (screensWndProc). None keeps a message from Wails but the screens' and
+// the main window's frame (mainFrameCalc).
 var appWndProc = func(hwnd uintptr, msg uint32, wParam, lParam uintptr) (uintptr, bool) {
+	if r, ok := mainFrameCalc(hwnd, msg, wParam, lParam); ok {
+		return r, true
+	}
 	if msg == w32.WM_DESTROY && hwnd == ownMainThreadWindow() {
 		unhookNoActivate()
 	} else {

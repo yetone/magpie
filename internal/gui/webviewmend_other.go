@@ -17,4 +17,8 @@ func awaitBrowserGone() {}
 // The screen coming back is watched on Windows only (screenback_windows.go).
 func watchScreenBack() {}
 
+// Only Windows' frameless main window needs its resize border kept
+// (mainframe_windows.go).
+func keepResizeFrame(*application.WebviewWindow) {}
+
 var appWndProc func(hwnd uintptr, msg uint32, wParam, lParam uintptr) (uintptr, bool)

@@ -65,6 +65,8 @@ func (h *host) makeMain(url string) *application.WebviewWindow {
 	lowWhileHidden(w)
 	h.mendWebView(w)
 	if mainFrameless(runtime.GOOS) {
+		// resized from Windows' own border too, not the page's edge alone
+		keepResizeFrame(w)
 		// the page's caption buttons follow the window's maximised state
 		// (captionJS); a resize that changes it says so, once
 		var maxed atomic.Bool
