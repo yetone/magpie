@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -87,22 +88,37 @@ func TestCombinedOutputOwnRuns(t *testing.T) {
 	}
 }
 
-// The context ending ends the command, and the run with it.
+// The context ending ends the command, and the run with it, and the run
+// says the context ended, whether the command had started or not (#5967:
+// a started one's Wait said "signal: killed").
 func TestCombinedOutputOwnContext(t *testing.T) {
 	noShell(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan error, 1)
-	go func() {
-		_, err := CombinedOutputOwn(ctx, CommandContext(ctx, "/bin/sh", "-c", "exec sleep 30"))
-		done <- err
-	}()
-	cancel()
-	select {
-	case err := <-done:
-		if err != context.Canceled {
-			t.Errorf("err %v, want canceled", err)
+	for _, started := range []bool{false, true} {
+		mark := filepath.Join(t.TempDir(), "started")
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan error, 1)
+		go func() {
+			_, err := CombinedOutputOwn(ctx, CommandContext(ctx, "/bin/sh", "-c", `: > "$1"; exec sleep 30`, "sh", mark))
+			done <- err
+		}()
+		if started {
+			for deadline := time.Now().Add(20 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+				if _, err := os.Stat(mark); err == nil {
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatal("the command never started")
+				}
+			}
 		}
-	case <-time.After(20 * time.Second):
-		t.Fatal("still running after its context ended")
+		cancel()
+		select {
+		case err := <-done:
+			if err != context.Canceled {
+				t.Errorf("started %v: err %v, want canceled", started, err)
+			}
+		case <-time.After(20 * time.Second):
+			t.Fatalf("started %v: still running after its context ended", started)
+		}
 	}
 }
