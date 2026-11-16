@@ -1139,14 +1139,18 @@ function routingPage(part) {
   // renews sooner (cmpRenews, as the gateway ranks them), "expires" when
   // the first's credits expire sooner, the key Smart went by (#5646). null when it is
   // first, or behind for what the row or another reason says already.
+  // A conversation kept on one Smart puts first anyway says "sooner" or
+  // "expires", not "kept": a new conversation goes there too, and "kept"
+  // read as every conversation stuck to one account (YsiCing on X: three
+  // Codex accounts, two at 0% "conversation kept on another").
   function behindWhy(r, w) {
     const f = r.order[0], x = r.order.find((y) => y.id === w.id);
     if (!f || !x || x === f || f.rest || f.fallback || x.fallback || x.routing || !x.known || group(x) !== "fine") return null;
     if (!weighedWith(r, x).includes(f) || memberSplit(r, f, x)) return null;
-    if (["session", "turn", "cache"].includes(r.affinity?.why)) return "kept";
-    if (r.sealedTask || ruleWhy(r, true) || f.learns || !f.known || group(f) !== "fine" || f.useFirst && !x.useFirst) return null;
+    const kept = ["session", "turn", "cache"].includes(r.affinity?.why) ? "kept" : null;
+    if (r.sealedTask || ruleWhy(r, true) || f.learns || !f.known || group(f) !== "fine" || f.useFirst && !x.useFirst) return kept;
     const { c, k, lapse } = cmpRenews(f, x);
-    return c >= 0 ? null : lapse || expiresAt(f, k) ? "expires" : "sooner";
+    return c >= 0 ? kept : lapse || expiresAt(f, k) ? "expires" : "sooner";
   }
 
   // memberSplit: the group that put x behind f, when it is one that takes
@@ -3266,6 +3270,7 @@ function routingPage(part) {
           : (b = behindWhy(r, w)) === "kept" ? quota(w, "{n} used · conversation kept on another", "{n} left · conversation kept on another")
           : b === "sooner" && soon ? quota(w, "{n} used · renews in {d} · one renewing sooner goes first", "{n} left · renews in {d} · one renewing sooner goes first", { d: dur(soon - n) })
           : b === "expires" && soon ? quota(w, "{n} used · renews in {d} · one whose credits expire sooner goes first", "{n} left · renews in {d} · one whose credits expire sooner goes first", { d: dur(soon - n) })
+          : b === "sooner" ? quota(w, "{n} used · one renewing sooner goes first", "{n} left · one renewing sooner goes first")
           : soon ? quota(w, "{n} used · renews in {d}", "{n} left · renews in {d}", { d: dur(soon - n) }) : quota(w, "{n} used", "{n} left");
       } else if (w.kind === "account") s = (!day && winsOf(w)[0]) || (!day && cardError(w) ? t("Allowance unavailable — hover for why") : t("what's left not known yet"));
       else if (w.routing === "usage") s = t("{n} tokens lately", { n: tokens(w.tokens || 0) });
