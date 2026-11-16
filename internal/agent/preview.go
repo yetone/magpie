@@ -390,7 +390,14 @@ func previewEnv(home, tmp string) []string {
 	// The test binary recognizes this marker and keeps the fixture HOME
 	// instead of creating a second isolated home. Production binaries ignore
 	// the variable.
-	return append(out, "HOME="+tmp, "USERPROFILE="+tmp, "TMPDIR="+tmp, "MAGPIE_TEST_SANDBOX="+tmp)
+	//
+	// No sign-in is read: building the providers there would read the
+	// Claude sign-in from the keychain, found through HOME on a Mac, and
+	// the copy's home has none, so macOS asked the user "Keychain Not
+	// Found" at each preview (jasonz3g on X). It would run agents' CLIs
+	// under the copy's home too. The files the dry run changes are the
+	// agent's, and no account changes them.
+	return append(out, "HOME="+tmp, "USERPROFILE="+tmp, "TMPDIR="+tmp, "MAGPIE_TEST_SANDBOX="+tmp, "MAGPIE_NO_ACCOUNTS=1")
 }
 
 // diffLines is the lines that differ between two texts, in the order of the
