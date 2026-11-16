@@ -52,6 +52,7 @@ func geminiLevelBody(p provider.Provider, proto provider.Protocol, model string,
 		return body
 	}
 	fields := map[string]any{}
+	efforts := p.Efforts(model)
 	switch proto {
 	case provider.Anthropic:
 		th, _ := top["thinking"].(map[string]any)
@@ -74,12 +75,12 @@ func geminiLevelBody(p provider.Provider, proto provider.Protocol, model string,
 				if oc == nil {
 					oc = map[string]any{}
 				}
-				oc["effort"] = geminiLevelFor(m, level)
+				oc["effort"] = geminiLevelForEfforts(m, level, efforts)
 				fields["output_config"] = oc
 			}
 		case "adaptive":
 			if said != "" {
-				if fit := geminiLevelFor(m, said); fit != said {
+				if fit := geminiLevelForEfforts(m, said, efforts); fit != said {
 					oc["effort"] = fit
 					fields["output_config"] = oc
 				}
@@ -87,7 +88,7 @@ func geminiLevelBody(p provider.Provider, proto provider.Protocol, model string,
 		}
 	case provider.Chat:
 		if e, ok := top["reasoning_effort"].(string); ok && e != "" {
-			if fit := geminiLevelFor(m, e); fit != e {
+			if fit := geminiLevelForEfforts(m, e, efforts); fit != e {
 				fields["reasoning_effort"] = fit
 			}
 		}
@@ -117,7 +118,7 @@ func geminiLevelBody(p provider.Provider, proto provider.Protocol, model string,
 				// at low, which every Gemini 3 text model takes
 				tc["thinking_level"] = "low"
 			default:
-				tc["thinking_level"] = geminiLevelFor(m, effortOfBudget(int(b)))
+				tc["thinking_level"] = geminiLevelForEfforts(m, effortOfBudget(int(b)), efforts)
 			}
 		}
 		if changed {
@@ -140,6 +141,12 @@ func geminiLevelBody(p provider.Provider, proto provider.Protocol, model string,
 // hasn't turns it away by name and is asked again at its lowest
 // (geminiRefusedLevel).
 func geminiLevelFor(model, effort string) string {
+	return geminiLevelForEfforts(model, effort, nil)
+}
+
+// geminiLevelForEfforts fits effort using the provider's levels when known,
+// falling back to catalog.EffortsOf.
+func geminiLevelForEfforts(model, effort string, efforts []string) string {
 	level := strings.ToLower(strings.TrimSpace(effort))
 	if level == "none" {
 		return "low"
@@ -149,8 +156,12 @@ func geminiLevelFor(model, effort string) string {
 			level = l
 		}
 	}
-	if ls := catalog.EffortsOf(model); len(ls) > 0 {
-		ls = slices.DeleteFunc(ls, func(l string) bool { return l == "none" })
+	ls := efforts
+	if len(ls) == 0 {
+		ls = catalog.EffortsOf(model)
+	}
+	if len(ls) > 0 {
+		ls = slices.DeleteFunc(slices.Clone(ls), func(l string) bool { return l == "none" })
 		if len(ls) > 0 {
 			return catalog.NearestEffort(level, ls)
 		}

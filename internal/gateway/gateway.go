@@ -4118,19 +4118,21 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		if mapped != "" {
 			// "none" turns its reasoning off; another level is asked at
 			// the one its model has nearest, as a fixed member's is
+			efforts := c.p.Efforts(c.model)
 			if mapped != "none" {
-				mapped = fitLevel(mapped, c.p.Efforts(c.model))
+				mapped = fitLevel(mapped, efforts)
 			}
-			attemptBody = withModelEffort(from, attemptBody, c.model, mapped)
+			attemptBody = withModelEffort(from, attemptBody, c.model, mapped, efforts)
 		} else if ruled != "" {
 			// asked even of a request that asked for no reasoning, as a
 			// member fixed at an effort is; already fitted to its levels
-			attemptBody = withModelEffort(from, attemptBody, c.model, ruled)
+			attemptBody = withModelEffort(from, attemptBody, c.model, ruled, c.p.Efforts(c.model))
 		} else if fixed != "" {
 			// a member fixed at an effort is asked for it, at the level its
 			// model has nearest, whatever the agent asked or the turn's
 			// pick: even a request that asked for no reasoning
-			attemptBody = withModelEffort(from, attemptBody, c.model, fitLevel(fixed, c.p.Efforts(c.model)))
+			efforts := c.p.Efforts(c.model)
+			attemptBody = withModelEffort(from, attemptBody, c.model, fitLevel(fixed, efforts), efforts)
 		} else if effort != "" {
 			// the level this model has nearest to the one picked; one whose
 			// levels aren't known isn't asked for more than high, which
@@ -7406,7 +7408,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			if offEffort(e) {
 				s.markUnfit(p.ID, offRefused(model), proto)
 			}
-			if res, err = s.forward(r.Context(), p, proto, path, p.Prepare(withModelEffort(proto, body, model, onEffort(p, model))), r.Header); err != nil {
+			if res, err = s.forward(r.Context(), p, proto, path, p.Prepare(withModelEffort(proto, body, model, onEffort(p, model), p.Efforts(model))), r.Header); err != nil {
 				return writeError(w, proto, 502, p.Name+": "+err.Error()), err.Error(), true
 			}
 		}

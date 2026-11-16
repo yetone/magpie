@@ -1,7 +1,9 @@
 package gateway
 
 import (
+	"context"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -148,6 +150,92 @@ func TestWithGeminiEffortAboveHigh(t *testing.T) {
 		if got := gjson.GetBytes(out, "generationConfig.thinkingConfig.thinkingLevel").String(); got != c.want {
 			t.Errorf("%s at %s: %s, want %s", c.model, c.effort, got, c.want)
 		}
+	}
+}
+
+// A provider-listed Gemini 4 model absent from models.dev (such as a plugin's
+// "-search" variant declaring xhigh in its catalog) keeps xhigh when agy's
+// effort is xhigh or max, on both Gemini and translated Chat upstreams; a
+// model listing high at most is still capped at high.
+func TestAgyProviderLevelsAboveHigh(t *testing.T) {
+	for _, proto := range []string{"gemini", "chat"} {
+		t.Run(proto, func(t *testing.T) {
+			fresh(t)
+			var mu sync.Mutex
+			var sent []byte
+			up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				b, _ := io.ReadAll(r.Body)
+				mu.Lock()
+				sent = b
+				mu.Unlock()
+				w.Header().Set("Content-Type", "text/event-stream")
+				if proto == "gemini" {
+					io.WriteString(w, sse(`data: {"candidates":[{"content":{"role":"model","parts":[{"text":"ok"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":5,"candidatesTokenCount":1}}`))
+					return
+				}
+				io.WriteString(w, "data: {\"id\":\"c1\",\"object\":\"chat.completion.chunk\",\"model\":\"m\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"ok\"}}]}\n\n")
+				io.WriteString(w, "data: {\"id\":\"c1\",\"object\":\"chat.completion.chunk\",\"model\":\"m\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")
+			}))
+			t.Cleanup(up.Close)
+
+			const hydrogenSearch, carbonSearch = "gemini-4-hydrogen-search", "gemini-4-carbon-search"
+			p := provider.Provider{ID: "relay", Name: "Relay", Key: "k", Models: []string{hydrogenSearch, carbonSearch}}
+			var liveBase string
+			if proto == "gemini" {
+				p.Gemini = up.URL + "/v1beta"
+				liveBase = p.Gemini
+			} else {
+				p.Chat = "http://api.relay.example.com/v1"
+				liveBase = p.Chat
+			}
+			if err := provider.Save(p); err != nil {
+				t.Fatal(err)
+			}
+			if err := catalog.SaveLive("relay", liveBase, []catalog.Model{
+				{ID: hydrogenSearch, Efforts: []string{"low", "medium", "high", "xhigh"}},
+				{ID: carbonSearch, Efforts: []string{"low", "medium", "high"}},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			s := New()
+			if proto == "chat" {
+				addr := strings.TrimPrefix(up.URL, "http://")
+				s.client = &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+					return (&net.Dialer{}).DialContext(ctx, network, addr)
+				}}}
+			}
+			body := `{"contents":[{"role":"user","parts":[{"text":"hi"}]}],"generationConfig":{"thinkingConfig":{"includeThoughts":true,"thinkingBudget":-1}}}`
+			for _, tc := range []struct {
+				pick, model, want string
+			}{
+				{"xhigh", hydrogenSearch, "xhigh"},
+				{"max", hydrogenSearch, "xhigh"},
+				{"max", carbonSearch, "high"},
+			} {
+				if err := provider.SetAgentEffort("agy", tc.pick); err != nil {
+					t.Fatal(err)
+				}
+				rec := httptest.NewRecorder()
+				req := httptest.NewRequest("POST", "/v1beta/models/relay/"+tc.model+":streamGenerateContent?alt=sse", strings.NewReader(body))
+				req.Header.Set("x-goog-api-key", TokenFor("agy"))
+				s.Handler().ServeHTTP(rec, req)
+				if rec.Code != 200 || !strings.Contains(rec.Body.String(), "ok") {
+					t.Fatalf("%s pick=%s: %d %s", tc.model, tc.pick, rec.Code, rec.Body)
+				}
+				mu.Lock()
+				raw := append([]byte(nil), sent...)
+				mu.Unlock()
+				var got string
+				if proto == "gemini" {
+					got = gjson.GetBytes(raw, "generationConfig.thinkingConfig.thinkingLevel").String()
+				} else {
+					got = gjson.GetBytes(raw, "reasoning_effort").String()
+				}
+				if got != tc.want {
+					t.Errorf("%s (%s) pick=%s: sent %q, want %q (body: %s)", tc.model, proto, tc.pick, got, tc.want, raw)
+				}
+			}
+		})
 	}
 }
 

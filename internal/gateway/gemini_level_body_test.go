@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -158,5 +159,64 @@ func TestGeminiLevelFor(t *testing.T) {
 		if got := geminiLevelFor(c.model, c.effort); got != c.want {
 			t.Errorf("%s at %s: %s, want %s", c.model, c.effort, got, c.want)
 		}
+	}
+}
+
+// A relay-listed Gemini 4 model absent from models.dev keeps its provider's
+// xhigh level in geminiLevelBody on both Anthropic and Chat upstreams instead
+// of being capped at high.
+func TestGeminiRelayProviderLevelsAboveHigh(t *testing.T) {
+	up, bodies := levelRelay(t)
+	addr := strings.TrimPrefix(up.URL, "http://")
+	const model = "gemini-4-hydrogen-search"
+	for _, c := range []struct {
+		name, upstream, path, body, key, want string
+	}{
+		{"chat xhigh to Chat relay", "chat", "/v1/chat/completions", `{"reasoning_effort":"xhigh"}`, "reasoning_effort", "xhigh"},
+		{"chat max to Chat relay", "chat", "/v1/chat/completions", `{"reasoning_effort":"max"}`, "reasoning_effort", "xhigh"},
+		{"messages max to Anthropic relay", "anth", "/v1/messages", `{"max_tokens":40000,"thinking":{"type":"adaptive"},"output_config":{"effort":"max"}}`, "output_config", `{"effort":"xhigh"}`},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			fresh(t)
+			p := provider.Provider{ID: "peta", Name: "peta", Key: "k", Models: []string{model}}
+			var liveBase string
+			if c.upstream == "anth" {
+				p.Anthropic = "http://api.peta.example.com"
+				liveBase = p.Anthropic
+			} else {
+				p.Chat = "http://api.peta.example.com/v1"
+				liveBase = p.Chat
+			}
+			if err := provider.Save(p); err != nil {
+				t.Fatal(err)
+			}
+			if err := catalog.SaveLive("peta", liveBase, []catalog.Model{
+				{ID: model, Efforts: []string{"low", "medium", "high", "xhigh"}},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			s := New()
+			s.client = &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+				return (&net.Dialer{}).DialContext(ctx, network, addr)
+			}}}
+			body := `{"model":"peta/` + model + `","messages":[{"role":"user","content":"hi"}],` + strings.TrimPrefix(c.body, "{")
+			*bodies = nil
+			rec := httptest.NewRecorder()
+			s.Handler().ServeHTTP(rec, httptest.NewRequest("POST", c.path, strings.NewReader(body)))
+			if rec.Code != 200 || len(*bodies) == 0 {
+				t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+			}
+			sent := (*bodies)[0]
+			if c.key == "output_config" {
+				got, _ := json.Marshal(sent[c.key])
+				if string(got) != c.want {
+					t.Errorf("%s: sent %s, want %s", c.key, got, c.want)
+				}
+				return
+			}
+			if got, _ := sent[c.key].(string); got != c.want {
+				t.Errorf("%s: sent %q, want %q", c.key, got, c.want)
+			}
+		})
 	}
 }
