@@ -629,6 +629,8 @@ type Server struct {
 	keyLanes lanes
 	// each account's one turn at a time near its usage cap (cap_near.go)
 	nearCap nearCaps
+	// what a turn spends on each account, for nearCap (cap_near.go)
+	turnSpend turnSpends
 	// the requests each key or account with a MaxRPM sent in the last
 	// minute, and those about to go (rpm.go)
 	rpms          rpms
@@ -3799,7 +3801,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			failTo(w, kept, from, call.Status, cmp.Or(msg, call.Error))
 			break
 		}
-		if used, near := nearCapOf(c, time.Now()); near && aff.Why != "strict" && (len(cands) > 1 || userCapped(c)) && capHeld(c.p, c.p, c.model, time.Now()) == nil {
+		if used, ahead, near := s.nearCapOf(c, time.Now()); near && aff.Why != "strict" && (len(cands) > 1 || userCapped(c)) && capHeld(c.p, c.p, c.model, time.Now()) == nil {
 			// within nearCapPoints of its usage cap, the account takes one
 			// turn at a time (dyzdyz010 on Discord): busy, the turn goes to
 			// the next one first, this one kept behind them, else waits for
@@ -3822,12 +3824,24 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				break
 			}
 			done, ok := s.nearCap.tryTake(c.who())
-			if !ok && i < len(cands)-1 && !nearBehind[c.who()] {
+			// a slot of its lane this request took already, handed it
+			// as it left another's queue (waitMate), is its own turn,
+			// not one out on the account
+			own := 0
+			if handed.release != nil && handed.who == c.who() {
+				own = 1
+			}
+			out, _, _ := s.lanes.out(c.who())
+			if (!ok || out > own) && i < len(cands)-1 && !nearBehind[c.who()] {
+				if ok {
+					done()
+				}
 				nearBehind[c.who()] = true
 				cands = append(slices.Delete(slices.Clone(cands), i, i+1), c)
 				i--
 				continue
 			}
+			held := false
 			if !ok {
 				// the wait is a known one (noteWait), and the Routing page
 				// says the turn is queued, not that routing goes on
@@ -3840,8 +3854,25 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 					call.Status, call.Error = canceled(r.Context())
 					break
 				}
-				nearCapAgain(r.Context(), c, used)
+				held = true
 			}
+			if out, _, _ := s.lanes.out(c.who()); out > own {
+				// turns sent before it came near its cap are still out
+				// on it, other sessions' among them: no reading has what
+				// they spend, so they end first (yalifesign on X: capped
+				// at 90%, five sessions at once, used to 100%)
+				stopQueue := s.showQueued(r.Context(), tr)
+				err = s.lanes.idle(r.Context(), c.who(), own)
+				stopQueue()
+				if err != nil {
+					done()
+					call.Status, call.Error = canceled(r.Context())
+					break
+				}
+				held = true
+			}
+			_, ended, _ := s.lanes.out(c.who())
+			nearCapAgain(r.Context(), c, used, ahead, held, ended)
 			nearDone = done
 			if h := capHeld(c.p, c.p, c.model, time.Now()); h != nil {
 				nearDone()

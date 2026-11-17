@@ -35,6 +35,12 @@ type lanes struct {
 	// given back or a rest is lifted (signal): a request waiting in one
 	// lane looks then for another with room (waitMate)
 	freed chan struct{}
+	// ended is when a turn on each key or account last gave its slot
+	// back, its reply read to the end: what it spent is counted by then
+	// (cap_near.go reads usage again after it)
+	ended map[string]time.Time
+	turns map[string]int // how many turns each has had come back
+	idles int            // turns waiting in idle, for tests
 }
 
 // signalLocked wakes every request waiting in a lane to look for another
@@ -437,6 +443,14 @@ func (l *lanes) releaser(who string, ln *lane) func() {
 	return func() {
 		once.Do(func() {
 			l.mu.Lock()
+			if l.ended == nil {
+				l.ended = map[string]time.Time{}
+			}
+			l.ended[who] = time.Now()
+			if l.turns == nil {
+				l.turns = map[string]int{}
+			}
+			l.turns[who]++
 			ln.busy--
 			ln.grant()
 			l.drop(who, ln)
@@ -444,6 +458,55 @@ func (l *lanes) releaser(who string, ln *lane) func() {
 			l.mu.Unlock()
 		})
 	}
+}
+
+// out is how many of who's turns are out at the vendor now, when one last
+// came back, and how many have come back.
+func (l *lanes) out(who string) (busy int, ended time.Time, turns int) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if ln := l.m[who]; ln != nil {
+		busy = ln.busy
+	}
+	return busy, l.ended[who], l.turns[who]
+}
+
+// idle waits till no more than own of who's slots are taken (the
+// caller's own), or ctx ends.
+func (l *lanes) idle(ctx context.Context, who string, own int) error {
+	for {
+		l.mu.Lock()
+		ln := l.m[who]
+		if ln == nil || ln.busy <= own {
+			l.mu.Unlock()
+			return nil
+		}
+		if l.freed == nil {
+			l.freed = make(chan struct{})
+		}
+		freed := l.freed
+		l.idles++
+		l.mu.Unlock()
+		var err error
+		select {
+		case <-freed:
+		case <-ctx.Done():
+			err = ctx.Err()
+		}
+		l.mu.Lock()
+		l.idles--
+		l.mu.Unlock()
+		if err != nil {
+			return err
+		}
+	}
+}
+
+// idling is how many turns wait in idle.
+func (l *lanes) idling() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.idles
 }
 
 // grant lets those first in the queue go while there is room.

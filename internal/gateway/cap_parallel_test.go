@@ -1,0 +1,197 @@
+package gateway
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/yetone/magpie/internal/provider"
+)
+
+// spendingBackend is a ChatGPT backend whose one account spends cost
+// points of its five hours on each turn, counted as the turn ends, as
+// ChatGPT counts a turn once it is done: the codex.rate_limits event at
+// a reply's start, and /wham/usage, say the usage as it is then, without
+// the turns still under way.
+type spendingBackend struct {
+	mu         sync.Mutex
+	used, cost float64
+	out, most  int
+	turns      int
+	five, week int64
+}
+
+func newSpendingBackend(t *testing.T, used, cost float64, hold time.Duration) *spendingBackend {
+	t.Helper()
+	now := time.Now()
+	b := &spendingBackend{used: used, cost: cost, five: now.Add(2 * time.Hour).Unix(), week: now.Add(4 * 24 * time.Hour).Unix()}
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/backend-api/codex/responses":
+			io.ReadAll(r.Body)
+			b.mu.Lock()
+			used := b.used
+			if used >= 100 {
+				b.mu.Unlock()
+				w.WriteHeader(429)
+				io.WriteString(w, `{"error":{"type":"usage_limit_reached","message":"The usage limit has been reached"}}`)
+				return
+			}
+			b.out++
+			b.most = max(b.most, b.out)
+			b.turns++
+			b.mu.Unlock()
+			w.Header().Set("Content-Type", "text/event-stream")
+			io.WriteString(w, sse(`event: codex.rate_limits`+"\n"+`data: {"type":"codex.rate_limits","plan_type":"plus","rate_limits":{"allowed":true,"limit_reached":false,"primary":{"used_percent":`+jsonFloat(used)+`,"window_minutes":300,"reset_at":`+jsonInt(b.five)+`},"secondary":{"used_percent":10,"window_minutes":10080,"reset_at":`+jsonInt(b.week)+`}},"credits":null,"metered_limit_name":null,"limit_name":null}`,
+				`data: {"type":"response.created","response":{"id":"r1","model":"gpt-5.5"}}`))
+			w.(http.Flusher).Flush()
+			select {
+			case <-time.After(hold):
+			case <-r.Context().Done():
+			}
+			b.mu.Lock()
+			b.used += b.cost
+			b.out--
+			b.mu.Unlock()
+			io.WriteString(w, sse(`data: {"type":"response.output_text.delta","delta":"pong"}`,
+				`data: {"type":"response.completed","response":{"id":"r1","usage":{"input_tokens":7,"output_tokens":1}}}`))
+		case "/backend-api/wham/usage":
+			b.mu.Lock()
+			used := b.used
+			b.mu.Unlock()
+			json.NewEncoder(w).Encode(map[string]any{"plan_type": "plus",
+				"rate_limit": map[string]any{"allowed": true,
+					"primary_window":   map[string]any{"used_percent": used, "limit_window_seconds": 18000, "reset_at": b.five},
+					"secondary_window": map[string]any{"used_percent": 10, "limit_window_seconds": 604800, "reset_at": b.week}}})
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	t.Cleanup(up.Close)
+	was := provider.CodexBase
+	provider.CodexBase = up.URL + "/backend-api/codex"
+	t.Cleanup(func() { provider.CodexBase = was })
+	return b
+}
+
+// yalifesign on X: a Codex Plus account capped at 90%, four or five
+// sessions at once, went to 100% of its five hours. Each session's turns
+// come one after another, all of them at once on the one account; each
+// turn spends its points as it ends, so a reading taken while others are
+// under way doesn't have them yet. The cap holds all the same: what a
+// turn spends is learned on the way up, the turns out are counted ahead
+// of the reading, and near the cap a turn waits for them and for a
+// reading that has them, so the account goes past its cap by one turn at
+// most, never on to the vendor's own 100%.
+func TestCapHoldsUnderParallelSessions(t *testing.T) {
+	codexSignedIn(t)
+	const start, cost, capAt = 60.0, 1.5, 90
+	b := newSpendingBackend(t, start, cost, 40*time.Millisecond)
+	nearCapAccounts(t, capAt, start)
+	srv := New()
+	const sessions = 5
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	codes := map[int]int{}
+	for range sessions {
+		wg.Go(func() {
+			for range 40 {
+				code, _ := resetPost(t, srv)
+				mu.Lock()
+				codes[code]++
+				mu.Unlock()
+				if code != 200 {
+					return
+				}
+			}
+		})
+	}
+	wg.Wait()
+	b.mu.Lock()
+	used, turns := b.used, b.turns
+	b.mu.Unlock()
+	t.Logf("turns %d, codes %v, used %.1f%%", turns, codes, used)
+	// the turn out as the account came to its cap may end past it; none
+	// goes out once it is there
+	if most := float64(capAt) + cost; used > most {
+		t.Fatalf("used %.1f%% of a %d%% cap after %d turns (codes %v); want at most %.1f%%", used, capAt, turns, codes, most)
+	}
+	if codes[429] == 0 {
+		t.Fatalf("codes %v; want the sessions held at the cap", codes)
+	}
+}
+
+// What a turn spends is learned as the usage moves up over the turns come
+// back, and counted ahead of the reading for the turns out and those come
+// back since it last moved; a renewed window keeps what a turn spent.
+func TestTurnSpendsAhead(t *testing.T) {
+	var ts turnSpends
+	if got := ts.ahead("a", 60, 0, 3); got != 0 {
+		t.Fatalf("nothing learned yet: ahead %v; want 0", got)
+	}
+	// two turns came back, the reading not moved: still nothing learned
+	if got := ts.ahead("a", 60, 2, 3); got != 0 {
+		t.Fatalf("ahead %v; want 0", got)
+	}
+	// it moved 3 points over those two: 1.5 a turn, none since
+	if got := ts.ahead("a", 63, 2, 4); got != 6 {
+		t.Fatalf("ahead %v; want 4 turns out at 1.5", got)
+	}
+	// one more came back unread, three out
+	if got := ts.ahead("a", 63, 3, 3); got != 6 {
+		t.Fatalf("ahead %v; want 4 turns at 1.5", got)
+	}
+	// renewed: what a turn spends stands, counted from here
+	if got := ts.ahead("a", 2, 3, 1); got != 1.5 {
+		t.Fatalf("ahead %v; want one turn at 1.5", got)
+	}
+	// a jump the vendor's own app made too is not taken as one turn's
+	if got := ts.ahead("a", 40, 4, 1); got != maxTurnSpend {
+		t.Fatalf("ahead %v; want %v", got, maxTurnSpend)
+	}
+	if got := ts.ahead("b", 50, 0, 2); got != 0 {
+		t.Fatalf("another account: ahead %v; want 0", got)
+	}
+}
+
+// A turn near its cap waits for the turns out on its account, not for a
+// slot its own request already holds (handed it from another's queue).
+func TestLaneIdleLeavesItsOwnSlot(t *testing.T) {
+	var l lanes
+	mine, ok := l.tryTake("acct", 0)
+	if !ok {
+		t.Fatal("no slot")
+	}
+	defer mine()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := l.idle(ctx, "acct", 1); err != nil {
+		t.Fatalf("waited on its own slot: %v", err)
+	}
+	other, _ := l.tryTake("acct", 0)
+	done := make(chan error, 1)
+	go func() { done <- l.idle(ctx, "acct", 1) }()
+	// it waits for a slot to come back: the channel it waits on is made
+	waitFor(t, "idle waiting", func() bool {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		return l.freed != nil
+	})
+	select {
+	case err := <-done:
+		t.Fatalf("went with another turn out: %v", err)
+	default:
+	}
+	other()
+	if err := <-done; err != nil {
+		t.Fatalf("still waiting once the other came back: %v", err)
+	}
+	if _, ended, turns := l.out("acct"); ended.IsZero() || turns != 1 {
+		t.Fatalf("ended %v, turns %d; want the other's return noted", ended, turns)
+	}
+}

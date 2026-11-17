@@ -200,12 +200,67 @@ func TestNearCapTakesOneTurnAtATime(t *testing.T) {
 	}
 }
 
+// A reply tells the usage as its turn begins (89%), without the turn
+// itself: once that turn has come back, the turn waiting after it is held
+// by the usage read again (92%), not sent on what the reply said
+// (yalifesign on X: capped at 90%, used to 100%).
+func TestNearCapReadsAgainAfterATurnCameBack(t *testing.T) {
+	codexSignedIn(t)
+	b := newNearCapBackend(t, map[string]float64{"acct-1": 88}, map[string]float64{"acct-1": 89}, map[string]float64{"acct-1": 92})
+	nearCapAccounts(t, 90, 88)
+	srv := New()
+	replies := postAtOnce(t, srv, 2)
+	waitFor(t, "one turn sent, one waiting", func() bool { return len(b.sent()) == 1 && srv.nearCap.waiting() == 1 })
+	close(b.open)
+	codes := map[int]int{}
+	for range 2 {
+		codes[(<-replies).code]++
+	}
+	if codes[200] != 1 || codes[429] != 1 || len(b.sent()) != 1 {
+		t.Fatalf("codes %v, sent %v; want one answered, one held by the usage read after it", codes, b.sent())
+	}
+}
+
+// A turn sent while the account was far from its cap is still out when
+// the account comes near it: the next turn waits for it to come back and
+// is held by the usage read then (92%), not sent beside it on the reading
+// that said 88% (yalifesign on X: five sessions at once, used to 100%).
+func TestNearCapWaitsForTurnsAlreadyOut(t *testing.T) {
+	codexSignedIn(t)
+	b := newNearCapBackend(t, map[string]float64{"acct-1": 80}, nil, map[string]float64{"acct-1": 92})
+	nearCapAccounts(t, 90, 80)
+	srv := New()
+	first := postAtOnce(t, srv, 1)
+	waitFor(t, "the first turn sent", func() bool { return len(b.sent()) == 1 })
+	// read again while it is out: near the cap now
+	b.mu.Lock()
+	b.used["acct-1"] = 88
+	b.mu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	provider.ReadUsageNow(ctx, "codex", "me@example.com")
+	waitFor(t, "read at 88%", func() bool {
+		n, _ := provider.Allowances("codex")["me@example.com"].For("gpt-5.5", time.Now())
+		return n == 88
+	})
+	second := postAtOnce(t, srv, 1)
+	waitFor(t, "the second sent or waiting", func() bool { return len(b.sent()) == 2 || srv.lanes.idling() == 1 })
+	close(b.open)
+	if r := <-first; r.code != 200 {
+		t.Fatalf("first: %d %s", r.code, r.body)
+	}
+	if r := <-second; r.code != 429 || len(b.sent()) != 1 {
+		t.Fatalf("second: %d, sent %v; want it held at the cap once the first came back", r.code, b.sent())
+	}
+}
+
 // The account near its cap the only one: a turn waits for the one before
-// it, and is then held by what that one's reply said (92%), not sent past
-// the cap on the old reading.
+// it, and is then held by what is known once that one has ended (92%, as
+// its reply and the usage read again after it say), not sent past the cap
+// on the old reading.
 func TestNearCapWaitsThenHolds(t *testing.T) {
 	codexSignedIn(t)
-	b := newNearCapBackend(t, map[string]float64{"acct-1": 89}, map[string]float64{"acct-1": 92}, nil)
+	b := newNearCapBackend(t, map[string]float64{"acct-1": 89}, map[string]float64{"acct-1": 92}, map[string]float64{"acct-1": 92})
 	nearCapAccounts(t, 90, 89)
 	srv := New()
 	replies := postAtOnce(t, srv, 2)
