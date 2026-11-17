@@ -3367,7 +3367,11 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
    key squeezed by them on a narrow window slid its copy button under the
    pointer that came to drag the row */
 #gatewayKeys .acc > :is(.key-quotas, .key-conc, .key-tier, .key-redact):not(.set) { flex-shrink: 8; }
-#gatewayKeys .acc:not(:hover) > :is(.key-quotas, .key-conc, .key-tier, .key-redact):not(.set, .open, :focus) { max-width: 0; padding: 0; margin-left: -9px; box-shadow: none; }
+/* On a narrow window they keep that room when not hovered, only faded
+   out: four of them (key-redact made four) took ~90px on hover, the key
+   gave it up and its copy button slid under the pointer that came to
+   drag the row, so the drag never started (#6268) */
+@media (min-width: 521px) { #gatewayKeys .acc:not(:hover) > :is(.key-quotas, .key-conc, .key-tier, .key-redact):not(.set, .open, :focus) { max-width: 0; padding: 0; margin-left: -9px; box-shadow: none; } }
 /* the MCP servers a key held to some may use: cut, and gives way first */
 #gatewayKeys .amodels.key-mcp { display: inline-block; flex: 0 1 auto; min-width: 24px; max-width: 180px; line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* a read-only key's tag, always shown, never a button */
