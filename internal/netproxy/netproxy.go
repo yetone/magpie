@@ -558,6 +558,9 @@ func Redact(raw string) string {
 		return ""
 	}
 	if settings.IsProxyRef(raw) {
+		if a := sshShown(raw); a != "" {
+			return a
+		}
 		// a saved proxy shown as its address, with no login
 		u.User = nil
 		return u.String()
@@ -571,6 +574,18 @@ func Redact(raw string) string {
 		address = strings.TrimPrefix(address, "http://")
 	}
 	return address
+}
+
+// sshShown is how a saved SSH proxy (a reference) is shown: its server's
+// address, not the tunnel's on loopback; "" for any other proxy.
+func sshShown(ref string) string {
+	id := settings.ProxyID(ref)
+	for _, p := range settings.Shared().Proxies {
+		if p.ID == id && p.IsSSH() {
+			return strings.TrimSpace(p.URL)
+		}
+	}
+	return ""
 }
 
 // fromEnv is the proxy the environment names for u: HTTPS_PROXY or

@@ -1120,8 +1120,8 @@ func take(to *backup.Bundle, from backup.Bundle, part string) {
 			px := slices.Clone(*from.Proxies)
 			if !keys && to.Proxies != nil && (to.Keys || (to.ProvidersKeys != nil && *to.ProvidersKeys)) {
 				for i := range px {
-					if j := slices.IndexFunc(*to.Proxies, func(o settings.NamedProxy) bool { return o.ID == px[i].ID }); j >= 0 && px[i].Pass == "" {
-						px[i].Pass = (*to.Proxies)[j].Pass
+					if j := slices.IndexFunc(*to.Proxies, func(o settings.NamedProxy) bool { return o.ID == px[i].ID }); j >= 0 {
+						px[i].KeepSecretsOf((*to.Proxies)[j]) // an SSH proxy's key with its password
 					}
 				}
 			}

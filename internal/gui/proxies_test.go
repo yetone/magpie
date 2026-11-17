@@ -2,12 +2,16 @@ package gui
 
 import (
 	"encoding/json"
+	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/yetone/magpie/internal/netproxy"
+	"github.com/yetone/magpie/internal/netproxy/sshtest"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 )
@@ -133,6 +137,95 @@ func TestSavedProxyTest(t *testing.T) {
 	for _, p := range state().SavedProxies {
 		if p.Check == nil || (p.Name == "Up") != p.Check.OK {
 			t.Fatalf("the last check of %s isn't kept: %+v", p.Name, p.Check)
+		}
+	}
+}
+
+// An SSH server is saved from its host, user and password: the save logs
+// in first, so a refused login is said there and nothing is kept, and a
+// kept one shows the host key it trusts. Its test goes through the
+// server; the page is never sent the password.
+func TestSavedSSHProxyAPI(t *testing.T) {
+	call, state := proxiesRig(t)
+	client, _, _ := proxyCheckRig(t)
+	old := proxyTestClient
+	proxyTestClient = client
+	t.Cleanup(func() { proxyTestClient = old })
+	srv := sshtest.Start(t, sshtest.Options{User: "root", Pass: "s3cret", Handler: http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(rw, "fl=1\nip=192.0.2.44\nloc=JP\n")
+	})})
+
+	code, body := call("/api/proxies/save", `{"name":"VPS","url":"`+srv.URL+`","user":"root","pass":"wrong","key":""}`)
+	var refused map[string]string
+	json.Unmarshal([]byte(body), &refused)
+	if code != 400 || refused["code"] != "proxy_why" || !strings.Contains(refused["why"], "turned the login away") || refused["addr"] != srv.Addr {
+		t.Fatalf("a refused login: %d %s", code, body)
+	}
+	if len(state().SavedProxies) != 0 {
+		t.Fatal("a proxy whose login was refused was kept")
+	}
+
+	code, body = call("/api/proxies/save", `{"name":"VPS","url":"`+srv.URL+`","user":"root","pass":"s3cret","key":""}`)
+	if code != 200 || strings.Contains(body, "s3cret") {
+		t.Fatalf("save: %d %s", code, body)
+	}
+	ps := state().SavedProxies
+	if len(ps) != 1 || !strings.HasPrefix(ps[0].HostKey, "SHA256:") || !ps[0].HasPass {
+		t.Fatalf("state: %+v", ps)
+	}
+	t.Cleanup(func() { netproxy.CloseSSH(ps[0].ID) })
+	_, body = call("/api/proxies/test", `{"id":"`+ps[0].ID+`"}`)
+	var out proxyTestJSON
+	if err := json.Unmarshal([]byte(body), &out); err != nil || !out.OK || out.IP != "192.0.2.44" {
+		t.Fatalf("test through the SSH server: %s", body)
+	}
+	if got := srv.Targets(); len(got) == 0 || got[len(got)-1] != "trace.example.invalid:80" {
+		t.Fatalf("the server was asked for %v", got)
+	}
+
+	// typed where an HTTP proxy goes, the same server says what it is
+	_, body = call("/api/proxies/test", `{"url":"http://`+srv.Addr+`"}`)
+	out = proxyTestJSON{}
+	json.Unmarshal([]byte(body), &out)
+	if out.OK || !strings.Contains(out.Why, "is an SSH server") || out.Addr != srv.Addr {
+		t.Fatalf("an SSH server as an HTTP proxy: %s", body)
+	}
+}
+
+// A server that lets magpie log in but won't forward says so about the
+// server, not about the tunnel's local port: OpenSSH with
+// AllowTcpForwarding no refuses the channel, and macOS 27's sshd hangs up
+// the whole connection.
+func TestSavedSSHProxyThatWontForward(t *testing.T) {
+	call, state := proxiesRig(t)
+	client, _, _ := proxyCheckRig(t)
+	old := proxyTestClient
+	proxyTestClient = client
+	t.Cleanup(func() { proxyTestClient = old })
+	for _, how := range []string{"prohibit", "hangup"} {
+		srv := sshtest.Start(t, sshtest.Options{User: "root", Pass: "pw", Forward: how})
+		if code, body := call("/api/proxies/save", `{"name":"`+how+`","url":"`+srv.URL+`","user":"root","pass":"pw"}`); code != 200 {
+			t.Fatalf("%s: save %d %s", how, code, body)
+		}
+		var id string
+		for _, p := range state().SavedProxies {
+			if p.Name == how {
+				id = p.ID
+			}
+		}
+		t.Cleanup(func() { netproxy.CloseSSH(id) })
+		_, body := call("/api/proxies/test", `{"id":"`+id+`"}`)
+		var out proxyTestJSON
+		json.Unmarshal([]byte(body), &out)
+		if out.OK || !strings.Contains(out.Why, "won't forward") || out.Addr != srv.Addr {
+			t.Errorf("%s: %s", how, body)
+		}
+		// the same before it is saved
+		_, body = call("/api/proxies/test", `{"url":"`+srv.URL+`","user":"root","pass":"pw"}`)
+		out = proxyTestJSON{}
+		json.Unmarshal([]byte(body), &out)
+		if out.OK || !strings.Contains(out.Why, "won't forward") || out.Addr != srv.Addr {
+			t.Errorf("%s, unsaved: %s", how, body)
 		}
 	}
 }

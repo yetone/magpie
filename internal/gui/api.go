@@ -3783,6 +3783,15 @@ func fail(rw http.ResponseWriter, err error) {
 			out["code"], out["blocked"] = "config_blocked", b
 		}
 	}
+	// a proxy's failure magpie can explain (netproxy.Why), said in the
+	// reader's language, Go's words beside it
+	var why *netproxy.Why
+	if errors.As(err, &why) {
+		out["code"], out["why"], out["addr"], out["was"], out["now"] = "proxy_why", why.Why, why.Addr, why.Was, why.Now
+		if why.Err != nil {
+			out["detail"] = redactProxyErr(why.Err.Error())
+		}
+	}
 	var noModels *agent.NoModelsError
 	if errors.As(err, &noModels) {
 		out["code"] = "no_models"

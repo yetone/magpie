@@ -2223,6 +2223,10 @@ func CheckProxy(p string) error {
 	if !strings.Contains(raw, "://") {
 		raw = "http://" + raw
 	}
+	if IsSSHAddress(raw) {
+		// a login goes with it, which an address alone can't hold
+		return fmt.Errorf("an SSH server is added as a saved proxy: Settings › Network › Add proxy › SSH")
+	}
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" || !slices.Contains([]string{"http", "https", "socks5", "socks5h"}, u.Scheme) {
 		return fmt.Errorf("proxy must look like http://127.0.0.1:7890 or socks5://127.0.0.1:1080")

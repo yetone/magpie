@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -16,14 +17,47 @@ import (
 // login in it; User and Pass are kept apart, in settings.json (0600) as
 // GitHubToken is, and the page is never sent the password. This computer's
 // own (KeepOwn), left out of a backup, as Proxy is.
+//
+// An ssh:// one is a server the user logs in to (a VPS that offers only
+// SSH, @laiuuui on X): magpie logs in itself and carries requests through
+// it as `ssh -D` would (netproxy's SSH tunnel). User is its login, Pass
+// its password or, with Key, the key's passphrase; Key is a private key,
+// kept as Pass is. HostKey is the server's key in authorized_keys form,
+// trusted on first use and checked on every login after.
 type NamedProxy struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
-	// URL is http://, https:// or socks5:// (host:port means http), with
-	// no user and password in it.
-	URL  string `json:"url"`
-	User string `json:"user,omitempty"`
-	Pass string `json:"pass,omitempty"`
+	// URL is http://, https://, socks5:// or ssh:// (host:port means
+	// http), with no user and password in it.
+	URL     string `json:"url"`
+	User    string `json:"user,omitempty"`
+	Pass    string `json:"pass,omitempty"`
+	Key     string `json:"key,omitempty"`
+	HostKey string `json:"hostKey,omitempty"`
+}
+
+// IsSSH is whether the proxy is an SSH server magpie tunnels through.
+func (p NamedProxy) IsSSH() bool { return IsSSHAddress(p.URL) }
+
+// IsSSHAddress is whether a proxy address is an ssh:// one.
+func IsSSHAddress(raw string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(raw)), "ssh://")
+}
+
+// SSHAddress is the address an SSH proxy is reached by: a SOCKS5 proxy
+// on loopback in front of the SSH connection. netproxy sets it; nil means
+// nothing in this program can carry an SSH proxy.
+var SSHAddress func(NamedProxy) (string, error)
+
+// KeepSecretsOf has p keep old's password and key where it was sent none:
+// what a sync or an edit that left them blank does.
+func (p *NamedProxy) KeepSecretsOf(old NamedProxy) {
+	if p.Pass == "" {
+		p.Pass = old.Pass
+	}
+	if p.Key == "" {
+		p.Key = old.Key
+	}
 }
 
 // ProxyRefPrefix starts a proxy choice that names a NamedProxy by its id.
@@ -50,6 +84,12 @@ func ProxyID(choice string) string {
 // Address is the proxy as a request takes it, with its login in it. Never
 // shown or logged: netproxy.Redact is what a line of text may carry.
 func (p NamedProxy) Address() (string, error) {
+	if p.IsSSH() {
+		if SSHAddress == nil {
+			return "", fmt.Errorf("proxy %q is an SSH server, which this program can't carry", p.Name)
+		}
+		return SSHAddress(p)
+	}
 	u, err := url.Parse(withScheme(strings.TrimSpace(p.URL)))
 	if err != nil || u.Host == "" {
 		return "", fmt.Errorf("proxy %q has no usable address", p.Name)
@@ -128,12 +168,36 @@ func checkProxies(ps []NamedProxy) error {
 		if p.URL == "direct" || strings.HasPrefix(p.URL, ProxyRefPrefix) {
 			return fmt.Errorf("proxy %q: type its address, like http://127.0.0.1:7890", p.Name)
 		}
+		if p.IsSSH() {
+			if err := CheckSSHProxy(*p); err != nil {
+				return fmt.Errorf("proxy %q: %w", p.Name, err)
+			}
+			continue
+		}
 		if err := checkAddress(p.URL); err != nil {
 			return fmt.Errorf("proxy %q: %w", p.Name, err)
 		}
 		if u, err := url.Parse(withScheme(p.URL)); err != nil || u.User != nil {
 			return fmt.Errorf("proxy %q: the username and password go in their own fields, not in the address", p.Name)
 		}
+	}
+	return nil
+}
+
+// CheckSSHProxy refuses an SSH proxy magpie couldn't log in to: no host, a
+// port that isn't one, or no user.
+func CheckSSHProxy(p NamedProxy) error {
+	u, err := url.Parse(strings.TrimSpace(p.URL))
+	if err != nil || u.Hostname() == "" || u.User != nil || (u.Path != "" && u.Path != "/") {
+		return fmt.Errorf("an SSH server looks like 203.0.113.5:22")
+	}
+	if port := u.Port(); port != "" {
+		if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
+			return fmt.Errorf("an SSH server looks like 203.0.113.5:22")
+		}
+	}
+	if strings.TrimSpace(p.User) == "" {
+		return fmt.Errorf("an SSH server needs the user to log in as")
 	}
 	return nil
 }
@@ -192,12 +256,12 @@ func rememberProxyNames(m map[string]string, ps []NamedProxy) map[string]string 
 	return m
 }
 
-// WithoutProxyPasswords is ps with each password left out: what goes
-// where credentials don't.
+// WithoutProxyPasswords is ps with each password and SSH key left out:
+// what goes where credentials don't.
 func WithoutProxyPasswords(ps []NamedProxy) []NamedProxy {
 	out := slices.Clone(ps)
 	for i := range out {
-		out[i].Pass = ""
+		out[i].Pass, out[i].Key = "", ""
 	}
 	return out
 }
@@ -217,7 +281,7 @@ func MergeProxies(cur, in []NamedProxy, keys bool) []NamedProxy {
 		if i := slices.IndexFunc(out, func(p NamedProxy) bool { return p.ID == n.ID }); i >= 0 {
 			old := out[i]
 			if !keys {
-				n.Pass = old.Pass
+				n.Pass, n.Key = old.Pass, old.Key
 			}
 			if !strings.EqualFold(old.Name, n.Name) && taken[strings.ToLower(n.Name)] {
 				n.Name = old.Name
@@ -226,7 +290,7 @@ func MergeProxies(cur, in []NamedProxy, keys bool) []NamedProxy {
 			continue
 		}
 		if !keys {
-			n.Pass = ""
+			n.Pass, n.Key = "", ""
 		}
 		base, k := n.Name, 2
 		for taken[strings.ToLower(n.Name)] {

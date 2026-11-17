@@ -3770,6 +3770,17 @@ body:not(.side-nav) #addSheet > .row-head.stuck::before { opacity: 1; box-shadow
 .proxy-form .proxy-controls { justify-content: flex-end; flex: 1 1 100%; }
 .proxy-form .proxy-credential { flex: 1 1 10rem; min-width: 0; }
 .proxy-form .sub.err { flex: 1 1 100%; }
+/* an SSH server's form: Proxy | SSH over its fields, and its key and host
+   key folded under Advanced */
+.proxy-form { gap: 8px; }
+.proxy-form .proxy-kind { flex: none; }
+.proxy-form .proxy-advanced { flex: 1 1 100%; min-width: 0; }
+.proxy-advanced summary { margin-left: 0; }
+.proxy-advanced .inner { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; }
+.proxy-advanced textarea.proxy-key { width: 100%; max-width: 100%; box-sizing: border-box; min-height: 64px; padding: 6px 9px; border-radius: 7px; border: 1px solid var(--line); background: var(--card); color: inherit; font: 11.5px/1.45 var(--mono, ui-monospace, monospace); resize: vertical; outline: none; }
+.proxy-advanced textarea.proxy-key:focus { border-color: var(--accent); }
+.proxy-hostkey { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.proxy-hostkey .sub { min-width: 0; overflow-wrap: anywhere; font: 11.5px/1.45 var(--mono, ui-monospace, monospace); }
 .editor :is(input.concurrency, input.queue-limit, input.queue-wait)[type] { width: 12em; max-width: 100%; }
 .editor input[type="number"] { -moz-appearance: textfield; }
 .editor input[type="number"]::-webkit-inner-spin-button, .editor input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
@@ -3942,16 +3953,16 @@ body:not(.side-nav) #addSheet > .row-head.stuck::before { opacity: 1; box-shadow
    reads as a control and not as a disabled hint (sylvenPR on X, a 5px ▸ in
    the muted grey); a pointer and a brighter label under it. The chevron
    starts where the fields do (--ed-at), no padding before it. */
-.editor .more summary { font-size: 12px; line-height: 18px; color: var(--fg-2); list-style: none; display: inline-flex; align-items: center; gap: 5px; padding: 3px 0; margin-left: var(--ed-at, 86px); border-radius: 4px; cursor: pointer; transition: color .12s; }
-.editor .more summary::-webkit-details-marker { display: none; }
-.editor .more summary::before { content: ""; flex: none; width: 10px; height: 10px; background: var(--muted); transition: transform .24s var(--ease-out), background-color .12s;
+.editor .more summary, .proxy-advanced summary { font-size: 12px; line-height: 18px; color: var(--fg-2); list-style: none; display: inline-flex; align-items: center; gap: 5px; padding: 3px 0; margin-left: var(--ed-at, 86px); border-radius: 4px; cursor: pointer; transition: color .12s; }
+.editor .more summary::-webkit-details-marker, .proxy-advanced summary::-webkit-details-marker { display: none; }
+.editor .more summary::before, .proxy-advanced summary::before { content: ""; flex: none; width: 10px; height: 10px; background: var(--muted); transition: transform .24s var(--ease-out), background-color .12s;
   -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M3.6 1.6 7 5 3.6 8.4' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
           mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M3.6 1.6 7 5 3.6 8.4' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat; }
-.editor .more[open]:not(.closing) summary::before { transform: rotate(90deg); }
-@media (prefers-reduced-motion: reduce) { .editor .more summary, .editor .more summary::before { transition: none; } }
-.editor .more summary:hover { color: var(--fg); }
-.editor .more summary:hover::before { background: var(--fg-2); }
-.editor .more summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.editor .more[open]:not(.closing) summary::before, .proxy-advanced[open] summary::before { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) { .editor .more summary, .editor .more summary::before, .proxy-advanced summary, .proxy-advanced summary::before { transition: none; } }
+.editor .more summary:hover, .proxy-advanced summary:hover { color: var(--fg); }
+.editor .more summary:hover::before, .proxy-advanced summary:hover::before { background: var(--fg-2); }
+.editor .more summary:focus-visible, .proxy-advanced summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* its labels are longer (Anthropic 地址, Responses-URL): their column takes
    the longest, on one line, rather than wrap a last 址 under it (#875) */
 .editor .more .inner { display: grid; grid-template-columns: minmax(var(--ed-lab, 72px), max-content) minmax(0, 1fr); gap: 10px 14px; align-items: first baseline; padding-top: 8px; }
