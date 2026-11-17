@@ -21,7 +21,8 @@ import (
 // bare id that is a catalog id already, or that the gateway would take to
 // a model the list doesn't show (a gateway key held to other models, an
 // id like anthropic/claude-x that names a provider of the user's), isn't
-// listed by it.
+// listed by it. A routing group the user made is listed by its own id as
+// well (fast for group/fast), where nothing else goes by that id.
 
 // BareModelIDs says whether /v1/models lists models by their bare ids too.
 func BareModelIDs() bool { return settings.Shared().BareModelIDs }
@@ -60,7 +61,8 @@ type Bare struct {
 }
 
 // BareEntries are the rows a list of shown adds for the bare ids, in the
-// order the models first appear in shown, each once.
+// order the models first appear in shown, each once, then the routing
+// groups the user made, by their own ids (groupBare).
 func BareEntries(shown []Entry) []Bare {
 	defer Hold()()
 	ids := make(map[string]bool, len(shown))
@@ -71,6 +73,7 @@ func BareEntries(shown []Entry) []Bare {
 	all := groupsIn(entries)
 	var out []Bare
 	seen := map[string]bool{}
+	reached := map[int]bool{}
 	for _, e := range shown {
 		m := e.Model
 		if e.Group != "" || m == "" || seen[m] || ids[m] {
@@ -79,9 +82,45 @@ func BareEntries(shown []Entry) []Bare {
 		seen[m] = true
 		if i := bareTarget(shown, all, entries, m); i >= 0 {
 			out = append(out, Bare{ID: m, Of: i})
+			reached[i] = true
+		}
+	}
+	// then each routing group the user made that no model's bare id
+	// reaches, by its own id
+	for j, e := range shown {
+		if e.Group == "" || reached[j] {
+			continue
+		}
+		if b, ok := groupBare(shown, all, entries, ids, seen, j); ok {
+			seen[b.ID] = true
+			out = append(out, b)
 		}
 	}
 	return out
+}
+
+// groupBare is the Bare for the routing group the user made at shown[j]
+// (小八 on Discord: group/fast is long to type into a client), by the id
+// a request for it reaches it by: its own id, fast. Only where that is
+// unambiguous: not for a group magpie found (listed under its model's
+// bare id already, or by its auto/<model>), nor by an id listed already
+// or given to another row, one a provider serves a model by, or one
+// GroupFor takes elsewhere.
+func groupBare(shown []Entry, all []Group, entries []Entry, ids, seen map[string]bool, j int) (Bare, bool) {
+	e := shown[j]
+	id := e.Group
+	if !e.Named || id == "" || e.ID != GroupPrefix+id || strings.Contains(id, "/") || ids[id] || seen[id] {
+		return Bare{}, false
+	}
+	for _, x := range entries {
+		if x.Model == id || x.ID == id {
+			return Bare{}, false
+		}
+	}
+	if i := bareTarget(shown, all, entries, id); i < 0 || shown[i].Group != id {
+		return Bare{}, false
+	}
+	return Bare{ID: id, Of: j}, true
 }
 
 // bareTarget is the index in shown of the entry a request for the bare id

@@ -2998,7 +2998,15 @@ the row of the entry that id reaches, with its label, under the bare id.
   agent with a subscription of its own is refused an id several other
   providers serve (`provider.OffSpread`).
 - An id already in the catalog as is (a group's or a provider's own id) is
-  not listed twice. Group rows themselves add nothing.
+  not listed twice.
+- A routing group the user made is listed by its own id too, `fast` beside
+  `group/fast` (`groupBare`; 小八 on Discord), after the models' bare ids,
+  and under Only in `group/fast`'s place. Only where that id is the
+  group's alone: not when a provider serves a model by it (that model's
+  bare id is listed, reaching the group as `GroupFor` routes it), when it
+  is listed already, when `GroupFor` of it reaches another group, or for a
+  group magpie found (its `auto/<model>` row is listed under the model's
+  bare id already). A group a model's bare id already reaches adds nothing.
 - The target must be in the list shown: a gateway key held to some models
   sees only the bare ids that reach one of its models, so a key held to
   `b/*` doesn't see `glm-5.3` that would go to `a`.
@@ -3006,7 +3014,8 @@ the row of the entry that id reaches, with its label, under the bare id.
   list each model twice, nor for Claude Desktop's list, which has its own
   shape.
 - No agent file changes: magpie still writes `provider/model` ids
-  (`magpieModels`), so turning it on or off rewrites nothing.
+  (`magpieModels`), and `group/<id>` for a group, so turning it on or off
+  rewrites nothing; the gateway takes either id.
 - Only (`{"on":true,"only":true}`, `settings.BareModelIDsOnly`,
   `provider.SetBareIDs`, `provider.BareOnly`): the bare ids in place of the
   rows they stand for, not beside them (qQianye on X: a Docker magpie's
@@ -3029,6 +3038,9 @@ the row of the entry that id reaches, with its label, under the bare id.
   place, found groups on and off, `provider/model` still served, Claude
   Code's discovery, a held key, another magpie) in
   [`bare_ids_test.go`](../../internal/gateway/bare_ids_test.go),
+  `TestBareIDsListUserGroups` (a user's group by its own id, on and Only,
+  a group named like a model, a found group, a held key) in
+  [`bare_group_ids_test.go`](../../internal/gateway/bare_group_ids_test.go),
   `TestBareModelIDsSetting` and `TestBareModelIDsOnlySetting` in
   `internal/gui`, and `internal/gui/tests/bare-ids.test.cjs`.
 - A URL magpie downloads but didn't choose itself is downloaded from public addresses only, wherever the request came from ([`image_fetch_guard.go`](../../internal/gateway/image_fetch_guard.go)). That is an image a caller names (an `/v1/images/edits` or `/v1/images/generations` reference image, for an images API that takes files, Gemini's own API or Code Assist: `fetchPicture` in [`draw.go`](../../internal/gateway/draw.go), `publicClient`), a page `web_fetch` reads (`webFetchClient`), and an image or video a vendor answers by URL, which what the model was asked to draw or do can steer (the inline download for a `b64_json` caller in `draw.go` and `/v1/videos/{id}/content` in [`video.go`](../../internal/gateway/video.go), `vendorClient`; generate_image's own download in [`internal/imagemcp`](../../internal/imagemcp/imagemcp.go), `PublicClient`). Every address the host resolves to must be public (`publicAddr`, which is [`internal/netguard`](../../internal/netguard/netguard.go)'s `Public`, the rule a provider's icon uses too: not loopback, RFC 1918, fc00::/7, link-local with 169.254.169.254, CGNAT 100.64/10, unspecified, multicast, documentation, reserved, benchmarking, Teredo, nor an IPv4-mapped, NAT64 or 6to4 form of one; an AAAA record Loon synthesizes for an A answer in the same reply, `fd27:712::/96` with that IPv4 address inside, is left out and the A answer judged in its place, `dropLoon`), and the request goes to the address checked, so a name that resolves elsewhere the second time changes nothing; a direct connection is checked again on the address dialled (`guardDialer`). Through a proxy the proxy is sent that address, never the name (an `https://` CONNECT or SOCKS keeps the name for TLS and Host; a plain `http://` URL through an HTTP proxy is asked for by the address in Host too). A fake-IP resolver's answer is the one shape let past that (#2593; ggbdpq, with h4rk8s's and TomXPRIME's reports): Clash's TUN with fake-ip, Clash Verge, Surge's enhanced mode and Loon answer every name in 198.18.0.0/15 (`netguard.FakeIP`), so with one on every download was refused as a private address. A name (never an address literal) whose every answer is in that range is fetched: with no proxy (pure TUN) its fake address is pinned and dialled, the dial guard letting that one address in, and the TUN carries it; through a proxy on this computer (a loopback address or `localhost`, `onThisComputer`) the proxy is given the name, never the fake address, which a real proxy can't route (h4rk8s: a CONNECT by the name went through where one by its 198.18 address failed), and a plain `http://` request's Host is the checked name, never the caller's own; through a proxy elsewhere it is refused. The fake-IP resolver's own AAAA beside its fake A answer (an IPv6 address in fc00::/7 or 2001:2::/48 while an A answer is in 198.18.0.0/15, `netguard.FakePaired`: mihomo's `fake-ip-range6`, which Clash Verge Rev turns on by default as `fdfe:dcba:9876::1/64` or fills in as `2001:2::/64`; jiezhengj, whose every `web_fetch` was refused) is left out by `dropLoon` and never dialled, the fake A answer judged and pinned in its place. An answer with any other address beside the fake ones (private or public) is judged as any, so a fake one beside 192.168.x is refused. The trust this asks for is the fake-IP resolver's: which host the name stands for, and so where the TUN or the proxy connects, is decided where magpie can't see, and a name that really points at the user's network is reached if that resolver's rules send it there. A provider's icon was already fetched this way (`publicIP` in [`internal/provider/icon.go`](../../internal/provider/icon.go), #252), and shares the rule. `TestFakeIPNameGoesToALocalProxyByName`, `TestFakeIPNameDialledThroughTheTUN`, `TestFakeIPWithItsIPv6Answer`, `TestFakeIPRefusesTheRest` in [`fakeip_test.go`](../../internal/gateway/fakeip_test.go). Each redirect, up to 5, is checked the same, and a caller's image must sniff as an image. A request from this computer gets nothing more: a reverse proxy or relay in front of magpie on the same host makes every request it carries arrive from loopback, so where a request came from is never a reason to reach a private address. Two things are: settings.json's `fetchPrivate` (`settings.FetchPrivate`, none by default, no Settings page, this computer's own and never brought by a sync or restore), a list of names, `name:port`s, IPs and CIDR ranges the user lets magpie download from (`allowFor`; a settings.json that can't be read lets nothing extra in), and for a vendor's URL the `host:port` of that provider's own endpoints, which the user named themselves (a provider on the LAN that serves its images from itself). A vendor's image that can't be downloaded is answered by its URL, never dropped; its video is a 502 naming why. A URL left for the vendor to fetch (a chat model's message) is the vendor's to fetch.
@@ -3424,7 +3436,7 @@ go test -tags nogui ./internal/gateway -run 'TestBedrock'
 go test -tags nogui ./internal/gateway -run 'TestPublicAddr|TestEditImageURL|TestPrivateDialer|TestFetchPrivateEntries|TestVendorImageURLAtPrivateAddress|TestVideoContentAtPrivateAddress'
 go test -tags nogui ./internal/gateway ./internal/provider ./internal/cli ./internal/gui -run 'TestDisabled|TestModelDisableCmd'
 node --test internal/gui/tests/disabled-models.test.cjs
-go test -tags nogui ./internal/gateway ./internal/gui -run 'TestBareModelIDs'
+go test -tags nogui ./internal/gateway ./internal/gui -run 'TestBare(ModelIDs|IDsList)'
 node --test internal/gui/tests/bare-ids.test.cjs
 go test -tags nogui ./internal/gateway -run 'TestTextWritten|TestGLMTextCall|TestPluginTextWrittenCall|TestQuietWholeReplyStreamed|TestDSMLAlma'
 go test -tags nogui ./internal/gateway -run 'TestAutoMode|TestClaudeBridgeSafeguard|TestSafeguardsRefused'
