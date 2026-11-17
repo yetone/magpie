@@ -55,6 +55,12 @@ type Bundle struct {
 	// nothing then. Put only adds, so one computer's never takes away
 	// another's.
 	ClaudePlugins *ClaudePlugins `json:"claudePlugins,omitempty"`
+	// Plugins are the library's own Claude plugins (plugin.go), each as a
+	// whole: its parts aren't among the skills, servers, hooks and
+	// subagents above, and each computer makes them again from it
+	// (plugin_carry.go). nil in a bundle from a magpie before they were
+	// carried: Put keeps this computer's then.
+	Plugins *[]*CarriedPlugin `json:"plugins,omitempty"`
 }
 
 // CarriedSkill is a skill with its folder's files.
@@ -126,19 +132,32 @@ func Collect() (*Bundle, error) {
 	// a server kept to this computer stays out; another computer's by its
 	// name, which a sync brought, goes on as it came (mcp_local.go)
 	for _, s := range sorted(l.carriedServers(), func(s *Server) string { return s.Name }) {
+		if l.ownedPart(s.Bundle) { // with its plugin (plugin_carry.go)
+			continue
+		}
 		// magpie's own by name, each computer's own binary; a server
 		// started its own way here goes with the synced start (mcp_here.go)
 		c := *carried(carriedStart(s))
 		c.Agents = orNone(slices.Sorted(slices.Values(s.Agents)))
 		b.MCP = append(b.MCP, &c)
 	}
-	skills := sorted(l.Skills, func(s *Skill) string { return s.Name })
+	skills := sorted(slices.DeleteFunc(slices.Clone(l.Skills), func(s *Skill) bool { return l.ownedPart(s.Bundle) }),
+		func(s *Skill) string { return s.Name })
 	dirs := []string{}
 	for _, s := range skills {
 		dirs = append(dirs, realDir(skillDir(s.Name)))
 	}
+	// a plugin's files from a folder are read with the skills', in one
+	// budget
+	plugins, pdirs, at := l.carriedPlugins()
+	read := readSkills(append(dirs, pdirs...))
+	for i, f := range read[len(skills):] {
+		c := plugins[at[i]]
+		c.Files, c.Exec, c.Left = f.Files, f.Exec, f.Left
+	}
+	b.Plugins = &plugins
 	tr := &tracer{}
-	for i, c := range readSkills(dirs) {
+	for i, c := range read[:len(skills)] {
 		s := skills[i]
 		if s.Source == nil || s.Source.Kind == "folder" {
 			c.From = tr.repoOf(s)
@@ -148,6 +167,9 @@ func Collect() (*Bundle, error) {
 	}
 	subs := []*Subagent{}
 	for _, s := range sorted(l.Subagents, func(s *Subagent) string { return s.Name }) {
+		if l.ownedPart(s.Bundle) {
+			continue
+		}
 		c := *s
 		c.Skills, c.MCP = slices.Sorted(slices.Values(s.Skills)), slices.Sorted(slices.Values(s.MCP))
 		c.Agents = orNone(slices.Sorted(slices.Values(s.Agents)))
@@ -165,6 +187,9 @@ func Collect() (*Bundle, error) {
 	b.Commands = &cmds
 	hooks := []*Hook{}
 	for _, h := range sorted(l.Hooks, func(h *Hook) string { return h.Name }) {
+		if l.ownedPart(h.Bundle) {
+			continue
+		}
 		c := *h
 		c.Agents = orNone(slices.Sorted(slices.Values(h.Agents)))
 		hooks = append(hooks, &c)
@@ -360,6 +385,27 @@ func (b *Bundle) check() error {
 			seen[e.Name] = true
 		}
 	}
+	if b.Plugins != nil {
+		seen := map[string]bool{}
+		for _, p := range *b.Plugins {
+			if p == nil {
+				return fmt.Errorf("an empty plugin")
+			}
+			// its folder's name in the library
+			if p.Name == "" || pluginSlug(p.Name) != p.Name {
+				return fmt.Errorf("the plugin name %q", p.Name)
+			}
+			if seen[p.Name] {
+				return fmt.Errorf("the plugin %s twice", p.Name)
+			}
+			seen[p.Name] = true
+			for _, rel := range slices.Concat(slices.Collect(maps.Keys(p.Files)), p.Left) {
+				if !localFile(rel) {
+					return fmt.Errorf("plugin %s: %q is not a file in its folder", p.Name, rel)
+				}
+			}
+		}
+	}
 	if b.Hooks != nil {
 		seen := map[string]bool{}
 		for _, h := range *b.Hooks {
@@ -515,7 +561,11 @@ func Put(b *Bundle) (*Result, error) {
 		return nil, err
 	}
 	biliWrote := false
+	var fetch []*CarriedPlugin
+	var gone []string
+	var plProblems []Problem
 	res, err := change(func(l *Library) error {
+		fetch, gone, plProblems = nil, nil, nil
 		if err := os.MkdirAll(skillsDir(), 0o755); err != nil {
 			return err
 		}
@@ -524,6 +574,16 @@ func Put(b *Bundle) (*Result, error) {
 			return err
 		}
 		defer os.RemoveAll(stage)
+		// this computer's plugins' parts stand aside while the items are
+		// replaced, the bundle carrying none of them, and the plugins
+		// are put after (plugin_carry.go). A bundle from a magpie before
+		// plugins were carried has their parts as its own items, naming
+		// the other computer's folder: this computer's stay instead
+		held := l.holdPluginParts()
+		b := b
+		if b.Plugins == nil {
+			b = held.without(b)
+		}
 
 		keep, link := map[string]bool{}, map[string]string{}
 		for _, s := range b.Skills {
@@ -709,6 +769,10 @@ func Put(b *Bundle) (*Result, error) {
 			}
 			l.Env = envs
 		}
+		l.putBack(held)
+		if b.Plugins != nil {
+			fetch, gone, plProblems = l.putPlugins(*b.Plugins, stage)
+		}
 		if b.Bili != nil {
 			wrote, err := putBili(*b.Bili, kept)
 			if err != nil {
@@ -727,6 +791,11 @@ func Put(b *Bundle) (*Result, error) {
 		// the running bilis read their settings again (best effort: one
 		// started later reads the file anyway)
 		biliReload()
+	}
+	if err == nil {
+		removePluginDirs(gone)
+		res.Problems = append(res.Problems, plProblems...)
+		fetchPlugins(fetch, res)
 	}
 	return res, err
 }

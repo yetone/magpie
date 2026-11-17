@@ -5499,6 +5499,8 @@ magpie.plugin("library", (ctx) => {
     const line = [[t("Skills"), p.skills], [t("MCP servers"), p.mcp], [t("Hooks"), p.hooks], [t("Subagents"), p.subagents]]
       .filter(([, v]) => v?.length).map(([k, v]) => k + " " + v.length).join(" · ");
     if (line) who.append(el("div", "sub lib-plparts", line));
+    // synced in from another computer, its source not reached here yet
+    if (p.pending) who.append(el("div", "sub lib-plpending", t("Not fetched on this computer yet: Update tries again")));
     row.append(glyph(GLYPH.folder), who,
       agentChips(all, p.agents, chipsChange("plugins/agents", p.name, "plugins", (x) => pluginRow(x, all)), { all: true }),
       toggle(!p.off, t("Turn {name} on or off", { name: p.name }), (v) => change("plugins/on", { name: p.name, on: v },

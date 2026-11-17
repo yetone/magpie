@@ -627,6 +627,18 @@ such plugins carries none and hashes as before (`TestClaudePluginsCollected`,
 `TestClaudePluginsInLibraryPart`). The preview names each marketplace and
 plugin (`TestClaudePluginsInPreview`).
 
+The Library's own Claude plugins (`library.Bundle.Plugins`,
+[`plugin_carry.go`](../../internal/library/plugin_carry.go), #6685) go in
+the library part as one record each, never as their parts: a plugin from a
+GitHub or git link as its source, which the other computer installs from
+itself, and one from a folder (or a link holding a sign-in) with its files.
+The other computer makes the parts again, each naming its own plugin
+folder, removes a plugin the bundle lacks, and keeps one it can't fetch yet
+as pending, with a problem. An empty list hashes as a bundle from before
+plugins were carried, and a bundle without the list leaves this computer's
+plugins alone. The preview names each plugin, its files as one digest
+(`TestSyncLibraryPlugins`, `TestNoPluginsHashAsBefore`).
+
 ## Verification
 
 ```sh

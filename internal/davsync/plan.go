@@ -292,10 +292,39 @@ func itemsOf(b backup.Bundle, p string) map[string]item {
 				}
 				continue
 			}
+			// the library's own plugins, each by its name: what it is and
+			// where from, its files as one digest, not as their bytes
+			if k == "plugins" {
+				var ps []*library.CarriedPlugin
+				json.Unmarshal(v, &ps)
+				for _, p := range ps {
+					if p == nil {
+						continue
+					}
+					c := *p
+					c.Files, c.Exec, c.Left = nil, nil, nil
+					r, _ := json.Marshal(struct {
+						library.CarriedPlugin
+						Files string `json:"files,omitempty"`
+					}{c, filesDigest(p.Files)})
+					out["plugin\x00"+p.Name] = item{Kind: "plugin", Name: p.Name, Raw: string(r)}
+				}
+				continue
+			}
 			flatten(out, k, x)
 		}
 	}
 	return out
+}
+
+// filesDigest is a digest of a plugin's carried files, "" for none: a
+// change to one of them is a change to the plugin.
+func filesDigest(files map[string][]byte) string {
+	if files == nil {
+		return ""
+	}
+	j, _ := json.Marshal(files) // its keys in order
+	return sum(j)
 }
 
 type item struct {

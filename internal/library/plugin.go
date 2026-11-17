@@ -69,6 +69,10 @@ type Plugin struct {
 	Left []PluginLeft `json:"left,omitempty"`
 	// Installed is when it was installed or last updated
 	Installed string `json:"installed,omitempty"`
+	// Pending is set while a plugin another computer has, by a source
+	// this one fetches it from, hasn't been fetched here yet: it was
+	// synced in and the fetch failed (plugin_carry.go). Update tries again
+	Pending bool `json:"pending,omitempty"`
 }
 
 // PluginLeft is a part of a plugin that wasn't carried.
@@ -184,8 +188,11 @@ func isPlugin(dir string) bool {
 
 // readPlugin reads the plugin in dir. over are the fields a marketplace's
 // entry gives for it, which a plugin.json overrides; hint is the name the
-// marketplace calls it by.
-func readPlugin(dir, hint string, over map[string]any) (*plLoaded, error) {
+// marketplace calls it by. Its name is force when that is set (a
+// marketplace's name for it, a synced plugin's), else its manifest's,
+// else hint: the name is its folder's in the library, and every
+// ${CLAUDE_PLUGIN_ROOT} in its parts is replaced with that folder.
+func readPlugin(dir, hint, force string, over map[string]any) (*plLoaded, error) {
 	man := map[string]any{}
 	if m, err := readJSONFile(filepath.Join(dir, ".claude-plugin", "plugin.json")); err == nil {
 		man = m
@@ -200,7 +207,10 @@ func readPlugin(dir, hint string, over map[string]any) (*plLoaded, error) {
 	if !isPlugin(dir) && len(man) == 0 {
 		return nil, fmt.Errorf("no Claude Code plugin in %s: it has no .claude-plugin/plugin.json, skills, agents, hooks or .mcp.json", dir)
 	}
-	name := pluginSlug(plStr(man["name"]))
+	name := pluginSlug(force)
+	if name == "" {
+		name = pluginSlug(plStr(man["name"]))
+	}
 	if name == "" {
 		name = pluginSlug(hint)
 	}
@@ -729,7 +739,7 @@ func findPlugins(root string) (*PluginProbe, error) {
 		return nil, err
 	}
 	if mk == nil {
-		pl, err := readPlugin(root, filepath.Base(root), nil)
+		pl, err := readPlugin(root, filepath.Base(root), "", nil)
 		if err != nil {
 			return nil, err
 		}
@@ -761,7 +771,7 @@ func findPlugins(root string) (*PluginProbe, error) {
 				c.Left = []PluginLeft{{What: c.Name, Why: "its source leaves the marketplace's folder"}}
 				break
 			}
-			if pl, err := readPlugin(d, c.Name, over); err == nil {
+			if pl, err := readPlugin(d, c.Name, "", over); err == nil {
 				c2 := candidateOf(pl, d, over)
 				c2.Name = c.Name
 				c = c2
@@ -947,12 +957,16 @@ func installPlugins(p *PluginProbe, input string, names, agents []string) (*Resu
 				return nil, fmt.Errorf("%s: its folder %s leaves its repository", c.Name, c.path)
 			}
 		}
-		pl, err := readPlugin(d, c.Name, c.over)
+		// a marketplace's name for it is its folder's: read with it, so
+		// its parts name that folder, not the one its manifest's name
+		// would have
+		force := ""
+		if len(p.Candidates) > 1 || c.Remote {
+			force = c.Name
+		}
+		pl, err := readPlugin(d, c.Name, force, c.over)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", c.Name, err)
-		}
-		if len(p.Candidates) > 1 || c.Remote {
-			pl.name = c.Name // a marketplace's name for it
 		}
 		if pl.parts() == 0 {
 			return nil, fmt.Errorf("%s has no skills, MCP servers, hooks or subagents magpie can give an agent", pl.name)

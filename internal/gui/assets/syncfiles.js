@@ -39,7 +39,7 @@ window.davForm = function (v) {
   keysL.classList.add("sync-sub-tick");
   const [setL, sets] = tick(t("Settings"), v.settings !== false);
   const [agentsL, agents] = tick(t("Agents' models"), v.agents !== false);
-  const [libL, lib] = tick(t("Library: instructions, MCP servers, skills, hooks and subagents"), v.library !== false);
+  const [libL, lib] = tick(t("Library: instructions, MCP servers, skills, hooks, subagents and Claude plugins"), v.library !== false);
   const [memL, mem] = tick(t("Memory: what the agents know, merged memory by memory"), v.memory !== false);
   const keysShow = () => { keysL.hidden = !prov.checked; };
   keysShow();
@@ -237,7 +237,7 @@ window.exportForm = function () {
   const p1 = input("", t("passphrase"), "password");
   const p2 = input("", t("again"), "password");
   const [keysL, keys] = tick(t("With the providers' API keys"), true);
-  const [libL, lib] = tick(t("With the library: instructions, MCP servers, skills, hooks and subagents"), true);
+  const [libL, lib] = tick(t("With the library: instructions, MCP servers, skills, hooks, subagents and Claude plugins"), true);
   const [memL, mem] = tick(t("With memory: what the agents know"), true);
   const [useL, use] = tick(t("With the usage history"), true);
   // sign-ins: off unless picked (qianxunji, curtinp118 on Discord)
@@ -302,7 +302,7 @@ window.importForm = function () {
   pf.append(name, pick, file);
   const pass = input("", t("passphrase"), "password");
   const [agentsL, agents] = tick(t("Set the agents' models too"), true);
-  const [libL, lib] = tick(t("Bring in the library too: instructions, MCP servers, skills, hooks and subagents"), true);
+  const [libL, lib] = tick(t("Bring in the library too: instructions, MCP servers, skills, hooks, subagents and Claude plugins"), true);
   const [memL, mem] = tick(t("Bring in memory too, merged with the memories here"), true);
   const [useL, use] = tick(t("Bring in the usage history too, merged with the one here"), true);
   const [siL, si] = tick(t("Bring in the sign-ins too, when the file has them"), true);
