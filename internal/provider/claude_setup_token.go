@@ -11,8 +11,9 @@ package provider
 // "oauth_token" and no more), and its /usage shows the API cost view, not
 // the subscription's windows. The account is named by the token's own
 // short hash, and its allowance is unknown (errClaudeSetupToken) until a
-// reply's rate-limit headers tell it. Claude Code itself can't be signed in
-// to it: there is nothing to put in its keychain or .credentials.json.
+// reply's rate-limit headers tell it. There is nothing to put in Claude
+// Code's keychain or .credentials.json for it: Claude Code itself is
+// switched to it through its settings.json (claude_token_env.go).
 
 import (
 	"crypto/sha256"
@@ -65,9 +66,11 @@ func claudeTokenName(token string) string {
 // zero. Its words must not read as a refusal (claudeUsageDenied).
 var errClaudeSetupToken = errors.New("unknown: a setup-token can't read the allowance (Claude Code's /usage needs a full sign-in); it shows once a reply tells it")
 
-// errClaudeTokenSwitch is the answer to signing Claude Code in to a
-// setup-token account.
-const errClaudeTokenSwitch = "%s was added by a setup-token: magpie's requests use it, but Claude Code itself can't be signed in to it"
+// errClaudeTokenSwitch is the answer to keeping Claude Code signed in to a
+// setup-token account (SetKeepLoginAs), or to putting one in its sign-in
+// store: Claude Code is switched to it in its settings.json alone
+// (claude_token_env.go), when the user picks it.
+const errClaudeTokenSwitch = "%s was added by a setup-token: Use switches Claude Code itself to it, but magpie can't keep Claude Code on it, as it can't read its allowance"
 
 // checkClaudeSetupToken is token trimmed, or why it isn't a setup-token.
 func checkClaudeSetupToken(token string) (string, error) {

@@ -285,6 +285,11 @@ func NextLogin(ctx context.Context, agent string) (from, to string, back, ok boo
 	if leftAlone(agent) {
 		return "", "", false, false // magpie has no say in its sign-in, or was told to leave it be
 	}
+	if agent == "claude" && claudeTokenInUse() != "" {
+		// on a setup-token the user switched it to, whose allowance can't
+		// be read: it stays there till they switch it again
+		return "", "", false, false
+	}
 	var spares []Login
 	var first *Login
 	ls := Logins(agent)

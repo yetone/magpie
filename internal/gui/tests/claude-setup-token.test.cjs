@@ -3,8 +3,9 @@
 // "Use a setup-token instead…", which ends the browser sign-in and asks for
 // the token `claude setup-token` printed, said whole in the page's
 // language. A refused token says why and stays to be fixed; one taken is
-// added. The account it makes is magpie's only: Remove and "magpie only",
-// no Use or Make first.
+// added. Its row's Use switches Claude Code itself to it (in its
+// settings.json, liukaybee on X); in use, the signed-in account's Use
+// switches back.
 // Chromium and WebKit, English, Chinese (both), Japanese and German, at
 // 420px; no backend, the API is faked here.
 const assert = require("node:assert/strict");
@@ -107,19 +108,44 @@ for (const engine of engines) for (const lang of ["en", "zh", "zh-TW", "ja", "de
     assert.deepEqual(await page.evaluate(() => window.signedInWith), [{ agent: "claude", user: "Claude setup-token 3204d0", token: true }]);
     assert.equal(await box.innerText().then((s) => s.includes(TOKEN)), false);
 
-    // its row is magpie's only
-    const row = await page.evaluate(() => {
-      const ls = [{ user: "pro@x.com", active: true, plan: "max" }, { user: "Claude setup-token 3204d0", on: true, token: true }];
+    // its row's Use switches Claude Code itself to it (liukaybee on X)
+    const rowsOf = (uses) => page.evaluate((uses) => {
+      document.getElementById("accts-under-test")?.remove();
+      const ls = [{ user: "pro@x.com", active: true, plan: "max" }, { user: "Claude setup-token 3204d0", on: true, token: true, uses }];
       const a = { agent: "claude", agentName: "Claude Code", logins: ls };
       const list = renderAccounts(a, { id: "claude", account: { agent: "claude", user: "pro@x.com" } });
+      list.id = "accts-under-test";
       document.body.append(list);
-      const rows = [...list.querySelectorAll("*")].filter((e) => e.textContent.includes("Claude setup-token 3204d0") && !e.textContent.includes("pro@x.com") && e.querySelector("button"));
-      const r = rows[0];
-      return r ? { text: r.innerText, buttons: [...r.querySelectorAll("button")].map((b) => b.textContent) } : null;
-    }).catch((e) => ({ error: e.message }));
-    assert.ok(row && !row.error, JSON.stringify(row));
-    assert.ok(row.text.includes(await translated("magpie only")), row.text);
-    assert.ok(!row.buttons.includes(await said("Make first")) && !row.buttons.includes(await said("Use")), row.buttons.join(","));
+      const of = (u) => {
+        const r = list.querySelector(`[data-account-id="${u}"] .acc-line`);
+        return { text: r.innerText, buttons: [...r.querySelectorAll("button.text")].map((b) => ({ text: b.textContent, title: b.title })), spans: [...r.querySelectorAll(".using")].map((x) => ({ text: x.textContent, title: x.title })) };
+      };
+      return { pro: of("pro@x.com"), tok: of("Claude setup-token 3204d0") };
+    }, uses);
+    const use = await said("Use");
+    let rows = await rowsOf(false);
+    const tokUse = rows.tok.buttons.find((b) => b.text === use);
+    assert.ok(tokUse, JSON.stringify(rows.tok));
+    assert.equal(tokUse.title, await translated("Switch {agent} itself to this setup-token, in its settings.json; its own sign-in stays", { agent: "Claude Code" }));
+    assert.ok(!rows.tok.text.includes(await said("magpie only")), rows.tok.text);
+    assert.ok(!rows.pro.buttons.some((b) => b.text === use), JSON.stringify(rows.pro));
+    const posted = page.waitForRequest((r) => new URL(r.url()).pathname === "/api/login/switch");
+    await page.locator('#accts-under-test [data-account-id="Claude setup-token 3204d0"] button.text', { hasText: use }).click();
+    assert.deepEqual((await posted).postDataJSON(), { agent: "claude", user: "Claude setup-token 3204d0" });
+
+    // in use: said on it, and the signed-in account's Use switches back
+    rows = await rowsOf(true);
+    assert.deepEqual(rows.tok.spans.map((x) => x.text), [await said("In use")]);
+    assert.equal(rows.tok.spans[0].title, await translated("{agent} itself uses this setup-token, set in its settings.json", { agent: "Claude Code" }));
+    assert.ok(!rows.tok.buttons.some((b) => b.text === use), JSON.stringify(rows.tok));
+    assert.deepEqual(rows.pro.spans.map((x) => x.text), [await said("Signed in")]);
+    assert.equal(rows.pro.spans[0].title, await translated("{agent} is signed in to this account, but uses {user}'s setup-token over it", { agent: "Claude Code", user: "Claude setup-token 3204d0" }));
+    const back = rows.pro.buttons.find((b) => b.text === use);
+    assert.ok(back, JSON.stringify(rows.pro));
+    assert.equal(back.title, await translated("Switch {agent} itself back to this account", { agent: "Claude Code" }));
+    await translated("{agent} now uses {user}", { agent: "Claude Code", user: "pro@x.com" });
+    const w2 = await page.evaluate(() => Math.max(...[...document.querySelectorAll("#accts-under-test *")].map((e) => e.getBoundingClientRect().right)));
+    assert.ok(w2 <= 420, `accounts reach ${w2}px`);
     assert.deepEqual(errors, []);
   });
 }

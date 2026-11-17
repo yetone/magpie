@@ -240,7 +240,8 @@ func syncClaudeProxyEnvNow() {
 	}
 	user := ""
 	for _, l := range Logins("claude") {
-		if l.Active {
+		if l.Active && user == "" || l.Uses {
+			// the setup-token it uses over its sign-in, if any
 			user = l.User
 		}
 	}

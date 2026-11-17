@@ -87,8 +87,9 @@ func TestClaudeSetupTokenAccount(t *testing.T) {
 		t.Fatal("Claude Code's own run was given the token")
 	}
 
-	// Claude Code can't be signed in to it
-	if err := SwitchLogin("claude", user); err == nil || !strings.Contains(err.Error(), "setup-token") {
+	// Claude Code's own sign-in isn't written with it: a switch to it
+	// goes in settings.json (claude_token_env_test.go)
+	if err := SwitchLogin("claude", user); err != nil {
 		t.Fatalf("switch onto a setup-token account: %v", err)
 	}
 	if after, _ := os.ReadFile(cred); string(after) != string(before) {

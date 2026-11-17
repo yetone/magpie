@@ -13566,9 +13566,13 @@ function renderAccounts(a, p) {
   const quota = loginUsageOf(a.agent);
   // signed out while spent, back once it has room (#408)
   const back = ls.find((l) => l.returns && !l.active);
+  // the setup-token Claude Code itself uses over its sign-in
+  const tokenUsed = ls.find((l) => l.uses);
   for (const l of ls) {
     const on = isOn(l);
     const row = el("div", "acc" + (on ? " in-use" : " off") + (l.user === justAdded ? " new" : ""));
+    // Use that switches Claude Code itself
+    const swUse = (title, b = el("button", "text", t("Use"))) => (b.title = title, b.onclick = () => (b.classList.add("busy"), accountAction("login/switch", { agent: a.agent, user: l.user }, t("{agent} now uses {user}", { agent: a.agentName, user: l.user }))), b);
     // its Remove, titled as given; true: the own account's, else the plain one
     const forgetOf = (title) => {
       const f = el("button", "text quiet", t("Remove"));
@@ -13661,6 +13665,11 @@ function renderAccounts(a, p) {
       signed.title = t("{agent} is kept signed in to this account; requests through magpie go to the accounts in their order", { agent: a.agentName });
       line.append(signed);
       if (on) line.append(makeFirst(l));
+    } else if (l.active && tokenUsed) {
+      // its sign-in still, under the setup-token Claude Code uses over it
+      const signed = el("span", "using", l.paused ? t("Paused") : t("Signed in"));
+      signed.title = t("{agent} is signed in to this account, but uses {user}'s setup-token over it", { agent: a.agentName, user: tokenUsed.user });
+      line.append(signed, swUse(t("Switch {agent} itself back to this account", { agent: a.agentName })));
     } else if (l.active) {
       const using = el("span", "using", l.paused ? t("Paused") : back ? t("First for now") : several ? t("First") : t("In use"));
       if (back && !l.paused) using.title = t("{user} was nearly used up, so magpie signed {agent} in to this one; it goes back to {user} once that has room again", { user: back.user, agent: a.agentName });
@@ -13689,10 +13698,13 @@ function renderAccounts(a, p) {
         line.append(forget);
         if (l.user === firstUser) line.append(el("span", "using", t("First")));
         else if (on) line.append(makeFirst(l));
+      } else if (l.token && l.uses) {
+        const using = el("span", "using", t("In use"));
+        using.title = t("{agent} itself uses this setup-token, set in its settings.json", { agent: a.agentName });
+        line.append(forget, using);
       } else if (l.token) {
-        const only = el("span", "using", t("magpie only"));
-        only.title = t("Added by a setup-token: requests through magpie use it; Claude Code itself can't be signed in to it");
-        line.append(forget, only);
+        // Claude Code itself switched to it in its settings.json (liukaybee on X)
+        line.append(forget, swUse(t("Switch {agent} itself to this setup-token, in its settings.json; its own sign-in stays", { agent: a.agentName })));
       } else if (l.accessOnly) {
         const only = el("span", "using", t("magpie only"));
         only.title = t("Kept access token only: requests through magpie use it until it expires; Codex itself isn't signed in to it, as Codex would renew it");
