@@ -304,6 +304,9 @@
 :is(#view-routing, #view-groups) .row-head { margin: 14px 0 6px; padding: 0 2px; gap: 0; }
 :is(#view-routing, #view-groups) .row-head .note { font-size: 11px; color: var(--faint); margin-left: 8px; }
 #view-routing .row-head .rt-livedot + .note { margin-left: 8px; }
+/* the note gives way first: with Routing groups ›, Settings › and Hide
+   accounts beside it, German ran 38px past a 560px window (#6669) */
+#view-routing > .row-head .note { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rt-gnew { display: inline-flex; align-items: center; gap: 4px; }
 /* the toolbar's Hide plans: every group's quota lines folded */
 .rt-groups.rt-noplans .rt-gquota { display: none; }
