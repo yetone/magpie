@@ -43,7 +43,7 @@ func Agent(target string) (file string, only bool) {
 
 // InMagpieOnly is whether everything a plugin at target has runs in
 // magpie's own process, its gateway middleware, its agent and what it adds
-// to the window, so the host has nothing of it to load.
+// to the window, or a privacy model launcher, so the host has nothing of it to load.
 func InMagpieOnly(target string) bool {
 	if Gateway(target) != "" {
 		return false
@@ -51,8 +51,9 @@ func InMagpieOnly(target string) bool {
 	mw, mwOnly := Middleware(target)
 	ag, agOnly := Agent(target)
 	pg, pgOnly := Window(target)
-	if mw == "" && ag == "" && pg == nil {
+	privacy, privacyOnly := PrivacyModels(target)
+	if mw == "" && ag == "" && pg == nil && privacy == nil {
 		return false
 	}
-	return (mw == "" || mwOnly) && (ag == "" || agOnly) && (pg == nil || pgOnly)
+	return (mw == "" || mwOnly) && (ag == "" || agOnly) && (pg == nil || pgOnly) && (privacy == nil || privacyOnly)
 }

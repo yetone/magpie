@@ -291,6 +291,23 @@ func startOne(path string, cpu bool, stop <-chan struct{}) (*helper, error) {
 	if !cpu {
 		wait = gpuLoadTimeout
 	}
+	h, err := startHelper(cmd, wait, onWhat(cpu), stop)
+	if err != nil {
+		// the name it was given ("failed to read GGUF: <name>"), as the
+		// path the user can find
+		if msg := strings.ReplaceAll(err.Error(), " "+modelName(), " "+modelPath()); msg != err.Error() {
+			err = errors.New(msg)
+		}
+	}
+	return h, err
+}
+
+// startHelper starts cmd, a program that speaks pf-serve's protocol on its
+// stdin and stdout, and waits up to wait for its hello line: Privacy
+// Filter's pf-serve, or a plugin's detector (external.go). onWhat ends a
+// load that took too long's error.
+func startHelper(cmd *exec.Cmd, wait time.Duration, onWhat string, stop <-chan struct{}) (*helper, error) {
+	path := cmd.Path
 	in, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err
@@ -324,7 +341,7 @@ func startOne(path string, cpu bool, stop <-chan struct{}) (*helper, error) {
 	case s = <-line:
 	case <-giveUp(wait):
 		h.kill()
-		return nil, fmt.Errorf("%s: the model didn't load in %s%s", baseName(path), wait, onWhat(cpu))
+		return nil, fmt.Errorf("%s: the model didn't load in %s%s", baseName(path), wait, onWhat)
 	case <-stop:
 		h.kill()
 		return nil, errStopped
@@ -335,9 +352,6 @@ func startOne(path string, cpu bool, stop <-chan struct{}) (*helper, error) {
 		if why == "" {
 			why = h.died()
 		}
-		// the name it was given ("failed to read GGUF: <name>"), as the
-		// path the user can find
-		why = strings.ReplaceAll(why, " "+modelName(), " "+modelPath())
 		return nil, fmt.Errorf("%s: %s", baseName(path), why)
 	}
 	return h, nil
@@ -671,7 +685,7 @@ func (h *helper) classify(texts []string) ([][]redact.Found, error) {
 		}
 	}()
 	if _, err := h.in.Write(b.Bytes()); err != nil {
-		return nil, fmt.Errorf("pf-serve %s (%v)", h.died(), err)
+		return nil, fmt.Errorf("%s %s (%v)", baseName(h.cmd.Path), h.died(), err)
 	}
 	beforeRead(h)
 	r := &reader{r: h.out}

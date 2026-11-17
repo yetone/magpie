@@ -65,12 +65,16 @@ func optionsCtx(ctx context.Context) redact.Options {
 	}
 	if (st.Redact || st.RedactPersonal) && ModelWanted(st) {
 		// until the model is on disk the rules mask alone, and nothing is
-		// held back for a download (it is started here)
-		if m := picked(st); m.Installed() {
+		// held back for a download (it is started here); a plugin's model
+		// whose plugin is off or whose files are gone is the same, with
+		// nothing to download (Settings → Privacy says so)
+		m := picked(st)
+		if m.Installed() {
 			o.MinScore = pii.Threshold(st.RedactModelScore, m)
 			o.Model = model(ctx, m, o.MinScore, st.RedactModel)
+			o.ModelGeneration = m.Generation()
 			o.NamesByModel = m.ID() == pii.AstrLinkGuard
-		} else {
+		} else if m.ManagesWeights() {
 			fetch(m, st.RedactModel)
 		}
 	}
@@ -93,14 +97,7 @@ func ModelWanted(st settings.Settings) bool {
 }
 
 // onDisk says a local model is downloaded; a var for tests.
-var onDisk = func() bool {
-	for _, m := range pii.Models() {
-		if m.Installed() {
-			return true
-		}
-	}
-	return false
-}
+var onDisk = pii.ManagedModelInstalled
 
 // fetched is when fetch last started each model's download, by id, so a
 // failed one is tried again an hour later rather than on every request.

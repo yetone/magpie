@@ -22279,13 +22279,13 @@ function privacyModelRow(box, why) {
     if (!r.isConnected) return;
     const who = el("div", "who"), val = el("div", "val");
     who.append(name(), el("div", m && (m.on || m.installed || !m.supported || pmBusy(m) || m.error || m.models?.some((x) => x.error)) ? "sub say" : "sub", pmSub(m)));
-    if (m?.supported || m?.installed) {
+    if (m?.supported || m?.installed || m?.managedWeights === false) {
       if (m.models?.length > 1) val.append(pmPick(m, (id) => act("pick", id)));
       if (pmBusy(m)) {
         const c = el("button", "text", t("Cancel"));
         c.onclick = () => act("cancel");
         val.append(c);
-      } else if (m.installed && !m.on) {
+      } else if (m.installed && !m.on && m.managedWeights !== false) {
         const x = el("button", "text", t("Delete model"));
         x.onclick = async () => {
           if (await confirmAction(t("Delete the model?"), t("Turning it on again downloads {size} again.", { size: fmtBytes(m.size) }), t("Delete"))) act("remove");
@@ -22324,12 +22324,11 @@ function pmPick(m, pick) {
   b.type = "button";
   menuOpener(b);
   b.title = t("The local model");
-  b.append(el("span", "", (PM_MODELS[m.model] || [m.model])[0]), svg(CHEV, 11, 1.6));
+  b.append(el("span", "", m.name || (PM_MODELS[m.model] || [m.model])[0]), svg(CHEV, 11, 1.6));
   b.onclick = (e) => {
     e.stopPropagation();
     if (b.classList.contains("open")) return closeProtoMenu();
-    const opts = (m.models || []).map((x) => ({ v: x.model, name: (PM_MODELS[x.model] || [x.model])[0], literalName: true,
-      note: !x.supported && !x.installed ? t("Not available on this system yet") : t(PM_MODELS[x.model]?.[1] || "") + " · " + fmtBytes(x.size) + (x.installed ? " · " + t("downloaded") : "") }));
+    const opts = (m.models || []).map(pmModelOption);
     openProtoMenu(b, opts, m.model, (v) => v !== m.model && pick(v), "The local model", "sess-menu", "right");
   };
   return b;
@@ -22357,6 +22356,8 @@ function pmScore(m, pick) {
 function pmSub(m) {
   const about = t("Names, addresses and passwords no rule can find, found by a model that runs on this computer");
   if (!m) return about;
+  // a plugin's model (pii/external.go): its files are the user's
+  if (m.managedWeights === false && !m.installed) return t("Not available: its plugin is off, or its files are gone");
   if (!m.supported && !m.installed) return t("Not available on this system yet");
   const d = pmBusy(m);
   if (d) return t("Downloading the model: {done} of {total}", { done: fmtBytes(d.done), total: fmtBytes(d.total) });

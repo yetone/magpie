@@ -94,9 +94,11 @@ type fake struct {
 	installed, fails bool
 }
 
-func (fake) ID() string        { return pii.AstrLinkGuard }
-func (fake) MinScore() float64 { return 0.8 }
-func (f fake) Installed() bool { return f.installed }
+func (fake) ID() string           { return pii.AstrLinkGuard }
+func (fake) MinScore() float64    { return 0.8 }
+func (f fake) Installed() bool    { return f.installed }
+func (fake) ManagesWeights() bool { return true }
+func (fake) Generation() string   { return "" }
 func (f fake) Find(_ context.Context, texts []string) ([][]redact.Found, error) {
 	if f.fails {
 		return nil, errors.New("pf-serve exited")
@@ -134,6 +136,47 @@ func TestNoModelYetMasksByTheRules(t *testing.T) {
 	}
 	if o := options(); o.Model == nil || !o.NamesByModel || len(fetches) != 1 {
 		t.Fatalf("on disk: model %v, names by model %v, fetches %v", o.Model != nil, o.NamesByModel, fetches)
+	}
+}
+
+// pluginFake is a plugin's model: its weights are the user's, nothing to
+// download, and gen is its build.
+type pluginFake struct {
+	fake
+	gen string
+}
+
+func (pluginFake) ID() string           { return "external/plugin/0123456789abcdef/v1" }
+func (pluginFake) ManagesWeights() bool { return false }
+func (p pluginFake) Generation() string { return p.gen }
+
+// A plugin's model picked while its plugin is off or its files are gone
+// masks by the rules alone, though the user turned the model on, and
+// starts no download; there, its build goes with what it finds.
+func TestPluginModelUnavailableIsTheRules(t *testing.T) {
+	h := t.TempDir()
+	t.Setenv("HOME", h)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
+	m := pluginFake{gen: "g1"}
+	if err := settings.Save(settings.Settings{Redact: true, RedactPersonal: true, RedactModel: true, RedactModelName: m.ID()}); err != nil {
+		t.Fatal(err)
+	}
+	fetches := 0
+	wasPicked, wasFetch, wasDisk := picked, fetch, onDisk
+	picked = func(settings.Settings) pii.Model { return m }
+	fetch = func(pii.Model, bool) { fetches++ }
+	onDisk = func() bool { return false }
+	t.Cleanup(func() { picked, fetch, onDisk = wasPicked, wasFetch, wasDisk })
+	o := options()
+	if o.Model != nil || fetches != 0 {
+		t.Fatalf("unavailable: model %v, fetches %d", o.Model != nil, fetches)
+	}
+	if out, n := redact.Mask("key sk-ant-api03-"+strings.Repeat("a", 40), o); n != 1 || strings.Contains(out, "aaaa") {
+		t.Fatalf("the rules didn't mask: %q", out)
+	}
+	m.installed = true
+	if o := options(); o.Model == nil || o.ModelGeneration != "g1" || o.NamesByModel {
+		t.Fatalf("available: model %v, generation %q, names by model %v", o.Model != nil, o.ModelGeneration, o.NamesByModel)
 	}
 }
 

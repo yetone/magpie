@@ -101,16 +101,18 @@ type fakeModel struct {
 	did       *[]string
 }
 
-func (f *fakeModel) ID() string        { return f.id }
-func (f *fakeModel) Supported() bool   { return true }
-func (f *fakeModel) Installed() bool   { return f.installed }
-func (f *fakeModel) MinScore() float64 { return 0.5 }
-func (f *fakeModel) Size() int64       { return 1 }
+func (f *fakeModel) ID() string           { return f.id }
+func (f *fakeModel) Supported() bool      { return true }
+func (f *fakeModel) Installed() bool      { return f.installed }
+func (f *fakeModel) ManagesWeights() bool { return true }
+func (f *fakeModel) Generation() string   { return "" }
+func (f *fakeModel) MinScore() float64    { return 0.5 }
+func (f *fakeModel) Size() int64          { return 1 }
 func (f *fakeModel) Find(context.Context, []string) ([][]redact.Found, error) {
 	return nil, nil
 }
 func (f *fakeModel) Now() pii.Status {
-	return pii.Status{Model: f.id, Supported: true, Installed: f.installed, Size: 1}
+	return pii.Status{Model: f.id, ManagedWeights: true, Supported: true, Installed: f.installed, Size: 1}
 }
 func (f *fakeModel) Download(done func()) error {
 	*f.did = append(*f.did, "download "+f.id)
@@ -302,3 +304,68 @@ type folderPick struct {
 }
 
 func (f folderPick) ChooseFolder(s string) (string, error) { return f.p.ChooseFolder(s) }
+
+// pluginFakeModel is a plugin's model (pii/external.go): nothing to
+// download, and unavailable while its plugin is off.
+type pluginFakeModel struct{ *fakeModel }
+
+func (pluginFakeModel) ManagesWeights() bool { return false }
+func (p pluginFakeModel) Now() pii.Status {
+	s := p.fakeModel.Now()
+	s.ManagedWeights, s.Name = false, "My detector"
+	if !p.installed {
+		s.Failed = "the local masking model My detector is unavailable"
+	}
+	return s
+}
+
+// A plugin's model is picked by its id (#6959). One whose plugin is off is
+// refused with why, nothing downloaded and the pick before kept; one whose
+// files are there masks at once, the one before let go. An id no model
+// has is refused.
+func TestPrivacyModelPickPluginModel(t *testing.T) {
+	h := t.TempDir()
+	t.Setenv("HOME", h)
+	t.Setenv("USERPROFILE", h)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
+	const id = "external/plugin/0123456789abcdef/v1"
+	var did []string
+	guard := &fakeModel{id: pii.AstrLinkGuard, installed: true, did: &did}
+	mine := pluginFakeModel{&fakeModel{id: id, did: &did}}
+	wasOf, wasModels := modelOf, models
+	t.Cleanup(func() { modelOf, models = wasOf, wasModels })
+	modelOf = func(m string) pii.Model {
+		if m == id {
+			return mine
+		}
+		return guard
+	}
+	models = func() []pii.Model { return []pii.Model{guard, mine} }
+	srv := webPageHandler(t, webHost{func() {}}, nil)
+	post := func(body string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, httptest.NewRequest("POST", "/api/privacy-model", strings.NewReader(body)))
+		return rec
+	}
+	if rec := post(`{"do":"on","model":"astrlink-guard"}`); rec.Code != http.StatusOK {
+		t.Fatalf("on: %d %s", rec.Code, rec.Body)
+	}
+	did = nil
+	if rec := post(`{"do":"pick","model":"` + id + `"}`); rec.Code == http.StatusOK || !strings.Contains(rec.Body.String(), "My detector is unavailable") {
+		t.Fatalf("picked while its plugin is off: %d %s", rec.Code, rec.Body)
+	}
+	if len(did) != 0 || settings.Load().RedactModelName != pii.AstrLinkGuard {
+		t.Fatalf("refused, yet did %v, name %q", did, settings.Load().RedactModelName)
+	}
+	mine.installed = true
+	if rec := post(`{"do":"pick","model":"` + id + `"}`); rec.Code != http.StatusOK || settings.Load().RedactModelName != id {
+		t.Fatalf("picked: %d %s", rec.Code, rec.Body)
+	}
+	if strings.Join(did, ", ") != "stop astrlink-guard, warm "+id {
+		t.Fatalf("did %v", did)
+	}
+	if rec := post(`{"do":"pick","model":"external/plugin/0123456789abcdef/nope"}`); rec.Code == http.StatusOK {
+		t.Fatalf("an unknown id picked: %d", rec.Code)
+	}
+}

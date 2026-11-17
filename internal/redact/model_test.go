@@ -247,3 +247,29 @@ func TestDefinitionMaskedAsWithoutModel(t *testing.T) {
 		t.Errorf("the message's name went as written: %s", with)
 	}
 }
+
+// A text sent before on a route goes as the model found it then, until the
+// model is another build (ModelGeneration, a plugin's model whose files
+// changed): that one is asked afresh.
+func TestNewModelBuildFindsAfresh(t *testing.T) {
+	resetSent()
+	t.Cleanup(resetSent)
+	const name = "Rina Kowalczyk"
+	s := "Ask " + name + " about the release."
+	blind := &fakeModel{values: map[string]string{}}
+	sees := &fakeModel{values: map[string]string{name: "private_person"}}
+	o := Options{Personal: true, Route: "vendor", ModelGeneration: "a"}
+
+	o.Model = blind.find
+	if out, _ := Mask(s, o); out != s {
+		t.Fatalf("nothing found, yet masked: %q", out)
+	}
+	o.Model = sees.find
+	if out, _ := Mask(s, o); out != s {
+		t.Fatalf("the same build sent it again otherwise: %q", out)
+	}
+	o.ModelGeneration = "b"
+	if out, _ := Mask(s, o); strings.Contains(out, name) {
+		t.Fatalf("a new build's find went out: %q", out)
+	}
+}

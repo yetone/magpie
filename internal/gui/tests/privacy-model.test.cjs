@@ -89,6 +89,18 @@ const pickWords = {
   de: { head: "Lokales Modell", note: "Chinesisch und Englisch, wenig Fehlalarme in Code · 39 MB" },
 };
 
+// a plugin's models (#6959): what one says while its plugin is off or its
+// files are gone
+const pluginWords = {
+  en: "Not available: its plugin is off, or its files are gone",
+  zh: "暂不可用：它的插件已关闭，或模型文件不在了",
+  "zh-TW": "暫不可用：它的外掛已關閉，或模型檔案不在了",
+  ja: "利用できません：プラグインがオフか、モデルのファイルがありません",
+  de: "Nicht verfügbar: Sein Plugin ist aus, oder seine Dateien fehlen",
+};
+const mine = { model: "external/plugin/0123456789abcdef/v1", name: "My detector", managedWeights: false, supported: true, installed: true };
+const gone = { model: "external/plugin/0123456789abcdef/v2", name: "Old detector", managedWeights: false, supported: true, installed: false };
+
 const scoreWords = {
   en: { name: "Confidence threshold", def: "Default (0.8)", most: "Masks the most" },
   zh: { name: "置信度阈值", def: "默认（0.8）", most: "遮得最多" },
@@ -319,6 +331,58 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(posts, ["pick astrlink-guard"]);
         assert.deepEqual(await page.evaluate(() => [scrollX, scrollY, document.querySelector("#view-settings").scrollTop]), before, "the pick moved nothing");
         assert.deepEqual(errors, []);
+      });
+    }
+  }
+
+  // a plugin's models are in the same menu by the names its options give
+  // (#6959), one whose plugin is off saying so; picked while unavailable,
+  // the row says why, keeps its switch and has nothing to delete
+  for (const lang of Object.keys(pluginWords)) {
+    for (const width of [1100, 640]) {
+      test(`${engine} ${lang} ${width}px: a plugin's models are picked by their names`, async (t) => {
+        const posts = [], model = { supported: true, installed: true, on: true, running: true, device: "CPU", size, managedWeights: true, others: [guard, mine, gone] };
+        const { browser, page, errors } = await open(engine, lang, width, true, model, posts);
+        t.after(() => browser.close());
+        const row = page.locator("#privacyModelRow");
+        await wheelTo(page, row, 300);
+        const pick = row.locator("button.pm-model");
+        await pick.waitFor();
+        await pick.click();
+        const menu = page.locator(".proto-menu");
+        await menu.waitFor();
+        const items = await menu.evaluate((b) => ({
+          items: [...b.querySelectorAll(".pm-item")].map((i) => [i.querySelector(".pm-name").textContent, i.querySelector(".pm-note")?.textContent || ""]),
+          inside: b.getBoundingClientRect().left >= 0 && b.getBoundingClientRect().right <= innerWidth,
+        }));
+        assert.deepEqual(items.items.map((i) => i[0]), ["Privacy Filter", "AstrLink Guard", "My detector", "Old detector"]);
+        assert.equal(items.items[2][1], "", "a plugin's model has no size or download");
+        assert.equal(items.items[3][1], pluginWords[lang]);
+        assert(items.inside, "the menu is inside the window");
+        await menu.locator(".pm-item", { hasText: "My detector" }).click();
+        await page.waitForFunction(() => !document.querySelector(".proto-menu"));
+        assert.deepEqual(posts, ["pick " + mine.model]);
+        await browser.close();
+
+        const two = await open(engine, lang, width, true, { ...gone, on: true, others: [guard] }, []);
+        t.after(() => two.browser.close());
+        const r = two.page.locator("#privacyModelRow");
+        await wheelTo(two.page, r, 300);
+        await two.page.waitForFunction((w) => document.querySelector("#privacyModelRow .sub")?.textContent === w, pluginWords[lang]);
+        const got = await r.evaluate((x) => {
+          const sub = x.querySelector(".sub"), b = x.getBoundingClientRect(), list = x.closest(".list").getBoundingClientRect();
+          return {
+            pick: x.querySelector("button.pm-model")?.textContent.trim(), segs: x.querySelectorAll(".segs").length,
+            buttons: [...x.querySelectorAll("button.text")].map((b) => b.textContent),
+            cut: sub.scrollWidth > sub.clientWidth + 1 || sub.scrollHeight > sub.clientHeight + 1,
+            inside: b.left >= list.left - 1 && b.right <= list.right + 1, wide: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+          };
+        });
+        assert.equal(got.pick, "Old detector");
+        assert.equal(got.segs, 1, "its switch stays");
+        assert.deepEqual(got.buttons, [], "nothing to delete: its files are the user's");
+        assert(!got.cut && got.inside && !got.wide, `why shown in full and inside: ${JSON.stringify(got)}`);
+        assert.deepEqual([...errors, ...two.errors], []);
       });
     }
   }

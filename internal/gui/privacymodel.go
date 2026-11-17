@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 
 	"github.com/yetone/magpie/internal/masking"
 	"github.com/yetone/magpie/internal/pii"
@@ -73,8 +74,8 @@ func privacyModelRoutes(mux *http.ServeMux, w Windows) {
 			fail(rw, err)
 			return
 		}
-		if in.Model != "" && in.Model != pii.PrivacyFilter && in.Model != pii.AstrLinkGuard {
-			fail(rw, fmt.Errorf("model is %s or %s, not %q", pii.PrivacyFilter, pii.AstrLinkGuard, in.Model))
+		if in.Model != "" && !slices.ContainsFunc(models(), func(m pii.Model) bool { return m.ID() == in.Model }) {
+			fail(rw, fmt.Errorf("unknown local masking model %q", in.Model))
 			return
 		}
 		st := settings.Load()
@@ -160,7 +161,11 @@ func privacyModelRoutes(mux *http.ServeMux, w Windows) {
 // is stopped; was is let go once id masks.
 func turnOn(id, was string) error {
 	m := modelOf(id)
-	if !m.Supported() {
+	installed := m.Installed()
+	if !m.Supported() || !installed && !m.ManagesWeights() {
+		if why := m.Now().Failed; why != "" {
+			return fmt.Errorf("%s", why)
+		}
 		return fmt.Errorf("the local masking model doesn't run on this system yet")
 	}
 	for _, o := range models() {
@@ -176,7 +181,7 @@ func turnOn(id, was string) error {
 			m.Warm()
 		}
 	}
-	if m.Installed() {
+	if installed {
 		on()
 		return nil
 	}

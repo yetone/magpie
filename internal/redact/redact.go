@@ -57,6 +57,10 @@ type Options struct {
 	Kinds map[string]bool
 	// Model, where set, finds more in the texts to mask (model.go)
 	Model Model
+	// ModelGeneration is which build of Model this is: a plugin's model
+	// whose files or launcher changed (pii.Model's Generation) finds
+	// afresh what the old one found in a text sent before (sentSpans)
+	ModelGeneration string
 	// Route names where a request masked for a vendor may go (the gateway
 	// sets it: the providers a model, its fallbacks or a routing group's
 	// members are served by). A text sent on it before goes on it again

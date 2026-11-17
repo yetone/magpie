@@ -2,7 +2,7 @@
 // masking rules can't (internal/redact's Model): a name or an address in
 // free text, a password with nothing around it to say so.
 //
-// It runs one of two models, the user's pick (Choose, Models):
+// Its built-in models are:
 // AstrLink Guard (astrlink.go), a 39 MB int8 token classifier for Chinese
 // and English, run in this process by internal/pii/guard, the default for
 // a user who never had the other; or Privacy Filter, below, which masks
@@ -38,6 +38,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/yetone/magpie/internal/pii/guard"
@@ -141,10 +142,12 @@ var ErrNotInstalled = errors.New("the local masking model isn't downloaded; down
 
 // Status is what Settings → Privacy shows of the model.
 type Status struct {
-	Model     string `json:"model"`
-	Supported bool   `json:"supported"`
-	Installed bool   `json:"installed"`
-	Size      int64  `json:"size"`
+	Model          string `json:"model"`
+	Name           string `json:"name,omitempty"`
+	ManagedWeights bool   `json:"managedWeights"`
+	Supported      bool   `json:"supported"`
+	Installed      bool   `json:"installed"`
+	Size           int64  `json:"size"`
 	// a download under way, or the last one's error
 	Downloading bool   `json:"downloading,omitempty"`
 	Done        int64  `json:"done,omitempty"`
@@ -183,7 +186,7 @@ type Status struct {
 
 // Now is the model's status.
 func Now() Status {
-	s := Status{Model: PrivacyFilter, Supported: Supported(), Installed: Installed(), Size: modelSize}
+	s := Status{Model: PrivacyFilter, ManagedWeights: true, Supported: Supported(), Installed: Installed(), Size: modelSize}
 	dl.fill(&s)
 	srv.mu.Lock()
 	if srv.h != nil {
@@ -227,6 +230,10 @@ type Model interface {
 	ID() string
 	Supported() bool
 	Installed() bool
+	// ManagesWeights reports whether Magpie downloads and can delete the weights.
+	ManagesWeights() bool
+	// Generation distinguishes revisions of a model that share a selection ID.
+	Generation() string
 	// Size is how much turning it on downloads.
 	Size() int64
 	// MinScore is its default threshold: masking drops what it is less
@@ -240,13 +247,31 @@ type Model interface {
 	Cancel()
 	// Warm loads it in the background, where it is on disk.
 	Warm()
-	// Stop lets it go; Remove stops it and deletes it.
+	// Stop lets it go; Remove also deletes weights managed by Magpie.
 	Stop()
 	Remove() error
 }
 
 // Models are the local models, Privacy Filter first.
-func Models() []Model { return []Model{pfModel{}, guardModel{}} }
+func Models() []Model {
+	models := builtInModels()
+	for _, m := range registeredPluginModels() {
+		models = append(models, refreshWeights(m))
+	}
+	return models
+}
+
+func builtInModels() []Model { return []Model{pfModel{}, guardModel{}} }
+
+// ManagedModelInstalled tells whether Magpie previously downloaded a model.
+func ManagedModelInstalled() bool {
+	for _, m := range builtInModels() {
+		if m.Installed() {
+			return true
+		}
+	}
+	return false
+}
 
 // Floor is the lowest threshold a user can set (settings.RedactModelScore):
 // what either model sends is at least this sure. pf-serve's default
@@ -265,8 +290,19 @@ func Threshold(set map[string]float64, m Model) float64 {
 
 // Of is the model id names; AstrLink Guard's for an id there's none of.
 func Of(id string) Model {
-	if id == PrivacyFilter {
+	switch id {
+	case PrivacyFilter:
 		return pfModel{}
+	case AstrLinkGuard:
+		return guardModel{}
+	}
+	if strings.HasPrefix(id, externalPrefix) {
+		for _, model := range registeredPluginModels() {
+			if model.ID() == id {
+				return refreshWeights(model)
+			}
+		}
+		return &externalModel{id: id}
 	}
 	return guardModel{}
 }
@@ -279,6 +315,9 @@ func Of(id string) Model {
 // before there was a choice isn't held back while AstrLink Guard
 // downloads (masking.picked starts that download).
 func Choose(name string, on bool) string {
+	if strings.HasPrefix(name, externalPrefix) {
+		return name
+	}
 	switch name {
 	case PrivacyFilter, AstrLinkGuard:
 		return name
@@ -293,6 +332,8 @@ func Choose(name string, on bool) string {
 type pfModel struct{}
 
 func (pfModel) ID() string                 { return PrivacyFilter }
+func (pfModel) ManagesWeights() bool       { return true }
+func (pfModel) Generation() string         { return "" }
 func (pfModel) Supported() bool            { return Supported() }
 func (pfModel) Installed() bool            { return Installed() }
 func (pfModel) Size() int64                { return Size() }

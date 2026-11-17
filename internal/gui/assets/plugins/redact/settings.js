@@ -436,3 +436,15 @@ featWho.redact = (line, f) => {
   const say = () => { const s = prefs; if (s && !(s.redact || s.redactPersonal || s.redactWords?.length)) line.prepend(el("span", "warn", t("Nothing is masked yet")), line.childNodes.length ? " · " : ""); };
   if (prefs) say(); else loadSettings().then(say, () => {});
 };
+
+// pmModelOption is a local model in app.js's pmPick menu: a built-in one
+// with what it is, its size and whether it is downloaded; a plugin's
+// (pii/external.go) by the name its options give, its files the user's.
+function pmModelOption(x) {
+  const [name, about] = PM_MODELS[x.model] || [x.model];
+  let note = "";
+  if (x.managedWeights === false) note = x.installed ? "" : t("Not available: its plugin is off, or its files are gone");
+  else if (!x.supported && !x.installed) note = t("Not available on this system yet");
+  else note = t(about || "") + " · " + fmtBytes(x.size) + (x.installed ? " · " + t("downloaded") : "");
+  return { v: x.model, name: x.name || name, literalName: true, note };
+}

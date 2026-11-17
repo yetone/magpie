@@ -358,6 +358,15 @@ func pluginsState(ctx context.Context, w Windows) pluginsJSON {
 		// one whose providers are known, as those are named in the
 		// background and the button would come and go with them
 		j.OptionsExample = plugin.OptionsExample(plugin.Target(e.Spec))
+		if p, _ := plugin.PrivacyModels(plugin.Target(e.Spec)); p != nil {
+			j.InMagpieOnly = plugin.InMagpieOnly(plugin.Target(e.Spec))
+			if j.InMagpieOnly {
+				j.Named = false
+			}
+			if j.OptionsExample == nil {
+				j.OptionsExample = map[string]any{"models": []any{}}
+			}
+		}
 		if file, _ := plugin.Agent(plugin.Target(e.Spec)); file != "" {
 			j.IsAgent = true
 			j.InMagpieOnly = plugin.InMagpieOnly(plugin.Target(e.Spec))

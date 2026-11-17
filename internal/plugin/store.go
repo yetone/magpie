@@ -583,6 +583,9 @@ func notPlugin(target string) error {
 	if w, _ := Window(target); w != nil {
 		return nil
 	}
+	if p, _ := PrivacyModels(target); p != nil {
+		return nil
+	}
 	var pkg struct {
 		Name    string          `json:"name"`
 		Main    string          `json:"main"`
@@ -745,6 +748,13 @@ func Prefer(name, id string) error {
 	return nil
 }
 
+var optionsValidators []func(target string, opts map[string]any) error
+
+// RegisterOptionsValidator adds a subsystem's validation at initialization.
+func RegisterOptionsValidator(check func(target string, opts map[string]any) error) {
+	optionsValidators = append(optionsValidators, check)
+}
+
 // SetOptions sets the options a plugin is handed (a middleware's
 // ctx.options); nil takes them away.
 func SetOptions(name string, opts map[string]any) error {
@@ -761,6 +771,12 @@ func SetOptions(name string, opts map[string]any) error {
 	}
 	if i < 0 {
 		return fmt.Errorf("no plugin %q", name)
+	}
+	target := Target(l.Plugins[i].Spec)
+	for _, check := range optionsValidators {
+		if err := check(target, opts); err != nil {
+			return err
+		}
 	}
 	if len(opts) == 0 {
 		opts = nil

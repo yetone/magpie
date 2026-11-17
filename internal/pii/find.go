@@ -134,6 +134,10 @@ var pf = &backend{turn: turn, waiting: &waiting, cache: cache, disk: &disk, path
 	classify: classify, heldBack: heldBack}
 
 func (b *backend) find(ctx context.Context, texts []string) ([][]redact.Found, error) {
+	return b.findWith(ctx, texts, b.classify)
+}
+
+func (b *backend) findWith(ctx context.Context, texts []string, classify func([]string) ([][]redact.Found, error)) ([][]redact.Found, error) {
 	b.loadCache()
 	out, miss := b.known(texts, nil)
 	if len(miss) == 0 {
@@ -275,7 +279,7 @@ func (b *backend) find(ctx context.Context, texts []string) ([][]redact.Found, e
 				answer(result{nil, fmt.Errorf("the local masking model has no text to read for %d texts", len(miss))})
 				return
 			}
-			found, err := classifySafely(b.classify, chunks[:1])
+			found, err := classifySafely(classify, chunks[:1])
 			if err != nil {
 				release()
 				answer(result{nil, err})

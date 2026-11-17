@@ -330,6 +330,10 @@ type guardModel struct{}
 
 func (guardModel) ID() string { return AstrLinkGuard }
 
+func (guardModel) ManagesWeights() bool { return true }
+
+func (guardModel) Generation() string { return "" }
+
 func (guardModel) Supported() bool { return true }
 
 func (guardModel) Installed() bool { return guardInstalled() }
@@ -343,7 +347,7 @@ func (guardModel) Find(ctx context.Context, texts []string) ([][]redact.Found, e
 }
 
 func (guardModel) Now() Status {
-	s := Status{Model: AstrLinkGuard, Supported: true, Installed: guardInstalled(), Size: guardSize(), Rosetta: translated(), Emulated: emulated()}
+	s := Status{Model: AstrLinkGuard, ManagedWeights: true, Supported: true, Installed: guardInstalled(), Size: guardSize(), Rosetta: translated(), Emulated: emulated()}
 	gdl.fill(&s)
 	gsrv.mu.Lock()
 	if gsrv.m != nil {

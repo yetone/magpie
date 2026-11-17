@@ -353,6 +353,9 @@ func FileIn(dir, rel string) (string, bool) {
 // starts the host again for it.
 func SetPageOptions(spec string, opts map[string]any) error {
 	t := Target(spec)
+	if p, _ := PrivacyModels(t); p != nil {
+		return SetOptions(spec, opts)
+	}
 	if mw, _ := Middleware(t); mw != "" {
 		return SetOptions(spec, opts)
 	}
