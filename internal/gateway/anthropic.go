@@ -299,7 +299,7 @@ func readAdvised(body []byte, clientMarks, facts, advised bool) (*Request, error
 				if advised {
 					// run by magpie: offered as a tool of the model's
 					// own when the reply is asked (advisor_serve.go)
-					r.Advisor = cmp.Or(r.Advisor, t.Model)
+					r.Advisor = cmp.Or(r.Advisor, advisorID(t.Model))
 					continue
 				}
 				// Claude Code's advisor: its instructions, which would

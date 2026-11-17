@@ -39,6 +39,7 @@ func TestAdvisorModelAsTheUpstreamNamesIt(t *testing.T) {
 		{ID: "relay", Name: "Relay", Key: "k", Anthropic: url, Models: []string{"claude-opus-5-5", "claude-sonnet-5-5"}},
 		{ID: "other", Name: "Other", Key: "k", Anthropic: url, Models: []string{"claude-opus-5-5"}},
 		{ID: "ds", Name: "DeepSeek", Key: "k", Anthropic: url, Models: []string{"deepseek-v4.1-flash"}},
+		{ID: "dot", Name: "Dotted", Key: "k", Anthropic: url, Models: []string{"claude-opus-5.5", "claude-fable-5.2"}},
 	} {
 		if err := provider.Save(p); err != nil {
 			t.Fatal(err)
@@ -63,6 +64,10 @@ func TestAdvisorModelAsTheUpstreamNamesIt(t *testing.T) {
 		{"another provider", "relay/claude-sonnet-5-5", "other/claude-opus-5-5", "", true},
 		{"a vendor's model", "ds/deepseek-v4.1-flash", "relay/claude-opus-5-5", "", true},
 		{"a model magpie doesn't serve", "ds/deepseek-v4.1-flash", "nobody/claude-opus-5-5", "", false},
+		{"2M mark", "relay/claude-sonnet-5-5", "relay/claude-opus-5-5[2m]", "claude-opus-5-5", false},
+		// Claude Code is given a dotted id with dashes, and names the
+		// advisor so (Refeccd on Discord)
+		{"a dotted id as Claude Code names it", "dot/claude-opus-5-5", "dot/claude-fable-5-2", "claude-fable-5.2", false},
 	} {
 		claudeCodeSends(t, advisorTurn(c.model, c.advisor))
 		b := u.last(t)

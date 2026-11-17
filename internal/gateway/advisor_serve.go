@@ -73,7 +73,7 @@ func advisorAsked(from provider.Protocol, body []byte) string {
 		typ := t.Get("type").String()
 		if strings.HasPrefix(typ, "advisor_") {
 			if adv == "" {
-				adv = t.Get("model").String()
+				adv = advisorID(t.Get("model").String())
 			}
 			continue
 		}
