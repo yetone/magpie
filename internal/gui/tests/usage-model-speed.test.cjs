@@ -46,6 +46,8 @@ const CHECK = {
     { kind: "math", ask: "987 × 654", ok: true, match: true, want: "645498", got: "645498", ms: 700, ttft_ms: 400, input: 30, output: 5, tries: 1 },
     { kind: "tool", ask: "get_weather", ok: false, match: false, want: "get_weather", status: 403, error: "this key has no access to tools", ms: 80, tries: 1 },
     { kind: "tool", ask: "get_time", ok: true, match: true, want: "get_time", got: 'get_time({"city":"Tokyo"})', ms: 800, ttft_ms: 600, input: 90, output: 12, tries: 1 },
+    { kind: "steps", ask: "(37 × 43 + 1289) × 7 − 2468", ok: true, match: false, want: "17692", got: "17682", ms: 900, ttft_ms: 500, input: 40, output: 5, tries: 1 },
+    { kind: "exact", ask: "sort", ok: true, match: true, want: "apple-banana-cherry-fig-pear", got: "apple-banana-cherry-fig-pear", ms: 700, ttft_ms: 400, input: 50, output: 9, tries: 1 },
   ],
 };
 let checks = 0;
@@ -99,11 +101,11 @@ function server(lang) {
 
 
 const L = {
-  en: { title: "Model speed", heads: ["Model", "Speed", "First token", "Requests"], fast: "75 tok/s", slow: "10 tok/s", wait: "600 ms", by: ["Models", "Providers"], more: ["Failed", "Other model"], check: "Check…", run: "Check", asked: "Expected answer", tokens: "4,200", sum: ["Answers right: 2 of 3", "Right tool calls: 1 of 2"], checked: ["Answers", "Tool calls"] },
-  zh: { title: "模型速度", heads: ["模型", "速度", "首字耗时", "请求"], fast: "75 token/秒", slow: "10 token/秒", wait: "600 毫秒", by: ["模型", "供应商"], more: ["失败", "其他模型"], check: "检查…", run: "检查", asked: "符合预期", tokens: "4,200", sum: ["答对 2 / 3", "工具调用正确 1 / 2"], checked: ["答对", "工具调用"] },
-  "zh-TW": { title: "模型速度", heads: ["模型", "速度", "首字耗時", "請求"], fast: "75 token/秒", slow: "10 token/秒", wait: "600 毫秒", by: ["模型", "供應商"], more: ["失敗", "其他模型"], check: "檢查…", run: "檢查", asked: "符合預期", tokens: "4,200", sum: ["答對 2 / 3", "工具呼叫正確 1 / 2"], checked: ["答對", "工具呼叫"] },
-  ja: { title: "モデルの速度", heads: ["モデル", "速度", "最初のトークン", "リクエスト"], fast: "75", slow: "10", wait: "600", by: ["モデル", "プロバイダ"], more: ["失敗", "別のモデル"], check: "チェック…", run: "チェック", asked: "想定どおり", tokens: "4,200", sum: ["正解 2 / 3", "正しいツール呼び出し 1 / 2"], checked: ["正解", "ツール呼び出し"] },
-  de: { title: "Modelltempo", heads: ["Modell", "Tempo", "Erstes Token", "Anfragen"], fast: "75", slow: "10", wait: "600", by: ["Modelle", "Anbieter"], more: ["Fehlgeschlagen", "Anderes Modell"], check: "Prüfen…", run: "Prüfen", asked: "Wie erwartet", tokens: "4.200", sum: ["Richtige Antworten: 2 von 3", "Richtige Werkzeugaufrufe: 1 von 2"], checked: ["Richtig", "Tool-Aufrufe"] },
+  en: { title: "Model speed", heads: ["Model", "Speed", "First token", "Requests"], fast: "75 tok/s", slow: "10 tok/s", wait: "600 ms", by: ["Models", "Providers"], more: ["Failed", "Other model"], check: "Check…", run: "Check", asked: "Expected answer", tokens: "4,200", sum: ["Answers right: 3 of 5", "Right tool calls: 1 of 2"], checked: ["Answers", "Tool calls"], sort: "Sort five words" },
+  zh: { title: "模型速度", heads: ["模型", "速度", "首字耗时", "请求"], fast: "75 token/秒", slow: "10 token/秒", wait: "600 毫秒", by: ["模型", "供应商"], more: ["失败", "其他模型"], check: "检查…", run: "检查", asked: "符合预期", tokens: "4,200", sum: ["答对 3 / 5", "工具调用正确 1 / 2"], checked: ["答对", "工具调用"], sort: "给五个词排序" },
+  "zh-TW": { title: "模型速度", heads: ["模型", "速度", "首字耗時", "請求"], fast: "75 token/秒", slow: "10 token/秒", wait: "600 毫秒", by: ["模型", "供應商"], more: ["失敗", "其他模型"], check: "檢查…", run: "檢查", asked: "符合預期", tokens: "4,200", sum: ["答對 3 / 5", "工具呼叫正確 1 / 2"], checked: ["答對", "工具呼叫"], sort: "為五個詞排序" },
+  ja: { title: "モデルの速度", heads: ["モデル", "速度", "最初のトークン", "リクエスト"], fast: "75", slow: "10", wait: "600", by: ["モデル", "プロバイダ"], more: ["失敗", "別のモデル"], check: "チェック…", run: "チェック", asked: "想定どおり", tokens: "4,200", sum: ["正解 3 / 5", "正しいツール呼び出し 1 / 2"], checked: ["正解", "ツール呼び出し"], sort: "5つの単語を並べ替える" },
+  de: { title: "Modelltempo", heads: ["Modell", "Tempo", "Erstes Token", "Anfragen"], fast: "75", slow: "10", wait: "600", by: ["Modelle", "Anbieter"], more: ["Fehlgeschlagen", "Anderes Modell"], check: "Prüfen…", run: "Prüfen", asked: "Wie erwartet", tokens: "4.200", sum: ["Richtige Antworten: 3 von 5", "Richtige Werkzeugaufrufe: 1 von 2"], checked: ["Richtig", "Tool-Aufrufe"], sort: "Fünf Wörter sortieren" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -217,15 +219,19 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await p.waitForTimeout(150);
         assert.equal(checks, 0, "opening the dialog sends no call");
         await dlg.locator(".bar button.primary").click();
-        await dlg.locator(".relay-part").nth(4).waitFor();
+        await dlg.locator(".relay-part").nth(6).waitFor();
         assert.equal(checks, 1);
         const parts = dlg.locator(".relay-part");
         // the right answers counted apart from the right tool calls
         assert.deepEqual((await dlg.locator(".relay-sum span").allTextContents()).map((x) => x.trim()), w.sum);
         assert.equal((await parts.nth(0).locator(".relay-said").textContent()).trim(), w.asked);
-        assert.deepEqual(await dlg.locator(".relay-mark").evaluateAll((ms) => ms.map((m) => m.className.replace("relay-mark ", ""))), ["ok", "off", "ok", "err", "ok"]);
+        assert.deepEqual(await dlg.locator(".relay-mark").evaluateAll((ms) => ms.map((m) => m.className.replace("relay-mark ", ""))), ["ok", "off", "ok", "err", "ok", "off", "ok"]);
         assert((await parts.nth(1).locator(".relay-name").textContent()).includes("1234 × 5678"));
         assert((await parts.nth(4).locator(".relay-name").textContent()).includes("get_time"));
+        // the harder ones by name: a longer sum, and an exact item by its id
+        assert((await parts.nth(5).locator(".relay-name").textContent()).includes("(37 × 43 + 1289) × 7 − 2468"));
+        assert((await parts.nth(5).locator(".relay-line.mono").textContent()).includes("17682"));
+        assert.equal((await parts.nth(6).locator(".relay-name").textContent()).trim(), w.sort);
         assert.equal(await parts.nth(2).locator(".relay-line").count(), 0, "an answer as asked says nothing more");
         const count = await parts.nth(0).locator(".relay-line").allTextContents();
         assert(count.some((x) => x.includes("118") && x.includes(w.tokens)), "the prompt's count: " + count);
@@ -242,7 +248,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const checkedHeads = async () => (await card.locator("thead th").allTextContents()).map((x) => x.replace(/[↑↓]/g, "").trim());
         assert.deepEqual(await checkedHeads(), [...w.heads, ...w.more, ...w.checked, ""]);
         const cells = (i) => card.locator("tbody tr").nth(i).locator("td").allTextContents();
-        assert.deepEqual((await cells(1)).slice(6, 8).map((x) => x.trim()), ["2/3", "1/2"]);
+        assert.deepEqual((await cells(1)).slice(6, 8).map((x) => x.trim()), ["3/5", "1/2"]);
         assert.deepEqual((await cells(0)).slice(6, 8).map((x) => x.trim()), ["—", "—"]);
         // the checked one first by Answers, the ones not checked last
         await head(6).click();

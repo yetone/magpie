@@ -2,9 +2,10 @@
 // with more than ten relays): one model on one provider checked with a
 // few small real calls through the gateway (/api/relay-check), each with
 // an answer known in advance: count to 40, three multiplications, two
-// questions a tool answers. What each found is said as found, a number or
-// what came back, never a verdict on the provider: a model can miss a sum
-// on one call, and a provider can count tokens its own way. The right
+// longer sums, three answers in an exact form, two questions a tool
+// answers. What each found is said as found, a number or what came
+// back, never a verdict on the provider: a model can miss a sum on one
+// call, and a provider can count tokens its own way. The right
 // answers are counted and kept (relayKeep), so the card sets each
 // provider's last check beside the others'. The calls cost what they
 // cost, so only the dialog's Check sends them. plugins/usage/page.js
@@ -17,7 +18,7 @@ window.relayCheck = function (provider, model, providerName, modelName) {
   const ed = el("div", "editor relay-check");
   const head = el("div", "ehead");
   head.append(el("b", "", t("Check {model} on {provider}", { model: modelName, provider: providerName })));
-  const say = el("p", "lib-confirm", t("A few small real calls with known answers, billed as any other: write the numbers 1 to 40, multiply, call the right tool. Each says what came back."));
+  const say = el("p", "lib-confirm", t("A few small real calls with known answers, billed as any other: write the numbers 1 to 40, work out sums, answer in an exact form, call the right tool. Each says what came back."));
   const list = el("div", "relay-parts");
   list.setAttribute("role", "status");
   list.hidden = true;
@@ -72,9 +73,14 @@ function relayKeep(provider, model, r) {
   window.dispatchEvent(new CustomEvent("magpie-relay-checked"));
 }
 
+// the exact items by the id the gateway gives them
+const RELAY_EXACT = { letters: "Count the r's in strawberry raspberry", primes: "List five primes after 50", sort: "Sort five words" };
+
 function relayName(p) {
   if (p.kind === "count") return t("Count to 40");
   if (p.kind === "math") return t("Multiply {q}", { q: p.ask });
+  if (p.kind === "steps") return t("Work out {q}", { q: p.ask });
+  if (p.kind === "exact") return RELAY_EXACT[p.ask] ? t(RELAY_EXACT[p.ask]) : p.ask;
   return t("Call {tool}", { tool: p.ask });
 }
 

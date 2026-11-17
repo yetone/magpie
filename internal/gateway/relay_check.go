@@ -34,6 +34,8 @@ import (
 const (
 	RelayPartCount = "count" // write 1 to 40: the reply, its speed, its tokens
 	RelayPartMath  = "math"  // a multiplication with a known product
+	RelayPartSteps = "steps" // a sum in a few steps, with a known result
+	RelayPartExact = "exact" // an answer asked for in an exact form
 	RelayPartTool  = "tool"  // a question one of two tools answers
 )
 
@@ -94,9 +96,33 @@ func tapUsage(r *http.Request, rec usage.Record) {
 // to be measured, short enough to cost a few hundred tokens.
 const relayCountTo = 40
 
-// relayMaths are the multiplications the math calls ask, and their
-// products: four-digit numbers, past what a model answers from memory.
-var relayMaths = [][2]string{{"1234 * 5678", "7006652"}, {"987 * 654", "645498"}, {"2468 * 1357", "3349076"}}
+// checkAsk is a call with one right answer: ask is what the GUI names it
+// by (the sum, or an exact item's id), text that the answer is compared
+// as written rather than as a number.
+type checkAsk struct {
+	kind, ask, prompt, want string
+	text                    bool
+}
+
+const checkNumOnly = " Answer with the number only, without separators."
+
+// checkAsks are the fixed-answer calls. The products are four-digit
+// numbers, past what a model answers from memory. The harder ones
+// (skingstyle48487's second follow-up: the first set told relays apart
+// too seldom) are what a smaller or cut-down model tends to miss: a sum
+// in a few steps, letters counted across two words, primes listed in an
+// exact form, words sorted and joined as told. Each is short and has one
+// answer a program can check; none names a product or a vendor.
+var checkAsks = []checkAsk{
+	{kind: RelayPartMath, ask: "1234 × 5678", prompt: "What is 1234 * 5678?" + checkNumOnly, want: "7006652"},
+	{kind: RelayPartMath, ask: "987 × 654", prompt: "What is 987 * 654?" + checkNumOnly, want: "645498"},
+	{kind: RelayPartMath, ask: "2468 × 1357", prompt: "What is 2468 * 1357?" + checkNumOnly, want: "3349076"},
+	{kind: RelayPartSteps, ask: "(37 × 43 + 1289) × 7 − 2468", prompt: "What is (37 * 43 + 1289) * 7 - 2468?" + checkNumOnly, want: "17692"},
+	{kind: RelayPartSteps, ask: "17 × 17 × 17 − 29 × 31", prompt: "What is 17 * 17 * 17 - 29 * 31?" + checkNumOnly, want: "4014"},
+	{kind: RelayPartExact, ask: "letters", prompt: "How many times does the letter r appear in the words strawberry raspberry?" + checkNumOnly, want: "6"},
+	{kind: RelayPartExact, ask: "primes", prompt: "List the first five prime numbers greater than 50, separated by commas without spaces, and nothing else.", want: "53,59,61,67,71", text: true},
+	{kind: RelayPartExact, ask: "sort", prompt: "Sort these words alphabetically, write them in lower case joined by single hyphens, and nothing else: pear, Apple, fig, banana, cherry", want: "apple-banana-cherry-fig-pear", text: true},
+}
 
 // relayTools are the tool calls' questions, the tool each should call and
 // the word its arguments should hold. Both calls offer both tools, so the
@@ -106,7 +132,8 @@ var relayTools = []struct{ q, tool, arg string }{
 	{"What time is it in Tokyo now? Use a tool.", "get_time", "tokyo"},
 }
 
-// CheckRelay checks model on providerID with its calls, three at a time. A provider or model the gateway can't resolve is each call's
+// CheckRelay checks model on providerID with its calls, three at a time.
+// A provider or model the gateway can't resolve is each call's
 // error, as an agent would meet it.
 func (s *Server) CheckRelay(ctx context.Context, providerID, model string) RelayCheckResult {
 	out := RelayCheckResult{Provider: providerID, Model: model}
@@ -118,11 +145,11 @@ func (s *Server) CheckRelay(ctx context.Context, providerID, model string) Relay
 	count := "Write the whole numbers from 1 to " + strconv.Itoa(relayCountTo) + " in order, separated by single spaces, and nothing else."
 	type call struct {
 		kind, ask, prompt, want, arg string
-		tools                        bool
+		tools, text                  bool
 	}
 	calls := []call{{kind: RelayPartCount, prompt: count, want: strings.Join(nums, " ")}}
-	for _, m := range relayMaths {
-		calls = append(calls, call{kind: RelayPartMath, ask: strings.ReplaceAll(m[0], "*", "×"), prompt: "What is " + m[0] + "? Answer with the number only, without separators.", want: m[1]})
+	for _, a := range checkAsks {
+		calls = append(calls, call{kind: a.kind, ask: a.ask, prompt: a.prompt, want: a.want, text: a.text})
 	}
 	for _, x := range relayTools {
 		calls = append(calls, call{kind: RelayPartTool, ask: x.tool, prompt: x.q, want: x.tool, arg: x.arg, tools: true})
@@ -140,12 +167,16 @@ func (s *Server) CheckRelay(ctx context.Context, providerID, model string) Relay
 			defer func() { <-slots }()
 			p := s.relayCall(ctx, ref, c.prompt, c.tools)
 			p.Kind, p.Ask, p.Want = c.kind, c.ask, c.want
-			switch c.kind {
-			case RelayPartCount:
+			switch {
+			case c.kind == RelayPartCount:
 				p.Match = p.OK && strings.Join(strings.Fields(p.Got), " ") == c.want
-			case RelayPartMath:
+			case c.text:
+				// as written: only quotes, a code mark or a full stop
+				// around it are read past
+				p.Match = p.OK && strings.Trim(p.Got, " \n.`\"'") == c.want
+			case c.kind != RelayPartTool:
 				p.Match = p.OK && strings.Trim(strings.NewReplacer(",", "", " ", "", " ", "").Replace(p.Got), ".`*\n") == c.want
-			case RelayPartTool:
+			default:
 				p.Match = p.OK && strings.HasPrefix(p.Got, c.want+"(") && strings.Contains(strings.ToLower(p.Got), c.arg)
 			}
 			if c.kind == RelayPartCount {

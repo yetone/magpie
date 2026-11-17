@@ -74,7 +74,7 @@ func relayParts(c RelayCheckResult) map[string]RelayPart {
 	return m
 }
 
-// relayRight answers each part as asked: the count, every product, and
+// relayRight answers each part as asked: the count, every fixed answer, and
 // the tool each question needs.
 func relayRight(prompt string, tools bool) (string, string) {
 	switch {
@@ -83,9 +83,9 @@ func relayRight(prompt string, tools bool) (string, string) {
 	case strings.Contains(prompt, "Tokyo"):
 		return "", `get_time{"city":"Tokyo"}`
 	}
-	for _, m := range relayMaths {
-		if strings.Contains(prompt, m[0]) {
-			return m[1], ""
+	for _, a := range checkAsks {
+		if prompt == a.prompt {
+			return a.want, ""
 		}
 	}
 	var n []string
@@ -106,7 +106,7 @@ func TestCheckRelayAnsweredAsAsked(t *testing.T) {
 		return relayRight(prompt, tools)
 	})
 	c := New().CheckRelay(context.Background(), "relay", "gpt-5.5")
-	n := 1 + len(relayMaths) + len(relayTools)
+	n := 1 + len(checkAsks) + len(relayTools)
 	if c.Provider != "relay" || c.Model != "gpt-5.5" || len(c.Parts) != n || int(calls.Load()) != n {
 		t.Fatalf("%+v, %d calls", c, calls.Load())
 	}
@@ -128,6 +128,67 @@ func TestCheckRelayAnsweredAsAsked(t *testing.T) {
 	if p := ps["tool get_time"]; p.Got != `get_time({"city":"Tokyo"})` {
 		t.Fatalf("tool: %+v", p)
 	}
+	if p := ps["exact sort"]; p.Got != "apple-banana-cherry-fig-pear" {
+		t.Fatalf("sort: %+v", p)
+	}
+}
+
+// The harder ones are told apart from the easy ones: a model right on
+// every product but a step out in a longer sum, a letter short, primes
+// spaced and words not lowered has exactly those not as asked. A code
+// mark or full stop around a number is read past.
+func TestCheckRelayHarderAnswersApart(t *testing.T) {
+	fresh(t)
+	checkedRelayUp(t, "gpt-5.5", 31, func(prompt string, tools bool) (string, string) {
+		switch {
+		case strings.Contains(prompt, "- 2468?"):
+			return "17682", ""
+		case strings.Contains(prompt, "strawberry"):
+			return "5", ""
+		case strings.Contains(prompt, "prime"):
+			return "53, 59, 61, 67, 71", ""
+		case strings.Contains(prompt, "Sort"):
+			return "Apple-banana-cherry-fig-pear", ""
+		case strings.Contains(prompt, "17 * 17"):
+			return "`4014`.", ""
+		}
+		return relayRight(prompt, tools)
+	})
+	ps := relayParts(New().CheckRelay(context.Background(), "relay", "gpt-5.5"))
+	var off []string
+	for k, p := range ps {
+		if !p.OK {
+			t.Fatalf("%s: %+v", k, p)
+		}
+		if !p.Match {
+			off = append(off, k)
+		}
+	}
+	slices.Sort(off)
+	if strings.Join(off, ",") != "exact letters,exact primes,exact sort,steps (37 × 43 + 1289) × 7 − 2468" {
+		t.Fatalf("not as asked: %v", off)
+	}
+}
+
+// What a check asks goes to the provider as written, so it names no
+// product, vendor or limit: a relay sees an ordinary short question.
+func TestRelayPromptsNameNoOne(t *testing.T) {
+	var ps []string
+	for _, a := range checkAsks {
+		ps = append(ps, a.prompt)
+	}
+	for _, x := range relayTools {
+		ps = append(ps, x.q)
+	}
+	ps = append(ps, string(relayCheckTools))
+	for _, p := range ps {
+		l := strings.ToLower(p)
+		for _, w := range []string{"magpie", "openai", "anthropic", "claude", "gpt", "gemini", "qwen", "relay", "limit", "test", "check"} {
+			if strings.Contains(l, w) {
+				t.Errorf("%q names %q", p, w)
+			}
+		}
+	}
 }
 
 // A model that calls the wrong one of the two tools, or answers one
@@ -138,7 +199,7 @@ func TestCheckRelayCountsEachAnswer(t *testing.T) {
 		switch {
 		case strings.Contains(prompt, "Tokyo"):
 			return "", `get_weather{"city":"Tokyo"}`
-		case strings.Contains(prompt, "2468"):
+		case strings.Contains(prompt, "2468 *"):
 			return "3349176", ""
 		}
 		return relayRight(prompt, tools)
