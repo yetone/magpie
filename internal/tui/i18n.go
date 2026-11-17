@@ -463,6 +463,7 @@ var zh = map[string]string{
 	"small":              "小模型",
 	"subagents":          "子代理",
 	"subagent model":     "子代理模型",
+	"subagent pool":      "子代理模型池",
 	"subagent effort":    "子代理推理强度",
 	"sign-in":            "登录方式",
 	"compaction model":   "压缩模型",
