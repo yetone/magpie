@@ -20,6 +20,19 @@ package provider
 // fields as qnnp-me/dsh-qianfan-token-plan reads). An item Released, or
 // past its expiresAt, is no plan. The item's apiKey is never kept.
 //
+// The credit packs beside the plan (积分包, yuushabu_buyinn on X: Baidu's
+// gift packs went uncounted) are the console's
+//
+//	GET console.bce.baidu.com/api/qianfan/charge/tokenPlanPersonal/pack/list
+//
+//	{"success":true,"result":{"items":[{"packId","name","packType":"gift",
+//	 "status":"active","totalCredits","usedCredits","remainingCredits",
+//	 "purchasedAt","expiresAt","isUsable","consumeOrder"},…]}}
+//
+// as its Token Plan page reads them (the resource micro-app's bundle,
+// mb-static/resource/assets: the page's pack-list hook and its
+// 赠送积分包余量 and 积分包余量 rows); see readQianfanPacks.
+//
 // As StepFun's sign-in (stepfun_plan.go), the user brings the session from
 // their own browser: a bookmarklet run on the signed-in console copies its
 // cookies, or the Cookie header of the console's request is pasted from
@@ -65,7 +78,10 @@ var qianfanConsole = "https://console.bce.baidu.com"
 
 const (
 	qianfanResourcePath = "/api/qianfan/charge/tokenPlanPersonal/resource"
-	qianfanPlanHost     = "qianfan.baidubce.com"
+	// qianfanPackPath lists the account's credit packs (积分包): those
+	// Baidu gives (赠送) and those bought (增购积分)
+	qianfanPackPath = "/api/qianfan/charge/tokenPlanPersonal/pack/list"
+	qianfanPlanHost = "qianfan.baidubce.com"
 	// qianfanPaste starts what the bookmarklet copies, the JSON of a session
 	qianfanPaste = "magpie-qianfan:"
 	// qianfanUA is a browser's: the console is a page's API
@@ -349,7 +365,13 @@ func qianfanClient() *http.Client {
 // as the session, and reads its result and the cookies a reply that read it
 // set.
 func qianfanResource(ctx context.Context, cookie string) (json.RawMessage, []*http.Cookie, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, qianfanConsole+qianfanResourcePath, nil)
+	return qianfanAsk(ctx, cookie, qianfanResourcePath)
+}
+
+// qianfanAsk asks the console's path as its page does, with the session,
+// and reads the result of a reply that succeeded and the cookies it set.
+func qianfanAsk(ctx context.Context, cookie, path string) (json.RawMessage, []*http.Cookie, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, qianfanConsole+path, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -459,7 +481,7 @@ func readQianfanPlan(raw []byte, now time.Time) (plan string, until *time.Time, 
 		live = append(live, held{it, end})
 	}
 	if len(live) == 0 {
-		return "", nil, "", w, errors.New("this Baidu Cloud account has no Token Plan Personal")
+		return "", nil, "", w, errQianfanNoPlan
 	}
 	slices.SortStableFunc(live, func(a, b held) int {
 		ra, rb := strings.EqualFold(a.it.Status, "Running"), strings.EqualFold(b.it.Status, "Running")
@@ -508,6 +530,135 @@ func readQianfanPlan(raw []byte, now time.Time) (plan string, until *time.Time, 
 	return plan, until, renew, w, nil
 }
 
+// errQianfanNoPlan is an account the console lists no running plan for.
+var errQianfanNoPlan = errors.New("this Baidu Cloud account has no Token Plan Personal")
+
+// qianfanPack is one credit pack the console lists (pack/list's items), as
+// its page reads them (the bundle's Token Plan Personal page: packType
+// "gift" is Baidu's gift, 赠送积分包, counted only with an expiresAt still
+// ahead; status "active" packs that are neither gift nor guoqing_lite or
+// guoqing_pro are the ones bought, 积分包; isUsable says the credits can
+// be spent now).
+type qianfanPack struct {
+	PackType  string `json:"packType"`
+	Status    string `json:"status"`
+	Total     any    `json:"totalCredits"`
+	Used      any    `json:"usedCredits"`
+	Remaining any    `json:"remainingCredits"`
+	ExpiresAt any    `json:"expiresAt"`
+	IsUsable  any    `json:"isUsable"`
+}
+
+// readQianfanPacks is the console's pack/list result as the card's rows
+// beside the plan's month: "Gift credits", Baidu's gift packs still live,
+// and "Credit packs", the active ones bought, each the packs' credits
+// summed, as the console's page sums them, and when the soonest of what is
+// left in them runs out. A kind the account has none of has no row. spare
+// is whether any pack can be spent now with credits left: Baidu spends
+// them once the plan's are used up (套餐额度 → 赠送积分包 → 常规积分包), so
+// the month used up doesn't stop the account. A reply magpie can't read,
+// or a pack whose amounts it doesn't tell, is an error: unknown, never
+// none. aside sets the gift packs aside from routing, as when the account
+// has a plan, whose month is its allowance.
+func readQianfanPacks(raw []byte, now time.Time, aside bool) (ws []QuotaWindow, spare bool, err error) {
+	var r struct {
+		Items []qianfanPack `json:"items"`
+	}
+	if json.Unmarshal(raw, &r) != nil {
+		return nil, false, fmt.Errorf("Baidu's console answered credit packs magpie can't read: %s", volcHead(raw))
+	}
+	type sum struct {
+		total, left float64
+		out         time.Time // the soonest end of a pack with credits left
+		outLeft     float64
+		any         bool
+	}
+	var gift, bought sum
+	for _, p := range r.Items {
+		kind := strings.ToLower(p.PackType)
+		end, hasEnd := qianfanTime(p.ExpiresAt)
+		var s *sum
+		switch {
+		case kind == "gift":
+			if !hasEnd || !end.After(now) {
+				continue
+			}
+			s = &gift
+		case kind == "guoqing_lite" || kind == "guoqing_pro" || !strings.EqualFold(p.Status, "active"):
+			continue
+		default:
+			if hasEnd && !end.After(now) {
+				continue
+			}
+			s = &bought
+		}
+		total, ok := number(p.Total)
+		if !ok || total < 0 {
+			return nil, false, errors.New("Baidu's console told no amount for a credit pack")
+		}
+		left, ok := number(p.Remaining)
+		if !ok {
+			used, uok := number(p.Used)
+			if !uok {
+				return nil, false, errors.New("Baidu's console told no amount for a credit pack")
+			}
+			left = total - used
+		}
+		left = max(0, left)
+		s.any = true
+		s.total += total
+		s.left += left
+		if left > 0 && hasEnd {
+			switch {
+			case s.out.IsZero() || end.Before(s.out):
+				s.out, s.outLeft = end, left
+			case end.Equal(s.out):
+				s.outLeft += left
+			}
+		}
+		if left > 0 && qianfanTrue(p.IsUsable) {
+			spare = true
+		}
+	}
+	// bought packs are spent only under a plan (积分包需订购套餐才可抵扣), so
+	// they never hold the account; the gift packs are its allowance when
+	// it has no plan (not aside)
+	for _, k := range []struct {
+		name  string
+		s     sum
+		aside bool
+	}{{"Gift credits", gift, aside}, {"Credit packs", bought, true}} {
+		if !k.s.any {
+			continue
+		}
+		w := QuotaWindow{Name: k.name, Unit: "credits", Amount: k.s.total - k.s.left, Limit: k.s.total, Aside: k.aside}
+		if k.s.total > 0 {
+			w.Used = max(0, min(100, w.Amount/k.s.total*100))
+		} else {
+			w.Used = 100
+		}
+		if !k.s.out.IsZero() {
+			out := k.s.out
+			w.RunsOutAt, w.RunsOut = &out, k.s.outLeft
+		}
+		ws = append(ws, w)
+	}
+	return ws, spare, nil
+}
+
+// qianfanTrue reads the console's flag: true, or "true" or 1.
+func qianfanTrue(v any) bool {
+	switch x := v.(type) {
+	case bool:
+		return x
+	case string:
+		return strings.EqualFold(x, "true") || x == "1"
+	case float64:
+		return x == 1
+	}
+	return false
+}
+
 // qianfanNow is the clock readQianfanPlan is read at, a var for tests.
 var qianfanNow = time.Now
 
@@ -530,14 +681,48 @@ func qianfanPlanQuota(ctx context.Context, p Provider) SubscriptionQuota {
 		q.Error = err.Error()
 		return q
 	}
-	plan, until, renew, w, err := readQianfanPlan(raw, qianfanNow())
-	if err != nil {
+	now := qianfanNow()
+	plan, until, renew, w, err := readQianfanPlan(raw, now)
+	if err != nil && !errors.Is(err, errQianfanNoPlan) {
 		q.Error = err.Error()
 		return q
 	}
+	noPlan := err != nil
+	// the credit packs beside the plan, with the session as the plan's
+	// read left it
+	packs, spare, perr := qianfanPacks(ctx, mergeQianfanCookies(s.Cookie, set), now, !noPlan)
+	if noPlan {
+		// with no plan, Baidu spends the gift packs straight away; an
+		// account with none of them, or none read, has nothing to show
+		if perr != nil || len(packs) == 0 {
+			q.Error = errQianfanNoPlan.Error()
+			return q
+		}
+		q.Windows = append(q.Windows, packs...)
+		return q
+	}
 	q.Plan, q.Until, q.Renew = plan, until, renew
+	// Baidu goes on to the packs once the month is used up
+	w.Credits = spare
 	q.Windows = append(q.Windows, w)
+	if perr != nil {
+		// not read is unknown, never no packs
+		q.Windows = append(q.Windows, QuotaWindow{Name: "Credit packs", Text: true, Aside: true, Display: "Unknown"})
+		return q
+	}
+	q.Windows = append(q.Windows, packs...)
 	return q
+}
+
+// qianfanPacks reads the account's credit packs as the card's rows
+// (readQianfanPacks), set aside from routing when the plan is the
+// account's allowance.
+func qianfanPacks(ctx context.Context, cookie string, now time.Time, aside bool) ([]QuotaWindow, bool, error) {
+	raw, _, err := qianfanAsk(ctx, cookie, qianfanPackPath)
+	if err != nil {
+		return nil, false, err
+	}
+	return readQianfanPacks(raw, now, aside)
 }
 
 // qianfanPlanQuotas is a card for each Token Plan Personal provider in use
