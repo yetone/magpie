@@ -51,6 +51,10 @@ func proxied() http.RoundTripper {
 // group names the pushes in the Bark app's list.
 const group = "magpie"
 
+// icon is magpie's own icon, which the Bark app shows on each push. It is
+// the site's copy of the app's apple-touch-icon.
+const icon = "https://usemagpie.ai/apple-touch-icon.png"
+
 // Push sends title and body to t. The error names the server's answer,
 // never the device key.
 func Push(ctx context.Context, t Target, title, body string) error {
@@ -62,6 +66,7 @@ func Push(ctx context.Context, t Target, title, body string) error {
 		"title":      title,
 		"body":       body,
 		"group":      group,
+		"icon":       icon,
 	})
 	req, err := http.NewRequestWithContext(ctx, "POST", t.url(), bytes.NewReader(b))
 	if err != nil {
