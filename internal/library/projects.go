@@ -104,6 +104,7 @@ var projectSkillsDirs = map[string]string{
 	"droid":       ".agents/skills",
 	"cline":       ".agents/skills",
 	"dsh":         ".agents/skills",
+	"ds-bot":      ".agents/skills",
 	"qoder":       ".qoder/skills",
 	"qoder-cn":    ".qoder/skills",
 	"codebuddy":   ".codebuddy/skills",

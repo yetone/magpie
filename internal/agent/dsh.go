@@ -358,6 +358,10 @@ func dshListFor(path string) string {
 	return id
 }
 
+// DshAppHome is whether dir is the home of an app that runs a dsh of its
+// own there (DS Bot's): that home is the app's, not dsh's (#5624).
+func DshAppHome(dir string) bool { return dshListFor(dir) != "dsh" }
+
 // dshProfiles are the profiles' patch lists (dsh 0.1.5 on), web's first.
 func dshProfiles(dir string) []string {
 	files, _ := filepath.Glob(filepath.Join(dir, "profiles", "*", "cordis.patch.yml"))

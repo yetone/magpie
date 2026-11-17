@@ -25,7 +25,6 @@ var noLibrary = map[string]string{
 	"copilot-jetbrains": "not looked at (#5897)",
 	"air":               "not looked at (#5897)",
 	"air-ide":           "not looked at (#5897)",
-	"ds-bot":            "not looked at (#5897)",
 	"morph":             "not looked at (#5897)",
 	"muse":              "not looked at (#5897)",
 	"empryo":            "not looked at (#5897)",
