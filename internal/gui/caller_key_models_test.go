@@ -241,3 +241,65 @@ func TestCallerKeyModelsOfferAnEmptyProviderWhole(t *testing.T) {
 		t.Fatal("providers", ids)
 	}
 }
+
+// The key editor offers a routing group of decision models beside the
+// chat groups (Kautism on Discord: a group of Clef and Jev could not be
+// picked for a key): the catalog keeps such a group out, as no agent chats
+// with it, yet the gateway gives a key naming it its models at
+// /v1/systemone. One switched off is not offered.
+func TestCallerKeyModelsOfferDecisionGroups(t *testing.T) {
+	sandboxHome(t)
+	for _, p := range []provider.Provider{
+		{ID: "relay", Name: "Relay", Key: "k", Chat: "http://127.0.0.1:1/v1", Models: []string{"m"}},
+		{ID: "ja", Name: "JA", Key: "k1", Decide: "http://127.0.0.1:1/v1"},
+		{ID: "jb", Name: "JB", Key: "k2", Decide: "http://127.0.0.1:1/v1"},
+	} {
+		if err := provider.Save(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, g := range []provider.Group{
+		{ID: "chat", Name: "Chat", Members: []string{"relay/m"}},
+		{ID: "jevs", Name: "Jevs", Members: []string{"ja/jev-latest", "jb/jev-latest"}},
+		{ID: "off", Name: "Off", Members: []string{"ja/jev-latest"}},
+	} {
+		if err := provider.SaveGroup(g); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := provider.SwitchGroup("off", false); err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	callerKeyRoutes(mux)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("GET", "/api/caller-keys/models", nil))
+	var l struct{ Models []keyModelJSON }
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &l) != nil {
+		t.Fatal(w.Code, w.Body)
+	}
+	var groups []string
+	lastGroup, firstModel := -1, -1
+	for i, m := range l.Models {
+		if m.Group {
+			groups = append(groups, m.ID)
+			lastGroup = i
+		} else if firstModel < 0 {
+			firstModel = i
+		}
+	}
+	if !slices.Contains(groups, "group/jevs") || !slices.Contains(groups, "group/chat") {
+		t.Fatalf("groups offered %v, want the chat group and the decision group", groups)
+	}
+	if slices.Contains(groups, "group/off") {
+		t.Fatalf("a switched-off decision group offered: %v", groups)
+	}
+	if firstModel >= 0 && lastGroup > firstModel {
+		t.Fatalf("a group after the models: %+v", l.Models)
+	}
+	for _, m := range l.Models {
+		if m.ID == "group/jevs" && m.Name != "Jevs" {
+			t.Fatalf("decision group shown as %q", m.Name)
+		}
+	}
+}

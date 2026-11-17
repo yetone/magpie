@@ -108,6 +108,31 @@ func callerKeyRoutes(mux *http.ServeMux) {
 			}
 			out = append(out, keyModelJSON{ID: e.Provider.ID + "/" + e.Model, Name: cmp.Or(e.Name, e.Model), Provider: e.Provider.ID, ProviderName: cmp.Or(e.Provider.Name, e.Provider.ID)})
 		}
+		// the decision groups, after the chat groups: Catalog keeps them
+		// out as no agent chats with one, but the gateway gives a key
+		// naming one its models at /v1/systemone (serveDecisionGroup's
+		// groupGiven), so a key held to some models had no way to be let
+		// use one but All models (Kautism on Discord: a group of Clef and
+		// Jev, not in the key's list). Only those the gateway serves now:
+		// on, and the user's own while their groups are served.
+		groupsEnd := 0
+		for groupsEnd < len(out) && out[groupsEnd].Group {
+			groupsEnd++
+		}
+		for _, g := range provider.Groups() {
+			if g.Hidden || g.Disabled || !g.Decides() {
+				continue
+			}
+			if _, _, ok := provider.FindGroup(provider.GroupPrefix + g.ID); !ok {
+				continue
+			}
+			id := provider.GroupPrefix + g.ID
+			if slices.ContainsFunc(out, func(m keyModelJSON) bool { return strings.EqualFold(m.ID, id) }) {
+				continue
+			}
+			out = slices.Insert(out, groupsEnd, keyModelJSON{ID: id, Name: cmp.Or(g.Name, g.ID), Group: true, Decides: true})
+			groupsEnd++
+		}
 		// the models a routing group listing alone keeps out of the lists,
 		// each after its provider's: a key not given the group is listed
 		// those it may use (the gateway's keyListed), so the picker offers

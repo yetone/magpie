@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -287,5 +288,57 @@ func TestDecisionTriesShareTheClassifierWait(t *testing.T) {
 	defer mu.Unlock()
 	if len(asked) != 1 {
 		t.Fatalf("asked %v in one classifier's wait, want the first key alone", asked)
+	}
+}
+
+// A gateway key held to some models reaches a decision group at
+// /v1/systemone when it names the group (Kautism on Discord: the key
+// editor now offers it), every member through it; a key naming only a
+// chat model is refused it, and asks none of its models.
+func TestGatewayKeyNamingADecisionGroup(t *testing.T) {
+	fresh(t)
+	f := &decideFleet{status: map[string]int{}}
+	a := f.serve()
+	defer a.Close()
+	up := httptest.NewServer(&fake{t: t, ctype: "application/json", reply: `{"id":"x","choices":[]}`})
+	defer up.Close()
+	for _, p := range []provider.Provider{
+		{ID: "relay", Name: "Relay", Key: "k", Chat: up.URL + "/v1", Models: []string{"m"}},
+		{ID: "ja", Name: "JA", Key: "ka", Decide: a.URL + "/v1"},
+	} {
+		if err := provider.Save(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := provider.SaveGroup(provider.Group{ID: "jevs", Name: "Jevs", Members: []string{"ja/jev-latest"}}); err != nil {
+		t.Fatal(err)
+	}
+	keys, secrets := newCaller(t, "Given the group", "A chat model only")
+	for i, ms := range [][]string{{"group/jevs"}, {"relay/m"}} {
+		if _, err := access.Update("models-key", access.Change{Key: keys[i].ID, Models: ms}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h := New().Handler()
+	ask := func(secret, model string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest("POST", "/v1/systemone", strings.NewReader(`{"model":"`+model+`","state":{"message":"hi"},"questions":{"intent":{"type":"choice"}}}`))
+		r.Header.Set("Authorization", "Bearer "+secret)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w
+	}
+	for _, model := range []string{"group/jevs", "Jevs"} {
+		if w := ask(secrets[0], model); w.Code != 200 || !strings.Contains(w.Body.String(), `"choice":"bug"`) {
+			t.Fatalf("%s for the key naming it: %d %s", model, w.Code, w.Body)
+		}
+	}
+	if got := len(f.took()); got != 2 {
+		t.Fatalf("asked %d times, want 2", got)
+	}
+	if w := ask(secrets[1], "group/jevs"); w.Code != 403 {
+		t.Fatalf("a key not naming the group: %d %s", w.Code, w.Body)
+	}
+	if got := f.took(); len(got) != 0 {
+		t.Fatalf("a refused key's request asked %v", got)
 	}
 }
