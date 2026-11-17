@@ -57,6 +57,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await prefs.click();
       await open(page).first().waitFor();
       assert.equal(await open(page).count(), 8, "Settings' tabs are listed");
+      // the list is drawn first and again with its chevron once navicons.js
+      // is in (app.js navSubs), so the chevron is waited for, not read at once
+      await chev.waitFor({ timeout: 10000 }).catch(() => {});
       assert.ok(await chev.isVisible(), "Settings' row shows a disclosure chevron");
       assert.equal(await prefs.getAttribute("aria-expanded"), "true");
       // a tab picked, so the page has something to keep
