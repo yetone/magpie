@@ -5650,3 +5650,11 @@ body.linux .action-confirm::backdrop { -webkit-backdrop-filter: none; backdrop-f
 .sync-preview .sync-item { display: flex; justify-content: space-between; gap: 12px; min-width: 0; }
 .sync-preview .sync-item span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sync-preview .sync-item .sub, .sync-preview .sync-items > .sub, .sync-preview .lib-confirm.sub { color: var(--muted); }
+
+/* Speed beside Model and Effort (Tengs999 on X): the bolt and what decides it */
+.field.ag-speed .v { display: inline-flex; align-items: center; gap: 3px; }
+.field.ag-speed .v svg, .field.ag-speed .v .bolts { flex: none; color: var(--accent); }
+.field.ag-speed .v path { fill: currentColor; }
+.field.ag-speed .v .bolts { display: inline-flex; }
+.field.ag-speed .v .bolts svg + svg { margin-left: -5px; }
+.field.ag-speed .ag-speed-by { color: var(--faint); font-weight: 400; white-space: pre; }

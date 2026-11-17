@@ -181,6 +181,7 @@ test("compat.js is the first of the page's own scripts", async () => {
   // rotfig.js when a routing's In turn is first shown;
   // ompadvisor.js when an omp's settings first show;
   // kimisub.js when a Kimi Code row's Subagents line first shows;
+  // agentspeed.js when an agent row on a fast model draws its Speed;
   // claudemagpie.js when Claude Desktop's twin button or Advanced fold first shows;
   // keyrates.js when a provider with two or more keys opens;
   // maximages.js when the provider editor draws Max output;
@@ -188,7 +189,7 @@ test("compat.js is the first of the page's own scripts", async () => {
   // navorder.js once a page order is kept, or Settings › Sidebar pages draws;
   // the checks above
   // still read them
-  for (const f of await scripts()) if (!["webfonts.js", "cfgblocked.js", "signsheets.js", "ruleedit.js", "ratewindows.js", "traywindows.js", "autoresetown.js", "registry.js", "navlamp.js", "whatsnew.js", "claudemode.js", "ctxtext.js", "resetask.js", "quotaall.js", "quotatable.js", "quitask.js", "checkinnow.js", "proxies.js", "autobackup.js", "scrollends.js", "profilerename.js", "settingshints.js", "keyspend.js", "syncfiles.js", "agentcompact.js", "agentwindow.js", "balfound.js", "passerrors.js", "tlscerts.js", "keybalance.js", "modellimits.js", "notices.js", "videogen.js", "provlinks.js", "setfeats.js", "pageshare.js", "panelfirst.js", "panelarrange.js", "modelfind.js", "agentsmanager.js", "agentsuffix.js", "phonetabs.js", "pluginmd.js", "bark.js", "acctexport.js", "plugincounts.js", "navicons.js", "autoswitchtip.js", "codexprojects.js", "pipecheck.js", "addfloat.js", "plugingrid.js", "plugininstalled.js", "rotfig.js", "ompadvisor.js", "kimisub.js", "claudemagpie.js", "keyrates.js", "maximages.js", "qianwenplan.js", "qianfanplan.js", "agymove.js", "updatetrust.js", "currencyprefs.js", "appearance.js", "mirroredit.js", "navorder.js", "instancename.js"].includes(f)) assert(all.includes(f), f + " is not loaded by index.html");
+  for (const f of await scripts()) if (!["webfonts.js", "cfgblocked.js", "signsheets.js", "ruleedit.js", "ratewindows.js", "traywindows.js", "autoresetown.js", "registry.js", "navlamp.js", "whatsnew.js", "claudemode.js", "ctxtext.js", "resetask.js", "quotaall.js", "quotatable.js", "quitask.js", "checkinnow.js", "proxies.js", "autobackup.js", "scrollends.js", "profilerename.js", "settingshints.js", "keyspend.js", "syncfiles.js", "agentcompact.js", "agentwindow.js", "balfound.js", "passerrors.js", "tlscerts.js", "keybalance.js", "modellimits.js", "notices.js", "videogen.js", "provlinks.js", "setfeats.js", "pageshare.js", "panelfirst.js", "panelarrange.js", "modelfind.js", "agentsmanager.js", "agentsuffix.js", "phonetabs.js", "pluginmd.js", "bark.js", "acctexport.js", "plugincounts.js", "navicons.js", "autoswitchtip.js", "codexprojects.js", "pipecheck.js", "addfloat.js", "plugingrid.js", "plugininstalled.js", "rotfig.js", "ompadvisor.js", "kimisub.js", "agentspeed.js", "claudemagpie.js", "keyrates.js", "maximages.js", "qianwenplan.js", "qianfanplan.js", "agymove.js", "updatetrust.js", "currencyprefs.js", "appearance.js", "mirroredit.js", "navorder.js", "instancename.js"].includes(f)) assert(all.includes(f), f + " is not loaded by index.html");
 });
 
 test("the styles hold up in Safari 15.0", async () => {

@@ -562,6 +562,8 @@ function renderAgents() {
     const launchOnly = !!a.launch && !a.fields.length && !a.import;
     if (a.launch && !launchOnly) extras.append(launchButton(a));
     // the panel's settings open in a sheet (connectPanel)
+    // the speed its model goes at, a line of the opened row after Effort
+    if (mode === "panel") fields.append(speedLazy(a));
     if (mode === "panel" && agentPrefsOf(a)) fields.append(agentPrefsButton(a));
     if (extras.childNodes.length) fields.append(extras);
     // an app taking magpie by a link (Cindy): its row opens it
@@ -1494,13 +1496,13 @@ function expandLink(a) {
     const own = want && agentPrefsOf(a);
     const compact = own && own.includes("fullContextRow") && !window.agentCompactFill;
     // and Kimi Code's Subagents line (kimisub.js) is there to measure
-    const kim = want && kimiSub(a) && !window.kimiSubLine;
+    const kim = want && kimiSub(a) && !window.kimiSubLine, spd = want && speedOf(a) && !window.speedField;
     // sheet measures once: its settings are read first (#5360, chiperman)
-    if ((own && (!prefs || compact)) || kim) {
+    if ((own && (!prefs || compact)) || kim || spd) {
       const label = [...b.childNodes];
       b.disabled = true;
       saving(b, t("Loading…"));
-      try { await Promise.all([own && !prefs && loadSettings(), compact && import("./agentcompact.js"), kim && import("./kimisub.js")]); }
+      try { await Promise.all([own && !prefs && loadSettings(), compact && import("./agentcompact.js"), kim && import("./kimisub.js"), spd && import("./agentspeed.js")]); }
       catch (e) { if (request === agentExpandRequest && b.isConnected) statusErr(e); return; }
       finally { b.disabled = false; doneSaving(b); b.replaceChildren(...label); }
       if (request !== agentExpandRequest || !b.isConnected || view !== "agents") return;
@@ -1609,6 +1611,8 @@ function connectRow(a, row, who, { fields, extras, fieldBtn, sw, kind }) {
   } else row.append(el("span", "ag-cant", t("Can't connect")));
   if (kind === "ok" && a.wired && agentExpanded === a.id) {
     row.classList.add("expanded");
+    // the speed its model goes at, beside Effort under New sessions
+    fields.append(speedLazy(a));
     row.append(connectPanel(a, { fields: fields.querySelector(".field") ? fields : null, extras, fieldBtn }));
   }
 }
@@ -5531,6 +5535,11 @@ function fastToggle(o) {
   };
   return b;
 }
+// speedLazy: the Speed beside Model and Effort (agentspeed.js), for an
+// agent whose model has a fast mode; Details imports it before it measures
+const speedOf = (a, f = a.fields.find((f) => f.key == "model")) => f && optionFor(f, f.value)?.fastFor;
+const speedLazy = (a, at = el("span", "field")) => !speedOf(a) ? "" : window.speedField ? speedField(a) || "" : (at.hidden = 1, import("./agentspeed.js").then(() => at.replaceWith(speedField(a) || ""), () => {}), at);
+
 // boltIcon: Fast's bolt, or Ultrafast's two
 function boltIcon(ultra, size) {
   if (!ultra) return svg(BOLT, size, 1.4);
