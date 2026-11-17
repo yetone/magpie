@@ -73,15 +73,37 @@ func piProviderOn(agentID string, models []catalog.Model, gw, on string) map[str
 // and off says magpie doesn't write the block (the pi-magpie extension
 // serves the provider), so there is nothing to pick.
 func piProtocolField(at place, modelsPath string, write func() error, off func() bool) Field {
+	return protocolField(at, piProtocolKey(at), modelsPath, func() (string, bool) {
+		v, has := edit.GetJSON(modelsPath, "providers."+magpieID+".api")
+		if _, block := edit.GetJSON(modelsPath, "providers."+magpieID); !block {
+			has = false
+		}
+		return v, has
+	}, write, off)
+}
+
+// protocolField is an agent's protocol, picked in its row and kept in the
+// stash at key: the api magpie's provider has in the models file at
+// modelsPath, which fileAPI reads (has: magpie's provider is in the file).
+// write rewrites the provider when it is there, and off says magpie
+// doesn't write it, so there is nothing to pick. Pi's (piProtocolField)
+// and omp's (omp_protocol.go).
+func protocolField(at place, key, modelsPath string, fileAPI func() (string, bool), write func() error, off func() bool) Field {
+	picked := func() string {
+		if v := stashShared()[key]; slices.Contains(piProtocols, v) {
+			return v
+		}
+		return ""
+	}
 	return Field{
 		Key: "protocol", Label: "protocol", Quiet: true,
 		Get: func() string {
-			picked := piProtocol(at)
+			picked := picked()
 			if at.cold {
 				// a stopped distro's files start it (#3896)
 				return picked
 			}
-			file, _ := edit.GetJSON(modelsPath, "providers."+magpieID+".api")
+			file, _ := fileAPI()
 			if file == "" {
 				return picked
 			}
@@ -89,7 +111,7 @@ func piProtocolField(at place, modelsPath string, write func() error, off func()
 			if want == "" {
 				want = "openai-completions"
 			}
-			// one the user typed there is what Pi asks on
+			// one the user typed there is what the agent asks on
 			if file != want && !slices.Contains(piAPIsWanted(modelsPath), file) {
 				return file
 			}
@@ -101,11 +123,12 @@ func piProtocolField(at place, modelsPath string, write func() error, off func()
 			}
 			// the api in the file now, the user's own included, gives way
 			// to the pick
-			if file, _ := edit.GetJSON(modelsPath, "providers."+magpieID+".api"); file != "" {
+			file, has := fileAPI()
+			if file != "" {
 				piAPIWanted(modelsPath, file)
 			}
-			stash(map[string]string{piProtocolKey(at): v})
-			if _, has := edit.GetJSON(modelsPath, "providers."+magpieID); !has || off() {
+			stash(map[string]string{key: v})
+			if !has || off() {
 				return nil
 			}
 			return write()
