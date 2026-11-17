@@ -29,6 +29,18 @@ select-all Remove) also turns found groups off (`SetAutoGroups(false)`,
 xwang_sh on X), so a model a provider lists later brings no new one; the
 removed records stay and turning them on again restores the groups as they were.
 
+A found group can go without the user removing it: one of its two providers
+is removed, or its list no longer has the model. `Reseat` moves an agent's
+config off it, but a conversation saved on it (a Codex thread names its
+model in every turn and in the compaction before a model switch) still asks
+for it. `provider.AutoStandIn` sends such a request to the model from a
+provider that still serves it, the same model and never another, as it does
+while found groups are off or a provider is kept out of them; a group the
+user changed or removed gets none. With no provider serving the model the
+request is still 404, and `unknownModel` says the model is gone and to pick
+another for the conversation instead of listing every id
+(`provider.GoneAutoGroup`; canlee886 on X, `TestFoundGroupGoneGoesToItsModel`).
+
 ## Responsibilities and sources of truth
 
 | Part | Responsibility | Source |

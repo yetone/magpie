@@ -942,14 +942,18 @@ var editionTwins = map[string]string{
 	"workbuddy-ai/deepseek-v4.1-flash-sg": "deepseek-v4.1-flash",
 }
 
-// AutoStandIn is the model a request for a group magpie found goes to while
-// such groups are off (SetAutoGroups), or once the providers the user keeps
-// out of them (SetAutoGroupSkip) took it away: its model, from the first
-// provider that serves it, one not kept out first, as "provider/model". An
-// agent set to the group, or a session begun on it, keeps working, on one
-// provider. ok is false for any other id, a group the user has of that id,
-// one they removed, and while found groups are on, one there is or that
-// isn't gone for a provider kept out.
+// AutoStandIn is the model a request for a group magpie found goes to
+// when there is no such group now: while such groups are off
+// (SetAutoGroups), once the providers the user keeps out of them
+// (SetAutoGroupSkip) took it away, or once fewer than two providers serve
+// its model (a provider removed, or its list without the model: canlee886
+// on X, a Codex thread saved on group/auto-gpt-6-1-sol failed every turn
+// with 404). It is its model, from the first provider that serves it, one
+// not kept out first, as "provider/model": the same model, never another.
+// An agent set to the group, or a session begun on it, keeps working, on
+// one provider. ok is false for any other id, a group there is, a group
+// the user has of that id, one they removed, and a model no provider
+// serves now (GoneGroupModel).
 func AutoStandIn(id string) (string, bool) { return AutoStandInFor("", id) }
 
 // AutoStandInFor is AutoStandIn for a request of agent's: the agent's own
@@ -966,14 +970,8 @@ func AutoStandInFor(agent, id string) (string, bool) {
 	if _, ok := groupOf(groupsIn(entries), gid); ok {
 		return "", false
 	}
-	if !f.NoAutoGroups {
-		if len(f.AutoGroupSkip) == 0 || slices.ContainsFunc(f.Groups, func(g Group) bool { return g.ID == gid }) {
-			return "", false // not gone for skipping: removed, or the user's
-		}
-		all := autoGroups(foundFrom(entries, heldOffEntries()), heldSettings().ModelSameAs)
-		if !slices.ContainsFunc(all, func(g Group) bool { return g.ID == gid }) {
-			return "", false
-		}
+	if !f.NoAutoGroups && slices.ContainsFunc(f.Groups, func(g Group) bool { return g.ID == gid }) {
+		return "", false // removed, or the user's
 	}
 	var first, kept string
 	for _, e := range entries {
@@ -994,6 +992,30 @@ func AutoStandInFor(agent, id string) (string, bool) {
 		return kept, true
 	}
 	return first, first != ""
+}
+
+// GoneAutoGroup reports whether ref names a group magpie found that is
+// gone with its model: no group of that id now, none the user has or
+// removed, and no provider serving its model (AutoStandIn has none). An
+// agent's conversation saved on it (canlee886 on X: a Codex thread on
+// group/auto-gpt-6-1-sol) is told the model is gone and to pick another,
+// rather than every id magpie has.
+func GoneAutoGroup(ref string) bool {
+	gid, ok := GroupIDOf(ref)
+	if i := strings.LastIndex(gid, ":"); i > 0 && slices.Contains(MemberEfforts, gid[i+1:]) {
+		gid = gid[:i]
+	}
+	if !ok || !strings.HasPrefix(gid, "auto-") || gid == "auto-" {
+		return false
+	}
+	if _, ok := groupOf(groupsIn(providerEntries()), gid); ok {
+		return false
+	}
+	if slices.ContainsFunc(load().Groups, func(g Group) bool { return g.ID == gid }) {
+		return false
+	}
+	_, ok = AutoStandIn(GroupPrefix + gid)
+	return !ok
 }
 
 // foundGroups are the groups magpie finds (autoGroups) among entries and

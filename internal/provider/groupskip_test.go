@@ -67,8 +67,13 @@ func TestAutoGroupSkip(t *testing.T) {
 	if _, ok := AutoStandIn("group/auto-kimi-k3"); ok {
 		t.Fatal("a stand-in for a group there is")
 	}
-	if _, ok := AutoStandIn("group/auto-y"); ok {
-		t.Fatal("a stand-in for a group that was never found")
+	// y, b's alone, is no group: its group's id still reaches it there, as
+	// a group gone for want of a second provider does (canlee886 on X)
+	if got, ok := AutoStandIn("group/auto-y"); !ok || got != "b/y" {
+		t.Fatalf("group/auto-y: %q %v, want b/y", got, ok)
+	}
+	if _, ok := AutoStandIn("group/auto-nothing"); ok {
+		t.Fatal("a stand-in for a model no provider serves")
 	}
 	// kept out under its new id
 	if err := Rename("b", "bee"); err != nil {
