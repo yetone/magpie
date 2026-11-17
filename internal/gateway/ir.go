@@ -585,6 +585,39 @@ type Usage struct {
 	// credits, nil when it said none: WorkBuddy's usage.credit, the
 	// figure its app shows on each reply as "Credits Consumed" (#2512)
 	Credits *float64 `json:"credits,omitempty"`
+	// advised is what the reply says its server-side advisor's calls cost
+	// (Anthropic's usage.iterations, advisor_message entries): billed at
+	// the advisor model's rates and never in the counts above, so each is
+	// a usage row of its own (advisorRows, #6977). A pointer, so Usage is
+	// still compared as a value; nil when the reply listed no iterations.
+	advised *advisedUse
+}
+
+// advisedUse is the advisor calls one reply reported, in the order its
+// iterations listed them.
+type advisedUse struct {
+	// model is magpie's id of the advisor model the request named, which
+	// its rows are priced by; "" until the route names it (advisedAs)
+	model string
+	calls []advisorCall
+}
+
+// advisorCall is one advisor_message iteration: the model the vendor
+// says ran it and its own token counts.
+type advisorCall struct {
+	served string
+	use    Usage
+}
+
+// advisedAs is u with its advisor calls named by magpie's id of the
+// advisor model the request asked for: the iterations name the vendor's.
+func (u Usage) advisedAs(model string) Usage {
+	if u.advised != nil && model != "" {
+		a := *u.advised
+		a.model = model
+		u.advised = &a
+	}
+	return u
 }
 
 // billed is what the request is billed for: its own count, and what it
@@ -667,6 +700,11 @@ func (u *Usage) add(v Usage) {
 	}
 	if v.Credits != nil {
 		u.Credits = v.Credits
+	}
+	// a stream's message_delta lists every iteration so far, the earlier
+	// ones again: the latest list stands for the reply's
+	if v.advised != nil {
+		u.advised = v.advised
 	}
 }
 

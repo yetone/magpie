@@ -36,6 +36,7 @@ var purposeKinds = func() map[string]PurposeKind {
 	add("Model list", "model_list")             // probelog.KindList
 	add("MCP tool", KindMCP)                    // an MCP tool call (SourceMCP)
 	add("Cache keep-alive", KindKeepalive)      // a plugin's own ping (plugin_calls.go)
+	add("Advisor", KindAdvisor)                 // an advisor call its vendor ran (gateway's advisorRows)
 	// Claude Code names neither of these requests, so the gateway tells them
 	// by their content: the *_inferred kinds. They share the purpose of the
 	// plain kind (a client's own marker, were one sent), and say in their
@@ -53,6 +54,10 @@ var purposeKinds = func() map[string]PurposeKind {
 // sub-agent progress summary and its auto mode classifier; InferredSuffix
 // follows one that was told by the request's content.
 const (
+	// KindAdvisor is the kind of an advisor call's row: one Anthropic's
+	// server ran for a request's advisor tool, its usage listed in the
+	// reply's iterations (#6977)
+	KindAdvisor      = "advisor"
 	KindAgentSummary = "agent_summary"
 	KindAutoMode     = "auto_mode_check"
 	InferredSuffix   = "_inferred"

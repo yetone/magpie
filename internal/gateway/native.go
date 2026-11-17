@@ -497,8 +497,8 @@ func (s *Server) nativeAny(w http.ResponseWriter, r *http.Request, p provider.Pr
 	}
 	call.Usage = u
 	s.record(*call)
-	appendUsage(r, usage.Record{Operation: "native", Time: start, Agent: call.Agent, Via: call.Via, Provider: p.ID, Host: p.Where(), Model: call.Model, Requested: call.Model, Served: u.Served, Upstream: u.Upstream,
+	appendAdvised(r, usage.Record{Operation: "native", Time: start, Agent: call.Agent, Via: call.Via, Provider: p.ID, Host: p.Where(), Model: call.Model, Requested: call.Model, Served: u.Served, Upstream: u.Upstream,
 		ProviderKeyID: provider.KeyID(p.Key), ProviderKeyName: p.KeyName,
 		Input: u.Input, Output: u.Output, CacheRead: u.CacheRead, CacheWrite: u.CacheWrite, CacheWrite1h: u.CacheWrite1h, Reasoning: u.Reasoning,
-		Millis: call.Millis, Status: call.Status, Session: sessionOf(r.Header)})
+		Millis: call.Millis, Status: call.Status, Session: sessionOf(r.Header)}, u)
 }

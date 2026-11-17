@@ -4696,7 +4696,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				failed.wholeIn, failed.wholeOut = call.wholeIn, hw.errBody()
 			}
 			withBodies(&rec, failed)
-			appendUsage(r, rec)
+			appendAdvised(r, rec, call.Usage)
 		}
 		sentMs, ownMs, retriedMs, queuedMs = 0, 0, 0, 0
 		if at := wrote.Load(); at > 0 && call.TTFT > 0 {
@@ -4943,7 +4943,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 					refusal.wholeIn, refusal.wholeOut = call.wholeIn, hw.errBody()
 				}
 				withBodies(&rec, refusal)
-				appendUsage(r, rec)
+				appendAdvised(r, rec, call.Usage)
 			}
 			failedRow = nil // its row is written
 			continue
@@ -4988,7 +4988,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 					refusal.wholeIn, refusal.wholeOut = call.wholeIn, hw.errBody()
 				}
 				withBodies(&rec, refusal)
-				appendUsage(r, rec)
+				appendAdvised(r, rec, call.Usage)
 			}
 			failedRow = nil // its row is written
 			continue
@@ -5887,7 +5887,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		}
 		failedWith(&rec, call.Status, call.Error, call.Usage.ErrType)
 		withBodies(&rec, &call)
-		appendUsage(r, rec)
+		appendAdvised(r, rec, call.Usage)
 		if call.Status < 400 {
 			// what its model searched with its provider's own tool
 			logNativeSearches(r.Context(), call.Usage.searches, start, call.Agent, call.Provider, where, model)
@@ -6864,6 +6864,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	searchFn := false            // Codex's tool search sent as a function
 	geminiWhole := false         // a Gemini client's generateContent
 	var toolSeen map[string]bool // the call ids the client holds (tool_use_ids.go)
+	advisor := ""                // magpie's id of the advisor model asked for
 	// a model that wants its reasoning text back (#388, #1104)
 	replay := proto == provider.Responses && (replaysReasoning(model, p.VendorHost()) || replaysReasoning(upstream, p.VendorHost()))
 	switch proto {
@@ -7025,7 +7026,9 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		// Anthropic turns the whole request away for, and every later
 		// one of the conversation with it (tool_blocks_paired.go)
 		body = toolBlocksPaired(body)
-		// Claude Code's advisor, named by magpie's id (advisor.go)
+		// Claude Code's advisor, named by magpie's id (advisor.go); its
+		// calls' usage rows go by that id (advisorRows)
+		advisor = advisorKeyModel(advisorAsked(provider.Anthropic, body))
 		body = advisorTools(body, p, upstream, wiresOf(r.Context()), keyAllows(r, p))
 		if p.IsBedrock() {
 			// Claude Code's metadata.user_id, a JSON string these days, is
@@ -7667,7 +7670,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	}
 	f, _ := w.(http.Flusher)
 	sniff := newSniffer(proto, res.Header.Get("Content-Type"))
-	defer func() { u.add(sniff.usage()) }()
+	defer func() { u.add(sniff.usage().advisedAs(advisor)) }()
 	var tidy *chatTidy
 	if proto == provider.Chat && sse {
 		tidy = &chatTidy{}

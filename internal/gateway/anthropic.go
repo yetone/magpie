@@ -1537,6 +1537,25 @@ type aUsage struct {
 	// reads from Claude Code. A vendor that leaves it out is told by its
 	// stream (hidesReasoning, #4545)
 	OutputTokensDetails *aOutputDetails `json:"output_tokens_details,omitempty"`
+	// Iterations lists the reply's sampling steps when a server-side tool
+	// ran one of its own: Anthropic's advisor tool. The counts above are
+	// the executor's alone; an advisor_message entry is the advisor
+	// model's call, billed at its rates and in no total above (#6977).
+	// It is read, never told: anthropic() leaves it out.
+	Iterations []aIteration `json:"iterations,omitempty"`
+}
+
+// aIteration is one entry of usage.iterations: "message" for the
+// executor's own sampling, "advisor_message" for an advisor call, with
+// the model that ran it.
+type aIteration struct {
+	Type                     string          `json:"type"`
+	Model                    string          `json:"model,omitempty"`
+	InputTokens              int             `json:"input_tokens"`
+	OutputTokens             int             `json:"output_tokens"`
+	CacheReadInputTokens     int             `json:"cache_read_input_tokens"`
+	CacheCreationInputTokens int             `json:"cache_creation_input_tokens"`
+	CacheCreation            *aCacheCreation `json:"cache_creation,omitempty"`
 }
 
 type aCacheCreation struct {
@@ -1558,6 +1577,22 @@ func (u aUsage) usage() Usage {
 	}
 	if d := u.OutputTokensDetails; d != nil {
 		out.Reasoning = d.ThinkingTokens
+	}
+	// the list is cumulative, so one with no advisor call in it says
+	// nothing that replaces an earlier one's
+	if len(u.Iterations) > 0 {
+		a := &advisedUse{}
+		for _, it := range u.Iterations {
+			if it.Type != "advisor_message" {
+				continue
+			}
+			use := aUsage{InputTokens: it.InputTokens, OutputTokens: it.OutputTokens, CacheReadInputTokens: it.CacheReadInputTokens,
+				CacheCreationInputTokens: it.CacheCreationInputTokens, CacheCreation: it.CacheCreation}.usage()
+			a.calls = append(a.calls, advisorCall{served: it.Model, use: use})
+		}
+		if len(a.calls) > 0 {
+			out.advised = a
+		}
 	}
 	return out
 }
