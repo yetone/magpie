@@ -55,3 +55,24 @@ func TestTrayDoubleClickReleaseSwallowedOnce(t *testing.T) {
 		t.Fatal("a late click left the double-click waiting")
 	}
 }
+
+// The Mac's menu bar item takes its clicks itself (trayOwnClicks) from the
+// moment it is made, not once the panel is: the panel is made on its first
+// open there, and that first click, going through the button's own
+// tracking, showed the panel and hid it again (Refeccd on Discord).
+func TestTrayOwnsClicksBeforeThePanel(t *testing.T) {
+	app, err := os.ReadFile("app.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`(?s)h\.tray = h\.app\.SystemTray\.New\(\)\n(\s*//[^\n]*\n)*\s*trayOwnClicks\(\)`).Match(app) {
+		t.Error("app.go doesn't install trayOwnClicks as soon as the tray is made")
+	}
+	lw, err := os.ReadFile("lightweight.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if regexp.MustCompile(`(?s)func \(h \*host\) makePanel\(\).*?trayOwnClicks\(\).*?\n}\n`).Match(lw) {
+		t.Error("makePanel still installs trayOwnClicks, which then waits for the first open")
+	}
+}

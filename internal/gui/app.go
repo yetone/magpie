@@ -624,6 +624,13 @@ func Run(version string, showMain bool, link string) error {
 	// before the item is made, which starts as hidden as AppKit kept it
 	hiddenAtStart := bringTrayBack()
 	h.tray = h.app.SystemTray.New()
+	// the Mac's clicks on the item go to its action from the first one
+	// (mpOwnClicks). Installed with the panel, which is made the first
+	// time it is opened (panelOnFirstOpen), the first click after each
+	// start went through the button's own mouse-down tracking: the panel
+	// came up and went again at once (Refeccd on Discord: "每次更新后，
+	// 第一次在菜单栏点击唤起主界面会出现闪退现象").
+	trayOwnClicks()
 	if runtime.GOOS == "linux" {
 		// set before the tray starts, it is the item's id too, which
 		// Omarchy's bar pins it by (Wails calls it "Wails" otherwise)

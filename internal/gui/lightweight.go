@@ -155,7 +155,6 @@ func (h *host) makePanel() *application.WebviewWindow {
 		h.tray.AttachWindow(w).WindowOffset(6)
 	}
 	// the icon stays lit while the panel is open (the Mac's)
-	trayOwnClicks()
 	w.OnWindowEvent(events.Mac.WindowShow, func(*application.WindowEvent) { trayHighlight(true) })
 	w.OnWindowEvent(events.Mac.WindowHide, func(*application.WindowEvent) { trayHighlight(false) })
 	sayWailsHides(w)
