@@ -45,6 +45,11 @@ import (
 // model). The provider stays unknown. A step agy sent through magpie is
 // the gateway's to count: usage's matcher pairs it with the gateway's
 // record by its tokens and time (agy sends no session header).
+//
+// How long a step's call took, and how long to its first token, are its
+// steps row's too (stepTimesOf; guyng35955 on X: Usage → Requests had no
+// first-token time, duration or speed for agy's own calls). The
+// transcript's created_at is to the second only.
 
 // AgyDir is agy's data folder, ~/.gemini/antigravity-cli.
 func AgyDir() string {
@@ -95,24 +100,33 @@ func agyDBFiles(transcript string) []string {
 // agyStepModels is the model of each step of a conversation's database,
 // by the step's index; nil when the database can't be read.
 func agyStepModels(path string) map[int]string {
+	models, _ := agyStepsOf(path)
+	return models
+}
+
+// agyStepsOf is the model of each step of a conversation's database, and
+// how long each step's model call took (stepTimesOf), by the step's index;
+// nil when the database can't be read.
+func agyStepsOf(path string) (map[int]string, map[int]stepTimes) {
 	if _, err := os.Stat(path); err != nil {
-		return nil
+		return nil, nil
 	}
 	db, done, err := openAppStore(path)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	defer done()
 	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	defer tx.Rollback()
 	out := map[int]string{}
+	times := map[int]stepTimes{}
 	gens := map[int64]string{}
 	rows, err := tx.Query("SELECT idx, data FROM gen_metadata WHERE data IS NOT NULL")
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	for rows.Next() {
 		var idx int64
@@ -132,7 +146,7 @@ func agyStepModels(path string) map[int]string {
 	rows.Close()
 	rows, err = tx.Query("SELECT idx, metadata FROM steps WHERE metadata IS NOT NULL")
 	if err != nil {
-		return out
+		return out, times
 	}
 	defer rows.Close()
 	for rows.Next() {
@@ -158,8 +172,11 @@ func agyStepModels(path string) map[int]string {
 		if m, ok := gens[gen]; ok {
 			out[int(idx)] = m
 		}
+		if t := stepTimesOf(b); t.millis > 0 {
+			times[int(idx)] = t
+		}
 	}
-	return out
+	return out, times
 }
 
 // agyGenStep is the step a generator answered: its "last_step_index" n,
@@ -240,10 +257,13 @@ func readAgyCalls(f file) (*callFile, bool) {
 		}
 	}
 	if len(at) > 0 {
-		if models := agyStepModels(agyConversationDB(f.path)); len(models) > 0 {
-			for step, i := range at {
+		models, times := agyStepsOf(agyConversationDB(f.path))
+		for step, i := range at {
+			if models != nil {
 				st.Calls[i].Model = models[step]
 			}
+			t := times[step]
+			st.Calls[i].TTFT, st.Calls[i].Millis = t.ttft, t.millis
 		}
 	}
 	return st, true

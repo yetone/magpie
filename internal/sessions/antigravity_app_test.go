@@ -310,3 +310,61 @@ func TestAntigravityAppParseBeforeFolderReadAgain(t *testing.T) {
 		t.Fatal("a parse from before the folder was read is kept")
 	}
 }
+
+// Each of the Antigravity app's calls carries its time to the first token
+// and how long it took, from its step's row (guyng35955 on X, for agy,
+// whose rows are the app's).
+func TestAntigravityAppCallTimes(t *testing.T) {
+	claude, _ := setup(t)
+	home := filepath.Join(filepath.Dir(claude), "home")
+	antigravityFixture(t, home, "37c3c786-9a11-44be-97df-b8fc1ccebc78")
+	var got [][2]int64
+	for _, c := range Calls(time.Time{}) {
+		if c.Agent == "antigravity" {
+			got = append(got, [2]int64{c.TTFT, c.Millis})
+		}
+	}
+	slices.SortFunc(got, func(a, b [2]int64) int { return int(b[1] - a[1]) })
+	// viewable_at and finished_generating_at less created_at, of steps 1,
+	// 3, 5 and 11
+	want := [][2]int64{{6055, 10521}, {10466, 10475}, {3800, 9702}, {4837, 4842}}
+	if !slices.Equal(got, want) {
+		t.Errorf("ttft and ms %v, want %v", got, want)
+	}
+}
+
+// A response two steps share is timed from its first step's start and
+// first content to its last step's end.
+func TestAntigravityAppOneResponseTimedWhole(t *testing.T) {
+	claude, _ := setup(t)
+	home := filepath.Join(filepath.Dir(claude), "home")
+	path := antigravityFixture(t, home, "b9eace9a-b15a-4dde-a440-b52e02016fa5")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var b []byte
+	if err := db.QueryRow("SELECT metadata FROM steps WHERE idx = 1").Scan(&b); err != nil {
+		t.Fatal(err)
+	}
+	// step 1 again, as step 4, its start 5s later and its end 7s later
+	ts := func(field uint64, sec int64, nanos uint64) []byte {
+		in := appendVarintField(appendVarintField(nil, 1, uint64(sec)), 2, nanos)
+		return appendBytesField(nil, field, in)
+	}
+	later := append(append(append([]byte{}, b...), ts(1, 1791860323, 193779000)...), ts(7, 1791860335, 668813000)...)
+	if _, err := db.Exec("INSERT INTO steps (idx, metadata) VALUES (4, ?)", later); err != nil {
+		t.Fatal(err)
+	}
+	calls, err := antigravityRead(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) == 0 || calls[0].step != 4 {
+		t.Fatalf("calls %+v, want step 1's response at step 4 first", calls)
+	}
+	if got := timesFrom(calls[0].began, calls[0].first, calls[0].ended); got != (stepTimes{ttft: 10466, millis: 17475}) {
+		t.Errorf("%+v, want 10466ms to the first token of 17475ms", got)
+	}
+}

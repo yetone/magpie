@@ -73,7 +73,9 @@ const callCacheVersion = "calls-v15"
 // pi 1, raft 1, cindy 2: a pi-subagents subagent's calls are its own
 // file's, on the model and provider it ran, not its tool result's on the
 // lead's (piSubagentsRead).
-var callParseVersions = map[string]int{"agy": 1, "antigravity": 1, "cindy": 2, "codex": 3, "pi": 1, "raft": 1, "zcode": 3}
+// agy 2, antigravity 2: a call carries its time to the first token and
+// how long it took, from its step's row (stepTimesOf).
+var callParseVersions = map[string]int{"agy": 2, "antigravity": 2, "cindy": 2, "codex": 3, "pi": 1, "raft": 1, "zcode": 3}
 
 // CallCacheVersion is callCacheVersion and callParseVersions, for a cache
 // of what is made of the calls (usage's requests-v1.bin and heatmap): a
