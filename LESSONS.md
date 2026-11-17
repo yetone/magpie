@@ -601,6 +601,19 @@ measures every label beside its control, in every editor it opens.
   editor is added to it.
 - Seen 1× (2026-11-12).
 
+**A guard test reads what it guards from the code, not from a list
+kept by hand.**
+- old-webkit's check that every script is loaded by index.html exempted
+  lazy files through a hand list. headerpresets.js (0d0462d4a),
+  navpages.js and pasteread.js were each added without joining it, so
+  the test was red on main for a week (#6030) and every GUI run's record
+  cited it. 4b8c5948e reads the exemptions from the scripts'
+  import("./x.js") calls, and an unimported file still turns it red.
+- Done right on 11-17: tui_zh_named_test.go and library_named_test.go
+  in internal/agent read the other package's files, so the change that
+  adds a label or an agent goes red in its own run.
+- Seen 1× (2026-11-17).
+
 **Playwright's WebKit is not WebKitGTK.** A GUI change with motion or a new
 browser API is tried in the real Linux app too.
 - 18e82adc6 (10-11) traded the layouts in a view transition. The GUI suite
