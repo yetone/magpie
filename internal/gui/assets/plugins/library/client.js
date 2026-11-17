@@ -49,6 +49,8 @@ magpie.plugin("library", (ctx) => {
     key: "M10 2.8a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4z M7.8 8.2 3 13 M4.5 11.5 6 13",
     person: "M8 3a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z M3.5 13.5c.6-2.4 2.3-3.6 4.5-3.6s3.9 1.2 4.5 3.6",
     back: "m9.5 4.5-3 3.5 3 3.5",
+    // an arrow turning back: a skill going back where it came from
+    putBack: "M6 3.5 3 6.5l3 3 M3 6.5h6.5a3.5 3.5 0 0 1 0 7H7",
     hook: "M10.5 2.5v6.5a3 3 0 0 1-6 0V7.5 M3 9l1.5-1.5L6 9",
     // a person with a second, smaller one it hands work to
     subagent: "M6 3a2.2 2.2 0 1 0 0 4.4A2.2 2.2 0 0 0 6 3z M2 13c.5-2.2 2-3.4 4-3.4s3.5 1.2 4 3.4 M11.5 7.5a1.5 1.5 0 1 0 0 .01 M10.2 12.5c.3-1.3 1.1-2 2.3-2s1.6.5 1.9 1.4",
@@ -7910,9 +7912,12 @@ magpie.plugin("library", (ctx) => {
     here.title = s.offHere ? t("Turn on on this computer") : t("Turn off on this computer only: your other computers keep it");
     here.setAttribute("aria-pressed", s.offHere ? "true" : "false");
     acts.append(here);
-    const rm = button("", "lib-icon danger", () => confirmRemoveSkill(s));
-    rm.append(svg(GLYPH.trash, 13, 1.4));
-    rm.title = t("Remove");
+    // brought in from the agents (BeiWeiji on X): Remove gives it back to
+    // them as they had it, and says so
+    const back = s.back?.length ? s.back.map(nameOf).join(", ") : "";
+    const rm = button("", "lib-icon" + (back ? " lib-putback" : " danger"), () => confirmRemoveSkill(s));
+    rm.append(svg(back ? GLYPH.putBack : GLYPH.trash, 13, 1.4));
+    rm.title = back ? t("Put back in {agents}", { agents: back }) : t("Remove");
     acts.append(rm);
     row.append(mark(s.icon, GLYPH.skill), who, acts, agentChips(withGone(all, s.agents), s.agents, chipsChange("skills/agents", s.name, "skills", (x) => skillRow(x, all)), { problems: s.problems, via: viaFor(s), all: true, always: alwaysFor(s) }));
     if (picking) return pickRow(row, s.name);
@@ -8087,6 +8092,7 @@ magpie.plugin("library", (ctx) => {
   }
 
   function confirmRemoveSkill(s) {
+    if (s.back?.length) return confirmPutBack(s);
     const ed = el("div", "editor lib-editor");
     const head = el("div", "ehead");
     head.append(glyph(GLYPH.trash), el("b", "", t("Remove {name}?", { name: s.name })));
@@ -8096,6 +8102,22 @@ magpie.plugin("library", (ctx) => {
       : t("It is taken out of every agent it was given to, and its folder is moved to magpie's backups.")));
     const bar = el("div", "bar");
     const go = button(t("Remove"), "primary danger-fill", async () => { if (await change("skills/remove", { name: s.name }, t("{name} removed", { name: s.name }))) closeLibModal(true); });
+    bar.append(el("span", "grow"), button(t("Cancel"), "", closeLibModal), go);
+    ed.append(bar);
+    modal = { save: () => go.click() };
+    openLib(ed);
+  }
+
+  // one brought in from the agents leaves the library for them again
+  function confirmPutBack(s) {
+    const agents = s.back.map(nameOf).join(", ");
+    const ed = el("div", "editor lib-editor lib-putback-sheet");
+    const head = el("div", "ehead");
+    head.append(glyph(GLYPH.putBack), el("b", "", t("Put {name} back?", { name: s.name })));
+    ed.append(head);
+    ed.append(el("p", "lib-confirm", t("It leaves the library and goes back to {agents} as it was before you brought it in.", { agents })));
+    const bar = el("div", "bar");
+    const go = button(t("Put it back"), "primary", async () => { if (await change("skills/remove", { name: s.name }, t("{name} went back to {agents}", { name: s.name, agents }))) closeLibModal(true); });
     bar.append(el("span", "grow"), button(t("Cancel"), "", closeLibModal), go);
     ed.append(bar);
     modal = { save: () => go.click() };

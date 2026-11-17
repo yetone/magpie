@@ -148,6 +148,9 @@ func handOver(l *Library, found *[]FoundSkill, ts []*Target, name string) (left 
 			}
 		}
 		s.Source = nil
+		if s.Home != nil {
+			s.Home.Dir = r // removed, it goes back there
+		}
 	} else {
 		// the entry only links to a folder elsewhere (or to the library's
 		// own): the library links past it, and only the link goes

@@ -586,6 +586,7 @@ func Put(b *Bundle) (*Result, error) {
 					n.From = cur.From
 				}
 				n.Gone = cur.Gone // kept on this computer only
+				n.Home = cur.Home // where it was in this computer's agents
 			}
 			skills = append(skills, n)
 			if keep[s.Name] {

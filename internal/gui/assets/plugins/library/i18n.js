@@ -2,6 +2,11 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "Put back in {agents}": "放回 {agents}",
+    "Put {name} back?": "把 {name} 放回？",
+    "It leaves the library and goes back to {agents} as it was before you brought it in.": "它会离开资源库，按导入前的样子放回 {agents}。",
+    "Put it back": "放回",
+    "{name} went back to {agents}": "{name} 已放回 {agents}",
     "Pick the agents that may search and read what was said in your other sessions.": "选择可以搜索、阅读你其他会话内容的 Agent。",
     "Update by themselves": "自动更新",
     "Fetch skills from GitHub and git again when they change there. One you changed here stays as it is.": "GitHub 和 git 上的技能有改动时自动重新获取。你在这里改过的技能保持不变。",
@@ -1078,6 +1083,11 @@ magpie.strings({
     "{name} read again from its source": "已重新从来源读取 {name}",
   },
   "zh-TW": {
+    "Put back in {agents}": "放回 {agents}",
+    "Put {name} back?": "把 {name} 放回？",
+    "It leaves the library and goes back to {agents} as it was before you brought it in.": "它會離開資源庫，依匯入前的樣子放回 {agents}。",
+    "Put it back": "放回",
+    "{name} went back to {agents}": "{name} 已放回 {agents}",
     "Pick the agents that may search and read what was said in your other sessions.": "選擇可以搜尋、閱讀你其他會話內容的 Agent。",
     "Update by themselves": "自動更新",
     "Fetch skills from GitHub and git again when they change there. One you changed here stays as it is.": "GitHub 和 git 上的技能有變動時自動重新取得。你在這裡改過的技能保持不變。",
@@ -2154,6 +2164,11 @@ magpie.strings({
     "{name} read again from its source": "已重新從來源讀取 {name}",
   },
   ja: {
+    "Put back in {agents}": "{agents} に戻す",
+    "Put {name} back?": "{name} を戻しますか？",
+    "It leaves the library and goes back to {agents} as it was before you brought it in.": "ライブラリから外れ、取り込む前の状態で {agents} に戻ります。",
+    "Put it back": "戻す",
+    "{name} went back to {agents}": "{name} を {agents} に戻しました",
     "Pick the agents that may search and read what was said in your other sessions.": "ほかのセッションで話した内容を検索して読める Agent を選びます。",
     "Update by themselves": "自動で更新",
     "Fetch skills from GitHub and git again when they change there. One you changed here stays as it is.": "GitHub や git でスキルが変わったら自動で取得し直します。ここで変更したスキルはそのままです。",
@@ -3230,6 +3245,11 @@ magpie.strings({
     "{name} read again from its source": "{name} をソースから読み直しました",
   },
   de: {
+    "Put back in {agents}": "Zurück zu {agents}",
+    "Put {name} back?": "{name} zurückgeben?",
+    "It leaves the library and goes back to {agents} as it was before you brought it in.": "Er verlässt die Bibliothek und kommt so zu {agents} zurück, wie er vor dem Übernehmen war.",
+    "Put it back": "Zurückgeben",
+    "{name} went back to {agents}": "{name} ist wieder in {agents}",
     "Pick the agents that may search and read what was said in your other sessions.": "Wähle die Agents, die durchsuchen und lesen dürfen, was in deinen anderen Sitzungen gesagt wurde.",
     "Update by themselves": "Selbst aktualisieren",
     "Fetch skills from GitHub and git again when they change there. One you changed here stays as it is.": "Skills von GitHub und git neu laden, wenn sie sich dort ändern. Ein hier geänderter Skill bleibt, wie er ist.",

@@ -9,7 +9,8 @@ import (
 // Every skill out of the library at once (#449): each as RemoveSkill takes
 // it — out of every agent, its folder kept aside in one backup, a folder of
 // the user's only unlinked — and one that can't be taken out said, the rest
-// gone all the same.
+// gone all the same. One brought in from an agent goes back to it as it
+// had it (BeiWeiji on X), not to the backups.
 func TestRemoveSkills(t *testing.T) {
 	h := sandbox(t)
 	src := filepath.Join(h, "src/skills")
@@ -41,7 +42,7 @@ func TestRemoveSkills(t *testing.T) {
 	if v, _ := Read(nil); len(v.Skills) != 0 {
 		t.Errorf("left in the library: %+v", v.Skills)
 	}
-	for _, d := range []string{".claude/skills/pdf", ".codex/skills/pdf", ".claude/skills/xlsx", ".claude/skills/notes", ".codex/skills/notes"} {
+	for _, d := range []string{".claude/skills/pdf", ".codex/skills/pdf", ".claude/skills/xlsx", ".codex/skills/notes"} {
 		if _, err := os.Lstat(filepath.Join(h, d)); !os.IsNotExist(err) {
 			t.Errorf("%s is still there", d)
 		}
@@ -52,10 +53,10 @@ func TestRemoveSkills(t *testing.T) {
 			t.Errorf("the user's %s went with it", d)
 		}
 	}
-	kept, _ := filepath.Glob(filepath.Join(BackupDir(), "*", "skills", "*"))
-	if len(kept) != 1 || filepath.Base(kept[0]) != "notes" {
+	if fi, err := os.Lstat(filepath.Join(h, ".claude/skills/notes/SKILL.md")); err != nil || linkEntry(fi) {
+		t.Errorf("notes isn't back in Claude Code's folder: %v", err)
+	}
+	if kept, _ := filepath.Glob(filepath.Join(BackupDir(), "*", "skills", "*")); len(kept) != 0 {
 		t.Errorf("kept aside: %v", kept)
-	} else if _, err := os.Stat(filepath.Join(kept[0], "SKILL.md")); err != nil {
-		t.Error("notes' folder wasn't kept whole")
 	}
 }
