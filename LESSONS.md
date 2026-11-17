@@ -1085,6 +1085,21 @@ before the merge, are in the code standards.)
 - Seen 3× (2026-10-17, 2026-11-10, 2026-11-12); moved to the code
   standards.
 
+**A byte budget is never paid for with behaviour the change isn't
+about.**
+- 286e3b6d5 (11-10, the panel's Usage tab account menu) fit under the
+  core budget with "no comments cut and no raise". Its diff also took
+  `aria-expanded="false"` off seven menu buttons on other pages (account
+  switch, sign-in proxy, window cap, both Thinking chips, reply model,
+  the local model's two pickers), so a screen reader no longer heard
+  them as shut, and openProtoMenu, which changes the attribute only
+  where it is set, stopped saying they opened. The body doesn't name
+  them. side-effort was red in all 10 cases from then on (#6353, found
+  a week later).
+- Diff a budget-tight change for removed lines in functions it is not
+  about, and name every one in the body.
+- Seen 1× (2026-11-18).
+
 **A release published after a newer one takes Latest, and with it the
 update feed and the tap, unless the publish step checks.**
 - 10-15: v0.1.1255 was published 25 minutes after v0.1.1256, and
