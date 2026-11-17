@@ -398,9 +398,10 @@ rate and at its largest input.**
   on the largest reply a test has.
 - Seen 2× (2026-10-14, 2026-10-18).
 
-**A new route or setting runs the packages whose guards list them.**
-TestEveryRouteHasACommandOrIsNamed (internal/cli) lists every route, and
-TestSettingsSaveKeepsWhatItDoesNotSend (internal/gui) every setting.
+**A new route, setting or agent runs the packages whose guards list
+them.** TestEveryRouteHasACommandOrIsNamed (internal/cli) lists every
+route, TestSettingsSaveKeepsWhatItDoesNotSend (internal/gui) every
+setting, and TestEveryAgentInLibrary (internal/library) every agent.
 - 11-11: 747632890 (context-cap) and eb56de0b5 (the catalog's model list)
   ran chosen tests and turned both guards red on CI at 8aae124b0. An hour
   later 58fb07095 (named proxies, 1,714 lines) did it again with three
@@ -416,7 +417,16 @@ TestSettingsSaveKeepsWhatItDoesNotSend (internal/gui) every setting.
   TestEveryRouteIsNamedForTheCLI fails on a route that the CLI's list
   doesn't name. When a rule keeps being missed, put its check where
   the work already runs.
-- Seen 2× (2026-11-11, 2026-11-15).
+- 11-17: 00b2c11a6 (Open Code Review) added an agent and ran chosen
+  internal/agent tests, a real ocr review and both cross-OS vets, but
+  pushed before its full suite. The suite then found
+  TestEveryAgentInLibrary red, and effdd1beb added the noLibrary line
+  half an hour later. That guard was red on main for a new agent on
+  11-10 twice (399010bef, 68cb92e8e), 11-12 (7e8214d60) and now. The
+  check now also runs where agents are added: internal/agent's
+  TestEveryAgentNamedForTheLibrary fails on an agent that targetOf's
+  cases and noLibrary both leave unnamed.
+- Seen 3× (2026-11-11, 2026-11-15, 2026-11-17).
 
 **A byte-for-byte check of a stream allows what the protocol allows,
 and its failure message counts against what it compared.**

@@ -74,6 +74,10 @@ listed as not run, never left out.
    test that pinned the old text. On 10-13 four commits ran chosen
    packages and turned main red this way: 6fa3109ea (494609866),
    43d8a5633 (24146c031), 5617281f5 and cdb7b5ff7 (c6de0d2a5).
+   A guard that keeps being missed gets a twin in the package the change
+   runs: internal/gui's TestEveryRouteIsNamedForTheCLI for a new route,
+   internal/agent's TestEveryAgentNamedForTheLibrary for a new agent
+   (red on main four times before it, last at 00b2c11a6, 11-17).
 4. **GUI tests in both engines.** A change to `internal/gui/assets` runs the
    Playwright tests it touches in Chromium and WebKit (`make test-ui`, or
    `BROWSER=webkit node --test …`). The suite must also pass in Chinese,
