@@ -263,6 +263,15 @@ type ModelSpeed struct {
 	Name string `json:"name"`
 }
 
+// ProviderSpeed is a usage.ProviderSpeed with the names the page shows
+// the model and provider by, and the provider's icon.
+type ProviderSpeed struct {
+	usage.ProviderSpeed
+	Name         string `json:"name"`
+	ProviderName string `json:"provider_name"`
+	Icon         string `json:"icon,omitempty"`
+}
+
 type Ledger struct {
 	CallerKeys []Group      `json:"callerKeys"`
 	Period     usage.Period `json:"period"`
@@ -305,6 +314,9 @@ type Ledger struct {
 	// Speeds: the models of the rows the filter keeps by the median speed
 	// of their requests and of their wait for the first token (usage.ModelSpeed)
 	Speeds []ModelSpeed `json:"speeds"`
+	// ProviderSpeeds: the same models on each provider they were tried
+	// on, with how the tries went (usage.ProviderSpeed)
+	ProviderSpeeds []ProviderSpeed `json:"provider_speeds"`
 	// SpeedMin is the fewest output tokens a request wrote to count in it
 	SpeedMin int `json:"speed_min"`
 	// BigWrite: the request that wrote the most to the cache, of the rows
@@ -496,6 +508,15 @@ func LedgerPage(p usage.Period, f usage.Filter, offset, limit int) Ledger {
 			name = pub(name)
 		}
 		out.Speeds = append(out.Speeds, ModelSpeed{ModelSpeed: s, Name: name})
+	}
+	out.ProviderSpeeds = []ProviderSpeed{}
+	for _, s := range l.ProviderSpeeds {
+		name := s.Model
+		if pub != nil {
+			name = pub(name)
+		}
+		a := which(s.Provider)
+		out.ProviderSpeeds = append(out.ProviderSpeeds, ProviderSpeed{ProviderSpeed: s, Name: name, ProviderName: a.Name, Icon: a.Icon})
 	}
 	for _, s := range l.Computers {
 		ls := Share{Share: s, Name: l.Names[s.ID]}

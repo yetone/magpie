@@ -91,35 +91,80 @@ func (h speedHist) median() float64 {
 	return sum / float64(got)
 }
 
-// modelHist is what one model's counted requests measured.
+// ProviderSpeed is one model's place on one provider: its speed as
+// ModelSpeed's, over that provider's requests, and how its tries there
+// went. Facts only: a failed try may be the agent's request as much as
+// the provider, and a reply naming another model may be a name the
+// provider's list doesn't give.
+type ProviderSpeed struct {
+	ModelSpeed
+	Provider string `json:"provider"`
+	// Tries are the tries sent to the provider for the model, not
+	// rejected before sending, a probe or canceled by the agent
+	Tries int `json:"tries"`
+	// Failed are those of Tries that failed, handed on to another
+	// provider or not (Row.Failed, Row.HandedOn)
+	Failed int `json:"failed,omitempty"`
+	// Swapped are those of Tries whose reply named another model than
+	// the one asked for (Row.Swapped)
+	Swapped int `json:"swapped,omitempty"`
+}
+
+// modelHist is what one model's counted requests measured on one
+// provider, and how its tries there went.
 type modelHist struct {
 	Requests int       `json:"n"`
 	Speed    speedHist `json:"s,omitempty"`
 	TTFT     speedHist `json:"t,omitempty"`
+	Tries    int       `json:"r,omitempty"`
+	Failed   int       `json:"f,omitempty"`
+	Swapped  int       `json:"w,omitempty"`
 }
 
-// speedRank collects the histograms of every model; a chunk keeps its own
-// (chunkPart.speeds) and a page merges those of the chunks it reads.
+// speedRank collects the histograms of every model on every provider,
+// keyed rankKey; a chunk keeps its own (chunkPart.speeds) and a page
+// merges those of the chunks it reads.
 type speedRank map[string]*modelHist
 
-func (s speedRank) of(model string) *modelHist {
-	m := s[model]
+// rankKey is model and provider as one key of a speedRank.
+func rankKey(model, provider string) string { return model + "\x00" + provider }
+
+// rankOf is the model and provider of a rankKey.
+func rankOf(k string) (model, provider string) {
+	model, provider, _ = strings.Cut(k, "\x00")
+	return model, provider
+}
+
+func (s speedRank) of(key string) *modelHist {
+	m := s[key]
 	if m == nil {
 		m = &modelHist{Speed: speedHist{}, TTFT: speedHist{}}
 		// unique's copy, so a chunk's part holds none of the chunk's strings
-		s[unique.Make(model).Value()] = m
+		s[unique.Make(key).Value()] = m
 	}
 	return m
 }
 
-// add counts r when it is fair to rank by: not rejected, not a try handed on
-// to another, not failed or canceled, its first token timed, and it wrote
-// MinRankTokens or more.
+// add counts r's try on its provider, when it is not rejected or canceled;
+// and its speed when it is fair to rank by: not a try handed on to
+// another, not failed, its first token timed, and it wrote MinRankTokens
+// or more.
 func (s speedRank) add(r *Row) {
-	if r.IsRejected() || r.HandedOn || r.Failed() || r.Canceled() || r.TTFT <= 0 || r.Output < MinRankTokens {
+	if r.IsRejected() || r.Canceled() {
 		return
 	}
-	m := s.of(r.Model)
+	m := s.of(rankKey(r.Model, r.Provider))
+	m.Tries++
+	switch {
+	case r.HandedOn || r.Failed():
+		m.Failed++
+		return
+	case r.Swapped:
+		m.Swapped++
+	}
+	if r.TTFT <= 0 || r.Output < MinRankTokens {
+		return
+	}
 	m.Requests++
 	m.TTFT[histBin(float64(r.TTFT))]++
 	if n, w := r.Decode(); w > 0 && n >= MinRankTokens {
@@ -129,9 +174,12 @@ func (s speedRank) add(r *Row) {
 
 // merge adds o's counts to s's.
 func (s speedRank) merge(o speedRank) {
-	for model, x := range o {
-		m := s.of(model)
+	for k, x := range o {
+		m := s.of(k)
 		m.Requests += x.Requests
+		m.Tries += x.Tries
+		m.Failed += x.Failed
+		m.Swapped += x.Swapped
 		for b, c := range x.Speed {
 			m.Speed[b] += c
 		}
@@ -141,27 +189,81 @@ func (s speedRank) merge(o speedRank) {
 	}
 }
 
-// result is the ranking, the fastest first; models whose speed wasn't
-// measured follow, the one with more requests first.
-func (s speedRank) result() []ModelSpeed {
-	out := make([]ModelSpeed, 0, len(s))
-	for model, m := range s {
-		out = append(out, ModelSpeed{
-			Model: model, Requests: m.Requests, SpeedN: m.Speed.total(),
-			TTFT: int64(m.TTFT.median() + 0.5), Speed: m.Speed.median(),
-		})
+// speedOf is m's medians as model's ModelSpeed.
+func (m *modelHist) speedOf(model string) ModelSpeed {
+	return ModelSpeed{
+		Model: model, Requests: m.Requests, SpeedN: m.Speed.total(),
+		TTFT: int64(m.TTFT.median() + 0.5), Speed: m.Speed.median(),
 	}
-	slices.SortFunc(out, func(a, b ModelSpeed) int {
-		switch {
-		case a.Speed != b.Speed:
-			if a.Speed > b.Speed {
-				return -1
-			}
-			return 1
-		case a.Requests != b.Requests:
-			return b.Requests - a.Requests
+}
+
+// result is the ranking of models, every provider's requests together,
+// the fastest first; models whose speed wasn't measured follow, the one
+// with more requests first. A model with no request that counted isn't
+// in it.
+func (s speedRank) result() []ModelSpeed {
+	byModel := speedRank{}
+	for k, x := range s {
+		if x.Requests == 0 {
+			continue
 		}
-		return strings.Compare(a.Model, b.Model)
+		model, _ := rankOf(k)
+		byModel.merge(speedRank{model: x})
+	}
+	out := make([]ModelSpeed, 0, len(byModel))
+	for model, m := range byModel {
+		out = append(out, m.speedOf(model))
+	}
+	slices.SortFunc(out, fasterFirst)
+	return out
+}
+
+// providers is each model on each provider it was tried on, a model's
+// fastest provider first, and the models in the order of result.
+func (s speedRank) providers() []ProviderSpeed {
+	out := make([]ProviderSpeed, 0, len(s))
+	for k, m := range s {
+		model, prov := rankOf(k)
+		out = append(out, ProviderSpeed{ModelSpeed: m.speedOf(model), Provider: prov, Tries: m.Tries, Failed: m.Failed, Swapped: m.Swapped})
+	}
+	place := map[string]int{}
+	for i, m := range s.result() {
+		place[m.Model] = i + 1
+	}
+	slices.SortFunc(out, func(a, b ProviderSpeed) int {
+		pa, pb := place[a.Model], place[b.Model]
+		switch {
+		case pa != pb:
+			// models without a counted request last
+			if pa == 0 || pb != 0 && pa > pb {
+				return 1
+			}
+			return -1
+		case a.Model != b.Model:
+			return strings.Compare(a.Model, b.Model)
+		}
+		if c := fasterFirst(a.ModelSpeed, b.ModelSpeed); c != 0 {
+			return c
+		}
+		if a.Tries != b.Tries {
+			return b.Tries - a.Tries
+		}
+		return strings.Compare(a.Provider, b.Provider)
 	})
 	return out
+}
+
+// fasterFirst orders a ranking: the fastest first, then the one with
+// more requests, then by name.
+func fasterFirst(a, b ModelSpeed) int {
+	switch {
+	case a.Speed != b.Speed:
+		if a.Speed > b.Speed {
+			return -1
+		}
+		return 1
+	case a.Requests != b.Requests:
+		return b.Requests - a.Requests
+	}
+	return strings.Compare(a.Model, b.Model)
 }

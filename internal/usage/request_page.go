@@ -64,6 +64,9 @@ type RequestPage struct {
 	// Speeds are the models of the rows the filter keeps, ranked by the
 	// median speed of their requests (speed_rank.go)
 	Speeds []ModelSpeed
+	// ProviderSpeeds are the same rows' models on each provider they were
+	// tried on: speed, first token, and how the tries went (speed_rank.go)
+	ProviderSpeeds []ProviderSpeed
 	// Heat is the rows by day, as the chart's filter keeps them: only for
 	// the heatmap's own period (HeatmapOf)
 	Heat *Heatmap
@@ -2704,7 +2707,7 @@ func buildRequestBlocksIn(p Period, f Filter, offset, limit int, now time.Time, 
 	slices.Sort(out.Purposes)
 	out.CallerKeys = callerGroups(callers)
 	out.Accounts = callerGroups(accounts)
-	out.Speeds = speeds.result()
+	out.Speeds, out.ProviderSpeeds = speeds.result(), speeds.providers()
 	for _, d := range Dimensions {
 		out.By[d] = sharesOf(groups[d])
 	}
@@ -2827,7 +2830,7 @@ func pageFromLedgerAt(p Period, f Filter, offset, limit int, all Ledgered, now t
 			out.Big.add(&r)
 		}
 	}
-	out.Speeds = speeds.result()
+	out.Speeds, out.ProviderSpeeds = speeds.result(), speeds.providers()
 	chartRows := l.Rows
 	if f.Day != "" {
 		chartFilter := f

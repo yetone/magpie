@@ -117,3 +117,85 @@ func TestModelSpeedRankMergesAndSurvivesTheFile(t *testing.T) {
 		}
 	}
 }
+
+// One model on several providers is told apart by provider: each one's
+// speed and first token over its own requests, and how its tries went,
+// failed (handed on or not) and answered by another model counted apart
+// (@skingstyle48487 on X, comparing a dozen relays). A canceled or a
+// rejected try, or a probe, is in none of it, and the model's own place in
+// the ranking is every provider's requests together, as before.
+func TestModelSpeedRankByProvider(t *testing.T) {
+	pageHome(t)
+	now := holdClock(t, time.Date(2026, 10, 9, 15, 0, 0, 0, time.Local))
+	at := now.Add(-time.Hour)
+	call := func(provider string, ttft, ms int64, mod func(*Row)) Row {
+		r := Row{Record: Record{Time: at, Provider: provider, Agent: "codex", Model: "gpt", Input: 100, Output: 500, TTFT: ttft, Millis: ms, Status: 200}}
+		if mod != nil {
+			mod(&r)
+		}
+		return r
+	}
+	rows := []Row{
+		// fast: 100 tok/s, first token 1 s, twice
+		call("fast", 1000, 6000, nil),
+		call("fast", 1000, 6000, nil),
+		// slow: 25 tok/s, first token 4 s; one answer from another model,
+		// one failed, one handed on, one canceled, one rejected
+		call("slow", 4000, 24000, nil),
+		call("slow", 4000, 24000, func(r *Row) { r.Served, r.Swapped = "claude-haiku-9", true }),
+		call("slow", 100, 200, func(r *Row) { r.Status, r.Error = 502, "bad gateway" }),
+		call("slow", 100, 200, func(r *Row) { r.Status, r.Error, r.HandedOn = 429, "busy", true }),
+		call("slow", 100, 200, func(r *Row) { r.Status, r.ErrType = StatusCanceled, CanceledErrType }),
+		call("slow", 4000, 24000, func(r *Row) { r.Rejected = true }),
+		// a model only ever failing, on a provider of its own
+		call("down", 0, 300, func(r *Row) { r.Model, r.Status, r.Error = "gone", 500, "boom" }),
+	}
+	gateway := &rowChunk{}
+	all := Ledgered{Agents: []string{"codex"}, Providers: []string{"fast", "slow", "down"}}
+	for i, row := range rows {
+		gateway.add(row, "", int64(i), false)
+		all.Rows = append(all.Rows, row)
+		if !row.IsRejected() {
+			all.Sum.addRow(row)
+		}
+	}
+	for name, query := range map[string]func(Filter) RequestPage{
+		"compact": func(f Filter) RequestPage { return buildRequestPage(Today, f, 0, 1, gateway, nil) },
+		"ledger":  func(f Filter) RequestPage { return pageFromLedger(Today, f, 0, 1, all) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			page := query(Filter{})
+			if len(page.Speeds) != 1 || page.Speeds[0].Model != "gpt" || page.Speeds[0].Requests != 4 {
+				t.Fatalf("by model: %+v, want gpt alone, of its 4 answered requests", page.Speeds)
+			}
+			got := page.ProviderSpeeds
+			if len(got) != 3 {
+				t.Fatalf("by provider: %+v", got)
+			}
+			f, s, d := got[0], got[1], got[2]
+			if f.Provider != "fast" || f.Model != "gpt" || f.Tries != 2 || f.Failed != 0 || f.Swapped != 0 || f.Requests != 2 || offBin(f.Speed, 100) || offBin(float64(f.TTFT), 1000) {
+				t.Fatalf("fast first: %+v", f)
+			}
+			if s.Provider != "slow" || s.Tries != 4 || s.Failed != 2 || s.Swapped != 1 || s.Requests != 2 || offBin(s.Speed, 25) || offBin(float64(s.TTFT), 4000) {
+				t.Fatalf("slow: %+v", s)
+			}
+			if d.Provider != "down" || d.Model != "gone" || d.Tries != 1 || d.Failed != 1 || d.Requests != 0 || d.Speed != 0 {
+				t.Fatalf("a model that only failed, last: %+v", d)
+			}
+			if only := query(Filter{Provider: "fast"}).ProviderSpeeds; len(only) != 1 || only[0].Provider != "fast" {
+				t.Fatalf("provider filter: %+v", only)
+			}
+		})
+	}
+	// the counts survive the chunks' merge and the file
+	a, b := speedRank{}, speedRank{}
+	a.add(&rows[3])
+	b.add(&rows[4])
+	part := addCells(&chunkPart{speeds: a}, &chunkPart{speeds: b})
+	disk := pageDiskPart(pageDiskEntry{Speeds: part.speeds})
+	for name, rank := range map[string]speedRank{"merged": part.speeds, "file": disk.speeds} {
+		if got := rank.providers(); len(got) != 1 || got[0].Tries != 2 || got[0].Failed != 1 || got[0].Swapped != 1 || got[0].Requests != 1 {
+			t.Fatalf("%s: %+v", name, got)
+		}
+	}
+}
