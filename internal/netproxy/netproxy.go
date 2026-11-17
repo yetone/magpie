@@ -203,6 +203,13 @@ func forChoice(c string) (*url.URL, error) {
 // its transport.
 var HTTP1 func(u *url.URL) bool
 
+// Elsewhere sends a request that Go's own TLS can't carry another way,
+// before a transport of Dispatch's dials it: ok false leaves the request
+// to the transport. internal/provider sets it for OpenCode Zen's free
+// tier, which answers a client that isn't Bun's 429 (zen_bun.go); nil
+// leaves every request to its transport.
+var Elsewhere func(req *http.Request) (res *http.Response, ok bool, err error)
+
 // Dispatch is a RoundTripper sending a request through base, unless its
 // context names a provider's own proxy (With): then through a clone of
 // base kept for that proxy alone. Connections are so reused among the
@@ -249,6 +256,11 @@ type route struct {
 }
 
 func (d *dispatch) RoundTrip(req *http.Request) (*http.Response, error) {
+	if f := Elsewhere; f != nil {
+		if res, ok, err := f(req); ok {
+			return res, err
+		}
+	}
 	if d.moved() {
 		d.CloseIdleConnections()
 	}
