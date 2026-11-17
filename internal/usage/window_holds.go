@@ -340,7 +340,7 @@ func baseRates(pr catalog.Price) catalog.Price {
 func apiPricer() func(Record) *catalog.Price {
 	st := settings.Load()
 	wires := st.Wires()
-	prices := map[[4]string]*catalog.Price{}
+	prices := map[[5]string]*catalog.Price{}
 	one := func(providerID, model string) *catalog.Price {
 		v, ok := provider.MakerPrice(model)
 		if !ok || v.Cost(1e6, 1e6, 0, 0) == 0 {
@@ -364,7 +364,8 @@ func apiPricer() func(Record) *catalog.Price {
 			served = ""
 		}
 		id := r.priceID()
-		k := [4]string{id, r.Model, served, r.Effort}
+		tier := r.billedTier()
+		k := [5]string{id, r.Model, served, r.Effort, tier}
 		if pr, ok := prices[k]; ok {
 			return pr
 		}
@@ -381,6 +382,8 @@ func apiPricer() func(Record) *catalog.Price {
 		if pr == nil && served != "" {
 			pr = one(id, served)
 		}
+		// a Fast call is worth Fast's API price (Pricer)
+		pr = tierPriced(pr, tier, served, r.Model)
 		prices[k] = pr
 		return pr
 	}

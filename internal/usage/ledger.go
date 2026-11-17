@@ -586,7 +586,7 @@ var ownPrice catalog.Price
 // one whose other models alone would stand for this call's, prices
 // nothing (#4278).
 func Pricer() func(Record) *catalog.Price {
-	prices := map[[6]string]*catalog.Price{}
+	prices := map[[7]string]*catalog.Price{}
 	// each provider's rate windows as the same read of the prices saw
 	// them: the windows are held once (BasePriceIn), each record's rate
 	// read at its own time (provider.RateAt), so a window that opens
@@ -606,7 +606,8 @@ func Pricer() func(Record) *catalog.Price {
 		// a key that bills at its own rate (provider.KeyPriceRates) prices
 		// its calls apart from the provider's other keys
 		key := r.ProviderKeyID
-		k := [6]string{id, r.Model, served, r.SessionProvider, r.Effort, key}
+		tier := r.billedTier()
+		k := [7]string{id, r.Model, served, r.SessionProvider, r.Effort, key, tier}
 		if pr, ok := prices[k]; ok {
 			return atWindow(pr, windows[id], r.Time)
 		}
@@ -618,10 +619,58 @@ func Pricer() func(Record) *catalog.Price {
 		}
 		if pr == nil {
 			catalog.Missing() // models.dev may list it by now
+		} else {
+			// Fast and Ultrafast bill at more than the standard price
+			// (Archivemylife on X: a Fast call read at the standard one)
+			pr = tierPriced(pr, tier, served, r.Model)
 		}
 		prices[k] = pr
 		return atWindow(pr, ws, r.Time)
 	}
+}
+
+// tierPriced is pr at a call's service tier: the price its maker lists
+// for the tier when pr is that model's standard price, the model that ran
+// or the one asked for (catalog.TierPrice), else pr. The rows hold the
+// tier's price, so the question is noted: a catalog that prices the tier
+// otherwise names the request index anew.
+func tierPriced(pr *catalog.Price, tier string, models ...string) *catalog.Price {
+	if pr == nil || tier == "" {
+		return pr
+	}
+	std := priceAnswer(pr, nil)
+	for _, model := range models {
+		if model == "" {
+			continue
+		}
+		tp, ok := catalog.TierPrice(*pr, model, tier)
+		answer := ""
+		if ok {
+			answer = priceAnswer(&tp, nil)
+		}
+		noteAsk(strings.Join([]string{"t", model, tier, std}, askSep), answer)
+		if ok {
+			return &tp
+		}
+	}
+	return pr
+}
+
+// billedTier is the service tier a record's call is priced at: the one
+// its reply named, as OpenAI's API bills it (a priority request it ran at
+// "default" is billed at the default), else the one sent: the ChatGPT
+// backend's reply names none that tells (servedTierAt keeps it ""). ""
+// for the standard tier.
+func (r Record) billedTier() string {
+	tier := strings.ToLower(strings.TrimSpace(r.TierServed))
+	if tier == "" || tier == "auto" {
+		tier = strings.ToLower(strings.TrimSpace(r.TierSent))
+	}
+	switch tier {
+	case "", "default", "auto", "standard":
+		return ""
+	}
+	return tier
 }
 
 // priceAsk is what Pricer prices a record by, less its time: the base
