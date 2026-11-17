@@ -90,6 +90,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         return r.top >= f.top - 0.5 && r.bottom <= f.bottom + 0.5;
       });
       assert.ok(await inSight("#prefs"), "the button is in sight");
+      // the foot takes more of the sidebar while the tabs show, through a
+      // class and not :has(), which Safari before 15.4 can't parse (#5919)
+      const footMax = () => page.locator(".side-foot").evaluate((f) => getComputedStyle(f).maxHeight);
+      assert.equal(await footMax(), "80%", "the foot grows for the tabs");
       const over = await page.locator(".side-foot").evaluate((f) => f.scrollHeight > f.clientHeight + 1);
       assert.equal(over, !!size.over, "the foot scrolls only when the list can't fit");
       if (!size.over) assert.ok(await inSight(".nav-s.cur"), "the open tab is in sight");
@@ -104,6 +108,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator('#nav button[data-view="agents"]').click();
       const closing = await drift(page, 600);
       await page.waitForFunction(() => !document.querySelector(".nav-sub"));
+      assert.equal(await footMax(), "55%", "the foot goes back once they fold");
       assert.ok(closing < 1, `the button moved ${closing}px while the list folded`);
       assert.ok(Math.abs((await prefs.boundingBox()).y - before.y) < 1, "the button is where it began");
 
