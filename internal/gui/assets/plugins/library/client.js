@@ -7904,6 +7904,8 @@ magpie.plugin("library", (ctx) => {
       };
       nm.append(b);
     }
+    // synced in by its source and not fetched here yet (#5715)
+    if (s.pending) nm.append(tag(t("Not fetched yet"), "warn lib-pending", t("Not fetched on this computer yet: Update tries again")));
     if (s.manual) nm.append(manualTag(s.name));
     if (lib.skillRouter && s.router === "direct" && !s.manual) nm.append(tag(t("Not through the router"), "lib-direct", t("Each agent is given it as its own skill, as with the skill router off.")));
     // turned off on this computer alone: no agent here gets it, the ticks

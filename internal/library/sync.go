@@ -503,6 +503,9 @@ type SkillView struct {
 	// in the library or in an agent's copy: an update replaces that, so
 	// the page asks first (#1449)
 	Edited bool `json:"edited,omitempty"`
+	// Pending is one a sync brought by its source and not yet fetched
+	// from there on this computer (Skill.Pending): Update tries again
+	Pending bool `json:"pending,omitempty"`
 	// Gone is when its source was found without it: removed there, the
 	// page offers to take it out (skill_gone.go)
 	Gone string `json:"gone,omitempty"`
@@ -769,7 +772,7 @@ func readView(problems []Problem, glance bool) (*View, error) {
 	v.Plugins = l.pluginsView()
 	tr := &tracer{}
 	for _, s := range l.Skills {
-		sv := SkillView{Name: s.Name, Bundle: s.Bundle, Agents: append([]string{}, s.Agents...), Icon: skillIcon(s), Problems: of("skill:" + s.Name), Repo: tr.repoOf(s), OffHere: s.OffHere, Note: s.Note, Router: s.Router}
+		sv := SkillView{Name: s.Name, Bundle: s.Bundle, Agents: append([]string{}, s.Agents...), Icon: skillIcon(s), Problems: of("skill:" + s.Name), Repo: tr.repoOf(s), OffHere: s.OffHere, Note: s.Note, Router: s.Router, Pending: s.Pending}
 		if s.Source != nil {
 			sv.Source, sv.Kind = s.Source.String(), s.Source.Kind
 		}

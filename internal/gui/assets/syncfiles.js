@@ -554,6 +554,14 @@ window.askUndoSync = function (v) {
 window.askPreviewRows = function (at, v, sub) {
   const left = ["providers", "settings", "profiles", "agents", "library", "memory"].filter((p) => v[p] === false);
   if (left.length) sub.after(el("div", "sub wraps sync-left", t("Stays as it is on each computer: {parts}", { parts: syncParts(left) })));
+  // the library's files too big to sync, and skills a sync couldn't fetch
+  // from their source here: said, never a silent success (#5715)
+  const lib = [v.libraryLeft?.length && t("Files too big to sync stay on this computer only, in: {names}", { names: v.libraryLeft.join(t(", ")) }), ...v.libraryProblems || []].filter(Boolean);
+  if (!v.error && lib.length) {
+    const d = el("div", "sub bad wraps sync-lib");
+    for (const l of lib) d.append(el("div", "", l));
+    sub.after(d);
+  }
   const row = (name, sub, b, cls) => {
     const r = el("div", "row pref wraps " + cls), who = el("div", "who"), val = el("div", "val");
     who.append(el("div", "name", name), el("div", "sub", sub));

@@ -47,6 +47,17 @@ type Skill struct {
 	// writes (ownHash): set as it is fetched, so a lock file the install
 	// writes again isn't taken for a change of the user's
 	Own string `json:"own,omitempty"`
+	// Pending is a skill a sync brought by its source (skill_carry.go)
+	// that isn't fetched from there on this computer yet: Hash and Commit
+	// are the version the other computer has, its folder what came with
+	// the sync or the older version here. The next sync, or Update, fetches
+	// it; an update clears it.
+	Pending bool `json:"pending,omitempty"`
+	// Missing are the files another computer has of the skill that a sync
+	// left out as too big to carry (CarriedSkill.Left), which this one
+	// doesn't have: it carries them on as left out, so its sync never
+	// takes them from the computer that has them (#5715), and says so.
+	Missing []string `json:"missing,omitempty"`
 	// From is the repository one not installed from GitHub was found to
 	// come from (skill_from.go), only to group it with the rest of it
 	From string `json:"from,omitempty"`
@@ -2150,8 +2161,15 @@ func (up *skillUpdate) apply(l *Library, targets []*Target) error {
 		}
 		// the commit it's at is known again once a check finds the files
 		// GitHub has to be these; a git repository's is the one fetched
-		s.Hash, s.Own, s.Commit = hash, own, up.commit
+		commit := up.commit
+		if s.Pending && hash == s.Hash && commit == "" {
+			// the version the other computer has, whose check found the
+			// commit GitHub has it at (skill_carry.go)
+			commit = s.Commit
+		}
+		s.Hash, s.Own, s.Commit = hash, own, commit
 		s.Gone = "" // its source has it again
+		s.Pending, s.Missing = false, nil
 	}
 	forgetCheck(name)
 	if old == "" {

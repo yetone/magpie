@@ -639,6 +639,21 @@ plugins were carried, and a bundle without the list leaves this computer's
 plugins alone. The preview names each plugin, its files as one digest
 (`TestSyncLibraryPlugins`, `TestNoPluginsHashAsBefore`).
 
+A library skill from GitHub or a git repository goes in the library part as
+its source too (#5715, [`skill_carry.go`](../../internal/library/skill_carry.go)),
+and the other computer fetches it itself, so a big skill no longer counts
+against the 64 MiB. What a sync still leaves out is said, never a silent
+success: `state.LibraryLeft` names the skills and plugins whose files were
+too big to go (or that this computer never had, `Skill.Missing`), and
+`state.LibraryProblems` what the last sync that brought the library in
+couldn't put here (a skill not fetched from its source yet, one kept as it
+was changed here). `Status` gives them as the view's `libraryLeft` and
+`libraryProblems`, dropping a problem settled since (`library.Unsettled`:
+Update fetched the skill), and Settings › Sync shows them in red under the
+status (`askPreviewRows` in syncfiles.js; `TestSyncSkillsBySourceAndLeftOut`,
+`sync-library-left.test.cjs`). A restore (`backup.Restore` through the
+restore and plan paths) doesn't record them yet.
+
 ## Verification
 
 ```sh

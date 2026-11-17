@@ -296,6 +296,13 @@ type state struct {
 	Off []string `json:"off,omitempty"`
 	// Applied is the last sync that brought parts in here, for UndoSync.
 	Applied *applied `json:"applied,omitempty"`
+	// LibraryLeft is the library's skills and plugins whose files the
+	// last sync left out of the server's file, too big for it (#5715);
+	// LibraryProblems what of the library the last sync that brought it
+	// in couldn't put here, such as a skill not fetched from its source
+	// yet. Both are said on the Settings page, never a silent success.
+	LibraryLeft     []string          `json:"libraryLeft,omitempty"`
+	LibraryProblems []library.Problem `json:"libraryProblems,omitempty"`
 }
 
 // blind is a write the server didn't check: the file it wrote (Sum), and
@@ -587,6 +594,9 @@ type View struct {
 	// Own is the agent fields picked on this computer after a sync set
 	// them, which sync leaves as they are here (own.go)
 	Own []OwnField `json:"own,omitempty"`
+	// LibraryLeft and LibraryProblems are the last sync's (state)
+	LibraryLeft     []string `json:"libraryLeft,omitempty"`
+	LibraryProblems []string `json:"libraryProblems,omitempty"`
 }
 
 // OtherView is the other kind's server as the Settings page shows it.
@@ -624,6 +634,10 @@ func Status() View {
 		}
 		if c.Usage && st.Usage != nil {
 			v.UsageError = st.Usage.Error
+		}
+		if c.library() {
+			// one settled since (Update fetched the skill) isn't said
+			v.LibraryLeft, v.LibraryProblems = st.LibraryLeft, said(library.Unsettled(st.LibraryProblems))
 		}
 		if !st.Last.IsZero() {
 			if ps, err := provider.Stored(); err == nil {
@@ -1265,10 +1279,55 @@ func bring(b backup.Bundle, part string) error {
 		_, err := backup.Restore(b, backup.Parts{Agents: true})
 		return err
 	case "library":
-		_, err := backup.Restore(b, backup.Parts{Library: true})
+		_, err := bringLibrary(b)
 		return err
 	}
 	return nil
+}
+
+// bringLibrary puts the library b carries here, and says what of it
+// couldn't be: a skill not fetched from its source yet, one kept as it was
+// changed here (library.Put).
+func bringLibrary(b backup.Bundle) ([]library.Problem, error) {
+	r, err := backup.Restore(b, backup.Parts{Library: true})
+	return r.LibraryProblems, err
+}
+
+// said is library problems as the Settings page says them: "pdf: why".
+func said(probs []library.Problem) []string {
+	var out []string
+	for _, p := range probs {
+		_, name, ok := strings.Cut(p.What, ":")
+		if !ok {
+			name = p.What
+		}
+		out = append(out, name+": "+p.Error)
+	}
+	return out
+}
+
+// leftOut is the skills and plugins whose files this computer's library
+// leaves out of a sync, too big for it (library.Collect), or doesn't have
+// as another computer left them out (library.Skill's Missing). A skill
+// carried as its source isn't: each computer fetches it from there.
+func leftOut(l *library.Bundle) []string {
+	if l == nil {
+		return nil
+	}
+	var names []string
+	for _, s := range l.Skills {
+		if len(s.Left) > 0 && !s.Fetch {
+			names = append(names, s.Name)
+		}
+	}
+	if l.Plugins != nil {
+		for _, p := range *l.Plugins {
+			if len(p.Left) > 0 {
+				names = append(names, p.Name)
+			}
+		}
+	}
+	return names
 }
 
 // keepUnseenGatewayKeys puts the gateway keys this computer holds that the
@@ -1441,6 +1500,10 @@ func syncOnce(ctx context.Context, c Config, st *state, pv *Plan) error {
 			st.Plugins = pluginNames(local.Plugins)
 		}
 		st.Off = c.left()
+		st.LibraryLeft = nil
+		if c.library() {
+			st.LibraryLeft = leftOut(local.Library)
+		}
 		return nil
 	}
 	if sum(data) == st.Sum && maps.Equal(L, st.Local) && !follow && !moved && len(rejoin) == 0 {
@@ -1625,10 +1688,19 @@ func syncOnce(ctx context.Context, c Config, st *state, pv *Plan) error {
 			log.Printf("sync: keeping this computer's setup before bringing in %v: %v", bringIn, err)
 		}
 	}
+	broughtLib := false
 	for _, p := range bringIn {
 		if p == "agents" {
 			got, err := bringAgents(remote.Agents, afterW)
 			broughtIn(st, got)
+			if err != nil {
+				return fmt.Errorf("bringing in the %s: %w", p, err)
+			}
+			continue
+		}
+		if p == "library" {
+			probs, err := bringLibrary(remote)
+			st.LibraryProblems, broughtLib = probs, true
 			if err != nil {
 				return fmt.Errorf("bringing in the %s: %w", p, err)
 			}
@@ -1740,6 +1812,13 @@ func syncOnce(ctx context.Context, c Config, st *state, pv *Plan) error {
 	}
 	st.Local = now
 	st.Off = c.left()
+	if !broughtLib {
+		st.LibraryProblems = library.Unsettled(st.LibraryProblems)
+	}
+	st.LibraryLeft = nil
+	if c.library() {
+		st.LibraryLeft = leftOut(local.Library)
+	}
 	if before != "" {
 		st.Applied = &applied{At: time.Now(), Parts: bringIn, File: before, After: now}
 	}

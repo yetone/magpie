@@ -84,6 +84,14 @@ type CarriedSkill struct {
 	// so without this the other computer groups the skill under "this
 	// computer". Bundles from before this have none.
 	From string `json:"from,omitempty"`
+	// Fetch is a skill carried as its source (skill_carry.go): the other
+	// computer fetches it from there, at the version Hash names (Commit
+	// too, for a git repository's), and Files are only what fit, standing
+	// in until then. A magpie from before this leaves it out and writes
+	// the files, as it did.
+	Fetch  bool   `json:"fetch,omitempty"`
+	Hash   string `json:"hash,omitempty"`
+	Commit string `json:"commit,omitempty"`
 }
 
 // A skill's file bigger than maxCarried is left out, and so are the
@@ -143,22 +151,47 @@ func Collect() (*Bundle, error) {
 	}
 	skills := sorted(slices.DeleteFunc(slices.Clone(l.Skills), func(s *Skill) bool { return l.ownedPart(s.Bundle) }),
 		func(s *Skill) string { return s.Name })
-	dirs := []string{}
+	// a skill carried as its source (skill_carry.go) takes only the room
+	// the ones carried as their files leave
+	var asFiles, asSource []*Skill
+	dirs, sdirs := []string{}, []string{}
 	for _, s := range skills {
-		dirs = append(dirs, realDir(skillDir(s.Name)))
+		if l.bySource(s) {
+			asSource, sdirs = append(asSource, s), append(sdirs, realDir(skillDir(s.Name)))
+		} else {
+			asFiles, dirs = append(asFiles, s), append(dirs, realDir(skillDir(s.Name)))
+		}
 	}
 	// a plugin's files from a folder are read with the skills', in one
 	// budget
 	plugins, pdirs, at := l.carriedPlugins()
 	read := readSkills(append(dirs, pdirs...))
-	for i, f := range read[len(skills):] {
+	for i, f := range read[len(asFiles):] {
 		c := plugins[at[i]]
 		c.Files, c.Exec, c.Left = f.Files, f.Exec, f.Left
 	}
 	b.Plugins = &plugins
+	used := int64(0)
+	for _, c := range read {
+		for _, f := range c.Files {
+			used += int64(len(f))
+		}
+	}
+	carried := map[string]*CarriedSkill{}
+	for i, c := range readSkillsMax(sdirs, maxCarried, max(maxCarriedAll-used, 0)) {
+		s := asSource[i]
+		c.Fetch, c.Hash, c.Commit = true, s.Hash, s.Commit
+		carried[s.Name] = c
+	}
+	for i, c := range read[:len(asFiles)] {
+		carried[asFiles[i].Name] = c
+	}
+	for _, s := range skills {
+		missing(carried[s.Name], s)
+	}
 	tr := &tracer{}
-	for i, c := range read[:len(skills)] {
-		s := skills[i]
+	for _, s := range skills {
+		c := carried[s.Name]
 		if s.Source == nil || s.Source.Kind == "folder" {
 			c.From = tr.repoOf(s)
 		}
@@ -562,10 +595,10 @@ func Put(b *Bundle) (*Result, error) {
 	}
 	biliWrote := false
 	var fetch []*CarriedPlugin
-	var gone []string
-	var plProblems []Problem
+	var gone, fetchS []string
+	var plProblems, skProblems []Problem
 	res, err := change(func(l *Library) error {
-		fetch, gone, plProblems = nil, nil, nil
+		fetch, gone, fetchS, plProblems, skProblems = nil, nil, nil, nil, nil
 		if err := os.MkdirAll(skillsDir(), 0o755); err != nil {
 			return err
 		}
@@ -586,7 +619,17 @@ func Put(b *Bundle) (*Result, error) {
 		}
 
 		keep, link := map[string]bool{}, map[string]string{}
+		// a skill carried as its source (skill_carry.go)
+		bySrc := map[string]*fromSource{}
 		for _, s := range b.Skills {
+			p := l.fromSourceHere(s)
+			if p != nil {
+				bySrc[s.Name] = p
+				if p.keep {
+					keep[s.Name] = true
+					continue
+				}
+			}
 			if cur := l.skill(s.Name); cur != nil && sameSource(cur.Source, s.Source) {
 				if have := readSkills([]string{realDir(skillDir(s.Name))})[0]; sameFiles(have, s) {
 					keep[s.Name] = true
@@ -606,6 +649,9 @@ func Put(b *Bundle) (*Result, error) {
 			}
 			if err := keepLeft(filepath.Join(stage, s.Name), realDir(skillDir(s.Name)), s); err != nil {
 				return fmt.Errorf("skill %s: %w", s.Name, err)
+			}
+			if p != nil {
+				p.whole(filepath.Join(stage, s.Name), s)
 			}
 		}
 
@@ -647,6 +693,26 @@ func Put(b *Bundle) (*Result, error) {
 				}
 				n.Gone = cur.Gone // kept on this computer only
 				n.Home = cur.Home // where it was in this computer's agents
+				if keep[s.Name] {
+					// the same files: what was fetched is still known
+					n.Hash, n.Own, n.Commit = cur.Hash, cur.Own, cur.Commit
+				}
+			}
+			if len(s.Left) > 0 {
+				dir := filepath.Join(stage, s.Name)
+				if keep[s.Name] {
+					dir = realDir(skillDir(s.Name))
+				}
+				n.Missing = notIn(dir, s.Left)
+			}
+			if p := bySrc[s.Name]; p != nil {
+				n.Hash, n.Own, n.Commit, n.Pending = p.hash, p.own, p.commit, p.pending
+				if p.fetch {
+					fetchS = append(fetchS, s.Name)
+				}
+				if p.changed {
+					skProblems = append(skProblems, changedHere(s.Name))
+				}
 			}
 			skills = append(skills, n)
 			if keep[s.Name] {
@@ -795,7 +861,9 @@ func Put(b *Bundle) (*Result, error) {
 	if err == nil {
 		removePluginDirs(gone)
 		res.Problems = append(res.Problems, plProblems...)
+		res.Problems = append(res.Problems, skProblems...)
 		fetchPlugins(fetch, res)
+		fetchSkills(fetchS, res)
 	}
 	return res, err
 }
