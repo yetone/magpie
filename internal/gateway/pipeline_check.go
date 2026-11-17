@@ -3,7 +3,6 @@ package gateway
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
 	"encoding/json"
 	"mime/multipart"
 	"net/http"
@@ -260,21 +259,5 @@ func (s *Server) checkCall(ctx context.Context, c *PipelineCheck, path, ctype st
 // silentWAV is d of silence as a 16 kHz mono 16-bit WAV file.
 func silentWAV(d time.Duration) []byte {
 	const rate = 16000
-	n := int(d.Seconds()*rate) * 2
-	var b bytes.Buffer
-	w := func(v any) { _ = binary.Write(&b, binary.LittleEndian, v) }
-	b.WriteString("RIFF")
-	w(uint32(36 + n))
-	b.WriteString("WAVEfmt ")
-	w(uint32(16))
-	w(uint16(1)) // PCM
-	w(uint16(1)) // mono
-	w(uint32(rate))
-	w(uint32(rate * 2))
-	w(uint16(2))
-	w(uint16(16))
-	b.WriteString("data")
-	w(uint32(n))
-	b.Write(make([]byte, n))
-	return b.Bytes()
+	return pcmWAV(make([]byte, int(d.Seconds()*rate)*2), rate)
 }

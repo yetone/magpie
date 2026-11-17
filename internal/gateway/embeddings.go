@@ -255,10 +255,18 @@ func (s *Server) serveRetrieval(w http.ResponseWriter, r *http.Request, path, op
 		base := strings.TrimRight(c.p.OpenAIBase(), "/")
 		tried := side.try(c)
 		msg := ""
-		if base == "" {
-			msg = fmt.Sprintf("%s has no OpenAI-style API for %s", c.p.Name, path)
-		} else if rr, ok := req.(refusingRetrieval); ok {
-			msg = rr.refuses(c.p) // never sent, so never a 404 of the vendor's
+		// asked in the vendor's own shape where it has no OpenAI-style one
+		// (Gemini's speech, speech_gemini.go)
+		var nat *vendorAsk
+		if nr, ok := req.(nativeRetrieval); ok {
+			nat, msg = nr.nativeAt(c.p, c.model)
+		}
+		if msg == "" && nat == nil {
+			if base == "" {
+				msg = fmt.Sprintf("%s has no OpenAI-style API for %s", c.p.Name, path)
+			} else if rr, ok := req.(refusingRetrieval); ok {
+				msg = rr.refuses(c.p) // never sent, so never a 404 of the vendor's
+			}
 		}
 		if msg != "" {
 			tried(400, errors.New(msg))
@@ -274,6 +282,9 @@ func (s *Server) serveRetrieval(w http.ResponseWriter, r *http.Request, path, op
 			return
 		}
 		out, ctype, err := req.forModel(c.model)
+		if nat != nil {
+			out, ctype = nat.body, "application/json"
+		}
 		if err != nil {
 			tried(400, err)
 			side.end(c.p, c.model, 400, err, Usage{})
@@ -292,10 +303,18 @@ func (s *Server) serveRetrieval(w http.ResponseWriter, r *http.Request, path, op
 		var got string
 		var code int
 		var res *http.Response // a streamed answer, not read yet
-		if st, ok := req.(streamedRetrieval); ok && st.streams() {
-			res, b, got, code, err = s.retrieveOpen(ctx, c.p, base+path, ctype, "", out)
+		var natIn, natOut int
+		if st, ok := req.(streamedRetrieval); ok && st.streams() && nat == nil {
+			res, b, got, code, err = s.retrieveOpen(ctx, c.p, provider.Chat, base+path, ctype, "", out)
+		} else if nat != nil {
+			// whole, then put in the client's shape
+			if b, got, code, err = s.retrieveAs(ctx, c.p, nat.proto, nat.url, ctype, out); err == nil {
+				if b, got, natIn, natOut, err = nat.answer(b); err != nil {
+					code, err = 502, fmt.Errorf("%s: %v", provider.HostOf(nat.url), err)
+				}
+			}
 		} else {
-			b, got, code, err = s.retrieveAs(ctx, c.p, base+path, ctype, out)
+			b, got, code, err = s.retrieveAs(ctx, c.p, provider.Chat, base+path, ctype, out)
 		}
 		if res == nil {
 			cancel()
@@ -310,6 +329,9 @@ func (s *Server) serveRetrieval(w http.ResponseWriter, r *http.Request, path, op
 		}
 		call.Status = code
 		in, outTokens := retrievedTokens(b), answeredTokens(b)
+		if nat != nil {
+			in, outTokens = natIn, natOut
+		}
 		var cached Usage // the cache's share, when the answer tells it
 		if cr, ok := req.(countedRetrieval); ok && res == nil && err == nil {
 			cached = cr.counted(b)
@@ -391,18 +413,19 @@ func resolveRetrievalModel(id, kind string) (provider.Provider, string, bool) {
 // retrieveFrom posts body to url as the provider signs its requests, and
 // reads the answer; a failure's code is the vendor's, with its message.
 func (s *Server) retrieveFrom(ctx context.Context, p provider.Provider, url string, body []byte) ([]byte, int, error) {
-	b, _, code, err := s.retrieveAs(ctx, p, url, "application/json", body)
+	b, _, code, err := s.retrieveAs(ctx, p, provider.Chat, url, "application/json", body)
 	return b, code, err
 }
 
 // retrieveAs is retrieveFrom with a body of its own Content-Type, a
-// multipart form's with its boundary; it also gives the answer's.
-func (s *Server) retrieveAs(ctx context.Context, p provider.Provider, url, ctype string, body []byte) ([]byte, string, int, error) {
+// multipart form's with its boundary, signed as a request of proto's; it
+// also gives the answer's.
+func (s *Server) retrieveAs(ctx context.Context, p provider.Provider, proto provider.Protocol, url, ctype string, body []byte) ([]byte, string, int, error) {
 	accept := ""
 	if ctype == "application/json" {
 		accept = "application/json"
 	}
-	res, b, got, code, err := s.retrieveOpen(ctx, p, url, ctype, accept, body)
+	res, b, got, code, err := s.retrieveOpen(ctx, p, proto, url, ctype, accept, body)
 	if res == nil {
 		return b, got, code, err
 	}
@@ -417,7 +440,7 @@ func (s *Server) retrieveAs(ctx context.Context, p provider.Provider, url, ctype
 // retrieveOpen posts body as retrieveAs does, with an Accept of its own
 // (none when empty). A success's answer is left unread in res, for the
 // caller to read and close; a failure's is read into b, res nil.
-func (s *Server) retrieveOpen(ctx context.Context, p provider.Provider, url, ctype, accept string, body []byte) (*http.Response, []byte, string, int, error) {
+func (s *Server) retrieveOpen(ctx context.Context, p provider.Provider, proto provider.Protocol, url, ctype, accept string, body []byte) (*http.Response, []byte, string, int, error) {
 	ctx = s.metered(p.Via(ctx), p, "") // counted against its MaxRPM (rpm.go)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
@@ -434,7 +457,7 @@ func (s *Server) retrieveOpen(ctx context.Context, p provider.Provider, url, cty
 		passOnCaller(ctx, req)
 		passOnUA(req, callerUA(ctx))
 	}
-	if err := p.Sign(ctx, req, provider.Chat, body); err != nil {
+	if err := p.Sign(ctx, req, proto, body); err != nil {
 		return nil, nil, "", 502, err
 	}
 	res, err := p.Do(s.client, req)
