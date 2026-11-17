@@ -1838,8 +1838,9 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	if zcodeTrialRestricted(c, why) {
 		id = c.restID()
 	}
-	// a relay's 429 that names the model whose credentials cooled down, or a
-	// vendor's that names the model it limits (modelNamed), is
+	// a relay's 429 that names the model whose credentials cooled down, a
+	// vendor's that names the model it limits (modelNamed), or
+	// Antigravity's for the model's pool (antigravityPoolSpent), is
 	// that model's: its siblings on the same key still answer upstream,
 	// and the model's own sentence rests with the model, not on every
 	// sibling's refusal (#3039)
@@ -1941,10 +1942,34 @@ func modelCooledDown(why string, body []byte) bool {
 
 // modelLimited says a refusal for want of quota, credit or rate is the
 // model's own, not the key's or account's: a relay's pooled credentials of
-// the model cooled down (modelCooledDown), or the vendor's words name the
-// model it limited (modelNamed).
+// the model cooled down (modelCooledDown), the vendor's words name the
+// model it limited (modelNamed), or Antigravity's quota of the model's
+// pool is used up (antigravityPoolSpent).
 func modelLimited(c candidate, why string, body []byte) bool {
-	return modelCooledDown(why, body) || modelNamed(c, why, body)
+	return modelCooledDown(why, body) || modelNamed(c, why, body) || antigravityPoolSpent(c, why, body)
+}
+
+// antigravityPoolQuota is Antigravity's refusal of a model whose quota pool
+// is used up, in agy's words ("Individual quota reached. Please upgrade
+// your subscription to increase your limits. Resets in 1h18m40s.", which
+// the agy-cli plugin relays) or Code Assist's ("You have exhausted your
+// capacity on this model. Your quota will reset after 3h19m30s.").
+var antigravityPoolQuota = lazyre.New(`(?i)\bindividual quota reached\b|\bexhausted your capacity on this model\b`)
+
+// antigravityPoolSpent says a quota refusal is Antigravity's for the
+// model's pool, not the account's: Google counts an Antigravity account's
+// quota per pool of models (Claude and GPT in one, Gemini's apart), and
+// has no allowance of the whole account to run out. It rests the model,
+// so the account's other pools are still asked. BruceLu73129013 on X
+// (agy-cli 0.1.87): Opus used up rested the account, and Gemini 4 Carbon,
+// its quota left, was answered the same 429 from the rest (timedHeld).
+// The retired built-in's readings told the pools apart (Pooled); agy-cli's
+// windows are display only (aside), so routing has no reading to narrow
+// the rest by, and the refusal's own words are what tell it. Only a
+// Google sign-in's (googleSignIn): another vendor's "individual quota
+// reached" says nothing of pools, and rests what it always did.
+func antigravityPoolSpent(c candidate, why string, body []byte) bool {
+	return c.model != "" && (why == failQuota || why == failRate) && googleSignIn(c.p) && antigravityPoolQuota.Match(wordsOf(body))
 }
 
 // modelLimitedBy is modelLimited, and a Claude account's plain rate limit
