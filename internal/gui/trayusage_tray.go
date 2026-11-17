@@ -53,6 +53,8 @@ func (h *host) watchTrayUsage() {
 			cancel()
 			if s.TrayNoLogos {
 				cells = trayPlain(cells)
+			} else if s.TrayAnthropicMark {
+				cells = trayAnthropic(cells)
 			}
 			if tip == "" {
 				currency, rate := trayCurrency()

@@ -1,4 +1,4 @@
-// Settings › Menu bar windows, and Windows' Tray icon number. app.js imports this only when the menu bar
+// Settings › Menu bar windows, Menu bar Claude logo, and Windows' Tray icon number. app.js imports this only when the menu bar
 // shows a card (renderTrayUsage), so it weighs nothing on the core.
 
 // which of a subscription's windows its menu bar card shows, by kind
@@ -9,9 +9,10 @@
 window.trayWindowsRow = function trayWindowsRow(s, keep, ids, mac) {
   // Windows' tray shows no text: the first card's figure is its icon, or
   // the bird (Benjaminliang_1 on X)
-  $("#trayNumberRow").hidden = !document.documentElement.classList.contains("win");
+  $("#trayNumberRow").hidden = !ids.length || !document.documentElement.classList.contains("win");
   $("#trayNumberSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.trayNoNumber ? "off" : "on",
     (v) => savePrefs({ ...keep, trayNoNumber: v === "off" })));
+  trayClaudeRow(s, keep, ids, mac);
   const pick = s.trayWindows || {}, box = $("#trayWindowsPick"), subs = [];
   for (const pid of new Set(ids.filter((id) => !id.startsWith("usage:")).map((id) => id.split("|")[0]))) {
     const ws = [], q = (quotas || []).find((q) => q.provider === pid);
@@ -39,3 +40,32 @@ window.trayWindowsRow = function trayWindowsRow(s, keep, ids, mac) {
     return b;
   }));
 };
+
+// the logos of Claude's cards (gui.trayClaudeLogos)
+const TRAY_CLAUDE_LOGOS = ["claude-color", "claudecode-color"];
+
+// Claude's cards in the Mac's menu bar with Claude's logo or Anthropic's
+// A\ (settings.TrayAnthropicMark, qingnianxiaozhe on X): asked only where a
+// ticked card is Claude's and the logos are shown. Until the cards are read,
+// a Claude Code one goes by its id.
+function trayClaudeRow(s, keep, ids, mac) {
+  const claude = ids.some((id) => {
+    const q = (quotas || []).find((q) => trayCardID(q) === id || q.provider + IN_USE === id);
+    return q ? TRAY_CLAUDE_LOGOS.includes(q.icon) : id.split("|")[0] === "claude";
+  });
+  $("#trayClaudeRow").hidden = !mac || !!s.trayNoLogos || !claude;
+  const opt = (logo, name) => {
+    logo.setAttribute("role", "img");
+    logo.setAttribute("aria-label", name);
+    return logo;
+  };
+  $("#trayClaudeSegs").replaceChildren(segs([["claude", opt(icon("claude-color"), "Claude")], ["anthropic", opt(anthropicMark(), "Anthropic")]],
+    s.trayAnthropicMark ? "anthropic" : "claude", (v) => savePrefs({ ...keep, trayAnthropicMark: v === "anthropic" })));
+}
+
+// Anthropic's A\ as the menu bar draws it (gui.trayAnthropicMark)
+function anthropicMark() {
+  const e = el("span", "ic anthropic-mark");
+  e.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M0.6 20 6.84 4h3.6l6.24 16h-3.4l-1.4-3.6H5.4L4 20Zm6.05-6.8h3.98L8.64 8.1Z"/><path fill="currentColor" d="M12.84 4h3.4l6.24 16h-3.4Z"/></svg>';
+  return e;
+}
