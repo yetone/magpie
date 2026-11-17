@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -266,5 +267,45 @@ func TestClaudeSetupTokenInUseNotMovedOff(t *testing.T) {
 	forget()
 	if _, to, _, ok := NextLogin(context.Background(), "claude"); !ok || to == "" {
 		t.Fatalf("NextLogin no longer moves the spent sign-in: %q ok=%v", to, ok)
+	}
+}
+
+// A setup-token is a long-lived subscription credential: the settings.json
+// it goes in is made readable by its owner alone, as Claude Code's own
+// .credentials.json is, whether it was 0644 (as Claude Code writes it) or
+// not there yet.
+func TestClaudeSetupTokenSettingsPrivate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no Unix modes")
+	}
+	for _, existed := range []bool{true, false} {
+		t.Run(map[bool]string{true: "0644", false: "missing"}[existed], func(t *testing.T) {
+			claudeThree(t)
+			if existed {
+				writeFile(t, claudeSettingsFile(), map[string]any{"model": "opus"})
+				if err := os.Chmod(claudeSettingsFile(), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			} else if err := os.Remove(claudeSettingsFile()); err != nil && !os.IsNotExist(err) {
+				t.Fatal(err)
+			}
+			tok, err := AddClaudeSetupToken(testSetupToken)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := SwitchLogin("claude", tok); err != nil {
+				t.Fatal(err)
+			}
+			if v, _ := envTokenOf(t); v != testSetupToken {
+				t.Fatalf("settings.json's %s = %q, want the setup-token", claudeTokenEnvKey, v)
+			}
+			st, err := os.Stat(claudeSettingsFile())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if perm := st.Mode().Perm(); perm&0o077 != 0 {
+				t.Fatalf("settings.json holding the token is %o, readable by others", perm)
+			}
+		})
 	}
 }

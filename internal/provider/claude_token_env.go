@@ -208,7 +208,43 @@ func setClaudeEnvTokenLocked(token string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
+	if err := claudeSettingsPrivate(path); err != nil {
+		return err
+	}
 	return edit.SetJSON(path, edit.KV{Path: "env." + claudeTokenEnvKey, Value: token})
+}
+
+// claudeSettingsPrivate makes Claude Code's settings.json readable by its
+// owner alone before a token goes in it. Claude Code writes the file 0644,
+// and edit.SetJSON keeps a file's mode, so a long-lived subscription token
+// would sit where every other account on the computer can read it, unlike
+// the sign-in Claude Code keeps in .credentials.json (0600) or the
+// keychain. A file that isn't there yet is made 0600 first, so the token
+// is never in a file anyone else can read, not even for a moment.
+func claudeSettingsPrivate(path string) error {
+	target, err := edit.Target(path) // a symlink's target holds the token
+	if err != nil {
+		return err
+	}
+	st, err := os.Stat(target)
+	if errors.Is(err, os.ErrNotExist) {
+		f, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if err != nil {
+			return err
+		}
+		if _, err := f.WriteString("{}\n"); err != nil {
+			f.Close()
+			return err
+		}
+		return f.Close()
+	}
+	if err != nil {
+		return err
+	}
+	if perm := st.Mode().Perm(); perm&0o077 != 0 {
+		return os.Chmod(target, perm&^0o077)
+	}
+	return nil
 }
 
 // claudeTokenGone takes magpie's token for the removed account l out of
