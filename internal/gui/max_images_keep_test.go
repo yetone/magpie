@@ -10,16 +10,17 @@ import (
 	"github.com/yetone/magpie/internal/provider"
 )
 
-// The provider editor has no MaxImages field: a save that doesn't send it
-// must keep what `magpie provider set <id> max-images=8` set, as it keeps
-// every other field the CLI alone sets.
+// A save that doesn't send maxImages (an older window, a preset's sheet)
+// keeps what `magpie provider set <id> max-images=8` or the editor's
+// Images per request set, one that sends it sets it, and {} clears it
+// (#6849).
 func TestProviderSaveKeepsMaxImages(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	if err := provider.Save(provider.Provider{ID: "eightmax", Name: "Eight Max", Chat: "https://example.invalid/v1", Key: "a", MaxImages: 8}); err != nil {
+	if err := provider.Save(provider.Provider{ID: "eightmax", Name: "Eight Max", Chat: "https://example.invalid/v1", Key: "a", MaxImages: map[string]int{"*": 8}}); err != nil {
 		t.Fatal(err)
 	}
 	mux := http.NewServeMux()
@@ -29,7 +30,7 @@ func TestProviderSaveKeepsMaxImages(t *testing.T) {
 		mux.ServeHTTP(w, httptest.NewRequest("POST", "/api/provider/save", strings.NewReader(body)))
 		return w
 	}
-	set := func() int {
+	set := func() map[string]int {
 		got, err := provider.Find("eightmax")
 		if err != nil {
 			t.Fatal(err)
@@ -39,8 +40,8 @@ func TestProviderSaveKeepsMaxImages(t *testing.T) {
 	if w := post(`{"id":"eightmax","name":"Eight Max","chat":"https://example.invalid/v1"}`); w.Code != 200 {
 		t.Fatalf("%d %s", w.Code, w.Body)
 	}
-	if n := set(); n != 8 {
-		t.Fatalf("a save leaving it out lost it: %d", n)
+	if n := set(); n["*"] != 8 {
+		t.Fatalf("a save leaving it out lost it: %v", n)
 	}
 	// the state the editor is drawn from says it too
 	w := httptest.NewRecorder()
@@ -52,10 +53,22 @@ func TestProviderSaveKeepsMaxImages(t *testing.T) {
 	shown := false
 	for _, q := range state.Providers {
 		if q.ID == "eightmax" {
-			shown = q.MaxImages == 8
+			shown = q.MaxImages["*"] == 8
 		}
 	}
 	if !shown {
 		t.Fatalf("the providers' state doesn't tell it: %s", w.Body)
+	}
+	if w := post(`{"id":"eightmax","name":"Eight Max","chat":"https://example.invalid/v1","maxImages":{"*":6,"gemini-3-flash":10}}`); w.Code != 200 {
+		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+	if n := set(); n["*"] != 6 || n["gemini-3-flash"] != 10 || len(n) != 2 {
+		t.Fatalf("a save sending it didn't set it: %v", n)
+	}
+	if w := post(`{"id":"eightmax","name":"Eight Max","chat":"https://example.invalid/v1","maxImages":{}}`); w.Code != 200 {
+		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+	if n := set(); len(n) != 0 {
+		t.Fatalf("{} didn't clear it: %v", n)
 	}
 }

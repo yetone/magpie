@@ -358,6 +358,12 @@ func moveModelRefs(pid, from, to string, account bool) error {
 			}
 			delete(q.Contexts, from)
 		}
+		if n, ok := q.MaxImages[from]; ok {
+			if _, has := q.MaxImages[to]; !has {
+				q.MaxImages[to] = n
+			}
+			delete(q.MaxImages, from)
+		}
 	}
 	ref := func(m string) string {
 		pre, rest := "", m

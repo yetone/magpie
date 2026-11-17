@@ -251,15 +251,14 @@ type Provider struct {
 	// limit.
 	MaxRPM int `json:"maxRPM,omitempty"`
 	// MaxImages is the most images one request to it may carry, by the
-	// user's word (100milionseek's and Coarena's own APIs take 8 a
-	// request and refuse the ninth with 400, and the count is over the
-	// whole conversation, tool results included, so a long session needs
-	// only one more to fail): past it the oldest images are left out,
-	// each replaced by a line of text saying so, the latest user
-	// message's kept whole. 0, the default, learns the cap from a
-	// Copilot refusal instead (gateway.imageCaps). See
-	// gateway.withinImageCap.
-	MaxImages int `json:"maxImages,omitempty"`
+	// user's word: by model id, "*" for all its models (100milionseek's
+	// and Coarena's APIs take 8 a request and refuse the ninth with 400,
+	// #6849). The count is over the whole conversation, tool results
+	// included. Past it the oldest images are left out, each replaced by
+	// a line of text saying so, the latest user message's kept whole
+	// (gateway.withinImageCap). None set leaves it to what a refusal that
+	// names its cap teaches (gateway.imageCaps). See ImageCapOf.
+	MaxImages map[string]int `json:"maxImages,omitempty"`
 	// QuotaRest is how many minutes one of its keys sits out once the
 	// vendor says it is out of its allowance without saying when it is
 	// back (#1772: Ollama Cloud's weekly limit); 0 is the gateway's own
@@ -1032,6 +1031,7 @@ func (p Provider) clone() Provider {
 	p.AccountConcurrency = maps.Clone(p.AccountConcurrency)
 	p.AccountWeights = maps.Clone(p.AccountWeights)
 	p.Contexts = maps.Clone(p.Contexts)
+	p.MaxImages = maps.Clone(p.MaxImages)
 	p.AccountModelsAll = maps.Clone(p.AccountModelsAll)
 	if p.AccountModels != nil {
 		m := make(map[string][]string, len(p.AccountModels))
@@ -2001,7 +2001,7 @@ func normalize(p Provider) Provider {
 	p.AccountWeights = normalAccountWeights(p.AccountWeights)
 	p.QueueLimit, p.QueueWait = min(max(p.QueueLimit, 0), MaxQueueLimit), min(max(p.QueueWait, 0), MaxQueueWait)
 	p.MaxRPM = min(max(p.MaxRPM, 0), MaxRPMLimit)
-	p.MaxImages = min(max(p.MaxImages, 0), MaxImagesLimit)
+	p.MaxImages = normalMaxImages(p.MaxImages)
 	p.QuotaRest = min(max(p.QuotaRest, 0), MaxQuotaRest)
 	if p.RestCap != RestCapOff {
 		p.RestCap = min(max(p.RestCap, 0), MaxQuotaRest)

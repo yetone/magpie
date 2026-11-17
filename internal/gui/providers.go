@@ -456,9 +456,8 @@ type providerJSON struct {
 	// minute, 0 for no limit (coeo91 on Discord)
 	MaxRPM int `json:"maxRPM,omitempty"`
 	// MaxImages is how many images one request to it may carry, by the
-	// user's word (provider.Provider.MaxImages); set on its own with
-	// max-images
-	MaxImages int `json:"maxImages,omitempty"`
+	// user's word: by model id, "*" for all (provider.Provider.MaxImages)
+	MaxImages map[string]int `json:"maxImages,omitempty"`
 	// RateWindows are the time-of-day windows it bills at its own rate
 	// (#2463), as the editor opens on them
 	RateWindows []provider.RateWindow `json:"rateWindows,omitempty"`
@@ -2245,6 +2244,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// its key when the form left it blank
 			if pr, err := provider.FromPreset(in.Preset); err == nil && in.Chat == "" && in.Responses == "" && in.Anthropic == "" && in.Gemini == "" {
 				pr.Key, pr.Models, pr.Fallback, pr.Headers, pr.BalanceToken, pr.Contexts = in.Key, in.Models, in.Fallback, in.Headers, in.BalanceToken, in.Contexts
+				pr.MaxImages = in.MaxImages
 				pr.ZhipuTeam = in.ZhipuTeam
 				pr.NoModels = in.NoModels
 				pr.BestInFamily = in.BestInFamily
@@ -2661,10 +2661,12 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 					in.CapStop, in.CapCareful = old.CapStop, old.CapCareful       // capstop, capcareful
 					in.UseFirst = old.UseFirst                                    // usefirst
 					in.NoStandIn = old.NoStandIn                                  // standin
-					in.MaxImages = old.MaxImages                                  // max-images
 					in.Off = old.Off                                              // and this with off and on
 					if in.Contexts == nil {
 						in.Contexts = old.Contexts // a save that doesn't say
+					}
+					if in.MaxImages == nil {
+						in.MaxImages = old.MaxImages // likewise
 					}
 					if in.Key == old.Key {
 						in.KeyName, in.KeyProtocol, in.KeyWeight, in.KeyPlan = old.KeyName, old.KeyProtocol, old.KeyWeight, old.KeyPlan

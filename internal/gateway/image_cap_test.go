@@ -134,10 +134,10 @@ func TestCopilotGeminiImagesUnderCapUntouched(t *testing.T) {
 	}
 }
 
-// maxImagesFake saves a provider with no account and n as its MaxImages,
+// maxImagesFake saves a provider with no account and caps as its MaxImages,
 // serving model m1 on a chat URL of its own, and answers every request it
 // gets with a chat stream, keeping the bodies.
-func maxImagesFake(t *testing.T, name string, n int) *[]string {
+func maxImagesFake(t *testing.T, name string, caps map[string]int) *[]string {
 	t.Helper()
 	fresh(t)
 	var mu sync.Mutex
@@ -154,17 +154,18 @@ func maxImagesFake(t *testing.T, name string, n int) *[]string {
 			`data: [DONE]`))
 	}))
 	t.Cleanup(up.Close)
-	if err := provider.Save(provider.Provider{ID: name, Name: name, Key: "k", Chat: up.URL + "/v1", Models: []string{"m1"}, MaxImages: n}); err != nil {
+	if err := provider.Save(provider.Provider{ID: name, Name: name, Key: "k", Chat: up.URL + "/v1", Models: []string{"m1"}, MaxImages: caps}); err != nil {
 		t.Fatal(err)
 	}
 	return &bodies
 }
 
 // A provider the user gave a MaxImages fits the request before it is sent,
-// with no refusal first: 100milionseek's and Coarena's 400s name no number
-// imageCapWords can read, so waiting to learn one never ends.
+// with no refusal first: 100milionseek's and Coarena's 400s each cost a
+// turn before their number is learned, and a learned cap is forgotten on
+// restart.
 func TestMaxImagesFitsBeforeSending(t *testing.T) {
-	sent := maxImagesFake(t, "eightmax", 8)
+	sent := maxImagesFake(t, "eightmax", map[string]int{"*": 8})
 	s := New()
 	rec := postCapChat(t, s, imageChat("eightmax/m1", 11, 1))
 	if rec.Code != 200 {
@@ -206,7 +207,7 @@ func TestMaxImagesFitsBeforeSending(t *testing.T) {
 // the vendor the model's own id, not the provider-prefixed one the agent
 // named.
 func TestMaxImagesUnderCapUntouched(t *testing.T) {
-	sent := maxImagesFake(t, "eightmax", 8)
+	sent := maxImagesFake(t, "eightmax", map[string]int{"*": 8})
 	s := New()
 	// same says got kept every image was kept: as many as was sent, none
 	// left out for the placeholder
@@ -237,8 +238,8 @@ func TestMaxImagesUnderCapUntouched(t *testing.T) {
 	}
 }
 
-// The user's number stands over the cap Copilot's refusal taught the same
-// provider's model: the smaller of the two isn't taken.
+// The user's number and the cap Copilot's refusal taught the same
+// provider's model both hold: the smaller one is sent at.
 func TestMaxImagesStandsOverTheLearnedCap(t *testing.T) {
 	var sent []string
 	var refused atomic.Int32
@@ -253,19 +254,21 @@ func TestMaxImagesStandsOverTheLearnedCap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p.MaxImages = 4
-	if err := provider.Save(*p); err != nil {
-		t.Fatal(err)
-	}
-	before := len(sent)
-	if rec := postCapChat(t, s, imageChat("copilot/gemini-4-carbon", 11, 1)); rec.Code != 200 {
-		t.Fatalf("the turn failed: %d %s", rec.Code, rec.Body.String())
-	}
-	if len(sent) != before+1 {
-		t.Fatalf("asked %d requests, want 1", len(sent)-before)
-	}
-	if n := strings.Count(sent[len(sent)-1], `"type":"image_url"`); n != 4 {
-		t.Errorf("sent %d images, not the 4 the user set", n)
+	for _, c := range []struct{ own, want int }{{4, 4}, {20, 10}} {
+		p.MaxImages = map[string]int{"*": c.own}
+		if err := provider.Save(*p); err != nil {
+			t.Fatal(err)
+		}
+		before := len(sent)
+		if rec := postCapChat(t, s, imageChat("copilot/gemini-4-carbon", 11, 1)); rec.Code != 200 {
+			t.Fatalf("the turn failed: %d %s", rec.Code, rec.Body.String())
+		}
+		if len(sent) != before+1 {
+			t.Fatalf("own %d: asked %d requests, want 1", c.own, len(sent)-before)
+		}
+		if n := strings.Count(sent[len(sent)-1], `"type":"image_url"`); n != c.want {
+			t.Errorf("own %d: sent %d images, not %d", c.own, n, c.want)
+		}
 	}
 }
 

@@ -6,9 +6,11 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // A model's cap on the images of one request.
@@ -28,26 +30,72 @@ import (
 // sent (forwardOnce). The latest user message is kept whole; when its own
 // images are over the cap, nothing is left out and the refusal goes on.
 //
-// A cap the user sets on a provider (Provider.MaxImages) needs no refusal
-// to know: 100milionseek's and Coarena's APIs take 8 a request and answer
-// the ninth with their own words, which imageCapWords doesn't match, so
-// learning one there never happens. The user's number stands over the
-// learned one and is fitted before the request is sent too.
+// Other vendors hold a request to a cap of their own and say so in their
+// own words (#6849): 100milionseek "At most 8 images per request
+// (MAX_IMAGES)." and Coarena "A request may carry at most 8 images.", the
+// vendor's name first. Those are learned the same way, by provider and
+// model, whatever id the user gave the provider: the words name the
+// vendor. A cap the user sets on a provider (Provider.MaxImages, for all
+// its models or for one) needs no refusal to know, and is fitted before
+// the first request is sent; a refusal naming a smaller one still lowers
+// it, since a request over it can't be served.
 //
-// A request under the cap, and every other vendor's, goes as it came.
+// A request under the cap, and one to a provider with none set or
+// learned, goes as it came.
 
-// imageCapWords are Copilot's words for a request over a model's image
-// cap, with the cap.
-var imageCapWords = lazyre.New(`(?i)too many images: maximum allowed for model \S+ is (\d+)`)
+// imageCapRefusal is a vendor's words for a request over a model's image
+// cap, with the cap; copilot is whether only a Copilot account's are
+// read, its words naming no vendor.
+type imageCapRefusal struct {
+	words   *lazyre.RE
+	copilot bool
+}
+
+// imageCapWords are the refusals a cap is learned from, as each vendor
+// says them (the bytes are quoted above).
+var imageCapWords = []imageCapRefusal{
+	{lazyre.New(`(?i)too many images: maximum allowed for model \S+ is (\d+)`), true},
+	{lazyre.New(`100milionseek: At most (\d+) images per request \(MAX_IMAGES\)`), false},
+	{lazyre.New(`Coarena: A request may carry at most (\d+) images\.`), false},
+}
 
 // imageOverCap stands where an image over the cap was left out. It goes
 // to the vendor, so it names neither magpie nor the vendor.
 const imageOverCap = "[An earlier image was omitted here to keep this request within the model's image limit.]"
 
-// imageCapped is whether p's refusals of too many images are learned:
-// Copilot's alone say so.
-func imageCapped(p provider.Provider) bool {
+// copilotAccount is whether p is a Copilot account, whose refusal of too
+// many images names no vendor.
+func copilotAccount(p provider.Provider) bool {
 	return p.Account != nil && p.Account.Agent == "copilot"
+}
+
+// learnedImageCap is the cap res's body b names for a request over it, as
+// p's vendor words it, 0 for none.
+func learnedImageCap(p provider.Provider, b []byte) int {
+	words := string(wordsOf(b))
+	for _, r := range imageCapWords {
+		if r.copilot && !copilotAccount(p) {
+			continue
+		}
+		if m := r.words.FindStringSubmatch(words); m != nil {
+			if n, err := strconv.Atoi(m[1]); err == nil && n > 0 {
+				return n
+			}
+		}
+	}
+	return 0
+}
+
+// under is whether a cap is kept under a key that starts with prefix.
+func (c *bodyCaps) under(prefix string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for k := range c.m {
+		if strings.HasPrefix(k, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // imageCapKey is where the cap of p's model is kept.
@@ -55,14 +103,40 @@ func imageCapKey(p provider.Provider, body []byte) string {
 	return p.ID + "\x00" + modelOf(body)
 }
 
-// imageCap is the most images one request to p may carry: the user's own
-// MaxImages, which needs no refusal to know and holds for any vendor,
-// else the cap Copilot's refusals taught that model, 0 for neither.
-func (s *Server) imageCap(p provider.Provider, body []byte) int {
-	if p.MaxImages > 0 {
-		return p.MaxImages
+// userImageCap is the cap the user set on p for the model body asks
+// for, 0 for none. The body names the vendor's id for it, and the user
+// set it by the id magpie lists it under, which a model's own upstream
+// name (SetModelID) can tell apart.
+func userImageCap(p provider.Provider, body []byte) int {
+	if len(p.MaxImages) == 0 {
+		return 0
 	}
-	return s.imageCaps.of(imageCapKey(p, body))
+	model := modelOf(body)
+	if n := p.MaxImages[model]; n > 0 {
+		return n
+	}
+	wires := settings.Shared().Wires()
+	for id, n := range p.MaxImages {
+		if id != "*" && n > 0 && provider.UpstreamNameIn(wires, p.ID, id) == model {
+			return n
+		}
+	}
+	return p.MaxImages["*"]
+}
+
+// imageCap is the most images one request to p may carry: the smaller of
+// the user's own MaxImages and the cap a refusal taught that model, 0
+// for neither.
+func (s *Server) imageCap(p provider.Provider, body []byte) int {
+	if len(p.MaxImages) == 0 && !s.imageCaps.under(p.ID+"\x00") {
+		// most requests: nothing read of the body
+		return 0
+	}
+	own, learned := userImageCap(p, body), s.imageCaps.of(imageCapKey(p, body))
+	if own > 0 && (learned <= 0 || own < learned) {
+		return own
+	}
+	return learned
 }
 
 // withinImageCap is body as it goes to p: its oldest images left out down
@@ -108,23 +182,26 @@ func withoutImagesOver(to provider.Protocol, body []byte, most int) (out []byte,
 	return b.Bytes(), over, true
 }
 
-// refitImageCap is forward's answer to res, Copilot's refusal of body for
-// too many images: the cap learned, and the request sent again with its
-// oldest images left out, when that brings it to the cap.
+// refitImageCap is forward's answer to res, a refusal of body for too
+// many images that names the cap (imageCapWords): the cap learned, and
+// the request sent again with its oldest images left out, when that
+// brings it under the cap it was sent at.
 func (s *Server) refitImageCap(ctx context.Context, p provider.Provider, to provider.Protocol, path string, body []byte, in http.Header, res *http.Response) (*http.Response, error) {
-	if res.StatusCode != http.StatusBadRequest || !imageCapped(p) || countsTokens(path) {
+	if res.StatusCode != http.StatusBadRequest || countsTokens(path) {
 		return res, nil
 	}
 	b := peekError(res)
-	m := imageCapWords.FindStringSubmatch(string(wordsOf(b)))
-	if m == nil {
+	n := learnedImageCap(p, b)
+	if n <= 0 {
 		return res, nil
 	}
-	n, err := strconv.Atoi(m[1])
-	if err != nil || n <= 0 {
+	was := s.imageCap(p, body)
+	s.imageCaps.learn(imageCapKey(p, body), n)
+	if n = s.imageCap(p, body); n == was {
+		// sent fitted to it already: the refusal is about the latest
+		// message's own images, and asking again changes nothing
 		return res, nil
 	}
-	n = s.imageCaps.learn(imageCapKey(p, body), n)
 	if _, left, ok := withoutImagesOver(to, body, n); !ok || left == 0 {
 		return res, nil
 	}

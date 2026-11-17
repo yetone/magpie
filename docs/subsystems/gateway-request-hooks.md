@@ -168,8 +168,15 @@ eleven seconds); each callback uses the configured bounded hook timeout. Request
   Codex's compaction and its fallback turn, titles, System One's
   classifier, search and vision (#4847). A request over a provider's byte
   cap is fitted in the gateway itself, not by a hook (`body_cap.go`), as is
-  one over a model's image cap — Copilot's, learned from its refusal, or
-  the provider's `max-images`, the user's word (`image_cap.go`).
+  one over a model's image cap (`image_cap.go`, #6849). The cap is the
+  smaller of the user's `MaxImages` (by model id, `"*"` for all; the
+  editor's Advanced › Images per request, `magpie provider set <id>
+  max-images=8 max-images.<model>=10`) and the one a 400 taught that
+  provider's model: Copilot's words on a Copilot account, and
+  100milionseek's and Coarena's own words, which name their vendor, on any
+  provider. Every image counts, those in a tool_result too; the oldest go
+  first, the latest user message's are kept, and a request with no cap or
+  within it goes as the same bytes. Session files are never touched.
 - `internal/gateway/gateway_hooks.go`: bounded response observation and
   `gatewayReply`, a stream made one reply.
 - `internal/gateway/signin_hooks.go`: sign-in events, and

@@ -235,6 +235,33 @@ const MaxRPMLimit = 10000
 // rather than a cap.
 const MaxImagesLimit = 1000
 
+// normalMaxImages is a MaxImages as saved: model ids trimmed, each cap held
+// to 1..MaxImagesLimit, a cap of 0 or less (none) and an empty id dropped.
+func normalMaxImages(m map[string]int) map[string]int {
+	var out map[string]int
+	for id, n := range m {
+		id = strings.TrimSpace(id)
+		if id == "" || n <= 0 {
+			continue
+		}
+		if out == nil {
+			out = map[string]int{}
+		}
+		out[id] = min(n, MaxImagesLimit)
+	}
+	return out
+}
+
+// ImageCapOf is the most images one request to model may carry, as the
+// user set it on p: the model's own, else the one for all its models, 0
+// for none.
+func (p Provider) ImageCapOf(model string) int {
+	if n := p.MaxImages[model]; n > 0 {
+		return n
+	}
+	return p.MaxImages["*"]
+}
+
 // RPMLimit is how many requests a minute each of p's keys or accounts may
 // send the vendor, 0 for no limit: the provider's MaxRPM. An account not
 // had from All or AlsoOn (made afresh by its sign-in) carries none of the
