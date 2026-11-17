@@ -29,6 +29,10 @@ import (
 	"github.com/yetone/magpie/internal/provider"
 )
 
+// nearChecked, for tests, is told each try's near-cap check, right after
+// it, before the try is counted out on the account.
+var nearChecked func(near bool)
+
 // nearCapPoints is how many points under a cap an account takes one turn at a
 // time: as careful caps read again (carefulNear), a turn of a big model
 // on a small plan spending a few points.
@@ -36,6 +40,9 @@ const nearCapPoints = carefulNear
 
 // nearCaps is each account's one turn near its cap, by candidate.who().
 type nearCaps struct {
+	// check makes a turn's near-cap check and its count as out on the
+	// account (lanes.plan) one step (#6958)
+	check sync.Mutex
 	mu    sync.Mutex
 	slots map[string]chan struct{}
 	wait  int // turns waiting for a slot, for tests
@@ -109,7 +116,7 @@ func (s *Server) nearCapOf(c candidate, now time.Time) (used, ahead float64, nea
 	}
 	used, _ = al.For(c.model, now)
 	out, _, turns := s.lanes.out(c.who())
-	ahead = s.turnSpend.ahead(c.who(), used, turns, out)
+	ahead = s.turnSpend.ahead(c.who(), used, turns, s.lanes.inReading(c.who()), out)
 	return used, ahead, al.NearCap(c.model, caps, nearCapPoints+ahead, now)
 }
 
@@ -144,10 +151,11 @@ func capWatched(c candidate) (provider.Allowance, provider.WindowCaps, bool) {
 }
 
 // turnSpends learns what a turn spends on each account, by candidate.who():
-// as its usage moves up, by how much, over the turns that came back since
-// it last moved. A reply tells the usage as its turn begins, so turns out
-// at the vendor, and those come back since the usage last moved, are in
-// no reading yet: what they will spend is ahead of the reading.
+// as its usage moves up, by how much, over the turns that reading has
+// that the one before it hadn't. A reply tells the usage as its turn
+// begins, so turns out at the vendor, and those come back since the turn
+// whose reply told it began, are in no reading yet: what they will spend
+// is ahead of the reading.
 type turnSpends struct {
 	mu sync.Mutex
 	m  map[string]turnSpend
@@ -155,7 +163,7 @@ type turnSpends struct {
 
 type turnSpend struct {
 	used  float64 // the usage last known
-	turns int     // turns come back when it last moved
+	turns int     // turns come back that reading has
 	per   float64 // what a turn spent then, at most maxTurnSpend
 }
 
@@ -163,25 +171,29 @@ type turnSpend struct {
 // moved by what the vendor's own app spent too is not one turn's.
 const maxTurnSpend = 2 * nearCapPoints
 
-// ahead notes who's usage, used, with turns come back, and answers what
-// out turns at the vendor and those come back since the usage last moved
-// will spend.
-func (t *turnSpends) ahead(who string, used float64, turns, out int) float64 {
+// ahead notes who's usage, used, with turns come back and read of them
+// in that reading at most (lanes.inReading), and answers what out turns
+// at the vendor and those come back that no reading has yet will spend.
+// Counting every turn come back as read, the turns of five sessions sent
+// together, out as the reading was told, were never ahead of it, and the
+// account went past its cap by a round of them (#6958).
+func (t *turnSpends) ahead(who string, used float64, turns, read, out int) float64 {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.m == nil {
 		t.m = map[string]turnSpend{}
 	}
+	read = min(read, turns)
 	s, ok := t.m[who]
 	switch {
 	case !ok || used < s.used:
 		// first known, or renewed: what a turn spent stands
-		s.used, s.turns = used, turns
+		s.used, s.turns = used, read
 	case used > s.used:
-		if n := turns - s.turns; n > 0 {
+		if n := read - s.turns; n > 0 {
 			s.per = min((used-s.used)/float64(n), maxTurnSpend)
 		}
-		s.used, s.turns = used, turns
+		s.used, s.turns = used, read
 	}
 	t.m[who] = s
 	return s.per * float64(out+max(turns-s.turns, 0))

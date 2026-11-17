@@ -41,6 +41,55 @@ type lanes struct {
 	ended map[string]time.Time
 	turns map[string]int // how many turns each has had come back
 	idles int            // turns waiting in idle, for tests
+	// planned is each's turns found not near a usage cap that haven't
+	// taken their lane yet: out on it already, for out and idle (#6958)
+	planned map[string]int
+	// read is how many turns had come back on each when one of its turns
+	// last took its lane: a reply tells the usage as its turn begins, so
+	// the reading it brings has those turns and none come back since
+	// (cap_near.go, #6958)
+	read map[string]int
+}
+
+// began notes that one of who's turns took its lane now.
+func (l *lanes) began(who string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.read == nil {
+		l.read = map[string]int{}
+	}
+	l.read[who] = l.turns[who]
+}
+
+// inReading is how many of who's turns come back the reading last told
+// has at most: those come back as one of its turns last took its lane.
+func (l *lanes) inReading(who string) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.read[who]
+}
+
+// plan counts a turn out on who before it takes its lane, and gives back
+// the func that stops counting it: called once its lane counts it, or as
+// it leaves.
+func (l *lanes) plan(who string) func() {
+	l.mu.Lock()
+	if l.planned == nil {
+		l.planned = map[string]int{}
+	}
+	l.planned[who]++
+	l.mu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			l.mu.Lock()
+			if l.planned[who]--; l.planned[who] <= 0 {
+				delete(l.planned, who)
+			}
+			l.signalLocked()
+			l.mu.Unlock()
+		})
+	}
 }
 
 // signalLocked wakes every request waiting in a lane to look for another
@@ -460,13 +509,15 @@ func (l *lanes) releaser(who string, ln *lane) func() {
 	}
 }
 
-// out is how many of who's turns are out at the vendor now, when one last
-// came back, and how many have come back.
+// out is how many of who's turns are out at the vendor now, those found
+// not near its cap on their way to their lane among them (plan), when one
+// last came back, and how many have come back.
 func (l *lanes) out(who string) (busy int, ended time.Time, turns int) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	busy = l.planned[who]
 	if ln := l.m[who]; ln != nil {
-		busy = ln.busy
+		busy += ln.busy
 	}
 	return busy, l.ended[who], l.turns[who]
 }
@@ -476,8 +527,11 @@ func (l *lanes) out(who string) (busy int, ended time.Time, turns int) {
 func (l *lanes) idle(ctx context.Context, who string, own int) error {
 	for {
 		l.mu.Lock()
-		ln := l.m[who]
-		if ln == nil || ln.busy <= own {
+		busy := l.planned[who]
+		if ln := l.m[who]; ln != nil {
+			busy += ln.busy
+		}
+		if busy <= own {
 			l.mu.Unlock()
 			return nil
 		}

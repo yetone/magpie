@@ -131,31 +131,38 @@ func TestCapHoldsUnderParallelSessions(t *testing.T) {
 // back since it last moved; a renewed window keeps what a turn spent.
 func TestTurnSpendsAhead(t *testing.T) {
 	var ts turnSpends
-	if got := ts.ahead("a", 60, 0, 3); got != 0 {
+	if got := ts.ahead("a", 60, 0, 0, 3); got != 0 {
 		t.Fatalf("nothing learned yet: ahead %v; want 0", got)
 	}
 	// two turns came back, the reading not moved: still nothing learned
-	if got := ts.ahead("a", 60, 2, 3); got != 0 {
+	if got := ts.ahead("a", 60, 2, 2, 3); got != 0 {
 		t.Fatalf("ahead %v; want 0", got)
 	}
 	// it moved 3 points over those two: 1.5 a turn, none since
-	if got := ts.ahead("a", 63, 2, 4); got != 6 {
+	if got := ts.ahead("a", 63, 2, 2, 4); got != 6 {
 		t.Fatalf("ahead %v; want 4 turns out at 1.5", got)
 	}
 	// one more came back unread, three out
-	if got := ts.ahead("a", 63, 3, 3); got != 6 {
+	if got := ts.ahead("a", 63, 3, 3, 3); got != 6 {
 		t.Fatalf("ahead %v; want 4 turns at 1.5", got)
 	}
 	// renewed: what a turn spends stands, counted from here
-	if got := ts.ahead("a", 2, 3, 1); got != 1.5 {
+	if got := ts.ahead("a", 2, 3, 3, 1); got != 1.5 {
 		t.Fatalf("ahead %v; want one turn at 1.5", got)
 	}
 	// a jump the vendor's own app made too is not taken as one turn's
-	if got := ts.ahead("a", 40, 4, 1); got != maxTurnSpend {
+	if got := ts.ahead("a", 40, 4, 4, 1); got != maxTurnSpend {
 		t.Fatalf("ahead %v; want %v", got, maxTurnSpend)
 	}
-	if got := ts.ahead("b", 50, 0, 2); got != 0 {
+	if got := ts.ahead("b", 50, 0, 0, 2); got != 0 {
 		t.Fatalf("another account: ahead %v; want 0", got)
+	}
+	// #6958: five turns out as the reading was told came back after it.
+	// Its 7.5 points are those five's before them, not ten's, and the
+	// five come back since are in no reading yet
+	ts.ahead("c", 60, 0, 0, 5)
+	if got := ts.ahead("c", 67.5, 10, 5, 0); got != 7.5 {
+		t.Fatalf("ahead %v; want the 5 turns no reading has, at 1.5", got)
 	}
 }
 
@@ -194,4 +201,16 @@ func TestLaneIdleLeavesItsOwnSlot(t *testing.T) {
 	if _, ended, turns := l.out("acct"); ended.IsZero() || turns != 1 {
 		t.Fatalf("ended %v, turns %d; want the other's return noted", ended, turns)
 	}
+}
+
+// #6958: the same five sessions, with each try's pause after its near-cap
+// check widened, as a busy machine widens it (ubuntu CI: 93% of a 90%
+// cap). A turn found not near is counted out on the account from its
+// check, before its try takes its lane, and the reading the account is
+// checked by has only the turns come back before the reply that told it
+// began, not those of the round under way then.
+func TestCapHoldsWithAPauseAfterTheCheck(t *testing.T) {
+	nearChecked = func(bool) { time.Sleep(15 * time.Millisecond) }
+	t.Cleanup(func() { nearChecked = nil })
+	TestCapHoldsUnderParallelSessions(t)
 }

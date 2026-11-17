@@ -3741,6 +3741,14 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	}()
 	nearBehind := map[string]bool{} // accounts near their cap moved behind the rest once
 	var nearInKey time.Duration     // the key's slot waited for before an account's turn near its cap
+	// onWay takes back a turn counted out on its account from its
+	// near-cap check (lanes.plan) once its lane counts it, or it leaves
+	var onWay func()
+	defer func() {
+		if onWay != nil {
+			onWay()
+		}
+	}()
 	for i := 0; i < len(cands); i++ {
 		if failedRow != nil {
 			failedRow()
@@ -3807,7 +3815,38 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			failTo(w, kept, from, call.Status, cmp.Or(msg, call.Error))
 			break
 		}
-		if used, ahead, near := s.nearCapOf(c, time.Now()); near && aff.Why != "strict" && (len(cands) > 1 || userCapped(c)) && capHeld(c.p, c.p, c.model, time.Now()) == nil {
+		if onWay != nil {
+			onWay()
+			onWay = nil
+		}
+		var nearUsed, nearAhead float64
+		var near bool
+		if _, _, watched := capWatched(c); watched {
+			// a turn found not near its cap is out on the account from
+			// its check, not from its lane, and the check and that count
+			// are one step: turns of sessions sent together each checked
+			// before any took its lane, saw none of the others, and went
+			// past the cap together (#6958: 93% of a 90% cap). The key's
+			// slot is taken first, as the near path below takes it, so a
+			// turn counted out never waits for a key slot a turn near the
+			// cap holds while it waits for the count to drop
+			waited, err := keySlot(r.Context())
+			nearInKey += waited
+			if err != nil {
+				call.Status, call.Error = canceled(r.Context())
+				break
+			}
+			s.nearCap.check.Lock()
+			nearUsed, nearAhead, near = s.nearCapOf(c, time.Now())
+			if !near {
+				onWay = s.lanes.plan(c.who())
+			}
+			s.nearCap.check.Unlock()
+			if nearChecked != nil {
+				nearChecked(near)
+			}
+		}
+		if near && aff.Why != "strict" && (len(cands) > 1 || userCapped(c)) && capHeld(c.p, c.p, c.model, time.Now()) == nil {
 			// within nearCapPoints of its usage cap, the account takes one
 			// turn at a time (dyzdyz010 on Discord): busy, the turn goes to
 			// the next one first, this one kept behind them, else waits for
@@ -3878,7 +3917,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				held = true
 			}
 			_, ended, _ := s.lanes.out(c.who())
-			nearCapAgain(r.Context(), c, used, ahead, held, ended)
+			nearCapAgain(r.Context(), c, nearUsed, nearAhead, held, ended)
 			nearDone = done
 			if h := capHeld(c.p, c.p, c.model, time.Now()); h != nil {
 				nearDone()
@@ -4438,6 +4477,15 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 					mate, handed.who, handed.release = m, m.who(), rel
 					return true, time.Time{}
 				})
+			}
+			if err == nil {
+				// the reply's reading has the turns come back by now
+				// (turnSpends), and its lane counts it
+				s.lanes.began(c.who())
+				if onWay != nil {
+					onWay()
+					onWay = nil
+				}
 			}
 			if errors.Is(err, errMoved) {
 				// nothing was sent, and nobody failed: the one with room is
