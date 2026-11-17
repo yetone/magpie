@@ -11,15 +11,16 @@ import (
 // for Desktop's subagents (provider.DesktopSubagentModel), so it goes on
 // as asked. Desktop's Claude Code marks a subagent's requests with
 // x-claude-code-agent-id (subagentOf), and its lead's never. A subagent
-// also sends tool-less helper calls of Claude Code's own on the haiku
-// tier's model, which stay where they are: only a request that offers
-// tools is the subagent's turn. named is the catalog id the request asked
-// for, which the trace and the ledger keep; resolved is where it would go
-// now, after desktopTurn, the tiers and the groups, so a turn already on
-// the model set isn't marked as moved. The model set must still be
-// enabled, served by its exact id and allowed to the gateway key; when it
-// isn't, the request goes on as asked and the pick says why. The cheap
-// checks come first, so an unset model costs a held settings read.
+// also sends tool-less helper calls, which stay where they are, and
+// WebSearch's forced server tool. Search is a helper only when Desktop's
+// haiku pick takes it; with no served pick, its old routing stays. named
+// is the catalog id the request asked for, which the trace and ledger keep;
+// resolved is where it would go now, after desktopTurn, the tiers and the
+// groups, so a turn already on the model set isn't marked as moved. The
+// model set must still be enabled, served by its exact id and allowed to
+// the gateway key; when it isn't, the request goes on as asked and the
+// pick says why. The cheap checks come first, so an unset model costs a
+// held settings read.
 func desktopSubagentPick(r *http.Request, agent, named, resolved string, body []byte) *SubagentPick {
 	to := provider.DesktopSubagentModel()
 	if to == "" || agent != "claude-desktop" || to == named || to == resolved {
@@ -28,7 +29,7 @@ func desktopSubagentPick(r *http.Request, agent, named, resolved string, body []
 	if sub, _ := subagentOf(r.Header); sub == "" {
 		return nil
 	}
-	if !hasTools(body) {
+	if !hasTools(body) || desktopSearchHelper(agent, body) {
 		return nil
 	}
 	pick := &SubagentPick{Asked: named, To: to}
@@ -62,7 +63,7 @@ func desktopSubagentEffort(r *http.Request, agent string, body []byte, pick *Sub
 		return ""
 	}
 	if pick == nil {
-		if sub, _ := subagentOf(r.Header); sub == "" || !hasTools(body) {
+		if sub, _ := subagentOf(r.Header); sub == "" || !hasTools(body) || desktopSearchHelper(agent, body) {
 			return ""
 		}
 	}
@@ -74,12 +75,13 @@ func desktopSubagentEffort(r *http.Request, agent string, body []byte, pick *Sub
 // request that offers tools and names no kind, the turn
 // desktopSubagentPick and desktopSubagentEffort take. Claude Code sends the
 // id from a terminal as from Desktop, so both are tagged; a subagent's
-// tool-less helper calls aren't its turns. known is a Desktop pick or effort
+// tool-less helpers aren't its turns. agent keeps Desktop's haiku search
+// helper rule off terminal Claude Code. known is a Desktop pick or effort
 // that found the turn already, so the body isn't decoded again, and a
 // request without the id isn't decoded at all.
-func subagentTurnOf(r *http.Request, kind string, body []byte, known bool) string {
+func subagentTurnOf(r *http.Request, agent, kind string, body []byte, known bool) string {
 	sub, _ := subagentOf(r.Header)
-	if sub == "" || kind != "" || !known && !hasTools(body) {
+	if sub == "" || kind != "" || !known && (!hasTools(body) || desktopSearchHelper(agent, body)) {
 		return ""
 	}
 	return sub

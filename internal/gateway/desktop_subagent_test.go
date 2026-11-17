@@ -398,3 +398,126 @@ func TestDesktopSubagentHeldGroupTarget(t *testing.T) {
 		t.Fatalf("allowed group trace %+v", r.Subagent)
 	}
 }
+
+// Search is a helper only when a served haiku pick takes it. Without one,
+// the subagent keeps its model, effort and turn tag as before.
+func TestDesktopSubagentWebSearchIsHelper(t *testing.T) {
+	for _, tc := range []struct {
+		name, haiku string
+		helper      bool
+	}{
+		{"unset", "", false},
+		{"unserved", "gone/m2", false},
+		{"picked", "fake/m2", true},
+		{"same model", "fake/m1", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			desktopSubagentSetup(t)
+			desktopSubagentSet(t, "fake/m3")
+			desktopEffortSet(t, "high")
+			if err := SetDesktopTier("haiku", tc.haiku); err != nil {
+				t.Fatal(err)
+			}
+			r := httptest.NewRequest("POST", "/v1/messages", nil)
+			r.Header.Set("x-claude-code-agent-id", "worker")
+			body := []byte(desktopWebSearchBody)
+			to := desktopTurn("fake/m1", body, true, true)
+			pick := desktopSubagentPick(r, "claude-desktop", "fake/m1", to, body)
+			if tc.helper && pick != nil || !tc.helper && (pick == nil || !pick.Moved() || pick.To != "fake/m3") {
+				t.Fatalf("haiku %q: WebSearch pick %+v, helper=%v", tc.haiku, pick, tc.helper)
+			}
+			wantEffort, wantSub := "high", "worker"
+			if tc.helper {
+				wantEffort, wantSub = "", ""
+			}
+			if effort := desktopSubagentEffort(r, "claude-desktop", body, nil); effort != wantEffort {
+				t.Fatalf("haiku %q: WebSearch effort %q, want %q", tc.haiku, effort, wantEffort)
+			}
+			if sub := subagentTurnOf(r, "claude-desktop", "", body, false); sub != wantSub {
+				t.Fatalf("haiku %q: WebSearch tag %q, want %q", tc.haiku, sub, wantSub)
+			}
+			turn := []byte(`{"tools":[{"name":"Bash"}]}`)
+			pick = desktopSubagentPick(r, "claude-desktop", "fake/m1", "fake/m1", turn)
+			if pick == nil || !pick.Moved() || pick.To != "fake/m3" {
+				t.Fatalf("ordinary subagent turn lost its model: %+v", pick)
+			}
+			if effort := desktopSubagentEffort(r, "claude-desktop", turn, pick); effort != "high" {
+				t.Fatalf("ordinary subagent turn effort %q, want high", effort)
+			}
+			if sub := subagentTurnOf(r, "claude-desktop", "", turn, true); sub != "worker" {
+				t.Fatalf("ordinary subagent turn tag %q, want worker", sub)
+			}
+		})
+	}
+}
+
+// A Desktop haiku pick never changes terminal Claude Code's subagent tag,
+// model or effort, even when the terminal sends the same search shape.
+func TestDesktopWebSearchLeavesTerminalSubagent(t *testing.T) {
+	desktopSubagentSetup(t)
+	desktopSubagentSet(t, "fake/m3")
+	desktopEffortSet(t, "high")
+	if err := SetDesktopTier("haiku", "fake/m2"); err != nil {
+		t.Fatal(err)
+	}
+	r := httptest.NewRequest("POST", "/v1/messages", nil)
+	r.Header.Set("x-claude-code-agent-id", "worker")
+	body := []byte(desktopWebSearchBody)
+	if pick := desktopSubagentPick(r, "claude", "fake/m1", "fake/m1", body); pick != nil {
+		t.Fatalf("terminal search took Desktop's subagent model: %+v", pick)
+	}
+	if effort := desktopSubagentEffort(r, "claude", body, nil); effort != "" {
+		t.Fatalf("terminal search took Desktop's subagent effort %q", effort)
+	}
+	if sub := subagentTurnOf(r, "claude", "", body, false); sub != "worker" {
+		t.Fatalf("terminal search lost its subagent tag: %q", sub)
+	}
+}
+
+// Through the server, the lead's and a subagent's search use haiku, keep
+// the requested model in the trace, and name the Desktop search rule.
+func TestDesktopWebSearchRoute(t *testing.T) {
+	for _, sub := range []string{"", "worker"} {
+		t.Run("subagent="+sub, func(t *testing.T) {
+			f := &fake{reply: sse(
+				`event: message_start`+"\n"+`data: {"type":"message_start","message":{"id":"m","type":"message","role":"assistant","model":"m2","content":[],"usage":{"input_tokens":7,"output_tokens":0}}}`,
+				`event: content_block_start`+"\n"+`data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`,
+				`event: content_block_delta`+"\n"+`data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"on it"}}`,
+				`event: content_block_stop`+"\n"+`data: {"type":"content_block_stop","index":0}`,
+				`event: message_delta`+"\n"+`data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}`,
+				`event: message_stop`+"\n"+`data: {"type":"message_stop"}`)}
+			up := setup(t, provider.Anthropic, f)
+			if err := provider.Save(provider.Provider{ID: "fake", Name: "Fake", Key: "k", Anthropic: up.URL, Models: []string{"m1", "m2", "m3"}}); err != nil {
+				t.Fatal(err)
+			}
+			desktopSubagentSet(t, "fake/m3")
+			if err := SetDesktopTier("haiku", "fake/m2"); err != nil {
+				t.Fatal(err)
+			}
+			s := New()
+			desktopSubagentAsk(t, s, Token+"-claude-desktop", "fake/m1", "", "/v1/messages", true)
+			r := httptest.NewRequest("POST", "/v1/messages", strings.NewReader(desktopWebSearchBody))
+			r.Header.Set("x-api-key", Token+"-claude-desktop")
+			r.Header.Set("User-Agent", desktopCodeUA)
+			r.Header.Set("x-claude-code-session-id", "lead-session")
+			if sub != "" {
+				r.Header.Set("x-claude-code-agent-id", sub)
+			}
+			w := httptest.NewRecorder()
+			s.Handler().ServeHTTP(w, r)
+			if w.Code != 200 {
+				t.Fatalf("WebSearch: %d %s", w.Code, w.Body.String())
+			}
+			if got := modelOf(f.got); got != "m2" {
+				t.Fatalf("WebSearch sent %q, want m2", got)
+			}
+			route := lastRoute(s)
+			if route.Model != "fake/m1" || route.Moved == nil || *route.Moved != (ModelMove{To: "fake/m2", Why: "desktop-search"}) || route.Subagent != nil || route.SubagentID != "" {
+				t.Fatalf("WebSearch route: model %q moved %+v subagent %+v id %q", route.Model, route.Moved, route.Subagent, route.SubagentID)
+			}
+			if b, err := os.ReadFile(desktopPickedPath()); err != nil || strings.TrimSpace(string(b)) != "fake/m1" {
+				t.Fatalf("WebSearch replaced lead pick with %q (%v)", b, err)
+			}
+		})
+	}
+}

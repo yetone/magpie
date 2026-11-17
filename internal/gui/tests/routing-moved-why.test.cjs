@@ -32,7 +32,7 @@ const routes = [
   req(1, "claude-desktop", "", opus, "agentrouter", "gpt-6.1-sol", { moved: { to: gpt, why: "desktop-title" } }),
 ];
 
-function serve(lang) {
+function serve(lang, shown = routes) {
   const state = { agents: [{ id: "claude-desktop", name: "Claude Desktop", fields: [] }, { id: "claude", name: "Claude Code", fields: [] }, { id: "codex", name: "Codex", fields: [] }],
     profiles: [], settings: { lang, theme: "light" } };
   return async (route) => {
@@ -43,7 +43,7 @@ function serve(lang) {
     if (url.pathname === "/api/state") return json(state);
     if (url.pathname === "/api/gateway/trace") {
       if (url.searchParams.has("wait")) return new Promise(() => {});
-      return json({ mine: true, now: new Date().toISOString(), seq: 6, totals: { requests: 6, rerouted: 0, errors: 0 }, routes });
+      return json({ mine: true, now: new Date().toISOString(), seq: Math.max(...shown.map((r) => r.seq)), totals: { requests: shown.length, rerouted: 0, errors: 0 }, routes: shown });
     }
     if (url.pathname === "/api/gateway/history") return json({ cut: false, days: [], routes: [] });
     if (url.pathname === "/api/gateway/session-titles") return json({ titles: {} });
@@ -88,11 +88,37 @@ const W = {
     codex: "Codex hat für einen eigenen Aufruf fake/m1 angefordert, das magpie nicht anbietet; magpie hat ihn mit fake/m2 beantwortet, dem Modell, das seinen letzten Zug beantwortet hat." },
 };
 
+const searchWhy = {
+  en: "Claude Code in Claude Desktop asked for fake/m1 for WebSearch; magpie served it on fake/m2, the model picked for haiku.",
+  zh: "Claude Desktop 里的 Claude Code 为 WebSearch 请求了 fake/m1；magpie 让 fake/m2 来处理，即为 haiku 档位选的模型。",
+  "zh-TW": "Claude Desktop 裡的 Claude Code 為 WebSearch 請求了 fake/m1；magpie 讓 fake/m2 來處理，即為 haiku 檔位選的模型。",
+  ja: "Claude Desktop の Claude Code が WebSearch に fake/m1 をリクエストしました。magpie は fake/m2（haiku ティアに選ばれたモデル）で応答しました。",
+  de: "Claude Code in Claude Desktop hat für WebSearch fake/m1 angefordert; magpie hat die Anfrage mit fake/m2 beantwortet, dem für haiku gewählten Modell.",
+};
+
 const engines = process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"];
 const langs = process.env.LANGS ? process.env.LANGS.split(",") : Object.keys(W);
 
 for (const engine of engines) {
   for (const lang of langs) {
+    test(`${engine} ${lang}: Desktop's WebSearch move names the haiku pick`, async (t) => {
+      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+      t.after(() => browser.close());
+      const page = await browser.newPage({ viewport: { width: 1100, height: 760 }, reducedMotion: "reduce" });
+      const errors = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      await page.route("**/*", serve(lang, [req(7, "claude-desktop", "search", "fake/m1", "fake", "m2", { moved: { to: "fake/m2", why: "desktop-search" } })]));
+      await page.goto("http://magpie.test/?view=routing");
+      const row = page.locator(".rt-req");
+      await row.waitFor();
+      assert.equal(await row.locator(".kind").getAttribute("title"), searchWhy[lang]);
+      assert((await row.getAttribute("title")).includes(searchWhy[lang]));
+      await row.evaluate((e) => e.click());
+      await page.waitForFunction((why) => document.querySelector(".rt-steps")?.textContent.includes(why), searchWhy[lang]);
+      const story = await page.locator(".rt-steps").textContent();
+      assert.equal(story.split(searchWhy[lang]).length - 1, 1, story);
+      assert.deepEqual(errors, []);
+    });
     for (const width of [1100, 420]) {
       test(`${engine} ${lang} ${width}px: a request magpie put on another model says why`, async (t) => {
         const w = W[lang];

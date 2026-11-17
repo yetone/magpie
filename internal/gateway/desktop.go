@@ -635,6 +635,7 @@ func desktopTurn(asked string, body []byte, byClaudeCode, bySubagent bool) strin
 // answered by AgentRouter's GPT, read as magpie swapping the model).
 const (
 	movedTier       = "desktop-tier"        // Claude Code's own id of a tier: the model picked for it
+	movedSearch     = "desktop-search"      // Claude Code's WebSearch call: the model picked for haiku
 	movedCheck      = "desktop-check"       // Desktop's check that the gateway answers: its menu's model
 	movedCheckFirst = "desktop-check-first" // …or, with none chosen, the first model it lists
 	movedTitle      = "desktop-title"       // a short call without tools Desktop names a model for: the chat's
@@ -658,6 +659,11 @@ func desktopMove(asked string, body []byte, byClaudeCode, bySubagent bool) (stri
 func desktopMoveTo(asked string, body []byte, byClaudeCode, bySubagent bool) (string, string) {
 	if asked == "" {
 		return asked, ""
+	}
+	if byClaudeCode && desktopSearchCall(body) {
+		if m := desktopSearchTier(); m != "" && m != asked {
+			return m, movedSearch
+		}
 	}
 	if m := desktopTierTurn(asked); m != "" {
 		return m, movedTier
@@ -1060,6 +1066,45 @@ func small(body []byte) bool {
 		MaxTokens int `json:"max_tokens"`
 	}
 	return json.Unmarshal(body, &v) == nil && v.MaxTokens > 0 && v.MaxTokens <= 4096
+}
+
+// desktopSearchHelper is a Desktop search taken by its served haiku pick,
+// so it is not a subagent's tool turn.
+func desktopSearchHelper(agent string, body []byte) bool {
+	return agent == "claude-desktop" && desktopSearchCall(body) && desktopSearchTier() != ""
+}
+
+// desktopSearchTier is the served pick for Desktop's haiku tier, or ""
+// when WebSearch keeps its existing routing.
+func desktopSearchTier() string {
+	m := DesktopTiers()["haiku"]
+	if m == "" || unserved(m) {
+		return ""
+	}
+	return m
+}
+
+// desktopSearchCall is Claude Code 2.1.321's WebSearch subrequest: only
+// the server search tool, forced by name. Desktop's gateway mode disables
+// GrowthBook, so its small-model flag defaults off and it asks on the
+// session's model even when haiku is picked.
+func desktopSearchCall(body []byte) bool {
+	if !bodyHas(body, `"tool_choice"`) || !bodyHas(body, `web_search_`) {
+		return false
+	}
+	var v struct {
+		Tools []struct {
+			Type string `json:"type"`
+			Name string `json:"name"`
+		} `json:"tools"`
+		ToolChoice struct {
+			Type string `json:"type"`
+			Name string `json:"name"`
+		} `json:"tool_choice"`
+	}
+	return json.Unmarshal(body, &v) == nil && len(v.Tools) == 1 &&
+		strings.HasPrefix(v.Tools[0].Type, "web_search_") && v.Tools[0].Name == "web_search" &&
+		v.ToolChoice.Type == "tool" && v.ToolChoice.Name == "web_search"
 }
 
 // hasTools: the request offers the model tools (Anthropic's, Chat's and

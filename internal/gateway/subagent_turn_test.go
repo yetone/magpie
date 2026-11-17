@@ -113,7 +113,7 @@ func TestSubagentTurnDoesNotDecode(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			headers := testing.AllocsPerRun(10, func() { subagentOf(tc.r.Header) })
 			allocs := testing.AllocsPerRun(10, func() {
-				if got := subagentTurnOf(tc.r, "", tc.body, tc.known); got != tc.want {
+				if got := subagentTurnOf(tc.r, "claude-desktop", "", tc.body, tc.known); got != tc.want {
 					t.Fatalf("got %q, want %q", got, tc.want)
 				}
 			})
@@ -123,11 +123,11 @@ func TestSubagentTurnDoesNotDecode(t *testing.T) {
 		})
 	}
 	// the decode the cases above leave out shows in the count
-	if got := subagentTurnOf(sub, "", tools, false); got != "worker" {
+	if got := subagentTurnOf(sub, "claude-desktop", "", tools, false); got != "worker" {
 		t.Fatalf("unknown turn with tools: %q", got)
 	}
 	headers := testing.AllocsPerRun(10, func() { subagentOf(sub.Header) })
-	if n := testing.AllocsPerRun(10, func() { subagentTurnOf(sub, "", tools, false) }); n <= headers {
+	if n := testing.AllocsPerRun(10, func() { subagentTurnOf(sub, "claude-desktop", "", tools, false) }); n <= headers {
 		t.Fatalf("reading an unknown turn's tools allocated %g times, its headers %g", n, headers)
 	}
 }
