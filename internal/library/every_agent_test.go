@@ -53,6 +53,7 @@ var noLibrary = map[string]string{
 	"shelley":           "not looked at (#5897)",
 	"kun":               "not looked at (#5897)",
 	"dim":               "not looked at (#5897)",
+	"open-code-review":  "a review CLI with its own fixed tools, not a coding agent; whether it reads skills or MCP not looked at",
 }
 
 func TestEveryAgentInLibrary(t *testing.T) {
