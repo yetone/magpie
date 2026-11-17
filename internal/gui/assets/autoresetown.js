@@ -1,7 +1,8 @@
 // Codex's auto-use rows, in its provider's editor (PROV_PREFS): each ChatGPT account's switches
 // and, under them, how early a reset about to expire is used. app.js
 // imports this when renderSettings draws them (renderAutoResetOwn), so it weighs
-// nothing on the core.
+// nothing on the core. Each ChatGPT account's own warm-up time is drawn here too
+// (warmAtOwnPaint), moved out of app.js for its budget.
 
 // renderAutoResetOwn lists each ChatGPT account under
 // "Codex: auto-use resets", with its switch, the same say as on the
@@ -10,6 +11,7 @@
 // window's Settings. The row shows while a Codex
 // account is signed in, or one is still on.
 window.autoResetOwnPaint = function (s) {
+  warmAtOwnPaint(s);
   const head = $("#codexAutoResetRow");
   const list = head.parentElement;
   list.querySelectorAll(".ar-own").forEach((r) => r.remove());
@@ -148,4 +150,52 @@ function resetLeadOwn(b, cur, set) {
   i.style.height = b.offsetHeight + "px";
   b.replaceWith(i);
   i.focus(NO_SCROLL);
+}
+
+// warmAtOwnPaint: each ChatGPT account's own daily time (#957,
+// codexWarmAtOf), shown with two accounts or one with its own
+function warmAtOwnPaint(s) {
+  const list = $("#codexWarmList");
+  list.querySelectorAll(".warm-own").forEach((r) => r.remove());
+  const own = s.codexWarmAtOf || {};
+  const users = [...(s.codexUsers || [])];
+  for (const u of Object.keys(own)) if (!users.some((x) => x.toLowerCase() === u)) users.push(u);
+  if (users.length < 2 && !Object.keys(own).length) return;
+  const save = async (user, at) => {
+    try {
+      prefs = await writingPrefs(api("settings/codex-warm-at", { user, at }));
+      if (state) state.settings = prefs;
+      renderSettings();
+    } catch (e) {
+      statusTErr(e);
+      renderSettings();
+    }
+  };
+  for (const user of users) {
+    const at = own[user.toLowerCase()];
+    const mode = at === undefined ? "same" : at === "off" ? "off" : "own";
+    const r = el("div", "row pref warm-own");
+    r.dataset.user = user;
+    const who = el("div", "who");
+    const name = el("div", "name", user);
+    name.title = user;
+    const sub = el("div", "sub", mode === "own" ? t("Its own time each day")
+      : mode === "off" ? t("Not started at a time of day")
+      : s.codexWarmAt ? t("Same as above, {at}", { at: warmTimes(s.codexWarmAts, s.codexWarmAt).join(", ") }) : t("Same as above, off"));
+    sub.title = t("Give accounts different times and one window starts as another runs out.");
+    who.append(name, sub);
+    const box = el("div", "warm-at");
+    if (mode === "own") {
+      const i = input(at, "06:00", "time");
+      i.className = "at";
+      i.setAttribute("aria-label", t("{who}'s time of day", { who: user }));
+      blurOnEnter(i);
+      i.onchange = () => { if (i.value && i.value !== at) save(user, i.value); };
+      box.append(i);
+    }
+    box.append(segs([["same", t("Same")], ["own", t("Own")], ["off", t("Off")]], mode, (v) =>
+      save(user, v === "same" ? "" : v === "off" ? "off" : s.codexWarmAt || "06:00")));
+    r.append(who, box);
+    $("#warmNowRow").before(r); // Warm up now stays last
+  }
 }

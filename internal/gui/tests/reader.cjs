@@ -244,6 +244,11 @@ async function openProvPrefs(page, id) {
   await adv.waitFor({ timeout: 60000 });
   if (!(await adv.evaluate((d) => d.open))) await adv.locator(":scope > summary").click();
   await page.locator(".editor .prov-prefs .row").filter({ visible: true }).first().waitFor({ timeout: 60000 });
+  // and the editor at rest: with a warm-up or check-in on, Advanced opens
+  // on its own, so no click waits out the modal's opening and a row read
+  // now is read mid-scale (warm-at-times, WebKit 900px, 0.66px over)
+  await page.waitForFunction(() => !document.querySelector("#modal").getAnimations({ subtree: true })
+    .some((a) => a.playState === "running" && a.effect?.getComputedTiming().endTime !== Infinity), null, { timeout: 60000 });
 }
 // inEditor brings a control in a provider's editor into sight. The editor
 // is in the modal, whose body isn't a view, so the app lets the scroll
