@@ -775,12 +775,24 @@ func codexIn(at place) *Agent {
 	// in the last minute, or one a Codex has open, waits for the next
 	// Sync. This machine's Codex only: a distro's state database isn't
 	// magpie's to open.
+	//
+	// T3 Code's magpie · Codex instance (t3CodexRunsIn) starts its threads
+	// on magpie by -c model_provider alone, in this folder, with
+	// config.toml on another provider; Codex resumes each on the provider
+	// it was started on, so those stay on magpie (t3BringBack), else T3
+	// sent magpie's model to ChatGPT at the next resume ("The
+	// 'codex-2/gpt-6.1-sol' model is not supported when using Codex with
+	// a ChatGPT account", xxxxpouqqs on X).
 	bringBack := func() {
 		if at.spell != nil || namesMagpie() {
 			return
 		}
 		to := sessions.CodexProviderIn(dir)
 		if to == magpieID {
+			return
+		}
+		if t3CodexRunsIn(at.home, dir) {
+			t3BringBack(dir, to)
 			return
 		}
 		// in place first where it can be (bringOver's, and those started
@@ -3417,6 +3429,68 @@ func codexReachedRead(path string, since time.Time) (at time.Time, to string, re
 	return
 }
 
+// t3Started says whether a Codex thread's originator is T3 Code ("T3
+// Code" from its app-server).
+func t3Started(originator string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(originator)), "t3")
+}
+
+// t3BringBack is bringBack with T3 Code's magpie Codex instance running
+// Codex in the folder dir: the threads on magpie that another client
+// started (the Codex app's, the CLI's) move to the provider to, Codex's
+// now, and T3's stay on magpie, where T3 resumes them through magpie. A
+// thread of T3's that a magpie before this moved to to on a model of
+// magpie's (an id with a /, which no ChatGPT or OpenAI model has) comes
+// back to magpie, where T3 resumes it again; T3's threads on its own
+// Codex instance, on OpenAI's models, stay. When who started the
+// threads can't be read, none moves.
+func t3BringBack(dir, to string) {
+	on, ok := sessions.CodexThreadsBy(dir, magpieID)
+	if !ok {
+		return
+	}
+	var ids []string
+	for id, t := range on {
+		if !t3Started(t.Originator) {
+			ids = append(ids, id)
+		}
+	}
+	slices.Sort(ids)
+	t3Move(dir, magpieID, to, ids, "started on magpie by another client than T3 Code")
+	gone, ok := sessions.CodexThreadsBy(dir, to)
+	if !ok {
+		return
+	}
+	var back []string
+	for id, t := range gone {
+		if t3Started(t.Originator) && strings.Contains(t.Model, "/") {
+			back = append(back, id)
+		}
+	}
+	slices.Sort(back)
+	t3Move(dir, to, magpieID, back, "T3 Code started on magpie")
+}
+
+// t3Move moves the threads ids of the Codex folder dir from the provider
+// from to the provider to, a paginated one by its row, the rest with a
+// copy kept, and says so in the log as the threads what.
+func t3Move(dir, from, to string, ids []string, what string) {
+	if len(ids) == 0 {
+		return
+	}
+	retagged, err := sessions.RetagPagedCodexThreadIDs(dir, from, to, ids)
+	if err != nil {
+		log.Printf("codex: moving the paginated threads %s to %s: %v", what, to, err)
+	}
+	moved, err := sessions.MoveCodexThreadIDs(dir, from, to, ids)
+	if n := len(retagged) + len(moved); n > 0 {
+		log.Printf("codex: %d thread(s) %s moved from %s to %s, where they are resumed", n, what, from, to)
+	}
+	if err != nil {
+		log.Printf("codex: moving the threads %s to %s: %v", what, to, err)
+	}
+}
+
 // codexRetagOpenThreads is run as the Codex app's app-server is about to be
 // ended for a change of provider: the chats the app has open hold their
 // lock, so no move of threads could take them, and the app-server that
@@ -3431,7 +3505,19 @@ func codexRetagOpenThreads(home string) {
 		if from == now {
 			continue
 		}
-		ids, err := sessions.RetagLoadedCodexThreads(home, from, now)
+		// T3 Code's threads on magpie stay there, where T3 resumes them
+		// (t3BringBack); none moves when who started them is unknown
+		var keep func(string) bool
+		if from == magpieID {
+			if user, _ := homes(); t3CodexRunsIn(user, home) {
+				by, ok := sessions.CodexThreadsBy(home, magpieID)
+				keep = func(id string) bool {
+					t, found := by[id]
+					return !ok || !found || t3Started(t.Originator)
+				}
+			}
+		}
+		ids, err := sessions.RetagLoadedCodexThreadsBut(home, from, now, keep)
 		if len(ids) > 0 {
 			log.Printf("codex: %d chat(s) the Codex app has open moved from %s to %s before its app-server restarts, so it goes on with them", len(ids), from, now)
 		}

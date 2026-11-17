@@ -566,6 +566,53 @@ func codexThreadsOn(home, p string) []string {
 	return out
 }
 
+// CodexThreadsBy are the threads a Codex folder's state databases keep
+// on the provider p, each id with the client that started it (the
+// threads table's originator: "T3 Code" for T3 Code's, "codex_cli_rs"
+// for the CLI's) and its model. ok is false when a database couldn't be
+// read, or keeps no originator (an older Codex): who started a
+// thread is unknown then.
+func CodexThreadsBy(home, p string) (threads map[string]CodexThreadBy, ok bool) {
+	threads = map[string]CodexThreadBy{}
+	ok = true
+	for _, path := range codexStateDBs(home) {
+		u := url.URL{Scheme: "file", Path: filepath.ToSlash(path), RawQuery: "mode=ro&_pragma=busy_timeout(2000)"}
+		if len(u.Path) >= 2 && u.Path[1] == ':' {
+			u.Path = "/" + u.Path
+		}
+		db, err := sql.Open("sqlite", u.String())
+		if err != nil {
+			ok = false
+			continue
+		}
+		rows, err := db.Query(`SELECT id, COALESCE(originator, ''), COALESCE(model, '') FROM threads WHERE model_provider = ?`, p)
+		if err != nil {
+			ok = false
+			db.Close()
+			continue
+		}
+		for rows.Next() {
+			var id string
+			var t CodexThreadBy
+			if rows.Scan(&id, &t.Originator, &t.Model) == nil && safeID.MatchString(id) {
+				threads[id] = t
+			}
+		}
+		if rows.Err() != nil {
+			ok = false
+		}
+		rows.Close()
+		db.Close()
+	}
+	return threads, ok
+}
+
+// CodexThreadBy is who started a Codex thread, and on what model.
+type CodexThreadBy struct {
+	Originator string
+	Model      string
+}
+
 // CodexThreadsBusyOn says whether a thread a Codex folder's state
 // databases keep on the provider p was written to in the last
 // ActiveWindow, or is held open by a Codex (its writer lock), which a
@@ -1330,6 +1377,13 @@ func retagRows(db *sql.DB, ids []string, from, to string) ([]string, error) {
 // at: the end waits for no turn to be open. It says the ids it moved and
 // the first error it met, having gone on past it.
 func RetagLoadedCodexThreads(home, from, to string) ([]string, error) {
+	return RetagLoadedCodexThreadsBut(home, from, to, nil)
+}
+
+// RetagLoadedCodexThreadsBut is RetagLoadedCodexThreads leaving the
+// threads keep says where they are: another client's on from, which it
+// resumes there (T3 Code's on magpie).
+func RetagLoadedCodexThreadsBut(home, from, to string, keep func(id string) bool) ([]string, error) {
 	if !codexProviderRe.MatchString(from) || !codexProviderRe.MatchString(to) || from == to {
 		return nil, fmt.Errorf("can't move Codex's threads from %q to %q", from, to)
 	}
@@ -1375,7 +1429,7 @@ func RetagLoadedCodexThreads(home, from, to string) ([]string, error) {
 		}
 		for rs.Next() {
 			var r row
-			if rs.Scan(&r.id, &r.path, &r.mode) == nil && safeID.MatchString(r.id) && locked[strings.ToLower(r.id)] {
+			if rs.Scan(&r.id, &r.path, &r.mode) == nil && safeID.MatchString(r.id) && locked[strings.ToLower(r.id)] && (keep == nil || !keep(r.id)) {
 				rows = append(rows, r)
 			}
 		}

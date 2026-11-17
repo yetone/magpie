@@ -52,6 +52,8 @@ package agent
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -78,13 +80,57 @@ const (
 // T3, and a sync doesn't bring it back.
 const t3CodexOffered = "t3code.codex"
 
-func t3code(home string) *Agent {
+// t3Base is T3 Code's folder for home: $T3CODE_HOME, else ~/.t3. Its
+// settings are userdata/settings.json in it.
+func t3Base(home string) string {
 	base := appdir.Getenv("T3CODE_HOME")
 	if base == "" {
-		base = filepath.Join(home, ".t3")
-	} else if rest, ok := strings.CutPrefix(base, "~"); ok {
-		base = filepath.Join(home, rest)
+		return filepath.Join(home, ".t3")
 	}
+	if rest, ok := strings.CutPrefix(base, "~"); ok {
+		return filepath.Join(home, rest)
+	}
+	return base
+}
+
+// t3CodexRunsIn reports whether T3 Code's settings for home have magpie's
+// Codex instance (t3CodexInstance) running Codex in the Codex home dir:
+// its homePath, ~ being home, or Codex's own home when it gives none.
+// Codex keeps the provider each thread was started on and resumes it
+// there, whatever the instance's -c model_provider says, so the threads
+// that instance starts are on magpie while config.toml names another
+// provider, and are T3's to resume through magpie. Settings there that
+// can't be read say yes: what they hold is unknown.
+func t3CodexRunsIn(home, dir string) bool {
+	path := filepath.Join(t3Base(home), "userdata", "settings.json")
+	if _, err := os.Stat(path); err != nil {
+		return !errors.Is(err, fs.ErrNotExist)
+	}
+	if _, ok := edit.GetJSON(path, t3CodexInstance); !ok {
+		raw, err := os.ReadFile(path)
+		return err != nil || !json.Valid(raw)
+	}
+	h, _ := edit.GetJSON(path, t3CodexInstance+".config.homePath")
+	h = strings.TrimSpace(h)
+	if h == "" {
+		return true
+	}
+	if h == "~" || strings.HasPrefix(h, "~/") || strings.HasPrefix(h, `~\`) {
+		h = filepath.Join(home, h[1:])
+	}
+	if filepath.Clean(h) == filepath.Clean(dir) {
+		return true
+	}
+	a, err := os.Stat(h)
+	if err != nil {
+		return false
+	}
+	b, err := os.Stat(dir)
+	return err == nil && os.SameFile(a, b)
+}
+
+func t3code(home string) *Agent {
+	base := t3Base(home)
 	path := filepath.Join(base, "userdata", "settings.json")
 	claudeOn := func() bool { _, ok := edit.GetJSON(path, t3Instance); return ok }
 	// either of magpie's instances: one the user removed in T3 leaves
