@@ -130,7 +130,7 @@ func lastKnown() (stateJSON, bool) {
 	if len(b) == 0 || json.Unmarshal(b, &f) != nil || f.Version != Version || f.State.Agents == nil {
 		return stateJSON{}, false
 	}
-	f.State.Settings = settings.Load()
+	f.State.Settings = stateSettings(settings.Load())
 	f.State.Last = true
 	return f.State, true
 }

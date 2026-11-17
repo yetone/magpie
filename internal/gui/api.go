@@ -3378,8 +3378,17 @@ func held(h http.Handler) http.Handler {
 	})
 }
 
+// stateSettings is s without the credentials Settings' own read keeps on
+// disk (settingsState), for /api/state, which is polled, and the start's
+// read of the last one (lastKnown), which puts today's settings in it
+func stateSettings(s settings.Settings) settings.Settings {
+	s.Proxies, s.LANKey, s.BarkKey, s.GitHubToken = nil, "", "", ""
+	return s
+}
+
 func state() stateJSON {
 	s := stateJSON{Agents: []agentJSON{}, Profiles: []profileJSON{}, Catalog: catalog.Source(), Settings: settings.Shared()} // only encoded, never changed
+	s.Settings = stateSettings(s.Settings)
 	// state() is asked for after nearly every click, so the rate — a
 	// network fetch once every TTL — is only worth its rare latency when
 	// cny is actually chosen; usd never looks at it
