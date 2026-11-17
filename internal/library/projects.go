@@ -195,6 +195,11 @@ func (l *Library) syncFolder(p *Project, res *Result, hubs map[string]*Server) {
 		if !ours(abs, name) {
 			continue // gone, or the user's own by now: forgotten, left as it is
 		}
+		if err := p.inside(filepath.Dir(abs)); err != nil {
+			fail(name, err)
+			placed = append(placed, e)
+			continue
+		}
 		if err := unlink(abs); err != nil {
 			fail(name, err)
 			placed = append(placed, e)
@@ -258,6 +263,11 @@ var errForeign = errors.New("not magpie's")
 // copy made again whenever the library's differs from it.
 func (p *Project) place(e, name string, asCopy bool) error {
 	abs := filepath.Join(p.Dir, filepath.FromSlash(e))
+	// the entry is magpie's own link to the library: the folder it is in
+	// is what must be the project's
+	if err := p.inside(filepath.Dir(abs)); err != nil {
+		return err
+	}
 	if fi, err := os.Lstat(abs); err == nil {
 		if !ours(abs, name) {
 			return errForeign
@@ -287,6 +297,39 @@ func (p *Project) place(e, name string, asCopy bool) error {
 		return link(abs, name)
 	}
 	return copyIn(abs, name)
+}
+
+// inside is an error when abs, links followed, isn't in the project's
+// folder. A project is often a repository someone else wrote, and a link
+// in it (CLAUDE.md to ~/.zshrc, .claude to a folder anyone can read)
+// would have magpie write the user's instructions, servers and keys
+// wherever the link's author chose. A link to nothing is refused too:
+// where a write through it lands can't be told before it is made.
+func (p *Project) inside(abs string) error {
+	root, err := filepath.EvalSymlinks(p.Dir)
+	if err != nil {
+		return err
+	}
+	q, rest := filepath.Clean(abs), ""
+	for {
+		if _, err := os.Lstat(q); err == nil {
+			break
+		}
+		up := filepath.Dir(q)
+		if up == q {
+			break
+		}
+		rest = filepath.Join(filepath.Base(q), rest)
+		q = up
+	}
+	real, err := filepath.EvalSymlinks(q)
+	if err != nil {
+		return fmt.Errorf("%s is a link to nothing: magpie leaves it as it is", p.rel(abs))
+	}
+	if real = filepath.Join(real, rest); !within(real, root) {
+		return fmt.Errorf("%s leads out of the project, to %s: magpie leaves it as it is", p.rel(abs), real)
+	}
+	return nil
 }
 
 // mkdirs makes dir and the folders above it the project hasn't, noting
@@ -337,6 +380,11 @@ func (p *Project) tidy() {
 // nothing's left in it.
 func (p *Project) writeIgnore() error {
 	f := filepath.Join(p.Dir, ".gitignore")
+	if _, err := os.Lstat(f); err == nil {
+		if err := p.inside(f); err != nil {
+			return err
+		}
+	}
 	b, err := os.ReadFile(f)
 	if os.IsNotExist(err) {
 		p.Gitignore = false

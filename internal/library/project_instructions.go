@@ -160,6 +160,11 @@ func (l *Library) syncProjectInstr(p *Project, fail func(what string, err error)
 			continue
 		}
 		abs := filepath.Join(p.Dir, filepath.FromSlash(f.Path))
+		if err := p.inside(abs); err != nil {
+			fail("instructions", err)
+			kept = append(kept, f)
+			continue
+		}
 		raw, err := os.ReadFile(abs)
 		if errors.Is(err, os.ErrNotExist) {
 			continue
@@ -195,6 +200,13 @@ func (l *Library) syncProjectInstr(p *Project, fail func(what string, err error)
 		r, had := rec[rel]
 		if globals == nil {
 			globals = l.globalInstrFiles()
+		}
+		if err := p.inside(abs); err != nil {
+			fail("instructions", err)
+			if had {
+				kept = append(kept, r)
+			}
+			continue
 		}
 		if globals[realBelow(abs)] {
 			fail("instructions", fmt.Errorf("%s is an agent's user-wide instructions file, which magpie writes from the shared instructions: it's left as it is", rel))

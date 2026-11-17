@@ -172,7 +172,11 @@ func (l *Library) syncProjectMCP(p *Project, hubs map[string]*Server, fail func(
 		had := p.Wrote[rel]
 		was := p.Startup[rel]
 		now := map[string]float64{}
-		entries, err := f.entries()
+		err := p.inside(abs)
+		var entries map[string]map[string]any
+		if err == nil {
+			entries, err = f.entries()
+		}
 		if err != nil {
 			fail("", err)
 			if len(had) > 0 {

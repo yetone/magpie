@@ -95,6 +95,12 @@ func (l *Library) syncProjectSubagents(p *Project, fail func(what string, err er
 	done := map[string]bool{}
 	for _, f := range p.AgentFiles {
 		abs := filepath.Join(p.Dir, filepath.FromSlash(f.Path))
+		if err := p.inside(abs); err != nil {
+			fail("subagent:"+f.Name, err)
+			kept = append(kept, f)
+			done[f.Path] = true
+			continue
+		}
 		cur, err := os.ReadFile(abs)
 		switch {
 		case os.IsNotExist(err):
@@ -138,6 +144,10 @@ func (l *Library) syncProjectSubagents(p *Project, fail func(what string, err er
 		}
 		w := wanted[rel]
 		abs := filepath.Join(p.Dir, filepath.FromSlash(rel))
+		if err := p.inside(abs); err != nil {
+			fail("subagent:"+w.s.Name, err)
+			continue
+		}
 		body := l.renderSubagent(w.sp, w.s)
 		cur, err := os.ReadFile(abs)
 		switch {

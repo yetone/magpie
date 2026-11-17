@@ -324,6 +324,10 @@ func (l *Library) syncCodexOff(p *Project, fail func(what string, err error)) {
 	}
 	want = slices.DeleteFunc(want, func(n string) bool { return have[n] == nil })
 	abs := filepath.Join(p.Dir, filepath.FromSlash(codexOffRel))
+	if err := p.inside(abs); err != nil {
+		fail("mcp", err)
+		return
+	}
 	var mine []string
 	for _, name := range p.CodexOff {
 		if slices.Contains(want, name) {
@@ -367,6 +371,10 @@ func (l *Library) syncSkillsOff(p *Project, fail func(what string, err error)) {
 		return
 	}
 	abs := filepath.Join(p.Dir, filepath.FromSlash(claudeSettingsRel))
+	if err := p.inside(abs); err != nil {
+		fail("skills", err)
+		return
+	}
 	var mine []string
 	for _, name := range p.Overrides {
 		if slices.Contains(want, name) {
@@ -419,6 +427,9 @@ func (p *Project) dropMadeFile(rel string) {
 		return
 	}
 	abs := filepath.Join(p.Dir, filepath.FromSlash(rel))
+	if p.inside(abs) != nil {
+		return
+	}
 	format := fmtClaude
 	if strings.HasSuffix(rel, ".toml") {
 		format = fmtCodex
