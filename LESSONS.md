@@ -910,6 +910,11 @@ cause:
     for three days, and it went red on ubuntu CI again at 0a7633136. It
     was ported unchanged as 11c427eaa. Now in the code standards (a
     red's issue is read to its last comment, 77898391d).
+  - 11-17: a filed red cited instead of taken. #6877 (i18n-keys, a
+    one-line fix the issue itself named) was red on main for a day, and
+    efcf8d9c0 and 50c5a52db each named it as "red on origin/main, filed"
+    and shipped. Nobody commented or took it; db02200ce fixed it at the
+    check. A red a commit cites twice is one to take, not to cite again.
   - 11-15: a claim with no work behind it holds a red as long as no
     comment at all. #2903 ("the plugin answered no response", ubuntu
     race) was claimed on 10-19 ("I'm on it: finding the cause by
