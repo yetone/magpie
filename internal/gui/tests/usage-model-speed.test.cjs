@@ -4,6 +4,11 @@
 // first-token wait and its request count, the fastest first, sortable by each
 // column, a model with nothing measured always last, in every language, at a
 // phone's width without scrolling sideways, and gone when no request counted.
+// By provider (skingstyle48487 on X, with a dozen relays): each model on each
+// provider with its tries, the share that failed and the replies that named
+// another model, and a Check… that sends its calls only on the dialog's
+// Check, saying what each found and how many answers and tool calls were
+// right, kept as the provider's Answers and Tool calls beside the others'.
 // No backend, the API is faked.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -27,6 +32,23 @@ const SPEEDS = [
   { model: "kimi-slow", name: "kimi-slow", requests: 3, tps: 10.2, tps_n: 3, ttft_ms: 2100 },
   { model: "burst-model", name: "burst-model", requests: 5, ttft_ms: 400 },
 ];
+// the same models by provider: glm-fast on two, one of which failed 1 of 4
+// tries and once answered with another model
+const PROV = [
+  { model: "glm-fast", name: "GLM Fast", provider: "zai", provider_name: "Z.ai Coding Plan", requests: 20, tries: 20, tps: 80, tps_n: 20, ttft_ms: 550 },
+  { model: "glm-fast", name: "GLM Fast", provider: "relay9", provider_name: "Relay Nine", requests: 3, tries: 4, failed: 1, swapped: 1, tps: 40, tps_n: 3, ttft_ms: 900 },
+  { model: "kimi-slow", name: "kimi-slow", provider: "relay9", provider_name: "Relay Nine", requests: 3, tries: 3, tps: 10.2, tps_n: 3, ttft_ms: 2100 },
+];
+const CHECK = {
+  provider: "relay9", model: "glm-fast", parts: [
+    { kind: "count", ok: true, match: true, want: "1 2 3", got: "1 2 3", ms: 2400, ttft_ms: 600, tps: 42, input: 4200, output: 120, prompt_chars: 118, tries: 1 },
+    { kind: "math", ask: "1234 × 5678", ok: true, match: false, want: "7006652", got: "7006552", served: "qwen3-8b", ms: 900, ttft_ms: 500, input: 30, output: 5, tries: 1 },
+    { kind: "math", ask: "987 × 654", ok: true, match: true, want: "645498", got: "645498", ms: 700, ttft_ms: 400, input: 30, output: 5, tries: 1 },
+    { kind: "tool", ask: "get_weather", ok: false, match: false, want: "get_weather", status: 403, error: "this key has no access to tools", ms: 80, tries: 1 },
+    { kind: "tool", ask: "get_time", ok: true, match: true, want: "get_time", got: 'get_time({"city":"Tokyo"})', ms: 800, ttft_ms: 600, input: 90, output: 12, tries: 1 },
+  ],
+};
+let checks = 0;
 const FAST = { id: "glm-fast", calls: 28, input: 1, output: 3780, cache_read: 0, cache_write: 0, cost: 0.3, timed: 27, ttft_ms: 27 * 600, decode_ms: 27 * 1800, decode_out: 27 * 135 };
 
 let speeds = SPEEDS;
@@ -37,7 +59,7 @@ function ledger(period) {
     timed: 27, ttft_ms: 27 * 600, decode_ms: 27 * 1800, decode_out: 27 * 135,
     by: { model: [FAST] }, bucket: "hour", series: [],
     agents: [{ id: "claude", name: "Claude Code", icon: "claudecode-color" }],
-    speeds, speed_min: 100,
+    speeds, provider_speeds: speeds.length ? PROV : [], speed_min: 100,
   };
 }
 
@@ -58,6 +80,11 @@ function server(lang) {
     if (url.pathname === "/api/state") return json(STATE(lang));
     if (url.pathname === "/api/usage/requests") return json(ledger(url.searchParams.get("period")));
     if (url.pathname === "/api/usage/quotas") return json([]);
+    if (url.pathname === "/api/relay-check") {
+      checks++;
+      assert.deepEqual(route.request().postDataJSON(), { provider: "relay9", model: "glm-fast" });
+      return json(CHECK);
+    }
     if (url.pathname === "/api/usage") return json({ calls: 0, errors: 0, input: 0, output: 0, reasoning: 0, unpriced: 0, cost: 0, bucket: "day", series: [], agents: [], models: [], path: "" });
     if (url.pathname === "/api/providers") return json({ providers: [], presets: [], excluded: [], models: [], gateway: { running: false } });
     if (url.pathname === "/api/sessions") return json({ sessions: [], dirs: [] });
@@ -72,11 +99,11 @@ function server(lang) {
 
 
 const L = {
-  en: { title: "Model speed", heads: ["Model", "Speed", "First token", "Requests"], fast: "75 tok/s", slow: "10 tok/s", wait: "600 ms" },
-  zh: { title: "模型速度", heads: ["模型", "速度", "首字耗时", "请求"], fast: "75 token/秒", slow: "10 token/秒", wait: "600 毫秒" },
-  "zh-TW": { title: "模型速度", heads: ["模型", "速度", "首字耗時", "請求"], fast: "75 token/秒", slow: "10 token/秒", wait: "600 毫秒" },
-  ja: { title: "モデルの速度", heads: ["モデル", "速度", "最初のトークン", "リクエスト"], fast: "75", slow: "10", wait: "600" },
-  de: { title: "Modelltempo", heads: ["Modell", "Tempo", "Erstes Token", "Anfragen"], fast: "75", slow: "10", wait: "600" },
+  en: { title: "Model speed", heads: ["Model", "Speed", "First token", "Requests"], fast: "75 tok/s", slow: "10 tok/s", wait: "600 ms", by: ["Models", "Providers"], more: ["Failed", "Other model"], check: "Check…", run: "Check", asked: "Expected answer", tokens: "4,200", sum: ["Answers right: 2 of 3", "Right tool calls: 1 of 2"], checked: ["Answers", "Tool calls"] },
+  zh: { title: "模型速度", heads: ["模型", "速度", "首字耗时", "请求"], fast: "75 token/秒", slow: "10 token/秒", wait: "600 毫秒", by: ["模型", "供应商"], more: ["失败", "其他模型"], check: "检查…", run: "检查", asked: "符合预期", tokens: "4,200", sum: ["答对 2 / 3", "工具调用正确 1 / 2"], checked: ["答对", "工具调用"] },
+  "zh-TW": { title: "模型速度", heads: ["模型", "速度", "首字耗時", "請求"], fast: "75 token/秒", slow: "10 token/秒", wait: "600 毫秒", by: ["模型", "供應商"], more: ["失敗", "其他模型"], check: "檢查…", run: "檢查", asked: "符合預期", tokens: "4,200", sum: ["答對 2 / 3", "工具呼叫正確 1 / 2"], checked: ["答對", "工具呼叫"] },
+  ja: { title: "モデルの速度", heads: ["モデル", "速度", "最初のトークン", "リクエスト"], fast: "75", slow: "10", wait: "600", by: ["モデル", "プロバイダ"], more: ["失敗", "別のモデル"], check: "チェック…", run: "チェック", asked: "想定どおり", tokens: "4,200", sum: ["正解 2 / 3", "正しいツール呼び出し 1 / 2"], checked: ["正解", "ツール呼び出し"] },
+  de: { title: "Modelltempo", heads: ["Modell", "Tempo", "Erstes Token", "Anfragen"], fast: "75", slow: "10", wait: "600", by: ["Modelle", "Anbieter"], more: ["Fehlgeschlagen", "Anderes Modell"], check: "Prüfen…", run: "Prüfen", asked: "Wie erwartet", tokens: "4.200", sum: ["Richtige Antworten: 2 von 3", "Richtige Werkzeugaufrufe: 1 von 2"], checked: ["Richtig", "Tool-Aufrufe"] },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -141,6 +168,95 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // a long model name is cut, not the numbers
         const cut = await card.locator("tbody td.nm").first().evaluate((e) => getComputedStyle(e).textOverflow);
         assert.equal(cut, "ellipsis");
+
+        // by provider: each model on each provider, with its tries, the
+        // share that failed and the replies that named another model
+        const by = card.locator(".led-spd-by .opt");
+        assert.deepEqual((await by.allTextContents()).map((x) => x.trim()), w.by);
+        await by.nth(1).click();
+        await card.locator(".led-spd.by-prov").waitFor();
+        // the sort is kept across the switch: by name, then the fastest first
+        assert.deepEqual(await card.locator("tbody .led-spd-prov").allTextContents(), ["Relay Nine", "Z.ai Coding Plan", "Relay Nine"]);
+        await head(1).click();
+        const pheads = (await card.locator("thead th").allTextContents()).map((x) => x.replace(/[↑↓]/g, "").trim());
+        assert.deepEqual(pheads, [...w.heads, ...w.more, ""]);
+        assert.deepEqual(await card.locator("tbody .led-spd-prov").allTextContents(), ["Z.ai Coding Plan", "Relay Nine", "Relay Nine"]);
+        const relay = await card.locator("tbody tr").nth(1).locator("td").allTextContents();
+        assert.equal(relay[3].trim(), "4", "tries");
+        assert.equal(relay[4].trim(), "25%", "1 of 4 failed");
+        assert.equal(relay[5].trim(), "1", "one reply named another model");
+        // the failed share sorts, most first
+        await head(4).click();
+        assert.equal((await card.locator("tbody tr").first().locator(".led-spd-prov").textContent()), "Relay Nine");
+        await card.locator("thead th").nth(1).locator("button").click();
+        const fitsProv = await card.evaluate((e) => ({ card: e.scrollWidth <= e.clientWidth + 1, doc: document.documentElement.scrollWidth <= window.innerWidth + 1 }));
+        assert.deepEqual(fitsProv, { card: true, doc: true });
+        if (lang === "en" && process.env.SHOTS) {
+          // the page scrolls inside the window: a tall one shows the card
+          await p.setViewportSize({ width: 400, height: 3000 });
+          await p.waitForTimeout(300);
+          await card.screenshot({ path: path.join(process.env.SHOTS, engine + "-providers-400.png") });
+          await p.setViewportSize({ width: 1000, height: 3000 });
+          await p.waitForTimeout(300);
+          await card.screenshot({ path: path.join(process.env.SHOTS, engine + "-providers-1000.png") });
+          await p.setViewportSize({ width: 400, height: 800 });
+        }
+
+        // Check… opens a dialog and sends nothing; only its Check does
+        checks = 0;
+        const go = card.locator("tbody tr").nth(1).locator(".led-spd-check");
+        assert.equal((await go.textContent()).trim(), w.check);
+        await go.click();
+        const dlg = p.locator("#modal .relay-check");
+        await dlg.waitFor();
+        await p.waitForTimeout(150);
+        assert.equal(checks, 0, "opening the dialog sends no call");
+        await dlg.locator(".bar button.primary").click();
+        await dlg.locator(".relay-part").nth(4).waitFor();
+        assert.equal(checks, 1);
+        const parts = dlg.locator(".relay-part");
+        // the right answers counted apart from the right tool calls
+        assert.deepEqual((await dlg.locator(".relay-sum span").allTextContents()).map((x) => x.trim()), w.sum);
+        assert.equal((await parts.nth(0).locator(".relay-said").textContent()).trim(), w.asked);
+        assert.deepEqual(await dlg.locator(".relay-mark").evaluateAll((ms) => ms.map((m) => m.className.replace("relay-mark ", ""))), ["ok", "off", "ok", "err", "ok"]);
+        assert((await parts.nth(1).locator(".relay-name").textContent()).includes("1234 × 5678"));
+        assert((await parts.nth(4).locator(".relay-name").textContent()).includes("get_time"));
+        assert.equal(await parts.nth(2).locator(".relay-line").count(), 0, "an answer as asked says nothing more");
+        const count = await parts.nth(0).locator(".relay-line").allTextContents();
+        assert(count.some((x) => x.includes("118") && x.includes(w.tokens)), "the prompt's count: " + count);
+        const math = (await parts.nth(1).locator(".relay-line").allTextContents()).join("\n");
+        assert(math.includes("7006552") && math.includes("qwen3-8b"), math);
+        assert((await parts.nth(3).locator(".relay-line.err").textContent()).includes("403 · this key has no access to tools"));
+        const fitsDlg = await dlg.evaluate((e) => ({ doc: document.documentElement.scrollWidth <= window.innerWidth + 1, dlg: e.parentElement.scrollWidth <= e.parentElement.clientWidth + 1 }));
+        assert.deepEqual(fitsDlg, { doc: true, dlg: true }, "the dialog fits a phone's width");
+        if (lang === "en" && process.env.SHOTS) await p.locator("#modal > *").first().screenshot({ path: path.join(process.env.SHOTS, engine + "-check-400.png") });
+        await p.keyboard.press("Escape");
+        await dlg.waitFor({ state: "hidden" });
+        // the check is kept beside the other providers: Answers and Tool
+        // calls, for the one checked, and nothing for the others
+        const checkedHeads = async () => (await card.locator("thead th").allTextContents()).map((x) => x.replace(/[↑↓]/g, "").trim());
+        assert.deepEqual(await checkedHeads(), [...w.heads, ...w.more, ...w.checked, ""]);
+        const cells = (i) => card.locator("tbody tr").nth(i).locator("td").allTextContents();
+        assert.deepEqual((await cells(1)).slice(6, 8).map((x) => x.trim()), ["2/3", "1/2"]);
+        assert.deepEqual((await cells(0)).slice(6, 8).map((x) => x.trim()), ["—", "—"]);
+        // the checked one first by Answers, the ones not checked last
+        await head(6).click();
+        assert.equal(await card.locator("tbody tr").first().locator(".led-spd-prov").textContent(), "Relay Nine");
+        assert.equal(await card.locator("tbody tr").first().locator("td").nth(6).getAttribute("class"), "n off");
+        if (lang === "en" && process.env.SHOTS) {
+          await p.setViewportSize({ width: 1000, height: 3000 });
+          await p.waitForTimeout(300);
+          await card.screenshot({ path: path.join(process.env.SHOTS, engine + "-providers-checked-1000.png") });
+          await p.setViewportSize({ width: 400, height: 800 });
+        }
+        // the choice is kept: Providers again after a reload
+        await p.reload();
+        await p.locator('[data-view="usage"]').first().click();
+        await p.locator(":is(#usageTab .opt, .nav-s):visible").nth(1).click();
+        await card.locator(".led-spd.by-prov").waitFor();
+        assert.deepEqual(await checkedHeads(), [...w.heads, ...w.more, ...w.checked, ""], "the check is kept after a reload");
+        await card.locator(".led-spd-by .opt").first().click();
+        await card.locator(".led-spd:not(.by-prov)").waitFor();
 
         // nothing counted: the card is gone
         speeds = [];

@@ -2397,14 +2397,44 @@ function ledShowStatus(to) {
 // ledger with the page (usage.ModelSpeed): failed, canceled and short
 // replies are left out. Sortable by any column; the fastest first.
 let ledSpeedSort = { key: "tps", dir: -1 };
+// by model, or each model on each provider it went to (skingstyle48487 on
+// X, with a dozen relays: which one is slow, which one fails, which one
+// answers with another model), kept as left
+let ledSpeedBy = "model";
+try { ledSpeedBy = localStorage.getItem("magpie.ledSpeedBy") === "provider" ? "provider" : "model"; } catch {}
 const LED_SPEED_COLS = [
   { key: "name", label: "Model", dir: 1 },
   { key: "tps", label: "Speed", dir: -1 },
   { key: "ttft_ms", label: "First token", dir: 1 },
   { key: "requests", label: "Requests", dir: -1 },
 ];
+// a provider's row counts its tries, and how many failed or were answered
+// by another model, beside the speed of those answered
+const LED_PROV_COLS = [
+  { key: "name", label: "Model", dir: 1 },
+  { key: "tps", label: "Speed", dir: -1 },
+  { key: "ttft_ms", label: "First token", dir: 1 },
+  { key: "tries", label: "Requests", dir: -1 },
+  { key: "fail", label: "Failed", dir: -1 },
+  { key: "swapped", label: "Other model", dir: -1 },
+  { key: "right", label: "Answers", dir: -1 },
+  { key: "tools", label: "Tool calls", dir: -1 },
+];
+const ledFail = (x) => x.tries ? (x.failed || 0) / x.tries : 0;
+// the last check of each model on each provider (relaycheck.js relayKeep):
+// its right answers and right tool calls, set beside the other providers'
+function ledChecks() {
+  try { return JSON.parse(localStorage.getItem("magpie.relayChecks") || "{}") || {}; } catch { return {}; }
+}
+const ledCheckShare = (x, key) => {
+  const c = x.check, of = c && (key === "tools" ? c.tools_of : c.of);
+  return of ? (key === "tools" ? c.tools : c.right) / of : -1;
+};
+let ledSpeedLast;
+window.addEventListener("magpie-relay-checked", () => { if (ledSpeedLast && $("#ledSpeed")) drawLedSpeed(ledSpeedLast); });
 function ledSpeedOrder(list) {
   const { key, dir } = ledSpeedSort;
+  const nm = (x) => (x.name || x.model) + (x.provider_name ? "\u0000" + x.provider_name : "");
   return [...list].sort((a, b) => {
     // a model with nothing measured goes last, whichever way it is sorted
     if (key === "tps" || key === "ttft_ms") {
@@ -2412,30 +2442,59 @@ function ledSpeedOrder(list) {
       if (!x !== !y) return x ? -1 : 1;
       if (x !== y) return dir * (x - y);
     } else if (key === "name") {
-      const c = (a.name || a.model).localeCompare(b.name || b.model);
+      const c = nm(a).localeCompare(nm(b));
       if (c) return dir * c;
-    } else if (a[key] !== b[key]) return dir * (a[key] - b[key]);
-    return b.requests - a.requests || (a.name || a.model).localeCompare(b.name || b.model);
+    } else if (key === "fail") {
+      const c = ledFail(a) - ledFail(b);
+      if (c) return dir * c;
+    } else if (key === "right" || key === "tools") {
+      // a provider not checked goes last, whichever way it is sorted
+      const x = ledCheckShare(a, key), y = ledCheckShare(b, key);
+      if ((x < 0) !== (y < 0)) return x < 0 ? 1 : -1;
+      if (x !== y) return dir * (x - y);
+    } else if ((a[key] || 0) !== (b[key] || 0)) return dir * ((a[key] || 0) - (b[key] || 0));
+    return (b.requests ?? b.tries) - (a.requests ?? a.tries) || nm(a).localeCompare(nm(b));
   });
 }
 function drawLedSpeed(l) {
   const box = $("#ledSpeed");
-  const list = l.speeds || [];
-  box.hidden = !list.length;
+  ledSpeedLast = l;
+  const byProv = ledSpeedBy === "provider";
+  const checks = byProv ? ledChecks() : {};
+  const list = ((byProv ? l.provider_speeds : l.speeds) || []).map((x) => byProv ? { ...x, check: checks[x.provider + "\u0000" + x.model] } : x);
+  box.hidden = !(l.speeds?.length || l.provider_speeds?.length);
   box.replaceChildren();
   if (box.hidden) return;
   const head = el("div", "led-bar");
   const title = el("b", "led-spd-t", t("Model speed"));
   title.title = t("Medians of the answered requests that wrote {n} tokens or more", { n: l.speed_min || 100 });
-  head.append(title);
-  const table = el("table", "led-spd");
+  const by = sessSegs([["model", "Models"], ["provider", "Providers"]], ledSpeedBy, (to) => {
+    ledSpeedBy = to;
+    try { localStorage.setItem("magpie.ledSpeedBy", to); } catch {}
+    if (!LED_SPEED_COLS.concat(to === "provider" ? LED_PROV_COLS : []).some((c) => c.key === ledSpeedSort.key)) ledSpeedSort = { key: "tps", dir: -1 };
+    drawLedSpeed(l);
+    $("#ledSpeed .segs .opt.on")?.focus({ preventScroll: true });
+  });
+  by.classList.add("led-spd-by");
+  head.append(title, el("span", "grow"), by);
+  // Other model shows once a reply named another model than the one asked
+  // for, and Answers and Tool calls once a provider was checked; nothing
+  // to say before
+  const checked = list.some((x) => x.check);
+  const cols = byProv ? LED_PROV_COLS.filter((c) => (c.key !== "swapped" || list.some((x) => x.swapped)) && (!["right", "tools"].includes(c.key) || checked)) : LED_SPEED_COLS;
+  if (!cols.some((c) => c.key === ledSpeedSort.key)) ledSpeedSort = { key: "tps", dir: -1 };
+  const table = el("table", "led-spd" + (byProv ? " by-prov" : ""));
   const hr = el("tr");
-  for (const c of LED_SPEED_COLS) {
+  for (const c of cols) {
     const th = el("th", c.key === "name" ? "nm" : "n");
     const on = ledSpeedSort.key === c.key;
     th.setAttribute("aria-sort", on ? (ledSpeedSort.dir > 0 ? "ascending" : "descending") : "none");
     const b = el("button", "led-spd-h" + (on ? " on" : ""), t(c.label));
     b.type = "button";
+    if (c.key === "fail") b.title = t("Tries that failed, those handed on to another provider too");
+    if (c.key === "swapped") b.title = t("Replies that named another model than the one asked for");
+    if (c.key === "right") b.title = t("Right answers in the last check of the model on this provider");
+    if (c.key === "tools") b.title = t("Right tool calls in the last check of the model on this provider");
     b.onclick = () => {
       ledSpeedSort = on ? { key: c.key, dir: -ledSpeedSort.dir } : { key: c.key, dir: c.dir };
       drawLedSpeed(l);
@@ -2444,6 +2503,7 @@ function drawLedSpeed(l) {
     th.append(b);
     hr.append(th);
   }
+  if (byProv) hr.append(el("th", "act"));
   const thead = el("thead");
   thead.append(hr);
   const body = el("tbody");
@@ -2451,10 +2511,46 @@ function drawLedSpeed(l) {
     const tr = el("tr");
     const name = el("td", "nm", x.name || x.model);
     name.title = x.name || x.model;
+    if (byProv) {
+      const sub = el("div", "led-spd-prov", x.provider_name || x.provider);
+      name.title += " · " + sub.textContent;
+      name.append(sub);
+    }
     tr.append(name,
       el("td", "n" + (x.tps ? "" : " faint"), x.tps ? t("{n} tok/s", { n: ledNum(Math.round(x.tps)) }) : "—"),
-      el("td", "n" + (x.ttft_ms ? "" : " faint"), x.ttft_ms ? ledTook(x.ttft_ms) : "—"),
-      el("td", "n", ledNum(x.requests)));
+      el("td", "n" + (x.ttft_ms ? "" : " faint"), x.ttft_ms ? ledTook(x.ttft_ms) : "—"));
+    if (!byProv) {
+      tr.append(el("td", "n", ledNum(x.requests)));
+      body.append(tr);
+      continue;
+    }
+    const f = ledFail(x);
+    const fail = el("td", "n" + (x.failed ? "" : " faint"), x.failed ? (f < 0.001 ? "<0.1%" : (f * 100).toFixed(f < 0.1 ? 1 : 0) + "%") : "0");
+    fail.title = t("{n} of {m} failed", { n: ledNum(x.failed || 0), m: ledNum(x.tries) });
+    tr.append(el("td", "n", ledNum(x.tries)), fail);
+    if (cols.some((c) => c.key === "swapped")) {
+      const sw = el("td", "n" + (x.swapped ? "" : " faint"), ledNum(x.swapped || 0));
+      sw.title = t("{n} of {m} replies named another model", { n: ledNum(x.swapped || 0), m: ledNum(x.tries) });
+      tr.append(sw);
+    }
+    for (const key of checked ? ["right", "tools"] : []) {
+      const c = x.check, of = c && (key === "tools" ? c.tools_of : c.of), n = c && (key === "tools" ? c.tools : c.right);
+      const td = el("td", "n" + (!of ? " faint" : n < of ? " off" : ""), of ? n + "/" + of : "—");
+      if (of) td.title = t("{n} of {m} right, checked {when}", { n, m: of, when: ago(c.at) });
+      tr.append(td);
+    }
+    // a check of this model on this provider: a few small real calls, made
+    // only on the press (relaycheck.js)
+    const act = el("td", "act");
+    const go = el("button", "text led-spd-check", t("Check…"));
+    go.type = "button";
+    go.title = t("Check {model} on {provider} with a few small real calls", { model: x.name || x.model, provider: x.provider_name || x.provider });
+    go.onclick = async () => {
+      try { window.relayCheck || await import(new URL("relaycheck.js", document.baseURI).href); } catch (err) { return status(err.message, "err"); }
+      relayCheck(x.provider, x.model, x.provider_name || x.provider, x.name || x.model);
+    };
+    act.append(go);
+    tr.append(act);
     body.append(tr);
   }
   table.append(thead, body);

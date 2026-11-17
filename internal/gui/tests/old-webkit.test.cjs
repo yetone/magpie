@@ -175,7 +175,8 @@ test("compat.js is the first of the page's own scripts", async () => {
   // navicons.js (the sidebar lists' marks) with the first list drawn;
   // autoswitchtip.js when a provider's accounts draw their switch;
   // codexprojects.js when the open Codex app shows fewer projects;
-  // pipecheck.js when Settings draws Models;
+  // pipecheck.js when Settings draws Models; relaycheck.js on Usage › Model
+  // speed's first Check… press;
   // addfloat.js when the Providers page's add sheet first opens;
   // plugingrid.js and plugininstalled.js when Plugins first draws;
   // rotfig.js when a routing's In turn is first shown;
@@ -189,7 +190,7 @@ test("compat.js is the first of the page's own scripts", async () => {
   // navorder.js once a page order is kept, or Settings › Sidebar pages draws;
   // the checks above
   // still read them
-  for (const f of await scripts()) if (!["webfonts.js", "cfgblocked.js", "signsheets.js", "ruleedit.js", "ratewindows.js", "traywindows.js", "autoresetown.js", "registry.js", "navlamp.js", "whatsnew.js", "claudemode.js", "ctxtext.js", "resetask.js", "quotaall.js", "quotatable.js", "quitask.js", "checkinnow.js", "proxies.js", "autobackup.js", "scrollends.js", "profilerename.js", "settingshints.js", "keyspend.js", "syncfiles.js", "agentcompact.js", "agentwindow.js", "balfound.js", "passerrors.js", "tlscerts.js", "keybalance.js", "modellimits.js", "notices.js", "videogen.js", "provlinks.js", "setfeats.js", "pageshare.js", "panelfirst.js", "panelarrange.js", "modelfind.js", "agentsmanager.js", "agentsuffix.js", "phonetabs.js", "pluginmd.js", "bark.js", "acctexport.js", "plugincounts.js", "navicons.js", "autoswitchtip.js", "codexprojects.js", "pipecheck.js", "addfloat.js", "plugingrid.js", "plugininstalled.js", "rotfig.js", "ompadvisor.js", "kimisub.js", "agentspeed.js", "claudemagpie.js", "keyrates.js", "maximages.js", "qianwenplan.js", "qianfanplan.js", "agymove.js", "updatetrust.js", "currencyprefs.js", "appearance.js", "mirroredit.js", "navorder.js", "instancename.js"].includes(f)) assert(all.includes(f), f + " is not loaded by index.html");
+  for (const f of await scripts()) if (!["webfonts.js", "cfgblocked.js", "signsheets.js", "ruleedit.js", "ratewindows.js", "traywindows.js", "autoresetown.js", "registry.js", "navlamp.js", "whatsnew.js", "claudemode.js", "ctxtext.js", "resetask.js", "quotaall.js", "quotatable.js", "quitask.js", "checkinnow.js", "proxies.js", "autobackup.js", "scrollends.js", "profilerename.js", "settingshints.js", "keyspend.js", "syncfiles.js", "agentcompact.js", "agentwindow.js", "balfound.js", "passerrors.js", "tlscerts.js", "keybalance.js", "modellimits.js", "notices.js", "videogen.js", "provlinks.js", "setfeats.js", "pageshare.js", "panelfirst.js", "panelarrange.js", "modelfind.js", "agentsmanager.js", "agentsuffix.js", "phonetabs.js", "pluginmd.js", "bark.js", "acctexport.js", "plugincounts.js", "navicons.js", "autoswitchtip.js", "codexprojects.js", "pipecheck.js", "relaycheck.js", "addfloat.js", "plugingrid.js", "plugininstalled.js", "rotfig.js", "ompadvisor.js", "kimisub.js", "agentspeed.js", "claudemagpie.js", "keyrates.js", "maximages.js", "qianwenplan.js", "qianfanplan.js", "agymove.js", "updatetrust.js", "currencyprefs.js", "appearance.js", "mirroredit.js", "navorder.js", "instancename.js"].includes(f)) assert(all.includes(f), f + " is not loaded by index.html");
 });
 
 test("the styles hold up in Safari 15.0", async () => {

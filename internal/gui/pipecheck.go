@@ -30,3 +30,23 @@ func handlePipelineCheck(rw http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(rw, gw.CheckPipeline(r.Context(), in.Kind))
 }
+
+// handleRelayCheck checks one model on one provider with a few small real
+// calls (gateway.CheckRelay), made only when the user presses Check.
+func handleRelayCheck(rw http.ResponseWriter, r *http.Request) {
+	var in struct{ Provider, Model string }
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		fail(rw, err)
+		return
+	}
+	if in.Provider == "" || in.Model == "" {
+		fail(rw, errors.New("a check needs a provider and a model"))
+		return
+	}
+	gw := served.Load()
+	if gw == nil {
+		fail(rw, errors.New("Another magpie serves the gateway: check there"))
+		return
+	}
+	writeJSON(rw, gw.CheckRelay(r.Context(), in.Provider, in.Model))
+}

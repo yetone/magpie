@@ -278,6 +278,7 @@ var notYet = map[string]string{
 	"POST /api/profile/{action}":                 A,  // api.go
 	"POST /api/proxy/check":                      S2, // api.go
 	"POST /api/pipelines/check":                  S2, // pipecheck.go: Settings › Models' Quick check, one real call a pipeline
+	"POST /api/relay-check":                      S2, // pipecheck.go: the Usage speed card by provider, its check button: a few small real calls to one model on one provider
 	"POST /api/proxies/save":                     S2, // proxies.go: Settings › Network's saved proxies
 	"POST /api/proxies/delete":                   S2, // proxies.go
 	"POST /api/proxies/test":                     S2, // proxies.go

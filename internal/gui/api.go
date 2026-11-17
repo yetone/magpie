@@ -2271,6 +2271,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	mux.HandleFunc("POST /api/proxy/check", handleProxyCheck)
 	proxyRoutes(mux)
 	mux.HandleFunc("POST /api/pipelines/check", handlePipelineCheck)
+	mux.HandleFunc("POST /api/relay-check", handleRelayCheck)
 	mux.HandleFunc("POST /api/settings/codex-titles", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct{ Model string }
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {

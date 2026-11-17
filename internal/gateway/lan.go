@@ -881,6 +881,8 @@ func appendUsage(r *http.Request, rec usage.Record) {
 		// a request an MCP tool call made: its row names the model (mcpUse)
 		mcpUseOf(r.Context()).used(rec.Provider, rec.Model)
 	}
+	// a relay check reads its calls' rows (relay_check.go)
+	tapUsage(r, rec)
 	budget.Append(rec)
 }
 
