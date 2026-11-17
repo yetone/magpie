@@ -626,8 +626,13 @@ func readEffort(answer string) (string, float64, error) {
 // answer's text, if it comes in wait.
 // held, when it names accounts, holds it to them, as heldByGroup does a
 // request through a group.
+//
+// A call the wait ends is magpie's own limit running out, as an image's
+// description's is (sideTimedOut, #2318): the usage log said "the agent
+// canceled the request", a 499 no failure, though no agent had
+// (ESern29751 on X).
 func (s *Server) askChat(wait time.Duration, held access.Identity, model string, body []byte) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), wait)
+	ctx, cancel := context.WithTimeoutCause(context.Background(), wait, sideTimedOut{"decision model", wait})
 	defer cancel()
 	r, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://magpie/v1/chat/completions", nil)
 	if err != nil {

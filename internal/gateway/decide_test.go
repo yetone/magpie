@@ -361,11 +361,11 @@ func TestJevPicksTheIntent(t *testing.T) {
 }
 
 // Jev is given Settings' Classifier timeout as the chat classifier is
-// (#2934): slower than the 8 seconds unset, its pick routes the turn once
+// (#2934): slower than the 15 seconds unset, its pick routes the turn once
 // it is given 60.
 func TestJevGivenTheClassifierTimeout(t *testing.T) {
 	was := classifyUnit
-	classifyUnit = 100 * time.Millisecond // 8 seconds are 800ms, 60 are 6s
+	classifyUnit = 100 * time.Millisecond // 15 seconds are 1.5s, 60 are 6s
 	t.Cleanup(func() { classifyUnit = was })
 	s, _, _, j := jevved(t, "", provider.Rule{Use: "b/big", Intent: "debugging"})
 	j.choice = "debugging"
@@ -382,7 +382,7 @@ func TestJevGivenTheClassifierTimeout(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, r := postOK(t, s, "s1", chat("why does this crash?", nil, 0, ""))
-	if r.Rule.N != 0 || !strings.Contains(r.Rule.Classified.Error, "no answer in 800ms") {
+	if r.Rule.N != 0 || !strings.Contains(r.Rule.Classified.Error, "no answer in 1.5s") {
 		t.Fatalf("unset: %+v", r.Rule.Classified)
 	}
 	st := settings.Load()

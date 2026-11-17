@@ -87,7 +87,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       }
       assert.equal(await page.locator("#routeList").evaluate((l) => l.previousElementSibling.textContent.trim()), w.head);
       assert.deepEqual(await row.locator(".segs button").allTextContents(), [8, 15, 30, 60].map(w.sec));
-      assert.equal(await row.locator(".segs button[aria-pressed=true]").textContent(), w.sec(8), "8 s at first");
+      assert.equal(await row.locator(".segs button[aria-pressed=true]").textContent(), w.sec(15), "15 s at first, the default (ESern29751 on X)");
 
       const at = () => page.evaluate(() => [scrollX, scrollY, document.querySelector("#classifyTimeoutRow").closest(".view").scrollTop]);
       const moved = [];

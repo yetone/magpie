@@ -7,11 +7,11 @@ import (
 
 // Settings' Classifier timeout (#2934: a Kiro subscription's haiku needed
 // more than 8 seconds) is kept from 1 to 60 seconds, and 0, which is what
-// a settings.json without it reads as, is the 8 a classifier was always
-// given.
+// a settings.json without it reads as, is the default: 15, room for a
+// classifier that reasons (ESern29751 on X), where it was 8.
 func TestClassifyTimeoutKeptAndBounded(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	if w := Load().ClassifyWait(); w != 8*time.Second {
+	if w := Load().ClassifyWait(); w != 15*time.Second {
 		t.Fatalf("unset: %v", w)
 	}
 	for _, n := range []int{1, 30, 60} {
@@ -34,7 +34,7 @@ func TestClassifyTimeoutKeptAndBounded(t *testing.T) {
 	if w := (Settings{ClassifyTimeout: 600}).ClassifyWait(); w != time.Minute {
 		t.Fatalf("600 waits %v", w)
 	}
-	if w := (Settings{ClassifyTimeout: -3}).ClassifyWait(); w != 8*time.Second {
+	if w := (Settings{ClassifyTimeout: -3}).ClassifyWait(); w != 15*time.Second {
 		t.Fatalf("-3 waits %v", w)
 	}
 }

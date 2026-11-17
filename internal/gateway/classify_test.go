@@ -285,7 +285,7 @@ func TestIntentClassifierFails(t *testing.T) {
 	}
 	// slow: past the timeout it's no answer
 	was := classifyUnit
-	classifyUnit = 25 * time.Millisecond // the 8 seconds unset are 200ms
+	classifyUnit = 20 * time.Millisecond // the 15 seconds unset are 300ms
 	t.Cleanup(func() { classifyUnit = was })
 	c.mu.Lock()
 	c.wait = 2 * time.Second
@@ -299,12 +299,12 @@ func TestIntentClassifierFails(t *testing.T) {
 
 // #2934 (aurochs-code): a Kiro subscription's haiku answered past the 8
 // seconds a classifier was given, so every turn fell back. Settings'
-// Classifier timeout gives it longer: a classifier slower than the 8
+// Classifier timeout gives it longer: a classifier slower than the 15
 // seconds unset routes the turn by its answer once it is given 60, and
-// one given 8 again is no answer.
+// one given 8 is no answer.
 func TestClassifierTimeoutSetting(t *testing.T) {
 	was := classifyUnit
-	classifyUnit = 100 * time.Millisecond // 8 seconds are 800ms, 60 are 6s
+	classifyUnit = 100 * time.Millisecond // 15 seconds unset are 1.5s, 8 are 800ms, 60 are 6s
 	t.Cleanup(func() { classifyUnit = was })
 	s, _, _, c := intented(t, provider.Rule{Use: "b/big", Intent: "refactoring"})
 	c.set("1", 0)
@@ -314,7 +314,8 @@ func TestClassifierTimeoutSetting(t *testing.T) {
 	for i, x := range []struct {
 		seconds int
 		answers bool
-	}{{0, false}, {60, true}, {8, false}} {
+		wait    string
+	}{{0, false, "1.5s"}, {60, true, ""}, {8, false, "800ms"}} {
 		st := settings.Load()
 		st.ClassifyTimeout = x.seconds
 		if err := settings.Save(st); err != nil {
@@ -329,9 +330,59 @@ func TestClassifierTimeoutSetting(t *testing.T) {
 		if x.answers && (!strings.Contains(out, "from kb") || r.Rule.N != 1 || cl.Intent != "refactoring" || cl.Error != "") {
 			t.Fatalf("given %ds: %s %+v %+v", x.seconds, out, r.Rule, cl)
 		}
-		if !x.answers && (!strings.Contains(out, "from ka") || r.Rule.N != 0 || !strings.Contains(cl.Error, "no answer in 800ms")) {
+		if !x.answers && (!strings.Contains(out, "from ka") || r.Rule.N != 0 || !strings.Contains(cl.Error, "no answer in "+x.wait)) {
 			t.Fatalf("given %ds: %s %+v %+v", x.seconds, out, r.Rule, cl)
 		}
+	}
+}
+
+// ESern29751 on X: a routing group whose classifier reasons before it
+// answers (MiniMax, which thinks even asked for none; Grok 4.6 and GPT-6
+// Luna, which go no lower than low) lost its intent routing on most turns.
+// Asked with a real routing prompt they answered in 4 to 10 seconds, past
+// the 8 a classifier was given unset, and every such call was logged 499
+// "the agent canceled the request", though no agent had. Unset, a
+// classifier that answers in 10 seconds now routes the turn, and one past
+// the wait is logged as magpie stopping, a failure.
+func TestReasoningClassifierAnswersInTheWaitUnset(t *testing.T) {
+	was := classifyUnit
+	classifyUnit = 50 * time.Millisecond // 10 seconds are 500ms
+	t.Cleanup(func() { classifyUnit = was })
+	s, _, _, c := intented(t, provider.Rule{Use: "b/big", Intent: "refactoring"})
+	c.set("1", 0)
+	c.mu.Lock()
+	c.wait = 10 * classifyUnit
+	c.mu.Unlock()
+	out, r := postOK(t, s, "rs1", chat("rename the parser package and move its tests", nil, 0, ""))
+	if cl := r.Rule.Classified; !strings.Contains(out, "from kb") || r.Rule.N != 1 || cl.Intent != "refactoring" || cl.Error != "" {
+		t.Fatalf("a classifier answering in 10s, unset: %s %+v %+v", out, r.Rule, cl)
+	}
+	// past the whole wait it is no answer, and the call magpie stopped is
+	// its failure, not an agent canceling
+	c.mu.Lock()
+	c.wait = time.Duration(settings.ClassifyTimeoutMost) * classifyUnit
+	c.mu.Unlock()
+	out, r = postOK(t, s, "rs2", chat("rename everything under internal", nil, 0, ""))
+	if cl := r.Rule.Classified; !strings.Contains(out, "from ka") || !strings.Contains(cl.Error, "no answer") {
+		t.Fatalf("a classifier past its wait: %s %+v %+v", out, r.Rule, cl)
+	}
+	var cut []usage.Record
+	for i := 0; i < 100 && len(cut) == 0; i++ {
+		for _, rec := range usage.Load(time.Time{}) {
+			if rec.Model == "cls" && rec.Status == usage.StatusCanceled {
+				cut = append(cut, rec)
+			}
+		}
+		if len(cut) == 0 {
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	if len(cut) != 1 {
+		t.Fatalf("the classifier's cut call in the usage log: %+v", cut)
+	}
+	rec := cut[0]
+	if !strings.Contains(rec.Error, "magpie stopped waiting") || !strings.Contains(rec.Error, "decision model") || usage.CanceledBy(rec.Status, rec.Error) || !rec.Failed() {
+		t.Fatalf("the classifier's cut call: %d %q", rec.Status, rec.Error)
 	}
 }
 

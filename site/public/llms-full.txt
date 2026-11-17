@@ -145,7 +145,7 @@ A group’s Rules send a turn to one of its models when the turn is of a kind yo
 - A rule decides as a turn begins, and the turn stays on that model while the agent sends tool results back, so what the vendor cached isn’t lost halfway. The one exception: a turn that grows past its model’s context moves to a member that takes it.
 - Tokens are estimated from the request’s size, or what the vendor counted for the conversation’s last request, whichever is more. Leave some margin: a rule at 150k for a 200k model, not 199k.
 - A subagent is a conversation of its own, so a rule can send it elsewhere while its agent keeps where it is.
-- An intent is a few words for what the user asks for — “writing or fixing tests”, “a quick question”. As a turn begins, the group’s classifier — any model magpie has; a small, fast one without reasoning is best — is asked once which of the intents that could match the user’s message is. Only the message is sent, not the conversation. If it fails, exceeds the configured timeout (8 s by default; set in Settings → Models → Replies → Intent classifier timeout) or can’t say, no intent matches and the turn goes by the other rules. It isn’t asked when a rule without an intent would decide anyway, and the same message isn’t asked about twice. Its calls show in Usage as magpie’s own. Exactly what it is asked, how its answer is used and what happens when it fails: [Intent routing](https://usemagpie.ai/docs/intent).
+- An intent is a few words for what the user asks for — “writing or fixing tests”, “a quick question”. As a turn begins, the group’s classifier — any model magpie has; a small, fast one without reasoning is best — is asked once which of the intents that could match the user’s message is. Only the message is sent, not the conversation. If it fails, exceeds the configured timeout (15 s by default; set in Settings → Models → Replies → Intent classifier timeout) or can’t say, no intent matches and the turn goes by the other rules. It isn’t asked when a rule without an intent would decide anyway, and the same message isn’t asked about twice. Its calls show in Usage as magpie’s own. Exactly what it is asked, how its answer is used and what happens when it fails: [Intent routing](https://usemagpie.ai/docs/intent).
 - compacting matches an agent compacting its conversation — Claude Code’s `/compact` and auto-compact, Codex, OpenCode, Pi, Gemini CLI, Qwen Code, Kimi Code — so a cheaper, faster model writes the summary while the conversation stays on its own. A compaction is decided on its own: the turn it happens in, and its cache, stay where they were. When the conversation is longer than the rule’s model takes, the next rule that matches, or the group’s order, decides instead.
 - **Hours and days..** A rule can hold only at some hours, on some days, by this computer’s clock — a vendor’s peak hours, say. A rule that sends those turns elsewhere still leaves the vendor’s model behind it for failover. To keep a model out entirely, choose Pause the model instead from the rule’s ⋯ menu: while it holds (its hours and days, its agents), that model is left out of the group — never first, never a fallback, not kept for the conversation it was in — and it is back once they end. A pause holds by hours, days and agents only; if every model of the group is paused, the agent is told so.
 - **Folders..** in folder matches a turn from an agent working in one of the folders you list, or a folder inside one: `~/work/acme` takes `~/work/acme/web`, not `~/work/acme-old`. The folder is the one the agent tells its model in the request — Claude Code, Codex, OpenCode and Pi say it — so an agent that doesn’t say its folder matches no folder rule. `~` is your home folder, `C:\work` is also WSL’s `/mnt/c/work`, and on macOS and Windows case doesn’t count.
@@ -3482,7 +3482,7 @@ You need a [routing group](https://usemagpie.ai/docs/start#routing) with at leas
 3. **Pick the classifier.** Intent told by appears once a rule has an intent, set to Jev when you have a TypeSafe provider. Otherwise choose a small, fast model without reasoning. A group whose effort Jev already picks offers the same under its classifier: It can pick the model too. A group can’t be saved with an intent and no classifier.
 4. **Save, and send a message.** Changes apply from the next turn, with no restart. The Routing tab shows what the classifier said and where the turn went.
 
-The timeout is global: in Settings → Models → Replies → Intent classifier timeout, choose 8, 15, 30 or 60 seconds. It defaults to 8 seconds and applies to the next classifier call, including Jev, with no restart. A slow classifier may need longer, but the turn waits for it before routing. In `~/.config/magpie/settings.json`, `"classifyTimeout"` accepts whole seconds from 1 to 60; 0 or a missing field uses 8. A custom value in that range appears as its own choice in Settings.
+The timeout is global: in Settings → Models → Replies → Intent classifier timeout, choose 8, 15, 30 or 60 seconds. It defaults to 15 seconds and applies to the next classifier call, including Jev, with no restart. A slow classifier may need longer, but the turn waits for it before routing. In `~/.config/magpie/settings.json`, `"classifyTimeout"` accepts whole seconds from 1 to 60; 0 or a missing field uses 15. A custom value in that range appears as its own choice in Settings.
 
 The same from a terminal:
 
@@ -3506,7 +3506,7 @@ Every request an agent sends to a group with rules goes through these steps, in 
 
 1. **Is this a new turn?.** magpie looks at the request’s last user message. If it carries text or an image and no tool result, you just spoke, so a new turn begins. If it carries tool results, the agent is continuing a turn already under way (see The rest of the turn). Turns are counted per conversation. A subagent is its own conversation: it shares its agent’s session but starts with different words.
 2. **Which intents could decide?.** magpie walks the rules top first and ignores intent for now: a rule is a candidate if its other conditions (tokens, images, reasoning, agents) hold for this request. Each candidate’s intent is collected, and duplicates spelled the same apart from case count once. The walk stops at the first candidate *without* an intent, because that rule matches outright and nothing below it could come first. If no intents were collected, the classifier isn’t asked and costs nothing.
-3. **Ask the classifier.** magpie sends the classifier the collected intents and the text of your message. The exact prompt is shown below. The call goes through magpie’s own gateway, like a request from an agent, so it uses that model’s provider with its keys or accounts and their failover. It has the configured timeout to answer (8 seconds by default).
+3. **Ask the classifier.** magpie sends the classifier the collected intents and the text of your message. The exact prompt is shown below. The call goes through magpie’s own gateway, like a request from an agent, so it uses that model’s provider with its keys or accounts and their failover. It has the configured timeout to answer (15 seconds by default).
 4. **Read the answer.** magpie takes the first whole number in the reply. `1` to `n` names that intent, and `0` means none of them. Anything else, such as no number or one out of range, counts as a failure. The answer is kept for 10 minutes for the same message and intents.
 5. **Match the rules.** The rules are checked top first with the answer. A rule with an intent matches only when the classifier named its intent, compared without case, and all its other conditions hold. The first rule that matches wins. If none matches, the group routes the turn as it always does.
 6. **Order the models.** The winning rule’s model goes first, and the group’s other models follow in their usual order as failover. This holds even if another model answered the conversation’s last turn: a rule outranks the Stays setting as a turn begins. If the rule’s model has nothing ready right now (every key resting, the provider off), the group’s usual order stands and the trace says so.
@@ -3605,7 +3605,7 @@ The classifier’s own calls appear in Usage under the agent *magpie*, with thei
 
 ## Latency, cost, privacy
 
-- **Latency..** Only the first request of a turn waits for the classifier, typically a few hundred milliseconds on a fast provider (323 ms in the screenshot) with a configured timeout of 8 seconds by default. Tool rounds within the turn, turns where no intent could decide, and cached answers add nothing.
+- **Latency..** Only the first request of a turn waits for the classifier, typically a few hundred milliseconds on a fast provider (323 ms in the screenshot) with a configured timeout of 15 seconds by default. Tool rounds within the turn, turns where no intent could decide, and cached answers add nothing.
 - **Cost..** One short call per turn: roughly the size of your message plus the intents in, and one or two tokens out. In the example above that was 212 tokens in and 1 out. With a subscription model as the classifier, these calls count against that subscription’s limits.
 - **Privacy..** The text of your message (up to about 4,000 characters) goes to the classifier’s provider. To keep it on your machine, use a local model from Ollama or LM Studio as the classifier. magpie keeps only a hash of the message and the answer, in memory, for 10 minutes. The message itself isn’t stored or logged.
 
@@ -3623,7 +3623,7 @@ The classifier’s own calls appear in Usage under the agent *magpie*, with thei
 
 | What | Value |
 | --- | --- |
-| Classifier timeout | 8 s by default; configurable from 1 to 60 s, including its provider’s failover |
+| Classifier timeout | 15 s by default; configurable from 1 to 60 s, including its provider’s failover |
 | Rest after a failure | 30 s, per classifier model |
 | Answer cache | 10 min, per classifier + intents + message; in memory |
 | Turn decisions kept | 24 h after the conversation’s last request; in memory |
@@ -3652,7 +3652,7 @@ Only in two cases: the model it is on fails and another member takes over, or th
 
 ### What if the classifier is down or slow?
 
-The turn still goes through. After waiting up to the configured timeout (8 s by default), no intent matches and the group’s other rules and order decide. For the next 30 s magpie doesn’t ask that classifier again, so turns don’t each wait out the timeout. The trace gives the reason.
+The turn still goes through. After waiting up to the configured timeout (15 s by default), no intent matches and the group’s other rules and order decide. For the next 30 s magpie doesn’t ask that classifier again, so turns don’t each wait out the timeout. The trace gives the reason.
 
 ### Why did the turn not go to the rule’s model when the classifier named its intent?
 
@@ -3678,11 +3678,11 @@ It can’t be a group: it must be one model, `provider/model`, which magpie chec
 
 ### Can I use a reasoning model?
 
-Yes, if it answers within the configured timeout (8 s by default). magpie asks it for the least reasoning it has (`none`, else its lowest level) and leaves 2048 tokens, so thinking doesn’t crowd out the answer. A small, fast model is still the better choice: cheaper, and every turn waits for it.
+Yes, if it answers within the configured timeout (15 s by default). magpie asks it for the least reasoning it has (`none`, else its lowest level) and leaves 2048 tokens, so thinking doesn’t crowd out the answer. A small, fast model is still the better choice: cheaper, and every turn waits for it.
 
 ### How well does it work with real models?
 
-We ran 20 real coding messages (English and Chinese: quick questions, test work, and ordinary coding tasks, including “Fix the bug in parseTokens and add a test for it”) through a group with two intent rules. DeepSeek V4 Flash, GLM-5.3 Flash and MiMo v2.6 Flash each classified all 20 correctly; the median classifier time was 0.75 s, 1.3 s and 1.9 s. Gemini 3.8 Flash through one reseller took 11 s even at `low` reasoning, so with the default 8 s timeout every turn timed out and routed as if there were no intents — the trace said so each time. That is the pattern to expect: a wrong classifier costs you the routing, never the turn.
+We ran 20 real coding messages (English and Chinese: quick questions, test work, and ordinary coding tasks, including “Fix the bug in parseTokens and add a test for it”) through a group with two intent rules. DeepSeek V4 Flash, GLM-5.3 Flash and MiMo v2.6 Flash each classified all 20 correctly; the median classifier time was 0.75 s, 1.3 s and 1.9 s. Gemini 3.8 Flash through one reseller took 11 s even at `low` reasoning, so with the 8 s timeout that was the default then every turn timed out and routed as if there were no intents — the trace said so each time. That is the pattern to expect: a wrong classifier costs you the routing, never the turn.
 
 ### Does retrying the same message ask again?
 

@@ -21856,7 +21856,7 @@ function renderReplies(s, keep) {
     [...waits, ["", t("No limit")]], ra, (v) => savePrefs({ ...keep, retryAfterCap: v === "" ? null : Number(v) }));
   // #2934
   const k = waitRow("classifyTimeoutRow", t("Intent classifier timeout"), t("How long a routing group's classifier is given to say which intent a turn is. The turn waits for it before it goes anywhere, and past it goes on without its answer. A slow classifier may need longer"),
-    [8, 15, 30, 60], s.classifyTimeout > 0 ? s.classifyTimeout : 8, "{n} s", (n) => savePrefs({ ...keep, classifyTimeout: n }));
+    [8, 15, 30, 60], s.classifyTimeout > 0 ? s.classifyTimeout : 15, "{n} s", (n) => savePrefs({ ...keep, classifyTimeout: n }));
   // the agent's instructions as a Claude run's system prompt (off unless on)
   const c = segRow("claudeLeanRow", t("Short Claude system prompt"),
     t("A Claude subscription answers with the agent's own instructions as its system prompt, in place of Claude Code's, about 1K fewer tokens each request. Still the real Claude Code, but its requests look less like Claude Code's own, which can put the account more at risk"),

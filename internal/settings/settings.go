@@ -639,7 +639,7 @@ type Settings struct {
 	ImageTimeout int `json:"imageTimeout,omitempty"`
 	// ClassifyTimeout is how long, in seconds, a routing group's classifier
 	// is given to say which intent a turn is (#2934: a Kiro subscription's
-	// haiku needed more than 8): from 1 to ClassifyTimeoutMost, 0 for
+	// haiku needed more than 8, the default then): from 1 to ClassifyTimeoutMost, 0 for
 	// ClassifyTimeoutDefault. ClassifyWait reads it.
 	ClassifyTimeout int `json:"classifyTimeout,omitempty"`
 	// GroupSink, GroupFirstToken and GroupPatience are what every routing
@@ -1532,9 +1532,13 @@ const BusyLoadMost = 10000
 // ClassifyTimeoutDefault is the seconds a classifier is given when
 // ClassifyTimeout is 0, and ClassifyTimeoutMost the most it can be set to:
 // the turn waits on it before it goes anywhere, with nothing sent to its
-// agent meanwhile.
+// agent meanwhile. 15, not 8: a classifier that reasons before it answers
+// (MiniMax thinks even asked for none; Grok 4.6 and GPT-6 Luna go no lower
+// than low) took 4 to 10 seconds over a real routing prompt, so 8 cut it
+// off on most turns and the group lost its intent routing (ESern29751 on
+// X). One that doesn't reason answers in a second or two either way.
 const (
-	ClassifyTimeoutDefault = 8
+	ClassifyTimeoutDefault = 15
 	ClassifyTimeoutMost    = 60
 )
 

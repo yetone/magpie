@@ -257,7 +257,7 @@ func TestDecisionProviderKeysFailOver(t *testing.T) {
 func TestDecisionTriesShareTheClassifierWait(t *testing.T) {
 	fresh(t)
 	was := classifyUnit
-	classifyUnit = 25 * time.Millisecond // the 8 seconds unset are 200ms
+	classifyUnit = 20 * time.Millisecond // the 15 seconds unset are 300ms
 	t.Cleanup(func() { classifyUnit = was })
 	var mu sync.Mutex
 	var asked []string
@@ -280,7 +280,7 @@ func TestDecisionTriesShareTheClassifierWait(t *testing.T) {
 	}
 	s := New()
 	_, err := s.askClassifier("jw/jev-latest", []string{"feature", "bug"}, before{}, false, "fix this")
-	if err == nil || !strings.Contains(err.Error(), "no answer in 200ms") {
+	if err == nil || !strings.Contains(err.Error(), "no answer in 300ms") {
 		t.Fatalf("a decision model that never answers: %v", err)
 	}
 	mu.Lock()
