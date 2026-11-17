@@ -146,7 +146,7 @@ func offSpreadIn(entries []Entry, all []Group, same map[string]string, agent, id
 	var out []string
 	var seen []string
 	for _, e := range entries {
-		if e.Group != "" || mergeKey(e.Provider.ID, e.Model, same) != k && e.Model != id {
+		if e.Group != "" || mergeKeyIn(e.Provider.Catalogs(), e.Provider.ID, e.Model, same) != k && e.Model != id {
 			continue
 		}
 		if slices.Contains(seen, e.Provider.ID) {

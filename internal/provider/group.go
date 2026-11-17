@@ -852,19 +852,47 @@ func AutoGroupOf(pid, model string) string {
 	return "auto-" + Slug(mergeKey(pid, model, settings.Load().ModelSameAs))
 }
 
-// MergeName is the name the groups magpie finds merge a model by, when
+// MergeName is the name the groups magpie finds merge p's model by, when
 // the user said nothing of it: its id as vendors agree on it (sameModel),
-// without a context window it is offered at (mergeName).
-func MergeName(model string) string { return mergeName(model) }
+// with the maker's name its vendor left off put back (unprefixed), without
+// a context window it is offered at (mergeName).
+func MergeName(p Provider, model string) string {
+	return mergeKeyIn(p.Catalogs(), p.ID, model, nil)
+}
 
-// mergeKey is what the groups magpie finds merge pid's model by: the
-// model the user said it is the same as (same, by "<provider>/<model>"),
-// spelt as vendors agree on it, else its own id so spelt (mergeName).
+// mergeKey is mergeKeyIn with pid's catalogs, as the providers list it.
 func mergeKey(pid, model string, same map[string]string) string {
+	return mergeKeyIn(catalogsOfProvider(pid), pid, model, same)
+}
+
+// catalogsOfProvider is the provider pid's Catalogs, none for a provider there
+// isn't.
+func catalogsOfProvider(pid string) []string {
+	if p := lookIn(sharedAll(), pid); p != nil && p.ID == pid {
+		return p.Catalogs()
+	}
+	return nil
+}
+
+// unprefixedOf is the model pid's catalogs say its model is, listed with
+// the maker's name left off (catalog.Unprefixed), "" for none.
+func unprefixedOf(pid, model string) string {
+	return catalog.Unprefixed(catalogsOfProvider(pid), model)
+}
+
+// mergeKeyIn is what the groups magpie finds merge pid's model by: the
+// model the user said it is the same as (same, by "<provider>/<model>"),
+// spelt as vendors agree on it, else the model pid's catalogs (cs) say an
+// id it lists with the maker's name left off is (catalog.Unprefixed: Kimi
+// Code's k3.1-pro is kimi-k3.1-pro), else its own id so spelt.
+func mergeKeyIn(cs []string, pid, model string, same map[string]string) string {
 	if v := same[pid+"/"+model]; v != "" {
 		return mergeName(v)
 	}
 	if v := editionTwins[pid+"/"+model]; v != "" {
+		return mergeName(v)
+	}
+	if v := catalog.Unprefixed(cs, model); v != "" {
 		return mergeName(v)
 	}
 	return mergeName(model)
@@ -1048,7 +1076,7 @@ func autoGroups(entries []Entry, same map[string]string) []Group {
 	var order []string
 	by := map[string][]Entry{}
 	for _, e := range entries {
-		k := mergeKey(e.Provider.ID, e.Model, same)
+		k := mergeKeyIn(e.Provider.Catalogs(), e.Provider.ID, e.Model, same)
 		i := slices.IndexFunc(by[k], func(o Entry) bool { return o.Provider.ID == e.Provider.ID })
 		if i < 0 {
 			if by[k] == nil {
@@ -1077,6 +1105,13 @@ func autoGroups(entries []Entry, same map[string]string) []Group {
 		g := Group{ID: "auto-" + Slug(k), Name: own(es[0]), Auto: true}
 		for _, e := range es {
 			g.Members = append(g.Members, e.ID)
+			// one merged by the maker's name its vendor left off had a group
+			// of its own id before (auto-k3-1-pro, Kimi Code's and Kimi Code
+			// China's k3.1-pro): an agent still set to that id is this group
+			if was := "auto-" + Slug(sameModel(e.Model)); was != g.ID && !slices.Contains(g.Former, was) &&
+				same[e.Provider.ID+"/"+e.Model] == "" && editionTwins[e.Provider.ID+"/"+e.Model] == "" {
+				g.Former = append(g.Former, was)
+			}
 			if g.Name == es[0].Model && own(e) != e.Model {
 				g.Name = own(e) // a vendor that names it, over one that only lists its id
 			}

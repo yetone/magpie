@@ -1275,7 +1275,7 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 		// a value the page reads as its default isn't sent: the window and
 		// reply limit the vendor listed are the ones in use unless the user
 		// set their own, and most models merge by their own id
-		if j.Merge = provider.MergeName(m.ID); j.Merge == m.ID {
+		if j.Merge = provider.MergeName(p, m.ID); j.Merge == m.ID {
 			j.Merge = ""
 		}
 		if j.Listed == j.Context {

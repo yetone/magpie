@@ -61,7 +61,7 @@ func TestAutoGroupsJoinAModelAtItsWindow(t *testing.T) {
 	}
 	// what the Same as box shows a sized model merging by
 	for in, want := range map[string]string{"claude-haiku-5-5@1m": "claude-haiku-5-5", "Grok-4.7@500K": "grok-4-7", "claude-opus-5-5@20260801": "claude-opus-5-5", "model@cf": "model@cf"} {
-		if got := MergeName(in); got != want {
+		if got := MergeName(Provider{ID: "cursor-plugin"}, in); got != want {
 			t.Errorf("MergeName(%q) = %q, want %q", in, got, want)
 		}
 	}
