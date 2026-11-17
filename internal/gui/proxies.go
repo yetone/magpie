@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptrace"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yetone/magpie/internal/netproxy"
@@ -357,9 +359,24 @@ func sshTested(p settings.NamedProxy, out proxyTestJSON) proxyTestJSON {
 	return out
 }
 
+// testProxy asks the trace page through addr. Its Ms is the latency
+// through the proxy: from the request written to the answer's first
+// byte, one round trip to the trace page and back through the proxy.
+// The whole request's time would count a new connection's dial, tunnel
+// and TLS on a first Test and not on the next one, which reuses it.
 func testProxy(ctx context.Context, addr string) proxyTestJSON {
+	// the transport calls these from its own goroutines
+	start := time.Now()
+	var wrote, first atomic.Int64
+	ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
+		WroteRequest:         func(httptrace.WroteRequestInfo) { wrote.Store(int64(time.Since(start))) },
+		GotFirstResponseByte: func() { first.Store(int64(time.Since(start))) },
+	})
 	leg := throughLeg(netproxy.With(ctx, addr), proxyTestClient)
 	out := proxyTestJSON{Ms: leg.Ms, IP: leg.IP, Loc: leg.Loc, At: time.Now().Unix()}
+	if w, f := wrote.Load(), first.Load(); w > 0 && f > w {
+		out.Ms = max(time.Duration(f-w).Milliseconds(), 1)
+	}
 	switch {
 	case leg.Error != "":
 		out.Error = redactProxyErr(leg.Error)

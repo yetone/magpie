@@ -16,14 +16,59 @@ function proxyWhy(o) {
 }
 // a check's failure, said as magpie explained it when it could
 const proxyFailed = (out) => (out.why ? proxyWhy(out) : out.error || "");
-function testSavedProxy(id) {
+// the country or region a check left from, by the trace page's ISO code,
+// named in the reader's language (IcyLiqu1d on X); a code Intl doesn't
+// know (Cloudflare's XX, T1) as it came
+function proxyRegion(loc) {
+  try { return new Intl.DisplayNames([intlLang()], { type: "region" }).of(loc) || loc; } catch { return loc || ""; }
+}
+// a check as one line: the latency and where it left from, or why it failed
+function proxyCheckLine(out) {
+  if (!out.ok) return t("Unreachable: {error}", { error: proxyFailed(out) });
+  return [t("Reachable, {ms} ms", { ms: out.ms }), out.loc && proxyRegion(out.loc)].filter(Boolean).join(" · ");
+}
+// testSavedProxy asks the server to test one saved proxy, only when a
+// Test (or a Save) is clicked; then draws with what it found
+function testSavedProxy(id, draw = renderSettings) {
   proxyChecks[id] = { busy: true };
-  renderSettings();
-  api("proxies/test", { id })
+  draw();
+  return api("proxies/test", { id })
     .then((o) => { proxyChecks[id] = { out: o }; })
     .catch((e) => { proxyChecks[id] = { out: { ok: false, error: t(e.message) } }; })
-    .finally(renderSettings);
+    .finally(draw);
 }
+// proxyPickTest: the provider editor's Test beside its saved proxy. What
+// it found is said where the picker's hint is, until another mode or
+// proxy is chosen. An editor opened before Settings was read draws its
+// picker again once the saved proxies are in, their names and Saved mode
+// with them.
+window.proxyPickTest = function (box, saved, hint) {
+  if (!prefs) return void loadSettings().then(() => box.isConnected && savedProxyList().length && box.replaceWith(proxyPicker()), () => {});
+  if (!savedProxyList().length || saved.nextElementSibling?.classList.contains("proxy-test")) return;
+  const test = el("button", "text proxy-test", t("Test"));
+  test.type = "button";
+  let ref = "";
+  const draw = () => {
+    const chk = proxyChecks[ref.slice(1)];
+    test.disabled = !!chk?.busy;
+    test.textContent = chk?.busy ? t("Testing…") : t("Test");
+    if (!chk?.out || draft?.proxyMode !== "saved" || draft.proxyRef !== ref) return;
+    hint.textContent = hint.title = proxyCheckLine(chk.out);
+    hint.classList.toggle("err", !chk.out.ok);
+  };
+  test.onclick = () => {
+    ref = draft?.proxyRef || "";
+    if (ref) testSavedProxy(ref.slice(1), draw);
+  };
+  // another proxy chosen (the button's name) or another mode (its
+  // hidden) puts the hint back
+  new MutationObserver(() => {
+    hint.textContent = t(PROXY_HINT[draft?.proxyMode || ""]);
+    hint.title = "";
+    hint.classList.remove("err");
+  }).observe(saved, { childList: true, characterData: true, subtree: true, attributeFilter: ["hidden"] });
+  saved.after(test);
+};
 window.renderSavedProxies = function (s) {
   const box = $("#proxiesList");
   box.replaceChildren();
@@ -46,9 +91,11 @@ window.renderSavedProxies = function (s) {
     const addr = ssh ? bareSSH(p.url) : p.url;
     const line = [ssh ? "SSH " + (p.user ? p.user + "@" : "") + addr : p.user ? p.user + "@" + p.url : p.url];
     if (chk?.busy) line.push(t("Testing…"));
-    else if (out) line.push(out.ok ? t("Reachable, {ms} ms", { ms: out.ms }) : t("Unreachable: {error}", { error: proxyFailed(out) }));
+    else if (out) line.push(proxyCheckLine(out));
     if (p.uses?.length) line.push(t("Used by {n}", { n: p.uses.length }));
-    sub.textContent = sub.title = line.join(" · ");
+    sub.textContent = line.join(" · ");
+    // the exit's own address, for whoever checks it against the proxy's
+    sub.title = [sub.textContent, !chk?.busy && out?.ok && out.ip].filter(Boolean).join(" · ");
     sub.classList.toggle("err", !!out && !out.ok && !chk?.busy);
     const val = el("div", "val");
     const test = el("button", "text", chk?.busy ? t("Testing…") : t("Test"));

@@ -1,14 +1,18 @@
 package gui
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/netproxy/sshtest"
@@ -138,6 +142,50 @@ func TestSavedProxyTest(t *testing.T) {
 		if p.Check == nil || (p.Name == "Up") != p.Check.OK {
 			t.Fatalf("the last check of %s isn't kept: %+v", p.Name, p.Check)
 		}
+	}
+}
+
+// A proxy's latency is the round trip through it to the trace page, the
+// same on a first Test, which dials, as on the next, which doesn't: a
+// slow dial is left out, a slow answer is in. The exit's country comes
+// with it.
+func TestSavedProxyLatencyIsTheRoundTrip(t *testing.T) {
+	call, _ := proxiesRig(t)
+	const answer, dialing = 100 * time.Millisecond, 1500 * time.Millisecond
+	proxy := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		time.Sleep(answer)
+		fmt.Fprint(rw, "fl=1\nip=203.0.113.9\nloc=JP\n")
+	}))
+	t.Cleanup(proxy.Close)
+	old := proxyTraceURL
+	proxyTraceURL = "http://trace.example.invalid/cdn-cgi/trace"
+	t.Cleanup(func() { proxyTraceURL = old })
+	base := &http.Transport{Proxy: netproxy.Func}
+	dial := (&net.Dialer{}).DialContext
+	var dials atomic.Int32
+	base.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		dials.Add(1)
+		time.Sleep(dialing)
+		return dial(ctx, network, addr)
+	}
+	t.Cleanup(base.CloseIdleConnections)
+	oldClient := proxyTestClient
+	proxyTestClient = &http.Client{Transport: netproxy.Dispatch(base)}
+	t.Cleanup(func() { proxyTestClient = oldClient })
+	call("/api/proxies/save", `{"name":"Tokyo","url":"`+proxy.URL+`"}`)
+	id := settings.Load().Proxies[0].ID
+	for i := range 2 {
+		_, body := call("/api/proxies/test", `{"id":"`+id+`"}`)
+		var out proxyTestJSON
+		if err := json.Unmarshal([]byte(body), &out); err != nil || !out.OK || out.Loc != "JP" || out.IP != "203.0.113.9" {
+			t.Fatalf("test %d: %s", i, body)
+		}
+		if out.Ms < answer.Milliseconds() || out.Ms >= dialing.Milliseconds() {
+			t.Fatalf("test %d took %d ms; want the answer's %v and not the dial's %v", i, out.Ms, answer, dialing)
+		}
+	}
+	if dials.Load() == 0 {
+		t.Fatal("the proxy was never dialled, so its dial wasn't left out")
 	}
 }
 

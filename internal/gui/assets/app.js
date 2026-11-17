@@ -7862,6 +7862,8 @@ function proxyPicker() {
   const row = el("div", "proxy-row");
   row.append(seg, addr, saved);
   box.append(row, login, hint);
+  // its Test is in proxies.js (IcyLiqu1d on X)
+  (!prefs || savedProxyList().length) && import("./proxies.js").then(() => proxyPickTest(box, saved, hint), () => {});
   return box;
 }
 

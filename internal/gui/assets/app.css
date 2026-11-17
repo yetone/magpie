@@ -3769,6 +3769,9 @@ body:not(.side-nav) #addSheet > .row-head.stuck::before { opacity: 1; box-shadow
 .editor .proxy-row input.proxy-url.off { display: none; }
 .editor .proxy-row .gone { display: none; }
 .editor .proxy-row .proxy-saved { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.editor .proxy-row .proxy-test { flex: none; }
+.editor .proxy-row .proxy-saved[hidden] + .proxy-test { display: none; }
+.editor .proxy-pick .hint.err { color: var(--red); }
 .saved-proxy .sub { overflow-wrap: anywhere; }
 .proxy-form { flex-wrap: wrap; }
 .proxy-form .proxy-controls { justify-content: flex-end; flex: 1 1 100%; }

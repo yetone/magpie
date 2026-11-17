@@ -1,6 +1,7 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // Named proxies (@tsingchao on X): Settings > Network keeps a list of them,
-// each with a Test, and the global proxy picks one as "@id" in a Saved mode.
+// each with a Test that says its latency and the exit's region (IcyLiqu1d
+// on X), and the global proxy picks one as "@id" in a Saved mode.
 // A saved proxy in use can't be deleted; a password is typed, never shown.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -31,7 +32,7 @@ function server(lang, posts) {
       if (req.method() === "POST") { const body = req.postDataJSON(); posts.push(body); cur = { ...cur, ...body, proxies: cur.proxies }; }
       return json(cur);
     }
-    if (url.pathname === "/api/proxies/test") { posts.push({ test: req.postDataJSON().id }); return json({ ok: true, ms: 42, at: 1 }); }
+    if (url.pathname === "/api/proxies/test") { posts.push({ test: req.postDataJSON().id }); return json({ ok: true, ms: 42, ip: "203.0.113.9", loc: "JP", at: 1 }); }
     if (url.pathname === "/api/proxies/save") {
       const b = req.postDataJSON();
       posts.push({ save: b });
@@ -49,11 +50,11 @@ function server(lang, posts) {
 }
 
 const labels = {
-  en: { test: "Test", add: "Add proxy", name: "Name", save: "Save", del: "Delete", saved: "Saved", ok: "Reachable, 42 ms", pass: "Password (optional)" },
-  zh: { test: "测试", add: "添加代理", name: "名称", save: "保存", del: "删除", saved: "已保存", ok: "可连接，42 毫秒", pass: "密码（可选）" },
-  "zh-TW": { test: "測試", add: "新增代理", name: "名稱", save: "儲存", del: "刪除", saved: "已儲存", ok: "可連線，42 毫秒", pass: "密碼（選填）" },
-  ja: { test: "テスト", add: "プロキシを追加", name: "名前", save: "保存", del: "削除", saved: "保存しました", ok: "接続できます、42 ms", pass: "パスワード（任意）" },
-  de: { test: "Testen", add: "Proxy hinzufügen", name: "Name", save: "Speichern", del: "Löschen", saved: "Gespeichert", ok: "Erreichbar, 42 ms", pass: "Passwort (optional)" },
+  en: { test: "Test", add: "Add proxy", name: "Name", save: "Save", del: "Delete", saved: "Saved", ok: "Reachable, 42 ms · Japan", pass: "Password (optional)" },
+  zh: { test: "测试", add: "添加代理", name: "名称", save: "保存", del: "删除", saved: "已保存", ok: "可连接，42 毫秒 · 日本", pass: "密码（可选）" },
+  "zh-TW": { test: "測試", add: "新增代理", name: "名稱", save: "儲存", del: "刪除", saved: "已儲存", ok: "可連線，42 毫秒 · 日本", pass: "密碼（選填）" },
+  ja: { test: "テスト", add: "プロキシを追加", name: "名前", save: "保存", del: "削除", saved: "保存しました", ok: "接続できます、42 ms · 日本", pass: "パスワード（任意）" },
+  de: { test: "Testen", add: "Proxy hinzufügen", name: "Name", save: "Speichern", del: "Löschen", saved: "Gespeichert", ok: "Erreichbar, 42 ms · Japan", pass: "Passwort (optional)" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -84,6 +85,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // Test shows the answer
         await rows.nth(1).getByRole("button", { name: l.test, exact: true }).click();
         await rows.nth(1).getByText(l.ok).waitFor();
+        // the exit's address is there for whoever checks it, not in the line
+        assert.match(await rows.nth(1).locator(".sub").getAttribute("title"), /203\.0\.113\.9$/);
+        assert.equal(posts.filter((p) => p.test).length, 1, "a test only when Test is clicked");
 
         // adding: a blank password isn't sent as one
         await list.getByRole("button", { name: l.add, exact: true }).click();
