@@ -614,6 +614,18 @@ kept by hand.**
   adds a label or an agent goes red in its own run.
 - Seen 1× (2026-11-17).
 
+**A guard that needs no browser runs on CI, or it guards nothing.**
+- nav-timeout.test.cjs reads the test sources only, yet CI ran no GUI
+  file, so it was red on main from 11-06 (#5425, 4 files) to 11-18 (24
+  files): every new test copied a 5s default, and each push's record
+  cited the red. skygunner's patch for the first nine sat on the issue
+  for ten days. 549813abb fixed all 24 and runs nav-timeout, i18n-keys
+  and i18n-en-no-cjk in test.yml's Linux job.
+- A guard test written for a class of mistake goes where every push
+  runs it. A patch posted on an issue is taken, with credit, before
+  another "seen again".
+- Seen 1× (2026-11-18).
+
 **Playwright's WebKit is not WebKitGTK.** A GUI change with motion or a new
 browser API is tried in the real Linux app too.
 - 18e82adc6 (10-11) traded the layouts in a view transition. The GUI suite
