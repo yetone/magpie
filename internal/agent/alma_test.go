@@ -880,3 +880,37 @@ func TestAlmaOneMagpie(t *testing.T) {
 		}
 	})
 }
+
+// A provider the user named magpie in Alma, at a magpie on a server, is
+// theirs (Alex on Discord): this magpie neither takes it for its own nor
+// tells drift when Alma's model is on it.
+func TestAlmaMagpieOnAServer(t *testing.T) {
+	syncHome(t)
+	f := startAlma(t)
+	a := alma()
+	if err := os.MkdirAll(a.Dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	vps := map[string]any{"id": "vps", "name": magpieID, "type": "openai", "apiKey": "sk-vps",
+		"baseURL": "https://magpie.example.com/v1", "enabled": true, "models": []any{"m"}}
+	f.mu.Lock()
+	f.providers = append(f.providers, vps)
+	f.settings["chat"].(map[string]any)["defaultModel"] = "vps:m"
+	f.mu.Unlock()
+	if p := almaMagpie([]almaProvider{{ID: "vps", Name: magpieID, Type: "openai", BaseURL: "https://magpie.example.com/v1"}}); p != nil {
+		t.Fatalf("a magpie on a server taken for this one: %+v", p)
+	}
+	if c := a.Check(); c != "" {
+		t.Fatalf("Alma on the user's server magpie told as drift: %q", c)
+	}
+	if a.Wired() {
+		t.Fatal("Alma on the user's server magpie reads as on this magpie")
+	}
+	// this magpie's own, named magpie at the gateway, is still found
+	if p := almaMagpie([]almaProvider{{ID: "x", Name: magpieID, Type: "openai", BaseURL: gatewayV1()}}); p == nil {
+		t.Fatal("magpie's own provider not found")
+	}
+	if p := almaMagpie([]almaProvider{{ID: "x", Name: magpieID, Type: "openai", BaseURL: "http://127.0.0.1:1/v1"}}); p == nil {
+		t.Fatal("magpie's own provider at an old local port not found, to be pointed back")
+	}
+}

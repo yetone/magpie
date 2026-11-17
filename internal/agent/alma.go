@@ -286,10 +286,12 @@ var almaSeen struct {
 }
 
 // almaMagpie is magpie's provider among Alma's: the one named magpie, or
-// an OpenAI-shaped one at the gateway. Nil if there is none.
+// an OpenAI-shaped one at the gateway. Nil if there is none. One named
+// magpie at another machine's address is the user's own, a magpie on a
+// server say (Alex on Discord), and never this magpie's.
 func almaMagpie(ps []almaProvider) *almaProvider {
 	for i := range ps {
-		if ps[i].Name == magpieID && (ps[i].Type == "openai" || ps[i].Type == "custom") {
+		if ps[i].Name == magpieID && (ps[i].Type == "openai" || ps[i].Type == "custom") && !onAnotherMachine(ps[i].BaseURL) {
 			return &ps[i]
 		}
 	}
