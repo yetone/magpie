@@ -90,6 +90,7 @@ Picking a model writes it into the agent’s own config file. Only the keys magp
 | Claude Code | `~/.claude/settings.json`: `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` and the model variables in its `env` block |
 | Codex | `~/.codex/config.toml`: a `[model_providers.magpie]` table and the model, with the list in `magpie-models.json`. Your ChatGPT sign-in is left alone |
 | OpenCode, MiMo Code, DevEco Code, Pi, Crush | A `magpie` provider entry, and `magpie/provider/model` |
+| Open Code Review | `~/.opencodereview/config.json`: a `magpie` custom provider, made the one `ocr` uses |
 | AtomCode | `~/.atomcode/config.toml`: a `magpie` provider account and one model entry per catalog model |
 | Snow CLI | `~/.snow/profiles/magpie.json`: a `magpie` profile, made the active one (Snow App takes it in with "Sync Snow CLI API config") |
 | QwenPaw | A `magpie` provider in `~/.qwenpaw.secret/providers/custom/magpie.json`, and each agent's `active_model` in its `agent.json`. Restart QwenPaw after the first connect |
