@@ -2324,6 +2324,11 @@ func (s *Server) handle(from provider.Protocol) http.HandlerFunc {
 			return
 		}
 		noteAsked(r.Context(), model)
+		// service_tier "fast", Codex's older word for its Fast, in the
+		// word Codex sends it in (fastTier, Archivemylife on X)
+		if from == provider.Responses || from == provider.Chat {
+			body = fastTier(body)
+		}
 		// Qoder 1.1.82 and later name no session: the one of its own
 		// session files the request holds the prompts of (qoder_session.go)
 		r = qoderSession(r, from, body)
