@@ -719,6 +719,7 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			ID       string            // a market server's, or a market skill's in its repository
 			Values   map[string]string // what a market server needs
 			Dir      string            // a project's folder
+			Instr    *string           `json:"instr"` // a project's own instructions (projects/instructions)
 			Copy     bool              // a project gets copies, not links
 			Keep     bool              // a project removed keeps what magpie put in it
 			On       bool              // every skill or server given to the agents, or taken from them
@@ -926,6 +927,13 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			res, err = library.ProjectSkillsOff(in.Dir, oneOrMore(in.Name, in.Names), in.Agents)
 		case "projects/copy":
 			res, err = library.ProjectCopy(in.Dir, in.Copy)
+		case "projects/instructions":
+			// the text, the agents (sent as [] for none), or both
+			c := library.ProjectInstr{Text: in.Instr}
+			if in.Agents != nil {
+				c.Agents = &in.Agents
+			}
+			res, err = library.ProjectInstructions(in.Dir, c)
 		case "all/sync":
 			res, err = library.Sync()
 		default:

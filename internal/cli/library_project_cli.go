@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"slices"
 	"sort"
@@ -20,6 +21,11 @@ const libraryProjectUsage = `magpie library project [--json]      the projects (
   magpie library project skill rm <dir> <skill…>   take skills out of it
   magpie library project skill agents <dir> <skill> <a,b…|none>   the agents it has the skill for
   magpie library project copy <dir> on|off copies of its skills in place of links to the library's
+  magpie library project instructions <dir> [--json]   its own instructions, the agents they're for and the files
+  magpie library project instructions <dir> text <text…>|--file <f>|-   set them ("" takes them out); written, between
+                                     magpie's two marker lines, into the project file each agent reads: by default for
+                                     the agents the shared instructions are on for, else every agent here that reads one
+  magpie library project instructions <dir> agents <a,b…|none>   the agents whose project file they're written into
                                      <dir> may be relative, or "." for the folder you're in. A skill that couldn't be
                                      placed (a folder there that isn't magpie's is left as it is) is named, and the
                                      command exits with status 1.
@@ -121,6 +127,8 @@ func libraryProjectCmd(args []string) error {
 			return usage()
 		}
 		return projectSkillCmd(rest[0], rest[1:], usage)
+	case "instructions", "instr":
+		return projectInstrCmd(rest, usage)
 	}
 	return fmt.Errorf("no library project command %q\n  %s", args[0], libraryProjectUsage)
 }
@@ -406,4 +414,163 @@ func quoteArg(s string) string {
 		return s
 	}
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// projectInstrCmd is magpie library project instructions …: the project's
+// own instructions, as the Instructions page's project card sets them.
+func projectInstrCmd(rest []string, usage func() error) error {
+	asJSON := slices.Contains(rest, "--json")
+	rest = slices.DeleteFunc(slices.Clone(rest), func(a string) bool { return a == "--json" })
+	if len(rest) == 0 || strings.HasPrefix(rest[0], "-") {
+		return usage()
+	}
+	dir, err := projectDir(rest[0])
+	if err != nil {
+		return err
+	}
+	if len(rest) == 1 {
+		return showProjectInstr(dir, asJSON)
+	}
+	var c library.ProjectInstr
+	switch rest[1] {
+	case "text":
+		var text string
+		switch args := rest[2:]; {
+		case len(args) == 1 && args[0] == "-":
+			b, err := io.ReadAll(os.Stdin)
+			if err != nil {
+				return err
+			}
+			text = string(b)
+		case len(args) == 2 && args[0] == "--file":
+			b, err := os.ReadFile(args[1])
+			if err != nil {
+				return err
+			}
+			text = string(b)
+		case len(args) > 0 && !strings.HasPrefix(args[0], "-"):
+			text = strings.Join(args, " ")
+		default:
+			return usage()
+		}
+		c.Text = &text
+		// the first text a project gets goes to the agents the shared
+		// instructions are on for, as the page's card does it
+		v, err := library.Read(nil)
+		if err != nil {
+			return err
+		}
+		if p := projectView(v, dir); p != nil && len(p.InstrAgents) == 0 && strings.TrimSpace(text) != "" {
+			ids := defaultInstrAgents(v)
+			if len(ids) == 0 {
+				return fmt.Errorf("no agent here reads a project's instructions file magpie knows of")
+			}
+			c.Agents = &ids
+		}
+	case "agents":
+		if len(rest) != 3 {
+			return usage()
+		}
+		ids, err := projectInstrAgents(rest[2])
+		if err != nil {
+			return err
+		}
+		c.Agents = &ids
+	default:
+		return usage()
+	}
+	res, err := library.ProjectInstructions(dir, c)
+	if err != nil {
+		return err
+	}
+	v, err := library.Read(res.Problems)
+	if err != nil {
+		return err
+	}
+	p := projectView(v, dir)
+	if p == nil {
+		return fmt.Errorf("%s isn't a project", dir)
+	}
+	if why := p.Problems["instructions"]; why != "" {
+		return fmt.Errorf("%s: %s", dir, why)
+	}
+	if p.Instr == "" || len(p.InstrAgents) == 0 {
+		fmt.Println(green.Render("✓"), dir, "has no instructions of its own in its files now")
+		return nil
+	}
+	fmt.Println(green.Render("✓"), dir, "→", strings.Join(p.InstrAgents, ", "), muted.Render(strings.Join(p.InstrFiles, " ")))
+	return nil
+}
+
+func showProjectInstr(dir string, asJSON bool) error {
+	v, err := library.Read(nil)
+	if err != nil {
+		return err
+	}
+	p := projectView(v, dir)
+	if p == nil {
+		return fmt.Errorf("%s isn't a project", dir)
+	}
+	if asJSON {
+		e := json.NewEncoder(os.Stdout)
+		e.SetIndent("", "  ")
+		return e.Encode(map[string]any{"dir": p.Dir, "text": p.Instr, "agents": p.InstrAgents, "files": p.InstrFiles})
+	}
+	if p.Instr == "" {
+		fmt.Println(muted.Render("No instructions of its own · magpie library project instructions " + quoteArg(dir) + " text <text…>"))
+		return nil
+	}
+	if len(p.InstrAgents) == 0 {
+		fmt.Println(muted.Render("for no agent · magpie library project instructions " + quoteArg(dir) + " agents <a,b…>"))
+	} else {
+		fmt.Println(bold.Render(strings.Join(p.InstrAgents, ", ")), muted.Render(strings.Join(p.InstrFiles, " ")))
+	}
+	if why := p.Problems["instructions"]; why != "" {
+		fmt.Println(amber.Render("!"), why)
+	}
+	fmt.Println(p.Instr)
+	return nil
+}
+
+// projectInstrAgents is a comma list of agents (none for no agent), each
+// by its id or name, refused when magpie knows of no file it reads a
+// project's instructions from.
+func projectInstrAgents(s string) ([]string, error) {
+	out := []string{}
+	for _, a := range agentList(s) {
+		id := strings.ToLower(a)
+		if library.ProjectInstrFile(id) == "" {
+			if t, err := library.Takes(a, "skills"); err == nil {
+				id = t
+			}
+		}
+		if library.ProjectInstrFile(id) == "" {
+			return nil, fmt.Errorf("magpie knows of no file %s reads a project's instructions from", a)
+		}
+		out = addOnce(out, id)
+	}
+	return out, nil
+}
+
+// defaultInstrAgents is who a project's first instructions are for: the
+// agents here that read a project's instructions and have the shared ones
+// on, else every one of them here.
+func defaultInstrAgents(v *library.View) []string {
+	var all, on []string
+	for _, a := range v.Agents {
+		if a.ProjectInstructions != "" && !a.Gone && !a.Unseen && a.Asleep == "" {
+			all = append(all, a.ID)
+		}
+	}
+	if v.Instructions != nil {
+		for _, a := range v.Instructions.Agents {
+			if a.On && slices.Contains(all, a.Agent) {
+				on = append(on, a.Agent)
+			}
+		}
+	}
+	if len(on) > 0 {
+		return on
+	}
+	return all
 }

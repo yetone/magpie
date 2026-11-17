@@ -217,3 +217,64 @@ func TestLibraryProjectHelp(t *testing.T) {
 		t.Error("library's usage doesn't name project")
 	}
 }
+
+// magpie library project instructions … (VictorHong1022 on X): a
+// project's own instructions set from a terminal go, between magpie's two
+// lines, into the file each agent reads in the project, the user's own
+// text there untouched, first to every agent here that reads one (the
+// shared instructions are on for none); an agent with no such file is
+// refused, and none takes them out.
+func TestLibraryProjectInstructionsCmd(t *testing.T) {
+	proj := projectSandbox(t)
+	must := func(args ...string) string {
+		t.Helper()
+		out, err := projectOut(t, args...)
+		if err != nil {
+			t.Fatalf("library project %v: %v\n%s", args, err, out)
+		}
+		return out
+	}
+	read := func(rel string) string {
+		t.Helper()
+		b, err := os.ReadFile(filepath.Join(proj, rel))
+		if err != nil {
+			t.Fatalf("%s: %v", rel, err)
+		}
+		return string(b)
+	}
+	if err := os.WriteFile(filepath.Join(proj, "CLAUDE.md"), []byte("Mine.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	must("add", ".")
+	if out := must("instructions", "."); !strings.Contains(out, "No instructions") {
+		t.Errorf("show:\n%s", out)
+	}
+	must("instructions", ".", "text", "Use", "pnpm", "here.")
+	part := "<!-- magpie:begin · written by magpie from its Library -->\nUse pnpm here.\n<!-- magpie:end -->\n"
+	if got := read("CLAUDE.md"); got != "Mine.\n\n"+part {
+		t.Errorf("CLAUDE.md = %q", got)
+	}
+	if got := read("AGENTS.md"); got != part {
+		t.Errorf("AGENTS.md = %q", got)
+	}
+	var v struct {
+		Agents []string `json:"agents"`
+		Files  []string `json:"files"`
+	}
+	if err := json.Unmarshal([]byte(must("instructions", ".", "--json")), &v); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(v.Agents, ",") != "claude,codex" || strings.Join(v.Files, ",") != "AGENTS.md,CLAUDE.md" {
+		t.Errorf("--json: %+v", v)
+	}
+	if out, err := projectOut(t, "instructions", ".", "agents", "zed"); err == nil {
+		t.Errorf("zed was taken:\n%s", out)
+	}
+	must("instructions", ".", "agents", "none")
+	if got := read("CLAUDE.md"); got != "Mine.\n" {
+		t.Errorf("CLAUDE.md after none = %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(proj, "AGENTS.md")); !os.IsNotExist(err) {
+		t.Errorf("AGENTS.md is still there: %v", err)
+	}
+}

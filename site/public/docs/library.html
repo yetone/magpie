@@ -298,6 +298,7 @@ magpie library sync     # write it into the agents again</pre>
       <li>Anything it replaces goes to the backups first.</li>
     </ul>
     <p>Projects can get skills and MCP servers too, in the project’s own folders (such as <code>.claude/skills</code>, <code>.agents/skills</code>, <code>.mcp.json</code> or <code>.codex/config.toml</code>). From a terminal, <code>magpie library project add .</code> adds the folder you are in, <code>magpie library project skill add . pdf docx</code> gives it skills, <code>magpie library project skill rm . pdf</code> takes one away, and <code>magpie library project skills .</code> lists them.</p>
+    <p>A project can have instructions of its own as well, so your shared instructions keep only what holds everywhere. On the Instructions page, open a project under the shared text and write what only it needs. magpie puts it between its two marker lines in the file each agent reads in that project: <code>CLAUDE.md</code> for Claude Code, <code>AGENTS.md</code> for Codex, Cursor and most others, <code>GEMINI.md</code> for Gemini CLI. The rest of the file stays yours. A file magpie makes is kept out of git, and turning an agent off takes its part out again. From a terminal: <code>magpie library project instructions . text "Use pnpm here."</code>, and <code>… agents claude,codex</code> or <code>… agents none</code>.</p>
   </article>
 </main>
 

@@ -65,6 +65,12 @@ type Project struct {
 	// (project_subagents.go)
 	Subagents  map[string][]string `json:"subagents,omitempty"`
 	AgentFiles []SubagentFile      `json:"agentFiles,omitempty"`
+	// Instr is the project's own instructions, InstrAgents the agents
+	// whose project file they're written into, InstrFiles the files
+	// magpie wrote them in (project_instructions.go)
+	Instr       string      `json:"instr,omitempty"`
+	InstrAgents []string    `json:"instrAgents,omitempty"`
+	InstrFiles  []InstrFile `json:"instrFiles,omitempty"`
 }
 
 // projectSkillsDirs is where, in a project, each agent reads skills of its
@@ -139,7 +145,7 @@ func (l *Library) syncProjects(res *Result) {
 
 func (l *Library) syncProject(p *Project, res *Result) {
 	if fi, err := os.Stat(p.Dir); err != nil || !fi.IsDir() {
-		if len(p.Skills) > 0 || len(p.Servers) > 0 || len(p.Subagents) > 0 || len(p.ServersOff) > 0 || len(p.SkillsOff) > 0 || p.holds() {
+		if len(p.Skills) > 0 || len(p.Servers) > 0 || len(p.Subagents) > 0 || len(p.ServersOff) > 0 || len(p.SkillsOff) > 0 || p.Instr != "" && len(p.InstrAgents) > 0 || p.holds() {
 			res.Problems = append(res.Problems, Problem{Agent: p.Dir, What: "project:", Error: "the folder is gone"})
 		}
 		return
@@ -222,6 +228,7 @@ func (l *Library) syncFolder(p *Project, res *Result, hubs map[string]*Server) {
 	})
 	l.syncSkillsOff(p, fail)
 	l.syncProjectSubagents(p, func(what string, err error) { fail(what, err) })
+	l.syncProjectInstr(p, fail)
 	p.tidy()
 }
 
@@ -478,7 +485,7 @@ func RemoveProject(dir string, keep bool) (*Result, error) {
 			l.Projects = slices.DeleteFunc(l.Projects, func(x *Project) bool { return x == p })
 			return nil
 		}
-		p.Skills, p.Servers, p.ServersOff, p.SkillsOff, p.Subagents = nil, nil, nil, nil, nil
+		p.Skills, p.Servers, p.ServersOff, p.SkillsOff, p.Subagents, p.InstrAgents = nil, nil, nil, nil, nil, nil
 		l.syncProject(p, &Result{})
 		if !p.holds() && p.Claude == nil && !slices.ContainsFunc(p.Trees, (*Project).holds) {
 			l.Projects = slices.DeleteFunc(l.Projects, func(x *Project) bool { return x == p })
@@ -567,7 +574,12 @@ type ProjectView struct {
 	Subagents map[string][]string `json:"subagents"`
 	// AgentFiles are the project's files magpie wrote for them
 	AgentFiles []string `json:"agentFiles"`
-	Missing    bool     `json:"missing,omitempty"` // the folder is gone
+	// Instr is the project's own instructions, InstrAgents the agents
+	// they're for, InstrFiles the project's files magpie wrote them in
+	Instr       string   `json:"instr"`
+	InstrAgents []string `json:"instrAgents"`
+	InstrFiles  []string `json:"instrFiles"`
+	Missing     bool     `json:"missing,omitempty"` // the folder is gone
 	// Problems are, by skill ("" for the project's own), what couldn't be done
 	Problems map[string]string `json:"problems,omitempty"`
 }
@@ -596,6 +608,10 @@ func projectViews(l *Library, problems []Problem) []ProjectView {
 		v.AgentFiles = []string{}
 		for _, f := range p.AgentFiles {
 			v.AgentFiles = append(v.AgentFiles, f.Path)
+		}
+		v.Instr, v.InstrAgents, v.InstrFiles = p.Instr, append([]string{}, p.InstrAgents...), []string{}
+		for _, f := range p.InstrFiles {
+			v.InstrFiles = append(v.InstrFiles, f.Path)
 		}
 		v.Subagents = map[string][]string{}
 		for k, a := range p.Subagents {
