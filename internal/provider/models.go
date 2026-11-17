@@ -3326,11 +3326,17 @@ func geminiTrialBase(l string) (string, bool) {
 // with no cost). gemini-pro-orchestrator is Orchestrator (Carbon)'s id
 // before Argon's came (MODEL_PLACEHOLDER_M667 in the Antigravity Context
 // Window Monitor extension 1.17.1, beside M681 for -argon and the shared
-// worker M669). Only these ids: no other name is read as one of them.
+// worker M669). The agy CLI names Orchestrator (Argon)
+// gemini-pro-orchestrator-g1-pro (`agy models` on a Google AI Pro account,
+// agy 1.5.9, in the agy-cli plugin's test/usage.mjs; mu33410 on X: agy's
+// Orchestrator had no cost) and Orchestrator (Carbon)
+// gemini-pro-orchestrator, as the app did before Argon. Only these ids: no
+// other name is read as one of them.
 var antigravityRoles = map[string]string{
 	"gemini-pro-orchestrator":        "gemini-4-carbon",
 	"gemini-pro-orchestrator-carbon": "gemini-4-carbon",
 	"gemini-pro-orchestrator-argon":  "gemini-4-argon",
+	"gemini-pro-orchestrator-g1-pro": "gemini-4-argon",
 	"gemini-flash-worker-agy":        "gemini-4-hydrogen",
 }
 

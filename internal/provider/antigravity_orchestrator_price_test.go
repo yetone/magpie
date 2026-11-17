@@ -53,8 +53,12 @@ func TestAntigravityOrchestratorIDsPricedAsTheirModel(t *testing.T) {
 		"gemini-pro-orchestrator-argon":  "gemini-4-argon",
 		"gemini-pro-orchestrator-carbon": "gemini-4-carbon",
 		"gemini-flash-worker-agy":        "gemini-4-hydrogen",
-		// Orchestrator (Carbon) before Argon came
+		// Orchestrator (Carbon) before Argon came, and in agy
 		"gemini-pro-orchestrator": "gemini-4-carbon",
+		// agy's Orchestrator (Argon) (mu33410 on X)
+		"gemini-pro-orchestrator-g1-pro":         "gemini-4-argon",
+		"agy-cli/gemini-pro-orchestrator-g1-pro": "gemini-4-argon",
+		"gemini-pro-orchestrator-g1-pro-high":    "gemini-4-argon",
 		// spelled as a route or an effort names them
 		"Gemini-Pro-Orchestrator-Argon":        "gemini-4-argon",
 		"google/gemini-pro-orchestrator-argon": "gemini-4-argon",
@@ -83,7 +87,7 @@ func TestAntigravityOrchestratorIDsPricedAsTheirModel(t *testing.T) {
 	}
 	// a name only like a role is no role
 	for _, id := range []string{"gemini-pro-orchestrator-neon", "gemini-flash-worker", "gemini-pro-orchestrator-argon-fast",
-		"my-gemini-pro-orchestrator-argon", "gemini-flash-worker-agy-ultra", "orchestrator", "gpt-5.1-codex-orchestrator"} {
+		"my-gemini-pro-orchestrator-argon", "gemini-pro-orchestrator-g1", "gemini-pro-orchestrator-g1-ultra", "gemini-flash-worker-agy-ultra", "orchestrator", "gpt-5.1-codex-orchestrator"} {
 		if pr, ok := MakerPrice(id); ok {
 			t.Errorf("MakerPrice(%q) = %+v; want unpriced", id, pr)
 		}

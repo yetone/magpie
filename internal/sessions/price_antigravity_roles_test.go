@@ -26,6 +26,7 @@ func TestPriceOfAntigravityOrchestratorRoles(t *testing.T) {
 	t.Cleanup(catalog.Reset)
 	for m, in := range map[string]float64{
 		"gemini-pro-orchestrator-argon": 2, "gemini-pro-orchestrator-carbon": 2.5, "gemini-flash-worker-agy": 1.5,
+		"gemini-pro-orchestrator-g1-pro": 2,
 	} {
 		if pr, ok := priceOf(settings.Load(), m); !ok || pr.Input != in {
 			t.Errorf("priceOf(%q) = %+v, %v; want input $%v", m, pr, ok, in)

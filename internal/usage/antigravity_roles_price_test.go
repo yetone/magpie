@@ -38,6 +38,8 @@ func TestAntigravityOrchestratorCallsPriced(t *testing.T) {
 			{Time: now.Add(-time.Hour), Agent: "antigravity", Session: "a1", Model: "gemini-pro-orchestrator-argon", Tokens: tok},
 			{Time: now.Add(-2 * time.Hour), Agent: "antigravity", Session: "a2", Model: "gemini-pro-orchestrator-carbon", Tokens: tok},
 			{Time: now.Add(-3 * time.Hour), Agent: "antigravity", Session: "a2", Model: "gemini-flash-worker-agy", Tokens: tok},
+			// agy's Orchestrator (Argon) (mu33410 on X)
+			{Time: now.Add(-4 * time.Hour), Agent: "agy", Session: "g1", Model: "gemini-pro-orchestrator-g1-pro", Tokens: tok},
 		}
 	}
 	t.Cleanup(func() { LogCalls = old })
@@ -47,10 +49,11 @@ func TestAntigravityOrchestratorCallsPriced(t *testing.T) {
 		"gemini-pro-orchestrator-argon":  cost(2, 10, 0.1),
 		"gemini-pro-orchestrator-carbon": cost(2.5, 12, 0.25),
 		"gemini-flash-worker-agy":        cost(1.5, 7.5, 0.075),
+		"gemini-pro-orchestrator-g1-pro": cost(2, 10, 0.1),
 	}
 	near := func(a, b float64) bool { return math.Abs(a-b) < 1e-9 }
 	rows, total, _ := Ledger(Month, Filter{})
-	if len(rows) != 3 {
+	if len(rows) != 4 {
 		t.Fatalf("rows %d", len(rows))
 	}
 	var sum float64
@@ -65,7 +68,11 @@ func TestAntigravityOrchestratorCallsPriced(t *testing.T) {
 	}
 	// the agent's own view
 	_, agent, _ := Ledger(Month, Filter{Agent: "antigravity"})
-	if agent.Unpriced != 0 || !near(agent.Cost, sum) {
-		t.Errorf("antigravity: cost %v unpriced %d, want %v and 0", agent.Cost, agent.Unpriced, sum)
+	if app := sum - want["gemini-pro-orchestrator-g1-pro"]; agent.Unpriced != 0 || !near(agent.Cost, app) {
+		t.Errorf("antigravity: cost %v unpriced %d, want %v and 0", agent.Cost, agent.Unpriced, app)
+	}
+	_, agy, _ := Ledger(Month, Filter{Agent: "agy"})
+	if g := want["gemini-pro-orchestrator-g1-pro"]; agy.Unpriced != 0 || !near(agy.Cost, g) {
+		t.Errorf("agy: cost %v unpriced %d, want %v and 0", agy.Cost, agy.Unpriced, g)
 	}
 }
