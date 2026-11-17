@@ -206,6 +206,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         checks = 0;
         const go = card.locator("tbody tr").nth(1).locator(".led-spd-check");
         assert.equal((await go.textContent()).trim(), w.check);
+        // found without pointing at its row first
+        await p.mouse.move(0, 0);
+        await p.waitForTimeout(200);
+        assert.equal(await go.evaluate((b) => getComputedStyle(b).opacity), "1", "Check… shows without hover");
+        assert(await go.isVisible());
         await go.click();
         const dlg = p.locator("#modal .relay-check");
         await dlg.waitFor();
