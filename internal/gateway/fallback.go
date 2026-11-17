@@ -1821,8 +1821,12 @@ func promptRefused(status int, body []byte) bool {
 // specified other fields alongside any_of. When using any_of, it must be
 // the only field set." (#5374, worksyang) — a description beside an
 // anyOf, which Google's Schema takes alone, the reporter's same tools
-// another member took.
-var shapeWords = lazyre.New(`(?i)failed to deserialize|unknown (item |content |input )?(type|variant|field|parameter)|unknown_parameter|unrecognized (request argument|field|parameter)|extra (inputs|fields) are not permitted|additional properties are not allowed|schema exceeds the maximum (nesting )?depth|schema[^"]{0,60}\bnesting depth\b|function_declarations\[\d+\]\.parameters\b|schema specified other fields alongside any_?of|InferHub\.001001005\.400`)
+// another member took. And pydantic's word for an item whose type its
+// tagged union has no member for, a DeepSeek channel's 422 "Input tag
+// 'reasoning' found using 'type' does not match any of the expected tags:
+// 'message', 'tool_result'" (yyhhyyyyyy on X): the same kind as xAI's
+// unknown item type, which DeepSeek's own API, another member, takes.
+var shapeWords = lazyre.New(`(?i)failed to deserialize|unknown (item |content |input )?(type|variant|field|parameter)|does not match any of the expected tags|unknown_parameter|unrecognized (request argument|field|parameter)|extra (inputs|fields) are not permitted|additional properties are not allowed|schema exceeds the maximum (nesting )?depth|schema[^"]{0,60}\bnesting depth\b|function_declarations\[\d+\]\.parameters\b|schema specified other fields alongside any_?of|InferHub\.001001005\.400`)
 
 // unsaidWords are Command Code's Provider API turning a request away with
 // nothing but a trace id: {"message":"invalid request error trace_id:
