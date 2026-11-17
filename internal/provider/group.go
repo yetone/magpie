@@ -853,20 +853,53 @@ func AutoGroupOf(pid, model string) string {
 }
 
 // MergeName is the name the groups magpie finds merge a model by, when
-// the user said nothing of it: its id as vendors agree on it (sameModel).
-func MergeName(model string) string { return sameModel(model) }
+// the user said nothing of it: its id as vendors agree on it (sameModel),
+// without a context window it is offered at (mergeName).
+func MergeName(model string) string { return mergeName(model) }
 
 // mergeKey is what the groups magpie finds merge pid's model by: the
 // model the user said it is the same as (same, by "<provider>/<model>"),
-// spelt as vendors agree on it, else its own id so spelt.
+// spelt as vendors agree on it, else its own id so spelt (mergeName).
 func mergeKey(pid, model string, same map[string]string) string {
 	if v := same[pid+"/"+model]; v != "" {
-		return sameModel(v)
+		return mergeName(v)
 	}
 	if v := editionTwins[pid+"/"+model]; v != "" {
-		return sameModel(v)
+		return mergeName(v)
 	}
-	return sameModel(model)
+	return mergeName(model)
+}
+
+// mergeName is id as vendors agree on it (sameModel), without the context
+// window a plugin offers the model at (windowless): the Cursor plugin's
+// claude-haiku-5-5@1m and claude-opus-5-5@300k, the grok plugin's
+// grok-4.7@500k are each the same model, at the same price per token,
+// asked for at a window of its own (modelWindow), so they join the group
+// of claude-haiku-5-5 another provider serves (Will on Discord: ticking
+// claude-haiku-5-5@1m in Cursor left auto/claude-haiku-5-5 without it).
+// A group's members already differ in window by provider.
+func mergeName(id string) string { return sameModel(windowless(id)) }
+
+// windowless is id without the context window it names after an "@"
+// (modelWindow, and a Grok one without its k: grokWindow); any other id,
+// a Vertex snapshot's @20260801 included, as it is.
+func windowless(id string) string {
+	if !strings.Contains(id, "@") {
+		return id
+	}
+	t := strings.TrimSpace(id)
+	l := strings.ToLower(t)
+	m := modelWindow.FindStringSubmatch(l)
+	if m == nil {
+		m = grokWindow.FindStringSubmatch(l)
+	}
+	if m == nil {
+		return id
+	}
+	if len(l) == len(t) {
+		return t[:len(m[1])] // as the vendor spells it
+	}
+	return m[1]
 }
 
 // editionTwins are the models a vendor's international edition lists
@@ -1016,11 +1049,16 @@ func autoGroups(entries []Entry, same map[string]string) []Group {
 	by := map[string][]Entry{}
 	for _, e := range entries {
 		k := mergeKey(e.Provider.ID, e.Model, same)
-		if !slices.ContainsFunc(by[k], func(o Entry) bool { return o.Provider.ID == e.Provider.ID }) {
+		i := slices.IndexFunc(by[k], func(o Entry) bool { return o.Provider.ID == e.Provider.ID })
+		if i < 0 {
 			if by[k] == nil {
 				order = append(order, k)
 			}
 			by[k] = append(by[k], e)
+		} else if o := by[k][i]; windowless(o.Model) != o.Model && windowless(e.Model) == e.Model {
+			// a provider that serves the model unsized and at a window
+			// (grok-4.7 and grok-4.7@500k) is in the group by the model
+			by[k][i] = e
 		}
 	}
 	var out []Group
