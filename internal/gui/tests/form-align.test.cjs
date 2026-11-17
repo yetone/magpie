@@ -110,6 +110,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const cctx = await browser.newContext({ viewport: { width, height: 1000 }, reducedMotion: "reduce" });
         const cpage = await cctx.newPage();
         cpage.setDefaultTimeout(6000);
+        cpage.setDefaultNavigationTimeout(60000);
         await cpage.addInitScript(() => { try { localStorage.setItem("magpie.gwConnectFolded", "0"); } catch {} });
         cpage.on("pageerror", (e) => errors.push(`${at} connect: ${e.message}`));
         await cpage.route("**/*", fixture(lang, "light", [], { lan: true }));

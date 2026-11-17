@@ -16,6 +16,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
     const page = await browser.newPage({ viewport: { width: 960, height: 600 } });
     page.setDefaultTimeout(8000);
+    page.setDefaultNavigationTimeout(60000);
     const opened = [];
     const navs = [];
     page.on("framenavigated", (f) => navs.push(f.url()));

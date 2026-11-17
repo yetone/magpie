@@ -22,6 +22,7 @@ async function openPage(t, engine, lang = "en", width = 1180, reducedMotion = "n
   const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
   const page = await browser.newPage({ viewport: { width, height: 1000 }, reducedMotion });
   page.setDefaultTimeout(8000);
+  page.setDefaultNavigationTimeout(60000);
   const errors = [], settingsAsked = held(), settings = held(), compactAsked = held(), compact = held();
   t.after(async () => { settings.release(); compact.release(); await browser.close(); });
   let reads = 0, fail = false;

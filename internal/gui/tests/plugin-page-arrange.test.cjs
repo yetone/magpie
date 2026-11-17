@@ -19,6 +19,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     const context = await browser.newContext({ viewport: { width: 1100, height: 700 }, reducedMotion: "reduce" });
     const page = await context.newPage();
     page.setDefaultTimeout(8000);
+    page.setDefaultNavigationTimeout(60000);
     const posts = [];
     let order = [];
     await page.route("**/*", async (route) => {

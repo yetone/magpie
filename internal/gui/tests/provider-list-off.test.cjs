@@ -55,6 +55,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         for (const [kind, p] of [["on", ark(false)], ["off", ark(true)]]) {
           const page = await (await browser.newContext({ viewport: { width, height: 900 } })).newPage();
           page.setDefaultTimeout(5000);
+          page.setDefaultNavigationTimeout(60000);
           const errors = [];
           page.on("pageerror", (e) => errors.push(e.message));
           const saves = [];

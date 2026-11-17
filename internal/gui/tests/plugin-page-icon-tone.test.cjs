@@ -81,6 +81,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const context = await browser.newContext({ viewport: { width: 1100, height: 760 }, reducedMotion: "reduce" });
         const page = await context.newPage();
         page.setDefaultTimeout(8000);
+        page.setDefaultNavigationTimeout(60000);
         const errors = [];
         page.on("pageerror", (e) => errors.push(e.message));
         await page.route("**/*", server(lang, theme, web));
@@ -125,6 +126,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const context = await browser.newContext({ viewport: { width: 390, height: 760 }, reducedMotion: "reduce", hasTouch: true, isMobile: engine === "chromium" });
       const page = await context.newPage();
       page.setDefaultTimeout(8000);
+      page.setDefaultNavigationTimeout(60000);
       await page.route("**/*", server("en", theme, true));
       await page.goto("http://magpie.test/");
       await page.locator('#nav button[data-view="plugin-day-card"] .nav-pic .mask').waitFor({ state: "attached" });

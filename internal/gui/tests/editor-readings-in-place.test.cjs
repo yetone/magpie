@@ -71,6 +71,7 @@ for (const engine of ["chromium", "webkit"]) {
       const context = await browser.newContext({ viewport: { width: 900, height: 800 }, reducedMotion: "reduce" });
       const page = await context.newPage();
       page.setDefaultTimeout(30000);
+      page.setDefaultNavigationTimeout(60000);
       const errors = [];
       page.on("pageerror", (e) => errors.push(e.message));
       let let_in;

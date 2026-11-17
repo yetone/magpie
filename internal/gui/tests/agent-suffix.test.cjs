@@ -33,6 +33,7 @@ async function openPage(t, engine, lang, width) {
     await browser.close();
   });
   page.setDefaultTimeout(8000);
+  page.setDefaultNavigationTimeout(60000);
   const errors = [], posts = [];
   page.on("pageerror", (e) => errors.push(e.message));
   // every agent's is Off; OpenCode has none of its own yet

@@ -215,3 +215,9 @@ jobs:
         run: |
           sh -n site/public/install.sh
           node --test site/*.test.mjs
+      - name: GUI guards that need no browser
+        if: matrix.goos == 'linux'
+        # the rest of internal/gui/tests needs Playwright and isn't run here;
+        # these read the sources, and went red on main after pushes that ran
+        # chosen GUI files only (#5425)
+        run: node --test internal/gui/tests/nav-timeout.test.cjs internal/gui/tests/i18n-keys.test.cjs internal/gui/tests/i18n-en-no-cjk.test.cjs
