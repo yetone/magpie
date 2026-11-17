@@ -136,9 +136,18 @@ var desktopApps = map[string]desktopApp{
 	// and needs no CLI. Its Windows install folder isn't known here, so on
 	// Windows only the rule that a desktop app's folder is never gone holds.
 	// Antigravity's app (antigravity.go), not Antigravity IDE
-	// (com.google.antigravity-ide). Its Windows and Linux installs aren't
-	// known here: there the file its backend writes finds it.
-	"antigravity": {id: "com.google.antigravity", names: []string{"Antigravity.app"}},
+	// (com.google.antigravity-ide). On Windows Google's
+	// Antigravity-x64.exe (2.32.1 from antigravity.google/download) is
+	// electron-builder's per-user NSIS installer, package antigravity: a
+	// real 2.30.0 install on the Windows box is
+	// %LOCALAPPDATA%\Programs\antigravity\Antigravity.exe, registered
+	// under HKCU's Uninstall\121a0be4-… (the UUID v5 of
+	// com.google.antigravity, as dsh's) with its DisplayVersion. A fresh
+	// install writes no ~/.gemini/antigravity, so with only the file its
+	// backend writes the app went unfound there (JJasonsun on Discord).
+	// Linux has only a tarball to unpack anywhere, which writes no desktop
+	// entry: there the file its backend writes finds it.
+	"antigravity": {id: "com.google.antigravity", names: []string{"Antigravity.app"}, win: filepath.Join("antigravity", "Antigravity.exe"), guid: "121a0be4-63bd-531e-acf8-fc3924c7e984"},
 	// MiniMax Code Desktop (3.1.10: MiniMax Code.app, com.minimax.agent.cn
 	// from filecdn.minimax.chat, com.minimax.agent from file.cdn.minimax.io;
 	// app-identity.js) runs the mcode runtime on ~/.minimax/config.yaml, as
