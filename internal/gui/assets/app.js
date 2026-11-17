@@ -516,7 +516,7 @@ function renderAgents() {
     const wide = (f) => f.label === "model" || f.label === "large" || f.label === "executor" || f.label === "planner";
     // a field with nothing to pick and nothing set isn't drawn (#1499)
     const none = (f) => (f.key === "effort" || toggled(f) || f.label === "subagents" || f.label === "gateway" || f.label === SUB_EFFORT || f.label === SUB_MODEL || f.label === AUTO_MODE || f.label === ADVISOR || f.label === MEMORIES || f.label === COMPACT_MODEL || f.label === "sign-in" || f.key === "small" || asideAccount(a, f)) && !f.options.length && !f.value;
-    const shownFields = a.fields.filter((f) => !grouped(a, f) && !none(f) && !codexOwnSub(a, f) && !codexRowed(a, f) && !hermesBot(f) && !ompAdvisorKey(f) && !protocolField(f));
+    const shownFields = a.fields.filter((f) => !(kimiSub(a) && f.key.startsWith("subagent_")) && !grouped(a, f) && !none(f) && !codexOwnSub(a, f) && !codexRowed(a, f) && !hermesBot(f) && !ompAdvisorKey(f) && !protocolField(f));
     const tiers = tierMenu(a);
     if (tiers) shownFields.push(tiers);
     const sorted = shownFields.sort((x, y) => wide(y) - wide(x) || extra(x) - extra(y));
@@ -1493,12 +1493,14 @@ function expandLink(a) {
     const want = open ? null : a.id;
     const own = want && agentPrefsOf(a);
     const compact = own && own.includes("fullContextRow") && !window.agentCompactFill;
+    // and Kimi Code's Subagents line (kimisub.js) is there to measure
+    const kim = want && kimiSub(a) && !window.kimiSubLine;
     // sheet measures once: its settings are read first (#5360, chiperman)
-    if (own && (!prefs || compact)) {
+    if ((own && (!prefs || compact)) || kim) {
       const label = [...b.childNodes];
       b.disabled = true;
       saving(b, t("Loading…"));
-      try { await Promise.all([!prefs && loadSettings(), compact && import("./agentcompact.js")]); }
+      try { await Promise.all([own && !prefs && loadSettings(), compact && import("./agentcompact.js"), kim && import("./kimisub.js")]); }
       catch (e) { if (request === agentExpandRequest && b.isConnected) statusErr(e); return; }
       finally { b.disabled = false; doneSaving(b); b.replaceChildren(...label); }
       if (request !== agentExpandRequest || !b.isConnected || view !== "agents") return;
@@ -2251,6 +2253,10 @@ function connectPanel(a, { fields, fieldBtn }) {
       kv(t("Claude models"), line(t("claude-* models need a Claude subscription in magpie"), add));
     }
   }
+  // Kimi Code's subagents ([secondary_model]; XiaoLing_Arisa on X): their
+  // line, drawn by kimisub.js, which Details imports before it first opens
+  // (a row drawn open from the start imports it here)
+  if (kimiSub(a)) { const v = kv(t("Subagents")), d = () => v.append(kimiSubLine(a, line, fieldBtn)); window.kimiSubLine ? d() : import("./kimisub.js").then(d, () => {}); }
   // which of magpie's models it lists, by whose they are
   if (a.models) {
     const chips = line();
@@ -3973,6 +3979,9 @@ const MEMORIES = "memories";
 // the model magpie puts every Codex (or Claude Desktop) subagent on,
 // whatever its lead asked for (willz on Discord, #1633)
 const SUB_MODEL = "subagent model";
+// Kimi Code's subagents: their model, pool and effort are one line of the
+// opened row (kimisub.js), never squares
+const kimiSub = (a) => a.fields.some((f) => f.key == "subagent_pool");
 // Claude Code's auto mode square: the model its client-side auto mode
 // classifier runs on (CLAUDE_CODE_AUTO_MODE_MODEL); unset, Claude Code's own
 // pick, not the model's
@@ -4834,7 +4843,7 @@ function openPicker(agent, field, anchor, ev, only) {
     const note = agent.id === "reasonix" && ["model", "planner"].includes(field.key) ? "restore the previous {field} selection"
       : PICKS_ITSELF.includes(agent.id) && field.key === "model" ? "clears the default model; {agent} picks one on its own"
       : field.label === MEMORIES ? MEMORIES_DEFAULT
-      : field.label === SUB_MODEL ? "each subagent on the model {agent}'s lead asks for"
+      : field.label === SUB_MODEL ? (kimiSub(agent) ? "each subagent on the lead's model" : "each subagent on the model {agent}'s lead asks for")
       : field.label === AUTO_MODE ? "the model {agent} picks for its auto mode classifier"
       : field.label === ADVISOR ? "no advisor"
       : field.label === COMPACT_MODEL ? "each compaction on the session's model"

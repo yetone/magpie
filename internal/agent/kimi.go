@@ -269,6 +269,19 @@ func kimiIn(at place) *Agent {
 			return err
 		}
 		tables, wrote := kimiModelTables(path, legacy, kimiWrote(path))
+		if !legacy {
+			// a model gone from the catalog out of the subagents' first:
+			// Kimi refuses a pool naming a model it doesn't have
+			names := map[string]bool{}
+			for _, t := range tables {
+				if k, err := strconv.Unquote(strings.TrimPrefix(t.Name, "models.")); err == nil {
+					names[k] = true
+				}
+			}
+			if err := kimiPruneSecondary(path, func(k string) bool { return names[k] }, kimiSecStashed(path)); err != nil {
+				return err
+			}
+		}
 		if err := edit.SetTOMLTables(path, []string{kimiModelTable}, tables); err != nil {
 			return err
 		}
@@ -277,6 +290,14 @@ func kimiIn(at place) *Agent {
 		return nil
 	}
 	dropMagpie := func() error {
+		if !legacy {
+			// magpie's models out of the subagents' first, the model they
+			// had back
+			if err := kimiPruneSecondary(path, func(string) bool { return false }, kimiSecStashed(path)); err != nil {
+				return err
+			}
+			forget(kimiSecStashKey(path))
+		}
 		if err := edit.SetTOMLTables(path, []string{kimiModelTable}, nil); err != nil {
 			return err
 		}
@@ -338,7 +359,7 @@ func kimiIn(at place) *Agent {
 			return wiringOff("Kimi Code", path, func(k string) (string, bool) { v, ok := t[k]; return v, ok },
 				"base_url", at.v1(), "api_key", at.gwKey())
 		},
-		Fields: []Field{{
+		Fields: append([]Field{{
 			Key: "model", Label: "model",
 			Get: get,
 			Set: func(v string) error {
@@ -366,7 +387,10 @@ func kimiIn(at place) *Agent {
 			Options: func(cur map[string]string) []Option {
 				return withVia(kimiOwnOptions(path, cur["model"]), "kimi", magpieID+"/")
 			},
-		}, kimiThinkingField(path, legacy, at.cold)},
+		}, kimiThinkingField(path, legacy, at.cold)}, kimiSubagents(path, legacy, at.cold, func() bool {
+			t, err := edit.GetTOMLTable(path, providerTable)
+			return err == nil && t != nil
+		})...),
 	}, path)
 }
 
