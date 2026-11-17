@@ -334,6 +334,13 @@ type subscriptionRun struct {
 	// compares it, for a client that took its images out since (#1382).
 	told     string
 	toldRuns []heardRun
+	// opening is the first message of that conversation (historyKey):
+	// a client that compacted it begins it with its summary instead
+	// (opensWith). resent says a request sent the turn the run answers
+	// again while the run had it (supersede): it waits parkLongest at most
+	// on its calls, until results of its own come (continueWith).
+	opening string
+	resent  bool
 
 	// A run whose output may not carry a call before it is made (Claude
 	// Code's interactive mode, readOutput) learns of it here, as the MCP
@@ -2430,6 +2437,81 @@ func (b *subscriptionBridge) retire(owner string, req *Request) {
 	}
 }
 
+// supersede ends, or bounds, the runs waiting on tool calls whose
+// conversation req carries on in run, the one started or resumed for it
+// (Kling__Lab on X). A run left waiting on calls no client will answer
+// holds a Claude Code that, in the interactive mode, moves a call to the
+// background after 120s and goes on working for no one, writing its
+// session, until runTimeout ends it: 30 to 80 minutes, in which the next
+// run's model read its session as another one at the same work.
+//
+//   - Its client compacted the conversation: req names calls the run made
+//     (its pending calls, the ones last answered in it, or those its
+//     session has lines for) but begins with another message than the
+//     conversation the run heard (opensWith), the client's summary. Its
+//     results, if they come, are in this conversation, and the run is
+//     ended now. A fork or a resumed session of Claude Code (#2933)
+//     begins with its lead's own first message, and the run is left to
+//     its parkLongest (released).
+//   - The very turn the run answers is sent again (a sub-agent's Task a
+//     client sent twice): the client may have given up on the first
+//     answer, or asked two sub-agents the same thing. The run is not
+//     ended, but waits parkLongest at most on its calls (resent), as one
+//     whose caller stopped does, and goes on as before if its results
+//     come.
+func (b *subscriptionBridge) supersede(req *Request, run *subscriptionRun) {
+	owner := run.owned()
+	named := map[string]bool{}
+	for _, m := range req.Messages {
+		for _, p := range m.Parts {
+			switch {
+			case p.Kind == ToolCall && p.ID != "":
+				named[p.ID] = true
+			case p.Kind == ToolResult && p.CallID != "":
+				named[p.CallID] = true
+			}
+		}
+	}
+	want := historyKey(req.Messages)
+	b.mu.Lock()
+	var runs []*subscriptionRun
+	for _, r := range b.runs {
+		// one kept for its conversation's next turn waits on no call
+		if r != run && r.idleKey == "" && r.owned() == owner {
+			runs = append(runs, r)
+		}
+	}
+	b.mu.Unlock()
+	for _, r := range runs {
+		r.mu.Lock()
+		waiting := !r.closed && !r.resuming && r.segment == nil && len(r.pending) > 0
+		mine := false
+		for id := range r.pending {
+			mine = mine || named[id]
+		}
+		for _, id := range r.results {
+			mine = mine || named[id]
+		}
+		for id := range r.lines {
+			mine = mine || named[id]
+		}
+		again := !r.closed && r.told != "" && r.told == want
+		if again {
+			r.resent = true
+		}
+		long := r.timer != nil && time.Until(r.ends) > parkLongest
+		r.mu.Unlock()
+		switch {
+		case waiting && mine && !r.opensWith(req.Messages):
+			log.Printf("claude: Claude Code pid %d (%s) is let go while it waits on tool calls: its client compacted the conversation, which goes on in a new run", r.pid(), r.model)
+			r.abortFor("its client compacted the conversation, which went on in a new run")
+		case again && waiting && long:
+			log.Printf("claude: Claude Code pid %d (%s) waits %s more at most on its tool calls: its turn was sent again, and goes on in another run", r.pid(), r.model, parkLongest)
+			r.endIn(parkLongest)
+		}
+	}
+}
+
 // aside says req may call none of the client's tools: a tool_choice of
 // none, or no tools.
 func aside(req *Request) bool {
@@ -3645,6 +3727,7 @@ func (r *subscriptionRun) park() {
 		}
 	}
 	r.parkedSeq = r.lineSeq
+	resent := r.resent
 	r.mu.Unlock()
 	switch {
 	case r.timer == nil:
@@ -3655,6 +3738,9 @@ func (r *subscriptionRun) park() {
 	case r.stdin == nil:
 		r.endIn(parkLongest)
 		return
+	case resent:
+		// its turn was sent again: its client may have given up on it
+		r.endIn(parkLongest)
 	}
 	if why, over := r.oversized(3); over {
 		log.Printf("claude: Claude Code pid %d (%s) is let go while it waits on tool calls: %s; their results go to a new one told the whole conversation", r.pid(), r.model, why)
@@ -3736,9 +3822,22 @@ func historyKey(msgs []Message) string {
 // heard keeps the conversation of the request the run now answers.
 func (r *subscriptionRun) heard(msgs []Message) {
 	key, runs := historyKey(msgs), heardRuns(msgs, true)
+	opening := ""
+	if len(msgs) > 0 {
+		opening = historyKey(msgs[:1])
+	}
 	r.mu.Lock()
-	r.told, r.toldRuns = key, runs
+	r.told, r.toldRuns, r.opening = key, runs, opening
 	r.mu.Unlock()
+}
+
+// opensWith says msgs begin with the message the conversation the run
+// last heard began with, or that the run heard none.
+func (r *subscriptionRun) opensWith(msgs []Message) bool {
+	r.mu.Lock()
+	opening := r.opening
+	r.mu.Unlock()
+	return opening == "" || len(msgs) > 0 && historyKey(msgs[:1]) == opening
 }
 
 // follows says msgs go on from the conversation the run last heard: that
@@ -6302,6 +6401,7 @@ func (r *subscriptionRun) continueWith(results []Part, said string, tools []brid
 	for _, p := range results {
 		r.results = append(r.results, p.CallID)
 	}
+	r.resent = false // its own client's results came: it is no one's leftover
 	r.mu.Unlock()
 	if r.resume != nil {
 		r.resume()
@@ -7486,6 +7586,9 @@ func (s *Server) serveSubscriptionAs(w http.ResponseWriter, r *http.Request, fro
 			// a run resumed is told this request's too
 			req.runTold(run)
 			run.adviseOn(r.Context(), req, s.adviceRound)
+			if name == "Claude Code" {
+				s.subscription.supersede(req, run)
+			}
 		}
 	}
 	if err != nil {

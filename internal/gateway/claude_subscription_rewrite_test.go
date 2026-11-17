@@ -108,10 +108,12 @@ func TestRunLetGoWhenTheClientRewroteTheConversation(t *testing.T) {
 	if got := ask(`[` + conv + `]`); got != "tool_use call_2" || len(started) != 1 {
 		t.Fatalf("a conversation that went on: %q from %d runs", got, len(started))
 	}
-	// the client compacts, and sends call_2's result after its summary; the
-	// rewrite is answered by a run of its own, and the run that made the
-	// calls goes on waiting for the results of the client that has not
-	// rewritten anything
+	// a fork of the conversation, an earlier result cleared in it, sends
+	// call_2's result; the rewrite is answered by a run of its own, and
+	// the run that made the calls goes on waiting for the results of the
+	// client that has not rewritten anything. (A client that compacted
+	// it, beginning it with a summary, has the run ended instead:
+	// TestCompactedConversationEndsTheRunThatWaitedOnItsCalls.)
 	go func(run *subscriptionRun, waiter chan mcpToolResult) {
 		if r, ok := <-waiter; !ok {
 			t.Errorf("the run's call was closed before its own results came")
@@ -121,11 +123,11 @@ func TestRunLetGoWhenTheClientRewroteTheConversation(t *testing.T) {
 		}
 		says(run, "from the conversation it was told")
 	}(started[0], <-second)
-	rewritten := `[` + user("a summary of the conversation so far") + `,` + call("call_2") + `,` + result("call_2", "B") + `]`
+	rewritten := `[` + user("read a, then b") + `,` + call("call_1") + `,` + result("call_1", "[cleared]") + `,` + call("call_2") + `,` + result("call_2", "B") + `]`
 	if got := ask(rewritten); got != "text from the conversation as it now is" {
 		t.Fatalf("after the rewrite: %q", got)
 	}
-	if len(started) != 2 || len(told[1]) != 3 || told[1][0].Parts[0].Text != "a summary of the conversation so far" {
+	if len(started) != 2 || len(told[1]) != 5 || told[1][2].Parts[0].Text != "[cleared]" {
 		t.Fatalf("%d runs, the last told %+v", len(started), told[len(told)-1])
 	}
 	started[0].mu.Lock()
@@ -229,12 +231,14 @@ func TestRewrittenRunWaitsParkLongestForItsOwnResults(t *testing.T) {
 		return `{"role":"user","content":[{"type":"tool_result","tool_use_id":"` + id + `","content":` + strconv.Quote(text) + `}]}`
 	}
 
-	if got := ask(`[` + user("read a") + `]`); got != "tool_use call_1" {
+	reply := func(text string) string { return `{"role":"assistant","content":` + strconv.Quote(text) + `}` }
+	if got := ask(`[` + user("read a") + `,` + reply("which a?") + `,` + user("the first") + `]`); got != "tool_use call_1" {
 		t.Fatalf("the first turn: %q", got)
 	}
-	// a rewritten request for the same call's results: answered by a run of
-	// its own, and the run that made the call is not ended for it
-	rewritten := `[` + user("a summary of the conversation so far") + `,` + call("call_1") + `,` + result("call_1", "A") + `]`
+	// a rewritten request for the same call's results, a fork's with an
+	// earlier message of its own: answered by a run of its own, and the
+	// run that made the call is not ended for it
+	rewritten := `[` + user("read a") + `,` + reply("which one?") + `,` + user("the first") + `,` + call("call_1") + `,` + result("call_1", "A") + `]`
 	if got := ask(rewritten); got != "text from the conversation as it now is" || len(started) != 2 {
 		t.Fatalf("after the rewrite: %q from %d runs", got, len(started))
 	}
