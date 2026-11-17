@@ -484,7 +484,13 @@ back every line after it, and the log moves in bursts.
   which isn't among the five it names (a8098a886). Write the record once
   the run has ended. A change that adds a box that scrolls on its own
   runs every GUI file that wheels the page (`reach`, `wheelTo`).
-- Seen 2× (2026-10-17, 2026-10-28).
+- 11-18: 97e0ecdaa (saved-proxy Test) recorded the whole GUI suite as
+  "still running at push: 3736 tests in, 127 red, none in a proxy or
+  provider file", named issues for some files and left "the rest" to
+  another session's rerun. A red counted before the run ends can't be
+  told from one the change made later in the same run.
+- Seen 3× (2026-10-17, 2026-10-28, 2026-11-18); moved to the code
+  standards.
 
 **A red only CI's OS shows is probed on CI's runners, with the
 suspect switched on and off, not rerun.** Start from what changed in
@@ -1248,6 +1254,9 @@ standards since 10-18, widened to a worktree and its logs. See
 
 ## Moved to the code standards
 
+- **A record is written once its run has ended** (10-17, 10-28,
+  11-18). On 11-18 97e0ecdaa was pushed with the GUI suite at 3736
+  tests and 127 red, "the rest" of them left to another session.
 - **One full suite runs on a machine at a time** (10-16, 10-17, 11-16).
   On 11-16 64c426158 ran the GUI suite on mica beside another session's
   full suite, was pushed with it still running, and named its 90 reds by
