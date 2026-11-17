@@ -558,8 +558,19 @@ body.side-nav #nav button.has-dot.can-fold::after { right: 28px; }
     background: radial-gradient(36px 400px at var(--lx) 50%, var(--hot) 0%, var(--hot) 12%, color-mix(in oklab, var(--hot) 45%, var(--far)) 45%, var(--far) 100%);
     -webkit-background-clip: text; background-clip: text; color: transparent;
   }
+  /* the row's icon takes the light too, from its own ink: as bright as the
+     word would be at its middle (--iw, navlamp.js), and with no lag of its
+     own, since the light already moves */
+  :is(.nav-s, #nav button, #prefs) > :is(svg, .nav-ic, .nav-s-ic).lit {
+    --lo: var(--muted);
+    --hi: var(--fg);
+    --hot: color-mix(in oklab, var(--hi) calc(var(--si) * 100%), var(--lo));
+    --far: color-mix(in oklab, var(--fg) calc(var(--si) * 15%), var(--lo));
+    color: color-mix(in oklab, var(--hot) calc(var(--iw) * 100%), var(--far));
+    transition: none;
+  }
 }
-@supports (color: oklch(from red round(l) c h)) { :is(.nav-s, #nav button, #prefs, .side-gw) > span.lit { --hi: oklch(from var(--fg) round(l) 0 h); } }
+@supports (color: oklch(from red round(l) c h)) { :is(.nav-s, #nav button, #prefs, .side-gw) > span.lit, :is(.nav-s, #nav button, #prefs) > :is(svg, .nav-ic, .nav-s-ic).lit { --hi: oklch(from var(--fg) round(l) 0 h); } }
 /* a row pressed darkens, as a Mac sidebar's does: it never shrinks the way a
    button does (.seg button:active, .icon:active below) */
 body.side-nav #side button:active { transform: none; }
