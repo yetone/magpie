@@ -28,10 +28,18 @@ type firstToken struct {
 	text                     time.Duration // to the first text
 	reasoning, lastReasoning time.Duration
 	hidden                   bool // redacted thinking cannot be timed by its visible portion
-	off                      bool // not a stream, or read as far as it is
-	began                    bool
-	read                     int
-	pend                     []byte
+	// again: the reply reasoned again after its first text (a Codex
+	// preamble, "I'll look at the tests", then its thinking, then a tool
+	// call: Archivemylife on X), and nothing has come after that
+	// reasoning yet. The answer the speed is counted over starts at what
+	// comes next, so text then moves to it: counted from the preamble, the
+	// window held the thinking, and the reply read as one burst at its
+	// end and told no speed
+	again bool
+	off   bool // not a stream, or read as far as it is
+	began bool
+	read  int
+	pend  []byte
 	// flow: how many bytes of content events had come by each time, one
 	// mark a millisecond, from the first content on
 	flow []flowMark
@@ -74,9 +82,24 @@ func (f *firstToken) see(b []byte) {
 		f.pend = f.pend[end:]
 		if f.text > 0 {
 			// the first text is known: what is left to tell is when the
-			// rest came, which a quicker look tells
+			// rest came, which a quicker look tells, and whether the reply
+			// reasoned again after it (again)
+			if mayReason(ev) {
+				_, _, reasoning, hidden := timingKind(ev)
+				f.hidden = f.hidden || hidden
+				if reasoning || hidden || reasoningItem(ev) {
+					f.again, f.lastReasoning = true, d
+					if flowContent(ev) {
+						f.mark(d, len(ev))
+					}
+					continue
+				}
+			}
 			if flowContent(ev) {
 				f.mark(d, len(ev))
+				if f.again {
+					f.text, f.again = d, false
+				}
 			}
 			continue
 		}
@@ -105,6 +128,28 @@ func (f *firstToken) see(b []byte) {
 	if len(f.pend) == 0 {
 		f.pend = nil
 	}
+}
+
+// mayReason: an event that can carry reasoning, or a reasoning item's
+// start or end, told by a look rather than a parse, so the events of an
+// answer after its first text are still only looked at (see).
+func mayReason(ev []byte) bool {
+	return bodyHas(ev, "reasoning") || bodyHas(ev, "thinking") || bodyHas(ev, "encrypted_content") || bodyHas(ev, `"thought"`)
+}
+
+// reasoningItem: a Responses reasoning item's start or end, which streams
+// nothing of the thinking it holds when its summary is off.
+func reasoningItem(ev []byte) bool {
+	if !bodyHas(ev, "output_item.") {
+		return false
+	}
+	_, data := eventParts(ev)
+	var v struct {
+		Item *struct {
+			Type string `json:"type"`
+		} `json:"item"`
+	}
+	return json.Unmarshal(data, &v) == nil && v.Item != nil && v.Item.Type == "reasoning"
 }
 
 // flowMost is the most marks kept: a reply that took longer than this many
@@ -182,17 +227,7 @@ func firstKind(ev []byte) (content, text bool) {
 }
 
 func timingKind(ev []byte) (content, text, reasoning, hidden bool) {
-	var name string
-	var data []byte
-	for _, ln := range bytes.Split(ev, []byte("\n")) {
-		ln = bytes.TrimRight(ln, "\r")
-		switch {
-		case bytes.HasPrefix(ln, []byte("event:")):
-			name = string(bytes.TrimSpace(ln[6:]))
-		case bytes.HasPrefix(ln, []byte("data:")):
-			data = append(data, bytes.TrimSpace(ln[5:])...)
-		}
-	}
+	name, data := eventParts(ev)
 	// only deltas, a tool call's start and Gemini's parts carry any: the
 	// rest go by unread
 	if len(data) == 0 || !(bodyHas(data, "delta") || bodyHas(data, `"parts"`) ||
@@ -298,6 +333,20 @@ func timingKind(ev []byte) (content, text, reasoning, hidden bool) {
 		}
 	}
 	return content, false, reasoning, hidden
+}
+
+// eventParts are a server-sent event's name and its data lines joined.
+func eventParts(ev []byte) (name string, data []byte) {
+	for _, ln := range bytes.Split(ev, []byte("\n")) {
+		ln = bytes.TrimRight(ln, "\r")
+		switch {
+		case bytes.HasPrefix(ln, []byte("event:")):
+			name = string(bytes.TrimSpace(ln[6:]))
+		case bytes.HasPrefix(ln, []byte("data:")):
+			data = append(data, bytes.TrimSpace(ln[5:])...)
+		}
+	}
+	return name, data
 }
 
 // filled is a JSON value with something in it.

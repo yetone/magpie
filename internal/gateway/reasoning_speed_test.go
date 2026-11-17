@@ -397,3 +397,55 @@ func TestLiveVisibleReasoningFixture(t *testing.T) {
 		t.Fatalf("live tool turn speed %d/%d; want 76/731", n, ms)
 	}
 }
+
+// A Codex turn that wrote a preamble, reasoned, then called a tool
+// (Archivemylife on X, gpt-6.1-sol at service_tier priority): counted from
+// the preamble, its window held the reasoning and its content read as one
+// burst at the end, so it told no speed. Its answer is counted from what
+// came after its last reasoning, the shell call's first bytes.
+func TestCodexPreambleThenReasoningTellsSpeed(t *testing.T) {
+	var sample struct {
+		Record struct {
+			Out       int   `json:"out"`
+			Reasoning int   `json:"reasoning"`
+			Ms        int64 `json:"ms"`
+		} `json:"record"`
+		Events []struct {
+			At   int64           `json:"at_ms"`
+			Data json.RawMessage `json:"data"`
+		} `json:"events"`
+	}
+	b, err := os.ReadFile("testdata/codex-preamble-reasoning-tool.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = json.Unmarshal(b, &sample); err != nil {
+		t.Fatal(err)
+	}
+	f := firstToken{}
+	var called int64 // the shell call's start, as it came
+	for _, e := range sample.Events {
+		if called == 0 && strings.Contains(string(e.Data), `"type":"function_call"`) {
+			called = e.At
+		}
+		f.start = time.Now().Add(-time.Duration(e.At) * time.Millisecond)
+		f.see([]byte("data: " + string(e.Data) + "\n\n"))
+	}
+	rec := sample.Record
+	ttft, text := f.ms()
+	if !f.hidesReasoning(provider.Responses, rec.Reasoning) {
+		t.Fatal("the reasoning after the preamble was not seen")
+	}
+	if text < called || text > called+50 {
+		t.Fatalf("answer counted from %d ms; want the shell call's start, %d", text, called)
+	}
+	n, w := usage.DecodeOf(rec.Out, rec.Reasoning, rec.Ms, ttft, text, f.flowFor(rec.Reasoning))
+	if n != rec.Out-rec.Reasoning || w <= 0 {
+		t.Fatalf("no speed: %d/%d (ttft %d, text %d, flow %d)", n, w, ttft, text, f.flowFor(rec.Reasoning))
+	}
+	// 630 tokens in about 1.6 s: priority's pace, not the 30 tok/s the
+	// whole turn after the preamble would read
+	if s := float64(n) / (float64(w) / 1000); s < 200 || s > 600 {
+		t.Fatalf("speed %.0f tok/s", s)
+	}
+}
