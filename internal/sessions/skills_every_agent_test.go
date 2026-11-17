@@ -36,6 +36,7 @@ var skillsCounted = map[string]struct {
 	"grok":           {test: "TestGrokToolsAndSkills"},
 	"alma":           {test: "TestAlmaSessions"},
 	"droid":          {test: "TestDroidToolsAndSkills"},
+	"liveagent":      {test: "TestLiveAgentSessions"},
 
 	"opencode":     {test: "TestOpenCodeToolsAndSkills"},
 	"cline":        {test: "TestClineToolsAndSkills"},

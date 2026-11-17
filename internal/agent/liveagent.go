@@ -69,6 +69,7 @@ import (
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/sessions"
 )
 
 // liveAgentApp is LiveAgent's macOS bundle (tauri.conf.json's identifier).
@@ -152,24 +153,8 @@ var liveAgentRunning = func() bool {
 // liveAgentDir is the folder of K-brain's config.json as LiveAgent hands it
 // over: $LIVEAGENT_HOME, else $K_BRAIN_HOME (each only an absolute path,
 // here), else the folder ~/.liveagent/data-dir.json points to, else
-// ~/.liveagent.
-func liveAgentDir(home string) string {
-	for _, v := range []string{"LIVEAGENT_HOME", "K_BRAIN_HOME"} {
-		if d := strings.TrimSpace(appdir.Getenv(v)); d != "" && filepath.IsAbs(d) {
-			return d
-		}
-	}
-	def := filepath.Join(home, ".liveagent")
-	if b, err := os.ReadFile(filepath.Join(def, "data-dir.json")); err == nil {
-		var p struct {
-			Path string `json:"path"`
-		}
-		if json.Unmarshal(b, &p) == nil && filepath.IsAbs(p.Path) && filepath.Clean(p.Path) != filepath.Clean(def) {
-			return p.Path
-		}
-	}
-	return def
-}
+// ~/.liveagent. The rule is sessions', which reads its sessions there.
+func liveAgentDir(home string) string { return sessions.LiveAgentDirIn(home) }
 
 // liveAgentWindowsApp says LiveAgent's installer has put it where it
 // installs it: per user under %LOCALAPPDATA%\LiveAgent, or for everyone

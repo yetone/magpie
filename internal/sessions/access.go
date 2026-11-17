@@ -245,6 +245,7 @@ func Found() []string {
 	add("hermes", HermesDirs()...)
 	add("alma", almaDB())
 	add("openmausbot", ombDB())
+	add("liveagent", liveagentSessions())
 	add("minimax-code", minimaxSessions())
 	kimi := []string{kimiSessions()}
 	for _, sh := range kimiWorkShares() {
