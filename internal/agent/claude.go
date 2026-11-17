@@ -1393,7 +1393,8 @@ func claudeIn(at place) *Agent {
 			for _, e := range shown {
 				for _, id := range append([]string{gateway.DesktopID(e)}, again[e.ID]...) {
 					if claudeName(id) == "" {
-						models = append(models, claudeBudget{id: id, window: e.Context, long: gateway.DesktopListed1M(e), compact: work(e.ID, gateway.DesktopListed1M(e)), behaves: behaves[id] != ""})
+						long := gateway.DesktopListed1M(e)
+						models = append(models, claudeBudget{id: id, window: e.Context, long: long, compact: work(e.ID, long && e.Context >= claudeLong), behaves: behaves[id] != ""})
 					}
 				}
 			}

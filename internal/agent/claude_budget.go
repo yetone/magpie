@@ -100,8 +100,14 @@ func claudePlan(models []claudeBudget, base int, theirs map[string]string) (top 
 			assumed = claudeLong
 		}
 		want := assumed
-		if m.window > 0 && !m.long {
+		switch {
+		case m.window > 0 && !m.long:
 			want = min(m.window, top)
+		case m.long && m.window > 0 && m.window < claudeLong:
+			// listed by its "[1m]" id though its window is smaller
+			// (gateway.DesktopListed1M: Claude Desktop's 200K would hold
+			// it otherwise), it compacts within its own window
+			want = m.window
 		}
 		switch {
 		case m.compact > 0:

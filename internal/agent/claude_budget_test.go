@@ -61,6 +61,15 @@ func TestClaudePlan(t *testing.T) {
 	if top != 1000000 || !reflect.DeepEqual(entries, map[string]int{"g": 272000}) {
 		t.Fatalf("[1m] beside 272K: %d %v", top, entries)
 	}
+	// a model under 1M listed by its "[1m]" id (Claude Desktop's 200K
+	// held it otherwise, RQuantum198888 on X) runs in Claude Code's 1M
+	// and compacts within its own window: the 872K the user typed whole,
+	// and a 400K one at the working window. Neither holds the top-level
+	// window, which its "[1m]" id doesn't read
+	top, entries = claudePlan([]claudeBudget{{id: "m[1m]", window: 872000, long: true, compact: -1}, {id: "n[1m]", window: 400000, long: true, compact: 272000}, {id: "g", window: 128000, compact: 272000}}, 272000, nil)
+	if top != 872000 || !reflect.DeepEqual(entries, map[string]int{"m": 872000, "g": 128000}) {
+		t.Fatalf("[1m] under 1M: %d %v", top, entries)
+	}
 	// a Desktop tier's pick Claude Code runs as a Claude model
 	// (behavesAs, moer2831) would run at that model's window: it is told
 	// its own, even where it is the largest

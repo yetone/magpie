@@ -15,9 +15,12 @@ import (
 // models made 34 entries). With DesktopLongest on, such a model is listed
 // by its "[1m]" id alone, so Desktop's menu has one entry per model, told
 // as the 1M one by the "1M context window" Desktop gives its own (a lone
-// "[1m]" row was shown as the plain model: 杰多夫 on Discord); one
-// under 1M (872K) keeps its own id and window, and a request on the plain id
-// a session was saved with is still served.
+// "[1m]" row was shown as the plain model: 杰多夫 on Discord). One past
+// 200K and under 1M (872K) is listed by its "[1m]" id whether or not
+// (RQuantum198888 on X: Desktop 5.11492 runs a plain id at 200K, and
+// offers no 1M entry for it), described by its own size and told its own
+// window, and a request on either id, or on the plain id a session was
+// saved with, is still served.
 func TestClaudeDesktopLongestOnly(t *testing.T) {
 	f := &fake{reply: sse(
 		`event: message_start`+"\n"+`data: {"type":"message_start","message":{"id":"m","type":"message","role":"assistant","model":"x","content":[],"usage":{"input_tokens":1,"output_tokens":0}}}`,
@@ -75,7 +78,7 @@ func TestClaudeDesktopLongestOnly(t *testing.T) {
 		t.Fatalf("off: %d entries of %d rows, want two 1M extras: %v", entries(off), len(off), off)
 	}
 	for id, r := range off {
-		if strings.HasSuffix(r.ID, "[1m]") {
+		if strings.HasSuffix(r.ID, "[1m]") != (id == "vend/exo-free") {
 			t.Fatalf("off: %s listed as %s", id, r.ID)
 		}
 	}
@@ -101,9 +104,12 @@ func TestClaudeDesktopLongestOnly(t *testing.T) {
 	}
 	// a row Desktop names after its catalog says its provider as well
 	// (desktopSaidBy)
-	said := func(r row, oneM bool) string {
+	said := func(r row, long bool) string {
 		var s []string
-		if oneM {
+		switch {
+		case long && r.MaxInput < 1_000_000:
+			s = append(s, "872K context window")
+		case long:
 			s = append(s, "1M context window")
 		}
 		if strings.Contains(r.ID, ".anthropic.") {
@@ -117,7 +123,7 @@ func TestClaudeDesktopLongestOnly(t *testing.T) {
 		}
 	}
 	for id, r := range off {
-		if want := said(r, false); r.Said != want {
+		if want := said(r, strings.HasSuffix(r.ID, "[1m]")); r.Said != want {
 			t.Errorf("off: %s (%s) described %q, want %q", id, r.ID, r.Said, want)
 		}
 	}
@@ -126,14 +132,19 @@ func TestClaudeDesktopLongestOnly(t *testing.T) {
 	}
 
 	// the 1M id and the plain id an older session holds both reach the model
-	for _, id := range []string{on["vend/deepseek-v4-pro"].ID, off["vend/deepseek-v4-pro"].ID} {
+	exo := strings.TrimSuffix(on["vend/exo-free"].ID, "[1m]")
+	for _, id := range []string{on["vend/deepseek-v4-pro"].ID, off["vend/deepseek-v4-pro"].ID, exo + "[1m]", exo} {
 		f.calls = 0
 		req := httptest.NewRequest("POST", "/v1/messages", strings.NewReader(`{"model":"`+id+`","max_tokens":10,"stream":true,"tools":[{"name":"t","input_schema":{"type":"object"}}],"messages":[{"role":"user","content":"hi"}]}`))
 		req.Header.Set("x-api-key", TokenFor("claude-desktop"))
 		rec := httptest.NewRecorder()
 		New().Handler().ServeHTTP(rec, req)
 		var sent struct{ Model string }
-		if rec.Code != 200 || f.calls != 1 || json.Unmarshal(f.got, &sent) != nil || sent.Model != "deepseek-v4-pro" {
+		want := "deepseek-v4-pro"
+		if strings.HasPrefix(id, exo) {
+			want = "exo-free"
+		}
+		if rec.Code != 200 || f.calls != 1 || json.Unmarshal(f.got, &sent) != nil || sent.Model != want {
 			t.Fatalf("%s: %d %s, %d calls, sent %s", id, rec.Code, rec.Body, f.calls, f.got)
 		}
 	}

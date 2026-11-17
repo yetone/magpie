@@ -241,7 +241,7 @@ func desktopModels(entries []provider.Entry, knowsMythos bool) []map[string]any 
 		var said []string
 		if desktopListed1M(e, longest) {
 			m["id"] = m["id"].(string) + "[1m]"
-			said = append(said, desktop1MSaid)
+			said = append(said, desktopWindowSaid(e))
 		}
 		if by := desktopSaidBy(e, labels[i]); by != "" {
 			said = append(said, by)
@@ -277,8 +277,40 @@ func desktopModels(entries []provider.Entry, knowsMythos bool) []map[string]any 
 const desktop1M = 1_000_000
 
 // desktopListed1M says e is listed to Claude Desktop by its "[1m]" id,
-// longest being settings.DesktopLongest.
-func desktopListed1M(e provider.Entry, longest bool) bool { return longest && e.Context >= desktop1M }
+// longest being settings.DesktopLongest: a model of 1M or more under
+// it, and one past 200K and under 1M that isn't Claude's always
+// (desktopMidWindow).
+func desktopListed1M(e provider.Entry, longest bool) bool {
+	return longest && e.Context >= desktop1M || desktopMidWindow(e)
+}
+
+// desktop200K is the window Claude Desktop 5.11492 starts its Code tab's
+// Claude Code with (CLAUDE_CODE_MAX_CONTEXT_TOKENS=200000 in its
+// --settings file, Fcn in its app.asar), which comes before the one magpie
+// writes to ~/.claude/settings.json.
+const desktop200K = 200_000
+
+// desktopMidWindow says e's window is past Desktop's 200K and under 1M,
+// so by its plain id it ran at 200K whatever the user set (872K on a GPT,
+// RQuantum198888 on X), and Desktop offers no 1M entry for it. Claude
+// Code 2.1.326 takes a "[1m]" id for 1M over that 200K (peo in aV), so it
+// is listed by that id and compacts within its own window, the
+// modelSettings.<id>.autoCompactWindow magpie writes for it (claudePlan),
+// described by its real size (desktopWindowSaid). A Claude model has its
+// own window in Claude Code and keeps its id.
+func desktopMidWindow(e provider.Entry) bool {
+	return e.Context > desktop200K && e.Context < desktop1M && claudeModel(e) == ""
+}
+
+// desktopWindowSaid is the description of a row listed by its "[1m]" id:
+// Desktop's own for its 1M entry (desktop1MSaid), or the model's real
+// window, "872K context window", for one under 1M.
+func desktopWindowSaid(e provider.Entry) string {
+	if e.Context >= desktop1M {
+		return desktop1MSaid
+	}
+	return strconv.Itoa((e.Context+500)/1000) + "K context window"
+}
 
 // DesktopListed1M says Claude Desktop is shown e by its "[1m]" id, which
 // its Code tab hands Claude Code, so a session on it has the 1M window.
