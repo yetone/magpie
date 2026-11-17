@@ -1761,7 +1761,8 @@ type AgentCompact struct {
 // window into, by the key each reads: Codex's model catalog
 // (auto_compact_token_limit), Claude Code's settings.json
 // (CLAUDE_CODE_AUTO_COMPACT_WINDOW, autoCompactWindow) and Grok Build's
-// model tables (context_window). Only these take an AgentCompact.
+// model tables (auto_compact_threshold_percent of the model's window).
+// Only these take an AgentCompact.
 var CompactAgents = []string{"codex", "claude", "grok"}
 
 // ForAgent is s as the agent of that kind reads Long conversations: its
