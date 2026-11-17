@@ -1702,6 +1702,11 @@ each one.
     request (#6688, cd030691a). 0b8c4bfc3's new field left
     TestEveryWordHasZh red (e9fcc6229). A change that adds a route or a
     label runs internal/cli, internal/gateway and internal/tui whole.
+    11-17: 618bfc1a9 gave Kimi Code a "subagent pool" field and ran
+    internal/agent and internal/gui only (both machines were loaded),
+    so TestEveryWordHasZh was red again (fixed in the commit after
+    it). internal/agent's TestEveryFieldLabelHasTUIZh now fails on such
+    a label in the package the change runs.
   - A red with an issue still needs an owner. #6677 was red on main for
     about three hours. A session that met it commented "Not taking it"
     and shipped past it, and the review fixed it in 4c86b0ab4. The four

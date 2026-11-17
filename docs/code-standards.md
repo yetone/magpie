@@ -77,7 +77,8 @@ listed as not run, never left out.
    A guard that keeps being missed gets a twin in the package the change
    runs: internal/gui's TestEveryRouteIsNamedForTheCLI for a new route,
    internal/agent's TestEveryAgentNamedForTheLibrary for a new agent
-   (red on main four times before it, last at 00b2c11a6, 11-17).
+   (red on main four times before it, last at 00b2c11a6, 11-17), and
+   its TestEveryFieldLabelHasTUIZh for a new field's label (618bfc1a9).
    A change under `site/public/docs` ends with `node llms-full.mjs` and
    `node search-index.mjs` in site/, then `node --test site/*.test.mjs`
    from the repo root: both files are built from those pages and
