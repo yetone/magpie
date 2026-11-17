@@ -77,15 +77,91 @@ func (s *Server) alphaSearchBody(w http.ResponseWriter, r *http.Request, body []
 	}
 	note := ""
 	if ons, model := chatGPTSearchers(r, q.Model); len(ons) > 0 {
-		answered, why := s.alphaSearchOn(w, r, withModel(body, model), model, ons)
+		ts := make([]searchTarget, len(ons))
+		for i, on := range ons {
+			ts[i] = searchTarget{p: on, model: model, url: provider.CodexBase + AlphaSearchPath}
+		}
+		answered, why := s.alphaSearchOn(w, r, body, ts)
 		if answered {
 			return
 		}
 		// a failure would end the turn: magpie searches in its place
 		log.Printf("web search on ChatGPT for %s: %s", q.Model, why)
 		note = "ChatGPT's web search failed (" + why + "); magpie searched in its place.\n\n"
+	} else if ts := s.relaySearchers(r, q.Model); len(ts) > 0 {
+		answered, why := s.alphaSearchOn(w, r, body, ts)
+		if answered {
+			return
+		}
+		log.Printf("web search on %s for %s: %s", ts[0].p.Name, q.Model, why)
+		note = ts[0].p.Name + "'s web search failed (" + why + "); magpie searched in its place.\n\n"
 	}
 	s.alphaSearchHere(w, r, q, note)
+}
+
+// searchTarget is where a web.run search goes: the provider, its model
+// as it knows it, and the address its search is at.
+type searchTarget struct {
+	p     provider.Provider
+	model string
+	url   string
+}
+
+// upstreamSearches is whether p answers Codex's web.run itself, at
+// alpha/search under its Responses address: a key+URL provider set to
+// search the web by itself (Searches, #359), as a relay of OpenAI's API
+// or of the ChatGPT backend does. Such a relay's web.run was searched by
+// magpie, and the relay's own search never used (YIXIE233 on X).
+func upstreamSearches(p provider.Provider) bool {
+	return p.Account == nil && !p.IsPlugin() && p.Searches && p.Base(provider.Responses) != ""
+}
+
+// relaySearchers is where a web.run search for model goes when a provider
+// set to search by itself serves it (upstreamSearches): the model's
+// provider, or the members of a routing group, in the order a turn of
+// the model is routed, those that search by themselves alone. None when
+// the one a turn goes to first can't, or Settings has magpie search for
+// every model (magpieSearches): magpie searches then, as before.
+func (s *Server) relaySearchers(r *http.Request, model string) []searchTarget {
+	who, keyHeld := keyHolds(r)
+	ref := model
+	if !provider.IsGroupRef(ref) {
+		if gid, ok := keyGroupFor(r, ref); ok {
+			ref = gid
+		}
+	}
+	var cs []candidate
+	if provider.IsGroupRef(ref) {
+		g, ms, ok := provider.FindGroup(ref)
+		if !ok {
+			return nil
+		}
+		if keyHeld {
+			keep := groupKeeps(who, g, ms)
+			ms = slices.DeleteFunc(slices.Clone(ms), func(m provider.Member) bool { return !keep[m.Provider.ID+"/"+m.Model] })
+		}
+		cs, _ = s.planGroup(g.Live(), ms, provider.Responses)
+	} else {
+		p, bare, ok := provider.Resolve(model)
+		if !ok || keyHeld && !modelAllowed(who, p, bare) {
+			return nil
+		}
+		cs = s.candidates(p, bare, provider.Responses)
+	}
+	var out []searchTarget
+	for _, c := range cs {
+		if !accountAllowed(who, c) {
+			continue
+		}
+		if !upstreamSearches(c.p) || magpieSearches(r.Context(), c.p) {
+			if len(out) == 0 {
+				return nil // the turn goes to one that can't: magpie's
+			}
+			continue
+		}
+		out = append(out, searchTarget{p: c.p, model: c.model, url: c.p.Base(provider.Responses) + AlphaSearchPath})
+	}
+	return out
 }
 
 // chatGPTSearchers is the ChatGPT accounts a web search for model may go
@@ -121,35 +197,40 @@ func chatGPTSearchers(r *http.Request, model string) ([]provider.Provider, strin
 	return append(ready, later...), bare
 }
 
-// alphaSearchOn sends the search to the ChatGPT backend on each account in
-// turn, the next asked when one is refused, limited or fails, and relays
-// the backend's answer as it is. It says whether one answered: when none
-// did, nothing is written, and the search is magpie's (alphaSearchHere),
-// with why returned.
-func (s *Server) alphaSearchOn(w http.ResponseWriter, r *http.Request, body []byte, model string, ons []provider.Provider) (bool, string) {
+// alphaSearchOn sends the search to each target in turn — the ChatGPT
+// backend on each account, or a provider that searches by itself — the
+// next asked when one is refused, limited or fails, and relays the
+// answer as it is. It says whether one answered: when none did, nothing
+// is written, and the search is magpie's (alphaSearchHere), with why
+// returned.
+func (s *Server) alphaSearchOn(w http.ResponseWriter, r *http.Request, body []byte, ts []searchTarget) (bool, string) {
 	start := time.Now()
 	// as written only when every account it may be asked on is set to go
 	// unmasked (provider.SkipsRedaction, isee1_1 on Discord); magpie's own
 	// search in its place masks its query itself (maskedQuery)
-	if len(ons) > 0 && !slices.ContainsFunc(ons, func(p provider.Provider) bool { return !p.SkipsRedaction() }) {
-		return s.alphaSearchAsked(w, r, body, model, ons, start)
+	if len(ts) > 0 && !slices.ContainsFunc(ts, func(t searchTarget) bool { return !t.p.SkipsRedaction() }) {
+		return s.alphaSearchAsked(w, r, body, ts, start)
 	}
 	w, body, unmask, hits, err := redactedHits(r.Context(), w, body)
 	defer unmask()
 	if err != nil {
 		return false, err.Error()
 	}
-	noteMasked(r, "search", hits, sentOf(hits, body), 0, "openai", model)
-	return s.alphaSearchAsked(w, r, body, model, ons, start)
+	noteMasked(r, "search", hits, sentOf(hits, body), 0, "openai", ts[0].model)
+	return s.alphaSearchAsked(w, r, body, ts, start)
 }
 
 // alphaSearchAsked is alphaSearchOn once body is as it goes.
-func (s *Server) alphaSearchAsked(w http.ResponseWriter, r *http.Request, body []byte, model string, ons []provider.Provider, start time.Time) (bool, string) {
+func (s *Server) alphaSearchAsked(w http.ResponseWriter, r *http.Request, body []byte, ts []searchTarget, start time.Time) (bool, string) {
 	var errs []string
-	for _, on := range ons {
-		who := "OpenAI (" + on.Account.User + "): "
+	for _, t := range ts {
+		on, model := t.p, t.model
+		who := on.Name + ": "
+		if on.Account != nil {
+			who = "OpenAI (" + on.Account.User + "): "
+		}
 		ctx := on.Via(r.Context())
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, provider.CodexBase+AlphaSearchPath, bytes.NewReader(body))
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, t.url, bytes.NewReader(withModel(body, model)))
 		if err != nil {
 			errs = append(errs, who+err.Error())
 			continue
@@ -158,6 +239,14 @@ func (s *Server) alphaSearchAsked(w http.ResponseWriter, r *http.Request, body [
 			if codexHeader(k) {
 				req.Header[k] = vs
 			}
+		}
+		if on.Account == nil {
+			// a relay is asked as Codex asks it: its originator, and its
+			// User-Agent where the provider passes it on
+			if o := r.Header.Get("originator"); o != "" {
+				req.Header.Set("originator", o)
+			}
+			req.Header.Set("User-Agent", userAgentFor(on, r.Header.Get("User-Agent")))
 		}
 		req.Header.Set("Content-Type", "application/json")
 		// a nil body: the search is answered in JSON, not streamed

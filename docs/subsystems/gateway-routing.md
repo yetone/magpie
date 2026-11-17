@@ -1998,6 +1998,26 @@ searches left the 5-hour window at the same percent, about 2s each, while
 mode reaches only the backend's search. Covered by
 `TestChatGPTAccountSearchesByItsWebSearch`, `TestResponsesWebSearchModeKept`
 and `TestCodexPagesRead`.
+
+Codex's web.run on any other model (its `POST /v1/alpha/search`, or under
+`CodexPath`) is searched by magpie (`alphaSearchHere`), unless the provider
+the turn would go to is a key+URL relay with a Responses base set to search
+by itself (`Searches`, "Searches the web by itself"; `upstreamSearches`).
+Then [`relaySearchers`](../../internal/gateway/codex_search.go) sends the
+body as Codex sent it, with the bare model, to `<Responses base>/alpha/search`
+with the relay's key, Codex's turn headers, its originator and the agent's
+User-Agent, and its 2xx reply goes back as it came (YIXIE233 on X: a relay
+in front of a ChatGPT pool that serves `/v1/alpha/search`). A group goes by
+its plan: the leading member decides, and later members that search are
+tried after it; one that doesn't is skipped. Accounts and models a key may
+not use are left out. When every try fails, magpie searches and the output
+starts with why. `magpieSearches` (Settings' `searchAll`) keeps magpie's
+search, as for the Responses `web_search` tool, which a relay set so was
+already sent as is (`searchedForIt`). A plugin's provider is not sent
+web.run: its fetch serves turns, not this route. Covered by
+`TestCodexWebRunGoesToRelayThatSearches` and
+`TestCodexWebRunInGroupFollowsLeadingMember` (both red on the old code),
+and `TestResponsesWebSearchToolToRelayThatSearches`.
 Covered by `TestCommandCodeSearchesForOtherModels`,
 `TestPluginSearchModelIsASearcher` and `TestSearcherChosen`.
 

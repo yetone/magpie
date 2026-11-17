@@ -188,8 +188,8 @@ const providerUsage = `usage:
                                    (Advanced › Connect to: connects to 10.0.0.5, then gw.corp.example's
                                     address, while TLS and Host still say relay.example.com)
        magpie provider set my-relay search=yes
-                                   (the relay answers Claude Code's WebSearch and Codex's web_search itself:
-                                    those go to it as sent, not through magpie's own search)
+                                   (the relay answers Claude Code's WebSearch and Codex's web search itself, web_search
+                                    and web.run's /alpha/search: those go to it as sent, not through magpie's search)
        magpie provider add lmstudio address=http://192.168.1.5:1234
        magpie provider set lmstudio address=192.168.1.5:1234
                                    (Ollama, LM Studio, oMLX or MLX-Serve on another port or computer: each of its
@@ -1392,8 +1392,9 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 			p.MagpieUserAgent = !on && p.Account == nil
 		case "search":
 			// yes: the vendor searches the web by itself, a web search a
-			// client offers going to it as it was sent (a relay in front of
-			// Anthropic's or OpenAI's API)
+			// client offers going to it as it was sent, Codex's web.run
+			// (/alpha/search) too (a relay in front of Anthropic's or
+			// OpenAI's API; YIXIE233 on X)
 			if v != "yes" && v != "no" {
 				return fmt.Errorf("search=yes|no, not %q", v)
 			}
