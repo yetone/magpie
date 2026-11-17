@@ -171,6 +171,7 @@
     <a href="#overview">记了什么</a>
     <a href="#cli">命令行查看</a>
     <a href="#sessions">每个会话花了多少</a>
+    <a href="#search-sessions">搜索说过的话</a>
     <a href="#price">价格从哪来</a>
     <a href="#unpriced">没有价格的请求</a>
     <a href="#statusline">Claude Code 状态栏</a>
@@ -196,6 +197,14 @@ magpie sessions --days 7          # what every session spent, day by day
 magpie sessions --model <m> --folder <f> --json
 magpie sessions read              # which agents' history magpie may read</pre></div>
     <p>Agent 自己的会话文件，要你允许该 Agent 后 magpie 才会读取，默认一个都不读。允许后，没经过 magpie 的请求（比如 Claude Code 直接登录 claude.ai 时）也能从这些文件计入用量。</p>
+    <h2 id="search-sessions"><a class="anchor" href="#search-sessions">搜索说过的话</a></h2>
+    <p><span class="ui">会话</span> 页的搜索、<code>magpie sessions search</code> 和 Magpie Sessions MCP 服务器（资源库 → MCP）都能在所有 Agent 的会话里，找出提示词或回复里说过这些词的会话，最新的在前，每条带一段上下文。<code>magpie sessions show</code> 把一个会话以文本打印出来，从说到这些词的地方开始，Agent 自己就能查到之前的对话、决定或修复：</p>
+    <div class="code"><span class="lang">终端</span><button class="copy" data-copy="use-said">复制</button><pre id="use-said">magpie sessions search login bug                 # every agent's sessions that said it
+magpie sessions search "rate limit" --agent codex --days 7 --limit 5
+magpie sessions search login --json
+magpie sessions show claude:&lt;id&gt; --find login    # that session, from where it was said
+magpie sessions show claude:&lt;id&gt; --from 40 --json</pre></div>
+    <p>只读取你允许 magpie 读取的 Agent。长历史上第一次搜索会建立一份索引，之后的搜索接着用。</p>
     <h2 id="price"><a class="anchor" href="#price">价格从哪来</a></h2>
     <p>每次请求按“实际价格”计费：你给该供应商和模型设了价格就用你的；没设就用供应商自己目录里的价格；再没有就用 models.dev 上模型厂商的价格。</p>
     <p>中转站打折或按倍率卖时，厂商的价格就不对了。告诉 magpie 它实际收多少，用量和会话的合计就会按这个算：</p>

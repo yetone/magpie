@@ -121,6 +121,52 @@ func SearchSaid(ctx context.Context, needle, agent string, limit int) (SaidFound
 	return saidIdx.search(ctx, needle, agent, limit)
 }
 
+// SearchSaidSince is SearchSaid of the sessions last used at since or
+// after (`magpie sessions search --days`).
+func SearchSaidSince(ctx context.Context, needle, agent string, since time.Time, limit int) (SaidFound, error) {
+	return saidIdx.searchSince(ctx, needle, agent, since, limit)
+}
+
+// SaidReady brings the index up to date as a search does, but waits for
+// it at most wait, not saidWait: a command run once (`magpie sessions
+// search`) has no next search to find the rest by. progress, when
+// given, is told every second how far it got.
+func SaidReady(ctx context.Context, wait time.Duration, progress func(indexed, total int)) error {
+	return saidIdx.ready(ctx, wait, progress)
+}
+
+func (x *saidIndex) ready(ctx context.Context, wait time.Duration, progress func(indexed, total int)) error {
+	db, err := x.open()
+	if err != nil {
+		return err
+	}
+	if progress != nil {
+		done, gone := make(chan struct{}), make(chan struct{})
+		// progress is not told anything once this returns
+		defer func() { close(done); <-gone }()
+		go func() {
+			defer close(gone)
+			t := time.NewTicker(time.Second)
+			defer t.Stop()
+			for {
+				select {
+				case <-done:
+					return
+				case <-t.C:
+					x.mu.Lock()
+					n, of, listed := x.indexed, x.total, x.listed
+					x.mu.Unlock()
+					if listed {
+						progress(n, of)
+					}
+				}
+			}
+		}()
+	}
+	x.fresh(ctx, db, wait)
+	return nil
+}
+
 // ForgetSaid closes the index, so a test's HOME can go: a refresh
 // running stops after the session it is reading.
 func ForgetSaid() {
@@ -539,6 +585,10 @@ func saidKeys(ctx context.Context, db *sql.DB, terms []string) (map[string]bool,
 const saidReadMost = 6 * time.Second
 
 func (x *saidIndex) search(ctx context.Context, needle, agent string, limit int) (SaidFound, error) {
+	return x.searchSince(ctx, needle, agent, time.Time{}, limit)
+}
+
+func (x *saidIndex) searchSince(ctx context.Context, needle, agent string, since time.Time, limit int) (SaidFound, error) {
 	out := SaidFound{Hits: []SaidHit{}}
 	terms := saidTerms(needle)
 	if len(terms) == 0 {
@@ -559,7 +609,7 @@ func (x *saidIndex) search(ctx context.Context, needle, agent string, limit int)
 	x.mu.Lock()
 	var found []saidSession
 	for k := range keys {
-		if ss, ok := x.sessions[k]; ok && (agent == "" || ss.s.Agent == agent) && Reads(ss.s.Agent) {
+		if ss, ok := x.sessions[k]; ok && (agent == "" || ss.s.Agent == agent) && !ss.s.Last.Before(since) && Reads(ss.s.Agent) {
 			found = append(found, ss)
 		}
 	}

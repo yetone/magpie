@@ -72,6 +72,12 @@ func helpFor(args []string) string {
 	case "log", "logs":
 		return logUsage
 	case "sessions":
+		if len(args) > 1 && args[1] == "search" {
+			return sessionsSearchUsage
+		}
+		if len(args) > 1 && args[1] == "show" {
+			return sessionsShowUsage
+		}
 		return sessionsUsage
 	case "search":
 		return searchUsage

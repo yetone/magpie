@@ -171,6 +171,7 @@
     <a href="#overview">What is recorded</a>
     <a href="#cli">On the command line</a>
     <a href="#sessions">What each session cost</a>
+    <a href="#search-sessions">Search what was said</a>
     <a href="#price">Where a price comes from</a>
     <a href="#unpriced">Calls with no price</a>
     <a href="#statusline">Claude Code's status line</a>
@@ -196,6 +197,14 @@ magpie sessions --days 7          # what every session spent, day by day
 magpie sessions --model <m> --folder <f> --json
 magpie sessions read              # which agents' history magpie may read</pre></div>
     <p>An agent's own session files are read only once you allow that agent; none are read until then. Once allowed, calls that didn't go through magpie (Claude Code signed in to claude.ai directly, say) reach Usage from those files too.</p>
+    <h2 id="search-sessions"><a class="anchor" href="#search-sessions">Search what was said</a></h2>
+    <p>The <span class="ui">Sessions</span> page's search, <code>magpie sessions search</code> and the Magpie Sessions MCP server (Library → MCP) find the sessions of every agent whose prompts or replies say the words, newest first, each with a snippet. <code>magpie sessions show</code> prints one as text, from where the words were said, so an agent can look up an earlier conversation, decision or fix by itself:</p>
+    <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="use-said">Copy</button><pre id="use-said">magpie sessions search login bug                 # every agent's sessions that said it
+magpie sessions search "rate limit" --agent codex --days 7 --limit 5
+magpie sessions search login --json
+magpie sessions show claude:&lt;id&gt; --find login    # that session, from where it was said
+magpie sessions show claude:&lt;id&gt; --from 40 --json</pre></div>
+    <p>They read only the agents you allow magpie to read. The first search on a long history builds an index of what was said, kept for the next one.</p>
     <h2 id="price"><a class="anchor" href="#price">Where a price comes from</a></h2>
     <p>A call is counted at its effective price: what you set for that provider and model if you did, otherwise what the provider's own catalogue lists, otherwise what models.dev lists for the model's maker.</p>
     <p>A relay that resells at a discount or a multiplier isn't charging the maker's price. Say what it actually charges, and Usage and the session totals use that:</p>

@@ -222,6 +222,8 @@ var cliForRoute = map[string]string{
 	"GET /api/sessions/reads":              "magpie sessions read",
 	"POST /api/sessions/reads":             "magpie sessions read",
 	"GET /api/sessions":                    "magpie sessions",
+	"GET /api/sessions/said":               "magpie sessions search",
+	"GET /api/sessions/transcript":         "magpie sessions show",
 	"POST /api/uninstall":                  "magpie uninstall",
 	"GET /api/usage":                       "magpie usage",
 	"GET /api/usage/quotas":                "magpie quota",
@@ -500,7 +502,6 @@ var notYet = map[string]string{
 	"GET /api/speeds":                            U,  // sessions_manage.go: the Sessions row's speed curve
 	"GET /api/sessions/manage":                   U,  // sessions_manage.go
 	"GET /api/sessions/search":                   U,  // sessions_manage.go
-	"GET /api/sessions/said":                     U,  // sessions_manage.go: every agent's sessions; agents have the sessions MCP server
 	"POST /api/sessions/codex-provider":          U,  // sessions_manage.go
 	"POST /api/sessions/delete":                  U,  // sessions_manage.go
 	"POST /api/sessions/purge":                   U,  // sessions_manage.go
@@ -512,7 +513,6 @@ var notYet = map[string]string{
 	"GET /api/sessions/overview":                 U,  // sessions.go
 	"GET /api/sessions/progress":                 U,  // sessions.go
 	"GET /api/sessions/stats":                    U,  // sessions.go
-	"GET /api/sessions/transcript":               U,  // sessions.go
 	"POST /api/agents/open":                      W,  // sessions.go
 	"POST /api/sessions/carry":                   U,  // sessions.go
 	"POST /api/sessions/export":                  U,  // sessions.go

@@ -28,6 +28,12 @@ func sessionsCmd(args []string) error {
 	if len(args) > 1 && args[1] == "read" {
 		return sessionReadsTo(os.Stdout, args[2:])
 	}
+	if len(args) > 1 && args[1] == "search" {
+		return sessionsSearchTo(os.Stdout, args[2:])
+	}
+	if len(args) > 1 && args[1] == "show" {
+		return sessionsShowTo(os.Stdout, args[2:])
+	}
 	if r := sessions.SettleReads(); !r.Asked {
 		fmt.Fprintln(os.Stderr, notAskedLine)
 	}

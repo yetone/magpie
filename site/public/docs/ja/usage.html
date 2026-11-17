@@ -171,6 +171,7 @@
     <a href="#overview">記録される内容</a>
     <a href="#cli">コマンドラインで見る</a>
     <a href="#sessions">セッションごとの費用</a>
+    <a href="#search-sessions">話した内容を検索</a>
     <a href="#price">価格の出どころ</a>
     <a href="#unpriced">価格のないリクエスト</a>
     <a href="#statusline">Claude Code のステータスライン</a>
@@ -196,6 +197,14 @@ magpie sessions --days 7          # what every session spent, day by day
 magpie sessions --model <m> --folder <f> --json
 magpie sessions read              # which agents' history magpie may read</pre></div>
     <p>エージェント自身のセッションファイルは、そのエージェントを許可するまで読みません。既定ではどれも読みません。許可すると、magpie を通らなかったリクエスト（Claude Code が claude.ai に直接サインインしている場合など）も、それらのファイルから使用量に入ります。</p>
+    <h2 id="search-sessions"><a class="anchor" href="#search-sessions">話した内容を検索</a></h2>
+    <p><span class="ui">セッション</span> ページの検索、<code>magpie sessions search</code>、Magpie Sessions MCP サーバー（ライブラリ → MCP）は、プロンプトや返答でその言葉を言ったすべてのエージェントのセッションを新しい順に見つけ、前後の文を添えて示します。<code>magpie sessions show</code> はセッションをテキストで表示し、その言葉が出た場所から始めます。エージェントが以前の会話・決定・修正を自分で調べられます：</p>
+    <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="use-said">コピー</button><pre id="use-said">magpie sessions search login bug                 # every agent's sessions that said it
+magpie sessions search "rate limit" --agent codex --days 7 --limit 5
+magpie sessions search login --json
+magpie sessions show claude:&lt;id&gt; --find login    # that session, from where it was said
+magpie sessions show claude:&lt;id&gt; --from 40 --json</pre></div>
+    <p>読み取りを許可したエージェントだけを読みます。履歴が長いと最初の検索で話した内容の索引を作り、次からはそれを使います。</p>
     <h2 id="price"><a class="anchor" href="#price">価格の出どころ</a></h2>
     <p>リクエストは実効価格で数えられます。そのプロバイダーとモデルにあなたが設定した価格、なければプロバイダー自身のカタログの価格、それもなければ models.dev にあるモデル提供元の価格です。</p>
     <p>割引や倍率で再販する中継サービスは、提供元の価格では請求しません。実際の価格を設定すれば、使用量とセッションの合計はそれで計算されます。</p>
