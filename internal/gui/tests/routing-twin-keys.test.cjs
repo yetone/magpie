@@ -4,8 +4,10 @@
 // alike (the same icon, key name and model), so which provider a row was
 // of couldn't be told. A key or account named as one of another
 // provider's on the stage says its provider after the name; a name only
-// one provider has says nothing more, as before. Every language, both
-// engines, a wide and a narrow width; no backend, the API is faked here.
+// one provider has says nothing more, as before. Since iamleehom on X, a
+// key's row is named by its provider and the key's name follows it. Every
+// language, both engines, a wide and a narrow width; no backend, the API
+// is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -67,12 +69,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await rows.nth(order.length - 1).waitFor();
           const seen = await rows.evaluateAll((ls) => ls.map((li) => {
             const b = li.querySelector("b"), sub = b.querySelector("span.who + span");
-            return [b.querySelector("span.who").textContent, sub.textContent, sub.getBoundingClientRect().width];
+            return [b.querySelector("span.prov").textContent, b.querySelector("span.who").textContent, sub.textContent];
           }));
-          assert.deepEqual(seen.map(([n, s]) => [n, s]), [
-            ["Key-01", "Relay A"], ["Key-02", "Relay A"], ["Key-01", "Relay B"], ["Key-02", "Relay B"], ["Key-09", ""],
+          // a key's row is headed by its provider since iamleehom on X,
+          // the key's name after it, so the twin rule has nothing to add
+          assert.deepEqual(seen, [
+            ["Relay A", "Key-01", ""], ["Relay A", "Key-02", ""], ["Relay B", "Key-01", ""], ["Relay B", "Key-02", ""], ["Solo", "Key-09", ""],
           ]);
-          if (width === 1100) for (const [n, s, w] of seen) if (s) assert.ok(w > 0, `${n} of ${s} is drawn`);
+          if (width === 1100) {
+            const drawn = await rows.evaluateAll((ls) => ls.map((li) => li.querySelector("b span.prov").getBoundingClientRect().width));
+            for (const w of drawn) assert.ok(w > 0, "each provider's name is drawn");
+          }
           // no row is alike another any more
           const texts = await rows.evaluateAll((ls) => ls.map((li) => li.querySelector("b").textContent));
           assert.equal(new Set(texts).size, texts.length, texts.join(" | "));

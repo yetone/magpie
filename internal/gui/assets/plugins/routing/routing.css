@@ -119,10 +119,14 @@
 .rt-accts li:not(.rt-sub) > b > * { flex: none; }
 .rt-accts li:not(.rt-sub) > b > span:not(.ic) { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .rt-accts li:not(.rt-sub) > b > span.who { flex-shrink: 100; } /* the name first, the plan after it */
-.rt-accts li:not(.rt-sub) > b > span:not(.ic):not(.who):not(:empty) { margin-left: .3em; }
+.rt-accts li:not(.rt-sub) > b > span:not(.ic):not(.who):not(.prov):not(:empty) { margin-left: .3em; }
+/* a key's row: its provider's name heads it and keeps its room; the key's
+   name follows, muted */
+.rt-accts li.keyled:not(.rt-sub) > b > span.who { margin-left: .3em; }
 .rt-accts li:not(.rt-sub) > b > .ic { align-self: center; }
 .rt-accts b > span:not(.ic) { font-weight: 450; color: var(--muted); }
-.rt-accts b > span.who { color: var(--fg); font-weight: 560; }
+.rt-accts b > span.who, .rt-accts li.keyled b > span.prov { color: var(--fg); font-weight: 560; }
+.rt-accts li.keyled b > span.who { color: var(--muted); font-weight: 450; }
 .rt-accts b .ic { display: inline-flex; width: 16px; height: 16px; margin-right: 7px; vertical-align: -3px; }
 .rt-accts b .ic img, .rt-accts b .ic svg { width: 16px; height: 16px; }
 .rt-accts b .fb { margin-left: 6px; font-size: 10.5px; font-weight: 560; padding: 0 6px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }

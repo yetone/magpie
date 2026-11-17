@@ -1573,7 +1573,7 @@ function routingPage(part) {
     const card = () => {
       const box = el("div", "rt-done");
       const model = w ? (tr.auto?.length ? `${w.model} → ${tr.auto[tr.auto.length - 1].model}` : w.model) : tr.model || "";
-      box.append(el("b", "who", w ? who(w) : tr.id), el("span", "mdl", model || ""), el("span", "effort-of", tr.effort || ""));
+      box.append(el("b", "who", w ? (w.kind === "key" ? where(w) : who(w)) : tr.id), el("span", "mdl", model || ""), el("span", "effort-of", tr.effort || ""));
       const v = speedOf(r, tr.ms, tr.ttft, tr.firstText, tr.flow, tr.firstReasoning || 0, tr.reasoningHidden || false);
       const { prompt, read } = promptOf(r);
       for (const [value, label] of [
@@ -2816,10 +2816,11 @@ function routingPage(part) {
   function makeRow(w) {
     const li = el("li"), b = el("b");
     b.append(icon(w.icon || (w.preset ? w.preset : "generic")));
-    const name = el("span", "who", who(w));
+    // a key's row is headed by its provider's name (prov), set in rebuild
+    const prov = el("span", "prov", ""), name = el("span", "who", who(w));
     // the provider's name heads the card; a row names what differs
-    const sub = el("span", "", rowSub(w, false));
-    b.append(name, " ", sub, el("code", "mdl", w.fixed ? `${w.model}:${w.fixed}` : w.model));
+    const sub = el("span", "", rowSub(w, false, false));
+    b.append(prov, name, " ", sub, el("code", "mdl", w.fixed ? `${w.model}:${w.fixed}` : w.model));
     if (w.fixed) b.title = t("{level} reasoning, fixed on this model in the group", { level: w.fixed });
     if (w.fast) {
       // the group sends this member in its vendor's fast mode
@@ -2842,13 +2843,21 @@ function routingPage(part) {
     st.onpointerleave = () => delete st.dataset.cut;
     li.append(el("i", "dot"), b, st, bar, tg);
     li.title = w.id;
-    return { li, wire: path(), st, bi, tg, w, subEl: sub };
+    return { li, wire: path(), st, bi, tg, w, provEl: prov, subEl: sub };
   }
+  // keyLed: a key's row is headed by its provider's name, the key's
+  // after it, muted: a key's name is often only its masked secret
+  // ("sk-4…ab10"), which says nothing of whose it is, so two relays' keys
+  // each serving one model read alike (iamleehom on X). Under a fold,
+  // whose heading names the provider, the key's name leads the row.
+  const keyLed = (w, folded) => w.kind === "key" && !folded;
   // rowSub is what a row says after the name: a fallback's provider, an
-  // account's plan; and the provider of a key or account named as one of
-  // another provider's on the stage is (twin), so two providers' Key-01
-  // rows, each of the same model, are told apart (iamleehom on Discord)
-  const rowSub = (w, twin) => w.fallback ? w.name : w.kind === "provider" ? "" : twin ? [w.name || w.provider, planName(w.plan)].filter(Boolean).join(" · ") : planName(w.plan) || "";
+  // account's plan; and the provider of an account (or a folded key) named
+  // as one of another provider's on the stage is (twin), so two
+  // providers' Key-01 rows, each of the same model, are told apart
+  // (iamleehom on Discord); a key-led row says its provider before it
+  const rowSub = (w, twin, folded) => keyLed(w, folded) ? planName(w.plan) || ""
+    : w.fallback ? w.name : w.kind === "provider" ? "" : twin ? [w.name || w.provider, planName(w.plan)].filter(Boolean).join(" · ") : planName(w.plan) || "";
 
   // sync puts the staged routes on the stage: each agent on the left, and
   // the accounts they weighed, each route's in the order it weighed them —
@@ -2949,13 +2958,6 @@ function routingPage(part) {
       // its way down: its route's heading, then the groups in the group
       row.path = ways ? [wayAt.get(id), ...(row.w.via || [])] : row.w.via || [];
     }
-    // a name more than one provider's rows go by says the provider too
-    const provsOf = new Map();
-    for (const id of ids) {
-      const w = rows.get(id).w;
-      if (w.kind !== "provider") { const n = who(w); provsOf.set(n, (provsOf.get(n) || new Set()).add(w.provider)); }
-    }
-    for (const id of ids) { const row = rows.get(id); setText(row.subEl, rowSub(row.w, provsOf.get(who(row.w))?.size > 1)); }
     // a group in the group heads its models, which it routes by its own
     // routing, set in under it
     // keys or accounts side by side that fold together, FOLD_AT or more
@@ -2977,6 +2979,20 @@ function routingPage(part) {
       else { flush(); if (folding(w)) run = [id]; }
     }
     flush();
+    // a row's name and what it says after it: a key named by its provider,
+    // unless a fold over it names that; and a name more than one
+    // provider's rows go by says the provider too
+    const provsOf = new Map();
+    for (const id of ids) {
+      const w = rows.get(id).w;
+      if (w.kind !== "provider" && !keyLed(w, foldOf.has(id))) { const n = who(w); provsOf.set(n, (provsOf.get(n) || new Set()).add(w.provider)); }
+    }
+    for (const id of ids) {
+      const row = rows.get(id), folded = foldOf.has(id), led = keyLed(row.w, folded);
+      setText(row.provEl, led ? row.w.name || row.w.provider : "");
+      setText(row.subEl, rowSub(row.w, !led && provsOf.get(who(row.w))?.size > 1, folded));
+      row.li.classList.toggle("keyled", led);
+    }
     // how many each group in the group routes to, which folds it when LONG
     const under = new Map();
     for (const id of ids) {
