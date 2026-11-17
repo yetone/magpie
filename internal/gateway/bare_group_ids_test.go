@@ -123,3 +123,74 @@ func TestBareIDsListUserGroups(t *testing.T) {
 		t.Fatalf("group/fast under Only: %d by %q", code, by)
 	}
 }
+
+// 小八 on Discord, v0.1.4377: with Only on, group/glm-5.2 stayed while
+// other groups lost the prefix. Each such group is named for a model a
+// provider serves, and its members are listed through the group alone
+// (Group.Unlists), so no provider's glm-5.2 row is shown to carry the
+// bare id. A request for glm-5.2 reaches the group all the same (GroupFor
+// before Resolve), so the group is listed as glm-5.2, in its place.
+func TestBareIDsListGroupNamedForAModel(t *testing.T) {
+	fresh(t)
+	for _, p := range []provider.Provider{
+		{ID: "a", Name: "A", Key: "k", Models: []string{"glm-5.2", "other-a"}},
+		{ID: "b", Name: "B", Key: "k", Models: []string{"glm-5.2"}},
+	} {
+		f := &fake{t: t, ctype: "application/json", reply: `{"id":"from-` + p.ID + `","choices":[{"index":0,"message":{"role":"assistant","content":"hi"},"finish_reason":"stop"}]}`}
+		up := httptest.NewServer(f)
+		t.Cleanup(up.Close)
+		p.Chat = up.URL + "/v1"
+		if err := provider.Save(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// b first: a request that went by Resolve instead would reach a
+	g := provider.Group{ID: "glm-5.2", Name: "GLM 5.2", Members: []string{"b/glm-5.2", "a/glm-5.2"}, Routing: provider.Ordered, Unlists: true}
+	if err := provider.SaveGroup(g); err != nil {
+		t.Fatal(err)
+	}
+	get := func() []string { return listedIDs(t, httptest.NewRequest("GET", "/v1/models", nil)) }
+	count := func(ids []string, id string) int {
+		n := 0
+		for _, x := range ids {
+			if x == id {
+				n++
+			}
+		}
+		return n
+	}
+	off := get()
+	if !slices.Contains(off, "group/glm-5.2") || slices.Contains(off, "a/glm-5.2") || slices.Contains(off, "b/glm-5.2") {
+		t.Fatalf("off: %v, want group/glm-5.2 and no member listed", off)
+	}
+
+	if err := provider.SetBareIDs(true, false); err != nil {
+		t.Fatal(err)
+	}
+	if on := get(); count(on, "glm-5.2") != 1 {
+		t.Fatalf("on: %v, want glm-5.2 once", on)
+	}
+
+	if err := provider.SetBareIDs(true, true); err != nil {
+		t.Fatal(err)
+	}
+	only := get()
+	if slices.Contains(only, "group/glm-5.2") {
+		t.Fatalf("Only: %v still lists group/glm-5.2", only)
+	}
+	if i, j := slices.Index(off, "group/glm-5.2"), slices.Index(only, "glm-5.2"); i != j || count(only, "glm-5.2") != 1 {
+		t.Fatalf("Only: glm-5.2 at %d of %v, want once where group/glm-5.2 was, %d of %v", j, only, i, off)
+	}
+	rec := httptest.NewRecorder()
+	New().Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/v1/models/glm-5.2", nil))
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"id":"glm-5.2"`) {
+		t.Fatalf("GET /v1/models/glm-5.2: %d %s", rec.Code, rec.Body.String())
+	}
+	for _, m := range []string{"glm-5.2", "group/glm-5.2"} {
+		rec := httptest.NewRecorder()
+		New().Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model":"`+m+`","messages":[{"role":"user","content":"hi"}]}`)))
+		if by := rec.Header().Get("X-Magpie-Provider"); rec.Code != 200 || by != "b" {
+			t.Fatalf("%s: %d by %q, want the group's first member, b: %s", m, rec.Code, by, rec.Body.String())
+		}
+	}
+}

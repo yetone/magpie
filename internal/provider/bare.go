@@ -22,7 +22,8 @@ import (
 // a model the list doesn't show (a gateway key held to other models, an
 // id like anthropic/claude-x that names a provider of the user's), isn't
 // listed by it. A routing group the user made is listed by its own id as
-// well (fast for group/fast), where nothing else goes by that id.
+// well (fast for group/fast, glm-5.2 for group/glm-5.2), where a
+// request for that id reaches the group.
 
 // BareModelIDs says whether /v1/models lists models by their bare ids too.
 func BareModelIDs() bool { return settings.Shared().BareModelIDs }
@@ -104,18 +105,20 @@ func BareEntries(shown []Entry) []Bare {
 // a request for it reaches it by: its own id, fast. Only where that is
 // unambiguous: not for a group magpie found (listed under its model's
 // bare id already, or by its auto/<model>), nor by an id listed already
-// or given to another row, one a provider serves a model by, or one
-// GroupFor takes elsewhere.
+// or given to another row, or one GroupFor takes elsewhere.
+//
+// A group named for a model a provider serves (glm-5.2) is listed so
+// too: a request for glm-5.2 reaches the group, GroupFor before Resolve,
+// whether or not the provider's glm-5.2 row is shown. When it is, that
+// row's bare id reaches the group first (BareEntries' reached); when it
+// isn't (the group lists its members alone, Group.Unlists; a provider
+// kept for routing groups; the agent's hidden models), the group's own
+// row carries the id, or Only left group/glm-5.2 (小八 on Discord).
 func groupBare(shown []Entry, all []Group, entries []Entry, ids, seen map[string]bool, j int) (Bare, bool) {
 	e := shown[j]
 	id := e.Group
 	if !e.Named || id == "" || e.ID != GroupPrefix+id || strings.Contains(id, "/") || ids[id] || seen[id] {
 		return Bare{}, false
-	}
-	for _, x := range entries {
-		if x.Model == id || x.ID == id {
-			return Bare{}, false
-		}
 	}
 	if i := bareTarget(shown, all, entries, id); i < 0 || shown[i].Group != id {
 		return Bare{}, false

@@ -3013,12 +3013,17 @@ the row of the entry that id reaches, with its label, under the bare id.
   not listed twice.
 - A routing group the user made is listed by its own id too, `fast` beside
   `group/fast` (`groupBare`; 小八 on Discord), after the models' bare ids,
-  and under Only in `group/fast`'s place. Only where that id is the
-  group's alone: not when a provider serves a model by it (that model's
-  bare id is listed, reaching the group as `GroupFor` routes it), when it
-  is listed already, when `GroupFor` of it reaches another group, or for a
-  group magpie found (its `auto/<model>` row is listed under the model's
-  bare id already). A group a model's bare id already reaches adds nothing.
+  and under Only in `group/fast`'s place. Only where a request for that
+  id reaches the group: not when it is listed already, when `GroupFor` of
+  it reaches another group, or for a group magpie found (its
+  `auto/<model>` row is listed under the model's bare id already). A
+  group a model's bare id already reaches adds nothing: a group named for
+  a model a provider serves, `glm-5.2`, is listed through that model's
+  row while the row is shown, and by its own row when it isn't (the
+  group lists its members alone, a provider kept for routing groups, the
+  agent's hidden models), since `GroupFor` takes `glm-5.2` to the group
+  before `Resolve` either way. Before, such a group stayed `group/glm-5.2`
+  under Only (小八 on Discord, v0.1.4377).
 - The target must be in the list shown: a gateway key held to some models
   sees only the bare ids that reach one of its models, so a key held to
   `b/*` doesn't see `glm-5.3` that would go to `a`.
