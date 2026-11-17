@@ -82,8 +82,13 @@ func geminiKept(u string) bool {
 // /models/example/model-demo, the path the relay routes by, not
 // /models/example%2Fmodel-demo (#6695, LuoRuiyao on X). An id with an
 // empty, . or .. segment, which a server or proxy could clean into a
-// path outside models/, goes as one escaped segment instead.
+// path outside models/, goes as one escaped segment instead. An id with
+// the models/ Google's own lists name a model by (AI Studio's
+// OpenAI-compatible /models lists "models/gemini-…") is asked without
+// it, since the path already has one: drawn at models/models/… the
+// Gemini API answered 404 (Dani Ariyanto on Discord, Nano Banana 2.1).
 func GeminiModelPath(model string) string {
+	model = strings.TrimPrefix(model, "models/")
 	segs := strings.Split(model, "/")
 	for i, s := range segs {
 		if s == "" || s == "." || s == ".." {
@@ -97,7 +102,7 @@ func GeminiModelPath(model string) string {
 // GeminiPath is the path under a Gemini base model is asked at: streamed as
 // server-sent events (alt=sse) when stream, else one JSON reply.
 func GeminiPath(model string, stream bool) string {
-	m := GeminiModelPath(strings.TrimPrefix(model, "models/"))
+	m := GeminiModelPath(model)
 	if stream {
 		return "/models/" + m + ":streamGenerateContent?alt=sse"
 	}

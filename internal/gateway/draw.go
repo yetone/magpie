@@ -1796,7 +1796,7 @@ func (s *Server) drawOpenRouterImages(ctx context.Context, p provider.Provider, 
 			req[k] = v
 		}
 	}
-	openRouterSize(req, d.Size)
+	openRouterSize(req, model, d.Size)
 	if len(d.Images) > 0 {
 		refs := make([]map[string]any, 0, len(d.Images))
 		for _, pic := range d.Images {
@@ -1819,8 +1819,9 @@ func (s *Server) drawOpenRouterImages(ctx context.Context, p provider.Provider, 
 // size among what it takes, and Sourceful's Riverflow V2 and xAI's answer
 // a pixel size with 400 "does not support explicit pixel sizes. Use
 // resolution and aspect_ratio instead." A ratio ("16:9") is an
-// aspect_ratio, and a tier ("2K", "auto") goes as the size it is.
-func openRouterSize(req map[string]any, size string) {
+// aspect_ratio, and a tier ("2K", "auto") goes as the size it is. A
+// model that draws at 1K alone (takesImageSize) is sent no resolution.
+func openRouterSize(req map[string]any, model, size string) {
 	size = strings.TrimSpace(size)
 	if size == "" {
 		return
@@ -1835,7 +1836,7 @@ func openRouterSize(req map[string]any, size string) {
 		return
 	}
 	req["aspect_ratio"] = r
-	if t := imageSizeOf(size); t != "" {
+	if t := imageSizeOf(size); t != "" && takesImageSize(model) {
 		req["resolution"] = t
 	}
 }
@@ -2334,22 +2335,43 @@ func imageSizeOf(size string) string {
 
 // imageConfigOf is the imageConfig an images API size asks a Gemini image
 // model to draw at: the ratio the size is nearest, with the imageSize
-// beside it when the size asks past the model's 1K default. Gemini 2.x
-// image models draw at 1K only and Google documents imageSize for the
-// Gemini 3 image models, so a 2.x model is sent the ratio alone, as
-// before. nil for none.
+// beside it when the size asks past the model's 1K default and the model
+// takes one (takesImageSize). nil for none.
 func imageConfigOf(model, size string) map[string]string {
 	c := map[string]string{}
 	if r := aspectOf(size); r != "" {
 		c["aspectRatio"] = r
 	}
-	if s := imageSizeOf(size); s != "" && !strings.HasPrefix(strings.ToLower(model), "gemini-2") {
+	if s := imageSizeOf(size); s != "" && takesImageSize(model) {
 		c["imageSize"] = s
 	}
 	if len(c) == 0 {
 		return nil
 	}
 	return c
+}
+
+// takesImageSize is whether a model can be asked for an imageSize past 1K.
+// A Gemini image model that draws at 1K alone refuses one: Gemini 2.x's
+// (Google documents imageSize for the Gemini 3 image models only), and a
+// Lite's, which answers 2K with 400 "Image size 2K is not supported for
+// this model" (gemini-3.1-flash-lite-image, Nano Banana 2 Lite: Dani
+// Ariyanto on Discord). Such a model is sent the ratio alone and draws at
+// its own 1K, as it does with no size asked. The id is read as Google
+// names it, without models/ or a relay's google/; any other model is
+// asked as before.
+func takesImageSize(model string) bool {
+	m := strings.ToLower(strings.TrimSpace(model))
+	if i := strings.LastIndex(m, "/"); i >= 0 {
+		m = m[i+1:]
+	}
+	switch {
+	case strings.HasPrefix(m, "gemini-2"):
+		return false
+	case strings.HasPrefix(m, "gemini-") || strings.HasPrefix(m, "nano-banana"):
+		return !strings.Contains(m, "lite")
+	}
+	return true
 }
 
 // grokAspects are the aspect ratios Grok's Imagine API takes.

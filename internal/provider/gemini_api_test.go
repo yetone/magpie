@@ -55,6 +55,10 @@ func TestGeminiModelPathKeepsSlashes(t *testing.T) {
 		"a//b":                       "a%2F%2Fb",
 		"/abs":                       "%2Fabs",
 		"trail/":                     "trail%2F",
+		// the models/ Google's lists name a model by is the path's own
+		"models/gemini-nano-banana-2.1": "gemini-nano-banana-2.1",
+		"models/example/model-demo":     "example/model-demo",
+		"models/../x":                   "..%2Fx",
 	} {
 		if got := GeminiModelPath(in); got != want {
 			t.Errorf("GeminiModelPath(%q) = %q, want %q", in, got, want)
