@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 
@@ -132,7 +134,16 @@ func MoveToAgy(ctx context.Context) ([]ImportedAccount, error) {
 		return nil, fmt.Errorf("%s takes no Antigravity accounts", agyCLIPackage)
 	}
 	forgetAccountCaches()
-	if PluginCLIMissing(agyCLIID) != "" {
+	// agy is downloaded from Google and checks each account with Google,
+	// so it goes the way Antigravity's requests went: where Google is
+	// reached only through Antigravity's own proxy (magpie in a container
+	// in China), going direct failed the install every time (huiqiang6 on
+	// X). agy-cli keeps that proxy for its requests after the move too.
+	if err := carryAgyProxy(accts); err != nil {
+		return nil, err
+	}
+	ctx = Via(ctx, PluginID(agyCLIID))
+	if agyCLIMissing(agyCLIID) != "" {
 		if err := installAgy(ctx, agyCLIID); err != nil {
 			return nil, err
 		}
@@ -144,9 +155,68 @@ func MoveToAgy(ctx context.Context) ([]ImportedAccount, error) {
 	return importPlugin(ctx, PluginID(agyCLIID), []string{string(text)})
 }
 
-// installAgy and importPlugin are InstallPluginCLI and ImportPluginFiles,
-// for tests to stand in for.
+// carryAgyProxy gives agy-cli the proxy Antigravity's requests went
+// through: Antigravity's own, when agy-cli has no account yet and no proxy
+// of its own; and each moving account's, where agy-cli would take another
+// for it and has none of the account's own. A proxy the user chose in
+// agy-cli is kept.
+func carryAgyProxy(accts []map[string]any) error {
+	from, ok := agyProxyFrom()
+	if !ok {
+		return nil
+	}
+	id := PluginID(agyCLIID)
+	f, err := read()
+	if err != nil {
+		return err
+	}
+	i := slices.IndexFunc(f.Providers, func(p Provider) bool { return p.ID == id })
+	if i < 0 {
+		f.Providers = append(f.Providers, Provider{ID: id})
+		i = len(f.Providers) - 1
+	}
+	p := &f.Providers[i]
+	changed := false
+	if p.Proxy == "" && from.Proxy != "" && len(plugin.Auths(agyCLIID)) == 0 {
+		p.Proxy, changed = from.Proxy, true
+	}
+	own := maps.Clone(p.AccountProxies)
+	if own == nil {
+		own = map[string]string{}
+	}
+	for _, a := range accts {
+		k := accountKey(agyWho(a))
+		want := from.AccountProxies[k]
+		if want == "" {
+			want = from.Proxy
+		}
+		if k != "" && want != "" && want != p.Proxy && own[k] == "" {
+			own[k], changed = want, true
+		}
+	}
+	if !changed {
+		return nil
+	}
+	p.AccountProxies = normalAccountProxies(own)
+	return store(f)
+}
+
+// agyProxyFrom is where Antigravity's proxy is kept: under the id its
+// accounts were served by (the plugin's own, "antigravity-plugin", while
+// the built-in was beside it), the first of them that has one.
+func agyProxyFrom() (Provider, bool) {
+	for _, id := range []string{PluginID("antigravity"), "antigravity", "antigravity-plugin"} {
+		if p, ok := storedPicks(id); ok && (p.Proxy != "" || len(p.AccountProxies) > 0) {
+			return p, true
+		}
+	}
+	return Provider{}, false
+}
+
+// agyCLIMissing, installAgy and importPlugin are PluginCLIMissing,
+// InstallPluginCLI and ImportPluginFiles, for tests to stand in for.
 var (
-	installAgy   = InstallPluginCLI
-	importPlugin = ImportPluginFiles
+	agyCLIMissing = PluginCLIMissing
+	installAgy    = InstallPluginCLI
+	importPlugin  = ImportPluginFiles
 )
