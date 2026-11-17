@@ -14,7 +14,7 @@ import (
 func TestOwnProviderNamedAsMagpies(t *testing.T) {
 	ids := []string{"agy", "opencode", "openchamber", "mimocode", "deveco", "pi", "aside", "omo", "prime-agent", "mu", "goose", "zed", "vscode",
 		"crush", "dsh", "ds-bot", "commandcode", "fx", "omp", "hermes", "morph", "kimi", "empryo", "nanobot", "miniq", "paimon", "craft-agents", "minimax-code", "droid",
-		"qoder", "qoder-cn", "grok", "atomcode", "cline", "snow", "qwenpaw"}
+		"qoder", "qoder-cn", "grok", "atomcode", "cline", "snow", "qwenpaw", "open-code-review"}
 	for _, id := range ids {
 		t.Run(id, func(t *testing.T) {
 			if id == "aside" {
@@ -34,6 +34,11 @@ func TestOwnProviderNamedAsMagpies(t *testing.T) {
 			if id == "craft-agents" {
 				// Craft's own config, with a connection of the user's
 				hanakoWrite(t, a.Path, craftUser, 0o644)
+			}
+			if id == "open-code-review" {
+				// a custom provider of the user's own, for its own model
+				// to be on
+				hanakoWrite(t, a.Path, `{"custom_providers":{"relay":{"protocol":"openai","url":"https://relay.example/v1","api_key":"sk-own"}}}`, 0o600)
 			}
 			if id == "cline" {
 				// a model of OpenRouter's, the provider Cline is on

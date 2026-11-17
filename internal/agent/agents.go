@@ -396,6 +396,7 @@ func onMachineAll(home, cfg string) []*Agent {
 		kun(home),
 		hanako(home),
 		atomcode(home),
+		ocr(home),
 		snow(home),
 		alma(),
 		shelley(home),

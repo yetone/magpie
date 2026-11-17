@@ -227,6 +227,8 @@ var cliSpecs = map[string]cliSpec{
 	// exists, but its installed-binary update path is not exercised here, so
 	// only its npm package and brew cask are recognized
 	"atomcode": {npm: []string{"@atomgit.com/atomcode"}, brew: []string{"atomcode"}},
+	// Open Code Review: npm, or its install script's /usr/local/bin/ocr
+	"open-code-review": {npm: []string{"@alibaba-group/open-code-review"}},
 	// Snow CLI is published on npm alone (snow-ai)
 	"snow": {npm: []string{"snow-ai"}, scripts: true},
 	// MothX: its npm installer package, which brings the native binary

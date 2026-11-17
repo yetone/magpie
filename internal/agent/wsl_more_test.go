@@ -39,6 +39,7 @@ var wslMore = []struct {
 	{"codebuddy", ".codebuddy/models.json", "/v1/chat/completions"},
 	{"cline", ".cline/data/settings/providers.json", "/v1"},
 	{"atomcode", ".atomcode/config.toml", "/v1"},
+	{"open-code-review", ".opencodereview/config.json", "/v1"},
 	{"snow", ".snow/profiles/magpie.json", "/v1"},
 	{"goose", ".config/goose/custom_providers/magpie.json", "/v1"},
 	{"mothx", ".mothx/settings.json", "/v1"},

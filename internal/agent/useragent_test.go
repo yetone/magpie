@@ -27,6 +27,8 @@ func TestAgentOf(t *testing.T) {
 		"HanaAgent/1.0":                            "hanako",
 		"hanako":                                   "hanako", // its key
 		"atomcode/5.2.1":                           "atomcode",
+		"open-code-review/1.13.10":                 "open-code-review",
+		"open-code-review/1.13.10 | claude":        "open-code-review",
 		"cline ai-sdk/openai-compatible/3.0.37":    "cline",
 		"Vibecoding Client/1.3.104 (darwin; arm64; go1.26.2)": "mothx",
 		"ZooCode/3.90.0": "zoo-code",

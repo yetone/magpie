@@ -757,6 +757,11 @@ var wslKinds = []wslKind{
 				return withVia(atomcodeOwnModels("", cur["model"]), "atomcode", magpieID+"/")
 			}
 		}},
+	// Open Code Review's ~/.opencodereview: no bin, as `ocr` is other
+	// programs' name too; ocr reads its config on every run. A stopped
+	// distro's config.json is looked at once it is started
+	{id: ocrID, name: "Open Code Review", dir: ".opencodereview", in: ocrIn,
+		asleep: wslOwnAsleep(ocrID, "model")},
 	// Snow CLI's ~/.snow, its profiles the distro's own; a stopped
 	// distro's are looked at once it is started
 	{id: "snow", name: "Snow CLI", dir: ".snow", bin: "snow", in: snowIn,
