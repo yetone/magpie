@@ -6715,14 +6715,41 @@ function routingPage(part) {
   // said whatever the group's routing, so it shows before Free first is
   // picked (jiabubu on Discord)
   const freeIn = (g, id) => !!(g && memberInfoOf(g, id)?.free);
-  function memberLabel(g, id) {
+  // memberParts: a member as who serves it (pv), its model (mn) and what
+  // is said after it (at), for memberLabel's one line of text and
+  // memberLine's card
+  function memberParts(g, id) {
     const i = memberInfoOf(g, id), m = modelOf(id), s = subOf(id), f = fixedOf(id);
-    if (s) return `${t("routing group")} · ${s.name}`;
+    if (s) return { pv: t("routing group"), mn: s.name, at: "" };
     const acct = memberAccount(id);
     const at = (acct ? ` · ${acct.name}` : "") + (f ? ` · ${fixedWords(f)}` : "") + (fastIn(g, id) ? ` · ${t("fast")}` : "") + (freeIn(g, id) ? ` · ${t("free")}` : "");
-    if (m) return `${m.providerName} · ${modelName(m)}${at}`;
-    if (i?.providerOff) return `${i.name} · ${i.model}${at} (${t("switched off")})`;
-    return i?.name ? `${i.name} · ${i.model}${at}` : id;
+    if (m) return { pv: m.providerName, mn: modelName(m), at };
+    if (i?.providerOff) return { pv: i.name, mn: i.model, at: `${at} (${t("switched off")})` };
+    return i?.name ? { pv: i.name, mn: i.model, at } : { pv: "", mn: id, at: "" };
+  }
+  function memberLabel(g, id) {
+    const p = memberParts(g, id);
+    return (p.pv ? p.pv + " · " : "") + p.mn + p.at;
+  }
+  // memberJoin: what goes between a group's members said in a line: an
+  // arrow in order, else the list comma, never the " · " that parts a
+  // member's provider from its model (tmr11235 on X: "Kimi Code · K3.1 Pro
+  // · OpenCode Go · Kimi K3.1 Pro" read as one run of names)
+  const memberJoin = (g) => g?.routing === "order" ? " → " : t(", ");
+  // memberLine: the members on a group's card, each one piece — its
+  // provider quiet, its model after — parted by memberJoin
+  function memberLine(g, ids, offs) {
+    const line = el("div", "mem");
+    ids.forEach((id, n) => {
+      if (n) line.append(el("span", "sep", memberJoin(g)));
+      const p = memberParts(g, id), b = el("span", "mbr");
+      if (p.pv) b.append(el("span", "pv", p.pv), " ");
+      b.append(el("span", "mn", p.mn));
+      const at = p.at + (offs && g.off?.includes(id) ? ` (${t("off")})` : "");
+      if (at) b.append(at);
+      line.append(b);
+    });
+    return line;
   }
   function renderGroups(filterOnly = false) {
     if (!groups) return;
@@ -7287,7 +7314,7 @@ function routingPage(part) {
     const main = el("div", "main"), nm = el("div", "nm");
     nm.append(el("b", "", g.name), el("code", "mdl", g.ref || "group/" + g.id));
     if (g.auto) nm.append(el("small", "auto", t("found by magpie")));
-    main.append(nm, el("div", "mem", shownMembers(g).map((id) => memberLabel(g, id)).join(g.routing === "order" ? " → " : " · ")));
+    main.append(nm, memberLine(g, shownMembers(g)));
     row.append(cb, ics, main);
     return row;
   }
@@ -7438,8 +7465,7 @@ function routingPage(part) {
       main.append(note);
     }
     const manual = g.routing === "manual";
-    const sep = g.routing === "order" ? " → " : " · ";
-    const mem = manual ? pickRow(g) : el("div", "mem", shownMembers(g).map((id) => memberLabel(g, id) + (g.off?.includes(id) ? ` (${t("off")})` : "")).join(sep));
+    const mem = manual ? pickRow(g) : memberLine(g, shownMembers(g), true);
     main.append(mem);
     if (!g.decides) main.append(...groupQuota(g));
     for (const p of g.patterns || []) {
@@ -8089,7 +8115,7 @@ function routingPage(part) {
         // its share by weight (#1910): a click edits it in place, Enter
         // or leaving it keeps it, Escape puts it back
         if (d.routing === "weight") row.append(memberWeight(id, off));
-        if (s) row.title = s.members.map((x) => memberLabel(s, x)).join(s.routing === "order" ? " → " : " · ");
+        if (s) row.title = s.members.map((x) => memberLabel(s, x)).join(memberJoin(s));
         if (!m && !s) { row.classList.add("off"); row.title = info?.providerOff ? offWords(info) : t("No provider serves {id} now; it is skipped", { id }); }
         if (i) { const up = el("button", "text", t("Up")); up.onclick = () => moveMember(i, i - 1); row.append(up); }
         if (i < d.members.length - 1) { const down = el("button", "text", t("Down")); down.onclick = () => moveMember(i, i + 1); row.append(down); }

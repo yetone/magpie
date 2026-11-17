@@ -75,8 +75,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await card.waitFor();
 
         const mem = (await card.locator(".mem").first().textContent()).trim();
-        const parts = mem.split(" · ");
-        assert.deepEqual(parts, ["Scope", "qwen", w.free, "Paid", "qwen"], `the card's members read ${mem}`);
+        const parts = await card.locator(".mem").first().locator(".mbr").allTextContents();
+        assert.deepEqual(parts, [`Scope qwen · ${w.free}`, "Paid qwen"], `the card's members read ${mem}`);
 
         await card.locator("button", { hasText: w.edit }).click();
         const rows = page.locator(".rt-gedit .fbl").first().locator(".fbrow");
