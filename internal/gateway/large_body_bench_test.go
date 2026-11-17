@@ -59,7 +59,10 @@ func largeConversation(proto provider.Protocol, model string, words int) []byte 
 	body := schema{"model": model, "max_tokens": 32000, "stream": false, "tools": tools}
 	switch proto {
 	case provider.Anthropic:
-		msgs[len(msgs)-1] = schema{"role": "user", "content": []any{schema{"type": "text", "text": "go on"}}}
+		// the user's words follow the last call's answer: a call left
+		// unanswered is mended before it is relayed (toolBlocksPaired)
+		msgs = append(msgs, schema{"role": "assistant", "content": []any{schema{"type": "text", "text": para}}},
+			schema{"role": "user", "content": []any{schema{"type": "text", "text": "go on"}}})
 		body["system"] = []any{schema{"type": "text", "text": para + para, "cache_control": schema{"type": "ephemeral"}}}
 		body["messages"] = msgs
 	case provider.Chat:
