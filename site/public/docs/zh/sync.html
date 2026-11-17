@@ -211,9 +211,10 @@ magpie webdav undo-sync                               # 撤销上次同步带来
     <p>不想开同步，只是搬到新电脑，就用加密备份文件：</p>
     <div class="code"><span class="lang">终端</span><button class="copy" data-copy="sy-backup">复制</button><pre id="sy-backup">magpie backup                               # writes magpie.magpie-backup, asks for a passphrase twice
 magpie backup --no-keys ~/b.magpie-backup   # no API keys in it
+magpie backup --no-usage                    # no usage history in it
 magpie restore magpie.magpie-backup         # on the other machine
 magpie restore --no-agents b.magpie-backup  # agents left as they are</pre></div>
-    <p>备份用 AES-256-GCM 在本机加密，密钥由口令经 PBKDF2-SHA256 派生，没有口令谁也读不了。恢复时同 id 的供应商被替换，其余的加上；Agent 的模型只设给那台电脑上装了的 Agent。</p>
+    <p>备份用 AES-256-GCM 在本机加密，密钥由口令经 PBKDF2-SHA256 派生，没有口令谁也读不了。恢复时同 id 的供应商被替换，其余的加上；Agent 的模型只设给那台电脑上装了的 Agent。备份文件里也带着用量记录（加 --no-usage 不带）；恢复时只补上那台电脑没有的调用，恢复两次也不会重复计数。</p>
 
     <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
     <h3>magpie 能用坚果云同步配置吗？</h3>

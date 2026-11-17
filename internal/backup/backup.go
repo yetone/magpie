@@ -5,7 +5,9 @@
 // servers and skills magpie gives the agents). Sign-ins (subscription
 // accounts and the plugins') are in it only when the user asks for them
 // (WithSignIns): each is the sign-in of an agent on this machine, and
-// without them each machine signs in on its own.
+// without them each machine signs in on its own. The usage history is in
+// it when asked for (WithUsage), as the CLI and the Settings page's Export
+// do unless told not to; a sync's and an automatic backup's never have it.
 //
 // The file is JSON: a header naming how it is sealed, and the bundle
 // encrypted with AES-256-GCM under a key derived from the passphrase with
@@ -13,6 +15,8 @@
 package backup
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
@@ -22,6 +26,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"maps"
 	"os"
@@ -39,6 +44,7 @@ import (
 	"github.com/yetone/magpie/internal/profile"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
+	"github.com/yetone/magpie/internal/usage"
 )
 
 // Ext is the extension backups are saved with.
@@ -112,6 +118,64 @@ type Bundle struct {
 	// put back, memory by memory, never put over what is there. Nil from
 	// a magpie before it, or with no memory.
 	Memory *memory.Bundle `json:"memory,omitempty"`
+	// Usage is the history of the calls made here and of the accounts'
+	// windows (WithUsage): merged where it is put back, never put over
+	// what is there. Nil when left out, and from a magpie before it.
+	Usage *Usage `json:"usage,omitempty"`
+}
+
+// Usage is the usage history a backup carries, so a restore on a new
+// computer has it (JasonLeeForOnly on Discord): usage.jsonl's lines,
+// gzipped (usage.LogBackup), and the quota cards' history as
+// provider.QuotaHistoryData keeps it, gzipped too.
+type Usage struct {
+	Calls  int    `json:"calls"`            // how many lines Log has
+	Log    []byte `json:"log,omitempty"`    // gzipped usage.jsonl
+	Quotas []byte `json:"quotas,omitempty"` // gzipped quota-history.json
+}
+
+// WithUsage puts this computer's usage history in b. A log that can't be
+// read is an error, never none.
+func WithUsage(b *Bundle) error {
+	lines, n, err := usage.LogBackup()
+	if err != nil {
+		return err
+	}
+	u := &Usage{Calls: n, Log: lines}
+	if q := provider.QuotaHistoryData(); len(q) > 0 {
+		var z bytes.Buffer
+		w, _ := gzip.NewWriterLevel(&z, gzip.BestCompression)
+		w.Write(q)
+		if err := w.Close(); err != nil {
+			return err
+		}
+		u.Quotas = z.Bytes()
+	}
+	b.Usage = u
+	return nil
+}
+
+// restoreUsage merges u into this computer's usage history, and says how
+// many calls it added.
+func restoreUsage(u *Usage) (int, error) {
+	n, err := usage.MergeLog(u.Log)
+	if err != nil {
+		return n, err
+	}
+	if len(u.Quotas) > 0 {
+		zr, err := gzip.NewReader(bytes.NewReader(u.Quotas))
+		if err != nil {
+			return n, err
+		}
+		q, err := io.ReadAll(zr)
+		if err != nil {
+			return n, err
+		}
+		if err := provider.MergeQuotaHistory(q, time.Now()); err != nil {
+			return n, err
+		}
+	}
+	return n, nil
 }
 
 // WithSignIns puts this computer's sign-ins in b. One that can't be read
@@ -418,10 +482,13 @@ type Parts struct {
 	// Memory merges the backup's memory into this computer's
 	// (memory.Put): a memory here is never taken away by it.
 	Memory bool
+	// Usage merges the backup's usage history into this computer's
+	// (usage.MergeLog): a call here already is never added again.
+	Usage bool
 }
 
 // All is every part.
-var All = Parts{Providers: true, Settings: true, Profiles: true, Agents: true, Library: true, SignIns: true, Memory: true}
+var All = Parts{Providers: true, Settings: true, Profiles: true, Agents: true, Library: true, SignIns: true, Memory: true, Usage: true}
 
 // Result says what a restore did.
 type Result struct {
@@ -432,14 +499,17 @@ type Result struct {
 	SignIn []string `json:",omitempty"`
 	// Plugins are the plugins installed for it, PluginErrors why the others
 	// couldn't be, by spec
-	Plugins         []string          `json:",omitempty"`
-	PluginErrors    map[string]string `json:",omitempty"`
-	Settings        bool
-	Profiles        int
-	Agents          int               // agent fields changed
-	Skipped         []string          // agent fields left alone: the agent is not on this machine, or the value failed
-	Library         bool              // the library was put in
-	Memory          bool              `json:",omitempty"` // memory changed: the backup's merged in
+	Plugins      []string          `json:",omitempty"`
+	PluginErrors map[string]string `json:",omitempty"`
+	Settings     bool
+	Profiles     int
+	Agents       int      // agent fields changed
+	Skipped      []string // agent fields left alone: the agent is not on this machine, or the value failed
+	Library      bool     // the library was put in
+	Memory       bool     `json:",omitempty"` // memory changed: the backup's merged in
+	// Usage is how many of the backup's calls were added to the usage
+	// history here; nil when it had none, or they weren't asked for.
+	Usage           *int              `json:",omitempty"`
 	LibraryProblems []library.Problem `json:",omitempty"` // what of it couldn't be given to an agent
 	// SignIns is what putting the backup's sign-ins in did; nil when it
 	// had none, or they weren't asked for.
@@ -643,6 +713,13 @@ func Restore(b Bundle, parts Parts) (Result, error) {
 				log.Printf("backup: memory digest: %v", err)
 			}
 		}
+	}
+	if parts.Usage && b.Usage != nil {
+		n, err := restoreUsage(b.Usage)
+		if err != nil {
+			return r, fmt.Errorf("the usage history: %w", err)
+		}
+		r.Usage = &n
 	}
 	return r, nil
 }

@@ -63,7 +63,7 @@ function serve(lang, posts) {
       return json(sync);
     }
     if (pathname === "/api/backup/export") { post(); return json({ path: "/home/me/magpie.magpie-backup", signIns: 3 }); }
-    if (pathname === "/api/backup/import") { post(); return json({ Added: 1, Replaced: 0, Profiles: 0, Agents: 0, SignIns: signInsResult }); }
+    if (pathname === "/api/backup/import") { post(); return json({ Added: 1, Replaced: 0, Profiles: 0, Agents: 0, SignIns: signInsResult, Usage: 12 }); }
     if (pathname === "/api/autobackup") return json(auto);
     if (pathname.startsWith("/api/autobackup/")) {
       const b = post();
@@ -163,11 +163,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await click(exTick);
         await form.locator(".hint", { hasText: w("Needed to open the file. The sign-ins are in it: anyone with the file and the passphrase can use those accounts, so pick a strong one.") }).waitFor();
         const [p1, p2] = [form.locator("input[type=password]").nth(0), form.locator("input[type=password]").nth(1)];
+        // the usage history goes unless unticked (JasonLeeForOnly on Discord)
+        assert.equal(await form.locator("label.tick", { hasText: w("With the usage history") }).locator("input").isChecked(), true);
         await p1.fill("correct horse");
         await p2.fill("correct horse");
         await noneWider(page);
         await click(form.locator("button.primary"));
-        assert.deepEqual(await waitPost("/api/backup/export"), { pass: "correct horse", keys: true, library: true, signIns: true, memory: true });
+        assert.deepEqual(await waitPost("/api/backup/export"), { pass: "correct horse", keys: true, library: true, signIns: true, memory: true, usage: true });
         await form.locator(".done").waitFor();
         await click(exportRow.locator("button"));
 
@@ -176,17 +178,21 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         form = list.locator(".sync-form");
         const imTick = form.locator("label.tick", { hasText: w("Bring in the sign-ins too, when the file has them") }).locator("input");
         assert.equal(await imTick.isChecked(), true);
+        assert.equal(await form.locator("label.tick", { hasText: w("Bring in the usage history too, merged with the one here") }).locator("input").isChecked(), true);
         await form.locator("input[type=file]").setInputFiles({ name: "magpie.magpie-backup", mimeType: "application/octet-stream", buffer: Buffer.from("sealed") });
         await form.locator(".fname", { hasText: "magpie.magpie-backup" }).waitFor();
         await form.locator("input[type=password]").fill("correct horse");
         await click(form.locator("button.primary"));
-        assert.equal((await waitPost("/api/backup/import"))?.signIns, true);
+        const imported = await waitPost("/api/backup/import");
+        assert.equal(imported?.signIns, true);
+        assert.equal(imported?.usage, true);
         const done = form.locator(".done");
         await done.first().waitFor();
         const lines = await done.allTextContents();
         for (const l of [w("Sign-ins: {added} added, {updated} updated, {kept} kept as they are here", { added: 2, updated: 1, kept: 1 }),
           w("One kept as it is here was renewed later here, or is the account the agent itself is signed in with."),
-          w("Codex is signed in with the backup's account.")]) assert.ok(lines.includes(l), `${l} in ${lines.join(" | ")}`);
+          w("Codex is signed in with the backup's account."),
+          w("Usage history: {n} calls added", { n: 12 })]) assert.ok(lines.includes(l), `${l} in ${lines.join(" | ")}`);
         await noneWider(page);
         await click(rowNamed(w("Import")).locator("button"));
 

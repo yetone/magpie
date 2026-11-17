@@ -239,10 +239,11 @@ window.exportForm = function () {
   const [keysL, keys] = tick(t("With the providers' API keys"), true);
   const [libL, lib] = tick(t("With the library: instructions, MCP servers, skills, hooks and subagents"), true);
   const [memL, mem] = tick(t("With memory: what the agents know"), true);
+  const [useL, use] = tick(t("With the usage history"), true);
   // sign-ins: off unless picked (qianxunji, curtinp118 on Discord)
   const [siL, si] = tick(t("With the sign-ins: subscription accounts and plugin sign-ins"), false);
   const what = el("div", "stack");
-  what.append(keysL, libL, memL, siL);
+  what.append(keysL, libL, memL, useL, siL);
   const passF = field(t("Passphrase"), p1, t("Needed to open the file. Subscriptions aren't in it: sign in to them on the other computer."));
   const passSay = passF[1].querySelector(".hint");
   si.onchange = () => {
@@ -259,7 +260,7 @@ window.exportForm = function () {
     if (p1.value !== p2.value) return say(t("The two passphrases differ"));
     go.classList.add("busy");
     try {
-      const r = await api("backup/export", { pass: p1.value, keys: keys.checked, library: lib.checked, memory: mem.checked, signIns: si.checked });
+      const r = await api("backup/export", { pass: p1.value, keys: keys.checked, library: lib.checked, memory: mem.checked, usage: use.checked, signIns: si.checked });
       ed.replaceChildren(el("div", "done", t("Saved to {path}", { path: r.path })));
     } catch (e) {
       go.classList.remove("busy");
@@ -303,9 +304,10 @@ window.importForm = function () {
   const [agentsL, agents] = tick(t("Set the agents' models too"), true);
   const [libL, lib] = tick(t("Bring in the library too: instructions, MCP servers, skills, hooks and subagents"), true);
   const [memL, mem] = tick(t("Bring in memory too, merged with the memories here"), true);
+  const [useL, use] = tick(t("Bring in the usage history too, merged with the one here"), true);
   const [siL, si] = tick(t("Bring in the sign-ins too, when the file has them"), true);
   const what = el("div", "stack");
-  what.append(agentsL, libL, memL, siL);
+  what.append(agentsL, libL, memL, useL, siL);
   ed.append(...field(t("File"), pf), ...field(t("Passphrase"), pass), ...field("", what, t("Providers with the same id are replaced; one that came without a key keeps the key it has here. The library replaces the one here, which is kept with its backups.")));
   const go = el("button", "text primary", t("Import"));
   const cancel = el("button", "text", t("Cancel"));
@@ -315,7 +317,7 @@ window.importForm = function () {
     if (!data) return say(t("Choose a file first"));
     go.classList.add("busy");
     try {
-      const r = await api("backup/import", { data, pass: pass.value, agents: agents.checked, library: lib.checked, memory: mem.checked, signIns: si.checked });
+      const r = await api("backup/import", { data, pass: pass.value, agents: agents.checked, library: lib.checked, memory: mem.checked, usage: use.checked, signIns: si.checked });
       const lines = [t("Providers: {added} added, {replaced} replaced; {profiles} profiles; {agents} agent settings changed", { added: r.Added, replaced: r.Replaced, profiles: r.Profiles, agents: r.Agents })];
       if (r.NeedKey?.length) lines.push(t("Needs a key: {names}", { names: r.NeedKey.join(", ") }));
       if (r.SignIns) lines.push(...signInsSaid(r.SignIns));
@@ -327,6 +329,7 @@ window.importForm = function () {
       if (r.Plugins?.length) lines.push(t("Plugins added: {names}", { names: r.Plugins.join(", ") }));
       for (const [spec, error] of Object.entries(r.PluginErrors || {})) lines.push(t("Couldn't add the plugin {spec}: {error}", { spec, error }));
       if (r.Library) lines.push(t("Library brought in and written into the agents"));
+      if (r.Usage != null) lines.push(t("Usage history: {n} calls added", { n: r.Usage }));
       for (const p of r.LibraryProblems || []) lines.push(t("{agent} couldn't get {what}: {error}", { agent: p.agent, what: p.what, error: p.error }));
       ed.replaceChildren(...lines.map((l) => el("div", "done", l)));
       refreshAfterSync();

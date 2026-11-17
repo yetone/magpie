@@ -306,6 +306,44 @@ clock.
   `syncOnce` after the sign-ins, never replaced as a part; see
   [Memory's backups and sync](memory.md#backups-and-sync).
 
+## The usage history in a backup file
+
+A backup file made by `magpie backup` or Settings → Sync → Export carries the
+usage history unless `--no-usage` (or the Export form's tick) leaves it out
+(JasonLeeForOnly on Discord: a server moved by backup and restore lost every
+call). [`WithUsage`](../../internal/backup/backup.go) puts in `Bundle.Usage`:
+usage.jsonl's whole lines, gzipped ([`LogBackup`](../../internal/usage/backup_log.go);
+a line still being written is left out), their count, and the gzipped quota
+history (`provider.QuotaHistoryData`). `Collect` never adds it, so a sync, a
+join and an automatic backup carry no usage: sync shares usage by day files
+(`usage.go`), and an automatic backup would hold the whole log every day.
+Routing history (debug data) and `usage-others` (the other computers' days)
+are never in a backup file.
+
+`Restore` with `Parts.Usage` (on in `All`; `magpie restore --no-usage` and
+the Import form's tick turn it off) merges, never replaces:
+[`MergeLog`](../../internal/usage/backup_log.go) appends the backup's lines
+this log doesn't have, compared byte for byte as a multiset, so a line here
+is passed over as often as it is here. Restoring the same file twice adds
+nothing; two calls the old log had as the same bytes both arrive; a line
+that isn't a JSON object is passed over. Most of the log is read before the
+gateway's log lock is taken, the rest under it, and the new lines are
+appended with O_APPEND a few MB at a time after a newline if the log ends
+in an unfinished line. Rows keep `Computer == ""`: they are this computer's
+calls from then on, key spend caps included. Quota points merge with
+`provider.MergeQuotaHistory`. `Result.Usage` is the number of calls added,
+nil when the file has no usage (one made before, or with `--no-usage`),
+which restores as before.
+
+Not yet: where usage is also shared by sync, the old computer's calls are
+in `usage-others` and, after a restore, in this log too, so they count
+twice (#6987).
+
+Tests: `TestBackupCarriesUsageHistory` (two homes, a restore twice, a
+duplicate line, `--no-usage`), `TestOldBackupWithoutUsage`,
+`TestUsageMergeKeepsLinesWhole` (an unfinished last line on both sides),
+and `sync-signins.test.cjs` for the forms.
+
 ## Data folder on another disk
 
 Settings › Sync's Data folder (CHENGJIAHEGOXIS and buhaodeshiyehao on X)

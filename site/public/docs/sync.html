@@ -211,9 +211,10 @@ magpie webdav undo-sync                               # put back what the last s
     <p>For a move to a new computer without sync, use an encrypted backup file:</p>
     <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="sy-backup">Copy</button><pre id="sy-backup">magpie backup                               # writes magpie.magpie-backup, asks for a passphrase twice
 magpie backup --no-keys ~/b.magpie-backup   # no API keys in it
+magpie backup --no-usage                    # no usage history in it
 magpie restore magpie.magpie-backup         # on the other machine
 magpie restore --no-agents b.magpie-backup  # agents left as they are</pre></div>
-    <p>It is encrypted on your machine with AES-256-GCM, the key derived from the passphrase with PBKDF2-SHA256; nothing in it can be read without the passphrase. Restoring replaces providers with the same id and adds the rest; agent models are set only for agents installed on that computer.</p>
+    <p>It is encrypted on your machine with AES-256-GCM, the key derived from the passphrase with PBKDF2-SHA256; nothing in it can be read without the passphrase. Restoring replaces providers with the same id and adds the rest; agent models are set only for agents installed on that computer. The file also carries the usage history (--no-usage leaves it out); a restore adds the calls that computer hasn't got, so restoring twice counts nothing twice.</p>
 
     <h2 id="faq"><a class="anchor" href="#faq">FAQ</a></h2>
     <h3>Can magpie sync through Nutstore (坚果云)?</h3>

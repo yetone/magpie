@@ -72,8 +72,9 @@ const usage = `magpie — one place to pick every agent's model
   magpie rename <old> <new>       rename a profile
   magpie rm <name>                delete a profile
 
-  magpie backup [--no-keys] [--no-library] [file]    providers, keys, settings, profiles, agent models and the library in one file, sealed with a passphrase
-  magpie restore [--no-agents] [--no-library] <file> put a backup in on this machine
+  magpie backup [--no-keys] [--no-library] [file]    providers, keys, settings, profiles, agent models, the library and the usage history in one file, sealed with a passphrase
+  magpie restore [--no-agents] [--no-library] <file> put a backup in on this machine; its usage history is merged with the one here
+                                                     --no-usage on either: the usage history left out
                                                      --sign-ins on backup: the subscriptions' and plugins' sign-ins too, sealed (off unless given); --no-sign-ins on restore leaves them out
   magpie uninstall [--yes]                           disconnect every agent, putting back what each had, then remove magpie's service and files
                                                      --keep-data: all but deleting magpie's settings, providers and usage

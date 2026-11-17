@@ -211,9 +211,10 @@ magpie webdav undo-sync                               # 前回の同期で入っ
     <p>同期せず新しいコンピュータに移るだけなら、暗号化バックアップファイルを使います。</p>
     <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="sy-backup">コピー</button><pre id="sy-backup">magpie backup                               # writes magpie.magpie-backup, asks for a passphrase twice
 magpie backup --no-keys ~/b.magpie-backup   # no API keys in it
+magpie backup --no-usage                    # no usage history in it
 magpie restore magpie.magpie-backup         # on the other machine
 magpie restore --no-agents b.magpie-backup  # agents left as they are</pre></div>
-    <p>手元で AES-256-GCM で暗号化し、鍵はパスフレーズから PBKDF2-SHA256 で作るので、パスフレーズなしでは読めません。復元すると同じ ID のプロバイダーは置き換え、ほかは追加します。エージェントのモデルは、そのコンピュータに入っているエージェントにだけ設定します。</p>
+    <p>手元で AES-256-GCM で暗号化し、鍵はパスフレーズから PBKDF2-SHA256 で作るので、パスフレーズなしでは読めません。復元すると同じ ID のプロバイダーは置き換え、ほかは追加します。エージェントのモデルは、そのコンピュータに入っているエージェントにだけ設定します。バックアップには使用履歴も入ります（--no-usage で外せます）。復元ではそのコンピュータにない呼び出しだけを足すので、二度復元しても二重には数えません。</p>
 
     <h2 id="faq"><a class="anchor" href="#faq">よくある質問</a></h2>
     <h3>magpie は坚果云（Nutstore）で同期できますか？</h3>
