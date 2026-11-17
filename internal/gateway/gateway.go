@@ -3617,6 +3617,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	wentTier := ""   // the service tier the last try went out at (noteWireTier, #1784)
 	where := ""      // the last try's provider.Where, for the usage
 	again := 0       // times the last one left has been tried again
+	planAgain := 0   // times a group's member was asked again in place for the Qwen Token Plan's concurrency 429 (qwenPlanBusy)
 	resealed := 0    // what of the conversation another account sealed was taken out: its reasoning, then its compaction
 	repicked := 0    // times Copilot's Auto was asked again for a model the account is served
 	floored := false // the reply's length raised to what the provider takes
@@ -5154,6 +5155,26 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			small, smallW = elsewhereWeighed(small, smallW, c)
 			last = i == len(cands)-1
 		}
+		if wait, ok := passingFor(c, hw.code(), hw.header, hw.errBody(), planAgain); ok && !protected && !last && !hw.passing && !hw.turnedAway && hw.failed() && qwenPlanBusy(c.p, hw.code(), hw.errBody()) && !kept.tooQuiet(wait) && !kept.outlives(wait) {
+			// the Qwen Token Plan turned the request away for its
+			// concurrency, its quota far from used (pelikanade on X): the
+			// same account is asked again after a jittered moment, a few
+			// times, before the group moves on to its next member, the
+			// account resting then as for a rate limit (dashScopeRate)
+			try.Fail, try.Again = failRate, wait.Milliseconds()
+			s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
+			skipped = append(skipped, c.label()+": "+call.Error)
+			planAgain++
+			if pauseUntilReaddressed(r.Context(), wait, readdressedOf([]candidate{c})) {
+				i--
+				continue
+			}
+			call.Status, call.Error = canceled(r.Context())
+			try.Gone = true
+			s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
+			break
+		}
+		planAgain = 0
 		if wait, ok := passing(hw.code(), hw.header, hw.errBody(), again); ok && !protected && !last && hw.failed() && spentAfter(cands[i+1:]) {
 			// the others left are out of their allowance (Discord, waroy: a
 			// Codex account run out, Grok busy a moment): this one is the
@@ -5391,7 +5412,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				forbade = append(forbade, forbidden{c: c, rest: rest, try: at, words: words5xx})
 			}
 			skipped = append(skipped, c.label()+": "+call.Error)
-			if waitsOf(c.patience, patienceFallback) > 0 && !hw.turnedAway && busy(hw.code(), hw.errBody()) && !routedThere(hw.header) {
+			if waitsOf(c.patience, patienceFallback) > 0 && !hw.turnedAway && busyFor(c, hw.code(), hw.errBody()) && !routedThere(hw.header) {
 				busyNow = noteBusy(busyNow, c, hw.header)
 			}
 			continue
@@ -5408,9 +5429,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		// its allowance, asked only as the one back soonest, isn't: the
 		// members before it were asked again as the last that may answer
 		// (spentAfter) and the agent is told theirs
-		lastSpent := last && isGroup && len(busyNow) > 0 && !hw.passing && hw.failed() && !busy(hw.code(), hw.errBody()) &&
+		lastSpent := last && isGroup && len(busyNow) > 0 && !hw.passing && hw.failed() && !busyFor(c, hw.code(), hw.errBody()) &&
 			slices.Contains([]string{failQuota, failCredit}, failure(hw.code(), hw.errBody())) && !spentAfter([]candidate{c})
-		if _, same := passing(hw.code(), hw.header, hw.errBody(), again); last && patience > 0 && !protected && !sameRefusal && !hw.turnedAway && !hw.refused && hw.failed() && (busy(hw.code(), hw.errBody()) && (!routedThere(hw.header) || len(busyNow) > 0) || lastSpent) &&
+		if _, same := passingFor(c, hw.code(), hw.header, hw.errBody(), again); last && patience > 0 && !protected && !sameRefusal && !hw.turnedAway && !hw.refused && hw.failed() && (busyFor(c, hw.code(), hw.errBody()) && (!routedThere(hw.header) || len(busyNow) > 0) || lastSpent) &&
 			(isGroup || !codexReset(hw.code(), hw.errBody())) &&
 			(len(busyNow) > 0 || waitsOf(c.patience, patienceFallback) > 0 && !same) {
 			// every member has failed, each in a way that passes — busy,
@@ -5462,7 +5483,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				break
 			}
 		}
-		if wait, ok := passing(hw.code(), hw.header, hw.errBody(), again); ok && !protected && !sameRefusal && !hw.turnedAway && hw.failed() && waitFrom.IsZero() && !kept.tooQuiet(wait) && !kept.outlives(wait) {
+		if wait, ok := passingFor(c, hw.code(), hw.header, hw.errBody(), again); ok && !protected && !sameRefusal && !hw.turnedAway && hw.failed() && waitFrom.IsZero() && !kept.tooQuiet(wait) && !kept.outlives(wait) {
 			// nobody else is left: the same one again, after a moment (not
 			// what Antigravity turned away: it turns it away again; nor
 			// once the group's patience is spent)
