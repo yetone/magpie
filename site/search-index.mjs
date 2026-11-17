@@ -3,7 +3,7 @@
 // its title and its sections, as plain text. Run `node search-index.mjs`
 // after changing a docs page; a test fails while a committed index differs
 // from what this builds.
-import { readFile, readdir, writeFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 
 const pub = new URL("./public/", import.meta.url);
 export const LANGS = { en: "docs/", zh: "docs/zh/", ja: "docs/ja/" };
@@ -73,6 +73,7 @@ export async function build() {
   return out;
 }
 
+// run as a script, it writes every file built from the docs (docs-index.mjs)
 if (import.meta.url === `file://${process.argv[1]}`) {
-  for (const [lang, json] of Object.entries(await build())) await writeFile(new URL(`search/${lang}.json`, pub), json);
+  await (await import("./docs-index.mjs")).writeAll();
 }

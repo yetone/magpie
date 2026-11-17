@@ -969,6 +969,9 @@ cause:
     f7e0c2763) did the same: five times in five days, each by a Go
     change that also touched a docs page and ran only Go tests. Now in
     the code standards' criterion 3.
+    Then testenv got the check: every package's run fails while a docs
+    page differs from site/docs-index.sums, which either generator now
+    writes with both files.
   - 10-28: of main's last 58 Test runs, 49 were cancelled by the next
     push. 0b99b8fbe's new allocation bound went red in macOS's Race job
     (sync.Pool lets go under -race) at 25df3187b, the first run after it

@@ -2,7 +2,7 @@
 // article as Markdown, for AI assistants that read a site in one file.
 // Run `node llms-full.mjs` after changing a docs page; a test fails while
 // the committed file differs from what this builds.
-import { readFile, readdir, writeFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 
 const pub = new URL("./public/", import.meta.url);
 
@@ -82,6 +82,7 @@ export async function build() {
   return parts.join("\n\n") + "\n";
 }
 
+// run as a script, it writes every file built from the docs (docs-index.mjs)
 if (import.meta.url === `file://${process.argv[1]}`) {
-  await writeFile(new URL("llms-full.txt", pub), await build());
+  await (await import("./docs-index.mjs")).writeAll();
 }

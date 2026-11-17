@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { LANGS, build, page } from "./search-index.mjs";
+import { SUMS, sums } from "./docs-index.mjs";
 
 const pub = new URL("./public/", import.meta.url);
 const { find, snippet } = createRequire(import.meta.url)("./public/docs-search.js");
@@ -76,4 +77,8 @@ test("search: snippet marks the terms around the first one found", () => {
   assert.deepEqual(parts.filter((_, i) => i % 2), ["Download", "mirror"]);
   assert.deepEqual(snippet("a.b (c)", "(c)"), ["a.b ", "(c)", ""], "regex characters are literal");
   assert.deepEqual(snippet("short", ""), ["short"]);
+});
+
+test("search: docs-index.sums is current, what the Go suite checks the docs pages by", async () => {
+  assert.equal(await readFile(SUMS, "utf8"), await sums(), "docs-index.sums is stale: run `node search-index.mjs` in site/");
 });
