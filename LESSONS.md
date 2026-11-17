@@ -664,6 +664,19 @@ too.**
 
 ## Concurrency and tests
 
+**A check and what it counts are one step, and a reading counts what it
+had when it was taken, not when it is looked at.**
+- #6958: TestCapHoldsUnderParallelSessions went red on ubuntu CI at 93%
+  of a 90% cap. A turn found not near its cap was counted on the account
+  only once it took its lane, so turns checking in that gap passed
+  together. The account's usage came from replies that began while a
+  round was out, so the reading lacked that round. turnSpends still took
+  every turn come back as read, and halved what a turn spends.
+- Widen the gap in a test hook to find such a red, not by rerunning. A
+  hook placed inside the lock it is testing hides the gap: the first
+  cut's test was green with the fix taken out.
+- Seen 1× (2026-11-17).
+
 **A fake or child process a test starts ends when the test does**, and
 **a timing test leaves room on both sides**, are in the code standards
 since 10-11. See [Moved to the code standards](#moved-to-the-code-standards).
