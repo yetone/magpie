@@ -964,6 +964,11 @@ cause:
     on llms-full.txt and on public/search/*.json, the index b70c45048
     added on 11-15 (fixed in f5f27070a). Docs pages now feed two
     generated files: run `node search-index.mjs` too.
+    11-16 dbbb2f26b (fixed in 9d5d8baf2) and 11-17 00b2c11a6 (a new
+    agent's docs row, cli (linux/amd64) red at 2f25728dd, fixed in
+    f7e0c2763) did the same: five times in five days, each by a Go
+    change that also touched a docs page and ran only Go tests. Now in
+    the code standards' criterion 3.
   - 10-28: of main's last 58 Test runs, 49 were cancelled by the next
     push. 0b99b8fbe's new allocation bound went red in macOS's Race job
     (sync.Pool lets go under -race) at 25df3187b, the first run after it

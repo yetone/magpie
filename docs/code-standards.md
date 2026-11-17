@@ -78,6 +78,12 @@ listed as not run, never left out.
    runs: internal/gui's TestEveryRouteIsNamedForTheCLI for a new route,
    internal/agent's TestEveryAgentNamedForTheLibrary for a new agent
    (red on main four times before it, last at 00b2c11a6, 11-17).
+   A change under `site/public/docs` ends with `node llms-full.mjs` and
+   `node search-index.mjs` in site/, then `node --test site/*.test.mjs`
+   from the repo root: both files are built from those pages and
+   committed, and a Go change that adds a docs row left them stale on
+   main five times from 11-13 to 11-17 (459d668b3, 256910f17,
+   9dcec6751, dbbb2f26b, 00b2c11a6).
 4. **GUI tests in both engines.** A change to `internal/gui/assets` runs the
    Playwright tests it touches in Chromium and WebKit (`make test-ui`, or
    `BROWSER=webkit node --test …`). The suite must also pass in Chinese,
