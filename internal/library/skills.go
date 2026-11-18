@@ -207,6 +207,11 @@ type meta struct {
 	// Discord). False when the front matter doesn't parse, or the value
 	// isn't a bool: not known.
 	Manual bool `yaml:"disable-model-invocation" json:"-"`
+	// Typed is its user-invocable: false for a skill only the model
+	// calls, which no agent offers to type; nil when it isn't said.
+	Typed *bool `yaml:"user-invocable" json:"-"`
+	// Hint is its argument-hint, which Claude Code shows after /name.
+	Hint string `yaml:"argument-hint" json:"-"`
 }
 
 func readMeta(dir string) (meta, bool) {
@@ -787,8 +792,11 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 	// the skills the router lists here (skill_router.go): no link of
 	// their own
 	routed := l.routedFor(t, sharers, cp, inShared)
+	// and the ones the user types still, each by a stub of its own
+	slash := slashFor(t, all, sharers, routed)
+	dropStubs(t, slash, res)
 	if !t.Gone {
-		defer l.placeRouter(t, routed, a, res)
+		defer l.placeRouter(t, routed, slash, a, res)
 	}
 	var mine []string
 	for _, name := range a.Skills {
@@ -2483,9 +2491,10 @@ func foundSkills(l *Library) []FoundSkill {
 			f := byName[name]
 			// magpie's link to the library's folder is an agent having the
 			// one found there
-			// and the skill router's entry is magpie's own (skill_router.go)
+			// and the skill router's entry and slash stubs are magpie's own
+			// (skill_router.go)
 			if strings.HasPrefix(name, ".") || ours(p, name) && (f == nil || f.Library == "") || l.skill(name) != nil || !nameRe.MatchString(name) ||
-				name == RouterSkill && routerOurs(p) {
+				routerOurs(p) {
 				continue
 			}
 			m, ok := readMeta(p)

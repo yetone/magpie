@@ -25,6 +25,17 @@ package library
 //     user to type, which a listed skill can't be;
 //   - one the agent finds in ~/.agents/skills anyway.
 //
+// A skill the router lists is still the user's to type in Codex ($name),
+// Pi (/skill:name) and Droid (/name) too: the agent's folder is given a
+// stub of it by that name (slashFor), whose SKILL.md has its name and
+// description and sends the agent to its own SKILL.md, and is marked for
+// the user to type alone, so the agent offers it in its picker and keeps
+// it out of the model's prompt. That is only for the agents whose own
+// loaders were read to do so (slashAgent), and only where no agent that
+// reads the folder too would put a stub's description in its prompt.
+// Claude Code's folder is read by Crush, DevEco Code and Kimi Code, so
+// its stubs are commands (routerCommands) instead.
+//
 // And an agent whose folder can't take the router keeps every link
 // (routerWhy): one given copies (in WSL, or by the user's choice), Claude
 // Desktop (synced by syncDesktopSkills, never here), LiveAgent (which
@@ -165,7 +176,7 @@ func (l *Library) routedFor(t *Target, sharers []string, cp bool, inShared func(
 		if l.blockedSkills[realDir(q)] {
 			continue
 		}
-		if _, err := os.Lstat(q); err == nil && !ours(q, s.Name) && realDir(q) != realDir(skillDir(s.Name)) {
+		if _, err := os.Lstat(q); err == nil && !ours(q, s.Name) && !routerOurs(q) && realDir(q) != realDir(skillDir(s.Name)) {
 			continue
 		}
 		out[s.Name] = true
@@ -176,7 +187,7 @@ func (l *Library) routedFor(t *Target, sharers []string, cp bool, inShared func(
 // placeRouter writes the router's folder for t's skills folder with the
 // skills routed, and its entry in the folder; with none routed, the entry
 // magpie made there goes, and its folder.
-func (l *Library) placeRouter(t *Target, routed map[string]bool, a *Applied, res *Result) {
+func (l *Library) placeRouter(t *Target, routed, slash map[string]bool, a *Applied, res *Result) {
 	id := t.Agent.ID
 	p := filepath.Join(t.Skills, RouterSkill)
 	dir := routerDir(t.Skills)
@@ -199,11 +210,12 @@ func (l *Library) placeRouter(t *Target, routed map[string]bool, a *Applied, res
 		l.routerCommands(t, nil, a, res)
 		return
 	}
-	changed, err := writeRouter(dir, t.Skills, routed)
+	changed, at, err := writeRouter(dir, t.Skills, routed)
 	if err != nil {
 		res.fail(id, "skill:"+RouterSkill, err)
 		return
 	}
+	placeStubs(t, slash, at, res)
 	if !routerOurs(p) || realDir(p) != realDir(dir) {
 		unlink(p) // magpie's, to an old folder: routerWhy left a user's alone
 		if err := os.MkdirAll(t.Skills, 0o755); err != nil {
@@ -332,7 +344,7 @@ func (l *Library) routerAllow(t *Target, want []string, a *Applied, res *Result)
 // writeRouter writes the router's folder dir for the skills folder at
 // skills: a link under .skills to each skill routed, and the SKILL.md
 // that lists them. It reports whether anything there changed.
-func writeRouter(dir, skills string, routed map[string]bool) (bool, error) {
+func writeRouter(dir, skills string, routed map[string]bool) (bool, map[string]string, error) {
 	names := slices.Sorted(func(yield func(string) bool) {
 		for n := range routed {
 			if !yield(n) {
@@ -342,20 +354,21 @@ func writeRouter(dir, skills string, routed map[string]bool) (bool, error) {
 	})
 	links := filepath.Join(dir, ".skills")
 	if err := os.MkdirAll(links, 0o755); err != nil {
-		return false, err
+		return false, nil, err
 	}
 	changed := false
 	es, _ := os.ReadDir(links)
 	for _, e := range es {
 		if !routed[e.Name()] {
 			if err := os.RemoveAll(filepath.Join(links, e.Name())); err != nil {
-				return false, err
+				return false, nil, err
 			}
 			changed = true
 		}
 	}
 	type entry struct{ name, desc, at string }
 	var list []entry
+	ats := map[string]string{}
 	for _, n := range names {
 		q := filepath.Join(links, n)
 		if to, ok := linkTarget(q); !ok || filepath.Clean(to) != filepath.Clean(skillDir(n)) {
@@ -369,6 +382,7 @@ func writeRouter(dir, skills string, routed map[string]bool) (bool, error) {
 		at := filepath.Join(routedAt(dir, skills, n), "SKILL.md")
 		m, _ := readMeta(skillDir(n))
 		list = append(list, entry{n, m.Description, at})
+		ats[n] = at
 	}
 	var b strings.Builder
 	desc := routerDesc(names, func(i int) string { return list[i].desc })
@@ -387,15 +401,15 @@ func writeRouter(dir, skills string, routed map[string]bool) (bool, error) {
 	}
 	md := filepath.Join(dir, "SKILL.md")
 	if old, err := os.ReadFile(md); err == nil && string(old) == b.String() {
-		return changed, nil
+		return changed, ats, nil
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return false, err
+		return false, nil, err
 	}
 	tmp := md + ".tmp"
 	if err := os.WriteFile(tmp, []byte(b.String()), 0o644); err != nil {
-		return false, err
+		return false, nil, err
 	}
-	return true, os.Rename(tmp, md)
+	return true, ats, os.Rename(tmp, md)
 }
 
 // routedAt is the folder of the routed skill n the router's SKILL.md
@@ -522,4 +536,181 @@ func routerDesc(names []string, desc func(int) string) string {
 		s = strings.TrimRight(string(r[:len(r)-1]), ", ") + "…"
 	}
 	return s
+}
+
+// slashAgent is whether the agent t's loader keeps a skill whose SKILL.md
+// sets disable-model-invocation (or, in Codex, whose agents/openai.yaml
+// turns allow_implicit_invocation off) in the picker the user types it
+// from, and out of the model's prompt, each read from its own source:
+//   - Codex (0.165): agents/openai.yaml's policy.allow_implicit_invocation
+//     false keeps a skill for $name, off the model's context;
+//   - Pi (1.4.0, dist/core/skills.js formatSkillsForPrompt): such a skill
+//     is only /skill:name;
+//   - Droid (0.231): the model's list filters disableModelInvocation, the
+//     slash list only userInvocable.
+//
+// Claude Code (2.1.327) does too, but it has command stubs: Crush, DevEco
+// Code and Kimi Code read its skills folder and neither flag. Not the
+// others: Gemini CLI (0.35) and Alma read neither, so a stub's
+// description would be in their prompt again, as with the router off.
+func slashAgent(t *Target) bool {
+	if t == nil || t.Agent == nil || t.Agent.Plugin != "" {
+		return false
+	}
+	id, _, _ := strings.Cut(t.Agent.ID, "@")
+	id, _, _ = strings.Cut(id, "#")
+	switch id {
+	case "codex", "pi", "droid":
+		return true
+	}
+	return false
+}
+
+// slashFor are the skills routed in t's folder that get a stub there to
+// type them by: none when t, or another agent that reads this folder (the
+// very same one, or as its SkillsAlso: Alma reads Codex's), would put a
+// stub's description in its prompt, and none for a skill only the model
+// calls (user-invocable: false).
+func slashFor(t *Target, all []*Target, sharers []string, routed map[string]bool) map[string]bool {
+	if len(routed) == 0 || !slashAgent(t) {
+		return nil
+	}
+	for _, o := range all {
+		if o == t || o.Skills == "" {
+			continue
+		}
+		reads := slices.Contains(sharers, o.Agent.ID) || slices.Contains(o.SkillsAlso, t.Agent.ID)
+		if reads && !slashAgent(o) {
+			return nil
+		}
+	}
+	out := map[string]bool{}
+	for n := range routed {
+		if m, _ := readMeta(skillDir(n)); m.Typed == nil || *m.Typed {
+			out[n] = true
+		}
+	}
+	return out
+}
+
+// stubsDir is the folder of the stubs for the skills folder dir, beside
+// the router's own (routerDir), so an agent that looks for skills in
+// every folder under magpie-skills finds none of them there.
+func stubsDir(dir string) string { return routerDir(dir) + "-slash" }
+
+// stubOf is whether the entry at p is magpie's stub of a skill: a link
+// into the router's folders by another name than the router's.
+func stubOf(p string) bool { return filepath.Base(p) != RouterSkill && routerOurs(p) }
+
+// dropStubs takes out of t's folder each stub of magpie's that isn't to
+// stay (keep), and its folder. It runs before the folder's links are
+// written, so a skill no longer routed gets its link where its stub was.
+func dropStubs(t *Target, keep map[string]bool, res *Result) {
+	es, _ := os.ReadDir(t.Skills)
+	for _, e := range es {
+		p := filepath.Join(t.Skills, e.Name())
+		if keep[e.Name()] || !stubOf(p) {
+			continue
+		}
+		if err := unlink(p); err != nil {
+			res.fail(t.Agent.ID, "skill:"+e.Name(), err)
+			continue
+		}
+		res.changed(t.Agent.ID)
+	}
+	sd := stubsDir(t.Skills)
+	if len(keep) == 0 {
+		os.RemoveAll(sd)
+		return
+	}
+	es, _ = os.ReadDir(sd)
+	for _, e := range es {
+		if !keep[e.Name()] {
+			os.RemoveAll(filepath.Join(sd, e.Name()))
+		}
+	}
+}
+
+// stubYAML is Codex's agents/openai.yaml for a stub: for $name only.
+const stubYAML = "policy:\n  allow_implicit_invocation: false\n"
+
+// stubText is the SKILL.md of the stub of the skill n, whose own SKILL.md
+// is at: its name, description and argument hint, for the user alone to
+// type, and where its instructions are.
+func stubText(n string, m meta, at string) string {
+	desc := m.Description
+	if desc == "" {
+		desc = n
+	}
+	var b strings.Builder
+	q, _ := json.Marshal(desc)
+	fmt.Fprintf(&b, "---\nname: %s\ndescription: %s\n", n, q)
+	if m.Hint != "" {
+		h, _ := json.Marshal(m.Hint)
+		fmt.Fprintf(&b, "argument-hint: %s\n", h)
+	}
+	b.WriteString("disable-model-invocation: true\n---\n\n")
+	fmt.Fprintf(&b, "The user called up the skill %s. Its instructions are in its SKILL.md at `%s`: read that file now, before anything else (it is there, so don't search for it), and follow it for this task. ", n, at)
+	b.WriteString("A file or script it names is in that skill's own folder, beside its SKILL.md.\n")
+	return b.String()
+}
+
+// writeIfNot writes s to the file p unless it holds s already, and says
+// whether it wrote.
+func writeIfNot(p, s string) (bool, error) {
+	if old, err := os.ReadFile(p); err == nil && string(old) == s {
+		return false, nil
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return false, err
+	}
+	tmp := p + ".tmp"
+	if err := os.WriteFile(tmp, []byte(s), 0o644); err != nil {
+		return false, err
+	}
+	return true, os.Rename(tmp, p)
+}
+
+// placeStubs writes the stub of each skill in slash and links it into t's
+// folder by the skill's name; at is where each one's SKILL.md is read
+// (writeRouter). An entry there that isn't magpie's is left as it is:
+// routedFor routes no skill with one.
+func placeStubs(t *Target, slash map[string]bool, at map[string]string, res *Result) {
+	id := t.Agent.ID
+	sd := stubsDir(t.Skills)
+	for _, n := range slices.Sorted(maps.Keys(slash)) {
+		if at[n] == "" {
+			continue
+		}
+		m, _ := readMeta(skillDir(n))
+		d := filepath.Join(sd, n)
+		w1, err := writeIfNot(filepath.Join(d, "SKILL.md"), stubText(n, m, at[n]))
+		if err != nil {
+			res.fail(id, "skill:"+n, err)
+			continue
+		}
+		w2, err := writeIfNot(filepath.Join(d, "agents", "openai.yaml"), stubYAML)
+		if err != nil {
+			res.fail(id, "skill:"+n, err)
+			continue
+		}
+		p := filepath.Join(t.Skills, n)
+		if to, ok := linkTarget(p); ok && filepath.Clean(to) == filepath.Clean(d) {
+			if w1 || w2 {
+				res.changed(id)
+			}
+			continue
+		}
+		if _, err := os.Lstat(p); err == nil {
+			if !stubOf(p) {
+				continue
+			}
+			unlink(p) // magpie's, to an old folder
+		}
+		if err := dirLink(d, p); err != nil {
+			res.fail(id, "skill:"+n, err)
+			continue
+		}
+		res.changed(id)
+	}
 }

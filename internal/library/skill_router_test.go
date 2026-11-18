@@ -175,6 +175,146 @@ func TestSkillRouter(t *testing.T) {
 	}
 }
 
+// A skill the router lists is still in Codex's $ picker (yuushabu_buyinn
+// on X: "skill routing means I can't use / to pick a skill"; Claude
+// Code's are commands, TestSkillRouterKeepsSlashCommands): its folder
+// gets a stub by the skill's name, which Codex offers to type and keeps
+// out of the model's prompt (allow_implicit_invocation off; Pi and Droid
+// read disable-model-invocation), and which sends it to the skill's own
+// SKILL.md. Gemini CLI, which has neither, gets no stub, nor does Claude
+// Code's skills folder, which Crush and others read; a skill kept direct,
+// or the router off, has its link where the stub was.
+func TestSkillRouterSlash(t *testing.T) {
+	h := sandbox(t)
+	src := filepath.Join(h, "src")
+	skill(t, filepath.Join(src, "pdf"), "pdf", "Read PDFs. Use for any .pdf file")
+	write(t, filepath.Join(src, "xlsx/SKILL.md"), "---\nname: xlsx\ndescription: Edit spreadsheets\nargument-hint: <file>\n---\n")
+	write(t, filepath.Join(src, "lint/SKILL.md"), "---\nname: lint\ndescription: Model only\nuser-invocable: false\n---\n")
+	ok(t)(InstallSkills(src, []string{"pdf", "xlsx", "lint"}, []string{"claude", "codex", "gemini"}))
+	ok(t)(SetSkillRouter(true))
+	folders := map[string]string{
+		"claude": filepath.Join(h, ".claude", "skills"),
+		"codex":  filepath.Join(h, ".codex", "skills"),
+		"gemini": filepath.Join(h, ".gemini", "skills"),
+	}
+	for _, id := range []string{"codex"} {
+		dir := folders[id]
+		for _, n := range []string{"pdf", "xlsx"} {
+			p := filepath.Join(dir, n)
+			if !stubOf(p) {
+				t.Fatalf("%s: no stub of %s to type it by", id, n)
+			}
+			md := read(t, filepath.Join(p, "SKILL.md"))
+			m := parseMeta([]byte(md))
+			if m.Name != n || !m.Manual || m.Description == "" {
+				t.Fatalf("%s: %s's stub front matter: %+v\n%s", id, n, m, md)
+			}
+			at := filepath.Join(realDir(dir), RouterSkill, ".skills", n, "SKILL.md")
+			if !strings.Contains(md, "`"+at+"`") {
+				t.Fatalf("%s: %s's stub doesn't send the agent to %s:\n%s", id, n, at, md)
+			}
+			if got := read(t, at); !strings.Contains(got, "name: "+n) {
+				t.Fatalf("%s: the stub's path doesn't lead to %s: %q", id, n, got)
+			}
+			if y := read(t, filepath.Join(p, "agents", "openai.yaml")); !strings.Contains(y, "allow_implicit_invocation: false") {
+				t.Fatalf("%s: %s's stub is in Codex's prompt: %q", id, n, y)
+			}
+		}
+		if m := parseMeta([]byte(read(t, filepath.Join(dir, "pdf", "SKILL.md")))); m.Description != "Read PDFs. Use for any .pdf file" {
+			t.Fatalf("%s: pdf's stub description: %q", id, m.Description)
+		}
+		if m := parseMeta([]byte(read(t, filepath.Join(dir, "xlsx", "SKILL.md")))); m.Hint != "<file>" {
+			t.Fatalf("%s: xlsx's argument-hint: %q", id, m.Hint)
+		}
+		// one only the model calls has nothing to type
+		if _, err := os.Lstat(filepath.Join(dir, "lint")); err == nil {
+			t.Fatalf("%s: a skill only the model calls has a stub", id)
+		}
+		if md := read(t, filepath.Join(dir, RouterSkill, "SKILL.md")); !strings.Contains(md, "## pdf") || !strings.Contains(md, "## lint") {
+			t.Fatalf("%s: the router no longer lists them:\n%s", id, md)
+		}
+	}
+	for _, id := range []string{"gemini", "claude"} {
+		if !routerOurs(filepath.Join(folders[id], RouterSkill)) {
+			t.Fatalf("%s isn't given the router", id)
+		}
+		for _, n := range []string{"pdf", "xlsx"} {
+			if _, err := os.Lstat(filepath.Join(folders[id], n)); err == nil {
+				t.Fatalf("%s's skills folder, read by an agent that would carry a stub's description in its prompt, has %s", id, n)
+			}
+		}
+	}
+	v := routerView(t)
+	for _, f := range v.FoundSkills {
+		if f.Name == "pdf" || f.Name == "xlsx" {
+			t.Fatalf("a stub is offered as a skill found in an agent: %+v", f)
+		}
+	}
+	if p := ok(t)(Sync()); len(p.Changed) != 0 || len(p.Problems) != 0 {
+		t.Fatalf("a second sync: changed %v, problems %+v", p.Changed, p.Problems)
+	}
+
+	// kept direct: its link where the stub was
+	ok(t)(SkillRouterHow("xlsx", true))
+	for _, id := range []string{"claude", "codex", "gemini"} {
+		if p := filepath.Join(folders[id], "xlsx"); !ours(p, "xlsx") {
+			t.Fatalf("%s: direct, xlsx has no link", id)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(stubsDir(folders["claude"]), "xlsx")); err == nil {
+		t.Fatal("direct, xlsx's stub stays")
+	}
+
+	// off: the links back, no stub left
+	ok(t)(SetSkillRouter(false))
+	for _, id := range []string{"claude", "codex", "gemini"} {
+		for _, n := range []string{"pdf", "xlsx", "lint"} {
+			if p := filepath.Join(folders[id], n); !ours(p, n) {
+				t.Fatalf("%s: router off, no link of %s", id, n)
+			}
+		}
+		if _, err := os.Stat(stubsDir(folders[id])); err == nil {
+			t.Fatalf("%s: router off, the stubs' folder stays", id)
+		}
+	}
+}
+
+// Alma reads Codex's folder too and neither flag, so with Alma here
+// Codex's folder gets no stub: it would put each skill's description in
+// Alma's prompt, which the router is there to keep out.
+func TestSkillRouterSlashNotWhereAlmaReads(t *testing.T) {
+	h := sandbox(t)
+	// Alma is there once it has its data folder (%APPDATA% on Windows,
+	// which sandbox clears)
+	t.Setenv("APPDATA", filepath.Join(h, "AppData", "Roaming"))
+	cfg, err := os.UserConfigDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	almaDir := filepath.Join(cfg, "alma")
+	os.MkdirAll(almaDir, 0o755)
+	if tg := targetByID("alma"); tg == nil || !slices.Contains(tg.SkillsAlso, "codex") {
+		t.Fatalf("alma: %+v", tg)
+	}
+	src := filepath.Join(h, "src")
+	skill(t, filepath.Join(src, "pdf"), "pdf", "Read PDFs")
+	ok(t)(InstallSkills(src, []string{"pdf"}, []string{"codex"}))
+	ok(t)(SetSkillRouter(true))
+	dir := filepath.Join(h, ".codex", "skills")
+	if !routerOurs(filepath.Join(dir, RouterSkill)) {
+		t.Fatal("codex isn't given the router")
+	}
+	if _, err := os.Lstat(filepath.Join(dir, "pdf")); err == nil {
+		t.Fatal("with Alma reading Codex's folder, codex has a stub of pdf")
+	}
+	// Alma gone: the stub
+	os.RemoveAll(almaDir)
+	ok(t)(Sync())
+	if !stubOf(filepath.Join(dir, "pdf")) {
+		t.Fatal("no Alma: codex has no stub of pdf")
+	}
+}
+
 // Unticked from every skill the router listed, the agent's entry goes.
 func TestSkillRouterLastSkillUnticked(t *testing.T) {
 	h := sandbox(t)
