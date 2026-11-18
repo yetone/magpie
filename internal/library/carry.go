@@ -61,6 +61,11 @@ type Bundle struct {
 	// (plugin_carry.go). nil in a bundle from a magpie before they were
 	// carried: Put keeps this computer's then.
 	Plugins *[]*CarriedPlugin `json:"plugins,omitempty"`
+	// NoAgents says the Library was told by a magpie whose page shows no
+	// agent (a container, a NAS, gateway mode; Shared): its skills and
+	// prompts are ticked for none there, and a magpie that takes them
+	// gives one ticked for none to the agents a new one goes to (Borrow).
+	NoAgents bool `json:"noAgents,omitempty"`
 }
 
 // CarriedSkill is a skill with its folder's files.

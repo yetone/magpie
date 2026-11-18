@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // a Library as a remote magpie tells it: two skills and two prompt sets
@@ -212,5 +214,109 @@ func TestBorrowedSkillGoesWithTheRemote(t *testing.T) {
 	}
 	if got := names(mustLoad(t)); len(got) != 0 {
 		t.Fatalf("left after switching off: %v", got)
+	}
+}
+
+// fenglian980510 on X: a magpie in Docker shows no agent, so its skills and
+// prompts are ticked for none. A magpie that uses its Library gives them
+// to its own agents, as it would a new one; one the remote ticked keeps
+// its ticks.
+func TestBorrowFromAMagpieWithNoAgents(t *testing.T) {
+	sandbox(t)
+	NoAgentsShown = func() bool { return true }
+	t.Cleanup(func() { NoAgentsShown = nil })
+	if _, err := Put(&Bundle{
+		Instructions: Instructions{Agents: []string{}},
+		Texts:        map[string]string{"default": "Be brief."},
+		MCP:          []*Server{},
+		Skills: []*CarriedSkill{
+			{Name: "pdf", Agents: []string{}, Files: map[string][]byte{"SKILL.md": []byte("---\nname: pdf\ndescription: PDFs\n---\n")}},
+			{Name: "notes", Agents: []string{"codex"}, Files: map[string][]byte{"SKILL.md": []byte("---\nname: notes\ndescription: Notes\n---\n")}},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	b, err := Shared()
+	if err != nil {
+		t.Fatal(err)
+	}
+	j, err := json.Marshal(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var remote Bundle
+	if err := json.Unmarshal(j, &remote); err != nil {
+		t.Fatal(err)
+	}
+	if !remote.NoAgents {
+		t.Fatal("a magpie showing no agent didn't say so")
+	}
+	NoAgentsShown = nil
+
+	// the client: its agents are found, one of them hidden on its Agents page
+	sandbox(t)
+	here := []string{"claude", "gemini"}
+	was := givenHere
+	givenHere = func(string) []string { return here }
+	t.Cleanup(func() { givenHere = was })
+	if _, err := SetBorrow("nas", true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Borrow("nas", "NAS", &remote); err != nil {
+		t.Fatal(err)
+	}
+	l := mustLoad(t)
+	agents := map[string][]string{}
+	for _, s := range l.Skills {
+		agents[s.Name] = s.Agents
+	}
+	if !slices.Equal(agents["pdf"], here) {
+		t.Fatalf("a skill ticked for none there went to %v here, not %v", agents["pdf"], here)
+	}
+	if !slices.Equal(agents["notes"], []string{"codex"}) {
+		t.Fatalf("a skill the remote ticked lost its ticks: %v", agents["notes"])
+	}
+	if !slices.Equal(l.Instructions.Agents, here) {
+		t.Fatalf("the prompts went to %v, not %v", l.Instructions.Agents, here)
+	}
+}
+
+// A magpie with agents here says nothing of the kind: what it ticked for
+// none stays with none.
+func TestBorrowFromAMagpieWithAgentsKeepsNone(t *testing.T) {
+	remote := remoteLibrary(t)
+	if remote.NoAgents {
+		t.Fatal("a magpie with agents said it shows none")
+	}
+	remote.Skills[0].Agents = []string{}
+	sandbox(t)
+	if _, err := SetBorrow("office", true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Borrow("office", "Office", remote); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range mustLoad(t).Skills {
+		if s.Name == remote.Skills[0].Name && len(s.Agents) != 0 {
+			t.Fatalf("ticked for none there, given to %v here", s.Agents)
+		}
+	}
+}
+
+// givenHere is the agents found here with a skills folder, less those the
+// Agents page hides.
+func TestGivenHereLeavesOutHiddenAgents(t *testing.T) {
+	sandbox(t)
+	all := givenHere("skills")
+	if !slices.Contains(all, "gemini") {
+		t.Fatalf("gemini, found by its binary, isn't one: %v", all)
+	}
+	s := settings.Load()
+	s.AgentsHidden = []string{"gemini"}
+	if err := settings.Save(s); err != nil {
+		t.Fatal(err)
+	}
+	if got := givenHere("skills"); slices.Contains(got, "gemini") {
+		t.Fatalf("a hidden agent is given new skills: %v", got)
 	}
 }

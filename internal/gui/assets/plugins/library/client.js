@@ -17,7 +17,8 @@ magpie.plugin("library", (ctx) => {
   let tab = "instructions";
   let shown = "";        // the tab the page last drew, which fades in only when it changes
   let fits = [];         // textareas to fit before the page is painted
-  try { tab = localStorage.getItem("magpie.libTab") || tab; } catch {}
+  let tabPicked = false; // the reader picked the tab, here or before: with no agent the page opens on MCP otherwise
+  try { const was = localStorage.getItem("magpie.libTab"); if (was) { tab = was; tabPicked = true; } } catch {}
   const texts = {};      // set → its shared instructions as typed, while not saved
   let openSet = null;    // the set of instructions opened to edit
   let addingSet = false; // a new set being named
@@ -81,11 +82,14 @@ magpie.plugin("library", (ctx) => {
   // MCP servers the router gives other computers' apps.
   const shownAgents = () => gatewayPage() ? [] : lib.agents.filter((a) => !a.gone && !a.unseen && !isHidden(a));
   // With no agent to write to, none on this computer or gateway mode, the
-  // library is its MCP servers alone, served to any app through the router
+  // library is its MCP servers, served to any app through the router
   // (treeman_26897 on Discord: magpie on a server, an MCP entry point for
-  // remote clients, had no way to turn the router on).
+  // remote clients, had no way to turn the router on), and the skills and
+  // prompts it tells the magpies that use it as a Remote magpie
+  // (fenglian980510 on X: a magpie in Docker had no Skills).
   const gatewayPage = () => typeof gatewayMode !== "undefined" && !!gatewayMode;
   const agentless = () => !!lib && (gatewayPage() || !lib.agents.length);
+  const AGENTLESS_TABS = ["instructions", "mcp", "skills"];
   const withGone = (all, on) => [...all, ...lib.agents.filter((a) => (a.gone || a.unseen && !isHidden(a)) && (on || []).includes(a.id) && !all.some((x) => x.id === a.id))];
   const mcpAgents = () => shownAgents().filter((a) => a.mcp)
     .map((a) => a.mcpVia ? { ...a, aside: t("{agent} reads MCP servers through the {ext} extension", { agent: a.name, ext: a.mcpVia }) } : a);
@@ -943,6 +947,7 @@ magpie.plugin("library", (ctx) => {
 
   function openTab(id) {
     tab = id;
+    tabPicked = true;
     try { localStorage.setItem("magpie.libTab", id); } catch {}
     // RTK's count read afresh each time its tab is opened: an agent run
     // since adds to it (#741); the page keeps the last one until then
@@ -962,7 +967,11 @@ magpie.plugin("library", (ctx) => {
   function libHead(counts) {
     const head = el("div", "lib-head");
     const n = (k) => (counts?.[k] ? " · " + counts[k] : "");
-    const tabs = segs(agentless() ? [["mcp", t("MCP servers") + n("mcp")]] : [
+    const tabs = segs(agentless() ? [
+      ["instructions", t("Instructions")],
+      ["mcp", t("MCP servers") + n("mcp")],
+      ["skills", t("Skills") + n("skills")],
+    ] : [
       ["instructions", t("Instructions")],
       ["memory", t("Memory")],
       ["mcp", t("MCP servers") + n("mcp")],
@@ -1029,9 +1038,9 @@ magpie.plugin("library", (ctx) => {
     const had = new Set([...page.querySelectorAll(".lib-detail[data-detail]")].map((d) => d.dataset.detail));
     page.replaceChildren();
     fits = [];
-    // the MCP servers alone with no agent to write to; the tab the reader
-    // last picked is kept for when there is one
-    if (agentless()) tab = "mcp";
+    // with no agent to write to, the tabs a Remote magpie's client takes
+    // from; the tab the reader last picked is kept for when there is one
+    if (agentless() && (!tabPicked || !AGENTLESS_TABS.includes(tab))) tab = "mcp";
     // Pi's tab only while a Pi is here; the pick is kept for when one is
     else if (tab === "pi" && !hasPi()) tab = "instructions";
     const head = libHead({ mcp: lib.servers.length, skills: lib.skills.length, hooks: (lib.hooks || []).length, env: (lib.env || []).length, subagents: (lib.subagents || []).length, commands: (lib.commands || []).length, plugins: (lib.plugins || []).length });
@@ -2507,7 +2516,9 @@ magpie.plugin("library", (ctx) => {
 
   function renderInstructions(body) {
     const iv = lib.instructions;
-    body.append(intro(t("Write it once: every agent switched on below reads it before each conversation, in its own instructions file.")));
+    body.append(intro(agentless()
+      ? t("A magpie on another computer that adds this one as a provider, with Use its skills and prompts on, takes these sets, and its agents read them.")
+      : t("Write it once: every agent switched on below reads it before each conversation, in its own instructions file.")));
     // the sets of shared instructions: one is on, the one the agents read;
     // a set opens to be edited (#106)
     const card = el("div", "list lib-list lib-sets");
@@ -2525,6 +2536,8 @@ magpie.plugin("library", (ctx) => {
     bar.append(el("span", "note", t("Not saved yet")), el("span", "grow"), button(t("Discard"), "", discard), button(t("Save"), "primary", saveInstructions));
     bar.hidden = !dirty();
     body.append(card);
+    // no agent here: the sets alone, for the magpies that take them
+    if (agentless()) { body.append(bar); return; }
 
     const rh = el("div", "row-head");
     // which set the agents switched on read, said where they're switched
@@ -2548,7 +2561,7 @@ magpie.plugin("library", (ctx) => {
     body.append(...asleepAsides(rows.filter((a) => a.asleep)));
     // a project's own, so the shared ones keep what holds everywhere
     // (VictorHong1022 on X), as a project has skills of its own
-    if (!agentless()) renderProjects(body, "instructions");
+    renderProjects(body, "instructions");
     body.append(bar);
   }
 
@@ -5558,7 +5571,9 @@ magpie.plugin("library", (ctx) => {
   // ---------- skills ----------
 
   function renderSkills(body) {
-    body.append(intro(t("A skill is a folder with a SKILL.md an agent loads when it's needed. The library keeps each one once and links it into the agents you pick.")));
+    body.append(intro(agentless()
+      ? t("A magpie on another computer that adds this one as a provider, with Use its skills and prompts on, takes these skills and gives them to its agents.")
+      : t("A skill is a folder with a SKILL.md an agent loads when it's needed. The library keeps each one once and links it into the agents you pick.")));
     body.append(installCard());
     const all = skillAgents();
     pickingFor("skills", lib.skills);
@@ -5655,6 +5670,8 @@ magpie.plugin("library", (ctx) => {
       if (picking) body.append(pickBar(all));
     }
     if (lib.newSkills?.length) renderNewSkills(body);
+    // no agent here: nothing of agents' own skills, projects or folders
+    if (agentless()) { body.append(discover("skills")); return; }
     // a glance hasn't looked through the agents' own skills yet (#541)
     if (lib.partial) {
       const rh = el("div", "row-head lib-found-wait");

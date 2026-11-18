@@ -3828,8 +3828,11 @@ expose it publicly without gateway-key authentication.
 
 Such a page is in **gateway mode**: it shows Sessions, Library, Providers,
 Routing, Gateway, Usage, Masking, Plugins and Settings, with no Agents tab.
-The Library has its MCP servers alone, with the MCP router: other
-computers' apps connect at the router's address with a gateway key.
+The Library has its MCP servers, with the MCP router: other
+computers' apps connect at the router's address with a gateway key. Its
+Skills and Instructions are there too, for a magpie on another computer
+that adds this one as an "Another computer's magpie" provider with Use its skills and
+prompts on: that magpie takes them and gives them to its own agents.
 Sessions lists only the sessions of other computers' agents that came
 through this gateway, never this machine's agents' session files
 ([gateway sessions](subsystems/gateway-sessions.md)). Settings leaves out what is written into this machine's agents (provider in

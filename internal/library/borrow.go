@@ -18,6 +18,7 @@ import (
 
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 func init() {
@@ -90,13 +91,15 @@ const (
 // hooks and what each agent gets besides are this computer's; a skill
 // linked to a folder here comes as its files.
 func Shared() (*Bundle, error) {
+	// asked before the lock: it looks for the agents here
+	none := noAgentsShown()
 	mu.Lock()
 	defer mu.Unlock()
 	l, err := load()
 	if err != nil {
 		return nil, err
 	}
-	b := &Bundle{Instructions: Instructions{Agents: orNone(slices.Sorted(slices.Values(l.Instructions.Agents))), Active: l.Instructions.Active},
+	b := &Bundle{NoAgents: none, Instructions: Instructions{Agents: orNone(slices.Sorted(slices.Values(l.Instructions.Agents))), Active: l.Instructions.Active},
 		Texts: map[string]string{}, MCP: []*Server{}, Skills: []*CarriedSkill{}}
 	for _, s := range l.Instructions.Sets {
 		if strings.HasPrefix(s.ID, borrowedPrefix) { // taken from a magpie: not passed on
@@ -131,6 +134,36 @@ func Shared() (*Bundle, error) {
 		b.Skills = append(b.Skills, c)
 	}
 	return b, nil
+}
+
+// NoAgentsShown says the page shows no agent to tick a skill or the
+// shared prompts for (the gui package's gateway mode: a container, a NAS,
+// magpie web --gateway). Unset, a magpie with no agent here has none.
+var NoAgentsShown func() bool
+
+func noAgentsShown() bool {
+	if NoAgentsShown != nil {
+		return NoAgentsShown()
+	}
+	return len(givenHere("skills")) == 0 && len(givenHere("instructions")) == 0
+}
+
+// givenHere are the agents here a new skill ("skills") or the shared
+// prompts ("instructions") go to, as the page ticks them for one: those
+// with a place for them, less those the Agents page hides (#71). A
+// test's own.
+var givenHere = func(kind string) []string {
+	hidden := settings.Shared().AgentsHidden
+	var out []string
+	for _, t := range Targets() {
+		if slices.Contains(hidden, t.Agent.ID) {
+			continue
+		}
+		if kind == "skills" && t.Skills != "" || kind == "instructions" && t.Instructions != "" {
+			out = append(out, t.Agent.ID)
+		}
+	}
+	return out
 }
 
 // borrowedPrefix starts the id of a set taken from a Remote magpie.
@@ -280,6 +313,13 @@ func Borrow(id, name string, b *Bundle) (*BorrowResult, error) {
 	if err := b.check(); err != nil {
 		return nil, err
 	}
+	// a magpie that shows no agent ticks its skills and prompts for none:
+	// here they go to the agents a new one would (a container's Library,
+	// fenglian980510 on X)
+	var skillsTo, promptsTo []string
+	if b.NoAgents {
+		skillsTo, promptsTo = givenHere("skills"), givenHere("instructions")
+	}
 	out := &BorrowResult{}
 	_, err := change(func(l *Library) error {
 		*out = BorrowResult{}
@@ -347,7 +387,11 @@ func Borrow(id, name string, b *Bundle) (*BorrowResult, error) {
 				out.Updated = append(out.Updated, "skill:"+s.Name)
 			} else {
 				// the agents the remote gives it to, only when it comes
-				l.Skills = append(l.Skills, &Skill{Name: s.Name, Agents: slices.Clone(orNone(s.Agents))})
+				to := orNone(s.Agents)
+				if b.NoAgents && len(s.Agents) == 0 {
+					to = orNone(skillsTo)
+				}
+				l.Skills = append(l.Skills, &Skill{Name: s.Name, Agents: slices.Clone(to)})
 				out.Added = append(out.Added, "skill:"+s.Name)
 			}
 			if err := os.Rename(filepath.Join(stage, s.Name), skillDir(s.Name)); err != nil {
@@ -410,7 +454,11 @@ func Borrow(id, name string, b *Bundle) (*BorrowResult, error) {
 		if first != "" && setText(l.sharedPath()) == "" {
 			l.Instructions.Active = first
 			if len(l.Instructions.Agents) == 0 {
-				l.Instructions.Agents = slices.Clone(orNone(b.Instructions.Agents))
+				to := orNone(b.Instructions.Agents)
+				if b.NoAgents && len(b.Instructions.Agents) == 0 {
+					to = orNone(promptsTo)
+				}
+				l.Instructions.Agents = slices.Clone(to)
 			}
 		}
 		return nil

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/agent"
+	"github.com/yetone/magpie/internal/library"
 	"github.com/yetone/magpie/internal/sessions"
 	"github.com/yetone/magpie/internal/settings"
 )
@@ -158,4 +159,7 @@ func agentsHereKept() bool {
 func init() {
 	f := ownSessionsOff
 	sessions.OwnOff.Store(&f)
+	// the browser page in gateway mode ticks a skill or the prompts for
+	// no agent: a magpie that uses this one's Library gives them to its own
+	library.NoAgentsShown = func() bool { on, _ := gatewayMode(true); return on }
 }

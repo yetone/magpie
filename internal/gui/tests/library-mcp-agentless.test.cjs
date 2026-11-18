@@ -3,8 +3,9 @@
 // clients has no agents, and the MCP router could only be turned on with
 // one to write to: the Library said "No agents to write to", and in
 // gateway mode (magpie web on such a server) it wasn't there at all.
-// With no agent, or in gateway mode, the Library is its MCP tab alone: the
-// servers with no agent chips, nothing from agents' own configs, and the
+// With no agent, or in gateway mode, the Library is its MCP tab (beside
+// Instructions and Skills, for a Remote magpie's clients): the servers with
+// no agent chips, nothing from agents' own configs, and the
 // router's switch, there before the first server too. Its lines say any
 // app connects at the address; a click posts servers/hub on, says the
 // router is on, counts what it serves and shows the address, and Connect…
@@ -101,8 +102,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const url = (web ? "https://mcp.example.net" : "http://127.0.0.1:3425") + "/mcp/magpie/hub";
         const errors = [];
         const ctx = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce" });
-        // the Skills tab last left: there is only MCP now
-        await ctx.addInitScript(() => { try { localStorage.setItem("magpie.libTab", "skills"); } catch {} });
+        // the Hooks tab last left: there are only Instructions, MCP and
+        // Skills now, and the page opens on MCP
+        await ctx.addInitScript(() => { try { localStorage.setItem("magpie.libTab", "hooks"); } catch {} });
         const page = await ctx.newPage();
         page.setDefaultTimeout(5000);
         page.setDefaultNavigationTimeout(60000);
@@ -117,8 +119,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const hub = v.locator(".lib-hub");
         await hub.waitFor();
 
-        // the MCP tab alone, and nothing of agents
-        assert.deepEqual((await v.locator(".lib-tabs .opt").allTextContents()).map((x) => x.trim().replace(/ · \d+$/, "")), [w("MCP servers")], `${where}: the tabs`);
+        // the MCP tab, beside the prompts and skills a Remote magpie's
+        // client takes (library-agentless-skills), and nothing of agents
+        assert.deepEqual((await v.locator(".lib-tabs .opt").allTextContents()).map((x) => x.trim().replace(/ · \d+$/, "")), [w("Instructions"), w("MCP servers"), w("Skills")], `${where}: the tabs`);
+        assert.equal((await v.locator(".lib-tabs .opt.on").textContent()).trim().replace(/ · \d+$/, ""), w("MCP servers"), `${where}: the tab open`);
         assert.equal((await v.locator(".lib-intro").first().textContent()).trim(), w("Add the servers other apps should reach, and turn on the MCP router: they connect at its address, from another computer with a gateway key."), where);
         assert.equal(await v.locator(".lib-server").count(), 1, where);
         assert.equal(await v.locator(".lib-ag, .lib-agents").count(), 0, `${where}: agent chips`);
