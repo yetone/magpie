@@ -920,9 +920,9 @@ func (s *Server) modelSearch(ctx context.Context, query string) (string, []Hit, 
 			case errors.Is(first, errCantServe):
 				return "", nil, fmt.Errorf("%w (no other provider could search in its place)", err)
 			case len(settings.Load().SearcherThen) > 0:
-				return "", nil, fmt.Errorf("%w (the searchers picked in Settings › Web search, in their order: no other provider searches in their place)", err)
+				return "", nil, fmt.Errorf("%w (the searchers picked in Settings › Models › Web search, in their order: no other provider searches in their place)", err)
 			}
-			return "", nil, fmt.Errorf("%w (the searcher picked in Settings › Web search: no other provider searches in its place)", err)
+			return "", nil, fmt.Errorf("%w (the searcher picked in Settings › Models › Web search: no other provider searches in its place)", err)
 		}
 		return said, hits, nil
 	}

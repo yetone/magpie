@@ -9,7 +9,7 @@ import (
 	"github.com/yetone/magpie/internal/provider"
 )
 
-// Settings › Web search › Advanced asks the search APIs together (#2845's
+// Settings › Models › Web search › Advanced asks the search APIs together (#2845's
 // mix, heyiwei5 on X): "mix" names two or more to ask at once, an empty
 // list asks them one at a time again, and the settings say which are
 // mixed. One named alone, or one not set up, is refused and changes

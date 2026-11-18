@@ -3462,7 +3462,7 @@ func dshSettingsEndpoint(path string) bool {
 var (
 	noticeDsh1 = newNotice("New dsh sessions start on this. A session made before keeps its model, open now or reopened later, until you pick another in it with /model or the model button by its message box. A dsh started with -p or in a terminal reads it at start-up.")
 	noticeDsh2 = newNotice("dsh reads its config at start-up — restart open dsh sessions to use this.")
-	noticeDsh3 = newNotice("dsh's web search goes through magpie, which has nothing to search with yet: set up a provider that searches by itself (DeepSeek, Claude, Codex, …) or a search API under Settings › Web search.")
+	noticeDsh3 = newNotice("dsh's web search goes through magpie, which has nothing to search with yet: set up a provider that searches by itself (DeepSeek, Claude, Codex, …) or a search API under Settings › Models › Web search.")
 	noticeDsh4 = newNotice("~/.dsh/settings.yaml sets its own DeepSeek endpoint or key, which dsh puts over magpie's; clear it in dsh's Models page to go through magpie.")
 	noticeDsh5 = newNotice("DeepSeek Harness Desktop hasn't been opened yet: it starts on this the first time it opens.")
 )

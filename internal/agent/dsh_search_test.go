@@ -113,7 +113,7 @@ func TestDshSearchThroughGateway(t *testing.T) {
 	}
 }
 
-// 我只会玩单机 on Discord: with a searcher named under Settings › Web search
+// 我只会玩单机 on Discord: with a searcher named under Settings › Models › Web search
 // (GPT-6 Luna), dsh's search row still asked the model dsh starts on, which
 // can't search by itself and asked the searcher in turn: two requests a
 // search, and a model that takes one call at a time timed out. The row

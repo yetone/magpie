@@ -132,5 +132,5 @@ func dsbot(home string) *Agent {
 var (
 	noticeDsbotUnopened = newNotice("DS Bot hasn't been opened yet: it starts on this the first time it opens.")
 	noticeDsbotNewBots  = newNotice("New Bots in DS Bot start on this, unless a default model for Bots is set in DS Bot. A Bot made before keeps its own model until you pick another for it.")
-	noticeDsbotSearch   = newNotice("DS Bot's web search goes through magpie, which has nothing to search with yet: set up a provider that searches by itself (DeepSeek, Claude, Codex, …) or a search API under Settings › Web search.")
+	noticeDsbotSearch   = newNotice("DS Bot's web search goes through magpie, which has nothing to search with yet: set up a provider that searches by itself (DeepSeek, Claude, Codex, …) or a search API under Settings › Models › Web search.")
 )

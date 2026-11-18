@@ -7,7 +7,7 @@ package agent
 // through magpie alone has no such key, and every search failed asking for
 // one (Packing1 on Discord). While dsh starts on a model of magpie's, magpie
 // points the row at the gateway, with its own key and that model, or the
-// searcher Settings › Web search names when the user named one
+// searcher Settings › Models › Web search names when the user named one
 // (dshSearchModel): the gateway answers the server tool as Anthropic does,
 // by the model's own search or magpie's (web_search_tool_result blocks
 // either way). A row of
@@ -31,7 +31,7 @@ const (
 
 // dshSearchModel is the model magpie's search row asks, for a dsh that
 // starts on start (a model of magpie's, without its prefix): the searcher
-// Settings › Web search names, when the user named one, else start. Asking
+// Settings › Models › Web search names, when the user named one, else start. Asking
 // start sent every search to the model dsh works on, which, unable to
 // search by itself, asked the named searcher in turn: two requests a
 // search, and a model that takes one call at a time timed out (我只会玩单机

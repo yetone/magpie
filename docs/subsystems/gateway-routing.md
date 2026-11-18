@@ -1938,7 +1938,7 @@ longer still ends: only a real event of the reply would keep it. Covered by `Tes
 
 ## Which providers search for another model
 
-`Searchers()` (Settings › Web search's picker) and `autoSearcher` (magpie's
+`Searchers()` (Settings › Models › Web search's picker) and `autoSearcher` (magpie's
 own pick) take a provider by `searchRank`, and its models by
 `searchableModel`, from the same rules that send a provider's own search
 tool on (`searchesItself`, `modelSearches`, `remoteSearch`). A provider
@@ -2042,7 +2042,7 @@ whom, why it didn't search, and which one searched in its place
 (`kindWhy`).
 
 A searcher named in Settings gives way only to the ones the user put
-after it, `SearcherThen` (Settings › Web search's "If it fails" row), in
+after it, `SearcherThen` (Settings › Models › Web search's "If it fails" row), in
 their order. One that can't search now, is the one named, or is the same
 model is skipped. The first that searches answers, and the row says why
 the named one didn't search (`searchingInstead`). No other provider
@@ -2062,7 +2062,7 @@ search APIs, when any are set up. Covered by
 `TestSearcherThenFromSettings` cover how the list is saved. Settings only
 takes a provider `Searchers()` offers. A save without the list keeps it,
 since the page's `prefsKeep` doesn't send it; `[]` clears it. `namedFailed` keeps the last search it didn't make, with the one that
-searched in its place (`Instead`), and clears it when it next searches. Settings › Web search shows that (`SearcherFailed`,
+searched in its place (`Instead`), and clears it when it next searches. Settings › Models › Web search shows that (`SearcherFailed`,
 `searchFailed`) at the start of the row's help, which wraps whole.
 Gearclickist on Discord picked Grok. Their grok-4.7 rows were about 1.3k
 tokens, the size of a request Grok ran no search for (one that searched

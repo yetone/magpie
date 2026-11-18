@@ -6531,7 +6531,7 @@ New Bots in DS Bot start on DSH's agent-default-model, so a Bot you make now is 
 
 ## Web search
 
-DS Bot's web search goes through magpie too. When magpie has nothing to search with yet, it asks you to set up a provider that searches by itself (DeepSeek, Claude, Codex, …) or a search API under Settings › Web search.
+DS Bot's web search goes through magpie too. When magpie has nothing to search with yet, it asks you to set up a provider that searches by itself (DeepSeek, Claude, Codex, …) or a search API under Settings › Models › Web search.
 
 ## Before DS Bot is opened
 

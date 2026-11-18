@@ -12,7 +12,7 @@ import (
 
 // A custom provider on OpenAI's Responses API, saved by the editor with
 // "Searches the web by itself" ticked and its models typed in because it
-// has no model list, is offered in Settings › Web search's searcher
+// has no model list, is offered in Settings › Models › Web search's searcher
 // picker with those models (axelburks on Discord): it was named among the
 // relays to pick there, with nothing to pick.
 func TestSearcherPickerOffersResponsesRelay(t *testing.T) {
