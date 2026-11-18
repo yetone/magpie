@@ -147,7 +147,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(saved.body.id, "local");
         assert.equal(saved.body.unredacted, true);
         const missing = await page.evaluate(() => [
-          "Redaction", "Send requests unmasked",
+          "Masking", "Send requests unmasked",
           "For a model running on this computer or your local network: secrets, personal data and your masked words go to it as written. Leave it off for a local relay or proxy that passes requests on to a vendor.",
           "{host} isn't on this computer or your local network: turned on, requests go to it unmasked.",
         ].filter((k) => !I18N.zh[k]));

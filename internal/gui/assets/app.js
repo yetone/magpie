@@ -9582,7 +9582,7 @@ function drawEditor(p, presetID) {
   // the Web search row, shown while there is an API it can search on
   const searchable = () => !!((draft.anthropic || "").trim() || (draft.responses || "").trim());
   let showSearch = () => {};
-  // the Redaction row, shown while every address is on this computer or
+  // the Masking row, shown while every address is on this computer or
   // the local network
   let showLocal = () => {};
   // the Certificate rows, shown over https:// (#2383, #5596)
@@ -9695,7 +9695,7 @@ function drawEditor(p, presetID) {
 
   const unmaskRow = (hint, urls) => {
     const [ltk, lcb] = tick(t("Send requests unmasked"), !!draft.unredacted);
-    const row = field(t("Redaction"), ltk, hint), note = el("div", "hint unmasked-away");
+    const row = field(t("Masking"), ltk, hint), note = el("div", "hint unmasked-away");
     row[1].append(note);
     showLocal = () => {
       const host = draft.unredacted && (urls ? awayHost(urls()) : p.name);
