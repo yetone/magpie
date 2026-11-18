@@ -13,10 +13,12 @@ import (
 	"github.com/yetone/magpie/internal/update"
 )
 
-// Dim alpha is started on magpie through the variables Dim documents for
-// an OpenAI-compatible endpoint; the model is in magpie's own file, and
-// nothing of Dim's (its home, settings, database or account) is written.
+// With no Dim daemon to reach, Dim alpha is started on magpie through the
+// variables Dim documents for an OpenAI-compatible endpoint; the model is
+// in magpie's own file, and nothing of Dim's (its home, settings,
+// database or account) is written.
 func TestDim(t *testing.T) {
+	away(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
