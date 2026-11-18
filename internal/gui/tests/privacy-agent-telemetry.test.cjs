@@ -1,7 +1,8 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // Settings › Privacy turns off every agent's telemetry (OipsAnthony on X).
 // The switch posts settings/agent-telemetry {off} and draws the settings the
-// reply carries; an agent that couldn't follow is said in the status. While
+// reply carries; an agent that couldn't follow is said in the status, else that it
+// takes effect when each agent next starts. While
 // it is on, an agent's own Telemetry row shows off, says why, and can't be
 // pressed; off again, the row is the agent's own. Every language, wide and
 // narrow, no native select, no scroll on click. No backend: faked here.
@@ -55,11 +56,11 @@ function fixture(lang, refused = "") {
 }
 
 const W = {
-  en: { all: "Turn off telemetry for all agents", why: "Off for all agents in Settings › Privacy", off: "Off", on: "On", details: "Details" },
-  zh: { all: "关闭所有 Agent 的遥测", why: "已在 设置 › 隐私 中为所有 Agent 关闭", off: "关闭", on: "开启", details: "详情" },
-  "zh-TW": { all: "關閉所有 Agent 的遙測", why: "已在 設定 › 隱私 中為所有 Agent 關閉", off: "關閉", on: "開啟", details: "詳情" },
-  ja: { all: "すべてのエージェントのテレメトリをオフ", why: "設定 › プライバシー ですべてのエージェントでオフです", off: "オフ", on: "オン", details: "詳細" },
-  de: { all: "Telemetrie aller Agents ausschalten", why: "Für alle Agents aus in Einstellungen › Datenschutz", off: "Aus", on: "An", details: "Details" },
+  en: { all: "Turn off telemetry for all agents", why: "Off for all agents in Settings › Privacy", off: "Off", on: "On", details: "Details", next: "Takes effect when each agent next starts" },
+  zh: { all: "关闭所有 Agent 的遥测", why: "已在 设置 › 隐私 中为所有 Agent 关闭", off: "关闭", on: "开启", details: "详情", next: "各 Agent 下次启动时生效" },
+  "zh-TW": { all: "關閉所有 Agent 的遙測", why: "已在 設定 › 隱私 中為所有 Agent 關閉", off: "關閉", on: "開啟", details: "詳情", next: "各 Agent 下次啟動時生效" },
+  ja: { all: "すべてのエージェントのテレメトリをオフ", why: "設定 › プライバシー ですべてのエージェントでオフです", off: "オフ", on: "オン", details: "詳細", next: "各エージェントの次回起動時に反映されます" },
+  de: { all: "Telemetrie aller Agents ausschalten", why: "Für alle Agents aus in Einstellungen › Datenschutz", off: "Aus", on: "An", details: "Details", next: "Wirkt beim nächsten Start jedes Agents" },
 };
 const gm = '.row.agent[data-id="gemini"]';
 const ROW = "#agentTelemetryAllRow";
@@ -112,6 +113,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator(`${ROW} .opt`, { hasText: w.on }).click();
         await page.waitForFunction(([s, on]) => document.querySelector(s)?.querySelector(".opt.on")?.textContent === on, [ROW, w.on]);
         assert.deepEqual(fx.posts, [{ off: true }]);
+        // an agent running now reads it when it next starts, as its own row says
+        await page.waitForFunction((s) => document.querySelector("#status")?.textContent === s, w.next);
         assert.equal(await page.evaluate(() => document.querySelector("#view-settings").scrollTop + scrollY), y, "a click scrolled the page");
 
         // the agent's own row: off, why, held
