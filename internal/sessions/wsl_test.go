@@ -34,6 +34,11 @@ func wslDistro(t *testing.T) (home string, running *bool) {
 	on := true
 	WSLHomes = func() []WSLHome { return []WSLHome{{Distro: "Ubuntu", Home: home, Running: on}} }
 	t.Cleanup(func() { wslSettle(); WSLHomes = nil; Reset() })
+	// the tests read what the first listing found: on a busy machine the
+	// walk outlasts the 3s a page waits for it, and the count read 0
+	was := wslFirstWait
+	wslFirstWait = time.Minute
+	t.Cleanup(func() { wslFirstWait = was })
 	Reset()
 	return home, &on
 }
