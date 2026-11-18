@@ -114,6 +114,7 @@ func callCacheDir() string             { return filepath.Join(filepath.Dir(Cache
 func callCachePath(path string) string { return filepath.Join(callCacheDir(), hashHead(path)+".gob") }
 
 func resetCalls() {
+	forgetCallPacks()
 	callsMu.Lock()
 	defer callsMu.Unlock()
 	callCache, callOrder = map[string]*callFile{}, nil
@@ -199,6 +200,7 @@ func pruneCalls(files []file) {
 	for _, f := range files {
 		shards[hashHead(f.path)+".gob"] = true
 	}
+	sweepCallPacks(root, on)
 	entries, _ := os.ReadDir(root)
 	for _, e := range entries {
 		if e.IsDir() {
@@ -482,7 +484,7 @@ func callsAlong(f file, sum *state) *callsRide {
 	callsMu.Unlock()
 	if claude {
 		// calls read before are read on, or again, by readCalls as they were
-		if _, err := os.Stat(callCachePath(f.path)); old != nil || !errors.Is(err, fs.ErrNotExist) {
+		if _, err := os.Stat(callCachePath(f.path)); old != nil || !errors.Is(err, fs.ErrNotExist) || callsPacked(f.path) {
 			lock.Unlock()
 			return nil
 		}
@@ -536,12 +538,16 @@ func (r *callsRide) finish(off int64, err error) {
 	st, f := r.st, r.f
 	st.Off, st.Size, st.Mod = off, f.size, f.mod.UnixNano()
 	st.ContentHash = prefixHash(f.path, off)
-	writeCalls(st, 0, false)
-	if r.claude {
-		if st.Claude != nil && !workingRevision(f.mod.UnixNano(), time.Now()) {
-			st = st.withoutRevisions()
-		}
+	if r.claude && !workingRevision(f.mod.UnixNano(), time.Now()) {
+		// idle: in the pass's pack, with no window, not a shard of its
+		// own (call_pack.go); a session being written keeps its shard,
+		// which the lines it gains are appended to
+		packCalls(st.withoutRevisions())
+		_ = os.Remove(callRevisionsPath(st.Path)) // one an older read left
+		st.dirty = nil
+		return
 	}
+	writeCalls(st, 0, false)
 	writeCallRevisions(st)
 	st.dirty = nil
 	if r.claude {
@@ -673,11 +679,16 @@ func (k *frameBuffer) frame() *callFrame {
 }
 
 func loadCalls(f file) *callFile {
-	in, err := os.Open(callCachePath(f.path))
-	if err != nil {
+	var in io.Reader
+	if sf, err := os.Open(callCachePath(f.path)); err == nil {
+		defer sf.Close()
+		in = sf
+	} else if b, ok := packedCalls(f.path); ok {
+		in = bytes.NewReader(b)
+	} else {
 		return nil
 	}
-	defer in.Close()
+	var err error
 	k := frameBuffers.Get().(*frameBuffer)
 	defer func() {
 		k.frame() // the pool holds no file's strings
@@ -783,7 +794,6 @@ var framePatchBufs = sync.Pool{New: func() any { return new([]callPatch) }}
 var frameBytes = sync.Pool{New: func() any { return new(bytes.Buffer) }}
 
 func writeCalls(st *callFile, start int, appendOnly bool) {
-	state := diskCallState(st)
 	dir := callCacheDir()
 	if os.MkdirAll(dir, 0700) != nil {
 		return
@@ -792,7 +802,14 @@ func writeCalls(st *callFile, start int, appendOnly bool) {
 	var err error
 	if appendOnly {
 		out, err = os.OpenFile(callCachePath(st.Path), os.O_WRONLY|os.O_APPEND, 0600)
-	} else {
+		if errors.Is(err, fs.ErrNotExist) {
+			// kept in a pack (call_pack.go), which is never appended to:
+			// the calls are written whole to a shard of their own, which
+			// is read before the pack
+			start, appendOnly = 0, false
+		}
+	}
+	if !appendOnly {
 		out, err = os.CreateTemp(dir, "calls-*.tmp")
 	}
 	if err != nil {
@@ -801,6 +818,16 @@ func writeCalls(st *callFile, start int, appendOnly bool) {
 	if !appendOnly {
 		defer os.Remove(out.Name())
 	}
+	ok := encodeCalls(out, st, start)
+	if closeErr := out.Close(); ok && closeErr == nil && !appendOnly {
+		_ = os.Rename(out.Name(), callCachePath(st.Path))
+	}
+}
+
+// encodeCalls writes st's calls from start, and those before it that
+// changed, to out as frames, and says whether every frame was written.
+func encodeCalls(out io.Writer, st *callFile, start int) bool {
+	state := diskCallState(st)
 	data := frameBytes.Get().(*bytes.Buffer)
 	defer func() {
 		if data.Cap() <= 4<<20 {
@@ -884,7 +911,5 @@ func writeCalls(st *callFile, start int, appendOnly bool) {
 	if ok {
 		flush(false)
 	}
-	if closeErr := out.Close(); ok && closeErr == nil && !appendOnly {
-		_ = os.Rename(out.Name(), callCachePath(st.Path))
-	}
+	return ok
 }

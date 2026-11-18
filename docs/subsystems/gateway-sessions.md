@@ -1062,6 +1062,24 @@ writes rebuilt the whole ledger, and the app grew to 85 GB. Verification:
 `TestCodexModelEffort*` in `codex_effort_shared_test.go` (the codex-only
 answer equals the whole ledger's), and `sessions-overview-once.test.cjs`.
 
+The calls a Sessions read rides along for an idle Claude Code session
+(not changed within the hour) it reads from the start go to a pack
+(`calls-v15/*.pack`), not to a shard of the session's own: one file for
+every such session the pass read, written when the pass ends (and every
+32 MB, and in `Saved`), with each session's frames as its shard would
+hold them and an index with a CRC at its end. A session being written
+keeps its shard and `.rev`, which the lines it gains are appended to.
+A session's own shard, which any later read of it writes whole (a pack is never appended to), is read before the pack. A
+pack that can't be read whole is as if it were not there, and its
+sessions are read again; the hourly sweep removes a pack none of whose
+sessions is listed. Before this, a cold read of 12,000 sessions made
+~21,000 files, and on Windows Defender scanned each as it closed: a
+cold page took 20.7 to 31.7 s on xiaomi-gpu, against 5.7 to 5.9 s with
+the pack, and 2.0 to 2.2 s on a restart (shangyuan0818 on X). See
+[`internal/sessions/call_pack.go`](../../internal/sessions/call_pack.go),
+`TestColdSessionsReadWritesOnePack`, `TestPackedCallsServeRequests` and
+`TestPackedSessionGrows`.
+
 ### Calls an app reports itself
 
 `POST /v1/magpie/usage/requests`
