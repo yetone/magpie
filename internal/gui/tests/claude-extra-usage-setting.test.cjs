@@ -14,11 +14,11 @@ const { provPrefsProviders, openProvPrefs, inEditor, watchSettingsReads, setting
 
 const assets = path.resolve(__dirname, "../assets");
 const words = {
-  en: { name: "Spend extra usage", off: "Off", on: "On", sub: "bills further requests as extra usage", risk: "other accounts take the requests" },
-  zh: { name: "花费额外用量", off: "关闭", on: "开启", sub: "按额外用量计费", risk: "由你的其他账号接手" },
-  "zh-TW": { name: "花費額外用量", off: "關閉", on: "開啟", sub: "按額外用量計費", risk: "由你的其他帳號接手" },
-  ja: { name: "追加使用量を使う", off: "オフ", on: "オン", sub: "追加使用量として請求", risk: "ほかのアカウントがリクエストを受けます" },
-  de: { name: "Zusätzliche Nutzung verbrauchen", off: "Aus", on: "An", sub: "als zusätzliche Nutzung ab", risk: "anderen Konten übernehmen die Anfragen" },
+  en: { field: "Claude requests", name: "Spend extra usage", off: "Off", on: "On", sub: "bills further requests as extra usage", risk: "other accounts take the requests" },
+  zh: { field: "Claude 请求", name: "花费额外用量", off: "关闭", on: "开启", sub: "按额外用量计费", risk: "由你的其他账号接手" },
+  "zh-TW": { field: "Claude 請求", name: "花費額外用量", off: "關閉", on: "開啟", sub: "按額外用量計費", risk: "由你的其他帳號接手" },
+  ja: { field: "Claude リクエスト", name: "追加使用量を使う", off: "オフ", on: "オン", sub: "追加使用量として請求", risk: "ほかのアカウントがリクエストを受けます" },
+  de: { field: "Claude-Anfragen", name: "Zusätzliche Nutzung verbrauchen", off: "Aus", on: "An", sub: "als zusätzliche Nutzung ab", risk: "anderen Konten übernehmen die Anfragen" },
 };
 
 function serve(lang, saved) {
@@ -63,6 +63,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await openProvPrefs(page, "claude");
       const row = page.locator(".editor .prov-prefs #claudeRunList > #claudeExtraRow");
       await inEditor(page, row);
+      // the field's own name, not "Claude Code", which is the agent's
+      // sheet on the Agents page
+      const label = page.locator(".editor label").filter({ has: page.locator("xpath=following-sibling::*[1][.//*[@id='claudeRunList']]") });
+      assert.equal((await label.textContent()).trim(), w.field);
       assert.equal(await row.locator(".name").textContent(), w.name);
       const sub = await row.locator(".sub").textContent();
       assert(sub.includes(w.sub) && sub.includes(w.risk), sub);
