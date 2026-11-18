@@ -1,11 +1,13 @@
 package gui
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yetone/magpie/internal/ghtoken"
 	"github.com/yetone/magpie/internal/settings"
@@ -75,7 +77,10 @@ func TestGitHubTokenRefusedShown(t *testing.T) {
 		Handler(nil, nil).ServeHTTP(rec, httptest.NewRequest("GET", "/api/settings", nil))
 		return rec.Body.String()
 	}
-	const tok = "ghp_refusedrefusedrefusedrefused4567"
+	// ghtoken keeps the tokens GitHub refused for as long as the process
+	// runs, so each run refuses a token of its own: with one constant a
+	// second run (-count=2) found it refused before GitHub was asked.
+	tok := fmt.Sprintf("ghp_refused%025d4567", time.Now().UnixNano())
 	s := settings.Load()
 	s.GitHubToken = tok
 	if err := settings.Save(s); err != nil {
