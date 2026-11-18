@@ -18,6 +18,7 @@ import (
 
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/lazyre"
+	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/proc"
 )
 
@@ -66,8 +67,13 @@ type piListed struct {
 	Date        string `json:"date,omitempty"`
 }
 
-// piNPMURL is npm's search; a variable for tests.
-var piNPMURL = "https://registry.npmjs.org/-/v1/search"
+// piNPMURL is npm's own search, asked when the registry in use (the
+// user's own, or npmmirror with the 「国内镜像」 switch) can't search;
+// piRegistry is that registry. Variables for tests.
+var (
+	piNPMURL   = "https://registry.npmjs.org/-/v1/search"
+	piRegistry = func() string { return plugin.Registry().URL }
+)
 
 //go:embed market_pi.json
 var piSnapshot []byte
@@ -151,9 +157,15 @@ func searchPiNPM(q string, size, from int) ([]piListed, int, error) {
 			} `json:"package"`
 		} `json:"objects"`
 	}
-	u := piNPMURL + "?" + url.Values{"text": {text}, "size": {strconv.Itoa(size)}, "from": {strconv.Itoa(from)}}.Encode()
-	if err := getJSON(u, &body); err != nil {
-		return nil, 0, &SearchError{Source: "npm", Err: err}
+	query := "?" + url.Values{"text": {text}, "size": {strconv.Itoa(size)}, "from": {strconv.Itoa(from)}}.Encode()
+	err := errors.New("no registry")
+	if r := strings.TrimRight(piRegistry(), "/"); r != "" && r != strings.TrimSuffix(piNPMURL, "/-/v1/search") {
+		err = getJSON(r+"/-/v1/search"+query, &body)
+	}
+	if err != nil {
+		if err = getJSON(piNPMURL+query, &body); err != nil {
+			return nil, 0, &SearchError{Source: "npm", Err: err}
+		}
 	}
 	var out []piListed
 	for _, o := range body.Objects {

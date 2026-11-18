@@ -42,11 +42,41 @@ func piNPM(t *testing.T, popular, found []string) (asked *atomic.Int32, texts *[
 		fmt.Fprintf(w, `{"total":%d,"objects":[%s]}`, len(list), strings.Join(list, ","))
 	}))
 	t.Cleanup(srv.Close)
-	was := piNPMURL
-	piNPMURL = srv.URL
-	t.Cleanup(func() { piNPMURL = was })
+	was, wasReg := piNPMURL, piRegistry
+	piNPMURL, piRegistry = srv.URL, func() string { return "" }
+	t.Cleanup(func() { piNPMURL, piRegistry = was, wasReg })
 	piForget(t)
 	return asked, texts, down
+}
+
+// The registry in use is searched first (a user behind a registry of their
+// own, or npmmirror with the 「国内镜像」 switch), and npm's own only when it
+// can't search.
+func TestPiSearchAsksTheRegistryInUse(t *testing.T) {
+	piCacheHere(t)
+	pkg := `{"package":{"name":"pi-own","version":"1.0.0","keywords":["pi-package"]}}`
+	asked, _, _ := piNPM(t, []string{`{"package":{"name":"pi-npm","version":"1.0.0","keywords":["pi-package"]}}`}, nil)
+	var regAsked atomic.Int32
+	var regDown atomic.Bool
+	reg := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		regAsked.Add(1)
+		if regDown.Load() || r.URL.Path != "/-/v1/search" {
+			http.Error(w, "no search here", http.StatusNotFound)
+			return
+		}
+		fmt.Fprintf(w, `{"total":1,"objects":[%s]}`, pkg)
+	}))
+	t.Cleanup(reg.Close)
+	piRegistry = func() string { return reg.URL + "/" }
+	list, _, err := searchPiNPM("", 250, 0)
+	if err != nil || len(list) != 1 || list[0].Name != "pi-own" || asked.Load() != 0 {
+		t.Fatalf("registry in use: %v %+v, npm asked %d times", err, list, asked.Load())
+	}
+	regDown.Store(true)
+	list, _, err = searchPiNPM("", 250, 0)
+	if err != nil || len(list) != 1 || list[0].Name != "pi-npm" || asked.Load() != 1 {
+		t.Fatalf("registry can't search: %v %+v, npm asked %d times", err, list, asked.Load())
+	}
 }
 
 func piForget(t *testing.T) {
