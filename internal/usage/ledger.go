@@ -607,7 +607,7 @@ func Pricer() func(Record) *catalog.Price {
 		// its calls apart from the provider's other keys
 		key := r.ProviderKeyID
 		tier := r.billedTier()
-		k := [7]string{id, r.Model, served, r.SessionProvider, r.Effort, key, tier}
+		k := [7]string{id, r.Model, served, r.SessionProvider, r.Effort, key, r.tierKey(tier, served)}
 		if pr, ok := prices[k]; ok {
 			return atWindow(pr, windows[id], r.Time)
 		}
@@ -622,7 +622,7 @@ func Pricer() func(Record) *catalog.Price {
 		} else {
 			// Fast and Ultrafast bill at more than the standard price
 			// (Archivemylife on X: a Fast call read at the standard one)
-			pr = tierPriced(pr, tier, served, r.Model)
+			pr = tierPriced(pr, tier, r.Time, served, r.Model)
 		}
 		prices[k] = pr
 		return atWindow(pr, ws, r.Time)
@@ -633,8 +633,10 @@ func Pricer() func(Record) *catalog.Price {
 // for the tier when pr is that model's standard price, the model that ran
 // or the one asked for (catalog.TierPrice), else pr. The rows hold the
 // tier's price, so the question is noted: a catalog that prices the tier
-// otherwise names the request index anew.
-func tierPriced(pr *catalog.Price, tier string, models ...string) *catalog.Price {
+// otherwise names the request index anew. at is the call's time: a tier
+// whose rate changes on a date (catalog.TierTimes) is priced at the rate
+// of its day.
+func tierPriced(pr *catalog.Price, tier string, at time.Time, models ...string) *catalog.Price {
 	if pr == nil || tier == "" {
 		return pr
 	}
@@ -643,17 +645,33 @@ func tierPriced(pr *catalog.Price, tier string, models ...string) *catalog.Price
 		if model == "" {
 			continue
 		}
-		tp, ok := catalog.TierPrice(*pr, model, tier)
+		tp, ok := catalog.TierPrice(*pr, model, tier, at)
 		answer := ""
 		if ok {
 			answer = priceAnswer(&tp, nil)
 		}
-		noteAsk(strings.Join([]string{"t", model, tier, std}, askSep), answer)
+		q := []string{"t", model, tier, std}
+		if _, era := catalog.TierTimes(model, tier, at); era >= 0 {
+			q = append(q, strconv.Itoa(era))
+		}
+		noteAsk(strings.Join(q, askSep), answer)
 		if ok {
 			return &tp
 		}
 	}
 	return pr
+}
+
+// tierKey is tier as a price cache keys it: with the rate of the call's
+// day where the tier's rate changes on a date (catalog.TierTimes), so
+// calls either side of the change price apart.
+func (r Record) tierKey(tier string, models ...string) string {
+	for _, m := range append(models, r.Model) {
+		if _, era := catalog.TierTimes(m, tier, r.Time); m != "" && era >= 0 {
+			return tier + "@" + strconv.Itoa(era)
+		}
+	}
+	return tier
 }
 
 // billedTier is the service tier a record's call is priced at: the one

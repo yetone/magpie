@@ -1000,7 +1000,11 @@ func PriceOf(providerID, modelID string) (Price, bool) {
 // at $8/$40, twice too, "across the full context window". A mode lists no
 // long-context price or 1-hour cache write, so std's are scaled by the
 // mode's own ratio to std, part by part.
-func TierPrice(std Price, model, tier string) (Price, bool) {
+//
+// A tier OpenAI prices as a multiple of the standard rate that changes on
+// a date (tierTimes: GPT-6.2's Ultrafast, which models.dev lists with no
+// cost) is std times the multiple in force at at, the call's own time.
+func TierPrice(std Price, model, tier string, at time.Time) (Price, bool) {
 	tier = strings.ToLower(strings.TrimSpace(tier))
 	if tier == "" || tier == "default" || tier == "auto" {
 		return Price{}, false
@@ -1010,6 +1014,11 @@ func TierPrice(std Price, model, tier string) (Price, bool) {
 		m, ok := all[maker].Models[model]
 		if !ok || m.Cost == nil || !m.Cost.Same(std) {
 			continue
+		}
+		if maker == "openai" {
+			if x, _ := TierTimes(model, tier, at); x > 0 {
+				return std.Times(x), true
+			}
 		}
 		for _, mode := range m.Experimental.Modes {
 			c, body := mode.Cost, mode.Provider.Body
@@ -1035,6 +1044,44 @@ func TierPrice(std Price, model, tier string) (Price, bool) {
 		}
 	}
 	return Price{}, false
+}
+
+// tierTimes are the service tiers OpenAI's pricing page prices as a
+// multiple of a model's standard rate, from a date on: "Ultrafast costs 3
+// times the Standard rate through February 28, 2027" and "6 times the
+// Standard rate starting March 1, 2027 (Pacific time)", for GPT-6.2 Astra
+// and GPT-6.2 Sol (mu33410 on X). models.dev lists their Ultrafast mode
+// with no cost, so it was billed at the standard rate, below Fast's.
+var tierTimes = func() map[[2]string][]tierRate {
+	pt, err := time.LoadLocation("America/Los_Angeles")
+	if err != nil {
+		pt = time.FixedZone("PST", -8*3600) // March 1st is before DST
+	}
+	ultra := []tierRate{{Times: 3}, {From: time.Date(2027, 3, 1, 0, 0, 0, 0, pt), Times: 6}}
+	return map[[2]string][]tierRate{{"gpt-6.2-astra", "ultrafast"}: ultra, {"gpt-6.2-sol", "ultrafast"}: ultra}
+}()
+
+type tierRate struct {
+	From  time.Time // zero: from the start
+	Times float64
+}
+
+// TierTimes is the multiple of model's standard rate OpenAI bills tier at
+// a call made at at (tierTimes), and which of its rates that is, for a
+// cache to tell calls on either side of a change apart; 0 when the tier
+// isn't priced that way. A zero at is now.
+func TierTimes(model, tier string, at time.Time) (float64, int) {
+	rates := tierTimes[[2]string{bareID(model), strings.ToLower(strings.TrimSpace(tier))}]
+	if at.IsZero() {
+		at = time.Now()
+	}
+	x, n := 0.0, -1
+	for i, r := range rates {
+		if !at.Before(r.From) {
+			x, n = r.Times, i
+		}
+	}
+	return x, n
 }
 
 // PricedBy is the list price the first of providers (models.dev ids)

@@ -365,7 +365,7 @@ func apiPricer() func(Record) *catalog.Price {
 		}
 		id := r.priceID()
 		tier := r.billedTier()
-		k := [5]string{id, r.Model, served, r.Effort, tier}
+		k := [5]string{id, r.Model, served, r.Effort, r.tierKey(tier, served)}
 		if pr, ok := prices[k]; ok {
 			return pr
 		}
@@ -383,7 +383,7 @@ func apiPricer() func(Record) *catalog.Price {
 			pr = one(id, served)
 		}
 		// a Fast call is worth Fast's API price (Pricer)
-		pr = tierPriced(pr, tier, served, r.Model)
+		pr = tierPriced(pr, tier, r.Time, served, r.Model)
 		prices[k] = pr
 		return pr
 	}
