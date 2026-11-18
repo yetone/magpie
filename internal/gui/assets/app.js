@@ -14842,11 +14842,15 @@ const pooledModels = (ws) => (ws?.some(isPool) ? ws.filter((w) => !isPool(w)) : 
 function poolTip(w) {
   return t("{pool}: one allowance for these models", { pool: w.pool }) + "\n" + tiersText({ tiers: w.members });
 }
+// ringParts: a ring's label in two, a pool's first word over its span
+// (Gemini / 5h), and so a name that is a group and a span ("Gemini · 7
+// days", "Video · 5 hours", "Text · weekly"): on one line its span was
+// cut off, and two groups' rings read the same "Gemini …" (tongzhenbao on
+// X). Any other name is one line.
+const ringParts = (w, m = w.window ? [w.pool, w.window] : w.name?.split(" · ")) => m?.[1] ? [poolWord(m[0]), shortWindow(m[1])] : void 0;
 // ringName: a window's name short enough for a ring: a pool's first word
 // and its span (Gemini 5h, Claude 7d).
-function ringName(w) {
-  return w.window ? poolWord(w.pool) + " " + shortWindow(w.window) : shortWindow(w.name);
-}
+const ringName = (w) => ringParts(w)?.join(" ") || shortWindow(w.name);
 
 // quotaall.js: accounts together, loaded once asked for
 function quotaAllJS() {
@@ -17925,8 +17929,8 @@ function panelQuotaCard(q, first = false) {
       const at = new Date(w.resetsAt);
       // the first deadline named as one: a bare "↻ 14:26" read as a
       // refresh to click (#840, hhh2210)
-      return at <= Date.now() ? (i || w.members ? ringName(w) + " " : "") + resetText(at)
-        : i || w.members ? ringName(w) + " " + resetClock(at) : resetText(at);
+      const n = i || w.members ? ringName(w) + " " : "";
+      return n + (at <= Date.now() || !n ? resetText(at) : resetClock(at));
     }).join(" · ")
     : ws.some((w) => w.used > 0) ? "" : t("Not used yet"));
   // the first window's own pace too, while its line is drawn and the
@@ -17943,11 +17947,8 @@ function panelQuotaCard(q, first = false) {
     dial.style.setProperty("--p", quotaFill(w));
     dial.append(el("b", "", quotaFill(w) + "%"));
     // a pool's ring: its first word over its span, too long for one line
-    const rn = el("span", "pq-rn", w.window ? undefined : ringName(w));
-    if (w.window) {
-      rn.classList.add("pq-rn2");
-      rn.append(el("span", "", poolWord(w.pool)), el("span", "", shortWindow(w.window)));
-    }
+    const two = ringParts(w), rn = el("span", "pq-rn" + (two ? " pq-rn2" : ""), two ? void 0 : ringName(w));
+    two?.forEach((x) => rn.append(el("span", "", x)));
     r.append(dial, rn);
     r.title = t(w.name) + " · " + quotaText(w) + (w.resetsAt ? "\n" + resetText(new Date(w.resetsAt), new Date(w.resetsAt).toLocaleString(intlLang())) + (new Date(w.resetsAt) > Date.now() ? " · " + untilText(new Date(w.resetsAt)) : "") : "")
       + (w.tiers ? "\n\n" + tiersText(w) + "\n" : "")
@@ -18738,10 +18739,11 @@ function quotaRefresh(q, then) {
 const everyModel = new Set(); // provider|user shown window by window
 function familyQuota(sub) {
   const fam = sub.error ? sub.windows : familyWindows(sub.windows);
-  if (fam === sub.windows) return [quotaWindows(sub), null];
-  const key = sub.provider + "|" + (sub.user || "");
   const models = pooledModels(sub.windows);
-  const pooled = models !== sub.windows;
+  // pools whose models weren't named (agy-cli before agy listed its
+  // models): the pools alone, not an "Every model (0)" that shows nothing
+  if (fam === sub.windows || !models.length) return [quotaWindows({ ...sub, windows: fam }), null];
+  const key = sub.provider + "|" + (sub.user || ""), pooled = models !== sub.windows;
   const shown = () => quotaWindows({ ...sub, windows: everyModel.has(key) ? models : fam });
   let box = shown();
   const b = el("button", "text quota-every");
@@ -18753,11 +18755,10 @@ function familyQuota(sub) {
   };
   label();
   b.onclick = () => {
-    if (everyModel.has(key)) everyModel.delete(key); else everyModel.add(key);
+    everyModel[everyModel.has(key) ? "delete" : "add"](key);
     const next = shown();
     if (box.classList.contains("brief")) next.classList.add("brief");
-    box.replaceWith(next);
-    box = next;
+    box.replaceWith(box = next);
     label();
   };
   return [box, b];
