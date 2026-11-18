@@ -559,9 +559,15 @@ func AutoDrawer() string {
 			cands = append(cands, c)
 		}
 	}
+	// the provider the pick is held to draws while it can (heldPick,
+	// auto_picks.go): a ChatGPT account added later doesn't take it over
+	held := heldPick(slotDrawer)
+	heldDraws := held != "" && slices.ContainsFunc(cands, func(c cand) bool {
+		return providerOfRef(c.ref) == held && !(c.gen && c.key.less(newest))
+	})
 	best, bestCost, bestDate := "", 0.0, ""
 	for _, c := range cands {
-		if c.gen && c.key.less(newest) {
+		if c.gen && c.key.less(newest) || heldDraws && providerOfRef(c.ref) != held {
 			continue
 		}
 		if c.gen && !c.priced && haveFamilyCost {
@@ -571,6 +577,7 @@ func AutoDrawer() string {
 			best, bestCost, bestDate = c.ref, c.cost, c.released
 		}
 	}
+	settlePick(slotDrawer, held, heldDraws, providerOfRef(best))
 	return best
 }
 

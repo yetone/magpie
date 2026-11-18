@@ -400,23 +400,39 @@ func autoSearcher() (provider.Provider, string, bool) {
 func autoSearcherReady() (provider.Provider, string, bool, bool) {
 	var best provider.Provider
 	var model string
-	top, bestReady := -1, false
+	top, bestReady, have := 0, false, false
+	// the provider the pick is held to goes before every other of its
+	// readiness (heldPick, auto_picks.go): one added later, a Claude
+	// account's first of all, doesn't take the searches over
+	held, heldServes := heldPick(slotSearcher), false
 	for _, p := range provider.All() {
 		r := searchRank(p)
-		if r < 0 || !p.On() || (bestReady && r >= top) {
+		if r < 0 || !p.On() {
+			continue
+		}
+		if held != "" && p.ID == held {
+			r = -1
+		}
+		if have && bestReady && r >= top {
 			continue
 		}
 		m, ready := searcherReady(p)
-		if m == "" || top >= 0 && (bestReady && !ready || ready == bestReady && r >= top) {
+		if m != "" && r == -1 {
+			heldServes = true
+		}
+		if m == "" || have && (bestReady && !ready || ready == bestReady && r >= top) {
 			continue
 		}
 		if codexSearches(p) {
 			// by the backend's search, which spends no model's tokens
 			m = codexSearchModel
 		}
-		best, model, top, bestReady = p, m, r, ready
+		best, model, top, bestReady, have = p, m, r, ready, true
 	}
-	return best, model, bestReady, top >= 0
+	if have {
+		settlePick(slotSearcher, held, heldServes, best.ID)
+	}
+	return best, model, bestReady, have
 }
 
 // Why the searcher Settings names isn't used, and magpie picks one itself.

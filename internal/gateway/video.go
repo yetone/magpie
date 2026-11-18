@@ -320,6 +320,22 @@ func VideomakerMissingOf(v string) string {
 // second from the key's balance, and a key set up for chat would
 // otherwise take videos a subscription made before.
 func AutoVideomaker() string {
+	// the provider the pick is held to makes them while it can (heldPick,
+	// auto_picks.go): one added later doesn't take it over
+	held := heldPick(slotVideo)
+	m := autoVideomaker(held)
+	settlePick(slotVideo, held, held != "" && providerOfRef(m) == held, providerOfRef(m))
+	return m
+}
+
+func autoVideomaker(held string) string {
+	if held != "" {
+		if p, err := provider.Find(held); err == nil && p.On() && !p.DecideOnly() {
+			if ms := OfferedVideomakers(*p); len(ms) > 0 {
+				return p.ID + "/" + ms[0].ID
+			}
+		}
+	}
 	paid := ""
 	for _, p := range provider.All() {
 		if !p.On() || p.DecideOnly() {

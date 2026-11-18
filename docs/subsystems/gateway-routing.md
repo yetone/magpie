@@ -2926,11 +2926,42 @@ model that sees, see "An image the describer can't describe"), and a
 searcher named there is not handed on
 to another provider when it fails (see "A searcher that fails or finds
 nothing"). Image and video generation (`AutoDrawer`,
-`AutoVideomaker`) are not held this way.
+`AutoVideomaker`) are not held to allowance this way.
 
 Covered by `TestAutoVisionPassesOverOneOut`,
 `TestAutoVisionTierAmongThoseWithAllowance`, `TestSpentModelAcrossAccounts`,
 `TestVisionDoesNotAskSpentDescriber` and `TestSearcherPassesOverOneOut`.
+
+## Automatic picks are held to the provider that serves them
+
+A slot Settings › Models leaves on Automatic (Image recognition, Web
+search, Image generation, Video generation) is held to the provider
+magpie first picked for it, in `auto-picks.json` beside providers.json
+(`auto_picks.go`: `heldPick`, `settlePick`). `seersRankedHeld` and
+`autoSearcherReady` put the held provider before every other of its
+readiness; `AutoDrawer` and `AutoVideomaker` pick among its models while it
+has one. A provider added later never takes a slot over: a Claude account
+ranks first for images and search, and one added for account switching
+alone took every agent's images and searches (hxy920830 on X). A default
+fills only a slot nothing serves: nothing held yet, or the held provider
+removed, turned off or left with no model for it; the next pick is then
+held. Allowance still comes first for the moment (above), and the hold
+stays. A model picked in Settings is the user's and no hold touches it;
+the picker shows Automatic's pick as `Automatic · <model>`.
+
+Holds begin once, when the gateway first serves (`KeepAutoPicksHeld`,
+`seedAutoPicks`, `Seeded`); until then each pick is made as before, and a
+file that can't be read holds nothing and is not written over. The seed
+reads the last 30 days of the ledger: Image description calls (`vision`)
+and the searcher's Web search calls (`web_search`, not `SourceSearch`). A
+slot taken over by a provider added later (`pickBefore`: the one that
+served the call just before the current pick's first) is given back while
+that provider can still serve it; one the current pick served from the
+first row is kept. Image and video generation have no Automatic call in
+the ledger and are held to the pick at the seed.
+
+Covered by `TestAddedProviderTakesNoAutomaticPick`,
+`TestAutoPicksSeededFromTheLedger` and `TestClaudeAccountAddedTakesNoImages`.
 
 ## Hidden image models
 
