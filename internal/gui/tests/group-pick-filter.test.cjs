@@ -3,9 +3,11 @@
 // with its reasoning fixed (a/two:max) was neither ticked nor taken out by
 // a click: it was added a second time. PAMI on Discord: with many groups,
 // one was hard to find.
-// - The picker ticks a model in the group as itself or with an effort, and
-//   a click takes that member out (its effort with it), not adds it twice;
-//   a model in other groups says them, the whole note on hover.
+// - The picker ticks a model in the group as itself or with an effort (a
+//   row of its own, saying its level), and a click takes that member out
+//   (its effort with it); the model's own row under it is not ticked and
+//   adds it again (visamzh on X, group-member-again.test.cjs). A model in
+//   other groups says them, the whole note on hover.
 // - Over the groups, a filter keeps those whose name, id or models match
 //   every word typed; the keyboard stays in it as the list is drawn, none
 //   matching says so, Escape clears it. Not one <select>, no left border.
@@ -118,6 +120,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await opt("two").waitFor();
       const cur = (name) => opt(name).evaluate((li) => li.classList.contains("cur"));
       assert.equal(await cur("two"), true, "a member with its effort is not ticked");
+      const plain = pop.locator("li", { has: page.locator(".v", { hasText: /^two$/ }) }).nth(1);
+      assert.equal(await plain.evaluate((li) => li.classList.contains("cur")), false, "the model's own row is ticked while it is in at max only");
       assert.equal(await cur("one"), true);
       assert.equal(await cur("three"), false);
       const note = opt("two").locator(".n");
@@ -144,7 +148,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.mouse.click(bb.x + bb.width / 2, bb.y + bb.height / 2);
       await page.waitForFunction(() => !document.querySelector(".rt-gedit"));
       const sent = posts.find((p) => p.path === "/api/groups/save");
-      assert.deepEqual(sent.body.members, ["a/one", "a/two"], "a member added twice, or its effort kept");
+      assert.deepEqual(sent.body.members, ["a/one", "a/two:max"], "a member added twice, or its effort lost");
 
       assert.equal(await page.locator("select").count(), 0, "a native select");
       const missing = await page.evaluate(() => ["Filter groups and models", "No group or model matches “{q}”"]

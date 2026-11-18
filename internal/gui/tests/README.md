@@ -1128,13 +1128,22 @@ and 1000x700, in Chromium and WebKit, English and Chinese.
 
 `group-pick-filter.test.cjs` covers a group's Add a model picker and the
 filter over the routing groups (#907; PAMI on Discord). A model in the group
-with its reasoning fixed (a/two:max) is ticked, and a click takes that member
-out instead of adding it a second time. A model that is in other groups names
+with its reasoning fixed (a/two:max) is a ticked row of its own, and a click
+takes that member out; the model's own row under it is not ticked. A model
+that is in other groups names
 them, and the whole note shows on hover. The filter keeps the groups whose
 name, id or models match every word typed, and the keyboard stays in it.
 When nothing matches it says so, and Escape clears it. The page never moves,
 and there is no select or left border. In Chromium and WebKit, English and
 Chinese.
+
+`group-member-again.test.cjs` covers adding a model to a group a second
+time at another reasoning (visamzh on X: gpt-6.2-sol at high and at xhigh).
+With sol in the group at xhigh, the picker lists that member ticked and sol
+itself not; a click on sol adds it again, its reasoning is fixed at high, and
+the save sends both members. A group read with sol at two levels keeps both
+rows and sends both back. It fails on the picker that took the model as its
+member at a level. In Chromium and WebKit, English and Chinese.
 
 `old-webkit.test.cjs` holds the page to Safari 15.0, the WebKit macOS 12 can
 have (#220: a regex lookbehind in app.js, a syntax error before Safari 16.4,

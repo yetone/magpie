@@ -8174,17 +8174,19 @@ function routingPage(part) {
       // the image models after them, said as such (jzw690 on X): a group
       // of them is picked in Settings › Models › Images, or named at the images API
       const drawRef = (x) => ({ ...ref(x), note: noted(`${x.providerName} · ${t("Image model")}`, x.id) });
-      const options = [...subs, ...(decides ? [] : groups.models.map(ref)), ...(decides ? [] : (groups.drawers || []).map(drawRef)), ...(chats ? [] : (groups.deciders || []).map(ref))];
-      // the member a model is in the group as: itself, or with its
-      // reasoning fixed (deepseek/x:max), which is ticked as it and taken
-      // out by it rather than added twice (#907)
-      const holding = (id) => d.members.includes(id) ? id : d.members.find((m) => splitMember(m)[0] === id);
-      openPicker({ id: "", name: "", fields: [] }, { key: "member", label: "model", value: "", options, multi: true, picked: (id) => !!holding(id), onPick: (id) => {
+      // a model in the group with its reasoning fixed (deepseek/x:max) or
+      // on one account is a row of its own, ticked, its level or account
+      // in its note, and a click takes that member out (#907); the model's
+      // own row under it adds it again, to be fixed at another level
+      // (visamzh on X: gpt-6.2-sol at high and at xhigh, #189)
+      const withHeld = (mk) => (x) => [...d.members.filter((m) => m !== x.id && !subOf(m) && splitMember(m)[0] === x.id)
+        .map((m) => { const o = mk(x); return { ...o, value: m, note: [fixedOf(m) && fixedWords(fixedOf(m)), memberAccount(m)?.name, o.note].filter(Boolean).join(" · ") }; }), mk(x)];
+      const options = [...subs, ...(decides ? [] : groups.models.flatMap(withHeld(ref))), ...(decides ? [] : (groups.drawers || []).flatMap(withHeld(drawRef))), ...(chats ? [] : (groups.deciders || []).flatMap(withHeld(ref)))];
+      openPicker({ id: "", name: "", fields: [] }, { key: "member", label: "model", value: "", options, multi: true, picked: (id) => d.members.includes(id), onPick: (id) => {
         if (!id) return;
-        const m = holding(id);
-        if (!m) d.members.splice(d.members.findLastIndex((x) => !d.matched.includes(x)) + 1, 0, id); // after the last named
-        else if (d.matched.includes(m)) return status(t("In the group by a pattern: switch it off to send it nothing"), "warn");
-        else { d.members.splice(d.members.indexOf(m), 1); rematch(); }
+        if (!d.members.includes(id)) d.members.splice(d.members.findLastIndex((x) => !d.matched.includes(x)) + 1, 0, id); // after the last named
+        else if (d.matched.includes(id)) return status(t("In the group by a pattern: switch it off to send it nothing"), "warn");
+        else { d.members.splice(d.members.indexOf(id), 1); rematch(); }
         draw(); drawRules();
       } }, addBtn, ev);
     };
