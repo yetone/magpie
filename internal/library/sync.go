@@ -446,10 +446,15 @@ type AgentView struct {
 	SkillRouter string `json:"skillRouter,omitempty"`
 	// How is the way it is given its skills, link or copy, and HowOwn its
 	// own over the library's; MustCopy is one that can only take copies
-	// (in WSL)
-	How      string `json:"how,omitempty"`
-	HowOwn   bool   `json:"howOwn,omitempty"`
-	MustCopy bool   `json:"mustCopy,omitempty"`
+	// (in WSL, Claude Desktop, LiveAgent). CopyWhy is why it gets copies
+	// without asking for them (copyWhy): desktop, liveagent, wsl,
+	// junction, or shared with CopyWith, the agents given copies that read
+	// the very same folder
+	How      string   `json:"how,omitempty"`
+	HowOwn   bool     `json:"howOwn,omitempty"`
+	MustCopy bool     `json:"mustCopy,omitempty"`
+	CopyWhy  string   `json:"copyWhy,omitempty"`
+	CopyWith []string `json:"copyWith,omitempty"`
 	// Gone: not installed here any more, and listed only for what magpie
 	// gave it to be taken out (held); it is given nothing new
 	Gone bool `json:"gone,omitempty"`
@@ -673,6 +678,14 @@ func readView(problems []Problem, glance bool) (*View, error) {
 	// through every agent's folders, in WSL too (#1624)
 	targets, asleep := targetsAsleep(false)
 	v := &View{Agents: []AgentView{}, Servers: []ServerView{}, Skills: []SkillView{}, FoundSkills: []FoundSkill{}, Instructions: l.instructionsView(targets, asleep), Dir: Dir(), Backups: BackupDir(), CopySkills: l.CopySkills, SharedSkills: l.SharedSkills, SharedDir: sharedSkillsDir(), AutoUpdateSkills: l.AutoUpdateSkills, MCPHub: l.MCPHub, SkillRouter: l.SkillRouter, HubPath: gateway.HubMCPPath, HubNote: settings.Shared().RouterNote, HubName: gateway.HostName(), HubAllTools: settings.Shared().RouterAllTools, HubFindsItself: hubFindsItself(), HubOnDemandOver: gateway.HubOnDemandOver, Partial: glance}
+	// each agent's skills folder as it really is, links followed: the
+	// agents reading the same one get copies together (copyWhy)
+	skillsAt := map[*Target]string{}
+	for _, t := range targets {
+		if t.Skills != "" {
+			skillsAt[t] = realDir(t.Skills)
+		}
+	}
 	for _, t := range targets {
 		av := AgentView{ID: t.Agent.ID, Name: t.Agent.Name, Icon: t.Agent.Icon, Instructions: t.Instructions, Skills: t.Skills,
 			SkillsAlso: t.SkillsAlso, Note: t.Note, MCPVia: t.MCPVia, ProjectSkills: ProjectSkillsDir(t.Agent.ID), ProjectMCP: ProjectMCPFile(t.Agent.ID), ProjectSubagents: ProjectSubagentsDir(t.Agent.ID),
@@ -682,7 +695,14 @@ func readView(problems []Problem, glance bool) (*View, error) {
 		if t.Skills != "" {
 			_, av.HowOwn = l.SkillHow[t.Agent.ID]
 			av.How, av.MustCopy = l.howOf(t.Agent.ID), t.Copy || t.Desktop != nil
-			if av.MustCopy {
+			var sharers []*Target
+			for _, o := range targets {
+				if o != t && o.Skills != "" && skillsAt[o] == skillsAt[t] {
+					sharers = append(sharers, o)
+				}
+			}
+			av.CopyWhy, av.CopyWith = l.copyWhy(t, sharers)
+			if av.MustCopy || av.CopyWhy == copyShared {
 				av.How = HowCopy
 			}
 			if l.SkillRouter {

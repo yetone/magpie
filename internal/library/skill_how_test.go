@@ -186,3 +186,71 @@ func TestSkillRelinkKeepsUnreadableCopy(t *testing.T) {
 		t.Fatalf("the unreadable copy's edits weren't kept: %v", kept)
 	}
 }
+
+// The By agent sheet says why an agent gets copies it didn't ask for
+// (4kT1FohCTP97031 on X read Claude Desktop's bare "Only ever takes
+// copies" as Claude Code's): Claude Code takes links as every agent
+// does, Claude Desktop only copies, for Cowork's reason, and an agent
+// reading the very same folder as one given copies gets copies too, and
+// says so, rather than claim links.
+func TestSkillHowSaysWhyCopies(t *testing.T) {
+	h := sandbox(t)
+	p, _ := desktopFiles(t, h)
+	write(t, p, `{}`)
+	desktopAccount(t, filepath.Dir(p), "org1", "acct1", `{"lastUpdated": "2026-10-01T00:00:00.000Z", "skills": []}`)
+	src := filepath.Join(h, "src/skills")
+	skill(t, filepath.Join(src, "pdf"), "pdf", "Read PDFs")
+	ok(t)(InstallSkills(src, []string{"pdf"}, []string{"claude", "claude-desktop"}))
+
+	how := func() map[string]AgentView {
+		t.Helper()
+		v, err := Read(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m := map[string]AgentView{}
+		for _, a := range v.Agents {
+			m[a.ID] = a
+		}
+		return m
+	}
+	m := how()
+	if a := m["claude"]; a.How != HowLink || a.MustCopy || a.CopyWhy != "" {
+		t.Errorf("Claude Code: how %q, must copy %v, why %q; it takes links", a.How, a.MustCopy, a.CopyWhy)
+	}
+	if !isLink(t, filepath.Join(h, ".claude/skills/pdf")) {
+		t.Error("Claude Code's skill isn't a link")
+	}
+	if a := m["claude-desktop"]; a.How != HowCopy || !a.MustCopy || a.CopyWhy != copyDesktop {
+		t.Errorf("Claude Desktop: how %q, must copy %v, why %q", a.How, a.MustCopy, a.CopyWhy)
+	}
+
+	// Codex reads Claude Code's very folder and is to have copies: both
+	// get copies, and Claude Code's row says whose
+	cx := filepath.Join(h, ".codex/skills")
+	os.RemoveAll(cx)
+	os.MkdirAll(filepath.Dir(cx), 0o755)
+	if err := os.Symlink(filepath.Join(h, ".claude/skills"), cx); err != nil {
+		t.Skipf("no symlink here: %v", err)
+	}
+	ok(t)(SetSkillHow("codex", HowCopy))
+	if isLink(t, filepath.Join(h, ".claude/skills/pdf")) {
+		t.Fatal("the shared folder kept a link while Codex is to have copies")
+	}
+	m = how()
+	if a := m["claude"]; a.How != HowCopy || a.MustCopy || a.CopyWhy != copyShared || !slices.Equal(a.CopyWith, []string{"Codex"}) {
+		t.Errorf("Claude Code: how %q, must copy %v, why %q with %v; it gets copies for Codex", a.How, a.MustCopy, a.CopyWhy, a.CopyWith)
+	}
+	if a := m["codex"]; a.How != HowCopy || a.CopyWhy != "" {
+		t.Errorf("Codex: how %q, why %q; copies are its own way", a.How, a.CopyWhy)
+	}
+
+	// Codex back to links: Claude Code's folder is links again
+	ok(t)(SetSkillHow("codex", ""))
+	if !isLink(t, filepath.Join(h, ".claude/skills/pdf")) {
+		t.Error("not a link again")
+	}
+	if a := how()["claude"]; a.How != HowLink || a.CopyWhy != "" {
+		t.Errorf("Claude Code after: how %q, why %q", a.How, a.CopyWhy)
+	}
+}

@@ -37,6 +37,60 @@ func (l *Library) copies(t *Target, sharers []string) bool {
 	return slices.ContainsFunc(append([]string{t.Agent.ID}, sharers...), func(id string) bool { return l.howOf(id) == HowCopy })
 }
 
+// Why an agent is given copies of its skills while links are its way
+// (AgentView.CopyWhy), so the page can say so rather than leave a
+// copy-only row unexplained (4kT1FohCTP97031 on X).
+const (
+	// Claude Desktop's Cowork leaves out a skill whose entry is a link: it
+	// lstats each one and skips a symbolic link (Claude 2.7032 app.asar),
+	// and it runs a skill in its own sandbox, which can't read past the
+	// plugin's folder (desktop_skills.go)
+	copyDesktop = "desktop"
+	// K-brain refuses a link anywhere in a skill's path (liveagent.go)
+	copyLiveAgent = "liveagent"
+	// an agent in WSL whose skills folder, or the distro's store, is on a
+	// Windows drive, where the distro can't make a link Windows follows
+	// (wslStored)
+	copyWSL = "wsl"
+	// on Windows, an agent that skips a skill behind a junction
+	// (junctionBlind)
+	copyJunction = "junction"
+	// an agent reading the very same folder as one given copies: they
+	// get copies together (copies), CopyWith names the others
+	copyShared = "shared"
+)
+
+// copyWhy is why the agent of t gets copies of its skills without its
+// own way or the library's asking for them, "" when it doesn't; sharers
+// are the other agents reading the very same folder, and with the names
+// of those given copies, for copyShared.
+func (l *Library) copyWhy(t *Target, sharers []*Target) (why string, with []string) {
+	switch {
+	case t.Desktop != nil:
+		return copyDesktop, nil
+	case t.Copy && t.Agent.ID == "liveagent":
+		return copyLiveAgent, nil
+	case t.Copy && t.Agent.WSL != "":
+		return copyWSL, nil
+	case t.Copy && skipsJunctions(t.Agent.ID):
+		return copyJunction, nil
+	case t.Copy:
+		return "", nil
+	}
+	if l.howOf(t.Agent.ID) == HowCopy {
+		return "", nil
+	}
+	for _, o := range sharers {
+		if l.howOf(o.Agent.ID) == HowCopy {
+			with = append(with, o.Agent.Name)
+		}
+	}
+	if len(with) > 0 {
+		return copyShared, with
+	}
+	return "", nil
+}
+
 // howOf is the way the agent is given its skills: its own, else the
 // library's.
 func (l *Library) howOf(id string) string {

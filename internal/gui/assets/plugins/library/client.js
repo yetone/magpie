@@ -7393,6 +7393,21 @@ magpie.plugin("library", (ctx) => {
     return out;
   }
 
+  // An agent's way in the sheet, with why it gets copies when it didn't
+  // ask for them (copyWhy, 4kT1FohCTP97031 on X: Claude Desktop's
+  // copies-only row said no more than that)
+  const COPY_WHY = {
+    desktop: "Only ever takes copies: Cowork skips a linked skill",
+    liveagent: "Only ever takes copies: LiveAgent refuses a linked skill",
+    wsl: "Only ever takes copies: its skills folder is on a Windows drive, where WSL can't link",
+    junction: "Only ever takes copies: on Windows it skips a linked skill",
+  };
+  function howLine(a) {
+    if (a.copyWhy === "shared") return t("Gets copies: it reads the same folder as {agents}, which gets copies", { agents: (a.copyWith || []).join(", ") });
+    if (a.mustCopy) return t(COPY_WHY[a.copyWhy] || "Only ever takes copies");
+    return a.how === "copy" ? t("Gets copies") : t("Gets links");
+  }
+
   function openSkillHow() {
     const ed = el("div", "editor lib-editor lib-byagent-sheet lib-howsheet");
     const head = el("div", "ehead");
@@ -7407,7 +7422,7 @@ magpie.plugin("library", (ctx) => {
       const row = el("div", "row lib-row lib-byagent-row lib-how-row");
       row.dataset.agent = a.id;
       const who = el("div", "who");
-      who.append(el("div", "name", a.name), el("div", "sub", a.mustCopy ? t("Only ever takes copies") : a.how === "copy" ? t("Gets copies") : t("Gets links")));
+      who.append(el("div", "name", a.name), el("div", "sub", howLine(a)));
       row.append(agentIcon(a.icon), who);
       if (!a.mustCopy) {
         row.append(segs([["", t("Library's way")], ["link", t("Links")], ["copy", t("Copies")]], a.howOwn ? a.how : "", async (h) => {
