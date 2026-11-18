@@ -161,7 +161,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const look = (e) => { const s = getComputedStyle(e); return { bg: s.backgroundColor, border: s.borderTopColor, radius: s.borderTopLeftRadius, height: s.height }; };
         assert.deepEqual(await box(page).evaluate(look), await page.locator(".editor input.concurrency").evaluate(look), "styled as Concurrency");
         const rpmLabel = page.locator(".editor label", { hasText: w.label });
-        const ccLabel = page.locator(".editor label", { hasText: await page.evaluate(() => t("Concurrency")) });
+        const ccLabel = page.locator(".editor label", { hasText: await page.evaluate(() => t("Requests at once")) });
         const [h, one] = [await rpmLabel.evaluate((e) => e.getBoundingClientRect().height), await ccLabel.evaluate((e) => e.getBoundingClientRect().height)];
         assert(h <= one + 1, `the label takes ${h}px, Concurrency's ${one}px`);
         const fit = await box(page).evaluate((e) => {

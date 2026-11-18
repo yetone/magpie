@@ -60,8 +60,8 @@ function serve(lang, posts) {
 }
 
 const words = {
-  en: { label: "Concurrency", save: "Save", none: "No limit", plugin: "4, as its plugin says", hint: "Over it, requests queue and go out in order; 0 or empty is no limit", bad: "Concurrency: a whole number from 0 to 1000" },
-  zh: { label: "并发上限", save: "保存", none: "不限制", plugin: "4（插件的默认值）", hint: "超出时排队，按顺序发出；0 或留空为不限制", bad: "并发上限：请填写 0 到 1000 之间的整数" },
+  en: { label: "Requests at once", save: "Save", none: "No limit", plugin: "4, as its plugin says", hint: "Over it, requests queue and go out in order; 0 or empty is no limit", bad: "Requests at once: a whole number from 0 to 1000" },
+  zh: { label: "同时请求数", save: "保存", none: "不限制", plugin: "4（插件的默认值）", hint: "超出时排队，按顺序发出；0 或留空为不限制", bad: "同时请求数：请填写 0 到 1000 之间的整数" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -139,10 +139,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(saved.body.maxConcurrency, null);
 
       const missing = await page.evaluate(() => [
-        "Concurrency", "No limit", "{n}, as its plugin says",
+        "Requests at once", "No limit", "{n}, as its plugin says",
         "Over it, requests queue and go out in order; 0 or empty is no limit",
         "Over it, requests queue and go out in order; empty takes the plugin's {n}, 0 is no limit",
-        "Concurrency: a whole number from 0 to 1000",
+        "Requests at once: a whole number from 0 to 1000",
       ].filter((k) => !I18N.zh[k]));
       assert.deepEqual(missing, [], "every string has its Chinese");
       // a left border thicker or another colour than the right one is a stripe

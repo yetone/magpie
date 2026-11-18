@@ -687,7 +687,7 @@ func Update(action string, in Change) (string, error) {
 			keys[i].Quotas = in.Quotas
 		case "concurrency-key":
 			if in.MaxConcurrency < 0 || in.MaxConcurrency > MaxKeyConcurrency {
-				return "", fmt.Errorf("Concurrency: a whole number from 0 to %d", MaxKeyConcurrency)
+				return "", fmt.Errorf("Requests at once: a whole number from 0 to %d", MaxKeyConcurrency)
 			}
 			keys[i].MaxConcurrency = in.MaxConcurrency
 		case "tier-key":

@@ -976,7 +976,7 @@ function gatewayConcurrencyBadge(k) {
       done = true;
       const s = i.value.trim();
       const v = /^\d+$/.test(s) && +s <= 1000 ? +s : null;
-      if (save && s && v == null) { status(t("Concurrency: a whole number from 0 to 1000"), "err"); return renderGatewayKeys(); }
+      if (save && s && v == null) { status(t("Requests at once: a whole number from 0 to 1000"), "err"); return renderGatewayKeys(); }
       if (save && s && v !== own) set(v);
       else renderGatewayKeys();
     };
