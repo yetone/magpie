@@ -841,8 +841,14 @@ const SignInHeader = "X-Magpie-Sign-In"
 // 400 for a model id none of its instances serves, "Model id : … , has no
 // provider supported" (#2887), and Azure OpenAI's DeploymentNotFound, whose
 // message "The API deployment for this resource does not exist" a relay
-// passes on as a 400 (its 404 fails over by its status already).
-var ModelUnserved = lazyre.New(`(?i)model.{0,80}(not (supported|accessible|available|found|enabled|allowed)|unsupported|does ?n[o']t exist|unknown|invalid)|(no such|unknown|invalid|unsupported) model|model_not_found|has no provider supported|deployment[ _]?not[ _]?found|deployment.{0,60}does ?n[o']t exist|模型.{0,12}(不存在|不支持|无权|未开通)`)
+// passes on as a 400 (its 404 fails over by its status already). And
+// Anthropic's 404 for a model the account may not call: through Claude
+// Code "There's an issue with the selected model (claude-mythos-5-2). It
+// may not exist or you may not have access to it.", from the API
+// {"type":"not_found_error","message":"model: claude-mythos-5-2"} — that
+// model rests on that account, not the account for all its models
+// (ZacharyZhang on X).
+var ModelUnserved = lazyre.New(`(?i)model.{0,80}(not (supported|accessible|available|found|enabled|allowed)|unsupported|does ?n[o']t exist|may not exist or you may not have access|unknown|invalid)|not_found_error.{0,40}"model: |(no such|unknown|invalid|unsupported) model|model_not_found|has no provider supported|deployment[ _]?not[ _]?found|deployment.{0,60}does ?n[o']t exist|模型.{0,12}(不存在|不支持|无权|未开通)`)
 
 // signInWords are words of a refusal about the sign-in itself, which a
 // model named beside them doesn't make the model's: "model gpt-x: invalid

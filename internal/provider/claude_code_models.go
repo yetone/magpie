@@ -249,8 +249,16 @@ func claudeModels() []catalog.Model {
 
 // claudeLists says whether the Claude account user has model, as its
 // Claude Code was told: a model it isn't entitled to is left out, and one
-// it offers or models.dev lists for every account is in. ok is false when
-// no Claude Code of the account has said.
+// it offers or models.dev lists for every account is in. A gated model
+// models.dev doesn't list for every account (Claude Mythos 5.2), which
+// another account's Claude Code offers, is the accounts' whose Claude Code
+// offers it: Claude Code names only the gated models an account has,
+// never the ones it lacks, so an account saying nothing of it is one
+// without it, asked only after the ones that have it (AccountsFor), not
+// first, to answer 404 "may not have access to it" (ZacharyZhang on X).
+// A model no account's Claude Code offers, nor models.dev lists (its list
+// not read yet), is unknown, and taken to be listed. ok is false when no
+// Claude Code of the account has said.
 func claudeLists(user, model string) (has, ok bool) {
 	cm, found := claudeModelsOf(user)
 	if !found {
@@ -262,6 +270,19 @@ func claudeLists(user, model string) (has, ok bool) {
 	}
 	if e, said := cm.entitled[id]; said {
 		return e, true
+	}
+	offers := func(cm claudeCodeModels) bool {
+		return slices.ContainsFunc(cm.extra, func(x claudeExtra) bool { return x.id == id })
+	}
+	if offers(cm) || slices.ContainsFunc(catalog.ProviderShared("anthropic"), func(m catalog.Model) bool {
+		return strings.EqualFold(m.ID, id)
+	}) {
+		return true, true
+	}
+	for _, f := range claudeCodeFiles() {
+		if other, ok := readClaudeCodeModels(f); ok && offers(other) {
+			return false, true
+		}
 	}
 	return true, true
 }
