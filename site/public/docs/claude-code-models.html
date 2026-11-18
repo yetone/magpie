@@ -106,6 +106,14 @@
     },
     {
      "@type": "Question",
+     "name": "Does Claude Code’s Code Mode work through magpie?",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "No. Claude Code turns Code Mode on only when it talks to Anthropic’s API directly: with ANTHROPIC_BASE_URL pointing anywhere but api.anthropic.com, or with ANTHROPIC_AUTH_TOKEN set, it starts with the ordinary tools and says “it only works directly with the Anthropic API”. That is a check in Claude Code, and it holds for every model magpie serves, a Claude subscription’s or an Anthropic API key’s included. To use Code Mode, pick one of Claude Code’s own models in magpie so it goes straight to Anthropic, then start claude with CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1. Code Mode also needs the feature flags Claude Code downloads, so leave Claude Code’s telemetry on in magpie’s Agents page."
+     }
+    },
+    {
+     "@type": "Question",
      "name": "Can I use my Claude subscription and DeepSeek side by side?",
      "acceptedAnswer": {
       "@type": "Answer",
@@ -287,6 +295,8 @@ magpie claude codex/gpt-5.5</pre></div>
     <p>Yes, while Claude Code is on a model through magpie: the gateway runs with the app. <code>magpie daemon install</code> keeps it running as a service with no window.</p>
     <h3>Can I keep my claude.ai sign-in?</h3>
     <p>The Claude Code row has a sign-in setting. With <span class="ui">magpie’s key</span>, the default, Claude Code is signed out of claude.ai while it runs through magpie, so the plan limits in <code>/usage</code>, connectors, voice and <code>/teleport</code> are off. With <span class="ui">claude.ai</span> it keeps its sign-in, which magpie never passes on. Remote Control and ultrareview stay off either way.</p>
+    <h3>Does Claude Code’s Code Mode work through magpie?</h3>
+    <p>No. Claude Code turns Code Mode on only when it talks to Anthropic’s API directly: with <code>ANTHROPIC_BASE_URL</code> pointing anywhere but <code>api.anthropic.com</code>, or with <code>ANTHROPIC_AUTH_TOKEN</code> set, it starts with the ordinary tools and says “it only works directly with the Anthropic API”. That is a check in Claude Code, and it holds for every model magpie serves, a Claude subscription’s or an Anthropic API key’s included. To use Code Mode, pick one of Claude Code’s own models in magpie so it goes straight to Anthropic, then start <code>claude</code> with <code>CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1</code>. Code Mode also needs the feature flags Claude Code downloads, so leave Claude Code’s telemetry on in magpie’s Agents page.</p>
     <h3>Can I use my Claude subscription and DeepSeek side by side?</h3>
     <p>Yes. Sign in to Claude in magpie and its models are <code>claude/…</code> in the same picker. Requests on a Claude subscription run through the Claude Code installed on your computer.</p>
     <h3>How do I undo it?</h3>

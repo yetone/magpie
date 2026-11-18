@@ -106,6 +106,14 @@
     },
     {
      "@type": "Question",
+     "name": "Claude Code の Code Mode は magpie 経由で使えますか？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "使えません。Claude Code が Code Mode を有効にするのは Anthropic の API に直接つなぐときだけです。ANTHROPIC_BASE_URL が api.anthropic.com 以外を指しているか、ANTHROPIC_AUTH_TOKEN が設定されていると、通常のツールで起動し “it only works directly with the Anthropic API” と表示します。これは Claude Code 自身のチェックで、Claude サブスクリプションや Anthropic API キーのモデルも含め、magpie が提供するすべてのモデルで同じです。Code Mode を使うには、magpie で Claude Code 自身のモデルを選んで Anthropic に直接つながるようにし、CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1 で claude を起動します。Code Mode は Claude Code がダウンロードする機能フラグも必要とするため、magpie の Agents ページで Claude Code のテレメトリーをオフにしないでください。"
+     }
+    },
+    {
+     "@type": "Question",
      "name": "Claude のサブスクリプションと DeepSeek を併用できますか？",
      "acceptedAnswer": {
       "@type": "Answer",
@@ -287,6 +295,8 @@ magpie claude codex/gpt-5.5</pre></div>
     <p>はい。Claude Code が magpie 経由のモデルを使っている間は必要です。ゲートウェイはアプリと一緒に動きます。<code>magpie daemon install</code> を使うと、ウィンドウなしのサービスとして動き続けます。</p>
     <h3>claude.ai のサインインはそのままにできますか？</h3>
     <p>Claude Code の行にサインインの設定があります。デフォルトの <span class="ui">magpie’s key</span> では、Claude Code が magpie 経由で動いている間は claude.ai からサインアウトされるため、<code>/usage</code> のプラン上限、コネクタ、音声、<code>/teleport</code> は使えません。<span class="ui">claude.ai</span> にするとサインインは保たれ、magpie がそれを外に渡すことはありません。Remote Control と ultrareview はどちらの場合も使えません。</p>
+    <h3>Claude Code の Code Mode は magpie 経由で使えますか？</h3>
+    <p>使えません。Claude Code が Code Mode を有効にするのは Anthropic の API に直接つなぐときだけです。<code>ANTHROPIC_BASE_URL</code> が <code>api.anthropic.com</code> 以外を指しているか、<code>ANTHROPIC_AUTH_TOKEN</code> が設定されていると、通常のツールで起動し “it only works directly with the Anthropic API” と表示します。これは Claude Code 自身のチェックで、Claude サブスクリプションや Anthropic API キーのモデルも含め、magpie が提供するすべてのモデルで同じです。Code Mode を使うには、magpie で Claude Code 自身のモデルを選んで Anthropic に直接つながるようにし、<code>CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1</code> で <code>claude</code> を起動します。Code Mode は Claude Code がダウンロードする機能フラグも必要とするため、magpie の Agents ページで Claude Code のテレメトリーをオフにしないでください。</p>
     <h3>Claude のサブスクリプションと DeepSeek を併用できますか？</h3>
     <p>はい。magpie で Claude にサインインすると、そのモデルが同じピッカーに <code>claude/…</code> として並びます。Claude サブスクリプションでのリクエストは、コンピューターにインストールされた Claude Code を通じて送られます。</p>
     <h3>元に戻すには？</h3>

@@ -106,6 +106,14 @@
     },
     {
      "@type": "Question",
+     "name": "Claude Code 的 Code Mode 能通过 magpie 用吗？",
+     "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "不能。Claude Code 只在直连 Anthropic API 时才开启 Code Mode：ANTHROPIC_BASE_URL 指向 api.anthropic.com 以外的地址，或设置了 ANTHROPIC_AUTH_TOKEN 时，它会用普通工具启动，并提示 “it only works directly with the Anthropic API”。这是 Claude Code 自己的检查，对 magpie 提供的所有模型都一样，包括 Claude 订阅和 Anthropic API key 的模型。要用 Code Mode，在 magpie 里给 Claude Code 选它自己的模型，让它直连 Anthropic，再用 CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1 启动 claude。Code Mode 还需要 Claude Code 下载的功能开关，所以别在 magpie 的 Agents 页面关掉 Claude Code 的遥测。"
+     }
+    },
+    {
+     "@type": "Question",
      "name": "Claude 订阅和 DeepSeek 能一起用吗？",
      "acceptedAnswer": {
       "@type": "Answer",
@@ -287,6 +295,8 @@ magpie claude codex/gpt-5.5</pre></div>
     <p>Claude Code 用的是经过 magpie 的模型时，需要：网关跟着应用运行。<code>magpie daemon install</code> 可以把它装成后台服务，不开窗口。</p>
     <h3>能保留 claude.ai 的登录吗？</h3>
     <p>Claude Code 那一行有个登录方式设置。默认的 <span class="ui">magpie 的密钥</span> 下，Claude Code 接入 magpie 期间会退出 claude.ai，所以 <code>/usage</code> 里的套餐额度、connectors、语音和 <code>/teleport</code> 不可用。选 <span class="ui">claude.ai</span> 则保留登录，magpie 不会把它转发出去。两种方式下 Remote Control 和 ultrareview 都不可用。</p>
+    <h3>Claude Code 的 Code Mode 能通过 magpie 用吗？</h3>
+    <p>不能。Claude Code 只在直连 Anthropic API 时才开启 Code Mode：<code>ANTHROPIC_BASE_URL</code> 指向 <code>api.anthropic.com</code> 以外的地址，或设置了 <code>ANTHROPIC_AUTH_TOKEN</code> 时，它会用普通工具启动，并提示 “it only works directly with the Anthropic API”。这是 Claude Code 自己的检查，对 magpie 提供的所有模型都一样，包括 Claude 订阅和 Anthropic API key 的模型。要用 Code Mode，在 magpie 里给 Claude Code 选它自己的模型，让它直连 Anthropic，再用 <code>CLAUDE_CODE_EXPERIMENTAL_CODE_MODE=1</code> 启动 <code>claude</code>。Code Mode 还需要 Claude Code 下载的功能开关，所以别在 magpie 的 Agents 页面关掉 Claude Code 的遥测。</p>
     <h3>Claude 订阅和 DeepSeek 能一起用吗？</h3>
     <p>能。在 magpie 里登录 Claude，它的模型以 <code>claude/…</code> 出现在同一个列表里。Claude 订阅的请求通过你电脑上安装的 Claude Code 发出。</p>
     <h3>怎么撤销？</h3>
