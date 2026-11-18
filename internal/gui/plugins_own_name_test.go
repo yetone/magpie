@@ -13,7 +13,7 @@ import (
 
 // #4558 (MYCF711): a plugin installed from git whose package.json says
 // magpie.name ("华为云 HUAWEI") read as its dependency key
-// (magpie-officeace) in Settings → Plugins. Bun takes no non-ASCII key, so
+// (magpie-officeace) in the Plugins page. Bun takes no non-ASCII key, so
 // the package's own name is the only readable one it has. The row is told
 // it (ownName), as is the sidebar's title for a page that names none; a
 // package that gives none is told none, and the community's list still

@@ -113,7 +113,7 @@ func TestToolsMCPOff(t *testing.T) {
 		t.Errorf("off, listed %+v", m)
 	}
 	m := readMCP(t, toolsPost(h, toolsCall("x_y", `{}`)))
-	if !m.Result.IsError || len(m.Result.Content) == 0 || !strings.Contains(m.Result.Content[0].Text, "Plugin tools plugin is off") {
+	if !m.Result.IsError || len(m.Result.Content) == 0 || !strings.Contains(m.Result.Content[0].Text, "Plugin tools built-in is off") {
 		t.Errorf("off, a call said %+v", m)
 	}
 	if len(*ran) != 0 || asked != 0 {
@@ -145,7 +145,7 @@ func TestToolsMCPHeldToKeyLimit(t *testing.T) {
 	r := httptest.NewRequest("POST", ToolsMCPPath, nil).WithContext(access.WithIdentity(t.Context(), capped))
 	res, rpcErr := s.toolsMCPCall(r, mcpMessage{ID: json.RawMessage("1"), Method: "tools/call", Params: json.RawMessage(`{"name":"x_y","arguments":{}}`)})
 	b, _ := json.Marshal(res)
-	if rpcErr != nil || !strings.Contains(string(b), `"isError":true`) || !strings.Contains(string(b), "Key limits plugin") {
+	if rpcErr != nil || !strings.Contains(string(b), `"isError":true`) || !strings.Contains(string(b), "Key limits built-in") {
 		t.Errorf("a limited key with limits off: %s %v", b, rpcErr)
 	}
 	if len(*ran) != 0 {

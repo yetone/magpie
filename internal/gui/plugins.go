@@ -24,7 +24,7 @@ import (
 )
 
 // OpenCode's provider plugins (internal/plugin): the providers they sign
-// in to are subscriptions in the add sheet, and Settings → Plugins adds,
+// in to are subscriptions in the add sheet, and the Plugins page adds,
 // updates and removes them.
 
 // pluginSubJSON is a plugin's provider as the add sheet lists it.
@@ -99,7 +99,7 @@ func pluginSubs() []pluginSubJSON {
 	return out
 }
 
-// pluginEntryJSON is a plugin as Settings → Plugins lists it.
+// pluginEntryJSON is a plugin as the Plugins page lists it.
 type pluginEntryJSON struct {
 	plugin.Entry
 	Error     string   `json:"error,omitempty"`   // why it didn't load

@@ -209,7 +209,7 @@ func TestVisionMCPHeldToKeyLimit(t *testing.T) {
 	setLimit(t, keys[0].ID, &access.Limit{Period: "day", Tokens: 100000})
 	looked := len(u.sent("eye"))
 	m = readMCP(t, visionPost(h, "127.0.0.1:5000", analyzeCall("data:image/png;base64,aGVsbG8=", ""), "Authorization", "Bearer "+secrets[0]))
-	if !m.Result.IsError || !strings.Contains(m.Result.Content[0].Text, "Key limits plugin") {
+	if !m.Result.IsError || !strings.Contains(m.Result.Content[0].Text, "Key limits built-in") {
 		t.Fatalf("off: %+v", m)
 	}
 	if n := len(u.sent("eye")); n != looked {

@@ -53,7 +53,7 @@ import (
 // addPlugins is backup.AddPlugins: a var so a test installs nothing.
 var addPlugins = backup.AddPlugins
 
-// removePlugin is provider.RemovePlugin, as Settings → Plugins removes one:
+// removePlugin is provider.RemovePlugin, as the Plugins page removes one:
 // a var so a test removes nothing.
 var removePlugin = func(name string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)

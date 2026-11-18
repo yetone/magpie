@@ -4585,7 +4585,7 @@ input.words.remote-key { width: 160px; }
 :root[data-theme="dark"] .warm-at input.at { color-scheme: dark; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .warm-at input.at { color-scheme: dark; } }
 @media (max-width: 520px) { .proxy-segs { flex-wrap: wrap; justify-content: flex-end; } }
-/* Settings → Plugins: what a plugin signs in to, or why it didn't load, said whole */
+/* Plugins page: what a plugin signs in to, or why it didn't load, said whole */
 .row.pref.plugin-row .sub, .row.pref.plugin-add .sub { white-space: normal; }
 .row.pref.plugin-row.off .name { color: var(--muted); }
 .row.pref.plugin-add .val { flex-wrap: wrap; justify-content: flex-end; }

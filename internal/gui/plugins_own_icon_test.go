@@ -12,7 +12,7 @@ import (
 
 // #1775 (peterroe): a plugin of several providers gives each its own
 // picture in the auth hook and itself one in package.json's magpie.icon.
-// Settings → Plugins is told the plugin's own, checked and kept as a
+// the Plugins page is told the plugin's own, checked and kept as a
 // listed plugin's is, apart from its providers'; one that gives none, or
 // a picture magpie doesn't take (plain http), is told none.
 func TestPluginsStateGivesThePluginsOwnIcon(t *testing.T) {

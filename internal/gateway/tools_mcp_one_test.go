@@ -78,7 +78,7 @@ func TestToolsMCPOnePlugin(t *testing.T) {
 	if ts, _ := PluginToolsOf(ctx, "@magpie-community/tools-search1api"); len(ts) != 0 {
 		t.Errorf("off, PluginToolsOf = %v", ts)
 	}
-	if _, err := RunPluginToolOf(ctx, "@magpie-community/tools-search1api", "search", nil, ""); err == nil || !strings.Contains(err.Error(), "Plugin tools plugin is off") {
+	if _, err := RunPluginToolOf(ctx, "@magpie-community/tools-search1api", "search", nil, ""); err == nil || !strings.Contains(err.Error(), "Plugin tools built-in is off") {
 		t.Errorf("off, RunPluginToolOf: %v", err)
 	}
 }

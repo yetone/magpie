@@ -268,7 +268,7 @@ func ForgetRefreshForTest() {
 
 // ErrUnmasked is the error a request gets when masking is wanted and
 // nothing can mask it.
-var ErrUnmasked = fmt.Errorf("masking is on in magpie's Settings → Privacy, but the redact plugin isn't serving it, so nothing was sent; turn the plugin on in Settings → Plugins")
+var ErrUnmasked = fmt.Errorf("masking is on in magpie's Settings › Privacy, but the Masking built-in isn't serving it, so nothing was sent; turn it on in Plugins › Built-in")
 
 // Served is the masker that serves now. With none, one refresh is asked
 // (at most once a second, never from inside one) and it is looked for

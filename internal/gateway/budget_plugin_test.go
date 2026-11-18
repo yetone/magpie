@@ -66,7 +66,7 @@ func TestKeyLimitsOnAndOff(t *testing.T) {
 	withoutLimits(t)
 	setLimit(t, keys[0].ID, &access.Limit{Period: "day", Tokens: 100000})
 	w := call(secrets[0])
-	if w.Code != http.StatusServiceUnavailable || !strings.Contains(w.Body.String(), "Key limits plugin") || w.Header().Get("X-Should-Retry") != "false" {
+	if w.Code != http.StatusServiceUnavailable || !strings.Contains(w.Body.String(), "Key limits built-in") || w.Header().Get("X-Should-Retry") != "false" {
 		t.Fatal("off: a limited key's request", w.Code, w.Body.String(), w.Header())
 	}
 	if calls.Load() != 2 {
@@ -75,7 +75,7 @@ func TestKeyLimitsOnAndOff(t *testing.T) {
 	if rec := lastUsage(t); !rec.Rejected || rec.CallerKeyID != keys[0].ID || rec.ErrType != "gateway_key_limit_off" || rec.Status != 503 {
 		t.Fatalf("off: refusal recorded as %+v", rec)
 	}
-	if err := mcp(); err == nil || !strings.Contains(err.Error(), "Key limits plugin") {
+	if err := mcp(); err == nil || !strings.Contains(err.Error(), "Key limits built-in") {
 		t.Errorf("off: the search MCP server said %v, not that the plugin is off", err)
 	}
 	if w := call(secrets[1]); w.Code != 200 {

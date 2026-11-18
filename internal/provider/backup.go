@@ -196,7 +196,7 @@ func withoutSecretOptions(opts map[string]any) map[string]any {
 }
 
 // AddPlugins installs the plugins another computer has (Carried) that
-// aren't here, the way Settings → Plugins adds one, and hands each a
+// aren't here, the way the Plugins page adds one, and hands each a
 // deprecated built-in it serves (HandOver). It never takes a plugin away
 // or changes one already here; a removal is davsync's, which tracks the
 // plugins both sides had at the last sync. It returns the specs added and why the others couldn't be.

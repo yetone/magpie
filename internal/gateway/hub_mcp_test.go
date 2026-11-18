@@ -390,7 +390,7 @@ func TestHubMCPHeldToKeyLimit(t *testing.T) {
 	r := httptest.NewRequest("POST", HubMCPPath+"claude", nil).WithContext(access.WithIdentity(t.Context(), capped))
 	res, rpcErr := s.hubMCPCall(r, "claude", mcpMessage{ID: json.RawMessage("1"), Method: "tools/call", Params: json.RawMessage(`{"name":"fs__read","arguments":{}}`)})
 	b, _ := json.Marshal(res)
-	if rpcErr != nil || !strings.Contains(string(b), `"isError":true`) || !strings.Contains(string(b), "Key limits plugin") {
+	if rpcErr != nil || !strings.Contains(string(b), `"isError":true`) || !strings.Contains(string(b), "Key limits built-in") {
 		t.Errorf("a limited key with limits off: %s %v", b, rpcErr)
 	}
 	if len(f.ran()) != 0 {

@@ -821,7 +821,7 @@ func (s *Server) webSearch(ctx context.Context, query string) (string, []Hit, er
 var errNoSearcher = errors.New("no provider that can search the web, nor a search API, is set up in magpie")
 
 // errSearchOff is a search asked of magpie while plugins/search is off.
-var errSearchOff = errors.New("magpie's web search is off: turn the Web search plugin on in magpie's Settings › Plugins")
+var errSearchOff = errors.New("magpie's web search is off: turn Web search on in magpie's Plugins › Built-in")
 
 // searchServed is whether plugins/search serves magpie's web search here
 // (the gateway's tool point, gwtool): off, magpie neither offers its
