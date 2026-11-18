@@ -2,7 +2,7 @@
 // Settings › General › Sidebar pages (youimark on X: a docker gateway has no
 // use for Agents or Library): the pages ticked off leave the sidebar, are
 // kept for this browser (localStorage magpie.navHidden), and the window
-// that would open on one opens Providers. Chromium and WebKit. No backend:
+// that would open on one opens Providers. A link to one still opens it. Chromium and WebKit. No backend:
 // the API is faked.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -61,6 +61,19 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     await page.goto(BASE);
     await page.waitForSelector("#nav button.on");
     assert.deepEqual((await hidden()).sort(), ["agents", "library"]);
+    assert.equal(await page.evaluate(() => document.querySelector("#nav button.on").dataset.view), "providers");
+    // still reachable: a link or ?view= to a page left out opens it, not Agents
+    // or Providers; only the window's own kept page gives way
+    const on = () => page.evaluate(() => [...document.querySelectorAll(".view")].find((v) => !v.hidden)?.id);
+    await page.evaluate(() => show("library"));
+    await page.waitForFunction(() => !document.querySelector("#view-library").hidden);
+    assert.equal(await on(), "view-library");
+    await page.goto(BASE + "?view=library");
+    await page.waitForFunction(() => !document.querySelector("#view-library")?.hidden);
+    assert.equal(await on(), "view-library");
+    await page.evaluate(() => localStorage.setItem("magpie.lastView", "library"));
+    await page.goto(BASE);
+    await page.waitForSelector("#nav button.on");
     assert.equal(await page.evaluate(() => document.querySelector("#nav button.on").dataset.view), "providers");
     // and put back
     await page.goto(BASE + "?view=settings");

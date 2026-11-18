@@ -23407,7 +23407,8 @@ function setGatewayMode(on) {
 }
 // offView: v, or the page a plugin switched off sends it to (yyddbds)
 function offView(v) {
-  const gone = (x) => featureHides($(`#nav button[data-view="${x}"]`)) || navMine().includes(x);
+  // a page left out of the sidebar (navMine) still opens when asked for
+  const gone = (x) => featureHides($(`#nav button[data-view="${x}"]`));
   if (!gone(v)) return v;
   if (v === "groups" && !gone("routing")) return "routing";
   return gatewayMode || gone("agents") ? "providers" : "agents";
