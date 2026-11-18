@@ -16,7 +16,7 @@ import (
 // and Messages APIs, before it looked at the key.
 const goUnavailable = `{"type":"error","error":{"type":"api_error","message":"Upstream request failed: Model is unavailable."}}`
 
-type goAsk struct{ url, auth, apiKey string }
+type goAsk struct{ url, auth, apiKey, body string }
 
 // streamFor is a stream saying text in the shape of the API path is on.
 func streamFor(path, text string) string {
@@ -47,7 +47,7 @@ func goFreeServer(t *testing.T, models, serves []string, zenStatus int, zenRefus
 		b, _ := io.ReadAll(r.Body)
 		r.Body.Close()
 		mu.Lock()
-		asked = append(asked, goAsk{r.URL.Host + r.URL.Path, r.Header.Get("Authorization"), r.Header.Get("x-api-key")})
+		asked = append(asked, goAsk{r.URL.Host + r.URL.Path, r.Header.Get("Authorization"), r.Header.Get("x-api-key"), string(b)})
 		mu.Unlock()
 		model := ""
 		for _, m := range models {
@@ -123,11 +123,11 @@ func TestOpenCodeGoOwnFreeModelStaysOnGo(t *testing.T) {
 // is served; a paid model Go doesn't serve isn't asked at Zen at all, and
 // its refusal says to pick one of Go's.
 func TestOpenCodeGoUnavailableSaysWhere(t *testing.T) {
-	s, asked := goFreeServer(t, []string{"cat-jam-free", "claude-opus-5"}, nil, 400,
+	s, asked := goFreeServer(t, []string{"glm-5-free", "claude-opus-5"}, nil, 400,
 		`{"error":{"type":"server_error","message":"Upstream request failed: Model is unavailable."}}`)
-	rec := goClaudeAsk(s, "go/cat-jam-free")
+	rec := goClaudeAsk(s, "go/glm-5-free")
 	body := rec.Body.String()
-	if rec.Code < 400 || !strings.Contains(body, "OpenCode Go doesn't serve cat-jam-free") || !strings.Contains(body, "OpenCode Zen provider, which needs no key") {
+	if rec.Code < 400 || !strings.Contains(body, "OpenCode Go doesn't serve glm-5-free") || !strings.Contains(body, "OpenCode Zen provider, which needs no key") {
 		t.Fatalf("%d %s", rec.Code, body)
 	}
 	n := len(asked())
@@ -140,5 +140,35 @@ func TestOpenCodeGoUnavailableSaysWhere(t *testing.T) {
 		if !strings.HasPrefix(a.url, "opencode.ai/inference/go/") {
 			t.Fatalf("a paid model asked at %s", a.url)
 		}
+	}
+}
+
+// withtee on X: a free model Go lists itself, asked from Claude Code, is
+// asked as Claude Code asked it. Nothing of OpenCode's is added: no
+// environment block ("Prefer /tmp/opencode over …", which the model said
+// back) and no stand-in tools. A Zen free model Go doesn't list still
+// carries both, as Zen's free tier wants them when it is asked there.
+func TestOpenCodeGoOwnFreeModelGetsNothingOfOpenCodes(t *testing.T) {
+	s, asked := goFreeServer(t, []string{"beam-free", "glm-5-free"}, []string{"beam-free"}, 200, "")
+	writeCatalog(t, `{"opencode-go":{"models":{"beam-free":{"id":"beam-free","cost":{"input":0,"output":0}}}}}`)
+	if rec := goClaudeAsk(s, "go/beam-free"); rec.Code != 200 {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	a := asked()
+	if len(a) != 1 {
+		t.Fatalf("asked %+v", a)
+	}
+	// the body is JSON, which writes < as \u003c
+	for _, not := range []string{"/tmp", "<env>", `\u003cenv\u003e`, provider.OpenCodeStub} {
+		if strings.Contains(a[0].body, not) {
+			t.Fatalf("Go's own free model was sent %q: %s", not, a[0].body)
+		}
+	}
+	if rec := goClaudeAsk(s, "go/glm-5-free"); rec.Code != 200 {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	a = asked()
+	if len(a) != 3 || !strings.Contains(a[2].body, "Prefer /tmp/opencode") || !strings.Contains(a[2].body, provider.OpenCodeStub) {
+		t.Fatalf("Zen's free model at Zen: %+v", a)
 	}
 }

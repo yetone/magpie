@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -210,15 +211,38 @@ func OpenCodeSession(h http.Header, u string) {
 // whose id doesn't say so (361 on Discord: it answered 403 "OpenCode's
 // free tier can only be used from within OpenCode"); openCodeFreeIDs are
 // such ones known without the catalog.
+//
+// On OpenCode Go's gateway a model Go lists itself (models.dev's
+// opencode-go: beam-free and cat-jam-free among them) is none of these.
+// Go serves its models, the free ones too, to a Go key from any client its
+// docs validate (Claude Code, Codex, Hermes, Pi, Raycast), so they are
+// asked as the client asked them, with nothing of OpenCode's added. Asked
+// as Zen's, Go's free models got the environment block's "Prefer
+// /tmp/opencode over generic system temporary directories" in Claude
+// Code's prompt and said it back (withtee on X). A Zen free model Go
+// doesn't list stays one, for Zen's free tier asks it when Go refuses it
+// (RetryOpenCodeFreeOnZen).
 func (p Provider) OpenCodeFree(model string) bool {
 	if !p.IsOpenCode() {
 		return false
 	}
-	if strings.HasSuffix(model, "-free") || openCodeFreeIDs[model] {
-		return true
+	if !strings.HasSuffix(model, "-free") && !openCodeFreeIDs[model] {
+		pr, ok := catalog.PriceOf("opencode", model)
+		if !ok || pr.Input != 0 || pr.Output != 0 {
+			return false
+		}
 	}
-	pr, ok := catalog.PriceOf("opencode", model)
-	return ok && pr.Input == 0 && pr.Output == 0
+	return !p.openCodeGoLists(model)
+}
+
+// openCodeGoLists says p is at OpenCode Go's gateway and models.dev's
+// opencode-go lists model.
+func (p Provider) openCodeGoLists(model string) bool {
+	if !slices.ContainsFunc([]string{p.Chat, p.Responses, p.Anthropic}, func(u string) bool { return openCodeGateway(u) == "go" }) {
+		return false
+	}
+	_, ok := catalog.PriceOf("opencode-go", model)
+	return ok
 }
 
 // openCodeFreeIDs are Zen's free models whose ids don't end in -free.

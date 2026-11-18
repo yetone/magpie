@@ -40,6 +40,44 @@ func TestOpenCodeZenListsFreeModels(t *testing.T) {
 	}
 }
 
+// On OpenCode Go a free model Go lists itself is asked as Go's others are,
+// not as Zen's free tier wants (withtee on X); one Go doesn't list, which
+// is asked at Zen when Go refuses it, is Zen's still. A Zen provider's
+// free models are unchanged, Go's among them.
+func TestOpenCodeGoOwnFreeModelsAreNotZens(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	free := `{"cost":{"input":0,"output":0}}`
+	body := `{"opencode-go":{"models":{"beam-free":` + free + `,"cat-jam-free":` + free + `,"glm-5.3":{"cost":{"input":1.4,"output":4.4}}}},` +
+		`"opencode":{"models":{"cat-jam-free":` + free + `,"glm-5-free":` + free + `}}}`
+	if err := os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(catalog.CachePath(), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	catalog.Reset()
+	t.Cleanup(catalog.Reset)
+	g, err := FromPreset("opencode-go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range []string{"beam-free", "cat-jam-free", "glm-5.3"} {
+		if g.OpenCodeFree(m) {
+			t.Errorf("Go's own %s counted as Zen's free", m)
+		}
+	}
+	if !g.OpenCodeFree("glm-5-free") {
+		t.Error("Zen's glm-5-free on Go is no longer asked as Zen's free tier wants")
+	}
+	z, err := FromPreset("opencode-zen")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !z.OpenCodeFree("cat-jam-free") || !z.OpenCodeFree("big-pickle") {
+		t.Error("Zen's free models changed")
+	}
+}
+
 // The Test button's probe of a free model is streamed and offers
 // OpenCode's five core tools, each in the protocol's own tool shape.
 func TestZenFreeProbe(t *testing.T) {
