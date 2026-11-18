@@ -11,7 +11,7 @@ import (
 // without a Responses URL, or a signed-in account, takes none.
 func TestProviderSetSocket(t *testing.T) {
 	p := provider.Provider{ID: "relay", Name: "Relay", Key: "k", Responses: "https://relay.example/v1"}
-	for _, c := range []struct{ v, want string }{{"auto", "auto"}, {"on", "on"}, {"off", ""}, {"AUTO", "auto"}, {"default", ""}} {
+	for _, c := range []struct{ v, want string }{{"auto", "auto"}, {"on", "on"}, {"off", "off"}, {"AUTO", "auto"}, {"default", ""}} {
 		if err := applyPairs(&p, []string{"socket=" + c.v}); err != nil || p.Socket != c.want {
 			t.Fatalf("socket=%s: %v, got %q", c.v, err, p.Socket)
 		}

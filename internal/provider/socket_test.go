@@ -54,9 +54,51 @@ func TestSocketTurn(t *testing.T) {
 }
 
 func TestSocketKeptAsSet(t *testing.T) {
-	for v, want := range map[string]string{"auto": "auto", " On ": "on", "off": "", "": "", "maybe": ""} {
+	for v, want := range map[string]string{"auto": "auto", " On ": "on", "off": "off", "no": "off", "": "", "default": "", "maybe": ""} {
 		if got := normalize(Provider{ID: "x", Socket: v}).Socket; got != want {
 			t.Errorf("%q kept as %q, want %q", v, got, want)
+		}
+	}
+}
+
+// KawaiiZapic on X: OpenAI's own API takes the Responses WebSocket, as
+// Codex's built-in OpenAI provider speaks it, so with Socket unset its
+// turns go there (auto); set off they don't, and any other host, a
+// signed-in account or plain http stays HTTP alone unless set.
+func TestSocketByDefaultOnOpenAI(t *testing.T) {
+	turn := func(p Provider, u string) (bool, bool) {
+		t.Helper()
+		req, err := http.NewRequestWithContext(p.Via(context.Background()), "POST", u, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return SocketTurn(req)
+	}
+	oai := Provider{ID: "openai", Key: "sk", Responses: "https://api.openai.com/v1"}
+	if got := oai.SocketMode(); got != SocketAuto {
+		t.Errorf("unset on api.openai.com: %q, want auto", got)
+	}
+	if ok, shun := turn(oai, "https://api.openai.com/v1/responses"); !ok || !shun {
+		t.Errorf("unset on api.openai.com: %v %v, want a turn that shuns", ok, shun)
+	}
+	off := oai
+	off.Socket = SocketOff
+	if ok, _ := turn(off, "https://api.openai.com/v1/responses"); ok || off.SocketMode() != "" {
+		t.Error("set off, OpenAI's turns went over the socket")
+	}
+	on := oai
+	on.Socket = SocketOn
+	if ok, shun := turn(on, "https://api.openai.com/v1/responses"); !ok || shun {
+		t.Errorf("set on: %v %v", ok, shun)
+	}
+	for _, p := range []Provider{
+		{ID: "relay", Key: "k", Responses: "https://relay.example/v1"},
+		{ID: "lookalike", Key: "k", Responses: "https://api.openai.com.example/v1"},
+		{ID: "plain", Key: "k", Responses: "http://api.openai.com/v1"},
+		{ID: "acct", Responses: "https://api.openai.com/v1", Account: &Account{}},
+	} {
+		if p.SocketMode() != "" || p.SocketByDefault() {
+			t.Errorf("%s: %q by default, want HTTP alone", p.ID, p.SocketMode())
 		}
 	}
 }

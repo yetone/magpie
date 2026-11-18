@@ -4,7 +4,9 @@
 // version", whose tick sends its Responses turns over the Responses
 // WebSocket. Ticked it saves auto; one set on from the CLI opens ticked
 // and keeps on; unticked it saves off. One without a Responses URL and a
-// signed-in account show none, and their Save sends none. Every
+// signed-in account show none, and their Save sends none. KawaiiZapic on
+// X: OpenAI's own API goes over it unset, so its row opens ticked with
+// Advanced shut, unticked saves off and ticked again saves unset. Every
 // language, wide and narrow.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -20,6 +22,7 @@ const base = {
 };
 const relay = { ...base, id: "relay", name: "Relay Hub", responses: "https://relay.example/v1", takesSocket: true, socket: "" };
 const kept = { ...base, id: "kept", name: "Kept Hub", responses: "https://kept.example/v1", takesSocket: true, socket: "on" };
+const oai = { ...base, id: "oai", name: "OpenAI Key", responses: "https://api.openai.com/v1", takesSocket: true, socket: "" };
 const chat = { ...base, id: "chat", name: "Chat Hub", chat: "https://chat.example/v1", takesSocket: false };
 const codex = {
   id: "codex", name: "Codex", icon: "codex-color", chat: "", responses: "", anthropic: "", catalog: "",
@@ -29,7 +32,7 @@ const codex = {
 };
 
 function serve(lang, posts) {
-  const providers = { providers: [relay, kept, chat, codex], presets: [], excluded: [], gateway: { running: true, window: true } };
+  const providers = { providers: [relay, kept, oai, chat, codex], presets: [], excluded: [], gateway: { running: true, window: true } };
   const state = { agents: [], profiles: [], settings: { lang, theme: "light" } };
   return async (route) => {
     const url = new URL(route.request().url());
@@ -130,6 +133,28 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await box(page, w).uncheck();
         saved = await save(page, posts, w);
         assert.equal(saved.body.id, "kept");
+        assert.equal(saved.body.socket, "");
+        assert.deepEqual(errors, []);
+      });
+
+      test(`${engine} ${lang} ${width}: OpenAI's own API opens ticked, saves off unticked and unset ticked again`, async (t) => {
+        const { page, errors, posts, w } = await open(t, "OpenAI Key");
+        assert.equal(await adv(page).evaluate((d) => d.open), false, "Advanced stays shut for a default");
+        await unfold(page);
+        await box(page, w).scrollIntoViewIfNeeded();
+        assert.equal(await box(page, w).isChecked(), true, "ticked by default");
+        await box(page, w).uncheck();
+        let saved = await save(page, posts, w);
+        assert.equal(saved.body.id, "oai");
+        assert.equal(saved.body.socket, "off");
+        await page.locator(".editor .bar").waitFor({ state: "detached" });
+        await page.locator(".row.provider", { hasText: "OpenAI Key" }).click();
+        await page.locator(".editor .bar").waitFor();
+        await unfold(page);
+        await box(page, w).scrollIntoViewIfNeeded();
+        await box(page, w).uncheck();
+        await box(page, w).check();
+        saved = await save(page, posts, w);
         assert.equal(saved.body.socket, "");
         assert.deepEqual(errors, []);
       });

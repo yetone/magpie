@@ -71,7 +71,8 @@ const providerUsage = `usage:
                                           patience=default, 1m
                                           socket=auto sends its Responses turns over the Responses WebSocket,
                                           over HTTP when it can't, and over HTTP alone for 10m once the host
-                                          refuses it; socket=on tries it every turn; socket=off, the default
+                                          refuses it; socket=on tries it every turn; socket=off sends them
+                                          over HTTP alone; socket=default, auto on api.openai.com, else off
                                           errors=pass sends the agent its errors as the vendor sent them:
                                           asked once, nothing read into them, no other provider tried;
                                           errors=magpie, the default, has magpie handle them
@@ -975,6 +976,8 @@ func showProviderAsking(p provider.Provider, ask bool) error {
 	}
 	if p.Socket != "" {
 		kv("socket", p.Socket)
+	} else if p.SocketByDefault() {
+		kv("socket", "auto (default)")
 	}
 	switch {
 	case p.Account != nil:
@@ -1345,7 +1348,7 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 			// refuses it to HTTP for a while, on tries it every turn
 			s, ok := provider.ParseSocket(v)
 			if !ok {
-				return fmt.Errorf("socket=auto|on|off, not %q", v)
+				return fmt.Errorf("socket=auto|on|off|default, not %q", v)
 			}
 			p.Socket = s
 		case "patience":
@@ -1564,7 +1567,7 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 			return fmt.Errorf("unknown field %q\n\n%s", k, providerUsage)
 		}
 	}
-	if p.Socket != "" && !p.TakesSocket() {
+	if p.Socket != "" && p.Socket != provider.SocketOff && !p.TakesSocket() {
 		return fmt.Errorf("socket=%s: %s has no Responses API of its own to speak a WebSocket to; only a provider with responses= and a key can", p.Socket, p.Name)
 	}
 	if p.NativeCompaction && !p.CarriesCompaction() {

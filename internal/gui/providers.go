@@ -216,7 +216,8 @@ type providerJSON struct {
 	// (provider.PinHosts), a preset's pointed at their own server too
 	TakesServerPin bool `json:"takesServerPin,omitempty"`
 	// its Responses turns over the Responses WebSocket (provider.Socket,
-	// #5781): auto, on or ""; TakesSocket: a provider of a key with a
+	// #5781): auto, on, off or "" (auto on OpenAI's own API, HTTP
+	// elsewhere: provider.SocketMode); TakesSocket: a provider of a key with a
 	// Responses URL
 	Socket      string `json:"socket"`
 	TakesSocket bool   `json:"takesSocket"`
@@ -1926,7 +1927,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// save that leaves it out keeps it
 			HTTP1 *bool `json:"http1"`
 			// Socket is how its Responses turns go over the Responses
-			// WebSocket (#5781): auto, on, or "" for HTTP alone; a save
+			// WebSocket (#5781): auto, on, off, or "" for its default; a save
 			// that leaves it out keeps it
 			Socket *string `json:"socket"`
 			// LimitRestOff is whether a quota refusal or a 429 leaves it

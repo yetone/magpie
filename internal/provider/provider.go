@@ -425,9 +425,10 @@ type Provider struct {
 	// Discord): SocketAuto tries it and falls back to HTTP, and leaves the
 	// host to HTTP for a while once it refuses the handshake, as
 	// chatgpt.com is; SocketOn tries it every time and falls back without
-	// that. "", the default, is HTTP alone. Only a provider of a key with a
-	// Responses URL takes it (TakesSocket). Set with `magpie provider set
-	// <id> socket=`.
+	// that; SocketOff is HTTP alone. "", the default, is auto on OpenAI's
+	// own API and HTTP alone elsewhere (SocketMode). Only a provider of a
+	// key with a Responses URL takes it (TakesSocket). Set with `magpie
+	// provider set <id> socket=`.
 	Socket string `json:"socket,omitempty"`
 
 	// NativeCompaction has Codex's compaction_trigger go to the provider

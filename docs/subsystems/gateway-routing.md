@@ -3232,12 +3232,19 @@ serves it on `/v1/responses`, `/responses` and the Codex backend's
 - `Run`'s shutdown ends each socket going away (1001) once its turn is
   answered, through `clientSockets.drain` beside `srv.Shutdown` (a hijacked
   connection isn't the server's), and refuses new ones 503.
-- Not covered: the leg to the vendor is the whole conversation each turn,
-  as before (for the ChatGPT backend, a socket per turn: see
-  [Providers and accounts](providers-accounts.md)); what is saved is
-  Codex's upload to magpie, and, when the provider is another magpie, the
-  leg between the two magpies (below). A socket's conversation doesn't
-  outlive the socket or the gateway.
+- The leg to the vendor cuts its own delta where the vendor keeps a
+  turn for the next: the ChatGPT backend and a Responses provider that
+  speaks the socket (`Socket`; unset, OpenAI's own API does, as Codex's
+  built-in OpenAI provider does, KawaiiZapic on X) take a turn as its new
+  input after `previous_response_id` on a kept socket (see
+  [Providers and accounts](providers-accounts.md)); OpenAI's API, Azure
+  and Ark over HTTP take the client's own `previous_response_id`
+  (`prevKeeps`, below), which Codex never sends (`store: false`); another
+  magpie takes the delta between the two (below). Everything else
+  (Chat Completions, Messages, Gemini, a Responses provider over HTTP)
+  is sent the whole conversation each turn, since those protocols keep
+  nothing between requests. A socket's conversation doesn't outlive the
+  socket or the gateway.
 
 ## A Realtime session
 

@@ -59,6 +59,20 @@ func TestProviderSaveSocket(t *testing.T) {
 	if info("relay").Socket != "auto" {
 		t.Fatal("ticked in the editor, not saved auto")
 	}
+	// KawaiiZapic on X: OpenAI's own API goes over the socket unset, so
+	// unticked there it is saved off, and ticked again unset
+	if err := provider.Save(provider.Provider{ID: "oai", Name: "OpenAI", Key: "sk-o", Responses: "https://api.openai.com/v1"}); err != nil {
+		t.Fatal(err)
+	}
+	oai := `{"id":"oai","from":"oai","name":"OpenAI","key":"","responses":"https://api.openai.com/v1","models":[],"headers":{}`
+	post(oai + `,"socket":"off"}`)
+	if info("oai").Socket != provider.SocketOff {
+		t.Fatal("unticked on OpenAI's API, not saved off")
+	}
+	post(oai + `,"socket":""}`)
+	if info("oai").Socket != "" {
+		t.Fatal("ticked again on OpenAI's API, not saved unset")
+	}
 	post(`{"id":"chat","name":"Chat","key":"sk-c","chat":"https://chat.example/v1","icon":"generic","new":true}`)
 	if info("chat").TakesSocket {
 		t.Error("a provider without a Responses URL is offered the socket")

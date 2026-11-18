@@ -10115,17 +10115,11 @@ function drawEditor(p, presetID) {
   // another editor's: no rows for it
   const certDraft = draft;
   import("./tlscerts.js").then(() => draft === certDraft && tlsCertRows({ p, pr, draft, at: certAt, certTakes, onHTTPS, addressOf, asTyped, show: (f) => { const was = showTLS; showTLS = () => { was(); f(); }; showTLS(); }, save: (f) => { pinBody = f; } }), statusErr);
-  // Responses over WebSocket (#5781): auto, or the CLI's on kept
+  // Responses over WebSocket (#5781), its row in socketrow.js
   const socketable = () => !p?.account && (p?.preset || pr?.id) !== "google-vertex" && /^\s*https?:\/\//i.test(addressOf("responses"));
-  {
-    const [stk, scb] = tick(t("Send Responses turns over WebSocket"), !!draft.socket);
-    stk.classList.add("socket-tick");
-    scb.onchange = () => { draft.socket = scb.checked ? (p?.socket || "auto") : ""; };
-    const srow = field(t("WebSocket"), stk);
-    showSocket = () => { for (const e of srow) e.style.display = socketable() ? "" : "none"; };
-    showSocket();
-    advIn.append(...srow);
-  }
+  const sockAt = document.createComment("");
+  advIn.append(sockAt);
+  import("./socketrow.js").then(() => draft === certDraft && socketRow({ p, draft, at: sockAt, socketable, addressOf, show: (f) => { showSocket = f; f(); } }), statusErr);
   // off, a 429 or quota refusal rests none of its keys (LimitRestOff, zoecats)
   if (custom) {
     const [rtk, rcb] = tick(t("Set it aside when out of quota or rate limited"), !draft.limitRestOff);

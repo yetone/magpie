@@ -209,3 +209,74 @@ func TestResponsesProviderSocketReplyIsAStream(t *testing.T) {
 		t.Errorf("Content-Type %q", ct)
 	}
 }
+
+// openAIAt adds "oai", a key's provider at OpenAI's own Responses URL
+// with Socket sock, whose api.openai.com is connected to the fake f on
+// this computer (Resolve, its test certificate let through), so nothing
+// reaches the network. It returns the handshakes the fake was asked for.
+func openAIAt(t *testing.T, f *fakeSocketBackend, sock string) *atomic.Int32 {
+	t.Helper()
+	noRests()
+	t.Cleanup(noRests)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	f.path = "/v1/responses"
+	var asked atomic.Int32
+	up := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Host != "api.openai.com" {
+			http.Error(w, "host "+r.Host, http.StatusMisdirectedRequest)
+			return
+		}
+		if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
+			asked.Add(1)
+		}
+		f.ServeHTTP(w, r)
+	}))
+	t.Cleanup(up.Close)
+	p := provider.Provider{ID: "oai", Name: "oai", Key: "sk-oai", Models: []string{"m1"}, Responses: "https://api.openai.com/v1", Socket: sock,
+		InsecureTLS: true, Resolve: map[string][]string{"api.openai.com": {up.Listener.Addr().String()}}}
+	if err := provider.Save(p); err != nil {
+		t.Fatal(err)
+	}
+	return &asked
+}
+
+// KawaiiZapic on X: Codex on an OpenAI API key sent the whole
+// conversation up every turn, since Codex says store false and only the
+// Responses WebSocket keeps a turn for the next one then. Codex's own
+// OpenAI provider speaks that socket to api.openai.com, and so does magpie
+// now with Socket unset: the second turn is the new input alone after
+// previous_response_id, on the first turn's socket.
+func TestOpenAIProviderTurnsGoOverWebSocketByDefault(t *testing.T) {
+	socketOn(t)
+	f := &fakeSocketBackend{keep: true, whole: true}
+	f.frames = keptReply(f)
+	asked := openAIAt(t, f, "")
+
+	relayPost(t, keptTurn("conv-1", "oai/m1", userPing))
+	relayPost(t, keptTurn("conv-1", "oai/m1", userPing, asstPong, userAgain))
+	if posts, sockets := f.counts(); posts != 0 || sockets != 2 || asked.Load() != 1 {
+		t.Fatalf("%d HTTP posts, %d socket turns on %d handshakes; want both turns on one socket", posts, sockets, asked.Load())
+	}
+	second := gjson.ParseBytes(f.turn(1).msg)
+	if got := second.Get("previous_response_id").String(); got != "resp-1" {
+		t.Errorf("previous_response_id %q, want resp-1: %s", got, f.turn(1).msg)
+	}
+	if in := second.Get("input").Array(); len(in) != 1 || in[0].Get("content.0.text").String() != "again" {
+		t.Errorf("delta input %s, want only the new user message", second.Get("input").Raw)
+	}
+}
+
+// Set off, OpenAI's API is spoken HTTP alone, as before.
+func TestOpenAIProviderSocketOffNeverDials(t *testing.T) {
+	socketOn(t)
+	f := &fakeSocketBackend{keep: true, whole: true}
+	f.frames = keptReply(f)
+	asked := openAIAt(t, f, provider.SocketOff)
+
+	relayPost(t, keptTurn("conv-1", "oai/m1", userPing))
+	relayPost(t, keptTurn("conv-1", "oai/m1", userPing, asstPong, userAgain))
+	if posts, _ := f.counts(); posts != 2 || asked.Load() != 0 {
+		t.Fatalf("%d posts, %d handshakes; want HTTP alone", posts, asked.Load())
+	}
+}
