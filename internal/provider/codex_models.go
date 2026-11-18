@@ -776,7 +776,8 @@ func CodexOwnLeftOut(keep string) func(slug string) bool {
 // CodexOrder is where each model of Codex's list goes when the user put
 // them in an order of their own on the Agents page (#855), by the slug
 // Codex knows it by — a ChatGPT account's own by its bare one, as the
-// backend lists it — and whether they did. A model it doesn't name keeps
+// backend lists it, and by magpie's id, as magpie lists one the backend's
+// list lacks — and whether they did. A model it doesn't name keeps
 // its place after them.
 func CodexOrder() (map[string]int, bool) {
 	order := ModelOrder("codex")
@@ -793,12 +794,19 @@ func CodexOrder() (map[string]int, bool) {
 		if !ok {
 			continue
 		}
-		slug := e.ID
-		if CodexOwn(e) {
-			slug = e.Model
+		put := func(slug string) {
+			if cur, seen := out[slug]; !seen || i < cur {
+				out[slug] = i
+			}
 		}
-		if cur, seen := out[slug]; !seen || i < cur {
-			out[slug] = i
+		put(e.ID)
+		// the account's own goes by its bare slug where the backend's list
+		// has it, and by magpie's id where that list lacks it
+		// (CodexListedBeside): GPT-6.2, beside a list asked for before it
+		// came, went last in the Codex app's picker wherever it was put
+		// (Wangalan167673 on X)
+		if CodexOwn(e) {
+			put(e.Model)
 		}
 	}
 	return out, true
