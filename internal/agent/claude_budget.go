@@ -38,6 +38,22 @@ type claudeBudget struct {
 // claudeLong is the window Claude Code takes a "[1m]" model for.
 const claudeLong = 1000000
 
+// claudeCompactMax is the largest auto-compact window Claude Code takes
+// from settings.json, top-level or under modelSettings: 2.1.316's
+// settings schema reads it as an int of 100000 to 1000000 (min(Xx),
+// max(uL), .catch(void 0)), and Claude Desktop's own copy of that schema
+// (2.7032, mhe in its app.asar) has the same bounds. A larger value reads
+// as none, so the model fell back to the top-level window: a 1048576
+// threshold typed for a 1M DeepSeek ran it at the 272K for every model
+// (ZeroX2017 on X). CLAUDE_CODE_AUTO_COMPACT_WINDOW past it is taken as
+// 1000000 (above_maximum), and tune refuses one past it already.
+const claudeCompactMax = 1000000
+
+// claudeCompactCap is n as magpie writes it for Claude Code: no more than
+// claudeCompactMax. The user's own threshold in magpie stays as they
+// typed it; only what goes into Claude Code's settings is held.
+func claudeCompactCap(n int) int { return min(n, claudeCompactMax) }
+
 // budgetKey is a modelSettings key as Claude Code matches it.
 func budgetKey(id string) string { return strings.ToLower(strings.TrimSuffix(id, "[1m]")) }
 
@@ -120,6 +136,9 @@ func claudePlan(models []claudeBudget, base int, theirs map[string]string) (top 
 			had = min(base, assumed)
 		}
 		if want == had && !m.behaves {
+			continue
+		}
+		if want = claudeCompactCap(want); want == had && !m.behaves {
 			continue
 		}
 		id := strings.TrimSuffix(m.id, "[1m]")

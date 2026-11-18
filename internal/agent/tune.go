@@ -409,7 +409,10 @@ func TuneRead(home, agent, knob, model string) (TuneSetting, error) {
 			// own: magpie's Long conversations where magpie wrote it
 			if v, ok := edit.GetJSON(p.path, "autoCompactWindow"); ok && v != "auto" {
 				if claudeLongWindow(p.path, "autoCompactWindow", "claude.compact_default") {
-					return TuneSetting{Value: v, Source: TuneLong, Ours: longOurs(settings.Load(), agent)}, nil
+					// Long conversations as typed, which the file holds to
+					// Claude Code's 1000000 (claudeCompactCap)
+					st := settings.Load()
+					return TuneSetting{Value: longValue(st.ForAgent(agent)), Source: TuneLong, Ours: longOurs(st, agent)}, nil
 				}
 				s.Value, s.Source = v, "settings"
 			}
@@ -441,7 +444,9 @@ func claudeLongWindow(path, key, stashKey string) bool {
 	if !ok || v == "" || v != stashShared()[stashKey] {
 		return false
 	}
-	return v == longValue(settings.Load().ForAgent("claude"))
+	// as Sync writes it, held to what Claude Code takes (claudeCompactCap)
+	n := settings.Load().ForAgent("claude").Compact()
+	return n > 0 && v == strconv.Itoa(claudeCompactCap(n))
 }
 
 func tuneStashed(agent, knob, model string) (tuneStash, bool) {
