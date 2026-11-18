@@ -2875,6 +2875,28 @@ computer Claude Code runs on:
 `"statusLine": {"type": "command", "command": "curl -fsS -m 1 -H 'Authorization: Bearer <gateway key>' --data-binary @- http://<host>:3425/v1/magpie/statusline || true"}`.
 `magpie web` shows this command with its own address under Settings → About.
 
+Codex's TUI has a footer of the same kind from 0.171.0-alpha.12 on: a
+status line provider, a stdio MCP server whose tool says it draws one.
+`magpie statusline --codex` is that server. Codex reads it about once a
+second and passes the thread's id; it answers the model the thread's latest
+turn went to, then the account of that provider that answered last, with
+its windows, or a relay key's balance:
+`→ relay/glm-5  relay $4.20`, or `→ codex/gpt-5.5  codex me@example.com 5h 37% 7d 12%`.
+With no route it shows the account that answered last of all, and with the
+gateway not running it shows nothing. It is off until the status line square
+on Codex's row (or `magpie codex statusline on`) turns it on. That writes
+three things into `~/.codex/config.toml`: `[features] tui_extensions_statusline = true`,
+`[mcp_servers.quota_line]` running this magpie by its full path with
+`args = ["statusline", "--codex"]` and `env_vars = ["MAGPIE_ADDR"]` (Codex hands a server only a few variables of its own), and
+`[tui] status_line_provider = { server = "quota_line", tool = "statusline" }`.
+Off, or Disconnect, takes out only those, and the flag only when magpie
+wrote it. The square isn't offered while the user has a provider of their
+own picked, a `quota_line` server of their own or the flag turned off. It
+is also not offered until a Codex CLI here is 0.171.0-alpha.12 or newer:
+0.170.0 accepts the keys and draws nothing. Codex lists the server's tool
+to the model like any MCP tool's. Its name and description say only what it
+shows. The Codex app has no such footer.
+
 `magpie heap [<file>]` is for a report of magpie holding too much memory: a
 macOS `sample` of the app shows Go's frames as `???`. It asks the running
 magpie that serves the gateway (the app, the menu bar, `magpie serve` or

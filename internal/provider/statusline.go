@@ -93,3 +93,48 @@ func StatuslineCard(q Quota, now time.Time) string {
 	}
 	return strings.Join(cells, " ")
 }
+
+// CodexStatuslineCards are the accounts a Codex thread's footer shows
+// (lyj1115 on X: the quota of the account in use, or the relay's balance,
+// under Codex's chat box): those of the provider the thread's latest turn
+// went to (model is provider/model), the one that answered last of them,
+// a key's balance as well as a subscription's windows; with no such
+// account, the one that answered last of all.
+func CodexStatuslineCards(model string, qs []Quota) []Quota {
+	shown := func(q Quota) bool { return len(q.Windows) > 0 || q.Kind == "balance" && q.Balance != "" }
+	latest := func(keep func(Quota) bool) []Quota {
+		var out []Quota
+		for _, q := range qs {
+			if !shown(q) || !keep(q) {
+				continue
+			}
+			switch {
+			case len(out) == 0:
+				out = []Quota{q}
+			case q.LastServedAt != nil && (out[0].LastServedAt == nil || q.LastServedAt.After(*out[0].LastServedAt)):
+				out[0] = q
+			}
+		}
+		return out
+	}
+	if p, _, ok := strings.Cut(model, "/"); ok && p != "" {
+		if out := latest(func(q Quota) bool { return q.Provider == p }); len(out) > 0 {
+			return out
+		}
+	}
+	return latest(func(q Quota) bool { return q.Last })
+}
+
+// CodexStatuslineCard is one account as Codex's footer shows it: its
+// windows as StatuslineCard has them, or a key's balance.
+func CodexStatuslineCard(q Quota, now time.Time) string {
+	if len(q.Windows) == 0 && q.Balance != "" {
+		name := q.Provider
+		if q.Alias != "" {
+			name += " " + q.Alias
+		}
+		return name + " " + q.Balance
+	}
+	q.Last = false // one account is shown: no star to tell it apart
+	return StatuslineCard(q, now)
+}

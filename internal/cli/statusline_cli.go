@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/yetone/magpie/internal/gateway"
@@ -25,6 +26,7 @@ import (
 )
 
 const statuslineUsage = `usage: magpie statusline [<provider|account>…]
+       magpie statusline --codex
   one line for Claude Code's status line: the model the session's latest turn went
   to through magpie, then each subscription and plan magpie has, as last read: its
   windows' use ("5h 62% 7d 41%"), * on the one that answered last. Accounts that
@@ -36,7 +38,12 @@ const statuslineUsage = `usage: magpie statusline [<provider|account>…]
   unless a status line of your own (claude-hud, a script) is there; or add it yourself:
     "statusLine": {"type": "command", "command": "magpie statusline"}
   It asks the gateway on this computer (the port in Settings' Gateway address, or MAGPIE_ADDR), never
-  a vendor, and prints nothing when the gateway isn't running.`
+  a vendor, and prints nothing when the gateway isn't running.
+  --codex is Codex's footer (Codex 0.171 on): an MCP server Codex starts, showing the
+  model the thread's latest turn went to and that account's windows or balance. Turn it
+  on with the status line square on Codex's row in the Agents page (or
+  magpie codex statusline on), which writes ~/.codex/config.toml's [mcp_servers.quota_line],
+  [features] tui_extensions_statusline and [tui] status_line_provider.`
 
 // statuslineWait bounds each ask of the gateway: Claude Code shows the line
 // only once the command ends.
@@ -44,6 +51,13 @@ const statuslineWait = time.Second
 
 // statuslineCmd: magpie statusline [<provider|account>…]
 func statuslineCmd(args []string) error {
+	if len(args) > 1 && strings.HasPrefix(args[1], "-") {
+		if args[1] == "--codex" && len(args) == 2 {
+			// Codex's footer: an MCP server Codex starts (statusline_codex.go)
+			return newCodexStatus(gateway.ClientURL()).serve(os.Stdin, os.Stdout)
+		}
+		return fmt.Errorf("magpie statusline takes providers or accounts, or --codex alone, not %q\n%s", args[1], statuslineUsage)
+	}
 	fmt.Println(statusline(os.Stdin, args[1:], gateway.ClientURL(), time.Now()))
 	return nil
 }

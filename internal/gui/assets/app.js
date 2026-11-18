@@ -4752,10 +4752,11 @@ function holdPop(pop, room) {
   if (!(parseFloat(getComputedStyle(pop).maxHeight) <= room)) pop.style.maxHeight = room + "px";
 }
 
-// a Claude Code switch: a square a click turns on or off, lit while on.
+// an agent's switch: a square a click turns on or off, lit while on.
 const TOGGLES = {
   ultracode: { label: "ultracode", note: "Claude plans a workflow for each substantive task", said: "{agent} ultracode → {value}" },
-  statusline: { label: "status line", note: "the 5h and 7d use of the accounts magpie serves, under Claude Code's prompt", said: "{agent} status line → {value}" },
+  // its note is the agent's own, on its field's on (Codex's footer isn't Claude Code's)
+  statusline: { label: "status line", said: "{agent} status line → {value}" },
 };
 function toggled(f) { return Object.hasOwn(TOGGLES, f.key); }
 function fieldToggle(a, f) {
@@ -4763,7 +4764,7 @@ function fieldToggle(a, f) {
   const on = f.value === "on";
   const b = el("button", "field extra" + (on ? " set" : ""));
   b.append(svg(EXTRA_GLYPH[f.key], 13, 1.5));
-  b.title = t("{label}: {value}", { label: t(k.label), value: t(on ? "on" : "off") }) + "\n" + t(k.note);
+  b.title = t("{label}: {value}", { label: t(k.label), value: t(on ? "on" : "off") }) + "\n" + t(k.note || f.options?.find((o) => o.value == "on")?.note || "");
   b.setAttribute("aria-label", b.title);
   b.setAttribute("aria-pressed", String(on));
   b.dataset.key = f.key;

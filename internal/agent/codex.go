@@ -276,6 +276,8 @@ func codexIn(at place) *Agent {
 	// where 127.0.0.1 is the distro's own, so the user points it at
 	// Windows as WSL sees it, or a forward of theirs (#816); magpie keeps
 	// that address, checks against it and writes it again
+	// onHere: this machine's Codex, before base names its kept gateway
+	onHere := at.spell == nil && at.base == nil
 	if at.spell == nil && at.base == nil {
 		at.base = func() string { return codexKeptGateway(path) }
 	}
@@ -2644,6 +2646,17 @@ func codexIn(at place) *Agent {
 	// yet is managed there (switching then left config.toml's wiring behind,
 	// and Codex on its own list; kakzyanaba on X)
 	a.Fields = append(a.Fields, codexScopeField(at, func() bool { return a.Wired() || a.Routed() || a.FailingOver() }))
+	// the footer's quota (codex_statusline.go), taken out with magpie
+	statusField := codexStatusField(at, path, onHere)
+	a.Fields = append(a.Fields, statusField)
+	if unwire := a.Unwire; unwire != nil {
+		a.Unwire = func() error {
+			if err := unwire(); err != nil {
+				return err
+			}
+			return statusField.Set("")
+		}
+	}
 	// this machine's Codex: the address its config keeps is tried (Drift),
 	// and moved to WSL's new one when that changed (#1013)
 	if at.spell == nil {
