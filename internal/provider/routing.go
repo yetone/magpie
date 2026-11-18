@@ -221,6 +221,12 @@ func SetRestartApp(id string, on bool) error {
 	return Save(*p)
 }
 
+// CodexRestartsApp is codexRestartsApp, for the agent package: a change
+// of Codex's route magpie makes by itself restarts the Codex app's
+// app-server (moving the chats it has open first, CodexBeforeAppEnd) only
+// when it says so.
+func CodexRestartsApp() bool { return codexRestartsApp() }
+
 // codexRestartsApp is whether the user had magpie restart the Codex app's
 // app-server for a change it makes by itself (Provider.RestartApp). While
 // providers.json can't be read it is unknown, and the app is left be: a

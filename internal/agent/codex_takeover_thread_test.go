@@ -46,8 +46,9 @@ func watchCodexThreads(t *testing.T) <-chan struct{} {
 // Codex went back to OpenAI, but the thread, written to that minute, was
 // left on magpie for a later Sync, and none came: the Codex app couldn't
 // go on with it on OpenAI, Retry failed the same way every time and its
-// model read "model unavailable". bringBack asks for that Sync once the
-// thread is quiet, and it moves the thread where Codex is.
+// model read "model unavailable". The takeover now stays while the thread
+// is written to (outStays), a Sync is asked for once it is quiet, and that
+// one ends the takeover and moves the thread where Codex is.
 func TestCodexTakeoverThreadComesBackOnceQuiet(t *testing.T) {
 	const id = "019a0000-0000-7000-8000-0000000000b1"
 	home, read := codexHome(t, `{"tokens":{"access_token":"x","id_token":"x.e30.x"}}`, "")
@@ -75,8 +76,8 @@ func TestCodexTakeoverThreadComesBackOnceQuiet(t *testing.T) {
 	if err := cx.Sync(); err != nil {
 		t.Fatal(err)
 	}
-	if cfg := read(); strings.Contains(cfg, "model_provider =") {
-		t.Fatalf("allowance back, magpie still Codex's provider:\n%s", cfg)
+	if cfg := read(); !strings.Contains(cfg, `model_provider = "magpie"`) {
+		t.Fatalf("allowance back with a thread on magpie written to this minute, the takeover ended under it:\n%s", cfg)
 	}
 	if p := codexRowOn(t, dir, id); p != "magpie" {
 		t.Fatalf("a thread being written to was moved: %q", p)
@@ -96,6 +97,9 @@ func TestCodexTakeoverThreadComesBackOnceQuiet(t *testing.T) {
 	}
 	if err := cx.Sync(); err != nil {
 		t.Fatal(err)
+	}
+	if cfg := read(); strings.Contains(cfg, "model_provider =") {
+		t.Fatalf("the thread quiet, magpie still Codex's provider:\n%s", cfg)
 	}
 	if p := codexRowOn(t, dir, id); p != "openai" {
 		t.Fatalf("thread on %q after the later Sync, want openai, where Codex lists it", p)

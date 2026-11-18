@@ -1409,6 +1409,32 @@ func codexIn(at place) *Agent {
 	out := func() bool {
 		return stashShared()[at.key("codex.login")] != "chatgpt" && codexUsedUp() && !codexSignInKept()
 	}
+	// outStays: the takeover's end (the account has room again, at its
+	// reset, or is one the user keeps Codex on) waits while a Codex has a
+	// chat on magpie open, unless the Codex app's app-server is restarted
+	// for it. The app keeps the app-server the takeover started (#4550,
+	// Restart the Codex app to follow off by default) and its chats with
+	// it, each holding its lock, so bringBack can't move them, and with
+	// config.toml back on OpenAI every send in one was refused: "This chat
+	// uses magpie, but your current provider is OpenAI. Switch to magpie
+	// to continue" (milianxinqi on X: "用的好好的，codex 突然就弹这个了").
+	// magpie serves those chats on the account with room meanwhile, and
+	// the app shows no account on that app-server either way. Once the
+	// chats are let go (the app restarted or quit, the chat closed)
+	// codexThreadsLater asks for the Sync that ends it, and bringBack
+	// moves them where Codex is then. The takeover turned off by hand
+	// (Always ChatGPT) restarts the app-server, moving its chats, and
+	// ends at once.
+	outStays := func() bool {
+		if at.spell != nil || stashShared()[at.key("codex.login")] == "chatgpt" || codexAppFollows() {
+			return false
+		}
+		if !codexHeldOnMagpie(dir) {
+			return false
+		}
+		codexThreadsLater(dir, magpieID)
+		return true
+	}
 	dropBase := func() error {
 		forget(at.key("codex.failover"))
 		if !viaBase() {
@@ -2198,6 +2224,12 @@ func codexIn(at place) *Agent {
 			}
 			// put back before #540's way back, which would take
 			// codex/<model> for a magpie model picked beside the sign-in
+			// the takeover ends below once the account has room, unless a
+			// Codex still has a chat on magpie open (outStays)
+			ending := asProvider() && stashShared()[at.key("codex.out")] == "1" && !out()
+			if ending && outStays() {
+				ending = false
+			}
 			if own := stashShared()[at.key("codex.out_own")]; own != "" {
 				m := get("model")
 				switch {
@@ -2206,7 +2238,7 @@ func codexIn(at place) *Agent {
 					// moved since (another model picked, magpie API, a
 					// disconnect): that stands
 					forget(at.key("codex.out_own"), at.key("codex.out_stand"))
-				case !out():
+				case ending:
 					// back beside the sign-in on the one picked, as Join
 					// leaves it: Codex's own sign-in, magpie's models joined
 					forget(at.key("codex.out_own"), at.key("codex.out"), at.key("codex.out_stand"))
@@ -2234,7 +2266,7 @@ func codexIn(at place) *Agent {
 				switch {
 				case viaBase() && !asProvider() && out():
 					return set(m)
-				case asProvider() && stashShared()[at.key("codex.out")] == "1" && !out():
+				case ending:
 					return set(m)
 				}
 			}
@@ -3108,6 +3140,28 @@ var codexUsedUp = func() bool {
 // codexSignInKept reports whether Codex is signed in to the account the
 // user keeps it on (provider.CodexSignInKept). A var so tests can say.
 var codexSignInKept = provider.CodexSignInKept
+
+// codexAppFollows reports whether magpie restarts the Codex app's
+// app-server for a change of Codex's route it makes by itself
+// (provider.CodexRestartsApp), moving the chats the app has open onto the
+// new provider first. A var so tests can say.
+var codexAppFollows = provider.CodexRestartsApp
+
+// codexHeldOnMagpie says whether a Codex holds open, or wrote to this
+// minute, a thread of the Codex home dir on magpie that Codex resumes on
+// the provider config.toml names: T3 Code's own (t3CodexRunsIn) stay on
+// magpie whatever it names, and are left out.
+func codexHeldOnMagpie(dir string) bool {
+	var skip func(string) bool
+	if user, _ := homes(); t3CodexRunsIn(user, dir) {
+		by, ok := sessions.CodexThreadsBy(dir, magpieID)
+		skip = func(id string) bool {
+			t, found := by[id]
+			return ok && found && t3Started(t.Originator)
+		}
+	}
+	return sessions.CodexThreadsBusyOnBut(dir, magpieID, skip)
+}
 
 // codexFailover reports whether Codex is signed in to a ChatGPT account
 // with more of its accounts on in magpie, behind it, and the user hasn't

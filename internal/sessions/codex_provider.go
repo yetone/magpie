@@ -623,6 +623,13 @@ type CodexThreadBy struct {
 // it was written to. A database that can't be read, and a rollout that
 // can't be found, say nothing.
 func CodexThreadsBusyOn(home, p string) bool {
+	return CodexThreadsBusyOnBut(home, p, nil)
+}
+
+// CodexThreadsBusyOnBut is CodexThreadsBusyOn leaving out the threads
+// skip names: another client's on p, which stay there whatever Codex's
+// config says (T3 Code's on magpie).
+func CodexThreadsBusyOnBut(home, p string, skip func(id string) bool) bool {
 	now := time.Now()
 	locked := codexLockedIDs(home)
 	for _, path := range codexStateDBs(home) {
@@ -640,7 +647,7 @@ func CodexThreadsBusyOn(home, p string) bool {
 		if err == nil {
 			for rows.Next() {
 				var id, r string
-				if rows.Scan(&id, &r) != nil {
+				if rows.Scan(&id, &r) != nil || skip != nil && skip(id) {
 					continue
 				}
 				if locked[strings.ToLower(id)] {
