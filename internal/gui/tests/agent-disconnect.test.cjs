@@ -54,8 +54,8 @@ function server(lang, posts) {
 }
 
 const words = {
-  en: { item: "Disconnect from magpie", ask: "Disconnect Codex from magpie?", go: "Disconnect", cancel: "Cancel", done: /Codex no longer goes through magpie/ },
-  zh: { item: "断开 magpie（还原配置）", ask: "断开 Codex 和 magpie？", go: "断开", cancel: "取消", done: /Codex 已不再经过 magpie/ },
+  en: { item: "Disconnect from magpie", ask: "Disconnect Codex from magpie?", go: "Disconnect", cancel: "Cancel", done: /Codex no longer goes through magpie/, lib: "The Library's MCP servers, skills and hooks stay" },
+  zh: { item: "断开 magpie（还原配置）", ask: "断开 Codex 和 magpie？", go: "断开", cancel: "取消", done: /Codex 已不再经过 magpie/, lib: "资源库的 MCP 服务器、技能和钩子会保留" },
 };
 const row = (id) => `.row.agent[data-id="${id}"]`;
 
@@ -80,10 +80,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const missing = await page.evaluate(() => [
         "Drag to reorder · click to move, hide or disconnect from magpie",
         "Disconnect from magpie",
-        "Take out everything magpie wrote into {agent}'s config and put back what it had before",
+        "Take magpie's endpoint, key and models out of {agent}'s config, restoring its own",
         "put back what {agent} had before magpie",
         "Disconnect {agent} from magpie?",
-        "magpie takes out everything it wrote into {agent}'s config — its endpoint, key, models and effort — and puts back the settings {agent} had before. magpie's providers and accounts stay as they are.",
+        "magpie takes its endpoint, key, models and effort out of {agent}'s config, restoring what it had. Providers and accounts stay.",
+        "The Library's MCP servers, skills and hooks stay",
         "Disconnect",
         "{agent} no longer goes through magpie; its own settings are back",
       ].filter((k) => !I18N.zh[k]));
@@ -111,6 +112,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const ask = page.locator(".editor.disconnect-ask");
       await ask.waitFor();
       assert.equal((await ask.locator(".ehead b").textContent()).trim(), w.ask);
+      // the Library's items stay, and the dialog says so
+      assert.equal((await ask.locator(".ag-note").first().textContent()).trim(), w.lib);
       await ask.locator(".bar button", { hasText: w.cancel }).click();
       await ask.waitFor({ state: "detached" });
       assert.deepEqual(posts, []);

@@ -1150,7 +1150,7 @@ const REAPPLY = "M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3.25h-3.25";
 
 // An unplugged plug: the agent taken off magpie.
 const UNPLUG = "M6 2v3M10 2v3M4.5 5h7v2.5a3.5 3.5 0 0 1-7 0zM8 11v3M2 2l12 12";
-const DISCONNECT_TIP = "Take out everything magpie wrote into {agent}'s config and put back what it had before";
+const DISCONNECT_TIP = "Take magpie's endpoint, key and models out of {agent}'s config, restoring its own";
 
 // an agent is connected with a switch (agent.Connect), off takes out what magpie wrote
 // the field magpie is picked in: the first, or Gemini CLI's model, its
@@ -2440,7 +2440,7 @@ function askDisconnect(a) {
   ed.append(el("p", "lib-confirm", t("{agent} goes back to how it was before it was connected; these are the places put back.", { agent: a.name })));
   // what changes, line by line, read from a dry run on a copy (preview.go);
   // where none can be had, the old words
-  const said = el("p", "lib-confirm", t("magpie takes out everything it wrote into {agent}'s config — its endpoint, key, models and effort — and puts back the settings {agent} had before. magpie's providers and accounts stay as they are.", { agent: a.name }));
+  const said = el("p", "lib-confirm", t("magpie takes its endpoint, key, models and effort out of {agent}'s config, restoring what it had. Providers and accounts stay.", { agent: a.name }));
   const body = el("div", "ag-diff-wrap");
   const show = (changes) => {
     if (changes?.length) body.replaceChildren(changesList(changes, 1));
@@ -2455,7 +2455,7 @@ function askDisconnect(a) {
     previewBlocked = !!a.native && !revision;
     go.disabled = previewBlocked;
   }, (err) => { if (!a.native) { show(null); return; } previewBlocked = true; go.disabled = true; body.replaceChildren(el("p", "lib-confirm", t(err.message))); });
-  ed.append(body);
+  ed.append(body, el("p", "ag-note", t("The Library's MCP servers, skills and hooks stay")));
   if (kindOf(a) === "codex") ed.append(el("p", "ag-note", t("magpie's provider table stays, so sessions opened on magpie's models still open")));
   const bar = el("div", "bar");
   const go = el("button", "text primary danger-fill", t("Disconnect and restore"));
