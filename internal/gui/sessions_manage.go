@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"net/http"
 	"os"
 	"runtime"
@@ -236,7 +237,17 @@ func sessionManageRoutes(mux *http.ServeMux, w Windows) {
 			for i := range list {
 				addCodexModelEffort(&list[i].Session, modelEffort)
 			}
-			native := map[string]bool{}
+			// a gateway session the agent keeps is one of its rows already:
+			// by a row's id, or by any other id a request names it by, a
+			// subagent's included (sessions.NativeIDs). Counted the same
+			// way as the tab of an agent not shown, and as delete tells
+			// them apart, so a Pi subagent's calls are no row of their own
+			// that delete can't find (lurx98 on X: Pi 8 here, 6 on another
+			// tab, and "no such session")
+			native := maps.Clone(view.Native[out.Agent])
+			if native == nil {
+				native = map[string]bool{}
+			}
 			for _, s := range list {
 				native[s.ID] = true
 			}

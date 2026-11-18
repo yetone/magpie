@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -133,8 +134,32 @@ func agentCounts(all []file) []AgentCount {
 	// as listAgent lists them, from the parses kept: a copy of a
 	// conversation is not a session of its own (ccCopies)
 	copies := ccCopies(all)
+	// a Codex subagent thread whose parent is gone is no row
+	// (keptSubagents), from the parses kept
+	var codex []file
+	for _, f := range all {
+		if f.agent == "codex" {
+			codex = append(codex, f)
+		}
+	}
+	var orphans map[string]bool
+	if len(codex) > 0 {
+		identities := codexIdentitySnapshot(codex)
+		parents := map[string]string{}
+		for _, f := range codex {
+			id := strings.TrimPrefix(f.key, "codex:")
+			parents[id] = ""
+			if i, ok := identities[id]; ok && i.Role == codexRoleSubagent {
+				parents[id] = i.ParentSession
+			}
+		}
+		orphans = orphanSubagents(parents)
+	}
 	for _, f := range all {
 		if copies[f.key] != "" {
+			continue
+		}
+		if f.agent == "codex" && orphans[strings.TrimPrefix(f.key, "codex:")] {
 			continue
 		}
 		if n[f.agent] == nil {
@@ -354,24 +379,40 @@ func listAgentWith(agent string, all []file, quick bool) []Managed {
 // history whose request action you are assessing…", flandern). Their calls
 // are still counted by Usage.
 func keptSubagents(out []Managed) []Managed {
-	ids := make(map[string]bool, len(out))
+	parents := make(map[string]string, len(out))
 	for _, m := range out {
-		ids[m.ID] = true
+		parents[m.ID] = ""
+		if m.Role == codexRoleSubagent {
+			parents[m.ID] = m.ParentSession
+		}
 	}
+	gone := orphanSubagents(parents)
+	if len(gone) == 0 {
+		return out
+	}
+	return slices.DeleteFunc(out, func(m Managed) bool { return gone[m.ID] })
+}
+
+// orphanSubagents are the Codex subagent threads keptSubagents takes off
+// the list: parents holds every thread by id, with the thread it is a
+// subagent of ("" for none). One whose parent is not there, or is such a
+// thread itself, goes. The list and its tab's count both ask it, so the
+// count is the rows the tab shows (lurx98 on X: Codex 6, then 0 rows).
+func orphanSubagents(parents map[string]string) map[string]bool {
+	gone := map[string]bool{}
 	for {
-		kept := make([]Managed, 0, len(out))
 		dropped := false
-		for _, m := range out {
-			if m.Role == codexRoleSubagent && !ids[m.ParentSession] {
-				delete(ids, m.ID)
-				dropped = true
+		for id, parent := range parents {
+			if gone[id] || parent == "" {
 				continue
 			}
-			kept = append(kept, m)
+			if _, ok := parents[parent]; !ok || gone[parent] {
+				gone[id] = true
+				dropped = true
+			}
 		}
-		out = kept
 		if !dropped {
-			return out
+			return gone
 		}
 	}
 }
