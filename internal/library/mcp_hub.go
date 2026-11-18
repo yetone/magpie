@@ -721,6 +721,8 @@ func healthErr(h ServerHealth) error {
 		s = "it answered " + h.Detail
 	case h.Why == "refused" || h.Why == "unreachable":
 		s = "it couldn't be reached: " + h.Detail
+	case h.Why == "nobrowser":
+		s = "it starts a Chrome, and there is none where magpie runs: use Magpie Browser, or give it " + h.Detail + " for a Chrome it can reach"
 	case h.Why == "novar":
 		s = h.Detail + " isn't set where magpie runs"
 	default:

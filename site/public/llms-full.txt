@@ -10813,6 +10813,12 @@ docker exec -it magpie magpie claude-code install
 
 A Grok (SuperGrok) subscription signs in through xAI’s Grok Build CLI, which the image doesn’t have either. Its sign-in, in the browser UI or with `magpie plugin login grok`, installs it first, as xAI’s installer does: the stable version from `x.ai/cli`, kept in `/config/home/.grok`. To use a Grok Build binary you put on the volume yourself, set `GROK_BIN_DIR` to the folder holding it.
 
+## MCP servers
+
+The Library’s MCP servers run in the container, and the image has what they start with: `npx`, `node` and `npm` (Node 24), and `uvx`, `uv`, `python` and `python3`. A server started with `uvx` or `python` downloads its Python into the volume the first time, which takes a few seconds. A server started with `docker` doesn’t run: the container has no Docker of its own.
+
+The image has no browser. Chrome DevTools’ and Playwright’s MCP servers start a Chrome of their own, so in the container their row in the Library says no Chrome here. Use Magpie Browser instead, which acts in your own browser, or point the server at a Chrome it can reach: `--browserUrl http://host:9222` for Chrome DevTools, `--cdp-endpoint` for Playwright.
+
 ## Your own browser
 
 Magpie Browser lets agents act in your own browser, through its extension. The extension can’t be loaded from the container’s folders, so in the browser UI open Library → Magpie Browser and click Download the extension. The zip is pointed at the page’s own address, with a gateway key named **Magpie Browser** of its own. Unzip it, open `chrome://extensions`, turn on Developer mode and click Load unpacked on the unzipped folder. An extension already loaded takes the address (`http://localhost:3430`, or the gateway’s published port) and a gateway key in its popup.

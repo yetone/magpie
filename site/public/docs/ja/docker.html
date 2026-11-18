@@ -135,6 +135,7 @@
     <a href="#run">起動する</a>
     <a href="#web">ブラウザ UI</a>
     <a href="#signin">サブスクリプションにサインイン</a>
+    <a href="#mcp">MCP サーバー</a>
     <a href="#browser">自分のブラウザ</a>
     <a href="#volume">保存されるもの</a>
     <a href="#env">環境変数</a>
@@ -205,6 +206,10 @@ docker logs magpie</pre>
       <pre id="ex-claude-code">docker exec -it magpie magpie claude-code install</pre>
     </div>
     <p>Grok（SuperGrok）サブスクリプションは xAI の Grok Build CLI でサインインしますが、これもイメージにはありません。ブラウザ UI や <code>magpie plugin login grok</code> でサインインすると、magpie が xAI のインストーラーと同じ方法で先にインストールします。<code>x.ai/cli</code> の stable 版を <code>/config/home/.grok</code> に置きます。自分でボリュームに置いた Grok Build を使うときは、<code>GROK_BIN_DIR</code> にそのフォルダを指定します。</p>
+
+    <h2 id="mcp"><a class="anchor" href="#mcp">MCP サーバー</a></h2>
+    <p>ライブラリの MCP サーバーはコンテナの中で動き、イメージには起動に使うコマンドが入っています：<code>npx</code>、<code>node</code>、<code>npm</code>（Node 24）と、<code>uvx</code>、<code>uv</code>、<code>python</code>、<code>python3</code>。<code>uvx</code> や <code>python</code> で起動するサーバーは、初回に Python をボリュームへダウンロードするので数秒かかります。<code>docker</code> で起動するサーバーは動きません：コンテナには自前の Docker がありません。</p>
+    <p>イメージにはブラウザがありません。Chrome DevTools と Playwright の MCP サーバーは自分で Chrome を起動するため、コンテナではライブラリの行に <span class="ui">ここに Chrome がありません</span> と出ます。代わりに、あなた自身のブラウザで操作する <a href="#browser">Magpie Browser</a> を使うか、サーバーが届く Chrome を指定してください：Chrome DevTools は <code>--browserUrl http://host:9222</code>、Playwright は <code>--cdp-endpoint</code>。</p>
 
     <h2 id="browser"><a class="anchor" href="#browser">自分のブラウザ</a></h2>
     <p>Magpie Browser は拡張機能を通して、エージェントにあなた自身のブラウザを操作させます。コンテナ内のフォルダは拡張機能として読み込めないので、ブラウザ UI で <span class="ui">ライブラリ</span> → <span class="ui">Magpie Browser</span> を開き、<span class="ui">拡張機能をダウンロード</span> をクリックします。zip はこのページ自身のアドレスを指し、<b>Magpie Browser</b> という名前の専用ゲートウェイキーが入っています。展開して <code>chrome://extensions</code> を開き、デベロッパー モードをオンにして、展開したフォルダを <span class="ui">パッケージ化されていない拡張機能を読み込む</span> で選びます。読み込み済みの拡張機能は、ポップアップでアドレス（<code>http://localhost:3430</code> か、ゲートウェイを公開したポート）とゲートウェイキーを受け付けます。</p>

@@ -49,7 +49,9 @@ type ServerHealth struct {
 	// protocol, home (exits in home, works in a project: Project),
 	// novar (a ${NAME} magpie's environment hasn't: Detail names
 	// them), wsldown (a command only agents in WSL start, whose distros,
-	// Detail, aren't running: it wasn't checked)
+	// Detail, aren't running: it wasn't checked), nobrowser (it listed its
+	// Tools, and starts a Chrome the container it runs in hasn't: Detail
+	// is its option for one it can reach, mcp_browser.go)
 	Why    string `json:"why,omitempty"`
 	Code   int    `json:"code,omitempty"`   // the exit code, or the HTTP status
 	Detail string `json:"detail,omitempty"` // the last line it wrote to stderr, or the error's text
@@ -247,6 +249,12 @@ func checkServer(ctx context.Context, s *Server, own ownSignIns) ServerHealth {
 		h = checkSSE(ctx, s)
 	default:
 		h = checkHTTP(ctx, s)
+	}
+	if h.State == "ok" && s.Transport == "stdio" {
+		// it lists its tools, and every one fails for want of a Chrome
+		if opt := noBrowser(s); opt != "" {
+			h.State, h.Why, h.Detail = "error", "nobrowser", opt
+		}
 	}
 	h.At = time.Now().UnixMilli()
 	if s.Transport == "http" {

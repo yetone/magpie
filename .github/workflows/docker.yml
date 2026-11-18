@@ -54,6 +54,10 @@ jobs:
           # a NAS panel's terminal opens bash or sh, with magpie on PATH
           docker exec smoke /bin/bash -c 'magpie healthcheck && ls /config >/dev/null'
           docker exec smoke /bin/sh -c 'echo sh works'
+          # what the Library's MCP servers start with, as the nonroot user
+          # (Passings_z on X: "npx not found"); python's first run would
+          # download one, so it is only found here
+          docker exec smoke /bin/sh -c 'node -v && npm -v && npx -v && uvx --version && uv --version && command -v python3 python'
 
           CODE=$(curl -s -o /tmp/body.json -w '%{http_code}' \
             -H 'Authorization: Bearer magpie' -H 'Content-Type: application/json' \
