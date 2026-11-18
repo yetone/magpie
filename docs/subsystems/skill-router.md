@@ -29,7 +29,7 @@ With the Library's switch "Skill router" on, each agent's skills folder is given
 - A skill listed by the router is not a `/name` command of the agent's. A skill the user types is kept direct, and one with `disable-model-invocation` is never listed.
 - The user's own `magpie-skills`, in the folder or in the Library, is never written over. The agent keeps every link, and the page says why (`own`, `taken`).
 - Turning the switch off writes every link again, removes the entry, its folder and magpie's Read rules, and leaves the user's own rules.
-- Alma reads Claude Code's and Codex's folders besides its own, so with the router on for them too it finds several `magpie-skills`, each listing another agent's skills (#5722).
+- Alma reads Claude Code's, Codex's and `~/.agents/skills` besides its own `~/.config/alma/skills`, and keeps one skill per name, its own first (personal > Claude Code > Codex > `~/.agents`: `loadSkills` in Alma's `electron/skills/skillsManager.ts`). With the router on for Alma, Alma's `magpie-skills` is the one it keeps, listing Alma's skills. When Alma's folder has no entry (every skill of Alma's kept direct, or none ticked for it), Alma takes Claude Code's (or Codex's) `magpie-skills` and is offered that agent's skills, as it was offered their links before the router; Alma's Settings › Skills turns a folder off. Seen with a real Alma 0.4.738 in a sandbox HOME (#5722).
 - An agent other than Claude Code may ask before reading a listed skill's files, as for any file outside its project. Only Claude Code has rules magpie writes.
 
 ## Verification
