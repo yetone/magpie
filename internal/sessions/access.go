@@ -147,6 +147,12 @@ func SetReads(all *bool, agents map[string]bool) error {
 				}
 				r.Agents[a] = on
 			}
+			for a := range cur.Kept {
+				if r.Kept == nil {
+					r.Kept = map[string]bool{}
+				}
+				r.Kept[a] = true
+			}
 		}
 		if all != nil {
 			r.All = *all
@@ -156,6 +162,21 @@ func SetReads(all *bool, agents map[string]bool) error {
 				r.Agents = map[string]bool{}
 			}
 			r.Agents[a] = on
+			// an agent turned off on its own (all not sent: Keep off,
+			// Settings › Privacy) is kept off and not asked about again;
+			// one left off in the first choice's list is (Kept)
+			switch {
+			case on:
+				delete(r.Kept, a)
+			case all == nil:
+				if r.Kept == nil {
+					r.Kept = map[string]bool{}
+				}
+				r.Kept[a] = true
+			}
+		}
+		if len(r.Kept) == 0 {
+			r.Kept = nil
 		}
 		return r
 	})

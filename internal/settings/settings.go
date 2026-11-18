@@ -2285,6 +2285,11 @@ type SessionReads struct {
 	Asked  bool            `json:"asked"`
 	All    bool            `json:"all,omitempty"`
 	Agents map[string]bool `json:"agents,omitempty"`
+	// Kept: the agents turned off one by one (Keep off, Settings ›
+	// Privacy), not only left off among the first choice's list. An agent
+	// that is off, found here and not kept is asked about once more
+	// (baysonfox on X: Antigravity 2.0 left off beside agy CLI).
+	Kept map[string]bool `json:"kept,omitempty"`
 }
 
 // Reads says whether agent's session files may be read.

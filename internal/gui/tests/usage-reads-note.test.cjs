@@ -30,7 +30,18 @@ function serve(lang, store, posts) {
     if (url.pathname === "/api/providers") return json({ providers: [], presets: [], excluded: [], gateway: { running: true, window: true, calls: [], groups: [] } });
     if (url.pathname === "/api/plugins") return json({ plugins: [] });
     if (url.pathname === "/api/sessions/reads") {
-      if (req.method() === "POST") { posts.push(req.postDataJSON()); store.asked = true; }
+      if (req.method() === "POST") {
+        const b = req.postDataJSON();
+        posts.push(b);
+        store.asked = true;
+        if (store.later && "antigravity" in b.agents) store.app = b.agents.antigravity;
+      }
+      // later: asked, agy CLI read and the Antigravity app left off in
+      // that first choice, so it is new until answered (baysonfox on X)
+      if (store.later) return json({ asked: true, all: false, found: [
+        { agent: "agy", name: "Antigravity CLI", icon: "antigravity-color", on: true },
+        { agent: "antigravity", name: "Antigravity", icon: "antigravity-color", on: store.app === true, new: store.app === undefined },
+      ] });
       return json({ asked: store.asked, all: false, found: found() });
     }
     if (url.pathname === "/api/speeds") return json([]);
@@ -88,6 +99,51 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.deepEqual(posts, [{ all: false, agents: { claude: true, codex: true } }]);
       assert.deepEqual(errors, []);
     });
+  }
+}
+
+// baysonfox on X: the Antigravity app was left off in the first choice
+// beside agy CLI, and its calls made without magpie were counted nowhere,
+// with nothing on Usage saying why. Requests says so above its rows and asks
+// once: Count reads it, Don't count keeps it off; either way the line goes.
+const LATER = "magpie doesn't read the session files of {names}, so their calls that didn't go through magpie aren't counted here.";
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  for (const [lang, width] of LANGS) {
+    for (const on of [true, false]) {
+      test(`${engine} ${lang} ${width}px: Requests asks about an agent left off in the first choice (${on ? "Count" : "Don't count"})`, async (t) => {
+        const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+        t.after(() => browser.close());
+        const page = await (await browser.newContext({ viewport: { width, height: 800 }, reducedMotion: "reduce" })).newPage();
+        page.setDefaultTimeout(8000);
+        page.setDefaultNavigationTimeout(60000);
+        const errors = [];
+        page.on("pageerror", (e) => errors.push(e.message));
+        const store = { asked: true, later: true }, posts = [];
+        await page.route("**/*", serve(lang, store, posts));
+        await page.goto("http://magpie.test/?view=usage");
+        await page.locator(":is(#usageTab .opt, .nav-s):visible").nth(1).click();
+        const line = page.locator("#ledReads");
+        await line.locator("p").waitFor();
+        const want = await page.evaluate(([s]) => t(s, { names: "Antigravity" }), [LATER]);
+        if (lang !== "en") assert.notEqual(want, LATER.replace("{names}", "Antigravity"), "translated");
+        assert.equal(await line.locator("p").textContent(), want);
+        assert.equal(await line.getAttribute("role"), "group");
+        // the not-yet-asked note is not shown beside it
+        assert.equal(await page.locator("#ledWrap .reads-note").count(), 0);
+        // both buttons inside the line, nothing sideways
+        const box = await line.boundingBox();
+        for (const b of await line.locator("button").all()) {
+          const r = await b.boundingBox();
+          assert.ok(r.x >= box.x - 0.5 && r.x + r.width <= box.x + box.width + 0.5, "button inside the line");
+        }
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth), false, "no sideways scroll");
+        assert.equal(posts.length, 0, "nothing changed before an answer");
+        await line.locator("button").nth(on ? 1 : 0).click();
+        await line.waitFor({ state: "hidden" });
+        assert.deepEqual(posts, [{ agents: { antigravity: on } }]);
+        assert.deepEqual(errors, []);
+      });
+    }
   }
 }
 

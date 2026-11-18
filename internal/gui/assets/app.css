@@ -1805,6 +1805,10 @@ body.masked :hover > .acct-eye, body.masked .pq-card:hover .acct-eye, body.maske
 .led-hscroll::-webkit-scrollbar-button, .led-hscroll::-webkit-scrollbar-corner { display: none; }
 .reads-note { margin-top: 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .reads-note p { margin: 0; }
+.reads-later { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 0 0 9px; padding: 8px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+.reads-later[hidden] { display: none; }
+.reads-later p { margin: 0; flex: 1 1 260px; min-width: 0; color: var(--muted); line-height: 1.45; }
+.reads-later-acts { display: flex; gap: 4px; margin-left: auto; }
 .led-none { padding: 18px 16px; color: var(--muted); text-align: center; line-height: 1.5; }
 .led-sk { padding: 11px 14px; }
 .led-sk + .led-sk { border-top: 1px solid var(--line-2); }

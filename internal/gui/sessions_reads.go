@@ -19,11 +19,11 @@ type readAgentJSON struct {
 	Name  string `json:"name"`
 	Icon  string `json:"icon"`
 	On    bool   `json:"on"`
-	// New: found here, never named by the user's choice, and not read,
-	// since that choice reads only the agents it names (All false): an
-	// agent installed after "allow selected" (baysonfox on X: Antigravity
-	// 2.0's sessions showed only through the gateway). The Sessions page
-	// asks about these once.
+	// New: found here and not read, and never turned off on its own
+	// (settings.SessionReads.Kept): an agent installed after "allow
+	// selected", or one left off in its list (baysonfox on X: Antigravity
+	// 2.0's sessions and calls showed only through the gateway, agy CLI's
+	// always). The Sessions page and Usage › Requests ask about these once.
 	New bool `json:"new,omitempty"`
 }
 
@@ -63,8 +63,7 @@ func readsNow() readsJSON {
 	for _, a := range agents {
 		j := readAgentJSON{Agent: a, Name: a, Icon: "generic", On: r.Reads(a)}
 		if r != nil && r.Asked && !j.On {
-			_, named := r.Agents[a]
-			j.New = !named && slices.Contains(here, a)
+			j.New = !r.Kept[a] && slices.Contains(here, a)
 		}
 		if l, ok := looks[a]; ok {
 			j.Name, j.Icon = l.Shared, l.Icon

@@ -76,6 +76,7 @@ magpie.plugin("usage", (ctx) => {
       <button class="text" id="ledExport" type="button" title="Save every request listed, all pages, as a CSV file in Downloads" data-tt><span data-t>Export CSV</span></button>
     </div>
     <p class="usage-note" id="ledScope" data-t>Gateway and session-log calls; local rejections excluded from totals.</p>
+    <div class="reads-later" id="ledReads" role="group" hidden></div>
     <div class="led-dash" id="ledDash" hidden>
       <div class="led-strip" id="ledKpi"></div>
       <section class="led-up" id="ledUp" hidden></section>

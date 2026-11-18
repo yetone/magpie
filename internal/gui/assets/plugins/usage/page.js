@@ -362,6 +362,57 @@ async function readsNote(host) {
   host.append(box);
 }
 
+// readsLater: the agents found here whose session files magpie doesn't
+// read, and which were never turned off on their own (reads.found[].new):
+// one installed after "allow selected", or left off in its list
+// (baysonfox on X: Antigravity 2.0 beside agy CLI, whose calls made
+// without magpie were counted nowhere). Requests says so above its rows
+// and asks once: Count reads them, Don't count keeps them off and the line
+// is gone for good. sessions/reads is read again at most once a minute.
+let readsLaterAt = 0, readsLaterGot = null, readsLaterKey = "";
+async function readsLater() {
+  const box = $("#ledReads");
+  if (!box) return;
+  if (Date.now() - readsLaterAt > 60e3) {
+    readsLaterAt = Date.now();
+    try { readsLaterGot = await api("sessions/reads"); } catch { readsLaterGot = null; }
+  }
+  const r = readsLaterGot;
+  const found = r?.asked && !r.gateway ? (r.found || []).filter((x) => x.new) : [];
+  const key = found.map((x) => x.agent).join(",") + "|" + locale;
+  if (key === readsLaterKey && box.childElementCount === (found.length ? 2 : 0)) return;
+  readsLaterKey = key;
+  box.hidden = !found.length;
+  if (!found.length) { box.replaceChildren(); return; }
+  const names = found.map((x) => x.name).join(t(", "));
+  const p = el("p", "", t("magpie doesn't read the session files of {names}, so their calls that didn't go through magpie aren't counted here.", { names }));
+  p.id = "ledReadsWhy";
+  box.setAttribute("aria-labelledby", p.id);
+  const acts = el("div", "reads-later-acts");
+  const answer = async (on) => {
+    for (const b of acts.children) b.disabled = true;
+    const agents = {};
+    for (const x of found) agents[x.agent] = on;
+    try {
+      readsLaterGot = await api("sessions/reads", { agents });
+      readsLaterAt = Date.now();
+      readsLater();
+      if (on) await loadLedger();
+    } catch (e) {
+      status(e.message, "err");
+      for (const b of acts.children) b.disabled = false;
+    }
+  };
+  const off = el("button", "text", t("Don't count"));
+  off.type = "button";
+  off.onclick = () => answer(false);
+  const go = el("button", "text primary", t("Count {names}", { names }));
+  go.type = "button";
+  go.onclick = () => answer(true);
+  acts.append(off, go);
+  box.replaceChildren(p, acts);
+}
+
 // noCallsIn is what an empty page says of the period it is on
 function noCallsIn(p) {
   if (periodDays(p)) return "No calls on the days picked.";
@@ -3558,6 +3609,7 @@ function ledProviderMore(p) {
 
 function renderLedger() {
   const l = ledger;
+  readsLater();
   const callers = l.callerKeys || [];
   const providers = l.providers || [];
   const missingAgent = ledAgent && !l.agents.some((a) => a.id === ledAgent);
