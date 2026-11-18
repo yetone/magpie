@@ -19964,7 +19964,7 @@ function findSettings() {
   let any = false;
   for (const id of SET_TABS) {
     const page = $("#setPage-" + id), tab = $("#setTab-" + id);
-    const part = setText(tab) + " " + id;
+    const part = setText(tab) + (id === "otel" ? " otel" : ""); // not "usage" for Allowances
     let hits = 0, head = "";
     const lit = new Set();
     for (const n of page.querySelectorAll(".row-head, .row")) {
@@ -19999,6 +19999,7 @@ function findSettings() {
     page.hidden = !hits;
     any ||= hits > 0;
   }
+  window.setFolds?.(v); // a hit under a folded Advanced (provlinks.js)
   // the built-ins that match (setfeats.js)
   if (window.setFeatsFind) any = setFeatsFind(words) > 0 || any;
   else import("./setfeats.js").then(() => setQuery && findSettings(), () => {});
@@ -20012,6 +20013,7 @@ function searchSettings(q) {
   const v = $("#view-settings");
   v.classList.remove("set-searching");
   for (const n of v.querySelectorAll(".set-miss")) n.classList.remove("set-miss");
+  window.setFolds?.(v, 1);
   $("#setNone").hidden = true;
   window.setFeatsFind?.([]);
   setSetTab(setTab);
