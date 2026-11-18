@@ -642,6 +642,26 @@ func magpieProviderJSONFor(shape, catalog string) any {
 }
 
 // magpieProviderJSONAt is magpieProviderJSONFor for an agent that reaches
+// openCodeLimit is a model's limit as OpenCode is told it. OpenCode's
+// limit has three sizes (packages/schema/src/config/provider.ts, and
+// OpenCode 1's models.dev schema): context, the window prompt and
+// reply share; input, the most a prompt may hold, which it compacts by
+// (core's session/compaction.ts inputWindow, the least of the two;
+// OpenCode 1's isOverflow takes it over context less output); and
+// output. m.Context is the prompt's, models.dev's input limit where it
+// gives one, so a model with both is told both as models.dev gives them:
+// gpt-6.2-sol's {context:1050000, input:922000, output:128000}, where
+// OpenCode was told the input limit as its context and no input
+// (Nepsama1337 on X). A window with no larger context beside it in
+// models.dev (one the user typed, one a vendor's list gives) is the
+// context alone, as before.
+func openCodeLimit(m catalog.Model) map[string]any {
+	if whole := catalog.WholeOf(m.ID, m.Context); whole > m.Context {
+		return map[string]any{"context": whole, "input": m.Context, "output": maxTokens(m)}
+	}
+	return map[string]any{"context": m.Context, "output": maxTokens(m)}
+}
+
 // openCodeKinds are the input kinds OpenCode's config takes for a model
 // (its modalities enum, models.dev's words).
 var openCodeKinds = []string{"text", "image", "audio", "video", "pdf"}
@@ -690,7 +710,7 @@ func magpieProviderJSONAt(shape, catalog, gw string) any {
 			// group's context (magpie group set … context=) never reaches
 			// it; an output of 0 is OpenCode's own default
 			if m.Context > 0 {
-				e["limit"] = map[string]any{"context": m.Context, "output": maxTokens(m)}
+				e["limit"] = openCodeLimit(m)
 			}
 			if openCodeReasons(m) {
 				e["reasoning"] = true

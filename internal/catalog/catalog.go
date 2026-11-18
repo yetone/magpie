@@ -602,6 +602,10 @@ var (
 	windows map[string]int
 	// outputs are the most tokens their replies may hold, likewise
 	outputs map[string]int
+	// wholes are the context windows, prompt and reply together, that
+	// models.dev gives beside an input limit below them, by bare id and
+	// that input limit: gpt-6.2-sol's 1050000 beside its 922000 (WholeOf)
+	wholes map[string]map[int]int
 	// efforts are the models' reasoning levels, by bare id, as most of the
 	// providers that give any for them give them
 	efforts map[string][]string
@@ -685,6 +689,7 @@ func loadGen() (map[string]mdProvider, int) {
 					votes, reasons := map[string]int{}, map[string]int{}
 					named := map[string]map[string]int{}
 					sizes, outs := map[string]map[int]int{}, map[string]map[int]int{}
+					whole := map[string]map[int]map[int]int{}
 					levels := map[string]map[string]int{}
 					kinds := map[string]map[string]int{}
 					voted := map[string]bool{}
@@ -749,6 +754,15 @@ func loadGen() (map[string]mdProvider, int) {
 							}
 							sizes[who][w]++
 						}
+						if in, ctx := Window(x.Limit.Input), Window(x.Limit.Context); in > 0 && ctx > in {
+							if whole[who] == nil {
+								whole[who] = map[int]map[int]int{}
+							}
+							if whole[who][in] == nil {
+								whole[who][in] = map[int]int{}
+							}
+							whole[who][in][ctx]++
+						}
 						if o := x.Limit.Output; o > 0 {
 							if outs[who] == nil {
 								outs[who] = map[int]int{}
@@ -811,6 +825,13 @@ func loadGen() (map[string]mdProvider, int) {
 					for id, by := range sizes {
 						windows[id] = mostGiven(by)
 					}
+					wholes = map[string]map[int]int{}
+					for id, ins := range whole {
+						wholes[id] = map[int]int{}
+						for in, by := range ins {
+							wholes[id][in] = mostGiven(by)
+						}
+					}
 					outputs = map[string]int{}
 					for id, by := range outs {
 						outputs[id] = mostGiven(by)
@@ -868,6 +889,7 @@ func Reset() {
 	gen++
 	resets.Add(1)
 	mdev, images, inputs, windows, outputs, efforts, thinks, names, listed, canonical, labs, normal = nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
+	wholes = nil
 	loadMu.Unlock()
 	if Forget != nil {
 		Forget()
@@ -1592,6 +1614,43 @@ func kindOrder(ks []string) []string {
 // Ark's kimi-k3-1-pro-261024 has kimi-k3.1-pro's window. A window the
 // vendor's own list gives is read before this, by the caller, and stays.
 func ContextOf(id string) int { return contextAs(id, true) }
+
+// WholeOf is the context window, prompt and reply together, that
+// models.dev gives model id beside an input limit of window: 1050000 for
+// gpt-6.2-sol told 922000, the input limit Context holds (window). 0 when
+// none of its entries pairs that input limit with a larger context: a
+// window the user typed, or one a vendor's own list gives, is a window of
+// its own, and an agent that takes both (OpenCode's limit.context and
+// limit.input) is told it alone, as before. The id is looked up as
+// ContextOf looks it up: a relay's spelling or a snapshot of it.
+func WholeOf(id string, window int) int {
+	if window <= 0 {
+		return 0
+	}
+	load()
+	return wholeIn(bareID(id), window, true)
+}
+
+func wholeIn(b string, window int, spellings bool) int {
+	if w, ok := found(b, wholes); ok {
+		return w[window]
+	}
+	if !spellings {
+		return 0
+	}
+	if r, _, ok := renamed(b); ok {
+		if w := wholeIn(r, window, false); w > 0 {
+			return w
+		}
+	}
+	if n, ok := normalFor(b); ok {
+		return wholeIn(n, window, false)
+	}
+	if t, ok := untagged(b); ok {
+		return wholeIn(t, window, true)
+	}
+	return 0
+}
 
 // contextAs is ContextOf, with another spelling (normalFor), the model
 // the user said it is the same as (UserSame) and a tag in brackets taken
