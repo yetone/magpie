@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -155,8 +156,20 @@ func TestSignalSavesTheSessionIndex(t *testing.T) {
 	died := deaths(t, syscall.SIGTERM)
 	oldSave, oldWait := sessionsSaved, saveOnSignal
 	t.Cleanup(func() { sessionsSaved, saveOnSignal = oldSave, oldWait })
+	// both set before the handler runs, never between signals: a signal
+	// sent to oneself is no ordering the race detector sees
 	saved := make(chan struct{}, 1)
-	sessionsSaved = func() { saved <- struct{}{} }
+	stuck := make(chan struct{})
+	t.Cleanup(func() { close(stuck) })
+	var stalls atomic.Bool
+	sessionsSaved = func() {
+		if stalls.Load() {
+			<-stuck
+			return
+		}
+		saved <- struct{}{}
+	}
+	saveOnSignal = time.Second
 	endProbesOnSignal()
 	send(t, syscall.SIGTERM)
 	diesOf(t, died, syscall.SIGTERM)
@@ -166,10 +179,7 @@ func TestSignalSavesTheSessionIndex(t *testing.T) {
 		t.Fatal("died without the session index saved")
 	}
 
-	saveOnSignal = 50 * time.Millisecond
-	stuck := make(chan struct{})
-	t.Cleanup(func() { close(stuck) })
-	sessionsSaved = func() { <-stuck }
+	stalls.Store(true)
 	send(t, syscall.SIGTERM)
-	diesOf(t, died, syscall.SIGTERM)
+	diesOf(t, died, syscall.SIGTERM) // saveOnSignal's 1s, inside diesOf's 3s
 }
