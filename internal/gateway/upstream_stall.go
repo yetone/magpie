@@ -86,9 +86,14 @@ func (g stallGuard) try(r *http.Request) (*http.Response, error) {
 	// one found closed) with a body from GetBody, which must be watched as
 	// this one is, or a retried send is not bounded
 	st := &stallTry{}
+	dropped := make(chan struct{})
+	var dropOnce sync.Once
 	st.onStall = func() {
-		cancel(errUploadStalled{after: bodyStall})
-		st.dropConn()
+		dropOnce.Do(func() {
+			cancel(errUploadStalled{after: bodyStall})
+			st.dropConn()
+			close(dropped)
+		})
 	}
 	sb := st.watch(r.Body)
 	trace := &httptrace.ClientTrace{GotConn: func(i httptrace.GotConnInfo) { st.setConn(i.Conn) }}
@@ -109,6 +114,9 @@ func (g stallGuard) try(r *http.Request) (*http.Response, error) {
 		cause := context.Cause(ctx)
 		cancel(nil)
 		if s, ok := cause.(errUploadStalled); ok {
+			// Cancellation wakes RoundTrip before the timer has finished
+			// closing the connection. Do not retry through that live socket.
+			<-dropped
 			return nil, s
 		}
 		return nil, err
