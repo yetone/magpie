@@ -20803,8 +20803,9 @@ function renderTrayUsage(s, keep) {
   if (trayUsageLoading) { trayUsageLoading.open = open; pill.classList.add("busy"); }
   $("#trayUsagePick").replaceChildren(pill);
   // how often it is asked for again, and whether it reads as used or left —
-  // the Usage page's choice too (#122)
-  $("#trayEveryRow").hidden = !ids.length;
+  // the Usage page's choice too (#122); none when allowances are read only
+  // when asked and no total is shown: the cards then keep the last reading
+  $("#trayEveryRow").hidden = !ids.length || s.quotaReads === "asked" && !ids.some((id) => id.startsWith("usage:"));
   $("#trayEverySegs").replaceChildren(segs(TRAY_EVERY.map((m) => [m, t("{n} min", { n: m })]), s.trayUsageEvery || 3,
     (trayUsageEvery) => savePrefs({ ...keep, trayUsageEvery })));
   // only the Mac's menu bar draws the cards, with their logos or without
