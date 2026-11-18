@@ -35,11 +35,11 @@ const candidates = [
   { name: "caveman", path: "skills/caveman", description: "Talks less.", have: true },
 ];
 const words = {
-  en: { skills: "3 skills", choose: "Choose…", install: "Install {n} skills", one: "Install 1 skill" },
-  zh: { skills: "3 个技能", choose: "选择…", install: "安装 {n} 个技能", one: "安装 1 个技能" },
-  "zh-TW": { skills: "3 個技能", choose: "選擇…", install: "安裝 {n} 個技能", one: "安裝 1 個技能" },
-  ja: { skills: "3 件のスキル", choose: "選択…", install: "{n} 個のスキルをインストール", one: "1 個のスキルをインストール" },
-  de: { skills: "3 Skills", choose: "Auswählen…", install: "{n} Skills installieren", one: "1 Skill installieren" },
+  en: { skills: "3 skills", five: "5 skills", choose: "Choose…", install: "Install {n} skills", one: "Install 1 skill" },
+  zh: { skills: "3 个技能", five: "5 个技能", choose: "选择…", install: "安装 {n} 个技能", one: "安装 1 个技能" },
+  "zh-TW": { skills: "3 個技能", five: "5 個技能", choose: "選擇…", install: "安裝 {n} 個技能", one: "安裝 1 個技能" },
+  ja: { skills: "3 件のスキル", five: "5 件のスキル", choose: "選択…", install: "{n} 個のスキルをインストール", one: "1 個のスキルをインストール" },
+  de: { skills: "3 Skills", five: "5 Skills", choose: "Auswählen…", install: "{n} Skills installieren", one: "1 Skill installieren" },
 };
 
 function serve(lang, st) {
@@ -139,6 +139,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.waitForFunction(() => document.querySelectorAll("#modal .mk-reposheet .lib-pick").length === 5);
       assert.deepEqual(st.probed, ["mattpocock/skills"]);
       assert.equal(await sheet.locator(".mk-repowait").count(), 0);
+      // the card behind now counts what the sheet lists, not skills.sh
+      assert.equal((await repo.locator(".mk-count").textContent()).trim(), w.five);
       // the list's still ticked, the rest not, the one had greyed
       assert.deepEqual(await rows.evaluateAll((rs) => rs.map((r) => [r.querySelector(".name").textContent, r.querySelector("input").checked, r.querySelector("input").disabled])),
         [["tdd", true, false], ["grill-me", true, false], ["write-a-prd", true, false], ["triage", false, false], ["caveman", false, true]]);
@@ -155,6 +157,20 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await go.click();
       await sheet.waitFor({ state: "detached" });
       assert.deepEqual(st.installs, [["skills/install", { source: "mattpocock/skills", paths: ["skills/grill-me", "skills/triage"], agents: ["claude"] }]]);
+      // drawn again, the card keeps the sheet's count
+      assert.equal((await repo.locator(".mk-count").textContent()).trim(), w.five);
+      // opened again, the sheet lists the read repository at once, the
+      // two just installed greyed, while it is read again
+      const [again, letAgain] = gate();
+      st.probeGate = again;
+      await repo.click();
+      await sheet.waitFor();
+      assert.equal(await sheet.locator(".mk-repowait").count(), 0);
+      assert.deepEqual(await rows.evaluateAll((rs) => rs.map((r) => [r.querySelector(".name").textContent, r.querySelector("input").checked, r.querySelector("input").disabled])),
+        [["tdd", true, false], ["grill-me", false, true], ["write-a-prd", true, false], ["triage", false, true], ["caveman", false, true]]);
+      letAgain();
+      await page.waitForFunction(() => document.querySelector("#modal .mk-reposheet") && !document.querySelector(".mk-repowait"));
+      assert.equal(st.probed.length, 2);
       assert.deepEqual(errors, []);
     });
 

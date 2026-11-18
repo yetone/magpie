@@ -9101,8 +9101,13 @@ magpie.plugin("library", (ctx) => {
 
   // A repository's card: its name, how many of its skills the list has,
   // and their names; opened, every skill it holds, to pick from.
+  // a repository Find skills has read, by its lowercased name: its card
+  // then counts what the sheet lists, not what skills.sh does
+  const repoRead = new Map();
+  const repoCount = (g) => t("{n} skills", { n: repoRead.get(g.repo.toLowerCase())?.candidates.length ?? g.skills.length });
   function repoCard(g) {
-    const fresh = g.skills.filter((x) => !x.have);
+    const read = repoRead.get(g.repo.toLowerCase());
+    const fresh = read ? read.candidates.filter((c) => !c.have) : g.skills.filter((x) => !x.have);
     const c = el("div", "mk-card click mk-repo" + (fresh.length ? "" : " have"));
     c.dataset.id = "repo:" + g.repo;
     const top = el("div", "mk-top");
@@ -9112,7 +9117,7 @@ magpie.plugin("library", (ctx) => {
     if (g.skills.some((x) => x.official)) { const o = el("span", "mk-official"); o.append(svg(CHECK, 9, 2.2)); o.title = t("Official — from the team that makes it"); nm.append(o); }
     who.append(nm);
     const meta = el("div", "mk-meta");
-    meta.append(el("span", "mk-pub mk-count", t("{n} skills", { n: g.skills.length })));
+    meta.append(el("span", "mk-pub mk-count", repoCount(g)));
     who.append(meta);
     top.append(logo(g.icon, g.repo), who);
     const names = g.skills.map((x) => x.name).join(", ");
@@ -9223,7 +9228,11 @@ magpie.plugin("library", (ctx) => {
       go.disabled = true;
       go.textContent = t("Installing…");
       let ok;
-      if (r.found) ok = await change("skills/install", { source: r.found.source, paths: [...r.pick], agents: r.agents }, done);
+      if (r.found) {
+        const paths = [...r.pick];
+        ok = await change("skills/install", { source: r.found.source, paths, agents: r.agents }, done);
+        if (ok) for (const c of r.found.candidates) if (paths.includes(c.path)) c.have = true;
+      }
       else {
         // one at a time, as each card's Add does
         const picked = g.skills.filter((x) => r.pick.has("m:" + x.skillId));
@@ -9240,17 +9249,33 @@ magpie.plugin("library", (ctx) => {
     openLib(ed);
     // the whole repository, as Find skills reads it; the list's picks
     // carried over by the folder name the market installs by
-    api("library/skills/probe", { source: g.repo }).then((p) => {
-      if (!ed.isConnected) return;
+    // read before: the sheet opens on it, as its card counts it
+    const adopt = (p) => {
       const byId = (id) => p.candidates.find((c) => c.name === id) || p.candidates.find((c) => c.path.split("/").pop() === id);
       const pick = new Set();
-      for (const k of r.pick) { const c = byId(k.slice(2)); if (c && !c.have) pick.add(c.path); }
-      if (!p.candidates.length) { r.error = t("No SKILL.md found there"); draw(); return; }
+      for (const k of r.pick) {
+        if (!k.startsWith("m:")) { if (p.candidates.some((c) => c.path === k && !c.have)) pick.add(k); continue; }
+        const c = byId(k.slice(2));
+        if (c && !c.have) pick.add(c.path);
+      }
       Object.assign(r, { found: p, pick });
       drawList();
       draw();
+    };
+    const key = g.repo.toLowerCase();
+    if (repoRead.has(key)) adopt(repoRead.get(key));
+    api("library/skills/probe", { source: g.repo }).then((p) => {
+      if (!p.candidates.length) {
+        repoRead.delete(key);
+        if (ed.isConnected) { r.found = null; r.error = t("No SKILL.md found there"); draw(); }
+        return;
+      }
+      repoRead.set(key, p);
+      // the card behind says the count the sheet lists
+      for (const n of document.querySelectorAll(".mk-repo .mk-count")) if (n.closest(".mk-repo").dataset.id.toLowerCase() === "repo:" + key) n.textContent = repoCount(g);
+      if (ed.isConnected) adopt(p);
     }, (e) => {
-      if (!ed.isConnected) return;
+      if (!ed.isConnected || r.found) return;
       r.error = e.message;
       draw();
     });
