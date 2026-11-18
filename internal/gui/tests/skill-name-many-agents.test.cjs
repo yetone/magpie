@@ -45,11 +45,21 @@ const SKILLS = [
   { name: "notes", kind: "", source: "", description: "d", agents: ALL.slice(3) },
 ];
 
+// The hand's room is set in whole pixels from the row's width (handGap in
+// plugins/library/client.js), never in container units: a chip's style
+// in cqw is worked out again on every change of the window's width, and
+// at 196 skills of 24 agents a resize took ~0.5s a step (lexrus on X).
+test("the library's chips use no container units", async () => {
+  const css = await fs.readFile(path.join(assets, "plugins/library/library.css"), "utf8");
+  assert.equal(/[\d.](cqw|cqi|cqh|cqb|cqmin|cqmax)\b/.test(css.replace(/\/\*[\s\S]*?\*\//g, "")), false);
+});
+
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   test(engine + ": a skill keeps its name beside many agents", async (t) => {
     assert(["chromium", "webkit"].includes(engine), "BROWSER must be chromium or webkit");
     const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || "chromium" }));
     t.after(() => browser.close());
+    const resized = {};
     for (const lang of ["en", "zh"]) for (const width of [866, 560]) {
       await t.test(`${lang} ${width}px`, async () => {
         const state = {
@@ -75,7 +85,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // unfold every group, so its skills are drawn
         for (const h of await v.locator(".lib-grouphead:not(.open)").all()) await h.click();
         await v.locator(".lib-group .lib-row:not(.lib-grouphead) .name", { hasText: "notes" }).waitFor({ state: "attached" });
-        const rows = await v.locator(".lib-group .lib-row").evaluateAll((rs) => rs.map((r) => {
+        const measure = () => v.locator(".lib-group .lib-row").evaluateAll((rs) => rs.map((r) => {
           const n = r.querySelector(".name"), rb = r.getBoundingClientRect(), nb = n.getBoundingClientRect();
           const chips = r.querySelector(":scope > .lib-agents");
           const cb = chips && chips.getBoundingClientRect();
@@ -83,9 +93,24 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             head: r.classList.contains("lib-grouphead"), text: n.textContent.trim(),
             nameW: nb.width, nameShown: nb.width >= Math.min(60, n.scrollWidth) && nb.left >= rb.left && nb.right <= rb.right + 0.5,
             chipsIn: !cb || (cb.left >= rb.left - 0.5 && cb.right <= rb.right + 0.5),
+            hand: cb ? Math.round(cb.width) : 0,
             bg: getComputedStyle(r).backgroundColor, weight: getComputedStyle(n).fontWeight,
           };
         }));
+        // the hand's room follows the window as it is resized (handGap), not
+        // only the width it was drawn at
+        if (width === 866) {
+          await page.setViewportSize({ width: 560, height: 900 });
+          await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+          const narrower = await measure();
+          for (const r of narrower) assert(r.chipsIn, `${r.text}: its agents run out of its row once the window is narrower`);
+          resized[lang] = narrower.map((r) => [r.text, r.hand]);
+          await page.setViewportSize({ width, height: 900 });
+          await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+        }
+        const rows = await measure();
+        // a hand resized to 560px closes up as one drawn at 560px does
+        if (width === 560 && resized[lang]) assert.deepEqual(resized[lang], rows.map((r) => [r.text, r.hand]), "the hands drawn at 866px and narrowed to 560px");
         const skills = rows.filter((r) => !r.head), heads = rows.filter((r) => r.head);
         assert.deepEqual(heads.map((h) => h.text), ["mattpocock/skills", "obra/superpowers", lang === "zh" ? "本机" : "On this computer"]);
         assert.deepEqual(skills.map((s) => s.text).sort(), ["brainstorming", "notes", "tdd", "writing-plans"]);
