@@ -474,6 +474,15 @@ back every line after it, and the log moves in bursts.
   can't explain a silence.
 - Seen 1× (2026-11-15).
 
+**A new GUI test file runs the guard tests that read every GUI file.**
+- 265217bf4, a10ac7bb0 and e5c0c23de (11-18) each added a test file
+  with `page.setDefaultTimeout(5000)` and no 60s navigation timeout, and
+  ran only their own file. nav-timeout.test.cjs (#4787's guard) failed
+  CI's cli job from cf20df721 for ~2h until 2acc2660e.
+- Run `node --test internal/gui/tests/nav-timeout.test.cjs` and the
+  other whole-folder guards with any new file there.
+- Seen 1× (2026-11-18).
+
 **A suite's log is kept whole until its reds are named.**
 - 5b12407e8 (10-17) piped a full run through tail, lost which
   internal/gateway test failed at 2559s, and shipped with an unnamed red.
