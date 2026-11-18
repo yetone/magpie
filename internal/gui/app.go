@@ -23,6 +23,7 @@ import (
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/autostart"
+	"github.com/yetone/magpie/internal/ccswitchlink"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/library"
 	"github.com/yetone/magpie/internal/omarchy"
@@ -774,6 +775,16 @@ func Run(version string, showMain bool, link string) error {
 	// Windows and Linux also report the start's own link as an event.
 	var skip sync.Once
 	h.app.Event.OnApplicationEvent(events.Common.ApplicationLaunchedWithUrl, func(e *application.ApplicationEvent) {
+		// a ccswitch:// link the Mac's Launch Services still sends here, from
+		// an older magpie's claim: CC Switch opens it and has its scheme back
+		if l := e.Context().URL(); ccswitchlink.Is(l) {
+			go func() {
+				if err := ccswitchlink.Forward(l); err != nil {
+					log.Println("ccswitch:// link:", err)
+				}
+			}()
+			return
+		}
 		u := ImportLink([]string{e.Context().URL()})
 		dup := false
 		if u == link {
