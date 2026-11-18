@@ -77,14 +77,15 @@ import (
 )
 
 type subscriptionBridge struct {
-	mu      sync.Mutex
-	runs    map[string]*subscriptionRun // callback token → run
-	calls   map[string]*subscriptionRun // tool_use id → run
-	idle    map[string]*subscriptionRun // conversation so far (turnKey) → run
-	shelf   map[string]*savedSession    // conversation so far (turnKey) → its saved session
-	baseURL string
-	sweep   sync.Once
-	swept   sync.Map // Claude Code's project folders sweepSessions went through
+	mu       sync.Mutex
+	runs     map[string]*subscriptionRun // callback token → run
+	calls    map[string]*subscriptionRun // tool_use id → run
+	idle     map[string]*subscriptionRun // conversation so far (turnKey) → run
+	shelf    map[string]*savedSession    // conversation so far (turnKey) → its saved session
+	resuming map[*savedSession]bool      // taken off the shelf, not yet owned by a run
+	baseURL  string
+	sweep    sync.Once
+	swept    sync.Map // Claude Code's project folders sweepSessions went through
 	// lost is why each run that had a conversation ended, by that
 	// conversation (convKey), and lostCalls by the tool calls it waited
 	// on or was last handed results for, for the log of a request that
@@ -2855,16 +2856,24 @@ func (b *subscriptionBridge) unshelve(req *Request, owner string) *savedSession 
 		}
 	}
 	delete(b.shelf, key)
+	if s != nil {
+		if b.resuming == nil {
+			b.resuming = make(map[*savedSession]bool)
+		}
+		b.resuming[s] = true
+	}
 	b.mu.Unlock()
 	if s == nil {
 		return nil
 	}
 	s.timer.Stop()
 	if !s.cachePrefix.accepts(req.cacheTail()) {
+		b.resumed(s)
 		s.discard()
 		return nil
 	}
 	if behind && !s.cutBehind() {
+		b.resumed(s)
 		s.discard()
 		return nil
 	}
@@ -3526,10 +3535,14 @@ func (b *subscriptionBridge) sweepSessions(dirs []string) {
 			continue
 		}
 		go func() {
+			kept, known := b.keptSessions()
+			if !known {
+				return
+			}
 			entries, _ := os.ReadDir(dir)
 			for _, e := range entries {
 				sid, ok := strings.CutSuffix(e.Name(), ".jsonl")
-				if !ok || e.IsDir() {
+				if !ok || e.IsDir() || kept[filepath.Join(dir, e.Name())] {
 					continue
 				}
 				if fi, err := e.Info(); err == nil && time.Since(fi.ModTime()) > idleLongest+time.Minute {
@@ -7230,6 +7243,14 @@ func (b *subscriptionBridge) whyCallsLost(req *Request) string {
 
 func (s *Server) serveClaudeSubscription(w http.ResponseWriter, r *http.Request, from provider.Protocol, p provider.Provider, model string, body []byte, usage *Usage) (int, string) {
 	defer s.bridgeTurn()()
+	if err := awaitPredecessorSessions(r.Context()); err != nil {
+		if r.Context().Err() != nil {
+			return http.StatusServiceUnavailable, "waiting for the previous gateway to save Claude sessions: " + err.Error()
+		}
+		// what would have been resumed is replayed, as before the wait: a
+		// turn is not refused for the gateway it was handed over from
+		log.Printf("claude: going on without the previous gateway's saved sessions: %v", err)
+	}
 	owner := p.ID
 	if p.Account != nil {
 		owner += "\x00" + p.Account.User
@@ -7250,6 +7271,9 @@ func (s *Server) serveClaudeSubscription(w http.ResponseWriter, r *http.Request,
 		// a run let go past idleMost left its session for this turn, or
 		// the run whose calls another request answered first has it
 		from := s.subscription.unshelve(req, owner)
+		if from != nil {
+			defer s.subscription.resumed(from)
+		}
 		if from == nil {
 			from = req.branch
 		}

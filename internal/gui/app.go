@@ -446,6 +446,7 @@ func Run(version string, showMain bool, link string) error {
 		// so do the threads.
 		OnShutdown: func() {
 			unhookNoActivate()
+			stopServing()
 			proc.EndProbes()
 			if handedOver.Load() {
 				return

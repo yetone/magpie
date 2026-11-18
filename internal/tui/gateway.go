@@ -22,6 +22,20 @@ var gw struct {
 	err  atomic.Pointer[string] // why it couldn't, "" or nil when it could
 }
 
+// serving ends the gateway this terminal serves and waits for it to
+// drain, while Run runs.
+var serving atomic.Pointer[func()]
+
+// StopGateway ends the gateway the terminal serves, its idle Claude
+// sessions saved for the next magpie, and returns once it has drained: what
+// the terminal closing (SIGHUP, which bubbletea doesn't handle) runs before
+// magpie dies of it. Nothing when the terminal serves none.
+func StopGateway() {
+	if f := serving.Load(); f != nil {
+		(*f)()
+	}
+}
+
 // gatewayWatch is how often the terminal looks for a gateway gone.
 var gatewayWatch = 15 * time.Second
 

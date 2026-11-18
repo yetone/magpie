@@ -1790,7 +1790,11 @@ func serve() error {
 	go provider.KeepRemotesUpdated(ctx, version)
 	// the models a Remote magpie's agents are on, as the app follows them
 	go agent.KeepFollowingRemote(ctx, 30*time.Second)
+	drained := make(chan struct{})
+	finish := stopGatewayOnSignal(func() { stop(); <-drained })
 	err := s.ListenAndServe(ctx)
+	close(drained)
+	finish()
 	if exe := follow.restartTo(); exe != "" {
 		// the plugin hosts end, waited for, first, as magpie web's
 		// reexec does (#3285)

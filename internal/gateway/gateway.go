@@ -553,6 +553,7 @@ type Server struct {
 	// refused as signed for another conversation (thinking_bound.go)
 	refusedThinking map[string]bool
 	subscription    *subscriptionBridge
+	sessionsSaved   chan struct{} // closed after the predecessor has persisted its Claude sessions
 	// imageStore is the image MCP server's jobs and images (image_mcp.go)
 	imageStore imageMCPStore
 	// browser is the Magpie Browser extensions connected (browser.go)
@@ -660,11 +661,12 @@ func New() *Server {
 		// (netproxy.HTTP1, which provider/codex_http1.go sets); a vendor's
 		// redirect is followed to its own origin only, so its key goes
 		// nowhere else (provider.KeepsCredentials)
-		client:       &http.Client{Transport: rpmTransport{upstreamTransport()}, CheckRedirect: provider.KeepsCredentials},
-		unfit:        make(map[string]bool),
-		subscription: newSubscriptionBridge(),
-		debug:        os.Getenv("MAGPIE_DEBUG") != "",
-		sightFile:    sightsPath(),
+		client:        &http.Client{Transport: rpmTransport{upstreamTransport()}, CheckRedirect: provider.KeepsCredentials},
+		unfit:         make(map[string]bool),
+		subscription:  newSubscriptionBridge(),
+		sessionsSaved: make(chan struct{}),
+		debug:         os.Getenv("MAGPIE_DEBUG") != "",
+		sightFile:     sightsPath(),
 	}
 	s.loadSights()
 	return s
@@ -1003,6 +1005,7 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 			log.Printf("gateway: ending before image descriptions could all be saved; the next start may describe them again")
 		}
 		s.subscription.abortAll()
+		close(s.sessionsSaved)
 		provider.FlushServed() // what answered last, kept for the next start and the CLI
 		flushSticks()          // who answered which conversation, for the next start or the magpie handed over to
 		// the MCP servers the hub started end with the gateway

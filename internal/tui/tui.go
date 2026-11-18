@@ -170,6 +170,9 @@ func Run(ready func()) error {
 	}
 	ctx, stop := context.WithCancel(context.Background())
 	wait := serveGateway(ctx)
+	halt := func() { stop(); wait() }
+	serving.Store(&halt)
+	defer serving.Store(nil)
 	_, err := tea.NewProgram(m, tea.WithAltScreen()).Run()
 	served := gw.here.Load()
 	stop()

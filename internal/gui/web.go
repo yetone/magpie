@@ -157,7 +157,7 @@ func (w *Web) ServesGateway() bool { return served.Load() != nil }
 func (w *Web) Wait() error {
 	<-w.quit
 	time.Sleep(200 * time.Millisecond) // the answer to the Quit gets out
-	w.srv.Close()
+	w.Close()
 	if !webReexec.Load() {
 		return nil
 	}
@@ -165,11 +165,18 @@ func (w *Web) Wait() error {
 	if err != nil {
 		return err
 	}
-	// the plugin hosts end, waited for, first: one still running at the
-	// exec is a child nothing waits for after it, <defunct> under this
-	// pid from then on (#3285)
+	// End and reap plugin hosts before replacing this process (#3285).
 	plugin.EndHosts()
 	return update.Reexec(exe, os.Args[1:], append(os.Environ(), webRunKey+"="+w.key))
+}
+
+// Close stops the web page and waits for this process's gateway to save its sessions.
+func (w *Web) Close() {
+	w.srv.Close()
+	// The gateway keeps idle Claude sessions as it ends. Wait for that
+	// before returning or replacing this process, or the next turn has
+	// to replay the whole conversation instead of resuming its session.
+	stopServing()
 }
 
 // webKeyMin is the shortest MAGPIE_WEB_KEY taken: it is all that stands

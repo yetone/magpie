@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -277,9 +279,17 @@ func (u *unreadConns) wait(ctx context.Context) {
 // this process started (claudeMCPPath): their MCP helper calls the
 // gateway's port, which the magpie this one handed it to now serves, and
 // that one passes on the calls of runs it doesn't have (ForwardCallbacks).
+// It also lets the successor wait until Claude sessions have been saved.
 // It returns once ln is closed.
 func (s *Server) ServeCallbacks(ln net.Listener) error {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /_magpie/claude-ready", func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-s.sessionsSaved:
+			w.WriteHeader(http.StatusNoContent)
+		case <-r.Context().Done():
+		}
+	})
 	mux.HandleFunc("POST "+claudeMCPPath+"{token}", s.subscription.mcpCall)
 	err := (&http.Server{Handler: mux, ReadHeaderTimeout: 30 * time.Second}).Serve(ln)
 	if errors.Is(err, net.ErrClosed) || errors.Is(err, http.ErrServerClosed) {
@@ -293,7 +303,8 @@ func (s *Server) ServeCallbacks(ln net.Listener) error {
 // when there is none.
 var predecessorCallbacks struct {
 	sync.Mutex
-	sock string
+	sock  string
+	ready bool
 }
 
 // ForwardCallbacks has a tool call for a Claude Code run this process
@@ -303,6 +314,7 @@ var predecessorCallbacks struct {
 // "" stops it.
 func ForwardCallbacks(sock string) {
 	predecessorCallbacks.Lock()
+	predecessorCallbacks.ready = false
 	predecessorCallbacks.sock = sock
 	predecessorCallbacks.Unlock()
 }
@@ -360,3 +372,67 @@ func (s *Server) Addr() string {
 	}
 	return s.ln.Addr().String()
 }
+
+// A successor accepts requests before its predecessor finishes draining.
+// Only Claude turns wait: resuming before the shelf is written replays history.
+// The predecessor saves its shelf once every request it holds has ended, of
+// any provider, up to handedOffDrain; a Claude turn waits for that at most
+// predecessorWait, then goes on as it did before the wait (a replay, for a
+// conversation the shelf would have resumed), and so does every turn after
+// it: errPredecessorSlow. A shelf written later is still read, at the next
+// turn no session here is found for (loadShelf).
+func awaitPredecessorSessions(ctx context.Context) error {
+	predecessorCallbacks.Lock()
+	sock, ready := predecessorCallbacks.sock, predecessorCallbacks.ready
+	predecessorCallbacks.Unlock()
+	if sock == "" || ready {
+		return nil
+	}
+	asker := ctx
+	ctx, cancel := context.WithTimeout(ctx, predecessorWait)
+	defer cancel()
+	markReady := func() {
+		predecessorCallbacks.Lock()
+		if predecessorCallbacks.sock == sock {
+			predecessorCallbacks.ready = true
+		}
+		predecessorCallbacks.Unlock()
+	}
+	transport := &http.Transport{DisableKeepAlives: true, DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		var d net.Dialer
+		return d.DialContext(ctx, "unix", sock)
+	}}
+	defer transport.CloseIdleConnections()
+	req, err := http.NewRequestWithContext(ctx, "GET", "http://predecessor/_magpie/claude-ready", nil)
+	if err != nil {
+		return err
+	}
+	resp, err := (&http.Client{Transport: transport}).Do(req)
+	if err != nil {
+		if asker.Err() == nil && ctx.Err() != nil {
+			markReady()
+			return errPredecessorSlow
+		}
+		// The callback listener goes away only after the old gateway drains.
+		if !errors.Is(err, os.ErrNotExist) && !errors.Is(err, syscall.ECONNREFUSED) {
+			return err
+		}
+	} else {
+		resp.Body.Close()
+		// Older versions have no readiness endpoint. Preserve their handover.
+		if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusNotFound {
+			return fmt.Errorf("predecessor returned %s", resp.Status)
+		}
+	}
+	markReady()
+	return nil
+}
+
+// predecessorWait is how long a Claude turn waits for the predecessor's
+// saved sessions; a var so tests can shorten it. Well inside Claude Code's
+// own ten minutes for a reply.
+var predecessorWait = 90 * time.Second
+
+// errPredecessorSlow: the predecessor had not saved its sessions within
+// predecessorWait, and no turn waits for it any more.
+var errPredecessorSlow = errors.New("the previous gateway is still draining")

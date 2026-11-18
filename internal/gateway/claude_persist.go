@@ -129,9 +129,15 @@ func (b *subscriptionBridge) keepShelf() {
 }
 
 // loadShelf puts the saved sessions an earlier gateway left on the shelf,
-// when the file changed since this one looked (b.mu not held). A file that
-// can't be read whole is unknown: nothing is taken from it.
+// when the file changed since this one looked (b.mu not held: it is taken
+// for the shelf only). A file that can't be read whole is unknown: nothing
+// is taken from it.
 func (b *subscriptionBridge) loadShelf() {
+	// the file and the shelf change together for the sweep (keptSessions):
+	// its entries are never in neither; b.mu is held only for the shelf,
+	// not for the file's reads, as every Claude turn waits on it
+	shelfFileMu.Lock()
+	defer shelfFileMu.Unlock()
 	path := shelfPath()
 	fi, err := os.Stat(path)
 	if err != nil {
@@ -149,23 +155,24 @@ func (b *subscriptionBridge) loadShelf() {
 	if json.Unmarshal(data, &f) != nil || f.Version != shelfFileVersion {
 		return
 	}
+	var saved []*savedSession
+	for _, e := range f.Entries {
+		if s := e.saved(); s != nil {
+			saved = append(saved, s)
+		}
+	}
 	// taken away: what a run goes on with from here is not what it says
 	if os.Remove(path) != nil {
 		return
 	}
-	for _, e := range f.Entries {
-		s := e.saved()
-		if s == nil {
-			continue
-		}
-		b.mu.Lock()
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for _, s := range saved {
 		if b.shelf[s.key] != nil {
-			b.mu.Unlock()
 			continue
 		}
 		b.shelf[s.key] = s
 		b.shelfTimer(s)
-		b.mu.Unlock()
 	}
 }
 
@@ -306,4 +313,69 @@ func (b *subscriptionBridge) keepForReset(run *subscriptionRun, req *Request, ow
 	b.trimShelf()
 	b.mu.Unlock()
 	log.Printf("claude: a turn refused for the account's limit leaves its conversation's session, cut before the turn, for the turn asked again until %s", heldClock(s.until, now))
+}
+
+// shelfFileMu is held while the shelf file is read for what it keeps
+// (keptSessions) and while its entries move to the shelf (loadShelf).
+var shelfFileMu sync.Mutex
+
+// resumed ends the protection while a saved session changes owners.
+func (b *subscriptionBridge) resumed(s *savedSession) {
+	b.mu.Lock()
+	delete(b.resuming, s)
+	b.mu.Unlock()
+}
+
+// keptSessions includes sessions waiting for quota resets, even if their
+// transcripts have not changed for hours. An unreadable shelf is unknown:
+// leave the files alone rather than destroy the only resumable history.
+func (b *subscriptionBridge) keptSessions() (map[string]bool, bool) {
+	shelfFileMu.Lock() // loadShelf moves none from the file to the shelf meanwhile
+	defer shelfFileMu.Unlock()
+	kept := make(map[string]bool)
+	add := func(dirs []string, session string) {
+		for _, dir := range dirs {
+			kept[filepath.Join(dir, session+".jsonl")] = true
+		}
+	}
+	data, err := os.ReadFile(shelfPath())
+	if err != nil && !os.IsNotExist(err) {
+		return nil, false
+	}
+	if err == nil {
+		var f shelfFile
+		if json.Unmarshal(data, &f) != nil || f.Version != shelfFileVersion {
+			return nil, false
+		}
+		for _, entry := range f.Entries {
+			if s := entry.saved(); s != nil {
+				add(s.sessions, s.session)
+			}
+		}
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	save := func(s *savedSession) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if !s.gone {
+			add(s.sessions, s.session)
+		}
+	}
+	for _, s := range b.shelf {
+		save(s)
+	}
+	for s := range b.resuming {
+		// taken marks it gone just before the run publishes its session id.
+		// The transfer owns the file until resumed releases this pin.
+		s.mu.Lock()
+		add(s.sessions, s.session)
+		s.mu.Unlock()
+	}
+	for _, r := range b.runs {
+		r.mu.Lock()
+		add(r.sessions, r.sessionID)
+		r.mu.Unlock()
+	}
+	return kept, true
 }

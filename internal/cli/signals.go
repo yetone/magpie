@@ -18,8 +18,8 @@ import (
 // endProbesOnSignal: the probes magpie asks a CLI with lead a session of
 // their own (proc.ProbeContext), so Ctrl+C in the terminal, the terminal
 // closing or a service manager's SIGTERM reach magpie and not them, and
-// magpie ending on the signal left them to init. They are ended first, and
-// magpie then dies of the signal. A command that waits on Ctrl+C itself
+// magpie ending on the signal left them to init. An owned gateway drains
+// and saves its sessions, probes end, and magpie then dies of the signal. A command that waits on Ctrl+C itself
 // (interruptContext) is left to finish its own way, its probes ended all the
 // same; the app and the TUI, which quit on SIGINT and SIGTERM their own way,
 // take those back (ownSignals). A signal magpie was started ignoring (nohup,
@@ -41,17 +41,28 @@ func endProbesOnSignal() {
 			// asked before the probes are ended, which can take a moment
 			// the command may spend finishing, and stop asking
 			handled := s == os.Interrupt && interrupts.Load() > 0
-			proc.EndProbes()
 			if !handled {
-				provider.FlushServed() // a gateway's last answers, noted and not yet written
-				gateway.FlushSticks()  // and who answered which conversation
-				// and the session index, or the next start reads every
-				// file a scan read since the last save again
-				savedWithin(sessionsSaved, saveOnSignal)
-				die(s)
+				finishSignalGateway(s)
+			} else {
+				proc.EndProbes()
 			}
 		}
 	}(onSignal)
+}
+
+func finishSignalGateway(s os.Signal) {
+	g := exitGateway.Swap(nil)
+	if g != nil {
+		defer close(g.done)
+		g.stop()
+	}
+	proc.EndProbes()
+	provider.FlushServed() // a gateway's last answers, noted and not yet written
+	gateway.FlushSticks()  // and who answered which conversation
+	// and the session index, or the next start reads every
+	// file a scan read since the last save again
+	savedWithin(sessionsSaved, saveOnSignal)
+	die(s)
 }
 
 // saveOnSignal bounds how long a signal waits for the session index to be

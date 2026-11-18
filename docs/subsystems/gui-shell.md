@@ -1229,6 +1229,48 @@ Windows has no SCM_RIGHTS for a listening socket in this form, and
 for the gateway to be idle (#577). `make dev` keeps its own handover, a
 new backend listening beside the old one (`gateway.Handover`, `devBackend`).
 
+Before `magpie web` returns from Quit or re-executes for an update,
+`Web.Wait` stops its page server and waits for its own gateway to finish
+(`stopServing`). That shutdown saves the idle Claude sessions for the
+[next start to resume](claude-subscription-bridge.md#a-restart-to-update),
+before the plugin hosts end and the process is replaced. Without the wait,
+Web updates skipped the saved-session index and replayed the conversation
+on its next turn (recih). A gateway served by another magpie is left alone.
+`TestWebShutdownKeepsClaudeSession` exercises Quit and a real Unix re-exec,
+then checks that the next turn resumes the session with only its new message.
+
+The same drain runs on desktop `OnShutdown`, before update installation,
+including normal Quit, Windows restart and a failed Unix handover. Web and
+`serve` commands register their gateway with the CLI signal handler
+(`stopGatewayOnSignal`): SIGINT, SIGTERM and SIGHUP wait for the gateway
+before flushing the indexes and preserving the signal's exit status. The
+`serve` return path joins a signal already shutting it down, so main cannot
+exit or re-exec midway through saving. `stopServing` also prevents the
+background watch from starting a gateway after shutdown begins.
+`TestSignalWaitsForGatewayShutdown` holds the drain for each signal;
+`TestDesktopShutdownDrainsGateway` checks the native callback's ordering
+without starting a desktop in a headless test.
+
+Accepting the handed-over socket is not proof that Claude sessions are
+saved. The successor waits on the predecessor's Unix callback endpoint
+`GET /_magpie/claude-ready` before serving a Claude subscription turn. It
+answers after `abortAll`; other providers and forwarded tool callbacks
+continue during the drain. The predecessor saves only once every request
+it holds has ended, of any provider, so a turn waits `predecessorWait`
+(90s) at most and then goes on, replaying what the shelf would have
+resumed, as every turn after it does (`errPredecessorSlow`); a shelf
+written later is still read at the next turn no session is found for. A
+cancelled wait returns 503 to the caller already gone. A predecessor
+without this endpoint (404) keeps the old handover behavior; the ordering
+guarantee applies when the predecessor includes this change.
+
+The terminal closing (SIGHUP) is left to magpie by Wails and bubbletea
+(`ownSignals`), so `runGUI`, `runPanel` and `runTUI` register the gateway
+they serve with the signal handler (`stopGatewayOnSignal`:
+`gui.StopServing`, `tui.StopGateway`), and it drains, the idle Claude
+sessions saved, before magpie dies of the signal.
+`TestHangupDrainsTheGatewayFirst`.
+
 `magpie update` in a terminal restarts the app the same way
 (gaubeebangeel on X: an agent the gateway serves ran the update at 4am,
 and the app ran on as the old version until it was quit and reopened,

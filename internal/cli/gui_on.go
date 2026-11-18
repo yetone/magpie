@@ -15,6 +15,8 @@ const hasGUI = true
 // runGUI starts the desktop app, writing its log to a file (startLog).
 func runGUI(showMain bool, link string) error {
 	startLog("app")
+	// SIGHUP, which Wails leaves to magpie, drains the gateway first
+	defer stopGatewayOnSignal(guiStop)()
 	return openApp(showMain, link)
 }
 
@@ -46,6 +48,7 @@ func runUninstallWindow() error {
 // of the one already running.
 func runPanel() error {
 	startLog("panel")
+	defer stopGatewayOnSignal(guiStop)() // as runGUI's
 	return openPanel()
 }
 
@@ -67,3 +70,6 @@ var startLog = func(how string) {
 		log.Println("log:", err)
 	}
 }
+
+// guiStop is gui.StopServing; a var so tests can stand in for it.
+var guiStop = gui.StopServing

@@ -275,11 +275,16 @@ func Main(v string) {
 // runTUI runs the TUI, which quits on Ctrl+C and SIGTERM itself once it
 // has started; it asks CLIs first, and a signal then ends those.
 func runTUI() error {
+	// the terminal closing (SIGHUP) drains the gateway it serves first
+	defer stopGatewayOnSignal(tuiStop)()
 	return tuiRun(ownSignals)
 }
 
 // tuiRun is tui.Run; a var so tests can stand in for it.
 var tuiRun = tui.Run
+
+// tuiStop is tui.StopGateway; a var so tests can stand in for it.
+var tuiStop = tui.StopGateway
 
 // syncAgentsOnChange sets what a catalog change (a provider or group
 // saved, a vendor's list fetched anew) does: the model lists agents keep
