@@ -2231,6 +2231,7 @@ function connectPanel(a, { fields, fieldBtn }) {
       const b = fieldBtn(off ? { ...e, value: "" } : e, "ag-eff");
       b.disabled = !!off;
       b.title = t("{label}: {value}", { label: t(e.label), value: off ? t("default") : e.value ? effortName(optionFor(e, e.value) || { value: e.value }) : t("the effort Claude Code asks for") }) + (off ? "\n" + t("Set a subagent model first") : "");
+      if (TIER_EFFORTS.includes(e.label)) tierSaid(b, e.value);
       b.setAttribute("aria-label", b.title);
       return b;
     };
@@ -2321,6 +2322,7 @@ function connectPanel(a, { fields, fieldBtn }) {
     for (const b of fields.querySelectorAll(":scope > .field")) {
       const f = a.fields.find((x) => x.key === b.dataset.key);
       if (f && !b.querySelector(":scope > .k")) b.prepend(el("span", "k", t(f.label)));
+      if (f?.key === "effort" && kindOf(a) === "claude") tierOwn(a, b);
     }
     // Cursor Private Inference's are magpie's own (#1003)
     kv(t(a.id === "cursor-local" ? "Settings" : "New sessions"), line(fields));
@@ -4195,6 +4197,19 @@ function tierMenu(a) {
 
 const DESKTOP_TIERS_FOOT = "Claude Desktop reads the tiers as it starts: restart it after a change.";
 
+// Which effort a Claude Code tier runs at, said where both are picked
+// (@lightwlh on X): unset, the session's (New sessions' effort, or /effort
+// in it), so its button reads "follows session"; set, its own, whatever the
+// session's is, and the session's effort's title says a tier with its own
+// runs at that one. ownSaid puts line s in b's title, or takes it out;
+// tierOwn reads f, a tier's effort just picked, as the slider's copy holds
+// it, since the agent's own field still has the old value.
+const ownSaid = (b, on, s) => b.title = b.title.replace(s = "\n" + t(s), "") + (on ? s : "");
+const tierOwn = (a, b, f) => ownSaid(b, a.fields.some((x) => TIER_EFFORTS.includes(x.label) && (x.label === f?.label ? f.value : x.value)), "A tier with an effort of its own runs at that one");
+function tierSaid(b, v) {
+  ownSaid(b, v, "Used whatever the session's effort or /effort is");
+  if (!v) b.querySelector(".v").textContent = t("follows session");
+}
 // levelUnset: what a role's level is when none is set
 const levelUnset = (a) => ompAgent(a) ? t("the session's thinking level") : t("the effort Claude Code asks for");
 
@@ -5105,6 +5120,10 @@ function renderEffortPicker() {
     // and light follow the level
     if ((roleLevel(opened.field.label) || opened.field.label === SUB_EFFORT) && opened.anchor.classList.contains("ag-eff")) {
       opened.anchor.title = t("{label}: {value}", { label: t(opened.field.label), value: option.value ? effortName(option) : levelUnset(opened.agent) });
+      if (TIER_EFFORTS.includes(opened.field.label)) {
+        tierSaid(opened.anchor, option.value);
+        for (const b of opened.anchor.closest(".row.agent").querySelectorAll('.field[data-key="effort"]')) tierOwn(opened.agent, b, opened.field);
+      }
       opened.anchor.setAttribute("aria-label", opened.anchor.title);
     } else if (roleLevel(opened.field.label)) {
       const menu = tierMenu(opened.agent);
