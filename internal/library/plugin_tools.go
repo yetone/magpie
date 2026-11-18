@@ -199,7 +199,9 @@ func pluginHubCall(ctx context.Context, agentID string, s *Server, tool string, 
 type PluginServer struct {
 	Name   string `json:"name"`
 	Plugin string `json:"plugin"` // plugin.Name, which PluginServerOn takes
-	// On is whether any agent is given it
+	// On is the Library's switch for it (!Hidden), so the Plugins page's
+	// Give to agents and Hide from agents say what the Library's row does:
+	// on with no agent ticked, an app at the MCP router's address has it
 	On bool `json:"on"`
 }
 
@@ -215,7 +217,7 @@ func PluginServers() map[string]PluginServer {
 	out := map[string]PluginServer{}
 	for _, s := range l.MCP {
 		if s.Plugin != "" {
-			out[s.Plugin] = PluginServer{Name: s.Name, Plugin: s.Plugin, On: len(s.Agents) > 0}
+			out[s.Plugin] = PluginServer{Name: s.Name, Plugin: s.Plugin, On: !s.Hidden}
 		}
 	}
 	return out

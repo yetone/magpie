@@ -294,6 +294,11 @@ func TestPluginToolsHidden(t *testing.T) {
 
 	// none kept: shown, it goes to the agents of the router's entry
 	ok(t)(ServerAgents("search1api", []string{}))
+	// on in the Library with no agent ticked, the Plugins page says it is
+	// on as the Library's switch does: an app at the router's address has it
+	if !listed("") || !PluginServers()[name].On {
+		t.Fatal("on in the Library, given to no agent: the Plugins page says hidden")
+	}
 	ok(t)(PluginServerOn(name, true))
 	if l, _ := load(); !slices.Equal(l.server("search1api").Agents, []string{"claude"}) {
 		t.Fatalf("shown with none kept, the router on: %v", l.server("search1api").Agents)
