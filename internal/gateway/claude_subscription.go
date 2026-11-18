@@ -826,7 +826,7 @@ func (c claudeCLI) asRoot(env []string) []string {
 // one in WSL is handed (wslrun's Env).
 var claudeEnvVars = []string{"ENABLE_CLAUDEAI_MCP_SERVERS", "DISABLE_AUTO_COMPACT", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
 	"DISABLE_TELEMETRY", "DO_NOT_TRACK", "DISABLE_ERROR_REPORTING", "DISABLE_AUTOUPDATER", "ANTHROPIC_BETAS",
-	"CLAUDE_CODE_EXTRA_BODY", "DISABLE_PROMPT_CACHING"}
+	"CLAUDE_CODE_EXTRA_BODY", "DISABLE_PROMPT_CACHING", "CLAUDE_CODE_MCP_AUTO_BACKGROUND_MS", "CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT"}
 
 // env is env for a run in config directory configDir ("" for the account
 // Claude Code is signed in to): for one in WSL, what of it goes in.
@@ -4188,8 +4188,31 @@ func claudeRunEnv(env []string, ttl string) []string {
 			out = append(out, k+"="+v)
 		}
 	}
+	for _, kv := range claudeToolWaitVars {
+		k, _, _ := strings.Cut(kv, "=")
+		if !slices.ContainsFunc(env, func(e string) bool { return strings.HasPrefix(e, k+"=") }) {
+			out = append(out, kv)
+		}
+	}
 	return append(out, "DISABLE_AUTOUPDATER=1", "DISABLE_ERROR_REPORTING=1")
 }
+
+// claudeToolWaitVars keep a turn's run waiting on magpie's MCP calls for as
+// long as the caller's tool takes: the caller runs them and has its own
+// timeouts. Claude Code otherwise moves a call still running after 120s to
+// the background and the model goes on without the result, so the turn's
+// reply is the model's next step, made before the result came, or a reply
+// with no calls at all, and the run keeps making calls no one is shown
+// (#6034). A call made past one still waiting on its user (Pi's
+// ask_user_question) is one no client runs, and the answer, in hand at
+// once, reached the model only when that call too was moved to the
+// background, its 120s later (FunnyPartMent on X: ~113s). Set to 0, the
+// timer is off and so is the move made to hand over a message that arrived
+// mid-call (Claude Code 2.1.316's isMcpCallMovableWithoutTimer asks the
+// same value). Claude Code also aborts a call that sent nothing for 30
+// minutes, a user's answer that took longer among them. A value set in
+// magpie's environment stays.
+var claudeToolWaitVars = []string{"CLAUDE_CODE_MCP_AUTO_BACKGROUND_MS=0", "CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT=0"}
 
 type lockedWriter struct{ run *subscriptionRun }
 
