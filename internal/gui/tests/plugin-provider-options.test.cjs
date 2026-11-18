@@ -4,7 +4,9 @@
 // cacheKeepaliveMaxPings) or that has some set gets the same Options
 // editor a middleware has, starting from its package's example; one with
 // neither, or switched off, gets none. Clearing them asks first, in words
-// that don't call them a middleware's. Every language; the API is faked.
+// that don't call them a middleware's. Its declared switches are its
+// provider's editor's: the JSON editor names that editor and opens it, so
+// a plugin's options have one place each. Every language; the API is faked.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -28,7 +30,10 @@ function server(lang, pluginState) {
     if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:false};` });
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
     if (url.pathname === "/api/state") return json({ agents: [], profiles: [], settings: { lang, theme: "light" } });
-    if (url.pathname === "/api/providers") return json({ providers: [], presets: [], excluded: [], gateway: { running: true, window: true }, plugins: [] });
+    if (url.pathname === "/api/providers") return json({ providers: [], presets: [], excluded: [], gateway: { running: true, window: true }, plugins: [
+      { id: "devin", pid: "devin", name: "Devin", spec: DEVIN, signedIn: true, methods: [], models: 0, options: [{ key: "fast", label: "Fast", on: false }] },
+      { id: "plain", pid: "plain", name: "Plain", spec: PLAIN, signedIn: true, methods: [], models: 0 },
+    ] });
     if (url.pathname === "/api/groups") return json({ groups: [], pools: [] });
     if (url.pathname === "/api/gateway/trace") return json({ routes: [] });
     if (url.pathname === "/api/plugins/market" || url.pathname === "/api/plugins" || url.pathname === "/api/plugins/listings") return json(url.pathname === "/api/plugins" ? pluginState : url.pathname === "/api/plugins/listings" ? { listings: [] } : { listings: [], state: pluginState });
@@ -40,11 +45,11 @@ function server(lang, pluginState) {
 }
 
 const W = {
-  en: { installed: "Installed", options: "Options", save: "Save", clear: "Clear", cancel: "Cancel", gone: /^Saved options will be removed\. The plugin will run with no options\.$/ },
-  zh: { installed: "已安装", options: "选项", save: "保存", clear: "清空", cancel: "取消", gone: /^已保存的选项将被移除。插件将不带选项运行。$/ },
-  "zh-TW": { installed: "已安裝", options: "選項", save: "儲存", clear: "清空", cancel: "取消", gone: /^已儲存的選項將被移除。外掛將不帶選項執行。$/ },
-  ja: { installed: "インストール済み", options: "オプション", save: "保存", clear: "クリア", cancel: "キャンセル", gone: /^保存したオプションが削除されます。プラグインはオプションなしで実行されます。$/ },
-  de: { installed: "Installiert", options: "Optionen", save: "Speichern", clear: "Leeren", cancel: "Abbrechen", gone: /^Die gespeicherten Optionen werden entfernt\. Das Plugin läuft ohne Optionen\.$/ },
+  en: { switches: "Its switches are in Devin's editor", installed: "Installed", options: "Options", save: "Save", clear: "Clear", cancel: "Cancel", gone: /^Saved options will be removed\. The plugin will run with no options\.$/ },
+  zh: { switches: "它的开关在 Devin 的编辑器里", installed: "已安装", options: "选项", save: "保存", clear: "清空", cancel: "取消", gone: /^已保存的选项将被移除。插件将不带选项运行。$/ },
+  "zh-TW": { switches: "它的開關在 Devin 的編輯器裡", installed: "已安裝", options: "選項", save: "儲存", clear: "清空", cancel: "取消", gone: /^已儲存的選項將被移除。外掛將不帶選項執行。$/ },
+  ja: { switches: "スイッチは Devin のエディタにあります", installed: "インストール済み", options: "オプション", save: "保存", clear: "クリア", cancel: "キャンセル", gone: /^保存したオプションが削除されます。プラグインはオプションなしで実行されます。$/ },
+  de: { switches: "Die Schalter sind im Editor von Devin", installed: "Installiert", options: "Optionen", save: "Speichern", clear: "Leeren", cancel: "Abbrechen", gone: /^Die gespeicherten Optionen werden entfernt\. Das Plugin läuft ohne Optionen\.$/ },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -101,6 +106,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await devin.locator(".pm-opts").waitFor({ state: "detached" });
           assert.deepEqual(posted[1], { spec: DEVIN, options: null });
           assert.equal(await view.locator("select").count(), 0);
+          // the switches Devin declares are in its editor: the link says
+          // so and opens it, and the JSON editor goes with the page
+          await devin.getByRole("button", { name: w.options, exact: true }).click();
+          const go = devin.locator(".pm-opts").getByRole("button", { name: w.switches, exact: true });
+          await go.click();
+          await page.locator("#view-providers").waitFor();
+          await page.waitForFunction(() => /view=providers/.test(location.search) || document.querySelector("#view-providers")?.offsetParent);
+          assert.equal(await view.locator(".pm-opts").count(), 0);
           assert.deepEqual(errors, []);
           await page.context().close();
         }
