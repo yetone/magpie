@@ -74,6 +74,14 @@ func extraUltra(p provider.Provider) bool {
 	return tier == "ultrafast"
 }
 
+// chatNoUltra reports whether a Chat Completions request goes to p on
+// OpenAI's own API, which answers service_tier "ultrafast" there with 400
+// "Invalid service_tier argument" (11-18), on every model; its Responses
+// take it (provider.OpenAIUltra).
+func chatNoUltra(p provider.Provider) bool {
+	return p.Chat != "" && provider.HostOf(p.Chat) == "api.openai.com"
+}
+
 // ultraKey marks a try of a pick sent Ultrafast (#1954) from an agent on
 // Claude's API: its speed "fast" goes to the ChatGPT backend as Ultrafast
 // (forwardTranslated), on an account that offers it.

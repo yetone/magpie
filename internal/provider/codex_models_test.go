@@ -301,3 +301,12 @@ func TestCodexVersionNotRerun(t *testing.T) {
 		t.Fatal("the npm codex was run")
 	}
 }
+
+// A magpie with no Codex to ask (in Docker: OoopsHh on X) asks for an
+// account's models as a Codex the ChatGPT backend lists GPT-6.2 and
+// Ultrafast to, which it does from 0.166.0 on.
+func TestCodexFallbackListsUltrafast(t *testing.T) {
+	if newerVersion(codexClientVersion, "0.166.0") != codexClientVersion {
+		t.Fatalf("models asked for as Codex %s, which is listed no Ultrafast", codexClientVersion)
+	}
+}

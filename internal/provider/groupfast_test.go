@@ -144,17 +144,30 @@ func TestSaveGroupFast(t *testing.T) {
 
 // A GPT model on a provider the user added by its address can be sent
 // Ultrafast where OpenAI offers it on the model (KoiLx0 on X): Codex's own
-// entry for it lists the tier, as Codex itself is offered it there. Not on
-// a model Codex's entry gives Fast alone, nor one it has no entry for, nor
-// on another vendor's model.
+// entry for it lists the tier, as Codex itself is offered it there, or
+// OpenAI's API serves it so (OoopsHh on X: in Docker there is no Codex CLI
+// and no entry). Not on a model Codex's entry gives Fast alone, nor one it
+// has no entry for, nor on another vendor's model.
 func TestCanUltraOwnProvider(t *testing.T) {
 	fastHome(t)
 	codexHome := t.TempDir()
 	t.Setenv("CODEX_HOME", codexHome)
 	rl, _ := Find("rl")
 	oa, _ := Find("oa")
-	if UltraOn(*rl, "gpt-6.1-sol", nil) {
+	if UltraOn(*rl, "gpt-6.1-mini", nil) || UltraOn(*rl, "gpt-6-sol", nil) {
 		t.Fatal("Ultrafast with no list saying so")
+	}
+	// with no list at all: the models OpenAI's API serves at Ultrafast
+	if !UltraOn(*rl, "gpt-6.1-sol", nil) || !UltraOn(*oa, "gpt-6.1-sol", nil) {
+		t.Error("gpt-6.1-sol: no Ultrafast where OpenAI's API serves it")
+	}
+	for m, want := range map[string]bool{
+		"gpt-6-astra": true, "gpt-6.2-astra": true, "openai/gpt-6.2-sol": true, "GPT-6-Astra-2026-09-14": true, "gpt-6.1-sol-20261001": true,
+		"gpt-6-sol": false, "gpt-6.1-terra": false, "gpt-6.2-astra-mini": false, "gpt-6.2": false, "claude-opus-5-5": false,
+	} {
+		if OpenAIUltra(m) != want {
+			t.Errorf("OpenAIUltra(%q) = %v", m, !want)
+		}
 	}
 	cache := `{"etag":"e1","models":[
 		{"slug":"gpt-6.1-sol","description":"x","service_tiers":[{"id":"priority","name":"Fast"},{"id":"ultrafast","name":"Ultra Fast"}]},
@@ -172,8 +185,11 @@ func TestCanUltraOwnProvider(t *testing.T) {
 		{*rl, "gpt-6.1-mini", false},
 		{*rl, "gpt-7", false},
 		{*rl, "claude-opus-5-5", false},
-		// OpenAI's own API offers no Ultrafast
-		{*oa, "gpt-6.1-sol", false},
+		// OpenAI's own API, on the models its Ultrafast mode names
+		{*oa, "gpt-6.1-sol", true},
+		{*oa, "gpt-6-sol", false},
+		{*oa, "gpt-6.1-mini", false},
+		{*oa, "claude-opus-5-5", false},
 	} {
 		if got := UltraOn(c.p, c.model, nil); got != c.want {
 			t.Errorf("%s/%s: Ultrafast %v, want %v", c.p.ID, c.model, got, c.want)
