@@ -4128,13 +4128,14 @@ func summaryEndedShort(rec *recorder) bool {
 // upstreamFailed is a relay's own word that the provider behind it turned
 // the request away, without saying why: "flyapi: Upstream request failed"
 // came as a 404 (#866), "apex: Upstream request failed" as a 400
-// invalid_request_error (#1511). Codex asking the same relay itself
-// compacts, so the summary request is asked again as text, and compacted
-// without a model when that fails too.
+// invalid_request_error (#1511), Open Design's "[code=upstream_error]
+// Provider returned error" as a 400 (vendorUnsaidWords). Codex asking the
+// same relay itself compacts, so the summary request is asked again as
+// text, and compacted without a model when that fails too.
 func upstreamFailed(rec *recorder) bool {
 	return rec.status >= 400 && rec.status < 500 && rec.status != http.StatusUnauthorized &&
 		rec.status != http.StatusForbidden && rec.status != http.StatusTooManyRequests &&
-		upstreamFailedWords.Match(rec.body.Bytes())
+		(upstreamFailedWords.Match(rec.body.Bytes()) || vendorUnsaidWords.Match(rec.body.Bytes()))
 }
 
 var upstreamFailedWords = lazyre.New(`(?i)upstream request failed`)
@@ -4152,7 +4153,7 @@ func roleRefused(rec *recorder, err error) bool {
 	if rec.status >= 400 {
 		return upstreamFailed(rec) || rec.status == http.StatusBadRequest && systemRefusedWords.Match(rec.body.Bytes())
 	}
-	return err != nil && (systemRefusedWords.MatchString(err.Error()) || upstreamFailedWords.MatchString(err.Error()))
+	return err != nil && (systemRefusedWords.MatchString(err.Error()) || upstreamFailedWords.MatchString(err.Error()) || vendorUnsaidWords.MatchString(err.Error()))
 }
 
 var systemRefusedWords = lazyre.New(`(?i)system messages are not allowed`)

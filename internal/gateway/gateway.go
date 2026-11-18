@@ -6958,6 +6958,12 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		if refusesLoneToolChoice(p) {
 			body = withoutLoneToolChoice(body)
 		}
+		// Open Design's amr-link answers Codex's compaction summary, its
+		// one request with no tools, 400 upstream_error: it is sent no
+		// empty tools and no choice beside them (opendesign_tools.go)
+		if openDesign(p) {
+			body = withoutEmptyTools(body)
+		}
 	case provider.Chat:
 		if p.RejectsTemperature(model) {
 			// a model whose list refuses them (a plugin's temperature:
