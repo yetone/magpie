@@ -3225,7 +3225,7 @@ magpie.plugin("library", (ctx) => {
         : can.length === 1 ? t(on.length ? "{agent} uses the library's servers through magpie" : "{agent} can use the library's servers through magpie", { agent: can[0].name })
         : t("{on} of {all} agents use the library's servers through magpie", { on: on.length, all: can.length })));
       const left = can.length - on.length;
-      const sub = [left ? t("{n} more can be connected", { n: left }) : t("Each server runs once, for all of them")];
+      const sub = [left ? t("{n} more can use them", { n: left }) : t("Each server runs once, for all of them")];
       if (kept.length) sub.push(kept.length === 1 ? t("1 keeps each server's own entry") : t("{n} keep each server's own entry", { n: kept.length }));
       const direct = directNames();
       if (direct) sub.push(t("{name} is given to each agent directly", { name: direct }));
@@ -3249,8 +3249,8 @@ magpie.plugin("library", (ctx) => {
       }
       const m = (a) => !q || a.name.toLowerCase().includes(q.toLowerCase());
       const groups = [
-        ...group("off", t("Not connected"), can.filter((a) => !st(a) && m(a)), many),
-        ...group("on", t("Connected"), on.filter(m), many),
+        ...group("off", t("Not using the library"), can.filter((a) => !st(a) && m(a)), many),
+        ...group("on", t("Using the library"), on.filter(m), many),
         ...group("kept", t("Keep each server's own entry"), kept.filter(m), many),
       ];
       out.push(...(groups.length ? groups : [el("p", "lib-hubnone", t("No agent called “{q}”", { q }))]));

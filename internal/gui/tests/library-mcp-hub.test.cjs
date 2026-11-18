@@ -216,7 +216,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // one agent that can be: named, not counted
         assert.equal(await lead(), web ? w("{agent} uses the library's servers through magpie", { agent: "Claude Code" }) : w("{on} of {all} agents use the library's servers through magpie", { on: 1, all: 2 }));
         assert.equal((await sheet.locator(".lib-hubsub").textContent()).trim().replace(/\u00a0/g, " "),
-          [web ? w("Each server runs once, for all of them") : w("{n} more can be connected", { n: 1 }), w("{n} keep each server's own entry", { n: 2 })].join(" · "));
+          [web ? w("Each server runs once, for all of them") : w("{n} more can use them", { n: 1 }), w("{n} keep each server's own entry", { n: 2 })].join(" · "));
         // the diagram's servers are the library's three, magpie-image's mark too (the owner: why isn't its logo there?)
         assert.equal(await sheet.locator(".lib-hubroute > .lib-hubstack").last().locator(":scope > *").count(), 3);
         assert.equal(await sheet.locator('.ehead > .lib-hubmark use[href="#bird"]').count(), 1);
@@ -225,7 +225,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const groups = () => sheet.locator(".lib-hubgrp").evaluateAll((gs) => gs.map((g) => [g.dataset.group, [...g.querySelectorAll(".lib-hubagent")].map((r) => r.dataset.agent)]));
         assert.deepEqual(await groups(), [...(web ? [] : [["off", ["cursor"]]]), ["on", ["claude"]], ["kept", ["codex", "claude-desktop"]]]);
         assert.deepEqual((await sheet.locator(".lib-hubsec > span:first-child").allTextContents()).map((x) => x.trim()),
-          [...(web ? [] : [w("Not connected")]), w("Connected"), w("Keep each server's own entry")]);
+          [...(web ? [] : [w("Not using the library")]), w("Using the library"), w("Keep each server's own entry")]);
         const rows = sheet.locator(".lib-hubagent");
         const states = () => rows.evaluateAll((rs) => rs.map((r) => [r.dataset.agent, r.dataset.state]));
         assert.deepEqual(await states(), [...(web ? [] : [["cursor", "none"]]), ["claude", "on"], ["codex", "own"], ["claude-desktop", "no-remote"]]);

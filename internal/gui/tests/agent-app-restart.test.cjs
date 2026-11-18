@@ -20,8 +20,8 @@ const claude = { id: "claude-desktop", name: "Claude Desktop", icon: "generic", 
 
 const words = {
   en: { restart: "Restart", cancel: "Cancel", line: "Connected · restart WorkBuddy to use it", done: "WorkBuddy restarted", still: "WorkBuddy is still open; it may be asking something in its window." },
-  zh: { restart: "重启", cancel: "取消", line: "已连接 · 重启 WorkBuddy 后生效", done: "WorkBuddy 已重启", still: "WorkBuddy" },
-  "zh-TW": { restart: "重啟", cancel: "取消", line: "已連接 · 重新啟動 WorkBuddy 後生效", done: "WorkBuddy 已重新啟動", still: "WorkBuddy" },
+  zh: { restart: "重启", cancel: "取消", line: "已接入 · 重启 WorkBuddy 后生效", done: "WorkBuddy 已重启", still: "WorkBuddy" },
+  "zh-TW": { restart: "重啟", cancel: "取消", line: "已接入 · 重新啟動 WorkBuddy 後生效", done: "WorkBuddy 已重新啟動", still: "WorkBuddy" },
   ja: { restart: "再起動", cancel: "キャンセル", line: "接続済み · WorkBuddy を再起動すると反映されます", done: "WorkBuddy を再起動しました", still: "WorkBuddy" },
   de: { restart: "Neu starten", cancel: "Abbrechen", line: "Verbunden · WorkBuddy neu starten, um es zu nutzen", done: "WorkBuddy neu gestartet", still: "WorkBuddy" },
 };
