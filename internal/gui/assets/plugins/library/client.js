@@ -8619,7 +8619,8 @@ magpie.plugin("library", (ctx) => {
 
   // The descriptions skills.sh doesn't list, read from each SKILL.md.
   async function describeSkills() {
-    const ids = (market.skills.items || []).filter((x) => !x.description && !asked.has(x.id)).map((x) => x.id).slice(0, 60);
+    // a repository's card names its skills: only a skill's own card waits for its about
+    const ids = (market.skills.items ? entriesOf("skills").slice(0, market.skills.shown) : []).filter((x) => !x.skills && !x.description && !asked.has(x.id)).map((x) => x.id).slice(0, 60);
     if (!ids.length) return;
     ids.forEach((id) => asked.add(id));
     try {
@@ -8708,22 +8709,45 @@ magpie.plugin("library", (ctx) => {
       grid.append(el("div", "mk-msg", q ? t("Nothing matches “{q}”.", { q }) : t("Nothing to show.")));
       return;
     }
-    for (const x of m.items.slice(0, m.shown)) grid.append(cardOf(kind, x));
+    for (const x of entriesOf(kind).slice(0, m.shown)) grid.append(cardOf(kind, x));
     moreCards(kind, grid);
   }
 
-  const cardOf = (kind, x) => kind === "mcp" ? serverCard(x) : kind === "pi" ? piCard(x) : skillCard(x);
+  const cardOf = (kind, x) => kind === "mcp" ? serverCard(x) : kind === "pi" ? piCard(x) : x.skills ? repoCard(x) : skillCard(x);
+
+  // What a list shows, a card each. skills.sh lists a repository's skills
+  // one by one (Ethereal499 on X: mattpocock/skills' all apart), so two or
+  // more from one repository are one card, the repository, where it first
+  // comes in the list; it opens on its skills, to pick all or a few.
+  // magpie's own keep cards of their own.
+  function entriesOf(kind) {
+    const m = market[kind];
+    if (kind !== "skills") return m.items;
+    if (m.entriesFor === m.items) return m.entries;
+    const by = new Map(), out = [];
+    for (const x of m.items) {
+      if (x.featured || !x.source) { out.push(x); continue; }
+      const k = x.source.toLowerCase();
+      let g = by.get(k);
+      if (!g) { g = { repo: x.source, icon: x.icon, skills: [] }; by.set(k, g); out.push(g); }
+      g.skills.push(x);
+    }
+    m.entries = out.map((e) => (e.skills?.length === 1 ? e.skills[0] : e));
+    m.entriesFor = m.items;
+    return m.entries;
+  }
 
   // The rest of a long list, a page at a time: the cards added under the
   // ones shown, which stay where they are.
   function moreCards(kind, grid) {
     const m = market[kind];
-    const left = m.items.length - m.shown;
+    const all = entriesOf(kind);
+    const left = all.length - m.shown;
     if (left <= 0) return;
     const more = button(t("Show more ({n} left)", { n: left.toLocaleString(intlLang()) }), "mk-more", () => {
       const from = m.shown;
       m.shown += MARKET_PAGE;
-      more.before(...m.items.slice(from, m.shown).map((x) => cardOf(kind, x)));
+      more.before(...all.slice(from, m.shown).map((x) => cardOf(kind, x)));
       more.remove();
       moreCards(kind, grid);
       if (kind === "skills") describeSkills();
@@ -9073,6 +9097,163 @@ magpie.plugin("library", (ctx) => {
     const ok = await change("market/skill", body, t("{name} is in the library now", { name: x.name }));
     if (ok) { x.have = x.name; drawMarket("skills"); } // take asked the market again
     return ok;
+  }
+
+  // A repository's card: its name, how many of its skills the list has,
+  // and their names; opened, every skill it holds, to pick from.
+  function repoCard(g) {
+    const fresh = g.skills.filter((x) => !x.have);
+    const c = el("div", "mk-card click mk-repo" + (fresh.length ? "" : " have"));
+    c.dataset.id = "repo:" + g.repo;
+    const top = el("div", "mk-top");
+    const who = el("div", "mk-who");
+    const nm = el("div", "mk-name");
+    nm.append(el("span", "mk-title", g.repo));
+    if (g.skills.some((x) => x.official)) { const o = el("span", "mk-official"); o.append(svg(CHECK, 9, 2.2)); o.title = t("Official — from the team that makes it"); nm.append(o); }
+    who.append(nm);
+    const meta = el("div", "mk-meta");
+    meta.append(el("span", "mk-pub mk-count", t("{n} skills", { n: g.skills.length })));
+    who.append(meta);
+    top.append(logo(g.icon, g.repo), who);
+    const names = g.skills.map((x) => x.name).join(", ");
+    const d = el("p", "mk-desc mk-names", names);
+    d.title = names;
+    const foot = el("div", "mk-foot");
+    const installs = g.skills.reduce((n, x) => n + (x.installs || 0), 0);
+    if (installs) {
+      const n = el("span", "mk-installs");
+      n.append(svg(GLYPH.down, 11, 1.5), el("span", "", compact(installs)));
+      n.title = t("{n} installs", { n: installs.toLocaleString(intlLang()) });
+      foot.append(n);
+    }
+    foot.append(el("span", "grow"));
+    if (!fresh.length) {
+      const b = el("span", "mk-have");
+      b.append(svg(CHECK, 11, 2), el("span", "", t("Added")));
+      b.title = t("In the library");
+      foot.append(b);
+    } else foot.append(button(t("Choose…"), "action mk-add", () => repoSheet(g)));
+    c.append(top, d, foot);
+    c.onclick = () => repoSheet(g);
+    c.title = t("Skills in {repo}", { repo: g.repo });
+    return c;
+  }
+
+  // A repository up close: the skills the list has from it at once, then
+  // every one it holds, as Find skills finds them; the list's are ticked.
+  // A repository too big to fetch whole keeps the list's, each installed
+  // by itself as its card's Add does (#2794).
+  function repoSheet(g) {
+    const all = skillAgents();
+    const r = { agents: all.map((a) => a.id), found: null, error: "", filter: "", pick: new Set(g.skills.filter((x) => !x.have).map((x) => "m:" + x.skillId)) };
+    const ed = el("div", "editor lib-editor mk-sheet mk-reposheet");
+    const head = el("div", "mk-sheethead");
+    const who = el("div", "mk-who");
+    who.append(el("div", "mk-name big", g.repo));
+    const meta = el("div", "mk-meta");
+    const installs = g.skills.reduce((n, x) => n + (x.installs || 0), 0);
+    if (installs) meta.append(el("span", "mk-badge", t("{n} installs", { n: compact(installs) })));
+    who.append(meta);
+    head.append(logo(g.icon, g.repo), who, extLink("https://github.com/" + g.repo, "GitHub"));
+    ed.append(head);
+    const box = el("div", "mk-repopicks");
+    ed.append(box);
+    const agentsBox = el("div");
+    const drawAgents = () => agentsBox.replaceChildren(agentChips(all, r.agents, (n) => { r.agents = n; drawAgents(); }, { names: true, all: true }));
+    drawAgents();
+    ed.append(...field(t("Agents"), agentsBox));
+    const bar = el("div", "bar");
+    bar.append(el("span", "grow"), button(t("Cancel"), "", closeLibModal));
+    const go = button("", "primary", () => install());
+    bar.append(go);
+    ed.append(bar);
+    // the rows: the repository's skills once fetched, else the list's
+    const rows = () => r.found
+      ? r.found.candidates.map((c) => ({ key: c.path, name: c.name, sub: c.description || c.path || "", have: c.have, as: c.as }))
+      : g.skills.map((x) => ({ key: "m:" + x.skillId, name: x.name, sub: x.description || "", have: !!x.have, as: x.have && x.have !== x.name ? x.have : "" }));
+    const syncGo = () => { const n = r.pick.size; go.textContent = n === 1 ? t("Install 1 skill") : t("Install {n} skills", { n }); go.disabled = !n; };
+    const list = el("div", "lib-picks");
+    const drawList = () => {
+      list.replaceChildren();
+      const q = r.filter.toLowerCase();
+      for (const x of rows()) {
+        if (q && !(x.name + " " + x.sub).toLowerCase().includes(q)) continue;
+        const row = el("label", "lib-pick" + (x.have ? " dim" : ""));
+        const cb = el("input");
+        cb.type = "checkbox";
+        cb.checked = r.pick.has(x.key);
+        cb.disabled = x.have;
+        cb.onchange = () => { if (cb.checked) r.pick.add(x.key); else r.pick.delete(x.key); draw(); };
+        const w = el("span", "who");
+        w.append(el("span", "name", x.name), el("span", "sub", x.sub));
+        row.append(cb, w);
+        if (x.have && x.as) row.append(tag(t("In the library as {name}", { name: x.as }), "lib-as", t("In the library as {name}", { name: x.as })));
+        else if (x.have) row.append(tag(t("in the library"), ""));
+        else if (x.as) row.append(tag(t("adds as {name}", { name: x.as }), "lib-as", t("The library has another skill called {name}, from elsewhere. This one goes in beside it as {as}.", { name: x.name, as: x.as })));
+        list.append(row);
+      }
+    };
+    const filter = el("input", "lib-filter");
+    filter.type = "text";
+    filter.dataset.lib = "repofilter";
+    filter.placeholder = t("Filter…");
+    filter.oninput = () => { r.filter = filter.value; drawList(); };
+    filter.onkeydown = (e) => e.stopPropagation();
+    function draw() {
+      const rs = rows(), fresh = rs.filter((x) => !x.have);
+      const hd = el("div", "lib-probehead");
+      hd.append(el("span", "note", rs.length === 1 ? t("1 skill in {src}", { src: g.repo }) : t("{n} skills in {src}", { n: rs.length, src: g.repo })), el("span", "grow"));
+      if (fresh.length > 1) {
+        const allOn = fresh.every((x) => r.pick.has(x.key));
+        hd.append(button(allOn ? t("Select none") : t("Select all"), "mk-repoall", () => { for (const x of fresh) allOn ? r.pick.delete(x.key) : r.pick.add(x.key); drawList(); draw(); }));
+      }
+      const parts = [hd];
+      if (rs.length > 8) parts.push(filter);
+      parts.push(list);
+      if (!r.found && !r.error) parts.push(el("div", "lib-none mk-repowait", t("Looking through the whole repository…")));
+      if (r.error) parts.push(el("div", "lib-none lib-left mk-repoerr", t("Only the skills skills.sh lists from it are here: {error}", { error: r.error })));
+      box.replaceChildren(...parts);
+      syncGo();
+    }
+    drawList();
+    draw();
+    async function install() {
+      const n = r.pick.size;
+      const done = n === 1 ? t("1 skill installed") : t("{n} skills installed", { n });
+      go.disabled = true;
+      go.textContent = t("Installing…");
+      let ok;
+      if (r.found) ok = await change("skills/install", { source: r.found.source, paths: [...r.pick], agents: r.agents }, done);
+      else {
+        // one at a time, as each card's Add does
+        const picked = g.skills.filter((x) => r.pick.has("m:" + x.skillId));
+        ok = true;
+        for (const [i, x] of picked.entries()) {
+          if (!await change("market/skill", { source: x.source, id: x.skillId, agents: r.agents }, i === picked.length - 1 ? done : "")) { ok = false; break; }
+          x.have = x.name;
+        }
+      }
+      if (ok) { closeLibModal(true); drawMarket("skills"); }
+      else if (go.isConnected) syncGo();
+    }
+    modal = { save: () => { if (!go.disabled) go.click(); } };
+    openLib(ed);
+    // the whole repository, as Find skills reads it; the list's picks
+    // carried over by the folder name the market installs by
+    api("library/skills/probe", { source: g.repo }).then((p) => {
+      if (!ed.isConnected) return;
+      const byId = (id) => p.candidates.find((c) => c.name === id) || p.candidates.find((c) => c.path.split("/").pop() === id);
+      const pick = new Set();
+      for (const k of r.pick) { const c = byId(k.slice(2)); if (c && !c.have) pick.add(c.path); }
+      if (!p.candidates.length) { r.error = t("No SKILL.md found there"); draw(); return; }
+      Object.assign(r, { found: p, pick });
+      drawList();
+      draw();
+    }, (e) => {
+      if (!ed.isConnected) return;
+      r.error = e.message;
+      draw();
+    });
   }
 
   // A package from Pi's market: who has it, or Install into a Pi (picked
