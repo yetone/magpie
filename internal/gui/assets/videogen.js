@@ -43,4 +43,28 @@ window.videoGenFill = function (r, s, keep) {
   const val = el("div", "val");
   val.append(b);
   r.append(who, val);
+  r.after(imageResRow(s, keep));
 };
+
+// imageResRow draws Image resolution, put after Video generation's row:
+// how large Magpie Image asks an image to be drawn when the agent names
+// no size (skingstyle48487 on X), the model's own, 1K, 2K or 4K, which
+// the gateway asks each vendor for in its own field
+function imageResRow(s, keep) {
+  const r = el("div", "row pref"), tiers = [["", "Automatic"], ["1K", "1K"], ["2K", "2K"], ["4K", "4K"]], who = el("div", "who"), val = el("div", "val"), n = t("Image resolution");
+  r.id = "imageResolutionRow";
+  who.append(el("div", "name", n), el("div", "sub wraps", t("How large images are drawn when the agent names no size. A model that can't draw that large draws at its own")));
+  const cur = tiers.find(([v]) => v === (s.imageResolution || "")) || tiers[0], b = el("button", "sess-pick image-resolution");
+  b.type = "button";
+  b.title = n;
+  menuOpener(b);
+  b.append(el("span", "", t(cur[1])), svg(CHEV, 11, 1.6));
+  b.onclick = (e) => {
+    e.stopPropagation();
+    if (b.classList.contains("open")) return closeProtoMenu();
+    openProtoMenu(b, tiers.map(([v, name]) => ({ v, name, note: "", literalName: !!v })), cur[0], (v) => v !== cur[0] && savePrefs({ ...keep, imageResolution: v }), "Image resolution", "sess-menu", "right");
+  };
+  val.append(b);
+  r.append(who, val);
+  return r;
+}

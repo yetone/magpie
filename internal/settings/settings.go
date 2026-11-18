@@ -637,6 +637,11 @@ type Settings struct {
 	// than 5): from 1 to ImageTimeoutMost, 0 for ImageTimeoutDefault.
 	// ImageWait reads it.
 	ImageTimeout int `json:"imageTimeout,omitempty"`
+	// ImageResolution is the resolution the image MCP asks an image to be
+	// drawn at when the agent names no size of its own (skingstyle48487 on
+	// X): one of ImageResolutions, "" for the model's own. The gateway
+	// asks each vendor for it in its own field (gateway's draw_tier.go).
+	ImageResolution string `json:"imageResolution,omitempty"`
 	// ClassifyTimeout is how long, in seconds, a routing group's classifier
 	// is given to say which intent a turn is (#2934: a Kiro subscription's
 	// haiku needed more than 8, the default then): from 1 to ClassifyTimeoutMost, 0 for
@@ -1612,6 +1617,8 @@ var (
 	// UpdateChannels are UpdateChannel's values: every version, Daily,
 	// Stable.
 	UpdateChannels = []string{"", UpdateDaily, UpdateStable}
+	// ImageResolutions are ImageResolution's values; "" is the model's own
+	ImageResolutions = []string{"", "1K", "2K", "4K"}
 	// UpdateEveries are UpdateEvery's values, in minutes.
 	UpdateEveries = []int{30, 60, 360, 1440}
 	// TextSizes are TextSize's values, in percent. None is under 100: the
@@ -2670,6 +2677,9 @@ func saveOwn(s Settings, recording, reads bool) error {
 	}
 	if s.ImageTimeout < 0 || s.ImageTimeout > ImageTimeoutMost {
 		return fmt.Errorf("image generation is given from 1 to %d minutes, or 0 for %d, not %d", ImageTimeoutMost, ImageTimeoutDefault, s.ImageTimeout)
+	}
+	if !slices.Contains(ImageResolutions, s.ImageResolution) {
+		return fmt.Errorf("an image is drawn at 1K, 2K, 4K or the model's own resolution (empty), not %q", s.ImageResolution)
 	}
 	if s.ClassifyTimeout < 0 || s.ClassifyTimeout > ClassifyTimeoutMost {
 		return fmt.Errorf("a routing group's classifier is given from 1 to %d seconds, or 0 for %d, not %d", ClassifyTimeoutMost, ClassifyTimeoutDefault, s.ClassifyTimeout)

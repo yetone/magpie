@@ -88,6 +88,7 @@ func ImageToolProps(images string) map[string]any {
 		"quality":          map[string]any{"type": "string", "description": "low, medium, high, xhigh, max or auto, for models that take it (xhigh and max: GPT Image 2.5 and later)."},
 		"complexity":       map[string]any{"type": "string", "description": "low, medium or high: how much detail GPT Image 2.6 and later put in (default high)."},
 		"background":       map[string]any{"type": "string", "description": "transparent, opaque or auto, for models that take it."},
+		"resolution":       map[string]any{"type": "string", "enum": []string{"1K", "2K", "4K", "auto"}, "description": "How large to draw: 1K, 2K or 4K on the long side, with size's aspect ratio, for models that take it; auto for the model's own. Default: the user's setting."},
 	}
 }
 
@@ -297,12 +298,17 @@ func (s *Server) imageMCPDraw(r *http.Request, raw json.RawMessage) map[string]a
 		Quality    string   `json:"quality"`
 		Complexity string   `json:"complexity"`
 		Background string   `json:"background"`
+		Resolution string   `json:"resolution"`
 	}
 	if err := json.Unmarshal(raw, &a); err != nil {
 		return toolResult("invalid arguments: "+err.Error(), true)
 	}
 	if strings.TrimSpace(a.Prompt) == "" {
 		return toolResult(GenerateImageTool+" needs a prompt", true)
+	}
+	tier, err := ImageTier(a.Resolution, a.Size)
+	if err != nil {
+		return toolResult(err.Error(), true)
 	}
 	req := map[string]any{"prompt": a.Prompt, "n": max(1, min(a.N, maxDrawings)), "response_format": "b64_json"}
 	// a model named goes to the images API named, so a gateway key's
@@ -314,7 +320,7 @@ func (s *Server) imageMCPDraw(r *http.Request, raw json.RawMessage) map[string]a
 		}
 		req["model"] = ref
 	}
-	for k, v := range map[string]string{"size": a.Size, "quality": a.Quality, "complexity": a.Complexity, "background": a.Background} {
+	for k, v := range map[string]string{"size": a.Size, "quality": a.Quality, "complexity": a.Complexity, "background": a.Background, "resolution": tier} {
 		if v != "" {
 			req[k] = v
 		}
@@ -353,14 +359,14 @@ func (s *Server) imageMCPDraw(r *http.Request, raw json.RawMessage) map[string]a
 		defer cancel()
 		rec := &replyRecorder{header: http.Header{}}
 		s.images(edit)(rec, in.WithContext(ctx))
-		return s.imageMCPDrawn(rec, who.KeyID, base)
+		return s.imageMCPDrawn(rec, who.KeyID, base, AskedTier(tier, a.Size))
 	})
 	return s.imageMCPAwait(r, j)
 }
 
 // imageMCPDrawn is the tool result of the images API's answer: each image
 // in it and at its URL.
-func (s *Server) imageMCPDrawn(rec *replyRecorder, key, base string) map[string]any {
+func (s *Server) imageMCPDrawn(rec *replyRecorder, key, base, tier string) map[string]any {
 	var out struct {
 		Model string `json:"model"`
 		Data  []struct {
@@ -382,7 +388,7 @@ func (s *Server) imageMCPDrawn(rec *replyRecorder, key, base string) map[string]
 		return toolResult("no image came back", true)
 	}
 	var content []any
-	var urls, lost, revised []string
+	var urls, lost, revised, pixels []string
 	var files []MadeFile
 	for i, d := range out.Data {
 		var img []byte
@@ -413,6 +419,7 @@ func (s *Server) imageMCPDrawn(rec *replyRecorder, key, base string) map[string]
 		if !strings.HasPrefix(mt, "image/") {
 			mt = "image/png"
 		}
+		pixels = append(pixels, PixelsOf(img))
 		urls = append(urls, base+ImageMCPFiles+s.imageMCPKeepFile(img, mt, key))
 		inline := len(img) <= imageMCPInline
 		if inline {
@@ -435,6 +442,7 @@ func (s *Server) imageMCPDrawn(rec *replyRecorder, key, base string) map[string]
 	for _, u := range urls {
 		fmt.Fprintf(&b, "- %s\n", u)
 	}
+	b.WriteString(PixelsSaid(pixels, tier))
 	if len(content) < len(urls) {
 		fmt.Fprintf(&b, "Images over %d MB are only at their URL.\n", imageMCPInline>>20)
 	}

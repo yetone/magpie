@@ -21770,7 +21770,8 @@ function renderImageGen(s, keep, box) {
   val.append(b);
   r.append(who, val);
   box.append(r);
-  // Video generation's row (#1399), drawn by videogen.js
+  // Video generation's row (#1399), drawn by videogen.js, and Image
+  // resolution's after it (skingstyle48487 on X)
   if (v !== "off") {
     const vr = el("div", "row pref");
     box.append(vr);

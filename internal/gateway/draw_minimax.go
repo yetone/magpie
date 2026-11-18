@@ -131,6 +131,9 @@ func minimaxH3Body(model string, d drawing) ([]byte, string, error) {
 	}
 	req := map[string]any{"model": model, "prompt": d.Prompt, "n": min(max(d.N, 1), 10)}
 	minimaxH3Size(req, d.Size)
+	if _, px := req["size"]; d.Tier != "" && !px {
+		req["area"] = d.Tier
+	}
 	switch f := strings.ToLower(d.Format); f {
 	case "png", "jpeg", "jpg", "webp":
 		req["output_format"] = f

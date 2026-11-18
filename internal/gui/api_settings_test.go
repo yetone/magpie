@@ -231,6 +231,36 @@ func TestSettingsImageTimeout(t *testing.T) {
 	}
 }
 
+// The resolution an image is drawn at (skingstyle48487 on X) is set by
+// the Settings page, "" for the model's own, kept by a save that doesn't
+// send it (the page's other saves don't), and refused when not a tier.
+func TestSettingsImageResolution(t *testing.T) {
+	h := t.TempDir()
+	t.Setenv("HOME", h)
+	t.Setenv("USERPROFILE", h)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
+	handler := Handler(nil, nil)
+	for _, x := range []struct {
+		body string
+		code int
+		want string
+	}{
+		{`{"theme":"dark","imageResolution":"4K"}`, http.StatusOK, "4K"},
+		{`{"theme":"light"}`, http.StatusOK, "4K"},
+		{`{"theme":"light","imageResolution":"8K"}`, http.StatusBadRequest, "4K"},
+		{`{"theme":"light","imageResolution":""}`, http.StatusOK, ""},
+	} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest("POST", "/api/settings", strings.NewReader(x.body)))
+		if rec.Code != x.code {
+			t.Fatalf("%s: %d %s", x.body, rec.Code, rec.Body)
+		}
+		if got := settings.Load().ImageResolution; got != x.want {
+			t.Fatalf("%s: imageResolution %q", x.body, got)
+		}
+	}
+}
+
 // How long a routing group's classifier is given (#2934) is set by the
 // Settings page, 0 for the default 8 seconds, kept by a save from a page
 // that doesn't send it, and refused past 60 with the saved value kept.

@@ -40,7 +40,7 @@ func TestImageMCPKeepsDrawingsOffTheHeap(t *testing.T) {
 	for range 3 {
 		rec := &replyRecorder{header: http.Header{}}
 		rec.body.Write(body)
-		res := s.imageMCPDrawn(rec, "", "http://127.0.0.1:3425")
+		res := s.imageMCPDrawn(rec, "", "http://127.0.0.1:3425", "")
 		if res["isError"] == true {
 			t.Fatalf("%v", res)
 		}
