@@ -1631,7 +1631,8 @@ body.masked :hover > .acct-eye, body.masked .pq-card:hover .acct-eye, body.maske
 /* always there, quiet until its row is pointed at (skingstyle48487: a
    button shown only on hover went unfound) */
 .led-spd-check { height: 20px; padding: 0 2px; font-size: 11px; color: var(--muted); }
-.led-spd tr:hover .led-spd-check, .led-spd-check:focus-visible { color: var(--ctl-fg); }
+.led-spd tr:hover .led-spd-check { color: var(--ctl-fg); }
+.led-spd-check:focus-visible { color: var(--ctl-fg); }
 .led-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; margin-bottom: 8px; }
 .led-bar .grow { flex: 1; }
 .led-by { font-size: 11.5px; color: var(--muted); }
