@@ -53,13 +53,6 @@ const Scheme = "magpie"
 // ParseImport reads an import link into the provider it describes.
 func ParseImport(link string) (Provider, error) {
 	u, err := url.Parse(strings.TrimSpace(link))
-	if err == nil && strings.EqualFold(u.Scheme, CCSwitchScheme) {
-		q, err := ccSwitchQuery(u)
-		if err != nil {
-			return Provider{}, err
-		}
-		return importFromQuery(q)
-	}
 	if err != nil || !strings.EqualFold(u.Scheme, Scheme) {
 		return Provider{}, errors.New("not a magpie:// link")
 	}
@@ -74,8 +67,7 @@ func ParseImport(link string) (Provider, error) {
 }
 
 // importFromQuery is ParseImport after the link's shape is known: q holds
-// the parameters in the list above, from a magpie:// link or translated from
-// a ccswitch:// one (ccSwitchQuery).
+// the parameters in the list above.
 func importFromQuery(q url.Values) (Provider, error) {
 	var err error
 	get := func(k string) string { return strings.TrimSpace(q.Get(k)) }
