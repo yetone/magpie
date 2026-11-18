@@ -7896,7 +7896,10 @@ function concurrencyField(p) {
     b.max = String(max);
     b.step = "1";
     b.inputMode = "numeric";
-    b.oninput = () => { draft[k] = b.value; };
+    b.oninput = () => {
+      draft[k] = b.value;
+      if (k === "concurrency") document.querySelectorAll(".alane").forEach(laneText);
+    };
   }
   return [
     ...field(t("Concurrency"), box, (plugin ? t("Over it, requests queue and go out in order; empty takes the plugin's {n}, 0 is no limit", { n: plugin }) : t("Over it, requests queue and go out in order; 0 or empty is no limit"))),
@@ -14642,9 +14645,14 @@ function laneOwnOf(p, ref) {
   const k = String(ref).toLowerCase();
   return Object.prototype.hasOwnProperty.call(m, k) ? m[k] : null;
 }
+// laneBase: the provider's limit, as typed in its open editor before Save
+function laneBase(p) {
+  const d = draft && editing === p?.id ? concurrencyOfDraft() : undefined;
+  return d != null ? d : d === null ? p?.pluginConcurrency || 0 : p?.maxConcurrency != null ? p.maxConcurrency : p?.pluginConcurrency || 0;
+}
 function laneLimitOf(p, ref) {
   const own = laneOwnOf(p, ref);
-  return own != null ? own : p?.maxConcurrency != null ? p.maxConcurrency : p?.pluginConcurrency || 0;
+  return own != null ? own : laneBase(p);
 }
 function laneText(pill) {
   const p = providers?.providers?.find((x) => x.id === pill.dataset.provider);
@@ -14681,7 +14689,7 @@ function laneLimitPill(p, ref, who, name) {
   pill.onclick = (e) => {
     e.stopPropagation();
     if (pill.classList.contains("open")) return closeProtoMenu();
-    const base = p.maxConcurrency != null ? p.maxConcurrency : p.pluginConcurrency || 0;
+    const base = laneBase(p);
     const opts = [{ v: "default", name: "Provider's", note: base ? t("{n} at once", { n: base }) : t("No limit") }, { v: 0, name: "No limit", note: "Any number at once" }];
     const nums = own == null || own === 0 || LANE_LIMITS.includes(own) ? LANE_LIMITS : [...LANE_LIMITS, own].sort((a, b) => a - b);
     for (const n of nums) opts.push({ v: n, name: String(n), note: "", literalName: true });

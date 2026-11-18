@@ -72,12 +72,12 @@ function serve(lang, posts, lanes) {
 
 const words = {
   en: {
-    busy: "1/1 running · 2 queued", running: "3 running", one: "1 at once", two: "2 at once", three: "3 at once", four: "4 at once", seven: "7 at once", none: "No limit at once",
+    busy: "1/1 running · 2 queued", running: "3 running", one: "1 at once", two: "2 at once", three: "3 at once", four: "4 at once", five: "5 at once", seven: "7 at once", none: "No limit at once",
     menu: "Requests at once", def: "Provider's", other: "Other…", save: "Save", queue: "Queue size", wait: "Queue wait",
     badQueue: "Queue size: a whole number from 0 to 10000",
   },
   zh: {
-    busy: "1/1 运行中 · 2 排队", running: "3 运行中", one: "并发 1", two: "并发 2", three: "并发 3", four: "并发 4", seven: "并发 7", none: "并发不限",
+    busy: "1/1 运行中 · 2 排队", running: "3 运行中", one: "并发 1", two: "并发 2", three: "并发 3", four: "并发 4", five: "并发 5", seven: "并发 7", none: "并发不限",
     menu: "同时请求数", def: "沿用提供商", other: "其他…", save: "保存", queue: "排队上限", wait: "排队等待",
     badQueue: "排队上限：0 到 10000 的整数",
   },
@@ -235,6 +235,27 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.waitForTimeout(250);
       assert.equal(await me.isVisible(), false, "idle with no limit: under ⋯ again");
       assert.equal(await pill(page, "Spare@Example.com").textContent(), w.four);
+      assert.deepEqual(errors, []);
+    });
+
+    test(`${engine} ${lang}: a key on the provider's limit shows the Concurrency typed before Save`, async (t) => {
+      // the pill read the saved limit while the editor said another
+      const lanes = { now: {}, reads: 0 };
+      const { page, errors, posts } = await open(t, "Relay", lanes);
+      const box = page.locator(".editor input.concurrency");
+      assert.equal(await pill(page, "k2").textContent(), w.two);
+      await box.fill("5");
+      assert.equal(await pill(page, "k2").textContent(), w.five, "the provider's limit as typed");
+      assert.equal(await pill(page, "k1").textContent(), w.one, "its own limit stays");
+      await pill(page, "k2").click();
+      await menu(page).waitFor();
+      assert.match(await item(page, w.def).textContent(), new RegExp(w.five), "the menu's provider's limit as typed");
+      await page.keyboard.press("Escape");
+      await box.fill("");
+      assert.equal(await pill(page, "k2").textContent(), w.none, "empty is no limit");
+      await box.fill("2000");
+      assert.equal(await pill(page, "k2").textContent(), w.two, "typed wrong: the saved one");
+      assert.equal(posts.length, 0, "nothing saved");
       assert.deepEqual(errors, []);
     });
 
