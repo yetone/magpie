@@ -1360,8 +1360,12 @@ func TestCodexOwnSignInTellsWhereItsTimeWent(t *testing.T) {
 	if n == nil {
 		t.Fatal("no timing for a turn on Codex's own sign-in")
 	}
+	// The backend starts its hold once it has read the body, which can be
+	// before the client's WroteRequest fires: the hold is in Send and Wait
+	// together, and most of it in Wait (on a busy Linux box, Send 4 and
+	// Wait 196.9 for a 200ms hold).
 	holdMs := float64(hold.Milliseconds())
-	if n.Asks != 1 || n.Wait < holdMs-1 || n.Head < n.Wait {
+	if n.Asks != 1 || n.Send+n.Wait < holdMs-1 || n.Wait < holdMs/2 || n.Head < n.Wait {
 		t.Fatalf("timing %+v for a %v hold", *n, hold)
 	}
 }
