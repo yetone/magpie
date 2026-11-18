@@ -34,6 +34,17 @@ const dailyWords = {
   de: { newest: "Aktuell auf Täglich · Unter Jede Version ist 0.1.410 erschienen", daily: "Aktuell auf Täglich" },
 };
 
+// newer than the channel's pick (realfxw on X: 0.1.4445 on Daily's
+// 0.1.4395): the row says nothing comes until the channel passes it,
+// not that it is up to date, and still offers the newest
+const aheadWords = {
+  en: { daily: "Newer than Daily's 0.1.390; it updates once Daily passes it · 0.1.410 is out on Every version", stable: "Newer than Stable's 0.1.390; it updates once Stable passes it" },
+  zh: { daily: "比每日版的 0.1.390 新，每日版超过它后才会更新 · 尝鲜版已有 0.1.410", stable: "比稳定版的 0.1.390 新，稳定版超过它后才会更新" },
+  "zh-TW": { daily: "比每日版的 0.1.390 新，每日版超過它後才會更新 · 搶先版已有 0.1.410", stable: "比穩定版的 0.1.390 新，穩定版超過它後才會更新" },
+  ja: { daily: "デイリー版の 0.1.390 より新しいため、デイリー版が追い越すまで更新されません · 先行版では 0.1.410 が出ています", stable: "安定版の 0.1.390 より新しいため、安定版が追い越すまで更新されません" },
+  de: { daily: "Neuer als 0.1.390 auf Täglich; Updates kommen, sobald Täglich diese Version überholt · Unter Jede Version ist 0.1.410 erschienen", stable: "Neuer als 0.1.390 auf Stabil; Updates kommen, sobald Stabil diese Version überholt" },
+};
+
 function settingsPayload(lang, ctl) {
   const s = {
     theme: "light", lang, tray: "panel", quotaLeft: false, currency: "usd",
@@ -69,7 +80,7 @@ function server(lang, ctl) {
     }
     if (url.pathname === "/api/update") {
       if (ctl.channel !== "stable" && ctl.channel !== "daily") return json({ state: "latest", current: "0.1.400", latest: "0.1.410" });
-      return json({ state: "latest", current: "0.1.400", latest: "0.1.390", channel: ctl.channel, ...(ctl.newest ? { newest: ctl.newest } : {}) });
+      return json({ state: "latest", current: "0.1.400", latest: "0.1.390", channel: ctl.channel, ...(ctl.newest ? { newest: ctl.newest } : {}), ...(ctl.ahead ? { ahead: true } : {}) });
     }
     if (url.pathname === "/api/plugins") return json({ plugins: [] });
     if (url.pathname === "/api/usage/quotas") return json([]);
@@ -159,6 +170,29 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await openPart(page, "about");
           await page.waitForFunction((s) => document.querySelector("#about .row.pref .sub.say")?.textContent === s, dailyWords[lang].daily);
           assert.equal(await row.locator("button", { hasText: w.go }).count(), 0);
+
+          // ahead of Daily, the newest out: said, the switch offered, and
+          // the row fits at 420 without a sideways scroll
+          ctl.ahead = true;
+          ctl.newest = "0.1.410";
+          await page.reload();
+          await settingsDrawn(page);
+          await openPart(page, "about");
+          await page.waitForFunction((s) => document.querySelector("#about .row.pref .sub.say")?.textContent === s, aheadWords[lang].daily);
+          await row.locator("button", { hasText: w.go }).waitFor();
+          await showRow(page, row);
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true, "no sideways scroll ahead of Daily");
+          const aheadRight = await row.locator("button", { hasText: w.go }).evaluate((b) => b.getBoundingClientRect().right);
+          assert.ok(aheadRight <= width, `the button ends at ${aheadRight}, past ${width}`);
+          // ahead of Stable, nothing newer
+          ctl.channel = "stable";
+          ctl.newest = "";
+          await page.reload();
+          await settingsDrawn(page);
+          await openPart(page, "about");
+          await page.waitForFunction((s) => document.querySelector("#about .row.pref .sub.say")?.textContent === s, aheadWords[lang].stable);
+          assert.equal(await row.locator("button", { hasText: w.go }).count(), 0);
+          ctl.ahead = false;
           assert.deepEqual(errors, []);
         });
       }

@@ -227,7 +227,11 @@ func updateCmd(args []string) error {
 	}
 	if !update.Newer(rel.Version, version) {
 		if update.Released(version) {
-			if ch := update.Channel(); ch != "" {
+			if ch := update.Channel(); ch != "" && update.Newer(version, rel.Version) {
+				// newer than the channel's: nothing is installed until the
+				// channel passes it (realfxw on X), which "up to date" hid
+				fmt.Println("magpie", version, "is newer than the "+ch+" channel's "+rel.Version+muted.Render("; it updates once "+ch+" passes it, or now with `magpie update channel every`"))
+			} else if ch != "" {
 				fmt.Println(green.Render("✓"), "magpie", version, muted.Render("is up to date on the "+ch+" channel ("+ch+" is "+rel.Version+")"))
 			} else {
 				fmt.Println(green.Render("✓"), "magpie", version, muted.Render("is the latest"))

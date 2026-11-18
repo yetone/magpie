@@ -314,3 +314,67 @@ func TestStableUpToDateNamesNewest(t *testing.T) {
 		t.Fatalf("every version: %v, asked %d times", j, asked.Load()-before)
 	}
 }
+
+// A version newer than its channel's (realfxw on X): 0.1.4445 on Daily,
+// whose pick was 0.1.4395, with 0.1.4472 out on every version. The row
+// said "up to date on Daily", nothing was installed until Daily passed
+// 0.1.4445, and the user restarted again and again for an update that
+// wasn't coming. The answer now says it is ahead (the row: newer than
+// Daily's, it updates once Daily passes it), and still names the newest.
+// The same version as the channel's, or every version, isn't ahead.
+func TestUpdateAheadOfChannel(t *testing.T) {
+	sandboxHome(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		v := "0.1.4472"
+		if r.URL.Query().Get("channel") == "daily" {
+			v = "0.1.4395"
+		}
+		json.NewEncoder(w).Encode(update.Release{Version: v, Notes: "- x"})
+	}))
+	defer srv.Close()
+	t.Setenv("MAGPIE_UPDATE_FEED", srv.URL)
+	oldV := Version
+	defer func() { Version = oldV }()
+	exe, err := update.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	o := updates
+	defer func() { updates = o }()
+	// as the page reads it
+	check := func(channel, v string) map[string]any {
+		t.Helper()
+		s := settings.Load()
+		s.UpdateChannel, s.NoAutoUpdate = channel, true
+		if err := settings.Save(s); err != nil {
+			t.Fatal(err)
+		}
+		Version = v
+		u := &updater{exe: exe}
+		u.self, _ = os.Stat(exe)
+		updates = u
+		u.check()
+		for range 1000 {
+			if j := u.json(); j.State != "checking" && j.State != "downloading" {
+				var m map[string]any
+				b, _ := json.Marshal(j)
+				if err := json.Unmarshal(b, &m); err != nil {
+					t.Fatal(err)
+				}
+				return m
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		t.Fatalf("still %s", u.json().State)
+		return nil
+	}
+	if j := check(settings.UpdateDaily, "0.1.4445"); j["state"] != "latest" || j["ahead"] != true || j["channel"] != "daily" || j["latest"] != "0.1.4395" || j["newest"] != "0.1.4472" {
+		t.Fatalf("ahead of Daily: %v", j)
+	}
+	if j := check(settings.UpdateDaily, "0.1.4395"); j["state"] != "latest" || j["ahead"] != nil || j["newest"] != "0.1.4472" {
+		t.Fatalf("Daily's own version: %v", j)
+	}
+	if j := check("", "0.1.4472"); j["state"] != "latest" || j["ahead"] != nil || j["channel"] != nil {
+		t.Fatalf("every version: %v", j)
+	}
+}

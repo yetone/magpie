@@ -22719,10 +22719,10 @@ async function renderUpdate(r, u) {
       again(1000);
       break;
     case "latest":
-      // Stable's and Daily's say the newest out (ylspcm on X)
-      sub.textContent = u.channel === "daily"
-        ? t(u.newest ? "Up to date on Daily · {v} is out on Every version" : "Up to date on Daily", { v: u.newest })
-        : u.newest ? t("Up to date on Stable · {v} is out on Every version", { v: u.newest }) : t(u.channel ? "Up to date on Stable" : "Up to date");
+      // Stable's and Daily's say the newest out (ylspcm on X); newer than
+      // the channel's, that nothing comes until it passes (realfxw on X)
+      sub.textContent = t(u.ahead ? "Newer than {c}'s {d}; it updates once {c} passes it" : u.channel == "daily" ? "Up to date on Daily" : u.channel ? "Up to date on Stable" : "Up to date", { c: t(u.channel == "daily" ? "Daily" : "Stable"), d: u.latest }) + (u.newest ? " · " + t("{v} is out on Every version", { v: u.newest }) : "");
+      if (u.ahead) sub.classList.add("wraps");
       if (u.newest) btn(t("Switch to Every version"), () => savePrefs({ ...prefsKeep(prefs), updateChannel: "" }));
       btn(t("Check"), check);
       break;

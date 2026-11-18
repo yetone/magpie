@@ -3590,10 +3590,12 @@ version channel first. A release marked urgent goes to Stable at once.
 When Stable moves past several versions, What's new lists the notes of
 every version since yours as one list.
 
-A version installed from the site can be newer than Stable's; the app
-keeps it and waits until Stable passes it. While it waits, the Version
-row says *Up to date on Stable*, names the newest version out on Every
-version, and offers to switch to Every version.
+A version installed from the site, or kept from Every version when the
+channel changed, can be newer than Stable's or Daily's; the app keeps it
+and waits until the channel passes it. While it waits, the Version row
+says so (*Newer than Daily's 0.1.4395; it updates once Daily passes it*),
+names the newest version out on Every version, and offers to switch to
+Every version; `magpie update` says the same.
 
 The site's downloads offer Stable's version beside the newest
 (`usemagpie.ai/download/stable/<platform>`). A fresh install of it (no
