@@ -8,6 +8,7 @@
 // always shown. app.js imports this when Settings draws, so it weighs
 // nothing on the core.
 import "./navorder.js";
+import "./guideback.js";
 const navPagesOf = (nav) => [...nav.querySelectorAll(":scope > button[data-view]")]
   .filter((b) => !(gatewayMode && GATEWAY_HIDES.includes(b.dataset.view)) && !featureHides(b))
   .map((b) => ({ v: b.dataset.view, name: (b.querySelector("span[data-t]") || b.querySelector("span"))?.textContent || b.textContent.trim(), plugin: "pluginPage" in b.dataset }));
@@ -108,6 +109,7 @@ function navPagesMenu(anchor) {
 }
 
 window.renderNavPages = function () {
+  window.guideBack(); // Get started, beside these (guideback.js)
   const row = $("#navPagesRow"), nav = $("#nav");
   if (!row) return;
   // only a window has a sidebar: the panel has no #nav (#6139)

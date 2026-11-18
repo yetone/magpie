@@ -10,7 +10,8 @@
 // Renzexi01 on X (一进来就这么复杂): while the card shows, the agents'
 // list is folded under it, behind "Show all {n} agents", since its second
 // step names the ones found here; one connected, or the card put away,
-// and the list is in view as before.
+// and the list is in view as before. Put away, its line says Settings ›
+// General brings it back, and a row there does (the window).
 // Both engines, a wide and a narrow window and the panel, every language.
 // No backend, the API is faked here.
 const assert = require("node:assert/strict");
@@ -59,6 +60,7 @@ function server(lang, w, posts) {
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
     if (req.method() === "POST") posts.push(url.pathname + url.search);
     if (url.pathname === "/api/state") return json(state());
+    if (url.pathname === "/api/settings") return json(settings());
     if (url.pathname === "/api/settings/guide") {
       w.hidden = !!req.postDataJSON().hidden;
       return json(settings());
@@ -223,6 +225,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator(".guide").waitFor({ state: "detached" });
         assert.ok(posts.includes("/api/settings/guide"));
         assert.equal(w.hidden, true);
+        assert.equal(await page.locator("#status").textContent(), await page.evaluate(() => t("Get started hidden; Settings › General brings it back")));
         // put away, the list is in view as it was before there was a card
         assert.equal(await folded(page), 0);
         assert.deepEqual(await tops(page), top, "no click moved the page");
@@ -236,6 +239,29 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await again.page.locator(".guide").count(), 0);
         assert.equal(await again.page.evaluate(() => { try { return Object.keys(localStorage).filter((k) => /guide/i.test(k)).length; } catch { return 0; } }), 0, "nothing kept in localStorage");
         assert.deepEqual(again.page.errors, []);
+        if (layout.name === "panel") return;
+
+        // and brought back from Settings › General, where its hide said:
+        // a row there only while it is away and would show
+        const pg = again.page, tr = (s) => pg.evaluate((s) => t(s), s);
+        await pg.goto("http://magpie.test/?view=settings&tab=general");
+        const back = pg.locator("#guideBackRow");
+        await back.locator("button").waitFor();
+        assert.equal(await back.locator(".name").textContent(), await tr("Get started"));
+        // Settings' search finds it by its name
+        await pg.locator("#setQ").fill((await tr("Get started")).toLowerCase());
+        await pg.waitForTimeout(150);
+        assert.ok(await back.isVisible(), "the search finds the row");
+        await pg.locator("#setQ").fill("");
+        const before = await pg.locator("#view-settings").evaluate((v) => v.scrollTop);
+        await back.locator("button").click();
+        await back.waitFor({ state: "hidden" });
+        assert.equal(w.hidden, false);
+        assert.equal(await pg.locator("#status").textContent(), await tr("Get started is back on the Agents page"));
+        assert.equal(await pg.locator("#view-settings").evaluate((v) => v.scrollTop), before, "no click moved the page");
+        await pg.goto("http://magpie.test" + layout.url);
+        await pg.locator("#agentsLead .guide").waitFor();
+        assert.deepEqual(pg.errors, []);
       });
     }
   }
