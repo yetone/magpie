@@ -339,6 +339,8 @@ Every other call but `init` is cancellable too (#4678): a models list, a usage r
 
 A plugin `fetch` has a bound before its head as well as between its body's bytes (`bodyIdleWait`, 30 minutes, in [`host.go`](../../internal/plugin/host.go); `headRead` for the head). A plugin whose vendor took the request and never answered (the Devin plugin returns its head only with Devin's first words; wu_chong4136 on X waited 10 to 20 minutes) is given up on with an `abort`, and the agent gets the gateway's retryable 502 (an SSE error on a stream) instead of keepalives for as long as the plugin waits. A plugin can bound its own vendor tighter: the Devin plugin gives up after 5 minutes of quiet with a 504 (0.1.45, the Devin mover's `min`).
 
+A completed fetch still drains its queued response head before interpreting the terminal result (`headRead`). The head and completion may arrive between the reader's initial empty-queue check and its result check; that short reply must not become “the plugin answered no response”. The terminal result is carried into the body, preserving its bytes and any final error (`TestHostHeadArrivesWithCompletion`).
+
 The GUI's plugin integration includes `subOf`, `pluginSubs`, and `startPluginSignIn`. A change to sign-in or provider presentation must follow these paths as well as the built-in paths it affects.
 
 ## Verification
