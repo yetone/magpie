@@ -6269,14 +6269,14 @@ function renderProviders(quiet) {
     // right-click: Move to Top, Move Up, Move Down, Move to Bottom (#1614)
     if (!p.off) row.oncontextmenu = (ev) => { ev.preventDefault(); openProviderMenu(row.querySelector(".pv-handle"), p, { x: ev.clientX, y: ev.clientY }); };
     row.onclick = async () => {
-      if (providerDirty() && !(await confirmDiscard())) return;
+      if (!await leaveDraft()) return;
       // a list drawn before the fresh one is in (#1519) leaves out what the
       // editor shows (headers, proxies): the row opens on the fresh one
       if (providers.last) {
         try { await loadProviders(); } catch (e) { statusErr(e); return; }
         if (!providers.providers.some((x) => x.id === p.id)) return;
       }
-      editing = open ? null : p.id; draft = null; renderProviders();
+      reEdit(open ? null : p.id);
     }; // the preset sheet stays as it is under the dialog
     list.append(row);
     if (open) dialog = renderEditor(p);
@@ -6367,7 +6367,7 @@ function openProviderMenu(anchor, p, at) {
 // pvpick.js, imported when Select is first clicked, so they weigh nothing
 // on the core. pvSel is the ids picked while picking, null otherwise.
 let pvSel = null, pvSelLast = null;
-$("#pvSelect").onclick = async () => (!providerDirty() || await confirmDiscard()) && import("./pvpick.js").then(() => startPicking(), statusErr);
+$("#pvSelect").onclick = async () => await leaveDraft() && import("./pvpick.js").then(() => startPicking(), statusErr);
 
 // Providers' search (#1614): the rows saying every word, on and off, by their
 // text, ids, addresses, users and keys; a word they don't say is a model's
@@ -6569,7 +6569,7 @@ function renderMovable() {
   // the editor opens over the list: the page itself doesn't move
   review.onclick = () => {
     if (ps.length > 1) { openPlugins(); return; }
-    editing = ps[0].id; draft = null; renderProviders();
+    reEdit(ps[0].id);
   };
   box.append(depLine("", ps.length > 1 ? t("These built-in subscriptions are deprecated: {names}", { names }) : t("{name}'s built-in subscription is deprecated", { name: names }), [t(DEPRECATED_WHY), t("Moving keeps your accounts, models and agents as they are.")].join(locale === "zh" || locale === "zh-TW" || locale === "ja" ? "" : " "), hide, review));
 }
@@ -7173,7 +7173,7 @@ function pickForAgent(a, p, btn, ev) {
   if (!field.options.some((o) => pre.test(o.value))) {
     ev.stopPropagation();
     status(t("{p} exposes no models yet — pick some below", { p: p.name }), "warn");
-    editing = p.id; draft = null; renderProviders();
+    reEdit(p.id);
     return;
   }
   openPicker(agent, field, btn, ev, (o) => pre.test(o.value));
@@ -7244,7 +7244,7 @@ function renderAdd() {
   c.append(svg(PLUS, 11, 1.8), t("Custom provider"));
   c.dataset.pick = "custom";
   c.title = t("any OpenAI or Anthropic compatible URL");
-  c.onclick = () => { editing = { custom: true }; draft = null; renderProviders(); };
+  c.onclick = () => reEdit({ custom: true });
   const imp = el("button", "text", t("Import…"));
   imp.title = t("Bring over providers set up in other apps");
   imp.onclick = openImportApps;
@@ -7438,7 +7438,7 @@ async function pluginSignIn(id, e) {
 
 // openProvider: a provider opened in the Providers tab
 async function openProvider(id) {
-  if (view === "providers" && providerDirty() && !(await confirmDiscard())) return;
+  if (view === "providers" && !await leaveDraft()) return;
   if (!await show("providers")) return;
   closeModal();
   adding = false; editing = id; draft = null; presetQuery = "";
@@ -7518,9 +7518,9 @@ function tile(pr) {
     markAdded(b);
     b.title = t("{name} is already added — open it", { name: pr.name });
     const have = presetProvider(pr);
-    b.onclick = () => { editing = have?.id ?? pr.id; draft = null; renderProviders(); };
+    b.onclick = () => reEdit(have?.id ?? pr.id);
   } else {
-    b.onclick = () => { editing = { preset: pr.id }; draft = null; renderProviders(); };
+    b.onclick = () => reEdit({ preset: pr.id });
   }
   return b;
 }
@@ -7766,6 +7766,10 @@ function confirmRemoval(name, consequence = "This removes the selected item. Con
 function confirmDiscard() {
   return confirmAction(t("Discard"), t("Discard unsaved changes? Your changes will be lost."), t("Discard"));
 }
+// opens x's editor (a provider id, { preset } or { custom }) with a new draft
+function reEdit(x) { editing = x; draft = null; renderProviders(); }
+// true when the open provider draft has nothing to lose, or the reader lets it go
+const leaveDraft = async () => !providerDirty() || await confirmDiscard();
 async function cancelEdit(keep) {
   if ((providerDirty() || ((importing || importingApps) && modalFormDirty())) && !(await confirmDiscard())) return false;
   if (keep !== true) dropSigningIn(editing);
@@ -10404,13 +10408,13 @@ function drawEditor(p, presetID) {
     // another key of the vendor, or the same key for another workspace
     const more = el("button", "text", t("Add another {name}", { name: pr.name }));
     more.title = vertex ? t("One more {name} provider, with its own project, credentials, headers and models", { name: pr.name }) : t("One more {name} provider, with its own key, headers and models", { name: pr.name });
-    more.onclick = () => { editing = { preset: pr.id }; draft = null; renderProviders(); };
+    more.onclick = async () => { if (await leaveDraft()) reEdit({ preset: pr.id }); };
     bar.append(more);
   }
   if (p) {
     const dup = el("button", "text", t("Duplicate"));
     dup.title = vertex ? t("A new provider with {name}'s project, credentials, headers and models, to change before adding", { name: p.name }) : t("A new provider with {name}'s URLs, key, headers, models and balance settings, to change before adding", { name: p.name });
-    dup.onclick = () => duplicateProvider(p);
+    dup.onclick = async () => { if (await leaveDraft()) duplicateProvider(p); };
     bar.append(dup);
   }
   bar.append(el("span", "grow"));
@@ -15957,7 +15961,7 @@ function atAddress(urls, origin) {
 $("#addProvider").onclick = (e) => {
   const view = $("#view-providers"), sheet = $("#addSheet");
   if (!adding) {
-    adding = true; editing = null; draft = null; renderProviders();
+    adding = true; reEdit(null);
     return unrollSheet(view, sheet, e);
   }
   if (!scrollOnPurpose(e, 700)) return;
