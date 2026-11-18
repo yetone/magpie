@@ -155,8 +155,14 @@ after adding.
 [internal/memory/digest.go](../../internal/memory/digest.go) renders one
 digest per scope within a budget (global 4000, project 1500, agent 1000,
 the whole 8000 characters), pinned and longer-lived kinds first, no memory
-cut in the middle. The text goes to every agent's vendor: it names neither
-magpie nor any vendor. Its header puts the project's own instruction files
+cut in the middle. A memory written in several lines keeps them, in its
+file, the digest and `memory_search`: the lines after the first are
+indented under its item (`memory.Indented`; _meouwu on X,
+`TestMultiLineMemoryKeepsItsLines`, `TestMemorySearchKeepsTheLines`). The
+dream's and distillation's lists for the model still run each memory into
+one line, which their replies are read by; the user's own memories are
+never rewritten from them (`Fixed`). The text goes to every agent's
+vendor: it names neither magpie nor any vendor. Its header puts the project's own instruction files
 (AGENTS.md and the like) and docs first: where a memory disagrees with
 them the agent follows the files and says which memory is out of date, and
 a project's rule or fact belongs in its files, memory keeping what holds
@@ -192,6 +198,9 @@ agents ticked under Instructions, unless `Instructions.NoMemory`
 A reply after a change carries `problem` when publishing the digest
 failed. The tab is in [plugins/library/client.js](../../internal/gui/assets/plugins/library/client.js)
 (`renderMemory`), tested by `internal/gui/tests/library-memory.test.cjs`.
+A memory's row, folded, shows its first line and an ellipsis when more
+follow (`firstLine`, suggestions too); open, it shows every line as written
+(`library-memory-lines.test.cjs`).
 Its Select puts a box on each memory listed: a click picks one, a
 Shift-click the range from the last one clicked, ↑ ↓ move between the
 boxes (Shift picks as it goes), ⌘A / Ctrl+A picks every one shown, Escape

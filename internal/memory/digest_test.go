@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -115,6 +116,56 @@ func TestDigestDefersToTheProjectsFiles(t *testing.T) {
 	for _, name := range []string{"magpie", "claude", "codex", "openai", "anthropic", "gemini"} {
 		if strings.Contains(strings.ToLower(head), name) {
 			t.Errorf("the header names %s", name)
+		}
+	}
+}
+
+// A memory the user writes in several lines keeps them: on save, on an
+// edit, in its file, and in the digest, where the lines after the first
+// are indented under its item (_meouwu on X: the line breaks were gone).
+func TestMultiLineMemoryKeepsItsLines(t *testing.T) {
+	fresh(t)
+	text := "Release steps:\n1. tag the commit\n2. push the tag by name\n\n   - never --tags"
+	m, _, err := Save(Input{Text: str(text + "\n"), Kind: str(Procedure), Scope: str(Global)}, FromUser, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Text != text {
+		t.Fatalf("saved %q, want %q", m.Text, text)
+	}
+	text += "\n3. wait for the assets"
+	if _, err := Edit(m.ID, Input{Text: str(text)}, true); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(in(m.ID + ".md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := decode(m.ID, b, time.Now()); err != nil || got.Text != text {
+		t.Fatalf("the file reads %q (%v), want %q", got.Text, err, text)
+	}
+	if got, _ := Get(m.ID); got.Text != text {
+		t.Fatalf("Get %q, want %q", got.Text, text)
+	}
+	if _, err := Publish(); err != nil {
+		t.Fatal(err)
+	}
+	d, _ := Digest("codex")
+	want := "How things are done:\n- Release steps:\n  1. tag the commit\n  2. push the tag by name\n\n     - never --tags\n  3. wait for the assets"
+	if !strings.Contains(d, want) {
+		t.Fatalf("digest %q, want it to hold %q", d, want)
+	}
+}
+
+func TestIndented(t *testing.T) {
+	for in, want := range map[string]string{
+		"one line":                  "one line",
+		"  a\r\nb  \n\n\tc\n":       "a\n> b\n\n> \tc",
+		"a \t\n   \nb":              "a\n\n> b",
+		"\n\nonly after blanks\n\n": "only after blanks",
+	} {
+		if got := Indented(in, "> "); got != want {
+			t.Errorf("Indented(%q) = %q, want %q", in, got, want)
 		}
 	}
 }

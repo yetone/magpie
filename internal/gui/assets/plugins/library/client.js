@@ -1336,7 +1336,7 @@ magpie.plugin("library", (ctx) => {
       const r = el("div", "row lib-row");
       r.dataset.sugg = s.key;
       const w = el("div", "who");
-      w.append(el("div", "name", s.text));
+      w.append(el("div", "name", firstLine(s.text)));
       const acts = el("div", "lib-acts");
       if (s.to === "global") {
         w.append(el("div", "sub", t("Learned in {projects}", { projects: s.projects.map((k) => mem.projects?.[k]?.name || k).join(", ") })));
@@ -1648,12 +1648,18 @@ magpie.plugin("library", (ctx) => {
     if (old) old.replaceWith(make());
     else render();
   }
+  // a memory folded: its first line, and an ellipsis when more follow
+  // (_meouwu on X: a memory of several lines was run into one)
+  function firstLine(text) {
+    const lines = String(text || "").trim().split(/\r?\n/);
+    return lines[0].trimEnd() + (lines.length > 1 ? " …" : "");
+  }
   function memRow(m) {
     const isOpen = !memPicking && memOpen === m.id;
     const row = el("div", "row lib-row click lib-mem" + (isOpen ? " open" : ""));
     row.dataset.id = m.id;
     const who = el("div", "who");
-    who.append(el("div", "name", m.text));
+    who.append(el("div", "name", isOpen ? m.text : firstLine(m.text)));
     const sub = [scopeName(m.scope), ...(m.tags || []).map((x) => "#" + x)];
     const from = m.origin === "agent" || m.origin === "inferred" ? (m.sources || []).find((s) => s.agent)?.agent : "";
     if (from) sub.push(t("from {agent}", { agent: nameOf(from) }));

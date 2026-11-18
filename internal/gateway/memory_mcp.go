@@ -569,7 +569,7 @@ func memoryLine(m *memory.Memory, c memoryCaller) string {
 	if m.Pinned {
 		l += ", pinned"
 	}
-	l += ", " + memoryStamp(m.Updated) + ": " + strings.Join(strings.Fields(m.Text), " ")
+	l += ", " + memoryStamp(m.Updated) + ": " + memory.Indented(m.Text, "  ")
 	if m.Why != "" {
 		l += " (why: " + strings.Join(strings.Fields(m.Why), " ") + ")"
 	}
@@ -718,7 +718,7 @@ func memoryForget(a memoryArgs) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return "Forgotten: [" + m.ID + "] " + strings.Join(strings.Fields(m.Text), " "), nil
+	return "Forgotten: [" + m.ID + "] " + memory.Indented(m.Text, "  "), nil
 }
 
 // memoryStamp is when a memory was last changed, in the reader's own zone

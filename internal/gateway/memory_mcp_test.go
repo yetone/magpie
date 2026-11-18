@@ -550,3 +550,18 @@ func TestMemorySavePointsProjectRulesToItsFiles(t *testing.T) {
 		t.Fatalf("memory_save's description: %s", desc)
 	}
 }
+
+// A memory the user wrote in several lines reaches an agent in them, the
+// lines after the first indented under it, so the next memory listed is
+// still told apart (_meouwu on X: the line breaks were run together).
+func TestMemorySearchKeepsTheLines(t *testing.T) {
+	fresh(t)
+	if _, _, err := memory.Save(memory.Input{Text: ptr("Release steps:\n1. tag the commit\n2. push the tag by name"), Kind: ptr(memory.Procedure), Scope: ptr(memory.Global)}, memory.FromUser, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	h := lanGuard(New().Handler())
+	said, bad := memPost(t, h, memorySearchTool, `{"query":"release steps"}`)
+	if bad || !strings.Contains(said, ": Release steps:\n  1. tag the commit\n  2. push the tag by name\n") {
+		t.Fatalf("memory_search said %q", said)
+	}
+}

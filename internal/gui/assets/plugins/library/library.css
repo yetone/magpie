@@ -911,7 +911,7 @@ body.window .lib-list .lib-row { --lib-indent: 38px; }
 .lib-membar .lib-menu { height: 28px; max-width: 220px; color: var(--fg); }
 .lib-membar .lib-menu > span:first-child, .lib-memline .lib-menu > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lib-mems .lib-mem > .who .name { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-weight: 400; }
-.lib-mems .lib-mem.open > .who .name { -webkit-line-clamp: unset; }
+.lib-mems .lib-mem.open > .who .name { -webkit-line-clamp: unset; white-space: pre-wrap; }
 .lib-mems .lib-mem > .who .sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lib-memdetail { padding-left: 12px; }
 /* Select: a box on each memory, the ones picked tinted, the bar under the list */
