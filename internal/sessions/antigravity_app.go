@@ -23,7 +23,11 @@ import (
 // ~/.gemini/antigravity/conversations/<conversation id>.db (Insiders uses
 // ~/.gemini/antigravity-insiders/conversations), written in WAL
 // mode while it runs. Its messages are encrypted at rest; the figures read
-// here are not. As Antigravity 2.23.0 on macOS writes them (yygutn's real
+// here are not. What was said is also written in plain text beside it,
+// brain/<conversation id>/.system_generated/logs/transcript_full.jsonl
+// (antigravityTranscript): the steps as agy CLI writes them, user turns,
+// replies, tool calls and their results, which the session viewer reads
+// (@yansheng1003 on X: it showed only the title and preview). As Antigravity 2.23.0 on macOS writes them (yygutn's real
 // rows on #2190; the app isn't installed on any machine magpie is tried on):
 //
 //	steps         idx, metadata BLOB, …: one row a step
@@ -130,10 +134,12 @@ func antigravityFilesIn(dir, goos string) []file {
 		if !stat(&f) {
 			continue
 		}
-		if fi, err := os.Stat(f.path + "-wal"); err == nil {
-			f.size += fi.Size()
-			if fi.ModTime().After(f.mod.Time()) {
-				f.mod = modOf(fi.ModTime())
+		for _, p := range []string{f.path + "-wal", antigravityTranscript(f.path)} {
+			if fi, err := os.Stat(p); err == nil {
+				f.size += fi.Size()
+				if fi.ModTime().After(f.mod.Time()) {
+					f.mod = modOf(fi.ModTime())
+				}
 			}
 		}
 		if r, ok := rows[id]; ok {
@@ -143,6 +149,26 @@ func antigravityFilesIn(dir, goos string) []file {
 		out = append(out, f)
 	}
 	return out
+}
+
+// antigravityTranscript is the plain-text transcript of the conversation
+// whose database is db: brain/<id>/.system_generated/logs/transcript_full.jsonl
+// in the same data folder (stable's, Insiders' or a WSL distro's), as
+// Antigravity 2.30 writes it. Its size and time are the session file's
+// too (antigravityFilesIn), so a step it adds reads the session again.
+func antigravityTranscript(db string) string {
+	id := strings.TrimSuffix(filepath.Base(db), ".db")
+	return filepath.Join(filepath.Dir(filepath.Dir(db)), "brain", id, ".system_generated", "logs", "transcript_full.jsonl")
+}
+
+// antigravityTranscriptOf reads the conversation whose database is db from
+// its transcript, as agy's; ErrNoTranscript when the app wrote none.
+func antigravityTranscriptOf(db string, keep func([]byte) bool, add func(bool, Part) bool) error {
+	p := antigravityTranscript(db)
+	if _, err := os.Stat(p); errors.Is(err, os.ErrNotExist) {
+		return ErrNoTranscript
+	}
+	return agyTranscript(p, keep, add)
 }
 
 // antigravityCallFiles are the same databases as call sources.

@@ -264,9 +264,11 @@ func SearchSession(ctx context.Context, s Session, needle string) (Hit, bool, er
 // so that one without the needle's bytes can be passed over unread. An
 // OpenCode session's is its info (the messages are elsewhere) or a database,
 // and a Cursor chat's a database too, whose newest pages are in its -wal.
+// An Antigravity app conversation's is its database, the transcript beside
+// it.
 func linesFile(s Session) bool {
 	switch s.Agent {
-	case "opencode":
+	case "opencode", "antigravity":
 		return false
 	case "cursor":
 		return strings.HasSuffix(s.Path, ".jsonl")

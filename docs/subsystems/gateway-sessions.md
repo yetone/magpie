@@ -1019,10 +1019,22 @@ including response folding and gateway matching. Insiders session ids
 have an `insiders-` prefix in magpie, leaving stable ids unchanged and
 keeping equal UUIDs in the two stores from sharing a session or call id.
 The files themselves are not renamed. Sessions stay read-only with no
-terminal resume command; encrypted conversation text is not read.
+terminal resume command. The database's step text is encrypted and not
+read; what was said is read from the plain-text transcript the app writes
+beside it, `brain/<id>/.system_generated/logs/transcript_full.jsonl` in the
+same store (`antigravityTranscript`), in agy's format and through agy's
+reader (`agyTranscript`): the user's turns, the replies, each tool call and
+its result, on the session viewer, search and the Markdown export
+(@yansheng1003 on X: only the title and preview showed). Its size and time
+are counted into the session file's with the `-wal`'s, so a step it adds
+reads the session again. A conversation with no transcript is
+`ErrNoTranscript`, as before.
 Verification: `TestAntigravityInsidersSessions` covers Insiders alone,
 both stores with the same UUID, per-model tokens, call ids, summary refresh
 and turning the existing reading choice off, using #2190's real step bytes.
+`TestAntigravityAppTranscript` reads a conversation the app's 2.30 language
+server had with a read_file call (testdata/antigravity-2.30-tools) from
+stable, Insiders and a WSL distro's store; `TestAntigravityAppNoTranscript`.
 
 A read of every call decodes each file's cached shard, and over a long
 history that is tens of thousands of files (#2278: 68k shards, 415 MB).
