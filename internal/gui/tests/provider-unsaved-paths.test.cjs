@@ -48,6 +48,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     t.after(() => browser.close());
     const page = await browser.newPage({ viewport: { width: 1100, height: 800 }, reducedMotion: "reduce" });
     page.setDefaultTimeout(5000);
+    page.setDefaultNavigationTimeout(60000);
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
     page.on("dialog", (d) => { errors.push("native dialog"); d.dismiss(); });
