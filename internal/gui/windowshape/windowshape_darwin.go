@@ -8,6 +8,7 @@ package windowshape
 #import <Cocoa/Cocoa.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
+#include <stdlib.h>
 
 // AppKit's own: no public API gives a window's corner radius.
 static double cornerRadius(void *p) {
@@ -28,6 +29,20 @@ static void lights(void *p, double *out) {
 		out[2 * i + 1] = NSHeight(w.frame) - NSMidY(r);
 	}
 	out[6] = NSHeight([w standardWindowButton:NSWindowCloseButton].superview.superview.frame);
+}
+
+// The menu a right-click 20pt below the top of w, by its traffic lights,
+// gets from the window's frame, where one the page passes up ends: its
+// items' titles, a line for a separator, joined by newlines; "" for none.
+static char *titlebarMenu(void *p) {
+	NSWindow *w = (NSWindow *)p;
+	NSView *frame = w.contentView.superview;
+	NSEvent *e = [NSEvent mouseEventWithType:NSEventTypeRightMouseDown location:NSMakePoint(120, NSHeight(w.frame) - 20)
+		modifierFlags:0 timestamp:NSProcessInfo.processInfo.systemUptime windowNumber:w.windowNumber context:nil
+		eventNumber:0 clickCount:1 pressure:1];
+	NSMutableArray *items = [NSMutableArray array];
+	for (NSMenuItem *i in [frame menuForEvent:e].itemArray) [items addObject:i.isSeparatorItem ? @"-" : i.title];
+	return strdup([items componentsJoinedByString:@"\n"].UTF8String);
 }
 
 static void *beginSheet(void *p, double h) {
@@ -89,7 +104,10 @@ static int firstPress(void *p, double x, double y) {
 */
 import "C"
 
-import "unsafe"
+import (
+	"strings"
+	"unsafe"
+)
 
 // Shape is how a window's frame looks, in points.
 type Shape struct {
@@ -97,17 +115,31 @@ type Shape struct {
 	Lights   [3][2]float64 // each traffic light's middle: x from the window's left, y from its top
 	Titlebar float64       // the title bar's height
 	Toolbar  bool          // whether it has a toolbar
+	Menu     []string      // the title bar's right-click menu (TitlebarMenu)
 }
 
 // Of measures the NSWindow w. Call it on the main thread.
 func Of(w unsafe.Pointer) Shape {
 	var out [7]C.double
 	C.lights(w, &out[0])
-	s := Shape{Radius: float64(C.cornerRadius(w)), Titlebar: float64(out[6]), Toolbar: C.hasToolbar(w) != 0}
+	s := Shape{Radius: float64(C.cornerRadius(w)), Titlebar: float64(out[6]), Toolbar: C.hasToolbar(w) != 0, Menu: TitlebarMenu(w)}
 	for i := range 3 {
 		s.Lights[i] = [2]float64{float64(out[2*i]), float64(out[2*i+1])}
 	}
 	return s
+}
+
+// TitlebarMenu is the menu a right-click on w's title bar, by its traffic
+// lights, gets from the window itself (where a right-click the page
+// doesn't take ends): its items' titles, "-" for a separator; none when
+// there is no menu. Call it on the main thread.
+func TitlebarMenu(w unsafe.Pointer) []string {
+	p := C.titlebarMenu(w)
+	defer C.free(unsafe.Pointer(p))
+	if s := C.GoString(p); s != "" {
+		return strings.Split(s, "\n")
+	}
+	return nil
 }
 
 // BeginSheet shows a sheet height points tall on w. Call it on the main

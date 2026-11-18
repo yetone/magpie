@@ -60,7 +60,8 @@ const (
 // toolbar a plain title bar's corners, a toolbar doesn't change them: the
 // window keeps its toolbar. The windows' program is run as linked against
 // each SDK, whatever the toolchain has, in a process of its own that runs
-// AppKit on its main thread.
+// AppKit on its main thread. A right-click on the title bar gets no menu
+// from the toolbar.
 func TestMainWindowCorners(t *testing.T) {
 	for _, sdk := range []struct {
 		name string
@@ -75,8 +76,9 @@ func checkMainWindowCorners(t *testing.T, sdk uint32) {
 	measureWindows(t, sdk, "corners", &run)
 	near := func(a, b float64) bool { return math.Abs(a-b) < 0.5 }
 	for _, s := range run.Stages {
-		t.Logf("%s: corners %.2fpt (plain %.2f, toolbar %.2f), lights %v (toolbar %v), title bar %.0fpt (toolbar %.0f), toolbar kept %v", s.Name,
-			s.Main.Radius, s.Plain.Radius, s.Toolbar.Radius, s.Main.Lights, s.Toolbar.Lights, s.Main.Titlebar, s.Toolbar.Titlebar, s.Main.Toolbar)
+		t.Logf("%s: corners %.2fpt (plain %.2f, toolbar %.2f), lights %v (toolbar %v), title bar %.0fpt (toolbar %.0f), toolbar kept %v, title bar menu %q (toolbar %q)", s.Name,
+			s.Main.Radius, s.Plain.Radius, s.Toolbar.Radius, s.Main.Lights, s.Toolbar.Lights, s.Main.Titlebar, s.Toolbar.Titlebar, s.Main.Toolbar,
+			s.Main.Menu, s.Toolbar.Menu)
 		if s.Plain.Radius < 0 {
 			t.Errorf("%s: AppKit doesn't tell a window's corner radius", s.Name)
 		} else if !near(s.Main.Radius, s.Plain.Radius) {
@@ -90,6 +92,15 @@ func checkMainWindowCorners(t *testing.T, sdk uint32) {
 		}
 		if !near(s.Main.Titlebar, s.Toolbar.Titlebar) {
 			t.Errorf("%s: a title bar %.0fpt tall, the toolbar's was %.0fpt", s.Name, s.Main.Titlebar, s.Toolbar.Titlebar)
+		}
+		// The toolbar, kept or not, offers no Icon and Text, Icon Only, Text
+		// Only on a right-click by the lights (AlanWang1027713 on X); the
+		// reference toolbar's does, or the right-click didn't arrive
+		if len(s.Main.Menu) > 0 {
+			t.Errorf("%s: a right-click on the title bar gets a menu: %q", s.Name, s.Main.Menu)
+		}
+		if s.Toolbar.Toolbar && len(s.Toolbar.Menu) == 0 {
+			t.Errorf("%s: a right-click on the title bar of a window with Wails' toolbar got no menu, so it can't tell the main window's", s.Name)
 		}
 		// Where a toolbar doesn't change the corners (the earlier design,
 		// macOS 27), the main window is left as it was
@@ -137,12 +148,15 @@ func TestMainWindowRightToLeft(t *testing.T) {
 	// as Xcode launches an app in its right-to-left pseudolanguage
 	measureWindows(t, sdkMacOS26, "right to left", &s,
 		"-AppleTextDirection", "YES", "-NSForceRightToLeftWritingDirection", "YES")
-	t.Logf("lights %v (x, y from the top left), toolbar kept %v", s.Lights, s.Toolbar)
+	t.Logf("lights %v (x, y from the top left), toolbar kept %v, title bar menu %q", s.Lights, s.Toolbar, s.Menu)
 	if s.Lights[0][0] < s.Lights[2][0] {
 		t.Fatalf("launched right to left, the traffic lights are on the left: %v", s.Lights)
 	}
 	if !s.Toolbar {
 		t.Errorf("the traffic lights are on the right, and the main window's toolbar was taken off")
+	}
+	if len(s.Menu) > 0 {
+		t.Errorf("a right-click on the title bar gets a menu: %q", s.Menu)
 	}
 }
 

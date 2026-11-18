@@ -223,6 +223,24 @@ static void insetLights(void *p) {
 	w.toolbar = nil;
 	[l apply];
 }
+
+// quietToolbar takes the menu off the main window's toolbar: a right-click
+// on the title bar (by the traffic lights) offered Icon and Text, Icon Only
+// and Text Only, for a toolbar that is empty and there only to inset the
+// lights (AlanWang1027713 on X). macOS 15 and later have a switch for it
+// (allowsDisplayModeCustomization); earlier ones, back to macOS 12, are
+// asked through AppKit's own, which the newer ones still answer. Each is
+// looked up at run time, as the SDK that builds magpie may be older than
+// the system it runs on.
+static void quietToolbar(void *p) {
+	NSToolbar *t = ((NSWindow *)p).toolbar;
+	if (t == nil) return;
+	t.allowsUserCustomization = NO;
+	SEL s = sel_registerName("setAllowsDisplayModeCustomization:");
+	if ([t respondsToSelector:s]) ((void (*)(id, SEL, BOOL))objc_msgSend)(t, s, NO);
+	s = sel_registerName("_setWantsToolbarContextMenu:");
+	if ([t respondsToSelector:s]) ((void (*)(id, SEL, BOOL))objc_msgSend)(t, s, NO);
+}
 */
 import "C"
 
@@ -230,10 +248,12 @@ import "github.com/wailsapp/wails/v3/pkg/application"
 
 // plainTitlebar gives the main window, in the design of macOS 26, the
 // corners of a window with a plain title bar (see insetLights); the traffic
-// lights stay inset into the page's header.
+// lights stay inset into the page's header. Where the toolbar stays, it has
+// no menu (quietToolbar).
 func plainTitlebar(w *application.WebviewWindow) {
 	application.InvokeSync(func() {
 		if p := w.NativeWindow(); p != nil {
+			C.quietToolbar(p)
 			C.insetLights(p)
 		}
 	})
