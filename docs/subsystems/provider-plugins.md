@@ -182,6 +182,8 @@ Trae's plugin doesn't give way yet: Trae.app reads a `queue_info.position` on it
 
 ## Two plugins for one provider id
 
+A plugin added by its path (a folder or a file of the user's own, `plugin.IsPath`) is the code its author is writing, edited in place. The host loads it once, so an edit reached it only once magpie was quit and opened again (yansheng1003 on X: "每次改了需要重新magpie"). `checkList`, run on every call to a plugin, now compares `seenStamp`: plugins.json and what is installed (`listStamp`) and the files of every on path plugin, their names, times and sizes (`pathsStamp` in [`pathstamp.go`](../../internal/plugin/pathstamp.go), `node_modules` and dot folders left out, at most 2000 files a plugin, walked at most once a second unless plugins.json changed). A change starts the host again with the files as they are; the host's own `Restart` records the stamp it started from. `TestPathPluginEditRestartsTheHost`, `TestPathsLookedAtOnceASecond`.
+
 The host runs one plugin per provider id. When two installed plugins have `auth` hooks for the same id, such as a third-party plugin and the user's own copy added by its folder, `auths()` in `host.js` takes the one picked for that id in `plugins.json`'s `prefer` map (provider id → spec). Without a pick it takes the last one in the list, as OpenCode does. Only the serving plugin's `provider.models` hook runs for that id. Every plugin's `config` hook still runs, so another plugin can still add models or a name to `config.provider[id]`.
 
 Before this, the plugin that lost the id disappeared silently: its row read "Signs in to nothing magpie can use", and `keepUnloaded` could list the id twice, once from the old `plugin-providers.json` (neiko on Discord). Now:
