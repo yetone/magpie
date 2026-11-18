@@ -29,6 +29,17 @@ import (
 // members and blocks as they came, with a missing call's synthetic error
 // result first, an answer to no call as the text it said, and a second
 // answer to one call left out.
+//
+// A message of another role between a call and its results (Claude Code's
+// {role: "system"} messages: a turn's effort, a steer the user sent while
+// a tool ran, a deferred tool's tool_addition) goes after the results.
+// It answers nothing: read as the turn after the call, it took the
+// call's synthetic result (which a system message can't hold, and which
+// withSystemOnTop and withoutTurnEffort then dropped) while the real
+// result after it turned into text, and DeepSeek, which counts it as the
+// next message, refused the request either way, 400 "messages.N:
+// `tool_use` ids were found without `tool_result` blocks immediately
+// after" (wizcheu on X, deepseek-flash through Claude Code).
 func toolBlocksPaired(body []byte) []byte {
 	if !bodyHas(body, `"tool_use"`) && !bodyHas(body, `"tool_result"`) {
 		return body
@@ -51,6 +62,11 @@ func pairedMessages(msgs []byte) ([]byte, bool) {
 	changed := false
 	var pending []string          // the calls of the assistant message in hand
 	answered := map[string]bool{} // which of them a result answered
+	var held []json.RawMessage    // other roles' messages after those calls
+	release := func() {
+		out = append(out, held...)
+		held = nil
+	}
 	open := func(id string) bool {
 		for _, p := range pending {
 			if p == id {
@@ -87,11 +103,18 @@ func pairedMessages(msgs []byte) ([]byte, bool) {
 			}
 			return true
 		})
+		if (role == "system" || role == "developer") && len(pending) > 0 {
+			// between the calls and their results: it follows them
+			held = append(held, el)
+			changed = true
+			return true
+		}
 		if role == "assistant" {
 			if blocks := unanswered(); len(blocks) > 0 {
 				out = append(out, resultsMessage(blocks))
 				changed = true
 			}
+			release()
 			pending, answered = nil, map[string]bool{}
 			if len(content) > 0 && content[0] == '[' {
 				eachElement(content, func(b []byte) bool {
@@ -143,6 +166,7 @@ func pairedMessages(msgs []byte) ([]byte, bool) {
 		pending, answered = nil, map[string]bool{}
 		if !touched {
 			out = append(out, el)
+			release()
 			return true
 		}
 		changed = true
@@ -158,6 +182,7 @@ func pairedMessages(msgs []byte) ([]byte, bool) {
 		} else {
 			out = append(out, withTopValue(el, "content", list))
 		}
+		release()
 		return true
 	})
 	if !valid {
@@ -167,6 +192,7 @@ func pairedMessages(msgs []byte) ([]byte, bool) {
 		out = append(out, resultsMessage(blocks))
 		changed = true
 	}
+	release()
 	if !changed {
 		return nil, false
 	}

@@ -736,13 +736,20 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 //     reasoning — is dropped inside a pending exchange, where it would
 //     sit between calls and their answers. One with neither text nor
 //     calls was taken out before, wherever it stood
-//     (withoutSilentAssistants, #2599).
+//     (withoutSilentAssistants, #2599);
+//   - a system or developer message between the calls and their tool
+//     messages goes after them: DeepSeek takes it for the message after
+//     the calls and refuses the request ("tool_use ids were found
+//     without tool_result blocks immediately after"), and read as the
+//     turn after them it gave the calls synthetic results and the real
+//     ones went as user text.
 func pairToolMessages(msgs []map[string]any) []map[string]any {
 	out := make([]map[string]any, 0, len(msgs))
 	var pending []string          // calls of the last assistant message with tool_calls
 	order := map[string]int{}     // a pending call's place among them
 	answered := map[string]bool{} // pending calls a tool message answered
 	var tools []map[string]any    // answers to pending, held for sorting
+	var held []map[string]any     // system messages after pending's calls
 
 	flushTools := func() {
 		if len(tools) == 0 {
@@ -763,6 +770,8 @@ func pairToolMessages(msgs []map[string]any) []map[string]any {
 			}
 		}
 		pending, order, answered = nil, map[string]int{}, map[string]bool{}
+		out = append(out, held...)
+		held = nil
 	}
 	// toolAsUser turns a tool message that answers no pending call into a
 	// user message carrying its result. A user message just emitted takes
@@ -818,6 +827,15 @@ func pairToolMessages(msgs []map[string]any) []map[string]any {
 			}
 			answered[id] = true
 			tools = append(tools, m)
+		case "system", "developer":
+			if len(pending) > 0 {
+				// between the calls and their tool messages, which must
+				// follow them at once (DeepSeek, Kimi): it goes after
+				// them, and the results it stood before stay results
+				held = append(held, m)
+				continue
+			}
+			out = append(out, m)
 		default:
 			flushPending()
 			out = append(out, m)
