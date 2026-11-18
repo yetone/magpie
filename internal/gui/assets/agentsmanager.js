@@ -1,5 +1,6 @@
 // Manage agents: hide or unhide many agents at once, by search and
-// selection. It changes only magpie's arrangement, never an agent's config.
+// selection. It changes magpie's arrangement and what the Library lists,
+// never an agent's config.
 // app.js imports this when Manage is pressed, so it weighs nothing on the
 // core.
 window.openAgentsManager = function () {
@@ -8,7 +9,7 @@ window.openAgentsManager = function () {
   const ed = el("div", "editor ag-manager");
   const head = el("div", "ehead");
   head.append(el("b", "", t("Manage agents")));
-  const note = el("p", "lib-confirm", t("Hiding only changes this list, not an agent's connection or settings. Unhidden agents may stay under Not set up."));
+  const note = el("p", "lib-confirm", t("Hiding leaves an agent's connection and settings as they are. The Library stops listing it too: what it gave the agent stays, and nothing new goes to it. Unhidden agents may stay under Not set up."));
   const search = el("input", "words ag-manage-search");
   search.type = "search";
   search.placeholder = t("Search agents…");
