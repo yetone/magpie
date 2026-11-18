@@ -53,10 +53,11 @@ func TestStreamedReasoningWithoutCount(t *testing.T) {
 		{"chat from anthropic", provider.Anthropic, real, "/v1/chat/completions", chatBody, 35, 0, true, true},
 		{"responses from anthropic", provider.Anthropic, real, "/v1/responses", `{"model":"fake/m1","stream":true,"input":"hi"}`, 35, 0, true, true},
 		// a Chat vendor's reasoning_content with no completion_tokens_details,
-		// a tool call its only answer: no text to time it from, and no count
-		// to take the reasoning out of its output, so no speed
-		{"chat tool, uncounted", provider.Chat, chatTool(""), "/v1/chat/completions", chatBody, 40, 0, true, false},
-		{"anthropic from chat tool, uncounted", provider.Chat, chatTool(""), "/v1/messages", `{"model":"fake/m1","stream":true,"max_tokens":400,"messages":[{"role":"user","content":"hi"}]}`, 40, 0, true, false},
+		// a tool call its only answer: its output holds the reasoning, and
+		// the speed is all of it from the first reasoning (Archivemylife on
+		// X), so no count is needed to tell it
+		{"chat tool, uncounted", provider.Chat, chatTool(""), "/v1/chat/completions", chatBody, 40, 0, true, true},
+		{"anthropic from chat tool, uncounted", provider.Chat, chatTool(""), "/v1/messages", `{"model":"fake/m1","stream":true,"max_tokens":400,"messages":[{"role":"user","content":"hi"}]}`, 40, 0, true, true},
 		// the same counted is known, and timed from its paced reasoning
 		{"chat tool, counted", provider.Chat, chatTool(`,"completion_tokens_details":{"reasoning_tokens":30}`), "/v1/chat/completions", chatBody, 40, 30, false, true},
 	} {

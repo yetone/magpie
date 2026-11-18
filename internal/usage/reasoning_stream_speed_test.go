@@ -17,9 +17,14 @@ func TestVisibleReasoningSpeed(t *testing.T) {
 		w    int64
 	}{
 		{"visible tool turn", visible, 1500, 14000},
-		{"answer remains separate", func() Record { r := visible; r.FirstText = 14000; r.Flow = 1000; return r }(), 100, 1000},
+		// the answer after the reasoning: all of it counts, from the first
+		// reasoning (Archivemylife on X: reasoning is tokens too)
+		{"answer after reasoning", func() Record { r := visible; r.FirstText = 14000; r.Flow = 1000; return r }(), 1500, 14000},
+		{"reasoning before the first token", func() Record { r := visible; r.TTFT, r.FirstText, r.Flow = 3000, 14000, 1000; return r }(), 1500, 14000},
 		{"hidden and old records", func() Record { r := visible; r.FirstReasoning = 0; return r }(), 0, 0},
-		{"unknown flow", func() Record { r := visible; r.Flow = 0; return r }(), 0, 0},
+		{"unknown flow", func() Record { r := visible; r.Flow = 0; return r }(), 1500, 14000},
+		// sealed reasoning whose start the stream showed (a reasoning item's)
+		{"sealed reasoning, its start seen", func() Record { r := visible; r.ReasoningHidden = true; return r }(), 1500, 14000},
 		{"held reasoning at quarter boundary", func() Record { r := visible; r.Flow = 3500; return r }(), 1500, 14000},
 		{"held reasoning just below quarter", func() Record { r := visible; r.Flow = 3499; return r }(), 0, 0},
 		{"held reasoning", func() Record { r := visible; r.Flow = 1000; return r }(), 0, 0},
@@ -60,8 +65,8 @@ func TestVisibleReasoningSpeed(t *testing.T) {
 	for _, c := range []*rowChunk{&hiddenChunk, hiddenChunk.pack().unpack()} {
 		row := c.row(0)
 		n, w := row.Decode()
-		if !row.ReasoningHidden || n != 0 || w != 0 {
-			t.Fatal("cache lost hidden reasoning flag")
+		if !row.ReasoningHidden || row.FirstReasoning != 1000 || n != 1500 || w != 14000 {
+			t.Fatalf("cache lost sealed reasoning: %+v, %d/%d", row, n, w)
 		}
 	}
 	var sum Totals
@@ -80,7 +85,7 @@ func TestVisibleReasoningSpeed(t *testing.T) {
 func TestPricedRowKeepsReasoningEvidence(t *testing.T) {
 	visible := Record{Time: time.Now(), Provider: "deepseek", Model: "deepseek-chat", Output: 1500, Reasoning: 1400, Millis: 15000, TTFT: 1000, FirstReasoning: 1000, Flow: 12000, Status: 200}
 	toolOnly := Record{Time: time.Now(), Provider: "deepseek", Model: "deepseek-chat", Output: 120, Millis: 9000, TTFT: 1000, Flow: 7000, Status: 200}
-	sealed := visible
+	sealed := toolOnly
 	sealed.ReasoningHidden = true
 	for _, c := range []struct {
 		name   string

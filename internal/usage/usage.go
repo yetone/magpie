@@ -113,7 +113,7 @@ type Record struct {
 	// Compaction is Codex's explicit native marker. Nil means no matching
 	// native Codex call established whether a gateway row compacted.
 	Compaction *bool `json:"compaction,omitempty"`
-	// FirstReasoning is the start of paced visible reasoning, absent for hidden reasoning.
+	// FirstReasoning: ms to the reply's first sign of reasoning, streamed or sealed (a reasoning delta, a reasoning item's or thinking block's start); 0 for none.
 	FirstReasoning int64 `json:"first_reasoning_ms,omitempty"`
 	// ReasoningHidden: the reply reasoned and its stream doesn't tell how
 	// much — sealed or summarised, or streamed with no reasoning count in
@@ -726,75 +726,91 @@ func DecodeWindow(out int, ms, ttft int64) int64 {
 	return w
 }
 
-// DecodeOf is what a reply's speed is told by: the tokens it was seen to
-// write and the ms it took (tony on Discord: gpt-6.1-sol read 163 tok/s,
-// with a 14 s first token). A reply that reasoned counts only its answer —
-// its output less the reasoning, from its first text — as most vendors
-// keep the reasoning out of the stream (OpenAI's is encrypted, its summary
-// sent when it's done; Claude's may come with no text): its tokens were
-// written before the first content, over time the window from it doesn't
-// hold, and counting them read a 2,000-token think and a 200-token answer
-// in 1.5 s as 1,467 tok/s. Its time goes to the wait before the answer.
-// With no answer text, paced visible reasoning can time all output from
-// firstReasoning. Missing evidence (including older records), hidden reasoning
-// and an unknown flow leave the speed untold. The
-// window is DecodeWindow's: 0 for a reply that tells none.
+// DecodeOf is what a reply's speed is told by: the tokens it wrote and the
+// ms it took. Its speed is all its output tokens, as its vendor's usage
+// counts them — reasoning and tool calls' arguments are tokens too — over
+// the time from its first output of any kind to its end (Archivemylife on
+// X): its first content (ttft) or, when it came first, its first sign of
+// reasoning (firstReasoning), streamed or sealed — a reasoning delta, a
+// Responses reasoning item's start, an Anthropic thinking block's start.
+// The wait before either, the vendor reading the prompt, is TTFT's, not
+// the speed's. Every protocol and vendor counts it so; only how its
+// reasoning is seen differs:
+//
+//   - a reply that reasoned and showed no sign of when (firstReasoning 0:
+//     a Chat vendor whose reasoning_tokens come with no reasoning delta, a
+//     Gemini thought not included, a record kept before the start was) had
+//     its reasoning written before its first content, over time its stream
+//     doesn't show, and counting it over the window from that content read
+//     a 2,000-token think and a 200-token answer in 1.5 s as 1,467 tok/s
+//     (tony on Discord). Such a reply counts its answer, its output less
+//     the reasoning, from its first text, and tells none with no text.
+//
+// The window is DecodeWindow's: 0 for a reply that tells none.
 //
 // A reply its vendor held back and let go in a burst at its end tells
 // none either (John on Discord: Kimi Code answering OpenCode read 1,367,
-// then 2,237 and 2,012 tok/s). The burst is told two ways, as the reply's
-// text came before it or with it:
+// then 2,237 and 2,012 tok/s). The burst is judged on what came after the
+// reasoning, its answer from its first text (or its first content, when it
+// had none), as reasoning sealed in the stream comes in no bytes:
 //
-//   - flow, when known (Record.Flow), is how long its content took to come
-//     from where its window starts. A window HeldShare times longer had
-//     its content come in a small part of it: the rest was a wait while
-//     the vendor wrote and held it. The time it took to come is not the
-//     time it took to write (a burst let go over 236 ms read 528 tokens at
-//     2,237 tok/s), and that time is not seen, so it tells no speed. A
-//     stream that came as it was written has a flow about its window.
-//   - a reply that reasoned is timed from its first text, its reasoning
-//     written before. When the answer would have been written over
-//     ThinkPace times faster than its reasoning came before it, from the
-//     first content to the first text, its first text came with the burst
-//     and the wait before it was the answer being written and held (22
-//     reasoning tokens over 10.5 s, then 528 answer tokens in 236 ms). A
-//     reasoning hidden from the stream (OpenAI's, Claude's omitted) comes
-//     before the first content and leaves this time short; one that
-//     streams comes at the pace its answer does.
+//   - flow, when known (Record.Flow), is how long the answer's content took
+//     to come. An answer window HeldShare times longer had its content come
+//     in a small part of it: the rest was a wait while the vendor wrote and
+//     held it. The time it took to come is not the time it took to write
+//     (a burst let go over 236 ms read 528 tokens at 2,237 tok/s), and that
+//     time is not seen, so it tells no speed. A stream that came as it was
+//     written has a flow about its window.
+//   - when the answer would have been written over ThinkPace times faster
+//     than the reasoning came before it, from the first content to the
+//     first text, its first text came with the burst and the wait before it
+//     was the answer being written and held (22 reasoning tokens over
+//     10.5 s, then 528 answer tokens in 236 ms).
 //   - a window under HeldWindowMs after a wait HeldShare times longer: the
 //     reply came whole in a moment after a long silence, and what it was
 //     written over is not seen (pluviophile714 on Discord: gpt-6.1-sol,
 //     392 tokens 0.25 s after an 8.2 s first token, read 1,539 tok/s where
 //     the vendor writes ~70). Its content can come spread over that moment
-//     (a relay replaying a held reply, OpenAI's answer let go after its
-//     hidden reasoning), so flow doesn't tell it. A stream as it is written
-//     takes a second or more to write a few hundred tokens; one that takes
-//     under a second is too short a sample to tell a speed by against such
-//     a wait, so a short answer after a long think tells none either.
+//     (a relay replaying a held reply), so flow doesn't tell it. A stream as
+//     it is written takes a second or more to write a few hundred tokens;
+//     one that takes under a second is too short a sample to tell a speed
+//     by against such a wait.
 func DecodeOf(out, reasoning int, ms, ttft, firstText, flow int64, firstReasoning ...int64) (tokens int, w int64) {
-	start := ttft
-	if reasoning > 0 {
-		if firstText > 0 {
-			out, start = out-reasoning, firstText
-		} else if len(firstReasoning) > 0 && firstReasoning[0] >= ttft && flow > 0 && reasoning <= out {
-			start = firstReasoning[0]
-		} else {
-			return 0, 0
-		}
-	}
 	if ttft <= 0 {
 		return 0, 0
+	}
+	var think int64
+	if len(firstReasoning) > 0 {
+		think = firstReasoning[0]
+	}
+	// from: where the answer the burst is judged on starts
+	start, from, answer := ttft, ttft, out-reasoning
+	if reasoning > 0 && firstText > 0 {
+		from = firstText
+	}
+	switch {
+	case reasoning > 0 && think <= 0:
+		// reasoned out of sight: the answer alone (above)
+		if firstText <= 0 {
+			return 0, 0
+		}
+		out, start = answer, firstText
+	case reasoning > out:
+		return 0, 0
+	case think > 0 && think < start:
+		start = think
 	}
 	if w = DecodeWindow(out, ms, start); w == 0 {
 		return 0, 0
 	}
-	if flow > 0 && flow*HeldShare < w {
+	tail := ms - from
+	if flow > 0 && flow*HeldShare < tail {
 		return 0, 0
 	}
 	if w < HeldWindowMs && start > HeldShare*w {
 		return 0, 0
 	}
-	if reasoning > 0 && firstText > 0 && int64(out)*(firstText-ttft) > ThinkPace*int64(reasoning)*w {
+	if reasoning > 0 && firstText > 0 && int64(answer)*(firstText-ttft) > ThinkPace*int64(reasoning)*tail {
 		return 0, 0
 	}
 	return out, w
@@ -813,7 +829,7 @@ const (
 
 // Decode is the record's DecodeOf.
 func (r Record) Decode() (tokens int, w int64) {
-	if r.ReasoningHidden && r.FirstText <= 0 {
+	if r.ReasoningHidden && r.FirstText <= 0 && r.FirstReasoning <= 0 {
 		return 0, 0
 	}
 	return DecodeOf(r.Output, r.Reasoning, r.Millis, r.TTFT, r.FirstText, r.Flow, r.FirstReasoning)

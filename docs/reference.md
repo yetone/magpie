@@ -477,12 +477,16 @@ words (`stop`, `tool_calls`, `end_turn`, a Responses reply's
 page shows it as Upstream stop reason.
 
 **Output speed** (tok/s on the Usage and Routing pages, `magpie usage`) is
-output tokens over the time after the first token, summed per request: the
+all output tokens the vendor counted, reasoning and tool calls included, over
+the time from the first output to the last, summed per request: the
 tokens of every timed request over the sum of their windows, so concurrent
-subagents never add up. A reply that reasoned counts only its answer, from its
-first text (`usage.DecodeOf`): hidden reasoning is written before the stream
-shows anything, so counting it in a window that starts after it read
-gpt-6.1-sol at hundreds of tok/s. A reply that reasoned and then wrote only
+subagents never add up. The first output is the earlier of the first content
+and the first sign the stream gave of reasoning (a reasoning item's or a
+thinking block's start, or reasoning deltas over 100 ms or more; a summary is
+no sign). A reply that reasoned with no sign of when counts only its answer,
+from its first text (`usage.DecodeOf`): its reasoning was written before the
+stream showed anything, so counting it in a window that starts after it read
+gpt-6.1-sol at hundreds of tok/s. Such a reply that then wrote only
 tool calls, one not streamed, and a burst (under 100 ms, or over 10,000 tok/s)
 tell no speed. So does a reply its vendor held back and let go in a burst at
 its end, however long the burst took to come: one whose content came in under

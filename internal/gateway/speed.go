@@ -84,7 +84,7 @@ func noteSpeed(c candidate, ttft int64, tokens int, w int64, now time.Time) {
 // usage.DecodeOf counts it for the Requests and Usage pages.
 func noteTrySpeed(c candidate, t Try, out, reasoning int, now time.Time) {
 	tokens, w := 0, int64(0)
-	if !t.ReasoningHidden || t.FirstText > 0 {
+	if !t.ReasoningHidden || t.FirstText > 0 || t.FirstReasoning > 0 {
 		tokens, w = usage.DecodeOf(out, reasoning, t.Millis, t.TTFT, t.FirstText, t.Flow, t.FirstReasoning)
 	}
 	noteSpeed(c, t.TTFT, tokens, w, now)

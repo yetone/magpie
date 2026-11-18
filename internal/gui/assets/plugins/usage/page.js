@@ -2809,7 +2809,7 @@ function renderLedgerDash(l) {
   const gs = ledGroupSpeed(l);
   const ttft = ledTTFT(l) ? t("first token in {ms} on average", { ms: ledTook(ledTTFT(l)) }) + " · " + t(l.timed === 1 ? "{k} timed reply" : "{k} timed replies", { k: ledNum(l.timed) }) : t("no streamed replies timed");
   const speedCard = block("Output speed", gs ? gs.mainParts : "—", gs?.other ? line(gs.other) : null,
-    "", [gs?.title, t("Output tokens a second after the first, over the streamed replies") + ". " + t("A reply that reasoned counts only its answer, from its first text: the reasoning was written before the stream showed it") + ". " + t("No answer text: speed includes reasoning only when visible reasoning streamed; hidden reasoning has no speed")].filter(Boolean).join("\n"));
+    "", [gs?.title, t("All output tokens the vendor counted, reasoning and tool calls included, a second from the first output to the end, over the streamed replies") + ". " + t("A reply that reasoned with no sign in its stream of when counts only its answer, from its first text")].filter(Boolean).join("\n"));
   speedCard.append(Object.assign(line(ttft), { className: "sub ttft" }));
   drawLedTrend();
 }
@@ -3399,25 +3399,36 @@ const LED_COLS = [
 // seen (pluviophile714 on Discord: gpt-6.1-sol, 392 tokens 0.25 s after an
 // 8.2 s first token, read 1,539 tok/s; usage.HeldWindowMs)
 const ledHeldShort_ = (w, from) => w < 1000 && from > 4 * w;
-// the tokens a reply was seen to write and the ms it took, as
-// usage.DecodeOf and routing/client.js's decodeOf tell them: one that reasoned
-// counts its answer from its first text, its reasoning written before
-// the stream showed any (tony on Discord); null when it tells no speed.
+// what a reply's speed counts, as usage.DecodeOf and routing/client.js's
+// decodeOf count it: all its output tokens, reasoning and tool calls
+// included (Archivemylife on X), from its first output of any kind, its
+// first content or its first sign of reasoning, to its end (start); one
+// that reasoned with no sign of when counts its answer from its first text
+// (answer, tony on Discord), and none with no text. from is where the
+// answer the burst is judged on starts. null when it counts none.
+const ledSpan_ = (r) => {
+  const think = r.reasoning > 0 ? r.reasoning : 0, fr = r.first_reasoning_ms > 0 ? r.first_reasoning_ms : 0, ft = r.first_text_ms > 0 ? r.first_text_ms : 0;
+  const from = think && ft ? ft : r.ttft_ms;
+  if (think && !fr) return ft ? { n: r.out - think, start: ft, from, think, answer: true } : null;
+  if (think > r.out) return null;
+  return { n: r.out, start: fr && fr < r.ttft_ms ? fr : r.ttft_ms, from, think };
+};
 // A reply held back and let go in a burst at its end tells none (John on
-// Discord): its content came in under a quarter of its window (flow_ms),
-// or its answer at over 20 times the pace its reasoning came before it,
-// or it came in under a second after a wait four times longer (ledHeldShort_)
+// Discord): its answer's content came in under a quarter of its window
+// (flow_ms), or its answer at over 20 times the pace its reasoning came
+// before it, or it came in under a second after a wait four times longer
+// (ledHeldShort_)
 const ledDecode = (r) => {
-  if (ledFailed_(r) || r.canceled || r.reasoning_hidden && !(r.first_text_ms > 0) || !(r.ttft_ms > 0)) return null;
-  const think = r.reasoning > 0, visible = think && !(r.first_text_ms > 0) && r.first_reasoning_ms >= r.ttft_ms && r.flow_ms > 0 && r.reasoning <= r.out;
-  const n = think && !visible ? r.out - r.reasoning : r.out, from = visible ? r.first_reasoning_ms : think ? r.first_text_ms : r.ttft_ms;
-  const w = r.ms - from;
-  if (!(n > 0 && from > 0 && w >= 100 && n * 1000 <= 10000 * w)) return null;
-  if (r.flow_ms > 0 && r.flow_ms * 4 < w) return null;
-  if (ledHeldShort_(w, from)) return null;
-  if (think && r.first_text_ms > 0 && n * (r.first_text_ms - r.ttft_ms) > 20 * r.reasoning * w) return null;
+  if (ledFailed_(r) || r.canceled || r.reasoning_hidden && !(r.first_text_ms > 0) && !(r.first_reasoning_ms > 0) || !(r.ttft_ms > 0)) return null;
+  const s = ledSpan_(r);
+  if (!s) return null;
+  const n = s.n, w = r.ms - s.start, tail = r.ms - s.from;
+  if (!(n > 0 && w >= 100 && n * 1000 <= 10000 * w)) return null;
+  if (r.flow_ms > 0 && r.flow_ms * 4 < tail) return null;
+  if (ledHeldShort_(w, s.start)) return null;
+  if (s.think && r.first_text_ms > 0 && (r.out - s.think) * (r.first_text_ms - r.ttft_ms) > 20 * s.think * tail) return null;
   if (ledCodexTurn(r) && (w < LED_CODEX_WINDOW_MS || n < LED_CODEX_BODY)) return null;
-  return { n, w };
+  return { n, w, answer: !!s.answer };
 };
 // a Codex turn of one call read from its session file, its first token
 // known: its window after the first token can be one network push, not the
@@ -3482,14 +3493,15 @@ const ledNoSpeed_ = (r) => {
   if (!(r.ms > 0)) return t("No duration was recorded to time a speed from");
   if (!(r.out > 0)) return t("No output tokens to time a speed from");
   if (!(r.ttft_ms > 0)) return r.source === "log" ? t("The session file has no first token to time a speed from") : t("Not streamed: no first token to time a speed from");
-  const think = r.reasoning > 0, visible = think && !(r.first_text_ms > 0) && r.first_reasoning_ms >= r.ttft_ms && r.flow_ms > 0 && r.reasoning <= r.out;
-  const n = think && !visible ? r.out - r.reasoning : r.out;
+  // a reply that reasoned with no sign of when and no text counts none:
+  // why is said of its answer, all after its first token
+  const s = ledSpan_(r) || { n: r.out - (r.reasoning || 0), start: r.ttft_ms, from: r.ttft_ms, think: r.reasoning || 0 }, n = s.n;
   if (!(n > 0)) return t("All its output was reasoning: no answer after it to time a speed from");
-  const from = visible ? r.first_reasoning_ms : think && r.first_text_ms > 0 ? r.first_text_ms : r.ttft_ms, w = r.ms - from;
+  const from = s.start, w = r.ms - from, tail = r.ms - s.from, burst = r.flow_ms > 0 && r.flow_ms * 4 < tail;
   const little = t("Too little came after the first token to time a speed by: {n} tokens in {ms}", { n: ledNum(n), ms: ledTook(Math.max(0, w)) });
   if (w < 100) return little;
-  if (ledHeldShort_(w, from) && !(n * 1000 > 10000 * w || r.flow_ms > 0 && r.flow_ms * 4 < w)) return t("It came in under a second after a wait of {wait}: it may have been written during the wait and let go at once, so how fast it was written isn't seen", { wait: ledTook(from) });
-  if (n * 1000 > 10000 * w || r.flow_ms > 0 && r.flow_ms * 4 < w || think && r.first_text_ms > 0 && n * (r.first_text_ms - r.ttft_ms) > 20 * r.reasoning * w) return t("It came in one burst at its end, not as it was written, so how fast it was written isn't seen");
+  if (ledHeldShort_(w, from) && !(n * 1000 > 10000 * w || burst)) return t("It came in under a second after a wait of {wait}: it may have been written during the wait and let go at once, so how fast it was written isn't seen", { wait: ledTook(from) });
+  if (n * 1000 > 10000 * w || burst || s.think && r.first_text_ms > 0 && (r.out - s.think) * (r.first_text_ms - r.ttft_ms) > 20 * s.think * tail) return t("It came in one burst at its end, not as it was written, so how fast it was written isn't seen");
   return little;
 };
 const ledFloorSpeed = (r) => { const f = ledFloor_(r); return f ? f.n / (f.w / 1000) : 0; };
@@ -3948,7 +3960,7 @@ function renderLedger() {
     const v = ledRowSpeed(r), floor = ledFloorSpeed(r), f = ledFloor_(r);
     const ttft = r.ttft_ms > 0 ? " · " + t("TTFT {ms}", { ms: ledTook(r.ttft_ms) }) : "";
     td(v ? t("{n} tok/s", { n: ledNum(Math.round(v)) }) : floor ? "≥" + t("{n} tok/s", { n: ledNum(Math.round(floor)) }) : "—", "n speed" + (v || floor ? "" : " faint"),
-      v ? (r.reasoning > 0 && r.first_text_ms > 0 ? t("{n} answer tokens in {ms} after the first text, the {r} reasoning tokens before it left out", { n: ledNum(ledDecode(r).n), ms: ledTook(ledDecode(r).w), r: ledNum(r.reasoning) })
+      v ? (ledDecode(r).answer ? t("{n} answer tokens in {ms} after the first text, the {r} reasoning tokens before it left out", { n: ledNum(ledDecode(r).n), ms: ledTook(ledDecode(r).w), r: ledNum(r.reasoning) })
         : t("{n} output tokens in {ms} after the first", { n: ledNum(ledDecode(r).n), ms: ledTook(ledDecode(r).w) })) + ttft
         : floor && f.gateway && f.answer ? t("At least: {n} answer tokens in {ms} after the first token, the {r} reasoning tokens left out. No first text was recorded, so reasoning after the first token is counted too", { n: ledNum(f.n), ms: ledTook(f.w), r: ledNum(r.reasoning) }) + ttft
         : floor && f.gateway ? t("At least: {n} output tokens in {ms}, from the request to its last token, the wait for the first one counted too", { n: ledNum(r.out), ms: ledTook(r.ms) }) + ". " + ledNoSpeed_(r) + ttft

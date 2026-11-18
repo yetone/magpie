@@ -601,27 +601,36 @@ function routingPage(part) {
   // 100 ms or would have it write over 10,000 tok/s, as it came in one
   // burst at its end (usage.DecodeWindow, #731: a whole Gemini tool call,
   // 8264 tokens 1 ms before the end, read 8,264,000 tok/s)
-  // A reply that reasoned counts its answer, its output less the
-  // reasoning, from its first text (usage.DecodeOf, tony on Discord):
-  // the reasoning was written before the stream showed any, OpenAI's
-  // encrypted and its summary sent when done, and counting it read
-  // gpt-6.1-sol at 163 tok/s. The reply's reasoning is its served try's.
+  // A reply counts all its output, reasoning and tool calls included,
+  // from its first output of any kind, its first content or its first
+  // sign of reasoning (usage.DecodeOf, Archivemylife on X: reasoning and
+  // tools are tokens too). One that reasoned with no sign of when in its
+  // stream counts its answer, its output less the reasoning, from its
+  // first text (tony on Discord), and none with no text. The reply's
+  // reasoning is its served try's.
   // A reply held back and let go in a burst at its end tells no speed
   // (usage.DecodeOf, John on Discord: Kimi Code at 2,237 tok/s): its
-  // content came in under a quarter of its window (flow), or its answer
-  // at over 20 times the pace its reasoning came before its first text, or
-  // it came in under a second after a wait four times longer
+  // answer's content came in under a quarter of its tail (flow), or its
+  // answer at over 20 times the pace its reasoning came before its first
+  // text, or it came in under a second after a wait four times longer
   // (pluviophile714 on Discord: gpt-6.1-sol, 392 tokens 0.25 s after an
   // 8.2 s first token, read 1,539 tok/s; usage.HeldWindowMs).
   function decodeOf(r, ms, ttft, firstText, flow = r.flow, firstReasoning = r.firstReasoning, reasoningHidden = r.reasoningHidden) {
-    if (reasoningHidden && !(firstText > 0)) return null;
-    const think = reasoningOf(r), visible = think > 0 && !(firstText > 0) && firstReasoning >= ttft && flow > 0 && think <= r.out;
-    const n = think > 0 && !visible ? r.out - think : r.out, from = visible ? firstReasoning : think > 0 ? firstText : ttft;
-    const w = ms - from;
-    if (!(n > 0 && ttft > 0 && from > 0 && w >= 100 && n * 1000 <= 10000 * w)) return null;
-    if (flow > 0 && flow * 4 < w) return null;
-    if (w < 1000 && from > 4 * w) return null;
-    if (think > 0 && firstText > 0 && n * (firstText - ttft) > 20 * think * w) return null;
+    if (reasoningHidden && !(firstText > 0) && !(firstReasoning > 0)) return null;
+    if (!(ttft > 0)) return null;
+    const think = reasoningOf(r) > 0 ? reasoningOf(r) : 0, fr = firstReasoning > 0 ? firstReasoning : 0, ft = firstText > 0 ? firstText : 0;
+    const from = think && ft ? ft : ttft, tail = ms - from;
+    let n = r.out, start = ttft;
+    if (think && !fr) {
+      if (!ft) return null;
+      n = r.out - think, start = ft;
+    } else if (think > r.out) return null;
+    else if (fr && fr < ttft) start = fr;
+    const w = ms - start;
+    if (!(n > 0 && w >= 100 && n * 1000 <= 10000 * w)) return null;
+    if (flow > 0 && flow * 4 < tail) return null;
+    if (w < 1000 && start > 4 * w) return null;
+    if (think && ft && (r.out - think) * (ft - ttft) > 20 * think * tail) return null;
     return { n, w };
   }
   const reasoningOf = (r) => r.reasoning ?? (r.usage?.length ? r.usage[r.usage.length - 1].reasoning || 0 : 0);
@@ -704,7 +713,7 @@ function routingPage(part) {
       cache: ["cache-hit", "Cache", prompt ? hitPct(read / prompt) : "—",
         tipLines(hitTip(read, prompt), t("Cache hit rate") + ": " + t("The share of the prompt read from the cache"))],
       speed: ["speed", "Speed", speed ? speed.text : "—", speed?.title ||
-        t("Output tokens a second after the first, over the streamed replies") + ". " + t("A reply that reasoned counts only its answer, from its first text: the reasoning was written before the stream showed it") + ". " + t("No answer text: speed includes reasoning only when visible reasoning streamed; hidden reasoning has no speed")],
+        t("All output tokens the vendor counted, reasoning and tool calls included, a second from the first output to the end, over the streamed replies") + ". " + t("A reply that reasoned with no sign in its stream of when counts only its answer, from its first text")],
       cost: ["cost", "Cost", routeCost(r), [r.priced ? costNote() : routeCredits([r]) ? "" : t("No known price or token counts for this request"), routeCredits([r]) ? creditsNote() : ""].filter(Boolean).join("\n")],
     };
     return visibleMetrics.map((key) => values[key]).filter((metric) => metric[2] !== "—");
@@ -4463,7 +4472,7 @@ function routingPage(part) {
       if (g.key && visibleMetrics.includes("cache") && total.prompt) meta.push(metricElement(["cache-hit", "Avg. cache", hitPct(total.read / total.prompt),
         tipLines(hitTip(total.read, total.prompt), t("Total cache reads divided by total prompt tokens; larger prompts carry more weight"), coverage(total.cached))]));
       if (g.key && visibleMetrics.includes("speed") && total.decodeMs) meta.push(metricElement(["speed", "Avg. speed", t("{n} tok/s", { n: Math.round(total.decodeOut * 1000 / total.decodeMs) }),
-        tipLines(t("Total output tokens divided by the time from each reply's first token to its end; the wait for the first token, and replies without usable timing, are left out") + ". " + t("A reply that reasoned counts only its answer, from its first text: the reasoning was written before the stream showed it") + ". " + t("No answer text: speed includes reasoning only when visible reasoning streamed; hidden reasoning has no speed"),
+        tipLines(t("Total output tokens divided by the time from each reply's first token to its end; the wait for the first token, and replies without usable timing, are left out") + ". " + t("Reasoning and tool calls count too, from the first output; a reply that reasoned with no sign in its stream of when counts only its answer, from its first text"),
           total.wholeMs ? t("Over each request's whole time, the wait for the first token and the reasoning counted: {n} tok/s", { n: Math.round(total.wholeOut * 1000 / total.wholeMs) }) : "", coverage(total.timed))]));
       const metaSig = JSON.stringify([bits, tokenHelp, meta.map((e) => [e.textContent, e.title])]);
       if (x.meta.dataset.sig !== metaSig) { x.meta.replaceChildren(...meta); x.meta.dataset.sig = metaSig; }

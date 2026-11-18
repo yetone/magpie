@@ -119,20 +119,23 @@ Usage rows and aggregates use `Record.Decode` and `DecodeOf` in
 `decodeOf` in [`plugins/routing/client.js`](../../internal/gui/assets/plugins/routing/client.js); Usage
 rows use `ledDecode` in [`plugins/usage/page.js`](../../internal/gui/assets/plugins/usage/page.js).
 
-When an answer follows reasoning, only answer tokens are timed from the
-first answer text. Without answer text, all output tokens are timed only
-when the gateway records paced visible reasoning and a usable content flow.
-`firstToken.reasoningMs` in
-[`ttft.go`](../../internal/gateway/ttft.go) requires reasoning at the first
-content and subsequent reasoning deltas at least 100 ms later. It excludes
-native Responses and Gemini, whose summaries do not measure their reported
-reasoning tokens, and redacted thinking, including translated sealed blocks.
-The upstream protocol is retained when the client receives a translation.
+A reply's speed counts all its output tokens as the vendor's usage counts
+them, reasoning and tool-call arguments included (Archivemylife on X), from
+its first output of any kind to its end: the earlier of its first content
+(`TTFT`) and its first sign of reasoning (`FirstReasoning`). That sign is
+`firstToken.reasoningMs` in [`ttft.go`](../../internal/gateway/ttft.go), in
+every protocol: a Responses reasoning item's start, an Anthropic thinking
+or redacted-thinking block's start, sealed thinking, or reasoning deltas
+spread over 100 ms or more (deltas that came at once are a buffered burst
+and tell none). A summary is no sign (`summaryPart`: a Responses reasoning
+summary's words, a Gemini thought, or one translated from another protocol,
+`summarized`), as it is written after some of the reasoning it sums up
+(#1463). A reply that reasoned with no sign of when counts only its answer,
+its output less the reasoning, from its first text, and none with no text.
+The burst and held-content checks judge the answer's part: from its first
+text when it reasoned, else from its first token.
 These are receive-side timing checks, not access to the vendor's generation
 clock: a relay that releases a buffered reply evenly can still look paced.
-Without an upstream guarantee, this is an observed output-rate estimate.
-Summaries stay excluded rather than extending their visible portion's time
-to an unobserved reasoning-token count.
 
 `Record.FirstReasoning` (`first_reasoning_ms`) and the corresponding
 `Call`, `Route` and `Try` field (`firstReasoning`) record this evidence with
