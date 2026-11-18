@@ -19,7 +19,8 @@ package library
 //
 // What stays a link of its own (routedFor):
 //   - a skill the user keeps direct (Skill.Router), to be a /command of
-//     the agent's, or always in its prompt;
+//     an agent other than Claude Code, whose routed skills each have a
+//     slash command (routerCommands), or always in its prompt;
 //   - one whose SKILL.md sets disable-model-invocation: it is for the
 //     user to type, which a listed skill can't be;
 //   - one the agent finds in ~/.agents/skills anyway.
@@ -182,6 +183,7 @@ func (l *Library) placeRouter(t *Target, routed map[string]bool, a *Applied, res
 	if len(routed) == 0 {
 		if !a.Router {
 			l.routerAllow(t, nil, a, res)
+			l.routerCommands(t, nil, a, res)
 			return
 		}
 		if routerOurs(p) {
@@ -194,6 +196,7 @@ func (l *Library) placeRouter(t *Target, routed map[string]bool, a *Applied, res
 		os.RemoveAll(dir)
 		a.Router = false
 		l.routerAllow(t, nil, a, res)
+		l.routerCommands(t, nil, a, res)
 		return
 	}
 	changed, err := writeRouter(dir, t.Skills, routed)
@@ -218,6 +221,7 @@ func (l *Library) placeRouter(t *Target, routed map[string]bool, a *Applied, res
 		res.changed(id)
 	}
 	l.routerAllow(t, routerRules(t, routed), a, res)
+	l.routerCommands(t, routed, a, res)
 }
 
 // routerRules are the rules that let Claude Code read a listed skill's
@@ -354,17 +358,15 @@ func writeRouter(dir, skills string, routed map[string]bool) (bool, error) {
 	var list []entry
 	for _, n := range names {
 		q := filepath.Join(links, n)
-		at := filepath.Join(realDir(skills), RouterSkill, ".skills", n, "SKILL.md")
 		if to, ok := linkTarget(q); !ok || filepath.Clean(to) != filepath.Clean(skillDir(n)) {
 			os.RemoveAll(q)
-			if err := dirLink(skillDir(n), q); err != nil {
-				// no link here (Windows without the right to): the library's
-				// own folder is read instead
-				at = filepath.Join(skillDir(n), "SKILL.md")
-			} else {
+			// no link here (Windows without the right to): the library's
+			// own folder is read instead (routedAt)
+			if dirLink(skillDir(n), q) == nil {
 				changed = true
 			}
 		}
+		at := filepath.Join(routedAt(dir, skills, n), "SKILL.md")
 		m, _ := readMeta(skillDir(n))
 		list = append(list, entry{n, m.Description, at})
 	}
@@ -394,6 +396,99 @@ func writeRouter(dir, skills string, routed map[string]bool) (bool, error) {
 		return false, err
 	}
 	return true, os.Rename(tmp, md)
+}
+
+// routedAt is the folder of the routed skill n the router's SKILL.md
+// names: through the agent's own skills folder, where the router's folder
+// dir links to it, else the library's own.
+func routedAt(dir, skills, n string) string {
+	if to, ok := linkTarget(filepath.Join(dir, ".skills", n)); ok && filepath.Clean(to) == filepath.Clean(skillDir(n)) {
+		return filepath.Join(realDir(skills), RouterSkill, ".skills", n)
+	}
+	return skillDir(n)
+}
+
+// routerCommands keeps each routed skill a /name of Claude Code's (RoyShen
+// on X: with the router on, / no longer picked a skill). For each one it
+// writes a slash command, <claude dir>/commands/<name>.md, that has the
+// agent read the skill's SKILL.md and follow it. The command says
+// disable-model-invocation, so Claude Code lists it under / with the
+// skill's description but leaves it out of the model's prompt (Claude
+// Code 2.1.316, tried in a sandbox HOME: the description is in no request,
+// and /name reads and follows the skill). They go in Claude Code's own
+// commands folder, not its skills folder, which Crush, DevEco Code and
+// Kimi Code read too, and which would give them every description again.
+// What magpie wrote is recorded as a command's is (Applied.RouterCommands,
+// syncOwnFiles); a library command or a file of the user's by that name
+// stays, and that skill gets none. Other agents: none.
+func (l *Library) routerCommands(t *Target, routed map[string]bool, a *Applied, res *Result) {
+	if len(routed) == 0 && len(a.RouterCommands) == 0 {
+		return
+	}
+	var want []ownFile
+	if dir := routerCommandsDir(t); dir != "" {
+		had := map[string]bool{}
+		for _, f := range a.RouterCommands {
+			had[f.Path] = true
+		}
+		taken := map[string]bool{}
+		for _, f := range a.Commands {
+			taken[f.Path] = true
+		}
+		rdir := routerDir(t.Skills)
+		for _, n := range slices.Sorted(maps.Keys(routed)) {
+			if strings.ContainsAny(n, `:/\`) {
+				continue
+			}
+			if c := l.command(n); c != nil && slices.Contains(c.Agents, t.Agent.ID) {
+				continue
+			}
+			path := filepath.Join(dir, n+".md")
+			if taken[path] {
+				continue
+			}
+			at := routedAt(rdir, t.Skills, n)
+			body := routerCommand(n, at)
+			if _, err := os.Lstat(path); err == nil && !had[path] {
+				// the user's own command by that name, unless it is what
+				// magpie would write
+				if cur, err := os.ReadFile(path); err != nil || !slices.Equal(cur, body) {
+					continue
+				}
+			}
+			want = append(want, ownFile{name: n, path: path, body: func() []byte { return body }})
+		}
+	}
+	if l.kept == nil {
+		l.kept = newBackups()
+	}
+	a.RouterCommands = syncOwnFiles(t, "command", a.RouterCommands, want, l.kept, res)
+}
+
+// routerCommandsDir is Claude Code's commands folder, beside the settings
+// routerRules writes; "" for any other agent.
+func routerCommandsDir(t *Target) string {
+	if t.Agent == nil || t.Agent.Plugin != "" || t.Settings == "" || t.Agent.WSL != "" {
+		return ""
+	}
+	if id, _, _ := strings.Cut(t.Agent.ID, "@"); id != "claude" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(t.Settings), "commands")
+}
+
+// routerCommand is the slash command for the routed skill n, whose folder
+// is at.
+func routerCommand(n, at string) []byte {
+	m, _ := readMeta(skillDir(n))
+	kv := [][2]string{}
+	if m.Description != "" {
+		kv = append(kv, [2]string{"description", yamlStr(m.Description)})
+	}
+	kv = append(kv, [2]string{"disable-model-invocation", "true"})
+	body := fmt.Sprintf("Use the user's skill %s: read `%s` and follow it. A file or script it names is in `%s`, beside it.\n\n$ARGUMENTS\n",
+		n, filepath.Join(at, "SKILL.md"), at)
+	return frontmatter(kv, body)
 }
 
 // routerDesc is the router's description: what it is, then each skill's

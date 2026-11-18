@@ -180,6 +180,9 @@ type Applied struct {
 	// RouterRules are the rules magpie put in Claude Code's
 	// permissions.allow so it reads a listed skill without asking.
 	RouterRules []string `json:"routerRules,omitempty"`
+	// RouterCommands are the slash commands magpie wrote for the skills
+	// the router lists (routerCommands), kept as Commands are
+	RouterCommands []SubagentFile `json:"routerCommands,omitempty"`
 }
 
 // empty is whether a holds nothing magpie wrote: a sync that only looked
@@ -189,7 +192,7 @@ type Applied struct {
 func (a *Applied) empty() bool {
 	return !a.Instructions && a.InstrHash == "" && len(a.MCP) == 0 && len(a.Skills) == 0 &&
 		len(a.ToolsOff) == 0 && len(a.ToolRules) == 0 && len(a.Hooks) == 0 && len(a.Env) == 0 &&
-		len(a.Subagents) == 0 && len(a.Commands) == 0 && len(a.Startup) == 0 && len(a.Picked) == 0 && !a.Router && len(a.RouterRules) == 0
+		len(a.Subagents) == 0 && len(a.Commands) == 0 && len(a.Startup) == 0 && len(a.Picked) == 0 && !a.Router && len(a.RouterRules) == 0 && len(a.RouterCommands) == 0
 }
 
 var mu lock // one change at a time, from the page or the CLI's process

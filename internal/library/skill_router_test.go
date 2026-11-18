@@ -269,3 +269,102 @@ func TestRouterRulesLibraryFolder(t *testing.T) {
 		t.Fatalf("windows path: %q", got)
 	}
 }
+
+// With the router on, a skill it lists is still a /name of Claude Code's
+// (RoyShen on X): a slash command in its commands folder that reads the
+// skill's SKILL.md, said disable-model-invocation so it stays out of the
+// model's prompt. A skill kept direct, or one of the user's own commands
+// by that name, gets none; a library command by that name takes its
+// place; router off, they go.
+func TestSkillRouterKeepsSlashCommands(t *testing.T) {
+	h := sandbox(t)
+	src := filepath.Join(h, "src")
+	skill(t, filepath.Join(src, "pdf"), "pdf", "Read PDFs. Use for any .pdf file")
+	skill(t, filepath.Join(src, "xlsx"), "xlsx", "Edit spreadsheets")
+	skill(t, filepath.Join(src, "docx"), "docx", "Write documents")
+	write(t, filepath.Join(src, "deploy/SKILL.md"), "---\nname: deploy\ndescription: Ship it\ndisable-model-invocation: true\n---\n")
+	ok(t)(InstallSkills(src, []string{"pdf", "xlsx", "docx", "deploy"}, []string{"claude", "codex"}))
+	cmds := filepath.Join(h, ".claude", "commands")
+	mine := filepath.Join(cmds, "docx.md")
+	write(t, mine, "my own docx command\n")
+	r := ok(t)(SetSkillRouter(true))
+	for _, p := range r.Problems {
+		if strings.Contains(p.What, "command") {
+			t.Fatalf("a problem for a stub: %+v", p)
+		}
+	}
+	stub := filepath.Join(cmds, "pdf.md")
+	got := read(t, stub)
+	at := filepath.Join(realDir(filepath.Join(h, ".claude", "skills")), RouterSkill, ".skills", "pdf", "SKILL.md")
+	for _, w := range []string{"disable-model-invocation: true\n", `description: "Read PDFs. Use for any .pdf file"`, "`" + at + "`", "$ARGUMENTS"} {
+		if !strings.Contains(got, w) {
+			t.Fatalf("pdf's stub has no %q:\n%s", w, got)
+		}
+	}
+	if !strings.Contains(read(t, at), "Read PDFs") {
+		t.Fatal("the stub's path doesn't lead to pdf's SKILL.md")
+	}
+	if _, err := os.Stat(filepath.Join(cmds, "xlsx.md")); err != nil {
+		t.Fatal("xlsx has no stub")
+	}
+	if _, err := os.Stat(filepath.Join(cmds, "deploy.md")); err == nil {
+		t.Fatal("deploy keeps its own link, yet has a stub")
+	}
+	if read(t, mine) != "my own docx command\n" {
+		t.Fatal("the user's own docx command was written over")
+	}
+	// Codex has no such folder of magpie's: nothing written for it
+	if es, _ := os.ReadDir(filepath.Join(h, ".codex", "prompts")); len(es) != 0 {
+		t.Fatalf("codex was given stubs: %v", es)
+	}
+	if r := ok(t)(Sync()); slices.Contains(r.Changed, "claude") {
+		t.Fatalf("a second sync changed claude: %+v", r.Changed)
+	}
+	// the stubs aren't offered as the user's commands to bring in
+	p, err := ProbeCommands()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range p.Candidates {
+		if c.Name == "pdf" || c.Name == "xlsx" {
+			t.Fatalf("a stub is offered to import: %+v", c)
+		}
+	}
+
+	// kept direct: its link is the /name, and the stub goes
+	ok(t)(SkillRouterHow("xlsx", true))
+	if _, err := os.Stat(filepath.Join(cmds, "xlsx.md")); err == nil {
+		t.Fatal("direct, xlsx's stub stays")
+	}
+
+	// a library command called pdf takes the stub's place
+	r = ok(t)(SaveCommand("", Command{Name: "pdf", Description: "mine", Prompt: "Do the pdf thing", Agents: []string{"claude"}}))
+	for _, p := range r.Problems {
+		if strings.Contains(p.What, "pdf") {
+			t.Fatalf("a problem: %+v", p)
+		}
+	}
+	if got := read(t, stub); !strings.Contains(got, "Do the pdf thing") {
+		t.Fatalf("pdf.md isn't the library's command:\n%s", got)
+	}
+	a := loaded(t).Applied["claude"]
+	if slices.ContainsFunc(a.RouterCommands, func(f SubagentFile) bool { return f.Path == stub }) {
+		t.Fatalf("the command is still on record as a stub: %+v", a.RouterCommands)
+	}
+	ok(t)(RemoveCommands([]string{"pdf"}))
+	if got := read(t, stub); !strings.Contains(got, "disable-model-invocation") {
+		t.Fatalf("the command gone, pdf has no stub again:\n%s", got)
+	}
+
+	// off: every stub goes, the user's own stays
+	ok(t)(SetSkillRouter(false))
+	if _, err := os.Stat(stub); err == nil {
+		t.Fatal("router off, pdf's stub stays")
+	}
+	if read(t, mine) != "my own docx command\n" {
+		t.Fatal("router off took the user's own command")
+	}
+	if a := loaded(t).Applied["claude"]; a != nil && len(a.RouterCommands) != 0 {
+		t.Fatalf("applied after off: %+v", a.RouterCommands)
+	}
+}

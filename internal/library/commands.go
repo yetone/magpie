@@ -230,7 +230,16 @@ func (l *Library) syncCommands(t *Target, b *backups, res *Result) {
 		}
 		files = append(files, ownFile{name: c.Name, path: path, body: func() []byte { return sp.render(c) }})
 	}
-	a.Commands = syncOwnFiles(t, "command", a.Commands, files, b, res)
+	// a stub the skill router wrote by that name (routerCommands) is
+	// magpie's to write over: the library's command takes its place
+	had := a.Commands
+	for _, f := range files {
+		if i := slices.IndexFunc(a.RouterCommands, func(r SubagentFile) bool { return r.Path == f.path }); i >= 0 {
+			had = append(slices.Clip(had), a.RouterCommands[i])
+			a.RouterCommands = slices.Delete(a.RouterCommands, i, i+1)
+		}
+	}
+	a.Commands = syncOwnFiles(t, "command", had, files, b, res)
 }
 
 // ---- changes ---------------------------------------------------------------

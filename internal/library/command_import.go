@@ -241,7 +241,8 @@ func (l *Library) findCommands(targets []*Target) *CommandProbe {
 		}
 		var mine []SubagentFile
 		if a := l.Applied[id]; a != nil {
-			mine = a.Commands
+			// the skill router's stubs (routerCommands) are magpie's too
+			mine = slices.Concat(a.Commands, a.RouterCommands)
 		}
 		for _, r := range commandReads(id, sp) {
 			ents, err := os.ReadDir(r[0])
