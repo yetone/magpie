@@ -816,10 +816,21 @@ function routingPage(part) {
   // a script's key read "Python-urllib"). srcOf is the stage's node for
   // it: each key's its own, two keys' scripts saying one User-Agent too.
   // Never the key's secret: a route carries its id and name alone.
+  // An agent magpie knows keeps its name beside the key's, as Usage's
+  // rows read ("DimCode · Server"): DimCode calling a Docker magpie by a
+  // key named "Magpie" read as that alone (Yayoi_no_yume on X).
   function callerName(r) {
     const k = r.callerKey && (callerKeys.find((x) => x.id === r.callerKey)?.name || r.callerKeyName);
-    return k || agentName(r.agent);
+    if (!k) return agentName(r.agent);
+    const ag = agentOf(r.agent);
+    return ag?.name && ag.name !== k ? `${ag.name} · ${k}` : k;
   }
+  // callerLines head a caller's tooltip: its name, then its agent's when
+  // the name doesn't say it already
+  const callerLines = (r) => {
+    const c = callerName(r), a = agentName(r.agent);
+    return c === a || c.startsWith(a + " · ") ? [c] : [c, a];
+  };
   const srcOf = (r) => r.callerKey ? r.agent + "\u0001" + r.callerKey : r.agent;
   // userShown is an account of provider as the user named it in magpie
   // (provider.AccountNames, #1515), else as its plugin's usage names it
@@ -2921,7 +2932,7 @@ function routingPage(part) {
       const fs = foldersOf([...new Set([...going, ...rs.filter((x) => srcOf(x) === id)])].sort((x, y) => x.id - y.id));
       // told again every second (countdown): only what changed is written
       setText(a.sub, fs.length > 1 ? fs.map(lastLevel).join(", ") : r.model);
-      const tip = [...new Set([callerName(r), agentName(r.agent)]), r.model, ...fs.map((f) => t("Folder") + ": " + f)].join("\n");
+      const tip = [...callerLines(r), r.model, ...fs.map((f) => t("Folder") + ": " + f)].join("\n");
       if (a.node.title !== tip) a.node.title = tip;
     }
     // the account sets, the latest of each
@@ -9615,7 +9626,7 @@ function routingPage(part) {
       n.node.style.setProperty("--agent", hueOf(id));
       n.wire.style.setProperty("--agent", hueOf(id));
       n.node.replaceChildren(icon(ag?.icon || "generic"), el("span", "ps-name", callerName(r)));
-      n.node.title = [...new Set([callerName(r), agentName(r.agent)]), ...foldersOf(recent.filter((x) => srcOf(x) === id).slice(0, 20).reverse()).map((f) => t("Folder") + ": " + f)].join("\n");
+      n.node.title = [...callerLines(r), ...foldersOf(recent.filter((x) => srcOf(x) === id).slice(0, 20).reverse()).map((f) => t("Folder") + ": " + f)].join("\n");
       return n.node;
     }));
     pTo.replaceChildren(...pDst.map((k) => {

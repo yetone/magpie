@@ -208,6 +208,13 @@ var others = []*Agent{
 	// Icons are the apps' own App Store icons (#shannnnnks on X).
 	{ID: "flowdown", Name: "FlowDown", Icon: "flowdown-color", UA: []string{"flowdown"}},
 	{ID: "bob", Name: "Bob", Icon: "bob-color", UA: []string{"bob/"}},
+	// DimCode (dimcode.dev) says "DimCode/<version>", or "DimAgent/<version>"
+	// to a provider set to send its identity (npm's dimagent 0.5.29,
+	// resolveDimOAuthIdentityHeaders). It is arcships' own app, apart from
+	// the Dim alpha magpie starts (dim.go); dimcode.dev's favicon is the
+	// same mark as dim-color. Unknown, it read as the cube and "DimAgent"
+	// on a Docker magpie's Routing page (Yayoi_no_yume on X)
+	{ID: "dimcode", Name: "DimCode", Icon: "dim-color", UA: []string{"dimagent", "dimcode"}},
 	// Kimi Code Desktop runs Kimi Code's engine on ~/.kimi-code, so it
 	// reaches magpie through Kimi Code's config, under a client name of
 	// its own ("kimi-code-desktop/…", jiabubu on Discord). Its icon is the
