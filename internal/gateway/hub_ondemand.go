@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -162,46 +163,162 @@ func hubWords(s string) []string {
 	return strings.FieldsFunc(strings.ToLower(s), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
 }
 
-// hubScore is how well t matches query's words: a word in its name
-// counts three, in its description one, and the whole query in its name
-// five more.
-func hubScore(t hubTool, query string, words []string) int {
-	name := strings.ToLower(t.name)
-	desc := strings.ToLower(hubDesc(t))
-	n := 0
-	for _, w := range words {
-		switch {
-		case strings.Contains(name, w):
-			n += 3
-		case strings.Contains(desc, w):
-			n++
+// hubStop are words of a query that say nothing of what a tool does.
+var hubStop = map[string]bool{
+	"a": true, "an": true, "the": true, "of": true, "to": true, "for": true, "in": true, "on": true, "at": true,
+	"by": true, "with": true, "and": true, "or": true, "from": true, "into": true, "is": true, "are": true, "be": true,
+	"it": true, "its": true, "this": true, "that": true, "my": true, "me": true, "i": true, "you": true, "your": true,
+	"some": true, "please": true, "tool": true, "tools": true, "can": true, "do": true, "how": true, "what": true,
+}
+
+// hubKeyWords are query's words that say what is wanted: hubWords but
+// the stop words and single letters, each once.
+func hubKeyWords(query string) []string {
+	var out []string
+	for _, w := range hubWords(query) {
+		if hubStop[w] || len(w) < 2 || slices.Contains(out, w) {
+			continue
+		}
+		out = append(out, w)
+	}
+	return out
+}
+
+// hubWordIn is whether w is one of words, or, for a word of four letters
+// or more, the start of one (repo is repository's, open is opens'), or one
+// of four letters or more is w's start (issues has issue). A word not in
+// ASCII (Chinese has no spaces between words) is anywhere in text.
+func hubWordIn(w string, words []string, text string) bool {
+	for _, r := range w {
+		if r > unicode.MaxASCII {
+			return strings.Contains(text, w)
 		}
 	}
-	if q := strings.ToLower(strings.TrimSpace(query)); q != "" && n > 0 && (strings.Contains(name, q) || strings.EqualFold(t.Tool, q)) {
-		n += 5
+	for _, x := range words {
+		if x == w || len(w) >= 4 && strings.HasPrefix(x, w) || len(x) >= 4 && strings.HasPrefix(w, x) {
+			return true
+		}
+	}
+	return false
+}
+
+// hubMatch is how well t matches query: how many of its key words are in
+// t's router name (in names) and how many more in its description only.
+// exact is the query being t's name, or its own.
+type hubMatch struct {
+	t            hubTool
+	names, descs int
+	exact        bool
+}
+
+// hubMatchOf is t's hubMatch for query, with keys its key words.
+func hubMatchOf(t hubTool, query string, keys []string) hubMatch {
+	m := hubMatch{t: t}
+	q := strings.TrimSpace(query)
+	m.exact = q != "" && (strings.EqualFold(t.name, q) || strings.EqualFold(t.Tool, q))
+	name := strings.ToLower(t.name)
+	desc := strings.ToLower(hubDesc(t))
+	nw, dw := hubWords(name), hubWords(desc)
+	for _, w := range keys {
+		switch {
+		case hubWordIn(w, nw, name):
+			m.names++
+		case hubWordIn(w, dw, desc):
+			m.descs++
+		}
+	}
+	return m
+}
+
+// clears is whether m is a match at all (sahuaja3669 on X, 11-18: a
+// router mustn't hand over a tool of a near name that does something
+// else): the query is its name, or it has at least two thirds of the
+// key words, one of them in its name unless it has them all. A word or
+// two of a longer ask, in a description, is not what was asked for.
+func (m hubMatch) clears(keys int) bool {
+	if m.exact {
+		return true
+	}
+	got := m.names + m.descs
+	return keys > 0 && got*3 >= keys*2 && (m.names > 0 || got == keys)
+}
+
+// score orders the matches: the query as a name first, then a word in
+// the name counting three and in the description one.
+func (m hubMatch) score() int {
+	n := 3*m.names + m.descs
+	if m.exact {
+		n += 100
 	}
 	return n
 }
 
-// hubMatches are ts best matching query first, those that don't left out.
+// hubMatches are ts that match query (hubMatch.clears), best first: none
+// when no tool does what it asks.
 func hubMatches(ts []hubTool, query string) []hubTool {
-	words := hubWords(query)
-	type scored struct {
-		t hubTool
-		n int
-	}
-	var out []scored
+	keys := hubKeyWords(query)
+	var out []hubMatch
 	for _, t := range ts {
-		if n := hubScore(t, query, words); n > 0 {
-			out = append(out, scored{t, n})
+		if m := hubMatchOf(t, query, keys); m.clears(len(keys)) {
+			out = append(out, m)
 		}
 	}
-	slices.SortStableFunc(out, func(a, b scored) int { return cmp.Compare(b.n, a.n) })
+	slices.SortStableFunc(out, func(a, b hubMatch) int { return cmp.Compare(b.score(), a.score()) })
 	ms := make([]hubTool, len(out))
-	for i, s := range out {
-		ms[i] = s.t
+	for i, m := range out {
+		ms[i] = m.t
 	}
 	return ms
+}
+
+// hubNear are ts whose names share a word with name, most first: the
+// tools a mistyped name (create_isue) may have meant.
+func hubNear(ts []hubTool, name string) []hubTool {
+	keys := hubKeyWords(name)
+	var out []hubMatch
+	for _, t := range ts {
+		m := hubMatchOf(t, name, keys)
+		if m.descs = 0; m.names > 0 {
+			out = append(out, m)
+		}
+	}
+	slices.SortStableFunc(out, func(a, b hubMatch) int { return cmp.Compare(b.score(), a.score()) })
+	ms := make([]hubTool, len(out))
+	for i, m := range out {
+		ms[i] = m.t
+	}
+	return ms
+}
+
+// hubServersSaid is the most tools hubServerCounts names of a server.
+const hubServersSaid = 8
+
+// hubServerCounts name ts' servers, in their order, each with how many
+// tools it has and the first hubServersSaid of their own names: what
+// there is, said as what there is and not as a match.
+func hubServerCounts(ts []hubTool) string {
+	var names []string
+	of := map[string][]string{}
+	for _, t := range ts {
+		if of[t.Server] == nil {
+			names = append(names, t.Server)
+		}
+		of[t.Server] = append(of[t.Server], t.Tool)
+	}
+	parts := make([]string, len(names))
+	for i, s := range names {
+		tools := of[s]
+		n := strconv.Itoa(len(tools)) + " tools"
+		if len(tools) == 1 {
+			n = "1 tool"
+		}
+		said := strings.Join(tools[:min(len(tools), hubServersSaid)], ", ")
+		if len(tools) > hubServersSaid {
+			said += ", …"
+		}
+		parts[i] = s + " (" + n + ": " + said + ")"
+	}
+	return strings.Join(parts, "; ")
 }
 
 // hubOfServer are ts of the server named server, as the user or the hub
@@ -235,7 +352,8 @@ func hubNameLines(ts []hubTool) string {
 }
 
 // hubFind answers find_tools: the matches with their parameters, then
-// more by name; with no query, or none matching, every tool by name.
+// more by name; with no query every tool by name, and with none matching
+// that no tool was found, and the servers.
 func hubFind(ts []hubTool, args json.RawMessage, where string) any {
 	var p struct {
 		Query  string `json:"query"`
@@ -254,7 +372,8 @@ func hubFind(ts []hubTool, args json.RawMessage, where string) any {
 	}
 	ms := hubMatches(ts, p.Query)
 	if len(ms) == 0 {
-		return toolResult("No tool matches \""+p.Query+"\". Every tool, by name:\n"+hubNameLines(ts), false)
+		return toolResult("No tool was found for \""+p.Query+"\": no tool's name or description has what it asks. Don't call a tool that only sounds close. "+
+			"The servers and their tools: "+hubServerCounts(ts)+". "+hubFindTool+" with other words, a server or a tool's name looks again.", false)
 	}
 	full := ms[:min(len(ms), hubFindFull)]
 	specs := make([]any, 0, len(full))
@@ -325,7 +444,7 @@ func (s *Server) hubCallByName(r *http.Request, agent string, ts []hubTool, args
 	t, ok := hubCallNamed(r.Context(), ts, agent, name)
 	if !ok {
 		why := "No tool is called " + name + "."
-		if ms := hubMatches(ts, name); len(ms) > 0 {
+		if ms := hubNear(ts, name); len(ms) > 0 {
 			why += " Close to it:\n" + hubNameLines(ms[:min(len(ms), hubFindFull)])
 		} else {
 			why += " " + hubFindTool + " gives the tools' names."
