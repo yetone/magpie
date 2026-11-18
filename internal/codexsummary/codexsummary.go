@@ -32,20 +32,31 @@ func Encrypted(summary string) string {
 	return Mark + base64.StdEncoding.EncodeToString([]byte(summary))
 }
 
+// Summary is the summary in a compaction item's encrypted_content: ours
+// is false for one magpie didn't make, and ok false for one of magpie's
+// whose summary can't be read.
+func Summary(encrypted string) (summary string, ours, ok bool) {
+	b64, isOurs := strings.CutPrefix(encrypted, Mark)
+	if !isOurs {
+		return "", false, false
+	}
+	b, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return "", true, false
+	}
+	return string(b), true, true
+}
+
 // Message is what a compaction item's encrypted_content is read as: ours
 // is false for one magpie didn't make (OpenAI's own, left as it is), and
 // msg nil for one of magpie's whose summary can't be read, which is left
 // out.
 func Message(encrypted string) (msg map[string]any, ours bool) {
-	b64, ok := strings.CutPrefix(encrypted, Mark)
+	summary, ours, ok := Summary(encrypted)
 	if !ok {
-		return nil, false
+		return nil, ours
 	}
-	b, err := base64.StdEncoding.DecodeString(b64)
-	if err != nil {
-		return nil, true
-	}
-	return UserMessage(Prefix + "\n" + string(b)), true
+	return UserMessage(Prefix + "\n" + summary), true
 }
 
 // UserMessage is a Responses input message of the user's.

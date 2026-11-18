@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/tidwall/gjson"
@@ -56,9 +57,11 @@ import (
 //
 // Every reasoning item OpenAI didn't seal (its encrypted_content is a
 // Fernet token, "gAAAA…"), one with Claude's block too, is written as
-// magpie_reasoning, a type Codex reads as one it doesn't know and never
-// sends (ResponseItem::Other), its summary and content kept for magpie's
-// own reading. That is done only as magpie lets Codex go
+// magpie_reasoning, a type Codex reads as one it doesn't know
+// (ResponseItem::Other), its summary and content kept for magpie's own
+// reading. Codex never sends one that is a response_item; one in a
+// compacted line's replacement_history it sends as "other", which OpenAI
+// refuses (codex-cli 0.165.0), so there it is left out. That is done only as magpie lets Codex go
 // (PortCodexRolloutsLeft), as through magpie the gateway sends each as
 // the model it goes to takes it (a DeepSeek or Kimi one gets its
 // reasoning back from them), and only in a thread begun on OpenAI's or
@@ -89,6 +92,11 @@ type codexPortHome struct {
 	// Lineage: every fork's place in its parent was looked at once
 	// (repairLineages), after magpie before it moved them
 	Lineage bool `json:"lineage,omitempty"`
+	// Refit: a whole pass was made since a line too long for a paginated
+	// rollout is written shorter (fitShorter) and a retired item is left
+	// out of replacement_history, which earlier passes left as they were
+	// and never looked at again
+	Refit bool `json:"refit,omitempty"`
 }
 
 // codexPortFirst is the first day magpie wrote a compaction item of its
@@ -162,7 +170,7 @@ func portCodexRollouts(ctx context.Context, home string, left bool) (CodexPort, 
 	}
 	was := st.Homes[key]
 	since := first
-	if !was.Since.IsZero() {
+	if !was.Since.IsZero() && was.Refit {
 		since = was.Since.Add(-codexPortSlack)
 	}
 	start := time.Now()
@@ -219,14 +227,14 @@ func portCodexRollouts(ctx context.Context, home string, left bool) (CodexPort, 
 			break
 		}
 	}
-	now := codexPortHome{Since: was.Since, Pending: pending, Lineage: was.Lineage}
+	now := codexPortHome{Since: was.Since, Pending: pending, Lineage: was.Lineage, Refit: was.Refit}
 	if res.Done && !was.Lineage {
 		fixed, whole := repairLineages(ctx, home)
 		res.Repaired = fixed
 		now.Lineage = whole
 	}
 	if res.Done {
-		now.Since = start
+		now.Since, now.Refit = start, true
 	} else {
 		now.Pending = append(now.Pending, was.Pending...)
 		now.Pending = uniq(now.Pending)
@@ -301,10 +309,20 @@ func portRollout(ctx context.Context, home, path string, left bool) (bool, error
 				}
 			}
 			out, ok := portLineAs(line, left && ours)
-			if ok {
-				out, ok = fitLine(line, out, paged)
+			if !ok {
+				return out, false
 			}
-			return out, ok
+			if fit, ok := fitLine(line, out, paged); ok {
+				return fit, true
+			}
+			// a paginated rollout's line can't grow, and the message
+			// with Codex's long summary prefix often is longer than the
+			// item it stands for (a short summary): left as it was, the
+			// item went to OpenAI and the chat stopped on
+			// invalid_encrypted_content (hey_boyce on X). It goes as the
+			// summary under a short heading, cut to fit when even that is
+			// longer, as no form of it is worse than the item itself.
+			return fitShorter(line, left && ours)
 		}
 	})
 }
@@ -639,13 +657,93 @@ func ordinalEnds(path string) map[int64]int64 {
 // portLineAs is portLine, with magpie's reasoning items written as
 // magpie_reasoning first when left.
 func portLineAs(line []byte, left bool) ([]byte, bool) {
+	return portLineWith(line, left, fullSummary)
+}
+
+// portLineWith is portLineAs with each of magpie's summaries written as
+// text makes it, or retired (retiredItem) when text is nil.
+func portLineWith(line []byte, left bool, text func(summary string) string) ([]byte, bool) {
 	retired := false
 	if left && unsealedReasoning(line) {
 		line, retired = retireReasoning(line)
 	}
-	out, ok := portLine(line)
+	out, ok := portLineText(line, text)
 	return out, ok || retired
 }
+
+// fullSummary is the text of the message a summary stands for, as Codex's
+// own local compaction writes it.
+func fullSummary(summary string) string { return codexsummary.Prefix + "\n" + summary }
+
+// shortHeading heads a summary written where Codex's own prefix doesn't
+// fit (fitShorter).
+const shortHeading = "Summary of the conversation so far:"
+
+// fitShorter is line, a paginated rollout's, with magpie's compaction
+// items in it written as a message no longer than line: the summary under
+// shortHeading, or as much of its start as fits under it, or, where not
+// even the heading fits (a summary of a few words), as much of the
+// summary alone. When not even that fits, each item is retired as one
+// Codex reads as of a type it doesn't know and never sends (retiredItem):
+// the chat goes on without the few words rather than stopping on them.
+// It is line and false only when none of these fits.
+func fitShorter(line []byte, left bool) ([]byte, bool) {
+	try := func(text func(string) string) ([]byte, bool) {
+		out, ok := portLineWith(line, left, text)
+		if !ok {
+			return line, false
+		}
+		return fitLine(line, out, true)
+	}
+	cut := func(head string, n int) func(string) string {
+		return func(s string) string {
+			if n >= len(s) {
+				return head + s
+			}
+			for n > 0 && !utf8.RuneStart(s[n]) {
+				n--
+			}
+			return head + s[:n] + "…"
+		}
+	}
+	for _, head := range []string{shortHeading + "\n", ""} {
+		if out, ok := try(cut(head, len(line))); ok {
+			return out, true
+		}
+		if _, ok := try(cut(head, 0)); !ok {
+			continue
+		}
+		lo, hi := 0, len(line) // the most kept that fits is in [lo, hi)
+		for hi-lo > 1 {
+			mid := (lo + hi) / 2
+			if _, ok := try(cut(head, mid)); ok {
+				lo = mid
+			} else {
+				hi = mid
+			}
+		}
+		return try(cut(head, lo))
+	}
+	return try(nil)
+}
+
+// retiredReasoning is the type a reasoning item OpenAI didn't seal is
+// retired as (retireReasoning).
+const retiredReasoning = "magpie_reasoning"
+
+// retiredInList says a line may hold an item retired as a type Codex
+// doesn't know in a compacted line's replacement_history, where Codex
+// sends it (portValue leaves it out).
+func retiredInList(line []byte) bool {
+	return bytes.Contains(line[:min(len(line), 256)], []byte(`"type":"compacted"`)) &&
+		(bytes.Contains(line, []byte(`"`+retiredReasoning+`"`)) || bytes.Contains(line, []byte(`"`+retiredItem+`"`)))
+}
+
+// retiredItem is the type magpie's compaction item is retired as where
+// no message for it fits (fitShorter), with nothing else kept: like
+// magpie_reasoning, a type Codex reads as one it doesn't know
+// (ResponseItem::Other) and never sends.
+const retiredItem = "magpie_compaction"
 
 // retireReasoning is a rollout line with each reasoning item in it that
 // OpenAI didn't seal (a response_item's, those in a compacted line's
@@ -701,7 +799,7 @@ func retireReasoning(line []byte) ([]byte, bool) {
 			obj = append(obj, k.Raw...)
 			obj = append(obj, ':')
 			if k.String() == "type" {
-				obj = append(obj, `"magpie_reasoning"`...)
+				obj = append(obj, `"`+retiredReasoning+`"`...)
 			} else {
 				obj = append(obj, v.Raw...)
 			}
@@ -727,7 +825,12 @@ func retireReasoning(line []byte) ([]byte, bool) {
 // gateway leaves it out; a line that is one alone stays as it is, as
 // leaving a line out would move every line after it.
 func portLine(line []byte) ([]byte, bool) {
-	if !bytes.Contains(line, magpieMark) && !bytes.Contains(line, claudeMark) {
+	return portLineText(line, fullSummary)
+}
+
+// portLineText is portLine with each summary written as text makes it.
+func portLineText(line []byte, text func(summary string) string) ([]byte, bool) {
+	if !bytes.Contains(line, magpieMark) && !bytes.Contains(line, claudeMark) && !retiredInList(line) {
 		return line, false
 	}
 	body := bytes.TrimRight(line, "\r\n")
@@ -738,7 +841,7 @@ func portLine(line []byte) ([]byte, bool) {
 	if d.Decode(&v) != nil || d.More() {
 		return line, false
 	}
-	v, changed, _ := portValue(v)
+	v, changed, _ := portValue(v, text)
 	if !changed {
 		return line, false
 	}
@@ -753,16 +856,28 @@ func portLine(line []byte) ([]byte, bool) {
 
 // portValue is v with magpie's compaction items in it written as their
 // messages; drop says v is one of magpie's that can't be read.
-func portValue(v any) (_ any, changed, drop bool) {
+func portValue(v any, text func(summary string) string) (_ any, changed, drop bool) {
 	switch x := v.(type) {
 	case map[string]any:
+		if t, _ := x["type"].(string); t == retiredReasoning || t == retiredItem {
+			// Codex never sends one in a response_item, but one in a
+			// compacted line's replacement_history it sends as
+			// "other", which OpenAI refuses ("Invalid value: 'other'",
+			// codex-cli 0.165.0): in a list it is left out
+			return x, false, true
+		}
 		if t, _ := x["type"].(string); t == "compaction" || t == "compaction_summary" {
 			enc, _ := x["encrypted_content"].(string)
-			if msg, ours := codexsummary.Message(enc); ours {
-				if msg == nil {
+			if sum, ours, ok := codexsummary.Summary(enc); ours {
+				if !ok {
 					return x, false, true
 				}
-				return msg, true, false
+				if text == nil {
+					// left out of a list (replacement_history), where
+					// Codex sends an item it doesn't know as "other"
+					return map[string]any{"type": retiredItem}, true, true
+				}
+				return codexsummary.UserMessage(text(sum)), true, false
 			}
 			return x, false, false
 		}
@@ -779,7 +894,7 @@ func portValue(v any) (_ any, changed, drop bool) {
 		for k, c := range x {
 			list, isList := c.([]any)
 			if !isList {
-				if nv, ch, dr := portValue(c); ch && !dr {
+				if nv, ch, _ := portValue(c, text); ch {
 					x[k], changed = nv, true
 				}
 				continue
@@ -791,7 +906,7 @@ func portValue(v any) (_ any, changed, drop bool) {
 			meta, hasMeta := x[k+"_metadata"]
 			metaList, _ := meta.([]any)
 			drop := !hasMeta || meta == nil || len(metaList) == len(list)
-			kept, gone, ch := portList(list, drop)
+			kept, gone, ch := portList(list, drop, text)
 			if !ch {
 				continue
 			}
@@ -808,16 +923,16 @@ func portValue(v any) (_ any, changed, drop bool) {
 		}
 		return x, changed, false
 	case []any:
-		kept, _, ch := portList(x, true)
+		kept, _, ch := portList(x, true, text)
 		return kept, ch, false
 	}
 	return v, false, false
 }
 
-func portList(list []any, drop bool) (_ []any, gone map[int]bool, changed bool) {
+func portList(list []any, drop bool, text func(summary string) string) (_ []any, gone map[int]bool, changed bool) {
 	out := make([]any, 0, len(list))
 	for i, e := range list {
-		nv, ch, dr := portValue(e)
+		nv, ch, dr := portValue(e, text)
 		if dr && drop {
 			if gone == nil {
 				gone = map[int]bool{}

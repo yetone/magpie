@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/klauspost/compress/zstd"
+	"github.com/tidwall/gjson"
 
 	"github.com/yetone/magpie/internal/claudeseal"
 	"github.com/yetone/magpie/internal/codexsummary"
@@ -380,26 +381,139 @@ func TestPortCodexRolloutsKeepsBytePlaces(t *testing.T) {
 }
 
 // A line whose portable form is longer (a short summary, under Codex's
-// prefix) can't keep its length: in a paginated rollout it is left as it
-// was, never moving what follows; in a legacy one, where Codex keeps no
-// place by byte, it is written as before.
+// prefix) can't grow in a paginated rollout, where Codex keeps each
+// line's place by byte. It was left as it was, so the item went to OpenAI
+// and the chat stopped on invalid_encrypted_content (hey_boyce on X): it
+// goes as the summary under a short heading, as long as the line was,
+// cut to fit when even that is longer (a summary of quotes, which JSON
+// writes in two bytes and base64 in fewer).
 func TestPortCodexRolloutsLongerLine(t *testing.T) {
-	lines := portRolloutLines("short")
-	lines[0] = strings.Replace(lines[0], `"model_provider":"openai"`, `"model_provider":"openai","history_mode":"paginated"`, 1)
+	for _, c := range []struct{ name, summary, want string }{
+		{"short", "short", "short"},
+		{"cut", "keep this" + strings.Repeat(`"`, 3000) + "the end", shortHeading + "\nkeep this"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			lines := portRolloutLines(c.summary)
+			lines[0] = strings.Replace(lines[0], `"model_provider":"openai"`, `"model_provider":"openai","history_mode":"paginated"`, 1)
+			home, path := portHome(t, lines, false)
+			before := lineEnds(t, path)
+			if _, err := PortCodexRollouts(context.Background(), home); err != nil {
+				t.Fatal(err)
+			}
+			if after := lineEnds(t, path); !reflect.DeepEqual(after, before) {
+				t.Fatalf("lines end at %v, were at %v", after, before)
+			}
+			got := readRollout(t, path)
+			for i, l := range got {
+				if strings.Contains(l, `"encrypted_content":"magpie1:`) {
+					t.Errorf("line %d still has magpie's item: %.300s", i, l)
+				}
+				if !json.Valid([]byte(l)) {
+					t.Errorf("line %d isn't JSON: %.300s", i, l)
+				}
+			}
+			for _, at := range []string{"payload.content.0.text", "payload.replacement_history.2.content.0.text"} {
+				i := 2
+				if strings.HasPrefix(at, "payload.replacement") {
+					i = 3
+				}
+				text := gjson.Get(got[i], at).String()
+				if !strings.HasPrefix(text, c.want) {
+					t.Errorf("line %d's %s is %.200q, want it to begin %q", i, at, text, c.want)
+				}
+				if c.name == "cut" && (!strings.HasSuffix(text, "…") || strings.Contains(text, "the end")) {
+					t.Errorf("line %d's summary isn't cut: %.200q…%.50q", i, text, text[max(0, len(text)-50):])
+				}
+			}
+		})
+	}
+}
+
+// An item with no id and a summary of a word has no message as short as
+// it: it is retired as a type Codex never sends, never left to be sent.
+func TestFitShorterRetires(t *testing.T) {
+	line := []byte(`{"timestamp":"2026-10-20T07:40:02.551Z","type":"response_item","payload":{"type":"compaction","encrypted_content":"` + codexsummary.Encrypted("ok") + `"}}` + "\n")
+	out, ok := fitShorter(line, false)
+	if !ok || len(out) != len(line) {
+		t.Fatalf("got %q, %v", out, ok)
+	}
+	if got := gjson.GetBytes(out, "payload.type").String(); got != retiredItem {
+		t.Errorf("type %q, want %q: %s", got, retiredItem, out)
+	}
+	if gjson.GetBytes(out, "timestamp").String() != "2026-10-20T07:40:02.551Z" {
+		t.Errorf("the line's head changed: %s", out)
+	}
+}
+
+// A compacted line an earlier pass wrote with magpie_reasoning in its
+// replacement_history (or a compaction item retired) had Codex send the
+// item as "other", and OpenAI refused every turn after ("Invalid
+// response.create payload: Invalid value: 'other'", real codex-cli
+// 0.169.1). The next pass leaves it out, and its metadata entry with it,
+// the line as long as it was; a magpie_reasoning response_item, which
+// Codex never sends, stays.
+func TestPortCodexRolloutsDropsRetiredFromHistory(t *testing.T) {
+	lines := []string{
+		`{"timestamp":"2026-10-30T07:05:20.118Z","type":"session_meta","payload":{"id":"` + portThread + `","model_provider":"openai","history_mode":"paginated"}}`,
+		`{"timestamp":"2026-10-30T07:05:40.551Z","type":"response_item","payload":{"type":"magpie_reasoning","summary":[{"type":"summary_text","text":"先看 go.mod"}]}}`,
+		`{"timestamp":"2026-10-30T07:40:02.553Z","type":"compacted","payload":{"message":"","replacement_history":[{"type":"message","role":"user","content":[{"type":"input_text","text":"修一下构建"}]},{"type":"magpie_reasoning","summary":[]},{"type":"magpie_compaction"},{"type":"message","role":"user","content":[{"type":"input_text","text":"go on"}]}],"replacement_history_metadata":[{"client_authored":true},{},{"compaction_model_hash":"h1"},{"client_authored":true}]}}`,
+	}
 	home, path := portHome(t, lines, false)
-	before := lineEnds(t, path)
+	ends := lineEnds(t, path)
 	if _, err := PortCodexRollouts(context.Background(), home); err != nil {
 		t.Fatal(err)
 	}
-	if after := lineEnds(t, path); !reflect.DeepEqual(after, before) {
-		t.Fatalf("lines end at %v, were at %v", after, before)
-	}
 	got := readRollout(t, path)
-	if got[2] != lines[2] {
-		t.Errorf("a longer line was written: %s", got[2])
+	if !reflect.DeepEqual(lineEnds(t, path), ends) {
+		t.Fatalf("lines moved: %v, were %v", lineEnds(t, path), ends)
 	}
-	if strings.Contains(got[4], "magpie1:%%%") {
-		t.Errorf("the shorter one wasn't: %s", got[4])
+	if got[1] != lines[1] {
+		t.Errorf("the response_item changed: %s", got[1])
+	}
+	p := decode(t, got[2])["payload"].(map[string]any)
+	var types []string
+	for _, it := range p["replacement_history"].([]any) {
+		types = append(types, it.(map[string]any)["type"].(string))
+	}
+	if !reflect.DeepEqual(types, []string{"message", "message"}) {
+		t.Errorf("replacement_history is %v: %s", types, got[2])
+	}
+	if m := p["replacement_history_metadata"].([]any); !reflect.DeepEqual(m, []any{map[string]any{"client_authored": true}, map[string]any{"client_authored": true}}) {
+		t.Errorf("metadata %v", m)
+	}
+}
+
+// A pass before this one looked at a paginated rollout, left its too-long
+// line as it was, and never looked at it again, as no later pass reads a
+// rollout last written before the one before it. One whole pass is made
+// again, once.
+func TestPortCodexRolloutsRefitsOnce(t *testing.T) {
+	lines := portRolloutLines("short")
+	lines[0] = strings.Replace(lines[0], `"model_provider":"openai"`, `"model_provider":"openai","history_mode":"paginated"`, 1)
+	home, path := portHome(t, lines, false)
+	st := codexPortState{Homes: map[string]codexPortHome{filepath.Clean(home): {Since: time.Now(), Lineage: true}}}
+	b, _ := json.Marshal(st)
+	if err := os.MkdirAll(filepath.Dir(codexPortPath()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(codexPortPath(), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	res, err := PortCodexRollouts(context.Background(), home)
+	if err != nil || len(res.Rewritten) != 1 {
+		t.Fatalf("pass: %+v, %v", res, err)
+	}
+	if got := readRollout(t, path); strings.Contains(got[2], `"encrypted_content":"magpie1:`) {
+		t.Errorf("not written: %s", got[2])
+	}
+	// the next pass reads only what changed since
+	lines[2] = strings.Replace(lines[2], "cmp_magpie_1761000002", "cmp_magpie_1761000003", 1)
+	b2 := []byte(strings.Join(lines, "\n") + "\n")
+	os.WriteFile(path, b2, 0o640)
+	old := time.Now().Add(-time.Hour)
+	os.Chtimes(path, old, old)
+	if res, err := PortCodexRollouts(context.Background(), home); err != nil || len(res.Rewritten) != 0 {
+		t.Errorf("second pass: %+v, %v", res, err)
 	}
 }
 
@@ -470,8 +584,10 @@ func TestPortCodexRolloutsRepairsForks(t *testing.T) {
 // ("Invalid 'input[5].content': array too long"). A pass made as magpie
 // lets Codex go writes each reasoning item OpenAI didn't seal as
 // magpie_reasoning, a type Codex reads as Other and never sends, in a
-// response_item and in replacement_history (its metadata kept beside
-// it), each line its length; OpenAI's own sealed reasoning and every
+// response_item; in replacement_history, where Codex sends an Other as
+// "other" and OpenAI refuses the turn ("Invalid value: 'other'", real
+// codex-cli 0.165.0 and 0.169.1), it is left out with its metadata entry.
+// Each line keeps its length; OpenAI's own sealed reasoning and every
 // other line keep their bytes. A pass while Codex goes through magpie
 // leaves them: there a DeepSeek or Kimi model gets its reasoning back
 // from them. A thread begun on a provider of the user's own is left be.
@@ -522,11 +638,11 @@ func TestPortCodexRolloutsLeftRetiresUnsealedReasoning(t *testing.T) {
 			}
 			p4 := decode(t, got[4])["payload"].(map[string]any)
 			hist := p4["replacement_history"].([]any)
-			if len(hist) != 3 || hist[1].(map[string]any)["type"] != "magpie_reasoning" ||
-				hist[2].(map[string]any)["type"] != "reasoning" || hist[2].(map[string]any)["encrypted_content"] != "gAAAAABo_OpenAIsOwn==" {
+			if len(hist) != 2 || hist[0].(map[string]any)["type"] != "message" ||
+				hist[1].(map[string]any)["type"] != "reasoning" || hist[1].(map[string]any)["encrypted_content"] != "gAAAAABo_OpenAIsOwn==" {
 				t.Errorf("replacement_history %v", hist)
 			}
-			if m := p4["replacement_history_metadata"].([]any); len(m) != 3 {
+			if m := p4["replacement_history_metadata"].([]any); len(m) != 2 || !reflect.DeepEqual(m[0], map[string]any{"client_authored": true}) {
 				t.Errorf("metadata %v", m)
 			}
 			if p7 := decode(t, got[7])["payload"].(map[string]any); p7["type"] != "magpie_reasoning" || strings.Contains(got[7], claudeseal.Mark) {
