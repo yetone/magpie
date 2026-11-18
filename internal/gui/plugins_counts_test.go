@@ -13,7 +13,8 @@ import (
 	"github.com/yetone/magpie/internal/stats"
 )
 
-// Discover's counts are asked once an hour; a like is taken only for a
+// Discover's counts, and the Library market's servers', are asked once
+// an hour; a like is taken only for a
 // plugin installed here that Discover lists, is kept on this computer,
 // and moves the count held at once.
 func TestPluginCountsAndLikes(t *testing.T) {
@@ -26,12 +27,15 @@ func TestPluginCountsAndLikes(t *testing.T) {
 	})
 	countsGot = nil
 	fail := false
-	pluginCountsAsk = func(context.Context) (map[string]stats.Counts, error) {
+	pluginCountsAsk = func(context.Context) (stats.Board, error) {
 		asked++
 		if fail {
-			return nil, errors.New("offline")
+			return stats.Board{}, errors.New("offline")
 		}
-		return map[string]stats.Counts{"opencode-a": {Users: 12, Likes: 3}}, nil
+		return stats.Board{
+			Plugins: map[string]stats.Counts{"opencode-a": {Users: 12, Likes: 3}},
+			Servers: map[string]stats.Counts{"context7": {Users: 40}},
+		}, nil
 	}
 	pluginLike = func(_ context.Context, name string, on bool) (int, error) {
 		likes[name] = on
@@ -44,6 +48,7 @@ func TestPluginCountsAndLikes(t *testing.T) {
 
 	get := func() (out struct {
 		Plugins map[string]stats.Counts `json:"plugins"`
+		Servers map[string]stats.Counts `json:"servers"`
 		Liked   []string                `json:"liked"`
 		Error   string                  `json:"error"`
 	}) {
@@ -63,7 +68,7 @@ func TestPluginCountsAndLikes(t *testing.T) {
 		return rec
 	}
 
-	if c := get(); c.Plugins["opencode-a"] != (stats.Counts{Users: 12, Likes: 3}) || len(c.Liked) != 0 {
+	if c := get(); c.Plugins["opencode-a"] != (stats.Counts{Users: 12, Likes: 3}) || c.Servers["context7"].Users != 40 || len(c.Liked) != 0 {
 		t.Fatalf("first: %+v", c)
 	}
 	get()
@@ -90,7 +95,7 @@ func TestPluginCountsAndLikes(t *testing.T) {
 	// an hour on, a failed ask keeps what was held
 	countsAt = countsAt.Add(-2 * 60 * 60 * 1e9)
 	fail = true
-	if c := get(); c.Plugins["opencode-a"].Users != 12 || c.Error == "" {
+	if c := get(); c.Plugins["opencode-a"].Users != 12 || c.Servers["context7"].Users != 40 || c.Error == "" {
 		t.Fatalf("a failed ask: %+v", c)
 	}
 }

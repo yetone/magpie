@@ -6,7 +6,11 @@
 // account or address. A plugin's users are the ids that reported it in
 // the last seven days. A like is one per id, can be taken back, and comes
 // only from an app that has the plugin (the app checks; here a like also
-// counts as that id having it). The caller's address is kept only hashed,
+// counts as that id having it). The same report names the Library's MCP
+// servers the app's market lists, by their market ids (a registry name
+// like io.github.owner/repo, or a featured one's short name), kept as
+// "mcp:<id>" beside the plugins and counted the same way, with no likes.
+// The caller's address is kept only hashed,
 // for an hour, to hold each one to RATE asks an hour.
 //
 // D1 (wrangler.jsonc's PLUGINS) holds three tables; the quarter-hour
@@ -15,6 +19,8 @@
 const ID = /^[0-9a-f]{32}$/;
 const NPM = /^(@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/;
 const GIT = /^github:[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+const SERVER = /^[A-Za-z0-9][A-Za-z0-9._-]*(\/[A-Za-z0-9][A-Za-z0-9._-]*)?$/;
+const MCP = "mcp:";
 export const MOST = 50; // plugins in one report, as the app's most
 export const RATE = 60; // asks an address makes in an hour
 const WEEK = 7 * 864e5;
@@ -42,6 +48,10 @@ function schema(db) {
 
 export function validName(n) {
   return typeof n === "string" && n.length <= 214 && (NPM.test(n) || GIT.test(n));
+}
+
+export function validServer(n) {
+  return typeof n === "string" && n.length <= 200 && SERVER.test(n);
 }
 
 const day = (t) => new Date(t).toISOString().slice(0, 10);
@@ -94,17 +104,27 @@ export async function handle(req, env, ctx, now = Date.now()) {
   if (!b || !ID.test(b.id ?? "")) return answer({ error: "a report needs the app's id" }, 400);
   if (await held(db, req, now)) return answer({ error: "too many asks; try again in an hour" }, 429);
   if (path === "/api/plugins/report") {
-    const names = Array.isArray(b.plugins) ? [...new Set(b.plugins)] : null;
-    if (!names || names.length > MOST || !names.every(validName)) return answer({ error: "plugins: names Discover lists" }, 400);
+    const plugins = Array.isArray(b.plugins) ? [...new Set(b.plugins)] : null;
+    if (!plugins || plugins.length > MOST || !plugins.every(validName)) return answer({ error: "plugins: names Discover lists" }, 400);
+    // an app from before servers were counted sends none
+    const servers = b.servers === undefined ? [] : Array.isArray(b.servers) ? [...new Set(b.servers)] : null;
+    if (!servers || servers.length > MOST || !servers.every(validServer)) return answer({ error: "servers: ids the market lists" }, 400);
+    const names = [...plugins, ...servers.map((s) => MCP + s)];
     const today = day(now);
-    const marks = names.map((_, i) => `?${i + 2}`).join(",");
-    const gone = db.prepare(`DELETE FROM installs WHERE device = ?1${names.length ? ` AND plugin NOT IN (${marks})` : ""}`).bind(b.id, ...names);
+    // what this id no longer has, plugins and servers apart: D1 binds at
+    // most 100 values a statement
+    const gone = (list, kind) =>
+      db
+        .prepare(
+          `DELETE FROM installs WHERE device = ?1 AND substr(plugin, 1, 4) ${kind}${list.length ? ` AND plugin NOT IN (${list.map((_, i) => `?${i + 2}`).join(",")})` : ""}`,
+        )
+        .bind(b.id, ...list);
     const put = names.map((n) =>
       db
         .prepare("INSERT INTO installs (device, plugin, day) VALUES (?1, ?2, ?3) ON CONFLICT (device, plugin) DO UPDATE SET day = ?3")
         .bind(b.id, n, today),
     );
-    await db.batch([gone, ...put]);
+    await db.batch([gone(plugins, "<> 'mcp:'"), gone(names.slice(plugins.length), "= 'mcp:'"), ...put]);
     return answer({ ok: true });
   }
   // a like, or one taken back
@@ -122,7 +142,8 @@ export async function handle(req, env, ctx, now = Date.now()) {
   return answer({ likes: row?.n ?? 0 });
 }
 
-// stats is every plugin's users and likes, held at the edge for an hour
+// stats is every plugin's users and likes, and every server's users,
+// held at the edge for an hour
 async function stats(req, db, ctx, now) {
   const key = new Request(new URL("/api/plugins/stats", req.url).toString());
   const hit = await caches.default.match(key);
@@ -132,9 +153,13 @@ async function stats(req, db, ctx, now) {
     db.prepare("SELECT plugin, COUNT(*) AS n FROM likes GROUP BY plugin"),
   ]);
   const plugins = {};
-  for (const r of users.results) (plugins[r.plugin] ??= {}).users = r.n;
-  for (const r of likes.results) (plugins[r.plugin] ??= {}).likes = r.n;
-  const res = answer({ plugins }, 200, { "Cache-Control": "public, max-age=3600" });
+  const servers = {};
+  for (const r of users.results) {
+    if (r.plugin.startsWith(MCP)) servers[r.plugin.slice(MCP.length)] = { users: r.n };
+    else (plugins[r.plugin] ??= {}).users = r.n;
+  }
+  for (const r of likes.results) if (!r.plugin.startsWith(MCP)) (plugins[r.plugin] ??= {}).likes = r.n;
+  const res = answer({ plugins, servers }, 200, { "Cache-Control": "public, max-age=3600" });
   ctx.waitUntil(caches.default.put(key, res.clone()));
   return res;
 }

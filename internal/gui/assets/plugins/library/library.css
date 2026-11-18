@@ -596,7 +596,7 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .mk-desc.wait { background: linear-gradient(90deg, var(--pill) 25%, var(--pill-hover) 45%, var(--pill) 65%); background-size: 240% 100%; animation: skeleton-shift 1.4s ease-in-out infinite; border-radius: 5px; min-height: 0; height: 8px; margin: 6px 20% 10px 0; }
 .mk-foot { display: flex; align-items: center; gap: 8px; min-height: 26px; margin-top: auto; }
 .mk-id { min-width: 0; font: var(--code-style, normal) var(--code-weight, 400) 11px var(--code-font, var(--code)); font-stretch: var(--code-stretch, 100%); color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mk-installs { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.mk-installs { flex: none; display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .mk-add { flex: none; height: 26px; }
 .mk-add.busy { color: var(--muted); }
 .mk-have { flex: none; display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 4px; font-size: 12px; color: var(--muted); }

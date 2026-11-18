@@ -4625,7 +4625,13 @@ and models to look after first, by magpie's own ids only:
   installed and on (npm names, or `github:owner/repo` for a repository
   tagged `magpie-plugin`; never a folder, a private repository or an
   unlisted package), with the same id, so Discover can say how many use
-  each (the ids that reported it in 7 days). A like on a plugin's page
+  each (the ids that reported it in 7 days). The same report names the
+  Library's MCP servers that an agent is given and that the market lists
+  from what ships with magpie (featured, or the registry snapshot), by
+  their market ids only (`context7`, `io.github.owner/name`; at most 50),
+  so the market can put the most used first; a server of the user's own,
+  one found only by a search, and its address, command or keys never go
+  (`library.PublicServers`). A like on a plugin's page
   goes there too, only for a plugin installed here, and is kept in
   `~/.config/magpie/plugin-likes.json`. The code is
   [internal/stats/plugins.go](../internal/stats/plugins.go) and

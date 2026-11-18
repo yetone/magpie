@@ -9,7 +9,10 @@ import { handle, prune, RATE, MOST } from "./pluginstats.js";
 function d1() {
   const db = new DatabaseSync(":memory:");
   const stmt = (sql, args = []) => ({
-    bind: (...a) => stmt(sql, a),
+    bind: (...a) => {
+      if (a.length > 100) throw new Error("D1 binds at most 100 values");
+      return stmt(sql, a);
+    },
     run: async () => (db.prepare(sql).run(...args), { success: true }),
     first: async () => db.prepare(sql).get(...args) ?? null,
     all: async () => ({ results: db.prepare(sql).all(...args) }),
@@ -131,4 +134,57 @@ test("an address makes RATE asks an hour", async () => {
 test("without the database, the counts are refused, not made up", async () => {
   assert.equal((await ask({}, "/api/plugins/stats")).status, 503);
   assert.equal(await handle(new Request("https://usemagpie.ai/api/plugins/other"), {}, ctx), null);
+});
+
+async function board(env, now = T0) {
+  store.clear();
+  return (await ask(env, "/api/plugins/stats", undefined, now)).json();
+}
+
+test("the Library's servers are counted beside the plugins, apart from them", async () => {
+  const env = { PLUGINS: d1() };
+  const full = Array.from({ length: MOST }, (_, i) => `p${i}`);
+  const many = Array.from({ length: MOST }, (_, i) => `io.github.o${i}/s${i}`);
+  assert.equal((await ask(env, "/api/plugins/report", { id: id(1), plugins: full, servers: many })).status, 200);
+  await ask(env, "/api/plugins/report", { id: id(2), plugins: ["opencode-a"], servers: ["context7", "io.github.o0/s0"] });
+  let b = await board(env);
+  assert.equal(b.servers["io.github.o0/s0"].users, 2);
+  assert.deepEqual(b.servers.context7, { users: 1 });
+  assert.equal(Object.keys(b.servers).length, MOST + 1);
+  assert.ok(Object.keys(b.plugins).every((k) => !k.startsWith("mcp:")));
+  // a server dropped from the library stops counting; the plugins stay
+  await ask(env, "/api/plugins/report", { id: id(2), plugins: ["opencode-a"], servers: ["context7"] }, T0 + DAY);
+  b = await board(env, T0 + DAY);
+  assert.equal(b.servers["io.github.o0/s0"].users, 1);
+  assert.deepEqual(b.plugins["opencode-a"], { users: 1 });
+  // a report with no servers (an app from before, or none in its library)
+  // keeps its plugins and drops its servers
+  await ask(env, "/api/plugins/report", { id: id(2), plugins: ["opencode-a"] }, T0 + DAY);
+  b = await board(env, T0 + DAY);
+  assert.equal(b.servers.context7, undefined);
+  assert.deepEqual(b.plugins["opencode-a"], { users: 1 });
+  // and a report of servers alone keeps no plugin
+  await ask(env, "/api/plugins/report", { id: id(2), plugins: [], servers: ["context7"] }, T0 + DAY);
+  b = await board(env, T0 + DAY);
+  assert.deepEqual(b.servers.context7, { users: 1 });
+  assert.equal(b.plugins["opencode-a"], undefined);
+  // a server can't be liked
+  assert.equal((await ask(env, "/api/plugins/like", { id: id(3), plugin: "mcp:context7", on: true })).status, 400);
+});
+
+test("only ids the market lists are taken as servers", async () => {
+  const env = { PLUGINS: d1() };
+  const bad = [
+    { id: id(1), plugins: [], servers: "context7" },
+    { id: id(1), plugins: [], servers: ["https://intranet.corp/mcp?key=abc"] },
+    { id: id(1), plugins: [], servers: ["npx -y @corp/secret"] },
+    { id: id(1), plugins: [], servers: ["/Users/me/server"] },
+    { id: id(1), plugins: [], servers: ["a/b/c"] },
+    { id: id(1), plugins: [], servers: ["x".repeat(201)] },
+    { id: id(1), plugins: [], servers: [7] },
+    { id: id(1), plugins: [], servers: Array.from({ length: MOST + 1 }, (_, i) => `s${i}`) },
+    { id: id(1), plugins: ["mcp:context7"] },
+  ];
+  for (const b of bad) assert.equal((await ask(env, "/api/plugins/report", b)).status, 400, JSON.stringify(b).slice(0, 80));
+  assert.deepEqual(await board(env), { plugins: {}, servers: {} });
 });

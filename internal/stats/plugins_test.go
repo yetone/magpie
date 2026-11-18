@@ -13,8 +13,9 @@ import (
 )
 
 // The day's plugins go to usemagpie.ai with the day's event, under its
-// id, as plugin.Public has them; not when the user turned off what magpie
-// is used with, nor when stats are off, nor with no plugin to name. A like
+// id, as plugin.Public has them, and the Library's market servers as
+// library.PublicServers has them; not when the user turned off what
+// magpie is used with, nor when stats are off, nor with nothing to name. A like
 // goes under the same id.
 func TestSendPlugins(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -23,12 +24,15 @@ func TestSendPlugins(t *testing.T) {
 	t.Setenv("MAGPIE_NO_STATS", "")
 	usage = func() Usage { return Usage{} }
 	plugins := []string{"@magpie-community/opencode-cursor-auth", "github:alice/tagged"}
-	was := publicPlugins
+	servers := []string{"context7", "io.github.big/one"}
+	was, wasServers := publicPlugins, publicServers
 	publicPlugins = func(context.Context) []string { return plugins }
-	defer func() { usage, publicPlugins = readUsage, was }()
+	publicServers = func() []string { return servers }
+	defer func() { usage, publicPlugins, publicServers = readUsage, was, wasServers }()
 	type report struct {
 		ID      string   `json:"id"`
 		Plugins []string `json:"plugins"`
+		Servers []string `json:"servers"`
 		Plugin  string   `json:"plugin"`
 		On      bool     `json:"on"`
 	}
@@ -63,7 +67,7 @@ func TestSendPlugins(t *testing.T) {
 	if err := Send(context.Background(), "0.1.300", "app", day); err != nil {
 		t.Fatal(err)
 	}
-	if len(reports) != 1 || reports[0].ID != posthogID || len(posthogID) != 32 || !slices.Equal(reports[0].Plugins, plugins) {
+	if len(reports) != 1 || reports[0].ID != posthogID || len(posthogID) != 32 || !slices.Equal(reports[0].Plugins, plugins) || !slices.Equal(reports[0].Servers, servers) {
 		t.Fatalf("reports %+v (event's id %q)", reports, posthogID)
 	}
 	// once a day
@@ -77,15 +81,21 @@ func TestSendPlugins(t *testing.T) {
 		t.Fatalf("like: %d %v %+v", n, err, likes)
 	}
 
-	// none to name: nothing goes
+	// servers alone still go, with no plugin
 	plugins = nil
 	Send(context.Background(), "0.1.300", "app", day.Add(24*time.Hour))
-	plugins = []string{"opencode-x"}
-	settings.Save(settings.Settings{NoUsageStats: true})
+	if len(reports) != 2 || reports[1].Plugins == nil || len(reports[1].Plugins) != 0 || !slices.Equal(reports[1].Servers, servers) {
+		t.Fatalf("servers alone: %+v", reports)
+	}
+	// none to name: nothing goes
+	servers = nil
 	Send(context.Background(), "0.1.300", "app", day.Add(48*time.Hour))
-	settings.Save(settings.Settings{NoStats: true})
+	plugins, servers = []string{"opencode-x"}, []string{"context7"}
+	settings.Save(settings.Settings{NoUsageStats: true})
 	Send(context.Background(), "0.1.300", "app", day.Add(72*time.Hour))
-	if len(reports) != 1 {
+	settings.Save(settings.Settings{NoStats: true})
+	Send(context.Background(), "0.1.300", "app", day.Add(96*time.Hour))
+	if len(reports) != 2 {
 		t.Fatalf("sent with nothing to name, or turned off: %+v", reports)
 	}
 }

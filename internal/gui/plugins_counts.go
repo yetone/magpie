@@ -18,13 +18,13 @@ import (
 )
 
 // Discover's counts, from usemagpie.ai (stats): each plugin's users and
-// likes, asked at most every hour, and the plugins liked here, kept on
-// this computer.
+// likes, and each MCP server's users for the Library's market, asked at
+// most every hour, and the plugins liked here, kept on this computer.
 
 var (
 	countsMu  sync.Mutex
 	countsAt  time.Time
-	countsGot map[string]stats.Counts
+	countsGot *stats.Board
 )
 
 // pluginCountsAsk and pluginLike are stats', for tests to stand in for.
@@ -63,28 +63,34 @@ func saveLiked(l []string) error {
 
 // pluginCounts is the counts held, asked again when an hour old; a failed
 // ask keeps what was held, tried again in a minute.
-func pluginCounts(ctx context.Context) (map[string]stats.Counts, error) {
+func pluginCounts(ctx context.Context) (stats.Board, error) {
 	countsMu.Lock()
 	defer countsMu.Unlock()
 	if countsGot != nil && time.Since(countsAt) < time.Hour {
-		return countsGot, nil
+		return *countsGot, nil
 	}
 	got, err := pluginCountsAsk(ctx)
 	if err != nil {
 		countsAt = time.Now().Add(-time.Hour + time.Minute)
-		return countsGot, err
+		if countsGot != nil {
+			return *countsGot, err
+		}
+		return stats.Board{}, err
 	}
-	countsGot, countsAt = got, time.Now()
+	countsGot, countsAt = &got, time.Now()
 	return got, nil
 }
 
 func pluginCountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/plugins/counts", func(rw http.ResponseWriter, r *http.Request) {
 		got, err := pluginCounts(r.Context())
-		out := map[string]any{"plugins": got, "liked": liked()}
-		if got == nil {
-			out["plugins"] = map[string]stats.Counts{}
+		if got.Plugins == nil {
+			got.Plugins = map[string]stats.Counts{}
 		}
+		if got.Servers == nil {
+			got.Servers = map[string]stats.Counts{}
+		}
+		out := map[string]any{"plugins": got.Plugins, "servers": got.Servers, "liked": liked()}
 		if err != nil {
 			out["error"] = err.Error()
 		}
@@ -121,10 +127,10 @@ func pluginCountRoutes(mux *http.ServeMux) {
 			return
 		}
 		countsMu.Lock()
-		if countsGot != nil {
-			c := countsGot[in.Name]
+		if countsGot != nil && countsGot.Plugins != nil {
+			c := countsGot.Plugins[in.Name]
 			c.Likes = n
-			countsGot[in.Name] = c
+			countsGot.Plugins[in.Name] = c
 		}
 		countsMu.Unlock()
 		writeJSON(rw, map[string]any{"likes": n, "liked": l})

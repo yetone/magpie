@@ -8549,6 +8549,24 @@ magpie.plugin("library", (ctx) => {
   };
   // how many cards a list shows at first, and each Show more adds
   const MARKET_PAGE = 60;
+  // Who uses each server, by its market id: the computers whose library
+  // had it in the last week (usemagpie.ai, through /api/plugins/counts),
+  // asked at most hourly. A server with USED of them goes first, most used
+  // first; the rest keep the market's own order, featured first.
+  const USED = 20;
+  let serverUsers = {}, usersAsked = 0, usersAsk = null;
+  function askServerUsers() {
+    if (!usersAsk || Date.now() - usersAsked > 36e5) {
+      usersAsked = Date.now();
+      usersAsk = api("plugins/counts").then((r) => { serverUsers = r.servers || {}; }, () => { usersAsked = Date.now() - 36e5 + 6e4; }); // a failed ask is tried again in a minute, not with every search
+    }
+    return usersAsk;
+  }
+  const usersOf = (x) => serverUsers[x.id]?.users || 0;
+  function byUse(items) {
+    const used = items.filter((x) => usersOf(x) >= USED).sort((a, b) => usersOf(b) - usersOf(a));
+    return used.length ? [...used, ...items.filter((x) => usersOf(x) < USED)] : items;
+  }
   const asked = new Set(); // skills whose description has been asked for
 
   async function fetchMarket(kind) {
@@ -8556,10 +8574,17 @@ magpie.plugin("library", (ctx) => {
     const seq = ++m.seq;
     m.loading = true;
     drawMarket(kind);
+    // the counts are asked beside the list, and waited for only briefly:
+    // a list already drawn is never reordered under the reader
+    const users = kind === "mcp" ? askServerUsers() : null;
     try {
       const r = await api("library/market/" + ({ mcp: "servers", skills: "skills", pi: "pi" })[kind] + "?q=" + encodeURIComponent(m.q.trim()));
+      if (users) await Promise.race([users, new Promise((ok) => setTimeout(ok, 1000))]);
       if (seq !== m.seq) return;
       m.items = r.items || [];
+      // a search keeps the registry's ranking
+      m.byUse = kind === "mcp" && !m.q.trim() && m.items.some((x) => usersOf(x) >= USED);
+      if (m.byUse) m.items = byUse(m.items);
       m.shown = MARKET_PAGE;
       m.error = r.error || "";
       // the source that didn't answer when the rest did (#1589)
@@ -8644,7 +8669,7 @@ magpie.plugin("library", (ctx) => {
     box.classList.toggle("loading", m.loading);
     const note = box.querySelector(".mk-note");
     note.textContent = q && m.items ? (m.items.length === 1 ? t("1 result") : t("{n} results", { n: m.items.length }))
-      : kind === "mcp" ? t("Featured, and the official MCP Registry") : kind === "pi" ? t("Most downloaded on npm") : t("Popular on skills.sh");
+      : kind === "mcp" ? (m.byUse ? t("Most used first, then featured and the MCP Registry") : t("Featured, and the official MCP Registry")) : kind === "pi" ? t("Most downloaded on npm") : t("Popular on skills.sh");
     const grid = box.querySelector(".mk-grid");
     grid.replaceChildren();
     if (!m.items) {
@@ -8784,6 +8809,13 @@ magpie.plugin("library", (ctx) => {
     const d = el("p", "mk-desc", about(x));
     d.title = about(x);
     const foot = el("div", "mk-foot");
+    const n = usersOf(x);
+    if (n) {
+      const u = el("span", "mk-installs");
+      u.append(svg(GLYPH.person, 11, 1.5), el("span", "", compact(n)));
+      u.title = t("{n} people use it, counted from the last week", { n: n.toLocaleString(intlLang()) });
+      foot.append(u);
+    }
     foot.append(el("span", "mk-id mono", x.name), el("span", "grow"), (needsKey(x) || x.optIn) && !x.have ? button(t("Add…"), "action mk-add", () => serverSheet(x)) : addButton(x, () => addServer(x, {}, null)));
     c.append(top, d, foot);
     c.onclick = () => serverSheet(x);

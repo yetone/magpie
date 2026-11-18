@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yetone/magpie/internal/library"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/update"
 )
@@ -19,8 +20,11 @@ import (
 // with, usemagpie.ai is told which plugins Discover lists are installed
 // and on here (plugin.Public: never a private repository, a folder or a
 // package no list names), under the same random id; it counts the
-// computers that said so in the last seven days. A like is the user's
-// own act, sent when they make it.
+// computers that said so in the last seven days. The Library's MCP
+// servers go the same way, for the market's order and counts: those the
+// market lists from what ships with magpie, by their market ids
+// (library.PublicServers), never a server of the user's own. A like is
+// the user's own act, sent when they make it.
 
 // Site takes the day's plugins and the likes; MAGPIE_SITE_HOST points
 // them elsewhere, for testing.
@@ -31,20 +35,35 @@ func Site() string {
 	return update.Site
 }
 
-// publicPlugins is plugin.Public; tests put their own.
-var publicPlugins = plugin.Public
+// publicPlugins is plugin.Public, and publicServers
+// library.PublicServers; tests put their own.
+var (
+	publicPlugins = plugin.Public
+	publicServers = library.PublicServers
+)
 
 // sendPlugins tells usemagpie.ai the plugins installed here Discover
-// lists; nothing when there are none.
+// lists, and the Library's servers the market lists; nothing when there
+// are none.
 func sendPlugins(ctx context.Context, id string) error {
-	names := publicPlugins(ctx)
-	if len(names) == 0 {
+	names, servers := publicPlugins(ctx), publicServers()
+	if len(names) == 0 && len(servers) == 0 {
 		return nil
 	}
 	if len(names) > most {
 		names = names[:most]
 	}
-	return post(ctx, "/api/plugins/report", map[string]any{"id": id, "plugins": names}, nil)
+	if len(servers) > most {
+		servers = servers[:most]
+	}
+	if names == nil {
+		names = []string{}
+	}
+	body := map[string]any{"id": id, "plugins": names}
+	if len(servers) > 0 {
+		body["servers"] = servers
+	}
+	return post(ctx, "/api/plugins/report", body, nil)
 }
 
 // Counts is what usemagpie.ai says of each plugin: the computers that
@@ -54,32 +73,40 @@ type Counts struct {
 	Likes int `json:"likes,omitempty"`
 }
 
-// PluginCounts asks usemagpie.ai each plugin's counts, by Discover's key.
-func PluginCounts(ctx context.Context) (map[string]Counts, error) {
+// Board is what usemagpie.ai counts: each plugin's, by Discover's key,
+// and each MCP server's, by its market id.
+type Board struct {
+	Plugins map[string]Counts `json:"plugins"`
+	Servers map[string]Counts `json:"servers"`
+}
+
+// PluginCounts asks usemagpie.ai each plugin's and each server's counts.
+func PluginCounts(ctx context.Context) (Board, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, "GET", Site()+"/api/plugins/stats", nil)
 	if err != nil {
-		return nil, err
+		return Board{}, err
 	}
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, err
+		return Board{}, err
 	}
 	defer res.Body.Close()
 	if res.StatusCode/100 != 2 {
-		return nil, fmt.Errorf("plugin counts: %s", res.Status)
+		return Board{}, fmt.Errorf("plugin counts: %s", res.Status)
 	}
-	var out struct {
-		Plugins map[string]Counts `json:"plugins"`
-	}
+	var out Board
 	if err := json.NewDecoder(http.MaxBytesReader(nil, res.Body, 4<<20)).Decode(&out); err != nil {
-		return nil, err
+		return Board{}, err
 	}
 	if out.Plugins == nil {
 		out.Plugins = map[string]Counts{}
 	}
-	return out.Plugins, nil
+	if out.Servers == nil {
+		out.Servers = map[string]Counts{}
+	}
+	return out, nil
 }
 
 // Like likes the plugin Discover keys name, or takes the like back, under
