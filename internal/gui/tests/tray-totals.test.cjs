@@ -23,11 +23,11 @@ const quotas = [
 ];
 
 const want = {
-  en: { off: "Off", today: "Tokens and cost today", week: "Tokens and cost, last 7 days", note: "Every agent's, as the Usage page counts them", two: "2 shown", subs: "2 subscriptions", days: "7 days" },
-  zh: { off: "关闭", today: "今天的 token 数和费用", week: "最近 7 天的 token 数和费用", note: "所有 Agent 的合计，与用量页的统计一致", two: "已选 2 项", subs: "2 个订阅", days: "7 天" },
-  "zh-TW": { off: "關閉", today: "今天的 token 數和費用", week: "最近 7 天的 token 數和費用", note: "所有 Agent 的合計，與用量頁的統計一致", two: "已選 2 項", subs: "2 個訂閱", days: "7 天" },
-  ja: { off: "オフ", today: "今日のトークン数と費用", week: "直近 7 日間のトークン数と費用", note: "すべてのエージェントの合計（使用量ページと同じ集計）", two: "2 件を表示", subs: "2 件のサブスクリプション", days: "7 日" },
-  de: { off: "Aus", today: "Tokens und Kosten heute", week: "Tokens und Kosten, letzte 7 Tage", note: "Alle Agenten zusammen, wie die Nutzungsseite sie zählt", two: "2 angezeigt", subs: "2 Abos", days: "7 Tage" },
+  en: { off: "Off", today: "Tokens and cost today", week: "Tokens and cost, last 7 days", note: "Gateway and session-log calls, as Usage › Requests counts them", two: "2 shown", subs: "2 subscriptions", days: "7 days" },
+  zh: { off: "关闭", today: "今天的 token 数和费用", week: "最近 7 天的 token 数和费用", note: "网关调用与会话日志调用，与用量 › 请求的统计一致", two: "已选 2 项", subs: "2 个订阅", days: "7 天" },
+  "zh-TW": { off: "關閉", today: "今天的 token 數和費用", week: "最近 7 天的 token 數和費用", note: "閘道呼叫與會話日誌呼叫，與用量 › 請求的統計一致", two: "已選 2 項", subs: "2 個訂閱", days: "7 天" },
+  ja: { off: "オフ", today: "今日のトークン数と費用", week: "直近 7 日間のトークン数と費用", note: "ゲートウェイとセッションログの呼び出し（使用量 › リクエストと同じ集計）", two: "2 件を表示", subs: "2 件のサブスクリプション", days: "7 日" },
+  de: { off: "Aus", today: "Tokens und Kosten heute", week: "Tokens und Kosten, letzte 7 Tage", note: "Aufrufe über den Zugangspunkt und aus Sitzungslogs, wie Nutzung › Anfragen sie zählt", two: "2 angezeigt", subs: "2 Abos", days: "7 Tage" },
 };
 
 function settingsPayload(over) {

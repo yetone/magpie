@@ -20772,7 +20772,7 @@ function renderTrayUsage(s, keep) {
     }
     // magpie's own count of every agent's requests, as the Usage page's
     // Overview has it: tokens over cost (#1984)
-    for (const [v, name] of TRAY_TOTALS) opts.push({ v, name, note: "Every agent's, as the Usage page counts them" });
+    for (const [v, name] of TRAY_TOTALS) opts.push({ v, name, note: "Gateway and session-log calls, as Usage › Requests counts them" });
     // one ticked that isn't there now stays to be unticked
     for (const id of ids) if (!opts.some((o) => o.v === id)) {
       const q = (quotas || []).find((q) => trayCardID(q) === id || q.provider + IN_USE === id);
