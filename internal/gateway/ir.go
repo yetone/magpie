@@ -439,6 +439,11 @@ type Request struct {
 	// and the conversation sent before stay as they were, so its prompt
 	// cache does (#2660). Every other upstream gets them in tools.
 	LoadedInPlace bool
+	// DeferredNamed is set on a Claude Code request carrying its
+	// DeferredToolPlaceholder: its deferred tools are named in a
+	// reminder and declared only once ToolSearch loads them
+	// (deferred_route.go).
+	DeferredNamed bool
 	// CR is set when the model asked is one of the glm-5.3-flash* routes
 	// whose replicas stitch CR into a call's arguments (#4256): the
 	// arguments reach the client with the stitched CR dropped

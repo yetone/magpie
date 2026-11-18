@@ -373,7 +373,10 @@ const claudeReviewEnv = "CLAUDE_CODE_AUTO_MODE_SERVER"
 // (cybercaius on Discord). 2.1.304 and later turn it on there themselves;
 // "true" also keeps it on in a conversation begun without it, which
 // Claude Code otherwise holds off until it is compacted. The gateway
-// carries deferred tools to every upstream (#2660, anthropic_shapes.go).
+// carries deferred tools to Anthropic upstreams and loads them in place on
+// a Responses upstream that takes it (#2660); elsewhere it turns them away,
+// and Claude Code declares every tool for that conversation, so a load
+// doesn't cost the prompt cache (gateway/deferred_route.go).
 // One the user set is theirs.
 const claudeSearchEnv = "ENABLE_TOOL_SEARCH"
 

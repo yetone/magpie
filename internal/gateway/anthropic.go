@@ -316,6 +316,7 @@ func readAdvised(body []byte, clientMarks, facts, advised bool) (*Request, error
 		}
 		if t.Name == "DeferredToolPlaceholder" {
 			// only keeps Anthropic's deferred loading on; never to be called
+			r.DeferredNamed = true
 			continue
 		}
 		r.Tools = append(r.Tools, Tool{Name: t.Name, Description: t.Description, Schema: t.InputSchema, Deferred: t.DeferLoading})
