@@ -6180,6 +6180,7 @@ const setupPaste = (q) => {
 };
 function renderProviders(quiet) {
   pasteLoad();
+  advMod();
   if (accountArranging || providerArranging) { accountRenderPending = true; return; }
   providersBehind = false;
   // a rebuild clamps the scroll to the top: put it back
@@ -8076,6 +8077,11 @@ document.addEventListener("click", (e) => {
     if (closing) d.open = false;
   }, () => {});
 }, true); // before the editor, which keeps its clicks to itself
+// groupAdvanced: the editor's Advanced rows under small headings
+// (advgroups.js, fetched as Providers first draws, so an editor opens with
+// them in place)
+const advMod = () => (advMod.p ||= import("./advgroups.js"));
+const groupAdvanced = (b) => self.advGroups ? advGroups(b) : advMod().then(() => b.isConnected && advGroups(b), () => {});
 // advancedSet says whether a setting under the editor's Advanced is set,
 // which opens it: none hides behind a fold
 function advancedSet(d, p) {
@@ -9760,6 +9766,7 @@ function drawEditor(p, presetID) {
     const urls = [p.chat, p.responses, p.anthropic].filter(Boolean);
     if (urls.length && !urls.some((u) => u.startsWith("plugin://"))) ed.append(...field(t("Endpoints"), renderEndpoints(p, p)));
     ed.append(adv);
+    groupAdvanced(advIn);
     const bar = el("div", "bar");
     // removing only hides it from magpie; the agent stays signed in
     const del = el("button", "text danger", t("Remove"));
@@ -10339,6 +10346,7 @@ function drawEditor(p, presetID) {
     ed.append(...row);
   }
   ed.append(adv);
+  groupAdvanced(advIn);
 
   if (custom) {
     const more = edAligned(el("details", "more"));
