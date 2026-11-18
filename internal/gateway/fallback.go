@@ -2010,9 +2010,14 @@ func elsewhere(left []candidate, c candidate) []candidate {
 // Google's suspension of an account for its terms (googleSuspended): it
 // says the service was disabled in this account before the request came,
 // a ruling on the account, not on what was sent, so the provider's other
-// accounts are asked (bestony on Discord).
+// accounts are asked (bestony on Discord). Nor does Anthropic's disabling
+// of a Claude account or organization (claudeAccountOff): the same.
 func riskRefused(c candidate, status int, header http.Header, body []byte) bool {
-	return failureOf(c, status, body) == failRestricted && !remoteModelRest(c, failRestricted, header) && !googleSuspended(c.p, carriedStatus(status, body), body)
+	if failureOf(c, status, body) != failRestricted || remoteModelRest(c, failRestricted, header) {
+		return false
+	}
+	status = carriedStatus(status, body)
+	return !googleSuspended(c.p, status, body) && !claudeAccountOff(c.p, status, body)
 }
 
 // elsewhereWeighed is elsewhere on a list of candidates beside their
@@ -2065,6 +2070,11 @@ func retryable(status int, body []byte) bool {
 		// quotaWords' is in it, so a group never asked the account with
 		// 6,467 points and the empty one was never rested (#4095,
 		// mycf_711)
+		return true
+	case status >= 400 && status < 500 && claudeOffWords.Match(body):
+		// the account turned off (its organization disabled, on hold):
+		// nothing about the request, which another member may serve. A
+		// 400, it ended the group at the disabled account (Ramon317317)
 		return true
 	case status >= 400 && status < 500 && refusedWords.Match(body):
 		// the vendor turning the agent's prompt away, at whatever 4xx it

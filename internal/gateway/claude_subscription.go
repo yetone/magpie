@@ -7724,6 +7724,12 @@ func bridgeFailed(name, msg string, status int) (int, string) {
 		return status, msg
 	case quotaSaid(msg):
 		return 429, msg
+	case name == "Claude Code" && claudeOffWords.MatchString(msg):
+		// the account on hold, as Claude Code says it with no status of
+		// the API's (account_on_hold): a 502 rested it a minute and asked
+		// it again; the account's own refusal, read as restricted
+		// (claudeAccountOff)
+		return http.StatusForbidden, msg
 	case unpastedSaid(name, msg):
 		// the same message fails the same way on every account and on
 		// every try: a 502 was asked again and again (ok123now on X)

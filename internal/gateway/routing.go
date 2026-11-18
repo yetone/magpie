@@ -741,7 +741,47 @@ func restrictedRefused(p provider.Provider, status int, body []byte) bool {
 	if restrictedSaid(status, body) {
 		return true
 	}
-	return isWorkBuddy(p) && provider.WBRestricted(status, wordsOf(body)) || googleSuspended(p, status, body)
+	return isWorkBuddy(p) && provider.WBRestricted(status, wordsOf(body)) || googleSuspended(p, status, body) || claudeAccountOff(p, status, body)
+}
+
+// claudeOffWords are Anthropic's, and Claude Code's, words for an account
+// that can serve nothing more: its organization disabled ("API Error: 400
+// {"type":"error","error":{"type":"invalid_request_error","message":"This
+// organization has been disabled."}}", Claude Code's errors page; the
+// same as a 403 permission_error), the claude.ai account put on hold
+// ("Your account is on hold and can't use Claude Code. View details or
+// appeal: https://claude.ai/restricted", account_on_hold), and an
+// organization that turned off Claude subscription sign-in for Claude
+// Code (oauth_org_not_allowed; the API's "OAuth authentication is
+// currently not allowed for this organization."), and a flagged account's
+// "Your account can't receive replies from Claude right now" (Claude's
+// apps show it as 「您的账户暂时无法接收 Claude 的回复」; RiverOnVenus on X
+// got 403s in a group with it; the English words are from a user's report,
+// not Anthropic's docs). Either apostrophe, or "cannot". None is about the
+// model or what was asked: the same request is served by another account.
+var claudeOffWords = lazyre.New(`(?i)this organization has been disabled|account is on hold and can(?:'|\x{2019}|no)t use Claude|organization has disabled Claude subscription access|OAuth authentication is currently not allowed for this organization|account can(?:'|\x{2019}|no)t receive (?:replies|responses) from Claude`)
+
+// claudeAccountOff says Anthropic turned p, a Claude subscription account
+// or a key on Anthropic's own API, off (claudeOffWords). Read as any
+// failure, a disabled account answered 400 and its group stopped there,
+// its next members never asked (Ramon317317 on X: a Claude account
+// flagged mid-use, and the group didn't move on); now it rests as one its
+// vendor restricted, until an appeal, and the request goes on to the
+// next member and the provider's other accounts (riskRefused leaves them
+// in). A relay's same words are about the relay's own account behind it,
+// and its other keys may still answer: read as any failure there.
+func claudeAccountOff(p provider.Provider, status int, body []byte) bool {
+	if status < 400 || status >= 500 {
+		return false
+	}
+	if a := p.Account; a != nil {
+		if a.Agent != "claude" {
+			return false
+		}
+	} else if provider.HostOf(p.Base(provider.Anthropic)) != "api.anthropic.com" {
+		return false
+	}
+	return claudeOffWords.Match(wordsOf(body))
 }
 
 // googleToS is Google's 403 PERMISSION_DENIED for a Code Assist account it

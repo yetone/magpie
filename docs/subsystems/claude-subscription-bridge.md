@@ -510,6 +510,13 @@ machine's turns with an image anywhere in their messages start as `-p`
 then, and text alone is still the interactive mode's. When the redo can't
 run (Off meanwhile, the client gone) the failure is a 400, not a 502
 (`bridgeFailed`), so neither the client nor the fallback asks it again.
+An account Anthropic turned off (its organization disabled, a 400 or
+403; on hold, which Claude Code says with no status and `bridgeFailed`
+gives a 403; subscription sign-in turned off for the organization; a
+flagged account that "can't receive replies from Claude", a 403) is
+read as restricted (`claudeAccountOff`, gateway-routing): it rests until
+an appeal and the request goes on to the next account or member
+(`TestClaudeAccountOffMovesToNextAccount`).
 `claude_tui_unpasted_test.go` holds each case, and
 `TestShimPaddedImageTakenWithoutMarks` the padded paste on a console that
 drops the marks.
