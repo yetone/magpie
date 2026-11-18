@@ -22012,7 +22012,7 @@ function renderRedact(s, keep) {
     onOff(s.redact, (redact) => savePrefs({ ...keep, redact })));
   if (s.redact) row(t("Keep a key's form"), t("A key goes as a made-up one of the same form (sk_… stays sk_…), not a placeholder, and comes back as it was"),
     onOff(s.redactShape, (redactShape) => savePrefs({ ...keep, redactShape }))).id = "redactShapeRow";
-  row(t("Mask personal data"), t("Emails, phone numbers, ID and bank card numbers too"),
+  row(t("Mask personal data"), t("Emails, phone numbers, ID and bank card numbers too. Turning it on turns on Hide accounts as well"),
     onOff(s.redactPersonal, (redactPersonal) => {
       if (redactPersonal) window.hideAccounts?.set(true, true);
       savePrefs({ ...keep, redactPersonal });
