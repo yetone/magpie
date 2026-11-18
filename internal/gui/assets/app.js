@@ -9729,6 +9729,13 @@ function drawEditor(p, presetID) {
     // and Advanced opened when one is on, as for Routing: the user who set
     // a warm-up finds it where it went (ChrisYagao on X: "我的预热去哪里了")
     if (subOf(a.agent)) advIn.append(...provPrefsField(a.agent, () => !(advanced && advanced.of === of) && provPrefsOn(a.agent) && (adv.open = true)));
+    // the Codex client, from Agents › Codex too, which gateway mode has not
+    if (a.agent === "codex") {
+      const box = el("div", "codex-client"), draw = () => box.replaceChildren(codexMenuBtn(CODEX_CLIENTS, prefs?.codexClient, "Codex client", "codexClient", "client", draw));
+      draw();
+      if (!prefs) loadSettings().then(draw, () => {});
+      advIn.append(...field(t("Codex client"), box, t("Which Codex requests to your ChatGPT accounts say they come from: the CLI or the desktop app")));
+    }
     // a subscription's window too: Codex's backend says 272K for models
     // that take 872K (#120)
     const cx = input(draft.contexts || "", t("e.g. 128k · or gpt-6=1m, comma separated"));
@@ -21534,7 +21541,8 @@ function renderCodexServiceTier(s) { codexMenuPick(CODEX_TIERS, s.codexServiceTi
 
 // a Codex row's button: the choice made, and the app's menu to change it,
 // posted on its own to settings/<path> as {<field>: value}
-function codexMenuPick(opts, v, label, key, field) {
+function codexMenuPick(opts, v, label, key, field) { $("#" + key + "Pick").replaceChildren(codexMenuBtn(opts, v, label, key, field)); }
+function codexMenuBtn(opts, v, label, key, field, done) {
   const cur = opts.find((o) => o.v === (v || "")) || opts[0];
   const b = condButton(label);
   b.append(t(cur.name));
@@ -21542,9 +21550,9 @@ function codexMenuPick(opts, v, label, key, field) {
   b.onclick = (e) => {
     e.stopPropagation();
     if (b.classList.contains("open")) return closeProtoMenu();
-    openProtoMenu(b, opts, cur.v, (x) => x !== cur.v && prefWrite(api("settings/" + key.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase()), { [field]: x })), label, "sess-menu");
+    openProtoMenu(b, opts, cur.v, (x) => x !== cur.v && prefWrite(api("settings/" + key.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase()), { [field]: x })).then(done), label, "sess-menu");
   };
-  $("#" + key + "Pick").replaceChildren(b);
+  return b;
 }
 
 // the Codex magpie presents to ChatGPT (ouhthuo on X)
