@@ -1883,7 +1883,7 @@ func copilotModels(ctx context.Context, app copilotApp) ([]catalog.Model, error)
 	copilotSeenMu.Lock()
 	for _, m := range v.Data {
 		if m.Capabilities.Type == "chat" {
-			copilotSeen[m.ID] = copilotAPIs(m.Endpoints)
+			copilotSee(m.ID, m.Endpoints)
 		}
 	}
 	copilotSeenMu.Unlock()

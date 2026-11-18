@@ -171,12 +171,26 @@ func (t codexSocket) overSocket(req *http.Request, shun bool) (*http.Response, e
 		return t.next.RoundTrip(req)
 	}
 	body, ok := codexSocketMessage(req)
-	if !ok {
+	copilot := provider.CopilotSocketTurn(req)
+	if !ok || (copilot && !provider.CopilotSocketModel(gjson.GetBytes(body, "model").String())) {
 		return viaHTTP()
 	}
-	msg := codexCreate(body)
+	create := codexCreate
+	if copilot {
+		initiator := "agent"
+		if strings.EqualFold(req.Header.Get("X-Initiator"), "user") {
+			initiator = "user"
+		}
+		create = func(body []byte) []byte { return copilotCreate(body, initiator) }
+	}
+	msg := create(body)
 	var shape *codexTurnShape
 	key := codexKeepKey(req, body)
+	if key == "" && copilot {
+		// Copilot is sent no conversation's id: the conversation is how
+		// it opens, as a delta goes only after the turn it carries on
+		key = codexKeepKeyOf(req, conversationID(req.Header, body), "")
+	}
 	if key != "" {
 		if s, ok := codexShape(body); ok {
 			shape = s
@@ -187,7 +201,7 @@ func (t codexSocket) overSocket(req *http.Request, shun bool) (*http.Response, e
 	if k := codexKeepTake(key); k != nil {
 		send := msg
 		if d, ok := k.delta(body, shape); ok {
-			send = codexCreate(d)
+			send = create(d)
 		}
 		if codexMessageTooBig(req.URL.Host, len(send)) {
 			k.close()
@@ -201,7 +215,7 @@ func (t codexSocket) overSocket(req *http.Request, shun bool) (*http.Response, e
 	if codexMessageTooBig(req.URL.Host, len(msg)) {
 		return viaHTTP()
 	}
-	res, err := t.socket(req, msg, key, shape, shun)
+	res, err := t.socket(req, msg, key, shape, shun, copilot)
 	if errors.Is(err, errCodexSocketFallBack) {
 		return viaHTTP()
 	}
@@ -272,6 +286,29 @@ func codexCreate(body []byte) []byte {
 	return append(out, rest...)
 }
 
+// copilotCreate is body, a JSON object, as Copilot's response.create
+// message: without stream, and with whether the user or the agent asked
+// the turn (initiator, said in X-Initiator over HTTP), as Copilot Chat
+// sends it (chatWebSocketManager.ts sendRequest).
+func copilotCreate(body []byte, initiator string) []byte {
+	who, _ := json.Marshal(initiator)
+	out := make([]byte, 0, len(body)+48)
+	out = append(out, `{"type":"response.create","initiator":`...)
+	out = append(out, who...)
+	gjson.ParseBytes(body).ForEach(func(k, v gjson.Result) bool {
+		switch k.String() {
+		case "stream", "type", "initiator":
+			return true
+		}
+		out = append(out, ',')
+		out = append(out, k.Raw...)
+		out = append(out, ':')
+		out = append(out, v.Raw...)
+		return true
+	})
+	return append(out, '}')
+}
+
 // withoutClientMetadata is body with key gone from its client_metadata,
 // every other byte as it was, and body itself when it has no such key.
 func withoutClientMetadata(body []byte, key string) []byte {
@@ -331,7 +368,10 @@ func withClientMetadata(body []byte, meta map[string]string) ([]byte, bool) {
 }
 
 // codexSocketHeaders are req's headers as the handshake carries them.
-func codexSocketHeaders(req *http.Request) http.Header {
+// Copilot's carries no OpenAI-Beta, as Copilot Chat's
+// (createResponsesWebSocket in @vscode/copilot-api), and no X-Initiator,
+// which each turn's message says.
+func codexSocketHeaders(req *http.Request, copilot bool) http.Header {
 	h := http.Header{}
 	for k, vs := range req.Header {
 		switch http.CanonicalHeaderKey(k) {
@@ -343,9 +383,14 @@ func codexSocketHeaders(req *http.Request) http.Header {
 		if hopHeader(k) || strings.HasPrefix(http.CanonicalHeaderKey(k), "Sec-Websocket-") {
 			continue
 		}
+		if copilot && http.CanonicalHeaderKey(k) == "X-Initiator" {
+			continue
+		}
 		h[k] = vs
 	}
-	h.Set("OpenAI-Beta", codexSocketBeta)
+	if !copilot {
+		h.Set("OpenAI-Beta", codexSocketBeta)
+	}
 	return h
 }
 
@@ -353,7 +398,7 @@ func codexSocketHeaders(req *http.Request) http.Header {
 // carries on with key's conversation is kept for its next turn. A host
 // that refuses the handshake is left to HTTP for a while when shun says
 // so (a provider's Socket "on" never is).
-func (t codexSocket) socket(req *http.Request, msg []byte, key string, shape *codexTurnShape, shun bool) (*http.Response, error) {
+func (t codexSocket) socket(req *http.Request, msg []byte, key string, shape *codexTurnShape, shun, copilot bool) (*http.Response, error) {
 	// the socket may outlive the request, kept for the next turn: only
 	// the handshake ends with it
 	ctx, cancel := context.WithCancel(context.WithoutCancel(req.Context()))
@@ -362,7 +407,7 @@ func (t codexSocket) socket(req *http.Request, msg []byte, key string, shape *co
 	u := *req.URL
 	c, hs, err := websocket.Dial(ctx, u.String(), &websocket.DialOptions{
 		HTTPClient:      &http.Client{Transport: t.next, CheckRedirect: provider.KeepsCredentials},
-		HTTPHeader:      codexSocketHeaders(req),
+		HTTPHeader:      codexSocketHeaders(req, copilot),
 		CompressionMode: websocket.CompressionNoContextTakeover,
 	})
 	stopped := timer.Stop()
@@ -405,7 +450,7 @@ func (t codexSocket) socket(req *http.Request, msg []byte, key string, shape *co
 		}
 		header[k] = vs
 	}
-	k := &codexKept{c: c, cancel: cancel, key: key, host: u.Host, header: header, opened: time.Now()}
+	k := &codexKept{c: c, cancel: cancel, key: key, host: u.Host, header: header, opened: time.Now(), copilot: copilot}
 	return t.turn(req, k, msg, shape, false)
 }
 
@@ -466,7 +511,7 @@ func (t codexSocket) turn(req *http.Request, k *codexKept, msg []byte, shape *co
 				return nil, errCodexSocketAgain
 			}
 			// ahead of the reply: it stands for the HTTP route's status
-			if res, fall := codexSocketError(req, header, frame); fall || res != nil {
+			if res, fall := codexSocketError(req, header, frame, k.copilot); fall || res != nil {
 				body.Close()
 				if fall {
 					return nil, errCodexSocketFallBack
@@ -536,7 +581,7 @@ func codexSocketEnded(host string, size int, err error) error {
 // codexSocketError is the HTTP reply an error frame that comes ahead of
 // the reply stands for, and true when the turn is to go over HTTP
 // instead; neither for one the stream carries on with.
-func codexSocketError(req *http.Request, header http.Header, frame []byte) (*http.Response, bool) {
+func codexSocketError(req *http.Request, header http.Header, frame []byte, copilot bool) (*http.Response, bool) {
 	code := gjson.GetBytes(frame, "error.code").String()
 	if code == "websocket_connection_limit_reached" {
 		return nil, true
@@ -546,7 +591,11 @@ func codexSocketError(req *http.Request, header http.Header, frame []byte) (*htt
 		status = int(gjson.GetBytes(frame, "status_code").Int())
 	}
 	if status < 400 || status > 599 {
-		return nil, false
+		// Copilot's error frames name no status
+		// ({"type":"error","error":{"code":"bad_request",...}}): the
+		// turn is asked over HTTP, whose reply has the status the
+		// account's resting and retries read
+		return nil, copilot
 	}
 	h := header.Clone()
 	for _, path := range []string{"headers", "error.headers"} {
@@ -652,11 +701,13 @@ func sseEvent(kind string, frame []byte) []byte {
 
 // codexSocketBody is the socket's frames read as server-sent events.
 type codexSocketBody struct {
-	c       *websocket.Conn
-	ctx     context.Context
-	k       *codexKept
-	shape   *codexTurnShape // nil: the socket isn't kept after the turn
-	output  []itemSum
+	c      *websocket.Conn
+	ctx    context.Context
+	k      *codexKept
+	shape  *codexTurnShape // nil: the socket isn't kept after the turn
+	output []itemSum
+	// sealed: which of output are reasoning items (codexKept.sealed)
+	sealed  []bool
 	pending []byte
 	done    bool
 	err     error
@@ -691,6 +742,7 @@ func (b *codexSocketBody) frame() ([]byte, error) {
 		if b.shape != nil {
 			if sum, ok := codexReplyItem(data); ok {
 				b.output = append(b.output, sum)
+				b.sealed = append(b.sealed, gjson.GetBytes(data, "item.type").String() == "reasoning")
 			} else {
 				b.shape = nil
 			}
@@ -701,7 +753,7 @@ func (b *codexSocketBody) frame() ([]byte, error) {
 			// kept for the conversation's next turn, which may carry on
 			// from this one
 			b.k.fields, b.k.input = b.shape.fields, b.shape.sums
-			b.k.output, b.k.replyID = b.output, id
+			b.k.output, b.k.sealed, b.k.replyID = b.output, b.sealed, id
 			codexKeepPut(b.k)
 		} else {
 			b.k.closeNormally()

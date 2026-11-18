@@ -64,19 +64,26 @@ var (
 // codexKept is a socket to the backend and what its last turn sent and
 // got back.
 type codexKept struct {
-	c       *websocket.Conn
-	cancel  context.CancelFunc
-	key     string // "" for a turn that names no conversation
-	host    string
-	header  http.Header // the handshake's, as each reply carries them
-	opened  time.Time
-	used    time.Time
-	once    sync.Once
-	timer   *time.Timer
-	fields  map[string]string
-	input   []itemSum
-	output  []itemSum
+	c      *websocket.Conn
+	cancel context.CancelFunc
+	key    string // "" for a turn that names no conversation
+	host   string
+	header http.Header // the handshake's, as each reply carries them
+	opened time.Time
+	used   time.Time
+	once   sync.Once
+	timer  *time.Timer
+	fields map[string]string
+	input  []itemSum
+	output []itemSum
+	// sealed says which of output are reasoning items, which a Copilot
+	// turn may come back without: Copilot's reasoning ids are Base64,
+	// + and / in them, and plainItemIDs leaves such reasoning out of the
+	// next turn. Copilot keeps the response's reasoning itself, so a
+	// turn that carries on from it without that item is still a delta.
+	sealed  []bool
 	replyID string
+	copilot bool // Copilot's socket (copilotCreate)
 }
 
 // close ends the socket at once.
@@ -107,12 +114,22 @@ func codexKeepKey(req *http.Request, body []byte) string {
 			return ""
 		}
 	}
+	return codexKeepKeyOf(req, sid, tid)
+}
+
+// codexKeepKeyOf is the key of req's conversation named sid and tid.
+func codexKeepKeyOf(req *http.Request, sid, tid string) string {
+	if sid == "" && tid == "" {
+		return ""
+	}
 	h := sha256.New()
 	for _, v := range []string{
 		req.URL.Scheme, req.URL.Host, req.URL.Path, req.Header.Get("Authorization"), req.Header.Get("Chatgpt-Account-Id"),
 		// a Responses provider's key may be said in either (#5781)
 		req.Header.Get("X-Api-Key"), req.Header.Get("Api-Key"),
 		sid, tid, req.Header.Get("X-Openai-Subagent"), req.Header.Get("X-Codex-Parent-Thread-Id"),
+		// Copilot Auto's session, which the handshake carries
+		req.Header.Get("Copilot-Session-Token"),
 	} {
 		h.Write([]byte(v))
 		h.Write([]byte{0})
@@ -306,8 +323,7 @@ func (k *codexKept) delta(body []byte, s *codexTurnShape) ([]byte, bool) {
 			return nil, false
 		}
 	}
-	n := len(k.input) + len(k.output)
-	if len(s.sums) < n {
+	if len(s.sums) < len(k.input) {
 		return nil, false
 	}
 	for i, sum := range k.input {
@@ -315,10 +331,16 @@ func (k *codexKept) delta(body []byte, s *codexTurnShape) ([]byte, bool) {
 			return nil, false
 		}
 	}
+	n := len(k.input)
 	for i, sum := range k.output {
-		if s.sums[len(k.input)+i] != sum {
-			return nil, false
+		if n < len(s.sums) && s.sums[n] == sum {
+			n++
+			continue
 		}
+		if k.copilot && i < len(k.sealed) && k.sealed[i] {
+			continue
+		}
+		return nil, false
 	}
 	in := gjson.GetBytes(body, "input")
 	if !in.IsArray() || in.Index <= 0 {

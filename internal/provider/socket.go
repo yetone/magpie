@@ -79,6 +79,9 @@ type socketKey struct{}
 type socketAt struct {
 	host, path string
 	shun       bool
+	// copilot: a Copilot account's turns, at whatever API host its
+	// session names (CopilotSocketTurn)
+	copilot bool
 }
 
 // withSocket is ctx carrying where p's turns may go over the Responses
@@ -96,6 +99,9 @@ func withSocket(ctx context.Context, p Provider) context.Context {
 }
 
 func (p Provider) socketAt() (socketAt, bool) {
+	if p.copilotSocket() {
+		return socketAt{copilot: true, shun: true}, true
+	}
 	mode := p.SocketMode()
 	if mode == "" || !p.TakesSocket() {
 		return socketAt{}, false
@@ -119,8 +125,44 @@ func SocketTurn(req *http.Request) (ok, shun bool) {
 		return true, true
 	}
 	at, _ := req.Context().Value(socketKey{}).(socketAt)
+	if at.copilot {
+		return req.URL.Path == "/responses", true
+	}
 	if at.host == "" || !strings.EqualFold(req.URL.Host, at.host) || req.URL.Path != at.path {
 		return false, false
 	}
 	return true, at.shun
+}
+
+// A Copilot account's Responses turn goes over Copilot's Responses
+// WebSocket, at the same /responses address, for a model whose
+// supported_endpoints list "ws:/responses", as Copilot Chat sends it
+// (microsoft/vscode extensions/copilot chatEndpoint.ts: useWebSocket,
+// ModelSupportedEndpoint.WebSocketResponses). There a conversation's next
+// turn goes on the same socket as its new input after
+// previous_response_id with store false, where over HTTP Copilot answers
+// previous_response_id 400 "previous_response_id is not supported" and
+// every turn goes whole (yuushabu_buyinn on X: 129 GB up for 31 GB down).
+// Socket "off" keeps an account's turns on HTTP.
+func (p Provider) copilotSocket() bool {
+	return p.Account != nil && p.Account.Agent == "copilot" && p.Socket != SocketOff
+}
+
+// CopilotSocketTurn says req is a Copilot account's Responses turn that
+// may go over Copilot's WebSocket (SocketTurn), its model aside
+// (CopilotSocketModel).
+func CopilotSocketTurn(req *http.Request) bool {
+	if req == nil || req.URL == nil {
+		return false
+	}
+	at, _ := req.Context().Value(socketKey{}).(socketAt)
+	return at.copilot && req.URL.Path == "/responses"
+}
+
+// CopilotSocketModel says Copilot's list named model served over its
+// Responses WebSocket ("ws:/responses" in its supported_endpoints).
+func CopilotSocketModel(model string) bool {
+	copilotSeenMu.Lock()
+	defer copilotSeenMu.Unlock()
+	return copilotSeenWS[model]
 }
