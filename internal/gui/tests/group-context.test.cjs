@@ -121,6 +121,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await box.fill("abc");
       assert.equal(await box.getAttribute("aria-invalid"), "true");
       assert((await hint()).includes(w.bad), await hint());
+      // Save refused while the box doesn't read: the editor stays open on it, nothing sent
+      await ed.locator("button.primary", { hasText: w.save }).click();
+      assert.equal(await ed.locator("button.primary", { hasText: w.save }).evaluate((b) => b.classList.contains("busy")), false, "a bad context is not saved");
+      assert.equal(await box.evaluate((x) => x === document.activeElement), true, "Save takes the reader to the bad box");
+      assert.equal(await page.locator(".rt-gedit").count(), 1);
       await box.fill("300k");
       assert.equal(await box.getAttribute("aria-invalid"), "false");
       assert.equal(await box.getAttribute("aria-describedby"), await row.locator(".hint").getAttribute("id"));

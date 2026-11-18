@@ -8503,14 +8503,23 @@ function routingPage(part) {
     const cmpIn = keys(input(d.compact > 0 ? ctxShort(d.compact).toLowerCase() : "", t("Default")));
     cmpIn.classList.add("cmp-in");
     cmpIn.setAttribute("aria-label", t("Compact at"));
+    const cmpHint = el("div", "hint"), cmpW = el("div");
+    cmpHint.id = "groupCompactHint";
+    cmpHint.hidden = true;
+    cmpIn.setAttribute("aria-describedby", cmpHint.id);
+    let cmpErr = "";
     cmpIn.oninput = () => {
       const v = cmpIn.value.trim().toLowerCase().replace(/_/g, ""), m = v.match(/^(\d+(?:\.\d+)?)\s*([km]?)$/);
       const n = m ? Math.round(+m[1] * (m[2] === "k" ? 1e3 : m[2] === "m" ? 1e6 : 1)) : 0;
-      cmpIn.setAttribute("aria-invalid", String(!!v && !(n > 0)));
+      cmpErr = !v || n > 0 ? "" : t("{v} is not a length of tokens like 200k or 1m", { v: cmpIn.value.trim() });
+      cmpIn.setAttribute("aria-invalid", String(!!cmpErr));
+      cmpHint.textContent = cmpErr;
+      cmpHint.hidden = !cmpErr;
       if (!v) d.compact = 0;
       else if (n > 0) d.compact = n;
     };
-    advIn.append(el("label", "", t("Compact at")), cmpIn);
+    cmpW.append(cmpIn, cmpHint);
+    advIn.append(el("label", "", t("Compact at")), cmpW);
     const aHint = el("div", "hint", t(AFF_HINT[d.affinity] || AFF_HINT[""]));
     const aw = el("div");
     aw.append(segs(AFF_OPTS.map(([id, n]) => [id, t(n)]), d.affinity, (v) => { d.affinity = v; aHint.textContent = t(AFF_HINT[v] || AFF_HINT[""]); drawFig(); }), aHint);
@@ -9345,6 +9354,9 @@ function routingPage(part) {
     const saveBtn = el("button", "text primary", t(g ? "Save" : "Add"));
     const save = () => {
       if (addPattern() === null) return adv.open = true, pin.focus({ preventScroll: true }); // typed, not added: it is meant
+      // a box under Advanced that doesn't read keeps its last good value: never saved as if it did
+      const bad = [[firstErr, firstIn], [ctxErr, ctxIn], [cmpErr, cmpIn]].find(([e]) => e);
+      if (bad) { adv.open = true; bad[1].focus({ preventScroll: true }); return status(bad[0], "warn"); }
       if (!d.members.length && !d.match.length) { addBtn.focus({ preventScroll: true }); return status(t("A group needs a model in it"), "warn"); }
       d.rules.forEach((r) => { r.intent = (r.intent || "").trim(); });
       // hours: both times, or none and no days; days alone are all day

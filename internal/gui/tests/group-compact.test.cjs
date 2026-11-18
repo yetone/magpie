@@ -103,6 +103,18 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await open();
       await box.fill("abc");
       assert.equal(await box.getAttribute("aria-invalid"), "true");
+      const cmpHint = ed.locator("#groupCompactHint");
+      assert.equal(await cmpHint.isVisible(), true, "a bad length is said, not only marked");
+      assert((await cmpHint.textContent()).includes("abc"));
+      assert.equal(await box.getAttribute("aria-describedby"), "groupCompactHint");
+      // Save refused while the box doesn't read: the editor stays open on it, nothing sent
+      await ed.locator("button.primary", { hasText: w.save }).click();
+      assert.equal(await ed.locator("button.primary", { hasText: w.save }).evaluate((b) => b.classList.contains("busy")), false, "a bad compact size is not saved");
+      assert.equal(await box.evaluate((x) => x === document.activeElement), true, "Save takes the reader to the bad box");
+      assert.equal(await page.locator(".rt-gedit").count(), 1);
+      await box.fill("");
+      assert.equal(await cmpHint.isVisible(), false, "empty is none, not an error");
+      await box.fill("abc");
       await box.fill("160k");
       assert.equal(await box.getAttribute("aria-invalid"), "false");
       assert.equal((await save()).compact, 160000);
