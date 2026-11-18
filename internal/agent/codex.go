@@ -1397,18 +1397,33 @@ func codexIn(at place) *Agent {
 	// api: the user wants magpie as Codex's provider even while Codex is
 	// signed in to ChatGPT
 	api := func() bool { return stashShared()[at.key("codex.login")] == "api" }
-	// out reports whether the Codex app holds the ChatGPT account Codex is
-	// signed in to (codexUsedUp), for magpie to become Codex's provider
-	// while it does (#540): never with the sign-in kept on ChatGPT
-	// (chatgpt), where the user would rather the Codex app wait for the
-	// account than leave its ChatGPT state, and never for the account the
-	// user keeps Codex signed in to (codexSignInKept): the takeover has the
-	// app read no account and show "magpie" for the one they picked
-	// (davezfr on X: account 1 out of its allowance and its credits,
-	// picked in Codex's sign-in, showed "magpie"; account 2 showed itself)
-	out := func() bool {
-		return stashShared()[at.key("codex.login")] != "chatgpt" && codexUsedUp() && !codexSignInKept()
+	// outOn reports whether the Codex app holds the ChatGPT account Codex
+	// is signed in to (codexUsedUp), for magpie to become Codex's provider
+	// on model m while it does (#540): never with the sign-in kept on
+	// ChatGPT (chatgpt), where the user would rather the Codex app wait for
+	// the account than leave its ChatGPT state. On the account the user
+	// keeps Codex signed in to (codexSignInKept) only for a model of
+	// magpie's: on one of Codex's own the takeover has the app read no
+	// account and show "magpie" for the one they picked (davezfr on X:
+	// account 1 out of its allowance and its credits, picked in Codex's
+	// sign-in, showed "magpie"; account 2 showed itself), but on magpie's
+	// the app greys Send for it till the account's reset, a Claude model
+	// with room included (Yuzhou__Zhang on X, a routing group of Claude
+	// accounts, after a5e3972a7). Keeping the sign-in on an account says
+	// which account, not that magpie's models wait for it; Always ChatGPT
+	// is the setting for that. One of Codex's own that the takeover put
+	// on magpie (codex.out_own, as magpie serves it or its stand-in) is
+	// still Codex's own here.
+	outOn := func(m string) bool {
+		if stashShared()[at.key("codex.login")] == "chatgpt" || !codexUsedUp() {
+			return false
+		}
+		own := stashShared()[at.key("codex.out_own")]
+		standsIn := own != "" && (codexOwnOf(m) == own || m == stashShared()[at.key("codex.out_stand")])
+		return isMagpie(m) && !standsIn || !codexSignInKept()
 	}
+	// out is outOn for the model Codex is set to
+	out := func() bool { return outOn(get("model")) }
 	// outStays: the takeover's end (the account has room again, at its
 	// reset, or is one the user keeps Codex on) waits while a Codex has a
 	// chat on magpie open, unless the Codex app's app-server is restarted
@@ -1859,7 +1874,7 @@ func codexIn(at place) *Agent {
 			p := get("model_provider")
 			ours := asProvider() || p == "" || p == "openai" || isCCSwitchMirror(p)
 			chatgpt := !api() && chatGPT()
-			if chatgpt && !out() && ours {
+			if chatgpt && !outOn(v) && ours {
 				forget(at.key("codex.out"))
 				if err := dropProvider(); err != nil {
 					return err

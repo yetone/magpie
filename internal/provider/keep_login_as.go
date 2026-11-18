@@ -41,11 +41,12 @@ func keptAs(agent string) string {
 // one the user keeps it on (keepsLogin): the account KeepLoginAs names, or,
 // kept on the first with none named, the one it is on, which magpie then
 // never moves it off. The Codex app shows that account as the user's own,
-// so magpie doesn't become Codex's provider while it is held (the agent
-// package's out): its takeover answers account/read with no account, and
-// the app showed "magpie" for the account the user picked (davezfr on X,
-// account 1 out of its allowance and its credits). false while it can't be
-// told.
+// so on one of Codex's own models magpie doesn't become Codex's provider
+// while it is held (the agent package's outOn): its takeover answers
+// account/read with no account, and the app showed "magpie" for the
+// account the user picked (davezfr on X, account 1 out of its allowance
+// and its credits). On a model of magpie's it does, kept or not, or the
+// app greys Send for it till the reset. false while it can't be told.
 func CodexSignInKept() bool {
 	for _, p := range storedFile().Providers {
 		if p.ID != "codex" {
