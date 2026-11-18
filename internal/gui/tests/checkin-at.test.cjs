@@ -1,7 +1,7 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // times_ang on X: "magpie 可以调整自动签到的时间吗". Under a daily check-in
-// that is on, a Check-in time row: Off (as each vendor's day starts) or
-// On at 09:00, a time typed then saved as settings.checkinAt through
+// that is on, the one Check-in time for every vendor: Day start (as each
+// vendor's day starts) or Set time at 09:00, a time typed then saved as settings.checkinAt through
 // POST /api/settings, and Off again saves ""; a plugin's check-in group
 // has the same row, a check-in turned off none. An account not checked in
 // yet says the time on its Usage card. Chromium and WebKit, the window at
@@ -52,11 +52,11 @@ function serve(lang, saved, at) {
 }
 
 const words = {
-  en: { name: "Check-in time", off: "As soon as each vendor's day starts", on: "From 21:30 each day, for every vendor's check-in", card: "Not checked in yet today · checks in from 21:30" },
-  zh: { name: "签到时间", off: "每个服务商的新一天一开始就签到", on: "每天 21:30 起签到，所有服务商的签到都按这个时间", card: "今日尚未签到 · 21:30 起签到" },
-  "zh-TW": { name: "簽到時間", off: "每個服務商的新一天一開始就簽到", on: "每天 21:30 起簽到，所有服務商的簽到都按這個時間", card: "今日尚未簽到 · 21:30 起簽到" },
-  ja: { name: "チェックインの時刻", off: "各サービスの日付が変わったらすぐにチェックイン", on: "毎日 21:30 からチェックイン（すべてのサービスのチェックインに共通）", card: "今日はまだチェックインしていません · 21:30 からチェックイン" },
-  de: { name: "Check-in-Zeit", off: "Sobald der Tag des jeweiligen Anbieters beginnt", on: "Täglich ab 21:30, für den Check-in jedes Anbieters", card: "Heute noch nicht eingecheckt · Check-in ab 21:30" },
+  en: { name: "Check-in time for every vendor", segs: ["Day start", "Set time"], off: "As soon as each vendor's day starts", on: "From 21:30 each day, for every vendor's check-in", card: "Not checked in yet today · checks in from 21:30" },
+  zh: { name: "所有服务商的签到时间", segs: ["新一天开始", "指定时间"], off: "每个服务商的新一天一开始就签到", on: "每天 21:30 起签到，所有服务商的签到都按这个时间", card: "今日尚未签到 · 21:30 起签到" },
+  "zh-TW": { name: "所有服務商的簽到時間", segs: ["新一天開始", "指定時間"], off: "每個服務商的新一天一開始就簽到", on: "每天 21:30 起簽到，所有服務商的簽到都按這個時間", card: "今日尚未簽到 · 21:30 起簽到" },
+  ja: { name: "すべてのサービスのチェックイン時刻", segs: ["日付が変わったら", "時刻を指定"], off: "各サービスの日付が変わったらすぐにチェックイン", on: "毎日 21:30 からチェックイン（すべてのサービスのチェックインに共通）", card: "今日はまだチェックインしていません · 21:30 からチェックイン" },
+  de: { name: "Check-in-Zeit für alle Anbieter", segs: ["Tagesbeginn", "Feste Zeit"], off: "Sobald der Tag des jeweiligen Anbieters beginnt", on: "Täglich ab 21:30, für den Check-in jedes Anbieters", card: "Heute noch nicht eingecheckt · Check-in ab 21:30" },
 };
 
 function launch(engine) {
@@ -84,6 +84,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal((await row.locator(".name").innerText()).trim(), w.name);
         assert.equal((await row.locator(".sub").innerText()).trim(), w.off);
         assert.equal(await row.locator("input.at").count(), 0, "no time while Off");
+        // one time for every vendor, not an On/Off of this vendor's check-in
+        assert.deepEqual((await row.locator(".segs .opt").allInnerTexts()).map((x) => x.trim()), w.segs);
         assert.equal(await page.locator("#traeList .ci-at-row").count(), 0, "a check-in turned off has none");
         assert.equal(await page.locator('.ci-plugin[data-provider="autoclaw"] .ci-at-row').count(), 1, "a plugin's check-in has one");
 

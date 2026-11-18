@@ -111,14 +111,15 @@ function checkinNowLine(r, who) {
 }
 
 // ciAtFill draws the check-in's time of day into row (checkinAt; times_ang
-// on X): Off asks as each vendor's day starts, On at 09:00 or the time typed.
+// on X), one for every vendor's: Day start asks as each vendor's day starts,
+// Set time at 09:00 or the time typed. Not On/Off: the check-in is its own.
 window.ciAtFill = function (row, s) {
   const at = s.checkinAt || "";
   const save = (v) => savePrefs({ ...prefsKeep(s), checkinAt: v });
   const who = el("div", "who");
   const sub = el("div", "sub", at ? t("From {at} each day, for every vendor's check-in", { at }) : t("As soon as each vendor's day starts"));
   sub.title = t("A computer asleep then checks in when it wakes.");
-  who.append(el("div", "name", t("Check-in time")), sub);
+  who.append(el("div", "name", t("Check-in time for every vendor")), sub);
   const box = el("div", "warm-at" + (at ? " times" : ""));
   if (at) {
     const i = input(at, "09:00", "time");
@@ -132,7 +133,7 @@ window.ciAtFill = function (row, s) {
     list.append(one);
     box.append(list);
   }
-  box.append(segs([["off", t("Off")], ["on", t("On")]], at ? "on" : "off", (v) => save(v === "on" ? at || "09:00" : "")));
+  box.append(segs([["off", t("Day start")], ["on", t("Set time")]], at ? "on" : "off", (v) => save(v === "on" ? at || "09:00" : "")));
   row.hidden = false;
   row.append(who, box);
 };
