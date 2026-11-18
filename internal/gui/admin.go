@@ -167,8 +167,12 @@ func adminAPI() http.Handler {
 // computer only would become one allowed from anywhere, or take over a
 // peer's; and turning one off or removing it locks its owner out. A key
 // that manages magpie is changed by the command line and the app, as its
-// Admin is set there (admin-key is left out above). The caller's own key
-// stays its to change. The body is read and put back for the handler.
+// Admin is set there (admin-key is left out above). So is a key let use
+// Magpie Memory from another computer (access.Key.Memory): its secret
+// reads and writes what goes into every agent's instructions here, which
+// managing magpie doesn't give, and memory-key is left out above too. The
+// caller's own key stays its to change. The body is read and put back for
+// the handler.
 func adminMayChangeKey(w http.ResponseWriter, r *http.Request) bool {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -194,6 +198,10 @@ func adminMayChangeKey(w http.ResponseWriter, r *http.Request) bool {
 	for _, k := range keys {
 		if k.ID == in.Key && k.Admin != "" {
 			adminError(w, http.StatusForbidden, "this key may manage magpie, so the management API doesn't change it: use `magpie gateway-key` or the app")
+			return false
+		}
+		if k.ID == in.Key && k.Memory {
+			adminError(w, http.StatusForbidden, "this key may use Magpie Memory from another computer, so the management API doesn't change it: use `magpie gateway-key` or the app")
 			return false
 		}
 	}

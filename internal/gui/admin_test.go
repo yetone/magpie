@@ -189,3 +189,58 @@ func TestAdminAPILeavesOtherManagingKeys(t *testing.T) {
 		}
 	}
 }
+
+// A key let use Magpie Memory from another computer (access.Key.Memory)
+// is left to the command line and the app as a managing key is: rotating
+// it through the API would hand a managing key its secret, and with it
+// what goes into every agent's instructions here, which managing magpie
+// doesn't give.
+func TestAdminAPILeavesMemoryKeys(t *testing.T) {
+	sandboxHome(t)
+	add := func(name string) string {
+		t.Helper()
+		if _, err := access.Update("add-key", access.Change{Name: name}); err != nil {
+			t.Fatal(err)
+		}
+		keys, _ := access.List()
+		return keys[len(keys)-1].ID
+	}
+	admin, mem := add("Admin"), add("Remote box")
+	if _, err := access.Update("admin-key", access.Change{Key: admin, Admin: access.AdminAny}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := access.Update("memory-key", access.Change{Key: mem, Memory: true}); err != nil {
+		t.Fatal(err)
+	}
+	as := func(action, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		r := httptest.NewRequest("POST", "/gateway-keys/"+action, strings.NewReader(body))
+		r = r.WithContext(access.WithIdentity(r.Context(), access.Identity{KeyID: admin, Admin: access.AdminAny}))
+		w := httptest.NewRecorder()
+		serveAdmin(w, r)
+		return w
+	}
+	for _, c := range []struct{ action, body string }{
+		{"rotate-key", `{"key":"` + mem + `"}`},
+		{"rotate-key", `{"key":"` + mem + `","secret":"chosen-by-the-caller-5678"}`},
+		{"memory-key", `{"key":"` + admin + `","memory":true}`},
+		{"memory-key", `{"key":"` + mem + `"}`},
+	} {
+		w := as(c.action, c.body)
+		if w.Code != http.StatusForbidden && w.Code != http.StatusNotFound {
+			t.Errorf("%s %s: %d, want 403 or 404 (%s)", c.action, c.body, w.Code, w.Body)
+		}
+		if strings.Contains(w.Body.String(), `"secret":`) {
+			t.Errorf("%s told a secret: %s", c.action, w.Body)
+		}
+	}
+	if who, ok := access.Authenticate("chosen-by-the-caller-5678"); ok {
+		t.Errorf("the caller's chosen secret opens %q", who.KeyName)
+	}
+	keys, _ := access.List()
+	for _, k := range keys {
+		if k.ID == mem && !k.Memory || k.ID == admin && k.Memory {
+			t.Errorf("memory changed through the API: %+v", k)
+		}
+	}
+}
