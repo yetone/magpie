@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -358,9 +359,16 @@ func codexBody(body []byte) []byte {
 		if firstLine(own) == firstLine(codex) {
 			codex = own
 		} else {
-			input = append([]any{map[string]any{"type": "message", "role": "developer",
-				"content": []any{map[string]any{"type": "input_text", "text": own}}}}, input...)
+			input = append([]any{DeveloperMessage(own)}, input...)
 		}
+	}
+	if codex != "" && InstructionsAfterInput(model) {
+		// GPT-6.2 reads top-level instructions after the input, so they
+		// went uncached every turn; they go first in the input, where
+		// Codex puts its own (BaseInstructionsFragment)
+		input = append([]any{DeveloperMessage(codex)}, input...)
+		codex = ""
+		delete(m, "instructions")
 	}
 	if input == nil {
 		input = []any{}
@@ -409,6 +417,40 @@ func codexBody(body []byte) []byte {
 		return body
 	}
 	return out
+}
+
+// InstructionsAfterInput says model is one OpenAI reads a request's
+// top-level instructions for after its input, not before it: GPT-6.2 and
+// later ("Starting with GPT-6.2, models append top-level instructions
+// after input and bill those tokens at the uncached input rate",
+// developers.openai.com/api/docs/guides/prompt-caching). Sent so, they
+// end the prompt the cache keeps, and from the second turn on what is
+// cached ends where the last turn's input did: on a ChatGPT account
+// gpt-6.2-sol had 1,920 of 8,271 input tokens cached on a third turn with
+// Codex's instructions on top, 6,016 with them first in the input
+// (gpt-6-sol cached 5,632 of 6,843 with them on top). Such a model is
+// sent its instructions as a developer message first in the input, which
+// is where Codex puts its own on every model.
+func InstructionsAfterInput(model string) bool {
+	if i := strings.LastIndexByte(model, '/'); i >= 0 {
+		model = model[i+1:]
+	}
+	g := gptVersionRE.FindStringSubmatch(strings.ToLower(model))
+	if g == nil {
+		return false
+	}
+	major, _ := strconv.Atoi(g[1])
+	minor, _ := strconv.Atoi(g[2]) // "" (gpt-7) is 0
+	return major > 6 || major == 6 && minor >= 2
+}
+
+var gptVersionRE = lazyre.New(`^gpt-(\d+)(?:\.(\d+))?(?:$|-)`)
+
+// DeveloperMessage is text as a Responses developer message, as Codex
+// sends its base instructions in the input.
+func DeveloperMessage(text string) map[string]any {
+	return map[string]any{"type": "message", "role": "developer",
+		"content": []any{map[string]any{"type": "input_text", "text": text}}}
 }
 
 // conversationKey names the conversation a request belongs to, for a client

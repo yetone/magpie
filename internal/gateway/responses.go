@@ -1547,7 +1547,11 @@ func buildResponses(r *Request, model, host string, rejectTemp bool) []byte {
 	if r.CacheKey != "" {
 		out["prompt_cache_key"] = r.CacheKey
 	}
-	if r.System != "" {
+	if r.System != "" && provider.InstructionsAfterInput(model) {
+		// GPT-6.2 reads top-level instructions after the input, uncached
+		// every turn: the system prompt goes first in it instead
+		out["input"] = append([]any{provider.DeveloperMessage(r.System)}, input...)
+	} else if r.System != "" {
 		out["instructions"] = r.System
 	}
 	if r.MaxTokens > 0 {

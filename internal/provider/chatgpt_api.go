@@ -646,6 +646,15 @@ func siwcBody(body []byte) []byte {
 			m["prompt_cache_key"] = k
 		}
 	}
+	// GPT-6.2 reads top-level instructions after the input, uncached
+	// every turn: they go first in it (InstructionsAfterInput)
+	if own, _ := m["instructions"].(string); own != "" {
+		if model, _ := m["model"].(string); InstructionsAfterInput(model) {
+			input, _ := m["input"].([]any)
+			m["input"] = append([]any{DeveloperMessage(own)}, input...)
+			delete(m, "instructions")
+		}
+	}
 	if tools, ok := m["tools"].([]any); ok {
 		if tools = siwcOwnTools(tools); len(tools) == 0 {
 			delete(m, "tools")
