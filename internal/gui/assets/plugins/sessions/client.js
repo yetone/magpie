@@ -633,12 +633,22 @@ magpie.plugin("sessions", (ctx) => {
     if (data?.trash.length) tr.append(el("em", "", String(data.trash.length)));
     tr.onclick = () => { trashOn = !trashOn; selecting = false; picked.clear(); draw(); speedsOn(); };
     // which agents' history is read is Settings › Privacy's (the scattered
-    // settings audit after netube99 on X); gateway mode reads none there
+    // settings audit after netube99 on X); gateway mode reads none there.
+    // The terminal a session opens in is General's: with that row here,
+    // a menu names both
     const go = el("button", "text sm-toset");
     go.type = "button";
     go.append(el("span", "", t("Settings")), " ›");
     go.hidden = !!data?.reads?.gateway;
-    go.onclick = (e) => openSettingsAt(e, "privacy", "#sessionReadsList .row");
+    const at = { privacy: "#sessionReadsList .row", general: "#sessionTerminalRow" };
+    const where = (tab) => t("Settings") + " › " + $("#setTab-" + tab).textContent;
+    go.onclick = (e) => {
+      if (!sessionTerminalShows(prefs)) return openSettingsAt(e, "privacy", at.privacy);
+      e.stopPropagation();
+      if (go.classList.contains("open")) return closeProtoMenu();
+      openProtoMenu(go, [{ v: "privacy", name: "Agents' session history", note: where("privacy") }, { v: "general", name: "Session terminal", note: where("general") }],
+        null, (v, ev) => openSettingsAt(ev, v, at[v]), "Settings", "sess-menu", "right");
+    };
     h.append(q, sel, tr, go);
     return h;
   }

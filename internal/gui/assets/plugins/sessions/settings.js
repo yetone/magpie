@@ -4,12 +4,15 @@
 // status), and before start.js draws Settings; drawn whether the plugin is
 // on or off.
 
+// a Mac's, and Windows' and Linux's when a terminal is found there; the
+// Sessions page's Settings › asks it too
+window.sessionTerminalShows = (s) => !web && (document.body.classList.contains("mac") || !!s?.terminalApps?.length);
+
 function renderSessionTerminal(s, keep) {
   const row = $("#sessionTerminalRow");
-  // a Mac's, and Windows' and Linux's when a terminal is found there
   const mac = document.body.classList.contains("mac");
   const apps = [...(s.terminalApps || [])];
-  row.hidden = web || !mac && !apps.length;
+  row.hidden = !sessionTerminalShows(s);
   if (row.hidden) return;
   const select = $("#sessionTerminalSelect");
   if (mac && !apps.some((app) => app.id === "com.apple.Terminal")) apps.unshift({ id: "com.apple.Terminal", name: "Terminal" });

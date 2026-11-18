@@ -3,7 +3,10 @@
 // and the Sessions page it is about didn't lead there once its first ask was
 // answered (the scattered settings audit after netube99 on X). Its head now
 // has a Settings › that opens Privacy at those rows, lit, with Back to
-// Sessions; gateway mode, which reads no agent's history, has none. Every
+// Sessions; gateway mode, which reads no agent's history, has none. Where
+// a session can open in a terminal (a Mac, or a terminal found), General's
+// Session terminal is Sessions' too, so Settings › is a menu of both, and
+// each reaches its row lit. Every
 // language, Chromium and WebKit, at 1100 and 420 wide, nothing past the
 // window's edge or over the head's other buttons.
 const assert = require("node:assert/strict");
@@ -49,8 +52,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       test(`${engine} ${lang} ${width}: Sessions leads to Settings › Privacy's session history`, async (t) => {
         const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
         t.after(() => browser.close());
-        const open = async (gateway) => {
+        const open = async (gateway, platform = "Linux x86_64") => {
           const page = await (await browser.newContext({ viewport: { width, height: 760 }, reducedMotion: "reduce" })).newPage();
+          await page.addInitScript((p) => Object.defineProperty(Navigator.prototype, "platform", { get: () => p }), platform);
           page.setDefaultTimeout(6000);
           page.setDefaultNavigationTimeout(60000);
           page.errors = [];
@@ -88,6 +92,30 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await back.click();
         await page.locator("#view-sessions .sm-head").waitFor();
         assert.deepEqual(page.errors, []);
+
+        // on a Mac a session opens in a terminal: Settings › names both
+        // places, and each one reaches its row, lit, the page unmoved
+        for (const [tab, row, name] of [["privacy", "#sessionReadsList .row", "Agents' session history"], ["general", "#sessionTerminalRow", "Session terminal"]]) {
+          page = await open(false, "MacIntel");
+          const top = await page.locator(".sm-head").evaluate((h) => h.getBoundingClientRect().top);
+          await page.locator(".sm-head .sm-toset").click();
+          const menu = page.locator(".proto-menu");
+          await menu.waitFor();
+          const items = menu.locator(".pm-item");
+          assert.equal(await items.count(), 2);
+          assert.deepEqual(await items.locator(".pm-name").allTextContents(), [await tr(page, "Agents' session history"), await tr(page, "Session terminal")]);
+          assert.equal(await page.locator(".sm-head").evaluate((h) => h.getBoundingClientRect().top), top, "opening the menu moved nothing");
+          const mb = await menu.boundingBox();
+          assert(mb.x >= 0 && mb.x + mb.width <= width + 1, "the menu inside the window");
+          const set = (await tr(page, "Settings")) + " › " + await page.locator("#setTab-" + tab).textContent();
+          const item = items.filter({ has: page.locator(".pm-name", { hasText: await tr(page, name) }) });
+          assert.equal(await item.locator(".pm-note").textContent(), set);
+          await item.click();
+          await page.locator(`#view-settings ${row}.flash`).first().waitFor();
+          assert.equal(await page.locator("#setTab-" + tab).getAttribute("aria-selected"), "true");
+          assert.equal(await page.evaluate(() => document.scrollingElement.scrollTop), 0, "the window itself is not scrolled");
+          assert.deepEqual(page.errors, []);
+        }
 
         // gateway mode reads no agent's history: no link
         page = await open(true);
