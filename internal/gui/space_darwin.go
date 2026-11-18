@@ -30,6 +30,21 @@ static int nonActivating(void *win) {
 	return [w isKindOfClass:[NSPanel class]] && (w.styleMask & NSWindowStyleMaskNonactivatingPanel) != 0;
 }
 
+// The quick panel's level, a menu bar extra's (NSStatusWindowLevel):
+// over normal and floating windows, the Dock and the menu bar, and under
+// pop-up menus and a screenshot tool's overlay above it. Wails'
+// PositionWindow puts the window it places at NSPopUpMenuWindowLevel,
+// where WeChat's screenshot couldn't cover the panel (zyh6036 on X).
+static void setPanelLevel(void *win) {
+	[(NSWindow *)win setLevel:NSStatusWindowLevel];
+}
+
+static long statusLevel(void) { return (long)NSStatusWindowLevel; }
+
+static long windowLevel(void *win) {
+	return (long)((NSWindow *)win).level;
+}
+
 // Can be made key: a borderless window can't unless its class says so,
 // as Wails' panel class does.
 static int canBeKey(void *win) {
@@ -119,6 +134,28 @@ func movesToActiveSpace(w *application.WebviewWindow) bool {
 func joinsFullScreenSpaces(w *application.WebviewWindow) bool {
 	p := w.NativeWindow()
 	return p != nil && C.joinsFullScreenSpaces(p) != 0
+}
+
+// setPanelLevel puts the quick panel at a menu bar extra's level, after
+// Wails' PositionWindow put it at a pop-up menu's; on the main thread.
+func setPanelLevel(w *application.WebviewWindow) {
+	if p := w.NativeWindow(); p != nil {
+		C.setPanelLevel(p)
+	}
+}
+
+// panelLevel is w's window level, -1 with no window; on the main thread.
+func panelLevel(w *application.WebviewWindow) int {
+	if p := w.NativeWindow(); p != nil {
+		return int(C.windowLevel(p))
+	}
+	return -1
+}
+
+// panelLevelOK says whether w is at a menu bar extra's level; on the
+// main thread.
+func panelLevelOK(w *application.WebviewWindow) bool {
+	return panelLevel(w) == int(C.statusLevel())
 }
 
 // canBeKey says whether w can be made key, take the keyboard; on the

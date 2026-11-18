@@ -54,7 +54,7 @@ func TestPanelToldItsSideWhenShown(t *testing.T) {
 	if body == nil {
 		t.Fatal("togglePanelNow not found")
 	}
-	if !regexp.MustCompile(`(?s)PositionWindow\(h\.panel, 6\)\s*showWebview\(h\.panel\)\.Focus\(\)\s*h\.tellPanelSide\(\)\s*return`).Match(body) {
+	if !regexp.MustCompile(`(?s)h\.placeByIcon\(h\.panel\)\s*showWebview\(h\.panel\)\.Focus\(\)\s*h\.tellPanelSide\(\)\s*return`).Match(body) {
 		t.Error("the Mac's panel isn't told its side after it is placed")
 	}
 	if !regexp.MustCompile(`(?s)h\.tray\.ToggleWindow\(\)\s*if h\.panel\.IsVisible\(\) \{\s*h\.tellPanelSide\(\)`).Match(body) {

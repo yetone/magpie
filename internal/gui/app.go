@@ -1027,7 +1027,7 @@ func (h *host) togglePanelNow() {
 			hideWebview(h.panel)
 			return
 		}
-		_ = h.tray.PositionWindow(h.panel, 6)
+		h.placeByIcon(h.panel)
 		showWebview(h.panel).Focus()
 		h.tellPanelSide()
 		return
@@ -1036,6 +1036,14 @@ func (h *host) togglePanelNow() {
 	if h.panel.IsVisible() {
 		h.tellPanelSide()
 	}
+}
+
+// placeByIcon places the panel by the tray icon. On the Mac, Wails puts
+// the window it places at a pop-up menu's level, over a screenshot tool's
+// (zyh6036 on X), so it goes back to a menu bar extra's (setPanelLevel).
+func (h *host) placeByIcon(w *application.WebviewWindow) {
+	_ = h.tray.PositionWindow(w, 6)
+	setPanelLevel(w)
 }
 
 // tellPanelSide tells the panel, just placed, which of its edges opens the

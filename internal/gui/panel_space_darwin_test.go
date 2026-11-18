@@ -20,7 +20,10 @@ import (
 // real window: the panel, made at start and made again after lightweight
 // mode let it go, is on every Space and over a full-screen app's, and is
 // shown and hidden with that set, without activating magpie (activated,
-// the Mac took the user to the Space of magpie's other windows).
+// the Mac took the user to the Space of magpie's other windows). Placed by
+// the tray icon, it is at a menu bar extra's level, not the pop-up menu
+// level Wails' PositionWindow gives it, where WeChat's screenshot couldn't
+// draw over it (zyh6036 on X).
 func TestPanelJoinsFullScreenSpaces(t *testing.T) {
 	out, err := runAppKit(t, 30*time.Second, []string{"MAGPIE_TEST_PANEL_SPACE=1"})
 	if err != nil || !strings.Contains(string(out), "panel space: ok") {
@@ -40,7 +43,7 @@ func init() {
 			fmt.Fprint(w, `<p>magpie</p>`)
 		})},
 	})
-	h := &host{app: app}
+	h := &host{app: app, tray: app.SystemTray.New()}
 	fail := func(format string, a ...any) {
 		fmt.Printf("panel space: "+format+"\n", a...)
 		os.Exit(1)
@@ -64,7 +67,10 @@ func init() {
 		if application.InvokeSyncWithResult(appFrontmost) {
 			fail("%s: magpie is frontmost before the icon is clicked; the test can't tell", how)
 		}
-		application.InvokeSync(func() { w.Show().Focus() }) // the icon clicked
+		application.InvokeSync(func() { h.placeByIcon(w); w.Show().Focus() }) // the icon clicked
+		if !application.InvokeSyncWithResult(func() bool { return panelLevelOK(w) }) {
+			fail("%s: placed by the icon, the panel is at level %d, not a menu bar extra's (NSStatusWindowLevel), so a screenshot tool's overlay can't cover it", how, application.InvokeSyncWithResult(func() int { return panelLevel(w) }))
+		}
 		waitFor(how+": the panel shows", func() bool { return application.InvokeSyncWithResult(func() bool { return windowOpen(w) }) })
 		// activation is asked for and comes a moment later: give it time
 		time.Sleep(500 * time.Millisecond)

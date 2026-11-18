@@ -14,7 +14,7 @@ import (
 func (h *host) sizeOpenPanel(w *application.WebviewWindow, width, height int) {
 	if runtime.GOOS != "windows" {
 		w.SetSize(width, height)
-		_ = h.tray.PositionWindow(w, 6)
+		h.placeByIcon(w)
 		return
 	}
 	b := w.Bounds()
