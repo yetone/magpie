@@ -38,7 +38,7 @@ func wasAsked(ctx context.Context) bool {
 
 // errNotAsked is what a read held back says: "not read yet", so keepLast
 // gives the reading kept from the last time instead.
-var errNotAsked = errors.New("not read yet: magpie reads allowances only when you ask (Settings → Usage)")
+var errNotAsked = errors.New("not read yet: magpie reads allowances only when you ask (Settings › Usage)")
 
 // readsAsked is whether the user has allowances read only when asked.
 func readsAsked() bool { return settings.Shared().QuotaReads == "asked" }

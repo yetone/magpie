@@ -771,7 +771,7 @@ var presets = []PresetDef{
 	{ID: RemoteMagpiePreset, Name: "Remote magpie", Icon: "magpie", Kind: KindRemote,
 		Note:           "another computer's magpie, shared on its network",
 		Endpoint:       "http://192.168.1.20:3425",
-		EndpointHint:   "The address and API key the other computer's magpie shows in Settings → Network and sharing, under Share on local network. Its models and routing groups are listed here; each request goes on in the API the agent spoke.",
+		EndpointHint:   "The address and API key the other computer's magpie shows in Settings › Network and sharing, under Share on local network. Its models and routing groups are listed here; each request goes on in the API the agent spoke.",
 		EndpointNeeded: "The other magpie's address is needed"},
 }
 

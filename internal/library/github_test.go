@@ -174,7 +174,7 @@ func TestGitHubRateLimitSaid(t *testing.T) {
 	if c.Status != "unknown" || c.Limited == nil || c.Limited.Token || c.Limited.Until != "2030-01-02T03:04:00Z" {
 		t.Fatalf("without a token: %+v %+v", c, c.Limited)
 	}
-	for _, w := range []string{"60 an hour", "until " + at, "GitHub token in Settings → Network and sharing", "5,000"} {
+	for _, w := range []string{"60 an hour", "until " + at, "GitHub token in Settings › Network and sharing", "5,000"} {
 		if !strings.Contains(c.Error, w) {
 			t.Errorf("without a token, %q doesn't say %q", c.Error, w)
 		}

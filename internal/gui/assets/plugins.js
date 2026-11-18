@@ -367,8 +367,8 @@
     const time = d && !isNaN(d) ? d.toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit" }) : "";
     if (l.token) return time ? t("GitHub's rate limit for your GitHub token is used up until {time}", { time })
       : t("GitHub's rate limit for your GitHub token is used up for now");
-    return time ? t("GitHub allows 60 requests an hour without a token, used up until {time}. Add a GitHub token in Settings → Network and sharing to raise it to 5,000.", { time })
-      : t("GitHub allows 60 requests an hour without a token, used up for now. Add a GitHub token in Settings → Network and sharing to raise it to 5,000.");
+    return time ? t("GitHub allows 60 requests an hour without a token, used up until {time}. Add a GitHub token in Settings › Network and sharing to raise it to 5,000.", { time })
+      : t("GitHub allows 60 requests an hour without a token, used up for now. Add a GitHub token in Settings › Network and sharing to raise it to 5,000.");
   }
   const checkedAt = () => checked ? new Date(checked.at).toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit" }) : "";
 

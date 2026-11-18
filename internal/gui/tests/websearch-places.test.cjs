@@ -24,7 +24,7 @@ const LANGS = ["en", "zh", "zh-TW", "ja", "de"];
 const tr = (lang, s) => (lang === "en" ? s : I18N[lang]?.[s] ?? s);
 const HOME = "/Users/tester";
 const OWN = "Agents call it themselves, beside magpie's web search, which doesn't use it.";
-const AS_API = "As a search API in Settings → Models → Web search, {name} searches for every model, with no server to add.";
+const AS_API = "As a search API in Settings › Models › Web search, {name} searches for every model, with no server to add.";
 
 // search: the Web search plugin as builtinsState gives it: on, and what
 // searches now (searchesNow)

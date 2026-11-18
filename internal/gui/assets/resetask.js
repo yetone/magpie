@@ -113,7 +113,7 @@ function remoteResetError(err) {
   if (/didn't say in time whether the reset was used/.test(err)) return t("That computer didn't say in time whether the reset was used — it may have been. Refresh the card before asking again");
   if (/^remote magpie doesn't share its quotas/.test(err)) return t("That computer's magpie can't use a reset from here yet — update magpie there");
   if (/^remote magpie holds this key/.test(err)) return t("That computer's magpie holds this key to a budget, models or accounts, so it uses none of its resets — give this provider a key with full access");
-  if (/^remote magpie isn't shared/.test(err)) return t("That computer's magpie isn't shared — turn on Settings → Network and sharing → Share on local network there");
+  if (/^remote magpie isn't shared/.test(err)) return t("That computer's magpie isn't shared — turn on Settings › Network and sharing › Share on local network there");
   if (/^remote magpie didn't take this key/.test(err)) return t("That computer's magpie didn't take this key — use one of its gateway keys in this provider");
   if (/^couldn't reach the remote magpie/.test(err)) return t("Couldn't reach that computer's magpie — check that it is running and its address");
   return err;

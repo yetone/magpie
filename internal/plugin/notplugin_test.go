@@ -20,7 +20,7 @@ func TestCommandOnlyPackageIsNoPlugin(t *testing.T) {
 	defer cancel()
 	abs, _ := filepath.Abs("testdata/notplugin/magpie-x-search")
 	_, err := Add(ctx, abs)
-	if err == nil || !strings.Contains(err.Error(), "magpie-x-search isn't an OpenCode or magpie plugin") || !strings.Contains(err.Error(), "Library → MCP servers") {
+	if err == nil || !strings.Contains(err.Error(), "magpie-x-search isn't an OpenCode or magpie plugin") || !strings.Contains(err.Error(), "Library › MCP servers") {
 		t.Fatalf("Add = %v", err)
 	}
 	if l := Load().Plugins; len(l) != 0 {

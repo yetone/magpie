@@ -1190,10 +1190,10 @@ func fetchWhole(src Source, name string) (string, error) {
 			what = src.Repo + " at " + src.Ref
 		}
 		if !token {
-			return "", fmt.Errorf("GitHub has no %s (a private repository installs with a GitHub token that can read it, set in Settings → Network and sharing)", what)
+			return "", fmt.Errorf("GitHub has no %s (a private repository installs with a GitHub token that can read it, set in Settings › Network and sharing)", what)
 		}
 		_, from := GitHubToken()
-		where := "the GitHub token in Settings → Network and sharing"
+		where := "the GitHub token in Settings › Network and sharing"
 		if from != "settings" {
 			where = from
 		}

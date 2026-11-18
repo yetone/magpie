@@ -170,7 +170,7 @@ func noteSelf(p Provider, ms []catalog.Model) {
 	remoteSelf.path, remoteSelf.ids = path, ids
 	remoteSelf.Unlock()
 	if self {
-		log.Printf("%s: this Remote magpie is this magpie itself; left out of routing unless kept (Providers → %s → Use it anyway)", p.ID, p.Name)
+		log.Printf("%s: this Remote magpie is this magpie itself; left out of routing unless kept (Providers › %s › Use it anyway)", p.ID, p.Name)
 	}
 }
 

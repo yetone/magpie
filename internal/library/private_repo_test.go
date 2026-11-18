@@ -45,12 +45,12 @@ func TestPrivateRepoInstallsWithToken(t *testing.T) {
 	t.Cleanup(func() { tarballURL, githubAPI = oldT, oldA })
 
 	_, err := InstallSkills("owner/private-skills", []string{"skills/pdf"}, []string{"claude"})
-	if err == nil || !strings.Contains(err.Error(), "Settings → Network and sharing") {
+	if err == nil || !strings.Contains(err.Error(), "Settings › Network and sharing") {
 		t.Fatalf("no token: %v", err)
 	}
 	setGitHubToken(t, "ghp_other")
 	_, err = InstallSkills("owner/private-skills", []string{"skills/pdf"}, []string{"claude"})
-	if err == nil || !strings.Contains(err.Error(), "that the GitHub token in Settings → Network and sharing can read") {
+	if err == nil || !strings.Contains(err.Error(), "that the GitHub token in Settings › Network and sharing can read") {
 		t.Fatalf("a token that can't read it: %v", err)
 	}
 	setGitHubToken(t, "ghp_reads")

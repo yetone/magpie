@@ -20,7 +20,7 @@ const tr = (lang, s) => (lang === "en" ? s : I18N[lang]?.[s] ?? s);
 const HOME = "/Users/tester";
 const ABOUT = "Search and read what was said in every agent's sessions on this computer: an earlier conversation, decision or fix, from Claude Code, Codex or any agent Magpie reads.";
 const HINT = "Pick the agents that may search and read what was said in your other sessions.";
-const IMAGES = "Pick the agents that may generate images: each image costs what the model set in Settings → Models → Images charges.";
+const IMAGES = "Pick the agents that may generate images: each image costs what the model set in Settings › Models › Images charges.";
 
 function route(lang) {
   return async (route) => {

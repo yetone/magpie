@@ -181,7 +181,7 @@ const selfServerName = "magpie-image"
 // agents picked for it.
 func selfServer() MarketServer {
 	m := localServer(selfServerName, "Magpie Image", "Magpie", "https://usemagpie.ai/favicon.png", "https://usemagpie.ai",
-		"Generate and edit images with the image model set in Magpie (Settings → Models → Images), and make short videos with a video model set up in Magpie (Grok Imagine, Seedance), saved in the project.", magpieCommand, []string{"mcp", "image"})
+		"Generate and edit images with the image model set in Magpie (Settings › Models › Images), and make short videos with a video model set up in Magpie (Grok Imagine, Seedance), saved in the project.", magpieCommand, []string{"mcp", "image"})
 	m.OptIn = true
 	return m
 }
@@ -213,7 +213,7 @@ const searchServerName = "magpie-web-search"
 // its own, so it is given only to the agents picked for it.
 func searchServer() MarketServer {
 	m := localServer(searchServerName, "Magpie Web Search", "Magpie", "https://usemagpie.ai/favicon.png", "https://usemagpie.ai",
-		"Search the web with the search set in Magpie (Settings → Models → Web search), and read a page by its URL.", magpieCommand, []string{"mcp", "search"})
+		"Search the web with the search set in Magpie (Settings › Models › Web search), and read a page by its URL.", magpieCommand, []string{"mcp", "search"})
 	m.OptIn = true
 	return m
 }
@@ -233,7 +233,7 @@ const visionServerName = "magpie-vision"
 // agents picked for it.
 func visionServer() MarketServer {
 	m := localServer(visionServerName, "Magpie Image Recognition", "Magpie", "https://usemagpie.ai/favicon.png", "https://usemagpie.ai",
-		"Read an image (a file, a URL, a screenshot) with the image recognition model set in Magpie (Settings → Models → Images), for a model that can't see.", magpieCommand, []string{"mcp", "vision"})
+		"Read an image (a file, a URL, a screenshot) with the image recognition model set in Magpie (Settings › Models › Images), for a model that can't see.", magpieCommand, []string{"mcp", "vision"})
 	m.OptIn = true
 	return m
 }

@@ -19,10 +19,10 @@ const HOME = "/Users/aimer";
 const TOKEN = "ghp_abcdefghijklmnopqrstuvwxyz0123";
 const words = {
   en: { head: "GitHub", name: "GitHub token", save: "Save", remove: "Remove", env: "Using GH_TOKEN from the environment",
-    refused: "a GitHub token is one word, without spaces", limited: "GitHub allows 60 requests an hour without a token, used up until {time}. Add a GitHub token in Settings → Network and sharing to raise it to 5,000.",
+    refused: "a GitHub token is one word, without spaces", limited: "GitHub allows 60 requests an hour without a token, used up until {time}. Add a GitHub token in Settings › Network and sharing to raise it to 5,000.",
     withToken: "GitHub's rate limit for your GitHub token is used up until {time}", check: "Check for updates" },
   zh: { head: "GitHub", name: "GitHub 令牌", save: "保存", remove: "移除", env: "正在使用环境变量 GH_TOKEN",
-    refused: "GitHub 令牌是一串不含空格的字符", limited: "GitHub 不带令牌每小时仅允许 60 次请求，已用完，{time} 恢复。在 设置 → 网络与共享 添加 GitHub 令牌可提高到 5000 次。",
+    refused: "GitHub 令牌是一串不含空格的字符", limited: "GitHub 不带令牌每小时仅允许 60 次请求，已用完，{time} 恢复。在 设置 › 网络与共享 添加 GitHub 令牌可提高到 5000 次。",
     withToken: "你的 GitHub 令牌的请求额度已用完，{time} 恢复", check: "检查更新" },
 };
 const UNTIL = "2030-01-02T03:04:00Z";

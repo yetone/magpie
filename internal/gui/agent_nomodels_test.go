@@ -64,7 +64,7 @@ func TestAgentConnectAllHidden(t *testing.T) {
 	fail(rec, fmt.Errorf("connect: %w", &agent.AllHiddenError{Agent: "OpenCode"}))
 	var out map[string]string
 	json.Unmarshal(rec.Body.Bytes(), &out)
-	if rec.Code != 400 || out["code"] != "all_hidden" || out["agent"] != "OpenCode" || !strings.Contains(out["error"], "Model list → Pick") {
+	if rec.Code != 400 || out["code"] != "all_hidden" || out["agent"] != "OpenCode" || !strings.Contains(out["error"], "Model list › Pick") {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
 	}
 }

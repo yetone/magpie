@@ -28,7 +28,7 @@ func TestConnectWithEveryModelTakenOut(t *testing.T) {
 	cfg := filepath.Join(home, ".config")
 	_, err := opencode(home, cfg).ConnectHow()
 	var ah *AllHiddenError
-	if !errors.As(err, &ah) || ah.Agent != "OpenCode" || !strings.Contains(err.Error(), "Model list → Pick") {
+	if !errors.As(err, &ah) || ah.Agent != "OpenCode" || !strings.Contains(err.Error(), "Model list › Pick") {
 		t.Fatalf("%v", err)
 	}
 	var nm *NoModelsError

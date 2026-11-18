@@ -74,11 +74,11 @@ function serve(lang, saves, cur) {
 }
 
 const words = {
-  en: { save: "Save", field: "Image models", hint: /Settings → Models → Images lists the ticked ones/, note: [/dall-e-3 · OpenAI, picked here, is unticked/, /it still draws/] },
-  zh: { save: "保存", field: "图像模型", hint: /设置 → 模型 → 图像 只列出已勾选的/, note: [/dall-e-3 · OpenAI 是此处选中的/, /它仍用于生图/] },
-  "zh-TW": { save: "儲存", field: "影像模型", hint: /設定 → 模型 → 影像 只列出已勾選的/, note: [/dall-e-3 · OpenAI 是此處選取的/, /它仍用於生圖/] },
-  ja: { save: "保存", field: "画像モデル", hint: /設定 → モデル → 画像 にはチェックしたものだけ/, note: [/ここで選んだ dall-e-3 · OpenAI は/, /描画には引き続き使われます/] },
-  de: { save: "Speichern", field: "Bildmodelle", hint: /Einstellungen → Modelle → Bilder listet die angehakten/, note: [/dall-e-3 · OpenAI, hier gewählt, ist/, /Es zeichnet weiter/] },
+  en: { save: "Save", field: "Image models", hint: /Settings › Models › Images lists the ticked ones/, note: [/dall-e-3 · OpenAI, picked here, is unticked/, /it still draws/] },
+  zh: { save: "保存", field: "图像模型", hint: /设置 › 模型 › 图像 只列出已勾选的/, note: [/dall-e-3 · OpenAI 是此处选中的/, /它仍用于生图/] },
+  "zh-TW": { save: "儲存", field: "影像模型", hint: /設定 › 模型 › 影像 只列出已勾選的/, note: [/dall-e-3 · OpenAI 是此處選取的/, /它仍用於生圖/] },
+  ja: { save: "保存", field: "画像モデル", hint: /設定 › モデル › 画像 にはチェックしたものだけ/, note: [/ここで選んだ dall-e-3 · OpenAI は/, /描画には引き続き使われます/] },
+  de: { save: "Speichern", field: "Bildmodelle", hint: /Einstellungen › Modelle › Bilder listet die angehakten/, note: [/dall-e-3 · OpenAI, hier gewählt, ist/, /Es zeichnet weiter/] },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {

@@ -122,13 +122,13 @@ func OwnUnready(name string) string {
 		case !searchServed():
 			return "Web search is off in Plugins › Built-in: its tools say so until it is turned on"
 		}
-		return "Nothing searches yet: add a search API in Settings → Models → Web search, or a provider that can search. Until then its tools say so"
+		return "Nothing searches yet: add a search API in Settings › Models › Web search, or a provider that can search. Until then its tools say so"
 	case "magpie-vision":
 		if _, ok := seer(); ok {
 			return ""
 		}
 		if provider.HeldSettings().Vision == "off" {
-			return "Image recognition is off in Settings → Models → Images: its tool says so until a model is picked there"
+			return "Image recognition is off in Settings › Models › Images: its tool says so until a model is picked there"
 		}
 		return "No model that sees images is set up yet: it reads images once a provider with one is added, and says so until then"
 	case imageServerName:
@@ -136,7 +136,7 @@ func OwnUnready(name string) string {
 			return ""
 		}
 		if settings.Shared().ImageGen == "off" {
-			return "Image generation is off in Settings → Models → Images: its tools say so until a model is picked there"
+			return "Image generation is off in Settings › Models › Images: its tools say so until a model is picked there"
 		}
 		return "No model that draws images is set up yet: it draws once a provider with an image model is added, and says so until then"
 	}

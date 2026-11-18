@@ -23,8 +23,8 @@ const { I18N } = strings();
 const LANGS = ["en", "zh", "zh-TW", "ja", "de"];
 const tr = (lang, s) => (lang === "en" ? s : I18N[lang]?.[s] ?? s);
 const HOME = "/Users/tester";
-const HINT = "Pick the agents that may search with it: each search goes where Settings → Models → Web search sends it, and costs what that charges.";
-const ABOUT = "Search the web with the search set in Magpie (Settings → Models → Web search), and read a page by its URL.";
+const HINT = "Pick the agents that may search with it: each search goes where Settings › Models › Web search sends it, and costs what that charges.";
+const ABOUT = "Search the web with the search set in Magpie (Settings › Models › Web search), and read a page by its URL.";
 
 function fixture(lang, { libOn, have = false, gateway = false }) {
   const st = { libOn };

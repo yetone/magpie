@@ -7679,8 +7679,8 @@ magpie.plugin("library", (ctx) => {
     const time = d && !isNaN(d) ? d.toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit" }) : "";
     if (l.token) return time ? t("GitHub's rate limit for your GitHub token is used up until {time}", { time })
       : t("GitHub's rate limit for your GitHub token is used up for now");
-    return time ? t("GitHub allows 60 requests an hour without a token, used up until {time}. Add a GitHub token in Settings → Network and sharing to raise it to 5,000.", { time })
-      : t("GitHub allows 60 requests an hour without a token, used up for now. Add a GitHub token in Settings → Network and sharing to raise it to 5,000.");
+    return time ? t("GitHub allows 60 requests an hour without a token, used up until {time}. Add a GitHub token in Settings › Network and sharing to raise it to 5,000.", { time })
+      : t("GitHub allows 60 requests an hour without a token, used up for now. Add a GitHub token in Settings › Network and sharing to raise it to 5,000.");
   }
 
   // what a check found of a skill, for a tooltip: the last commit to it
@@ -8867,14 +8867,14 @@ magpie.plugin("library", (ctx) => {
       ed.append(el("p", "mk-hint", t("Pick the agents that may use your browser: they act in your tabs, signed in as you are.")));
       ed.append(browserSetup());
     } else if (x.name === "magpie-web-search") {
-      ed.append(el("p", "mk-hint", t("Pick the agents that may search with it: each search goes where Settings → Models → Web search sends it, and costs what that charges.")));
+      ed.append(el("p", "mk-hint", t("Pick the agents that may search with it: each search goes where Settings › Models › Web search sends it, and costs what that charges.")));
     } else if (x.name in WEB_SEARCHES) {
       // a search server of its own (netube99 on X): the agents call it
       // with its key, beside magpie's web search, which it neither uses nor
       // switches on; one Settings has as a search API is offered there too
       const v = WEB_SEARCHES[x.name];
       const hint = el("p", "mk-hint", t("Agents call it themselves, beside magpie's web search, which doesn't use it.")
-        + (v ? " " + t("As a search API in Settings → Models → Web search, {name} searches for every model, with no server to add.", { name: x.title || x.name }) : ""));
+        + (v ? " " + t("As a search API in Settings › Models › Web search, {name} searches for every model, with no server to add.", { name: x.title || x.name }) : ""));
       const go = el("button", "link", t("Set up in Settings"));
       go.type = "button";
       go.onclick = async (e) => { if (await closeLibModal()) openSettingsAt(e, "models", "#searchList .row"); };
@@ -8883,8 +8883,8 @@ magpie.plugin("library", (ctx) => {
     } else if (x.name === "magpie-sessions") {
       ed.append(el("p", "mk-hint", t("Pick the agents that may search and read what was said in your other sessions.")));
     } else if (x.name === "magpie-vision") {
-      ed.append(el("p", "mk-hint", t("Pick the agents that may read images with it: each image goes to the Image recognition model set in Settings → Models → Images, and costs what that model charges.")));
-    } else if (x.optIn) ed.append(el("p", "mk-hint", t("Pick the agents that may generate images: each image costs what the model set in Settings → Models → Images charges.")));
+      ed.append(el("p", "mk-hint", t("Pick the agents that may read images with it: each image goes to the Image recognition model set in Settings › Models › Images, and costs what that model charges.")));
+    } else if (x.optIn) ed.append(el("p", "mk-hint", t("Pick the agents that may generate images: each image costs what the model set in Settings › Models › Images charges.")));
     // one of magpie's own that can't answer yet says why, and is added all
     // the same: it answers once that is set up, its tools saying how
     if (x.unready) ed.append(el("p", "mk-hint mk-unready", t(x.unready)));

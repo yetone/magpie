@@ -27,7 +27,7 @@ const cases = [
     "Couldn't reach ChatGPT — check the network or the proxy", {}],
   ["json@example.com", "ChatGPT's usage reply isn't one magpie reads: unexpected end of JSON input",
     "ChatGPT answered in a form magpie doesn't read — hover for what it sent", {}],
-  ["asked@example.com", "not read yet: magpie reads allowances only when you ask (Settings → Usage)",
+  ["asked@example.com", "not read yet: magpie reads allowances only when you ask (Settings › Usage)",
     "Not read yet — magpie reads allowances only when you ask; refresh this card to read it", {}],
   ["other@example.com", "something nobody has words for",
     "Allowance unavailable — hover for why", {}],

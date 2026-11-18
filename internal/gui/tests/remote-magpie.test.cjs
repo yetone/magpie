@@ -28,7 +28,7 @@ const presets = [
   { id: "ollama", name: "Ollama", icon: "ollama", kind: "local", chat: "http://localhost:11434/v1", noKey: true, added: false },
   { id: "remote-magpie", name: "Remote magpie", icon: "magpie", kind: "remote", added: false,
     note: "another computer's magpie, shared on its network", endpoint: "http://192.168.1.20:3425",
-    endpointHint: "The address and API key the other computer's magpie shows in Settings → Network and sharing, under Share on local network. Its models and routing groups are listed here; each request goes on in the API the agent spoke.",
+    endpointHint: "The address and API key the other computer's magpie shows in Settings › Network and sharing, under Share on local network. Its models and routing groups are listed here; each request goes on in the API the agent spoke.",
     endpointNeeded: "The other magpie's address is needed" },
 ];
 const providers = [{ id: "openrouter", name: "OpenRouter", icon: "openai", preset: "openrouter", models: [], agents: [], key: { set: true, masked: "sk-…ab12" } },
@@ -59,9 +59,9 @@ function server(lang, saves) {
 }
 
 const L = {
-  en: { field: "Endpoint", hint: /Settings → Network and sharing, under Share on local network.*the API the agent spoke/, needed: "The other magpie's address is needed", note: "another computer's magpie, shared on its network", add: "Add", name: "Name", mcp: "Add its MCP servers to the Library",
+  en: { field: "Endpoint", hint: /Settings › Network and sharing, under Share on local network.*the API the agent spoke/, needed: "The other magpie's address is needed", note: "another computer's magpie, shared on its network", add: "Add", name: "Name", mcp: "Add its MCP servers to the Library",
     decide: ["Jev endpoint", "System One endpoint"] },
-  zh: { field: "接口地址", hint: /设置 → 网络与共享 → 局域网共享.*原样转发/, needed: "需要填写另一台 magpie 的地址", note: "远程：另一台电脑上的 magpie，局域网共享", add: "添加", name: "名称", mcp: "把它的 MCP 服务器加到资源库",
+  zh: { field: "接口地址", hint: /设置 › 网络与共享 › 局域网共享.*原样转发/, needed: "需要填写另一台 magpie 的地址", note: "远程：另一台电脑上的 magpie，局域网共享", add: "添加", name: "名称", mcp: "把它的 MCP 服务器加到资源库",
     decide: ["Jev 端点", "System One 端点"] },
 };
 

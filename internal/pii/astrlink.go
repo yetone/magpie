@@ -322,7 +322,7 @@ func guardHeldBack() error {
 	if gsrv.lastErr == nil || !time.Now().Before(gsrv.retryAt) {
 		return nil
 	}
-	return fmt.Errorf("%w; it is tried again in %s, and until then a request it hasn't read is held back at once. To send requests masked by the rules alone, turn the model off in Settings → Privacy",
+	return fmt.Errorf("%w; it is tried again in %s, and until then a request it hasn't read is held back at once. To send requests masked by the rules alone, turn the model off in Settings › Privacy",
 		gsrv.lastErr, time.Until(gsrv.retryAt).Round(time.Second))
 }
 

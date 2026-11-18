@@ -324,8 +324,8 @@ window.importForm = function () {
       // a backup carries a subscription's settings, its sign-in only when
       // made with them
       if (r.SignIn?.length) lines.push(r.SignIns
-        ? t("This backup's settings use {names}, which isn't signed in on this computer, and the backup has no sign-in for it. To use it here, sign in in Providers → Add a provider; if you don't, nothing needs doing.", { names: subNames(r.SignIn) })
-        : t("This backup's settings use {names}, which isn't signed in on this computer. A backup carries settings, not sign-ins: to use it here, sign in in Providers → Add a provider; if you don't, nothing needs doing.", { names: subNames(r.SignIn) }));
+        ? t("This backup's settings use {names}, which isn't signed in on this computer, and the backup has no sign-in for it. To use it here, sign in in Providers › Add a provider; if you don't, nothing needs doing.", { names: subNames(r.SignIn) })
+        : t("This backup's settings use {names}, which isn't signed in on this computer. A backup carries settings, not sign-ins: to use it here, sign in in Providers › Add a provider; if you don't, nothing needs doing.", { names: subNames(r.SignIn) }));
       if (r.Plugins?.length) lines.push(t("Plugins added: {names}", { names: r.Plugins.join(", ") }));
       for (const [spec, error] of Object.entries(r.PluginErrors || {})) lines.push(t("Couldn't add the plugin {spec}: {error}", { spec, error }));
       if (r.Library) lines.push(t("Library brought in and written into the agents"));

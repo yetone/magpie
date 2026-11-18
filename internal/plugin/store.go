@@ -577,7 +577,7 @@ func notPlugin(target string) error {
 	}
 	why := fmt.Sprintf("%s isn't an OpenCode or magpie plugin: its package names no file to load (no main or exports in package.json, no index file)", name)
 	if len(pkg.Bin) > 0 && string(pkg.Bin) != "null" {
-		why += ", only a command (bin). If it is an MCP server, add it under Library → MCP servers instead"
+		why += ", only a command (bin). If it is an MCP server, add it under Library › MCP servers instead"
 	}
 	return errors.New(why)
 }

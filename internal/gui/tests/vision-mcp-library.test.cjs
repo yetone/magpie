@@ -24,10 +24,10 @@ const { I18N } = strings();
 const LANGS = ["en", "zh", "zh-TW", "ja", "de"];
 const tr = (lang, s) => (lang === "en" ? s : I18N[lang]?.[s] ?? s);
 const HOME = "/Users/tester";
-const HINT = "Pick the agents that may read images with it: each image goes to the Image recognition model set in Settings → Models → Images, and costs what that model charges.";
+const HINT = "Pick the agents that may read images with it: each image goes to the Image recognition model set in Settings › Models › Images, and costs what that model charges.";
 const UNREADY = "No model that sees images is set up yet: it reads images once a provider with one is added, and says so until then";
-const ABOUT = "Read an image (a file, a URL, a screenshot) with the image recognition model set in Magpie (Settings → Models → Images), for a model that can't see.";
-const SEARCH = "Search the web with the search set in Magpie (Settings → Models → Web search), and read a page by its URL.";
+const ABOUT = "Read an image (a file, a URL, a screenshot) with the image recognition model set in Magpie (Settings › Models › Images), for a model that can't see.";
+const SEARCH = "Search the web with the search set in Magpie (Settings › Models › Web search), and read a page by its URL.";
 
 function fixture(lang, { libOn, have = false, gateway = false, unready = "", vision = "" }) {
   const st = { libOn };

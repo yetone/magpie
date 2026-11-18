@@ -26,7 +26,7 @@ import (
 	"github.com/yetone/magpie/internal/settings"
 )
 
-var errAccountDiscoveryOff = errors.New("subscription accounts are off in magpie (Settings → Privacy, or `magpie accounts discovery on`)")
+var errAccountDiscoveryOff = errors.New("subscription accounts are off in magpie (Settings › Privacy, or `magpie accounts discovery on`)")
 
 // discoveryOff is whether agents' sign-ins are left unread; see above.
 func discoveryOff() bool { return settings.AccountDiscoveryOff() }

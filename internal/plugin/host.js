@@ -1444,7 +1444,7 @@ function entries(target) {
   }
   if (out.length === 0) {
     // a command alone (bin), an MCP server, is no plugin at all (#1327)
-    const cmd = pkg?.bin ? ", only a command (bin). If it is an MCP server, add it under Library → MCP servers instead" : ""
+    const cmd = pkg?.bin ? ", only a command (bin). If it is an MCP server, add it under Library › MCP servers instead" : ""
     // said without a stack: there is no fault in the host to trace
     throw Object.assign(new Error(`${pkg?.name || target} isn't an OpenCode or magpie plugin: its package names no file to load (no main or exports in package.json, no index file)${cmd}`), { plain: true })
   }

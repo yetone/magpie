@@ -661,7 +661,7 @@ func (e *NoModelsError) Error() string {
 type AllHiddenError struct{ Agent string }
 
 func (e *AllHiddenError) Error() string {
-	return "None of magpie's models is left in " + e.Agent + "'s model list: pick one under Model list → Pick on the Agents page, then connect " + e.Agent
+	return "None of magpie's models is left in " + e.Agent + "'s model list: pick one under Model list › Pick on the Agents page, then connect " + e.Agent
 }
 
 func (a *Agent) Connect() error {

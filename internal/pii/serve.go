@@ -532,7 +532,7 @@ func heldBack() error {
 	if srv.lastErr == nil || !time.Now().Before(srv.retryAt) {
 		return nil
 	}
-	return fmt.Errorf("%w; it is tried again in %s, and until then a request it hasn't read is held back at once. To send requests masked by the rules alone, turn the model off in Settings → Privacy",
+	return fmt.Errorf("%w; it is tried again in %s, and until then a request it hasn't read is held back at once. To send requests masked by the rules alone, turn the model off in Settings › Privacy",
 		srv.lastErr, time.Until(srv.retryAt).Round(time.Second))
 }
 
