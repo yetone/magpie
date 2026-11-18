@@ -880,6 +880,7 @@ function renderProfiles() {
   $(".profiles > .chip-input")?.remove(); // a name field open goes with the list it was for
   $(".profiles").classList.remove("naming", "detailed");
   $("#save").textContent = t("＋ Save current");
+  $("#save").title = t("A profile holds each agent's settings and model list, and who gets what from the Library. Providers, routing and Settings stay as they are.");
   // the panel's button names the profile in use, else how many there are
   // (superhtoooth on X: a count read as a name)
   const cur = state.profiles.find((p) => p.inUse);
@@ -887,7 +888,7 @@ function renderProfiles() {
   n.textContent = cur ? cur.name : state.profiles.length || "";
   n.classList.toggle("cur", !!cur);
   n.title = cur ? t("In use") : "";
-  if (!state.profiles.length) chips.append(el("span", "hint", t("none yet · save the setup to switch back in one click")));
+  if (!state.profiles.length) chips.append(el("span", "hint", t("none yet · save the agents' settings and the Library's picks to switch back in one click")));
   for (const p of state.profiles) {
     const c = el("button", "chip");
     c._profile = p.name;
