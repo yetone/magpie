@@ -362,6 +362,7 @@ body.panel .seg { display: none; }
    they don't fit there, in the row rather than over it: halfway between what
    is either side of them, not a third of the room their left and two thirds
    their right (#442) */
+.top.spare #find { display: none; }
 .top.tight .brand > span:not(.logo), .top.tight .update span { display: none; }
 .top.tight .update { width: 22px; padding: 0; justify-content: center; margin-right: 4px; }
 .top.tight .update-hide { right: -5px; }
@@ -4255,6 +4256,16 @@ body:not(.side-nav) #view-settings .set-head.stuck::before { opacity: 1; box-sha
 .set-searching .set-page::before { content: attr(data-part); display: block; margin: 4px 2px 6px; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
 .set-none { margin: 18px 2px; font-size: 13px; color: var(--muted); text-align: center; }
 .set-page > .list:not(:last-child) { margin-bottom: 8px; }
+/* what the search finds on the other pages (finder.js): a part per page
+   after Settings' own, named by it; the place Open goes to is lit there */
+.set-else { display: contents; }
+.set-else[hidden] { display: none; }
+.find-more { margin: 0 2px; }
+body.web .row.pref.find-row { flex-wrap: nowrap; }
+body.web .row.pref.find-row > .who { flex-basis: auto; min-width: 0; }
+.find-lit { animation: flash 1.2s ease-out; border-radius: 6px; }
+/* the tray panel has Settings' button; the window's header finds */
+body.panel #find { display: none; }
 /* Plugins › Built-in: what the list is over its rows, and a row in use
    saying what uses it under its switch, which can't be turned off */
 .feat-say { margin: 2px 4px 10px; font-size: 12px; line-height: 1.45; color: var(--muted); }

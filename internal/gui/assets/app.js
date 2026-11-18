@@ -19556,12 +19556,15 @@ if (!web) addEventListener("keydown", (e) => {
 }, true);
 // Cmd+, (Ctrl+, off the Mac) opens Settings, as it does in a Mac app
 // (#670), from the window or the panel alike and from a text box too; in a
-// browser tab it is the browser's.
-if (!web) addEventListener("keydown", (e) => {
+// browser tab it is the browser's. Cmd+K (Ctrl+K) is Settings' search,
+// which finds a setting on any page (findAnywhere), in a tab too.
+addEventListener("keydown", (e) => {
   const mod = /^Mac/.test(navigator.platform) ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
-  if (!mod || e.altKey || e.shiftKey || e.repeat || (e.key !== "," && e.code !== "Comma")) return;
+  if (!mod || e.altKey || e.shiftKey || e.repeat) return;
+  const k = e.code === "KeyK" || e.key === "k" ? findAnywhere : !web && (e.key === "," || e.code === "Comma") ? openSettings : null;
+  if (!k) return;
   e.preventDefault();
-  openSettings();
+  k();
 }, true);
 
 // Font discovery is lazy and separate from polling the app's state. Drafts
@@ -19997,59 +20000,11 @@ function setSetTab(tab, remember) {
   setSetTab(setTab);
 }
 
-// Settings' search (sgfvdsg86265 on X): rows matching the words, shown or
-// English, by their text, section heading or part name; Escape restores.
-const setText = (n) => [n.textContent, ...[...n.querySelectorAll("[data-en]")].map((e) => e.dataset.en)].join(" ").toLowerCase();
+// Settings' search, and what it finds on the other pages: finder.js,
+// loaded the first time a search runs or the box is focused
 function findSettings() {
-  if (!provLinksDrawn && setQuery) provLinksDraw();
-  const v = $("#view-settings");
-  v.classList.add("set-searching");
-  const words = setQuery.split(/\s+/);
-  let any = false;
-  for (const id of SET_TABS) {
-    const page = $("#setPage-" + id), tab = $("#setTab-" + id);
-    const part = setText(tab) + (id === "otel" ? " otel" : ""); // not "usage" for Allowances
-    let hits = 0, head = "";
-    const lit = new Set();
-    for (const n of page.querySelectorAll(".row-head, .row")) {
-      if (n.matches(".row-head")) {
-        head = setText(n);
-        continue;
-      }
-      if (n.parentElement.closest(".row")) continue; // a row in a row goes with it
-      const says = part + " " + head + " " + setText(n);
-      const hit = words.every((w) => says.includes(w));
-      n.classList.toggle("set-miss", !hit);
-      let shows = hit;
-      for (let a = n; shows && a && a !== page; a = a.parentElement) if (a.hidden) shows = false;
-      if (shows && featureHides(n)) shows = false; // a built-in plugin switched off
-      // a provider's link with no such provider to open
-      const ps = n.agents && (providers || providersEarly?.got)?.providers;
-      if (shows && ps && !ps.some((x) => n.agents.includes(x.account?.agent))) n.classList.add("set-miss"), shows = false;
-      if (!shows) continue;
-      hits++;
-      lit.add(n.closest(".list") || n.parentElement);
-    }
-    // a section's heading and list go when nothing in them is left
-    for (const box of page.querySelectorAll(".list")) {
-      if (box.parentElement.closest(".row")) continue; // inside a row: it goes with the row
-      box.classList.toggle("set-miss", ![...lit].some((l) => box.contains(l)));
-    }
-    for (const h of page.querySelectorAll(":scope > .row-head")) {
-      const next = h.nextElementSibling;
-      h.classList.toggle("set-miss", !next || next.classList.contains("set-miss"));
-    }
-    page.dataset.part = tab.textContent;
-    page.hidden = !hits;
-    any ||= hits > 0;
-  }
-  window.setFolds?.(v); // a hit under a folded Advanced (provlinks.js)
-  // the built-ins that match (setfeats.js)
-  if (window.setFeatsFind) any = setFeatsFind(words) > 0 || any;
-  else import("./setfeats.js").then(() => setQuery && findSettings(), () => {});
-  const none = $("#setNone");
-  none.hidden = any;
-  none.textContent = t("No setting matches “{q}”", { q: $("#setQ").value.trim() });
+  if (window.setFind) setFind();
+  else import("./finder.js").then(() => setQuery && setFind(), () => {});
 }
 function searchSettings(q) {
   setQuery = q.trim().toLowerCase();
@@ -20060,11 +20015,13 @@ function searchSettings(q) {
   window.setFolds?.(v, 1);
   $("#setNone").hidden = true;
   window.setFeatsFind?.([]);
+  window.findElse?.([]);
   setSetTab(setTab);
 }
 {
   const q = $("#setQ");
   q.oninput = () => searchSettings(q.value);
+  q.onfocus = () => import("./finder.js").catch(() => {});
   q.onkeydown = (e) => {
     if (e.key === "Escape" && q.value) {
       e.preventDefault();
@@ -23637,6 +23594,20 @@ async function openSettingsAt(e, tab, row) {
   row.classList.add("flash");
 }
 $("#prefs").onclick = () => { window.navFold?.("settings") || openSettings(); $("#prefs").blur(); };
+// Settings' search from any page (canlee886 on X): it finds the settings of
+// every page, finder.js. Back goes to the page it was brought up from
+async function findAnywhere() {
+  $("#find").blur();
+  if (mode !== "window") return openSettings();
+  closeProtoMenu();
+  closeAgentMenu();
+  jumpFrom("settings");
+  if (!await show("settings")) return;
+  const q = $("#setQ");
+  q.focus({ preventScroll: true });
+  q.select();
+}
+$("#find").onclick = findAnywhere;
 
 // The header's refresh reads again what the page shown draws (#844)
 function refreshKind() {
@@ -23780,7 +23751,7 @@ function fitTop() {
   st?.classList.toggle("tight", st.scrollWidth > st.clientWidth);
   // a phone's browser: the tabs have a row of their own (app.css), at their size;
   // and beside the sidebar the header holds only where the reader is and the icons
-  if (phoneWeb() || sideNav()) { top.classList.remove("tight", "cramped", "inrow", "crowded", "packed"); return; }
+  if (phoneWeb() || sideNav()) { top.classList.remove("spare", "tight", "cramped", "inrow", "crowded", "packed"); return; }
   const fits = () => {
     const a = actions.getBoundingClientRect();
     // the buttons sit against the padding; under a page zoom (the text size)
@@ -23793,7 +23764,10 @@ function fitTop() {
     const n = nav.getBoundingClientRect();
     return left + 8 <= n.left && n.right + 8 <= a.left;
   };
-  top.classList.remove("tight", "cramped", "inrow", "crowded", "packed");
+  top.classList.remove("spare", "tight", "cramped", "inrow", "crowded", "packed");
+  if (fits()) return;
+  // Find goes first: ⌘K and Settings' own box still reach it
+  top.classList.add("spare");
   if (fits()) return;
   top.classList.add("tight");
   if (fits()) return;

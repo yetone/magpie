@@ -9494,6 +9494,33 @@ function routingPage(part) {
   };
   gTicks();
   new MutationObserver(gTicks).observe(gView(), { attributes: true, attributeFilter: ["hidden"] });
+  // Settings' search (app.js finder.js, canlee886 on X): the groups by name,
+  // and what a group's editor sets, each with the words it is found by in
+  // English and the reader's language: a group's strategy is its Routing
+  const G_FIELDS = [["Name"], ["Note"], ["In agents’ lists", "hidden show"], ["Models", "members model"], ["Accounts", "keys"], ["Gateway keys"],
+    ["Masking", "redact"], ["Patterns", "match"], ["Model lists"], ["Routing", "strategy order turn", "Routing strategies", ...GROUP_ROUTE_OPTS.map((x) => x[1])],
+    ["Rate limited", "429"], ["Slow to start", "first token timeout"], ["Every member busy"], ["Context", "window"], ["Compact at", "compaction"], ["Stays", "affinity session sticky"]];
+  window.routingFind = () => featuresOff.has("groups") || !groups ? null : {
+    groups: groups.groups.filter((g) => !g.hidden).map((g) => ({ id: g.id, name: g.name || g.id, note: g.note || "" })),
+    fields: G_FIELDS.map(([f, more = "", ...also]) => [f, t(f), [f, t(f), more, ...also.flatMap((x) => [x, t(x)])].join(" ").toLowerCase()]),
+  };
+  // routingOpenGroup: the group's editor, at field (its label, in English)
+  // when given, in sight when the reader's click asked (go) and lit
+  window.routingOpenGroup = async (id, field, go) => {
+    if (gView().hidden && !(await window.show("groups"))) return;
+    if (!groups) await loadGroups();
+    const g = groups?.groups.find((x) => x.id === id);
+    if (!g || (gEdit?.id !== id && !(await openGroupEditor(g)))) return;
+    const ed = gList.querySelector(".rt-gedit");
+    if (!ed) return;
+    const l = field && [...ed.querySelectorAll("label")].find((x) => x.textContent.trim() === t(field));
+    if (l?.closest("details")) l.closest("details").open = true;
+    const at = l || ed;
+    if (go) { at.scrollIntoView({ block: "center" }); window.arrived?.(gView()); }
+    at.classList.remove("find-lit");
+    void at.offsetWidth;
+    at.classList.add("find-lit");
+  };
   // newGroupWith: a new group's editor, opened with the model in it — a
   // model of a provider kept for routing groups that no group has, which
   // agents can reach no other way. The picker and the provider's editor
