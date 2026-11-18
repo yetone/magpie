@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/codexcat"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/filelock"
@@ -913,6 +914,28 @@ func CodexSignInWho() string {
 		return ""
 	}
 	return l.User + "\x00" + l.Plan
+}
+
+// CodexSignInListed is the models the account Codex is signed in to listed
+// when magpie last asked for its list (KeepAccountsListed), and when that
+// was; ok is false while none is kept. The Codex app's list beside the
+// sign-in (gateway.CodexDesktopCatalog) is the same backend's list for the
+// same account, asked apart: one older than this that lacks a model this
+// has is asked for again, or the app's picker went without a model
+// magpie's own lists had (ANAGABRIELRLki on X: GPT-6.2 Astra).
+func CodexSignInListed() (ids []string, fetched time.Time, ok bool) {
+	l, found := liveLogin("codex")
+	if !found {
+		return nil, time.Time{}, false
+	}
+	ms, at, ok := catalog.Live(accountModels("codex", l.User))
+	if !ok {
+		return nil, time.Time{}, false
+	}
+	for _, m := range ms {
+		ids = append(ids, m.ID)
+	}
+	return ids, at, true
 }
 
 // codexLoginIn is the ChatGPT account Codex is signed in to in its folder

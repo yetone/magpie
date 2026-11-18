@@ -128,6 +128,18 @@ func CodexLiveList(ctx context.Context) ([]byte, error) {
 	return b, nil
 }
 
+// CodexClientVersion is the Codex client version the backend's model
+// list is asked for now (codexVersion): a list asked for an older one may
+// lack a model the backend lists only to a newer client.
+func CodexClientVersion() string { return codexVersion() }
+
+// CodexVersionBehind says a list asked for Codex version asked is behind
+// now, the version magpie asks as (CodexClientVersion), or its version
+// isn't known (codexListBehind).
+func CodexVersionBehind(asked, now string) bool {
+	return asked == "" || asked != now && newerVersion(asked, now) != asked
+}
+
 var codexVersionCache struct {
 	sync.Mutex
 	v  string
@@ -473,10 +485,7 @@ const listRound = 10 * time.Minute
 // codexListBehind says a ChatGPT account's list asked for Codex version
 // asked is behind the one magpie asks as now, or its version wasn't kept:
 // a model the backend lists only to a newer client may be missing from it.
-func codexListBehind(asked string) bool {
-	now := codexVersion()
-	return asked == "" || asked != now && newerVersion(asked, now) != asked
-}
+func codexListBehind(asked string) bool { return CodexVersionBehind(asked, codexVersion()) }
 
 // Levels are the reasoning levels the account's own list gives the model —
 // a Free ChatGPT plan's may be fewer than a Plus one's — and ok is false
