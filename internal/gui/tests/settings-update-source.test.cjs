@@ -111,12 +111,23 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert(m.text <= Math.ceil(m.span) + 1, `${name}: the label is clipped (${m.text}px in ${m.span}px, button ${m.pick}px)`);
           assert(m.span > 0, `${name}: the label shows`);
         };
+        // Download source above says what the source picked does: site never
+        // asks GitHub (so no mirror), GitHub only never usemagpie.ai
+        const says = async (key, host) => {
+          const got = await page.evaluate(() => ({ sub: document.querySelector(".update-mirror-row .who .sub")?.firstChild?.textContent, code: document.querySelector(".update-mirror-row code")?.textContent }));
+          assert.equal(got.sub, await page.evaluate((k) => t(k), key));
+          assert.equal(got.code, host);
+        };
+        await says("Updates are downloaded from usemagpie.ai, and from GitHub when that fails; a mirror can stand in for GitHub where it is slow", "usemagpie.ai");
         await fits(l.auto);
         await choose(l.github, "github");
         await fits(l.github);
+        await says("Update source is GitHub only: updates come from GitHub; a mirror can stand in for it where it is slow", "github.com");
         await choose(l.site, "site");
         await fits(l.site);
+        await says("Update source is usemagpie.ai only: updates never come from GitHub, so no mirror is used", "usemagpie.ai");
         await choose(l.auto, "");
+        await says("Updates are downloaded from usemagpie.ai, and from GitHub when that fails; a mirror can stand in for GitHub where it is slow", "usemagpie.ai");
         // the menu ticks the one chosen
         await pick.click();
         assert.equal(await page.locator(".proto-menu .pm-item.on").textContent(), l.auto);
