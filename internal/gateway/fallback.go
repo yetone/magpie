@@ -2717,6 +2717,12 @@ type holdWriter struct {
 	// takes; slow says it took longer, and was let go with nothing sent
 	firstWait time.Duration
 	slow      bool
+	// stuck says the vendor said nothing for translatedQuietLongest
+	// while the agent was kept alive (keepQuiet), and the try was let go:
+	// the agent is told so as an error, never left with silence
+	stuck string
+	// name is the provider's, for what stuck tells the agent
+	name string
 	// budgeted says firstWait was cut to what was left of the walk's
 	// total time (groupBudget), so its running out is the budget's end,
 	// not this member being slow (#5113)
@@ -2863,7 +2869,7 @@ func (h *holdWriter) Write(b []byte) (int, error) {
 	if h.slow {
 		return 0, errSlowStart
 	}
-	if h.looped != "" || h.relooped {
+	if h.looped != "" || h.relooped || h.stuck != "" {
 		return 0, errLooped
 	}
 	if h.handedOver {
@@ -3850,8 +3856,13 @@ func (h *holdWriter) watch() func() {
 }
 
 // keepQuiet keeps the agent of a stream alive with SSE comments while the
-// vendor says nothing, every keepaliveEvery for up to keepaliveLongest
-// since it last did: a vendor that sent its 200 and response.created, then
+// vendor says nothing, every keepaliveEvery for up to translatedQuietLongest
+// since it last did, as a translated reply's client is kept
+// (keepThroughSilence), and then ends the try with an error the agent is
+// told (endStuck). It stopped at keepaliveLongest (5 minutes) and left the
+// agent with nothing: a Claude relay that took longer than that before its
+// headers, or quiet mid-reply, had pi's 300s idle timeout end the request
+// with no word of why (Wing8Aqua on X). A vendor that sent its 200 and response.created, then
 // nothing while it reasoned, had the stream held with none of it sent,
 // and Cloudflare in front of a remote magpie ended the request at 125s
 // (524) with the agent sent nothing at all; one quiet mid-reply was reset
@@ -3859,11 +3870,12 @@ func (h *holdWriter) watch() func() {
 // comments only (keepAlive), none of the try, which another account may
 // still answer instead; passed, a comment goes between two lines of it.
 func (h *holdWriter) keepQuiet() {
-	if h.slow || h.relooped || h.ended || h.alive == nil || h.alive.proto == provider.Gemini || h.ctx != nil && h.ctx.Err() != nil {
+	if h.slow || h.relooped || h.ended || h.stuck != "" || h.alive == nil || h.alive.proto == provider.Gemini || h.ctx != nil && h.ctx.Err() != nil {
 		return
 	}
-	if !h.heard.IsZero() && time.Since(h.heard) >= keepaliveLongest {
-		return // a stream stuck this long is left for a timeout to end
+	if !h.heard.IsZero() && time.Since(h.heard) >= translatedQuietLongest {
+		h.endStuck(time.Since(h.heard))
+		return
 	}
 	if !h.passing && h.stream && h.failure == 0 && !h.whole && !h.wantWhole && h.held.Len() > 0 && h.alive.tooQuiet(0) {
 		// a stream held while its vendor is quiet: Codex would hang up
@@ -3888,6 +3900,37 @@ func (h *holdWriter) keepQuiet() {
 	h.wrote = time.Now()
 	if f, ok := h.w.(http.Flusher); ok {
 		f.Flush()
+	}
+}
+
+// endStuck lets a try go whose vendor said nothing for quiet
+// (translatedQuietLongest), its agent kept alive all that time. Passing,
+// the agent's stream ends with the error as its own event, after a blank
+// line, as cutLoop ends one; held, the gateway tells it (stuck, failTo),
+// and nobody else is asked: the agent has waited that long already.
+func (h *holdWriter) endStuck(quiet time.Duration) {
+	name := h.name
+	if name == "" {
+		name = "the provider"
+	}
+	d := quiet.Round(time.Second)
+	if d == 0 {
+		d = quiet.Round(time.Millisecond)
+	}
+	h.stuck = fmt.Sprintf("%s sent nothing for %s; the request was ended", name, d)
+	if h.passing && strings.HasPrefix(h.w.Header().Get("Content-Type"), "text/event-stream") {
+		proto := h.alive.proto
+		if h.atLine {
+			io.WriteString(h.w, "\n")
+		} else {
+			io.WriteString(h.w, "\n\n")
+		}
+		streamError(h.w, proto, "", http.StatusGatewayTimeout, h.stuck)
+		h.ended = true
+		h.flush()
+	}
+	if h.stop != nil {
+		h.stop()
 	}
 }
 

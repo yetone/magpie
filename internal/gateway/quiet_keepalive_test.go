@@ -184,10 +184,11 @@ func TestSilentHeldStreamStillFailsOver(t *testing.T) {
 	}
 }
 
-// A vendor quiet for longer than keepaliveLongest (the held stream's
-// comments) and translatedQuietLongest (a translated stream's own,
-// keepThroughSilence) is no longer covered for: the comments stop, for a
-// stuck stream to end at a timeout.
+// A vendor quiet for longer than translatedQuietLongest, which both the
+// held stream's comments (keepQuiet) and a translated stream's own
+// (keepThroughSilence) cover, is let go: the client is told so as its
+// stream's error, not left with comments that stop and then silence
+// (Wing8Aqua on X; TestQuietClaudeStreamStuckEndsWithAnError).
 func TestQuietKeptAliveOnlySoLong(t *testing.T) {
 	fresh(t)
 	quietFast(t)
@@ -199,25 +200,30 @@ func TestQuietKeptAliveOnlySoLong(t *testing.T) {
 	quietOn(t, "fixture", quietCreated+quietDelta("hel"), quietDelta("lo")+quietDone, never)
 	gw := httptest.NewServer(New().Handler())
 	t.Cleanup(gw.Close)
+	began := time.Now()
 	resp, err := http.Post(gw.URL+"/v1/chat/completions", "application/json",
 		strings.NewReader(`{"model":"fixture/gpt-test","stream":true,"messages":[{"role":"user","content":"hi"}]}`))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	b, _ := io.ReadAll(resp.Body) // the vendor goes on after 3s
-	// counted from its first words, as readQuiet: the held stream's before
-	// them are kept for 200ms of their own
+	b, _ := io.ReadAll(resp.Body) // the vendor would go on after 3s
+	took := time.Since(began)
 	body := string(b)
-	i, j := strings.Index(body, "hel"), strings.Index(body, `"lo"`)
-	if i < 0 || j < i {
+	i := strings.Index(body, "hel")
+	if i < 0 || strings.Contains(body, `"lo"`) {
 		t.Fatalf("%q", body)
 	}
-	// 200ms at one each 40ms is 5, from each of the two keepers, the
-	// held stream's and the translated stream's, with room; one that
-	// never stopped sends ~75 in the 3s
-	if n := strings.Count(body[i:j], ": keepalive"); n == 0 || n > 16 {
-		t.Fatalf("%d keepalives in 3s, kept for 200ms: %q", n, body)
+	if !strings.Contains(body[i:], "Fixture sent nothing for") || !strings.Contains(body[i:], `"error"`) {
+		t.Fatalf("the stuck vendor's stream ended with no error: %q", body)
+	}
+	if took >= 2500*time.Millisecond {
+		t.Fatalf("ended after %v, the vendor's own 3s: it wasn't let go", took)
+	}
+	// kept alive until then: 200ms at one each 40ms, from each keeper,
+	// with room
+	if n := strings.Count(body[i:], ": keepalive"); n == 0 || n > 24 {
+		t.Fatalf("%d keepalives: %q", n, body)
 	}
 }
 
