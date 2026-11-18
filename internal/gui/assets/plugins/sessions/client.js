@@ -580,6 +580,54 @@ magpie.plugin("sessions", (ctx) => {
     return card;
   }
 
+  // An agent found after the user chose which agents' sessions to read
+  // (baysonfox on X: Antigravity 2.0, installed after allow selected,
+  // showed only what came through the gateway): a choice that names its
+  // agents reads no other, so the page asks about each such agent once
+  // (reads.found[].new). Allow names it on, Keep off names it off; either
+  // way it isn't asked about again, and Settings › Privacy changes it.
+  const laterFound = () => data?.reads?.asked && !data.reads.gateway ? (data.reads.found || []).filter((x) => x.new) : [];
+  let laterBusy = false;
+
+  function laterCard(found) {
+    const card = el("div", "sm-consent sm-later");
+    const title = el("b", "sm-consent-title", t("Show these agents' sessions too?"));
+    title.id = "smLaterTitle";
+    card.setAttribute("role", "group");
+    card.setAttribute("aria-labelledby", title.id);
+    card.append(title);
+    const list = el("div", "list sm-consent-list");
+    for (const x of found) {
+      const row = el("div", "row sm-consent-row");
+      row.append(icon(x.icon), el("span", "sm-consent-name", x.name));
+      list.append(row);
+    }
+    card.append(list);
+    const acts = el("div", "sm-consent-acts");
+    const save = async (on) => {
+      laterBusy = true;
+      draw();
+      const agents = {};
+      for (const x of found) agents[x.agent] = on;
+      try {
+        await api("sessions/reads", { agents });
+        await load();
+      } catch (err) { status(err.message, "err"); }
+      finally { laterBusy = false; draw(); }
+    };
+    const off = el("button", "text sm-later-off", t("Keep off"));
+    off.type = "button";
+    off.disabled = laterBusy;
+    off.onclick = () => save(false);
+    const on = el("button", "text primary sm-later-on", t("Show their sessions"));
+    on.type = "button";
+    on.disabled = laterBusy;
+    on.onclick = () => save(true);
+    acts.append(off, on);
+    card.append(acts);
+    return card;
+  }
+
   function head() {
     const h = el("div", "usage-head sm-head");
     const wrap = el("div", "sm-switch");
@@ -672,6 +720,7 @@ magpie.plugin("sessions", (ctx) => {
     }
     if (trashOn) { box.append(...trash()); return box; }
     if (consentApplies()) box.append(consentCard());
+    else if (laterFound().length) box.append(laterCard(laterFound()));
     if (recordingApplies()) box.append(recordingCard());
     if (!data.agents.length) {
       if (consentApplies()) return box;

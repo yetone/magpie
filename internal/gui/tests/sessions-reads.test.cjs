@@ -6,6 +6,9 @@
 // Allow selected stays off until one is picked and saves those picked,
 // Allow all saves every agent and those found later. Settings › Privacy
 // has a row for agents found later and one per agent, each saved alone.
+// An agent found after a choice that names its agents (baysonfox on X:
+// Antigravity 2.0 installed after allow selected) is asked about once on
+// the Sessions page: Allow names it on, Keep off names it off.
 // Every language, Chromium and WebKit, a narrow window; the API is faked.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -41,9 +44,12 @@ function serve(lang, store, posts) {
       }
       for (const p of posts) for (const a in p.agents || {}) store.named[a] = true;
       for (const f of store.found) if (!(f.agent in store.named)) f.on = store.asked && store.all;
+      // as readsNow: found, not named and not read under a choice that names
+      for (const f of store.found) f.new = store.asked && !store.all && !(f.agent in store.named);
       return json({ asked: store.asked, all: store.all, found: store.found });
     }
     if (url.pathname === "/api/sessions/manage") {
+      for (const f of store.found) f.new = store.asked && !store.all && !(f.agent in store.named);
       const on = store.found.filter((f) => store.asked && f.on);
       const agents = on.map((f) => ({ agent: f.agent, count: 1, deletable: true, name: f.name, icon: f.icon }));
       const agent = agents[0]?.agent || "";
@@ -58,11 +64,11 @@ function serve(lang, store, posts) {
 }
 
 const words = {
-  en: { nav: "Sessions", title: "Show your agents' sessions?", some: "Allow selected", all: "Allow all", head: "Agents' session history", later: "Agents found later", on: "On", off: "Off" },
-  zh: { nav: "会话", title: "显示智能体的会话吗？", some: "允许所选", all: "全部允许", head: "智能体的会话历史", later: "之后发现的智能体", on: "开启", off: "关闭" },
-  "zh-TW": { nav: "會話", title: "顯示智慧體的會話嗎？", some: "允許所選", all: "全部允許", head: "智慧體的會話歷史", later: "之後發現的智慧體", on: "開啟", off: "關閉" },
-  ja: { nav: "セッション", title: "エージェントのセッションを表示しますか？", some: "選択したものを許可", all: "すべて許可", head: "エージェントのセッション履歴", later: "あとで見つかったエージェント", on: "オン", off: "オフ" },
-  de: { nav: "Sitzungen", title: "Sitzungen deiner Agenten anzeigen?", some: "Ausgewählte erlauben", all: "Alle erlauben", head: "Sitzungsverlauf der Agenten", later: "Später gefundene Agenten", on: "An", off: "Aus" },
+  en: { nav: "Sessions", title: "Show your agents' sessions?", some: "Allow selected", all: "Allow all", head: "Agents' session history", later: "Agents found later", on: "On", off: "Off", laterTitle: "Show these agents' sessions too?", keepOff: "Keep off", allow: "Show their sessions" },
+  zh: { nav: "会话", title: "显示智能体的会话吗？", some: "允许所选", all: "全部允许", head: "智能体的会话历史", later: "之后发现的智能体", on: "开启", off: "关闭", laterTitle: "还要显示这些智能体的会话吗？", keepOff: "保持关闭", allow: "显示会话" },
+  "zh-TW": { nav: "會話", title: "顯示智慧體的會話嗎？", some: "允許所選", all: "全部允許", head: "智慧體的會話歷史", later: "之後發現的智慧體", on: "開啟", off: "關閉", laterTitle: "也要顯示這些智慧體的會話嗎？", keepOff: "保持關閉", allow: "顯示會話" },
+  ja: { nav: "セッション", title: "エージェントのセッションを表示しますか？", some: "選択したものを許可", all: "すべて許可", head: "エージェントのセッション履歴", later: "あとで見つかったエージェント", on: "オン", off: "オフ", laterTitle: "これらのエージェントのセッションも表示しますか？", keepOff: "オフのままにする", allow: "セッションを表示" },
+  de: { nav: "Sitzungen", title: "Sitzungen deiner Agenten anzeigen?", some: "Ausgewählte erlauben", all: "Alle erlauben", head: "Sitzungsverlauf der Agenten", later: "Später gefundene Agenten", on: "An", off: "Aus", laterTitle: "Auch die Sitzungen dieser Agenten anzeigen?", keepOff: "Aus lassen", allow: "Sitzungen anzeigen" },
 };
 
 async function open(engine, width, t) {
@@ -130,6 +136,38 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator('#view-sessions .row.sm-sess[data-id="claude-1"]').waitFor();
       assert.deepEqual(errors, []);
     });
+  }
+  for (const [lang, width] of [["en", 900], ["en", 390], ["zh", 420], ["zh-TW", 420], ["ja", 420], ["de", 390]]) {
+    const w = words[lang];
+    for (const allow of [true, false]) {
+      test(`${engine} ${lang} ${width}px: an agent found after allow selected is asked about once (${allow ? "allow" : "keep off"})`, async (t) => {
+        const { page, errors } = await open(engine, width, t);
+        const store = {
+          asked: true, all: false, named: { claude: true },
+          found: [{ agent: "claude", name: "Claude Code", icon: "claudecode-color", on: true }, { agent: "antigravity", name: "Antigravity", icon: "antigravity-color", on: false }],
+        }, posts = [];
+        await page.route("**/*", serve(lang, store, posts));
+        await page.goto("http://magpie.test/?view=sessions");
+        const card = page.locator("#view-sessions .sm-later");
+        await card.waitFor();
+        assert.equal(await page.locator("#view-sessions .sm-consent:not(.sm-later)").count(), 0, "the first consent is not shown again");
+        assert.equal(await card.locator(".sm-consent-title").textContent(), w.laterTitle);
+        assert.equal(await card.getAttribute("role"), "group");
+        assert.deepEqual(await card.locator(".sm-consent-name").allTextContents(), ["Antigravity"]);
+        // the sessions already read are listed under it
+        await page.locator('#view-sessions .row.sm-sess[data-id="claude-1"]').waitFor();
+        await fits(page, "#view-sessions .sm-later");
+        assert.equal(posts.length, 0);
+        await card.getByRole("button", { name: allow ? w.allow : w.keepOff, exact: true }).click();
+        await card.waitFor({ state: "detached" });
+        assert.deepEqual(posts, [{ agents: { antigravity: allow } }]);
+        // not asked again
+        await page.reload();
+        await page.locator('#view-sessions .row.sm-sess[data-id="claude-1"]').waitFor();
+        assert.equal(await page.locator("#view-sessions .sm-later").count(), 0);
+        assert.deepEqual(errors, []);
+      });
+    }
   }
   test(`${engine} en 390px: Allow all reads every agent, those found later too`, async (t) => {
     const { page, errors } = await open(engine, 390, t);

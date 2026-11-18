@@ -197,6 +197,7 @@ body.window .row.sm-sub-row { min-height: 42px; padding-left: calc(14px + var(--
 .sm-consent-row .lib-switch { flex: none; cursor: pointer; padding: 0; border: 0; }
 .sm-consent-row .lib-switch:disabled { opacity: .5; cursor: default; }
 .sm-consent-acts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.sm-later .sm-consent-row { cursor: default; }
 /* a session's output speed (session_speed.go): its last two minutes and
    tokens a second now, opening the round's numbers */
 .row.sm-sess .sm-speed { flex: none; display: inline-flex; align-items: center; gap: 10px; height: 30px; padding: 0 8px; border: 0; border-radius: 7px; background: none; color: var(--muted); font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; transition: background-color .15s ease; }

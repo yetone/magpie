@@ -441,6 +441,11 @@ covers them), and `sessions/manage` carries the same as `reads`. While
 `asked` is false the Sessions page shows the consent (`consentCard` in
 the sessions plugin): each agent found with a switch, off; Allow selected
 saves `all: false` with each agent picked or not, Allow all `all: true`.
+A choice with `all` false reads no agent it doesn't name, so one found
+after it (Antigravity 2.0 installed after Allow selected: baysonfox on
+X) is `new` in `found` (on disk, not named, not read), and the Sessions
+page asks about those once (`laterCard`): Show their sessions sends
+each `true`, Keep off `false`, so it isn't new again.
 Settings › Privacy, *Agents' session history* (`renderSessionReads` in
 the sessions plugin's `settings.js`), has *Agents found later* (`all`, sent with each listed agent
 at the value its row shows) and a row per agent.

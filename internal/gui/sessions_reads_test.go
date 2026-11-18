@@ -94,3 +94,122 @@ func TestSessionReadsRoutes(t *testing.T) {
 		t.Fatal("a body that isn't JSON was taken")
 	}
 }
+
+// An agent installed after "allow selected" (baysonfox on X: Antigravity
+// 2.0's sessions showed only while it was connected to magpie, agy CLI's
+// always). The choice read agy only, and nothing asked about the app found
+// later. /api/sessions/reads marks it new; the page's Show their sessions names it on and
+// its sessions are listed, and Keep off names it off and it isn't new again.
+// The app's folder is a real Antigravity 2.30 one (testdata/antigravity-2.30,
+// written by its language server on Windows), agy's a real agy CLI's.
+func TestSessionReadsNewAgent(t *testing.T) {
+	for _, allow := range []bool{true, false} {
+		t.Run(map[bool]string{true: "allow", false: "keep off"}[allow], func(t *testing.T) {
+			h := sandboxHome(t)
+			copyTree(t, "../sessions/testdata/agy-sessions", filepath.Join(h, ".gemini", "antigravity-cli"))
+			copyTree(t, "../sessions/testdata/antigravity-2.30", filepath.Join(h, ".gemini", "antigravity"))
+			// the choice made before the app was installed: agy only
+			if err := settings.SetSessionReads(func(*settings.SessionReads) *settings.SessionReads {
+				return &settings.SessionReads{Asked: true, Agents: map[string]bool{"agy": true}}
+			}); err != nil {
+				t.Fatal(err)
+			}
+			sessions.Reset()
+			t.Cleanup(sessions.Reset)
+			mux := http.NewServeMux()
+			sessionManageRoutes(mux, folderOnly{})
+			call := func(method, path, body string) []byte {
+				t.Helper()
+				w := httptest.NewRecorder()
+				mux.ServeHTTP(w, httptest.NewRequest(method, path, strings.NewReader(body)))
+				if w.Code != 200 {
+					t.Fatalf("%s %s: %d %s", method, path, w.Code, w.Body)
+				}
+				return w.Body.Bytes()
+			}
+			of := func(r readsJSON, agent string) readAgentJSON {
+				t.Helper()
+				for _, f := range r.Found {
+					if f.Agent == agent {
+						return f
+					}
+				}
+				t.Fatalf("%s not found: %+v", agent, r.Found)
+				return readAgentJSON{}
+			}
+			listed := func() []string {
+				t.Helper()
+				var m struct {
+					Sessions []struct {
+						ID    string `json:"id"`
+						Agent string `json:"agent"`
+					} `json:"sessions"`
+				}
+				json.Unmarshal(call("GET", "/api/sessions/manage?agent=antigravity", ""), &m)
+				// with none of its own the page is on another agent's (agy's)
+				var ids []string
+				for _, s := range m.Sessions {
+					if s.Agent == "antigravity" {
+						ids = append(ids, s.ID)
+					}
+				}
+				return ids
+			}
+			var r readsJSON
+			json.Unmarshal(call("GET", "/api/sessions/reads", ""), &r)
+			if a := of(r, "antigravity"); a.On || !a.New {
+				t.Fatalf("antigravity found after allow selected = %+v, want off and new", a)
+			}
+			if a := of(r, "agy"); !a.On || a.New {
+				t.Fatalf("agy, named on = %+v", a)
+			}
+			if ids := listed(); len(ids) != 0 {
+				t.Fatalf("antigravity listed before it was allowed: %v", ids)
+			}
+			body := `{"agents":{"antigravity":false}}`
+			if allow {
+				body = `{"agents":{"antigravity":true}}`
+			}
+			// a fresh value: new is left out when false
+			r = readsJSON{}
+			json.Unmarshal(call("POST", "/api/sessions/reads", body), &r)
+			a := of(r, "antigravity")
+			if a.New || a.On != allow {
+				t.Fatalf("after the answer: %+v", a)
+			}
+			if s := settings.Shared().SessionReads; s == nil || s.All || !s.Agents["agy"] {
+				t.Fatalf("the answer changed the rest of the choice: %+v", s)
+			}
+			ids := listed()
+			if allow && (len(ids) != 1 || ids[0] != "d96c88af-9e92-463f-a81c-9bb0f7007818") {
+				t.Fatalf("antigravity allowed: listed %v", ids)
+			}
+			if !allow && len(ids) != 0 {
+				t.Fatalf("antigravity kept off: listed %v", ids)
+			}
+		})
+	}
+}
+
+// Only a choice that reads agents by name finds one new: allow all reads
+// those found later, and before the choice the consent asks about all.
+func TestSessionReadsNewOnlyWhenNamed(t *testing.T) {
+	for name, r := range map[string]*settings.SessionReads{
+		"not asked":    {},
+		"allow all":    {Asked: true, All: true},
+		"all, agy off": {Asked: true, All: true, Agents: map[string]bool{"agy": false}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := sandboxHome(t)
+			copyTree(t, "../sessions/testdata/antigravity-2.30", filepath.Join(h, ".gemini", "antigravity"))
+			if err := settings.SetSessionReads(func(*settings.SessionReads) *settings.SessionReads { return r }); err != nil {
+				t.Fatal(err)
+			}
+			for _, f := range readsNow().Found {
+				if f.New {
+					t.Fatalf("%s new under %+v", f.Agent, r)
+				}
+			}
+		})
+	}
+}
