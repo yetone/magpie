@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -56,13 +57,13 @@ func TestCodexVersion(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	writeFile(t, filepath.Join(home, ".codex", "models_cache.json"), map[string]any{"client_version": "0.160.0"})
+	writeFile(t, filepath.Join(home, ".codex", "models_cache.json"), map[string]any{"client_version": "0.170.0"})
 	exe := filepath.Join(t.TempDir(), "codex")
-	testenv.Program(t, exe, "#!/bin/sh\necho codex-cli 0.161.1\n")
+	testenv.Program(t, exe, "#!/bin/sh\necho codex-cli 0.171.1\n")
 	old := codexExecutable
 	t.Cleanup(func() { codexExecutable = old; codexVersionCache.at = time.Time{}; codexSeen = seenVersion{} })
 	codexSeen = seenVersion{}
-	for _, c := range []struct{ exe, want string }{{exe, "0.161.1"}, {"", "0.160.0"}} {
+	for _, c := range []struct{ exe, want string }{{exe, "0.171.1"}, {"", "0.170.0"}} {
 		codexExecutable = func() string { return c.exe }
 		codexVersionCache.at = time.Time{}
 		if got := codexVersion(); got != c.want {
@@ -75,9 +76,9 @@ func TestCodexVersion(t *testing.T) {
 	if got := codexVersion(); got != codexClientVersion {
 		t.Errorf("CODEX_HOME with no cache: %s", got)
 	}
-	writeFile(t, filepath.Join(os.Getenv("CODEX_HOME"), "models_cache.json"), map[string]any{"client_version": "0.160.2"})
+	writeFile(t, filepath.Join(os.Getenv("CODEX_HOME"), "models_cache.json"), map[string]any{"client_version": "0.170.2"})
 	codexVersionCache.at = time.Time{}
-	if got := codexVersion(); got != "0.160.2" {
+	if got := codexVersion(); got != "0.170.2" {
 		t.Errorf("CODEX_HOME's cache: %s", got)
 	}
 }
@@ -111,9 +112,9 @@ func TestCodexVersionSeen(t *testing.T) {
 	}{
 		{h("User-Agent", "claude-cli/2.1.300 (external, cli)"), codexClientVersion},
 		{h("User-Agent", "Mozilla/5.0", "version", "9.9.9"), codexClientVersion},
-		{h("User-Agent", "codex_cli_rs/0.160.0 (Mac OS 26.6.0; arm64) ghostty/1.2.0"), "0.160.0"},
-		{h("User-Agent", "Codex Desktop/0.162.3 (Windows 10.0.26100; x86_64) unknown", "originator", "Codex Desktop"), "0.162.3"},
-		{h("User-Agent", "codex_cli_rs/0.150.0", "version", "0.150.0"), "0.162.3"},
+		{h("User-Agent", "codex_cli_rs/0.170.0 (Mac OS 26.6.0; arm64) ghostty/1.2.0"), "0.170.0"},
+		{h("User-Agent", "Codex Desktop/0.172.3 (Windows 10.0.26100; x86_64) unknown", "originator", "Codex Desktop"), "0.172.3"},
+		{h("User-Agent", "codex_cli_rs/0.150.0", "version", "0.150.0"), "0.172.3"},
 	} {
 		SawCodexClient(c.h)
 		if got := codexVersion(); got != c.want {
@@ -134,8 +135,86 @@ func TestCodexVersionSeen(t *testing.T) {
 	if _, err := codexModels(context.Background(), sign); err != nil {
 		t.Fatal(err)
 	}
-	if asked != "0.162.3" || !strings.HasPrefix(ua, "codex_cli_rs/0.162.3 (") || ver != "0.162.3" {
+	if asked != "0.172.3" || !strings.HasPrefix(ua, "codex_cli_rs/0.172.3 (") || ver != "0.172.3" {
 		t.Fatalf("models asked as client_version %q, User-Agent %q, version %q", asked, ua, ver)
+	}
+}
+
+// With no Codex CLI here, or an older one, the models list is still asked
+// for as a Codex new enough for every model the account has: GPT-6.2 Sol
+// and Astra, listed to 0.166.0 and later only, were never offered at the
+// 0.159.0 magpie asked as (zzstar101 and m0eaki on X). npm's latest
+// counts once read, and only a release version of it.
+func TestCodexVersionPublished(t *testing.T) {
+	if compareClaudeVersion(codexClientVersion, "0.166.0") < 0 {
+		t.Fatalf("codexClientVersion %s is older than GPT-6.2's minimal_client_version 0.166.0", codexClientVersion)
+	}
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", t.TempDir())
+	t.Setenv("CODEX_HOME", "")
+	old, oldURL := codexExecutable, codexNpmLatest
+	codexExecutable = func() string { return "" }
+	reset := func() {
+		codexPublishedCache.Lock()
+		codexPublishedCache.v, codexPublishedCache.at = "", time.Time{}
+		codexPublishedCache.Unlock()
+		codexVersionCache.at = time.Time{}
+		codexSeen = seenVersion{}
+	}
+	t.Cleanup(func() { codexExecutable, codexNpmLatest = old, oldURL; reset() })
+	reset()
+	if got := codexVersion(); got != codexClientVersion {
+		t.Fatalf("a test binary asked npm: %s", got)
+	}
+	// a request an older Codex sent goes on saying the floor, in its
+	// version header and its User-Agent ("请求头版本太低了", zzstar101)
+	req := httptest.NewRequest(http.MethodPost, "https://chatgpt.com/backend-api/codex/responses", nil)
+	req.Header.Set("version", "0.159.0")
+	req.Header.Set("User-Agent", "codex_cli_rs/0.159.0 (Mac OS 26.2.0; arm64)")
+	sign := codexSign(func(context.Context) (string, string, error) { return "tok", "acct-1", nil })
+	if err := sign(context.Background(), req, []byte(`{}`)); err != nil {
+		t.Fatal(err)
+	}
+	if v, ua := req.Header.Get("version"), req.Header.Get("User-Agent"); v != codexClientVersion || !strings.Contains(ua, "/"+codexClientVersion+" (") {
+		t.Fatalf("an old Codex's request went as version %q, User-Agent %q", v, ua)
+	}
+	var answer string
+	var asks atomic.Int32
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asks.Add(1)
+		w.Write([]byte(answer))
+	}))
+	defer fake.Close()
+	codexNpmLatest = fake.URL + "/@openai/codex/latest"
+	for _, c := range []struct{ answer, want string }{
+		{`{"name":"@openai/codex","version":"9.1.0"}`, "9.1.0"},
+		{`{"version":"9.2.0-alpha.3"}`, codexClientVersion},
+		{`{"version":"0.100.0"}`, codexClientVersion},
+		{`<html>`, codexClientVersion},
+	} {
+		reset()
+		answer = c.answer
+		asks.Store(0)
+		codexVersion() // asks in the background
+		deadline := time.Now().Add(10 * time.Second)
+		for {
+			codexPublishedCache.Lock()
+			done := !codexPublishedCache.at.IsZero() && !codexPublishedCache.asking
+			codexPublishedCache.Unlock()
+			if done {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("%s: npm's answer was never read", c.answer)
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+		if got := codexVersion(); got != c.want {
+			t.Errorf("npm said %s: %s, want %s", c.answer, got, c.want)
+		}
+		if n := asks.Load(); n != 1 {
+			t.Errorf("npm said %s: asked %d times", c.answer, n)
+		}
 	}
 }
 

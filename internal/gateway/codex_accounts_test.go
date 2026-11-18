@@ -789,7 +789,7 @@ func TestCallKind(t *testing.T) {
 // one that sent it, in the User-Agent and the version header alike, so a
 // model Codex CLI reaches on its own isn't refused through magpie
 // (Discord: "The 'gpt-6.1-sol' model is not supported when using Codex
-// with a ChatGPT account"). 0.161.0 is newer than any installed here or
+// with a ChatGPT account"). 0.199.0 is newer than any installed here or
 // magpie's own fallback, so only the client's own version can pass.
 func TestCodexPoolSaysTheClientsVersion(t *testing.T) {
 	codexSignedIn(t, "spare@example.com")
@@ -799,7 +799,7 @@ func TestCodexPoolSaysTheClientsVersion(t *testing.T) {
 		ua := r.Header.Get("User-Agent")
 		uas, vers = append(uas, ua), append(vers, r.Header.Get("version"))
 		v, _, _ := strings.Cut(strings.TrimPrefix(ua, "codex_cli_rs/"), " ")
-		if modelOf(b) == "gpt-6.1-sol" && (!strings.HasPrefix(ua, "codex_cli_rs/") || older(v, "0.161.0")) {
+		if modelOf(b) == "gpt-6.1-sol" && (!strings.HasPrefix(ua, "codex_cli_rs/") || older(v, "0.199.0")) {
 			w.WriteHeader(400)
 			io.WriteString(w, `{"detail":"The 'gpt-6.1-sol' model is not supported when using Codex with a ChatGPT account."}`)
 			return
@@ -820,14 +820,14 @@ func TestCodexPoolSaysTheClientsVersion(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer chatgpt-token")
 	req.Header.Set("chatgpt-account-id", "acct-1")
 	req.Header.Set("originator", "codex_cli_rs")
-	req.Header.Set("User-Agent", "codex_cli_rs/0.161.0 (Mac OS 26.6.0; arm64) ghostty/1.2.0")
-	req.Header.Set("version", "0.161.0")
+	req.Header.Set("User-Agent", "codex_cli_rs/0.199.0 (Mac OS 26.6.0; arm64) ghostty/1.2.0")
+	req.Header.Set("version", "0.199.0")
 	s.Handler().ServeHTTP(rec, req)
 	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "pong") {
 		t.Fatalf("status %d: %s (User-Agent %q, version %q)", rec.Code, rec.Body.String(), uas, vers)
 	}
 	for i := range uas {
-		if !strings.HasPrefix(uas[i], "codex_cli_rs/0.161.0 (") || vers[i] != "0.161.0" {
+		if !strings.HasPrefix(uas[i], "codex_cli_rs/0.199.0 (") || vers[i] != "0.199.0" {
 			t.Errorf("request %d: User-Agent %q, version %q", i, uas[i], vers[i])
 		}
 	}

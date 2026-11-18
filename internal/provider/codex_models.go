@@ -14,18 +14,25 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/codexcat"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/settings"
+	"github.com/yetone/magpie/internal/source"
 )
 
-// codexClientVersion is the Codex CLI version the models list is asked for
-// when Codex CLI has not asked itself yet: the list leaves out models newer
-// than the client asking.
-const codexClientVersion = "0.159.0"
+// codexClientVersion is the oldest Codex CLI version the models list is
+// asked for and requests say they are: npm's latest @openai/codex on
+// 2026-11-18. The list leaves out models newer than the client asking
+// (each entry's minimal_client_version): GPT-6.2 Sol and Astra need
+// 0.166.0, and at the 0.159.0 this was before, a user with no newer Codex
+// CLI never saw them (zzstar101 and m0eaki on X). A fixed version goes
+// stale as Codex releases, so npm's latest counts too (codexPublished).
+const codexClientVersion = "0.169.1"
 
 // codexModels asks the ChatGPT backend which Codex models the account's own
 // plan has — a Free account lists fewer than a Plus or Pro one, and one it
@@ -128,7 +135,8 @@ var codexVersionCache struct {
 }
 
 // codexVersion is the client version the models list is asked for: the
-// newest of the Codex CLI installed, the one Codex CLI last asked with and
+// newest of the Codex CLI installed, the one Codex CLI last asked with,
+// a Codex seen through the gateway, npm's latest (codexPublished) and
 // codexClientVersion. The list leaves out models newer than the client
 // asking, and Codex CLI's models_cache.json keeps the version it was written
 // with until Codex next asks — after an update that brought new models
@@ -156,7 +164,80 @@ func codexVersion() string {
 		}
 		codexVersionCache.v, codexVersionCache.at = v, time.Now()
 	}
-	return newerVersion(codexVersionCache.v, codexSeen.get())
+	return newerVersion(newerVersion(codexVersionCache.v, codexSeen.get()), codexPublished())
+}
+
+// codexNpmLatest is where npm says which @openai/codex is latest, the
+// release its installs and `npm i -g @openai/codex` get; a var so tests
+// can serve one.
+var codexNpmLatest = codexNpmRegistry
+
+const codexNpmRegistry = "https://registry.npmjs.org/@openai/codex/latest"
+
+// codexPublishedEvery is how often npm is asked again.
+const codexPublishedEvery = 6 * time.Hour
+
+var codexPublishedCache struct {
+	sync.Mutex
+	v      string    // the latest read, "" before one is
+	at     time.Time // when it was last asked
+	asking bool
+}
+
+// codexPublished is npm's latest Codex CLI as last read, "" before it is:
+// asked in the background at most every codexPublishedEvery, through the
+// mirrors when npm doesn't answer, and never from a test binary unless a
+// test points codexNpmLatest at a fake.
+func codexPublished() string {
+	codexPublishedCache.Lock()
+	defer codexPublishedCache.Unlock()
+	v, u := codexPublishedCache.v, codexNpmLatest
+	if codexPublishedCache.asking || time.Since(codexPublishedCache.at) < codexPublishedEvery || testing.Testing() && u == codexNpmRegistry {
+		return v
+	}
+	codexPublishedCache.asking = true
+	go func() {
+		found := codexAskPublished(u)
+		codexPublishedCache.Lock()
+		if found != "" {
+			codexPublishedCache.v = found
+		}
+		codexPublishedCache.at, codexPublishedCache.asking = time.Now(), false
+		codexPublishedCache.Unlock()
+	}()
+	return v
+}
+
+var codexReleaseRe = lazyre.New(`^\d{1,4}\.\d{1,4}\.\d{1,6}$`)
+
+// codexAskPublished is the version u says is latest, or "" when it can't
+// be read or isn't a release version (an alpha is never named: the
+// backend's lists and requests are a release's).
+func codexAskPublished(u string) string {
+	c := &http.Client{Timeout: 8 * time.Second, Transport: http.DefaultClient.Transport}
+	req, err := http.NewRequest(http.MethodGet, u, nil)
+	if err != nil {
+		return ""
+	}
+	req.Header.Set("Accept", "application/json")
+	res, err := source.Do(c, req)
+	if err != nil {
+		return ""
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return ""
+	}
+	var got struct {
+		Version any `json:"version"`
+	}
+	if json.NewDecoder(io.LimitReader(res.Body, 4<<20)).Decode(&got) != nil {
+		return ""
+	}
+	if v, _ := got.Version.(string); codexReleaseRe.MatchString(v) {
+		return v
+	}
+	return ""
 }
 
 // codexCLIVersion is what the codex CLI at exe says its version is; a var
