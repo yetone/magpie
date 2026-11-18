@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/tidwall/gjson"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -393,6 +394,70 @@ func TestSaltedToolUseIDTranslatedAsHeld(t *testing.T) {
 	for _, id := range []string{"Bash:0#a65b", "call_1", "mp_x"} {
 		if got := anthropicInID(anthropicOutID(id)); got != id {
 			t.Errorf("anthropicInID(anthropicOutID(%q)) = %q", id, got)
+		}
+	}
+}
+
+// Two calls of one reply under one id, answered by the client under the
+// two ids it was given, reach the upstream as two calls each with its own
+// answer: no answer is left out and no call goes unanswered, which
+// DeepSeek's Anthropic endpoint turns the whole request away for
+// ("tool_use ids were found without tool_result blocks immediately after",
+// wizcheu on X).
+func TestMessagesRelayedSharedIDBothAnswered(t *testing.T) {
+	fresh(t)
+	up := &messagesUpstream{minted: []string{"call_00_dup", "call_00_dup"}}
+	srv := httptest.NewServer(up)
+	t.Cleanup(srv.Close)
+	if err := provider.Save(provider.Provider{ID: "bridge", Name: "Bridge", Key: "k", Models: []string{"ds-v4"}, Anthropic: srv.URL}); err != nil {
+		t.Fatal(err)
+	}
+	h := New().Handler()
+	tools := `"tools":[{"name":"Bash","description":"run","input_schema":{"type":"object","properties":{"command":{"type":"string"}},"required":["command"]}}]`
+	post := func(messages string) string {
+		rec := httptest.NewRecorder()
+		body := `{"model":"bridge/ds-v4","max_tokens":100,"stream":true,` + tools + `,"messages":[` + messages + `]}`
+		h.ServeHTTP(rec, httptest.NewRequest("POST", "/v1/messages", strings.NewReader(body)))
+		if rec.Code != 200 {
+			t.Fatalf("%d %s", rec.Code, rec.Body.String())
+		}
+		return rec.Body.String()
+	}
+	ask := `{"role":"user","content":"Call the Bash tool twice"}`
+	ids := messageToolUseIDs(t, post(ask))
+	if len(ids) != 2 || ids[0] == ids[1] {
+		t.Fatalf("one reply carried tool_use ids %q, want two different ones", ids)
+	}
+	a, _ := json.Marshal(ids[0])
+	b, _ := json.Marshal(ids[1])
+	post(ask + `,
+ {"role":"assistant","content":[{"type":"tool_use","id":` + string(a) + `,"name":"Bash","input":{"command":"date"}},{"type":"tool_use","id":` + string(b) + `,"name":"Bash","input":{"command":"date"}}]},
+ {"role":"user","content":[{"type":"tool_result","tool_use_id":` + string(a) + `,"content":"ANSWER-ONE"},{"type":"tool_result","tool_use_id":` + string(b) + `,"content":"ANSWER-TWO"}]}`)
+	got := up.asked()
+	sent := got[len(got)-1]
+	var calls, results []string
+	for _, c := range gjson.Get(sent, "messages.1.content").Array() {
+		if c.Get("type").String() == "tool_use" {
+			calls = append(calls, c.Get("id").String())
+		}
+	}
+	for _, c := range gjson.Get(sent, "messages.2.content").Array() {
+		if c.Get("type").String() == "tool_result" {
+			results = append(results, c.Get("tool_use_id").String())
+		}
+	}
+	if len(calls) != 2 || len(results) != 2 {
+		t.Fatalf("the upstream got calls %q answered by %q, want two calls each with its result:\n%s", calls, results, sent)
+	}
+	if calls[0] == calls[1] || results[0] != calls[0] || results[1] != calls[1] {
+		t.Fatalf("the upstream got calls %q answered by %q, want two distinct ids each answered in order:\n%s", calls, results, sent)
+	}
+	if calls[0] != "call_00_dup" {
+		t.Fatalf("the first call went back under %q, want the upstream's own call_00_dup", calls[0])
+	}
+	for _, s := range []string{"ANSWER-ONE", "ANSWER-TWO"} {
+		if !strings.Contains(sent, s) {
+			t.Fatalf("%s didn't reach the upstream:\n%s", s, sent)
 		}
 	}
 }

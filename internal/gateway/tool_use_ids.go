@@ -89,6 +89,16 @@ func clientToolUseIDs(body []byte) map[string]bool {
 // id that went out salted comes back as the client holds it, and the
 // upstream that made the call gets its own again, on the call and on the
 // result answering it. The rest goes as it came.
+//
+// Two calls of one reply the upstream gave one id (a bridge numbering them
+// by place, #4910) went out under two; they go back under two as well:
+// the first under the upstream's id, each later one under the salted id
+// the client holds, on the call and on its result. Given back the one id
+// twice, the pairing (tool_blocks_paired.go) took the second result for a
+// second answer to the first call and left it out, and the upstream got
+// two calls with one result, a 400 "tool_use ids were found without
+// tool_result blocks immediately after" on every later request of the
+// conversation.
 func saltedCallIDsBack(body []byte) []byte {
 	if !bodyHas(body, `"`+anthropicIDMark) {
 		return body
@@ -101,6 +111,7 @@ func saltedCallIDsBack(body []byte) []byte {
 	if decodeJSON(reply["messages"], &msgs) != nil {
 		return body
 	}
+	kept := sharedCallIDs(msgs)
 	changed := false
 	for i, m := range msgs {
 		var one map[string]json.RawMessage
@@ -115,7 +126,7 @@ func saltedCallIDsBack(body []byte) []byte {
 		for _, b := range blocks {
 			for _, field := range []string{"id", "tool_use_id"} {
 				var id string
-				if decodeJSON(b[field], &id) != nil || id == "" {
+				if decodeJSON(b[field], &id) != nil || id == "" || kept[id] {
 					continue
 				}
 				raw, ok := unsaltCallID(id)
@@ -140,6 +151,50 @@ func saltedCallIDsBack(body []byte) []byte {
 		return body
 	}
 	return nb
+}
+
+// sharedCallIDs is the salted tool_use ids that would name the same call
+// as another tool_use of their message once unsalted: an id that came
+// plain takes it first, then the salted ones in order, the first of which
+// takes it if no plain one did. Those after stay salted.
+func sharedCallIDs(msgs []json.RawMessage) map[string]bool {
+	var kept map[string]bool
+	for _, m := range msgs {
+		var one struct {
+			Content json.RawMessage `json:"content"`
+		}
+		var blocks []struct {
+			Type string `json:"type"`
+			ID   string `json:"id"`
+		}
+		if decodeJSON(m, &one) != nil || decodeJSON(one.Content, &blocks) != nil {
+			continue
+		}
+		taken := map[string]bool{}
+		var salted []string
+		for _, b := range blocks {
+			if b.Type != "tool_use" || b.ID == "" {
+				continue
+			}
+			if _, ok := unsaltCallID(b.ID); ok {
+				salted = append(salted, b.ID)
+			} else {
+				taken[b.ID] = true
+			}
+		}
+		for _, id := range salted {
+			raw, _ := unsaltCallID(id)
+			if !taken[raw] {
+				taken[raw] = true
+				continue
+			}
+			if kept == nil {
+				kept = map[string]bool{}
+			}
+			kept[id] = true
+		}
+	}
+	return kept
 }
 
 // toolUseType is the kind of block whose id the client holds against a
