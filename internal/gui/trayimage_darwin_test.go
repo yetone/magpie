@@ -62,7 +62,7 @@ func TestTrayImage(t *testing.T) {
 			t.Errorf("dark %v: the bird alone is %d px", dark, ws[0])
 		}
 		for i := 1; i < len(ws); i++ {
-			if d := ws[i] - ws[i-1]; d < 40 || d > 110 {
+			if d := ws[i] - ws[i-1]; d < 40 || d > 114 {
 				t.Errorf("dark %v: cell %d widens it by %d px", dark, i, d)
 			}
 		}
@@ -77,7 +77,7 @@ func TestTrayImage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ink := inkIn(img, image.Rect(48, 8, 48+28, 36), false); ink < 40 {
+	if ink := inkIn(img, image.Rect(48, 6, 48+32, 38), false); ink < 40 {
 		t.Errorf("no letter where the logo can't be read: %d px", ink)
 	}
 }
@@ -173,7 +173,7 @@ func TestTrayImageMonoLogos(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			logo := image.Rect(48, 8, 48+28, 36)
+			logo := image.Rect(48, 6, 48+32, 38)
 			for y := logo.Min.Y; y < logo.Max.Y; y++ {
 				for x := logo.Min.X; x < logo.Max.X; x++ {
 					r, g, b, _ := img.At(x, y).RGBA()
@@ -186,7 +186,7 @@ func TestTrayImageMonoLogos(t *testing.T) {
 			if ink < 40 {
 				t.Errorf("%s, dark %v: the logo has %d px of ink", name, dark, ink)
 			}
-			if name == "codex-color" && ink > 28*28*85/100 {
+			if name == "codex-color" && ink > 32*32*85/100 {
 				t.Errorf("codex, dark %v: %d px of ink, its glyph not cut out", dark, ink)
 			}
 		}
@@ -195,7 +195,7 @@ func TestTrayImageMonoLogos(t *testing.T) {
 
 // Each logo is as large as the next in the menu bar (the user: tray 上的
 // provider icon 大小不一致), whatever margin its file has round it: its ink
-// spans 12-14pt of the 14pt box, a solid tile the lower end.
+// spans 13.5-16pt of the 16pt box, a solid tile the lower end.
 func TestTrayImageLogoSizes(t *testing.T) {
 	bird, err := os.ReadFile("tray.png")
 	if err != nil {
@@ -210,14 +210,14 @@ func TestTrayImageLogoSizes(t *testing.T) {
 		}
 		x0, y0, x1, y1 := 99, 99, -1, -1
 		for y := 0; y < 44; y++ {
-			for x := 46; x < 78; x++ {
+			for x := 46; x < 82; x++ {
 				if _, _, _, a := img.At(x, y).RGBA(); a > 0x4000 {
 					x0, y0, x1, y1 = min(x0, x), min(y0, y), max(x1, x), max(y1, y)
 				}
 			}
 		}
-		if side := max(x1-x0, y1-y0) + 1; side < 24 || side > 29 {
-			t.Errorf("%s spans %d px of a 28 px box", name, side)
+		if side := max(x1-x0, y1-y0) + 1; side < 27 || side > 33 {
+			t.Errorf("%s spans %d px of a 32 px box", name, side)
 		}
 	}
 }

@@ -42,19 +42,19 @@ func TestTrayImageColumns(t *testing.T) {
 		if err != nil || h != 44 {
 			t.Fatalf("dark %v: %v, %dx%d", dark, err, w4, h)
 		}
-		// the digits after the logo (14pt and 3pt, at 2x)
-		digits2, digits4 := w2-w0-34, w4-w0-34
+		// the digits after the logo (16pt and 3pt, at 2x)
+		digits2, digits4 := w2-w0-38, w4-w0-38
 		if digits4 < digits2+30 || digits4 > digits2*2+20 {
 			t.Errorf("dark %v: four windows' digits are %d px wide, two's %d", dark, digits4, digits2)
 		}
-		left := image.Rect(w0+34, 0, w0+34+digits4/2-6, h)
-		right := image.Rect(w0+34+digits4/2+6, 0, w4, h)
+		left := image.Rect(w0+38, 0, w0+38+digits4/2-6, h)
+		right := image.Rect(w0+38+digits4/2+6, 0, w4, h)
 		if l, r := inkBands(img, left, dark), inkBands(img, right, dark); l != 2 || r != 2 {
 			t.Errorf("dark %v: the columns draw %d and %d lines, want 2 and 2", dark, l, r)
 		}
 		// a gap of no ink between the columns
 		gap := false
-		for x := w0 + 34 + digits4/4; x < w4-digits4/4; x++ {
+		for x := w0 + 38 + digits4/4; x < w4-digits4/4; x++ {
 			if inkIn(img, image.Rect(x, 0, x+1, h), dark) == 0 {
 				gap = true
 				break

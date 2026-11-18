@@ -37,15 +37,15 @@ func TestTrayImageAnthropicMark(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// the first logo: 14pt at 2x from the left edge
-		logo := image.Rect(0, 0, 28, ah)
+		// the first logo: 16pt at 2x from the left edge
+		logo := image.Rect(0, 0, 32, ah)
 		if ink := inkIn(mark, logo, dark); ink < 150 {
 			t.Errorf("dark %v: %d px of the mark's ink", dark, ink)
 		}
 		if differ := pxDiffer(claude, mark, logo); differ < 50 {
 			t.Errorf("dark %v: the mark differs from Claude's logo in %d px", dark, differ)
 		}
-		if differ := pxDiffer(claude, mark, image.Rect(30, 0, aw, ah)); differ > 0 {
+		if differ := pxDiffer(claude, mark, image.Rect(34, 0, aw, ah)); differ > 0 {
 			t.Errorf("dark %v: %d px differ past the first logo", dark, differ)
 		}
 	}
