@@ -158,7 +158,7 @@ func (l *Library) wanted(agent string) string {
 			parts = append(parts, s)
 		}
 	}
-	return strings.Join(parts, "\n\n")
+	return markersOut(strings.Join(parts, "\n\n"))
 }
 
 // memoryDigest is memory's published digest for the agent, "" when
@@ -277,6 +277,17 @@ func own(file string) string {
 	return strings.TrimSpace(file)
 }
 
+// markersOut is text with magpie's own begin and end lines made inert, so
+// they can't end its part early. The part holds memory's digest, which an
+// agent, a remote Memory key or a distilled conversation writes: an end
+// line in a memory left the text after it outside magpie's part, read as
+// the user's own instructions, kept after the memory was forgotten, and
+// written again after it on every sync. wanted applies it too, so the
+// part in the file is the text magpie compares it with, not an edit.
+func markersOut(text string) string {
+	return strings.ReplaceAll(text, "<!-- magpie:", "<!-- magpie :")
+}
+
 // withBlock is the file with magpie's part set to text, or taken out for "".
 // A new part goes after what the user has written.
 func withBlock(file, text string) string {
@@ -285,7 +296,7 @@ func withBlock(file, text string) string {
 	before, after = strings.TrimRight(before, "\n"), strings.TrimLeft(after, "\n")
 	block := ""
 	if text != "" {
-		block = blockBegin + "\n" + text + "\n" + blockEnd
+		block = blockBegin + "\n" + markersOut(text) + "\n" + blockEnd
 	}
 	if !ok {
 		before, after = strings.TrimRight(file, "\n"), ""

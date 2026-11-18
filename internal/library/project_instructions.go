@@ -137,7 +137,7 @@ type InstrFile struct {
 // wanted. A part the user edited in the file is left alone until the
 // project's text changes; one taken out of the file is written again.
 func (l *Library) syncProjectInstr(p *Project, fail func(what string, err error)) {
-	text := strings.TrimSpace(strings.ReplaceAll(p.Instr, "\r\n", "\n"))
+	text := markersOut(strings.TrimSpace(strings.ReplaceAll(p.Instr, "\r\n", "\n")))
 	wanted := map[string]bool{}
 	if text != "" {
 		renames := projectInstrRenames(p.InstrAgents)
