@@ -372,13 +372,24 @@ func Homebrew(exe string) bool {
 	return strings.Contains(filepath.ToSlash(exe), "/Cellar/magpie/")
 }
 
-// Executable is the running binary, symlinks resolved.
+// Executable is the running binary, symlinks resolved. When they can't be
+// (Go's EvalSymlinks fails on the current junction Scoop runs an app from,
+// "The system cannot find the path specified"), it is the path the binary
+// was started from, which still names it.
 func Executable() (string, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return "", err
 	}
-	return filepath.EvalSymlinks(exe)
+	return resolved(exe), nil
+}
+
+// resolved is path with its symlinks resolved, or path when that fails.
+func resolved(path string) string {
+	if p, err := filepath.EvalSymlinks(path); err == nil {
+		return p
+	}
+	return path
 }
 
 // Writable reports whether magpie may replace what lives in dir.

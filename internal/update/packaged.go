@@ -18,7 +18,7 @@ import (
 // file that no longer matches it, and the manager's next upgrade, which
 // can be a version older than the one magpie put in, writes over it again.
 type Packaged struct {
-	Manager string `json:"manager"`           // pacman, dpkg, rpm, homebrew or nix
+	Manager string `json:"manager"`           // pacman, dpkg, rpm, homebrew, nix, scoop or winget
 	Package string `json:"package,omitempty"` // the package's name, when known
 }
 
@@ -31,6 +31,8 @@ func (p *Packaged) Name() string {
 		return "Homebrew"
 	case "nix":
 		return "Nix"
+	case "scoop":
+		return "Scoop"
 	}
 	return p.Manager
 }
@@ -53,6 +55,13 @@ func (p *Packaged) Command() string {
 		return "sudo dnf upgrade " + pkg
 	case "homebrew":
 		return "brew upgrade " + pkg
+	case "scoop":
+		return "scoop update " + pkg
+	case "winget":
+		if p.Package == "" {
+			return "winget upgrade magpie"
+		}
+		return "winget upgrade --id " + p.Package
 	}
 	return ""
 }
@@ -100,6 +109,9 @@ func packagedIn(root, goos, exe string) *Packaged {
 		name, _, _ := strings.Cut(rest, "/")
 		return &Packaged{Manager: "homebrew", Package: name}
 	}
+	if goos == "windows" {
+		return packagedOnWindows(exe)
+	}
 	if goos != "linux" {
 		return nil
 	}
@@ -121,6 +133,50 @@ func packagedIn(root, goos, exe string) *Packaged {
 		}
 	}
 	return nil
+}
+
+// packagedOnWindows says whether Scoop or winget installed exe. Scoop keeps
+// an app in <root>\apps\<name>\<version> (or its current junction, which
+// Go doesn't resolve), with the scoop-install.json and scoop-manifest.json
+// it writes beside it (install.json and manifest.json before Scoop 0.6);
+// its root is $SCOOP, so that folder's name isn't relied on.
+// winget keeps a portable package in WinGet\Packages\<id>_<source> under
+// %LOCALAPPDATA%\Microsoft (or Program Files, machine-wide), and the
+// command on PATH is a link to it in WinGet\Links, which Executable
+// resolves. Either one's next update would otherwise put back the version
+// it holds, or fail on the file magpie changed.
+func packagedOnWindows(exe string) *Packaged {
+	dir := filepath.Dir(exe)
+	app := filepath.Dir(dir)
+	if strings.EqualFold(filepath.Base(filepath.Dir(app)), "apps") && (scoopFiles(dir, "scoop-") || scoopFiles(dir, "")) {
+		return &Packaged{Manager: "scoop", Package: filepath.Base(app)}
+	}
+	p := strings.ReplaceAll(exe, `\`, "/")
+	if i := strings.Index(strings.ToLower(p), "/winget/packages/"); i >= 0 {
+		folder, _, _ := strings.Cut(p[i+len("/winget/packages/"):], "/")
+		// <id>_<source>: _Microsoft.Winget.Source_8wekyb3d8bbwe from the
+		// community repository, __DefaultSource from a local manifest
+		id := ""
+		for _, src := range []string{"_microsoft.winget.source", "__defaultsource"} {
+			if j := strings.Index(strings.ToLower(folder), src); j > 0 {
+				id = folder[:j]
+				break
+			}
+		}
+		return &Packaged{Manager: "winget", Package: id}
+	}
+	return nil
+}
+
+// scoopFiles is whether dir has the two files Scoop writes into an app's
+// version folder, their names starting with prefix.
+func scoopFiles(dir, prefix string) bool {
+	return isFile(filepath.Join(dir, prefix+"install.json")) && isFile(filepath.Join(dir, prefix+"manifest.json"))
+}
+
+func isFile(path string) bool {
+	st, err := os.Stat(path)
+	return err == nil && st.Mode().IsRegular()
 }
 
 // systemPath is whether a package may own p: /usr (but not /usr/local,

@@ -133,3 +133,87 @@ func TestPackagedByHomebrewAndNix(t *testing.T) {
 		t.Fatalf("the app: %+v", p)
 	}
 }
+
+// Scoop's app folder as `scoop install magpie-app` from the magpie bucket
+// leaves it: the version folder holds the binary with the
+// scoop-install.json and scoop-manifest.json Scoop writes (seen on
+// xiaomi-gpu, Scoop 0.6.0), install.json and manifest.json before 0.6,
+// and current is a junction to it.
+func TestPackagedByScoop(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "scoop")
+	for i, v := range []string{"0.1.4478", "current"} {
+		dir := filepath.Join(root, "apps", "magpie-app", v)
+		pre := []string{"scoop-", ""}[i]
+		writeFile(t, filepath.Join(dir, "magpie.exe"), "MZ")
+		writeFile(t, filepath.Join(dir, pre+"install.json"), `{"bucket":"magpie","architecture":"64bit"}`)
+		writeFile(t, filepath.Join(dir, pre+"manifest.json"), `{"version":"0.1.4478"}`)
+		p := packagedIn("/", "windows", filepath.Join(dir, "magpie.exe"))
+		if p == nil || p.Manager != "scoop" || p.Package != "magpie-app" {
+			t.Fatalf("%s: got %+v, want scoop's magpie-app", v, p)
+		}
+		if c := p.Command(); c != "scoop update magpie-app" {
+			t.Fatalf("command %q", c)
+		}
+		if s := p.Say(); !strings.Contains(s, "Scoop") || !strings.HasSuffix(s, "scoop update magpie-app") {
+			t.Fatalf("say %q", s)
+		}
+	}
+	// a magpie.exe kept by hand in a folder named apps, without Scoop's
+	// files, is magpie's to update
+	own := filepath.Join(t.TempDir(), "apps", "magpie", "bin")
+	writeFile(t, filepath.Join(own, "magpie.exe"), "MZ")
+	writeFile(t, filepath.Join(own, "manifest.json"), `{}`)
+	writeFile(t, filepath.Join(own, "scoop-install.json"), `{}`)
+	if p := packagedIn("/", "windows", filepath.Join(own, "magpie.exe")); p != nil {
+		t.Fatalf("own folder: got %+v", p)
+	}
+	// only on Windows
+	dir := filepath.Join(root, "apps", "magpie-app", "current")
+	if p := packagedIn("/", "linux", filepath.Join(dir, "magpie.exe")); p != nil {
+		t.Fatalf("linux: got %+v", p)
+	}
+}
+
+// winget's portable package folder, as `winget install yetone.Magpie`
+// leaves it per user and machine-wide.
+func TestPackagedByWinget(t *testing.T) {
+	for _, exe := range []string{
+		`C:\Users\yeton\AppData\Local\Microsoft\WinGet\Packages\yetone.Magpie_Microsoft.Winget.Source_8wekyb3d8bbwe\magpie.exe`,
+		`C:\Program Files\WinGet\Packages\yetone.Magpie_Microsoft.Winget.Source_8wekyb3d8bbwe\magpie.exe`,
+		// winget install --manifest, as seen on xiaomi-gpu (winget 1.29)
+		`C:\Users\yeton\AppData\Local\Microsoft\WinGet\Packages\yetone.Magpie__DefaultSource\magpie.exe`,
+	} {
+		p := packagedIn("/", "windows", exe)
+		if p == nil || p.Manager != "winget" || p.Package != "yetone.Magpie" {
+			t.Fatalf("%s: got %+v", exe, p)
+		}
+		if c := p.Command(); c != "winget upgrade --id yetone.Magpie" {
+			t.Fatalf("command %q", c)
+		}
+	}
+	if p := packagedIn("/", "windows", `C:\Users\yeton\Downloads\magpie-windows-amd64.exe`); p != nil {
+		t.Fatalf("downloaded: got %+v", p)
+	}
+	p := packagedIn("/", "windows", `C:\Users\yeton\AppData\Local\Microsoft\WinGet\Packages\odd\magpie.exe`)
+	if p == nil || p.Manager != "winget" || p.Command() != "winget upgrade magpie" {
+		t.Fatalf("unknown id: got %+v", p)
+	}
+}
+
+// A path whose links can't be resolved is kept as given, so a Scoop
+// install's current junction (which EvalSymlinks fails on) is still
+// judged by PackagedBy, instead of Executable failing and the check being
+// skipped.
+func TestResolvedKeepsUnresolvablePath(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "gone", "magpie.exe")
+	if got := resolved(missing); got != missing {
+		t.Fatalf("resolved(%q) = %q", missing, got)
+	}
+	real := filepath.Join(dir, "magpie")
+	writeFile(t, real, "x")
+	want, _ := filepath.EvalSymlinks(real)
+	if got := resolved(real); got != want {
+		t.Fatalf("resolved(%q) = %q, want %q", real, got, want)
+	}
+}
