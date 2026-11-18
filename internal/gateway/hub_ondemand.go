@@ -48,7 +48,25 @@ const hubOnDemandOver = 10
 // omp (18.9) mounts every MCP tool as an xd:// device, its schema read only
 // when asked for: given find_tools in their place, neither showed its
 // model which tools were behind it (tao5010 on Discord, 11-04).
-var hubSearchesItself = map[string]bool{"claude": true, "claude-desktop": true, "codex": true, "pi": true, "droid": true, "omp": true}
+// The Library's Tools on demand row names them from HubFindsItself, so its
+// words can't leave one out again (they named four of the six, 11-18).
+var hubSearchers = []string{"claude", "claude-desktop", "codex", "pi", "droid", "omp"}
+
+var hubSearchesItself = func() map[string]bool {
+	m := map[string]bool{}
+	for _, id := range hubSearchers {
+		m[id] = true
+	}
+	return m
+}()
+
+// HubFindsItself is the agents given every tool whole because they search
+// their MCP tools themselves (hubSearchesItself), by id, in the order the
+// Library names them.
+func HubFindsItself() []string { return slices.Clone(hubSearchers) }
+
+// HubOnDemandOver is hubOnDemandOver, for the Library to say.
+const HubOnDemandOver = hubOnDemandOver
 
 // hubFindFull is how many of find_tools' matches come with their
 // parameters, and hubFindMore how many more it names after them.

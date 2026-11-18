@@ -2,8 +2,9 @@
 // ArvinCharl on X: the MCP router's tools fill an agent's context. With
 // the router on, the Library's MCP tab has a Tools on demand row under the
 // router's name: a switch, on by default (settings' routerAllTools off),
-// saying that an agent given more than 10 tools gets two in their place,
-// and which agents find tools themselves. A click posts servers/hub-tools
+// saying that an agent given more than the gateway's count of tools gets
+// two in their place, and which agents find tools themselves, both from the
+// library's view. A click posts servers/hub-tools
 // {on: true} (every tool whole), says so, and the switch reads off; a click
 // again posts {on: false}. Off, there is no row. In every language, both
 // engines, wide and narrow: no sideways scroll, the switch inside its row.
@@ -20,10 +21,17 @@ const HOME = "/Users/mg";
 const fixture = (st) => ({
   dir: `${HOME}/.magpie/library`, backups: `${HOME}/.magpie/backups`, home: HOME,
   mcpHub: st.on, hubPath: "/mcp/magpie/hub/", hubNote: "", hubName: "la-box", hubAllTools: st.all,
+  hubOnDemandOver: OVER, hubFindsItself: FINDS,
   agents: [{ id: "claude", name: "Claude Code", icon: "claudecode-color", skills: `${HOME}/.claude/skills`, mcp: `${HOME}/.claude.json`, ...(st.on ? { hub: "on" } : {}) }],
   instructions: { agents: [], sets: [] }, foundServers: [], projects: [], foundSkills: [], skills: [], problems: [],
   servers: [{ name: "fetch", transport: "stdio", command: "uvx", args: ["mcp-server-fetch"], agents: ["claude"] }],
 });
+
+// the gateway's own threshold and agents (hubOnDemandOver, hubFindsItself
+// in the library's view), not 10 and the four the row's words once named:
+// the row says what it is given (11-18)
+const OVER = 12;
+const FINDS = ["Claude Code", "Claude Desktop", "Codex", "Pi", "Droid", "omp"];
 
 let I18N;
 function tr(lang, key, vars = {}) {
@@ -128,7 +136,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         });
         assert.ok(after, "the row isn't under the router's name");
         assert.equal((await row.locator(".name").textContent()).trim(), w("Tools on demand"));
-        assert.equal((await row.locator(".sub").textContent()).trim(), w("An agent given more than 10 tools gets two in their place, one that finds a tool and one that runs it, so their definitions stay out of every request. Claude Code, Claude Desktop, Codex and Pi find tools themselves and are given every one."));
+        const says = (await row.locator(".sub").textContent()).trim();
+        assert.equal(says, w("An agent given more than {n} tools gets two in their place, one that finds a tool and one that runs it, so their definitions stay out of every request.", { n: OVER }) + (lang.startsWith("zh") || lang === "ja" ? "" : " ") +
+          w("{list} and {last} find tools themselves and are given every one.", { list: FINDS.slice(0, -1).join(w(", ")), last: FINDS.at(-1) }));
+        for (const name of FINDS) assert.ok(says.includes(name), `${name} isn't named: ${says}`);
+        assert.ok(says.includes(String(OVER)) && !says.includes("10"), says);
+        assert.ok(!says.includes("。 "), says);
         const sw = () => p.locator("#view-library .lib-hubtoolsrow .lib-switch");
         assert.equal(await sw().getAttribute("aria-label"), w("Tools on demand"));
         assert.equal(await sw().getAttribute("aria-checked"), "true");

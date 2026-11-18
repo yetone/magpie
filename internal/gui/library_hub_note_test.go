@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yetone/magpie/internal/agent"
+	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/settings"
 )
 
@@ -74,5 +76,38 @@ func TestHubAllToolsSaved(t *testing.T) {
 	}
 	if rec := post("/api/library/servers/hub-tools", `{"on":false}`); rec.Code != http.StatusOK || settings.Load().RouterAllTools {
 		t.Fatalf("off: %d %v", rec.Code, settings.Load().RouterAllTools)
+	}
+}
+
+// The Tools on demand row says how many tools an agent is given whole and
+// which agents search their tools themselves from the page's view, which
+// carries the gateway's own (gateway.HubOnDemandOver,
+// gateway.HubFindsItself), each agent by its name: its words named four of
+// the six (11-18).
+func TestHubFindsItselfInTheView(t *testing.T) {
+	sandboxHome(t)
+	rec := httptest.NewRecorder()
+	Handler(nil, nil).ServeHTTP(rec, httptest.NewRequest("GET", "/api/library", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	var v struct {
+		HubFindsItself  []string
+		HubOnDemandOver int
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &v); err != nil {
+		t.Fatal(err)
+	}
+	ids := gateway.HubFindsItself()
+	if v.HubOnDemandOver != gateway.HubOnDemandOver || len(v.HubFindsItself) != len(ids) {
+		t.Fatalf("view says %d, %q; the gateway %d, %q", v.HubOnDemandOver, v.HubFindsItself, gateway.HubOnDemandOver, ids)
+	}
+	for i, id := range ids {
+		if a, err := agent.Find(id); err == nil && a.ID == id && v.HubFindsItself[i] != a.Name {
+			t.Fatalf("%s is said as %q, not %q", id, v.HubFindsItself[i], a.Name)
+		}
+		if v.HubFindsItself[i] == id && id != "omp" {
+			t.Fatalf("%s is said by its id", id)
+		}
 	}
 }

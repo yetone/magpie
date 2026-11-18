@@ -3051,11 +3051,22 @@ magpie.plugin("library", (ctx) => {
   // itself and is given more than a few is given two in their place, one
   // finding a tool and one running it (gateway.hubOnDemand). Off gives
   // every agent every tool whole (settings' routerAllTools).
+  // what the row says: the threshold and the agents that search their
+  // tools themselves come from the gateway's own (hubOnDemandOver,
+  // hubFindsItself in the library's view), so the words can't leave one
+  // out again: they named four of the six (11-18)
+  function hubToolsSay() {
+    const say = t("An agent given more than {n} tools gets two in their place, one that finds a tool and one that runs it, so their definitions stay out of every request.", { n: lib.hubOnDemandOver });
+    const finds = lib.hubFindsItself || [];
+    if (finds.length < 2) return say;
+    // a sentence ending in a full-width stop (zh, ja) is followed by none
+    return say + (say.endsWith("。") ? "" : " ") + t("{list} and {last} find tools themselves and are given every one.", { list: finds.slice(0, -1).join(t(", ")), last: finds.at(-1) });
+  }
   function hubToolsRow() {
     const row = el("div", "row lib-row lib-hubtoolsrow");
     const who = el("div", "who");
     who.append(el("div", "name", t("Tools on demand")));
-    who.append(el("div", "sub wraps", t("An agent given more than 10 tools gets two in their place, one that finds a tool and one that runs it, so their definitions stay out of every request. Claude Code, Claude Desktop, Codex and Pi find tools themselves and are given every one.")));
+    who.append(el("div", "sub wraps", hubToolsSay()));
     const on = !lib.hubAllTools;
     row.append(glyph(GLYPH.search), who, toggle(on, t("Tools on demand"), (v) =>
       change("servers/hub-tools", { on: !v }).then((ok) => {

@@ -248,3 +248,26 @@ func TestHubFindToolsSaysWhatIsBehind(t *testing.T) {
 		t.Fatalf("with 40 servers find_tools' description is %d characters (at most %d): %s", runeLen(find), max, find)
 	}
 }
+
+// HubFindsItself, which the Library's Tools on demand row names, is every
+// agent hubOnDemand gives every tool whole and no other: its words named
+// four of the six (11-18).
+func TestHubFindsItselfIsWhoGetsEveryTool(t *testing.T) {
+	fresh(t)
+	n := hubOnDemandOver + 1
+	for _, id := range HubFindsItself() {
+		if hubOnDemand(id, n) || hubOnDemand(id+"@wsl:Ubuntu", n) {
+			t.Fatalf("%s is named as searching itself but is given its tools on demand", id)
+		}
+	}
+	for id := range hubSearchesItself {
+		if !slices.Contains(HubFindsItself(), id) {
+			t.Fatalf("%s is given every tool but not named", id)
+		}
+	}
+	for _, id := range []string{"opencode", "gemini", "kimi", "qwen", "goose", "crush", "copilot", "cursor"} {
+		if !hubOnDemand(id, n) {
+			t.Fatalf("%s is given every tool but not named", id)
+		}
+	}
+}

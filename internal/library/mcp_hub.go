@@ -32,6 +32,7 @@ package library
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -1123,3 +1124,22 @@ var (
 	_ hubConn = (*streamConn)(nil)
 	_ hubConn = (*httpConn)(nil)
 )
+
+// hubFindsItself is the names of the agents the router gives every tool
+// whole, as they search their MCP tools themselves (gateway.HubFindsItself),
+// for the Tools on demand row to say: its words named four of the six
+// (11-18). An agent's name doesn't change while magpie runs, so they are
+// looked up once; one not found is said by its id.
+var hubFindsItself = sync.OnceValue(func() []string {
+	names := map[string]string{}
+	for _, a := range append(apps(), agent.All()...) {
+		if _, ok := names[a.ID]; !ok && a.WSL == "" {
+			names[a.ID] = a.Name
+		}
+	}
+	var out []string
+	for _, id := range gateway.HubFindsItself() {
+		out = append(out, cmp.Or(names[id], id))
+	}
+	return out
+})

@@ -583,6 +583,12 @@ type View struct {
 	// HubAllTools: every agent is given the router's tools whole, none on
 	// demand (settings' RouterAllTools, gateway.hubOnDemand)
 	HubAllTools bool `json:"hubAllTools"`
+	// HubFindsItself names the agents given every tool whole, as they
+	// search their tools themselves, and HubOnDemandOver how many tools an
+	// agent is given whole at most (gateway.HubFindsItself,
+	// gateway.HubOnDemandOver): the Tools on demand row says them
+	HubFindsItself  []string `json:"hubFindsItself"`
+	HubOnDemandOver int      `json:"hubOnDemandOver"`
 	// CheckDue is set when the skills from GitHub weren't checked for
 	// updates since magpie started, or not for a while: the page checks
 	// them as it shows them (#1449)
@@ -666,7 +672,7 @@ func readView(problems []Problem, glance bool) (*View, error) {
 	// the agents are found once for the whole read: finding them looks
 	// through every agent's folders, in WSL too (#1624)
 	targets, asleep := targetsAsleep(false)
-	v := &View{Agents: []AgentView{}, Servers: []ServerView{}, Skills: []SkillView{}, FoundSkills: []FoundSkill{}, Instructions: l.instructionsView(targets, asleep), Dir: Dir(), Backups: BackupDir(), CopySkills: l.CopySkills, SharedSkills: l.SharedSkills, SharedDir: sharedSkillsDir(), AutoUpdateSkills: l.AutoUpdateSkills, MCPHub: l.MCPHub, SkillRouter: l.SkillRouter, HubPath: gateway.HubMCPPath, HubNote: settings.Shared().RouterNote, HubName: gateway.HostName(), HubAllTools: settings.Shared().RouterAllTools, Partial: glance}
+	v := &View{Agents: []AgentView{}, Servers: []ServerView{}, Skills: []SkillView{}, FoundSkills: []FoundSkill{}, Instructions: l.instructionsView(targets, asleep), Dir: Dir(), Backups: BackupDir(), CopySkills: l.CopySkills, SharedSkills: l.SharedSkills, SharedDir: sharedSkillsDir(), AutoUpdateSkills: l.AutoUpdateSkills, MCPHub: l.MCPHub, SkillRouter: l.SkillRouter, HubPath: gateway.HubMCPPath, HubNote: settings.Shared().RouterNote, HubName: gateway.HostName(), HubAllTools: settings.Shared().RouterAllTools, HubFindsItself: hubFindsItself(), HubOnDemandOver: gateway.HubOnDemandOver, Partial: glance}
 	for _, t := range targets {
 		av := AgentView{ID: t.Agent.ID, Name: t.Agent.Name, Icon: t.Agent.Icon, Instructions: t.Instructions, Skills: t.Skills,
 			SkillsAlso: t.SkillsAlso, Note: t.Note, MCPVia: t.MCPVia, ProjectSkills: ProjectSkillsDir(t.Agent.ID), ProjectMCP: ProjectMCPFile(t.Agent.ID), ProjectSubagents: ProjectSubagentsDir(t.Agent.ID),
