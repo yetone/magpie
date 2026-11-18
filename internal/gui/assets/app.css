@@ -1815,6 +1815,8 @@ body.masked :hover > .acct-eye, body.masked .pq-card:hover .acct-eye, body.maske
 .led tbody tr:hover td { background: var(--card-2, var(--pill)); }
 .led .n { text-align: right; }
 .led .faint { color: var(--faint); }
+/* a dash that says on hover why it has no figure (ohblue on X) */
+.led td.speed.faint[title], .led td.cache-hit.faint[title] { cursor: help; }
 .led .muted { color: var(--muted); }
 .led th, .led .when, .led .model-value { color: var(--fg-2); }
 #ledRoute { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }

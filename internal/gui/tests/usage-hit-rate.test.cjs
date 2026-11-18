@@ -50,8 +50,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator("#usageAgents .row.stat").nth(2).waitFor();
         const notes = await page.locator("#usageAgents .row.stat .num small").allTextContents();
         assert.equal(notes.length, 3, notes.join(" | "));
-        assert.ok(notes[0].includes(`${rate} 90%`), notes[0]);
-        assert.ok(notes[1].includes(`${rate} 25%`), notes[1]);
+        assert.ok(notes[0].includes(`${rate} 90.00%`), notes[0]);
+        assert.ok(notes[1].includes(`${rate} 25.00%`), notes[1]);
         assert.ok(!notes[2].includes(rate), notes[2]);
       } finally {
         await browser.close();

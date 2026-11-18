@@ -116,7 +116,7 @@ async function rest(p, western, what) {
   for (const x of tiles) if (/\d/.test(x)) assert(has(x, western) || !/[万亿KMB]/.test(x), `${what}: Overview tile "${x}"`);
   // the hit rate is of the whole prompt, what was written to the cache in
   // it too: 2B read of 1B + 2B + 30M written, not of 1B + 2B (67%)
-  assert(tiles.some((x) => /(hit rate|命中率) 66%/.test(x)), `${what}: the Overview's hit rate in ${JSON.stringify(tiles)}`);
+  assert(tiles.some((x) => /(hit rate|命中率) 66\.01%/.test(x)), `${what}: the Overview's hit rate in ${JSON.stringify(tiles)}`);
   assert.equal((await p.locator("#chart .peak").textContent()).trim(), western ? "1.46B" : "14.6 亿", what + ": the Overview chart's peak");
 
   await p.locator(":is(#usageTab .opt, .nav-s):visible").nth(1).click();

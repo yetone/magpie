@@ -134,7 +134,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           ["197.5k", await say("Tokens"), false],
           [await say("{n} s", { n: "35" }), await say("First token"), false],
           [await say("{n} tok/s", { n: 40 }), await say("Speed"), false],
-          ["98%", await say("Cache"), false],
+          ["98.00%", await say("Cache"), false],
         ]);
         assert.deepEqual(a.cut, [], `${lang} at ${width}: cut ${a.cut.join(", ")} in ${a.w}px`);
         // the five figures on one line where the stage is wide; three to a

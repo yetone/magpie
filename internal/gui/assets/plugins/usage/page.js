@@ -1042,7 +1042,7 @@ function renderUsage() {
   // a vendor that counts no cache (cache_unknown) is left out (#3464)
   const hitRate = cacheHitOf(u);
   const hit = u.cache_read && hitRate !== null ? t("hit rate {p}", { p: hitPct(hitRate) }) : "";
-  tile(fmtN(u.cache_read), t("cache read"), hit, u.cache_write ? t("{n} written", { n: fmtN(u.cache_write) }) + cacheTTLs(u, fmtN) : "");
+  tile(fmtN(u.cache_read), t("cache read"), hit, tipOf(hit && cacheHitTip(u), u.cache_write ? t("{n} written", { n: fmtN(u.cache_write) }) + cacheTTLs(u, fmtN) : ""));
   tile(fmtN(u.reasoning), t("reasoning"), t("inside output"));
   tile(String(u.calls), t(u.calls === 1 ? "call" : "calls"), [u.credited ? ledCredits(u).textContent : "", u.errors ? t("{n} failed", { n: u.errors }) : "", u.retried ? t("{n} answered on a retry", { n: u.retried }) : "", u.canceled ? t("{n} canceled", { n: u.canceled }) : "", u.unpriced ? unpricedCalls(u.unpriced) : ""].filter(Boolean).join(" · "), u.unpriced ? unpricedCallsWhy(u.unpriced) : "");
 
@@ -1128,7 +1128,7 @@ function renderUsage() {
     // read tile counts it (#925)
     const hitRate = cacheHitOf(g);
     const hit = g.cache_read && hitRate !== null ? " · " + t("hit rate {p}", { p: hitPct(hitRate) }) : "";
-    num.append(el("b", "", fmtN(usageTokens(g))), el("small", "", t("{a} in · {b} out", { a: fmtN(g.input), b: fmtN(g.output) }) + (g.cache_read ? " · " + t("{n} cached", { n: fmtN(g.cache_read) }) : "") + hit));
+    num.append(el("b", "", fmtN(usageTokens(g))), Object.assign(el("small", "", t("{a} in · {b} out", { a: fmtN(g.input), b: fmtN(g.output) }) + (g.cache_read ? " · " + t("{n} cached", { n: fmtN(g.cache_read) }) : "") + hit), { title: hit && cacheHitTip(g) }));
     r.append(num);
     r.append(el("div", "cost", fmtCost(g, g.provider) || ""));
     if (act) act(r, g);
@@ -2129,9 +2129,9 @@ function ledTierText(r) {
 // said
 function ledDetail(r) {
   const dl = el("dl", "led-dl");
-  const add = (name, value, cls) => {
+  const add = (name, value, cls, title) => {
     if (value === "" || value == null) return;
-    dl.append(el("dt", "", t(name)), el("dd", cls || "", value));
+    dl.append(el("dt", "", t(name)), Object.assign(el("dd", cls || "", value), { title: title || "" }));
   };
   add("Time", new Date(r.t).toLocaleString(intlLang(), { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", ...hourClock() }), "led-when");
   {
@@ -2180,7 +2180,7 @@ function ledDetail(r) {
   if (r.computerName) add("Computer", r.computerName);
   // the client's own name, for one the user counts as an agent (#1958)
   add("Client", r.client);
-  add("Cache hit rate", ledHitText(ledCacheHit(r)));
+  add("Cache hit rate", ledHitText(ledCacheHit(r)), "", ledCacheHit(r) === null ? "" : ledHitTip(r));
   // its tokens at every width, the cache's beside in and out: a prompt read
   // from the cache is told from one that missed it, whose input is the
   // whole of it, where the row's cache columns are out of sight (#1839).
@@ -2192,6 +2192,9 @@ function ledDetail(r) {
   if (r.credits != null) add("Credits", ledCredits({ credits: r.credits, credited: 1 }).textContent);
   if (ledRowSpeed(r)) add("Speed", t("{n} tok/s", { n: ledNum(Math.round(ledRowSpeed(r))) }));
   else if (ledFloorSpeed(r)) add("Speed", "≥" + t("{n} tok/s", { n: ledNum(Math.round(ledFloorSpeed(r))) }));
+  // none, and why in words, for a reader who can't hover the dash (ohblue
+  // on X: "why do some show no speed?")
+  else if (!ledFailed_(r) && !r.canceled) add("Speed", "— " + ledNoSpeed_(r), "led-nospeed");
   // what went up to the vendor and came back, its tries summed, and what
   // DeepSeek's image files kept out of it (#5407); a row from before has
   // none of them, and says nothing
@@ -2743,7 +2746,7 @@ function renderLedgerDash(l) {
   // the count in the words the quick panel uses too, the whole sentence on
   // hover (tenacious_eagle on Discord)
   block("Cost", c || "—", line(l.unpriced ? unpricedCalls(l.unpriced) : t("effective prices")), c ? "cost" : "", l.unpriced ? unpricedCallsWhy(l.unpriced) : "");
-  const hit = block("Cache hit rate", rate === null ? "—" : hitPct(rate, 2), cacheLeftOut(l) ? line(cacheLeftOut(l)) : null, "", t("The share of the prompt read from the cache"));
+  const hit = block("Cache hit rate", rate === null ? "—" : hitPct(rate), cacheLeftOut(l) ? line(cacheLeftOut(l)) : null, "", tipOf(t("The share of the prompt read from the cache"), rate === null ? "" : cacheHitTip(l)));
   const meter = el("div", "meter"), fill = el("i");
   fill.style.width = (100 * (rate || 0)).toFixed(1) + "%";
   meter.append(fill);
@@ -3333,9 +3336,11 @@ new ResizeObserver(() => {
 // (#3464) or a request with no prompt counted
 const ledCacheHit = (r) => r.cache_unknown ? null : cacheHitOf({ input: r.in, cache_read: r.cache_read, cache_write: r.cache_write });
 const ledHitText = (h) => h === null ? "" : hitPct(h);
+// its exact rate, on hover
+const ledHitTip = (r) => cacheHitTip({ input: r.in, cache_read: r.cache_read, cache_write: r.cache_write });
 const LED_COLS = [
   ["Time"], ["Agent"], ["Requested"], ["Provider · account"], ["Sent", "", true], ["Served"], ["Effort", "", true],
-  ["In", "n"], ["Out", "n"], ["Cache write", "n", true], ["Cache read", "n", true], ["Cache hit rate", "n", 2, "The share of the prompt read from the cache"], ["Cost", "n"], ["TTFT", "n", 2, "Time to first token"], ["Duration", "n"], ["Speed", "n"], ["Status"],
+  ["In", "n"], ["Out", "n"], ["Cache write", "n", true], ["Cache read", "n", true], ["Cache hit rate", "n", 2, "The share of the prompt read from the cache"], ["Cost", "n"], ["TTFT", "n", 2, "Time to first token"], ["Duration", "n"], ["Speed", "n", 0, "Output tokens a second after the first, over the streamed replies"], ["Status"],
 ];
 
 // a window under a second after a wait over four times longer: the reply came
@@ -3853,7 +3858,7 @@ function renderLedger() {
       td(fmtN(r.cache_read || 0), "n" + (r.cache_read ? "" : " faint"), exactN(r.cache_read));
     }
     const hit = ledHitText(ledCacheHit(r));
-    td(hit || "—", "n cache-hit" + (hit ? "" : " faint"), r.cache_unknown ? t("The vendor doesn't count the cache") : t("Cache hit rate") + ": " + t("The share of the prompt read from the cache"));
+    td(hit || "—", "n cache-hit" + (hit ? "" : " faint"), r.cache_unknown ? t("The vendor doesn't count the cache") : tipOf(hit && ledHitTip(r), t("Cache hit rate") + ": " + t("The share of the prompt read from the cache")));
     // what the reply said it cost in its plan's credits (WorkBuddy's
     // usage.credit, #2512), on its own row as on the ranking's line
     // (jiabubu on Discord): in place of the dash a plan's model has for a
@@ -4660,7 +4665,7 @@ function renderSessions() {
     tile(c || "—", t("cost"), unpricedModels || t("at effective prices"), unpricedNote);
     // input leaves out what was read from the cache and written to it
     const prompt = tot.input + tot.cache_read + tot.cache_write;
-    tile(fmtN(tot.cache_read), t("cache read"), tot.cache_read && prompt ? t("hit rate {p}", { p: hitPct(tot.cache_read / prompt) }) : "", tot.cache_write ? t("{n} written", { n: fmtN(tot.cache_write) }) : "");
+    tile(fmtN(tot.cache_read), t("cache read"), tot.cache_read && prompt ? t("hit rate {p}", { p: hitPct(tot.cache_read / prompt) }) : "", tipOf(tot.cache_read && hitTip(tot.cache_read, prompt), tot.cache_write ? t("{n} written", { n: fmtN(tot.cache_write) }) : ""));
     tile(active == null ? "—" : fmtDur(active), t("active"), active == null ? t("not kept by model") : t(days === 1 ? "on {n} day" : "on {n} days", { n: days }),
       t("The time the sessions were at work: the pauses between one message and the next, each under five minutes"), "dur");
     // how many folders, and how much of it the first took
@@ -5752,6 +5757,15 @@ function renderQuotaTrend() {
   };
 }
 
+// setQuotaRange: the trend's range, kept; only this page picks one, so it
+// lives here and not in app.js
+function setQuotaRange(id) {
+  if (id === quotaRange) return;
+  quotaRange = id;
+  try { localStorage.setItem("magpie.quotaRange", id); } catch {}
+  // A range also restores today's meters when leaving a historical cycle.
+  renderQuotas();
+}
 // quotaDaysField: the trend head's button as a field for a number of days,
 // 1 to 45; Enter picks it, Escape or a bad number leaves the range as it was
 function quotaDaysField(b) {

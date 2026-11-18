@@ -91,7 +91,7 @@ async function open(browser, lang, first) {
 }
 
 const langs = ["en", "zh", "zh-TW", "ja", "de"];
-const pctOf = (id) => ((100 * (81000 + id * 100)) / (90000 + id * 100)).toFixed(0) + "%";
+const pctOf = (id) => ((100 * (81000 + id * 100)) / (90000 + id * 100)).toFixed(2) + "%";
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   test(`${engine}: a request under way in a long session shows the last cache, never a dash`, async (t) => {

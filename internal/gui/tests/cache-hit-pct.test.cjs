@@ -1,9 +1,11 @@
 // A cache hit rate never reads 100% unless every prompt token came from the
 // cache (ZhangXiaof48473 on X: Codex gpt-6.1-sol requests of 77.5K tokens
 // read "缓存 100%" on Routing's request list beside "缓存 99%"). Where
-// rounding to a whole percent would say 100% or 0% of a prompt not all or
-// none cached, the rate shows a decimal or two: 99.6%. One formatter
-// (hitPct) says every hit rate. No backend: the API is faked here.
+// rounding would say 100.00% or 0.00% of a prompt not all or none cached,
+// the rate reads 99.99% or 0.01%. Every rate has two decimals, alike down a
+// list (shangyuan0818 on X: "98%" beside "99.6%"), and its exact share on
+// hover. One formatter (hitPct) says every hit rate. No backend: the API
+// is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -20,7 +22,7 @@ function req(id, input, read) {
     done: true, status: 200, ms: 11000, ttft: 7000, tokens: input + read + 400, out: 400,
     usage: [{ provider: seat.provider, model: seat.model, in: input, out: 400, cache_read: read, cache_write: 0 }], priced: true, cost: 0.01 };
 }
-// newest first: 77,200 of 77,500 read (99.6%), all read, 77,035 of 77,500 (99.4%)
+// newest first: 77,200 of 77,500 read (99.61%), all read, 77,035 of 77,500 (99.4%)
 const fixtures = [req(3, 300, 77200), req(2, 0, 77500), req(1, 465, 77035)];
 
 function serve(lang) {
@@ -58,13 +60,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.goto("http://magpie.test/?view=routing");
       const rows = page.locator(".rt-req");
       await rows.nth(fixtures.length - 1).waitFor();
-      assert.deepEqual(await rows.locator(".cache-hit .v").allTextContents(), ["99.6%", "100%", "99%"]);
+      assert.deepEqual(await rows.locator(".cache-hit .v").allTextContents(), ["99.61%", "100.00%", "99.40%"]);
       await rows.nth(0).click();
-      assert.match(await page.locator(".rt-steps").textContent(), lang === "zh" ? /请求缓存命中率 99\.6%/ : /request cache hit rate 99\.6%/);
+      assert.match(await page.locator(".rt-steps").textContent(), lang === "zh" ? /请求缓存命中率 99\.61%/ : /request cache hit rate 99\.61%/);
       // every caller's shared formatter, at its edges
-      const got = await page.evaluate(() => [[1], [0], [0.6], [0.994], [0.9995], [0.99999], [0.003], [0.0004], [1e-7], [0.873, 1], [0.99996, 1], [1, 1]]
-        .map(([h, d]) => hitPct(h, d)));
-      assert.deepEqual(got, ["100%", "0%", "60%", "99%", "99.95%", "99.99%", "0.3%", "0.04%", "0.01%", "87.3%", "99.99%", "100.0%"]);
+      const got = await page.evaluate(() => [1, 0, 0.6, 0.994, 0.9995, 0.99999, 0.003, 0.0004, 1e-7, 0.873, 0.99996].map((h) => hitPct(h)));
+      assert.deepEqual(got, ["100.00%", "0.00%", "60.00%", "99.40%", "99.95%", "99.99%", "0.30%", "0.04%", "0.01%", "87.30%", "99.99%"]);
+      // the exact share on hover
+      const title = await rows.nth(0).locator(".cache-hit").getAttribute("title");
+      const tip = await page.evaluate(() => t("{a} of {b} prompt tokens read from the cache: {p}", { a: ledNum(77200), b: ledNum(77500), p: +(100 * 77200 / 77500).toFixed(6) + "%" }));
+      assert(title.startsWith(tip), title);
       assert.deepEqual(errors, []);
     });
   }

@@ -845,7 +845,7 @@
         const c = el("div", "ctx-stat ctx-cache" + (known ? "" : shown ? " was" : " none"));
         c.append(el("div", "ctx-k", t("Prompt cache")));
         const cb = el("div", "ctx-big");
-        cb.append(el("b", "", shown ? hitPct(shown.read / shown.total) : "—"), el("span", "", t("hit")));
+        cb.append(Object.assign(el("b", "", shown ? hitPct(shown.read / shown.total) : "—"), { title: hitTip(shown?.read, shown?.total) }), el("span", "", t("hit")));
         const bar = el("div", "ctx-bar");
         const fillBar = el("i");
         fillBar.style.width = (shown ? (shown.read / shown.total) * 100 : 0).toFixed(1) + "%";

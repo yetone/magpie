@@ -168,7 +168,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           }
         }
         // the cache never flashes to a dash; its bar never empties
-        assert.deepEqual([...new Set(frames.map((f) => f.figure$))].filter((x) => !/^\d+%$/.test(x)), [], "the cache figure is a figure on every frame");
+        assert.deepEqual([...new Set(frames.map((f) => f.figure$))].filter((x) => !/^\d+\.\d\d%$/.test(x)), [], "the cache figure is a figure on every frame");
         assert(frames.every((f) => f.fill > 0), "the cache bar never empties");
         assert.deepEqual([...new Set(frames.map((f) => f.scroll))], [frames[0].scroll], "the page doesn't scroll by itself");
         // under way with its prompt: the last request's, dimmed and said so;

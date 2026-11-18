@@ -7,6 +7,8 @@
 // (/api/masking/sent), kept for the newest requests only.
 
 const stillMotion = calm;
+// a placeholder magpie sent for a value, {{KIND_xxxx}}; only this page reads it
+const PLACEHOLDER = /\{\{[^{}\s]{1,64}\}\}/g;
 // maskMatches is text's stand-ins as matchAll gives them: its {{…}}
 // placeholders, and the made-up keys "Keep a key's form" sent (redact's
 // shape.go), the keys of info that are no placeholder, which only the
