@@ -426,3 +426,54 @@ func TestDimDisconnectWithDimGone(t *testing.T) {
 		t.Fatalf("dim.json kept: %v", err)
 	}
 }
+
+// Dim's Magpie provider names its models as the gateway tells them, with
+// the provider after each (T_t__biu on X), but takes the names only when
+// it lists the models again: a Sync lists them again once magpie's models
+// or their names changed (a Dim connected before had none listed with the
+// providers), and not while they stay the same.
+func TestDimListsAgainWhenNamesChange(t *testing.T) {
+	dimSandbox(t)
+	f := newFakeDim()
+	f.listed = []dimModel{{ID: "deepseek/pro"}}
+	f.use(t)
+	a, _ := Find("dim")
+	if err := a.Apply("model", "magpie/deepseek/pro"); err != nil {
+		t.Fatal(err)
+	}
+	refreshes := func() int {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		return strings.Count(strings.Join(f.calls, " "), "provider.refresh")
+	}
+	n := refreshes()
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if refreshes() != n {
+		t.Fatalf("listed again with nothing changed: %v", f.calls)
+	}
+	// one connected by an older magpie, which kept no listing
+	st := readDimState(dimFile())
+	st.Dim.Listed = ""
+	writeDimState(dimFile(), st)
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if refreshes() != n+1 {
+		t.Fatalf("not listed again for an older connect: %v", f.calls)
+	}
+	// the provider renamed: the names Dim shows change
+	if err := provider.Save(provider.Provider{ID: "deepseek", Name: "DeepSeek Official", Chat: "https://api.deepseek.com/v1", Key: "k", Models: []string{"pro", "flash"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if refreshes() != n+2 {
+		t.Fatalf("not listed again after a rename: %v", f.calls)
+	}
+	if f.sel.Provider != "magpie" || f.sel.Model != "deepseek/pro" {
+		t.Fatalf("pick changed: %+v", f.sel)
+	}
+}

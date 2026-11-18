@@ -1931,9 +1931,13 @@ func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 				// model discovery (parseModelsListResponse) names a row by
 				// before name, so magpie's GLM-5.3-Flash of three providers
 				// read three times the same in its picker (cdredfox on X);
+				// for Dim alpha: its built-in Magpie provider's list
+				// (provider.refresh) names each model by display_name,
+				// which its Models page and search show, so two
+				// providers' DeepSeek read the same there (T_t__biu on X);
 				// and for Claude Code's discovery, whose /model names a row
 				// by display_name alone
-				if agent == "cindy" || discovers {
+				if agent == "cindy" || agent == "dim" || discovers {
 					m["display_name"] = labels[i]
 				}
 				if agent == "cursor-local" {

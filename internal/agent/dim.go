@@ -9,7 +9,10 @@ package agent
 // isn't 3425, on; its models listed from magpie's /v1/models (the limits
 // Dim needs given where magpie's list has none); and the model picked
 // made Dim's model. So dima, and anything else on Dim's daemon, runs on
-// magpie however it is started. No other provider of Dim's is touched,
+// magpie however it is started. Each model is listed by the name the
+// agents' lists give it, its provider's after it (the gateway's
+// display_name for Dim's key), and listed again when those change
+// (dimListed). No other provider of Dim's is touched,
 // and a key, or an address of neither Dim's nor magpie's, the user gave
 // the Magpie provider is left as it is: magpie only picks the model on
 // it. What was there before is kept in magpie's dim.json, beside the
@@ -264,6 +267,8 @@ type dimRecord struct {
 	BaseURL   string        `json:"baseUrl,omitempty"`
 	Selection *dimSelection `json:"selection"`
 	Picked    string        `json:"picked,omitempty"` // the model magpie picked in Dim
+	// Listed is dimListed when Dim last listed the provider's models
+	Listed string `json:"listed,omitempty"`
 }
 
 type dimState struct {
@@ -288,6 +293,19 @@ func writeDimState(file string, st dimState) error {
 		return err
 	}
 	return edit.WriteAtomic(file, append(b, '\n'))
+}
+
+// dimListed stands for the models Dim's Magpie provider lists and the
+// names it shows them by: the gateway tells Dim each model by the name the
+// agents' lists give it, its provider's after it (T_t__biu on X: two
+// vendors' DeepSeek read the same in Dim), and Dim takes the names only
+// when it lists the models again (provider.refresh).
+func dimListed() string {
+	h := sha256.New()
+	for _, m := range sharedModels("dim") {
+		fmt.Fprintf(h, "%s\x00%s\x00", m.ID, m.Name)
+	}
+	return hex.EncodeToString(h.Sum(nil)[:8])
 }
 
 func dimKeyHash(k string) string {
@@ -356,14 +374,28 @@ func dimWire(dir, file, model string, start, pick bool) error {
 			return err
 		}
 	}
+	listed := dimListed()
 	if !pick {
-		return nil
+		// Dim's list of a provider magpie picked a model on follows
+		// magpie's models and their names (a provider renamed or added,
+		// the Provider in model names setting), listed again once they
+		// changed: a Dim connected before its list had the providers in
+		// it is listed again on the first Sync
+		if rec.Picked == "" || rec.Listed == listed {
+			return nil
+		}
+		if err := c.call("provider.refresh", map[string]any{"providerId": magpieID}, nil); err != nil {
+			return err
+		}
+		rec.Listed = listed
+		return writeDimState(file, st)
 	}
 	ref := strings.TrimPrefix(model, magpieID+"/")
 	var cat dimCatalog
 	if err := c.call("provider.refresh", map[string]any{"providerId": magpieID}, &cat); err != nil {
 		return err
 	}
+	rec.Listed = listed
 	i := slices.IndexFunc(cat.Models, func(m dimModel) bool { return m.ID == ref })
 	if i < 0 {
 		return fmt.Errorf("Dim's Magpie provider doesn't list %s", ref)

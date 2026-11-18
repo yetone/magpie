@@ -17,8 +17,16 @@ import (
 // by the name the agents' lists give it: with its provider's after it, and
 // with the provider left out, plain only where no other has that name. A
 // name the user gave a model is kept as they wrote it under "own". Another
-// client's display_name stays the name alone.
+// client's display_name stays the name alone. Dim alpha's Magpie provider
+// lists models by display_name too (T_t__biu on X: two vendors' DeepSeek
+// read the same there), and is told them the same way.
 func TestCindyDiscoveryNamesModelsApart(t *testing.T) {
+	for _, agent := range []string{"cindy", "dim"} {
+		t.Run(agent, func(t *testing.T) { discoveryNamesApart(t, agent) })
+	}
+}
+
+func discoveryNamesApart(t *testing.T, agent string) {
 	fresh(t)
 	os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755)
 	data := `{"or":{"models":{"glm-5.3-flash":{"id":"glm-5.3-flash","name":"GLM-5.3-Flash"},"kimi":{"id":"kimi","name":"Kimi"}}},"zp":{"models":{"glm-5.3-flash":{"id":"glm-5.3-flash","name":"GLM-5.3-Flash"}}},"sf":{"models":{"glm-flash":{"id":"glm-flash","name":"GLM-5.3-Flash"}}}}`
@@ -39,11 +47,12 @@ func TestCindyDiscoveryNamesModelsApart(t *testing.T) {
 	if err := provider.SetModelName("sf/glm-flash", "My Flash"); err != nil {
 		t.Fatal(err)
 	}
-	list := func(cindy bool) map[string]string {
+	list := func(named bool) map[string]string {
 		req := httptest.NewRequest("GET", "/v1/models", nil)
-		if cindy {
-			// Cindy's import link gives it the cindy key (CindyLink)
-			req.Header.Set("Authorization", "Bearer "+TokenFor("cindy"))
+		if named {
+			// Cindy's import link gives it the cindy key (CindyLink),
+			// and magpie gives Dim's Magpie provider the dim key
+			req.Header.Set("Authorization", "Bearer "+TokenFor(agent))
 		}
 		rec := httptest.NewRecorder()
 		New().Handler().ServeHTTP(rec, req)
@@ -72,7 +81,7 @@ func TestCindyDiscoveryNamesModelsApart(t *testing.T) {
 		}
 		got := list(true)
 		if got["or/glm-5.3-flash"] != c.or || got["zp/glm-5.3-flash"] != c.zp || got["sf/glm-flash"] != c.sf || got["or/kimi"] != c.kimi {
-			t.Fatalf("%s: Cindy told %v", c.mode, got)
+			t.Fatalf("%s: %s told %v", c.mode, agent, got)
 		}
 		other := list(false)
 		if other["or/glm-5.3-flash"] != "GLM-5.3-Flash" || other["zp/glm-5.3-flash"] != "GLM-5.3-Flash" || other["or/kimi"] != "Kimi" {
