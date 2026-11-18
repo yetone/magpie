@@ -43,7 +43,7 @@ button.row.sm-else-row { width: 100%; gap: 10px; text-align: left; cursor: point
 .sess-from { margin-bottom: 8px; }
 .sm-bar { gap: 8px; padding: 0 11px; }
 .sm-bar .grow { flex: 1; }
-.sm-bar .sm-delete, .sm-bar .sm-empty { display: inline-flex; align-items: center; gap: 5px; }
+.sm-bar .sm-delete, .sm-bar .sm-empty, .sm-bar .sm-small { display: inline-flex; align-items: center; gap: 5px; }
 .sm-bar .sm-delete:disabled { opacity: .45; }
 .sm-count { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .sm-check { flex: none; margin: 0; width: 14px; height: 14px; accent-color: var(--accent); }
@@ -96,6 +96,7 @@ body.window .sm-group .row.sm-sess { padding-left: 32px; }
 .sm-ask-list { grid-column: 1 / -1; min-width: 0; margin: 0; padding: 0; list-style: none; font-size: 12.5px; color: var(--fg); line-height: 1.6; }
 .sm-ask-list li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sm-ask-list li.more { color: var(--muted); }
+.sm-ask-small { grid-column: 1 / -1; min-width: 0; margin: 0; font-size: 12px; color: var(--muted); }
 /* a field in a session dialog (#1991): its label above it, both across the
    dialog, never squeezed into the form's 72px label column */
 .editor label.sm-ask-field { grid-column: 1 / -1; min-width: 0; display: flex; flex-direction: column; gap: 6px; text-align: left; padding-top: 0; }
