@@ -403,7 +403,11 @@ function ruleBulk(s, sel) {
       const r = el("div", "row pref");
       r.id = "maskAlertRow";
       const who = el("div", "who");
-      who.append(el("div", "name", t("Masking alert")), el("div", "sub wraps", t("A notification when masking swaps a value for the first time: its kind and how many, never the value itself")));
+      const sub = el("div", "sub wraps", t("A notification when masking swaps a value for the first time: its kind and how many, never the value itself"));
+      // and why it wouldn't be seen, as Settings › Usage's alerts say it
+      const warn = notifyWarn(s);
+      if (warn) sub.append(" · ", el("span", "warn", warn));
+      who.append(el("div", "name", t("Masking alert")), sub);
       const v = el("div", "val");
       v.id = "maskAlertSegs";
       v.append(segs([["off", t("Off")], ["on", t("On")]], s.maskAlert ? "on" : "off", (x) => savePrefs({ ...keep, maskAlert: x === "on" })));

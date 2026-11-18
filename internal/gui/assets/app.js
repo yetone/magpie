@@ -21213,9 +21213,14 @@ function renderWarmNow(agent, users, rowId) {
 // renderAlerts draws the usage alerts (#368): a notification when a window
 // that routing counts reaches the share set, or a balance falls to the
 // amount set, each once; Off, or the number in a field beside On.
-function renderAlerts(s, keep) {
-  const problem = s.notifyProblem === "denied" ? t("Notifications are turned off for magpie in the system's settings")
+// notifyWarn: why a notification set here wouldn't be seen, said beside
+// each alert, the Masking alert's in Privacy too
+function notifyWarn(s) {
+  return s.notifyProblem === "denied" ? t("Notifications are turned off for magpie in the system's settings")
     : s.notifyProblem === "unavailable" ? t("Notifications can't be shown on this system") : "";
+}
+function renderAlerts(s, keep) {
+  const problem = notifyWarn(s);
   const sub = (id, what) => {
     const box = $(id);
     box.textContent = what;
