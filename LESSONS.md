@@ -1257,6 +1257,11 @@ standards since 10-18, widened to a worktree and its logs. See
 - **A record is written once its run has ended** (10-17, 10-28,
   11-18). On 11-18 97e0ecdaa was pushed with the GUI suite at 3736
   tests and 127 red, "the rest" of them left to another session.
+  f4b202030 (11-18) said "running on mica at push time; result goes on
+  #6034", and v0.1.4408 was tagged on it. The result came 40 minutes
+  later with internal/dirent (#7031) and an internal/gui test (#7032)
+  red, both "pass alone": the tag shipped past two reds no one had
+  looked at.
 - **One full suite runs on a machine at a time** (10-16, 10-17, 11-16).
   On 11-16 64c426158 ran the GUI suite on mica beside another session's
   full suite, was pushed with it still running, and named its 90 reds by
