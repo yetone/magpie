@@ -168,6 +168,16 @@ func disabledNow() func(pid, model string) bool {
 	}
 }
 
+// DisabledPattern is ModelDisabled's pattern with the list read once, for
+// a loop over many models: "" for a model that isn't disabled.
+func DisabledPattern() func(pid, model string) string {
+	list, _ := disabledList()
+	return func(pid, model string) string {
+		pat, _ := matchDisabled(list, namesOf(pid, model)...)
+		return pat
+	}
+}
+
 // IDDisabled reports whether a model id as asked ("<provider>/<model>" or a
 // bare id) is one the user disabled, and the pattern that did.
 func IDDisabled(id string) (string, bool) {

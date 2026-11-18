@@ -4,6 +4,8 @@
 // works. {name} slots are filled by t(str, vars).
 const I18N = {
   zh: {
+    "disabled": "已停用",
+    "Disabled in Settings → Models ({pattern}): refused on every route": "已在 设置 → 模型 中停用（{pattern}）：所有路由都会拒绝",
     "Check {model} on {provider}": "在 {provider} 上检查 {model}",
     "A few small real calls with known answers, billed as any other: write the numbers 1 to 40, work out sums, answer in an exact form, call the right tool. Each says what came back.": "几次小的真实调用，答案事先已知，照常计费：写出 1 到 40、算算术、按指定格式作答、调用正确的工具。每一项都列出实际返回的内容。",
     "Count to 40": "数到 40",
@@ -5462,6 +5464,8 @@ const I18N = {
     "runs everything without asking": "所有操作都直接运行，不询问",
   },
   "zh-TW": {
+    "disabled": "已停用",
+    "Disabled in Settings → Models ({pattern}): refused on every route": "已在 設定 → 模型 中停用（{pattern}）：所有路由都會拒絕",
     "Check {model} on {provider}": "在 {provider} 上檢查 {model}",
     "A few small real calls with known answers, billed as any other: write the numbers 1 to 40, work out sums, answer in an exact form, call the right tool. Each says what came back.": "幾次小的真實呼叫，答案事先已知，照常計費：寫出 1 到 40、算算術、按指定格式作答、呼叫正確的工具。每一項都列出實際回傳的內容。",
     "Count to 40": "數到 40",
@@ -10904,6 +10908,8 @@ const I18N = {
     "runs everything without asking": "所有操作都直接執行，不詢問",
   },
   ja: {
+    "disabled": "無効",
+    "Disabled in Settings → Models ({pattern}): refused on every route": "設定 → モデル で無効にしています（{pattern}）：どの経路でも断られます",
     "Check {model} on {provider}": "{provider} で {model} をチェック",
     "A few small real calls with known answers, billed as any other: write the numbers 1 to 40, work out sums, answer in an exact form, call the right tool. Each says what came back.": "答えの決まった小さな実際の呼び出しを数回行います（通常どおり課金）：1 から 40 までを書く、計算する、決まった形式で答える、正しいツールを呼ぶ。それぞれ返ってきた内容を示します。",
     "Count to 40": "40 まで数える",
@@ -16348,6 +16354,8 @@ const I18N = {
     "runs everything without asking": "すべて確認せずに実行する",
   },
   de: {
+    "disabled": "deaktiviert",
+    "Disabled in Settings → Models ({pattern}): refused on every route": "In Einstellungen → Modelle deaktiviert ({pattern}): auf jedem Weg abgelehnt",
     "Check {model} on {provider}": "{model} bei {provider} prüfen",
     "A few small real calls with known answers, billed as any other: write the numbers 1 to 40, work out sums, answer in an exact form, call the right tool. Each says what came back.": "Ein paar kleine echte Aufrufe mit bekannten Antworten, wie jeder andere berechnet: die Zahlen 1 bis 40 schreiben, rechnen, in einer genauen Form antworten, das richtige Werkzeug aufrufen. Jeder zeigt, was zurückkam.",
     "Count to 40": "Bis 40 zählen",
