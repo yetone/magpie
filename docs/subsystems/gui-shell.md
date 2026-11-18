@@ -1354,7 +1354,10 @@ and `update-wait.test.cjs`.
 What a user changes is meant to apply live, and most of it does; a restart
 is the way out for what doesn't yet, without quitting and opening magpie by
 hand (yansheng1003 on X: "请在刷新旁边增加一个重启按钮"). Settings › Version
-has **Restart** beside Check while no update is on offer: not once one is
+has **Restart only** beside Check while no update is on
+offer, named for what it does: a bare Restart beside Check read as
+installing an update (realfxw on X restarted again and again on a
+version newer than Daily's). It isn't shown once one is
 found, downloading, downloaded (its Restart to update is the only one) or
 blocked, nor with a newer version named or a download failed, whose own
 buttons fill a narrow row (`renderUpdate`), and the tray's

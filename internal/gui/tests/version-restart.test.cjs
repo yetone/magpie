@@ -1,14 +1,18 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // Settings › About's Version row restarts magpie as it is (yansheng1003 on
 // X: "请在刷新旁边增加一个重启按钮"):
-// - up to date, the row has Restart beside Check, on one line at 400px
+// - up to date, the row has Restart only beside Check, on
+//   one line at 400px
 //   too; a click posts /api/restart with the tab the window is on and says
 //   Restarting…;
 // - in a browser (magpie web), the page reloads once another run of
 //   magpie answers /api/update, of the same version;
 // - a restart that can't be arranged says so and gives the buttons back;
 // - an update downloaded has its own Restart to update, and no second
-//   Restart.
+//   Restart;
+// - with automatic updates off and nothing checked yet, the button beside
+//   Check says it doesn't update (realfxw on X restarted again and again
+//   on a bare Restart, waiting for an update).
 // Every language, both engines; no backend, the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -19,17 +23,17 @@ const { watchSettingsReads, settingsDrawn } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
 const words = {
-  en: { version: "Version", latest: "Up to date", check: "Check", restart: "Restart", restarting: "Restarting…", failed: "Couldn't restart magpie", update: "Restart to update" },
-  zh: { version: "版本", latest: "已是最新", check: "检查", restart: "重启", restarting: "正在重启…", failed: "无法重启 magpie", update: "重启以更新" },
-  "zh-TW": { version: "版本", latest: "已是最新", check: "檢查", restart: "重啟", restarting: "正在重啟…", failed: "無法重啟 magpie", update: "重啟以更新" },
-  ja: { version: "バージョン", latest: "最新です", check: "確認", restart: "再起動", restarting: "再起動中…", failed: "magpie を再起動できませんでした", update: "再起動してアップデート" },
-  de: { version: "Version", latest: "Aktuell", check: "Prüfen", restart: "Neu starten", restarting: "Neustart…", failed: "magpie konnte nicht neu gestartet werden", update: "Zum Aktualisieren neu starten" },
+  en: { version: "Version", latest: "Up to date", check: "Check", restart: "Restart only", off: "Automatic updates are off", restarting: "Restarting…", failed: "Couldn't restart magpie", update: "Restart to update" },
+  zh: { version: "版本", latest: "已是最新", check: "检查", restart: "仅重启", off: "自动更新已关闭", restarting: "正在重启…", failed: "无法重启 magpie", update: "重启以更新" },
+  "zh-TW": { version: "版本", latest: "已是最新", check: "檢查", restart: "僅重啟", off: "自動更新已關閉", restarting: "正在重啟…", failed: "無法重啟 magpie", update: "重啟以更新" },
+  ja: { version: "バージョン", latest: "最新です", check: "確認", restart: "再起動のみ", off: "自動アップデートはオフです", restarting: "再起動中…", failed: "magpie を再起動できませんでした", update: "再起動してアップデート" },
+  de: { version: "Version", latest: "Aktuell", check: "Prüfen", restart: "Nur neu starten", off: "Automatische Updates sind ausgeschaltet", restarting: "Neustart…", failed: "magpie konnte nicht neu gestartet werden", update: "Zum Aktualisieren neu starten" },
 };
 
 function server(lang, ctl) {
   const settings = {
     theme: "light", lang, tray: "panel", quotaLeft: false, currency: "usd", proxy: "", redact: false, redactWords: [],
-    version: "0.1.400", dir: "~/.config/magpie", gateway: "http://127.0.0.1:3425", proxyNow: "none", proxySource: "none",
+    noAutoUpdate: !!ctl.off, version: "0.1.400", dir: "~/.config/magpie", gateway: "http://127.0.0.1:3425", proxyNow: "none", proxySource: "none",
     visionModels: [], imageGenModels: [], workbuddyCheckins: [], lanURLs: [], fx: { rate: 7.2, at: new Date().toISOString(), stale: false },
   };
   return async (route) => {
@@ -148,6 +152,22 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await page.context().close();
         }
       });
+
+      for (const width of [900, 400]) {
+        await t.test(`${lang} ${width}px: automatic updates off, the button beside Check says it doesn't update`, async () => {
+          const ctl = { posts: [], off: true, update: { state: "", current: "0.1.400", run: 111 } };
+          const { page, errors } = await open(browser, lang, ctl, width);
+          const row = versionRow(page, lang);
+          await row.locator(".sub", { hasText: w.off }).waitFor();
+          assert.deepEqual(await buttons(row), [w.check, w.restart]);
+          const tops = await row.locator(".val button").evaluateAll((bs) => bs.map((b) => Math.round(b.getBoundingClientRect().top)));
+          assert.equal(new Set(tops).size, 1, `the buttons wrap: tops ${tops}`);
+          const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+          assert.ok(over <= 0, `the page scrolls sideways by ${over}px`);
+          assert.deepEqual(errors, []);
+          await page.context().close();
+        });
+      }
 
       await t.test(lang + ": an update downloaded has no second Restart", async () => {
         const ctl = { posts: [], update: { state: "ready", current: "0.1.400", latest: "0.1.401", run: 111 } };

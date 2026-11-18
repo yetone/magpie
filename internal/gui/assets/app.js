@@ -22763,8 +22763,10 @@ async function renderUpdate(r, u) {
   }
   // magpie started again as it is (yansheng1003 on X), in versionrow.js;
   // not beside an update on offer, whose own path restarts, nor past a
-  // narrow row's room
-  if (!/^(ready|downloading|found|available|blocked)$/.test(u.state) && !u.newest && !(u.state === "error" && u.latest)) btn(t("Restart"), () => import("./versionrow.js").then(() => restartSelf(r, u)), u.state === "checking");
+  // narrow row's room. Named for what it does: a bare Restart beside
+  // Check read as installing an update (realfxw on X restarted again and
+  // again on a version newer than Daily's)
+  if (!/^(ready|downloading|found|available|blocked)$/.test(u.state) && !u.newest && !(u.state === "error" && u.latest)) btn(t("Restart only"), () => import("./versionrow.js").then(() => restartSelf(r, u)), u.state === "checking");
   if (kept && !pageShown) kept.remove();
 }
 
