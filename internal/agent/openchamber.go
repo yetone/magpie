@@ -168,7 +168,7 @@ func openChamber(home, cfg string) *Agent {
 	// the OpenCode config as the OpenCode on PATH reads it, which writes
 	// it in OpenCode 2's words for an OpenCode 2 (ocFile), as OpenCode's
 	// own Sync does: the two never write it in each other's
-	file := func() ocFile { return ocFile{path: ocPath, two: openCodeTwo(here("")), block: block} }
+	file := func() ocFile { return openCodeFileAt(here(""), ocPath, "opencode", block) }
 	opts := func(key string) func(map[string]string) []Option {
 		return func(cur map[string]string) []Option {
 			return withVia(ownOptions(auth, cur[key]), "opencode", magpieID+"/")
@@ -181,7 +181,10 @@ func openChamber(home, cfg string) *Agent {
 		if usesMagpie(m, file().small(), s.model(), s.small()) {
 			return nil
 		}
-		return edit.DelJSON(ocPath, "provider."+magpieID, openCodeNativeKey)
+		if err := edit.DelJSON(ocPath, "provider."+magpieID, openCodeNativeKey); err != nil {
+			return err
+		}
+		return openCodePluginGone(ocPath)
 	}
 	return &Agent{
 		ID: "openchamber", Name: "OpenChamber", Icon: "openchamber", Aliases: []string{"chamber"}, Spelled: openCodeSpelled(ocPath, gatewayV1),

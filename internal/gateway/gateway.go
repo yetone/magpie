@@ -1781,6 +1781,11 @@ func (s *Server) models(w http.ResponseWriter, r *http.Request) {
 		antigravityModels(w, r)
 		return
 	}
+	// OpenCode's magpie plugin's (opencode_models.go)
+	if f := r.URL.Query().Get("format"); f == OpenCodeFormat || f == OpenCode2Format {
+		openCodeModels(w, r, f == OpenCode2Format)
+		return
+	}
 	if waitsForList(r) {
 		// another magpie waiting for the list to change (models_wait.go)
 		s.modelsOnceChanged(w, r)

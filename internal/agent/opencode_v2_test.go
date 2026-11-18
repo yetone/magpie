@@ -69,7 +69,7 @@ func nativeOnly(t *testing.T, path string, models ...string) {
 func TestOpenCode2WritesItsOwnWords(t *testing.T) {
 	home, _ := codexHome(t, "", "")
 	reasonCatalog(t)
-	openCodeAt(t, "2.2.6")
+	openCodeAt(t, "2.0.4") // one that has the list in its file (openCodeDiscovers); the plugin's list says the same words
 	oc := opencode(home, filepath.Join(home, ".config"))
 	if err := oc.Apply("model", "magpie/rsn/plan"); err != nil {
 		t.Fatal(err)
@@ -131,7 +131,7 @@ func TestOpenCode2WritesItsOwnWords(t *testing.T) {
 func TestOpenCode1KeepsItsWords(t *testing.T) {
 	home, _ := codexHome(t, "", "")
 	reasonCatalog(t)
-	openCodeAt(t, "1.19.5")
+	openCodeAt(t, "1.3.9") // one that has the list in its file (openCodeDiscovers); the plugin's list says the same words
 	oc := opencode(home, filepath.Join(home, ".config"))
 	if err := oc.Apply("model", "magpie/rsn/plan"); err != nil {
 		t.Fatal(err)
@@ -261,7 +261,7 @@ func TestOpenCode2LeavesTheirSmallModel(t *testing.T) {
 func TestOpenChamberAndOpenCode2AgreeOnWords(t *testing.T) {
 	home, _ := codexHome(t, "", "")
 	reasonCatalog(t)
-	openCodeAt(t, "2.2.6")
+	openCodeAt(t, "2.0.4") // one that has the list in its file (openCodeDiscovers); the plugin's list says the same words
 	writeFile(t, filepath.Join(home, ".config", "openchamber", "settings.json"), `{}`)
 	ch := openChamber(home, filepath.Join(home, ".config"))
 	oc := opencode(home, filepath.Join(home, ".config"))

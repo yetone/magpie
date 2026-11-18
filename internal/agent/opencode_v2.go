@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"maps"
-	"strconv"
-	"strings"
 
 	"github.com/yetone/magpie/internal/edit"
 )
@@ -27,13 +25,8 @@ var openCodeVersion = func() string { return (&Agent{ID: "opencode", Bin: "openc
 // openCodeTwo is whether the OpenCode at a place is 2.x: the one on this
 // machine's PATH, or the distro's, as its probe found it.
 func openCodeTwo(at place) bool {
-	v := at.version
-	if at.spell == nil {
-		v = openCodeVersion()
-	}
-	major, _, _ := strings.Cut(strings.TrimPrefix(strings.TrimSpace(v), "v"), ".")
-	n, err := strconv.Atoi(major)
-	return err == nil && n >= 2
+	n, ok := openCodeVersionParts(openCodeVersionAt(at))
+	return ok && n[0] >= 2
 }
 
 // openCodeTitleKey is where OpenCode 2 keeps the model it titles sessions
@@ -44,16 +37,65 @@ const openCodeTitleKey = "agents.title.model"
 // the OpenCode reading it is 2.x, block magpie's provider in OpenCode 1's
 // words (magpieProviderJSONAt).
 type ocFile struct {
-	path  string
-	two   bool
-	block func() any
+	path     string
+	two      bool
+	discover bool // the OpenCode loads magpie's plugin (opencode_discover.go)
+	block    func() any
 }
 
 // sync brings magpie's provider in the file up to date, and writes it
 // where it is missing when put (a model of magpie's is chosen there). For
 // OpenCode 2 a provider of magpie's under provider, and a small_model of
 // magpie's, move to OpenCode 2's words first.
+//
+// Where the OpenCode finds magpie's models itself (discover), the file has
+// magpie's provider without them, and magpie's plugin beside it.
 func (f ocFile) sync(put bool) error {
+	var err error
+	if f.discover {
+		err = f.syncFound(put)
+	} else {
+		err = f.syncListed(put)
+		if unstashPeek(openCodeDiscoverKey(f.path)) != "" {
+			stash(map[string]string{openCodeDiscoverKey(f.path): ""})
+		}
+	}
+	return errors.Join(err, f.pluginSynced())
+}
+
+// syncFound is sync for an OpenCode that finds magpie's models itself:
+// magpie's models in the file go first, leaving what the user said of
+// them (modelsLeft), and the provider is written without them.
+func (f ocFile) syncFound(put bool) error {
+	moved := unstashPeek(openCodeDiscoverKey(f.path)) != ""
+	listed := f
+	listed.block = withoutModels(f.block)
+	var err error
+	if !f.two {
+		err = f.modelsLeft("provider."+magpieID, openCodeKept(f.path, f.block)(), f.block(), moved)
+		if _, ok := edit.GetJSON(f.path, openCodeNativeKey); ok && err == nil {
+			err = f.modelsLeft(openCodeNativeKey, openCodeNativeKept(f.path, f.block)(), openCodeNative(f.block()), moved)
+		}
+	} else {
+		if err := f.moveProvider(); err != nil {
+			return err
+		}
+		if err := f.moveSmall(); err != nil {
+			return err
+		}
+		err = f.modelsLeft(openCodeNativeKey, openCodeNativeKept(f.path, f.outputsKept)(), openCodeNative(f.block()), moved)
+	}
+	if err != nil {
+		return err
+	}
+	if !moved {
+		stash(map[string]string{openCodeDiscoverKey(f.path): "1"})
+	}
+	return listed.syncListed(put)
+}
+
+// syncListed is sync with magpie's models as block has them.
+func (f ocFile) syncListed(put bool) error {
 	if !f.two {
 		v1 := openCodeKept(f.path, f.block)
 		var err error

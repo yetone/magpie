@@ -54,8 +54,13 @@ func openCodeNative(block any) any {
 	}
 	// in the order magpie lists them (#4575): OpenCode lists a provider's
 	// models in the file's key order
+	// and none where the block has none (OpenCode's magpie plugin lists
+	// them: opencode_discover.go)
+	in, listed := b["models"].(orderedJSON)
+	if !listed {
+		return out
+	}
 	ms := orderedJSON{}
-	in, _ := b["models"].(orderedJSON)
 	for _, p := range in {
 		m, _ := p.v.(map[string]any)
 		e := map[string]any{"name": m["name"]}
