@@ -153,7 +153,8 @@ type HubServer struct {
 	// magpie's own token, past a gateway key's models, accounts and
 	// spend), and another magpie's router (which passes a call on to its
 	// own). It is given only to a caller on this computer (HubVisitor),
-	// Magpie Browser also to a keyed one elsewhere (Keyed).
+	// Magpie Browser also to a keyed one elsewhere (Keyed), and Magpie
+	// Memory to one elsewhere by a key let use it (Memory).
 	HereOnly bool
 	// Program: the server is a program run on this computer, with the
 	// user's rights (a command, or a tools plugin), not an HTTP server
@@ -165,6 +166,12 @@ type HubServer struct {
 	// and to another computer's caller with a key, and calls go to that
 	// key's browsers only.
 	Keyed bool
+	// Memory: the server is Magpie Memory (`magpie mcp memory`), which
+	// holds what is known about this computer's user and writes into
+	// every agent's instructions here: given to this computer, and to
+	// another computer's caller by a key the user let use it
+	// (access.Key.Memory), as memoryReaches holds its own route.
+	Memory bool
 }
 
 // HubVisitor is who a hub request is from, for what it is given of the
@@ -176,6 +183,9 @@ type HubServer struct {
 type HubVisitor struct {
 	Away, Held bool
 	Key        string
+	// Memory: an Away visitor by a key let use Magpie Memory
+	// (access.Key.Memory), given that server (HubServer's Memory).
+	Memory bool
 }
 
 // Gives is whether v is given s.
@@ -185,6 +195,9 @@ func (v HubVisitor) Gives(s HubServer) bool {
 	}
 	if s.Keyed {
 		return v.Key != ""
+	}
+	if s.Memory {
+		return v.Memory
 	}
 	return !s.HereOnly && !(v.Held && s.Program)
 }
@@ -209,6 +222,7 @@ func hubVisitor(r *http.Request) HubVisitor {
 	v := HubVisitor{Away: away, Held: away && nativeHeld(access.Caller(r.Context()))}
 	if !local(r) && !hubFromPage(r) {
 		v.Key = access.Caller(r.Context()).KeyID
+		v.Memory = access.Caller(r.Context()).Memory
 	}
 	return v
 }

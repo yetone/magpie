@@ -261,6 +261,16 @@ curl -s -X POST http://127.0.0.1:3425/v1/magpie/admin/gateway-keys/add-key \
     <p>アプリ自身のページと同じ処理が <code>/v1/magpie/admin/</code> の下にあります。<code>GET providers</code>、<code>POST provider/{save,delete,on,off,name,…}</code>、<code>POST keys/…</code>（プロバイダーのキー）、<code>GET</code>/<code>POST gateway-keys[/{add-key,rename-key,limit-key,models-key,remove-key,…}]</code>、<code>GET</code>/<code>POST account-groups[/…]</code>、<code>GET routing-groups[/{id}]</code> と <code>POST routing-groups/{create,update,delete,switch,…}</code>（ルーティングページのグループと組み合わせ。検証はアプリと同じで、<code>update</code> は送ったフィールドだけを変えます）、そして <code>POST signin</code>（<code>{"agent":…}</code>）は、ベンダーのページと入力するコードを返し、パスワードは受け取りません。ブラウザーのあるコンピューターで開いてください。保存済みのキーとゲートウェイキーの秘密は再び返されず、このコンピューターのほかのアプリを変更する操作も提供しません。サインインはエクスポートしません。すべてのアカウントの秘密を渡すことになるからです。</p>
     <p>読み取り専用キー、拡張機能のキー、発行されたキーや短期キー、共有キーは使えません。キーの有無にかかわらず Web ページからは呼べません（<code>Origin</code> や <code>Sec-Fetch-*</code> を持つリクエストはすべて拒否）。このコンピューターの別名で届いたリクエストも拒否されます。ネットワーク越しに共有している場合、<code>any</code> のキーだけが通ります。</p>
 
+    <h2 id="memory"><a class="anchor" href="#memory">ほかのコンピュータからのメモリー</a></h2>
+    <p>Magpie Memory はこのコンピュータのエージェントに応えます。ほかのコンピュータのエージェントにも読み書きさせるには、そのエージェント専用のゲートウェイキーを作って許可します。アプリのキーのメニュー › 詳細設定 › Magpie Memory から、またはコマンドラインで:</p>
+    <div class="code">
+      <span class="lang">Shell</span>
+      <button class="copy" data-copy="ex-memory">コピー</button>
+      <pre id="ex-memory">magpie gateway-key add remote-box
+magpie gateway-key memory &lt;id&gt; on</pre>
+    </div>
+    <p>magpie を共有している間、そのエージェントは <code>http://&lt;このコンピュータ&gt;:3425/mcp/magpie/memory</code> を <code>Authorization: Bearer &lt;キー&gt;</code> 付きで使うか、MCP ルーターで <code>magpie-memory</code> を見つけます。保存した内容はここのすべてのエージェントの指示に入るため、ほかのキーには渡しません。共有キー、読み取り専用・発行された・短期のキー、キーの有無にかかわらず Web ページも使えません。</p>
+
     <h2 id="api"><a class="anchor" href="#api">統計 API</a></h2>
     <p>使用量ページの内容は JSON でも、このコンピューターに、また magpie を共有している間はゲートウェイキー付きのリクエストに提供されます。予算、モデル、アカウントで制限されたキーには、自分のリクエストと上限だけが返ります。持ち主がそのキーの<span class="ui">残量</span>をオンにすると（<code>magpie gateway-key quotas &lt;id&gt; on</code>）、使えるもののクォータも返ります。</p>
     <ul>

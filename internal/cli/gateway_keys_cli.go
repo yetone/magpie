@@ -74,6 +74,10 @@ func gatewayKeysTo(out io.Writer, args []string) error {
 		access.MigrateLegacyLANKeyBestEffort()
 		return gatewayKeyAdmin(out, args[1:])
 	}
+	if action == "memory" {
+		access.MigrateLegacyLANKeyBestEffort()
+		return gatewayKeyMemory(out, args[1:])
+	}
 	if action == "move" {
 		access.MigrateLegacyLANKeyBestEffort()
 		return gatewayKeyMove(out, args[1:])
@@ -1017,6 +1021,47 @@ func gatewayKeyAdmin(out io.Writer, args []string) error {
 		_, err = fmt.Fprintf(out, "%s: may manage magpie (/v1/magpie/admin/) from this computer and, while magpie is shared, from other machines\n", k.Name)
 	default:
 		_, err = fmt.Fprintf(out, "%s: may not manage magpie\n", k.Name)
+	}
+	return err
+}
+
+// gatewayKeyMemory shows or sets whether a key's agents on another
+// computer may use Magpie Memory (/mcp/magpie/memory and the hub's
+// magpie-memory), reading and saving what is known about this computer's
+// user (Niapyaya on X):
+//
+//	magpie gateway-key memory <id> [on | off]
+func gatewayKeyMemory(out io.Writer, args []string) error {
+	usage := fmt.Errorf("usage: magpie gateway-key memory <id> [on | off]")
+	if len(args) == 0 || len(args) > 2 {
+		return usage
+	}
+	id := args[0]
+	if len(args) == 2 {
+		var on bool
+		switch strings.ToLower(args[1]) {
+		case "on":
+			on = true
+		case "off":
+		default:
+			return usage
+		}
+		if _, err := access.Update("memory-key", access.Change{Key: id, Memory: on}); err != nil {
+			return err
+		}
+	}
+	keys, err := access.List()
+	if err != nil {
+		return err
+	}
+	i := slices.IndexFunc(keys, func(k access.Key) bool { return k.ID == id })
+	if i < 0 {
+		return fmt.Errorf("Key not found")
+	}
+	if k := keys[i]; k.Memory {
+		_, err = fmt.Fprintf(out, "%s: its agents on other computers may read and save Magpie Memory, while magpie is shared\n", k.Name)
+	} else {
+		_, err = fmt.Fprintf(out, "%s: Magpie Memory only for the agents on this computer\n", k.Name)
 	}
 	return err
 }

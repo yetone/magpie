@@ -78,12 +78,27 @@ and refuses empty or over-long text, an unknown kind and a bad scope
 [internal/gateway/memory_mcp.go](../../internal/gateway/memory_mcp.go):
 `memory_search`, `memory_save`, `memory_forget`, `memory_context`, Streamable HTTP at
 `MemoryMCPPath` (`/mcp/magpie/memory`), served like the search server
-(`serveMCP`) but to the agents on this computer alone, as the hub gives it
-(`HereOnly`): memory is what is known about this computer's user, and its
-digest goes into every agent's instructions here, so another computer's
-gateway key (which may be a friend's, and may use every MCP server unless
-it is held to some) and a web page, even one Settings lists, are turned
-away (`TestMemoryMCPGuarded`).
+(`serveMCP`) but to the agents on this computer, and to another
+computer's only by a gateway key the user let use it, as the hub gives it
+(`HereOnly`, `HubServer.Memory`; `memoryReaches`): memory is what is known
+about this computer's user, and its digest goes into every agent's
+instructions here, so any other gateway key (which may be a friend's, and
+may use every MCP server unless it is held to some) and a web page, even
+one Settings lists, are turned away (`TestMemoryMCPGuarded`).
+
+- A key is let use it with `access.Key.Memory`: the key's ··· › Advanced ›
+  Magpie Memory on the Gateway page, or `magpie gateway-key memory <id> on`
+  (Niapyaya on X: an agent on a remote machine adding memories). As
+  `Admin`, only a key the user made can have it (`memoryOf`): never the
+  sharing key, a read-only or Browser key, nor an issued or expiring one
+  (`TestMemoryKey`). Read-only takes it away; the management API can't set
+  it. From elsewhere it answers only while magpie is shared
+  (`sharedWith`), and never to a page by `hubFromPage` (an Origin,
+  `Sec-Fetch-Site`, a `Mozilla/` agent), not `fromBrowser`, as Node's
+  fetch, the MCP SDK's transport, sends `Sec-Fetch-Mode`
+  (`TestMemoryMCPToAKeyGivenIt`, `TestHubGivesMemoryToAKeyLetUseIt`). Such
+  a caller has no folder here (`memoryCaller`), so it saves globally or
+  names a project by its key.
 
 - The Library offers it in the market as `magpie-memory`
   ([market.go](../../internal/library/market.go)), run as

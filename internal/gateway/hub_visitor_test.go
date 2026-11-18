@@ -225,3 +225,77 @@ func TestHubGivesAlmaItsHereOnlyServersNotAPage(t *testing.T) {
 		t.Fatalf("ran for a page: %q", got)
 	}
 }
+
+// Magpie Memory goes through the hub to another computer's caller by a
+// gateway key the user let use it (access.Key.Memory, Niapyaya on X), as
+// /mcp/magpie/memory answers it: listed and run. Another key, the key
+// sent by a web page and the key once memory is taken away aren't given
+// it, and it never runs for them.
+func TestHubGivesMemoryToAKeyLetUseIt(t *testing.T) {
+	fresh(t)
+	t.Setenv("MAGPIE_ADDR", "")
+	t.Setenv("MAGPIE_PUBLIC_URL", "")
+	t.Setenv("MAGPIE_TRUST_PROXY", "")
+	servers := []HubServer{
+		{Name: "magpie-memory", HereOnly: true, Program: true, Memory: true},
+		{Name: "magpie-image", HereOnly: true, Program: true},
+		{Name: "docs"},
+	}
+	var tools []HubTool
+	for _, s := range servers {
+		tools = append(tools, HubTool{Server: s.Name, Tool: "do", Spec: hubSpec("do")})
+	}
+	f := &fakeHub{on: true, tools: map[string][]HubTool{"": tools}, servers: map[string][]HubServer{"": servers}}
+	withHub(t, f)
+	h := lanGuard(New().Handler())
+	keys, secrets := newCaller(t, "Remote box", "Friend")
+	if _, err := access.Update("memory-key", access.Change{Key: keys[0].ID, Memory: true}); err != nil {
+		t.Fatal(err)
+	}
+	const there = "192.0.2.7:4000"
+	listed := func(hdr ...string) []string {
+		t.Helper()
+		m := readMCP(t, hubPostAt(h, HubMCPAll, there, toolsList, hdr...))
+		var out []string
+		for _, t := range m.Result.Tools {
+			out = append(out, strings.TrimSuffix(t.Name, hubSep+"do"))
+		}
+		slices.Sort(out)
+		return out
+	}
+	given := []string{"Authorization", "Bearer " + secrets[0]}
+	other := []string{"Authorization", "Bearer " + secrets[1]}
+	page := append([]string{"Origin", "https://evil.example"}, given...)
+	browser := append([]string{"User-Agent", "Mozilla/5.0 (Macintosh) Chrome/140"}, given...)
+	if got, want := listed(given...), []string{"docs", "magpie-memory"}; !slices.Equal(got, want) {
+		t.Errorf("the key let use memory is given %v, want %v", got, want)
+	}
+	m := readMCP(t, hubPostAt(h, HubMCPAll, there, toolsCall("magpie-memory"+hubSep+"do", `{}`), given...))
+	if m.Error != nil || m.Result.IsError {
+		t.Fatalf("memory for the key let use it: %+v", m)
+	}
+	if got := f.ran(); len(got) != 1 {
+		t.Fatalf("ran %q, want magpie-memory once", got)
+	}
+	if got, want := listed(other...), []string{"docs"}; !slices.Equal(got, want) {
+		t.Errorf("another key is given %v, want %v", got, want)
+	}
+	for _, auth := range [][]string{other, browser} {
+		m := readMCP(t, hubPostAt(h, HubMCPAll, there, toolsCall("magpie-memory"+hubSep+"do", `{}`), auth...))
+		if m.Error == nil && !m.Result.IsError {
+			t.Errorf("memory ran for %v: %+v", auth, m)
+		}
+	}
+	if w := hubPostAt(h, HubMCPAll, there, toolsList, page...); w.Code == http.StatusOK && strings.Contains(w.Body.String(), "magpie-memory") {
+		t.Errorf("a page with the key is given memory: %s", w.Body.String())
+	}
+	if _, err := access.Update("memory-key", access.Change{Key: keys[0].ID}); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := listed(given...), []string{"docs"}; !slices.Equal(got, want) {
+		t.Errorf("once taken away, the key is given %v, want %v", got, want)
+	}
+	if got := f.ran(); len(got) != 1 {
+		t.Fatalf("memory ran for a caller not given it: %q", got)
+	}
+}

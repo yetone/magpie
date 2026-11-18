@@ -10718,6 +10718,17 @@ It answers the same as the app’s own pages do, under `/v1/magpie/admin/`: `GET
 
 A key that is read-only, the extension’s, issued or short-lived, or the sharing key, can’t have it. A web page can’t call it, with a key or without (any request with `Origin` or `Sec-Fetch-*` is refused), and nor can a request under another name for this computer. Shared over the network, only a key set to `any` gets in.
 
+## Memory from other computers
+
+Magpie Memory answers the agents on this computer. To let an agent on another computer read and save it too, give that agent a gateway key of its own and allow it, from the key’s menu in the app under Advanced › Magpie Memory, or from the command line:
+
+```
+magpie gateway-key add remote-box
+magpie gateway-key memory <id> on
+```
+
+While magpie is shared, that agent uses `http://<this computer>:3425/mcp/magpie/memory` with `Authorization: Bearer <key>`, or finds `magpie-memory` in the MCP router. What it saves goes into every agent’s instructions here, so no other key gets it: not the sharing key, a read-only, issued or short-lived key, nor a web page, with the key or without.
+
 ## Stats API
 
 What the Usage page shows is also served as JSON, to this computer and, while magpie is shared, to a request with a gateway key. A key held to a budget, models or accounts is told only its own calls and limit, and the quotas of what it may use once its owner turns on Quotas for it (`magpie gateway-key quotas <id> on`).

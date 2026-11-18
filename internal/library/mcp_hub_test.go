@@ -887,6 +887,10 @@ func TestHubKeepsThisComputersOwnServersHere(t *testing.T) {
 		if got, want := hubServerOf(&c.s).Keyed, len(c.s.Args) > 1 && c.s.Args[1] == "browser"; got != want {
 			t.Errorf("%+v: keyed %v, want %v", c.s, got, want)
 		}
+		// only Magpie Memory goes to a key let use it (gateway.HubServer's Memory)
+		if got, want := hubServerOf(&c.s).Memory, len(c.s.Args) > 1 && c.s.Args[1] == "memory"; got != want {
+			t.Errorf("%+v: memory %v, want %v", c.s, got, want)
+		}
 	}
 	keyed := gateway.WithHubVisitor(here, gateway.HubVisitor{Away: true, Key: "k1"})
 	if got := servers(keyed); !slices.Equal(got, []string{"fake", browserServerName}) && !slices.Equal(got, []string{browserServerName, "fake"}) {

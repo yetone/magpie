@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yetone/magpie/internal/access"
 	// search by meaning, when switched on (memory.Semantic)
 	_ "github.com/yetone/magpie/internal/memembed"
 	"github.com/yetone/magpie/internal/memory"
@@ -54,16 +55,29 @@ const (
 const memoryServerName = "magpie-memory"
 
 func (s *Server) memoryMCP(w http.ResponseWriter, r *http.Request) {
-	// what is known about this computer's user, and what goes into every
-	// agent's instructions here (the digest): only an agent on this
-	// computer reads or writes it, as the hub gives it (HereOnly). Another
-	// computer's gateway key, which may be a friend's, and a web page,
-	// even one Settings lists, are turned away.
-	if !local(r) || fromBrowser(r) {
-		http.Error(w, "magpie's memory MCP server answers the agents on this computer alone", http.StatusForbidden)
+	if !memoryReaches(r) {
+		http.Error(w, "magpie's memory MCP server answers the agents on this computer, and another computer's only while magpie is shared and by a gateway key let use Magpie Memory (the key's ··· › Advanced in magpie's gateway keys, or `magpie gateway-key memory <id> on`); never a web page", http.StatusForbidden)
 		return
 	}
 	serveMCP(w, r, "magpie's memory", memoryServerName, 1<<20, s.memoryMCPCall)
+}
+
+// memoryReaches is whether r may read and write magpie's memory: what is
+// known about this computer's user, and what goes into every agent's
+// instructions here (the digest). An agent on this computer may; another
+// computer's only while magpie is shared, by a gateway key the user let
+// use it themselves (access.Key.Memory, Niapyaya on X: an agent on a
+// remote machine saving to it), as the hub gives it (HubVisitor's
+// Memory). Any other key, which may be a friend's and uses every MCP
+// server unless held to some, and a web page, one Settings lists and that
+// sends a key included, are turned away. From elsewhere a page is told by
+// hubFromPage, not fromBrowser, whose Sec-Fetch-Mode Node's fetch sends
+// too (#5522): the MCP SDK's own transport, which a remote agent uses.
+func memoryReaches(r *http.Request) bool {
+	if local(r) {
+		return !fromBrowser(r)
+	}
+	return sharedWith(r) && access.Caller(r.Context()).Memory && !hubFromPage(r)
 }
 
 var memoryKinds = strings.Join(memory.Kinds, ", ")

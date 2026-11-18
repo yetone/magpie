@@ -261,6 +261,16 @@ curl -s -X POST http://127.0.0.1:3425/v1/magpie/admin/gateway-keys/add-key \
     <p>It answers the same as the app’s own pages do, under <code>/v1/magpie/admin/</code>: <code>GET providers</code>, <code>POST provider/{save,delete,on,off,name,…}</code>, <code>POST keys/…</code> (a provider’s keys), <code>GET</code>/<code>POST gateway-keys[/{add-key,rename-key,limit-key,models-key,remove-key,…}]</code>, <code>GET</code>/<code>POST account-groups[/…]</code>, <code>GET routing-groups[/{id}]</code> and <code>POST routing-groups/{create,update,delete,switch,…}</code> (the Routing page’s groups and combos, checked as the app checks them; <code>update</code> changes only the fields you send), and <code>POST signin</code> with <code>{"agent":…}</code>, which answers the vendor’s page and the code to type there, never a password; open it on a computer with a browser. A saved key and a gateway key’s secret are never told again, and what changes this computer’s apps is not served. Sign-ins are not exported: that would hand out every account’s secrets.</p>
     <p>A key that is read-only, the extension’s, issued or short-lived, or the sharing key, can’t have it. A web page can’t call it, with a key or without (any request with <code>Origin</code> or <code>Sec-Fetch-*</code> is refused), and nor can a request under another name for this computer. Shared over the network, only a key set to <code>any</code> gets in.</p>
 
+    <h2 id="memory"><a class="anchor" href="#memory">Memory from other computers</a></h2>
+    <p>Magpie Memory answers the agents on this computer. To let an agent on another computer read and save it too, give that agent a gateway key of its own and allow it, from the key’s menu in the app under Advanced › Magpie Memory, or from the command line:</p>
+    <div class="code">
+      <span class="lang">Shell</span>
+      <button class="copy" data-copy="ex-memory">Copy</button>
+      <pre id="ex-memory">magpie gateway-key add remote-box
+magpie gateway-key memory &lt;id&gt; on</pre>
+    </div>
+    <p>While magpie is shared, that agent uses <code>http://&lt;this computer&gt;:3425/mcp/magpie/memory</code> with <code>Authorization: Bearer &lt;key&gt;</code>, or finds <code>magpie-memory</code> in the MCP router. What it saves goes into every agent’s instructions here, so no other key gets it: not the sharing key, a read-only, issued or short-lived key, nor a web page, with the key or without.</p>
+
     <h2 id="api"><a class="anchor" href="#api">Stats API</a></h2>
     <p>What the Usage page shows is also served as JSON, to this computer and, while magpie is shared, to a request with a gateway key. A key held to a budget, models or accounts is told only its own calls and limit, and the quotas of what it may use once its owner turns on <span class="ui">Quotas</span> for it (<code>magpie gateway-key quotas &lt;id&gt; on</code>).</p>
     <ul>

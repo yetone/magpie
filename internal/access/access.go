@@ -184,6 +184,14 @@ type Key struct {
 	// not a read-only, browser, issued or expiring key, nor the default
 	// sharing key, which magpie hands to agents.
 	Admin string `json:"admin,omitempty"`
+	// Memory lets the key's agents on another computer use Magpie Memory
+	// (/mcp/magpie/memory, and the hub's magpie-memory), reading and
+	// saving what is known about this computer's user (Niapyaya on X).
+	// Memory's digest goes into every agent's instructions here, so it is
+	// never a key's by default: only a key the user made themselves can
+	// have it, as Admin (memoryOf). Agents on this computer use memory
+	// whatever it says.
+	Memory bool `json:"memory,omitempty"`
 	// Expires is when the key stops working (an issued key, IssueKey);
 	// zero for one that doesn't. Prune removes it a while after.
 	Expires time.Time `json:"expires,omitzero"`
@@ -279,6 +287,8 @@ type Identity struct {
 	Browser bool
 	// Admin is Key.Admin, "" for a key that can't have it (adminOf).
 	Admin string
+	// Memory is Key.Memory, false for a key that can't have it (memoryOf).
+	Memory bool
 	// sum is the SHA-256 of the secret the request came with, so a
 	// connection kept open can tell the key was rotated since (Current).
 	sum [32]byte
@@ -503,6 +513,8 @@ type Change struct {
 	Browser bool `json:"browser,omitempty"`
 	// Admin is what "admin-key" sets (CleanAdmin's AdminLocal, AdminAny or "").
 	Admin string `json:"admin,omitempty"`
+	// Memory is what "memory-key" sets (Key.Memory).
+	Memory bool `json:"memory,omitempty"`
 	// Issues is what "issuer-key" sets: the key may issue short-lived
 	// keys under itself (Key.Issues).
 	Issues bool `json:"issues,omitempty"`
@@ -726,6 +738,7 @@ func Update(action string, in Change) (string, error) {
 			keys[i].ReadOnly = in.ReadOnly
 			if in.ReadOnly {
 				keys[i].Admin = ""
+				keys[i].Memory = false
 			}
 		case "admin-key":
 			// the management API changes providers, accounts and keys, so
@@ -745,6 +758,21 @@ func Update(action string, in Change) (string, error) {
 				}
 			}
 			keys[i].Admin = level
+		case "memory-key":
+			// memory's digest goes into every agent's instructions here, so
+			// only a key the user made for their own agents elsewhere can
+			// read and write it, never one handed to others
+			if in.Memory {
+				switch {
+				case defaultKey:
+					return "", errors.New("The sharing key is the one magpie gives agents that reach it from elsewhere, so it can't use Magpie Memory from another computer: add a key of its own for that")
+				case keys[i].Browser || keys[i].ReadOnly:
+					return "", errors.New("A read-only key, or the Magpie Browser extension's, can't use Magpie Memory: add another key for that")
+				case keys[i].Issuer != "" || !keys[i].Expires.IsZero():
+					return "", errors.New("An issued key can't use Magpie Memory from another computer: let a key of yours do it")
+				}
+			}
+			keys[i].Memory = in.Memory
 		case "on-key", "off-key":
 			keys[i].Off = action == "off-key"
 		case "remove-key":
@@ -768,7 +796,7 @@ func Update(action string, in Change) (string, error) {
 		default:
 			return "", fmt.Errorf("unknown key action %q", action)
 		}
-		if defaultKey && action != "remove-key" && action != "rename-key" && action != "limit-key" && action != "reset-limit-key" && action != "models-key" && action != "aliases-key" && action != "accounts-key" && action != "mcp-key" && action != "quotas-key" && action != "concurrency-key" && action != "tier-key" && action != "redact-key" && action != "access-key" && action != "issuer-key" && action != "admin-key" && action != "move-key" {
+		if defaultKey && action != "remove-key" && action != "rename-key" && action != "limit-key" && action != "reset-limit-key" && action != "models-key" && action != "aliases-key" && action != "accounts-key" && action != "mcp-key" && action != "quotas-key" && action != "concurrency-key" && action != "tier-key" && action != "redact-key" && action != "access-key" && action != "issuer-key" && action != "admin-key" && action != "memory-key" && action != "move-key" {
 			mirror = &keys[i]
 		}
 	}
@@ -1046,4 +1074,10 @@ func adminOf(k Key) string {
 		return ""
 	}
 	return k.Admin
+}
+
+// memoryOf is whether a key really may use Magpie Memory from another
+// computer: never one that can't hold it, whatever the file says.
+func memoryOf(k Key) bool {
+	return k.Memory && k.Issuer == "" && !k.ReadOnly && !k.Browser && k.Expires.IsZero() && !k.LAN
 }

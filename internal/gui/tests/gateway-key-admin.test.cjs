@@ -1,23 +1,25 @@
 // A gateway key is given the management API (/v1/magpie/admin/, #6307,
 // ljayic on X) from its row's menu, under Advanced: off, from this
 // computer or from any. A key that can manage magpie says so in its row.
-// The sharing key, a read-only key and Magpie Browser's can't hold it,
-// so their menus don't offer it.
+// Beside it, Advanced lets a key's agents on other computers read and
+// save Magpie Memory (Niapyaya on X), and such a key says so in its row.
+// The sharing key, a read-only key and Magpie Browser's can't hold
+// either, so their menus don't offer them.
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
 const { fixture } = require("./fixtures/caller-keys.cjs");
 
 const words = {
-  en: { more: "Key actions", adv: "Advanced", head: "Management API", off: "Off", local: "From this computer", any: "From any computer", tag: "Manages magpie", madeLocal: "Server can manage magpie from this computer", madeOff: "Server can't manage magpie" },
-  zh: { more: "密钥操作", adv: "高级", head: "管理 API", off: "关闭", local: "仅限本机", any: "任何电脑均可", tag: "可管理 magpie", madeLocal: "Server 现在可在本机管理 magpie", madeOff: "Server 不再能管理 magpie" },
-  "zh-TW": { more: "金鑰操作", adv: "進階", head: "管理 API", off: "關閉", local: "僅限本機", any: "任何電腦均可", tag: "可管理 magpie", madeLocal: "Server 現在可在本機管理 magpie", madeOff: "Server 不再能管理 magpie" },
-  ja: { more: "キーの操作", adv: "詳細設定", head: "管理 API", off: "オフ", local: "このコンピュータから", any: "どのコンピュータからでも", tag: "magpie を管理", madeLocal: "Server はこのコンピュータから magpie を管理できます", madeOff: "Server は magpie を管理できなくなりました" },
-  de: { more: "Schlüsselaktionen", adv: "Erweitert", head: "Verwaltungs-API", off: "Aus", local: "Von diesem Computer", any: "Von jedem Computer", tag: "Verwaltet magpie", madeLocal: "Server kann magpie von diesem Computer aus verwalten", madeOff: "Server kann magpie nicht mehr verwalten" },
+  en: { more: "Key actions", adv: "Advanced", head: "Management API", off: "Off", local: "From this computer", any: "From any computer", tag: "Manages magpie", madeLocal: "Server can manage magpie from this computer", madeOff: "Server can't manage magpie", mem: "Magpie Memory", memTag: "Memory from any computer", memOn: "Server can read and save Magpie Memory from any computer", memOff: "Server uses Magpie Memory from this computer only" },
+  zh: { more: "密钥操作", adv: "高级", head: "管理 API", off: "关闭", local: "仅限本机", any: "任何电脑均可", tag: "可管理 magpie", madeLocal: "Server 现在可在本机管理 magpie", madeOff: "Server 不再能管理 magpie", mem: "Magpie Memory", memTag: "任何电脑可用记忆", memOn: "Server 现在可在任何电脑上读写 Magpie Memory", memOff: "Server 只在本机使用 Magpie Memory" },
+  "zh-TW": { more: "金鑰操作", adv: "進階", head: "管理 API", off: "關閉", local: "僅限本機", any: "任何電腦均可", tag: "可管理 magpie", madeLocal: "Server 現在可在本機管理 magpie", madeOff: "Server 不再能管理 magpie", mem: "Magpie Memory", memTag: "任何電腦可用記憶", memOn: "Server 現在可在任何電腦上讀寫 Magpie Memory", memOff: "Server 只在本機使用 Magpie Memory" },
+  ja: { more: "キーの操作", adv: "詳細設定", head: "管理 API", off: "オフ", local: "このコンピュータから", any: "どのコンピュータからでも", tag: "magpie を管理", madeLocal: "Server はこのコンピュータから magpie を管理できます", madeOff: "Server は magpie を管理できなくなりました", mem: "Magpie Memory", memTag: "どこからでもメモリー", memOn: "Server はどのコンピュータからでも Magpie Memory を読み書きできます", memOff: "Server はこのコンピュータでのみ Magpie Memory を使います" },
+  de: { more: "Schlüsselaktionen", adv: "Erweitert", head: "Verwaltungs-API", off: "Aus", local: "Von diesem Computer", any: "Von jedem Computer", tag: "Verwaltet magpie", madeLocal: "Server kann magpie von diesem Computer aus verwalten", madeOff: "Server kann magpie nicht mehr verwalten", mem: "Magpie Memory", memTag: "Memory von jedem Computer", memOn: "Server kann Magpie Memory von jedem Computer aus lesen und speichern", memOff: "Server nutzt Magpie Memory nur von diesem Computer aus" },
 };
 
 const keys = () => [
-  { id: "ops", name: "Ops", masked: "sk-magpie-key-…000000", admin: "any" },
+  { id: "ops", name: "Ops", masked: "sk-magpie-key-…000000", admin: "any", memory: true },
   { id: "server", name: "Server", masked: "sk-magpie-key-…222222" },
   { id: "laptop", name: "Laptop", masked: "sk-magpie-key-…111111", readOnly: true },
   { id: "magpie", name: "Magpie", masked: "sk-magpie-key-…444444", lan: true },
@@ -47,12 +49,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await row(id).getByRole("button", { name: w.more, exact: true }).click();
           await page.locator(".row-menu").waitFor();
         };
-        const levels = async (id) => {
+        const levels = async (id, head = w.head) => {
           await menu(id);
           await item(w.adv).click();
+          await item(head).click();
           await page.locator(".proto-menu").waitFor();
-          assert.equal((await page.locator(".proto-menu .pm-head").textContent()).trim(), w.head);
+          assert.equal((await page.locator(".proto-menu .pm-head").textContent()).trim(), head);
         };
+        const memTag = (id) => row(id).locator(".key-memory");
+        const memories = () => events.filter((e) => e.action === "memory-key").map((e) => e.body);
         const admins = () => events.filter((e) => e.action === "admin-key").map((e) => e.body);
 
         // a key that can manage magpie says so always, not only on hover
@@ -90,14 +95,34 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await level(w.any).getAttribute("aria-checked"), "true");
         await page.keyboard.press("Escape");
 
+        // Magpie Memory from other computers: off unless given, and said
+        // in the row while on
+        assert.equal((await memTag("ops").textContent()).trim(), w.memTag);
+        assert.ok((await memTag("ops").getAttribute("title")).length > 10, "the memory tag says what it means");
+        assert.equal(await memTag("server").count(), 0);
+        await levels("server", w.mem);
+        assert.equal(await level(w.local).getAttribute("aria-checked"), "true");
+        await level(w.any).click();
+        await page.waitForFunction(() => !!document.querySelector('#gatewayKeys .acc[data-key="server"] .key-memory'));
+        assert.deepEqual(memories(), [{ key: "server", memory: true }]);
+        assert.equal((await page.locator("#status").textContent()).trim(), w.memOn);
+        await levels("server", w.mem);
+        assert.equal(await level(w.any).getAttribute("aria-checked"), "true");
+        await level(w.local).click();
+        await page.waitForFunction(() => !document.querySelector('#gatewayKeys .acc[data-key="server"] .key-memory'));
+        assert.deepEqual(memories().at(-1), { key: "server", memory: false });
+        assert.equal((await page.locator("#status").textContent()).trim(), w.memOff);
+
         // keys that can't hold it aren't offered it
         for (const id of ["laptop", "magpie", "ext"]) {
           await menu(id);
           assert.equal(await item(w.adv).count(), 0, `${id} offers the management API`);
           await page.keyboard.press("Escape");
           assert.equal(await tag(id).count(), 0);
+          assert.equal(await memTag(id).count(), 0);
         }
         assert.equal(admins().length, 2);
+        assert.equal(memories().length, 2);
         assert.deepEqual(await scrolled(), before, "a click moved the page");
 
         const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -105,7 +130,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const rowBox = await row("ops").boundingBox(), b = await tag("ops").boundingBox();
         assert.ok(b.x >= rowBox.x && b.x + b.width <= rowBox.x + rowBox.width + 1, "the tag runs out of its row");
         assert.equal(await page.locator("select").count(), 0, "no native select");
-        const borders = await page.locator("#gatewayKeys .key-admin").evaluateAll((els) => els.map((e) => {
+        const borders = await page.locator("#gatewayKeys .key-admin, #gatewayKeys .key-memory").evaluateAll((els) => els.map((e) => {
           const c = getComputedStyle(e);
           return { left: c.borderLeftStyle, right: c.borderRightStyle, leftColor: c.borderLeftColor, rightColor: c.borderRightColor };
         }));

@@ -188,6 +188,7 @@ function fixture(lang, theme, events, options = {}) {
       if (action === "remove-key") keys = keys.filter((v) => v !== k);
       if (action === "on-key" || action === "off-key") k.off = action === "off-key";
       if (action === "admin-key") k.admin = body.admin || undefined;
+      if (action === "memory-key") k.memory = body.memory || undefined;
       if (action === "limit-key") {
         // what a key has used is the fixture's; a new limit starts unused
         const usedOf = (l) => {
