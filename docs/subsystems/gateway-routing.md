@@ -1158,7 +1158,7 @@ Each vendor is sent its own request:
 | Volcengine Ark (`isArk`) | `/images/generations`, `watermark: false` unless sent, one request per image, ratio as the doc's 2K size, the caller's other fields as sent (`stream: true` is a 400 pointing to the native route) | the same endpoint, images as JSON `image` (URL or data URL); a mask is a 400 that says to describe it in the prompt | Seedance at `/contents/generations/tasks` (below) |
 | Gemini at Google, a Google sign-in | `generateContent` asking for images | the images as inline parts | a plugin's Veo through its fetch |
 | OpenRouter | `/images` for image-only models, chat with modalities for the others | `input_references` | none |
-| DashScope, ModelScope | their own asynchronous image APIs (`draw_dashscope.go`, `draw_modelscope.go`) | their image fields | none |
+| DashScope, ModelScope | their own asynchronous image APIs (`draw_dashscope.go`, `draw_modelscope.go`) | their image fields | a Token Plan's Wan 3.0 and HappyHorse at `/api/v1/services/aigc/video-generation/video-synthesis` (below); none for ModelScope |
 | MiniMax API key | | | H3 at `/v2/video_generation` (below) |
 | Another magpie | its images API | its images API | its videos API, ids wrapped |
 
@@ -1354,6 +1354,58 @@ when nothing else makes videos. Covered by `TestMiniMaxKeysMakeH3Videos`,
 `TestMiniMaxVideoFailuresSayWhy`, `TestImageMCPMakesMiniMaxVideos`,
 `TestMiniMaxComesAfterOtherVideomakers` and
 `TestMiniMaxVideoMovesPastATokenPlanKey`.
+
+Alibaba's Token Plans (`qwen-token-plan`, `bailian-token-plan`,
+`alibaba-token-plan`, `qwencloud-token-plan`) name every kind of model the
+plan serves, each in its own list on the preset (`PresetDef.Drawers`,
+`Videos`, `Speakers`, `Transcribers`, read by `PlanDrawers`, `PlanVideos`,
+`PlanSpeakers`, `PlanTranscribers`): Qwen-Image and Wan 2.7 images
+(drawn as above), Wan 3.0 and HappyHorse 1.1 videos, qwen-audio TTS and
+ASR, beside the chat models (@gaubeebangeel on X). A key of such a plan
+(no account, not a plugin or another magpie, `dashScope`) is asked on
+DashScope's own APIs at its host's root (`dashScopeRoot`), since the
+plan's host has no OpenAI-style videos or audio API:
+
+- **Video** ([`video_dashscope.go`](../../internal/gateway/video_dashscope.go),
+  `filmsDashScope`, `makesDashScopeVideo`): `POST
+  <root>/api/v1/services/aigc/video-generation/video-synthesis` with
+  `X-DashScope-Async: enable`, polled at `GET <root>/api/v1/tasks/<id>`,
+  its MP4 `output.video_url` fetched through `vendorClient`.
+  `dashScopeVideoBody` puts the prompt and `negative_prompt` in `input`,
+  `input_reference`, `last_frame` and `reference_images` as `media` items
+  of type `first_frame`, `last_frame` and `reference_image` (at most 10),
+  `size` as `resolution` (1080P/720P/480P by its shorter side) and the
+  nearest `ratio`, `seconds` as a whole `duration`, `watermark: false`
+  unless sent, and the caller's other fields in `parameters` as sent. The
+  task answer names no model, so the vendor id is the model and task in
+  base64url (`dashScopeStarted`, `dashScopeTask`). PENDING, RUNNING,
+  SUCCEEDED, FAILED/UNKNOWN and CANCELED are read as queued, in_progress,
+  completed and failed (`dashScopeVideoStatus`). Ids carry the key's mark
+  and polls go on that key, as MiniMax's do.
+- **Text to speech** ([`speech_dashscope.go`](../../internal/gateway/speech_dashscope.go),
+  `dashScopeAudio`, `speechRequest.dashScopeSpeech`, a `nativeRetrieval`
+  as Gemini's speech is): `/v1/audio/speech` goes to `POST
+  <root>/api/v1/services/audio/tts/SpeechSynthesizer` with `input.text`,
+  `voice` (an OpenAI name, or none, is the model's own first voice:
+  `longanlingxin` for -plus, `longanhuan_v3.6` for -flash), `format`
+  (mp3 by default, wav, pcm, opus; aac, flac and `stream_format: sse` are
+  400s before DashScope is asked), `instructions` as `instruction` and
+  `speed` as `rate` (0.5 to 2). The answer's `output.audio.url` is fetched
+  (`fetchVendorFile`), or `output.audio.data` decoded, and served with the
+  format's type; `usage.characters` is the input counted.
+- **Speech to text** (`audioForm.nativeAt`,
+  `dashScopeTranscription`): `/v1/audio/transcriptions` goes to `POST
+  <root>/api/v1/services/aigc/multimodal-generation/generation`, the
+  form's file as an `input_audio` data URI, its `format` from the file's
+  name or type, `language` as `language_hints`; the prompt has no field
+  there and isn't sent. `output.text` is answered as OpenAI's json, text or
+  verbose_json; srt, vtt and `/v1/audio/translations` are 400s.
+
+The plan's Qwen-Omni realtime (`wss://<root>/api-ws/v1/realtime`) is
+served by the realtime route as other DashScope hosts are. Covered by
+`TestTokenPlansNameEveryKind`, `TestTokenPlanSpeaks`,
+`TestTokenPlanTranscribes`, `TestTokenPlanMakesVideos` and
+`TestDashScopeVideoBody`.
 
 ## A key's model patterns and names
 

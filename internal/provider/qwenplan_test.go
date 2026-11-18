@@ -23,7 +23,7 @@ func TestQwenTokenPlan(t *testing.T) {
 	if p.Chat != "https://token-plan.maas.qianwenaiapi.com/compatible-mode/v1" || p.Anthropic != "https://token-plan.maas.qianwenaiapi.com/apps/anthropic" || p.Responses != "" {
 		t.Fatalf("endpoints: %q %q %q", p.Chat, p.Responses, p.Anthropic)
 	}
-	if got := p.planModels(nil); len(got) != len(Preset("qwen-token-plan").Models) || got[1].ID != "qwen3.8-max" {
+	if got := p.planModels(nil); len(got) != len(Preset("qwen-token-plan").Models) || got[1].ID != "qwen4-max" {
 		t.Fatalf("plan's: %+v", got)
 	}
 	im, _ := imported("Qwen", "sk-sp-x", endpoints{chat: "https://token-plan.maas.qianwenaiapi.com/compatible-mode/v1"}, nil)
@@ -60,7 +60,7 @@ func TestBailianTokenPlan(t *testing.T) {
 	if pr := Preset("bailian-token-plan"); pr.Icon != "bailian-color" || !slices.Equal(pr.Models, Preset("qwen-token-plan").Models) {
 		t.Fatalf("preset: %+v", pr)
 	}
-	if got := p.planModels(nil); len(got) != len(alibabaPlanModels) || got[1].ID != "qwen3.8-max" {
+	if got := p.planModels(nil); len(got) != len(alibabaPlanModels) || got[1].ID != "qwen4-max" {
 		t.Fatalf("plan's: %+v", got)
 	}
 	im, _ := imported("Bailian", "sk-sp-x", endpoints{chat: root + "/compatible-mode/v1"}, nil)

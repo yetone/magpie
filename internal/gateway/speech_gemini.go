@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
@@ -30,10 +31,12 @@ type nativeRetrieval interface {
 // turned into what the client is given (bytes, Content-Type and the
 // tokens it counted).
 type vendorAsk struct {
-	url    string
-	body   []byte
-	proto  provider.Protocol
-	answer func(b []byte) (out []byte, ctype string, in, outTokens int, err error)
+	url   string
+	body  []byte
+	proto provider.Protocol
+	// answer is given the request's context, for an answer that is a URL
+	// to fetch the audio from (DashScope's)
+	answer func(ctx context.Context, b []byte) (out []byte, ctype string, in, outTokens int, err error)
 }
 
 // geminiSpeechBase is the Gemini API base p is asked for model at, a
@@ -100,7 +103,8 @@ func geminiVoice(v string) string {
 	return defaultGeminiVoice
 }
 
-// nativeAt asks a Gemini TTS model on generateContent: the input to read,
+// nativeAt asks a DashScope plan's qwen-audio TTS model on its own API
+// (speech_dashscope.go), and a Gemini TTS model on generateContent: the input to read,
 // after the instructions on how (Gemini takes them in the prompt: "Say
 // cheerfully: …"), in one prebuilt voice, answered with audio alone. speed
 // has no Gemini field and is left out. The answer is 24 kHz PCM, given back
@@ -110,6 +114,9 @@ func geminiVoice(v string) string {
 // fail them all, while players read a WAV by its header). A streamed
 // answer (stream_format sse) is turned away: generateContent's is whole.
 func (sp *speechRequest) nativeAt(p provider.Provider, model string) (*vendorAsk, string) {
+	if dashScopeAudio(p, model, catalog.ServesSpeech) {
+		return sp.dashScopeSpeech(p, model)
+	}
 	base := strings.TrimRight(geminiSpeechBase(p, model), "/")
 	if base == "" {
 		return nil, ""
@@ -147,7 +154,7 @@ func (sp *speechRequest) nativeAt(p provider.Provider, model string) (*vendorAsk
 	if p.IsVertex() {
 		url = base + provider.VertexWholePath(model)
 	}
-	return &vendorAsk{url: url, body: body, proto: provider.Gemini, answer: func(b []byte) ([]byte, string, int, int, error) {
+	return &vendorAsk{url: url, body: body, proto: provider.Gemini, answer: func(_ context.Context, b []byte) ([]byte, string, int, int, error) {
 		return geminiAudio(b, format == "pcm")
 	}}, ""
 }

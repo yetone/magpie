@@ -36,6 +36,7 @@ func (s *Server) transcribe(path, operation string) http.HandlerFunc {
 			writeError(w, provider.Chat, 400, err.Error())
 			return
 		}
+		a.op = operation
 		if a.model == "" {
 			writeError(w, provider.Chat, 400, "name the model: the form's \"model\" is a magpie model id, provider/model (openai/whisper-1, groq/whisper-large-v3)")
 			return
@@ -52,6 +53,11 @@ type audioForm struct {
 	boundary string
 	model    string
 	prompt   string
+	// op is the API asked: transcriptions or translations
+	op string
+	// language and format are the form's language and response_format,
+	// for a vendor asked in its own shape (DashScope's, speech_dashscope.go)
+	language, format string
 	// masked is the prompt as it goes to a vendor, when masking changed it
 	masked *string
 }
@@ -74,7 +80,7 @@ func readAudioForm(ctype string, body []byte) (*audioForm, error) {
 			return nil, errors.New("the multipart form doesn't parse: " + err.Error())
 		}
 		switch p.FormName() {
-		case "model", "prompt":
+		case "model", "prompt", "language", "response_format":
 			if p.FileName() != "" {
 				continue
 			}
@@ -82,14 +88,43 @@ func readAudioForm(ctype string, body []byte) (*audioForm, error) {
 			if err != nil {
 				return nil, errors.New("the multipart form doesn't parse: " + err.Error())
 			}
-			if p.FormName() == "model" {
+			switch p.FormName() {
+			case "model":
 				a.model = strings.TrimSpace(string(v))
-			} else {
+			case "prompt":
 				a.prompt = string(v)
+			case "language":
+				a.language = strings.TrimSpace(string(v))
+			default:
+				a.format = strings.TrimSpace(string(v))
 			}
 		}
 	}
 	return a, nil
+}
+
+// file is the form's first file part: its bytes, name and type. It is read
+// only for a vendor that takes the audio in a shape of its own, so a form
+// passed on as sent is never copied.
+func (a *audioForm) file() (audio []byte, name, ctype string, err error) {
+	mr := multipart.NewReader(bytes.NewReader(a.raw), a.boundary)
+	for {
+		p, err := mr.NextRawPart()
+		if err == io.EOF {
+			return nil, "", "", nil
+		}
+		if err != nil {
+			return nil, "", "", errors.New("the multipart form doesn't parse: " + err.Error())
+		}
+		if p.FormName() != "file" {
+			continue
+		}
+		v, err := io.ReadAll(p)
+		if err != nil {
+			return nil, "", "", errors.New("the multipart form doesn't parse: " + err.Error())
+		}
+		return v, p.FileName(), p.Header.Get("Content-Type"), nil
+	}
 }
 
 // mask masks the prompt, the form's only text a vendor is sent; the

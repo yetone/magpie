@@ -309,7 +309,7 @@ func (s *Server) serveRetrieval(w http.ResponseWriter, r *http.Request, path, op
 		} else if nat != nil {
 			// whole, then put in the client's shape
 			if b, got, code, err = s.retrieveAs(ctx, c.p, nat.proto, nat.url, ctype, out); err == nil {
-				if b, got, natIn, natOut, err = nat.answer(b); err != nil {
+				if b, got, natIn, natOut, err = nat.answer(ctx, b); err != nil {
 					code, err = 502, fmt.Errorf("%s: %v", provider.HostOf(nat.url), err)
 				}
 			}

@@ -1330,14 +1330,31 @@ func (p Provider) PlanRerankers() []catalog.Model {
 	return p.planMedia(func(r *Region) []string { return r.Rerankers }, false, false, catalog.ServesRerank)
 }
 
-// PlanRetrieval are the preset's models of kind's (catalog.ServesEmbedding
-// or ServesRerank), or both for "".
+// PlanSpeakers are the text-to-speech models the preset names, served on
+// /v1/audio/speech.
+func (p Provider) PlanSpeakers() []catalog.Model {
+	return p.planMedia(func(r *Region) []string { return r.Speakers }, false, false, catalog.ServesSpeech)
+}
+
+// PlanTranscribers are the speech-to-text models the preset names, served
+// on /v1/audio/transcriptions.
+func (p Provider) PlanTranscribers() []catalog.Model {
+	return p.planMedia(func(r *Region) []string { return r.Transcribers }, false, false, catalog.ServesTranscription)
+}
+
+// PlanRetrieval are the preset's models of kind's (catalog.ServesEmbedding,
+// ServesRerank, ServesSpeech or ServesTranscription), or its embedding and
+// rerank models for "".
 func (p Provider) PlanRetrieval(kind string) []catalog.Model {
 	switch kind {
 	case catalog.ServesEmbedding:
 		return p.PlanEmbeddings()
 	case catalog.ServesRerank:
 		return p.PlanRerankers()
+	case catalog.ServesSpeech:
+		return p.PlanSpeakers()
+	case catalog.ServesTranscription:
+		return p.PlanTranscribers()
 	case "":
 		return append(p.PlanEmbeddings(), p.PlanRerankers()...)
 	}
@@ -1362,7 +1379,8 @@ func (p Provider) planMedia(ids func(*Region) []string, draws, films bool, serve
 		return nil
 	}
 	// a preset with no regions names its own (Voyage AI's)
-	own := &Region{Embeddings: pr.Embeddings, Rerankers: pr.Rerankers}
+	own := &Region{Embeddings: pr.Embeddings, Rerankers: pr.Rerankers, Drawers: pr.Drawers, Videos: pr.Videos,
+		Speakers: pr.Speakers, Transcribers: pr.Transcribers}
 	// keys on plans of their own (KeyAccount.Plan): each plan's, once
 	views := []Provider{p}
 	if p.plansMixed() {
