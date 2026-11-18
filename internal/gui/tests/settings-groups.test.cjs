@@ -216,7 +216,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await edit("claude");
         assert.deepEqual(await panes(page), ["claude"]);
         // Claude Code's own run row is Claude's too
-        assert.deepEqual(await visibleRows(), [w.lean, w.extra, w.reset, w.daily]);
+        assert.deepEqual(await visibleRows(), [w.reset, w.daily, w.lean, w.extra]);
         await thumbsUnderPicks("claude");
         await press(page.locator(".editor #claudeWarmSegs .opt").nth(2));
         await last("claudeWarmup", "all");

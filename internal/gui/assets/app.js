@@ -6180,7 +6180,9 @@ const setupPaste = (q) => {
 };
 function renderProviders(quiet) {
   pasteLoad();
+  // an editor waits for advgroups.js, so its rows never move after it draws (#7051)
   advMod();
+  if (!advMod.done && editing) return void advMod.p.then(() => renderProviders(quiet));
   if (accountArranging || providerArranging) { accountRenderPending = true; return; }
   providersBehind = false;
   // a rebuild clamps the scroll to the top: put it back
@@ -8080,8 +8082,8 @@ document.addEventListener("click", (e) => {
 // groupAdvanced: the editor's Advanced rows under small headings
 // (advgroups.js, fetched as Providers first draws, so an editor opens with
 // them in place)
-const advMod = () => (advMod.p ||= import("./advgroups.js"));
-const groupAdvanced = (b) => self.advGroups ? advGroups(b) : advMod().then(() => b.isConnected && advGroups(b), () => {});
+const advMod = () => (advMod.p ||= import("./advgroups.js").catch(() => {}).finally(() => advMod.done = true));
+const groupAdvanced = (b) => self.advGroups?.(b);
 // advancedSet says whether a setting under the editor's Advanced is set,
 // which opens it: none hides behind a fold
 function advancedSet(d, p) {
