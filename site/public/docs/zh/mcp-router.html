@@ -164,6 +164,15 @@ magpie library mcp router off</pre>
     </div>
     <p><code>magpie library</code> 会列出哪些 Agent 用上了 MCP 路由、哪些保留各自的条目，以及原因。</p>
 
+    <h2 id="on-demand"><a class="anchor" href="#on-demand">按需加载工具</a></h2>
+    <p>给 Agent 的每个工具，连同完整的参数定义，会随每次请求一起发出。所以通过 MCP 路由拿到超过 10 个工具的 Agent，会改为拿到两个工具，<b>默认开启</b>：</p>
+    <ul>
+      <li><b><code>find_tools</code></b>：按任务需要的关键词查找匹配的工具，最匹配的 5 个附带描述和参数，其后最多再列 15 个工具名。它自己的描述里列出了每个服务器和它的工具，模型知道有哪些可找。</li>
+      <li><b><code>call_tool</code></b>：按名字运行一个工具，并传入参数。</li>
+    </ul>
+    <p>自己会搜索 MCP 工具的 Agent 仍会拿到全部工具，由它自己的工具搜索把工具挡在每次请求之外：Claude Code、Claude Desktop、Codex、Pi、Droid 和 omp。工具不超过 10 个的 Agent，以及连接 <a href="#apps">其他应用</a> 地址的应用（magpie 无法知道是哪个应用），也拿到全部工具。</p>
+    <p>想让所有 Agent 都拿到全部工具，在 <span class="ui">资源库</span> → <span class="ui">MCP</span> 的 <span class="ui">MCP 路由</span> 下关闭 <span class="ui">按需加载工具</span>，然后重启 Agent。</p>
+
     <h2 id="apps"><a class="anchor" href="#apps">其他应用</a></h2>
     <p>MCP 路由打开后，<span class="ui">其他应用</span> 一行显示一个以 <code>/mcp/magpie/hub</code> 结尾的地址，它提供资源库里的所有服务器。<span class="ui">连接…</span> 会打开一个面板，里面有给 Cursor、VS Code、Windsurf 或任何接受 JSON MCP 配置的应用准备好的条目，可直接复制；在应用窗口里，Cursor 和 VS Code 还有 <span class="ui">添加</span>，会打开对应应用让你确认。另一台电脑上的应用需要网关密钥，和局域网里的其他请求一样（见 <a href="/docs/zh/remote">远程 magpie</a>）。</p>
     <div class="callout"><b>命令型服务器运行在这台电脑上。</b>局域网里持有网关密钥的人都能通过 MCP 路由调用它们，权限就是你在这台电脑上的权限。密钥只给信任的人。</div>
