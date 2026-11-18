@@ -123,6 +123,10 @@ func pairedMessages(msgs []byte) ([]byte, bool) {
 					}
 					return true
 				})
+				if list, moved := callsLast(content); moved {
+					el = withTopValue(el, "content", list)
+					changed = true
+				}
 			}
 			out = append(out, el)
 			return true
@@ -197,6 +201,51 @@ func pairedMessages(msgs []byte) ([]byte, bool) {
 		return nil, false
 	}
 	return rawList(out), true
+}
+
+// callsLast is an assistant message's content, a JSON array, with the
+// words it wrote after a call put before its first call, and whether any
+// were. DeepSeek's Anthropic endpoint takes a call as answered only when
+// nothing but thinking or another call follows it in its message: a text
+// block after it, even one with the call's result in the next message, is
+// refused with 400 "messages.N.K: `tool_use` ids were found without
+// `tool_result` blocks immediately after", K the text block's index, and
+// every later request of the conversation carries it (wizcheu on X:
+// messages.71.2 and messages.422.2, deepseek-flash at max effort through
+// Claude Code; checked against api.deepseek.com/anthropic on 2026-11-19:
+// [thinking, tool_use, text] and [tool_use, text, tool_use] are refused,
+// [thinking, tool_use, thinking, tool_use] and [text, tool_use] are
+// taken). Thinking stays where it was; a text block with no words after a
+// call is left out, as Anthropic refuses an empty one.
+func callsLast(content []byte) ([]byte, bool) {
+	var head, calls []json.RawMessage
+	called, moved := false, false
+	eachElement(content, func(b []byte) bool {
+		typ, _, _ := blockIDs(b)
+		switch {
+		case typ == "tool_use":
+			called = true
+			calls = append(calls, b)
+		case !called:
+			head = append(head, b)
+		case typ == "thinking" || typ == "redacted_thinking":
+			calls = append(calls, b)
+		default:
+			moved = true
+			if typ == "text" {
+				var s string
+				if t, _ := memberOf(b, "text"); json.Unmarshal(t, &s) != nil || strings.TrimSpace(s) == "" {
+					return true
+				}
+			}
+			head = append(head, b)
+		}
+		return true
+	})
+	if !moved {
+		return nil, false
+	}
+	return rawList(append(head, calls...)), true
 }
 
 // rawList is a JSON array of els, each as it is.

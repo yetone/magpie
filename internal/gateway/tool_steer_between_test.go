@@ -34,9 +34,12 @@ var steerBetween = map[string]string{
 
 // deepseekPairing is what api.deepseek.com/anthropic holds a request to,
 // checked against it on 2026-11-18 (a system message between a call and
-// its result: 400; after the result: 200): the message right after a
-// tool_use's is a user message whose results answer every call, and a
-// system message holds no tool_result. "" when the request passes.
+// its result: 400; after the result: 200) and 2026-11-19 (a text block
+// after a call in its message: 400 messages.N.K, K the text's block;
+// thinking after it: 200): nothing but thinking or calls follows a call
+// in its message, the message right after a tool_use's is a user message
+// whose results answer every call, and a system message holds no
+// tool_result. "" when the request passes.
 func deepseekPairing(body []byte) string {
 	var q struct {
 		Messages []struct {
@@ -67,6 +70,16 @@ func deepseekPairing(body []byte) string {
 		for j, b := range blocks(m.Content) {
 			if b["type"] == "tool_use" {
 				ids = append(ids, fmt.Sprintf("%d:%v", j, b["id"]))
+				continue
+			}
+			if len(ids) > 0 && b["type"] != "thinking" && b["type"] != "redacted_thinking" {
+				// words after a call (checked 2026-11-19): K is their block
+				var calls []string
+				for _, id := range ids {
+					_, call, _ := strings.Cut(id, ":")
+					calls = append(calls, call)
+				}
+				return fmt.Sprintf("messages.%d.%d: `tool_use` ids were found without `tool_result` blocks immediately after: %s", i, j, strings.Join(calls, ", "))
 			}
 		}
 		if len(ids) == 0 {
