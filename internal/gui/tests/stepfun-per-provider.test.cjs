@@ -68,7 +68,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(posts[0].body.text, "magpie-stepfun:{}");
 
       // the one signed in signs out, for its own id
-      await page.locator(".editor .bar").getByRole("button", { name: words[lang].cancel, exact: true }).click();
+      await page.locator(".editor .bar .ed-cancel").click();
       await page.locator(".editor").waitFor({ state: "detached" });
       await page.locator(".row.provider", { hasText: "StepFun" }).filter({ hasNotText: "Work" }).click();
       await page.locator(".editor .stepplan").getByRole("button", { name: words[lang].out, exact: true }).click();

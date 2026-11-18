@@ -70,7 +70,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const link = ed.locator(".ehead .link");
         assert.equal(await link.count() ? await link.textContent() : null, links[name], `${name}: its head's link`);
         assert.deepEqual(errors, [], `${name}: nothing throws`);
-        await ed.locator(".bar").getByRole("button", { name: w.cancel, exact: true }).click();
+        await ed.locator(".bar .ed-cancel").click();
         await ed.waitFor({ state: "detached" });
       }
     });

@@ -73,12 +73,12 @@ function serve(lang, posts, lanes) {
 const words = {
   en: {
     busy: "1/1 running · 2 queued", running: "3 running", one: "1 at once", two: "2 at once", three: "3 at once", four: "4 at once", five: "5 at once", seven: "7 at once", none: "No limit at once",
-    menu: "Requests at once", def: "Provider's", other: "Other…", save: "Save", queue: "Queue size", wait: "Queue wait",
+    menu: "Requests at once", def: "Provider's", other: "Other…", save: "Save", cancel: "Cancel", close: "Close", queue: "Queue size", wait: "Queue wait",
     badQueue: "Queue size: a whole number from 0 to 10000",
   },
   zh: {
     busy: "1/1 运行中 · 2 排队", running: "3 运行中", one: "并发 1", two: "并发 2", three: "并发 3", four: "并发 4", five: "并发 5", seven: "并发 7", none: "并发不限",
-    menu: "同时请求数", def: "沿用提供商", other: "其他…", save: "保存", queue: "排队上限", wait: "排队等待",
+    menu: "同时请求数", def: "沿用提供商", other: "其他…", save: "保存", cancel: "取消", close: "关闭", queue: "排队上限", wait: "排队等待",
     badQueue: "排队上限：0 到 10000 的整数",
   },
 };
@@ -210,6 +210,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await item(page, "2").click();
       const p = await posted(posts, n);
       assert.deepEqual(p.body, { id: "codex", account: "me@example.com", limit: 2 });
+      await page.waitForTimeout(250);
+      assert.equal(await page.locator(".editor > .bar .ed-cancel").textContent(), w.close, "a signed-in provider's editor says Close too");
       assert.deepEqual(errors, []);
     });
 
@@ -247,6 +249,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await box.fill("5");
       assert.equal(await pill(page, "k2").textContent(), w.five, "the provider's limit as typed");
       assert.equal(await pill(page, "k1").textContent(), w.one, "its own limit stays");
+      // brought into sight first: a scroll that lands after the click closes the menu
+      await pill(page, "k2").scrollIntoViewIfNeeded();
+      await page.waitForTimeout(250);
       await pill(page, "k2").click();
       await menu(page).waitFor();
       assert.match(await item(page, w.def).textContent(), new RegExp(w.five), "the menu's provider's limit as typed");
@@ -256,6 +261,34 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await box.fill("2000");
       assert.equal(await pill(page, "k2").textContent(), w.two, "typed wrong: the saved one");
       assert.equal(posts.length, 0, "nothing saved");
+      assert.deepEqual(errors, []);
+    });
+
+    test(`${engine} ${lang}: the editor says Close while nothing waits for Save, and Cancel once something does`, async (t) => {
+      // a key's pill acts at once, so after it there is nothing to cancel
+      const lanes = { now: {}, reads: 0 };
+      const { page, errors, posts } = await open(t, "Relay", lanes);
+      const bar = page.locator(".editor > .bar");
+      const says = () => bar.locator(".ed-cancel").textContent();
+      assert.equal(await says(), w.close);
+      await pill(page, "k2").click();
+      await menu(page).waitFor();
+      const n = posts.length;
+      await item(page, "3").click();
+      await posted(posts, n);
+      await page.waitForTimeout(250);
+      assert.equal(await says(), w.close, "a pill that acts at once leaves nothing to cancel");
+      const box = page.locator(".editor input.concurrency");
+      await box.fill("5");
+      await page.waitForTimeout(50);
+      assert.equal(await says(), w.cancel, "a typed Concurrency waits for Save");
+      await box.fill("2");
+      await page.waitForTimeout(50);
+      assert.equal(await says(), w.close, "typed back as saved");
+      await bar.getByRole("button", { name: w.close, exact: true }).click();
+      await page.locator(".editor").waitFor({ state: "detached" });
+      assert.equal(await page.locator(".action-confirm").count(), 0, "nothing to discard, nothing asked");
+      assert.deepEqual(await page.evaluate(() => ["zh", "zh-TW", "ja", "de"].filter((l) => !I18N[l].Close)), []);
       assert.deepEqual(errors, []);
     });
 

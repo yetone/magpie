@@ -87,7 +87,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.deepEqual(fit, { inside: true, url: true });
 
           // one with no Balance URL keeps Advanced shut, as before
-          await page.locator(".editor .bar").getByRole("button", { name: await tr("Cancel"), exact: true }).click();
+          await page.locator(".editor .bar .ed-cancel").click();
           await page.locator(".row.provider", { hasText: "Plain" }).click();
           assert.equal(await page.locator(".editor details.advanced").evaluate((d) => d.open), false, "nothing set, nothing opened");
 

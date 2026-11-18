@@ -9432,6 +9432,13 @@ function duplicateProvider(p) {
   renderProviders();
 }
 
+// closeWhenClean: an editor's Cancel says Close while nothing waits for its
+// Save; its switches and pills that act at once are done already
+function closeWhenClean(ed, cancel) {
+  const say = () => { cancel.textContent = t(providerDirty() ? "Cancel" : "Close"); };
+  for (const ev of ["input", "change", "click"]) ed.addEventListener(ev, () => setTimeout(say));
+  say();
+}
 // renderEditor: an existing provider (p), a new preset (presetID), or custom.
 function renderEditor(p, presetID) {
   // its own icons, not the page's kept ones, which the rows after it take back
@@ -9443,6 +9450,8 @@ function renderEditor(p, presetID) {
       providerDraftRef = draft;
       providerDraftBase = providerDraftValue();
     }
+    const cancel = p && editor.querySelector(":scope > .bar .ed-cancel");
+    if (cancel) closeWhenClean(editor, cancel);
     return editor;
   } finally { keptIcons = kept; }
 }
@@ -9748,7 +9757,7 @@ function drawEditor(p, presetID) {
     del.title = t("{agent} stays signed in; magpie just stops offering it", { agent: a.agentName });
     del.onclick = () => providerAction("delete", { id: p.id }, t("{name} removed", { name: p.name }));
     bar.append(del, el("span", "grow"));
-    const cancel = el("button", "text", t("Cancel"));
+    const cancel = el("button", "text ed-cancel", t("Cancel"));
     cancel.onclick = cancelEdit;
     const saveBtn = el("button", "text primary", t("Save"));
     saveBtn.onclick = () => {
@@ -10421,7 +10430,7 @@ function drawEditor(p, presetID) {
     bar.append(dup);
   }
   bar.append(el("span", "grow"));
-  const cancel = el("button", "text", t("Cancel"));
+  const cancel = el("button", "text ed-cancel", t("Cancel"));
   cancel.onclick = cancelEdit;
   const saveBtn = el("button", "text primary", t(isNew ? "Add" : "Save"));
   const save = () => {

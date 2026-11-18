@@ -146,7 +146,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // the editor's Cancel puts a waiting sign-in away: opened again, the
       // editor has Add another, not the box
       await begin();
-      await page.locator(".editor .bar button", { hasText: new RegExp("^" + w.cancel + "$") }).last().click();
+      await page.locator(".editor .bar .ed-cancel").click();
       await page.locator(".editor .accts").waitFor({ state: "detached" });
       for (let i = 0; i < 40 && ctl.canceled.length < 3; i++) await page.waitForTimeout(25);
       assert.deepEqual(ctl.canceled, ["q1", "q2", "q3"]);

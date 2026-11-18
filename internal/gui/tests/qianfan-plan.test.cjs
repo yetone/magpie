@@ -63,7 +63,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator(".row.provider", { hasText: "Qianfan API" }).click();
       await page.locator(".editor").waitFor();
       assert.equal(await page.locator(".editor .stepplan").count(), 0);
-      await page.locator(".editor .bar").getByRole("button", { name: words[lang].cancel, exact: true }).click();
+      await page.locator(".editor .bar .ed-cancel").click();
       await page.locator(".editor").waitFor({ state: "detached" });
 
       // the one not signed in takes a paste, for its own id
@@ -77,7 +77,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(posts[0].body.text, "magpie-qianfan:{}");
 
       // the one signed in signs out, for its own id
-      await page.locator(".editor .bar").getByRole("button", { name: words[lang].cancel, exact: true }).click();
+      await page.locator(".editor .bar .ed-cancel").click();
       await page.locator(".editor").waitFor({ state: "detached" });
       await page.locator(".row.provider", { hasText: "Qianfan Plan" }).click();
       await page.locator(".editor .stepplan").getByRole("button", { name: words[lang].out, exact: true }).click();
@@ -87,7 +87,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await page.locator(".editor .stepplan .ended").count(), 0);
 
       // the one Baidu ended says so and takes a new paste, for its own id
-      await page.locator(".editor .bar").getByRole("button", { name: words[lang].cancel, exact: true }).click();
+      await page.locator(".editor .bar .ed-cancel").click();
       await page.locator(".editor").waitFor({ state: "detached" });
       await page.locator(".row.provider", { hasText: "Qianfan Old" }).click();
       assert.match(await page.locator(".editor .stepplan .ended").innerText(), new RegExp(words[lang].ended));
