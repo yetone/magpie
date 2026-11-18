@@ -33,6 +33,16 @@ const codex = {
   proxy: "",
 };
 
+// openVia opens the sign-in's proxy menu. The sheet can have just
+// scrolled to hold the pressed button, and a click scrolls its target into
+// view first: a scroll event is delivered on the next frame, after the
+// click has opened the menu, which takes it for the reader's scroll and
+// closes. So the button is put in view and that scroll let land first.
+async function openVia(page, via) {
+  await via.scrollIntoViewIfNeeded();
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  await via.click();
+}
 function serve(lang, seen) {
   const providers = { providers: [claude, codex], presets: [], excluded: [], gateway: { running: true, window: true } };
   const state = { agents: [], profiles: [], settings: { lang, theme: "light" } };
@@ -120,7 +130,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // in sight first: Playwright scrolls to what it clicks
         await via.scrollIntoViewIfNeeded();
         const before = await scrolls();
-        await via.click();
+        await openVia(page, via);
         const menu = page.locator(".proto-menu");
         await menu.waitFor();
         const names = await menu.locator(".pm-item .pm-name").allTextContents();
@@ -142,7 +152,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // sign-in started again drew the link anew at the editor's foot,
         // partly under its bar at 380: in sight first, as above
         await via.scrollIntoViewIfNeeded();
-        await via.click();
+        await openVia(page, via);
         await menu.locator(".pm-item", { hasText: w.custom }).click();
         const form = box.locator("form.proxy-ask");
         await form.waitFor();
@@ -176,7 +186,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await via.waitFor();
         assert.deepEqual(seen.starts, [{ agent: "codex" }]);
         assert.equal((await via.textContent()).trim(), w.via.replace("{p}", w.global));
-        await via.click();
+        await openVia(page, via);
         const menu = page.locator(".proto-menu");
         assert.deepEqual(await menu.locator(".pm-item .pm-name").allTextContents(), [w.global, w.direct, w.custom]);
         assert.equal(await menu.locator(".pm-item.on .pm-name").textContent(), w.global);
