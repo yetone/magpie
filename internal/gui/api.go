@@ -1707,6 +1707,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	sessionManageRoutes(mux, w)
 	backupRoutes(mux, w)
 	dataFolderRoutes(mux, w)
+	restartRoutes(mux, w)
 	mtlsRoutes(mux, w)
 	joinRoutes(mux)
 	httpsRoutes(mux, w)

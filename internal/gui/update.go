@@ -128,6 +128,10 @@ type updateJSON struct {
 	Notes   string `json:"notes,omitempty"`
 	URL     string `json:"url,omitempty"`
 	Stuck   string `json:"stuck,omitempty"` // available: why it can't update itself
+	// Run tells this run of magpie from the next, of the same version:
+	// a page whose restart asked for no update reloads once it changes
+	// (restart.go)
+	Run int64 `json:"run,omitempty"`
 	// available, stuck "not-writable": the folder magpie may not write to
 	StuckDir string `json:"stuckDir,omitempty"`
 	// available, stuck "package": the package manager that installed
@@ -799,7 +803,7 @@ func (u *updater) jsonIn(lang string) updateJSON {
 			go u.relang(u.latest.Version, lang)
 		}
 	}
-	j := updateJSON{State: u.state, Current: Version, Error: u.err, Retry: u.retry}
+	j := updateJSON{State: u.state, Current: Version, Run: runStarted, Error: u.err, Retry: u.retry}
 	if u.channel != "" && u.latest != nil {
 		j.Channel = u.channel
 		if u.state == "latest" {

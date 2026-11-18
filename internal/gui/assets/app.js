@@ -22693,19 +22693,7 @@ async function renderUpdate(r, u) {
       if (u.mirror) {
         sub.textContent = t("Couldn't download {v} through the mirror {mirror}; it may be down or sent a file that doesn't match the release, which isn't installed", { v: u.latest, mirror: u.mirror })
           + (u.error ? " · " + u.error.replace("through the mirror " + u.mirror + ": ", "").replace(/^Get "[^"]*": /, "") : "");
-        btn(t("Download from GitHub"), async () => {
-          if (updateBusy) return;
-          dim();
-          try {
-            prefs = await writingPrefs(api("settings/update-mirror", { mirror: "" }));
-            await api(updatePath("update/install"), installFrom());
-            updateLast = null;
-            renderSettings(); // the source row says GitHub, this one the download
-          } catch (e) {
-            statusTErr(e);
-            renderUpdate(r);
-          }
-        });
+        btn(t("Download from GitHub"), () => import("./versionrow.js").then(() => fromGitHub(r)));
       }
       btn(t("Check"), check);
       if (u.latest) page();
@@ -22729,6 +22717,10 @@ async function renderUpdate(r, u) {
     default: // built from source
       sub.textContent = "";
   }
+  // magpie started again as it is (yansheng1003 on X), in versionrow.js;
+  // not beside an update on offer, whose own path restarts, nor past a
+  // narrow row's room
+  if (!/^(ready|downloading|found|available|blocked)$/.test(u.state) && !u.newest && !(u.state === "error" && u.latest)) btn(t("Restart"), () => import("./versionrow.js").then(() => restartSelf(r, u)), u.state === "checking");
   if (kept && !pageShown) kept.remove();
 }
 

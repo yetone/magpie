@@ -11,6 +11,7 @@ import (
 // (i18n.js), and these few are all the menu and the icon's tooltip show
 // (#301).
 var trayZh = map[string]string{
+	"Restart magpie":                       "重启 magpie",
 	"Open magpie":                          "打开 magpie",
 	"Version %s":                           "版本 %s",
 	"Restart to Update":                    "重启以更新",
@@ -46,6 +47,7 @@ var trayZh = map[string]string{
 
 // trayZhTW is the tray menu in Traditional Chinese, with Taiwan's words.
 var trayZhTW = map[string]string{
+	"Restart magpie":                       "重新啟動 magpie",
 	"Open magpie":                          "開啟 magpie",
 	"Version %s":                           "版本 %s",
 	"Restart to Update":                    "重新啟動以更新",
@@ -81,6 +83,7 @@ var trayZhTW = map[string]string{
 
 // trayJa is the tray menu in Japanese.
 var trayJa = map[string]string{
+	"Restart magpie":                       "magpie を再起動",
 	"Open magpie":                          "magpie を開く",
 	"Version %s":                           "バージョン %s",
 	"Restart to Update":                    "再起動してアップデート",
@@ -116,6 +119,7 @@ var trayJa = map[string]string{
 
 // trayDe is the tray menu in German.
 var trayDe = map[string]string{
+	"Restart magpie":                       "magpie neu starten",
 	"Open magpie":                          "magpie öffnen",
 	"Version %s":                           "Version %s",
 	"Restart to Update":                    "Zum Aktualisieren neu starten",
@@ -199,7 +203,8 @@ func trayMenuLabels(lang, version, update string, paused bool) trayLabels {
 		open:    trayText(lang, "Open magpie"),
 		pause:   trayText(lang, "Pause Gateway"),
 		version: trayText(lang, "Version %s", version),
-		restart: trayText(lang, "Restart to Update"),
+		// no update waiting: magpie restarts as it is (restart.go)
+		restart: trayText(lang, "Restart magpie"),
 		quit:    trayText(lang, "Quit magpie"),
 	}
 	if update != "" {

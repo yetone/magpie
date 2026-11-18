@@ -551,9 +551,20 @@ func Run(version string, showMain bool, link string) error {
 	})
 	menu.AddSeparator()
 	ver := menu.Add(labels.version).SetEnabled(false)
-	restart := menu.Add(labels.restart).SetHidden(true)
+	var ready string // the version waiting for a restart; on the main thread
+	restart := menu.Add(labels.restart)
 	restart.OnClick(func(*application.Context) {
 		// the window comes back if it was open; the tray alone if not
+		if updates.json().State != "ready" {
+			// no update: magpie as it is (restart.go), its requests
+			// handed over where the gateway can be
+			go func() {
+				if restartSelfNow(false, h.MainShown(), "") {
+					leave(h.app.Quit)
+				}
+			}()
+			return
+		}
 		now := func() bool {
 			if restartToUpdate(false, h.MainShown(), "") {
 				leave(h.app.Quit)
@@ -564,7 +575,6 @@ func Run(version string, showMain bool, link string) error {
 		updates.restartAsked(now)
 	})
 	quit := menu.Add(labels.quit).OnClick(func(*application.Context) { go h.AskQuit() })
-	var ready string // the version waiting for a restart; on the main thread
 	relabel := func() {
 		l := trayMenuLabels(trayLang(settings.Shared().Lang, systemLang), version, ready, pausedNow())
 		if waiting, b := updates.waitingFor(); waiting && ready != "" {
@@ -585,7 +595,6 @@ func Run(version string, showMain bool, link string) error {
 	updates.onReady = func(v string) {
 		application.InvokeSync(func() {
 			ready = v
-			restart.SetHidden(false)
 			relabel()
 		})
 	}

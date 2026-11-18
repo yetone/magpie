@@ -143,7 +143,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await button.evaluate((b) => { const fn = b.onclick; fn(); fn(); });
         await page.waitForTimeout(50);
         assert.equal(ctl.posts, 1, "a second click must not ask again");
-        assert.equal(await row.locator("button").count(), 1);
+        assert.equal(await row.locator("button", { hasText: w.check }).count(), 1); // and Restart beside it (version-restart)
 
         // a read that left while the check ran, answered "checking" only after
         // the check itself has answered — it must not be drawn over that
@@ -164,7 +164,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         ctl.releaseGets();
         await page.waitForTimeout(1200);
         assert.equal((await row.locator(".sub").textContent()).trim(), w.latest, "a late checking read must not replace the answer");
-        assert.equal(await row.locator("button").count(), 1);
+        assert.equal(await row.locator("button", { hasText: w.check }).count(), 1); // and Restart beside it (version-restart)
         assert.equal(await button.isEnabled(), true);
         assert.equal(ctl.posts, 1);
         assert.deepEqual(errors, []);
@@ -182,7 +182,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.evaluate(() => renderSettings());
         const again = rowOf(page, w.version);
         await again.locator("button", { hasText: w.check }).waitFor();
-        assert.equal(await again.locator("button").isDisabled(), true, "the new row keeps the button while the check runs");
+        assert.equal(await again.locator("button", { hasText: w.check }).isDisabled(), true, "the new row keeps the button while the check runs");
+        assert.equal(await again.locator("button", { hasNotText: w.check }).isDisabled(), true, "and Restart beside it dimmed with it");
         assert.equal((await again.locator(".sub").textContent()).trim(), w.checking);
         assert.equal(ctl.posts, 1);
         ctl.update = { state: "latest", current: "0.1.400" };

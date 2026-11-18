@@ -1346,6 +1346,33 @@ and the old one quitting only after its stream) and
 socket passing in [`handoff_test.go`](../../internal/handoff/handoff_test.go),
 and `update-wait.test.cjs`.
 
+### Restart magpie, with no update
+
+What a user changes is meant to apply live, and most of it does; a restart
+is the way out for what doesn't yet, without quitting and opening magpie by
+hand (yansheng1003 on X: "请在刷新旁边增加一个重启按钮"). Settings › Version
+has **Restart** beside Check while no update is on offer: not once one is
+found, downloading, downloaded (its Restart to update is the only one) or
+blocked, nor with a newer version named or a download failed, whose own
+buttons fill a narrow row (`renderUpdate`), and the tray's
+restart item is always there: *Restart magpie*, *Restart to Update* once
+one is ready (`trayMenuLabels`).
+
+Both go through `restartSelfNow` in [`restart.go`](../../internal/gui/restart.go),
+the updater's restart with nothing to install: `beginHandover` on a Mac and
+Linux, so the gateway's requests carry on, else `update.Relaunch` or
+`relaunchBinary` once this magpie has exited (Windows; requests in flight
+there are cut). An update ready is installed on the way (`restartToUpdate`).
+The page's `POST /api/restart {view}` answers 204 and quits (`leave`); a
+relaunch that can't be arranged answers 400 and magpie runs on, the row
+saying "Couldn't restart magpie". A browser on the app's page restarts the
+app; `magpie web` runs again in its place (`webReexec`). `/api/update`
+carries `run`, when this run started, and a browser's page reloads once a
+run other than the one it restarted answers (`restartSelf` in
+versionrow.js, imported when Restart is pressed). See
+`TestRestartStartsMagpieAgain`, `TestUpdateSaysItsRun`,
+`TestTrayMenuLabels` and `version-restart.test.cjs`.
+
 ### Where Windows installs magpie
 
 There is no installer: the Windows exe opened from Downloads, the Desktop
