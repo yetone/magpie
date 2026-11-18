@@ -208,6 +208,6 @@ func digestOf(f *file, agent string) string {
 	if len(parts) == 0 {
 		return ""
 	}
-	return "## Memory\n\nWhat is known from earlier conversations with the user. Follow it unless the user says otherwise now. When a memory_search tool is at hand, search it for more before asking the user again, and save what they ask to be remembered with memory_save.\n\n" +
+	return "## Memory\n\nWhat is known from earlier conversations with the user. Follow it unless the user says otherwise now. The project's own instruction files (AGENTS.md and the like) and docs come first: where a memory disagrees with them, follow the project's files and tell the user which memory is out of date. A rule or fact of one project belongs in that project's files; memory keeps what holds for the user across projects. When a memory_search tool is at hand, search it for more before asking the user again, and save what they ask to be remembered with memory_save.\n\n" +
 		strings.Join(parts, "\n\n")
 }

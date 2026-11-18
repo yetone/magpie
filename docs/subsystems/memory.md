@@ -125,6 +125,15 @@ one Settings lists, are turned away (`TestMemoryMCPGuarded`).
   the project, and how each was found, as text and `structuredContent`
   (`TestMemoryMCPProjectArgumentAndContext`).
 - A save through MCP is active at once, origin `agent`.
+- A project's rules go to the project's files: `memory_save`'s description
+  says a project's rule, convention or fact belongs in its instruction
+  files or docs when it keeps them, and a new save of the caller's project
+  (any kind but profile and preference), or a global rule or procedure,
+  made where the project's root holds one of `projectInstructionFiles`
+  (AGENTS.md, CLAUDE.md, GEMINI.md, .github/copilot-instructions.md,
+  .cursorrules) ends with a note naming the files found and asking the
+  agent to offer to write it there (`projectFilesNote`,
+  `TestMemorySavePointsProjectRulesToItsFiles`). The save itself is kept.
 
 ### Other memory services
 
@@ -147,7 +156,11 @@ after adding.
 digest per scope within a budget (global 4000, project 1500, agent 1000,
 the whole 8000 characters), pinned and longer-lived kinds first, no memory
 cut in the middle. The text goes to every agent's vendor: it names neither
-magpie nor any vendor.
+magpie nor any vendor. Its header puts the project's own instruction files
+(AGENTS.md and the like) and docs first: where a memory disagrees with
+them the agent follows the files and says which memory is out of date, and
+a project's rule or fact belongs in its files, memory keeping what holds
+across projects (flying_crp on X, `TestDigestDefersToTheProjectsFiles`).
 
 The digest changes only when published, so an agent's instructions — and
 the prompt cache built on them — change mid-session only then
@@ -229,7 +242,9 @@ further (`State.Since`), unless a range is picked.
   tools, no reasoning), cut to 24k characters keeping the head and the
   tail, plus the memories already kept for that project, under neutral
   instructions that name neither magpie nor the vendor
-  (`TestWhatIsSent`, `TestLongConversationCut`).
+  (`TestWhatIsSent`, `TestLongConversationCut`). They leave a project's
+  rules and conventions to its own instruction files and docs, and drop
+  what disagrees with them.
 - The request goes through the gateway this process serves
   (`distillComplete`), as `x-api-key: magpie-memory`, so it is routed,
   masked and counted in Usage under the agent `memory`

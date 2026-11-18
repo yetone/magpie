@@ -205,6 +205,12 @@ func TestWhatIsSent(t *testing.T) {
 			t.Errorf("sent: %q", w)
 		}
 	}
+	// a project's rules are left to its own files (flying_crp on X)
+	for _, w := range []string{"A rule or convention of one project belongs in the project's own instruction files and docs", "Never keep an item that disagrees with what the project's files say", "what the project's instruction files or docs say"} {
+		if !strings.Contains(sys, w) {
+			t.Errorf("the instructions lack %q", w)
+		}
+	}
 	for _, w := range []string{"magpie", "claude", "codex", "openai", "anthropic", "gpt", "gemini"} {
 		if strings.Contains(strings.ToLower(sys+strings.Split(user, "Conversation:")[0]), w) {
 			t.Errorf("names %q", w)

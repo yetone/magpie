@@ -106,7 +106,9 @@ func memoryMCPTools() []any {
 			"name":  memorySaveTool,
 			"title": "Save memory",
 			"description": "Remembers one thing for later conversations, in every agent: what the user asks you to remember, a preference or rule they state, a correction they make, a fact about them or the project that will still hold next time. " +
-				"One fact per memory, written so it reads on its own. Don't save what is in the code or its history, a task's progress, or secrets. Saving what is already remembered merges into it; with id, changes that memory.",
+				"One fact per memory, written so it reads on its own. Don't save what is in the code or its history, a task's progress, or secrets. " +
+				"Memory is for what holds for the user across projects. A rule, convention or fact of one project belongs in that project's own instruction files or docs (AGENTS.md and the like) when it keeps them: offer to write it there instead, and don't save what they already say or what disagrees with them. " +
+				"Saving what is already remembered merges into it; with id, changes that memory.",
 			"inputSchema": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -662,7 +664,49 @@ func memorySave(c memoryCaller, a memoryArgs) (string, error) {
 	if !added {
 		return "Already remembered, merged: " + memoryLine(m, c), nil
 	}
-	return "Remembered: " + memoryLine(m, c), nil
+	return "Remembered: " + memoryLine(m, c) + projectFilesNote(c, m), nil
+}
+
+// projectInstructionFiles are the files, under a project's root, an agent
+// reads the project's own instructions from.
+var projectInstructionFiles = []string{"AGENTS.md", "CLAUDE.md", "GEMINI.md", ".github/copilot-instructions.md", ".cursorrules"}
+
+// projectFilesNote points a save that belongs in the project's own
+// instruction files there: a project's rules kept in memory too disagree
+// with those files once the files are tidied (flying_crp on X). It is for
+// a memory of the caller's project, or a rule or procedure kept for
+// everyone, saved in a project that keeps such files; "" otherwise. It
+// names only the files found, never this app nor a vendor.
+func projectFilesNote(c memoryCaller, m *memory.Memory) string {
+	if c.project == nil || m == nil {
+		return ""
+	}
+	inProject := m.Scope == memory.ScopeOf(c.project)
+	switch {
+	case inProject && m.Kind != memory.Profile && m.Kind != memory.Preference:
+	case m.Scope == memory.Global && (m.Kind == memory.Rule || m.Kind == memory.Procedure):
+	default:
+		return ""
+	}
+	var found []string
+	for _, root := range c.project.Roots {
+		for _, f := range projectInstructionFiles {
+			if fi, err := os.Stat(filepath.Join(root, filepath.FromSlash(f))); err == nil && !fi.IsDir() {
+				found = append(found, f)
+			}
+		}
+		if len(found) > 0 {
+			break
+		}
+	}
+	if len(found) == 0 {
+		return ""
+	}
+	files := strings.Join(found, ", ")
+	if inProject {
+		return "\nThis project keeps its own instructions in " + files + ". A rule or fact of the project is better written there, where everyone working on it reads it and it is kept up to date with the project: offer the user to add it there, and forget this memory once it is."
+	}
+	return "\nIf this holds only in this project, it belongs in the project's own " + files + " rather than in memory: offer the user to add it there, and forget this memory once it is."
 }
 
 func memoryForget(a memoryArgs) (string, error) {

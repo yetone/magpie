@@ -88,3 +88,33 @@ func TestDigestPartsAndBudget(t *testing.T) {
 		}
 	}
 }
+
+// The digest defers to the project's own instruction files: a memory that
+// disagrees with them loses, and a project's rules are pointed to its
+// files (flying_crp on X: memory and AGENTS.md said opposite things, and
+// a project's rule went into memory). The header names neither this app
+// nor a vendor.
+func TestDigestDefersToTheProjectsFiles(t *testing.T) {
+	fresh(t)
+	save(t, "Answer in Chinese", Preference, Global)
+	if _, err := Publish(); err != nil {
+		t.Fatal(err)
+	}
+	d, _ := Digest("codex")
+	head := strings.SplitN(d, "\n\n", 3)[1]
+	for _, want := range []string{
+		"The project's own instruction files (AGENTS.md and the like) and docs come first",
+		"where a memory disagrees with them, follow the project's files",
+		"A rule or fact of one project belongs in that project's files",
+		"memory keeps what holds for the user across projects",
+	} {
+		if !strings.Contains(head, want) {
+			t.Errorf("the header lacks %q:\n%s", want, head)
+		}
+	}
+	for _, name := range []string{"magpie", "claude", "codex", "openai", "anthropic", "gemini"} {
+		if strings.Contains(strings.ToLower(head), name) {
+			t.Errorf("the header names %s", name)
+		}
+	}
+}

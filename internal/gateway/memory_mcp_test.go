@@ -485,3 +485,68 @@ func TestMemoryMCPProjectArgumentAndContext(t *testing.T) {
 		t.Fatalf("tools: %s", w.Body.String())
 	}
 }
+
+// A rule of a project that keeps its own instruction files is pointed
+// there when saved, so memory and the project's files don't drift apart
+// (flying_crp on X): a project memory, and a rule kept for everyone that
+// may hold here alone. A preference, and a project with no such file,
+// get no note. The save tool's description says the same, and neither
+// names this app nor a vendor.
+func TestMemorySavePointsProjectRulesToItsFiles(t *testing.T) {
+	fresh(t)
+	h := lanGuard(New().Handler())
+	d := t.TempDir()
+	kept := gitRepo(t, filepath.Join(d, "kept"), "https://github.com/someone/kept.git")
+	if err := os.WriteFile(filepath.Join(kept, "AGENTS.md"), []byte("# Notes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bare := gitRepo(t, filepath.Join(d, "bare"), "https://github.com/someone/bare.git")
+	in := func(dir string) []string {
+		return []string{MemoryClientHeader, "codex-mcp-client", MemoryCwdHeader, dir}
+	}
+	note := "This project keeps its own instructions in AGENTS.md"
+	said, bad := memPost(t, h, memorySaveTool, `{"text":"Run tests with -race","kind":"rule","scope":"project"}`, in(filepath.Join(kept, "src"))...)
+	if bad || !strings.HasPrefix(said, "Remembered") || !strings.Contains(said, note) {
+		t.Fatalf("a project rule where AGENTS.md is: %s", said)
+	}
+	said, _ = memPost(t, h, memorySaveTool, `{"text":"Releases go out on Tuesdays","kind":"fact"}`, in(kept)...)
+	if !strings.Contains(said, note) {
+		t.Fatalf("a project fact where AGENTS.md is: %s", said)
+	}
+	said, _ = memPost(t, h, memorySaveTool, `{"text":"Commit messages in English","kind":"rule"}`, in(kept)...)
+	if !strings.Contains(said, "everywhere") || !strings.Contains(said, "If this holds only in this project, it belongs in the project's own AGENTS.md") {
+		t.Fatalf("a rule for everyone saved in a project with AGENTS.md: %s", said)
+	}
+	for _, c := range []struct{ args, dir string }{
+		{`{"text":"Answer in Chinese","kind":"preference"}`, kept},
+		{`{"text":"Run tests with -count=1","kind":"rule","scope":"project"}`, bare},
+		{`{"text":"Keep diffs small","kind":"rule"}`, bare},
+	} {
+		if said, _ := memPost(t, h, memorySaveTool, c.args, in(c.dir)...); strings.Contains(said, "instructions in") || strings.Contains(said, "belongs in") {
+			t.Errorf("%s in %s: %s", c.args, filepath.Base(c.dir), said)
+		}
+	}
+	w := mcpPostTo(h, MemoryMCPPath, "127.0.0.1:50000", `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, "Accept", "application/json")
+	var list struct {
+		Result struct {
+			Tools []struct{ Name, Description string }
+		}
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
+		t.Fatal(err)
+	}
+	var desc string
+	for _, tl := range list.Result.Tools {
+		if tl.Name == memorySaveTool {
+			desc = tl.Description
+		}
+		for _, name := range []string{"magpie", "openai", "anthropic", "codex"} {
+			if strings.Contains(strings.ToLower(tl.Description), name) {
+				t.Errorf("%s's description names %s", tl.Name, name)
+			}
+		}
+	}
+	if !strings.Contains(desc, "belongs in that project's own instruction files or docs") || !strings.Contains(desc, "across projects") {
+		t.Fatalf("memory_save's description: %s", desc)
+	}
+}
