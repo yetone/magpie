@@ -1981,6 +1981,13 @@ func normalize(p Provider) Provider {
 	if p.Decide == "" {
 		p.Decide = p.arkSystemOne()
 	}
+	// one asked at the Gemini Developer API on an AI Studio key, the
+	// google preset's or a custom one, answers gemini-decision-1 at its
+	// Decisions API on the same key (WangYeruo on X: it was asked at
+	// OpenRouter instead, this provider having no decision API)
+	if p.Decide == "" {
+		p.Decide = p.googleDecisions()
+	}
 	if p.Routing != Ordered && p.Routing != Rotate && p.Routing != LeastUsed && p.Routing != Pace && p.Routing != Weighted && p.Routing != FreeFirst && p.Routing != Fastest && p.Routing != Drain && !PluginRouting(p.Routing) {
 		p.Routing = ""
 	}

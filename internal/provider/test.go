@@ -220,10 +220,11 @@ func (p Provider) ModelTest() string {
 // (Vercel's TypeSafe API, OpenRouter's), or Workers AI's, which DecideAsk
 // wraps it for (ARNO on Discord: cloudflare-jev's models couldn't be
 // tested from their right-click); not Vercel's evaluation models, which
-// name the model in headers of their own.
+// name the model in headers of their own. Google's Decisions API, which
+// DecideAsk asks as it takes it, can be too.
 func (p Provider) AsksDecideModels() bool {
 	v := p.DecideVia()
-	return p.Decides() && (v == ViaSystemOne || v == ViaVercel || v == ViaCloudflare)
+	return p.Decides() && (v == ViaSystemOne || v == ViaVercel || v == ViaCloudflare || v == ViaGoogle)
 }
 
 // mantleBase is base for model at the prefix Mantle serves it under

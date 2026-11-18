@@ -90,10 +90,45 @@ func (p Provider) arkSystemOne() string {
 	return ""
 }
 
+// GoogleDecision is Google's decision model, gemini-decision-1, which the
+// Gemini Developer API answers at its Decisions API (POST
+// /v1beta/decisions) on an AI Studio key: typed noul, choice and score
+// questions, as System One asks them, over an input (Google's docs,
+// aistudio.google.com/docs/decisions-api, 2026-11-11).
+const GoogleDecision = "gemini-decision-1"
+
+// googleDecides reports whether base is the Gemini Developer API's,
+// generativelanguage.googleapis.com, AI Studio keys' host: the one host
+// Google serves its Decisions API at ("Available on the Gemini Developer
+// API (v1beta) … only"; Vertex AI has none).
+func googleDecides(base string) bool {
+	return HostOf(base) == "generativelanguage.googleapis.com"
+}
+
+// googleDecisions is the decision base of a key's provider asked at the
+// Gemini Developer API (the google preset, AI Studio's OpenAI-compatible
+// …/v1beta/openai or its own …/v1beta): AIStudioGemini, whose
+// /decisions answers gemini-decision-1 on the same key (WangYeruo on X:
+// google/gemini-decision-1 was asked at OpenRouter, the google provider
+// having no decision API); "" for any other. A signed-in account, a
+// plugin, a remote magpie and Vertex say their own.
+func (p Provider) googleDecisions() string {
+	if p.Account != nil || p.IsRemoteMagpie() || p.IsVertex() {
+		return ""
+	}
+	if googleDecides(p.Chat) || googleDecides(p.Gemini) {
+		return AIStudioGemini
+	}
+	return ""
+}
+
 // vendorDecision is the decision model of the vendor whose System One
-// API base is, Bailian's or Ark's, which its model list never names.
+// API base is, Bailian's, Ark's or Google's, which its model list never
+// names (Google's: its chat list is the chat models').
 func vendorDecision(base string) (catalog.Model, bool) {
 	switch {
+	case googleDecides(base):
+		return catalog.Model{ID: GoogleDecision, Name: "Gemini Decision 1"}, true
 	case bailianDecides(base):
 		return catalog.Model{ID: BailianDecision, Name: "Decision model (preview)"}, true
 	case arkDecides(base):
@@ -342,12 +377,14 @@ var cloudflareDecideModels = []catalog.Model{
 // setup points, at the AI SDK's evaluation models (a boolean for a noul
 // and probabilities for a confidence); or Workers AI (System One's
 // questions and answers, in Cloudflare's envelope and at an account's
-// address).
+// address); or Google's Decisions API (System One's questions over an
+// input, at the Gemini API's /decisions, its key as x-goog-api-key).
 const (
 	ViaSystemOne  = "systemone"
 	ViaVercel     = "vercel"
 	ViaVercelEval = "vercel-eval"
 	ViaCloudflare = "cloudflare"
+	ViaGoogle     = "google"
 )
 
 // DecideVia is the way p's decision API is asked, known by its host or by
@@ -359,6 +396,8 @@ func (p Provider) DecideVia() string {
 	}
 	base := strings.TrimRight(p.Decide, "/")
 	switch h := HostOf(base); {
+	case googleDecides(base):
+		return ViaGoogle
 	case strings.HasSuffix(base, "/v4/ai"):
 		return ViaVercelEval
 	case h == "ai-gateway.vercel.sh" || strings.HasSuffix(base, "/typesafe") || strings.Contains(base, "/typesafe/v1"):
@@ -464,6 +503,10 @@ func decideFactOf(id string) (decideFact, bool) {
 		return decideFact{context: 65_536, images: true}, true
 	case last == BailianDecision:
 		return decideFact{context: 65_536}, true
+	case last == GoogleDecision:
+		// "up to 262,144 tokens" of text, images, video, audio and PDFs
+		// (its model page)
+		return decideFact{context: 262_144, images: true}, true
 	case last == ArkDecision:
 		// its window on System One is not documented; an image in the
 		// request was left unread on 11-01 (a red square asked "is it
@@ -572,8 +615,21 @@ func (p Provider) DecideURL(ctx context.Context) (string, error) {
 			}
 		}
 		return api + "/accounts/" + acct + "/ai/run", nil
+	case ViaGoogle:
+		return strings.TrimSuffix(strings.TrimRight(p.Decide, "/"), "/decisions") + "/decisions", nil
 	}
 	return p.Decide + "/systemone", nil
+}
+
+// DecideProtocol is the protocol p's decision API is signed as: Google's
+// as its Gemini API (x-goog-api-key, where a key as a Bearer token is
+// turned away, "Expected OAuth 2 access token"), every other as chat
+// completions.
+func (p Provider) DecideProtocol() Protocol {
+	if p.DecideVia() == ViaGoogle {
+		return Gemini
+	}
+	return Chat
 }
 
 // DecideModelURL is where a question for model is posted: DecideURL, or,
@@ -955,7 +1011,7 @@ func (p Provider) fetchDecide(ctx context.Context) ([]catalog.Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := p.Sign(ctx, req, Chat, nil); err != nil {
+	if err := p.Sign(ctx, req, p.DecideProtocol(), nil); err != nil {
 		return nil, err
 	}
 	res, err := Keyed(http.DefaultClient).Do(req)
@@ -1056,7 +1112,7 @@ func (p Provider) AskSystemOne(ctx context.Context, model string) error {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	p.DecideHeaders(req.Header)
-	if err := p.Sign(ctx, req, Chat, nil); err != nil {
+	if err := p.Sign(ctx, req, p.DecideProtocol(), nil); err != nil {
 		return err
 	}
 	// a plugin's goes through its fetch (Do), at plugin://<id>/v1/systemone
@@ -1066,10 +1122,10 @@ func (p Provider) AskSystemOne(ctx context.Context, model string) error {
 	}
 	defer res.Body.Close()
 	b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
-	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("%s: %s", p.Name, APIError(b, res.Status))
+	status, b := DecideResult(via, res.StatusCode, b)
+	if status != http.StatusOK {
+		return fmt.Errorf("%s: %s", p.Name, APIError(b, fmt.Sprintf("%d %s", status, http.StatusText(status))))
 	}
-	b = DecideAnswer(via, b)
 	var out struct {
 		Answers map[string]json.RawMessage `json:"answers"`
 	}
@@ -1169,7 +1225,7 @@ func (p Provider) checkKey(ctx context.Context, u string) error {
 	if err != nil {
 		return err
 	}
-	if err := p.Sign(ctx, req, Chat, nil); err != nil {
+	if err := p.Sign(ctx, req, p.DecideProtocol(), nil); err != nil {
 		return err
 	}
 	res, err := Keyed(http.DefaultClient).Do(req)

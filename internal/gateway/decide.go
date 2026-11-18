@@ -544,7 +544,7 @@ func (s *Server) postDecideSent(ctx context.Context, p provider.Provider, model 
 		req.Header.Set("ai-model-id", model)
 		req.Header.Set("ai-evaluation-model-specification-version", "4")
 	}
-	if err := p.Sign(ctx, req, provider.Chat, body); err != nil {
+	if err := p.Sign(ctx, req, p.DecideProtocol(), body); err != nil {
 		return decided{}, err
 	}
 	res, err := p.Do(s.client, req)
@@ -553,10 +553,8 @@ func (s *Server) postDecideSent(ctx context.Context, p provider.Provider, model 
 	}
 	defer res.Body.Close()
 	b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
-	if res.StatusCode < 300 {
-		b = provider.DecideAnswer(via, b)
-	}
-	return decided{sent: req, body: body, status: res.StatusCode, answer: b, header: res.Header}, nil
+	status, b := provider.DecideResult(via, res.StatusCode, b)
+	return decided{sent: req, body: body, status: status, answer: b, header: res.Header}, nil
 }
 
 // maxSystemOneBody is the most a System One request may be; larger is 413

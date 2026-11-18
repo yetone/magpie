@@ -160,6 +160,22 @@ Coding and Agent Plans answer System One nothing (404) and get none; a
 key of another plan is never asked it (`decideKeys`). A URL the user gave
 is kept. `TestArkPayAsYouGoDecides`, `TestArkDecisionSkipsPlanKeys`,
 `custom-systemone-url.test.cjs`.
+A provider asked at the Gemini Developer API with an AI Studio key
+(`generativelanguage.googleapis.com`, the `google` preset's OpenAI-compatible
+base or a native Gemini base; not Vertex, a signed-in account or another
+magpie) gets its System One at `AIStudioGemini` too (`googleDecisions`):
+Google's Decisions API (`POST /v1beta/decisions`, `ViaGoogle`) serves
+`gemini-decision-1` on the same key, which goes as `x-goog-api-key`
+(`DecideProtocol`), never as a Bearer token. Google takes System One's
+questions as they are, with a choice's undescribed option as `""`; the
+state goes as `input`, a string as it is and an object as its JSON text
+(an object would be read as a content block), and the images as image
+blocks after it (`googleAsk`). The answer's usage
+(`total_input_tokens`/`total_output_tokens`) comes back as System One's,
+and a `prompt_feedback.block_reason` with no answers is a 400 saying why
+(`DecideResult`). Before, `google/gemini-decision-1` fell to OpenRouter's
+decision list. `TestGoogleDecideWire`, `TestGoogleKeyDecides`,
+`TestGoogleSystemOne`, `TestGoogleDecisionsTakesImages`.
 Refresh replaces the list: removed decisions stop routing, and an empty
 remote list never gains a fabricated Jev alias.
 An older peer without the decision-list extension continues serving its

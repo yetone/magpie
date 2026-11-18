@@ -69,9 +69,10 @@ type systemOneTarget struct {
 }
 
 // takesImages is whether the model takes a System One request's images:
-// a Clef on Workers AI does, and another magpie passes them on.
+// a Clef on Workers AI does, Google's gemini-decision-1 does (as image
+// blocks of its input), and another magpie passes them on.
 func (t systemOneTarget) takesImages() bool {
-	if t.p.IsRemoteMagpie() {
+	if t.p.IsRemoteMagpie() || t.p.DecideVia() == provider.ViaGoogle {
 		return true
 	}
 	return t.p.DecideVia() == provider.ViaCloudflare && provider.CloudflareClef(t.model)
@@ -295,7 +296,7 @@ func decisionsState(input json.RawMessage, ts []systemOneTarget, images *[]strin
 		content, refusal, err := decisionsText(it["content"], fmt.Sprintf("input[%d].content", i), func(where, url string) error {
 			for _, t := range ts {
 				if !t.takesImages() {
-					return untranslated("%s is an image (input_image), which %s can't take: System One takes images only for Cloudflare's Clef", where, t)
+					return untranslated("%s is an image (input_image), which %s can't take: System One takes images only for Cloudflare's Clef and Google's gemini-decision-1", where, t)
 				}
 			}
 			if !strings.HasPrefix(url, "data:") {
