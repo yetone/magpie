@@ -2,6 +2,8 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "In {plugin}": "属于 {plugin}",
+    "Comes with the Claude plugin {plugin}. Changing the plugin's agents, or turning it off and on, gives this to the plugin's agents again.": "随 Claude 插件 {plugin} 安装。改动插件的 Agent，或把插件关掉再打开，会把它重新给到插件的 Agent。",
     "Put back in {agents}": "放回 {agents}",
     "Put {name} back?": "把 {name} 放回？",
     "It leaves the library and goes back to {agents} as it was before you brought it in.": "它会离开资源库，按导入前的样子放回 {agents}。",
@@ -1100,6 +1102,8 @@ magpie.strings({
     "{agents} reads no project instructions file magpie knows of.": "{agents} 没有 magpie 已知的项目指令文件。",
   },
   "zh-TW": {
+    "In {plugin}": "屬於 {plugin}",
+    "Comes with the Claude plugin {plugin}. Changing the plugin's agents, or turning it off and on, gives this to the plugin's agents again.": "隨 Claude 外掛 {plugin} 安裝。變更外掛的 Agent，或把外掛關閉再開啟，會把它重新給到外掛的 Agent。",
     "Put back in {agents}": "放回 {agents}",
     "Put {name} back?": "把 {name} 放回？",
     "It leaves the library and goes back to {agents} as it was before you brought it in.": "它會離開資源庫，依匯入前的樣子放回 {agents}。",
@@ -2198,6 +2202,8 @@ magpie.strings({
     "{agents} reads no project instructions file magpie knows of.": "{agents} 沒有 magpie 已知的專案指令檔案。",
   },
   ja: {
+    "In {plugin}": "{plugin} の一部",
+    "Comes with the Claude plugin {plugin}. Changing the plugin's agents, or turning it off and on, gives this to the plugin's agents again.": "Claude プラグイン {plugin} と一緒に入りました。プラグインのエージェントを変えるか、オフにしてオンに戻すと、プラグインのエージェントに改めて渡されます。",
     "Put back in {agents}": "{agents} に戻す",
     "Put {name} back?": "{name} を戻しますか？",
     "It leaves the library and goes back to {agents} as it was before you brought it in.": "ライブラリから外れ、取り込む前の状態で {agents} に戻ります。",
@@ -3296,6 +3302,8 @@ magpie.strings({
     "{agents} reads no project instructions file magpie knows of.": "{agents} は magpie が把握しているプロジェクトの指示ファイルを読みません。",
   },
   de: {
+    "In {plugin}": "Teil von {plugin}",
+    "Comes with the Claude plugin {plugin}. Changing the plugin's agents, or turning it off and on, gives this to the plugin's agents again.": "Kommt mit dem Claude-Plugin {plugin}. Werden die Agenten des Plugins geändert oder wird es aus- und wieder eingeschaltet, geht dies erneut an die Agenten des Plugins.",
     "Put back in {agents}": "Zurück zu {agents}",
     "Put {name} back?": "{name} zurückgeben?",
     "It leaves the library and goes back to {agents} as it was before you brought it in.": "Er verlässt die Bibliothek und kommt so zu {agents} zurück, wie er vor dem Übernehmen war.",

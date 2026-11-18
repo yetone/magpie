@@ -226,13 +226,19 @@ func (l *Library) putPlugins(in []*CarriedPlugin, stage string) (fetch []*Carrie
 			gone = append(gone, p.Name)
 		}
 	}
+	// a part's own agents, set on its row, stay: only a change to the
+	// plugin's agents or switch gives every part the plugin's again
 	settle := func(p *Plugin, c *CarriedPlugin) {
-		p.Agents, p.Off = slices.Clone(orNone(c.Agents)), c.Off
+		agents := slices.Clone(orNone(c.Agents))
+		moved := p.Off != c.Off || !slices.Equal(orNone(p.Agents), agents)
+		p.Agents, p.Off = agents, c.Off
 		if c.Description != "" {
 			p.Description = c.Description
 		}
 		takeOut(l, p, c.Taken)
-		l.givePlugin(p)
+		if moved {
+			l.givePlugin(p)
+		}
 	}
 	for _, c := range in {
 		have := l.plugin(c.Name)

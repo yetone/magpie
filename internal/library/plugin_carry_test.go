@@ -293,3 +293,36 @@ func TestPluginFromFilesEitherOS(t *testing.T) {
 		}
 	}
 }
+
+// A part of a plugin given to fewer agents on its own row keeps that
+// through a sync that brings the plugin as it was: only a change to the
+// plugin's agents or its switch gives every part the plugin's again.
+func TestPluginPartOwnAgentsKeptBySync(t *testing.T) {
+	h := sandbox(t)
+	pluginAgents(t, h)
+	src := filepath.Join(h, "work", "acme")
+	writePlugin(t, src)
+	ok(t)(InstallPlugins(src, nil, []string{"claude", "codex"}))
+	ok(t)(SkillAgents("tdd", []string{"claude"}))
+	b, err := Collect()
+	if err != nil {
+		t.Fatal(err)
+	}
+	agentsOf := func() string {
+		for _, s := range View0(t).Skills {
+			if s.Name == "tdd" {
+				return strings.Join(s.Agents, ",")
+			}
+		}
+		return "gone"
+	}
+	putJSON(t, mustJSON(t, b))
+	if got := agentsOf(); got != "claude" {
+		t.Errorf("after a sync of the same plugin, tdd's agents: %s, want its own claude", got)
+	}
+	(*b.Plugins)[0].Agents = []string{"codex"}
+	putJSON(t, mustJSON(t, b))
+	if got := agentsOf(); got != "codex" {
+		t.Errorf("after the plugin's agents changed, tdd's agents: %s, want the plugin's codex", got)
+	}
+}

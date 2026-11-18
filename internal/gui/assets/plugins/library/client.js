@@ -2769,6 +2769,13 @@ magpie.plugin("library", (ctx) => {
     if (title) s.title = title;
     return s;
   }
+  // a part a Claude plugin brought: its agents follow the plugin's when
+  // those change (library/plugin.go givePlugin)
+  const withPlugin = (nm, x) => {
+    if (x.bundle) nm.append(tag(t("In {plugin}", { plugin: x.bundle }), "lib-bundle",
+      t("Comes with the Claude plugin {plugin}. Changing the plugin's agents, or turning it off and on, gives this to the plugin's agents again.", { plugin: x.bundle })));
+    return nm;
+  };
 
   // ---------- MCP servers ----------
 
@@ -3338,6 +3345,7 @@ magpie.plugin("library", (ctx) => {
     else if (s.signIn?.signedIn) nm.append(tag(t("Signed in"), "lib-signed", t("The agents given it use magpie's sign-in")));
     // kept to this computer: sync carries it nowhere (huhuy72219405 on X)
     // a plugin's tools say whose they are, where they are turned off too
+    withPlugin(nm, s);
     if (s.plugin) nm.append(tag(t("Plugin"), "lib-local lib-plugin", t("{plugin}'s tools. Plugins can hide them from every agent, keeping the plugin; sync never carries them to your other computers", { plugin: s.plugin })));
     else if (s.local) nm.append(tag(t("Not synced"), "lib-local", s.bridge ? bridgedWhy() : t("Sync never carries it to your other computers")));
     // out of the hub, each agent's own entry (#4382): said only while the hub is on
@@ -4691,7 +4699,7 @@ magpie.plugin("library", (ctx) => {
   function hookRow(h, all) {
     const row = el("div", "row lib-row click lib-hook");
     const who = el("div", "who");
-    who.append(el("div", "name mono", h.name));
+    who.append(withPlugin(el("div", "name mono", h.name), h));
     // what it is for, in the user's own words (#2011)
     if (h.description) who.append(el("div", "lib-hookdesc", h.description));
     who.append(el("div", "sub lib-hookev", hookLine(h)));
@@ -5010,7 +5018,7 @@ magpie.plugin("library", (ctx) => {
   function subagentRow(s, all) {
     const row = el("div", "row lib-row click lib-subagent");
     const who = el("div", "who");
-    who.append(el("div", "name mono", s.name));
+    who.append(withPlugin(el("div", "name mono", s.name), s));
     who.append(el("div", "lib-subagentdesc", s.description));
     const line = subagentLine(s);
     if (line) who.append(el("div", "sub lib-subagentuses", line));
@@ -7863,7 +7871,7 @@ magpie.plugin("library", (ctx) => {
   function skillRow(s, all) {
     const row = el("div", "row lib-row click lib-skill" + (s.missing ? " missing" : "") + (s.source ? " src" : "") + (s.offHere ? " offhere" : ""));
     const who = el("div", "who");
-    const nm = el("div", "name", s.name);
+    const nm = withPlugin(el("div", "name", s.name), s);
     const c = s.check;
     const gone = isGone(s);
     if (gone) {
