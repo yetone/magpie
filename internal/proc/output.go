@@ -134,6 +134,7 @@ func StartReaped(cmd *exec.Cmd) error {
 	if err := cmd.Start(); err != nil {
 		return err
 	}
+	ClearProcessEfficiencyMode(cmd.Process.Pid)
 	go cmd.Wait()
 	return nil
 }

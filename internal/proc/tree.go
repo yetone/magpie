@@ -87,3 +87,19 @@ func (t *Tree) Stop(grace time.Duration) <-chan struct{} {
 	}()
 	return t.stopped
 }
+
+// SetEfficiencyMode puts the tree's root process in Windows' efficiency mode
+// (EcoQoS) or hands its choice back to Windows, while it has not ended yet.
+// What it starts in turn is left to Windows, so a CLI a plugin runs isn't
+// slowed.
+func (t *Tree) SetEfficiencyMode(on bool) {
+	if t == nil {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.done {
+		return
+	}
+	t.setEfficiency(on)
+}

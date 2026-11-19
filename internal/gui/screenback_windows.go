@@ -130,8 +130,14 @@ var appWndProc = func(hwnd uintptr, msg uint32, wParam, lParam uintptr) (uintptr
 	}
 	if msg == w32.WM_DESTROY && hwnd == ownMainThreadWindow() {
 		unhookNoActivate()
+		stopEfficiencyMode()
 	} else {
 		hookNoActivate(hwnd)
+	}
+	if efficiencyMsg(msg) {
+		if f := efficiencyCheck.Load(); f != nil {
+			(*f)()
+		}
 	}
 	if why := screenBackFrom(msg, wParam, lParam); why != "" {
 		if f := screenBack.Load(); f != nil {

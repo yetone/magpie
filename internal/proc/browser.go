@@ -21,6 +21,7 @@ var startBrowser = func(cmd *exec.Cmd) error {
 	if err := cmd.Start(); err != nil {
 		return err
 	}
+	ClearProcessEfficiencyMode(cmd.Process.Pid)
 	go cmd.Wait() //nolint:errcheck
 	return nil
 }

@@ -10,12 +10,20 @@ import (
 
 // group is a job the command is put in, and every process it starts with
 // it; closing the job ends them all, as it does when magpie exits. A
-// command that can't be put in one is killed alone.
-type group struct{ job windows.Handle }
+// command that can't be put in one is killed alone. proc holds the root
+// process's own handle until sweep, so SetEfficiencyMode reaches only that
+// process and never a recycled pid.
+type group struct {
+	job  windows.Handle
+	proc windows.Handle
+}
 
 func ownGroup(*exec.Cmd) {}
 
 func (g *group) join(cmd *exec.Cmd) {
+	if p, err := windows.OpenProcess(windows.PROCESS_SET_INFORMATION, false, uint32(cmd.Process.Pid)); err == nil {
+		g.proc = p
+	}
 	job, err := windows.CreateJobObject(nil, nil)
 	if err != nil {
 		return
@@ -40,6 +48,12 @@ func (g *group) join(cmd *exec.Cmd) {
 	g.job = job
 }
 
+func (g *group) setEfficiency(on bool) {
+	if g.proc != 0 {
+		_ = setHandleEfficiencyMode(g.proc, on)
+	}
+}
+
 // kill ends the job's processes. Unlike a Unix group, a job takes no new
 // process once it is being ended, so nothing can be missed and nothing is
 // left to wait on: the channel is closed already.
@@ -57,6 +71,10 @@ var closed = func() chan struct{} { c := make(chan struct{}); close(c); return c
 func (g *group) term(*exec.Cmd) error { return errors.ErrUnsupported }
 
 func (g *group) sweep(*exec.Cmd) {
+	if g.proc != 0 {
+		_ = windows.CloseHandle(g.proc)
+		g.proc = 0
+	}
 	if g.job != 0 {
 		_ = windows.CloseHandle(g.job)
 		g.job = 0

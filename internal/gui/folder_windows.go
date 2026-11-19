@@ -29,6 +29,7 @@ func openFolder(_ *application.App, path string) error {
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("explorer: %w", err)
 	}
+	proc.ClearProcessEfficiencyMode(cmd.Process.Pid)
 	go cmd.Wait() // it exits 1 when it did open the folder
 	return nil
 }

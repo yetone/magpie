@@ -73,3 +73,5 @@ var killFor = 10 * time.Second
 // sweep ends what is left of the group once its leader is gone: the group
 // keeps the leader's pid while any of it runs, so none else has it.
 func (g group) sweep(cmd *exec.Cmd) { _ = g.kill(cmd) }
+
+func (group) setEfficiency(bool) {}
