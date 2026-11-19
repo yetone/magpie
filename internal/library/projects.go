@@ -658,8 +658,12 @@ type ProjectView struct {
 	ClaudePlugins []string `json:"claudePlugins"`
 	// Hooks are the library's hooks the project has on their own, for
 	// the agents given
-	Hooks   map[string][]string `json:"hooks"`
-	Missing bool                `json:"missing,omitempty"` // the folder is gone
+	Hooks map[string][]string `json:"hooks"`
+	// Own are, by kind (skills, servers, hooks, subagents), what the
+	// project's own files already give agents and magpie didn't place:
+	// read-only (#7245)
+	Own     map[string][]OwnResource `json:"own,omitempty"`
+	Missing bool                     `json:"missing,omitempty"` // the folder is gone
 	// Problems are, by skill ("" for the project's own), what couldn't be done
 	Problems map[string]string `json:"problems,omitempty"`
 }
@@ -711,6 +715,8 @@ func projectViews(l *Library, problems []Problem) []ProjectView {
 		}
 		if fi, err := os.Stat(p.Dir); err != nil || !fi.IsDir() {
 			v.Missing = true
+		} else {
+			v.Own = p.ownResources()
 		}
 		for _, x := range problems {
 			if x.Agent == p.Dir {

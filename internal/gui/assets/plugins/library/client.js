@@ -7165,10 +7165,10 @@ magpie.plugin("library", (ctx) => {
     card.append(head);
     if (p.problems?.[""]) card.append(el("div", "lib-err", p.problems[""]));
     if (!isOpen) return card;
-    if (mcp) return projectServers(p, card);
-    if (sub) return projectSubagents(p, card);
+    if (mcp) return projectOwn(p, "servers", projectServers(p, card));
+    if (sub) return projectOwn(p, "subagents", projectSubagents(p, card));
     if (plg) return projectPlugins(p, card);
-    if (hk) return projectHooks(p, card);
+    if (hk) return projectOwn(p, "hooks", projectHooks(p, card));
     if (ins) return projectInstructions(p, card);
 
     const opts = el("div", "lib-projopts");
@@ -7211,6 +7211,29 @@ magpie.plugin("library", (ctx) => {
     card.append(el("p", "lib-aside lib-projfoot", t("Placed in {dirs} of the project and kept out of git, its .gitignore untouched. A folder there that isn't magpie's is left as it is.", { dirs: dirs.join(", ") })));
     const skip = shownAgents().filter((a) => a.skills && !a.projectSkills);
     if (skip.length) card.append(el("p", "lib-aside lib-projfoot", t("{agents} reads no project skills folder magpie knows of.", { agents: skip.map((a) => a.name).join(", ") })));
+    return projectOwn(p, "skills", card);
+  }
+
+  // What the project's own files already give agents, apart from what magpie
+  // placed (#7245): read-only rows under a heading, no chips, nothing here
+  // changes or takes them away.
+  function projectOwn(p, key, card) {
+    const rows = p.own?.[key] || [];
+    if (!rows.length) return card;
+    const box = el("div", "lib-projown");
+    box.append(el("div", "lib-projownhead", t("Project's own")));
+    for (const r of rows) {
+      const row = el("div", "row lib-row lib-projskill lib-projownrow");
+      const w = el("div", "who");
+      w.append(el("div", "name mono", r.name));
+      const line = [r.event, r.transport, r.path].filter(Boolean).join(" · ");
+      const sub = el("div", "sub mono", line);
+      sub.title = r.description || line;
+      w.append(sub);
+      row.append(glyph(GLYPH.folder), w);
+      box.append(row);
+    }
+    card.append(box);
     return card;
   }
 

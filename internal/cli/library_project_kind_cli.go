@@ -230,7 +230,7 @@ func (k projectKind) list(typed string, asJSON bool) error {
 	}
 	have := k.of(p)
 	if asJSON {
-		return printJSON(map[string]any{"dir": p.Dir, "name": p.Name, k.plural: have})
+		return printJSON(map[string]any{"dir": p.Dir, "name": p.Name, k.plural: have, "items": k.items(p)})
 	}
 	names := make([]string, 0, len(have))
 	for n := range have {
@@ -244,7 +244,44 @@ func (k projectKind) list(typed string, asJSON bool) error {
 	for _, n := range names {
 		fmt.Printf("  %s → %s\n", bold.Render(n), strings.Join(have[n], ", "))
 	}
+	if own := p.Own[k.plural]; len(own) > 0 {
+		fmt.Println(" ", muted.Render("the project's own, read-only:"))
+		for _, r := range own {
+			fmt.Printf("  %s %s\n", r.Name, muted.Render(strings.TrimSpace(r.Event+" "+r.Path)))
+		}
+	}
 	return nil
+}
+
+// projectItem is one row of a project's list, with where it comes from:
+// source "magpie" for what magpie placed (agents says for whom), "project"
+// for what the project's own files give (read-only, #7247).
+type projectItem struct {
+	Name        string   `json:"name"`
+	Source      string   `json:"source"`
+	Agents      []string `json:"agents,omitempty"`
+	Agent       string   `json:"agent,omitempty"`
+	Path        string   `json:"path,omitempty"`
+	Event       string   `json:"event,omitempty"`
+	Transport   string   `json:"transport,omitempty"`
+	Description string   `json:"description,omitempty"`
+}
+
+func (k projectKind) items(p *library.ProjectView) []projectItem {
+	have := k.of(p)
+	names := make([]string, 0, len(have))
+	for n := range have {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	out := []projectItem{}
+	for _, n := range names {
+		out = append(out, projectItem{Name: n, Source: "magpie", Agents: have[n]})
+	}
+	for _, r := range p.Own[k.plural] {
+		out = append(out, projectItem{Name: r.Name, Source: "project", Agent: r.Agent, Path: r.Path, Event: r.Event, Transport: r.Transport, Description: r.Description})
+	}
+	return out
 }
 
 var _ = os.Stdout

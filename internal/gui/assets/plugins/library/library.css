@@ -697,6 +697,9 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-project .lib-projskill { border-top: 1px solid var(--line-2); }
 .lib-projfoot { margin: 0; padding: 8px 12px 10px 49px; border-top: 1px solid var(--line-2); }
 .lib-projfoot + .lib-projfoot { border-top: 0; padding-top: 0; }
+.lib-projown { border-top: 1px solid var(--line-2); }
+.lib-projownhead { padding: 8px 12px 2px 49px; font-size: 11px; color: var(--muted); }
+.lib-projownrow { opacity: .8; }
 
 /* the library's skills: a card for each GitHub repository they came from,
    and one for those on this computer, folded to its heading line */

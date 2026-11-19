@@ -88,7 +88,7 @@ const words = {
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
-  test(engine + ": a project turns on a plugin Claude Code has installed", async (t) => {
+  test(engine + ": a project turns a library hook on for the agents that read a project hooks file", async (t) => {
     const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
     const errors = [];
     t.after(async () => {

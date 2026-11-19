@@ -1,8 +1,10 @@
 package library
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -256,5 +258,39 @@ func TestProjectOneHookPerAgent(t *testing.T) {
 	gone(t, filepath.Join(a, ".codex/hooks.json"))
 	if v := View0(t); len(v.Projects[0].Hooks) != 0 {
 		t.Errorf("view after removal: %+v", v.Projects[0].Hooks)
+	}
+}
+
+// What the project's own files give agents is listed apart from what magpie
+// placed, read-only (#7245, #7247): a hook, server, skill and subagent the
+// folder had before, and none of magpie's.
+func TestProjectOwnResources(t *testing.T) {
+	_, a, _ := pluginProjects(t)
+	ok(t)(SaveHook("", Hook{Name: "bark", Event: "turn-end", Command: "say bark", Agents: []string{}}))
+	write(t, filepath.Join(a, ".claude/settings.json"), `{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "echo shared"}]}]}}`)
+	write(t, filepath.Join(a, ".claude/settings.local.json"), `{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "echo mine"}]}]}}`)
+	write(t, filepath.Join(a, ".mcp.json"), `{"mcpServers": {"theirs": {"url": "https://x.test/mcp?key=SECRET"}}}`)
+	write(t, filepath.Join(a, ".claude/skills/own/SKILL.md"), "---\nname: own\ndescription: Mine.\n---\nbody\n")
+	write(t, filepath.Join(a, ".claude/agents/rev.md"), "---\nname: rev\ndescription: Reviews.\n---\nbody\n")
+	ok(t)(ProjectHooks(a, []string{"bark"}, []string{"claude"}))
+	own := View0(t).Projects[0].Own
+	var hooks []string
+	for _, r := range own["hooks"] {
+		hooks = append(hooks, r.Name)
+	}
+	if !slices.Equal(hooks, []string{"echo shared", "echo mine"}) {
+		t.Errorf("own hooks %v (magpie's say bark must not be one)", hooks)
+	}
+	if len(own["servers"]) != 1 || own["servers"][0].Name != "theirs" || own["servers"][0].Transport != "http" {
+		t.Errorf("own servers %+v", own["servers"])
+	}
+	if b, _ := json.Marshal(own); strings.Contains(string(b), "SECRET") {
+		t.Errorf("a credential went in the view: %s", b)
+	}
+	if len(own["skills"]) != 1 || own["skills"][0].Name != "own" || own["skills"][0].Description != "Mine." {
+		t.Errorf("own skills %+v", own["skills"])
+	}
+	if len(own["subagents"]) != 1 || own["subagents"][0].Name != "rev" {
+		t.Errorf("own subagents %+v", own["subagents"])
 	}
 }

@@ -404,6 +404,20 @@ func TestLibraryProjectHookCmd(t *testing.T) {
 	if out := must("hook", "."); !strings.Contains(out, "bark") || !strings.Contains(out, "codex") {
 		t.Errorf("list:\n%s", out)
 	}
+	// each row says where it comes from (#7247): magpie's bark, the project's echo mine
+	var listed struct {
+		Items []struct{ Name, Source, Path string }
+	}
+	if err := json.Unmarshal([]byte(must("hook", ".", "--json")), &listed); err != nil {
+		t.Fatal(err)
+	}
+	src := map[string]string{}
+	for _, it := range listed.Items {
+		src[it.Name] = it.Source
+	}
+	if src["bark"] != "magpie" || src["echo mine"] != "project" || len(src) != 2 {
+		t.Errorf("sources: %+v", listed.Items)
+	}
 	must("hook", "agents", ".", "bark", "codex")
 	if got := read(".claude/settings.local.json"); strings.Contains(got, "say bark") || !strings.Contains(got, "echo mine") {
 		t.Errorf("claude after agents:\n%s", got)
