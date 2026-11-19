@@ -112,7 +112,7 @@ func syncSteps(all, gone []*Target, b *backups, res *Result) []func(*Library) {
 	// a skill whose app moved it is followed first, for every agent to
 	// get the moved one (skill_moved.go)
 	// an edit made in a subagent's own file too (subagent_file.go)
-	steps := []func(*Library){func(l *Library) { l.followMovedSkills(); l.followSubagentFiles() }}
+	steps := []func(*Library){func(l *Library) { l.followMovedSkills(); l.markDangling(); l.followSubagentFiles() }}
 	for _, t := range all {
 		steps = append(steps, func(l *Library) {
 			l.syncInstructions(t, all, b, res, true)
@@ -640,7 +640,8 @@ func readView(problems []Problem, glance bool) (*View, error) {
 	// a skill whose app moved it to its new version's folder is linked
 	// there (skill_moved.go); what was kept of the links is let go then,
 	// for the rest of the read to see the new one
-	if l.followMovedSkills() {
+	moved := l.followMovedSkills()
+	if l.markDangling() || moved {
 		forget()
 		forget = readParts()
 		if err := l.save(); err != nil {

@@ -175,7 +175,7 @@ func (l *Library) syncFolder(p *Project, res *Result, hubs map[string]*Server) {
 	// right to make a symlink
 	copies := map[string]bool{}
 	for name, agents := range p.Skills {
-		if l.skill(name) == nil {
+		if s := l.skill(name); s == nil || s.Dangling { // none, or its source is gone (skill_dangling.go)
 			continue
 		}
 		for _, id := range agents {
