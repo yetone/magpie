@@ -2215,7 +2215,10 @@ magpie.plugin("library", (ctx) => {
     if (nativeLoading) return;
     nativeLoading = true;
     try {
-      nativeView = await api("library/native");
+      // a reply that is not a list (an older magpie, a stand-in) lists
+      // nothing; iterating it threw and left the whole tab undrawn
+      const r = await api("library/native");
+      nativeView = Array.isArray(r) ? r : [];
     } catch {
       // a list that can't be read is not drawn, never a wrong one
     }
