@@ -384,6 +384,9 @@ func codexBody(body []byte) []byte {
 	// a call's name the backend refuses, in a history another provider's
 	// model wrote, turned the whole request away (codex_names.go)
 	codexToolNames(m)
+	// and a tool's schema the backend's strict mode can't compile, a
+	// oneOf above all, turned it away too (codex_strict.go)
+	codexToolStrict(m)
 	if _, ok := m["parallel_tool_calls"]; !ok {
 		m["parallel_tool_calls"] = true
 	}
