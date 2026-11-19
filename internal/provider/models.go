@@ -2428,8 +2428,23 @@ func (p Provider) listPrice(model string) (catalog.Price, bool, int) {
 	return p.listPriceIn(p.priceCatsOf(), model)
 }
 
-// listPriceIn is listPrice with p's catalogs given.
+// listPriceIn is listPrice with p's catalogs given, Gemini 4 Carbon and
+// Argon at Antigravity's original price on an Antigravity route, and under
+// its own ids anywhere (antigravityOriginal).
 func (p Provider) listPriceIn(c priceCats, model string) (catalog.Price, bool, int) {
+	pr, ok, from := p.listPriceBase(c, model)
+	if ok {
+		if p.servedByAntigravity() {
+			pr = atLeastOriginal(model, pr)
+		} else {
+			pr = agyScoped(model, pr)
+		}
+	}
+	return pr, ok, from
+}
+
+// listPriceBase is listPriceIn before Antigravity's original prices.
+func (p Provider) listPriceBase(c priceCats, model string) (catalog.Price, bool, int) {
 	if own := p.OwnModelID(model); own != model {
 		// a model listed by an id the user gave it is priced as the
 		// provider's own id of it first, then as the id it is listed by
@@ -2815,7 +2830,7 @@ var kimiCodeAPI = map[string]string{
 func MakerPrice(model string) (catalog.Price, bool) {
 	for _, m := range pricedNames(model) {
 		if pr, ok := makerListPrice(m); ok {
-			return pr, true
+			return agyScoped(model, pr), true
 		}
 	}
 	if f, ok := mythosFable(model); ok {
@@ -2998,6 +3013,9 @@ func tariffOf(s settings.Settings, p Provider, known bool, model string) (catalo
 			return catalog.Price{}, true
 		}
 		pr, ok := MakerPrice(model)
+		if ok && p.servedByAntigravity() {
+			pr = atLeastOriginal(model, pr)
+		}
 		if ok {
 			if k := p.PeakOf(model); k != "" {
 				pr.Peak = k
@@ -3015,6 +3033,9 @@ func tariffOf(s settings.Settings, p Provider, known bool, model string) (catalo
 	pr, ok := p.ListPrice(model)
 	if !ok {
 		pr, ok = MakerPrice(model)
+		if ok && p.servedByAntigravity() {
+			pr = atLeastOriginal(model, pr)
+		}
 	}
 	if !ok {
 		pr, ok = SamePriceIn(s, id, model)

@@ -26,12 +26,18 @@ func TestPriceOfAntigravityOrchestratorRoles(t *testing.T) {
 	catalog.Reset()
 	t.Cleanup(catalog.Reset)
 	for m, in := range map[string]float64{
-		"gemini-pro-orchestrator-argon": 2, "gemini-pro-orchestrator-carbon": 2.5, "gemini-flash-worker-agy": 1.5,
-		"gemini-pro-orchestrator-g1-pro": 2, "gemini-pro-orchestrator-neon": 3,
+		// Argon and Carbon at Antigravity's original $4, not the
+		// introductory $2 (provider.AgyScoped)
+		"gemini-pro-orchestrator-argon": 4, "gemini-pro-orchestrator-carbon": 4, "gemini-flash-worker-agy": 1.5,
+		"gemini-pro-orchestrator-g1-pro": 4, "gemini-pro-orchestrator-neon": 3,
 	} {
 		if pr, ok := priceOf(settings.Load(), m); !ok || pr.Input != in {
 			t.Errorf("priceOf(%q) = %+v, %v; want input $%v", m, pr, ok, in)
 		}
+	}
+	// a bare Carbon is the Gemini API's, at the catalog's price
+	if pr, ok := priceOf(settings.Load(), "gemini-4-carbon"); !ok || pr.Input != 2.5 {
+		t.Errorf("priceOf(gemini-4-carbon) = %+v, %v; want the catalog's input $2.5", pr, ok)
 	}
 	if pr, ok := priceOf(settings.Load(), "gemini-pro-orchestrator-krypton"); ok {
 		t.Errorf("priceOf(gemini-pro-orchestrator-krypton) = %+v; want unpriced", pr)

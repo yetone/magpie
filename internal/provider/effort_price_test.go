@@ -57,9 +57,12 @@ func TestEffortIDPricedAsItsModel(t *testing.T) {
 		"gemini-4-carbon-extra-high": "gemini-4-carbon", "gemini-4-carbon-extra-low": "gemini-4-carbon",
 		"Claude-Opus-5-5-High": "claude-opus-5-5", "google/gemini-4-argon-high": "gemini-4-argon",
 	} {
-		w := want[base]
 		for name, price := range map[string]func(string) (catalog.Price, bool){
 			"MakerPrice": MakerPrice, "antigravity ListPrice": ag.ListPrice, "relay ListPrice": other.ListPrice} {
+			w := want[base]
+			if _, orig := antigravityOriginal[base]; name == "antigravity ListPrice" && orig {
+				w = antigravityOriginal[base] // Antigravity counts Carbon and Argon at the original price
+			}
 			pr, ok := price(id)
 			if !ok || pr.Input != w.Input || pr.Output != w.Output || pr.CacheRead != w.CacheRead || pr.CacheWrite != w.CacheWrite {
 				t.Errorf("%s(%q) = %+v, %v; want %s's %+v", name, id, pr, ok, base, w)
@@ -121,8 +124,12 @@ func TestGeminiTrialIDPricedAsItsModel(t *testing.T) {
 		for name, price := range map[string]func(string) (catalog.Price, bool){
 			"MakerPrice": MakerPrice, "antigravity ListPrice": ag.ListPrice} {
 			pr, ok := price(id)
-			if !ok || pr.Input != 2 || pr.Output != 10 || pr.CacheRead != 0.1 {
-				t.Errorf("%s(%q) = %+v, %v; want %s's $2/$10", name, id, pr, ok, base)
+			in, out, cr := 2.0, 10.0, 0.1
+			if name == "antigravity ListPrice" { // Antigravity counts Carbon and Argon at the original price
+				in, out, cr = 4, 20, 0.2
+			}
+			if !ok || pr.Input != in || pr.Output != out || pr.CacheRead != cr {
+				t.Errorf("%s(%q) = %+v, %v; want %s's $%v/$%v", name, id, pr, ok, base, in, out)
 			}
 		}
 		if got := PricedName(id); got != base && got != "google/"+base { // a route's prefix stays
