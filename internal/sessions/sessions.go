@@ -1656,6 +1656,8 @@ func saved() {
 	saving.Unlock()
 	ccFamilyWrites.Wait()
 	ccRestWrites.Wait()
+	ccRestIDWrites.Wait()
+	ccUUIDWait()
 	flushCallPack()
 }
 

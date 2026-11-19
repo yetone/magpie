@@ -188,6 +188,11 @@ func ccFamiliesForget() {
 	ccFamilies.path, ccFamilies.groups, ccFamilies.dirty = "", nil, false
 	ccRestKept.path, ccRestKept.dirty = "", false
 	clear(ccRestMemo)
+	ccUUIDWait()
+	ccRestIDWrites.Wait()
+	clear(ccUUIDMemo)
+	clear(ccUUIDDirty)
+	ccUUIDPruned = ""
 }
 
 // What a copy or branch holds that the file it is kept in doesn't (ccRest)
@@ -225,6 +230,10 @@ func ccRestLoad() {
 	if !ok {
 		return
 	}
+	ids := map[string][][16]byte{}
+	if b, err := os.ReadFile(ccRestIDsPath()); err == nil {
+		ids = decodeRestIDs(b)
+	}
 	for k, st := range files {
 		f := strings.Split(k, "\x00")
 		if len(f) != 6 || st == nil {
@@ -240,7 +249,8 @@ func ccRestLoad() {
 			continue
 		}
 		if _, ok := ccRestMemo[f[0]]; !ok {
-			ccRestMemo[f[0]] = &ccRestOf{size: n[0], mod: n[1], keeper: f[1], ksize: n[2], kmod: n[3], st: st}
+			// ids known only when kept by the same key: nil is not known
+			ccRestMemo[f[0]] = &ccRestOf{size: n[0], mod: n[1], keeper: f[1], ksize: n[2], kmod: n[3], st: st, ids: ids[k]}
 		}
 	}
 }
@@ -248,14 +258,21 @@ func ccRestLoad() {
 // ccRestSave writes the rests when they changed. Encoded under mu, written
 // behind it.
 func ccRestSave() {
+	ccUUIDSave()
 	if !ccRestKept.dirty || ccRestKept.path == "" {
 		return
 	}
 	ccRestKept.dirty = false
 	files := make(map[string]*state, len(ccRestMemo))
+	ids := map[string][][16]byte{}
 	for p, m := range ccRestMemo {
-		files[ccRestKey(p, m)] = m.st
+		k := ccRestKey(p, m)
+		files[k] = m.st
+		if m.ids != nil {
+			ids[k] = m.ids
+		}
 	}
+	ccRestIDWrites.write(ccRestIDsPath(), encodeRestIDs(ids))
 	var b bytes.Buffer
 	if encodeCache(&b, cacheFile{Version: cacheVersion, Zone: zone(), Parsers: parseVersions, Files: files}) != nil {
 		return

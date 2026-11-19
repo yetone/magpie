@@ -216,6 +216,8 @@ func ccFamily(files []file) (copies, branches map[string]string) {
 		}
 	}
 	ccFamiliesSave()
+	ccUUIDSave()
+	ccUUIDPrune()
 	// a file judged here that no longer starts like another lets its
 	// uuids go; another caller's files are left as they are
 	for _, o := range all {
@@ -255,6 +257,7 @@ var ccUUIDMemo = map[string]*ccUUIDs{}
 type ccUUIDs struct {
 	size, mod, off int64
 	set            uuidSet
+	hash           digest // prefixHash of the file up to off
 	// forked is the session its messages say they were copied from
 	// (forkedFrom, which /branch writes on each), "" for none
 	forked string
@@ -276,6 +279,12 @@ var ccForked = []byte(`"forkedFrom":{`)
 // read stopped while the file only grew.
 func ccUUIDsOf(f file) uuidSet {
 	m := ccUUIDMemo[f.path]
+	if m == nil {
+		// what an earlier start read of it, read on from there
+		if m = ccUUIDKept(f); m != nil {
+			ccUUIDMemo[f.path] = m
+		}
+	}
 	if m == nil || f.size < m.size || f.size == m.size && f.mod.UnixNano() != m.mod {
 		m = &ccUUIDs{set: uuidSet{}}
 		ccUUIDMemo[f.path] = m
@@ -298,6 +307,8 @@ func ccUUIDsOf(f file) uuidSet {
 	})
 	if err == nil {
 		m.off = off
+		m.hash = prefixHash(f.path, off)
+		ccUUIDDirty[f.path] = true
 	}
 	m.size, m.mod = f.size, f.mod.UnixNano()
 	return m.set
@@ -341,10 +352,11 @@ type ccRestOf struct {
 	keeper      string
 	ksize, kmod int64
 	st          *state
-	// ids is the uuids of the messages st was read from, nil when not
-	// known (kept on disk): while the copy stays as it is and the keeper
-	// only grows, st stands as long as the keeper holds none of them
-	ids []string
+	// ids is the uuids of the messages st was read from (uuidKey), nil
+	// when not known: while the copy stays as it is and the keeper only
+	// grows, st stands as long as the keeper holds none of them. Kept on
+	// disk with st (cc-rest-ids.bin).
+	ids [][16]byte
 }
 
 // ccRest is the copy's file read for its messages the keeper's file
@@ -366,14 +378,14 @@ func ccRest(copyFile, keeper file) *state {
 	// session, is not read again on each turn
 	if m != nil && m.ids != nil && m.size == copyFile.size && m.mod == copyFile.mod.UnixNano() &&
 		m.keeper == keeper.path && keeper.size > m.ksize &&
-		!slices.ContainsFunc(m.ids, held.has) {
+		!slices.ContainsFunc(m.ids, func(k [16]byte) bool { _, ok := held[k]; return ok }) {
 		m.ksize, m.kmod = keeper.size, keeper.mod.UnixNano()
 		ccRestKept.dirty = true
 		return m.st
 	}
 	line := parserFor(copyFile.agent).line
 	s := &state{}
-	ids := []string{}
+	ids := [][16]byte{}
 	_, err := scanThin(copyFile.path, 0, nil, thinClaude, func(b []byte, _, _ int64) bool {
 		if !bytes.Contains(b, ccUser) && !bytes.Contains(b, ccAssistant) {
 			return true
@@ -382,7 +394,7 @@ func ccRest(copyFile, keeper file) *state {
 		if t := r[0].String(); t != "user" && t != "assistant" || r[1].Type != gjson.String || held.has(r[1].Str) {
 			return true
 		}
-		ids = append(ids, r[1].Str)
+		ids = append(ids, uuidKey(r[1].Str))
 		line(s, b, copyFile.main)
 		return true
 	})

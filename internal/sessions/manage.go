@@ -570,7 +570,7 @@ func Delete(agent, id string) (Trashed, error) {
 	}
 	for _, f := range fs {
 		delete(cache, f.path)
-		delete(ccUUIDMemo, f.path)
+		ccUUIDDrop(f.path)
 	}
 	saveCache()
 	wslForget(fs)
