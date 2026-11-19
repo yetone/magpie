@@ -413,7 +413,7 @@ func TestKeptBodyIsOnlyItsCallers(t *testing.T) {
 		{"no key", "", "10.0.0.2:1", z, dz},
 		{"another computer", "keyA", "10.0.0.3:1", z, dz},
 		{"a corrupt body", "keyA", "10.0.0.2:1", append(slices.Clone(z[:len(z)/2]), 0xff, 0xff, 0xff), dz},
-		{"a flipped byte", "keyA", "10.0.0.2:1", func() []byte { b := slices.Clone(z); b[len(b)/2] ^= 0x40; return b }(), dz},
+		{"a flipped byte", "keyA", "10.0.0.2:1", flipped(t, z, first, next), dz},
 		{"another digest", "keyA", "10.0.0.2:1", z, map[string]string{"Content-Encoding": "dcz", availableDictHeader: sfBinary(sum), BodyDigestHeader: sfBinary(sha256.Sum256(first))}},
 		{"no digest", "keyA", "10.0.0.2:1", z, map[string]string{"Content-Encoding": "dcz", availableDictHeader: sfBinary(sum)}},
 	} {
@@ -438,6 +438,29 @@ func TestKeptBodyIsOnlyItsCallers(t *testing.T) {
 	if rec.Header().Get(KeptBodyHeader) != "" {
 		t.Fatalf("kept a plain client's body")
 	}
+}
+
+// flipped is z with one byte from its middle on flipped where the flip
+// changes what it decodes to: a bit zstd doesn't read (a table entry no
+// symbol uses) decodes to the same body, which is rightly passed on, so
+// which byte that is depends on the package's sources newAgentChat reads.
+func flipped(t *testing.T, z, dict, want []byte) []byte {
+	t.Helper()
+	for i := len(z) / 2; i < len(z); i++ {
+		b := slices.Clone(z)
+		b[i] ^= 0x40
+		r, err := dczReader(bytes.NewReader(b), dict)
+		if err != nil {
+			return b
+		}
+		got, err := io.ReadAll(r)
+		r.Close()
+		if err != nil || !bytes.Equal(got, want) {
+			return b
+		}
+	}
+	t.Fatal("no byte past the middle changes the body")
+	return nil
 }
 
 // A magpie keeps no more than dictPerScope bodies of a caller, nor more
