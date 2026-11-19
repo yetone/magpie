@@ -176,9 +176,39 @@ func hubDesc(t hubTool) string {
 }
 
 // hubWords are s's words, lower case, split at anything not a letter or
-// digit (create_issue is create and issue).
+// digit (create_issue is create and issue), and where a script written
+// without spaces (hubSpaceless) meets one that isn't (截图screenshot is
+// 截图 and screenshot).
 func hubWords(s string) []string {
-	return strings.FieldsFunc(strings.ToLower(s), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
+	var out []string
+	var b strings.Builder
+	spaceless := false
+	for _, r := range strings.ToLower(s) {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+			if b.Len() > 0 {
+				out = append(out, b.String())
+				b.Reset()
+			}
+			continue
+		}
+		if b.Len() > 0 && hubSpaceless(r) != spaceless {
+			out = append(out, b.String())
+			b.Reset()
+		}
+		spaceless = hubSpaceless(r)
+		b.WriteRune(r)
+	}
+	if b.Len() > 0 {
+		out = append(out, b.String())
+	}
+	return out
+}
+
+// hubSpaceless is whether r is of a script written without spaces between
+// its words: Chinese, Japanese and Korean (whose words carry their
+// particles).
+func hubSpaceless(r rune) bool {
+	return unicode.In(r, unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Hangul)
 }
 
 // hubStop are words of a query that say nothing of what a tool does.
@@ -189,28 +219,94 @@ var hubStop = map[string]bool{
 	"some": true, "please": true, "tool": true, "tools": true, "can": true, "do": true, "how": true, "what": true,
 }
 
-// hubKeyWords are query's words that say what is wanted: hubWords but
-// the stop words and single letters, each once.
-func hubKeyWords(query string) []string {
+// hubStopRunes are characters of a spaceless query that say nothing of
+// what a tool does, where hubSpacelessKeys cuts it: Chinese pronouns,
+// particles and measure words (帮我截个图 is 截 and 图), and Japanese
+// particles (スクリーンショットを撮る). Only those that seldom start or
+// end a word a tool is described with: 请 is in 请求, 地 in 地图, so
+// neither is one.
+var hubStopRunes = func() map[rune]bool {
+	m := map[rune]bool{}
+	for _, r := range "我你他她它们的了吗呢吧啊呀么个帮把给这那一をはがのにでとへも" {
+		m[r] = true
+	}
+	return m
+}()
+
+// hubSpacelessKeys are the key words of w, a word of a spaceless script:
+// w cut at hubStopRunes, each piece one key word (帮我截个图 is 截 and 图),
+// but a lone character that isn't Han (a kana says nothing alone).
+func hubSpacelessKeys(w string) []string {
 	var out []string
-	for _, w := range hubWords(query) {
-		if hubStop[w] || len(w) < 2 || slices.Contains(out, w) {
-			continue
+	for _, piece := range strings.FieldsFunc(w, func(r rune) bool { return hubStopRunes[r] }) {
+		if rs := []rune(piece); len(rs) > 1 || unicode.Is(unicode.Han, rs[0]) {
+			out = append(out, piece)
 		}
-		out = append(out, w)
 	}
 	return out
 }
 
+// hubPhraseIn is whether w, a key word of a spaceless script, is in text:
+// a character is, and a longer one has at least half of its runs of two
+// characters there. Its words aren't known, but 屏幕截图 and 截取屏幕 share
+// 屏幕, and of 发送飞书消息's five runs, 发送, 飞书 and 消息 are words a
+// description says and 送飞 and 书消 are not.
+func hubPhraseIn(w, text string) bool {
+	rs := []rune(w)
+	if len(rs) == 1 {
+		return strings.Contains(text, w)
+	}
+	in := 0
+	for i := 0; i+1 < len(rs); i++ {
+		if strings.Contains(text, string(rs[i:i+2])) {
+			in++
+		}
+	}
+	return in*2 >= len(rs)-1
+}
+
+// hubKeyWords are query's words that say what is wanted: hubWords but
+// the stop words and single letters, a spaceless word as
+// hubSpacelessKeys, each once.
+func hubKeyWords(query string) []string {
+	var out []string
+	add := func(w string) {
+		if !slices.Contains(out, w) {
+			out = append(out, w)
+		}
+	}
+	for _, w := range hubWords(query) {
+		if r := []rune(w); hubSpaceless(r[0]) {
+			for _, k := range hubSpacelessKeys(w) {
+				add(k)
+			}
+			continue
+		}
+		if hubStop[w] || len(w) < 2 {
+			continue
+		}
+		add(w)
+	}
+	return out
+}
+
+// hubNonASCII is whether s has a letter not in ASCII (an em dash or a
+// curly quote in an English description isn't one).
+func hubNonASCII(s string) bool {
+	return strings.IndexFunc(s, func(r rune) bool { return r > unicode.MaxASCII && unicode.IsLetter(r) }) >= 0
+}
+
 // hubWordIn is whether w is one of words, or, for a word of four letters
 // or more, the start of one (repo is repository's, open is opens'), or one
-// of four letters or more is w's start (issues has issue). A word not in
-// ASCII (Chinese has no spaces between words) is anywhere in text.
+// of four letters or more is w's start (issues has issue). A word of a
+// spaceless script is as hubPhraseIn finds it; another not in ASCII is
+// anywhere in text.
 func hubWordIn(w string, words []string, text string) bool {
-	for _, r := range w {
-		if r > unicode.MaxASCII {
-			return strings.Contains(text, w)
-		}
+	if hubSpaceless([]rune(w)[0]) {
+		return hubPhraseIn(w, text)
+	}
+	if hubNonASCII(w) {
+		return strings.Contains(text, w)
 	}
 	for _, x := range words {
 		if x == w || len(w) >= 4 && strings.HasPrefix(x, w) || len(x) >= 4 && strings.HasPrefix(w, x) {
@@ -221,23 +317,33 @@ func hubWordIn(w string, words []string, text string) bool {
 }
 
 // hubMatch is how well t matches query: how many of its key words are in
-// t's router name (in names) and how many more in its description only.
+// t's router name or its server's (in names) and how many more in its
+// description only, of keys, the key words that count for t.
 // exact is the query being t's name, or its own.
 type hubMatch struct {
-	t            hubTool
-	names, descs int
-	exact        bool
+	t                  hubTool
+	names, descs, keys int
+	exact              bool
 }
 
-// hubMatchOf is t's hubMatch for query, with keys its key words.
+// hubMatchOf is t's hubMatch for query, with keys its key words. A key
+// word not in ASCII counts only for a tool whose name, server or
+// description has such letters: an English description never has 截图,
+// and a query of 截图 screenshot is screenshot to it (Passings_z on X,
+// 11-19: an agent asking in Chinese found none of the tools there were).
 func hubMatchOf(t hubTool, query string, keys []string) hubMatch {
 	m := hubMatch{t: t}
 	q := strings.TrimSpace(query)
 	m.exact = q != "" && (strings.EqualFold(t.name, q) || strings.EqualFold(t.Tool, q))
-	name := strings.ToLower(t.name)
+	name := strings.ToLower(t.name + " " + t.Server)
 	desc := strings.ToLower(hubDesc(t))
 	nw, dw := hubWords(name), hubWords(desc)
+	own := hubNonASCII(name) || hubNonASCII(desc)
 	for _, w := range keys {
+		if !own && hubNonASCII(w) {
+			continue
+		}
+		m.keys++
 		switch {
 		case hubWordIn(w, nw, name):
 			m.names++
@@ -251,14 +357,15 @@ func hubMatchOf(t hubTool, query string, keys []string) hubMatch {
 // clears is whether m is a match at all (sahuaja3669 on X, 11-18: a
 // router mustn't hand over a tool of a near name that does something
 // else): the query is its name, or it has at least two thirds of the
-// key words, one of them in its name unless it has them all. A word or
-// two of a longer ask, in a description, is not what was asked for.
-func (m hubMatch) clears(keys int) bool {
+// key words that count for it, one of them in its name unless it has
+// them all. A word or two of a longer ask, in a description, is not what
+// was asked for.
+func (m hubMatch) clears() bool {
 	if m.exact {
 		return true
 	}
 	got := m.names + m.descs
-	return keys > 0 && got*3 >= keys*2 && (m.names > 0 || got == keys)
+	return m.keys > 0 && got*3 >= m.keys*2 && (m.names > 0 || got == m.keys)
 }
 
 // score orders the matches: the query as a name first, then a word in
@@ -277,7 +384,7 @@ func hubMatches(ts []hubTool, query string) []hubTool {
 	keys := hubKeyWords(query)
 	var out []hubMatch
 	for _, t := range ts {
-		if m := hubMatchOf(t, query, keys); m.clears(len(keys)) {
+		if m := hubMatchOf(t, query, keys); m.clears() {
 			out = append(out, m)
 		}
 	}
@@ -308,13 +415,17 @@ func hubNear(ts []hubTool, name string) []hubTool {
 	return ms
 }
 
-// hubServersSaid is the most tools hubServerCounts names of a server.
+// hubServersSaid is the most tools hubServerCounts names of a server
+// when naming them all would be longer than hubSayMax.
 const hubServersSaid = 8
 
 // hubServerCounts name ts' servers, in their order, each with how many
-// tools it has and the first hubServersSaid of their own names: what
-// there is, said as what there is and not as a match.
-func hubServerCounts(ts []hubTool) string {
+// tools it has and their own names: what there is, said as what there is
+// and not as a match. Every tool is named when that is hubSayMax
+// characters at most, else the first hubServersSaid of each server's, and
+// all is false. Naming only some, a model looking for one of the others
+// had no way to it (Passings_z on X, 11-19).
+func hubServerCounts(ts []hubTool) (said string, all bool) {
 	var names []string
 	of := map[string][]string{}
 	for _, t := range ts {
@@ -323,20 +434,48 @@ func hubServerCounts(ts []hubTool) string {
 		}
 		of[t.Server] = append(of[t.Server], t.Tool)
 	}
-	parts := make([]string, len(names))
-	for i, s := range names {
-		tools := of[s]
-		n := strconv.Itoa(len(tools)) + " tools"
-		if len(tools) == 1 {
-			n = "1 tool"
+	say := func(most int) (string, bool) {
+		all := true
+		parts := make([]string, len(names))
+		for i, s := range names {
+			tools := of[s]
+			n := strconv.Itoa(len(tools)) + " tools"
+			if len(tools) == 1 {
+				n = "1 tool"
+			}
+			said := strings.Join(tools[:min(len(tools), most)], ", ")
+			if len(tools) > most {
+				said += ", …"
+				all = false
+			}
+			parts[i] = s + " (" + n + ": " + said + ")"
 		}
-		said := strings.Join(tools[:min(len(tools), hubServersSaid)], ", ")
-		if len(tools) > hubServersSaid {
-			said += ", …"
-		}
-		parts[i] = s + " (" + n + ": " + said + ")"
+		return strings.Join(parts, "; "), all
 	}
-	return strings.Join(parts, "; ")
+	if said, all := say(len(ts)); runeLen(said) <= hubSayMax {
+		return said, all
+	}
+	return say(hubServersSaid)
+}
+
+// hubNotFound is find_tools' answer when no tool matches query: that none
+// was found, every server with its tools (hubServerCounts), and how to
+// look again; when the query has words not in ASCII and no tool has such
+// letters, that the tools are named and described in English, since a
+// query in another language can match none of them.
+func hubNotFound(ts []hubTool, query string) string {
+	said, all := hubServerCounts(ts)
+	out := "No tool was found for \"" + query + "\": no tool's name or description has what it asks. Don't call a tool that only sounds close. " +
+		"The servers and their tools: " + said + ". "
+	if !all {
+		out += hubFindTool + " with an empty query names every tool. "
+	}
+	if hubNonASCII(query) && !slices.ContainsFunc(ts, func(t hubTool) bool { return hubNonASCII(t.name + " " + t.Server + " " + hubDesc(t)) }) {
+		out += "The tools are named and described in English: " + hubFindTool + " with English words looks again."
+	} else {
+		out += hubFindTool + " with other words, a server or a tool's name looks again."
+	}
+	return out
 }
 
 // hubOfServer are ts of the server named server, as the user or the hub
@@ -390,8 +529,7 @@ func hubFind(ts []hubTool, args json.RawMessage, where string) any {
 	}
 	ms := hubMatches(ts, p.Query)
 	if len(ms) == 0 {
-		return toolResult("No tool was found for \""+p.Query+"\": no tool's name or description has what it asks. Don't call a tool that only sounds close. "+
-			"The servers and their tools: "+hubServerCounts(ts)+". "+hubFindTool+" with other words, a server or a tool's name looks again.", false)
+		return toolResult(hubNotFound(ts, p.Query), false)
 	}
 	full := ms[:min(len(ms), hubFindFull)]
 	specs := make([]any, 0, len(full))
