@@ -381,7 +381,7 @@ list the session), and `HasGatewayConversations` counts it.
 Implementation: [`internal/sessions/gateway_delete.go`](../../internal/sessions/gateway_delete.go),
 `Restore` in [`internal/sessions/manage.go`](../../internal/sessions/manage.go), and
 [`internal/gui/sessions_manage.go`](../../internal/gui/sessions_manage.go).
-An agent whose sessions magpie cannot delete (OpenCode, Cline, Grok, Kimi, Hermes:
+An agent whose sessions magpie cannot delete (OpenCode, Cline, Kimi, Hermes:
 rows in the agent's own database or store) and whose command is no longer on
 PATH (`cliGone`) is forgettable (_SekiBetu_ on X): its rows get Delete, which
 only hides them through the same hidden list (`sessions.Forget`, trash note
@@ -389,6 +389,30 @@ marked `forgot`; the agent's own files are not touched), and no Resume
 (`resumeFor`). Restore unhides. With the command installed nothing changes.
 Tests: `TestUninstalledAgentSessionsAreForgotten`,
 `TestManageDeleteOfAnUninstalledAgentTakesItOffTheList`, `sessions-forget.test.cjs`.
+Grok Build's sessions are deletable too (#3003 asked; #4595 had them listed
+with no Delete): a session is its folder, so `sessions.Delete` moves the whole
+of it under `<GROK_HOME>/sessions/<url-encoded cwd>/<id>/` — `updates.jsonl`,
+`summary.json`, the locks and the `terminal/` output Grok Build writes beside
+them — and its subagents' folders, which are folders of their own beside it
+and which `grokFiles` folds into the session it ran in. What is outside them
+stays: another session's folder, the `prompt_history.jsonl` of the cwd, and
+the index. Grok Build also copies each session's text into
+`<GROK_HOME>/sessions/session_search.sqlite` (`session_docs`, one row a
+session, over the FTS5 `session_docs_fts` its own triggers keep in step), so
+that file is the one copy of the text a folder delete would leave behind and
+its search would go on finding: `grokSearchRowsDrop` deletes the session's
+row and its subagents', waiting on Grok's own write lock
+(`BEGIN IMMEDIATE`, busy timeout 5 s), before any file is moved. A row that
+can't be taken out stops the delete, so the session stays whole rather than
+half gone; no index, or one without those tables, deletes as before. Restore
+brings the folder back; the row isn't put back, so Grok Build's search finds
+the restored session again only if Grok Build indexes the folder again.
+Implementation:
+[`grok_search.go`](../../internal/sessions/grok_search.go), the `grok` branch
+of `sessionPaths` and `Delete` in
+[`manage.go`](../../internal/sessions/manage.go); tests
+`TestGrokDeleteRestore`, `TestGrokDeleteLeavesTheSessionWhenItsIndexRowCantGo`,
+`TestGrokSearchRowsDrop` and `TestGrokSessionDeleteOnThePage`.
 A deleted Codex session also leaves the Codex app's list (zhuddan on Discord).
 The app (ChatGPT.app's Codex, 26.x) lists threads from its own catalog,
 `<CODEX_HOME>/sqlite/codex.db` (`codex-dev.db` for a non-prod build), table

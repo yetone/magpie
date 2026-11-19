@@ -31,14 +31,19 @@ import (
 // when it deletes an empty draft itself; zachzhao1984 on Discord) and
 // Antigravity CLI's (agy: a conversation's brain folder, conversations/<id>.db
 // and annotations/<id>.pbtxt, what agy's own delete removes; ysm119 on
-// Discord). agy's conversation_summaries.db and jetbox_summaries_proto.pb,
+// Discord) and Grok Build's (a session's folder whole, and its subagents'
+// folders beside it, whose text Grok Build also copied into
+// session_search.sqlite: that index's rows go first, grokSearchRowsDrop,
+// and a session whose row can't be taken out stays where it is; #3003).
+// agy's conversation_summaries.db and jetbox_summaries_proto.pb,
 // which it keeps open, keep the row, and agy lists no conversation whose
-// files are gone, as a restore brings it back to its /resume list.
+// files are gone, as a restore brings it back to its /resume list. A
+// restored Grok Build session is whole again; its row does not come back
+// with it, so Grok Build's search finds it only once Grok Build has indexed
+// the folder again.
 // Hermes's, Alma's and OpenMausBot's are rows in a database the agent keeps open and
 // writes, so they are only listed, and so are OpenCode's and ZCode's, and
-// Cline's, whose sessions.db lists a session whose files are gone. Grok
-// Build's are folders, but it copies each session's text into
-// session_search.sqlite, which a delete would leave behind. Kimi Code's are
+// Cline's, whose sessions.db lists a session whose files are gone. Kimi Code's are
 // folders, but session_index.jsonl, which Kimi writes, names each one. A
 // Claude Desktop (Cowork) session is a Claude Code folder inside a session
 // Desktop keeps and lists itself. The agents' indexes are left as they are: Codex's
@@ -84,7 +89,7 @@ type AgentCount struct {
 // those kept as files of their own, in a layout magpie knows whole.
 func Deletable(agent string) bool {
 	switch agent {
-	case "claude", "qoder", "qoder-cn", "workbuddy", "workbuddy-ai", "codebuddy", "codex", "pi", "raft", "cindy", "omp", "cursor", "dsh", "droid", "agy":
+	case "claude", "qoder", "qoder-cn", "workbuddy", "workbuddy-ai", "codebuddy", "codex", "pi", "raft", "cindy", "omp", "cursor", "dsh", "droid", "agy", "grok":
 		return true
 	}
 	return false
@@ -542,6 +547,15 @@ func Delete(agent, id string) (Trashed, error) {
 	if agent == "agy" && agyHeld(filepath.Join(agyDataDir(fs), "presence", id+".lock")) {
 		return Trashed{}, ErrActive
 	}
+	// Grok Build's search index keeps a copy of the text of every session
+	// going, a subagent's under its own id: those rows go before a file
+	// does, so a delete that can't take them out moves nothing and the
+	// session is whole rather than gone from the list and found by search
+	if agent == "grok" {
+		if err := grokSearchRowsDrop(append([]string{id}, subIDs(fs, id)...)); err != nil {
+			return Trashed{}, err
+		}
+	}
 	t := Trashed{Agent: agent, ID: id, Title: s.Title, Cwd: s.Cwd, Last: s.Last, Deleted: now}
 	name := now.UTC().Format("20060102T150405.000000000") + "-" + id
 	dir := filepath.Join(TrashDir(), agent, name)
@@ -634,6 +648,20 @@ func sessionPaths(agent, id string, fs []file) []string {
 			add(p)
 		}
 		add(filepath.Join(dir, "annotations", id+".pbtxt"))
+		return out
+	}
+	if agent == "grok" {
+		// a session is its folder: updates.jsonl, summary.json, the locks
+		// Grok Build writes beside them, prompt_context.json, terminal/ and
+		// the rest of what it kept there. Its subagents' sessions are
+		// folders of their own beside it (grokFiles folds them into this
+		// one), so each moves whole as well. What the cwd's folder holds
+		// for every session there (prompt_history.jsonl) stays.
+		for _, f := range fs {
+			if d := filepath.Dir(f.path); !contains(out, d) {
+				add(d)
+			}
+		}
 		return out
 	}
 	if agent == "dsh" {
