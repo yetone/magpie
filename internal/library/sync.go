@@ -412,6 +412,9 @@ type AgentView struct {
 	ProjectMCP string `json:"projectMCP,omitempty"`
 	// ProjectSubagents is the folder in a project it reads subagents from
 	ProjectSubagents string `json:"projectSubagents,omitempty"`
+	// ProjectHooks is the file in a project it reads hooks from, which a
+	// project's plugins' hooks are written into (project_plugins.go)
+	ProjectHooks string `json:"projectHooks,omitempty"`
 	// ProjectInstructions is the file in a project it reads the
 	// project's instructions from, when there is none yet
 	ProjectInstructions string `json:"projectInstructions,omitempty"`
@@ -695,7 +698,7 @@ func readView(problems []Problem, glance bool) (*View, error) {
 	}
 	for _, t := range targets {
 		av := AgentView{ID: t.Agent.ID, Name: t.Agent.Name, Icon: t.Agent.Icon, Instructions: t.Instructions, Skills: t.Skills,
-			SkillsAlso: t.SkillsAlso, Note: t.Note, MCPVia: t.MCPVia, ProjectSkills: ProjectSkillsDir(t.Agent.ID), ProjectMCP: ProjectMCPFile(t.Agent.ID), ProjectSubagents: ProjectSubagentsDir(t.Agent.ID),
+			SkillsAlso: t.SkillsAlso, Note: t.Note, MCPVia: t.MCPVia, ProjectSkills: ProjectSkillsDir(t.Agent.ID), ProjectMCP: ProjectMCPFile(t.Agent.ID), ProjectSubagents: ProjectSubagentsDir(t.Agent.ID), ProjectHooks: ProjectHooksFile(t.Agent.ID),
 			ProjectInstructions: ProjectInstrFile(t.Agent.ID),
 			ProjectOff:          slices.Contains(projectOffAgents, t.Agent.ID), ProjectSkillOff: slices.Contains(projectSkillOffAgents, t.Agent.ID),
 			ProjectNoSSE: ProjectNoSSE(t.Agent.ID)}

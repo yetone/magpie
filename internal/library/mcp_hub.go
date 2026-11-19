@@ -226,8 +226,12 @@ func hubServers(agentID string) []*Server {
 func (l *Library) hubServers(agentID string) []*Server {
 	id, key, scoped := strings.Cut(agentID, gateway.HubProjectSep)
 	var p *Project
+	var given map[string][]string // the project's servers, its plugins' too
 	if scoped {
 		p = l.projectByKey(key)
+	}
+	if p != nil {
+		_, given, _ = l.withPlugins(p)
 	}
 	var out []*Server
 	for _, s := range l.MCP {
@@ -235,7 +239,7 @@ func (l *Library) hubServers(agentID string) []*Server {
 		if p != nil {
 			if slices.Contains(p.ServersOff[s.Name], id) {
 				on = false
-			} else if !s.Hidden && slices.Contains(p.Servers[s.Name], id) {
+			} else if !s.Hidden && slices.Contains(given[s.Name], id) {
 				on = true
 			}
 		}

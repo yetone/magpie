@@ -261,30 +261,44 @@ func hookSpecOf(t *Target) (*hookSpec, string) {
 	return sp, why
 }
 
+// claudeHookSpec is how Claude Code keeps hooks in a settings file at path:
+// its own settings.json, or a project's .claude/settings.local.json.
+func claudeHookSpec(path string) *hookSpec {
+	return &hookSpec{
+		path: path,
+		events: map[string]string{"turn-end": "Stop", "after-tool": "PostToolUse", "before-tool": "PreToolUse",
+			"prompt": "UserPromptSubmit", "session-start": "SessionStart"},
+		native: claudeHookEvents,
+		tools:  map[string]string{"shell": "Bash", "edit": "Edit|Write|MultiEdit"},
+		agent:  "claude",
+	}
+}
+
+// codexHookSpec is how Codex keeps hooks in a hooks.json at path, whose
+// events are codex-rs/hooks' HookEventName's: the one beside its
+// config.toml, or a project's .codex/hooks.json.
+func codexHookSpec(path string) *hookSpec {
+	return &hookSpec{
+		path: path,
+		events: map[string]string{"turn-end": "Stop", "after-tool": "PostToolUse", "before-tool": "PreToolUse",
+			"prompt": "UserPromptSubmit", "session-start": "SessionStart"},
+		native: []string{"PreToolUse", "PermissionRequest", "PostToolUse", "PreCompact", "PostCompact", "SessionStart", "SessionEnd",
+			"UserPromptSubmit", "SubagentStart", "SubagentStop", "Stop", "Interrupt"},
+		tools: map[string]string{"shell": "Bash", "edit": "apply_patch"},
+		agent: "codex",
+	}
+}
+
 func hookSpecFor(t *Target) (*hookSpec, string) {
 	if t.Agent.WSL != "" {
 		return nil, wslNoHooks(t.Agent)
 	}
 	switch t.Agent.ID {
 	case "claude":
-		return &hookSpec{
-			path: filepath.Join(claudeDir(), "settings.json"),
-			events: map[string]string{"turn-end": "Stop", "after-tool": "PostToolUse", "before-tool": "PreToolUse",
-				"prompt": "UserPromptSubmit", "session-start": "SessionStart"},
-			native: claudeHookEvents,
-			tools:  map[string]string{"shell": "Bash", "edit": "Edit|Write|MultiEdit"},
-		}, ""
+		return claudeHookSpec(filepath.Join(claudeDir(), "settings.json")), ""
 	case "codex":
-		// codex-rs/hooks: hooks.json beside config.toml, whose events are
-		// HookEventName's
-		return &hookSpec{
-			path: filepath.Join(codexDir(), "hooks.json"),
-			events: map[string]string{"turn-end": "Stop", "after-tool": "PostToolUse", "before-tool": "PreToolUse",
-				"prompt": "UserPromptSubmit", "session-start": "SessionStart"},
-			native: []string{"PreToolUse", "PermissionRequest", "PostToolUse", "PreCompact", "PostCompact", "SessionStart", "SessionEnd",
-				"UserPromptSubmit", "SubagentStart", "SubagentStop", "Stop", "Interrupt"},
-			tools: map[string]string{"shell": "Bash", "edit": "apply_patch"},
-		}, ""
+		// codex-rs/hooks: hooks.json beside config.toml
+		return codexHookSpec(filepath.Join(codexDir(), "hooks.json")), ""
 	case "gemini":
 		// gemini-cli packages/core/src/hooks/types.ts, HookEventName
 		return &hookSpec{
@@ -678,20 +692,66 @@ func (l *Library) syncHooks(t *Target, b *backups, res *Result) {
 		}
 		return
 	}
+	w := &hookWrite{id: id, sp: sp, want: want, recs: a.Hooks, gone: t.Gone,
+		keep: func(path string) error { return b.keep(id, path) },
+		fail: func(what string, err error) { res.fail(id, what, err) }}
+	if id == "codex" {
+		w.rekeyCfg = filepath.Join(codexDir(), "config.toml")
+	}
+	recs, changed, ok := w.run()
+	if changed {
+		res.changed(id)
+	}
+	if ok {
+		a.Hooks = recs
+	}
+}
+
+// hookWrite is one agent's hooks file brought to what it should hold: the
+// entries of want written in, those of recs (what magpie wrote before) no
+// longer wanted taken out, and an entry the user changed or wrote
+// themselves left as it is. The agent's own file (syncHooks) and a
+// project's (project_plugins.go) are both brought up this way.
+type hookWrite struct {
+	id   string
+	sp   *hookSpec
+	want []*Hook
+	recs []HookEntry
+	gone bool // the agent is gone from here: nothing new is written
+	// keep backs a file up before it is written; nil writes it as it is
+	keep func(path string) error
+	// rekeyCfg is Codex's config.toml, whose trust of each hook moves
+	// with the entries left after one taken out; "" for another agent
+	rekeyCfg string
+	fail     func(what string, err error)
+}
+
+// run writes the file, and says what magpie's records of it are now,
+// whether it was written, and false when they should stay as they were
+// (the file couldn't be read or written).
+func (w *hookWrite) run() (recs []HookEntry, changed, ok bool) {
+	sp, want := w.sp, w.want
 	failAll := func(err error) {
 		for _, h := range want {
-			res.fail(id, "hook:"+h.Name, err)
+			w.fail("hook:"+h.Name, err)
 		}
 		if len(want) == 0 {
-			res.fail(id, "hooks", err)
+			w.fail("hooks", err)
 		}
 	}
+	keep := func(path string) error {
+		if w.keep == nil {
+			return nil
+		}
+		return w.keep(path)
+	}
+	id, gone := w.id, w.gone
 	var doc []byte
 	if !sp.toml {
 		d, err := readHooksFile(sp.path)
 		if err != nil {
 			failAll(err)
-			return
+			return nil, false, false
 		}
 		doc = d
 	}
@@ -725,11 +785,11 @@ func (l *Library) syncHooks(t *Target, b *backups, res *Result) {
 			_, err = startMatcher(id, h.Matcher)
 		}
 		if err != nil {
-			res.fail(id, "hook:"+h.Name, err)
+			w.fail("hook:"+h.Name, err)
 			continue
 		}
 		if _, err := listOf(ev); err != nil {
-			res.fail(id, "hook:"+h.Name, err)
+			w.fail("hook:"+h.Name, err)
 			continue
 		}
 		ws = append(ws, &wanted{h: h, ev: ev, entry: sp.entry(h, ev)})
@@ -753,9 +813,9 @@ func (l *Library) syncHooks(t *Target, b *backups, res *Result) {
 	var kept []HookEntry
 	drop := map[string][]int{} // event → the entries to take out
 	var unread []HookEntry     // records of an event whose list can't be read now
-	for _, rec := range a.Hooks {
+	for _, rec := range w.recs {
 		if _, err := listOf(rec.Event); err != nil {
-			res.fail(id, "hook:"+rec.Name, err)
+			w.fail("hook:"+rec.Name, err)
 			unread = append(unread, rec)
 			continue
 		}
@@ -778,7 +838,7 @@ func (l *Library) syncHooks(t *Target, b *backups, res *Result) {
 	for _, w := range ws {
 		// an agent gone from here is given nothing new; what it has stays
 		// its until unticked
-		if w.done || t.Gone {
+		if w.done || gone {
 			continue
 		}
 		// the same entry of the user's own already runs: it isn't written
@@ -790,13 +850,12 @@ func (l *Library) syncHooks(t *Target, b *backups, res *Result) {
 		added = append(added, HookEntry{Name: w.h.Name, Event: w.ev, Entry: w.entry})
 	}
 	if len(drop) == 0 && len(add) == 0 {
-		a.Hooks = append(kept, unread...)
-		return
+		return append(kept, unread...), false, true
 	}
 	if sp.toml {
-		if err := b.keep(id, sp.path); err != nil {
+		if err := keep(sp.path); err != nil {
 			failAll(err)
-			return
+			return nil, false, false
 		}
 		err := os.MkdirAll(filepath.Dir(sp.path), 0o755)
 		if err == nil {
@@ -820,11 +879,9 @@ func (l *Library) syncHooks(t *Target, b *backups, res *Result) {
 		}
 		if err != nil {
 			failAll(fmt.Errorf("%s: %w", sp.path, err))
-			return
+			return nil, false, false
 		}
-		res.changed(id)
-		a.Hooks = append(append(kept, added...), unread...)
-		return
+		return append(append(kept, added...), unread...), true, true
 	}
 	// what each list becomes, and where each entry left in it moves to
 	var set []edit.KV
@@ -864,26 +921,26 @@ func (l *Library) syncHooks(t *Target, b *backups, res *Result) {
 			set = append(set, edit.KV{Path: "hooks." + ev, Value: next})
 		}
 	}
-	if err := b.keep(id, sp.path); err != nil {
+	if err := keep(sp.path); err != nil {
 		failAll(err)
-		return
+		return nil, false, false
 	}
 	// Codex trusts a hook by where it is (codex-rs/hooks: hook_key, the
 	// file's path, the event, the group's and the handler's index): an
 	// entry taken out from before the user's own would leave their trust
 	// on the wrong ones, so it is moved with them
 	var rekey func() error
-	if id == "codex" && len(drop) > 0 {
-		cfg := filepath.Join(codexDir(), "config.toml")
+	if w.rekeyCfg != "" && len(drop) > 0 {
+		cfg := w.rekeyCfg
 		f, err := codexRekey(cfg, sp.path, moved)
 		if err != nil {
 			failAll(err)
-			return
+			return nil, false, false
 		}
 		if f != nil {
-			if err := b.keep(id, cfg); err != nil {
+			if err := keep(cfg); err != nil {
 				failAll(err)
-				return
+				return nil, false, false
 			}
 			rekey = f
 		}
@@ -912,15 +969,14 @@ func (l *Library) syncHooks(t *Target, b *backups, res *Result) {
 	}
 	if err != nil {
 		failAll(fmt.Errorf("%s: %w", sp.path, err))
-		return
+		return nil, false, false
 	}
-	res.changed(id)
 	if rekey != nil {
 		if err := rekey(); err != nil {
-			res.fail(id, "hooks", fmt.Errorf("the hooks are written, but Codex's trust of the ones after them couldn't be moved: review them in Codex's /hooks (%w)", err))
+			w.fail("hooks", fmt.Errorf("the hooks are written, but Codex's trust of the ones after them couldn't be moved: review them in Codex's /hooks (%w)", err))
 		}
 	}
-	a.Hooks = append(append(kept, added...), unread...)
+	return append(append(kept, added...), unread...), true, true
 }
 
 // codexState is a [hooks.state."<key>"] header line in Codex's config.toml.

@@ -938,6 +938,8 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			res, err = library.ProjectSubagents(in.Dir, oneOrMore(in.Name, in.Names), in.Agents)
 		case "projects/server":
 			res, err = library.ProjectServer(in.Dir, in.Name, in.Agents)
+		case "projects/plugin":
+			res, err = library.ProjectPlugin(in.Dir, in.Name, in.Agents)
 		case "projects/server-off":
 			// a Library server turned off in this project only
 			res, err = library.ProjectServerOff(in.Dir, in.Name, in.Agents)

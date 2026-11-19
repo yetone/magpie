@@ -1225,6 +1225,7 @@ func RemovePlugin(name string) (*Result, error) {
 			return fmt.Errorf("no plugin called %s", name)
 		}
 		removePluginParts(l, b)
+		l.dropProjectPlugin(name)
 		l.Plugins = slices.DeleteFunc(l.Plugins, func(x *Plugin) bool { return x.Name == name })
 		return nil
 	})
