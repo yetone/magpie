@@ -9029,7 +9029,7 @@ You can also choose what one rate limited (429) while it still has quota does: K
 
 ## Routings
 
-- **Smart.** (default): the first takes requests while it has quota to spare; when it runs low, the one with the most left takes over. One out of credit sits out half an hour, one out of quota until it resets, one rate limited as long as the vendor asks, and one that fails a minute, longer each time it fails again.
+- **Quota first.** (default): the first takes requests while it has quota to spare; when it runs low, the one with the most left takes over. One out of credit sits out half an hour, one out of quota until it resets, one rate limited as long as the vendor asks, and one that fails a minute, longer each time it fails again.
 - **In order.** : requests go to the first; the next takes over when the one before runs out of quota, hits a rate limit or fails.
 - **In turn.** : each message you send goes to the next one, round the list; the agent’s tool calls for it stay on the same one. A move costs some prompt cache; with Stays on Session, a whole conversation stays on one instead.
 - **Least used first.** : a subscription by the share of its allowance used, a key by the tokens it served in the last hours.
