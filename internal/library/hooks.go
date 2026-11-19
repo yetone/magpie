@@ -30,6 +30,7 @@ import (
 //	Codex        <codex home>/hooks.json     the same shape
 //	Gemini CLI   ~/.gemini/settings.json     the same shape, timeout in ms
 //	Cursor       ~/.cursor/hooks.json        hooks.<event>: [{command, timeout, matcher}], version 1
+//	DeepSeek Harness  $DSH_HOME/magpie-hooks.json  the Claude Code shape, run by the plugin dsh-hooks-claude-code (dsh_hooks.go)
 //
 // A portable event ("turn-end") is the same moment in each agent, under
 // each one's own name; an agent's own event ("codex:PermissionRequest")
@@ -204,7 +205,7 @@ type hookSpec struct {
 }
 
 // hookAgents are the agents magpie can give hooks to.
-var hookAgents = []string{"claude", "codex", "cursor", "gemini", "grok", "grok-app"}
+var hookAgents = []string{"claude", "codex", "cursor", "dsh", "gemini", "grok", "grok-app"}
 
 // grokHookEvents are the events the Grok CLI fires (docs/user-guide/10-hooks.md),
 // shared by Grok Build and the Grok App that runs it. Only the ones magpie
@@ -328,6 +329,8 @@ func hookSpecFor(t *Target) (*hookSpec, string) {
 		// Grok App runs the same CLI, on a custom route reading
 		// agent-home/config.toml, the same [[hooks.<Event>]] shape
 		return grokHookSpec(t.MCP.Path), ""
+	case "dsh":
+		return dshHookSpec(t)
 	}
 	return nil, fmt.Sprintf("%s has no hooks magpie can write", t.Agent.Name)
 }
@@ -704,6 +707,12 @@ func (l *Library) syncHooks(t *Target, b *backups, res *Result) {
 	}
 	if ok {
 		a.Hooks = recs
+		if id == "dsh" {
+			// dsh runs a hooks file through a plugin its profiles load
+			if err := dshHooksPlugin(t, sp.path, len(recs) > 0, func(path string) error { return b.keep(id, path) }); err != nil {
+				res.fail(id, "hooks", err)
+			}
+		}
 	}
 }
 
