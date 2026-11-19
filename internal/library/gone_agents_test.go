@@ -97,3 +97,39 @@ func TestGoneAgentListedToTakeOut(t *testing.T) {
 		t.Errorf("hermes, holding nothing, is still listed: %+v", a)
 	}
 }
+
+// izhidigua on X: after the config was synced to a computer without Claude
+// Code, Claude Desktop and Pi, Skills listed the agents installed there,
+// and MCP the uninstalled ones as well, ticked on its servers by the other
+// computer. A tick that came with the library is nothing magpie wrote
+// here: an agent not installed is listed only for what it holds
+// (Applied), as for a server or a skill alike.
+func TestGoneAgentWithOnlySyncedTicksIsNotListed(t *testing.T) {
+	h := sandbox(t)
+	write(t, filepath.Join(h, ".claude/settings.json"), "{}")
+	write(t, filepath.Join(h, ".pi/agent/settings.json"), "{}")
+	for _, n := range []string{"claude", "claude.exe", "pi", "pi.exe"} {
+		os.Remove(filepath.Join(h, "bin", n))
+	}
+	src := filepath.Join(h, "src/skills")
+	skill(t, filepath.Join(src, "pdf"), "pdf", "Read PDFs")
+	all := []string{"claude", "claude-desktop", "pi", "codex"}
+	ok(t)(InstallSkills(src, []string{"pdf"}, all))
+	ok(t)(SaveServer("", Server{Name: "fs", Transport: "stdio", Command: "npx", Args: []string{"-y", "@mcp/fs"}, Agents: all}))
+	v, err := Read(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range v.Agents {
+		if a.Gone {
+			t.Errorf("%s is listed as gone, holding nothing written here", a.ID)
+		}
+	}
+	if !slices.ContainsFunc(v.Agents, func(a AgentView) bool { return a.ID == "codex" && !a.Gone }) {
+		t.Errorf("codex isn't listed: %+v", v.Agents)
+	}
+	// the ticks stay for the day it is installed
+	if got := v.Servers[0].Agents; !slices.Contains(got, "pi") || !slices.Contains(got, "claude") {
+		t.Errorf("the server's ticks were changed: %v", got)
+	}
+}
