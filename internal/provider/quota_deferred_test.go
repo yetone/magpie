@@ -59,12 +59,22 @@ func TestQuotaDeferredReadIsNotFailure(t *testing.T) {
 			if len(report) != 1 || deferred(report[0]) != tc.want {
 				t.Errorf("CLI/gateway report lost readDeferred: %+v", report)
 			}
+			// a failed read says why beside the reading it stands in
+			// for (tmr11235 on X: agy-cli's quota stood days old with no
+			// reason); a deferred one failed at nothing
+			want := tc.err
+			if tc.want {
+				want = ""
+			}
+			if q.ReadError != want || len(report) != 1 || report[0].ReadError != want {
+				t.Errorf("readError = %q (report %+v), want %q", q.ReadError, report, want)
+			}
 		})
 	}
 	if q := keepLast(SubscriptionQuota{Provider: good.Provider, User: good.User, Error: "401 unauthorized"}, ""); q.Error == "" || deferred(q) {
 		t.Fatalf("an account refusal was hidden as a deferred read: %+v", q)
 	}
-	if q := keepLast(good, ""); q.AsOf != nil || deferred(q) {
+	if q := keepLast(good, ""); q.AsOf != nil || deferred(q) || q.ReadError != "" {
 		t.Fatalf("a successful reading is still deferred: %+v", q)
 	}
 }

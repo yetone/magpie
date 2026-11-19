@@ -88,6 +88,7 @@ func keepLast(q SubscriptionQuota, user string) SubscriptionQuota {
 		e.Q.Error = ""
 		e.Q.AsOf = nil
 		e.Q.ReadDeferred = false
+		e.Q.ReadError = ""
 		if c.m == nil {
 			c.m = map[string]lastQuota{}
 		}
@@ -114,6 +115,9 @@ func keepLast(q SubscriptionQuota, user string) SubscriptionQuota {
 		return q
 	}
 	out.ReadDeferred = readDeferred(q.Error)
+	if !out.ReadDeferred {
+		out.ReadError = q.Error
+	}
 	out.Name, out.Icon, out.User = q.Name, q.Icon, q.User
 	if out.Name == "" {
 		out.Name, out.Icon = c.m[key].Q.Name, c.m[key].Q.Icon

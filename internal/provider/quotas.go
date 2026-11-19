@@ -94,6 +94,8 @@ type Quota struct {
 	AsOf          *time.Time `json:"asOf,omitempty"` // the cached reading's time, nil for a new one
 	// ReadDeferred says no request was made this time, rather than one failed.
 	ReadDeferred bool `json:"readDeferred,omitempty"`
+	// ReadError is why the reading AsOf stands in for failed.
+	ReadError string `json:"readError,omitempty"`
 	// ReadAt is when the windows or balance shown were read, nil when not
 	// known; a Claude account's can be well before now (claudeReadAt).
 	ReadAt *time.Time `json:"readAt,omitempty"`
@@ -203,7 +205,7 @@ func quotaReport(subs, plans, balances []SubscriptionQuota, now time.Time) []Quo
 		qs   []SubscriptionQuota
 	}{{"subscription", subs}, {"plan", plans}, {"balance", balances}} {
 		for _, q := range g.qs {
-			r := Quota{Provider: q.Provider, Name: q.Name, Kind: g.kind, Plan: q.Plan, User: q.User, AsOf: q.AsOf, ReadAt: q.ReadAt, ReadDeferred: q.ReadDeferred,
+			r := Quota{Provider: q.Provider, Name: q.Name, Kind: g.kind, Plan: q.Plan, User: q.User, AsOf: q.AsOf, ReadAt: q.ReadAt, ReadDeferred: q.ReadDeferred, ReadError: q.ReadError,
 				Windows: []QuotaSpan{}, Balance: q.Balance, BalanceSplit: q.BalanceSplit, SharedBalance: q.SharedBalance, Error: q.Error, Until: q.Until, Renew: q.Renew, Resets: q.Resets, ResetsUsed: q.ResetsUsed, From: q.From, Alias: q.Alias, Seat: q.Seat}
 			// a pool's own windows stand in for the models' drawing on it,
 			// as the usage page shows them

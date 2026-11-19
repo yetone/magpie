@@ -377,8 +377,10 @@ its card refresh, or allowances set to *When I ask*) can use the last
 reading with `readDeferred: true`. `AsOf` and `ReadAt` still date that
 snapshot; the GUI says it was not refreshed this time rather than that a
 request failed. Network failures, unavailable `/usage` and account refusals
-are not deferred reads. The flag also reaches `magpie quota --json` and
-the gateway report. [`quota_last.go`](../../internal/provider/quota_last.go),
+are not deferred reads. A failed read that an old reading stands in for
+carries its error as `readError`, which the GUI shows after the date, so
+a stand-in that lasts days still says why. Both fields also reach
+`magpie quota --json` and the gateway report. [`quota_last.go`](../../internal/provider/quota_last.go),
 `TestQuotaDeferredReadIsNotFailure`.
 
 Allowance readings are kept by provider, lowercased account and window in

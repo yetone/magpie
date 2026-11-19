@@ -98,6 +98,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const read = claude.locator(".quota-read");
       await read.waitFor();
       assert.ok((await read.textContent()).includes(deferredWords[lang]), "a request not made was described as failed");
+      // a failed read's stand-in says why it failed (tmr11235 on X:
+      // agy-cli's quota stood days old with no reason); a deferred one
+      // failed at nothing
+      const why = "agy usage query timed out.";
+      const asOf = state.quotas[0].readAt;
+      assert.ok((await page.evaluate(q => asOfText(q), { asOf, readError: why })).endsWith(" · " + why), "a failed read hid why");
+      assert.ok(!(await page.evaluate(q => asOfText(q), { asOf, readError: why, readDeferred: true })).includes(why));
+      assert.ok(!(await page.evaluate(q => asOfText(q, true), { asOf, readError: why })).includes(why), "the short line stays short");
 
       let release, readStarted;
       const started = new Promise(r => { readStarted = r; });

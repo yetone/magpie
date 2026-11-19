@@ -218,6 +218,10 @@ type SubscriptionQuota struct {
 	// ReadDeferred distinguishes a reading deliberately not requested from
 	// a request that failed. AsOf and ReadAt still date the cached values.
 	ReadDeferred bool `json:"readDeferred,omitempty"`
+	// ReadError is why the reading AsOf stands in for failed, so a
+	// stand-in that has lasted days says why (tmr11235 on X: agy-cli's
+	// quota "as of" four days back, with no reason given).
+	ReadError string `json:"readError,omitempty"`
 	// ReadAt is when what is shown was read: a key's balance, kept a
 	// minute (KeyBalances), or an account's allowance, which a cache (a
 	// minute's, or a Claude account's until Claude Code tells it again)
