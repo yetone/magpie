@@ -2,6 +2,12 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "project scope": "项目范围",
+    "user scope": "用户范围",
+    "Off in {agent}": "在 {agent} 中已关闭",
+    "{agent}'s own settings turn this plugin off": "{agent} 自己的设置把这个插件关掉了",
+    "Installed in the agents themselves": "Agent 自己安装的内容",
+    "Listed as the agents' plugins and packages declare them. The agent loads them: magpie copies and changes nothing, and a session shows what is loaded.": "按 Agent 的插件和包所声明的内容列出。由 Agent 自己加载：magpie 不复制也不改动，会话中才能看到实际加载了什么。",
     "In {plugin}": "属于 {plugin}",
     "Comes with the Claude plugin {plugin}. Changing the plugin's agents, or turning it off and on, gives this to the plugin's agents again.": "随 Claude 插件 {plugin} 安装。改动插件的 Agent，或把插件关掉再打开，会把它重新给到插件的 Agent。",
     "Put back in {agents}": "放回 {agents}",
@@ -1140,6 +1146,12 @@ magpie.strings({
     "{agents} reads no project instructions file magpie knows of.": "{agents} 没有 magpie 已知的项目指令文件。",
   },
   "zh-TW": {
+    "project scope": "專案範圍",
+    "user scope": "使用者範圍",
+    "Off in {agent}": "在 {agent} 中已關閉",
+    "{agent}'s own settings turn this plugin off": "{agent} 自己的設定把這個外掛關掉了",
+    "Installed in the agents themselves": "Agent 自己安裝的內容",
+    "Listed as the agents' plugins and packages declare them. The agent loads them: magpie copies and changes nothing, and a session shows what is loaded.": "依 Agent 的外掛與套件所宣告的內容列出。由 Agent 自己載入：magpie 不複製也不改動，工作階段中才看得到實際載入了什麼。",
     "In {plugin}": "屬於 {plugin}",
     "Comes with the Claude plugin {plugin}. Changing the plugin's agents, or turning it off and on, gives this to the plugin's agents again.": "隨 Claude 外掛 {plugin} 安裝。變更外掛的 Agent，或把外掛關閉再開啟，會把它重新給到外掛的 Agent。",
     "Put back in {agents}": "放回 {agents}",
@@ -2278,6 +2290,12 @@ magpie.strings({
     "{agents} reads no project instructions file magpie knows of.": "{agents} 沒有 magpie 已知的專案指令檔案。",
   },
   ja: {
+    "project scope": "プロジェクトの範囲",
+    "user scope": "ユーザーの範囲",
+    "Off in {agent}": "{agent} ではオフ",
+    "{agent}'s own settings turn this plugin off": "{agent} 自身の設定でこのプラグインはオフです",
+    "Installed in the agents themselves": "エージェント自身がインストールしたもの",
+    "Listed as the agents' plugins and packages declare them. The agent loads them: magpie copies and changes nothing, and a session shows what is loaded.": "エージェントのプラグインとパッケージが宣言する内容を一覧にしています。読み込むのはエージェント自身で、magpie はコピーも変更もしません。実際に読み込まれたものはセッションで分かります。",
     "In {plugin}": "{plugin} の一部",
     "Comes with the Claude plugin {plugin}. Changing the plugin's agents, or turning it off and on, gives this to the plugin's agents again.": "Claude プラグイン {plugin} と一緒に入りました。プラグインのエージェントを変えるか、オフにしてオンに戻すと、プラグインのエージェントに改めて渡されます。",
     "Put back in {agents}": "{agents} に戻す",
@@ -3416,6 +3434,12 @@ magpie.strings({
     "{agents} reads no project instructions file magpie knows of.": "{agents} は magpie が把握しているプロジェクトの指示ファイルを読みません。",
   },
   de: {
+    "project scope": "Projektbereich",
+    "user scope": "Benutzerbereich",
+    "Off in {agent}": "In {agent} aus",
+    "{agent}'s own settings turn this plugin off": "Die eigenen Einstellungen von {agent} schalten dieses Plugin aus",
+    "Installed in the agents themselves": "Von den Agents selbst installiert",
+    "Listed as the agents' plugins and packages declare them. The agent loads them: magpie copies and changes nothing, and a session shows what is loaded.": "So aufgelistet, wie die Plugins und Pakete der Agents sie angeben. Der Agent lädt sie selbst: magpie kopiert und ändert nichts, und eine Sitzung zeigt, was geladen ist.",
     "In {plugin}": "Teil von {plugin}",
     "Comes with the Claude plugin {plugin}. Changing the plugin's agents, or turning it off and on, gives this to the plugin's agents again.": "Kommt mit dem Claude-Plugin {plugin}. Werden die Agenten des Plugins geändert oder wird es aus- und wieder eingeschaltet, geht dies erneut an die Agenten des Plugins.",
     "Put back in {agents}": "Zurück zu {agents}",

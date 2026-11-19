@@ -212,6 +212,7 @@ var cliForRoute = map[string]string{
 	"POST /api/settings/mtls/issue":        "magpie mtls issue",
 	"POST /api/settings/mtls/revoke":       "magpie mtls revoke",
 	"GET /api/library":                     "magpie library",
+	"GET /api/library/native":              "magpie library native",
 	"POST /api/library/{what}/{action}":    "magpie library",
 	"GET /api/plugins":                     "magpie plugin",
 	"POST /api/plugins/{op}":               "magpie plugin",

@@ -690,6 +690,19 @@ func piSourceID(s string) string {
 
 // installed says whether Pi has pk on disk, and its version there.
 func (p piPlace) installed(pk PiPackage) (bool, string) {
+	d := p.packageDir(pk)
+	if d == "" {
+		return false, ""
+	}
+	var m struct{ Version string }
+	if raw, err := os.ReadFile(filepath.Join(d, "package.json")); err == nil {
+		json.Unmarshal(raw, &m)
+	}
+	return true, m.Version
+}
+
+// packageDir is where Pi has pk on disk, "" when it hasn't.
+func (p piPlace) packageDir(pk PiPackage) string {
 	var dirs []string
 	switch pk.Kind {
 	case "npm":
@@ -700,23 +713,18 @@ func (p piPlace) installed(pk PiPackage) (bool, string) {
 	case "git":
 		h, gp := piGitPlace(pk.Source)
 		if h == "" || gp == "" {
-			return false, ""
+			return ""
 		}
 		dirs = append(dirs, filepath.Join(p.dir, "git", h, filepath.FromSlash(gp)))
 	default:
 		dirs = append(dirs, p.resolve(pk.Source))
 	}
 	for _, d := range dirs {
-		if _, err := os.Stat(d); err != nil {
-			continue
+		if _, err := os.Stat(d); err == nil {
+			return d
 		}
-		var m struct{ Version string }
-		if raw, err := os.ReadFile(filepath.Join(d, "package.json")); err == nil {
-			json.Unmarshal(raw, &m)
-		}
-		return true, m.Version
 	}
-	return false, ""
+	return ""
 }
 
 // ---- changes ----------------------------------------------------------------

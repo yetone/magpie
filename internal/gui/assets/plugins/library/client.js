@@ -991,6 +991,8 @@ magpie.plugin("library", (ctx) => {
     if (id === "bili" && bili) loadBili();
     // Pi's extensions too: one installed or changed outside magpie since
     if (id === "pi" && piView) loadPi();
+    // and the plugins and packages the agents installed themselves
+    if (["skills", "mcp", "hooks"].includes(id) && nativeView) loadNative();
     // memory too: agents save to it while the page is open
     if (id === "memory" && mem) loadMemory();
     if (!lib) return page.querySelector(":scope > .lib-skel")?.replaceWith(skeleton(id));
@@ -2201,6 +2203,59 @@ magpie.plugin("library", (ctx) => {
     piLoading = false;
     if (tab === "pi" && piView) render();
   }
+  // What plugins Codex and packages Pi installed themselves declare (#7244,
+  // jinpwng): listed once beside the library's own, with where each came
+  // from. Read only: the agent loads them, magpie copies, links and
+  // registers nothing, and whether a session loads one isn't known from
+  // its files. Asked for when a tab that lists them is drawn, not part of
+  // /api/library, which is polled.
+  let nativeView = null;   // /api/library/native
+  let nativeLoading = false;
+  async function loadNative() {
+    if (nativeLoading) return;
+    nativeLoading = true;
+    try {
+      nativeView = await api("library/native");
+    } catch {
+      // a list that can't be read is not drawn, never a wrong one
+    }
+    nativeLoading = false;
+    if (nativeView && ["skills", "mcp", "hooks"].includes(tab)) render();
+  }
+  function nativeSection(kind) {
+    if (agentless()) return [];
+    if (!nativeView) { if (!nativeLoading) loadNative(); return []; }
+    const rows = [];
+    for (const p of nativeView) {
+      for (const x of p.parts || []) {
+        if (x.kind !== kind || isHidden({ id: p.agent })) continue;
+        const row = el("div", "row lib-row lib-native");
+        row.dataset.native = p.agent + " " + p.name + " " + x.name;
+        const who = el("div", "who");
+        who.append(el("div", "name mono", x.name));
+        if (x.detail) who.append(el("div", kind === "hook" ? "sub mono" : "sub", x.detail));
+        const origin = el("div", "lib-src");
+        const bits = [p.agentName, p.name + (p.version ? " " + p.version : ""), p.scope === "project" ? t("project scope") : t("user scope")];
+        origin.append(el("span", "", bits.join(" · ")));
+        if (p.project) origin.append(pathLink(p.project));
+        origin.title = p.source || "";
+        who.append(origin);
+        row.append(glyph(GLYPH[kind === "mcp" ? "web" : kind === "hook" ? "cmd" : "skill"]), who);
+        if (p.enabled === false) row.append(tag(t("Off in {agent}", { agent: p.agentName }), "warn", t("{agent}'s own settings turn this plugin off", { agent: p.agentName })));
+        rows.push(row);
+      }
+    }
+    if (!rows.length) return [];
+    const box = el("section", "lib-nativebox");
+    const rh = el("div", "row-head");
+    rh.append(el("span", "label", t("Installed in the agents themselves")), el("span", "grow"));
+    box.append(rh, intro(t("Listed as the agents' plugins and packages declare them. The agent loads them: magpie copies and changes nothing, and a session shows what is loaded.")));
+    const list = el("div", "list lib-list");
+    list.append(...rows);
+    box.append(list);
+    return [box];
+  }
+
   function renderPi(body) {
     body.append(intro(t("The extensions and packages each Pi loads. Switch one off, or copy it to another Pi: a package is added to that Pi's settings, and Pi installs it when it next starts.")));
     if (!piView) {
@@ -2976,6 +3031,7 @@ magpie.plugin("library", (ctx) => {
         body.append(el("p", "lib-aside lib-wb-trust", t("{agent} connects a server only once you trust it: switch it on in {agent}'s MCP settings, and again after its command or address changes.", { agent: wb.name })));
       }
     }
+    body.append(...nativeSection("mcp"));
     body.append(discover("mcp"));
   }
 
@@ -4761,6 +4817,7 @@ magpie.plugin("library", (ctx) => {
     // ones whose hooks files magpie knows
     const skip = all.filter((a) => hookAgentOf(a.id).no);
     if (skip.length) body.append(el("p", "lib-aside lib-hooks-no", t("magpie can't give hooks to {agents} yet: their chips are greyed, and say why.", { agents: skip.map((a) => a.name).join(", ") })));
+    body.append(...nativeSection("hook"));
   }
 
   function hookRow(h, all) {
@@ -5925,6 +5982,7 @@ magpie.plugin("library", (ctx) => {
     if (shownAgents().some((a) => a.id === "claude-desktop" && a.skills)) {
       body.append(el("p", "lib-aside", t("Claude Desktop shows skill changes once its window is reloaded ({keys}). It gets a copy of each skill, and one you change in Desktop is left as it is.", { keys: /^Mac/.test(navigator.platform) ? "⌘R" : "Ctrl+R" })));
     }
+    body.append(...nativeSection("skill"));
     body.append(discover("skills"));
   }
 

@@ -344,6 +344,12 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 	mux.HandleFunc("GET /api/library/pi", func(rw http.ResponseWriter, r *http.Request) {
 		writeJSON(rw, library.ReadPiExtensions())
 	})
+	// What the agents' own plugins (Codex's marketplaces) and packages (Pi's)
+	// declare, read and never written (#7244). Asked for when the Library
+	// is opened, not part of the polled /api/library.
+	mux.HandleFunc("GET /api/library/native", func(rw http.ResponseWriter, r *http.Request) {
+		writeJSON(rw, library.ReadNative())
+	})
 	mux.HandleFunc("POST /api/library/pi", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct {
 			Pi, Ext, Pkg string
