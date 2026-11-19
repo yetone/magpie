@@ -65,7 +65,7 @@ const lone = {
   de: "Hier ist nur ein Konto oder Schlüssel aktiv, also hat die Weiterleitung keine Wahl. Aktiviere im Editor des Anbieters ein zweites; wie weitergeleitet wird, legst du dann unten unter „Mehrere Konten oder Schlüssel“ fest.",
 };
 const change = { en: "Change how Relay routes", zh: "改 Relay 的路由方式", "zh-TW": "改 Relay 的路由方式", ja: "Relay のルーティングを変更", de: "Ändern, wie Relay weiterleitet" };
-const smart = { en: "Smart", zh: "智能", "zh-TW": "智慧", ja: "スマート", de: "Intelligent" };
+const smart = { en: "Quota first", zh: "额度优先", "zh-TW": "額度優先", ja: "枠優先", de: "Kontingent zuerst" };
 
 async function open(engine, lang, scene, width, t) {
   const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
