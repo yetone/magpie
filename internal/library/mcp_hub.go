@@ -169,13 +169,31 @@ func (l *Library) hubFor(t *Target, a *Applied, entries map[string]map[string]an
 	if l.server(HubEntry) != nil {
 		return nil, hubTaken
 	}
-	if _, ok := entries[HubEntry]; ok && !slices.Contains(a.MCP, HubEntry) {
+	if _, ok := entries[HubEntry]; ok && !slices.Contains(a.MCP, HubEntry) && !l.sharerWrote(t, HubEntry) {
 		return nil, hubOwn
 	}
 	if err := t.MCP.foreign(entries[HubEntry]); err != nil {
 		return nil, hubOwn
 	}
 	return hs, ""
+}
+
+// sharerWrote is whether another agent reading the very file t does has
+// name down as written by magpie: Antigravity and agy share
+// ~/.gemini/config/mcp_config.json, and the entry the one wrote there is
+// magpie's for the other too, not a server of the user's own
+// (izhidigua on X).
+func (l *Library) sharerWrote(t *Target, name string) bool {
+	id := t.Agent.ID
+	for other, a := range l.Applied {
+		if other == id || a == nil || !slices.Contains(a.MCP, name) {
+			continue
+		}
+		if o := targetByID(other); o != nil && o.MCP != nil && o.MCP.Path == t.MCP.Path {
+			return true
+		}
+	}
+	return false
 }
 
 // ---- what the gateway asks -------------------------------------------------
