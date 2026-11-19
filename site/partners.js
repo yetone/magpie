@@ -76,7 +76,7 @@ export const PARTNERS = [
     },
     langs: ["zh", "en"],
     from: "2026-10-24T00:00:00+08:00",
-    until: "2026-11-24T00:00:00+08:00",
+    until: "2026-12-24T00:00:00+08:00",
   },
   {
     id: "wandapi",
