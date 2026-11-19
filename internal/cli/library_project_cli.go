@@ -31,6 +31,11 @@ const libraryProjectUsage = `magpie library project [--json]      the projects (
   magpie library project subagent add <dir> <subagent…> [agents=a,b…]   the same for library subagents
   magpie library project subagent rm <dir> <subagent…>   take subagents out of it
   magpie library project subagent agents <dir> <subagent> <a,b…|none>   the agents it has the subagent for
+  magpie library project hook [list] <dir> [--json]   its own hooks and the agents each is for
+  magpie library project hook add <dir> <hook…> [agents=a,b…]   give it library hooks, one at a time, written into
+                                     .claude/settings.local.json and .codex/hooks.json beside what's there
+  magpie library project hook rm <dir> <hook…>   take them out, only the entries magpie wrote
+  magpie library project hook agents <dir> <hook> <a,b…|none>   the agents it has the hook for
   magpie library project instructions <dir> [--json]   its own instructions, the agents they're for and the files
   magpie library project instructions <dir> text <text…>|--file <f>|-   set them ("" takes them out); written, between
                                      magpie's two marker lines, into the project file each agent reads: by default for
@@ -141,6 +146,8 @@ func libraryProjectCmd(args []string) error {
 		return projectKindCmd(projectServers, rest, usage)
 	case "subagent":
 		return projectKindCmd(projectSubagents, rest, usage)
+	case "hook":
+		return projectKindCmd(projectHooks, rest, usage)
 	case "instructions", "instr":
 		return projectInstrCmd(rest, usage)
 	}

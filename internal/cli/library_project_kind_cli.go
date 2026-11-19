@@ -25,7 +25,7 @@ type projectKind struct {
 }
 
 var projectServers = projectKind{
-	word: "server", plural: "servers", reads: "MCP servers", takes: "mcp",
+	word: "server", plural: "servers", reads: "MCP servers", takes: "mcp", problem: "mcp:",
 	folder: func(a library.AgentView) string { return a.ProjectMCP },
 	of:     func(p *library.ProjectView) map[string][]string { return p.Servers },
 	set: func(dir string, names, agents []string) (*library.Result, error) {
@@ -42,10 +42,17 @@ var projectServers = projectKind{
 }
 
 var projectSubagents = projectKind{
-	word: "subagent", plural: "subagents", reads: "subagents", takes: "mcp",
+	word: "subagent", plural: "subagents", reads: "subagents", takes: "mcp", problem: "subagent:",
 	folder: func(a library.AgentView) string { return a.ProjectSubagents },
 	of:     func(p *library.ProjectView) map[string][]string { return p.Subagents },
 	set:    library.ProjectSubagents,
+}
+
+var projectHooks = projectKind{
+	word: "hook", plural: "hooks", reads: "hooks", problem: "hook:",
+	folder: func(a library.AgentView) string { return a.ProjectHooks },
+	of:     func(p *library.ProjectView) map[string][]string { return p.Hooks },
+	set:    library.ProjectHooks,
 }
 
 // agentsOf is a comma list of agents, none for no agent, each refused when
@@ -194,7 +201,7 @@ func projectKindCmd(k projectKind, rest []string, usage func() error) error {
 	}
 	var bad []string
 	for _, n := range names {
-		key := k.word + ":" + n
+		key := k.problem + n
 		if why := p.Problems[key]; why != "" {
 			bad = append(bad, n)
 			fmt.Println(amber.Render("!"), n, muted.Render("not placed:"), why)

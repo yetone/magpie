@@ -461,7 +461,7 @@ func (l *Library) syncTrees(p *Project, res *Result, hubs map[string]*Server) {
 			t = &Project{Dir: d}
 		}
 		t.Copy, t.Skills, t.Servers, t.ServersOff, t.SkillsOff, t.Subagents = p.Copy, p.Skills, p.Servers, p.ServersOff, p.SkillsOff, p.Subagents
-		t.Instr, t.InstrAgents, t.Plugins, t.ClaudePlugins = p.Instr, p.InstrAgents, p.Plugins, p.ClaudePlugins
+		t.Instr, t.InstrAgents, t.Plugins, t.ClaudePlugins, t.Hooks = p.Instr, p.InstrAgents, p.Plugins, p.ClaudePlugins, p.Hooks
 		l.syncFolder(t, res, hubs)
 		trees = append(trees, t)
 	}
@@ -475,7 +475,7 @@ func (l *Library) syncTrees(p *Project, res *Result, hubs map[string]*Server) {
 		// no longer one of the repository's worktrees, or no longer the
 		// project's: what magpie put there comes out
 		t.Skills, t.Servers, t.ServersOff, t.SkillsOff, t.Subagents = nil, nil, nil, nil, nil
-		t.Instr, t.InstrAgents, t.Plugins, t.ClaudePlugins = "", nil, nil, nil
+		t.Instr, t.InstrAgents, t.Plugins, t.ClaudePlugins, t.Hooks = "", nil, nil, nil, nil
 		l.syncFolder(t, res, nil)
 		if t.holds() {
 			trees = append(trees, t)
@@ -533,7 +533,7 @@ func (l *Library) treesChanged() bool {
 				}
 			}
 		}
-		if len(p.Skills)+len(p.Servers)+len(p.ServersOff)+len(p.SkillsOff)+len(p.Subagents)+len(p.InstrAgents)+len(p.Plugins) == 0 && len(p.Trees) == 0 {
+		if len(p.Skills)+len(p.Servers)+len(p.ServersOff)+len(p.SkillsOff)+len(p.Subagents)+len(p.InstrAgents)+len(p.Plugins)+len(p.Hooks)+len(p.ClaudePlugins) == 0 && len(p.Trees) == 0 {
 			continue
 		}
 		dirs := p.treeDirs()

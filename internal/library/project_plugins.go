@@ -3,6 +3,7 @@ package library
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -107,6 +108,17 @@ func (l *Library) withPlugins(p *Project) (skills, servers, subagents map[string
 // projectHooks are, by agent, the hooks the project's plugins give it.
 func (l *Library) projectHooks(p *Project) map[string][]*Hook {
 	out := map[string][]*Hook{}
+	for _, name := range slices.Sorted(maps.Keys(p.Hooks)) {
+		h := l.hook(name)
+		if h == nil {
+			continue
+		}
+		for _, a := range p.Hooks[name] {
+			if ProjectHooksFile(a) != "" && hookTakes(h, a) && !slices.Contains(out[a], h) {
+				out[a] = append(out[a], h)
+			}
+		}
+	}
 	for _, name := range slices.Sorted(func(yield func(string) bool) {
 		for k := range p.Plugins {
 			if !yield(k) {
@@ -248,6 +260,59 @@ func ProjectPlugin(dir, name string, agents []string) (*Result, error) {
 		p.Plugins[name] = ids
 		return nil
 	})
+}
+
+// ProjectHooks sets which agents get each of some library hooks in a
+// project, one at a time, not as part of a plugin (#7253); none takes them
+// out, and with them only the entries magpie wrote.
+func ProjectHooks(dir string, names, agents []string) (*Result, error) {
+	return change(func(l *Library) error {
+		p := l.project(dir)
+		if p == nil {
+			return fmt.Errorf("no project %s", dir)
+		}
+		if len(names) == 0 {
+			return errors.New("no hooks given")
+		}
+		for _, n := range names {
+			if l.hook(n) == nil {
+				return fmt.Errorf("no hook called %s", n)
+			}
+		}
+		var ids []string
+		for _, id := range agents {
+			if ProjectHooksFile(id) == "" {
+				return fmt.Errorf("magpie knows of no file %s reads a project's hooks from", id)
+			}
+			ids = set(ids, id, true)
+		}
+		for _, n := range names {
+			if len(ids) == 0 {
+				delete(p.Hooks, n)
+				continue
+			}
+			if p.Hooks == nil {
+				p.Hooks = map[string][]string{}
+			}
+			p.Hooks[n] = slices.Clone(ids)
+		}
+		if len(p.Hooks) == 0 {
+			p.Hooks = nil
+		}
+		return nil
+	})
+}
+
+// dropProjectHooks takes hooks leaving the library out of every project.
+func (l *Library) dropProjectHooks(names []string) {
+	for _, p := range l.Projects {
+		for _, n := range names {
+			delete(p.Hooks, n)
+		}
+		if len(p.Hooks) == 0 {
+			p.Hooks = nil
+		}
+	}
 }
 
 // dropProjectPlugin takes a plugin out of every project, and their

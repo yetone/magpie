@@ -205,3 +205,56 @@ func loadT(t *testing.T) *Library {
 	}
 	return l
 }
+
+// One hook given to a project on its own (#7253): written into each
+// chosen agent's project hooks file, beside what the user has there, and
+// taken out again with only magpie's entry; a hook leaving the library
+// leaves its projects, and a worktree follows.
+func TestProjectOneHookPerAgent(t *testing.T) {
+	_, a, b := pluginProjects(t)
+	ok(t)(SaveHook("", Hook{Name: "bark", Event: "turn-end", Command: "say bark", Agents: []string{}}))
+	ok(t)(SaveHook("", Hook{Name: "tick", Event: "turn-end", Command: "say tick", Agents: []string{}}))
+	f := filepath.Join(a, ".claude/settings.local.json")
+	write(t, f, `{
+  // mine
+  "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "echo mine"}]}]}
+}
+`)
+	if _, err := ProjectHooks(a, []string{"bark"}, []string{"gemini"}); err == nil {
+		t.Error("an agent with no project hooks file was taken")
+	}
+	if _, err := ProjectHooks(a, []string{"nope"}, []string{"claude"}); err == nil {
+		t.Error("a hook the library hasn't was taken")
+	}
+	res := ok(t)(ProjectHooks(a, []string{"bark"}, []string{"claude", "codex"}))
+	ok(t)(ProjectHooks(a, []string{"tick"}, []string{"codex"}))
+	if len(res.Problems) > 0 {
+		t.Fatalf("problems: %+v", res.Problems)
+	}
+	claude, codex := read(t, f), read(t, filepath.Join(a, ".codex/hooks.json"))
+	if !strings.Contains(claude, "say bark") || !strings.Contains(claude, "echo mine") || !strings.Contains(claude, "// mine") || strings.Contains(claude, "say tick") {
+		t.Errorf("claude:\n%s", claude)
+	}
+	if !strings.Contains(codex, "say bark") || !strings.Contains(codex, "say tick") {
+		t.Errorf("codex:\n%s", codex)
+	}
+	gone(t, filepath.Join(b, ".codex"))
+	if v := View0(t); len(v.Projects[0].Hooks["bark"]) != 2 {
+		t.Errorf("view: %+v", v.Projects[0].Hooks)
+	}
+	ok(t)(ProjectHooks(a, []string{"bark"}, []string{"claude", "codex"})) // again: once
+	if n := strings.Count(read(t, f), "say bark"); n != 1 {
+		t.Errorf("%d entries:\n%s", n, read(t, f))
+	}
+
+	ok(t)(ProjectHooks(a, []string{"bark"}, nil))
+	if got := read(t, f); strings.Contains(got, "say bark") || !strings.Contains(got, "echo mine") || !strings.Contains(got, "// mine") {
+		t.Errorf("after withdrawing:\n%s", got)
+	}
+	// a hook leaving the library leaves the project
+	ok(t)(RemoveHooks([]string{"tick"}))
+	gone(t, filepath.Join(a, ".codex/hooks.json"))
+	if v := View0(t); len(v.Projects[0].Hooks) != 0 {
+		t.Errorf("view after removal: %+v", v.Projects[0].Hooks)
+	}
+}

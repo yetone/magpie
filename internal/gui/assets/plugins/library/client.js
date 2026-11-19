@@ -4820,6 +4820,7 @@ magpie.plugin("library", (ctx) => {
     // ones whose hooks files magpie knows
     const skip = all.filter((a) => hookAgentOf(a.id).no);
     if (skip.length) body.append(el("p", "lib-aside lib-hooks-no", t("magpie can't give hooks to {agents} yet: their chips are greyed, and say why.", { agents: skip.map((a) => a.name).join(", ") })));
+    if (!agentless() && (hooks.length || lib.projects.length)) renderProjects(body, "hooks");
     body.append(...nativeSection("hook"));
   }
 
@@ -7053,7 +7054,7 @@ magpie.plugin("library", (ctx) => {
 
   function renderProjects(body, kind) {
     const rh = el("div", "row-head");
-    rh.append(el("span", "label", kind === "skills" ? t("Project skills") : kind === "subagents" ? t("Project subagents") : kind === "plugins" ? t("Project plugins") : kind === "instructions" ? t("Project instructions") : t("Project servers")), el("span", "grow"));
+    rh.append(el("span", "label", kind === "skills" ? t("Project skills") : kind === "subagents" ? t("Project subagents") : kind === "plugins" ? t("Project plugins") : kind === "hooks" ? t("Project hooks") : kind === "instructions" ? t("Project instructions") : t("Project servers")), el("span", "grow"));
     if (!addingProject) rh.append(button(t("Add a project"), "action lib-updall", () => { addingProject = { dir: "" }; render(); }));
     body.append(rh);
     if (addingProject) body.append(addProjectCard(kind));
@@ -7062,6 +7063,8 @@ magpie.plugin("library", (ctx) => {
         ? t("Give a project instructions of its own: magpie writes them into the AGENTS.md, CLAUDE.md or the like each agent reads there, leaving the rest of each file as it is.")
         : kind === "subagents"
         ? t("Give a project's agents some of these subagents as the project's own: magpie writes them into its .claude/agents and the like, and keeps them out of git.")
+        : kind === "hooks"
+        ? t("Give a project's agents some of these hooks as the project's own: magpie writes each into the project's .claude/settings.local.json or .codex/hooks.json, beside what's already there.")
         : kind === "plugins"
         ? t("Give a project a whole plugin: magpie writes each part where its agents read the project's own, and taking the plugin out takes out only what it wrote.")
         : kind === "mcp"
@@ -7122,19 +7125,19 @@ magpie.plugin("library", (ctx) => {
   }
 
   function projectCard(p, kind) {
-    const mcp = kind === "mcp", sub = kind === "subagents", ins = kind === "instructions", plg = kind === "plugins";
+    const mcp = kind === "mcp", sub = kind === "subagents", ins = kind === "instructions", plg = kind === "plugins", hk = kind === "hooks";
     const card = el("div", "list lib-card lib-project" + (p.missing ? " missing" : ""));
     const isOpen = openProjects.has(p.dir);
     const head = el("div", "row lib-row click lib-projhead" + (isOpen ? " open" : ""));
     const who = el("div", "who");
     const nm = el("div", "name", p.name);
     if (p.missing) nm.append(tag(t("Folder is gone"), "warn"));
-    else if (p.copy && !mcp && !sub && !ins && !plg) nm.append(tag(t("Copies"), ""));
+    else if (p.copy && !mcp && !sub && !ins && !plg && !hk) nm.append(tag(t("Copies"), ""));
     who.append(nm);
     const src = el("div", "lib-src");
     src.append(pathLink(p.dir));
     who.append(src);
-    const names = Object.keys((plg ? p.plugins : sub ? p.subagents : mcp ? p.servers : p.skills) || {}).sort();
+    const names = Object.keys((hk ? p.hooks : plg ? p.plugins : sub ? p.subagents : mcp ? p.servers : p.skills) || {}).sort();
     const pills = el("div", "lib-tags");
     if (!isOpen && ins) {
       const first = (projTexts[p.dir] ?? p.instr ?? "").split("\n").find((l) => l.trim())?.replace(/^#+\s*/, "") || "";
@@ -7147,7 +7150,7 @@ magpie.plugin("library", (ctx) => {
     } else if (!isOpen) {
       for (const n of names.slice(0, 4)) pills.append(tag(n, "lib-dot"));
       if (names.length > 4) pills.append(tag("+" + (names.length - 4), ""));
-      if (!names.length) pills.append(tag(plg ? t("No Claude plugins yet") : sub ? t("No subagents yet") : mcp ? t("No servers yet") : t("No skills yet"), "lib-unchecked"));
+      if (!names.length) pills.append(tag(hk ? t("No hooks yet") : plg ? t("No Claude plugins yet") : sub ? t("No subagents yet") : mcp ? t("No servers yet") : t("No skills yet"), "lib-unchecked"));
     }
     const acts = el("div", "lib-rowacts");
     const rm = button("", "lib-icon danger", () => confirmRemoveProject(p));
@@ -7158,13 +7161,14 @@ magpie.plugin("library", (ctx) => {
     chev.append(svg(CHEV_R, 11, 1.7));
     head.append(glyph(GLYPH.folder), who, pills, acts, chev);
     head.onclick = () => { isOpen ? openProjects.delete(p.dir) : openProjects.add(p.dir); projectShown.delete(p.dir); render(); };
-    head.title = ins ? (isOpen ? t("Hide its instructions") : t("Write its instructions")) : plg ? (isOpen ? t("Hide its plugins") : t("Pick the plugins it gets")) : sub ? (isOpen ? t("Hide its subagents") : t("Pick the subagents it gets")) : mcp ? (isOpen ? t("Hide its servers") : t("Pick the servers it gets")) : isOpen ? t("Hide its skills") : t("Pick the skills it gets");
+    head.title = hk ? (isOpen ? t("Hide its hooks") : t("Pick the hooks it gets")) : ins ? (isOpen ? t("Hide its instructions") : t("Write its instructions")) : plg ? (isOpen ? t("Hide its plugins") : t("Pick the plugins it gets")) : sub ? (isOpen ? t("Hide its subagents") : t("Pick the subagents it gets")) : mcp ? (isOpen ? t("Hide its servers") : t("Pick the servers it gets")) : isOpen ? t("Hide its skills") : t("Pick the skills it gets");
     card.append(head);
     if (p.problems?.[""]) card.append(el("div", "lib-err", p.problems[""]));
     if (!isOpen) return card;
     if (mcp) return projectServers(p, card);
     if (sub) return projectSubagents(p, card);
     if (plg) return projectPlugins(p, card);
+    if (hk) return projectHooks(p, card);
     if (ins) return projectInstructions(p, card);
 
     const opts = el("div", "lib-projopts");
@@ -7388,6 +7392,33 @@ magpie.plugin("library", (ctx) => {
     }
     if (!(lib.subagents || []).length) card.append(el("p", "lib-aside lib-projfoot", t("No subagents in the library yet")));
     card.append(el("p", "lib-aside lib-projfoot", t("Written into the project's own agents folder, one file per subagent; a file magpie makes is kept out of git, its .gitignore untouched. A file there by the same name that isn't magpie's is left as it is.")));
+    return card;
+  }
+
+  // The project's card, open on the Hooks tab: each library hook with the
+  // chips of the agents that read hooks from a project's own file (#7253).
+  function projectHooks(p, card) {
+    const all = shownAgents().filter((a) => a.projectHooks);
+    for (const h of [...(lib.hooks || [])].sort((a, b) => a.name.localeCompare(b.name))) {
+      const row = el("div", "row lib-row lib-projskill lib-projhook");
+      const w = el("div", "who");
+      const n = el("div", "name mono", h.name);
+      const problem = p.problems?.["hook:" + h.name];
+      if (problem) n.append(tag(t("Not written"), "warn", problem));
+      w.append(n);
+      const sub = el("div", "sub", problem || hookLine(h));
+      sub.title = problem || h.command;
+      w.append(sub);
+      const on = (p.hooks?.[h.name] || []).filter((id) => all.some((a) => a.id === id));
+      const say = (next) => next.length
+        ? t("{item} is in {name} for {agents}", { item: h.name, name: p.name, agents: next.map(nameOf).join(", ") })
+        : t("{item} is out of {name}", { item: h.name, name: p.name });
+      row.append(glyph(GLYPH.hook), w, agentChips(all, on, projectChange("projects/hooks", p.dir, h.name, say), { blocked: hookBlocked(h) }));
+      card.append(row);
+    }
+    if (!(lib.hooks || []).length) card.append(el("p", "lib-aside lib-projfoot", t("No hooks in the library yet")));
+    card.append(el("p", "lib-aside lib-projfoot", t("Written into the project's own hooks file for each agent, one entry per hook; a file magpie makes is kept out of git, its .gitignore untouched. An entry there that isn't magpie's is left as it is.")));
+    if (all.some((a) => a.id === "codex")) card.append(el("p", "lib-aside lib-projfoot lib-projhooks-codex", t("Codex runs a project's hooks only in a project you trust, once you've reviewed them in /hooks.")));
     return card;
   }
 

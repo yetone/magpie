@@ -1187,6 +1187,14 @@ func SaveHook(old string, h Hook) (*Result, error) {
 				return fmt.Errorf("no hook called %s", old)
 			}
 			l.Hooks = slices.Delete(l.Hooks, i, i+1)
+			if old != h.Name {
+				for _, p := range l.Projects {
+					if a, ok := p.Hooks[old]; ok {
+						delete(p.Hooks, old)
+						p.Hooks[h.Name] = a
+					}
+				}
+			}
 		}
 		h.Agents = orNone(slices.Compact(slices.Sorted(slices.Values(h.Agents))))
 		l.Hooks = append(l.Hooks, &h)
@@ -1277,6 +1285,7 @@ func RemoveHooks(names []string) (*Result, error) {
 			return errors.New(failed[0].Error)
 		}
 		l.Hooks = slices.DeleteFunc(l.Hooks, func(h *Hook) bool { return slices.Contains(names, h.Name) })
+		l.dropProjectHooks(names)
 		return nil
 	})
 	if res != nil {

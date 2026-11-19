@@ -361,3 +361,55 @@ func TestLibraryProjectServerAndSubagentCmd(t *testing.T) {
 	}
 	refused("subagent", "rm", ".", "reviewer")
 }
+
+// #7253: one hook added to a project and taken out again through the CLI,
+// beside the user's own entry, for the agents named.
+func TestLibraryProjectHookCmd(t *testing.T) {
+	proj := projectSandbox(t)
+	if _, err := library.SaveHook("", library.Hook{Name: "bark", Event: "turn-end", Command: "say bark", Agents: []string{}}); err != nil {
+		t.Fatal(err)
+	}
+	own := `{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"echo mine"}]}]}}`
+	if err := os.MkdirAll(filepath.Join(proj, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(proj, ".claude", "settings.local.json"), []byte(own), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	must := func(args ...string) string {
+		t.Helper()
+		out, err := projectOut(t, args...)
+		if err != nil {
+			t.Fatalf("library project %v: %v\n%s", args, err, out)
+		}
+		return out
+	}
+	read := func(rel string) string {
+		b, _ := os.ReadFile(filepath.Join(proj, rel))
+		return string(b)
+	}
+	must("add", ".")
+	for _, bad := range [][]string{{"hook", "add", ".", "nope"}, {"hook", "add", ".", "bark", "agents=zz"}, {"hook", "add", ".", "bark", "--yes"}, {"hook", "rm", ".", "bark"}} {
+		if out, err := projectOut(t, bad...); err == nil {
+			t.Errorf("library project %v was taken:\n%s", bad, out)
+		}
+	}
+	must("hook", "add", ".", "bark", "agents=claude,codex")
+	if got := read(".claude/settings.local.json"); !strings.Contains(got, "say bark") || !strings.Contains(got, "echo mine") {
+		t.Errorf("claude:\n%s", got)
+	}
+	if got := read(".codex/hooks.json"); !strings.Contains(got, "say bark") {
+		t.Errorf("codex:\n%s", got)
+	}
+	if out := must("hook", "."); !strings.Contains(out, "bark") || !strings.Contains(out, "codex") {
+		t.Errorf("list:\n%s", out)
+	}
+	must("hook", "agents", ".", "bark", "codex")
+	if got := read(".claude/settings.local.json"); strings.Contains(got, "say bark") || !strings.Contains(got, "echo mine") {
+		t.Errorf("claude after agents:\n%s", got)
+	}
+	must("hook", "rm", ".", "bark")
+	if _, err := os.Stat(filepath.Join(proj, ".codex", "hooks.json")); err == nil {
+		t.Error("the file magpie made stayed")
+	}
+}
