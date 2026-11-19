@@ -18,8 +18,20 @@ import (
 // without the line (#1600, justrun1983). It goes on only to a Claude model
 // asked on Anthropic's Messages API (Anthropic's own, a relay's, Bedrock's),
 // as Claude Code sent it. The Claude subscription's run sends its own
-// (withoutBillingHeader), another magpie decides for the provider it picks,
-// and Code Assist is sent it as before (antigravityTurnsAway, #666).
+// (withoutBillingHeader), and another magpie decides for the provider it
+// picks.
+//
+// A Gemini CLI sign-in goes without it too: Code Assist was sent it as
+// Gemini's first system words, so Gemini's implicit cache, which needs the
+// same prefix, read nothing on any turn in Claude Code (niyezaimenglima on
+// X: "缓存命中是0"). Every other Code Assist route is handed it as before.
+// The built-in Antigravity account's cloak leaves it out on the way
+// (antigravityCloak), and its refusal is told against the system as
+// written, line and all (antigravityTurnsAway, #666). A plugin's request is
+// the plugin's: Antigravity's, agy-cli's and Zed's cloaks match the line to
+// the end of its line, which takes Claude Code's identity sentence after
+// it, so with the line cut here that sentence reached Antigravity, and it
+// answered the 429 it gives Claude Code's prompt.
 
 // billingLine is a system block that is the billing line and nothing else.
 var billingLine = lazyre.New(`^x-anthropic-billing-header:(\s*[A-Za-z_]+=[^;\s]*;)*\s*$`)
@@ -34,7 +46,10 @@ func keepsBillingLine(to provider.Protocol, model, wire string) bool {
 // dropsBillingLine says whether p's request for model asked on to goes
 // without the billing line.
 func dropsBillingLine(p provider.Provider, to provider.Protocol, model, wire string) bool {
-	return !p.IsRemoteMagpie() && to != provider.CodeAssist && !keepsBillingLine(to, model, wire)
+	if to == provider.CodeAssist {
+		return accountAgent(p) == "gemini"
+	}
+	return !p.IsRemoteMagpie() && !keepsBillingLine(to, model, wire)
 }
 
 // withoutBillingLine is an Anthropic Messages body without Claude Code's

@@ -8692,8 +8692,9 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 		if to == provider.CodeAssist && p.Account != nil {
 			// the envelope is named in there, where the id it carries is
 			// known: on Antigravity that is the variant the effort picked,
-			// not the model magpie knows
-			body = codeAssistBody(p, req, model, wires)
+			// not the model magpie knows. It is built from what goes
+			// (sent), the billing line left out as for buildFor
+			body = codeAssistBody(p, sent, model, wires)
 		} else if wire != model {
 			// the vendor's own name for the model goes in the model field
 			// and nowhere else: everything above shaped the request from

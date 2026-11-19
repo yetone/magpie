@@ -1,12 +1,16 @@
 package gateway
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/tidwall/gjson"
 	"github.com/yetone/magpie/internal/provider"
@@ -186,5 +190,94 @@ func TestBillingLineKeptForClaude(t *testing.T) {
 		if got, want := u.last(t), claudeCodeTurn("claude-opus-5-5", cch); got != want {
 			t.Fatalf("claude body changed:\n got %s\nwant %s", got, want)
 		}
+	}
+}
+
+// A Gemini CLI sign-in in Claude Code read nothing from Gemini's cache on
+// any turn (niyezaimenglima on X: "缓存命中是0"): Code Assist was sent the
+// billing line as the system instruction's first words, and its cch
+// changes every turn, so the prefix Gemini's implicit cache needs was new
+// each time. Two turns that differ only in cch now go the same, without
+// the line.
+func TestBillingLineLeftOutForCodeAssist(t *testing.T) {
+	fresh(t)
+	dir := filepath.Dir(provider.Path())
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	logins := []map[string]any{{"agent": "gemini", "user": "u@example.com", "on": true,
+		"auth": map[string]any{"access_token": "tok", "refresh_token": "ref", "project": "p1", "expiry_date": time.Now().Add(time.Hour).UnixMilli()}}}
+	if err := os.WriteFile(filepath.Join(dir, "logins.json"), mustJSON(logins), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := http.DefaultClient
+	http.DefaultClient = &http.Client{Transport: countTransport(func(r *http.Request) (*http.Response, error) {
+		if strings.Contains(r.URL.Path, ":loadCodeAssist") {
+			return &http.Response{StatusCode: 200, Header: make(http.Header),
+				Body: io.NopCloser(strings.NewReader(`{"currentTier":{"id":"standard-tier"},"cloudaicompanionProject":"p1"}`))}, nil
+		}
+		return nil, fmt.Errorf("unexpected request to %s", r.URL)
+	})}
+	t.Cleanup(func() { http.DefaultClient = old })
+	var mu sync.Mutex
+	var sent []string
+	s := New()
+	s.client = &http.Client{Transport: countTransport(func(r *http.Request) (*http.Response, error) {
+		b, _ := io.ReadAll(r.Body)
+		if strings.Contains(r.URL.Path, "GenerateContent") {
+			mu.Lock()
+			sent = append(sent, string(b))
+			mu.Unlock()
+		}
+		rec := httptest.NewRecorder()
+		rec.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(rec, sse(`data: {"response":{"candidates":[{"content":{"role":"model","parts":[{"text":"hi"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":1}}}`))
+		return rec.Result(), nil
+	})}
+	for _, cch := range []string{"aaaaa", "bbbbb"} {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("POST", "/v1/messages?beta=true", strings.NewReader(claudeCodeTurn("gemini/gemini-3.5-pro", cch)))
+		req.Header.Set("User-Agent", "claude-cli/2.1.114 (external, sdk-cli)")
+		req.Header.Set("Authorization", "Bearer "+Token)
+		s.Handler().ServeHTTP(rec, req)
+		if rec.Code != 200 {
+			t.Fatalf("%d %s", rec.Code, rec.Body.String())
+		}
+	}
+	if len(sent) != 2 {
+		t.Fatalf("asked %d times, want 2", len(sent))
+	}
+	for _, b := range sent {
+		if strings.Contains(b, "x-anthropic-billing-header") || strings.Contains(b, "cch=") {
+			t.Fatalf("billing line sent: %s", b)
+		}
+		if !strings.Contains(b, "You are a Claude agent") {
+			t.Fatalf("prompt lost: %s", b)
+		}
+	}
+	a := gjson.Get(sent[0], "request.systemInstruction").Raw
+	if a == "" || a != gjson.Get(sent[1], "request.systemInstruction").Raw {
+		t.Fatalf("system instructions differ:\n%s\n%s", sent[0], sent[1])
+	}
+}
+
+// Every other Code Assist route is still handed the line. The built-in
+// Antigravity account's cloak leaves it out on the way, and its refusal is
+// told against the system as Claude Code wrote it (#666). A plugin's cloak
+// takes the line to its end, Claude Code's identity sentence with it: cut
+// here, the sentence reached Antigravity's plugin on its own, and a real
+// account answered the 429 it gives Claude Code's prompt.
+func TestBillingLineCodeAssistOthers(t *testing.T) {
+	ag := provider.Provider{ID: "antigravity", Account: &provider.Account{Agent: "antigravity"}}
+	if dropsBillingLine(ag, provider.CodeAssist, "gemini-3.5-pro", "gemini-3.5-pro") {
+		t.Fatal("Antigravity's line dropped before its cloak")
+	}
+	pl := provider.PluginAtForTest("antigravity-plugin", "antigravity", "https://example.com")
+	if dropsBillingLine(pl, provider.CodeAssist, "gemini-3.5-pro", "gemini-3.5-pro") {
+		t.Fatal("a Code Assist plugin's line dropped before its cloak")
+	}
+	gm := provider.Provider{ID: "gemini", Account: &provider.Account{Agent: "gemini"}}
+	if !dropsBillingLine(gm, provider.CodeAssist, "gemini-3.5-pro", "gemini-3.5-pro") {
+		t.Fatal("Gemini CLI's line kept")
 	}
 }
