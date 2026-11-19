@@ -108,7 +108,7 @@ func claudeLine(s *state, b []byte, main bool) {
 		ccLink(s, h, b, main)
 		ccReply(s, at, msg, b, main)
 	case bytes.HasPrefix(msg, ccRole) && typeAfter(msg, ccRole) == "user":
-		if main && !ccToolResult(msg) {
+		if (main || !s.more().TaskRead) && !ccToolResult(msg) {
 			// a prompt, or something Claude Code put in: read whole
 			claudeFull(s, b, main)
 			return
@@ -209,7 +209,13 @@ func ccRelocated(s *state, b []byte, main bool) {
 // magpie that didn't read /cd's relocated lines, and the folder it names is
 // not the project the file is in: the session was moved with /cd, and its
 // parse names the folder it left. Read again once, the parse is current.
+// The same for a subagent's parse made before its task was kept.
 func ccStale(f file, s *state) bool {
+	if f.agent == "claude" && !f.main && s != nil && !s.more().TaskRead && SubagentOf(f.path) != "" {
+		// a subagent's parse from before its task and meta were kept with
+		// it: read again once, so a start no longer opens each of them
+		return true
+	}
 	if f.agent != "claude" || !f.main || s == nil || s.CdRead || s.Cwd == "" {
 		return false
 	}
@@ -366,6 +372,7 @@ func claudeFull(s *state, b []byte, main bool) {
 	s.saw(at, main)
 	want := bytes.Contains(b, ccAssistant) ||
 		main && bytes.Contains(b, ccUser) ||
+		!main && !s.more().TaskRead && bytes.Contains(b, ccUser) ||
 		main && (bytes.Contains(b, ccTitle) || bytes.Contains(b, ccCustom) || bytes.Contains(b, ccSummary)) ||
 		s.Cwd == "" && bytes.Contains(b, ccCwd)
 	if !want {
@@ -408,6 +415,10 @@ func claudeFull(s *state, b []byte, main bool) {
 			s.own().Named = title(l.Summary)
 		}
 	case "user":
+		if !main && !l.IsMeta && !s.more().TaskRead {
+			// the subagent's task, as ccTask reads it
+			s.own().Task, s.own().TaskRead = untagged(ccText(l.Message.Content)), true
+		}
 		if main && !l.IsMeta && !l.IsSidechain {
 			p := ccPrompt(l.Message.Content)
 			if p != "" {

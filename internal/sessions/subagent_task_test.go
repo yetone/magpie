@@ -153,3 +153,56 @@ func TestSubagentWithMetaTaskIsNotReadForIt(t *testing.T) {
 		t.Fatalf("subagents %+v", s.Subagents)
 	}
 }
+
+// A restart does not open each Claude Code subagent's file or meta file
+// again: its task and its meta come back from the saved parse, as the
+// listing of a few thousand subagents did at every start (shangyuan0818 on X).
+func TestSubagentTaskAndMetaComeBackFromTheSavedParse(t *testing.T) {
+	inZone(t, 0)
+	claude, _ := setup(t)
+	const sid = "11111111-2222-3333-4444-555555555555"
+	subs := filepath.Join(claude, "projects", "-work-app", sid, "subagents")
+	meta := filepath.Join(subs, "agent-a1.meta.json")
+	writeFile(t, meta, `{"agentType":"Explore","toolUseId":"toolu_01BZaaaaaaaaaaaaaaaaaaaa"}`)
+	sub := filepath.Join(subs, "agent-a1.jsonl")
+	writeFile(t, sub, ccHookLine(0)+ccTaskLine("Map the parser callers"))
+	List(0)
+	Saved()
+	// a restart: the parses come back from the disk, nothing else kept
+	Reset()
+	ccTasks.Clear()
+	ccMetas.Clear()
+	// and the meta file is not there to be read again
+	if err := os.Remove(meta); err != nil {
+		t.Fatal(err)
+	}
+	scans := scansOf(t, sub)
+	s := find(t, List(0), "claude", sid)
+	if n := scans(); n != 0 {
+		t.Fatalf("the list read a subagent's file %d times for a task the saved parse holds", n)
+	}
+	if len(s.Subagents) == 0 || s.Subagents[0].Kind != "Explore" || s.Subagents[0].Title != "Map the parser callers" {
+		t.Fatalf("subagents %+v", s.Subagents)
+	}
+}
+
+// A subagent's parse made before its task was kept is read again once, and
+// is not after that, whether or not its file names a task.
+func TestSubagentParseWithoutItsTaskIsReadOnce(t *testing.T) {
+	inZone(t, 0)
+	claude, _ := setup(t)
+	const sid = "11111111-2222-3333-4444-555555555555"
+	sub := filepath.Join(claude, "projects", "-work-app", sid, "subagents", "agent-a1.jsonl")
+	writeFile(t, sub, ccHookLine(0))
+	List(0)
+	f := file{agent: "claude", path: sub}
+	st := parsed(sub)
+	if st == nil || !st.more().TaskRead || ccStale(f, st) {
+		t.Fatalf("a parse of a subagent with no task is read again at each start: %+v", st)
+	}
+	old := *st
+	old.StateMore = nil // as a magpie before this kept it
+	if !ccStale(f, &old) {
+		t.Fatal("a subagent's parse made before its task was kept is not read again")
+	}
+}

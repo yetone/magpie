@@ -275,6 +275,13 @@ type StateMore struct {
 	Custom                string            `json:"custom,omitempty"` // the name the user gave it
 	First                 string            `json:"first,omitempty"`  // the first message, when no prompt looked typed
 	Convs                 []string          `json:"convs,omitempty"`  // the gateway's ids for its requests (dshConvs)
+	// Claude Code subagent: what it was asked (its first user line, as
+	// ccTask reads it), and the agent-<id>.meta.json beside it. Kept with
+	// the file's state, so a restart opens neither again for each of
+	// thousands of subagent files (shangyuan0818 on X).
+	Task     string     `json:"task,omitempty"`
+	TaskRead bool       `json:"task_read,omitempty"`
+	SubMeta  *ccSubMeta `json:"sub_meta,omitempty"`
 	// ResponseIDs are the ids of the replies its own requests got, as the
 	// gateway wrote them on its routes and the agent kept them with the
 	// reply (dsh's replay state): they name a request after the fact, where
@@ -349,7 +356,7 @@ func moreOf(m StateMore) *StateMore {
 func (m *StateMore) zero() bool {
 	return m == nil || m.DBRevision == "" && !m.CodexIdentityConflict && m.CodexNickname == "" &&
 		len(m.CodexSpawnNames) == 0 && len(m.CodexSpawnConflicts) == 0 && len(m.CodexAgentIDs) == 0 &&
-		len(m.CodexAgentConflicts) == 0 && m.Named == "" && m.Custom == "" && m.First == "" &&
+		len(m.CodexAgentConflicts) == 0 && m.Named == "" && m.Custom == "" && m.First == "" && m.Task == "" && !m.TaskRead && m.SubMeta == nil &&
 		len(m.Convs) == 0 && len(m.ResponseIDs) == 0 && len(m.SeedConvs) == 0 && len(m.TurnConvs) == 0 &&
 		m.Root == "" && m.Leaf == "" && len(m.Compacts) == 0 && m.Since.IsZero() &&
 		m.Grok == nil && m.Droid == nil && m.Kimi == nil && m.Agy == nil && m.Dsh == nil && m.Cline == nil
@@ -2430,6 +2437,15 @@ func parseRead(f file, old *state, calls *callsRide) *state {
 	}
 	if calls != nil {
 		calls.finish(off, err)
+	}
+	if parser.claude && !f.main && err == nil && SubagentOf(f.path) != "" {
+		// read: found or not, so the parse is not read again for it
+		s.own().TaskRead = true
+		if s.more().SubMeta == nil {
+			if m, ok := readCCMeta(f.path); ok {
+				s.own().SubMeta = &m
+			}
+		}
 	}
 	if isBuddy(f.agent) && s.Cwd == "" {
 		workbuddyMeta(s, f.path)

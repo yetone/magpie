@@ -54,12 +54,19 @@ func subagentsOf(s Session, fs []file) []Subagent {
 			if sa.ID == "" || strings.HasPrefix(sa.ID, "acompact-") {
 				continue
 			}
-			m := ccMeta(f.path)
+			var m ccSubMeta
+			if st.more().SubMeta != nil {
+				m = *st.more().SubMeta
+			} else {
+				m = ccMeta(f.path)
+			}
 			sa.Kind, sa.Parent = m.AgentType, m.ParentAgentID
 			// the file only when the meta names no task: cmp.Or read
 			// every Claude Code subagent's file for a title it threw away
 			if sa.Title = m.Description; sa.Title == "" {
-				sa.Title = ccTask(f.path)
+				if sa.Title = st.more().Task; sa.Title == "" {
+					sa.Title = ccTask(f.path)
+				}
 			}
 		case "opencode":
 			sa.ID = f.m().sid
@@ -122,19 +129,29 @@ func ccMeta(p string) ccSubMeta {
 	if v, ok := ccMetas.Load(meta); ok {
 		return v.(ccSubMeta)
 	}
-	b, err := os.ReadFile(meta)
-	if err != nil {
+	m, ok := readCCMeta(p)
+	if !ok {
 		return ccSubMeta{}
+	}
+	ccMetas.Store(meta, m)
+	return m
+}
+
+// readCCMeta reads the meta file beside the subagent file p; false when
+// it isn't there or isn't JSON.
+func readCCMeta(p string) (ccSubMeta, bool) {
+	b, err := os.ReadFile(strings.TrimSuffix(p, ".jsonl") + ".meta.json")
+	if err != nil {
+		return ccSubMeta{}, false
 	}
 	var m ccSubMeta
 	if json.Unmarshal(b, &m) != nil {
-		return ccSubMeta{}
+		return ccSubMeta{}, false
 	}
 	m.AgentType = m.AgentType[:min(len(m.AgentType), 128)]
 	m.ParentAgentID = m.ParentAgentID[:min(len(m.ParentAgentID), 128)]
 	m.Description = title(m.Description)
-	ccMetas.Store(meta, m)
-	return m
+	return m, true
 }
 
 var ccMetas sync.Map
