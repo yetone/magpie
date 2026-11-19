@@ -18,6 +18,22 @@ func NativeEndpoints(e Entry) []string {
 	return endpointsOf(relayed(*e.Provider, e.Model))
 }
 
+// PreferredEndpoint is the path a request for the model is best asked on
+// (/v1/models' magpie_prefers, for another magpie that has this one as its
+// provider): its provider's Native API, or for a routing group the one
+// GroupAPI wires an agent to, Responses where its members are best there.
+// "" for a model translated anyway, or a group that stays on Chat.
+// members is nil when the group's aren't known.
+func PreferredEndpoint(e Entry, members func(id string) []Member) string {
+	if e.Group == "" {
+		return endpointOf[e.Provider.Native(e.Model)]
+	}
+	if members == nil {
+		return ""
+	}
+	return endpointOf[GroupAPI(members(e.ID))]
+}
+
 // relayed are the APIs p takes a request for model on as it is, in the
 // order p speaks them: none for a model every request to is translated
 // anyway.

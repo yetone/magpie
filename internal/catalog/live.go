@@ -353,6 +353,9 @@ func Unique(ms []Model) []Model {
 		if len(k.Via) == 0 {
 			k.Via = m.Via
 		}
+		if k.Prefers == "" {
+			k.Prefers = m.Prefers
+		}
 		if k.ImageInput == nil && m.ImageInput != nil {
 			k.ImageInput, k.Images = m.ImageInput, m.Images
 		}
@@ -1065,6 +1068,9 @@ func fetchPage(ctx context.Context, url, key string, anthropic bool, headers map
 		}
 		kimiFacts(&m, r)
 		m.Via = slices.Clip(r.Via)
+		if p := EndpointAPIs([]string{r.Prefers}); len(p) == 1 {
+			m.Prefers = p[0]
+		}
 		out = append(out, m)
 	}
 	return out, v.HasMore, v.LastID, nil
@@ -1148,6 +1154,11 @@ type liveModel struct {
 	// the magpies another magpie's model passes through to its vendor,
 	// itself last (magpie_via.go)
 	Via []string `json:"magpie_via"`
+	// the path another magpie asks the model on best (magpie_prefers): its
+	// provider's own best API for it, or a routing group's
+	// (provider.PreferredEndpoint), which native_endpoints, in the order
+	// that magpie's provider speaks them, doesn't tell
+	Prefers string `json:"magpie_prefers"`
 	// the protocol family PipeLLM routes the model by: openai, anthropic
 	// or gemini
 	TypeTarget string `json:"type_target"`

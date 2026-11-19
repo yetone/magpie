@@ -2379,6 +2379,16 @@ func (p Provider) Native(model string) Protocol {
 	if len(out) == 0 {
 		return ""
 	}
+	// a remote magpie's own best API for it (magpie_prefers): its list
+	// names every API the model goes on as it is in the order its provider
+	// speaks them, Chat first, so a GPT its OpenAI key or ChatGPT sign-in
+	// serves best on Responses, and a routing group whose members are,
+	// was asked on Chat here — where OpenAI turns away the max effort
+	// Responses takes (OoopsHh on X: Pi's openai/* and auto/* on
+	// openai-completions, codex/* alone on openai-responses)
+	if pr := p.RemotePrefers(model); pr != "" && slices.Contains(out, pr) {
+		return pr
+	}
 	if p.ResponsesFirst(model) && slices.Contains(out, Responses) {
 		return Responses
 	}

@@ -1866,6 +1866,13 @@ func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 			// shows its Fast switch on a model whose tiers hold priority
 			// (#1914). A model with none says nothing
 			tiers := codexTiers(shown)
+			// each routing group's members, looked up once a list, for
+			// another magpie's magpie_prefers
+			var membersOf func(string) []provider.Member
+			if magpie {
+				find := provider.FoundOnce(provider.GroupFinder())
+				membersOf = func(id string) []provider.Member { _, ms, _ := find(id); return ms }
+			}
 			// each model by its bare id as well, after the provider/model ids,
 			// when the user asked for it (settings.BareModelIDs): a client
 			// moved from another proxy asks for gpt-5.6-sol (love1sbug on X).
@@ -1927,6 +1934,12 @@ func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 					// magpies, for one that names its models by it
 					// (provider.UpstreamNames, lcc580 on X)
 					m["magpie_by"] = e.ServedBy()
+					// the API it is best asked on here, which
+					// native_endpoints' order doesn't say: that magpie's
+					// agents are wired to it (OoopsHh on X)
+					if pe := provider.PreferredEndpoint(e, membersOf); pe != "" {
+						m["magpie_prefers"] = pe
+					}
 				}
 				if ts := tiers[e.ID]; len(ts) > 0 {
 					m["service_tiers"] = ts
@@ -8384,6 +8397,11 @@ func (s *Server) usable(p provider.Provider, model string) []provider.Protocol {
 	}
 	if p.MessagesFirst(model) {
 		sort.SliceStable(out, func(i, j int) bool { return out[i] == provider.Anthropic && out[j] != provider.Anthropic })
+	}
+	// a remote magpie's model is translated to the API that magpie asks it
+	// on best, so it isn't translated there a second time
+	if pr := p.RemotePrefers(model); pr != "" {
+		sort.SliceStable(out, func(i, j int) bool { return out[i] == pr && out[j] != pr })
 	}
 	if p.IsPlugin() && len(apis) > 1 {
 		// a plugin's model is translated to its own API, the first it

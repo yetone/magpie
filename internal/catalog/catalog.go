@@ -47,6 +47,11 @@ type Model struct {
 	// APIs, when the vendor says, are the APIs the model is served on
 	// ("chat", "responses", "anthropic"); empty is not known.
 	APIs []string `json:",omitempty"`
+	// Prefers, on a model of another magpie's list, is the API that magpie
+	// asks it on best (magpie_prefers): "responses" for a GPT its OpenAI
+	// key or ChatGPT sign-in is best asked on there, or a routing group
+	// whose members are; "" when it didn't say.
+	Prefers string `json:",omitempty"`
 	// Endpoints, in magpie's own models for an agent, are the gateway
 	// paths a request for it is relayed on as it is
 	// (provider.NativeEndpoints, /v1/models' native_endpoints); a group's
