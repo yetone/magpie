@@ -273,7 +273,11 @@ func Found() []string {
 		kimi = append(kimi, filepath.Join(kimiWorkRuntime(sh), "home", "sessions"))
 	}
 	add("kimi", kimi...)
-	add("agy", filepath.Join(AgyDir(), "brain"))
+	var agy []string
+	for _, d := range agyDataDirs() {
+		agy = append(agy, filepath.Join(d, "brain"))
+	}
+	add("agy", agy...)
 	add("antigravity", antigravityConversations(), filepath.Join(AntigravityInsidersDir(), "conversations"))
 	add("gemini", geminiTmpDir())
 	var devin []string

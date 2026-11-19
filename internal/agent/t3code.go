@@ -82,16 +82,7 @@ const t3CodexOffered = "t3code.codex"
 
 // t3Base is T3 Code's folder for home: $T3CODE_HOME, else ~/.t3. Its
 // settings are userdata/settings.json in it.
-func t3Base(home string) string {
-	base := appdir.Getenv("T3CODE_HOME")
-	if base == "" {
-		return filepath.Join(home, ".t3")
-	}
-	if rest, ok := strings.CutPrefix(base, "~"); ok {
-		return filepath.Join(home, rest)
-	}
-	return base
-}
+func t3Base(home string) string { return appdir.T3Code(home) }
 
 // t3CodexRunsIn reports whether T3 Code's settings for home have magpie's
 // Codex instance (t3CodexInstance) running Codex in the Codex home dir:
