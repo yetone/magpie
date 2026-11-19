@@ -65,3 +65,16 @@ func TestVarsAreApart(t *testing.T) {
 		seen[v] = true
 	}
 }
+
+// A variable that holds an address is in NotPaths. Every other one is
+// taken for a folder, which magpie passes over when it isn't an absolute
+// path: AGY_LLM_GATEWAY_URL=http://… had magpie print "ignoring
+// AGY_LLM_GATEWAY_URL: not an absolute path" at every start, and
+// appdir.Getenv read it as unset.
+func TestAddressesAreNotPaths(t *testing.T) {
+	for _, v := range Vars {
+		if (strings.HasSuffix(v, "_URL") || strings.HasSuffix(v, "_ADDR")) && !NotPaths[v] {
+			t.Errorf("%s holds an address, but it isn't in NotPaths", v)
+		}
+	}
+}
