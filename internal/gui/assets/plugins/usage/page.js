@@ -741,14 +741,15 @@ function quotaWho(q) {
 // /api/warm-now {agent, user}), for this account. Idle is as the
 // warm-up tells it (idle in codex_warmup.go): nothing used and its reset a
 // whole window away, or gone by; or not read at all, which a Claude account
-// never used is, while a Codex account with no 5-hour window has none to
-// start. One just warmed reads the same for warmSlack, so it waits that out.
+// never read is, while an account read with no 5-hour window (a Codex
+// plan's, a Claude Ultra's, shangyuan0818 on X) has none to start. One just warmed reads the
+// same for warmSlack, so it waits that out.
 const quotaWarmed = new Map();
 function quotaWarm(q) {
   const agent = q.provider, user = q.user, key = agent + "\n" + user?.toLowerCase();
   if (!user || q.error || !(state.settings?.[agent + "Users"] || []).some((u) => u.toLowerCase() === user.toLowerCase())) return null;
   const w = q.windows?.find((x) => x.name === "5 hours"), now = Date.now(), at = w?.resetsAt ? Date.parse(w.resetsAt) : 0;
-  if (w ? !(at && at <= now) && (w.used > 0 || at && at - now < 5 * 3600e3 - 600e3) : agent !== "claude") return null;
+  if (w ? !(at && at <= now) && (w.used > 0 || at && at - now < 5 * 3600e3 - 600e3) : agent !== "claude" || q.windows?.length) return null;
   const busy = quotaWarmed.get(key);
   if (busy && busy !== true && now - busy < 600e3) return null;
   const b = el("button", "text acct-warm" + (busy === true ? " busy" : ""), t("Warm up"));

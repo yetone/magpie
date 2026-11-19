@@ -62,6 +62,41 @@ func claudeWithUnstarted(ws []QuotaWindow) []QuotaWindow {
 	return out
 }
 
+// claudeNoFiveHour says whether the whole reading ws of an account, read at
+// now, is of one the vendor sends no 5-hour window for, so claudeWithUnstarted
+// must not make one up. Anthropic leaves a window out (null) while it hasn't
+// started, which is all an idle account's reading says, so it is the use
+// that tells: an account whose week rose since prev, read at prevAt less than
+// five hours ago, was used inside five hours, and one used so has a 5-hour
+// window running where its plan has one. prev with no 5-hour window at all
+// (the made-up one has no reset) stays so, as does the card kept on disk, until
+// a reading tells one (shangyuan0818 on X: a verified Ultra account has none).
+func claudeNoFiveHour(prev []QuotaWindow, prevAt time.Time, ws []QuotaWindow, now time.Time) bool {
+	has := func(l []QuotaWindow) bool {
+		return slices.ContainsFunc(l, func(w QuotaWindow) bool { return w.Name == "5 hours" })
+	}
+	if has(ws) || len(prev) == 0 {
+		return false
+	}
+	if !has(prev) {
+		return true // seen without one, and nothing since says it started
+	}
+	if prevAt.IsZero() || now.Sub(prevAt) >= 5*time.Hour {
+		return false
+	}
+	week := func(l []QuotaWindow) (QuotaWindow, bool) {
+		for _, w := range l {
+			if w.Name == "7 days" && w.ResetsAt != nil {
+				return w, true
+			}
+		}
+		return QuotaWindow{}, false
+	}
+	a, ok1 := week(prev)
+	b, ok2 := week(ws)
+	return ok1 && ok2 && b.Used > a.Used && b.ResetsAt.Sub(*a.ResetsAt).Abs() < time.Hour
+}
+
 // claudeHeard is how long what Claude Code said as it answered stands in
 // for the usage endpoint when that fails.
 const claudeHeard = time.Hour

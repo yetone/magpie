@@ -1067,8 +1067,20 @@ func claudeWindows(ctx context.Context, user string, active bool) ([]QuotaWindow
 		}
 		return ws, err
 	}
-	// a whole reading: a window it leaves out hasn't started
-	ws = claudeWithUnstarted(ws)
+	// a whole reading: a window it leaves out hasn't started, unless the
+	// account is seen used with none (claudeNoFiveHour)
+	prev, prevAt := e.ws, e.at
+	if prev == nil {
+		if q, ok := lastReading("claude/" + key); ok {
+			prev, prevAt = q.Windows, e.at
+			if q.ReadAt != nil {
+				prevAt = *q.ReadAt
+			}
+		}
+	}
+	if !claudeNoFiveHour(prev, prevAt, ws, now) {
+		ws = claudeWithUnstarted(ws)
+	}
 	c.Lock()
 	if c.m == nil {
 		c.m = map[string]claudeUsageEntry{}

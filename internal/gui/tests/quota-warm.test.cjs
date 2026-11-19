@@ -32,11 +32,13 @@ const quotas = [
   { provider: "codex", name: "Codex", icon: "codex-color", plan: "Plus", user: "elsewhere@example.com", windows: [{ name: "5 hours", used: 0, resetsAt: iso(now + 5 * H) }] },
   // a Claude account never used: no window read
   { provider: "claude", name: "Claude Code", icon: "claude-color", plan: "Max", user: "claude@example.com", windows: [] },
+  // a Claude Ultra read with a week and no 5-hour window: it has none to start (shangyuan0818 on X)
+  { provider: "claude", name: "Claude Code", icon: "claude-color", plan: "Ultra", user: "ultra@example.com", windows: [{ name: "7 days", used: 12, resetsAt: iso(now + 72 * H) }] },
 ];
 const WHY = "429 Too Many Requests: usage limit reached";
 
 function serve(lang, asked) {
-  const settings = { lang, theme: "light", currency: "usd", codexUsers: ["idle-account-with-a-long-name@example.com", "busy@example.com", "ran-out@example.com", "zero@example.com"], claudeUsers: ["claude@example.com"] };
+  const settings = { lang, theme: "light", currency: "usd", codexUsers: ["idle-account-with-a-long-name@example.com", "busy@example.com", "ran-out@example.com", "zero@example.com"], claudeUsers: ["claude@example.com", "ultra@example.com"] };
   const state = { agents: [], profiles: [], settings };
   return async (r) => {
     const url = new URL(r.request().url());
@@ -116,7 +118,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.ok((await idle.getAttribute("title")).startsWith(w.tip), await idle.getAttribute("title"));
         await warmOf(page, "Ran-Out@Example.com").waitFor();
         await warmOf(page, "claude@example.com").waitFor();
-        for (const u of ["busy@example.com", "zero@example.com", "elsewhere@example.com"]) {
+        for (const u of ["busy@example.com", "zero@example.com", "elsewhere@example.com", "ultra@example.com"]) {
           assert.equal(await page.locator(".subscription-account", { has: page.locator(`[title="${u}"]`) }).count(), 1, u + "'s line is there");
           assert.equal(await warmOf(page, u).count(), 0, u + " has no Warm up");
         }
