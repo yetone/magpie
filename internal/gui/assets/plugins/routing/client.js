@@ -8734,7 +8734,9 @@ function routingPage(part) {
       // only what holds the rules back is said in a line: how they work is
       // under the ⓘ beside Add a rule
       rHint2.textContent = d.members.length < 2 ? t("With two models or more, a rule can send some turns to one of them first.")
-        : d.routing === "manual" ? t("The rules wait while you pick the model by hand.") : "";
+        : d.routing === "manual" ? t("The rules wait while you pick the model by hand.")
+        : none ? (d.routing ? t("No rules: the members go by the routing set under Advanced, {mode}; if one fails, the next takes over.", { mode: t((GROUP_ROUTE_OPTS.find((o) => o[0] === d.routing) || ["", d.routing])[1]) })
+          : t("No rules: Smart routing. The member whose allowance renews soonest goes first, ties in the listed order; if it fails, the next takes over.")) : "";
       rHint2.hidden = !rHint2.textContent;
       let focus = null;
       d.rules.forEach((r, i) => {

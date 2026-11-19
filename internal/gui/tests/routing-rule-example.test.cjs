@@ -32,11 +32,11 @@ const groups = () => ({
 });
 
 const words = {
-  en: { edit: "Edit", save: "Save", intent: "planning, design, or a hard problem to think through" },
-  zh: { edit: "编辑", save: "保存", intent: "规划、设计，或需要深入思考的难题" },
-  "zh-TW": { edit: "編輯", save: "儲存", intent: "規劃、設計，或需要深入思考的難題" },
-  ja: { edit: "編集", save: "保存", intent: "計画、設計、またはじっくり考える必要がある難問" },
-  de: { edit: "Bearbeiten", save: "Speichern", intent: "Planung, Entwurf oder ein schwieriges Problem zum Durchdenken" },
+  en: { smart: "No rules: Smart routing", order: "No rules: the members go by the routing set under Advanced, In order", edit: "Edit", save: "Save", intent: "planning, design, or a hard problem to think through" },
+  zh: { smart: "没有规则：按智能路由", order: "没有规则：成员按高级里设置的路由（按顺序）", edit: "编辑", save: "保存", intent: "规划、设计，或需要深入思考的难题" },
+  "zh-TW": { smart: "沒有規則：依智慧路由", order: "沒有規則：成員依進階中設定的路由（按順序）", edit: "編輯", save: "儲存", intent: "規劃、設計，或需要深入思考的難題" },
+  ja: { smart: "ルールなし：スマートルーティング", order: "ルールなし：メンバーは詳細設定のルーティング（順番）", edit: "編集", save: "保存", intent: "計画、設計、またはじっくり考える必要がある難問" },
+  de: { smart: "Keine Regeln: Smart-Routing", order: "Keine Regeln: Die Mitglieder gehen nach dem unter Erweitert gesetzten Routing (Der Reihe nach)", edit: "Bearbeiten", save: "Speichern", intent: "Planung, Entwurf oder ein schwieriges Problem zum Durchdenken" },
 };
 
 function serve(lang, posts) {
@@ -107,7 +107,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
   for (const lang of Object.keys(words)) {
     const w = words[lang];
     for (const width of [1100, 390]) {
-      test(`${engine} ${lang} ${width}: a group with no rule offers an example rule`, async (t) => {
+      test(`${engine} ${lang} ${width}: a group with no rule says how it routes and offers an example rule`, async (t) => {
         const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
         t.after(() => browser.close());
         const page = await (await browser.newContext({ viewport: { width, height: 1400 }, reducedMotion: "reduce" })).newPage();
@@ -123,11 +123,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const tryIt = ed.locator("button.rt-try");
         await ed.locator(".rt-rules").waitFor({ state: "attached" });
         assert(await tryIt.isVisible(), "the example's button shows");
-        // the button alone: no line of text added under Rules
-        assert(await page.evaluate(() => {
+        // the default said in one line under Rules (@canlee886 on X: a group
+        // with no rules said nothing of how it routes)
+        const line = async () => page.evaluate(() => {
           const h = document.querySelector(".rt-gedit .rt-rules").previousElementSibling;
-          return h.classList.contains("hint") && h.hidden;
-        }), "no line under Rules");
+          return h.classList.contains("hint") && !h.hidden ? h.textContent : "";
+        });
+        assert((await line()).startsWith(w.smart), `Smart's line: ${await line()}`);
+        assert.equal((await line()).split("\n").length, 1);
         // nothing past the editor's side, nor a sideways scroll
         const past = await page.evaluate(() => {
           const e = document.querySelector(".rt-gedit").getBoundingClientRect();
@@ -143,10 +146,18 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await rows.first().locator(".rt-cond.in textarea").inputValue(), w.intent);
         assert.match(await rows.first().locator(".rt-model").textContent(), /opus/, "to the last member");
         assert(!(await tryIt.isVisible()), "gone once a rule is there");
+        assert.equal(await line(), "", "no line once a rule is there");
         const body = await saved(page, ed, w, posts);
         assert.deepEqual(body.rules, [rule("a/opus", { useEffort: "", intent: w.intent })]);
         assert.equal(body.classifier, "typesafe/jev-latest");
         assert.deepEqual(errors, []);
+
+        // routed In order, the line names that
+        shape = { routing: "order" };
+        await page.reload();
+        ed = await openEditor(page, w);
+        await ed.locator(".rt-rules").waitFor({ state: "attached" });
+        assert((await line()).startsWith(w.order), `In order's line: ${await line()}`);
 
         // one model, or routed by hand: no example
         for (const s of [{ members: ["a/opus"], memberInfo: [member("a/opus")] }, { routing: "manual" }]) {
