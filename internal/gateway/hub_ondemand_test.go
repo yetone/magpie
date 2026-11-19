@@ -136,12 +136,12 @@ func TestHubMCPToolsWhole(t *testing.T) {
 	many := manyHubTools(hubOnDemandOver + 2)
 	f := &fakeHub{on: true, tools: map[string][]HubTool{
 		"claude": many, "claude@wsl:Ubuntu": many, "claude-desktop": many, "codex": many, "pi": many, "": many,
-		"droid": many, "droid@wsl:Ubuntu": many, "omp": many,
+		"droid": many, "droid@wsl:Ubuntu": many, "omp": many, "agy": many, "antigravity": many,
 		"gemini": manyHubTools(hubOnDemandOver), "opencode": many,
 	}}
 	withHub(t, f)
 	h := lanGuard(New().Handler())
-	for _, a := range []string{"claude", "claude@wsl:Ubuntu", "claude-desktop", "codex", "pi", "droid", "droid@wsl:Ubuntu", "omp", "gemini"} {
+	for _, a := range []string{"claude", "claude@wsl:Ubuntu", "claude-desktop", "codex", "pi", "droid", "droid@wsl:Ubuntu", "omp", "agy", "antigravity", "gemini"} {
 		if got := listedNames(t, readMCP(t, hubPost(h, a, here, toolsList))); len(got) != len(f.tools[a]) {
 			t.Fatalf("%s listed %v", a, got)
 		}

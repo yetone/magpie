@@ -20,7 +20,9 @@ import (
 // Claude Code, Codex (supports_search_tool, codexcat.go), Pi, whose MCP
 // extension lists a server's tools only when they are searched for, Droid,
 // which defers every MCP tool to its ToolSearch, and omp, which mounts
-// them as xd:// devices named in a catalog. Any other agent sends every
+// them as xd:// devices named in a catalog, and Antigravity and agy, which
+// list an MCP tool by name only and read its schema file when it is called
+// for. Any other agent sends every
 // tool it is given, with its whole inputSchema, on every request, so past
 // hubOnDemandOver tools it is given two in their place: find_tools, which
 // gives the tools that match what the model looks for with their
@@ -48,9 +50,16 @@ const hubOnDemandOver = 10
 // omp (18.9) mounts every MCP tool as an xd:// device, its schema read only
 // when asked for: given find_tools in their place, neither showed its
 // model which tools were behind it (tao5010 on Discord, 11-04).
+// Antigravity (agy 1.5.12) loads MCP tools lazily: its prompt names each
+// server's tools and its own call tool for a lazy MCP tool says "Read the
+// tool's schema file", one JSON file per tool under
+// ~/.gemini/antigravity-cli/mcp/<server>/ (the binary's McpToolConfig has
+// enable_lazy_load and SplitEnabledToolsByEagerLazy; a server marks a tool
+// always loaded with `_meta` "antigravity/alwaysLoad"). Given find_tools in
+// their place it searched twice (izhidigua on X, 11-19).
 // The Library's Tools on demand row names them from HubFindsItself, so its
 // words can't leave one out again (they named four of the six, 11-18).
-var hubSearchers = []string{"claude", "claude-desktop", "codex", "pi", "droid", "omp"}
+var hubSearchers = []string{"claude", "claude-desktop", "codex", "pi", "droid", "omp", "agy", "antigravity"}
 
 var hubSearchesItself = func() map[string]bool {
 	m := map[string]bool{}
