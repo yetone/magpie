@@ -45,7 +45,7 @@ func fastPick(cands []candidate, pl planned, providerID, model string, ultra boo
 	for _, ws := range [][]Weighed{pl.order, pl.left} {
 		for i, w := range ws {
 			if w.Provider == providerID && w.Model == model {
-				ws[i].Fast = true
+				ws[i].Fast, ws[i].Ultra = true, ultra
 			}
 		}
 	}

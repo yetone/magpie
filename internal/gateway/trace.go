@@ -328,6 +328,7 @@ type Weighed struct {
 	Model    string  `json:"model"`
 	Fixed    string  `json:"fixed,omitempty"` // the effort the group's member it is of is fixed at
 	Fast     bool    `json:"fast,omitempty"`  // the group's member it is of is sent fast
+	Ultra    bool    `json:"ultra,omitempty"` // and Ultrafast, where the account offers it (Group.Ultra, an Ultrafast pick)
 	Routing  string  `json:"routing"`         // its provider's: "", order, rotate, usage
 	Fallback bool    `json:"fallback,omitempty"`
 	Shared   bool    `json:"shared,omitempty"` // its provider has more than one on
@@ -614,7 +615,7 @@ type planned struct {
 }
 
 func weighed(c candidate, p provider.Provider, wg weighing, fallback bool, from provider.Protocol) Weighed {
-	w := Weighed{ID: c.rest, Provider: p.ID, Name: p.Name, Icon: p.Icon, Preset: p.Preset, Model: c.model, Fixed: c.effort, Fast: c.fast,
+	w := Weighed{ID: c.rest, Provider: p.ID, Name: p.Name, Icon: p.Icon, Preset: p.Preset, Model: c.model, Fixed: c.effort, Fast: c.fast, Ultra: c.fast && c.ultra,
 		Routing: p.Routing, Fallback: fallback, Shared: c.rest != p.ID, Rank: c.rank, NoURL: c.noURL, Reserve: c.reserve, UseFirst: c.p.UseFirst}
 	switch {
 	case c.p.Account != nil:

@@ -9,7 +9,8 @@
 // leaves it. A GPT model on a provider the user added by its address
 // (ownFast, #1615) has the toggle too, off until clicked, and its title says
 // fast is asked of the provider; one OpenAI offers Ultrafast on (ultraOK)
-// goes on to Ultrafast, and its title says that is asked for. In English and Chinese, Chromium and WebKit.
+// goes on to Ultrafast, and its title says that is asked for. A group's
+// card says "· Ultrafast" of a member sent so, not "· fast" (OoopsHh on X). In English and Chinese, Chromium and WebKit.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -25,20 +26,27 @@ const models = [
   { id: "rl/o4-mini", name: "o4-mini", providerName: "Relay", icon: "generic", canFast: true, ownFast: true },
   // one OpenAI offers Ultrafast on (KoiLx0 on X)
   { id: "rl/gpt-6.2-sol", name: "gpt-6.2-sol", providerName: "Relay", icon: "generic", canFast: true, ownFast: true, ultraOK: true },
+  // #6881's member (paul-tian; ggbdpq's fixture): a Codex account's
+  // GPT-6-Astra set Ultrafast, which the list read as Fast
+  { id: "cx/gpt-6-astra", name: "gpt-6-astra", providerName: "Codex", icon: "generic", canFast: true, ultraOK: true },
 ];
 const members = ["oa/gpt-6.1-sol:high", "an/claude-opus-5-5", "rl/glm-5", "rl/o4-mini", "rl/gpt-6.2-sol"];
 const groups = () => ({
   models, pools: [],
   groups: [{ id: "sol", name: "Sol", members, fast: ["oa/gpt-6.1-sol:high"], routing: "order", ready: true,
-    memberInfo: members.map((id) => ({ id, ready: true, fast: id === "oa/gpt-6.1-sol:high", canFast: id !== "rl/glm-5", ownFast: id.startsWith("rl/") && id !== "rl/glm-5", ultraOK: id === "rl/gpt-6.2-sol" })) }],
+    memberInfo: members.map((id) => ({ id, ready: true, fast: id === "oa/gpt-6.1-sol:high", canFast: id !== "rl/glm-5", ownFast: id.startsWith("rl/") && id !== "rl/glm-5", ultraOK: id === "rl/gpt-6.2-sol" })) },
+  // one sent Ultrafast: its card says Ultrafast, not fast (OoopsHh on X)
+  { id: "astra", name: "Astra", members: ["cx/gpt-6-astra", "rl/gpt-6.2-sol"], fast: ["cx/gpt-6-astra", "rl/gpt-6.2-sol"], ultra: ["cx/gpt-6-astra", "rl/gpt-6.2-sol"], routing: "order", ready: true,
+    memberInfo: [{ id: "cx/gpt-6-astra", ready: true, fast: true, ultra: true, canFast: true, ultraOK: true },
+      { id: "rl/gpt-6.2-sol", ready: true, fast: true, ultra: true, canFast: true, ownFast: true, ultraOK: true }] }],
 });
 
 const words = {
-  en: { edit: "Edit", save: "Save", fast: "Fast", std: "Standard speed", label: "gpt-6.1-sol · high reasoning · fast", remove: "Remove",
+  en: { edit: "Edit", save: "Save", fast: "Fast", std: "Standard speed", label: "gpt-6.1-sol · high reasoning · fast", ultraLabel: "gpt-6.2-sol · Ultrafast", codexLabel: "gpt-6-astra · Ultrafast", remove: "Remove",
     ownOff: 'Sent as the agent asks; click to ask your provider for OpenAI\'s fast mode (service_tier "priority")',
     ownOn: 'Asked for OpenAI\'s fast mode (service_tier "priority") whatever the agent asks: quicker, at a higher price, where your provider serves it. One that turns it away is asked without it',
     ultra: "Ultrafast", ownUltra: 'Asked for service_tier "ultrafast" whatever the agent asks, where your provider serves it. One that turns it away is asked without it. Click to send it at the usual speed' },
-  zh: { edit: "编辑", save: "保存", fast: "快速", std: "标准速度", label: "gpt-6.1-sol · high 推理强度 · 快速", remove: "移除",
+  zh: { edit: "编辑", save: "保存", fast: "快速", std: "标准速度", label: "gpt-6.1-sol · high 推理强度 · 快速", ultraLabel: "gpt-6.2-sol · 极速", codexLabel: "gpt-6-astra · 极速", remove: "移除",
     ownOff: '按代理的请求发送；点击向你的服务商请求 OpenAI 的快速模式（service_tier "priority"）',
     ownOn: '无论代理怎么请求，都向服务商请求 OpenAI 的快速模式（service_tier "priority"）：服务商支持时更快，价格更高。服务商拒绝这个字段时，会去掉它再请求一次',
     ultra: "极速", ownUltra: '无论 Agent 要求什么，都向你的服务商请求极速（service_tier "ultrafast"），前提是它支持；不接受的会改为不带该字段重新请求。点一下改回标准速度' },
@@ -90,9 +98,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       page.on("pageerror", (e) => errors.push(e.message));
       await page.route("**/*", serve(lang, posts));
       await page.goto("http://magpie.test/?view=groups");
-      const card = page.locator(".rt-group", { hasText: "Sol" });
+      const card = page.locator('.rt-group[data-id="sol"]');
       await card.waitFor();
       assert((await card.locator(".mem").textContent()).includes(w.label), "the card says the member is sent fast");
+      const ultraCard = (await page.locator('.rt-group[data-id="astra"]').locator(".mem").textContent());
+      assert(ultraCard.includes(w.ultraLabel), `the card says the member is sent Ultrafast: ${ultraCard}`);
+      assert(ultraCard.includes(w.codexLabel) && !ultraCard.includes(`gpt-6-astra · ${w.label.split(" · ").pop()}`), `the card says #6881's Codex member is sent Ultrafast: ${ultraCard}`);
 
       await card.locator("button", { hasText: w.edit }).click();
       const ed = page.locator(".rt-gedit");
@@ -161,7 +172,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.deepEqual(sent.body.ultra, ["rl/gpt-6.2-sol"]);
 
       const missing = await page.evaluate(() => [
-        "fast", "Fast", "Standard speed", "Sent in its vendor's fast mode, as the group says",
+        "fast", "Fast", "Ultrafast", "Standard speed", "Sent in its vendor's fast mode, as the group says",
+        "Sent Ultrafast where the account offers it, as the group says",
         "Sent in its vendor's fast mode whatever the agent asks: quicker, at a higher price",
         "Sent at its vendor's usual speed; click to send it in fast mode",
         'Asked for OpenAI\'s fast mode (service_tier "priority") whatever the agent asks: quicker, at a higher price, where your provider serves it. One that turns it away is asked without it',

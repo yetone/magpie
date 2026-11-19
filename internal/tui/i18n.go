@@ -333,6 +333,7 @@ var zh = map[string]string{
 	"found by magpie: a change makes it yours":           "由 magpie 发现：修改后归你所有",
 	"models · the first that can take a request gets it": "模型 · 由第一个能接受请求的模型处理",
 	"fast":       "快速",
+	"Ultrafast":  "极速",
 	"by pattern": "按模式匹配",
 	"switched off: skipped until it is on again":               "已关闭：开启前会被跳过",
 	"patterns · every model they match now, after those named": "模式 · 在列出的模型之后，当前匹配到的所有模型",

@@ -89,3 +89,24 @@ func TestGroupTakeOutKeepsARulesOtherModels(t *testing.T) {
 		t.Fatalf("members %v rules %+v", g.Members, g.Rules)
 	}
 }
+
+// A member sent Ultrafast reads "· Ultrafast" in the group's list, not
+// "· fast", as the CLI and the GUI say it (OoopsHh on X).
+func TestGroupMemberUltrafastShown(t *testing.T) {
+	home(t)
+	if err := provider.Save(provider.Provider{ID: "oa", Name: "OpenAI", Key: "k", Responses: "https://api.openai.com/v1", Models: []string{"gpt-6.2-sol", "gpt-6.1-sol"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.SaveGroup(provider.Group{ID: "sol", Name: "Sol", Members: []string{"oa/gpt-6.2-sol", "oa/gpt-6.1-sol"},
+		Fast: []string{"oa/gpt-6.2-sol", "oa/gpt-6.1-sol"}, Ultra: []string{"oa/gpt-6.2-sol"}}); err != nil {
+		t.Fatal(err)
+	}
+	m := press(t, model{w: 120, h: 40}, "3", "enter")
+	v := m.View()
+	if !strings.Contains(v, "gpt-6.2-sol · Ultrafast") || strings.Contains(v, "gpt-6.2-sol · fast") {
+		t.Fatalf("Ultrafast not shown:\n%s", v)
+	}
+	if !strings.Contains(v, "gpt-6.1-sol · fast") {
+		t.Fatalf("fast not shown:\n%s", v)
+	}
+}

@@ -2846,8 +2846,8 @@ function routingPage(part) {
     if (w.fixed) b.title = t("{level} reasoning, fixed on this model in the group", { level: w.fixed });
     if (w.fast) {
       // the group sends this member in its vendor's fast mode
-      const f = el("small", "fb", t("fast"));
-      f.title = t("Sent in its vendor's fast mode, as the group says");
+      const f = el("small", "fb", t(w.ultra ? "Ultrafast" : "fast"));
+      f.title = t(w.ultra ? "Sent Ultrafast where the account offers it, as the group says" : "Sent in its vendor's fast mode, as the group says");
       b.append(f);
     }
     if (w.fallback) b.append(el("small", "fb", t("fallback")));
@@ -6749,6 +6749,11 @@ function routingPage(part) {
   const memberNote = (id) => { const o = !subOf(id) && !modelOf(id) && offOf(id); return subOf(id) ? t("routing group") : [modelOf(id)?.providerName || o && `${o.name} · ${t("switched off")}`, memberAccount(id)?.name, drawerOf(id) && t("Image model"), fixedOf(id) && fixedWords(fixedOf(id))].filter(Boolean).join(" · "); };
   // a member the group sends in its vendor's fast mode (Group.Fast)
   const fastIn = (g, id) => !!g?.fast?.includes(id) && !subOf(id);
+  // the word for a member's speed where it is said in a line: Ultrafast
+  // where the group sends it so and an account offers it (memberJSON.Ultra,
+  // as its button in the editor says), else fast (OoopsHh on X: a list
+  // card said fast of an Ultrafast member)
+  const speedIn = (g, id) => fastIn(g, id) && t(memberInfoOf(g, id)?.ultra ? "Ultrafast" : "fast");
   // a member Free first and Cheapest first count as costing nothing: its
   // provider is Free for me, or its vendor serves it free (memberJSON.Free),
   // said whatever the group's routing, so it shows before Free first is
@@ -6761,7 +6766,7 @@ function routingPage(part) {
     const i = memberInfoOf(g, id), m = modelOf(id), s = subOf(id), f = fixedOf(id);
     if (s) return { pv: t("routing group"), mn: s.name, at: "" };
     const acct = memberAccount(id);
-    const at = (acct ? ` · ${acct.name}` : "") + (f ? ` · ${fixedWords(f)}` : "") + (fastIn(g, id) ? ` · ${t("fast")}` : "") + (freeIn(g, id) ? ` · ${t("free")}` : "");
+    const at = (acct ? ` · ${acct.name}` : "") + (f ? ` · ${fixedWords(f)}` : "") + (fastIn(g, id) ? ` · ${speedIn(g, id)}` : "") + (freeIn(g, id) ? ` · ${t("free")}` : "");
     if (m) return { pv: m.providerName, mn: modelName(m), at };
     if (i?.providerOff) return { pv: i.name, mn: i.model, at: `${at} (${t("switched off")})` };
     return i?.name ? { pv: i.name, mn: i.model, at } : { pv: "", mn: id, at: "" };
@@ -7740,7 +7745,7 @@ function routingPage(part) {
       b.setAttribute("aria-checked", String(on));
       b.dataset.member = id;
       b.append(el("span", "dot"), memberIcon(id), el("span", "n", memberName(id)));
-      const note = [memberNote(id), fastIn(g, id) && t("fast"), freeIn(g, id) && t("free")].filter(Boolean).join(" · ");
+      const note = [memberNote(id), speedIn(g, id), freeIn(g, id) && t("free")].filter(Boolean).join(" · ");
       if (note) b.append(el("small", "", note));
       b.title = on ? t("Every request goes to {name}", { name: memberLabel(g, id) })
         : info?.providerOff ? offWords(info)
@@ -9873,7 +9878,7 @@ function routingPage(part) {
         if (b.classList.contains("open")) return closeProtoMenu();
         openProtoMenu(b, g.members.map((id) => {
           const info = g.memberInfo?.find((x) => x.id === id);
-          const note = [memberNote(id), fastIn(g, id) && t("fast"), freeIn(g, id) && t("free"), info && !info.ready && t("no provider serves it now")].filter(Boolean).join(" · ");
+          const note = [memberNote(id), speedIn(g, id), freeIn(g, id) && t("free"), info && !info.ready && t("no provider serves it now")].filter(Boolean).join(" · ");
           return { v: id, name: memberName(id), literalName: true, note, title: memberLabel(g, id) };
         }), picked, async (id) => {
           closeProtoMenu();
