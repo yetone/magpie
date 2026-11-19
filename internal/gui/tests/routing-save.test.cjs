@@ -55,7 +55,7 @@ function serve(lang, posts, off = []) {
 }
 
 const ROUTINGS = [
-  ["", "Smart", "智能"], ["order", "In order", "按顺序"], ["drain", "Until used up", "用完再换"], ["rotate", "In turn", "轮流"],
+  ["", "Quota first", "额度优先"], ["order", "In order", "按顺序"], ["drain", "Until used up", "用完再换"], ["rotate", "In turn", "轮流"],
   ["usage", "Least used first", "用量少的优先"], ["pace", "Use before expiry", "到期前用完"],
 ];
 const STAYS = [["", "Auto", "自动"], ["session", "Session", "整个会话"], ["turn", "Within a turn", "一轮之内"], ["off", "Off", "关闭"]];
@@ -123,7 +123,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.getByRole("button", { name: L.cancel, exact: true }).click();
         await page.getByRole("alertdialog").locator("button").last().click();
         await open();
-        assert.match(await opt(L.routing, zh ? "智能" : "Smart").getAttribute("class"), /\bon\b/);
+        assert.match(await opt(L.routing, zh ? "额度优先" : "Quota first").getAttribute("class"), /\bon\b/);
         assert.match(await opt(L.stays, zh ? "自动" : "Auto").getAttribute("class"), /\bon\b/);
         assert.equal(await unsaved(L.routing).isVisible(), false);
         assert.equal(await unsaved(L.stays).isVisible(), false);
@@ -156,7 +156,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await page.locator(".editor .accts").first().waitFor();
           const field = page.locator(".editor label", { hasText: new RegExp(`^${L.routing}$`) }).locator("xpath=following-sibling::div[1]");
           const shown = await field.locator(".segs").first().evaluate((box) => [...box.querySelectorAll(".opt")].filter((b) => getComputedStyle(b).display !== "none").map((b) => b.textContent));
-          assert.deepEqual(shown, [zh ? "智能" : "Smart"], `${where}: Smart alone`);
+          assert.deepEqual(shown, [zh ? "额度优先" : "Quota first"], `${where}: Smart alone`);
           assert.match(await field.locator(".segs .opt").first().getAttribute("class"), /\bon\b/, `${where}: Smart picked`);
           assert.ok(await page.evaluate(() => document.scrollingElement.scrollWidth <= innerWidth + 1), `${where}: fits`);
           // on again, every routing is back

@@ -30,11 +30,11 @@ const groups = (pick) => ({ models, pools: [], groups: [
 ] });
 
 const words = {
-  en: { edit: "Edit", save: "Save", routing: "Routing", manual: "Manual", smart: "Smart",
+  en: { edit: "Edit", save: "Save", routing: "Routing", manual: "Manual", smart: "Quota first",
     hint: "Manual: every request goes to the model you pick on the group's card, over its own accounts or keys; the others, and the rules, wait until you pick another — none takes over when it fails.",
     rulesWait: "The rules wait while you pick the model by hand.", group: "Model every request goes to",
     saved: "Hand: every request to luna" },
-  zh: { edit: "编辑", save: "保存", routing: "路由", manual: "手动", smart: "智能",
+  zh: { edit: "编辑", save: "保存", routing: "路由", manual: "手动", smart: "额度优先",
     hint: "手动：所有请求发给在路由组卡片上选中的模型（在其账号或 Key 间路由）；改选前其他模型和规则不生效，失败时也不切换。",
     rulesWait: "手动选择模型时，规则暂不生效。", group: "所有请求发往的模型",
     saved: "Hand：所有请求改发给 luna" },

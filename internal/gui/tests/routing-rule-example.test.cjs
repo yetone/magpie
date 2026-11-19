@@ -32,11 +32,11 @@ const groups = () => ({
 });
 
 const words = {
-  en: { smart: "No rules: Smart routing", order: "No rules: the members go by the routing set under Advanced, In order", edit: "Edit", save: "Save", intent: "planning, design, or a hard problem to think through" },
-  zh: { smart: "没有规则：按智能路由", order: "没有规则：成员按高级里设置的路由（按顺序）", edit: "编辑", save: "保存", intent: "规划、设计，或需要深入思考的难题" },
-  "zh-TW": { smart: "沒有規則：依智慧路由", order: "沒有規則：成員依進階中設定的路由（按順序）", edit: "編輯", save: "儲存", intent: "規劃、設計，或需要深入思考的難題" },
-  ja: { smart: "ルールなし：スマートルーティング", order: "ルールなし：メンバーは詳細設定のルーティング（順番）", edit: "編集", save: "保存", intent: "計画、設計、またはじっくり考える必要がある難問" },
-  de: { smart: "Keine Regeln: Smart-Routing", order: "Keine Regeln: Die Mitglieder gehen nach dem unter Erweitert gesetzten Routing (Der Reihe nach)", edit: "Bearbeiten", save: "Speichern", intent: "Planung, Entwurf oder ein schwieriges Problem zum Durchdenken" },
+  en: { smart: "No rules: Quota first, which doesn't judge how hard a task is", order: "No rules: the members go by the routing set under Advanced, In order", edit: "Edit", save: "Save", intent: "planning, design, or a hard problem to think through" },
+  zh: { smart: "没有规则：额度优先，不判断任务难易", order: "没有规则：成员按高级里设置的路由（按顺序）", edit: "编辑", save: "保存", intent: "规划、设计，或需要深入思考的难题" },
+  "zh-TW": { smart: "沒有規則：額度優先，不判斷任務難易", order: "沒有規則：成員依進階中設定的路由（按順序）", edit: "編輯", save: "儲存", intent: "規劃、設計，或需要深入思考的難題" },
+  ja: { smart: "ルールなし：枠優先。タスクの難しさは判断しません", order: "ルールなし：メンバーは詳細設定のルーティング（順番）", edit: "編集", save: "保存", intent: "計画、設計、またはじっくり考える必要がある難問" },
+  de: { smart: "Keine Regeln: Kontingent zuerst, ohne die Schwierigkeit einer Aufgabe zu beurteilen", order: "Keine Regeln: Die Mitglieder gehen nach dem unter Erweitert gesetzten Routing (Der Reihe nach)", edit: "Bearbeiten", save: "Speichern", intent: "Planung, Entwurf oder ein schwieriges Problem zum Durchdenken" },
 };
 
 function serve(lang, posts) {

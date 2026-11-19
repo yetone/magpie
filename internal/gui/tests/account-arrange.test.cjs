@@ -122,7 +122,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     await page.route("**/*", f.route);
     for (const id of ["antigravity", "relay"]) {
       await open(page, id);
-      for (const [mode, label] of [["", "Smart"], ["order", "In order"], ["rotate", "In turn"], ["usage", "Least used first"]]) {
+      for (const [mode, label] of [["", "Quota first"], ["order", "In order"], ["rotate", "In turn"], ["usage", "Least used first"]]) {
         // picked, then made with the editor's Save, which closes it
         const saveResponse = page.waitForResponse(response =>
           new URL(response.url()).pathname === "/api/provider/save" && response.request().method() === "POST");

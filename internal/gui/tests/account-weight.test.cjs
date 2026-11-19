@@ -137,7 +137,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal((await page.locator("#status").textContent()).trim(), note, at);
 
       // back to Smart hides them
-      await page.locator(".editor").getByRole("button", { name: await say(page, lang, "Smart"), exact: true }).first().click();
+      await page.locator(".editor").getByRole("button", { name: await say(page, lang, "Quota first"), exact: true }).first().click();
       assert.equal(await chip("max@example.com").isVisible(), false, `${at}: a weight under Smart`);
       // open, the editor scrolls and the dialog around it doesn't: the lines
       // its check-in and warm-up rows keep out of sight were held against

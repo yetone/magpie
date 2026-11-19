@@ -171,7 +171,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         f = await fig(routing);
         assert.equal(f.affinity, "session");
         assert.equal(f.msgs, "AAABBB");
-        await routing.locator(".segs .opt", { hasText: new RegExp(`^${await tr(page, "Smart")}$`) }).click();
+        await routing.locator(".segs .opt", { hasText: new RegExp(`^${await tr(page, "Quota first")}$`) }).click();
         assert.equal(await routing.locator("svg.rot-fig").count(), 0, "drawn for In turn only");
         assert.deepEqual(errors, []);
       });

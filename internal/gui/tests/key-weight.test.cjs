@@ -112,7 +112,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       if (process.env.ARTIFACT_DIR) await page.locator(".editor .accts").screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-key-weight-rows.png`) });
       // back to Smart hides them
-      await page.locator(".editor").getByRole("button", { name: lang === "en" ? "Smart" : "智能", exact: true }).first().click();
+      await page.locator(".editor").getByRole("button", { name: lang === "en" ? "Quota first" : "额度优先", exact: true }).first().click();
       assert.equal(await chip("aaaaaaaaaa").isVisible(), false);
       assert.deepEqual(errors, []);
     });

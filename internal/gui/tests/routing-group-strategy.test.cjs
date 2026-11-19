@@ -25,10 +25,10 @@ const info = [{ id: "a/sol", ready: true }, { id: "b/flash", ready: true }, { id
 const base = { members: ["a/sol", "b/flash", "c/luna"], ready: true, memberInfo: info, offers: [], shared: [] };
 
 const words = {
-  en: { order: "In order", manual: "Manual", weight: "By weight", smart: "Smart", head: "Routing", edit: "Edit",
-    names: ["Smart", "In order", "Until used up", "In turn", "Least used first", "Use before expiry", "Free first", "Speed first", "Cheapest first", "Free quota by expiry", "Small context first", "By weight", "Manual"],
+  en: { order: "In order", manual: "Manual", weight: "By weight", smart: "Quota first", head: "Routing", edit: "Edit",
+    names: ["Quota first", "In order", "Until used up", "In turn", "Least used first", "Use before expiry", "Free first", "Speed first", "Cheapest first", "Free quota by expiry", "Small context first", "By weight", "Manual"],
     tip: "How Auto routes: click to change it", saved: "Auto: Manual" },
-  zh: { order: "按顺序", manual: "手动", weight: "按权重", smart: "智能", head: "路由", edit: "编辑",
+  zh: { order: "按顺序", manual: "手动", weight: "按权重", smart: "额度优先", head: "路由", edit: "编辑",
     tip: "Auto 的路由方式：点击更改", saved: "Auto：手动" },
   "zh-TW": { tip: "Auto 的路由方式：點擊更改" },
   ja: { tip: "Auto のルーティング方法：クリックで変更" },
@@ -213,8 +213,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await menu.waitFor();
       const box = await menu.boundingBox();
       assert.ok(box.x >= 0 && box.x + box.width <= width, JSON.stringify(box));
-      await menu.locator(".pm-item", { hasText: "Smart" }).click();
-      await page.waitForFunction(() => document.querySelector('.rt-group[data-id="auto"] .rt-groute')?.textContent === "Smart");
+      await menu.locator(".pm-item", { hasText: "Quota first" }).click();
+      await page.waitForFunction(() => document.querySelector('.rt-group[data-id="auto"] .rt-groute')?.textContent === "Quota first");
       assert.equal(posts.at(-1).body.routing, "");
       assert.deepEqual(errors, []);
     });

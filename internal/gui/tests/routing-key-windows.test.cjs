@@ -160,7 +160,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.match(await row("relay-b").locator("em").textContent(), /95%/);
       // the header tells Smart as it weighs them, not as keys in their order
       assert.equal((await page.locator(".rt-mode").textContent()).trim(),
-        await say("Smart: of the accounts with quota to spare, the one whose allowance renews soonest goes first — what it has left would be lost at the reset. The week decides; an account with five hours and no week goes by its five hours, and one whose month its weeks can no longer use up before it renews by its week. One at 90% or more waits until the others can't answer; one resting after a failure goes last."));
+        await say("Quota first: of the accounts with quota to spare, the one whose allowance renews soonest goes first — what it has left would be lost at the reset. The week decides; an account with five hours and no week goes by its five hours, and one whose month its weeks can no longer use up before it renews by its week. One at 90% or more waits until the others can't answer; one resting after a failure goes last."));
       assert.deepEqual(errors, []);
     });
     test(`${engine} ${lang}: one whose month its weeks can't use up says its week decides (#5639)`, async (t) => {
@@ -201,7 +201,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const steps = await page.locator(".rt-steps li").allTextContents();
       assert.ok(steps.some((s) => s.includes(aside)), steps.join("\n"));
       assert.equal((await page.locator(".rt-mode").textContent()).trim(),
-        await say("Smart: of the accounts with quota to spare, the one whose allowance renews soonest goes first — what it has left would be lost at the reset. The week decides; an account with five hours and no week goes by its five hours, and one whose month its weeks can no longer use up before it renews by its week. One at 90% or more waits until the others can't answer; one resting after a failure goes last."));
+        await say("Quota first: of the accounts with quota to spare, the one whose allowance renews soonest goes first — what it has left would be lost at the reset. The week decides; an account with five hours and no week goes by its five hours, and one whose month its weeks can no longer use up before it renews by its week. One at 90% or more waits until the others can't answer; one resting after a failure goes last."));
       assert.deepEqual(errors, []);
     });
 

@@ -51,7 +51,7 @@ function serve(lang, scene) {
 }
 
 const chip = { en: "By weight", zh: "按权重", ja: "重み付け", de: "Nach Gewicht" };
-const smart = { en: "Smart", zh: "智能", ja: "スマート", de: "Intelligent" };
+const smart = { en: "Quota first", zh: "额度优先", ja: "枠優先", de: "Kontingent zuerst" };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   for (const lang of ["en", "zh", "ja", "de"]) {
@@ -103,7 +103,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal((await page.locator(".rt-hub i").textContent()).trim(), smart[lang]);
       assert.equal((await page.locator(".rt-mode").textContent()).trim(),
         await page.evaluate(([lang, key]) => (lang !== "en" && I18N[lang]?.[key]) || key, [lang,
-          "Smart: keys that suit the request go first — one made for the model's own API — then in their order. One resting after a failure goes last."]));
+          "Quota first: keys that suit the request go first — one made for the model's own API — then in their order. One resting after a failure goes last."]));
       assert.deepEqual(errors, []);
     });
   }

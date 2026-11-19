@@ -88,7 +88,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.match(said, pattern(await say("Free quota by expiry: {who}'s free quota is lost soonest, in {d}, so it's spent first.")));
         assert.ok(said.includes("mm@example.com"), said);
         assert.equal((await page.locator(".rt-mode").textContent()).trim(),
-          await say("Free quota by expiry: the accounts on a free plan, or whose model costs nothing there, go first, the one whose free quota is lost soonest first — at its next reset, or when its credits expire if sooner; once it is used up, the next. A paid one takes requests only when no free one has quota left, the paid as Smart orders them."));
+          await say("Free quota by expiry: the accounts on a free plan, or whose model costs nothing there, go first, the one whose free quota is lost soonest first — at its next reset, or when its credits expire if sooner; once it is used up, the next. A paid one takes requests only when no free one has quota left, the paid as Quota first orders them."));
         if (lang !== "en") assert.notEqual(await say("Free quota by expiry"), "Free quota by expiry", `${lang} names Free quota by expiry`);
         const wide = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
         assert.ok(wide <= 0, `the page scrolls sideways by ${wide}px`);
