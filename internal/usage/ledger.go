@@ -1126,6 +1126,15 @@ func (r Row) Floor() (tokens int, ms int64) {
 // so the clients a shared gateway serves can be compared (#2521).
 var Dimensions = []string{"provider", "agent", "model", "modelAt", "callerKey"}
 
+// modelAtDim is "modelAt"'s place in Dimensions.
+const modelAtDim = 3
+
+func init() {
+	if Dimensions[modelAtDim] != "modelAt" {
+		panic("usage: modelAtDim is not modelAt's place in Dimensions")
+	}
+}
+
 // NoCallerKey is the "callerKey" of a call that carried no gateway key: one
 // that wasn't counted against any, as this computer's own agents' are, or
 // that came before keys were recorded. As a filter it keeps only those.

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/sessions"
 	"github.com/yetone/magpie/internal/usage"
 )
 
@@ -120,6 +121,10 @@ func SpanOf(from, date string, zone *time.Location) (Day, error) {
 	if date > today {
 		return Day{}, fmt.Errorf("%s is after today, %s", date, today)
 	}
+	// the session folders listed once for the reads below, not once
+	// each: a long history's thousands of files were listed and stat'd
+	// for every one of them (WaiooT on X)
+	defer sessions.OneListing()()
 	f := usage.Filter{Zone: zone}
 	var p usage.Period
 	switch from {
@@ -165,16 +170,17 @@ func SpanOf(from, date string, zone *time.Location) (Day, error) {
 		if c := agents[s.ID]; c != nil {
 			a.Name, a.Icon = c.Name, c.Icon
 		}
-		af := f
-		af.Agent = s.ID
-		if s.ID == "" {
-			// a filter of "" keeps every agent: the calls that named none
-			// are this group's own, and are listed by model without it
-			af.Agent = ""
-		}
+		// each agent's models are of the same build as the day's own
+		// (AgentModels): a page of each agent beside it was a build each,
+		// all of them again on every switch of the day (WaiooT on X)
 		var models []usage.Share
-		if s.ID != "" || len(all.By["agent"]) == 1 {
-			models = usage.QueryPage(p, af, 0, 1).By["modelAt"]
+		switch {
+		case s.ID != "":
+			models = all.AgentModels[s.ID]
+		case len(all.By["agent"]) == 1:
+			// the calls that named no agent are all there are: a filter of
+			// "" would keep every agent's, so they are listed only alone
+			models = all.By["modelAt"]
 		}
 		for j, m := range models {
 			if j == DayModels {

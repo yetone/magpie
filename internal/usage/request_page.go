@@ -55,6 +55,12 @@ type RequestPage struct {
 	Series   []SeriesPoint
 	By       map[string][]Share
 	ChartBy  map[string][]Share // the whole period's legend while a day is selected
+	// AgentModels is each agent's By["modelAt"], by the agent a filter
+	// names it by (ReportedAs): what the same page with that agent picked
+	// would have as its By["modelAt"], counted in the same pass. A day's
+	// card asked for a page of each agent beside the day's own, a whole
+	// build each, every time the day was switched (WaiooT on X).
+	AgentModels map[string][]Share
 	// Computers are the rows told apart by the computer they were made on,
 	// ThisComputer's and each other's by id, of the rows without the
 	// filter's computer, and Names what the others are called: none when no
@@ -2542,6 +2548,8 @@ func buildRequestBlocksIn(p Period, f Filter, offset, limit int, now time.Time, 
 		chartGroups[d] = map[string]*Share{}
 		seriesGroups[d] = map[string]*Share{}
 	}
+	agentModels := map[string]map[string]*Share{}
+	reported := map[string]string{} // ReportedAs, once for each agent
 	// Bound the requested prefix before adding limit: external offsets can
 	// reach MaxInt, and a page beyond all sources needs no heap at all.
 	maxRows := 0
@@ -2667,7 +2675,21 @@ func buildRequestBlocksIn(p Period, f Filter, offset, limit int, now time.Time, 
 					add(chartGroups[dim], keys.key(&r, dim), d)
 				}
 				if cell.bits&(cellGroup<<j) != 0 {
-					add(groups[dim], keys.key(&r, dim), d)
+					k := keys.key(&r, dim)
+					add(groups[dim], k, d)
+					if j == modelAtDim {
+						a, ok := reported[agent]
+						if !ok {
+							a = ReportedAs(agent)
+							reported[agent] = a
+						}
+						m := agentModels[a]
+						if m == nil {
+							m = map[string]*Share{}
+							agentModels[a] = m
+						}
+						add(m, k, d)
+					}
 				}
 			}
 		}
@@ -2710,6 +2732,10 @@ func buildRequestBlocksIn(p Period, f Filter, offset, limit int, now time.Time, 
 	out.Speeds, out.ProviderSpeeds = speeds.result(), speeds.providers()
 	for _, d := range Dimensions {
 		out.By[d] = sharesOf(groups[d])
+	}
+	out.AgentModels = make(map[string][]Share, len(agentModels))
+	for a, m := range agentModels {
+		out.AgentModels[a] = sharesOf(m)
 	}
 	if f.Day != "" {
 		out.ChartBy = map[string][]Share{}
@@ -2845,6 +2871,17 @@ func pageFromLedgerAt(p Period, f Filter, offset, limit int, all Ledgered, now t
 				add(r)
 			}
 		})
+	}
+	out.AgentModels = map[string][]Share{}
+	byAgent := map[string][]Row{}
+	for _, r := range all.Filtered(f.Without("modelAt")).Rows {
+		a := ReportedAs(r.Agent)
+		byAgent[a] = append(byAgent[a], r)
+	}
+	for a, rows := range byAgent {
+		if m := Breakdown(rows, "modelAt"); len(m) > 0 {
+			out.AgentModels[a] = m
+		}
 	}
 	for _, d := range Dimensions {
 		g := f.Without(d)
