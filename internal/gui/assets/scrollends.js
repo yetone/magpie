@@ -38,8 +38,9 @@
     box.classList.toggle("on", on || held);
     let bottom = innerHeight - r.bottom + 16;
     // above a page's own sticky foot under it (Providers' Add buttons, a
-    // Routing group editor's Cancel and Add: Jiabubu on Discord)
-    for (const foot of v.querySelectorAll(":scope > .after-list:not(.away), .view-foot")) {
+    // Routing group editor's Cancel and Add: Jiabubu on Discord; Plugins'
+    // install box, the Library's save and pick bars: WaiooT on X)
+    for (const foot of v.querySelectorAll(":scope > .after-list:not(.away), .view-foot, .pm-manual, .lib-savebar, .lib-pickbar")) {
       const f = foot.getBoundingClientRect();
       if (getComputedStyle(foot).position === "sticky" && f.bottom > innerHeight - bottom - box.offsetHeight && f.top < innerHeight - bottom) bottom = Math.max(bottom, innerHeight - f.top + 8);
     }
