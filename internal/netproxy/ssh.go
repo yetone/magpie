@@ -383,7 +383,7 @@ func sshWhy(addr string, err error) error {
 		// keyboard-interactive at once, where the library waits for its
 		// questions (60), after the password was turned away
 		w.Why = "the SSH server at {addr} turned the login away: check the user and the password or key"
-	case strings.Contains(msg, "connection refused"):
+	case refused(msg):
 		w.Why = "nothing answers SSH at {addr}: check the address and port"
 	case strings.Contains(msg, "no such host"):
 		w.Why = "the SSH server's name doesn't resolve"

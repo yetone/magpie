@@ -63,7 +63,7 @@ func Explain(address, msg string) *Why {
 		w.Why = "{addr} turned the username and password away"
 	case strings.Contains(msg, "no acceptable authentication methods"):
 		w.Why = "{addr} wants a username and password"
-	case strings.Contains(msg, "connection refused"):
+	case refused(msg):
 		w.Why = "nothing answers at {addr}: check the address and port, and that the proxy is running"
 	case strings.Contains(msg, "no such host"):
 		w.Why = "the proxy's host name doesn't resolve"
@@ -75,6 +75,14 @@ func Explain(address, msg string) *Why {
 		return nil
 	}
 	return w
+}
+
+// refused is whether msg is a connection refused: "connection refused" on
+// macOS and Linux, and Windows' "No connection could be made because the
+// target machine actively refused it" (WSAECONNREFUSED), which magpie on
+// Windows read as nothing it knew.
+func refused(msg string) bool {
+	return strings.Contains(msg, "connection refused") || strings.Contains(msg, "actively refused")
 }
 
 // ExplainServer is Explain, and when the error text can't tell what
