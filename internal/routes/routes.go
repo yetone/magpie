@@ -114,6 +114,9 @@ type Seat struct {
 	// costs 0. Cheapest goes by them.
 	Priced          bool
 	Cost, CacheCost float64
+	// Window is its model's context window there, in tokens, 0 when not
+	// known. SmallFirst goes by it.
+	Window int
 }
 
 // Strategy orders a pool.
@@ -144,6 +147,9 @@ type Strategy struct {
 	// trace then shows it. Only when set: pricing reads each provider's
 	// model list and the user's prices.
 	ByPrice bool
+	// ByWindow: it weighs by Window, so the gateway reads each seat's
+	// model's context window, and the routing trace then shows it.
+	ByWindow bool
 }
 
 var reg = struct {

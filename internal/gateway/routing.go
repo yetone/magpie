@@ -2576,6 +2576,9 @@ type weighing struct {
 	// behind is the accounts on credits weigh put after the others
 	// (creditsBehind), by rest key
 	behind map[string]bool
+	// window is each seat's model's context window, by restID: filled
+	// only when the routing weighs by it (routes.Strategy.ByWindow)
+	window map[string]int
 }
 
 // seatPrice is a seat's price at the request's time, as Cheapest weighed
@@ -2843,6 +2846,15 @@ func weighRouted(p provider.Provider, cs []candidate, model string, from provide
 			pr = pr.In(at)
 			seats[i].Priced, seats[i].Cost, seats[i].CacheCost = true, pr.Input+pr.Output, pr.CacheRead
 			wg.price[c.restID()] = seatPrice{in: pr.Input, out: pr.Output, cache: pr.CacheRead, peak: peak}
+		}
+	}
+	if st.ByWindow {
+		// as roomy reads it: the provider's own, else the catalog's
+		served := sync.OnceValue(provider.Served)
+		wg.window = map[string]int{}
+		for i, c := range cs {
+			seats[i].Window = windowIn(served, c.p, c.model)
+			wg.window[c.restID()] = seats[i].Window
 		}
 	}
 	order := routes.Apply(st, p.ID, seats)

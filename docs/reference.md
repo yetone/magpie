@@ -2376,6 +2376,17 @@ each of these groups ordered by the share used.
   time window sends a member first at its hours, and a Pause rule leaves
   one out at its hours. The Routing page says why the first went first:
   "costs least on Ollama now — $0.150 in, $0.600 out a million tokens".
+- **Small context first** (routing groups only): each request goes to the
+  member with the smallest context window that holds it, so the big ones
+  are kept for the long requests only they can take. A member whose window
+  the request is longer than is left out before it is asked, as under every
+  routing, and asked only once every one with room is out of its
+  allowance. Members of one size go as Smart orders them, a member all but
+  used up still goes after those with room, and one whose window isn't
+  known goes after every known one. The window is the one you set for the
+  model, else the model list's. The Routing page says why the first went
+  first: "Composer 2.5's 200K context window is the smallest that holds
+  this request".
 
 The routings besides Smart are the built-in plugin `rotation` (Routing
 strategies in Plugins › Built-in). It stays on while a provider or group is
@@ -2400,6 +2411,7 @@ depends on the routing:
 | Use before expiry | Only between accounts in the same pace band that magpie sent the same tokens lately, in practice none since magpie started. |
 | Speed first | Only between those within a tenth of each other's speed, and among those not measured lately. |
 | Cheapest first | Only between those that cost the same now, and among those with no known price. |
+| Small context first | Only between those whose context windows are the same size, after Smart's order, and among those whose window isn't known. |
 
 For Claude Code and Codex, *Make first* also signs the agent in to that
 account, because the account the agent is signed in to is first. With

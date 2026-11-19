@@ -260,6 +260,7 @@ var zh = map[string]string{
 	"cheapest first":                                             "最便宜优先",
 	"until used up":                                              "用完再换",
 	"free, soonest to expire":                                    "免费且最快到期优先",
+	"small context first":                                        "小上下文优先",
 	"manual":                                                     "手动",
 	"smart":                                                      "智能",
 	"stays the session":                                          "整个会话保持",

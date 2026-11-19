@@ -1075,9 +1075,9 @@ func sessionNamed(in http.Header) bool {
 // started side by side then each keep an account of their own until its
 // allowance runs out, as a user picking the mode with several accounts
 // expects (connor_yang on Discord: three sessions on two of three
-// accounts). In order, By weight, Free first, Speed first, Cheapest, Manual
-// and a plugin's routing pick for their own reasons, and keep their order;
-// In turn spreads on its own.
+// accounts). In order, By weight, Free first, Speed first, Cheapest,
+// Small context first, Manual and a plugin's routing pick for their own
+// reasons, and keep their order; In turn spreads on its own.
 func spreadsSessions(mode, routing string) bool {
 	if mode != provider.AffinitySession && mode != provider.AffinityStrict {
 		return false

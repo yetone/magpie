@@ -618,6 +618,43 @@ var Cheapest = Strategy{ByPrice: true, Order: func(_ string, seats []Seat) []int
 	return idx
 }}
 
+// SmallFirst sends a request to the member whose model has the smallest
+// context window, so the big ones are kept for the requests only they
+// hold: the gateway leaves out, before asking, every member whose window
+// the request is longer than (roomy), so the first left is the smallest
+// that holds it. In Smart's order otherwise: a seat all but used up
+// still goes after those with room, one set to be used first still
+// first, and members of one window in Smart's order among themselves; a
+// window not known goes after every known one.
+var SmallFirst = Strategy{ByWindow: true, Order: func(pool string, seats []Seat) []int {
+	idx := Smart.Order(pool, seats)
+	rank := func(s Seat) (int, int) {
+		g := 1
+		switch {
+		case seatTier(s) == 2:
+			g = 2
+		case s.Lead:
+			g = 0
+		}
+		return g, s.Window
+	}
+	sort.SliceStable(idx, func(a, b int) bool {
+		ga, wa := rank(seats[idx[a]])
+		gb, wb := rank(seats[idx[b]])
+		if ga != gb {
+			return ga < gb
+		}
+		if wa == wb {
+			return false
+		}
+		if wa == 0 || wb == 0 { // not known: after those known
+			return wb == 0
+		}
+		return wa < wb
+	})
+	return idx
+}}
+
 // sameCost: two prices within a millionth of each other, or of a cent a
 // million tokens, are the same price.
 func sameCost(a, b float64) bool {
@@ -641,4 +678,5 @@ var Builtin = map[string]Strategy{
 	provider.Cheapest:     Cheapest,
 	provider.Drain:        Drain,
 	provider.FreeExpiring: FreeExpiring,
+	provider.SmallFirst:   SmallFirst,
 }

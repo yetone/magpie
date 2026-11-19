@@ -364,6 +364,7 @@ type Weighed struct {
 	LateTTFT float64           `json:"lateTtft,omitempty"` // speed first: its ms to the first token lately, 0 if not measured (speed.go)
 	LateTPS  float64           `json:"lateTps,omitempty"`  // speed first: its tokens a second lately, 0 if not told
 	Price    *SeatPrice        `json:"price,omitempty"`    // cheapest first: what its model costs on it now, nil if not known
+	Context  int               `json:"context,omitempty"`  // small context first: its model's context window there, 0 if not known
 	Turn     bool              `json:"turn,omitempty"`     // in turn: it was this one's turn
 	Fit      int               `json:"fit,omitempty"`      // keyFit
 	Speaks   provider.Protocol `json:"speaks,omitempty"`   // a key made for one protocol only
@@ -691,6 +692,9 @@ func weighed(c candidate, p provider.Provider, wg weighing, fallback bool, from 
 	}
 	if pr, ok := wg.price[c.restID()]; ok {
 		w.Price = &SeatPrice{Input: pr.in, Output: pr.out, CacheRead: pr.cache, Peak: pr.peak}
+	}
+	if n, ok := wg.window[c.restID()]; ok {
+		w.Context = n
 	}
 	if sinks(p.Sink, p.Routing) {
 		markSunk(&w, c)

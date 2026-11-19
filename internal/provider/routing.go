@@ -58,6 +58,13 @@ const (
 	// (routes.FreeExpiring; wowbbs on Discord: five check-in accounts of
 	// WorkBuddy, MiniMax, Trae and Qoder in one group). A group's only.
 	FreeExpiring = "expiring"
+	// SmallFirst sends a request to the member with the smallest context
+	// window that holds it, so the big ones are kept for long requests
+	// (routes.SmallFirst; yg6888 on X: Composer's 200K and Grok 4.7's
+	// 256K never answered in a group of 1M models under Smart). Members
+	// too small are left out as under every routing (roomy). A group's
+	// only: a provider's keys and accounts serve one window.
+	SmallFirst = "fit"
 )
 
 // FreePlan says whether an account's plan, as its vendor or plugin names
