@@ -1,6 +1,8 @@
 package gateway
 
 import (
+	"encoding/json"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/yetone/magpie/internal/provider"
@@ -32,6 +34,32 @@ func TestOpenAIKeyUltrafast(t *testing.T) {
 	if err := provider.SetFastTier("codex", "ok/gpt-6-astra", "ultrafast"); err != nil {
 		t.Fatal(err)
 	}
+	// and its list says so, to another magpie that has this one as its
+	// provider: in Docker it said Fast alone (OoopsHh on X)
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/v1/models", nil))
+	var list struct {
+		Data []struct {
+			ID    string `json:"id"`
+			Tiers []struct {
+				ID string `json:"id"`
+			} `json:"service_tiers"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatalf("%v: %s", err, rec.Body)
+	}
+	listed := map[string]string{}
+	for _, m := range list.Data {
+		for _, x := range m.Tiers {
+			listed[m.ID] += x.ID + " "
+		}
+	}
+	for id, want := range map[string]string{"ok/gpt-6-astra": "priority ultrafast ", "ok/gpt-6-sol": "priority "} {
+		if listed[id] != want {
+			t.Errorf("%s listed with tiers %q, want %q", id, listed[id], want)
+		}
+	}
 	for _, a := range []struct{ name, path, body string }{
 		{"responses", "/v1/responses", `{"model":"ok/gpt-6-astra","input":"hi"}`},
 		{"anthropic", "/v1/messages", `{"model":"ok/gpt-6-astra","max_tokens":1024,"messages":[{"role":"user","content":"hi"}]}`},
@@ -41,8 +69,8 @@ func TestOpenAIKeyUltrafast(t *testing.T) {
 		if host != "api.openai.com" || path != "/v1/responses" || body["service_tier"] != "ultrafast" || body["model"] != "gpt-6-astra" {
 			t.Errorf("%s: sent to %s%s %v", a.name, host, path, body)
 		}
-		if len(r.Tries) != 1 || !r.Tries[0].Fast {
-			t.Errorf("%s: traced %+v", a.name, r.Tries)
+		if len(r.Tries) != 1 || !r.Tries[0].Fast || len(r.Order) == 0 || !r.Order[0].Ultra {
+			t.Errorf("%s: traced %+v, order %+v", a.name, r.Tries, r.Order)
 		}
 		// another agent's request goes at the usual speed
 		postFrom(t, s, "opencode", a.path, a.body)

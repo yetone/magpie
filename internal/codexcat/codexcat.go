@@ -397,9 +397,9 @@ func entriesAt(ms []catalog.Model, after int, effort string) []any {
 		// or a group one is in, gets the tier Codex's own catalog gives its
 		// GPT models
 		if slug, ok := strings.CutPrefix(m.ID, "codex/"); m.Fast || ok && strings.HasPrefix(slug, "gpt-") {
-			e.Tiers = append(e.Tiers, fastTier)
+			e.Tiers = withTiers(own, append(e.Tiers, fastTier), m.Tiers)
 		} else if m.OwnTier && (len(m.Tiers) == 0 || len(ownTiers(own, m)) > 0) {
-			e.Tiers = ownTiers(own, m)
+			e.Tiers = withTiers(own, ownTiers(own, m), m.Tiers)
 		} else if len(m.Tiers) > 0 {
 			// another magpie's model: the tiers it offers its own Codex
 			// (#1234)
@@ -722,13 +722,18 @@ func ownTiers(own map[string]map[string]any, m catalog.Model) []tier {
 var fastTier = tier{ID: "priority", Name: "Fast", Description: "1.5x speed, increased usage"}
 
 // namedTiers are the tiers ids name, each as Codex's own catalog writes it
-// on any of its models, else by its id: Fast's "priority" as Codex names it.
+// on any of its models, else by its id: Fast's "priority" as Codex names
+// it, "ultrafast" as Ultrafast.
 func namedTiers(own map[string]map[string]any, ids []string) []tier {
 	ts := []tier{}
 	for _, id := range ids {
 		t := tier{ID: id, Name: id}
-		if id == fastTier.ID {
+		switch id {
+		case fastTier.ID:
 			t = fastTier
+		case "ultrafast":
+			// as magpie names it, where Codex's own catalog doesn't
+			t.Name = "Ultrafast"
 		}
 	found:
 		for _, slug := range slices.Sorted(maps.Keys(own)) {
@@ -744,6 +749,20 @@ func namedTiers(own map[string]map[string]any, ids []string) []tier {
 			}
 		}
 		ts = append(ts, t)
+	}
+	return ts
+}
+
+// withTiers is ts with each tier of ids it lacks after them, named as
+// namedTiers names it: Ultrafast where the provider's account or key
+// offers it (provider.CodexTiers), beside the Fast these entries take from
+// Codex's own catalog, which a magpie with no Codex beside it (Docker)
+// hasn't got (OoopsHh on X).
+func withTiers(own map[string]map[string]any, ts []tier, ids []string) []tier {
+	for _, id := range ids {
+		if !slices.ContainsFunc(ts, func(t tier) bool { return t.ID == id }) {
+			ts = append(ts, namedTiers(own, []string{id})...)
+		}
 	}
 	return ts
 }

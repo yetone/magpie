@@ -377,6 +377,8 @@ func buildModels(agent string) []catalog.Model {
 		_, ms, _ := find(id)
 		return ms
 	}
+	// the models Codex's accounts offer Ultrafast on, read once a list
+	ultra := sync.OnceValue(provider.UltraModels)
 	for i, e := range shown {
 		efforts := e.Efforts
 		if agent == "codex" {
@@ -429,7 +431,7 @@ func buildModels(agent string) []catalog.Model {
 		// the service tiers Codex is offered on it, as the gateway's own
 		// lists offer them: Fast in the Codex CLI magpie writes
 		// magpie-models.json for (#1530)
-		provider.CodexTiers(&m, e, members)
+		provider.CodexTiersWith(&m, e, members, ultra)
 		if agent == "codex" {
 			provider.CodexSeals(&m, e, members)
 		}

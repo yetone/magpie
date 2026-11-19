@@ -40,7 +40,9 @@ func TestModelsListTiersForEveryClient(t *testing.T) {
 		}
 		got[m.ID] = s
 	}
-	for id, want := range map[string]string{"relay/gpt-6.1-sol": "priority ", "relay/glm-5": ""} {
+	// Ultrafast too: OpenAI serves it on GPT-6.1 Sol, and a provider added
+	// by its address offers it as its editor does (OoopsHh on X)
+	for id, want := range map[string]string{"relay/gpt-6.1-sol": "priority ultrafast ", "relay/glm-5": ""} {
 		if s, ok := got[id]; !ok || s != want {
 			t.Errorf("%s tiers %q (listed %v), want %q", id, s, ok, want)
 		}

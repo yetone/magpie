@@ -101,8 +101,10 @@ func TestRemoteMagpieOffersItsTiers(t *testing.T) {
 		}
 		offered[m.Slug] = s
 	}
+	// Ultrafast too: OpenAI serves it on GPT-6.1 Sol, and a provider added
+	// by its address offers it as its editor does (OoopsHh on X)
 	for slug, want := range map[string]string{
-		"relay/gpt-6.1-sol": "priority:Fast ", "office/relay/gpt-6.1-sol": "priority:Fast ",
+		"relay/gpt-6.1-sol": "priority:Fast ultrafast:Ultrafast ", "office/relay/gpt-6.1-sol": "priority:Fast ultrafast:Ultrafast ",
 		"relay/glm-5": "", "office/relay/glm-5": "",
 	} {
 		if got, ok := offered[slug]; !ok || got != want {

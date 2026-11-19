@@ -47,7 +47,10 @@ func TestCodexCatalogTiersReachDisk(t *testing.T) {
 		}
 		tiers[m.Slug] = s
 	}
-	for slug, want := range map[string]string{"sub/gpt-6.1-sol": "priority:Fast ", "sub/glm-4.6": "", "relay/glm-4.6": ""} {
+	// and Ultrafast, which OpenAI serves on GPT-6.1 Sol and a provider
+	// added by its address offers as its editor does (provider.CanUltra;
+	// OoopsHh on X)
+	for slug, want := range map[string]string{"sub/gpt-6.1-sol": "priority:Fast ultrafast:Ultrafast ", "sub/glm-4.6": "", "relay/glm-4.6": ""} {
 		if g, ok := tiers[slug]; !ok {
 			t.Errorf("%s is not in magpie-models.json: %s", slug, raw)
 		} else if g != want {
