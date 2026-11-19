@@ -67,7 +67,7 @@ func (s *Server) codexCatalog(w http.ResponseWriter, r *http.Request) {
 	// account's own models and the ones this key's Codex used are among
 	// them, and kept when the end is cut
 	entries := codexcat.Entries(ms, 0)
-	codexcat.FitOwn(entries, usage.CodexUsedBy(access.Caller(r.Context()).KeyID), codexcat.ChatGPTOwn)
+	codexcat.FitOwn(entries, usage.CodexUsedBy(access.Caller(r.Context()).KeyID), codexcat.OwnIn(ms))
 	for _, e := range entries {
 		var one bytes.Buffer
 		enc := json.NewEncoder(&one)

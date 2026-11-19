@@ -216,7 +216,7 @@ func CatalogAt(ms []catalog.Model, effort string) []byte { return CatalogUsed(ms
 // them (FitOwn).
 func CatalogUsed(ms []catalog.Model, effort string, used []string) []byte {
 	entries := entriesAt(ms, 0, effort)
-	FitOwn(entries, used, ChatGPTOwn)
+	FitOwn(entries, used, OwnIn(ms))
 	out := struct {
 		Models []any `json:"models"`
 	}{Models: entries}
@@ -232,6 +232,44 @@ func CatalogUsed(ms []catalog.Model, effort string, used []string) []byte {
 // Codex that reaches them through magpie, which FitOwn keeps in the first
 // AppList.
 func ChatGPTOwn(slug string) bool { return strings.HasPrefix(slug, "codex/") }
+
+// OwnSlug is the slug of Codex's own model m is, when a ChatGPT account
+// serves it: one magpie holds (codex/<slug>), or one another magpie holds,
+// whose entry for its own Codex names it codex/<slug> (office/codex/<slug>,
+// provider.codexEntries). Such a model is given Codex's own entry for the
+// slug where this computer's Codex has one, as a ChatGPT account here is,
+// and is one of Codex's own models where the Codex app reads them (FitOwn).
+func OwnSlug(m catalog.Model) (string, bool) {
+	if slug, ok := strings.CutPrefix(m.ID, "codex/"); ok {
+		return slug, true
+	}
+	if len(m.Codex) == 0 {
+		return "", false
+	}
+	var e struct {
+		Slug string `json:"slug"`
+	}
+	if json.Unmarshal(m.Codex, &e) != nil {
+		return "", false
+	}
+	slug, ok := strings.CutPrefix(e.Slug, "codex/")
+	if !ok || slug == "" || !strings.HasSuffix(m.ID, "/"+e.Slug) {
+		return "", false
+	}
+	return slug, true
+}
+
+// OwnIn is ChatGPTOwn for ms: a slug of theirs that is Codex's own model
+// (OwnSlug), another magpie's ChatGPT account's too.
+func OwnIn(ms []catalog.Model) func(slug string) bool {
+	remote := map[string]bool{}
+	for _, m := range ms {
+		if _, ok := OwnSlug(m); ok {
+			remote[m.ID] = true
+		}
+	}
+	return func(slug string) bool { return ChatGPTOwn(slug) || remote[slug] }
+}
 
 // level, tier and model are an entry of models.json as Entries writes it.
 type level struct {
@@ -364,7 +402,8 @@ func entriesAt(ms []catalog.Model, after int, effort string) []any {
 	autoReview := AutoReviewModel()
 	var entries []any
 	for i, m := range ms {
-		if raw, ok := own[strings.TrimPrefix(m.ID, "codex/")]; ok && strings.HasPrefix(m.ID, "codex/") {
+		if slug, ok := OwnSlug(m); ok && own[slug] != nil {
+			raw := own[slug]
 			e := ownEntry(raw, m.ID, shownName(m), after+i+1)
 			// the window as magpie resolves it — the one the user set,
 			// else the account's list's — not the cache's, which is what
@@ -1280,7 +1319,7 @@ func listedEntry(m catalog.Model, priority int, work settings.Settings, autoRevi
 			e["input_modalities"] = slices.DeleteFunc(slices.Clone(in), func(x any) bool { return x == "image" })
 		}
 	}
-	if v1 && (m.Fast || m.Seals) {
+	if _, own := OwnSlug(m); v1 && (m.Fast || m.Seals || own) {
 		Stamp(e)
 	} else if _, ok := e["multi_agent_version"]; !ok && m.AgentsV2 {
 		e["multi_agent_version"] = "v2"

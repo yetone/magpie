@@ -120,6 +120,24 @@ list has no separate retrieval kind: these entries remain in `Catalog` and
 agent model lists, just as on the remote. Keeping them makes retrieval
 routing possible; their presence does not mean they support conversations.
 
+A remote magpie's models carry the entries that magpie hands its own Codex
+on another computer: the list fetch asks `/v1/codex/models` once more with
+Codex's `client_version` and the remote's key (`codexEntries` in
+[`codex_entries.go`](../../internal/provider/codex_entries.go),
+`TestRemoteMagpieHandsOnItsCodexEntries`), and `codexcat.listedEntry`
+hands each entry on under the local id, its `" via magpie"` said once. A
+ChatGPT account the remote holds is Codex's own model here too: an entry
+whose slug is `codex/<slug>` under an id ending in it
+(`office/codex/gpt-6-astra`, `codexcat.OwnSlug`) takes this computer's
+Codex cache entry for the slug, as a local account's `codex/<slug>` does,
+and counts as Codex's own where the Codex app reads the list (`OwnIn`,
+`TestRemoteChatGPTModelIsCodexOwn`). Before this, the remote's ChatGPT
+models reached Codex as entries magpie made up for a third party's model
+(Darkf1ames on X). What stays apart from a local account: Codex names
+magpie its provider for them, and a remote with no Codex cache of its own
+hands on entries made from the bundled instructions, without the
+backend's other fields.
+
 `DecidesModel` uses the remote's explicit decision marker, so Clef and custom
 names work and a chat model named Jev Router stays a chat model. `Deciders`
 lists, and the gateway answers, these decisions even when the user's local
