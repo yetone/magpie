@@ -21,6 +21,16 @@ const libraryProjectUsage = `magpie library project [--json]      the projects (
   magpie library project skill rm <dir> <skill…>   take skills out of it
   magpie library project skill agents <dir> <skill> <a,b…|none>   the agents it has the skill for
   magpie library project copy <dir> on|off copies of its skills in place of links to the library's
+  magpie library project server [list] <dir> [--json]   its MCP servers and the agents each is for
+  magpie library project server add <dir> <server…> [agents=a,b…]   give it library servers: by default for the agents
+                                     its servers are for already, or, with none yet, every agent here that reads a
+                                     project's MCP file
+  magpie library project server rm <dir> <server…>   take servers out of it
+  magpie library project server agents <dir> <server> <a,b…|none>   the agents it has the server for
+  magpie library project subagent [list] <dir> [--json]   its subagents and the agents each is for
+  magpie library project subagent add <dir> <subagent…> [agents=a,b…]   the same for library subagents
+  magpie library project subagent rm <dir> <subagent…>   take subagents out of it
+  magpie library project subagent agents <dir> <subagent> <a,b…|none>   the agents it has the subagent for
   magpie library project instructions <dir> [--json]   its own instructions, the agents they're for and the files
   magpie library project instructions <dir> text <text…>|--file <f>|-   set them ("" takes them out); written, between
                                      magpie's two marker lines, into the project file each agent reads: by default for
@@ -127,6 +137,10 @@ func libraryProjectCmd(args []string) error {
 			return usage()
 		}
 		return projectSkillCmd(rest[0], rest[1:], usage)
+	case "server", "mcp":
+		return projectKindCmd(projectServers, rest, usage)
+	case "subagent":
+		return projectKindCmd(projectSubagents, rest, usage)
 	case "instructions", "instr":
 		return projectInstrCmd(rest, usage)
 	}
