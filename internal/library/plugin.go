@@ -178,7 +178,7 @@ func pluginSlug(s string) string {
 
 // isPlugin is whether dir looks like a plugin's folder.
 func isPlugin(dir string) bool {
-	for _, p := range []string{".claude-plugin/plugin.json", "skills", "agents", "commands", "hooks/hooks.json", ".mcp.json"} {
+	for _, p := range []string{".claude-plugin/plugin.json", ".codex-plugin/plugin.json", "skills", "agents", "commands", "hooks/hooks.json", ".mcp.json"} {
 		if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(p))); err == nil {
 			return true
 		}
@@ -199,13 +199,27 @@ func readPlugin(dir, hint, force string, over map[string]any) (*plLoaded, error)
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return nil, err
 	}
+	// Codex's own manifest (#7255) names the same parts the same way: skills,
+	// mcpServers, hooks. Claude Code's fields win where both name one, so a
+	// part is carried once. Its hooks are read apart below: they are Codex's.
+	var codexHooks any
+	if cx, err := readJSONFile(filepath.Join(dir, ".codex-plugin", "plugin.json")); err == nil {
+		codexHooks = cx["hooks"]
+		for k, v := range cx {
+			if _, ok := man[k]; !ok && k != "hooks" {
+				man[k] = v
+			}
+		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
 	for k, v := range over {
 		if _, ok := man[k]; !ok {
 			man[k] = v
 		}
 	}
 	if !isPlugin(dir) && len(man) == 0 {
-		return nil, fmt.Errorf("no Claude Code plugin in %s: it has no .claude-plugin/plugin.json, skills, agents, hooks or .mcp.json", dir)
+		return nil, fmt.Errorf("no plugin in %s: it has no .claude-plugin/plugin.json, .codex-plugin/plugin.json, skills, agents, hooks or .mcp.json", dir)
 	}
 	name := pluginSlug(force)
 	if name == "" {
@@ -292,6 +306,7 @@ func readPlugin(dir, hint, force string, over map[string]any) (*plLoaded, error)
 
 	// MCP servers
 	var mcpDocs []map[string]any
+	mcpRead := filepath.Join(dir, ".mcp.json")
 	if m, err := readJSONFile(filepath.Join(dir, ".mcp.json")); err == nil {
 		mcpDocs = append(mcpDocs, m)
 	} else if !errors.Is(err, fs.ErrNotExist) {
@@ -300,7 +315,8 @@ func readPlugin(dir, hint, force string, over map[string]any) (*plLoaded, error)
 	for _, v := range manifestList(man["mcpServers"]) {
 		switch x := v.(type) {
 		case string:
-			if d, ok := inside(dir, x); ok {
+			// a manifest naming ./.mcp.json names the file already read
+			if d, ok := inside(dir, x); ok && filepath.Clean(d) != mcpRead {
 				if m, err := readJSONFile(d); err == nil {
 					mcpDocs = append(mcpDocs, m)
 				} else {
@@ -344,6 +360,34 @@ func readPlugin(dir, hint, force string, over map[string]any) (*plLoaded, error)
 	n := 0
 	for _, doc := range hookDocs {
 		hooks, left := plHooksOf(doc, name, root, sub, &n)
+		p.hooks = append(p.hooks, hooks...)
+		p.left = append(p.left, left...)
+	}
+	// the hooks Codex's manifest names (a path, a list of paths or the hooks
+	// themselves) are Codex's own, as written: its events and matchers, given
+	// to Codex alone
+	for _, v := range manifestList(codexHooks) {
+		var doc map[string]any
+		switch x := v.(type) {
+		case string:
+			d, ok := inside(dir, x)
+			if !ok {
+				leave(x, "the path leaves the plugin's folder")
+				continue
+			}
+			m, err := readJSONFile(d)
+			if err != nil {
+				leave(x, err.Error())
+				continue
+			}
+			doc = m
+		case map[string]any:
+			doc = x
+		}
+		if doc == nil {
+			continue
+		}
+		hooks, left := plHooksOfAgent(doc, name, root, sub, &n, "codex")
 		p.hooks = append(p.hooks, hooks...)
 		p.left = append(p.left, left...)
 	}
@@ -541,6 +585,14 @@ func toolKind(m string) (string, bool) {
 // is the portable one; any other is given to Claude Code alone, as
 // written.
 func plHooksOf(doc map[string]any, bundle, root string, sub func(string) string, n *int) ([]*Hook, []PluginLeft) {
+	return plHooksOfAgent(doc, bundle, root, sub, n, "")
+}
+
+// plHooksOfAgent is plHooksOf for a hooks file one agent's own manifest
+// names: agent is that agent ("codex"), and each hook keeps its event and
+// matcher as the file wrote them, as that agent's own event, which no other
+// agent is given. "" is the portable reading.
+func plHooksOfAgent(doc map[string]any, bundle, root string, sub func(string) string, n *int, agent string) ([]*Hook, []PluginLeft) {
 	m, _ := doc["hooks"].(map[string]any)
 	if m == nil {
 		m = doc
@@ -579,7 +631,14 @@ func plHooksOf(doc map[string]any, bundle, root string, sub func(string) string,
 				if t, ok := hm["timeout"].(float64); ok && t > 0 && t <= 86400 {
 					x.Timeout = int(t)
 				}
-				if portable, ok := claudeEvents[ev]; ok {
+				if agent == "codex" {
+					if !slices.Contains(codexHookSpec("").native, ev) {
+						left = append(left, PluginLeft{What: ev + " hook", Why: "Codex has no event called " + ev})
+						*n--
+						continue
+					}
+					x.Event, x.Matcher = "codex:"+ev, matcher
+				} else if portable, ok := claudeEvents[ev]; ok {
 					k, tools := toolKind(matcher)
 					if slices.Contains(toolEvents, portable) && tools {
 						x.Event, x.Matcher = portable, k
@@ -587,7 +646,7 @@ func plHooksOf(doc map[string]any, bundle, root string, sub func(string) string,
 						x.Event = portable
 					}
 				}
-				if x.Event == "" {
+				if x.Event == "" && agent == "" {
 					if !slices.Contains(claudeHookEvents, ev) {
 						left = append(left, PluginLeft{What: ev + " hook", Why: "Claude Code has no event called " + ev})
 						*n--
@@ -682,7 +741,7 @@ func resolvePluginRoot(input string) (root, tmp string, err error) {
 		if !fi.IsDir() {
 			// .claude-plugin/marketplace.json or plugin.json
 			dir = filepath.Dir(dir)
-			if filepath.Base(dir) == ".claude-plugin" {
+			if filepath.Base(dir) == ".claude-plugin" || filepath.Base(dir) == ".codex-plugin" {
 				dir = filepath.Dir(dir)
 			}
 		}
