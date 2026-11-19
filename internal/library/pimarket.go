@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/lazyre"
@@ -53,6 +54,10 @@ type PiMarketPackage struct {
 	Repo      string `json:"repo,omitempty"`
 	Homepage  string `json:"homepage,omitempty"`
 	Updated   string `json:"updated,omitempty"`
+	// Kind is npm or git, and ID the package however its source pins it
+	// (piSourceID): what a Pi's own packages are matched by
+	Kind string `json:"kind"`
+	ID   string `json:"id"`
 }
 
 // piListed is a package as the snapshot and the disk cache keep it.
@@ -238,7 +243,8 @@ func MarketPiPackages(q string) ([]PiMarketPackage, error) {
 
 func piMarketOf(p piListed) PiMarketPackage {
 	m := PiMarketPackage{Source: "npm:" + p.Name, Name: p.Name, Version: p.Version, Description: p.Description,
-		Publisher: p.Publisher, Downloads: p.Downloads, NPM: "https://www.npmjs.com/package/" + p.Name}
+		Publisher: p.Publisher, Downloads: p.Downloads, NPM: "https://www.npmjs.com/package/" + p.Name,
+		Kind: "npm", ID: "npm:" + p.Name}
 	if repo := piRepoURL(p.Repository); repo != "" {
 		m.Repo = repo
 		if owner := githubOwner(repo); owner != "" {
@@ -313,13 +319,14 @@ var piRun = func(bin, dir string, args ...string) (string, error) {
 	return text, nil
 }
 
-// InstallPiPackage installs an npm package from the market into a Pi.
+// InstallPiPackage installs a package from npm or git into a Pi: one
+// from the market, or one the search named (PiDirectAt).
 func InstallPiPackage(pi, source string) (*PiInstalled, error) {
-	name, ok := strings.CutPrefix(strings.TrimSpace(source), "npm:")
-	if !ok || !piNameRe.MatchString(name) {
-		return nil, fmt.Errorf("%q isn't an npm package Pi can install", source)
+	source = strings.TrimSpace(source)
+	if !piSourceOK(source) {
+		return nil, fmt.Errorf("%q isn't a package Pi can install from npm or git", source)
 	}
-	source = "npm:" + name
+	name, _ := piPackageName(source)
 	piMu.Lock()
 	defer piMu.Unlock()
 	p, err := piPlaceOf(pi)
@@ -422,4 +429,255 @@ func (p piPlace) has(id string) (bool, error) {
 		x, ok := piPackageOf(r)
 		return ok && p.piIdentity(x.Source) == id
 	}), nil
+}
+
+// ---- a package named outright -----------------------------------------------
+
+// eachg0 on X: the skills and MCP searches take a repository or a package
+// named outright, and Pi's only searched, so a package found elsewhere
+// couldn't be installed from it. A search that names one the way `pi
+// install` takes it is now offered as named, whatever the search finds.
+// Pi 1.5.2 (core/package-manager.js parseSource, utils/git.js parseGitUrl)
+// installs from:
+//   - npm:<name>[@<version>]
+//   - git:<host>/<path>[@<ref>], git:git@<host>:<path>[@<ref>], git:<URL>,
+//     and hosted-git-info's git:<owner>/<repo> and git:github:<owner>/<repo>
+//   - an https://, http://, ssh:// or git:// address of a repository
+// and reads anything else as a folder. As the other searches do, magpie
+// also takes what Pi would read as a folder but is plainly a package: a
+// scoped name, git@<host>:<path>, <host.tld>/<owner>/<repo>, GitHub's
+// <owner>/<repo>, a package's page on npmjs.com, a repository's page on
+// GitHub (…/tree/<ref>, #readme), and a bare name the registry has with
+// Pi's keyword (a bare word is a search first: "web" is a package too).
+// What it installs is always one of Pi's own forms. A folder on this
+// computer isn't offered: the market installs what can be fetched.
+
+var (
+	// piPinRe is an npm version or range, and piRefRe a git ref: never
+	// one that starts with "-", which git or npm would read as a flag
+	piPinRe = lazyre.New(`^[A-Za-z0-9._^~<>=*+][A-Za-z0-9._^~<>=*+-]*$`)
+	piRefRe = lazyre.New(`^[A-Za-z0-9._+][A-Za-z0-9._+-]*$`)
+	// piHostRe is a git host's name, and piPartRe one part of a path
+	piHostRe = lazyre.New(`^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$`)
+	piPartRe = lazyre.New(`^[A-Za-z0-9._][A-Za-z0-9._~-]*$`)
+)
+
+// piSourceOK says whether s is an npm or git source in one of Pi's own
+// forms that InstallPiPackage may hand to pi install.
+func piSourceOK(s string) bool {
+	if s == "" || strings.HasPrefix(s, "-") || strings.ContainsAny(s, "\\?#%") ||
+		strings.ContainsFunc(s, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) {
+		return false
+	}
+	switch piKind(s) {
+	case "npm":
+		name, pin := piPackageName(s)
+		return piNameRe.MatchString(name) && (pin == "" || piPinRe.MatchString(pin)) &&
+			!strings.HasSuffix(s, "@") // npm:x@ names no version
+	case "git":
+		rest := strings.TrimPrefix(s, "git:")
+		if rest == "" || strings.HasPrefix(rest, "-") {
+			return false
+		}
+		if i := strings.LastIndex(rest, "@"); i > 0 && !strings.Contains(rest[i:], "/") && !strings.Contains(rest[i:], ":") {
+			if !piRefRe.MatchString(rest[i+1:]) {
+				return false
+			}
+		}
+		host, p := piGitPlace(s)
+		parts := strings.Split(p, "/")
+		if !piHostRe.MatchString(host) || len(parts) < 2 {
+			return false
+		}
+		for _, x := range parts {
+			if x == "." || x == ".." || !piPartRe.MatchString(x) {
+				return false
+			}
+		}
+		// Pi takes a host without git: only with a scheme, and a shorthand
+		// host only with git: (parseGitUrl)
+		return strings.HasPrefix(s, "git:") || strings.Contains(s, "://")
+	}
+	return false
+}
+
+// piHosted is hosted-git-info's shorthands as the hosts they name, so a
+// package is one identity however it was typed.
+var piHosted = map[string]string{"github": "github.com", "gitlab": "gitlab.com", "bitbucket": "bitbucket.org"}
+
+// piSourceFor is the source a search names, in Pi's own form, or "" when
+// it names none; bare: a name alone, which is offered only if the
+// registry has it with Pi's keyword.
+func piSourceFor(q string) (src string, bare bool) {
+	q = strings.TrimSpace(q)
+	low := strings.ToLower(q)
+	plain := strings.TrimPrefix(strings.TrimPrefix(strings.TrimPrefix(low, "https://"), "http://"), "www.")
+	switch {
+	case q == "":
+		return "", false
+	case strings.HasPrefix(low, "npm:"):
+		src = "npm:" + strings.TrimSpace(q[4:])
+	case strings.HasPrefix(plain, "npmjs.com/package/"), strings.HasPrefix(plain, "npmjs.org/package/"):
+		src = piNPMPage(q[strings.Index(low, "/package/")+len("/package/"):])
+	case strings.HasPrefix(low, "git:"):
+		src = "git:" + piShorthand(strings.TrimSpace(q[4:]))
+	case strings.HasPrefix(low, "https://"), strings.HasPrefix(low, "http://"), strings.HasPrefix(low, "ssh://"), strings.HasPrefix(low, "git://"):
+		src = piRepoPage(q)
+	case strings.HasPrefix(q, "git@"):
+		src = "git:" + q
+	case strings.HasPrefix(q, "@"):
+		src = "npm:" + q
+	case strings.Contains(q, "/"):
+		if host, _, _ := strings.Cut(q, "/"); strings.Contains(host, ".") {
+			src = "git:" + q
+		} else if strings.Count(q, "/") == 1 {
+			src = "git:github.com/" + q
+		}
+	default:
+		src, bare = "npm:"+q, true
+	}
+	if !piSourceOK(src) {
+		return "", false
+	}
+	return src, bare
+}
+
+// piShorthand is git:'s text with a hosted shorthand (github:o/r, o/r)
+// written out as its host.
+func piShorthand(s string) string {
+	if k, rest, ok := strings.Cut(s, ":"); ok && piHosted[strings.ToLower(k)] != "" {
+		return piHosted[strings.ToLower(k)] + "/" + rest
+	}
+	if host, _, ok := strings.Cut(s, "/"); ok && !strings.Contains(host, ".") && !strings.Contains(host, ":") && !strings.Contains(host, "@") && strings.Count(s, "/") == 1 {
+		return "github.com/" + s
+	}
+	return s
+}
+
+// piNPMPage is npm's page of a package (…/package/<name>[/v/<version>])
+// as the package.
+func piNPMPage(rest string) string {
+	rest, _, _ = strings.Cut(rest, "?")
+	rest, _, _ = strings.Cut(rest, "#")
+	parts := strings.Split(strings.Trim(rest, "/"), "/")
+	n := 1
+	if strings.HasPrefix(parts[0], "@") {
+		n = 2
+	}
+	if len(parts) < n {
+		return ""
+	}
+	name := strings.Join(parts[:n], "/")
+	if len(parts) >= n+2 && parts[n] == "v" {
+		return "npm:" + name + "@" + parts[n+1]
+	}
+	return "npm:" + name
+}
+
+// piRepoPage is a repository's address as Pi takes it: a page of one on
+// GitHub, GitLab or Bitbucket as the repository (…/tree/<ref> as its ref,
+// #readme and what follows the repository gone); any other as it is.
+func piRepoPage(q string) string {
+	u, err := url.Parse(q)
+	if err != nil {
+		return ""
+	}
+	host := strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.")
+	if (u.Scheme != "https" && u.Scheme != "http") || !slices.Contains([]string{"github.com", "gitlab.com", "bitbucket.org"}, host) {
+		return strings.TrimRight(q, "/")
+	}
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	if len(parts) < 2 {
+		return ""
+	}
+	src := "https://" + host + "/" + parts[0] + "/" + strings.TrimSuffix(parts[1], ".git")
+	rest := parts[2:]
+	if len(rest) > 0 && rest[0] == "-" { // GitLab's /-/tree/<ref>
+		rest = rest[1:]
+	}
+	if len(rest) >= 2 && (rest[0] == "tree" || rest[0] == "src") {
+		src += "@" + rest[1]
+	}
+	return src
+}
+
+// piLatest is the registry's latest of an npm package: the registry in
+// use first, then npm's own, as the search asks them.
+func piLatest(name string) (piListed, []string, error) {
+	var doc struct {
+		Name        string          `json:"name"`
+		Version     string          `json:"version"`
+		Description string          `json:"description"`
+		Keywords    []string        `json:"keywords"`
+		Homepage    string          `json:"homepage"`
+		Repository  json.RawMessage `json:"repository"`
+		NPMUser     struct {
+			Name string `json:"name"`
+		} `json:"_npmUser"`
+	}
+	path := "/" + url.PathEscape(name) + "/latest"
+	npm := strings.TrimSuffix(piNPMURL, "/-/v1/search")
+	err := errors.New("no registry")
+	if r := strings.TrimRight(piRegistry(), "/"); r != "" && r != npm {
+		err = getJSON(r+path, &doc)
+	}
+	if err != nil {
+		if err = getJSON(npm+path, &doc); err != nil {
+			return piListed{}, nil, err
+		}
+	}
+	if doc.Name != name {
+		return piListed{}, nil, fmt.Errorf("the registry answered %q for %s", doc.Name, name)
+	}
+	repo := ""
+	if json.Unmarshal(doc.Repository, &repo) != nil {
+		var r struct{ URL string }
+		json.Unmarshal(doc.Repository, &r)
+		repo = r.URL
+	}
+	d := strings.TrimSpace(doc.Description)
+	if r := []rune(d); len(r) > 280 {
+		d = strings.TrimSpace(string(r[:277])) + "…"
+	}
+	return piListed{Name: doc.Name, Version: doc.Version, Description: d, Publisher: doc.NPMUser.Name,
+		Repository: repo, Homepage: doc.Homepage}, doc.Keywords, nil
+}
+
+// PiDirectAt is the package a search names outright, to install as named,
+// when it's one Pi can install and none of what was found is it; nil
+// otherwise.
+func PiDirectAt(q string, found []PiMarketPackage) *PiMarketPackage {
+	src, bare := piSourceFor(q)
+	if src == "" {
+		return nil
+	}
+	id := piSourceID(src)
+	name, pin := piPackageName(src)
+	if slices.ContainsFunc(found, func(m PiMarketPackage) bool { return m.Source == src || pin == "" && m.ID == id }) {
+		return nil
+	}
+	if piKind(src) == "npm" {
+		got, kw, err := piLatest(name)
+		if bare && (err != nil || !slices.Contains(kw, "pi-package")) {
+			return nil
+		}
+		if err != nil {
+			got = piListed{Name: name}
+		}
+		m := piMarketOf(got)
+		m.Source = src
+		if pin != "" {
+			m.Version = pin
+		}
+		return &m
+	}
+	host, p := piGitPlace(src)
+	m := PiMarketPackage{Source: src, Name: name, Kind: "git", ID: id, Publisher: strings.TrimPrefix(strings.TrimPrefix(src, "git:"), "https://")}
+	if !strings.HasPrefix(src, "http://") && !strings.HasPrefix(src, "ssh://") && !strings.HasPrefix(src, "git://") && !strings.Contains(src, "git@") {
+		m.Repo = "https://" + host + "/" + p
+		if strings.EqualFold(host, "github.com") {
+			m.Icon = gh(strings.Split(p, "/")[0])
+		}
+	}
+	return &m
 }

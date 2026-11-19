@@ -124,6 +124,9 @@ type marketJSON struct {
 	// Custom is a server to add by hand, for a search that is an address
 	// nothing listed is at
 	Custom *library.Custom `json:"custom,omitempty"`
+	// Direct is the Pi package a search names outright (an npm name, npm:,
+	// a git address), to install as named when nothing listed is it
+	Direct *library.PiMarketPackage `json:"direct,omitempty"`
 	// Failed is the source the search couldn't reach, and Cause why; the
 	// items are then what the others found (#1589)
 	Failed string `json:"failed,omitempty"`
@@ -222,8 +225,11 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 		writeJSON(rw, marketOf(list, err))
 	})
 	mux.HandleFunc("GET /api/library/market/pi", func(rw http.ResponseWriter, r *http.Request) {
-		list, err := library.MarketPiPackages(r.URL.Query().Get("q"))
-		writeJSON(rw, marketOf(list, err))
+		q := r.URL.Query().Get("q")
+		list, err := library.MarketPiPackages(q)
+		m := marketOf(list, err)
+		m.Direct = library.PiDirectAt(q, list)
+		writeJSON(rw, m)
 	})
 	mux.HandleFunc("POST /api/library/market/about", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct{ IDs []string }

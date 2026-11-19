@@ -8892,10 +8892,14 @@ magpie.plugin("library", (ctx) => {
       // a search that is an address nothing listed is at: the server
       // there, to add by hand
       m.custom = r.custom || null;
+      // a search that names a Pi package outright (eachg0 on X): it,
+      // to install as named
+      m.direct = r.direct || null;
     } catch (e) {
       if (seq !== m.seq) return;
       m.items = m.items || [];
       m.custom = null;
+      m.direct = null;
       m.failed = null;
       m.error = e.message;
     }
@@ -8939,7 +8943,7 @@ magpie.plugin("library", (ctx) => {
     const inp = el("input");
     inp.type = "search";
     inp.dataset.lib = "market-" + kind;
-    inp.placeholder = kind === "mcp" ? t("Search MCP servers — GitHub, Postgres, Figma…") : kind === "pi" ? t("Search Pi packages on npm — mcp, web, subagents…") : t("Search skills on skills.sh — react, pdf, testing…");
+    inp.placeholder = kind === "mcp" ? t("Search MCP servers — GitHub, Postgres, Figma…") : kind === "pi" ? t("Search Pi packages on npm, or enter a package or git URL…") : t("Search skills on skills.sh — react, pdf, testing…");
     inp.spellcheck = false;
     inp.autocomplete = "off";
     inp.value = m.q;
@@ -8997,6 +9001,7 @@ magpie.plugin("library", (ctx) => {
         : t("skills.sh's search didn't answer ({error}), so these are only the matches among magpie's picks and the most installed skills.", { error: m.failed.cause })));
     } else if (m.error) grid.append(el("div", "mk-msg err", m.error));
     if (kind === "mcp" && q && m.custom) grid.append(customAt(q, m.custom, m.items.length));
+    else if (kind === "pi" && q && m.direct) grid.append(piCard(m.direct));
     else if (!m.items.length && !m.error) {
       grid.append(el("div", "mk-msg", q ? t("Nothing matches “{q}”.", { q }) : t("Nothing to show.")));
       return;
@@ -9576,10 +9581,11 @@ magpie.plugin("library", (ctx) => {
   // A package from Pi's market: who has it, or Install into a Pi (picked
   // when there are several). Pi itself installs it.
   const piLive = () => (piView?.pis || []).filter((p) => !p.asleep && !p.err && !isHidden({ id: p.id }));
-  const piHas = (x) => piLive().filter((p) => (p.packages || []).some((k) => k.kind === "npm" && k.name === x.name));
+  const piSame = (k, x) => k.id && x.id ? k.id === x.id : k.kind === "npm" && k.name === x.name;
+  const piHas = (x) => piLive().filter((p) => (p.packages || []).some((k) => piSame(k, x)));
   function piCard(x) {
     const has = piHas(x);
-    const c = el("div", "mk-card" + (has.length ? " have" : ""));
+    const c = el("div", "mk-card" + (has.length ? " have" : "") + (x === market.pi.direct ? " mk-direct" : ""));
     c.dataset.id = x.source;
     const top = el("div", "mk-top");
     const who = el("div", "mk-who");
@@ -9600,7 +9606,8 @@ magpie.plugin("library", (ctx) => {
       n.title = t("{n} downloads last month", { n: x.downloads.toLocaleString(intlLang()) });
       foot.append(n);
     }
-    foot.append(extLink(x.repo || x.npm, x.repo ? t("Source") : "npm"), el("span", "grow"));
+    if (x.repo || x.npm) foot.append(extLink(x.repo || x.npm, x.repo ? t("Source") : "npm"));
+    foot.append(el("span", "grow"));
     const live = piLive();
     const want = live.filter((p) => !has.includes(p));
     if (has.length && !want.length) {

@@ -93,6 +93,9 @@ type PiPackage struct {
 	Name   string `json:"name"`
 	// Kind is npm, git or local
 	Kind string `json:"kind"`
+	// ID is the package however its source pins it (piSourceID), for an
+	// npm or git one: what the market's cards are matched by
+	ID string `json:"id,omitempty"`
 	// Pin is the version or ref the source names, if any
 	Pin string `json:"pin,omitempty"`
 	On  bool   `json:"on"`
@@ -616,6 +619,7 @@ func piPackageOf(r json.RawMessage) (PiPackage, bool) {
 	pk.Source = s
 	pk.Name, pk.Pin = piPackageName(s)
 	pk.Kind = piKind(s)
+	pk.ID = piSourceID(s)
 	return pk, true
 }
 
@@ -664,6 +668,15 @@ func piGitPlace(s string) (host, p string) {
 // piIdentity is getPackageIdentity: one package however its source pins
 // it, so it isn't written twice.
 func (p piPlace) piIdentity(s string) string {
+	if id := piSourceID(s); id != "" {
+		return id
+	}
+	return "local:" + p.resolve(s)
+}
+
+// piSourceID is piIdentity for a package fetched from npm or git, the
+// same in every Pi; "" for a local one, which is a folder of one Pi's.
+func piSourceID(s string) string {
 	switch piKind(s) {
 	case "npm":
 		n, _ := piPackageName(s)
@@ -672,7 +685,7 @@ func (p piPlace) piIdentity(s string) string {
 		h, gp := piGitPlace(s)
 		return "git:" + strings.ToLower(h) + "/" + gp
 	}
-	return "local:" + p.resolve(s)
+	return ""
 }
 
 // installed says whether Pi has pk on disk, and its version there.

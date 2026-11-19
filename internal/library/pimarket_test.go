@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -275,7 +276,12 @@ func TestPiInstallAndRemove(t *testing.T) {
 	if _, err := InstallPiPackage("pi", "npm:@scope/pi-foo"); err == nil || !strings.Contains(err.Error(), "already") {
 		t.Errorf("installed twice: %v", err)
 	}
-	for _, bad := range []string{"npm:-g", "npm:--prefix=/x", "git:github.com/a/b", "pi-foo", "npm:../x", "npm:a b"} {
+	if _, err := InstallPiPackage("pi", "https://github.com/a/b@v1"); err == nil || !strings.Contains(err.Error(), "already") {
+		t.Errorf("a git package the Pi has under another ref installed again: %v", err)
+	}
+	for _, bad := range []string{"npm:-g", "npm:--prefix=/x", "pi-foo", "npm:../x", "npm:a b", "npm:pi-foo@", "npm:pi-foo@-g",
+		"github.com/a/b", "./pkg", "/abs/pkg", "git:github.com/a", "git:github.com/a/../../x", "git:github.com/a/b@-c",
+		"git:-c/a/b", "https://github.com/a/b?x=1", "git:github.com/a/b c", "https://evil..com/a/b", `git:github.com\a\b`} {
 		if _, err := InstallPiPackage("pi", bad); err == nil {
 			t.Errorf("%q installed", bad)
 		}
@@ -432,5 +438,190 @@ func TestPiSearchFindsByNameOnNPMMirror(t *testing.T) {
 				t.Errorf("pi-rename = %+v", p)
 			}
 		}
+	}
+}
+
+// eachg0 on X: the skills and MCP searches take a package or repository
+// named outright, and Pi's only searched. Each form `pi install` takes (Pi
+// 1.5.2's parseSource and parseGitUrl), and each that Pi would read as a
+// folder but is plainly a package, is the source Pi installs; a folder,
+// a flag, or a path that climbs out isn't one.
+func TestPiSourceFor(t *testing.T) {
+	for _, c := range []struct {
+		q, src string
+		bare   bool
+	}{
+		{"pi-rename", "npm:pi-rename", true},
+		{"  pi-rename ", "npm:pi-rename", true},
+		{"pi-rename@1.2.0", "npm:pi-rename@1.2.0", true},
+		{"npm:pi-rename", "npm:pi-rename", false},
+		{"NPM:pi-rename@^1.0.0", "npm:pi-rename@^1.0.0", false},
+		{"@scope/pi-tools", "npm:@scope/pi-tools", false},
+		{"npm:@scope/pi-tools@1.0.0", "npm:@scope/pi-tools@1.0.0", false},
+		{"https://www.npmjs.com/package/pi-rename", "npm:pi-rename", false},
+		{"https://www.npmjs.com/package/@scope/pi-tools/v/1.0.0", "npm:@scope/pi-tools@1.0.0", false},
+		{"npmjs.com/package/pi-rename?activeTab=readme", "npm:pi-rename", false},
+		{"git:github.com/example/pi-tools@v1", "git:github.com/example/pi-tools@v1", false},
+		{"git:git@github.com:example/pi-tools", "git:git@github.com:example/pi-tools", false},
+		{"git:https://gitlab.com/g/sub/pi-tools", "git:https://gitlab.com/g/sub/pi-tools", false},
+		{"git:example/pi-tools", "git:github.com/example/pi-tools", false},
+		{"git:github:example/pi-tools", "git:github.com/example/pi-tools", false},
+		{"git:gitlab:example/pi-tools", "git:gitlab.com/example/pi-tools", false},
+		{"https://github.com/ShaneLevs/pi-rename", "https://github.com/ShaneLevs/pi-rename", false},
+		{"https://github.com/ShaneLevs/pi-rename#readme", "https://github.com/ShaneLevs/pi-rename", false},
+		{"https://github.com/ShaneLevs/pi-rename.git", "https://github.com/ShaneLevs/pi-rename", false},
+		{"https://github.com/ShaneLevs/pi-rename/tree/v1.2.0/src", "https://github.com/ShaneLevs/pi-rename@v1.2.0", false},
+		{"https://gitlab.com/g/pi-tools/-/tree/main", "https://gitlab.com/g/pi-tools@main", false},
+		{"https://git.example.org/team/pi-tools.git", "https://git.example.org/team/pi-tools.git", false},
+		{"ssh://git@git.example.org/team/pi-tools", "ssh://git@git.example.org/team/pi-tools", false},
+		{"git@github.com:example/pi-tools.git", "git:git@github.com:example/pi-tools.git", false},
+		{"github.com/example/pi-tools", "git:github.com/example/pi-tools", false},
+		{"example/pi-tools", "git:github.com/example/pi-tools", false},
+		// a search, or nothing Pi installs from the market
+		{"", "", false},
+		{"web search", "", false},
+		{"-g", "", false},
+		{"--prefix=/x", "", false},
+		{"./pi-tools", "", false},
+		{"/Users/u/pi-tools", "", false},
+		{"~/pi-tools", "", false},
+		{"a/b/c", "", false},
+		{"Pi-Rename", "", false},
+		{"npm:", "", false},
+		{"npm:-g", "", false},
+		{"git:github.com/a/../../etc", "", false},
+		{"git:github.com/a/b@--upload-pack=x", "", false},
+		{"https://github.com/a", "", false},
+		{"https://example.com/a/b?x=1", "", false},
+	} {
+		src, bare := piSourceFor(c.q)
+		if src != c.src || bare != c.bare {
+			t.Errorf("%q: %q bare %v, want %q bare %v", c.q, src, bare, c.src, c.bare)
+		}
+	}
+}
+
+// piRegistryFake is a registry with only the packages given, by their
+// latest's bytes; npm's own and its search are down. The count is of the
+// latest's asked.
+func piRegistryFake(t *testing.T, latest map[string][]byte) *atomic.Int32 {
+	t.Helper()
+	_, _, down := piNPM(t, nil, nil)
+	down.Store(true)
+	asked := &atomic.Int32{}
+	reg := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/-/v1/search" {
+			fmt.Fprint(w, `{"objects":[],"total":0}`)
+			return
+		}
+		asked.Add(1)
+		name, ok := strings.CutSuffix(strings.TrimPrefix(r.URL.EscapedPath(), "/"), "/latest")
+		if n, err := url.PathUnescape(name); err == nil && ok {
+			if b := latest[n]; b != nil {
+				w.Write(b)
+				return
+			}
+		}
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, `{"error":"[NOT_FOUND] %s not found"}`, name)
+	}))
+	t.Cleanup(reg.Close)
+	piRegistry = func() string { return reg.URL }
+	return asked
+}
+
+// eachg0 found pi-rename elsewhere and typed it: whatever the search finds
+// (npmmirror's here finds nothing), it is offered as the registry has it.
+// A bare word is offered only when the registry has it with Pi's keyword,
+// so "web" (a package without it) stays a search; one named with npm: or a
+// scope is offered as named; one the search found isn't offered twice. The
+// latest's bytes are npmmirror's own (2026-11-19).
+func TestPiDirectAt(t *testing.T) {
+	piCacheHere(t)
+	real, err := os.ReadFile(filepath.Join("testdata", "npmmirror", "pi-rename-latest.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	asked := piRegistryFake(t, map[string][]byte{
+		"pi-rename":       real,
+		"web":             []byte(`{"name":"web","version":"0.0.2","description":"A web thing","keywords":["http"]}`),
+		"@scope/pi-tools": []byte(`{"name":"@scope/pi-tools","version":"2.0.0","description":"Tools","repository":"git+https://github.com/scope/pi-tools.git","_npmUser":{"name":"sc"}}`),
+	})
+	list, _ := MarketPiPackages("pi-rename")
+	if slices.Contains(piNames(list), "pi-rename") {
+		t.Fatalf("the search found it: %v", piNames(list))
+	}
+	d := PiDirectAt("pi-rename", list)
+	if d == nil {
+		t.Fatal("pi-rename, named outright, isn't offered")
+	}
+	if d.Source != "npm:pi-rename" || d.Name != "pi-rename" || d.Version != "1.2.0" || d.Publisher != "shanelevs" ||
+		d.Kind != "npm" || d.ID != "npm:pi-rename" || d.Repo != "https://github.com/ShaneLevs/pi-rename" || !strings.HasPrefix(d.Description, "Pi coding agent extension") {
+		t.Errorf("pi-rename = %+v", d)
+	}
+	if d := PiDirectAt("pi-rename@1.1.0", nil); d == nil || d.Source != "npm:pi-rename@1.1.0" || d.Version != "1.1.0" {
+		t.Errorf("a pinned pi-rename = %+v", d)
+	}
+	for _, q := range []string{"web", "pi-nothing", "web search"} {
+		if d := PiDirectAt(q, nil); d != nil {
+			t.Errorf("%q offered as a package: %+v", q, d)
+		}
+	}
+	if d := PiDirectAt("npm:web", nil); d == nil || d.Source != "npm:web" {
+		t.Errorf("npm:web, named with npm:, = %+v", d)
+	}
+	if d := PiDirectAt("@scope/pi-tools", nil); d == nil || d.Source != "npm:@scope/pi-tools" || d.Version != "2.0.0" || d.Publisher != "sc" || d.Repo != "https://github.com/scope/pi-tools" {
+		t.Errorf("@scope/pi-tools = %+v", d)
+	}
+	if d := PiDirectAt("npm:@scope/pi-gone@1.0.0", nil); d == nil || d.Source != "npm:@scope/pi-gone@1.0.0" || d.Name != "@scope/pi-gone" || d.Version != "1.0.0" {
+		t.Errorf("one the registry doesn't have, named with npm: = %+v", d)
+	}
+	found := []PiMarketPackage{piMarketOf(piListed{Name: "pi-rename"})}
+	if d := PiDirectAt("pi-rename", found); d != nil {
+		t.Errorf("offered beside the search's own card: %+v", d)
+	}
+	if d := PiDirectAt("pi-rename@1.1.0", found); d == nil {
+		t.Error("a pin the search's card doesn't name isn't offered")
+	}
+
+	n := asked.Load()
+	d = PiDirectAt("https://github.com/ShaneLevs/pi-rename#readme", nil)
+	if d == nil || d.Source != "https://github.com/ShaneLevs/pi-rename" || d.Kind != "git" || d.ID != "git:github.com/ShaneLevs/pi-rename" ||
+		d.Name != "pi-rename" || d.Repo != "https://github.com/ShaneLevs/pi-rename" || d.Icon != gh("ShaneLevs") || d.Publisher != "github.com/ShaneLevs/pi-rename" {
+		t.Errorf("a GitHub page = %+v", d)
+	}
+	if d := PiDirectAt("git:git@git.example.org:team/pi-tools@v2", nil); d == nil || d.Source != "git:git@git.example.org:team/pi-tools@v2" || d.ID != "git:git.example.org/team/pi-tools" || d.Repo != "" {
+		t.Errorf("an ssh address = %+v", d)
+	}
+	if asked.Load() != n {
+		t.Error("the registry was asked about a git package")
+	}
+}
+
+// One the search named is installed as named: a git source by pi install
+// itself, the WSL Pi's by its settings.json entry.
+func TestPiInstallNamedOutright(t *testing.T) {
+	here, wsl := piTwo(t)
+	runs := piFake(t)
+	write(t, filepath.Join(here, "settings.json"), `{}`)
+	write(t, filepath.Join(wsl, "settings.json"), `{}`)
+	for _, q := range []string{"https://github.com/ShaneLevs/pi-rename/tree/v1.2.0", "npm:@scope/pi-tools@2.0.0"} {
+		src, _ := piSourceFor(q)
+		if _, err := InstallPiPackage("pi", src); err != nil {
+			t.Fatalf("%s: %v", src, err)
+		}
+		if _, err := InstallPiPackage("pi@wsl:Ubuntu", src); err != nil {
+			t.Fatalf("WSL %s: %v", src, err)
+		}
+	}
+	if len(*runs) != 2 || (*runs)[0][3] != "https://github.com/ShaneLevs/pi-rename@v1.2.0" || (*runs)[1][3] != "npm:@scope/pi-tools@2.0.0" {
+		t.Errorf("runs %q", *runs)
+	}
+	if got := piSettingsPackages(t, wsl); len(got) != 2 || got[0] != "https://github.com/ShaneLevs/pi-rename@v1.2.0" || got[1] != "npm:@scope/pi-tools@2.0.0" {
+		t.Errorf("WSL packages = %q", got)
+	}
+	v := ReadPiExtensions()
+	if p := piOf(t, v, "pi"); len(p.Packages) != 2 || p.Packages[0].ID != "git:github.com/ShaneLevs/pi-rename" || p.Packages[1].ID != "npm:@scope/pi-tools" {
+		t.Errorf("packages = %+v", p.Packages)
 	}
 }
