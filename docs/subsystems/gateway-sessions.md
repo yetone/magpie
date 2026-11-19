@@ -295,6 +295,18 @@ call magpie had routed was counted again as a local session's whatever
 provider id ZCode wrote beside it (nori_tsukiji on X). Verification:
 `TestZCodeCallsPairWithTheGatewaysRecords`.
 
+Pairing needs the tokens and end time to agree, so a routed call they don't
+(a try the gateway and ZCode count differently) was still listed twice. A
+call whose provider is the gateway is left out of ZCode's calls before any
+pairing: the id magpie writes (`magpie`), and any provider the user added by
+hand whose base URL in `config.json` or `provider_config.json` is this
+machine (loopback, `localhost`, one of its addresses) at the gateway's port
+(`zcodeGateway`, `gatewayBase`; jiangshangmuyun on X: "new-provider" at
+`127.0.0.1:3425`, one call listed as "new-provider · Local session" among
+the gateway's rows). It reads the configuration as it is now, as
+`workbuddyGateway` does. Verification: `TestZCodeHandAddedGatewayProvider`,
+`TestGatewayBase`.
+
 The Claude subscription bridge's own Claude Code runs save their sessions
 in a Claude folder the readers list (the user's own, or a saved account's
 under `claude-accounts`), often in the caller's project. They aren't the

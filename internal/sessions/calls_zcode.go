@@ -24,6 +24,8 @@ import (
 // (ocGatewayProvider): ZCode records the provider it was told to use, and
 // the route magpie writes says "magpie", so unlike dsh's this one is a
 // provider id magpie itself chose and can be trusted to mean the gateway.
+// A provider the user added by hand at the gateway's address is the gateway
+// too, by its address (zcodeGateway, calls_zcode_gateway.go).
 
 // zcCallList is the last listing of ZCode's database, kept while the
 // database and its WAL are as they were. Its lock is the one ocCallList
@@ -108,7 +110,7 @@ func readZCodeCalls(f file) (*callFile, bool) {
 	}
 	for i, b := range msgs {
 		var m ocMessage
-		if json.Unmarshal(b, &m) != nil || m.Role != "assistant" || ocGatewayProvider(m.ProviderID) || copies[i] {
+		if json.Unmarshal(b, &m) != nil || m.Role != "assistant" || zcodeGateway(m.ProviderID) || copies[i] {
 			continue
 		}
 		if c, ok := ocCall(st, m, info.Directory); ok {

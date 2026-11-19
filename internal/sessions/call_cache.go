@@ -68,6 +68,8 @@ const callCacheVersion = "calls-v15"
 // (gemini-4-argon-d) is its model's (GeminiDeployment).
 // zcode 3: a call names its session as a request does, without the sess_
 // prefix (zcodeBareID), so the gateway's record of it pairs with it.
+// zcode 4: a call to a provider the user added at the gateway's address
+// is the gateway's, and left out (zcodeGateway).
 // agy 1: a call names the model its conversation's database names for its
 // step (agyStepModels).
 // pi 1, raft 1, cindy 2: a pi-subagents subagent's calls are its own
@@ -75,7 +77,7 @@ const callCacheVersion = "calls-v15"
 // lead's (piSubagentsRead).
 // agy 2, antigravity 2: a call carries its time to the first token and
 // how long it took, from its step's row (stepTimesOf).
-var callParseVersions = map[string]int{"agy": 2, "antigravity": 2, "cindy": 2, "codex": 3, "pi": 1, "raft": 1, "zcode": 3}
+var callParseVersions = map[string]int{"agy": 2, "antigravity": 2, "cindy": 2, "codex": 3, "pi": 1, "raft": 1, "zcode": 4}
 
 // CallCacheVersion is callCacheVersion and callParseVersions, for a cache
 // of what is made of the calls (usage's requests-v1.bin and heatmap): a
