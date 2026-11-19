@@ -3348,13 +3348,17 @@ func geminiTrialBase(l string) (string, bool) {
 // gemini-pro-orchestrator-g1-pro (`agy models` on a Google AI Pro account,
 // agy 1.5.9, in the agy-cli plugin's test/usage.mjs; mu33410 on X: agy's
 // Orchestrator had no cost) and Orchestrator (Carbon)
-// gemini-pro-orchestrator, as the app did before Argon. Only these ids: no
-// other name is read as one of them.
+// gemini-pro-orchestrator, as the app did before Argon. Orchestrator
+// (Neon) plans with Gemini 4 Neon (the same docs page, read 2026-11-19);
+// its id is gemini-pro-orchestrator-neon, beside -argon and -g1-pro in
+// the agy 1.5.10 binary's strings (mu33410 on X: Neon had no cost in agy).
+// Only these ids: no other name is read as one of them.
 var antigravityRoles = map[string]string{
 	"gemini-pro-orchestrator":        "gemini-4-carbon",
 	"gemini-pro-orchestrator-carbon": "gemini-4-carbon",
 	"gemini-pro-orchestrator-argon":  "gemini-4-argon",
 	"gemini-pro-orchestrator-g1-pro": "gemini-4-argon",
+	"gemini-pro-orchestrator-neon":   "gemini-4-neon",
 	"gemini-flash-worker-agy":        "gemini-4-hydrogen",
 }
 

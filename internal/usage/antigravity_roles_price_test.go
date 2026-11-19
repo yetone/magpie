@@ -26,7 +26,8 @@ func TestAntigravityOrchestratorCallsPriced(t *testing.T) {
 	os.WriteFile(catalog.CachePath(), []byte(`{"google":{"id":"google","models":{
 	    "gemini-4-argon":{"id":"gemini-4-argon","cost":{"input":2,"output":10,"cache_read":0.1}},
 	    "gemini-4-carbon":{"id":"gemini-4-carbon","cost":{"input":2.5,"output":12,"cache_read":0.25}},
-	    "gemini-4-hydrogen":{"id":"gemini-4-hydrogen","cost":{"input":1.5,"output":7.5,"cache_read":0.075}}}}}`), 0o644)
+	    "gemini-4-hydrogen":{"id":"gemini-4-hydrogen","cost":{"input":1.5,"output":7.5,"cache_read":0.075}},
+	    "gemini-4-neon":{"id":"gemini-4-neon","cost":{"input":3,"output":15,"cache_read":0.15}}}}}`), 0o644)
 	catalog.Reset()
 	t.Cleanup(catalog.Reset)
 
@@ -40,6 +41,8 @@ func TestAntigravityOrchestratorCallsPriced(t *testing.T) {
 			{Time: now.Add(-3 * time.Hour), Agent: "antigravity", Session: "a2", Model: "gemini-flash-worker-agy", Tokens: tok},
 			// agy's Orchestrator (Argon) (mu33410 on X)
 			{Time: now.Add(-4 * time.Hour), Agent: "agy", Session: "g1", Model: "gemini-pro-orchestrator-g1-pro", Tokens: tok},
+			// agy's Orchestrator (Neon) (mu33410 on X)
+			{Time: now.Add(-5 * time.Hour), Agent: "agy", Session: "g2", Model: "gemini-pro-orchestrator-neon", Tokens: tok},
 		}
 	}
 	t.Cleanup(func() { LogCalls = old })
@@ -50,10 +53,11 @@ func TestAntigravityOrchestratorCallsPriced(t *testing.T) {
 		"gemini-pro-orchestrator-carbon": cost(2.5, 12, 0.25),
 		"gemini-flash-worker-agy":        cost(1.5, 7.5, 0.075),
 		"gemini-pro-orchestrator-g1-pro": cost(2, 10, 0.1),
+		"gemini-pro-orchestrator-neon":   cost(3, 15, 0.15),
 	}
 	near := func(a, b float64) bool { return math.Abs(a-b) < 1e-9 }
 	rows, total, _ := Ledger(Month, Filter{})
-	if len(rows) != 4 {
+	if len(rows) != 5 {
 		t.Fatalf("rows %d", len(rows))
 	}
 	var sum float64
@@ -68,11 +72,12 @@ func TestAntigravityOrchestratorCallsPriced(t *testing.T) {
 	}
 	// the agent's own view
 	_, agent, _ := Ledger(Month, Filter{Agent: "antigravity"})
-	if app := sum - want["gemini-pro-orchestrator-g1-pro"]; agent.Unpriced != 0 || !near(agent.Cost, app) {
+	agyCost := want["gemini-pro-orchestrator-g1-pro"] + want["gemini-pro-orchestrator-neon"]
+	if app := sum - agyCost; agent.Unpriced != 0 || !near(agent.Cost, app) {
 		t.Errorf("antigravity: cost %v unpriced %d, want %v and 0", agent.Cost, agent.Unpriced, app)
 	}
 	_, agy, _ := Ledger(Month, Filter{Agent: "agy"})
-	if g := want["gemini-pro-orchestrator-g1-pro"]; agy.Unpriced != 0 || !near(agy.Cost, g) {
+	if g := agyCost; agy.Unpriced != 0 || !near(agy.Cost, g) {
 		t.Errorf("agy: cost %v unpriced %d, want %v and 0", agy.Cost, agy.Unpriced, g)
 	}
 }
