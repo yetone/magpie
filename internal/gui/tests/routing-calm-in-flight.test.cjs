@@ -4,7 +4,7 @@
 // animation", every wire dotted and still while two accounts answered).
 // Reduced motion is the system's (Windows' "Animation effects" off, which
 // WebView2 reports as prefers-reduced-motion) or Settings' Reduce motion.
-// Nothing moves along a wire then, but the flowing wires fade and come
+// Nothing moves along a wire then (the magpie fades in and out, wings still), but the flowing wires fade and come
 // back, and so does the dot held at the account answering. Once the
 // request is over nothing fades. No backend, the API is faked here.
 const assert = require("node:assert/strict");
@@ -73,6 +73,21 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // two requests at once, one at each account: the reporter's two
         // rows "answering another request…"
         send(route(2, [at(1, false)]), route(3, [at(2, false)]));
+        // the magpie that brings each request is there, still: it fades in
+        // by opacity alone, its wings don't beat, and it fades away again
+        await page.waitForFunction(() => document.querySelector(".rt-sky .rt-flier.calm"));
+        const bird = await page.evaluate(() => {
+          const b = document.querySelector(".rt-sky .rt-flier.calm");
+          const css = (e) => getComputedStyle(e);
+          const rule = [...document.styleSheets].flatMap((sh) => { try { return [...sh.cssRules]; } catch { return []; } }).find((r) => r.name === "rtfade");
+          return { lift: css(b.querySelector(".rt-lift")).animationName, wings: [...b.querySelectorAll(".wing")].map((w) => css(w).animationName),
+            keys: rule ? [...rule.cssRules].map((k) => k.style.cssText) : null };
+        });
+        assert.equal(bird.lift, "rtfade", "the bird fades in");
+        assert.deepEqual(bird.wings, ["none", "none"], "its wings are still");
+        assert(bird.keys && bird.keys.every((k) => /opacity/.test(k) && !/transform/.test(k)), `fade by opacity alone: ${bird.keys}`);
+        await page.waitForFunction(() => document.querySelector(".rt-sky .rt-flier.calm.away"), null, { timeout: 5000 });
+        await page.waitForFunction(() => !document.querySelector(".rt-sky .rt-flier"), null, { timeout: 5000 });
         await page.waitForFunction(() => document.querySelectorAll(".rt-accts li.now").length === 2);
         await page.waitForFunction(() => document.querySelectorAll(".rt-flows path[d]").length >= 2);
         // the wires' dashes stand still: no animation and no offset
@@ -91,8 +106,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const held = () => page.evaluate(() => getComputedStyle(document.querySelector(".rt-sky .pkt.held")).opacity);
         const heldWas = await held();
         await page.waitForFunction((was) => getComputedStyle(document.querySelector(".rt-sky .pkt.held")).opacity !== was, heldWas);
-        // no bird flies with motion reduced
-        assert.equal(await page.locator(".rt-flier").count(), 0);
+        // no bird is left on the stage once it has faded
+        assert.equal(await page.locator(".rt-flier:not(.calm)").count(), 0);
 
         // both are answered: nothing fades any more, the layer is whole
         send(route(2, [at(1, true)]), route(3, [at(2, true)]));

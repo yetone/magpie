@@ -5614,9 +5614,11 @@ function routingPage(part) {
     + "</g></g>";
 
   function bird(kind) {
-    if (still() || !shown()) return null;
+    if (!shown()) return null;
     const g = document.createElementNS(NS, "g");
-    g.setAttribute("class", "rt-flier " + kind);
+    // with motion reduced the magpie doesn't fly or beat its wings: it fades
+    // in where the dot is put and fades out (routing.css .calm)
+    g.setAttribute("class", "rt-flier " + kind + (still() ? " calm" : ""));
     g.innerHTML = FLIER;
     sky.appendChild(g);
     return g;
@@ -5624,8 +5626,10 @@ function routingPage(part) {
   // off it goes, up and away, once it has let go of the dot
   function away(b) {
     if (!b) return;
-    b.classList.add("away");
-    setTimeout(() => b.remove(), 450);
+    // a calm one has been put down, not flown: it stays a while to be seen
+    const wait = b.classList.contains("calm") ? 700 : 0;
+    setTimeout(() => b.classList.add("away"), wait);
+    setTimeout(() => b.remove(), wait + 450);
   }
   function packet() {
     const dot = document.createElementNS(NS, "circle");

@@ -55,6 +55,11 @@
 .rt-flier .wing.far { animation-delay: -.03s; }
 @keyframes rtflap { 0%, 100% { transform: scaleY(1); } 55% { transform: scaleY(-.62) skewX(-8deg); } }
 .rt-flier .rt-lift { animation: rtcome .3s ease-out; transition: transform .45s cubic-bezier(.3, 0, .2, 1), opacity .45s; }
+/* motion reduced: the magpie only fades in and out, wings still (opacity alone) */
+.rt-flier.calm .wing { animation: none; }
+.rt-flier.calm .rt-lift { animation: rtfade .2s cubic-bezier(.23, 1, .32, 1); transition: opacity .25s cubic-bezier(.23, 1, .32, 1); }
+.rt-flier.calm.away .rt-lift { transform: none; opacity: 0; }
+@keyframes rtfade { from { opacity: 0; } }
 .rt-flier.away .rt-lift { transform: translate(14px, -16px) scale(.8); opacity: 0; }
 @keyframes rtcome { from { transform: translate(-6px, -10px) scale(.85); opacity: 0; } }
 .rt-srcs { position: relative; z-index: 1; min-width: 0; display: grid; gap: 10px; }
