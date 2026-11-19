@@ -805,6 +805,30 @@ function fitChartLabels() {
 }
 new ResizeObserver(fitChartLabels).observe($("#view-usage"));
 
+// The allowances' cards come in at different times, each vendor's read
+// and the curves' history apart, and each one drawn grows the page above
+// what's below it (liuzhengdong99 on X: 滑到上面看某张卡片，视图会被拽回下面).
+// The Overview keeps where the reader is on what they read: the card, or
+// the part of the page under the cards, nearest the view's top, found again
+// by its data-key once the cards are drawn anew (keepInView in app.js). At
+// the page's top, while the cards are arranged by hand (unpin in app.js),
+// or on another tab, nothing is kept and the browser's own anchoring is
+// left as it was.
+keepInView($("#view-usage"), () => {
+  const v = $("#view-usage"), pane = $("#usagePane");
+  if (pane.hidden || !pane.offsetParent || usageArranging) return null;
+  // the highest that starts in sight, else the one cut by the view's top
+  const top = v.getBoundingClientRect().top, foot = top + v.clientHeight;
+  let best = null, at = Infinity, cut = null;
+  for (const n of [...$("#subscriptionUsage").children, ...[...pane.children].filter((c) => c.id !== "subscriptionUsage")]) {
+    if (!n.offsetParent) continue;
+    const r = n.getBoundingClientRect();
+    if (r.bottom <= top + 1 || !r.height || r.top >= foot) continue;
+    if (r.top >= top - 0.5) { if (r.top < at) { at = r.top; best = n; } } else if (!cut || r.top > cut.getBoundingClientRect().top) cut = n;
+  }
+  return best || cut;
+}, true);
+
 // The Overview's lists — Agents, Models, Accounts, Gateway keys — each fold
 // away under their heading (#2378: 日常看账号维度较多，都要拉到最底下), and
 // stay folded across a reload (magpie.usageFolded, the folded ones' names).
@@ -5693,6 +5717,46 @@ function cardsShownFor(p) {
 // that ends highest (#860), as tall as what it holds (jen_celeus on X).
 const USAGE_MIN = 260, USAGE_GAP = 7;
 let usagePacked = null, usagePackFrame = 0;
+// usageTall: each card's height as last drawn in full, by its key, kept
+// for the next start (magpie.usageCardTall). A card still
+// waiting on its read or its curve (usageWaiting) is packed and
+// held at least that tall, so the cards come in without the page around
+// them moving (liuzhengdong99 on X: 先按固定高度占位、数据回来再填内容).
+let usageTall = {}, usageTallSave = 0;
+try { usageTall = JSON.parse(localStorage.getItem("magpie.usageCardTall") || "{}") || {}; } catch {}
+for (const k in usageTall) if (!(usageTall[k] > 0)) delete usageTall[k];
+// still to come for a card: an account the gateway is reading yet
+// (X-Magpie-Reading, asked again), or its curve before the history's
+// first answer (quotasReading, quotaHistV in app.js; history that never
+// comes leaves the card as tall as it was)
+function usageWaiting(k) {
+  const subs = (quotas || []).filter((q) => q.provider === k);
+  return quotasReading && subs.some((q) => q.error) || !quotaHistV && quotaRange !== "off" && subs.some((q) => !q.error && q.windows?.length);
+}
+function usageWaits(cards, hs) {
+  const held = cards.map(() => false);
+  let moved = false;
+  cards.forEach((c, i) => {
+    const k = c.dataset.key, was = usageTall[k];
+    if (!k) return;
+    if (usageWaiting(k)) {
+      if (was > hs[i]) { hs[i] = was; held[i] = true; }
+    } else if (was !== Math.ceil(hs[i])) {
+      usageTall[k] = Math.ceil(hs[i]);
+      moved = true;
+    }
+  });
+  if (moved) usageTallKeep();
+  return held;
+}
+function usageTallKeep() {
+  if (!usageTallSave) usageTallSave = setTimeout(() => {
+    usageTallSave = 0;
+    const keys = Object.keys(usageTall);
+    for (const k of keys.slice(0, Math.max(0, keys.length - 200))) delete usageTall[k];
+    try { localStorage.setItem("magpie.usageCardTall", JSON.stringify(usageTall)); } catch {}
+  }, 1000);
+}
 function packUsage() {
   const list = $("#subscriptionUsage");
   if (usagePackFrame) { cancelAnimationFrame(usagePackFrame); usagePackFrame = 0; }
@@ -5716,10 +5780,13 @@ function packUsage() {
     const empty = ends.reduce((s, e) => s + tall - (e - USAGE_GAP), 0) * (width - (n - 1) * USAGE_GAP) / n;
     return { n, at, tall, empty };
   };
+  let held = [];
   const heights = () => {
     for (const c of cards) c.style.minHeight = "";
     fitQuota([...list.querySelectorAll(".quota-windows")]);
-    return foldedHeights(cards, cards.map((c) => c.getBoundingClientRect().height));
+    const hs = cards.map((c) => c.getBoundingClientRect().height);
+    held = usageWaits(cards, hs);
+    return foldedHeights(cards, hs);
   };
   const columns = (n) => { list.style.gridTemplateColumns = `repeat(${n}, minmax(0, 1fr))`; };
   let best;
@@ -5729,7 +5796,11 @@ function packUsage() {
   } else {
     list.classList.remove("packed");
     for (const c of cards) c.style.gridArea = "";
+    // while cards are still to come, the columns they were last seen
+    // whole in ("#" + how many fit): the heights kept are that width's
+    const waits = cards.some((c) => usageWaiting(c.dataset.key)), kept = usageTall["#" + most];
     for (let n = most; n >= Math.max(1, most - 1); n--) {
+      if (waits && kept && n !== kept && kept >= most - 1 && kept <= most) continue;
       columns(n);
       const p = place(n, heights());
       if (!best) best = p;
@@ -5740,13 +5811,17 @@ function packUsage() {
     best = place(best.n, heights());
   }
   usagePacked = { most, keys, n: best.n };
+  if (!held.some(Boolean) && !cards.some((c) => usageWaiting(c.dataset.key)) && usageTall["#" + most] !== best.n) { usageTall["#" + most] = best.n; usageTallKeep(); }
   list.classList.add("packed");
   best.at.forEach(([c, top, h], i) => {
     const area = `${top + 1} / ${c + 1} / span ${Math.max(1, h)} / span 1`;
     if (cards[i].style.gridArea !== area) cards[i].style.gridArea = area;
-    const min = cards[i].dataset.folded ? h + "px" : "";
+    const min = cards[i].dataset.folded || held[i] ? h + "px" : "";
     if (cards[i].style.minHeight !== min) cards[i].style.minHeight = min;
   });
+  // the cards drawn anew or moved to another column: the one being read
+  // stays where it was on the screen
+  followPin($("#view-usage"));
 }
 // foldedHeights: a folded card as tall as the tallest folded one of one
 // account, or whole rows of it, so folded cards line up in a grid; an

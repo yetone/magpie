@@ -1211,6 +1211,14 @@ at least 5em, at 420 wide the long names are shortened while no bar is under
 5em and nothing runs past its card, and wide again the names are whole; in
 Chromium and WebKit, English and Chinese.
 
+`usage-cards-steady.test.cjs` opens Usage › Overview with eight allowance
+cards, most still being read (`X-Magpie-Reading`), wheels down and back up
+to a card in the middle, then lets the reads and the curves' history in
+400ms apart. The card being read must not move a pixel in any frame;
+opened again with the heights known, no card in sight may move. All five
+languages, 1100px and 420px, Chromium and WebKit; the API is faked.
+`MAGPIE_ASSETS` selects older assets for the failing comparison.
+
 `usage-sessions-agents-fit.test.cjs` checks Usage › Sessions with 15 agents
 (#929): the agent filter is a menu button like the model and folder ones, no
 segment per agent; at 860 and 560 wide nothing scrolls sideways and the three
