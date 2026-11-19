@@ -5,7 +5,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	"github.com/yetone/magpie/internal/appdir"
@@ -30,7 +29,14 @@ type Listening struct {
 	Serves  string `json:"serves"`
 	Version string `json:"version"`
 	Started string `json:"started"`
+	// Host is the machine's name, a pod's in Kubernetes: two pods on one
+	// volume (a rolling update) each run magpie as pid 1, so the pid alone
+	// doesn't say the file is this process's
+	Host string `json:"host,omitempty"`
 }
+
+// podName is this machine's (or pod's) name, "" when it can't be read.
+var podName = func() string { h, _ := os.Hostname(); return h }()
 
 // ListeningPath is where the file is.
 func ListeningPath() string { return filepath.Join(appdir.Config(), ListeningFile) }
@@ -44,7 +50,7 @@ func recordListening(addr net.Addr) {
 	if addr == nil {
 		return
 	}
-	b, err := json.Marshal(Listening{Addr: addr.String(), Pid: os.Getpid(), Serves: Serves, Version: Version, Started: processStart.UTC().Format(time.RFC3339)})
+	b, err := json.Marshal(ownListening(addr.String()))
 	if err != nil {
 		return
 	}
@@ -52,19 +58,35 @@ func recordListening(addr net.Addr) {
 	if os.MkdirAll(filepath.Dir(p), 0o700) != nil {
 		return
 	}
-	tmp := p + "." + strconv.Itoa(os.Getpid()) + ".tmp"
-	if os.WriteFile(tmp, b, 0o600) != nil {
+	// a temp file of its own: named by the pid, another pod's magpie, pid
+	// 1 too, wrote the same one meanwhile
+	f, err := os.CreateTemp(filepath.Dir(p), ListeningFile+".*.tmp")
+	if err != nil {
 		return
 	}
-	if os.Rename(tmp, p) != nil {
+	tmp := f.Name()
+	_, werr := f.Write(b)
+	if cerr := f.Close(); werr != nil || cerr != nil || os.Chmod(tmp, 0o600) != nil || os.Rename(tmp, p) != nil {
 		os.Remove(tmp)
 	}
 }
 
+// ownListening is the file's content for this process listening on addr.
+func ownListening(addr string) Listening {
+	return Listening{Addr: addr, Pid: os.Getpid(), Serves: Serves, Version: Version, Started: processStart.UTC().Format(time.RFC3339), Host: podName}
+}
+
+// mine says l was written by this process: its pid, start and machine.
+// One from before Host was written has none, and is judged by the rest.
+func (l Listening) mine() bool {
+	return l.Pid == os.Getpid() && l.Started == processStart.UTC().Format(time.RFC3339) && (l.Host == "" || l.Host == podName)
+}
+
 // forgetListening removes the file when it is this process's: one that took
-// the gateway over (handover.go) has written its own by then.
+// the gateway over (handover.go), or a pod on the same volume, has written
+// its own by then.
 func forgetListening() {
-	if l, ok := ReadListening(); ok && l.Pid == os.Getpid() {
+	if l, ok := ReadListening(); ok && l.mine() {
 		os.Remove(ListeningPath())
 	}
 }

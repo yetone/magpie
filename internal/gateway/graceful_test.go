@@ -178,3 +178,37 @@ func TestDrainEndsAtItsGrace(t *testing.T) {
 		}
 	}
 }
+
+// A rolling update's old pod keeps the connections agents kept alive to
+// it after the Service sends new ones elsewhere, and its end closed each
+// one after its reply with no word of it, so an agent's next request on it
+// went out on a closed connection: a broken pipe, once for each, in a real
+// rollout of three pods. Once draining, every reply says Connection:
+// close, so that next request dials the Service again.
+func TestDrainingRepliesCloseTheirConnection(t *testing.T) {
+	fresh(t)
+	t.Setenv("MAGPIE_ADDR", "127.0.0.1:0")
+	s := New()
+	stop, done := listening(t, s)
+	defer func() { stop(); <-done }()
+	s.lnMu.Lock()
+	addr := s.ln.Addr().String()
+	s.lnMu.Unlock()
+	get := func() *http.Response {
+		t.Helper()
+		r, err := http.Get("http://" + addr + "/v1/models")
+		if err != nil {
+			t.Fatal(err)
+		}
+		io.Copy(io.Discard, r.Body)
+		r.Body.Close()
+		return r
+	}
+	if r := get(); r.Close {
+		t.Fatal("a reply before the drain closed its connection")
+	}
+	s.Drain(time.Minute)
+	if r := get(); !r.Close {
+		t.Fatalf("a draining gateway's reply (%d) kept its connection alive", r.StatusCode)
+	}
+}

@@ -122,3 +122,32 @@ func TestMoveLockOfDeadMagpie(t *testing.T) {
 	}
 	unlock()
 }
+
+// A move's lock written by another pod's magpie on the same volume (a
+// Kubernetes rolling update) names a pid of that pod's namespace, one no
+// process here has: it is held while it is fresh, not taken as a dead
+// magpie's, and a stale one (a quarter of an hour) is taken.
+func TestMoveLockOfAnotherPod(t *testing.T) {
+	claudeHome(t)
+	gone := exec.Command("true")
+	if err := gone.Run(); err != nil {
+		t.Skip(err)
+	}
+	p := migrationsPath() + ".lock"
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte(strconv.Itoa(gone.Process.Pid)+" magpie-7d9f-old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lockMoves(); err == nil {
+		t.Fatal("another pod's lock was taken as a dead magpie's")
+	}
+	old := time.Now().Add(-16 * time.Minute)
+	os.Chtimes(p, old, old)
+	unlock, err := lockMoves()
+	if err != nil {
+		t.Fatalf("a stale lock of another pod: %v", err)
+	}
+	unlock()
+}

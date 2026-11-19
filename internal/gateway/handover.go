@@ -182,12 +182,16 @@ func (s *Server) stopAccepting() {
 }
 
 // closesWhenHandedOff has each reply the gateway gives once it takes no
-// connection (stopAccepting) close its connection, so the agent's next
-// request dials the magpie serving the port after this one rather than
-// waiting on a connection this one's end closes (unreadConns).
+// connection (stopAccepting), or once it drains (a SIGTERM, Drain), close
+// its connection, so the agent's next request dials the magpie serving the
+// port after this one (the Service's next pod) rather than going out on a
+// connection this one's end closes. A rolling update's old pod keeps the
+// connections agents kept alive to it, and its end closed each one after
+// the reply under way, which said nothing of it: the agent's next request
+// on it was refused (a broken pipe), once for each such connection.
 func (s *Server) closesWhenHandedOff(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if s.notAccepting.Load() {
+		if s.notAccepting.Load() || s.draining.Load() {
 			w.Header().Set("Connection", "close")
 		}
 		h.ServeHTTP(w, r)

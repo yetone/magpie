@@ -337,3 +337,60 @@ func TestRenewLockOfDeadHostAndRefusal(t *testing.T) {
 		t.Fatalf("requests went with %v, want the other magpie's token last", auths)
 	}
 }
+
+// Two Kubernetes pods on one volume (a rolling update's old pod and new
+// one) each have pids of their own namespace, so a renewal lock the other
+// pod's host holds names a pid that is no process here. It was taken over
+// as a dead host's, and both pods spent one refresh token. A lock from
+// another host is waited for (up to its age) instead: no exchange is made
+// while it is held, and once the other pod saved its renewal and let go,
+// this one sends that token without spending its own.
+func TestRenewLockOfAnotherPodIsWaitedFor(t *testing.T) {
+	sandbox(t)
+	v := newRaceVendor(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	key := raceAccount(t, ctx, "r1")
+
+	dead := exec.Command(os.Args[0], "-test.run=^$")
+	if err := dead.Run(); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256([]byte(key))
+	lock := AuthPath() + ".renew-" + hex.EncodeToString(sum[:])[:16] + ".lock"
+	held := fmt.Sprintf(`{"pid":%d,"host":"magpie-7d9f-old pid:[4026532001]","at":%d}`, dead.Process.Pid, time.Now().UnixMilli())
+	if err := os.WriteFile(lock, []byte(held), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sent := make(chan error, 1)
+	go func() { sent <- raceSend(ctx, key) }()
+	time.Sleep(1500 * time.Millisecond)
+	if exchanges, _ := v.seen(); len(exchanges) != 0 {
+		t.Fatalf("exchanged %v while another pod's host held the renewal lock", exchanges)
+	}
+	// the other pod's renewal: saved, then the lock let go
+	var all map[string]map[string]any
+	raw, err := os.ReadFile(AuthPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	json.Unmarshal(raw, &all)
+	all[key]["access"], all[key]["refresh"] = "a-other-pod", "r-other-pod"
+	all[key]["expires"] = time.Now().Add(time.Hour).UnixMilli()
+	raw, _ = json.Marshal(all)
+	if err := os.WriteFile(AuthPath(), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	os.Remove(lock)
+	if err := <-sent; err != nil {
+		t.Fatal(err)
+	}
+	Told()
+	exchanges, auths := v.seen()
+	if len(exchanges) != 0 {
+		t.Errorf("exchanged %v: the other pod's renewal was spent again", exchanges)
+	}
+	if len(auths) != 1 || auths[0] != "Bearer a-other-pod" {
+		t.Errorf("requests went with %v, want the other pod's token", auths)
+	}
+}

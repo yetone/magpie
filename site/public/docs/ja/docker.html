@@ -295,7 +295,10 @@ metadata:
 spec:
   replicas: 1
   strategy:
-    type: Recreate   <span class="c"># /config を使う magpie は常に 1 つ</span>
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1         <span class="c"># 新しい Pod を古い Pod の横で起動</span>
+      maxUnavailable: 0   <span class="c"># 新しい Pod の準備後に古い Pod が終了</span>
   selector:
     matchLabels: {app: magpie}
   template:
@@ -305,6 +308,12 @@ spec:
       terminationGracePeriodSeconds: 30   <span class="c"># MAGPIE_DRAIN（20 秒）＋保存用の 10 秒</span>
       securityContext:
         fsGroup: 65532
+      affinity:
+        podAffinity:   <span class="c"># 新しい Pod を古い Pod と同じノード（ReadWriteOnce ボリュームのある所）に</span>
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels: {app: magpie}
+              topologyKey: kubernetes.io/hostname
       containers:
         - name: magpie
           image: ghcr.io/yetone/magpie:stable
@@ -324,7 +333,8 @@ spec:
     </div>
     <p><b>レディネス。</b>上のように <code>exec</code> で <code>magpie healthcheck</code> を実行します。コンテナ内から問い合わせるのでキーは不要です。<code>httpGet</code> プローブはコンテナの外から来るため、ゲートウェイキーが必要になります。</p>
     <p><b>長いターン。</b>エージェントのターンは数分間ストリームすることがあります。<code>MAGPIE_DRAIN</code> と <code>terminationGracePeriodSeconds</code> を一緒に上げ、後者を前者より 10 秒長くします：<code>MAGPIE_DRAIN: "300"</code> と <code>terminationGracePeriodSeconds: 310</code>。</p>
-    <p><b>1 つのボリュームに 1 つの Pod。</b>ゲートウェイを提供する magpie が保存済みのサインインを更新し続けます。2 つの Pod が同じ <code>/config</code> を使うと両方が更新し、アカウントがサインアウトされることがあります。<code>strategy: Recreate</code>（または <code>maxSurge: 0</code>）にしてください。古い Pod が処理中のリクエストを終えて終了してから新しい Pod が起動し、その間のリクエストは新しい Pod の準備を待ちます。ReadWriteOnce ボリュームでの既定の RollingUpdate も安全には重なりません。新しい Pod が別ノードだとボリュームをマウントできず、ロールアウトが止まります。</p>
+    <p><b>ローリングアップデート。</b>新しい Pod は古い Pod と同じ <code>/config</code> で並んで動き、準備ができると Service がリクエストを送り始めます。その後古い Pod は上のとおりドレインするので、リクエストは落ちません。サインインの更新と保存されるファイルは、Pod 間でロックされます。1 つの magpie だけが行う処理（保存済みサインインのバックグラウンド更新、チェックイン、プラグインの更新）は古い Pod が終了するまで続け、新しい Pod が 1 秒以内に引き継ぎます。ReadWriteOnce ボリュームは 1 つのノードにしかマウントできないため、上の <code>podAffinity</code> で新しい Pod を古い Pod のノードで起動します。ReadWriteMany ボリュームなら不要です。</p>
+    <p><b>v0.1.4526 より前のバージョンからの更新。</b>古い Pod はこの引き継ぎに加わらないため、更新の間は両方がサインインを更新します。この 1 回だけは <code>strategy: Recreate</code> で更新し、その後で上のローリングアップデートに切り替えてください。</p>
 
     <p style="margin-top:48px">質問や共有したいセットアップがあれば <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> へどうぞ。詳細は<a href="https://github.com/yetone/magpie/blob/main/docs/reference.md#docker">リファレンス</a>（英語）にあります。</p>
   </article>

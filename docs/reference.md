@@ -3870,9 +3870,22 @@ magpie to save its state after, and 7s elsewhere, inside `docker stop`'s
 -t`, Compose's `stop_grace_period`) for longer turns. Ctrl+C and SIGHUP still
 end it at once. In Kubernetes, probe readiness with
 `exec: {command: [/magpie, healthcheck]}`: an `httpGet` probe comes from
-outside the container and would need a gateway key. Run one magpie per
-`/config` volume, with `strategy: Recreate`: the magpie serving keeps the
-saved sign-ins renewed, and two pods on one volume would both renew them.
+outside the container and would need a gateway key.
+
+A rolling update (`maxSurge: 1`, `maxUnavailable: 0`) overlaps the new pod
+with the old one on one `/config` volume and drops nothing: both answer
+requests, and each sign-in renewal and saved file is locked across them
+(flock, and host.js's renewal locks, which name the pod beside the pid since
+pods share pid numbers). The work only one magpie may do, what
+`ListenAndServe` starts after binding (renewing saved sign-ins, check-ins,
+retiring moves, plugin and Bun updates, `WhileServing`), runs only in the
+magpie holding `gateway.serving.lock` in the config folder: the old pod
+until its gateway ends, then the new one, which asks each second. A
+ReadWriteOnce volume needs the new pod on the old one's node, so the
+example Deployment in the Docker page has a required `podAffinity` on its
+own label with `topologyKey: kubernetes.io/hostname`. A pod on a version
+before v0.1.4526 doesn't take the lock: update from it once with
+`strategy: Recreate`.
 
 #### NAS with agents on other machines
 

@@ -1,8 +1,10 @@
 package gateway
 
 import (
+	"encoding/json"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -106,5 +108,37 @@ func TestRelistenMovesTheNote(t *testing.T) {
 	defer s.ln.Close()
 	if l, ok := ReadListening(); !ok || l.Addr != to {
 		t.Errorf("after moving: %+v %v, want %s", l, ok, to)
+	}
+}
+
+// Two pods on one volume (a rolling update) both run magpie as pid 1, so
+// the old pod's end removed the gateway.json the new pod had written over
+// its own. Only this process's own file, by pid, start and machine, is
+// removed.
+func TestForgetListeningKeepsAnotherPods(t *testing.T) {
+	fresh(t)
+	other := ownListening("10.0.0.7:3425")
+	other.Host = "magpie-7d9f-new"
+	b, _ := json.Marshal(other)
+	os.MkdirAll(filepath.Dir(ListeningPath()), 0o700)
+	if err := os.WriteFile(ListeningPath(), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	forgetListening()
+	if _, ok := ReadListening(); !ok {
+		t.Fatal("another pod's gateway.json, with this pid, was removed")
+	}
+	other.Host, other.Started = podName, "2001-01-01T00:00:00Z"
+	b, _ = json.Marshal(other)
+	os.WriteFile(ListeningPath(), b, 0o600)
+	forgetListening()
+	if _, ok := ReadListening(); !ok {
+		t.Fatal("a gateway.json of another start, with this pid, was removed")
+	}
+	b, _ = json.Marshal(ownListening("127.0.0.1:3425"))
+	os.WriteFile(ListeningPath(), b, 0o600)
+	forgetListening()
+	if _, ok := ReadListening(); ok {
+		t.Fatal("this process's own gateway.json was kept")
 	}
 }

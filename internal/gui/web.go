@@ -407,7 +407,21 @@ func LANAddrs() []string {
 // routes, judged by the gateway (onePort) and never by box, and the page
 // and its API behind the allow list and the key, or box's sign-in.
 func webServed(port, key string, keep time.Duration, box boxSignIn, page http.Handler) http.Handler {
-	return onePort(gateway.AllowGuard(gateway.ClientCertGuard(webHandler(port, key, keep, box, page))))
+	return closesWhenDraining(onePort(gateway.AllowGuard(gateway.ClientCertGuard(webHandler(port, key, keep, box, page)))))
+}
+
+// closesWhenDraining has each reply the page port gives while this
+// process's gateway drains (a SIGTERM) close its connection, as the
+// gateway's own do: an agent that sends /v1 here and kept its connection
+// alive then dials the Service's next pod for its next request, rather
+// than sending it on a connection the drain's end closes.
+func closesWhenDraining(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if gw := served.Load(); gw != nil && gw.Draining() {
+			w.Header().Set("Connection", "close")
+		}
+		h.ServeHTTP(w, r)
+	})
 }
 
 // webHandler is what `magpie web` on port serves: the page and its API

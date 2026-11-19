@@ -10936,7 +10936,10 @@ metadata:
 spec:
   replicas: 1
   strategy:
-    type: Recreate   # one magpie on /config at a time
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1         # the new pod starts beside the old one
+      maxUnavailable: 0   # the old one ends once the new one is ready
   selector:
     matchLabels: {app: magpie}
   template:
@@ -10946,6 +10949,12 @@ spec:
       terminationGracePeriodSeconds: 30   # MAGPIE_DRAIN (20s) plus 10s to save
       securityContext:
         fsGroup: 65532
+      affinity:
+        podAffinity:   # the new pod on the old one's node, where the ReadWriteOnce volume is
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels: {app: magpie}
+              topologyKey: kubernetes.io/hostname
       containers:
         - name: magpie
           image: ghcr.io/yetone/magpie:stable
@@ -10968,7 +10977,9 @@ spec:
 
 **Longer turns.** An agent’s turn can stream for minutes. Raise `MAGPIE_DRAIN` and `terminationGracePeriodSeconds` together, the second 10 seconds above the first: `MAGPIE_DRAIN: "300"` with `terminationGracePeriodSeconds: 310`.
 
-**One pod per volume.** The magpie serving the gateway keeps the saved sign-ins renewed, and two pods on one `/config` would both renew them, which can sign an account out. Keep `strategy: Recreate` (or `maxSurge: 0`): the old pod finishes its requests and ends before the new one starts, and requests sent in between wait for the new one. A default RollingUpdate with a ReadWriteOnce volume doesn’t overlap safely either: on another node the new pod can’t mount the volume, and the rollout stalls.
+**Rolling updates.** The new pod serves beside the old one on the same `/config`, and the Service sends it requests once it is ready; the old pod then drains as above, so no request is dropped. Each sign-in renewal and each saved file is locked across the pods. What only one magpie may do (renewing the saved sign-ins in the background, check-ins, plugin updates) the old pod keeps doing until it ends, and the new pod takes it over within a second. A ReadWriteOnce volume mounts on one node only, so the `podAffinity` above starts the new pod on the old one's node; with a ReadWriteMany volume, leave it out.
+
+**Updating from a version before v0.1.4526.** The old pod doesn't take part in that handover, so the two would both renew sign-ins for the length of the update. Make that one update with `strategy: Recreate`, then switch to the rolling update above.
 
 Questions or a setup worth sharing? Ask on [Discord](https://discord.gg/vGSnD3ZKQF). The [reference](https://github.com/yetone/magpie/blob/main/docs/reference.md#docker) has the details.
 

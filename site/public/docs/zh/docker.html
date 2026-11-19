@@ -295,7 +295,10 @@ metadata:
 spec:
   replicas: 1
   strategy:
-    type: Recreate   <span class="c"># 同一时间只有一个 magpie 使用 /config</span>
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1         <span class="c"># 新 Pod 在旧 Pod 旁边启动</span>
+      maxUnavailable: 0   <span class="c"># 新 Pod 就绪后旧 Pod 才退出</span>
   selector:
     matchLabels: {app: magpie}
   template:
@@ -305,6 +308,12 @@ spec:
       terminationGracePeriodSeconds: 30   <span class="c"># MAGPIE_DRAIN（20 秒）加 10 秒保存状态</span>
       securityContext:
         fsGroup: 65532
+      affinity:
+        podAffinity:   <span class="c"># 新 Pod 和旧 Pod 在同一节点，ReadWriteOnce 卷在那里</span>
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels: {app: magpie}
+              topologyKey: kubernetes.io/hostname
       containers:
         - name: magpie
           image: ghcr.io/yetone/magpie:stable
@@ -324,7 +333,8 @@ spec:
     </div>
     <p><b>就绪探针。</b>如上用 <code>exec</code> 执行 <code>magpie healthcheck</code>：它在容器内部发起请求，不需要密钥。<code>httpGet</code> 探针来自容器外部，需要网关密钥。</p>
     <p><b>更长的回合。</b>智能体的一个回合可能流式输出好几分钟。同时调大 <code>MAGPIE_DRAIN</code> 和 <code>terminationGracePeriodSeconds</code>，后者比前者多 10 秒：<code>MAGPIE_DRAIN: "300"</code> 配 <code>terminationGracePeriodSeconds: 310</code>。</p>
-    <p><b>一个卷只跑一个 Pod。</b>提供网关的 magpie 负责续期已保存的登录，两个 Pod 共用一个 <code>/config</code> 会各自续期，可能让账号掉线。请保持 <code>strategy: Recreate</code>（或 <code>maxSurge: 0</code>）：旧 Pod 先完成手上的请求并退出，新 Pod 再启动，其间发来的请求要等新 Pod 就绪。默认的 RollingUpdate 配 ReadWriteOnce 卷也无法安全重叠：新 Pod 若在另一个节点上就挂载不了卷，滚动更新会卡住。</p>
+    <p><b>滚动更新。</b>新 Pod 和旧 Pod 共用同一个 <code>/config</code> 同时提供服务，新 Pod 就绪后 Service 开始向它转发请求；旧 Pod 随后按上文排空，不会丢请求。每次登录续期和每个保存的文件都在两个 Pod 之间加锁。只能由一个 magpie 做的事（后台续期已保存的登录、签到、更新插件）由旧 Pod 继续做到它退出，新 Pod 在一秒内接手。ReadWriteOnce 卷只能挂载在一个节点上，所以上面的 <code>podAffinity</code> 让新 Pod 在旧 Pod 所在的节点启动；用 ReadWriteMany 卷时可以去掉它。</p>
+    <p><b>从 v0.1.4526 之前的版本更新。</b>旧 Pod 不参与这次交接，更新期间两个 Pod 会同时续期登录。这一次请用 <code>strategy: Recreate</code> 更新，之后再换成上面的滚动更新。</p>
 
     <p style="margin-top:48px">遇到问题，或者有值得分享的配置？来 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 聊。细节见<a href="https://github.com/yetone/magpie/blob/main/docs/reference.md#docker">参考文档</a>（英文）。</p>
   </article>

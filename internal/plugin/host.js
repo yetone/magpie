@@ -31,6 +31,7 @@ import dns from "node:dns"
 import fs from "node:fs"
 import http2 from "node:http2"
 import net from "node:net"
+import os from "node:os"
 import path from "node:path"
 import readline from "node:readline"
 import { Duplex } from "node:stream"
@@ -1033,7 +1034,8 @@ function authCopy(key) {
 // the two left plugin-auth.json all zero (#1505). A write or flush that
 // fails leaves p as it was.
 async function writeDurable(p, data) {
-  const tmp = p + ".tmp-" + process.pid
+  // named past the pid: another pod's host on the volume can have this one's
+  const tmp = p + ".tmp-" + process.pid + "-" + Math.random().toString(36).slice(2, 10)
   try {
     const f = fs.openSync(tmp, "w", 0o600)
     try {
@@ -3119,8 +3121,24 @@ function keepsAlive(a) {
 // account's beside plugin-auth.json, held across the plugin's refresh,
 // and the sign-in is read again under it. The lock names its holder's pid:
 // one whose holder is gone is taken over at once, and one held longer
-// than RENEW_LOCK_STALE by anyone.
+// than RENEW_LOCK_STALE by anyone. A pid is this host's to ask about only
+// in its own pid namespace: two Kubernetes pods on one volume (a rolling
+// update's old pod and new one) each run magpie as pid 1 and a host as a
+// low pid of their own, and a pod asking after the other's pid asked after
+// a process of its own, found none, and took a lock the other held: both
+// spent one refresh token. So a lock names where its pid is (renewHost), and
+// one from elsewhere is judged by its age alone.
 const RENEW_LOCK_STALE = 60 * 1000
+
+// renewHost is where this host's pid means something: the machine's (or
+// pod's) name and, on Linux, its pid namespace.
+const renewHost = (() => {
+  let ns = ""
+  try {
+    ns = fs.readlinkSync("/proc/self/ns/pid")
+  } catch {}
+  return `${os.hostname()} ${ns}`.trim()
+})()
 
 function alive(pid) {
   try {
@@ -3133,7 +3151,7 @@ function alive(pid) {
 
 async function lockRenew(key) {
   const lock = `${authPath}.renew-${createHash("sha256").update(key).digest("hex").slice(0, 16)}.lock`
-  const me = JSON.stringify({ pid: process.pid, at: Date.now(), n: randomUUID() })
+  const me = JSON.stringify({ pid: process.pid, host: renewHost, at: Date.now(), n: randomUUID() })
   fs.mkdirSync(path.dirname(authPath), { recursive: true })
   for (let start = Date.now(), wait = 10; ; wait = Math.min(wait * 2, 500)) {
     try {
@@ -3155,8 +3173,11 @@ async function lockRenew(key) {
       h = JSON.parse(raw)
     } catch {}
     // a holder gone, or one too long at it; a file not written yet is
-    // judged by its age
-    const stale = Number.isInteger(h?.pid) ? !alive(h.pid) || Date.now() - h.at > RENEW_LOCK_STALE : age > RENEW_LOCK_STALE
+    // judged by its age, and one whose pid is another pod's or machine's
+    // by its own time (a host before renewHost names none: its pid is asked
+    // after here, as it was)
+    const here = h?.host === undefined || h.host === renewHost
+    const stale = Number.isInteger(h?.pid) ? (here && !alive(h.pid)) || Date.now() - h.at > RENEW_LOCK_STALE : age > RENEW_LOCK_STALE
     if (raw !== null && (stale || Date.now() - start > 2 * RENEW_LOCK_STALE)) {
       try {
         if (fs.readFileSync(lock, "utf8") === raw) fs.unlinkSync(lock)

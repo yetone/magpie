@@ -10,6 +10,7 @@ package provider
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -145,12 +146,22 @@ var claudeRunWait = 90 * time.Second
 
 var claudeRunSeq atomic.Int64
 
+// runMarkTag tells this process's run marks from another's with its pid.
+var runMarkTag = func() string {
+	b := make([]byte, 4)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}()
+
 // claudeRunMarks matches the lock files of the runs in user's directory.
 func claudeRunMarks(user string) string { return claudeAccountDir(user) + ".run-*.lock" }
 
 // markClaudeRun holds a lock file of this run's own, released as it ends.
 func markClaudeRun(user string) (release func()) {
-	path := fmt.Sprintf("%s.run-%d-%d.lock", claudeAccountDir(user), os.Getpid(), claudeRunSeq.Add(1))
+	// named past the pid and the count: another pod's magpie on the same
+	// volume has pid 1 too, and would take this one's name, fail its lock
+	// and remove the file this run holds
+	path := fmt.Sprintf("%s.run-%d-%d-%s.lock", claudeAccountDir(user), os.Getpid(), claudeRunSeq.Add(1), runMarkTag)
 	unlock, held := filelock.Lock(path, 0)
 	if !held {
 		_ = os.Remove(path)

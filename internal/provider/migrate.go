@@ -512,6 +512,16 @@ func setMigration(id string, f func(m *Migration)) error {
 	return writePrivate(migrationsPath(), append(b, '\n'))
 }
 
+// movesHost is the machine's (or pod's) name, which a moves lock names
+// beside its pid.
+var movesHost = func() string {
+	h, _ := os.Hostname()
+	if h == "" || strings.ContainsAny(h, " \t\n") {
+		return "-"
+	}
+	return h
+}()
+
 // lockMoves keeps two magpies (the app and a CLI, a dev build beside a
 // release) from moving at once.
 func lockMoves() (func(), error) {
@@ -522,14 +532,18 @@ func lockMoves() (func(), error) {
 	for range 2 {
 		f, err := os.OpenFile(p, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 		if err == nil {
-			fmt.Fprint(f, os.Getpid())
+			fmt.Fprint(f, os.Getpid(), " ", movesHost)
 			f.Close()
 			return func() { os.Remove(p) }, nil
 		}
 		// one left by a magpie that died moving (killed, or stopped
-		// mid-move) holds nothing
+		// mid-move) holds nothing. Its pid is asked after only where it
+		// is one: another pod's magpie on the same volume has pids of
+		// its own namespace, so its lock is judged by its age alone.
 		if b, rerr := os.ReadFile(p); rerr == nil {
-			if pid, perr := strconv.Atoi(strings.TrimSpace(string(b))); perr == nil && pid != os.Getpid() && !update.Alive(pid) {
+			f := strings.Fields(string(b))
+			here := len(f) == 1 || len(f) == 2 && f[1] == movesHost
+			if pid, perr := strconv.Atoi(strings.Join(f[:min(len(f), 1)], "")); perr == nil && here && pid != os.Getpid() && !update.Alive(pid) {
 				os.Remove(p)
 				continue
 			}

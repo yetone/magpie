@@ -813,8 +813,9 @@ func keepRecent(ring []Call, c Call) []Call {
 }
 
 // WhileServing is work only the magpie serving the gateway does, begun
-// once it is bound and ended with it: one of the magpies running, never
-// two at once.
+// once it is bound and holds the serving lock (serving.go), and ended with
+// it: one of the magpies on a config folder, never two at once, two
+// Kubernetes pods on one volume included.
 var WhileServing []func(context.Context)
 
 // ListenAndServe runs the gateway until ctx ends, and returns once the
@@ -908,51 +909,60 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	go func() { defer close(pruned); keepHubPruned(freshCtx) }()
 	defer func() { stopFresh(); <-pruned }()
 	srv := &http.Server{Handler: s.closesWhenHandedOff(s.Front()), ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 5 * time.Minute, ConnState: s.unread.note}
-	// the magpie serving the gateway, and only it, keeps the saved accounts
-	// signed in, so two never refresh one sign-in at once
-	go provider.KeepLoginsAlive(ctx)
-	// and tells the request hooks of an account to sign in again
-	go keepHooksToldOfSignIns(ctx)
-	// and signs Codex and Claude Code in to their next account when the
-	// one they are on is spent
-	go provider.KeepOnAnAccountWithRoom(ctx)
-	// and has the Codex app read its provider again as magpie becomes it
-	// for a used-up ChatGPT account, and after (its Send greys otherwise)
-	go provider.KeepCodexAppOnItsProvider(ctx, s.CodexBusy)
-	// and, when settings say to, starts its accounts' next windows as the last reset
-	go provider.KeepCodexWindowsWarm(ctx)
-	go provider.KeepClaudeWindowsWarm(ctx, warmClaude)
-	// and spends a Codex reset about to run out unused, for the accounts
-	// that let it
-	go provider.KeepResetsFromRunningOut(ctx)
-	// and checks the WorkBuddy accounts in for the day's credits
-	go provider.KeepWorkBuddyCheckedIn(ctx)
-	// and the Trae CN accounts (#694), and the MiniMax Code ones (#811)
-	go provider.KeepTraeCheckedIn(ctx)
-	go provider.KeepMiniMaxCheckedIn(ctx)
-	// and the Qoder ones' daily credits
-	go provider.KeepQoderCheckedIn(ctx)
-	// and the accounts of the plugins that check in themselves
-	go provider.KeepPluginsCheckedIn(ctx)
-	// and counts the calls those plugins' accounts made outside magpie
-	// (Cursor's editor and cursor-agent) on the Usage page
-	go usage.KeepOutsideCallsRead(ctx)
-	// and moves the built-in subscriptions being retired onto their plugins
-	go provider.KeepRetiringMoved(ctx)
-	// and fetches the partner list every hour, asked for or not
-	go provider.KeepPartnersFresh(ctx)
-	go provider.KeepPluginsListed(ctx) // models a plugin's vendor drops or adds, while magpie runs
-	// and renews the plugins' sign-ins as they come due, used or not (#5080)
-	go provider.KeepPluginsSignedIn(ctx)
-	// and those a signed-in account's vendor adds (a ChatGPT plan's new GPT)
-	go provider.KeepAccountsListed(ctx)
-	// and fetches the lists of the providers the user asked to keep fresh (#2135)
-	go provider.KeepListsFresh(ctx)
-	// and follows a Remote magpie's list as it changes there (KaCli)
-	go provider.KeepRemoteListsFollowed(ctx)
-	// and keeps the community's plugins up to date, noting others' updates, and the Bun they run on
-	go plugin.KeepUpdated(ctx)
-	go plugin.KeepBunUpdated(ctx)
+	// what the magpie serving the gateway does, and only it: at once, or
+	// once another magpie on this config folder lets go of it (serving.go:
+	// a Kubernetes rolling update's old pod, draining)
+	releaseServing := holdServing(ctx, servingLockPath(), func() {
+		// the magpie serving the gateway, and only it, keeps the saved accounts
+		// signed in, so two never refresh one sign-in at once
+		go provider.KeepLoginsAlive(ctx)
+		// and tells the request hooks of an account to sign in again
+		go keepHooksToldOfSignIns(ctx)
+		// and signs Codex and Claude Code in to their next account when the
+		// one they are on is spent
+		go provider.KeepOnAnAccountWithRoom(ctx)
+		// and has the Codex app read its provider again as magpie becomes it
+		// for a used-up ChatGPT account, and after (its Send greys otherwise)
+		go provider.KeepCodexAppOnItsProvider(ctx, s.CodexBusy)
+		// and, when settings say to, starts its accounts' next windows as the last reset
+		go provider.KeepCodexWindowsWarm(ctx)
+		go provider.KeepClaudeWindowsWarm(ctx, warmClaude)
+		// and spends a Codex reset about to run out unused, for the accounts
+		// that let it
+		go provider.KeepResetsFromRunningOut(ctx)
+		// and checks the WorkBuddy accounts in for the day's credits
+		go provider.KeepWorkBuddyCheckedIn(ctx)
+		// and the Trae CN accounts (#694), and the MiniMax Code ones (#811)
+		go provider.KeepTraeCheckedIn(ctx)
+		go provider.KeepMiniMaxCheckedIn(ctx)
+		// and the Qoder ones' daily credits
+		go provider.KeepQoderCheckedIn(ctx)
+		// and the accounts of the plugins that check in themselves
+		go provider.KeepPluginsCheckedIn(ctx)
+		// and counts the calls those plugins' accounts made outside magpie
+		// (Cursor's editor and cursor-agent) on the Usage page
+		go usage.KeepOutsideCallsRead(ctx)
+		// and moves the built-in subscriptions being retired onto their plugins
+		go provider.KeepRetiringMoved(ctx)
+		// and fetches the partner list every hour, asked for or not
+		go provider.KeepPartnersFresh(ctx)
+		go provider.KeepPluginsListed(ctx) // models a plugin's vendor drops or adds, while magpie runs
+		// and renews the plugins' sign-ins as they come due, used or not (#5080)
+		go provider.KeepPluginsSignedIn(ctx)
+		// and those a signed-in account's vendor adds (a ChatGPT plan's new GPT)
+		go provider.KeepAccountsListed(ctx)
+		// and fetches the lists of the providers the user asked to keep fresh (#2135)
+		go provider.KeepListsFresh(ctx)
+		// and follows a Remote magpie's list as it changes there (KaCli)
+		go provider.KeepRemoteListsFollowed(ctx)
+		// and keeps the community's plugins up to date, noting others' updates, and the Bun they run on
+		go plugin.KeepUpdated(ctx)
+		go plugin.KeepBunUpdated(ctx)
+		for _, f := range WhileServing {
+			go f(ctx)
+		}
+	})
+	defer releaseServing()
 	// and keeps macOS from App Napping the process the agents wait on (#6261)
 	defer awake.NoNap()()
 	// and, when settings say to, keeps the computer awake while agents work
@@ -968,9 +978,6 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		b := s.Busy()
 		return awake.State{Busy: b.Any(), Last: b.Last}
 	})
-	for _, f := range WhileServing {
-		go f(ctx)
-	}
 	// and, on Windows, serves WSL distros under NAT at Windows' address on
 	// their network (wsl.go)
 	go s.serveWSL(ctx, srv)
@@ -978,6 +985,8 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	go func() {
 		defer close(drained)
 		<-ctx.Done()
+		// the work only it does ended with ctx: the next magpie takes it
+		releaseServing()
 		s.endStreams()
 		c, cancel := context.WithTimeout(context.Background(), s.drainFor())
 		defer cancel()
