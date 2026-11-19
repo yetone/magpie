@@ -3,6 +3,7 @@ package library
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -98,3 +99,65 @@ func TestProjectPiPackages(t *testing.T) {
 }
 
 func squash(s string) string { return strings.Join(strings.Fields(s), "") }
+
+// A plugin that is a Pi package, given to a project for Pi (#7243), is one
+// entry of its .pi/settings.json: its folder. Applied again it stays one;
+// withdrawn, only that entry goes; a declaration the project has of the same
+// package is left byte for byte.
+func TestProjectPluginPiPackage(t *testing.T) {
+	h := sandbox(t)
+	pluginAgents(t, h)
+	src := filepath.Join(t.TempDir(), "acme")
+	writePlugin(t, src)
+	if err := os.WriteFile(filepath.Join(src, "package.json"), []byte(`{"name":"acme-kit","pi":{"skills":["./skills"],"extensions":["./extension.ts"]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ok(t)(InstallPlugins(src, nil, []string{}))
+	dir := pluginDir("acme-kit")
+	a, b := filepath.Join(t.TempDir(), "a"), filepath.Join(t.TempDir(), "b")
+	for _, d := range []string{a, b} {
+		gitInit(t, d)
+		ok(t)(AddProject(d))
+	}
+	file := filepath.Join(a, ".pi/settings.json")
+	count := func(p string) int { return strings.Count(read(t, p), dir) }
+
+	// not for Pi: no package
+	ok(t)(ProjectPlugin(a, "acme-kit", []string{"claude"}))
+	gone(t, file)
+	ok(t)(ProjectPlugin(a, "acme-kit", []string{"pi"}))
+	if count(file) != 1 {
+		t.Fatalf("one entry for the plugin:\n%s", read(t, file))
+	}
+	ok(t)(ProjectPlugin(a, "acme-kit", []string{"pi"}))
+	ok(t)(ProjectPlugin(a, "acme-kit", []string{"pi", "claude"}))
+	if count(file) != 1 {
+		t.Fatalf("applied again:\n%s", read(t, file))
+	}
+	gone(t, filepath.Join(b, ".pi"))
+	ok(t)(ProjectPlugin(a, "acme-kit", nil))
+	gone(t, file)
+
+	// the project's own filtered declaration of the same folder
+	own := "{\n  \"theme\": \"dark\",\n  \"packages\": [{\"source\": " + strconv.Quote(dir) + ", \"skills\": [\"demo\"]}]\n}\n"
+	write(t, file, own)
+	ok(t)(ProjectPlugin(a, "acme-kit", []string{"pi"}))
+	if read(t, file) != own {
+		t.Fatalf("assignment changed the native entry:\n%s", read(t, file))
+	}
+	ok(t)(ProjectPlugin(a, "acme-kit", nil))
+	if read(t, file) != own {
+		t.Fatalf("withdrawal changed the native entry:\n%s", read(t, file))
+	}
+
+	// beside the project's other packages: only the managed entry goes
+	write(t, file, "{\"packages\": [\"npm:pi-own\"]}\n")
+	ok(t)(ProjectPlugin(a, "acme-kit", []string{"pi"}))
+	if s := read(t, file); count(file) != 1 || !strings.Contains(s, "npm:pi-own") {
+		t.Fatalf("beside:\n%s", s)
+	}
+	ok(t)(ProjectPlugin(a, "acme-kit", nil))
+	if s := read(t, file); strings.Contains(s, dir) || !strings.Contains(s, "npm:pi-own") {
+		t.Fatalf("withdrawn:\n%s", s)
+	}
+}

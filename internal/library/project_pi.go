@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -109,7 +110,8 @@ func piIndex(list []json.RawMessage, source string) int {
 // syncProjectPi writes the packages the project wants into its
 // .pi/settings.json and takes out what magpie wrote that it no longer does.
 func (l *Library) syncProjectPi(p *Project, fail func(what string, err error)) {
-	if len(p.Pi) == 0 && len(p.PiRecs) == 0 {
+	want, viaPlugin := l.projectPiWanted(p)
+	if len(want) == 0 && len(p.PiRecs) == 0 {
 		return
 	}
 	abs := filepath.Join(p.Dir, filepath.FromSlash(piSettingsRel))
@@ -133,9 +135,9 @@ func (l *Library) syncProjectPi(p *Project, fail func(what string, err error)) {
 			fail("pi:"+rec.Source, fmt.Errorf("%s has been changed since magpie wrote %s: it's left as it is", piSettingsRel, rec.Source))
 			continue
 		}
-		state, want := p.Pi[rec.Source]
+		state, wanted := want[rec.Source]
 		switch {
-		case !want:
+		case !wanted:
 			changed = true
 			if rec.Orig != nil {
 				list[i] = rec.Orig
@@ -152,8 +154,8 @@ func (l *Library) syncProjectPi(p *Project, fail func(what string, err error)) {
 		}
 		recs = append(recs, rec)
 	}
-	srcs := make([]string, 0, len(p.Pi))
-	for s := range p.Pi {
+	srcs := make([]string, 0, len(want))
+	for s := range want {
 		srcs = append(srcs, s)
 	}
 	sort.Strings(srcs)
@@ -162,10 +164,13 @@ func (l *Library) syncProjectPi(p *Project, fail func(what string, err error)) {
 			continue
 		}
 		if piIndex(list, s) >= 0 {
+			if viaPlugin[s] {
+				continue // the project declares it already: it loads as it is
+			}
 			fail("pi:"+s, fmt.Errorf("%s has %s already: it's the project's own, left as it is until it is adopted", piSettingsRel, s))
 			continue
 		}
-		e := piEntryFor(s, p.Pi[s], nil)
+		e := piEntryFor(s, want[s], nil)
 		list = append(list, e)
 		recs = append(recs, PiRec{Source: s, Entry: e})
 		changed = true
@@ -293,4 +298,41 @@ func (p *Project) piViews() []ProjectPiView {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Source < out[j].Source })
 	return out
+}
+
+// piManifest says whether a folder is a Pi package: a package.json with a
+// `pi` object (skills, extensions, prompts, themes).
+func piManifest(dir string) bool {
+	b, err := os.ReadFile(filepath.Join(dir, "package.json"))
+	if err != nil {
+		return false
+	}
+	return gjson.GetBytes(b, "pi").IsObject()
+}
+
+// projectPiWanted are the packages the project has: those it was given by
+// source, and, for each library plugin it gives Pi that is a Pi package, the
+// plugin's folder (#7243), one entry however often it is applied. viaPlugin
+// marks the latter. A source given by hand wins.
+func (l *Library) projectPiWanted(p *Project) (want map[string]string, viaPlugin map[string]bool) {
+	want = map[string]string{}
+	viaPlugin = map[string]bool{}
+	for s, st := range p.Pi {
+		want[s] = st
+	}
+	for name, agents := range p.Plugins {
+		b := l.plugin(name)
+		if b == nil || b.Off || !slices.Contains(agents, "pi") {
+			continue
+		}
+		dir := pluginDir(name)
+		if !piManifest(dir) {
+			continue
+		}
+		if _, ok := want[dir]; !ok {
+			want[dir] = "on"
+			viaPlugin[dir] = true
+		}
+	}
+	return want, viaPlugin
 }
