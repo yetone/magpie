@@ -2322,7 +2322,7 @@ function connectPanel(a, { fields, fieldBtn }) {
     for (const b of fields.querySelectorAll(":scope > .field")) {
       const f = a.fields.find((x) => x.key === b.dataset.key);
       if (f && !b.querySelector(":scope > .k")) b.prepend(el("span", "k", t(f.label)));
-      if (f?.key === "effort" && kindOf(a) === "claude") tierOwn(a, b);
+      if (f?.key === "effort" && kindOf(a) === "claude") { tierOwn(a, b); maxSaid(b, f.value); }
     }
     // Cursor Private Inference's are magpie's own (#1003)
     kv(t(a.id === "cursor-local" ? "Settings" : "New sessions"), line(fields));
@@ -4206,6 +4206,10 @@ const DESKTOP_TIERS_FOOT = "Claude Desktop reads the tiers as it starts: restart
 // it, since the agent's own field still has the old value.
 const ownSaid = (b, on, s) => b.title = b.title.replace(s = "\n" + t(s), "") + (on ? s : "");
 const tierOwn = (a, b, f) => ownSaid(b, a.fields.some((x) => TIER_EFFORTS.includes(x.label) && (x.label === f?.label ? f.value : x.value)), "A tier with an effort of its own runs at that one");
+// Max is Claude Code's environment's (CLAUDE_CODE_EFFORT_LEVEL), which
+// outranks /effort and /model's slider, so its title says so (@daix91 on X);
+// s, when given, is the title's new first line (a pick in the slider)
+const maxSaid = (b, v, s = b.title) => ownSaid(b, (b.title = s, v === "max"), "Max is fixed in Claude Code's environment, so /effort can't change it. Pick another level to get /effort back.");
 function tierSaid(b, v) {
   ownSaid(b, v, "Used whatever the session's effort or /effort is");
   if (!v) b.querySelector(".v").textContent = t("follows session");
@@ -5127,6 +5131,9 @@ function renderEffortPicker() {
         for (const b of opened.anchor.closest(".row.agent").querySelectorAll('.field[data-key="effort"]')) tierOwn(opened.agent, b, opened.field);
       }
       opened.anchor.setAttribute("aria-label", opened.anchor.title);
+    } else if (opened.field.key === "effort" && kindOf(opened.agent) === "claude") {
+      // New sessions' effort: its first line names the level as fieldBtn does
+      maxSaid(opened.anchor, option.value, opened.anchor.title.replace(/^.*/, t("{label}: {value}", { label: t("effort"), value: option.value || t("agent default") })));
     } else if (roleLevel(opened.field.label)) {
       const menu = tierMenu(opened.agent);
       if (menu) {
