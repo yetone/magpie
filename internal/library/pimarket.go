@@ -157,14 +157,31 @@ func searchPiNPM(q string, size, from int) ([]piListed, int, error) {
 			} `json:"package"`
 		} `json:"objects"`
 	}
-	query := "?" + url.Values{"text": {text}, "size": {strconv.Itoa(size)}, "from": {strconv.Itoa(from)}}.Encode()
-	err := errors.New("no registry")
-	if r := strings.TrimRight(piRegistry(), "/"); r != "" && r != strings.TrimSuffix(piNPMURL, "/-/v1/search") {
-		err = getJSON(r+"/-/v1/search"+query, &body)
+	ask := func(text string) error {
+		body.Total, body.Objects = 0, nil
+		query := "?" + url.Values{"text": {text}, "size": {strconv.Itoa(size)}, "from": {strconv.Itoa(from)}}.Encode()
+		err := errors.New("no registry")
+		if r := strings.TrimRight(piRegistry(), "/"); r != "" && r != strings.TrimSuffix(piNPMURL, "/-/v1/search") {
+			err = getJSON(r+"/-/v1/search"+query, &body)
+		}
+		if err != nil {
+			if err = getJSON(piNPMURL+query, &body); err != nil {
+				return &SearchError{Source: "npm", Err: err}
+			}
+		}
+		return nil
 	}
-	if err != nil {
-		if err = getJSON(piNPMURL+query, &body); err != nil {
-			return nil, 0, &SearchError{Source: "npm", Err: err}
+	if err := ask(text); err != nil {
+		return nil, 0, err
+	}
+	// npmmirror answers nothing to a keywords: qualifier, and finds a
+	// search's words with the keyword as a plain word (PlainKeywords:
+	// eachg0 on X, "rename" found no pi-rename). The list before a search
+	// stays the one magpie shipped with there: npmmirror's has no monthly
+	// downloads to put the most used first.
+	if q != "" && len(body.Objects) == 0 && from == 0 {
+		if ask(plugin.PlainKeywords(text)) != nil {
+			body.Total, body.Objects = 0, nil // the first answer stands
 		}
 	}
 	var out []piListed

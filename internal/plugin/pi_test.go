@@ -409,6 +409,49 @@ func TestSearchFindsPiPackages(t *testing.T) {
 	}
 }
 
+// The Plugins page's search, with npmmirror answering (the 「国内镜像」
+// switch puts it before npm's own): npmmirror answers a keywords:
+// qualifier with nothing, so pi packages were never found there (eachg0
+// on X, the Pi market's sibling). Asked again in plain words, they are.
+// The answers are npmmirror's own bytes (testdata/npmmirror, 2026-11-19).
+func TestSearchFindsPiPackagesOnNPMMirror(t *testing.T) {
+	read := func(f string) []byte {
+		b, err := os.ReadFile(filepath.Join("testdata", "npmmirror", f))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	fakeNPM(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("text") == "pi-package antigravity" {
+			w.Write(read("search-pi-package-antigravity.json"))
+			return
+		}
+		w.Write(read("search-keywords.json"))
+	})
+	hits, err := Search(context.Background(), "antigravity")
+	var names []string
+	for _, h := range hits {
+		names = append(names, h.Package)
+	}
+	if err != nil || !slices.Contains(names, "pi-antigravity") {
+		t.Fatalf("Search = %v, %v", names, err)
+	}
+}
+
+func TestPlainKeywords(t *testing.T) {
+	for in, want := range map[string]string{
+		"keywords:pi-package rename": "pi-package rename",
+		"keywords:a,b  x":            "a b x",
+		"rename opencode":            "rename opencode",
+		"keywords:":                  "keywords:",
+	} {
+		if got := PlainKeywords(in); got != want {
+			t.Errorf("PlainKeywords(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 // pinnedPi is the pi testdata/pi-lock installs. Its bun.lock names every
 // package of pi at a version and its npm integrity, so the test runs on
 // the same pi each time. Installed as ensurePi installs it, at npm's

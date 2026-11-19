@@ -640,6 +640,9 @@ func searchNPM(ctx context.Context, text string, keep func(string, []string) boo
 	if err := json.Unmarshal(b, &r); err != nil {
 		return nil, err
 	}
+	if plain := PlainKeywords(text); len(r.Objects) == 0 && plain != text {
+		return searchNPM(ctx, plain, keep)
+	}
 	var out []Hit
 	for _, o := range r.Objects {
 		p := o.Package
@@ -652,6 +655,24 @@ func searchNPM(ctx context.Context, text string, keep func(string, []string) boo
 		}})
 	}
 	return out, nil
+}
+
+// PlainKeywords is a search's text with each keywords: qualifier as the
+// plain word it names: "keywords:pi-package rename" is "pi-package
+// rename". npmmirror (the 「国内镜像」 switch, or a user's own registry
+// pointed at it) knows no qualifier and answers {"objects":[],"total":0}
+// to any text that has one, while its plain search finds the packages
+// with the keyword (eachg0 on X: pi-rename not found), so a search that
+// came back empty is asked again in plain words and the keyword is
+// checked here.
+func PlainKeywords(text string) string {
+	f := strings.Fields(text)
+	for i, w := range f {
+		if k, ok := strings.CutPrefix(w, "keywords:"); ok && k != "" {
+			f[i] = strings.ReplaceAll(k, ",", " ")
+		}
+	}
+	return strings.Join(f, " ")
 }
 
 // Page is a package's page: its README and when it last changed.

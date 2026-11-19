@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -381,5 +382,55 @@ func TestPiRunGivesAgentDir(t *testing.T) {
 	testenv.Program(t, bin, "#!/bin/sh\necho 'npm ERR! 404 Not Found' >&2\nexit 1\n")
 	if _, err := piRun(bin, dir, "install", "npm:nope"); err == nil || !strings.Contains(err.Error(), "404") {
 		t.Errorf("err = %v, want npm's own words", err)
+	}
+}
+
+// eachg0 on X: with npmmirror as the registry (the 「国内镜像」 switch),
+// searching the Pi market for "rename" or "pi-rename" found nothing, though
+// pi-rename has the pi-package keyword. npmmirror answers every search with
+// a keywords: qualifier with {"objects":[],"total":0}; its plain search
+// finds them. The answers are npmmirror's own bytes (testdata/npmmirror,
+// 2026-11-19), and npm's own search is down, so the mirror has to find it.
+func TestPiSearchFindsByNameOnNPMMirror(t *testing.T) {
+	piCacheHere(t)
+	_, _, down := piNPM(t, nil, nil)
+	down.Store(true)
+	read := func(f string) []byte {
+		b, err := os.ReadFile(filepath.Join("testdata", "npmmirror", f))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	var texts []string
+	var mu sync.Mutex
+	mirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		text := r.URL.Query().Get("text")
+		mu.Lock()
+		texts = append(texts, text)
+		mu.Unlock()
+		switch {
+		case strings.Contains(text, "keywords:"):
+			w.Write(read("search-keywords.json"))
+		case text == "pi-package rename":
+			w.Write(read("search-pi-package-rename.json"))
+		case text == "pi-package pi-rename":
+			w.Write(read("search-pi-package-pi-rename.json"))
+		default:
+			w.Write(read("search-keywords.json"))
+		}
+	}))
+	t.Cleanup(mirror.Close)
+	piRegistry = func() string { return mirror.URL }
+	for _, q := range []string{"rename", "pi-rename"} {
+		list, err := MarketPiPackages(q)
+		if err != nil || !slices.Contains(piNames(list), "pi-rename") {
+			t.Errorf("%q: %v %v (asked %q)", q, piNames(list), err, texts)
+		}
+		for _, p := range list {
+			if p.Name == "pi-rename" && (p.Source != "npm:pi-rename" || p.Version != "1.2.0" || p.Publisher != "shanelevs") {
+				t.Errorf("pi-rename = %+v", p)
+			}
+		}
 	}
 }
