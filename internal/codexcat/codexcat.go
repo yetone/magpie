@@ -1195,7 +1195,8 @@ func listedEntry(m catalog.Model, priority int, work settings.Settings, autoRevi
 	}
 	e := ownEntry(raw, m.ID, shownName(m), priority)
 	desc, _ := e["description"].(string)
-	e["description"] = cmp.Or(strings.TrimSpace(desc), m.Name) + " via magpie"
+	// another magpie's entry ends so already: said once
+	e["description"] = cmp.Or(strings.TrimSuffix(strings.TrimSpace(desc), " via magpie"), m.Name) + " via magpie"
 	if c := m.Context; c > 0 {
 		// the window magpie resolves (the user's, else this entry's own),
 		// and where the user has Codex compact it, theirs alone: not

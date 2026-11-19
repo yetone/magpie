@@ -78,6 +78,10 @@ func TestRemoteMagpieDecisionRefresh(t *testing.T) {
 	var mu sync.Mutex
 	list := `{"data":[{"id":"relay/typesafe/jev-router"},{"id":"judge/custom-image-decision","kind":"decision","context_length":65536,"modalities":{"input":["text","image"]}}]}`
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/codex/models" { // its Codex list, which says nothing here
+			http.NotFound(w, r)
+			return
+		}
 		if r.URL.Path != "/v1/models" || r.Header.Get(DecidersHeader) != "1" || r.Header.Get(DrawersHeader) != "1" || r.Header.Get(VideomakersHeader) != "1" || r.Header.Get("Authorization") != "Bearer remote-key" {
 			t.Errorf("remote discovery: %s %v", r.URL.Path, r.Header)
 		}
