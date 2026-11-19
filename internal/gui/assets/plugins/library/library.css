@@ -416,10 +416,9 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-icon { width: 26px; height: 26px; padding: 0; display: inline-grid; place-items: center; }
 .lib-rowacts.busy { opacity: 1; }
 .lib-icon.busy, .lib-icon.busy:disabled { opacity: 1; color: var(--muted); }
-.lib-icon.busy svg { animation: lib-spin .8s linear infinite; }
-@keyframes lib-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .lib-icon.busy svg { animation: lib-pulse 1.2s ease infinite alternate; } }
-@keyframes lib-pulse { to { opacity: .35; } }
+/* busy: app.js glyphBusy has put the spinner's arc in place of the glyph */
+.lib-icon.busy svg > * { transform-box: view-box; transform-origin: 50% 50%; animation: spin .8s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .lib-icon.busy svg > * { animation: none; } }
 
 /* the skill finder */
 .lib-install { margin-bottom: 4px; }

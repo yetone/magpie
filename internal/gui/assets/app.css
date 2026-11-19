@@ -849,7 +849,9 @@ body.panel #agents > .row .ag-handle::before { left: -8px; }
 .ag-open .field.ag-who .ok { order: 2; }
 .ag-who .ok { display: none; flex: none; align-items: center; gap: 3px; color: var(--green); font-weight: 600; }
 .ag-who.done .ok { display: inline-flex; }
+/* busy: app.js glyphBusy has put the spinner's arc in place of the glyph */
 .ag-fix.busy svg > * { transform-box: view-box; transform-origin: 50% 50%; animation: spin .8s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .ag-fix.busy svg > * { animation: none; } }
 /* what has to listen at an address no agent reaches magpie by (#1013): long addresses wrap, and it can be copied */
 .drift-why { overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
 /* the agent's CLI on its name's line (#202): its version faint, and a quiet

@@ -2115,13 +2115,13 @@ function appRestart(a) {
     e.stopPropagation();
     if (!(await confirmRestart(a.name))) return;
     go.disabled = true;
-    go.classList.add("busy");
+    glyphBusy(go, true);
     try {
       state = await api("agents/restart/" + a.id, {});
       renderAgents();
       status(t("{agent} restarted", { agent: a.name }));
     } catch (err) {
-      if (go.isConnected) { go.disabled = false; go.classList.remove("busy"); }
+      if (go.isConnected) { go.disabled = false; glyphBusy(go, false); }
       status(tNotice(err.message), "err");
     }
   };
@@ -2506,7 +2506,7 @@ async function keepAgent(a) {
 
 // reapplyAgent writes what magpie set on the agent into its config again.
 async function reapplyAgent(a, btn) {
-  btn?.classList.add("busy");
+  glyphBusy(btn, true);
   try {
     state = await api("agents/reapply/" + a.id, {});
     renderAgents();
@@ -2514,7 +2514,7 @@ async function reapplyAgent(a, btn) {
     const msg = t("{agent} goes through magpie again", { agent: a.name });
     saidOk(msg);
   } catch (e) {
-    btn?.classList.remove("busy");
+    glyphBusy(btn, false);
     statusErr(e);
   }
 }
@@ -2528,6 +2528,18 @@ let cliInfo = {}; // agent id → { version, latest, via, command, update }
 const cliBusy = new Set(); // the ones being updated now
 const CLI_UP = "M8 2.5v8M4.5 7 8 10.5 11.5 7M3.5 13.5h9";
 const CLI_SPIN = "M13.5 8a5.5 5.5 0 1 1-5.5-5.5";
+
+// glyphBusy shows an icon button at work with the spinner the others turn
+// (saving, a CLI's update): its glyph is put aside for the arc and comes
+// back when it is done. A glyph turning on itself said nothing but that
+// it was turning (a skill's update arrow went round, @wiirhan on X).
+function glyphBusy(b, on) {
+  const g = b?.querySelector("svg");
+  if (!g) return;
+  b.classList.toggle("busy", on);
+  if (on) b.held ||= (g.replaceWith(svg(CLI_SPIN, g.getAttribute("width"))), g);
+  else if (b.held) g.replaceWith(b.held), b.held = 0;
+}
 
 function cliTag(a) {
   const box = el("span", "ag-cli");

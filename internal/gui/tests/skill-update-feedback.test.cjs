@@ -1,8 +1,8 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // zhexuanliuoutl1 on X: updating a skill from GitHub (hugohe3/ppt-master) said
-// nothing while it ran. The row's Update button now spins until the fetch is
-// done, and the toast says what came of it: updated, already up to date, or
-// the error. In English and Chinese, in Chromium and WebKit. No backend: the
+// nothing while it ran. The row's Update button now shows the spinner until
+// the fetch is done, and the toast says what came of it: updated, already up
+// to date, or the error. In English and Chinese, in Chromium and WebKit. No backend: the
 // API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -103,8 +103,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const status = async () => (await page.locator("#status").textContent()).trim();
 
         await press(page, btn);
-        // held: the button turns, the row's actions stay in view
-        await page.waitForFunction(() => document.querySelector(".lib-skill .lib-rowacts.busy button.lib-icon.busy svg")?.getAnimations().some((a) => a.playState === "running"));
+        // held: the spinner's arc turns in place of the arrow (@wiirhan on X:
+        // the arrow itself went round), the row's actions stay in view
+        await page.waitForFunction(() => document.querySelector(".lib-skill .lib-rowacts.busy button.lib-icon.busy svg path")?.getAnimations().some((a) => a.playState === "running"));
         await page.mouse.move(0, 0);
         // (its fade-out, if it were going, is under .14s: a state, not a wait)
         await page.waitForFunction(() => getComputedStyle(document.querySelector(".lib-rowacts.busy")).opacity === "1");

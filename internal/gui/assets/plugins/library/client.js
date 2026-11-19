@@ -8342,13 +8342,14 @@ magpie.plugin("library", (ctx) => {
     if (!gone && (s.kind === "github" || s.kind === "git" || s.origin)) {
       const u = button("", "lib-icon", async (e, b) => {
         if (s.edited) return confirmUpdateEdited(s);
-        // spinning, with the row's actions kept in view while the fetch
-        // runs; then what came of it: updated, nothing new, or the error
-        b.classList.add("busy");
+        // the spinner in place of its arrow, with the row's actions kept in
+        // view while the fetch runs; then what came of it: updated,
+        // nothing new, or the error
+        glyphBusy(b, true);
         b.parentElement?.classList.add("busy");
         await change("skills/update", { name: s.name }, (res) => res?.current?.includes(s.name)
           ? t("{name} is already up to date", { name: s.name }) : t("{name} is updated", { name: s.name }));
-        b.classList.remove("busy");
+        glyphBusy(b, false);
         b.parentElement?.classList.remove("busy");
       });
       u.append(svg(GLYPH.up, 13, 1.5));
