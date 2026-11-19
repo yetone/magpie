@@ -131,6 +131,17 @@ type promptBuilder struct {
 	// so its bytes count once
 	sent  sentSizes
 	again bool
+	// from and model: the protocol the request speaks and the model it
+	// names, whose vendor's rule an inline image is counted by
+	// (imageTokensOf)
+	from  provider.Protocol
+	model string
+}
+
+// image is what an inline image of src takes, at detail when the request
+// named one.
+func (b *promptBuilder) image(detail string, src []byte) int {
+	return imageTokensOf(b.from, b.model, detail, src)
 }
 
 // PromptPiece is a stretch of an item's text as the request sent it: a
@@ -790,10 +801,12 @@ func (b *promptBuilder) anthropic(body []byte) bool {
 			Content json.RawMessage `json:"content"`
 		} `json:"messages"`
 		Tools []json.RawMessage `json:"tools"`
+		Model string            `json:"model"`
 	}
 	if decodeJSONView(body, &req) != nil {
 		return false
 	}
+	b.from, b.model = provider.Anthropic, req.Model
 	for _, s := range blocksOf(req.System) {
 		if strings.HasPrefix(s.Text, "x-anthropic-billing-header") {
 			b.add(PartSystem, "billing", "", tokensOf(s.Text), txt("system", s.Text))
@@ -929,7 +942,7 @@ func (b *promptBuilder) anthropicBlock(role string, x rawBlock) {
 		for _, c := range blocksOf(x.Content) {
 			switch c.Type {
 			case "image", "document":
-				b.add(PartFiles, c.Type, "image", imageTokens, imgPiece(c.Source))
+				b.add(PartFiles, c.Type, "image", b.sourceTokens(c.Type, c.Source), imgPiece(c.Source))
 			default:
 				n += tokensOf(c.Text)
 				texts = append(texts, c.Text)
@@ -946,7 +959,7 @@ func (b *promptBuilder) anthropicBlock(role string, x rawBlock) {
 			b.add(PartFiles, "document", "image", rawTokens(x.Source), rawPiece("", "", x.Source))
 			return
 		}
-		b.add(PartFiles, x.Type, "image", imageTokens, imgPiece(x.Source))
+		b.add(PartFiles, x.Type, "image", b.sourceTokens(x.Type, x.Source), imgPiece(x.Source))
 	default:
 		b.chat(tokensOf(x.Text), txt(role, x.Text))
 	}
@@ -960,10 +973,12 @@ func (b *promptBuilder) responses(body []byte) bool {
 		Input        json.RawMessage   `json:"input"`
 		Tools        []json.RawMessage `json:"tools"`
 		Previous     string            `json:"previous_response_id"`
+		Model        string            `json:"model"`
 	}
 	if decodeJSONView(body, &req) != nil {
 		return false
 	}
+	b.from, b.model = provider.Responses, req.Model
 	b.held = req.Previous != ""
 	var ins string
 	if decodeJSONView(req.Instructions, &ins) == nil && ins != "" {
@@ -1067,7 +1082,7 @@ func (b *promptBuilder) responsesItem(raw json.RawMessage) {
 			}
 			for _, p := range parts {
 				if p.image {
-					b.add(PartFiles, "image", "image", imageTokens, imgPiece(p.src))
+					b.add(PartFiles, "image", "image", b.partImage(p), imgPiece(p.src))
 					continue
 				}
 				b.userText(p.text)
@@ -1111,7 +1126,7 @@ func (b *promptBuilder) responsesItem(raw json.RawMessage) {
 			var texts []string
 			for _, p := range responsesContent(it.Output) {
 				if p.image {
-					b.add(PartFiles, "image", "image", imageTokens, imgPiece(p.src))
+					b.add(PartFiles, "image", "image", b.partImage(p), imgPiece(p.src))
 					continue
 				}
 				n += tokensOf(p.text)
@@ -1133,9 +1148,29 @@ func (b *promptBuilder) responsesItem(raw json.RawMessage) {
 }
 
 type rPart struct {
-	text  string
-	image bool
-	src   json.RawMessage // an image's image_url
+	text   string
+	image  bool
+	src    json.RawMessage // an image's image_url
+	detail string          // a Responses image's detail, beside its image_url
+	file   bool            // an input_file: a document, not a picture
+}
+
+// partImage is what a Responses or Chat image part takes; a file at the
+// estimate for a picture.
+func (b *promptBuilder) partImage(p rPart) int {
+	if p.file {
+		return imageTokens
+	}
+	return b.image(p.detail, p.src)
+}
+
+// sourceTokens is what an Anthropic image or document block takes: a
+// document at the estimate for a picture.
+func (b *promptBuilder) sourceTokens(typ string, src []byte) int {
+	if typ != "image" {
+		return imageTokens
+	}
+	return b.image("", src)
 }
 
 func responsesContent(c json.RawMessage) []rPart {
@@ -1147,11 +1182,13 @@ func responsesContent(c json.RawMessage) []rPart {
 		Type     string          `json:"type"`
 		Text     string          `json:"text"`
 		ImageURL json.RawMessage `json:"image_url"`
+		Detail   string          `json:"detail"`
 	}
 	_ = decodeJSONView(c, &ps)
 	out := make([]rPart, 0, len(ps))
 	for _, p := range ps {
-		out = append(out, rPart{text: p.Text, image: p.Type == "input_image" || p.Type == "input_file" || p.Type == "image_url", src: p.ImageURL})
+		out = append(out, rPart{text: p.Text, image: p.Type == "input_image" || p.Type == "input_file" || p.Type == "image_url", src: p.ImageURL,
+			detail: p.Detail, file: p.Type == "input_file"})
 	}
 	return out
 }
@@ -1174,10 +1211,12 @@ func (b *promptBuilder) chatCompletions(body []byte) bool {
 			} `json:"tool_calls"`
 		} `json:"messages"`
 		Tools []json.RawMessage `json:"tools"`
+		Model string            `json:"model"`
 	}
 	if decodeJSONView(body, &req) != nil {
 		return false
 	}
+	b.from, b.model = provider.Chat, req.Model
 	for _, t := range req.Tools {
 		b.responsesTool(t)
 	}
@@ -1194,7 +1233,7 @@ func (b *promptBuilder) chatCompletions(body []byte) bool {
 			}
 			for _, p := range parts {
 				if p.image {
-					b.add(PartFiles, "image", "image", imageTokens, imgPiece(p.src))
+					b.add(PartFiles, "image", "image", b.partImage(p), imgPiece(p.src))
 					continue
 				}
 				b.userText(p.text)
@@ -1204,7 +1243,7 @@ func (b *promptBuilder) chatCompletions(body []byte) bool {
 			var texts []string
 			for _, p := range parts {
 				if p.image {
-					b.add(PartFiles, "image", "image", imageTokens, imgPiece(p.src))
+					b.add(PartFiles, "image", "image", b.partImage(p), imgPiece(p.src))
 					continue
 				}
 				n += tokensOf(p.text)
@@ -1302,7 +1341,7 @@ func (b *promptBuilder) gemini(body []byte) bool {
 				}
 				b.result(id, rawTokens(p.FunctionResponse.Response), rawPiece("result", "", p.FunctionResponse.Response))
 			case len(p.InlineData) > 0 || len(p.FileData) > 0:
-				b.add(PartFiles, "image", "image", imageTokens, imgPiece(p.InlineData))
+				b.add(PartFiles, "image", "image", b.image("", p.InlineData), imgPiece(p.InlineData))
 			case c.Role == "model":
 				role := "assistant"
 				if p.Thought {
