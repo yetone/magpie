@@ -1,6 +1,6 @@
 /* Insights › Masking (page.js): what masking kept from vendors, in a
    short band over the requests it changed, and one request opened. Flat
-   only: hairlines, one thin number, the accent kept for what left this
+   only: hairlines, one number, the accent kept for what left this
    computer as placeholders */
 #view-masking { container-type: inline-size; }
 #view-masking .grow { flex: 1; }
@@ -14,7 +14,10 @@
 .msk-band { display: grid; grid-template-columns: minmax(0, 240px) minmax(0, 1fr); gap: 36px; align-items: center; margin-top: 12px; }
 .msk-sk-num { height: 92px; border-radius: 10px; }
 .msk-sk-flow { height: 102px; border-radius: 10px; }
-.msk-num { font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, system-ui, sans-serif; font-size: 52px; font-weight: 100; line-height: .9; letter-spacing: -.045em; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--fg); }
+/* the interface's font at the weight and tracking of the app's other big
+   numbers (.si-pct b, .kpi b), not a thin display face (CHENGJIAHEGOXIS on
+   X: 「瘦长的比较别扭」) */
+.msk-num { font-size: 52px; font-weight: 600; line-height: .9; letter-spacing: -.035em; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--fg); }
 .msk-unit { margin-top: 6px; font-size: 12.5px; color: var(--fg-2); }
 .msk-stats { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font-size: 11.5px; color: var(--muted); }
 .msk-stats b { margin-right: 4px; font-weight: 600; color: var(--fg); font-variant-numeric: tabular-nums; }
