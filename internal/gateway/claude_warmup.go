@@ -224,7 +224,7 @@ func claudeUsage(ctx context.Context, configDir string) (string, error) {
 		if res.IsError {
 			return "", errors.New("Claude Code: " + clip(res.Result))
 		}
-		return res.Result + claudeExtraUsage(out.Bytes()), nil
+		return res.Result + claudeExtraUsage(out.Bytes(), res.Result), nil
 	}
 	msg := strings.TrimSpace(stderr.String())
 	if msg == "" {
@@ -236,14 +236,29 @@ func claudeUsage(ctx context.Context, configDir string) (string, error) {
 	return "", errors.New("Claude Code: " + clip(msg))
 }
 
-// claudeExtraUsage is the line (provider.ClaudeExtraLine) for the extra
-// usage, Anthropic's usage credits, an account has on and a monthly cap
-// for, from the usage_report Claude Code's verbose json carries with its
-// /usage; "" when out has none, as from a Claude Code that sends none.
-func claudeExtraUsage(out []byte) string {
+// claudeExtraUsage is what the gateway adds under -p /usage's text from
+// the usage_report Claude Code's verbose json carries (Claude Code's own
+// read of Anthropic's usage endpoint, so magpie asks Anthropic nothing):
+//
+//   - the month's extra usage (usage credits), which the text has no
+//     figure for (provider.ClaudeExtraLine);
+//   - the server's usage rows (limits[]), as /usage's own lines, when the
+//     text drew none: the text draws the session and week from the
+//     endpoint's five_hour and seven_day, and an account whose meters come
+//     only as rows (a Claude Enterprise seat, @andy_chen1997 on X) read as
+//     "temporarily unavailable" while the report held its 5 hours;
+//   - provider.ClaudeNoLimitsLine when the server reported no meters at
+//     all (limits: [], Claude Code's "the server reported no meters"): a
+//     plan without 5-hour or weekly limits, never a passing failure. A
+//     null limits or rate_limits says nothing: a server that predates the
+//     rows, or a fetch that failed.
+func claudeExtraUsage(out []byte, text string) string {
 	var all []struct {
 		Report *struct {
 			Limits *struct {
+				// as written: a row of another shape costs its rows,
+				// never the extra usage beside them
+				Rows  json.RawMessage `json:"limits"`
 				Extra *struct {
 					On       bool     `json:"is_enabled"`
 					Limit    *float64 `json:"monthly_limit"`
@@ -257,20 +272,85 @@ func claudeExtraUsage(out []byte) string {
 		return ""
 	}
 	for _, m := range all {
-		if m.Report == nil || m.Report.Limits == nil || m.Report.Limits.Extra == nil {
+		if m.Report == nil || m.Report.Limits == nil {
 			continue
 		}
-		x := m.Report.Limits.Extra
-		if !x.On || x.Limit == nil || *x.Limit <= 0 {
-			return ""
+		var add strings.Builder
+		var rows []claudeLimitRow
+		if json.Unmarshal(m.Report.Limits.Rows, &rows) == nil && rows != nil && !claudeTextHasWindow(text) {
+			for _, row := range rows {
+				if line := row.line(); line != "" {
+					add.WriteString("\n" + line)
+				}
+			}
+			if len(rows) == 0 {
+				add.WriteString("\n" + provider.ClaudeNoLimitsLine)
+			}
 		}
-		used := 0.0
-		if x.Used != nil {
-			used = *x.Used
+		if x := m.Report.Limits.Extra; x != nil && x.On && x.Limit != nil && *x.Limit > 0 {
+			used := 0.0
+			if x.Used != nil {
+				used = *x.Used
+			}
+			add.WriteString("\n" + provider.ClaudeExtraLine(used, *x.Limit, x.Currency))
 		}
-		return "\n" + provider.ClaudeExtraLine(used, *x.Limit, x.Currency)
+		return add.String()
 	}
 	return ""
+}
+
+// claudeLimitRow is one of the usage endpoint's limits[] rows as Claude
+// Code's usage_report carries them (2.1.328's schema): kind is the
+// server's meter ("session", "weekly_all", "weekly_scoped"), percent is
+// 0-100 and resets_at ISO 8601.
+type claudeLimitRow struct {
+	Kind     string   `json:"kind"`
+	Percent  *float64 `json:"percent"`
+	ResetsAt *string  `json:"resets_at"`
+	Scope    *struct {
+		Model *struct {
+			Name string `json:"display_name"`
+		} `json:"model"`
+	} `json:"scope"`
+}
+
+// line is the row as /usage's text would say it, "" for a row it draws
+// none for: a meter of no known kind, one with no reading, or one scoped
+// to a surface rather than a model (Claude Code's text leaves those out
+// too).
+func (r claudeLimitRow) line() string {
+	if r.Percent == nil {
+		return ""
+	}
+	var head string
+	switch r.Kind {
+	case "session":
+		head = "Current session"
+	case "weekly_all":
+		head = "Current week (all models)"
+	case "weekly_scoped":
+		if r.Scope == nil || r.Scope.Model == nil || strings.TrimSpace(r.Scope.Model.Name) == "" || strings.ContainsAny(r.Scope.Model.Name, "()") {
+			return ""
+		}
+		head = "Current week (" + strings.TrimSpace(r.Scope.Model.Name) + ")"
+	default:
+		return ""
+	}
+	line := head + ": " + strconv.FormatFloat(*r.Percent, 'f', -1, 64) + "% used"
+	if r.ResetsAt != nil && *r.ResetsAt != "" {
+		line += " · resets " + *r.ResetsAt
+	}
+	return line
+}
+
+// claudeTextHasWindow says /usage's text drew a window of its own.
+func claudeTextHasWindow(text string) bool {
+	for _, line := range strings.Split(text, "\n") {
+		if l := strings.TrimSpace(line); strings.HasPrefix(l, "Current session:") || strings.HasPrefix(l, "Current week") {
+			return true
+		}
+	}
+	return false
 }
 
 // claudeUsageEnv is the environment a /usage read runs Claude Code in:

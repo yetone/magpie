@@ -157,6 +157,41 @@ func TestClaudeUsageCredits(t *testing.T) {
 	}
 }
 
+// A Claude Enterprise seat's -p /usage printed only the subscription line
+// (@andy_chen1997 on X): its meters came as the usage endpoint's rows
+// (limits[]), which Claude Code's text doesn't draw. The read adds them as
+// /usage's own lines; a report of no meters ([]) as the plan having none;
+// a null one, a fetch that failed or a server before rows, adds nothing.
+// The rows follow Claude Code 2.1.328's usage_report schema; no Enterprise
+// account was at hand.
+func TestClaudeUsageRows(t *testing.T) {
+	const sub = "You are currently using your subscription to power your Claude Code usage"
+	msgs := func(text, limits string) string {
+		return `[{"type":"system","subtype":"init"},{"type":"assistant","usage_report":{"rate_limits":` + limits + `}},{"type":"result","is_error":false,"result":"` + text + `"}]`
+	}
+	rows := `{"limits":[` +
+		`{"kind":"session","group":"session","percent":37.5,"resets_at":"2026-11-19T15:00:00.000Z","scope":null,"severity":"normal","is_active":true},` +
+		`{"kind":"weekly_scoped","group":"weekly","percent":4,"resets_at":null,"scope":{"model":{"display_name":"Fable"}}},` +
+		`{"kind":"weekly_scoped","group":"weekly","percent":9,"resets_at":null,"scope":{"surface":{"display_name":"Claude Design"}}},` +
+		`{"kind":"new_meter","group":"x","percent":50,"resets_at":null}` +
+		`],"extra_usage":null}`
+	for _, c := range []struct{ name, text, limits, want string }{
+		{"rows", sub, rows, "\nCurrent session: 37.5% used · resets 2026-11-19T15:00:00.000Z\nCurrent week (Fable): 4% used"},
+		{"text drew its own", "Current session: 13% used", rows, ""},
+		{"no meters", sub, `{"limits":[],"extra_usage":null}`, "\n" + provider.ClaudeNoLimitsLine},
+		{"no meters, credits", sub, `{"limits":[],"extra_usage":{"is_enabled":true,"monthly_limit":50000,"used_credits":100,"currency":"USD"}}`, "\n" + provider.ClaudeNoLimitsLine + "\nExtra usage: 1.00 / 500.00 USD spent"},
+		{"a row of another shape", sub, `{"limits":[{"kind":"session","percent":"most"}],"extra_usage":{"is_enabled":true,"monthly_limit":50000,"used_credits":100,"currency":"USD"}}`, "\nExtra usage: 1.00 / 500.00 USD spent"},
+		{"rows unknown", sub, `{"limits":null,"extra_usage":null}`, ""},
+		{"fetch failed", sub, `null`, ""},
+	} {
+		fakeWarmClaude(t, msgs(c.text, c.limits), 0)
+		got, err := claudeUsage(context.Background(), "")
+		if want := c.text + c.want; err != nil || got != want {
+			t.Errorf("%s: usage %q %v, want %q", c.name, got, err, want)
+		}
+	}
+}
+
 // /usage runs without CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, which keeps
 // Claude Code from asking for the usage, unless the user set it; telemetry,
 // error reporting and autoupdate stay off. The warm-up keeps it.

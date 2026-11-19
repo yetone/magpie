@@ -6,9 +6,12 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -58,7 +61,55 @@ func readClaudeUsage(ctx context.Context, configDir string) ([]QuotaWindow, erro
 	if err != nil {
 		return []QuotaWindow{}, err
 	}
-	return parseClaudeUsage(text, time.Now())
+	ws, err := parseClaudeUsage(text, time.Now())
+	if errors.Is(err, errClaudeUsageUnavailable) && claudeUsageBased(configDir) {
+		// a seat Claude Code itself holds no rate limits for: nothing to
+		// wait for
+		return []QuotaWindow{claudeNoLimitsWindow()}, nil
+	}
+	return ws, err
+}
+
+// ClaudeNoLimitsLine is the line the gateway adds under /usage's text when
+// Claude Code's usage_report has the server reporting no meters (limits:
+// []): the plan has no 5-hour or weekly limits. Read as /usage's text
+// alone (the subscription line, no window), it said "temporarily
+// unavailable" (@andy_chen1997 on X, a Claude Enterprise seat). Its words
+// say no "usage limit", which claudeUsageDenied reads as an account error.
+const ClaudeNoLimitsLine = "Usage report: no meters on this plan"
+
+// claudeNoLimitsWindow is a plan without 5-hour or weekly limits: told as
+// text, set aside, so routing holds nothing against it.
+func claudeNoLimitsWindow() QuotaWindow {
+	return QuotaWindow{Name: "5-hour and weekly limits", Display: "None on this plan", Text: true, Aside: true}
+}
+
+// claudeUsageBased says the account in configDir ("" the user's own) is a
+// seat Claude Code holds no rate limits for, by what it saved of the
+// account's organization (.claude.json's oauthAccount): a usage-based
+// Claude Enterprise seat (seatTier "enterprise_usage_based", Claude
+// Code's vmr) or an organization billed by usage (billingType
+// "usage_based", its fD). Its /usage then never draws a window. A read
+// that fails says no.
+func claudeUsageBased(configDir string) bool {
+	path := claudeProfilePath()
+	if configDir != "" {
+		path = filepath.Join(configDir, ".claude.json")
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var p struct {
+		Account *struct {
+			SeatTier    string `json:"seatTier"`
+			BillingType string `json:"billingType"`
+		} `json:"oauthAccount"`
+	}
+	if json.Unmarshal(b, &p) != nil || p.Account == nil {
+		return false
+	}
+	return p.Account.SeatTier == "enterprise_usage_based" || p.Account.BillingType == "usage_based"
 }
 
 // "Current session: 13% used · resets Oct 1 at 3:30pm (Asia/Shanghai)",
@@ -222,6 +273,13 @@ func parseClaudeUsage(text string, now time.Time) ([]QuotaWindow, error) {
 		out = append(out, claudeOveragesWindow(out))
 	}
 	if len(out) == 0 {
+		if slices.ContainsFunc(lines, func(line string) bool { return strings.TrimSpace(line) == ClaudeNoLimitsLine }) {
+			out = append(out, claudeNoLimitsWindow())
+			if w, ok := claudeExtraWindow(lines); ok {
+				out = append(out, w)
+			}
+			return out, nil
+		}
 		if text == claudeNoWindow {
 			// the interactive panel loaded with none of the account's
 			// windows: none has started (claudeWithUnstarted)
@@ -289,6 +347,10 @@ func claudeResetTime(s string, now time.Time, span time.Duration) (time.Time, bo
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return time.Time{}, false
+	}
+	// a usage_report row's resets_at, which the gateway adds as written
+	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+		return t, true
 	}
 	loc := time.Local
 	if i := strings.LastIndex(s, "("); i >= 0 && strings.HasSuffix(s, ")") {

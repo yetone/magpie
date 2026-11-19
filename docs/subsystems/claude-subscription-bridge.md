@@ -761,6 +761,28 @@ does not call), and only Anthropic decides whether a request spends it
 (X, Shinji_Zl). Tried against fakes only; the owner's account has extra
 usage off.
 
+The text draws the session and the weeks from the endpoint's `five_hour`
+and `seven_day` fields, and from `limits[]` only the rows of kind
+`weekly_scoped` with a model. The same `usage_report.rate_limits.limits`
+carries every row as the server sent it (`kind` `session`, `weekly_all`
+or `weekly_scoped`, `percent` 0-100, `resets_at` ISO 8601). When the text
+drew no window, `claudeExtraUsage` adds each such row as /usage's own
+line (the reset as written, which `claudeResetTime` reads), and an empty
+`limits` (the server reported no meters) as
+`provider.ClaudeNoLimitsLine`, read as a text row "5-hour and weekly
+limits: None on this plan". `limits: null`, or `rate_limits: null` (the
+fetch failed, or the token lacks the profile scope), adds nothing, and
+the subscription line alone still reads as "temporarily unavailable"
+(`errClaudeUsageUnavailable`), unless what Claude Code saved of the
+account's organization (`.claude.json` `oauthAccount`) names a seat it
+holds no rate limits for: `seatTier` `enterprise_usage_based` or
+`billingType` `usage_based` (Claude Code's `vmr` and `fD`,
+`claudeUsageBased`). A Claude Enterprise seat read as "temporarily
+unavailable" before (@andy_chen1997 on X). Built from Claude Code
+2.1.328's schema and handling; no Enterprise account was tried
+(`TestClaudeUsageRows`, `TestClaudeEnterpriseUsage`,
+`TestClaudeUsageBasedSeat`).
+
 A turn's run (`claudeRunEnv`) is not given
 `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`, which the one-off runs above
 keep (`cleanClaudeEnv`). With it, or `DISABLE_TELEMETRY` or
