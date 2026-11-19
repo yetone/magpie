@@ -22,7 +22,15 @@ let featAt = null, featAtEnd = 0;
     row.classList.add("flash");
   };
 }
-window.setFeatsFind = function (words) {
+// fq is finder.js's findQuery; dry counts them and draws nothing
+window.setFeatsFind = function (fq, dry) {
+  const say = (s) => (s ? s + " " + t(s) : "");
+  const found = ((fq?.key && prefs?.builtins) || []).filter((f) => {
+    const props = Object.values(f.schema?.properties || {});
+    const text = [say(f.name), say(f.sub), ...props.map((p) => say(p.title) + " " + say(p.description))].join(" ").toLowerCase();
+    return fq.test(text, [say(f.name), ...props.map((p) => say(p.title))].join(" ").toLowerCase());
+  });
+  if (dry) return found.length;
   let box = document.getElementById("setFeats");
   if (!box) {
     box = el("section", "set-page set-feats");
@@ -31,12 +39,6 @@ window.setFeatsFind = function (words) {
     $("#view-settings").append(box);
   }
   const list = box.firstChild;
-  const say = (s) => (s ? s + " " + t(s) : "");
-  const found = ((words.length && prefs?.builtins) || []).filter((f) => {
-    const props = Object.values(f.schema?.properties || {});
-    const text = [say(f.name), say(f.sub), ...props.map((p) => say(p.title) + " " + say(p.description))].join(" ").toLowerCase();
-    return words.every((w) => text.includes(w));
-  });
   // drawn again only when it changes: a draw is a change Settings'
   // observer runs the search again on
   const key = document.documentElement.lang + " " + found.map((f) => f.id + (f.on ? "+" : "-")).join(" ");

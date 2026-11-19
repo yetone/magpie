@@ -4255,6 +4255,8 @@ body:not(.side-nav) #view-settings .set-head.stuck::before { opacity: 1; box-sha
 .set-searching .set-miss { display: none !important; }
 .set-searching .set-page::before { content: attr(data-part); display: block; margin: 4px 2px 6px; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
 .set-none { margin: 18px 2px; font-size: 13px; color: var(--muted); text-align: center; }
+/* what the words are about, found when nothing has them (finder.js): a line over the parts */
+.set-none.set-near { margin: 2px 2px 10px; text-align: start; }
 .set-page > .list:not(:last-child) { margin-bottom: 8px; }
 /* what the search finds on the other pages (finder.js): a part per page
    after Settings' own, named by it; the place Open goes to is lit there */
