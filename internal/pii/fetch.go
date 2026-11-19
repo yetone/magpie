@@ -59,6 +59,9 @@ func Download(done func()) error {
 	if !Supported() {
 		return fmt.Errorf("the local masking model doesn't run on %s yet", target())
 	}
+	if err := downloadable(); err != nil {
+		return err
+	}
 	return dl.run(modelSize, install, done)
 }
 

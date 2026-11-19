@@ -335,6 +335,7 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	in.RedactModelScore = cur.RedactModelScore         // set on its own (privacy-model)
 	in.RedactModelOff = cur.RedactModelOff             // set on its own (privacy-model)
 	in.RedactModelAuto = cur.RedactModelAuto           // set on its own (masking)
+	in.RedactModelDir = cur.RedactModelDir             // set on its own (privacy-model's folder)
 	in.RedactActions = cur.RedactActions               // set on their own (redact-actions)
 	in.RedactAllow = cur.RedactAllow                   // set on its own (redact-allow)
 	in.DisabledModels = cur.DisabledModels             // set on their own (disabled-models, #1867)

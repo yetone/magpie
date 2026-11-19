@@ -386,3 +386,17 @@ func TestImageGenAcceptsMiniMaxImageModel(t *testing.T) {
 		t.Error("a model it doesn't draw was taken")
 	}
 }
+
+// The models folder is set by Move… on the redaction page, never by a
+// settings save, whatever the body says.
+func TestRedactModelDirIsNotASettingsSave(t *testing.T) {
+	cur := settings.Defaults()
+	cur.RedactModelDir = "/models"
+	in, err := Merge([]byte(`{"theme":"dark","redactModelDir":"/elsewhere"}`), cur, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if in.RedactModelDir != "/models" {
+		t.Errorf("a save changed the models folder: %q", in.RedactModelDir)
+	}
+}

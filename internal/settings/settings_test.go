@@ -538,3 +538,25 @@ func TestDefaultTextSize(t *testing.T) {
 		t.Fatalf("on %s the default is %d, want %d", runtime.GOOS, orig(), want)
 	}
 }
+
+// The models folder is this computer's: settings that come from another
+// computer's sync keep the one set here, and it is saved and cleared on its
+// own.
+func TestRedactModelDirKept(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := SetRedactModelDir("/models"); err != nil {
+		t.Fatal(err)
+	}
+	cur := Load()
+	if cur.RedactModelDir != "/models" {
+		t.Fatalf("not saved: %q", cur.RedactModelDir)
+	}
+	from := Settings{RedactModelDir: "D:\\their-disk"}
+	from.KeepOwn(cur)
+	if from.RedactModelDir != "/models" {
+		t.Fatalf("a sync took the folder: %q", from.RedactModelDir)
+	}
+	if err := SetRedactModelDir(""); err != nil || Load().RedactModelDir != "" {
+		t.Fatalf("cleared: %v %q", err, Load().RedactModelDir)
+	}
+}

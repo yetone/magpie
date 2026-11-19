@@ -238,9 +238,14 @@ type Settings struct {
 	RedactModelName  string             `json:"redactModelName,omitempty"`
 	RedactModelOff   bool               `json:"redactModelOff,omitempty"`
 	RedactModelAuto  bool               `json:"redactModelAuto,omitempty"`
-	RedactPersonal   bool               `json:"redactPersonal,omitempty"`
-	RedactKinds      map[string]bool    `json:"redactKinds,omitempty"`
-	RedactWords      []string           `json:"redactWords,omitempty"`
+	// RedactModelDir is the folder the local models are downloaded into
+	// (pii.Root), an absolute path on this computer, so a sync never
+	// carries it; "" is magpie's cache, as before (MetalHqa on X: the
+	// models filled his C: drive).
+	RedactModelDir string          `json:"redactModelDir,omitempty"`
+	RedactPersonal bool            `json:"redactPersonal,omitempty"`
+	RedactKinds    map[string]bool `json:"redactKinds,omitempty"`
+	RedactWords    []string        `json:"redactWords,omitempty"`
 	// RedactWordsAnyCase matches RedactWords in any case (ZoeCats on
 	// Discord); off, the default, a word is matched as written.
 	RedactWordsAnyCase bool `json:"redactWordsAnyCase,omitempty"`
@@ -1839,6 +1844,7 @@ func (s *Settings) KeepOwn(cur Settings) {
 	s.PanelShortcut = cur.PanelShortcut
 	s.RedactModel, s.RedactModelName, s.RedactModelScore = cur.RedactModel, cur.RedactModelName, cur.RedactModelScore
 	s.RedactModelOff, s.RedactModelAuto = cur.RedactModelOff, cur.RedactModelAuto
+	s.RedactModelDir = cur.RedactModelDir // a folder of this computer's
 	s.ClaudeRunsMost = cur.ClaudeRunsMost
 	s.RequestArchiveLocal, s.RequestArchiveLocalMB = cur.RequestArchiveLocal, cur.RequestArchiveLocalMB
 	s.AgentsHere = cur.AgentsHere
@@ -2561,6 +2567,15 @@ func UseDefaultRedactModel(name string) (bool, error) {
 	}
 	s.RedactModelName, s.RedactModelAuto = name, true
 	return true, save(s, false)
+}
+
+// SetRedactModelDir keeps dir as the folder the local models are kept in;
+// "" is magpie's cache.
+func SetRedactModelDir(dir string) error {
+	defer lockFile()()
+	s := load()
+	s.RedactModelDir = dir
+	return save(s, false)
 }
 
 // SetRedactModelName keeps the local model the user picked while it is

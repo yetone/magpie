@@ -22118,13 +22118,14 @@ function privacyModelRow(box, why) {
       sr.replaceChildren(sw, sv);
       if (!sr.isConnected) r.after(sr);
     } else sr.remove();
+    import("./pmfolder.js").then(() => window.pmFolder(r, sr, m, act), () => {});
     clearTimeout(pmTimer);
     // a download's progress, and where pf-serve runs once it has started
     const starting = m?.on && m.installed && !m.running && !m.failed && tries++ < 30;
-    if (pmBusy(m) || starting) pmTimer = setTimeout(load, 1000);
+    if (pmBusy(m) || starting || m?.moving) pmTimer = setTimeout(load, 1000);
   };
   const load = () => api("privacy-model").then((m) => { pmState = m; draw(m); }).catch(() => {});
-  const act = (doing, model, score) => { tries = 0; api("privacy-model", { do: doing, model, score }).then((m) => { pmState = m; draw(m); }).catch((e) => { statusTErr(e); load(); }); };
+  const act = (doing, model, score, dir) => { tries = 0; api("privacy-model", { do: doing, model, score, dir }).then((m) => { pmState = m; draw(m); }).catch((e) => { statusTErr(e); load(); }); };
   draw(pmState);
   load();
 }

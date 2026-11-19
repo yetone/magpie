@@ -40,7 +40,6 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/pii/guard"
 	"github.com/yetone/magpie/internal/redact"
 )
@@ -76,10 +75,11 @@ func Supported() bool { return serveSHA[target()] != "" }
 // Size is how much turning the model on downloads.
 func Size() int64 { return modelSize }
 
-// dir is where the model and pf-serve are kept: magpie's cache, since
-// either can be downloaded again, and never the settings' folder, which a
-// sync carries to the user's other computers.
-var dir = func() string { return filepath.Join(appdir.Cache(), "privacy-filter") }
+// dir is where the model and pf-serve are kept: in Root, magpie's cache
+// unless the user picked a folder (folder.go), since either can be
+// downloaded again, and never the settings' folder, which a sync carries to
+// the user's other computers.
+var dir = func() string { return filepath.Join(Root(), pfFolder) }
 
 func modelPath() string { return filepath.Join(dir(), modelName()) }
 
@@ -204,6 +204,9 @@ func Now() Status {
 
 // Remove ends pf-serve and deletes the model and pf-serve.
 func Remove() error {
+	if moving() {
+		return errMoving
+	}
 	Cancel()
 	Stop()
 	dl.mu.Lock()

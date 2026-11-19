@@ -1725,7 +1725,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		appPageRoutes(mux)
 		remoteRoutes(mux, w)
 	}
-	privacyModelRoutes(mux)
+	privacyModelRoutes(mux, w)
 	maskingRoutes(mux)
 	builtinRoutes(mux)
 	mux.HandleFunc("GET /api/settings", func(rw http.ResponseWriter, r *http.Request) {
