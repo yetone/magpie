@@ -394,6 +394,8 @@ func changeLocked(f func(l *Library) error) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
+	// what a subagent's file says first, for f to change that
+	l.followSubagentFiles()
 	if err := f(l); err != nil {
 		return nil, err
 	}

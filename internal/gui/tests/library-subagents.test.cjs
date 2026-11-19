@@ -18,6 +18,11 @@
 // one, so the hint and an aside name the agents that run it on their own
 // pick, and the hint says when Codex's subagent model on the Agents page
 // takes its place.
+// Each is kept in a file of its own on this computer (JonahFu on X): the
+// editor shows where, a click shows it in the file manager, and Copy puts
+// the path on the clipboard; an edit there magpie couldn't read says why.
+// A file of the user's own, in a git repository say, is under Advanced,
+// folded until one is set, and Save posts it.
 // At 420 and 1100 wide in en, zh, zh-TW, ja and de: no sideways scroll,
 // and what each click pressed stays where it was on the screen.
 // No backend: the API is faked here.
@@ -63,7 +68,10 @@ function tr(lang, key, vars = {}) {
   return s.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m));
 }
 
-function server(lang, state, posts) {
+const FILE = `${HOME}/.magpie/library/subagents/reviewer.md`, OWN = `${HOME}/code/agents/test-writer.md`;
+const BAD = `magpie can't read ${FILE}: it has no front matter. The agents keep what it said before.`;
+
+function server(lang, state, posts, reveals = []) {
   return async (route) => {
     const req = route.request(), url = new URL(req.url());
     const json = (data) => route.fulfill({ json: data });
@@ -71,11 +79,12 @@ function server(lang, state, posts) {
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
     if (url.pathname === "/api/state") return json({ agents: [], profiles: [], settings: { lang, theme: "light" } });
     if (url.pathname === "/api/library") return json(lib(state.subagents, state.held));
-    if (url.pathname.startsWith("/api/library/") && req.method() === "POST" && !url.pathname.endsWith("/reveal")) {
+    if (url.pathname === "/api/library/reveal") { reveals.push(req.postDataJSON().path); return json({}); }
+    if (url.pathname.startsWith("/api/library/") && req.method() === "POST") {
       const body = req.postDataJSON(), what = url.pathname.replace("/api/library/", "");
       posts.push({ what, body });
       if (what === "subagents/agents") state.subagents = state.subagents.map((x) => (x.name === body.name ? { ...x, agents: body.agents.filter((a) => a !== WSL) } : x));
-      if (what === "subagents/save") state.subagents = [...state.subagents.filter((x) => x.name !== body.old), body.subagent];
+      if (what === "subagents/save") state.subagents = [...state.subagents.filter((x) => x.name !== body.old), { ...body.subagent, path: body.subagent.file || `${HOME}/.magpie/library/subagents/${body.subagent.name}.md` }];
       if (what === "subagents/remove") state.subagents = state.subagents.filter((x) => x.name !== body.name);
       return json({ ...lib(state.subagents, state.held), result: { changed: ["claude"] } });
     }
@@ -128,8 +137,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) {
       await t.test(lang, async () => {
         const w = (key, vars) => tr(lang, key, vars);
-        const state = { subagents: [sa("reviewer", LONG, "You review code.\n\nReport bugs only.", ["tdd"], ["github"], ["claude", "codex"])] };
-        const posts = [], errors = [];
+        const state = { subagents: [{ ...sa("reviewer", LONG, "You review code.\n\nReport bugs only.", ["tdd"], ["github"], ["claude", "codex"]), path: FILE, fileError: BAD }] };
+        const posts = [], errors = [], reveals = [];
         const open = async (width) => {
           const ctx = await browser.newContext({ viewport: { width, height: 1000 }, reducedMotion: "reduce" });
           await ctx.addInitScript(() => { try { localStorage.setItem("magpie.libTab", "subagents"); } catch {} });
@@ -138,7 +147,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           page.setDefaultNavigationTimeout(60000);
           page.on("pageerror", (e) => errors.push(e.message));
           page.on("dialog", (d) => { errors.push("a browser dialog: " + d.message()); d.dismiss(); });
-          await page.route("**/*", server(lang, state, posts));
+          await page.route("**/*", server(lang, state, posts, reveals));
           await page.goto("http://magpie.test/");
           await page.locator('button[data-view="library"]').click();
           await page.locator("#view-library .lib-subagent").first().waitFor();
@@ -211,6 +220,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await settled(page);
         assert.equal(await page.locator("#modal select").count(), 0, "a native <select>");
         assert.equal((await ed.locator(".ehead b").textContent()).trim(), w("New subagent"));
+        // a new one has no file yet; one of the user's own is under
+        // Advanced, folded
+        assert.equal(await ed.locator(".lib-subagentfile").count(), 0, "a file line for a subagent not saved yet");
+        const more = ed.locator(".lib-subagentmore");
+        assert.equal(await more.evaluate((d) => d.open), false, "Advanced open at first");
+        assert.equal((await more.locator("summary").textContent()).trim(), w("Advanced"));
         const edChip = (id) => ed.locator(`.lib-ag[data-agent="${id}"]`);
         for (const id of ["claude", "codex", "cursor", "droid", "opencode"]) assert.equal(await edChip(id).getAttribute("aria-pressed"), "true", id);
         assert.equal(await edChip(WSL).getAttribute("aria-pressed"), "false");
@@ -263,10 +278,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await menu.waitFor({ state: "detached" });
         assert.equal((await ed.locator(".lib-subagentskills").textContent()).trim(), "tdd");
         await ed.waitFor();
+        // kept in a file of the user's own, in a repository
+        await more.locator("summary").click();
+        await ed.locator(".lib-subagentownfile").fill(" " + OWN + " ");
+        assert.equal(await ed.locator(".lib-subagentownfile").getAttribute("placeholder"), "~/code/agents/test-writer.md");
+        await more.getByText(w("A Markdown file anywhere, in a git repository say. One there already is what the subagent says."), { exact: true }).waitFor();
         assert.deepEqual(await sideways(page), [], "sideways scroll in the editor");
         await ed.locator(".bar button.primary").click();
         await ed.waitFor({ state: "detached" });
-        assert.deepEqual(posts.shift(), { what: "subagents/save", body: { old: "", subagent: { name: "test-writer", description: "写测试", prompt: "Write tests first.\nThen run them.", model: "group/review", skills: ["tdd"], mcp: [], agents: ["claude", "codex", "cursor", "droid"] } } });
+        assert.deepEqual(posts.shift(), { what: "subagents/save", body: { old: "", subagent: { name: "test-writer", description: "写测试", prompt: "Write tests first.\nThen run them.", model: "group/review", skills: ["tdd"], mcp: [], agents: ["claude", "codex", "cursor", "droid"], file: OWN } } });
         await row("test-writer").waitFor();
         assert.equal((await row("test-writer").locator(".lib-subagentuses").textContent()).trim(), w("Model: {name}", { name: "review" }) + " · " + w("Skills: {names}", { names: "tdd" }));
         await v.locator(".lib-subagents-nomodel").filter({ hasText: w("{agents} can't be given a subagent's model: theirs runs on the model the agent picks.", { agents: "Claude Code, Cursor, Droid" }) }).waitFor();
@@ -280,6 +300,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal((await ed.locator(".ehead b").textContent()).trim(), "reviewer");
         assert.equal(await ed.locator(".lib-subagentprompt").inputValue(), "You review code.\n\nReport bugs only.");
         assert.equal((await ed.locator(".lib-subagentmcp").textContent()).trim(), "github");
+        // where it is kept: shown in the file manager on a click, and why
+        // the edit made there wasn't taken in
+        const file = ed.locator(".lib-subagentfile");
+        assert.equal((await file.locator(".lib-path").textContent()).trim(), "~/.magpie/library/subagents/reviewer.md");
+        await ed.getByText(w("Edit it in any editor or agent: magpie takes the change in and gives it to the agents"), { exact: true }).waitFor();
+        assert.equal((await ed.locator(".lib-subagentfile-err").textContent()).trim(), BAD);
+        await file.locator(".lib-path").click();
+        for (let i = 0; !reveals.length && i < 100; i++) await new Promise((r) => setTimeout(r, 50));
+        assert.deepEqual(reveals, [FILE]);
+        assert.equal(await file.locator("button.copy").count(), 1);
+        assert.equal(await ed.locator(".lib-subagentmore").evaluate((d) => d.open), false, "Advanced open with no file of the user's own");
         await ed.locator(".bar button.danger").click();
         const sheet = page.locator("dialog.action-confirm");
         await sheet.waitFor();
@@ -299,6 +330,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await ed.waitFor();
         await settled(page);
         assert.equal((await ed.locator(".lib-subagentmodel").textContent()).trim(), "review");
+        // kept in the user's file: shown, and Advanced open with it
+        assert.equal((await ed.locator(".lib-subagentfile .lib-path").textContent()).trim(), "~/code/agents/test-writer.md");
+        assert.equal(await ed.locator(".lib-subagentmore").evaluate((d) => d.open), true, "Advanced folded over the user's file");
+        assert.equal(await ed.locator(".lib-subagentownfile").inputValue(), OWN);
+        assert.equal(await ed.locator(".lib-subagentfile-err").count(), 0);
         assert.equal((await hint("model").textContent()).trim(), w("Not set for {agents}: theirs runs on the model the agent picks", { agents: "Claude Code, Cursor, Droid" }) + " · " + w("Codex's subagent model on the Agents page is set, and takes the place of this one"));
         await ed.locator(".bar button", { hasText: w("Cancel") }).click();
         await ed.waitFor({ state: "detached" });

@@ -5138,14 +5138,17 @@ magpie.plugin("library", (ctx) => {
 
   function editSubagent(s) {
     const all = subagentAgents();
-    const d = s ? { name: s.name, description: s.description, prompt: s.prompt, model: s.model || "", skills: [...(s.skills || [])], mcp: [...(s.mcp || [])], agents: [...(s.agents || [])] }
-      : { name: "", description: "", prompt: "", model: "", skills: [], mcp: [], agents: all.filter((a) => !subagentBlocked(a)).map((a) => a.id) };
+    const d = s ? { name: s.name, description: s.description, prompt: s.prompt, model: s.model || "", skills: [...(s.skills || [])], mcp: [...(s.mcp || [])], agents: [...(s.agents || [])], file: s.file || "" }
+      : { name: "", description: "", prompt: "", model: "", skills: [], mcp: [], agents: all.filter((a) => !subagentBlocked(a)).map((a) => a.id), file: "" };
     const ed = el("div", "editor lib-editor lib-subagentedit");
     const head = el("div", "ehead");
     head.append(glyph(GLYPH.subagent), el("b", "", s ? s.name : t("New subagent")));
     ed.append(head);
     const err = el("div", "editor-error");
-    const name = field2(d.name, t("e.g. code-reviewer"), (v) => { d.name = v.trim(); });
+    // a file of the user's own's example follows the name
+    let own = null;
+    const ownExample = () => "~/code/agents/" + (d.name || "reviewer") + ".md";
+    const name = field2(d.name, t("e.g. code-reviewer"), (v) => { d.name = v.trim(); if (own) own.placeholder = ownExample(); });
     name.classList.add("mono");
     ed.append(...field(t("Name"), name, t("Lowercase letters, digits and -; it is the file's name in each agent")));
     const box = (cls, value, placeholder, rows, max, onEnter) => {
@@ -5179,6 +5182,28 @@ magpie.plugin("library", (ctx) => {
     ed.append(...withHint(field(t("MCP servers"), servers), mcpHint));
     const agentsBox = el("div");
     ed.append(...field(t("Agents"), agentsBox));
+    // the file it is kept in on this computer (JonahFu on X): to open, or
+    // to hand an agent to edit; magpie takes an edit there in
+    if (s?.path) {
+      const where = el("div", "lib-rulefile lib-subagentfile");
+      where.append(pathLink(s.path), copyBtn(s.path, t("Path")));
+      const [fl, fw] = field(t("Kept in"), where, t("Edit it in any editor or agent: magpie takes the change in and gives it to the agents"));
+      if (s.fileError) fw.append(el("div", "lib-signin-err lib-subagentfile-err", s.fileError));
+      ed.append(fl, fw);
+    }
+    // a file of the user's own, in a git repository say: rarely, so under
+    // Advanced, open while it is
+    if (!s?.bundle) {
+      const more = el("details", "more advanced lib-subagentmore");
+      more.open = !!d.file;
+      more.append(el("summary", "", t("Advanced")));
+      const inner = el("div", "inner");
+      own = field2(d.file, ownExample(), (v) => { d.file = v; });
+      own.classList.add("mono", "lib-subagentownfile");
+      inner.append(...field(t("Keep in a file of your own"), own, t("A Markdown file anywhere, in a git repository say. One there already is what the subagent says.")));
+      more.append(inner);
+      ed.append(more);
+    }
     ed.append(err);
     function drawHints() {
       const sk = unbound(all, d.agents, "skills"), mc = unbound(all, d.agents, "mcp");
@@ -5207,7 +5232,7 @@ magpie.plugin("library", (ctx) => {
     const save = async () => {
       err.textContent = "";
       try {
-        const subagent = { name: d.name, description: d.description.trim(), prompt: d.prompt, model: d.model, skills: d.skills, mcp: d.mcp, agents: d.agents.filter((id) => !subagentBlocked(agentOf(id) || { id })) };
+        const subagent = { name: d.name, description: d.description.trim(), prompt: d.prompt, model: d.model, skills: d.skills, mcp: d.mcp, agents: d.agents.filter((id) => !subagentBlocked(agentOf(id) || { id })), file: d.file.trim() };
         take(await api("library/subagents/save", { old: s ? s.name : "", subagent }));
         report(lib.result, s ? t("{name} saved", { name: d.name }) : "");
         closeLibModal(true);

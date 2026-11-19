@@ -901,6 +901,8 @@ func KeepLinked(ctx context.Context, interval time.Duration) {
 		}
 		// what was ticked for a stopped WSL distro's agents, once it runs
 		keepWoken()
+		// an edit made in a subagent's own file (subagent_file.go)
+		keepSubagentFiles()
 		// a git worktree made or removed beside a project follows it
 		keepProjectTrees()
 		// Claude Code's auto-compaction beside a bili plugin magpie

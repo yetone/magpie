@@ -161,6 +161,12 @@ func revealable(v *library.View) []string {
 	for _, s := range v.FoundSkills {
 		out = append(out, s.Link, s.Shared)
 	}
+	for _, s := range v.Subagents {
+		// the file it is kept in, to edit it in
+		if s.Path != "" {
+			out = append(out, s.Path)
+		}
+	}
 	for _, r := range v.Rules {
 		for _, f := range r.Files {
 			out = append(out, f)

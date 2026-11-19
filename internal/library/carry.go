@@ -215,6 +215,7 @@ func Collect() (*Bundle, error) {
 		c.Skills, c.MCP = slices.Sorted(slices.Values(s.Skills)), slices.Sorted(slices.Values(s.MCP))
 		c.Agents = orNone(slices.Sorted(slices.Values(s.Agents)))
 		c.From = s.From.clone()
+		c.File, c.FileHash = "", "" // this computer's
 		subs = append(subs, &c)
 	}
 	b.Subagents = &subs
@@ -826,7 +827,17 @@ func Put(b *Bundle) (*Result, error) {
 				c := *s
 				c.Skills, c.MCP, c.Agents = slices.Clone(s.Skills), slices.Clone(s.MCP), slices.Clone(orNone(s.Agents))
 				c.From = s.From.clone()
+				// the file it is kept in here stays this computer's
+				c.File, c.FileHash = "", ""
+				if here := l.subagent(s.Name); here != nil {
+					c.File, c.FileHash = here.File, here.FileHash
+				}
 				subs = append(subs, &c)
+			}
+			for _, s := range l.Subagents {
+				if !slices.ContainsFunc(subs, func(c *Subagent) bool { return c.Name == s.Name }) {
+					dropSubagentFile(s)
+				}
 			}
 			l.Subagents = subs
 		}

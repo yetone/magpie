@@ -111,7 +111,8 @@ func (l *Library) sync() *Result {
 func syncSteps(all, gone []*Target, b *backups, res *Result) []func(*Library) {
 	// a skill whose app moved it is followed first, for every agent to
 	// get the moved one (skill_moved.go)
-	steps := []func(*Library){func(l *Library) { l.followMovedSkills() }}
+	// an edit made in a subagent's own file too (subagent_file.go)
+	steps := []func(*Library){func(l *Library) { l.followMovedSkills(); l.followSubagentFiles() }}
 	for _, t := range all {
 		steps = append(steps, func(l *Library) {
 			l.syncInstructions(t, all, b, res, true)
@@ -154,7 +155,7 @@ func syncSteps(all, gone []*Target, b *backups, res *Result) []func(*Library) {
 	}
 	// magpie's copies in a WSL distro no agent there is linked to any more
 	steps = append(steps, func(l *Library) { l.sweepWSLStores(append(slices.Clone(all), gone...), res) })
-	return append(steps, func(l *Library) { l.syncProjects(res) })
+	return append(steps, func(l *Library) { l.syncProjects(res) }, func(l *Library) { l.writeSubagentFiles() })
 }
 
 // Sync writes the library into the agents again: after an agent is

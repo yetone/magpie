@@ -66,6 +66,11 @@ type Subagent struct {
 	// repository, and FromHash what it said then (subagent_import.go)
 	From     *Source `json:"from,omitempty"`
 	FromHash string  `json:"fromHash,omitempty"`
+	// File is a file of the user's own it is kept in on this computer,
+	// "" for the library's; FileHash what the file said when magpie last
+	// wrote or took it in (subagent_file.go)
+	File     string `json:"file,omitempty"`
+	FileHash string `json:"fileHash,omitempty"`
 }
 
 // SubagentFile is a file magpie wrote for a subagent, and the hash of what
@@ -436,18 +441,41 @@ func SaveSubagent(old string, s Subagent) (*Result, error) {
 		if s.Name != old && l.subagent(s.Name) != nil {
 			return fmt.Errorf("the library already has a subagent called %s", s.Name)
 		}
-		s.From, s.FromHash = nil, ""
+		file, err := l.ownSubagentPath(s.Name, s.File)
+		if err != nil {
+			return err
+		}
+		s.From, s.FromHash, s.File, s.FileHash = nil, "", file, ""
 		if old != "" {
 			i := slices.IndexFunc(l.Subagents, func(x *Subagent) bool { return x.Name == old })
 			if i < 0 {
 				return fmt.Errorf("no subagent called %s", old)
 			}
+			was := l.Subagents[i]
 			// where it was imported from stays, its edits telling an
 			// import again to leave it alone
-			s.From, s.FromHash = l.Subagents[i].From.clone(), l.Subagents[i].FromHash
+			s.From, s.FromHash = was.From.clone(), was.FromHash
+			if was.file() == s.file() {
+				s.FileHash = was.FileHash
+			} else {
+				dropSubagentFile(was)
+			}
 			l.Subagents = slices.Delete(l.Subagents, i, i+1)
 			if old != s.Name {
 				l.renameProjectSubagents(old, s.Name)
+			}
+		}
+		// a file of the user's own that is there already is what it says
+		if file != "" && s.FileHash == "" {
+			if b, err := os.ReadFile(file); err == nil {
+				x, err := readOwnSubagent(s.Name, b)
+				if err != nil {
+					return fmt.Errorf("%s: %v", file, err)
+				}
+				s.Description, s.Prompt, s.Model, s.Skills, s.MCP = x.Description, x.Prompt, x.Model, x.Skills, x.MCP
+				s.FileHash = subagentHash(b)
+			} else if !errors.Is(err, os.ErrNotExist) {
+				return err
 			}
 		}
 		s.Skills = slices.Compact(slices.Sorted(slices.Values(s.Skills)))
@@ -487,7 +515,13 @@ func RemoveSubagents(names []string) (*Result, error) {
 				return fmt.Errorf("no subagent called %s", n)
 			}
 		}
-		l.Subagents = slices.DeleteFunc(l.Subagents, func(s *Subagent) bool { return slices.Contains(names, s.Name) })
+		l.Subagents = slices.DeleteFunc(l.Subagents, func(s *Subagent) bool {
+			if slices.Contains(names, s.Name) {
+				dropSubagentFile(s)
+				return true
+			}
+			return false
+		})
 		return nil
 	})
 }
@@ -499,6 +533,10 @@ type SubagentView struct {
 	*Subagent
 	// Files are, for each agent it was written to, the file
 	Files map[string]string `json:"files,omitempty"`
+	// Path is the file it is kept in on this computer, to edit it in;
+	// FileError why an edit there wasn't taken in
+	Path      string `json:"path,omitempty"`
+	FileError string `json:"fileError,omitempty"`
 	// Problems are the agents it couldn't be given to, and why
 	Problems map[string]string `json:"problems,omitempty"`
 }
@@ -546,7 +584,8 @@ func (l *Library) subagentsView(targets []*Target, asleep []*agent.Agent, of fun
 	for _, s := range l.Subagents {
 		c := *s
 		c.Agents = orNone(c.Agents)
-		sv := SubagentView{Subagent: &c, Problems: of("subagent:" + s.Name)}
+		sv := SubagentView{Subagent: &c, Problems: of("subagent:" + s.Name), Path: s.file(), FileError: subagentFileError(s)}
+		c.FileHash = ""
 		for id, a := range l.Applied {
 			for _, f := range a.Subagents {
 				if f.Name == s.Name && slices.Contains(s.Agents, id) {
