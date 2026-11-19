@@ -401,6 +401,7 @@ func onMachineAll(home, cfg string) []*Agent {
 		openMausBot(home),
 		avibe(home),
 		kun(home),
+		nowledgeMem(home),
 		hanako(home),
 		atomcode(home),
 		ocr(home),

@@ -51,6 +51,7 @@ var noLibrary = map[string]string{
 	"paimon":            "not looked at (#5897)",
 	"shelley":           "not looked at (#5897)",
 	"kun":               "not looked at (#5897)",
+	"nowledge-mem":      "a memory app: its own AI only, no skills or MCP servers of an agent's",
 	"dim":               "not looked at (#5897)",
 	"open-code-review":  "a review CLI with its own fixed tools, not a coding agent; whether it reads skills or MCP not looked at",
 }

@@ -63,6 +63,9 @@ func TestMain(m *testing.M) {
 	// nor a Kun runtime this machine runs: each home's Kun runs in the
 	// test (runningKun)
 	kunLive = runningKun
+	// nor the Nowledge Mem this machine runs: each config folder's Mem
+	// runs in the test (runningMem)
+	memLive = runningMem
 	// nor which OpenCode this machine has: an OpenCode 2 on PATH turned
 	// every OpenCode test's file into OpenCode 2's words; the tests about
 	// it say their own (opencode_v2_test.go)

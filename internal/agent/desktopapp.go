@@ -157,6 +157,9 @@ var desktopApps = map[string]desktopApp{
 	// folder is the default's, not read from an install.
 	"minimax-code": {id: "com.minimax.agent.cn", names: []string{"MiniMax Code.app"}, win: filepath.Join("MiniMax Code", "MiniMax Code.exe"),
 		more: []desktopApp{{id: "com.minimax.agent", names: []string{"MiniMax Code.app"}}}},
+	// Nowledge Mem (0.10.121: Nowledge Mem.app, co.nowledge.mem.desktop, a
+	// Tauri app) keeps its config folder only once it has been opened.
+	"nowledge-mem": {id: "co.nowledge.mem.desktop", names: []string{"Nowledge Mem.app"}},
 	"codebuddy": {id: "com.tencent.codebuddy", names: []string{"CodeBuddy.app"},
 		more: []desktopApp{{id: "com.tencent.codebuddycn", names: []string{"CodeBuddy CN.app"}}}},
 }
