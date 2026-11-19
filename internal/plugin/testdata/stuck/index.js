@@ -20,6 +20,9 @@ function traceUsage(options) {
 }
 
 export const StuckPlugin = async () => {
+  // with $STUCK_PID set, the process the plugin runs in says who it is,
+  // for a test that looks for it once magpie has exited (#7146)
+  if (process.env.STUCK_PID) fs.writeFileSync(process.env.STUCK_PID, String(process.pid))
   if (process.env.STUCK_LOAD) await never()
   return {
     config: async (cfg) => {
@@ -55,6 +58,13 @@ export const StuckPlugin = async () => {
               fs.appendFileSync(process.env.STUCK_TRACE, JSON.stringify({ finished: true }) + "\n")
               ok()
             }, linger), { once: true }))
+          } else if (process.env.STUCK_USAGE_HOLD) {
+            // with $STUCK_USAGE_HOLD set, it holds something open while it
+            // waits, as a plugin driving a browser holds the browser: a
+            // promise alone keeps no process alive once stdin has closed
+            // (#7146)
+            setInterval(() => {}, 1 << 30)
+            await never()
           } else await never()
         }
         return { windows: [] }

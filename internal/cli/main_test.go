@@ -30,6 +30,15 @@ func TestMain(m *testing.M) {
 		}
 		os.Exit(0)
 	}
+	// With MAGPIE_CLI_TEST_HOST_EXIT set, it starts a plugin host and
+	// ends as magpie does (plugin_host_exit_cli_test.go).
+	if how := os.Getenv(hostExitEnv); how != "" {
+		if os.Getenv(testenv.Marker) == "" {
+			os.Exit(2)
+		}
+		testenv.Offline()
+		hostThenExit(how)
+	}
 	os.Exit(testenv.RunIn(m, func(string) { testenv.Offline() }))
 }
 

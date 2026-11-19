@@ -35,9 +35,20 @@ func TestSessionCommandsSkipStartUp(t *testing.T) {
 			t.Fatalf("%v ran the start-up moves", args)
 		}
 	}
+	// nor do the version and the notices, which read no file: the moves
+	// read the providers, which started a plugin host beside the running
+	// gateway's and left it behind (#7146)
+	for _, args := range [][]string{{"version"}, {"--version"}, {"-v"}, {"licenses"}} {
+		if _, err := printed(t, func() error { return run(args) }); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		if ran != 0 {
+			t.Fatalf("%v ran the start-up moves", args)
+		}
+	}
 	// and a command that reads the files still has them brought up first
-	_ = run([]string{"version"})
+	_ = run([]string{"groups"})
 	if ran != 1 {
-		t.Fatalf("version: start-up ran %d times, want 1", ran)
+		t.Fatalf("groups: start-up ran %d times, want 1", ran)
 	}
 }

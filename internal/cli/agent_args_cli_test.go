@@ -191,7 +191,7 @@ func TestAgentFieldNameShowsIt(t *testing.T) {
 func TestEveryAgentFieldNameWritesNothing(t *testing.T) {
 	cliHome(t)
 	writeHomeFile(t, filepath.Join(".claude", "settings.json"), "{\n  \"model\": \"opus\",\n  \"theme\": \"dark\"\n}\n")
-	if _, err := printed(t, func() error { return run([]string{"version"}) }); err != nil {
+	if _, err := printed(t, func() error { return run([]string{"groups"}) }); err != nil {
 		t.Fatal(err)
 	}
 	before := homeFiles(t)
@@ -261,7 +261,7 @@ func TestClaudeTierNamesSetTheModel(t *testing.T) {
 func TestClaudeUltracodeNamedAsAValue(t *testing.T) {
 	cliHome(t)
 	path := writeHomeFile(t, filepath.Join(".claude", "settings.json"), "{\n  \"model\": \"opus\",\n  \"theme\": \"dark\"\n}\n")
-	if _, err := printed(t, func() error { return run([]string{"version"}) }); err != nil {
+	if _, err := printed(t, func() error { return run([]string{"groups"}) }); err != nil {
 		t.Fatal(err)
 	}
 	before := homeFiles(t)

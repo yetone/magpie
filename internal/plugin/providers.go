@@ -626,6 +626,19 @@ func Listed() ([]Provider, bool) {
 // refreshing is Cached's refreshes in the background.
 var refreshing sync.WaitGroup
 
+// ListInBackground sets whether Cached, finding the plugins not asked
+// since this magpie started or since they changed, asks them in the
+// background: true until it is set. The app, serve, web, tray and the TUI
+// do; a command that does its work and ends (magpie version, magpie group
+// <id>) reads what was listed last and asks nothing. Its ask started a
+// second plugin host beside the running gateway's, which the command left
+// running as it exited, its call to a browser-backed plugin's models still
+// pending: that orphan opened the same Chrome profiles as the gateway's
+// host, and Chrome refused them (#7146). It gives what was set before.
+func ListInBackground(on bool) (was bool) { return !noBackgroundList.Swap(!on) }
+
+var noBackgroundList atomic.Bool
+
 // Refreshed waits for Cached's refreshes in the background to end, the
 // host left running: for tests that watch the providers' list on disk.
 func Refreshed() { refreshing.Wait() }
@@ -751,7 +764,7 @@ func Cached() []Provider {
 		// Whether one is already in flight is read and set under one lock,
 		// so two callers asking at once start one refresh, not two.
 		provMu.Lock()
-		start := !provBusy && !provGood && !provTried && !provSettling
+		start := !provBusy && !provGood && !provTried && !provSettling && !noBackgroundList.Load()
 		var ctx context.Context
 		if start {
 			ctx, provCancel = context.WithCancel(context.Background())

@@ -58,7 +58,7 @@ func TestMakeDirs(t *testing.T) {
 		t.Setenv(k, filepath.Join(vol, d))
 	}
 	t.Setenv("MAGPIE_ADDR", "127.0.0.1:1")
-	if err := run([]string{"version"}); err != nil {
+	if err := run([]string{"groups"}); err != nil {
 		t.Fatal(err)
 	}
 	for _, d := range []string{"home", "config", "cache", "data", "state"} {
