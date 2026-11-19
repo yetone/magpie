@@ -346,6 +346,15 @@ func fakeClaude(args []string) {
 		time.AfterFunc(d, func() { _ = os.WriteFile(listed, nil, 0o600) })
 	}
 	streams := 0
+	// FAKE_HISTORY: a resumed conversation's history is drawn above the
+	// prompt, and it talks of the dialogs
+	if os.Getenv("FAKE_HISTORY") != "" {
+		fmt.Print("\r\n> Why does it say asked to accept running in Bypass\x1b[1CPermissions\x1b[1Cmode?\r\n" +
+			"  ❯ No, exit\r\n  ❯ Yes, I accept\r\n  Do you trust this folder? Yes, I trust this folder\r\n" +
+			"  Choose the text style that looks best; Select login method; Press Enter to continue;\r\n" +
+			"  Enter to confirm · Esc to skip, keep browser tools off\r\n" +
+			strings.Repeat("  and more history of that conversation, long past the dialogs' words\r\n", 40))
+	}
 	fmt.Print("\r\n❯ ")
 	// the prompt's words, and the prompt as drawn, again as a paste
 	// starts and as one is taken in. As Claude Code 2.1.318 does, it draws
@@ -1177,6 +1186,17 @@ func TestShimTrustsWhenTold(t *testing.T) {
 // that folder's settings.json and the next run is shown none of it.
 func TestShimAcceptsBypassDisclaimer(t *testing.T) {
 	out := runShim(t, []string{"FAKE_BYPASS=1", BypassEnv + "=1"}, append([]string{fakePath(t)}, pArgs...), []string{"hello"}, 3)
+	if out[0]["subtype"] != "init" || out[1]["type"] != "assistant" {
+		t.Fatalf("got %v, want an interactive turn", out)
+	}
+}
+
+// A resumed conversation whose history holds the dialogs' words and
+// option rows is not a dialog: the prompt box is showing, and the run
+// goes on, with no BypassEnv or TrustEnv to answer one (@alisenray on X:
+// every --resume failed at 45s, "not answered", no dialog on screen).
+func TestShimIgnoresDialogWordsInHistory(t *testing.T) {
+	out := runShim(t, []string{"FAKE_HISTORY=1"}, append([]string{fakePath(t)}, pArgs...), []string{"hello"}, 3)
 	if out[0]["subtype"] != "init" || out[1]["type"] != "assistant" {
 		t.Fatalf("got %v, want an interactive turn", out)
 	}
