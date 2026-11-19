@@ -193,7 +193,7 @@ func (l *Library) syncProjectHooks(p *Project, fail func(what string, err error)
 			delete(p.HookRecs, id)
 			// Claude Code's file holds the skills the project turns off
 			// too (syncSkillsOff)
-			if id != "claude" || len(p.Overrides) == 0 {
+			if id != "claude" || len(p.Overrides) == 0 && len(p.ClaudeWrote) == 0 {
 				p.dropMadeFile(rel)
 			}
 			continue

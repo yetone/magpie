@@ -952,6 +952,14 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			res, err = library.ProjectServer(in.Dir, in.Name, in.Agents)
 		case "projects/plugin":
 			res, err = library.ProjectPlugin(in.Dir, in.Name, in.Agents)
+		case "projects/claude-plugin":
+			// a plugin Claude Code has installed, on for this project alone
+			// (agents ["claude"]) or taken out of its settings ([])
+			if len(in.Agents) > 1 || len(in.Agents) == 1 && in.Agents[0] != "claude" {
+				http.Error(rw, "only Claude Code reads a project's enabledPlugins", http.StatusBadRequest)
+				return
+			}
+			res, err = library.ProjectClaudePlugin(in.Dir, in.Name, len(in.Agents) == 1)
 		case "projects/server-off":
 			// a Library server turned off in this project only
 			res, err = library.ProjectServerOff(in.Dir, in.Name, in.Agents)

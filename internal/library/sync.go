@@ -568,13 +568,16 @@ type View struct {
 	NewSkills []NewSkill `json:"newSkills"`
 	// CheckFolders is whether a check looks in folders the user added
 	// skills from, which the page then offers with no remote skill
-	CheckFolders bool              `json:"checkFolders,omitempty"`
-	Projects     []ProjectView     `json:"projects"`
-	Instructions *InstructionsView `json:"instructions"`
-	Dir          string            `json:"dir"`
-	Backups      string            `json:"backups"`
-	SkillGroups  []SkillGroup      `json:"skillGroups"`
-	CopySkills   bool              `json:"copySkills"` // the library gives skills as copies (#896)
+	CheckFolders bool          `json:"checkFolders,omitempty"`
+	Projects     []ProjectView `json:"projects"`
+	// ClaudeInstalled are the plugins Claude Code has installed itself,
+	// which a project can turn on for its folder (project_claude_plugins.go)
+	ClaudeInstalled []ClaudePluginView `json:"claudeInstalled"`
+	Instructions    *InstructionsView  `json:"instructions"`
+	Dir             string             `json:"dir"`
+	Backups         string             `json:"backups"`
+	SkillGroups     []SkillGroup       `json:"skillGroups"`
+	CopySkills      bool               `json:"copySkills"` // the library gives skills as copies (#896)
 	// SharedSkills: every skill on here is in ~/.agents/skills too
 	// (skills_shared.go), at SharedDir
 	SharedSkills bool   `json:"sharedSkills"`
@@ -869,6 +872,9 @@ func readView(problems []Problem, glance bool) (*View, error) {
 	v.NewSkills = newSkills(l)
 	v.CheckFolders = l.addedFromFolders()
 	v.Projects = projectViews(l, problems)
+	if v.ClaudeInstalled = ReadClaudeInstalled(); v.ClaudeInstalled == nil {
+		v.ClaudeInstalled = []ClaudePluginView{}
+	}
 	v.SkillGroups = l.skillGroups()
 	v.CheckDue = checkDue(l)
 	if glance {

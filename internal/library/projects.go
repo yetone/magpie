@@ -77,6 +77,12 @@ type Project struct {
 	// agent, the hook entries magpie wrote in the project's file for them
 	Plugins  map[string][]string    `json:"plugins,omitempty"`
 	HookRecs map[string][]HookEntry `json:"hookRecs,omitempty"`
+	// ClaudePlugins are the plugins Claude Code has installed that the
+	// project turns on for itself, ClaudeWrote the enabledPlugins keys
+	// magpie wrote for them in .claude/settings.local.json, the only
+	// ones it takes out (project_claude_plugins.go)
+	ClaudePlugins []string `json:"claudePlugins,omitempty"`
+	ClaudeWrote   []string `json:"claudeWrote,omitempty"`
 }
 
 // projectSkillsDirs is where, in a project, each agent reads skills of its
@@ -151,7 +157,7 @@ func (l *Library) syncProjects(res *Result) {
 
 func (l *Library) syncProject(p *Project, res *Result) {
 	if fi, err := os.Stat(p.Dir); err != nil || !fi.IsDir() {
-		if len(p.Skills) > 0 || len(p.Servers) > 0 || len(p.Subagents) > 0 || len(p.Plugins) > 0 || len(p.ServersOff) > 0 || len(p.SkillsOff) > 0 || p.Instr != "" && len(p.InstrAgents) > 0 || p.holds() {
+		if len(p.Skills) > 0 || len(p.Servers) > 0 || len(p.Subagents) > 0 || len(p.Plugins) > 0 || len(p.ClaudePlugins) > 0 || len(p.ServersOff) > 0 || len(p.SkillsOff) > 0 || p.Instr != "" && len(p.InstrAgents) > 0 || p.holds() {
 			res.Problems = append(res.Problems, Problem{Agent: p.Dir, What: "project:", Error: "the folder is gone"})
 		}
 		return
@@ -246,6 +252,7 @@ func (l *Library) syncFolder(p *Project, res *Result, hubs map[string]*Server) {
 	l.syncProjectSubagents(p, func(what string, err error) { fail(what, err) })
 	l.syncProjectInstr(p, fail)
 	l.syncProjectHooks(p, fail)
+	l.syncProjectClaudePlugins(p, fail)
 	p.tidy()
 }
 
@@ -545,7 +552,7 @@ func RemoveProject(dir string, keep bool) (*Result, error) {
 			l.Projects = slices.DeleteFunc(l.Projects, func(x *Project) bool { return x == p })
 			return nil
 		}
-		p.Skills, p.Servers, p.ServersOff, p.SkillsOff, p.Subagents, p.InstrAgents, p.Plugins = nil, nil, nil, nil, nil, nil, nil
+		p.Skills, p.Servers, p.ServersOff, p.SkillsOff, p.Subagents, p.InstrAgents, p.Plugins, p.ClaudePlugins = nil, nil, nil, nil, nil, nil, nil, nil
 		l.syncProject(p, &Result{})
 		if !p.holds() && p.Claude == nil && !slices.ContainsFunc(p.Trees, (*Project).holds) {
 			l.Projects = slices.DeleteFunc(l.Projects, func(x *Project) bool { return x == p })
@@ -642,7 +649,10 @@ type ProjectView struct {
 	// Plugins are the library's plugins the project has, for the agents
 	// named
 	Plugins map[string][]string `json:"plugins"`
-	Missing bool                `json:"missing,omitempty"` // the folder is gone
+	// ClaudePlugins are the plugins Claude Code has installed that the
+	// project turns on for itself
+	ClaudePlugins []string `json:"claudePlugins"`
+	Missing       bool     `json:"missing,omitempty"` // the folder is gone
 	// Problems are, by skill ("" for the project's own), what couldn't be done
 	Problems map[string]string `json:"problems,omitempty"`
 }
@@ -684,6 +694,7 @@ func projectViews(l *Library, problems []Problem) []ProjectView {
 		for k, a := range p.Plugins {
 			v.Plugins[k] = append([]string{}, a...)
 		}
+		v.ClaudePlugins = append([]string{}, p.ClaudePlugins...)
 		for _, t := range p.Trees {
 			v.Trees = append(v.Trees, t.Dir)
 		}
