@@ -20898,6 +20898,7 @@ function renderProxy(s, keep) {
     system: t("Following the system proxy, {proxy}", { proxy: proxyDisplay(s.proxyNow) }),
     environment: t("Following HTTPS_PROXY, {proxy}", { proxy: proxyDisplay(s.proxyNow) }),
     off: t("Off: requests to vendors without a proxy of their own, and update checks, go direct"),
+    down: t("Nothing answers at the proxy found, {proxy}; requests go direct until it runs again", { proxy: proxyDisplay(s.proxyNow) }),
     none: t("No system proxy found; requests to vendors without a proxy of their own, and update checks, go direct"),
   }[s.proxySource] || "";
   const row = proxyRow(s, keep, {

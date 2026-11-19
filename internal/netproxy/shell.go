@@ -93,14 +93,17 @@ func liveShell(raw string) *url.URL {
 var (
 	shellUp   = 15 * time.Second
 	shellDown = 2 * time.Second
-	dialShell = func(addr string) bool {
-		c, err := net.DialTimeout("tcp", addr, 300*time.Millisecond)
-		if err == nil {
-			c.Close()
-		}
-		return err == nil
-	}
+	dialShell = dialPort
 )
+
+// dialPort is whether something takes a connection at addr.
+func dialPort(addr string) bool {
+	c, err := net.DialTimeout("tcp", addr, 300*time.Millisecond)
+	if err == nil {
+		c.Close()
+	}
+	return err == nil
+}
 
 var shellPorts struct {
 	sync.Mutex
@@ -113,7 +116,8 @@ type shellPort struct {
 }
 
 // listening is whether p's port has a listener, for a loopback p; any
-// other is taken as it is, as a terminal's programs take it.
+// other is taken as it is, as a terminal's programs take it. Auto asks it
+// of the login shell's proxy and the system's (liveSystem).
 func listening(p *url.URL) bool {
 	if !loopback(strings.ToLower(p.Hostname())) {
 		return true

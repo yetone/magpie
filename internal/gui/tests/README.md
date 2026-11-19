@@ -1733,6 +1733,12 @@ rest, tagged "proxy not reachable", in English and Chinese, never "an error
 another account wouldn't fix"; picking the request doesn't move the page.
 Chromium and WebKit, API faked.
 
+`proxy-down.test.cjs` opens Settings → Network with the proxy on Auto and
+a system proxy on loopback that nothing listens on (@bitssly on X: a VPN
+app turned off left Windows' proxy at its port). The proxy line names the
+address found and says requests go direct until it runs again, in all five
+languages, at 1100px and 420px, Chromium and WebKit. The API is faked.
+
 `s3-sync.test.cjs` sets up sync to an S3 bucket from Settings (#296). It
 works as follows, in English and Chinese:
 
