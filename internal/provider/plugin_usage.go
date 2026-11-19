@@ -222,6 +222,12 @@ func quotaOfPlugin(q SubscriptionQuota, u plugin.Usage) SubscriptionQuota {
 		// window that counts nothing yet says 0 with a count, or with no
 		// text, and one that stops the account is a reading at 0
 		w.Text = w.Text || x.Aside && x.Display != "" && (used == nil || *used == 0) && x.Amount == 0 && x.Limit == 0 && x.Balance == nil
+		if x.Credits && used != nil && !w.Text {
+			// the account goes on past it on credits it holds: routed as
+			// used, with the account on its credits (Allowance.OnCredits);
+			// aside only for a magpie that doesn't know it
+			w.Aside, w.Credits = false, true
+		}
 		if t, err := time.Parse(time.RFC3339, x.ResetsAt); err == nil {
 			w.ResetsAt = &t
 		}

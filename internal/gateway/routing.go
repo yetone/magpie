@@ -2304,9 +2304,16 @@ func creditsAgain(c candidate, status int, body []byte) bool {
 	return status == http.StatusTooManyRequests && failure(status, body) == failQuota && c.onCredits()
 }
 
-// spendsCredits is onCredits for the account of p, whose allowance is a.
+// spendsCredits is onCredits for the account of p, whose allowance is a:
+// a Codex account the user lets spend them, or a plugin's account whose
+// plugin says it goes on past a window on credits it holds
+// (plugin.UsageWindow.Credits).
 func spendsCredits(p provider.Provider, a provider.Allowance) bool {
-	return p.Account != nil && p.Account.UsageAgent() == "codex" && a.OnCredits() && provider.CodexCredits(p.Account.User)
+	if p.Account == nil || !a.OnCredits() {
+		return false
+	}
+	ag := p.Account.UsageAgent()
+	return ag == "codex" && provider.CodexCredits(p.Account.User) || strings.HasPrefix(ag, "plugin:")
 }
 
 // creditsLast: c is a Codex account on its credits (onCredits) that the
@@ -2320,11 +2327,53 @@ func spendsCredits(p provider.Provider, a provider.Allowance) bool {
 // the subscription's credits.
 func (c candidate) creditsLast(now time.Time) bool {
 	acct := c.p.Account
-	if acct == nil || !provider.CodexCreditsLast(acct.User) || freeOnChatGPT(c.model, acct.Plan) {
+	if acct == nil || acct.UsageAgent() != "codex" || !provider.CodexCreditsLast(acct.User) || freeOnChatGPT(c.model, acct.Plan) {
 		return false
 	}
+	return c.pastWindows(now)
+}
+
+// pastWindows: by its last reading a window of c's for the model is used
+// up, where an account not let spend credits is held, and c goes on past
+// it on its credits (spendsCredits).
+func (c candidate) pastWindows(now time.Time) bool {
 	a, _ := c.allowance()
 	return spendsCredits(c.p, a) && a.CapHeld(c.model, provider.WindowCaps{Credits: true}, now) != nil
+}
+
+// creditsBehind: c is a plugin's account gone on past its windows on
+// credits it holds (pastWindows), which its vendor spends after them and
+// which last longer: a Kiro trial's run a year, the plan's credits end at
+// the month's reset. Its provider's accounts not so are asked before it
+// (weigh), so no plan's credits are lost unspent while a trial's are spent.
+func (c candidate) creditsBehind(now time.Time) bool {
+	return c.p.Account != nil && strings.HasPrefix(c.p.Account.UsageAgent(), "plugin:") && c.pastWindows(now)
+}
+
+// behindOthers is cs with those on credits that go behind (creditsBehind)
+// after the others with room, and before those used up with nothing to go
+// on with (full), each in its order, and their rest keys.
+func behindOthers(cs []candidate, now time.Time) ([]candidate, map[string]bool) {
+	var ahead, behind, spent []candidate
+	var keys map[string]bool
+	for _, c := range cs {
+		switch {
+		case c.creditsBehind(now):
+			behind = append(behind, c)
+			if keys == nil {
+				keys = map[string]bool{}
+			}
+			keys[c.rest] = true
+		case !c.full(now).IsZero():
+			spent = append(spent, c)
+		default:
+			ahead = append(ahead, c)
+		}
+	}
+	if len(behind) == 0 {
+		return cs, nil
+	}
+	return append(append(ahead, behind...), spent...), keys
 }
 
 // allowance is the candidate's allowance as last known: a subscription
@@ -2523,6 +2572,10 @@ type weighing struct {
 	// restID (a group's heads can be two models on one key): filled only
 	// when the routing weighs by it (routes.Strategy.ByPrice)
 	price map[string]seatPrice
+
+	// behind is the accounts on credits weigh put after the others
+	// (creditsBehind), by rest key
+	behind map[string]bool
 }
 
 // seatPrice is a seat's price at the request's time, as Cheapest weighed
@@ -2612,10 +2665,16 @@ func learns(c candidate, lefts map[allowanceKey]left) bool {
 }
 
 // weigh orders one provider's candidates as its routing says, and tells
-// what it went by: with Sink on, those rate limited with quota left behind
-// the others (sink.go).
+// what it went by: a plugin's accounts gone on past their windows on
+// credits behind the others (creditsBehind), unless the user picks the
+// account; with Sink on, those rate limited with quota left behind the
+// others (sink.go). A group's heads keep the group's order: a member's
+// trial is spent before the next member.
 func weigh(p provider.Provider, cs []candidate, model string, from provider.Protocol) ([]candidate, weighing) {
 	cs, wg := weighRouted(p, cs, model, from)
+	if p.Routing != provider.Manual && !strings.HasPrefix(p.ID, provider.GroupPrefix) {
+		cs, wg.behind = behindOthers(cs, time.Now())
+	}
 	if sinks(p.Sink, p.Routing) {
 		cs = sinkLast(cs)
 	}
@@ -2694,7 +2753,7 @@ func weighRouted(p provider.Provider, cs []candidate, model string, from provide
 				restarts: rs, dueRestart: !rs.IsZero() && due.Equal(rs), credits: spendsCredits(c.p, a)} // one not known counts as unused
 			l.dueExpiry = !l.dueRestart && !l.lapse.IsZero() && due.Equal(l.lapse)
 			l.weekLow = u >= lowShare && u < usedShare && a.CapUsed(m, now) < lowShare
-			l.first = l.credits && provider.CodexCreditsFirst(c.p.Account.User)
+			l.first = l.credits && c.p.Account.UsageAgent() == "codex" && provider.CodexCreditsFirst(c.p.Account.User)
 			if b, bu, has := a.Left(m); has {
 				// a wallet's figure is weighed only against the same
 				// provider's in the same unit (routes.Seat.LeftIn)

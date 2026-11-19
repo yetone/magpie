@@ -98,6 +98,32 @@ func TestPluginHostPassesABalanceOn(t *testing.T) {
 	}
 }
 
+// A window used up that says credits (a Kiro month spent with a trial
+// left) reaches magpie as one routing counts, the account on its credits:
+// not set aside, though the plugin sends aside too for a magpie before
+// this. One without credits set aside stays aside.
+func TestPluginHostPassesCreditsOn(t *testing.T) {
+	windows := filepath.Join(t.TempDir(), "windows.json")
+	if err := os.WriteFile(windows, []byte(`{
+		"a@fake": [{"name": "Credits", "used": 100, "amount": 916, "limit": 916, "aside": true, "credits": true}, {"name": "Trial credits", "used": 80, "amount": 400, "limit": 500, "aside": true}],
+		"full@fake": [{"name": "Credits", "used": 100, "amount": 916, "limit": 916, "aside": true}]
+	}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	u := fakePluginUsage(t, windows)
+	now := time.Now()
+	w := u["a@fake"].Windows
+	if len(w) != 2 || !w[0].Credits || w[0].Aside || w[1].Credits || !w[1].Aside {
+		t.Fatalf("credits: %+v", w)
+	}
+	if a, ok := routedAllowance("plugin:fakeco", "a@fake", u["a@fake"], now); !ok || !a.OnCredits() {
+		t.Errorf("the account is not on its credits: %+v", a)
+	}
+	if w := u["full@fake"].Windows; len(w) != 1 || w[0].Credits || !w[0].Aside {
+		t.Errorf("aside alone: %+v", w)
+	}
+}
+
 // fakePluginUsage signs in the fake plugin's a@fake and full@fake with
 // the windows file it reads (FAKE_WINDOWS) and reads their usage.
 func fakePluginUsage(t *testing.T, windows string) map[string]SubscriptionQuota {

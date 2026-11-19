@@ -3313,7 +3313,11 @@ async function load({ provider, account, proxy }) {
 //       Antigravity), aside? (using it up doesn't
 //       stop the account), runsOutAt? (ISO or ms: when the soonest
 //       credits left in it are lost, apart from its reset, as WorkBuddy's
-//       packages end) / runsOut? (how many are lost then), balance?
+//       packages end) / runsOut? (how many are lost then), credits?
+//       (used up, the account goes on past it on credits it holds, which
+//       its vendor spends after it, as a Kiro trial's: routing asks the
+//       provider's other accounts first; sent with aside, which a magpie
+//       that doesn't know it goes by), balance?
 //       (how much is left, in unit, of a prepaid wallet with no total:
 //       sent without used, it is no share, yet routing knows the account
 //       and puts the one with the most left first among the provider's
@@ -3382,6 +3386,7 @@ async function usageOf(provider, account, signal) {
       aside: !!w?.aside,
       runsOutAt: when(w?.runsOutAt),
       runsOut: Math.max(0, num(w?.runsOut)),
+      credits: !!w?.credits,
       balance: typeof w?.balance === "number" && isFinite(w.balance) ? Math.max(0, w.balance) : null, // null: not said
     })),
   }
