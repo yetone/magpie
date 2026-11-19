@@ -976,3 +976,13 @@ input.lib-memq:focus, input.lib-memtags:focus, input.lib-memwhy:focus { border-c
 .lib-bili-phil .lib-acts { justify-content: flex-end; }
 /* the servers turned off, folded below the ones on, as Providers' */
 #view-library .lib-offhead .fold:disabled { cursor: default; opacity: 1; }
+.lib-rule > .who { flex-basis: 240px; }
+.lib-rule .lib-ruledesc { font-size: 12px; line-height: 1.45; color: var(--fg-2); white-space: normal; overflow-wrap: anywhere; margin-top: 1px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.lib-ruleedit .lib-rulebody, .lib-ruleedit .lib-rulepaths { width: 100%; box-sizing: border-box; resize: none; font: inherit; font-size: 12.5px; line-height: 1.45; }
+.lib-ruleedit .lib-rulepaths { font-family: var(--code-font, var(--code)); font-size: 12px; }
+.lib-ruleedit .lib-rulebody { max-height: 40vh; overflow-y: auto; }
+.lib-ruleedit .hint:empty { display: none; }
+.lib-rulefiles { display: grid; gap: 4px; min-width: 0; }
+.lib-rulefile { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.lib-rulefile > .note { flex: none; font-size: 12px; color: var(--fg-2); }
+.lib-rulefile > .lib-path { min-width: 0; white-space: normal; overflow-wrap: anywhere; }

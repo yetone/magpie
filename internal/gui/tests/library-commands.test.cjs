@@ -161,11 +161,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const row = (name) => v.locator(".lib-command").filter({ has: page.locator(".name", { hasText: new RegExp("^/" + name + "$") }) });
         const agentsOf = (name) => state.commands.find((s) => s.name === name)?.agents;
 
-        // the tab, with its count, between Subagents and Claude plugins
+        // the tab, with its count, between Subagents and Rules
         const tabs = (await v.locator(".lib-tabs button").allTextContents()).map((x) => x.trim());
         const at = tabs.indexOf(w("Slash commands") + " · 1");
         assert(at > 0, tabs.join("|"));
-        assert.deepEqual(tabs.slice(at - 1, at + 2), [w("Subagents"), w("Slash commands") + " · 1", w("Claude plugins")]);
+        assert.deepEqual(tabs.slice(at - 1, at + 2), [w("Subagents"), w("Slash commands") + " · 1", w("Rules")]);
         assert.equal((await row("review").locator(".lib-commanddesc").textContent()).trim(), LONG);
         await wrapped(page, 420);
         // Gemini takes only $ARGUMENTS, and review uses $1

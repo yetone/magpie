@@ -161,6 +161,11 @@ func revealable(v *library.View) []string {
 	for _, s := range v.FoundSkills {
 		out = append(out, s.Link, s.Shared)
 	}
+	for _, r := range v.Rules {
+		for _, f := range r.Files {
+			out = append(out, f)
+		}
+	}
 	for _, p := range v.Projects {
 		out = append(out, p.Dir)
 		for _, e := range p.Placed {
@@ -713,6 +718,7 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			// a subagent saved (#2283)
 			Subagent library.Subagent
 			Command  library.Command
+			Rule     library.Rule
 			Agent    string            // the agent whose own skill is in the library's way
 			App      string            // the app the MCP hub is added to (servers/hub-open)
 			Note     string            // what the MCP router says of itself (servers/hub-note), or a skill's note (skills/note)
@@ -828,6 +834,12 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			res, err = library.CommandAgentsSet(in.Name, in.Agents)
 		case "commands/remove":
 			res, err = library.RemoveCommands([]string{in.Name})
+		case "rules/save":
+			res, err = library.SaveRule(in.Old, in.Rule)
+		case "rules/agents":
+			res, err = library.RuleAgentsSet(in.Name, in.Agents)
+		case "rules/remove":
+			res, err = library.RemoveRules([]string{in.Name})
 		case "commands/import":
 			res, err = library.ImportCommands(in.Paths)
 		case "subagents/import":

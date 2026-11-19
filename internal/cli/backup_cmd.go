@@ -85,6 +85,9 @@ func backupCmd(args []string) error {
 		if l.Commands != nil && len(*l.Commands) > 0 {
 			fmt.Printf(", %d slash commands", len(*l.Commands))
 		}
+		if l.Rules != nil && len(*l.Rules) > 0 {
+			fmt.Printf(", %d rules", len(*l.Rules))
+		}
 		if l.Hooks != nil && len(*l.Hooks) > 0 {
 			fmt.Printf(", %d hooks", len(*l.Hooks))
 		}

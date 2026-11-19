@@ -418,7 +418,7 @@ func syncOwnFiles(t *Target, noun string, had []SubagentFile, want []ownFile, b 
 }
 
 // ownNoun is how a problem names what is in the agent's way.
-var ownNoun = map[string]string{"subagent": "subagent", "command": "slash command"}
+var ownNoun = map[string]string{"subagent": "subagent", "command": "slash command", "rule": "rule"}
 
 // ---- changes ---------------------------------------------------------------
 

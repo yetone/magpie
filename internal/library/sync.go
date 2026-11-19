@@ -120,6 +120,7 @@ func syncSteps(all, gone []*Target, b *backups, res *Result) []func(*Library) {
 			l.syncEnv(t, b, res)
 			l.syncSubagents(t, b, res)
 			l.syncCommands(t, b, res)
+			l.syncRules(t, b, res)
 		})
 	}
 	// an edit made in an agent's copy of a skill goes to the library first,
@@ -548,7 +549,11 @@ type View struct {
 	// the agents that can take them do with them
 	Commands      []CommandView      `json:"commands"`
 	CommandAgents []CommandAgentView `json:"commandAgents"`
-	FoundServers  []Found            `json:"foundServers"`
+	// Rules are the library's rules, and RuleAgents what the agents that
+	// can take them do with them (rules.go)
+	Rules        []RuleView      `json:"rules"`
+	RuleAgents   []RuleAgentView `json:"ruleAgents"`
+	FoundServers []Found         `json:"foundServers"`
 	// Plugins are the plugins kept as one item each (plugin.go)
 	Plugins     []PluginView `json:"plugins"`
 	Skills      []SkillView  `json:"skills"`
@@ -795,6 +800,7 @@ func readView(problems []Problem, glance bool) (*View, error) {
 	v.Env, v.EnvAgents = l.envView(append(slices.Clone(targets), gone...), of)
 	v.Subagents, v.SubagentAgents = l.subagentsView(targets, asleep, of)
 	v.Commands, v.CommandAgents = l.commandsView(targets, asleep, of)
+	v.Rules, v.RuleAgents = l.rulesView(targets, asleep, of)
 	v.Plugins = l.pluginsView()
 	tr := &tracer{}
 	for _, s := range l.Skills {

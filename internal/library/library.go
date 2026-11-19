@@ -38,6 +38,9 @@ type Library struct {
 	// Commands are slash commands the agents ticked for each are given
 	// (commands.go)
 	Commands []*Command `json:"commands,omitempty"`
+	// Rules are files of guidance given to the agents ticked for each,
+	// in their own folder of rules (rules.go)
+	Rules []*Rule `json:"rules,omitempty"`
 	// Plugins are the Claude Code plugins kept as one item each: its
 	// skills, servers, hooks and subagents are the items above marked
 	// with its name (plugin.go)
@@ -166,6 +169,9 @@ type Applied struct {
 	// Commands are the files magpie wrote for the slash commands, kept as
 	// Subagents are
 	Commands []SubagentFile `json:"commands,omitempty"`
+	// Rules are the files magpie wrote for the rules, kept as Subagents
+	// are
+	Rules []SubagentFile `json:"rules,omitempty"`
 	// Startup is, for each server, the startup timeout magpie wrote in its
 	// entry (Codex's startup_timeout_sec): one there other than this is
 	// the user's
@@ -192,7 +198,7 @@ type Applied struct {
 func (a *Applied) empty() bool {
 	return !a.Instructions && a.InstrHash == "" && len(a.MCP) == 0 && len(a.Skills) == 0 &&
 		len(a.ToolsOff) == 0 && len(a.ToolRules) == 0 && len(a.Hooks) == 0 && len(a.Env) == 0 &&
-		len(a.Subagents) == 0 && len(a.Commands) == 0 && len(a.Startup) == 0 && len(a.Picked) == 0 && !a.Router && len(a.RouterRules) == 0 && len(a.RouterCommands) == 0
+		len(a.Subagents) == 0 && len(a.Commands) == 0 && len(a.Rules) == 0 && len(a.Startup) == 0 && len(a.Picked) == 0 && !a.Router && len(a.RouterRules) == 0 && len(a.RouterCommands) == 0
 }
 
 var mu lock // one change at a time, from the page or the CLI's process
@@ -259,6 +265,10 @@ func (l *Library) save() error {
 	sort.Slice(l.Commands, func(i, j int) bool { return l.Commands[i].Name < l.Commands[j].Name })
 	for _, c := range l.Commands {
 		c.Agents = orNone(c.Agents)
+	}
+	sort.Slice(l.Rules, func(i, j int) bool { return l.Rules[i].Name < l.Rules[j].Name })
+	for _, r := range l.Rules {
+		r.Agents = orNone(r.Agents)
 	}
 	// an entry with nothing in it is no record of what magpie wrote, and
 	// is not kept: a sync that only looked at an agent used to leave one
