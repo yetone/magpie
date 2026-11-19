@@ -530,6 +530,10 @@ type Try struct {
 	Served  string `json:"served,omitempty"`
 	Swapped bool   `json:"swapped,omitempty"`
 	Routed  bool   `json:"routed,omitempty"`
+	// Wire: the model id it went out to the vendor under, when that is
+	// another than Model (usage.Record.Wire): a name the user gave the
+	// model upstream, or the variant a plugin picked
+	Wire string `json:"wire,omitempty"`
 	// Upstream: the provider an aggregator said answered behind it
 	// (OpenRouter's DeepInfra, Novita …)
 	Upstream string `json:"upstream,omitempty"`

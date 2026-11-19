@@ -1,7 +1,10 @@
 package gateway
 
 import (
+	"cmp"
 	"context"
+	"net/http"
+	"strings"
 
 	"github.com/yetone/magpie/internal/provider"
 )
@@ -26,6 +29,9 @@ type wireAt struct {
 	// tier: the service tier the try's request went out at, whichever
 	// path sent it (noteWireTier)
 	tier string
+	// model: the model id the plugin the try went to said it sent its
+	// vendor (noteWireModel)
+	model string
 }
 
 type wireAtKey struct{}
@@ -67,4 +73,31 @@ func wireEffort(to provider.Protocol, req *Request) (string, bool) {
 		return req.Effort, true
 	}
 	return "", false
+}
+
+// noteWireModel leaves, where the request's context has a place for it, the
+// model id a plugin's answer res says it sent its vendor
+// (provider.SentModelHeader). Only a plugin is taken at its word: a vendor
+// or a relay naming one is not what magpie sent.
+func noteWireModel(ctx context.Context, p provider.Provider, res *http.Response) {
+	if res == nil || !p.IsPlugin() {
+		return
+	}
+	m := strings.TrimSpace(res.Header.Get(provider.SentModelHeader))
+	res.Header.Del(provider.SentModelHeader)
+	w, _ := ctx.Value(wireAtKey{}).(*wireAt)
+	if w == nil || m == "" || len(m) > 200 {
+		return
+	}
+	w.model = m
+}
+
+// wireName is the model id a try went out under, when it is another than
+// model, the id magpie asked it for: what the plugin said it sent, else the
+// name the user gave the model upstream (sentAs, provider.SentNameOnIn).
+func wireName(model, plugin, sentAs string) string {
+	if w := cmp.Or(plugin, sentAs); w != model {
+		return w
+	}
+	return ""
 }

@@ -62,6 +62,13 @@ type Record struct {
 	// vendor's own bill. Neither is in a record written before they were.
 	Requested string `json:"req,omitempty"`
 	Served    string `json:"served,omitempty"`
+	// Wire is the model id the request went out to the vendor under, when
+	// it is another than Model: a name the user gave the model upstream
+	// (ModelWires), or the variant a plugin picked for the effort, which
+	// the plugin says (provider.SentModelHeader) — Antigravity's
+	// gemini-…-high for gemini-… at high. "" when it went as Model, and in
+	// a record written before it was kept.
+	Wire string `json:"wire,omitempty"`
 	// Upstream: the provider an aggregator (OpenRouter …) said answered
 	// behind it — DeepInfra, Novita — when its reply named one
 	Upstream string `json:"upstream,omitempty"`

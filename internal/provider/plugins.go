@@ -835,6 +835,14 @@ func pluginRequestBase(pp plugin.Provider, m plugin.Model, loader string) string
 // clears the mark.
 const SignInHeader = "X-Magpie-Sign-In"
 
+// SentModelHeader is how a plugin says the model id it sent the vendor,
+// when it picks one magpie can't: Antigravity's plugin sends a family as
+// the variant of it the effort picks from the account's own list
+// (gemini-3.1-pro at high goes as gemini-3.1-pro-high). The gateway keeps
+// it as the try's and the ledger row's Wire, read from a plugin's answer
+// only; like every X-Magpie- header it never reaches the agent.
+const SentModelHeader = "X-Magpie-Sent-Model"
+
 // ModelUnserved are how a vendor says the model isn't one it serves this
 // key, or this way — words another provider, or key, may not answer with
 // (the gateway's unservedWords, read decoded: catalog.Words): ModelScope's

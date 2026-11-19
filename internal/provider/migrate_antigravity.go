@@ -16,7 +16,7 @@ import (
 func init() {
 	movers["antigravity"] = &mover{
 		pkg:    "@magpie-community/opencode-antigravity-auth",
-		min:    "0.2.1", // 0.2.1 serves again as 0.1.18 did, for the users who have it, and is withdrawn for anyone new (plugin.WithdrawnOf; owner, 11-15: 正在使用的继续正常，加个提示，新用户不让下载); 0.2.0 retired it, sending nothing; 0.1.18 a variant at xhigh (Gemini 4 Hydrogen) is asked at xhigh (plugins#1169); 0.1.14: Gemini 4's late INVALID_ARGUMENT, a bare line in the stream, is asked again and says it isn't a region block (0.1.13 Codex's GPT-5 line reworded in a user's turn, 0.1.12 rewords instead of zero-width, 0.1.11 omp's "key words", 0.1.0 ported the built-in)
+		min:    "0.2.4", // 0.2.4 says the id a request went out under (x-magpie-sent-model), the variant the effort picked, for the ledger and Routing; 0.2.3 Claude Code's identity line goes as "You're …" (#1151); 0.2.1 serves again as 0.1.18 did, for the users who have it, and is withdrawn for anyone new (plugin.WithdrawnOf; owner, 11-15: 正在使用的继续正常，加个提示，新用户不让下载); 0.2.0 retired it, sending nothing; 0.1.18 a variant at xhigh (Gemini 4 Hydrogen) is asked at xhigh (plugins#1169); 0.1.14: Gemini 4's late INVALID_ARGUMENT, a bare line in the stream, is asked again and says it isn't a region block (0.1.13 Codex's GPT-5 line reworded in a user's turn, 0.1.12 rewords instead of zero-width, 0.1.11 omp's "key words", 0.1.0 ported the built-in)
 		agents: []string{"antigravity"},
 		out: func() ([]Moving, error) {
 			var out []Moving

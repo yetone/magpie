@@ -3800,6 +3800,10 @@ function routingPage(part) {
     as.forEach((a, i) => items.push([a, "aside", undefined, as.about[i]]));
     r.tries.forEach((tr, i) => {
       items.push([tryWhy(r, i), tr.done ? (tryOk(tr) ? "ok" : "bad") : "wait", undefined, tried(r, tr)]);
+      // the id it went out under, when another than its model's: the
+      // variant a plugin picked for the effort (Antigravity's …-high), a
+      // name set for the model upstream
+      if (tr.wire) items.push([t("Sent to the vendor as {model}", { model: tr.wire }), "aside wire-said"]);
       // where its time went, once it is done: the first try's has the
       // request's masking before it
       const timed = i === 0 && r.masking > 0 ? { ...tr, masking: r.masking } : tr;

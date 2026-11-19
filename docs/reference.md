@@ -470,11 +470,16 @@ whether Fast ran or not, so from it those are left empty too. The JSON
 log keeps them as `tier_asked`, `tier_sent` and `tier_served`, and each
 try in `/v1/magpie/route` has `tier` and `tier_served`. A request's row
 on the Requests page shows them as Service tier (asked, sent when it
-differs, answered). The last column,
-`upstream_stop`, is why the upstream said its reply ended, in its own
+differs, answered). Then
+`upstream_stop`, why the upstream said its reply ended, in its own
 words (`stop`, `tool_calls`, `end_turn`, a Responses reply's
-`completed`), empty when it said none. A request's row on the Requests
-page shows it as Upstream stop reason.
+`completed`), empty when it said none; a request's row on the Requests
+page shows it as Upstream stop reason. After `credits`, the last column,
+`sent_model`, is the model id the request went out to the vendor under,
+when it is another than `model`: a name set for the model upstream, or the
+variant a plugin picked for the effort (Antigravity's
+`gemini-3.1-pro-high` for `gemini-3.1-pro` at high). A request's row shows it
+as Sent, and each try in `/v1/magpie/route` has it as `wire`.
 
 **Output speed** (tok/s on the Usage and Routing pages, `magpie usage`) is
 all output tokens the vendor counted, reasoning and tool calls included, over

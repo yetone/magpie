@@ -2229,7 +2229,9 @@ function ledDetail(r) {
   }
   // the subscription account that answered, or the key it was sent with
   if (r.source !== "log") add("Account", r.providerAccount || r.providerKeyName);
-  add("Sent", r.model);
+  // the id it went out under, when another than the model's (a variant a
+  // plugin picked for the effort, a name set upstream): the model's on hover
+  add("Sent", r.wire || r.model, r.wire ? "led-wire" : "", r.wire ? r.model + " → " + r.wire : "");
   if (r.served) add("Served", ledServed(r));
   add("Effort", r.effort);
   add("Service tier", ledTierText(r));
@@ -3934,7 +3936,7 @@ function renderLedger() {
     if (badges.childElementCount) wc.append(badges);
     // the model sent is what the gateway sent the vendor: a session file has none
     // The log names a model, but does not capture the outbound HTTP request.
-    td(r.model || "—", "model " + (r.model ? "model-value" : "faint"), r.source === "log" && r.model ? t("Model recorded in the local session log; the outbound HTTP request was not captured.") : r.model);
+    td(r.wire || r.model || "—", "model " + (r.model ? "model-value" : "faint"), r.source === "log" && r.model ? t("Model recorded in the local session log; the outbound HTTP request was not captured.") : r.wire ? r.model + " → " + r.wire : r.model);
     td(ledServed(r), "model");
     td(r.effort || "—", r.effort ? "" : "faint");
     td(fmtN(r.in || 0), "n", exactN(r.in));
