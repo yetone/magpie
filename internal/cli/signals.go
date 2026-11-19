@@ -55,7 +55,7 @@ func finishSignalGateway(s os.Signal) {
 	g := exitGateway.Swap(nil)
 	if g != nil {
 		defer close(g.done)
-		g.stop()
+		g.stop(s)
 	}
 	proc.EndProbes()
 	provider.FlushServed() // a gateway's last answers, noted and not yet written

@@ -1793,7 +1793,13 @@ func serve() error {
 	// the models a Remote magpie's agents are on, as the app follows them
 	go agent.KeepFollowingRemote(ctx, 30*time.Second)
 	drained := make(chan struct{})
-	finish := stopGatewayOnSignal(func() { stop(); <-drained })
+	// a SIGTERM (Kubernetes', Docker's, a service manager's) finishes the
+	// requests in flight first (serve_drain.go)
+	finish := stopGatewayOnSignalAs(func(sig os.Signal) {
+		drainOnSignal(s, sig)
+		stop()
+		<-drained
+	})
 	err := s.ListenAndServe(ctx)
 	close(drained)
 	finish()

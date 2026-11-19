@@ -203,6 +203,33 @@ func (s *Server) drainFor() time.Duration {
 	if s.handingOver() {
 		return handedOffDrain
 	}
+	if g := time.Duration(s.grace.Load()); g > 0 {
+		return g // Drain's
+	}
+	return shortDrain
+}
+
+// Drain readies the gateway's end for a stop that should cut nothing: a
+// SIGTERM to `magpie serve`, which is how Kubernetes, Docker and a service
+// manager end it (a rolling update's old pod). GET / answers 503 from now
+// on, so a readiness probe (`magpie healthcheck`) takes this magpie out of
+// its Service, and once ctx ends the requests in flight, a stream an agent
+// is reading included, are given grace to finish rather than shortDrain's
+// 2s. The listener closes as ctx ends, as before: new connections go to
+// the next magpie, or are refused.
+func (s *Server) Drain(grace time.Duration) {
+	s.grace.Store(int64(grace))
+	s.draining.Store(true)
+}
+
+// Draining: Drain was called.
+func (s *Server) Draining() bool { return s.draining.Load() }
+
+// Grace is the grace Drain gave, shortDrain before it was called.
+func (s *Server) Grace() time.Duration {
+	if g := time.Duration(s.grace.Load()); g > 0 {
+		return g
+	}
 	return shortDrain
 }
 

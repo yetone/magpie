@@ -142,6 +142,7 @@
     <a href="#share">网关密钥与其他机器</a>
     <a href="#compose">在 NAS 上用 Docker Compose</a>
     <a href="#ops">健康检查、终端与更新</a>
+    <a href="#k8s">Kubernetes</a>
   </aside>
 
   <article>
@@ -235,6 +236,7 @@ docker logs magpie</pre>
       <tr><td><code>MAGPIE_NAME</code></td><td>这个 magpie 的名称：浏览器标签页的标题显示为 <code>&lt;名称&gt; · magpie</code>，部署了好几个时用来区分。在页面的 <span class="ui">设置</span> → <span class="ui">网络与共享</span> → <span class="ui">高级</span> → <span class="ui">名称</span> 里设置的名称优先。</td></tr>
       <tr><td><code>MAGPIE_TLS_CERT</code>、<code>MAGPIE_TLS_KEY</code></td><td>挂载进容器的 PEM 证书（后面跟着证书链）和私钥：其他机器只能用 <code>https://</code> 访问网关和 Web 界面，它们发来的明文 HTTP 返回 400。文件变了会重新读取，续期不用重启。只给一个，或文件读不出来，magpie 不会启动。<code>MAGPIE_PUBLIC_URL</code> 也写成 <code>https://</code>。</td></tr>
       <tr><td><code>MAGPIE_ALLOW_IPS</code></td><td>其他机器只能从这些地址访问网关和 Web 界面，写 IP 或 CIDR 网段：<code>203.0.113.7,10.0.0.0/8,2001:db8::/32</code>。其他地址即使带着网关密钥也会得到 403。不设置则所有地址都可访问，各自仍需密钥。见<a href="#allow">允许的地址</a>。</td></tr>
+      <tr><td><code>MAGPIE_DRAIN</code></td><td>停止时等待进行中请求（包括流式输出）的时长：秒数（<code>300</code>）或时长（<code>5m</code>）；未设置时在 Kubernetes 中为 20 秒，其他环境为 7 秒（<code>docker stop</code> 只等 10 秒），<code>0</code> 为 2 秒。超过 10 秒时，也要让 Docker 等这么久：<code>docker stop -t</code>、Compose 的 <code>stop_grace_period</code>。见 <a href="#k8s">Kubernetes</a>。</td></tr>
       <tr><td><code>HOME</code>、<code>XDG_CONFIG_HOME</code>、<code>XDG_CACHE_HOME</code>、<code>XDG_DATA_HOME</code>、<code>XDG_STATE_HOME</code></td><td>镜像已设为上面 <code>/config</code> 下的目录，不要改</td></tr>
     </table></div>
 
@@ -280,6 +282,49 @@ docker logs magpie</pre>
       <li><b>更新。</b>拉取新镜像，在同一个数据卷上重新创建容器：<code>docker pull ghcr.io/yetone/magpie:latest</code>，然后 <code>docker rm -f magpie</code> 再执行同样的 <code>docker run</code>；或 <code>docker compose pull &amp;&amp; docker compose up -d</code>。magpie 一天会发好几个版本；用 Renovate 或 Watchtower 想一天只更新一次，就跟 <code>daily</code>（Renovate 请固定它的 digest），想一周一次就跟 <code>stable</code>。magpie 发现更新时，设置 › 关于里写的是那个版本自己的镜像（<code>docker pull ghcr.io/yetone/magpie:0.1.1150</code>）：<code>latest</code> 可能比你的更新通道的版本更新；请用你拉取的那个标签运行容器。</li>
       <li><b>自己构建。</b>在<a href="https://github.com/yetone/magpie">仓库</a>的检出目录里 <code>docker build -t magpie .</code> 得到同样的镜像。</li>
     </ul>
+
+    <h2 id="k8s"><a class="anchor" href="#k8s">Kubernetes</a></h2>
+    <p>重启不会中断正在进行的请求，无需任何配置。收到 <code>SIGTERM</code>（滚动更新、<code>kubectl delete pod</code>、<code>docker stop</code>）时，<code>magpie serve</code> 和 <code>magpie web</code> 立即让就绪检查失败，在 Service 停止转发期间继续接收 5 秒，然后停止接收新连接，让正在进行的请求（包括流式输出）最多再跑 20 秒完成。</p>
+    <div class="code">
+      <span class="lang">deployment.yaml</span>
+      <button class="copy" data-copy="ex-k8s">复制</button>
+      <pre id="ex-k8s">apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: magpie
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate   <span class="c"># 同一时间只有一个 magpie 使用 /config</span>
+  selector:
+    matchLabels: {app: magpie}
+  template:
+    metadata:
+      labels: {app: magpie}
+    spec:
+      terminationGracePeriodSeconds: 30   <span class="c"># MAGPIE_DRAIN（20 秒）加 10 秒保存状态</span>
+      securityContext:
+        fsGroup: 65532
+      containers:
+        - name: magpie
+          image: ghcr.io/yetone/magpie:stable
+          ports:
+            - containerPort: 3425
+          readinessProbe:
+            exec:
+              command: [/magpie, healthcheck]
+            periodSeconds: 5
+          volumeMounts:
+            - name: config
+              mountPath: /config
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: magpie-config   <span class="c"># ReadWriteOnce</span></pre>
+    </div>
+    <p><b>就绪探针。</b>如上用 <code>exec</code> 执行 <code>magpie healthcheck</code>：它在容器内部发起请求，不需要密钥。<code>httpGet</code> 探针来自容器外部，需要网关密钥。</p>
+    <p><b>更长的回合。</b>智能体的一个回合可能流式输出好几分钟。同时调大 <code>MAGPIE_DRAIN</code> 和 <code>terminationGracePeriodSeconds</code>，后者比前者多 10 秒：<code>MAGPIE_DRAIN: "300"</code> 配 <code>terminationGracePeriodSeconds: 310</code>。</p>
+    <p><b>一个卷只跑一个 Pod。</b>提供网关的 magpie 负责续期已保存的登录，两个 Pod 共用一个 <code>/config</code> 会各自续期，可能让账号掉线。请保持 <code>strategy: Recreate</code>（或 <code>maxSurge: 0</code>）：旧 Pod 先完成手上的请求并退出，新 Pod 再启动，其间发来的请求要等新 Pod 就绪。默认的 RollingUpdate 配 ReadWriteOnce 卷也无法安全重叠：新 Pod 若在另一个节点上就挂载不了卷，滚动更新会卡住。</p>
 
     <p style="margin-top:48px">遇到问题，或者有值得分享的配置？来 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 聊。细节见<a href="https://github.com/yetone/magpie/blob/main/docs/reference.md#docker">参考文档</a>（英文）。</p>
   </article>

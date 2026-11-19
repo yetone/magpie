@@ -3850,6 +3850,24 @@ service's); `--addr host:port` names it by hand, and `magpie status --json`
 prints the role, pid, version and address for a watchdog. Bind-mounting a folder at `/config` in place of a
 named volume works too; it has to be writable by uid 65532.
 
+On SIGTERM (`docker stop`, a Kubernetes rolling update, a service manager),
+`magpie serve` and `magpie web` drain rather than cut what they serve:
+`GET /` answers 503 at once, so `magpie healthcheck` fails and a readiness
+probe takes the pod out of its Service; in a Kubernetes pod the gateway
+keeps accepting for 5s while that reaches kube-proxy and the ingress; then
+it stops accepting and gives the requests in flight, streams included, up
+to `MAGPIE_DRAIN` to finish (seconds or a duration such as `90s`; `0`
+ends as before, after 2s). Unset, it is 20s in a Kubernetes pod, which
+fits the default `terminationGracePeriodSeconds` of 30 with room for
+magpie to save its state after, and 7s elsewhere, inside `docker stop`'s
+10s; raise it together with the grace the platform gives (`docker stop
+-t`, Compose's `stop_grace_period`) for longer turns. Ctrl+C and SIGHUP still
+end it at once. In Kubernetes, probe readiness with
+`exec: {command: [/magpie, healthcheck]}`: an `httpGet` probe comes from
+outside the container and would need a gateway key. Run one magpie per
+`/config` volume, with `strategy: Recreate`: the magpie serving keeps the
+saved sign-ins renewed, and two pods on one volume would both renew them.
+
 #### NAS with agents on other machines
 
 Magpie can run on a headless NAS as a shared gateway even when the agents that

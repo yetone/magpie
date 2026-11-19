@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
@@ -172,12 +173,33 @@ func (w *Web) Wait() error {
 
 // Close stops the web page and waits for this process's gateway to save its sessions.
 func (w *Web) Close() {
-	w.srv.Close()
+	// a gateway draining (a SIGTERM, gateway.Drain) lets the page port's
+	// requests in flight finish too, the /v1 ones an agent sends through it
+	// included, for as long as the gateway gives its own
+	pageDone := make(chan struct{})
+	if gw := served.Load(); gw != nil && gw.Draining() {
+		go func() {
+			defer close(pageDone)
+			ctx, cancel := context.WithTimeout(context.Background(), gw.Grace())
+			defer cancel()
+			if w.srv.Shutdown(ctx) != nil {
+				w.srv.Close()
+			}
+		}()
+	} else {
+		w.srv.Close()
+		close(pageDone)
+	}
 	// The gateway keeps idle Claude sessions as it ends. Wait for that
 	// before returning or replacing this process, or the next turn has
 	// to replay the whole conversation instead of resuming its session.
 	stopServing()
+	<-pageDone
 }
+
+// ServedGateway is the gateway this process serves, nil while another
+// magpie has it.
+func ServedGateway() *gateway.Server { return served.Load() }
 
 // webKeyMin is the shortest MAGPIE_WEB_KEY taken: it is all that stands
 // between the network and the keys behind the page.
