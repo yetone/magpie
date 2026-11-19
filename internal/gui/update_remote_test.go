@@ -112,7 +112,7 @@ func TestRemoteUpdateNote(t *testing.T) {
 		say, tip string
 	}{
 		{provider.RemoteUpdate{State: "updating", Version: "v0.1.200"}, "updating to {v}", "{v}"},
-		{provider.RemoteUpdate{State: "unsupported", Why: "container"}, "can't update itself", "docker pull ghcr.io/yetone/magpie:latest"},
+		{provider.RemoteUpdate{State: "unsupported", Why: "container", Version: "0.1.4479"}, "can't update itself", "docker pull {image}"},
 		{provider.RemoteUpdate{State: "unsupported", Why: "package", Manager: "Homebrew", Command: "brew upgrade magpie"}, "can't update itself", "{cmd}"},
 		{provider.RemoteUpdate{State: "unsupported", Why: "not-writable"}, "can't update itself", "update it there"},
 		{provider.RemoteUpdate{State: "off"}, "automatic updates off", "turned off"},
@@ -125,6 +125,13 @@ func TestRemoteUpdateNote(t *testing.T) {
 		if j == nil || j.Say != c.say || !strings.Contains(j.Tip, c.tip) {
 			t.Errorf("%+v: %+v", c.out, j)
 		}
+	}
+	// a container is pointed at the image of the version it was asked to
+	// update to, by its own tag: :latest may hold another release
+	// (fishmagic80 on X)
+	provider.SetRemoteUpdateForTest("office", provider.RemoteUpdate{State: "unsupported", Why: "container", Version: "0.1.4479"})
+	if j := remoteUpdateNote("office", now); j == nil || j.V != "0.1.4479" || j.Image != "ghcr.io/yetone/magpie:0.1.4479" || strings.Contains(j.Tip, "latest") {
+		t.Errorf("container: %+v", j)
 	}
 	provider.SetRemoteUpdateForTest("office", provider.RemoteUpdate{State: "current"})
 	if j := remoteUpdateNote("office", now); j != nil {

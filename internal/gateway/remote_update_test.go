@@ -212,13 +212,15 @@ func TestRemoteMagpieAskedToFollow(t *testing.T) {
 		t.Fatalf("the row: %+v %v", u, ok)
 	}
 
-	// it can't update itself: the row says why
+	// it can't update itself: the row says why, and keeps the version it
+	// was asked to go to, whose image a container's hint names
+	// (fishmagic80 on X)
 	a.mu.Lock()
 	a.out = provider.RemoteUpdate{State: "unsupported", Why: "container"}
 	a.mu.Unlock()
 	provider.ForgetRemoteUpdatesForTest()
 	provider.UpdateRemotes(ctx, "v0.1.200")
-	if u, ok := provider.RemoteUpdateOf("home", time.Now()); !ok || u.State != "unsupported" || u.Why != "container" {
+	if u, ok := provider.RemoteUpdateOf("home", time.Now()); !ok || u.State != "unsupported" || u.Why != "container" || u.Version != "v0.1.200" {
 		t.Fatalf("a container: %+v %v", u, ok)
 	}
 

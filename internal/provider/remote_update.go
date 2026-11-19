@@ -37,8 +37,8 @@ type RemoteUpdate struct {
 	// old: a magpie from before RemoteUpdatePath; refused: the key isn't
 	// one of full access there
 	State string `json:"state"`
-	// Version is what the remote runs (as answered), or is updating to
-	// (kept here)
+	// Version is what the remote runs (as answered), or is updating to,
+	// or can't update itself to (kept here)
 	Version string `json:"version,omitempty"`
 	// Why it can't: container, package, not-writable, source
 	Why string `json:"why,omitempty"`
@@ -179,8 +179,8 @@ func UpdateRemotes(ctx context.Context, version string) {
 				return
 			}
 			out := AskRemoteUpdate(ctx, p, version)
-			if out.State == "updating" {
-				out.Version = version
+			if out.State == "updating" || out.State == "unsupported" {
+				out.Version = version // what it is updating to, or would: a container's hint names its image
 			}
 			log.Printf("remote magpie %s on %s, asked to update to %s: %s %s", remoteName(p), have, version, out.State, out.Why)
 			noteRemoteUpdate(p.ID, version, out, time.Now())

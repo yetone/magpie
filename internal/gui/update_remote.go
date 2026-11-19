@@ -53,6 +53,7 @@ type remoteUpdateJSON struct {
 	V       string `json:"v,omitempty"`
 	Manager string `json:"manager,omitempty"`
 	Cmd     string `json:"cmd,omitempty"`
+	Image   string `json:"image,omitempty"`
 }
 
 // remoteUpdateNote is what the Remote magpie id's row says of its last
@@ -75,7 +76,8 @@ func remoteUpdateNote(id string, now time.Time) *remoteUpdateJSON {
 	default:
 		switch u.Why {
 		case "container":
-			j.Tip = "It runs in a container: pull the new image (docker pull ghcr.io/yetone/magpie:latest) and recreate the container."
+			j.Tip = "It runs in a container: pull the image of {v} (docker pull {image}) and recreate the container from it."
+			j.Image = update.Image(u.Version)
 		case "package":
 			j.Tip = "{manager} installed it there: update it with {manager}."
 			if u.Command != "" {

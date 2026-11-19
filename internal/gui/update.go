@@ -138,7 +138,10 @@ type updateJSON struct {
 	// magpie and updates it (pacman's magpie-bin from the AUR, say), and
 	// the command that does
 	Packaged *packagedJSON `json:"packaged,omitempty"`
-	Retry    bool          `json:"retry,omitempty"` // error: a click downloads it again
+	// available, stuck "container": the image of the version out, its
+	// own tag (update.Image)
+	Image string `json:"image,omitempty"`
+	Retry bool   `json:"retry,omitempty"` // error: a click downloads it again
 	// error: the download failed through this mirror (Settings' UpdateMirror),
 	// and GitHub itself may do (#893)
 	Mirror string `json:"mirror,omitempty"`
@@ -830,6 +833,9 @@ func (u *updater) jsonIn(lang string) updateJSON {
 		j.Stuck = u.stuck
 		if u.stuck == "not-writable" {
 			j.StuckDir = u.exeDir
+		}
+		if u.stuck == "container" && u.latest != nil {
+			j.Image = update.Image(u.latest.Version)
 		}
 		if u.stuck == "package" && u.packaged != nil {
 			j.Packaged = &packagedJSON{Manager: u.packaged.Name(), Package: u.packaged.Package, Command: u.packaged.Command()}

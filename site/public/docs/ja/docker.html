@@ -277,7 +277,7 @@ docker logs magpie</pre>
     <ul>
       <li><b>ヘルスチェック。</b>イメージには <code>HEALTHCHECK</code> があります。ゲートウェイが応答している間 <code>magpie healthcheck</code> は 0 で終わり、<code>serve</code> でも <code>web</code> でも同じです。<code>docker ps</code> は healthy と表示し、Compose は <code>depends_on: condition: service_healthy</code> で待てます。</li>
       <li><b>ターミナル。</b><code>docker exec -it magpie bash</code> や NAS の管理画面のターミナルで、<code>magpie</code> が PATH にあるシェルが開きます：<code>magpie providers</code>、<code>magpie models</code>、<code>magpie usage</code>、<code>magpie quota</code> など、<a href="https://github.com/yetone/magpie/blob/main/docs/reference.md">CLI</a> のすべてが使えます。</li>
-      <li><b>更新。</b>新しいイメージを取得し、同じボリュームでコンテナを作り直します：<code>docker pull ghcr.io/yetone/magpie:latest</code> のあと <code>docker rm -f magpie</code> と同じ <code>docker run</code>、または <code>docker compose pull &amp;&amp; docker compose up -d</code>。magpie は 1 日に何度もリリースされます。Renovate や Watchtower で 1 日 1 回だけ更新するなら <code>daily</code> を（Renovate ではダイジェストを固定して）、週 1 回なら <code>stable</code> を使います。</li>
+      <li><b>更新。</b>新しいイメージを取得し、同じボリュームでコンテナを作り直します：<code>docker pull ghcr.io/yetone/magpie:latest</code> のあと <code>docker rm -f magpie</code> と同じ <code>docker run</code>、または <code>docker compose pull &amp;&amp; docker compose up -d</code>。magpie は 1 日に何度もリリースされます。Renovate や Watchtower で 1 日 1 回だけ更新するなら <code>daily</code> を（Renovate ではダイジェストを固定して）、週 1 回なら <code>stable</code> を使います。magpie が更新を見つけると、設定 › 情報にはそのバージョン自身のイメージが表示されます（<code>docker pull ghcr.io/yetone/magpie:0.1.1150</code>）。<code>latest</code> はアップデートチャンネルのものより新しいリリースのことがあるので、取得したタグでコンテナを起動してください。</li>
       <li><b>自分でビルドする。</b><a href="https://github.com/yetone/magpie">リポジトリ</a>のチェックアウトで <code>docker build -t magpie .</code> を実行すると同じイメージができます。</li>
     </ul>
 

@@ -4,8 +4,9 @@
 // version was out, and its Download opened the release page with nothing
 // saying why. Both now say the folder magpie may not write to, in English,
 // Chinese, Japanese and German, at a narrow window too. In a container (the
-// Docker image's /magpie, run as nonroot) they say to pull the new image
-// rather than to move magpie to another folder. No backend, the API is
+// Docker image's /magpie, run as nonroot) they say to pull the new
+// version's image, by its own tag, rather than to move magpie to another
+// folder. No backend, the API is
 // faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -24,13 +25,15 @@ const words = {
 };
 
 const folder = { state: "available", current: "0.1.400", latest: "0.1.401", url: "https://github.com/yetone/magpie-releases/releases/tag/v0.1.401", stuck: "not-writable", stuckDir: DIR };
-const container = { state: "available", current: "0.1.400", latest: "0.1.401", url: "https://github.com/yetone/magpie-releases/releases/tag/v0.1.401", stuck: "container" };
+// on the Daily channel :latest held another release than the one out
+// (fishmagic80 on X): the hint names the version's own image
+const container = { state: "available", current: "0.1.400", latest: "0.1.401", channel: "daily", url: "https://github.com/yetone/magpie-releases/releases/tag/v0.1.401", stuck: "container", image: "ghcr.io/yetone/magpie:0.1.401" };
 const pull = {
-  en: "magpie runs in a container, so it can't update itself; pull the new image (docker pull ghcr.io/yetone/magpie:latest) and recreate the container.",
-  zh: "magpie 运行在容器里，无法自动更新；请拉取新镜像（docker pull ghcr.io/yetone/magpie:latest）并重新创建容器。",
-  "zh-TW": "magpie 在容器中執行，無法自動更新；請拉取新映像（docker pull ghcr.io/yetone/magpie:latest）並重新建立容器。",
-  ja: "magpie はコンテナで実行されているため、自動アップデートできません。新しいイメージを取得し（docker pull ghcr.io/yetone/magpie:latest）、コンテナを作り直してください。",
-  de: "magpie läuft in einem Container und kann sich daher nicht selbst aktualisieren; laden Sie das neue Image (docker pull ghcr.io/yetone/magpie:latest) und erstellen Sie den Container neu.",
+  en: "magpie runs in a container, so it can't update itself; pull the image of 0.1.401 (docker pull ghcr.io/yetone/magpie:0.1.401) and recreate the container from it.",
+  zh: "magpie 运行在容器里，无法自动更新；请拉取 0.1.401 的镜像（docker pull ghcr.io/yetone/magpie:0.1.401），并用它重新创建容器。",
+  "zh-TW": "magpie 在容器中執行，無法自動更新；請拉取 0.1.401 的映像（docker pull ghcr.io/yetone/magpie:0.1.401），並用它重新建立容器。",
+  ja: "magpie はコンテナで実行されているため、自動アップデートできません。0.1.401 のイメージを取得し（docker pull ghcr.io/yetone/magpie:0.1.401）、そのイメージでコンテナを作り直してください。",
+  de: "magpie läuft in einem Container und kann sich daher nicht selbst aktualisieren; laden Sie das Image von 0.1.401 (docker pull ghcr.io/yetone/magpie:0.1.401) und erstellen Sie den Container damit neu.",
 };
 const cases = [
   { name: "a magpie that can't write to its folder says why it can't update", update: folder, langs: ["en", "zh", "ja", "de"], why: (lang) => words[lang].why },

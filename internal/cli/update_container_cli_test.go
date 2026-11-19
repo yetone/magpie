@@ -14,8 +14,10 @@ import (
 )
 
 // `magpie update` in the Docker image (/magpie, run as nonroot) failed with
-// the rename's "permission denied"; it now says to pull the new image.
-// Outside a container it goes on to the download as before.
+// the rename's "permission denied"; it now says to pull the new image:
+// the found release's own tag, not :latest, which on the Daily or Stable
+// channel holds another release (fishmagic80 on X). Outside a container
+// it goes on to the download as before.
 func TestUpdateInContainerSaysPullTheImage(t *testing.T) {
 	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
 		t.Skip("needs a folder this user may not write to")
@@ -44,7 +46,7 @@ func TestUpdateInContainerSaysPullTheImage(t *testing.T) {
 
 	updateInContainer = func() bool { return true }
 	err := updateCmd([]string{"update"})
-	if err == nil || !strings.Contains(err.Error(), "docker pull ghcr.io/yetone/magpie:latest") {
+	if err == nil || !strings.Contains(err.Error(), "the image of 0.1.11 (docker pull ghcr.io/yetone/magpie:0.1.11)") {
 		t.Fatalf("in a container: %v", err)
 	}
 
