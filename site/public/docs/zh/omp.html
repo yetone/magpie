@@ -212,7 +212,7 @@ providers:
     <h2 id="scope"><a class="anchor" href="#scope">enabledModels</a></h2>
     <p><code>enabledModels</code> 列了模型时，新会话只能用列表里的：default 角色的模型不在列表里，omp 就从列表里另挑一个。所以你有这个列表时，magpie 会在里面加一条 <code>magpie/**</code>，让 magpie 的所有模型都能在 omp 的选择器和 Ctrl+P 里出现。列表本身是你的：magpie 保留原有条目、顺序和注释，没有列表时不新建，限定在某些文件夹的条目也不动。其他角色不受这个列表限制。</p>
     <h2 id="api"><a class="anchor" href="#api">每个模型走自己的接口</a></h2>
-    <p>和 Pi 一样，每个模型都走它供应商原生的接口，网关原样转发，不做翻译：OpenAI 的 Responses、Anthropic 的 Messages、Gemini 的 <code>/v1beta</code>。走 Chat 的话，Claude 在工具调用之间会丢掉思考的签名，Chat 里没有放它们的地方。magpie 还让 omp 在请求头里带上会话 id 和 omp 自己的名字，用量页按 omp 统计，“记录网关对话”也能记下 omp 的对话。</p>
+    <p>和 Pi 一样，每个模型都走它供应商原生的接口，网关原样转发，不做翻译：OpenAI 的 Responses、Anthropic 的 Messages、Gemini 的 <code>/v1beta</code>。走 Chat 的话，Claude 在工具调用之间会丢掉思考的签名，Chat 里没有放它们的地方。magpie 还让 omp 在请求头里带上会话 id，“记录网关对话”也能记下 omp 的对话。omp 18.1.6 起会自己报上名字（<code>omp/&lt;版本&gt;</code>）；更早的 omp 由 magpie 在 User-Agent 里补上，所以用量页都按 omp 统计。你自己给 magpie 供应商设的 User-Agent 会保留。</p>
     <h2 id="profiles"><a class="anchor" href="#profiles">profiles 和 WSL</a></h2>
     <p><code>~/.omp/profiles/&lt;名字&gt;/agent</code> 里的每个 profile 都是一个单独的 omp，在 Agent 页显示为 <code>omp#&lt;名字&gt;</code>，有自己的 config.yml 和 models.yml；<code>OMP_PROFILE</code> 选中的那个就是默认那一行。WSL 发行版里的 omp 用那边的 <code>~/.omp/agent</code>；它在 NAT 后面要访问 Windows 的地址时，供应商改带网关在局域网共享用的 Key。</p>
     <h2 id="off"><a class="anchor" href="#off">切回</a></h2>

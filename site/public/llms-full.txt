@@ -7450,7 +7450,7 @@ While `enabledModels` lists models, a new session is held to it: a default model
 
 ## Each model on its own API
 
-As with Pi, each model is asked on its provider's native API, and the gateway relays it as it is: OpenAI's Responses, Anthropic's Messages, Gemini's `/v1beta`. Over Chat, a Claude lost its thinking's signatures between tool turns, since Chat has no place for them. magpie also has omp send its session id and its own name in headers, so Usage counts it as omp and Record gateway conversations keeps its turns.
+As with Pi, each model is asked on its provider's native API, and the gateway relays it as it is: OpenAI's Responses, Anthropic's Messages, Gemini's `/v1beta`. Over Chat, a Claude lost its thinking's signatures between tool turns, since Chat has no place for them. magpie also has omp send its session id in a header, so Record gateway conversations keeps its turns. omp 18.1.6 and later name themselves (`omp/<version>`); for an older omp magpie adds the name as its User-Agent, so Usage counts it as omp either way. A User-Agent you set on magpie's provider yourself stays.
 
 ## Profiles and WSL
 

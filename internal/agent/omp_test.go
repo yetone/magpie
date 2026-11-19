@@ -208,6 +208,9 @@ task:
 // tell for omp's; magpie's provider names it, and the gateway knows that
 // name for omp.
 func TestOmpNamedToTheGateway(t *testing.T) {
+	was := ompVersion
+	ompVersion = func() string { return "16.3.5" }
+	t.Cleanup(func() { ompVersion = was })
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
@@ -718,6 +721,9 @@ func TestOmpOwnModels(t *testing.T) {
 // magpie's. The address, API, auth and model list stay magpie's, and a key
 // magpie doesn't write goes.
 func TestOmpKeepsTheUsersSettings(t *testing.T) {
+	was := ompVersion
+	ompVersion = func() string { return "" } // named plain omp
+	t.Cleanup(func() { ompVersion = was })
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)

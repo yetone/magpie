@@ -212,7 +212,7 @@ providers:
     <h2 id="scope"><a class="anchor" href="#scope">enabledModels</a></h2>
     <p><code>enabledModels</code> にモデルがある間、新しいセッションはそのリストに縛られます。default のモデルがリストになければ始まらず、omp はリストから別のモデルを選びます。そこでリストがあるときは magpie が <code>magpie/**</code> を加え、omp のピッカーと Ctrl+P にも magpie の全モデルが出るようにします。リストは自分のものです。magpie は既存のエントリ、順序、コメントを残し、リストがなければ作らず、フォルダーに限ったエントリには触れません。ほかのロールはこのリストに縛られません。</p>
     <h2 id="api"><a class="anchor" href="#api">モデルごとに自分の API</a></h2>
-    <p>Pi と同じく、各モデルはプロバイダー本来の API で呼ばれ、ゲートウェイは翻訳せずにそのまま中継します。OpenAI の Responses、Anthropic の Messages、Gemini の <code>/v1beta</code> です。Chat 経由だと、Claude はツール呼び出しの間で思考の署名を失っていました。Chat にはそれを置く場所がないからです。magpie は omp にセッション id と自分の名前をヘッダーで送らせるので、使用量では omp として数え、「ゲートウェイの会話を記録」も omp の会話を残します。</p>
+    <p>Pi と同じく、各モデルはプロバイダー本来の API で呼ばれ、ゲートウェイは翻訳せずにそのまま中継します。OpenAI の Responses、Anthropic の Messages、Gemini の <code>/v1beta</code> です。Chat 経由だと、Claude はツール呼び出しの間で思考の署名を失っていました。Chat にはそれを置く場所がないからです。magpie は omp にセッション id をヘッダーで送らせるので、「ゲートウェイの会話を記録」も omp の会話を残します。omp 18.1.6 以降は自分の名前（<code>omp/&lt;バージョン&gt;</code>）を名乗ります。それより古い omp には magpie が User-Agent で名前を補うので、使用量ではどちらも omp として数えます。magpie のプロバイダーに自分で設定した User-Agent はそのまま残ります。</p>
     <h2 id="profiles"><a class="anchor" href="#profiles">プロファイルと WSL</a></h2>
     <p><code>~/.omp/profiles/&lt;名前&gt;/agent</code> の各プロファイルはそれぞれ別の omp で、エージェントページに <code>omp#&lt;名前&gt;</code> として、自分の config.yml と models.yml を持って並びます。<code>OMP_PROFILE</code> が選ぶものは既定の行です。WSL のディストリビューションの omp はそちらの <code>~/.omp/agent</code> を使い、NAT 越しに Windows のアドレスへ届くときは、ゲートウェイをネットワークで共有するキーをプロバイダーに付けます。</p>
     <h2 id="off"><a class="anchor" href="#off">元に戻す</a></h2>
