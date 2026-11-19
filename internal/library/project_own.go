@@ -65,6 +65,7 @@ func (p *Project) ownResources() map[string][]OwnResource {
 	for _, id := range ids {
 		out["subagents"] = append(out["subagents"], p.ownSubagents(id)...)
 	}
+	out["pi"] = p.ownPi()
 	for k, rows := range out {
 		if len(rows) == 0 {
 			delete(out, k)
@@ -225,6 +226,35 @@ func (p *Project) ownSubagents(id string) []OwnResource {
 			name = strings.TrimSuffix(e.Name(), sp.ext)
 		}
 		out = append(out, OwnResource{Name: name, Path: rel, Agent: id, Description: m.Description})
+	}
+	return out
+}
+
+// ownPi are the packages the project's .pi/settings.json declares that magpie
+// didn't write: its own, which can be adopted (#7249).
+func (p *Project) ownPi() []OwnResource {
+	abs := filepath.Join(p.Dir, filepath.FromSlash(piSettingsRel))
+	if p.inside(abs) != nil {
+		return nil
+	}
+	list, err := projectPiList(abs)
+	if err != nil {
+		return nil
+	}
+	var out []OwnResource
+	for _, r := range list {
+		pk, ok := piPackageOf(r)
+		if !ok || slices.ContainsFunc(p.PiRecs, func(x PiRec) bool { return piIDOf(x.Source) == piIDOf(pk.Source) }) {
+			continue
+		}
+		row := OwnResource{Name: pk.Source, Path: piSettingsRel, Agent: "pi"}
+		if !pk.On {
+			row.Event = "off"
+		}
+		if pk.Filtered {
+			row.Description = "filtered"
+		}
+		out = append(out, row)
 	}
 	return out
 }

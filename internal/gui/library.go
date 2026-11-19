@@ -963,6 +963,14 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 				return
 			}
 			res, err = library.ProjectClaudePlugin(in.Dir, in.Name, len(in.Agents) == 1)
+		case "projects/pi":
+			// a Pi package of the project's .pi/settings.json: "on", "off"
+			// (kept, loads nothing), "removed", or "adopt" for one it declares
+			if in.How == "adopt" {
+				res, err = library.ProjectPiAdopt(in.Dir, in.Name)
+			} else {
+				res, err = library.ProjectPi(in.Dir, in.Name, in.How)
+			}
 		case "projects/server-off":
 			// a Library server turned off in this project only
 			res, err = library.ProjectServerOff(in.Dir, in.Name, in.Agents)

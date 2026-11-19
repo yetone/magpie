@@ -461,7 +461,7 @@ func (l *Library) syncTrees(p *Project, res *Result, hubs map[string]*Server) {
 			t = &Project{Dir: d}
 		}
 		t.Copy, t.Skills, t.Servers, t.ServersOff, t.SkillsOff, t.Subagents = p.Copy, p.Skills, p.Servers, p.ServersOff, p.SkillsOff, p.Subagents
-		t.Instr, t.InstrAgents, t.Plugins, t.ClaudePlugins, t.Hooks = p.Instr, p.InstrAgents, p.Plugins, p.ClaudePlugins, p.Hooks
+		t.Instr, t.InstrAgents, t.Plugins, t.ClaudePlugins, t.Hooks, t.Pi = p.Instr, p.InstrAgents, p.Plugins, p.ClaudePlugins, p.Hooks, p.Pi
 		l.syncFolder(t, res, hubs)
 		trees = append(trees, t)
 	}
@@ -475,7 +475,7 @@ func (l *Library) syncTrees(p *Project, res *Result, hubs map[string]*Server) {
 		// no longer one of the repository's worktrees, or no longer the
 		// project's: what magpie put there comes out
 		t.Skills, t.Servers, t.ServersOff, t.SkillsOff, t.Subagents = nil, nil, nil, nil, nil
-		t.Instr, t.InstrAgents, t.Plugins, t.ClaudePlugins, t.Hooks = "", nil, nil, nil, nil
+		t.Instr, t.InstrAgents, t.Plugins, t.ClaudePlugins, t.Hooks, t.Pi = "", nil, nil, nil, nil, nil
 		l.syncFolder(t, res, nil)
 		if t.holds() {
 			trees = append(trees, t)
@@ -498,7 +498,7 @@ func (p *Project) tree(dir string) *Project {
 
 // holds says whether magpie has anything of its own in the folder still.
 func (p *Project) holds() bool {
-	return len(p.Placed) > 0 || len(p.Wrote) > 0 || len(p.CodexOff) > 0 || len(p.Overrides) > 0 || len(p.MadeFiles) > 0 || len(p.AgentFiles) > 0 || len(p.InstrFiles) > 0 || len(p.HookRecs) > 0 || len(p.ClaudeWrote) > 0
+	return len(p.Placed) > 0 || len(p.Wrote) > 0 || len(p.CodexOff) > 0 || len(p.Overrides) > 0 || len(p.MadeFiles) > 0 || len(p.AgentFiles) > 0 || len(p.InstrFiles) > 0 || len(p.HookRecs) > 0 || len(p.ClaudeWrote) > 0 || len(p.PiRecs) > 0
 }
 
 // ignored are the files and folders of the project magpie put there, which
@@ -533,7 +533,7 @@ func (l *Library) treesChanged() bool {
 				}
 			}
 		}
-		if len(p.Skills)+len(p.Servers)+len(p.ServersOff)+len(p.SkillsOff)+len(p.Subagents)+len(p.InstrAgents)+len(p.Plugins)+len(p.Hooks)+len(p.ClaudePlugins) == 0 && len(p.Trees) == 0 {
+		if len(p.Skills)+len(p.Servers)+len(p.ServersOff)+len(p.SkillsOff)+len(p.Subagents)+len(p.InstrAgents)+len(p.Plugins)+len(p.Hooks)+len(p.ClaudePlugins)+len(p.Pi) == 0 && len(p.Trees) == 0 {
 			continue
 		}
 		dirs := p.treeDirs()

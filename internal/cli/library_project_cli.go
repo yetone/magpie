@@ -36,6 +36,12 @@ const libraryProjectUsage = `magpie library project [--json]      the projects (
                                      .claude/settings.local.json and .codex/hooks.json beside what's there
   magpie library project hook rm <dir> <hook…>   take them out, only the entries magpie wrote
   magpie library project hook agents <dir> <hook> <a,b…|none>   the agents it has the hook for
+  magpie library project pi [list] <dir> [--json]   its packages for Pi (.pi/settings.json) and the project's own
+  magpie library project pi add|on <dir> <source…>   give it packages for Pi: npm:<name>[@version] or a git source; Pi
+                                     installs them when it next starts there
+  magpie library project pi off <dir> <source…>   keep them listed but loading nothing; on turns them on again
+  magpie library project pi rm <dir> <source…>   take them out, only what magpie wrote
+  magpie library project pi adopt <dir> <source…>   switch a package the project declares itself, left as written
   magpie library project instructions <dir> [--json]   its own instructions, the agents they're for and the files
   magpie library project instructions <dir> text <text…>|--file <f>|-   set them ("" takes them out); written, between
                                      magpie's two marker lines, into the project file each agent reads: by default for
@@ -148,6 +154,8 @@ func libraryProjectCmd(args []string) error {
 		return projectKindCmd(projectSubagents, rest, usage)
 	case "hook":
 		return projectKindCmd(projectHooks, rest, usage)
+	case "pi":
+		return projectPiCmd(rest, usage)
 	case "instructions", "instr":
 		return projectInstrCmd(rest, usage)
 	}

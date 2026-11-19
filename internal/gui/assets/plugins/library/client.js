@@ -7493,9 +7493,63 @@ magpie.plugin("library", (ctx) => {
       }
       card.append(el("p", "lib-aside lib-projfoot lib-projclaude-note", t("The plugins above are Claude Code's own, turned on for this project in .claude/settings.local.json. They stay installed through Claude Code.")));
     }
+    projectPiPackages(p, card);
     card.append(el("p", "lib-aside lib-projfoot", t("Its skills, servers and subagents go where the project's own do, and its hooks into .claude/settings.local.json and .codex/hooks.json. A file there that isn't magpie's, or an entry you changed, is left as it is.")));
     if (plugins.some((b) => b.hooks?.length && (p.plugins?.[b.name] || []).includes("codex"))) card.append(el("p", "lib-aside lib-projfoot lib-projhooks-codex", t("Codex runs a project's hooks only in a project you trust, once you've reviewed them in /hooks.")));
     return card;
+  }
+
+  // A project's Pi packages (#7249): the entries of its .pi/settings.json,
+  // each on, off (kept, loading nothing) or removed, and those the project
+  // declares itself, left as written until adopted.
+  function projectPiPackages(p, card) {
+    if (!shownAgents().some((a) => a.id === "pi")) return;
+    const box = el("div", "lib-projpi");
+    box.append(el("div", "lib-projownhead", t("Pi packages")));
+    const set = (source, how, said) => change("projects/pi", { dir: p.dir, name: source, how }, said);
+    for (const x of p.pi || []) {
+      const row = el("div", "row lib-row lib-projskill lib-projpirow" + (x.state === "off" ? " off" : ""));
+      row.dataset.source = x.source;
+      const w = el("div", "who");
+      const n = el("div", "name mono", x.name);
+      const problem = p.problems?.["pi:" + x.source];
+      if (problem) n.append(tag(t("Not written"), "warn", problem));
+      w.append(n);
+      const sub = el("div", "sub mono", x.source);
+      sub.title = problem || x.source;
+      w.append(sub);
+      const sw = toggle(x.state === "on", x.source, (on) =>
+        set(x.source, on ? "on" : "off", on ? t("{item} is on in {name}", { item: x.name, name: p.name }) : t("{item} is off in {name}", { item: x.name, name: p.name })));
+      const rm = button("", "lib-icon danger", () => set(x.source, "removed", t("{item} is out of {name}", { item: x.name, name: p.name })));
+      rm.append(svg(GLYPH.trash, 13, 1.4));
+      rm.title = t("Remove");
+      row.append(glyph(GLYPH.folder), w, sw, rm);
+      box.append(row);
+    }
+    for (const o of p.own?.pi || []) {
+      const row = el("div", "row lib-row lib-projskill lib-projownrow lib-projpiown");
+      row.dataset.source = o.name;
+      const w = el("div", "who");
+      w.append(el("div", "name mono", o.name));
+      const line = [o.event, o.path].filter(Boolean).join(" · ");
+      w.append(el("div", "sub mono", line));
+      row.append(glyph(GLYPH.folder), w);
+      // one that picks some of the package's resources is `pi config`'s
+      if (!o.description) row.append(button(t("Take over"), "lib-btn", () => set(o.name, "adopt", t("{item} is magpie's in {name}", { item: o.name, name: p.name }))));
+      box.append(row);
+    }
+    const add = el("div", "row lib-row lib-projpiadd");
+    const inp = input("", t("Pi package, e.g. npm:pi-demo"));
+    inp.className = "grow";
+    inp.dataset.lib = "projpi:" + p.dir;
+    const go = async () => {
+      const source = inp.value.trim();
+      if (source) await set(source, "on", t("{item} is on in {name}", { item: source, name: p.name }));
+    };
+    inp.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") go(); };
+    add.append(inp, button(t("Add"), "lib-btn", go));
+    box.append(add);
+    card.append(box);
   }
 
   // The agents a project's first instructions are for: those here that

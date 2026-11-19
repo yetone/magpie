@@ -427,3 +427,52 @@ func TestLibraryProjectHookCmd(t *testing.T) {
 		t.Error("the file magpie made stayed")
 	}
 }
+
+// magpie library project pi (#7249): add, off, on, rm, adopt and list, and
+// the project's own package left as it is.
+func TestLibraryProjectPiCmd(t *testing.T) {
+	proj := projectSandbox(t)
+	if err := os.MkdirAll(filepath.Join(proj, ".pi"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	own := `{"packages":["npm:pi-own"]}`
+	if err := os.WriteFile(filepath.Join(proj, ".pi", "settings.json"), []byte(own), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	must := func(args ...string) string {
+		t.Helper()
+		out, err := projectOut(t, args...)
+		if err != nil {
+			t.Fatalf("library project %v: %v\n%s", args, err, out)
+		}
+		return out
+	}
+	read := func() string {
+		b, _ := os.ReadFile(filepath.Join(proj, ".pi", "settings.json"))
+		return strings.Join(strings.Fields(string(b)), "")
+	}
+	must("add", ".")
+	for _, bad := range [][]string{{"pi", "add", ".", "--evil"}, {"pi", "add", ".", "-x"}, {"pi", "add", ".", "./local dir"}, {"pi", "add", ".", "npm:pi-own"}} {
+		if out, err := projectOut(t, bad...); err == nil {
+			t.Errorf("library project %v was taken:\n%s", bad, out)
+		}
+	}
+	must("pi", "add", ".", "npm:pi-demo")
+	if got := read(); !strings.Contains(got, `"npm:pi-own"`) || !strings.Contains(got, `"npm:pi-demo"`) {
+		t.Errorf("add: %s", got)
+	}
+	must("pi", "off", ".", "npm:pi-demo")
+	if got := read(); !strings.Contains(got, `"extensions":[]`) {
+		t.Errorf("off: %s", got)
+	}
+	out := must("pi", ".", "--json")
+	if !strings.Contains(out, `"by": "project"`) || !strings.Contains(out, `"state": "off"`) {
+		t.Errorf("list:\n%s", out)
+	}
+	must("pi", "on", ".", "npm:pi-demo")
+	must("pi", "adopt", ".", "npm:pi-own")
+	must("pi", "rm", ".", "npm:pi-demo", "npm:pi-own")
+	if got := read(); got != own {
+		t.Errorf("rm: %s", got)
+	}
+}
