@@ -357,3 +357,110 @@ func TestRouteTellsItsPrompt(t *testing.T) {
 		t.Fatalf("conversation %q", rs[0].Conv)
 	}
 }
+
+// Pi lists its skills in an <available_skills> block after a paragraph
+// on loading them (pi-coding-agent 0.73.1's formatSkillsForPrompt, its
+// bytes in testdata/context): the block and the paragraph are skills, on
+// every protocol, and the system prompt keeps what is around them.
+func TestPromptOfPiSkills(t *testing.T) {
+	raw, err := os.ReadFile("testdata/context/pi-0.73.1-system.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sys := string(raw)
+	at := strings.Index(sys, "The following skills provide specialized")
+	end := strings.Index(sys, "</available_skills>") + len("</available_skills>")
+	if at < 0 || end < at {
+		t.Fatal("fixture has no skills block")
+	}
+	block := sys[at:end]
+
+	b := newPromptBuilder()
+	rest := b.splitSkills(sys, "system")
+	if strings.Contains(rest, "<skill>") || strings.Contains(rest, "The following skills") {
+		t.Fatalf("the system prompt keeps the skills: %q", rest[max(0, len(rest)-400):])
+	}
+	if !strings.HasSuffix(rest, "Run `go test ./...` before you commit.\n\nCurrent date: 2026-11-19\nCurrent working directory: /home/u/proj") ||
+		!strings.HasPrefix(rest, "You are an expert coding assistant operating inside pi") {
+		t.Fatalf("what is around the block moved: %q", rest[max(0, len(rest)-200):])
+	}
+	if it, ok := itemOf(b.prompt(), PartSkills, "skills"); !ok || it.Tokens != tokensOf(block) {
+		t.Fatalf("skills %+v, want %d tokens", it, tokensOf(block))
+	}
+
+	str, _ := json.Marshal(sys)
+	for _, c := range []struct {
+		from provider.Protocol
+		body string
+	}{
+		{provider.Chat, `{"model":"m","messages":[{"role":"system","content":` + string(str) + `},{"role":"user","content":"hi"}]}`},
+		{provider.Anthropic, `{"model":"m","system":[{"type":"text","text":` + string(str) + `}],"messages":[{"role":"user","content":"hi"}]}`},
+	} {
+		p := promptOf(c.from, []byte(c.body))
+		if p == nil {
+			t.Fatalf("%s: no prompt", c.from)
+		}
+		sk, ok := itemOf(p, PartSkills, "skills")
+		if !ok || sk.Tokens != tokensOf(block) {
+			t.Fatalf("%s: skills %+v", c.from, partOf(p, PartSkills))
+		}
+		if s := partOf(p, PartSystem); s.Tokens <= 0 || s.Tokens > tokensOf(sys)-tokensOf(block)+2 {
+			t.Fatalf("%s: system %d tokens, the whole prompt is %d and its skills %d", c.from, s.Tokens, tokensOf(sys), tokensOf(block))
+		}
+	}
+}
+
+// An <available_skills> named in prose, or a block left open, isn't
+// taken for skills.
+func TestSplitSkillsBlockOnlyWhole(t *testing.T) {
+	for _, s := range []string{
+		"Agents on the standard list skills in an <available_skills> block.",
+		"Skills:\n\n<available_skills>\n  <skill>\n    <name>a</name>",
+	} {
+		b := newPromptBuilder()
+		if rest := b.splitSkills(s, "system"); rest != s {
+			t.Fatalf("%q became %q", s, rest)
+		}
+		if _, ok := itemOf(b.prompt(), PartSkills, "skills"); ok {
+			t.Fatalf("%q: skills", s)
+		}
+	}
+}
+
+// Pi's instruction files, each under "## <path>" in its "# Project
+// Context" (pi-coding-agent 0.73.1's buildSystemPrompt), are memory, and
+// its skills and closing lines after the last file aren't part of it.
+func TestPromptOfPiMemory(t *testing.T) {
+	raw, err := os.ReadFile("testdata/context/pi-0.73.1-system.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	str, _ := json.Marshal(string(raw))
+	p := promptOf(provider.Chat, []byte(`{"model":"m","messages":[{"role":"system","content":`+string(str)+`},{"role":"user","content":"hi"}]}`))
+	if p == nil {
+		t.Fatal("no prompt")
+	}
+	for path, tag := range map[string]string{"/home/u/.pi/agent/AGENTS.md": "user", "/home/u/proj/AGENTS.md": "project"} {
+		it, ok := itemOf(p, PartMemory, path)
+		if !ok || it.Tag != tag {
+			t.Fatalf("%s: %+v in %+v", path, it, partOf(p, PartMemory))
+		}
+	}
+	file := "## /home/u/proj/AGENTS.md\n\n# Project notes\n\nRun `go test ./...` before you commit.\n\n\n\n"
+	if it, _ := itemOf(p, PartMemory, "/home/u/proj/AGENTS.md"); it.Tokens != tokensOf(file) {
+		t.Fatalf("the last file holds %d tokens, its text is %d", it.Tokens, tokensOf(file))
+	}
+	if _, ok := itemOf(p, PartSkills, "skills"); !ok {
+		t.Fatalf("skills %+v", partOf(p, PartSkills))
+	}
+	b := newPromptBuilder()
+	if rest := b.splitSkills(b.splitMemory(string(raw)), "system"); strings.Contains(rest, "AGENTS.md") || strings.Contains(rest, "Run `go test") ||
+		!strings.HasSuffix(rest, "\nCurrent date: 2026-11-19\nCurrent working directory: /home/u/proj") || !strings.Contains(rest, piContext) {
+		t.Fatalf("system prompt %q", rest[max(0, len(rest)-300):])
+	}
+	// without Pi's header, a "## /path/AGENTS.md" line is the prompt's own
+	b = newPromptBuilder()
+	if s := "Notes.\n\n## /p/AGENTS.md\n\nkeep this"; b.splitMemory(s) != s {
+		t.Fatal("a heading outside Pi's context was taken")
+	}
+}

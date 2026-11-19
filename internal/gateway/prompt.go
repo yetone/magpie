@@ -383,7 +383,9 @@ var (
 	instructionsFrom = lazyre.New(`(?m)^Instructions from: (\S.*?)[ \t]*$`)
 	// Codex: "# AGENTS.md instructions for /path"
 	agentsFor = lazyre.New(`^# (\S+\.md) instructions for (\S.*?)[ \t]*\n`)
-	leadTag   = lazyre.New(`^\s*<([a-zA-Z_][\w -]{0,40})>`)
+	// Pi: "## /path/AGENTS.md" under its "# Project Context" header
+	piFile  = lazyre.New(`(?m)^## (\S.*?[/\\](?:AGENTS|CLAUDE)\.(?:md|MD))[ \t]*$`)
+	leadTag = lazyre.New(`^\s*<([a-zA-Z_][\w -]{0,40})>`)
 )
 
 // memoryTag says whose an instruction file is from how the agent
@@ -400,7 +402,8 @@ func memoryTag(path, desc string) string {
 	case d != "":
 		return "project"
 	}
-	if strings.Contains(path, "/.claude/") || strings.Contains(path, "/.codex/") || strings.Contains(path, "/.config/") {
+	if strings.Contains(path, "/.claude/") || strings.Contains(path, "/.codex/") || strings.Contains(path, "/.config/") ||
+		strings.Contains(path, "/.pi/") {
 		return "user"
 	}
 	return "project"
@@ -413,6 +416,7 @@ func (b *promptBuilder) splitMemory(text string) string {
 		at, body    int
 		path, desc  string
 		openCodeish bool
+		pi          bool
 	}
 	var ss []section
 	for _, m := range contentsOf.FindAllStringSubmatchIndex(text, -1) {
@@ -420,6 +424,11 @@ func (b *promptBuilder) splitMemory(text string) string {
 	}
 	for _, m := range instructionsFrom.FindAllStringSubmatchIndex(text, -1) {
 		ss = append(ss, section{at: m[0], body: m[1], path: text[m[2]:m[3]], openCodeish: true})
+	}
+	if strings.Contains(text, piContext) {
+		for _, m := range piFile.FindAllStringSubmatchIndex(text, -1) {
+			ss = append(ss, section{at: m[0], body: m[1], path: text[m[2]:m[3]], pi: true})
+		}
 	}
 	if len(ss) == 0 {
 		return text
@@ -438,18 +447,98 @@ func (b *promptBuilder) splitMemory(text string) string {
 			rest.WriteString(chunk[j:])
 			chunk = chunk[:j]
 		}
+		// Pi's skills and closing lines after its last file aren't the file's
+		if s.pi {
+			if j := piFileEnd(chunk); j < len(chunk) {
+				rest.WriteString("\n" + strings.TrimLeft(chunk[j:], "\n"))
+				chunk = chunk[:j]
+			}
+		}
 		b.add(PartMemory, s.path, memoryTag(s.path, s.desc), tokensOf(chunk), txt("", chunk))
 	}
 	return rest.String()
+}
+
+// piContext heads the instruction files Pi puts in its system prompt,
+// each under "## <path>", before its skills and its closing date and
+// working directory lines.
+const piContext = "# Project Context\n\nProject-specific instructions and guidelines:\n\n"
+
+// piFileEnd is where a Pi instruction file's text ends: at Pi's skills,
+// or its closing lines.
+func piFileEnd(chunk string) int {
+	end := len(chunk)
+	if j := strings.Index(chunk, skillsBlockLead); j >= 0 {
+		end = j
+	}
+	if m := skillsBlock.FindStringIndex(chunk); m != nil && m[0] < end {
+		end = m[0]
+	}
+	if j := strings.Index(chunk, "\nCurrent date: "); j >= 0 && j < end {
+		end = j
+	}
+	return end
 }
 
 // skillsList heads the skills Claude Code lists, in its own prompt or a
 // reminder; the list runs to the next blank line.
 const skillsList = "The following skills are available for use with the Skill tool:"
 
-// splitSkills takes the list of skills out of a text, as skills, and
+// skillsBlock holds the skills of Pi and other agents on the Agent Skills
+// standard (agentskills.io): <skill> entries in an <available_skills>
+// block, after a paragraph on how to load them.
+const (
+	skillsBlockEnd = "</available_skills>"
+	// Pi's paragraph before the block
+	skillsBlockLead = "The following skills provide specialized instructions"
+)
+
+// skillsBlock opens the block, on a line of its own, so prose naming the
+// tag isn't taken for one.
+var skillsBlock = lazyre.New(`(?m)^[ \t]*<available_skills>[ \t]*$`)
+
+// splitSkills takes the lists of skills out of a text, as skills, and
 // returns what is left.
 func (b *promptBuilder) splitSkills(text, role string) string {
+	return b.splitSkillsBlock(b.splitSkillsList(text, role), role)
+}
+
+// splitSkillsBlock takes an <available_skills> block, and the paragraph
+// leading it, out of a text.
+func (b *promptBuilder) splitSkillsBlock(text, role string) string {
+	m := skillsBlock.FindStringIndex(text)
+	if m == nil {
+		return text
+	}
+	at := m[0]
+	n := strings.Index(text[at:], skillsBlockEnd)
+	if n < 0 {
+		return text
+	}
+	end := at + n + len(skillsBlockEnd)
+	// the paragraph before the block, when it is about the skills
+	before := strings.TrimRight(text[:at], "\n")
+	lead := 0
+	if p := strings.LastIndex(before, "\n\n"); p >= 0 {
+		lead = p + 2
+	}
+	if strings.HasPrefix(before[lead:], skillsBlockLead) {
+		at = lead
+	}
+	b.add(PartSkills, "skills", "skills", tokensOf(text[at:end]), txt(role, text[at:end]))
+	head := strings.TrimRight(text[:at], "\n")
+	tail := strings.TrimLeft(text[end:], "\n")
+	switch {
+	case head == "":
+		return b.splitSkillsBlock(tail, role)
+	case tail == "":
+		return head
+	}
+	return head + "\n\n" + b.splitSkillsBlock(tail, role)
+}
+
+// splitSkillsList takes Claude Code's list of skills out of a text.
+func (b *promptBuilder) splitSkillsList(text, role string) string {
 	at := strings.Index(text, skillsList)
 	if at < 0 {
 		return text
