@@ -766,7 +766,7 @@ function routingPage(part) {
   const quota = (w, used, left, vars) => w.balance != null ? t(left, { n: balText(w), ...vars }) + lapses(w)
     : (w.usedWindow ? shortWindow(w.usedWindow) + " " : "") + (w.limit > 0 ? quotaCount(w) + " · " : "") + t(quotaLeft ? left : used, { n: pct(share(w)), ...vars });
   const fill = (w) => Math.max(0, Math.min(100, share(w))) + "%";
-  const FAIL = { rate: "rate limited", credit: "out of credit", quota: "quota used up", other: "failed", auth: "sign-in required", canceled: "canceled", foreign: "another account's reasoning", floor: "reply too short", verify: "needs verification", refused: "refused (safety filter)", shape: "request not understood", sight: "images not taken", proxy: "proxy not reachable", offline: "network down", overloaded: "servers overloaded", effort: "reasoning effort not in its plan", overflow: "too long for its model", room: "reply asked past the window left", slow: "slow to start", prompt: "agent's prompt turned away", restricted: "account restricted by the vendor" };
+  const FAIL = { rate: "rate limited", credit: "out of credit", quota: "quota used up", other: "failed", auth: "sign-in required", canceled: "canceled", foreign: "another account's reasoning", floor: "reply too short", verify: "needs verification", refused: "refused (safety filter)", shape: "request not understood", sight: "images not taken", proxy: "proxy not reachable", offline: "network down", overloaded: "servers overloaded", effort: "reasoning effort not in its plan", overflow: "too long for its model", room: "reply asked past the window left", slow: "slow to start", prompt: "agent's prompt turned away", restricted: "account restricted by the vendor", suspended: "suspended by the vendor" };
   // a refusal the vendor called a rate limit, resting as out of quota
   // until the time it named (Rest.Rate), says rate limited: WorkBuddy's
   // per-model "频率限制" read as the account's quota used up, its credits
@@ -951,6 +951,9 @@ function routingPage(part) {
       // the vendor restricted the account itself (#1849): only its lifting,
       // which the vendor's appeal asks for, brings it back
       case "restricted": return t("The vendor restricted the account: it rests {d}, as only the vendor lifting the restriction brings it back. Appeal with the vendor; once it's lifted, try it again here", { d });
+      // an Azure key that answered before, refused 401: its subscription
+      // disabled till its credit renews, asked in the background
+      case "suspended": return t("Its key answered before, so the vendor has most likely suspended it (an Azure subscription out of credit): checked in the background, back as soon as it answers");
       case "backoff": return rest.why === "rate"
         ? t("It was rate limited again as soon as it was back ({n} times in a row): it rests {d}, longer each time until it answers", { n: rest.failures, d })
         : (rest.failures > 1

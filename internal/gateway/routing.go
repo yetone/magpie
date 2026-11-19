@@ -860,7 +860,8 @@ type Rest struct {
 	// or is rate limited again as soon as it is back), "restricted" (the
 	// vendor restricted the account: two hours, or until lifted by hand),
 	// "off" (no rest: its provider is set not to rest after an unknown
-	// failure, provider.RestCapOff).
+	// failure, provider.RestCapOff), "suspended" (an Azure key that
+	// answered before refused 401: a day, or until its probe answers).
 	By       string `json:"by"`
 	Failures int    `json:"failures,omitempty"` // in a row, for a backoff
 	// Key is what it rests by, for the app to lift the rest (Unrest)
@@ -1501,6 +1502,12 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	now := time.Now()
 	d := fallbackCooldown
 	why := failureOf(c, status, body)
+	if why == failOther && azureSuspended(c, status) {
+		// an Azure key that answered before, refused 401: its
+		// subscription disabled for its credit spent, back when Azure
+		// enables it again (azure_suspended.go)
+		why = failSuspended
+	}
 	if why == failCut {
 		// a plugin ended the turn on purpose, its upstream's stream having
 		// died mid-call (plugins#38): the account is as good as it was, the
@@ -1737,6 +1744,9 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 		// Its words, for restrictedHeld to give again while it rests
 		d, r.By = restrictedRest, "restricted"
 		r.said = provider.APIError(body, http.StatusText(status))
+	case failSuspended:
+		// until it answers again: asked in the background (probeable)
+		d, r.By = suspendedRest, "suspended"
 	case failVerify:
 		d, r.By = verifyRest, "verify"
 		// the error as the agent was given it, and the link in it
@@ -1840,7 +1850,7 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 			// greys its Send till it knows magpie is its provider
 			codexMayBeUsedUp(a.User)
 		}
-	} else if a == nil && why != failOther && why != failVerify && why != failRestricted {
+	} else if a == nil && why != failOther && why != failVerify && why != failRestricted && why != failSuspended {
 		staleKeyAllowance(c.p) // a key that reads its windows, too
 	}
 	r.Until = onWall(now.Add(d))

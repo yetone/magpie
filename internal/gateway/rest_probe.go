@@ -11,7 +11,9 @@ package gateway
 // A list costs no allowance, and none is asked of a subscription's
 // account, a plugin's, or a rest whose end the vendor or the user named
 // (out of quota or credit, a Retry-After, a window full), which ends on
-// time; nor of a rate limit, which a list answers while the chat endpoint
+// time — but an Azure key that answered before and is refused 401, its
+// subscription disabled until its credit renews (azure_suspended.go), is
+// asked; nor of a rate limit, which a list answers while the chat endpoint
 // still refuses, or of one model alone. A list answers for the vendor,
 // not for every model behind it, so a rest the list lifted that fails
 // again is not asked again until the key answers a request.
@@ -72,7 +74,16 @@ var restProbes = struct {
 // A Retry-After the vendor sent with it is its word on when to ask again,
 // which a list asked sooner would go around.
 func probeable(c candidate, r Rest, header http.Header, now time.Time) bool {
-	if retryAfter(header, now) > 0 || c.p.Account != nil || r.Model != "" || r.Key != c.restKey() || r.Why != failOther || !c.p.ListAsks() {
+	if c.p.Account != nil || r.Model != "" || r.Key != c.restKey() || !c.p.ListAsks() {
+		return false
+	}
+	if r.Why == failSuspended {
+		// an Azure subscription disabled, its key refused till Azure
+		// enables it again, which nothing says the time of: its list is
+		// refused the same till then (azure_suspended.go)
+		return r.By == "suspended" && probeBefore(now.Add(restProbeSteps[0]), r.Until)
+	}
+	if retryAfter(header, now) > 0 || r.Why != failOther {
 		return false
 	}
 	if r.By != "backoff" {

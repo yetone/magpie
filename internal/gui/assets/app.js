@@ -15476,7 +15476,7 @@ const accountRestLines = (p, user) => {
 };
 
 // a key's rest, worded as the Routing page words a failure
-const KEY_FAIL = { rate: "rate limited", credit: "out of credit", quota: "quota used up", other: "failed", auth: "sign-in required", verify: "needs verification", refused: "refused (safety filter)", proxy: "proxy not reachable", slow: "slow to start" };
+const KEY_FAIL = { rate: "rate limited", credit: "out of credit", quota: "quota used up", other: "failed", auth: "sign-in required", verify: "needs verification", refused: "refused (safety filter)", proxy: "proxy not reachable", slow: "slow to start", suspended: "suspended by the vendor" };
 // Rest.Rate: the vendor called it a rate limit
 const keyFail = (r) => r.why === "quota" && r.rate ? KEY_FAIL.rate : KEY_FAIL[r.why] || "failed";
 
