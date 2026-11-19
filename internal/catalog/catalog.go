@@ -1583,6 +1583,18 @@ func IsOneOf(id string, ids map[string]bool) bool {
 	return ok
 }
 
+// IsOneLike is IsOneOf for models a rule names by their id rather than a
+// list: whether like takes the model of this id, by the id or any spelling
+// IsOneOf hears (a relay's rename, a tag in brackets, ":official", the
+// model the user said it is). like gets bare ids, lowercase. A rule kept
+// so reaches a model newer than any list: provider.OffersUltra's every GPT
+// Sol, Astra and Terra.
+func IsOneLike(id string, like func(bare string) bool) bool {
+	load()
+	_, ok := lookupBy(bareID(id), func(b string) (bool, bool) { return true, like(b) }, true, true)
+	return ok
+}
+
 // KnowsAsWritten is Knows without another spelling (normalFor): the
 // usage report sends a model's id only when models.dev knows it as
 // written, so an id a user typed that only folds into a known one
@@ -1813,24 +1825,38 @@ func lookupAs[T any](id string, table map[string]T, spellings bool) (T, bool) {
 // lookupIn is lookupAs for a bare id, the user's word heard only with
 // user, as contextIn.
 func lookupIn[T any](b string, table map[string]T, spellings, user bool) (T, bool) {
-	if v, ok := found(b, table); ok {
+	return lookupBy(b, inMap(table), spellings, user)
+}
+
+// inMap is a table's lookup of a bare id as it is written, for foundBy.
+func inMap[T any](table map[string]T) func(string) (T, bool) {
+	return func(b string) (T, bool) {
+		v, ok := table[b]
+		return v, ok
+	}
+}
+
+// lookupBy is lookupIn for a table read through get, which may be a rule
+// rather than a map (IsOneLike).
+func lookupBy[T any](b string, get func(string) (T, bool), spellings, user bool) (T, bool) {
+	if v, ok := foundBy(b, get); ok {
 		return v, true
 	}
 	if s, ok := userSame(b, user); ok {
-		if v, ok := lookupIn(s, table, true, false); ok {
+		if v, ok := lookupBy(s, get, true, false); ok {
 			return v, true
 		}
 	}
 	if r, _, ok := renamed(b); ok {
-		if v, ok := found(r, table); ok {
+		if v, ok := foundBy(r, get); ok {
 			return v, true
 		}
 	}
 	if n, ok := normalFor(b); spellings && ok {
-		return found(n, table)
+		return foundBy(n, get)
 	}
 	if t, ok := untagged(b); spellings && ok {
-		return lookupIn(t, table, true, user)
+		return lookupBy(t, get, true, user)
 	}
 	var zero T
 	return zero, false
@@ -1916,21 +1942,25 @@ func normalFor(b string) (string, bool) {
 // profile's without its geography, "gpt-5.4(high)" (CLIProxyAPI's level in
 // the id) as gpt-5.4, or "glm-5:free" (":batch", ":thinking") as glm-5.
 func found[T any](b string, table map[string]T) (T, bool) {
-	if v, ok := table[b]; ok {
+	return foundBy(b, inMap(table))
+}
+
+// foundBy is found for a table read through get.
+func foundBy[T any](b string, get func(string) (T, bool)) (T, bool) {
+	if v, ok := get(b); ok {
 		return v, true
 	}
 	if r, ok := unprofiled(b); ok {
-		return found(r, table)
+		return foundBy(r, get)
 	}
 	if i := strings.IndexByte(b, '('); i > 0 && strings.HasSuffix(b, ")") {
-		if v, ok := table[b[:i]]; ok {
+		if v, ok := get(b[:i]); ok {
 			return v, true
 		}
 		b = b[:i]
 	}
 	if i := strings.IndexByte(b, ':'); i > 0 {
-		v, ok := table[b[:i]]
-		return v, ok
+		return get(b[:i])
 	}
 	var zero T
 	return zero, false
