@@ -404,15 +404,21 @@ its search would go on finding: `grokSearchRowsDrop` deletes the session's
 row and its subagents', waiting on Grok's own write lock
 (`BEGIN IMMEDIATE`, busy timeout 5 s), before any file is moved. A row that
 can't be taken out stops the delete, so the session stays whole rather than
-half gone; no index, or one without those tables, deletes as before. Restore
-brings the folder back; the row isn't put back, so Grok Build's search finds
-the restored session again only if Grok Build indexes the folder again.
+half gone; no index, or one without those tables, deletes as before. The rows
+are kept, every column as Grok Build had them, in the trash entry's
+`grok_search.json` (not in the note the Trash page lists, the text can be
+large); Restore puts them back (`INSERT OR IGNORE`, so a row Grok Build wrote
+again meanwhile is kept, and an index that can't be written doesn't stop the
+restore), and a delete that fails after dropping them puts them back too.
 Implementation:
 [`grok_search.go`](../../internal/sessions/grok_search.go), the `grok` branch
 of `sessionPaths` and `Delete` in
 [`manage.go`](../../internal/sessions/manage.go); tests
 `TestGrokDeleteRestore`, `TestGrokDeleteLeavesTheSessionWhenItsIndexRowCantGo`,
-`TestGrokSearchRowsDrop` and `TestGrokSessionDeleteOnThePage`.
+`TestGrokSearchRowsDrop`, `TestGrokSearchRowsComeBackWhole` and
+`TestGrokSessionDeleteOnThePage`. The schema (session_docs: session_id, cwd,
+updated_at, title, content, content_hash; some versions add an offset column)
+was read from Grok Build 1.0.67's own index and binary.
 A deleted Codex session also leaves the Codex app's list (zhuddan on Discord).
 The app (ChatGPT.app's Codex, 26.x) lists threads from its own catalog,
 `<CODEX_HOME>/sqlite/codex.db` (`codex-dev.db` for a non-prod build), table

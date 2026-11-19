@@ -209,6 +209,13 @@ func TestGrokDeleteRestore(t *testing.T) {
 			t.Fatalf("%s isn't back: %v", p, err)
 		}
 	}
+	// the index has its rows again, its search finds them, and the other
+	// session's is not doubled
+	for id, word := range map[string]string{grokMain: grokWordMain, grokSub: grokWordSub, grokFork: grokWordFork} {
+		if rows, found := grokSearchCount(t, index, id, word); rows != 1 || found != 1 {
+			t.Fatalf("%s after the restore: %d rows and %d found, want 1 and 1", id, rows, found)
+		}
+	}
 	Reset()
 	if back, ok := findManaged(ListAgent("grok"), grokMain); !ok || back.Title != m.Title || !back.Deletable {
 		t.Fatalf("the restored session: %+v", back)
@@ -274,13 +281,13 @@ func TestGrokSearchRowsDrop(t *testing.T) {
 	}
 
 	// no index: a Grok Build that never searched deletes as before
-	if err := grokSearchRowsDrop([]string{grokMain}); err != nil {
+	if _, err := grokSearchRowsDrop([]string{grokMain}); err != nil {
 		t.Fatalf("no index: %v", err)
 	}
 
 	index := grokSearchDB()
 	grokSearchMake(t, index, [][2]string{{grokMain, grokWordMain}, {grokFork, grokWordFork}})
-	if err := grokSearchRowsDrop([]string{grokMain}); err != nil {
+	if _, err := grokSearchRowsDrop([]string{grokMain}); err != nil {
 		t.Fatal(err)
 	}
 	if rows, found := grokSearchCount(t, index, grokMain, grokWordMain); rows != 0 || found != 0 {
@@ -290,7 +297,7 @@ func TestGrokSearchRowsDrop(t *testing.T) {
 		t.Fatalf("the other session: %d rows, %d found", rows, found)
 	}
 	// nothing of it left to take out is not an error
-	if err := grokSearchRowsDrop([]string{grokMain}); err != nil {
+	if _, err := grokSearchRowsDrop([]string{grokMain}); err != nil {
 		t.Fatalf("already gone: %v", err)
 	}
 
@@ -307,7 +314,54 @@ func TestGrokSearchRowsDrop(t *testing.T) {
 	if err := os.Rename(bare, index); err != nil {
 		t.Fatal(err)
 	}
-	if err := grokSearchRowsDrop([]string{grokMain}); err != nil {
+	if _, err := grokSearchRowsDrop([]string{grokMain}); err != nil {
 		t.Fatalf("no tables: %v", err)
+	}
+}
+
+// A session's index rows come back whole with it: every column, the offset
+// Grok Build keeps too, and a row Grok Build wrote again meanwhile is not
+// written over.
+func TestGrokSearchRowsComeBackWhole(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("GROK_HOME", filepath.Join(home, ".grok"))
+	index := grokSearchDB()
+	grokSearchMake(t, index, [][2]string{{grokMain, grokWordMain}, {grokFork, grokWordFork}})
+	db, err := sql.Open("sqlite", sqliteURL(index, "_pragma=busy_timeout(2000)"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`UPDATE session_docs SET last_indexed_offset = 4242, content_hash = 'h1' WHERE session_id = ?`, grokMain); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := grokSearchRowsDrop([]string{grokMain})
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("dropped %v, %v", rows, err)
+	}
+	dir := t.TempDir()
+	if err := grokSearchKeep(dir, rows); err != nil {
+		t.Fatal(err)
+	}
+	if err := grokSearchPut(grokSearchKept(dir)); err != nil {
+		t.Fatal(err)
+	}
+	var off int
+	var hash string
+	if err := db.QueryRow(`SELECT last_indexed_offset, content_hash FROM session_docs WHERE session_id = ?`, grokMain).Scan(&off, &hash); err != nil || off != 4242 || hash != "h1" {
+		t.Fatalf("row back as %d %q, %v", off, hash, err)
+	}
+	if r, f := grokSearchCount(t, index, grokMain, grokWordMain); r != 1 || f != 1 {
+		t.Fatalf("%d rows, %d found", r, f)
+	}
+	// Grok Build indexed it again first: its row stays
+	if _, err := db.Exec(`UPDATE session_docs SET content_hash = 'newer' WHERE session_id = ?`, grokMain); err != nil {
+		t.Fatal(err)
+	}
+	if err := grokSearchPut(grokSearchKept(dir)); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT content_hash FROM session_docs WHERE session_id = ?`, grokMain).Scan(&hash); err != nil || hash != "newer" {
+		t.Fatalf("restore wrote over %q, %v", hash, err)
 	}
 }

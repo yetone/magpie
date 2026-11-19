@@ -38,9 +38,8 @@ import (
 // agy's conversation_summaries.db and jetbox_summaries_proto.pb,
 // which it keeps open, keep the row, and agy lists no conversation whose
 // files are gone, as a restore brings it back to its /resume list. A
-// restored Grok Build session is whole again; its row does not come back
-// with it, so Grok Build's search finds it only once Grok Build has indexed
-// the folder again.
+// restored Grok Build session is whole again, and the index rows it dropped
+// (kept whole in the trash entry's grok_search.json) go back with it.
 // Hermes's, Alma's and OpenMausBot's are rows in a database the agent keeps open and
 // writes, so they are only listed, and so are OpenCode's and ZCode's, and
 // Cline's, whose sessions.db lists a session whose files are gone. Kimi Code's are
@@ -551,16 +550,26 @@ func Delete(agent, id string) (Trashed, error) {
 	// going, a subagent's under its own id: those rows go before a file
 	// does, so a delete that can't take them out moves nothing and the
 	// session is whole rather than gone from the list and found by search
+	var grokRows []grokSearchRow
 	if agent == "grok" {
-		if err := grokSearchRowsDrop(append([]string{id}, subIDs(fs, id)...)); err != nil {
+		var err error
+		if grokRows, err = grokSearchRowsDrop(append([]string{id}, subIDs(fs, id)...)); err != nil {
 			return Trashed{}, err
 		}
 	}
+	// a delete that stops after that puts the rows back
+	undone := func() { grokSearchPut(grokRows) }
 	t := Trashed{Agent: agent, ID: id, Title: s.Title, Cwd: s.Cwd, Last: s.Last, Deleted: now}
 	name := now.UTC().Format("20060102T150405.000000000") + "-" + id
 	dir := filepath.Join(TrashDir(), agent, name)
 	t.Key = agent + "/" + name
 	if err := os.MkdirAll(filepath.Join(dir, "files"), 0o700); err != nil {
+		undone()
+		return Trashed{}, err
+	}
+	if err := grokSearchKeep(dir, grokRows); err != nil {
+		os.RemoveAll(dir)
+		undone()
 		return Trashed{}, err
 	}
 	for i, p := range paths {
@@ -572,6 +581,7 @@ func Delete(agent, id string) (Trashed, error) {
 				move(filepath.Join(dir, "files", back.Name), back.From)
 			}
 			os.RemoveAll(dir)
+			undone()
 			return Trashed{}, err
 		}
 		t.Items = append(t.Items, m)
@@ -961,6 +971,10 @@ func Restore(key string) (Trashed, error) {
 	// by itself
 	if t.Agent == "codex" && len(t.CodexCatalog) > 0 {
 		restoreCodexCatalog(t.CodexCatalog)
+	}
+	// Grok Build's search finds it again
+	if t.Agent == "grok" {
+		grokSearchPut(grokSearchKept(dir))
 	}
 	os.RemoveAll(dir)
 	wslRelistNow(t.Items)
