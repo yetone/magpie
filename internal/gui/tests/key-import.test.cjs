@@ -17,18 +17,18 @@ const { chromium, webkit } = require("playwright");
 
 const assets = path.resolve(__dirname, "../assets");
 const until = new Date(Date.now() + 10 * 60e3).toISOString();
-const relay = () => ({
+const relay = (said) => ({
   id: "relay", name: "Relay", icon: "generic", chat: "https://relay.example.com/v1", responses: "", anthropic: "", catalog: "",
   models: [{ id: "big", name: "", on: true }], agents: [], fallback: [], headers: {},
   key: { set: true, masked: "sk-…one" }, balanceToken: { takes: false, set: false }, proxy: "",
   keyList: [
     { id: "aaaaaaaaaa", name: "", masked: "sk-…one", on: true, active: true },
-    { id: "bbbbbbbbbb", name: "", masked: "sk-…two", on: true, rest: { why: "rate", status: 429, until, key: "relay#bbbbbbbbbb" } },
+    { id: "bbbbbbbbbb", name: "", masked: "sk-…two", on: true, rest: { why: "rate", status: 429, until, key: "relay#bbbbbbbbbb", ...(said ? { error: said } : {}) } },
   ],
 });
 
-function serve(lang, posts, adds = []) {
-  const p = relay();
+function serve(lang, posts, adds = [], said) {
+  const p = relay(said);
   const providers = { providers: [p], presets: [], excluded: [], gateway: { running: true, window: true } };
   const state = { agents: [], profiles: [], settings: { lang, theme: "light" } };
   return async (route) => {
@@ -69,7 +69,7 @@ const words = {
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   for (const lang of ["en", "zh"]) {
     const w = words[lang];
-    const open = async (t, name, adds) => {
+    const open = async (t, name, adds, said) => {
       const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
       t.after(async () => {
         if (process.env.ARTIFACT_DIR) {
@@ -85,7 +85,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const errors = [];
       page.on("pageerror", (e) => errors.push(e.message));
       const posts = [];
-      await page.route("**/*", serve(lang, posts, adds));
+      await page.route("**/*", serve(lang, posts, adds, said));
       await page.goto("http://magpie.test/?view=providers");
       await page.locator(".row.provider", { hasText: "Relay" }).first().click();
       await page.locator(".editor .accts .acc.add").waitFor();
@@ -124,6 +124,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator('.acc[data-account-id="dddddddddd"]').waitFor();
       assert.equal(await page.locator(".acc.adding").count(), 0, "the box stays open");
       assert.equal((await page.locator("#status").textContent()).trim(), w.note);
+      assert.deepEqual(errors, []);
+    });
+
+    // @YsiCing on X: a key rested "400 · out of credit" said nothing of what
+    // its vendor answered; the row says it, as an account's does
+    test(`${engine} ${lang}: a resting key says what its vendor answered`, async (t) => {
+      const said = "Rate limit reached for gpt-x on requests per min (RPM)";
+      const { page, errors } = await open(t, "said", [], said);
+      assert.match(await page.locator('.acc[data-account-id="bbbbbbbbbb"] .key-rest').textContent(), w.rest);
+      assert.equal(await page.locator('.acc[data-account-id="bbbbbbbbbb"] .key-rest-said').textContent(), said);
+      assert.equal(await page.locator('.acc[data-account-id="aaaaaaaaaa"] .key-rest-said').count(), 0);
       assert.deepEqual(errors, []);
     });
 

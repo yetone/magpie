@@ -1085,7 +1085,10 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 	if out.KeyList == nil {
 		out.KeyList = []provider.KeyInfo{}
 	}
-	// a key the gateway passes over after a failure says so on its row
+	// a key the gateway passes over after a failure says so on its row,
+	// with the vendor's words, as an account's row does (accountRests):
+	// without them a key's "400 · out of credit" said nothing of what its
+	// vendor answered (@YsiCing on X)
 	restKey := p.RestKeys()
 	for i, k := range out.KeyList {
 		if !k.On {
@@ -1093,7 +1096,7 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 		}
 		key := restKey(k)
 		if r, ok := keyRestOf(key); ok {
-			out.KeyList[i].Rest = &provider.KeyRest{Why: r.Why, Status: r.Status, Until: r.Until, Key: key, Probed: r.Probed, Rate: r.Rate}
+			out.KeyList[i].Rest = &provider.KeyRest{Why: r.Why, Status: r.Status, Until: r.Until, Key: key, Probed: r.Probed, By: r.By, Error: r.Error, Rate: r.Rate}
 		}
 	}
 	// and one with a spend cap, what it has spent of it (the gateway
