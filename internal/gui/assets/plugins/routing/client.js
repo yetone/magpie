@@ -2873,9 +2873,11 @@ function routingPage(part) {
       if (cut && !st.title) st.title = st.textContent;
     };
     st.onpointerleave = () => delete st.dataset.cut;
-    li.append(el("i", "dot"), b, st, bar, tg);
+    // every window the account has, as Usage reads them (the seat's windows line)
+    const wn = el("div", "wins");
+    li.append(el("i", "dot"), b, st, bar, tg, wn);
     li.title = w.id;
-    return { li, wire: path(), st, bi, tg, w, provEl: prov, subEl: sub };
+    return { li, wire: path(), st, bi, tg, wn, w, provEl: prov, subEl: sub };
   }
   // keyLed: a key's row is headed by its provider's name, the key's
   // after it, muted: a key's name is often only its masked secret
@@ -3349,6 +3351,23 @@ function routingPage(part) {
       // crowd the stage. Live only, as the list's are (winsOf).
       const tip = [w.id, ...(day ? [] : [...winsOf(w), cardError(w)].filter(Boolean))].join("\n");
       if (row.li.title !== tip) row.li.title = tip;
+      // every window the account has, each with what it has left (or used,
+      // as the Usage page's setting says) and when it starts again, in the
+      // seat itself, not only on hover (YujunT46308 on X: a bar alone isn't
+      // what they read the Usage page for). The one the row's status already
+      // says is not told twice; a wallet's balance is its status; an account
+      // not read says so there, not here. Live only, as winsOf.
+      const wp = day || w.balance != null ? [] : winParts(w).slice(s === winsOf(w)[0] ? 1 : 0);
+      const sig = wp.map((p) => p.k + "\u0000" + p.v + "\u0000" + p.r).join("\u0001");
+      if (row.wn.dataset.sig !== sig) {
+        row.wn.dataset.sig = sig;
+        row.wn.replaceChildren(...wp.map((p) => {
+          const e = el("span", "", "");
+          e.append(el("span", "k", p.k), " ", el("b", "", p.v), ...(p.r ? [" ", el("span", "r", p.r)] : []));
+          e.title = p.tip;
+          return e;
+        }));
+      }
       const bar = w.known && !w.free && w.balance == null;
       row.li.classList.toggle("nobar", !bar);
       row.bi.style.width = bar ? fill(w) : "0";

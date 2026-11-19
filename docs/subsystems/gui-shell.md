@@ -337,9 +337,14 @@ itself. It shows only live, with a subscription account listed. See
 `routing-read-allowances.test.cjs`.
 
 On the stage, an account's seat tells the same windows in its tooltip,
-under its id (`render`, #1835). The row itself keeps one line: the
-fullest window while idle, what it is doing while it answers. See
-`routing-seat-windows.test.cjs`.
+under its id (`render`, #1835). The row's status keeps one line: the
+fullest window while idle, what it is doing while it answers. Under it the
+seat tells every window it has, as `winParts` words them (short name, used or
+left as the Usage page's setting says, when it starts again; YujunT46308 on
+X), wrapping on a narrow stage. The one the status already says is not told
+twice, a wallet's balance is its status, and an account with no card of its
+own, or one not read, tells no windows rather than a guess. See
+`routing-seat-windows.test.cjs`, `routing-seat-wins.test.cjs`.
 
 ### Routing account cards
 

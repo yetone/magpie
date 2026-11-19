@@ -151,6 +151,11 @@
 .rt-accts .bar { grid-column: 2 / 4; height: 3px; }
 .rt-accts .bar i { width: 0; transition: width .4s; }
 .rt-accts li.nobar .bar { display: none; }
+/* an account's every window, under its status: name, what is used or left,
+   when it starts again; wraps, never cut short */
+.rt-accts li > .wins { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 11px; line-height: 16px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rt-accts li > .wins:empty { display: none; }
+.rt-accts li > .wins b { font-weight: 450; color: var(--fg-2); }
 .rt-accts .dot { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--muted); }
 .rt-accts li.on { border-color: var(--fg); }
 .rt-accts li.on em { color: var(--fg); }
