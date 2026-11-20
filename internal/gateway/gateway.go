@@ -8087,6 +8087,13 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 				// never held: its cut is the truncation it always was.
 				holdTail = true
 			}
+			if proto == provider.Chat && sse && gather == nil && sniff.ended && sniff.failed == "" && sniff.u.Stop == "" && sniff.tail.void() &&
+				(sniff.tail.usage || !saysItsEnd(p, proto, upstream)) {
+				// [DONE] with nothing before it, not even a finish_reason:
+				// held, for the empty reply's error to go in its place
+				// (chatTail.void), not after the end a client stops at
+				holdTail = true
+			}
 			out := buf[:n]
 			if tidy != nil {
 				out = tidy.write(out)
@@ -8278,6 +8285,32 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		}
 		status, msg := gather.finish(client, p, sse, cut, sniff.failed)
 		return status, msg, true
+	}
+	if proto == provider.Chat && sse && sniff.failed == "" && sniff.u.Stop == "" && sniff.tail.void() &&
+		(sniff.tail.usage || !saysItsEnd(p, proto, upstream)) &&
+		(rerr == nil || rerr == io.EOF) && r.Context().Err() == nil {
+		// a 200 that ended, [DONE] or not, having carried nothing — no
+		// text, no call, no reasoning, no finish_reason — is no reply: an
+		// empty one, as a translated Chat reply is (28b8244d4). Relayed
+		// as it came, dsh read it as "Stream ended without
+		// finish_reason" (@yuushabu_buyinn on X, Copilot's
+		// gemini-4-hydrogen). The held end is dropped and the error said
+		// in its place, [DONE] after: held, the try fails for the next
+		// candidate as an empty reply, resting nobody; let through, the
+		// client is told why its reply ended. Read before the Gemini
+		// fill-in below, which gave such a reply a "stop" for its usage.
+		// Where a reply says its end (saysItsEnd), one that counted no
+		// usage either was cut, not empty: Command Code's killed worker
+		// ends after its role chunk, told below as a cut
+		msg := p.Name + ": " + emptyReply
+		// the line left pending is a usage frame's or [DONE]: dropped too
+		holdTail, heldTail, pending = false, nil, nil
+		w.Write(append(apart(), streamFailure(provider.Chat, msg)...))
+		w.Write([]byte("data: [DONE]\n\n"))
+		if f != nil {
+			f.Flush()
+		}
+		return res.StatusCode, msg, true
 	}
 	// a Chat stream of Gemini's OpenAI-compatible API is whole only with
 	// its finish_reason, [DONE] or not (saysItsEnd)
@@ -9857,7 +9890,11 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 		ended = ended || replyEnds(actual, data, upstreamStop([]byte(data)))
 		return dec(data, see)
 	})
-	if fin := tail.finish(); err == nil && !ended && actual == provider.Chat && fin != "" && saysItsEnd(p, actual, model) {
+	// a Chat reply that carried nothing at all and no finish_reason, but
+	// counted its usage, is an empty one (chatTail.void), not one whose
+	// end alone was lost; one with no usage either is still a cut
+	chatVoid := actual == provider.Chat && !ended && tail.void() && tail.usage
+	if fin := tail.finish(); err == nil && !ended && actual == provider.Chat && fin != "" && !chatVoid && saysItsEnd(p, actual, model) {
 		// Gemini's OpenAI-compatible API lost only the finish_reason
 		// after its generation was done (chatTail)
 		ended, err = true, dec(string(finishChunk(fin)), see)
@@ -9909,7 +9946,7 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 		col.add(Event{Kind: KStop, Stop: "length"})
 		ended = true
 	}
-	if col.err == "" && !ended && saysItsEnd(p, actual, model) && r.Context().Err() == nil {
+	if col.err == "" && !ended && !chatVoid && saysItsEnd(p, actual, model) && r.Context().Err() == nil {
 		// an Anthropic stream that just stopped — no stop_reason, no
 		// message_stop — or a Responses one with no response.completed is
 		// a reply cut short, not a finished one, as a streaming client is
@@ -9919,7 +9956,9 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 		msg := p.Name + ": " + errEndedShort.Error()
 		return writeError(w, from, 502, msg), msg
 	}
-	if (empty || repliesCounted(actual) && uncounted(col.res.Usage)) && !saidAnything(col.res.Parts) && answersNothing(col.res.Stop) {
+	// a Chat reply that said nothing and never gave a finish_reason is
+	// empty too, as streamTranslated has it (28b8244d4)
+	if (empty || repliesCounted(actual) && uncounted(col.res.Usage) || cutVoidAt(actual) && col.res.Stop == "") && !saidAnything(col.res.Parts) && answersNothing(col.res.Stop) {
 		msg := p.Name + ": " + emptyReply
 		return writeError(w, from, 502, msg), msg
 	}

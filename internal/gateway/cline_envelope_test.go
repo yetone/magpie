@@ -75,8 +75,10 @@ func TestClineEnvelopeUnwrapped(t *testing.T) {
 		t.Fatalf("refused: %d %s", code, body)
 	}
 
-	// a stream passes as it came
-	reply = "data: {\"success\":true,\"data\":{}}\n\ndata: [DONE]\n\n"
+	// a stream passes as it came (one that carried no reply at all would
+	// be an empty one, chat_empty_passthrough_test.go)
+	reply = "data: {\"success\":true,\"data\":{}}\n\n" +
+		"data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"pong\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n"
 	ctype = "text/event-stream"
 	code, body = ask("/v1/chat/completions", `{"model":"cline/deepseek/deepseek-v4.1-flash","stream":true,"messages":[{"role":"user","content":"Say pong"}]}`)
 	if code != 200 || !strings.Contains(body, `"success":true`) {
