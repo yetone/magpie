@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/yetone/magpie/internal/coderun"
 	"os"
 	"slices"
 	"strings"
@@ -219,6 +220,11 @@ var (
 // Main runs magpie with os.Args, at the version the build was stamped with.
 func Main(v string) {
 	version = v
+	if coderun.Helping() {
+		// internal: a run_code script, in a process of its own; it reads
+		// and writes no file of magpie's
+		os.Exit(coderun.Main())
+	}
 	// before anything reads or writes a file: no home, or a relative one,
 	// would put the agents' configs and magpie's keys under the working
 	// folder. What needs no file still answers (magpie version in a

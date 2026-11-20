@@ -9,6 +9,7 @@ import (
 
 	"github.com/yetone/magpie/internal/agentenv"
 	"github.com/yetone/magpie/internal/budget"
+	"github.com/yetone/magpie/internal/coderun"
 	"github.com/yetone/magpie/internal/gwbudget"
 	"github.com/yetone/magpie/internal/gwmw"
 	"github.com/yetone/magpie/internal/gwtool"
@@ -24,6 +25,10 @@ import (
 const standInsEnv = "MAGPIE_GATEWAY_TEST_STAND_INS"
 
 func TestMain(m *testing.M) {
+	if coderun.Helping() {
+		// a run_code script: the test binary is the helper (hubCodeRun)
+		os.Exit(coderun.Main())
+	}
 	serveRotation()
 	groupsServed = provider.ServeGroups()
 	serveMiddleware()

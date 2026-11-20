@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"runtime/metrics"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -241,4 +242,46 @@ func TestHubCodeOff(t *testing.T) {
 	if got := run(`return 1`); got.Error == nil {
 		t.Fatalf("ran: %+v", got)
 	}
+}
+
+// A builtin is Go, past goja's interrupt: one that allocates gigabytes at
+// once, or a regular expression that backtracks for ever, is ended with
+// the script's process at its memory or its time, and takes neither
+// magpie's memory nor the request with it.
+func TestHubCodeBuiltinsEndWithTheirProcess(t *testing.T) {
+	was := hubCodeWait
+	hubCodeWait = 2 * time.Second
+	t.Cleanup(func() { hubCodeWait = was })
+	_, run := codeHub(t, nil)
+	for _, c := range []struct{ code, want string }{
+		{`return "x".repeat(3e9).length`, "memory"},
+		{`return /^(a+)+$(?!x)/.test("a".repeat(40) + "b")`, "didn't finish"},
+		{`const a = []; a.length = 4e9; return a.indexOf(1)`, "didn't finish"},
+	} {
+		code, want := c.code, c.want
+		before := hubHeapNow()
+		start := time.Now()
+		got := make(chan mcpReply, 1)
+		go func() { got <- run(code) }()
+		select {
+		case m := <-got:
+			if !m.Result.IsError || !strings.Contains(codeText(m), want) {
+				t.Fatalf("%s gave %q, want %q", code, codeText(m), want)
+			}
+		case <-time.After(20 * time.Second):
+			t.Fatalf("%s still running after %s", code, time.Since(start))
+		}
+		if took := time.Since(start); took > 10*time.Second {
+			t.Fatalf("%s took %s", code, took)
+		}
+		if grew := int64(hubHeapNow()) - int64(before); grew > 256<<20 {
+			t.Fatalf("%s grew magpie's heap by %d MB", code, grew>>20)
+		}
+	}
+}
+
+func hubHeapNow() uint64 {
+	s := []metrics.Sample{{Name: "/memory/classes/heap/objects:bytes"}}
+	metrics.Read(s)
+	return s[0].Value.Uint64()
 }
