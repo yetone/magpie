@@ -664,6 +664,18 @@ var wslKinds = []wslKind{
 				return append(grokOwnOptions("", "", cur["model"]), opts...)
 			}
 		}},
+	// Kigi, a fork of Grok Build, with its config.toml in ~/.kigi
+	{id: "kigi", name: "Kigi", dir: ".kigi", bin: "kigi", in: kigiIn,
+		restart: newNotice("{agent} in WSL {distro} reads its settings at start-up — restart open kigi sessions to use this."),
+		asleep: func(key string) func(map[string]string) []Option {
+			if key != "model" {
+				return nil
+			}
+			// its models_cache.json and config.toml are the distro's files
+			return func(cur map[string]string) []Option {
+				return withVia(kigiOwnOptions("", "", cur["model"]), "kigi", magpieID+"/")
+			}
+		}},
 	{id: "droid", name: "Droid", dir: ".factory", bin: "droid", in: droidIn,
 		restart: newNotice("{agent} in WSL {distro} reads its settings at start-up — restart open droid sessions to use this."),
 		asleep: func(key string) func(map[string]string) []Option {

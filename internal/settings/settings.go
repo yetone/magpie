@@ -1790,11 +1790,12 @@ var CompactAgents = []string{"codex", "claude", "grok"}
 // is Codex's, what OpenAI tells it for its own models; written into Grok
 // Build as a percent it compacted a 1M model at 27% and a 512K one at 53%
 // (@taktoshilite on X). A size the user typed, for every agent or for
-// Grok Build, still holds.
+// Grok Build, still holds. Kigi, a fork of Grok Build, compacts at the
+// same 85% of its own and is told the same way.
 func (s Settings) ForAgent(kind string) Settings {
 	if c, ok := s.AgentCompacts[kind]; ok {
 		s.CompactAt, s.FullContext = c.At, c.Full
-	} else if kind == "grok" && s.CompactAt == 0 {
+	} else if (kind == "grok" || kind == "kigi") && s.CompactAt == 0 {
 		s.FullContext = true
 	}
 	return s

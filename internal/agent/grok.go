@@ -18,6 +18,7 @@ package agent
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"maps"
 	"os"
@@ -42,16 +43,17 @@ var grokEfforts = []string{"none", "minimal", "low", "medium", "high", "xhigh", 
 // grokModelTable is the header prefix of every table magpie writes.
 var grokModelTable = `model."` + magpieID + "/"
 
-// grokModelTables are magpie's model tables, for a Grok that reaches the
+// grokModelTables are magpie's model tables for agent (Grok Build, or Kigi,
+// which reads the same tables), for one that reaches the
 // gateway's /v1 at v1, with the context_window and the
 // auto_compact_threshold_percent magpie gives each model (by its catalog
 // id), which the caller stashes. A value the user set in a table themselves
 // (grokOwnWindow, grokOwnPercent: had is what the tables hold now, wrote and
 // wrotePct what magpie last gave them) stays as they set it.
-func grokModelTables(v1 string, had grokHad, wrote, wrotePct map[string]int) ([]edit.Table, map[string]int, map[string]int) {
+func grokModelTables(agent, v1 string, had grokHad, wrote, wrotePct map[string]int) ([]edit.Table, map[string]int, map[string]int) {
 	var out []edit.Table
-	st, gave, gavePct := settings.Load().ForAgent("grok"), map[string]int{}, map[string]int{}
-	for _, m := range sharedModels("grok") {
+	st, gave, gavePct := settings.Load().ForAgent(agent), map[string]int{}, map[string]int{}
+	for _, m := range sharedModels(agent) {
 		kvs := []edit.KV{
 			{Path: "model", Value: m.ID},
 			{Path: "name", Value: m.Name},
@@ -226,9 +228,43 @@ func grok(home string) *Agent { return grokIn(here(home)) }
 // (see wsl.go), where GROK_HOME isn't read and its models name the gateway
 // as the distro reaches it.
 func grokIn(at place) *Agent {
-	dir := at.getenv("GROK_HOME")
+	return grokLikeIn(grokBuild, at)
+}
+
+// grokKind is an agent that keeps Grok Build's config.toml: Grok Build
+// itself, or a fork of it (Kigi) with a home and a name of its own.
+type grokKind struct {
+	id, name, icon string
+	aliases, ua    []string
+	// env names the home it is moved to, else dir under the user's home
+	env, dir string
+	// proc is the pattern of its running process (Running), and notice
+	// what it says after a change while one runs
+	proc   string
+	notice notice
+	// options are its own models and magpie's, for the model field
+	options func(dir, path, cur string) []Option
+}
+
+var grokBuild = grokKind{
+	id: "grok", name: "Grok Build", icon: "xai",
+	aliases: []string{"grok-build", "grok-cli"},
+	ua:      []string{"grok-shell", "grok-pager", "xai-grok-build"}, // grok-pager: its terminal front end
+	env:     "GROK_HOME", dir: ".grok",
+	proc: `(^|/)grok( |$)`, notice: noticeGrok,
+	options: func(dir, path, cur string) []Option {
+		// magpie's rows for the account Grok Build is signed in
+		// to are its own models a second time: they fold into
+		// one row (Fate on Discord: grokbuild 在登录态下会加载重复的模型)
+		return joinedVia(grokOwnOptions(dir, path, cur), grokVia(), [2]string{"grok same", dir + "\x00" + path})
+	},
+}
+
+// grokLikeIn is the agent of kind k at a place.
+func grokLikeIn(k grokKind, at place) *Agent {
+	dir := at.getenv(k.env)
 	if dir == "" {
-		dir = at.join(".grok")
+		dir = at.join(k.dir)
 	}
 	path := filepath.Join(dir, "config.toml")
 	get := func(k string) (string, error) {
@@ -250,7 +286,7 @@ func grokIn(at place) *Agent {
 	// keyWindows and keyPercents are the context_window and
 	// auto_compact_threshold_percent magpie last gave each of its models, so
 	// one the user set by hand since is told from it and kept
-	keyWindows, keyPercents := "grok:"+path+":windows", "grok:"+path+":percents"
+	keyWindows, keyPercents := k.id+":"+path+":windows", k.id+":"+path+":percents"
 	writeMagpie := func() error {
 		had, err := grokHadIn(path)
 		if err != nil {
@@ -265,7 +301,7 @@ func grokIn(at place) *Agent {
 		if savedPct != "" {
 			json.Unmarshal([]byte(savedPct), &wrotePct)
 		}
-		tables, gave, gavePct := grokModelTables(at.v1(), had, wrote, wrotePct)
+		tables, gave, gavePct := grokModelTables(k.id, at.v1(), had, wrote, wrotePct)
 		if err := edit.SetTOMLTables(path, []string{grokModelTable}, tables); err != nil {
 			return err
 		}
@@ -303,11 +339,11 @@ func grokIn(at place) *Agent {
 		if !ok {
 			return nil
 		}
-		return catalog.Efforts(sharedModels("grok"), ref) // only read
+		return catalog.Efforts(sharedModels(k.id), ref) // only read
 	}
 	return atomic(&Agent{
-		ID: "grok", Name: "Grok Build", Icon: "xai", Aliases: []string{"grok-build", "grok-cli"}, Spelled: prefixed,
-		UA:  []string{"grok-shell", "grok-pager", "xai-grok-build"}, // grok-pager: its terminal front end
+		ID: k.id, Name: k.name, Icon: k.icon, Aliases: k.aliases, Spelled: prefixed,
+		UA:  k.ua,
 		Dir: dir, Path: path,
 		Sync: func() error {
 			ok, err := wired()
@@ -330,8 +366,8 @@ func grokIn(at place) *Agent {
 			return writeMagpie()
 		},
 		Notice: func() string {
-			if Running(`(^|/)grok( |$)`) {
-				return noticeGrok.String()
+			if Running(k.proc) {
+				return k.notice.String()
 			}
 			return ""
 		},
@@ -348,9 +384,9 @@ func grokIn(at place) *Agent {
 				return err.Error()
 			}
 			if t == nil {
-				return "Grok Build's [model." + strconv.Quote(v) + "] (config.toml) is gone, so it no longer reaches magpie"
+				return k.name + "'s [model." + strconv.Quote(v) + "] (config.toml) is gone, so it no longer reaches magpie"
 			}
-			return wiringOff("Grok Build", path, func(k string) (string, bool) { v, ok := t[k]; return v, ok },
+			return wiringOff(k.name, path, func(k string) (string, bool) { v, ok := t[k]; return v, ok },
 				"base_url", at.v1(), "api_key", at.gwKey())
 		},
 		Fields: []Field{
@@ -403,10 +439,7 @@ func grokIn(at place) *Agent {
 					return edit.SetTOMLKey(path, "models", "default", v)
 				},
 				Options: func(cur map[string]string) []Option {
-					// magpie's rows for the account Grok Build is signed in
-					// to are its own models a second time: they fold into
-					// one row (Fate on Discord: grokbuild 在登录态下会加载重复的模型)
-					return joinedVia(grokOwnOptions(dir, path, cur["model"]), grokVia(), [2]string{"grok same", dir + "\x00" + path})
+					return k.options(dir, path, cur["model"])
 				},
 			},
 			{
@@ -417,6 +450,12 @@ func grokIn(at place) *Agent {
 				Set: func(v string) error {
 					if v == "" {
 						return edit.DelTOMLKey(path, "models", "default_reasoning_effort")
+					}
+					// any other word stops the agent at start-up ("invalid
+					// reasoning effort", kigi 0.1.22 on `magpie kigi effort
+					// ultra`), so it is refused here instead
+					if !slices.Contains(grokEfforts, v) {
+						return fmt.Errorf("%s takes no effort %q: %s", k.name, v, strings.Join(grokEfforts, ", "))
 					}
 					return edit.SetTOMLKey(path, "models", "default_reasoning_effort", v)
 				},

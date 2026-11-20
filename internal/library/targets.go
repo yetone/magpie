@@ -446,6 +446,14 @@ func targetOf(a *agent.Agent) *Target {
 		t.MCP = &mcpFile{Path: a.Path, Format: fmtGrok}
 		t.Instructions = filepath.Join(a.Dir, "AGENTS.md")
 		t.Skills = filepath.Join(a.Dir, "skills")
+	case "kigi":
+		// Kigi, a fork of Grok Build, reads the same [mcp_servers.<name>]
+		// tables from its config.toml, AGENTS.md from its home
+		// ($KIGI_SHARE_DIR, else ~/.kigi; prompt/agents_md.rs) and skills
+		// from skills there and in ~/.agents (prompt/skills.rs)
+		t.MCP = &mcpFile{Path: a.Path, Format: fmtGrok}
+		t.Instructions = filepath.Join(a.Dir, "AGENTS.md")
+		t.Skills = filepath.Join(a.Dir, "skills")
 	case "grok-app":
 		// Independent mode (Use on a custom provider) starts the CLI with
 		// GROK_HOME at agent-home, beside config.toml (grok-app's
@@ -916,7 +924,7 @@ func wslOpened(t *Target) {
 // the one targetOf makes on this machine, given copies (#1323).
 var ownFolder = map[string]bool{
 	"hermes": true, "omp": true, "opencode": true, "mimocode": true, "droid": true,
-	"grok": true, "commandcode": true, "atomcode": true, "qoder": true, "qoder-cn": true,
+	"grok": true, "kigi": true, "commandcode": true, "atomcode": true, "qoder": true, "qoder-cn": true,
 	"minimax-code": true, "fx": true, "dsh": true, "qwen": true,
 }
 
@@ -1123,7 +1131,7 @@ func skipsJunctions(id string) bool {
 // does (core/package-manager.js, userAgentsSkillsDir, @code-yeongyu/senpi
 // 2026.5.13). ZCode reads it beside ~/.zcode/skills (#4987). mu is Pi
 // 1.4.0 (core/package-manager.ts, qybaihe/mu b71cd18).
-var readsShared = []string{"codex", "gemini", "opencode", "deveco", "crush", "dsh", "ds-bot", "commandcode", "devin", "droid", "cline", "grok", "grok-app", "fx", "alma", "kimi", "omo", "zcode", "mu"}
+var readsShared = []string{"codex", "gemini", "opencode", "deveco", "crush", "dsh", "ds-bot", "commandcode", "devin", "droid", "cline", "grok", "kigi", "grok-app", "fx", "alma", "kimi", "omo", "zcode", "mu"}
 
 // Pi reads ~/.agents/skills from 0.54.0 (2026-02-19, its CHANGELOG: "Added
 // default skill auto-discovery for .agents/skills locations … global

@@ -381,6 +381,7 @@ func onMachineAll(home, cfg string) []*Agent {
 		qoder(home),
 		qoderCN(home),
 		grok(home),
+		kigi(home),
 		grokApp(home),
 		zcode(home),
 		workbuddy(home),

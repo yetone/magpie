@@ -24,7 +24,7 @@ func commentable(path string) bool {
 
 // rewrittenEachSync are the agents whose config every sync writes again
 // unchanged, notes or none (#3870)
-var rewrittenEachSync = map[string]bool{"kimi": true, "grok": true, "atomcode": true}
+var rewrittenEachSync = map[string]bool{"kimi": true, "grok": true, "kigi": true, "atomcode": true}
 
 func modTimes(home string) map[string]time.Time {
 	m := map[string]time.Time{}

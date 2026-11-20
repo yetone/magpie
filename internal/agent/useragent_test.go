@@ -22,6 +22,7 @@ func TestAgentOf(t *testing.T) {
 		"dsh":                                      "dsh", // a record kept by an id already
 		"pi":                                       "pi",
 		"grok-pager/0.2.1":                         "grok",
+		"kigi/0.1.22 (linux; x86_64)":              "kigi", // Kigi 0.1.22's own
 		"ZCode/3.10.1":                             "zcode",
 		"Alma/1.2.0":                               "alma",
 		"HanaAgent/1.0":                            "hanako",
