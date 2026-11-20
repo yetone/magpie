@@ -1470,6 +1470,9 @@ func membersFound(entries []Entry, find entryOf, all []Group, g Group, off func(
 			}
 			model, effort := memberEffortIn(entries, id)
 			p, m, ok := resolveIn(entries, model)
+			if ok && unpicked(find, p, m) {
+				m = listedSpelling(entries, p.ID, m)
+			}
 			if !ok || unpicked(find, p, m) && (also == nil || !also(p, m)) {
 				continue // none serves it, or the user unchecked it (#3911)
 			}
@@ -1520,6 +1523,22 @@ func unpicked(find entryOf, p Provider, m string) bool {
 	return len(p.Models) > 0 && find(p.ID, m) < 0 && !p.DecidesModel(m)
 }
 
+// listedSpelling is provider pid's model m as its list spells it, where
+// the two differ only in case (DeepSeek-V4-Pro for deepseek-v4-pro), else
+// m. A member saved in another case than the provider lists its model by
+// (a model typed in, a list fetched again in the vendor's own case) was
+// taken for one the user unticked, and a group of only such members
+// left every agent's picker with no word of why (@CHENGJIAHEGOXIS on X).
+// Asked only once the exact one is missing.
+func listedSpelling(entries []Entry, pid, m string) string {
+	for i := range entries {
+		if e := &entries[i]; e.Provider.ID == pid && e.Model != m && strings.EqualFold(e.Model, m) {
+			return e.Model
+		}
+	}
+	return m
+}
+
 // ResolveRoute is Resolve for a model a route names, a routing group's
 // member or a provider's fallback, as routing reaches it: not one the
 // user unchecked (unpicked). A request naming the model itself goes by
@@ -1536,6 +1555,9 @@ func ResolveRoute(id string) (Provider, string, bool) {
 			}
 		}
 		return -1
+	}
+	if ok && unpicked(find, p, m) {
+		m = listedSpelling(entries, p.ID, m)
 	}
 	if !ok || unpicked(find, p, m) {
 		return Provider{}, "", false

@@ -93,7 +93,9 @@ func ownFields(a *agent.Agent, vals map[string]string) []fieldJSON {
 
 func fieldsOf(a *agent.Agent, vals map[string]string, own bool) []fieldJSON {
 	out := []fieldJSON{}
-	for _, f := range a.Fields {
+	// read once an agent, for a field that offers routing groups
+	unserved := sync.OnceValue(func() []provider.UnservedGroup { return provider.UnservedGroups(a.ListsFor()) })
+	for i, f := range a.Fields {
 		if f.Own != own {
 			continue
 		}
@@ -101,7 +103,44 @@ func fieldsOf(a *agent.Agent, vals map[string]string, own bool) []fieldJSON {
 		if opts == nil {
 			opts = []agent.Option{}
 		}
-		out = append(out, fieldJSON{Key: f.Key, Label: f.Label, Value: vals[f.Key], Options: opts})
+		out = append(out, fieldJSON{Key: f.Key, Label: f.Label, Value: vals[f.Key], Options: opts,
+			Unserved: unservedIn(opts, i == 0 && !own, unserved)})
+	}
+	return out
+}
+
+// unservedIn are the user's routing groups a field's picker shows, not to
+// be picked, each with why its options lack it: for a field that offers
+// routing groups, or the agent's model field (its first) when it offers
+// magpie's models and not one group, as with every group of the user's
+// left out. A group's value is as the field gives magpie's models
+// (Codex's group/<id>, another agent's magpie/group/<id>).
+func unservedIn(opts []agent.Option, first bool, unserved func() []provider.UnservedGroup) []unservedJSON {
+	prefix, ok, groups := "", false, false
+	for _, o := range opts {
+		if o.Ref == "" || !strings.HasSuffix(o.Value, o.Ref) {
+			continue
+		}
+		if o.Group == agent.RoutingGroups {
+			groups = true
+		}
+		if !ok || o.Group == agent.RoutingGroups {
+			prefix, ok = strings.TrimSuffix(o.Value, o.Ref), true
+		}
+	}
+	if !ok || !groups && !first {
+		return nil
+	}
+	var out []unservedJSON
+	for _, g := range unserved() {
+		if slices.ContainsFunc(opts, func(o agent.Option) bool { return o.Ref == g.Ref }) {
+			continue
+		}
+		// one the agent's lists offer and the field doesn't: an agent that
+		// can't take its members (a protocol none of them speaks)
+		why := cmp.Or(g.Why, provider.WhyGroupAgentCant)
+		out = append(out, unservedJSON{Value: prefix + g.Ref, Label: g.Name, Icons: g.Icons, Ref: g.Ref, Why: why,
+			Pick: g.Pickable()})
 	}
 	return out
 }
@@ -310,6 +349,10 @@ func agentModelsAPI(mux *http.ServeMux) {
 			// Widen: models its visibility keeps that were ticked, whose
 			// providers or groups it is shown from now on
 			Widen []string
+			// Show: an entry its lists leave out, picked in one of its
+			// pickers (a routing group made after they were narrowed),
+			// put back in them (provider.ShowFor)
+			Show string
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			fail(rw, err)
@@ -318,6 +361,14 @@ func agentModelsAPI(mux *http.ServeMux) {
 		a, err := agent.Find(r.PathValue("id"))
 		if err != nil {
 			fail(rw, err)
+			return
+		}
+		if in.Show != "" {
+			if err := provider.ShowFor(a.ListsFor(), in.Show); err != nil {
+				fail(rw, err)
+				return
+			}
+			writeJSON(rw, map[string]any{"count": modelCount(a.ListsFor())})
 			return
 		}
 		if in.OwnHidden != nil {

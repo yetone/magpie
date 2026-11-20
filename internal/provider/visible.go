@@ -490,3 +490,42 @@ func InOrder(agent string, es []Entry) []Entry {
 func CodexOwn(e Entry) bool {
 	return e.Group == "" && e.Provider.Account != nil && e.Provider.Account.Agent == "codex"
 }
+
+// ShowFor puts entry id back in agent's lists, as the user picks it in
+// one of the agent's pickers where its lists leave it out (a routing
+// group made after the agent was narrowed, or shown only its picks): its
+// provider or group is added to the names the agent is narrowed to, and
+// it is picked for an agent shown only its picks, else no longer taken
+// out. Nothing else in the lists changes.
+func ShowFor(agent, id string) error {
+	agent = strings.ToLower(strings.TrimSpace(agent))
+	if id = strings.TrimSpace(id); agent == "" || id == "" {
+		return errors.New("no agent or model")
+	}
+	if err := Widen(agent, []string{id}); err != nil {
+		return err
+	}
+	s := settings.Load()
+	changed := false
+	if picks, only := s.PickedModels[agent]; only {
+		if !slices.ContainsFunc(picks, func(p string) bool { return PublicRef(p) == id }) {
+			s.PickedModels[agent], changed = sortedIDs(append(slices.Clone(picks), id)), true
+		}
+	} else if was := s.HiddenModels[agent]; slices.ContainsFunc(was, func(h string) bool { return PublicRef(h) == id }) {
+		keep := slices.DeleteFunc(slices.Clone(was), func(h string) bool { return PublicRef(h) == id })
+		if len(keep) == 0 {
+			delete(s.HiddenModels, agent)
+		} else {
+			s.HiddenModels[agent] = keep
+		}
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+	if err := settings.Save(s); err != nil {
+		return err
+	}
+	catalog.Touched()
+	return nil
+}

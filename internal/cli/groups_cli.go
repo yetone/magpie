@@ -995,7 +995,7 @@ func memberLabel(id string, names map[string]provider.Entry) (string, bool) {
 		return "", false
 	}
 	model, effort := provider.MemberEffort(id)
-	if e, ok := names[model]; ok {
+	if e, ok := servedEntry(names, model); ok {
 		n := e.Name
 		if n == "" {
 			n = e.Model
@@ -1040,6 +1040,25 @@ func catalogByID() map[string]provider.Entry {
 		}
 	}
 	return out
+}
+
+// servedEntry is the served model a member names: one saved in another
+// case than its provider lists the model by is that model, as the gateway
+// takes it (provider's listedSpelling; @CHENGJIAHEGOXIS on X:
+// deepseek-agents/DeepSeek-V4-Pro read "not served").
+func servedEntry(names map[string]provider.Entry, model string) (provider.Entry, bool) {
+	if e, ok := names[model]; ok {
+		return e, true
+	}
+	pid, _, _ := strings.Cut(model, "/")
+	found := "" // the first spelling, so two of one model read the same each time
+	for id := range names {
+		if strings.HasPrefix(id, pid+"/") && strings.EqualFold(id, model) && (found == "" || id < found) {
+			found = id
+		}
+	}
+	e, ok := names[found]
+	return e, ok && found != ""
 }
 
 // groups: `magpie groups`
@@ -1169,7 +1188,7 @@ func groups() error {
 		var ms []string
 		for _, id := range g.Members {
 			model, _ := provider.MemberEffort(id)
-			served := names[model].ID != ""
+			_, served := servedEntry(names, model)
 			picked := g.Routing == provider.Manual && id == g.Picked()
 			if served && (picked || g.Routing != provider.Manual) {
 				ready = true

@@ -2690,6 +2690,10 @@ body .foot .status.lift { white-space: normal; overflow-wrap: anywhere; text-ove
 .pop li.reset .ic { opacity: .75; }
 .pop li.custom .v { color: var(--fg); }
 .pop li.custom .n { color: var(--muted); }
+/* a routing group no provider serves now: in its section, greyed, with why */
+.pop li.unserved { cursor: default; }
+.pop li.unserved .v, .pop li.unserved .ic { opacity: .5; }
+.pop li.unserved.sel { background: transparent; }
 /* the models on the agent's own account through magpie, folded into one
    row (#496): a chevron says it opens, turned down while open */
 .pop li.fold .v { color: var(--muted); }

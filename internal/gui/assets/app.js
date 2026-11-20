@@ -4843,6 +4843,14 @@ function toggleFold() {
   filter((o) => o.fold);
 }
 
+// unservedRows: the user's routing groups the field doesn't offer, last in
+// the groups' section with why (field.unserved), so none is gone from the
+// picker without a word (@CHENGJIAHEGOXIS on X: DeepSeek-API-Agents, on
+// on the Routing page, was in no section of Codex's). One the gateway
+// serves, which only the agent's own lists leave out, is picked as any
+// other and put back in them (pick); the rest can't be picked.
+const unservedRows = (f, only) => only ? [] : (f.unserved || []).map((u) => ({ ...u, group: ROUTING_GROUPS, note: t(u.why), unserved: !u.pick }));
+
 // openPicker drops the option list under a field button. `only` narrows the
 // options (the providers page offers one vendor's models at a time).
 function openPicker(agent, field, anchor, ev, only) {
@@ -4855,7 +4863,7 @@ function openPicker(agent, field, anchor, ev, only) {
   // the picker's own choices, routing groups, each provider's, then the
   // agent's own models, which hid magpie's below the fold (abledo)
   const rest = options.filter((o) => !o.reset && o.group !== ROUTING_GROUPS);
-  options = [...options.filter((o) => o.reset), ...options.filter((o) => !o.reset && o.group === ROUTING_GROUPS), ...rest.filter((o) => !o.direct), ...rest.filter((o) => o.direct)];
+  options = [...options.filter((o) => o.reset), ...options.filter((o) => !o.reset && o.group === ROUTING_GROUPS), ...unservedRows(field, only), ...rest.filter((o) => !o.direct), ...rest.filter((o) => o.direct)];
   const effortPicker = !only && (field.key === "effort" || field.label === "effort" || field.label === "thinking" || field.label === SUB_EFFORT || roleLevel(field.label));
   options = oneRowPerModel(options, cur);
   // models of one provider that would read alike say what tells them apart
@@ -5503,7 +5511,8 @@ function renderList() {
     if (!q && head && head.key !== group) list.append(head.li);
     if (!q) group = head ? head.key : o.group ?? group;
     if (o.fold) { list.append(foldRow(o, idx, hasIcons)); return; }
-    const li = el("li", (idx === pick.cursor ? "sel" : "") + (o.value === pick.field.value || pick.field.picked?.(o.value) ? " cur" : "") + (o.custom ? " custom" : "") + (o.reset ? " reset" : ""));
+    const li = el("li", (idx === pick.cursor ? "sel" : "") + (o.value === pick.field.value || pick.field.picked?.(o.value) ? " cur" : "") + (o.custom ? " custom" : "") + (o.reset ? " reset" : "") + (o.unserved ? " unserved" : ""));
+    if (o.unserved) li.setAttribute("aria-disabled", "true");
     li.dataset.i = idx;
     if (hasIcons) li.append(optionIcon(o));
     const words = el("span", "option-words");
@@ -5532,7 +5541,7 @@ function renderList() {
     if (note) { const n = el("span", "n", note); n.title = note; words.append(n); }
     li.append(words);
     if (o.run) li.title = t(DISCONNECT_TIP, { agent: pick.agent.name });
-    if (pick.modelPicker && o.value && !o.custom && !o.run) {
+    if (pick.modelPicker && o.value && !o.custom && !o.run && !o.why) {
       const star = el("button", "favorite" + (isFavorite(o) ? " on" : ""));
       star.title = isFavorite(o) ? t("Remove from favorites") : t("Add to favorites");
       star.setAttribute("aria-pressed", String(isFavorite(o)));
@@ -5695,6 +5704,7 @@ async function commit(value) {
   if (!pick || value == null) return;
   const { agent, field, anchor, levelNext } = pick;
   const opt = pick.options.find((o) => o.value === value);
+  if (opt?.unserved) return; // a group no provider serves now: its row says why
   if (field.multi && !opt?.run) {
     // a picker that takes several (a group's models, PAMI on Discord)
     // stays open: each pick adds one, or takes it out again, and is ticked
@@ -5839,6 +5849,9 @@ async function setPick(agent, field, value, opt) {
   renderAgents();
   flash();
   try {
+    // a group the agent's lists leave out is put back in them first, so
+    // the agent is given it before it is set to it
+    if (opt?.pick) await api("agent-models/" + encodeURIComponent(agent.id), { show: opt.ref });
     const next = await api("set", { agent: agent.id, field: field.key, value });
     // a later pick is already on its way: its answer is the one to draw
     if (seq !== commit.seq) return;
