@@ -2897,11 +2897,36 @@ magpie.plugin("library", (ctx) => {
   }
   // a part a Claude plugin brought: its agents follow the plugin's when
   // those change (library/plugin.go givePlugin)
-  const withPlugin = (nm, x) => {
-    if (x.bundle) nm.append(tag(t("In {plugin}", { plugin: x.bundle }), "lib-bundle",
-      t("Comes with the Claude plugin {plugin}. Changing the plugin's agents, or turning it off and on, gives this to the plugin's agents again.", { plugin: x.bundle })));
+  // On Skills, Hooks and Subagents (kind) the tag shows only what that
+  // plugin brought, the rest back with the bar's Show all (#7280, jinpwng)
+  const withPlugin = (nm, x, kind) => {
+    if (!x.bundle) return nm;
+    const b = tag(t("In {plugin}", { plugin: x.bundle }), "lib-bundle",
+      t("Comes with the Claude plugin {plugin}. Changing the plugin's agents, or turning it off and on, gives this to the plugin's agents again.", { plugin: x.bundle }));
+    if (kind) {
+      b.classList.add("link");
+      b.dataset.bundle = x.bundle;
+      b.onclick = (e) => { e.stopPropagation(); bundleOnly[kind] = x.bundle; render(); };
+    }
+    nm.append(b);
     return nm;
   };
+  // what a tab shows of a plugin's, picked from its tag: nothing once the
+  // plugin brings none of the tab's items any more
+  const bundleOnly = {};
+  const onlyBundle = (kind, items) => {
+    const b = bundleOnly[kind];
+    if (b && !items.some((x) => x.bundle === b)) delete bundleOnly[kind];
+    return bundleOnly[kind] ? items.filter((x) => x.bundle === bundleOnly[kind]) : items;
+  };
+  function bundleBar(kind) {
+    const b = bundleOnly[kind];
+    if (!b) return [];
+    const bar = el("div", "row-head lib-bundleonly");
+    bar.append(el("span", "label", t("Only what {plugin} brings", { plugin: b })), el("span", "grow"),
+      button(t("Show all"), "lib-bundleall", () => { delete bundleOnly[kind]; render(); }));
+    return [bar];
+  }
 
   // ---------- MCP servers ----------
 
@@ -4811,8 +4836,8 @@ magpie.plugin("library", (ctx) => {
         body.append(rh);
       }
       const list = el("div", "list lib-list");
-      list.append(...[...hooks].sort((a, b) => a.name.localeCompare(b.name)).map((h) => hookRow(h, all)));
-      body.append(list);
+      list.append(...onlyBundle("hooks", [...hooks]).sort((a, b) => a.name.localeCompare(b.name)).map((h) => hookRow(h, all)));
+      body.append(...bundleBar("hooks"), list);
       if (picking) body.append(pickBar(all));
       const after = el("div", "after-list");
       after.append(button(t("＋ Add hook"), "", () => editHook(null)));
@@ -4839,7 +4864,7 @@ magpie.plugin("library", (ctx) => {
   function hookRow(h, all) {
     const row = el("div", "row lib-row click lib-hook");
     const who = el("div", "who");
-    who.append(withPlugin(el("div", "name mono", h.name), h));
+    who.append(withPlugin(el("div", "name mono", h.name), h, "hooks"));
     // what it is for, in the user's own words (#2011)
     if (h.description) who.append(el("div", "lib-hookdesc", h.description));
     who.append(el("div", "sub lib-hookev", hookLine(h)));
@@ -5020,8 +5045,8 @@ magpie.plugin("library", (ctx) => {
       body.append(empty(t("No subagents in the library yet"), t("Add one, and pick the agents that can hand it a task."), button(t("＋ Add a subagent"), "action", () => editSubagent(null))));
     } else {
       const list = el("div", "list lib-list");
-      list.append(...[...subs].sort((a, b) => a.name.localeCompare(b.name)).map((s) => subagentRow(s, all)));
-      body.append(list);
+      list.append(...onlyBundle("subagents", [...subs]).sort((a, b) => a.name.localeCompare(b.name)).map((s) => subagentRow(s, all)));
+      body.append(...bundleBar("subagents"), list);
       const after = el("div", "after-list");
       after.append(button(t("＋ Add subagent"), "", () => editSubagent(null)));
       body.append(after);
@@ -5159,7 +5184,7 @@ magpie.plugin("library", (ctx) => {
   function subagentRow(s, all) {
     const row = el("div", "row lib-row click lib-subagent");
     const who = el("div", "who");
-    who.append(withPlugin(el("div", "name mono", s.name), s));
+    who.append(withPlugin(el("div", "name mono", s.name), s, "subagents"));
     who.append(el("div", "lib-subagentdesc", s.description));
     const line = subagentLine(s);
     if (line) who.append(el("div", "sub lib-subagentuses", line));
@@ -5953,7 +5978,8 @@ magpie.plugin("library", (ctx) => {
         null,
         many && [removeEveryButton("skills"), GLYPH.trash],
       ]));
-      body.append(rh);
+      onlyBundle("skills", lib.skills);
+      body.append(rh, ...bundleBar("skills"));
       drawSkills(box, all);
       body.append(box);
       // under the list, so the skills stay where they were above it
@@ -6136,7 +6162,7 @@ magpie.plugin("library", (ctx) => {
     if (pick !== "source") {
       const skills = [...lib.skills].sort(byName(pick));
       const g = { key: "flat", repo: "", skills, parts: null,
-        text: new Map(skills.map((s) => [s, (s.name + " " + (s.note || "") + " " + (s.description || "") + " " + skillRepo(s)).toLowerCase()])) };
+        text: new Map(skills.map((s) => [s, (s.name + " " + (s.note || "") + " " + (s.description || "") + " " + (s.bundle || "") + " " + skillRepo(s)).toLowerCase()])) };
       grouped[pick] = { lib, groups: [g] };
       return grouped[pick].groups;
     }
@@ -6184,7 +6210,7 @@ magpie.plugin("library", (ctx) => {
       ...mine.filter((g) => g.skills.length && mineHere(g)), ...down.sort(byRepo), ...(by.has("local") ? [by.get("local")] : [])];
     for (const g of groups) {
       g.skills.sort((a, b) => a.name.localeCompare(b.name));
-      g.text = new Map(g.skills.map((s) => [s, (s.name + " " + (s.note || "") + " " + (s.description || "") + " " + (g.mine || (g.owner ? skillRepo(s) : g.repo))).toLowerCase()]));
+      g.text = new Map(g.skills.map((s) => [s, (s.name + " " + (s.note || "") + " " + (s.description || "") + " " + (s.bundle || "") + " " + (g.mine || (g.owner ? skillRepo(s) : g.repo))).toLowerCase()]));
       g.parts = g.mine ? null : partsOf(g);
     }
     grouped[pick] = { lib, groups };
@@ -6281,7 +6307,12 @@ magpie.plugin("library", (ctx) => {
   // What a group shows: its skills the filter matches, and whether it's
   // folded. While filtering a group is open unless folded since the filter
   // changed; else as the user last left it, or folded when there are many.
-  const skillHits = (g, q) => (q ? g.skills.filter((s) => g.text.get(s).includes(q)) : g.skills);
+  // the filter matches a skill's plugin too (#7280), and a plugin's tag
+  // picked shows only what it brought
+  const skillHits = (g, q) => {
+    const b = bundleOnly.skills;
+    return q || b ? g.skills.filter((s) => (!b || s.bundle === b) && (!q || g.text.get(s).includes(q))) : g.skills;
+  };
   const groupFolded = (g, q) => (q ? unfiltered.has(g.key) : folds[g.key] ?? lib.skills.length > MANY);
 
   // Collapse all / Expand all (#1862, WardLu): every group the list shows
@@ -8371,7 +8402,7 @@ magpie.plugin("library", (ctx) => {
   function skillRow(s, all) {
     const row = el("div", "row lib-row click lib-skill" + (s.missing ? " missing" : "") + (s.source ? " src" : "") + (s.offHere ? " offhere" : ""));
     const who = el("div", "who");
-    const nm = withPlugin(el("div", "name", s.name), s);
+    const nm = withPlugin(el("div", "name", s.name), s, "skills");
     const c = s.check;
     const gone = isGone(s);
     if (gone) {

@@ -235,9 +235,14 @@ button.row.lib-hubfolded:hover { background: var(--pill); }
 .lib-tag.warn::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
 /* what a check for updates found, beside a skill's name */
 .lib-row .name .lib-tag { height: 17px; padding: 0 6px; margin-left: 7px; font-size: 10.5px; font-weight: 500; vertical-align: 1px; }
+/* a tag that can be clicked wraps under a long name instead of being cut off
+   by its ellipsis, where a narrow window or a long translation needs it */
+.lib-row .name:has(> .lib-tag.link) { white-space: normal; text-overflow: clip; overflow-wrap: anywhere; }
 .lib-tag.lib-new { color: var(--accent); background: var(--accent-soft); }
 .lib-tag.lib-new::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
 .lib-tag.lib-new.link { cursor: pointer; }
+.lib-tag.lib-bundle.link { cursor: pointer; }
+@media (hover: hover) and (pointer: fine) { .lib-tag.lib-bundle.link:hover { color: var(--fg); } }
 .lib-tag.lib-new.link:hover { background: color-mix(in srgb, var(--accent) 22%, var(--accent-soft)); }
 .lib-tag.lib-unchecked { color: var(--faint); font-weight: 400; }
 .lib-tag.lib-unchecked.link { cursor: pointer; }
