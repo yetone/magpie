@@ -1,7 +1,8 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // jinpwng (#7244): a plugin Codex installed from a marketplace and a package
 // Pi installed list their skills, MCP servers and hooks in the Library's own
-// tabs, once, with where they came from. Read only: nothing there to switch,
+// tabs, once, with where they came from. A plugin Claude Code installed
+// itself (#7266) too, its subagents on the Subagents tab. Read only: nothing there to switch,
 // copy or remove, and no row twice. In every language, both engines, at a
 // phone's width too. No backend: the API is faked here, with the shapes
 // the Go reader returns for Codex's real cache layout (chrome's inline
@@ -16,7 +17,7 @@ const assets = path.resolve(__dirname, "../assets");
 const HOME = "/Users/me";
 const lib = () => ({
   dir: `${HOME}/.magpie/library`, backups: `${HOME}/.magpie/backups`, home: HOME,
-  agents: [{ id: "codex", name: "Codex", icon: "", skills: `${HOME}/.codex/skills`, mcp: true, hooks: true }],
+  agents: [{ id: "codex", name: "Codex", icon: "", skills: `${HOME}/.codex/skills`, mcp: true, hooks: true }, { id: "claude", name: "Claude Code", icon: "", skills: `${HOME}/.claude/skills`, mcp: true, hooks: true }],
   instructions: { agents: [], sets: [] }, foundServers: [], projects: [], foundSkills: [], skills: [], servers: [], hooks: [],
 });
 const native = [
@@ -30,6 +31,14 @@ const native = [
   {
     agent: "codex", agentName: "Codex", name: "codex-app-tools", version: "26.1029.61003", source: "openai-bundled", scope: "user", dir: `${HOME}/.codex/plugins/cache/openai-bundled/codex-app-tools/26.1029.61003`, loaded: "unknown",
     parts: [{ kind: "mcp", name: "codex_app", detail: "stdio" }],
+  },
+  {
+    agent: "claude", agentName: "Claude Code", name: "fixture@fixmarket", version: "0.1.0", source: "fixmarket", scope: "project", project: `${HOME}/work/app`, dir: `${HOME}/.claude/plugins/cache/fixmarket/fixture/0.1.0`, enabled: true, loaded: "unknown",
+    parts: [
+      { kind: "skill", name: "fix-skill", detail: "A fixture skill" },
+      { kind: "hook", name: "SessionStart", detail: "/usr/bin/true" },
+      { kind: "subagent", name: "fix-agent", detail: "A fixture agent" },
+    ],
   },
   {
     agent: "pi", agentName: "Pi", name: "proj-kit", version: "2.0.0", source: "npm:proj-kit", scope: "project", project: `${HOME}/work/app`, dir: `${HOME}/work/app/.pi/npm/node_modules/proj-kit`, loaded: "unknown",
@@ -65,9 +74,10 @@ const words = {
 };
 // the tab, and the rows of its kind the fake lists
 const tabs = {
-  skills: ["chrome", "review"],
+  skills: ["chrome", "fix-skill", "review"],
   mcp: ["codex_app"],
-  hooks: ["Stop"],
+  hooks: ["Stop", "SessionStart"],
+  subagents: ["fix-agent"],
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -97,11 +107,18 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await v.locator(".lib-nativebox .label").textContent(), w.head);
         // each row says where it came from, once, with its scope
         const first = (await rows.first().textContent());
-        assert(first.includes("Codex · " + (tab === "mcp" ? "codex-app-tools" : "chrome") + " 26.1029.61003"), first);
+        if (tab === "subagents") {
+          // Claude Code's, with its plugin id and scope, and its description
+          assert(first.includes("Claude Code · fixture@fixmarket 0.1.0 · " + w.project), first);
+          assert(first.includes("A fixture agent"), first);
+          assert.equal(await rows.first().locator("svg").count(), 1);
+        } else assert(first.includes("Codex · " + (tab === "mcp" ? "codex-app-tools" : "chrome") + " 26.1029.61003"), first);
+        if (tab === "hooks") assert((await rows.nth(1).textContent()).includes("Claude Code · fixture@fixmarket 0.1.0"));
         if (tab === "skills") {
           assert(first.includes(w.user), first);
-          assert((await rows.nth(1).textContent()).includes(w.project), await rows.nth(1).textContent());
-          assert((await rows.nth(1).textContent()).includes("proj-kit 2.0.0"));
+          assert((await rows.nth(1).textContent()).includes("Claude Code · fixture@fixmarket 0.1.0 · " + w.project), await rows.nth(1).textContent());
+          assert((await rows.nth(2).textContent()).includes(w.project), await rows.nth(2).textContent());
+          assert((await rows.nth(2).textContent()).includes("proj-kit 2.0.0"));
           // chrome's own settings turn it off
           assert.equal(await rows.first().locator(".lib-tag").textContent(), w.off);
         }

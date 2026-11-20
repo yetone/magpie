@@ -992,7 +992,7 @@ magpie.plugin("library", (ctx) => {
     // Pi's extensions too: one installed or changed outside magpie since
     if (id === "pi" && piView) loadPi();
     // and the plugins and packages the agents installed themselves
-    if (["skills", "mcp", "hooks"].includes(id) && nativeView) loadNative();
+    if (NATIVE_TABS.includes(id) && nativeView) loadNative();
     // memory too: agents save to it while the page is open
     if (id === "memory" && mem) loadMemory();
     if (!lib) return page.querySelector(":scope > .lib-skel")?.replaceWith(skeleton(id));
@@ -2209,6 +2209,9 @@ magpie.plugin("library", (ctx) => {
   // registers nothing, and whether a session loads one isn't known from
   // its files. Asked for when a tab that lists them is drawn, not part of
   // /api/library, which is polled.
+  // Claude Code's own plugins too (#7266): their subagents on Subagents,
+  // and their parts beside a project's whole-plugin choice on Plugins
+  const NATIVE_TABS = ["skills", "mcp", "hooks", "subagents", "plugins"];
   let nativeView = null;   // /api/library/native
   let nativeLoading = false;
   async function loadNative() {
@@ -2223,7 +2226,16 @@ magpie.plugin("library", (ctx) => {
       // a list that can't be read is not drawn, never a wrong one
     }
     nativeLoading = false;
-    if (nativeView && ["skills", "mcp", "hooks"].includes(tab)) render();
+    if (nativeView && NATIVE_TABS.includes(tab)) render();
+  }
+  // a Claude Code plugin's parts, from any of its installed records, in
+  // the words a library plugin's are said in
+  function claudeNativeParts(id) {
+    if (!nativeView) { if (!nativeLoading) loadNative(); return ""; }
+    const p = nativeView.find((x) => x.agent === "claude" && x.name === id);
+    if (!p) return "";
+    const of = (kind) => (p.parts || []).filter((x) => x.kind === kind).map((x) => x.name);
+    return pluginParts({ skills: of("skill"), mcp: of("mcp"), hooks: of("hook"), subagents: of("subagent") });
   }
   function nativeSection(kind) {
     if (agentless()) return [];
@@ -2243,7 +2255,7 @@ magpie.plugin("library", (ctx) => {
         if (p.project) origin.append(pathLink(p.project));
         origin.title = p.source || "";
         who.append(origin);
-        row.append(glyph(GLYPH[kind === "mcp" ? "web" : kind === "hook" ? "cmd" : "skill"]), who);
+        row.append(glyph(GLYPH[{ mcp: "web", hook: "cmd", subagent: "subagent" }[kind] || "skill"]), who);
         if (p.enabled === false) row.append(tag(t("Off in {agent}", { agent: p.agentName }), "warn", t("{agent}'s own settings turn this plugin off", { agent: p.agentName })));
         rows.push(row);
       }
@@ -5028,6 +5040,7 @@ magpie.plugin("library", (ctx) => {
     const skip = all.filter((a) => subagentAgentOf(a.id).no);
     if (skip.length) body.append(el("p", "lib-aside lib-subagents-no", t("magpie can't give subagents to {agents} yet: their chips are greyed, and say why.", { agents: skip.map((a) => a.name).join(", ") })));
     if (!agentless() && (subs.length || lib.projects.length)) renderProjects(body, "subagents");
+    body.append(...nativeSection("subagent"));
   }
 
   // subagents from a repository (CHENGJIAHEGOXIS on X): a link to one,
@@ -7485,6 +7498,10 @@ magpie.plugin("library", (ctx) => {
         const row = el("div", "row lib-row lib-projskill lib-projplugin lib-projclaude");
         const w = el("div", "who");
         w.append(el("div", "name mono", c.id));
+        // what it brings, as Claude Code's record of it declares (#7266):
+        // read once the native list is in, and only listed, never written
+        const n = claudeNativeParts(c.id);
+        if (n) w.append(el("div", "sub lib-projclaude-parts", n));
         row.append(glyph(GLYPH.folder), w);
         const say = (next) => next.length
           ? t("{item} is in {name} for {agents}", { item: c.id, name: p.name, agents: nameOf("claude") })

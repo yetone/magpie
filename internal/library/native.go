@@ -3,6 +3,7 @@ package library
 import (
 	"encoding/json"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -10,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
+	"github.com/tidwall/gjson"
 )
 
 // What the agents' own plugins and packages declare (jinpwng, #7244). A
@@ -40,10 +42,22 @@ import (
 // has no "pi" object; Pi has no MCP servers, hooks or subagents of a
 // package's. A project's packages load only once Pi trusts the project, so
 // they are listed with Enabled unknown.
+//
+// Claude Code (#7266, jinpwng), under its config folder:
+//
+//	plugins/installed_plugins.json  {"version": 2, "plugins": {"<plugin>@<marketplace>":
+//	    [{"scope": "user"|"project"|"local", "installPath", "version", "projectPath"}]}}
+//	settings.json                   enabledPlugins (user scope)
+//	<project>/.claude/settings.json, settings.local.json   enabledPlugins (project, local)
+//
+// One record for each scope an id is installed in. The parts are read from
+// installPath as Claude Code reads a plugin: what plugin.json names is
+// added to the default folders (skills/, agents/, hooks/hooks.json,
+// .mcp.json), not read instead of them. Subagents are agents/*.md.
 
 // NativePart is one thing a native plugin or package declares.
 type NativePart struct {
-	// Kind is skill, mcp or hook
+	// Kind is skill, mcp, hook or subagent
 	Kind string `json:"kind"`
 	Name string `json:"name"`
 	// Detail is a skill's description, a server's transport, a hook's
@@ -79,6 +93,7 @@ const nativePartsMax = 500
 // writes nothing and starts nothing.
 func ReadNative() []NativePlugin {
 	out := codexNative()
+	out = append(out, claudeNative()...)
 	out = append(out, piNativePlugins()...)
 	if out == nil {
 		out = []NativePlugin{}
@@ -180,11 +195,18 @@ func codexVersion(dir string) (string, map[string]any) {
 }
 
 func codexParts(root string, man map[string]any) []NativePart {
+	return manifestParts(root, man, false)
+}
+
+// manifestParts are the parts a plugin's manifest declares. Codex reads
+// the default files only when the manifest names none; Claude Code reads
+// them too (also).
+func manifestParts(root string, man map[string]any, also bool) []NativePart {
 	var parts []NativePart
 	// skills
 	roots := pathsOf(man["skills"])
-	if len(roots) == 0 {
-		roots = []string{"skills"}
+	if len(roots) == 0 || also {
+		roots = append([]string{"skills"}, roots...)
 	}
 	for _, r := range roots {
 		if d, ok := inside(root, r); ok && isDir(d) {
@@ -193,18 +215,23 @@ func codexParts(root string, man map[string]any) []NativePart {
 	}
 	// MCP servers: a file or the servers inline, else .mcp.json
 	var docs []map[string]any
+	named := true
 	switch v := man["mcpServers"].(type) {
 	case string:
 		docs = nativeJSONFiles(root, []string{v})
 	case map[string]any:
 		docs = []map[string]any{v}
 	default:
-		docs = nativeJSONFiles(root, []string{".mcp.json"})
+		named = false
+	}
+	if !named || also {
+		docs = append(docs, nativeJSONFiles(root, []string{".mcp.json"})...)
 	}
 	for _, d := range docs {
 		parts = append(parts, nativeServers(d)...)
 	}
 	// hooks: files or inline objects, else hooks/hooks.json
+	named = true
 	switch v := man["hooks"].(type) {
 	case string:
 		docs = nativeJSONFiles(root, []string{v})
@@ -223,12 +250,128 @@ func codexParts(root string, man map[string]any) []NativePart {
 		}
 		docs = append(docs, nativeJSONFiles(root, files)...)
 	default:
-		docs = nativeJSONFiles(root, []string{"hooks/hooks.json"})
+		docs, named = nil, false
+	}
+	if !named || also {
+		docs = append(docs, nativeJSONFiles(root, []string{"hooks/hooks.json"})...)
 	}
 	for _, d := range docs {
 		parts = append(parts, nativeHooks(d)...)
 	}
+	if also {
+		parts = append(parts, nativeSubagents(root, man)...)
+	}
 	return nativeUnique(parts)
+}
+
+// nativeSubagents are a Claude Code plugin's agents/*.md and the files or
+// folders its manifest's "agents" names: each Markdown file with a
+// description in its front matter is one.
+func nativeSubagents(root string, man map[string]any) []NativePart {
+	var files []string
+	for _, rel := range append([]string{"agents"}, pathsOf(man["agents"])...) {
+		d, ok := inside(root, rel)
+		if !ok {
+			continue
+		}
+		if fi, err := os.Stat(d); err == nil && !fi.IsDir() {
+			files = append(files, d)
+		} else if es, err := os.ReadDir(d); err == nil {
+			for _, e := range es {
+				if !e.IsDir() && strings.HasSuffix(strings.ToLower(e.Name()), ".md") {
+					files = append(files, filepath.Join(d, e.Name()))
+				}
+			}
+		}
+	}
+	slices.Sort(files)
+	var out []NativePart
+	for _, f := range slices.Compact(files) {
+		s, _ := readSubagentAt(f)
+		if s == nil {
+			continue
+		}
+		name := s.Name
+		if name == "" {
+			name = strings.TrimSuffix(filepath.Base(f), filepath.Ext(f))
+		}
+		out = append(out, NativePart{Kind: "subagent", Name: name, Detail: s.Description})
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+// ---- Claude Code ------------------------------------------------------------
+
+func claudeNative() []NativePlugin {
+	raw, err := readClaudeJSON(claudeInstalled())
+	if err != nil || raw == nil {
+		return nil
+	}
+	var doc struct {
+		Plugins map[string][]struct {
+			Scope       string `json:"scope"`
+			InstallPath string `json:"installPath"`
+			Version     string `json:"version"`
+			ProjectPath string `json:"projectPath"`
+		} `json:"plugins"`
+	}
+	if json.Unmarshal(raw, &doc) != nil {
+		return nil
+	}
+	settings := map[string][]byte{}
+	enabled := func(file, id string) *bool {
+		b, ok := settings[file]
+		if !ok {
+			b, _ = readClaudeJSON(file)
+			settings[file] = b
+		}
+		v := gjson.GetBytes(b, "enabledPlugins."+gjson.Escape(id))
+		if !v.IsBool() {
+			return nil
+		}
+		on := v.Bool()
+		return &on
+	}
+	var out []NativePlugin
+	for _, id := range slices.Sorted(maps.Keys(doc.Plugins)) {
+		name, market, ok := strings.Cut(id, "@")
+		if !ok || name == "" {
+			continue
+		}
+		for _, e := range doc.Plugins[id] {
+			if e.InstallPath == "" || !isDir(e.InstallPath) {
+				continue
+			}
+			man, _ := readJSONFile(filepath.Join(e.InstallPath, ".claude-plugin", "plugin.json"))
+			p := NativePlugin{Agent: "claude", AgentName: "Claude Code", Name: id, Version: e.Version,
+				Source: market, Scope: "user", Dir: e.InstallPath, Loaded: "unknown"}
+			if p.Version == "" {
+				p.Version = plStr(man["version"])
+			}
+			switch e.Scope {
+			case "user", "":
+				p.Enabled = enabled(claudeSettings(), id)
+			case "project", "local":
+				if e.ProjectPath == "" {
+					continue
+				}
+				p.Scope, p.Project = "project", e.ProjectPath
+				file := "settings.json"
+				if e.Scope == "local" {
+					file = "settings.local.json"
+				}
+				p.Enabled = enabled(filepath.Join(e.ProjectPath, ".claude", file), id)
+			default:
+				// managed, or a scope this magpie doesn't know: not listed
+				// as one the user or a project chose
+				continue
+			}
+			p.Parts = manifestParts(e.InstallPath, man, true)
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // nativeJSONFiles reads the files a manifest names inside the plugin's
@@ -357,7 +500,7 @@ func nativeUnique(parts []NativePart) []NativePart {
 		seen[p] = true
 		out = append(out, p)
 	}
-	kinds := map[string]int{"skill": 0, "mcp": 1, "hook": 2}
+	kinds := map[string]int{"skill": 0, "mcp": 1, "hook": 2, "subagent": 3}
 	sort.SliceStable(out, func(i, j int) bool { return kinds[out[i].Kind] < kinds[out[j].Kind] })
 	return out
 }

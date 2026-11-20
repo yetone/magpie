@@ -267,3 +267,78 @@ func TestNativeNothingIsEmptyList(t *testing.T) {
 		t.Errorf("%#v", v)
 	}
 }
+
+// A plugin Claude Code installed itself (`claude plugin install`, #7266)
+// is listed for each scope installed_plugins.json records, named by its
+// id, with the skills, hooks and subagents its manifest adds to the
+// default folders, and whether that scope's settings turn it on. The
+// record is the shape Claude Code 2.1.327 wrote for a user and a project
+// install of one fixture plugin; nothing is written.
+func TestNativeClaudePlugins(t *testing.T) {
+	home := sandbox(t)
+	cc := filepath.Join(home, ".claude")
+	inst := filepath.Join(cc, "plugins", "cache", "fixmarket", "fixture", "0.1.0")
+	proj := t.TempDir()
+	write(t, filepath.Join(cc, "plugins", "installed_plugins.json"), `{
+  "version": 2,
+  "plugins": {
+    "fixture@fixmarket": [
+      {"scope": "user", "installPath": "`+inst+`", "version": "0.1.0", "installedAt": "2026-11-20T02:39:31.789Z"},
+      {"scope": "project", "installPath": "`+inst+`", "version": "0.1.0", "projectPath": "`+proj+`"}
+    ],
+    "gone@fixmarket": [{"scope": "user", "installPath": "`+filepath.Join(cc, "nowhere")+`", "version": "1.0.0"}]
+  }
+}`)
+	write(t, filepath.Join(cc, "settings.json"), `{"enabledPlugins": {"fixture@fixmarket": true}}`)
+	write(t, filepath.Join(proj, ".claude", "settings.json"), `{"enabledPlugins": {"fixture@fixmarket": false}}`)
+	write(t, filepath.Join(inst, ".claude-plugin", "plugin.json"), `{"name": "fixture", "version": "0.1.0",
+  "skills": "./extra/", "agents": ["./more/fix-agent.md"],
+  "hooks": {"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "/usr/bin/true"}]}]}}}`)
+	write(t, filepath.Join(inst, "skills", "fix-skill", "SKILL.md"), "---\nname: fix-skill\ndescription: A fixture skill\n---\n")
+	write(t, filepath.Join(inst, "extra", "more-skill", "SKILL.md"), "---\nname: more-skill\ndescription: Another\n---\n")
+	write(t, filepath.Join(inst, "more", "fix-agent.md"), "---\nname: fix-agent\ndescription: A fixture agent\n---\nYou review.\n")
+	write(t, filepath.Join(inst, "agents", "plain.md"), "---\nname: plain\ndescription: Default folder\n---\nHi.\n")
+	write(t, filepath.Join(inst, "agents", "notes.md"), "no front matter\n")
+	write(t, filepath.Join(inst, "hooks", "hooks.json"), `{"hooks": {"Stop": [{"matcher": "", "hooks": [{"type": "command", "command": "echo done"}]}]}}`)
+	write(t, filepath.Join(inst, ".mcp.json"), `{"mcpServers": {"fixdb": {"url": "https://x.example/mcp"}}}`)
+	before := dirDump(t, cc)
+
+	var got []NativePlugin
+	for _, p := range ReadNative() {
+		if p.Agent == "claude" {
+			got = append(got, p)
+		}
+	}
+	if len(got) != 2 {
+		t.Fatalf("want the user and the project record, got %+v", got)
+	}
+	user, pr := got[0], got[1]
+	if user.Name != "fixture@fixmarket" || user.Scope != "user" || user.Project != "" || user.Version != "0.1.0" ||
+		user.Source != "fixmarket" || user.AgentName != "Claude Code" || user.Loaded != "unknown" || user.Enabled == nil || !*user.Enabled {
+		t.Errorf("user: %+v", user)
+	}
+	if pr.Scope != "project" || pr.Project != proj || pr.Enabled == nil || *pr.Enabled {
+		t.Errorf("project (its settings.json turns it off): %+v", pr)
+	}
+	names := func(kind string) (out []string) {
+		for _, x := range partsOf(user, kind) {
+			out = append(out, x.Name+"="+x.Detail)
+		}
+		return
+	}
+	if s := strings.Join(names("skill"), ","); s != "fix-skill=A fixture skill,more-skill=Another" {
+		t.Errorf("skills (skills/ and the manifest's): %s", s)
+	}
+	if s := strings.Join(names("subagent"), ","); s != "fix-agent=A fixture agent,plain=Default folder" {
+		t.Errorf("subagents (agents/ and the manifest's): %s", s)
+	}
+	if s := strings.Join(names("hook"), ","); s != "SessionStart=/usr/bin/true,Stop=echo done" {
+		t.Errorf("hooks (inline and hooks/hooks.json): %s", s)
+	}
+	if s := strings.Join(names("mcp"), ","); s != "fixdb=http" {
+		t.Errorf("servers: %s", s)
+	}
+	if after := dirDump(t, cc); after != before {
+		t.Errorf("reading changed Claude's folder")
+	}
+}

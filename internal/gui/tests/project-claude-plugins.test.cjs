@@ -1,7 +1,9 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // (#7254, jinpwng on X) A project's Claude plugins tab lists the plugins
 // Claude Code has installed itself, each with one Claude chip that posts to
-// projects/claude-plugin; no chip left takes it out. In English and Chinese.
+// projects/claude-plugin; no chip left takes it out. Each row says what the
+// plugin brings, as Claude Code's own record declares it (#7266), from
+// /api/library/native. In English and Chinese.
 // No backend: the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -27,6 +29,16 @@ const lib = (given) => ({
   projects: [{ dir: DIR, name: "app", copy: false, skills: {}, placed: [], servers: {}, subagents: {}, plugins: {}, claudePlugins: given, wrote: {} }],
 });
 
+// fmt@acme as ReadNative lists Claude Code's user install of it
+const NATIVE = [{
+  agent: "claude", agentName: "Claude Code", name: "fmt@acme", version: "0.1.0", source: "acme", scope: "user", dir: `${HOME}/.claude/plugins/cache/acme/fmt/0.1.0`, enabled: true, loaded: "unknown",
+  parts: [
+    { kind: "skill", name: "fix-skill", detail: "A fixture skill" },
+    { kind: "hook", name: "SessionStart", detail: "/usr/bin/true" },
+    { kind: "subagent", name: "fix-agent", detail: "A fixture agent" },
+  ],
+}];
+
 function server(lang, posts) {
   let given = [];
   return async (route) => {
@@ -43,6 +55,7 @@ function server(lang, posts) {
       if (b.agents.length) given.push(b.name);
       return route.fulfill({ json: { ...lib(given), result: { changed: [], problems: [] } } });
     }
+    if (url.pathname === "/api/library/native") return route.fulfill({ json: NATIVE });
     if (url.pathname === "/api/plugins") return route.fulfill({ json: { plugins: [] } });
     if (url.pathname === "/api/usage/quotas") return route.fulfill({ json: [] });
     if (url.pathname === "/api/groups") return route.fulfill({ json: { groups: [] } });
@@ -82,8 +95,8 @@ const chip = async (page, loc) => {
 
 
 const words = {
-  en: { on: "fmt@acme is in app for Claude Code", out: "fmt@acme is out of app", note: "The plugins above are Claude Code's own, turned on for this project in .claude/settings.local.json. They stay installed through Claude Code." },
-  zh: { on: "fmt@acme 已在 app 中对 Claude Code 开启", out: "fmt@acme 已从 app 中移除", note: "上面的插件是 Claude Code 自带的，在 .claude/settings.local.json 里只为这个项目启用，仍由 Claude Code 安装。" },
+  en: { parts: "Skills: fix-skill · Hooks: SessionStart · Subagents: fix-agent", on: "fmt@acme is in app for Claude Code", out: "fmt@acme is out of app", note: "The plugins above are Claude Code's own, turned on for this project in .claude/settings.local.json. They stay installed through Claude Code." },
+  zh: { parts: "技能：fix-skill · Hooks：SessionStart · 子代理：fix-agent", on: "fmt@acme 已在 app 中对 Claude Code 开启", out: "fmt@acme 已从 app 中移除", note: "上面的插件是 Claude Code 自带的，在 .claude/settings.local.json 里只为这个项目启用，仍由 Claude Code 安装。" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -115,6 +128,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(await rows.first().locator(".lib-ag").evaluateAll((cs) => cs.map((c) => c.dataset.agent)), ["claude"]);
         assert.equal((await card.locator(".lib-projclaude-note").textContent()).trim(), w.note);
         const row = () => card.locator(".lib-projclaude").filter({ hasText: "fmt@acme" });
+        // its parts, once the native list is in; lint@acme isn't in it and says none
+        await page.waitForFunction(() => document.querySelector("#view-library .lib-projclaude-parts"));
+        assert.equal(await row().locator(".lib-projclaude-parts").textContent(), w.parts);
+        assert.equal(await card.locator(".lib-projclaude").filter({ hasText: "lint@acme" }).locator(".lib-projclaude-parts").count(), 0);
         await chip(page, row().locator('.lib-ag[data-agent="claude"]'));
         await page.waitForFunction(() => document.querySelectorAll('#view-library .lib-projclaude .lib-ag.on').length === 1);
         await page.waitForFunction((s) => document.querySelector("#status").textContent.trim() === s, w.on);

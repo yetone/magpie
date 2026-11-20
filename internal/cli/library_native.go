@@ -7,7 +7,7 @@ import (
 )
 
 // libraryNativeCmd is magpie library native: what the plugins Codex and
-// the packages Pi installed themselves declare. It reads and writes
+// Claude Code (#7266) and the packages Pi installed themselves declare. It reads and writes
 // nothing; the agent loads them, and whether one is loaded in a session
 // isn't known from its files.
 func libraryNativeCmd(rest []string) error {
@@ -16,7 +16,7 @@ func libraryNativeCmd(rest []string) error {
 	}
 	v := library.ReadNative()
 	if len(v) == 0 {
-		fmt.Println(muted.Render("no plugins or packages installed through Codex or Pi"))
+		fmt.Println(muted.Render("no plugins or packages installed through Codex, Claude Code or Pi"))
 		return nil
 	}
 	for _, p := range v {
@@ -30,7 +30,7 @@ func libraryNativeCmd(rest []string) error {
 		}
 		fmt.Printf("%s  %s %s  (%s, %s)\n", p.AgentName, p.Name, p.Version, where, state)
 		for _, x := range p.Parts {
-			fmt.Printf("    %-5s %s", x.Kind, x.Name)
+			fmt.Printf("    %-8s %s", x.Kind, x.Name)
 			if x.Detail != "" && x.Kind != "skill" {
 				fmt.Printf("  %s", x.Detail)
 			}
