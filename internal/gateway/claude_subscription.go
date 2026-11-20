@@ -1353,6 +1353,9 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 	if tui && !client {
 		// a saved account's run in magpie's folder is never asked (#4830)
 		trustWork(binary, configDir, work)
+	} else if tui {
+		// nor is one in the caller's folder (@ahz2ygnhjmIJ0E0 on X)
+		trustCaller(binary, configDir, work)
 	}
 	cmd.Env = binary.env(binary.asRoot(env), configDir)
 	if tui {

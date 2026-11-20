@@ -376,11 +376,11 @@ func claudeOnboarded(dir string, acct map[string]any) {
 var claudeTrustMu sync.Mutex
 
 // ClaudeTrustFolder records, in saved account config directory dir, that
-// Claude Code may work in magpie's own folder, which keys names as Claude
-// Code keys its projects (2.1.316: the folder's path, on Windows with
-// forward slashes, "C:/Users/<me>/AppData/Local/Temp/magpie-claude-work"),
-// as Claude Code itself records it once the trust question is answered
-// yes. On mydosu's Windows (#4830) a saved account's directory had no
+// Claude Code may work in a folder (magpie's own, or a caller's), which
+// keys names as Claude Code keys its projects (2.1.316: the folder's
+// path, on Windows with forward slashes,
+// "C:/Users/<me>/AppData/Local/Temp/magpie-claude-work"), as Claude Code
+// itself records it once the trust question is answered yes. On mydosu's Windows (#4830) a saved account's directory had no
 // such entry, and every /usage read of that account waited out its time
 // on the question.
 // Only a directory of magpie's saved accounts is written, never the

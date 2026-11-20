@@ -405,6 +405,26 @@ func trustWork(binary claudeCLI, configDir, work string) {
 	}
 }
 
+// trustCaller records, in a saved account's config directory (configDir,
+// "" for the account Claude Code is signed in to, whose ~/.claude.json
+// magpie never writes), that Claude Code may work in the caller's folder
+// work, before a run there. The shim answers the trust question yes in a
+// saved account all the same (claudetui.TrustEnv), and Claude Code then
+// records just this, so the entry is the one the answer leaves: recorded
+// first, the run isn't asked at all. @ahz2ygnhjmIJ0E0 (X, Claude Code
+// 2.1.329) had folders their own ~/.claude.json trusts, while the saved
+// accounts' files had them only here and there; each run of an account
+// that didn't was asked, and a question the shim didn't read (2.1.329's
+// "Quick safety check") waited out 45s on every account in turn.
+func trustCaller(binary claudeCLI, configDir, work string) {
+	if configDir == "" || work == "" {
+		return
+	}
+	if err := provider.ClaudeTrustFolder(configDir, claudeTrustKeys(binary, work)...); err != nil {
+		log.Printf("claude: the caller's folder not recorded as trusted for %s: %v", configDir, err)
+	}
+}
+
 // trustGOOS is the system claudeTrustKeys keys for; a var for tests.
 var trustGOOS = runtime.GOOS
 

@@ -217,3 +217,65 @@ func TestClaudeBridgeTrustsMagpiesFolderForSavedAccount(t *testing.T) {
 		t.Fatalf("the run started with %v trusted, not magpie's folder %s", got, claudeKey(work))
 	}
 }
+
+// @ahz2ygnhjmIJ0E0 on X (Claude Code 2.1.329): the folders they work in
+// were trusted in their own ~/.claude.json, and in the saved accounts'
+// files only here and there, so a run of an account without the entry was
+// asked about the caller's folder, and each account in turn waited out
+// the question. A saved account's run in the caller's folder starts with
+// the folder trusted in that account's file, under the path Claude Code
+// runs in; the account Claude Code is signed in to keeps its own file
+// unwritten.
+func TestClaudeBridgeTrustsCallersFolderForSavedAccount(t *testing.T) {
+	h := tuiScriptHarness(t, `cat "$CLAUDE_CONFIG_DIR/.claude.json" > $log.seen; pwd > $log.pwd`)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(os.Getenv("HOME"), ".config"))
+	cfg := filepath.Join(filepath.Dir(provider.Path()), "claude-accounts", "0123456789abcdef")
+	if err := os.MkdirAll(cfg, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// a saved account's file that trusts some other folder only
+	if err := os.WriteFile(filepath.Join(cfg, ".claude.json"), []byte(`{"hasCompletedOnboarding": true, "projects": {"/elsewhere": {"hasTrustDialogAccepted": true}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	caller := t.TempDir()
+	req := &Request{
+		System:   "Primary working directory: " + caller,
+		Messages: []Message{{Role: "user", Parts: []Part{{Kind: Text, Text: "hello"}}}},
+	}
+	run, _, err := h.s.subscription.start(context.Background(), req, "claude-sonnet-5", cfg, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !run.tui {
+		t.Fatal("the run wasn't interactive")
+	}
+	read := func(suffix string) []byte {
+		var b []byte
+		eventually(t, "the run wrote its "+suffix, func() bool {
+			entries, _ := os.ReadDir(h.logs)
+			for _, e := range entries {
+				if strings.HasSuffix(e.Name(), suffix) {
+					b, _ = os.ReadFile(filepath.Join(h.logs, e.Name()))
+				}
+			}
+			return len(b) > 0
+		})
+		return b
+	}
+	if got := strings.TrimSpace(string(read(".pwd"))); evalSymlinks(got) != evalSymlinks(caller) {
+		t.Fatalf("the run went in %s, not the caller's %s", got, caller)
+	}
+	got := trustedIn(t, read(".seen"))
+	if !slices.Contains(got, claudeKey(caller)) || !slices.Contains(got, "/elsewhere") {
+		t.Fatalf("the run started with %v trusted, want the caller's %s and /elsewhere", got, claudeKey(caller))
+	}
+
+	// the signed-in account's own file is never written
+	home, _ := os.UserHomeDir()
+	trustCaller(claudeCLI{}, "", caller)
+	for _, f := range []string{filepath.Join(home, ".claude.json"), filepath.Join(home, ".claude", ".claude.json")} {
+		if _, err := os.Stat(f); !os.IsNotExist(err) {
+			t.Errorf("%s was written", f)
+		}
+	}
+}
