@@ -4843,6 +4843,14 @@ magpie.plugin("library", (ctx) => {
       after.append(button(t("＋ Add hook"), "", () => editHook(null)));
       body.append(after);
     }
+    // the hooks the agents run that magpie didn't give them, as the user or
+    // another tool wrote them (@InkCoalW on X); RTK's are the RTK tab's
+    const found = agentless() ? [] : (lib.foundHooks || []).filter((f) => !f.own);
+    if (found.length) {
+      const rh = el("div", "row-head lib-foundhookhead");
+      rh.append(el("span", "label", t("In your agents")), el("span", "grow"), el("span", "note", t("not in the library — bring one in to manage it here")));
+      body.append(rh, foldedFound("hooks", found.map(foundHookRow)));
+    }
     const given = (id) => hooks.some((h) => h.agents?.includes(id));
     for (const a of all) {
       const ha = hookAgentOf(a.id);
@@ -4877,6 +4885,60 @@ magpie.plugin("library", (ctx) => {
     row.onclick = () => editHook(h);
     row.title = t("Edit {name}", { name: h.name });
     return row;
+  }
+
+  // One hook of an agent's own file: when it runs, what it runs, and where
+  // it is written.
+  function foundHookLabel(f) { return f.matcher ? f.event + " · " + f.matcher : f.event; }
+
+  function foundHookRow(f) {
+    const row = el("div", "row lib-row lib-found lib-foundhook");
+    const who = el("div", "who");
+    who.append(el("div", "name mono", foundHookLabel(f)));
+    const line = f.commands.join(" ; ");
+    const cmd = el("div", "sub mono lib-hookcmd", line);
+    cmd.title = line;
+    who.append(cmd);
+    const src = el("div", "lib-src");
+    src.append(pathLink(f.file));
+    who.append(src);
+    const have = el("div", "lib-have");
+    const a = agentOf(f.agent);
+    if (a) { const i = agentIcon(a.icon); i.title = a.name; have.append(i); }
+    row.append(glyph(GLYPH.hook), who, have);
+    const b = button(t("Bring in"), "action", () => change("hooks/import", { names: [f.key] }, t("{name} is in the library now", { name: f.hook.name })));
+    if (f.hook) {
+      b.title = f.joins ? t("It is {name} of the library: {agent} is ticked for it", { name: f.joins, agent: a?.name || f.agent })
+        : t("Keeps it in the library as {name}: {agent} goes on running it, and you can give it to the others", { name: f.hook.name, agent: a?.name || f.agent });
+    } else {
+      // a group of several, a prompt or an agent hook, or a key the
+      // library has no field for: magpie would change it on its next write
+      b.disabled = true;
+      b.title = f.why === "several" ? t("It runs several commands: the library keeps a hook as one command")
+        : f.why === "type" ? t("It isn't a command: the library keeps command hooks")
+        : t("It has settings the library doesn't keep: bringing it in would change it");
+    }
+    const rm = button("", "lib-icon danger", () => confirmRemoveFoundHook(f));
+    rm.append(svg(GLYPH.trash, 13, 1.4));
+    rm.title = t("Remove");
+    row.append(b, rm);
+    return row;
+  }
+
+  function confirmRemoveFoundHook(f) {
+    const ed = el("div", "editor lib-editor");
+    const head = el("div", "ehead");
+    head.append(glyph(GLYPH.trash), el("b", "", t("Remove this {event} hook?", { event: foundHookLabel(f) })));
+    ed.append(head);
+    const cmd = el("p", "lib-confirm mono", f.commands.join(" ; "));
+    ed.append(cmd);
+    ed.append(el("p", "lib-confirm", t("It is taken out of {file}, and the rest of the file stays as it is. The file is copied to magpie's backups first, where it can be put back.", { file: tilde(f.file) })));
+    const bar = el("div", "bar");
+    const go = button(t("Remove"), "primary danger-fill", async () => { if (await change("hooks/remove-found", { names: [f.key] }, t("Hook removed"))) closeLibModal(true); });
+    bar.append(el("span", "grow"), button(t("Cancel"), "", closeLibModal), go);
+    ed.append(bar);
+    modal = { save: () => go.click() };
+    openLib(ed);
   }
 
   function editHook(h) {

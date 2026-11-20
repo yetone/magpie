@@ -558,6 +558,9 @@ type View struct {
 	Rules        []RuleView      `json:"rules"`
 	RuleAgents   []RuleAgentView `json:"ruleAgents"`
 	FoundServers []Found         `json:"foundServers"`
+	// FoundHooks are the hooks the agents run that magpie didn't give
+	// them (hooks_found.go)
+	FoundHooks []FoundHook `json:"foundHooks"`
 	// Plugins are the plugins kept as one item each (plugin.go)
 	Plugins     []PluginView `json:"plugins"`
 	Skills      []SkillView  `json:"skills"`
@@ -869,6 +872,7 @@ func readView(problems []Problem, glance bool) (*View, error) {
 	for i := range v.FoundServers {
 		v.FoundServers[i].Icon = serverIcon(l, v.FoundServers[i].Server)
 	}
+	v.FoundHooks = foundHooksOf(l, targets)
 	v.NewSkills = newSkills(l)
 	v.CheckFolders = l.addedFromFolders()
 	v.Projects = projectViews(l, problems)
