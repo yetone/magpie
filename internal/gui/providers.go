@@ -733,6 +733,21 @@ type presetJSON struct {
 	New bool `json:"new,omitempty"`
 }
 
+// pluginPartnerJSON is a plugin's partner as the Plugins page lists it: its
+// package, its name and logo, its tagline by language and the languages
+// it is listed in, and its site (a usemagpie.ai/go link, siteHost the
+// host it sends the browser to).
+type pluginPartnerJSON struct {
+	ID       string            `json:"id"`
+	Name     string            `json:"name"`
+	Plugin   string            `json:"plugin"`
+	Icon     string            `json:"icon,omitempty"`
+	Notes    map[string]string `json:"notes,omitempty"`
+	Langs    []string          `json:"langs,omitempty"`
+	Website  string            `json:"website,omitempty"`
+	SiteHost string            `json:"siteHost,omitempty"`
+}
+
 type gatewayJSON struct {
 	URL     string   `json:"url"`
 	LAN     bool     `json:"lan"`
@@ -825,8 +840,11 @@ type excludedJSON struct {
 type providersJSON struct {
 	Providers []providerJSON `json:"providers"`
 	Presets   []presetJSON   `json:"presets"`
-	Excluded  []excludedJSON `json:"excluded"` // sign-ins magpie found but will not share
-	Gateway   gatewayJSON    `json:"gateway"`
+	// PluginPartners are the partners whose product is a plugin: the
+	// Plugins page lists them first in Discover
+	PluginPartners []pluginPartnerJSON `json:"pluginPartners,omitempty"`
+	Excluded       []excludedJSON      `json:"excluded"` // sign-ins magpie found but will not share
+	Gateway        gatewayJSON         `json:"gateway"`
 	// CodexDaemon is the account Codex's background app-server is still
 	// signed in to after Codex was switched to another; "" when none is
 	// left behind (provider.CodexDaemonStale).
@@ -1583,6 +1601,9 @@ func providersState() providersJSON {
 		team := provider.TakesZhipuTeam(bases)
 		vendor, keyRegions := presetAccessKey(pr)
 		s.Presets = append(s.Presets, presetJSON{PresetDef: pr, Added: have[pr.ID], ZhipuTeam: team, AccessKey: vendor != "", AccessKeyVendor: vendor, AccessKeyRegions: keyRegions, Vertex: pr.ID == provider.VertexPreset, OwnClient: presetOwnClient(pr)})
+	}
+	for _, pa := range provider.PluginPartners() {
+		s.PluginPartners = append(s.PluginPartners, pluginPartnerJSON{ID: pa.ID, Name: pa.Name, Plugin: pa.Plugin, Icon: pa.Icon, Notes: pa.Notes, Langs: pa.Langs, Website: pa.Website, SiteHost: pa.SiteHost})
 	}
 	cat, models := provider.CatalogGroups()
 	s.Gateway = gatewayJSON{URL: gateway.URL(), OnNetwork: gateway.OnNetwork(), Models: models, Calls: []gateway.Call{}, Groups: []gwGroupJSON{}}
@@ -3854,8 +3875,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 		}
 		rw.WriteHeader(http.StatusNoContent)
 	})
-	// the add sheet counts what it showed of the partners and what was
-	// opened of them (provider.CountPartner); only listed partners count.
+	// the add sheet and the Plugins page count what they showed of the
+	// partners and what was opened of them (provider.CountPartner); only
+	// listed partners count.
 	// Those shown are no longer new (provider.NoticePartners).
 	mux.HandleFunc("POST /api/partner", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct {

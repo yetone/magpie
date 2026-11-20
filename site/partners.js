@@ -25,6 +25,17 @@
 //   langs      the app languages it is listed in (["zh"]); none is all
 //   from, until  RFC 3339 times bounding when it is listed (the paid term)
 //
+// A partner whose product is a plugin, not a model endpoint, is listed at
+// the top of the Plugins page's Discover instead of in the add sheet:
+//
+//   plugin     its npm package's name ("@acme/magpie-notes"), with no
+//              version; it has no chat, responses, anthropic, regions or
+//              keysUrl. id, name, iconUrl, notes, langs, website, from and
+//              until are as above.
+//
+// At most 12 of each kind are listed. An app from before plugin partners
+// leaves them out, as entries with no endpoint.
+//
 // Every URL is https. An entry that breaks a rule is left out by the app.
 //
 // The app gets keysUrl and website (a region's too) as usemagpie.ai/go/…

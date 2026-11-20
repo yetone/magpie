@@ -29,6 +29,10 @@ import (
 // a release: the list is fetched from PartnersURL, as the plugin market's
 // is, and kept on disk. A partner is a preset in all but where it comes
 // from, so adding one, its editor and its key page work as a preset's do.
+//
+// A partner whose product is a plugin, not an endpoint, names its npm
+// package as Plugin and no endpoint: it is listed at the top of the
+// Plugins page's Discover (PluginPartners), never in the add sheet.
 
 // PartnersURL is where the list is kept; MAGPIE_PARTNERS moves it, and
 // MAGPIE_PARTNERS=off keeps to none.
@@ -37,8 +41,8 @@ const PartnersURL = "https://usemagpie.ai/api/partners"
 // KindPartner is a partner's Kind: the add sheet lists them apart.
 const KindPartner Kind = "partner"
 
-// MaxPartners is the most partners listed; the rest of a longer list are
-// left out.
+// MaxPartners is the most partners listed, of the add sheet's and of the
+// Plugins page's each; the rest of a longer list are left out.
 const MaxPartners = 12
 
 // Partner is one entry of the list: a preset, its tagline in each
@@ -56,7 +60,15 @@ type Partner struct {
 	// From and Until bound when it is listed; zero is unbounded.
 	From  time.Time `json:"from,omitzero"`
 	Until time.Time `json:"until,omitzero"`
+	// Plugin is the npm package of a partner listed on the Plugins page:
+	// one with no endpoint, which the add sheet never lists. An app from
+	// before it drops such an entry, as it has no endpoint.
+	Plugin string `json:"plugin,omitempty"`
 }
+
+// IsPlugin reports whether the partner is listed on the Plugins page, not
+// in the add sheet.
+func (p Partner) IsPlugin() bool { return p.Plugin != "" }
 
 // Live reports whether the partner is listed at now.
 func (p Partner) Live(now time.Time) bool {
@@ -104,6 +116,10 @@ const partnerRetry = 10 * time.Minute
 
 var partnerID = lazyre.New(`^[a-z0-9][a-z0-9-]{1,40}$`)
 
+// npmPackage is an npm package's name, as the plugin store checks one
+// (internal/plugin's pkgName).
+var npmPackage = lazyre.New(`^(@[a-z0-9][a-z0-9._~-]*/)?[a-z0-9][a-z0-9._~-]*$`)
+
 func partnerCacheFile() string { return filepath.Join(appdir.Cache(), "partners.json") }
 
 func partnersSource() string {
@@ -119,11 +135,23 @@ func partnersSource() string {
 	return src
 }
 
-// Partners are the partners listed now, in the list's order: what was
-// fetched last, never waited for. A list this process hasn't fetched, or
-// fetched an hour ago, is fetched again behind the call, and the page
-// asked again shows it.
+// Partners are the add sheet's partners listed now, in the list's order:
+// what was fetched last, never waited for. A list this process hasn't
+// fetched, or fetched an hour ago, is fetched again behind the call, and
+// the page asked again shows it.
 func Partners() []Partner {
+	return slices.DeleteFunc(listedPartners(), Partner.IsPlugin)
+}
+
+// PluginPartners are the Plugins page's partners listed now, in the
+// list's order, as Partners.
+func PluginPartners() []Partner {
+	return slices.DeleteFunc(listedPartners(), func(p Partner) bool { return !p.IsPlugin() })
+}
+
+// listedPartners are every partner listed now, the add sheet's and the
+// Plugins page's.
+func listedPartners() []Partner {
 	if partnersSource() == "off" {
 		return nil
 	}
@@ -367,20 +395,32 @@ func fetchPartners(ctx context.Context, src string) ([]Partner, error) {
 }
 
 // validPartners keeps the entries magpie can list safely, at most
-// MaxPartners: an id of its own that no built-in preset has, a name, and
-// https addresses only. What a partner may not set (a decision API, no
-// key, an endpoint of the user's own) is cleared.
+// MaxPartners of the add sheet's and as many of the Plugins page's: an id
+// of its own that no built-in preset has, a name, and https addresses
+// only. What a partner may not set (a decision API, no key, an endpoint
+// of the user's own) is cleared.
 func validPartners(in []Partner) []Partner {
 	var out []Partner
 	ids := map[string]bool{}
+	n := map[bool]int{}
 	for _, p := range in {
-		if len(out) == MaxPartners {
-			break
-		}
-		if err := checkPartner(p); err != nil || ids[p.ID] {
+		if err := checkPartner(p); err != nil || ids[p.ID] || n[p.IsPlugin()] == MaxPartners {
 			continue
 		}
 		ids[p.ID] = true
+		n[p.IsPlugin()]++
+		if p.IsPlugin() {
+			// a plugin's partner is its name, its tagline, its logo and
+			// its site: nothing a preset of it would carry
+			out = append(out, Partner{
+				PresetDef: PresetDef{ID: p.ID, Name: p.Name, Short: p.Short, Icon: p.Icon, Website: p.Website, SiteHost: p.SiteHost, Kind: KindPartner, Note: p.Notes["en"]},
+				IconURL:   p.IconURL, Notes: p.Notes, Langs: p.Langs, From: p.From, Until: p.Until, Plugin: p.Plugin,
+			})
+			if !strings.HasPrefix(p.Icon, "file:") || IconFile(strings.TrimPrefix(p.Icon, "file:")) == "" {
+				out[len(out)-1].Icon = "generic"
+			}
+			continue
+		}
 		p.Kind, p.Sponsored = KindPartner, false
 		p.Decide, p.NoKey, p.Hosts = "", false, false
 		p.Endpoint, p.EndpointHint, p.EndpointNeeded = "", "", ""
@@ -479,6 +519,22 @@ func checkPartner(p Partner) error {
 	if strings.TrimSpace(p.Name) == "" {
 		return errors.New("no name")
 	}
+	if p.IsPlugin() {
+		// a package's name alone: the Plugins page installs it as npm
+		// has it, and knows it installed by that name
+		if len(p.Plugin) > 214 || !npmPackage.MatchString(p.Plugin) {
+			return errors.New("not an npm package's name")
+		}
+		if p.Chat != "" || p.Responses != "" || p.Anthropic != "" || len(p.Regions) > 0 {
+			return errors.New("a plugin's partner with an endpoint")
+		}
+		for _, u := range []string{p.Website, p.IconURL} {
+			if u != "" && !httpsURL(u) {
+				return fmt.Errorf("not https: %s", u)
+			}
+		}
+		return nil
+	}
 	if p.Chat == "" && p.Responses == "" && p.Anthropic == "" && len(p.Regions) == 0 {
 		return errors.New("no endpoint")
 	}
@@ -565,7 +621,7 @@ func partnerPreset(id string) *PresetDef {
 	defer partnerMu.Unlock()
 	loadPartners()
 	p, ok := partnerState.Seen[id]
-	if !ok {
+	if !ok || p.IsPlugin() {
 		return nil
 	}
 	d := p.PresetDef

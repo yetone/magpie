@@ -407,14 +407,21 @@ test("partners", async () => {
   assert.equal(res.headers.get("Cache-Control"), "public, max-age=600");
   const { partners } = await res.json();
   assert.deepEqual(partners, served(PARTNERS, Date.now()));
-  assert(partners.length <= 12);
+  // each kind, the add sheet's and the Plugins page's, at most 12
+  assert(partners.filter((p) => !p.plugin).length <= 12);
+  assert(partners.filter((p) => p.plugin).length <= 12);
   const ids = new Set();
   for (const p of PARTNERS) {
     assert.match(p.id, /^[a-z0-9][a-z0-9-]{1,40}$/, p.id);
     assert(!ids.has(p.id), p.id + " twice");
     ids.add(p.id);
     assert(p.name?.trim(), p.id + " has no name");
-    assert(p.chat || p.responses || p.anthropic || p.regions?.length, p.id + " has no endpoint");
+    if (p.plugin) {
+      // a plugin's partner: an npm package's name and no endpoint
+      assert.match(p.plugin, /^(@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/, p.id + ": " + p.plugin);
+      assert(p.plugin.length <= 214, p.id);
+      assert(!p.chat && !p.responses && !p.anthropic && !p.regions, p.id + " is a plugin's partner with an endpoint");
+    } else assert(p.chat || p.responses || p.anthropic || p.regions?.length, p.id + " has no endpoint");
     const urls = [p.chat, p.responses, p.anthropic, p.website, p.keysUrl, p.iconUrl, ...(p.regions || []).flatMap((r) => [r.chat, r.responses, r.anthropic, r.keysUrl, r.website])];
     for (const u of urls.filter(Boolean)) assert.equal(new URL(u).protocol, "https:", p.id + ": " + u);
     for (const t of [p.from, p.until].filter(Boolean)) assert(!isNaN(Date.parse(t)), p.id + ": " + t);
@@ -451,6 +458,18 @@ test("partners: links go through /go", () => {
   // partners.js itself is left as it is
   assert.equal(LIST[0].keysUrl, "https://acme.example/keys");
   assert.equal(served([{ ...LIST[0], until: "2026-10-10T00:00:01Z" }], NOW).length, 1);
+});
+
+// a plugin's partner is served as the rest: its website a /go link that
+// counts the click, its package as it is
+test("partners: a plugin's partner", () => {
+  const notes = { id: "notes", name: "Notes", plugin: "@notes/magpie-sync", website: "https://notes.example/?aff=1", iconUrl: "https://notes.example/i.png", notes: { en: "Notes" } };
+  const [p] = served([notes], NOW);
+  assert.equal(p.plugin, "@notes/magpie-sync");
+  assert.equal(p.website, "https://usemagpie.ai/go/notes/site");
+  assert.equal(p.siteHost, "notes.example");
+  assert.equal(goTarget([notes], "notes", "site"), "https://notes.example/?aff=1&ref=magpie");
+  assert.equal(goTarget([notes], "notes", "keys"), "");
 });
 
 test("partners: /go sends the browser on, saying it came from magpie", () => {

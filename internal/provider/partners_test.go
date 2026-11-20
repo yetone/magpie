@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +16,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/plugin"
 )
 
 // fetchPartnersNow fetches the list as the background refresh does, and
@@ -635,5 +639,92 @@ func TestPartnersUnparsedFileKeptAside(t *testing.T) {
 	defer partnerMu.Unlock()
 	if partnerState.Error == "" {
 		t.Fatalf("the failed try isn't recorded: %+v", partnerState)
+	}
+}
+
+// A partner whose product is a plugin names its npm package and no
+// endpoint: it is listed by PluginPartners, never by Partners nor as a
+// preset, and an entry that isn't a package's name, sends to http, or
+// has an endpoint as well is left out. The add sheet's partners are as
+// they were, each list capped on its own, and the plugin's partner is
+// counted as theirs are.
+func TestPluginPartners(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	t.Setenv("DO_NOT_TRACK", "")
+	t.Setenv("MAGPIE_NO_STATS", "")
+	resetPartners()
+	t.Cleanup(resetPartners)
+	entries := []string{
+		`{"id":"acme","name":"Acme AI","chat":"https://api.acme.example/v1"}`,
+		`{"id":"notes","name":"Notes Sync","plugin":"@notes/magpie-sync","website":"https://usemagpie.ai/go/notes/site","siteHost":"notes.example",
+		  "notes":{"en":"Your notes, in every agent","zh":"笔记进每个 agent"},"langs":["zh","en"],"keysUrl":"https://notes.example/keys","decide":"https://notes.example/d"}`,
+		`{"id":"bare","name":"Bare","plugin":"bare-plugin"}`,
+		`{"id":"badname","name":"Bad name","plugin":"Bad Name"}`,
+		`{"id":"versioned","name":"Versioned","plugin":"some-plugin@1.2.3"}`,
+		`{"id":"both","name":"Both","plugin":"both-plugin","chat":"https://api.both.example/v1"}`,
+		`{"id":"regions","name":"Regions","plugin":"regions-plugin","regions":[{"id":"cn","name":"China","chat":"https://cn.example/v1"}]}`,
+		`{"id":"plainsite","name":"Plain site","plugin":"plain-plugin","website":"http://plain.example"}`,
+		`{"id":"openrouter","name":"Not OpenRouter","plugin":"openrouter-plugin"}`,
+	}
+	// thirteen more of each: each list stops at MaxPartners of its own
+	for i := range 13 {
+		entries = append(entries, fmt.Sprintf(`{"id":"pv%d","name":"P%d","chat":"https://p%d.example/v1"}`, i, i, i),
+			fmt.Sprintf(`{"id":"pl%d","name":"L%d","plugin":"plugin-%d"}`, i, i, i))
+	}
+	var body atomic.Value
+	body.Store(`{"partners":[` + strings.Join(entries, ",") + `]}`)
+	t.Setenv("MAGPIE_PARTNERS", partnerFeedServer(t, &body).URL)
+	fetchPartnersNow()
+
+	pv, pl := Partners(), PluginPartners()
+	if len(pv) != MaxPartners || pv[0].ID != "acme" || pv[1].ID != "pv0" {
+		t.Fatalf("add sheet's partners = %s", partnerIDs(pv))
+	}
+	if len(pl) != MaxPartners || partnerIDs(pl[:3]) != "notes,bare,pl0" {
+		t.Fatalf("plugin partners = %s", partnerIDs(pl))
+	}
+	n := pl[0]
+	if n.Plugin != "@notes/magpie-sync" || n.Name != "Notes Sync" || n.Notes["zh"] != "笔记进每个 agent" || n.Note != "Your notes, in every agent" || len(n.Langs) != 2 || !n.Sponsored {
+		t.Errorf("notes = %+v", n)
+	}
+	if n.Website != "https://usemagpie.ai/go/notes/site" || n.SiteHost != "notes.example" || n.Icon != "generic" {
+		t.Errorf("notes site %q host %q icon %q", n.Website, n.SiteHost, n.Icon)
+	}
+	// nothing a preset carries: no key page, no decision API, no endpoint
+	if n.KeysURL != "" || n.Decide != "" || n.Chat != "" {
+		t.Errorf("notes kept preset fields: keys %q decide %q chat %q", n.KeysURL, n.Decide, n.Chat)
+	}
+	if pr := Preset("notes"); pr != nil {
+		t.Errorf("a plugin's partner is a preset: %+v", pr)
+	}
+	if _, err := FromPreset("notes"); err == nil {
+		t.Error("a provider was made from a plugin's partner")
+	}
+	if pr := Preset("acme"); pr == nil || !pr.Sponsored {
+		t.Errorf("Preset(acme) = %+v", pr)
+	}
+
+	// counted as the add sheet's are: shown and opened as the page says,
+	// added when its plugin is installed, and only then: not another
+	// package, not a failed install, not one carried over from a backup
+	CountPartner(PartnerShown, "notes", "badname")
+	oldAdd := addPlugin
+	t.Cleanup(func() { addPlugin = oldAdd })
+	addPlugin = func(_ context.Context, spec string) (plugin.Entry, error) {
+		if spec == "@notes/magpie-sync@9.9.9" {
+			return plugin.Entry{}, errors.New("no such version")
+		}
+		return plugin.Entry{Spec: spec}, nil
+	}
+	ctx := context.Background()
+	for _, spec := range []string{"@notes/magpie-sync", "other-plugin", "@notes/magpie-sync@9.9.9"} {
+		_, _ = AddPlugin(ctx, spec)
+	}
+	if got, want := countsLine(PartnerCounts(time.Now().Add(24*time.Hour))), "notes added 1,notes shown 1"; got != want {
+		t.Errorf("counts = %q, want %q", got, want)
 	}
 }

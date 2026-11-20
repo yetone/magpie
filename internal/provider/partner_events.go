@@ -22,10 +22,10 @@ import (
 
 // What is counted for a partner.
 const (
-	PartnerShown  = "shown"  // the add sheet listed it
+	PartnerShown  = "shown"  // the add sheet (the Plugins page) listed it
 	PartnerOpened = "opened" // its row was opened
 	PartnerKeys   = "keys"   // its key page was opened
-	PartnerAdded  = "added"  // a provider was added from it
+	PartnerAdded  = "added"  // a provider was added from it (its plugin installed)
 )
 
 // partnerCaps is the most counted of each a day: a count, not a log of
@@ -65,15 +65,26 @@ func partnerCounting() bool {
 	return !s.NoStats && !s.NoUsageStats
 }
 
-// livePartner reports whether id is a partner listed now: only those are
-// counted, never a provider of the user's own.
+// livePartner reports whether id is a partner listed now, the add sheet's
+// or the Plugins page's: only those are counted, never a provider of the
+// user's own.
 func livePartner(id string) bool {
-	for _, p := range Partners() {
+	for _, p := range listedPartners() {
 		if p.ID == id {
 			return true
 		}
 	}
 	return false
+}
+
+// countPluginPartner counts an install of pkg for the partner whose
+// plugin it is, if one is listed now.
+func countPluginPartner(pkg string) {
+	for _, p := range PluginPartners() {
+		if p.Plugin == pkg {
+			CountPartner(PartnerAdded, p.ID)
+		}
+	}
 }
 
 // CountPartner counts what for each of the partners ids, today.

@@ -370,3 +370,17 @@ body.window .pm-manual { --bleed-l: 16px; }
 .pm-like.on svg path { fill: currentColor; }
 .pm-like:not(:disabled):active { transform: scale(.97); }
 @media (hover: hover) and (pointer: fine) { .pm-like:not(:disabled):hover { background: var(--pill-hover); color: var(--fg); } }
+
+/* Partners (partnerSection): the sponsors whose product is a plugin, a
+   quiet list of rows at the top of Discover, each its logo, its name and
+   tagline, its site and its one button */
+.pm-partners .pm-sechead { align-items: center; }
+.pm-plist { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 2px 12px; padding: 6px; border-radius: 14px; border: 1px solid var(--line); background: var(--card); }
+.pm-prow { min-width: 0; }
+.pm-prow .pm-logo { width: 32px; height: 32px; border-radius: 9px; }
+.pm-prow .pm-logo .ic { width: 18px; height: 18px; }
+.pm-psite { flex: none; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 7px; background: none; color: var(--faint); cursor: pointer; transition: color .15s ease, background .15s ease; }
+.pm-psite:focus-visible { outline: none; color: var(--fg); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent); }
+@media (hover: hover) and (pointer: fine) {
+  .pm-psite:hover { color: var(--fg); background: var(--pill); }
+}

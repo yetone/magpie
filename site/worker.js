@@ -17,7 +17,8 @@
 //                          Both take ?lang=zh for the notes in Chinese, where a
 //                          release has them (below its <!-- lang:zh --> marker);
 //                          any other lang, or none, is the English alone.
-//   /api/partners          {partners: [...]}: the add sheet's Partners (partners.js),
+//   /api/partners          {partners: [...]}: the add sheet's and the Plugins
+//                          page's Partners (partners.js),
 //                          their website and key links through /go
 //   /go/<id>/keys[/<region>], /go/<id>/site[/<region>]
 //                          a partner's key page or website, counted

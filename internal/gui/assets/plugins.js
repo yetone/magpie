@@ -227,6 +227,7 @@
   }
 
   async function load() {
+    window.pmPartners?.again();
     if (!mine && !listings) draw();
     const parts = [
       loadMine().then(() => { draw(); window.renderPluginDot?.(); }),
@@ -236,6 +237,7 @@
       providers ? null : loadProviders().then(drawBody, () => {}),
     ];
     import("./plugincounts.js").then(() => window.pmCounts.load(drawBody), () => {});
+    import("./pluginpartners.js").then(drawBody, () => {});
     await Promise.all(parts);
     askNPM();
     askGit();
@@ -1046,6 +1048,8 @@
     const match = (l) => !f || [l.name, l.package, summary(l), (l.providers || []).join(" "), l.npm?.publisher || "", l.github?.owner || ""].join(" ").toLowerCase().includes(f);
     const all = everything(match);
     const out = [];
+    const partners = window.pmPartners?.({ f, all: everything(() => true), kindPick, srcPick, onlyNew, entryOf, kindOf, opens, npm, logo, actionFor, glyph, OUTL });
+    if (partners) out.push(partners);
     if (!f) {
       const rec = !kindPick && recSection(all);
       if (rec) out.push(rec);

@@ -178,7 +178,8 @@ test("compat.js is the first of the page's own scripts", async () => {
   // pipecheck.js when Settings draws Models; relaycheck.js on Usage › Model
   // speed's first Check… press;
   // addfloat.js when the Providers page's add sheet first opens;
-  // plugingrid.js and plugininstalled.js when Plugins first draws;
+  // plugingrid.js, plugininstalled.js and pluginpartners.js when Plugins
+  // first draws;
   // rotfig.js when a routing's In turn is first shown;
   // ompadvisor.js when an omp's settings first show;
   // kimisub.js when a Kimi Code row's Subagents line first shows;
