@@ -70,6 +70,33 @@ func TestRenameGroupMovesTheAgentsOnIt(t *testing.T) {
 	}
 }
 
+// Codex on a group magpie found, by its auto/<model>, moves with it when
+// the group is made the user's under another id: left on the auto ref,
+// Codex named a model its list no longer had (@CHENGJIAHEGOXIS on X).
+func TestRenameFoundGroupMovesTheAgentsOnIt(t *testing.T) {
+	home := syncHome(t)
+	for _, id := range []string{"relay", "relay2"} {
+		if err := provider.Save(provider.Provider{ID: id, Name: id, Key: "k", Chat: "http://127.0.0.1:1/v1", Models: []string{"deepseek-v4.1-flash"}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	codexCfg := filepath.Join(home, ".codex", "config.toml")
+	codexCat := filepath.Join(home, ".codex", "magpie-models.json")
+	writeFile(t, codexCfg, "model = \"auto/deepseek-v4.1-flash\"\nmodel_provider = \"magpie\"\nmodel_catalog_json = '"+codexCat+"'\n")
+	writeFile(t, codexCat, `{"models":[]}`)
+	SyncCatalog()
+	moved, err := RenameGroup("auto-deepseek-v4-1-flash", "deepseek-api-agents")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(moved, "Codex") {
+		t.Errorf("Codex not said moved: %v", moved)
+	}
+	if v, _ := edit.GetTOMLTop(codexCfg, "model"); v != "group/deepseek-api-agents" {
+		t.Errorf("codex model = %q", v)
+	}
+}
+
 // A change to the list alone never restarts the Codex app's app-server:
 // a provider renamed rewrites the catalog, and the app shows the new name
 // at its next launch (TestCodexEffortPickKeepsTheAppRunning says why).

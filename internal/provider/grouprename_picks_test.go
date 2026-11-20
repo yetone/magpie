@@ -70,3 +70,69 @@ func TestRenameGroupKeepsPicks(t *testing.T) {
 		t.Fatal("an unpicked group came on")
 	}
 }
+
+// A group magpie found, made the user's under an id of their own, stays
+// in the lists that showed it (@CHENGJIAHEGOXIS on X: DeepSeek-API-Agents
+// was gone from Codex's picker). Codex picked it by its auto/<model>,
+// which the renamed group no longer answers to; Claude's list narrowed to
+// it by that ref, and OpenCode's to a group by its bare id, rename with it.
+func TestRenameFoundGroupKeepsItsPicks(t *testing.T) {
+	isolate(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	for _, p := range []Provider{
+		{ID: "dss", Name: "dss", Key: "k", Chat: "http://127.0.0.1:1/v1", Models: []string{"deepseek-v4.1-flash"}},
+		{ID: "deepseek-agents", Name: "DeepSeek-Agents", Key: "k", Chat: "http://127.0.0.1:1/v1", Models: []string{"deepseek-v4.1-flash", "deepseek-v4-pro"}},
+	} {
+		if err := Save(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := SaveGroup(Group{ID: "open-chatgpt", Name: "Open-ChatGPT", Members: []string{"dss/deepseek-v4.1-flash"}}); err != nil {
+		t.Fatal(err)
+	}
+	found := "auto-deepseek-v4-1-flash"
+	refs := GroupRefs(found)
+	if len(refs) != 2 || refs[1] != "auto/deepseek-v4.1-flash" {
+		t.Fatalf("found group's refs %v", refs)
+	}
+	if err := SetOnlyPicked("codex", true); err != nil {
+		t.Fatal(err)
+	}
+	s := settings.Load()
+	s.Visible = map[string][]string{
+		"claude":   {"auto/deepseek-v4.1-flash", "dss"},
+		"opencode": {"OPEN-CHATGPT"},
+	}
+	if err := settings.Save(s); err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range []string{"codex", "claude"} {
+		if shown, _ := CatalogFor(a); !slices.Contains(ids(shown), refs[1]) {
+			t.Fatalf("%s doesn't show the found group to begin with: %v", a, ids(shown))
+		}
+	}
+	if err := RenameGroup(found, "deepseek-api-agents"); err != nil {
+		t.Fatal(err)
+	}
+	if err := RenameGroup("open-chatgpt", "open-gpt"); err != nil {
+		t.Fatal(err)
+	}
+	for a, want := range map[string]string{"codex": "group/deepseek-api-agents", "claude": "group/deepseek-api-agents", "opencode": "group/open-gpt"} {
+		if shown, _ := CatalogFor(a); !slices.Contains(ids(shown), want) {
+			t.Errorf("%s lost %s: %v", a, want, ids(shown))
+		}
+	}
+	s = settings.Load()
+	if p := s.PickedModels["codex"]; slices.Contains(p, refs[1]) || !slices.Contains(p, "group/deepseek-api-agents") {
+		t.Errorf("codex picks %v", p)
+	}
+	if v := s.Visible["claude"]; !slices.Equal(v, []string{"group/deepseek-api-agents", "dss"}) {
+		t.Errorf("claude visible %v", v)
+	}
+	if v := s.Visible["opencode"]; !slices.Equal(v, []string{"open-gpt"}) {
+		t.Errorf("opencode visible %v", v)
+	}
+}

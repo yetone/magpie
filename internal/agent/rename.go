@@ -49,9 +49,12 @@ func RenameProvider(from, to string) ([]string, error) {
 func RenameGroup(from, to string) ([]string, error) {
 	from = strings.ToLower(strings.TrimSpace(from))
 	to = strings.ToLower(strings.TrimSpace(to))
-	old, now := provider.GroupPrefix+from, provider.GroupPrefix+to
+	now := provider.GroupPrefix + to
+	// a found group's agents may be on its auto/<model>, which the group
+	// made the user's under to no longer answers to
+	old := append([]string{provider.GroupPrefix + from}, provider.GroupRefs(from)...)
 	moved, err := renameRefs(func(ref string) (string, bool) {
-		if ref == old && from != to {
+		if slices.Contains(old, ref) && from != to {
 			return now, true
 		}
 		return "", false
