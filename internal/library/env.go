@@ -26,6 +26,8 @@ import (
 //	             that will be applied to every session")
 //	Codex        <codex home>/config.toml    [shell_environment_policy.set] NAME = "value" (its config docs:
 //	             "set" is the variables forced into the environment of every command it runs)
+//	Pi           <agent dir>/extensions/magpie-env.ts  an extension magpie writes that sets them in
+//	             process.env as Pi starts: Pi has no setting for them (env_pi.go)
 //
 // What magpie wrote is recorded name and value (Applied.Env). A variable
 // the file already has is the user's: another value is never written over
@@ -47,7 +49,7 @@ type EnvEntry struct {
 }
 
 // envAgents are the agents magpie can give variables to.
-var envAgents = []string{"claude", "codex"}
+var envAgents = []string{"claude", "codex", "pi"}
 
 const (
 	maxEnvName  = 128
@@ -65,7 +67,7 @@ func (e *EnvVar) check() error {
 	}
 	for _, a := range e.Agents {
 		if !slices.Contains(envAgents, a) {
-			return fmt.Errorf("magpie gives variables to Claude Code and Codex, not %s", a)
+			return fmt.Errorf("magpie gives variables to Claude Code, Codex and Pi, not %s", a)
 		}
 	}
 	return nil
@@ -90,6 +92,11 @@ func envFile(t *Target) (string, string) {
 		return "", fmt.Sprintf("magpie gives variables only to agents on this computer, not yet to %s in WSL", t.Agent.Name)
 	case t.Agent.ID == "claude":
 		return filepath.Join(claudeDir(), "settings.json"), ""
+	case t.Agent.ID == "pi":
+		if t.Agent.Dir == "" {
+			return "", fmt.Sprintf("magpie doesn't know where %s keeps its settings", t.Agent.Name)
+		}
+		return piEnvPath(t.Agent.Dir), ""
 	}
 	return filepath.Join(codexDir(), "config.toml"), ""
 }
@@ -100,6 +107,9 @@ const codexEnvTable = "shell_environment_policy"
 // readEnv is the variables path holds, in the setting this agent keeps
 // them in. A file that can't be read as that is an error, never "none".
 func readEnv(id, path string) (map[string]string, error) {
+	if id == "pi" {
+		return readPiEnv(path)
+	}
 	out := map[string]string{}
 	if id == "claude" {
 		doc, err := readHooksFile(path)
@@ -169,6 +179,9 @@ func codexHasSet(path string) bool {
 // writeEnv sets and takes out variables where the agent keeps them,
 // leaving the rest of the file as it is.
 func writeEnv(id, path string, set map[string]string, del []string) error {
+	if id == "pi" {
+		return writePiEnv(path, set, del)
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}

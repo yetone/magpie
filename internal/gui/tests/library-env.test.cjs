@@ -19,11 +19,12 @@ const agent = (id, name) => ({ id, name, icon: "", skills: `${HOME}/.${id}/skill
 const ENV_AGENTS = [
   { id: "claude", file: `${HOME}/.claude/settings.json` },
   { id: "codex", file: `${HOME}/.codex/config.toml` },
+  { id: "pi", file: `${HOME}/.pi/agent/extensions/magpie-env.ts` },
   { id: "cursor", no: "Cursor has no environment settings magpie can write" },
 ];
 const lib = (env) => ({
   dir: `${HOME}/.magpie/library`, backups: `${HOME}/.magpie/backups`, home: HOME,
-  agents: [agent("claude", "Claude Code"), agent("codex", "Codex"), agent("cursor", "Cursor")],
+  agents: [agent("claude", "Claude Code"), agent("codex", "Codex"), agent("pi", "Pi"), agent("cursor", "Cursor")],
   instructions: { agents: [] }, servers: [], skills: [], foundServers: [], projects: [], foundSkills: [], problems: [],
   env, envAgents: ENV_AGENTS,
 });
@@ -114,6 +115,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForTimeout(150);
         assert.equal(posts.length, 0);
 
+        // Pi is offered like the others (norcleeh on X)
+        assert.notEqual(await row("HTTPS_PROXY").locator('.lib-ag[data-agent="pi"]').getAttribute("aria-disabled"), "true");
+
         // a chip posts env/agents
         await row("HTTPS_PROXY").locator('.lib-ag[data-agent="claude"]').click();
         await page.waitForFunction(() => true);
@@ -133,6 +137,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(posts[1].body.old, "");
         assert.equal(posts[1].body.env.name, "NO_PROXY");
         assert.equal(posts[1].body.env.value, "localhost");
+        assert.deepEqual([...posts[1].body.env.agents].sort(), ["claude", "codex", "pi"]);
         await row("NO_PROXY").waitFor();
 
         // a row's Remove asks first, naming it, and posts env/remove

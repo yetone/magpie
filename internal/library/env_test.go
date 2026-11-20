@@ -247,3 +247,82 @@ func TestEnvIsCarried(t *testing.T) {
 		t.Fatal("variables lost to an old bundle")
 	}
 }
+
+// Pi (norcleeh on X) has no setting for variables, so they go into an
+// extension magpie writes in its agent folder, which sets them as Pi
+// starts. Values of every shape come back as written, the user's own file
+// at that path is never written over, a value the user edited there is
+// theirs, and the file goes with the last variable, leaving the rest of
+// the folder as it is.
+func TestEnvPi(t *testing.T) {
+	h := sandbox(t)
+	dir := filepath.Join(h, ".pi/agent")
+	write(t, filepath.Join(dir, "settings.json"), "{}\n")
+	write(t, filepath.Join(dir, "extensions/mine.ts"), "export default function () {}\n")
+	ext := filepath.Join(dir, "extensions/magpie-env.ts")
+	odd := "a \"quoted\" `tick` ${x} \\ \n line sep </script>"
+
+	ok(t)(SaveEnv("", EnvVar{Name: "HTTPS_PROXY", Value: "http://127.0.0.1:7890", Agents: []string{"pi"}}))
+	ok(t)(SaveEnv("", EnvVar{Name: "ODD", Value: odd, Agents: []string{"pi", "claude"}}))
+	s := read(t, ext)
+	if !strings.HasPrefix(s, piEnvMark) || !strings.Contains(s, "process.env[name] = value") {
+		t.Fatalf("magpie-env.ts:\n%s", s)
+	}
+	got, err := readPiEnv(ext)
+	if err != nil || got["HTTPS_PROXY"] != "http://127.0.0.1:7890" || got["ODD"] != odd || len(got) != 2 {
+		t.Fatalf("pi env: %q %v", got, err)
+	}
+	if strings.Contains(s, " ") {
+		t.Errorf("a raw U+2028 ends a JavaScript line:\n%s", s)
+	}
+	view, err := Read(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var piFile string
+	for _, a := range view.EnvAgents {
+		if a.ID == "pi" {
+			piFile = a.File + a.No
+		}
+	}
+	if piFile != ext {
+		t.Errorf("the tab offers Pi as %q, want %s", piFile, ext)
+	}
+
+	// a value the user changed in the file is theirs from then on
+	write(t, ext, strings.Replace(s, `"HTTPS_PROXY":"http://127.0.0.1:7890"`, `"HTTPS_PROXY":"http://proxy:1"`, 1))
+	ok(t)(RemoveEnv("HTTPS_PROXY"))
+	if got, _ := readPiEnv(ext); got["HTTPS_PROXY"] != "http://proxy:1" || got["ODD"] != odd {
+		t.Errorf("the user's edited value was taken out: %q", got)
+	}
+	// unticking Pi takes out what magpie wrote, and only that
+	ok(t)(EnvAgents("ODD", []string{"claude"}))
+	if got, _ := readPiEnv(ext); got["ODD"] != "" || got["HTTPS_PROXY"] != "http://proxy:1" {
+		t.Errorf("after unticking Pi: %q", got)
+	}
+	if got := claudeEnv(t, filepath.Join(h, ".claude/settings.json")); got["ODD"] != odd {
+		t.Errorf("claude's ODD: %q", got)
+	}
+	if err := os.Remove(ext); err != nil {
+		t.Fatal(err)
+	}
+	ok(t)(SaveEnv("", EnvVar{Name: "LAST", Value: "1", Agents: []string{"pi"}}))
+	ok(t)(RemoveEnv("LAST"))
+	if _, err := os.Stat(ext); !os.IsNotExist(err) {
+		t.Errorf("magpie-env.ts stayed with nothing in it: %v", err)
+	}
+	if read(t, filepath.Join(dir, "extensions/mine.ts")) != "export default function () {}\n" {
+		t.Error("the user's own extension changed")
+	}
+
+	// the user's own file at that path is left as it is, and says why
+	own := "// my own env\nprocess.env.A = 'x';\n"
+	write(t, ext, own)
+	res, err := SaveEnv("", EnvVar{Name: "A", Value: "1", Agents: []string{"pi"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Problems) != 1 || read(t, ext) != own {
+		t.Errorf("the user's own magpie-env.ts: %+v\n%s", res.Problems, read(t, ext))
+	}
+}
