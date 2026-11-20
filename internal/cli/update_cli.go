@@ -24,6 +24,9 @@ var (
 	updateCanElevate  = update.CanElevate
 	updateInContainer = gateway.InContainer
 	updatePackagedBy  = update.PackagedBy
+	// updateReplaceBinary is update.ReplaceBinary; a test downloads
+	// without putting the test binary's replacement in
+	updateReplaceBinary = update.ReplaceBinary
 )
 
 // updateEveries are the intervals magpie update auto takes, by their
@@ -253,7 +256,9 @@ func updateCmd(args []string) error {
 			return fmt.Errorf("%s can't be replaced where it is; move magpie to Applications, or download the new version from %s", tilde(app), update.Site)
 		}
 		fmt.Println(muted.Render("  downloading " + update.AppAsset() + via(ctx) + " …"))
-		staged, err := update.Stage(ctx, rel, app)
+		pctx, ended := withDownloadProgress(ctx)
+		staged, err := update.Stage(pctx, rel, app)
+		ended()
 		if err != nil {
 			return err
 		}
@@ -289,7 +294,10 @@ func updateCmd(args []string) error {
 		}
 	}
 	fmt.Println(muted.Render("  downloading " + update.BinaryAsset() + via(ctx) + " …"))
-	if err := update.ReplaceBinary(ctx, rel); err != nil {
+	pctx, ended := withDownloadProgress(ctx)
+	err = updateReplaceBinary(pctx, rel)
+	ended()
+	if err != nil {
 		return err
 	}
 	fmt.Println(green.Render("✓"), "updated to", rel.Version)
