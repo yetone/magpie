@@ -30,6 +30,10 @@ type libRow struct {
 	on    []string // the agents that get it (or have it, when found)
 	own   bool     // a server the agent's app puts in itself: nothing to bring in
 	bad   int      // agents it couldn't be given to
+	// kept: a skill whose own folder removing it moves to the backups (D
+	// deletes it instead); not one linked from a folder of the user's,
+	// nor one going back to the agents it was brought in from
+	kept bool
 }
 
 // libKinds are what the library can give, by row kind.
@@ -70,7 +74,7 @@ func (m *model) reloadLibrary() {
 		m.lib = append(m.lib, libRow{kind: "mcp", name: s.Name, about: what, on: s.Agents, bad: len(s.Problems)})
 	}
 	for _, s := range v.Skills {
-		r := libRow{kind: "skill", name: s.Name, about: s.Description, on: s.Agents, bad: len(s.Problems)}
+		r := libRow{kind: "skill", name: s.Name, about: s.Description, on: s.Agents, bad: len(s.Problems), kept: s.Kind != "folder" && len(s.Back) == 0 && !s.Missing}
 		if s.Missing {
 			r.about, r.bad = tr("its folder is gone"), r.bad+1
 		} else if s.Gone != "" {
@@ -86,7 +90,7 @@ func (m *model) reloadLibrary() {
 		m.lib = append(m.lib, libRow{kind: "found-mcp", name: f.Server.Name, on: f.Server.Agents, own: f.Own})
 	}
 	for _, f := range v.FoundSkills {
-		m.lib = append(m.lib, libRow{kind: "found-skill", name: f.Name, about: f.Description, on: f.Agents})
+		m.lib = append(m.lib, libRow{kind: "found-skill", name: f.Name, about: f.Description, on: f.Agents, kept: f.Link == ""})
 	}
 	if rv := library.ReadRTK(); rv.Path != "" || len(rv.Agents) > 0 {
 		r := libRow{kind: "rtk", name: "RTK"}
@@ -121,6 +125,19 @@ func (m model) libName(id string) string {
 func (m model) updateLibrary(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	n := len(m.lib)
 	key := msg.String()
+	// D, while a skill's d waits for its second press, takes it out with
+	// its folder deleted rather than kept with the backups
+	if key == "D" && n > 0 && strings.HasPrefix(m.confirm, "library/") {
+		r := m.lib[m.lrow]
+		if r.kept && m.confirm == "library/"+r.kind+"/"+r.name {
+			m.confirm = ""
+			how := library.RemoveSkillsHow
+			if r.kind == "found-skill" {
+				how = library.RemoveFoundSkillsHow
+			}
+			return m, libCmd(func() (*library.Result, error) { return how([]string{r.name}, false) }, trf("deleted %s", r.name))
+		}
+	}
 	if key != "d" {
 		m.confirm = ""
 	}
@@ -219,6 +236,9 @@ func (m model) updateLibrary(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.flash = trf("press d again to take %s out of every agent that has it, kept with the backups", r.name)
 			case "found-mcp":
 				m.flash = trf("press d again to take %s out of every agent that has it, their files kept with the backups", r.name)
+			}
+			if r.kept {
+				m.flash += " · " + tr("D deletes its folder, with no backup")
 			}
 			return m, nil
 		}

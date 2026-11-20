@@ -8054,20 +8054,50 @@ magpie.plugin("library", (ctx) => {
     return b;
   }
 
+  // What a sheet removing skills says, and below it a box keeping their
+  // folders in magpie's backups: ticked, as every removal did before;
+  // unticked, the folders are deleted (Eternalfate__ on X: a skill removed
+  // is to be gone, not kept somewhere on disk). say(keep) gives the lines,
+  // as many either way, said again as the box changes. The reader's last
+  // choice is the next sheet's. With nothing of magpie's to keep (a skill
+  // linked from a folder of the reader's, only unlinked) there's no box.
+  // Answers whether to keep, for the sheet's Remove to ask.
+  function keepLines(ed, say, box) {
+    let keep = true;
+    try { keep = localStorage.getItem("magpie.libSkillBackup") !== "off"; } catch {}
+    if (!box) keep = true;
+    const ps = say(keep).filter(Boolean).map((l) => ed.appendChild(el("p", "lib-confirm", l)));
+    if (!box) return () => true;
+    const lab = el("label", "tick lib-keepbox");
+    const c = el("input");
+    c.type = "checkbox";
+    c.checked = keep;
+    c.onchange = () => {
+      keep = c.checked;
+      try { localStorage.setItem("magpie.libSkillBackup", keep ? "on" : "off"); } catch {}
+      say(keep).filter(Boolean).forEach((l, i) => { if (ps[i]) ps[i].textContent = l; });
+    };
+    lab.append(c, el("span", "", t("Keep a copy in magpie's backups")));
+    ed.append(lab);
+    return () => keep;
+  }
+
   // the sheet asking first: its head and what it says, then Remove all n,
-  // or Remove n when they are the ones picked (some)
-  function confirmRemoveEvery(kind, names, title, lines, some) {
+  // or Remove n when they are the ones picked (some); skills' sheets give
+  // say and box, for keepLines
+  function confirmRemoveEvery(kind, names, title, lines, some, say, box) {
     const ed = el("div", "editor lib-editor");
     const head = el("div", "ehead");
     head.append(glyph(GLYPH.trash), el("b", "", title));
     ed.append(head);
     for (const l of lines) if (l) ed.append(el("p", "lib-confirm", l));
+    const keep = say ? keepLines(ed, say, box) : () => true;
     const bar = el("div", "bar");
     const label = !some ? t("Remove all {n}", { n: names.length }) : names.length === 1 ? t("Remove") : t("Remove {n}", { n: names.length });
-    const go = button(label, "primary danger-fill", async () => { go.disabled = true; if (await removeEvery(kind, names, some)) closeLibModal(true); else go.disabled = false; });
+    const go = button(label, "primary danger-fill", async () => { go.disabled = true; if (await removeEvery(kind, names, some, !keep())) closeLibModal(true); else go.disabled = false; });
     bar.append(el("span", "grow"), button(t("Cancel"), "", closeLibModal), go);
     ed.append(bar);
-    modal = { save: () => go.click() };
+    modal = { save: () => go.click(), dirty: () => false }; // the keep box is a choice, not an edit to lose
     openLib(ed);
   }
   const takenFrom = (items) => {
@@ -8082,14 +8112,17 @@ magpie.plugin("library", (ctx) => {
     const skills = (some || lib.skills).slice(), names = skills.map((s) => s.name), n = names.length;
     const linked = skills.filter((s) => s.kind === "folder").length, kept = n - linked;
     const projects = (lib.projects || []).filter((p) => names.some((x) => p.skills?.[x]?.length)).length;
-    const where = [];
-    if (kept) where.push(t("{n} folders are moved to magpie's backups (Backups, at the top of the Library), not deleted.", { n: kept }));
-    if (linked) where.push(t("{n} linked from folders of your own are only unlinked: those folders stay where they are.", { n: linked }));
+    const where = (keep) => {
+      const w = [];
+      if (kept) w.push(keep ? t("{n} folders are moved to magpie's backups (Backups, at the top of the Library), not deleted.", { n: kept })
+        : t("{n} folders are deleted, with no copy kept.", { n: kept }));
+      if (linked) w.push(t("{n} linked from folders of your own are only unlinked: those folders stay where they are.", { n: linked }));
+      return [w.join(" ")];
+    };
     confirmRemoveEvery("skills", names, !some ? t("Remove all {n} skills?", { n }) : n === 1 ? t("Remove {name}?", { name: names[0] }) : t("Remove {n} skills?", { n }), [
       takenFrom(skills),
       projects && t("The skills magpie placed in {n} projects are taken away too.", { n: projects }),
-      where.join(" "),
-    ], !!some);
+    ], !!some, where, kept > 0);
   }
 
   function confirmRemoveEveryServer(some) {
@@ -8108,10 +8141,10 @@ magpie.plugin("library", (ctx) => {
   // picks; one that couldn't be stays picked and says why on its row, and
   // only those gone are counted as removed. Nothing removed at all (the
   // change refused) leaves every one picked, the sheet open with why.
-  async function removeEvery(kind, names, some) {
+  async function removeEvery(kind, names, some, noBackup) {
     const what = (p) => p.what.replace(/^(skill|mcp|hook):/, "");
     try {
-      const v = await api("library/" + kind + "/remove-all", { names });
+      const v = await api("library/" + kind + "/remove-all", noBackup ? { names, noBackup } : { names });
       take(v);
       const res = v.result || {}, no = res.unremoved || [];
       if (some) {
@@ -8586,23 +8619,24 @@ magpie.plugin("library", (ctx) => {
       list.append(li);
     }
     ed.append(list);
-    ed.append(el("p", "lib-confirm", takenFrom(skills) + " " + t("Their folders are moved to magpie's backups (Backups, at the top of the Library), not deleted.")));
+    const keep = keepLines(ed, (keep) => [takenFrom(skills) + " " + (keep ? t("Their folders are moved to magpie's backups (Backups, at the top of the Library), not deleted.")
+      : t("Their folders are deleted, with no copy kept."))], true);
     const bar = el("div", "bar");
     const go = button(n === 1 ? t("Remove") : t("Remove {n}", { n }), "primary danger-fill", async () => {
       go.disabled = true;
-      if (await removeGone(names)) closeLibModal(true);
+      if (await removeGone(names, !keep())) closeLibModal(true);
       else go.disabled = false;
     });
     bar.append(el("span", "grow"), button(t("Cancel"), "", closeLibModal), go);
     ed.append(bar);
-    modal = { save: () => go.click() };
+    modal = { save: () => go.click(), dirty: () => false }; // the keep box is a choice, not an edit to lose
     openLib(ed);
   }
   // only those still marked removed from their source are taken out; one
   // found there again meanwhile stays, and is said
-  async function removeGone(names) {
+  async function removeGone(names, noBackup) {
     try {
-      const v = await api("library/skills/remove-gone", { names });
+      const v = await api("library/skills/remove-gone", noBackup ? { names, noBackup } : { names });
       take(v);
       const res = v.result || {}, no = res.unremoved || [];
       const out = names.filter((x) => !no.some((p) => p.what === "skill:" + x));
@@ -8724,14 +8758,16 @@ magpie.plugin("library", (ctx) => {
     const head = el("div", "ehead");
     head.append(glyph(GLYPH.trash), el("b", "", t("Remove {name}?", { name: s.name })));
     ed.append(head);
-    ed.append(el("p", "lib-confirm", s.kind === "folder"
+    const own = s.kind !== "folder" && !s.missing;
+    const keep = keepLines(ed, (keep) => [!own
       ? t("It is taken out of every agent it was given to. The folder it was linked from stays where it is.")
-      : t("It is taken out of every agent it was given to, and its folder is moved to magpie's backups.")));
+      : keep ? t("It is taken out of every agent it was given to, and its folder is moved to magpie's backups.")
+      : t("It is taken out of every agent it was given to, and its folder is deleted, with no copy kept.")], own);
     const bar = el("div", "bar");
-    const go = button(t("Remove"), "primary danger-fill", async () => { if (await change("skills/remove", { name: s.name }, t("{name} removed", { name: s.name }))) closeLibModal(true); });
+    const go = button(t("Remove"), "primary danger-fill", async () => { if (await change("skills/remove", keep() ? { name: s.name } : { name: s.name, noBackup: true }, t("{name} removed", { name: s.name }))) closeLibModal(true); });
     bar.append(el("span", "grow"), button(t("Cancel"), "", closeLibModal), go);
     ed.append(bar);
-    modal = { save: () => go.click() };
+    modal = { save: () => go.click(), dirty: () => false }; // the keep box is a choice, not an edit to lose
     openLib(ed);
   }
 
@@ -9004,41 +9040,40 @@ magpie.plugin("library", (ctx) => {
     const head = el("div", "ehead");
     head.append(glyph(GLYPH.trash), el("b", "", n === 1 ? t("Remove {name}?", { name: names[0] }) : t("Remove {n} skills?", { n })));
     ed.append(head);
-    const lines = [];
-    if (n === 1) {
-      const f = some[0], agents = [...f.agents, ...(f.copies || [])].map(nameOf).filter(Boolean);
-      lines.push(!agents.length ? t("Its folder is moved to magpie's backups.")
-        : f.link ? t("It is taken out of {agents}. The folder it was linked from stays where it is.", { agents: agents.join(", ") })
-        : t("It is taken out of {agents}, and its folder is moved to magpie's backups.", { agents: agents.join(", ") }));
-      if (f.shared) lines.push(t("Its entry in {path} goes to the backups too, so no agent reads it from there.", { path: f.shared }));
-      if (f.others?.length) lines.push(t("{agents} has another skill by this name; that one stays.", { agents: f.others.map(nameOf).join(", ") }));
-    } else {
+    // own: folders deleted when no copy is kept; one with an entry in the
+    // shared folder (other tools' too) goes to the backups either way
+    const linked = some.filter((f) => f.link).length, kept = n - linked, own = some.filter((f) => !f.link && !f.shared).length;
+    const keep = keepLines(ed, (keep) => n === 1 ? foundSaid(some[0], keep) : (() => {
+      const lines = [];
       const agents = [...new Set(some.flatMap((f) => [...f.agents, ...(f.copies || [])]))].map(nameOf).filter(Boolean);
       if (agents.length) lines.push(t("They are taken out of {agents}.", { agents: agents.join(", ") }));
-      const linked = some.filter((f) => f.link).length, kept = n - linked, shared = some.filter((f) => f.shared).length;
+      const shared = some.filter((f) => f.shared).length;
       const where = [];
-      if (kept) where.push(t("{n} folders are moved to magpie's backups (Backups, at the top of the Library), not deleted.", { n: kept }));
+      if (keep ? kept : own) where.push(keep ? t("{n} folders are moved to magpie's backups (Backups, at the top of the Library), not deleted.", { n: kept })
+        : t("{n} folders are deleted, with no copy kept.", { n: own }));
       if (linked) where.push(t("{n} linked from folders of your own are only unlinked: those folders stay where they are.", { n: linked }));
       lines.push(where.join(" "));
+      // magpie never deletes in the shared folder, other tools' too: an
+      // entry there goes to the backups either way (removeFound)
       if (shared) lines.push(t("{n} have an entry in the shared skills folder, which goes to the backups too, so no agent reads them from there.", { n: shared }));
       if (some.some((f) => f.others?.length)) lines.push(t("Another agent's own skill by one of these names stays."));
-    }
-    for (const l of lines) if (l) ed.append(el("p", "lib-confirm", l));
+      return lines;
+    })(), own > 0);
     const bar = el("div", "bar");
-    const go = button(n === 1 ? t("Remove") : t("Remove {n}", { n }), "primary danger-fill", async () => { go.disabled = true; if (await removeFoundSome(names)) closeLibModal(true); else go.disabled = false; });
+    const go = button(n === 1 ? t("Remove") : t("Remove {n}", { n }), "primary danger-fill", async () => { go.disabled = true; if (await removeFoundSome(names, !keep())) closeLibModal(true); else go.disabled = false; });
     bar.append(el("span", "grow"), button(t("Cancel"), "", closeLibModal), go);
     ed.append(bar);
-    modal = { save: () => go.click() };
+    modal = { save: () => go.click(), dirty: () => false }; // the keep box is a choice, not an edit to lose
     openLib(ed);
   }
 
   // as the library's Remove… (#1852): the ones taken out leave the list and
   // the picks; one that couldn't be stays picked and says why on its row;
   // none taken out (the change refused) leaves the sheet open with why
-  async function removeFoundSome(names) {
+  async function removeFoundSome(names, noBackup) {
     const what = (p) => p.what.replace(/^skill:/, "");
     try {
-      const v = await api("library/skills/remove-found-some", { names });
+      const v = await api("library/skills/remove-found-some", noBackup ? { names, noBackup } : { names });
       take(v);
       const res = v.result || {}, no = res.unremoved || [];
       foundErrs.clear();
@@ -9059,22 +9094,32 @@ magpie.plugin("library", (ctx) => {
     }
   }
 
+  // what removing one skill of the agents' own does, its folder kept in
+  // the backups or (keep false) deleted
+  function foundSaid(f, keep) {
+    const agents = [...f.agents, ...(f.copies || [])].map(nameOf).filter(Boolean);
+    return [
+      !agents.length ? (keep ? t("Its folder is moved to magpie's backups.") : t("Its folder is deleted, with no copy kept."))
+        : f.link ? t("It is taken out of {agents}. The folder it was linked from stays where it is.", { agents: agents.join(", ") })
+        : keep ? t("It is taken out of {agents}, and its folder is moved to magpie's backups.", { agents: agents.join(", ") })
+        : t("It is taken out of {agents}, and its folder is deleted, with no copy kept.", { agents: agents.join(", ") }),
+      // never deleted, as the shared folder is other tools' too (removeFound)
+      f.shared && t("Its entry in {path} goes to the backups too, so no agent reads it from there.", { path: f.shared }),
+      f.others?.length && t("{agents} has another skill by this name; that one stays.", { agents: f.others.map(nameOf).join(", ") }),
+    ];
+  }
+
   function confirmRemoveFoundSkill(f) {
     const ed = el("div", "editor lib-editor");
     const head = el("div", "ehead");
     head.append(glyph(GLYPH.trash), el("b", "", t("Remove {name}?", { name: f.name })));
     ed.append(head);
-    const agents = [...f.agents, ...(f.copies || [])].map(nameOf).filter(Boolean);
-    ed.append(el("p", "lib-confirm", !agents.length ? t("Its folder is moved to magpie's backups.")
-      : f.link ? t("It is taken out of {agents}. The folder it was linked from stays where it is.", { agents: agents.join(", ") })
-      : t("It is taken out of {agents}, and its folder is moved to magpie's backups.", { agents: agents.join(", ") })));
-    if (f.shared) ed.append(el("p", "lib-confirm", t("Its entry in {path} goes to the backups too, so no agent reads it from there.", { path: f.shared })));
-    if (f.others?.length) ed.append(el("p", "lib-confirm", t("{agents} has another skill by this name; that one stays.", { agents: f.others.map(nameOf).join(", ") })));
+    const keep = keepLines(ed, (keep) => foundSaid(f, keep), !f.link && !f.shared);
     const bar = el("div", "bar");
-    const go = button(t("Remove"), "primary danger-fill", async () => { if (await change("skills/remove-found", { name: f.name }, t("{name} removed", { name: f.name }))) closeLibModal(true); });
+    const go = button(t("Remove"), "primary danger-fill", async () => { if (await change("skills/remove-found", keep() ? { name: f.name } : { name: f.name, noBackup: true }, t("{name} removed", { name: f.name }))) closeLibModal(true); });
     bar.append(el("span", "grow"), button(t("Cancel"), "", closeLibModal), go);
     ed.append(bar);
-    modal = { save: () => go.click() };
+    modal = { save: () => go.click(), dirty: () => false }; // the keep box is a choice, not an edit to lose
     openLib(ed);
   }
 

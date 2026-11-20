@@ -113,6 +113,12 @@ func goneCheck(e *GoneError) SkillCheck {
 // such skill. One found in its source again since is left, and said in
 // Unremoved.
 func RemoveGoneSkills(names []string) (*Result, error) {
+	return RemoveGoneSkillsHow(names, true)
+}
+
+// RemoveGoneSkillsHow is RemoveGoneSkills, with keep false deleting their
+// folders rather than moving them to the backups (RemoveSkillsHow).
+func RemoveGoneSkillsHow(names []string, keep bool) (*Result, error) {
 	mu.Lock()
 	l, err := load()
 	mu.Unlock()
@@ -145,7 +151,7 @@ func RemoveGoneSkills(names []string) (*Result, error) {
 		}
 		return nil, fmt.Errorf("no skill is removed from its source")
 	}
-	res, err := RemoveSkills(take)
+	res, err := RemoveSkillsHow(take, keep)
 	if res != nil {
 		res.Unremoved = append(res.Unremoved, left...)
 	}

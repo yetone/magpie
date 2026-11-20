@@ -751,6 +751,9 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			// Replace updates a skill changed here all the same, its
 			// changed version kept with the backups (#1449)
 			Replace bool
+			// NoBackup deletes a skill's folder on skills/remove… rather
+			// than moving it to the backups, as the reader picked
+			NoBackup bool `json:"noBackup"`
 			// a skill's file saved: its place in the skill, its new text,
 			// and what it held when the page opened it
 			File, Text, Was string
@@ -874,7 +877,7 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 				res, err = &library.Result{Changed: []string{}, Problems: []library.Problem{}, Gone: []string{gone.Name}}, nil
 			}
 		case "skills/remove-gone":
-			res, err = library.RemoveGoneSkills(in.Names)
+			res, err = library.RemoveGoneSkillsHow(in.Names, !in.NoBackup)
 		case "skills/update-all":
 			res, err = library.UpdateSkills()
 		case "skills/update-some":
@@ -894,9 +897,9 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 		case "skills/agents-some":
 			res, err = library.SomeSkillsAgents(in.Names, in.Agents, in.On)
 		case "skills/remove":
-			res, err = library.RemoveSkill(in.Name)
+			res, err = library.RemoveSkillsHow([]string{in.Name}, !in.NoBackup)
 		case "skills/remove-all":
-			res, err = library.RemoveSkills(in.Names)
+			res, err = library.RemoveSkillsHow(in.Names, !in.NoBackup)
 		case "skills/group":
 			res, err = library.GroupSkills(in.Old, in.Name, in.Names)
 		case "skills/ungroup":
@@ -910,9 +913,9 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 		case "skills/import-all":
 			res, err = library.ImportSkills(in.Names)
 		case "skills/remove-found":
-			res, err = library.RemoveFoundSkill(in.Name)
+			res, err = library.RemoveFoundSkillsHow([]string{in.Name}, !in.NoBackup)
 		case "skills/remove-found-some":
-			res, err = library.RemoveFoundSkills(in.Names)
+			res, err = library.RemoveFoundSkillsHow(in.Names, !in.NoBackup)
 		case "skills/hand-over":
 			// out of ~/.agents/skills, into the library's own folder (tnt1223)
 			res, err = library.HandOverSkills(oneOrMore(in.Name, in.Names))
