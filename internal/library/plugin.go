@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -789,16 +790,44 @@ func fetchSourceRoot(input string) (root, tmp string, src Source, err error) {
 	return sub, tmp, src, nil
 }
 
+// rootName is the name a plugin at root goes by when nothing in it names it:
+// its folder's, or, for the top of a repository downloaded into tmp, the
+// repository's (#7269). The download's folder is a new temp name on every
+// fetch, and a bundle named after it was a second bundle on each update.
+func rootName(input, root, tmp string) string {
+	if tmp == "" || filepath.Clean(root) != filepath.Clean(tmp) {
+		return filepath.Base(root)
+	}
+	repo := ""
+	if src, ok := githubSource(input); ok {
+		repo = src.Repo
+	} else if src, ok, err := gitSource(input); ok && err == nil {
+		repo = src.Repo
+		if u, err := url.Parse(repo); err == nil && u.Scheme != "" {
+			repo = u.Path
+		} else if _, after, ok := strings.Cut(repo, ":"); ok {
+			repo = after // user@host:group/repo.git
+		}
+	}
+	parts := strings.FieldsFunc(repo, func(r rune) bool { return r == '/' || r == '\\' })
+	for i := len(parts) - 1; i >= 0; i-- {
+		if n := strings.TrimSuffix(parts[i], ".git"); n != "" {
+			return n
+		}
+	}
+	return ""
+}
+
 // findPlugins reads the plugins at root: a marketplace's entries, or the
-// one plugin there.
-func findPlugins(root string) (*PluginProbe, error) {
+// one plugin there, which goes by hint when nothing in it names it.
+func findPlugins(root, hint string) (*PluginProbe, error) {
 	p := &PluginProbe{root: root, Candidates: []PluginCandidate{}}
 	mk, err := readJSONFile(filepath.Join(root, ".claude-plugin", "marketplace.json"))
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, err
 	}
 	if mk == nil {
-		pl, err := readPlugin(root, filepath.Base(root), "", nil)
+		pl, err := readPlugin(root, hint, "", nil)
 		if err != nil {
 			return nil, err
 		}
@@ -901,7 +930,7 @@ func ProbePlugins(input string) (*PluginProbe, error) {
 	if err != nil {
 		return nil, err
 	}
-	p, err := findPlugins(root)
+	p, err := findPlugins(root, rootName(input, root, tmp))
 	if err != nil {
 		if tmp != "" {
 			os.RemoveAll(tmp)
@@ -935,7 +964,7 @@ func InstallPlugins(input string, names, agents []string) (*Result, error) {
 		return nil, err
 	}
 	defer cleanup()
-	return installPlugins(p, input, names, agents)
+	return installPlugins(p, input, names, agents, "")
 }
 
 // pluginProbeFor is the probe of input, from the one the page just made when it
@@ -947,7 +976,7 @@ func pluginProbeFor(input string) (*PluginProbe, func(), error) {
 		probes.Unlock()
 		if e != nil {
 			if _, err := os.Stat(e.tmp); err == nil {
-				if p, err := findPlugins(e.p.root); err == nil {
+				if p, err := findPlugins(e.p.root, rootName(input, e.p.root, e.tmp)); err == nil {
 					p.Source = input
 					return p, func() {}, nil
 				}
@@ -958,7 +987,7 @@ func pluginProbeFor(input string) (*PluginProbe, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	p, err := findPlugins(root)
+	p, err := findPlugins(root, rootName(input, root, tmp))
 	if err != nil {
 		if tmp != "" {
 			os.RemoveAll(tmp)
@@ -973,7 +1002,8 @@ func pluginProbeFor(input string) (*PluginProbe, func(), error) {
 	}, nil
 }
 
-func installPlugins(p *PluginProbe, input string, names, agents []string) (*Result, error) {
+// as is the name an update keeps for the one plugin, "" otherwise.
+func installPlugins(p *PluginProbe, input string, names, agents []string, as string) (*Result, error) {
 	var picked []PluginCandidate
 	switch {
 	case len(names) == 0 && len(p.Candidates) == 1:
@@ -1019,7 +1049,7 @@ func installPlugins(p *PluginProbe, input string, names, agents []string) (*Resu
 		// a marketplace's name for it is its folder's: read with it, so
 		// its parts name that folder, not the one its manifest's name
 		// would have
-		force := ""
+		force := as
 		if len(p.Candidates) > 1 || c.Remote {
 			force = c.Name
 		}
@@ -1320,7 +1350,15 @@ func UpdatePlugin(name string) (*Result, error) {
 		return nil, err
 	}
 	defer cleanup()
-	return installPlugins(p, b.Source, names, nil)
+	// the bundle keeps its name: it is what the projects and agents have it
+	// by, and its folder what a project's Pi package entry names (#7269). A
+	// name derived again can differ: a bundle named before by its
+	// download's temp folder, or a manifest that renamed the plugin.
+	if b.Pick == "" && len(p.Candidates) == 1 {
+		p.Candidates[0].Name = name
+		return installPlugins(p, b.Source, nil, nil, name)
+	}
+	return installPlugins(p, b.Source, names, nil, "")
 }
 
 // ---- the page --------------------------------------------------------------
