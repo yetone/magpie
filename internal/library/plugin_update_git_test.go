@@ -139,3 +139,57 @@ func TestPluginRootName(t *testing.T) {
 		t.Errorf("a folder: %q", got)
 	}
 }
+
+// jinpwng on X: a Pi package from git, looked up again in the same magpie
+// and then given a new commit, is updated to that commit. The update took
+// the download the lookup kept, said it was done, and Pi went on loading
+// the old version until magpie restarted.
+func TestPluginUpdateFetchesPastALookup(t *testing.T) {
+	h := sandbox(t)
+	pluginAgents(t, h)
+	addr, commit := gitRepo(t, map[string]string{
+		"package.json": `{"name":"acme-pi","version":"1.0.0","pi":{"extensions":["./extension.ts"]}}`,
+		"extension.ts": "export default function (pi) { pi.registerCommand('acme-v1', {}) }\n",
+	})
+	t.Cleanup(forgetProbes)
+	if _, err := ProbePlugins(addr); err != nil {
+		t.Fatal(err)
+	}
+	res := ok(t)(InstallPlugins(addr, nil, []string{}))
+	if len(res.Installed) != 1 {
+		t.Fatalf("installed: %+v", res.Installed)
+	}
+	name := res.Installed[0]
+	proj := filepath.Join(t.TempDir(), "proj")
+	gitInit(t, proj)
+	ok(t)(AddProject(proj))
+	ok(t)(ProjectPlugin(proj, name, []string{"pi"}))
+	settings := read(t, filepath.Join(proj, ".pi/settings.json"))
+
+	// the lookup, then the new commit, in the same process
+	if _, err := ProbePlugins(addr); err != nil {
+		t.Fatal(err)
+	}
+	commit(map[string]string{
+		"package.json": `{"name":"acme-pi","version":"2.0.0","pi":{"extensions":["./extension.ts"]}}`,
+		"extension.ts": "export default function (pi) { pi.registerCommand('acme-v2', {}) }\n",
+	})
+	ok(t)(UpdatePlugin(name))
+
+	if s := read(t, filepath.Join(pluginDir(name), "extension.ts")); !strings.Contains(s, "acme-v2") {
+		t.Fatalf("after the update the plugin's folder has %q, want the new commit's", s)
+	}
+	if s := read(t, filepath.Join(pluginDir(name), "package.json")); !strings.Contains(s, `"2.0.0"`) {
+		t.Fatalf("package.json: %s", s)
+	}
+	if after := read(t, filepath.Join(proj, ".pi/settings.json")); after != settings || !strings.Contains(after, pluginDir(name)) {
+		t.Fatalf("the project's settings:\n%s\nwas\n%s", after, settings)
+	}
+
+	// a second commit and a second update, still in the same process
+	commit(map[string]string{"extension.ts": "export default function (pi) { pi.registerCommand('acme-v3', {}) }\n"})
+	ok(t)(UpdatePlugin(name))
+	if s := read(t, filepath.Join(pluginDir(name), "extension.ts")); !strings.Contains(s, "acme-v3") {
+		t.Fatalf("after the second update the plugin's folder has %q", s)
+	}
+}
