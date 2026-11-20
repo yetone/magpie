@@ -51,6 +51,9 @@ func geminiTypes(body []byte, keepUnions bool) []byte {
 		return body
 	}
 	body = geminiSchemaShapes(body)
+	// an object of any fields, which Gemini's Schema can't say, as JSON
+	// text in a string (gemini_free_objects.go, #7363)
+	body = geminiFreeObjects(body)
 	tools := gjson.GetBytes(body, "tools")
 	if !tools.IsArray() || tools.Index <= 0 {
 		return body

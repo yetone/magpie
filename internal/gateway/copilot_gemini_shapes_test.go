@@ -66,7 +66,7 @@ func badGeminiShape(node any, root bool) string {
 
 func TestCopilotGeminiTakesToolShapes(t *testing.T) {
 	cases := []struct{ name, schema, want string }{
-		{"object without properties", `{"type":"object","properties":{"opts":{"type":"object","description":"o"}}}`, `"opts":{"description":"o","properties":{},"type":"object"}`},
+		{"object without properties", `{"type":"object","properties":{"opts":{"type":"object","description":"o"}}}`, `"opts":{"type":"string","description":"o (A JSON object, written as JSON text.)"}`}, // properties {} is answered {}: as JSON text (gemini_free_objects.go, #7363)
 		{"object at the root without properties", `{"type":"object"}`, `"parameters":{"properties":{},"type":"object"}`},
 		{"anyOf of one type beside its type", `{"type":"object","properties":{"v":{"description":"d","type":"string","anyOf":[{"type":"string"},{"type":"string"}]}}}`, `"v":{"description":"d","type":"string"}`},
 		{"anyOf of one type", `{"type":"object","properties":{"v":{"anyOf":[{"type":"string","enum":["a"]},{"type":"string","enum":["b"]}]}}}`, `"v":{"enum":["a","b"],"type":"string"}`},

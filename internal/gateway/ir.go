@@ -449,6 +449,10 @@ type Request struct {
 	// arguments reach the client with the stitched CR dropped
 	// (tool_args_cr.go).
 	CR bool
+	// Free is, for a Gemini model, where each tool's objects of any
+	// fields are, by the tool's name: sent to it as JSON text, they
+	// reach the client read back (gemini_free_objects.go, #7363).
+	Free map[string][][]string
 }
 
 // nsTool is a tool as a Responses client knows it: by its namespace and its

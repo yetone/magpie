@@ -18,7 +18,9 @@ import (
 // at the root, and a tuple array (prefixItems). Each is written as the
 // nearest schema Gemini takes, keeping what the model can act on:
 //
-//   - object with no properties: properties {} added;
+//   - object with no properties: properties {} added (under the root,
+//     geminiTypes then sends it as JSON text in a string: given
+//     properties {}, Copilot's Gemini fills it with {}, #7363);
 //   - anyOf of one type (null apart): that one schema, branches merged
 //     (object properties joined, string enums joined), nullable kept as an
 //     anyOf with null;
