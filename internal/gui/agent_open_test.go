@@ -191,3 +191,70 @@ func TestCodexOpenButton(t *testing.T) {
 		t.Fatalf("Open in terminal opened the app: %v", apps)
 	}
 }
+
+// revealHost is the app's windows, keeping what they were asked to show.
+type revealHost struct {
+	folderOnly
+	shown *[]string
+}
+
+func (h revealHost) RevealFolder(p string) error { *h.shown = append(*h.shown, p); return nil }
+func (h revealHost) OpenFolder(p string) error   { *h.shown = append(*h.shown, p); return nil }
+
+// Show settings file on an Agents row (InkCoalW on X): the file shown is
+// the agent's own, as detected. The page sends only the id; an id that
+// isn't an agent's, or a path, shows nothing, and the page served to a
+// browser shows nothing on the computer it runs on.
+func TestAgentRevealShowsOnlyItsFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("claude here is a POSIX shell's program")
+	}
+	h := sandboxHome(t)
+	dir := t.TempDir()
+	prog := filepath.Join(dir, "claude")
+	if err := os.WriteFile(prog, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+	proc.Forget()
+	t.Cleanup(proc.Forget)
+	a, err := agent.Find("claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Path == "" || !strings.HasPrefix(a.Path, h) {
+		t.Fatalf("claude's file is %q, not in the sandbox %q", a.Path, h)
+	}
+	if err := os.MkdirAll(filepath.Dir(a.Path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(a.Path, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var shown []string
+	post := func(w Windows, id string) int {
+		t.Helper()
+		b, _ := json.Marshal(map[string]string{"agent": id})
+		rec := httptest.NewRecorder()
+		Handler(w, nil).ServeHTTP(rec, httptest.NewRequest("POST", "/api/agents/reveal", strings.NewReader(string(b))))
+		return rec.Code
+	}
+	for _, id := range []string{"nope", a.Path, "../claude", ""} {
+		if code := post(revealHost{shown: &shown}, id); code == http.StatusNoContent || len(shown) != 0 {
+			t.Fatalf("%q: %d, shown %q", id, code, shown)
+		}
+	}
+	if code := post(webTab{}, "claude"); code == http.StatusNoContent {
+		t.Fatalf("the browser's page showed a file: %d", code)
+	}
+	if code := post(revealHost{shown: &shown}, "claude"); code != http.StatusNoContent || len(shown) != 1 || shown[0] != a.Path {
+		t.Fatalf("claude: %d, shown %q, want %q", code, shown, a.Path)
+	}
+	// not written yet: its folder
+	os.Remove(a.Path)
+	shown = nil
+	if code := post(revealHost{shown: &shown}, "claude"); code != http.StatusNoContent || len(shown) != 1 || shown[0] != filepath.Dir(a.Path) {
+		t.Fatalf("claude with no file: %d, shown %q", code, shown)
+	}
+}

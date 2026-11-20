@@ -8,7 +8,9 @@
 // API is faked here. lileo0668 on Discord: every agent with a program has
 // "Copy launch command" there too, the line the server made, on every
 // system, the web build and the panel included; a desktop app has none.
-// Narrow too.
+// Narrow too. InkCoalW on X: "Show settings file" posts agents/reveal with
+// the id alone (the server finds the file), on the window, not in the web
+// build or the panel.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -33,6 +35,7 @@ function server(lang, web, posts) {
     if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:${web}};` });
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
     if (url.pathname === "/api/state") return json({ ...state, settings: { lang, theme: "light" } });
+    if (url.pathname === "/api/agents/reveal") { posts.push([url.pathname, req.postData()]); return route.fulfill({ status: 204, body: "" }); }
     if (url.pathname === "/api/agents/open") { posts.push([url.pathname, req.postData()]); return route.fulfill({ status: 204, body: "" }); }
     if (url.pathname === "/api/copy") { posts.push([url.pathname, req.postData()]); return route.fulfill({ status: 204, body: "" }); }
     if (url.pathname === "/api/usage/quotas") return json([]);
@@ -48,11 +51,11 @@ function server(lang, web, posts) {
 }
 
 const words = {
-  en: { item: "Open in terminal", copy: "Copy launch command" },
-  zh: { item: "在终端中打开", copy: "复制启动命令" },
-  "zh-TW": { item: "在終端機中開啟", copy: "複製啟動命令" },
-  ja: { item: "ターミナルで開く", copy: "起動コマンドをコピー" },
-  de: { item: "Im Terminal öffnen", copy: "Startbefehl kopieren" },
+  en: { item: "Open in terminal", copy: "Copy launch command", show: "Show settings file" },
+  zh: { item: "在终端中打开", copy: "复制启动命令", show: "在文件夹中显示设置文件" },
+  "zh-TW": { item: "在終端機中開啟", copy: "複製啟動命令", show: "在資料夾中顯示設定檔" },
+  ja: { item: "ターミナルで開く", copy: "起動コマンドをコピー", show: "設定ファイルをフォルダで表示" },
+  de: { item: "Im Terminal öffnen", copy: "Startbefehl kopieren", show: "Einstellungsdatei im Ordner zeigen" },
 };
 const row = (id) => `.row.agent[data-id="${id}"]`;
 
@@ -107,7 +110,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await item().click();
       await sent;
       await page.locator(".pop.row-menu").waitFor({ state: "detached" });
-      assert.deepEqual(posts.map(([p, b]) => [p, JSON.parse(b)]), [["/api/agents/open", { agent: "codex", terminal: true }]], "the id, and the terminal asked for");
+      assert.deepEqual(posts.splice(0).map(([p, b]) => [p, JSON.parse(b)]), [["/api/agents/open", { agent: "codex", terminal: true }]], "the id, and the terminal asked for");
+
+      await menu("codex");
+      const show = page.locator(".pop.row-menu .rm-item", { hasText: w.show });
+      assert.equal(await show.count(), 1, "its settings file can be shown");
+      const shown = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/agents/reveal");
+      await show.click();
+      await shown;
+      assert.deepEqual(posts.map(([p, b]) => [p, JSON.parse(b)]), [["/api/agents/reveal", { agent: "codex" }]], "the id alone");
       assert.deepEqual(errors, []);
     });
   }
@@ -119,6 +130,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     await page.locator(".pop.row-menu").waitFor();
     assert.equal(await page.locator(".pop.row-menu .rm-item", { hasText: "Open in terminal" }).count(), 0);
     assert.equal(await page.locator(".pop.row-menu .rm-item", { hasText: "Copy launch command" }).count(), 1, "copying is for the web too");
+    assert.equal(await page.locator(".pop.row-menu .rm-item", { hasText: "Show settings file" }).count(), 0, "a file on the server's computer isn't shown");
     assert.deepEqual(errors, []);
   });
 
@@ -129,6 +141,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     await page.locator(".pop.row-menu").waitFor();
     assert.equal(await page.locator(".rm-item", { hasText: "Open in terminal" }).count(), 0);
     assert.equal(await page.locator(".rm-item", { hasText: "Copy launch command" }).count(), 1, "copying is for the panel too");
+    assert.equal(await page.locator(".rm-item", { hasText: "Show settings file" }).count(), 0);
     assert.deepEqual(posts, []);
     assert.deepEqual(errors, []);
   });

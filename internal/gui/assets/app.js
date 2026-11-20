@@ -3902,7 +3902,9 @@ function openAgentMenu(anchor, a, inFold, at) {
   // coolmantou, lileo0668
   // Codex's desktop app, by the setting Open Codex with (Yink88564391 on
   // X): in the menu, not on the row, so the row lines up with the others
-  const app = a.openApp && mode != "panel" && !web, o = a.terminal && mode != "panel" && !web, term = [...app ? [{ name: "Open the Codex app", icon: LAUNCH_GLYPH, sep: !0, run: () => api("agents/open", { agent: a.id }).catch(statusErr) }] : [], ...o ? [{ name: "Open in terminal", icon: LAUNCH_GLYPH, sep: !app, run: () => api("agents/open", { agent: a.id, terminal: !0 }).catch(statusErr) }] : [], ...a.command ? [{ name: "Copy launch command", icon: COPY_ICON, sep: !o && !app, run: () => copy(a.command, t("Launch command")) }] : []];
+  const app = a.openApp && mode != "panel" && !web, o = a.terminal && mode != "panel" && !web, term = [...app ? [{ name: "Open the Codex app", icon: LAUNCH_GLYPH, sep: !0, run: () => api("agents/open", { agent: a.id }).catch(statusErr) }] : [], ...o ? [{ name: "Open in terminal", icon: LAUNCH_GLYPH, sep: !app, run: () => api("agents/open", { agent: a.id, terminal: !0 }).catch(statusErr) }] : [], ...a.command ? [{ name: "Copy launch command", icon: COPY_ICON, sep: !o && !app, run: () => copy(a.command, t("Launch command")) }] : [],
+    // its whole file at hand, as CC Switch has it (InkCoalW on X)
+    ...a.path && mode != "panel" && !web ? [{ name: "Show settings file", icon: "M4.5 2.5h5l2.5 2.5v8.5h-7.5zM9.5 2.5V5H12", run: () => api("agents/reveal", { agent: a.id }).catch(statusErr) }] : []];
   const acts = inFold && isHidden(a)
     ? [{ name: "Show", icon: EYE, run: () => setAgentHidden(a, false) }]
     : inFold

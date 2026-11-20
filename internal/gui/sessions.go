@@ -10,6 +10,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"runtime/debug"
@@ -458,6 +459,42 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 			return
 		}
 		if err := agentTerminal(run, name, settings.Shared().SessionTerminal); err != nil {
+			fail(rw, err)
+			return
+		}
+		rw.WriteHeader(http.StatusNoContent)
+	})
+	// agents/reveal shows an agent's settings file, the one magpie writes,
+	// in the file manager, from its row's menu (InkCoalW on X: its whole
+	// file at hand, as CC Switch has it). The page sends only the agent's
+	// id; the path is the agent's as detected, never one the page names.
+	mux.HandleFunc("POST /api/agents/reveal", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ Agent string }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		if isWeb(w) {
+			fail(rw, errors.New("showing a file is only for the desktop app"))
+			return
+		}
+		path := ""
+		for _, a := range agent.Detected() {
+			if a.ID == in.Agent {
+				path = a.Path
+			}
+		}
+		if path == "" {
+			fail(rw, errors.New("no settings file for this agent"))
+			return
+		}
+		var err error
+		if _, e := os.Stat(path); e == nil {
+			err = revealIn(w, path)
+		} else {
+			err = w.OpenFolder(filepath.Dir(path))
+		}
+		if err != nil {
 			fail(rw, err)
 			return
 		}

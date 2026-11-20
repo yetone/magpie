@@ -517,6 +517,7 @@ var notYet = map[string]string{
 	"GET /api/sessions/progress":                 U,  // sessions.go
 	"GET /api/sessions/stats":                    U,  // sessions.go
 	"POST /api/agents/open":                      W,  // sessions.go
+	"POST /api/agents/reveal":                    W,  // sessions.go
 	"POST /api/sessions/carry":                   U,  // sessions.go
 	"POST /api/sessions/export":                  U,  // sessions.go
 	"POST /api/sessions/terminal":                W,  // sessions.go
