@@ -38,6 +38,9 @@ type Result struct {
 	// otherAPI: the vendor said the model isn't served on the API asked
 	// (catalog.WrongEndpoint), so another may be asked instead
 	otherAPI bool
+	// modelGone: the vendor said it serves this key not the model asked,
+	// on any API (modelUnservedHere), so another model may be asked
+	modelGone bool
 	// Queued is the vendor's queue message when a plugin's model was
 	// queued instead of answered (Qoder's "queued the request for ...").
 	// The model is served, so the test is OK: it waits where an agent's
@@ -109,7 +112,25 @@ func (p Provider) Test(ctx context.Context) []Result {
 		}
 		url, body := tiny(q, proto, UpstreamName(p, model))
 		ctx, b := q.tested(p.loggedAs(ctx, q), url, body)
-		out = append(out, probe(ctx, q, proto, url, b, model, testWait))
+		r := probe(ctx, q, proto, url, b, model, testWait)
+		// a model the vendor lists and serves this key on no account
+		// (sub2api's 404 "… is not supported by any configured account in
+		// this group") says nothing of the key: the next model it sees is
+		// asked, a few at most
+		for tried := []string{model}; r.modelGone && len(tried) < testModels; {
+			next := p.testModel(q, proto, tried...)
+			if next == "" {
+				break
+			}
+			tried = append(tried, next)
+			if len(p.KeysOn()) == 0 {
+				q = p.routedTo(next)
+			}
+			url, body := tiny(q, proto, UpstreamName(p, next))
+			ctx, b := q.tested(p.loggedAs(ctx, q), url, body)
+			r = probe(ctx, q, proto, url, b, next, testWait)
+		}
+		out = append(out, r)
 	}
 	if len(out) == 0 && p.zenPublic() {
 		out = append(out, Result{Protocol: Chat, Error: zenPublicNone})
@@ -694,7 +715,7 @@ const zenPublicNone = "no free model of OpenCode Zen is listed for this API: the
 // is served on, or none (z'x on Discord: Test asked public for
 // claude-fable-5 on Messages, gemini-3-flash on Gemini and big-pickle on
 // Responses, and every one failed, though big-pickle answers on chat).
-func (p Provider) testModel(q Provider, proto Protocol) string {
+func (p Provider) testModel(q Provider, proto Protocol, skip ...string) string {
 	k := q.first()
 	// a model the key's vendor lists it, and the user lets it serve
 	// (AccountModels, #474), as routing has it
@@ -729,7 +750,7 @@ func (p Provider) testModel(q Provider, proto Protocol) string {
 				if public && !p.OpenCodeFree(m.ID) {
 					continue
 				}
-				if !p.DecidesModel(m.ID) && !off(p.ID, m.ID) && want(m.ID) && sees(m.ID) {
+				if !p.DecidesModel(m.ID) && !off(p.ID, m.ID) && !slices.Contains(skip, m.ID) && want(m.ID) && sees(m.ID) {
 					return m.ID
 				}
 			}
@@ -1052,8 +1073,30 @@ func probeOnce(ctx context.Context, p Provider, proto Protocol, url string, body
 	}
 	r.otherAPI = catalog.WrongEndpoint(res.StatusCode, b)
 	r.Unserved = catalog.APIRefused(res.StatusCode, b)
+	r.modelGone = !r.otherAPI && !r.Unserved && modelUnservedHere(res.StatusCode, b)
 	return r
 }
+
+// modelUnservedHere is a refusal of the model asked as one the vendor
+// doesn't serve the key, the key itself good: sub2api's 404 "Model
+// \"gpt-5.6\" is not supported by any configured account in this group"
+// for a model its /v1/models lists (Sidrune AI, Axo 11-20). The words are
+// ModelUnserved's, the gateway's for resting that model alone, with none
+// of a sign-in's beside them.
+func modelUnservedHere(status int, body []byte) bool {
+	switch status {
+	case http.StatusBadRequest, http.StatusForbidden, http.StatusNotFound, http.StatusUnprocessableEntity:
+	default:
+		return false
+	}
+	words := catalog.Words(body)
+	return ModelUnserved.Match(words) && !signInWords.Match(words)
+}
+
+// testModels is how many models a test of one endpoint asks at most, the
+// first and the next ones when each is refused as a model the key isn't
+// served (Result.modelGone).
+const testModels = 3
 
 // streams reports whether a request body asks for a stream.
 func streams(body []byte) bool {

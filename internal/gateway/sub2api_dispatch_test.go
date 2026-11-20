@@ -64,3 +64,13 @@ func TestGroupWithoutMessagesGoesToChat(t *testing.T) {
 		t.Fatalf("Messages asked %d times, want once; chat %d, want 3 (%v)", calls["/v1/messages"], calls["/v1/chat/completions"], calls)
 	}
 }
+
+// sub2api's 404 for a model no account of the key's group serves
+// (no_account_error.go; Sidrune AI's gpt-5.6, Axo 11-20) rests that model
+// on the key alone, the key asked again for others.
+func TestSub2apiNoAccountIsTheModels(t *testing.T) {
+	body := []byte(`{"error":{"type":"model_not_found","message":"Model \"gpt-5.6\" is not supported by any configured account in this group"}}`)
+	if !modelRefused(http.StatusNotFound, body) {
+		t.Error("not read as the model refused")
+	}
+}

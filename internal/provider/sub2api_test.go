@@ -2,9 +2,14 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
+	"sync"
 	"testing"
+
+	"github.com/yetone/magpie/internal/catalog"
 )
 
 // sub2apiNoDispatch is sub2api's 403 to /v1/messages for a key whose group
@@ -39,5 +44,90 @@ func TestTestGroupWithoutMessages(t *testing.T) {
 	}
 	if a := got[Anthropic]; a.OK || !a.Unserved || a.Status != http.StatusForbidden {
 		t.Errorf("anthropic: %+v, want unserved", a)
+	}
+}
+
+// sub2api's 404 for a model its /v1/models lists that no account of the
+// key's group serves (no_account_error.go), as a Sidrune AI China-region
+// key's Test got it for gpt-5.6 (Axo, 11-20).
+const sub2apiNoAccount = `{"error":{"type":"model_not_found","message":"Model \"gpt-5.6\" is not supported by any configured account in this group"}}`
+
+// A key whose group serves none of the first model it lists tests on the
+// next one, not as a failure of the key.
+func TestTestNextModelWhenUnserved(t *testing.T) {
+	sandboxHome(t)
+	var mu sync.Mutex
+	var asked []string
+	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			_, _ = rw.Write([]byte(`{"object":"list","data":[{"id":"gpt-5.6"},{"id":"gpt-5.5"}]}`))
+			return
+		}
+		var in struct {
+			Model string `json:"model"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		mu.Lock()
+		asked = append(asked, in.Model)
+		mu.Unlock()
+		rw.Header().Set("Content-Type", "application/json")
+		if in.Model == "gpt-5.6" {
+			rw.WriteHeader(http.StatusNotFound)
+			_, _ = rw.Write([]byte(sub2apiNoAccount))
+			return
+		}
+		_, _ = rw.Write([]byte(`{"id":"c","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`))
+	}))
+	defer srv.Close()
+	if err := catalog.SaveLive("relay", srv.URL+"/v1", []catalog.Model{{ID: "gpt-5.6"}, {ID: "gpt-5.5"}}); err != nil {
+		t.Fatal(err)
+	}
+	p := Provider{ID: "relay", Name: "Relay", Chat: srv.URL + "/v1", Key: "sk-1"}
+	rs := p.Test(context.Background())
+	if len(rs) != 1 || !rs[0].OK || rs[0].Model != "gpt-5.5" {
+		t.Errorf("results %+v, want chat OK on gpt-5.5", rs)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if !slices.Equal(asked, []string{"gpt-5.6", "gpt-5.5"}) {
+		t.Errorf("asked %q", asked)
+	}
+}
+
+// A model refused as one the key isn't served, every model the key has,
+// asks a few at most and reports the last refusal.
+func TestTestUnservedModelsAskedAFew(t *testing.T) {
+	sandboxHome(t)
+	var mu sync.Mutex
+	n := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			_, _ = rw.Write([]byte(`{"object":"list","data":[{"id":"m1"},{"id":"m2"},{"id":"m3"},{"id":"m4"},{"id":"m5"},{"id":"m6"}]}`))
+			return
+		}
+		mu.Lock()
+		n++
+		mu.Unlock()
+		rw.Header().Set("Content-Type", "application/json")
+		rw.WriteHeader(http.StatusNotFound)
+		_, _ = rw.Write([]byte(sub2apiNoAccount))
+	}))
+	defer srv.Close()
+	var ms []catalog.Model
+	for _, id := range []string{"m1", "m2", "m3", "m4", "m5", "m6"} {
+		ms = append(ms, catalog.Model{ID: id})
+	}
+	if err := catalog.SaveLive("relay", srv.URL+"/v1", ms); err != nil {
+		t.Fatal(err)
+	}
+	p := Provider{ID: "relay", Name: "Relay", Chat: srv.URL + "/v1", Key: "sk-1"}
+	rs := p.Test(context.Background())
+	if len(rs) != 1 || rs[0].OK || rs[0].Status != http.StatusNotFound {
+		t.Errorf("results %+v, want one 404", rs)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if n != testModels {
+		t.Errorf("asked %d times, want %d", n, testModels)
 	}
 }
