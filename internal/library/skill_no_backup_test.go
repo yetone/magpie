@@ -45,9 +45,10 @@ func TestRemoveSkillWithoutBackup(t *testing.T) {
 }
 
 // The same for a skill an agent has of its own: removed without a backup
-// its folders are deleted; a link only unlinked, its folder kept; and an
-// entry in ~/.agents/skills, which other tools read, still goes to the
-// backups, never deleted.
+// its folders are deleted, its entry in ~/.agents/skills too (it leaves
+// that folder either way: kept, it only sat in the backups, and most
+// users' skills are there, @Eternalfate__ on X); a link only unlinked,
+// its folder kept, a link in ~/.agents/skills too.
 func TestRemoveFoundSkillWithoutBackup(t *testing.T) {
 	h := sandbox(t)
 	claude := filepath.Join(h, ".claude/skills")
@@ -63,20 +64,36 @@ func TestRemoveFoundSkillWithoutBackup(t *testing.T) {
 	if err := os.Symlink(dev, filepath.Join(claude, "dev")); err != nil {
 		t.Fatal(err)
 	}
+	// an entry in ~/.agents/skills that is a link to a folder of the
+	// user's: only the link goes
+	work := filepath.Join(h, "src/work")
+	skill(t, work, "work", "Mine, elsewhere")
+	if err := os.Symlink(work, filepath.Join(h, ".agents/skills/work")); err != nil {
+		t.Fatal(err)
+	}
 
-	ok(t)(RemoveFoundSkillsHow([]string{"notes", "pdf", "dev"}, false))
-	for _, p := range []string{filepath.Join(claude, "notes"), filepath.Join(h, ".codex/skills/notes"), filepath.Join(claude, "pdf"), filepath.Join(claude, "dev")} {
+	ok(t)(RemoveFoundSkillsHow([]string{"notes", "pdf", "dev", "work"}, false))
+	for _, p := range []string{filepath.Join(claude, "notes"), filepath.Join(h, ".codex/skills/notes"), filepath.Join(claude, "pdf"), filepath.Join(claude, "dev"),
+		shared, filepath.Join(h, ".agents/skills/work")} {
 		if _, err := os.Lstat(p); !os.IsNotExist(err) {
 			t.Errorf("%s is still there", p)
 		}
 	}
-	if m, _ := filepath.Glob(filepath.Join(BackupDir(), "*", "*", "skills", "notes")); len(m) != 0 {
-		t.Errorf("notes kept with the backups, though not asked: %v", m)
-	}
-	if m, _ := filepath.Glob(filepath.Join(BackupDir(), "*", "*", "skills", "pdf", "SKILL.md")); len(m) != 1 {
-		t.Errorf("the shared entry wasn't kept with the backups: %v", m)
+	if m, _ := filepath.Glob(filepath.Join(BackupDir(), "*", "*", "skills", "*")); len(m) != 0 {
+		t.Errorf("kept with the backups, though not asked: %v", m)
 	}
 	if read(t, filepath.Join(dev, "SKILL.md")) == "" {
 		t.Error("the folder Claude Code linked to is gone")
+	}
+	if read(t, filepath.Join(work, "SKILL.md")) == "" {
+		t.Error("the folder ~/.agents/skills linked to is gone")
+	}
+
+	// kept, as by default, the shared entry goes to the backups
+	again := filepath.Join(h, ".agents/skills/again")
+	skill(t, again, "again", "Again")
+	ok(t)(RemoveFoundSkill("again"))
+	if m, _ := filepath.Glob(filepath.Join(BackupDir(), "*", "*", "skills", "again", "SKILL.md")); len(m) != 1 {
+		t.Errorf("the shared entry wasn't kept with the backups: %v", m)
 	}
 }

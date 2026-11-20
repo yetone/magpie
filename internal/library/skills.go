@@ -607,13 +607,6 @@ func linked(p string) bool {
 // Goose, Cindy): one link there, whichever of them it's for.
 func sharedSkillsDir() string { return filepath.Join(home(), ".agents", "skills") }
 
-// inSharedDir is whether p is an entry of ~/.agents/skills, however its
-// folder is reached: the user's own, which other tools read too, that
-// magpie never deletes.
-func inSharedDir(p string) bool {
-	return realDir(filepath.Dir(p)) == realDir(sharedSkillsDir())
-}
-
 // sharedHas is whether the library's skill by that name is kept in
 // ~/.agents/skills, so every agent that reads the shared folder has it,
 // whatever the library gives (sharedEntry).
@@ -2930,10 +2923,13 @@ func removeFound(found []FoundSkill, name string, keep bool) error {
 			}
 			continue
 		}
-		if !keep && !inSharedDir(e.p) {
+		if !keep {
 			// not a link (above): the skill's own folder, deleted as asked.
-			// One in ~/.agents/skills, which other tools read too, is never
-			// deleted: it goes to the backups as ever
+			// One in ~/.agents/skills too (@Eternalfate__ on X: most skills
+			// are there, so the sheet never had the tick): it leaves that
+			// folder either way, and the other tools reading it lose it
+			// either way; kept, it only sat in the backups. A folder the
+			// entry links to is never reached here (above)
 			if err := os.RemoveAll(e.p); err != nil {
 				return err
 			}

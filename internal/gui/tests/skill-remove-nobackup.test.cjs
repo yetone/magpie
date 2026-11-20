@@ -4,10 +4,15 @@
 // copy in magpie's backups", ticked unless the reader unticked it last time
 // (remembered in this browser). Unticked, what the sheet says changes to
 // the folder being deleted, and Remove posts noBackup: true; ticked, it
-// posts what it did before. A skill linked from a folder of the user's,
-// and an agent's own skill with an entry in ~/.agents/skills, have no tick:
-// nothing of theirs is deleted either way. Chromium and WebKit, 980px and
-// 440px, in en, zh, zh-TW, ja and de; nothing runs off the page sideways.
+// posts what it did before. A skill linked from a folder of the user's
+// has no tick: only the link goes. An agent's own skill with its folder in
+// ~/.agents/skills, where most users' skills are, has the tick (the same
+// reader saw none on any sheet, v0.1.4594): it leaves that folder either
+// way, deleted or kept in the backups as the tick says; one there that is
+// a link has none. Remove all counts a skill brought in from the agents as
+// going back to them, not as a folder kept or deleted, and with only such
+// and linked ones has no tick. Chromium and WebKit, 980px and 440px, in
+// en, zh, zh-TW, ja and de; nothing runs off the page sideways.
 // No backend: the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -87,10 +92,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           skills: [
             { name: "notes", kind: "", description: "Notes", agents: ["claude"] },
             { name: "lint", kind: "folder", description: "Lint", source: `${HOME}/.agents/skills/lint`, agents: ["claude"] },
+            { name: "brought", kind: "folder", description: "Brought in", source: `${HOME}/.agents/skills/brought`, agents: ["codex"], back: ["codex"] },
           ],
           found: [
             { name: "old", description: "Not wanted", agents: ["claude"] },
             { name: "grilling", description: "Grill a plan", agents: ["goose"], shared: `${HOME}/.agents/skills/grilling` },
+            { name: "web", description: "Web", agents: ["claude"], link: `${HOME}/src/web`, shared: `${HOME}/.agents/skills/web` },
           ],
         };
         const posts = [], errors = [];
@@ -118,6 +125,22 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await sheet.locator(".bar button:not(.primary)").click();
           await sheet.waitFor({ state: "detached" });
         };
+        const removeAll = async () => {
+          await page.locator("#view-library .lib-skillshead .lib-barmore").click();
+          await page.locator(".row-menu .rm-item.lib-everyrm").click();
+          await sheet.waitFor();
+        };
+
+        // Remove all: the one brought in goes back, only notes' folder is
+        // kept, so the tick is for that one
+        await removeAll();
+        assert.equal(await box.count(), 1, "no tick with a folder of magpie's");
+        assert.equal((await lines()).at(-1), [
+          w("{n} go back to the agents they were brought in from, as they were.", { n: 1 }),
+          w("{n} folders are moved to magpie's backups (Backups, at the top of the Library), not deleted.", { n: 1 }),
+          w("{n} linked from folders of your own are only unlinked: those folders stay where they are.", { n: 1 }),
+        ].join(" "));
+        await cancel();
 
         // the library's own folder: ticked at first, as it always was
         await ask("notes");
@@ -140,6 +163,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(posts.shift(), { what: "skills/remove", body: { name: "notes", noBackup: true } });
         await row("notes").waitFor({ state: "detached" });
 
+        // Remove all with only a linked one and one brought in: no tick
+        await removeAll();
+        assert.equal(await box.count(), 0, "a tick with nothing to keep or delete");
+        assert.equal((await lines()).at(-1), [
+          w("{n} go back to the agents they were brought in from, as they were.", { n: 1 }),
+          w("{n} linked from folders of your own are only unlinked: those folders stay where they are.", { n: 1 }),
+        ].join(" "));
+        await cancel();
+
         // linked from a folder of the user's: no tick, its folder stays
         await ask("lint");
         assert.equal(await box.count(), 0, "a linked skill has the tick");
@@ -156,9 +188,32 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await sheet.waitFor({ state: "detached" });
         assert.deepEqual(posts.shift(), { what: "skills/remove-found", body: { name: "old" } });
 
-        // one in ~/.agents/skills: never deleted, so no tick
+        // one in ~/.agents/skills, as most are: the same tick
+        const at = `${HOME}/.agents/skills/grilling`;
         await ask("grilling");
-        assert.equal(await box.count(), 0, "a shared skill has the tick");
+        assert.equal(await box.count(), 1, "a skill in ~/.agents/skills has no tick");
+        assert.equal(await box.isChecked(), true);
+        assert.deepEqual(await lines(), [
+          w("It is taken out of {agents}, and its folder is moved to magpie's backups.", { agents: "Goose" }),
+          w("Its entry in {path} goes to the backups too, so no agent reads it from there.", { path: at }),
+        ]);
+        await sheet.locator("label.lib-keepbox").click();
+        assert.deepEqual(await lines(), [
+          w("It is taken out of {agents}, and its folder is deleted, with no copy kept.", { agents: "Goose" }),
+          w("Its entry in {path} is deleted too, so no agent reads it from there.", { path: at }),
+        ]);
+        assert.deepEqual(await sideways(page), [], "sideways with the tick");
+        await sheet.locator(".bar button.primary").click();
+        await sheet.waitFor({ state: "detached" });
+        assert.deepEqual(posts.shift(), { what: "skills/remove-found", body: { name: "grilling", noBackup: true } });
+
+        // a link there to a folder of the user's: only the link goes, no tick
+        await ask("web");
+        assert.equal(await box.count(), 0, "a linked skill has the tick");
+        assert.deepEqual(await lines(), [
+          w("It is taken out of {agents}. The folder it was linked from stays where it is.", { agents: "Claude Code" }),
+          w("Its link in {path} goes too, so no agent reads it from there.", { path: `${HOME}/.agents/skills/web` }),
+        ]);
         await cancel();
         assert.deepEqual(posts, []);
         assert.deepEqual(errors, []);

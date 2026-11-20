@@ -8172,10 +8172,14 @@ magpie.plugin("library", (ctx) => {
   // every skill, or those picked (#1852)
   function confirmRemoveEverySkill(some) {
     const skills = (some || lib.skills).slice(), names = skills.map((s) => s.name), n = names.length;
-    const linked = skills.filter((s) => s.kind === "folder").length, kept = n - linked;
+    // brought in from the agents: they go back to them (putBack), nothing
+    // of theirs kept or deleted, so they count for neither, nor the tick
+    const back = skills.filter((s) => s.back?.length).length;
+    const linked = skills.filter((s) => s.kind === "folder" && !s.back?.length).length, kept = n - linked - back;
     const projects = (lib.projects || []).filter((p) => names.some((x) => p.skills?.[x]?.length)).length;
     const where = (keep) => {
       const w = [];
+      if (back) w.push(t("{n} go back to the agents they were brought in from, as they were.", { n: back }));
       if (kept) w.push(keep ? t("{n} folders are moved to magpie's backups (Backups, at the top of the Library), not deleted.", { n: kept })
         : t("{n} folders are deleted, with no copy kept.", { n: kept }));
       if (linked) w.push(t("{n} linked from folders of your own are only unlinked: those folders stay where they are.", { n: linked }));
@@ -9102,25 +9106,25 @@ magpie.plugin("library", (ctx) => {
     const head = el("div", "ehead");
     head.append(glyph(GLYPH.trash), el("b", "", n === 1 ? t("Remove {name}?", { name: names[0] }) : t("Remove {n} skills?", { n })));
     ed.append(head);
-    // own: folders deleted when no copy is kept; one with an entry in the
-    // shared folder (other tools' too) goes to the backups either way
-    const linked = some.filter((f) => f.link).length, kept = n - linked, own = some.filter((f) => !f.link && !f.shared).length;
+    // kept: folders moved to the backups, or deleted when no copy is kept,
+    // an entry in ~/.agents/skills too: it leaves that folder either way
+    // (@Eternalfate__ on X: most skills are there, and had no tick)
+    const linked = some.filter((f) => f.link).length, kept = n - linked;
     const keep = keepLines(ed, (keep) => n === 1 ? foundSaid(some[0], keep) : (() => {
       const lines = [];
       const agents = [...new Set(some.flatMap((f) => [...f.agents, ...(f.copies || [])]))].map(nameOf).filter(Boolean);
       if (agents.length) lines.push(t("They are taken out of {agents}.", { agents: agents.join(", ") }));
-      const shared = some.filter((f) => f.shared).length;
+      const shared = some.filter((f) => f.shared && !f.link).length;
       const where = [];
-      if (keep ? kept : own) where.push(keep ? t("{n} folders are moved to magpie's backups (Backups, at the top of the Library), not deleted.", { n: kept })
-        : t("{n} folders are deleted, with no copy kept.", { n: own }));
+      if (kept) where.push(keep ? t("{n} folders are moved to magpie's backups (Backups, at the top of the Library), not deleted.", { n: kept })
+        : t("{n} folders are deleted, with no copy kept.", { n: kept }));
       if (linked) where.push(t("{n} linked from folders of your own are only unlinked: those folders stay where they are.", { n: linked }));
       lines.push(where.join(" "));
-      // magpie never deletes in the shared folder, other tools' too: an
-      // entry there goes to the backups either way (removeFound)
-      if (shared) lines.push(t("{n} have an entry in the shared skills folder, which goes to the backups too, so no agent reads them from there.", { n: shared }));
+      if (shared) lines.push(keep ? t("{n} have an entry in the shared skills folder, which goes to the backups too, so no agent reads them from there.", { n: shared })
+        : t("{n} have an entry in the shared skills folder, which is deleted too, so no agent reads them from there.", { n: shared }));
       if (some.some((f) => f.others?.length)) lines.push(t("Another agent's own skill by one of these names stays."));
       return lines;
-    })(), own > 0);
+    })(), kept > 0);
     const bar = el("div", "bar");
     const go = button(n === 1 ? t("Remove") : t("Remove {n}", { n }), "primary danger-fill", async () => { go.disabled = true; if (await removeFoundSome(names, !keep())) closeLibModal(true); else go.disabled = false; });
     bar.append(el("span", "grow"), button(t("Cancel"), "", closeLibModal), go);
@@ -9165,8 +9169,11 @@ magpie.plugin("library", (ctx) => {
         : f.link ? t("It is taken out of {agents}. The folder it was linked from stays where it is.", { agents: agents.join(", ") })
         : keep ? t("It is taken out of {agents}, and its folder is moved to magpie's backups.", { agents: agents.join(", ") })
         : t("It is taken out of {agents}, and its folder is deleted, with no copy kept.", { agents: agents.join(", ") }),
-      // never deleted, as the shared folder is other tools' too (removeFound)
-      f.shared && t("Its entry in {path} goes to the backups too, so no agent reads it from there.", { path: f.shared }),
+      // its entry in ~/.agents/skills leaves it either way, deleted with
+      // its folder when no copy is kept; a link there only goes
+      f.shared && (f.link ? t("Its link in {path} goes too, so no agent reads it from there.", { path: f.shared })
+        : keep ? t("Its entry in {path} goes to the backups too, so no agent reads it from there.", { path: f.shared })
+        : t("Its entry in {path} is deleted too, so no agent reads it from there.", { path: f.shared })),
       f.others?.length && t("{agents} has another skill by this name; that one stays.", { agents: f.others.map(nameOf).join(", ") }),
     ];
   }
@@ -9176,7 +9183,7 @@ magpie.plugin("library", (ctx) => {
     const head = el("div", "ehead");
     head.append(glyph(GLYPH.trash), el("b", "", t("Remove {name}?", { name: f.name })));
     ed.append(head);
-    const keep = keepLines(ed, (keep) => foundSaid(f, keep), !f.link && !f.shared);
+    const keep = keepLines(ed, (keep) => foundSaid(f, keep), !f.link);
     const bar = el("div", "bar");
     const go = button(t("Remove"), "primary danger-fill", async () => { if (await change("skills/remove-found", keep() ? { name: f.name } : { name: f.name, noBackup: true }, t("{name} removed", { name: f.name }))) closeLibModal(true); });
     bar.append(el("span", "grow"), button(t("Cancel"), "", closeLibModal), go);
