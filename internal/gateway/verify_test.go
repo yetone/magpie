@@ -31,9 +31,11 @@ func TestVerifyRefusalRestsTheLastOne(t *testing.T) {
 		t.Fatalf("try %+v rest %+v", try, try.Rest)
 	}
 
-	// the agent reconnects at once: held, not sent on
+	// the agent reconnects at once: held, not sent on, and told the same:
+	// the vendor's words and where to verify (the first reply puts the
+	// vendor's words first, upstreamTold; a held one is magpie's own)
 	for range 3 {
-		if code, again := postAs(t, s, "", req); code != 403 || provider.APIError([]byte(again), "") != msg {
+		if code, again := postAs(t, s, "", req); code != 403 || !sameVerify(provider.APIError([]byte(again), ""), msg) {
 			t.Fatalf("%d %s", code, again)
 		}
 	}
@@ -122,7 +124,7 @@ func TestAgyCLIVerifyWords(t *testing.T) {
 		s := New()
 		code, got := postAs(t, s, "", `{"model":"a/m","messages":[{"role":"user","content":"hi"}]}`)
 		msg := provider.APIError([]byte(got), "")
-		if code != 403 || strings.Count(msg, "needs to be verified") != 1 || !strings.HasSuffix(msg, c.tail) {
+		if code != 403 || strings.Count(msg, "needs to be verified") != 1 || !strings.Contains(msg, c.tail) {
 			t.Fatalf("%d: %s", code, msg)
 		}
 		r := s.trace.routes[len(s.trace.routes)-1]
@@ -131,4 +133,15 @@ func TestAgyCLIVerifyWords(t *testing.T) {
 			t.Fatalf("try %+v rest %+v", try, try.Rest)
 		}
 	}
+}
+
+// sameVerify says whether two answers to an account Google wants verified
+// tell the same: Google's words, and the link to verify it at.
+func sameVerify(a, b string) bool {
+	for _, w := range []string{"Verify your account to continue.", "open https://accounts.google.com/signin/continue?sarp=1&x=2 in a browser"} {
+		if !strings.Contains(a, w) || !strings.Contains(b, w) {
+			return false
+		}
+	}
+	return true
 }

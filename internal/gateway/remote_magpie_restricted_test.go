@@ -128,7 +128,7 @@ func TestRemoteMagpieVerifyHeldOnTheModel(t *testing.T) {
 		t.Fatalf("%d %s", code, body)
 	}
 	for range 2 {
-		if code, again := postAs(t, s, "", req); code != 403 || provider.APIError([]byte(again), "") != msg {
+		if code, again := postAs(t, s, "", req); code != 403 || !sameVerify(provider.APIError([]byte(again), ""), msg) {
 			t.Fatalf("held: %d %s", code, again)
 		}
 	}

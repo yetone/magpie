@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -39,6 +40,17 @@ func errorShape(proto provider.Protocol) int {
 // the agent compact). Every other byte is the vendor's. A body not in the client's
 // shape is rebuilt in it, as before.
 func writeVendorErrorFrom(w http.ResponseWriter, proto, upstream provider.Protocol, p provider.Provider, res *http.Response, msg string, body []byte) int {
+	// the agent is told the vendor's words first, as it said them, and
+	// magpie's after (upstreamTold); a try's held reply keeps magpie's
+	// reading, which what follows the try reads, and is told so only on
+	// its way to the agent (retell)
+	msg = cmp.Or(msg, p.Name+": "+provider.APIError(body, res.Status))
+	told := upstreamTold(p.Name, res.StatusCode, res.Header, body, msg, p.IsPlugin())
+	if h := holdOf(w); h != nil {
+		h.retellAs(msg, told)
+	} else {
+		msg = told
+	}
 	if status, ok := writeKeptError(w, proto, upstream, p, res, msg, body); ok {
 		return status
 	}

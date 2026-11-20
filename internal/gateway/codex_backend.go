@@ -4123,9 +4123,15 @@ func lacksEndpoint(status int) bool {
 
 // summaryEndedShort is a summary ask answered 502 because the reply
 // stopped before its end: a translated one serve held whole and found
-// cut (errEndedShort, #3526, Edward4226's third shape).
+// cut (errEndedShort, #3526, Edward4226's third shape). The words end
+// the vendor's line of the error, before what upstreamTold names it by.
 func summaryEndedShort(rec *recorder) bool {
-	return rec.status == http.StatusBadGateway && strings.HasSuffix(provider.APIError(rec.body.Bytes(), ""), errEndedShort.Error())
+	if rec.status != http.StatusBadGateway {
+		return false
+	}
+	line, _, _ := strings.Cut(provider.APIError(rec.body.Bytes(), ""), magpieSays)
+	line = strings.TrimSuffix(line, " (HTTP 502)")
+	return strings.HasSuffix(line, errEndedShort.Error())
 }
 
 // upstreamFailed is a relay's own word that the provider behind it turned

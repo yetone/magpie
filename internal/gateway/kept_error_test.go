@@ -12,7 +12,8 @@ import (
 // ne9ko9 on Discord: a vendor that speaks the client's own API has its
 // error reach the client as it came: its status, its own type, a numeric
 // code and the fields magpie knows nothing of, every byte but the message,
-// which names the provider. It was rebuilt from the status, with only a
+// which names the provider, and its status, code and request id after the
+// vendor's words (upstreamTold). It was rebuilt from the status, with only a
 // string code kept.
 func TestSameAPIErrorKeptAsSent(t *testing.T) {
 	for _, c := range []struct {
@@ -23,13 +24,13 @@ func TestSameAPIErrorKeptAsSent(t *testing.T) {
 	}{
 		{"chat", "/v1/chat/completions", `{"model":"a/m","messages":[{"role":"user","content":"hi"}]}`, provider.Chat, 400,
 			`{"error":{"message":"Request rejected by gateway rule (FX-1214)","type":"upstream_rule","code":1214,"param":null,"extra":{"trace":"t-9"}},"request_id":"req-77"}`,
-			`{"error":{"message":"A: Request rejected by gateway rule (FX-1214)","type":"upstream_rule","code":1214,"param":null,"extra":{"trace":"t-9"}},"request_id":"req-77"}`},
+			`{"error":{"message":"A: Request rejected by gateway rule (FX-1214) (HTTP 400, request id req-77)","type":"upstream_rule","code":1214,"param":null,"extra":{"trace":"t-9"}},"request_id":"req-77"}`},
 		{"anthropic", "/v1/messages", `{"model":"a/m","max_tokens":10,"messages":[{"role":"user","content":"hi"}]}`, provider.Anthropic, 403,
 			`{"type":"error","error":{"type":"upstream_rule","message":"Request rejected by gateway rule","code":20031,"details":["region"]},"request_id":"req_01"}`,
-			`{"type":"error","error":{"type":"upstream_rule","message":"A: Request rejected by gateway rule","code":20031,"details":["region"]},"request_id":"req_01"}`},
+			`{"type":"error","error":{"type":"upstream_rule","message":"A: Request rejected by gateway rule (HTTP 403, 20031, request id req_01)","code":20031,"details":["region"]},"request_id":"req_01"}`},
 		{"responses", "/v1/responses", `{"model":"a/m","input":"hi"}`, provider.Responses, 400,
 			`{"error":{"message":"Request rejected by gateway rule","type":"upstream_rule","code":1214,"param":"input","extra":true}}`,
-			`{"error":{"message":"A: Request rejected by gateway rule","type":"upstream_rule","code":1214,"param":"input","extra":true}}`},
+			`{"error":{"message":"A: Request rejected by gateway rule (HTTP 400, 1214)","type":"upstream_rule","code":1214,"param":"input","extra":true}}`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			fresh(t)
@@ -57,7 +58,7 @@ func TestSameAPIOverflowKeepsTheRest(t *testing.T) {
 	if w.Code != 400 || gjson.Get(b, "error.code").String() != "context_length_exceeded" || gjson.Get(b, "error.type").String() != "invalid_request_error" {
 		t.Fatalf("overflow not said as Chat says it: %d %s", w.Code, b)
 	}
-	if gjson.Get(b, "error.extra").String() != "x" || gjson.Get(b, "request_id").String() != "r1" || gjson.Get(b, "error.message").String() != "A: Prompt exceeds max length" {
+	if gjson.Get(b, "error.extra").String() != "x" || gjson.Get(b, "request_id").String() != "r1" || gjson.Get(b, "error.message").String() != "A: Prompt exceeds max length (HTTP 400, 1261, request id r1)" {
 		t.Fatalf("the vendor's other fields were lost: %s", b)
 	}
 }

@@ -1174,6 +1174,15 @@ func APIError(b []byte, fallback string) string {
 	return apiError(b, fallback)
 }
 
+// VendorWords is what a vendor's error body says in its own words, as
+// APIError reads them but with none of magpie's hints after them: the
+// error's message (with its type and code when the message is only a
+// status line), or the body itself cut short. "" for a body that says
+// nothing (empty), for the caller to say so.
+func VendorWords(b []byte) string {
+	return strings.TrimPrefix(apiError(b, ""), ": ")
+}
+
 // cmdGoNoAPI is Command Code's Provider API refusing a Go plan's key:
 // "Your Go plan doesn't include API access. Upgrade to Provider or higher
 // …" (#969). Go's key is only taken where Command Code's CLI asks, which

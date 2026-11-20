@@ -5737,7 +5737,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// nobody is left: the agent is told it was refused, as a
 			// request it shouldn't send again as it is, not handed an empty
 			// reply it would ask again for, paying for each
-			failTo(w, kept, from, refusedStatus, call.Error)
+			// told with the vendor's own words first (refusalTold)
+			failTo(w, kept, from, refusedStatus, refusalTold(c.p, c.model, hw.status, call.Usage.RequestID, hw.failMsg, c.p.IsPlugin()))
 		} else if hw.turnedAway && hw.failed() {
 			// nobody is left to answer what Antigravity turned away: the
 			// agent is told why, at a status it doesn't retry, not the 429
