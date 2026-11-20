@@ -495,6 +495,11 @@ type providerJSON struct {
 	// with none listed to chat with, how many embedding and rerank models
 	// it lists: served on /v1/embeddings and /v1/rerank, with no pick
 	Retrieval int `json:"retrieval,omitempty"`
+	// its embedding and rerank models (gateway.RetrievalModels), listed
+	// apart in its editor: they need no pick, and agents don't chat with
+	// them, so they aren't among Models (@rfiacne on X couldn't find them)
+	EmbedIDs  []string `json:"embedIds,omitempty"`
+	RerankIDs []string `json:"rerankIds,omitempty"`
 	// its video models (gateway.Videomakers), listed apart in its editor
 	// as its image models are, and those unticked there
 	// (provider.HiddenVideomakers)
@@ -1391,13 +1396,15 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 		out.Deciders = &deciders
 	}
 	out.Exposed = len(exposed)
+	for _, m := range gateway.RetrievalModels(p, catalog.ServesEmbedding) {
+		out.EmbedIDs = append(out.EmbedIDs, m.ID)
+	}
+	for _, m := range gateway.RetrievalModels(p, catalog.ServesRerank) {
+		out.RerankIDs = append(out.RerankIDs, m.ID)
+	}
 	if len(out.Models) == 0 {
 		// a vendor of embedding and rerank models alone (heatonz)
-		for _, m := range append(catalog.LiveServing(p.ID, ""), p.PlanRetrieval("")...) {
-			if m.Serves == catalog.ServesEmbedding || m.Serves == catalog.ServesRerank {
-				out.Retrieval++
-			}
-		}
+		out.Retrieval = len(out.EmbedIDs) + len(out.RerankIDs)
 	}
 	// its image models aren't among those agents chat with; the editor
 	// lists them apart, as Settings → Models → Images is where one is picked

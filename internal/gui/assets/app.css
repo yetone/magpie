@@ -4098,6 +4098,7 @@ body:not(.side-nav) #addSheet > .row-head.stuck::before { opacity: 1; box-shadow
   transition: background .12s, color .12s, border-color .12s;
 }
 .mchip:hover { color: var(--fg); border-color: var(--muted); }
+.mchips.still .mchip:hover { color: var(--muted); border-color: var(--line); }
 .mchip.on { color: var(--accent); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 45%, transparent); font-weight: 500; }
 .mchip.on::before { content: "✓"; font-size: 10px; }
 /* a chip a click picks and unpicks keeps its size either way (frankdeng on

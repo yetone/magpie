@@ -80,6 +80,21 @@ func servesKind(kind string) func(p provider.Provider, model string) bool {
 	}
 }
 
+// RetrievalModels are the embedding or rerank models, kind's, p serves
+// on /v1/embeddings or /v1/rerank by their own ids: those its fetched
+// list says are of that API (catalog.LiveServing), then those its preset
+// names (PlanRetrieval), each id once. They need no pick: the routes take
+// them as listed.
+func RetrievalModels(p provider.Provider, kind string) []catalog.Model {
+	ms := slices.Clone(catalog.LiveServing(p.ID, kind))
+	for _, m := range p.PlanRetrieval(kind) {
+		if !slices.ContainsFunc(ms, func(x catalog.Model) bool { return x.ID == m.ID }) {
+			ms = append(ms, m)
+		}
+	}
+	return ms
+}
+
 // retrievalKind is the kind of model an operation of serveRetrieval's is
 // asked of.
 func retrievalKind(operation string) string {

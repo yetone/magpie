@@ -98,7 +98,7 @@ func TestModelsListMediaOnlyWhenAsked(t *testing.T) {
 	if _, body := get("/v1/models?kind=image&format=text", nil); !strings.Contains(body, image) || strings.Contains(body, video) {
 		t.Fatalf("kind=image&format=text:\n%s", body)
 	}
-	for _, bad := range []string{"images", "embedding", "", "chat,"} {
+	for _, bad := range []string{"images", "embeddings", "moderation", "", "chat,"} {
 		if code, body := get("/v1/models?kind="+bad, nil); code != 400 {
 			t.Errorf("kind=%q: %d %s", bad, code, body)
 		}

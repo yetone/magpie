@@ -61,12 +61,13 @@ it takes images. List them from there rather than shipping a list: the
 user adds and removes providers in magpie. Reasoning is asked in your
 API's own field (`reasoning_effort`, `reasoning.effort`, Anthropic's
 `thinking` or `output_config.effort`). `?format=text` gives the ids one a
-line. The list holds chat models only. Ask for image and video models
-with `?kind=image,video` (or `?kind=chat,image,video`, or `?kind=all`).
-Each of them is marked `"kind": "image"` or `"kind": "video"` and goes to
-`/v1/images/generations` or `/v1/videos`, never to a chat route. Cherry
-Studio, which can't ask and tells an image model from a chat one by its
-id, is listed every kind.
+line. The list holds chat models only. Ask for image, video, embedding
+and rerank models with `?kind=image,video,embedding,rerank` (or
+`?kind=chat,image`, any of them, or `?kind=all`). Each of them is marked
+`"kind": "image"`, `"video"`, `"embedding"` or `"rerank"` and goes to
+`/v1/images/generations`, `/v1/videos`, `/v1/embeddings` or `/v1/rerank`,
+never to a chat route. Cherry Studio, which can't ask and tells an image
+or embedding model from a chat one by its id, is listed every kind.
 
 **A vendor's own fields.** `/v1/images/generations` and `/v1/videos`
 take OpenAI's fields and pass the others on to a vendor that takes them:

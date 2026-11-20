@@ -108,12 +108,22 @@ bases from one address (`remoteMagpieEndpoints` in
 list requests images, videos and decisions with `X-Magpie-Drawers`,
 `X-Magpie-Videomakers` and `X-Magpie-Deciders`. The gateway includes these
 only when asked, with `kind` of `image`, `video` or `decision`. Any other
-client asks for image and video models with `?kind=` (`chat`, `image`,
-`video`, comma separated, or `all`; `listKinds` in
+client asks for image, video, embedding and rerank models with `?kind=`
+(`chat`, `image`, `video`, `embedding`, `rerank`, comma separated, or
+`all`; `listKinds` in
 [`gateway.go`](../../internal/gateway/gateway.go)); without it the list is
 chat models alone, so no agent's chat picker offers an image or video
 model, and an unknown kind is a 400 (axelburks on Discord;
-`TestModelsListMediaOnlyWhenAsked`). Decision
+`TestModelsListMediaOnlyWhenAsked`). Embedding and rerank entries are
+`retrievalObjects`: every on provider's `RetrievalModels` (its fetched
+list's `Serves` models and its preset's), as `provider/model`, with
+`supported_endpoint_types` `embeddings` or `jina-rerank`, less disabled
+models and those a held key can't reach. Cherry Studio, which can't ask,
+gets every kind; a remote magpie asks by its headers, not `?kind=`, so
+its list is unchanged (@rfiacne on X;
+`TestAddedProvidersRetrievalModelsListed`). A provider's editor lists the
+same models read only, as Embedding models and Rerank models
+(`embedIds`/`rerankIds`, `retrievalRows` in app.js). Decision
 entries pass through `keyAllowed`, including model and account restrictions.
 [`catalog/live.go`](../../internal/catalog/live.go) keeps each kind and all
 models the remote already exposed, including retrieval models. The shared

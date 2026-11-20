@@ -1727,6 +1727,48 @@ func videomakerObjects(r *http.Request) []map[string]any {
 	return out
 }
 
+// retrievalObjects are the embedding or rerank models, kind's, that
+// magpie serves on /v1/embeddings or /v1/rerank (RetrievalModels), as a
+// client asks for them (?kind=embedding,rerank, listKinds): "kind":
+// "embedding" or "rerank", each provider's by "provider/model", the id
+// either route takes. supported_endpoint_types is new-api's word for the
+// route, which Cherry Studio's new-api provider reads the model's kind
+// from (listModels.ts ENDPOINT_TYPE_ALIASES: "embeddings",
+// "jina-rerank"). Models disabled in magpie are left out, and a gateway
+// key held to some models or accounts is told of those alone, as its
+// chat list is (#2579).
+func retrievalObjects(r *http.Request, kind string) []map[string]any {
+	who, held := keyListHolds(r)
+	path, ends := "/v1/embeddings", []string{"embeddings"}
+	if kind == catalog.ServesRerank {
+		path, ends = "/v1/rerank", []string{"jina-rerank"}
+	}
+	var out []map[string]any
+	for _, p := range provider.All() {
+		if !p.On() || p.DecideOnly() {
+			continue
+		}
+		for _, m := range RetrievalModels(p, kind) {
+			if _, off := modelOff(p, m.ID, p.ID+"/"+m.ID); off {
+				continue
+			}
+			if held && (!modelAllowed(who, p, m.ID) || !accountServes(who, p, m.ID)) {
+				continue
+			}
+			name := cmp.Or(m.Name, m.ID)
+			o := map[string]any{"id": p.ID + "/" + m.ID, "object": "model", "type": "model", "kind": kind, "created": 0,
+				"owned_by": p.ID, "display_name": name, "magpie_label": name + " · " + p.Name,
+				"native_endpoints": []string{path}, "supported_endpoint_types": ends,
+				"magpie_via": catalog.ViaHere(m.Via)}
+			if m.Context > 0 {
+				o["context_window"] = m.Context
+			}
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
 // viaOf is the magpies e's model passes through after this one, as the
 // remote magpie serving it listed them; nil for a provider's own model.
 // A routing group's are its members' together: a group with a remote
@@ -1758,48 +1800,60 @@ func catalogFor(r *http.Request) []provider.Entry {
 
 // listKinds is which of magpie's models a /v1/models call lists: its chat
 // models alone, unless it names the kinds it wants in ?kind= (chat, image,
-// video, comma separated; all for the three). Image and video models are
-// listed only when asked for, each marked "kind" (drawerObjects,
-// videomakerObjects): OpenAI's own list puts gpt-image and sora among its
-// chat models with nothing to tell them apart, and the clients and agents
-// that offer every id this list gives as a model to chat with (OpenCode's,
-// Cherry Studio's, ZCode's pasted ?format=text) would offer an image model
-// in their chat pickers (axelburks on Discord asked for them here). A kind
-// it doesn't know is refused, not read as none.
+// video, embedding, rerank, comma separated; all for every one). The
+// others are listed only when asked for, each marked "kind"
+// (drawerObjects, videomakerObjects, retrievalObjects): OpenAI's own list
+// puts gpt-image and sora among its chat models with nothing to tell them
+// apart, and the clients and agents that offer every id this list gives
+// as a model to chat with (OpenCode's, Cherry Studio's, ZCode's pasted
+// ?format=text) would offer an image or embedding model in their chat
+// pickers (axelburks on Discord asked for image and video models here,
+// @rfiacne on X for embedding ones). A kind it doesn't know is refused,
+// not read as none.
 //
-// Cherry Studio is the exception: it can't ask, and it tells an image model
-// from a chat one itself. Its provider of magpie (an OpenAI-compatible one)
-// reads only each id, then looks the id's last segment up in its own model
-// registry (provider-registry's models.json, by normalizeModelId), which
-// marks gpt-image-2, dall-e-3, the gemini-*-image, imagen, seedream and
-// grok-imagine models as image generation: those go to its Paintings page,
-// not its chat picker (isNonChatModel). Without them listed, Paintings had
-// no model of magpie's (pingqipai3 on X). So it is listed every kind.
-func listKinds(r *http.Request) (chat, image, video bool, err error) {
+// Cherry Studio is the exception: it can't ask, and it tells an image
+// model from a chat one itself. Its provider of magpie (an
+// OpenAI-compatible one) reads only each id, then looks the id's last
+// segment up in its own model registry (provider-registry's models.json,
+// by normalizeModelId), which marks gpt-image-2, dall-e-3, the
+// gemini-*-image, imagen, seedream and grok-imagine models as image
+// generation: those go to its Paintings page, not its chat picker
+// (isNonChatModel), and its embedding and rerank models (text-embedding-3,
+// bge-m3, Qwen3-Embedding, bge-reranker) to its knowledge bases. Without
+// them listed, Paintings had no model of magpie's (pingqipai3 on X). So it
+// is listed every kind.
+func listKinds(r *http.Request) (k listKind, err error) {
 	q, ok := r.URL.Query()["kind"]
 	if !ok {
 		// a list of ids pasted somewhere (?format=text) stays chat models
 		media := cherryStudio(r) && r.URL.Query().Get("format") != "text"
-		return true, media, media, nil
+		return listKind{chat: true, image: media, video: media, embedding: media, rerank: media}, nil
 	}
 	for _, v := range q {
-		for k := range strings.SplitSeq(v, ",") {
-			switch strings.ToLower(strings.TrimSpace(k)) {
+		for kind := range strings.SplitSeq(v, ",") {
+			switch strings.ToLower(strings.TrimSpace(kind)) {
 			case "chat":
-				chat = true
+				k.chat = true
 			case "image":
-				image = true
+				k.image = true
 			case "video":
-				video = true
+				k.video = true
+			case "embedding":
+				k.embedding = true
+			case "rerank":
+				k.rerank = true
 			case "all":
-				chat, image, video = true, true, true
+				k = listKind{true, true, true, true, true}
 			default:
-				return false, false, false, fmt.Errorf("kind %q: /v1/models lists the kinds chat, image and video (or all), comma separated", k)
+				return listKind{}, fmt.Errorf("kind %q: /v1/models lists the kinds chat, image, video, embedding and rerank (or all), comma separated", kind)
 			}
 		}
 	}
-	return chat, image, video, nil
+	return k, nil
 }
+
+// listKind is which kinds of model a /v1/models call lists (listKinds).
+type listKind struct{ chat, image, video, embedding, rerank bool }
 
 // cherryStudio is a request of Cherry Studio's: with the key magpie's link
 // gives it (agentOf), or a key the user typed in by hand, by its User-Agent,
@@ -1830,7 +1884,8 @@ func (s *Server) models(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 	data := []map[string]any{}
-	chat, images, videos, err := listKinds(r)
+	kinds, err := listKinds(r)
+	chat, images, videos := kinds.chat, kinds.image, kinds.video
 	if err != nil {
 		writeError(w, provider.Chat, 400, err.Error())
 		return
@@ -1996,6 +2051,12 @@ func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 	}
 	if videos || r.Header.Get(provider.VideomakersHeader) != "" {
 		data = append(data, videomakerObjects(r)...)
+	}
+	if kinds.embedding {
+		data = append(data, retrievalObjects(r, catalog.ServesEmbedding)...)
+	}
+	if kinds.rerank {
+		data = append(data, retrievalObjects(r, catalog.ServesRerank)...)
 	}
 	if r.Header.Get(provider.DecidersHeader) != "" {
 		// the decision models its own pickers offer: of a provider with
