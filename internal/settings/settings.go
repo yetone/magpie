@@ -1783,11 +1783,31 @@ var CompactAgents = []string{"codex", "claude", "grok"}
 
 // ForAgent is s as the agent of that kind reads Long conversations: its
 // own AgentCompact in CompactAt and FullContext, when it has one.
+//
+// Grok Build with none of its own, under magpie's default for every agent
+// (no size typed, so WorkingWindow), runs to the whole window, where Grok
+// Build compacts at a percent of its own (GrokOwnCompact). WorkingWindow
+// is Codex's, what OpenAI tells it for its own models; written into Grok
+// Build as a percent it compacted a 1M model at 27% and a 512K one at 53%
+// (@taktoshilite on X). A size the user typed, for every agent or for
+// Grok Build, still holds.
 func (s Settings) ForAgent(kind string) Settings {
 	if c, ok := s.AgentCompacts[kind]; ok {
 		s.CompactAt, s.FullContext = c.At, c.Full
+	} else if kind == "grok" && s.CompactAt == 0 {
+		s.FullContext = true
 	}
 	return s
+}
+
+// GrokOwnCompact says Grok Build runs to the whole window only because it
+// has no Long conversations of its own and every agent's is magpie's
+// default (ForAgent): it compacts where Grok Build itself does, 85% of the
+// window unless the user's [session] says otherwise (grok-build's
+// DEFAULT_AUTO_COMPACT_THRESHOLD_PERCENT; xAI's own models come with 80).
+func (s Settings) GrokOwnCompact() bool {
+	_, own := s.AgentCompacts["grok"]
+	return !own && s.CompactAt == 0 && !s.FullContext
 }
 
 // Compact is where a conversation on a longer window is compacted when

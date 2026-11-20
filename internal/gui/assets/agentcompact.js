@@ -11,7 +11,13 @@ const compactFill = function (list, a) {
   const row = el("div", "row pref agent-compact");
   row.dataset.agent = kind;
   const who = el("div", "who"), box = el("div");
-  who.append(el("div", "name", t("Long conversations")), el("div", "sub", t("{agent} compacts at 272K or the size picked; the full window is slower and costlier. magpie's models only: a subscription's own models keep their own.", { agent: a.name })));
+  // Grok Build compacts at a percent of the window of its own, and with no
+  // size typed for it or for every agent, that is where it compacts
+  // (settings.ForAgent: @taktoshilite on X, a 1M model compacted at 27%)
+  const sub = kind === "grok"
+    ? t("Grok Build compacts at 85% of the window, or at the size picked; a smaller size is faster and cheaper. magpie's models only: a subscription's own models keep their own.")
+    : t("{agent} compacts at 272K or the size picked; the full window is slower and costlier. magpie's models only: a subscription's own models keep their own.", { agent: a.name });
+  who.append(el("div", "name", t("Long conversations")), el("div", "sub", sub));
   row.append(who, box);
   // what Codex's own config holds back, said under the row (renderAgentPrefs)
   const held = el("div", "compact-helds");
@@ -24,7 +30,7 @@ const compactFill = function (list, a) {
     const key = JSON.stringify([own, s.compactAt, s.fullContext]);
     if (key === drawn) return;
     drawn = key;
-    const full = own ? !!own.full : !!s.fullContext;
+    const full = own ? !!own.full : !!s.fullContext || (kind === "grok" && !s.compactAt);
     const at = own ? own.at || 0 : s.compactAt || 0;
     const set = (body) => writingPrefs(api("settings/agent-compact", { agent: kind, own: true, ...body }))
       .then((ns) => { prefs = ns; renderSettings(); if (row.isConnected) draw(); }).catch(settingsErr);

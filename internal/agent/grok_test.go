@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/provider"
@@ -563,6 +564,8 @@ func TestGrokWindowFollowsLongConversations(t *testing.T) {
 			t.Fatalf("%s: percents pro %d, flash %d, want %d and %d", when, p, f, pro, flash)
 		}
 	}
+	set(func(s *settings.Settings) {})
+	want("magpie's default: Grok Build's own threshold", -1, -1)
 	set(func(s *settings.Settings) { s.CompactAt = 300000 })
 	want("compact at 300K", 30, -1)
 	set(func(s *settings.Settings) { s.FullContext = true })
@@ -582,4 +585,92 @@ func TestGrokWindowFollowsLongConversations(t *testing.T) {
 	want("grok's own full window", -1, -1)
 	set(func(s *settings.Settings) { s.AgentCompacts = map[string]settings.AgentCompact{"codex": {Full: true}} })
 	want("codex's full window reached grok", 30, -1)
+}
+
+// With no size typed for Grok Build or for every agent, Grok Build compacts
+// where it does itself, 85% of the window: magpie's default for every
+// agent, Codex's 272K, went in as a percent, so a 1M model compacted at 27%
+// and a 512K one at 51% (@taktoshilite on X: "100 万的上下文用不了多少就开始
+// 压缩了"). Windows from the vendor's list, none typed, as theirs were. A
+// table magpie gave 27 on that default gets none, Grok Build's own; 272K
+// picked for Grok Build itself, and a percent the user set, stay.
+func TestGrokCompactsAtItsOwnPercentByDefault(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	t.Setenv("GROK_HOME", filepath.Join(home, "grok"))
+	path := filepath.Join(home, "grok", "config.toml")
+	if err := provider.Save(provider.Provider{ID: "v", Name: "V", Chat: "https://example.test/v1", Key: "k", Models: []string{"big", "mid"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := catalog.SaveLive("v", "https://example.test/v1", []catalog.Model{{ID: "big", Context: 1000000}, {ID: "mid", Context: 524288}}); err != nil {
+		t.Fatal(err)
+	}
+	percents := func() (int, int) {
+		t.Helper()
+		had, err := grokHadIn(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		get := func(id string) int {
+			if n, ok := had.percents[id]; ok {
+				return n
+			}
+			return -1
+		}
+		return get("v/big"), get("v/mid")
+	}
+	sync := func() {
+		t.Helper()
+		if err := grok(home).Sync(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	save := func(s settings.Settings) {
+		t.Helper()
+		if err := settings.Save(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// what the magpie before this one wrote on the default: 27, on record
+	stash(map[string]string{"grok:" + path + ":percents": `{"v/big":27,"v/mid":51}`})
+	os.MkdirAll(filepath.Dir(path), 0o755)
+	old := "[models]\ndefault = \"magpie/v/big\"\n\n" +
+		"[model.\"magpie/v/big\"]\nmodel = \"v/big\"\nbase_url = \"http://127.0.0.1:3425/v1\"\napi_key = \"magpie\"\ncontext_window = 1000000\nauto_compact_threshold_percent = 27\n\n" +
+		"[model.\"magpie/v/mid\"]\nmodel = \"v/mid\"\nbase_url = \"http://127.0.0.1:3425/v1\"\napi_key = \"magpie\"\ncontext_window = 524288\nauto_compact_threshold_percent = 51\n"
+	if err := os.WriteFile(path, []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sync()
+	if big, mid := percents(); big != -1 || mid != -1 {
+		raw, _ := os.ReadFile(path)
+		t.Fatalf("magpie's default: big %d%%, mid %d%%, want none (Grok Build's own 85)\n%s", big, mid, raw)
+	}
+	if w, _ := grokWindowsIn(path); w["v/big"] != 1000000 || w["v/mid"] != 524288 {
+		t.Fatalf("windows %v", w)
+	}
+	// 272K picked for Grok Build itself is the user's
+	save(settings.Settings{AgentCompacts: map[string]settings.AgentCompact{"grok": {}}})
+	sync()
+	if big, mid := percents(); big != 27 || mid != 51 {
+		t.Fatalf("272K picked for Grok Build: big %d%%, mid %d%%, want 27 and 51", big, mid)
+	}
+	// so is a size typed for every agent
+	save(settings.Settings{CompactAt: 900000})
+	sync()
+	if big, mid := percents(); big != 90 || mid != -1 {
+		t.Fatalf("900K for every agent: big %d%%, mid %d%%, want 90 and none", big, mid)
+	}
+	// back to the default, a percent set by hand stays
+	save(settings.Settings{})
+	sync()
+	if err := edit.SetTOMLKey(path, `model."magpie/v/big"`, "auto_compact_threshold_percent", 90); err != nil {
+		t.Fatal(err)
+	}
+	sync()
+	if big, mid := percents(); big != 90 || mid != -1 {
+		t.Fatalf("big set by hand to 90: big %d%%, mid %d%%", big, mid)
+	}
 }

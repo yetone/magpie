@@ -896,6 +896,8 @@ func agentCompact(agent string, args []string) error {
 		s := settings.Load()
 		own, has := s.AgentCompacts[agent]
 		switch a := s.ForAgent(agent); {
+		case !has && agent == "grok" && s.GrokOwnCompact():
+			fmt.Println("every", muted.Render(fmt.Sprintf("· %s, as every agent's is magpie's default · magpie model compact %s <size>|off", grokOwnWords, agent)))
 		case !has:
 			fmt.Println("every", muted.Render(fmt.Sprintf("· %s follows every agent's (%s) · magpie model compact %s <size>|off", agent, compactWords(a), agent)))
 		case own.Full:
@@ -920,9 +922,17 @@ func agentCompact(agent string, args []string) error {
 	if err := provider.SetAgentCompact(agent, c); err != nil {
 		return err
 	}
-	fmt.Println(green.Render("✓"), agent+":", compactWords(settings.Load().ForAgent(agent)))
+	words := compactWords(settings.Load().ForAgent(agent))
+	if agent == "grok" && settings.Load().GrokOwnCompact() {
+		words = grokOwnWords
+	}
+	fmt.Println(green.Render("✓"), agent+":", words)
 	return nil
 }
+
+// grokOwnWords says Grok Build compacts where it does itself
+// (settings.GrokOwnCompact).
+const grokOwnWords = "Grok Build compacts at its own threshold (85% of the model's window unless its config says otherwise)"
 
 // modelAgentWindow says or sets the windows one agent is told
 // (settings.AgentContexts): model=size pairs replace those it had, off
