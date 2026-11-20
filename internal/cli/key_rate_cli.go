@@ -58,9 +58,12 @@ func keyRateCmd(rest []string) error {
 			name = k.Name + " " + muted.Render(k.Masked+" · "+k.ID)
 		}
 		r, own := p.KeyPriceRate(k.ID)
+		g, read := p.KeyGroupRate(k.ID)
 		switch {
 		case own:
 			fmt.Println(name, "· ×"+rateText(r))
+		case read && p.TopUpRate > 0:
+			fmt.Println(name, muted.Render("· ×"+rateText(r)+", its group's ×"+rateText(g)+" read from the relay, at the top-up rate ×"+rateText(p.TopUpRate)))
 		case r > 0:
 			fmt.Println(name, muted.Render("· ×"+rateText(r)+", the provider's"))
 		default:

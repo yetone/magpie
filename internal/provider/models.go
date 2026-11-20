@@ -3045,7 +3045,7 @@ func tariffOf(s settings.Settings, p Provider, known bool, model string) (catalo
 		pr.Peak = k
 	}
 	// what the provider bills against it (#819)
-	if ok && p.PriceRate > 0 {
+	if ok && (p.PriceRate > 0 || p.zeroRate) {
 		pr = pr.Times(p.PriceRate)
 	}
 	if ok && p.cacheWritesAlike() {

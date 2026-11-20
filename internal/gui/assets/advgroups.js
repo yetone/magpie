@@ -9,7 +9,7 @@
   const GROUPS = [
     ["Routing", ["Routing", "Rate limited", "Stays", "Resets", "Warm up", "Check in", "Claude Code", "Fallback", "Rests", "Errors"]],
     ["Models", ["Context window", "Max output", "Compaction", "Compact at", "Images", "Web search"]],
-    ["Limits and cost", ["Requests at once", "Accounts at once", "Requests per minute", "Queue size", "Price rate", "Free for me", "Billing", "Rate windows", "Account balance", "Balance URL", "Balance field"]],
+    ["Limits and cost", ["Requests at once", "Accounts at once", "Requests per minute", "Queue size", "Price rate", "Top-up rate", "Free for me", "Billing", "Rate windows", "Account balance", "Balance URL", "Balance field"]],
     ["Connection", ["Headers", "Extra body", "Reply headers", "Request headers to pass", "Proxy", "Upstream", "Key header", "User-Agent", "Codex client", "Masking", "Certificate", "HTTP version", "WebSocket", "Agents"]],
   ];
   window.advGroups = function (box) {

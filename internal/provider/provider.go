@@ -607,6 +607,15 @@ type Provider struct {
 	// at 0.5× and 1.2×), by its KeyID. A key not in it bills at PriceRate
 	// (see key_rate.go).
 	KeyPriceRates map[string]float64 `json:"keyPriceRates,omitempty"`
+	// TopUpRate is, for a relay built on sub2api, what one of its dollars
+	// cost the user (@YIXIE233 on X: ¥7 for $100 is 0.07): each key's
+	// group rate is read from the relay (key_rate_read.go) and the key
+	// bills at that times this, unless it has a rate in KeyPriceRates.
+	// 0 is none: no group rate is read.
+	TopUpRate float64 `json:"topUpRate,omitempty"`
+	// zeroRate marks a PriceRate of 0 that is a rate, a free group's, not
+	// the price as listed; set by atKeyRate alone
+	zeroRate bool
 
 	// BalanceURL, when set, is where the vendor tells what is left on a
 	// key, asked with the key the way a chat request carries it; BalancePath
@@ -1888,6 +1897,9 @@ func normalize(p Provider) Provider {
 	p.KeySpendCaps = normalKeySpendCaps(p.KeySpendCaps)
 	p.KeyOwnBalances = normalKeyOwnBalances(p.KeyOwnBalances)
 	p.KeyPriceRates = normalKeyPriceRates(p.KeyPriceRates)
+	if TopUpRateOK(p.TopUpRate) != "" {
+		p.TopUpRate = 0
+	}
 	if len(p.Models) > 0 {
 		p.NoModels = false // a pick is no longer Select none
 	}
