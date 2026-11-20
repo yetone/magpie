@@ -19843,8 +19843,13 @@ async function loadSettings() {
   syncView = null;
   // gateway mode turned in another tab, or the agents here come and gone
   if (web && !!s.gatewayOn !== gatewayMode) setGatewayMode(!!s.gatewayOn);
+  $("#setUnread")?.remove(); // settingsunread.js's line, once read
   renderSettings();
 }
+// Settings never read (a magpie just restarted still starting, or the read
+// failed) left every page of them blank, with only the footer saying why
+// (WaiooT on X): settingsunread.js says so in the page and reads them again
+function settingsUnread(e) { statusErr(e); if (!prefs && view === "settings") import("./settingsunread.js").then((m) => m.unread(e)); }
 
 // Writes of the settings, counted as they start and end: a read of them
 // (the state, the settings) that one overlapped is from before it, and is
@@ -23400,7 +23405,7 @@ async function show(v) {
   // Routing's accounts' windows as Usage read them (#1833), never an asked read
   // and Providers' balances (rowBalance, plugins/usage/page.js)
   if ((rtView(v) || v === "providers" && !featuresOff.has("usage")) && (!quotas || Date.now() - quotasAt > 60e3)) loadQuotas();
-  if (v === "settings") (settingsLoad = loadSettings()).then(back, statusErr);
+  if (v === "settings") (settingsLoad = loadSettings()).then(back, settingsUnread);
   if (v === "plugins") window.loadPlugins?.()?.then(back);
   syncTitle();
   syncURL();
@@ -24400,6 +24405,10 @@ if (mode === "window") {
 
 // loadBack: a window shown again hears visibilitychange and focus together;
 // one read for both. A read asked over a second ago gets one more after it.
+// a view's entrance held while out of sight ends as the window is back: a
+// page shown with it held at its first frame was a blank pane under its
+// header and sidebar (WaiooT on X)
+function playViews() { for (const v of $$(".view")) for (const a of v.getAnimations?.() || []) try { a.finish(); } catch {} }
 function loadBack() {
   const f = loadBack.flight;
   if (f && performance.now() - f.at < 1000) return f.done;
@@ -24412,7 +24421,7 @@ function loadBack() {
 // and one gone from view, hidden or closed (which hides it first), says
 // so: what its Sessions and Usage pages keep goes 30 s later unless a page
 // asks again (pageAwayFor)
-document.addEventListener("visibilitychange", () => { if (!document.hidden) { loadBack(); wag(); refreshLanes(); } else fetch("/api/page-away", { method: "POST", keepalive: true }).catch(() => {}); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { playViews(); loadBack(); wag(); refreshLanes(); } else fetch("/api/page-away", { method: "POST", keepalive: true }).catch(() => {}); });
 // an agent's config can be rewritten, or the agent run round magpie, while the
 // window is up: ask what drifted now and then, and redraw only on a change —
 // never under an open menu

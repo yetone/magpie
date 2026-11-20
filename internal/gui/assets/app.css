@@ -142,6 +142,10 @@ html.magpie-out-of-sight,
 html.magpie-out-of-sight *,
 html.magpie-out-of-sight *::before,
 html.magpie-out-of-sight *::after { animation-play-state: paused !important; }
+/* but a view's entrance plays: held, a view shown then stays transparent
+   at its first frame until the page hears it is back, and a window shown
+   without that word was a blank pane (WaiooT on X) */
+html.magpie-out-of-sight .view { animation-play-state: running !important; }
 /* out of sight a while: nothing is drawn, so WebKit lets go of every
    layer's buffers, which it keeps for a hidden window (#5530) */
 html.magpie-asleep body { content-visibility: hidden; }
