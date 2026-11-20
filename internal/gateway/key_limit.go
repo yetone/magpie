@@ -157,7 +157,7 @@ func protoOfPath(path string) provider.Protocol {
 		return provider.Anthropic
 	case strings.HasPrefix(path, "/v1beta/"):
 		return provider.Gemini
-	case strings.HasSuffix(path, "/responses"):
+	case strings.HasSuffix(path, "/responses"), strings.HasSuffix(path, "/responses/compact"):
 		return provider.Responses
 	}
 	return provider.Chat
