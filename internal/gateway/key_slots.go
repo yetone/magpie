@@ -51,6 +51,8 @@ var keySlotRoutes = map[string]keySlotKind{
 	"POST /chat/completions":        keySlotLazy,
 	"POST /v1/responses":            keySlotLazy,
 	"POST /responses":               keySlotLazy,
+	"POST /v1/responses/compact":    keySlotLazy,
+	"POST /responses/compact":       keySlotLazy,
 	"POST /v1/messages":             keySlotLazy,
 	"POST /messages":                keySlotLazy,
 	"POST /api/chat":                keySlotLazy,
