@@ -566,6 +566,13 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
   if (input.model.providerID === <span class="s">"acme"</span>) output.headers[<span class="s">"x-acme-session"</span>] = input.sessionID
 }</pre>
     </div>
+    <h3 id="caller">The agent that asked</h3>
+    <p><code>input.caller</code> is the agent the request came from: its id, the name people know it by, and <code>via</code>, the computers it came through when another magpie passed it on with a Remote magpie provider, the agent’s computer first. <code>via</code> is empty for an agent on this computer. A request passed on names the agent on the first computer, never the magpie in between. <code>input.agent</code> stays <code>"build"</code>, as in OpenCode, and OpenCode never sets <code>caller</code>, so check that it is there.</p>
+    <div class="code">
+      <span class="lang">input.caller</span>
+      <pre>{ agent: <span class="s">"claude"</span>, name: <span class="s">"Claude Code"</span>, via: [<span class="s">"MacBook-Pro"</span>] }</pre>
+    </div>
+    <p>Your <code>fetch</code> gets the same as <code>x-magpie-caller-agent</code>, <code>x-magpie-caller-name</code> and <code>x-magpie-caller-via</code> (comma-separated) in <code>init.headers</code>, each percent-encoded (<code>decodeURIComponent</code>). magpie takes these headers off what your plugin sends, so the vendor never sees them, and the request it gets is the same whoever asked.</p>
 
     <h2 id="signin-state"><a class="anchor" href="#signin-state">Sign-in state</a></h2>
     <p>magpie marks an account whose sign-in the vendor refused. It shows the mark to the user and stops sending to the account until it works again. By default a 401 marks the account and a success clears the mark. A plugin can say more precisely what an answer means with the <code>X-Magpie-Sign-In</code> response header, which magpie removes before the answer goes on:</p>

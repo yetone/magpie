@@ -11618,6 +11618,16 @@ OpenCode’s `chat.headers` hook runs for every request. Its `input.sessionID` i
 }
 ```
 
+### The agent that asked
+
+`input.caller` is the agent the request came from: its id, the name people know it by, and `via`, the computers it came through when another magpie passed it on with a Remote magpie provider, the agent’s computer first. `via` is empty for an agent on this computer. A request passed on names the agent on the first computer, never the magpie in between. `input.agent` stays `"build"`, as in OpenCode, and OpenCode never sets `caller`, so check that it is there.
+
+```
+{ agent: "claude", name: "Claude Code", via: ["MacBook-Pro"] }
+```
+
+Your `fetch` gets the same as `x-magpie-caller-agent`, `x-magpie-caller-name` and `x-magpie-caller-via` (comma-separated) in `init.headers`, each percent-encoded (`decodeURIComponent`). magpie takes these headers off what your plugin sends, so the vendor never sees them, and the request it gets is the same whoever asked.
+
 ## Sign-in state
 
 magpie marks an account whose sign-in the vendor refused. It shows the mark to the user and stops sending to the account until it works again. By default a 401 marks the account and a success clears the mark. A plugin can say more precisely what an answer means with the `X-Magpie-Sign-In` response header, which magpie removes before the answer goes on:

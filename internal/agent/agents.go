@@ -33,7 +33,7 @@ func init() {
 	usage.Agents = func() []usage.Known {
 		var out []usage.Known
 		for _, a := range Clients() {
-			out = append(out, usage.Known{ID: a.ID, Names: append([]string{a.ID}, a.Aliases...), UA: a.UA})
+			out = append(out, usage.Known{ID: a.ID, Name: a.Name, Names: append([]string{a.ID}, a.Aliases...), UA: a.UA})
 		}
 		return out
 	}

@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -54,6 +55,12 @@ const (
 	// it again only when its own differ (maskedBefore). Taken only from a
 	// magpie's request.
 	MaskedAsHeader = "X-Magpie-Masked-As"
+	// ViaChainHeader is the computers a request came through before it
+	// reached this one, comma-separated: the agent's first (ViaHeader's),
+	// then each magpie that passed it on. A plugin is told them
+	// (tellCaller). A magpie that sends only ViaHeader is taken as a chain
+	// of that one. Taken only from a magpie's request.
+	ViaChainHeader = "X-Magpie-Via-Chain"
 )
 
 // caller is who a request is recorded as: its agent, and the computer it
@@ -88,6 +95,9 @@ type caller struct {
 	// maskedAs: the magpie that passed it on masked it by the settings
 	// this fingerprint names (MaskedAsHeader)
 	maskedAs string
+	// chain: the computers the request came through before this one, via
+	// first (ViaChainHeader); none for this computer's own
+	chain []string
 }
 
 type callerCtx struct{}
@@ -114,6 +124,7 @@ func withCaller(next http.Handler) http.Handler {
 		r.Header.Del(ClientUAHeader)
 		r.Header.Del(ClaudeCacheTTLHeader)
 		r.Header.Del(MaskedAsHeader)
+		r.Header.Del(ViaChainHeader)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -156,6 +167,7 @@ func callerFrom(r *http.Request) caller {
 			if c.via == "" {
 				c.via, _, _ = net.SplitHostPort(r.RemoteAddr)
 			}
+			c.chain = chainOf(r.Header.Get(ViaChainHeader), c.via)
 		}
 	} else {
 		// Claude Code, known by its token or its User-Agent; Claude
@@ -163,6 +175,27 @@ func callerFrom(r *http.Request) caller {
 		c.claudeHere = (c.agent == "claude" || fromClaudeCode(r.Header)) && c.agent != "claude-desktop" && local(r)
 	}
 	return c
+}
+
+// chainOf is the computers a ViaChainHeader names, when it is a fit one
+// beginning at via (the agent's computer); else via alone, as an older
+// magpie says no more.
+func chainOf(v, via string) []string {
+	if via == "" {
+		return nil
+	}
+	var chain []string
+	for p := range strings.SplitSeq(v, ",") {
+		if p = label(p); p == "" || len(chain) == catalog.MaxVia {
+			chain = nil
+			break
+		}
+		chain = append(chain, p)
+	}
+	if len(chain) == 0 || chain[0] != via {
+		return []string{via}
+	}
+	return chain
 }
 
 // claudeTTLOf is how long the prompt cache of c's request is to be kept,
@@ -263,11 +296,18 @@ func passOnCaller(ctx context.Context, req *http.Request) {
 		return
 	}
 	req.Header.Set(AgentHeader, c.agent)
-	if c.via == "" {
-		c.via = hostName()
+	chain := c.chain
+	if h := hostName(); h != "" {
+		chain = append(slices.Clip(chain), h)
+	}
+	if c.via == "" && len(chain) > 0 {
+		c.via = chain[0]
 	}
 	if c.via != "" {
 		req.Header.Set(ViaHeader, c.via)
+	}
+	if len(chain) > 0 {
+		req.Header.Set(ViaChainHeader, strings.Join(chain, ","))
 	}
 }
 

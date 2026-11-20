@@ -174,6 +174,22 @@ So `forwardOnce` sets two more headers on every plugin request, each dropped fir
 
 `unsaid` in `host.js` takes both off whatever the plugin sends on. Devin 0.1.34 keys its keepalive by them. `TestPluginToldTheSession` ([`plugin_session_test.go`](../../internal/gateway/plugin_session_test.go)) sends Claude Code's lead and subagent, a caller's `X-Magpie-Session`, OpenCode's header and none, to a relayed Anthropic model and a translated Chat one, unstreamed, and checks what the plugin read and that the vendor got neither header.
 
+## The agent that asked, for a plugin
+
+A plugin couldn't tell which agent a request came from: the gateway knew it (`callerFrom`, kept in the request's context), the plugin's request is built afresh, and on a magpie that a Remote magpie provider passes requests to, the agent named by the magpie that passed it on (`X-Magpie-Agent`) went no further than usage (@febsincos on X). So `forwardOnce` tells the plugin's fetch the caller as the gateway records it (`tellCaller` in [`plugin_caller.go`](../../internal/gateway/plugin_caller.go)), each header dropped first when the agent sent one, all left off when no agent is known:
+
+| Header | Value |
+| --- | --- |
+| `x-magpie-caller-agent` (`provider.CallerAgentHeader`) | The agent's id (`claude`, `pi`, a plugin agent's id, or the product name `usage.AgentOf` gives an unknown client). |
+| `x-magpie-caller-name` (`provider.CallerNameHeader`) | The name people know it by (`usage.AgentName`: the agent's `Name`, a plugin agent's `name`; its id when magpie knows no other). |
+| `x-magpie-caller-via` (`provider.CallerViaHeader`) | For a request another magpie passed on, the computers it came through, comma-separated, the agent's first; left off for an agent on this computer. |
+
+Each value, and each computer, is percent-encoded UTF-8 (`url.PathEscape`; `decodeURIComponent` reads it). A request passed on names the agent on the first computer, never the magpie in between, so the value is the same whether the agent is here or several hops away. To carry the whole way, `passOnCaller` sends `X-Magpie-Via-Chain` beside `X-Magpie-Via`: the computers before, then this one (`hostName`). The receiving magpie takes it only from a magpie's request, only when it begins with `X-Magpie-Via` and each part is a `label` (at most `catalog.MaxVia` of them), else the chain is `X-Magpie-Via` alone, as an older magpie sends (`chainOf`); `withCaller` takes it off every request as it arrives, as the others.
+
+The host gives the same to `chat.headers` as `input.caller`, `{agent, name, via}` (`callerOf` in [`host.js`](../../internal/plugin/host.js)), a copy per hook. `input.agent` stays OpenCode's `"build"`, which a plugin may go by, and OpenCode never sets `caller`, so a plugin written for both checks for it. `unsaid` takes the three headers off whatever the plugin sends on, so no vendor is told and its request is the same whoever asked.
+
+`TestPluginToldTheCaller` ([`plugin_caller_test.go`](../../internal/gateway/plugin_caller_test.go)) sends a request from an agent known by its token and one by its User-Agent, one passed on by a real Remote magpie hop, one through two magpies, one from a magpie that sends no chain, and a client's own `X-Magpie-Agent` and `X-Magpie-Caller-*` headers, which aren't taken; it checks what the plugin's fetch and its `chat.headers` hook were told, that the vendor got no `x-magpie-` header, and that the vendor got the same body and headers in every case. `TestPassOnCallerAddsThisComputer` checks the chain each magpie sends and the next reads back, and that a chain not beginning at `X-Magpie-Via`, or with a part that isn't a name, or past `MaxVia`, is read as `X-Magpie-Via` alone.
+
 ## Whether another candidate follows
 
 A free model's vendor may queue a request for minutes: Qoder answers its code 10605 and its plugin waits in Qoder's queue as Qoder's client does (up to 4 minutes), CodeArts answers a 429 with `queue-status: queued` and its plugin polls the trace for up to 5 minutes. While another account, provider or routing group member could answer at once, that wait only keeps the agent waiting (axuhere on X: "模型请求正在排队 · 预计等待超过 10 分钟").

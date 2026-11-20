@@ -566,6 +566,13 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
   if (input.model.providerID === <span class="s">"acme"</span>) output.headers[<span class="s">"x-acme-session"</span>] = input.sessionID
 }</pre>
     </div>
+    <h3 id="caller">发起请求的 agent</h3>
+    <p><code>input.caller</code> 是请求来自哪个 agent：它的 id、大家熟知的名字，以及 <code>via</code>：请求由另一台 magpie 通过「远程 magpie」提供商转来时经过的电脑，agent 所在的电脑排第一。agent 就在本机时 <code>via</code> 为空。转来的请求写的是第一台电脑上的 agent，而不是中间的 magpie。<code>input.agent</code> 仍是 <code>"build"</code>，与 OpenCode 一致；OpenCode 不会设置 <code>caller</code>，所以用之前先判断它在不在。</p>
+    <div class="code">
+      <span class="lang">input.caller</span>
+      <pre>{ agent: <span class="s">"claude"</span>, name: <span class="s">"Claude Code"</span>, via: [<span class="s">"MacBook-Pro"</span>] }</pre>
+    </div>
+    <p>你的 <code>fetch</code> 在 <code>init.headers</code> 里拿到同样的内容：<code>x-magpie-caller-agent</code>、<code>x-magpie-caller-name</code> 和 <code>x-magpie-caller-via</code>（逗号分隔），每个值都经过百分号编码（用 <code>decodeURIComponent</code> 解开）。magpie 会从插件发出的请求里去掉这些头，厂商看不到，无论谁发起，厂商收到的请求都一样。</p>
 
     <h2 id="signin-state"><a class="anchor" href="#signin-state">登录状态</a></h2>
     <p>厂商拒绝了某个账号的登录时，magpie 会给它打上标记，告诉用户，并且在它恢复之前不再往它发请求。默认情况下，401 打标记，成功清除标记。插件可以用 <code>X-Magpie-Sign-In</code> 响应头更准确地说明一个回答的含义，magpie 会在转发前去掉这个头：</p>

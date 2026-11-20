@@ -730,10 +730,11 @@ function asked(input, init) {
 // that asked works (WorkDirHeader and WorkGitHeader in internal/provider),
 // that a queue needn't be waited out (FallbackHeader), and the session and
 // subagent the agent named (SessionToPluginHeader, SubagentToPluginHeader)
-// and the effort asked of a model with variants (EffortHeader):
+// and the effort asked of a model with variants (EffortHeader), and the
+// agent the request came from (CallerAgentHeader and the two beside it):
 // for the plugin to read, never for its vendor, so a plugin that sends on
 // the headers it was given sends them nowhere.
-const MAGPIE_ONLY = ["x-magpie-work-dir", "x-magpie-work-git", "x-magpie-fallback", "x-magpie-session", "x-magpie-subagent", "x-magpie-effort"]
+const MAGPIE_ONLY = ["x-magpie-work-dir", "x-magpie-work-git", "x-magpie-fallback", "x-magpie-session", "x-magpie-subagent", "x-magpie-effort", "x-magpie-caller-agent", "x-magpie-caller-name", "x-magpie-caller-via"]
 
 function unsaid(input, init) {
   if (input instanceof Request && MAGPIE_ONLY.some((k) => input.headers.has(k))) {
@@ -3538,6 +3539,25 @@ async function staleAccess(key, before) {
   return "kept"
 }
 
+// callerOf is the agent a request came from, as magpie's headers for the
+// plugin say it: {agent: "claude", name: "Claude Code", via: [computers]},
+// via empty for an agent on this computer, else the computers another
+// magpie passed it on through, the agent's first. undefined when magpie
+// said none.
+function callerOf(headers) {
+  const dec = (v) => {
+    try {
+      return decodeURIComponent(v ?? "")
+    } catch {
+      return ""
+    }
+  }
+  const agent = dec(headers?.["x-magpie-caller-agent"])
+  if (!agent) return undefined
+  const via = String(headers["x-magpie-caller-via"] ?? "").split(",").map(dec).filter(Boolean)
+  return { agent, name: dec(headers["x-magpie-caller-name"]) || agent, via }
+}
+
 async function fetchAs(id, record, key, params) {
   const { controller: ctl, gate } = record
   const { provider, model, npm, url, method, headers, body, session } = params
@@ -3562,6 +3582,9 @@ async function fetchAs(id, record, key, params) {
       checkFetch(record)
       m = p.models[model] ?? { id: model, providerID: provider, api: { id: model, npm } }
     }
+    // input.agent stays OpenCode's own agent ("build"), which a plugin may
+    // go by; who asked is magpie's input.caller
+    const caller = callerOf(headers)
     for (const x of said) {
       const fn = x.hooks["chat.headers"]
       const out = { headers: {} }
@@ -3570,6 +3593,7 @@ async function fetchAs(id, record, key, params) {
           {
             sessionID: session ?? "",
             agent: "build",
+            ...(caller ? { caller: structuredClone(caller) } : {}),
             model: m,
             provider: { source: "custom", info: p, options: o },
             message: { id: "", sessionID: session ?? "", role: "user", time: { created: Date.now() }, agent: "build", model: { providerID: provider, modelID: model } },

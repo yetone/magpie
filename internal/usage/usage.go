@@ -447,6 +447,7 @@ func Load(since time.Time) []Record {
 // Known is an agent as its requests name it.
 type Known struct {
 	ID    string
+	Name  string   // as people know it (Claude Code); "" for its id
 	Names []string // its id and aliases, which a record may already carry
 	UA    []string // what its User-Agent begins with
 }
@@ -483,6 +484,18 @@ func knownAgents() []Known {
 // rather than the product name of some other client (Python-urllib).
 func IsAgent(id string) bool {
 	return slices.ContainsFunc(knownAgents(), func(k Known) bool { return k.ID == id || slices.Contains(k.Names, id) })
+}
+
+// AgentName is the name people know the agent id by (Claude Code for
+// claude), its own plugin's for an agent a plugin adds; the id itself for
+// one magpie doesn't know, or knows by no other name.
+func AgentName(id string) string {
+	for _, k := range knownAgents() {
+		if k.ID == id && k.Name != "" {
+			return k.Name
+		}
+	}
+	return id
 }
 
 // libraries are the product names of HTTP libraries, runtimes and API

@@ -566,6 +566,13 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
   if (input.model.providerID === <span class="s">"acme"</span>) output.headers[<span class="s">"x-acme-session"</span>] = input.sessionID
 }</pre>
     </div>
+    <h3 id="caller">リクエストしたエージェント</h3>
+    <p><code>input.caller</code> はリクエスト元のエージェントです。その id、一般に知られた名前、そして <code>via</code>：別の magpie が「リモート magpie」プロバイダーで転送したときに経由したコンピューターで、エージェントのコンピューターが先頭です。このコンピューター上のエージェントなら <code>via</code> は空です。転送されたリクエストは、途中の magpie ではなく最初のコンピューター上のエージェントを示します。<code>input.agent</code> は OpenCode と同じく <code>"build"</code> のままで、OpenCode は <code>caller</code> を設定しないので、あるかどうか確かめてから使ってください。</p>
+    <div class="code">
+      <span class="lang">input.caller</span>
+      <pre>{ agent: <span class="s">"claude"</span>, name: <span class="s">"Claude Code"</span>, via: [<span class="s">"MacBook-Pro"</span>] }</pre>
+    </div>
+    <p><code>fetch</code> は同じ内容を <code>init.headers</code> の <code>x-magpie-caller-agent</code>、<code>x-magpie-caller-name</code>、<code>x-magpie-caller-via</code>（カンマ区切り）で受け取ります。どの値もパーセントエンコードされています（<code>decodeURIComponent</code> で戻せます）。magpie はプラグインが送るリクエストからこれらのヘッダーを外すので、ベンダーには届かず、誰がリクエストしてもベンダーが受け取るリクエストは同じです。</p>
 
     <h2 id="signin-state"><a class="anchor" href="#signin-state">サインイン状態</a></h2>
     <p>magpie は、ベンダーにサインインを拒否されたアカウントに記録を付けます。その記録をユーザーに表示し、再び使えるようになるまでそのアカウントには送信しません。デフォルトでは 401 で記録が付き、成功すると消えます。プラグインは <code>X-Magpie-Sign-In</code> レスポンスヘッダーで、応答の意味をより正確に伝えられます。このヘッダーは応答が先に渡される前に magpie が取り除きます：</p>
