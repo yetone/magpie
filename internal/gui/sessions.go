@@ -55,14 +55,7 @@ type sessionsJSON struct {
 // page and a detail (MergeExternal) never read them, and copying every
 // session's days for each poll of an open Sessions page was ~1.8 GB in 4
 // minutes over ~720k calls (#2776). The stats add them (gatewayDays).
-func gatewayExternal(g usage.GatewaySession) sessions.ExternalSession {
-	e := sessions.ExternalSession{Agent: g.Agent, ID: g.ID, Start: g.Start, Last: g.Last, Tokens: g.Tokens, Cost: g.Cost, Unpriced: g.Unpriced}
-	e.Models = make([]sessions.ExternalModel, 0, len(g.Models))
-	for _, m := range g.Models {
-		e.Models = append(e.Models, sessions.ExternalModel{Model: m.Model, Tokens: m.Tokens, Cost: m.Cost, Priced: m.Priced})
-	}
-	return e
-}
+func gatewayExternal(g usage.GatewaySession) sessions.ExternalSession { return g.External() }
 
 // gatewayDays is a gateway session's usage by day, as the stats count it.
 func gatewayDays(g usage.GatewaySession) []sessions.ExternalDayUsage {
@@ -91,21 +84,7 @@ func gatewayListed(g usage.GatewaySession, title func(agent, id string) string) 
 // ~150 MB, and each was looked for in the store of what was asked
 // (GatewayTitler).
 func listedExternal(nativeKeys map[string]bool, n int) []sessions.ExternalSession {
-	hidden := sessions.GatewayHidden()
-	title := sessions.GatewayTitler()
-	var ext []sessions.ExternalSession
-	usage.EachGatewaySession(nativeKeys, func(g usage.GatewaySession) bool {
-		if len(ext) == n {
-			return false
-		}
-		// one a list leaves out (externalSessions) takes no room; nor does
-		// one that spent nothing, with no file behind it (SpentNothing)
-		if g.Agent != "" && g.ID != "" && !hidden(g.Agent, g.ID, g.Last) && !g.SpentNothing() {
-			ext = append(ext, gatewayListed(g, title))
-		}
-		return true
-	})
-	return ext
+	return usage.ListedGateway(nativeKeys, n)
 }
 
 func gatewaySession(g usage.GatewaySession) sessions.Session {

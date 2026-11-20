@@ -244,9 +244,18 @@ further (`State.Since`), unless a range is picked.
 - `Keep` runs 5 minutes after the GUI backend starts, then hourly
   (`keepDistilling` in `internal/gui/memory_distill.go`). `Run` takes at
   most 30 conversations (`PerRun`, more than a busy hour brings) quiet for 30 minutes (`Quiet`) with at
-  least two turns, and skips the gateway's own records, read-only
-  agents, subagent sessions and its own agent (`memory`). One run at a
-  time, in this process and across processes (`.run` lock).
+  least two turns, and skips subagent sessions and its own agent
+  (`memory`). One run at a time, in this process and across processes
+  (`.run` lock).
+- The conversations are those the Sessions page lists (`listed`): the
+  agents' own files, read-only ones included (the Antigravity app's,
+  Cursor's editor's), and the sessions only the gateway recorded
+  (`usage.ListedGateway`, as the page lists them), each read where it is
+  kept (`transcriptOf`, `sessions.GatewayTranscript` for a gateway-only
+  one). Before, only the files were read, and an agent seen only through
+  the gateway was never learnt from (bxgz233 on X: 1000+ WorkBuddy
+  sessions; `TestGatewayOnlySessionsRead`, `TestReadOnlySessionsRead`). A
+  gateway session with nothing recorded has no turns and is passed over.
 - What is sent: the conversation's user and assistant text only (no
   tools, no reasoning), cut to 24k characters keeping the head and the
   tail, plus the memories already kept for that project, under neutral

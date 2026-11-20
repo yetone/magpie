@@ -126,6 +126,41 @@ func EachGatewaySession(nativeKeys map[string]bool, each func(GatewaySession) bo
 	}
 }
 
+// External is g as a session list holds it (sessions.MergeExternal),
+// without its usage by day: a list and a detail never read those.
+func (s GatewaySession) External() sessions.ExternalSession {
+	e := sessions.ExternalSession{Agent: s.Agent, ID: s.ID, Start: s.Start, Last: s.Last, Tokens: s.Tokens, Cost: s.Cost, Unpriced: s.Unpriced}
+	e.Models = make([]sessions.ExternalModel, 0, len(s.Models))
+	for _, m := range s.Models {
+		e.Models = append(e.Models, sessions.ExternalModel{Model: m.Model, Tokens: m.Tokens, Cost: m.Cost, Priced: m.Priced})
+	}
+	return e
+}
+
+// ListedGateway are the gateway's sessions a list of n rows shows beside
+// the natives whose keys are nativeKeys (sessions.GatewayKeys): newest
+// first, titled by what each was first asked (sessions.GatewayTitler),
+// without those deleted from the list (sessions.GatewayHidden) or that
+// spent nothing (SpentNothing), and no more than n. The Sessions page and
+// memory's reading of conversations both list them so.
+func ListedGateway(nativeKeys map[string]bool, n int) []sessions.ExternalSession {
+	hidden := sessions.GatewayHidden()
+	title := sessions.GatewayTitler()
+	var ext []sessions.ExternalSession
+	EachGatewaySession(nativeKeys, func(g GatewaySession) bool {
+		if len(ext) == n {
+			return false
+		}
+		if g.Agent != "" && g.ID != "" && !hidden(g.Agent, g.ID, g.Last) && !g.SpentNothing() {
+			e := g.External()
+			e.Title = title(g.Agent, g.ID)
+			ext = append(ext, e)
+		}
+		return true
+	})
+	return ext
+}
+
 // localMidnight is since's local date when since is that date's start.
 func localMidnight(since time.Time) (string, bool) {
 	date := since.In(time.Local).Format(time.DateOnly)

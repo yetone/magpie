@@ -116,7 +116,6 @@ func TestReadsQuietSessionsOnce(t *testing.T) {
 	sb.session("going", 5*time.Minute, "going: one", "two")
 	sb.session("short", time.Hour, "short: hi")
 	sb.session("sub", time.Hour, "sub: one", "two").ParentSession = "quiet"
-	sb.session("gw", time.Hour, "gw: one", "two").Gateway = true
 	sb.session("old", 8*24*time.Hour, "old: one", "two")
 	sb.session("own", time.Hour, "own: one", "two").Agent = Agent
 	sb.session("unread", time.Hour).Transcript = false
