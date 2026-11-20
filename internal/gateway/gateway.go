@@ -882,6 +882,9 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	// the keys out of credit a magpie before this one rested go on
 	// resting, and climb on from their rung (rest_store.go)
 	loadRests()
+	// and the rate limits and quotas still shown on their rows
+	// (limit_notice.go)
+	loadNotices()
 	// a socket handed over (handover.go): the magpie that had it stops
 	// accepting once told this one serves on it
 	if ack := takeAck(); ack != nil {

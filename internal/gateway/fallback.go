@@ -1631,6 +1631,11 @@ func liftedLocked(key string, now time.Time) {
 		}
 	}
 	restingUntil.lifted[key] = now
+	// the limit it was shown for is over too (limit_notice.go): written
+	// by saveDropped once the lock is let go
+	if dropNotice(key) {
+		noticesDropped.Store(true)
+	}
 }
 
 // liftedRests is when each rest lifted before its time was lifted, by

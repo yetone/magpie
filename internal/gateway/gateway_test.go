@@ -113,6 +113,10 @@ func noRests() {
 	codexHolds.Lock()
 	codexHolds.m = nil
 	codexHolds.Unlock()
+	limitNotices.Lock()
+	limitNotices.m = map[string]LimitNotice{}
+	limitNotices.Unlock()
+	noticesDropped.Store(false)
 }
 
 func post(t *testing.T, path, body string) (int, string) {

@@ -230,6 +230,7 @@ func clearRest(key string) {
 	if kept {
 		saveRests() // its rung starts over after a restart too
 	}
+	clearNotice(key) // it answered: its limit is over
 }
 
 // How long a candidate sits out, by why it failed.
@@ -964,6 +965,7 @@ func restarted(agent, user string) {
 // full: those no vendor timed by renewed's word alone, and those it did
 // only by restarted's.
 func liftRests(agent, user string, vendorTill bool) {
+	defer saveDropped() // after the lock is let go
 	restingUntil.Lock()
 	defer restingUntil.Unlock()
 	now := time.Now()
@@ -1035,6 +1037,7 @@ func creditsKnown(agent, user string) {
 		liftedLocked(k, now)
 	}
 	restingUntil.Unlock()
+	saveDropped()
 	codexHolds.Lock()
 	if h, ok := codexHolds.m[strings.ToLower(user)]; ok && h.why == failQuota {
 		delete(codexHolds.m, strings.ToLower(user))
@@ -1145,6 +1148,7 @@ func (s *Server) Unrest(key string) bool {
 	delete(restingUntil.note, key)
 	liftedLocked(key, time.Now())
 	restingUntil.Unlock()
+	saveDropped()
 	if kept {
 		saveRests()
 	}
@@ -1171,6 +1175,13 @@ func (s *Server) UnrestAll(key string) int {
 	}
 	liftedLocked(key, now)
 	restingUntil.Unlock()
+	// and the notices of its models whose rests ended already
+	for _, n := range LimitNoticesUnder(key + "/") {
+		if dropNotice(n.Key) {
+			noticesDropped.Store(true)
+		}
+	}
+	saveDropped()
 	if kept {
 		saveRests()
 	}
@@ -1989,6 +2000,8 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	if r.Probed {
 		s.probeLater(c.p, r, now)
 	}
+	// shown on its row till the limit is over, past its rest
+	noteLimit(r, header, body, now)
 	if unread && id == c.restKey() && id != c.restID() {
 		narrowing.Add(1)
 		go narrowWhenRead(c, r)
@@ -2545,6 +2558,12 @@ func resetsNoted(h http.Header, now time.Time) time.Duration {
 // retryAfter is when a vendor says to try again: Retry-After, in seconds
 // or as a date, or the reset headers of OpenAI's and Anthropic's kind.
 func retryAfter(h http.Header, now time.Time) time.Duration {
+	return min(retryAfterSaid(h, now), longestWait)
+}
+
+// retryAfterSaid is retryAfter as the vendor said it, not held to the
+// longest wait: the time a limit's notice is shown till (limitEnd).
+func retryAfterSaid(h http.Header, now time.Time) time.Duration {
 	var d time.Duration
 	if v := h.Get("Retry-After"); v != "" {
 		if n, err := strconv.ParseFloat(v, 64); err == nil {
@@ -2570,7 +2589,7 @@ func retryAfter(h http.Header, now time.Time) time.Duration {
 	if d <= 0 {
 		return 0
 	}
-	return min(d, longestWait)
+	return d
 }
 
 var allowances = provider.Allowances

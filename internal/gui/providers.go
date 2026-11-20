@@ -1124,6 +1124,8 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 		key := restKey(k)
 		if r, ok := keyRestOf(key); ok {
 			out.KeyList[i].Rest = &provider.KeyRest{Why: r.Why, Status: r.Status, Until: r.Until, Key: key, Probed: r.Probed, By: r.By, Error: r.Error, Rate: r.Rate}
+		} else if n, ok := limitNoticeOf(key); ok {
+			out.KeyList[i].Rest = noticeRest(n)
 		}
 	}
 	// and one with a spend cap, what it has spent of it (the gateway
@@ -1490,21 +1492,46 @@ var keyRestOf = gateway.RestOf
 // restsUnder is gateway.RestsUnder, swapped in tests.
 var restsUnder = gateway.RestsUnder
 
+// limitNoticeOf and limitNoticesUnder are gateway.LimitNoticeOf and
+// gateway.LimitNoticesUnder, swapped in tests.
+var (
+	limitNoticeOf     = gateway.LimitNoticeOf
+	limitNoticesUnder = gateway.LimitNoticesUnder
+)
+
+// noticeRest is a rate limit or quota the gateway rests on no more, as
+// the row shows it: Notice set, Until when the vendor said it lifts.
+func noticeRest(n gateway.LimitNotice) *provider.KeyRest {
+	return &provider.KeyRest{Why: n.Why, Status: n.Status, Until: n.Until, Key: n.Key, Model: n.Model, Error: n.Error, Rate: n.Rate, Notice: true, At: n.At}
+}
+
 // accountRests are the rests in force of a subscription's accounts, by
 // user in lower case: an account's own (provider@user) and each of its
 // models' (provider@user/model), as the gateway keys them (restKey,
-// restID); nil when none rests.
+// restID); then the rate limits and quotas whose rests ended before the
+// limit did (gateway.LimitNotice, @eachg0 on X); nil when there are none.
 func accountRests(id string) map[string][]provider.KeyRest {
 	var out map[string][]provider.KeyRest
-	for _, r := range restsUnder(id + "@") {
-		user, model, _ := strings.Cut(strings.TrimPrefix(r.Key, id+"@"), "/")
+	add := func(key string, r provider.KeyRest) {
+		user, model, _ := strings.Cut(strings.TrimPrefix(key, id+"@"), "/")
 		if user == "" {
-			continue
+			return
 		}
 		if out == nil {
 			out = map[string][]provider.KeyRest{}
 		}
-		out[user] = append(out[user], provider.KeyRest{Why: r.Why, Status: r.Status, Until: r.Until, Key: r.Key, Probed: r.Probed, By: r.By, Model: cmp.Or(r.Model, model), Error: r.Error, Rate: r.Rate})
+		r.Model = cmp.Or(r.Model, model)
+		out[user] = append(out[user], r)
+	}
+	resting := map[string]bool{}
+	for _, r := range restsUnder(id + "@") {
+		resting[r.Key] = true
+		add(r.Key, provider.KeyRest{Why: r.Why, Status: r.Status, Until: r.Until, Key: r.Key, Probed: r.Probed, By: r.By, Model: r.Model, Error: r.Error, Rate: r.Rate})
+	}
+	for _, n := range limitNoticesUnder(id + "@") {
+		if !resting[n.Key] {
+			add(n.Key, *noticeRest(n))
+		}
 	}
 	return out
 }

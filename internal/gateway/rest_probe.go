@@ -263,6 +263,7 @@ func (s *Server) probed(key string, until time.Time, err error, now time.Time) {
 	}
 	restingUntil.Unlock()
 	restProbes.Unlock()
+	saveDropped()
 	if ladder {
 		saveRests()
 	}
