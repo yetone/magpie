@@ -46,6 +46,11 @@ type Result struct {
 	// V1 is the base the request was answered at once the /v1 it was
 	// typed without was added (missingV1): the editor's URL takes it
 	V1 string `json:"v1,omitempty"`
+	// Unserved: the vendor serves this key nothing on this API, whatever
+	// the model (catalog.APIRefused: sub2api's "This group does not allow
+	// /v1/messages dispatch"). Not a failure of the key: the gateway asks
+	// its models on its other APIs.
+	Unserved bool `json:"unserved,omitempty"`
 }
 
 // Test sends the smallest possible request to each endpoint the vendor
@@ -1046,6 +1051,7 @@ func probeOnce(ctx context.Context, p Provider, proto Protocol, url string, body
 		return r
 	}
 	r.otherAPI = catalog.WrongEndpoint(res.StatusCode, b)
+	r.Unserved = catalog.APIRefused(res.StatusCode, b)
 	return r
 }
 

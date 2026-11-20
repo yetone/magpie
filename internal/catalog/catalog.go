@@ -2589,7 +2589,20 @@ func WrongEndpoint(status int, body []byte) bool {
 			return true
 		}
 	}
-	return false
+	return APIRefused(status, body)
+}
+
+// APIRefused is a refusal of the API itself, whatever the model: sub2api
+// answers a key whose group isn't let dispatch Anthropic's Messages with
+// 403 {"type":"error","error":{"type":"permission_error","message":"This
+// group does not allow /v1/messages dispatch"}} (Sidrune AI, 11-20: every
+// Claude Code request of a China-region key). The key serves its models on
+// its other APIs; on this one it serves none of them.
+func APIRefused(status int, body []byte) bool {
+	if status < 400 || status >= 500 {
+		return false
+	}
+	return strings.Contains(strings.ToLower(string(Words(body))), "does not allow /v1/messages dispatch")
 }
 
 // NoChannel recognizes a relay (New API and its forks) answering 503 that no

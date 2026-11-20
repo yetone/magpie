@@ -7821,6 +7821,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		}
 		if wrongEndpoint(res.StatusCode, b) {
 			s.markUnfit(p.ID, model, proto)
+			s.markAPI(p.ID, proto, res.StatusCode, b)
 			if len(s.usable(p, model)) > 0 {
 				u.RequestID = "" // another endpoint answers, with its own id
 				return res.StatusCode, msg, false
@@ -8553,6 +8554,18 @@ func eventStream(res *http.Response) (io.Reader, bool) {
 	return br, false
 }
 
+// apiRefused is the unfit mark of an API a provider refused whatever the
+// model (catalog.APIRefused): no model of it is asked there again.
+const apiRefused = "\x01api"
+
+// markAPI marks proto unfit for every model of p when its refusal was of
+// the API itself, not of model on it.
+func (s *Server) markAPI(providerID string, proto provider.Protocol, status int, body []byte) {
+	if catalog.APIRefused(status, body) {
+		s.markUnfit(providerID, apiRefused, proto)
+	}
+}
+
 // fits reports whether the provider hasn't turned model away from proto.
 func (s *Server) fits(providerID, model string, proto provider.Protocol) bool {
 	s.mu.Lock()
@@ -8577,7 +8590,7 @@ func (s *Server) usable(p provider.Provider, model string) []provider.Protocol {
 	apis := p.APIs(model)
 	var out []provider.Protocol
 	for _, proto := range p.Speaks() {
-		if s.fits(p.ID, model, proto) && (apis == nil && !p.NamedOnlyOn(proto) || slices.Contains(apis, proto)) {
+		if s.fits(p.ID, model, proto) && s.fits(p.ID, apiRefused, proto) && (apis == nil && !p.NamedOnlyOn(proto) || slices.Contains(apis, proto)) {
 			out = append(out, proto)
 		}
 	}
@@ -9219,6 +9232,7 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			return res, to, nil
 		}
 		s.markUnfit(p.ID, model, to)
+		s.markAPI(p.ID, to, res.StatusCode, b)
 		next := s.usable(p, model)
 		if len(next) == 0 {
 			return res, to, nil
