@@ -10779,7 +10779,7 @@ Run magpie on a server or a NAS that has no desktop: its gateway serves your mod
 | **Volume** | `/config`: providers, keys, sign-ins, plugins and usage |
 | **User** | nonroot (uid 65532) |
 
-The image holds magpie’s terminal-only build on Debian 12 slim, with bash for a terminal in the container and curl for the installers of the CLIs some subscriptions sign in with (Cursor, Devin, Grok Build). It runs `magpie serve` (the gateway alone) unless given another command. The container finds no agents to wire, so magpie in it is a gateway: the agents that use it run elsewhere.
+The image holds magpie’s terminal-only build on Debian 13 slim, with bash for a terminal in the container and curl for the installers of the CLIs some subscriptions sign in with (Cursor, Devin, Grok Build). It runs `magpie serve` (the gateway alone) unless given another command. The container finds no agents to wire, so magpie in it is a gateway: the agents that use it run elsewhere.
 
 ## Run it
 

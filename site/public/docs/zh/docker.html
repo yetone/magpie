@@ -157,7 +157,7 @@
       <tr><td><b>数据卷</b></td><td><code>/config</code>：供应商、密钥、登录、插件和用量</td></tr>
       <tr><td><b>用户</b></td><td>nonroot（uid 65532）</td></tr>
     </table></div>
-    <p>镜像里是 magpie 的纯终端版本，基于 Debian 12 slim，带 bash，方便在容器里开终端，也带 curl，用来安装部分订阅登录时需要的 CLI（Cursor、Devin、Grok Build）。不指定命令时运行 <code>magpie serve</code>（只有网关）。容器里找不到需要配置的 Agent，所以这里的 magpie 是一个网关：用它的 Agent 运行在别的机器上。</p>
+    <p>镜像里是 magpie 的纯终端版本，基于 Debian 13 slim，带 bash，方便在容器里开终端，也带 curl，用来安装部分订阅登录时需要的 CLI（Cursor、Devin、Grok Build）。不指定命令时运行 <code>magpie serve</code>（只有网关）。容器里找不到需要配置的 Agent，所以这里的 magpie 是一个网关：用它的 Agent 运行在别的机器上。</p>
 
     <h2 id="run"><a class="anchor" href="#run">运行</a></h2>
     <p>带 Web 界面运行，给页面一个重启后不变的 key，两个端口都只发布在宿主机的回环地址上：</p>

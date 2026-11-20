@@ -3773,7 +3773,7 @@ uses the service's gateway.
 
 ### Docker
 
-`docker build` makes a server image: the terminal-only binary on Debian 12
+`docker build` makes a server image: the terminal-only binary on Debian 13
 slim, with bash and curl, so a vendor's `curl … | bash` installer runs and
 the CLI it installs (Cursor's, Devin's, Grok Build) finds the glibc it links,
 as the plugins' Bun does, and a terminal opens in the container (`docker exec -it magpie bash`, or a

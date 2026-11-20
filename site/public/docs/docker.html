@@ -157,7 +157,7 @@
       <tr><td><b>Volume</b></td><td><code>/config</code>: providers, keys, sign-ins, plugins and usage</td></tr>
       <tr><td><b>User</b></td><td>nonroot (uid 65532)</td></tr>
     </table></div>
-    <p>The image holds magpie’s terminal-only build on Debian 12 slim, with bash for a terminal in the container and curl for the installers of the CLIs some subscriptions sign in with (Cursor, Devin, Grok Build). It runs <code>magpie serve</code> (the gateway alone) unless given another command. The container finds no agents to wire, so magpie in it is a gateway: the agents that use it run elsewhere.</p>
+    <p>The image holds magpie’s terminal-only build on Debian 13 slim, with bash for a terminal in the container and curl for the installers of the CLIs some subscriptions sign in with (Cursor, Devin, Grok Build). It runs <code>magpie serve</code> (the gateway alone) unless given another command. The container finds no agents to wire, so magpie in it is a gateway: the agents that use it run elsewhere.</p>
 
     <h2 id="run"><a class="anchor" href="#run">Run it</a></h2>
     <p>Run it with the browser UI, a key for that page you keep across restarts, and both ports on the host’s loopback only:</p>

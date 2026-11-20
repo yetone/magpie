@@ -16,10 +16,10 @@ RUN CGO_ENABLED=0 go build -tags nogui -trimpath \
 # The runtimes the Library's MCP servers start with: npx (most of them,
 # chrome-devtools among them: "npx not found", Passings_z on X), node and
 # npm (magpie installs an npx server's package and runs it with node,
-# mcp_npx.go), and uvx. Node is the official build, for Debian 12's glibc;
-# uv's static binaries download the Python a uvx server needs into the
-# volume the first time.
-FROM node:24.22.3-bookworm-slim AS node
+# mcp_npx.go), and uvx. Node is the official build, taken from the image
+# of the same Debian release as the one below; uv's static binaries
+# download the Python a uvx server needs into the volume the first time.
+FROM node:24.22.3-trixie-slim AS node
 FROM ghcr.io/astral-sh/uv:0.13.7 AS uv
 
 # Debian, not distroless: a subscription's CLI is installed with its
@@ -27,10 +27,13 @@ FROM ghcr.io/astral-sh/uv:0.13.7 AS uv
 # installs is a glibc binary that needs a full system's loader and
 # libraries. distroless with a copied curl ran the installer, but Cursor's
 # cursor-agent then failed with "cannot execute: required file not found".
-# Debian 12 has the glibc, libgcc and libstdc++ the plugins' Bun needs too,
-# and bash for a NAS panel's terminal. nonroot keeps distroless's uid 65532,
+# Debian has the glibc, libgcc and libstdc++ the plugins' Bun needs too,
+# and bash for a NAS panel's terminal. Debian 13, not 12: an npm package's
+# own binary built on a newer system needs glibc 2.38 or later, and Debian
+# 12's 2.36 crashed an MCP server's Rust binary at once (Passings_z on X,
+# "GLIBC_2.38 not found"); 13 has 2.41. nonroot keeps distroless's uid 65532,
 # so a volume made by an older image stays writable.
-FROM debian:12-slim
+FROM debian:13-slim
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
