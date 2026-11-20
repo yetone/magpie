@@ -402,7 +402,7 @@ func SubscriptionUsage(ctx context.Context) []SubscriptionQuota {
 	c.Lock()
 	out := visibleQuotas(c.data)
 	c.Unlock()
-	return withDailyCredits(out, time.Now())
+	return withDailyCredits(withHeardClaudeCards(out), time.Now())
 }
 
 // SubscriptionUsageReading says a read of the accounts' usage is under way:
@@ -808,6 +808,19 @@ func (e claudeUsageEntry) windows(now time.Time) []QuotaWindow {
 	return ws
 }
 
+// claudeHeardStands says what Claude Code said as it answered still stands
+// for user's allowance in place of a /usage read that failed: for
+// claudeHeard, and for a setup-token account, which /usage can't read at
+// all, so a reply's headers are the only reading it will ever have, until
+// its windows renew (windows reads those as started again), however long
+// ago it answered (mayne_wong on X).
+func claudeHeardStands(e claudeUsageEntry, user string, now time.Time) bool {
+	if e.ws == nil || e.heard.IsZero() {
+		return false
+	}
+	return now.Sub(e.heard) < claudeHeard || claudeTokenAccount(user)
+}
+
 // claudeAskFloor is the least time between two readings, however often the
 // user refreshes; between two that nobody asked for (a reading magpie keeps
 // up to date by itself, for the Usage page left open, the menu bar's
@@ -1005,7 +1018,7 @@ func claudeWindows(ctx context.Context, user string, active bool) ([]QuotaWindow
 		c.m[key] = e
 	}
 	c.Unlock()
-	heard := e.ws != nil && now.Sub(e.heard) < claudeHeard
+	heard := claudeHeardStands(e, user, now)
 	if !read {
 		switch {
 		case ok && e.err != nil && !(heard && !claudeDenied(e.err.Error())):
@@ -1062,7 +1075,7 @@ func claudeWindows(ctx context.Context, user string, active bool) ([]QuotaWindow
 			e = f // headers received while /usage ran are newer than e
 		}
 		c.Unlock()
-		if e.ws != nil && time.Since(e.heard) < claudeHeard && !claudeDenied(err.Error()) {
+		if claudeHeardStands(e, user, time.Now()) && !claudeDenied(err.Error()) {
 			return e.windows(time.Now()), nil // a fresh header stands unless the account was refused
 		}
 		return ws, err

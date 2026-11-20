@@ -170,3 +170,85 @@ func TestCheckClaudeSetupToken(t *testing.T) {
 		}
 	}
 }
+
+// mayne_wong on X (v0.1.4527): a setup-token account's Usage card stayed on
+// a snapshot from days before ("as of …, couldn't fetch the latest quota"),
+// past a few minutes and a refresh, while Routing showed the allowance its
+// replies' headers told. /usage can't read such an account, so every read
+// of it fails; what a reply told stands on the card over the snapshot,
+// dated by when it was heard, as soon as it is heard and however long ago,
+// until its windows renew. With allowances read when asked too, where the
+// card is kept till a refresh.
+func TestClaudeSetupTokenCardShowsWhatRepliesTold(t *testing.T) {
+	for _, reads := range []string{"", "asked"} {
+		for _, ago := range []time.Duration{2 * time.Minute, 3 * time.Hour} {
+			t.Run(reads+"/"+ago.String(), func(t *testing.T) {
+				claudeHome(t)
+				if reads != "" {
+					setQuotaReads(t, reads)
+				}
+				forgetAccountCaches()
+				claudeUsage.Lock()
+				claudeUsage.m = nil
+				claudeUsage.Unlock()
+				subscriptionUsageCache.Lock()
+				subscriptionUsageCache.data, subscriptionUsageCache.at = nil, time.Time{}
+				subscriptionUsageCache.Unlock()
+				user, err := AddClaudeSetupToken(testSetupToken)
+				if err != nil {
+					t.Fatal(err)
+				}
+				key := strings.ToLower(user)
+				// a snapshot from two days before, which the card fell back to
+				lastQuotas.Lock()
+				lastQuotas.load()
+				lastQuotas.m = map[string]lastQuota{"claude/" + key: {At: time.Now().Add(-48 * time.Hour), Q: SubscriptionQuota{Provider: "claude",
+					Windows: []QuotaWindow{{Name: "5 hours", Used: 5}}}}}
+				lastQuotas.Unlock()
+				ctx := context.Background()
+				card := func(step string) {
+					t.Helper()
+					found := false
+					for _, q := range Quotas(ctx) {
+						if q.Provider != "claude" || !strings.EqualFold(q.User, user) {
+							continue
+						}
+						found = true
+						if step == "" {
+							if q.AsOf == nil {
+								t.Fatalf("before anything was heard: card %+v, want the snapshot", q)
+							}
+							return
+						}
+						if q.Error != "" || q.AsOf != nil || q.ReadError != "" || len(q.Windows) == 0 || q.Windows[0].Used < 63 || q.Windows[0].Used > 65 {
+							t.Fatalf("%s: card %+v; want the 64%% the reply's headers told", step, q)
+						}
+					}
+					if !found {
+						t.Fatalf("%s: no card for %q on the Usage page", step, user)
+					}
+				}
+				card("") // the card is read, before any reply
+				NoteClaudeLimits(user, []ClaudeLimit{{Kind: "five_hour", Used: 0.64, ResetsAt: time.Now().Add(4 * time.Hour).Unix()}})
+				heard := time.Now().Add(-ago)
+				claudeUsage.Lock()
+				e := claudeUsage.m[key]
+				e.heard, e.at = heard, heard
+				claudeUsage.m[key] = e
+				claudeUsage.Unlock()
+				card("heard, the card not read again")
+				for i := range 2 { // a refresh, and one more after it
+					RefreshUsage(ctx, "claude", user)
+					card("refreshed")
+					q := LoginUsage(ctx, "claude")[user]
+					if q.Error != "" || q.AsOf != nil || len(q.Windows) == 0 || q.Windows[0].Used < 63 || q.Windows[0].Used > 65 {
+						t.Fatalf("refresh %d: routing's reading %+v; want the 64%% the reply told", i+1, q)
+					}
+					if q.ReadAt == nil || q.ReadAt.Sub(heard).Abs() > time.Second {
+						t.Fatalf("refresh %d: read at %v, want when it was heard, %v", i+1, q.ReadAt, heard)
+					}
+				}
+			})
+		}
+	}
+}

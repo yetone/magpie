@@ -165,7 +165,12 @@ func withAccountReadings(cards []SubscriptionQuota) []SubscriptionQuota {
 // are kept apart from the readings (claudeUsage), and telling them drops
 // the account's reading (StaleAllowance), so a magpie only requests reach
 // (`magpie serve` for a Remote magpie) had a card for nobody (#2206,
-// SuInk). A reading started after it stands, as it is newer.
+// SuInk). A reading started after it stands, as it is newer, unless it
+// failed: a card that stands in for a failed read (AsOf, Error) is the
+// snapshot from before, and what was heard since it was made, while it
+// stands (claudeHeardStands), is newer than that (mayne_wong on X: a
+// setup-token account, which /usage never reads, showed a two-day-old
+// snapshot after every refresh while Routing showed its last reply's).
 func withHeardClaude(q SubscriptionQuota, l Login) SubscriptionQuota {
 	if l.Agent != "claude" {
 		return q
@@ -173,12 +178,36 @@ func withHeardClaude(q SubscriptionQuota, l Login) SubscriptionQuota {
 	claudeUsage.Lock()
 	e, ok := claudeUsage.m[strings.ToLower(l.User)]
 	claudeUsage.Unlock()
-	if !ok || e.heardSeq <= q.readSeq || len(e.ws) == 0 {
+	if !ok || len(e.ws) == 0 {
+		return q
+	}
+	now := time.Now()
+	failed := q.Error != "" || q.AsOf != nil
+	switch {
+	case e.heardSeq > q.readSeq && e.heardSeq != 0:
+	case failed && claudeHeardStands(e, l.User, now) && (q.AsOf == nil || e.heard.After(*q.AsOf)) &&
+		!claudeDenied(q.Error) && !claudeDenied(q.ReadError):
+	default:
 		return q
 	}
 	at := e.heard
-	q.Windows, q.ReadAt, q.AsOf, q.Error, q.readSeq = e.windows(time.Now()), &at, nil, "", e.heardSeq
+	q.Windows, q.ReadAt, q.AsOf, q.Error, q.ReadError, q.ReadDeferred = e.windows(now), &at, nil, "", "", false
+	q.readSeq = max(q.readSeq, e.heardSeq)
 	return q
+}
+
+// withHeardClaudeCards is cards with each Claude account's card as
+// withHeardClaude has it: the Usage page's, kept from the read before
+// (SubscriptionUsage holds them a minute, or till asked), showed a
+// snapshot from before while Routing, which reads what was heard, showed
+// the account's last reply (mayne_wong on X).
+func withHeardClaudeCards(cards []SubscriptionQuota) []SubscriptionQuota {
+	for i, q := range cards {
+		if q.Provider == "claude" && q.From == "" && q.User != "" {
+			cards[i] = withHeardClaude(q, Login{Agent: "claude", User: q.User})
+		}
+	}
+	return cards
 }
 
 // lastReading is the reading kept on disk under key (keepLast), with its
