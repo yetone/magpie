@@ -36,6 +36,13 @@ const libraryProjectUsage = `magpie library project [--json]      the projects (
                                      .claude/settings.local.json and .codex/hooks.json beside what's there
   magpie library project hook rm <dir> <hook…>   take them out, only the entries magpie wrote
   magpie library project hook agents <dir> <hook> <a,b…|none>   the agents it has the hook for
+  magpie library project plugin [list] <dir> [--json]   the library's plugins and Claude Code's own, and which are on
+  magpie library project plugin on <dir> <plugin…> [agents=a,b…]   turn plugins on in it: a library plugin's parts go
+                                     where its agents read the project's own (by default the agents its plugins are
+                                     for already, or every agent here that reads one); a plugin Claude Code installed
+                                     (name@marketplace, or its name alone when only one has it) is turned on in
+                                     .claude/settings.local.json, for this project alone
+  magpie library project plugin off <dir> <plugin…>   turn them off: only what magpie wrote for them comes out
   magpie library project pi [list] <dir> [--json]   its packages for Pi (.pi/settings.json) and the project's own
   magpie library project pi add|on <dir> <source…>   give it packages for Pi: npm:<name>[@version] or a git source; Pi
                                      installs them when it next starts there
@@ -158,6 +165,8 @@ func libraryProjectCmd(args []string) error {
 		return projectKindCmd(projectSubagents, rest, usage)
 	case "hook":
 		return projectKindCmd(projectHooks, rest, usage)
+	case "plugin", "plugins":
+		return projectPluginCmd(rest, usage)
 	case "pi":
 		return projectPiCmd(rest, usage)
 	case "instructions", "instr":
