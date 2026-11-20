@@ -111,7 +111,7 @@ exec "$claude" "$@"
 	if want := "-p --output-format stream-json --input-format stream-json --verbose --model haiku --tools  --strict-mcp-config --setting-sources "; !strings.Contains(args, want) {
 		t.Fatalf("Claude Code ran with %q", args)
 	}
-	if want := `--settings {"disableDeepLinkRegistration":"disable"}`; !strings.Contains(args, want) {
+	if want := `--settings {"disableDeepLinkRegistration":"disable",`; !strings.Contains(args, want) {
 		t.Fatalf("Claude Code registers no URL handler, ran with %q", args)
 	}
 	if !strings.Contains(told, `told {"message":{"content":[{"text":"hi","type":"text"}],"role":"user"},"type":"user"}`) {

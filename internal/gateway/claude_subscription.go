@@ -4133,6 +4133,10 @@ func cleanClaudeEnvTTL(env []string, ttl string) []string {
 		"CLAUDE_CODE_OAUTH_TOKEN": true, "CLAUDE_CODE_PROMPT_CACHE_TTL": true, "FORCE_PROMPT_CACHING_5M": true,
 		"CLAUDE_CODE_EXTRA_BODY": true, "ANTHROPIC_BETAS": true,
 	}
+	// magpie's routing names, never Anthropic's (claudeModelEnv)
+	for _, k := range claudeModelEnv {
+		blocked[k] = true
+	}
 	out := make([]string, 0, len(env)+3)
 	for _, e := range env {
 		k, _, _ := strings.Cut(e, "=")

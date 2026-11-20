@@ -584,14 +584,57 @@ func claudeResult(b []byte) (claudeRun, bool) {
 // has no use for the handler. --settings is not one of the sources
 // --setting-sources controls, so this applies however the user's settings
 // read.
-const disableDeepLinkSettings = `{"disableDeepLinkRegistration":"disable"}`
+var disableDeepLinkSettings = withAnthropicModels(`{"disableDeepLinkRegistration":"disable"}`)
+
+// claudeModelEnv are the variables Claude Code picks a model by: the main
+// one, each tier's (what its alias, haiku in the warm-up, resolves to) and
+// what /model says of it, the small fast model, the subagents' and the auto
+// mode classifier's. Where magpie wires Claude Code to itself they hold
+// magpie's routing names (claude/claude-haiku-5-5, group/opus-5-5[1m]),
+// while a run on an account goes to Anthropic, which knows none of them.
+// One in magpie's environment, or in ~/.claude.json's env, which Claude
+// Code reads whatever --setting-sources says (2.1.327), sent the warm-up's
+// haiku as claude/claude-haiku-5-5: Anthropic answered "There's an issue
+// with the selected model" and the 5-hour window never opened
+// (@ahz2ygnhjmIJ0E0 on X).
+var claudeModelEnv = func() []string {
+	out := []string{"ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_MODEL", "ANTHROPIC_SMALL_FAST_MODEL",
+		"CLAUDE_CODE_SUBAGENT_MODEL", "CLAUDE_CODE_AUTO_MODE_MODEL"}
+	for _, tier := range []string{"OPUS", "SONNET", "HAIKU", "FABLE"} {
+		for _, s := range []string{"", "_NAME", "_DESCRIPTION", "_SUPPORTED_CAPABILITIES"} {
+			out = append(out, "ANTHROPIC_DEFAULT_"+tier+"_MODEL"+s)
+		}
+	}
+	return out
+}()
+
+// withAnthropicModels is the --settings JSON object settings with each of
+// claudeModelEnv set empty in its env: --settings outranks both the
+// environment and ~/.claude.json, and an empty one is Claude Code's own
+// default, so an alias is Anthropic's model and an id stays as given.
+func withAnthropicModels(settings string) string {
+	var m map[string]any
+	if err := json.Unmarshal([]byte(settings), &m); err != nil {
+		panic(err)
+	}
+	env := map[string]string{}
+	for _, k := range claudeModelEnv {
+		env[k] = ""
+	}
+	m["env"] = env
+	b, err := json.Marshal(m)
+	if err != nil {
+		panic(err)
+	}
+	return string(b)
+}
 
 // claudeRunSettings is a run's settings: no deep link, and the thinking
 // shown as a summary. -p has --thinking-display, but the interactive mode
 // (interactiveArgs drops that flag) shows none unless showThinkingSummaries
 // is on, so a client saw no thinking at all (DIYgod on X, #5379). It costs
 // no quota.
-const claudeRunSettings = `{"disableDeepLinkRegistration":"disable","showThinkingSummaries":true}`
+var claudeRunSettings = withAnthropicModels(`{"disableDeepLinkRegistration":"disable","showThinkingSummaries":true}`)
 
 func claudeUsageArgs() []string {
 	return []string{"-p", "/usage", "--output-format", "json",
