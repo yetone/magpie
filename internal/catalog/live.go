@@ -908,17 +908,23 @@ func fetchPage(ctx context.Context, url, key string, anthropic bool, headers map
 		HasMore bool        `json:"has_more"`
 		LastID  string      `json:"last_id"`
 	}
-	if err := json.Unmarshal(b, &v); err != nil {
-		return nil, false, "", fmt.Errorf("%s: not a model list", url)
-	}
-	rows := v.Data
 	// each row as it was sent too, for one that is a Codex catalog entry
 	// (Model.Codex): rows decoded, so these decode alike
 	var raw struct {
 		Data   []json.RawMessage `json:"data"`
 		Models []json.RawMessage `json:"models"`
 	}
-	json.Unmarshal(b, &raw)
+	if err := json.Unmarshal(b, &v); err != nil {
+		// Together AI's list is the array alone, no "data" around it
+		// (together-python's models.list reads the answer as a list)
+		if json.Unmarshal(b, &v.Data) != nil {
+			return nil, false, "", fmt.Errorf("%s: not a model list", url)
+		}
+		json.Unmarshal(b, &raw.Data)
+	} else {
+		json.Unmarshal(b, &raw)
+	}
+	rows := v.Data
 	raws := raw.Data
 	if len(rows) == 0 {
 		rows, raws = v.Models, raw.Models
@@ -934,7 +940,7 @@ func fetchPage(ctx context.Context, url, key string, anthropic bool, headers map
 	// Anthropic's and OpenAI's /v1/models both page with has_more and
 	// last_id.
 	var out []Model
-	vercel := VercelGateway(url)
+	vercel, together := VercelGateway(url), TogetherAPI(url)
 	for i, r := range rows {
 		id := r.ID
 		if id == "" {
@@ -994,6 +1000,32 @@ func fetchPage(ctx context.Context, url, key string, anthropic bool, headers map
 		// elevenlabs/scribe-v2) serve their own APIs. A "-batch" id
 		// (anthropic/claude-sonnet-4.6-batch) is for its batch API alone:
 		// "Synchronous requests don't accept -batch IDs"
+		// Together AI's says it too (together-python's ModelType: chat,
+		// language, code, image, embedding, moderation, rerank, audio,
+		// transcribe, video), and its ids often don't: its embedding
+		// togethercomputer/m2-bert-80M-32k-retrieval, its reranker
+		// Salesforce/Llama-Rank-V1. Another list's row that says
+		// "embedding" or "rerank" means the same
+		switch strings.ToLower(r.Type) {
+		case "embedding", "embeddings":
+			drawer, films, serves = false, false, ServesEmbedding
+		case "rerank", "reranking":
+			drawer, films, serves = false, false, ServesRerank
+		}
+		if together {
+			switch r.Type {
+			case "moderation":
+				continue
+			case "image":
+				drawer, films, serves = true, false, ""
+			case "video":
+				drawer, films, serves = false, true, ""
+			case "audio":
+				serves = ServesSpeech
+			case "transcribe":
+				serves = ServesTranscription
+			}
+		}
 		if vercel {
 			if strings.HasSuffix(id, "-batch") {
 				continue
@@ -1395,6 +1427,13 @@ func (p Price) sane() bool {
 		}
 	}
 	return true
+}
+
+// TogetherAPI says u is Together AI's API, whose model list says what
+// each model is for (its "type").
+func TogetherAPI(u string) bool {
+	x, err := url.Parse(strings.TrimSpace(u))
+	return err == nil && strings.EqualFold(x.Hostname(), "api.together.xyz")
 }
 
 // VercelGateway reports whether u is at Vercel's AI Gateway
