@@ -699,7 +699,7 @@ func planFallbackGroup(g provider.Group, ms []provider.Member, from provider.Pro
 // too, within its own order (#2255), before g's Sink orders the whole.
 // A member's fallbacks are not the group's.
 func (s *Server) planGroup(g provider.Group, ms []provider.Member, from provider.Protocol) ([]candidate, planned) {
-	var pl planned
+	pl := planned{routing: g.Routing, grouped: true}
 	var asides []candidate
 	var wAsides []Weighed
 	out := planLevel(g, ms, 0, from, &pl, &asides, &wAsides, nil)

@@ -991,6 +991,26 @@ that honours no service tier is sent none, and Anthropic-protocol requests
 `TestKeyTieredChat`, `TestKeyServiceTier` in `internal/access`,
 `TestGatewayKeyTierCLI`, `gateway-key-tier.test.cjs`.
 
+A key's `Routing` (justforlxz on X; `access.Key`, set by the `routing-key`
+action, the key row's routing badge or `magpie gateway-key routing <id>
+follow|smart|order|drain|rotate|usage|pace|weight|free|fast|cheap|expiring|fit|<plugin>/<name>`; stored as
+"", "smart", a built-in routing or a plugin's) is how a routing group its
+requests ask for picks among its members' keys and accounts: the group is
+planned with that routing in place of its own (`keyRouted` in
+`key_routing.go`, applied where the request's group is resolved: `handle` for
+Chat, Messages and Responses, the masked-route move there too, embeddings
+and rerank, drawing, video, a System One group and a relayed search's
+order). Unset follows the group. A Manual group still sends to its pick, and
+a group in the group or a provider in it routed its own way keeps its own
+routing (#576), as under the group's own; a member left on the default is
+weighed with the key's routing, as with the group's. The plan carries the
+routing it was made by (`planned.routing`), so `leastHeld` judges the
+members the same way, and the trace's group shows it. count_tokens plans no
+group, so it is untouched. An issued key that sets none follows its
+issuer's (`Identity.Routing`). Tests: `TestKeyGroupRouting`,
+`TestKeyRouting` in `internal/access`, `TestGatewayKeyRoutingCLI`,
+`gateway-key-routing.test.cjs`.
+
 A key's `Redact` (y0ngb1n on X; `access.Key`, set by the `redact-key` action,
 the key row's masking badge or `magpie gateway-key redact <id>
 follow|on|off`; stored as "", "on" or "off") decides whether Settings ›

@@ -619,6 +619,10 @@ type planned struct {
 	// model is, though no other can read it
 	unlisted  []candidate
 	unlistedW []Weighed
+	// routing, when grouped, is the routing a group was planned by: its
+	// own, or the calling key's (keyRouted)
+	routing string
+	grouped bool
 }
 
 func weighed(c candidate, p provider.Provider, wg weighing, fallback bool, from provider.Protocol) Weighed {

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/usage"
 )
@@ -161,7 +162,7 @@ func (s *Server) serveRetrieval(w http.ResponseWriter, r *http.Request, path, op
 	// (429) or one whose vendor fails; a model is asked on its own
 	tries := []candidate{{p: p, model: model}}
 	if isGroup {
-		cs, pl := s.planGroup(g.Live(), ms, provider.Chat)
+		cs, pl := s.planGroup(keyRouted(access.Caller(r.Context()), g.Live()), ms, provider.Chat)
 		if len(cs) > 0 {
 			tries = cs
 		} else if slices.ContainsFunc(pl.left, func(w Weighed) bool { return w.HeldBy != "" }) {

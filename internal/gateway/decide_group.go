@@ -90,7 +90,8 @@ func (s *Server) serveDecisionGroup(w http.ResponseWriter, r *http.Request, body
 	if refuseOff(w, provider.Chat, asked) { // every model of it disabled (#1867)
 		return
 	}
-	g = g.Live()
+	// routed as the calling key says, where it says (justforlxz on X)
+	g = keyRouted(access.Caller(r.Context()), g.Live())
 	r = heldByGroup(r, g) // held to the group's accounts, if it is
 	keyWho, keyHeld := keyHolds(r)
 	accWho, accHeld := accountHolds(r)

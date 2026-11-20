@@ -85,7 +85,7 @@ var adminProviderActions = []string{
 var adminKeyActions = []string{
 	"add-key", "rotate-key", "rename-key", "limit-key", "reset-limit-key",
 	"models-key", "aliases-key", "accounts-key", "mcp-key", "quotas-key",
-	"concurrency-key", "tier-key", "redact-key", "issuer-key", "access-key",
+	"concurrency-key", "tier-key", "routing-key", "redact-key", "issuer-key", "access-key",
 	"on-key", "off-key", "remove-key", "move-key",
 }
 

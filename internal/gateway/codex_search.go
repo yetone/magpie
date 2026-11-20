@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -140,7 +141,7 @@ func (s *Server) relaySearchers(r *http.Request, model string) []searchTarget {
 			keep := groupKeeps(who, g, ms)
 			ms = slices.DeleteFunc(slices.Clone(ms), func(m provider.Member) bool { return !keep[m.Provider.ID+"/"+m.Model] })
 		}
-		cs, _ = s.planGroup(g.Live(), ms, provider.Responses)
+		cs, _ = s.planGroup(keyRouted(access.Caller(r.Context()), g.Live()), ms, provider.Responses)
 	} else {
 		p, bare, ok := provider.Resolve(model)
 		if !ok || keyHeld && !modelAllowed(who, p, bare) {

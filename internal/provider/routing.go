@@ -89,6 +89,16 @@ var pluginRouting = lazyre.New(`^[A-Za-z0-9._-]+/[A-Za-z0-9][A-Za-z0-9._-]*$`)
 // its listed order.
 func PluginRouting(routing string) bool { return pluginRouting.MatchString(routing) }
 
+// GroupRouting says whether routing is one a routing group can be routed
+// by besides Smart (""): a built-in one, Manual, or a plugin's.
+func GroupRouting(routing string) bool {
+	switch routing {
+	case Ordered, Rotate, LeastUsed, Pace, Weighted, FreeFirst, Fastest, Cheapest, Drain, FreeExpiring, SmallFirst, Manual:
+		return true
+	}
+	return PluginRouting(routing)
+}
+
 // SetRouting changes how a provider's requests spread over its keys or
 // accounts.
 func SetRouting(id, routing string) error {

@@ -492,7 +492,7 @@ func strictKeep(scope, mode string, in http.Header, body []byte, cs []candidate,
 	}
 	if len(back) > 0 {
 		pl.capped = slices.DeleteFunc(slices.Clone(pl.capped), func(c candidate) bool { return c.sameVendor(st.who, st.model) })
-		return append(back, cs...), planned{order: append(order, pl.order...), left: pl.left, held: pl.held, capped: pl.capped}, nil
+		return append(back, cs...), planned{order: append(order, pl.order...), left: pl.left, held: pl.held, capped: pl.capped, routing: pl.routing, grouped: pl.grouped}, nil
 	}
 	var held []Weighed
 	for _, c := range pl.held {
@@ -506,7 +506,7 @@ func strictKeep(scope, mode string, in http.Header, body []byte, cs []candidate,
 	if len(held) > 0 {
 		// only its own reset, should it spend one by itself, brings it back
 		pl.held = slices.DeleteFunc(slices.Clone(pl.held), func(c candidate) bool { return !c.sameVendor(st.who, st.model) })
-		return nil, planned{order: nil, left: pl.left, held: pl.held, capped: pl.capped}, held[:1]
+		return nil, planned{order: nil, left: pl.left, held: pl.held, capped: pl.capped, routing: pl.routing, grouped: pl.grouped}, held[:1]
 	}
 	return cs, pl, nil
 }
@@ -858,6 +858,9 @@ func leastHeld(scope, key string, cs []candidate, pl planned, ready bool) ([]can
 	}
 	if strings.HasPrefix(scope, provider.GroupPrefix) {
 		if g, ms, ok := provider.FindGroup(scope); ok {
+			if pl.grouped { // as it was planned: by the calling key's routing, it may be
+				g.Routing = pl.routing
+			}
 			for _, m := range ms {
 				// a group in the group, or a provider routed its own way:
 				// its own routing orders its models or keys (#576)

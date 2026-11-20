@@ -217,6 +217,42 @@ type Key struct {
 	// are, for a device the user trusts. A request with no key (this
 	// computer's own) always follows the setting.
 	Redact string `json:"redact,omitempty"`
+	// Routing is how a routing group the key asks for picks among its
+	// members' accounts and keys for the key's requests (justforlxz on
+	// X): RoutingSmart, one of provider's group routings but Manual, or a
+	// plugin's
+	// "<plugin>/<name>"; "" follows the group's own. A manual group
+	// still sends to its pick, and a group in the group, or a provider
+	// routed its own way in it, keeps its own routing, as always.
+	Routing string `json:"routing,omitempty"`
+}
+
+// RoutingSmart is a key's Routing for Smart: a group's own routing ""
+// is Smart, and a key's "" follows the group.
+const RoutingSmart = "smart"
+
+// keyRoutings are the built-in routings a key can set, besides Smart.
+var keyRoutings = []string{provider.Ordered, provider.Drain, provider.Rotate, provider.LeastUsed, provider.Pace, provider.Weighted, provider.FreeFirst, provider.Fastest, provider.Cheapest, provider.FreeExpiring, provider.SmallFirst}
+
+// CleanRouting is a key's group routing as it is kept: "" to follow the
+// group, RoutingSmart, a built-in routing or a plugin's.
+func CleanRouting(v string) (string, error) {
+	r := strings.TrimSpace(v)
+	switch strings.ToLower(r) {
+	case "", "follow", "group", "default":
+		return "", nil
+	case RoutingSmart:
+		return RoutingSmart, nil
+	case provider.Manual: // a group's own pick: a key has none to send to
+	default:
+		if l := strings.ToLower(r); provider.GroupRouting(l) {
+			return l, nil
+		}
+		if provider.PluginRouting(r) {
+			return r, nil
+		}
+	}
+	return "", fmt.Errorf("Routing: follow, smart, one of %s or a plugin's <plugin>/<name>, not %q", strings.Join(keyRoutings, ", "), v)
 }
 
 // A key's Redact.
@@ -308,6 +344,9 @@ type Identity struct {
 	ServiceTier string
 	// Redact is Key.Redact; an issued key is held on by its issuer's on.
 	Redact string
+	// Routing is Key.Routing; an issued key that sets none follows its
+	// issuer's.
+	Routing string
 	// Default: the key is the sharing key magpie made itself (Default),
 	// the one it writes into this computer's own agents that reach the
 	// gateway from beyond loopback, never one the user made for someone
@@ -526,6 +565,9 @@ type Change struct {
 	ServiceTier string `json:"serviceTier,omitempty"`
 	// Redact is what "redact-key" sets (Key.Redact): "", "on" or "off".
 	Redact string `json:"redact,omitempty"`
+	// Routing is what "routing-key" sets (Key.Routing), "" to follow the
+	// group's own.
+	Routing string `json:"routing,omitempty"`
 	// Secret is the value "add-key" gives the new key, one its clients
 	// already send (love1sbug on X: keys handed out from another gateway),
 	// or "rotate-key" gives the key; "" for one magpie makes.
@@ -708,6 +750,12 @@ func Update(action string, in Change) (string, error) {
 				return "", err
 			}
 			keys[i].ServiceTier = tier
+		case "routing-key":
+			routing, err := CleanRouting(in.Routing)
+			if err != nil {
+				return "", err
+			}
+			keys[i].Routing = routing
 		case "redact-key":
 			mode, err := CleanRedact(in.Redact)
 			if err != nil {
@@ -796,7 +844,7 @@ func Update(action string, in Change) (string, error) {
 		default:
 			return "", fmt.Errorf("unknown key action %q", action)
 		}
-		if defaultKey && action != "remove-key" && action != "rename-key" && action != "limit-key" && action != "reset-limit-key" && action != "models-key" && action != "aliases-key" && action != "accounts-key" && action != "mcp-key" && action != "quotas-key" && action != "concurrency-key" && action != "tier-key" && action != "redact-key" && action != "access-key" && action != "issuer-key" && action != "admin-key" && action != "memory-key" && action != "move-key" {
+		if defaultKey && action != "remove-key" && action != "rename-key" && action != "limit-key" && action != "reset-limit-key" && action != "models-key" && action != "aliases-key" && action != "accounts-key" && action != "mcp-key" && action != "quotas-key" && action != "concurrency-key" && action != "tier-key" && action != "routing-key" && action != "redact-key" && action != "access-key" && action != "issuer-key" && action != "admin-key" && action != "memory-key" && action != "move-key" {
 			mirror = &keys[i]
 		}
 	}

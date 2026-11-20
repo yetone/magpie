@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -57,6 +58,10 @@ func gatewayKeysTo(out io.Writer, args []string) error {
 	if action == "tier" {
 		access.MigrateLegacyLANKeyBestEffort()
 		return gatewayKeyTier(out, args[1:])
+	}
+	if action == "routing" {
+		access.MigrateLegacyLANKeyBestEffort()
+		return gatewayKeyRouting(out, args[1:])
 	}
 	if action == "redact" || action == "masking" {
 		access.MigrateLegacyLANKeyBestEffort()
@@ -123,7 +128,7 @@ func gatewayKeysTo(out io.Writer, args []string) error {
 		args = args[:2]
 	}
 	if (action == "list" && len(args) != 1) || (action != "list" && len(args) != 2) {
-		return fmt.Errorf("usage: magpie gateway-key list | add <name> [--key <value> | --key -] [--read-only] | rotate <id> [--key <value> | --key -] | remove <id> | limit <id> [list | off | reset [<n>] | remove <n> | [add] day|week|month|total|<N>d|<N>h|account [--account <provider>/<account> --window <name>] [--tokens N] [--cost USD] [--cache-reads] [--model <provider>/<model>|<provider>/* ...]] | models <id> [all | <provider>/<model>|<provider>/*|re:<regexp> ...] | aliases <id> [none | <name>=<provider>/<model> ...] | accounts <id> [all | <provider>/<account>|<provider>/<key id> ...] | quotas <id> [on | off] | concurrency <id> [<n> | off] | tier <id> [follow | standard | fast | ultrafast] | redact <id> [follow | on | off] | mcp <id> [all | none | <server>|<server>/<tool> ...] | access <id> [read-only | full] | move <id> <place> | issue --ttl <duration> [--name <name>] [--models a,b] [--accounts a,b] [--tokens N] [--cost USD] [--read-only] [--from <id>] | issuer <id> [on | off] | oidc [list | add --key <id> --repo owner/name … | remove <rule id>]")
+		return fmt.Errorf("usage: magpie gateway-key list | add <name> [--key <value> | --key -] [--read-only] | rotate <id> [--key <value> | --key -] | remove <id> | limit <id> [list | off | reset [<n>] | remove <n> | [add] day|week|month|total|<N>d|<N>h|account [--account <provider>/<account> --window <name>] [--tokens N] [--cost USD] [--cache-reads] [--model <provider>/<model>|<provider>/* ...]] | models <id> [all | <provider>/<model>|<provider>/*|re:<regexp> ...] | aliases <id> [none | <name>=<provider>/<model> ...] | accounts <id> [all | <provider>/<account>|<provider>/<key id> ...] | quotas <id> [on | off] | concurrency <id> [<n> | off] | tier <id> [follow | standard | fast | ultrafast] | routing <id> [follow | smart | order | drain | rotate | usage | pace | weight | free | fast | cheap | expiring | fit | <plugin>/<name>] | redact <id> [follow | on | off] | mcp <id> [all | none | <server>|<server>/<tool> ...] | access <id> [read-only | full] | move <id> <place> | issue --ttl <duration> [--name <name>] [--models a,b] [--accounts a,b] [--tokens N] [--cost USD] [--read-only] [--from <id>] | issuer <id> [on | off] | oidc [list | add --key <id> --repo owner/name … | remove <rule id>]")
 	}
 	switch action {
 	case "list", "add", "rotate", "remove":
@@ -902,6 +907,36 @@ func gatewayKeyTier(out io.Writer, args []string) error {
 	k := keys[i]
 	word := map[string]string{"": "follows the request", settings.CodexTierStandard: "standard", "priority": "fast", "ultrafast": "ultrafast"}[k.ServiceTier]
 	_, err = fmt.Fprintf(out, "%s: service tier %s\n", k.Name, word)
+	return err
+}
+
+// gatewayKeyRouting shows or sets how a routing group a key's requests
+// ask for picks its members' accounts and keys for them (access.Key.Routing,
+// justforlxz on X):
+//
+//	magpie gateway-key routing <id>             its routing
+//	magpie gateway-key routing <id> follow|smart|order|drain|rotate|usage|pace|weight|free|fast|cheap|expiring|fit|<plugin>/<name>
+func gatewayKeyRouting(out io.Writer, args []string) error {
+	if len(args) == 0 || len(args) > 2 {
+		return fmt.Errorf("usage: magpie gateway-key routing <id> [follow | smart | order | drain | rotate | usage | pace | weight | free | fast | cheap | expiring | fit | <plugin>/<name>]")
+	}
+	id := args[0]
+	if len(args) == 2 {
+		if _, err := access.Update("routing-key", access.Change{Key: id, Routing: args[1]}); err != nil {
+			return err
+		}
+	}
+	keys, err := access.List()
+	if err != nil {
+		return err
+	}
+	i := slices.IndexFunc(keys, func(k access.Key) bool { return k.ID == id })
+	if i < 0 {
+		return fmt.Errorf("Key not found")
+	}
+	k := keys[i]
+	word := cmp.Or(map[string]string{"": "follows each routing group's own", access.RoutingSmart: "smart"}[k.Routing], k.Routing)
+	_, err = fmt.Fprintf(out, "%s: group routing %s\n", k.Name, word)
 	return err
 }
 

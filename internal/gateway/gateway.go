@@ -2947,6 +2947,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// before any image is taken out of the request: one may be for images
 	g, ms, isGroup := provider.FindGroup(asked)
 	g = g.Live() // a manual group's rules wait
+	// routed as the calling key says, where it says (justforlxz on X)
+	g = keyRouted(access.Caller(r.Context()), g)
 	// a model on this machine or the local network that the user set to
 	// go unmasked gets the request as written (lc on Discord), and it
 	// isn't masked on its way, the request archive on or not: the archive
@@ -2976,7 +2978,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				log.Printf("gateway: %d value(s) masking would change, sent as written to %s (Settings › Privacy)", hits.n, to)
 				p, model, _ = provider.Resolve(to)
 				g, ms, isGroup = provider.FindGroup(to)
-				g = g.Live()
+				g = keyRouted(access.Caller(r.Context()), g.Live())
 				sentWhole = true
 				move(to, movedPrivacy)
 			} else {

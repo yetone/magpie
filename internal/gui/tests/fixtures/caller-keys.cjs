@@ -237,6 +237,7 @@ function fixture(lang, theme, events, options = {}) {
         k.maxConcurrency = body.maxConcurrency || undefined;
       }
       if (action === "tier-key") k.serviceTier = body.serviceTier || undefined;
+      if (action === "routing-key") k.routing = body.routing || undefined;
       if (action === "redact-key") k.redact = body.redact === "on" || body.redact === "off" ? body.redact : undefined;
       if (action === "access-key") k.readOnly = body.readOnly || undefined;
       // a key put at a place in the list, as access.Update keeps it;
