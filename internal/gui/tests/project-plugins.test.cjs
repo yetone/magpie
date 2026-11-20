@@ -26,7 +26,7 @@ const lib = (given) => ({
     agent("goose", "Goose"),
   ],
   instructions: { agents: [] }, servers: [], subagents: [], skills: [], foundServers: [], foundSkills: [],
-  plugins: [plugin("acme-kit", { skills: ["tdd"], mcp: ["acme-db"], hooks: ["acme-kit:Stop"], subagents: ["reviewer"] }), plugin("tidy", { skills: ["tidy"] })],
+  plugins: [plugin("acme-kit", { skills: ["tdd"], mcp: ["acme-db"], hooks: ["acme-kit:Stop"], subagents: ["reviewer"] }), plugin("tidy", { skills: ["tidy"] }), plugin("pi-guard", { extensions: ["extension.ts"] })],
   projects: [{ dir: DIR, name: "app", copy: false, skills: {}, placed: [], servers: {}, subagents: {}, plugins: given, wrote: {} }],
 });
 
@@ -119,7 +119,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await press(page, card.locator(".lib-projhead"));
         const rows = card.locator(".lib-projplugin");
         await rows.first().waitFor();
-        assert.equal(await rows.count(), 2);
+        assert.equal(await rows.count(), 3);
+        // #7267: a Pi package with only an extension says so on its row
+        assert.match((await card.locator(".lib-projplugin").filter({ hasText: "pi-guard" }).locator(".lib-plparts").textContent()).trim(), /^\S.* 1$/);
         const row = () => card.locator(".lib-projplugin").filter({ hasText: "acme-kit" }).first();
         assert.deepEqual(await row().locator(".lib-ag").evaluateAll((cs) => cs.map((c) => c.dataset.agent)), ["claude", "codex", "pi"], "Goose takes nothing in a project");
         assert.equal(await card.locator(".lib-projhooks-codex").count(), 0);

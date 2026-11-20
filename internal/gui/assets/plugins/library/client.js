@@ -5693,6 +5693,7 @@ magpie.plugin("library", (ctx) => {
     p.mcp?.length ? t("MCP servers: {names}", { names: p.mcp.join(", ") }) : "",
     p.hooks?.length ? t("Hooks: {names}", { names: p.hooks.join(", ") }) : "",
     p.subagents?.length ? t("Subagents: {names}", { names: p.subagents.join(", ") }) : "",
+    p.extensions?.length ? t("Pi extensions: {names}", { names: p.extensions.join(", ") }) : "",
   ].filter(Boolean).join(" · ");
 
   function renderPlugins(body) {
@@ -5763,7 +5764,7 @@ magpie.plugin("library", (ctx) => {
       w.append(el("span", "name", x.name), el("span", "sub", x.description || ""));
       const count = (n) => (n ? [String(n)] : []);
       const parts = x.remote ? t("Fetched from its own repository when installed")
-        : pluginParts({ skills: count(x.skills), mcp: count(x.mcp), hooks: count(x.hooks), subagents: count(x.subagents) });
+        : pluginParts({ skills: count(x.skills), mcp: count(x.mcp), hooks: count(x.hooks), subagents: count(x.subagents), extensions: count(x.extensions) });
       if (parts) w.append(el("span", "sub lib-plparts", parts));
       r.append(cb, w);
       if (x.have) r.append(tag(t("in the library"), ""));
@@ -5797,7 +5798,7 @@ magpie.plugin("library", (ctx) => {
     if (p.description) who.append(el("div", "lib-subagentdesc", p.description));
     // counts, not every name: PStack has a hundred (jinpwng on X); the
     // names are in the dialog, folded
-    const line = [[t("Skills"), p.skills], [t("MCP servers"), p.mcp], [t("Hooks"), p.hooks], [t("Subagents"), p.subagents]]
+    const line = [[t("Skills"), p.skills], [t("MCP servers"), p.mcp], [t("Hooks"), p.hooks], [t("Subagents"), p.subagents], [t("Pi extensions"), p.extensions]]
       .filter(([, v]) => v?.length).map(([k, v]) => k + " " + v.length).join(" · ");
     if (line) who.append(el("div", "sub lib-plparts", line));
     // synced in from another computer, its source not reached here yet
@@ -5817,7 +5818,7 @@ magpie.plugin("library", (ctx) => {
     head.append(glyph(GLYPH.folder), el("b", "", p.name));
     ed.append(head);
     if (p.description) ed.append(el("p", "lib-subagentdesc", p.description));
-    const rows = [[t("Skills"), p.skills], [t("MCP servers"), p.mcp], [t("Hooks"), p.hooks], [t("Subagents"), p.subagents]].filter(([, v]) => v?.length);
+    const rows = [[t("Skills"), p.skills], [t("MCP servers"), p.mcp], [t("Hooks"), p.hooks], [t("Subagents"), p.subagents], [t("Pi extensions"), p.extensions]].filter(([, v]) => v?.length);
     for (const [label, names] of rows) {
       const d = el("details", "lib-plgroup");
       d.append(el("summary", "", label + " " + names.length), el("div", "mono lib-plnames", names.join(", ")));
@@ -7462,7 +7463,7 @@ magpie.plugin("library", (ctx) => {
       if (problem) n.append(tag(t("Not written"), "warn", problem));
       else if (b.off) n.append(tag(t("Off"), ""));
       w.append(n);
-      const line = [[t("Skills"), b.skills], [t("MCP servers"), b.mcp], [t("Hooks"), b.hooks], [t("Subagents"), b.subagents]]
+      const line = [[t("Skills"), b.skills], [t("MCP servers"), b.mcp], [t("Hooks"), b.hooks], [t("Subagents"), b.subagents], [t("Pi extensions"), b.extensions]]
         .filter(([, v]) => v?.length).map(([k, v]) => k + " " + v.length).join(" · ");
       const sub = el("div", "sub lib-plparts", problem || line);
       sub.title = problem || line;

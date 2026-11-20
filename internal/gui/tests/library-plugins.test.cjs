@@ -29,7 +29,10 @@ const SUB_AGENTS = [
 const MODELS = [{ id: "openai/gpt-6-sol", name: "GPT-6 Sol", note: "OpenAI" }, { id: "group/review", name: "review", group: true }];
 const LONG = "Reviews code a change touched and reports only real bugs: logic errors, edge cases, races and leaks, never style, and never refactors that have nothing to do with the change.";
 const PLUGIN = { name: "code-kit", version: "1.2.0", description: LONG, agents: ["claude", "codex"], skills: ["code-kit-tdd"], mcp: ["code-kit-docs"], hooks: ["code-kit-lint"], subagents: ["code-kit-reviewer"], left: [{ what: "commands/ship.md", why: "slash commands aren't carried" }], source: "/Users/chuan/code-kit", installed: "2026-11-11" };
-const FOUND = { source: "/Users/chuan/market", candidates: [{ name: "fresh-kit", description: "A new one", skills: 2, mcp: 1, hooks: 0, subagents: 1 }, { name: "code-kit", description: "Have it", skills: 1, mcp: 0, hooks: 0, subagents: 0, have: true }] };
+// #7267: a Pi package with only an extension is a plugin, its extension
+// its one part
+const PI_PKG = { name: "acme-pi-guard", version: "1.2.0", agents: [], extensions: ["extension.ts"], source: "/Users/chuan/pi-guard", installed: "2026-11-20" };
+const FOUND = { source: "/Users/chuan/market", candidates: [{ name: "fresh-kit", description: "A new one", skills: 2, mcp: 1, hooks: 0, subagents: 1 }, { name: "code-kit", description: "Have it", skills: 1, mcp: 0, hooks: 0, subagents: 0, have: true }, { name: "acme-pi-guard", description: "Guards", skills: 0, mcp: 0, hooks: 0, subagents: 0, extensions: 1, have: true }] };
 const lib = (plugins) => ({
   dir: `${HOME}/.magpie/library`, backups: `${HOME}/.magpie/backups`, home: HOME,
   agents: [agent("claude", "Claude Code"), agent("codex", "Codex")],
@@ -115,7 +118,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) {
       await t.test(lang, async () => {
         const w = (key, vars) => tr(lang, key, vars);
-        const state = { plugins: [{ ...PLUGIN }] };
+        const state = { plugins: [{ ...PLUGIN }, { ...PI_PKG }] };
         const posts = [], errors = [];
         const open = async (width) => {
           const ctx = await browser.newContext({ viewport: { width, height: 1000 }, reducedMotion: "reduce" });
@@ -135,7 +138,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         {
           const { ctx, page } = await open(1100);
           assert.deepEqual(await sideways(page), [], "sideways scroll at 1100");
-          await press(page, page.locator("#view-library .lib-plugin").first());
+          await press(page, page.locator("#view-library .lib-plugin").filter({ has: page.locator(".name", { hasText: "code-kit" }) }));
           await page.locator("#modal .lib-pldetail").waitFor();
           await settled(page);
           assert.deepEqual(await sideways(page), [], "sideways scroll in the dialog at 1100");
@@ -160,9 +163,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const row = (name) => v.locator(".lib-plugin").filter({ has: page.locator(".name", { hasText: name }) });
         // the tab, counted, and the row's parts
         const tabs = (await v.locator(".lib-tabs button").allTextContents()).map((x) => x.trim());
-        assert(tabs.includes(w("Claude plugins") + " · 1"), tabs.join("|"));
+        assert(tabs.includes(w("Claude plugins") + " · 2"), tabs.join("|"));
         assert.equal((await row("code-kit").locator(".lib-plparts").textContent()).trim(),
           [w("Skills") + " 1", w("MCP servers") + " 1", w("Hooks") + " 1", w("Subagents") + " 1"].join(" · "));
+        assert.equal((await row("acme-pi-guard").locator(".lib-plparts").textContent()).trim(), w("Pi extensions") + " 1");
         assert.deepEqual(await sideways(page), [], "sideways scroll at 420");
         assert.equal(await page.locator("select").count(), 0, "a native <select>");
 
@@ -187,6 +191,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await v.locator(".lib-plpick input:checked").count(), 1);
         assert.equal(await v.locator(".lib-plpick input:disabled").count(), 0);
         assert.deepEqual(await sideways(page), [], "sideways scroll with the finds at 420");
+        assert.equal((await v.locator(".lib-plpick").filter({ hasText: "acme-pi-guard" }).locator(".lib-plparts").textContent()).trim(), w("Pi extensions: {names}", { names: "1" }));
         await v.locator(".lib-plfind .lib-probefoot button.primary", { hasText: w("Install 1 plugin") }).click();
         await row("fresh-kit").waitFor();
         const inst = posts.shift();

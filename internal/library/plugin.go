@@ -66,6 +66,11 @@ type Plugin struct {
 	MCP       []string `json:"mcp,omitempty"`
 	Hooks     []string `json:"hooks,omitempty"`
 	Subagents []string `json:"subagents,omitempty"`
+	// Extensions are the Pi extensions a Pi package declares (package.json
+	// pi.extensions), as paths in its folder. They are Pi's to load, from
+	// the package entry a project giving the plugin to Pi gets (#7267), so
+	// magpie writes nothing for them
+	Extensions []string `json:"extensions,omitempty"`
 	// Left are the parts of the plugin magpie doesn't carry, and why
 	Left []PluginLeft `json:"left,omitempty"`
 	// Installed is when it was installed or last updated
@@ -113,11 +118,74 @@ type plLoaded struct {
 	servers                    []*Server
 	hooks                      []*Hook
 	agents                     []*Subagent
+	extensions                 []string // a Pi package's, relative to its folder
 	left                       []PluginLeft
 }
 
 func (p *plLoaded) parts() int {
-	return len(p.skills) + len(p.servers) + len(p.hooks) + len(p.agents)
+	return len(p.skills) + len(p.servers) + len(p.hooks) + len(p.agents) + len(p.extensions)
+}
+
+// piPackageExtensions are the extensions a Pi package declares in
+// package.json pi.extensions, as Pi resolves them (package-manager.js): a
+// file is itself, a folder its index.ts/index.js or package.json's own
+// pi.extensions, else each extension in it; a glob matches files in the
+// package; "!" leaves out what matches. A folder that isn't a Pi package, or
+// declares none, has none: Pi loads no extensions/ folder of a package with
+// a "pi" object that doesn't name it.
+func piPackageExtensions(dir string) []string {
+	if !piManifest(dir) {
+		return nil
+	}
+	raw, _ := os.ReadFile(filepath.Join(dir, "package.json"))
+	var pkg struct {
+		Pi struct {
+			Extensions []string `json:"extensions"`
+		} `json:"pi"`
+	}
+	if json.Unmarshal(stripBOM(raw), &pkg) != nil {
+		return nil
+	}
+	var files, drops []string
+	for _, e := range pkg.Pi.Extensions {
+		switch {
+		case strings.HasPrefix(e, "!") || strings.HasPrefix(e, "-"):
+			drops = append(drops, strings.TrimPrefix(filepath.ToSlash(e[1:]), "./"))
+		case strings.HasPrefix(e, "+"):
+		case piIsPattern(e):
+			for _, f := range piExpand(dir, e) {
+				if fi, err := os.Stat(f); err == nil && fi.Mode().IsRegular() {
+					files = append(files, f)
+				}
+			}
+		default:
+			d, ok := inside(dir, e)
+			if !ok {
+				continue
+			}
+			if fi, err := os.Stat(d); err != nil {
+				continue
+			} else if fi.IsDir() {
+				files = append(files, piDirEntries(d)...)
+			} else {
+				files = append(files, d)
+			}
+		}
+	}
+	var out []string
+	for _, f := range files {
+		rel, err := filepath.Rel(dir, f)
+		if err != nil || strings.HasPrefix(rel, "..") {
+			continue
+		}
+		rel = filepath.ToSlash(rel)
+		if slices.ContainsFunc(drops, func(x string) bool { return rel == x || piGlob(x).MatchString(rel) }) {
+			continue
+		}
+		out = append(out, rel)
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
 }
 
 func readJSONFile(p string) (map[string]any, error) {
@@ -219,8 +287,22 @@ func readPlugin(dir, hint, force string, over map[string]any) (*plLoaded, error)
 			man[k] = v
 		}
 	}
-	if !isPlugin(dir) && len(man) == 0 {
-		return nil, fmt.Errorf("no plugin in %s: it has no .claude-plugin/plugin.json, .codex-plugin/plugin.json, skills, agents, hooks or .mcp.json", dir)
+	// a Pi package's package.json names it, says what it is and its version
+	// where no plugin manifest does: its name holds however the package is
+	// fetched (#7267)
+	if piManifest(dir) {
+		if pkg, err := readJSONFile(filepath.Join(dir, "package.json")); err == nil {
+			for _, k := range []string{"name", "description", "version"} {
+				if _, ok := man[k]; !ok && plStr(pkg[k]) != "" {
+					man[k] = pkg[k]
+				}
+			}
+		}
+	}
+	// a Pi package (package.json with a "pi" object) is one too (#7267):
+	// one with only extensions has nothing else here
+	if !isPlugin(dir) && len(man) == 0 && !piManifest(dir) {
+		return nil, fmt.Errorf("no plugin in %s: it has no .claude-plugin/plugin.json, .codex-plugin/plugin.json, skills, agents, hooks, .mcp.json or a Pi package.json", dir)
 	}
 	name := pluginSlug(force)
 	if name == "" {
@@ -235,7 +317,8 @@ func readPlugin(dir, hint, force string, over map[string]any) (*plLoaded, error)
 	if name == "" {
 		return nil, errors.New("the plugin has no name")
 	}
-	p := &plLoaded{name: name, description: strings.Join(strings.Fields(plStr(man["description"])), " "), version: plStr(man["version"])}
+	p := &plLoaded{name: name, description: strings.Join(strings.Fields(plStr(man["description"])), " "), version: plStr(man["version"]),
+		extensions: piPackageExtensions(dir)}
 	root, sub := pluginDir(name), pluginSub(name)
 	leave := func(what, why string) { p.left = append(p.left, PluginLeft{What: what, Why: why}) }
 
@@ -702,6 +785,7 @@ type PluginCandidate struct {
 	MCP         int    `json:"mcp"`
 	Hooks       int    `json:"hooks"`
 	Subagents   int    `json:"subagents"`
+	Extensions  int    `json:"extensions,omitempty"`
 	// Remote: it is fetched from another repository when installed, so
 	// its parts aren't counted
 	Remote bool `json:"remote,omitempty"`
@@ -914,7 +998,7 @@ func marketSource(s map[string]any) (Source, string) {
 
 func candidateOf(pl *plLoaded, dir string, over map[string]any) PluginCandidate {
 	return PluginCandidate{Name: pl.name, Description: pl.description, Version: pl.version,
-		Skills: len(pl.skills), MCP: len(pl.servers), Hooks: len(pl.hooks), Subagents: len(pl.agents),
+		Skills: len(pl.skills), MCP: len(pl.servers), Hooks: len(pl.hooks), Subagents: len(pl.agents), Extensions: len(pl.extensions),
 		Left: pl.left, dir: dir, over: over}
 }
 
@@ -1058,7 +1142,7 @@ func installPlugins(p *PluginProbe, input string, names, agents []string, as str
 			return nil, fmt.Errorf("%s: %w", c.Name, err)
 		}
 		if pl.parts() == 0 {
-			return nil, fmt.Errorf("%s has no skills, MCP servers, hooks or subagents magpie can give an agent", pl.name)
+			return nil, fmt.Errorf("%s has no skills, MCP servers, hooks, subagents or extensions for Pi magpie can give an agent", pl.name)
 		}
 		ones = append(ones, one{c, pl, d})
 	}
@@ -1091,7 +1175,8 @@ func installPlugins(p *PluginProbe, input string, names, agents []string, as str
 func installPlugin(l *Library, pl *plLoaded, dir, input, pick string, agents []string) ([]Problem, error) {
 	old := l.plugin(pl.name)
 	b := &Plugin{Name: pl.name, Description: pl.description, Version: pl.version, Source: input, Pick: pick,
-		Agents: orNone(slices.Compact(slices.Sorted(slices.Values(agents)))), Installed: time.Now().Format(time.RFC3339)}
+		Agents: orNone(slices.Compact(slices.Sorted(slices.Values(agents)))), Installed: time.Now().Format(time.RFC3339),
+		Extensions: pl.extensions}
 	if old != nil {
 		b.Agents, b.Off = old.Agents, old.Off
 		if len(agents) > 0 {
@@ -1207,7 +1292,7 @@ func installPlugin(l *Library, pl *plLoaded, dir, input, pick string, agents []s
 		l.Subagents = append(l.Subagents, s)
 		b.Subagents = append(b.Subagents, n)
 	}
-	if len(b.Skills)+len(b.MCP)+len(b.Hooks)+len(b.Subagents) == 0 {
+	if len(b.Skills)+len(b.MCP)+len(b.Hooks)+len(b.Subagents)+len(b.Extensions) == 0 {
 		os.RemoveAll(pluginDir(pl.name))
 		return nil, errors.New("every part of it clashes with the library's own: " + skipped[len(skipped)-1].Error)
 	}

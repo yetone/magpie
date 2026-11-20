@@ -284,7 +284,7 @@ func (l *Library) putPlugins(in []*CarriedPlugin, stage string) (fetch []*Carrie
 			continue
 		}
 		if pl.parts() == 0 {
-			fail(fmt.Errorf("%s has no skills, MCP servers, hooks or subagents magpie can give an agent", c.Name))
+			fail(fmt.Errorf("%s has no skills, MCP servers, hooks, subagents or extensions for Pi magpie can give an agent", c.Name))
 			continue
 		}
 		skipped, err := installPlugin(l, pl, dir, c.Source, c.Pick, c.Agents)

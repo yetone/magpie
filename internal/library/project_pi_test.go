@@ -3,6 +3,7 @@ package library
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -159,5 +160,78 @@ func TestProjectPluginPiPackage(t *testing.T) {
 	ok(t)(ProjectPlugin(a, "acme-kit", nil))
 	if s := read(t, file); strings.Contains(s, dir) || !strings.Contains(s, "npm:pi-own") {
 		t.Fatalf("withdrawn:\n%s", s)
+	}
+}
+
+// An extension-only Pi package (#7267, jinpwng) is a plugin: the probe
+// finds it by its package.json, shows its extension and names it by the
+// package, and a project giving it to Pi gets one entry, its folder.
+func TestPiExtensionOnlyPackageIsAPlugin(t *testing.T) {
+	h := sandbox(t)
+	pluginAgents(t, h)
+	src := filepath.Join(t.TempDir(), "folder")
+	write(t, filepath.Join(src, "package.json"), `{"name":"@acme/pi-guard","version":"1.2.0","description":"Guards","pi":{"extensions":["./extension.ts"]}}`)
+	write(t, filepath.Join(src, "extension.ts"), "export default function (pi: any) { pi.on('session_start', async () => {}) }\n")
+	forgetProbes()
+	p, err := ProbePlugins(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Candidates) != 1 || p.Candidates[0].Extensions != 1 || p.Candidates[0].Name != "acme-pi-guard" || p.Candidates[0].Version != "1.2.0" {
+		t.Fatalf("probe: %+v", p.Candidates)
+	}
+	ok(t)(InstallPlugins(src, nil, []string{}))
+	v := View0(t)
+	if len(v.Plugins) != 1 || v.Plugins[0].Name != "acme-pi-guard" || !slices.Equal(v.Plugins[0].Extensions, []string{"extension.ts"}) {
+		t.Fatalf("bundle: %+v", v.Plugins)
+	}
+	if len(v.Skills)+len(v.Servers)+len(v.Hooks)+len(v.Subagents) != 0 {
+		t.Fatalf("an extension is no library item: %+v", v)
+	}
+	proj := filepath.Join(t.TempDir(), "proj")
+	gitInit(t, proj)
+	ok(t)(AddProject(proj))
+	file := filepath.Join(proj, ".pi/settings.json")
+	write(t, file, "{\"packages\": [\"npm:pi-own\"]}\n")
+	ok(t)(ProjectPlugin(proj, "acme-pi-guard", []string{"pi"}))
+	ok(t)(ProjectPlugin(proj, "acme-pi-guard", []string{"pi"}))
+	s := read(t, file)
+	if strings.Count(s, pluginDir("acme-pi-guard")) != 1 || !strings.Contains(s, "npm:pi-own") {
+		t.Fatalf("one entry beside the project's own:\n%s", s)
+	}
+	ok(t)(ProjectPlugin(proj, "acme-pi-guard", nil))
+	if s := read(t, file); strings.Contains(s, pluginDir("acme-pi-guard")) || !strings.Contains(s, "npm:pi-own") {
+		t.Fatalf("withdrawn:\n%s", s)
+	}
+
+	// a package.json with no "pi" object is no plugin still
+	plain := filepath.Join(t.TempDir(), "plain")
+	write(t, filepath.Join(plain, "package.json"), `{"name":"left-pad"}`)
+	forgetProbes()
+	if _, err := ProbePlugins(plain); err == nil || !strings.Contains(err.Error(), "no plugin") {
+		t.Fatalf("a plain package: %v", err)
+	}
+}
+
+// The extensions a package declares, resolved as Pi does: a file, a
+// folder's index, each extension in a folder, a glob, and "!" leaving one
+// out; nothing outside the package.
+func TestPiPackageExtensions(t *testing.T) {
+	d := t.TempDir()
+	write(t, filepath.Join(d, "package.json"), `{"pi":{"extensions":["./a.ts","./withindex","./many","./globbed/*.ts","!globbed/skip.ts","../out.ts"]}}`)
+	for _, f := range []string{"a.ts", "withindex/index.ts", "withindex/helper.ts", "many/x.ts", "many/y.js", "many/notes.md", "globbed/g.ts", "globbed/skip.ts"} {
+		write(t, filepath.Join(d, f), "//")
+	}
+	write(t, filepath.Join(filepath.Dir(d), "out.ts"), "//")
+	got := piPackageExtensions(d)
+	want := []string{"a.ts", "globbed/g.ts", "many/x.ts", "many/y.js", "withindex/index.ts"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	nopi := t.TempDir()
+	write(t, filepath.Join(nopi, "package.json"), `{"name":"x"}`)
+	write(t, filepath.Join(nopi, "extensions/e.ts"), "//")
+	if got := piPackageExtensions(nopi); got != nil {
+		t.Fatalf("no pi object: %v", got)
 	}
 }
