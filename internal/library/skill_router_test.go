@@ -315,6 +315,61 @@ func TestSkillRouterSlashNotWhereAlmaReads(t *testing.T) {
 	}
 }
 
+// DeepSeek Harness (yuushabu_buyinn on X): a skill the router lists stays
+// a /name of dsh's. Its folder, $DSH_HOME/skills, gets a stub dsh's
+// skill-filesystem reads as user-only (disable-model-invocation), which
+// its / picker offers and its catalog for the model leaves out; router
+// off, the skill's link is back where the stub was.
+func TestSkillRouterSlashDsh(t *testing.T) {
+	h := sandbox(t)
+	holdCLI(t, h, "dsh")
+	dir := filepath.Join(h, ".dsh", "skills")
+	if tg := targetByID("dsh"); tg == nil || tg.Skills != dir {
+		t.Fatalf("dsh: %+v", tg)
+	}
+	src := filepath.Join(h, "src")
+	skill(t, filepath.Join(src, "pdf"), "pdf", "Read PDFs")
+	write(t, filepath.Join(src, "lint/SKILL.md"), "---\nname: lint\ndescription: Model only\nuser-invocable: false\n---\n")
+	ok(t)(InstallSkills(src, []string{"pdf", "lint"}, []string{"dsh"}))
+	ok(t)(SetSkillRouter(true))
+	if !routerOurs(filepath.Join(dir, RouterSkill)) {
+		t.Fatal("dsh isn't given the router")
+	}
+	p := filepath.Join(dir, "pdf")
+	if !stubOf(p) {
+		t.Fatal("dsh: no stub of pdf to type it by")
+	}
+	md := read(t, filepath.Join(p, "SKILL.md"))
+	if m := parseMeta([]byte(md)); m.Name != "pdf" || !m.Manual || m.Description != "Read PDFs" {
+		t.Fatalf("dsh: pdf's stub front matter: %+v\n%s", m, md)
+	}
+	// dsh's parseInvocationPolicy refuses a skill with the camelCase keys
+	for _, k := range []string{"disableModelInvocation", "modelInvocable", "userInvocable"} {
+		if strings.Contains(md, k+":") {
+			t.Fatalf("dsh: the stub has %s, which dsh refuses:\n%s", k, md)
+		}
+	}
+	at := filepath.Join(realDir(dir), RouterSkill, ".skills", "pdf", "SKILL.md")
+	if !strings.Contains(md, "`"+at+"`") {
+		t.Fatalf("dsh: the stub doesn't send the agent to %s:\n%s", at, md)
+	}
+	if _, err := os.Lstat(filepath.Join(dir, "lint")); err == nil {
+		t.Fatal("dsh: a skill only the model calls has a stub")
+	}
+	if p := ok(t)(Sync()); len(p.Changed) != 0 || len(p.Problems) != 0 {
+		t.Fatalf("a second sync: changed %v, problems %+v", p.Changed, p.Problems)
+	}
+	ok(t)(SetSkillRouter(false))
+	for _, n := range []string{"pdf", "lint"} {
+		if !ours(filepath.Join(dir, n), n) {
+			t.Fatalf("dsh: router off, no link of %s", n)
+		}
+	}
+	if _, err := os.Stat(stubsDir(dir)); err == nil {
+		t.Fatal("dsh: router off, the stubs' folder stays")
+	}
+}
+
 // Unticked from every skill the router listed, the agent's entry goes.
 func TestSkillRouterLastSkillUnticked(t *testing.T) {
 	h := sandbox(t)
