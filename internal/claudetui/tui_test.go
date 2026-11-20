@@ -3,6 +3,7 @@ package claudetui
 import (
 	"bufio"
 	"bytes"
+	_ "embed"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -44,17 +45,33 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// fakeTrust asks whether to trust the folder as Claude Code 2.1.314 does:
-// its words placed by cursor moves, "No, exit" chosen, and drawn again on
-// No once it listens, the keys before that lost. Enter on No exits.
-// With always, it never listens, as a question whose answer never goes
-// through.
+// trustScreen is how Claude Code 2.1.329 first draws its trust question,
+// as a real run drew it in a sandbox (its folder /private/tmp/
+// magpie-trust-fixture): headed "Quick safety check", the No row first,
+// and "trust this folder" in the Yes row alone.
+//
+//go:embed testdata/trust-2.1.329.bin
+var trustScreen []byte
+
+// fakeTrust asks whether to trust the folder as Claude Code 2.1.329 does
+// (trustScreen): "No, exit" chosen, the keys before it listens lost, and
+// nothing drawn again until a key moves the choice, when its two rows
+// are, as 2.1.329 draws them. Enter on No exits. With always, it never listens, as a
+// question whose answer never goes through.
 func fakeTrust(r *bufio.Reader, always bool) {
 	var mu sync.Mutex
 	yes, deaf := false, true
+	first := true
 	draw := func() {
-		marks := map[bool]string{true: "\x1b[38;2;177;185;249m❯\x1b[39m", false: " "}
-		fmt.Printf("\x1b[2GDo\x1b[5Gyou\x1b[9Gtrust\x1b[15Gthis\x1b[20Gfolder?\r\n\x1b[2G%s\x1b[4GNo,\x1b[8Gexit\r\n\x1b[2G%s\x1b[4GYes,\x1b[9GI\x1b[11Gtrust\x1b[17Gthis\x1b[22Gfolder\r\n", marks[!yes], marks[yes])
+		if first {
+			first = false
+			_, _ = os.Stdout.Write(trustScreen)
+			return
+		}
+		// 2.1.329's own redraw on a key (its cursor left on the No row
+		// it started from)
+		marks := map[bool]string{true: "\x1b[38;2;177;185;249m❯", false: " "}
+		fmt.Printf("\x1b[?2026h\x1b[1D\x1b[4B\r\x1b[1C\x1b[4A%s\x1b[4GNo, exit\x1b[39m\r\x1b[1C\x1b[1B%s\x1b[4GYes, I trust this folder\x1b[39m\r\r\n\r\n\r\n\x1b[1C\x1b[4A\x1b[?2026l", marks[!yes], marks[yes])
 	}
 	draw()
 	time.AfterFunc(150*time.Millisecond, func() {
@@ -64,7 +81,6 @@ func fakeTrust(r *bufio.Reader, always bool) {
 		mu.Lock()
 		defer mu.Unlock()
 		deaf, yes = false, false
-		draw()
 	})
 	for {
 		c, err := r.ReadByte()
@@ -1168,6 +1184,31 @@ func TestShimDeclinesChromeOffer(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(home, "claude", "chrome-declined")); err != nil {
 		t.Fatal("the offer wasn't declined")
+	}
+}
+
+// Claude Code 2.1.329's trust question, as a real run drew it, is the
+// question, read from what was drawn and from the screen alike, with "No,
+// exit" chosen: its heading is "Quick safety check", and "trust this
+// folder" is in its Yes row alone, under the No row. Read as a question
+// with its words above both rows, it was none, and a run told to trust
+// the folder waited out readyWait on it, 502 on every account
+// (@ahz2ygnhjmIJ0E0 on X).
+func TestTrustQuestionOf2_1_329(t *testing.T) {
+	s := &shim{screen: trustScreen, grid: newGrid(screenSize())}
+	s.grid.write(trustScreen)
+	now, _ := s.looks()
+	for name, p := range map[string]string{"drawn": s.plain(), "screen": now} {
+		words := strings.Join(strings.Fields(p), " ")
+		if !optionDialog(words, trustAsk, trustRow) {
+			t.Errorf("%s: not the trust question: %q", name, words)
+		}
+		if optionDialog(words, bypassAsk, bypassRow) {
+			t.Errorf("%s: read as the Bypass Permissions disclaimer", name)
+		}
+	}
+	if p := s.plain(); lastAt(trustNo, p) < 0 || lastAt(trustYes, p) >= 0 {
+		t.Errorf("No isn't the choice drawn: %q", p)
 	}
 }
 

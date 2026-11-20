@@ -33,6 +33,14 @@ const DeadlineEnv = "MAGPIE_CLAUDE_TUI_BY"
 // folder of magpie's.
 const Untrusted = "Claude Code asks whether to trust the folder"
 
+// Unanswered ends, in what the helper says as it ends, a question of
+// Claude Code's it saw and answered without the answer going through
+// (the trust question, the Bypass Permissions disclaimer, the Claude in
+// Chrome offer): Claude Code asks it the same under every account, so
+// the bridge doesn't ask the next account (@ahz2ygnhjmIJ0E0 on X: 502
+// after every account had waited out 45s on the trust question).
+const Unanswered = ", not answered in "
+
 // EndedEarly begins what the helper says as it ends over a Claude Code
 // that ended itself before it showed its prompt, as one that can't load
 // the session it was told to go on with does. Every other way the

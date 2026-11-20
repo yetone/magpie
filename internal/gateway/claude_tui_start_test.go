@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/claudetui"
+	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/testenv"
 )
 
@@ -143,5 +145,30 @@ exit 1`)
 				t.Fatalf("a -p Claude Code ran: %v", runs)
 			}
 		})
+	}
+}
+
+// A question Claude Code's interactive mode asked and the helper couldn't
+// get answered (the trust question, which Claude Code 2.1.329 asked
+// where the helper didn't see it) is asked the same under every account:
+// the turn is a 400 no account rests for, and the next account isn't
+// asked. It was a 502, and every account waited out its 45s in turn
+// before the client had it (@ahz2ygnhjmIJ0E0 on X).
+func TestClaudeTUIUnansweredQuestionIsNoAccountsFault(t *testing.T) {
+	said := "Claude Code asked whether to trust /work" + claudetui.Unanswered + "45s: Quick safety check ❯ No, exit Yes, I trust this folder"
+	h, started := tuiHelperHarness(t, `echo "claude-tui: `+said+`" >&2
+exit 1`)
+	body := `{"model":"claude-sonnet-5","max_tokens":100,"messages":[{"role":"user","content":"hi"}]}`
+	var u Usage
+	rec := httptest.NewRecorder()
+	code, msg := h.s.serveClaudeSubscription(rec, httptest.NewRequest("POST", "/v1/messages", strings.NewReader(body)), provider.Anthropic, h.p, "claude-sonnet-5", []byte(body), &u)
+	if code != 400 || !strings.Contains(msg, said) {
+		t.Fatalf("%d %.300s", code, msg)
+	}
+	if retryable(code, rec.Body.Bytes()) {
+		t.Fatalf("the unanswered question is asked of the next account: %s", rec.Body.String())
+	}
+	if n := helperStarts(started); n != 1 {
+		t.Fatalf("the helper started %d times, want once", n)
 	}
 }

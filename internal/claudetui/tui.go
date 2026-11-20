@@ -522,27 +522,34 @@ func tailAfter(words string, end int) int {
 	return utf8.RuneCountInString(words[end:])
 }
 
-// optionDialog is whether words end on a question: its heading, then its
-// option rows, a No and the yes row, with only the dialog's footer under
-// them. The question's words alone are not it: a resumed conversation's
-// history can hold them (#, @alisenray: "Bypass Permissions mode" in the
-// history failed every --resume at 45s with the prompt box showing).
+// optionDialog is whether words end on a question: its option rows, a No
+// and the yes row, with only the dialog's footer under them, and its
+// words ask at most dialogBody before them or in them. The question's
+// words alone are not it: a resumed conversation's history can hold them
+// (#, @alisenray: "Bypass Permissions mode" in the history failed every
+// --resume at 45s with the prompt box showing). Nor do the words come
+// first: Claude Code (2.1.327, 2.1.329) heads the trust question "Quick
+// safety check", and "trust this folder" is in its Yes row alone, under
+// the No row. A check that wanted the words above both rows never saw
+// the question, and every run of a saved account in a caller's folder
+// waited out its 45s on it (@ahz2ygnhjmIJ0E0 on X).
 func optionDialog(words, ask string, yes *lazyre.RE) bool {
-	h := strings.Index(words, ask)
-	if h < 0 {
-		return false
-	}
-	end := -1
+	start, end := len(words), -1
 	for _, re := range []*lazyre.RE{noRow, yes} {
 		m := re.FindAllStringIndex(words, -1)
-		if len(m) == 0 || m[len(m)-1][0] < h {
+		if len(m) == 0 {
 			return false
 		}
-		if e := m[len(m)-1][1]; e > end {
-			end = e
-		}
+		start = min(start, m[len(m)-1][0])
+		end = max(end, m[len(m)-1][1])
 	}
-	return tailAfter(words, end) <= dialogFoot
+	if tailAfter(words, end) > dialogFoot {
+		return false
+	}
+	// the words can end in the footer's reach: the Yes row "Yes, I
+	// trust" holds "trust this folder", past what the row matched
+	h := strings.LastIndex(words, ask)
+	return h >= 0 && (h >= start || tailAfter(words[:start], h) <= dialogBody)
 }
 
 // headingDialog is whether words end on a screen drawn under heading ask
@@ -639,9 +646,11 @@ func (s *shim) ready() error {
 	if folder == "" {
 		folder = "the folder it runs in"
 	}
-	asking := "asked whether to trust " + folder + ", not answered"
-	bypassAsking := "asked to accept running in Bypass Permissions mode, not answered"
-	chromeAsking := "asked whether to use Claude in Chrome, not answered"
+	// each said as "Claude Code <asking> in <wait>" (Unanswered)
+	unanswered := strings.TrimSuffix(Unanswered, " in ")
+	asking := "asked whether to trust " + folder + unanswered
+	bypassAsking := "asked to accept running in Bypass Permissions mode" + unanswered
+	chromeAsking := "asked whether to use Claude in Chrome" + unanswered
 	onboard := func(screen, key string) error {
 		if shownAt[screen].IsZero() {
 			shownAt[screen] = time.Now()
