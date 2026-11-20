@@ -789,6 +789,9 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 		case "servers/hub-tools":
 			// every tool given whole, not on demand (settings.RouterAllTools)
 			err = settings.SetRouterAllTools(in.On)
+		case "servers/hub-code":
+			// the router's run_code (settings.RouterNoCode)
+			err = settings.SetRouterNoCode(!in.On)
 		case "servers/hub-open":
 			// the hub added to another app through its install link,
 			// built here: the page names the app, never the link

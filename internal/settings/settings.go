@@ -327,6 +327,11 @@ type Settings struct {
 	// one that runs it (gateway.hubOnDemand; ArvinCharl on X: the tools
 	// filled the context). This computer's own (KeepOwn).
 	RouterAllTools bool `json:"routerAllTools,omitempty"`
+	// RouterNoCode takes the router's code mode away: on by default, every
+	// agent given the router is also given run_code, which runs a script
+	// that calls its tools and gives back only what the script returns
+	// (gateway.hubCodeOn). This computer's own (KeepOwn).
+	RouterNoCode bool `json:"routerNoCode,omitempty"`
 	// Name is what this magpie is called, said in its web page's browser
 	// tab as "<name> · magpie", to tell several deployed ones apart
 	// (starballl on X). "" is MAGPIE_NAME, else none (InstanceName). This
@@ -1857,7 +1862,7 @@ func (s *Settings) KeepOwn(cur Settings) {
 	s.NoAccountDiscovery = cur.NoAccountDiscovery
 	s.LAN, s.AllowIPs, s.MTLS, s.HTTPS = cur.LAN, cur.AllowIPs, cur.MTLS, cur.HTTPS
 	s.DesktopGateway = cur.DesktopGateway // an address of this computer
-	s.RouterNote, s.RouterAllTools = cur.RouterNote, cur.RouterAllTools
+	s.RouterNote, s.RouterAllTools, s.RouterNoCode = cur.RouterNote, cur.RouterAllTools, cur.RouterNoCode
 	s.Name = cur.Name // what this magpie is called
 	s.FetchPrivate = cur.FetchPrivate
 	s.SessionTerminal = cur.SessionTerminal
@@ -2462,6 +2467,18 @@ func SetRouterAllTools(on bool) error {
 		return err
 	}
 	s.RouterAllTools = on
+	return save(s, true)
+}
+
+// SetRouterNoCode sets RouterNoCode alone, from what the file holds now.
+// A settings file that can't be read is left as it is, with the error.
+func SetRouterNoCode(off bool) error {
+	defer lockFile()()
+	s, err := loadChecked()
+	if err != nil {
+		return err
+	}
+	s.RouterNoCode = off
 	return save(s, true)
 }
 

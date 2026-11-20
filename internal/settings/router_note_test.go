@@ -43,3 +43,28 @@ func TestRouterNote(t *testing.T) {
 		t.Fatalf("saved %+v", s)
 	}
 }
+
+// The router's code mode switch is this computer's own too: a sync keeps
+// it, and it is set alone, beside the rest of the file.
+func TestRouterNoCode(t *testing.T) {
+	from := Settings{}
+	from.KeepOwn(Settings{RouterNoCode: true})
+	if !from.RouterNoCode {
+		t.Fatal("a sync turned code mode back on")
+	}
+	if err := Save(Settings{Theme: "dark"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetRouterNoCode(true); err != nil {
+		t.Fatal(err)
+	}
+	if s := Load(); !s.RouterNoCode || s.Theme != "dark" {
+		t.Fatalf("saved %+v", s)
+	}
+	if err := SetRouterNoCode(false); err != nil {
+		t.Fatal(err)
+	}
+	if Load().RouterNoCode {
+		t.Fatal("not turned on again")
+	}
+}

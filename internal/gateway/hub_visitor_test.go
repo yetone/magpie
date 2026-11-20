@@ -48,7 +48,9 @@ func TestHubKeepsThisComputersOwnServersHere(t *testing.T) {
 		m := readMCP(t, hubPostAt(h, HubMCPAll, addr, toolsList, hdr...))
 		var out []string
 		for _, t := range m.Result.Tools {
-			out = append(out, strings.TrimSuffix(t.Name, hubSep+"do"))
+			if t.Name != hubCodeTool { // the servers given; run_code is the router's own
+				out = append(out, strings.TrimSuffix(t.Name, hubSep+"do"))
+			}
 		}
 		slices.Sort(out)
 		return out
@@ -182,7 +184,9 @@ func TestHubGivesAlmaItsHereOnlyServersNotAPage(t *testing.T) {
 		}
 		var out []string
 		for _, x := range readMCP(t, w).Result.Tools {
-			out = append(out, strings.TrimSuffix(x.Name, hubSep+"do"))
+			if x.Name != hubCodeTool { // the servers given; run_code is the router's own
+				out = append(out, strings.TrimSuffix(x.Name, hubSep+"do"))
+			}
 		}
 		slices.Sort(out)
 		return w.Code, out
@@ -258,7 +262,9 @@ func TestHubGivesMemoryToAKeyLetUseIt(t *testing.T) {
 		m := readMCP(t, hubPostAt(h, HubMCPAll, there, toolsList, hdr...))
 		var out []string
 		for _, t := range m.Result.Tools {
-			out = append(out, strings.TrimSuffix(t.Name, hubSep+"do"))
+			if t.Name != hubCodeTool { // the servers given; run_code is the router's own
+				out = append(out, strings.TrimSuffix(t.Name, hubSep+"do"))
+			}
 		}
 		slices.Sort(out)
 		return out

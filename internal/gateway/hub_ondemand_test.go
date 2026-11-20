@@ -74,7 +74,7 @@ func TestHubMCPToolsOnDemand(t *testing.T) {
 	if !strings.Contains(say, "on demand") || !strings.Contains(say, "create_issue") {
 		t.Fatalf("instructions: %s", say)
 	}
-	if got := listedNames(t, readMCP(t, hubPost(h, "opencode", here, toolsList))); !slices.Equal(got, []string{hubFindTool, hubCallTool}) {
+	if got := listedNames(t, readMCP(t, hubPost(h, "opencode", here, toolsList))); !slices.Equal(got, []string{hubFindTool, hubCallTool, hubCodeTool}) {
 		t.Fatalf("listed %v", got)
 	}
 
@@ -142,11 +142,11 @@ func TestHubMCPToolsWhole(t *testing.T) {
 	withHub(t, f)
 	h := lanGuard(New().Handler())
 	for _, a := range []string{"claude", "claude@wsl:Ubuntu", "claude-desktop", "codex", "pi", "droid", "droid@wsl:Ubuntu", "omp", "agy", "antigravity", "gemini"} {
-		if got := listedNames(t, readMCP(t, hubPost(h, a, here, toolsList))); len(got) != len(f.tools[a]) {
+		if got := listedNames(t, readMCP(t, hubPost(h, a, here, toolsList))); len(got) != len(f.tools[a])+1 || got[len(got)-1] != hubCodeTool {
 			t.Fatalf("%s listed %v", a, got)
 		}
 	}
-	if got := listedNames(t, readMCP(t, hubPostAt(h, HubMCPAll, here, toolsList))); len(got) != len(many) {
+	if got := listedNames(t, readMCP(t, hubPostAt(h, HubMCPAll, here, toolsList))); len(got) != len(many)+1 {
 		t.Fatalf("any app listed %v", got)
 	}
 	s := settings.Load()
@@ -159,7 +159,7 @@ func TestHubMCPToolsWhole(t *testing.T) {
 		s.RouterAllTools = false
 		settings.Save(s)
 	})
-	if got := listedNames(t, readMCP(t, hubPost(h, "opencode", here, toolsList))); len(got) != len(many) {
+	if got := listedNames(t, readMCP(t, hubPost(h, "opencode", here, toolsList))); len(got) != len(many)+1 {
 		t.Fatalf("with every tool whole, listed %v", got)
 	}
 }
@@ -218,7 +218,7 @@ func TestHubFindToolsSaysWhatIsBehind(t *testing.T) {
 	h := lanGuard(New().Handler())
 	specs := listedSpecs(t, hubPost(h, "opencode", here, toolsList).Body.String())
 	find, ok := specs[hubFindTool]
-	if !ok || len(specs) != 2 {
+	if !ok || len(specs) != 3 {
 		t.Fatalf("listed %v", specs)
 	}
 	first, _, _ := strings.Cut(find, "\n")

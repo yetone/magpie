@@ -131,7 +131,7 @@ func TestKeyMCPHub(t *testing.T) {
 	held := keyHeldToMCP(t, "Held", "github/create_issue", "fs")
 	key := []string{"Authorization", "Bearer " + held}
 
-	if got := listedNames(t, readMCP(t, hubPost(h, "claude", here, toolsList, key...))); !slices.Equal(got, []string{"github__create_issue", "fs__read"}) {
+	if got := listedNames(t, readMCP(t, hubPost(h, "claude", here, toolsList, key...))); !slices.Equal(got, []string{"github__create_issue", "fs__read", hubCodeTool}) {
 		t.Fatalf("listed %v", got)
 	}
 	say := initInstructions(t, hubPost(h, "claude", here, hubInit, key...).Body.String())
@@ -174,7 +174,7 @@ func TestKeyMCPHub(t *testing.T) {
 		t.Fatalf("ran %q, want %q", got, want)
 	}
 	// a request with no key sees every tool
-	if got := listedNames(t, readMCP(t, hubPost(h, "claude", here, toolsList))); len(got) != 4 {
+	if got := listedNames(t, readMCP(t, hubPost(h, "claude", here, toolsList))); len(got) != 4+1 { // and run_code
 		t.Fatalf("no key: %v", got)
 	}
 }

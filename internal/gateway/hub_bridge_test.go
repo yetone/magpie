@@ -50,7 +50,9 @@ func TestHubLeavesRemoteRouterToARouter(t *testing.T) {
 	names := func(m mcpReply) []string {
 		var out []string
 		for _, x := range m.Result.Tools {
-			out = append(out, x.Name)
+			if x.Name != hubCodeTool { // the servers' tools; run_code is the router's own
+				out = append(out, x.Name)
+			}
 		}
 		slices.Sort(out)
 		return out

@@ -111,3 +111,41 @@ func TestHubFindsItselfInTheView(t *testing.T) {
 		}
 	}
 }
+
+// The router's Code mode switch is this computer's setting, on by
+// default, comes back in the page's view, and a save from the Settings
+// page leaves it as it is.
+func TestHubCodeSaved(t *testing.T) {
+	sandboxHome(t)
+	h := Handler(nil, nil)
+	post := func(path, body string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest("POST", path, strings.NewReader(body)))
+		return rec
+	}
+	view := func(rec *httptest.ResponseRecorder) bool {
+		var v struct{ HubCode bool }
+		if err := json.Unmarshal(rec.Body.Bytes(), &v); err != nil {
+			t.Fatal(err)
+		}
+		return v.HubCode
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/library", nil))
+	if !view(rec) {
+		t.Fatal("code mode isn't on by default")
+	}
+	rec = post("/api/library/servers/hub-code", `{"on":false}`)
+	if rec.Code != http.StatusOK || view(rec) || !settings.Load().RouterNoCode {
+		t.Fatalf("off: %d %s, saved %v", rec.Code, rec.Body, settings.Load().RouterNoCode)
+	}
+	if rec := post("/api/settings", `{"theme":"dark","lang":"en"}`); rec.Code != http.StatusOK {
+		t.Fatalf("settings: %d %s", rec.Code, rec.Body)
+	}
+	if !settings.Load().RouterNoCode {
+		t.Fatal("the Settings page's save turned it on")
+	}
+	if rec := post("/api/library/servers/hub-code", `{"on":true}`); rec.Code != http.StatusOK || !view(rec) || settings.Load().RouterNoCode {
+		t.Fatalf("on: %d %v", rec.Code, settings.Load().RouterNoCode)
+	}
+}
