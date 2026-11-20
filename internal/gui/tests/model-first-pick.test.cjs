@@ -65,8 +65,8 @@ function serve(lang, saves) {
 }
 
 const words = {
-  en: { hint: "Click a model to pick just it", tip: "Click to pick just this model", save: "Save", picked: "Agents see the models picked." },
-  zh: { hint: "点击模型可单选", tip: "点击只选这个模型", save: "保存", picked: "Agent 看到的是已勾选的模型。" },
+  en: { hint: "Click a dashed one to pick just it", tip: "Click to pick just this model", save: "Save", picked: "Agents see the models picked." },
+  zh: { hint: "点击虚线框的模型可单选", tip: "点击只选这个模型", save: "保存", picked: "Agent 看到的是已勾选的模型。" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {

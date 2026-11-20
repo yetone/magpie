@@ -11473,7 +11473,9 @@ const typedIds = (v) => (v || "").split(/[,\n]/).map((id) => id.trim()).filter(B
 // a Save takes as if Enter had been pressed on them
 function chosenIds() {
   const typed = typedIds(draft.typed);
-  return [...draft.chosen, ...typed.filter((id) => !draft.chosen.includes(id))].filter((id, i, all) => all.indexOf(id) === i);
+  // ids typed join what the list serves, drawn dashed (none while some
+  // are picked), as a click on a chip it doesn't serve does
+  return [...typed[0] && draft.dashed || [], ...draft.chosen, ...typed].filter((id, i, all) => all.indexOf(id) === i);
 }
 
 // noneChosen: Select none kept, nothing picked or served (#1818)
@@ -11484,7 +11486,7 @@ const pickingNone = () => !!draft.picking && !chosenIds().length;
 const bestChosen = () => !!draft.best && !draft.none && !chosenIds().length;
 
 // servedIds: the picks; none after Select none; else the vendor's list's
-const servedIds = (p) => draft.chosen.length ? draft.chosen : draft.none || draft.picking ? [] : p.models.filter((m) => draft.best ? m.best : m.on).map((m) => m.id);
+const servedIds = (p) => draft.chosen[0] ? draft.chosen : draft.none || draft.picking ? [] : p.models.filter((m) => draft.best ? m.best : m.on).map((m) => m.id);
 
 // modelsOpen: models let out to full height (#833). MCHIPS_MAX: .mchips' max-height
 let modelsOpen = false;
@@ -11641,15 +11643,17 @@ function renderModels(p) {
   };
   const draw = () => {
     if (agentMenu && chips.contains(agentMenu.anchor)) closeAgentMenu();
-    if (draft.chosen.length) draft.picking = false;
+    if (draft.chosen[0]) draft.picking = false;
     chips.replaceChildren();
     const f = (q?.value || "").trim().toLowerCase();
     let shown = 0, hidden = 0, unpicked = 0;
     // Picked only, unfiltered: the picks alone (unpickedShown)
-    const picksOnly = draft.chosen.length && !f && unpickedShown !== p.id && !decideOnly(p);
+    const picksOnly = draft.chosen[0] && !f && unpickedShown !== p.id && !decideOnly(p);
     // none picked: what the vendor's list serves is drawn as served (#614,
     // #1818), none after Select none
-    const served = draft.chosen.length || draft.picking || decideOnly(p) || draft.none ? new Set() : new Set(dashed());
+    const served = draft.chosen[0] || draft.picking || decideOnly(p) || draft.none ? new Set() : new Set(dashed());
+    // an id added by hand joins them too (chosenIds)
+    draft.dashed = [...served];
     // models that would read alike say what tells them apart (modelTells)
     const tells = modelTells(p.models);
     // a filter is a search: what it doesn't match is left out
@@ -11697,9 +11701,13 @@ function renderModels(p) {
       if (kb.length) c.title = (c.title || m.id) + "\n" + t("Kept out of agents' lists by {groups}, a routing group listed alone", { groups: kb.join(", ") });
       tested(c, m.id);
       menu(c, m.id);
-      // a click picks it (#681); the last unpicked leaves none (#1831)
+      // a click picks it (#681); the last unpicked leaves none (#1831).
+      // With none picked, a served (dashed) one is picked alone (#681), and
+      // one the list doesn't serve joins those it does: a relay's 25th
+      // model clicked left the 24 served out (onkashiko on X), where the
+      // TUI's toggle adds it to them
       c.onclick = () => {
-        draft.chosen = on ? draft.chosen.filter((x) => x !== m.id) : [...draft.chosen, m.id];
+        draft.chosen = on ? draft.chosen.filter((x) => x !== m.id) : [...served.has(m.id) ? [] : served, ...draft.chosen, m.id];
         draft.none = true;
         unpickedShown = p.id;
         draw();
@@ -11718,7 +11726,7 @@ function renderModels(p) {
       chips.append(c);
     }
     if (hidden || unpicked) chips.append(showRest(hidden || unpicked, () => { if (unpicked) unpickedShown = p.id; else showAll = true; draw(); }));
-    if (!p.models.length && !draft.chosen.length) chips.append(el("span", "hint", t(emptyModelsHint(p))));
+    if (!p.models.length && !draft.chosen[0]) chips.append(el("span", "hint", t(emptyModelsHint(p))));
     // the list is of models agents chat with: image, embedding and speech
     // models are left out of it, and an image model is set in Settings
     else if (f && !chips.children.length) chips.append(el("span", "hint", t("No model here matches “{q}”. Image, embedding and speech models aren't listed, as agents can't chat with them: pick an image model in Settings › Models › Images.", { q: q.value.trim() })));
@@ -11727,11 +11735,11 @@ function renderModels(p) {
     drawWorkOn();
     drawServes();
     why.textContent = decideOnly(p) ? t("Agents never see them: a routing group picks one as its classifier.")
-      : !draft.chosen.length && draft.picking ? t("Pick a model first.")
-      : !draft.chosen.length && draft.none ? t("None selected: no agent or routing group uses its models. Its balance and usage still show. Click a model to pick it.")
+      : !draft.chosen[0] && draft.picking ? t("Pick a model first.")
+      : !draft.chosen[0] && draft.none ? t("None selected: no agent or routing group uses its models. Its balance and usage still show. Click a model to pick it.")
       : bestChosen() && !draft.unlisted ? t("Best in family: agents see the newest model of each family it lists (dashed), up to {n}. A newer one it lists later takes the old one's place.", { n: 24 })
-      : draft.unlisted ? t(draft.chosen.length ? "Agents don't see them: only the routing groups they are in use them." : "Vendor's list: agents don't see it, the routing groups its models are in use up to {n} of it (dashed). Click a model to pick just it.", { n: 24 })
-      : t(draft.chosen.length ? "Agents see the models picked." : "Vendor's list: agents see up to {n} of its models (dashed), and those it lists later. Click a model to pick just it.", { n: 24 });
+      : draft.unlisted ? t(draft.chosen[0] ? "Agents don't see them: only the routing groups they are in use them." : "Vendor's list: agents don't see it, the routing groups its models are in use up to {n} of it (dashed). Click a dashed one to pick just it.", { n: 24 })
+      : t(draft.chosen[0] ? "Agents see the models picked." : "Vendor's list: agents see up to {n} of its models (dashed), and those it lists later. Click a dashed one to pick just it.", { n: 24 });
     drawLost();
     drawHiders();
   };
@@ -12165,12 +12173,12 @@ function renderModels(p) {
     b.dataset.serves = v;
     b.title = t(tip, { n: 24 });
     b.onclick = () => {
-      if (v !== "picked" && draft.chosen.length) picksLeft = { id: p.id, picks: [...draft.chosen] };
+      if (v !== "picked" && draft.chosen[0]) picksLeft = { id: p.id, picks: [...draft.chosen] };
       if (v !== "picked") { draft.chosen = []; draft.typed = ""; draft.none = v === "none"; draft.best = v === "best"; draft.picking = false; }
       else {
-        if (!draft.chosen.length && picksLeft?.id === p.id) { draft.chosen = picksLeft.picks; draft.none = true; }
+        if (!draft.chosen[0] && picksLeft?.id === p.id) { draft.chosen = picksLeft.picks; draft.none = true; }
         // none picked: it picks none, not the first 24 (yuancjun)
-        draft.picking = !draft.chosen.length;
+        draft.picking = !draft.chosen[0];
         unpickedShown = null; draft.best = false;
       }
       draw();
@@ -12178,7 +12186,7 @@ function renderModels(p) {
     serves.append(b);
     return b;
   });
-  const servesMode = () => draft.chosen.length || draft.picking ? "picked" : draft.none ? "none" : draft.best ? "best" : "list";
+  const servesMode = () => draft.chosen[0] || draft.picking ? "picked" : draft.none ? "none" : draft.best ? "best" : "list";
   const drawServes = () => {
     const now = servesMode();
     for (const b of servesOpts) { b.classList.toggle("on", b.dataset.serves === now); b.setAttribute("aria-pressed", b.dataset.serves === now); }
