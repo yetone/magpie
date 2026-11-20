@@ -47,6 +47,10 @@ const libraryProjectUsage = `magpie library project [--json]      the projects (
                                      magpie's two marker lines, into the project file each agent reads: by default for
                                      the agents the shared instructions are on for, else every agent here that reads one
   magpie library project instructions <dir> agents <a,b…|none>   the agents whose project file they're written into
+  magpie library project export <dir> [file]   what the project has, and the hooks, subagents and sources that
+                                     takes, as JSON (to the file, or printed): no key, sign-in or other project
+  magpie library project apply <file|-> <dir>   give a folder (made a project) what an export has: added to what
+                                     it has already, so again changes nothing; what this library lacks is named
                                      <dir> may be relative, or "." for the folder you're in. A skill that couldn't be
                                      placed (a folder there that isn't magpie's is left as it is) is named, and the
                                      command exits with status 1.
@@ -158,6 +162,10 @@ func libraryProjectCmd(args []string) error {
 		return projectPiCmd(rest, usage)
 	case "instructions", "instr":
 		return projectInstrCmd(rest, usage)
+	case "export":
+		return projectExportCmd(rest, usage)
+	case "apply", "import":
+		return projectApplyCmd(rest, usage)
 	}
 	return fmt.Errorf("no library project command %q\n  %s", args[0], libraryProjectUsage)
 }
