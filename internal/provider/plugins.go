@@ -473,11 +473,25 @@ func pluginPrice(m plugin.Model) (catalog.Price, bool) {
 func pluginAccountCatalog(pp plugin.Provider, key string) []catalog.Model {
 	all := pluginCatalog(pp)
 	for _, a := range pp.Accounts {
-		if a.Key == key && a.Models != nil {
+		if a.Key == key && toldList(a) != nil {
 			return slices.DeleteFunc(all, func(m catalog.Model) bool { return !slices.Contains(a.Models, m.ID) })
 		}
 	}
 	return all
+}
+
+// toldList is the models account a has as its plugin told them, nil when
+// it told none: a list that fell back (the plugin's own defaults, its
+// vendor's list for the account unread, with no list read before for
+// keepListed to keep) says nothing of the account's plan, as a built-in
+// account whose fetch failed is taken to have every model. bitssly on X
+// (商汤小浣熊): one of three accounts fell back, and Routing left it out
+// of every model the plugin's defaults lack.
+func toldList(a plugin.Account) []string {
+	if a.FellBack {
+		return nil
+	}
+	return a.Models
 }
 
 // PluginListError is why the plugin couldn't list the account at key's
@@ -516,7 +530,7 @@ func pluginServedCatalog(pp plugin.Provider, keys []string) []catalog.Model {
 	listed := map[string]bool{}
 	for _, k := range keys {
 		i := slices.IndexFunc(pp.Accounts, func(a plugin.Account) bool { return a.Key == k })
-		if i < 0 || pp.Accounts[i].Models == nil {
+		if i < 0 || toldList(pp.Accounts[i]) == nil {
 			return all
 		}
 		for _, m := range pp.Accounts[i].Models {
@@ -534,7 +548,7 @@ func (a *Account) pluginLists(model string) bool {
 		pp = cur
 	}
 	for _, ac := range pp.Accounts {
-		if ac.Key == a.pluginKey && ac.Models != nil {
+		if ac.Key == a.pluginKey && toldList(ac) != nil {
 			return slices.Contains(ac.Models, model)
 		}
 	}

@@ -193,7 +193,7 @@ func pluginAccountListed(p Provider, ref string) []string {
 		return nil
 	}
 	for _, l := range pluginLogins(pp) {
-		if accountKey(l.User) != accountKey(ref) || l.acct.Models == nil {
+		if accountKey(l.User) != accountKey(ref) || toldList(l.acct) == nil {
 			continue
 		}
 		out := make([]string, 0, len(l.acct.Models))
