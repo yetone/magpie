@@ -97,6 +97,20 @@ func ProxyOfLogin(id, user string) string {
 	return s.Proxy
 }
 
+// ClaudeProxies are the distinct proxy choices the Claude subscription's
+// accounts send their requests through (ProxyOfLogin): what
+// internal/egress looks the way out up through. No account, none: a user
+// without one is never looked up for.
+func ClaudeProxies() []string {
+	var out []string
+	for _, l := range Logins("claude") {
+		if c := strings.TrimSpace(ProxyOfLogin("claude", l.User)); !slices.Contains(out, c) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
 // Via is ctx for requests made on behalf of the provider or signed-in
 // account with id (see Provider.Via).
 func Via(ctx context.Context, id string) context.Context {

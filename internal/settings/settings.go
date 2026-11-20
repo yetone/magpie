@@ -522,6 +522,13 @@ type Settings struct {
 	// fallbacks take the request. Off, as by default, such an account is
 	// sent requests and Anthropic decides whether extra usage pays.
 	ClaudeNoExtraUsage bool `json:"claudeNoExtraUsage,omitempty"`
+	// ClaudeRegionHold holds a Claude subscription's requests, and the
+	// Claude Code runs magpie starts for its accounts, while the network
+	// way out they would take is in a region Anthropic doesn't list as
+	// supported (internal/egress, @alterxyz4 on X). A way out not known
+	// (the lookup failed) holds nothing. Off, as by default, magpie only
+	// warns.
+	ClaudeRegionHold bool `json:"claudeRegionHold,omitempty"`
 	// ClaudePrintMode runs a Claude subscription's Claude Code as `claude
 	// -p` always. Off, as by default, a model request runs in Claude
 	// Code's interactive mode, as a person runs it, and never as -p: the

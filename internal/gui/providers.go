@@ -21,6 +21,7 @@ import (
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/autostart"
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/egress"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/library"
 	"github.com/yetone/magpie/internal/plugin"
@@ -541,6 +542,10 @@ type providerJSON struct {
 	// chooses that isn't on this computer: its requests fail until another
 	// is picked, as a missing proxy never means a direct connection.
 	ProxyGone string `json:"proxyGone,omitempty"`
+	// Egress is where the Claude subscription's accounts' way out to the
+	// internet is (internal/egress): the worst of their proxies' lookups,
+	// set on the Claude row when it has accounts.
+	Egress *egress.Result `json:"egress,omitempty"`
 	// a subscription account's rests in force, by its user in lower case:
 	// its own and each of its models' (maxleebeta on Discord: WorkBuddy's
 	// 429 "将在 … 重置" rested a model, credits left, and nothing here said so)
@@ -1097,6 +1102,12 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 	out.Key.Set = p.Key != ""
 	out.Key.Masked = provider.Mask(p.Key)
 	out.ProxyGone = provider.ProxyGone(p)
+	if p.ID == "claude" {
+		if cs := provider.ClaudeProxies(); len(cs) > 0 {
+			r := egress.Worst(cs)
+			out.Egress = &r
+		}
+	}
 	if provider.BuiltinRetired(p.ID) {
 		// only its plugin's row is listed now: built-in accounts not moved
 		// yet are providersJSON.Unmoved's

@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/egress"
 	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/routes"
@@ -570,13 +571,14 @@ func carriedStatus(status int, body []byte) int {
 // failure says why a reply failed.
 func failure(status int, body []byte) string {
 	status = carriedStatus(status, body)
-	if status == http.StatusBadGateway && (proxyDown.Match(body) || bodyHas(body, closedUnsentWords) || bodyHas(body, stalledWords)) {
+	if status == http.StatusBadGateway && (proxyDown.Match(body) || bodyHas(body, closedUnsentWords) || bodyHas(body, stalledWords) || bodyHas(body, egress.HeldWords)) {
 		// the proxy didn't take the connection, or the network closed
 		// each new one before the request was sent (errClosedUnsent):
 		// nothing reached the vendor, and the account is as good as it
 		// was. Read as the account's failure, it rested ChatGPT accounts
 		// whose window was full till the window renewed, days off,
-		// shown as "502 · 失败" (dealyang_ on X)
+		// shown as "502 · 失败" (dealyang_ on X). A Claude request magpie
+		// held for its way out's region (egress.Hold) never left either
 		return failProxy
 	}
 	if _, ok := provider.Verification(body); ok && (status == 401 || status == 403) {

@@ -2287,6 +2287,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	// Settings › Proxy's Test (#2076): the address Cloudflare sees a request
 	// from through the proxy in force, and without it
 	mux.HandleFunc("POST /api/proxy/check", handleProxyCheck)
+	mux.HandleFunc("POST /api/egress/check", handleEgressCheck)
 	proxyRoutes(mux)
 	mux.HandleFunc("POST /api/pipelines/check", handlePipelineCheck)
 	mux.HandleFunc("POST /api/relay-check", handleRelayCheck)

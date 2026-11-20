@@ -31,6 +31,7 @@ import (
 	"github.com/yetone/magpie/internal/awake"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/codexrelay"
+	"github.com/yetone/magpie/internal/egress"
 	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/gwbudget"
 	"github.com/yetone/magpie/internal/gwmw"
@@ -973,6 +974,9 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		go usage.KeepOutsideCallsRead(ctx)
 		// and moves the built-in subscriptions being retired onto their plugins
 		go provider.KeepRetiringMoved(ctx)
+		// and looks up which region the Claude accounts' way out to the
+		// internet is in, through each of their proxies (internal/egress)
+		go egress.Keep(ctx, provider.ClaudeProxies)
 		// and fetches the partner list every hour, asked for or not
 		go provider.KeepPartnersFresh(ctx)
 		go provider.KeepPluginsListed(ctx) // models a plugin's vendor drops or adds, while magpie runs
@@ -6135,6 +6139,14 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 	// they carry another agent's harness (Pi, OpenCode, and others).
 	if p.Account != nil && p.Account.Agent == "claude" {
 		call.To = provider.Anthropic
+		// the user asked for no Claude request to leave while its way out
+		// is in a region Anthropic doesn't list (egress.Hold): it goes no
+		// further, and as a request that never left, nobody rests for it
+		// and the next member is asked
+		if err := egress.Hold(r.Context(), claudeProxy(r.Context())); err != nil {
+			msg := p.Name + ": " + err.Error()
+			return writeError(w, from, http.StatusBadGateway, msg), msg
+		}
 		return s.serveClaudeSubscription(w, r, from, p, model, body, &call.Usage)
 	}
 	// Copilot's Auto (all a Student plan may pick) is asked which model it

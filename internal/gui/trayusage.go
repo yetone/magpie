@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yetone/magpie/internal/egress"
 	"github.com/yetone/magpie/internal/fx"
 	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
@@ -591,6 +592,25 @@ func trayTokens(lang string, t usage.Totals) string {
 		parts = append(parts, trayText(lang, "%s cached", trayCount(lang, cached)))
 	}
 	return trayText(lang, "%s tokens (%s)", trayCount(lang, t.Tokens()+t.CacheRead+t.CacheWrite), strings.Join(parts, " · "))
+}
+
+// trayEgressTip is the line the tooltip begins with while the Claude
+// accounts' way out to the internet is in a region Anthropic doesn't list
+// (internal/egress); "" otherwise, an unknown one too.
+func trayEgressTip(lang string, r egress.Result) string {
+	if r.State != egress.Unsupported {
+		return ""
+	}
+	return "⚠ " + trayText(lang, "Claude's way out to the internet is in %s, outside Anthropic's supported regions", r.Loc)
+}
+
+// trayEgress is the Claude accounts' way out as the tray tells it: Unknown
+// with no account.
+var trayEgress = func() egress.Result {
+	if cs := provider.ClaudeProxies(); len(cs) > 0 {
+		return egress.Worst(cs)
+	}
+	return egress.Result{State: egress.Unknown}
 }
 
 // trayIdleTip is the tooltip while the menu bar shows no cards: magpie's

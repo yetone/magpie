@@ -13,7 +13,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yetone/magpie/internal/egress"
 	"github.com/yetone/magpie/internal/netproxy"
+	"github.com/yetone/magpie/internal/provider"
 )
 
 // Settings › Proxy's Test (#2076, c4ex): whether the proxy in force is the
@@ -199,4 +201,18 @@ func handleProxyCheck(rw http.ResponseWriter, r *http.Request) {
 	out := checkProxy(r.Context(), http.DefaultClient, r.Context(), through)
 	out.Proxy, out.Source = proxy, source
 	writeJSON(rw, out)
+}
+
+// handleEgressCheck looks the Claude accounts' way out up again now,
+// through each of their proxies (the Providers page's Check again), and
+// answers the worst of what it found.
+func handleEgressCheck(rw http.ResponseWriter, r *http.Request) {
+	cs := provider.ClaudeProxies()
+	var wg sync.WaitGroup
+	for _, c := range cs {
+		wg.Add(1)
+		go func() { defer wg.Done(); egress.Check(r.Context(), c) }()
+	}
+	wg.Wait()
+	writeJSON(rw, egress.Worst(cs))
 }

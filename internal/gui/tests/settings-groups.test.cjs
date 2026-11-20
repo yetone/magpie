@@ -61,11 +61,11 @@ function server(lang, posts, over) {
 
 const L = {
   en: {
-    lean: "Short Claude system prompt", extra: "Spend extra usage", reset: "Warm up on reset", daily: "Daily warm-up", checkin: "Daily check-in",
+    lean: "Short Claude system prompt", extra: "Spend extra usage", region: "Hold requests outside supported regions", reset: "Warm up on reset", daily: "Daily warm-up", checkin: "Daily check-in",
     on: "On", off: "Off", started: "last started", checked: "Ann checked in today +2, 3-day streak",
   },
   zh: {
-    lean: "精简 Claude 系统提示词", extra: "花费额外用量", reset: "窗口重置时预热", daily: "每日定时预热", checkin: "每日自动签到",
+    lean: "精简 Claude 系统提示词", extra: "花费额外用量", region: "在不支持的地区时暂停请求", reset: "窗口重置时预热", daily: "每日定时预热", checkin: "每日自动签到",
     on: "开启", off: "关闭", started: "上次启动于", checked: "Ann 今日已签到 +2, 连续 3 天",
   },
 };
@@ -216,7 +216,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await edit("claude");
         assert.deepEqual(await panes(page), ["claude"]);
         // Claude Code's own run row is Claude's too
-        assert.deepEqual(await visibleRows(), [w.reset, w.daily, w.lean, w.extra]);
+        assert.deepEqual(await visibleRows(), [w.reset, w.daily, w.lean, w.extra, w.region]);
         await thumbsUnderPicks("claude");
         await press(page.locator(".editor #claudeWarmSegs .opt").nth(2));
         await last("claudeWarmup", "all");
