@@ -32,7 +32,6 @@ var noLibrary = map[string]string{
 	"ante":              "not looked at (#5897)",
 	"astrbot":           "not looked at (#5897)",
 	"qwenpaw":           "not looked at (#5897)",
-	"openclaw":          "not looked at (#5897)",
 	"pencil":            "not looked at (#5897)",
 	"openpencil":        "not looked at (#5897)",
 	"newmax":            "not looked at (#5897)",

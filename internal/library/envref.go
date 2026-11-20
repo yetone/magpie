@@ -201,7 +201,10 @@ func (f *mcpFile) refsOf() envSyntax {
 	// Alma
 	// 0.4.164 JSON.parses mcp.json and hands a command its env and a url
 	// its headers as written (out/main/index.js createStdioTransport,
-	// connectRemoteServer). Devin's docs name ${env:NAME} for OAuth
+	// connectRemoteServer). OpenClaw expands ${NAME} anywhere in
+	// openclaw.json as it loads it, but an unset or empty one fails the
+	// whole file, every setting with it (docs/gateway/configuration.md),
+	// so a server that references one isn't written there. Devin's docs name ${env:NAME} for OAuth
 	// fields only (extensibility/mcp/configuration.mdx), so its headers
 	// and env aren't known to read one.
 	return envSyntax{}

@@ -309,6 +309,10 @@ const (
 	// config.json.live-mcp.json: a list of servers, each by its id, stdio
 	// or streamable HTTP (liveagent.go)
 	fmtLiveAgent
+	// fmtOpenClaw is OpenClaw's openclaw.json mcp.servers: command/args/
+	// env, or url/headers with a transport, where a url with none is SSE
+	// (OpenClaw 2026.11.6 docs/cli/mcp.md, McpServerSchema)
+	fmtOpenClaw
 )
 
 // mcpFile is the file an agent keeps its user-wide MCP servers in.
@@ -349,7 +353,7 @@ func (f *mcpFile) key() string {
 		return "mcp"
 	case fmtGoose:
 		return "extensions"
-	case fmtZCode:
+	case fmtZCode, fmtOpenClaw:
 		return "mcp.servers"
 	case fmtZed:
 		return "context_servers"
@@ -753,6 +757,30 @@ func (f *mcpFile) encode(s *Server) ordered {
 				add("transport", "stdio")
 			}
 		}
+	case fmtOpenClaw:
+		// as `openclaw mcp set` takes one: a url with no transport is
+		// SSE to OpenClaw, so streamable HTTP is named, and `type: "http"`
+		// is an alias its doctor rewrites (docs/cli/mcp.md)
+		if s.Remote() {
+			add("url", s.URL)
+			t := "streamable-http"
+			if s.Transport == "sse" {
+				t = "sse"
+			}
+			add("transport", t)
+			optional("headers", s.Headers)
+		} else {
+			add("command", s.Command)
+			add("args", list(s.Args))
+			optional("env", s.Env)
+		}
+		// OpenClaw gives a request a minute unless the entry says more
+		// (mcp-transport-config DEFAULT_REQUEST_TIMEOUT_MS); every other
+		// key fails the whole file (`openclaw config validate`), timeout
+		// among them
+		if t := selfTimeout(s, 0); t > 0 {
+			add("requestTimeoutMs", t*1000)
+		}
 	case fmtKiro:
 		// as the docs show them: command/args/env, or url/headers — no
 		// type, the entry's shape saying which (kiro.dev/docs/mcp/
@@ -1077,6 +1105,23 @@ func (f *mcpFile) decode(name string, m map[string]any) (*Server, bool) {
 		} else {
 			local(str(m, "command"), m["args"], m["env"])
 		}
+	case fmtOpenClaw:
+		// streamable HTTP when the transport (or the type alias `openclaw
+		// mcp set` also takes) says so, else SSE: a url with no transport
+		// is SSE to OpenClaw (mcp-config-normalize.ts)
+		if u := str(m, "url"); u != "" {
+			named := str(m, "transport")
+			if named == "" {
+				named = str(m, "type")
+			}
+			t := "sse"
+			if n := strings.ToLower(strings.TrimSpace(named)); n == "streamable-http" || n == "http" {
+				t = "http"
+			}
+			remote(t, u, m["headers"])
+		} else {
+			local(str(m, "command"), m["args"], m["env"])
+		}
 	case fmtLiveAgent:
 		// K-brain's transport, or a url's or a command's when there is
 		// none (normalizeLiveSettings); its http is streamable HTTP alone
@@ -1380,6 +1425,10 @@ var owned = map[mcpFormat][]string{
 	// enabled, and the id's description, docsUrl, cwd, timeoutMs,
 	// workspaceRoots, policy and auth, are the user's
 	fmtLiveAgent: {"transport", "url", "headers", "command", "args", "env"},
+	// enabled, cwd, the timeouts, auth, oauth, toolFilter, sslVerify and
+	// the client certificate are the user's; a type is the alias OpenClaw
+	// rewrites to transport
+	fmtOpenClaw: {"transport", "type", "url", "headers", "command", "args", "env"},
 
 	// a url agy read in place of serverUrl goes when magpie writes one
 	fmtAntigravity: {"type", "serverUrl", "url", "headers", "command", "args", "env"},

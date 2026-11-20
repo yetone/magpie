@@ -630,6 +630,13 @@ func targetOf(a *agent.Agent) *Target {
 		t.MCP = &mcpFile{Path: filepath.Join(a.Dir, liveAgentMCP), Format: fmtLiveAgent}
 		t.Skills = filepath.Join(a.Dir, "skills")
 		t.Copy = true
+	case "openclaw":
+		// OpenClaw keeps its MCP servers under mcp.servers in the
+		// openclaw.json magpie sets its model in (agent.openClawPaths),
+		// and takes a change to mcp without a restart (OpenClaw
+		// 2026.11.6 docs/cli/mcp.md, config-reload-plan "mcp" hot;
+		// JeffreyCalm on X)
+		t.MCP = &mcpFile{Path: a.Path, Format: fmtOpenClaw}
 	case "claude-desktop":
 		// Claude Desktop reads only commands from its file: a remote server
 		// is added in its own Connectors settings. In its 3p mode (magpie's
