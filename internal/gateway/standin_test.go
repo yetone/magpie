@@ -1,12 +1,14 @@
 package gateway
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/usage"
 )
 
 // a model the agent names that magpie doesn't serve goes to the one the
@@ -289,5 +291,71 @@ func TestClaudeTierForAScriptClaudeCodeStarted(t *testing.T) {
 	StandIn = func(string, string) string { return "" }
 	if rec := ask("/v1/messages", "claude-sonnet-4-6", urllib, Token); rec.Code != 404 {
 		t.Errorf("not routed: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+// huangfuyafei on X: OpenMausBot's calls were listed as Claude Code's,
+// while OpenBot's showed under its own name. OpenMausBot runs the real
+// Claude Code, which sends nothing of OpenMausBot's, so magpie gives its
+// engine a key naming it. Its requests are then OpenMausBot's, and still
+// Claude Code's for the tiers (claudeTierStandIn) and its helper calls
+// (observedKind); Claude Code's own stays Claude Code.
+func TestClaudeCodeInsideAnApp(t *testing.T) {
+	setHome(t, t.TempDir())
+	f := &fake{t: t, ctype: "application/json", reply: `{"id":"msg","type":"message","role":"assistant","content":[{"type":"text","text":"OK"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}`}
+	setup(t, provider.Anthropic, f)
+	p, _ := provider.Find("fake")
+	p.Models = []string{"main", "flash"}
+	if err := provider.Save(*p); err != nil {
+		t.Fatal(err)
+	}
+	StandIn = func(agent, model string) string {
+		if agent != "claude" {
+			return ""
+		}
+		return "fake/flash"
+	}
+	t.Cleanup(func() { StandIn = nil })
+	// package agent lists the agents (usage.Agents), and isn't linked here
+	was := usage.PluginAgents
+	usage.PluginAgents = func() []usage.Known {
+		return []usage.Known{{ID: "claude", Names: []string{"claude"}, UA: []string{"claude-cli"}}, {ID: "openmausbot", Names: []string{"openmausbot"}}}
+	}
+	t.Cleanup(func() { usage.PluginAgents = was })
+	const cc = "claude-cli/2.1.300 (external, cli)"
+	ask := func(ua, key string) (*http.Request, int, string) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("POST", "/v1/messages", strings.NewReader(`{"model":"claude-haiku-4-5-20251001","max_tokens":5,"messages":[{"role":"user","content":"hi"}]}`))
+		req.Header.Set("User-Agent", ua)
+		req.Header.Set("Authorization", "Bearer "+key)
+		req.Header.Set("x-api-key", key)
+		New().Handler().ServeHTTP(rec, req)
+		return req, rec.Code, rec.Body.String()
+	}
+	for _, c := range []struct{ ua, key, agent string }{
+		{cc, TokenFor("openmausbot"), "openmausbot"},
+		{cc, Token, "claude"},
+		{cc, TokenFor("claude"), "claude"},
+	} {
+		req, code, body := ask(c.ua, c.key)
+		if got := agentOf(req); got != c.agent {
+			t.Errorf("%s: agent %q, want %q", c.key, got, c.agent)
+		}
+		if code != 200 || modelOf(f.got) != "flash" {
+			t.Errorf("%s: %d %s, upstream got %q, want the haiku tier", c.key, code, body, modelOf(f.got))
+		}
+		if k := observedKind(claudeCodeAs(req, agentOf(req)), "", []byte(`{"max_tokens":5,"messages":[{"role":"user","content":"hi"}]}`)); k != "auxiliary" {
+			t.Errorf("%s: a helper call's kind %q", c.key, k)
+		}
+	}
+	// an app's own client under its key, not Claude Code: no tier
+	req, _, _ := ask("ai-sdk/anthropic/2.0.0", TokenFor("openmausbot"))
+	if claudeCodeInside(req, agentOf(req)) {
+		t.Error("an app's own client taken for Claude Code")
+	}
+	// Claude Desktop's Code tab keeps its own handling
+	req, _, _ = ask(cc, TokenFor("claude-desktop"))
+	if claudeCodeInside(req, "claude-desktop") {
+		t.Error("Claude Desktop taken for Claude Code inside an app")
 	}
 }

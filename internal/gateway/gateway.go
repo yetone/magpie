@@ -88,6 +88,28 @@ func agentOf(r *http.Request) string {
 	return usage.AgentOf(ua)
 }
 
+// claudeCodeInside is whether r is Claude Code's own request (its
+// User-Agent) sent under a key or address naming another agent: an app
+// that runs the real Claude Code as its engine, given a key of its own so
+// its requests are counted as the app's. OpenMausBot runs Claude Code with
+// CLAUDE_CODE_ENTRYPOINT taken out and no header of its own
+// (server/drivers/claude.ts's claudeEnvironment), so with the gateway's
+// plain token its calls were listed as Claude Code's (huangfuyafei on X,
+// beside OpenBot's under its own name). What magpie does for Claude Code
+// alone still applies to it: its tiers (claudeTierStandIn) and its helper
+// calls (observedKind). Claude Desktop's Code tab, which has handling of
+// its own, is not one.
+func claudeCodeInside(r *http.Request, agent string) bool {
+	if agent == "claude" || agent == "claude-desktop" || !fromClaudeCode(r.Header) {
+		return false
+	}
+	if pathAgent(r) != "" {
+		return true
+	}
+	id, ok := strings.CutPrefix(callerKey(r), Token+"-")
+	return ok && id != ""
+}
+
 // codexForClaudeCode is a Codex turn that Claude Code started under its
 // own name. OpenAI's Codex plugin for Claude Code (/codex:review,
 // /codex:rescue) runs `codex app-server` with clientInfo named "Claude
@@ -264,12 +286,16 @@ var claudeFamily = lazyre.New(`^claude-(?:[0-9][0-9.-]*-)?(?:opus|sonnet|haiku|f
 // which went nowhere, a 404 (tbxark on X). It gets Claude Code's tier too.
 // An id the user does serve (a Claude account, an Anthropic key) goes
 // where it is served, and an agent magpie knows keeps its own models.
+//
+// Claude Code an app runs under a key naming the app (claudeCodeInside:
+// OpenMausBot's magpie engine) is Claude Code here, as it was while its
+// requests were counted as Claude Code's.
 func claudeTierStandIn(r *http.Request, agent, asked string) string {
 	if StandIn == nil || !claudeFamily.MatchString(strings.ToLower(strings.TrimSuffix(asked, "[1m]"))) {
 		return ""
 	}
 	if agent != "claude" {
-		if !startedByAgent(r, agent) || !unserved(asked) {
+		if !claudeCodeInside(r, agent) && (!startedByAgent(r, agent) || !unserved(asked)) {
 			return ""
 		}
 		agent = "claude"

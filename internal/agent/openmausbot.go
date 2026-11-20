@@ -19,8 +19,8 @@ package agent
 // OpenMausBot's own "Claude endpoint" (server/claude-endpoints.ts's
 // newClaudeEndpoint) writes one: a claudeAgent instance with access
 // "custom", a Claude home of its own under the data folder, requireApiKey,
-// the gateway's address and key as ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN
-// and ANTHROPIC_API_KEY, and every magpie model in endpointModels, its
+// the gateway's address and a key naming OpenMausBot (gateway.TokenFor) as
+// ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN and ANTHROPIC_API_KEY, and every magpie model in endpointModels, its
 // picker. An instance with any of those keys owns its routing: neither the
 // user's settings nor a provider switch in OpenMausBot's environment
 // reaches it (claudeEnvironment, claudeInstanceOwnsRouting).
@@ -262,7 +262,11 @@ func ombInstanceJSON(path, dir, gw string) map[string]any {
 			}
 		}
 	}
-	key := keyAt(gw)
+	// a key naming OpenMausBot: the Claude Code it runs sends nothing of
+	// OpenMausBot's own, so with the gateway's plain token its calls were
+	// counted as Claude Code's (huangfuyafei on X); the gateway still
+	// treats them as Claude Code's for its tiers (claudeCodeInside)
+	key := agentKeyAt("openmausbot", gw)
 	return map[string]any{
 		"driver": "claudeAgent", "displayName": "magpie", "access": "custom",
 		"config": config,

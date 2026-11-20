@@ -127,7 +127,9 @@ func TestOpenMausBotEngine(t *testing.T) {
 	}
 	insts := ombRead(t, path)
 	e := ombFormat(t, insts[magpieID])
-	if e.Environment["ANTHROPIC_BASE_URL"] != gateway.URL() || e.Environment["ANTHROPIC_AUTH_TOKEN"] != gateway.Token || e.Environment["ANTHROPIC_API_KEY"] != gateway.Token {
+	if e.Environment["ANTHROPIC_BASE_URL"] != gateway.URL() || e.Environment["ANTHROPIC_AUTH_TOKEN"] != gateway.TokenFor("openmausbot") || e.Environment["ANTHROPIC_API_KEY"] != gateway.TokenFor("openmausbot") {
+		// a key naming OpenMausBot: the Claude Code it runs sends nothing
+		// else of it, and was counted as Claude Code (huangfuyafei on X)
 		t.Errorf("environment: %v", e.Environment)
 	}
 	if e.Config.ConfigDir != filepath.Join(dir, "providers", magpieID) {
@@ -233,6 +235,8 @@ func TestOpenMausBotKeepsTheUsers(t *testing.T) {
 	env["HTTPS_PROXY"] = "http://proxy:8080"
 	env["CLAUDE_CODE_USE_BEDROCK"] = "1"
 	env["ANTHROPIC_AUTH_TOKEN"] = "sk-elsewhere"
+	// an engine magpie wrote before it named OpenMausBot in the key
+	env["ANTHROPIC_API_KEY"] = gateway.Token
 	env["ANTHROPIC_MODEL"] = "gone/old"
 	edit.SetJSON(path, edit.KV{Path: ombInstance, Value: mine})
 	for range 2 {
@@ -257,7 +261,7 @@ func TestOpenMausBotKeepsTheUsers(t *testing.T) {
 	if got.Environment["HTTPS_PROXY"] != "http://proxy:8080" {
 		t.Errorf("the user's environment not kept: %v", got.Environment)
 	}
-	if _, ok := got.Environment["CLAUDE_CODE_USE_BEDROCK"]; ok || got.Environment["ANTHROPIC_AUTH_TOKEN"] != gateway.Token {
+	if _, ok := got.Environment["CLAUDE_CODE_USE_BEDROCK"]; ok || got.Environment["ANTHROPIC_AUTH_TOKEN"] != gateway.TokenFor("openmausbot") || got.Environment["ANTHROPIC_API_KEY"] != gateway.TokenFor("openmausbot") {
 		t.Errorf("the routing is the user's: %v", got.Environment)
 	}
 	if slices.Contains(got.Config.EndpointModels, "gone/old") || got.Environment["ANTHROPIC_MODEL"] != got.Config.EndpointModels[0] {
