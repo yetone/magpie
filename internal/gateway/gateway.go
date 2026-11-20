@@ -1119,6 +1119,7 @@ func (s *Server) routes() *routeMux {
 	mux.HandleFunc("POST /api/chat", s.ollamaChat(false))
 	mux.HandleFunc("POST /api/generate", s.ollamaChat(true))
 	mux.HandleFunc("GET /v1/magpie/quotas", s.quotas)
+	mux.HandleFunc("GET "+AccountsPath, s.accountsList)
 	mux.HandleFunc("GET /v1/magpie/usage", s.usageSummary)
 	mux.HandleFunc("GET /v1/magpie/usage/requests", s.usageRequests)
 	mux.HandleFunc("POST /v1/magpie/usage/requests", s.usageIngest)
@@ -1280,7 +1281,7 @@ var catalogSize stamped[struct{}, int]
 
 func (s *Server) info(w http.ResponseWriter, r *http.Request) {
 	out := map[string]any{"name": "magpie", "version": Version, "models": catalogSize.get(struct{}{}, func() int { return len(provider.Catalog()) }), "window": Window,
-		"apis": []string{"/v1/chat/completions", "/v1/responses", "/v1/messages", "/v1/systemone", "/v1beta/models/{model}:generateContent", "/v1/images/generations", "/v1/images/edits", "/v1/videos", NativePath + "{provider}/{path}", "/v1/embeddings", "/v1/rerank", "/v1/decisions", "/v1/audio/transcriptions", "/v1/audio/translations", "/v1/audio/speech", "/v1/realtime", "/v1/magpie/quotas", "/v1/magpie/quotas/history", "/v1/magpie/usage", "/v1/magpie/usage/requests", "/v1/magpie/route", StatuslinePath, "/v1/magpie/trace", OwnMCPPath, SearchMCPPath, VisionMCPPath, MemoryMCPPath, SessionsMCPPath, ImageMCPPath, BrowserMCPPath, ToolsMCPPath, HubMCPAll, HubMCPPath + "{agent}"}}
+		"apis": []string{"/v1/chat/completions", "/v1/responses", "/v1/messages", "/v1/systemone", "/v1beta/models/{model}:generateContent", "/v1/images/generations", "/v1/images/edits", "/v1/videos", NativePath + "{provider}/{path}", "/v1/embeddings", "/v1/rerank", "/v1/decisions", "/v1/audio/transcriptions", "/v1/audio/translations", "/v1/audio/speech", "/v1/realtime", "/v1/magpie/quotas", "/v1/magpie/quotas/history", AccountsPath, "/v1/magpie/usage", "/v1/magpie/usage/requests", "/v1/magpie/route", StatuslinePath, "/v1/magpie/trace", OwnMCPPath, SearchMCPPath, VisionMCPPath, MemoryMCPPath, SessionsMCPPath, ImageMCPPath, BrowserMCPPath, ToolsMCPPath, HubMCPAll, HubMCPPath + "{agent}"}}
 	// which process serves, for another magpie on this computer to name it
 	// on its Routing page (#2606); not told to another machine
 	if local(r) {
@@ -10706,8 +10707,10 @@ func dshCompacts(h http.Header) bool {
 // agent names itself in sessionHeaders is taken.
 const SessionHeader = "X-Magpie-Session"
 
-// AccountHeader pins a request to one of a subscription's accounts, by its
-// user (an email, a login) or its id in the routing trace, percent-encoded
+// AccountHeader pins a request to one of a subscription's accounts or one
+// of a provider's keys, by its user (an email, a login), a key's name, its
+// id in the routing trace, or its stable id as AccountsPath lists it
+// ("<provider>/<id>", pinTargets), percent-encoded
 // when it isn't ASCII (pinnedName): only it is tried, and when it can't take the request the caller is told why rather
 // than another account answering — a probe of one account needs that one.
 // It goes no further than magpie.

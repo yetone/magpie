@@ -4969,14 +4969,17 @@ func streamStatus(msg string) int {
 // percent-encoded (pinnedName), and matches as written or decoded.
 func pinTo(raw string, cands []candidate, pl planned) ([]candidate, planned, int, string) {
 	want := pinnedName(raw)
-	match := func(w Weighed) bool {
-		return strings.EqualFold(want, w.Who) || want == w.ID || strings.EqualFold(raw, w.Who) || raw == w.ID
+	// by its stable id too, as AccountsPath lists it: "<provider>/<id>",
+	// or the id alone; a key so, whatever it is named
+	targets := pinTargets(want, append(slices.Clone(pl.order), pl.left...))
+	match := func(w Weighed, c *candidate) bool {
+		return strings.EqualFold(want, w.Who) || want == w.ID || strings.EqualFold(raw, w.Who) || raw == w.ID || pinnedBy(targets, w, c)
 	}
 	var out []candidate
 	var order []Weighed
 	var rests []string
 	for i, c := range cands {
-		if i >= len(pl.order) || !match(pl.order[i]) {
+		if i >= len(pl.order) || !match(pl.order[i], &c) {
 			continue
 		}
 		r, ok := restOf(c.restKey())
@@ -4996,20 +4999,20 @@ func pinTo(raw string, cands []candidate, pl planned) ([]candidate, planned, int
 		return nil, pl, http.StatusTooManyRequests, AccountHeader + ": " + strings.Join(rests, "; ") + "; no other account is tried in its place"
 	}
 	for _, w := range pl.left {
-		if match(w) && w.Held {
+		if match(w, nil) && w.Held {
 			return nil, pl, http.StatusForbidden, fmt.Sprintf("%s: the gateway key may not use %s's account", AccountHeader, w.Who)
 		}
-		if match(w) && w.Capped > 0 {
+		if match(w, nil) && w.Capped > 0 {
 			msg, _ := cappedError(w.Model, []Weighed{w}, time.Now())
 			return nil, pl, http.StatusTooManyRequests, AccountHeader + ": " + msg + "; no other account is tried in its place"
 		}
-		if match(w) {
+		if match(w, nil) {
 			return nil, pl, http.StatusBadRequest, fmt.Sprintf("%s: %s's plan doesn't list %s", AccountHeader, w.Who, w.Model)
 		}
 	}
 	var have []string
 	for _, w := range append(slices.Clone(pl.order), pl.left...) {
-		if w.Kind == "account" && !slices.Contains(have, w.Who) {
+		if (w.Kind == "account" || w.Kind == "key") && w.Who != "" && !slices.Contains(have, w.Who) {
 			have = append(have, w.Who)
 		}
 	}

@@ -1,0 +1,200 @@
+package gateway
+
+import (
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"slices"
+	"strings"
+	"sync"
+	"testing"
+
+	"github.com/yetone/magpie/internal/provider"
+)
+
+// keyVendor answers a chat request by its key: 401 with the vendor's own
+// words for a key in bad, else a reply naming the key. It notes each key
+// asked.
+type keyVendor struct {
+	mu    sync.Mutex
+	bad   map[string]bool
+	asked []string
+}
+
+func (v *keyVendor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	io.Copy(io.Discard, r.Body)
+	key := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	v.mu.Lock()
+	v.asked = append(v.asked, key)
+	v.mu.Unlock()
+	w.Header().Set("Content-Type", "application/json")
+	if v.bad[key] {
+		w.WriteHeader(http.StatusUnauthorized)
+		io.WriteString(w, `{"error":{"message":"Incorrect API key provided: `+provider.Mask(key)+`","type":"invalid_request_error","code":"invalid_api_key"}}`)
+		return
+	}
+	io.WriteString(w, `{"id":"c1","object":"chat.completion","model":"m","choices":[{"index":0,"message":{"role":"assistant","content":"from `+key+`"},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":1}}`)
+}
+
+func (v *keyVendor) seen() []string {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return slices.Clone(v.asked)
+}
+
+// keyedPost asks model on /v1/chat/completions from this computer, pinned
+// to account when it isn't "".
+func keyedPost(t *testing.T, s *Server, model, account string) (int, string) {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model":"`+model+`","messages":[{"role":"user","content":"ping"}]}`))
+	req.Header.Set("Authorization", "Bearer magpie")
+	if account != "" {
+		req.Header.Set(AccountHeader, account)
+	}
+	s.Handler().ServeHTTP(rec, req)
+	return rec.Code, rec.Body.String()
+}
+
+const (
+	firstKey  = "sk-first-0123456789abcdef"
+	secondKey = "sk-second-0123456789abcdef"
+	offKey    = "sk-off-0123456789abcdef"
+)
+
+// @tmr11235 on X: a plugin testing whether an account works could find
+// only the accounts /v1/magpie/quotas has a card for. GET
+// /v1/magpie/accounts lists every one, a signed-in account and an API
+// key alike, with no quota read, by identifiers alone: no key, token or
+// refresh token is in it.
+func TestAccountsListsEveryAccountAndKey(t *testing.T) {
+	twoAccounts(t)
+	if err := provider.Save(provider.Provider{ID: "keyed", Name: "Keyed", Chat: "https://example.invalid/v1", Models: []string{"m"},
+		Key: firstKey, Keys: []provider.KeyAccount{{Key: secondKey, Name: "work"}, {Key: offKey, Off: true}}}); err != nil {
+		t.Fatal(err)
+	}
+	s := New()
+	get := func(path, from string) (int, string) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", path, nil)
+		req.RemoteAddr = from
+		s.Handler().ServeHTTP(rec, req)
+		return rec.Code, rec.Body.String()
+	}
+	code, body := get(AccountsPath, "127.0.0.1:5000")
+	if code != 200 {
+		t.Fatalf("%d %s", code, body)
+	}
+	for _, secret := range []string{firstKey, secondKey, offKey, "r-acct-1", "r-acct-2"} {
+		if strings.Contains(body, secret) {
+			t.Fatalf("a secret (%s) is told: %s", secret, body)
+		}
+	}
+	var out struct {
+		Data []listedAccount `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(body), &out); err != nil {
+		t.Fatal(err)
+	}
+	find := func(pid, id string) *listedAccount {
+		for i, a := range out.Data {
+			if a.Provider == pid && a.ID == id {
+				return &out.Data[i]
+			}
+		}
+		t.Fatalf("%s/%s not listed: %s", pid, id, body)
+		return nil
+	}
+	for _, k := range []struct {
+		key, label string
+		on         bool
+	}{{firstKey, provider.Mask(firstKey), true}, {secondKey, "work", true}, {offKey, provider.Mask(offKey), false}} {
+		a := find("keyed", provider.KeyID(k.key))
+		if a.Kind != "key" || a.Label != k.label || a.On != k.on || a.Pin != "keyed/"+provider.KeyID(k.key) || a.User != "" {
+			t.Errorf("key %s listed %+v", k.label, a)
+		}
+	}
+	for _, user := range []string{"me@example.com", "spare@example.com"} {
+		a := find("codex", provider.LoginID("codex", user))
+		if a.Kind != "account" || a.User != user || a.Label != user || !a.On || a.Pin != "codex/"+a.ID {
+			t.Errorf("account %s listed %+v", user, a)
+		}
+	}
+	// ?provider= keeps one provider's
+	if _, b := get(AccountsPath+"?provider=keyed", "127.0.0.1:5000"); strings.Contains(b, "codex") || !strings.Contains(b, "keyed") {
+		t.Errorf("?provider=keyed: %s", b)
+	}
+	// another computer is told none of it without the shared gateway's key
+	if code, b := get(AccountsPath, "192.168.1.9:5000"); code != http.StatusForbidden || strings.Contains(b, "keyed") {
+		t.Errorf("from the network: %d %s", code, b)
+	}
+}
+
+// A request pinned by a listed account's pin, or its id alone, goes to
+// that key and no other: a provider's only key on is pinned by its own
+// fingerprint too, and a key the vendor refuses is answered with the
+// vendor's own refusal, the next key not asked in its place.
+func TestAccountPinnedByListedID(t *testing.T) {
+	fresh(t)
+	v := &keyVendor{bad: map[string]bool{secondKey: true}}
+	up := httptest.NewServer(v)
+	t.Cleanup(up.Close)
+	if err := provider.Save(provider.Provider{ID: "keyed", Name: "Keyed", Chat: up.URL + "/v1", Models: []string{"m"}, Routing: provider.Ordered,
+		Key: firstKey, Keys: []provider.KeyAccount{{Key: secondKey, Name: "work"}}}); err != nil {
+		t.Fatal(err)
+	}
+	s := New()
+	// unpinned, the first answers
+	if code, body := keyedPost(t, s, "keyed/m", ""); code != 200 || !strings.Contains(body, "from "+firstKey) {
+		t.Fatalf("unpinned: %d %s", code, body)
+	}
+	v.asked = nil
+	// pinned to the refused key by its pin: its 401 is the answer, and the
+	// first key, which would answer, isn't asked
+	code, body := keyedPost(t, s, "keyed/m", "keyed/"+provider.KeyID(secondKey))
+	if code != http.StatusUnauthorized || !strings.Contains(body, "Incorrect API key") {
+		t.Fatalf("pinned to the refused key: %d %s", code, body)
+	}
+	if got := v.seen(); !slices.Equal(got, []string{secondKey}) {
+		t.Fatalf("keys asked %v, want the pinned one alone", got)
+	}
+	// and the first by its id alone
+	v.asked = nil
+	if code, body := keyedPost(t, s, "keyed/m", provider.KeyID(firstKey)); code != 200 || !strings.Contains(body, "from "+firstKey) {
+		t.Fatalf("pinned by id: %d %s", code, body)
+	}
+	if got := v.seen(); !slices.Equal(got, []string{firstKey}) {
+		t.Fatalf("keys asked %v", got)
+	}
+	// one key on beside one off is planned as the provider: pinned by its
+	// fingerprint all the same, and the one off isn't taken for it
+	if err := provider.Save(provider.Provider{ID: "keyed", Name: "Keyed", Chat: up.URL + "/v1", Models: []string{"m"},
+		Key: firstKey, Keys: []provider.KeyAccount{{Key: secondKey, Off: true}}}); err != nil {
+		t.Fatal(err)
+	}
+	v.asked = nil
+	if code, body := keyedPost(t, s, "keyed/m", "keyed/"+provider.KeyID(firstKey)); code != 200 || !strings.Contains(body, "from "+firstKey) {
+		t.Fatalf("the only key on, pinned: %d %s", code, body)
+	}
+	if code, body := keyedPost(t, s, "keyed/m", "keyed/"+provider.KeyID(secondKey)); code != http.StatusNotFound {
+		t.Fatalf("the key off, pinned: %d %s", code, body)
+	}
+	if got := v.seen(); !slices.Equal(got, []string{firstKey}) {
+		t.Fatalf("keys asked %v", got)
+	}
+}
+
+// A signed-in account is pinned by its listed pin as well, as by its user.
+func TestAccountPinnedByLoginID(t *testing.T) {
+	heads := twoAccounts(t)
+	s := New()
+	pin := "codex/" + provider.LoginID("codex", "spare@example.com")
+	code, body := pinnedPost(t, s, "/v1/responses", "codex/gpt-5.5", pin)
+	if code != 200 || !strings.Contains(body, "from acct-2") {
+		t.Fatalf("%d %s", code, body)
+	}
+	if len(*heads) != 1 || (*heads)[0].Get("chatgpt-account-id") != "acct-2" {
+		t.Fatalf("upstream %v", *heads)
+	}
+}

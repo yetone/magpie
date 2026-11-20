@@ -153,6 +153,36 @@ func TestHeldKeyToldItsOwnQuotas(t *testing.T) {
 			}
 		}
 	}
+	// the accounts list names the same accounts and keys, and nothing else
+	for i, s := range secrets[1:5] {
+		name := keys[i+1].Name
+		c, b := do("GET", AccountsPath, s)
+		if c != 200 {
+			t.Fatalf("%s accounts: %d %s", name, c, b)
+		}
+		var out struct{ Data []listedAccount }
+		if err := json.Unmarshal([]byte(b), &out); err != nil {
+			t.Fatal(err, b)
+		}
+		var got []string
+		for _, a := range out.Data {
+			switch a.Provider {
+			case "alpha":
+				got = append(got, "alpha:"+strings.ToLower(a.Label))
+			case "beta":
+				got = append(got, "beta:")
+			default:
+				got = append(got, a.Provider+":?")
+			}
+		}
+		slices.Sort(got)
+		if !slices.Equal(got, want[name]) {
+			t.Errorf("%s accounts: told %v, want %v", name, got, want[name])
+		}
+	}
+	if c, b := do("GET", AccountsPath, secrets[5]); c != http.StatusForbidden || !strings.Contains(b, provider.KeyHeldCode) {
+		t.Errorf("Budget accounts, quotas off: %d %s", c, b)
+	}
 	// a card the key isn't told isn't read again for it
 	for _, x := range []struct{ secret, card string }{
 		{secrets[3], "provider=alpha&user=One"},

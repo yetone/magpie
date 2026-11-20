@@ -574,6 +574,21 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
     </div>
     <p><code>fetch</code> は同じ内容を <code>init.headers</code> の <code>x-magpie-caller-agent</code>、<code>x-magpie-caller-name</code>、<code>x-magpie-caller-via</code>（カンマ区切り）で受け取ります。どの値もパーセントエンコードされています（<code>decodeURIComponent</code> で戻せます）。magpie はプラグインが送るリクエストからこれらのヘッダーを外すので、ベンダーには届かず、誰がリクエストしてもベンダーが受け取るリクエストは同じです。</p>
 
+    <h3 id="pin"><a class="anchor" href="#pin">id で一つのアカウントを指定する</a></h3>
+    <p>アカウントや API キーが使えるか試すには、まず一覧を取り、そのうち一つに固定したリクエストを送ります。<code>GET /v1/magpie/accounts</code> は、ベンダーが枠を返すかどうかに関係なく、すべてのプロバイダのすべてのアカウントと API キーを返します。プロバイダ、<code>id</code>（キーの id はフィンガープリントで、キーそのものではありません）、<code>kind</code>（<code>account</code> または <code>key</code>）、<code>label</code>、<code>on</code>、<code>pin</code> です。キーやトークンは含まれません。<code>?provider=&lt;id&gt;</code> で一つのプロバイダに絞れます。<code>pin</code> を <code>X-Magpie-Account</code> に入れて送ると、そのアカウントだけが試されます。ルーティングもフェイルオーバーもせず、失敗はベンダーの返したとおりに返ります。</p>
+    <div class="code">
+      <span class="lang">JavaScript</span>
+      <pre><span class="k">const</span> base = <span class="s">"http://"</span> + process.env.MAGPIE_ADDR
+<span class="k">const</span> { data } = <span class="k">await</span> (<span class="k">await</span> fetch(base + <span class="s">"/v1/magpie/accounts"</span>)).json()
+<span class="c">// [{ provider: "openai", id: "3f9a1c02d4", pin: "openai/3f9a1c02d4", kind: "key", label: "sk-p…x9Qa", on: true }, …]</span>
+<span class="k">const</span> res = <span class="k">await</span> fetch(base + <span class="s">"/v1/chat/completions"</span>, {
+  method: <span class="s">"POST"</span>,
+  headers: { authorization: <span class="s">"Bearer magpie"</span>, <span class="s">"content-type"</span>: <span class="s">"application/json"</span>,
+    <span class="s">"x-magpie-account"</span>: encodeURIComponent(data[0].pin) },
+  body: JSON.stringify({ model: <span class="s">"openai/gpt-5.5"</span>, messages: [{ role: <span class="s">"user"</span>, content: <span class="s">"ping"</span> }] }),
+})</pre>
+    </div>
+
     <h2 id="signin-state"><a class="anchor" href="#signin-state">サインイン状態</a></h2>
     <p>magpie は、ベンダーにサインインを拒否されたアカウントに記録を付けます。その記録をユーザーに表示し、再び使えるようになるまでそのアカウントには送信しません。デフォルトでは 401 で記録が付き、成功すると消えます。プラグインは <code>X-Magpie-Sign-In</code> レスポンスヘッダーで、応答の意味をより正確に伝えられます。このヘッダーは応答が先に渡される前に magpie が取り除きます：</p>
     <div class="table-wrap"><table>

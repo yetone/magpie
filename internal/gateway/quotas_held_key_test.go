@@ -72,6 +72,7 @@ func TestHeldKeyToldNoAccounts(t *testing.T) {
 	told := []struct{ method, path string }{
 		{"GET", "/v1/magpie/quotas"},
 		{"GET", "/v1/magpie/quotas/history"},
+		{"GET", AccountsPath},
 		{"GET", provider.RemoteCardsPath},
 		{"POST", provider.RemoteRefreshPath},
 		{"GET", "/v1/magpie/concurrency"},

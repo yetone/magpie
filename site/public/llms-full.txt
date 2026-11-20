@@ -11628,6 +11628,22 @@ OpenCode’s `chat.headers` hook runs for every request. Its `input.sessionID` i
 
 Your `fetch` gets the same as `x-magpie-caller-agent`, `x-magpie-caller-name` and `x-magpie-caller-via` (comma-separated) in `init.headers`, each percent-encoded (`decodeURIComponent`). magpie takes these headers off what your plugin sends, so the vendor never sees them, and the request it gets is the same whoever asked.
 
+### One account, by its id
+
+To test whether one account or key works, list them all and send a request pinned to one. `GET /v1/magpie/accounts` names every account and API key of every provider, whether or not its vendor tells a quota: its provider, `id` (a key’s is a fingerprint, never the key), `kind` (`account` or `key`), `label`, `on` and `pin`. No key or token is in it. `?provider=<id>` lists one provider’s. Send `pin` as `X-Magpie-Account` and only that account is tried: no routing, no failover, and its failure comes back as the vendor said it.
+
+```
+const base = "http://" + process.env.MAGPIE_ADDR
+const { data } = await (await fetch(base + "/v1/magpie/accounts")).json()
+// [{ provider: "openai", id: "3f9a1c02d4", pin: "openai/3f9a1c02d4", kind: "key", label: "sk-p…x9Qa", on: true }, …]
+const res = await fetch(base + "/v1/chat/completions", {
+  method: "POST",
+  headers: { authorization: "Bearer magpie", "content-type": "application/json",
+    "x-magpie-account": encodeURIComponent(data[0].pin) },
+  body: JSON.stringify({ model: "openai/gpt-5.5", messages: [{ role: "user", content: "ping" }] }),
+})
+```
+
 ## Sign-in state
 
 magpie marks an account whose sign-in the vendor refused. It shows the mark to the user and stops sending to the account until it works again. By default a 401 marks the account and a success clears the mark. A plugin can say more precisely what an answer means with the `X-Magpie-Sign-In` response header, which magpie removes before the answer goes on:

@@ -2814,6 +2814,18 @@ ASCII, so an account named in other letters (`北冥`) is sent percent-encoded
 magpie decodes it, and a value that isn't such an encoding is the name as
 written.
 
+`GET /v1/magpie/accounts` lists the accounts and API keys of every
+provider, those whose vendor tells no quota included, by identifiers only:
+`provider`, `id` (a signed-in account's login id, a key's fingerprint,
+never the key), `kind` (`account` or `key`), `label`, `user`, `plan`, `on`
+and `pin`, `"<provider>/<id>"`. `?provider=<id>` lists one provider's.
+`X-Magpie-Account: <pin>` (or the id alone) pins a request to that
+account or key. It is asked as `/v1/magpie/quotas` is: this machine, or
+another with a key of a gateway shared on the local network; a read-only
+key may read it, and a key held to a budget, models or accounts only when
+its owner lets it be told quotas, and then only of the accounts it may
+use.
+
 A status bar can show where a turn went before its first token arrives:
 send `X-Magpie-Session: <id>` with the requests (an agent's own session
 header, such as Pi's or Claude Code's, works too) and read
