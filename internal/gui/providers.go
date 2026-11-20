@@ -882,6 +882,9 @@ type providersJSON struct {
 	// Moved is the agents the change moved off models it stopped serving
 	// (agent.Reseat), for the page to say so.
 	Moved []agent.Move `json:"moved,omitempty"`
+	// Placed names the region of its preset a provider saved was moved to,
+	// its key refused where it was and taken there (MoveToKeyPlace).
+	Placed string `json:"placed,omitempty"`
 	// Added and Had: of the keys pasted at once (keys/import), how many
 	// were new and how many the provider had already.
 	Added int `json:"added,omitempty"`
@@ -2232,6 +2235,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 		}
 		var moved []agent.Move
 		var agyMoved []provider.ImportedAccount
+		var placed string // the name of the region a saved provider was moved to, its key being that place's
 		switch r.PathValue("action") {
 		case "show":
 			// a signed-in account the user removed, back with its picks
@@ -2867,7 +2871,14 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				var wg sync.WaitGroup
 				wg.Go(func() { provider.PrefillNewKeys(ctx, had, in.ID) })
 				if old == nil || old.Key != p.Key {
-					p.Fetch(ctx)
+					if _, err := p.Fetch(ctx); err != nil {
+						// a key its vendor's other place keeps (Sidrune AI's
+						// China key at Global): the provider moves there
+						if q, at := provider.MoveToKeyPlace(ctx, *p, err); at != "" {
+							placed = at
+							q.Fetch(ctx)
+						}
+					}
 				} else if askHub {
 					provider.AskRemoteHub(ctx, in.ID)
 				}
@@ -3385,6 +3396,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 		st := providersState()
 		st.Moved = moved
 		st.AgyMoved = agyMoved
+		st.Placed = placed
 		writeJSON(rw, st)
 		// the tray panel's account switch draws the kept list: a change
 		// made here is in it at once

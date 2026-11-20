@@ -54,12 +54,116 @@ type Result struct {
 	// /v1/messages dispatch"). Not a failure of the key: the gateway asks
 	// its models on its other APIs.
 	Unserved bool `json:"unserved,omitempty"`
+	// Region is the region of the provider's preset the key was taken
+	// at, once refused at the one it was tested at (testOtherPlace): the
+	// editor moves the provider there.
+	Region string `json:"region,omitempty"`
 }
 
 // Test sends the smallest possible request to each endpoint the vendor
 // serves, signed with a key made for it and asking for a model that key
 // sees, and reports what came back.
 func (p Provider) Test(ctx context.Context) []Result {
+	out := p.test(ctx)
+	if rs := p.testOtherPlace(ctx, out); rs != nil {
+		return rs
+	}
+	return out
+}
+
+// testPreset is the preset a provider's regions are read from (Preset):
+// a var, for a test's regions at its own servers.
+var testPreset = Preset
+
+// testOtherPlace is the test at the other place of the provider's preset,
+// China's or Global's, when the key was refused at this one (401) and is
+// taken there: a vendor whose two places keep their own accounts turns a
+// key of the other away as invalid (Sidrune AI's global.sidrune.ai, Axo
+// 11-20: "Invalid API key" on every endpoint for a China key). Its
+// results say the region (Result.Region), for the editor to move there.
+// Nil when the key is refused there too, or the preset has no such pair.
+func (p Provider) testOtherPlace(ctx context.Context, out []Result) []Result {
+	if !keyRefused(out) {
+		return nil
+	}
+	for _, q := range p.atOtherPlace() {
+		rs := q.test(ctx)
+		if !slices.ContainsFunc(rs, func(x Result) bool { return x.OK }) {
+			continue
+		}
+		for i := range rs {
+			rs[i].Region = q.placeID
+		}
+		return rs
+	}
+	return nil
+}
+
+// placed is the provider put at another region of its preset, with that
+// region's id.
+type placed struct {
+	Provider
+	placeID, placeName string
+}
+
+// atOtherPlace is the provider at each region of its preset that is the
+// other place than the one it is at, China's for Global's and Global's
+// for China's (placeOf): a vendor's two places keep their own accounts.
+// None when it has no preset with such a pair, or is at no place.
+func (p Provider) atOtherPlace() []placed {
+	if p.Preset == "" {
+		return nil
+	}
+	pr := testPreset(p.Preset)
+	if pr == nil || len(pr.Regions) < 2 {
+		return nil
+	}
+	at := p.regionOf(pr)
+	if at == nil || placeOf(*at) == "" {
+		return nil
+	}
+	var out []placed
+	for _, r := range pr.Regions {
+		if placeOf(r) == "" || placeOf(r) == placeOf(*at) {
+			continue
+		}
+		q := p
+		q.atRegionOf(pr, r)
+		out = append(out, placed{q, r.ID, r.Name})
+	}
+	return out
+}
+
+// MoveToKeyPlace moves a provider whose model list refused its key (a
+// 401, listErr from its Fetch) to the other place of its preset whose
+// list takes the key, and saves it there: a Sidrune AI key of China's
+// typed into a provider at Global (Axo, 11-20). It says the name of the
+// region moved to, or "" when none takes the key, and the provider as
+// saved.
+func MoveToKeyPlace(ctx context.Context, p Provider, listErr error) (Provider, string) {
+	le := (*catalog.ListError)(nil)
+	if !errors.As(listErr, &le) || le.Status != http.StatusUnauthorized {
+		return p, ""
+	}
+	for _, q := range p.atOtherPlace() {
+		if _, err := q.List(ctx); err != nil {
+			continue
+		}
+		if err := Save(q.Provider); err != nil {
+			return p, ""
+		}
+		return q.Provider, q.placeName
+	}
+	return p, ""
+}
+
+// keyRefused says no endpoint answered and one refused the key itself.
+func keyRefused(rs []Result) bool {
+	return !slices.ContainsFunc(rs, func(x Result) bool { return x.OK }) &&
+		slices.ContainsFunc(rs, func(x Result) bool { return x.Status == http.StatusUnauthorized })
+}
+
+func (p Provider) test(ctx context.Context) []Result {
 	ctx = withUnreached(p.ownRequests(p.Via(ctx), probelog.KindTest))
 	if p.DecideOnly() {
 		return p.testDecide(ctx)
@@ -129,6 +233,11 @@ func (p Provider) Test(ctx context.Context) []Result {
 			url, body := tiny(q, proto, UpstreamName(p, next))
 			ctx, b := q.tested(p.loggedAs(ctx, q), url, body)
 			r = probe(ctx, q, proto, url, b, next, testWait)
+		}
+		if le := (*catalog.ListError)(nil); model == "" && errors.As(listErr, &le) && le.Status == http.StatusUnauthorized {
+			// no model to ask, the list having refused the key: the
+			// refusal is what the key is told, not the list's absence
+			r.Status, r.Error = le.Status, cmp.Or(le.Msg, le.StatusText)
 		}
 		out = append(out, r)
 	}

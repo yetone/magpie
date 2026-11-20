@@ -859,6 +859,7 @@ func (p Provider) fetchOne(ctx context.Context) (fetched, error) {
 		return fetched{ms, base, nil, nil}, nil
 	}
 	var errs []string
+	var refused *catalog.ListError // the first list the vendor answered with an error status
 	var out []catalog.Model
 	byID := map[string]int{}
 	add := func(m catalog.Model) {
@@ -969,6 +970,9 @@ func (p Provider) fetchOne(ctx context.Context) (fetched, error) {
 			if !slices.Contains(errs, err.Error()) {
 				errs = append(errs, err.Error())
 			}
+			if le := (*catalog.ListError)(nil); errors.As(err, &le) && refused == nil {
+				refused = le
+			}
 			dead = append(dead, protoBase)
 			continue
 		}
@@ -1005,7 +1009,7 @@ func (p Provider) fetchOne(ctx context.Context) (fetched, error) {
 		}
 		// the endpoints are kept as they were: a vendor with no list (or one
 		// that wants what the key can't give) still serves the models typed in
-		return fetched{}, errorf("%s — type its model ids in by hand, or give the URL its list is at", strings.Join(errs, "; "))
+		return fetched{}, catalog.ListsFailed{Msg: fmt.Sprintf("%s — type its model ids in by hand, or give the URL its list is at", strings.Join(errs, "; ")), Status: refused}
 	}
 	if len(dead) > 0 {
 		kept, saved := p.keepDeadSides(dead, sides)

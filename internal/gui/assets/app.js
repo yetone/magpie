@@ -10304,6 +10304,12 @@ function drawEditor(p, presetID) {
       seg.append(b);
     }
     accessAt(cur);
+    // the key was taken at another region than the one picked (a test's
+    // result.region): the editor moves there, for Save to keep
+    draft.onKeyRegion = (id) => {
+      const b = seg.querySelectorAll(".opt")[pr.regions.findIndex((r) => r.id === id)];
+      if (b && !b.classList.contains("on")) { b.click(); status(t("The key is {region}'s: moved there. Save to keep it.", { region: b.textContent })); }
+    };
     queueMicrotask(() => {
       slide(seg, "regions");
       // the region in use in view, where they scroll
@@ -11469,6 +11475,7 @@ async function provTest(id, body) {
   try {
     const r = await api("provider/test", { ...body, id, run }, null, ac.signal);
     if (editing === id && r?.results?.some((x) => x.v1)) draft?.onV1?.(r.results);
+    if (editing === id) draft?.onKeyRegion?.(r?.results?.find((x) => x.region)?.region);
     return r;
   }
   catch (e) { e.stopped = ac.signal.aborted; throw e; }
@@ -15926,7 +15933,9 @@ async function providerAction(action, body, okMsg, base = "provider/") {
     renderProviders();
     state = await api("state");
     renderAgents();
-    saidMoved(okMsg);
+    // a provider saved at the region its key is of (providers.placed, the
+    // region's name): Sidrune AI's China key typed in at Global
+    saidMoved(providers.placed ? t("Saved at {region}: the key is that region's", { region: t(providers.placed) }) : okMsg);
     return true;
   } catch (e) {
     // a Remove may have gone through before what failed: the list as it is

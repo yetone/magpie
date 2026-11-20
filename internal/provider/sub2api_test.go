@@ -131,3 +131,101 @@ func TestTestUnservedModelsAskedAFew(t *testing.T) {
 		t.Errorf("asked %d times, want %d", n, testModels)
 	}
 }
+
+// sub2api's 401 to a key it doesn't know, as global.sidrune.ai answered a
+// Sidrune AI China key on every endpoint (Axo, 11-20).
+const sub2apiInvalidKey = `{"error":{"type":"authentication_error","message":"Invalid API key"}}`
+
+// A key of a partner's other place, China's or Global's, tests at the
+// place that takes it, and says which, for the editor to move there; a
+// key neither takes stays refused where it was.
+// twoPlaces serves a preset "sid" with a China region taking sk-cn and a
+// Global one taking sk-global; each refuses any other key as sub2api does.
+func twoPlaces(t *testing.T) (cn, global *httptest.Server) {
+	t.Helper()
+	serve := func(key string) *httptest.Server {
+		srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+			rw.Header().Set("Content-Type", "application/json")
+			if r.Header.Get("Authorization") != "Bearer "+key {
+				rw.WriteHeader(http.StatusUnauthorized)
+				_, _ = rw.Write([]byte(sub2apiInvalidKey))
+				return
+			}
+			if r.Method != http.MethodPost {
+				_, _ = rw.Write([]byte(`{"object":"list","data":[{"id":"gpt-5.5"}]}`))
+				return
+			}
+			_, _ = rw.Write([]byte(`{"id":"c","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`))
+		}))
+		t.Cleanup(srv.Close)
+		return srv
+	}
+	cn, global = serve("sk-cn"), serve("sk-global")
+	pr := &PresetDef{Regions: []Region{
+		{ID: "cn", Name: "China", Chat: cn.URL + "/v1"},
+		{ID: "global", Name: "Global", Chat: global.URL + "/v1"},
+	}}
+	was := testPreset
+	t.Cleanup(func() { testPreset = was })
+	testPreset = func(id string) *PresetDef {
+		if id == "sid" {
+			return pr
+		}
+		return nil
+	}
+	return cn, global
+}
+
+func TestTestKeyOfTheOtherPlace(t *testing.T) {
+	sandboxHome(t)
+	cn, global := twoPlaces(t)
+	for _, c := range []struct {
+		name, key, at, want string
+		ok                  bool
+	}{
+		{"a China key at Global", "sk-cn", global.URL, "cn", true},
+		{"a Global key at China", "sk-global", cn.URL, "global", true},
+		{"a China key at China", "sk-cn", cn.URL, "", true},
+		{"a key neither takes", "sk-none", global.URL, "", false},
+	} {
+		p := Provider{ID: "sid", Name: "Sid", Preset: "sid", Chat: c.at + "/v1", Key: c.key}
+		rs := p.Test(context.Background())
+		if len(rs) != 1 || rs[0].OK != c.ok || rs[0].Region != c.want {
+			t.Errorf("%s: %+v, want ok %v at region %q", c.name, rs, c.ok, c.want)
+		}
+		if !c.ok && rs[0].Status != http.StatusUnauthorized {
+			t.Errorf("%s: status %d, want the 401", c.name, rs[0].Status)
+		}
+	}
+}
+
+// A provider saved with a key its place refuses, which the other place
+// takes, is saved at the other place (Axo's China key at Global, 11-20).
+func TestSaveMovesToKeyPlace(t *testing.T) {
+	sandboxHome(t)
+	cn, global := twoPlaces(t)
+	for _, c := range []struct {
+		name, key, at, want, chat string
+	}{
+		{"a China key at Global", "sk-cn", global.URL, "China", cn.URL + "/v1"},
+		{"a Global key at Global", "sk-global", global.URL, "", global.URL + "/v1"},
+		{"a key neither takes", "sk-none", global.URL, "", global.URL + "/v1"},
+	} {
+		p := Provider{ID: "sid", Name: "Sid", Preset: "sid", Chat: c.at + "/v1", Key: c.key}
+		if err := Save(p); err != nil {
+			t.Fatal(err)
+		}
+		_, err := p.Fetch(context.Background())
+		q, at := MoveToKeyPlace(context.Background(), p, err)
+		if at != c.want {
+			t.Errorf("%s: moved to %q, want %q (fetch: %v)", c.name, at, c.want, err)
+		}
+		saved, ferr := Find("sid")
+		if ferr != nil {
+			t.Fatal(ferr)
+		}
+		if saved.Chat != c.chat || q.Chat != c.chat {
+			t.Errorf("%s: saved at %s (returned %s), want %s", c.name, saved.Chat, q.Chat, c.chat)
+		}
+	}
+}

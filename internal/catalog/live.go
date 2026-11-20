@@ -609,6 +609,7 @@ func FetchAtListed(ctx context.Context, base, key string, anthropic bool, header
 	}
 
 	var errs []string
+	var refused *ListError
 	for _, u := range urls {
 		ms, err := fetchOne(ctx, u, key, anthropic, headers)
 		listed.record(auth, u, ms)
@@ -619,11 +620,31 @@ func FetchAtListed(ctx context.Context, base, key string, anthropic bool, header
 			err = errors.New(u + ": no models listed")
 		}
 		errs = append(errs, err.Error())
+		if le := (*ListError)(nil); errors.As(err, &le) && refused == nil {
+			refused = le
+		}
 		if ctx.Err() != nil {
 			break
 		}
 	}
-	return nil, "", errors.New("no model list: " + strings.Join(errs, "; "))
+	return nil, "", ListsFailed{"no model list: " + strings.Join(errs, "; "), refused}
+}
+
+// ListsFailed is a model list asked at none of its URLs, in the words
+// each was refused with, carrying the first error status a vendor
+// answered (ListError) for errors.As to find.
+type ListsFailed struct {
+	Msg    string
+	Status *ListError
+}
+
+func (e ListsFailed) Error() string { return e.Msg }
+
+func (e ListsFailed) Unwrap() error {
+	if e.Status == nil {
+		return nil
+	}
+	return e.Status
 }
 
 // listAuthFor names how a list request is authenticated, which is half of
@@ -897,10 +918,7 @@ func fetchPage(ctx context.Context, url, key string, anthropic bool, headers map
 		}
 	}
 	if res.StatusCode != http.StatusOK {
-		if msg := errorMessage(b); msg != "" {
-			return nil, false, "", fmt.Errorf("%s: %s (%s)", url, res.Status, msg)
-		}
-		return nil, false, "", fmt.Errorf("%s: %s", url, res.Status)
+		return nil, false, "", &ListError{URL: url, Status: res.StatusCode, StatusText: res.Status, Msg: errorMessage(b)}
 	}
 	var v struct {
 		Data    []liveModel `json:"data"`
@@ -1441,4 +1459,18 @@ func TogetherAPI(u string) bool {
 func VercelGateway(u string) bool {
 	x, err := url.Parse(strings.TrimSpace(u))
 	return err == nil && strings.EqualFold(x.Hostname(), "ai-gateway.vercel.sh")
+}
+
+// ListError is a model list the vendor answered with an error status:
+// Status is it, for a caller to tell a refused key (401) from the rest.
+type ListError struct {
+	URL, StatusText, Msg string
+	Status               int
+}
+
+func (e *ListError) Error() string {
+	if e.Msg != "" {
+		return fmt.Sprintf("%s: %s (%s)", e.URL, e.StatusText, e.Msg)
+	}
+	return fmt.Sprintf("%s: %s", e.URL, e.StatusText)
 }
