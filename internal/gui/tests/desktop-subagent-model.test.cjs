@@ -1,5 +1,7 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // Desktop's gateway-applied subagent model and effort share Codex's controls.
+// Unset, its square and picker say the lead picks: a tier, on the model set
+// for it in Tiers (@mathfournity on X: "Default" didn't say so).
 // Desktop's routing trace has subagent picks without a kind. All APIs and
 // assets are intercepted; no backend or external network is used.
 const assert = require("node:assert/strict");
@@ -83,32 +85,32 @@ function server(lang, fixture) {
 const W = {
   en: { effortDefault: "subagent effort: default\nthe effort Claude Code asks for", effortHigh: "subagent effort: high",
     effortStory: "The subagent effort set in magpie is high; the model's supported levels and a routing group's fixed member effort still apply.",
-    unset: "subagent model: the model the lead asks for", def: "Default", set: "subagent model: M2",
-    note: "each subagent on the model Claude Desktop's lead asks for",
+    unset: "subagent model: Lead's pick\nThe lead names opus, sonnet, haiku or fable for each subagent, which runs on that tier's model in Tiers. A model picked here runs every subagent.", def: "Lead's pick", set: "subagent model: M2\nEvery subagent runs on this model, even when the lead names another. Lead's pick lets the lead choose again.",
+    note: "the tier the lead names, on its model in Tiers",
     moved: "Claude Desktop requested a subagent on fake/m1; magpie put it on fake/m2, the model set for its subagents.",
     kept: "Claude Desktop requested a subagent on fake/m1 and it stayed there: its subagents are set to fake/m2, but it is disabled in magpie." },
   zh: { effortDefault: "子代理推理强度：默认\n跟随 Claude Code 请求的推理强度", effortHigh: "子代理推理强度：高",
     effortStory: "magpie 为子代理设定的推理强度是 高；仍按模型支持的等级适配，并保留路由组成员的固定强度。",
-    unset: "子代理模型：主代理请求的模型", def: "默认", set: "子代理模型：M2",
-    note: "每个子代理都用 Claude Desktop 主代理请求的模型",
+    unset: "子代理模型：由主代理自选\n主代理为每个子代理指定 opus、sonnet、haiku 或 fable，子代理就用“档位”里为该档设定的模型。在这里选一个模型，就让所有子代理都用它。", def: "由主代理自选", set: "子代理模型：M2\n所有子代理都用这个模型，主代理指定了别的也一样。选“由主代理自选”就让主代理重新选择。",
+    note: "主代理指定的档位，用“档位”里为它设定的模型",
     moved: "Claude Desktop 请求了使用 fake/m1 的子代理；magpie 将其改用 fake/m2，即为它的子代理设定的模型。",
     kept: "Claude Desktop 请求了使用 fake/m1 的子代理，并保留在该模型上：它的子代理设为 fake/m2，但该模型在 magpie 中已停用。" },
   "zh-TW": { effortDefault: "子代理推理強度：預設\n跟隨 Claude Code 請求的推理強度", effortHigh: "子代理推理強度：高",
     effortStory: "magpie 為子代理設定的推理強度是 高；仍按模型支援的等級適配，並保留路由群組成員的固定強度。",
-    unset: "子代理模型：主代理請求的模型", def: "預設", set: "子代理模型：M2",
-    note: "每個子代理都用 Claude Desktop 主代理請求的模型",
+    unset: "子代理模型：由主代理自選\n主代理為每個子代理指定 opus、sonnet、haiku 或 fable，子代理就用「檔位」裡為該檔設定的模型。在這裡選一個模型，就讓所有子代理都用它。", def: "由主代理自選", set: "子代理模型：M2\n所有子代理都用這個模型，主代理指定了別的也一樣。選「由主代理自選」就讓主代理重新選擇。",
+    note: "主代理指定的檔位，用「檔位」裡為它設定的模型",
     moved: "Claude Desktop 請求了使用 fake/m1 的子代理；magpie 將其改用 fake/m2，即為它的子代理設定的模型。",
     kept: "Claude Desktop 請求了使用 fake/m1 的子代理，並保留在該模型上：它的子代理設為 fake/m2，但該模型在 magpie 中已停用。" },
   ja: { effortDefault: "サブエージェントの推論レベル：デフォルト\nClaude Code が要求する推論レベル", effortHigh: "サブエージェントの推論レベル：高",
     effortStory: "magpie で設定したサブエージェントの推論レベルは 高 です。モデルが対応するレベルへの調整と、ルーティンググループのメンバーに固定されたレベルは引き続き適用されます。",
-    unset: "サブエージェントのモデル：リードがリクエストしたモデル", def: "デフォルト", set: "サブエージェントのモデル：M2",
-    note: "各サブエージェントは Claude Desktop のリードがリクエストしたモデルを使います",
+    unset: "サブエージェントのモデル：リードが選ぶ\nリードがサブエージェントごとに opus、sonnet、haiku、fable のいずれかを指定し、サブエージェントは「階層」でその階層に設定したモデルで動きます。ここでモデルを選ぶと、すべてのサブエージェントがそのモデルを使います。", def: "リードが選ぶ", set: "サブエージェントのモデル：M2\nリードが別のモデルを指定しても、すべてのサブエージェントがこのモデルで動きます。「リードが選ぶ」を選ぶと、選択をリードに戻します。",
+    note: "リードが指定した階層の、「階層」で設定したモデル",
     moved: "Claude Desktop が fake/m1 のサブエージェントをリクエストしました。magpie はサブエージェント用に設定された fake/m2 に切り替えました。",
     kept: "Claude Desktop が fake/m1 のサブエージェントをリクエストし、そのモデルのままになりました。サブエージェントは fake/m2 に設定されていますが、このモデルは magpie で無効になっています。" },
   de: { effortDefault: "Reasoning-Effort der Subagenten: Standard\nder von Claude Code angeforderte Reasoning-Effort", effortHigh: "Reasoning-Effort der Subagenten: hoch",
     effortStory: "Der in magpie gesetzte Reasoning-Effort der Subagenten ist hoch; die unterstützten Stufen des Modells und die feste Stufe eines Mitglieds der Routing-Gruppe gelten weiterhin.",
-    unset: "Modell der Subagenten: das Modell, das der Haupt-Agent anfordert", def: "Standard", set: "Modell der Subagenten: M2",
-    note: "jeder Subagent auf dem Modell, das der Haupt-Agent von Claude Desktop anfordert",
+    unset: "Modell der Subagenten: Wahl des Haupt-Agenten\nDer Haupt-Agent nennt für jeden Subagenten opus, sonnet, haiku oder fable, und der Subagent läuft auf dem Modell, das unter „Stufen“ für diese Stufe gesetzt ist. Wähle hier ein Modell, um es für alle Subagenten zu nutzen.", def: "Wahl des Haupt-Agenten", set: "Modell der Subagenten: M2\nAlle Subagenten laufen auf diesem Modell, auch wenn der Haupt-Agent ein anderes nennt. „Wahl des Haupt-Agenten“ lässt ihn wieder wählen.",
+    note: "die Stufe, die der Haupt-Agent nennt, auf ihrem Modell unter „Stufen“",
     moved: "Claude Desktop hat einen Subagent mit fake/m1 angefordert; magpie hat ihn auf fake/m2 gesetzt, das für seine Subagenten festgelegte Modell.",
     kept: "Claude Desktop hat einen Subagent mit fake/m1 angefordert, und er blieb dort: Seine Subagenten sind auf fake/m2 gesetzt, aber es ist in magpie deaktiviert." },
 };
@@ -161,7 +163,7 @@ for (const engine of engines) {
         assert.equal(await page.locator("#pop").evaluate((e) => e.classList.contains("model-picker")), true, "app's own model picker");
         assert.equal(await page.locator("select").count(), 0, "no native select");
         const first = await page.locator("#pop #list li").first().evaluate((e) => [e.querySelector(".v")?.textContent, e.querySelector(".n")?.textContent]);
-        assert.deepEqual(first, [w.def, w.note], "translated Default first with Desktop's lead note");
+        assert.deepEqual(first, [w.def, w.note], "translated Lead's pick first with Desktop's tier note");
         const items = await page.locator("#pop #list li").allInnerTexts();
         for (const model of models) assert(items.some((s) => s.includes(model.label)), `${model.label} offered by magpie`);
         const pop = await page.locator("#pop").boundingBox();

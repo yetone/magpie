@@ -4052,6 +4052,14 @@ const SUB_MODEL_UNSET_PLAIN = "The lead picks each subagent's model, or the lead
 const SUB_MODEL_LEAD = "Every subagent runs on the lead's model ({model}), even when the lead names another. Lead's pick lets the lead choose again.";
 const SUB_MODEL_LEAD_PLAIN = "Every subagent runs on the lead's model, even when the lead names another. Lead's pick lets the lead choose again.";
 const SUB_MODEL_SET = "Every subagent runs on this model, even when the lead names another. Lead's pick lets the lead choose again.";
+// Claude Desktop's subagent model unset: its Code tab's lead names a tier
+// in the Agent call (Claude Code 2.1.327 takes opus, sonnet, haiku or
+// fable there, nothing else), and the subagent runs on that tier's model
+// (@mathfournity on X: a model set here held every subagent to it, and
+// "Default" didn't say the lead chooses)
+const DESKTOP_SUB_UNSET = "The lead names opus, sonnet, haiku or fable for each subagent, which runs on that tier's model in Tiers. A model picked here runs every subagent.";
+const DESKTOP_SUB_NOTE = "the tier the lead names, on its model in Tiers";
+const deskSub = (a, f) => a.id === "claude-desktop" && f.label === SUB_MODEL;
 const SUB_MODEL_OLD = "Codex's config still starts subagents on {model} when the lead names none; picking here replaces it.";
 // codexSubSaid: the subagent model's name, what it does
 function codexSubSaid(a, f) {
@@ -4092,7 +4100,7 @@ const MEMORIES_DEFAULT = "Codex's own memory models, or the session's magpie mod
 const SAME_SESSION = "Same as the session";
 function extraField(a, f) {
   if (toggled(f)) return fieldToggle(a, f);
-  const said = f.label === SUB_MODEL && codexSub(a) ? codexSubSaid(a, f) : null;
+  const said = f.label === SUB_MODEL && codexSub(a) ? codexSubSaid(a, f) : deskSub(a, f) ? { name: f.value ? optionFor(f, f.value)?.label || f.value : t(LEADS_PICK), line: t(f.value ? SUB_MODEL_SET : DESKTOP_SUB_UNSET) } : null;
   const set = !!(f.value || f.custom || said?.old);
   const b = el("button", "field extra" + (set ? " set" : ""));
   b.append(svg(EXTRA_GLYPH[f.label] || EXTRA_GLYPH.tiers, 13, 1.5));
@@ -4885,6 +4893,8 @@ function openPicker(agent, field, anchor, ev, only) {
     const leadIcon = (main && optionFor(main, main.value)?.icon) || agent.icon;
     options.unshift({ value: "", label: t(LEADS_PICK), note: said.lead ? t("{model} unless the lead names another", { model: said.lead }) : t("the lead's model unless it names another"), icon: leadIcon, reset: true },
       { value: CODEX_SUB_LEAD, label: t(SAME_AS_LEAD), note: said.lead ? t("{model}, for every subagent", { model: said.lead }) : t("the lead's model, for every subagent"), icon: leadIcon, reset: true });
+  } else if (deskSub(agent, field) && !options.some((o) => o.value === "")) {
+    options.unshift({ value: "", label: t(LEADS_PICK), note: t(DESKTOP_SUB_NOTE), icon: agent.icon, reset: true });
   } else if (!only && !field.menu && !field.onPick && !options.some((o) => o.value === "")) {
     // Pi picks the first provider signed in when none is set (#709)
     const note = agent.id === "reasonix" && ["model", "planner"].includes(field.key) ? "restore the previous {field} selection"
