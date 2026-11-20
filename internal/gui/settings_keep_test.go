@@ -239,6 +239,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 	was.HTTPS = true                                  // Network and sharing's settings/https
 	was.OnTop = true                                  // the title bar's pin, window/ontop
 	was.ImageResolution = "4K"                        // Settings > Images' Resolution row, sent by that row alone
+	was.RedactModelDir = "/Volumes/models"            // Privacy's Advanced › models folder, moved by its own route
 	was.Name = "Tokyo box"                            // Network and sharing's Advanced › Name, sent by its own row alone
 	// Settings > Usage's Bark row has its own route (settings/bark)
 	was.BarkServer, was.BarkKey, was.BarkDaily = "https://bark.example.com", "kept", "21:30"
