@@ -89,18 +89,22 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(kinds[0], w.head);
         if (w.subs) assert.equal(kinds[1][0], w.subs);
 
-        // its rows: listed in the page's language only, one quiet line each
-        // with no badge, the tagline in the title
-        const grid = sheet.locator(".kind").first().locator("xpath=following-sibling::div[1]");
+        // its rows: listed in the page's language only, with no badge, the
+        // tagline on a quiet second line under the name and in the title
+        // (yetone: 上 A 方案)
+        const grid = sheet.locator(".kind-row + .grid");
         const rows = grid.locator(".tile");
         assert.deepEqual(await rows.locator(".n").allTextContents(), w.rows);
         const look = await rows.evaluateAll((rs) => rs.map((r) => ({ badge: r.querySelectorAll(".badge").length, over: r.scrollWidth > r.clientWidth + 1, h: r.getBoundingClientRect().height })));
         for (const l of look) {
           assert.equal(l.badge, 0);
           assert.equal(l.over, false);
-          assert(l.h <= 40, "row " + l.h + "px tall");
+          assert(l.h <= 52, "row " + l.h + "px tall");
         }
         const acme = rows.filter({ hasText: "Acme AI" });
+        assert.equal(await acme.locator(".sub").textContent(), w.note);
+        const [nb, sb] = await Promise.all([acme.locator(".n").boundingBox(), acme.locator(".sub").boundingBox()]);
+        assert(sb.y >= nb.y + nb.height - 1, "tagline under the name");
         assert.match(await acme.getAttribute("title"), new RegExp("Acme AI · " + w.note));
         assert.match(await acme.getAttribute("title"), /api\.acme\.example\.com/);
         assert.equal(await rows.filter({ hasText: "Taken" }).locator(".have").count(), 1);
