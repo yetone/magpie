@@ -92,6 +92,9 @@ type Project struct {
 	// (project_pi.go)
 	Pi     map[string]string `json:"pi,omitempty"`
 	PiRecs []PiRec           `json:"piRecs,omitempty"`
+	// reshaped: claudePlugins or pi was read in another build's shape
+	// (project_shapes.go)
+	reshaped bool
 }
 
 // projectSkillsDirs is where, in a project, each agent reads skills of its

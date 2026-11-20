@@ -296,6 +296,9 @@ func (l *Library) save() error {
 	if err != nil {
 		return err
 	}
+	if err := l.reshapedCopy(); err != nil {
+		return fmt.Errorf("keeping %s before writing it in magpie's shape: %w", path(), err)
+	}
 	return edit.WriteAtomic(path(), append(b, '\n'))
 }
 
