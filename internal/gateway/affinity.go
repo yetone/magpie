@@ -27,7 +27,9 @@ package gateway
 // it cached at the one before (vincentzhang on Discord).
 
 import (
+	"bufio"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -140,6 +142,10 @@ type Affinity struct {
 	// LeadModel is, for Why "lead", the model of the session's main
 	// conversation, whose key or account this call went to (withSession).
 	LeadModel string `json:"leadModel,omitempty"`
+	// Forked is, for Why "strict", that the conversation is a fork of
+	// another nobody had answered under its own id yet, kept on the
+	// account the one it branched from is on (forkOf)
+	Forked bool `json:"forked,omitempty"`
 }
 
 type stick struct {
@@ -198,11 +204,14 @@ var sticks = struct {
 	// conversations spreads rather than all going to the one holding the
 	// fewest a moment before (#1342)
 	opening map[string]stick
+	// forks: scope|historyID → the stick key of the conversation that
+	// history was last sent under, for a fork to find it by (forkOf)
+	forks map[string]string
 	// the file as last read or written: another magpie's writes (the one
 	// handing over to this one) are read again when a conversation is missed
 	from string
 	mod  time.Time
-}{m: map[string]stick{}, opening: map[string]stick{}}
+}{m: map[string]stick{}, opening: map[string]stick{}, forks: map[string]string{}}
 
 // sticksSaving keeps one write of the file at a time, the latest last.
 var sticksSaving sync.Mutex
@@ -458,13 +467,11 @@ func turnIn(req *Request) (turn int, within bool) {
 // isn't brought back, the user's own setting, and the conversation doesn't
 // move either: held is it, for the request to be refused as held. Neither
 // for another mode, nor for a conversation nobody has answered yet.
-func strictKeep(scope, mode string, in http.Header, body []byte, cs []candidate, pl planned) ([]candidate, planned, []Weighed) {
+func strictKeep(scope, mode string, in http.Header, body, written []byte, cs []candidate, pl planned) ([]candidate, planned, []Weighed) {
 	if mode != provider.AffinityStrict {
 		return cs, pl, nil
 	}
-	sticks.Lock()
-	st, had := stickOf(stickKey(scope, in, body))
-	sticks.Unlock()
+	st, had, _ := strictStick(scope, in, stickKey(scope, in, body), written)
 	if !had || time.Since(st.at) > stickKeep || slices.ContainsFunc(cs, func(c candidate) bool { return c.sameVendor(st.who, st.model) }) {
 		return cs, pl, nil
 	}
@@ -509,6 +516,119 @@ func strictKeep(scope, mode string, in http.Header, body []byte, cs []candidate,
 		return nil, planned{order: nil, left: pl.left, held: pl.held, capped: pl.capped, routing: pl.routing, grouped: pl.grouped}, held[:1]
 	}
 	return cs, pl, nil
+}
+
+// strictStick is who answered the conversation key is for, as Stays:
+// Strict keeps it, and whether that is the one it is a fork of (forkOf):
+// a conversation nobody has answered under its own id that carries the
+// history of one answered under another. Claude Code's /branch and
+// --fork-session send the conversation so far, the parent's whole history,
+// under a new x-claude-code-session-id; routed as a session of its own it
+// went to the account the fewest others were on, or routing's first, and
+// the session ran on two accounts (galaxy_huage on X). Its history is the
+// parent's, read and written in the parent's cache: it goes on there.
+// written is the request as the agent wrote it.
+func strictStick(scope string, in http.Header, key string, written []byte) (stick, bool, bool) {
+	sticks.Lock()
+	defer sticks.Unlock()
+	st, had := stickOf(key)
+	if had && time.Since(st.at) > stickKeep {
+		had = false
+	}
+	if strings.Contains(key, "|agent:") || !sessionNamed(in) {
+		// a subagent goes with its lead (withLead); a conversation known
+		// by its body's hash is its history's already
+		return st, had, false
+	}
+	hid := historyID(written)
+	if hid == "" {
+		return st, had, false
+	}
+	at := scope + "|" + hid
+	if had {
+		if from, ok := sticks.forks[at]; !ok || from == key {
+			sticks.forks[at] = key
+		} else if pst, ok := stickOf(from); !ok || time.Since(pst.at) > stickKeep {
+			sticks.forks[at] = key // the one it was is gone
+		}
+		if len(sticks.forks) > 4096 {
+			for h, k := range sticks.forks {
+				if pst, ok := sticks.m[k]; !ok || time.Since(pst.at) > stickKeep {
+					delete(sticks.forks, h)
+				}
+			}
+		}
+		return st, had, false
+	}
+	from, ok := sticks.forks[at]
+	if !ok || from == key {
+		return st, had, false
+	}
+	pst, ok := stickOf(from)
+	if !ok || time.Since(pst.at) > stickKeep {
+		return st, had, false
+	}
+	return pst, true, true
+}
+
+// strictCounts keeps of cs, a token count's keys or accounts, the one a
+// conversation kept strictly is on (strictStick), nobody where that one
+// isn't among them: the count is then the local estimate. A conversation
+// nobody has answered is counted as before.
+func strictCounts(scope string, in http.Header, body []byte, cs []candidate) []candidate {
+	st, had, _ := strictStick(scope, in, stickKey(scope, in, body), nil)
+	if !had {
+		return cs
+	}
+	return slices.DeleteFunc(cs, func(c candidate) bool { return !c.sameVendor(st.who, st.model) })
+}
+
+// historyID is the hash of how a conversation's history begins: its turns
+// up to and through the first that isn't the user's (an answer, a call, a
+// reasoning item), the agent's own system or developer messages passed
+// over, each read as writeOpening reads it (no cache mark, a content of one
+// text part as its text). It names a conversation that has been answered
+// at least once, whoever sends it on: two conversations that open with the
+// same words differ by what was answered. "" for one with no answer in it.
+func historyID(body []byte) string {
+	var m struct {
+		Messages json.RawMessage `json:"messages"`
+		Input    json.RawMessage `json:"input"`
+	}
+	if decodeJSONView(body, &m) != nil {
+		return ""
+	}
+	items := elementsOf(m.Messages)
+	if len(items) == 0 {
+		items = elementsOf(m.Input)
+	}
+	h := sha256.New()
+	w := bufio.NewWriterSize(h, 512)
+	n := 0
+	for _, it := range items {
+		var r struct {
+			Role string `json:"role"`
+		}
+		if decodeJSONView(it, &r) != nil {
+			return ""
+		}
+		if r.Role == "system" || r.Role == "developer" {
+			continue
+		}
+		if n > 0 {
+			w.WriteByte('\n')
+		}
+		n++
+		writeOpening(w, it)
+		if r.Role != "user" {
+			if n == 1 {
+				return "" // a history cut by its client: no opening to name
+			}
+			w.Flush()
+			return "magpie-history-" + hex.EncodeToString(h.Sum(nil)[:12])
+		}
+	}
+	return ""
 }
 
 // strictOnly leaves of cs, for a conversation kept strictly, the key or
@@ -570,9 +690,15 @@ func affine(scope, mode string, rotate, spread, inOrder, hoursOver bool, in http
 	key := stickKey(scope, in, body)
 	a := &Affinity{Mode: mode}
 	a.Turn, a.Within = turnOf(from, written)
-	sticks.Lock()
-	st, had := stickOf(key)
-	sticks.Unlock()
+	var st stick
+	var had bool
+	if mode == provider.AffinityStrict {
+		st, had, a.Forked = strictStick(scope, in, key, written)
+	} else {
+		sticks.Lock()
+		st, had = stickOf(key)
+		sticks.Unlock()
+	}
 	if had && time.Since(st.at) > stickKeep {
 		had = false
 	}
@@ -741,9 +867,11 @@ func affine(scope, mode string, rotate, spread, inOrder, hoursOver bool, in http
 		switch {
 		case rotate:
 			cs, pl = leastHeld(scope, key, cs, pl, false)
-		case spread && strings.Contains(key, "|agent:"):
+		case (spread || mode == provider.AffinityStrict) && strings.Contains(key, "|agent:"):
 			// a subagent goes with its session's account, not to another
-			// as a session of its own
+			// as a session of its own: under Strict whatever the routing,
+			// its compaction included (Claude Code compacts a subagent's
+			// conversation under its agent id)
 			cs, pl = withLead(key, cs, pl)
 		case spread:
 			cs, pl = leastHeld(scope, key, cs, pl, true)

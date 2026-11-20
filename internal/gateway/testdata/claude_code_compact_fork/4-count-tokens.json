@@ -1,0 +1,19 @@
+{
+ "path": "/v1/messages/count_tokens",
+ "headers": {
+  "user-agent": "claude-cli/2.1.325 (external, cli)",
+  "x-claude-code-session-id": "22222222-2222-4333-8444-555555555555",
+  "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,token-counting-2024-11-01",
+  "anthropic-version": "2023-06-01",
+  "x-app": "cli"
+ },
+ "body": {
+  "model": "cc/claude-opus-5-5",
+  "messages": [
+   {
+    "role": "user",
+    "content": "## Notes\n\n- Always use any instead of interface{ [… 8169 chars, 2a0e6dd9bb]"
+   }
+  ]
+ }
+}

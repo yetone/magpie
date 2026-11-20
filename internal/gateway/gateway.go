@@ -2383,6 +2383,13 @@ func (s *Server) countOn(w http.ResponseWriter, r *http.Request, p provider.Prov
 		counts = slices.DeleteFunc(counts, func(c candidate) bool { return !s.rpms.free(c.who(), c.p.RPMLimit()) })
 		// of those resting, only the one back soonest (#1799)
 		counts = probeOne(counts)
+		// a conversation that stays strictly where it is is counted
+		// there, or by the estimate: Claude Code counts its memory files
+		// again right after a compact, under the session's id, and a key
+		// it never uses for the session was sent them (galaxy_huage on X)
+		if p.Affinity == provider.AffinityStrict {
+			counts = strictCounts(p.ID+"/"+model, r.Header, body, counts)
+		}
 	}
 	// the names in force, read at most once however many candidates are
 	// counted, and not at all where there are none
@@ -3478,7 +3485,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// account past the usage cap set on it, and is refused there, not
 	// moved, while the account is held as it won't spend its credits
 	// (#1797)
-	cands, pl, strictHeld := strictKeep(scope, mode, r.Header, body, cands, pl)
+	cands, pl, strictHeld := strictKeep(scope, mode, r.Header, body, plain, cands, pl)
 	// a Codex reset spent before any try, on an account held as it won't
 	// spend its credits
 	var resetFirst *AutoReset

@@ -1,0 +1,170 @@
+{
+ "path": "/v1/messages",
+ "headers": {
+  "user-agent": "claude-cli/2.1.325 (external, cli)",
+  "x-claude-code-session-id": "22222222-2222-4333-8444-555555555555",
+  "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,per-turn-control-2026-07-01,mid-conversation-tool-changes-2026-07-01,thinking-token-count-2026-05-13,advanced-tool-use-2025-11-20,effort-2025-11-24,dangerous-tool-use-2026-09-03,thinking-display-updates-2026-08-18,afk-mode-2026-01-31",
+  "anthropic-version": "2023-06-01",
+  "x-app": "cli"
+ },
+ "body": {
+  "model": "cc/claude-opus-5-5",
+  "messages": [
+   {
+    "role": "user",
+    "content": [
+     {
+      "type": "text",
+      "text": "<system-reminder>\nCodebase and user instructions are shown b [… 8496 chars, 40663e2494]"
+     },
+     {
+      "type": "text",
+      "text": "<system-reminder>\nAttribution for git commits and pull reque [… 580 chars, 9b0f046f12]"
+     },
+     {
+      "type": "text",
+      "text": "say hi"
+     }
+    ]
+   },
+   {
+    "role": "system",
+    "content": "# Environment\nYou have been invoked in the following environ [… 11646 chars, 3438bab66a]",
+    "output_config": {
+     "effort": "medium"
+    }
+   },
+   {
+    "role": "assistant",
+    "content": [
+     {
+      "type": "text",
+      "text": "<summary>Summary of the conversation so far: the user said hi.</summary>"
+     }
+    ]
+   },
+   {
+    "role": "user",
+    "content": [
+     {
+      "type": "text",
+      "text": "second turn",
+      "cache_control": {
+       "type": "ephemeral"
+      }
+     }
+    ]
+   }
+  ],
+  "system": [
+   {
+    "type": "text",
+    "text": "x-anthropic-billing-header: cc_version=2.1.325.382; cc_entrypoint=cli;"
+   },
+   {
+    "type": "text",
+    "text": "You are Claude Code, Anthropic's official CLI for Claude.",
+    "cache_control": {
+     "type": "ephemeral"
+    }
+   },
+   {
+    "type": "text",
+    "text": "\nYou are an agent working with the user toward their goals,  [… 6171 chars, cf800e8cb8]",
+    "cache_control": {
+     "type": "ephemeral"
+    }
+   }
+  ],
+  "metadata": {
+   "user_id": "{\"device_id\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"account_uuid\":\"\",\"session_id\":\"22222222-2222-4333-8444-555555555555\"}"
+  },
+  "max_tokens": 128000,
+  "thinking": {
+   "type": "adaptive",
+   "display": "updates"
+  },
+  "context_management": {
+   "edits": [
+    {
+     "type": "clear_thinking_20251015",
+     "keep": "all"
+    }
+   ]
+  },
+  "safeguards": [
+   {
+    "type": "dangerous_tool_use",
+    "classifier_context": {
+     "v": 1,
+     "permission_mode": "auto",
+     "platform": "macos",
+     "live_cwd": "/home/user/work/proj",
+     "home_dir": "/home/user/work/home",
+     "rule_roots": {
+      "userSettings": "/home/user/work/home/.claude",
+      "projectSettings": "/home/user/work/proj",
+      "localSettings": "/home/user/work/proj",
+      "flagSettings": "/home/user/work/proj",
+      "policySettings": "/home/user/work/proj",
+      "cliArg": "/home/user/work/proj",
+      "command": "/home/user/work/proj",
+      "session": "/home/user/work/proj",
+      "toolsNarrowing": "/home/user/work/proj",
+      "mcpServerPolicy": "/home/user/work/proj",
+      "hostCredential": "/home/user/work/proj"
+     },
+     "trusted_directories": {
+      "primary": {
+       "path": "/home/user/work/proj",
+       "resolved": [
+        "/home/user/work/proj"
+       ]
+      },
+      "additional": [],
+      "network": [],
+      "block_reads_outside_working_directories": false
+     },
+     "rules": {
+      "allow": [],
+      "deny": [],
+      "ask": []
+     },
+     "auto_mode": {
+      "allow": [],
+      "soft_deny": [],
+      "hard_deny": [],
+      "environment": []
+     },
+     "artifact_consent_holdback": false,
+     "case_insensitive_paths": false,
+     "restricted": false,
+     "is_remote_mode": false,
+     "classify_all_shell": false,
+     "user_identity": "user",
+     "git_state": {
+      "cwd": "/home/user/work/proj",
+      "root": null,
+      "branch": null,
+      "default_branch": null,
+      "status": null,
+      "visibility": {
+       "origin": null,
+       "push_remote": null,
+       "remotes": [],
+       "visibility_cache": []
+      },
+      "error": "not_a_repo"
+     },
+     "classifier_facts": {
+      "bashPrescreenRetry": "true"
+     }
+    }
+   }
+  ],
+  "output_config": {
+   "effort": "medium"
+  },
+  "stream": true
+ }
+}
