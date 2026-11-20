@@ -971,13 +971,45 @@ func liftRests(agent, user string, vendorTill bool) {
 		if r.agent != agent || !strings.EqualFold(r.user, user) || !(r.Why == failQuota || r.By == "window" || r.Why == failCredit && agent == "codex") {
 			continue
 		}
-		if vendorTill != (r.By == "resets" || r.By == "retry-after") {
+		if timed := r.By == "resets" || r.By == "retry-after"; vendorTill != timed {
+			if timed && r.Why != failRate {
+				askOnRenewalLocked(k, r, now)
+			}
 			continue
 		}
 		delete(restingUntil.m, k)
 		delete(restingUntil.note, k)
 		liftedLocked(k, now)
 	}
+}
+
+// askOnRenewalLocked has a rest the vendor gave the time of, out of quota
+// or credit, asked again once, without lifting it, when a reading of its
+// windows finds the one it was out of full no more while the time the
+// vendor named still stands: a reset bought on the vendor's side (Zhipu's
+// 重置卡, RookieRicardoR on X) renews the window there, and every request
+// was answered with the refusal till the time it named, the vendor never
+// asked. The rest stands (#2718: the vendor's usage can say less than full
+// while its refusal does too), so a pick that keeps off a resting account
+// still does; only the hold is let go (asksAt), for the next request to
+// ask. Once for each time the vendor named: refused again with the same
+// time, the new rest holds till it, whatever readings say, as before.
+func askOnRenewalLocked(k string, r Rest, now time.Time) {
+	until, ok := restingUntil.m[k]
+	if !ok || !now.Before(until) || restingUntil.renewAsked[k].Equal(until) {
+		return
+	}
+	if restingUntil.renewAsked == nil {
+		restingUntil.renewAsked = map[string]time.Time{}
+	}
+	for x, t := range restingUntil.renewAsked {
+		if !now.Before(t) {
+			delete(restingUntil.renewAsked, x)
+		}
+	}
+	restingUntil.renewAsked[k] = until
+	r.first, r.askAt = false, now
+	restingUntil.note[k] = r
 }
 
 // creditsKnown lifts the rests out of its allowance of a ChatGPT account

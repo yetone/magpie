@@ -1616,6 +1616,10 @@ var restingUntil = struct {
 	// found, from whichever page lifted it (zoecats on Discord: Try now
 	// in the provider's editor left Routing at 429 until a restart)
 	lifted map[string]time.Time
+	// renewAsked is, by the key it rests by, the end of a rest the vendor
+	// timed that a reading's renewal had asked again once
+	// (askOnRenewalLocked): not asked so again till another time is named
+	renewAsked map[string]time.Time
 }{m: map[string]time.Time{}, note: map[string]Rest{}, lifted: map[string]time.Time{}}
 
 // liftedLocked notes that the rest by key was lifted now, with
