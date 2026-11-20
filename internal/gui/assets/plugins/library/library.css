@@ -221,6 +221,9 @@ button.row.lib-hubfolded:hover { background: var(--pill); }
 .lib-srclink:hover { color: var(--fg); text-decoration: underline; text-underline-offset: 2px; }
 /* kept in ~/.agents/skills: moved into the library on a click (tnt1223) */
 .lib-src > .lib-handover { flex: 0 2 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; height: auto; border: 0; background: none; font-size: 11px; color: var(--accent); padding: 0 2px; margin-left: 4px; border-radius: 3px; white-space: nowrap; }
+/* a native row's plugin or package: shows only what it declares */
+.lib-srcpick { font: inherit; color: var(--muted); background: none; border: 0; padding: 0; height: auto; border-radius: 3px; cursor: pointer; }
+@media (hover: hover) and (pointer: fine) { .lib-srcpick:hover { color: var(--fg); text-decoration: underline; text-underline-offset: 2px; } }
 .lib-src > .lib-handover:hover { text-decoration: underline; text-underline-offset: 2px; }
 .lib-confirm.lib-muted { color: var(--muted); }
 
