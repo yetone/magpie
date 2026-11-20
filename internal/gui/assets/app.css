@@ -4287,6 +4287,10 @@ body.panel #find { display: none; }
 .feat-say { margin: 2px 4px 10px; font-size: 12px; line-height: 1.45; color: var(--muted); }
 .set-searching .feat-say { display: none; }
 .row.pref .sub.feat-why { color: var(--muted); font-size: 11px; }
+/* a link that starts its line sits flush with the name and the words above
+   it, its padding out to the left; one after a word or a warning keeps it
+   (every word a line starts with is an element: plugins/search/settings.js) */
+.feat-go > .link:first-child { margin-left: -4px; }
 /* the local model's row says a download, a device or an error in full */
 #privacyModelRow .val { gap: 8px; }
 #privacyModelRow .sub { white-space: normal; overflow-wrap: anywhere; }

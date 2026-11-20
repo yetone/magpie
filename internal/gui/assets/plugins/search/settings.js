@@ -229,7 +229,7 @@ function searchMore(asked, set) {
 featWho.search = (line, f, who) => {
   if (!f.on) return;
   if (f.searches?.length) who.querySelector(".feat-why")?.remove();
-  line.append(f.searches?.length ? t("Searches with {names}", { names: f.searches.join(" → ") })
+  line.append(f.searches?.length ? el("span", "", t("Searches with {names}", { names: f.searches.join(" → ") }))
     : el("span", "warn", t("Nothing to search with yet")));
 };
 

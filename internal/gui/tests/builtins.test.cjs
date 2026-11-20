@@ -203,6 +203,20 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const say = await page.evaluate((v) => document.querySelector(`#nav [data-view="${v}"]`).textContent, v);
           assert.equal((await page.locator(`#builtinList [data-id="${id}"] .feat-go`).textContent()).trim(), say, `${where}: ${id} leads to ${v}`);
         }
+        // a link that starts its line has its word flush with the row's name
+        // (the owner, 11-20: 「网关」 sat 4px in from 「密钥限额」 above it)
+        for (const id of ["budget", "rotation", "middleware", "tools", "gateway"]) {
+          const [name, word] = await page.evaluate((id) => {
+            const r = document.querySelector(`#builtinList [data-id="${id}"]`), b = r.querySelector(".feat-go > .link");
+            const range = document.createRange();
+            range.selectNodeContents(b);
+            return [r.querySelector(".name").getBoundingClientRect().left, range.getBoundingClientRect().left];
+          }, id);
+          assert.ok(Math.abs(word - name) <= 1, `${where}: ${id}'s link starts at ${word}, its name at ${name}`);
+        }
+        // and one after a word or a warning keeps its own room
+        const after = await page.evaluate(() => [...document.querySelectorAll("#builtinList .feat-go > .link")].filter((b) => { const r = document.createRange(); r.setStart(b.parentElement, 0); r.setEndBefore(b); return r.toString().trim(); }).map((b) => getComputedStyle(b).marginLeft));
+        assert.ok(after.length && after.every((m) => m === "0px"), `${where}: links after a word, ${after}`);
         // Library switched on: its tab is back at once, the page stays
         await page.locator('#builtinList [data-id="library"] [role="switch"]').click();
         await page.waitForSelector('#builtinList [data-id="library"] [aria-checked="true"]');
