@@ -16,6 +16,7 @@ import (
 	"io"
 	"maps"
 	"math"
+	"math/bits"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -1657,35 +1658,86 @@ func visibleLocal(chunks []*rowChunk) refSet {
 	// the decoded chunk's string: a long history's ~400k ids held ~7MB of
 	// copies at the start's peak, and a key of these is a string header's
 	// size (msgKey).
-	// made to size, as many as the rows that can have an id (a Codex call
-	// has none): grown an id at a time, it was ~250 MB of a minute and a
-	// third of polls (#2278)
 	keys := msgKeysOf(chunks)
+	// a settled chunk's are read here, once, into one list (msgKeysOf
+	// keeps none of them)
+	var read []msgKey
+	var readAt []int // where each chunk's begin in read, for those of keys nil
 	n := 0
-	for _, k := range keys {
-		// a settled chunk's are read below: the set grows for them
+	for i, k := range keys {
 		if k != nil {
 			n += len(k.keys)
+			continue
 		}
+		if readAt == nil {
+			readAt = make([]int, len(chunks)+1)
+			rows := lentRows()
+			defer rows.release()
+			for j := i; j < len(chunks); j++ {
+				readAt[j] = len(read)
+				if keys[j] == nil {
+					read = appendMsgKeys(read, rows.of(chunks[j]))
+				}
+			}
+			readAt[len(chunks)] = len(read)
+		}
+		n += readAt[i+1] - readAt[i]
+	}
+	keysOf := func(i int) []msgKey {
+		if keys[i] != nil {
+			return keys[i].keys
+		}
+		return read[readAt[i]:readAt[i+1]]
 	}
 	seen := keptSeen.Swap(nil)
 	// judged by the chunks' rows, an upper bound n leaves the recent out of
 	need := rowsOfAll(chunks)
 	if seen == nil || !scratchFits(seen.made, need) {
-		seen = &seenScratch{ids: make(map[[2]uint64]struct{}, n)}
+		seen = &seenScratch{}
 	}
 	seen.made = max(seen.made, need)
 	defer keepSeen(seen)
-	rows := lentRows()
-	defer rows.release()
-	var read chunkMsgKeys
-	for i, c := range chunks {
-		k := keys[i]
-		if k == nil {
-			read.keys = appendMsgKeys(read.keys[:0], rows.of(c))
-			k = &read
+	// A set of every id was the largest thing a page's open held: ~24 MB
+	// for ~1M ids, beside the rows it pairs. Most ids are of one call, so
+	// a first pass marks the slot of each id's hash in a bit set, and the
+	// slots marked twice in another; an id whose slot was marked once is
+	// the only one of its hash, so of its id, and only the others go in
+	// the set: ~2 bits an id and a set of a few percent of them.
+	m := uint64(max(n, 1)) * 8
+	words := int((m + 63) / 64)
+	once, twice := sized(seen.once, words), sized(seen.twice, words)
+	seen.once, seen.twice = once, twice
+	slot := func(k msgKey) (int, uint64) {
+		b, _ := bits.Mul64(k.k, m)
+		return int(b >> 6), 1 << (b & 63)
+	}
+	for i := range chunks {
+		for _, k := range keysOf(i) {
+			w, bit := slot(k)
+			if once[w]&bit != 0 {
+				twice[w] |= bit
+			} else {
+				once[w] |= bit
+			}
 		}
-		for _, k := range k.keys {
+	}
+	candidates := 0
+	for i := range chunks {
+		for _, k := range keysOf(i) {
+			if w, bit := slot(k); twice[w]&bit != 0 {
+				candidates++
+			}
+		}
+	}
+	if candidates == 0 {
+		return duplicates
+	}
+	seen.ids = mapFor(seen.ids, candidates)
+	for i, c := range chunks {
+		for _, k := range keysOf(i) {
+			if w, bit := slot(k); twice[w]&bit == 0 {
+				continue
+			}
 			if _, ok := seen.ids[k.id()]; ok {
 				duplicates.add(rowRef{c, int(k.at)})
 			} else {
@@ -1696,16 +1748,17 @@ func visibleLocal(chunks []*rowChunk) refSet {
 	return duplicates
 }
 
-// keptSeen is visibleLocal's set of ids seen, kept empty for the next
-// call as matchScratch is: made to size for every pairing it was ~210 MB
-// of the ~2 GB 90 s of polls allocated (#2278). A cleared map keeps its
-// buckets.
+// keptSeen is visibleLocal's scratch, kept empty for the next call as
+// matchScratch is: made to size for every pairing it was ~210 MB of the
+// ~2 GB 90 s of polls allocated (#2278). A cleared map keeps its buckets.
 var keptSeen atomic.Pointer[seenScratch]
 
-// seenScratch is the set and the ids of the largest call it served.
+// seenScratch is the set, the bit sets and the rows of the largest call it
+// served.
 type seenScratch struct {
-	ids  map[[2]uint64]struct{}
-	made int
+	ids         map[[2]uint64]struct{}
+	once, twice []uint64
+	made        int
 }
 
 func keepSeen(seen *seenScratch) {

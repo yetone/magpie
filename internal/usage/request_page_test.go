@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"math"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -528,5 +529,60 @@ func TestRequestBlocksKeepOneChunkASource(t *testing.T) {
 	again, idx := read()
 	if again != built || idx.chunks[path] != again || again.lastUse() != idx.tick || idx.tick <= used {
 		t.Fatalf("a published chunk read again: %p (was %p), map %p, used %d (was %d)", again, built, idx.chunks[path], again.lastUse(), used)
+	}
+}
+
+// visibleLocal's bit sets only narrow what goes in its set of ids: what it
+// leaves out is what a set of every id leaves out, for many chunks, ids
+// repeated in a chunk and across chunks, settled chunks among them, and so
+// few ids that most slots are shared.
+func TestVisibleLocalBitsAreExact(t *testing.T) {
+	t.Cleanup(ReleaseScratch)
+	old := time.Now().AddDate(0, 0, -30)
+	rng := rand.New(rand.NewPCG(7, 9))
+	for _, ids := range []int{1, 3, 40, 5000} {
+		var chunks []*rowChunk
+		want := map[rowRef]bool{}
+		seen := map[string]bool{}
+		var made [][]string
+		for c := range 30 {
+			ch := &rowChunk{}
+			var msgs []string
+			for j := range 1 + rng.IntN(300) {
+				msg := ""
+				if rng.IntN(10) != 0 {
+					msg = fmt.Sprintf("msg_%d", rng.IntN(ids*20))
+				}
+				r := Row{}
+				if c%3 == 0 {
+					r.Time = old
+				}
+				ch.add(r, msg, int64(j), false)
+				msgs = append(msgs, msg)
+			}
+			ch = ch.pack()
+			if c%3 == 0 {
+				ch.Latest = old
+			}
+			ch.serial = nextChunkSerial()
+			chunks = append(chunks, ch)
+			made = append(made, msgs)
+		}
+		for c, msgs := range made {
+			for j, msg := range msgs {
+				if msg == "" {
+					continue
+				}
+				if seen[msg] {
+					want[rowRef{chunks[c], j}] = true
+				}
+				seen[msg] = true
+			}
+		}
+		for i := range 2 { // the second with the scratch kept
+			if got := refMap(visibleLocal(chunks)); !maps.Equal(got, want) {
+				t.Fatalf("%d ids, call %d: left out %d rows, want %d", ids, i, len(got), len(want))
+			}
+		}
 	}
 }
