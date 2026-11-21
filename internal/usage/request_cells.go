@@ -92,10 +92,30 @@ type chunkPart struct {
 	// model (speed_rank.go)
 	speeds speedRank
 	// big is the request of the rows the filter keeps that wrote the most
-	// to the cache (BigWrite)
-	big BigWrite
+	// to the cache (BigWrite), nil for none: a session file's rows have no
+	// route, and its 56 bytes were a third of most parts
+	big *BigWrite
 	// newest is the chunk's newest rows a page read of it (newest)
 	newest atomic.Pointer[chunkNewest]
+}
+
+// bigWrite is p's BigWrite, zero for none.
+func (p *chunkPart) bigWrite() BigWrite {
+	if p.big == nil {
+		return BigWrite{}
+	}
+	return *p.big
+}
+
+// keepBig keeps the larger of p's BigWrite and o.
+func (p *chunkPart) keepBig(o BigWrite) {
+	if o.N <= 0 {
+		return
+	}
+	if p.big == nil {
+		p.big = &BigWrite{}
+	}
+	p.big.merge(o)
 }
 
 // partKey is what a chunk's cells are of besides the chunk: the page's
@@ -166,6 +186,7 @@ func newCellPass(p Period, f Filter, now time.Time, names bool) *cellPass {
 // part is c's cells, read through rows into r.
 func (pass *cellPass) part(ps *pairedRows, rows *chunkRows, c *rowChunk, r *Row) *chunkPart {
 	part := &chunkPart{}
+	var big BigWrite
 	at := map[cellRow]int{}
 	var raw []cellRow
 	var cells []pageCell
@@ -240,7 +261,7 @@ func (pass *cellPass) part(ps *pairedRows, rows *chunkRows, c *rowChunk, r *Row)
 					part.speeds = speedRank{}
 				}
 				part.speeds.add(r)
-				part.big.add(r)
+				big.add(r)
 			}
 		}
 	})
@@ -259,6 +280,7 @@ func (pass *cellPass) part(ps *pairedRows, rows *chunkRows, c *rowChunk, r *Row)
 		part.cells[i] = cells[j]
 	}
 	part.speeds.clip()
+	part.keepBig(big)
 	return part
 }
 
