@@ -14,10 +14,10 @@
 // The chosen theme (light, dark, or the system's) is on <html data-theme>
 // before anything paints.
 // The page is English, or the language the worker served it in at /zh/,
-// /ja/ or /de/; T(en, zh, ja, de) is a script's words in it.
-window.LANG = document.documentElement.lang.slice(0, 2);
-window.T = (en, zh, ja, de) => ({ zh, ja, de })[LANG] ?? en;
-window.themeTitle = (m) => T("Theme: " + m, "主题：" + { system: "跟随系统", light: "浅色", dark: "深色" }[m], "テーマ：" + { system: "システム", light: "ライト", dark: "ダーク" }[m], "Farbschema: " + { system: "System", light: "Hell", dark: "Dunkel" }[m]);
+// /zh-tw/, /ja/ or /de/; T(en, zh, ja, de, tw) is a script's words in it.
+window.LANG = document.documentElement.lang === "zh-TW" ? "zh-tw" : document.documentElement.lang.slice(0, 2);
+window.T = (en, zh, ja, de, tw) => ({ zh, ja, de, "zh-tw": tw })[LANG] ?? en;
+window.themeTitle = (m) => T("Theme: " + m, "主题：" + { system: "跟随系统", light: "浅色", dark: "深色" }[m], "テーマ：" + { system: "システム", light: "ライト", dark: "ダーク" }[m], "Farbschema: " + { system: "System", light: "Hell", dark: "Dunkel" }[m], "主題：" + { system: "跟隨系統", light: "淺色", dark: "深色" }[m]);
 (() => {
   let mode = "system";
   try { mode = localStorage.getItem("theme") || "system"; } catch {}
@@ -53,6 +53,7 @@ window.themeTitle = (m) => T("Theme: " + m, "主题：" + { system: "跟随系�
 <link rel="canonical" data-i18n-attr="href:meta.url" href="https://usemagpie.ai/">
 <link rel="alternate" hreflang="en" href="https://usemagpie.ai/">
 <link rel="alternate" hreflang="zh" href="https://usemagpie.ai/zh/">
+<link rel="alternate" hreflang="zh-TW" href="https://usemagpie.ai/zh-tw/">
 <link rel="alternate" hreflang="ja" href="https://usemagpie.ai/ja/">
 <link rel="alternate" hreflang="de" href="https://usemagpie.ai/de/">
 <link rel="alternate" hreflang="x-default" href="https://usemagpie.ai/">
@@ -153,6 +154,7 @@ nav.open .menu .i-close { display: block; }
 :lang(zh) .eyebrow, :lang(zh) .agents p, :lang(zh) .sponsor p, :lang(ja) .eyebrow, :lang(ja) .agents p, :lang(ja) .sponsor p { letter-spacing: .04em; }
 /* Japanese kana and kanji in Japanese faces, not the Chinese ones above */
 :lang(ja) body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", Meiryo, "Noto Sans CJK JP", system-ui, sans-serif; }
+:lang(zh-TW) body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, "PingFang TC", "Microsoft JhengHei", "Noto Sans CJK TC", sans-serif; }
 .btn { display: inline-flex; align-items: center; gap: 8px; padding: 0 18px; height: 42px; border-radius: 10px; background: var(--btn); color: var(--btn-ink); text-decoration: none; font-weight: 560; font-size: 15px; white-space: nowrap; border: 1px solid var(--btn); transition: transform .12s, opacity .12s; }
 .btn:hover { opacity: .88; }
 .btn:active { transform: translateY(1px); }
@@ -422,7 +424,8 @@ footer a:hover { color: var(--ink); }
     <button class="theme lang" type="button" aria-label="Language" title="Language" aria-haspopup="true" aria-expanded="false" aria-controls="langs" data-i18n-attr="aria-label:nav.language,title:nav.language"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
     <div class="lang-menu" id="langs" hidden>
       <a href="/" hreflang="en" lang="en">English</a>
-      <a href="/zh/" hreflang="zh" lang="zh">中文</a>
+      <a href="/zh/" hreflang="zh" lang="zh">简体中文</a>
+      <a href="/zh-tw/" hreflang="zh-TW" lang="zh-TW">繁體中文</a>
       <a href="/ja/" hreflang="ja" lang="ja">日本語</a>
       <a href="/de/" hreflang="de" lang="de">Deutsch</a>
     </div>
@@ -808,8 +811,9 @@ magpie tui                             <span class="c" data-i18n="cli.c.tui"># t
   const langOpen = (on) => { langs.hidden = !on; langBtn.setAttribute("aria-expanded", String(on)); };
   langBtn.addEventListener("click", () => { open(false); langOpen(langs.hidden); });
   langs.querySelectorAll("a").forEach((a) => {
-    if (a.hreflang === LANG) a.setAttribute("aria-current", "page");
-    a.addEventListener("click", () => { document.cookie = "lang=" + a.hreflang + "; path=/; max-age=31536000; samesite=lax"; });
+    const lang = a.hreflang.toLowerCase();
+    if (lang === LANG) a.setAttribute("aria-current", "page");
+    a.addEventListener("click", () => { document.cookie = "lang=" + lang + "; path=/; max-age=31536000; samesite=lax"; });
   });
   document.addEventListener("click", (e) => { if (!langBtn.parentNode.contains(e.target)) langOpen(false); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !langs.hidden) { langOpen(false); langBtn.focus(); } });
@@ -821,7 +825,7 @@ magpie tui                             <span class="c" data-i18n="cli.c.tui"># t
   document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
-      b.textContent = T("Copied", "已复制", "コピーしました", "Kopiert"); setTimeout(() => (b.textContent = T("Copy", "复制", "コピー", "Kopieren")), 1400);
+      b.textContent = T("Copied", "已复制", "コピーしました", "Kopiert", "已複製"); setTimeout(() => (b.textContent = T("Copy", "复制", "コピー", "Kopieren", "複製")), 1400);
     } catch {}
   }));
 
@@ -835,9 +839,9 @@ magpie tui                             <span class="c" data-i18n="cli.c.tui"># t
     const arm = /aarch64|arm64|armv8/i.test(ua);
     const dl = (a64) => "/download/" + os + (a64 ? "-arm64" : "-amd64");
     document.querySelectorAll("a.dl").forEach((a) => (a.href = dl(arm)));
-    document.querySelectorAll(".dl-label").forEach((e) => (e.textContent = T("Download for " + name, "下载 " + name + " 版", name + " 版をダウンロード", "Für " + name + " herunterladen")));
+    document.querySelectorAll(".dl-label").forEach((e) => (e.textContent = T("Download for " + name, "下载 " + name + " 版", name + " 版をダウンロード", "Für " + name + " herunterladen", "下載 " + name + " 版")));
     document.querySelectorAll(".os-note").forEach((e) => (e.innerHTML = os === "windows" ? "Windows 10+" : "Needs WebKitGTK 4.1"));
-    document.querySelectorAll('.meta a[href="#get"]').forEach((a) => (a.textContent = T("macOS & other builds", "macOS 及其他版本", "macOS とその他のビルド", "macOS und weitere Builds")));
+    document.querySelectorAll('.meta a[href="#get"]').forEach((a) => (a.textContent = T("macOS & other builds", "macOS 及其他版本", "macOS とその他のビルド", "macOS und weitere Builds", "macOS 及其他版本")));
     try { navigator.userAgentData?.getHighEntropyValues(["architecture"]).then((v) => {
       if (v.architecture === "arm") document.querySelectorAll("a.dl").forEach((a) => (a.href = dl(true)));
     }).catch(() => {}); } catch {}
@@ -864,7 +868,7 @@ magpie tui                             <span class="c" data-i18n="cli.c.tui"># t
   chan.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => pick(b.dataset.ch)));
   Promise.all([feed(""), feed("?channel=stable")]).then(([rel, st]) => {
     if (!rel) return;
-    document.querySelectorAll(".ver").forEach((e) => (e.textContent = T("Version ", "版本 ", "バージョン ", "Version ") + rel.version));
+    document.querySelectorAll(".ver").forEach((e) => (e.textContent = T("Version ", "版本 ", "バージョン ", "Version ", "版本 ") + rel.version));
     if (!st || !st.version || st.version === rel.version) return;
     chan.querySelector('[data-ch="latest"] .v').textContent = rel.version;
     document.querySelectorAll('[data-ch="stable"] .v, .stable-v').forEach((e) => (e.textContent = st.version));
@@ -900,7 +904,7 @@ magpie tui                             <span class="c" data-i18n="cli.c.tui"># t
     claude: ["me@work.dev", "Claude Max", "claude-color", "Claude Max", ""],
     claude2: ["me@home.dev", "Claude Pro", "claude-color", "Claude Pro", ""],
     gpt: ["me@home.dev", "ChatGPT Pro", "openai", "ChatGPT Pro", "bird"],
-    or: ["sk-or-…4f2a", "OpenRouter", "openrouter", T("The OpenRouter key", "OpenRouter 密钥", "OpenRouter のキー", "Der OpenRouter-Schlüssel"), "bird"],
+    or: ["sk-or-…4f2a", "OpenRouter", "openrouter", T("The OpenRouter key", "OpenRouter 密钥", "OpenRouter のキー", "Der OpenRouter-Schlüssel", "OpenRouter 金鑰"), "bird"],
     gh: ["octo-dev", "Copilot Business", "githubcopilot", "Copilot", "bird"],
   };
   const A = (v, used, inc, x = {}) => { const [who, plan, icon, name, cls] = V[v]; return { who, plan, icon, name, cls, used, inc, ...x }; };
@@ -909,37 +913,37 @@ magpie tui                             <span class="c" data-i18n="cli.c.tui"># t
   const G = (who, plan, icon, cls, rule, short) => ({ who, plan, icon, cls, rule, short, used: 0, inc: 0, key: 1 });
   const MODES = {
     intent: {
-      name: T("By intent", "按意图", "インテント別", "Nach Intent"), n: 0, stats: T(["turns", "asked the classifier", "tool rounds kept on their model"], ["轮对话", "次询问分类模型", "个工具轮次留在原模型"], ["ターン", "分類モデルへの問い合わせ", "同じモデルに留まったツール往復"], ["Runden", "Fragen an den Klassifikator", "Tool-Runden beim selben Modell"]),
+      name: T("By intent", "按意图", "インテント別", "Nach Intent", "按意圖"), n: 0, stats: T(["turns", "asked the classifier", "tool rounds kept on their model"], ["轮对话", "次询问分类模型", "个工具轮次留在原模型"], ["ターン", "分類モデルへの問い合わせ", "同じモデルに留まったツール往復"], ["Runden", "Fragen an den Klassifikator", "Tool-Runden beim selben Modell"], ["輪對話", "次詢問分類模型", "個工具輪次留在原模型"]),
       desc: T("By intent: as a turn begins, a small fast model (the group's classifier) is asked once which of your rules' intents the message is. The turn goes to that rule's model; its tool rounds stay there, without asking again.",
         "按意图：每轮对话开始时，问一次小而快的模型（路由组的分类模型）这条消息属于你哪条规则的意图。这一轮交给那条规则的模型，之后的工具轮次也留在那里，不再重新询问。",
         "インテント別：ターンの始めに、小さく速いモデル（グループの分類モデル）に、メッセージがどのルールのインテントにあたるかを一度だけ尋ねます。そのターンはそのルールのモデルが担当し、続くツールの往復も問い直さずそこに留まります。",
-        "Nach Intent: Zu Beginn einer Runde wird ein kleines, schnelles Modell (der Klassifikator der Gruppe) einmal gefragt, welchem Intent Ihrer Regeln die Nachricht entspricht. Die Runde geht an das Modell dieser Regel; ihre Tool-Runden bleiben dort, ohne erneute Frage."),
+        "Nach Intent: Zu Beginn einer Runde wird ein kleines, schnelles Modell (der Klassifikator der Gruppe) einmal gefragt, welchem Intent Ihrer Regeln die Nachricht entspricht. Die Runde geht an das Modell dieser Regel; ihre Tool-Runden bleiben dort, ohne erneute Frage.", "按意圖：每輪對話開始時，問一次小而快的模型（路由組的分類模型）這條訊息屬於你哪條規則的意圖。這一輪交給那條規則的模型，之後的工具輪次也留在那裡，不再重新詢問。"),
       accts: () => [
-        G("claude-opus-5-5", "Claude Max", "claude-color", "", T("first · whatever no rule takes", "第一个 · 规则都不匹配时用它", "先頭 · どのルールにも当たらないとき", "erstes · alles, was keine Regel nimmt")),
-        G("deepseek-v4-flash", "DeepSeek", "deepseek-color", "", T("intent · a quick question", "意图 · 简单提问", "インテント · ちょっとした質問", "Intent · eine kurze Frage"), T("quick question", "简单提问", "ちょっとした質問", "kurze Frage")),
-        G("glm-5.3", T("Zhipu GLM", "智谱 GLM", "Zhipu GLM", "Zhipu GLM"), "zhipu-color", "", T("intent · writing or fixing tests", "意图 · 编写或修复测试", "インテント · テストの作成や修正", "Intent · Tests schreiben oder reparieren"), T("tests", "测试", "テスト", "Tests")),
-        G("kimi-k3", "Kimi", "kimi", "bird", T("intent · reviewing a diff", "意图 · 审阅改动", "インテント · 差分のレビュー", "Intent · einen Diff prüfen"), T("review", "审阅", "レビュー", "Review")),
+        G("claude-opus-5-5", "Claude Max", "claude-color", "", T("first · whatever no rule takes", "第一个 · 规则都不匹配时用它", "先頭 · どのルールにも当たらないとき", "erstes · alles, was keine Regel nimmt", "第一個 · 規則都不匹配時用它")),
+        G("deepseek-v4-flash", "DeepSeek", "deepseek-color", "", T("intent · a quick question", "意图 · 简单提问", "インテント · ちょっとした質問", "Intent · eine kurze Frage", "意圖 · 簡單提問"), T("quick question", "简单提问", "ちょっとした質問", "kurze Frage", "簡單提問")),
+        G("glm-5.3", T("Zhipu GLM", "智谱 GLM", "Zhipu GLM", "Zhipu GLM", "智譜 GLM"), "zhipu-color", "", T("intent · writing or fixing tests", "意图 · 编写或修复测试", "インテント · テストの作成や修正", "Intent · Tests schreiben oder reparieren", "意圖 · 編寫或修復測試"), T("tests", "测试", "テスト", "Tests", "測試")),
+        G("kimi-k3", "Kimi", "kimi", "bird", T("intent · reviewing a diff", "意图 · 审阅改动", "インテント · 差分のレビュー", "Intent · einen Diff prüfen", "意圖 · 審閱改動"), T("review", "审阅", "レビュー", "Review", "審閱")),
       ],
       turns: [
-        [T("Add a --dry-run flag to the deploy command", "给 deploy 命令加一个 --dry-run 参数", "deploy コマンドに --dry-run フラグを追加して", "Dem deploy-Befehl ein --dry-run-Flag hinzufügen"), 0, 2],
-        [T("What does ^\\d{3}-\\d{4}$ match?", "^\\d{3}-\\d{4}$ 能匹配什么？", "^\\d{3}-\\d{4}$ は何にマッチする？", "Worauf passt ^\\d{3}-\\d{4}$?"), 1, 0],
-        [T("TestRouting fails after my change — fix it", "我改完之后 TestRouting 挂了，帮我修好", "変更したら TestRouting が落ちた。直して", "TestRouting schlägt nach meiner Änderung fehl – bitte reparieren"), 2, 2],
-        [T("Review my staged changes before I commit", "提交前帮我审一下暂存的改动", "コミット前にステージした変更をレビューして", "Meine gestagten Änderungen vor dem Commit prüfen"), 3, 1],
-        [T("Why does useEffect run twice in dev?", "为什么 useEffect 在开发模式下会执行两次？", "開発モードで useEffect が2回実行されるのはなぜ？", "Warum läuft useEffect im Dev-Modus zweimal?"), 1, 0],
-        [T("Write table-driven tests for parseTokens", "给 parseTokens 写表驱动测试", "parseTokens のテーブル駆動テストを書いて", "Tabellengetriebene Tests für parseTokens schreiben"), 2, 1],
-        [T("Refactor the retry loop into its own function", "把重试循环抽成单独的函数", "リトライのループを別の関数に切り出して", "Die Retry-Schleife in eine eigene Funktion auslagern"), 0, 1],
+        [T("Add a --dry-run flag to the deploy command", "给 deploy 命令加一个 --dry-run 参数", "deploy コマンドに --dry-run フラグを追加して", "Dem deploy-Befehl ein --dry-run-Flag hinzufügen", "給 deploy 命令加一個 --dry-run 參數"), 0, 2],
+        [T("What does ^\\d{3}-\\d{4}$ match?", "^\\d{3}-\\d{4}$ 能匹配什么？", "^\\d{3}-\\d{4}$ は何にマッチする？", "Worauf passt ^\\d{3}-\\d{4}$?", "^\\d{3}-\\d{4}$ 能匹配什麼？"), 1, 0],
+        [T("TestRouting fails after my change — fix it", "我改完之后 TestRouting 挂了，帮我修好", "変更したら TestRouting が落ちた。直して", "TestRouting schlägt nach meiner Änderung fehl – bitte reparieren", "我改完之後 TestRouting 掛了，幫我修好"), 2, 2],
+        [T("Review my staged changes before I commit", "提交前帮我审一下暂存的改动", "コミット前にステージした変更をレビューして", "Meine gestagten Änderungen vor dem Commit prüfen", "提交前幫我審一下暫存的改動"), 3, 1],
+        [T("Why does useEffect run twice in dev?", "为什么 useEffect 在开发模式下会执行两次？", "開発モードで useEffect が2回実行されるのはなぜ？", "Warum läuft useEffect im Dev-Modus zweimal?", "為什麼 useEffect 在開發模式下會執行兩次？"), 1, 0],
+        [T("Write table-driven tests for parseTokens", "给 parseTokens 写表驱动测试", "parseTokens のテーブル駆動テストを書いて", "Tabellengetriebene Tests für parseTokens schreiben", "給 parseTokens 寫表驅動測試"), 2, 1],
+        [T("Refactor the retry loop into its own function", "把重试循环抽成单独的函数", "リトライのループを別の関数に切り出して", "Die Retry-Schleife in eine eigene Funktion auslagern", "把重試迴圈抽成單獨的函式"), 0, 1],
       ],
     },
     smart: {
-      name: T("Smart", "智能", "スマート", "Smart"), n: 30,
+      name: T("Smart", "智能", "スマート", "Smart", "智慧"), n: 30,
       desc: T("Smart, the default: the account that resets soonest goes first, so no allowance is left to go to waste; any that can't answer are passed over. (Here each request stands for an hour.)",
         "智能（默认）：最先重置的账号先用，额度一点不浪费；答不了的账号直接跳过。（演示里每个请求代表一小时。）",
         "スマート（既定）：リセットが最も早いアカウントから使うので、枠を無駄にしません。応答できないアカウントは飛ばします。（デモでは1リクエストを1時間とします。）",
-        "Smart, die Voreinstellung: Das Konto, das als Erstes zurückgesetzt wird, kommt zuerst, damit kein Kontingent verfällt; Konten, die nicht antworten können, werden übersprungen. (Hier steht jede Anfrage für eine Stunde.)"),
+        "Smart, die Voreinstellung: Das Konto, das als Erstes zurückgesetzt wird, kommt zuerst, damit kein Kontingent verfällt; Konten, die nicht antworten können, werden übersprungen. (Hier steht jede Anfrage für eine Stunde.)", "智慧（預設）：最先重置的帳號先用，額度一點不浪費；答不了的帳號直接跳過。（示範裡每個請求代表一小時。）"),
       first: (a) => T(`${a.name} resets in ${fmt(left(a))} — soonest, so it goes first: what it has left is used, not lost at the reset.`,
         `${a.name} ${fmt(left(a))}后重置，最早，所以先用它：剩下的额度会被用掉，而不是在重置时作废。`,
         `${a.name} は ${fmt(left(a))}後にリセット。最も早いので先に使います。残りの枠はリセットで消えずに使い切られます。`,
-        `${a.name} wird in ${fmt(left(a))} zurückgesetzt – am frühesten, also kommt es zuerst dran: Was übrig ist, wird genutzt, statt beim Reset zu verfallen.`),
+        `${a.name} wird in ${fmt(left(a))} zurückgesetzt – am frühesten, also kommt es zuerst dran: Was übrig ist, wird genutzt, statt beim Reset zu verfallen.`, `${a.name} ${fmt(left(a))}後重置，最早，所以先用它：剩下的額度會被用掉，而不是在重置時作廢。`),
       accts: () => [
         A("claude", 72, 1.5, { r: 9 }),
         A("claude2", 38, 3, { r: 48, fail: { at: 3, code: 429, rest: 7000 } }),
@@ -949,28 +953,28 @@ magpie tui                             <span class="c" data-i18n="cli.c.tui"># t
       ],
     },
     order: {
-      name: T("In order", "按顺序", "優先順", "Der Reihe nach"), n: 18,
-      desc: T("In order: the first answers everything until it can't; then the next takes over.", "按顺序：第一个账号包揽所有请求，直到它答不了，再由下一个接手。", "優先順：最初のアカウントが応答できなくなるまですべてを担当し、その後は次が引き継ぎます。", "Der Reihe nach: Das erste Konto beantwortet alles, bis es nicht mehr kann; dann übernimmt das nächste."),
-      first: (a) => T(`${a.name} answers everything, for as long as it can.`, `${a.name} 只要还能答，就全由它来答。`, `応答できる限り、${a.name} がすべてを担当します。`, `${a.name} beantwortet alles, solange es geht.`),
+      name: T("In order", "按顺序", "優先順", "Der Reihe nach", "按順序"), n: 18,
+      desc: T("In order: the first answers everything until it can't; then the next takes over.", "按顺序：第一个账号包揽所有请求，直到它答不了，再由下一个接手。", "優先順：最初のアカウントが応答できなくなるまですべてを担当し、その後は次が引き継ぎます。", "Der Reihe nach: Das erste Konto beantwortet alles, bis es nicht mehr kann; dann übernimmt das nächste.", "按順序：第一個帳號包攬所有請求，直到它答不了，再由下一個接手。"),
+      first: (a) => T(`${a.name} answers everything, for as long as it can.`, `${a.name} 只要还能答，就全由它来答。`, `応答できる限り、${a.name} がすべてを担当します。`, `${a.name} beantwortet alles, solange es geht.`, `${a.name} 只要還能答，就全由它來答。`),
       accts: () => [A("claude", 76, 3), A("claude2", 44, 3), A("gpt", 30, 3), A("or", 0, 0, { key: 1 }), A("gh", 24, 2)],
     },
     turn: {
-      name: T("In turn", "轮流", "持ち回り", "Reihum"), n: 16,
-      desc: T("In turn: each request goes to the next account, so the load is spread evenly.", "轮流：每个请求交给下一个账号，负载均匀分摊。", "持ち回り：リクエストごとに次のアカウントへ回し、負荷を均等に分散します。", "Reihum: Jede Anfrage geht an das nächste Konto, so verteilt sich die Last gleichmäßig."),
-      first: () => T("Each request goes to the next account in turn.", "每个请求依次交给下一个账号。", "リクエストを順番に次のアカウントへ回します。", "Jede Anfrage geht reihum an das nächste Konto."),
+      name: T("In turn", "轮流", "持ち回り", "Reihum", "輪流"), n: 16,
+      desc: T("In turn: each request goes to the next account, so the load is spread evenly.", "轮流：每个请求交给下一个账号，负载均匀分摊。", "持ち回り：リクエストごとに次のアカウントへ回し、負荷を均等に分散します。", "Reihum: Jede Anfrage geht an das nächste Konto, so verteilt sich die Last gleichmäßig.", "輪流：每個請求交給下一個帳號，負載均勻分攤。"),
+      first: () => T("Each request goes to the next account in turn.", "每个请求依次交给下一个账号。", "リクエストを順番に次のアカウントへ回します。", "Jede Anfrage geht reihum an das nächste Konto.", "每個請求依次交給下一個帳號。"),
       accts: () => [A("claude", 30, 2), A("claude2", 40, 2), A("gpt", 52, 2), A("or", 0, 0, { key: 1 }), A("gh", 18, 2)],
     },
     least: {
-      name: T("Least used", "用量少的优先", "使用量の少ない順", "Geringste Nutzung"), n: 18,
-      desc: T("Least used first: each request goes to the account with the most allowance left; a key by the tokens magpie sent it lately.", "用量少的优先：每个请求交给剩余额度最多的账号；密钥按 magpie 最近发给它的 token 数算。", "使用量の少ない順：各リクエストを残り枠が最も多いアカウントへ送ります。キーは magpie が最近送ったトークン数で比べます。", "Geringste Nutzung zuerst: Jede Anfrage geht an das Konto mit dem meisten verbleibenden Kontingent; ein Schlüssel nach den Tokens, die magpie ihm zuletzt geschickt hat."),
-      first: () => T("Each request goes to whichever has the most left — watch the bars even out.", "每个请求交给剩得最多的账号——看进度条慢慢拉平。", "各リクエストは残りが最も多いアカウントへ。バーが揃っていく様子をご覧ください。", "Jede Anfrage geht an das Konto mit dem meisten Rest – sehen Sie zu, wie sich die Balken angleichen."),
+      name: T("Least used", "用量少的优先", "使用量の少ない順", "Geringste Nutzung", "用量少的優先"), n: 18,
+      desc: T("Least used first: each request goes to the account with the most allowance left; a key by the tokens magpie sent it lately.", "用量少的优先：每个请求交给剩余额度最多的账号；密钥按 magpie 最近发给它的 token 数算。", "使用量の少ない順：各リクエストを残り枠が最も多いアカウントへ送ります。キーは magpie が最近送ったトークン数で比べます。", "Geringste Nutzung zuerst: Jede Anfrage geht an das Konto mit dem meisten verbleibenden Kontingent; ein Schlüssel nach den Tokens, die magpie ihm zuletzt geschickt hat.", "用量少的優先：每個請求交給剩餘額度最多的帳號；金鑰按 magpie 最近發給它的 token 數算。"),
+      first: () => T("Each request goes to whichever has the most left — watch the bars even out.", "每个请求交给剩得最多的账号——看进度条慢慢拉平。", "各リクエストは残りが最も多いアカウントへ。バーが揃っていく様子をご覧ください。", "Jede Anfrage geht an das Konto mit dem meisten Rest – sehen Sie zu, wie sich die Balken angleichen.", "每個請求交給剩得最多的帳號——看進度條慢慢拉平。"),
       accts: () => [A("claude", 64, 6), A("claude2", 30, 6), A("gpt", 22, 6), A("or", 40, 6, { key: 1, bar: 1 }), A("gh", 46, 6)],
     },
   };
 
   let mode, M, accts = [], t = 0, gen = 0, next = 0, sent = 0, done = 0, rerouted = 0, errs = 0, ptr = 0;
   let hours = 0; // the demo's clock in smart mode: an hour a request
-  const left = (a) => a.r - hours, fmt = (h) => h < 48 ? T(`${h} h`, `${h} 小时`, `${h} 時間`, `${h} Std.`) : T(`${Math.round(h / 24)} d`, `${Math.round(h / 24)} 天`, `${Math.round(h / 24)} 日`, `${Math.round(h / 24)} Tg.`);
+  const left = (a) => a.r - hours, fmt = (h) => h < 48 ? T(`${h} h`, `${h} 小时`, `${h} 時間`, `${h} Std.`, `${h} 小時`) : T(`${Math.round(h / 24)} d`, `${Math.round(h / 24)} 天`, `${Math.round(h / 24)} 日`, `${Math.round(h / 24)} Tg.`, `${Math.round(h / 24)} 天`);
   let began = 0, last = null, trips = [], capQ = [], capAt = -1e9, capLo = false, endAt = 0, wSrc, vis = true;
 
   const resting = (a) => a.until > t;
@@ -1018,11 +1022,11 @@ magpie tui                             <span class="c" data-i18n="cli.c.tui"># t
     });
     layout();
     list.classList.toggle("models", !!M.turns);
-    desc.textContent = M.desc; chip.textContent = M.name; who.textContent = T("your agent", "你的 Agent", "あなたのエージェント", "Ihr Agent");
-    (M.stats || T(["requests", "rerouted", "errors your agent saw"], ["个请求", "次改道", "个错误被 Agent 看到"], ["リクエスト", "振り替え", "エージェントが見たエラー"], ["Anfragen", "umgeleitet", "Fehler bei Ihrem Agenten"])).forEach((n, i) => (statName[i].textContent = n));
+    desc.textContent = M.desc; chip.textContent = M.name; who.textContent = T("your agent", "你的 Agent", "あなたのエージェント", "Ihr Agent", "你的 Agent");
+    (M.stats || T(["requests", "rerouted", "errors your agent saw"], ["个请求", "次改道", "个错误被 Agent 看到"], ["リクエスト", "振り替え", "エージェントが見たエラー"], ["Anfragen", "umgeleitet", "Fehler bei Ihrem Agenten"], ["個請求", "次改道", "個錯誤被 Agent 看到"])).forEach((n, i) => (statName[i].textContent = n));
     tabs.forEach((b) => b.setAttribute("aria-selected", String(b.dataset.mode === m)));
-    show(M.turns ? T("Claude Code sends every turn to one model name — a magpie group. Watch where each message goes.", "Claude Code 每轮都发给同一个模型名——一个 magpie 路由组。看每条消息去了哪里。", "Claude Code は毎ターン、同じモデル名（magpie のグループ）に送ります。各メッセージの行き先をご覧ください。", "Claude Code schickt jede Runde an denselben Modellnamen – eine Weiterleitungsgruppe von magpie. Sehen Sie, wohin jede Nachricht geht.")
-      : T("Claude Code sends every request to magpie; magpie decides which account answers it.", "Claude Code 把每个请求发给 magpie，由 magpie 决定哪个账号来答。", "Claude Code はすべてのリクエストを magpie に送り、どのアカウントが応答するかは magpie が決めます。", "Claude Code schickt jede Anfrage an magpie; magpie entscheidet, welches Konto sie beantwortet."));
+    show(M.turns ? T("Claude Code sends every turn to one model name — a magpie group. Watch where each message goes.", "Claude Code 每轮都发给同一个模型名——一个 magpie 路由组。看每条消息去了哪里。", "Claude Code は毎ターン、同じモデル名（magpie のグループ）に送ります。各メッセージの行き先をご覧ください。", "Claude Code schickt jede Runde an denselben Modellnamen – eine Weiterleitungsgruppe von magpie. Sehen Sie, wohin jede Nachricht geht.", "Claude Code 每輪都發給同一個模型名——一個 magpie 路由組。看每條訊息去了哪裡。")
+      : T("Claude Code sends every request to magpie; magpie decides which account answers it.", "Claude Code 把每个请求发给 magpie，由 magpie 决定哪个账号来答。", "Claude Code はすべてのリクエストを magpie に送り、どのアカウントが応答するかは magpie が決めます。", "Claude Code schickt jede Anfrage an magpie; magpie entscheidet, welches Konto sie beantwortet.", "Claude Code 把每個請求發給 magpie，由 magpie 決定哪個帳號來答。"));
     stats(); render();
   }
 
@@ -1056,18 +1060,18 @@ magpie tui                             <span class="c" data-i18n="cli.c.tui"># t
     a.served++; a.used = Math.min(100, a.used + a.inc);
     if (last !== a) {
       if (!began) began = 1, say(M.first(a));
-      else if (mode === "smart" && a.used >= 90) say(T(`The others are resting, so ${a.name.replace(/^The /, "the ")} answers — running low beats no answer.`, `其他账号都在休息，所以由 ${a.name} 来答——额度快用完也比没人答强。`, `ほかのアカウントは休止中なので ${a.name} が応答します。枠が残り少なくても、応答なしよりはましです。`, `Die anderen pausieren, also antwortet ${a.name.replace(/^Der /, "der ")} – knappes Kontingent ist besser als keine Antwort.`));
-      else if (mode === "smart" && a.r) say(T(`${a.name} takes over — it resets next, in ${fmt(left(a))}.`, `${a.name} 接手——它下一个重置，还有 ${fmt(left(a))}。`, `${a.name} が引き継ぎます。次にリセットされるのはこれで、あと ${fmt(left(a))}。`, `${a.name} übernimmt – sein Reset kommt als Nächstes, in ${fmt(left(a))}.`), true);
-      else if (mode === "smart" || mode === "order") say(T(`${a.name} takes over.`, `${a.name} 接手。`, `${a.name} が引き継ぎます。`, `${a.name} übernimmt.`), true);
+      else if (mode === "smart" && a.used >= 90) say(T(`The others are resting, so ${a.name.replace(/^The /, "the ")} answers — running low beats no answer.`, `其他账号都在休息，所以由 ${a.name} 来答——额度快用完也比没人答强。`, `ほかのアカウントは休止中なので ${a.name} が応答します。枠が残り少なくても、応答なしよりはましです。`, `Die anderen pausieren, also antwortet ${a.name.replace(/^Der /, "der ")} – knappes Kontingent ist besser als keine Antwort.`, `其他帳號都在休息，所以由 ${a.name} 來答——額度快用完也比沒人答強。`));
+      else if (mode === "smart" && a.r) say(T(`${a.name} takes over — it resets next, in ${fmt(left(a))}.`, `${a.name} 接手——它下一个重置，还有 ${fmt(left(a))}。`, `${a.name} が引き継ぎます。次にリセットされるのはこれで、あと ${fmt(left(a))}。`, `${a.name} übernimmt – sein Reset kommt als Nächstes, in ${fmt(left(a))}.`, `${a.name} 接手——它下一個重置，還有 ${fmt(left(a))}。`), true);
+      else if (mode === "smart" || mode === "order") say(T(`${a.name} takes over.`, `${a.name} 接手。`, `${a.name} が引き継ぎます。`, `${a.name} übernimmt.`, `${a.name} 接手。`), true);
       last = a;
     }
-    if (mode === "smart" && was < 90 && a.used >= 90) say(T(`${a.name} is at ${Math.round(a.used)}% — kept for last. The next with quota to spare takes over.`, `${a.name} 已用 ${Math.round(a.used)}%——留到最后。下一个额度充足的账号接手。`, `${a.name} は ${Math.round(a.used)}% 使用済み。最後に回し、枠に余裕のある次のアカウントが引き継ぎます。`, `${a.name} steht bei ${Math.round(a.used)}% – es kommt zuletzt dran. Das nächste Konto mit genug Kontingent übernimmt.`));
+    if (mode === "smart" && was < 90 && a.used >= 90) say(T(`${a.name} is at ${Math.round(a.used)}% — kept for last. The next with quota to spare takes over.`, `${a.name} 已用 ${Math.round(a.used)}%——留到最后。下一个额度充足的账号接手。`, `${a.name} は ${Math.round(a.used)}% 使用済み。最後に回し、枠に余裕のある次のアカウントが引き継ぎます。`, `${a.name} steht bei ${Math.round(a.used)}% – es kommt zuletzt dran. Das nächste Konto mit genug Kontingent übernimmt.`, `${a.name} 已用 ${Math.round(a.used)}%——留到最後。下一個額度充足的帳號接手。`));
     if (mode !== "smart") return;
     hours++;
     for (const b of accts) if (b.r && left(b) <= 0) { // its week renews: now the last to reset
       const lost = Math.round(100 - b.used);
       b.used = 0; b.r += 168;
-      say(T(`${b.name}'s week renewed with only ${lost}% unused — it went first, so little was lost. It resets last now; the next to reset takes over.`, `${b.name} 的周额度已重置，只剩 ${lost}% 没用上——它先用，所以几乎没浪费。现在它最晚重置，下一个要重置的账号接手。`, `${b.name} の週の枠がリセットされました。使い残しは ${lost}% だけ。先に使ったので無駄はほとんどありません。今度はリセットが最も遅いので、次にリセットされるアカウントが引き継ぎます。`, `Das Wochenkontingent von ${b.name} wurde erneuert, nur ${lost}% blieben ungenutzt – es kam zuerst dran, also ging wenig verloren. Jetzt kommt sein Reset als letzter; das Konto mit dem nächsten Reset übernimmt.`));
+      say(T(`${b.name}'s week renewed with only ${lost}% unused — it went first, so little was lost. It resets last now; the next to reset takes over.`, `${b.name} 的周额度已重置，只剩 ${lost}% 没用上——它先用，所以几乎没浪费。现在它最晚重置，下一个要重置的账号接手。`, `${b.name} の週の枠がリセットされました。使い残しは ${lost}% だけ。先に使ったので無駄はほとんどありません。今度はリセットが最も遅いので、次にリセットされるアカウントが引き継ぎます。`, `Das Wochenkontingent von ${b.name} wurde erneuert, nur ${lost}% blieben ungenutzt – es kam zuerst dran, also ging wenig verloren. Jetzt kommt sein Reset als letzter; das Konto mit dem nächsten Reset übernimmt.`, `${b.name} 的週額度已重置，只剩 ${lost}% 沒用上——它先用，所以幾乎沒浪費。現在它最晚重置，下一個要重置的帳號接手。`));
       if (last === b) last = null;
     }
   }
@@ -1075,7 +1079,7 @@ magpie tui                             <span class="c" data-i18n="cli.c.tui"># t
   const TAGS = T({ 429: "429 · rate limited", 402: "402 · no credit", 503: "503 · failed", quota: "429 · quota used up" },
     { 429: "429 · 限流", 402: "402 · 余额不足", 503: "503 · 出错", quota: "429 · 额度用完" },
     { 429: "429 · レート制限", 402: "402 · クレジット不足", 503: "503 · 失敗", quota: "429 · 枠を使い切り" },
-    { 429: "429 · Rate-Limit", 402: "402 · kein Guthaben", 503: "503 · Fehler", quota: "429 · Kontingent aufgebraucht" });
+    { 429: "429 · Rate-Limit", 402: "402 · kein Guthaben", 503: "503 · Fehler", quota: "429 · Kontingent aufgebraucht" }, { 429: "429 · 限流", 402: "402 · 餘額不足", 503: "503 · 出錯", quota: "429 · 額度用完" });
   function fail(a, code) {
     a.li.classList.remove("hit"); void a.li.offsetWidth; a.li.classList.add("hit", "tagged");
     a.tg.textContent = TAGS[code];
@@ -1083,10 +1087,10 @@ magpie tui                             <span class="c" data-i18n="cli.c.tui"># t
     if (resting(a)) return; // it was already out when the request got there
     a.code = code;
     next = Math.max(next, t + 1500); // a moment to read what happened
-    if (code === 429) { a.why = "rate"; a.until = t + a.fail.rest; say(T(`${a.name} answered 429 — it rests for as long as the vendor asks, and the request is retried on the next at once.`, `${a.name} 返回 429——按厂商要求的时长休息，请求立刻在下一个账号上重试。`, `${a.name} が 429 を返しました。ベンダーが求める間だけ休ませ、リクエストはすぐ次のアカウントで再試行します。`, `${a.name} antwortete mit 429 – Pause, so lange der Anbieter es verlangt; die Anfrage wird sofort beim nächsten Konto wiederholt.`)); }
-    if (code === 402) { a.why = "credit"; a.until = Infinity; say(T(`${a.name} is out of credit — it sits out half an hour, and the request moves on. Claude Code never sees the error.`, `${a.name} 余额不足——歇半小时，请求转给别的账号。Claude Code 完全看不到这个错误。`, `${a.name} はクレジット切れ。30分休ませ、リクエストは別のアカウントへ。Claude Code にこのエラーは見えません。`, `${a.name} hat kein Guthaben mehr – eine halbe Stunde Pause, und die Anfrage zieht weiter. Claude Code sieht den Fehler nie.`)); }
-    if (code === 503) { a.why = "fail"; a.until = t + a.fail.rest; say(T(`${a.name} failed — it steps back a while, longer each time it fails again. Another account answers instead.`, `${a.name} 出错了——先退下一会儿，再出错就退得更久。换另一个账号来答。`, `${a.name} が失敗。しばらく外し、失敗が続くほど長く外します。代わりに別のアカウントが応答します。`, `${a.name} ist fehlgeschlagen – eine Weile Pause, bei jedem weiteren Fehler länger. Ein anderes Konto antwortet stattdessen.`)); }
-    if (code === "quota") { a.why = "quota"; a.until = Infinity; say(T(`${a.name} is out of quota — passed over until it resets. The request goes to the next.`, `${a.name} 额度用完——重置前都跳过它，请求交给下一个。`, `${a.name} は枠を使い切りました。リセットまで飛ばし、リクエストは次へ。`, `${a.name} hat sein Kontingent aufgebraucht – bis zum Reset übersprungen. Die Anfrage geht an das nächste Konto.`)); }
+    if (code === 429) { a.why = "rate"; a.until = t + a.fail.rest; say(T(`${a.name} answered 429 — it rests for as long as the vendor asks, and the request is retried on the next at once.`, `${a.name} 返回 429——按厂商要求的时长休息，请求立刻在下一个账号上重试。`, `${a.name} が 429 を返しました。ベンダーが求める間だけ休ませ、リクエストはすぐ次のアカウントで再試行します。`, `${a.name} antwortete mit 429 – Pause, so lange der Anbieter es verlangt; die Anfrage wird sofort beim nächsten Konto wiederholt.`, `${a.name} 返回 429——按廠商要求的時長休息，請求立刻在下一個帳號上重試。`)); }
+    if (code === 402) { a.why = "credit"; a.until = Infinity; say(T(`${a.name} is out of credit — it sits out half an hour, and the request moves on. Claude Code never sees the error.`, `${a.name} 余额不足——歇半小时，请求转给别的账号。Claude Code 完全看不到这个错误。`, `${a.name} はクレジット切れ。30分休ませ、リクエストは別のアカウントへ。Claude Code にこのエラーは見えません。`, `${a.name} hat kein Guthaben mehr – eine halbe Stunde Pause, und die Anfrage zieht weiter. Claude Code sieht den Fehler nie.`, `${a.name} 餘額不足——歇半小時，請求轉給別的帳號。Claude Code 完全看不到這個錯誤。`)); }
+    if (code === 503) { a.why = "fail"; a.until = t + a.fail.rest; say(T(`${a.name} failed — it steps back a while, longer each time it fails again. Another account answers instead.`, `${a.name} 出错了——先退下一会儿，再出错就退得更久。换另一个账号来答。`, `${a.name} が失敗。しばらく外し、失敗が続くほど長く外します。代わりに別のアカウントが応答します。`, `${a.name} ist fehlgeschlagen – eine Weile Pause, bei jedem weiteren Fehler länger. Ein anderes Konto antwortet stattdessen.`, `${a.name} 出錯了——先退下一會兒，再出錯就退得更久。換另一個帳號來答。`)); }
+    if (code === "quota") { a.why = "quota"; a.until = Infinity; say(T(`${a.name} is out of quota — passed over until it resets. The request goes to the next.`, `${a.name} 额度用完——重置前都跳过它，请求交给下一个。`, `${a.name} は枠を使い切りました。リセットまで飛ばし、リクエストは次へ。`, `${a.name} hat sein Kontingent aufgebraucht – bis zum Reset übersprungen. Die Anfrage geht an das nächste Konto.`, `${a.name} 額度用完——重置前都跳過它，請求交給下一個。`)); }
     if (last === a) last = null;
   }
 
@@ -1139,21 +1143,21 @@ magpie tui                             <span class="c" data-i18n="cli.c.tui"># t
     for (const [msg, n, rounds] of M.turns) {
       if (g !== gen) return;
       const a = accts[n];
-      who.textContent = T("new turn", "新一轮", "新しいターン", "neue Runde"); chip.textContent = T("new turn", "新一轮", "新しいターン", "neue Runde");
-      show(T(`A new turn: “${msg}”`, `新一轮对话：“${msg}”`, `新しいターン：「${msg}」`, `Eine neue Runde: „${msg}“`));
+      who.textContent = T("new turn", "新一轮", "新しいターン", "neue Runde", "新一輪"); chip.textContent = T("new turn", "新一轮", "新しいターン", "neue Runde", "新一輪");
+      show(T(`A new turn: “${msg}”`, `新一轮对话：“${msg}”`, `新しいターン：「${msg}」`, `Eine neue Runde: „${msg}“`, `新一輪對話：「${msg}」`));
       const dot = await trip(null);
       if (g !== gen) return;
-      chip.textContent = T("classifying…", "分类中…", "分類中…", "klassifiziere…");
+      chip.textContent = T("classifying…", "分类中…", "分類中…", "klassifiziere…", "分類中…");
       await wait(900);
       if (g !== gen) return dot?.remove();
       rerouted++; stats();
-      chip.textContent = n ? a.short : T("no intent", "无意图", "インテントなし", "kein Intent");
+      chip.textContent = n ? a.short : T("no intent", "无意图", "インテントなし", "kein Intent", "無意圖");
       a.li.classList.remove("hit"); void a.li.offsetWidth; a.li.classList.add("tagged");
-      a.tg.textContent = n ? "✓ " + a.short : T("✓ the group's first", "✓ 路由组第一个", "✓ グループの先頭", "✓ erstes der Gruppe");
+      a.tg.textContent = n ? "✓ " + a.short : T("✓ the group's first", "✓ 路由组第一个", "✓ グループの先頭", "✓ erstes der Gruppe", "✓ 路由組第一個");
       setTimeout(() => a.li.classList.remove("tagged"), 1600);
       const why = a.rule.replace(/^[^·]*· /, "");
-      show(n ? T(`The classifier says: ${why} — so ${a.who} answers it.`, `分类模型判断：${why}——所以由 ${a.who} 来答。`, `分類モデルの判定：${why}。なので ${a.who} が応答します。`, `Der Klassifikator sagt: ${why} – also antwortet ${a.who}.`)
-        : T(`None of the intents — it goes to the group's first model, ${a.who}.`, `哪个意图都不是——交给路由组的第一个模型 ${a.who}。`, `どのインテントでもないので、グループの先頭のモデル ${a.who} へ。`, `Keiner der Intents – die Runde geht an das erste Modell der Gruppe, ${a.who}.`));
+      show(n ? T(`The classifier says: ${why} — so ${a.who} answers it.`, `分类模型判断：${why}——所以由 ${a.who} 来答。`, `分類モデルの判定：${why}。なので ${a.who} が応答します。`, `Der Klassifikator sagt: ${why} – also antwortet ${a.who}.`, `分類模型判斷：${why}——所以由 ${a.who} 來答。`)
+        : T(`None of the intents — it goes to the group's first model, ${a.who}.`, `哪个意图都不是——交给路由组的第一个模型 ${a.who}。`, `どのインテントでもないので、グループの先頭のモデル ${a.who} へ。`, `Keiner der Intents – die Runde geht an das erste Modell der Gruppe, ${a.who}.`, `哪個意圖都不是——交給路由組的第一個模型 ${a.who}。`));
       await travel(dot, a.wire, false, 420);
       if (g !== gen) return dot.remove();
       last = a; a.served++;
@@ -1163,17 +1167,17 @@ magpie tui                             <span class="c" data-i18n="cli.c.tui"># t
       dot.remove(); done++; stats();
       for (let i = 0; i < rounds; i++) {
         if (g !== gen) return;
-        who.textContent = T("tool result", "工具结果", "ツールの結果", "Tool-Ergebnis");
-        chip.textContent = T("same turn", "同一轮", "同じターン", "gleiche Runde");
-        if (!i) show(T(`Its tool results come back as more requests — no new question: they stay on ${a.who}.`, `工具结果作为后续请求回来——不是新问题，所以留在 ${a.who}。`, `ツールの結果は続きのリクエストとして戻ります。新しい質問ではないので ${a.who} に留まります。`, `Die Tool-Ergebnisse kommen als weitere Anfragen zurück – keine neue Frage, also bleiben sie bei ${a.who}.`));
+        who.textContent = T("tool result", "工具结果", "ツールの結果", "Tool-Ergebnis", "工具結果");
+        chip.textContent = T("same turn", "同一轮", "同じターン", "gleiche Runde", "同一輪");
+        if (!i) show(T(`Its tool results come back as more requests — no new question: they stay on ${a.who}.`, `工具结果作为后续请求回来——不是新问题，所以留在 ${a.who}。`, `ツールの結果は続きのリクエストとして戻ります。新しい質問ではないので ${a.who} に留まります。`, `Die Tool-Ergebnisse kommen als weitere Anfragen zurück – keine neue Frage, also bleiben sie bei ${a.who}.`, `工具結果作為後續請求回來——不是新問題，所以留在 ${a.who}。`));
         await trip(a);
         errs++; stats();
       }
       await wait(rounds ? 700 : 1300);
     }
     if (g !== gen) return;
-    who.textContent = T("your agent", "你的 Agent", "あなたのエージェント", "Ihr Agent"); chip.textContent = M.name;
-    show(T(`${done} turns, each on the model its rule names — one question to the classifier per turn, ${errs} tool rounds kept on their model.`, `${done} 轮对话，各自交给规则指定的模型——每轮只问一次分类模型，${errs} 个工具轮次留在原模型。`, `${done} ターン、それぞれルールが指すモデルへ。分類モデルへの問い合わせは1ターン1回、${errs} 回のツール往復は同じモデルに留まりました。`, `${done} Runden, jede auf dem Modell, das ihre Regel nennt – eine Frage an den Klassifikator pro Runde, ${errs} Tool-Runden beim selben Modell geblieben.`));
+    who.textContent = T("your agent", "你的 Agent", "あなたのエージェント", "Ihr Agent", "你的 Agent"); chip.textContent = M.name;
+    show(T(`${done} turns, each on the model its rule names — one question to the classifier per turn, ${errs} tool rounds kept on their model.`, `${done} 轮对话，各自交给规则指定的模型——每轮只问一次分类模型，${errs} 个工具轮次留在原模型。`, `${done} ターン、それぞれルールが指すモデルへ。分類モデルへの問い合わせは1ターン1回、${errs} 回のツール往復は同じモデルに留まりました。`, `${done} Runden, jede auf dem Modell, das ihre Regel nennt – eine Frage an den Klassifikator pro Runde, ${errs} Tool-Runden beim selben Modell geblieben.`, `${done} 輪對話，各自交給規則指定的模型——每輪只問一次分類模型，${errs} 個工具輪次留在原模型。`));
     await wait(4600);
     if (g === gen) reset(mode);
   }
@@ -1194,11 +1198,11 @@ magpie tui                             <span class="c" data-i18n="cli.c.tui"># t
         ? T({ rate: `rate limited · back in ${s} s`, fail: `failing · back in ${s} s`, credit: "out of credit · back in 30 m", quota: "out of quota · resets 3 PM" },
           { rate: `限流 · ${s} 秒后恢复`, fail: `出错 · ${s} 秒后恢复`, credit: "余额不足 · 30 分钟后恢复", quota: "额度用完 · 下午 3 点重置" },
           { rate: `レート制限 · ${s} 秒後に復帰`, fail: `失敗中 · ${s} 秒後に復帰`, credit: "クレジット切れ · 30 分後に復帰", quota: "枠切れ · 午後3時にリセット" },
-          { rate: `Rate-Limit · zurück in ${s} s`, fail: `fehlerhaft · zurück in ${s} s`, credit: "kein Guthaben · zurück in 30 min", quota: "kein Kontingent · Reset um 15 Uhr" })[a.why]
-        : last === a ? (mode === "smart" && a.used >= 90 ? T("serving · running low", "服务中 · 额度将尽", "応答中 · 残りわずか", "antwortet · wird knapp") : T("serving", "服务中", "応答中", "antwortet"))
-        : a.key ? (a.bar ? T(`${n}% of tokens lately`, `近期 token 占 ${n}%`, `最近のトークンの ${n}%`, `zuletzt ${n}% der Tokens`) : T("pay as you go", "按量付费", "従量課金", "nach Verbrauch"))
-        : mode === "smart" && a.used >= 90 ? T(`${n}% used · kept for last`, `已用 ${n}% · 留到最后`, `${n}% 使用 · 最後に回す`, `${n}% genutzt · kommt zuletzt`)
-        : mode === "smart" && a.r ? T(`${n}% used · resets in ${fmt(left(a))}`, `已用 ${n}% · ${fmt(left(a))}后重置`, `${n}% 使用 · ${fmt(left(a))}後にリセット`, `${n}% genutzt · Reset in ${fmt(left(a))}`) : T(`${n}% used`, `已用 ${n}%`, `${n}% 使用`, `${n}% genutzt`);
+          { rate: `Rate-Limit · zurück in ${s} s`, fail: `fehlerhaft · zurück in ${s} s`, credit: "kein Guthaben · zurück in 30 min", quota: "kein Kontingent · Reset um 15 Uhr" }, { rate: `限流 · ${s} 秒後恢復`, fail: `出錯 · ${s} 秒後恢復`, credit: "餘額不足 · 30 分鐘後恢復", quota: "額度用完 · 下午 3 點重置" })[a.why]
+        : last === a ? (mode === "smart" && a.used >= 90 ? T("serving · running low", "服务中 · 额度将尽", "応答中 · 残りわずか", "antwortet · wird knapp", "服務中 · 額度將盡") : T("serving", "服务中", "応答中", "antwortet", "服務中"))
+        : a.key ? (a.bar ? T(`${n}% of tokens lately`, `近期 token 占 ${n}%`, `最近のトークンの ${n}%`, `zuletzt ${n}% der Tokens`, `近期 token 佔 ${n}%`) : T("pay as you go", "按量付费", "従量課金", "nach Verbrauch", "按量付費"))
+        : mode === "smart" && a.used >= 90 ? T(`${n}% used · kept for last`, `已用 ${n}% · 留到最后`, `${n}% 使用 · 最後に回す`, `${n}% genutzt · kommt zuletzt`, `已用 ${n}% · 留到最後`)
+        : mode === "smart" && a.r ? T(`${n}% used · resets in ${fmt(left(a))}`, `已用 ${n}% · ${fmt(left(a))}后重置`, `${n}% 使用 · ${fmt(left(a))}後にリセット`, `${n}% genutzt · Reset in ${fmt(left(a))}`, `已用 ${n}% · ${fmt(left(a))}後重置`) : T(`${n}% used`, `已用 ${n}%`, `${n}% 使用`, `${n}% genutzt`, `已用 ${n}%`);
       if (a.st.textContent !== label) a.st.textContent = label;
       a.bi.style.width = a.used + "%";
       a.li.classList.toggle("on", last === a && !rest);
@@ -1226,12 +1230,12 @@ magpie tui                             <span class="c" data-i18n="cli.c.tui"># t
     }
     for (const a of accts) if (a.until && a.until !== Infinity && t >= a.until) {
       a.until = 0;
-      say(T(`${a.name} is back — ${a.why === "rate" ? "its rate limit is over" : "it gets another chance"}.`, `${a.name} 回来了——${a.why === "rate" ? "限流结束" : "再给它一次机会"}。`, `${a.name} が復帰。${a.why === "rate" ? "レート制限が明けました" : "もう一度チャンスを与えます"}。`, `${a.name} ist zurück – ${a.why === "rate" ? "das Rate-Limit ist vorbei" : "es bekommt eine neue Chance"}.`), true);
+      say(T(`${a.name} is back — ${a.why === "rate" ? "its rate limit is over" : "it gets another chance"}.`, `${a.name} 回来了——${a.why === "rate" ? "限流结束" : "再给它一次机会"}。`, `${a.name} が復帰。${a.why === "rate" ? "レート制限が明けました" : "もう一度チャンスを与えます"}。`, `${a.name} ist zurück – ${a.why === "rate" ? "das Rate-Limit ist vorbei" : "es bekommt eine neue Chance"}.`, `${a.name} 回來了——${a.why === "rate" ? "限流結束" : "再給它一次機會"}。`), true);
     }
     if (capQ.length && t - capAt > (capLo && !capQ[0].lo ? 700 : 2200)) show(capQ.shift());
     if (!M.turns && done >= M.n && !endAt) {
       endAt = t + 4200;
-      capQ = []; show(T(`${done} requests answered, ${rerouted} rerouted — and not one error reached Claude Code.`, `${done} 个请求全部答完，${rerouted} 次改道——没有一个错误传到 Claude Code。`, `${done} 件のリクエストすべてに応答、振り替え ${rerouted} 回。Claude Code に届いたエラーはゼロ。`, `${done} Anfragen beantwortet, ${rerouted} umgeleitet – und kein einziger Fehler erreichte Claude Code.`));
+      capQ = []; show(T(`${done} requests answered, ${rerouted} rerouted — and not one error reached Claude Code.`, `${done} 个请求全部答完，${rerouted} 次改道——没有一个错误传到 Claude Code。`, `${done} 件のリクエストすべてに応答、振り替え ${rerouted} 回。Claude Code に届いたエラーはゼロ。`, `${done} Anfragen beantwortet, ${rerouted} umgeleitet – und kein einziger Fehler erreichte Claude Code.`, `${done} 個請求全部答完，${rerouted} 次改道——沒有一個錯誤傳到 Claude Code。`));
     }
     if (endAt && t >= endAt) reset(mode);
     render();

@@ -51,10 +51,12 @@
 //                          (relay, below) so a blocker that knows its host
 //                          doesn't drop the count
 //   /docs, /docs/zh, /docs/ja  the getting-started guide: /docs/start, /docs/<lang>/start
-//   /zh/, /ja/, /de/       the home page in Chinese, Japanese, German (i18n.js);
+//   /zh/, /zh-tw/, /ja/, /de/  the home page in Chinese (Simplified and
+//                          Traditional), Japanese, German (i18n.js);
 //                          / sends a browser that prefers one of them there,
 //                          until a language is picked on the page (the lang
-//                          cookie). /de/ has no docs: its links go to English.
+//                          cookie). /zh-tw/'s docs links go to the Chinese
+//                          docs, /de/'s to English.
 //
 // Everything else is the static site in public/.
 
@@ -180,7 +182,7 @@ export default {
     // does, until a language is picked
     const doc = url.pathname.match(/^\/docs\/([a-z-]+)(\.html)?$/);
     if (doc && !DOC_LANGS.includes(doc[1]) && (req.method === "GET" || req.method === "HEAD")) {
-      const lang = preferred(req);
+      const lang = LANGS[preferred(req)]?.docs;
       const vary = { Vary: "Accept-Language, Cookie", "Cache-Control": "no-cache" };
       const there = `/docs/${lang}/${doc[1]}`;
       // a page not written in that language yet stays English
@@ -192,13 +194,14 @@ export default {
       out.headers.set("Cache-Control", "no-cache");
       return out;
     }
-    const home = url.pathname.match(/^\/([a-z]{2})(\/(index\.html)?)?$/);
-    if (home && LANGS[home[1]]) {
-      if (!home[2]) return Response.redirect(new URL(`/${home[1]}/`, url).toString(), 301);
+    const home = url.pathname.match(/^\/([a-z]{2}(?:-[a-z]{2})?)(\/(index\.html)?)?$/i);
+    if (home && LANGS[home[1].toLowerCase()]) {
+      const lang = home[1].toLowerCase();
+      if (!home[2] || lang !== home[1]) return Response.redirect(new URL(`/${lang}/`, url).toString(), 301);
       // the English page, fetched afresh: its ETag would also stand for an
       // older dictionary
       const res = await env.ASSETS.fetch(new Request(new URL("/", url), { method: req.method }));
-      return beacon(translate(res, home[1]));
+      return beacon(translate(res, lang));
     }
     if (url.pathname === "/" && (req.method === "GET" || req.method === "HEAD")) {
       const lang = preferred(req);
@@ -317,16 +320,17 @@ async function capture(event, props) {
 
 // preferred is the home page's language for this browser: the one picked on
 // the page (the lang cookie), else the first of its Accept-Language that the
-// site has, else English.
+// site has, else English. Chinese written in Traditional characters (zh-TW,
+// zh-HK, zh-MO, zh-Hant) is zh-tw.
 export function preferred(req) {
-  const picked = (req.headers.get("Cookie") || "").match(/(?:^|;\s*)lang=([a-z]{2})/);
-  if (picked) return LANGS[picked[1]] ? picked[1] : "en";
+  const picked = (req.headers.get("Cookie") || "").match(/(?:^|;\s*)lang=([a-z]{2}(?:-[a-z]{2})?)/i);
+  if (picked) return LANGS[picked[1].toLowerCase()] ? picked[1].toLowerCase() : "en";
   const wants = (req.headers.get("Accept-Language") || "")
     .split(",")
     .map((p, i) => {
       const [tag, ...rest] = p.trim().toLowerCase().split(";");
       const q = rest.map((x) => x.trim()).find((x) => x.startsWith("q="));
-      return { lang: tag.split("-")[0], q: q ? parseFloat(q.slice(2)) || 0 : 1, i };
+      return { lang: /^zh-(tw|hk|mo|hant)\b/.test(tag) ? "zh-tw" : tag.split("-")[0], q: q ? parseFloat(q.slice(2)) || 0 : 1, i };
     })
     .filter((w) => w.lang && w.q > 0)
     .sort((a, b) => b.q - a.q || a.i - b.i);
@@ -366,7 +370,7 @@ function translate(res, lang) {
     rw.on('a[href^="/docs/"]', {
       element: (el) => {
         const href = el.getAttribute("href");
-        if (!href.startsWith(`/docs/${lang}/`)) el.setAttribute("href", `/docs/${lang}/` + href.slice(6));
+        if (!href.startsWith(`/docs/${docs}/`)) el.setAttribute("href", `/docs/${docs}/` + href.slice(6));
       },
     });
   return rw.transform(out);

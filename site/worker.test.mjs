@@ -161,7 +161,7 @@ test("i18n: every string the home page marks has its Chinese, and no other", asy
   }
 });
 
-test("home: / sends a browser that prefers Chinese, Japanese or German to its page, until a language is picked", async () => {
+test("home: / sends a browser that prefers Chinese (Simplified or Traditional), Japanese or German to its page, until a language is picked", async () => {
   const env = { ASSETS: { fetch: async () => new Response("<html></html>", { headers: { "Content-Type": "text/plain" } }) } };
   const home = (headers) => worker.fetch(new Request("https://usemagpie.ai/", { headers }), env, ctx);
   const to = async (headers) => {
@@ -172,7 +172,11 @@ test("home: / sends a browser that prefers Chinese, Japanese or German to its pa
   assert.equal(await to({}), null);
   assert.equal(await to({ "Accept-Language": "en-US,en;q=0.9,zh;q=0.8" }), null);
   assert.equal(await to({ "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8" }), "/zh/");
-  assert.equal(await to({ "Accept-Language": "zh-TW" }), "/zh/");
+  for (const tag of ["zh-TW", "zh-tw,zh;q=0.9", "zh-HK", "zh-MO", "zh-Hant", "zh-Hant-TW,en;q=0.5"]) assert.equal(await to({ "Accept-Language": tag }), "/zh-tw/", tag);
+  for (const tag of ["zh", "zh-SG", "zh-Hans-CN"]) assert.equal(await to({ "Accept-Language": tag }), "/zh/", tag);
+  assert.equal(await to({ Cookie: "lang=zh-tw" }), "/zh-tw/");
+  assert.equal(await to({ "Accept-Language": "zh-TW", Cookie: "lang=zh" }), "/zh/");
+  assert.equal(await to({ "Accept-Language": "zh-CN", Cookie: "lang=zh-tw" }), "/zh-tw/");
   assert.equal(await to({ "Accept-Language": "fr-FR,zh;q=0.5,en;q=0.4" }), "/zh/");
   assert.equal(await to({ "Accept-Language": "en;q=0.2,zh;q=0.8" }), "/zh/");
   assert.equal(await to({ "Accept-Language": "zh-CN", Cookie: "a=b; lang=en" }), null);
@@ -184,10 +188,10 @@ test("home: / sends a browser that prefers Chinese, Japanese or German to its pa
   assert.equal(await to({ "Accept-Language": "de-AT" }), "/de/");
   assert.equal(await to({ "Accept-Language": "de", Cookie: "lang=en" }), null);
   assert.equal(await to({ Cookie: "lang=de" }), "/de/");
-  for (const lang of ["zh", "de"]) {
-    const res = await worker.fetch(new Request("https://usemagpie.ai/" + lang), env, ctx);
-    assert.equal(res.status, 301);
-    assert.equal(new URL(res.headers.get("Location")).pathname, `/${lang}/`);
+  for (const [from, lang] of [["zh", "zh"], ["de", "de"], ["zh-tw", "zh-tw"], ["zh-TW/", "zh-tw"], ["zh-TW", "zh-tw"]]) {
+    const res = await worker.fetch(new Request("https://usemagpie.ai/" + from), env, ctx);
+    assert.equal(res.status, 301, from);
+    assert.equal(new URL(res.headers.get("Location")).pathname, `/${lang}/`, from);
   }
 });
 
@@ -385,6 +389,8 @@ test("docs: an English docs page sends a browser that prefers Chinese or Japanes
   assert.equal(await to("/docs/start", {}), 200);
   assert.equal(await to("/docs/start", { "Accept-Language": "en-US,en;q=0.9,zh;q=0.8" }), 200);
   assert.equal(await to("/docs/start", { "Accept-Language": "zh-CN,zh;q=0.9" }), "/docs/zh/start");
+  assert.equal(await to("/docs/start", { "Accept-Language": "zh-TW" }), "/docs/zh/start");
+  assert.equal(await to("/docs/start", { Cookie: "lang=zh-tw" }), "/docs/zh/start");
   assert.equal(await to("/docs/start?omarchy=1", { "Accept-Language": "ja-JP" }), "/docs/ja/start?omarchy=1");
   assert.equal(await to("/docs/start", { "Accept-Language": "zh-CN", Cookie: "lang=en" }), 200);
   assert.equal(await to("/docs/start", { Cookie: "lang=ja" }), "/docs/ja/start");
