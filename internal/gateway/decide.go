@@ -799,6 +799,16 @@ func sentEffort(proto provider.Protocol, body []byte, p provider.Provider, model
 	return fitFor(p, model, e)
 }
 
+// sentEffortIf is sentEffort for a model that goes out by the effort it
+// is asked at, a relay's effort family (provider.SentIDAt): for any other
+// the body is not read for it.
+func sentEffortIf(p provider.Provider, model string, proto provider.Protocol, body []byte) string {
+	if p.SentIDAt(model, "") == model {
+		return ""
+	}
+	return sentEffort(proto, body, p, model)
+}
+
 // fitFor is the effort a request asking for want goes to model at, at p:
 // the level of its own nearest (fitEffort), and for a model known to have
 // none to pick from — a thinking switch alone, as Xiaomi's mimo-v2.6-flash

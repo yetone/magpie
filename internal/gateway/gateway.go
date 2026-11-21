@@ -2400,7 +2400,7 @@ func (s *Server) countOn(w http.ResponseWriter, r *http.Request, p provider.Prov
 	// counted, and not at all where there are none
 	wires := sync.OnceValue(func() map[string]string { return settings.Shared().Wires() })
 	for i, c := range counts {
-		res, err := s.forward(r.Context(), c.p, provider.Anthropic, "/v1/messages/count_tokens", rewriteModel(body, provider.UpstreamNameIn(wires(), c.p.ID, model)), r.Header)
+		res, err := s.forward(r.Context(), c.p, provider.Anthropic, "/v1/messages/count_tokens", rewriteModel(body, provider.UpstreamNameAsIn(wires(), c.p.ID, model, c.p.SentIDAt(model, sentEffortIf(c.p, model, provider.Anthropic, body)))), r.Header)
 		if tooMany := (*errRPM)(nil); errors.As(err, &tooMany) {
 			break // its minute filled since: nobody rests, the estimate answers
 		}
@@ -7055,7 +7055,9 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			capped = int(gjson.GetBytes(body, "max_completion_tokens").Int())
 		}
 	}
-	upstream := provider.UpstreamNameIn(wiresOf(r.Context()), p.ID, model)
+	// a relay's effort family goes as the id of the effort asked
+	// (effort_variants.go); any other model as magpie knows it
+	upstream := provider.UpstreamNameAsIn(wiresOf(r.Context()), p.ID, model, p.SentIDAt(model, sentEffortIf(p, model, proto, body)))
 	body = rewriteModel(body, upstream)
 	if proto == provider.Chat {
 		body = withMistralCacheKey(p, r.Header, body)
@@ -8871,7 +8873,9 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 				filledOutput = to != provider.Anthropic
 			}
 		}
-		wire := provider.UpstreamNameIn(wires, p.ID, model)
+		// a relay's effort family goes as the id of the effort the
+		// request was built at (effort_variants.go)
+		wire := provider.UpstreamNameAsIn(wires, p.ID, model, p.SentIDAt(model, req.Effort))
 		sent := req
 		if dropsBillingLine(p, to, model, wire) && billingHeader.MatchString(req.System) {
 			// Claude Code's billing line, which changes every turn, as the

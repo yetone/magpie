@@ -1220,8 +1220,13 @@ func ServesModel(p Provider, model string) bool { return p.serves(model) }
 // vendor's name, and what a reply says answered is compared with it, so a
 // model asked for by the name the vendor serves it under is not read as
 // another one.
+//
+// A relay's effort family offered as one model (effort_variants.go) is
+// asked for by the id of its default effort, as a request with no effort
+// is (Provider.SentIDAt): the Test button and the key check try the id the
+// relay lists.
 func UpstreamName(p Provider, model string) string {
-	return UpstreamNameIn(settings.Load().Wires(), p.ID, model)
+	return UpstreamNameAsIn(settings.Load().Wires(), p.ID, model, p.SentIDAt(model, ""))
 }
 
 // UpstreamNameIn is UpstreamName over a settings' ModelWires already read,
@@ -1317,6 +1322,11 @@ func SentNameOnIn(wires map[string]string, pid, account, model, effort string) s
 		if own := modelIDsOf(pid).ownOf(model); own != model {
 			return UpstreamNameAsIn(wires, pid, own, antigravitySentID(account, own, effort))
 		}
+	}
+	if account != "antigravity" {
+		// a relay's effort family goes out as the id of the effort sent
+		// (effort_variants.go), as the gateway asked for it
+		return UpstreamNameAsIn(wires, pid, model, SentIDOf(pid, model, effort))
 	}
 	return UpstreamNameAsIn(wires, pid, model, antigravitySentID(account, model, effort))
 }

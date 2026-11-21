@@ -1132,14 +1132,17 @@ func TestRouteJudgesTheUpstreamNameByTheAccountAndNotByTheProvidersId(t *testing
 	}
 
 	// the relay was asked for the model under its provider's own name, and
-	// answered with that id: nothing swapped
-	answers = "vendor-c/gemini-3.7-flash"
+	// answered with that id: nothing swapped. A relay of the user's own
+	// that lists a model once per effort is asked for the effort's id
+	// (effort_variants.go), here the high one, as the turn thinks hard.
+	answers = "vendor-c/gemini-3.7-flash-high"
 	if r := turn(); r.Swapped {
 		t.Errorf("the relay answered with the id it was asked for, which is no swap: the route says %v", r.Swapped)
 	}
 
-	// a level of the family is another model, and the route reads it as one
-	answers = "vendor-c/gemini-3.7-flash-high"
+	// another level of the family is another model, and the route reads it
+	// as one
+	answers = "vendor-c/gemini-3.7-flash-low"
 	if r := turn(); !r.Swapped {
 		t.Errorf("the relay answered with a level's id: the route says swapped %v", r.Swapped)
 	}

@@ -311,6 +311,32 @@ that the upstream does not list are named against all listed names and ids;
 listed models keep their `Available` names unchanged
 ([`Exposed`](../../internal/provider/models.go)).
 
+A relay the user added by its address (`AddedByAddress`, and not Azure,
+Bedrock, Vertex or a Remote magpie) that lists one model once per effort,
+the effort in the id (`gemini-4-argon-low`, `-medium`, `-high`; elis_pina
+on X), is offered that model once: `gemini-4-argon`, with those efforts as
+its levels (`Efforts`), in place of its first member, in the editor's chips,
+`/v1/models` and every agent's list (`foldEffortVariants` in `available`,
+[`effort_variants.go`](../../internal/provider/effort_variants.go)). An id
+is a member when what follows its last `-` is, in any case, exactly
+`minimal`, `low`, `medium`, `high` or `xhigh`, and the part before names a
+version (a digit in its last path part): `-highspeed`, `-lite`, `-tiered`,
+`-preview`, `-max` and `mistral-medium` are not. A family needs two levels
+or more, each one id; a lone `foo-high` stays as it is. When the relay
+lists the bare id too, that is the family's default; else the level nearest
+`medium` (`nearestEffort`, a tie going up). The family's window and output
+are its members' least, images only when every member takes them, and its
+keys every member's. A family the user listed a member of under an id of
+their own, or whose id they gave another model, isn't folded: their word
+on the list stands. Each member's old id still resolves, is served by the
+keys that served it, passes a key's allow-list and a pick, and goes
+upstream as it is, at any effort. The gateway sends the id of the effort a
+request goes at (`SentIDAt`; [Gateway routing](gateway-routing.md)).
+Presets and plugins list as their vendor says
+(`TestRelayEffortIDsAreOneModel`, `TestRelayEffortFamilyWithItsOwnID`,
+`TestRelayEffortFamilyKeepsTheUsersIDs`,
+`TestRelayEffortFamiliesOnlyOnTheUsersRelays`).
+
 The list a magpie gives another magpie also names, as `magpie_by`, the
 provider serving each model there (`Entry.ServedBy`: "routing group" for a
 group, and for a model of its own Remote magpie the provider at the start

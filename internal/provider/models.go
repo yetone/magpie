@@ -102,7 +102,9 @@ func (p Provider) available() []catalog.Model {
 		// a model the provider's catalog doesn't list reads as it does
 		// under the other providers serving it (GLM-5-Turbo, not
 		// glm-5-turbo, beside ZCode's)
-		return catalog.Named(catalog.Decorate(live, known))
+		// a relay's ids of one model at each effort as that model, with
+		// those efforts (effort_variants.go)
+		return catalog.Named(p.foldEffortVariants(catalog.Decorate(live, known)))
 	}
 	if p.IsAzure() {
 		// an Azure resource serves its deployments alone, named as the
@@ -221,6 +223,11 @@ func (p Provider) liveByID(model string) []catalog.Model {
 	own := p.OwnModelID(model)
 	ms := catalog.LiveByIDShared(p.ID, own)
 	if own == model {
+		if len(ms) == 0 && p.foldsEfforts() {
+			// a relay's effort family, whose own id it may not list:
+			// its default member's (effort_variants.go)
+			return p.liveFamily(model)
+		}
 		return ms
 	}
 	out := slices.Clone(ms)
@@ -404,8 +411,14 @@ func liveIDs(id string) map[string]bool {
 	for _, m := range ms {
 		out[m.ID] = true
 	}
-	// picks are of the ids the user lists them by (SetModelID)
-	return modelIDsOf(id).ids(out)
+	// picks are of the ids the user lists them by (SetModelID), and of a
+	// relay's effort families (effort_variants.go)
+	out = modelIDsOf(id).ids(out)
+	all := sharedAll()
+	if i := slices.IndexFunc(all, func(p Provider) bool { return p.ID == id }); i >= 0 {
+		out = all[i].withFamilyIDs(out)
+	}
+	return out
 }
 
 // dropGonePicks takes out of the saved provider's picks those before had
@@ -1722,6 +1735,24 @@ func (p Provider) Serving(model string) func(KeyAccount) bool {
 	}
 	// the vendor's lists name the model by its own id (SetModelID)
 	keys, found := x.of[p.OwnModelID(model)]
+	if !found {
+		// a relay's effort family: the keys listed any of its ids
+		// (effort_variants.go)
+		if f, ok := p.family(model); ok {
+			keys = map[string]bool{}
+			for _, id := range f.members() {
+				ks, ok := x.of[id]
+				if ok && len(ks) == 0 {
+					keys = nil // one of them listed to every key
+					break
+				}
+				for k := range ks {
+					keys[k] = true
+				}
+				found = found || ok
+			}
+		}
+	}
 	return func(k KeyAccount) bool {
 		id := keyID(k.Key)
 		return !found || len(keys) == 0 || !x.listed[id] || keys[id]
