@@ -100,6 +100,9 @@ func TestHubMCPToolsOnDemand(t *testing.T) {
 		`{"name":"github__create_issue","arguments":{"title":"a"}}`,
 		`{"name":"create_issue","arguments":{"title":"a"}}`,
 		`{"name":"github__create_issue","arguments":"{\"title\":\"a\"}"}`,
+		// the agent's own names for it: Alma's, Claude Code's
+		`{"name":"magpie__github_create_issue","arguments":{"title":"a"}}`,
+		`{"name":"mcp__magpie__github__create_issue","arguments":{"title":"a"}}`,
 	} {
 		ran := readMCP(t, hubPost(h, "opencode", here, toolsCall(hubCallTool, args)))
 		if ran.Result.IsError || ran.Result.Content[0].Text != "ran github create_issue" {
