@@ -21,6 +21,13 @@ func TestCreateSkill(t *testing.T) {
 	if m.Name != "my-skill" || m.Description != "Does: a thing across lines" {
 		t.Errorf("front matter: %+v\\n%s", m, b)
 	}
+	// The fields the user didn't set aren't written: a null user-invocable
+	// or an empty argument-hint is noise in a file the user edits.
+	for _, k := range []string{"user-invocable", "disable-model-invocation", "argument-hint"} {
+		if strings.Contains(string(b), k) {
+			t.Errorf("SKILL.md says %s:\n%s", k, b)
+		}
+	}
 	for _, d := range []string{".claude/skills/my-skill", ".codex/skills/my-skill"} {
 		if _, err := os.Stat(filepath.Join(h, d, "SKILL.md")); err != nil {
 			t.Errorf("not given to %s: %v", d, err)

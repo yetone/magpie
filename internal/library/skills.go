@@ -209,12 +209,12 @@ type meta struct {
 	// when the user types /name, never on the model's own (sunset3279 on
 	// Discord). False when the front matter doesn't parse, or the value
 	// isn't a bool: not known.
-	Manual bool `yaml:"disable-model-invocation" json:"-"`
+	Manual bool `yaml:"disable-model-invocation,omitempty" json:"-"`
 	// Typed is its user-invocable: false for a skill only the model
 	// calls, which no agent offers to type; nil when it isn't said.
-	Typed *bool `yaml:"user-invocable" json:"-"`
+	Typed *bool `yaml:"user-invocable,omitempty" json:"-"`
 	// Hint is its argument-hint, which Claude Code shows after /name.
-	Hint string `yaml:"argument-hint" json:"-"`
+	Hint string `yaml:"argument-hint,omitempty" json:"-"`
 }
 
 func readMeta(dir string) (meta, bool) {
