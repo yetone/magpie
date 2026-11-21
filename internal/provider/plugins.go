@@ -64,9 +64,13 @@ const WaitHeader = "X-Magpie-Wait"
 
 // SessionToPluginHeader and SubagentToPluginHeader tell a plugin's fetch
 // the session the agent named (sessionOf: Claude Code's
-// x-claude-code-session-id and the rest) and the subagent the request is
-// of: Claude Code's x-claude-code-agent-id, or Codex's spawn thread id
-// (collab_spawn / thread_spawn / agent_job). The agent's own headers never
+// x-claude-code-session-id and the rest; for an OpenCode 1 subagent that
+// names no separate root session, its x-opencode-parent-session-id unless
+// the caller set X-Magpie-Session) and the subagent the request is of:
+// Claude Code's x-claude-code-agent-id, Codex's spawn thread id
+// (collab_spawn / thread_spawn / agent_job), or OpenCode's
+// x-opencode-session-id when x-opencode-parent-session-id is set. The
+// agent's own headers never
 // reach a plugin, so a plugin that keeps state per conversation (Devin's
 // cache keepalive) had only the request's text to go by, and Claude Code
 // Auto's permission check, whose history grows in its one merged user

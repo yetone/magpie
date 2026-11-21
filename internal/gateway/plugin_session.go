@@ -23,7 +23,8 @@ func withCodexPluginSubagent(ctx context.Context, sub string) context.Context {
 // tellPluginSession sets X-Magpie-Session and X-Magpie-Subagent on a
 // plugin's fetch request so plugins keeping per-conversation state can
 // tell subagents apart from their lead (plugins#620): Claude Code by
-// x-claude-code-agent-id and Codex by its spawn thread id. Any
+// x-claude-code-agent-id, Codex by its spawn thread id, and OpenCode
+// by x-opencode-parent-session-id / x-opencode-session-id. Any
 // client-sent headers of those names are dropped first; an explicit
 // caller X-Magpie-Session still sets X-Magpie-Session. The plugin host
 // strips both headers before anything reaches a vendor (host.js).
@@ -50,7 +51,29 @@ func pluginSessionOf(ctx context.Context, in http.Header, body []byte) (session,
 		c, _ := ctx.Value(callerCtx{}).(caller)
 		sub = codexPluginSubagent(c.agent, in, body)
 	}
-	return session, sub
+	if sub != "" {
+		return session, sub
+	}
+	if parent, child, ok := openCodePluginSubagent(in); ok {
+		if strings.TrimSpace(in.Get(SessionHeader)) != "" || (session != "" && session != child) {
+			return session, child
+		}
+		return parent, child
+	}
+	return session, ""
+}
+
+// openCodePluginSubagent returns (parent, child, true) when in carries
+// OpenCode's own subagent headers (x-opencode-parent-session-id and a
+// distinct x-opencode-session-id). A user-created fork in OpenCode 2
+// carries no x-opencode-parent-session-id and returns false.
+func openCodePluginSubagent(in http.Header) (parent, child string, ok bool) {
+	parent = validPluginID(in.Get("x-opencode-parent-session-id"))
+	child = validPluginID(in.Get("x-opencode-session-id"))
+	if parent == "" || child == "" || child == parent {
+		return "", "", false
+	}
+	return parent, child, true
 }
 
 // validPluginID trims raw and rejects empty strings, values over 128 bytes

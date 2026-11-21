@@ -17,9 +17,10 @@ import (
 // keyed Claude Code Auto's permission check by its text alone, and a check
 // whose history grew kept its older pings running beside the new ones
 // (magpie-community/plugins#620, zelong77). The same holds for Codex's
-// spawned subagents, which share their lead's session-id and name their
-// own thread in thread-id / turn metadata. The headers reach the plugin
-// and never the vendor; a request that names no session has neither.
+// spawned subagents (thread-id / turn metadata) and OpenCode's subagents
+// (x-opencode-parent-session-id / x-opencode-session-id). The headers
+// reach the plugin and never the vendor; a request that names no session
+// has neither.
 func TestPluginToldTheSession(t *testing.T) {
 	var mu sync.Mutex
 	var got []http.Header
@@ -297,6 +298,133 @@ func TestPluginToldTheSession(t *testing.T) {
 			}
 			body += `}`
 			check(t, model+", "+tc.name, "/v1/responses", body, tc.headers, tc.session, tc.subagent)
+		}
+	}
+
+	// OpenCode 2 and OpenCode 1 over Chat Completions: relayed (fake-1)
+	// and translated to Anthropic Messages (fake-claude).
+	oc2UA := "opencode/latest/2.3.2/cli"
+	oc1UA := "opencode/1.19.6 ai-sdk/provider-utils/4.0.23 runtime/bun/1.4.4"
+	for _, model := range []string{"fake-1", "fake-claude"} {
+		for _, tc := range []struct {
+			name              string
+			headers           map[string]string
+			session, subagent string
+		}{
+			{
+				name: "opencode 2 lead",
+				headers: map[string]string{
+					"User-Agent":            oc2UA,
+					"x-opencode-session":    "ses_root",
+					"x-opencode-session-id": "ses_root",
+					"x-session-affinity":    "ses_root",
+					"x-session-id":          "ses_root",
+				},
+				session: "ses_root",
+			},
+			{
+				name: "opencode 2 user fork without parent header is not a subagent",
+				headers: map[string]string{
+					"User-Agent":            oc2UA,
+					"x-opencode-session":    "ses_root",
+					"x-opencode-session-id": "ses_fork",
+					"x-session-affinity":    "ses_root",
+					"x-session-id":          "ses_root",
+				},
+				session: "ses_root",
+			},
+			{
+				name: "opencode 2 subagent",
+				headers: map[string]string{
+					"User-Agent":                   oc2UA,
+					"x-opencode-session":           "ses_root",
+					"x-opencode-session-id":        "ses_child",
+					"x-opencode-parent-session-id": "ses_root",
+					"x-parent-session-id":          "ses_root",
+					"x-session-affinity":           "ses_root",
+					"x-session-id":                 "ses_root",
+				},
+				session:  "ses_root",
+				subagent: "ses_child",
+			},
+			{
+				name: "opencode 1 lead",
+				headers: map[string]string{
+					"User-Agent":            oc1UA,
+					"x-opencode-session-id": "ses_root",
+					"x-session-affinity":    "ses_root",
+					"x-session-id":          "ses_root",
+				},
+				session: "ses_root",
+			},
+			{
+				name: "opencode 1 subagent",
+				headers: map[string]string{
+					"User-Agent":                   oc1UA,
+					"x-opencode-session-id":        "ses_child",
+					"x-opencode-parent-session-id": "ses_root",
+					"x-parent-session-id":          "ses_root",
+					"x-session-affinity":           "ses_child",
+					"x-session-id":                 "ses_child",
+				},
+				session:  "ses_root",
+				subagent: "ses_child",
+			},
+			{
+				name: "opencode 1 subagent respects explicit X-Magpie-Session",
+				headers: map[string]string{
+					"User-Agent":                   oc1UA,
+					"X-Magpie-Session":             "mine",
+					"x-opencode-session-id":        "ses_child",
+					"x-opencode-parent-session-id": "ses_root",
+					"x-session-affinity":           "ses_child",
+				},
+				session:  "mine",
+				subagent: "ses_child",
+			},
+			{
+				name: "opencode 1 subagent with explicit X-Magpie-Session matching child keeps subagent",
+				headers: map[string]string{
+					"User-Agent":                   oc1UA,
+					"X-Magpie-Session":             "ses_child",
+					"x-opencode-session-id":        "ses_child",
+					"x-opencode-parent-session-id": "ses_root",
+					"x-session-affinity":           "ses_child",
+				},
+				session:  "ses_child",
+				subagent: "ses_child",
+			},
+			{
+				name: "opencode self-parent is not a subagent",
+				headers: map[string]string{
+					"User-Agent":                   oc1UA,
+					"x-opencode-session-id":        "ses_self",
+					"x-opencode-parent-session-id": "ses_self",
+					"x-session-affinity":           "ses_self",
+				},
+				session: "ses_self",
+			},
+			{
+				name: "generic x-parent-session-id without opencode headers is not treated as opencode",
+				headers: map[string]string{
+					"x-session-affinity":  "other_child",
+					"x-parent-session-id": "other_parent",
+				},
+				session: "other_child",
+			},
+			{
+				name: "opencode overlong session id is ignored as subagent",
+				headers: map[string]string{
+					"User-Agent":                   oc2UA,
+					"x-opencode-session":           "ses_root",
+					"x-opencode-session-id":        tooLong,
+					"x-opencode-parent-session-id": "ses_root",
+				},
+				session: "ses_root",
+			},
+		} {
+			body := `{"model":"` + pid + `/` + model + `","stream":true,"messages":[{"role":"user","content":"hi"}]}`
+			check(t, model+", "+tc.name, "/v1/chat/completions", body, tc.headers, tc.session, tc.subagent)
 		}
 	}
 }
