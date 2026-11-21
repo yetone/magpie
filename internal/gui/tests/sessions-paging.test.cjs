@@ -134,8 +134,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // 1111 of them name "Session 1" ("1", "1x", "1xx", "1xxx"), so the note
       // counts that list — 200 of 1111, not of the 2600 on the computer
       const q = page.locator("#sessQ");
-      const at = Date.now();
       await q.fill("Session 1");
+      // typing waits for a pause; Enter filters at once, and is what is timed
+      const at = Date.now();
+      await q.press("Enter");
       const took = Date.now() - at;
       assert(await rows.count() <= 200, "a search draws a page, not the history");
       assert.equal(await rows.count(), 200, "a page of the matches");
@@ -144,6 +146,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       // a filter that keeps nothing says so, and the note counts nothing
       await q.fill("nothing matches this at all");
+      await q.press("Enter");
       await page.locator("#sessList .empty-state").waitFor();
       assert.equal(await rows.count(), 0);
       assert.match(await page.locator("#sessNote").innerText(), w.whole(0));
@@ -157,6 +160,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // 2599, and saying so would send the reader looking for one. The whole
       // list is drawn, so it is the length and not "1 of 1" (yetone, #1019).
       await q.fill("Fix the session list");
+      await q.press("Enter");
       await page.locator("#sessList .row.sess").first().waitFor();
       assert.equal(await rows.count(), 1, "the one match");
       assert.equal(await more.count(), 0, "a list shorter than a page has no way to more");

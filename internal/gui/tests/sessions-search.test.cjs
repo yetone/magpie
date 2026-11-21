@@ -46,8 +46,10 @@ function serve(lang, log) {
     if (url.pathname === "/api/sessions/search") {
       const q = url.searchParams.get("q");
       log.push({ agent: url.searchParams.get("agent"), q });
-      // long enough for the next keystroke to land while it is out
+      // long enough for the next keystroke to land while it is out, or
+      // held until the test lets it go
       await new Promise((r) => setTimeout(r, log.slow ? 900 : 250));
+      await log.hold;
       const hits = [];
       for (const [id, text] of Object.entries(said)) {
         const i = text.toLowerCase().indexOf(q);
@@ -123,7 +125,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // a new query cancels the one in flight, and its answer never shows
         log.slow = true;
         await filter.fill("parser");
-        await page.waitForTimeout(450); // past the pause: its request is out
+        for (let i = 0; i < 100 && !log.some((x) => x.q === "parser"); i++) await page.waitForTimeout(20); // past the pause: its request is out
         await filter.fill("kafka");
         await row("ses_03").locator(".sm-hit mark").waitFor();
         await page.waitForTimeout(1000);
@@ -132,11 +134,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await row("ses_01").count(), 0, "the cancelled search's answer isn't shown");
         assert.equal(await row("ses_03").locator(".sm-hit mark").textContent(), "Kafka");
 
-        // what a title or id matches is shown at once, before any answer
+        // what a title or id matches is shown before any answer: the
+        // search's is held, and the row is there with the search under way
         log.slow = false;
         log.cut = true;
+        let release;
+        log.hold = new Promise((r) => { release = r; });
         await filter.fill("ses_01");
-        await row("ses_01").waitFor({ timeout: 200 });
+        await row("ses_01").waitFor();
+        assert.equal(await view.locator(".sm-search-note").textContent(), await tr("Searching what was said…"));
+        release();
+        log.hold = null;
         // a search cut short says how far it read
         await view.locator(".sm-search-note").filter({ hasText: await tr("Searched what was said in the latest {n} of {total} sessions.", { n: 2, total: 3 }) }).waitFor();
 

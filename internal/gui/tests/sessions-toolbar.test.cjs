@@ -71,6 +71,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await picker.locator("em").textContent(), "426");
         const filter = view.locator(".sm-filter");
         await filter.fill("Fix the session toolbar");
+        await filter.press("Enter"); // typing waits for a pause; Enter filters at once
         assert.equal(await view.locator(".row.sm-sess").count(), 1, "search still filters the current agent's sessions");
         await filter.press("Escape");
         assert.equal(await view.locator(".row.sm-sess").count(), 100, "Escape clears the session search, back to the folder's first page");

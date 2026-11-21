@@ -116,10 +116,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // a filter starts again at a page; clearing it keeps a page
         const filter = view.locator(".sm-filter");
         await filter.fill("task");
+        await filter.press("Enter"); // typing waits for a pause; Enter filters at once
         assert.equal(await rows.count(), 100 + 3, "every folder opens to a page while filtering");
         await filter.fill("task 249");
+        await filter.press("Enter");
         assert.equal(await rows.count(), 1);
         await filter.fill("");
+        await filter.press("Enter");
         assert.equal(await rows.count(), 100);
 
         // the folder's box and the bar pick every session, drawn or not

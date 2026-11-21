@@ -4035,16 +4035,19 @@ function renderLedger() {
 }
 
 {
-  let typing = 0;
-  $("#ledQ").oninput = (e) => {
-    ledQuery = e.target.value;
-    ledModel = "";
-    ledOwn("model");
-    clearTimeout(typing);
-    typing = setTimeout(() => { ledOffset = 0; loadLedger().catch((err) => status(err.message, "err")); }, 250);
-  };
+  // read once typing pauses, at Enter, and never while an input method is
+  // still composing its words (suetfungsit on X)
+  let typing = 0, composing = false;
+  const ledBy = () => { clearTimeout(typing); ledOffset = 0; loadLedger().catch((err) => status(err.message, "err")); };
+  const ledTyped = () => { ledQuery = $("#ledQ").value; ledModel = ""; ledOwn("model"); };
+  const later = () => { ledTyped(); clearTimeout(typing); typing = setTimeout(ledBy, 250); };
+  $("#ledQ").oninput = (e) => { if (e.isComposing || composing) clearTimeout(typing); else later(); };
+  $("#ledQ").addEventListener("compositionstart", () => { composing = true; clearTimeout(typing); });
+  $("#ledQ").addEventListener("compositionend", () => { composing = false; later(); });
   $("#ledQ").onkeydown = (e) => {
-    if (e.key === "Escape" && e.target.value) { e.stopPropagation(); e.target.value = ""; ledQuery = ""; ledModel = ""; ledOwn("model"); ledOffset = 0; loadLedger().catch((err) => status(err.message, "err")); }
+    if (e.isComposing || e.keyCode === 229) return; // the input method's own Enter or Escape
+    if (e.key === "Enter") { ledTyped(); ledBy(); }
+    else if (e.key === "Escape" && e.target.value) { e.stopPropagation(); e.target.value = ""; ledQuery = ""; ledModel = ""; ledOwn("model"); ledBy(); }
   };
   $("#ledExport").onclick = async () => {
     const b = $("#ledExport");
@@ -5526,8 +5529,23 @@ function sessionDetail(s) {
 
 // All sessions: the Sessions page, on the agent picked here if one is
 $("#sessAll").onclick = (e) => magpie.call("sessions", "reveal", sessAgent === "all" ? {} : { agent: sessAgent }, e);
-$("#sessQ").oninput = (e) => { sessQuery = e.target.value; if (sessions) renderSessions(); };
-$("#sessQ").onkeydown = (e) => { if (e.key === "Escape" && e.target.value) { e.stopPropagation(); e.target.value = ""; sessQuery = ""; if (sessions) renderSessions(); } };
+// Search filters once typing pauses, at Enter, and never while an input
+// method is still composing its words (suetfungsit on X: pinyin filtered
+// a long history before its characters were picked)
+{
+  const q = $("#sessQ");
+  let typing = 0, composing = false;
+  const by = () => { clearTimeout(typing); if (sessQuery === q.value) return; sessQuery = q.value; if (sessions) renderSessions(); };
+  const later = () => { clearTimeout(typing); typing = setTimeout(by, 200); };
+  q.oninput = (e) => { if (e.isComposing || composing) clearTimeout(typing); else later(); };
+  q.addEventListener("compositionstart", () => { composing = true; clearTimeout(typing); });
+  q.addEventListener("compositionend", () => { composing = false; later(); });
+  q.onkeydown = (e) => {
+    if (e.isComposing || e.keyCode === 229) return; // the input method's own Enter or Escape
+    if (e.key === "Enter") by();
+    else if (e.key === "Escape" && q.value) { e.stopPropagation(); q.value = ""; by(); }
+  };
+}
 
 // ---------- settings ----------
 //
