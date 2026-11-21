@@ -24199,8 +24199,7 @@ function navSubs() {
       s.classList.toggle("cur", cur);
       s.setAttribute("aria-selected", String(cur));
       s.tabIndex = cur ? 0 : -1;
-      const ic = NAV_SUB_IC?.[view]?.[b.dataset.seg || b.dataset.set];
-      s.append(ic ? svg(ic, 14, 1.4) : el("i", "nav-s-ic"), el("span", "", name));
+      s.append(window.navSubIc?.(view, b) || el("i", "nav-s-ic"), el("span", "", name));
       if (b.dataset.sub === "installed" && pluginUpdates) {
         const up = el("em", "up", t(pluginUpdates === 1 ? "1 update" : "{n} updates", { n: pluginUpdates }));
         s.title = t("Newer versions of your plugins are out: update them under Installed");

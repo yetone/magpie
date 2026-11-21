@@ -69,7 +69,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForFunction(([v, n]) => document.querySelectorAll(`.nav-sub[data-view="${v}"]:not(.leaving) .nav-s`).length >= n, [view, n]);
         await page.waitForFunction(() => [...document.querySelectorAll(".nav-sub, .nav-sub *")].every((e) => e.getAnimations().every((a) => a.playState !== "running")));
         const rows = await page.evaluate((v) => [...document.querySelectorAll(`.nav-sub[data-view="${v}"]:not(.leaving) .nav-s`)].map((s) => {
-          const ic = s.querySelector(":scope > svg")?.getBoundingClientRect(), name = s.querySelector(":scope > span");
+          const ic = s.querySelector(":scope > svg, :scope > .nav-s-ic > .ic")?.getBoundingClientRect(), name = s.querySelector(":scope > span");
           const nb = name.getBoundingClientRect();
           return { text: name.textContent, ic: ic && { left: ic.left, right: ic.right, w: ic.width, mid: ic.top + ic.height / 2 }, nameLeft: nb.left, mid: nb.top + nb.height / 2, whole: name.scrollWidth <= name.clientWidth + 1, over: name.scrollWidth - name.clientWidth, sw: s.getBoundingClientRect().width };
         }), view);

@@ -541,7 +541,9 @@ body.side-nav #nav button.has-dot.can-fold::after { right: 28px; }
    of a row up, over Discover (#1787) */
 .nav-sub > button { position: relative; z-index: 1; flex: none; display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 6px; font-size: 12.5px; color: var(--ctl-fg); text-align: left; white-space: nowrap; transition: color .2s var(--ease); }
 .nav-sub > button > :is(svg, .nav-s-ic) { flex: none; width: 14px; height: 14px; margin-left: -2px; color: var(--muted); transition: color .2s var(--ease); }
-.nav-s:hover:not(.cur) > svg, .nav-s.cur > svg { color: inherit; }
+.nav-s:hover:not(.cur) > :is(svg, .nav-s-ic), .nav-s.cur > :is(svg, .nav-s-ic) { color: inherit; }
+/* an agent's own logo in the glyph's place (navicons.js navSubIc) */
+.nav-s-ic > .ic { display: flex; width: 100%; height: 100%; }
 .nav-sub > button > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .nav-sub > button > em { margin-left: auto; font-style: normal; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
 /* an update waiting, in the sidebar's dot colour, as the words the dot means */
