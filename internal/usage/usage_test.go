@@ -143,7 +143,7 @@ func TestSummarizeTimesFirstTokens(t *testing.T) {
 	}
 	s := summarize(Today, now, recs)
 	m := s.Models[0]
-	if m.Timed != 2 || m.MeanTTFT() != 750 || m.DecodeMs != 3000 || m.DecodeOut != 150 || m.Speed() != 50 {
+	if m.Timed != 2 || m.MeanTTFT() != 750 || m.DecodeMs != 3000 || m.DecodeOut != 150 || !within(m.Speed(), 50) {
 		t.Fatalf("model: %+v", m.Totals)
 	}
 	if s.Timed != 2 || s.Series[14].Timed != 2 {
@@ -172,14 +172,14 @@ func TestBurstTellsNoSpeed(t *testing.T) {
 		{Time: at, Provider: "antigravity", Model: "gemini-3.8-flash", Output: 400, Millis: 6000, TTFT: 2000, Status: 200},   // 100 tok/s
 	}
 	m := summarize(Today, now, recs).Models[0]
-	if m.Timed != 3 || m.MeanTTFT() != (24359+3000+2000)/3 || m.DecodeMs != 16000 || m.DecodeOut != 1600 || m.Speed() != 100 {
+	if m.Timed != 3 || m.MeanTTFT() != (24359+3000+2000)/3 || m.DecodeMs != 16000 || m.DecodeOut != 1600 || !within(m.Speed(), 100) {
 		t.Fatalf("model: %+v, %v tok/s", m.Totals, m.Speed())
 	}
 	var rows Totals
 	for _, r := range recs {
 		rows.addRow(Row{Record: r})
 	}
-	if rows.Timed != 3 || rows.DecodeMs != 16000 || rows.DecodeOut != 1600 || rows.Speed() != 100 {
+	if rows.Timed != 3 || rows.DecodeMs != 16000 || rows.DecodeOut != 1600 || !within(rows.Speed(), 100) {
 		t.Fatalf("rows: %+v", rows)
 	}
 	for _, c := range []struct {
@@ -228,7 +228,7 @@ func TestReasoningReplyTimedByItsAnswer(t *testing.T) {
 	}
 	const ms, out = 1500 + 1500 + 3000 + 5000, 200 + 200 + 300 + 500
 	m := summarize(Today, now, recs).Models[0]
-	if m.Timed != 6 || m.DecodeMs != ms || m.DecodeOut != out || m.Speed() != 109.0909090909091 {
+	if m.Timed != 6 || m.DecodeMs != ms || m.DecodeOut != out || !within(m.Speed(), (133.33+100)/2) { // the median of 133, 133, 100 and 100
 		t.Fatalf("model: %+v, %v tok/s", m.Totals, m.Speed())
 	}
 	var rows Totals
@@ -251,7 +251,7 @@ func TestReasoningReplyTimedByItsAnswer(t *testing.T) {
 			p = q
 		}
 	}
-	if p.DecodeMs != ms || p.DecodeOut != out {
+	if p.DecodeMs != ms || p.DecodeOut != out || p.TPS != m.Speed() {
 		t.Fatalf("part: %+v", p)
 	}
 	for _, c := range []struct {

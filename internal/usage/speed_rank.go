@@ -135,6 +135,43 @@ func (h speedHist) median() float64 {
 	return sum / float64(got)
 }
 
+// Rates are the speeds a Totals' replies wrote at, each its own, in
+// histograms of 2% bins: Speed the measured ones' (Row.Decode), Floor the
+// floors of those read from session files (Row.Floor). A sum's speed is
+// their median, as a ranking's is (ModelSpeed), so it is the figure most
+// of its rows show: tokens over summed time let a few replies held for
+// minutes before their first token outweigh hundreds that streamed. A
+// Rates is never changed once made, only replaced: a Totals is copied by
+// value, and the copies share it.
+type Rates struct {
+	Speed speedHist `json:"s,omitempty"`
+	Floor speedHist `json:"f,omitempty"`
+}
+
+// rateBin is the bin of n tokens over ms.
+func rateBin(n int, ms int64) uint16 { return histBin(float64(n) * 1000 / float64(ms)) }
+
+// plus is r and o counted together, a new Rates when both have any.
+func (r *Rates) plus(o *Rates) *Rates {
+	switch {
+	case o == nil:
+		return r
+	case r == nil:
+		return o
+	}
+	return &Rates{Speed: r.Speed.plus(o.Speed), Floor: r.Floor.plus(o.Floor)}
+}
+
+// withSpeed is r with one more measured speed, n tokens over ms.
+func (r *Rates) withSpeed(n int, ms int64) *Rates {
+	return r.plus(&Rates{Speed: speedHist{{rateBin(n, ms), 1}}})
+}
+
+// withFloor is r with one more floor, n tokens over ms.
+func (r *Rates) withFloor(n int, ms int64) *Rates {
+	return r.plus(&Rates{Floor: speedHist{{rateBin(n, ms), 1}}})
+}
+
 // ProviderSpeed is one model's place on one provider: its speed as
 // ModelSpeed's, over that provider's requests, and how its tries there
 // went. Facts only: a failed try may be the agent's request as much as

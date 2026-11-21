@@ -981,12 +981,14 @@ func (t *Totals) addRow(r Row) {
 			t.DecodeMs += w
 			t.DecodeOut += n
 			t.DecodeN++
+			t.Rates = t.Rates.withSpeed(n, w)
 		}
 	}
 	if n, ms := r.Floor(); ms > 0 {
 		t.FloorOut += n
 		t.FloorMs += ms
 		t.FloorN++
+		t.Rates = t.Rates.withFloor(n, ms)
 	}
 	t.count(r.Record)
 	t.Input += r.Input
@@ -1034,6 +1036,7 @@ func (t *Totals) plus(d *Totals) {
 	t.FloorOut += d.FloorOut
 	t.FloorMs += d.FloorMs
 	t.FloorN += d.FloorN
+	t.Rates = t.Rates.plus(d.Rates)
 	t.plusBytes(d)
 }
 
@@ -1285,6 +1288,12 @@ type Part struct {
 	TTFT      int64 `json:"ttft_ms,omitempty"`
 	DecodeMs  int64 `json:"decode_ms,omitempty"`
 	DecodeOut int   `json:"decode_out,omitempty"`
+	// TPS is the median of its replies' speeds, as Totals.Speed is: a
+	// point's mark on a chart of speed is the same figure as its row in
+	// the ranking. Set by settle from speeds, which the chart's many
+	// parts don't send whole.
+	TPS    float64   `json:"tps,omitempty"`
+	speeds speedHist `json:"-"`
 	// the bytes its requests sent up and read back (Totals.UpBytes), for
 	// a chart of the traffic over time
 	UpBytes   int64 `json:"up_bytes,omitempty"`
@@ -1308,6 +1317,7 @@ func (p *Part) add(r Row) {
 		if n, w := r.Decode(); w > 0 {
 			p.DecodeMs += w
 			p.DecodeOut += n
+			p.speeds = p.speeds.plus(speedHist{{rateBin(n, w), 1}})
 		}
 	}
 }
@@ -1322,8 +1332,31 @@ func (p *Part) plus(d *Totals) {
 	p.TTFT += d.TTFT
 	p.DecodeMs += d.DecodeMs
 	p.DecodeOut += d.DecodeOut
+	if d.Rates != nil {
+		p.speeds = p.speeds.plus(d.Rates.Speed)
+	}
 	p.UpBytes += d.UpBytes
 	p.DownBytes += d.DownBytes
+}
+
+// settle sets each part's TPS from the speeds it counted, and lets go of
+// them.
+func settle(pts []SeriesPoint) {
+	for i := range pts {
+		for _, by := range pts[i].By {
+			for k, p := range by {
+				if p.speeds == nil {
+					continue
+				}
+				p.TPS = p.speeds.median()
+				if p.speeds.total() == 1 { // its own, as Totals.Speed tells one
+					p.TPS = float64(p.DecodeOut) / (float64(p.DecodeMs) / 1000)
+				}
+				p.speeds = nil
+				by[k] = p
+			}
+		}
+	}
 }
 
 // SeriesPoint is a point of the timeline with its calls told apart, by each
@@ -1396,6 +1429,7 @@ func ledgerSeriesAt(p Period, rows []Row, now time.Time) (bucket string, pts []S
 			}
 		}
 	}
+	settle(pts)
 	return bucket, pts
 }
 

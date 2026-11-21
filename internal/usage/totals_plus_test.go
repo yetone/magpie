@@ -17,6 +17,8 @@ func TestTotalsPlusAddsEveryField(t *testing.T) {
 			f.SetInt(int64(i + 1))
 		case reflect.Float64:
 			f.SetFloat(float64(i) + 0.5)
+		case reflect.Pointer: // Rates, one reply's speed and one's floor
+			f.Set(reflect.ValueOf(&Rates{Speed: speedHist{{uint16(i), 1}}, Floor: speedHist{{uint16(i), 1}}}))
 		default:
 			t.Fatalf("Totals.%s is a %s: plus and this test need it", v.Type().Field(i).Name, f.Kind())
 		}
@@ -31,6 +33,10 @@ func TestTotalsPlusAddsEveryField(t *testing.T) {
 		case reflect.Float64:
 			if a.Float() != 2*b.Float() {
 				t.Errorf("plus left out %s: %v of %v", name, a.Float(), 2*b.Float())
+			}
+		case reflect.Pointer:
+			if r := got.Rates; r == nil || r.Speed.total() != 2 || r.Floor.total() != 2 {
+				t.Errorf("plus left out %s: %+v", name, r)
 			}
 		default:
 			if a.Int() != 2*b.Int() {
@@ -57,7 +63,7 @@ func TestPartPlusIsAdd(t *testing.T) {
 		var d Totals
 		d.addRow(r)
 		got.plus(&d)
-		if got != want {
+		if !reflect.DeepEqual(got, want) {
 			t.Errorf("row %d: plus %+v, add %+v", i, got, want)
 		}
 	}

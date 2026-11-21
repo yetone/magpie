@@ -19094,10 +19094,35 @@ const cacheHitTip = (x) => hitTip(x.cache_read || 0, cachePrompt(x));
 const cacheLeftOut = (x) => x.cache_unknown_calls
   ? t(x.cache_unknown_calls === 1 ? "{n} request left out: its vendor doesn't count the cache" : "{n} requests left out: their vendor doesn't count the cache", { n: ledNum(x.cache_unknown_calls) })
   : "";
-// timed replies' tokens a second after their first (usage.Totals.Speed)
-const ledSpeed = (x) => x?.decode_ms > 0 ? (1000 * x.decode_out) / x.decode_ms : 0;
-// the least untimed replies wrote at (usage.Totals.Floor)
-const ledFloor = (x) => x?.floor_ms > 0 ? (1000 * x.floor_out) / x.floor_ms : 0;
+// the median of a histogram of 2% bins (usage.speedHist, as JSON: bin to
+// count; bin 400 holds 1), the two middle values' mean for an even count,
+// as usage's median is; 0 for none
+function ledHistMedian(h) {
+  const bins = Object.keys(h || {}).sort((a, b) => a - b), n = bins.reduce((a, b) => a + h[b], 0);
+  let seen = 0, sum = 0;
+  for (const b of bins) {
+    for (const i of [(n - 1) >> 1, n >> 1]) if (i >= seen && i < seen + h[b]) sum += 1.02 ** (b - 399.5);
+    seen += h[b];
+  }
+  return sum / 2;
+}
+// a sum's histograms of its replies' own speeds and floors (usage.Rates)
+// with another's counted in, for a row that adds rows up
+function ledRatesPlus(a = {}, b) {
+  const out = { s: { ...a.s }, f: { ...a.f } };
+  for (const k in out) for (const bin in b[k]) out[k][bin] = (out[k][bin] || 0) + b[k][bin];
+  return out;
+}
+// timed replies' tokens a second after their first (usage.Totals.Speed):
+// the median of their own speeds, so a few replies held for minutes before
+// their first token don't pull a sum of hundreds that streamed down
+// (FallMonkey on X). One reply's is its own, not its bin's middle; a
+// chart's part has its median as tps; a sum with no rates (a magpie before
+// them) its tokens over its time.
+const ledSpeed = (x) => x?.rates && x.decode_n !== 1 ? ledHistMedian(x.rates.s) : x?.tps > 0 ? x.tps : x?.decode_ms > 0 ? (1000 * x.decode_out) / x.decode_ms : 0;
+// the least untimed replies wrote at (usage.Totals.Floor): the median of
+// their own floors, as ledSpeed is
+const ledFloor = (x) => x?.rates && x.floor_n !== 1 ? ledHistMedian(x.rates.f) : x?.floor_ms > 0 ? (1000 * x.floor_out) / x.floor_ms : 0;
 // a group's speed by one rule (Fallmonkey): timed replies "125 tok/s · 1
 // timed reply", session-file floors "≥100 tok/s · 30 replies", both with
 // the larger count first; v orders and bars, main/other the two parts
@@ -19106,9 +19131,9 @@ function ledGroupSpeed(x) {
   if (!v && !f) return null;
   const tok = (s) => t("{n} tok/s", { n: ledNum(Math.round(s)) });
   const count = (k, timed) => !k ? "" : t(timed ? (k === 1 ? "{k} timed reply" : "{k} timed replies") : (k === 1 ? "{k} reply" : "{k} replies"), { k: ledNum(k) });
-  const vTitle = !v || !kv ? "" : f ? t(kv === 1 ? "Measured on {k} reply, from its first token to its end" : "Measured on {k} replies, from their first token to their end", { k: ledNum(kv) })
-    : t(kv === 1 ? "Measured on {k} reply, from its first token to its end; the others tell no speed" : "Measured on {k} replies, from their first token to their end; the others tell no speed", { k: ledNum(kv) });
-  const fTitle = !f || !kf ? "" : t(kf === 1 ? "At least: {k} reply read from a session file, which doesn't say when its answer began, so time before that is counted too" : "At least: {k} replies read from session files, which don't say when their answers began, so time before that is counted too", { k: ledNum(kf) });
+  const vTitle = !v || !kv ? "" : f ? t(kv === 1 ? "Measured on {k} reply, from its first token to its end" : "The median of {k} replies, each measured from its first token to its end", { k: ledNum(kv) })
+    : t(kv === 1 ? "Measured on {k} reply, from its first token to its end; the others tell no speed" : "The median of {k} replies, each measured from its first token to its end; the others tell no speed", { k: ledNum(kv) });
+  const fTitle = !f || !kf ? "" : t(kf === 1 ? "At least: {k} reply read from a session file, which doesn't say when its answer began, so time before that is counted too" : "At least: the median of {k} replies read from session files, which don't say when their answers began, so time before that is counted too", { k: ledNum(kf) });
   // speed and count kept apart for a narrow card (#1623)
   const measured = v ? { s: v, head: tok(v), count: count(kv, true), title: vTitle } : null;
   const floor = f ? { s: f, head: "≥" + tok(f), count: count(kf, false), title: fTitle } : null;
@@ -19410,6 +19435,8 @@ function drawLedRank(box, l, split, metric, picked, choose, compact) {
   if (rest.length) {
     const tot = rest.reduce((acc, x) => {
       for (const k of ["calls", "errors", "loops", "input", "output", "cache_read", "cache_write", "cache_unknown", "cache_unknown_calls", "cost", "credits", "credited", "timed", "ttft_ms", "decode_ms", "decode_out", "decode_n", "floor_out", "floor_ms", "floor_n", "up_bytes", "down_bytes"]) acc[k] = (acc[k] || 0) + (x[k] || 0);
+      // "Other"'s speed is the median of all their replies, not of their medians
+      if (x.rates) acc.rates = ledRatesPlus(acc.rates, x.rates);
       return acc;
     }, { id: "\0other", name: t("Other ({n})", { n: rest.length }) });
     box.append(one(tot, "var(--faint)", true));

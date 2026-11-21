@@ -631,6 +631,10 @@ type Totals struct {
 	FloorOut int   `json:"floor_out,omitempty"`
 	FloorMs  int64 `json:"floor_ms,omitempty"`
 	FloorN   int   `json:"floor_n,omitempty"`
+	// Rates are the DecodeN replies' speeds and the FloorN floors one by
+	// one, what Speed and Floor take the median of; nil for none
+	// (speed_rank.go)
+	Rates *Rates `json:"rates,omitempty"`
 	// UpBytes, DownBytes and ImageFilesSaved are the rows' own summed
 	// (Record.UpBytes …): what went up to the vendors and came back, of
 	// the rows that kept it; none when no row did
@@ -700,21 +704,32 @@ func (t Totals) MeanTTFT() int64 {
 }
 
 // Speed is how fast the timed calls wrote, in tokens a second after their
-// first: 0 for none.
+// first: the median of the replies' own speeds, each as its row tells it
+// (Row.Decode); 0 for none. Not their tokens over their summed time: a
+// few long replies held back by a rate limit or a sleeping computer
+// weighed more than hundreds that streamed (FallMonkey on X: a ranking
+// row read ≥31 tok/s where its rows read ≥80-105).
 func (t Totals) Speed() float64 {
-	if t.DecodeMs <= 0 {
+	switch {
+	case t.DecodeN == 1 && t.DecodeMs > 0: // its own, not its bin's middle
+		return float64(t.DecodeOut) / (float64(t.DecodeMs) / 1000)
+	case t.Rates == nil:
 		return 0
 	}
-	return float64(t.DecodeOut) / (float64(t.DecodeMs) / 1000)
+	return t.Rates.Speed.median()
 }
 
 // Floor is the least the replies whose speed wasn't measured wrote at, in
-// tokens a second (Row.Floor): 0 for none.
+// tokens a second (Row.Floor): the median of the replies' own floors, as
+// Speed is, 0 for none.
 func (t Totals) Floor() float64 {
-	if t.FloorMs <= 0 {
+	switch {
+	case t.FloorN == 1 && t.FloorMs > 0:
+		return float64(t.FloorOut) / (float64(t.FloorMs) / 1000)
+	case t.Rates == nil:
 		return 0
 	}
-	return float64(t.FloorOut) / (float64(t.FloorMs) / 1000)
+	return t.Rates.Floor.median()
 }
 
 // A reply's speed is its output tokens over its decode window, the ms
@@ -974,6 +989,7 @@ func (t *Totals) addFrom(row Row, price *catalog.Price) {
 			t.DecodeMs += w
 			t.DecodeOut += n
 			t.DecodeN++
+			t.Rates = t.Rates.withSpeed(n, w)
 		}
 	}
 	if r.Input+r.Output == 0 {

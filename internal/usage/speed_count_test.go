@@ -46,11 +46,11 @@ func TestGroupSpeedSaysHowManyRepliesItIsOf(t *testing.T) {
 		by[s.ID] = s
 	}
 	sol := by["codex"]
-	if sol.Calls != 260 || sol.DecodeN != 1 || sol.Speed() != 125 || sol.FloorN != 259 || sol.Floor() != 50 {
+	if sol.Calls != 260 || sol.DecodeN != 1 || sol.Speed() != 125 || sol.FloorN != 259 || !within(sol.Floor(), 50) {
 		t.Fatalf("sol: %d calls, %d measured at %v tok/s, %d floors at %v; want 260, 1 at 125, 259 at 50", sol.Calls, sol.DecodeN, sol.Speed(), sol.FloorN, sol.Floor())
 	}
 	cc := by["claude"]
-	if cc.Calls != 42 || cc.DecodeN != 0 || cc.Speed() != 0 || cc.FloorN != 30 || cc.FloorOut != 60000 || cc.FloorMs != 600000 || cc.Floor() != 100 {
+	if cc.Calls != 42 || cc.DecodeN != 0 || cc.Speed() != 0 || cc.FloorN != 30 || cc.FloorOut != 60000 || cc.FloorMs != 600000 || !within(cc.Floor(), 100) {
 		t.Fatalf("Claude Code: %d calls, %d measured at %v, %d floors %d/%d ms at %v; want 42, none, 30 at 100", cc.Calls, cc.DecodeN, cc.Speed(), cc.FloorN, cc.FloorOut, cc.FloorMs, cc.Floor())
 	}
 	// the page's own sums count both the same way
