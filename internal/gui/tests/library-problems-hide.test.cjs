@@ -190,6 +190,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     // the pointer (at once, with reduced motion) until the one wanted is
     // the one under its own middle
     const chip = async (page, name, id) => {
+      // the Skill router row is over the list, so a row may be below the fold
+      await row(page, name).locator(".lib-agents").scrollIntoViewIfNeeded();
       const b = await row(page, name).locator(".lib-agents").boundingBox();
       await page.mouse.move(b.x + 6, b.y + b.height / 2);
       await page.waitForFunction(([v, name, id]) => {

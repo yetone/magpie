@@ -3108,7 +3108,11 @@ magpie.plugin("library", (ctx) => {
       : lib.mcpHub
       ? t("Each agent is given one server, magpie, in place of these. magpie runs each server once for all of them and hands each call to it, as server__tool. Restart an agent for it to read the change.")
       : t("Serve every server through magpie: each agent is given one server, magpie, in place of these, and any other app connects at one address.")));
-    if (lib.mcpHub) who.append(el("div", "sub lib-hubstats", hubStats()));
+    if (lib.mcpHub) {
+      const stats = el("div", "sub lib-hubstats", hubStats());
+      stats.title = stats.textContent;
+      who.append(stats);
+    }
     row.append(hubMark(), who, toggle(!!lib.mcpHub, t("MCP router"), (on) =>
       change("servers/hub", { on }, agentless()
         ? (on ? t("The MCP router is on: apps can connect at its address") : t("The MCP router is off"))
@@ -3944,7 +3948,7 @@ magpie.plugin("library", (ctx) => {
   function paintHealth(x) {
     // the hub's count of tools follows each check
     const stats = page.querySelector(".lib-hubstats");
-    if (stats) stats.textContent = hubStats();
+    if (stats) stats.textContent = stats.title = hubStats();
     const boxes = typeof x === "string" ? page.querySelectorAll(`.lib-health[data-server="${CSS.escape(x)}"]`) : [x];
     for (const b of boxes) {
       const e = health.get(b.dataset.server);

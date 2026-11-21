@@ -71,6 +71,8 @@ const scrolled = (page) => page.evaluate(() => [window.scrollX, window.scrollY, 
 // dialog is let settle first.
 const press = async (page, loc) => {
   await page.waitForFunction(() => !document.querySelector("#modal").getAnimations({ subtree: true }).length);
+  // the Skill router row is over the list, so the bars may be below the fold
+  await loc.scrollIntoViewIfNeeded();
   const b = await loc.boundingBox();
   await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
 };

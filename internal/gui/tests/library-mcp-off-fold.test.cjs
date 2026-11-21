@@ -101,7 +101,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await v.locator('.lib-server[data-server="alpha"]').waitFor();
 
         // the list holds the ones on; the ones off are under the fold, folded
-        assert.deepEqual(await names(page, ".lib-list:not(.lib-offlist)"), ["alpha", "charlie", "delta", "foxtrot", "hotel"]);
+        assert.deepEqual(await names(page, ".lib-list:not(.lib-offlist):not(.lib-hublist)"), ["alpha", "charlie", "delta", "foxtrot", "hotel"]);
         const fold = v.locator(".lib-offhead .fold");
         assert(await fold.isVisible(), "the fold shows");
         assert.equal((await fold.locator(".label").textContent()).trim(), w("Servers turned off"));
@@ -110,7 +110,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await fold.getAttribute("title"), w("Show the servers turned off"));
         const offList = v.locator(".lib-offlist");
         assert(await offList.evaluate((l) => l.hidden), "folded, the ones off are hidden");
-        const listBottom = await v.locator(".lib-list:not(.lib-offlist)").first().evaluate((e) => e.getBoundingClientRect().bottom);
+        const listBottom = await v.locator(".lib-list:not(.lib-offlist):not(.lib-hublist)").first().evaluate((e) => e.getBoundingClientRect().bottom);
         assert(await top(v.locator(".lib-offhead")) >= listBottom, "the fold is below the list");
         assert(await top(v.locator(".lib-offhead")) < await top(v.locator(".after-list").first()), "the fold is above Add server");
         assert.deepEqual(await sideways(page), [], "sideways scroll, folded");
@@ -144,11 +144,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(await names(page, ".lib-offlist"), ["bravo", "echo", "golf"]);
 
         // a server switched off moves under it, one switched on comes back up
-        await v.locator('.lib-list:not(.lib-offlist) > .lib-server[data-server="delta"] > .lib-switch').click();
+        await v.locator('.lib-list:not(.lib-offlist):not(.lib-hublist) > .lib-server[data-server="delta"] > .lib-switch').click();
         await page.waitForFunction(() => document.querySelector('#view-library .lib-offlist > .lib-server[data-server="delta"]'));
         assert.equal((await v.locator(".lib-offhead .note").textContent()).trim(), "4");
         await v.locator('.lib-offlist > .lib-server[data-server="echo"] > .lib-switch').click();
-        await page.waitForFunction(() => document.querySelector('#view-library .lib-list:not(.lib-offlist) > .lib-server[data-server="echo"]'));
+        await page.waitForFunction(() => document.querySelector('#view-library .lib-list:not(.lib-offlist):not(.lib-hublist) > .lib-server[data-server="echo"]'));
         assert.deepEqual(await names(page, ".lib-offlist"), ["bravo", "delta", "golf"]);
 
         // folded, picking opens it, and it can't be folded while picking
@@ -169,7 +169,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator('button[data-view="library"]').click();
         await v.locator(".lib-offhead .fold").waitFor();
         assert.equal((await v.locator(".lib-offhead .note").textContent()).trim(), String(NAMES.length));
-        assert(await v.locator(".lib-list:not(.lib-offlist)").first().evaluate((l) => l.hidden), "an empty list shows");
+        assert(await v.locator(".lib-list:not(.lib-offlist):not(.lib-hublist)").first().evaluate((l) => l.hidden), "an empty list shows");
         // and none off: no fold
         st.off.clear();
         await page.reload();

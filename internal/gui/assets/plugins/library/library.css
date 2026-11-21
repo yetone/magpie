@@ -63,7 +63,10 @@ body.window .lib-head { top: -2px; margin: -2px 0 0; padding: 8px 0 4px; }
 /* its switch stays beside its text in a narrow window, as a setting's does */
 .lib-list .row.lib-hub { flex-wrap: nowrap; }
 .lib-hub .name { white-space: normal; }
-.lib-hub .lib-hubstats { margin-top: 4px; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* one line, cut where it runs out: a check ending adds its tools to it in
+   place, and the router sits over the list, so a line more would move
+   every server row under the pointer (the whole count is its title) */
+.lib-hub .lib-hubstats { margin-top: 4px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* the address any other app connects at, under the switch */
 .lib-list .row.lib-hubat { flex-wrap: nowrap; align-items: center; }
 .lib-hubat > .lib-glyph { align-self: center; margin-top: 0; }

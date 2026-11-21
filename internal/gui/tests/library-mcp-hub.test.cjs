@@ -157,12 +157,6 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const v = page.locator("#view-library");
         const hub = v.locator(".lib-hub");
         await hub.waitFor();
-        // at the top: over the server list and Add server
-        assert.equal(await page.evaluate(() => {
-          const v = document.querySelector("#view-library");
-          const h = v.querySelector(".lib-hub"), l = v.querySelector(".lib-list:not(.lib-hublist)"), a = v.querySelector(".after-list");
-          return !!(h.compareDocumentPosition(l) & Node.DOCUMENT_POSITION_FOLLOWING) && !!(h.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING);
-        }), true, "the MCP router row is above the server list and Add server");
 
         // off: what it would do, and no reasons yet
         assert.equal((await hub.locator(".name").textContent()).trim(), w("MCP router"));
@@ -172,13 +166,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await sw.getAttribute("role"), "switch");
         assert.equal(await sw.getAttribute("aria-checked"), "false");
         assert.equal(await v.locator(".lib-hub-why").count(), 0);
-        // below the servers, not among them
-        const below = await page.evaluate(() => {
-          const rows = [...document.querySelectorAll("#view-library .lib-server")];
+        // at the top: over the servers and Add server, not among them
+        const above = await page.evaluate(() => {
+          const rows = [...document.querySelectorAll("#view-library .lib-server, #view-library .after-list")];
           const hub = document.querySelector("#view-library .lib-hub");
-          return rows.length > 0 && rows.every((r) => r.getBoundingClientRect().bottom <= hub.getBoundingClientRect().top);
+          return rows.length > 1 && rows.every((r) => hub.getBoundingClientRect().bottom <= r.getBoundingClientRect().top);
         });
-        assert.ok(below, "the hub's row isn't below the servers");
+        assert.ok(above, "the hub's row isn't above the servers");
         assert.deepEqual(await sideways(page), [], "sideways scroll, off");
 
         // on
