@@ -175,10 +175,10 @@ So `forwardOnce` sets two more headers on every plugin request, each dropped fir
 
 | Header | Value |
 | --- | --- |
-| `x-magpie-session` (`provider.SessionToPluginHeader`) | The session the request names, as `sessionOf` reads it: the caller's own `X-Magpie-Session`, else the agent's header (Claude Code's `x-claude-code-session-id`, OpenCode's `x-opencode-session`, Codex's `session_id` and the rest of `sessionHeaders`). |
-| `x-magpie-subagent` (`provider.SubagentToPluginHeader`) | The Claude Code subagent the request is of (`x-claude-code-agent-id`, `subOf`); never sent for the lead's own turns. |
+| `x-magpie-session` (`provider.SessionToPluginHeader`) | The session the request names, as `sessionOf` reads it: the caller's own `X-Magpie-Session`, else the agent's header (Claude Code's `x-claude-code-session-id`, OpenCode's `x-opencode-session`, Codex's `session-id`/`session_id` and the rest of `sessionHeaders`). |
+| `x-magpie-subagent` (`provider.SubagentToPluginHeader`) | The subagent the request is of: Claude Code's `x-claude-code-agent-id` (`subOf`), or a Codex spawned subagent's thread id (`collab_spawn` / `thread_spawn` / `agent_job`, from `thread_id` in turn metadata / `client_metadata` or `thread-id`, when distinct from the root session); never sent for the lead's own turns or non-spawn helper calls (`thread_title`, `guardian`, `review`). |
 
-`unsaid` in `host.js` takes both off whatever the plugin sends on. Devin 0.1.34 keys its keepalive by them. `TestPluginToldTheSession` ([`plugin_session_test.go`](../../internal/gateway/plugin_session_test.go)) sends Claude Code's lead and subagent, a caller's `X-Magpie-Session`, OpenCode's header and none, to a relayed Anthropic model and a translated Chat one, unstreamed, and checks what the plugin read and that the vendor got neither header.
+`unsaid` in `host.js` takes both off whatever the plugin sends on. Devin 0.1.34 keys its keepalive by them. `TestPluginToldTheSession` ([`plugin_session_test.go`](../../internal/gateway/plugin_session_test.go)) sends Claude Code's lead and subagent, a caller's `X-Magpie-Session`, OpenCode's header, none, and Codex's lead, spawned subagent (via headers and `client_metadata`) and helper calls, to relayed Messages/Responses models and a translated Chat one, and checks what the plugin read and that the vendor got no `x-magpie-*` header.
 
 ## The agent that asked, for a plugin
 
