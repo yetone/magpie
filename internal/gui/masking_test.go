@@ -149,6 +149,109 @@ func TestMaskingRecordsAPI(t *testing.T) {
 	}
 }
 
+// Insights › Masking's search (r3inbowari on X): was this word masked?
+// The records are searched on the server, past the page the window has,
+// by what each value stood for as the masker remembers it, whatever its
+// case, or by a placeholder as written; a record whose value the masker
+// no longer knows is said to be unknown, never a miss.
+func TestMaskingRecordsSearch(t *testing.T) {
+	const key1, key2 = "sk-proj-abcdEFGH1234ijklMNOP5678qrst", "ghp_ZYXWvuts9876RQPOnmlk5432JIHGfedcBA"
+	h := t.TempDir()
+	t.Setenv("HOME", h)
+	t.Setenv("USERPROFILE", h)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
+	if err := settings.Save(settings.Settings{Redact: true}); err != nil {
+		t.Fatal(err)
+	}
+	defer gwmw.Mask(masking.Masker{})()
+	m, _ := gwmw.Served()
+	tl := m.(gwmw.Teller)
+	add := func(key, agent string) (maskrec.Record, string) {
+		_, hits := tl.TextHits("my key is " + key)
+		if len(hits) != 1 {
+			t.Fatalf("masked %q: %+v", key, hits)
+		}
+		x := hits[0]
+		return maskrec.Add(maskrec.Record{What: "chat", Agent: agent, N: 1,
+			Values: []maskrec.Value{{Placeholder: x.Placeholder, Kind: x.Kind, By: x.By, Head: x.Head, Len: x.Len}}}), x.Placeholder
+	}
+	r1, p1 := add(key1, "claude")
+	// a record from before magpie last started: its value is gone
+	gone := maskrec.Add(maskrec.Record{What: "chat", N: 1, Values: []maskrec.Value{{Placeholder: "{{SECRET_0000dead}}", Kind: "SECRET", By: redact.ByRule}}})
+	r2, p2 := add(key2, "codex")
+	// newer than every match, so the first page of one is a miss
+	maskrec.Add(maskrec.Record{What: "chat", N: 1, Values: []maskrec.Value{{Placeholder: "{{SECRET_0000beef}}", Kind: "SECRET", By: redact.ByRule}}})
+
+	srv := webPageHandler(t, webHost{func() {}}, nil)
+	type page struct {
+		Records []maskedRecord `json:"records"`
+		More    bool           `json:"more"`
+		Unknown *bool          `json:"unknown"`
+	}
+	get := func(q url.Values) page {
+		t.Helper()
+		if !q.Has("limit") {
+			q.Set("limit", "10")
+		}
+		rw := httptest.NewRecorder()
+		srv.ServeHTTP(rw, httptest.NewRequest("GET", "/api/masking/records?"+q.Encode(), nil))
+		var out page
+		if rw.Code != http.StatusOK || json.Unmarshal(rw.Body.Bytes(), &out) != nil {
+			t.Fatalf("%v: %d %s", q, rw.Code, rw.Body)
+		}
+		return out
+	}
+	keys := func(p page) []int64 {
+		var ks []int64
+		for _, r := range p.Records {
+			ks = append(ks, r.Key)
+		}
+		return ks
+	}
+	// part of the value, in another case, past a newer record that
+	// doesn't have it, on a page of one
+	got := get(url.Values{"q": {"  ABCDefgh1234  "}, "limit": {"1"}})
+	if len(got.Records) != 1 || got.Records[0].Key != r1.Key || strings.Join(got.Records[0].Hits, ",") != p1 || got.More {
+		t.Fatalf("search by part: %v %+v", keys(got), got)
+	}
+	if got.Unknown == nil || !*got.Unknown {
+		t.Fatalf("a value the masker no longer knows went unsaid: %+v", got)
+	}
+	// every record with it, newest first; other filters still hold
+	got = get(url.Values{"q": {"sk-proj"}})
+	if len(got.Records) != 1 || got.Records[0].Key != r1.Key {
+		t.Fatalf("one match: %v", keys(got))
+	}
+	if got = get(url.Values{"q": {"key"}}); len(got.Records) != 0 {
+		t.Fatalf("the text around a value is not the value: %v", keys(got))
+	}
+	if got = get(url.Values{"q": {"ZYXW"}, "agent": {"claude"}}); len(got.Records) != 0 {
+		t.Fatalf("another agent's: %v", keys(got))
+	}
+	if got = get(url.Values{"q": {"zyxw"}, "agent": {"codex"}}); len(got.Records) != 1 || got.Records[0].Key != r2.Key {
+		t.Fatalf("by agent: %v", keys(got))
+	}
+	// a placeholder as a vendor's reply had it
+	if got = get(url.Values{"q": {p2}}); len(got.Records) != 1 || got.Records[0].Key != r2.Key {
+		t.Fatalf("by placeholder: %v", keys(got))
+	}
+	if got = get(url.Values{"q": {"{{SECRET_0000dead}}"}}); len(got.Records) != 1 || got.Records[0].Key != gone.Key {
+		t.Fatalf("an unknown value's placeholder: %v", keys(got))
+	}
+	if got = get(url.Values{"q": {"not-masked-anywhere"}}); len(got.Records) != 0 || got.More {
+		t.Fatalf("a word never masked: %v", keys(got))
+	}
+	// cut to searchMax characters: a search longer than any value finds
+	// nothing, and one that is all spaces is no search
+	if got = get(url.Values{"q": {key1 + strings.Repeat("x", 300)}}); len(got.Records) != 0 {
+		t.Fatalf("long search: %v", keys(got))
+	}
+	if got = get(url.Values{"q": {"   "}}); len(got.Records) != 4 || got.Unknown != nil {
+		t.Fatalf("blank search: %v %+v", keys(got), got)
+	}
+}
+
 // Try it under Settings › Privacy shows what a request would send: with
 // Keep a key's form on, a made-up key of the same form, not a
 // placeholder.

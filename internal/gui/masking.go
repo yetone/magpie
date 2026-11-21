@@ -27,6 +27,9 @@ type maskedRecord struct {
 	// Key is a string, as gateway.Masked's: a JS number rounds it
 	Key    int64         `json:"key,string"`
 	Values []maskedValue `json:"values,omitempty"`
+	// Hits are the placeholders whose values the search found, for the
+	// row to say which of its values it was listed for
+	Hits []string `json:"hits,omitempty"`
 }
 
 type maskedValue struct {
@@ -57,11 +60,63 @@ func shownRecord(r maskrec.Record, t gwmw.Teller) maskedRecord {
 	return out
 }
 
+// searchMax is the longest search the records take, in characters.
+const searchMax = 200
+
+// maskSearcher is a search of the records for a word: what each value
+// it looks at stood for comes from the masker's memory, in this process,
+// and goes nowhere else.
+type maskSearcher struct {
+	q, p    string // q lower-cased, and as typed for a placeholder
+	t       gwmw.Teller
+	hit     map[string]bool
+	unknown bool
+}
+
+// maskSearch is the search for q, trimmed and cut to searchMax
+// characters; nil when there is nothing to search for.
+func maskSearch(q string, t gwmw.Teller) *maskSearcher {
+	q = strings.TrimSpace(q)
+	if r := []rune(q); len(r) > searchMax {
+		q = string(r[:searchMax])
+	}
+	if q == "" {
+		return nil
+	}
+	return &maskSearcher{q: strings.ToLower(q), p: q, t: t, hit: map[string]bool{}}
+}
+
+// takes says whether v's value has the search in it, whatever its case,
+// or its placeholder is the search; a value the masker doesn't know is
+// counted as unknown.
+func (s *maskSearcher) takes(v maskrec.Value) bool {
+	if hit, seen := s.hit[v.Placeholder]; seen {
+		return hit
+	}
+	hit := v.Placeholder == s.p
+	if !hit {
+		val, ok := "", false
+		if s.t != nil {
+			val, ok = s.t.Value(v.Placeholder)
+		}
+		if !ok {
+			s.unknown = true
+			return false
+		}
+		hit = strings.Contains(strings.ToLower(val), s.q)
+	}
+	s.hit[v.Placeholder] = hit
+	return hit
+}
+
 // maskingRoutes are Settings → Privacy's record of what masking swapped:
 //   - GET /api/masking/summary?days= is maskrec.Sum;
-//   - GET /api/masking/records?before=&limit=&kind=&by=&agent=&provider=&blocked=
+//   - GET /api/masking/records?before=&limit=&kind=&by=&agent=&provider=&blocked=&q=
 //     a page of records, newest first (kind may list several, split by
-//     commas; blocked=1 keeps the requests held back);
+//     commas; blocked=1 keeps the requests held back; q keeps those with a
+//     value that has q in it, whatever its case, or whose placeholder is
+//     q, as maskSearch reads them: r3inbowari on X asked to find whether
+//     a word was masked);
 //   - GET /api/masking/record?key= one record;
 //   - GET /api/masking/value?p= what a placeholder stood for, while this
 //     magpie's masker remembers it (404 after a restart: it is never on
@@ -157,13 +212,32 @@ func maskingRoutes(mux *http.ServeMux) {
 		q := r.URL.Query()
 		before, _ := strconv.ParseInt(q.Get("before"), 10, 64)
 		limit, _ := strconv.Atoi(q.Get("limit"))
-		rs, more := maskrec.List(before, min(max(limit, 1), 200), maskrec.Filter{Kind: q.Get("kind"), By: q.Get("by"), Agent: q.Get("agent"), Provider: q.Get("provider"), Blocked: q.Get("blocked") == "1"})
+		f := maskrec.Filter{Kind: q.Get("kind"), By: q.Get("by"), Agent: q.Get("agent"), Provider: q.Get("provider"), Blocked: q.Get("blocked") == "1"}
 		t, _ := teller()
+		s := maskSearch(q.Get("q"), t)
+		if s != nil {
+			f.Value = s.takes
+		}
+		rs, more := maskrec.List(before, min(max(limit, 1), 200), f)
 		out := []maskedRecord{}
 		for _, rec := range rs {
-			out = append(out, shownRecord(rec, t))
+			mr := shownRecord(rec, t)
+			if s != nil {
+				for _, v := range rec.Values {
+					if s.takes(v) {
+						mr.Hits = append(mr.Hits, v.Placeholder)
+					}
+				}
+			}
+			out = append(out, mr)
 		}
-		writeJSON(rw, map[string]any{"records": out, "more": more})
+		res := map[string]any{"records": out, "more": more}
+		if s != nil {
+			// some value looked at that the masker no longer knows: masked
+			// before magpie last started, so the search can't tell it
+			res["unknown"] = s.unknown
+		}
+		writeJSON(rw, res)
 	})
 	mux.HandleFunc("GET /api/masking/record", func(rw http.ResponseWriter, r *http.Request) {
 		key, _ := strconv.ParseInt(r.URL.Query().Get("key"), 10, 64)

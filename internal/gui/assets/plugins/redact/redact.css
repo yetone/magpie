@@ -132,6 +132,26 @@
 .msk-chev { flex: none; display: inline-flex; color: var(--faint); }
 .msk-none { padding: 26px 12px; text-align: center; font-size: 12.5px; color: var(--muted); }
 .msk-none.err { color: var(--red); }
+/* the search: a field at the bar's end, across it when the window is
+   narrow; a find's kind is inked, and what it couldn't look at is said
+   under the list */
+.msk-q { flex: 0 1 200px; width: auto; min-width: 120px; }
+@media (max-width: 560px) { .msk-q { flex: 1 1 100%; } }
+/* on a phone's page, where a search takes a line of its own, an empty
+   one waits as a magnifier at the bar's end, so the requests still start
+   where they did; tapped or holding a word, it is the line */
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1024px) {
+  body.web .msk-bar > .msk-q:placeholder-shown:not(:focus) {
+    order: 0; flex: 0 0 30px; width: 30px; min-width: 0; height: 30px; min-height: 0; padding: 0; cursor: pointer;
+    background: var(--card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='7' cy='7' r='4.5' fill='none' stroke='%238e8e93' stroke-width='1.6'/%3E%3Cpath d='M10.4 10.4 14 14' stroke='%238e8e93' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E") center / 14px no-repeat;
+  }
+  body.web .msk-bar > .msk-q:placeholder-shown:not(:focus)::placeholder { color: transparent; }
+}
+.msk-kind.hit { border-color: var(--accent-soft); background: var(--accent-soft); color: var(--accent); }
+.msk-kind.hit b { color: inherit; }
+.msk-qnone > div:first-child { overflow-wrap: anywhere; }
+.msk-qsub { margin-top: 4px; font-size: 11.5px; }
+.msk-qnote { margin: 10px 2px 0; font-size: 11.5px; color: var(--muted); }
 .msk-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 12px; padding: 0 2px; font-size: 11.5px; color: var(--muted); }
 .msk-foot > span { flex: 1; min-width: 0; }
 .msk-vhead { display: flex; align-items: baseline; gap: 10px; margin: 12px 2px 5px; font-size: 11.5px; color: var(--muted); }

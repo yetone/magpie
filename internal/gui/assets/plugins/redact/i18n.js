@@ -2,6 +2,10 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "Find a masked word": "查找脱敏过的词",
+    "No masked value has “{q}” in it": "没有哪个脱敏的值含有「{q}」",
+    "Only the requests these filters show were searched": "只搜了当前筛选条件下的请求",
+    "magpie remembers masked values only while it runs, so requests from before it last started aren't searched": "magpie 只在运行时记得脱敏前的值，所以上次启动之前的请求搜不到",
     "{n} checked": "检查了 {n} 个",
     "{n} masked": "{n} 个有脱敏",
     "none to mask": "没有要脱敏的",
@@ -131,6 +135,10 @@ magpie.strings({
     "Sent as written in new messages; earlier ones stay masked, so the cache still holds": "新消息起按原样发送；之前的消息仍脱敏，缓存不受影响",
   },
   "zh-TW": {
+    "Find a masked word": "尋找脫敏過的詞",
+    "No masked value has “{q}” in it": "沒有哪個脫敏的值含有「{q}」",
+    "Only the requests these filters show were searched": "只搜尋了目前篩選條件下的請求",
+    "magpie remembers masked values only while it runs, so requests from before it last started aren't searched": "magpie 只在執行時記得脫敏前的值，所以上次啟動之前的請求搜尋不到",
     "{n} checked": "檢查了 {n} 個",
     "{n} masked": "{n} 個有脫敏",
     "none to mask": "沒有要脫敏的",
@@ -260,6 +268,10 @@ magpie.strings({
     "Sent as written in new messages; earlier ones stay masked, so the cache still holds": "新訊息起照原樣送出；之前的訊息仍脫敏，快取不受影響",
   },
   ja: {
+    "Find a masked word": "マスクした語を検索",
+    "No masked value has “{q}” in it": "「{q}」を含むマスクした値はありません",
+    "Only the requests these filters show were searched": "今の絞り込みで表示されるリクエストだけを検索しました",
+    "magpie remembers masked values only while it runs, so requests from before it last started aren't searched": "magpie はマスクした値を実行中しか覚えていないため、前回の起動より前のリクエストは検索されません",
     "{n} checked": "{n} 件を確認",
     "{n} masked": "{n} 件でマスク",
     "none to mask": "マスク対象なし",
@@ -389,6 +401,10 @@ magpie.strings({
     "Sent as written in new messages; earlier ones stay masked, so the cache still holds": "新しいメッセージからそのまま送信します。以前のメッセージはマスクしたままなので、キャッシュは保たれます",
   },
   de: {
+    "Find a masked word": "Maskiertes Wort suchen",
+    "No masked value has “{q}” in it": "Kein maskierter Wert enthält „{q}“",
+    "Only the requests these filters show were searched": "Gesucht wurde nur in den Anfragen, die diese Filter zeigen",
+    "magpie remembers masked values only while it runs, so requests from before it last started aren't searched": "magpie kennt maskierte Werte nur, solange es läuft, daher werden Anfragen vor dem letzten Start nicht durchsucht",
     "{n} checked": "{n} geprüft",
     "{n} masked": "{n} maskiert",
     "none to mask": "nichts zu maskieren",
