@@ -74,6 +74,13 @@ var restartApps = map[string]restartable{
 	"openmausbot": {mac: ombApp, winExe: "OpenMausBot.exe", win: func(image string) bool {
 		return winBase(image, "OpenMausBot.exe")
 	}},
+	// the Antigravity app (2.x) reads agy's sign-in from the keyring at
+	// start, so a switch of agy's account (provider.AgySwitchedAt, #1908)
+	// reaches it once it starts again; on Windows it is electron-builder's
+	// per-user %LOCALAPPDATA%\Programs\antigravity\Antigravity.exe
+	"antigravity": {mac: desktopApps["antigravity"], winExe: "Antigravity.exe", win: func(image string) bool {
+		return winBase(image, "Antigravity.exe") && winHas(image, `\antigravity\`)
+	}},
 }
 
 func winBase(image, name string) bool {
@@ -305,6 +312,17 @@ func (a *Agent) AppBehind() *AppRun {
 	if !ok || a.WSL != "" {
 		return nil
 	}
+	if a.ID == "antigravity" { // what it reads is agy's sign-in, which magpie switched
+		at := agySwitchedAt()
+		if at.IsZero() {
+			return nil
+		}
+		c, ok := findRestartable(r)
+		if !ok || !c.since.Before(at.Add(-time.Second)) {
+			return nil
+		}
+		return &AppRun{Since: c.since}
+	}
 	if !a.Wired() && !a.Disconnected() {
 		return nil
 	}
@@ -385,6 +403,10 @@ var desktopSetsHere = func() []desktopPaths {
 	home, _ := os.UserHomeDir()
 	return desktopSets(desktopdir.OS, home, os.Getenv)
 }
+
+// agySwitchedAt is when magpie last switched agy's account; a var so
+// tests set it.
+var agySwitchedAt = provider.AgySwitchedAt
 
 // restarting holds one restart per agent at a time, so a second click
 // waits for the first instead of quitting the app it just opened.

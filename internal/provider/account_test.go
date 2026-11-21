@@ -93,6 +93,11 @@ func isolate(t testing.TB) {
 	oldAgyEnv := agyLoginEnv
 	agyLoginEnv = func(string) string { return "" }
 	t.Cleanup(func() { agyLoginEnv = oldAgyEnv })
+	// nor agy's keyring entry (#1908): a test switching agy's account
+	// gets a stand-in of its own, never the system's
+	oldAgyKeyring := agyKeyringHere
+	agyKeyringHere = func() (agyKeyring, error) { return nil, errors.New("no system keyring in tests") }
+	t.Cleanup(func() { agyKeyringHere = oldAgyKeyring })
 	forgetClaudeCredential()
 	forgetClaudeStatus()
 	devinStatus.forget()

@@ -213,16 +213,18 @@ func SetKeepLogin(id string, keep bool) error {
 	return nil
 }
 
-// SetSwitchOnly has magpie only move Codex's or Claude Code's own sign-in
-// between its accounts (Provider.SwitchOnly): Codex's requests never sent
-// through the gateway for account failover, Claude's accounts serving no
-// request through the gateway (KeptToAgent). Off, both are as before.
+// SetSwitchOnly has magpie only move Codex's, Claude Code's or agy's own
+// sign-in between its accounts (Provider.SwitchOnly): Codex's requests
+// never sent through the gateway for account failover, Claude's and
+// Antigravity CLI's accounts serving no request through the gateway
+// (KeptToAgent). Off, each is as before.
 func SetSwitchOnly(id string, on bool) error {
 	p, err := Find(id)
 	if err != nil {
 		return err
 	}
-	if p.Account == nil || p.Account.Agent != p.ID || p.ID != "codex" && p.ID != "claude" {
+	agy := p.ID == agyCLIID && p.IsPlugin()
+	if !agy && (p.Account == nil || p.Account.Agent != p.ID || p.ID != "codex" && p.ID != "claude") {
 		return fmt.Errorf("magpie doesn't route %s's own requests for account failover", p.Name)
 	}
 	p.SwitchOnly = on

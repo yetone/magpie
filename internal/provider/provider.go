@@ -2760,10 +2760,24 @@ func (p Provider) On() bool { return p.Ready() && !p.Off && !p.KeptToAgent() && 
 // magpie moves to the next account with room and back, and the gateway
 // sends no request to them, so none goes through Claude Code's SDK run,
 // which spends more of the allowance than Claude Code's own sessions
-// (myduso on Discord). Codex's SwitchOnly only keeps failover out of its
+// (myduso on Discord). Antigravity CLI's is the same (#1908): its
+// accounts are agy's own sign-in, which magpie switches in the keyring
+// (agy_switch.go). Codex's SwitchOnly only keeps failover out of its
 // config.
 func (p Provider) KeptToAgent() bool {
-	return p.SwitchOnly && p.ID == "claude" && p.Account != nil && p.Account.Agent == "claude"
+	if !p.SwitchOnly || p.Account == nil {
+		return false
+	}
+	return p.ID == "claude" && p.Account.Agent == "claude" || p.ID == agyCLIID && p.IsPlugin()
+}
+
+// KeptAgentName is the agent whose own sign-in a provider KeptToAgent is
+// kept to, as a message names it.
+func (p Provider) KeptAgentName() string {
+	if p.ID == agyCLIID {
+		return "agy"
+	}
+	return "Claude Code"
 }
 
 // SetOff switches a provider off, or on again (see Provider.Off). Saving

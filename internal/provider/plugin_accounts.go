@@ -319,6 +319,9 @@ func pluginOfAgent(agent string) (plugin.Provider, bool) {
 func pluginLoginList(pp plugin.Provider) []Login { return loginsOf(pluginSide(pp)) }
 
 func switchPluginLogin(pp plugin.Provider, user string) error {
+	if pp.ID == agyCLIID && agySwitchesKeyring() { // agy's own sign-in moves (#1908)
+		return switchAgyLogin(pp, user)
+	}
 	return switchSideLogin(pluginAgent(pp), user, pluginSide(pp))
 }
 

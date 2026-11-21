@@ -38,3 +38,18 @@ func TestClaudeKeptToClaudeCodeServesNothing(t *testing.T) {
 		t.Fatalf("unticked: %d %s", rec.Code, rec.Body.String())
 	}
 }
+
+// Antigravity CLI kept to agy's own sign-in (#1908) is told as agy's,
+// with the tick to undo it named as its editor names it.
+func TestAgyKeptToAgySaysAgy(t *testing.T) {
+	p := provider.PluginForTest("agy-cli", "agy-cli")
+	p.Name, p.SwitchOnly = "Antigravity CLI", true
+	msg := switchedOff(p, "agy-cli/gemini-3-pro")
+	if !strings.Contains(msg, "kept to agy's own sign-in") || !strings.Contains(msg, `"Only switch agy's sign-in"`) || strings.Contains(msg, "Claude") {
+		t.Fatalf("switchedOff = %q", msg)
+	}
+	p.SwitchOnly = false
+	if p.KeptToAgent() {
+		t.Fatal("kept to agy with Only switch off")
+	}
+}

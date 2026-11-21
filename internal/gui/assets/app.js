@@ -1412,7 +1412,7 @@ function connectLine(a, kind) {
   if (!a.wired) {
     const src = a.source || "";
     const sw = switchEntry(a);
-    if (kindOf(a) === "agy") say(t("Not connected · once connected, start it with magpie's command"));
+    if (kindOf(a) === "agy" && !sw) say(t("Not connected · once connected, start it with magpie's command"));
     // through magpie only for failover (#1385): the line says so
     else if (a.failover) {
       say(t("Not connected · goes through magpie only to fail over to your other ChatGPT accounts"));
@@ -1631,12 +1631,17 @@ function connectRow(a, row, who, { fields, extras, fieldBtn, sw, kind }) {
 
 // Switch accounts only (the owner on X): a Claude Code or Codex not connected says its account
 let accountSwitched = null, panelAccts = null;
-const switchesAccounts = (a) => !a.wired && (a.id === "claude" || a.id === "codex");
+// agy and the Antigravity app share agy's sign-in, which magpie switches
+// between Antigravity CLI's accounts with Only switch on (#1908)
+const agyShares = (a) => /^(agy|antigravity)$/.test(a.id);
+const switchesAccounts = (a) => !a.wired && /^(claude|codex|agy|antigravity)$/.test(a.id);
+const switchesVia = (a) => agyShares(a) ? "agy-cli" : a.id;
 
 function switchable(a) {
   if (!switchesAccounts(a)) return null;
-  const p = (mode === "panel" ? panelAccts : providers || providersEarly?.got)?.providers?.find((x) => x.id === a.id && x.account?.agent === a.id);
-  return p && loginsInOrder(p.account, p)[0]?.user ? p : null;
+  const id = switchesVia(a), p = (mode === "panel" ? panelAccts : providers || providersEarly?.got)?.providers?.find((x) => x.id === id && x.account?.agent === id);
+  // agy's: only with Only switch on, where picking one signs agy in to it
+  return p && (!agyShares(a) || p.switchOnly) && loginsInOrder(p.account, p)[0]?.user ? p : null;
 }
 
 function switchEntry(a) {
@@ -1660,6 +1665,8 @@ function switchEntry(a) {
   b.append(pn ? el("span", "chev", svg(CHEV, 11, 1.7)) : svg(CHEV, 10, 1.6));
   const opts = ls.filter((l) => !l.token && !l.accessOnly).map((l) => ({ v: "u:" + l.user, name: l.user, literalName: true, note: l.lapsed ? "Sign-in required" : accountPlan({ ...l, agent: a.id }) }));
   const on = cx ? t("magpie only switches {agent}'s sign-in; its requests go straight to OpenAI", ag) : t("magpie serves no requests on these accounts");
+  // agy's sign-in is agy's own, whichever row (agy, or the Antigravity app) it is picked from
+  if (agyShares(a)) ag.agent = "agy";
   // the Only switch setting, where the accounts page offers it
   if (!cx || ls.filter((l) => !l.lapsed && (l.active || l.on)).length > 1) opts.push({ v: "only", name: t("Only switch {agent}'s sign-in", ag), literalName: true, ticked: !!p.switchOnly, note: on });
   opts.push({ v: "manage", name: "Manage accounts…", note: "" });
@@ -1686,7 +1693,7 @@ function switchEntry(a) {
 async function switchAccountTo(a, p, user) {
   const said = t("{agent} is now signed in as {user}. New {agent} sessions use this account; one already open keeps its account until it is started again.", { agent: a.name, user });
   // kept signed in to one of the user's choosing (#524): that choice moves
-  if (!await (keptLogin(p) ? accountAction("provider/keeplogin", { id: p.id, keepLogin: true, keepLoginAs: user }, said) : accountAction("login/switch", { agent: a.id, user }, said))) return;
+  if (!await (keptLogin(p) ? accountAction("provider/keeplogin", { id: p.id, keepLogin: true, keepLoginAs: user }, said) : accountAction("login/switch", { agent: switchesVia(a), user }, said))) return;
   accountSwitched = { agent: a.id, user, at: performance.now() };
   renderAgents();
 }
@@ -6113,7 +6120,7 @@ function prefetchProviders() {
   e.read.then((s) => {
     e.got = s;
     markNewPartners();
-    if (state?.agents?.some((a) => !a.wired && (a.id === "claude" || a.id === "codex"))) renderAgents();
+    if (state?.agents?.some(switchesAccounts)) renderAgents();
   }, () => { if (providersEarly === e) providersEarly = null; });
 }
 
@@ -14085,11 +14092,12 @@ function renderAccounts(a, p) {
     }
     list.append(box);
   }
-  const cx = a.agent === "codex", ag = { agent: a.agentName };
-  if (p && (cx && several || a.agent === "claude")) {
+  const cx = a.agent === "codex", agy = a.agent === "agy-cli", ag = { agent: agy ? "agy" : a.agentName };
+  if (p && (cx && several || a.agent === "claude" || agy)) {
     const [only, cb] = tick(t("Only switch {agent}'s sign-in", ag), p.switchOnly);
     const [tip, on, off] = cx ? [t("When an account is used up, magpie signs {agent} in to the next one, and requests go straight to OpenAI. Open {agent} sessions keep their account until reopened.", ag), t("magpie only switches {agent}'s sign-in; its requests go straight to OpenAI", ag), t("A connected {agent} fails over to your other accounts through magpie again", ag)]
-      : [t("When an account is used up, magpie signs {agent} in to the next one. Requests on these accounts don't go through magpie.", ag), t("magpie serves no requests on these accounts"), t("magpie serves requests on these accounts again")];
+      // agy's sign-in is the one the Antigravity app reads too (#1908)
+      : [agy ? t("Using an account signs agy and the Antigravity app in to it. Requests on these accounts don't go through magpie.") : t("When an account is used up, magpie signs {agent} in to the next one. Requests on these accounts don't go through magpie.", ag), t("magpie serves no requests on these accounts"), t("magpie serves requests on these accounts again")];
     only.title = tip;
     cb.onchange = () => accountAction("provider/switchonly", { id: p.id, switchOnly: cb.checked }, cb.checked ? on : off);
     list.append(el("div", "switch-only", only));

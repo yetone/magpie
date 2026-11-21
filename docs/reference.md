@@ -2584,6 +2584,20 @@ Claude Code, so no turn runs through Claude Code's SDK mode, which
 spends more of the allowance than Claude Code used on its own (myduso on
 Discord). Their usage is still read and shown.
 
+*Only switch agy's sign-in* under Providers › Antigravity CLI (or
+`magpie accounts switch-only agy-cli on`) does the same for agy (#1908):
+magpie serves no request on those accounts, and using one signs agy in
+to it where agy keeps its own sign-in (the keychain on macOS, Credential
+Manager on Windows, the Secret Service or agy's token file on Linux).
+The Antigravity app (2.x) reads the same sign-in, so it moves with agy.
+The rows of agy and the Antigravity app on Agents then show the account
+and switch it, as Claude Code's does. magpie renews the account with
+Google first, keeps a copy of what agy had in `agy-keyring-backup.json`
+in magpie's folder, and doesn't switch while agy or the app is in the
+middle of a turn. A running Antigravity app reads the sign-in when it
+starts: its row offers a Restart. agy started with a Gemini API key or
+Vertex AI in its environment isn't switched.
+
 **Switch accounts only.** To use magpie only to switch Claude Code (or
 Codex) between your accounts, leave it not connected on Agents and sign
 your accounts in under Providers › Claude Code. Its row on Agents then
