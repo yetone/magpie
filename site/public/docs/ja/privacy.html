@@ -169,7 +169,7 @@
       <li><b>プロバイダー</b>：オンのもの。プリセットの ID（<code>deepseek</code>）、サブスクリプションの ID（<code>codex</code>、<code>copilot</code>）、既知のコミュニティプラグインの ID（<code>plugin:kiro</code>）。自分で追加したプロバイダーは <code>custom</code>、それ以外のプラグインは <code>plugin</code> とだけ記録します。</li>
       <li><b>モデル</b>：つないだエージェントに設定されたモデルを、プロバイダー ID とベンダーのモデル ID で（<code>deepseek/deepseek-v4</code>）。キーのプロバイダーで <a href="https://models.dev">models.dev</a> に載っていないモデル ID（ローカルモデル、ファインチューン）は <code>&lt;プロバイダー&gt;/other</code>、自分のプロバイダーのモデルは <code>custom</code>、ルーティンググループは <code>group</code> です。</li>
     </ul>
-    <p>あわせて <code>magpie partner</code> イベントも送ります。プロバイダー追加シートの先頭に載る各パートナーについて、その ID で、終わった日にシートに表示された回数、行が開かれた回数、キーのページが開かれた回数、そこからプロバイダーが追加された回数です（<code>what</code>：<code>shown</code>、<code>opened</code>、<code>keys</code>、<code>added</code>。1 日にそれぞれ最大 20 回、追加は 5 回）。回数だけで、自分のプロバイダーは含みません。</p>
+    <p>あわせて <code>magpie partner</code> イベントも送ります。プロバイダー追加シートまたはプラグインページの Discover の先頭に載る各パートナーについて、その ID で、終わった日に表示された回数、行が開かれた回数、キーのページが開かれた回数、そこからプロバイダーが追加された回数またはそのプラグインがインストールされた回数（<code>what</code>：<code>shown</code>、<code>opened</code>、<code>keys</code>、<code>added</code>。1 日にそれぞれ最大 20 回、追加は 5 回）と、載っている場所（<code>slot</code>：<code>providers</code> または <code>plugins</code>）です。回数だけで、自分のプロバイダーは含みません。<code>magpie page</code> イベントは、その日にプラグインページが開かれた回数です（<code>page</code>：<code>plugins</code>。最大 20 回）。</p>
     <p id="plugins">この部分がオンのとき、magpie は同じ日に、Discover に載っているどのプラグインを入れて（オンにして）いるかを <code>usemagpie.ai</code> に伝え、Discover が各プラグインの利用者数を示せるようにします：<code>POST /api/plugins/report</code> に同じランダムな ID とプラグインの npm パッケージ名、<code>magpie-plugin</code> タグのリポジトリは <code>github:owner/repo</code>（最大 50 個）。フォルダーから入れたもの、非公開リポジトリ、Discover に載っていないパッケージのプラグインは送りません。同じ報告で、ライブラリの MCP サーバーのうち、エージェントに渡していて、magpie に同梱のライブラリのマーケット一覧に載っているものを、マーケットの ID だけで送ります（<code>context7</code>、<code>io.github.owner/name</code>。最大 50 個）。マーケットで利用者の多いものを先に並べるためです。自分で作ったサーバーや検索でだけ見つかるサーバーは送らず、アドレス、コマンド、キーも送りません。プラグインのページでのいいねは <code>POST /api/plugins/like</code> で、ID、プラグイン、オンかオフかを送ります。いいねできるのはこのコンピューターに入っているプラグインだけで、いいねしたものは <code>plugin-likes.json</code> に残ります。サイトは直近 7 日に報告した ID の数を数え、報告は 30 日で消します。アドレスはハッシュだけを 1 時間、頻度の制限のために残します。Discover は ID を含まない <code>GET /api/plugins/stats</code> で数を読みます。コードは <a href="https://github.com/yetone/magpie/blob/main/internal/stats/plugins.go">internal/stats/plugins.go</a> と <a href="https://github.com/yetone/magpie/blob/main/site/pluginstats.js">site/pluginstats.js</a> です。</p>
     <p>どのイベントにも <code>$process_person_profile: false</code> が付き、PostHog はこの ID の人物プロファイルを作りません。名前、Base URL、アカウント、キー、プロンプト、返答、使用量は送りません。まとめ全体はこのような形です。</p>
     <div class="code">
@@ -193,7 +193,9 @@
     { &quot;event&quot;: &quot;magpie uses&quot;, &quot;properties&quot;: { &quot;kind&quot;: &quot;provider&quot;, &quot;id&quot;: &quot;custom&quot;, … } },
     { &quot;event&quot;: &quot;magpie uses&quot;, &quot;properties&quot;: { &quot;kind&quot;: &quot;model&quot;, &quot;id&quot;: &quot;deepseek/deepseek-v4&quot;, … } },
     { &quot;event&quot;: &quot;magpie partner&quot;, &quot;timestamp&quot;: &quot;2026-10-12T12:00:00Z&quot;,
-      &quot;properties&quot;: { &quot;id&quot;: &quot;&lt;partner id&gt;&quot;, &quot;what&quot;: &quot;shown&quot;, &quot;count&quot;: 3, &quot;day&quot;: &quot;2026-10-12&quot;, … } }
+      &quot;properties&quot;: { &quot;id&quot;: &quot;&lt;partner id&gt;&quot;, &quot;what&quot;: &quot;shown&quot;, &quot;count&quot;: 3, &quot;day&quot;: &quot;2026-10-12&quot;, &quot;slot&quot;: &quot;providers&quot;, … } },
+    { &quot;event&quot;: &quot;magpie page&quot;, &quot;timestamp&quot;: &quot;2026-10-12T12:00:00Z&quot;,
+      &quot;properties&quot;: { &quot;page&quot;: &quot;plugins&quot;, &quot;count&quot;: 2, &quot;day&quot;: &quot;2026-10-12&quot;, … } }
   ]
 }</pre>
     </div>
@@ -236,8 +238,8 @@
     <ul>
       <li><code>/api/latest</code>：更新情報。<code>noAutoUpdate</code> がオンでなければ 6 時間ごと。<code>?lang=</code> であなたの言語のノートを取ります。<span class="ui">設定</span> → <span class="ui">情報</span> → <span class="ui">アップデートチャネル</span>が安定版かデイリーなら <code>?channel=stable</code> か <code>?channel=daily</code> も付けます。新しくインストールした magpie も一度 <code>?channel=stable</code> を尋ね、自分が安定版なら安定版にとどまります。どちらもあなたが誰かは含みません。<code>/api/notes</code> は更新後の「新機能」です。</li>
       <li><code>/files/&lt;バージョン&gt;/&lt;ファイル&gt;</code>：更新とインストーラがダウンロードするリリースファイルで、Cloudflare R2 から配信されます。サイトにないファイルは github.com へ転送されます。何も計測しません。</li>
-      <li><code>/api/partners</code>：プロバイダー追加シートのパートナー一覧。6 時間ごと。パートナーが載っている間、10 回に 1 回の取得を Cloudflare が示す国とともに <code>magpie partners fetch</code> として数えます。</li>
-      <li><code>/go/&lt;パートナー&gt;/site</code> と <code>/go/&lt;パートナー&gt;/keys</code>：パートナーの公式サイトとキーのページへのリンクをブラウザーで開くと、移動の前に <code>magpie partner go</code>（どのパートナーか、どのリンクか、地域、国）として数えます。</li>
+      <li><code>/api/partners</code>：プロバイダー追加シートとプラグインページのパートナー一覧。6 時間ごと。パートナーが載っている間、10 回に 1 回の取得を Cloudflare が示す国とともに <code>magpie partners fetch</code> として数えます。</li>
+      <li><code>/go/&lt;パートナー&gt;/site</code> と <code>/go/&lt;パートナー&gt;/keys</code>：パートナーの公式サイトとキーのページへのリンクをブラウザーで開くと、移動の前に <code>magpie partner go</code>（どのパートナーか、どのリンクか、地域、載っている場所、国）として数えます。</li>
       <li><code>/api/plugins/stats</code>：Discover の各プラグインの利用者数といいねの数と、ライブラリのマーケットの各 MCP サーバーの利用者数。多くて 1 時間に 1 回で、ID は含みません。<a href="#plugins">プラグインの報告</a>といいねは ID を含み、共有がオンのときだけ送ります。</li>
       <li><code>/api/icon?url=…</code>：プラグイン、インポートリンク、ライブラリが示すアイコンはここを経由して取得するので、アイコンのあるホストに見えるのはあなたではなく Cloudflare のアドレスです。画像を中継するだけで、数えることも記録することもしません。</li>
     </ul>

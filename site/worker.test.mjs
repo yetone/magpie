@@ -517,6 +517,7 @@ test("partners: /go counts the click", async () => {
   assert.equal(captured[0].properties.id, p.id);
   assert.equal(captured[0].properties.what, what);
   assert.equal(captured[0].properties.$process_person_profile, false);
+  assert.equal(captured[0].properties.slot, p.plugin ? "plugins" : "providers");
   // a HEAD goes on but isn't counted
   captured.length = 0;
   const head = await worker.fetch(new Request("https://usemagpie.ai/go/" + p.id + "/" + what, { method: "HEAD" }), {}, ctx);

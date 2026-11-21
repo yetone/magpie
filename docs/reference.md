@@ -4719,11 +4719,14 @@ and models to look after first, by magpie's own ids only:
   fine-tune) is only `<provider>/other`; one on a provider of your own is
   only `custom`, a routing group only `group`;
 - how many of each, and how many routing groups you have.
-- for each partner (a sponsor listed first in the add sheet), by its id, how
-  many times a day the add sheet showed it, its row was opened, its key
-  page was opened and a provider was added from it (at most 20 of each,
-  5 adds), kept in `~/.cache/magpie/partner-counts.json` for at most 14
-  days and sent the day after as `magpie partner` events;
+- for each partner (a sponsor listed first in the add sheet, or in the
+  Plugins page's Discover), by its id, how many times a day it was shown,
+  its row was opened, its key page was opened and a provider was added
+  from it or its plugin installed (at most 20 of each, 5 adds), with where
+  it is listed (`slot`: `providers` or `plugins`), and how many times a
+  day the Plugins page was opened (at most 20), kept in
+  `~/.cache/magpie/partner-counts.json` for at most 14 days and sent the
+  day after as `magpie partner` and `magpie page` events;
 - to usemagpie.ai, not PostHog, which of the plugins Discover lists are
   installed and on (npm names, or `github:owner/repo` for a repository
   tagged `magpie-plugin`; never a folder, a private repository or an
@@ -4753,8 +4756,8 @@ Partners are also counted where usemagpie.ai sees them, whatever these
 settings say, as any website sees its visits. The partner list
 (`/api/partners`) gives each partner's website and key page as a
 `https://usemagpie.ai/go/<id>/site|keys[/<region>]` link, which sends a
-`magpie partner go` event (the partner, which link, the region, and the
-country Cloudflare gives) before sending the browser on; and one in ten
+`magpie partner go` event (the partner, which link, the region, where it
+is listed, and the country Cloudflare gives) before sending the browser on; and one in ten
 fetches of the list sends a `magpie partners fetch` event with weight 10
 and the country, while a partner is listed. Each event has an id of its
 own: no install id, address or account goes with it. The code is

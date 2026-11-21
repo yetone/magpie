@@ -246,6 +246,9 @@
   // the sidebar's dot, followed: Plugins opens on Installed, where the
   // plugins with an update are named at the top
   window.pluginTabTo = (id) => { tab = id; };
+  // opened from another page (app.js show): on Installed when an update
+  // waits, and the opening counted for its partners (provider.CountPage)
+  window.pmOpen = (up) => { if (up) tab = "installed"; api("page", { page: "plugins" }).catch(() => {}); };
   // pluginQuery: Discover, looking for q (the add sheet found nothing by it)
   window.pluginQuery = (q) => {
     query = q;

@@ -41,12 +41,31 @@ type PartnerCount struct {
 	ID    string `json:"id"`
 	What  string `json:"what"`
 	Count int    `json:"count"`
+	// Slot is where the partner is listed: "plugins" (the Plugins page),
+	// "providers" (the add sheet), or "" for one no longer listed.
+	Slot string `json:"slot,omitempty"`
+}
+
+// PageCount is one day's count of how often a page was opened.
+type PageCount struct {
+	Day   string `json:"day"` // 2006-01-02, UTC
+	Page  string `json:"page"`
+	Count int    `json:"count"`
 }
 
 type partnerCounts struct {
 	// Days is day → partner → what → count.
 	Days map[string]map[string]map[string]int `json:"days"`
+	// Pages is day → page → times opened.
+	Pages map[string]map[string]int `json:"pages,omitempty"`
 }
+
+// The pages counted, and the most counted of each a day. The Plugins page
+// is where the plugin partners are listed, so how often it is opened is
+// what their places are worth.
+const PagePlugins = "plugins"
+
+var pageCaps = map[string]int{PagePlugins: 20}
 
 var partnerCountMu sync.Mutex
 
@@ -130,6 +149,68 @@ func CountPartner(what string, ids ...string) {
 	}
 }
 
+// CountPage counts an opening of page, today, under the partners'
+// switches.
+func CountPage(page string) {
+	limit := pageCaps[page]
+	if limit == 0 || !partnerCounting() {
+		return
+	}
+	partnerCountMu.Lock()
+	defer partnerCountMu.Unlock()
+	c := readPartnerCounts()
+	now := time.Now().UTC()
+	day := now.Format("2006-01-02")
+	for d := range c.Pages {
+		if t, err := time.Parse("2006-01-02", d); err != nil || now.Sub(t) > partnerDays*24*time.Hour {
+			delete(c.Pages, d)
+		}
+	}
+	if c.Pages[day] == nil {
+		c.Pages[day] = map[string]int{}
+	}
+	if c.Pages[day][page] >= limit {
+		return
+	}
+	c.Pages[day][page]++
+	writePartnerCounts(c)
+}
+
+// PageCounts are the page counts of the days before today, to be sent.
+func PageCounts(now time.Time) []PageCount {
+	partnerCountMu.Lock()
+	defer partnerCountMu.Unlock()
+	c := readPartnerCounts()
+	today := now.UTC().Format("2006-01-02")
+	var out []PageCount
+	for day, pages := range c.Pages {
+		if day >= today {
+			continue
+		}
+		for page, n := range pages {
+			out = append(out, PageCount{Day: day, Page: page, Count: n})
+		}
+	}
+	slices.SortFunc(out, func(a, b PageCount) int {
+		return cmp.Or(cmp.Compare(a.Day, b.Day), cmp.Compare(a.Page, b.Page))
+	})
+	return out
+}
+
+// partnerSlot is where the partner id is listed now: "plugins",
+// "providers", or "" when it isn't.
+func partnerSlot(id string) string {
+	for _, p := range listedPartners() {
+		if p.ID == id {
+			if p.IsPlugin() {
+				return "plugins"
+			}
+			return "providers"
+		}
+	}
+	return ""
+}
+
 // PartnerCounts are the counts of the days before today, to be sent.
 func PartnerCounts(now time.Time) []PartnerCount {
 	partnerCountMu.Lock()
@@ -137,13 +218,19 @@ func PartnerCounts(now time.Time) []PartnerCount {
 	c := readPartnerCounts()
 	today := now.UTC().Format("2006-01-02")
 	var out []PartnerCount
+	slots := map[string]string{}
 	for day, ids := range c.Days {
 		if day >= today {
 			continue
 		}
+		for id := range ids {
+			if _, ok := slots[id]; !ok {
+				slots[id] = partnerSlot(id)
+			}
+		}
 		for id, whats := range ids {
 			for what, n := range whats {
-				out = append(out, PartnerCount{Day: day, ID: id, What: what, Count: n})
+				out = append(out, PartnerCount{Day: day, ID: id, What: what, Count: n, Slot: slots[id]})
 			}
 		}
 	}
@@ -172,6 +259,12 @@ func PartnerCountsSent(now time.Time) {
 			sent = true
 		}
 	}
+	for d := range c.Pages {
+		if d < today {
+			delete(c.Pages, d)
+			sent = true
+		}
+	}
 	if sent {
 		writePartnerCounts(c)
 	}
@@ -184,6 +277,9 @@ func readPartnerCounts() partnerCounts {
 	}
 	if c.Days == nil {
 		c.Days = map[string]map[string]map[string]int{}
+	}
+	if c.Pages == nil {
+		c.Pages = map[string]map[string]int{}
 	}
 	return c
 }

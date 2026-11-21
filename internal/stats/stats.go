@@ -113,7 +113,13 @@ func Send(ctx context.Context, version, what string, now time.Time) error {
 		}
 		// a partner's counts of the days ended, each at its own day
 		for _, c := range provider.PartnerCounts(now) {
-			e := event("magpie partner", map[string]any{"id": c.ID, "what": c.What, "count": c.Count, "day": c.Day})
+			e := event("magpie partner", map[string]any{"id": c.ID, "what": c.What, "count": c.Count, "day": c.Day, "slot": c.Slot})
+			e["timestamp"] = c.Day + "T12:00:00Z"
+			uses = append(uses, e)
+		}
+		// how often the Plugins page, where its partners are, was opened
+		for _, c := range provider.PageCounts(now) {
+			e := event("magpie page", map[string]any{"page": c.Page, "count": c.Count, "day": c.Day})
 			e["timestamp"] = c.Day + "T12:00:00Z"
 			uses = append(uses, e)
 		}

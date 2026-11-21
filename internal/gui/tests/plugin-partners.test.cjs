@@ -9,6 +9,7 @@
 // button (Install, Installed), its site through usemagpie.ai/go, and opens
 // the plugin's page. Counted as the add sheet's: shown once a showing,
 // opened when opened; an install magpie counts itself (provider.AddPlugin),
+// and the page's own openings are counted (provider.CountPage),
 // so the page says nothing of it. A kind picked lists the partners of that
 // kind, a source picked none, a search those it matches; with no partner
 // there is no section. Every language, both engines, 980px and 420px; the
@@ -43,6 +44,7 @@ function server(lang, opts) {
     const url = new URL(req.url());
     const json = (data) => route.fulfill({ json: data });
     if (url.pathname === "/api/partner") { opts.counted.push(req.postDataJSON()); return route.fulfill({ status: 204, body: "" }); }
+    if (url.pathname === "/api/page") { opts.pages.push(req.postDataJSON()); return route.fulfill({ status: 204, body: "" }); }
     if (url.pathname === "/api/open") { opts.opened.push(req.postDataJSON()?.url); return json({}); }
     if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:${JSON.stringify(lang)},theme:"light",web:false};` });
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
@@ -84,7 +86,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     for (const lang of Object.keys(L)) for (const width of [980, 420]) {
       await t.test(lang + " " + width, async () => {
         const w = L[lang];
-        const opts = { partners: pluginPartners, counted: [], opened: [], added: [] };
+        const opts = { partners: pluginPartners, counted: [], opened: [], added: [], pages: [] };
         const page = await (await browser.newContext({ viewport: { width, height: 820 } })).newPage();
         page.setDefaultTimeout(8000);
         page.setDefaultNavigationTimeout(60000);
@@ -135,6 +137,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await kinds.first().click();
         await sec.waitFor();
         assert.equal(shown().length, 1, "counted again on a redraw");
+        // the page's opening counted once (provider.CountPage), not each redraw
+        assert.deepEqual(opts.pages, [{ page: "plugins" }]);
         // an origin picked: none
         await view.locator(".pm-bar .pm-pop").first().click();
         await page.locator(".proto-menu .pm-item", { hasText: await tr("Other authors") }).click();
@@ -200,7 +204,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
     t.after(() => browser.close());
     for (const lang of ["en", "zh"]) {
-      const opts = { partners: [], counted: [], opened: [], added: [] };
+      const opts = { partners: [], counted: [], opened: [], added: [], pages: [] };
       const page = await (await browser.newContext({ viewport: { width: 980, height: 820 } })).newPage();
       const errors = [];
       page.on("pageerror", (e) => errors.push(e.message));

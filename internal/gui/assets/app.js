@@ -23458,7 +23458,6 @@ async function show(v) {
   if (gatewayMode && GATEWAY_HIDES.includes(v)) v = "providers";
   v = offView(v);
   if (v !== view) {
-    if (v === "plugins" && pluginUpdates) window.pluginTabTo?.("installed");
     if (view === "providers" && (editing !== null || importing || importingApps)) {
       if (!await cancelEdit(true)) return false;
     } else if (!$("#modal").hidden && !$("#modal").classList.contains("out")) {
@@ -23480,6 +23479,9 @@ async function show(v) {
     magpie.call(view, "leave");
   }
   if (v !== view && !jump) backTo = null;
+  // Plugins opened from another page: on Installed when an update waits, and
+  // the opening counted for its partners (plugins.js pmOpen, provider.CountPage)
+  if (v !== view && v === "plugins") window.pmOpen?.(pluginUpdates);
   view = v;
   renderBack();
   window.hideAccounts?.page();

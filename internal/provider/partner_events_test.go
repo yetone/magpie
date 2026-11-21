@@ -82,3 +82,52 @@ func TestCountPartner(t *testing.T) {
 		t.Fatalf("counted while off or unlisted: %v", got)
 	}
 }
+
+// The Plugins page's openings are counted by the day up to their cap,
+// sent the day after and then gone; a page not counted, or the switches
+// off, add nothing. A partner's count says where it is listed.
+func TestCountPage(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	t.Setenv("DO_NOT_TRACK", "")
+	t.Setenv("MAGPIE_NO_STATS", "")
+	resetPartners()
+	t.Cleanup(resetPartners)
+	var body atomic.Value
+	body.Store(`{"partners":[{"id":"acme","name":"Acme","chat":"https://a.example/v1"},{"id":"lens","name":"Lens","plugin":"@lens/opencode-lens"}]}`)
+	t.Setenv("MAGPIE_PARTNERS", partnerFeedServer(t, &body).URL)
+	fetchPartnersNow()
+
+	for range 25 {
+		CountPage(PagePlugins)
+	}
+	CountPage("settings")
+	t.Setenv("DO_NOT_TRACK", "1")
+	CountPage(PagePlugins)
+	t.Setenv("DO_NOT_TRACK", "")
+	CountPartner(PartnerShown, "acme", "lens")
+
+	now := time.Now()
+	if got := PageCounts(now); len(got) != 0 {
+		t.Fatalf("today's page counts are sent before the day ends: %v", got)
+	}
+	tomorrow := now.Add(24 * time.Hour)
+	got := PageCounts(tomorrow)
+	if len(got) != 1 || got[0].Page != PagePlugins || got[0].Count != 20 || got[0].Day != now.UTC().Format("2006-01-02") {
+		t.Fatalf("page counts = %+v, want plugins 20 today", got)
+	}
+	slots := map[string]string{}
+	for _, c := range PartnerCounts(tomorrow) {
+		slots[c.ID] = c.Slot
+	}
+	if slots["acme"] != "providers" || slots["lens"] != "plugins" {
+		t.Fatalf("slots = %v, want acme providers, lens plugins", slots)
+	}
+	PartnerCountsSent(tomorrow)
+	if got := PageCounts(tomorrow.Add(24 * time.Hour)); len(got) != 0 {
+		t.Fatalf("page counts sent again: %v", got)
+	}
+}

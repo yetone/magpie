@@ -12240,7 +12240,7 @@ Unless you turn that part off, one `magpie uses` event follows for each agent, p
 - **providers.** that are on: a preset’s id (`deepseek`), a subscription’s (`codex`, `copilot`), a known community plugin’s (`plugin:kiro`). A provider you added yourself is only `custom`; any other plugin only `plugin`.
 - **models.** the connected agents are set to, as provider id and vendor model id (`deepseek/deepseek-v4`). On a key’s provider, a model id that [models.dev](https://models.dev) doesn’t list (a local model, a fine-tune) is only `<provider>/other`; a model on your own provider is `custom`; a routing group is `group`.
 
-With them go `magpie partner` events: for each partner listed first in the add sheet, by its id, how many times on a day that has ended the sheet showed it, its row was opened, its key page was opened, and a provider was added from it (`what`: `shown`, `opened`, `keys`, `added`; at most 20 a day each, 5 adds). Counts only, never a provider of your own.
+With them go `magpie partner` events: for each partner listed first in the add sheet or in the Plugins page’s Discover, by its id, how many times on a day that has ended it was shown, its row was opened, its key page was opened, and a provider was added from it or its plugin installed (`what`: `shown`, `opened`, `keys`, `added`; at most 20 a day each, 5 adds), and where it is listed (`slot`: `providers` or `plugins`). Counts only, never a provider of your own. A `magpie page` event says how many times on that day the Plugins page was opened (`page`: `plugins`; at most 20).
 
 With that part on, magpie also tells `usemagpie.ai`, on the same day, which of the plugins Discover lists are installed and on, so Discover can say how many use each one: `POST /api/plugins/report` with the same random id and the plugins’ npm names, or `github:owner/repo` for a repository tagged `magpie-plugin` (at most 50). A plugin from a folder, a private repository or a package Discover doesn’t list is never named. The same report names the MCP servers in your Library that an agent is given and that the Library’s market lists from what ships with magpie, by their market ids only (`context7`, `io.github.owner/name`; at most 50), so the market can put the most used first; a server of your own, or one found only by a search, is never named, nor its address, command or keys. A like on a plugin’s page goes as `POST /api/plugins/like` with the id, the plugin and whether it is on, and only for a plugin installed here; the plugins you liked are kept in `plugin-likes.json`. The site counts the ids that reported a plugin in the last 7 days, drops a report after 30 days, and keeps your address only hashed, for an hour, to limit how often it is asked. Discover reads the counts from `GET /api/plugins/stats`, which carries no id. The code is [internal/stats/plugins.go](https://github.com/yetone/magpie/blob/main/internal/stats/plugins.go) and [site/pluginstats.js](https://github.com/yetone/magpie/blob/main/site/pluginstats.js).
 
@@ -12265,7 +12265,9 @@ Every event carries `$process_person_profile: false`, so PostHog keeps no person
     { "event": "magpie uses", "properties": { "kind": "provider", "id": "custom", … } },
     { "event": "magpie uses", "properties": { "kind": "model", "id": "deepseek/deepseek-v4", … } },
     { "event": "magpie partner", "timestamp": "2026-10-12T12:00:00Z",
-      "properties": { "id": "<partner id>", "what": "shown", "count": 3, "day": "2026-10-12", … } }
+      "properties": { "id": "<partner id>", "what": "shown", "count": 3, "day": "2026-10-12", "slot": "providers", … } },
+    { "event": "magpie page", "timestamp": "2026-10-12T12:00:00Z",
+      "properties": { "page": "plugins", "count": 2, "day": "2026-10-12", … } }
   ]
 }
 ```
@@ -12314,8 +12316,8 @@ magpie asks its own site for a few things, whatever the privacy settings say, as
 
 - `/api/latest`: the update feed, every 6 hours unless `noAutoUpdate` is on, with `?lang=` for the notes in your language, and `?channel=stable` or `?channel=daily` when Settings → About → Update channel is Stable or Daily; a fresh install asks `?channel=stable` once too, to stay on Stable when it is Stable’s version. Neither says who you are. `/api/notes` gives What’s new after an update.
 - `/files/<version>/<file>`: the release files an update and the installer download, served from Cloudflare R2. A file the site doesn’t hold is sent on to github.com. Nothing is counted.
-- `/api/partners`: the add sheet’s partner list, every 6 hours. One fetch in ten is counted as a `magpie partners fetch` event, with the country Cloudflare gives, while a partner is listed.
-- `/go/<partner>/site` and `/go/<partner>/keys`: a partner’s website and key-page links, opened in your browser, are counted (the partner, which link, a region, a country) as `magpie partner go` before you are sent on.
+- `/api/partners`: the partner list of the add sheet and the Plugins page, every 6 hours. One fetch in ten is counted as a `magpie partners fetch` event, with the country Cloudflare gives, while a partner is listed.
+- `/go/<partner>/site` and `/go/<partner>/keys`: a partner’s website and key-page links, opened in your browser, are counted (the partner, which link, a region, where it is listed, a country) as `magpie partner go` before you are sent on.
 - `/api/plugins/stats`: Discover’s counts of how many use and like each plugin, and the Library market’s of how many use each MCP server, at most once an hour. It carries no id; the plugin report and likes do, and go only with sharing what you use on.
 - `/api/icon?url=…`: icons named by a plugin, an import link or the library are fetched through it, so their hosts see Cloudflare’s address, not yours. The worker passes the picture on and counts and keeps nothing.
 

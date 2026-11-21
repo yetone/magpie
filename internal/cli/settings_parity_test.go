@@ -488,6 +488,7 @@ var notYet = map[string]string{
 	"POST /api/keys/{action}":                    P,  // providers.go
 	"POST /api/login/{action}":                   P,  // providers.go
 	"POST /api/open":                             W,  // providers.go
+	"POST /api/page":                             W,  // providers.go
 	"POST /api/partner":                          P,  // providers.go
 	"POST /api/providers/arrange":                W,  // providers.go
 	"POST /api/signin":                           P,  // providers.go

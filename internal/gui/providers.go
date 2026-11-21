@@ -3943,6 +3943,14 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 		}
 		rw.WriteHeader(http.StatusNoContent)
 	})
+	// a page opened whose openings are counted (provider.CountPage): the
+	// Plugins page, where its partners are listed
+	mux.HandleFunc("POST /api/page", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ Page string }
+		_ = json.NewDecoder(io.LimitReader(r.Body, 1024)).Decode(&in)
+		provider.CountPage(in.Page)
+		rw.WriteHeader(http.StatusNoContent)
+	})
 	mux.HandleFunc("POST /api/open", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct{ URL string }
 		_ = json.NewDecoder(r.Body).Decode(&in)

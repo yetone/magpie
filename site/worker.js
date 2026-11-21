@@ -127,7 +127,7 @@ export default {
       let id, what, region, to, counted;
       try {
         [, , id, what, region] = url.pathname.split("/").map(decodeURIComponent);
-        if ((to = goTarget(PARTNERS, id, what, region))) counted = ["magpie partner go", { id, what, region: region || "" }];
+        if ((to = goTarget(PARTNERS, id, what, region))) counted = ["magpie partner go", { id, what, region: region || "", slot: PARTNERS.find((p) => p.id === id).plugin ? "plugins" : "providers" }];
         else if (region === undefined && (to = sponsorTarget(SPONSORS, id, what))) counted = ["magpie sponsor go", { id, where: what }];
       } catch {}
       if (!to) return new Response("not found\n", { status: 404 });

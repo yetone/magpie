@@ -169,7 +169,7 @@
       <li><b>供应商</b>：开启的供应商。预设的 ID（<code>deepseek</code>）、订阅的（<code>codex</code>、<code>copilot</code>）、已知社区插件的（<code>plugin:kiro</code>）。你自己添加的供应商只记作 <code>custom</code>，其他插件只记作 <code>plugin</code>。</li>
       <li><b>模型</b>：接入的 agent 设定的模型，记为供应商 ID 加厂商模型 ID（<code>deepseek/deepseek-v4</code>）。密钥类供应商上 <a href="https://models.dev">models.dev</a> 没收录的模型 ID（本地模型、微调模型）只记作 <code>&lt;供应商&gt;/other</code>；你自己供应商上的模型记作 <code>custom</code>；路由组记作 <code>group</code>。</li>
     </ul>
-    <p>同时发送 <code>magpie partner</code> 事件：添加供应商页里排在最前的每个合作伙伴，按它的 ID，在已结束的某一天里被展示、行被打开、Key 页面被打开、从它添加供应商的次数（<code>what</code>：<code>shown</code>、<code>opened</code>、<code>keys</code>、<code>added</code>；每天每项最多 20 次，添加最多 5 次）。只有次数，从不包含你自己的供应商。</p>
+    <p>同时发送 <code>magpie partner</code> 事件：添加供应商页或插件页 Discover 里排在最前的每个合作伙伴，按它的 ID，在已结束的某一天里被展示、行被打开、Key 页面被打开、从它添加供应商或安装它的插件的次数（<code>what</code>：<code>shown</code>、<code>opened</code>、<code>keys</code>、<code>added</code>；每天每项最多 20 次，添加最多 5 次），以及它所在的位置（<code>slot</code>：<code>providers</code> 或 <code>plugins</code>）。只有次数，从不包含你自己的供应商。<code>magpie page</code> 事件记录那一天插件页被打开的次数（<code>page</code>：<code>plugins</code>；最多 20 次）。</p>
     <p id="plugins">这部分开着时，magpie 当天还会告诉 <code>usemagpie.ai</code> 装了 Discover 里列出的哪些插件（且已开启），让 Discover 显示每个插件有多少人在用：<code>POST /api/plugins/report</code>，带同一个随机 ID 和插件的 npm 包名；打了 <code>magpie-plugin</code> 标签的仓库记作 <code>github:owner/repo</code>（最多 50 个）。来自本地文件夹、私有仓库或 Discover 没列出的包的插件，永远不会发送。同一次上报还会带上资源库里分给了 agent、且资源库市场随 magpie 自带列出的 MCP 服务器，只用市场 ID（<code>context7</code>、<code>io.github.owner/name</code>，最多 50 个），让市场把用的人最多的排在前面；你自己的服务器、只靠搜索找到的服务器永远不会发送，服务器的地址、命令和密钥也不会。在插件页点赞时发 <code>POST /api/plugins/like</code>，带 ID、插件名和点赞还是取消，只有本机装了的插件才能点赞；点过赞的插件记在 <code>plugin-likes.json</code>。网站只统计近 7 天上报过某个插件的 ID 数，30 天后删除上报记录；你的 IP 只以哈希形式保存一小时，用来限制请求频率。Discover 从 <code>GET /api/plugins/stats</code> 读取计数，这个请求不带 ID。代码见 <a href="https://github.com/yetone/magpie/blob/main/internal/stats/plugins.go">internal/stats/plugins.go</a> 和 <a href="https://github.com/yetone/magpie/blob/main/site/pluginstats.js">site/pluginstats.js</a>。</p>
     <p>每个事件都带 <code>$process_person_profile: false</code>，PostHog 不为这个 ID 建用户档案。不发送名称、Base URL、账号、密钥、提示词、回复和用量。一整批大致如下：</p>
     <div class="code">
@@ -193,7 +193,9 @@
     { &quot;event&quot;: &quot;magpie uses&quot;, &quot;properties&quot;: { &quot;kind&quot;: &quot;provider&quot;, &quot;id&quot;: &quot;custom&quot;, … } },
     { &quot;event&quot;: &quot;magpie uses&quot;, &quot;properties&quot;: { &quot;kind&quot;: &quot;model&quot;, &quot;id&quot;: &quot;deepseek/deepseek-v4&quot;, … } },
     { &quot;event&quot;: &quot;magpie partner&quot;, &quot;timestamp&quot;: &quot;2026-10-12T12:00:00Z&quot;,
-      &quot;properties&quot;: { &quot;id&quot;: &quot;&lt;partner id&gt;&quot;, &quot;what&quot;: &quot;shown&quot;, &quot;count&quot;: 3, &quot;day&quot;: &quot;2026-10-12&quot;, … } }
+      &quot;properties&quot;: { &quot;id&quot;: &quot;&lt;partner id&gt;&quot;, &quot;what&quot;: &quot;shown&quot;, &quot;count&quot;: 3, &quot;day&quot;: &quot;2026-10-12&quot;, &quot;slot&quot;: &quot;providers&quot;, … } },
+    { &quot;event&quot;: &quot;magpie page&quot;, &quot;timestamp&quot;: &quot;2026-10-12T12:00:00Z&quot;,
+      &quot;properties&quot;: { &quot;page&quot;: &quot;plugins&quot;, &quot;count&quot;: 2, &quot;day&quot;: &quot;2026-10-12&quot;, … } }
   ]
 }</pre>
     </div>
@@ -236,8 +238,8 @@
     <ul>
       <li><code>/api/latest</code>：更新信息，每 6 小时一次（开了 <code>noAutoUpdate</code> 则不请求），带 <code>?lang=</code> 取对应语言的说明；<span class="ui">设置</span> → <span class="ui">关于</span> → <span class="ui">更新渠道</span>选了稳定版或每日版时还带 <code>?channel=stable</code> 或 <code>?channel=daily</code>；新安装的 magpie 也会请求一次 <code>?channel=stable</code>，若自己就是稳定版，便留在稳定版。两者都不含你是谁。<code>/api/notes</code> 在更新后给出“新功能”。</li>
       <li><code>/files/&lt;版本&gt;/&lt;文件&gt;</code>：更新和安装脚本下载的发布文件，由 Cloudflare R2 提供；站点上没有的文件会转到 github.com。不做任何统计。</li>
-      <li><code>/api/partners</code>：添加供应商页的合作伙伴列表，每 6 小时一次。在有合作伙伴上架时，每十次拉取记一次 <code>magpie partners fetch</code> 事件，附 Cloudflare 给出的国家。</li>
-      <li><code>/go/&lt;合作伙伴&gt;/site</code> 和 <code>/go/&lt;合作伙伴&gt;/keys</code>：在浏览器里打开合作伙伴的官网和 Key 页面链接时，先记一次 <code>magpie partner go</code>（哪个合作伙伴、哪个链接、地区、国家），再跳转。</li>
+      <li><code>/api/partners</code>：添加供应商页和插件页的合作伙伴列表，每 6 小时一次。在有合作伙伴上架时，每十次拉取记一次 <code>magpie partners fetch</code> 事件，附 Cloudflare 给出的国家。</li>
+      <li><code>/go/&lt;合作伙伴&gt;/site</code> 和 <code>/go/&lt;合作伙伴&gt;/keys</code>：在浏览器里打开合作伙伴的官网和 Key 页面链接时，先记一次 <code>magpie partner go</code>（哪个合作伙伴、哪个链接、地区、所在位置、国家），再跳转。</li>
       <li><code>/api/plugins/stats</code>：Discover 里每个插件的在用人数和点赞数，以及资源库市场里每个 MCP 服务器的在用人数，最多每小时取一次，不带 ID；<a href="#plugins">插件上报</a>和点赞带 ID，只在开着分享时发送。</li>
       <li><code>/api/icon?url=…</code>：插件、导入链接和库里的图标经它获取，图标所在的服务器只看到 Cloudflare 的地址，看不到你的。它只转发图片，不计数也不记录。</li>
     </ul>
