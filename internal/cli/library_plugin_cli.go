@@ -13,8 +13,8 @@ import (
 )
 
 const libraryPluginUsage = `magpie library plugin [list] [--json]   the plugins in the library, and the agents each is given to
-  magpie library plugin import <source> [plugin…] [agents=a,b…|none]   Library › Claude plugins › Find plugins and
-                                     Install: <source> is a folder here (a plugin's, a Pi package's or a marketplace's),
+  magpie library plugin import <source> [plugin…] [agents=a,b…|none]   put a source's plugins in the library, as
+                                     Library › Claude plugins does: <source> is a folder here (a plugin's, a Pi package's or a marketplace's),
                                      owner/repo, or a git address. A marketplace's plugins are named after it; with no
                                      agents= the plugin goes to every agent the Library shows, as the page does, and
                                      agents=none keeps it in the library for projects alone
