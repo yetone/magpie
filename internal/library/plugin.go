@@ -1099,7 +1099,11 @@ func installPlugins(p *PluginProbe, input string, names, agents []string, as str
 	case len(names) == 0 && len(p.Candidates) == 1:
 		picked = p.Candidates
 	case len(names) == 0:
-		return nil, fmt.Errorf("%s lists %d plugins: pick the ones to install", p.Marketplace, len(p.Candidates))
+		var all []string
+		for _, c := range p.Candidates {
+			all = append(all, c.Name)
+		}
+		return nil, fmt.Errorf("%s lists %d plugins (%s): pick the ones to install", p.Marketplace, len(p.Candidates), strings.Join(all, ", "))
 	default:
 		for _, n := range names {
 			i := slices.IndexFunc(p.Candidates, func(c PluginCandidate) bool { return c.Name == n })

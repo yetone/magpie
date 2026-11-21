@@ -54,6 +54,8 @@ const libraryUsage = `magpie library                     what the library gives 
   magpie library skill auto-update on|off      fetch each skill from GitHub or git again by itself when it changes there (one changed here stays)
   magpie library skill use-library <name> <agent>   an agent's own skill by that name is in the way: set it aside, link the library's
   magpie library skill keep-own <name> <agent>      …or keep the agent's, and take the agent off the library's
+  magpie library plugin [list]       the library's plugins (Library › Claude plugins): magpie library plugin help
+  magpie library plugin import <folder | owner/repo | git address> [plugin…] [agents=a,b…|none]   Find plugins and Install
   magpie library project …           a project folder's own skills (Library › Projects): magpie library project help
   magpie library native              what plugins Codex and Claude Code and packages Pi installed themselves declare (read only; the agent loads them)
   magpie library rtk                 which agents run their shell commands through RTK (rtk-ai.app), to save tokens
@@ -287,6 +289,8 @@ func libraryCmd(args []string) error {
 		return rtkCmd(rest)
 	case "project", "projects":
 		return libraryProjectCmd(rest)
+	case "plugin", "plugins":
+		return libraryPluginCmd(rest)
 	case "help", "-h", "--help":
 		fmt.Print("  " + libraryUsage)
 		return nil
