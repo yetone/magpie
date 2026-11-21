@@ -422,6 +422,9 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-rowacts { display: flex; gap: 2px; flex: none; opacity: 0; transition: opacity .14s; }
 .lib-row:hover .lib-rowacts, .lib-rowacts:focus-within { opacity: 1; }
 .lib-icon { width: 26px; height: 26px; padding: 0; display: inline-grid; place-items: center; }
+/* a row's buttons keep their size: a long command squeezed them, so each
+   row's Bring in and Remove sat at another x down the list */
+.lib-row > .lib-icon, .lib-row > .action { flex: none; }
 .lib-rowacts.busy { opacity: 1; }
 .lib-icon.busy, .lib-icon.busy:disabled { opacity: 1; color: var(--muted); }
 /* busy: app.js glyphBusy has put the spinner's arc in place of the glyph */
