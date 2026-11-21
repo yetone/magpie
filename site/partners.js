@@ -127,11 +127,11 @@ export const PARTNERS = [
     id: "sidrune",
     name: "Sidrune AI",
     regions: [
-      { id: "cn", name: "China", chat: "https://cn.sidrune.ai/v1", responses: "https://cn.sidrune.ai/v1", anthropic: "https://cn.sidrune.ai", keysUrl: "https://cn.sidrune.ai/register?promo=MAGPIE3", website: "https://cn.sidrune.ai/" },
-      { id: "global", name: "Global", chat: "https://global.sidrune.ai/v1", responses: "https://global.sidrune.ai/v1", anthropic: "https://global.sidrune.ai", keysUrl: "https://global.sidrune.ai/register?promo=MAGPIE3", website: "https://global.sidrune.ai/" },
+      { id: "cn", name: "China", chat: "https://cn.sidrune.ai/v1", responses: "https://cn.sidrune.ai/v1", anthropic: "https://cn.sidrune.ai", keysUrl: "https://cn.sidrune.ai/register?promo=MAGPIE3", website: "https://cn.sidrune.ai/?promo=MAGPIE3" },
+      { id: "global", name: "Global", chat: "https://global.sidrune.ai/v1", responses: "https://global.sidrune.ai/v1", anthropic: "https://global.sidrune.ai", keysUrl: "https://global.sidrune.ai/register?promo=MAGPIE3", website: "https://global.sidrune.ai/?promo=MAGPIE3" },
     ],
     keysUrl: "https://cn.sidrune.ai/register?promo=MAGPIE3",
-    website: "https://cn.sidrune.ai/",
+    website: "https://cn.sidrune.ai/?promo=MAGPIE3",
     iconUrl: "https://usemagpie.ai/img/partner-sidrune.png",
     notes: {
       en: "Claude at 85% off, $3 free on sign-up",
