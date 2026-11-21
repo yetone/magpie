@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/tidwall/gjson"
 
@@ -251,15 +253,28 @@ type errAdvice struct {
 
 func (e errAdvice) Error() string { return e.err.Error() }
 
+// adviseLog writes to app.log what the gateway knows of a failed advisor
+// call: its model, the error_code the client is told, how long the ask
+// took, and what failed (the upstream's status and message, or the step).
+// The client is told only the code, and the sub-call's usage row says it
+// ran and what it cost; nothing tied a turn's "unavailable" to a cause,
+// so a timeout, a broken reply and a refused request looked the same and
+// the billed call left no trace to judge the provider by (#7354).
+func adviseLog(model, code string, took time.Duration, what string) {
+	log.Printf("advisor: asking %s failed in %s (the client is told %q): %s", model, took.Round(time.Millisecond), code, logSafe(what))
+}
+
 // advise asks the advisor model, model, about q, the model's request, and
 // what it said before calling the advisor.
 func (s *Server) advise(ctx context.Context, q *Request, said []Part, model string) (string, error) {
+	began := time.Now()
 	body := buildAnthropic(adviceFor(q, said), model)
 	// the caller named the advisor's model, not magpie's settings, so it is
 	// asked as the caller: the key's models and limits hold it (no
 	// magpieChose, which a search's or a title's model takes)
 	r, err := http.NewRequestWithContext(ownAsk(ctx), http.MethodPost, "http://magpie/v1/messages", nil)
 	if err != nil {
+		adviseLog(model, "unavailable", time.Since(began), err.Error())
 		return "", errAdvice{"unavailable", err}
 	}
 	r.Header.Set("Content-Type", "application/json")
@@ -293,6 +308,14 @@ func (s *Server) advise(ctx context.Context, q *Request, said []Part, model stri
 				code = "too_many_requests"
 			}
 		}
+		what := fmt.Sprintf("%d %s", w.Code, msg)
+		switch {
+		case ctx.Err() != nil:
+			what = ctx.Err().Error() + ", the ask cut short (" + what + ")"
+		case err != nil:
+			what = "its reply didn't parse (" + what + ")"
+		}
+		adviseLog(model, code, time.Since(began), what)
 		return "", errAdvice{code, fmt.Errorf("%s: %s", model, msg)}
 	}
 	var text strings.Builder
@@ -303,6 +326,9 @@ func (s *Server) advise(ctx context.Context, q *Request, said []Part, model stri
 	}
 	advice := strings.TrimSpace(text.String())
 	if advice == "" {
+		// the call ran and was billed, but nothing came back to give the
+		// model: the shape that left no trace anywhere (#7354)
+		adviseLog(model, "unavailable", time.Since(began), "it answered with no advice")
 		return "", errAdvice{"unavailable", fmt.Errorf("%s said nothing", model)}
 	}
 	return advice, nil

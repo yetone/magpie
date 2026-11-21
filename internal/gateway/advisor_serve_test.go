@@ -23,6 +23,7 @@ type advisedUpstream struct {
 	exec    []string // the executor's requests
 	advisor []string // the advisor model's
 	fail    int      // the advisor model's status, 0 = answers
+	empty   bool     // the advisor model answers 200 with no text
 }
 
 func (u *advisedUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -36,6 +37,10 @@ func (u *advisedUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if u.fail != 0 {
 			w.WriteHeader(u.fail)
 			io.WriteString(w, `{"error":{"message":"slow down","type":"rate_limit_error"}}`)
+			return
+		}
+		if u.empty {
+			io.WriteString(w, chatSSE("", "", ""))
 			return
 		}
 		io.WriteString(w, chatSSE("Check the tests first.", "", ""))
@@ -246,6 +251,46 @@ func TestAdvisorFailureIsAnErrorCode(t *testing.T) {
 	content, _ := blocks[2]["content"].(map[string]any)
 	if content["type"] != "advisor_tool_result_error" || content["error_code"] == "" {
 		t.Fatalf("result %v", blocks[2])
+	}
+}
+
+// A failed advisor call is in app.log with what the gateway knows of it
+// (#7354: the call ran and was billed, the client got only error_code
+// "unavailable", and app.log held nothing of it, so a timeout, a broken
+// reply and a refused request looked the same): the advisor's model, how
+// long the ask took, the upstream's status and message, and the code the
+// client is told. A 200 with no advice in it is logged too — the call the
+// provider answers and bills while its result never reaches the model.
+func TestAdvisorFailureIsLogged(t *testing.T) {
+	u := advisedSetup(t)
+	u.fail = 503
+	l := catchLog(t)
+	blocks := sendAdvised(t, New(), advisorTurn("v/glm-5.1", "adv/adv-pro"), false)
+	content, _ := blocks[2]["content"].(map[string]any)
+	if content["error_code"] != "overloaded" {
+		t.Fatalf("error_code %v", content)
+	}
+	line := l.String()
+	for _, want := range []string{"advisor", "adv/adv-pro", "503", "slow down", `"overloaded"`} {
+		if !strings.Contains(line, want) {
+			t.Fatalf("the log holds no %q: %s", want, line)
+		}
+	}
+
+	// the call the upstream answers and bills, with nothing in it for the
+	// model: the client is told "unavailable", and the log says the answer
+	// came back empty rather than failed
+	u.mu.Lock()
+	u.fail, u.empty = 0, true
+	u.mu.Unlock()
+	blocks = sendAdvised(t, New(), advisorTurn("v/glm-5.1", "adv/adv-pro"), false)
+	content, _ = blocks[2]["content"].(map[string]any)
+	if content["error_code"] != "unavailable" {
+		t.Fatalf("error_code %v", content)
+	}
+	line = l.String()
+	if !strings.Contains(line, "no advice") || !strings.Contains(line, `"unavailable"`) {
+		t.Fatalf("the empty answer isn't logged: %s", line)
 	}
 }
 
