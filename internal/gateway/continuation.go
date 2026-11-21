@@ -502,6 +502,9 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 	// usage frame, which went to Codex as a response.completed with
 	// nothing in it: codealc on X)
 	var voids bool
+	// named: the reply limit the client named, which a void's error
+	// names (a limit asked for in its place, voidRoom, isn't the agent's)
+	named := request.MaxTokens
 	empties := 0 // the times such a reply was asked again here
 	said, stop := false, ""
 	var kept []Event       // the reply's end, while nothing is said in it
@@ -807,7 +810,21 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 				// nowhere: its budget is spent, and a second ask at the
 				// same max_tokens would mostly spend it twice over before
 				// the error (#2972, its review)
-				failed = cutVoidFailed(p.Name, request.MaxTokens)
+				if request.MaxTokens <= 0 && s.noteVoid(p, model, this.Output) && r.Context().Err() == nil {
+					// the request named no limit, and the API's own
+					// default cut it: asked again here, once, for the
+					// room the model has (voidRoom), the reasoning the
+					// client has staying and the next try's following it
+					if n := roomedOutput(s.voidRoomOf(p.ID, model), contextOf(p, model), estimate(request)); n > 0 {
+						roomed := *request
+						roomed.MaxTokens, request = n, &roomed
+						before, this = before.plus(this, false), Usage{}
+						kept, stop = nil, ""
+						enc.keepalive()
+						continue
+					}
+				}
+				failed = cutVoidFailed(p.Name, named)
 				break
 			}
 			for _, ev := range kept {

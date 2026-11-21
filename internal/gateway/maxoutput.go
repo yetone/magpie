@@ -401,3 +401,95 @@ func withThinkingRoom(p provider.Provider, model string, proto provider.Protocol
 // thinkingRoomBelow is the largest reply limit a request names that is
 // raised for thinking: a client that asked for more has made room.
 const thinkingRoomBelow = 16384
+
+// voidRoomUnknown is the reply limit a model whose own isn't known is
+// asked for once its API's default cut a reply that said nothing
+// (voidRoom): what the OpenAI-compatible APIs of today's reasoning
+// models take, four times the 8192 a relay's Gemini default cut at.
+const voidRoomUnknown = 32768
+
+// voidRoom is the reply limit to ask p's model for, a request naming
+// none, after its API's own default cut a reply having spent spent
+// tokens on nothing but reasoning (cutVoid): the model's own limit
+// (askedOutput) when it is more than was spent, else voidRoomUnknown
+// when the model's limit isn't known and that is more. 0 when there is
+// no more room to ask for: the model's own was what cut it.
+//
+// JNDliuliuM on X (v0.1.4613): Hermes's subagents, on a Gemini model at
+// a relay's Chat endpoint, named no max_tokens, as Hermes doesn't for a
+// custom provider; the relay cut every reply at 8192 tokens of reasoning,
+// and thirteen 502s later three subagents had failed their tasks.
+func voidRoom(p provider.Provider, model string, spent int) int {
+	own := askedOutput(p, model)
+	switch {
+	case own > spent:
+		return own
+	case own <= 0 && spent < voidRoomUnknown:
+		return voidRoomUnknown
+	}
+	return 0
+}
+
+// voidRoomKey is the key of p's model in voidRooms.
+func voidRoomKey(providerID, model string) string { return providerID + "\x00" + model }
+
+// noteVoid remembers, of a reply from p's model cut at its length having
+// said nothing on a request that named no reply limit, the limit to ask
+// that model for from now on when a request names none (voidRoom); the
+// API's default is the same every ask. It says whether there is one.
+func (s *Server) noteVoid(p provider.Provider, model string, spent int) bool {
+	n := voidRoom(p, model, spent)
+	if n <= 0 {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.voidRooms == nil {
+		s.voidRooms = make(map[string]int)
+	}
+	k := voidRoomKey(p.ID, model)
+	if s.voidRooms[k] < 0 {
+		// its API turned the room asked for away (forgetVoidRoom)
+		return false
+	}
+	s.voidRooms[k] = n
+	return true
+}
+
+// voidRoomOf is the reply limit p's model is asked for when a request
+// names none (noteVoid), 0 when its API's default never cut it void.
+func (s *Server) voidRoomOf(providerID, model string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return max(s.voidRooms[voidRoomKey(providerID, model)], 0)
+}
+
+// forgetVoidRoom drops the limit noteVoid remembered for p's model, its
+// API having turned it away as too large: a request naming none is sent
+// none there again, and no void of the model's asks for more.
+func (s *Server) forgetVoidRoom(providerID, model string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.voidRooms == nil {
+		s.voidRooms = make(map[string]int)
+	}
+	s.voidRooms[voidRoomKey(providerID, model)] = -1
+}
+
+// withVoidRoom is body, in proto's words, asking p's model for the room
+// noteVoid remembered when it names no reply limit of its own (the
+// window it shares with the prompt allowing), and whether it was. A
+// limit the client named goes as it is: its own choice.
+func (s *Server) withVoidRoom(p provider.Provider, model string, proto provider.Protocol, body []byte) ([]byte, bool) {
+	if namesOutput(proto, body) {
+		return body, false
+	}
+	n := roomedOutput(s.voidRoomOf(p.ID, model), contextOf(p, model), len(body)/4)
+	if n <= 0 {
+		return body, false
+	}
+	if b, ok := withReplyCap(proto, body, n); ok {
+		return b, true
+	}
+	return body, false
+}
