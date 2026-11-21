@@ -10,6 +10,7 @@ package provider
 
 import (
 	"fmt"
+	"maps"
 	"math"
 	"strconv"
 	"strings"
@@ -17,9 +18,9 @@ import (
 
 // KeyPriceRate is the price rate the key keyID bills at: its own when the
 // user gave it one; else, on a provider with a top-up rate, its group's
-// rate read from the relay times that (key_rate_read.go) once one is
-// read; else the provider's (0: the price as listed). own says the user
-// gave the key its rate.
+// rate read from the relay times that and the key's factor
+// (key_rate_read.go) once one is read; else the provider's (0: the price
+// as listed). own says the user gave the key its rate.
 func (p Provider) KeyPriceRate(keyID string) (rate float64, own bool) {
 	if r, ok := p.KeyPriceRates[strings.ToLower(keyID)]; ok && r > 0 {
 		return r, true
@@ -31,7 +32,8 @@ func (p Provider) KeyPriceRate(keyID string) (rate float64, own bool) {
 }
 
 // readKeyPriceRate is the key's group rate read from its relay times the
-// provider's top-up rate, when it has one and a rate was read.
+// provider's top-up rate and the key's factor, when it has a top-up rate
+// and a rate was read.
 func (p Provider) readKeyPriceRate(keyID string) (float64, bool) {
 	if p.TopUpRate <= 0 || p.Account != nil || keyID == "" {
 		return 0, false
@@ -40,7 +42,103 @@ func (p Provider) readKeyPriceRate(keyID string) (float64, bool) {
 	if !ok {
 		return 0, false
 	}
-	return math.Round(g*p.TopUpRate*1e6) / 1e6, true
+	return math.Round(g*p.TopUpRate*p.KeyRateFactor(keyID)*1e6) / 1e6, true
+}
+
+// KeyRateFactor is what the key keyID's read rate is multiplied by
+// (@YIXIE233 on X: under one relay a group whose upstream caches 90% of a
+// prompt costs a third of one that caches 60%, at the same group rate): the
+// one the user gave it, else 1. It never changes a rate the user typed.
+func (p Provider) KeyRateFactor(keyID string) float64 {
+	if f, ok := p.KeyRateFactors[strings.ToLower(keyID)]; ok && KeyRateFactorOK(f) == "" {
+		return f
+	}
+	return 1
+}
+
+// KeyRateFactorOK says what is wrong with a key's factor, "" when nothing:
+// above 0 up to 1000, at most four decimals. None is 1.
+func KeyRateFactorOK(f float64) string {
+	if math.IsNaN(f) || f <= 0 || f > 1000 {
+		return "a key's factor is above 0 up to 1000; take it off for 1"
+	}
+	if math.Abs(f*10000-math.Round(f*10000)) > 1e-6 {
+		return "a key's factor has at most four decimals, like 1.25"
+	}
+	return ""
+}
+
+// SetKeyRateFactor gives the key ref (its id or name) of the provider id
+// a factor on its read rate, or with nil none (1) again. Nothing is read
+// from the relay for it.
+func SetKeyRateFactor(id, ref string, f *float64) error {
+	if f != nil {
+		if bad := KeyRateFactorOK(*f); bad != "" {
+			return fmt.Errorf("%s, not %v", bad, *f)
+		}
+	}
+	p, err := Find(id)
+	if err != nil {
+		return err
+	}
+	if p.Account != nil {
+		return fmt.Errorf("%s is a subscription: a factor is for an API key's read rate", p.Name)
+	}
+	r, ok := p.accountRef(ref)
+	if !ok {
+		return fmt.Errorf("%s has no key %q", p.Name, ref)
+	}
+	k := strings.ToLower(r)
+	m := maps.Clone(p.KeyRateFactors)
+	if m == nil {
+		m = map[string]float64{}
+	}
+	if f == nil {
+		if _, had := m[k]; !had {
+			return nil
+		}
+		delete(m, k)
+	} else {
+		m[k] = *f
+	}
+	p.KeyRateFactors = m
+	return Save(*p)
+}
+
+// ParseKeyRateFactor reads a key's factor as the CLI takes it: a number
+// ("1.5", "1.5x", "×0.8"), or default (nil) for none.
+func ParseKeyRateFactor(s string) (*float64, error) {
+	v := strings.ToLower(strings.TrimSpace(s))
+	switch v {
+	case "default", "off", "none", "-":
+		return nil, nil
+	}
+	v = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(v, "×"), "x"), "x"))
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return nil, fmt.Errorf("a key's factor is a number like 1.5 or 0.8, or default for none, not %q", s)
+	}
+	if bad := KeyRateFactorOK(f); bad != "" {
+		return nil, fmt.Errorf("%s, not %v", bad, f)
+	}
+	return &f, nil
+}
+
+// normalKeyRateFactors is m as it is kept: key ids in lower case, factors
+// that aren't one, and 1, left out; nil for none.
+func normalKeyRateFactors(m map[string]float64) map[string]float64 {
+	var out map[string]float64
+	for k, f := range m {
+		k = strings.ToLower(strings.TrimSpace(k))
+		if k == "" || f == 1 || KeyRateFactorOK(f) != "" {
+			continue
+		}
+		if out == nil {
+			out = map[string]float64{}
+		}
+		out[k] = f
+	}
+	return out
 }
 
 // atKeyRate is p as the key keyID bills: its price rate the key's own when

@@ -3852,6 +3852,22 @@ body:not(.side-nav) #addSheet > .row-head.stuck::before { opacity: 1; box-shadow
 .editor .key-rate { display: grid; grid-template-columns: minmax(0, 1fr) 96px; align-items: center; gap: 8px; min-width: 0; }
 .editor .key-rate .who { font-size: 12px; font-weight: 500; color: var(--fg-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .editor .key-rate input { min-width: 0; width: 100%; }
+/* a key's factor on its read rate (@YIXIE233 on X): a third column,
+   named once over it, while the provider has a top-up rate */
+.editor .key-rate .key-rate-factor, .editor .key-rate-head { display: none; }
+.editor .fx .key-rate, .editor .fx .key-rate-head { grid-template-columns: minmax(0, 1fr) 96px 80px; }
+.editor .fx .key-rate .key-rate-factor { display: block; }
+.editor .fx .key-rate-head { display: grid; gap: 8px; margin-top: 4px; padding: 0 11px; font-size: 12px; color: var(--fg-2); }
+.editor .key-rate-head span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* narrow: a key's name over its two boxes, the factor still under its head */
+.editor .key-rates-all { container-type: inline-size; }
+@container (max-width: 320px) {
+  .editor .fx .key-rate { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); row-gap: 4px; }
+  .editor .fx .key-rate .who { grid-column: 1 / -1; }
+  .editor .fx .key-rate-head { grid-template-columns: minmax(0, 1fr); }
+  .editor .fx .key-rate-head span:not(:last-child) { display: none; }
+  .editor .fx .key-rate-head span:last-child { text-align: right; }
+}
 /* past eight keys their lines fold behind All N keys, opened with a filter */
 .editor .acct-proxy-tools { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .editor .acct-proxy-tools .acct-proxy-filter { flex: 1 1 auto; min-width: 0; }

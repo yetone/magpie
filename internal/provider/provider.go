@@ -613,6 +613,12 @@ type Provider struct {
 	// bills at that times this, unless it has a rate in KeyPriceRates.
 	// 0 is none: no group rate is read.
 	TopUpRate float64 `json:"topUpRate,omitempty"`
+	// KeyRateFactors is, for a provider with a TopUpRate, what each key's
+	// read rate is multiplied by, by its KeyID (@YIXIE233 on X: groups of
+	// one relay whose upstream caches differ cost 2-3x apart at the same
+	// group rate). A key not in it has 1; a rate in KeyPriceRates is
+	// never multiplied (see key_rate.go).
+	KeyRateFactors map[string]float64 `json:"keyRateFactors,omitempty"`
 	// zeroRate marks a PriceRate of 0 that is a rate, a free group's, not
 	// the price as listed; set by atKeyRate alone
 	zeroRate bool
@@ -1024,6 +1030,7 @@ func (p Provider) clone() Provider {
 	p.KeySpendCaps = maps.Clone(p.KeySpendCaps)
 	p.KeyOwnBalances = maps.Clone(p.KeyOwnBalances)
 	p.KeyPriceRates = maps.Clone(p.KeyPriceRates)
+	p.KeyRateFactors = maps.Clone(p.KeyRateFactors)
 	if p.AccountWindowCaps != nil {
 		m := make(map[string]map[string]int, len(p.AccountWindowCaps))
 		for k, v := range p.AccountWindowCaps {
@@ -1897,6 +1904,7 @@ func normalize(p Provider) Provider {
 	p.KeySpendCaps = normalKeySpendCaps(p.KeySpendCaps)
 	p.KeyOwnBalances = normalKeyOwnBalances(p.KeyOwnBalances)
 	p.KeyPriceRates = normalKeyPriceRates(p.KeyPriceRates)
+	p.KeyRateFactors = normalKeyRateFactors(p.KeyRateFactors)
 	if TopUpRateOK(p.TopUpRate) != "" {
 		p.TopUpRate = 0
 	}

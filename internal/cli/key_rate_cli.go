@@ -7,13 +7,14 @@ import (
 	"github.com/yetone/magpie/internal/provider"
 )
 
-const keyRateUsage = "magpie provider key-rate <id> [key [rate|default]]"
+const keyRateUsage = "magpie provider key-rate <id> [key [rate|default | factor <f>|default]]"
 
 // keyRateCmd shows, or sets, the price rate each of a provider's API keys
 // bills at (@tnt12231 on X: one relay, keys in groups at 0.5× and 1.2×):
-// a key's own, or the provider's (provider/key_rate.go).
+// a key's own, or the provider's (provider/key_rate.go). factor sets what
+// a key's rate read from its relay is multiplied by (@YIXIE233 on X).
 func keyRateCmd(rest []string) error {
-	if len(rest) < 1 || len(rest) > 3 {
+	if len(rest) < 1 || len(rest) > 4 || (len(rest) == 4) != (len(rest) > 2 && rest[2] == "factor") {
 		return fmt.Errorf("%s", keyRateUsage)
 	}
 	p, err := provider.Find(rest[0])
@@ -23,7 +24,18 @@ func keyRateCmd(rest []string) error {
 	if p.Account != nil {
 		return fmt.Errorf("%s is a subscription: a price rate of its own is for an API key (the provider's is in its editor)", p.Name)
 	}
-	if len(rest) > 2 {
+	if len(rest) == 4 {
+		f, err := provider.ParseKeyRateFactor(rest[3])
+		if err != nil {
+			return err
+		}
+		if err := provider.SetKeyRateFactor(p.ID, rest[1], f); err != nil {
+			return err
+		}
+		if p, err = provider.Find(p.ID); err != nil {
+			return err
+		}
+	} else if len(rest) > 2 {
 		r, err := provider.ParseKeyPriceRate(rest[2])
 		if err != nil {
 			return err
@@ -63,7 +75,11 @@ func keyRateCmd(rest []string) error {
 		case own:
 			fmt.Println(name, "· ×"+rateText(r))
 		case read && p.TopUpRate > 0:
-			fmt.Println(name, muted.Render("· ×"+rateText(r)+", its group's ×"+rateText(g)+" read from the relay, at the top-up rate ×"+rateText(p.TopUpRate)))
+			factor := ""
+			if f := p.KeyRateFactor(k.ID); f != 1 {
+				factor = " × factor " + rateText(f)
+			}
+			fmt.Println(name, muted.Render("· ×"+rateText(r)+", its group's ×"+rateText(g)+" read from the relay, at the top-up rate ×"+rateText(p.TopUpRate)+factor))
 		case r > 0:
 			fmt.Println(name, muted.Render("· ×"+rateText(r)+", the provider's"))
 		default:

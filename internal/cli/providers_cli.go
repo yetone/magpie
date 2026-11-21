@@ -115,10 +115,11 @@ const providerUsage = `usage:
                                           how much an API key may spend, in USD as the Usage page prices its calls,
                                           a day (the default), a month or in all from now: at it, routing takes the
                                           key for used up and goes on to the other keys and the fallbacks
-  magpie provider key-rate <id> [key [rate|default]]
+  magpie provider key-rate <id> [key [rate|default | factor <f>|default]]
                                           the price rate one API key bills at against the official price, as a relay
                                           bills its key groups apart (e.g. 0.5): the Usage page counts that key's calls
-                                          at it; default has it bill at the provider's rate
+                                          at it; default has it bill at the provider's rate. factor multiplies a rate
+                                          read from the relay (top-up rate) for that key, e.g. 1.5; default for none
   magpie provider key-balance <id> [key [usd|¥cny|off] [--refill monthly[:day]|weekly[:mon…sun]|daily|off] [--expiring amount@yyyy-mm-dd|off]… [--expiring-remove [amount@]yyyy-mm-dd]…]
                                           the balance on an API key whose vendor tells none, typed from its own page
                                           in USD or in yuan (¥100): the Usage page shows it less what magpie prices the
