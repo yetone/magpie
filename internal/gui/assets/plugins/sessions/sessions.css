@@ -132,7 +132,9 @@ body.window .sm-group .row.sm-sess { padding-left: 32px; }
   .row.sm-sess .cost { min-width: 58px; }
 }
 @media (max-width: 420px) {
-  .sm-head { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; row-gap: 6px; }
+  /* the search field fills the head's last row here, so the head's own
+     margin is the whole space to the list */
+  .sm-head { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; row-gap: 6px; margin-bottom: var(--find-gap); }
   .sm-switch { grid-column: 1 / -1; }
   .sm-agent-pick { max-width: 100%; }
   .sm-filter { grid-column: 1; grid-row: 2; width: 100%; min-width: 0; }

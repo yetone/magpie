@@ -435,7 +435,7 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 @media (prefers-reduced-motion: reduce) { .lib-icon.busy svg > * { animation: none; } }
 
 /* the skill finder */
-.lib-install { margin-bottom: 4px; }
+.lib-install { margin-bottom: var(--find-gap); }
 .lib-find { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 12px; }
 .lib-find input { flex: 1; min-width: 0; height: 28px; border: 0; outline: none; background: none; font-size: 13px; color: var(--fg); }
 .lib-find input::placeholder { color: var(--faint); }
@@ -560,7 +560,7 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 
 /* the market: servers and skills to add, each with its own picture */
 .mk { display: flex; flex-direction: column; }
-.mk-find { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; margin-bottom: 10px; border-radius: 10px; background: var(--card); border: 1px solid var(--line); transition: border-color .14s, box-shadow .14s; }
+.mk-find { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; margin-bottom: var(--find-gap); border-radius: 10px; background: var(--card); border: 1px solid var(--line); transition: border-color .14s, box-shadow .14s; }
 .mk-find:focus-within { border-color: color-mix(in srgb, var(--fg) 35%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--fg) 7%, transparent); }
 .mk-find input { flex: 1; min-width: 0; height: 100%; border: 0; outline: none; background: none; font-size: 13px; color: var(--fg); }
 .mk-find input::placeholder { color: var(--faint); }

@@ -1,5 +1,8 @@
 /* magpie — one quiet surface, real logos, controls that read as pop-up buttons. */
 :root {
+  /* a page's own search box to the list or empty box under it, on every
+     page that has one (search-list-gap.test.cjs) */
+  --find-gap: 10px;
   --bg: #f4f4f6;
   --card: #ffffff;
   --card-2: #f9f9fb;      /* expanded editor */
@@ -2847,7 +2850,7 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 /* Providers' search (#1614): a toolbar field over the list, at its right
    edge as Settings' is; across the page when the window is narrow. While
    searching, the Turned off fold stays open on the ones that match. */
-#view-providers .pv-head { display: flex; justify-content: flex-end; gap: 8px; margin: 0 0 10px; flex: none; }
+#view-providers .pv-head { display: flex; justify-content: flex-end; gap: 8px; margin: 0 0 var(--find-gap); flex: none; }
 /* Hide accounts, on Routing, Usage and (its own switch) Providers. On, it
    says so in its struck eye and its words, a shade darker: a page tool,
    not a banner */
