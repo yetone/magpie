@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/yetone/magpie/internal/provider"
 )
 
 // A plugin's fetch is told the session the agent named and the subagent a
@@ -427,6 +429,75 @@ func TestPluginToldTheSession(t *testing.T) {
 			check(t, model+", "+tc.name, "/v1/chat/completions", body, tc.headers, tc.session, tc.subagent)
 		}
 	}
+
+	// Codex's Responses WebSocket (responses_ws.go): the handshake carries
+	// session-id, thread-id and x-openai-subagent (codex-rs
+	// build_websocket_headers), and each turn is served as its POST is
+	t.Run("codex subagent over the responses websocket", func(t *testing.T) {
+		mu.Lock()
+		got = nil
+		mu.Unlock()
+		_, ts := sockServer(t)
+		c, resp, err := dialSock(t, ts, "/v1/responses", http.Header{
+			"User-Agent": {codexUA}, "Originator": {"codex_exec"},
+			"Session-Id": {"codex-root"}, "Thread-Id": {"codex-child-ws"},
+			"X-Openai-Subagent": {"collab_spawn"}, "X-Codex-Window-Id": {"codex-child-ws:0"},
+		})
+		if err != nil {
+			code := 0
+			if resp != nil {
+				code = resp.StatusCode
+			}
+			t.Fatalf("%v (%d)", err, code)
+		}
+		out := c.turn(`{"type":"response.create","model":"` + pid + `/fake-resp","stream":true,"input":[{"role":"user","content":"hi"}],"client_metadata":{"session_id":"codex-root","thread_id":"codex-child-ws","x-openai-subagent":"collab_spawn"}}`)
+		if last(out).Get("type").String() != "response.completed" {
+			t.Fatalf("%v", out)
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if len(got) == 0 {
+			t.Fatal("the vendor got nothing")
+		}
+		for _, h := range got {
+			for k, vs := range h {
+				if strings.HasPrefix(strings.ToLower(k), "x-magpie-") {
+					t.Errorf("the vendor got %s: %q", k, vs)
+				}
+			}
+			if s, a := h.Values("X-Saw-Session"), h.Values("X-Saw-Subagent"); !slices.Equal(s, []string{"codex-root"}) || !slices.Equal(a, []string{"codex-child-ws"}) {
+				t.Errorf("the plugin was told session %q, subagent %q; want codex-root, codex-child-ws", s, a)
+			}
+		}
+	})
+
+	// magpie's own ask made while a Codex subagent's turn is out (a web
+	// search, searchWith) enters serve again on that turn's context: serve
+	// tells the plugin the ask's own subagent, none, not the turn's
+	t.Run("a re-entry from a codex subagent's turn", func(t *testing.T) {
+		mu.Lock()
+		got = nil
+		mu.Unlock()
+		ctx := context.WithValue(withCodexPluginSubagent(context.Background(), "codex-child-1"), callerCtx{}, caller{agent: "codex"})
+		r := httptest.NewRequestWithContext(ownAsk(magpieChose(ctx)), "POST", "http://magpie/v1/messages", nil)
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("User-Agent", SearchAgent)
+		rec := httptest.NewRecorder()
+		New().serve(rec, r, provider.Anthropic, []byte(`{"model":"`+pid+`/fake-claude","max_tokens":64,"stream":false,"messages":[{"role":"user","content":"hi"}]}`))
+		if rec.Code != 200 {
+			t.Fatalf("%d %s", rec.Code, rec.Body)
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if len(got) == 0 {
+			t.Fatal("the vendor got nothing")
+		}
+		for _, h := range got {
+			if v := h.Values("X-Saw-Subagent"); len(v) > 0 {
+				t.Errorf("the plugin was told subagent %q for magpie's own ask; want omitted", v)
+			}
+		}
+	})
 }
 
 func TestPluginSessionEdges(t *testing.T) {
