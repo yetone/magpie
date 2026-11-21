@@ -3756,7 +3756,11 @@ magpie.plugin("library", (ctx) => {
     // the click moves until the answer comes
     if (health.get(name) && !health.get(name).h && !box.hidden) return;
     box.hidden = !(toolsOpen.has(name) && list.length);
-    if (box.hidden) return box.replaceChildren();
+    if (box.hidden) {
+      liftRow(box);
+      return box.replaceChildren();
+    }
+    toolsLift.observe(box);
     const ul = el("ul", "lib-toollist");
     const off = toolsOffOf(name);
     for (const tl of list) {
@@ -3778,6 +3782,39 @@ magpie.plugin("library", (ctx) => {
     foot.append(el("span", "grow"), button(t("Check again"), "", () => recheck(name)));
     parts.push(foot);
     box.replaceChildren(...parts);
+  }
+  // A server's chips and switch stay where they were when its tools open
+  // (the owner): the list makes the row taller, and the row centres what
+  // it holds, so they would sit half the list lower. Those on the name's
+  // line are moved back up by what the row grew past its closed height;
+  // on a narrow window they are on a line of their own and stay there.
+  // translate moves them without changing the row, so measuring again
+  // sees the same layout.
+  const toolsLift = new ResizeObserver((entries) => entries.forEach((e) => liftRow(e.target)));
+  function liftRow(box) {
+    const who = box.parentElement, row = who?.parentElement;
+    if (!row || !box.isConnected) return toolsLift.unobserve(box);
+    const others = [...row.children].filter((c) => c !== who);
+    let up = 0, line = [];
+    if (!box.hidden) {
+      toolsLift.observe(box);
+      const cs = getComputedStyle(row), top = box.getBoundingClientRect().top, w = who.getBoundingClientRect(), wt = w.top;
+      // centred beside the name's column (the picture sits at the top
+      // already), not on a line under it
+      const centred = (c) => { const a = getComputedStyle(c).alignSelf; return a === "center" || (a === "auto" || a === "normal") && cs.alignItems === "center"; };
+      const beside = others.filter((c) => c.getBoundingClientRect().top + (c._lift || 0) < w.bottom);
+      line = beside.filter(centred);
+      const pad = cs.boxSizing === "border-box" ? parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) + parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth) : 0;
+      const head = top - wt - parseFloat(getComputedStyle(box).marginTop);
+      const closed = Math.max(head, (parseFloat(cs.minHeight) || 0) - pad, ...beside.map((c) => c.offsetHeight));
+      up = Math.max(0, Math.round(who.offsetHeight - closed) / 2);
+    } else toolsLift.unobserve(box);
+    for (const c of others) {
+      const by = line.includes(c) ? up : 0;
+      if ((c._lift || 0) === by) continue;
+      c._lift = by;
+      c.style.translate = by ? `0 ${-by}px` : "";
+    }
   }
   // Each tool has a switch (nf1qaz2w on Discord): one turned off is left
   // out by the agents given the server that can leave out a single tool.

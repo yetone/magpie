@@ -6,7 +6,8 @@
 // agents given the server that can't leave out a single tool (toolsOff
 // unset in their view) are named under the list, never shown as following
 // the switches. In every language, both engines, a wide and a narrow window.
-// No backend: the API is faked here.
+// Opening the list leaves the row's chips and switch where they were
+// (the owner). No backend: the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -98,8 +99,35 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const pill = page.locator('#view-library .lib-health[data-server="filesystem"]');
         await page.waitForFunction(() => document.querySelector('#view-library .lib-health[data-server="filesystem"]')?.classList.contains("has-list"));
         const list = page.locator('#view-library .lib-tools[data-server="filesystem"]');
+        // the row's chips and switch: where each is, from the row's top, and
+        // whether it is beside the name's column or on a line under it
+        const marks = () => page.evaluate(async () => {
+          // after the frame's layout and resize observers, as it is painted
+          await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+          const row = document.querySelector('#view-library .lib-row[data-server="filesystem"]'), who = row.querySelector(":scope > .who");
+          const r = row.getBoundingClientRect(), w = who.getBoundingClientRect(), box = who.querySelector(".lib-tools");
+          return { under: box.hidden ? null : box.getBoundingClientRect().bottom - r.top, at: [...row.children].filter((c) => c !== who).map((c) => {
+            const b = c.getBoundingClientRect();
+            return { cls: c.className, top: b.top - r.top, beside: b.top < w.bottom };
+          }) };
+        });
+        const closed = await marks();
+        assert.ok(closed.at.length >= 2, "the row has its chips and switch");
+        const level = (now, why) => closed.at.forEach((c, i) => {
+          // beside the name they stay put; under it they go under the list
+          if (c.beside || now.under == null) assert.ok(Math.abs(now.at[i].top - c.top) <= 1, `${why}: ${c.cls} moved from ${c.top} to ${now.at[i].top}`);
+          else assert.ok(now.at[i].top >= now.under - 1, `${why}: ${c.cls} at ${now.at[i].top} is over the list (to ${now.under})`);
+        });
         await pill.click();
         await list.waitFor();
+        level(await marks(), "opened");
+        // closed again, all back where they were; then open for the rest
+        await pill.click();
+        await list.waitFor({ state: "hidden" });
+        level(await marks(), "closed again");
+        await pill.click();
+        await list.waitFor();
+        level(await marks(), "opened again");
 
         // a switch beside each tool, off for the one the library turned off
         const sw = (name) => list.locator(`.lib-switch[data-tool="${name}"]`);
