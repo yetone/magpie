@@ -1034,7 +1034,7 @@ document.getElementById(<span class="s">"calls"</span>).textContent = `${s.calls
       <tr><td><code>agents</code></td><td>The end of the Agents page</td><td><code>{}</code></td></tr>
       <tr><td><code>usage</code></td><td>The end of Usage’s Overview</td><td><code>{}</code></td></tr>
       <tr><td><code>settings</code></td><td>A <span class="ui">Plugins</span> tab in Settings, there only while a plugin has a panel in it</td><td><code>{}</code></td></tr>
-      <tr><td><code>provider</code></td><td>Each saved provider’s editor</td><td><code>{ provider: { id, name } }</code></td></tr>
+      <tr><td><code>provider</code></td><td>The editor of each provider the plugin gives (every saved provider’s when it gives none), as a row before Advanced</td><td><code>{ provider: { id, name } }</code></td></tr>
     </table></div>
     <p>A plugin has at most 8 panels. A panel’s height follows its <code>&lt;html&gt;</code> (up to 2400px), so let the page size itself and don’t give <code>html</code> or <code>body</code> a fixed height. A panel that throws, or doesn’t answer in 10 seconds, shows <span class="ui">{name} stopped working</span> with <span class="ui">Try again</span> in its own place; the page around it and the panels beside it go on.</p>
     <h3 id="replaces"><a class="anchor" href="#replaces">Taking a built-in page’s place</a></h3>

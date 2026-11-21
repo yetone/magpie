@@ -118,10 +118,16 @@ type pluginPanel struct {
 	Titles map[string]string `json:"titles,omitempty"`
 	URL    string            `json:"url"`   // the panel, under pluginPagePrefix
 	Reads  []string          `json:"reads"` // what it may read, of plugin.PageReads
-	token  string
-	dir    string
-	file   string
-	hosted bool
+	// Providers are, for a provider panel of a plugin that gives
+	// providers, the ids magpie knows them by: its panels are in their
+	// editors only. A plugin that gives none has its panels in every
+	// provider's editor. Marvis's first-line panel was in every provider's
+	// editor, Kimi's among them, and in none of Marvis's own (11-21).
+	Providers []string `json:"providers,omitempty"`
+	token     string
+	dir       string
+	file      string
+	hosted    bool
 }
 
 // pageKeyChars are what a window page's key can't have
@@ -133,6 +139,19 @@ var pageKeyChars = strings.NewReplacer("@", "", "/", "-", ".", "-", "_", "-", " 
 func windowParts() (pages []pluginPage, panels []pluginPanel) {
 	seen := map[string]bool{}
 	replaced := map[string]bool{}
+	// the providers each plugin gave when last listed, read once and only
+	// when a panel is a provider's
+	var gives map[string][]string
+	providersOf := func(spec string) []string {
+		if gives == nil {
+			gives = map[string][]string{}
+			ps, _ := plugin.Listed()
+			for _, pp := range ps {
+				gives[pp.Spec] = append(gives[pp.Spec], provider.PluginID(pp.ID))
+			}
+		}
+		return gives[spec]
+	}
 	for _, e := range plugin.Load().Plugins {
 		if e.Off {
 			continue
@@ -192,6 +211,9 @@ func windowParts() (pages []pluginPage, panels []pluginPanel) {
 				token: tok, dir: spec.Dir, URL: pluginPagePrefix + tok + "/" + filepath.ToSlash(rel), file: filepath.ToSlash(rel), hosted: !only}
 			if p.Title == "" {
 				p.Title = cmp.Or(plugin.InstalledName(e.Spec), plugin.ShortName(name))
+			}
+			if p.Slot == "provider" {
+				p.Providers = providersOf(e.Spec)
 			}
 			panels = append(panels, p)
 		}

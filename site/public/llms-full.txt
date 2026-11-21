@@ -12106,7 +12106,7 @@ A plugin can also put panels into the pages magpie draws itself. Each one is a s
 | `agents` | The end of the Agents page | `{}` |
 | `usage` | The end of Usage’s Overview | `{}` |
 | `settings` | A Plugins tab in Settings, there only while a plugin has a panel in it | `{}` |
-| `provider` | Each saved provider’s editor | `{ provider: { id, name } }` |
+| `provider` | The editor of each provider the plugin gives (every saved provider’s when it gives none), as a row before Advanced | `{ provider: { id, name } }` |
 
 A plugin has at most 8 panels. A panel’s height follows its `<html>` (up to 2400px), so let the page size itself and don’t give `html` or `body` a fixed height. A panel that throws, or doesn’t answer in 10 seconds, shows {name} stopped working with Try again in its own place; the page around it and the panels beside it go on.
 

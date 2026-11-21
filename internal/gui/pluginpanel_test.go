@@ -6,9 +6,11 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/settings"
 )
 
@@ -173,5 +175,37 @@ func TestPluginPageReplacesFirstWins(t *testing.T) {
 	}
 	if pages[1].Spec != second || pages[1].Replaces != "" {
 		t.Errorf("the second: %+v", pages[1])
+	}
+}
+
+// A provider panel of a plugin that gives providers is listed with the ids
+// magpie knows them by, so the window draws it in their editors only; a
+// plugin that gives none is listed with none, its panel in every
+// provider's editor. Marvis's first-line panel was in Kimi's editor, and
+// in every other provider's (11-21).
+func TestPluginProviderPanelsNameTheirProviders(t *testing.T) {
+	on, off, _, _ := panelPlugins(t)
+	plugin.UseCached([]plugin.Provider{{ID: "marvis", Spec: on, Name: "Marvis"}, {ID: "other", Spec: off, Name: "Other"}})
+	t.Cleanup(func() { plugin.UseCached(nil) })
+	h := pageMux()
+	var panels []pluginPanel
+	w := do(h, httptest.NewRequest("GET", "/api/plugin-panels", nil))
+	if err := json.Unmarshal(w.Body.Bytes(), &panels); err != nil || len(panels) != 3 {
+		t.Fatalf("panels: %s %v", w.Body, err)
+	}
+	for _, p := range panels {
+		want := []string(nil)
+		if p.Slot == "provider" {
+			want = []string{"marvis"}
+		}
+		if !slices.Equal(p.Providers, want) {
+			t.Errorf("%s panel: providers %v, want %v", p.Slot, p.Providers, want)
+		}
+	}
+	// a plugin that gives no provider: every provider's
+	plugin.UseCached([]plugin.Provider{})
+	w = do(h, httptest.NewRequest("GET", "/api/plugin-panels", nil))
+	if strings.Contains(w.Body.String(), `"providers"`) {
+		t.Errorf("a plugin with no providers: %s", w.Body)
 	}
 }

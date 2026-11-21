@@ -390,11 +390,13 @@
   // changed, so a panel already open goes on as it is
   function fill(box) {
     const name = box.dataset.slot;
-    const list = panelList.filter((e) => e.slot === name);
+    const context = box.pluginContext || {};
+    // a provider panel of a plugin that gives providers is in their
+    // editors only
+    const list = panelList.filter((e) => e.slot === name && (e.providers?.includes(context.provider?.id) ?? 1));
     const sig = list.map((e) => e.key + " " + e.url + " " + titled(e)).join("|");
     if (box.dataset.sig === sig && box.childElementCount === list.length) return;
     box.dataset.sig = sig;
-    const context = box.pluginContext || {};
     const parts = list.map((e) => {
       const sec = el("section", "plugin-panel");
       sec.dataset.panel = e.key;

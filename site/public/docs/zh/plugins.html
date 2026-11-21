@@ -1034,7 +1034,7 @@ document.getElementById(<span class="s">"calls"</span>).textContent = `${s.calls
       <tr><td><code>agents</code></td><td>「Agent」页面的末尾</td><td><code>{}</code></td></tr>
       <tr><td><code>usage</code></td><td>用量「概览」的末尾</td><td><code>{}</code></td></tr>
       <tr><td><code>settings</code></td><td>设置里的「<span class="ui">插件</span>」标签页，有插件在这里放了面板时才出现</td><td><code>{}</code></td></tr>
-      <tr><td><code>provider</code></td><td>每个已保存 Provider 的编辑页</td><td><code>{ provider: { id, name } }</code></td></tr>
+      <tr><td><code>provider</code></td><td>插件所提供的每个 Provider 的编辑页（不提供 Provider 的插件则是每个已保存 Provider），作为「高级」之前的一行</td><td><code>{ provider: { id, name } }</code></td></tr>
     </table></div>
     <p>一个插件最多 8 个面板。面板的高度跟随它的 <code>&lt;html&gt;</code>（最高 2400px），所以让页面自己决定高度，不要给 <code>html</code> 或 <code>body</code> 固定高度。面板出错，或 10 秒内没有应答，就在它自己的位置显示「<span class="ui">{name} 已停止工作</span>」和「<span class="ui">重试</span>」；所在的页面和旁边的面板照常运行。</p>
     <h3 id="replaces"><a class="anchor" href="#replaces">替代一个内置页面</a></h3>

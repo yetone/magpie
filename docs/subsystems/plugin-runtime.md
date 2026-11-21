@@ -287,8 +287,12 @@ starts a Bun host.
   (`maxPanels`), each `slot` one of `plugin.PanelSlots`: `agents` (the end
   of the Agents page), `usage` (the end of Usage's Overview), `settings` (a
   Plugins tab in Settings, shown only while a panel is in it, in the tab
-  strip and in the sidebar of a wide window) and `provider` (each saved
-  provider's editor, told `{provider: {id, name}}`). `file` is an .html in
+  strip and in the sidebar of a wide window) and `provider` (a provider's
+  editor, told `{provider: {id, name}}`: a row of the form before
+  Advanced, the title in the names column; the panel lists the ids of the
+  providers its plugin gives, from `plugin.Listed()`, and shows only in
+  their editors, or in every saved provider's when the plugin gives none).
+  `file` is an .html in
   the plugin's folder (`plugin.FileIn`). `GET /api/plugin-panels` lists an
   on plugin's panels in plugins.json order, each with a token of its own
   (`pageToken(spec + "\x00panel\x00" + i)`), served under the same policy

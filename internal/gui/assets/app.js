@@ -9747,6 +9747,9 @@ function drawEditor(p, presetID) {
   adv.append(el("summary", "", t("Advanced")));
   const advIn = el("div", "inner");
   adv.append(advIn);
+  // a plugin's panels for this provider (magpie.panels' provider), told
+  // which: rows of the form, before Advanced
+  const panels = p && magpie.slot?.("provider", { provider: { id: p.id, name: p.name || p.id } }) || "";
   // Routing, Rate limited and Stays: changed by few, so under Advanced, at
   // its top, and opening it when one isn't its default (the owner, 11-12)
   const routingAdvanced = (p) => {
@@ -9820,7 +9823,7 @@ function drawEditor(p, presetID) {
     // nowhere to show or test
     const urls = [p.chat, p.responses, p.anthropic].filter(Boolean);
     if (urls.length && !urls.some((u) => u.startsWith("plugin://"))) ed.append(...field(t("Endpoints"), renderEndpoints(p, p)));
-    ed.append(adv);
+    ed.append(panels, adv);
     groupAdvanced(advIn);
     const bar = el("div", "bar");
     // removing only hides it from magpie; the agent stays signed in
@@ -10401,7 +10404,7 @@ function drawEditor(p, presetID) {
     refreshEndpoints();
     ed.append(...row);
   }
-  ed.append(adv);
+  ed.append(panels, adv);
   groupAdvanced(advIn);
 
   if (custom) {
@@ -10626,8 +10629,6 @@ function drawEditor(p, presetID) {
   };
   saveBtn.onclick = save;
   bar.append(cancel, saveBtn);
-  // a plugin's panels for a provider (magpie.panels' provider), told which
-  if (p) { const slot = magpie.slot?.("provider", { provider: { id: p.id, name: p.name || p.id } }); if (slot) ed.append(slot); }
   ed.append(bar);
   setTimeout(() => (isNew ? (custom || another ? name : endpoint || vertexProject || key) : null)?.focus(), 0);
   return ed;

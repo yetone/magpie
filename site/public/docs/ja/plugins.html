@@ -1034,7 +1034,7 @@ document.getElementById(<span class="s">"calls"</span>).textContent = `${s.calls
       <tr><td><code>agents</code></td><td>「エージェント」ページの末尾</td><td><code>{}</code></td></tr>
       <tr><td><code>usage</code></td><td>使用量の「概要」の末尾</td><td><code>{}</code></td></tr>
       <tr><td><code>settings</code></td><td>設定の「<span class="ui">プラグイン</span>」タブ（プラグインがそこにパネルを置いているときだけ表示）</td><td><code>{}</code></td></tr>
-      <tr><td><code>provider</code></td><td>保存した各プロバイダーの編集画面</td><td><code>{ provider: { id, name } }</code></td></tr>
+      <tr><td><code>provider</code></td><td>プラグインが提供する各プロバイダーの編集画面（提供しないプラグインは保存した全プロバイダー）、「詳細」の前の 1 行として</td><td><code>{ provider: { id, name } }</code></td></tr>
     </table></div>
     <p>パネルは 1 つのプラグインにつき 8 個まで。パネルの高さは <code>&lt;html&gt;</code> に合わせて決まる（最大 2400px）ので、ページ自身に高さを任せ、<code>html</code> や <code>body</code> に固定の高さを付けないでください。パネルがエラーを出すか 10 秒以内に応答しないと、その場所に「<span class="ui">{name} は動作を停止しました</span>」と「<span class="ui">再試行</span>」が表示されます。周りのページと隣のパネルはそのまま動き続けます。</p>
     <h3 id="replaces"><a class="anchor" href="#replaces">組み込みページの代わりになる</a></h3>
