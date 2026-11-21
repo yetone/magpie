@@ -1477,6 +1477,9 @@ body.masked :hover > .acct-eye, body.masked .pq-card:hover .acct-eye, body.maske
 /* the last label can be wider than its bar's column: let it spill left, not off the card */
 .chart .labels span:last-child { display: flex; justify-content: flex-end; }
 .row.stat .who { flex: 0 0 180px; }
+/* the logo meets the top of the name's letters, not the middle of a name and
+   the line under it, which wraps to several lines (the owner, 11-21) */
+.row.stat > .ic { align-self: flex-start; margin-top: 4px; }
 /* the line under a name (a sign-in's id, its calls, credits and speed) is
    read whole at every width, not cut where the column ends */
 .row.stat .who .sub { white-space: normal; overflow-wrap: anywhere; }
