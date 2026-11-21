@@ -1,6 +1,6 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
-// The skill router, on the Library's Skills tab: a Skill router row under
-// the list with a switch. Off, no skill has a router button. On (posts
+// The skill router, on the Library's Skills tab: a Skill router row at the
+// top, over the install card and the list, with a switch. Off, no skill has a router button. On (posts
 // skills/router {on: true}), each skill an agent may pick itself gets a
 // button that keeps it out of the router (skills/router-direct), and a
 // skill only for the user to type gets none. A skill kept out shows "Not
@@ -114,6 +114,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const v = page.locator("#view-library");
         const row = v.locator(".lib-skillrouter");
         await row.waitFor();
+
+        // at the top: over the install card and the skill list
+        assert.equal(await page.evaluate(() => {
+          const v = document.querySelector("#view-library");
+          const r = v.querySelector(".lib-skillrouter"), c = v.querySelector(".lib-install"), l = v.querySelector(".lib-groups");
+          return !!(r.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING) && !!(r.compareDocumentPosition(l) & Node.DOCUMENT_POSITION_FOLLOWING);
+        }), true, "the Skill router row is above the install card and the list");
 
         // off: the row and its switch, no router buttons, no why
         assert.equal((await row.locator(".name").textContent()).trim(), w("Skill router"));

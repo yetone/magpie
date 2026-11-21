@@ -6053,8 +6053,11 @@ magpie.plugin("library", (ctx) => {
     body.append(intro(agentless()
       ? t("A magpie on another computer that adds this one as a provider, with Use its skills and prompts on, takes these skills and gives them to its agents.")
       : t("A skill is a folder with a SKILL.md an agent loads when it's needed. The library keeps each one once and links it into the agents you pick.")));
-    body.append(installCard());
     const all = skillAgents();
+    // the skill router first, over the install card and the list (the
+    // owner, 11-21: at the foot of a long list nobody found it)
+    if (lib.skills.length && all.length) body.append(...skillRouterPart());
+    body.append(installCard());
     pickingFor("skills", lib.skills);
     if (lib.skills.length) {
       const rh = el("div", "row-head lib-skillshead");
@@ -6146,7 +6149,7 @@ magpie.plugin("library", (ctx) => {
       drawSkills(box, all);
       body.append(box);
       // under the list, so the skills stay where they were above it
-      if (all.length) body.append(skillHowBar(), skillWhereBar(), ...skillAutoPart(), ...skillRouterPart());
+      if (all.length) body.append(skillHowBar(), skillWhereBar(), ...skillAutoPart());
       if (picking) body.append(pickBar(all));
     }
     if (lib.newSkills?.length) renderNewSkills(body);
