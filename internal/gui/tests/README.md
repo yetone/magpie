@@ -2838,3 +2838,9 @@ tone, #26251E. It checks that the row draws that picture as a mask in the
 text colour, and that it shows in both themes, all five languages, at 980px
 and 420px, in Chromium and WebKit (chen2652). `ARTIFACT_DIR` keeps the row's
 screenshots.
+
+`plugin-badge-align.test.cjs` checks that the magpie community badge's
+shield, on a card and on Today's pick, and the card's downloads arrow are
+centred on their words: the icon's ink against the words' ink, read from a
+4x screenshot, within 1px. All five languages, 1180px and 420px, Chromium
+and WebKit. `BADGE_LOG` prints each offset.
