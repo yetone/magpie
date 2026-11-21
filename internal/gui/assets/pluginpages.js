@@ -212,34 +212,19 @@
     return b;
   }
 
-  // a press held 400ms on a tab picks it up; it is dragged to its place
-  // and the order kept (settings PluginPageOrder)
+  // a tab is taken up as it is pressed and moved, as its grip says (the
+  // owner: a press held 400ms first was a drag that never started); a press
+  // let go where it was is a click (dragRows)
   function hold(b, ev) {
-    if (ev.button !== 0 || !document.body.classList.contains("side-nav")) return;
-    let last = ev;
-    const mv = (m) => { last = m; if (Math.hypot(m.clientX - ev.clientX, m.clientY - ev.clientY) > 6) stop(); };
-    const stop = () => {
-      clearTimeout(timer);
-      document.removeEventListener("pointermove", mv);
-      document.removeEventListener("pointerup", stop);
-      document.removeEventListener("pointercancel", stop);
-    };
-    const timer = setTimeout(() => {
-      stop();
-      const nav = $("#nav");
-      const rows = [...nav.querySelectorAll("button[data-plugin-page]")].filter((x) => !pages.get(x.dataset.view)?.entry.replaces);
-      b.dataset.dragged = "1";
-      const at = { button: 0, isPrimary: true, pointerId: ev.pointerId, clientX: last.clientX, clientY: last.clientY };
-      if (!dragRows(at, b, b, nav, rows, (to) => {
-        const rest = rows.filter((x) => x !== b);
-        rest.splice(to, 0, b);
-        rows[to][to > rows.indexOf(b) ? "after" : "before"](b);
-        api("plugin-pages/arrange", { order: rest.map((x) => x.dataset.view) }).catch((err) => { statusErr(err); load(); });
-      })) delete b.dataset.dragged;
-    }, 400);
-    document.addEventListener("pointermove", mv);
-    document.addEventListener("pointerup", stop);
-    document.addEventListener("pointercancel", stop);
+    if (!document.body.classList.contains("side-nav")) return;
+    const nav = $("#nav");
+    const rows = [...nav.querySelectorAll("button[data-plugin-page]")].filter((x) => !pages.get(x.dataset.view)?.entry.replaces);
+    dragRows(ev, b, b, nav, rows, (to) => {
+      const rest = rows.filter((x) => x !== b);
+      rest.splice(to, 0, b);
+      rows[to][to > rows.indexOf(b) ? "after" : "before"](b);
+      api("plugin-pages/arrange", { order: rest.map((x) => x.dataset.view) }).catch((err) => { statusErr(err); load(); });
+    });
   }
 
   async function load() {
