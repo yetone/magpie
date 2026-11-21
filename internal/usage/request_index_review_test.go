@@ -72,19 +72,20 @@ func TestQueryPageIOOutsideCacheLock(t *testing.T) {
 		})
 	}()
 	defer func() { close(release); <-done }()
-	select {
-	case <-entered:
-	case <-time.After(5 * time.Second):
-		t.Fatal("all-period read did not start")
-	}
+	// the read starts when it starts: a busy machine took over 5s to get
+	// there (#7300), and a read that never starts is the run's -timeout
+	<-entered
 	today := make(chan RequestPage, 1)
 	go func() { today <- QueryPage(Today, Filter{}, 0, 1) }()
+	// Today waiting on All's read waits until release, which is never
+	// before this select ends: any bound tells the two apart, so it is
+	// one a loaded machine doesn't reach
 	select {
 	case p := <-today:
 		if p.Total != 0 {
 			t.Fatal(p.Total)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Error("Today waited on All's blocked file IO")
 	}
 }
