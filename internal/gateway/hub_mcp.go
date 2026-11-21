@@ -669,7 +669,7 @@ func (s *Server) hubMCPCall(r *http.Request, agent string, m mcpMessage) (any, m
 			}
 		}
 		if hubCodeOn(len(ts)) {
-			list = append(list, hubCodeSpec(where, onDemand))
+			list = append(list, hubCodeSpec(where, onDemand, hubSkillsOf(agent)))
 		}
 		return map[string]any{"tools": list}, nil
 	case "tools/call":

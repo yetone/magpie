@@ -30,9 +30,8 @@ var grace = 2 * time.Second
 
 // start is what the gateway gives the helper first.
 type start struct {
-	Code   string   `json:"code"`
-	Tools  []string `json:"tools"`
-	Limits Limits   `json:"limits"`
+	Script
+	Limits Limits `json:"limits"`
 }
 
 // said is one message from the helper: a tool call it wants run, its
@@ -56,11 +55,11 @@ type answer struct {
 	Err string          `json:"err,omitempty"`
 }
 
-// Run runs code in a helper process, exe started as Command, with names
-// the tools it may call, each run here by run. It ends the helper when
-// the script is past lim.Wait (and grace), and whatever has gone wrong it
-// gives back a result that says so: never an error.
-func Run(ctx context.Context, exe, code string, names []string, lim Limits, run Call) any {
+// Run runs sc in a helper process, exe started as Command, each tool call
+// it makes run here by run. It ends the helper when the script is past
+// lim.Wait (and grace), and whatever has gone wrong it gives back a result
+// that says so: never an error.
+func Run(ctx context.Context, exe string, sc Script, lim Limits, run Call) any {
 	ctx, cancel := context.WithTimeout(ctx, lim.Wait+grace)
 	defer cancel()
 	cmd := proc.CommandContext(ctx, exe, Command)
@@ -95,7 +94,7 @@ func Run(ctx context.Context, exe, code string, names []string, lim Limits, run 
 		defer wmu.Unlock()
 		enc.Encode(v)
 	}
-	send(start{Code: code, Tools: names, Limits: lim})
+	send(start{Script: sc, Limits: lim})
 	dec := json.NewDecoder(stdout)
 	n := 0
 	for {
@@ -225,7 +224,7 @@ func Main() int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), s.Limits.Wait)
 	defer cancel()
-	res, err := json.Marshal(script(ctx, s.Code, s.Tools, ask, s.Limits))
+	res, err := json.Marshal(script(ctx, s.Script, ask, s.Limits))
 	if err != nil {
 		res, _ = json.Marshal(Result("code mode's result can't be written: "+err.Error(), true))
 	}

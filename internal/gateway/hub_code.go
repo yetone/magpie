@@ -62,9 +62,57 @@ func hubCodeOn(n int) bool {
 // hubCodeSay is what the instructions add when the router gives run_code.
 const hubCodeSay = " " + hubCodeTool + " runs JavaScript that calls these tools and gives back only what it returns: several calls, or the part of an answer you need, in one step."
 
+// HubSkill is a skill of the Library's with code, given to an agent: a
+// code.js beside its SKILL.md whose default export is an async function.
+// run_code runs it as skills.<name>(args), calling the same tools.
+type HubSkill struct {
+	Name, About string
+	Code        string
+}
+
+// HubSkills is a Hub that also gives an agent's skills with code and
+// saves a script that ran as a new one (library/mcp_hub.go).
+type HubSkills interface {
+	// Skills are agent's skills with code: those it is given, every one
+	// for agent "" (HubMCPAll's)
+	Skills(agent string) []HubSkill
+	// SaveSkill makes a skill of the user's called name in the Library,
+	// given to agent, with about as its description and code as its
+	// code.js. It never writes over a skill or a folder that is there.
+	SaveSkill(agent, name, about, code string) error
+}
+
+// hubSkillsOf are agent's skills with code: none when the hub keeps no
+// skills.
+func hubSkillsOf(agent string) []HubSkill {
+	if h, ok := MCPHub.(HubSkills); ok {
+		return h.Skills(agent)
+	}
+	return nil
+}
+
+// hubSkillKey is skill name n as a script calls it: - as _.
+func hubSkillKey(n string) string { return strings.ReplaceAll(n, "-", "_") }
+
+// hubSkillsSay is how many skills run_code's description names, and
+// hubSkillsAbout how much of each one's description it gives.
+const (
+	hubSkillsSay   = 30
+	hubSkillsAbout = 200
+)
+
+// hubSkillFile is the code.js of a script saved as a skill (save_as): an
+// async function of args whose body is the script.
+func hubSkillFile(code string) string {
+	return "// Saved from magpie's run_code. It runs there as skills.<name>(args),\n" +
+		"// calling the MCP router's tools as tools.<server>__<tool>(args).\n" +
+		"export default async (args) => {\n" + strings.TrimRight(code, "\n") + "\n}\n"
+}
+
 // hubCodeSpec is run_code as tools/list gives it, its description after
-// where; onDemand says the tools' parameters come from find_tools.
-func hubCodeSpec(where string, onDemand bool) map[string]any {
+// where; onDemand says the tools' parameters come from find_tools, and
+// skills are the agent's skills with code.
+func hubCodeSpec(where string, onDemand bool, skills []HubSkill) map[string]any {
 	pre := ""
 	if where != "" {
 		pre = "[" + where + "] "
@@ -80,16 +128,56 @@ func hubCodeSpec(where string, onDemand bool) map[string]any {
 			"Each tool is an async function on `tools`, by its name: `const r = await tools[\"github__search_issues\"]({q: \"bug\"})` (also tools.github__search_issues, with - as _). " + params + " " +
 			"A tool gives back its structured result, else its text (parsed when it is JSON); a tool's error is thrown. " +
 			"The code is the body of an async function: `return` the result. Plain JavaScript only: no require, import, fetch, files or timers. " +
-			fmt.Sprintf("At most %d tool calls and %s in all.", hubCodeCalls, hubCodeWait),
-		"inputSchema": json.RawMessage(`{"type":"object","properties":{"code":{"type":"string","description":"JavaScript, the body of an async function; return what you need"}},"required":["code"]}`),
+			fmt.Sprintf("At most %d tool calls and %s in all.", hubCodeCalls, hubCodeWait) +
+			hubSkillsLine(skills) +
+			" To keep code that worked for next time, run it with save_as: it is saved as a skill of the user's, skills.<name>(args), that reads its inputs from `args`.",
+		"inputSchema": json.RawMessage(`{"type":"object","properties":{` +
+			`"code":{"type":"string","description":"JavaScript, the body of an async function; return what you need"},` +
+			`"args":{"type":"object","description":"Inputs the code reads as the object args"},` +
+			`"save_as":{"type":"object","description":"Also save the code, when it runs without an error, as a skill of the user's for skills.<name>(args) later","properties":{"name":{"type":"string","description":"lowercase words joined by -"},"description":{"type":"string","description":"what it does and when to use it, and the args it takes"}},"required":["name","description"]}` +
+			`},"required":["code"]}`),
 	}
+}
+
+// hubSkillsLine is what run_code's description says of skills, the
+// agent's skills with code.
+func hubSkillsLine(skills []HubSkill) string {
+	if len(skills) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(" The user's skills with code are async functions on `skills`, each given one object of args, calling the same tools:")
+	for i, k := range skills {
+		if i == hubSkillsSay {
+			fmt.Fprintf(&b, " and %d more", len(skills)-i)
+			break
+		}
+		if i > 0 {
+			b.WriteString(";")
+		}
+		fmt.Fprintf(&b, " skills.%s", hubSkillKey(k.Name))
+		about := strings.Join(strings.Fields(k.About), " ")
+		if r := []rune(about); len(r) > hubSkillsAbout {
+			about = string(r[:hubSkillsAbout]) + "…"
+		}
+		if about != "" {
+			b.WriteString(" (" + about + ")")
+		}
+	}
+	b.WriteString(".")
+	return b.String()
 }
 
 // hubCodeRun answers run_code: the script in args run against ts, the
 // agent's tools.
 func (s *Server) hubCodeRun(r *http.Request, agent string, ts []hubTool, args json.RawMessage, meta hubCallMeta) any {
 	var p struct {
-		Code string `json:"code"`
+		Code   string          `json:"code"`
+		Args   json.RawMessage `json:"args"`
+		SaveAs *struct {
+			Name        string `json:"name"`
+			Description string `json:"description"`
+		} `json:"save_as"`
 	}
 	if err := json.Unmarshal(args, &p); err != nil {
 		return toolResult(hubCodeTool+" takes {\"code\": \"<JavaScript>\"}: "+err.Error(), true)
@@ -132,7 +220,39 @@ func (s *Server) hubCodeRun(r *http.Request, agent string, ts []hubTool, args js
 	for i, t := range ts {
 		names[i] = t.name
 	}
-	return coderun.Run(r.Context(), exe, p.Code, names, coderun.Limits{
+	var skills []coderun.Skill
+	for _, k := range hubSkillsOf(agent) {
+		skills = append(skills, coderun.Skill{Name: k.Name, Code: k.Code})
+	}
+	res := coderun.Run(r.Context(), exe, coderun.Script{Code: p.Code, Args: p.Args, Tools: names, Skills: skills}, coderun.Limits{
 		Calls: hubCodeCalls, AtOnce: hubCodeAtOnce, Max: hubCodeMax, Heap: hubCodeHeap, Wait: hubCodeWait,
 	}, call)
+	if p.SaveAs == nil {
+		return res
+	}
+	return hubCodeSave(res, agent, strings.TrimSpace(p.SaveAs.Name), p.SaveAs.Description, p.Code)
+}
+
+// hubCodeSave is res, what a script gave back, with what became of its
+// save_as: the script saved as the skill name when it ran without an
+// error.
+func hubCodeSave(res any, agent, name, about, code string) any {
+	m, _ := res.(map[string]any)
+	if m == nil {
+		return res
+	}
+	var say string
+	h, ok := MCPHub.(HubSkills)
+	if failed, _ := m["isError"].(bool); failed {
+		say = "Not saved as a skill: the code didn't run without an error."
+	} else if !ok {
+		say = "Not saved as a skill: this router keeps no skills."
+	} else if err := h.SaveSkill(HubAgentOf(agent), name, about, hubSkillFile(code)); err != nil {
+		say = "Not saved as a skill: " + err.Error()
+	} else {
+		say = fmt.Sprintf("Saved as the skill %s: skills.%s(args) runs it from now on.", name, hubSkillKey(name))
+	}
+	content, _ := m["content"].([]any)
+	m["content"] = append(content, map[string]any{"type": "text", "text": say})
+	return m
 }

@@ -1788,6 +1788,12 @@ func (l *Library) offered(p *Probe, path string, shown bool) {
 // source and given to the agents like any other. The name can't be one the
 // library has, one an agent has of its own, or a folder in the way.
 func CreateSkill(name, description string, agents []string) (*Result, error) {
+	return createSkill(name, description, agents, "Write what the agent should do when this skill is used.\n", nil)
+}
+
+// createSkill is CreateSkill with body after the SKILL.md's heading, and
+// files beside it, by name.
+func createSkill(name, description string, agents []string, body string, files map[string]string) (*Result, error) {
 	name = strings.TrimSpace(name)
 	if err := checkName("skill", name); err != nil {
 		return nil, err
@@ -1815,13 +1821,19 @@ func CreateSkill(name, description string, agents []string) (*Result, error) {
 		if err != nil {
 			return err
 		}
-		text := "---\n" + string(head) + "---\n\n# " + name + "\n\nWrite what the agent should do when this skill is used.\n"
+		text := "---\n" + string(head) + "---\n\n# " + name + "\n\n" + body
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}
 		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(text), 0o644); err != nil {
 			os.RemoveAll(dir)
 			return err
+		}
+		for n, b := range files {
+			if err := os.WriteFile(filepath.Join(dir, n), []byte(b), 0o644); err != nil {
+				os.RemoveAll(dir)
+				return err
+			}
 		}
 		ag := slices.Clone(agents)
 		slices.Sort(ag)

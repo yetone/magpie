@@ -70,7 +70,7 @@ func hubSpec(name string) map[string]json.RawMessage {
 	}
 }
 
-func withHub(t *testing.T, f *fakeHub) {
+func withHub(t *testing.T, f Hub) {
 	t.Helper()
 	old := MCPHub
 	MCPHub = f
