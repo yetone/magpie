@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -34,13 +35,15 @@ func ParseSocket(v string) (string, bool) {
 }
 
 // SocketMode is how p's Responses turns go: SocketAuto, SocketOn, or ""
-// for HTTP alone. A Socket the user set is kept; unset, OpenAI's own API
-// (an https Responses URL at api.openai.com) is auto, as Codex's built-in
-// OpenAI provider speaks its WebSocket mode to it (supports_websockets in
-// codex-rs's create_openai_provider). There a conversation's next turn
-// goes as its new input after previous_response_id, even with store
-// false, where HTTP sends the whole conversation every turn (KawaiiZapic
-// on X). Any other address is HTTP alone unless set.
+// for HTTP alone. A Socket the user set is kept; unset, a provider at an
+// https Responses URL is auto (SocketByDefault): OpenAI's own API, as
+// Codex's built-in OpenAI provider speaks its WebSocket mode to it
+// (supports_websockets in codex-rs's create_openai_provider), and a relay
+// too. There a conversation's next turn goes as its new input after
+// previous_response_id, even with store false, where HTTP sends the whole
+// conversation every turn (KawaiiZapic on X). A relay is held to more
+// (SocketRelay): one that refuses the socket is spoken HTTP for hours,
+// and a delta it doesn't answer as one is sent whole.
 func (p Provider) SocketMode() string {
 	switch p.Socket {
 	case SocketOff:
@@ -55,13 +58,23 @@ func (p Provider) SocketMode() string {
 }
 
 // SocketByDefault says p's turns go over the Responses WebSocket with
-// Socket unset (SocketMode).
+// Socket unset (SocketMode): a key's provider at an https Responses URL,
+// but another magpie, whose turns go as deltas over HTTP already
+// (remote_delta.go in the gateway), and a plugin's.
 func (p Provider) SocketByDefault() bool {
-	if !p.TakesSocket() || p.PluginProvider() != "" {
+	if !p.TakesSocket() || p.PluginProvider() != "" || p.IsRemoteMagpie() {
 		return false
 	}
 	u, err := url.Parse(strings.TrimSpace(p.Responses))
-	return err == nil && u.Scheme == "https" && strings.EqualFold(u.Hostname(), "api.openai.com")
+	return err == nil && u.Scheme == "https" && u.Host != ""
+}
+
+// openAIHost says host is OpenAI's own API.
+func openAIHost(host string) bool {
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	return strings.EqualFold(host, "api.openai.com")
 }
 
 // TakesSocket says p can have its turns go over the Responses WebSocket
@@ -79,6 +92,9 @@ type socketKey struct{}
 type socketAt struct {
 	host, path string
 	shun       bool
+	// relay: a host other than OpenAI's own API, not set on
+	// (SocketRelay)
+	relay bool
 	// copilot: a Copilot account's turns, at whatever API host its
 	// session names (CopilotSocketTurn)
 	copilot bool
@@ -110,7 +126,25 @@ func (p Provider) socketAt() (socketAt, bool) {
 	if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") {
 		return socketAt{}, false
 	}
-	return socketAt{host: u.Host, path: u.Path + "/responses", shun: mode != SocketOn}, true
+	return socketAt{host: u.Host, path: u.Path + "/responses", shun: mode != SocketOn,
+		relay: mode != SocketOn && !openAIHost(u.Host)}, true
+}
+
+// SocketRelay says req's turn goes to a relay's socket (SocketTurn): any
+// host but OpenAI's own API, with Socket auto or unset. Most relays
+// refuse the handshake (DeepSeek 405, OpenRouter, AiHubMix and OpenCode
+// Go 404, tried 11-21), so one that refuses is spoken HTTP for hours,
+// not minutes; and one that takes it is trusted with a delta only while
+// it says it answered after the response named (response.created's
+// previous_response_id), as OpenAI's own backend does: DeepSeek's
+// Responses API answers a previous_response_id it ignores, a made-up one
+// too, with a 200 that has lost the conversation.
+func SocketRelay(req *http.Request) bool {
+	if req == nil {
+		return false
+	}
+	at, _ := req.Context().Value(socketKey{}).(socketAt)
+	return at.relay && !at.copilot
 }
 
 // SocketTurn says req is a Responses turn that may go over the Responses

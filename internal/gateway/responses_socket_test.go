@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/coder/websocket"
 	"github.com/tidwall/gjson"
@@ -90,8 +91,8 @@ func TestResponsesProviderTurnGoesOverWebSocket(t *testing.T) {
 	}
 }
 
-// A provider without Socket never dials one, the default; not even
-// when another provider on the same host has it set.
+// A provider at a plain http address without Socket never dials one;
+// not even when another provider on the same host has it set.
 func TestResponsesProviderWithoutSocketNeverDials(t *testing.T) {
 	socketOn(t)
 	f := &fakeSocketBackend{whole: true}
@@ -216,6 +217,13 @@ func TestResponsesProviderSocketReplyIsAStream(t *testing.T) {
 // reaches the network. It returns the handshakes the fake was asked for.
 func openAIAt(t *testing.T, f *fakeSocketBackend, sock string) *atomic.Int32 {
 	t.Helper()
+	return httpsAt(t, f, "oai", "api.openai.com", sock)
+}
+
+// httpsAt adds provider id at https://host/v1 with Socket sock, host
+// connected to the fake f as openAIAt's is.
+func httpsAt(t *testing.T, f *fakeSocketBackend, id, host, sock string) *atomic.Int32 {
+	t.Helper()
 	noRests()
 	t.Cleanup(noRests)
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -223,7 +231,7 @@ func openAIAt(t *testing.T, f *fakeSocketBackend, sock string) *atomic.Int32 {
 	f.path = "/v1/responses"
 	var asked atomic.Int32
 	up := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Host != "api.openai.com" {
+		if r.Host != host {
 			http.Error(w, "host "+r.Host, http.StatusMisdirectedRequest)
 			return
 		}
@@ -233,8 +241,8 @@ func openAIAt(t *testing.T, f *fakeSocketBackend, sock string) *atomic.Int32 {
 		f.ServeHTTP(w, r)
 	}))
 	t.Cleanup(up.Close)
-	p := provider.Provider{ID: "oai", Name: "oai", Key: "sk-oai", Models: []string{"m1"}, Responses: "https://api.openai.com/v1", Socket: sock,
-		InsecureTLS: true, Resolve: map[string][]string{"api.openai.com": {up.Listener.Addr().String()}}}
+	p := provider.Provider{ID: id, Name: id, Key: "sk-" + id, Models: []string{"m1"}, Responses: "https://" + host + "/v1", Socket: sock,
+		InsecureTLS: true, Resolve: map[string][]string{host: {up.Listener.Addr().String()}}}
 	if err := provider.Save(p); err != nil {
 		t.Fatal(err)
 	}
@@ -278,5 +286,133 @@ func TestOpenAIProviderSocketOffNeverDials(t *testing.T) {
 	relayPost(t, keptTurn("conv-1", "oai/m1", userPing, asstPong, userAgain))
 	if posts, _ := f.counts(); posts != 2 || asked.Load() != 0 {
 		t.Fatalf("%d posts, %d handshakes; want HTTP alone", posts, asked.Load())
+	}
+}
+
+// KawaiiZapic on X, then the owner: relays too. A relay at an https
+// Responses address, Socket unset, has its turns go over the socket, the
+// next one as the new input after previous_response_id, while the relay
+// says it answered after that response.
+func TestRelayTurnsGoOverWebSocketByDefault(t *testing.T) {
+	socketOn(t)
+	f := &fakeSocketBackend{keep: true, whole: true}
+	f.frames = keptReply(f)
+	asked := httpsAt(t, f, "relay", "relay.example", "")
+
+	relayPost(t, keptTurn("conv-1", "relay/m1", userPing))
+	rec := relayPost(t, keptTurn("conv-1", "relay/m1", userPing, asstPong, userAgain))
+	if posts, sockets := f.counts(); posts != 0 || sockets != 2 || asked.Load() != 1 {
+		t.Fatalf("%d HTTP posts, %d socket turns on %d handshakes; want both turns on one socket", posts, sockets, asked.Load())
+	}
+	second := gjson.ParseBytes(f.turn(1).msg)
+	if got := second.Get("previous_response_id").String(); got != "resp-1" {
+		t.Errorf("previous_response_id %q, want resp-1: %s", got, f.turn(1).msg)
+	}
+	if in := second.Get("input").Array(); len(in) != 1 {
+		t.Errorf("delta input %s, want only the new user message", second.Get("input").Raw)
+	}
+	if n := strings.Count(rec.Body.String(), "event: response.created\n"); n != 1 {
+		t.Errorf("%d response.created: %s", n, rec.Body.String())
+	}
+}
+
+// Most relays refuse the handshake (DeepSeek 405, OpenRouter 404, tried
+// 11-21), a 401 too: one that does is spoken HTTP for codexRelayShun, not
+// asked again in ten minutes. OpenAI's own API keeps the short shun.
+func TestRelayRefusedSocketIsLeftToHTTPForHours(t *testing.T) {
+	for _, code := range []int{http.StatusMethodNotAllowed, http.StatusNotFound, http.StatusUnauthorized} {
+		t.Run(http.StatusText(code), func(t *testing.T) {
+			socketOn(t)
+			f := &fakeSocketBackend{whole: true, refuse: code}
+			asked := httpsAt(t, f, "relay", "relay.example", "")
+			relayPost(t, relayPing)
+			relayPost(t, relayPing)
+			if posts, _ := f.counts(); posts != 2 || asked.Load() != 1 {
+				t.Fatalf("%d posts, %d handshakes; want both over HTTP after one refusal", posts, asked.Load())
+			}
+			codexShunMu.Lock()
+			until := codexShun["relay.example"]
+			codexShunMu.Unlock()
+			if left := time.Until(until); left < codexRelayShun-time.Minute {
+				t.Errorf("left to HTTP for %s, want %s", left, codexRelayShun)
+			}
+		})
+	}
+	t.Run("openai", func(t *testing.T) {
+		socketOn(t)
+		f := &fakeSocketBackend{whole: true, refuse: http.StatusNotFound}
+		openAIAt(t, f, "")
+		relayPost(t, strings.Replace(relayPing, "relay/m1", "oai/m1", 1))
+		codexShunMu.Lock()
+		until := codexShun["api.openai.com"]
+		codexShunMu.Unlock()
+		if left := time.Until(until); left <= 0 || left > codexSocketShun {
+			t.Errorf("OpenAI left to HTTP for %s, want %s", left, codexSocketShun)
+		}
+	})
+}
+
+// A relay that takes the socket but drops previous_response_id answers
+// the new input alone as the whole conversation (DeepSeek's HTTP does,
+// with a 200). Its delta's response.created names no previous response:
+// nothing of that reply is handed on, the turn goes whole on a new
+// socket, and the relay's next turns go whole too.
+func TestRelayDeltaNotAnsweredAsOneGoesWhole(t *testing.T) {
+	socketOn(t)
+	f := &fakeSocketBackend{keep: true, whole: true}
+	reply := keptReply(f)
+	f.frames = func(turn socketTurn) []string {
+		turn.msg = []byte(`{}`) // as though it never read previous_response_id
+		return reply(turn)
+	}
+	httpsAt(t, f, "relay", "relay.example", "")
+
+	relayPost(t, keptTurn("conv-1", "relay/m1", userPing))
+	rec := relayPost(t, keptTurn("conv-1", "relay/m1", userPing, asstPong, userAgain))
+	if posts, sockets := f.counts(); posts != 0 || sockets != 3 || f.opened() != 2 {
+		t.Fatalf("%d posts, %d turns on %d sockets; want the delta tried, then whole on a new socket", posts, sockets, f.opened())
+	}
+	if !gjson.GetBytes(f.turn(1).msg, "previous_response_id").Exists() {
+		t.Fatalf("the second turn wasn't tried as a delta: %s", f.turn(1).msg)
+	}
+	whole := f.turn(2)
+	if whole.socket != 2 || gjson.GetBytes(whole.msg, "previous_response_id").Exists() ||
+		len(gjson.GetBytes(whole.msg, "input").Array()) != 3 {
+		t.Errorf("the retry on socket %d: %s; want the whole turn on a new socket", whole.socket, whole.msg)
+	}
+	if n := strings.Count(rec.Body.String(), "event: response.created\n"); n != 1 || !strings.Contains(rec.Body.String(), `"id":"resp-3"`) {
+		t.Errorf("%d response.created; want the whole turn's reply alone: %s", n, rec.Body.String())
+	}
+	relayPost(t, keptTurn("conv-1", "relay/m1", userPing, asstPong, userAgain, asstPong, userPing))
+	third := f.turn(3)
+	if third.socket != 2 || gjson.GetBytes(third.msg, "previous_response_id").Exists() ||
+		len(gjson.GetBytes(third.msg, "input").Array()) != 5 {
+		t.Errorf("the next turn on socket %d: %s; want it whole on the kept socket", third.socket, third.msg)
+	}
+}
+
+// A relay's socket that answers a new turn with an error frame has the
+// turn go over HTTP; when HTTP takes it, the socket isn't asked again
+// for codexRelayShun.
+func TestRelaySocketErrorGoesOverHTTP(t *testing.T) {
+	socketOn(t)
+	f := &fakeSocketBackend{whole: true}
+	f.frames = func(socketTurn) []string {
+		return []string{`{"type":"error","status":400,"error":{"type":"invalid_request_error","message":"Unsupported"}}`}
+	}
+	asked := httpsAt(t, f, "relay", "relay.example", "")
+	rec := relayPost(t, relayPing)
+	if n := strings.Count(rec.Body.String(), "event: response.created\n"); n != 1 || strings.Contains(rec.Body.String(), "Unsupported") {
+		t.Errorf("want the HTTP reply alone: %s", rec.Body.String())
+	}
+	relayPost(t, relayPing)
+	if posts, sockets := f.counts(); posts != 2 || sockets != 1 || asked.Load() != 1 {
+		t.Fatalf("%d posts, %d socket turns, %d handshakes; want the socket tried once", posts, sockets, asked.Load())
+	}
+	codexShunMu.Lock()
+	until := codexShun["relay.example"]
+	codexShunMu.Unlock()
+	if left := time.Until(until); left < codexRelayShun-time.Minute {
+		t.Errorf("left to HTTP for %s, want %s", left, codexRelayShun)
 	}
 }

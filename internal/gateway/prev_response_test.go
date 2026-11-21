@@ -7,12 +7,14 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/tidwall/gjson"
 	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
@@ -64,7 +66,13 @@ func prevSandbox(t *testing.T, p provider.Provider) *Server {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	old := prevResponses
 	prevResponses = newPrevStore(prevCap, prevTTL)
-	t.Cleanup(func() { prevResponses = old })
+	clearNoDelta := func() {
+		prevNoDeltaMu.Lock()
+		clear(prevNoDelta)
+		prevNoDeltaMu.Unlock()
+	}
+	clearNoDelta()
+	t.Cleanup(func() { prevResponses = old; clearNoDelta() })
 	if err := provider.Save(p); err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +197,7 @@ func TestPreviousResponseKeptUpstreamSentNewInputOnly(t *testing.T) {
 		if forget.Load() && strings.Contains(string(body), "previous_response_id") {
 			return 400, "application/json", `{"error":{"message":"Previous response with id 'resp_up1' not found.","type":"invalid_request_error","param":"previous_response_id","code":"previous_response_not_found"}}`
 		}
-		return 200, "application/json", fmt.Sprintf(`{"id":"resp_up%d","object":"response","status":"completed","output":[{"type":"message","id":"msg_%d","role":"assistant","content":[{"type":"output_text","text":"answer %d"}]}],"usage":{"input_tokens":3,"output_tokens":1}}`, n, n, n)
+		return 200, "application/json", keptReplyAfter(n, body)
 	})
 	s := prevSandbox(t, provider.Provider{ID: "fake", Name: "Fake", Key: "k", Models: []string{"m1"}, Responses: up.srv.URL + "/v1"})
 	img := `{"type":"message","role":"user","content":[{"type":"input_image","image_url":"data:image/png;base64,` + strings.Repeat("QUFB", 50000) + `"},{"type":"input_text","text":"what is this?"}]}`
@@ -268,7 +276,13 @@ func TestPrevStoreBounded(t *testing.T) {
 func TestKeptTurnOwnsItsInput(t *testing.T) {
 	old := prevResponses
 	prevResponses = newPrevStore(prevCap, prevTTL)
-	t.Cleanup(func() { prevResponses = old })
+	clearNoDelta := func() {
+		prevNoDeltaMu.Lock()
+		clear(prevNoDelta)
+		prevNoDeltaMu.Unlock()
+	}
+	clearNoDelta()
+	t.Cleanup(func() { prevResponses = old; clearNoDelta() })
 	body := []byte(`{"model":"m","instructions":"` + strings.Repeat("rules ", 1000) + `","input":[{"type":"message","role":"user","content":"hi"}]}`)
 	r := httptest.NewRequest("POST", "/v1/responses", nil)
 	r.RemoteAddr = "127.0.0.1:5555"
@@ -456,4 +470,126 @@ func TestPreviousResponseToAnotherProviderSentWithoutIDs(t *testing.T) {
 		t.Fatalf("%d calls to the other provider, want one", n)
 	}
 	wholeWithoutIDs(t, other.last())
+}
+
+// keptReplyAfter is the n-th whole reply of an upstream that keeps
+// responses, naming the one it was sent after as OpenAI's does.
+func keptReplyAfter(n int, body []byte) string {
+	prev := "null"
+	if id := gjson.GetBytes(body, "previous_response_id").String(); id != "" {
+		prev = strconv.Quote(id)
+	}
+	return fmt.Sprintf(`{"id":"resp_up%d","object":"response","status":"completed","previous_response_id":%s,"output":[{"type":"message","id":"msg_%d","role":"assistant","content":[{"type":"output_text","text":"answer %d"}]}],"usage":{"input_tokens":3,"output_tokens":1}}`, n, prev, n, n)
+}
+
+// The owner, after KawaiiZapic on X: a relay's Responses turns go as
+// deltas too. A client naming the previous response has the relay that
+// answered it sent the new input alone after the relay's id, while the
+// relay's reply names that id back, streamed or whole.
+func TestRelayKeptUpstreamSentNewInputOnly(t *testing.T) {
+	for _, stream := range []bool{false, true} {
+		t.Run(fmt.Sprint("stream ", stream), func(t *testing.T) {
+			up := newPrevUp(t, func(n int, body []byte) (int, string, string) {
+				r := keptReplyAfter(n, body)
+				if !stream {
+					return 200, "application/json", r
+				}
+				created, _ := sjsonSet(r, "output", []any{})
+				return 200, "text/event-stream", "event: response.created\ndata: {\"type\":\"response.created\",\"response\":" + created + "}\n\n" +
+					"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":" + r + "}\n\n"
+			})
+			s := prevSandbox(t, provider.Provider{ID: "relay", Name: "Relay", Key: "k", Models: []string{"m1"}, Responses: up.srv.URL + "/v1"})
+			st := ""
+			if stream {
+				st = `"stream":true,`
+			}
+			askResponses(t, s, "", `{"model":"relay/m1",`+st+`"input":"first turn"}`)
+			rec := askResponses(t, s, "", `{"model":"relay/m1",`+st+`"previous_response_id":"resp_up1","input":"second turn"}`)
+			if rec.Code != 200 || !strings.Contains(rec.Body.String(), "answer 2") {
+				t.Fatalf("%d %s", rec.Code, rec.Body.String())
+			}
+			q := up.last()
+			in, _ := json.Marshal(q["input"])
+			if up.calls() != 2 || q["previous_response_id"] != "resp_up1" || strings.Contains(string(in), "first turn") {
+				t.Fatalf("%d calls, prev %v input %s; want the new input alone after resp_up1", up.calls(), q["previous_response_id"], in)
+			}
+		})
+	}
+}
+
+// A relay that drops previous_response_id (DeepSeek's Responses API,
+// tried 11-21) answers the new input alone with a 200 that has lost the
+// conversation and names no previous response. That reply never reaches
+// the client: the turn is asked again whole, and the relay's next turns
+// go whole without a delta tried.
+func TestRelayDeltaDroppedGoesWhole(t *testing.T) {
+	for _, stream := range []bool{false, true} {
+		t.Run(fmt.Sprint("stream ", stream), func(t *testing.T) {
+			up := newPrevUp(t, func(n int, body []byte) (int, string, string) {
+				r := keptReplyAfter(n, []byte(`{}`)) // the id never read
+				if !stream {
+					return 200, "application/json", r
+				}
+				return 200, "text/event-stream", "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"x\",\"previous_response_id\":null}}\n\n" +
+					"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":" + r + "}\n\n"
+			})
+			s := prevSandbox(t, provider.Provider{ID: "relay", Name: "Relay", Key: "k", Models: []string{"m1"}, Responses: up.srv.URL + "/v1"})
+			st := ""
+			if stream {
+				st = `"stream":true,`
+			}
+			askResponses(t, s, "", `{"model":"relay/m1",`+st+`"input":"first turn"}`)
+			rec := askResponses(t, s, "", `{"model":"relay/m1",`+st+`"previous_response_id":"resp_up1","input":"second turn"}`)
+			if rec.Code != 200 || !strings.Contains(rec.Body.String(), "answer 3") || strings.Contains(rec.Body.String(), "answer 2") {
+				t.Fatalf("client given %d: %s; want the whole turn's reply alone", rec.Code, rec.Body.String())
+			}
+			up.mu.Lock()
+			tried := string(up.got[1])
+			up.mu.Unlock()
+			q := up.last()
+			in, _ := json.Marshal(q["input"])
+			if up.calls() != 3 || !strings.Contains(tried, `"previous_response_id":"resp_up1"`) {
+				t.Fatalf("%d calls, the second %s; want the delta tried, then the whole", up.calls(), tried)
+			}
+			if _, has := q["previous_response_id"]; has || !strings.Contains(string(in), "first turn") || !strings.Contains(string(in), "second turn") {
+				t.Fatalf("whole: prev %v input %s", q["previous_response_id"], in)
+			}
+			askResponses(t, s, "", `{"model":"relay/m1",`+st+`"previous_response_id":"resp_up3","input":"third turn"}`)
+			if q := up.last(); up.calls() != 4 || q["previous_response_id"] != nil {
+				t.Fatalf("%d calls, prev %v; want the next turn whole at once", up.calls(), q["previous_response_id"])
+			}
+		})
+	}
+}
+
+// A relay that turns the field away is sent the whole, and its next
+// turns too, not a delta and a refusal each turn.
+func TestRelayDeltaRefusedGoesWhole(t *testing.T) {
+	up := newPrevUp(t, func(n int, body []byte) (int, string, string) {
+		if gjson.GetBytes(body, "previous_response_id").Exists() {
+			return 400, "application/json", `{"error":{"message":"Unsupported parameter: previous_response_id","type":"invalid_request_error"}}`
+		}
+		return 200, "application/json", keptReplyAfter(n, body)
+	})
+	s := prevSandbox(t, provider.Provider{ID: "relay", Name: "Relay", Key: "k", Models: []string{"m1"}, Responses: up.srv.URL + "/v1"})
+	askResponses(t, s, "", `{"model":"relay/m1","input":"first turn"}`)
+	responseID(t, askResponses(t, s, "", `{"model":"relay/m1","previous_response_id":"resp_up1","input":"second turn"}`))
+	if up.calls() != 3 {
+		t.Fatalf("%d calls; want the delta refused, then the whole", up.calls())
+	}
+	responseID(t, askResponses(t, s, "", `{"model":"relay/m1","previous_response_id":"resp_up3","input":"third turn"}`))
+	if q := up.last(); up.calls() != 4 || q["previous_response_id"] != nil {
+		t.Fatalf("%d calls, prev %v; want the next turn whole at once", up.calls(), q["previous_response_id"])
+	}
+}
+
+// sjsonSet is doc with key set to v.
+func sjsonSet(doc, key string, v any) (string, error) {
+	var m map[string]any
+	if err := json.Unmarshal([]byte(doc), &m); err != nil {
+		return "", err
+	}
+	m[key] = v
+	b, err := json.Marshal(m)
+	return string(b), err
 }

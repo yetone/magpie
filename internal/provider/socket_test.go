@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -35,12 +36,12 @@ func TestSocketTurn(t *testing.T) {
 		t.Errorf("on: %v %v, want a turn that never shuns", ok, shun)
 	}
 	off := relay
-	off.Socket = ""
+	off.Socket = SocketOff
 	if ok, _ := turn(off.Via(context.Background()), "https://relay.example/v1/responses"); ok {
-		t.Error("a provider without Socket went over the socket")
+		t.Error("a provider set off went over the socket")
 	}
 	if ok, _ := turn(off.Via(ctx), "https://relay.example/v1/responses"); ok {
-		t.Error("a provider without Socket took the one around it")
+		t.Error("a provider set off took the one around it")
 	}
 	acct := relay
 	acct.Account = &Account{}
@@ -94,8 +95,30 @@ func TestSocketByDefaultOnOpenAI(t *testing.T) {
 	for _, p := range []Provider{
 		{ID: "relay", Key: "k", Responses: "https://relay.example/v1"},
 		{ID: "lookalike", Key: "k", Responses: "https://api.openai.com.example/v1"},
-		{ID: "plain", Key: "k", Responses: "http://api.openai.com/v1"},
+	} {
+		if p.SocketMode() != SocketAuto {
+			t.Errorf("%s: %q by default, want auto", p.ID, p.SocketMode())
+		}
+		u := strings.TrimSuffix(p.Responses, "/") + "/responses"
+		req, err := http.NewRequestWithContext(p.Via(context.Background()), "POST", u, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ok, shun := SocketTurn(req); !ok || !shun || !SocketRelay(req) {
+			t.Errorf("%s: %v %v relay %v, want a relay's turn that shuns", p.ID, ok, shun, SocketRelay(req))
+		}
+		p.Socket = SocketOn
+		if req, _ := http.NewRequestWithContext(p.Via(context.Background()), "POST", u, nil); SocketRelay(req) {
+			t.Errorf("%s set on: held to a relay's rules", p.ID)
+		}
+	}
+	if req, _ := http.NewRequestWithContext(oai.Via(context.Background()), "POST", "https://api.openai.com/v1/responses", nil); SocketRelay(req) {
+		t.Error("OpenAI's own API held to a relay's rules")
+	}
+	for _, p := range []Provider{
+		{ID: "plain", Key: "k", Responses: "http://relay.example/v1"},
 		{ID: "acct", Responses: "https://api.openai.com/v1", Account: &Account{}},
+		{ID: "remote", Key: "k", Responses: "https://magpie.example/v1", Preset: RemoteMagpiePreset},
 	} {
 		if p.SocketMode() != "" || p.SocketByDefault() {
 			t.Errorf("%s: %q by default, want HTTP alone", p.ID, p.SocketMode())

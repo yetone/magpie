@@ -1,12 +1,15 @@
 package gateway
 
 import (
+	"bufio"
 	"bytes"
 	"container/list"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
+	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -241,19 +244,112 @@ func prevRoute(p provider.Provider) string {
 // prevKeeps is whether p keeps the responses it gives and takes
 // previous_response_id: OpenAI's API and Azure OpenAI, and Ark's own
 // /api/v3 (tried with a real key on 10-29: a stored response's word came
-// back after its id, and an unknown id is a 400 PreviousResponseNotFound).
-// A subscription's or a plugin's account is never asked so.
+// back after its id, and an unknown id is a 400 PreviousResponseNotFound);
+// and a relay (prevRelay) until it answers a delta not as one. A
+// subscription's or a plugin's account is never asked so.
 var prevKeptBy = prevKeeps
 
 func prevKeeps(p provider.Provider) bool {
 	if p.Account != nil || p.PluginProvider() != "" {
 		return false
 	}
+	return prevVendorKeeps(p) || prevRelay(p) && !prevDeltaLapsed(prevRoute(p))
+}
+
+func prevVendorKeeps(p provider.Provider) bool {
 	host := p.VendorHost()
 	if host == "api.openai.com" || p.IsAzure() {
 		return true
 	}
 	return host == "ark.cn-beijing.volces.com" && strings.Contains(p.Base(provider.Responses), "/api/v3")
+}
+
+// prevRelay is a key's Responses provider that isn't a vendor known to
+// keep responses (prevVendorKeeps) or another magpie (remote_delta.go):
+// a relay, which may pass previous_response_id on to an upstream that
+// keeps it, or drop it. DeepSeek's Responses API drops it (tried 11-21):
+// the reply to the new input alone has lost the conversation, with a 200,
+// a made-up id's too. So a relay's delta is handed on only once its reply
+// names the response it was sent after (prevEchoed), as OpenAI's does;
+// one that doesn't, or turns the field away (prevRefused), is sent each
+// turn whole for prevDeltaLapse.
+func prevRelay(p provider.Provider) bool {
+	return p.Account == nil && p.PluginProvider() == "" && !p.IsRemoteMagpie() && !prevVendorKeeps(p)
+}
+
+// prevDeltaLapse is how long a relay that answered a delta not as one is
+// sent whole.
+var prevDeltaLapse = 24 * time.Hour
+
+var (
+	prevNoDeltaMu sync.Mutex
+	// prevNoDelta is until when a relay's route (prevRoute) is sent
+	// whole
+	prevNoDelta = map[string]time.Time{}
+)
+
+func prevDeltaIgnored(p provider.Provider, why string) {
+	route := prevRoute(p)
+	prevNoDeltaMu.Lock()
+	_, was := prevNoDelta[route]
+	prevNoDelta[route] = time.Now().Add(prevDeltaLapse)
+	prevNoDeltaMu.Unlock()
+	if !was {
+		log.Printf("gateway: %s %s after previous_response_id; its turns go whole for %s", p.Name, why, prevDeltaLapse)
+	}
+}
+
+func prevDeltaLapsed(route string) bool {
+	prevNoDeltaMu.Lock()
+	defer prevNoDeltaMu.Unlock()
+	until, ok := prevNoDelta[route]
+	if ok && time.Now().After(until) {
+		delete(prevNoDelta, route)
+		return false
+	}
+	return ok
+}
+
+// prevEchoHead bounds what of a streamed reply is read for its
+// response.created.
+const prevEchoHead = 256 << 10
+
+// prevEchoed reads the head of res, a relay's 200 to a turn sent after
+// the response id, for whether it says it followed that one: a stream's
+// response.created, or a whole body, names it as previous_response_id.
+// What was read is put back in front of res.Body.
+func prevEchoed(res *http.Response, id string) bool {
+	var head bytes.Buffer
+	stream := strings.Contains(res.Header.Get("Content-Type"), "event-stream")
+	limit := int64(prevEchoHead)
+	if !stream {
+		limit = prevReplyMax
+	}
+	br := bufio.NewReader(io.TeeReader(io.LimitReader(res.Body, limit), &head))
+	ok := false
+	if stream {
+		for {
+			line, err := br.ReadBytes('\n')
+			if data, has := bytes.CutPrefix(bytes.TrimSpace(line), []byte("data:")); has {
+				if v := gjson.GetBytes(data, "type").String(); v != "codex.rate_limits" && v != "codex.response.metadata" {
+					ok = v == "response.created" && gjson.GetBytes(data, "response.previous_response_id").String() == id
+					break
+				}
+			}
+			if err != nil {
+				break
+			}
+		}
+	} else {
+		b, err := io.ReadAll(br)
+		ok = err == nil && int64(len(b)) < limit && gjson.GetBytes(b, "previous_response_id").String() == id
+	}
+	rest := res.Body
+	res.Body = struct {
+		io.Reader
+		io.Closer
+	}{io.MultiReader(bytes.NewReader(head.Bytes()), rest), rest}
+	return ok
 }
 
 // prevAsk is what serveAgent made of a request's previous_response_id,

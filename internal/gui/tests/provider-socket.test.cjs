@@ -5,9 +5,10 @@
 // WebSocket. Ticked it saves auto; one set on from the CLI opens ticked
 // and keeps on; unticked it saves off. One without a Responses URL and a
 // signed-in account show none, and their Save sends none. KawaiiZapic on
-// X: OpenAI's own API goes over it unset, so its row opens ticked with
-// Advanced shut, unticked saves off and ticked again saves unset. Every
-// language, wide and narrow.
+// X, then the owner: OpenAI's own API and a relay at an https address go
+// over it unset, so their row opens ticked with Advanced shut, unticked
+// saves off and ticked again saves unset; plain http and another magpie
+// open unticked. Every language, wide and narrow.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -20,7 +21,9 @@ const base = {
   models: [{ id: "gpt-6", name: "gpt-6", on: true }], agents: [], fallback: [], headers: {},
   key: { set: true, masked: "sk-…one" }, keyList: [], balanceToken: { takes: false, set: false }, proxy: "", searches: false,
 };
-const relay = { ...base, id: "relay", name: "Relay Hub", responses: "https://relay.example/v1", takesSocket: true, socket: "" };
+const relay = { ...base, id: "relay", name: "Relay Hub", responses: "http://relay.example/v1", takesSocket: true, socket: "" };
+const secure = { ...base, id: "secure", name: "Secure Hub", responses: "https://secure.example/v1", takesSocket: true, socket: "" };
+const remote = { ...base, id: "office", name: "Office Magpie", preset: "remote-magpie", responses: "https://magpie.example/v1", takesSocket: true, socket: "" };
 const kept = { ...base, id: "kept", name: "Kept Hub", responses: "https://kept.example/v1", takesSocket: true, socket: "on" };
 const oai = { ...base, id: "oai", name: "OpenAI Key", responses: "https://api.openai.com/v1", takesSocket: true, socket: "" };
 const chat = { ...base, id: "chat", name: "Chat Hub", chat: "https://chat.example/v1", takesSocket: false };
@@ -32,7 +35,7 @@ const codex = {
 };
 
 function serve(lang, posts) {
-  const providers = { providers: [relay, kept, oai, chat, codex], presets: [], excluded: [], gateway: { running: true, window: true } };
+  const providers = { providers: [relay, secure, remote, kept, oai, chat, codex], presets: [], excluded: [], gateway: { running: true, window: true } };
   const state = { agents: [], profiles: [], settings: { lang, theme: "light" } };
   return async (route) => {
     const url = new URL(route.request().url());
@@ -133,28 +136,41 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await box(page, w).uncheck();
         saved = await save(page, posts, w);
         assert.equal(saved.body.id, "kept");
-        assert.equal(saved.body.socket, "");
+        assert.equal(saved.body.socket, "off", "at https, unset would be the socket again");
         assert.deepEqual(errors, []);
       });
 
-      test(`${engine} ${lang} ${width}: OpenAI's own API opens ticked, saves off unticked and unset ticked again`, async (t) => {
-        const { page, errors, posts, w } = await open(t, "OpenAI Key");
-        assert.equal(await adv(page).evaluate((d) => d.open), false, "Advanced stays shut for a default");
+      for (const [name, id] of [["OpenAI Key", "oai"], ["Secure Hub", "secure"]]) {
+        test(`${engine} ${lang} ${width}: ${name} opens ticked, saves off unticked and unset ticked again`, async (t) => {
+          const { page, errors, posts, w } = await open(t, name);
+          assert.equal(await adv(page).evaluate((d) => d.open), false, "Advanced stays shut for a default");
+          await unfold(page);
+          await box(page, w).scrollIntoViewIfNeeded();
+          assert.equal(await box(page, w).isChecked(), true, "ticked by default");
+          await box(page, w).uncheck();
+          let saved = await save(page, posts, w);
+          assert.equal(saved.body.id, id);
+          assert.equal(saved.body.socket, "off");
+          await page.locator(".editor .bar").waitFor({ state: "detached" });
+          await page.locator(".row.provider", { hasText: name }).click();
+          await page.locator(".editor .bar").waitFor();
+          await unfold(page);
+          await box(page, w).scrollIntoViewIfNeeded();
+          await box(page, w).uncheck();
+          await box(page, w).check();
+          saved = await save(page, posts, w);
+          assert.equal(saved.body.socket, "");
+          assert.deepEqual(errors, []);
+        });
+      }
+
+      test(`${engine} ${lang} ${width}: another magpie opens unticked and saves unset`, async (t) => {
+        const { page, errors, posts, w } = await open(t, "Office Magpie");
         await unfold(page);
         await box(page, w).scrollIntoViewIfNeeded();
-        assert.equal(await box(page, w).isChecked(), true, "ticked by default");
-        await box(page, w).uncheck();
-        let saved = await save(page, posts, w);
-        assert.equal(saved.body.id, "oai");
-        assert.equal(saved.body.socket, "off");
-        await page.locator(".editor .bar").waitFor({ state: "detached" });
-        await page.locator(".row.provider", { hasText: "OpenAI Key" }).click();
-        await page.locator(".editor .bar").waitFor();
-        await unfold(page);
-        await box(page, w).scrollIntoViewIfNeeded();
-        await box(page, w).uncheck();
-        await box(page, w).check();
-        saved = await save(page, posts, w);
+        assert.equal(await box(page, w).isChecked(), false, "its turns go as deltas over HTTP already");
+        const saved = await save(page, posts, w);
+        assert.equal(saved.body.id, "office");
         assert.equal(saved.body.socket, "");
         assert.deepEqual(errors, []);
       });

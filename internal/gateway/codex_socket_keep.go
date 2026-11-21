@@ -84,6 +84,7 @@ type codexKept struct {
 	sealed  []bool
 	replyID string
 	copilot bool // Copilot's socket (copilotCreate)
+	relay   bool // a relay's (provider.SocketRelay)
 }
 
 // close ends the socket at once.

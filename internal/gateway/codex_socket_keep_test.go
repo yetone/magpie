@@ -21,8 +21,14 @@ func keptReply(f *fakeSocketBackend) func(socketTurn) []string {
 		f.mu.Lock()
 		n := len(f.sockets)
 		f.mu.Unlock()
+		// The real backend names the turn's previous_response_id back in
+		// response.created; a relay that ignores it names none.
+		created := fmt.Sprintf(`{"type":"response.created","response":{"id":"resp-%d"}}`, n)
+		if prev := gjson.GetBytes(turn.msg, "previous_response_id").String(); prev != "" {
+			created = fmt.Sprintf(`{"type":"response.created","response":{"id":"resp-%d","previous_response_id":%q}}`, n, prev)
+		}
 		return []string{
-			fmt.Sprintf(`{"type":"response.created","response":{"id":"resp-%d"}}`, n),
+			created,
 			`{"type":"response.output_item.added","output_index":0,"item":{"id":"msg_a","type":"message","status":"in_progress","role":"assistant","content":[]}}`,
 			`{"type":"response.output_text.delta","delta":"pong"}`,
 			`{"type":"response.output_item.done","output_index":0,"item":{"id":"msg_a","type":"message","status":"completed","role":"assistant","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"pong"}]}}`,

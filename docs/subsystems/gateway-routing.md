@@ -3314,9 +3314,11 @@ serves it on `/v1/responses`, `/responses` and the Codex backend's
   input after `previous_response_id` on a kept socket (see
   [Providers and accounts](providers-accounts.md)); OpenAI's API, Azure
   and Ark over HTTP take the client's own `previous_response_id`
-  (`prevKeeps`, below), which Codex never sends (`store: false`); another
+  (`prevKeeps`, below), and so does a relay whose reply names the id it
+  followed, which Codex never sends (`store: false`); another
   magpie takes the delta between the two (below). Everything else
-  (Chat Completions, Messages, Gemini, a Responses provider over HTTP)
+  (Chat Completions, Messages, Gemini, a Responses provider over HTTP with no
+  `previous_response_id` from the client)
   is sent the whole conversation each turn, since those protocols keep
   nothing between requests. A socket's conversation doesn't outlive the
   socket or the gateway.
@@ -3398,6 +3400,20 @@ included). `previousResponse` in
   new input with the provider's own id (`prevDelta`), so images aren't
   uploaded again. A provider that says it doesn't know that id
   (`prevRefused`) is sent the whole conversation at once.
+- A Responses relay with an API key (`prevRelay`: no account, no plugin,
+  not another magpie, not one of the above) is sent the delta the same
+  way since 11-21 (KawaiiZapic on X), but its reply must say it followed
+  that id: the first event of a stream (past `codex.*` frames) is
+  `response.created` with `response.previous_response_id`, or a JSON
+  body's `previous_response_id` (`prevEchoed`, which reads at most the
+  stream's first 256KB and hands the reply on whole). DeepSeek's
+  Responses answers 200 to any `previous_response_id`, a made-up one
+  too, and drops the conversation (tried 11-21). A reply that doesn't
+  name it, or a refusal (`prevRefused`), sends the turn again whole and
+  sends that route (`prevRoute`) whole turns for 24 hours
+  (`prevDeltaIgnored`, `prevDeltaLapse`;
+  `TestRelayKeptUpstreamSentNewInputOnly`,
+  `TestRelayDeltaDroppedGoesWhole`, `TestRelayDeltaRefusedGoesWhole`).
 - A kept turn remembers which provider and key its reply came from
   (`made`, any relayed reply, kept upstream or not). A conversation going
   on with another one is sent the items magpie brings back without the
