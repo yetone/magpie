@@ -1,8 +1,11 @@
 package usage
 
 import (
+	"cmp"
+	"encoding/json"
 	"math"
 	"slices"
+	"strconv"
 	"strings"
 	"unique"
 )
@@ -33,8 +36,54 @@ type ModelSpeed struct {
 
 // speedHist counts values by the 2% bin they fall in, so a chunk of
 // hundreds of thousands of requests is a few hundred numbers, and a page
-// adds the chunks' up instead of sorting every request's.
-type speedHist map[uint16]uint32
+// adds the chunks' up instead of sorting every request's. The bins are
+// kept in order, 8 bytes each: a map of them took two to three times
+// that, and every chunk's part keeps one for each model it ran (#2278).
+// On disk it is the JSON object a map of bin to count was.
+type speedHist []histCount
+
+type histCount struct {
+	bin uint16
+	n   uint32
+}
+
+// inc counts n more values in bin b.
+func (h *speedHist) inc(b uint16, n uint32) {
+	i, ok := slices.BinarySearchFunc(*h, b, func(c histCount, b uint16) int { return cmp.Compare(c.bin, b) })
+	if ok {
+		(*h)[i].n += n
+		return
+	}
+	*h = slices.Insert(*h, i, histCount{b, n})
+}
+
+func (h speedHist) MarshalJSON() ([]byte, error) {
+	out := []byte{'{'}
+	for i, c := range h {
+		if i > 0 {
+			out = append(out, ',')
+		}
+		out = append(out, '"')
+		out = strconv.AppendUint(out, uint64(c.bin), 10)
+		out = append(out, '"', ':')
+		out = strconv.AppendUint(out, uint64(c.n), 10)
+	}
+	return append(out, '}'), nil
+}
+
+func (h *speedHist) UnmarshalJSON(b []byte) error {
+	var m map[uint16]uint32
+	if err := json.Unmarshal(b, &m); err != nil {
+		return err
+	}
+	out := make(speedHist, 0, len(m))
+	for bin, n := range m {
+		out = append(out, histCount{bin, n})
+	}
+	slices.SortFunc(out, func(a, b histCount) int { return cmp.Compare(a.bin, b.bin) })
+	*h = out
+	return nil
+}
 
 const (
 	histStep = 1.02
@@ -56,7 +105,7 @@ func histValue(b uint16) float64 {
 
 func (h speedHist) total() (n int) {
 	for _, c := range h {
-		n += int(c)
+		n += int(c.n)
 	}
 	return n
 }
@@ -68,22 +117,17 @@ func (h speedHist) median() float64 {
 	if n == 0 {
 		return 0
 	}
-	bins := make([]uint16, 0, len(h))
-	for b := range h {
-		bins = append(bins, b)
-	}
-	slices.Sort(bins)
 	lo, hi := (n-1)/2, n/2
 	var got, seen int
 	var sum float64
-	for _, b := range bins {
-		next := seen + int(h[b])
+	for _, c := range h {
+		next := seen + int(c.n)
 		if lo >= seen && lo < next {
-			sum += histValue(b)
+			sum += histValue(c.bin)
 			got++
 		}
 		if hi >= seen && hi < next {
-			sum += histValue(b)
+			sum += histValue(c.bin)
 			got++
 		}
 		seen = next
@@ -138,7 +182,7 @@ func rankOf(k string) (model, provider string) {
 func (s speedRank) of(key string) *modelHist {
 	m := s[key]
 	if m == nil {
-		m = &modelHist{Speed: speedHist{}, TTFT: speedHist{}}
+		m = &modelHist{}
 		// unique's copy, so a chunk's part holds none of the chunk's strings
 		s[unique.Make(key).Value()] = m
 	}
@@ -166,9 +210,9 @@ func (s speedRank) add(r *Row) {
 		return
 	}
 	m.Requests++
-	m.TTFT[histBin(float64(r.TTFT))]++
+	m.TTFT.inc(histBin(float64(r.TTFT)), 1)
 	if n, w := r.Decode(); w > 0 && n >= MinRankTokens {
-		m.Speed[histBin(float64(n)*1000/float64(w))]++
+		m.Speed.inc(histBin(float64(n)*1000/float64(w)), 1)
 	}
 }
 
@@ -180,12 +224,44 @@ func (s speedRank) merge(o speedRank) {
 		m.Tries += x.Tries
 		m.Failed += x.Failed
 		m.Swapped += x.Swapped
-		for b, c := range x.Speed {
-			m.Speed[b] += c
+		m.Speed = m.Speed.plus(x.Speed)
+		m.TTFT = m.TTFT.plus(x.TTFT)
+	}
+}
+
+// plus is h with o's counts added, both in order, merged in one pass.
+func (h speedHist) plus(o speedHist) speedHist {
+	switch {
+	case len(o) == 0:
+		return h
+	case len(h) == 0:
+		return slices.Clone(o)
+	}
+	out := make(speedHist, 0, len(h)+len(o))
+	i, j := 0, 0
+	for i < len(h) && j < len(o) {
+		switch a, b := h[i], o[j]; {
+		case a.bin < b.bin:
+			out = append(out, a)
+			i++
+		case a.bin > b.bin:
+			out = append(out, b)
+			j++
+		default:
+			out = append(out, histCount{a.bin, a.n + b.n})
+			i++
+			j++
 		}
-		for b, c := range x.TTFT {
-			m.TTFT[b] += c
-		}
+	}
+	out = append(append(out, h[i:]...), o[j:]...)
+	return slices.Clip(out)
+}
+
+// clip lets go of the room s's histograms grew into: a chunk's part
+// keeps them for as long as the chunk is read.
+func (s speedRank) clip() {
+	for _, m := range s {
+		m.Speed, m.TTFT = slices.Clip(m.Speed), slices.Clip(m.TTFT)
 	}
 }
 

@@ -258,6 +258,7 @@ func (pass *cellPass) part(ps *pairedRows, rows *chunkRows, c *rowChunk, r *Row)
 	for i, j := range order {
 		part.cells[i] = cells[j]
 	}
+	part.speeds.clip()
 	return part
 }
 

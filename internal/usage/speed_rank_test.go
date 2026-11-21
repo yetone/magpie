@@ -1,7 +1,10 @@
 package usage
 
 import (
+	"encoding/json"
 	"math"
+	"math/rand/v2"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -197,5 +200,67 @@ func TestModelSpeedRankByProvider(t *testing.T) {
 		if got := rank.providers(); len(got) != 1 || got[0].Tries != 2 || got[0].Failed != 1 || got[0].Swapped != 1 || got[0].Requests != 1 {
 			t.Fatalf("%s: %+v", name, got)
 		}
+	}
+}
+
+// A histogram kept as bins in order counts, merges and takes its median
+// as the map of bin to count it replaced did, and reads the page file that
+// map wrote: the same JSON object.
+func TestSpeedHistIsTheMap(t *testing.T) {
+	median := func(m map[uint16]uint32) float64 {
+		var h speedHist
+		for b, n := range m {
+			h.inc(b, n)
+		}
+		return h.median()
+	}
+	r := rand.New(rand.NewPCG(1, 2))
+	for round := range 200 {
+		ma, mb := map[uint16]uint32{}, map[uint16]uint32{}
+		var a, b speedHist
+		for range r.IntN(300) {
+			bin, n := uint16(r.IntN(40*(round%5+1))), uint32(r.IntN(3)+1)
+			ma[bin] += n
+			a.inc(bin, n)
+		}
+		for range r.IntN(300) {
+			bin := uint16(r.IntN(200))
+			mb[bin]++
+			b.inc(bin, 1)
+		}
+		sum := map[uint16]uint32{}
+		for _, m := range []map[uint16]uint32{ma, mb} {
+			for bin, n := range m {
+				sum[bin] += n
+			}
+		}
+		got := a.plus(b)
+		if got.total() != a.total()+b.total() || got.median() != median(sum) || len(got) != len(sum) {
+			t.Fatalf("round %d: merged %d values, median %v over %d bins; want %d, %v, %d", round, got.total(), got.median(), len(got), a.total()+b.total(), median(sum), len(sum))
+		}
+		for i := 1; i < len(got); i++ {
+			if got[i-1].bin >= got[i].bin {
+				t.Fatalf("round %d: bins out of order at %d", round, i)
+			}
+		}
+		old, err := json.Marshal(sum)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var read speedHist
+		if err := json.Unmarshal(old, &read); err != nil || !reflect.DeepEqual(read, got) && len(got) > 0 {
+			t.Fatalf("round %d: the map's JSON read back as %v, %v; want %v", round, read, err, got)
+		}
+		mine, _ := json.Marshal(got)
+		var back map[uint16]uint32
+		if err := json.Unmarshal(mine, &back); err != nil || !reflect.DeepEqual(back, sum) {
+			t.Fatalf("round %d: written %s, read by the map as %v, %v", round, mine, back, err)
+		}
+	}
+	var e struct {
+		H speedHist `json:"h,omitempty"`
+	}
+	if b, _ := json.Marshal(e); string(b) != "{}" {
+		t.Fatalf("an empty histogram is written: %s", b)
 	}
 }
