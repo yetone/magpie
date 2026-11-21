@@ -9,6 +9,9 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
+// the router row is over the list, so a row may be under the fold: the
+// reader wheels to it (the app puts Playwright's own scroll back)
+const { reach } = require("./reader.cjs");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
 
@@ -64,7 +67,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await page.goto("http://magpie.test/");
           await page.locator('button[data-view="library"]').click();
           const ed = page.locator("#modal .lib-editor");
-          await page.locator("#view-library .lib-server .name", { hasText: "magpie-web-search" }).click();
+          const name = page.locator("#view-library .lib-server .name", { hasText: "magpie-web-search" });
+          await reach(page, name);
+          await name.click();
           await ed.waitFor();
           await page.waitForTimeout(600); // the dialog has stopped growing in
           const pick = (name) => ed.locator(".lib-viewpick .opt", { hasText: new RegExp("^" + name + "$") });

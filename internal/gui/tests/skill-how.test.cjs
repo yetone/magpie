@@ -12,6 +12,9 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
+// the router row is over the list, so a row may be under the fold: the
+// reader wheels to it (the app puts Playwright's own scroll back)
+const { reach } = require("./reader.cjs");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
 
@@ -71,8 +74,7 @@ const scrolled = (page) => page.evaluate(() => [window.scrollX, window.scrollY, 
 // dialog is let settle first.
 const press = async (page, loc) => {
   await page.waitForFunction(() => !document.querySelector("#modal").getAnimations({ subtree: true }).length);
-  // the Skill router row is over the list, so the bars may be below the fold
-  await loc.scrollIntoViewIfNeeded();
+  await reach(page, loc);
   const b = await loc.boundingBox();
   await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
 };

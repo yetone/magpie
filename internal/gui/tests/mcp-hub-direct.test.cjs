@@ -11,6 +11,9 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
+// the router row is over the list, so a row may be under the fold: the
+// reader wheels to it (the app puts Playwright's own scroll back)
+const { reach } = require("./reader.cjs");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
 
@@ -89,7 +92,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             const ed = page.locator("#modal .lib-editor");
             const sw = ed.getByRole("switch", { name: w("Through the MCP router"), exact: true });
             const tag = row.locator(".lib-tag.lib-direct");
-            const open = async (r = row) => { await r.locator(".name").click(); await ed.waitFor(); };
+            const open = async (r = row) => { await reach(page, r.locator(".name")); await r.locator(".name").click(); await ed.waitFor(); };
             const save = async () => { await ed.locator(":scope > .bar button.primary").click(); await ed.waitFor({ state: "detached" }); };
             const stats = () => page.locator("#view-library .lib-hubstats").textContent();
             await row.waitFor();

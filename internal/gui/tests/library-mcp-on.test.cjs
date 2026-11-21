@@ -11,6 +11,9 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
+// the router row is over the list, so a row may be under the fold: the
+// reader wheels to it (the app puts Playwright's own scroll back)
+const { reach } = require("./reader.cjs");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
 const { strings } = require("./strings.cjs");
@@ -118,6 +121,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(await sideways(page), [], `${where}: sideways scroll, on`);
 
         // off: kept, dimmed, the editor not opened
+        await reach(page, sw);
         await sw.click();
         await page.waitForFunction((x) => document.querySelector("#status")?.textContent === x, w("{name} is off; its settings are kept", { name: "notes" }));
         assert.deepEqual(st.sent, [{ name: "notes", on: false }]);
@@ -135,6 +139,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(await sideways(page), [], `${where}: sideways scroll, off`);
 
         // on again, as it was
+        await reach(page, offRow.locator(":scope > .lib-switch"));
         await offRow.locator(":scope > .lib-switch").click();
         await page.waitForFunction((x) => document.querySelector("#status")?.textContent === x, w("{name} is on again", { name: "notes" }));
         assert.deepEqual(st.sent, [{ name: "notes", on: false }, { name: "notes", on: true }]);
