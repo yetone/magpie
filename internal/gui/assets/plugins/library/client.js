@@ -5851,14 +5851,30 @@ magpie.plugin("library", (ctx) => {
     const plugins = lib.plugins || [];
     if (!plugins.length) {
       body.append(empty(t("No Claude plugins in the library yet"), t("Install one from a folder, a git address or a marketplace.json.")));
+      body.append(discover("claude"));
       // Claude Code's own plugins can still be turned on for a project
       if (!agentless() && lib.projects.length && (lib.claudeInstalled || []).length) renderProjects(body, "plugins");
       return;
     }
-    const list = el("div", "list lib-list");
+    const list = el("div", "list lib-list lib-plugins");
     list.append(...[...plugins].sort((a, b) => a.name.localeCompare(b.name)).map((p) => pluginRow(p, all)));
-    body.append(list);
+    body.append(list, discover("claude"));
+    filterPlugins(body);
     if (!agentless()) renderProjects(body, "plugins");
+  }
+  // The market's search narrows the installed plugins too: a row shows
+  // when its name, version, description or parts have every word typed.
+  function filterPlugins(body) {
+    const list = body.querySelector(".lib-plugins");
+    if (!list) return;
+    const words = market.claude.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    let shown = 0;
+    for (const row of list.querySelectorAll(":scope > .lib-plugin")) {
+      const text = (row.querySelector(".who")?.textContent || "").toLowerCase();
+      row.hidden = !words.every((w) => text.includes(w));
+      if (!row.hidden) shown++;
+    }
+    list.hidden = !shown;
   }
 
   function pluginFind() {
@@ -9248,6 +9264,7 @@ magpie.plugin("library", (ctx) => {
     mcp: { q: "", items: null, error: "", loading: false, seq: 0, timer: 0, custom: null, shown: 0 },
     skills: { q: "", items: null, error: "", loading: false, seq: 0, timer: 0, shown: 0 },
     pi: { q: "", items: null, error: "", loading: false, seq: 0, timer: 0, shown: 0 },
+    claude: { q: "", items: null, error: "", loading: false, seq: 0, timer: 0, shown: 0 },
   };
   // how many cards a list shows at first, and each Show more adds
   const MARKET_PAGE = 60;
@@ -9280,7 +9297,7 @@ magpie.plugin("library", (ctx) => {
     // a list already drawn is never reordered under the reader
     const users = kind === "mcp" ? askServerUsers() : null;
     try {
-      const r = await api("library/market/" + ({ mcp: "servers", skills: "skills", pi: "pi" })[kind] + "?q=" + encodeURIComponent(m.q.trim()));
+      const r = await api("library/market/" + ({ mcp: "servers", skills: "skills", pi: "pi", claude: "claude" })[kind] + "?q=" + encodeURIComponent(m.q.trim()));
       if (users) await Promise.race([users, new Promise((ok) => setTimeout(ok, 1000))]);
       if (seq !== m.seq) return;
       m.items = r.items || [];
@@ -9308,7 +9325,7 @@ magpie.plugin("library", (ctx) => {
     m.loading = false;
     drawMarket(kind);
     if (kind === "skills") describeSkills();
-    if (kind === "pi") return;
+    if (kind === "pi" || kind === "claude") return;
     // The market reads the library as it is now; one it calls added that
     // this page doesn't list was added elsewhere — another window, the CLI.
     const mine = new Set((kind === "mcp" ? lib?.servers : lib?.skills)?.map((x) => x.name) || []);
@@ -9345,7 +9362,8 @@ magpie.plugin("library", (ctx) => {
     const inp = el("input");
     inp.type = "search";
     inp.dataset.lib = "market-" + kind;
-    inp.placeholder = kind === "mcp" ? t("Search MCP servers — GitHub, Postgres, Figma…") : kind === "pi" ? t("Search Pi packages on npm, or enter a package or git URL…") : t("Search skills on skills.sh — react, pdf, testing…");
+    inp.placeholder = kind === "mcp" ? t("Search MCP servers — GitHub, Postgres, Figma…") : kind === "pi" ? t("Search Pi packages on npm, or enter a package or git URL…")
+      : kind === "claude" ? t("Search Claude plugins — GitHub, Figma, testing…") : t("Search skills on skills.sh — react, pdf, testing…");
     inp.spellcheck = false;
     inp.autocomplete = "off";
     inp.value = m.q;
@@ -9353,7 +9371,9 @@ magpie.plugin("library", (ctx) => {
       m.q = inp.value;
       clearTimeout(m.timer);
       const q = m.q.trim();
-      if (kind !== "mcp" && q.length === 1) return;
+      // the Claude plugins' search finds the installed ones too
+      if (kind === "claude") filterPlugins(box.closest(".lib-body") || page);
+      if (kind !== "mcp" && kind !== "claude" && q.length === 1) return;
       m.timer = setTimeout(() => fetchMarket(kind), 320);
     };
     inp.onkeydown = (e) => {
@@ -9376,7 +9396,7 @@ magpie.plugin("library", (ctx) => {
     box.classList.toggle("loading", m.loading);
     const note = box.querySelector(".mk-note");
     note.textContent = q && m.items ? (m.items.length === 1 ? t("1 result") : t("{n} results", { n: m.items.length }))
-      : kind === "mcp" ? (m.byUse ? t("Most used first, then featured and the MCP Registry") : t("Featured, and the official MCP Registry")) : kind === "pi" ? t("Most downloaded on npm") : t("Popular on skills.sh");
+      : kind === "mcp" ? (m.byUse ? t("Most used first, then featured and the MCP Registry") : t("Featured, and the official MCP Registry")) : kind === "pi" ? t("Most downloaded on npm") : kind === "claude" ? t("Claude Code's official marketplace") : t("Popular on skills.sh");
     const grid = box.querySelector(".mk-grid");
     grid.replaceChildren();
     if (!m.items) {
@@ -9412,7 +9432,7 @@ magpie.plugin("library", (ctx) => {
     moreCards(kind, grid);
   }
 
-  const cardOf = (kind, x) => kind === "mcp" ? serverCard(x) : kind === "pi" ? piCard(x) : x.skills ? repoCard(x) : skillCard(x);
+  const cardOf = (kind, x) => kind === "mcp" ? serverCard(x) : kind === "pi" ? piCard(x) : kind === "claude" ? claudeCard(x) : x.skills ? repoCard(x) : skillCard(x);
 
   // What a list shows, a card each. skills.sh lists a repository's skills
   // one by one (Ethereal499 on X: mattpocock/skills' all apart), so two or
@@ -10047,6 +10067,39 @@ magpie.plugin("library", (ctx) => {
     }
     piBusy.delete(key);
     if (tab === "pi") render();
+  }
+  // A plugin of Claude Code's official marketplace: installed into the
+  // library from the marketplace, by the same install as an address
+  // typed above, for every agent shown (its row's chips change that).
+  function claudeCard(x) {
+    const has = (lib?.plugins || []).some((p) => p.name === x.name);
+    const c = el("div", "mk-card" + (has ? " have" : ""));
+    c.dataset.id = x.name;
+    const top = el("div", "mk-top");
+    const who = el("div", "mk-who");
+    const nm = el("div", "mk-name");
+    nm.append(el("span", "mk-title", x.title || x.name));
+    who.append(nm);
+    const meta = el("div", "mk-meta");
+    if (x.author) meta.append(el("span", "mk-pub", x.author));
+    if (x.category) meta.append(el("span", "mk-badge", x.category));
+    who.append(meta);
+    top.append(logo(x.icon, x.title || x.name), who);
+    const d = el("p", "mk-desc", x.description || "");
+    d.title = x.description || "";
+    const foot = el("div", "mk-foot");
+    if (x.repo) foot.append(extLink(x.repo, t("Source")));
+    else if (x.homepage) foot.append(extLink(x.homepage, t("Website")));
+    foot.append(el("span", "grow"));
+    if (has) {
+      const b = el("span", "mk-have");
+      b.append(svg(CHECK, 11, 2), el("span", "", t("Installed")));
+      foot.append(b);
+    } else {
+      foot.append(button(t("Install"), "action mk-add", () => change("plugins/install", { source: x.source, names: [x.name], agents: shownAgents().map((a) => a.id) }, t("1 plugin installed"))));
+    }
+    c.append(top, d, foot);
+    return c;
   }
   function confirmRemovePi(p, k) {
     const ed = el("div", "editor lib-editor lib-rmone");

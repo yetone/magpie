@@ -399,6 +399,7 @@ var notYet = map[string]string{
 	"GET /api/library/market/servers":            L,  // library.go
 	"GET /api/library/market/skills":             L,  // library.go
 	"GET /api/library/market/pi":                 L,  // library.go
+	"GET /api/library/market/claude":             L,  // library.go
 	"GET /api/library/mcp-signin/{id}":           L,  // library.go
 	"GET /api/library/pi":                        L,  // library.go
 	"GET /api/library/rtk":                       L,  // library.go

@@ -30,11 +30,14 @@ func chinaOn(t *testing.T) {
 
 func TestChinaFirst(t *testing.T) {
 	for raw, want := range map[string]string{
-		"https://registry.npmjs.org/@magpie-community%2fopencode-kiro-auth":                            "https://registry.npmmirror.com/@magpie-community%2fopencode-kiro-auth",
-		"https://registry.npmjs.org/-/v1/search?text=opencode&size=20":                                 "https://registry.npmmirror.com/-/v1/search?text=opencode&size=20",
-		"https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-darwin-aarch64.zip":           "https://registry.npmmirror.com/-/binary/bun/bun-v1.4.2/bun-darwin-aarch64.zip",
-		"https://raw.githubusercontent.com/magpie-community/plugins/main/registry.json":                "https://cdn.jsdelivr.net/gh/magpie-community/plugins@main/registry.json",
-		"https://huggingface.co/LocalAI-io/privacy-filter-GGUF/resolve/935d868/privacy-filter-q8.gguf": "https://hf-mirror.com/LocalAI-io/privacy-filter-GGUF/resolve/935d868/privacy-filter-q8.gguf",
+		"https://registry.npmjs.org/@magpie-community%2fopencode-kiro-auth":                                         "https://registry.npmmirror.com/@magpie-community%2fopencode-kiro-auth",
+		"https://registry.npmjs.org/-/v1/search?text=opencode&size=20":                                              "https://registry.npmmirror.com/-/v1/search?text=opencode&size=20",
+		"https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/bun-darwin-aarch64.zip":                        "https://registry.npmmirror.com/-/binary/bun/bun-v1.4.2/bun-darwin-aarch64.zip",
+		"https://raw.githubusercontent.com/magpie-community/plugins/main/registry.json":                             "https://cdn.jsdelivr.net/gh/magpie-community/plugins@main/registry.json",
+		"https://raw.githubusercontent.com/anthropics/claude-plugins-official/main/.claude-plugin/marketplace.json": "https://cdn.jsdelivr.net/gh/anthropics/claude-plugins-official@main/.claude-plugin/marketplace.json",
+		"https://raw.githubusercontent.com/anthropics/claude-plugins-official/main":                                 "",
+		"https://raw.githubusercontent.com/anthropics/claude-code/main/.claude-plugin/marketplace.json":             "",
+		"https://huggingface.co/LocalAI-io/privacy-filter-GGUF/resolve/935d868/privacy-filter-q8.gguf":              "https://hf-mirror.com/LocalAI-io/privacy-filter-GGUF/resolve/935d868/privacy-filter-q8.gguf",
 		// no other model, and no page of Hugging Face's
 		"https://huggingface.co/someone/else/resolve/main/x.gguf":                                     "",
 		"https://huggingface.co/QuantumNous/astrlink-guard/resolve/7216b6a/int8/model_int8.onnx_data": "https://hf-mirror.com/QuantumNous/astrlink-guard/resolve/7216b6a/int8/model_int8.onnx_data",

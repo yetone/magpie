@@ -23,11 +23,16 @@ const (
 	npmMirror    = "https://registry.npmmirror.com"
 	githubMirror = "https://gh-proxy.com"
 	// with the 「国内镜像」 switch: Bun's releases at npmmirror, and the
-	// plugin list at jsDelivr, both copies of the very files
-	bunMirror  = "https://registry.npmmirror.com/-/binary/bun"
-	listMirror = "https://cdn.jsdelivr.net/gh/magpie-community/plugins@"
-	hfMirror   = "https://hf-mirror.com"
+	// plugin lists at jsDelivr, all copies of the very files
+	bunMirror = "https://registry.npmmirror.com/-/binary/bun"
+	jsDelivr  = "https://cdn.jsdelivr.net/gh/"
+	hfMirror  = "https://hf-mirror.com"
 )
+
+// listRepos are the GitHub repositories whose files jsDelivr serves with
+// the switch on: the community's plugin list, and Claude Code's official
+// plugins marketplace (the Library's Claude plugins market).
+var listRepos = []string{"magpie-community/plugins", "anthropics/claude-plugins-official"}
 
 // NPMMirror is npm's registry in China, npmmirror.
 const NPMMirror = npmMirror
@@ -40,7 +45,7 @@ var China = func() bool { return settings.Shared().ChinaMirror }
 // "" when there is none. Only mirrors that serve the same bytes as the
 // official address: npmmirror for npm's registry and Bun's releases (whose
 // zips are checked against Bun's checksums all the same), jsDelivr for the
-// community repo's plugin list, hf-mirror for the masking models. Never a proxy such as gh-proxy, which
+// community repo's plugin list and Claude Code's official marketplace, hf-mirror for the masking models. Never a proxy such as gh-proxy, which
 // would hand magpie whatever it liked.
 func chinaFirst(raw string) string {
 	u, err := url.Parse(raw)
@@ -57,10 +62,14 @@ func chinaFirst(raw string) string {
 	case "huggingface.co":
 		return modelMirror(u)
 	case "raw.githubusercontent.com":
-		// /magpie-community/plugins/<branch>/<path>
-		if rest, ok := strings.CutPrefix(u.EscapedPath(), "/magpie-community/plugins/"); ok {
-			if ref, path, ok := strings.Cut(rest, "/"); ok && ref != "" && path != "" && u.RawQuery == "" {
-				return listMirror + ref + "/" + path
+		// /<repo>/<branch>/<path>, for the repositories whose lists magpie
+		// reads: the community's plugins and Claude Code's official
+		// plugins marketplace
+		for _, repo := range listRepos {
+			if rest, ok := strings.CutPrefix(u.EscapedPath(), "/"+repo+"/"); ok {
+				if ref, path, ok := strings.Cut(rest, "/"); ok && ref != "" && path != "" && u.RawQuery == "" {
+					return jsDelivr + repo + "@" + ref + "/" + path
+				}
 			}
 		}
 	}
