@@ -3704,7 +3704,11 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 /* a partner's row carries its tagline on a second, quieter line */
 .tile.two { height: 46px; align-items: flex-start; padding-top: 6px; }
 .tile.two .have, .tile.two .cnt { align-self: center; }
-.tile.two .ic { width: 22px; height: 22px; }
+/* the logo's top on the top of the name's letters, not of its line: the
+   name's half-leading and the room over its letters at 13px are 4.25px
+   for Latin capitals and 3 to 3.5px for CJK. A whole pixel, as the logo
+   is drawn on one (partner-tile-top.test.cjs) */
+.tile.two .ic { width: 22px; height: 22px; margin-top: 4px; }
 .tile .col { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .tile .sub { min-width: 0; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sheet .grid:has(> .tile.two) { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 2px 12px; }
