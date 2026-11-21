@@ -2990,12 +2990,13 @@ magpie.plugin("library", (ctx) => {
       : t("Add a server once and switch it on for the agents that should have it — magpie writes it into each one's config in the shape that agent reads.")));
     const all = mcpAgents();
     pickingFor("servers", lib.servers);
+    // the router first, over the list (the owner, 11-21: at the list's
+    // foot nobody found it); with no server only where it is what the
+    // page is for, with no agent, to turn on before the first server
+    if (lib.servers.length || agentless()) body.append(...hubPart());
     if (!lib.servers.length) {
       const add = button(t("＋ Add a server"), "action", () => editServer(null));
       body.append(empty(t("No servers in the library yet"), lib.foundServers.length && !agentless() ? t("Add one, or bring in those your agents already have, below.") : t("Paste a server's JSON from its README, or fill it in."), add));
-      // with no agent, the router is what the page is for: there to turn
-      // on before the first server
-      if (agentless()) body.append(...hubPart());
     } else {
       const list = el("div", "list lib-list");
       // turned off, they fold away below the ones on, as Providers' do
@@ -3057,9 +3058,6 @@ magpie.plugin("library", (ctx) => {
       const after = el("div", "after-list");
       after.append(button(t("＋ Add server"), "", () => editServer(null)));
       body.append(after);
-      // kept while picking too, as Add server is: the page stays as tall,
-      // so Select doesn't move under the pointer (library-servers-bulk)
-      body.append(...hubPart());
       // each server is checked once a session, and again only once it
       // changed; once the rows are on the page, for them to show it. One
       // that no agent and no project has is started for nobody, so it is
