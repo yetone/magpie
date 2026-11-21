@@ -74,6 +74,35 @@ func TestAgyMoveUsersAreTheOldPluginsNotInAgyCLI(t *testing.T) {
 	}
 }
 
+// agy-cli has every account of the old plugin once each one's email is
+// among its own (the owner's screenshot, 11-21: one Google account in
+// both, still told to use agy-cli); one it lacks, or none signed in, is
+// not every.
+func TestAgyHasEveryOldAccount(t *testing.T) {
+	signIn(t)
+	if AgyHasEvery() {
+		t.Fatal("nothing signed in has every account")
+	}
+	old := map[string]any{"type": "oauth", "refresh": "1//a|proj-a", "accountId": "A@x.com"}
+	writePluginAuth(t, map[string]any{"antigravity": old})
+	if AgyHasEvery() {
+		t.Fatal("agy-cli signed in to nothing has every account")
+	}
+	cli := map[string]any{"type": "success", "key": "agy:0123", "metadata": map[string]any{"email": "a@x.com"}}
+	writePluginAuth(t, map[string]any{"antigravity": old, "agy-cli": cli})
+	if !AgyHasEvery() {
+		t.Fatal("agy-cli with the one old account doesn't have every one")
+	}
+	writePluginAuth(t, map[string]any{"antigravity": old, "antigravity#b": map[string]any{"type": "oauth", "refresh": "1//b|p", "accountId": "b@x.com"}, "agy-cli": cli})
+	if AgyHasEvery() {
+		t.Fatal("agy-cli without b@x.com has every account")
+	}
+	writePluginAuth(t, map[string]any{"agy-cli": cli})
+	if !AgyHasEvery() {
+		t.Fatal("agy-cli signed in, no old account left: not every")
+	}
+}
+
 // Move installs agy-cli at the version that takes the old plugin's
 // sign-ins, and hands it those sign-ins as the plugin keeps them, every one
 // at once; the old sign-ins stay where they are.

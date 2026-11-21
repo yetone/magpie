@@ -13,9 +13,15 @@ type Withdrawal struct {
 	// ID and Name are the provider the package serves
 	ID   string `json:"id"`
 	Name string `json:"name"`
-	// Instead is the provider to use in its place, and Package its plugin
-	Instead string `json:"instead"`
-	Package string `json:"package"`
+	// Instead is the provider to use in its place, InsteadID its id, and
+	// Package its plugin
+	Instead   string `json:"instead"`
+	InsteadID string `json:"insteadId"`
+	Package   string `json:"package"`
+	// Spec and Off are this magpie's entry of the withdrawn package, set
+	// by WithdrawnKept: the page turns it off by its spec
+	Spec string `json:"spec,omitempty"`
+	Off  bool   `json:"off,omitempty"`
 }
 
 // withdrawn, by package name.
@@ -23,7 +29,7 @@ var withdrawn = map[string]Withdrawal{
 	// Google suspends accounts it sees calling Code Assist through
 	// Antigravity's own client, as this plugin does (the owner, 11-15:
 	// 正在使用的继续正常，加个提示，新用户不让下载)
-	"@magpie-community/opencode-antigravity-auth": {ID: "antigravity", Name: "Antigravity", Instead: "Antigravity (local agy CLI)", Package: "@magpie-community/opencode-agy-cli-auth"},
+	"@magpie-community/opencode-antigravity-auth": {ID: "antigravity", Name: "Antigravity", Instead: "Antigravity (local agy CLI)", InsteadID: "agy-cli", Package: "@magpie-community/opencode-agy-cli-auth"},
 }
 
 // WithdrawnOf is the withdrawal of the package name, if it is withdrawn.
@@ -37,9 +43,12 @@ func WithdrawnOf(name string) (Withdrawal, bool) {
 func WithdrawnKept() []Withdrawal {
 	var out []Withdrawal
 	for _, e := range Load().Plugins {
-		if w, ok := withdrawn[PackageName(e.Spec)]; ok && !slices.Contains(out, w) {
-			out = append(out, w)
+		w, ok := withdrawn[PackageName(e.Spec)]
+		if !ok || slices.ContainsFunc(out, func(o Withdrawal) bool { return o.ID == w.ID }) {
+			continue
 		}
+		w.Spec, w.Off = e.Spec, e.Off
+		out = append(out, w)
 	}
 	return out
 }

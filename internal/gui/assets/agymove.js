@@ -1,7 +1,8 @@
-// The line over the Providers list moving the withdrawn Antigravity
-// plugin's accounts to Antigravity (local agy CLI). app.js imports this
-// when /api/providers names any (agyMove), so it weighs nothing on the
-// core for everyone else.
+// The lines over the Providers list about the withdrawn Antigravity
+// plugin: moving its accounts to Antigravity (local agy CLI), and the
+// plugin itself still on. app.js imports this when /api/providers names
+// any (agyMove, withdrawn), so it weighs nothing on the core for everyone
+// else.
 
 // agyMoveLine: the withdrawn Antigravity plugin's accounts, which Antigravity
 // (local agy CLI) takes as they are (one Google sign-in for both), moved
@@ -38,4 +39,32 @@ window.agyMoveLine = function () {
   };
   return depLine("agy-move", t("Antigravity's accounts can move to Antigravity (local agy CLI)"),
     agySaid?.why || t("Google suspends accounts it sees used outside its own app. agy signs in with the same Google account, so {users} move as they are.", { users: named.length ? named.join(t(", ")) : t("{n} accounts", { n: users.length }) }), hide, go);
+};
+
+// withdrawnLine: a withdrawn plugin still on. Beside the plugin to use
+// instead, which has every account it has (the owner's screenshot, 11-21:
+// agy-cli signed in, still told to use it), its requests still go out
+// through the withdrawn one, so the line says so and turns it off; off,
+// it is kept with its sign-ins and can be turned on again from Plugins.
+// Otherwise it says the risk and leads to the plugin to use instead.
+window.withdrawnLine = function (w) {
+  if (!w.beside) {
+    const go = el("button", "text action", t("Use {name}", { name: w.instead }));
+    go.onclick = () => openPlugins("agy");
+    return depLine("withdrawn", t("{name}'s plugin can get your account suspended", { name: w.name }), t("Google suspends accounts it sees used outside its own app. {name} runs your own agy instead.", { name: w.instead }), go);
+  }
+  const go = el("button", "text action", t("Turn off {name}'s plugin", { name: w.name }));
+  go.onclick = async () => {
+    go.disabled = true;
+    try {
+      await api("plugins/off", { spec: w.spec, off: true });
+      providers = await api("providers");
+      renderProviders();
+    } catch (e) {
+      go.disabled = false;
+      status(e.message, "err");
+    }
+  };
+  return depLine("withdrawn", t("{name}'s plugin is still on beside {instead}", { name: w.name, instead: w.instead }),
+    t("Google suspends accounts it sees used outside its own app. {instead} has your accounts now, so {name}'s plugin can be turned off.", { name: w.name, instead: w.instead }), go);
 };

@@ -108,6 +108,30 @@ func AgyMoveUsers() []string {
 	return out
 }
 
+// AgyHasEvery reports whether Antigravity (local agy CLI) is signed in
+// and has every account of the withdrawn Antigravity plugin, by email:
+// then nothing is left to move, and the old plugin only sends requests
+// agy-cli could. An old account with no email can't be matched, so it
+// counts as not there. Account discovery being off changes nothing here:
+// these are the user's own sign-ins.
+func AgyHasEvery() bool {
+	have := map[string]bool{}
+	for _, a := range plugin.Auths(agyCLIID) {
+		if who := agyWho(a); who != "" {
+			have[who] = true
+		}
+	}
+	if len(have) == 0 {
+		return false
+	}
+	for _, a := range plugin.Auths("antigravity") {
+		if a["type"] == "oauth" && !have[agyWho(a)] {
+			return false
+		}
+	}
+	return true
+}
+
 // MoveToAgy brings Antigravity's accounts into agy-cli: the plugin
 // installed (or brought up to the version that takes them) and agy with
 // it, then each account checked with agy and kept as agy-cli's. The old

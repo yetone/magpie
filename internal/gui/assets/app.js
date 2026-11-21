@@ -6626,14 +6626,10 @@ function renderMovable() {
   for (const p of unmoved) window.unmovedLine ? box.append(unmovedLine(p)) : import("./unmoved.js").then(renderMovable, () => {});
   if (eg) box.append(eg);
   if (agy) box.append(agy);
-  // a plugin magpie gives nobody new (plugin.WithdrawnOf): it still
-  // works, and its user is told the risk and what to use instead
-  for (const w of wd) {
-    if (agy && w.id === "antigravity") continue;
-    const go = el("button", "text action", t("Use {name}", { name: w.instead }));
-    go.onclick = () => openPlugins("agy");
-    box.append(depLine("withdrawn", t("{name}'s plugin can get your account suspended", { name: w.name }), t("Google suspends accounts it sees used outside its own app. {name} runs your own agy instead.", { name: w.instead }), go));
-  }
+  // a plugin magpie gives nobody new (plugin.WithdrawnOf), on: it still
+  // works, and its user is told the risk and what to do (withdrawnLine,
+  // in agymove.js, imported when there is one)
+  for (const w of wd) if (!agy || w.id !== "antigravity") window.withdrawnLine ? box.append(withdrawnLine(w)) : import("./agymove.js").then(renderMovable, () => {});
   if (!ps.length || hid === ids) return;
   const names = ps.map((p) => p.name).join(t(", "));
   // one quiet line over the list, as calm as its rows: an amber dot, what

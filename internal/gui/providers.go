@@ -875,9 +875,9 @@ type providersJSON struct {
 	// Unmoved are the retired built-ins whose accounts haven't moved onto
 	// their plugins yet, served by nothing until they do, with why
 	Unmoved []provider.MoveCandidate `json:"unmoved,omitempty"`
-	// Withdrawn are the plugins this magpie still has that magpie gives
+	// Withdrawn are the plugins this magpie still has on that magpie gives
 	// to nobody new, for the page to say the risk and what to use instead
-	Withdrawn []plugin.Withdrawal `json:"withdrawn,omitempty"`
+	Withdrawn []withdrawnJSON `json:"withdrawn,omitempty"`
 	// AgyMove are the withdrawn Antigravity plugin's accounts (by email)
 	// that Antigravity (local agy CLI) can take as they are, which it
 	// doesn't have yet (provider.MoveToAgy), and AgyMoved what moving
@@ -1583,7 +1583,7 @@ func providersState() providersJSON {
 			s.Unmoved = append(s.Unmoved, c)
 		}
 	}
-	s.Withdrawn = plugin.WithdrawnKept()
+	s.Withdrawn = withdrawnLines()
 	if err := provider.FileError(); err != nil {
 		s.FileError = err.Error()
 	}
@@ -4200,4 +4200,30 @@ func fetchedCount(p provider.Provider, ids int) int {
 		return n
 	}
 	return ids
+}
+
+// withdrawnJSON is a withdrawn plugin the page names. Beside is set when
+// the plugin to use instead is on and signed in with every account the
+// withdrawn one has: nothing is left to move, so the page offers to turn
+// the withdrawn one off rather than to use what is in use already (a
+// user signed in to agy-cli was still told to use it).
+type withdrawnJSON struct {
+	plugin.Withdrawal
+	Beside bool `json:"beside,omitempty"`
+}
+
+// withdrawnLines are the withdrawn plugins still on. One turned off
+// sends nothing anywhere, so it gets no line.
+func withdrawnLines() []withdrawnJSON {
+	list := plugin.Load().Plugins
+	var out []withdrawnJSON
+	for _, w := range plugin.WithdrawnKept() {
+		if w.Off {
+			continue
+		}
+		// the plugin to use instead (w.Package), on
+		insteadOn := slices.ContainsFunc(list, func(e plugin.Entry) bool { return !e.Off && plugin.PackageName(e.Spec) == w.Package })
+		out = append(out, withdrawnJSON{Withdrawal: w, Beside: insteadOn && w.ID == "antigravity" && provider.AgyHasEvery()})
+	}
+	return out
 }
