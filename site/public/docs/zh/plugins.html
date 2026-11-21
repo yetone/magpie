@@ -761,7 +761,7 @@ m plugin logout acme</pre>
     <p>插件可以在 Agent 请求路由前等待外部 I/O，例如召回项目上下文。在 package.json 声明 <code>"magpie": { "hooks": "./hooks.js" }</code>，或者添加 <code>*.hooks.js</code> / <code>.mjs</code> / <code>.ts</code> / <code>.mts</code> 文件（Bun 直接运行 TypeScript，无需构建）。导出具名异步 <code>onRequest(body, ctx)</code>。纯网关插件不需要 OpenCode 的 main/exports。</p>
     <p>可选的异步 <code>onResponse(reply, ctx)</code> 在输出完成后接收尽力投递的通知，不修改回复，也不阻塞实时流。工具声明和工具循环由客户端负责。</p>
     <p>可选的异步 <code>onSignIn(event, ctx)</code> 在订阅账号需要重新登录时收到通知：<code>event</code> 为 <code>{provider, providerName, account, state, endsAt?}</code>，<code>state</code> 是 <code>signed-out</code>，或 Claude 登录三天内到期时的 <code>ending</code>。每次失效只通知一次，直到账号恢复可用，不含任何令牌。钩子文件可以只导出 <code>onSignIn</code>。</p>
-<p>它在 Bun 中运行，每个 Agent 请求调用一次，位于 JS 网关中间件之前，对所有供应商生效，包括 Codex 自己的 ChatGPT 登录。body 是 Agent API 请求对象；ctx 包含 <code>protocol</code>、<code>model</code>、<code>stream</code>、<code>path</code>、<code>agent</code>、<code>session</code>、<code>cwd</code>、<code>query</code>、<code>options</code>、<code>signal</code>。query 是最后一条用户文本，不含工具结果和图片；缺失身份信息为空，HTTP Authorization 不传入。</p>
+<p>它在 Bun 中运行，每个 Agent 请求调用一次，位于 JS 网关中间件之前，对所有供应商生效，包括 Codex 自己的 ChatGPT 登录。body 是 Agent API 请求对象；ctx 包含 <code>protocol</code>、<code>model</code>、<code>stream</code>、<code>path</code>、<code>agent</code>、<code>caller</code>、<code>session</code>、<code>cwd</code>、<code>query</code>、<code>options</code>、<code>signal</code>。<code>caller</code> 是 <code>{agent, name, via}</code>，与<a href="#middleware">中间件</a>的 <code>ctx.caller</code> 相同，<code>onRequest</code> 和 <code>onResponse</code> 里都有。请求钩子不能拒绝请求；中间件的 <code>ctx.reject</code> 可以，而且在问任何供应商之前。query 是最后一条用户文本，不含工具结果和图片；缺失身份信息为空，HTTP Authorization 不传入。</p>
 <p>返回对象替换请求，undefined 保留此前请求。改动模型、流式、客户端工具或工具选择的钩子会被回滚，算作失败，这次请求不会调用它的 <code>onResponse</code>。每个钩子收到独立副本，失败或返回 undefined 时丢弃其原地修改。成功修改按启用顺序传给后续插件。每个钩子默认 1 秒；选项 <code>gatewayTimeoutMs</code> 可设为 100 到 30000 毫秒的整数，超出范围时取较近的边界。整条链按预算求和，限制为 2 到 10 秒；若最长的单个钩子超时更长，则以它为准。宿主启动最多 11 秒，启动及 RPC 共为链预算加 1 秒（至少 11 秒）。设置 → 插件提供选项编辑及调用次数、耗时、失败与最近结果。<code>ctx.report(code, bytes)</code> 只接受 ready/empty/unbound/unauthorized/unavailable/invalid/skipped 和字节数；不保存私有文本，重载后统计清零。fetch 应使用 <code>ctx.signal</code>。异常、畸形返回、超时、宿主正忙于启动时保留原请求。Bun 插件具有宿主权限，只安装可信代码。</p>
 <p>用 <code>magpie plugin add ./my-plugin</code> 安装，<code>magpie plugin options my-plugin '&lbrace;"serverUrl":"http://127.0.0.1:8000"&rbrace;'</code> 设置选项。on/off 和选项变更触发宿主重载；仅修改源码需主动触发配置重载。内部标题和分类请求跳过此钩子。</p>
 
@@ -828,7 +828,15 @@ magpie plugin options model-map '{"mapping": {"fast": "deepseek/deepseek-chat"}}
       <tr><td><code>onResponse(body, ctx)</code></td><td>非流式的完整回复；<code>ctx.status</code> 是它的状态码。</td><td>回复体，或者不返回。</td></tr>
     </table></div>
     <p><code>export const events = ["content_block_delta"]</code> 让 <code>onEvent</code> 只处理这些名字的事件（Anthropic Messages 和 Responses 的事件有名字）。Chat Completions 和 Gemini 的事件没有名字，处理它们时不要写 <code>events</code>。一个事件只是回复的一小段，一个词可能被拆在两个事件里。<code>data: [DONE]</code> 行和注释直接放行，不经过钩子。压缩过的回复原样放行。</p>
-    <p><code>ctx</code> 里有 <code>protocol</code>（<code>anthropic</code>、<code>chat</code>、<code>responses</code> 或 <code>gemini</code>）、agent 请求的 <code>model</code> 和 <code>stream</code>、<code>path</code>、magpie 知道时的 <code>agent</code>、<code>options</code>（这个插件的<a href="#middleware-options">选项</a>），以及 <code>state</code>：每个请求独有的对象。</p>
+    <p><code>ctx</code> 里有 <code>protocol</code>（<code>anthropic</code>、<code>chat</code>、<code>responses</code> 或 <code>gemini</code>）、agent 请求的 <code>model</code> 和 <code>stream</code>、<code>path</code>、magpie 知道时的 <code>agent</code>、<code>caller</code>、<code>options</code>（这个插件的<a href="#middleware-options">选项</a>），以及 <code>state</code>：每个请求独有的对象。</p>
+    <p><code>ctx.caller</code> 是请求来自的 Agent，<code>{agent, name, via}</code>，和供应商插件的 <code>chat.headers</code> 拿到的 <code>input.caller</code> 一样：另一个 magpie 经 Remote magpie 供应商转来的请求，它写的是第一台电脑上的 Agent，<code>via</code> 是请求经过的电脑，Agent 所在的那台在最前（本机的 Agent 为空）。<code>ctx.agent</code> 是发这个请求的客户端，转来的请求是 <code>magpie</code>。要在问任何供应商之前拒绝某个 Agent，在 <code>onRequest</code> 里拒绝它：</p>
+    <div class="code">
+      <span class="lang">no-pi.middleware.js</span>
+      <button class="copy" data-copy="mw-caller">%s</button>
+      <pre id="mw-caller"><span class="k">export function</span> onRequest(body, ctx) {
+  <span class="k">if</span> (ctx.caller?.agent === <span class="s">"pi"</span>) <span class="k">return</span> ctx.reject(403, <span class="s">"not for Pi"</span>)
+}</pre>
+    </div>
     <h3>钩子出错时</h3>
     <p>处理请求、一次供应商尝试或完整回复时，钩子有 250 毫秒；处理一个事件时有 50 毫秒；加载有 1 秒。钩子抛出异常、超时或返回了别的东西，都当作它不存在：请求或事件按原样发送。设置 → 插件会显示每个中间件的钩子、调用次数、平均每次耗时和失败次数，以及最近一次错误。钩子看到的是 agent 发出和收到的原始内容：发出时在 magpie 脱敏之前，返回时在还原之后。magpie 自己的请求（会话标题、路由分类器，以及它为 agent 的请求做的网页搜索和图片描述）不经过中间件。</p>
 

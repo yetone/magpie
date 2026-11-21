@@ -42,11 +42,22 @@ reply it asked for). A rolled-back hook counts as failed and gets no `onResponse
 for that request. It cannot reject requests or register tools. The synchronous middleware API remains available separately.
 
 Context fields: `protocol` (`chat`, `responses`, `anthropic`, `gemini`), `model`,
-`stream`, `path`, `origin`, `agent`, `session`, `cwd`, `query`, `kind`, package `options`, private
+`stream`, `path`, `origin`, `agent`, `caller`, `session`, `cwd`, `query`, `kind`, package `options`, private
 request `state`, an `AbortSignal` and `report(code, bytes)`. Headers and client
 credentials are not forwarded to the hook. Query extraction keeps original model
 input intact while excluding client environment/instruction notices from recall.
 Empty identity fields must not be interpreted as authenticated user identity.
+
+`caller` is `{agent, name, via}`, the agent the request came from through
+any magpies that passed it on: the JS middleware's `ctx.caller` and
+`chat.headers`' `input.caller`, from one function (`pluginCaller` in
+`internal/gateway/plugin_caller.go`). `agent` stays `agentOf(r)`, the
+client that sent this request (`magpie` for one passed on). It is the same
+in `onRequest` and that request's `onResponse`, absent when the gateway
+knows no agent, and each hook gets its own copy of the context, so one
+hook's change to it reaches no other (`TestAsyncGatewayHookToldTheCaller`).
+A request hook still can't refuse a request; a middleware's `ctx.reject`
+can, before a provider is picked.
 
 `kind` is `"subagent"` when the client says the request is a subagent's
 (Claude Code's `x-claude-code-agent-id`, Codex's `x-openai-subagent:

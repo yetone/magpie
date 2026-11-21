@@ -11816,7 +11816,7 @@ Optional async `onResponse(reply, ctx)` receives a best-effort completion notifi
 
 Optional async `onSignIn(event, ctx)` hears of a subscription account that has to be signed in again: `event` is `{provider, providerName, account, state, endsAt?}`, `state` `signed-out`, or `ending` for a Claude sign-in within three days of its end. It is told once until the account works again, and carries no token. A hooks file may export only `onSignIn`.
 
-It runs in Bun once per agent request, before the JS gateway middleware, for every provider, Codex's own ChatGPT sign-in included. body is the agent API object. ctx contains `protocol`, `model`, `stream`, `path`, `agent`, `session`, `cwd`, `query`, `options` and `signal`. The query is the latest user text, excluding tool results and images. Missing identity fields are empty; authorization headers are never included.
+It runs in Bun once per agent request, before the JS gateway middleware, for every provider, Codex's own ChatGPT sign-in included. body is the agent API object. ctx contains `protocol`, `model`, `stream`, `path`, `agent`, `caller`, `session`, `cwd`, `query`, `options` and `signal`. `caller` is `{agent, name, via}`, as the middleware’s `ctx.caller`, in `onRequest` and `onResponse` alike. A request hook can’t turn a request away; a middleware’s `ctx.reject` can, before any provider is asked. The query is the latest user text, excluding tool results and images. Missing identity fields are empty; authorization headers are never included.
 
 Return an object to replace the request, or undefined to keep it. A hook that changes the model, streaming, the client's tools or its tool choice is rolled back, as a failure, and gets no `onResponse` for that request. Each hook receives a clone; mutations from failed or undefined hooks are discarded. Successful changes follow enabled plugin order. Each hook defaults to one second; `gatewayTimeoutMs` accepts integers from 100 to 30000 milliseconds; a value outside that range is clamped to the nearer bound. The chain sums budgets, clamped to 2–10 seconds, or takes the longest hook's own timeout when that is longer; host startup is bounded to 11 seconds, and startup plus RPC to the chain budget plus one second (at least 11 seconds). Settings → Plugins offers JSON options and call, latency, failure and outcome diagnostics. `ctx.report(code, bytes)` accepts ready/empty/unbound/unauthorized/unavailable/invalid/skipped and byte counts only. Statistics reset on reload and retain no private text. Use `ctx.signal` with fetch. Errors, invalid returns, timeouts and a host busy starting keep the request. Bun plugins have host privileges; install trusted code.
 
@@ -11892,7 +11892,15 @@ Each is a named export or a member of `export default { … }`. Bodies and event
 
 `export const events = ["content_block_delta"]` calls `onEvent` only for events of those names (Anthropic Messages and Responses name theirs). Chat Completions and Gemini events have no name, so leave `events` out for them. An event holds a piece of the reply, so a word can be split over two events. A `data: [DONE]` line and comments pass by unseen. A compressed reply passes as it is.
 
-`ctx` has `protocol` (`anthropic`, `chat`, `responses` or `gemini`), `model` and `stream` as the agent asked, `path`, `agent` when magpie knows it, `options` (the plugin’s options) and `state`, an object of the request’s own.
+`ctx` has `protocol` (`anthropic`, `chat`, `responses` or `gemini`), `model` and `stream` as the agent asked, `path`, `agent` when magpie knows it, `caller`, `options` (the plugin’s options) and `state`, an object of the request’s own.
+
+`ctx.caller` is the agent the request came from, `{agent, name, via}`, the same as a provider plugin’s `chat.headers` gets as `input.caller`: for a request another magpie passed on with a Remote magpie provider it names the agent on the first computer, and `via` the computers it came through, the agent’s first (empty for an agent on this computer). `ctx.agent` is the client that sent this request, which for a request passed on is `magpie`. To refuse an agent before any provider is asked, turn it away in `onRequest`:
+
+```
+export function onRequest(body, ctx) {
+  if (ctx.caller?.agent === "pi") return ctx.reject(403, "not for Pi")
+}
+```
 
 ### When a hook fails
 

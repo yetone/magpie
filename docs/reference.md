@@ -1601,7 +1601,11 @@ per middleware; `{skip: true}` passes the account over for that request),
 event of a streamed reply and `onResponse(body, ctx)` a whole one, all in
 the agent's own API. A hook returns the changed object, or nothing to
 leave it; `onEvent` returns `null` to drop an event, and
-`ctx.reject(status, message)` turns a request away. Declare it with
+`ctx.reject(status, message)` turns a request away. `ctx.caller` is
+the agent the request came from, `{agent, name, via}`, through any magpies
+that passed it on (as a plugin's `chat.headers` gets `input.caller`), so
+`onRequest` can refuse an agent before any provider is asked; the async
+request hooks get it too. Declare it with
 `"magpie": { "middleware": "./mw.js" }` in `package.json`, or add a single
 `*.middleware.js` file:
 

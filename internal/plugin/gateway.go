@@ -11,6 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/yetone/magpie/internal/gwmw"
+
 	"github.com/yetone/magpie/internal/filememo"
 )
 
@@ -95,6 +97,10 @@ type GatewayContext struct {
 	// x-openai-subagent), and "" for any other: the main conversation,
 	// and a client that doesn't say. Per request, never per session.
 	Kind string `json:"kind"`
+	// Caller is the agent the request came from, through any magpies that
+	// passed it on (gwmw.Caller, chat.headers' input.caller); nil, and
+	// absent from ctx, when no agent is known. Agent stays agentOf's.
+	Caller *gwmw.Caller `json:"caller,omitempty"`
 }
 
 // GatewayState is aggregate diagnostics for this host's lifetime. Outcomes

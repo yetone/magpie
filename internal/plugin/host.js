@@ -1651,7 +1651,9 @@ async function gatewayBegin(p, signal) {
         outcome = code
         bytes = Number.isSafeInteger(count) && count >= 0 && count <= 32768 ? count : 0
       }
-      const ctx = { ...p.context, options: structuredClone(h.options), state: {}, signal: ownSignal, report }
+      // each hook its own copy: ctx.caller is an object, and one hook's
+      // change to it reaches no other hook
+      const ctx = { ...structuredClone(p.context), options: structuredClone(h.options), state: {}, signal: ownSignal, report }
       const result = await bounded(Promise.resolve().then(() => h.onRequest(structuredClone(body), ctx)), ownSignal)
       let next = body
       if (result !== undefined) {

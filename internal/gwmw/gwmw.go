@@ -33,6 +33,22 @@ type Info struct {
 	Stream   bool   `json:"stream"`
 	Path     string `json:"path"`
 	Agent    string `json:"agent,omitempty"`
+	// Caller is the agent the request came from, here or on the first of
+	// the magpies that passed it on: what a plugin's chat.headers is told
+	// as input.caller. nil when no agent is known.
+	Caller *Caller `json:"caller,omitempty"`
+}
+
+// Caller is the agent a request came from, as the gateway records it:
+// its id, the name people know it by, and the computers it came through
+// when other magpies passed it on (the agent's first; empty for an agent
+// on this computer). The same shape and value as a plugin's
+// chat.headers input.caller, so a plugin reads one caller wherever it is
+// told one.
+type Caller struct {
+	Agent string   `json:"agent"`
+	Name  string   `json:"name"`
+	Via   []string `json:"via"`
 }
 
 // Reject is a request a middleware turned away: the agent gets Status with
