@@ -3463,6 +3463,17 @@ magpie.plugin("library", (ctx) => {
       const addr = el("div", "lib-hubaddr");
       addr.append(el("code", "", url), copyBtn(url, t("Address")));
       out.push(addr, el("p", "lib-hubcap", t("From another computer, use the address magpie is reached at there, with a gateway key: Authorization: Bearer <key>.")));
+      // the address that gives its tools on demand (gateway.HubOnDemandQuery;
+      // Passings_z on X): which app connects isn't known, so the plain
+      // address gives every tool, and an app that doesn't search its tools
+      // itself asks for them on demand. Only while Tools on demand is on,
+      // since with it off the query changes nothing
+      if (!lib.hubAllTools && lib.hubOnDemandQuery) {
+        const lazy = url + "?" + lib.hubOnDemandQuery;
+        const addr2 = el("div", "lib-hubaddr lib-hubaddr-lazy");
+        addr2.append(el("code", "", lazy), copyBtn(lazy, t("Address")));
+        out.push(addr2, el("p", "lib-hubcap", t("For an app that doesn't search its tools itself: past {n} tools, it is given one that finds a tool and one that runs it.", { n: lib.hubOnDemandOver })));
+      }
       const apps = [
         ...(mcpAgents().some((a) => a.id === "cursor") ? [] : [{ id: "cursor", icon: "cursor", name: "Cursor", link: true, where: t("Or add it to ~/.cursor/mcp.json"), text: json({ mcpServers: { magpie: { url } } }) }]),
         { id: "vscode", icon: "vscode", name: "VS Code", link: true, where: t("Or add it to .vscode/mcp.json, or to your user mcp.json"), text: json({ servers: { magpie: { type: "http", url } } }) },

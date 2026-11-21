@@ -19,7 +19,10 @@
 // posts servers/hub-open with the app's name, never a link) and none in a
 // browser. No agent is told to the user as a command to run. The address
 // is the public one in a browser and the gateway in the app. A click again
-// turns it off. In every language, both engines, a wide window in the app
+// turns it off. Other apps also get the address that gives the tools on
+// demand (?tools=on-demand, Passings_z on X), with what it does, while
+// Tools on demand is on; with every tool whole it isn't offered. In every
+// language, both engines, a wide window in the app
 // and a narrow one in a browser: no sideways scroll, and the switch beside
 // its text.
 // No backend: the API is faked here.
@@ -37,6 +40,7 @@ const MANY = Array.from({ length: 21 }, (_, i) => ({ id: "agent" + (i + 1), name
 const fixture = (on, st = {}) => ({
   dir: `${HOME}/.magpie/library`, backups: `${HOME}/.magpie/backups`, home: HOME,
   mcpHub: on, hubPath: "/mcp/magpie/hub/",
+  hubOnDemandQuery: "tools=on-demand", hubOnDemandOver: 10, hubAllTools: !!st.allTools,
   agents: [
     { id: "claude", name: "Claude Code", icon: "claudecode-color", skills: `${HOME}/.claude/skills`, mcp: `${HOME}/.claude.json`, ...(on ? { hub: "on" } : {}) },
     { id: "codex", name: "Codex", icon: "codex-color", mcp: `${HOME}/.codex/config.toml`, ...(on ? { hub: "own" } : {}) },
@@ -137,7 +141,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const w = (key, vars) => tr(lang, key, vars);
         const web = width < 800;
         // Cursor is one of the agents in the app, and not in a browser
-        const st = { on: false, sent: [], opened: [], all: [], copied: [], web, cursor: !web };
+        // every tool whole in a browser: no address for the tools on demand
+        const st = { on: false, sent: [], opened: [], all: [], copied: [], web, cursor: !web, allTools: web };
         const url = (web ? "https://mac.tail0.ts.net" : "http://127.0.0.1:3425") + "/mcp/magpie/hub";
         const errors = [];
         const ctx = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce" });
@@ -277,7 +282,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
         // Other apps: the address, and a row per app with what adds it
         await tabs.last().click();
-        assert.equal((await sheet.locator(".lib-hubaddr code").textContent()).trim(), url);
+        assert.deepEqual((await sheet.locator(".lib-hubaddr code").allTextContents()).map((x) => x.trim()), web ? [url] : [url, url + "?tools=on-demand"]);
+        if (!web) {
+          // its own copy gives the address with the query
+          await sheet.locator(".lib-hubaddr-lazy .copy").click();
+          for (let i = 0; i < 250 && st.copied.at(-1) !== url + "?tools=on-demand"; i++) await page.waitForTimeout(20);
+          assert.equal(st.copied.at(-1), url + "?tools=on-demand");
+        }
         const apps = sheet.locator(".lib-hubapp");
         // Cursor is set up by hand only when magpie doesn't look after it
         assert.deepEqual(await apps.evaluateAll((rs) => rs.map((r) => r.dataset.app)), [...(web ? ["cursor"] : []), "vscode", "windsurf", "json"]);
@@ -303,7 +314,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal((await app("windsurf").locator(".sub").textContent()).trim(), w("Paste it into ~/.codeium/windsurf/mcp_config.json"));
         assert.deepEqual(await copied("windsurf", "Windsurf"), { mcpServers: { magpie: { serverUrl: url } } });
         assert.deepEqual(await copied("json", w("Other")), { mcpServers: { magpie: { type: "http", url } } });
-        assert.equal((await sheet.locator(".lib-hubcap").textContent()).trim(), w("From another computer, use the address magpie is reached at there, with a gateway key: Authorization: Bearer <key>."));
+        assert.deepEqual((await sheet.locator(".lib-hubcap").allTextContents()).map((x) => x.trim()), [w("From another computer, use the address magpie is reached at there, with a gateway key: Authorization: Bearer <key>."),
+          ...(web ? [] : [w("For an app that doesn't search its tools itself: past {n} tools, it is given one that finds a tool and one that runs it.", { n: 10 })])]);
         assert.deepEqual(await sideways(page), [], "sideways scroll, apps");
         await shot(page, `${engine}-${lang}-${width}-apps`);
         await bar.locator("button.primary").click();

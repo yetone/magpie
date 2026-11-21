@@ -84,11 +84,32 @@ const (
 	hubFindMore = 15
 )
 
+// HubOnDemandParam and HubOnDemandValue are the query the address for any
+// other app (HubMCPAll) takes to give its tools on demand: which app
+// connects there isn't known, so without it every tool is listed whole (an
+// app that searches its MCP tools itself wants them so), and an app that
+// sends every tool on every request asks for find_tools and call_tool with
+// /mcp/magpie/hub?tools=on-demand (Passings_z on X, 11-21: their own
+// harness got every tool with Tools on demand on).
+const (
+	HubOnDemandParam = "tools"
+	HubOnDemandValue = "on-demand"
+)
+
+// HubOnDemandQuery is HubOnDemandParam=HubOnDemandValue, for the Library to
+// give.
+const HubOnDemandQuery = HubOnDemandParam + "=" + HubOnDemandValue
+
+// hubAsksOnDemand is whether r asks for the tools on demand (HubOnDemandParam).
+func hubAsksOnDemand(r *http.Request) bool {
+	return r.URL.Query().Get(HubOnDemandParam) == HubOnDemandValue
+}
+
 // hubOnDemand is whether agent is given find_tools and call_tool in place
-// of its n tools. The address for any other app ("") lists every tool:
-// which app connects there isn't known.
-func hubOnDemand(agent string, n int) bool {
-	if agent == "" || n <= hubOnDemandOver {
+// of its n tools. The address for any other app ("") lists every tool
+// unless asked for them on demand (hubAsksOnDemand).
+func hubOnDemand(agent string, n int, asked bool) bool {
+	if (agent == "" && !asked) || n <= hubOnDemandOver {
 		return false
 	}
 	id, _, _ := strings.Cut(HubAgentOf(agent), "@")

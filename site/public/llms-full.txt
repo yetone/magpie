@@ -10571,13 +10571,13 @@ Every tool an agent is given goes out, with its whole parameter schema, on every
 - **`find_tools`.** takes the words of what the task needs and gives the tools that match: the best 5 with their description and parameters, then up to 15 more by name. Its own description names each server and its tools, so the model knows what there is to find.
 - **`call_tool`.** runs a tool by name, with its arguments.
 
-An agent that searches its MCP tools itself is given every tool, and its own search keeps them out of each request: Claude Code, Claude Desktop, Codex, Pi, Droid and omp. So is an agent given 10 tools or fewer, and an app at the Other apps address, since magpie can’t tell which app that is.
+An agent that searches its MCP tools itself is given every tool, and its own search keeps them out of each request: Claude Code, Claude Desktop, Codex, Pi, Droid and omp. So is an agent given 10 tools or fewer, and an app at the Other apps address, since magpie can’t tell which app that is. An app there that doesn’t search its tools itself can ask for them on demand: add `?tools=on-demand` to the address, as in `http://127.0.0.1:3425/mcp/magpie/hub?tools=on-demand`.
 
 To give every agent every tool instead, turn off Tools on demand under MCP router in Library → MCP, then restart your agents.
 
 ## Other apps
 
-With the router on, the Other apps row shows an address ending in `/mcp/magpie/hub`, which serves every server in the Library. Connect… opens a sheet with a ready entry to copy for Cursor, VS Code, Windsurf or any app that takes a JSON MCP config; in the app window, Cursor and VS Code also have Add, which opens the app to confirm. An app on another computer needs a gateway key, as every request from your network does (see [Remote magpie](https://usemagpie.ai/docs/remote)).
+With the router on, the Other apps row shows an address ending in `/mcp/magpie/hub`, which serves every server in the Library. Connect… → Other apps also gives the address with `?tools=on-demand`, for an app that should get its tools on demand. Connect… opens a sheet with a ready entry to copy for Cursor, VS Code, Windsurf or any app that takes a JSON MCP config; in the app window, Cursor and VS Code also have Add, which opens the app to confirm. An app on another computer needs a gateway key, as every request from your network does (see [Remote magpie](https://usemagpie.ai/docs/remote)).
 
 > **Command servers run on this computer.** Anyone holding a gateway key on your network can call them through the router, with your rights here. Only share keys with people you trust.
 

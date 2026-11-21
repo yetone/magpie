@@ -170,11 +170,11 @@ magpie library mcp router off</pre>
       <li><b><code>find_tools</code></b>：タスクに必要な語で一致するツールを探します。上位 5 個は説明とパラメーター付きで、続けて最大 15 個を名前で返します。説明には各サーバーとそのツールが書かれているので、モデルは何が探せるかを知っています。</li>
       <li><b><code>call_tool</code></b>：ツールを名前で、引数とともに実行します。</li>
     </ul>
-    <p>MCP ツールを自分で検索するエージェントにはすべてのツールを渡し、そのエージェント自身の検索が毎回のリクエストからツールを外します：Claude Code、Claude Desktop、Codex、Pi、Droid、omp。ツールが 10 個以下のエージェントと、<a href="#apps">ほかのアプリ</a> のアドレスに接続するアプリ（どのアプリかは magpie にはわかりません）にもすべてのツールを渡します。</p>
+    <p>MCP ツールを自分で検索するエージェントにはすべてのツールを渡し、そのエージェント自身の検索が毎回のリクエストからツールを外します：Claude Code、Claude Desktop、Codex、Pi、Droid、omp。ツールが 10 個以下のエージェントと、<a href="#apps">ほかのアプリ</a> のアドレスに接続するアプリ（どのアプリかは magpie にはわかりません）にもすべてのツールを渡します。ツールを自分で検索しないアプリは、アドレスに <code>?tools=on-demand</code> を付けるとオンデマンドで受け取れます。例：<code>http://127.0.0.1:3425/mcp/magpie/hub?tools=on-demand</code>。</p>
     <p>すべてのエージェントにすべてのツールを渡すには、<span class="ui">ライブラリ</span> → <span class="ui">MCP</span> の <span class="ui">MCP ルーター</span> の下にある <span class="ui">ツールをオンデマンドで渡す</span> をオフにして、エージェントを再起動してください。</p>
 
     <h2 id="apps"><a class="anchor" href="#apps">ほかのアプリ</a></h2>
-    <p>ルーターがオンのとき、<span class="ui">ほかのアプリ</span> の行に <code>/mcp/magpie/hub</code> で終わるアドレスが出ます。ここではライブラリのすべてのサーバーを提供します。<span class="ui">接続…</span> を押すと、Cursor、VS Code、Windsurf、JSON の MCP 設定を受け付けるアプリ向けのエントリがコピーできるシートが開きます。アプリのウィンドウでは、Cursor と VS Code には <span class="ui">追加</span> もあり、そのアプリが開いて確認を求めます。別のコンピュータのアプリには、ネットワークからのほかのリクエストと同じくゲートウェイのキーが必要です（<a href="/docs/ja/remote">リモート magpie</a> を参照）。</p>
+    <p>ルーターがオンのとき、<span class="ui">ほかのアプリ</span> の行に <code>/mcp/magpie/hub</code> で終わるアドレスが出ます。ここではライブラリのすべてのサーバーを提供します。<span class="ui">接続…</span> → <span class="ui">ほかのアプリ</span> には <code>?tools=on-demand</code> を付けたアドレスもあり、ツールを<a href="#on-demand">オンデマンドで</a>受け取りたいアプリに使います。<span class="ui">接続…</span> を押すと、Cursor、VS Code、Windsurf、JSON の MCP 設定を受け付けるアプリ向けのエントリがコピーできるシートが開きます。アプリのウィンドウでは、Cursor と VS Code には <span class="ui">追加</span> もあり、そのアプリが開いて確認を求めます。別のコンピュータのアプリには、ネットワークからのほかのリクエストと同じくゲートウェイのキーが必要です（<a href="/docs/ja/remote">リモート magpie</a> を参照）。</p>
     <div class="callout"><b>コマンドのサーバーはこのコンピュータで動きます。</b>ネットワーク上でゲートウェイのキーを持つ人は、ルーターを通してあなたの権限でそれを呼び出せます。キーは信頼できる人にだけ渡してください。</div>
 
     <h2 id="kept"><a class="anchor" href="#kept">自分のエントリを残すエージェント</a></h2>
