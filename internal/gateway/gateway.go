@@ -9930,11 +9930,6 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 		// told, not left out for the model to answer the words alone (#6135)
 		return writeError(w, from, 400, msg), msg
 	}
-	if s.refusesDeferred(p, from, to, model, request) {
-		// Claude Code asks again with every tool declared, so a tool it
-		// loads doesn't change the prompt's start (deferred_route.go)
-		return writeError(w, from, 400, deferredRefusal), deferredRefusal
-	}
 	stream := request.Stream
 	request.Stream = true
 	if stream {
