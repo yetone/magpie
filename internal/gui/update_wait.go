@@ -97,7 +97,7 @@ func (u *updater) idle() bool { return idleAt(restartBusy(), time.Now()) }
 // (Restart to update), not Settings' AutoRestart's.
 func (u *updater) waitIdle(restart func() bool, asked bool) {
 	u.mu.Lock()
-	u.whenIdle, u.gaveUp, u.waitAsked = restart, false, asked
+	u.whenIdle, u.gaveUp, u.waitAsked, u.waitNow = restart, false, asked, false
 	if !u.waiting {
 		u.drainMost = 0
 	}
@@ -186,12 +186,12 @@ func (u *updater) waitFor(gen int) {
 			last = b
 			u.told()
 		}
-		if !idleAt(b, time.Now()) {
+		u.mu.Lock()
+		asked, now := u.waitAsked, u.waitNow
+		u.mu.Unlock()
+		if !now && !idleAt(b, time.Now()) {
 			continue
 		}
-		u.mu.Lock()
-		asked := u.waitAsked
-		u.mu.Unlock()
 		if !asked && inUseAt(time.Now()) {
 			continue
 		}

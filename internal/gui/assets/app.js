@@ -4524,11 +4524,13 @@ async function renderUpdateBadge() {
       renderUpdateBadge();
     }
   };
-  if (pulling) {
-    if (u.state === "ready") {
-      delete b.dataset.pulling;
-      return restart();
-    }
+  if (pulling && u.state === "ready") {
+    delete b.dataset.pulling;
+    // the click's restart, armed in the app while the feed was asked or
+    // the newer version downloaded, is made there: shown as waiting
+    if (!u.waiting) return restart();
+    b.classList.remove("busy");
+  } else if (pulling) {
     b.title = label.textContent = downloadingText(u);
     setTimeout(renderUpdateBadge, 700);
     return;
@@ -22699,9 +22701,22 @@ async function renderUpdate(r, u) {
     updateSeq.set(r, mine + 1); // the answer stands; a read still out is older
     renderUpdate(r, next);
   };
+  // the app restarted into the update: this one has gone
+  const gone = () => {
+    sub.textContent = t("Restarting…");
+    for (const b of val.querySelectorAll("button")) b.remove();
+    backAsNew(u.current);
+  };
+  // a restart waiting (on the gateway, or a click's on the feed and the
+  // download, canlee886 on X) ends in one: a read that finds no one is that
   const again = (ms) => {
-    const seen = seqOf(r);
-    setTimeout(() => { if (r.isConnected && seqOf(r) === seen) renderUpdate(r); }, ms);
+    const seen = seqOf(r), on = () => r.isConnected && seqOf(r) === seen;
+    setTimeout(async () => {
+      if (!on()) return;
+      if (!u.waiting) return renderUpdate(r);
+      const n = await api(updatePath("update")).catch(() => null);
+      if (on()) n ? renderUpdate(r, n) : gone();
+    }, ms);
   };
   switch (u.state) {
     case "ready": {
@@ -22722,19 +22737,7 @@ async function renderUpdate(r, u) {
         sub.textContent += " · " + (u.handover ? t("restarts once the Claude subscription's replies have finished") : t("restarts once the gateway is idle")) + (busyNow ? " · " + busyNow : "");
         btn(t("Restart now"), () => install("now"));
         btn(t("Cancel"), () => install("cancel"));
-        // the wait ends in a restart: a read that finds no one is that
-        const seen = seqOf(r);
-        setTimeout(async () => {
-          if (!r.isConnected || seqOf(r) !== seen) return;
-          const n = await api(updatePath("update")).catch(() => null);
-          if (!r.isConnected || seqOf(r) !== seen) return;
-          if (!n) {
-            sub.textContent = t("Restarting…");
-            for (const b of val.querySelectorAll("button")) b.remove();
-            return backAsNew(u.current);
-          }
-          renderUpdate(r, n);
-        }, 1000);
+        again(1000);
         break;
       }
       if (u.gaveUp) sub.textContent += " · " + t("the gateway stayed busy for an hour, so magpie didn't restart; it updates when you restart or quit it");

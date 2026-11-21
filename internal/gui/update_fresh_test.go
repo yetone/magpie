@@ -93,6 +93,11 @@ func freshUpdater(t *testing.T, exe bool) *updater {
 		pending.Store(&handover{})
 		t.Cleanup(func() { pending.Store(nil) })
 	}
+	t.Cleanup(func() {
+		// a restart a click armed waits no longer than the test
+		u.cancelWait()
+		u.loops.Wait()
+	})
 	return u
 }
 
@@ -416,4 +421,79 @@ func TestRestartPutsInTheClickedDownload(t *testing.T) {
 	u.freshen()
 	asked = f.asked.Load()
 	unchanged("the dialog")
+}
+
+// canlee886 on X (0.1.4582, 0.1.4617 downloaded, newer ones out): Settings'
+// Restart to update did nothing. The click asked the feed first (recheck),
+// which answered slower than the restart waits for it, so the route said
+// "checking", and Settings' row read again, found 0.1.4617 still waiting
+// and offered Restart to update as before. The restart was dropped; the
+// answer then downloaded the newer one, and only a second click restarted.
+// The click's restart now waits in the app for the feed and the download,
+// the page reads "checking" meanwhile, and the restart is made once the
+// newest is in, with no second click.
+func TestRestartClickOutlastsASlowFeed(t *testing.T) {
+	busy := &fakeBusy{}
+	u := freshUpdater(t, true)
+	quick(t, busy, u)
+	waitRecheck = (*updater).recheck
+	f := newFreshFeed(t)
+	oldTicks, oldTick := recheckTicks, recheckTick
+	recheckTicks, recheckTick = 3, time.Millisecond
+	t.Cleanup(func() { recheckTicks, recheckTick = oldTicks, oldTick })
+	u.checkByClock()
+	if j := u.json(); j.State != "ready" || j.Latest != "0.1.11" || f.downloads.Load() != 1 {
+		t.Fatalf("the clock's check: %+v, %d downloads", j, f.downloads.Load())
+	}
+
+	// 0.1.12 out, and the feed slow to say so
+	f.latest.Store("0.1.12")
+	hold := make(chan struct{})
+	f.mu.Lock()
+	f.hold = hold
+	f.mu.Unlock()
+	released := false
+	release := func() {
+		if !released {
+			released = true
+			f.mu.Lock()
+			f.hold = nil
+			f.mu.Unlock()
+			close(hold)
+		}
+	}
+	t.Cleanup(release)
+	j := postInstall(t, &quitCount{})
+	if j.State != "checking" || !j.Waiting {
+		t.Fatalf("the click, the feed not answered: %+v, want checking with the restart waiting", j)
+	}
+	// what Settings' row reads next: not the download waiting, as if
+	// nothing had been clicked
+	if j := u.json(); j.State != "checking" || !j.Waiting {
+		t.Fatalf("the row's next read: %+v, want checking with the restart waiting", j)
+	}
+
+	// the restart the click armed, made by the app once the newest is in
+	into := make(chan string, 2)
+	u.mu.Lock()
+	armed := u.whenIdle != nil
+	u.whenIdle = func() bool {
+		u.mu.Lock()
+		into <- u.latest.Version
+		u.mu.Unlock()
+		return true
+	}
+	u.mu.Unlock()
+	if !armed {
+		t.Fatal("the click armed no restart")
+	}
+	release()
+	select {
+	case v := <-into:
+		if v != "0.1.12" || f.downloads.Load() != 2 {
+			t.Fatalf("restarted into %s after %d downloads, want 0.1.12 after 2", v, f.downloads.Load())
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatalf("the click's restart was never made: %+v", u.json())
+	}
 }

@@ -1080,13 +1080,23 @@ restarted (elis_pina on X). Nor is it asked with downloads on a click
 (`keepsStaged`): the copy clicked for is what goes in (sakamotokurome on
 X). From 0.1.4051 to this change a restart never asked with a copy
 waiting (canlee886 on X); the cost now is that a click may wait for a
-download. The header's Update and the tray restart by themselves once it
-is in; Settings' Version card shows the download, and a second click on
-its Restart to update goes into it without asking again (app.js has no
-room left in its budget for the card to follow by itself). See
+download. A click's restart that the feed's answer or the download
+holds up is carried through by the app itself (`waitIdle` from the
+install route, `waitFor`), not by the page: the route answers `checking`
+or `downloading` with `waiting`, the waiting copy isn't shown as `ready`
+meanwhile (`jsonIn`), and the restart is made once the newest is in, the
+gateway idle (or at once after Restart now, `waitNow`). Settings' Version
+card shows the check and the download and, once the app is gone, that it
+is restarting (`again` in `renderUpdate`); the header's Update shows them
+and then the wait. Before, the route answered a bare `checking` once
+`recheck`'s 10 s ran out, the card read the waiting copy as `ready` again
+and offered the same Restart to update, so the click did nothing and only
+a second one restarted (canlee886 on X, 0.1.4582 with 0.1.4617 waiting).
+A download that fails ends the wait and the card says why (`error`). See
 `TestRestartTakesTheNewestOut`, `TestUpdateStagedGivesWayToNewer`,
-`TestRestartAfterItsDownloadDoesNotAskAgain` and
-`TestRestartPutsInTheClickedDownload`.
+`TestRestartAfterItsDownloadDoesNotAskAgain`,
+`TestRestartPutsInTheClickedDownload`,
+`TestRestartClickOutlastsASlowFeed` and `update-restart-check.test.cjs`.
 
 One download runs at a time (`begin` refuses a check while one is under
 way). A check that comes meanwhile sets `again` (`supersede`), and once

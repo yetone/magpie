@@ -113,6 +113,7 @@ type updater struct {
 	autoRestart func() bool
 	autoSkip    string
 	waitAsked   bool // the restart waiting was a click's
+	waitNow     bool // and its Restart now: a busy gateway isn't waited for
 	// installed: this process put an update in (install), and is leaving
 	// for it; followed: it is restarting into one another magpie put in
 	// (restartBeside). Either way what is on disk is no longer another's
@@ -826,8 +827,10 @@ func (u *updater) jsonIn(lang string) updateJSON {
 	if u.state == "error" {
 		j.Mirror, j.Network = u.mirror, u.network
 	}
-	if u.state == "checking" && u.staged != "" {
-		j.State = "ready" // what was downloaded can still be restarted into
+	if u.state == "checking" && u.staged != "" && !(u.waiting && u.waitAsked) {
+		// what was downloaded can still be restarted into; not when a
+		// click's restart waits on this check, which the page shows
+		j.State = "ready"
 	}
 	if u.state == "available" {
 		j.Stuck = u.stuck
@@ -1021,26 +1024,34 @@ func updateRoutes(mux *http.ServeMux, w Windows) {
 			writeJSON(rw, updates.json())
 			return
 		}
+		restart := func() bool {
+			if restartFrom(w, in.View) {
+				go leave(w.Quit)
+				return true
+			}
+			return false
+		}
 		if updates.json().State == "ready" {
 			if in.When != "now" && !updates.idle() {
-				updates.waitIdle(func() bool {
-					if restartFrom(w, in.View) {
-						go leave(w.Quit)
-						return true
-					}
-					return false
-				}, true)
+				updates.waitIdle(restart, true)
 				writeJSON(rw, updates.json())
 				return
 			}
 			updates.cancelWait()
 			updates.recheck(true)
-			if updates.asking() {
-				// the feed hasn't answered yet: the page reads again and
-				// restarts once it has, into the newest
-				j := updates.json()
-				j.State = "checking"
-				writeJSON(rw, j)
+			if st := updates.json().State; updates.asking() || st == "downloading" {
+				// the feed hasn't answered yet, or named a newer version,
+				// downloading now: the restart is still the click's, made
+				// here once it is in, into the newest. The page used to
+				// be told only "checking", and Settings' row read again,
+				// found the download waiting and offered Restart to update
+				// as before: the click did nothing (canlee886 on X, a slow
+				// feed); a second one restarted.
+				updates.waitIdle(restart, true)
+				updates.mu.Lock()
+				updates.waitNow = in.When == "now"
+				updates.mu.Unlock()
+				writeJSON(rw, updates.json())
 				return
 			}
 		}
