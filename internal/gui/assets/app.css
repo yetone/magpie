@@ -5506,6 +5506,16 @@ body.window .row + .row.agent.conn > .who { min-height: 41px; } /* the line abov
 .prefs-more { margin: 10px 0 0; }
 .prefs-more > summary { margin-left: 2px; }
 .prefs-more > .list { margin-top: 6px; }
+/* an Advanced fold inside a card (Privacy's Models folder): a line of the
+   card's own, ruled like its rows, its chevron's ink on the labels' left
+   edge (the chevron's path starts 2.8px into its box; a row's label 14px
+   in, its first letter's ink about a pixel more) */
+.list > .row-fold { border-top: 1px solid var(--line-2); }
+.list > .row-fold > .prefs-more { margin: 0; }
+.list > .row-fold > .prefs-more > summary { display: flex; margin: 0; padding: 13px 12px 13px 11.5px; border-radius: 0; }
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1024px) { body.web .list > .row-fold > .prefs-more > summary { padding-left: 9.75px; } } /* the rows' 12px there */
+.list > .row-fold > .prefs-more > summary:focus-visible { outline-offset: -2px; }
+.list > .row-fold > .prefs-more > .row { border-top: 1px solid var(--line-2); }
 /* which copy is left on the old list: a sentence that wraps as one, under the warning's words */
 .ag-vl.ag-stale-copy { display: block; padding-left: 14px; font-size: 12px; line-height: 1.6; color: var(--fg-2); }
 /* Codex's daemon: restarted from its line, a button that sits in the sentence */
