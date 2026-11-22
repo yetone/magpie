@@ -3947,8 +3947,10 @@ function renderLedger() {
     const cachedIn = r.cache_unknown ? 0 : (r.cache_read || 0) + (r.cache_write || 0);
     if (cachedIn > 0) {
       const whole = (r.in || 0) + cachedIn;
-      const c = td(el("span", "in-own", fmtN(r.in || 0)), "n in-split", t("Prompt {all}: {in} new · {read} cache read · {write} cache write", { all: ledNum(whole), in: ledNum(r.in || 0), read: ledNum(r.cache_read || 0), write: ledNum(r.cache_write || 0) }));
-      c.append(el("span", "in-all", fmtN(whole)));
+      // the whole is drawn from data-all (app.css), so the cell's text
+      // stays the vendor's in, as every other count's does
+      const c = td(el("span", "in-own", fmtN(r.in || 0)), "n in-split", tipOf(ledNum(r.in || 0), t("Prompt {all}: {in} new · {read} cache read · {write} cache write", { all: ledNum(whole), in: ledNum(r.in || 0), read: ledNum(r.cache_read || 0), write: ledNum(r.cache_write || 0) })));
+      c.dataset.all = fmtN(whole);
     } else td(fmtN(r.in || 0), "n", exactN(r.in));
     td(fmtN(r.out || 0), "n", tipOf(exactN(r.out), r.reasoning ? t("{n} reasoning, inside output", { n: ledNum(r.reasoning) }) : ""));
     // a vendor that counts no cache wrote and read none we know of, not 0 (#3464)

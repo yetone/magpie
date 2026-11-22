@@ -80,13 +80,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
               // ledFit sets for the width, toggled to read the other too
               const read = (on) => {
                 table.classList.toggle("tight", on);
-                return { cacheShown: shown(heads[r]), cached: cell(0).innerText.trim(), plain: cell(1).innerText.trim() };
+                // what the cell shows: its own text, then what app.css draws after it
+                const says = (c) => (c.innerText + (getComputedStyle(c, "::after").content.match(/^"(.*)"$/)?.[1] || "")).trim();
+                return { cacheShown: shown(heads[r]), cached: says(cell(0)), plain: says(cell(1)), text: cell(0).textContent };
               };
               const wide = read(false), narrow = read(true);
               table.classList.toggle("tight", tight);
               return {
                 tight, wide, narrow, head: heads[i].title, cachedTip: cell(0).title,
-                want: { own: fmtN(2), whole: fmtN(60402), plain: fmtN(1234) },
+                want: { own: fmtN(2), ownExact: ledNum(2), whole: fmtN(60402), plain: fmtN(1234) },
                 tip: t("Prompt {all}: {in} new · {read} cache read · {write} cache write", { all: ledNum(60402), in: ledNum(2), read: ledNum(52000), write: ledNum(8400) }),
               };
             });
@@ -95,7 +97,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             assert.equal(got.wide.cached, got.want.own, "beside the cache columns, the vendor's in");
             assert.equal(got.narrow.cached, got.want.whole, "with them left out, the whole prompt");
             for (const v of [got.wide, got.narrow]) assert.equal(v.plain, got.want.plain, "a prompt the cache had nothing of is its in");
-            assert.equal(got.cachedTip, got.tip);
+            for (const v of [got.wide, got.narrow]) assert.equal(v.text, got.want.own, "its text is the vendor's in, as every count's is");
+            assert.equal(got.cachedTip, got.want.ownExact + "\n" + got.tip, "the exact in first, then the prompt");
             assert(got.head.length > 0, "the header says what In counts");
             if (lang !== "en") assert.notEqual(got.tip, "Prompt 60,402: 2 new · 52,000 cache read · 8,400 cache write", "translated");
             assert.deepEqual(errors, []);
