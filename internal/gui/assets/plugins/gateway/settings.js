@@ -842,6 +842,8 @@ function remoteSays(m) {
   if (/turned the key away/.test(m)) return t("That magpie turned the key away: use the key in the link it printed");
   if (/doesn't let this computer in/.test(m)) return t("That magpie doesn’t let this computer in: add this computer’s address to its allowed addresses");
   if ((x = /^(\S+) is a name on the internet/.exec(m))) return t("{host} is a name on the internet: open it over https://, or the key crosses the network unencrypted", { host: x[1] });
+  if ((x = /^(\S+) isn't reached through Tailscale/.exec(m))) return t("{host} isn’t reached through Tailscale from this computer: turn Tailscale on, or open it over https://", { host: x[1] });
+  if ((x = /^(\S+) is a Tailscale address, which a Mac opens over https:\/\/ only/.exec(m))) return t("{host} is a Tailscale address, which a Mac opens over https:// only: type the machine’s .ts.net name, or open it over https://", { host: x[1] });
   if ((x = /^(\S+)'s certificate isn't trusted/.exec(m))) return t("{host}’s certificate isn’t trusted by this computer", { host: x[1] });
   if ((x = /^(\S+) doesn't answer/.exec(m))) return t("{host} doesn’t answer", { host: x[1] });
   if ((x = /^(\S+) answered .*not as a magpie page/.exec(m))) return t("{host} doesn’t answer as a magpie page: check the address and port (magpie web’s is 3430)", { host: x[1] });
@@ -878,7 +880,11 @@ function renderRemote(asked) {
   open.onclick = () => {
     open.disabled = true;
     api("remote", { url: addr.value, key: key.value })
-      .then((r) => { remoteState = r; remoteDraft = { url: null, key: "" }; renderRemote(true); })
+      .then((r) => {
+        remoteState = r; remoteDraft = { url: null, key: "" }; renderRemote(true);
+        // plain http over Tailscale (@baysonfox on X): its WireGuard encrypts the way
+        if (r.tailnet) status(t("Over Tailscale, which encrypts the connection"), "ok");
+      })
       .catch((e) => { open.disabled = false; status(remoteSays(e.message), "err"); });
   };
   for (const f of [addr, key]) f.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") open.onclick(); };

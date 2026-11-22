@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -84,28 +86,28 @@ func saveRemote(c remoteConf) error {
 // remoteAddr reads what was typed as the other magpie's address: the link
 // it printed (with ?k=, which is taken out as the key) or the bare
 // address, https:// when no scheme is named. Plain http is taken only
-// where the key doesn't cross the internet in the clear: an IP address
-// (this computer, the LAN, a Tailscale address), localhost, a .local name
-// or a one-word name; a name on the internet needs https, which is also
-// what a Mac's webview asks of one.
-func remoteAddr(raw string) (addr, key string, err error) {
+// where the key doesn't cross the internet in the clear (plainHTTP);
+// tailnet says the way there is Tailscale's, which encrypts it.
+func remoteAddr(raw string) (addr, key string, tailnet bool, err error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return "", "", errors.New("type the other magpie's address")
+		return "", "", false, errors.New("type the other magpie's address")
 	}
 	raw = provider.WithScheme(raw, "https")
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" || u.Hostname() == "" {
-		return "", "", fmt.Errorf("%q isn't an address such as https://magpie.example.com", raw)
+		return "", "", false, fmt.Errorf("%q isn't an address such as https://magpie.example.com", raw)
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return "", "", fmt.Errorf("the address is http:// or https://, not %s://", u.Scheme)
+		return "", "", false, fmt.Errorf("the address is http:// or https://, not %s://", u.Scheme)
 	}
 	if u.User != nil {
-		return "", "", errors.New("the address can't carry a user name or password: the key signs in")
+		return "", "", false, errors.New("the address can't carry a user name or password: the key signs in")
 	}
-	if u.Scheme == "http" && !plainHTTPOK(u.Hostname()) {
-		return "", "", fmt.Errorf("%s is a name on the internet: open it over https://, or the key crosses the network unencrypted", u.Hostname())
+	if u.Scheme == "http" {
+		if tailnet, err = plainHTTP(u.Hostname()); err != nil {
+			return "", "", false, err
+		}
 	}
 	q := u.Query()
 	key = q.Get("k")
@@ -115,13 +117,77 @@ func remoteAddr(raw string) (addr, key string, err error) {
 	if u.Path == "" {
 		u.Path = "/"
 	}
-	return u.String(), key, nil
+	return u.String(), key, tailnet, nil
 }
 
-// plainHTTPOK: a page on host may be reached over plain http.
-func plainHTTPOK(host string) bool {
+// tailnetNets are Tailscale's addresses: 100.64/10 and fd7a:115c:a1e0::/48.
+var tailnetNets = []*net.IPNet{
+	{IP: net.IPv4(100, 64, 0, 0).To4(), Mask: net.CIDRMask(10, 32)},
+	{IP: net.ParseIP("fd7a:115c:a1e0::"), Mask: net.CIDRMask(48, 128)},
+}
+
+func onTailnet(ip net.IP) bool {
+	for _, n := range tailnetNets {
+		if n.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// remoteLookup resolves a name as the window will; a var for tests.
+var remoteLookup = func(host string) ([]net.IP, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	return net.DefaultResolver.LookupIP(ctx, "ip", host)
+}
+
+// remoteOS is the system whose webview opens the window; a var for tests.
+var remoteOS = runtime.GOOS
+
+// plainHTTP judges a page on host reached over plain http: nil where the
+// key stays off the internet, tailnet when Tailscale carries it (its
+// WireGuard encrypts the way, @baysonfox on X). Allowed: localhost, a
+// .local or one-word name, a private, loopback or link-local address, a
+// Tailscale address, and a .ts.net name that resolves to Tailscale
+// addresses alone, as MagicDNS answers on the tailnet; a .ts.net name
+// that resolves elsewhere (Funnel's public relays) or not at all is on
+// the internet. A Mac's webview (App Transport Security) refuses http to
+// any other name and to a 100.64/10 or public address, whatever this
+// check says, so there those are refused here; Info.plist excepts ts.net.
+// Elsewhere a public address still passes (#7488).
+func plainHTTP(host string) (tailnet bool, err error) {
 	h := strings.ToLower(strings.TrimSuffix(host, "."))
-	return net.ParseIP(h) != nil || h == "localhost" || strings.HasSuffix(h, ".local") || !strings.Contains(h, ".")
+	internet := fmt.Errorf("%s is a name on the internet: open it over https://, or the key crosses the network unencrypted", host)
+	if h == "localhost" || strings.HasSuffix(h, ".local") || !strings.Contains(h, ".") && net.ParseIP(h) == nil {
+		return false, nil
+	}
+	if ip := net.ParseIP(h); ip != nil {
+		switch {
+		case onTailnet(ip) && ip.To4() != nil && remoteOS == "darwin":
+			return false, fmt.Errorf("%s is a Tailscale address, which a Mac opens over https:// only: type the machine's .ts.net name, or open it over https://", host)
+		case onTailnet(ip):
+			return true, nil
+		case ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast():
+			return false, nil
+		case remoteOS == "darwin":
+			return false, internet
+		}
+		return false, nil
+	}
+	if !strings.HasSuffix(h, ".ts.net") {
+		return false, internet
+	}
+	ips, lerr := remoteLookup(h)
+	if lerr != nil || len(ips) == 0 {
+		return false, fmt.Errorf("%s isn't reached through Tailscale from this computer: turn Tailscale on, or open it over https://", host)
+	}
+	for _, ip := range ips {
+		if !onTailnet(ip) {
+			return false, fmt.Errorf("%s isn't reached through Tailscale from this computer: turn Tailscale on, or open it over https://", host)
+		}
+	}
+	return true, nil
 }
 
 // remoteLink is the address with the key, which the page trades for its
@@ -193,6 +259,8 @@ type remoteOpener interface {
 type remoteJSON struct {
 	URL    string `json:"url"`
 	HasKey bool   `json:"hasKey"`
+	// Tailnet: the address just opened is plain http over Tailscale.
+	Tailnet bool `json:"tailnet,omitempty"`
 }
 
 // remoteRoutes: GET /api/remote says what is kept; POST takes {"url",
@@ -217,7 +285,7 @@ func remoteRoutes(mux *http.ServeMux, w Windows) {
 			fail(rw, err)
 			return
 		}
-		addr, key, err := remoteAddr(in.URL)
+		addr, key, tailnet, err := remoteAddr(in.URL)
 		if err != nil {
 			fail(rw, err)
 			return
@@ -254,7 +322,7 @@ func remoteRoutes(mux *http.ServeMux, w Windows) {
 		}
 		u, _ := url.Parse(addr)
 		o.OpenRemote(remoteLink(c), "magpie · "+u.Host)
-		writeJSON(rw, remoteJSON{URL: c.URL, HasKey: true})
+		writeJSON(rw, remoteJSON{URL: c.URL, HasKey: true, Tailnet: tailnet})
 	})
 	mux.HandleFunc("POST /api/remote/forget", func(rw http.ResponseWriter, r *http.Request) {
 		if err := saveRemote(remoteConf{}); err != nil {

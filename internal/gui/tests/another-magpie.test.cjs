@@ -32,6 +32,9 @@ function server(lang, web, posts, gets) {
       posts.push(body);
       if (body.key === "wrong-wrong-wrong-wrong") return json({ error: "that magpie turned the key away: use the key in the link it printed (MAGPIE_WEB_KEY, or the k= in it)" }, 400);
       if (/^http:\/\/magpie\.example\.com/.test(body.url)) return json({ error: "magpie.example.com is a name on the internet: open it over https://, or the key crosses the network unencrypted" }, 400);
+      if (/^http:\/\/funnel\.tail1234\.ts\.net/.test(body.url)) return json({ error: "funnel.tail1234.ts.net isn't reached through Tailscale from this computer: turn Tailscale on, or open it over https://" }, 400);
+      if (/^http:\/\/100\./.test(body.url)) return json({ error: "100.101.1.2 is a Tailscale address, which a Mac opens over https:// only: type the machine's .ts.net name, or open it over https://" }, 400);
+      if (/^http:\/\/nas\.tail1234\.ts\.net/.test(body.url)) { kept = { url: body.url, hasKey: true }; return json({ ...kept, tailnet: true }); }
       kept = { url: body.url.replace(/\?k=.*/, ""), hasKey: true };
       return json(kept);
     }
@@ -98,6 +101,23 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const openBtn = list.getByRole("button", { name: await tr("Open"), exact: true });
         await openBtn.click();
         await page.locator("#status").filter({ hasText: await tr("{host} is a name on the internet: open it over https://, or the key crosses the network unencrypted", { host: "magpie.example.com" }) }).waitFor();
+        // @baysonfox on X: a Tailscale name over http opens, and says Tailscale encrypts it
+        await addr.fill("http://nas.tail1234.ts.net:3430/");
+        await openBtn.click();
+        await page.locator("#status").filter({ hasText: await tr("Over Tailscale, which encrypts the connection") }).waitFor();
+        if (lang !== "en") assert.notEqual(await tr("Over Tailscale, which encrypts the connection"), "Over Tailscale, which encrypts the connection", "translated");
+        assert.equal(await page.locator("#status.ok").count(), 1, "said as done, not as a warning");
+        await list.getByRole("button", { name: await tr("Forget") }).click();
+        await until(page, () => posts.includes("forget"));
+        await page.waitForFunction(() => !document.querySelector("#remoteList input.remote-url").value);
+        // a .ts.net name off the tailnet, and a 100.x address on a Mac
+        await addr.fill("http://funnel.tail1234.ts.net:3430/");
+        await key.fill(KEY);
+        await openBtn.click();
+        await page.locator("#status").filter({ hasText: await tr("{host} isn’t reached through Tailscale from this computer: turn Tailscale on, or open it over https://", { host: "funnel.tail1234.ts.net" }) }).waitFor();
+        await addr.fill("http://100.101.1.2:3430/");
+        await openBtn.click();
+        await page.locator("#status").filter({ hasText: await tr("{host} is a Tailscale address, which a Mac opens over https:// only: type the machine’s .ts.net name, or open it over https://", { host: "100.101.1.2" }) }).waitFor();
         // a wrong key
         await addr.fill("https://magpie.example.com");
         await key.fill("wrong-wrong-wrong-wrong");
@@ -116,7 +136,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await key.getAttribute("placeholder"), await tr("Kept"));
         assert.equal(await page.locator("#setPage-network select").count(), 0, "no native select");
         await forget.click();
-        await until(page, () => posts.includes("forget"));
+        await until(page, () => posts.filter((p) => p === "forget").length === 2);
         await page.waitForFunction(() => !document.querySelector("#remoteList input.remote-url").value);
         assert.deepEqual(errors, []);
       });
