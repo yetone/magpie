@@ -3456,7 +3456,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			}
 		}
 		// /responses/compact goes only where it is the provider's own
-		// route (responses_compact.go, #7281)
+		// route, or to a ChatGPT or Copilot account as Codex's trigger
+		// (responses_compact.go, #7281, #7285)
 		if unaryCompact(r) {
 			var left bool
 			if cands, pl, left = s.unaryCompactCarriers(cands, pl); !left {
@@ -6281,8 +6282,9 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 	// compaction is on, goes as it came: a translation would leave it out
 	// (#1099)
 	keep := s.keepsCompaction(from, p, model, body)
-	// /responses/compact goes as it came, and only to a provider that
-	// has the route (responses_compact.go)
+	// /responses/compact goes as it came to a provider that has the
+	// route, or as Codex's trigger to an account that carries it
+	// (responses_compact.go)
 	compact := from == provider.Responses && unaryCompact(r)
 	if compact {
 		keep, relayable = true, s.compactsUnary(p, model)
@@ -7098,8 +7100,16 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	// a client that asked for one body, of an account that only streams:
 	// asked streamed, the stream read here (gathered)
 	var gather *gathered
-	if gathers(p, proto, body) {
+	// a /responses/compact to an account is asked on /responses with
+	// Codex's compaction_trigger, streamed, and gathered into the
+	// response.compaction (responses_compact.go, #7285)
+	byTrigger := proto == provider.Responses && unaryCompact(r) && compactsByTrigger(p)
+	if gathers(p, proto, body) || byTrigger {
 		gather = &gathered{h: http.Header{}, status: http.StatusOK, capped: int(gjson.GetBytes(body, "max_output_tokens").Int())}
+		if byTrigger {
+			gather.compact, gather.kept = true, compactKept(body)
+			body = withCompactionTrigger(body)
+		}
 		body = withFields(body, map[string]any{"stream": true})
 	}
 	searchFn := false            // Codex's tool search sent as a function
@@ -7337,7 +7347,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		body = withBodyEffort(proto, body, effort)
 	}
 	path := upstreamPath(p, proto, upstream)
-	if proto == provider.Responses && unaryCompact(r) {
+	if proto == provider.Responses && unaryCompact(r) && !byTrigger {
 		path += "/compact" // responses_compact.go
 	}
 	if proto == provider.Gemini && p.IsVertex() && geminiWhole {

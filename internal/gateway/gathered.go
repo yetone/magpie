@@ -32,6 +32,30 @@ type gathered struct {
 	// capped: the max_output_tokens the client asked, for a reply that
 	// stopped at it with no end said (endsAtProbeCap)
 	capped int
+	// compact: a /responses/compact asked of an account with Codex's
+	// compaction_trigger (responses_compact.go); the reply is the
+	// response.compaction, kept (its input's user messages) first
+	compact bool
+	kept    []json.RawMessage
+}
+
+// compacted writes resp to w as a /responses/compact's reply
+// (compactionReply), or a 502 when it sealed nothing.
+func (g *gathered) compacted(w http.ResponseWriter, p provider.Provider, resp json.RawMessage) (int, string) {
+	b, ok := compactionReply(resp, g.kept)
+	if !ok {
+		msg := p.Name + ": the compaction_trigger was answered without a compaction item"
+		return writeError(w, provider.Responses, 502, msg), msg
+	}
+	for _, k := range []string{"Request-Id", "X-Request-Id"} {
+		if v := g.h.Get(k); v != "" {
+			w.Header().Set(k, v)
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(b)
+	return http.StatusOK, ""
 }
 
 func (g *gathered) Header() http.Header         { return g.h }
@@ -48,6 +72,9 @@ func (g *gathered) Write(b []byte) (int, error) { return g.buf.Write(b) }
 // the stream began it, incomplete at max_output_tokens.
 func (g *gathered) finish(w http.ResponseWriter, p provider.Provider, sse bool, cut string, failed string) (int, string) {
 	if !sse {
+		if g.compact && g.status == http.StatusOK {
+			return g.compacted(w, p, g.buf.Bytes())
+		}
 		for k, vs := range g.h {
 			w.Header()[k] = vs
 		}
@@ -115,6 +142,9 @@ func (g *gathered) finish(w http.ResponseWriter, p provider.Provider, sse bool, 
 		items[0] = msg
 	}
 	resp = withStreamedOutput(resp, items)
+	if g.compact {
+		return g.compacted(w, p, resp)
+	}
 	for _, k := range []string{"Request-Id", "X-Request-Id"} {
 		if v := g.h.Get(k); v != "" {
 			w.Header().Set(k, v)
