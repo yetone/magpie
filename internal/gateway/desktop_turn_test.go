@@ -304,9 +304,12 @@ func TestDesktopSubagentTurnLeavesTitleOnLead(t *testing.T) {
 	}
 }
 
-// Claude Code 2.1.321 sends WebSearch as a request of its own, with
-// thinking off and the server search tool forced by name.
-const desktopWebSearchBody = `{"model":"fake/m1","max_tokens":16000,"thinking":{"type":"disabled"},"system":"You run a web search for another Claude model","tools":[{"type":"web_search_20250305","name":"web_search"}],"tool_choice":{"type":"tool","name":"web_search"},"messages":[{"role":"user","content":"Search for Go release notes"}]}`
+// Claude Code's WebSearch request as it goes out: 2.1.328's, captured
+// from the CLI against a fake server (2.1.317, 2.1.326 and 2.1.330 send
+// the same). Its option names web_search, but the request carries
+// tool_choice auto, with no thinking. The texts are cut short and the
+// user id made up; the keys, their order and the tool are as sent.
+const desktopWebSearchBody = `{"model":"fake/m1","messages":[{"role":"user","content":[{"type":"text","text":"Perform a web search for the query: Go release notes"}]}],"system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=2.1.328"},{"type":"text","text":"You are a Claude agent, built on Anthropic's Claude Agent SDK."},{"type":"text","text":"You run a web search for another Claude model"}],"tools":[{"type":"web_search_20250305","name":"web_search","max_uses":8}],"tool_choice":{"type":"auto"},"metadata":{"user_id":"{\"device_id\":\"d0\"}"},"max_tokens":128000,"output_config":{"effort":"max"},"stream":true}`
 
 func TestDesktopSearchCall(t *testing.T) {
 	for _, tc := range []struct {
@@ -314,21 +317,24 @@ func TestDesktopSearchCall(t *testing.T) {
 		want       bool
 	}{
 		{"search", desktopWebSearchBody, true},
+		{"forced by name", strings.Replace(desktopWebSearchBody, `"tool_choice":{"type":"auto"}`, `"tool_choice":{"type":"tool","name":"web_search"}`, 1), true},
+		{"any tool", strings.Replace(desktopWebSearchBody, `"tool_choice":{"type":"auto"}`, `"tool_choice":{"type":"any"}`, 1), true},
 		{"new tool version", strings.ReplaceAll(desktopWebSearchBody, "20250305", "20260209"), true},
 		{"different prompt", strings.ReplaceAll(desktopWebSearchBody, "You run a web search for another Claude model", "Search the web"), true},
-		{"no prompt", `{"tools":[{"type":"web_search_20250305","name":"web_search"}],"tool_choice":{"type":"tool","name":"web_search"}}`, true},
+		{"no prompt", `{"tools":[{"type":"web_search_20250305","name":"web_search"}],"tool_choice":{"type":"auto"}}`, true},
 		{"prompt only", `{"system":"You run a web search for another Claude model"}`, false},
-		{"no tools", `{"tool_choice":{"type":"tool","name":"web_search"}}`, false},
-		{"empty tools", `{"tools":[],"tool_choice":{"type":"tool","name":"web_search"}}`, false},
-		{"null tools", `{"tools":null,"tool_choice":{"type":"tool","name":"web_search"}}`, false},
+		{"no tools", `{"tool_choice":{"type":"auto"}}`, false},
+		{"empty tools", `{"tools":[],"tool_choice":{"type":"auto"}}`, false},
+		{"null tools", `{"tools":null,"tool_choice":{"type":"auto"}}`, false},
 		{"multiple tools", strings.ReplaceAll(desktopWebSearchBody, `"tools":[`, `"tools":[{"name":"Bash"},`), false},
+		{"another tool after it", strings.Replace(desktopWebSearchBody, `"max_uses":8}]`, `"max_uses":8},{"name":"Bash"}]`, 1), false},
 		{"client tool", strings.ReplaceAll(desktopWebSearchBody, `"type":"web_search_20250305",`, ""), false},
 		{"other server tool", strings.ReplaceAll(desktopWebSearchBody, "web_search_20250305", "web_fetch_20250910"), false},
 		{"no version prefix", strings.ReplaceAll(desktopWebSearchBody, "web_search_20250305", "web_search"), false},
 		{"other tool name", strings.Replace(desktopWebSearchBody, `"name":"web_search"`, `"name":"other"`, 1), false},
-		{"auto choice", strings.ReplaceAll(desktopWebSearchBody, `"type":"tool"`, `"type":"auto"`), false},
-		{"other choice name", strings.ReplaceAll(desktopWebSearchBody, `"tool_choice":{"type":"tool","name":"web_search"}`, `"tool_choice":{"type":"tool","name":"Bash"}`), false},
-		{"no choice", `{"tools":[{"type":"web_search_20250305","name":"web_search"}]}`, false},
+		{"none", strings.Replace(desktopWebSearchBody, `"tool_choice":{"type":"auto"}`, `"tool_choice":{"type":"none"}`, 1), false},
+		{"other choice name", strings.Replace(desktopWebSearchBody, `"tool_choice":{"type":"auto"}`, `"tool_choice":{"type":"tool","name":"Bash"}`, 1), false},
+		{"no choice", strings.Replace(desktopWebSearchBody, `"tool_choice":{"type":"auto"},`, "", 1), false},
 		{"invalid json", desktopWebSearchBody[:len(desktopWebSearchBody)-1], false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -380,7 +386,7 @@ func TestDesktopWebSearchScope(t *testing.T) {
 func TestDesktopWebSearchLeavesToolTurns(t *testing.T) {
 	for _, tc := range []struct{ name, body string }{
 		{"multiple tools", strings.ReplaceAll(desktopWebSearchBody, `"tools":[`, `"tools":[{"name":"Bash"},`)},
-		{"auto choice", strings.ReplaceAll(desktopWebSearchBody, `"type":"tool"`, `"type":"auto"`)},
+		{"none", strings.Replace(desktopWebSearchBody, `"tool_choice":{"type":"auto"}`, `"tool_choice":{"type":"none"}`, 1)},
 		{"ordinary turn", `{"tools":[{"name":"Bash"}],"tool_choice":{"type":"auto"}}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

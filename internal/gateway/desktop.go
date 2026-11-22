@@ -1129,10 +1129,14 @@ func desktopSearchTier() string {
 	return m
 }
 
-// desktopSearchCall is Claude Code 2.1.321's WebSearch subrequest: only
-// the server search tool, forced by name. Desktop's gateway mode disables
-// GrowthBook, so its small-model flag defaults off and it asks on the
-// session's model even when haiku is picked.
+// desktopSearchCall is Claude Code's WebSearch subrequest: only the server
+// search tool, named web_search, with a tool_choice that lets it be called.
+// Claude Code's option names the tool, but the request it sends (2.1.317 to
+// 2.1.330) carries tool_choice auto, so auto, any and the tool by name are
+// all the search; none, or another tool by name, is not. The request always
+// has a tool_choice, which keeps the decode off every other body. Desktop's
+// gateway mode disables GrowthBook, so its small-model flag defaults off and
+// it asks on the session's model even when haiku is picked.
 func desktopSearchCall(body []byte) bool {
 	if !bodyHas(body, `"tool_choice"`) || !bodyHas(body, `web_search_`) {
 		return false
@@ -1147,9 +1151,17 @@ func desktopSearchCall(body []byte) bool {
 			Name string `json:"name"`
 		} `json:"tool_choice"`
 	}
-	return json.Unmarshal(body, &v) == nil && len(v.Tools) == 1 &&
-		strings.HasPrefix(v.Tools[0].Type, "web_search_") && v.Tools[0].Name == "web_search" &&
-		v.ToolChoice.Type == "tool" && v.ToolChoice.Name == "web_search"
+	if json.Unmarshal(body, &v) != nil || len(v.Tools) != 1 ||
+		!strings.HasPrefix(v.Tools[0].Type, "web_search_") || v.Tools[0].Name != "web_search" {
+		return false
+	}
+	switch v.ToolChoice.Type {
+	case "auto", "any":
+		return true
+	case "tool":
+		return v.ToolChoice.Name == "web_search"
+	}
+	return false
 }
 
 // hasTools: the request offers the model tools (Anthropic's, Chat's and
