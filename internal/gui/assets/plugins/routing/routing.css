@@ -871,6 +871,11 @@ body.window .rt-gedit > .bar { --vfoot: 8px; }
    the chips go on a line of their own, right-aligned, rather than past
    the edge; none of them is ever cut */
 .rt-gedit .fallback, .rt-gedit .fallback:not(.rt-rules) .fbl { grid-template-columns: minmax(0, 1fr); }
+/* the rows stack in a column, not a grid: WebKit (the macOS app) sized a
+   grid's row to its member's first line only, so a row whose chips wrapped
+   onto a second line (an account picked, liaobode96 on X) drew that line
+   over the next row, and the last one's under the list */
+.rt-gedit .fallback .fbl:not(:empty) { display: flex; flex-direction: column; }
 /* in :where, so a phone's own row (body.web, above) still wins */
 :where(.rt-gedit .fallback:not(.rt-rules)) .fbrow { flex-wrap: wrap; justify-content: flex-end; row-gap: 2px; }
 :where(.rt-gedit .fallback:not(.rt-rules)) .fbrow .n { flex: 1 1 8em; }
@@ -912,6 +917,9 @@ body.window .rt-gedit > .bar { --vfoot: 8px; }
 /* a group's account choice (Group.Accounts): a long account name ellipsizes */
 .rt-gedit .fbrow .rt-gacct { flex: 0 1 auto; min-width: 0; }
 .rt-gedit .fbrow .rt-gacct > span { overflow: hidden; text-overflow: ellipsis; }
+/* a member's own account: a long address ellipsizes rather than pushing
+   the row past the editor's edge */
+.rt-gedit .fbrow .rt-macct { flex: 0 1 auto; min-width: 0; }
 .rt-gedit > .rt-gacc[hidden] { display: none; }
 /* a group bound to gateway keys (Group.Keys): a long key name ellipsizes */
 .rt-gedit > .rt-gkeys[hidden] { display: none; }
