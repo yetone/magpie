@@ -1459,7 +1459,10 @@ function routingPage(part) {
         ? t("{by} was asked which of {kinds} turn {turn} is, and answered “{said}”, which is no rule's intent ({took}).", { by, kinds, turn: r.rule.turn, said: answered, took: when + sure })
         : t("{by} was asked which of {kinds} turn {turn} is, and said none ({took}).", { by, kinds, turn: r.rule.turn, took: when + sure })
       : t("{by} was asked which of {kinds} turn {turn} is, and said “{intent}” ({took}).", { by, kinds, turn: r.rule.turn, intent: c.intent, took: when + sure })) + told;
-    return effort ? `${said} ${effort}` : above ? `${said} ${above}` : said;
+    // the intent was told, the effort, asked apart, wasn't: the turn
+    // reasons as the agent asked (@zyh6036 on X)
+    const effortFailed = c.effortError ? t("{by} was to rate how hard turn {turn} is, but couldn't — {err} — so it reasons as the agent asked.", { by, turn: r.rule.turn, err: c.effortError }) : "";
+    return effort ? `${said} ${effort}` : above ? `${said} ${above}` : effortFailed ? `${said} ${effortFailed}` : said;
   }
   // intentOf is the intent a rule's condition asks for, as the gateway
   // writes it (intent "…"); undefined for another condition

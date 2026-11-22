@@ -140,6 +140,17 @@ type answerError struct{ error }
 // it isn't left to rest for it.
 type waitSpent struct{ error }
 
+// effortFailed is a chat classifier that told the message's intent but
+// not how hard the turn is, asked in a call of its own: the intent still
+// holds, and the turn reasons as the agent asked. It answered, so it
+// isn't left to rest for it, which would leave the next turns' intents
+// unasked too. (@zyh6036 on X: with the group's reasoning on auto, every
+// turn of Codex, which always asks for an effort, lost its intent this
+// way and stayed on the classifier's own model; Pi asks for none.)
+type effortFailed struct{ error }
+
+func (e effortFailed) Unwrap() error { return e.error }
+
 // cutShort is the waitSpent of a classifier given wait, what was left of
 // the request's classifier wait full, that didn't answer in it.
 func cutShort(model string, wait, full time.Duration) error {
@@ -194,6 +205,17 @@ func classify(ask classifier, held access.Identity, model string, intents []stri
 	classified.Lock()
 	defer classified.Unlock()
 	c.err = err
+	if errors.As(err, new(effortFailed)) {
+		// the intent alone, said this time and not kept: the effort is
+		// asked again with the next turn
+		c.v, c.err = v, nil
+		if was, ok := classified.last[model]; !ok || was.err != err.Error() {
+			log.Printf("routing: the classifier %s couldn't say: %s", model, err)
+		}
+		classified.last[model] = classifyFailure{err: err.Error(), at: time.Now()}
+		delete(classified.failed, rest)
+		return v, false, err
+	}
 	if err != nil {
 		f := classifyFailure{err: err.Error(), at: time.Now()}
 		if !errors.As(err, new(answerError)) && !errors.As(err, new(waitSpent)) {
@@ -564,7 +586,14 @@ func (s *Server) askClassifierIn(wait time.Duration, who access.Identity, model 
 	if ierr != nil {
 		return verdict{}, ierr
 	}
-	return v, eerr
+	if eerr != nil && len(intents) > 0 {
+		v.Effort, v.Score = "", 0
+		return v, effortFailed{eerr}
+	}
+	if eerr != nil {
+		return verdict{}, eerr // the effort alone was asked
+	}
+	return v, nil
 }
 
 const effortPrompt = "You judge how much reasoning a coding assistant needs to handle a user's message well. " +
