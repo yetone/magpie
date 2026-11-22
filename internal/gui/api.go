@@ -633,6 +633,10 @@ type settingsJSON struct {
 	CodexUsers []string `json:"codexUsers,omitempty"`
 	// and the Claude accounts, which Warm up now picks from
 	ClaudeUsers []string `json:"claudeUsers,omitempty"`
+	// and the agy CLI's: when its warm-up last started a pool's window,
+	// and the accounts Warm up now picks from
+	AgyWarmed *time.Time `json:"agyWarmed,omitempty"`
+	AgyUsers  []string   `json:"agyUsers,omitempty"`
 	// the Codexes here that kept the background compaction's table (and
 	// its share) out of the config at the last sync: too old for it
 	// (before 0.163.0-alpha.8), or of no known version (codex_async.go)
@@ -948,6 +952,7 @@ func settingsState() settingsJSON {
 	}
 	s.CodexWarmed, s.ClaudeWarmed = latest(provider.CodexWarmed()), latest(provider.ClaudeWarmed())
 	s.CodexUsers, s.ClaudeUsers = loginUsers("codex"), loginUsers("claude")
+	s.AgyWarmed, s.AgyUsers = latest(provider.AgyWarmed()), loginUsers("agy-cli")
 	s.CodexAsyncHeld = agent.CodexAsyncHeld()
 	s.CodexCompactKeys = codexKeysText(agent.CodexCompactHeld(""))
 	s.ClaudeCache = claudeCacheState()

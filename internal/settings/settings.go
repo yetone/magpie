@@ -382,6 +382,10 @@ type Settings struct {
 	// ClaudeWarmup is CodexWarmup for the Claude accounts, the request
 	// sent through Claude Code.
 	ClaudeWarmup string `json:"claudeWarmup,omitempty"`
+	// AgyWarmup is CodexWarmup for the agy CLI's (Antigravity's) accounts,
+	// each pool of models (Gemini, Claude & GPT) started on its own: a
+	// pool's window starts at the first request to one of its models.
+	AgyWarmup string `json:"agyWarmup,omitempty"`
 	// CodexWarmAt starts each ChatGPT account's 5-hour window at a time of
 	// day of the user's choosing, local "15:04", with the same tiny
 	// request: an account whose 5-hour window isn't running then gets one,
@@ -1627,7 +1631,8 @@ var (
 	Currencies = []string{"usd", "cny", CurrencyByProvider}
 	// TotalCurrencies are TotalCurrency's values, "" being usd.
 	TotalCurrencies = []string{"usd", "cny"}
-	// Warmups are CodexWarmup's and ClaudeWarmup's values, off as "".
+	// Warmups are CodexWarmup's, ClaudeWarmup's and AgyWarmup's values,
+	// off as "".
 	Warmups = []string{"", "week", "all"}
 	// TrayEvery are TrayUsageEvery's values, in minutes.
 	TrayEvery = []int{1, 3, 5, 10, 30}
@@ -2708,6 +2713,9 @@ func saveOwn(s Settings, recording, reads bool) error {
 	if !slices.Contains(Warmups, s.ClaudeWarmup) {
 		return fmt.Errorf("claude warm-up must be off, week or all, not %q", s.ClaudeWarmup)
 	}
+	if !slices.Contains(Warmups, s.AgyWarmup) {
+		return fmt.Errorf("agy warm-up must be off, week or all, not %q", s.AgyWarmup)
+	}
 	for _, at := range slices.Concat(s.CodexWarmAts, s.ClaudeWarmAts) {
 		if _, _, ok := Clock(at); !ok {
 			return fmt.Errorf("a warm-up's time of day must look like 06:00, not %q", at)
@@ -3048,6 +3056,9 @@ func (s Settings) normal() Settings {
 	}
 	if s.ClaudeWarmup == "off" {
 		s.ClaudeWarmup = ""
+	}
+	if s.AgyWarmup == "off" {
+		s.AgyWarmup = ""
 	}
 	if s.TrayUsageEvery == 0 {
 		s.TrayUsageEvery = 3

@@ -19,7 +19,7 @@ func init() {
 			if err != nil {
 				return 0, err
 			}
-			n := count(s.CodexWarmup != "", s.ClaudeWarmup != "", s.CodexWarmAt != "" || len(s.CodexWarmAts) > 0,
+			n := count(s.CodexWarmup != "", s.ClaudeWarmup != "", s.AgyWarmup != "", s.CodexWarmAt != "" || len(s.CodexWarmAts) > 0,
 				s.ClaudeWarmAt != "" || len(s.ClaudeWarmAts) > 0, s.WorkBuddyCheckin, s.TraeCheckin, s.MiniMaxCheckin, s.QoderCheckin)
 			n += len(s.CodexWarmAtOf)
 			for _, on := range s.PluginCheckins {

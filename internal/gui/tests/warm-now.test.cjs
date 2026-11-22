@@ -1,6 +1,6 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
-// Warm up now (a Windows user on Discord): the last row of Codex's and
-// Claude Code's warm-ups, in each one's provider editor (they were tabs in
+// Warm up now (a Windows user on Discord): the last row of Codex's,
+// Claude Code's and the agy CLI's warm-ups, in each one's provider editor (they were tabs in
 // Settings › Usage until the owner moved them on 11-07), sends one account
 // the warm-up's request at once (POST /api/warm-now {agent, user}). One
 // account goes at a press; with more the press opens the app's menu of
@@ -18,8 +18,8 @@ const { provPrefsProviders, openProvPrefs, inEditor } = require("./reader.cjs");
 const assets = path.resolve(__dirname, "../assets");
 const WHY = "429 Too Many Requests: {\"detail\":\"usage limit reached\"} https://chatgpt.com/backend-api/codex/responses-with-a-very-long-unbroken-reason";
 
-function serve(lang, asked, codexUsers, claudeUsers) {
-  const settings = { theme: "light", lang, currency: "usd", codexWarmup: "", codexUsers, claudeUsers };
+function serve(lang, asked, codexUsers, claudeUsers, agyUsers) {
+  const settings = { theme: "light", lang, currency: "usd", codexWarmup: "", codexUsers, claudeUsers, agyUsers };
   return async (route) => {
     const url = new URL(route.request().url());
     const json = (data, status = 200) => route.fulfill({ status, json: data });
@@ -36,7 +36,7 @@ function serve(lang, asked, codexUsers, claudeUsers) {
       asked.push([route.request().postDataJSON().agent, "all"]);
       return json({ results: ALL });
     }
-    if (url.pathname === "/api/providers") return json(provPrefsProviders(["codex", "claude"], { codex: "Codex", claude: "Claude Code" }));
+    if (url.pathname === "/api/providers") return json(provPrefsProviders(["codex", "claude", "agy-cli"], { codex: "Codex", claude: "Claude Code", "agy-cli": "Antigravity CLI" }));
     if (url.pathname === "/api/groups") return json({ groups: [], models: [] });
     if (url.pathname === "/api/plugins") return json({ plugins: [] });
     if (url.pathname.startsWith("/api/")) return json({});
@@ -91,7 +91,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         page.setDefaultNavigationTimeout(60000);
         const errors = [], asked = [];
         page.on("pageerror", (e) => { if (engine === "webkit" && /due to access control checks/.test(e.message)) return; errors.push(e.message); }); // a goto in WebKit can cut off a fetch (#1350)
-        await page.route("**/*", serve(lang, asked, ["a@example.com", "B@Example.com"], ["own@example.com"]));
+        await page.route("**/*", serve(lang, asked, ["a@example.com", "B@Example.com"], ["own@example.com"], ["own@example.com"]));
         await openProvPrefs(page, "codex");
         const row = page.locator(".editor .prov-prefs #warmNowRow");
         await row.locator("button").waitFor();
@@ -146,6 +146,18 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForFunction((s) => document.querySelector("#claudeWarmNowSub")?.textContent.startsWith(s), w.own);
         assert.deepEqual(asked.at(-1), ["claude", "own@example.com"]);
         assert.equal(asked.length, 3);
+        assert.deepEqual(await sideways(page), []);
+
+        // the agy CLI's editor (0Block0_o on X): its account's pools, at a press
+        await openProvPrefs(page, "agy-cli");
+        const arow = page.locator(".editor .prov-prefs #agyWarmNowRow");
+        await arow.locator("button").waitFor();
+        await inEditor(page, arow.locator("button"));
+        assert.equal((await arow.locator("button").innerText()).trim(), w.go);
+        await arow.locator("button").click();
+        await page.waitForFunction((s) => document.querySelector("#agyWarmNowSub")?.textContent.startsWith(s), w.own);
+        assert.deepEqual(asked.at(-1), ["agy-cli", "own@example.com"]);
+        assert.equal(asked.length, 4);
         assert.deepEqual(await sideways(page), []);
         assert.equal(await page.locator("select").count(), 0);
         assert.deepEqual(errors, []);

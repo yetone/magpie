@@ -19972,14 +19972,15 @@ const DISCORD_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="curre
 const PROV_PREFS = {
   codex: ["codexResetList", "codexWarmList"],
   claude: ["claudeRunList", "claudeWarmList"],
+  "agy-cli": ["agyWarmList"],
   workbuddy: ["wbList"],
   "trae-cn": ["traeList"],
   "minimax-code": ["minimaxList"], "minimax-code-global": ["minimaxList"],
   qoder: ["qoderList"], "qoder-cn": ["qoderList"],
 };
-// each list's label in the editor's Advanced, the plugins' check-ins
-// under Check in
-const PROV_PREF_LABEL = { codexResetList: "Resets", codexWarmList: "Warm up", claudeWarmList: "Warm up" };
+// each list's label in the editor's Advanced (a warm-up's Warm up), the
+// plugins' check-ins under Check in
+const PROV_PREF_LABEL = { codexResetList: "Resets", claudeRunList: "Claude requests" };
 let provPrefListEls = null, provPrefMount = null;
 // homeProvPrefRows: an editor's lists back in the page
 function homeProvPrefRows() {
@@ -20019,6 +20020,7 @@ function remountProvPrefs() {
 // provPrefsOn: the agent's warm-up or daily check-in is on
 const provPrefsOn = (a, s = prefs) => !!(a == "codex" ? s.codexWarmup || warmTimes(s.codexWarmAts, s.codexWarmAt).length
   : a == "claude" ? s.claudeWarmup || warmTimes(s.claudeWarmAts, s.claudeWarmAt).length
+  : a == "agy-cli" ? s.agyWarmup
   : s.checkinPlugins?.find((p) => p.id == a)?.on ?? s[PLUGIN_CHECKIN_INHERITS[a]]);
 // provPrefsField: a subscription's warm-up, check-in and resets as the
 // editor's own fields, under Advanced (the owner, 11-09: a block of cards
@@ -20030,7 +20032,7 @@ function provPrefsField(agent, opened) {
   const slots = keys.map((k) => {
     const slot = el("div", "prov-prefs");
     slot.dataset.list = k;
-    slot.fieldRow = field(t(k == "claudeRunList" ? "Claude requests" : PROV_PREF_LABEL[k] || "Check in"), slot);
+    slot.fieldRow = field(t(PROV_PREF_LABEL[k] || (k.endsWith("WarmList") ? "Warm up" : "Check in")), slot);
     for (const n of slot.fieldRow) n.hidden = true;
     slot.hidden = true;
     return slot;
@@ -20292,16 +20294,16 @@ function renderSettings() {
     prefWrite(api("settings/login", { on: v === "on" }))));
   renderLoginAllow(s);
   homeProvPrefRows();
-  // A ChatGPT account's next window started as soon as the last resets
-  $("#warmSegs").replaceChildren(segs([["off", t("Off")], ["week", t("Weekly")], ["all", t("Weekly and 5-hour")]],
-    s.codexWarmup || "off", (v) => savePrefs({ ...keep, codexWarmup: v === "off" ? "" : v })));
-  $("#warmSub").textContent = t("One tiny request starts the next window at once")
-    + (s.codexWarmed ? " · " + t("last started {when}", { when: syncWhen(s.codexWarmed) }) : "");
-  // and a Claude account's, the request sent through Claude Code
-  $("#claudeWarmSegs").replaceChildren(segs([["off", t("Off")], ["week", t("Weekly")], ["all", t("Weekly and 5-hour")]],
-    s.claudeWarmup || "off", (v) => savePrefs({ ...keep, claudeWarmup: v === "off" ? "" : v })));
-  $("#claudeWarmSub").textContent = t("One tiny request through Claude Code (Haiku) starts the next window at once")
-    + (s.claudeWarmed ? " · " + t("last started {when}", { when: syncWhen(s.claudeWarmed) }) : "");
+  // A ChatGPT account's next window started as soon as the last resets, a
+  // Claude account's through Claude Code, and an agy CLI account's, each
+  // pool's with a request to one of its models
+  for (const [id, key, sub, warmed] of [["warm", "codexWarmup", "One tiny request starts the next window at once", s.codexWarmed],
+    ["claudeWarm", "claudeWarmup", "One tiny request through Claude Code (Haiku) starts the next window at once", s.claudeWarmed],
+    ["agyWarm", "agyWarmup", "One tiny request through the agy CLI starts each pool's next window at once", s.agyWarmed]]) {
+    $(`#${id}Segs`).replaceChildren(segs([["off", t("Off")], ["week", t("Weekly")], ["all", t("Weekly and 5-hour")]],
+      s[key] || "off", (v) => savePrefs({ ...keep, [key]: v === "off" ? "" : v })));
+    $(`#${id}Sub`).textContent = t(sub) + (warmed ? " · " + t("last started {when}", { when: syncWhen(warmed) }) : "");
+  }
   // and the 5-hour windows started at times of day, so they line up with it
   renderWarmAt($("#warmAtSegs"), $("#warmAtSub"), warmTimes(s.codexWarmAts, s.codexWarmAt), s.codexWarmup, "",
     (v) => savePrefs({ ...keep, codexWarmAts: v, codexWarmAt: v[0] || "" }));
@@ -20310,6 +20312,7 @@ function renderSettings() {
   renderAutoResetOwn(s); // and each account's own warm-up time
   renderWarmNow("codex", s.codexUsers, "#warmNowRow");
   renderWarmNow("claude", s.claudeUsers, "#claudeWarmNowRow");
+  renderWarmNow("agy-cli", s.agyUsers, "#agyWarmNowRow");
   // each built-in vendor's daily check-in, shown while one of its
   // accounts is signed in (#694, #811): its switch, how each account went,
   // and under it each account's own (#1902)
@@ -22998,7 +23001,7 @@ function prefsKeep(s) {
     otel: s.otel || {},
     trayUsages: s.trayUsages || [],
     redact: !!s.redact, redactPersonal: !!s.redactPersonal, redactKinds: s.redactKinds || {}, redactWords: s.redactWords || [], redactWordsAnyCase: !!s.redactWordsAnyCase, redactWordsWhole: !!s.redactWordsWhole, redactShape: !!s.redactShape, codexWarmup: s.codexWarmup || "",
-    claudeWarmup: s.claudeWarmup || "", codexWarmAt: s.codexWarmAt || "", claudeWarmAt: s.claudeWarmAt || "",
+    claudeWarmup: s.claudeWarmup || "", agyWarmup: s.agyWarmup || "", codexWarmAt: s.codexWarmAt || "", claudeWarmAt: s.claudeWarmAt || "",
     codexWarmAts: warmTimes(s.codexWarmAts, s.codexWarmAt), claudeWarmAts: warmTimes(s.claudeWarmAts, s.claudeWarmAt), workbuddyCheckin: !!s.workbuddyCheckin, traeCheckin: !!s.traeCheckin, minimaxCheckin: !!s.minimaxCheckin, qoderCheckin: !!s.qoderCheckin, checkinAt: s.checkinAt || "", noStats: !!s.noStats, noUsageStats: !!s.noUsageStats, signInLinkOnly: !!s.signInLinkOnly,
     replyModel: s.replyModel || "", noLoopGuard: !!s.noLoopGuard, claudeLeanPrompt: !!s.claudeLeanPrompt, claudeNoExtraUsage: !!s.claudeNoExtraUsage, claudeRegionHold: !!s.claudeRegionHold, claudePrintMode: !!s.claudePrintMode, refusalRetries: s.refusalRetries ?? null, retryAfterCap: s.retryAfterCap ?? null,
     noUpdatePill: !!s.noUpdatePill, noAutoUpdate: !!s.noAutoUpdate, updateEvery: s.updateEvery || 360, autoRestart: !!s.autoRestart, noAutoDownload: !!s.noAutoDownload, updateChannel: s.updateChannel || "",

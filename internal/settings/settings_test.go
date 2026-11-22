@@ -89,6 +89,19 @@ func TestRoundTrip(t *testing.T) {
 	if Save(Settings{ClaudeWarmup: "hourly"}) == nil {
 		t.Fatal("bad claude warm-up accepted")
 	}
+	// the agy CLI's (Antigravity's), off by default as the others are
+	if Load().AgyWarmup != "" {
+		t.Fatal("agy warm-up on by default")
+	}
+	if Save(Settings{AgyWarmup: "week"}) != nil || Load().AgyWarmup != "week" {
+		t.Fatal("agy warm-up not kept")
+	}
+	if Save(Settings{AgyWarmup: "off"}) != nil || Load().AgyWarmup != "" {
+		t.Fatal("agy off is off")
+	}
+	if Save(Settings{AgyWarmup: "daily"}) == nil {
+		t.Fatal("bad agy warm-up accepted")
+	}
 	// a time of day to start the 5-hour windows at, as 06:00 however given
 	if Save(Settings{CodexWarmAt: "6:00", ClaudeWarmAt: "21:30:00"}) != nil || Load().CodexWarmAt != "06:00" || Load().ClaudeWarmAt != "21:30" {
 		t.Fatalf("warm-up times not kept: %+v", Load())

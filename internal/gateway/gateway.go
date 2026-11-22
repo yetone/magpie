@@ -962,6 +962,7 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		// and, when settings say to, starts its accounts' next windows as the last reset
 		go provider.KeepCodexWindowsWarm(ctx)
 		go provider.KeepClaudeWindowsWarm(ctx, warmClaude)
+		go provider.KeepAgyWindowsWarm(ctx)
 		// and spends a Codex reset about to run out unused, for the accounts
 		// that let it
 		go provider.KeepResetsFromRunningOut(ctx)

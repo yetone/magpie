@@ -3,7 +3,7 @@
 // A subscription's warm-up, daily check-in and Codex's auto-use resets are
 // in its provider's editor (PROV_PREFS), not in Settings › Allowances:
 // Codex's has its resets and warm-up, Claude's its warm-up and short
-// system prompt, WorkBuddy's its
+// system prompt, the agy CLI's its warm-up (0Block0_o on X), WorkBuddy's its
 // check-in, a plugin's that checks in itself its own row; Settings' search
 // still finds them, each a row that opens the editor. Chromium and WebKit,
 // at 1100 and 420, in every language; the API is faked here.
@@ -18,11 +18,11 @@ const assets = path.resolve(__dirname, "../assets");
 
 function serve(lang, posted) {
   const settings = { theme: "light", lang, currency: "usd", guideHidden: true,
-    codexUsers: ["ann@example.test"], claudeUsers: ["ann@example.test"], codexWarmup: "week",
+    codexUsers: ["ann@example.test"], claudeUsers: ["ann@example.test"], agyUsers: ["ann@example.test"], codexWarmup: "week",
     workbuddy: true, workbuddyCheckin: true,
     checkinAccounts: [{ key: "workbuddy|u1", by: "", user: "Ann", on: true }],
     checkinPlugins: [{ id: "fakeco", name: "FakeCo", on: true }] };
-  const providers = provPrefsProviders(["codex", "claude", "workbuddy", "fakeco", "relayco"], { codex: "Codex", claude: "Claude Code", workbuddy: "WorkBuddy", fakeco: "FakeCo", relayco: "RelayCo" });
+  const providers = provPrefsProviders(["codex", "claude", "agy-cli", "workbuddy", "fakeco", "relayco"], { codex: "Codex", claude: "Claude Code", "agy-cli": "Antigravity CLI", workbuddy: "WorkBuddy", fakeco: "FakeCo", relayco: "RelayCo" });
   return async (route) => {
     const req = route.request(), url = new URL(req.url());
     const json = (data) => route.fulfill({ json: data });
@@ -47,6 +47,12 @@ function serve(lang, posted) {
 }
 
 const LANGS = ["en", "zh", "zh-TW", "ja", "de"];
+// the agy warm-up's line, the request said to go through the agy CLI
+const AGY_SUB = { en: "One tiny request through the agy CLI starts each pool's next window at once",
+  zh: "通过 agy CLI 发一条极小的请求，让每个额度池的下一个窗口立即开始计时",
+  "zh-TW": "透過 agy CLI 發一條極小的請求，讓每個額度池的下一個時段立即開始計時",
+  ja: "agy CLI 経由でごく小さなリクエストを 1 件送り、各プールの次の期間をすぐに開始します",
+  de: "Eine winzige Anfrage über die agy CLI startet sofort das nächste Zeitfenster jedes Kontingents" };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   for (const width of [1100, 420]) {
@@ -93,6 +99,21 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert(await box.locator("#claudeRunList #claudeLeanRow").isVisible(), "Claude's short system prompt");
         assert(await box.locator("#claudeRunList #claudeExtraRow").isVisible(), "Claude's extra usage");
         assert.equal(await box.locator("#codexWarmList, #codexResetList").count(), 0);
+
+        // the agy CLI's warm-up, off until set, written as agyWarmup
+        await openProvPrefs(page, "agy-cli");
+        await box.locator("#agyWarmList #agyWarmSegs .opt").first().waitFor();
+        assert.equal(await box.locator("#codexWarmList, #codexResetList, #claudeWarmList, #claudeRunList").count(), 0, "only agy's own");
+        assert.equal((await box.locator("#agyWarmSub").innerText()).trim(), AGY_SUB[lang]);
+        assert.equal(await box.locator("#agyWarmSegs .opt.on").evaluate((o) => o === o.parentElement.querySelector(".opt")), true, "Off");
+        assert(await box.locator("#agyWarmNowRow").isVisible(), "Warm up now, with an account signed in");
+        const agyWeek = box.locator("#agyWarmSegs .opt").nth(1);
+        await agyWeek.scrollIntoViewIfNeeded();
+        const agySaved = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/settings" && r.request().method() === "POST");
+        await agyWeek.click();
+        await agySaved;
+        assert.equal(posted.at(-1).agyWarmup, "week");
+        assert.equal(posted.at(-1).codexWarmup, "all", "the others' kept");
 
         await openProvPrefs(page, "workbuddy");
         await box.locator("#wbCheckinSegs .opt").first().waitFor();
