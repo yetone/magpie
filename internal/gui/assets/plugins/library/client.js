@@ -7947,6 +7947,12 @@ magpie.plugin("library", (ctx) => {
   // the skills from GitHub and git repositories as this page does and
   // fetches again each one changed there; one changed here keeps its
   // Update button (skill_autoupdate.go). Only with such a skill to update.
+  // the skills an update by themselves fetched again, "" for none
+  function updatedSaid(res) {
+    const up = res?.updated || [];
+    return up.length === 1 ? t("{name} is updated", { name: up[0] }) : up.length ? t("updated: {names}", { names: up.join(", ") }) : "";
+  }
+
   function skillAutoPart() {
     if (!lib.autoUpdateSkills && !lib.skills.some((s) => s.kind === "github" || s.kind === "git")) return [];
     const list = el("div", "list lib-list lib-hublist lib-skillauto");
@@ -7954,8 +7960,9 @@ magpie.plugin("library", (ctx) => {
     const who = el("div", "who");
     who.append(el("div", "name", t("Update by themselves")));
     who.append(el("div", "sub wraps", t("Fetch skills from GitHub and git again when they change there. One you changed here stays as it is.")));
+    // switched on, it looks at once: what that updated is said first
     row.append(glyph(GLYPH.down), who, toggle(!!lib.autoUpdateSkills, t("Update by themselves"), (on) =>
-      change("skills/auto-update", { on }, on ? t("Skills update by themselves now") : t("Skills wait for you to update them now"))));
+      change("skills/auto-update", { on }, on ? (res) => [updatedSaid(res), t("Skills update by themselves now")].filter(Boolean).join(" · ") : t("Skills wait for you to update them now"))));
     list.append(row);
     return [list];
   }
@@ -8360,16 +8367,20 @@ magpie.plugin("library", (ctx) => {
     render();
     try {
       take(await api("library/skills/check", {}));
+      // with Update by themselves on, the check updated what it found
+      const updated = updatedSaid(lib.result);
       const got = lib.skills.filter((s) => s.check);
       const n = got.filter((s) => s.check.status === "update" && !isGone(s)).length;
       const unknown = got.filter((s) => s.check.status === "unknown");
       const gone = lib.skills.filter(isGone).map((s) => s.name);
       let msg = n ? (n === 1 ? t("1 skill has an update") : t("{n} skills have updates", { n })) : gone.length ? "" : t("Every skill is up to date");
+      if (updated) msg = updated + (msg ? " · " + msg : "");
       if (gone.length) msg += (msg ? " · " : "") + goneSaid(gone);
       const more = lib.newSkills?.length || 0;
       if (more) msg += " · " + (more === 1 ? t("1 more skill in their repositories") : t("{n} more skills in their repositories", { n: more }));
       if (quiet) {
         const said = [];
+        if (updated) said.push(updated);
         if (n) said.push(n === 1 ? t("1 skill has an update") : t("{n} skills have updates", { n }));
         if (gone.length) said.push(goneSaid(gone));
         if (more) said.push(more === 1 ? t("1 more skill in their repositories") : t("{n} more skills in their repositories", { n: more }));

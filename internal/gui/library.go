@@ -314,13 +314,16 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 		writeJSON(rw, p)
 	})
 	// which skills GitHub has changed: the page as it is, each skill from
-	// there carrying what the check found of it
+	// there carrying what the check found of it. With Update by themselves
+	// on, the ones changed there are updated too, and the result says so
+	// (skill_autoupdate.go)
 	mux.HandleFunc("POST /api/library/skills/check", func(rw http.ResponseWriter, r *http.Request) {
-		if _, err := library.CheckSkills(); err != nil {
+		_, up, err := library.CheckSkillsUpdating()
+		if err != nil {
 			fail(rw, err)
 			return
 		}
-		v, err := libraryView(nil)
+		v, err := libraryView(up)
 		if err != nil {
 			fail(rw, err)
 			return

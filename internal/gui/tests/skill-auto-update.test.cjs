@@ -5,6 +5,9 @@
 // library of the user's own folders only has nothing to update and no
 // switch. In every language, in Chromium and WebKit. No backend: the API is
 // faked here.
+// CHENGJIAHEGOXIS on X: switched on, the skills kept their old content.
+// Switching on looks at once, and a check while it is on updates what it
+// finds: the page says which skills that updated.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -35,7 +38,10 @@ function server(lang, posts, st) {
       const what = url.pathname.split("/").pop(), body = req.postDataJSON();
       posts.push({ what, body });
       if (what === "auto-update") st.on = body.on;
-      return route.fulfill({ json: { ...lib(st), result: { changed: [] } } });
+      // switched on, the library looked at once and updated pdf; a check
+      // with it on updated docx and pdf
+      const updated = what === "auto-update" && body.on ? ["pdf"] : what === "check" && st.on ? ["docx", "pdf"] : [];
+      return route.fulfill({ json: { ...lib(st), result: { changed: [], updated } } });
     }
     if (url.pathname === "/api/plugins") return route.fulfill({ json: { plugins: [] } });
     if (url.pathname === "/api/usage/quotas") return route.fulfill({ json: [] });
@@ -49,11 +55,11 @@ function server(lang, posts, st) {
 }
 
 const words = {
-  en: { name: "Update by themselves", on: "Skills update by themselves now", off: "Skills wait for you to update them now" },
-  zh: { name: "自动更新", on: "技能现在会自动更新", off: "技能现在等你手动更新" },
-  "zh-TW": { name: "自動更新", on: "技能現在會自動更新", off: "技能現在等你手動更新" },
-  ja: { name: "自動で更新", on: "スキルは自動で更新されるようになりました", off: "スキルは手動で更新するようになりました" },
-  de: { name: "Selbst aktualisieren", on: "Skills aktualisieren sich jetzt selbst", off: "Skills warten jetzt, bis du sie aktualisierst" },
+  en: { name: "Update by themselves", on: "pdf is updated · Skills update by themselves now", off: "Skills wait for you to update them now", check: "updated: docx, pdf" },
+  zh: { name: "自动更新", on: "pdf 已更新 · 技能现在会自动更新", off: "技能现在等你手动更新", check: "已更新：docx, pdf" },
+  "zh-TW": { name: "自動更新", on: "pdf 已更新 · 技能現在會自動更新", off: "技能現在等你手動更新", check: "已更新：docx, pdf" },
+  ja: { name: "自動で更新", on: "pdf を更新しました · スキルは自動で更新されるようになりました", off: "スキルは手動で更新するようになりました", check: "更新しました：docx, pdf" },
+  de: { name: "Selbst aktualisieren", on: "pdf wurde aktualisiert · Skills aktualisieren sich jetzt selbst", off: "Skills warten jetzt, bis du sie aktualisierst", check: "aktualisiert: docx, pdf" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -91,9 +97,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await sw.click();
         await page.waitForFunction((x) => document.querySelector("#status").textContent.trim() === x, w.on);
         await page.waitForFunction(() => document.querySelector('.lib-skillauto [role="switch"]')?.getAttribute("aria-checked") === "true");
+        // a check while it is on says what it updated
+        await v.locator(".lib-skillshead .lib-barmore").click();
+        await page.locator(".row-menu .rm-item.lib-check").click();
+        await page.waitForFunction((x) => document.querySelector("#status").textContent.trim().startsWith(x), w.check);
         await v.locator('.lib-skillauto [role="switch"]').click();
         await page.waitForFunction((x) => document.querySelector("#status").textContent.trim() === x, w.off);
-        assert.deepEqual(posts, [{ what: "auto-update", body: { on: true } }, { what: "auto-update", body: { on: false } }]);
+        assert.deepEqual(posts, [{ what: "auto-update", body: { on: true } }, { what: "check", body: {} }, { what: "auto-update", body: { on: false } }]);
 
         // nothing from GitHub or git: nothing to update, no switch
         st.github = false;
