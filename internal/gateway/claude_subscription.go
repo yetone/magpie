@@ -317,6 +317,10 @@ type subscriptionRun struct {
 	// its first turn, which a turn refused for the account's limit is
 	// cut back to (keepForReset, #6292)
 	fromLen int64
+	// fromKey is where the saved session it started from waited
+	// (savedSession.key): the turn it was started for goes on from there,
+	// which may be before Claude Code's local reply (turnFrom)
+	fromKey string
 
 	// effort is the level its Claude Code thinks at, as it started (its
 	// --effort) or was told since (setEffort, setTUIEffort); "" is Claude
@@ -1495,6 +1499,7 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 		from.taken()
 		run.mu.Lock()
 		run.sessionID, run.fromLen = from.session, fromLen
+		run.fromKey = from.key
 		run.mu.Unlock()
 	}
 	line, _ := json.Marshal(map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": prompt}})
@@ -2074,6 +2079,13 @@ func (b *subscriptionBridge) resume(req *Request, owner string) (*subscriptionRu
 		}
 	}
 	if run == nil {
+		if k, messages := b.waitingPrefix(req, owner); k != "" {
+			if r := b.idle[k]; r != nil {
+				key, since, run = k, messages, r
+			}
+		}
+	}
+	if run == nil {
 		// the client sent the conversation back rewritten (#912): the
 		// run is its own when nothing else could be, and its agent was
 		// told every tool the client offers now
@@ -2156,7 +2168,7 @@ func (b *subscriptionBridge) resume(req *Request, owner string) (*subscriptionRu
 	run.segment = ch
 	run.active = time.Now()
 	run.turnUUID, run.backKey, run.backLine, run.backMsg = turn, key, run.lastLine, run.lastMsg
-	run.fromLen = 0 // it answered a turn since it started: its lines say where the conversation stood
+	run.fromLen, run.fromKey = 0, "" // it answered a turn since it started: its lines say where the conversation stood
 	run.allowed = allowedTools(req)
 	run.mu.Unlock()
 	run.endIn(runTimeout)
@@ -2205,18 +2217,85 @@ func nextTurn(req *Request, owner string) (string, []Message) {
 		return "", nil
 	}
 	since := msgs[j+1:]
+	if !selfContainedCalls(since) {
+		return "", nil
+	}
+	return turnKey(owner, req, msgs[:j+1]), since
+}
+
+// selfContainedCalls says no result in msgs answers a call before msgs.
+func selfContainedCalls(msgs []Message) bool {
 	calls := map[string]bool{}
-	for _, m := range since {
+	for _, m := range msgs {
 		for _, p := range m.Parts {
 			switch {
 			case p.Kind == ToolCall:
 				calls[p.ID] = true
 			case p.Kind == ToolResult && !calls[p.CallID]:
-				return "", nil
+				return false
 			}
 		}
 	}
-	return turnKey(owner, req, msgs[:j+1]), since
+	return true
+}
+
+// pastLocalReply is nextTurn with Claude Code's local replies passed
+// over: the conversation up to the last reply the upstream gave, and the
+// messages since, Claude Code's own and any cancelled user message among
+// them (#3808). "" when there is none to pass, or the turn isn't new.
+func pastLocalReply(req *Request, owner string) (string, []Message) {
+	msgs := req.Messages
+	if len(msgs) == 0 || msgs[len(msgs)-1].Role == "assistant" {
+		return "", nil
+	}
+	j, passed := len(msgs)-1, false
+	for j >= 0 && (msgs[j].Role != "assistant" || callsTool(msgs[j]) || localResumeReply(msgs[j])) {
+		passed = passed || localResumeReply(msgs[j])
+		j--
+	}
+	if j < 0 || !passed || !selfContainedCalls(msgs[j+1:]) {
+		return "", nil
+	}
+	return turnKey(owner, req, msgs[:j+1]), msgs[j+1:]
+}
+
+// waitingPrefix is pastLocalReply when a run waits there, or a session is
+// shelved there (b.mu held): a cancelled turn, or Claude Code's native
+// resume, adds "No response requested." to the conversation as an
+// assistant message the upstream never sent (<synthetic> in its
+// transcript; Messages carries only its role and words), so nextTurn's
+// key, taken after it, is no run's. The key is turnKey's still: the
+// account, model, settings, system prompt, tools and every message up to
+// the upstream's reply are the run's own.
+func (b *subscriptionBridge) waitingPrefix(req *Request, owner string) (string, []Message) {
+	key, since := pastLocalReply(req, owner)
+	if key == "" || b.idle[key] == nil && b.shelf[key] == nil {
+		return "", nil
+	}
+	return key, since
+}
+
+// turnFrom is the turn of req a run took at key, the conversation it
+// waited at: nextTurn's, or one past Claude Code's local reply
+// (waitingPrefix). A run refused for the limit, or a turn sent again, is
+// cut back to before the turn it took, the cancelled user message in it
+// (keepForReset, retryBranch); nextTurn's would leave that message out.
+func turnFrom(req *Request, owner, key string) (string, []Message) {
+	k, since := nextTurn(req, owner)
+	if k == "" || key == "" || k == key {
+		return k, since
+	}
+	if pk, psince := pastLocalReply(req, owner); pk == key {
+		return pk, psince
+	}
+	return k, since
+}
+
+// localResumeReply is the assistant message Claude Code adds to a
+// conversation itself, not the upstream's (NO_RESPONSE_REQUESTED in its
+// source): after a turn its user cancelled, and on a native resume.
+func localResumeReply(m Message) bool {
+	return m.Role == "assistant" && len(m.Parts) == 1 && m.Parts[0].Kind == Text && m.Parts[0].Text == "No response requested."
 }
 
 // looseTurn is a conversation a run waits at, as a client may send it
@@ -2855,6 +2934,13 @@ func (b *subscriptionBridge) unshelve(req *Request, owner string) *savedSession 
 		s = b.shelf[key]
 	}
 	if s == nil {
+		if k, messages := b.waitingPrefix(req, owner); k != "" {
+			if saved := b.shelf[k]; saved != nil {
+				key, since, s = k, messages, saved
+			}
+		}
+	}
+	if s == nil {
 		// rewritten (resume); its Claude Code is told the tools the
 		// client offers now, and the session keeps the calls made of
 		// those it had
@@ -3132,8 +3218,7 @@ func (b *subscriptionBridge) retryBranch(req *Request, owner string) *savedSessi
 	if req.clientCache != nil {
 		return nil
 	}
-	key, since := nextTurn(req, owner)
-	if key == "" {
+	if key, _ := nextTurn(req, owner); key == "" {
 		return nil
 	}
 	keys, want := conversationKeys(owner, req.Messages), historyKey(req.Messages)
@@ -3167,6 +3252,7 @@ func (b *subscriptionBridge) retryBranch(req *Request, owner string) *savedSessi
 		busy := (gone || !run.closed) && run.rewinding == nil && !run.rewound && run.lean == req.leanPrompt &&
 			!run.clientMarks && (run.tui || !wantTUI(req)) && run.told == want
 		sid, sessions, backLine, backMsg, appended, tui, prefix := run.sessionID, slices.Clone(run.sessions), run.backLine, run.backMsg, run.appended, run.tui, run.cachePrefix
+		backKey := run.backKey
 		started := run.started
 		run.mu.Unlock()
 		if !busy || sid == "" || backLine == "" && backMsg == "" || len(sessions) == 0 {
@@ -3183,7 +3269,10 @@ func (b *subscriptionBridge) retryBranch(req *Request, owner string) *savedSessi
 		if found != nil {
 			found.discard() // a newer run's copy is taken: the older one's goes
 		}
-		found, at = &savedSession{session: cut, sessions: sessions, owner: owner, at: time.Now(), since: since, tui: tui, appended: appended, cachePrefix: prefix}, started
+		// the turn as the run took it: past Claude Code's local reply,
+		// a cancelled user message is in it (#3808)
+		key, since := turnFrom(req, owner, backKey)
+		found, at = &savedSession{session: cut, sessions: sessions, owner: owner, key: key, at: time.Now(), since: since, tui: tui, appended: appended, cachePrefix: prefix}, started
 		foundEnded = nil
 		if gone {
 			foundEnded = run

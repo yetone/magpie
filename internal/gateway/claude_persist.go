@@ -263,20 +263,20 @@ func quotaShelfFor(owner, msg string, now time.Time) time.Duration {
 // (rewound) and not gone on with since, or one with the client's own
 // cache marks, as no branch is cut of one.
 func (b *subscriptionBridge) keepForReset(run *subscriptionRun, req *Request, owner, msg string) {
-	key, since := nextTurn(req, owner)
-	if key == "" {
+	if key, _ := nextTurn(req, owner); key == "" {
 		return
 	}
 	run.mu.Lock()
 	sid, sessions, tools := run.sessionID, slices.Clone(run.sessions), maps.Clone(run.tools)
 	skip := run.closed || run.rewound && !run.replied || run.clientMarks || run.rewinding != nil
 	fromLen, backLine, backMsg := run.fromLen, run.backLine, run.backMsg
+	fromKey, backKey := run.fromKey, run.backKey
 	tui, appended, prefix := run.tui, run.appended, run.cachePrefix
 	run.mu.Unlock()
 	if skip || sid == "" || len(sessions) == 0 {
 		return
 	}
-	var cut string
+	var cut, took string
 	var err error
 	switch {
 	case fromLen > 0:
@@ -288,8 +288,10 @@ func (b *subscriptionBridge) keepForReset(run *subscriptionRun, req *Request, ow
 			}
 			return int(fromLen)
 		})
+		took = fromKey
 	case backLine != "" || backMsg != "":
 		cut, err = cutReply(sessions, sid, backLine, backMsg)
+		took = backKey
 	default:
 		return
 	}
@@ -297,6 +299,10 @@ func (b *subscriptionBridge) keepForReset(run *subscriptionRun, req *Request, ow
 		log.Printf("claude: the session of a turn refused for the account's limit couldn't be cut before the turn (%v); the turn asked again is told the whole conversation", err)
 		return
 	}
+	// the turn as the run took it: past Claude Code's local reply, a
+	// cancelled user message is in it, and the turn asked again is told it
+	// (#3808)
+	key, since := turnFrom(req, owner, took)
 	conv := ""
 	if keys := conversationKeys(owner, req.Messages[:len(req.Messages)-len(since)]); len(keys) > 0 {
 		conv = keys[len(keys)-1]
