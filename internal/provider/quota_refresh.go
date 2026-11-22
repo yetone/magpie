@@ -192,18 +192,25 @@ func refreshCards(ctx context.Context, provider, user string) (subs, plans, bala
 func keepCardRead(q SubscriptionQuota, seq uint64) {
 	out := []SubscriptionQuota{q}
 	c := &subscriptionUsageCache
+	has := func() bool {
+		return slices.ContainsFunc(c.data, func(k SubscriptionQuota) bool {
+			return k.Provider == q.Provider && strings.EqualFold(k.User, q.User)
+		})
+	}
 	c.Lock()
-	has := slices.ContainsFunc(c.data, func(k SubscriptionQuota) bool {
-		return k.Provider == q.Provider && strings.EqualFold(k.User, q.User)
-	})
-	if has {
+	ok := has()
+	c.Unlock()
+	if !ok {
+		return
+	}
+	// noted first: a stale replica's window is set to the current one
+	noteQuotaHistory(out, time.Now())
+	c.Lock()
+	if has() {
 		c.data = cacheCards(c.data, out, seq, true)
 	}
 	c.Unlock()
-	if has {
-		noteQuotaHistory(out, time.Now())
-		toldUsage()
-	}
+	toldUsage()
 }
 
 // cacheCards commits a batch without overwriting cards read by a newer
