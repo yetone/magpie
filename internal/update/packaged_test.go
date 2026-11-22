@@ -132,6 +132,10 @@ func TestPackagedByHomebrewAndNix(t *testing.T) {
 	if p := packagedIn(root, "darwin", "/Applications/magpie.app/Contents/MacOS/magpie"); p != nil {
 		t.Fatalf("the app: %+v", p)
 	}
+	// the flake's app on a Mac runs from the store, which Nix updates
+	if p := packagedIn(root, "darwin", "/nix/store/abc123-magpie-0.1.4674/Applications/magpie.app/Contents/MacOS/magpie"); p == nil || p.Manager != "nix" || p.Command() != "" {
+		t.Fatalf("the flake's app on a Mac: %+v", p)
+	}
 }
 
 // Scoop's app folder as `scoop install magpie-app` from the magpie bucket

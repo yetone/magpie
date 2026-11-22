@@ -109,14 +109,16 @@ func packagedIn(root, goos, exe string) *Packaged {
 		name, _, _ := strings.Cut(rest, "/")
 		return &Packaged{Manager: "homebrew", Package: name}
 	}
+	// Nix's store on a Mac too: the flake's magpie.app runs from there,
+	// read-only, and a profile or a system configuration updates it
+	if strings.HasPrefix(p, "/nix/store/") {
+		return &Packaged{Manager: "nix"}
+	}
 	if goos == "windows" {
 		return packagedOnWindows(exe)
 	}
 	if goos != "linux" {
 		return nil
-	}
-	if strings.HasPrefix(p, "/nix/store/") {
-		return &Packaged{Manager: "nix"}
 	}
 	if !systemPath(p) {
 		return nil

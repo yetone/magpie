@@ -79,3 +79,20 @@ func TestUpdateTakesTheMacTerminalBuild(t *testing.T) {
 		}
 	}
 }
+
+// The Nix flake's magpie.app runs from /nix/store, read-only. The bundle's
+// own check said "read-only" and told the user to move magpie to
+// Applications; it is Nix's to update, as a binary in the store is.
+func TestUpdateLeavesTheStoresAppToNix(t *testing.T) {
+	app := "/nix/store/abc123-magpie-0.1.4674/Applications/magpie.app"
+	wasB, wasE := bundleOf, executable
+	t.Cleanup(func() { bundleOf, executable = wasB, wasE })
+	bundleOf = func() string { return app }
+	executable = func() (string, error) { return app + "/Contents/MacOS/magpie", nil }
+
+	u := &updater{}
+	u.place("darwin", true)
+	if u.stuck != "package" || u.packaged == nil || u.packaged.Manager != "nix" || u.bundle != "" || u.exe != "" {
+		t.Fatalf("the store's app: stuck %q, packaged %+v, bundle %q, exe %q", u.stuck, u.packaged, u.bundle, u.exe)
+	}
+}

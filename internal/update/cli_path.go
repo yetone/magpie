@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/proc"
 )
@@ -197,6 +198,10 @@ func Program() (string, error) { return cliProgram() }
 func cliProgram() (string, error) {
 	if a := os.Getenv("APPIMAGE"); a != "" && runtime.GOOS == "linux" {
 		return a, nil
+	}
+	// a Nix or Guix package: its wrapper, by the profile's link
+	if p := appdir.Launcher(); p != "" {
+		return p, nil
 	}
 	exe, err := Executable()
 	if err != nil {

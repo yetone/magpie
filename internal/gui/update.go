@@ -272,6 +272,16 @@ var (
 // only ever offered the release page. The app's own binary copied out of
 // its .app isn't replaced by the terminal build.
 func (u *updater) place(goos string, gui bool) {
+	// a package's copy is its manager's to update, an app in Nix's store
+	// as much as a binary: the bundle's own check would say "read-only"
+	// and send the user to move it to Applications
+	if exe, err := executable(); err == nil {
+		if p := packagedBy(exe); p != nil {
+			u.exeDir = filepath.Dir(exe)
+			u.stuck, u.packaged = "package", p
+			return
+		}
+	}
 	if b := bundleOf(); b != "" {
 		if u.stuck = update.Stuck(b); u.stuck == "" {
 			u.bundle = b

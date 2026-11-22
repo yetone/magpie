@@ -39,10 +39,12 @@ func instanceLock(dir, exe string) string {
 }
 
 // installedCopy is whether exe is an installed magpie: the program of an
-// app bundle, or Homebrew's.
+// app bundle, Homebrew's, or a Nix or Guix package's (a new store path
+// each upgrade).
 func installedCopy(exe string) bool {
 	exe = filepath.ToSlash(exe)
-	return strings.Contains(exe, ".app/Contents/MacOS/") || strings.Contains(exe, "/Cellar/magpie/")
+	return strings.Contains(exe, ".app/Contents/MacOS/") || strings.Contains(exe, "/Cellar/magpie/") ||
+		strings.HasPrefix(exe, "/nix/store/") || strings.HasPrefix(exe, "/gnu/store/")
 }
 
 // holdInstance takes the lock at path for this process, or reports that

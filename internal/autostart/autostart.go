@@ -11,6 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // Arg is what magpie is started with at login: the tray, no window.
@@ -70,6 +72,10 @@ func self() (string, error) {
 	// an AppImage runs from a folder mounted anew each time; the file
 	// itself is where it's kept
 	if p := os.Getenv("APPIMAGE"); p != "" {
+		return p, nil
+	}
+	// a Nix or Guix package: its wrapper, by the profile's link
+	if p := appdir.Launcher(); p != "" {
 		return p, nil
 	}
 	exe, err := os.Executable()

@@ -40,9 +40,15 @@ func registerScheme() error {
 	if os.Getenv("FLATPAK_ID") != "" {
 		return nil
 	}
-	exe, err := os.Executable()
-	if err != nil {
-		return err
+	// a Nix or Guix package's wrapper, by the profile's link: the store
+	// path changes with each upgrade, and the binary it wraps can't start
+	// the GUI by itself
+	exe := appdir.Launcher()
+	if exe == "" {
+		var err error
+		if exe, err = os.Executable(); err != nil {
+			return err
+		}
 	}
 	data := dataHome()
 	iconErr := installIcon(data)

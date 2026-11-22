@@ -384,6 +384,10 @@ var self = func() (string, error) {
 	if p := os.Getenv("APPIMAGE"); p != "" {
 		return p, nil
 	}
+	// a Nix or Guix package: its wrapper, by the profile's link
+	if p := appdir.Launcher(); p != "" {
+		return p, nil
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		return "", err
