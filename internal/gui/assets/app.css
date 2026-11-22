@@ -1850,6 +1850,9 @@ body.masked :hover > .acct-eye, body.masked .pq-card:hover .acct-eye, body.maske
 /* a window too narrow for every column leaves out those the request's
    page says (#860), and narrows the names */
 .led.tight .lc-opt { display: none; }
+/* the input, as the whole prompt while the cache columns are left out */
+.led .in-split .in-all, .led.tight .in-split .in-own { display: none; }
+.led.tight .in-split .in-all { display: inline; }
 .led.tight .model, .led.tight .where { max-width: 160px; }
 .led.tight th, .led.tight td { padding-left: 6px; padding-right: 6px; }
 .led.tighter .price-reference, .led.tight2 .lc-opt2 { display: none; }
