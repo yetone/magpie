@@ -667,6 +667,16 @@ button.rt-session { cursor: pointer; }
    of logos in, spilling it over the card's left edge onto the name (ARNO
    on Discord) */
 .rt-group .rt-ghandle.ag-handle { position: relative; align-items: center; justify-content: center; width: auto; min-width: 24px; height: 24px; padding: 0 3px; }
+/* every row's logos in one cell as wide as the widest stack (three discs
+   and a "+N", 68px), from its left edge, so each name and line under it
+   starts at one x whatever the row's logos; at the top of the row, the
+   discs' top on the name's letters, not centred on a row of four or five
+   lines (the owner, 11-22: 这个排版布局是正确的吗？) */
+.rt-group > .ics { align-self: flex-start; align-items: flex-start; width: 68px; justify-content: flex-start; margin-top: 4px; }
+.rt-group > .rt-ghandle.ag-handle { width: 74px; padding-top: 2px; align-items: flex-start; justify-content: flex-start; margin-top: 2px; }
+/* a group magpie found has no switch: its tags and Edit keep the place
+   they have in a row with one (the switch's 32px and the gap before it) */
+.rt-group > button.text:last-child { margin-right: 44px; }
 .rt-group .rt-ghandle::before { content: ""; position: absolute; left: -7px; top: 50%; width: 5px; height: 11px; margin-top: -5.5px; background: radial-gradient(circle, var(--muted) .9px, transparent 1.2px) 0 0 / 3.5px 3.75px; opacity: 0; transition: opacity .15s; }
 .rt-group:is(:hover, .dragging) .rt-ghandle::before, .rt-group .rt-ghandle.open::before { opacity: 1; }
 /* apart: Safari before 15.4 drops a whole selector list with :focus-visible in it */
@@ -817,6 +827,7 @@ body.window .rt-gedit > .bar { --vfoot: 8px; }
   }
   body.web .rt-group .tags { justify-content: flex-start; max-width: none; grid-column: 2 / -1; grid-row: 2; }
   body.web .rt-group > .text { grid-column: 3; grid-row: 1; }
+  body.web .rt-group > button.text:last-child { margin-right: 0; }
   body.web .rt-group .nm { flex-wrap: wrap; }
   body.web .rt-group .mem { white-space: normal; overflow-wrap: anywhere; }
   /* wrapped, a member moves to the next line whole, cut short only when
