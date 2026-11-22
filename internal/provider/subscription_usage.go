@@ -990,8 +990,10 @@ func claudeWindows(ctx context.Context, user string, active bool) ([]QuotaWindow
 		active && e.ws == nil && e.err != nil && now.Sub(e.tried) >= e.wait
 	// a saved account the switch off a spent one has no reading of
 	// (spareRead): read once, and again only after a wait while its read
-	// keeps failing, never every look
-	spare := !active && spareRead(ctx) && e.ws == nil && (e.tried.IsZero() || now.Sub(e.tried) >= e.wait)
+	// keeps failing, never every look; one read longer ago than its
+	// shortest window is read again as well (claudeStale), as what it
+	// said then tells nothing of the account now
+	spare := !active && spareRead(ctx) && (e.ws == nil || claudeStale(e.ws, e.at, now)) && (e.tried.IsZero() || now.Sub(e.tried) >= e.wait)
 	// nor, with allowances read only when asked, one nobody asked for
 	// and the keep-alive's run on a saved account (renewClaude), an hour
 	// apart at the most, whose run is the renewal: not put off by the floor
@@ -1061,6 +1063,7 @@ func claudeWindows(ctx context.Context, user string, active bool) ([]QuotaWindow
 		return kept()
 	}
 	if err != nil {
+		noteClaudeSaid(user, err.Error(), time.Now()) // "You've hit your … limit" (claude_said_out.go)
 		c.Lock()
 		if f, ok := c.m[key]; ok {
 			// A failed read cannot establish that an account refusal cleared.
@@ -1100,6 +1103,7 @@ func claudeWindows(ctx context.Context, user string, active bool) ([]QuotaWindow
 	}
 	c.m[key] = claudeUsageEntry{at: now, ws: ws, heard: e.heard, tried: now, asked: asked, wait: e.wait, whole: true}
 	c.Unlock()
+	clearClaudeSaid(user) // read well: the reading decides (claude_said_out.go)
 	// as of now, as a kept reading is: /usage gives a reset to the minute
 	// and can lag it, so a window it still counts full may have started
 	// again already

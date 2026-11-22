@@ -44,10 +44,18 @@ func warmClaudeLogin(send func(ctx context.Context, configDir string) error) fun
 		if i < 0 {
 			return fmt.Errorf("no Claude account %q", user)
 		}
+		var err error
 		if !ls[i].Active {
-			return inSavedClaudeDir(ls[i].User, func(dir string) error { return send(ctx, dir) })
+			err = inSavedClaudeDir(ls[i].User, func(dir string) error { return send(ctx, dir) })
+		} else {
+			err = send(ctx, "")
 		}
-		return send(ctx, "")
+		// "You've hit your weekly limit · resets Nov 24 at 5am": out till
+		// then, for the switch too (claude_said_out.go)
+		if err != nil {
+			noteClaudeSaid(ls[i].User, err.Error(), time.Now())
+		}
+		return err
 	}
 }
 

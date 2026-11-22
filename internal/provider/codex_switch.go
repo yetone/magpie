@@ -345,7 +345,8 @@ func NextLogin(ctx context.Context, agent string) (from, to string, back, ok boo
 	// nothing for it, and a workspace seat at its owner's limit or a spend
 	// cap is held with every window under the share
 	if first != nil && first.On && first.Lapsed == "" && returnsToFirst(agent) {
-		if q, known := u[first.User]; known && q.Error == "" && !q.Held && !usedPast(q, backShare, now) && !capped(first.User, q) {
+		if q, known := u[first.User]; known && q.Error == "" && !q.Held && !usedPast(q, backShare, now) && !capped(first.User, q) &&
+			(agent != "claude" || !claudeSaidOut(first.User, now)) {
 			return from, first.User, true, true
 		}
 	}
@@ -368,7 +369,9 @@ func NextLogin(ctx context.Context, agent string) (from, to string, back, ok boo
 	q, known := u[from]
 	// a Claude account /usage can't read that Claude Code was refused on
 	// for its limit is spent as one read past the share (claudeOutUnread)
-	out := agent == "claude" && claudeOutUnread(from, known, q, now)
+	// and so is one Claude Code said hit its limit, till the reset it
+	// named (claudeSaidOut), whatever an older reading says
+	out := agent == "claude" && (claudeOutUnread(from, known, q, now) || claudeSaidOut(from, now))
 	if keep || !out && (!known || q.Error != "" || !q.Held && !usedPast(q, share, now) && !capped(from, q)) {
 		return "", "", false, false
 	}
@@ -391,26 +394,41 @@ func NextLogin(ctx context.Context, agent string) (from, to string, back, ok boo
 	if !q.Held && !out {
 		most = roomLeft(q, share, AccountCapsOf(agent, from), now) + roomMargin
 	}
+	stale := ""
 	for _, l := range spares {
 		q, known := u[l.User]
-		if agent == "claude" && (!known || unreadSpare(q)) {
-			// a saved Claude account magpie has no reading of: read now,
-			// by Claude Code's /usage in its own directory, one account at
-			// a time and only till one has room
-			q, known = readSpare(ctx, l)
+		old := false
+		if agent == "claude" {
+			// a saved Claude account magpie has no reading of, or one too
+			// old to go by: read now, by Claude Code's /usage in its own
+			// directory, one account at a time and only till one has room
+			var out bool
+			if q, known, old, out = claudeSpare(ctx, l, q, known, now); out {
+				continue
+			}
 		}
 		if !known || q.Error != "" || q.Held {
 			continue
 		}
 		if !usedPast(q, share, now) && !capped(l.User, q) {
+			if old {
+				// still too old to go by: every spare read freshly first
+				if stale == "" {
+					stale = l.User
+				}
+				continue
+			}
 			return from, l.User, false, true
 		}
-		if r := roomLeft(q, share, AccountCapsOf(agent, l.User), now); r > most {
+		if r := roomLeft(q, share, AccountCapsOf(agent, l.User), now); r > most && !old {
 			best, most = l.User, r
 		}
 	}
 	if best != "" {
 		return from, best, false, true
+	}
+	if stale != "" {
+		return from, stale, false, true
 	}
 	return "", "", false, false
 }
@@ -483,26 +501,59 @@ func NextInOrder(ctx context.Context, agent string) (to string, over bool, err e
 	u := someLoginUsage(ctx, agent, users...)
 	now := time.Now()
 	best, most := "", math.Inf(-1)
+	stale := ""
 	for _, l := range order {
 		q, known := u[l.User]
-		if agent == "claude" && (!known || unreadSpare(q)) {
-			q, known = readSpare(ctx, l)
+		old := false
+		if agent == "claude" {
+			var out bool
+			if q, known, old, out = claudeSpare(ctx, l, q, known, now); out {
+				continue
+			}
 		}
 		if !known || q.Error != "" || q.Held {
 			continue
 		}
 		caps := AccountCapsOf(agent, l.User)
 		if !usedPast(q, share, now) && !capReached(q, caps, now) {
+			if old {
+				if stale == "" {
+					stale = l.User
+				}
+				continue
+			}
 			return l.User, false, nil
 		}
-		if r := roomLeft(q, share, caps, now); r > most {
+		if r := roomLeft(q, share, caps, now); r > most && !old {
 			best, most = l.User, r
 		}
+	}
+	if best == "" && stale != "" {
+		return stale, false, nil
 	}
 	if best == "" {
 		return "", false, fmt.Errorf("magpie has no reading of %s's other accounts' usage: name the one to switch to (magpie accounts switch %s <email>)", agent, agent)
 	}
 	return best, true, nil
+}
+
+// claudeSpare is the saved Claude account l's reading for the switch,
+// read (q as routing has it, known: there is one): read again now
+// (readSpare) when there is none to go by (unreadSpare) or it is too old
+// (staleSpare). out says Claude Code said the account hit its limit and
+// the reset it named hasn't come (claudeSaidOut), whatever the reading:
+// it is passed over. old says the reading is still too old after.
+func claudeSpare(ctx context.Context, l Login, q SubscriptionQuota, known bool, now time.Time) (_ SubscriptionQuota, _ bool, old, out bool) {
+	if claudeSaidOut(l.User, now) {
+		return q, known, false, true
+	}
+	if !known || unreadSpare(q) || staleSpare(q, now) {
+		q, known = readSpare(ctx, l)
+		if claudeSaidOut(l.User, now) {
+			return q, known, false, true
+		}
+	}
+	return q, known, known && staleSpare(q, now), false
 }
 
 // unreadSpare says q, a saved Claude account's reading, has nothing to go
