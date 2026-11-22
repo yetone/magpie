@@ -57,7 +57,8 @@ func TestDshCustomProvider(t *testing.T) {
 			t.Fatalf("missing %q in\n%s", want, s)
 		}
 	}
-	if strings.Count(s, "id: llm-pi-ai") != 1 || strings.Contains(s, "deepseek-official") {
+	// dsh's own DeepSeek provider is not named, magpie's web row (#7461) aside
+	if strings.Count(s, "id: llm-pi-ai") != 1 || strings.Contains(strings.Replace(s, strings.Join(dshWebLines(), "\n"), "", 1), "deepseek-official") {
 		t.Fatalf("patch:\n%s", s)
 	}
 	if f.Get() != "magpie/deepseek/pro" || a.Check() != "" {

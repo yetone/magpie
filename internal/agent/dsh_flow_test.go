@@ -52,7 +52,7 @@ func TestDshFlowPatchList(t *testing.T) {
 		t.Fatalf("the user's row or comments lost:\n%s", s)
 	}
 	var rows []map[string]any
-	if err := yaml.Unmarshal([]byte(s), &rows); err != nil || len(rows) != 4 || rows[0]["id"] != "some-plugin" || rows[0]["disabled"] != false {
+	if err := yaml.Unmarshal([]byte(s), &rows); err != nil || len(rows) != 5 || rows[0]["id"] != "some-plugin" || rows[0]["disabled"] != false {
 		t.Fatalf("%v %v\n%s", err, rows, s)
 	}
 	if f.Get() != "magpie/deepseek/pro" {

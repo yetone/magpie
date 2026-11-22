@@ -1824,7 +1824,7 @@ func dshSetFile(path, v string, modern bool, models []catalog.Model, gw string) 
 			return err
 		}
 		if modern {
-			items = dshPutSearch(items, dshProfileHome(path), "", gw)
+			items = dshPutSearch(items, path, "", gw)
 		}
 	case modern && viaGateway:
 		drop("llm-deepseek") // magpie's before it was a provider of its own
@@ -1839,13 +1839,13 @@ func dshSetFile(path, v string, modern bool, models []catalog.Model, gw string) 
 		}
 		put("agent-default-model", dshDefaultLines(route, ref, effort))
 		dshEffortWrote(path, effort)
-		items = dshPutSearch(items, dshProfileHome(path), dshSearchModel(ref), gw)
+		items = dshPutSearch(items, path, dshSearchModel(ref), gw)
 	case modern:
 		drop("llm-deepseek")
 		if items, err = dshPutRoute(items, false, nil, gw); err != nil {
 			return err
 		}
-		items = dshPutSearch(items, dshProfileHome(path), "", gw)
+		items = dshPutSearch(items, path, "", gw)
 		if !contains(dshEfforts, effort) {
 			effort = ""
 		}
@@ -2636,7 +2636,7 @@ func dshRouteAgainSaid(f string, models []catalog.Model, gw string) (string, err
 		items = dshStartYields(f, items)
 	}
 	if dshProfileList(f) {
-		items = dshSearchAgain(items, dshProfileHome(f), gw)
+		items = dshSearchAgain(items, f, gw)
 	}
 	if dshJoin(items) == before {
 		return "", nil
