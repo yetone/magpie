@@ -188,8 +188,17 @@ func TestVolcenginePlanModelsAsDocumented(t *testing.T) {
 			}
 		}
 	}
-	if !slices.Contains(agent.Drawers, "doubao-seedream-5.0-flash") || !slices.Contains(agent.Drawers, "doubao-seedream-5-0-pro") {
-		t.Errorf("Agent Plan drawers %v", agent.Drawers)
+	// The Agent Plan's image and video models, as its 套餐概览 lists them
+	// (read 11-22; doubao-seedream-5.5 reported by yuushabu_buyinn on X).
+	for _, id := range []string{"doubao-seedream-5-0-pro", "doubao-seedream-5.0-flash", "doubao-seedream-5.5"} {
+		if !slices.Contains(agent.Drawers, id) {
+			t.Errorf("Agent Plan drawers %v lack %s", agent.Drawers, id)
+		}
+	}
+	for _, id := range []string{"doubao-seedance-2.0", "doubao-seedance-2.0-fast", "doubao-seedance-2.0-mini", "doubao-seedance-2.5", "doubao-seedance-2.5-flash"} {
+		if !slices.Contains(agent.Videos, id) {
+			t.Errorf("Agent Plan videos %v lack %s", agent.Videos, id)
+		}
 	}
 	p, err := FromPreset("volcengine")
 	if err != nil {
