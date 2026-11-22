@@ -6,7 +6,9 @@
 // empty shows its group rate times the top-up rate as its placeholder,
 // following the box as it is typed; a key's own rate stands. Save posts
 // the rate, null when emptied, and refuses one out of range or past four
-// decimals before anything is posted. In every language.
+// decimals before anything is posted. How often the rates are read
+// (@YIXIE233 on X asked for 3 hours) sits under it while a top-up rate is
+// typed: whole hours from 1 to 168, null when emptied. In every language.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -26,7 +28,7 @@ const base = {
   key: { set: true, masked: "sk-…one" }, balanceToken: { takes: false, set: false }, proxy: "", maxConcurrency: null,
 };
 const relay = { ...base, id: "relay", name: "Relay", keyList: [key("aaaaaaaaaa", "Cheap"), key("bbbbbbbbbb", "Pro"), key("cccccccccc", "Own")],
-  keyPriceRates: { cccccccccc: 0.3 }, topUpRate: 0.07, keyGroupRates: { aaaaaaaaaa: 1, bbbbbbbbbb: 2.5 } };
+  keyPriceRates: { cccccccccc: 0.3 }, topUpRate: 0.07, rateReadHours: 3, keyGroupRates: { aaaaaaaaaa: 1, bbbbbbbbbb: 2.5 } };
 const plain = { ...base, id: "plain", name: "Plain", keyList: [key("aaaaaaaaaa", "Only")] };
 const sub = { ...base, id: "codex", name: "Codex Sub", icon: "openai", account: { kind: "codex" }, key: { set: false }, keyList: [] };
 
@@ -53,7 +55,8 @@ function serve(lang, posts) {
 }
 
 const strings = ["Save", "Top-up rate", "What one dollar of the relay cost you, like 0.07 for ¥7 per $100. Each key's group rate is read from the relay, and its calls cost the two multiplied",
-  "Read from the relay: {rates}", "Top-up rate: a number above 0 up to 1000, at most four decimals"];
+  "Read from the relay: {rates}", "Top-up rate: a number above 0 up to 1000, at most four decimals",
+  "Read rates every (hours)", "Read rates every: a whole number of hours from 1 to 168"];
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) {
@@ -119,6 +122,45 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await box(page).fill("");
       saved = await save(page, posts);
       assert.equal(saved.body.topUpRate, null, "emptied, it is taken off");
+      assert.deepEqual(errors, []);
+    });
+
+    test(`${engine} ${lang}: how often the rates are read`, async (t) => {
+      const { page, errors, posts, w } = await open(t, "Relay");
+      const every = page.locator(".editor input.rate-read-hours");
+      await every.waitFor();
+      assert.equal(await every.inputValue(), "3");
+      assert.equal(await every.getAttribute("placeholder"), "6", "empty is six hours");
+      assert.equal(await every.getAttribute("aria-label"), w["Read rates every (hours)"]);
+      for (const v of ["0", "169", "2.5", "abc"]) {
+        await every.fill(v);
+        await (await saveButton(page)).click();
+        await page.locator(".editor .editor-error").waitFor();
+        assert.equal(await page.locator(".editor .editor-error").textContent(), w["Read rates every: a whole number of hours from 1 to 168"], v);
+        assert.equal(posts.length, 0, `${v} is not posted`);
+      }
+      await every.fill("12");
+      let saved = await save(page, posts);
+      assert.equal(saved.body.rateReadHours, 12);
+      assert.equal(saved.body.topUpRate, 0.07);
+      await page.locator(".row.provider", { hasText: "Relay" }).click();
+      await every.waitFor();
+      await every.fill("");
+      saved = await save(page, posts);
+      assert.equal(saved.body.rateReadHours, null, "emptied, back to six");
+
+      // a provider with no top-up rate reads nothing: the box shows once one is typed
+      await page.locator(".row.provider", { hasText: "Plain" }).click();
+      await unfold(page);
+      await box(page).waitFor();
+      assert(await every.isHidden(), "no top-up rate, no interval");
+      await box(page).fill("0.5");
+      await every.waitFor();
+      await box(page).fill("");
+      assert(await every.isHidden());
+      saved = await save(page, posts);
+      assert.equal(saved.body.topUpRate, null);
+      assert(!("rateReadHours" in saved.body), "no top-up rate, the interval is left as it was");
       assert.deepEqual(errors, []);
     });
 

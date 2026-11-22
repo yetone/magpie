@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -294,5 +295,85 @@ func TestKeepKeyRatesReadEnds(t *testing.T) {
 	case <-done:
 	case <-time.After(10 * time.Second):
 		t.Fatal("still running")
+	}
+}
+
+// @YIXIE233 on X asked to read group rates every 3 hours, not 6: a
+// provider's RateReadHours is how long a reading stands; none is six.
+func TestKeyGroupRateReadEvery(t *testing.T) {
+	keyRateHome(t)
+	f := &relayKeys{reply: map[string]func(w http.ResponseWriter){"sk-a": billing("2"), "sk-b": billing("3")}}
+	srv := f.serve(t)
+	if err := Save(Provider{ID: "every3", Name: "Every 3", Chat: srv.URL + "/v1", Key: "sk-a", Models: []string{"sol"}, TopUpRate: 0.07, RateReadHours: 3}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Save(Provider{ID: "plain", Name: "Plain", Chat: srv.URL + "/v2", Key: "sk-b", Models: []string{"sol"}, TopUpRate: 0.07}); err != nil {
+		t.Fatal(err)
+	}
+	readKeyRatesDue(t.Context())
+	if n := f.count(); n != 2 {
+		t.Fatalf("asked %d times, want each key once", n)
+	}
+	aged := func(id, key string, d time.Duration) {
+		keyRates.Lock()
+		m := keyRatesLocked()
+		r := m[keyRateKey(id, keyID(key))]
+		r.At = time.Now().Add(-d)
+		m[keyRateKey(id, keyID(key))] = r
+		keyRates.Unlock()
+	}
+	due := func(now time.Time) []string {
+		var ids []string
+		for _, j := range keyRatesDue(now) {
+			ids = append(ids, j.p.ID)
+		}
+		slices.Sort(ids)
+		return ids
+	}
+	now := time.Now()
+	if got := due(now); len(got) != 0 {
+		t.Fatalf("due at once: %v", got)
+	}
+	// 3h1m on: the 3-hour provider is due, the other not
+	if got := due(now.Add(3*time.Hour + time.Minute)); !slices.Equal(got, []string{"every3"}) {
+		t.Fatalf("at 3h1m: %v", got)
+	}
+	// 2h59m on: neither
+	if got := due(now.Add(3*time.Hour - time.Minute)); len(got) != 0 {
+		t.Fatalf("at 2h59m: %v", got)
+	}
+	// 6h1m on: both
+	if got := due(now.Add(6*time.Hour + time.Minute)); !slices.Equal(got, []string{"every3", "plain"}) {
+		t.Fatalf("at 6h1m: %v", got)
+	}
+	// and a read run then asks the 3-hour one again
+	aged("every3", "sk-a", 3*time.Hour+time.Minute)
+	aged("plain", "sk-b", 3*time.Hour+time.Minute)
+	readKeyRatesDue(t.Context())
+	f.Lock()
+	asked := slices.Clone(f.asked)
+	f.Unlock()
+	if !slices.Equal(asked[2:], []string{"sk-a"}) {
+		t.Fatalf("asked %v after 3h1m, want sk-a again only", asked)
+	}
+	// hours kept wrong in the file are dropped on Save
+	if err := Save(Provider{ID: "bad", Name: "Bad", Chat: srv.URL + "/v3", Key: "sk-c", TopUpRate: 0.07, RateReadHours: 169}); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := Find("bad"); p.RateReadHours != 0 {
+		t.Fatalf("kept %v", p.RateReadHours)
+	}
+}
+
+func TestRateReadHoursOK(t *testing.T) {
+	for _, h := range []int{0, 1, 3, 6, 168} {
+		if e := RateReadHoursOK(h); e != "" {
+			t.Errorf("%v: %s", h, e)
+		}
+	}
+	for _, h := range []int{-1, 169} {
+		if RateReadHoursOK(h) == "" {
+			t.Errorf("%v taken", h)
+		}
 	}
 }

@@ -24,7 +24,7 @@ window.topUpRateField = function (p) {
     const read = rates.length === 1 ? "×" + rates[0][1] : rates.map(([id, r]) => name(id) + " ×" + r).join(", ");
     hint += " · " + t("Read from the relay: {rates}", { rates: read });
   }
-  const out = field(t("Top-up rate"), box, hint);
+  const out = [...field(t("Top-up rate"), box, hint), ...rateEveryField(p)];
   // a provider of one key has its factor beside the box; one of more, on
   // each key's line
   const only = p?.keyList?.length === 1 && p.keyList[0];
@@ -34,6 +34,29 @@ window.topUpRateField = function (p) {
   showFactors(null, box.value, fx);
   return [...out, ...fx];
 };
+// How often the keys' group rates are read, in hours (@YIXIE233 on X
+// asked for 3): empty is magpie's six. Shown, as the factors are, while a
+// top-up rate is typed.
+function rateEveryField(p) {
+  const box = input(draft.rateReadHours ?? (p?.rateReadHours ? String(p.rateReadHours) : ""), "6");
+  box.classList.add("rate-read-hours");
+  box.inputMode = "numeric";
+  box.oninput = () => { draft.rateReadHours = box.value; };
+  const out = field(t("Read rates every (hours)"), box);
+  for (const n of out) n.classList.add("rate-every");
+  showFactors(null, draft.topUpRate ?? (p?.topUpRate ? String(p.topUpRate) : ""), out);
+  return out;
+}
+// rateReadHoursOf is the hours typed in box as saved, null for the
+// default; hours typed wrong are focused and named, and give undefined
+function rateReadHoursOf(box) {
+  const v = box.value.trim();
+  if (!v) return null;
+  if (/^\d+$/.test(v) && +v >= 1 && +v <= 168) return +v;
+  shown(box).focus(NO_SCROLL);
+  editorError(t("Read rates every: a whole number of hours from 1 to 168"), "warn");
+  return undefined;
+}
 // A key's factor (@YIXIE233 on X): groups of one relay whose upstreams
 // cache 60% and 90% of a prompt cost 2-3× apart at the same group rate.
 // The read rate is multiplied by it; a key's own rate is not. Shown where
@@ -62,7 +85,7 @@ const factorOf = (v) => { const n = decimalOf(String(v ?? "").trim()); return n 
 // per-key column in ed (or the nodes given), else hides them
 function showFactors(ed, top, nodes) {
   const on = decimalOf(String(top ?? "").trim()) > 0;
-  for (const n of nodes || ed?.querySelectorAll(".solo-factor") || []) n.hidden = !on;
+  for (const n of nodes || ed?.querySelectorAll(".solo-factor, .rate-every") || []) n.hidden = !on;
   ed?.querySelector(".key-rates-all")?.classList.toggle("fx", on);
 }
 // topUpRateOf is the top-up rate typed in box as saved, null for none; a
@@ -137,6 +160,8 @@ document.addEventListener("input", (e) => {
 window.keyPriceRates = function (ed, body) {
   const top = ed.querySelector("input.top-up-rate");
   if (top && (body.topUpRate = topUpRateOf(top)) === undefined) return null;
+  const every = ed.querySelector("input.rate-read-hours");
+  if (every && body.topUpRate != null && (body.rateReadHours = rateReadHoursOf(every)) === undefined) return null;
   if (ed.querySelector("input.key-rate-factor") && (body.keyRateFactors = keyRateFactorsOf(ed)) === null) return null;
   if (!ed.querySelector(".key-rates")) return undefined;
   const map = {};

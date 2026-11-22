@@ -613,6 +613,10 @@ type Provider struct {
 	// bills at that times this, unless it has a rate in KeyPriceRates.
 	// 0 is none: no group rate is read.
 	TopUpRate float64 `json:"topUpRate,omitempty"`
+	// RateReadHours is, for a provider with a TopUpRate, how many hours a
+	// key's read group rate stands before it is read again (@YIXIE233 on
+	// X asked for 3), 1 to 168; 0 is the default, six.
+	RateReadHours int `json:"rateReadHours,omitempty"`
 	// KeyRateFactors is, for a provider with a TopUpRate, what each key's
 	// read rate is multiplied by, by its KeyID (@YIXIE233 on X: groups of
 	// one relay whose upstream caches differ cost 2-3x apart at the same
@@ -1907,6 +1911,9 @@ func normalize(p Provider) Provider {
 	p.KeyRateFactors = normalKeyRateFactors(p.KeyRateFactors)
 	if TopUpRateOK(p.TopUpRate) != "" {
 		p.TopUpRate = 0
+	}
+	if RateReadHoursOK(p.RateReadHours) != "" {
+		p.RateReadHours = 0
 	}
 	if len(p.Models) > 0 {
 		p.NoModels = false // a pick is no longer Select none

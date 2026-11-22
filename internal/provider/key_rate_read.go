@@ -40,7 +40,7 @@ import (
 const sub2APIKeyBilling = "/v1/sub2api/billing"
 
 // keyRateEvery is how long a key's read rate stands before it is read
-// again, keyRateRetry how long after a failed read; keyRateTick how often
+// again when its provider sets no RateReadHours, keyRateRetry how long after a failed read; keyRateTick how often
 // the loop looks for a key that is due.
 var (
 	keyRateEvery = 6 * time.Hour
@@ -59,6 +59,24 @@ func TopUpRateOK(r float64) string {
 		return "a top-up rate has at most four decimals, like 0.0714"
 	}
 	return ""
+}
+
+// RateReadHoursOK says what is wrong with a provider's RateReadHours, ""
+// when nothing: 1 to 168 hours (a week), 0 for the default.
+func RateReadHoursOK(h int) string {
+	if h < 0 || h > 168 {
+		return "rates are read every 1 to 168 hours"
+	}
+	return ""
+}
+
+// keyRateEveryOf is how long a read rate of p's stands: its own
+// RateReadHours, else keyRateEvery.
+func keyRateEveryOf(p Provider) time.Duration {
+	if p.RateReadHours > 0 && RateReadHoursOK(p.RateReadHours) == "" {
+		return time.Duration(p.RateReadHours) * time.Hour
+	}
+	return keyRateEvery
 }
 
 // keyRateRead is one key's last reading.
@@ -267,7 +285,7 @@ func keyRatesDue(now time.Time) []keyRateJob {
 			keyRates.Lock()
 			last, seen := keyRatesLocked()[id]
 			keyRates.Unlock()
-			wait := keyRateEvery
+			wait := keyRateEveryOf(p)
 			if last.Err != "" {
 				wait = keyRateRetry
 			}
@@ -311,8 +329,8 @@ func readKeyRatesDue(ctx context.Context) {
 
 // KeepKeyRatesRead reads the group rate of every key whose provider has a
 // top-up rate, when the magpie serving the gateway starts and again as
-// each is due (every six hours, half an hour after a failed read), until
-// ctx ends.
+// each is due (every six hours or the provider's RateReadHours, half an
+// hour after a failed read), until ctx ends.
 func KeepKeyRatesRead(ctx context.Context) {
 	t := time.NewTimer(0)
 	defer t.Stop()
