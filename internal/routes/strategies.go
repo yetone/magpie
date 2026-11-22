@@ -40,13 +40,22 @@ func tier(share float64) int {
 
 // seatTier is tier of the seat's share used, but 0 for one set to spend
 // its credits before another account (Seat.First): a window it uses up
-// doesn't send its requests elsewhere (jojonas_xyz on X). Running low on
-// its week alone (Seat.WeekLow) is 0 too: Smart and Use before expiry
-// spend what is lost at the reset, and a week at 90% renewing today was
-// kept for last behind one renewing tomorrow (ysicing_01858 on Discord).
-// All but used up is 2 whatever the window.
+// doesn't send its requests elsewhere (jojonas_xyz on X). One that goes on
+// past its windows on a plugin's trial credits (Seat.Trial: a Kiro
+// account's trial after its month) is 0 too: what is left of the window
+// isn't all it has, so a group keeps it with those that have room and
+// asks it before they are all used up. Credits a ChatGPT account bought
+// (Seat.Credits alone) keep it with the used up unless it is First.
+// Running low on its week alone (Seat.WeekLow) is 0 too: Smart and Use
+// before expiry spend what is lost at the reset, and a week at 90%
+// renewing today was kept for last behind one renewing tomorrow
+// (ysicing_01858 on Discord). All but used up is 2 whatever the window,
+// for one with nothing to go on with.
 func seatTier(s Seat) int {
 	if s.First {
+		return 0
+	}
+	if s.Trial && s.Known && s.Used >= UsedShare {
 		return 0
 	}
 	if t := tier(s.Used); t != 1 || !s.WeekLow {
@@ -277,7 +286,8 @@ func Drained(key string) {
 // nothing changed gives the same order, so a preview moves nothing.
 var Drain = Strategy{Exact: true, Order: func(pool string, seats []Seat) []int {
 	spent := func(s Seat) bool {
-		return s.Spent || !s.First && s.Known && s.Used >= provider.SpentShareOf(provider.Drain)
+		// one on its trial credits still answers: it isn't used up
+		return s.Spent || !s.First && !s.Trial && s.Known && s.Used >= provider.SpentShareOf(provider.Drain)
 	}
 	drains.Lock()
 	defer drains.Unlock()
@@ -351,7 +361,12 @@ var LeastUsed = Strategy{ByUse: true, Order: func(_ string, seats []Seat) []int 
 	// shareless, kept for their cost before a share nearly gone; then
 	// those running low, then spent
 	place := func(s Seat) int {
-		switch t := tier(s.Used); {
+		t := tier(s.Used)
+		if s.Trial && s.Known && t == 2 {
+			// on its trial credits: what is left of the window isn't all it has
+			t = 0
+		}
+		switch {
 		case s.Learns:
 			return 0
 		case t == 0 && shared(s):

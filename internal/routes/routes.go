@@ -82,6 +82,11 @@ type Seat struct {
 	// (a Kiro trial's). All but used up, it goes before those used up with
 	// nothing to go on with.
 	Credits bool
+	// Trial: its credits cost nothing to spend, a plugin's own trial
+	// credits (a Kiro month used up with a trial left), not bought ones a
+	// Codex account spends. What is left of the window isn't all it has,
+	// so it is weighed as having room (seatTier).
+	Trial bool
 	// First: such an account the user set to spend its credits before
 	// another account (provider.CodexCreditsFirst): its windows running
 	// out never put it behind the others (seatTier), so it keeps the
