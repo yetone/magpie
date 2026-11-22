@@ -69,13 +69,31 @@ func searchableModel(p provider.Provider, model string) bool {
 
 // webSearchOf is what this magpie's list tells another magpie of how it
 // searches for e (remoteSearch): magpie is whether it has a searcher.
+// Native is every model this magpie would itself search with by the
+// model alone (searchRank's searchers, each with its own models): the
+// other magpie's search comes marked (SearchingHeader), so only the
+// model's own search answers it. A Claude subscription (Claude Code's
+// WebSearch, as for this magpie's own searches) and a plugin's model it
+// marks as one that searches were left at "magpie", so another magpie
+// could pick none of them to search with (#7475); an AI Studio key's
+// image models were said to search, which googleSearch doesn't do for
+// them.
 func webSearchOf(e provider.Entry, magpie bool) string {
 	p := *e.Provider
 	if e.Group == "" {
-		if p.IsRemoteMagpie() && remoteSearch(p, e.Model) == searchNative || codeAssistSearches(p, provider.CodeAssist, e.Model) {
+		if p.IsRemoteMagpie() && remoteSearch(p, e.Model) == searchNative || codeAssistSearches(p, provider.CodeAssist, e.Model) ||
+			claudeAccount(p) || pluginSearches(p, e.Model) {
 			return searchNative
 		}
 		for _, proto := range p.Speaks() {
+			if proto == provider.Gemini && geminiKeySearches(p) {
+				// googleSearch is Gemini's own (searchesFor): an image
+				// model on the key searches for nothing
+				if searchModel(e.Model) {
+					return searchNative
+				}
+				continue
+			}
 			if searchesItself(p, proto) || modelSearches(p, proto, e.Model) {
 				return searchNative
 			}
@@ -85,6 +103,13 @@ func webSearchOf(e provider.Entry, magpie bool) string {
 		return searchMagpie
 	}
 	return ""
+}
+
+// claudeAccount is a Claude subscription's sign-in, whose Claude Code runs
+// a search offered to it with its own WebSearch (claudeCLIArgs): the
+// searcher magpie picks first (searchRank).
+func claudeAccount(p provider.Provider) bool {
+	return p.Account != nil && p.Account.Agent == "claude"
 }
 
 // markSearching marks a request to a remote magpie made for a search.

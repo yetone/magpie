@@ -338,7 +338,7 @@ func searcher() (provider.Provider, string, bool) {
 func searchRank(p provider.Provider) int {
 	p.Searches = false
 	switch {
-	case p.Account != nil && p.Account.Agent == "claude":
+	case claudeAccount(p):
 		return 0
 	case p.Account != nil && p.Account.Agent == "codex":
 		return 1

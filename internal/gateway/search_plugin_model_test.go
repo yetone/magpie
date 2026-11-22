@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/yetone/magpie/internal/provider"
 )
 
 // A plugin that marks a model of its list as one that searches the web by
@@ -54,6 +56,20 @@ func TestPluginSearchModelIsASearcher(t *testing.T) {
 	p, m, ok := searcher()
 	if !ok || p.ID != pid || m != "fake-search" {
 		t.Fatalf("searcher = %s %s %v", p.ID, m, ok)
+	}
+	// and a Remote magpie's list says it searches natively, so a magpie
+	// that has this one as its Remote magpie may pick it too (#7475),
+	// and the plugin's other models are searched for
+	if got := webSearchOf(provider.Entry{Provider: &p, Model: "fake-search"}, true); got != searchNative {
+		t.Errorf("the plugin's search model is listed web_search %q, want %q", got, searchNative)
+	}
+	for _, other := range p.Available() {
+		if other.ID == "fake-search" {
+			continue
+		}
+		if got := webSearchOf(provider.Entry{Provider: &p, Model: other.ID}, true); got == searchNative {
+			t.Errorf("the plugin's %s is listed web_search %q", other.ID, got)
+		}
 	}
 
 	said, _, err := New().webSearch(context.Background(), "今天上海天气")
