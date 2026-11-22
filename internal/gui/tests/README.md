@@ -1528,6 +1528,16 @@ found skill with a byte copy in another agent shows both agents' icons and
 no "differs in"; one that really differs still says so. Chromium and
 WebKit, in English and Chinese, with `/api/plugins` faked.
 
+`library-sections.test.cjs` hides the Library's tabs from Plugins ›
+Built-in (lantian_x on X): the Library row's Sections link opens a menu of
+the tabs, each ticked; unticking Hooks and Environment variables posts the
+plugin's `hide` setting at once and the link says two are hidden; the
+Library page's tabs and, from 1024 points, the sidebar's list leave them
+out, and Hooks, open last, gives way to Instructions. The last tab shown
+can't be hidden and nothing is posted then; nothing but the setting is
+posted at all. Every language, Chromium and WebKit, at 1100, 800 and 420
+points, with the API faked.
+
 `library-problems-hide.test.cjs` opens the Library with Grok Build's
 AGENTS.md failing to stat at every sync (Zachary-wW, #3745), the API
 answering as `library.go` does, the error texts as magpie's own sync gave

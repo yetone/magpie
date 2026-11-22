@@ -225,9 +225,13 @@ func TestBuiltinConfig(t *testing.T) {
 	if b := gw(); b.Config["callsPage"] != int64(50) {
 		t.Fatalf("a refused one written: %+v", b)
 	}
+	// the Library's tabs the reader hid (lantian_x on X), the page's alone
+	if rec := postBuiltin(h, `{"id":"library","config":{"hide":"hooks,env"}}`); rec.Code != http.StatusOK {
+		t.Fatalf("library hide: %d %s", rec.Code, rec.Body)
+	}
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "/boot.js", nil))
-	if !strings.Contains(rec.Body.String(), `"pluginConfig":{"gateway":{"callsPage":50}}`) {
+	if !strings.Contains(rec.Body.String(), `"pluginConfig":{"gateway":{"callsPage":50},"library":{"hide":"hooks,env"}}`) {
 		t.Fatalf("boot.js: %s", rec.Body)
 	}
 }

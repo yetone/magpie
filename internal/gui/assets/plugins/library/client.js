@@ -858,7 +858,7 @@ magpie.plugin("library", (ctx) => {
     }
     if (ul.childElementCount) card.append(ul);
     const tabNames = { instructions: t("Instructions"), mcp: t("MCP servers"), skills: t("Skills"), hooks: t("Hooks"), env: t("Environment variables"), subagents: t("Subagents"), commands: t("Slash commands"), rules: t("Rules"), plugins: t("Claude plugins") };
-    const others = Object.keys(away).filter((k) => k in tabNames);
+    const others = Object.keys(away).filter((k) => k in tabNames && shownTabs().some(([id]) => id === k));
     if (others.length) {
       const more = el("div", "lib-problems-away");
       for (const k of others) {
@@ -928,6 +928,7 @@ magpie.plugin("library", (ctx) => {
   function renderLoading() {
     page.replaceChildren();
     shown = "";
+    shownTab();
     page.append(libHead(null), skeleton(tab));
   }
 
@@ -981,6 +982,7 @@ magpie.plugin("library", (ctx) => {
   }
 
   function openTab(id) {
+    if (id !== askedTab) askedTab = "";
     tab = id;
     tabPicked = true;
     try { localStorage.setItem("magpie.libTab", id); } catch {}
@@ -999,12 +1001,13 @@ magpie.plugin("library", (ctx) => {
     render(); syncLists();
   }
 
-  // the tabs and the Library folder; without the library yet (lib is null
-  // while it loads) the tabs have no counts and the folder waits
-  function libHead(counts) {
-    const head = el("div", "lib-head");
-    const n = (k) => (counts?.[k] ? " · " + counts[k] : "");
-    const tabs = segs(agentless() ? [
+  // The page's tabs, in their order, and those it shows: the reader can
+  // hide a tab they don't use (Plugins › Built-in › Library's Sections,
+  // lantian_x on X). The plugin's hide setting is the page's alone: the
+  // library gives agents what a hidden tab holds as before. One tab always
+  // shows, and one opened from another page (server) shows while it is open.
+  function allTabs(n = () => "") {
+    return agentless() ? [
       ["instructions", t("Instructions")],
       ["mcp", t("MCP servers") + n("mcp")],
       ["skills", t("Skills") + n("skills")],
@@ -1022,7 +1025,28 @@ magpie.plugin("library", (ctx) => {
       ["rtk", "RTK"],
       ["bili", "billion-context"],
       ...(hasPi() ? [["pi", t("Pi packages")]] : []),
-    ], tab, openTab);
+    ];
+  }
+  const hiddenTabs = () => new Set(String(ctx.config.hide || "").split(",").map((x) => x.trim()).filter(Boolean));
+  let askedTab = ""; // a hidden tab another page opened, shown while it is open
+  function shownTabs(n) {
+    const all = allTabs(n), hide = hiddenTabs();
+    const shown = all.filter(([id]) => !hide.has(id) || id === askedTab);
+    return shown.length ? shown : all.slice(0, 1);
+  }
+  // the tab open is one the page shows, or the first it does; the pick
+  // is kept for when its tab shows again
+  function shownTab() {
+    const shown = shownTabs();
+    if (!shown.some(([id]) => id === tab)) tab = shown[0][0];
+  }
+
+  // the tabs and the Library folder; without the library yet (lib is null
+  // while it loads) the tabs have no counts and the folder waits
+  function libHead(counts) {
+    const head = el("div", "lib-head");
+    const n = (k) => (counts?.[k] ? " · " + counts[k] : "");
+    const tabs = segs(shownTabs(n), tab, openTab);
     tabs.classList.add("lib-tabs");
     head.append(tabs);
     // the buttons keep together at the end, on a line of their own when the
@@ -1081,6 +1105,7 @@ magpie.plugin("library", (ctx) => {
     if (agentless() && (!tabPicked || !AGENTLESS_TABS.includes(tab))) tab = "mcp";
     // Pi's tab only while a Pi is here; the pick is kept for when one is
     else if (tab === "pi" && !hasPi()) tab = "instructions";
+    shownTab();
     const head = libHead({ mcp: lib.servers.length, skills: lib.skills.length, hooks: (lib.hooks || []).length, env: (lib.env || []).length, subagents: (lib.subagents || []).length, commands: (lib.commands || []).length, rules: (lib.rules || []).length, plugins: (lib.plugins || []).length });
     page.append(head);
     head.classList.toggle("stuck", top > 0);
@@ -10248,11 +10273,57 @@ magpie.plugin("library", (ctx) => {
   }
   const shelf = () => JSON.stringify([lib?.servers?.map((x) => x.name), lib?.skills?.map((x) => x.name)]);
 
+  // Plugins › Built-in › Library's row: a menu of the page's tabs, each
+  // ticked while it shows. A change is saved at once (the plugin's hide
+  // setting); unticking the last one shown is refused, as the page keeps one.
+  function sectionsLink(line, f) {
+    // only where the server takes the setting (a magpie before it has no schema)
+    if (!f.on || f.broken || !f.schema?.properties?.hide) return;
+    const hide = new Set(String(f.config?.hide || "").split(",").map((x) => x.trim()).filter(Boolean));
+    const all = allTabs(), off = all.filter(([id]) => hide.has(id)).length;
+    const b = el("button", "link lib-sections", off ? t("Sections · {n} hidden", { n: off }) : t("Sections"));
+    b.type = "button";
+    menuOpener(b);
+    b.onclick = (e) => {
+      e.stopPropagation();
+      const opts = all.map(([v, name]) => ({ v, name, literalName: true, note: "" }));
+      openProtoMenu(b, opts, all.map(([id]) => id).filter((id) => !hide.has(id)), async (shown) => {
+        if (!shown.length) {
+          closeProtoMenu();
+          status(t("One section always shows"), "err");
+          return;
+        }
+        // what the menu doesn't list (Pi's, without a Pi) stays as it was
+        const next = [...hide].filter((id) => !all.some(([x]) => x === id))
+          .concat(all.map(([id]) => id).filter((id) => !shown.includes(id))).join(",");
+        try {
+          const list = await api("plugins/builtin", { id: "library", config: { hide: next } });
+          if (state.settings) state.settings.builtins = list;
+          applyFeatures(list);
+          const was = String(f.config?.hide || "");
+          f.config = { ...f.config, hide: next };
+          hide.clear();
+          for (const id of next.split(",").filter(Boolean)) hide.add(id);
+          const n = all.filter(([id]) => hide.has(id)).length;
+          b.textContent = n ? t("Sections · {n} hidden", { n }) : t("Sections");
+          if (was !== next) status(t("Saved"), "ok", 1500);
+        } catch (err) {
+          status(t(err.message), "err");
+        }
+      }, "Library sections", "", "left", true);
+    };
+    line.append(b);
+  }
+
+  ctx.onConfig(() => { if (lib && page && !page.hidden) render(); });
+
   ctx.slots.add("page", {
     key: "library",
     title: "Library",
     mount(main) {
       page = main;
+      // app.js's: the Built-in row's own line (featGo)
+      if (typeof featWho === "object") featWho.library = sectionsLink;
       wireLists();
       // The dialog is the providers page's; while the library has it, its
       // backdrop and Escape close it here.
@@ -10268,7 +10339,7 @@ magpie.plugin("library", (ctx) => {
       document.addEventListener("visibilitychange", () => { if (!document.hidden) quietLoad(); });
       window.addEventListener("focus", quietLoad);
     },
-    open: () => (loading = load("open")),
+    open: () => { askedTab = ""; return (loading = load("open")); },
     relang: () => load(),
     // one of the market's servers up close, from another page (Settings ›
     // Images' Magpie Image, #2091, Magpie Image Recognition, and Settings ›
@@ -10276,6 +10347,7 @@ magpie.plugin("library", (ctx) => {
     // pick the agents that get it; one already in the library is on that
     // tab's list, which opens with nothing over it
     server: async (name) => {
+      askedTab = "mcp";
       if (tab !== "mcp") openTab("mcp");
       await loading;
       if (!market.mcp.items || market.mcp.q.trim()) {
