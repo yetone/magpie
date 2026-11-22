@@ -110,7 +110,7 @@ const words = {
   },
   ja: {
     only: "コピーのみ", desktopOnly: "コピーのみ：Cowork はリンクされたスキルを読み飛ばします",
-    sharedCodex: "コピー：Codex と同じフォルダーを読み、Codex がコピーを使うため",
+    sharedCodex: "コピー：Codex と同じフォルダーを読み、そちらがコピーを使うため",
   },
   de: {
     only: "Nimmt nur Kopien", desktopOnly: "Nimmt nur Kopien: Cowork überspringt einen verlinkten Skill",

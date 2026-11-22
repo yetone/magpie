@@ -2693,7 +2693,7 @@ magpie.strings({
     "Only ever takes copies: LiveAgent refuses a linked skill": "コピーのみ：LiveAgent はリンクされたスキルを受け付けません",
     "Only ever takes copies: its skills folder is on a Windows drive, where WSL can't link": "コピーのみ：スキルのフォルダーが Windows のドライブにあり、WSL はそこにリンクを作れません",
     "Only ever takes copies: on Windows it skips a linked skill": "コピーのみ：Windows ではリンクされたスキルを読み飛ばします",
-    "Gets copies: it reads the same folder as {agents}, which gets copies": "コピー：{agents} と同じフォルダーを読み、{agents} がコピーを使うため",
+    "Gets copies: it reads the same folder as {agents}, which gets copies": "コピー：{agents} と同じフォルダーを読み、そちらがコピーを使うため",
     "Gets copies": "コピーを受け取る",
     "Gets links": "リンクを受け取る",
     "Library's way": "ライブラリに従う",
