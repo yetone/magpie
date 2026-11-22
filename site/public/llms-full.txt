@@ -8307,13 +8307,17 @@ Source: https://usemagpie.ai/docs/mistral-vibe
 
 # Mistral Vibe on any model
 
-Mistral Vibe is Mistral's open-source coding agent, the `vibe` CLI. It keeps its settings in `config.toml` in `$VIBE_HOME`, else `~/.vibe`. magpie adds a magpie provider there with one model per catalog model, so Vibe's /model picker lists DeepSeek, GLM, Kimi, Qwen, Claude, a ChatGPT subscription or any other model in magpie. For Mistral's own models in other agents, see [Mistral in Claude Code, Codex, Gemini CLI and OpenCode](https://usemagpie.ai/docs/mistral).
+Mistral Vibe is Mistral's open-source coding agent: the `vibe` CLI, and Vibe Desktop, its app for macOS and Windows. Both keep their settings in `config.toml` in `$VIBE_HOME`, else `~/.vibe`. magpie adds a magpie provider there with one model per catalog model, so Vibe's /model picker lists DeepSeek, GLM, Kimi, Qwen, Claude, a ChatGPT subscription or any other model in magpie. For Mistral's own models in other agents, see [Mistral in Claude Code, Codex, Gemini CLI and OpenCode](https://usemagpie.ai/docs/mistral).
 
 ## Set up Mistral Vibe
 
 1. **Add a provider in magpie.** Add an API key on the Providers page, or sign in to a subscription.
 2. **Pick a model for Mistral Vibe on the Agents page.** Pick one via magpie; magpie points Vibe's active_model at it.
-3. **Restart open vibe sessions.** Vibe reads its settings at start-up. Afterwards you can switch to another magpie model in Vibe's /model too.
+3. **Restart open vibe sessions, or start a new chat in Vibe Desktop.** Vibe reads its settings when a session starts. Afterwards you can switch to another magpie model in Vibe's /model too.
+
+## Vibe Desktop
+
+Vibe Desktop runs the same app server as the CLI, on the same `config.toml`, so its model picker lists magpie's models as /model does, and they need no Mistral sign-in. magpie finds the app by itself: with only Vibe Desktop installed, Mistral Vibe is on the Agents page. The app reads `config.toml` when a chat starts, so after a change start a new chat; one already open keeps what it read.
 
 ## config.toml
 
@@ -8367,7 +8371,7 @@ Vibe doesn't read keys from config.toml, so magpie puts its key in extra_headers
 
 ### Why is Vibe still on its old model?
 
-Vibe reads its settings at start-up. Restart open vibe sessions.
+Vibe reads its settings when a session starts. Restart open vibe sessions, or start a new chat in Vibe Desktop.
 
 ### Is my old model back when I switch back?
 

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mistral Vibe 接入 DeepSeek、GLM、Kimi、Qwen、Claude 或 ChatGPT 订阅：通过 magpie 配置 ~/.vibe/config.toml · magpie</title>
-<meta name="description" content="通过 magpie 让 Mistral Vibe（vibe 命令行）用上 DeepSeek、GLM、Kimi、Qwen、Claude 或 ChatGPT 订阅：config.toml 里的 magpie 供应商和模型，/model 选择器，active_model，思考强度，不往环境变量写 Key，你自己的设置保持不变，以及切回。">
+<meta name="description" content="通过 magpie 让 Mistral Vibe（vibe 命令行和 Vibe Desktop）用上 DeepSeek、GLM、Kimi、Qwen、Claude 或 ChatGPT 订阅：config.toml 里的 magpie 供应商和模型，/model 选择器，active_model，思考强度，不往环境变量写 Key，你自己的设置保持不变，以及切回。">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#fafafa">
 <script>
@@ -35,7 +35,7 @@
 <link rel="stylesheet" href="/docs.css">
 <meta property="og:site_name" content="magpie">
 <meta property="og:title" content="让 Mistral Vibe 用任意模型">
-<meta property="og:description" content="通过 magpie 让 Mistral Vibe（vibe 命令行）用上 DeepSeek、GLM、Kimi、Qwen、Claude 或 ChatGPT 订阅：config.toml 里的 magpie 供应商和模型，/model 选择器，active_model，思考强度，不往环境变量写 Key，你自己的设置保持不变，以及切回。">
+<meta property="og:description" content="通过 magpie 让 Mistral Vibe（vibe 命令行和 Vibe Desktop）用上 DeepSeek、GLM、Kimi、Qwen、Claude 或 ChatGPT 订阅：config.toml 里的 magpie 供应商和模型，/model 选择器，active_model，思考强度，不往环境变量写 Key，你自己的设置保持不变，以及切回。">
 <meta property="og:image" content="https://usemagpie.ai/img/og.png">
 <meta property="og:url" content="https://usemagpie.ai/docs/zh/mistral-vibe">
 <meta name="twitter:card" content="summary_large_image">
@@ -46,7 +46,7 @@
   {
    "@type": "TechArticle",
    "headline": "让 Mistral Vibe 用任意模型",
-   "description": "通过 magpie 让 Mistral Vibe（vibe 命令行）用上 DeepSeek、GLM、Kimi、Qwen、Claude 或 ChatGPT 订阅：config.toml 里的 magpie 供应商和模型，/model 选择器，active_model，思考强度，不往环境变量写 Key，你自己的设置保持不变，以及切回。",
+   "description": "通过 magpie 让 Mistral Vibe（vibe 命令行和 Vibe Desktop）用上 DeepSeek、GLM、Kimi、Qwen、Claude 或 ChatGPT 订阅：config.toml 里的 magpie 供应商和模型，/model 选择器，active_model，思考强度，不往环境变量写 Key，你自己的设置保持不变，以及切回。",
    "inLanguage": "zh-CN",
    "url": "https://usemagpie.ai/docs/zh/mistral-vibe",
    "about": {
@@ -85,7 +85,7 @@
      "name": "为什么 Vibe 还在用原来的模型？",
      "acceptedAnswer": {
       "@type": "Answer",
-      "text": "Vibe 只在启动时读取设置。重启打开着的 vibe 会话。"
+      "text": "Vibe 在会话开始时读取设置。重启打开着的 vibe 会话，或在 Vibe Desktop 里新开一个对话。"
      }
     },
     {
@@ -170,6 +170,7 @@
     <p>Mistral Vibe</p>
     <a href="#overview">工作原理</a>
     <a href="#on">接入 Mistral Vibe</a>
+    <a href="#desktop">Vibe Desktop</a>
     <a href="#file">config.toml</a>
     <a href="#key">Key 放在哪里</a>
     <a href="#models">模型和思考强度</a>
@@ -180,13 +181,15 @@
   <article>
     <p class="eyebrow" id="overview">文档 · 指南</p>
     <h1>让 Mistral Vibe 用任意模型</h1>
-    <p class="lede">Mistral Vibe 是 Mistral 的开源编程 Agent，命令是 <code>vibe</code>。它的设置在 <code>$VIBE_HOME</code>（没设置时是 <code>~/.vibe</code>）里的 <code>config.toml</code>。magpie 在里面加一个 magpie 供应商和 magpie 目录里的每个模型，Vibe 的 /model 选择器里就有了 DeepSeek、GLM、Kimi、Qwen、Claude 或 ChatGPT 订阅等 magpie 里的模型。想在别的 Agent 里用 Mistral 自己的模型，见 <a href="/docs/zh/mistral">Mistral 接入 Claude Code、Codex、Gemini CLI 和 OpenCode</a>。</p>
+    <p class="lede">Mistral Vibe 是 Mistral 的开源编程 Agent：命令行 <code>vibe</code>，以及它的 macOS 和 Windows 应用 Vibe Desktop。两者的设置都在 <code>$VIBE_HOME</code>（没设置时是 <code>~/.vibe</code>）里的 <code>config.toml</code>。magpie 在里面加一个 magpie 供应商和 magpie 目录里的每个模型，Vibe 的 /model 选择器里就有了 DeepSeek、GLM、Kimi、Qwen、Claude 或 ChatGPT 订阅等 magpie 里的模型。想在别的 Agent 里用 Mistral 自己的模型，见 <a href="/docs/zh/mistral">Mistral 接入 Claude Code、Codex、Gemini CLI 和 OpenCode</a>。</p>
     <h2 id="on"><a class="anchor" href="#on">接入 Mistral Vibe</a></h2>
     <ol class="steps">
       <li><b>在 magpie 里添加供应商</b>在 <span class="ui">供应商</span> 页添加 API Key，或登录一个订阅。</li>
       <li><b>在 <span class="ui">Agent</span> 页给 Mistral Vibe 选模型</b>选一个 via magpie 的模型，magpie 把 Vibe 的 active_model 指向它。</li>
-      <li><b>重启打开着的 vibe 会话</b>Vibe 只在启动时读取设置。之后也可以在 Vibe 的 /model 里换成别的 magpie 模型。</li>
+      <li><b>重启打开着的 vibe 会话，或在 Vibe Desktop 里新开一个对话</b>Vibe 在会话开始时读取设置。之后也可以在 Vibe 的 /model 里换成别的 magpie 模型。</li>
     </ol>
+    <h2 id="desktop"><a class="anchor" href="#desktop">Vibe Desktop</a></h2>
+    <p>Vibe Desktop 和命令行跑的是同一个 app server，读的是同一个 <code>config.toml</code>，所以它的模型选择器和 /model 一样列出 magpie 的模型，用这些模型不需要登录 Mistral。magpie 会自己找到这个应用：只装了 Vibe Desktop 时，<span class="ui">Agents</span> 页上也有 Mistral Vibe。应用在对话开始时读取 <code>config.toml</code>，改动后新开一个对话即可；已经打开的对话还用它读到的设置。</p>
     <h2 id="file"><a class="anchor" href="#file">config.toml</a></h2>
     <p>magpie 写入一个 <code>[[providers]]</code> 条目，把网关的 <code>/v1</code> 当作 OpenAI chat completions 用，再为目录里的每个模型写一个 <code>[[models]]</code> 条目。模型的别名是 <code>magpie/&lt;供应商&gt;/&lt;模型&gt;</code>，这就是 /model 里显示的名字，也是 active_model 里存的值：</p>
     <div class="code"><span class="lang">终端</span><button class="copy" data-copy="vibe-toml">复制</button><pre id="vibe-toml"># ~/.vibe/config.toml
@@ -221,7 +224,7 @@ max_context_length = …</pre></div>
     <h3>magpie 的 Key 写在哪里？</h3>
     <p>Vibe 不从 config.toml 读 Key，所以 magpie 把 Key 作为 Authorization 头放在 extra_headers 里，不写环境变量。</p>
     <h3>为什么 Vibe 还在用原来的模型？</h3>
-    <p>Vibe 只在启动时读取设置。重启打开着的 vibe 会话。</p>
+    <p>Vibe 在会话开始时读取设置。重启打开着的 vibe 会话，或在 Vibe Desktop 里新开一个对话。</p>
     <h3>切回后原来的模型还在吗？</h3>
     <p>在。magpie 记下了 active_model 原来的值，切回时恢复它。</p>
 

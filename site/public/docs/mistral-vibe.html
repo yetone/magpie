@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mistral Vibe with DeepSeek, GLM, Kimi, Qwen, Claude or a ChatGPT subscription: magpie in ~/.vibe/config.toml · magpie</title>
-<meta name="description" content="Use DeepSeek, GLM, Kimi, Qwen, Claude or a ChatGPT subscription in Mistral Vibe (the vibe CLI) through magpie: magpie's provider and models in config.toml, the /model picker, active_model, thinking levels, no key in your environment, your own settings kept, and switching back.">
+<meta name="description" content="Use DeepSeek, GLM, Kimi, Qwen, Claude or a ChatGPT subscription in Mistral Vibe (the vibe CLI and Vibe Desktop) through magpie: magpie's provider and models in config.toml, the /model picker, active_model, thinking levels, no key in your environment, your own settings kept, and switching back.">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#fafafa">
 <script>
@@ -35,7 +35,7 @@
 <link rel="stylesheet" href="/docs.css">
 <meta property="og:site_name" content="magpie">
 <meta property="og:title" content="Mistral Vibe on any model">
-<meta property="og:description" content="Use DeepSeek, GLM, Kimi, Qwen, Claude or a ChatGPT subscription in Mistral Vibe (the vibe CLI) through magpie: magpie's provider and models in config.toml, the /model picker, active_model, thinking levels, no key in your environment, your own settings kept, and switching back.">
+<meta property="og:description" content="Use DeepSeek, GLM, Kimi, Qwen, Claude or a ChatGPT subscription in Mistral Vibe (the vibe CLI and Vibe Desktop) through magpie: magpie's provider and models in config.toml, the /model picker, active_model, thinking levels, no key in your environment, your own settings kept, and switching back.">
 <meta property="og:image" content="https://usemagpie.ai/img/og.png">
 <meta property="og:url" content="https://usemagpie.ai/docs/mistral-vibe">
 <meta name="twitter:card" content="summary_large_image">
@@ -46,7 +46,7 @@
   {
    "@type": "TechArticle",
    "headline": "Mistral Vibe on any model",
-   "description": "Use DeepSeek, GLM, Kimi, Qwen, Claude or a ChatGPT subscription in Mistral Vibe (the vibe CLI) through magpie: magpie's provider and models in config.toml, the /model picker, active_model, thinking levels, no key in your environment, your own settings kept, and switching back.",
+   "description": "Use DeepSeek, GLM, Kimi, Qwen, Claude or a ChatGPT subscription in Mistral Vibe (the vibe CLI and Vibe Desktop) through magpie: magpie's provider and models in config.toml, the /model picker, active_model, thinking levels, no key in your environment, your own settings kept, and switching back.",
    "inLanguage": "en",
    "url": "https://usemagpie.ai/docs/mistral-vibe",
    "about": {
@@ -85,7 +85,7 @@
      "name": "Why is Vibe still on its old model?",
      "acceptedAnswer": {
       "@type": "Answer",
-      "text": "Vibe reads its settings at start-up. Restart open vibe sessions."
+      "text": "Vibe reads its settings when a session starts. Restart open vibe sessions, or start a new chat in Vibe Desktop."
      }
     },
     {
@@ -170,6 +170,7 @@
     <p>Mistral Vibe</p>
     <a href="#overview">How it works</a>
     <a href="#on">Set up Mistral Vibe</a>
+    <a href="#desktop">Vibe Desktop</a>
     <a href="#file">config.toml</a>
     <a href="#key">Where the key goes</a>
     <a href="#models">Models and thinking</a>
@@ -180,13 +181,15 @@
   <article>
     <p class="eyebrow" id="overview">Docs · Guide</p>
     <h1>Mistral Vibe on any model</h1>
-    <p class="lede">Mistral Vibe is Mistral's open-source coding agent, the <code>vibe</code> CLI. It keeps its settings in <code>config.toml</code> in <code>$VIBE_HOME</code>, else <code>~/.vibe</code>. magpie adds a magpie provider there with one model per catalog model, so Vibe's /model picker lists DeepSeek, GLM, Kimi, Qwen, Claude, a ChatGPT subscription or any other model in magpie. For Mistral's own models in other agents, see <a href="/docs/mistral">Mistral in Claude Code, Codex, Gemini CLI and OpenCode</a>.</p>
+    <p class="lede">Mistral Vibe is Mistral's open-source coding agent: the <code>vibe</code> CLI, and Vibe Desktop, its app for macOS and Windows. Both keep their settings in <code>config.toml</code> in <code>$VIBE_HOME</code>, else <code>~/.vibe</code>. magpie adds a magpie provider there with one model per catalog model, so Vibe's /model picker lists DeepSeek, GLM, Kimi, Qwen, Claude, a ChatGPT subscription or any other model in magpie. For Mistral's own models in other agents, see <a href="/docs/mistral">Mistral in Claude Code, Codex, Gemini CLI and OpenCode</a>.</p>
     <h2 id="on"><a class="anchor" href="#on">Set up Mistral Vibe</a></h2>
     <ol class="steps">
       <li><b>Add a provider in magpie</b>Add an API key on the <span class="ui">Providers</span> page, or sign in to a subscription.</li>
       <li><b>Pick a model for Mistral Vibe on the <span class="ui">Agents</span> page</b>Pick one via magpie; magpie points Vibe's active_model at it.</li>
-      <li><b>Restart open vibe sessions</b>Vibe reads its settings at start-up. Afterwards you can switch to another magpie model in Vibe's /model too.</li>
+      <li><b>Restart open vibe sessions, or start a new chat in Vibe Desktop</b>Vibe reads its settings when a session starts. Afterwards you can switch to another magpie model in Vibe's /model too.</li>
     </ol>
+    <h2 id="desktop"><a class="anchor" href="#desktop">Vibe Desktop</a></h2>
+    <p>Vibe Desktop runs the same app server as the CLI, on the same <code>config.toml</code>, so its model picker lists magpie's models as /model does, and they need no Mistral sign-in. magpie finds the app by itself: with only Vibe Desktop installed, Mistral Vibe is on the <span class="ui">Agents</span> page. The app reads <code>config.toml</code> when a chat starts, so after a change start a new chat; one already open keeps what it read.</p>
     <h2 id="file"><a class="anchor" href="#file">config.toml</a></h2>
     <p>magpie writes a <code>[[providers]]</code> entry with the gateway's <code>/v1</code> as OpenAI chat completions, and one <code>[[models]]</code> entry per catalog model. A model's alias is <code>magpie/&lt;provider&gt;/&lt;model&gt;</code>, which is what /model shows and active_model holds:</p>
     <div class="code"><span class="lang">Terminal</span><button class="copy" data-copy="vibe-toml">Copy</button><pre id="vibe-toml"># ~/.vibe/config.toml
@@ -221,7 +224,7 @@ max_context_length = …</pre></div>
     <h3>Where does magpie put its key?</h3>
     <p>Vibe doesn't read keys from config.toml, so magpie puts its key in extra_headers as an Authorization header, not in your environment.</p>
     <h3>Why is Vibe still on its old model?</h3>
-    <p>Vibe reads its settings at start-up. Restart open vibe sessions.</p>
+    <p>Vibe reads its settings when a session starts. Restart open vibe sessions, or start a new chat in Vibe Desktop.</p>
     <h3>Is my old model back when I switch back?</h3>
     <p>Yes. magpie noted what active_model was and puts it back.</p>
 

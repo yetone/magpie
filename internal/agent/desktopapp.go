@@ -157,6 +157,16 @@ var desktopApps = map[string]desktopApp{
 	// folder is the default's, not read from an install.
 	"minimax-code": {id: "com.minimax.agent.cn", names: []string{"MiniMax Code.app"}, win: filepath.Join("MiniMax Code", "MiniMax Code.exe"),
 		more: []desktopApp{{id: "com.minimax.agent", names: []string{"MiniMax Code.app"}}}},
+	// Vibe Desktop, Mistral Vibe's desktop app (vibe.go), from Mistral's
+	// own builds (storage.googleapis.com/mistralai-ci-desktop-app, the
+	// Homebrew cask mistral-vibe-app's source): 1.3.0's Vibe.app,
+	// ai.mistral.lechat.desktop, team 8FQF64XL6Y, package le-chat-desktop.
+	// Its Windows installer, vibe-1.3.0-setup.exe, is electron-builder's
+	// one-click per-user NSIS: its script installs to
+	// %LOCALAPPDATA%\Programs\le-chat-desktop\Vibe.exe and registers
+	// HKCU\Software\102a3a1f-… (the UUID v5 of the appId, as dsh's).
+	// There is no Linux build.
+	"vibe": {id: "ai.mistral.lechat.desktop", names: []string{"Vibe.app"}, win: filepath.Join("le-chat-desktop", "Vibe.exe"), guid: "102a3a1f-fbe2-52e4-bb21-8e6b977cc08e"},
 	// Nowledge Mem (0.10.121: Nowledge Mem.app, co.nowledge.mem.desktop, a
 	// Tauri app) keeps its config folder only once it has been opened.
 	"nowledge-mem": {id: "co.nowledge.mem.desktop", names: []string{"Nowledge Mem.app"}},

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mistral Vibe で DeepSeek・GLM・Kimi・Qwen・Claude・ChatGPT サブスクリプションを使う：magpie を ~/.vibe/config.toml に · magpie</title>
-<meta name="description" content="magpie で Mistral Vibe（vibe CLI）から DeepSeek・GLM・Kimi・Qwen・Claude・ChatGPT サブスクリプションを使う方法：config.toml の magpie のプロバイダーとモデル、/model ピッカー、active_model、思考レベル、環境変数にキーを書かない、自分の設定はそのまま、元に戻す方法。">
+<meta name="description" content="magpie で Mistral Vibe（vibe CLI と Vibe Desktop）から DeepSeek・GLM・Kimi・Qwen・Claude・ChatGPT サブスクリプションを使う方法：config.toml の magpie のプロバイダーとモデル、/model ピッカー、active_model、思考レベル、環境変数にキーを書かない、自分の設定はそのまま、元に戻す方法。">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#fafafa">
 <script>
@@ -35,7 +35,7 @@
 <link rel="stylesheet" href="/docs.css">
 <meta property="og:site_name" content="magpie">
 <meta property="og:title" content="Mistral Vibe を任意のモデルで">
-<meta property="og:description" content="magpie で Mistral Vibe（vibe CLI）から DeepSeek・GLM・Kimi・Qwen・Claude・ChatGPT サブスクリプションを使う方法：config.toml の magpie のプロバイダーとモデル、/model ピッカー、active_model、思考レベル、環境変数にキーを書かない、自分の設定はそのまま、元に戻す方法。">
+<meta property="og:description" content="magpie で Mistral Vibe（vibe CLI と Vibe Desktop）から DeepSeek・GLM・Kimi・Qwen・Claude・ChatGPT サブスクリプションを使う方法：config.toml の magpie のプロバイダーとモデル、/model ピッカー、active_model、思考レベル、環境変数にキーを書かない、自分の設定はそのまま、元に戻す方法。">
 <meta property="og:image" content="https://usemagpie.ai/img/og.png">
 <meta property="og:url" content="https://usemagpie.ai/docs/ja/mistral-vibe">
 <meta name="twitter:card" content="summary_large_image">
@@ -46,7 +46,7 @@
   {
    "@type": "TechArticle",
    "headline": "Mistral Vibe を任意のモデルで",
-   "description": "magpie で Mistral Vibe（vibe CLI）から DeepSeek・GLM・Kimi・Qwen・Claude・ChatGPT サブスクリプションを使う方法：config.toml の magpie のプロバイダーとモデル、/model ピッカー、active_model、思考レベル、環境変数にキーを書かない、自分の設定はそのまま、元に戻す方法。",
+   "description": "magpie で Mistral Vibe（vibe CLI と Vibe Desktop）から DeepSeek・GLM・Kimi・Qwen・Claude・ChatGPT サブスクリプションを使う方法：config.toml の magpie のプロバイダーとモデル、/model ピッカー、active_model、思考レベル、環境変数にキーを書かない、自分の設定はそのまま、元に戻す方法。",
    "inLanguage": "ja",
    "url": "https://usemagpie.ai/docs/ja/mistral-vibe",
    "about": {
@@ -85,7 +85,7 @@
      "name": "Vibe が前のモデルのままなのはなぜですか？",
      "acceptedAnswer": {
       "@type": "Answer",
-      "text": "Vibe は設定を起動時に読みます。開いている vibe セッションを再起動してください。"
+      "text": "Vibe は設定をセッションの開始時に読みます。開いている vibe セッションを再起動するか、Vibe Desktop で新しいチャットを始めてください。"
      }
     },
     {
@@ -170,6 +170,7 @@
     <p>Mistral Vibe</p>
     <a href="#overview">仕組み</a>
     <a href="#on">Mistral Vibe の設定</a>
+    <a href="#desktop">Vibe Desktop</a>
     <a href="#file">config.toml</a>
     <a href="#key">キーの置き場所</a>
     <a href="#models">モデルと思考レベル</a>
@@ -180,13 +181,15 @@
   <article>
     <p class="eyebrow" id="overview">ドキュメント · ガイド</p>
     <h1>Mistral Vibe を任意のモデルで</h1>
-    <p class="lede">Mistral Vibe は Mistral のオープンソースのコーディングエージェントで、コマンドは <code>vibe</code> です。設定は <code>$VIBE_HOME</code>（なければ <code>~/.vibe</code>）の <code>config.toml</code> にあります。magpie はここに magpie プロバイダーとカタログの各モデルを加えるので、Vibe の /model ピッカーに DeepSeek・GLM・Kimi・Qwen・Claude・ChatGPT サブスクリプションなど magpie のモデルが並びます。Mistral 自身のモデルをほかのエージェントで使うには <a href="/docs/ja/mistral">Mistral を Claude Code・Codex・Gemini CLI・OpenCode で使う</a> を見てください。</p>
+    <p class="lede">Mistral Vibe は Mistral のオープンソースのコーディングエージェントで、<code>vibe</code> CLI と、macOS・Windows 向けのアプリ Vibe Desktop があります。どちらも設定は <code>$VIBE_HOME</code>（なければ <code>~/.vibe</code>）の <code>config.toml</code> にあります。magpie はここに magpie プロバイダーとカタログの各モデルを加えるので、Vibe の /model ピッカーに DeepSeek・GLM・Kimi・Qwen・Claude・ChatGPT サブスクリプションなど magpie のモデルが並びます。Mistral 自身のモデルをほかのエージェントで使うには <a href="/docs/ja/mistral">Mistral を Claude Code・Codex・Gemini CLI・OpenCode で使う</a> を見てください。</p>
     <h2 id="on"><a class="anchor" href="#on">Mistral Vibe の設定</a></h2>
     <ol class="steps">
       <li><b>magpie でプロバイダーを追加</b><span class="ui">プロバイダー</span> ページで API キーを追加するか、サブスクリプションにサインインします。</li>
       <li><b><span class="ui">エージェント</span> ページで Mistral Vibe のモデルを選ぶ</b>via magpie のモデルを選ぶと、magpie が Vibe の active_model をそれに向けます。</li>
-      <li><b>開いている vibe セッションを再起動</b>Vibe は設定を起動時に読みます。その後は Vibe の /model でほかの magpie のモデルにも切り替えられます。</li>
+      <li><b>開いている vibe セッションを再起動するか、Vibe Desktop で新しいチャットを始める</b>Vibe は設定をセッションの開始時に読みます。その後は Vibe の /model でほかの magpie のモデルにも切り替えられます。</li>
     </ol>
+    <h2 id="desktop"><a class="anchor" href="#desktop">Vibe Desktop</a></h2>
+    <p>Vibe Desktop は CLI と同じ app server を同じ <code>config.toml</code> で動かすので、モデルピッカーには /model と同じく magpie のモデルが並び、それらに Mistral へのサインインは要りません。magpie はアプリを自分で見つけます。Vibe Desktop だけを入れていても、<span class="ui">Agents</span> ページに Mistral Vibe が出ます。アプリは <code>config.toml</code> をチャットの開始時に読むので、変更後は新しいチャットを始めてください。開いているチャットは読んだ設定のままです。</p>
     <h2 id="file"><a class="anchor" href="#file">config.toml</a></h2>
     <p>magpie はゲートウェイの <code>/v1</code> を OpenAI chat completions として使う <code>[[providers]]</code> エントリと、カタログのモデルごとに <code>[[models]]</code> エントリを書きます。モデルのエイリアスは <code>magpie/&lt;プロバイダー&gt;/&lt;モデル&gt;</code> で、/model に表示され、active_model に入る値です：</p>
     <div class="code"><span class="lang">ターミナル</span><button class="copy" data-copy="vibe-toml">コピー</button><pre id="vibe-toml"># ~/.vibe/config.toml
@@ -221,7 +224,7 @@ max_context_length = …</pre></div>
     <h3>magpie のキーはどこに置かれますか？</h3>
     <p>Vibe は config.toml からキーを読まないので、magpie は extra_headers に Authorization ヘッダーとして置きます。環境変数には書きません。</p>
     <h3>Vibe が前のモデルのままなのはなぜですか？</h3>
-    <p>Vibe は設定を起動時に読みます。開いている vibe セッションを再起動してください。</p>
+    <p>Vibe は設定をセッションの開始時に読みます。開いている vibe セッションを再起動するか、Vibe Desktop で新しいチャットを始めてください。</p>
     <h3>元に戻すと前のモデルに戻りますか？</h3>
     <p>戻ります。magpie は active_model の元の値を覚えていて、元に戻すときにそれを戻します。</p>
 

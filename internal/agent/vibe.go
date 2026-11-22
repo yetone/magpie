@@ -23,6 +23,15 @@ package agent
 // put in the user's environment or in ~/.vibe/.env. Vibe's requests say
 // Mistral-Vibe/<version> as their User-Agent, which the gateway tells apart.
 //
+// Vibe Desktop (Mistral's Electron app, Vibe.app, ai.mistral.lechat.desktop)
+// runs the same app server, vibe-app-server, on the same config.toml: it
+// starts the one in its bundle with the user's shell environment, so
+// $VIBE_HOME or ~/.vibe, "the way Desktop and the CLI already share
+// ~/.vibe" (1.3.0's main process), and its model picker lists config.toml's
+// [[models]]. A provider with no api_key_env_var needs no Mistral sign-in
+// there. So one agent stands for both, found by the app too
+// (desktopApps).
+//
 // Vibe's own Library places are ~/.vibe/skills/<name>/SKILL.md and
 // ~/.vibe/AGENTS.md (vibe/core/config/harness_files/_paths.py,
 // vibe/core/system_prompt.py), in internal/library/targets.go.
@@ -45,7 +54,10 @@ import (
 const vibeID = "vibe"
 
 // what Vibe says after a change (notice.go)
-var noticeVibe = newNotice("Vibe reads its settings at start-up — restart open vibe sessions to use this.")
+var (
+	noticeVibe        = newNotice("Vibe reads its settings at start-up — restart open vibe sessions to use this.")
+	noticeVibeDesktop = newNotice("Vibe Desktop reads its settings when a chat starts — start a new chat there to use this. Open vibe sessions need a restart too.")
+)
 
 // vibeContext is what Vibe is told of a model whose context magpie doesn't
 // know: without one it takes a default window with a warning.
@@ -284,7 +296,18 @@ func vibeAt(at place) *Agent {
 		Spelled: prefixed, NoNames: true,
 		UA:  []string{"mistral-vibe"},
 		Bin: "vibe", Dir: dir, Path: path, binNot: vibeNotAvibe,
+		// Vibe Desktop, on this machine (a distro has none), needs no CLI,
+		// and installed but not opened yet it has made no ~/.vibe
+		sign: func() bool { return at.spell == nil && (&Agent{ID: vibeID}).HasApp() },
 		Notice: func() string {
+			// Vibe Desktop's app server reads config.toml when a chat
+			// starts and doesn't watch it: a chat open before keeps what
+			// it read, a new one has magpie's models (vibe-app-server
+			// 3.1.3, the one Vibe Desktop 1.3.0 carries, run as the app
+			// runs it).
+			if at.spell == nil && (&Agent{ID: vibeID}).HasApp() {
+				return noticeVibeDesktop.String()
+			}
 			if Running(`(^|/)vibe( |$)`) {
 				return noticeVibe.String()
 			}
