@@ -121,6 +121,9 @@ type signInFlow struct {
 	// nonce and hostID are a ChatGPT API sign-in's: what its ID token must
 	// carry, and this machine's id it registers magpie for (chatgpt_api.go)
 	nonce, hostID string
+	// clientID and subject are the account a ChatGPT API sign-in signs in
+	// to again: the client id OpenAI issued it, and who it is
+	clientID, subject string
 	// claimed is a callback being traded for the account: the browser's own
 	// or a pasted address, whichever came first
 	claimed bool
@@ -379,8 +382,15 @@ func (s *signInFlow) begin() error {
 		}
 		s.redirect = fmt.Sprintf("http://127.0.0.1:%d/auth/callback", ln.Addr().(*net.TCPAddr).Port)
 		s.nonce = randomToken(24)
+		// an account signed in to again goes with the client OpenAI
+		// issued it, not a new registration
+		var again siwcCreds
+		if s.user != "" {
+			again, _ = siwcLookup(s.user)
+		}
 		s.mu.Lock()
-		s.st.URL = siwcAuthorize(s.redirect, s.state, s.nonce, challenge, s.hostID)
+		s.clientID, s.subject = again.ClientID, again.Subject
+		s.st.URL = siwcAuthorize(s.redirect, s.state, s.nonce, challenge, s.hostID, again)
 		s.mu.Unlock()
 	case "copilot":
 		// GitHub's device code, as Copilot's editors sign in

@@ -191,11 +191,25 @@ func listenSIWCCallback() (net.Listener, error) {
 	return net.Listen("tcp", "127.0.0.1:0")
 }
 
-// siwcAuthorize is OpenAI's page the sign-in opens.
-func siwcAuthorize(redirect, state, nonce, challenge, hostID string) string {
+// siwcAuthorize is OpenAI's page the sign-in opens. A new account
+// registers magpie (dynamic_agent_client, named magpie); one signed in to
+// again (again, its saved credentials) goes with the client id OpenAI
+// issued it and the hints that pick the same account, as OpenAI asks:
+// signing in again makes no new client.
+func siwcAuthorize(redirect, state, nonce, challenge, hostID string, again siwcCreds) string {
 	q := url.Values{}
-	q.Set("client_id", siwcDynamicClient)
-	q.Set("agent_name_hint", siwcAgentName)
+	if again.ClientID != "" {
+		q.Set("client_id", again.ClientID)
+		if siwcHintLive(again.IDToken) {
+			q.Set("id_token_hint", again.IDToken)
+		}
+		if again.Email != "" {
+			q.Set("login_hint", again.Email)
+		}
+	} else {
+		q.Set("client_id", siwcDynamicClient)
+		q.Set("agent_name_hint", siwcAgentName)
+	}
 	q.Set("ext_agent_host_id", hostID)
 	q.Set("response_type", "code")
 	q.Set("redirect_uri", redirect)
@@ -208,9 +222,33 @@ func siwcAuthorize(redirect, state, nonce, challenge, hostID string) string {
 	return siwcAuthorizeURL + "?" + q.Encode()
 }
 
+// siwcHintLive is whether an ID token can go as id_token_hint: one past
+// its exp is left out (login_hint still names the account), so a sign-in
+// again long after the last one never hangs on a stale hint.
+func siwcHintLive(idToken string) bool {
+	if idToken == "" {
+		return false
+	}
+	exp, ok := jwtClaims(idToken)["exp"].(float64)
+	return ok && time.Unix(int64(exp), 0).After(time.Now().Add(time.Minute))
+}
+
 // siwcDone finishes a sign-in whose browser came back with q.
 func (s *signInFlow) siwcDone(ctx context.Context, w http.ResponseWriter, q url.Values) {
-	user, plan, err := siwcSignedIn(ctx, q.Get("code"), strings.TrimSpace(q.Get("client_id")), s.verifier, s.redirect, s.nonce, s.hostID)
+	clientID := strings.TrimSpace(q.Get("client_id"))
+	var err error
+	if s.clientID != "" {
+		// signed in again: OpenAI may leave the client id out, and one
+		// other than the account's is not taken in its place
+		if clientID != "" && clientID != s.clientID {
+			err = errors.New("ChatGPT sign-in: OpenAI answered for another client than this account's; start it again")
+		}
+		clientID = s.clientID
+	}
+	var user, plan string
+	if err == nil {
+		user, plan, err = siwcSignedIn(ctx, q.Get("code"), clientID, s.verifier, s.redirect, s.nonce, s.hostID, s.subject)
+	}
 	if err != nil {
 		s.finish(SignInState{State: "failed", Error: err.Error()})
 		signInPage(w, false, "Sign-in didn't finish", err.Error())
@@ -221,7 +259,9 @@ func (s *signInFlow) siwcDone(ctx context.Context, w http.ResponseWriter, q url.
 }
 
 // siwcSignedIn trades the code for the account's tokens and keeps it.
-func siwcSignedIn(ctx context.Context, code, clientID, verifier, redirect, nonce, hostID string) (user, plan string, err error) {
+// subject, when set, is the account signed in to again: another one
+// signed in in the browser keeps nothing.
+func siwcSignedIn(ctx context.Context, code, clientID, verifier, redirect, nonce, hostID, subject string) (user, plan string, err error) {
 	if clientID == "" {
 		return "", "", errors.New("ChatGPT sign-in: OpenAI didn't finish registering magpie (no client id came back); start it again")
 	}
@@ -242,6 +282,9 @@ func siwcSignedIn(ctx context.Context, code, clientID, verifier, redirect, nonce
 		return "", "", fmt.Errorf("ChatGPT sign-in: %w", err)
 	}
 	c.Subject, c.Email = claimString(id, "sub"), claimString(id, "email")
+	if subject != "" && c.Subject != subject {
+		return "", "", fmt.Errorf("ChatGPT sign-in: %s signed in, not the account being signed in to again; add it as a new account instead", firstNonEmpty(c.Email, "another account"))
+	}
 	user = firstNonEmpty(c.Email, c.Subject)
 	if user == "" {
 		return "", "", errors.New("ChatGPT sign-in: OpenAI didn't say which account signed in")

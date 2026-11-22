@@ -29,6 +29,7 @@ type fakeOpenAI struct {
 	noID     bool
 	refuse   string // a refresh refused with this OAuth code
 	modelsOf string // the token /models was asked with
+	sub      string // who the ID token names, "user-1" when ""
 	n        int
 }
 
@@ -62,7 +63,7 @@ func newFakeOpenAI(t *testing.T) *fakeOpenAI {
 			}
 			if !f.noID {
 				out["id_token"] = fakeJWT(map[string]any{"iss": f.auth.URL, "aud": r.PostForm.Get("client_id"),
-					"sub": "user-1", "email": "me@example.com", "nonce": f.nonce, "exp": float64(time.Now().Add(time.Hour).Unix()),
+					"sub": firstNonEmpty(f.sub, "user-1"), "email": "me@example.com", "nonce": f.nonce, "exp": float64(time.Now().Add(time.Hour).Unix()),
 					"https://api.openai.com/auth": map[string]any{"chatgpt_plan_type": "plus"}})
 			}
 			json.NewEncoder(w).Encode(out)
@@ -104,7 +105,13 @@ func (f *fakeOpenAI) lastForm() url.Values {
 // client id it issued (clientID, "" for none), and waits for its end.
 func signInVia(t *testing.T, f *fakeOpenAI, clientID string, nonce func(string) string) SignInState {
 	t.Helper()
-	st, err := StartSignIn(ChatGPTAPIID)
+	return signInAs(t, f, "", clientID, nonce)
+}
+
+// signInAs is signInVia signing in to user again ("" for a new account).
+func signInAs(t *testing.T, f *fakeOpenAI, user, clientID string, nonce func(string) string) SignInState {
+	t.Helper()
+	st, err := StartSignInWith(ChatGPTAPIID, SignInOptions{User: user})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -477,5 +484,101 @@ func TestChatGPTAPIUsageSaysWhere(t *testing.T) {
 	}
 	if len(f.forms) != n {
 		t.Errorf("OpenAI was asked %d times for it", len(f.forms)-n)
+	}
+}
+
+// Signing in to an account again goes with the client id OpenAI issued it,
+// as OpenAI's Sign in with ChatGPT asks of a returning account: no new
+// registration (no dynamic_agent_client, no agent_name_hint), the account
+// named by its retained ID token and email, the same machine id, and the
+// code traded under that client id though the callback leaves it out. A
+// callback for another client, or another account signed in in the
+// browser, replaces nothing.
+func TestChatGPTAPISignInAgain(t *testing.T) {
+	claudeHome(t)
+	f := newFakeOpenAI(t)
+	if st := signInVia(t, f, "oaiapp_123", same); st.State != "done" {
+		t.Fatalf("first sign-in %+v", st)
+	}
+	first, _ := siwcLookup("me@example.com")
+
+	st, err := StartSignInWith(ChatGPTAPIID, SignInOptions{User: "me@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, _ := url.Parse(st.URL)
+	q := u.Query()
+	CancelSignIn(st.ID)
+	for k, want := range map[string]string{"client_id": "oaiapp_123", "id_token_hint": first.IDToken,
+		"login_hint": "me@example.com", "ext_agent_host_id": first.HostID, "resource": "https://api.openai.com/v1",
+		"scope": "openid profile email offline_access resource.invoke chatgpt.tokens.use.direct"} {
+		if q.Get(k) != want {
+			t.Errorf("%s = %q, want %q", k, q.Get(k), want)
+		}
+	}
+	if q.Has("agent_name_hint") {
+		t.Errorf("agent_name_hint %q sent again", q.Get("agent_name_hint"))
+	}
+	// the new-account sign-in still registers
+	st, _ = StartSignIn(ChatGPTAPIID)
+	u, _ = url.Parse(st.URL)
+	CancelSignIn(st.ID)
+	if got := u.Query().Get("client_id"); got != "dynamic_agent_client" {
+		t.Errorf("a new account's client_id %q", got)
+	}
+
+	if done := signInAs(t, f, "me@example.com", "", same); done.State != "done" || done.User != "me@example.com" {
+		t.Fatalf("signed in again %+v", done)
+	}
+	if got := f.lastForm().Get("client_id"); got != "oaiapp_123" {
+		t.Errorf("code traded under %q", got)
+	}
+	again, _ := siwcLookup("me@example.com")
+	if again.ClientID != "oaiapp_123" || again.Access == first.Access {
+		t.Fatalf("kept %+v", again)
+	}
+
+	t.Run("another client", func(t *testing.T) {
+		done := signInAs(t, f, "me@example.com", "oaiapp_999", same)
+		if done.State != "failed" || !strings.Contains(done.Error, "another client") {
+			t.Fatalf("ended %+v", done)
+		}
+		if c, _ := siwcLookup("me@example.com"); c.ClientID != "oaiapp_123" || c.Access != again.Access {
+			t.Errorf("replaced with %+v", c)
+		}
+	})
+	t.Run("another account", func(t *testing.T) {
+		f.mu.Lock()
+		f.sub = "user-2"
+		f.mu.Unlock()
+		defer func() { f.mu.Lock(); f.sub = ""; f.mu.Unlock() }()
+		done := signInAs(t, f, "me@example.com", "", same)
+		if done.State != "failed" || !strings.Contains(done.Error, "not the account") {
+			t.Fatalf("ended %+v", done)
+		}
+		if c, _ := siwcLookup("me@example.com"); c.Subject != "user-1" || c.Access != again.Access {
+			t.Errorf("replaced with %+v", c)
+		}
+	})
+}
+
+// An ID token past its exp is not sent as id_token_hint: the login_hint
+// alone names the account signed in to again.
+func TestChatGPTAPIStaleHintLeftOut(t *testing.T) {
+	stale := fakeJWT(map[string]any{"sub": "user-1", "exp": float64(time.Now().Add(-2 * time.Hour).Unix())})
+	live := fakeJWT(map[string]any{"sub": "user-1", "exp": float64(time.Now().Add(time.Hour).Unix())})
+	for _, c := range []struct {
+		id   string
+		hint bool
+	}{{stale, false}, {live, true}, {"", false}, {"not-a-jwt", false}} {
+		u, _ := url.Parse(siwcAuthorize("http://127.0.0.1:1/auth/callback", "s", "n", "c", "urn:uuid:x",
+			siwcCreds{ClientID: "oaiapp_123", IDToken: c.id, Email: "me@example.com"}))
+		q := u.Query()
+		if q.Has("id_token_hint") != c.hint {
+			t.Errorf("token %.12q: id_token_hint sent = %v, want %v", c.id, q.Has("id_token_hint"), c.hint)
+		}
+		if q.Get("login_hint") != "me@example.com" || q.Get("client_id") != "oaiapp_123" {
+			t.Errorf("token %.12q: %v", c.id, q)
+		}
 	}
 }
