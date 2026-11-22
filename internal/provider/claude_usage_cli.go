@@ -44,14 +44,42 @@ func UsageClaudeVia(f func(ctx context.Context, configDir string) (string, error
 }
 
 // runClaudeUsage is what Claude Code's /usage printed, through
-// claudeCLIUsage; errClaudeCannotRun when nothing set it.
+// claudeCLIUsage; errClaudeCannotRun when nothing set it. It runs for
+// claudeUsageTimeout (claudeUsageCtx), not to the deadline of the refresh
+// it is part of.
 func runClaudeUsage(ctx context.Context, configDir string) (string, error) {
 	claudeCLIUsage.RLock()
 	defer claudeCLIUsage.RUnlock()
 	if claudeCLIUsage.f == nil {
 		return "", errClaudeCannotRun
 	}
+	ctx, done := claudeUsageCtx(ctx)
+	defer done()
 	return claudeCLIUsage.f(ctx, configDir)
+}
+
+// claudeUsageTimeout bounds one Claude Code /usage run. Claude Code 2.1.327
+// asks api.anthropic.com in two rounds before /usage prints (three
+// requests at once, then one more), so a run takes about twice one
+// request's time: 0.3s on a near network, 6.3s with each request 3s, 18.3s
+// with each 9s (a proxy that held each request that long, on mote). It
+// bounds none of them itself: a request that is never answered held the
+// run past 120s. The 20s of a refresh (subscriptionTimeout) killed every
+// read on the owner's Mac, where a request takes longer, and a read killed
+// is no reading at all: the account's last one, days old, stood in for it.
+var claudeUsageTimeout = 45 * time.Second
+
+// claudeUsageCtx is ctx for a /usage run: its deadline claudeUsageTimeout
+// from now, whatever deadline ctx has, and ended when ctx is cancelled
+// otherwise (a caller gone, magpie quitting).
+func claudeUsageCtx(ctx context.Context) (context.Context, context.CancelFunc) {
+	run, cancel := context.WithTimeout(context.WithoutCancel(ctx), claudeUsageTimeout)
+	stop := context.AfterFunc(ctx, func() {
+		if !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			cancel()
+		}
+	})
+	return run, func() { stop(); cancel() }
 }
 
 // readClaudeUsage is the allowance of the account in configDir, from
