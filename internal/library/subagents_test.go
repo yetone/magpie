@@ -272,3 +272,72 @@ func TestSubagentModelGoesToCodex(t *testing.T) {
 		}
 	}
 }
+
+// A subagent's effort (xuanbo1889245 on X: one left to the agent ran at
+// its default, spending more tokens than it needed) goes into Claude
+// Code's agent file as effort and Codex's role as model_reasoning_effort,
+// both of which those agents put over their default; no other agent's
+// file is written one, and the page is told which take it. Taken away,
+// each file is as one written without it; its own file and the library
+// keep it; a level neither agent takes is refused.
+func TestSubagentEffortGoesToClaudeAndCodex(t *testing.T) {
+	h := sandbox(t)
+	files := subagentAgents(t, h)
+	s := reviewer
+	for id := range files {
+		s.Agents = append(s.Agents, id)
+	}
+	ok(t)(SaveSubagent("", s))
+	plain := map[string]string{}
+	for id, f := range files {
+		plain[id] = read(t, f)
+	}
+
+	s.Effort = " High "
+	ok(t)(SaveSubagent("reviewer", s))
+	if c := read(t, files["claude"]); !strings.HasPrefix(c, "---\nname: \"reviewer\"\n") || !strings.Contains(c, "\neffort: high\n---\n") {
+		t.Errorf("claude's file with an effort:\n%s", c)
+	}
+	var r map[string]any
+	if err := toml.Unmarshal([]byte(read(t, files["codex"])), &r); err != nil {
+		t.Fatal(err)
+	}
+	if r["model_reasoning_effort"] != "high" || r["developer_instructions"] != "You review code.\n\nReport bugs only.\n" || len(r) != 4 {
+		t.Errorf("codex role with an effort: %#v", r)
+	}
+	for id, f := range files {
+		if id != "codex" && id != "claude" && read(t, f) != plain[id] {
+			t.Errorf("%s's file changed with the effort:\n%s", id, read(t, f))
+		}
+	}
+	if own := read(t, filepath.Join(Dir(), "subagents/reviewer.md")); !strings.Contains(own, "\neffort: high\n") {
+		t.Errorf("its own file:\n%s", own)
+	}
+	v, err := Read(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Subagents[0].Effort != "high" {
+		t.Errorf("view's effort: %q", v.Subagents[0].Effort)
+	}
+	for _, av := range v.SubagentAgents {
+		if av.Effort != (av.ID == "codex" || av.ID == "claude") {
+			t.Errorf("agent view %+v", av)
+		}
+	}
+
+	s.Effort = ""
+	ok(t)(SaveSubagent("reviewer", s))
+	for id, f := range files {
+		if read(t, f) != plain[id] {
+			t.Errorf("%s's file with the effort taken away:\n%s\nwant:\n%s", id, read(t, f), plain[id])
+		}
+	}
+
+	for _, e := range []string{"minimal", "none", "ultra", "8000", "hi gh"} {
+		s.Effort = e
+		if _, err := SaveSubagent("reviewer", s); err == nil {
+			t.Errorf("effort %q saved", e)
+		}
+	}
+}

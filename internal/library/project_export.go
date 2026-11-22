@@ -80,6 +80,7 @@ type ExportSubagent struct {
 	Description string   `json:"description,omitempty"`
 	Prompt      string   `json:"prompt,omitempty"`
 	Model       string   `json:"model,omitempty"`
+	Effort      string   `json:"effort,omitempty"`
 	Skills      []string `json:"skills,omitempty"`
 	MCP         []string `json:"mcp,omitempty"`
 }
@@ -139,7 +140,7 @@ func ExportProject(dir string) (*ProjectExport, error) {
 		}
 		x := ExportSubagent{Name: s.Name, Bundle: s.Bundle}
 		if s.Bundle == "" {
-			x.Description, x.Prompt, x.Model = s.Description, s.Prompt, s.Model
+			x.Description, x.Prompt, x.Model, x.Effort = s.Description, s.Prompt, s.Model, s.Effort
 			x.Skills, x.MCP = slices.Clone(s.Skills), slices.Clone(s.MCP)
 		}
 		e.Need.Subagents = append(e.Need.Subagents, x)
@@ -211,7 +212,7 @@ func ApplyProject(dir string, e *ProjectExport) (*ProjectApplied, error) {
 		if l.subagent(s.Name) != nil || s.Bundle != "" || s.Prompt == "" {
 			continue
 		}
-		res, err := SaveSubagent("", Subagent{Name: s.Name, Description: s.Description, Prompt: s.Prompt, Model: s.Model, Skills: s.Skills, MCP: s.MCP, Agents: []string{}})
+		res, err := SaveSubagent("", Subagent{Name: s.Name, Description: s.Description, Prompt: s.Prompt, Model: s.Model, Effort: s.Effort, Skills: s.Skills, MCP: s.MCP, Agents: []string{}})
 		add(res, err, "subagent "+s.Name)
 		if err == nil {
 			out.Saved = append(out.Saved, "subagent "+s.Name)

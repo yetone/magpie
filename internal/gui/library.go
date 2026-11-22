@@ -3,11 +3,13 @@ package gui
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -47,12 +49,14 @@ type subagentModel struct {
 	Name  string `json:"name"`
 	Note  string `json:"note,omitempty"`
 	Group bool   `json:"group,omitempty"`
+	// Efforts are the efforts Codex runs it at, when the catalog knows
+	Efforts []string `json:"efforts,omitempty"`
 }
 
 func subagentModels() []subagentModel {
 	out := []subagentModel{}
 	for _, e := range provider.CodexSubagentModels() {
-		m := subagentModel{ID: e.ID, Name: e.Name, Note: e.Provider.Name, Group: e.Group != ""}
+		m := subagentModel{ID: e.ID, Name: e.Name, Note: e.Provider.Name, Group: e.Group != "", Efforts: e.Efforts}
 		if a := e.Provider.Account; a != nil && a.User != "" {
 			m.Note = a.User
 		}
@@ -62,6 +66,30 @@ func subagentModels() []subagentModel {
 		out = append(out, m)
 	}
 	return out
+}
+
+// codexSubagentEffort refuses an effort the model a Codex subagent runs
+// on lacks, its own or the one the Agents page puts Codex's subagents on:
+// Codex refuses to start a subagent at one (the Agents page's subagent
+// effort is held to the same). With neither, the lead picks the model,
+// and any effort goes.
+func codexSubagentEffort(s library.Subagent) error {
+	if s.Effort == "" || !slices.ContainsFunc(s.Agents, func(a string) bool { return a == "codex" || strings.HasPrefix(a, "codex@") }) {
+		return nil
+	}
+	m := strings.TrimSpace(s.Model)
+	if m == "" {
+		m = provider.CodexSubagentModel()
+	}
+	if m == "" {
+		return nil
+	}
+	for _, e := range subagentModels() {
+		if e.ID == m && len(e.Efforts) > 0 && !slices.Contains(e.Efforts, strings.ToLower(strings.TrimSpace(s.Effort))) {
+			return fmt.Errorf("Codex runs %s at %s, not %s: it would refuse to start this subagent", e.Name, strings.Join(e.Efforts, ", "), s.Effort)
+		}
+	}
+	return nil
 }
 
 func libraryView(res *library.Result) (libraryJSON, error) { return libraryRead(res, false) }
@@ -864,7 +892,9 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 		case "plugins/remove":
 			res, err = library.RemovePlugin(in.Name)
 		case "subagents/save":
-			res, err = library.SaveSubagent(in.Old, in.Subagent)
+			if err = codexSubagentEffort(in.Subagent); err == nil {
+				res, err = library.SaveSubagent(in.Old, in.Subagent)
+			}
 		case "subagents/agents":
 			res, err = library.SubagentAgentsSet(in.Name, in.Agents)
 		case "subagents/remove":

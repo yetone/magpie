@@ -200,3 +200,36 @@ func TestSubagentFileNotCarried(t *testing.T) {
 		t.Errorf("after put: %+v, file %q", s, read(t, mine))
 	}
 }
+
+// An effort set in a subagent's own file reaches the library and the
+// agents; one magpie can't give (a level no agent takes, or Claude Code's
+// number of thinking tokens) is left out rather than the file refused.
+func TestSubagentFileEffort(t *testing.T) {
+	h := sandbox(t)
+	claude := filepath.Join(h, ".claude/agents/reviewer.md")
+	ok(t)(SaveSubagent("", Subagent{Name: "reviewer", Description: "Reviews a diff.", Prompt: "You review code.", Agents: []string{"claude"}}))
+	f := filepath.Join(Dir(), "subagents/reviewer.md")
+
+	write(t, f, "---\nname: reviewer\ndescription: Reviews a diff.\neffort: XHigh\n---\n\nYou review code.\n")
+	ok(t)(Sync())
+	l, _ := load()
+	if got := l.subagent("reviewer"); got.Effort != "xhigh" {
+		t.Errorf("the library after the edit: %+v", got)
+	}
+	if c := read(t, claude); !strings.Contains(c, "\neffort: xhigh\n") {
+		t.Errorf("claude's after the edit: %q", c)
+	}
+
+	for i, e := range []string{"ultra", "12000"} {
+		prompt := "You review code, briefly" + strings.Repeat("!", i) + "."
+		write(t, f, "---\nname: reviewer\ndescription: Reviews a diff.\neffort: "+e+"\n---\n\n"+prompt+"\n")
+		ok(t)(Sync())
+		l, _ = load()
+		if got := l.subagent("reviewer"); got.Effort != "" || got.Prompt != prompt {
+			t.Errorf("the library after effort %s: %+v", e, got)
+		}
+		if c := read(t, claude); strings.Contains(c, "effort") || !strings.Contains(c, prompt) {
+			t.Errorf("claude's after effort %s: %q", e, c)
+		}
+	}
+}

@@ -286,7 +286,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(await sideways(page), [], "sideways scroll in the editor");
         await ed.locator(".bar button.primary").click();
         await ed.waitFor({ state: "detached" });
-        assert.deepEqual(posts.shift(), { what: "subagents/save", body: { old: "", subagent: { name: "test-writer", description: "写测试", prompt: "Write tests first.\nThen run them.", model: "group/review", skills: ["tdd"], mcp: [], agents: ["claude", "codex", "cursor", "droid"], file: OWN } } });
+        assert.deepEqual(posts.shift(), { what: "subagents/save", body: { old: "", subagent: { name: "test-writer", description: "写测试", prompt: "Write tests first.\nThen run them.", model: "group/review", effort: "", skills: ["tdd"], mcp: [], agents: ["claude", "codex", "cursor", "droid"], file: OWN } } });
         await row("test-writer").waitFor();
         assert.equal((await row("test-writer").locator(".lib-subagentuses").textContent()).trim(), w("Model: {name}", { name: "review" }) + " · " + w("Skills: {names}", { names: "tdd" }));
         await v.locator(".lib-subagents-nomodel").filter({ hasText: w("{agents} can't be given a subagent's model: theirs runs on the model the agent picks.", { agents: "Claude Code, Cursor, Droid" }) }).waitFor();

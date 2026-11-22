@@ -18,7 +18,7 @@ func TestProjectExportApply(t *testing.T) {
 	_, a, _ := pluginProjects(t)
 	ok(t)(SaveHook("", Hook{Name: "bark", Event: "session-start", Command: "say bark", Agents: []string{}}))
 	s := reviewer
-	s.Name, s.Agents = "checker", []string{}
+	s.Name, s.Agents, s.Effort = "checker", []string{}, "low"
 	ok(t)(SaveSubagent("", s))
 	ok(t)(ProjectHooks(a, []string{"bark"}, []string{"claude"}))
 	ok(t)(ProjectSubagents(a, []string{s.Name}, []string{"claude"}))
@@ -74,6 +74,9 @@ func TestProjectExportApply(t *testing.T) {
 		}
 	}
 	l := loadT(t)
+	if x := l.subagent(s.Name); x == nil || x.Effort != "low" {
+		t.Errorf("subagent's effort didn't go: %+v", x)
+	}
 	if l.hook("bark") == nil || len(l.hook("bark").Agents) != 0 {
 		t.Errorf("hook: %+v", l.hook("bark"))
 	}

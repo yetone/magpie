@@ -5189,6 +5189,9 @@ magpie.plugin("library", (ctx) => {
   // Claude Code's and Droid's. Every other agent gets its prompt alone.
   // Its model goes only into Codex's role file (luckymanjc on Discord: a
   // routing group named for a subagent, which ran on its lead's model).
+  // Its effort goes into Claude Code's file and Codex's role file
+  // (xuanbo1889245 on X: one left to the agent ran at its default, and
+  // spent more tokens than it needed).
   const subagentAgentOf = (id) => (lib.subagentAgents || []).find((x) => x.id === id);
   const subagentAgents = () => shownAgents().filter((a) => subagentAgentOf(a.id));
   // why a can't be given a subagent, or ""
@@ -5204,6 +5207,7 @@ magpie.plugin("library", (ctx) => {
   function subagentLine(s) {
     const parts = [];
     if (s.model) parts.push(t("Model: {name}", { name: subagentModelName(s.model) }));
+    if (s.effort) parts.push(t("Effort: {level}", { level: effortName({ value: s.effort }) }));
     if (s.skills?.length) parts.push(t("Skills: {names}", { names: s.skills.join(", ") }));
     if (s.mcp?.length) parts.push(t("MCP servers: {names}", { names: s.mcp.join(", ") }));
     return parts.join(" · ");
@@ -5409,10 +5413,38 @@ magpie.plugin("library", (ctx) => {
     return b;
   }
 
+  // the effort a subagent runs at, from the app menu: the agent's own ("")
+  // or a level both Claude Code's agent file and Codex's role take
+  // (library.SubagentEfforts)
+  const SUBAGENT_EFFORTS = ["low", "medium", "high", "xhigh", "max"];
+  function effortPick(d, changed) {
+    const b = el("button", "sess-pick lib-menu lib-subagenteffort");
+    b.type = "button";
+    b.setAttribute("aria-haspopup", "menu");
+    b.setAttribute("aria-expanded", "false");
+    const draw = () => b.replaceChildren(el("span", "", d.effort ? effortName({ value: d.effort }) : t("Picked by the agent")), svg(CHEV, 11, 1.6));
+    b.onclick = (e) => {
+      e.stopPropagation();
+      const opts = [{ v: "", name: t("Picked by the agent"), literalName: true, note: "", always: true },
+        ...SUBAGENT_EFFORTS.map((v) => ({ v, name: effortName({ value: v }), literalName: true, note: "" }))];
+      openProtoMenu(b, opts, d.effort, (v) => { d.effort = v; draw(); changed(); }, "Effort", "", "left", false, "");
+    };
+    draw();
+    return b;
+  }
+  // the efforts Codex runs a subagent's model at, its own or the Agents
+  // page's for every subagent; null when the lead picks it, or the
+  // catalog doesn't say
+  const codexEfforts = (d) => {
+    const id = d.model || lib.codexSubagentModel;
+    const m = id && (lib.subagentModels || []).find((x) => x.id === id);
+    return m?.efforts?.length ? m : null;
+  };
+
   function editSubagent(s) {
     const all = subagentAgents();
-    const d = s ? { name: s.name, description: s.description, prompt: s.prompt, model: s.model || "", skills: [...(s.skills || [])], mcp: [...(s.mcp || [])], agents: [...(s.agents || [])], file: s.file || "" }
-      : { name: "", description: "", prompt: "", model: "", skills: [], mcp: [], agents: all.filter((a) => !subagentBlocked(a)).map((a) => a.id), file: "" };
+    const d = s ? { name: s.name, description: s.description, prompt: s.prompt, model: s.model || "", effort: s.effort || "", skills: [...(s.skills || [])], mcp: [...(s.mcp || [])], agents: [...(s.agents || [])], file: s.file || "" }
+      : { name: "", description: "", prompt: "", model: "", effort: "", skills: [], mcp: [], agents: all.filter((a) => !subagentBlocked(a)).map((a) => a.id), file: "" };
     const ed = el("div", "editor lib-editor lib-subagentedit");
     const head = el("div", "ehead");
     head.append(glyph(GLYPH.subagent), el("b", "", s ? s.name : t("New subagent")));
@@ -5446,11 +5478,12 @@ magpie.plugin("library", (ctx) => {
 
     // what the skills and servers reach, said under each: the agents
     // picked that can't bind them
-    const skillsHint = el("div", "hint lib-subagenthint-skills"), mcpHint = el("div", "hint lib-subagenthint-mcp"), modelHint = el("div", "hint lib-subagenthint-model");
+    const skillsHint = el("div", "hint lib-subagenthint-skills"), mcpHint = el("div", "hint lib-subagenthint-mcp"), modelHint = el("div", "hint lib-subagenthint-model"), effortHint = el("div", "hint lib-subagenthint-effort");
     const skills = namesPick("lib-subagentskills", lib.skills.map((x) => x.name), d, "skills", "Skills", "Find a skill");
     const servers = namesPick("lib-subagentmcp", lib.servers.map((x) => x.name), d, "mcp", "MCP servers", "Find a server");
     const withHint = ([l, w], h) => { w.append(h); return [l, w]; };
     ed.append(...withHint(field(t("Model"), modelPick(d, () => drawHints())), modelHint));
+    ed.append(...withHint(field(t("Effort"), effortPick(d, () => drawHints())), effortHint));
     ed.append(...withHint(field(t("Skills"), skills), skillsHint));
     ed.append(...withHint(field(t("MCP servers"), servers), mcpHint));
     const agentsBox = el("div");
@@ -5489,6 +5522,12 @@ magpie.plugin("library", (ctx) => {
       modelHint.textContent = !d.model ? t("Each agent runs it on the model it picks for a subagent") : [
         mo.length ? t("Not set for {agents}: theirs runs on the model the agent picks", { agents: mo.map((a) => a.name).join(", ") }) : "",
         held ? t("Codex's subagent model on the Agents page is set, and takes the place of this one") : ""].filter(Boolean).join(" · ");
+      // who runs it at the effort set, and a level Codex's model lacks,
+      // which saving refuses (gui's codexSubagentEffort)
+      const ef = unbound(all, d.agents, "effort"), cm = d.effort && d.agents.includes("codex") && codexEfforts(d);
+      effortHint.textContent = !d.effort ? "" : [
+        ef.length ? t("Not set for {agents}: theirs runs at the effort the agent picks", { agents: ef.map((a) => a.name).join(", ") }) : "",
+        cm && !cm.efforts.includes(d.effort) ? t("Codex runs {model} at {levels} only, and won't start it at this one", { model: cm.name, levels: cm.efforts.map((v) => effortName({ value: v })).join(", ") }) : ""].filter(Boolean).join(" · ");
     }
     function drawAgents() {
       agentsBox.replaceChildren(agentChips(all, d.agents, (next) => { d.agents = next; drawAgents(); }, { names: true, blocked: subagentBlocked, all: true }));
@@ -5505,7 +5544,7 @@ magpie.plugin("library", (ctx) => {
     const save = async () => {
       err.textContent = "";
       try {
-        const subagent = { name: d.name, description: d.description.trim(), prompt: d.prompt, model: d.model, skills: d.skills, mcp: d.mcp, agents: d.agents.filter((id) => !subagentBlocked(agentOf(id) || { id })), file: d.file.trim() };
+        const subagent = { name: d.name, description: d.description.trim(), prompt: d.prompt, model: d.model, effort: d.effort, skills: d.skills, mcp: d.mcp, agents: d.agents.filter((id) => !subagentBlocked(agentOf(id) || { id })), file: d.file.trim() };
         take(await api("library/subagents/save", { old: s ? s.name : "", subagent }));
         report(lib.result, s ? t("{name} saved", { name: d.name }) : "");
         closeLibModal(true);

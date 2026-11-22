@@ -50,6 +50,9 @@ func ownSubagentFile(s *Subagent) []byte {
 	if s.Model != "" {
 		kv = append(kv, [2]string{"model", yamlStr(s.Model)})
 	}
+	if s.Effort != "" {
+		kv = append(kv, [2]string{"effort", s.Effort})
+	}
 	if len(s.Skills) > 0 {
 		kv = append(kv, [2]string{"skills", yamlList(s.Skills)})
 	}
@@ -78,6 +81,11 @@ func readOwnSubagent(name string, b []byte) (*Subagent, error) {
 		Prompt:      strings.TrimRight(strings.TrimLeft(body, "\n"), " \n\t"),
 		Model:       plStr(front["model"]),
 	}
+	// an effort magpie can't give (Claude Code's number of thinking
+	// tokens, say) is left out rather than the whole file refused
+	if e := strings.ToLower(strings.TrimSpace(plStr(front["effort"]))); slices.Contains(SubagentEfforts, e) {
+		s.Effort = e
+	}
 	for _, k := range []struct {
 		key string
 		to  *[]string
@@ -101,7 +109,7 @@ func readOwnSubagent(name string, b []byte) (*Subagent, error) {
 
 // saysSame is whether s and f say the same, the agents aside.
 func (s *Subagent) saysSame(f *Subagent) bool {
-	return s.Description == f.Description && s.Prompt == f.Prompt && s.Model == f.Model &&
+	return s.Description == f.Description && s.Prompt == f.Prompt && s.Model == f.Model && s.Effort == f.Effort &&
 		slices.Equal(s.Skills, f.Skills) && slices.Equal(s.MCP, f.MCP)
 }
 
@@ -140,7 +148,7 @@ func (s *Subagent) takeFile() bool {
 		return false
 	}
 	changed := !s.saysSame(x)
-	s.Description, s.Prompt, s.Model, s.Skills, s.MCP = x.Description, x.Prompt, x.Model, x.Skills, x.MCP
+	s.Description, s.Prompt, s.Model, s.Effort, s.Skills, s.MCP = x.Description, x.Prompt, x.Model, x.Effort, x.Skills, x.MCP
 	s.FileHash = subagentHash(b)
 	return changed
 }
