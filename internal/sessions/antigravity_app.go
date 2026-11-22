@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -473,7 +474,37 @@ func parseAntigravity(f file) *state {
 		s.use(dateOf(c.at), agAppModelOr(c.model), c.tokens)
 		s.day(dateOf(c.at)).Replies++
 	}
+	agyToolUse(s, antigravityTranscript(f.path))
 	return s
+}
+
+// agyToolUse counts the tools and skills of the transcript at path (the
+// app's own, as agy writes it: its language server is agy's) on s: each
+// model step's tool calls and the skills they read (agyTools), and the
+// skills a prompt calls up (agyAskedSkills). A step written again counts
+// once. No transcript (an app before 2.30) counts none.
+func agyToolUse(s *state, path string) {
+	seen := map[int]bool{}
+	scanAt(path, 0, nil, func(b []byte, _, _ int64) bool {
+		var l agyLine
+		if json.Unmarshal(b, &l) != nil || l.Step == nil || seen[*l.Step] {
+			return true
+		}
+		at, err := time.Parse(time.RFC3339Nano, l.CreatedAt)
+		if err != nil {
+			return true
+		}
+		seen[*l.Step] = true
+		switch {
+		case l.Source == "USER_EXPLICIT" && l.Type == "USER_INPUT":
+			for _, k := range agyAskedSkills(l.Content) {
+				s.tool(at, "", k)
+			}
+		case l.Source == "MODEL" && l.Type == "PLANNER_RESPONSE":
+			agyTools(s, at, l)
+		}
+		return true
+	})
 }
 
 // agAppModelOr is the model a call is counted under: its generator's, else

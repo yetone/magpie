@@ -1489,9 +1489,12 @@ const cacheVersion = 29
 // request still answering carried and has no reply id for yet.
 // agy 1: a step's tokens are counted under the model its conversation's
 // database names (agyStepModels), not "agy".
+// agy 2, antigravity 3: the skills a prompt calls up (/<name>) and a
+// model's read of a SKILL.md calls up (agyAskedSkills, agyTools); the
+// app's tool calls, from its transcript.
 // pi 1, raft 1, cindy 1: a pi-subagents tool result's model work is its
 // subagents', counted from their own files (piSubagentsRead).
-var parseVersions = map[string]int{"codex": 3, "zcode": 1, "dsh": 3, "antigravity": 2, "agy": 1, "pi": 1, "raft": 1, "cindy": 1}
+var parseVersions = map[string]int{"codex": 3, "zcode": 1, "dsh": 3, "antigravity": 3, "agy": 2, "pi": 1, "raft": 1, "cindy": 1}
 
 type cacheFile struct {
 	Version int    `json:"version"`

@@ -8,10 +8,13 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/tidwall/gjson"
 
 	"github.com/yetone/magpie/internal/dirent"
 )
@@ -428,14 +431,79 @@ func agyCount(s *state, c *agyCarry, b []byte, model func(int) string) {
 		if s.Title == "" {
 			s.Title = title(agyRequest(l.Content))
 		}
-	case l.Source == "MODEL" && l.Type == "PLANNER_RESPONSE":
-		for _, tc := range l.ToolCalls {
-			s.tool(at, tc.Name, "")
+		for _, k := range agyAskedSkills(l.Content) {
+			s.tool(at, "", k)
 		}
+	case l.Source == "MODEL" && l.Type == "PLANNER_RESPONSE":
+		agyTools(s, at, l)
 		if len(l.ToolCalls) == 0 && l.Content != "" {
 			s.day(dateOf(at)).Replies++
 		}
 	}
+}
+
+// agyTools counts a model step's tool calls: each tool, and each skill a
+// call calls up by reading its SKILL.md. agy (1.5.13, and the app's
+// language server) has no tool for skills: its system prompt lists each
+// skill's SKILL.md by its path and tells the model to read it, which it
+// does with read_file ({"Path":…}) or run_command ({"CommandLine":…}). A
+// skill is named by its SKILL.md's folder, as Codex's and Grok Build's
+// are (skillReadsIn); a write_file or edit_file of a SKILL.md calls none
+// up.
+func agyTools(s *state, at time.Time, l agyLine) {
+	for _, tc := range l.ToolCalls {
+		s.tool(at, tc.Name, "")
+		var text string
+		switch tc.Name {
+		case "read_file":
+			text = gjson.GetBytes(tc.Args, "Path").String()
+		case "run_command":
+			text = gjson.GetBytes(tc.Args, "CommandLine").String()
+		}
+		if strings.Contains(text, "SKILL.md") {
+			for _, k := range skillReadsIn(text) {
+				s.tool(at, "", k)
+			}
+		}
+	}
+}
+
+// agySkillCalls are the notes agy adds after a prompt for a skill it puts
+// in the prompt whole, each "<SKILL>" then the skill's name in brackets:
+// typed as /<name> at the start of the prompt (in print mode and the
+// TUI alike), or mentioned. A third note, "The user requested you read
+// and use the "<name>" skill", gives the path only; the model's read of
+// it is what counts then, so it isn't counted twice.
+var agySkillCalls = []string{
+	"<SKILL>The user has explicitly invoked the (",
+	"<SKILL>The user mentioned the (",
+}
+
+// agyAskedSkills are the skills a prompt calls up by itself: those agy
+// added a note for after what the user typed (agySkillCalls), once each.
+// The user's own words, in <USER_REQUEST>, can't call one up.
+func agyAskedSkills(content string) []string {
+	if _, after, ok := strings.Cut(content, "</USER_REQUEST>"); ok {
+		content = after
+	}
+	if !strings.Contains(content, "<SKILL>") {
+		return nil
+	}
+	var out []string
+	for _, note := range agySkillCalls {
+		for rest := content; ; {
+			_, after, ok := strings.Cut(rest, note)
+			if !ok {
+				break
+			}
+			name, tail, ok := strings.Cut(after, ") skill.")
+			rest = tail
+			if name = strings.TrimSpace(name); ok && name != "" && !strings.Contains(name, "\n") && !slices.Contains(out, name) {
+				out = append(out, name)
+			}
+		}
+	}
+	return out
 }
 
 // agyRequest is what the user typed, out of the <USER_REQUEST> agy wraps
