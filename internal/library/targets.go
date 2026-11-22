@@ -1124,6 +1124,20 @@ func skipsJunctions(id string) bool {
 	return linkOS == "windows" && slices.Contains(junctionBlind, id)
 }
 
+// projectLinkBlind are the agents that skip magpie's link in a project's
+// skills folder on every system, and list a folder there: agy 1.5.14 on
+// macOS lists a copied <project>/.agents/skills/<skill> and not the
+// symlink to the library's (#7506, jinpwng on X; agy --print /skills, with
+// a control repository listing none). The app reads skills through the
+// same customizations walk as agy (junctionBlind), so it is taken alike.
+var projectLinkBlind = []string{"agy", "antigravity"}
+
+// projectCopies is whether the agent is given a copy in a project's
+// skills folder rather than magpie's link.
+func projectCopies(id string) bool {
+	return skipsJunctions(id) || slices.Contains(projectLinkBlind, id)
+}
+
 // readsShared are the agents that read ~/.agents/skills as well as their
 // own folder (each one's docs or source): Kimi Code's own is
 // ~/.kimi-code/skills besides it (#4379). OmO's engine, senpi, a fork of

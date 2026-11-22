@@ -199,9 +199,9 @@ func (l *Library) syncFolder(p *Project, res *Result, hubs map[string]*Server) {
 	}
 	want := map[string]string{} // entry → the skill
 	// the entries given as copies: all of them in a project that takes
-	// copies, else those an agent reads that skips a junction
-	// (skipsJunctions), which is magpie's link on Windows without the
-	// right to make a symlink
+	// copies, else those an agent reads that skips magpie's link there
+	// (projectCopies): Antigravity's on every system, and on Windows a
+	// junction, magpie's link without the right to make a symlink
 	copies := map[string]bool{}
 	for name, agents := range p.Skills {
 		if s := l.skill(name); s == nil || s.Dangling { // none, or its source is gone (skill_dangling.go)
@@ -211,7 +211,7 @@ func (l *Library) syncFolder(p *Project, res *Result, hubs map[string]*Server) {
 			if d := ProjectSkillsDir(id); d != "" {
 				e := d + "/" + name
 				want[e] = name
-				copies[e] = copies[e] || p.Copy || skipsJunctions(id)
+				copies[e] = copies[e] || p.Copy || projectCopies(id)
 			}
 		}
 	}

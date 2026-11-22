@@ -155,3 +155,29 @@ func TestJunctionBlindProjectCopies(t *testing.T) {
 		t.Error(".agents/skills/pdf is still a copy")
 	}
 }
+
+// agy on macOS lists a project's copied skill and not magpie's symlink
+// (#7506), so a project skill ticked for Antigravity is a copy on every
+// system, and a link again once Antigravity is unticked.
+func TestAgyProjectSkillIsACopyOffWindows(t *testing.T) {
+	_, proj := projectLib(t)
+	old := linkOS
+	linkOS = "darwin"
+	t.Cleanup(func() { linkOS = old })
+	ok(t)(ProjectSkill(proj, "pdf", []string{"agy", "claude"}))
+	sh, cl := filepath.Join(proj, ".agents/skills/pdf"), filepath.Join(proj, ".claude/skills/pdf")
+	if isLink(t, sh) || !ours(sh, "pdf") {
+		t.Fatal(".agents/skills/pdf isn't magpie's copy")
+	}
+	if runtime.GOOS != "windows" && !isLink(t, cl) {
+		t.Fatal(".claude/skills/pdf isn't a link")
+	}
+	ok(t)(Sync())
+	if isLink(t, sh) || !ours(sh, "pdf") {
+		t.Fatal("a sync made the copy a link")
+	}
+	ok(t)(ProjectSkill(proj, "pdf", []string{"codex"}))
+	if runtime.GOOS != "windows" && !isLink(t, sh) {
+		t.Error(".agents/skills/pdf is still a copy with Antigravity unticked")
+	}
+}
