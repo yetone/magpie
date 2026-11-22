@@ -627,6 +627,16 @@ func targetOf(a *agent.Agent) *Target {
 		t.Instructions = filepath.Join(d, "steering", "AGENTS.md")
 		t.MCP = &mcpFile{Path: filepath.Join(d, "settings", "mcp.json"), Format: fmtKiro}
 		t.Skills = filepath.Join(d, "skills")
+	case "trae-cn":
+		// TRAE CN 2.3.105403 reads its skills from <home>/<dataFolderName>/
+		// skills, ~/.trae-cn/skills (docs.trae.cn/ide_skills), and the
+		// mcpServers of mcp.json in its userData's User folder, with a JSONC
+		// parser and a watch on the file (apps). Its skills are found by a
+		// loader in its Rust agent (libai_agent) that nothing shows
+		// following a link, so it gets copies (takesCopies)
+		t.MCP = &mcpFile{Path: a.Path, Format: fmtTrae}
+		t.Skills = filepath.Join(h, ".trae-cn", "skills")
+		t.Copy = takesCopies(a.ID)
 	case "liveagent":
 		// LiveAgent's engine, K-brain, keeps its MCP servers in
 		// config.json.live-mcp.json beside its config.json, in the folder
@@ -992,6 +1002,18 @@ func apps() []*agent.Agent {
 		bin = "kiro-cli"
 	}
 	out = append(out, &agent.Agent{ID: "kiro-cli", Name: "Kiro CLI", Icon: "kiro-color", Bin: bin})
+	// TRAE CN (#5889), ByteDance's VS Code fork, is no agent magpie wires
+	// a model into either. It is found by its Electron userData, named for
+	// its product.json nameShort "Trae CN" (~/Library/Application
+	// Support/Trae CN, %APPDATA%\Trae CN, ~/.config/Trae CN), which holds
+	// the user-wide mcp.json it reads (TRAE CN 2.3.105403's workbench:
+	// joinPath(userSettingsResource, "..", "mcp.json")). Its skills are
+	// in ~/.trae-cn, a folder named for its dataFolderName that the
+	// international Trae's ~/.trae is not
+	if d, err := os.UserConfigDir(); err == nil {
+		dir := filepath.Join(d, "Trae CN")
+		out = append(out, &agent.Agent{ID: "trae-cn", Name: "TRAE CN", Icon: "trae", Dir: dir, Path: filepath.Join(dir, "User", "mcp.json")})
+	}
 	return out
 }
 
@@ -1135,8 +1157,15 @@ var projectLinkBlind = []string{"agy", "antigravity"}
 // projectCopies is whether the agent is given a copy in a project's
 // skills folder rather than magpie's link.
 func projectCopies(id string) bool {
-	return skipsJunctions(id) || slices.Contains(projectLinkBlind, id)
+	return skipsJunctions(id) || slices.Contains(projectLinkBlind, id) || takesCopies(id)
 }
+
+// takesCopies is whether the agent is given copies of its skills, in its
+// own folder and a project's, on every system: TRAE CN's skills are read
+// by its Rust agent (modules/ai-agent, 2.3.105403), which can't be seen
+// to follow a link, so it gets real folders rather than links it may
+// skip.
+func takesCopies(id string) bool { return id == "trae-cn" }
 
 // readsShared are the agents that read ~/.agents/skills as well as their
 // own folder (each one's docs or source): Kimi Code's own is
@@ -1243,9 +1272,10 @@ func Takes(q, kind string) (string, error) {
 		}
 	}
 	what := map[string]string{"instructions": "instructions", "mcp": "MCP servers", "skills": "skills"}[kind]
-	// an app found by its program alone (Kiro CLI) that isn't here: told
-	// so, not recorded and then given nothing, as Targets leaves it out
-	if app && a.Bin != "" && !a.Detected() {
+	// an app found by its program alone (Kiro CLI), or by its own folder
+	// (TRAE CN), that isn't here: told so, not recorded and then given
+	// nothing, as Targets leaves it out
+	if app && (a.Bin != "" || a.ID == "trae-cn") && !a.Detected() {
 		return "", fmt.Errorf("%s isn't installed here; nothing reads its %s until it is", a.Name, what)
 	}
 	// gone for its CLI, as Targets leaves it out (#2254): told so, not

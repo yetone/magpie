@@ -36,7 +36,9 @@ import (
 // @tencent-ai/codebuddy-code 2.164.0), and Droid .factory/mcp.json
 // (docs.factory.com/cli/configuration/mcp). Qoder and CodeBuddy, like
 // Claude Code, ask the user to approve a project's server before using
-// it. Each is written in the shape the agent's user-wide file has.
+// it. TRAE CN reads .trae/mcp.json once its Enable Project MCP setting is
+// on (its workbench, 2.3.105403).
+// Each is written in the shape the agent's user-wide file has.
 // DeepSeek Harness has none: its servers are @deepseek-ai/dsh-mcp-client
 // rows in a profile's patch layers (bundles, the profile's and
 // $DSH_HOME's cordis.patch.yml, --patch overlays; composeProfile in
@@ -56,6 +58,7 @@ var projectMCPFiles = map[string]struct {
 	"qoder-cn":  {".qoder/settings.json", fmtOmp},
 	"codebuddy": {".mcp.json", fmtClaude},
 	"droid":     {".factory/mcp.json", fmtClaude},
+	"trae-cn":   {".trae/mcp.json", fmtTrae},
 }
 
 // ProjectMCPFile is the file, in a project, an agent reads the project's

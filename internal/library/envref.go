@@ -195,6 +195,8 @@ func (f *mcpFile) refsOf() envSyntax {
 	// and env on (kimi_cli/cli/__init__.py, fastmcp mcp_config.py). Cline's
 	// settings are plain strings (@cline/core 0.0.90). ZCode expands only
 	// its plugins' servers, not mcp.servers (zcode.cjs createTransport).
+	// TRAE CN hands both on as written: its workbench stringifies an env's
+	// values and expands no ${...} in mcp.json (2.3.105403).
 	// Zed hands a command its env and a url its headers as written
 	// (zed-industries/zed 2c99f547: crates/context_server/src/transport/
 	// stdio_transport.rs command.envs, http.rs build_request).

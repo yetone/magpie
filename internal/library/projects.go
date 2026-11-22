@@ -108,7 +108,9 @@ type Project struct {
 // (getProjectSkillsDir, @qoder-ai/qodercli 1.1.69, whose .agents/skills
 // a setting can turn off), CodeBuddy Code .codebuddy/skills
 // (getProjectSkillsDir, @tencent-ai/codebuddy-code 2.164.0) and Command
-// Code .commandcode/skills (commandcode.ai/docs/skills). DeepSeek Harness
+// Code .commandcode/skills (commandcode.ai/docs/skills), TRAE CN
+// .trae/skills (its workbench's joinPath(workspace, ".trae", "skills"),
+// 2.3.105403; docs.trae.cn/ide_skills). DeepSeek Harness
 // reads <projectRoot>/.dsh/skills and <projectRoot>/.agents/skills, the
 // project root being the nearest folder up from where it runs with a .git
 // in it, else that folder itself (the provider's roots and findProjectRoot,
@@ -139,6 +141,7 @@ var projectSkillsDirs = map[string]string{
 	"qoder-cn":    ".qoder/skills",
 	"codebuddy":   ".codebuddy/skills",
 	"commandcode": ".commandcode/skills",
+	"trae-cn":     ".trae/skills",
 }
 
 // ProjectSkillsDir is the folder, in a project, an agent reads its skills
