@@ -366,7 +366,10 @@ func NextLogin(ctx context.Context, agent string) (from, to string, back, ok boo
 	// A window whose reset has passed counts as started again (usedPast),
 	// on every account, however its reading came
 	q, known := u[from]
-	if keep || !known || q.Error != "" || !q.Held && !usedPast(q, share, now) && !capped(from, q) {
+	// a Claude account /usage can't read that Claude Code was refused on
+	// for its limit is spent as one read past the share (claudeOutUnread)
+	out := agent == "claude" && claudeOutUnread(from, known, q, now)
+	if keep || !out && (!known || q.Error != "" || !q.Held && !usedPast(q, share, now) && !capped(from, q)) {
 		return "", "", false, false
 	}
 	if agent == "codex" && !q.Held && !capped(from, q) && spendsFirst(from, q) {
@@ -385,7 +388,7 @@ func NextLogin(ctx context.Context, agent string) (from, to string, back, ok boo
 	// it has more than the one it is on by roomMargin, so that the agent
 	// isn't moved to and fro between two all but even; else it stays
 	best, most := "", math.Inf(-1)
-	if !q.Held {
+	if !q.Held && !out {
 		most = roomLeft(q, share, AccountCapsOf(agent, from), now) + roomMargin
 	}
 	for _, l := range spares {

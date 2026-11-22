@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -37,6 +38,9 @@ func claudeOutSoon(t *testing.T, first string) (spare string, set func(string), 
 		claudeTranscripts.Lock()
 		claudeTranscripts.started, claudeTranscripts.off = false, nil
 		claudeTranscripts.Unlock()
+		claudeOn.Lock()
+		claudeOn.user, claudeOn.since = "", time.Time{}
+		claudeOn.Unlock()
 	}
 	forget()
 	t.Cleanup(forget)
@@ -124,6 +128,81 @@ func TestClaudeRefusalInSessionReadsAtOnce(t *testing.T) {
 	}
 	if to, err := SwitchWhenSpent(context.Background(), "claude"); err != nil || to != spare {
 		t.Fatalf("after the refusal: switched to %q: %v, want %q", to, err, spare)
+	}
+}
+
+// claudeUnread has the account Claude Code is on answer /usage with err
+// from now on, as the owner's did on every look (11-22: "signal: killed",
+// the run killed at its deadline), and ages the readings by d.
+func claudeUnread(t *testing.T, err string, age func(time.Duration), d time.Duration) {
+	t.Helper()
+	UsageClaudeVia(func(_ context.Context, dir string) (string, error) {
+		if dir == "" {
+			return "", errors.New(err)
+		}
+		return "Current session: 0% used · resets " + sessionReset(), nil
+	})
+	age(d)
+}
+
+// The owner's case (11-22): every /usage run of the account Claude Code
+// is on killed at its deadline, its reading "signal: killed", and Claude
+// Code stopped mid-task for its limit while every other account had room.
+// The failed reading kept Claude Code on it for good; the refusal Claude
+// Code wrote to its session moves it on.
+func TestClaudeUnreadRefusedMovesOn(t *testing.T) {
+	spare, _, age := claudeOutSoon(t, "50")
+	session := filepath.Join(filepath.Dir(claudeCredentialsPath()), "projects", "-work", "s1.jsonl")
+	writeSession(t, session, `{"type":"user","message":{"role":"user","content":"go"},"timestamp":"`+time.Now().UTC().Format(time.RFC3339Nano)+`"}`)
+	claudeLookDue() // the minute's look finds Claude Code on pro@x.com
+	claudeUnread(t, "signal: killed", age, claudeLookEvery)
+	if to, err := SwitchWhenSpent(context.Background(), "claude"); err != nil || to != "" {
+		t.Fatalf("unread with no refusal: switched to %q: %v", to, err)
+	}
+	writeSession(t, session, claudeRefusalLine(time.Now()))
+	if !claudeLookDue() {
+		t.Fatal("Claude Code was refused, and no look is due")
+	}
+	if to, err := SwitchWhenSpent(context.Background(), "claude"); err != nil || to != spare {
+		t.Fatalf("unread and refused: switched to %q: %v, want %q", to, err, spare)
+	}
+}
+
+// Claude Code's own word that the account is out, as /usage or a run
+// answers it ("You've hit your weekly limit", the owner's warm-up line of
+// 11-22 whole), moves Claude Code on with no refusal since it is on the
+// account; a refusal of the account itself (signed out) doesn't, nor a
+// failed read with only a refusal from before Claude Code was on it.
+func TestClaudeLimitSaidMovesOn(t *testing.T) {
+	for _, c := range []struct {
+		err   string
+		moves bool
+	}{
+		{"Claude Code: You've hit your weekly limit · resets Nov 24 at 5am (Asia/Shanghai)", true},
+		{"Claude Code's /usage told no allowance: You've hit your session limit · resets 3:30am (UTC)", true},
+		{"Claude Code: You've hit your Fable limit for this week. Switch models?", true},
+		{"Claude Code: You've hit your limit · resets 5pm (UTC)", true},
+		{"Claude Code's /usage told no allowance: HTTP 401 Unauthorized", false},
+		{"signal: killed", false},
+	} {
+		t.Run(c.err, func(t *testing.T) {
+			spare, _, age := claudeOutSoon(t, "50")
+			session := filepath.Join(filepath.Dir(claudeCredentialsPath()), "projects", "-work", "s1.jsonl")
+			writeSession(t, session, `{"type":"user","message":{"role":"user","content":"go"},"timestamp":"`+time.Now().UTC().Format(time.RFC3339Nano)+`"}`)
+			claudeLookDue()
+			// refused before Claude Code was on the account: another's
+			writeSession(t, session, claudeRefusalLine(time.Now().Add(-time.Hour)))
+			claudeLookDue()
+			// past the reading's wait, Claude Code used since: /usage is run
+			claudeUnread(t, c.err, age, 11*time.Minute)
+			want := ""
+			if c.moves {
+				want = spare
+			}
+			if to, err := SwitchWhenSpent(context.Background(), "claude"); err != nil || to != want {
+				t.Fatalf("switched to %q: %v, want %q", to, err, want)
+			}
+		})
 	}
 }
 

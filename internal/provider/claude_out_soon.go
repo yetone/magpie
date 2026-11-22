@@ -28,6 +28,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // claudeLookEvery is how often Claude's sign-in is looked at between
@@ -217,6 +219,7 @@ func claudeLookDue() bool {
 	if active == "" || !spare {
 		return false
 	}
+	claudeOnSince(active, time.Now())
 	scanClaudeLimits()
 	claudeUsage.Lock()
 	e := claudeUsage.m[strings.ToLower(active)]
@@ -226,4 +229,50 @@ func claudeLookDue() bool {
 		return true
 	}
 	return e.ws != nil && claudeNearOut(e.windows(time.Now()), time.Now())
+}
+
+// claudeOn is the account the switch last found Claude Code on, and since
+// when: a refusal Claude Code wrote before is another account's.
+var claudeOn struct {
+	sync.Mutex
+	user  string
+	since time.Time
+}
+
+// claudeOnSince is since when the switch has found Claude Code on user,
+// now when it finds it there first.
+func claudeOnSince(user string, now time.Time) time.Time {
+	claudeOn.Lock()
+	defer claudeOn.Unlock()
+	if claudeOn.since.IsZero() || !strings.EqualFold(claudeOn.user, user) {
+		claudeOn.user, claudeOn.since = user, now
+	}
+	return claudeOn.since
+}
+
+// claudeLimitSaid is Claude Code's own word that the account is out:
+// "You've hit your session limit", "… weekly limit", "… Fable limit for
+// this week", "… limit · resets 5pm" (2.1.327 builds it as "You've hit
+// your " and the window's words), and the older "usage limit reached".
+var claudeLimitSaid = lazyre.New(`(?i)hit your (?:[\w.-]+ ){0,3}limit|\b(?:session|weekly|usage) limit (?:reached|hit)`)
+
+// claudeOutUnread says the account Claude Code is on, user, whose reading
+// q (known: there is one) tells no allowance, is out all the same: the
+// reading is Claude Code's word that it hit its limit, or it failed (a
+// /usage run killed at its deadline, not read yet) while Claude Code was
+// refused for its limit since it has been on user (claudeLimitHit). Both
+// were read as "not known" and kept Claude Code on the account for good:
+// /usage killed at its 20 seconds on every look, Claude Code stopped
+// mid-task on the owner's accounts with every other one having room, and
+// only marking it limited by hand moved it on. A refusal of the account
+// itself (signed out, 401) is not this: nothing says it is out.
+func claudeOutUnread(user string, known bool, q SubscriptionQuota, now time.Time) bool {
+	if known && q.Error == "" {
+		return false // read: the reading decides
+	}
+	said := claudeNotYourLimit.ReplaceAllString(q.Error, "")
+	if claudeLimitSaid.MatchString(said) {
+		return true
+	}
+	return !claudeDenied(said) && claudeLimitHitAfter(claudeOnSince(user, now))
 }
