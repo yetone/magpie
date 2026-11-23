@@ -584,14 +584,22 @@ var ownPrice catalog.Price
 // through; that name prices the call when the catalog lists the very model
 // id under it, and never otherwise: a name models.dev doesn't know, or
 // one whose other models alone would stand for this call's, prices
-// nothing (#4278).
+// nothing (#4278). A call Kimi Code made on its own sign-in
+// ("kimi-code/k3-256k") is priced as one to the user's Kimi Code
+// membership (provider.KimiCodeSessionPrice, #3331).
 func Pricer() func(Record) *catalog.Price {
-	prices := map[[8]string]*catalog.Price{}
-	// each provider's rate windows as the same read of the prices saw
-	// them: the windows are held once (BasePriceIn), each record's rate
+	// each price with the rate windows the same read of the prices saw
+	// for it: the windows are held once (BasePriceIn), each record's rate
 	// read at its own time (provider.RateAt), so a window that opens
-	// mid-page prices only the calls inside it (#2463)
-	windows := map[string][]provider.RateWindow{}
+	// mid-page prices only the calls inside it (#2463). They are kept with
+	// the price, not with the record's provider: a Kimi Code session's
+	// call is priced at a membership's windows under the unknown provider
+	// another session's call has none under (VectorLu, #3331)
+	type priced struct {
+		price   *catalog.Price
+		windows []provider.RateWindow
+	}
+	prices := map[[8]string]priced{}
 	s := settings.Load()
 	wires := s.Wires()
 	return func(r Record) *catalog.Price {
@@ -609,15 +617,12 @@ func Pricer() func(Record) *catalog.Price {
 		tier := r.billedTier()
 		agy := r.Provider == UnknownProvider && agyLocal(r.Agent)
 		k := [8]string{id, r.Model, served, r.SessionProvider, r.Effort, key, r.tierKey(tier, served), strconv.FormatBool(agy)}
-		if pr, ok := prices[k]; ok {
-			return atWindow(pr, windows[id], r.Time)
+		if c, ok := prices[k]; ok {
+			return atWindow(c.price, c.windows, r.Time)
 		}
 		a := priceAsk{ID: id, Model: r.Model, Served: served, SessionProvider: r.SessionProvider, Effort: r.Effort, Key: key, Unknown: r.Provider == UnknownProvider, Agy: agy}
 		pr, ws := basePriceIn(s, wires, a)
 		noteAsk(a.ask(), priceAnswer(pr, ws))
-		if pr != nil {
-			windows[id] = ws
-		}
 		if pr == nil {
 			catalog.Missing() // models.dev may list it by now
 		} else {
@@ -625,7 +630,7 @@ func Pricer() func(Record) *catalog.Price {
 			// (Archivemylife on X: a Fast call read at the standard one)
 			pr = tierPriced(pr, tier, r.Time, served, r.Model)
 		}
-		prices[k] = pr
+		prices[k] = priced{pr, ws}
 		return atWindow(pr, ws, r.Time)
 	}
 }
@@ -711,6 +716,20 @@ func basePriceIn(s settings.Settings, wires map[string]string, a priceAsk) (*cat
 	var v catalog.Price
 	var ws []provider.RateWindow
 	var ok bool
+	if a.Unknown {
+		// a call Kimi Code made on its own sign-in, its model as its
+		// session file names it ("kimi-code/k3-256k", #3331): a price the
+		// user set for that very name stands, else it is priced as a call
+		// to their Kimi Code membership
+		if _, kimi := provider.KimiCodeSessionModel(a.Model); kimi {
+			if v, ok, ws = provider.UserBasePriceIn(s, a.ID, a.Model); !ok {
+				v, ok, ws = provider.KimiCodeSessionPrice(s, a.Model)
+			}
+			if ok {
+				return &v, ws
+			}
+		}
+	}
 	// the swap the ledger marks: the reply named another model than
 	// asked, no rename of it (#5340)
 	if servedInstead(wires, a.ID, a.Model, a.Effort, a.Served) {

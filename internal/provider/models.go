@@ -2874,6 +2874,69 @@ func MakerPrice(model string) (catalog.Price, bool) {
 	return catalog.Price{}, false
 }
 
+// KimiCodeSessionModel is the Kimi Code model a call in Kimi Code's own
+// session file was made on, when it names one: its wire file names the
+// call's model by the key of its [models."…"] table, and a Kimi Code
+// sign-in keys them "kimi-code/<model>" ("kimi-code/k3-256k", its
+// provider "managed:kimi-code"). The part before the slash is Kimi Code's
+// own name, not a provider of magpie's: the reporter's sign-in is magpie's
+// Kimi Code (China), "kimi-code-cn".
+func KimiCodeSessionModel(model string) (string, bool) {
+	pid, id, ok := strings.Cut(strings.TrimSpace(model), "/")
+	if !ok || (pid != "kimi-code" && pid != "kimi-code-cn") || id == "" || strings.Contains(id, "/") {
+		return "", false
+	}
+	return id, true
+}
+
+// KimiCodeSessionPrice is what a call Kimi Code made on its own sign-in,
+// not through magpie, costs the user (#3331, westlinkin): its model as the
+// session file names it, "kimi-code/k3-256k". It is priced as a call to a
+// Kimi Code membership the user has added, the one whose id the name
+// begins with first: the price they set for the model there (or for every
+// model of it, or for the model at any provider), the first membership
+// with one, else the first membership's price for it (the Kimi API model
+// it is, kimiCodeAPI), each with that membership's windows. With none
+// added it is the Kimi API model's list price (VectorLu), and a model the
+// API doesn't sell (kimi-for-coding) stays unpriced. A model that isn't a
+// Kimi Code sign-in's is false.
+func KimiCodeSessionPrice(s settings.Settings, model string) (catalog.Price, bool, []RateWindow) {
+	id, ok := KimiCodeSessionModel(model)
+	if !ok {
+		return catalog.Price{}, false, nil
+	}
+	pid, _, _ := strings.Cut(strings.TrimSpace(model), "/")
+	// the one named first, then the rest in the user's order
+	var members, rest []Provider
+	for _, p := range All() {
+		switch {
+		case !p.kimiCodeMember():
+		case p.ID == pid:
+			members = append(members, p)
+		default:
+			rest = append(rest, p)
+		}
+	}
+	members = append(members, rest...)
+	for _, p := range members {
+		if pr, ok := userPrice(s, p, id); ok {
+			pr.Peak = p.PeakOf(id)
+			return pr, true, p.RateWindows
+		}
+	}
+	for _, p := range members {
+		if pr, ok := tariffOf(s, p, true, id); ok {
+			return pr, true, p.RateWindows
+		}
+	}
+	if api, ok := kimiCodeAPI[strings.ToLower(id)]; ok {
+		if pr, ok := makerListPrice(api); ok {
+			return pr, true, nil
+		}
+	}
+	return catalog.Price{}, false, nil
+}
+
 // makerListPrice is a model id's list price at its maker: the price of
 // the models.dev provider that lists it as its own model
 // (catalog.MakerPriced), else the first maker preset's that lists it. The

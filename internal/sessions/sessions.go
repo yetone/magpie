@@ -2966,6 +2966,13 @@ func priceOf(s settings.Settings, model string) (catalog.Price, bool) {
 	if m == "" {
 		return catalog.Price{}, false
 	}
+	// Kimi Code's own sign-in names its models "kimi-code/<model>", and
+	// "kimi-code" there is Kimi Code's name, not magpie's provider: the
+	// call is priced as one to the user's Kimi Code membership (#3331),
+	// as the ledger prices it
+	if pr, ok, _ := provider.KimiCodeSessionPrice(s, m); ok {
+		return pr, true
+	}
 	if pid, rest, ok := strings.Cut(m, "/"); ok {
 		// without a rate window's rate (#2463): a session sums its calls by
 		// model, not by time, so the window of the hour it is read in
