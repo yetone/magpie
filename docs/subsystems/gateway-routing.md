@@ -2117,6 +2117,20 @@ web.run: its fetch serves turns, not this route. Covered by
 `TestCodexWebRunGoesToRelayThatSearches` and
 `TestCodexWebRunInGroupFollowsLeadingMember` (both red on the old code),
 and `TestResponsesWebSearchToolToRelayThatSearches`.
+
+A partner can say its API searches by itself (`searches` in
+site/partners.js, `PresetDef.Searches`; CoreCode). A provider added from
+that partner, at one of its addresses, is then treated as a relay set to
+search (`saidToSearch`, `provider.PresetSearches`), with nothing saved to
+the user's config, so providers added before the flag get it too: Claude
+Code's `web_search_20250305` and Codex's Responses `web_search` go to it as
+sent, and Settings may name it as the searcher (`namedSearcherRank`'s
+manual rank), but magpie never picks it by itself (`searchRank`). Its word
+does not cover web.run: `upstreamSearches` reads only the user's own
+`Searches`, since a partner's `/v1/alpha/search` is not promised (CoreCode
+has none). A provider moved to another host, and a partner that says
+nothing, are as before. Covered by `TestPartnerSaidToSearch` (red with the
+partner's word not read).
 Covered by `TestCommandCodeSearchesForOtherModels`,
 `TestPluginSearchModelIsASearcher` and `TestSearcherChosen`.
 

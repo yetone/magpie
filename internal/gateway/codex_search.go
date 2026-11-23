@@ -112,7 +112,10 @@ type searchTarget struct {
 // alpha/search under its Responses address: a key+URL provider set to
 // search the web by itself (Searches, #359), as a relay of OpenAI's API
 // or of the ChatGPT backend does. Such a relay's web.run was searched by
-// magpie, and the relay's own search never used (YIXIE233 on X).
+// magpie, and the relay's own search never used (YIXIE233 on X). A
+// partner's word (provider.PresetSearches) is not read: it is about the
+// web_search tools, and CoreCode, which runs both, has no alpha/search,
+// so its web.run is magpie's search as before.
 func upstreamSearches(p provider.Provider) bool {
 	return p.Account == nil && !p.IsPlugin() && p.Searches && p.Base(provider.Responses) != ""
 }

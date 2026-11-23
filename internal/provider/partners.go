@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -614,7 +615,7 @@ func keptPartnerIcons() []string {
 // partnerPreset is the preset of a partner listed now or before, for a
 // provider added from it: one no longer listed isn't Sponsored.
 func partnerPreset(id string) *PresetDef {
-	if partnersSource() == "off" {
+	if partnersSource() == "off" && !partnersHeldForTest.Load() {
 		return nil
 	}
 	partnerMu.Lock()
@@ -653,5 +654,31 @@ func claimPartnerFetch() {
 		}
 		partnerMu.Unlock()
 		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// partnersHeldForTest has partnerPreset read a test's list
+// (PartnersForTest) where a test otherwise keeps to none.
+var partnersHeldForTest atomic.Bool
+
+// PartnersForTest lists ps as the partners fetched now, unchecked (a
+// test's endpoints are http), for another package's tests; restore puts
+// back what was held before.
+func PartnersForTest(ps []Partner) (restore func()) {
+	partnerMu.Lock()
+	defer partnerMu.Unlock()
+	was := partnerState
+	c := &partnerCache{At: time.Now(), Partners: ps, Seen: map[string]Partner{}}
+	for _, p := range ps {
+		p.Kind = KindPartner
+		c.Seen[p.ID] = p
+	}
+	partnerState = c
+	partnersHeldForTest.Store(true)
+	return func() {
+		partnerMu.Lock()
+		defer partnerMu.Unlock()
+		partnerState = was
+		partnersHeldForTest.Store(false)
 	}
 }

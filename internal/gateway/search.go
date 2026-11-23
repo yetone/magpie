@@ -110,7 +110,7 @@ func searchesItself(p provider.Provider, proto provider.Protocol) bool {
 	// its upstream does (#2027), on an API it has an address for: one with
 	// only a Chat address would be sent no search tool at all. Another
 	// sign-in's Searches is never read.
-	saidTo := p.Searches && (proto == provider.Anthropic || proto == provider.Responses) && p.Base(proto) != ""
+	saidTo := saidToSearch(p) && (proto == provider.Anthropic || proto == provider.Responses) && p.Base(proto) != ""
 	if p.Account != nil {
 		// Grok by its id: moved to its plugin, its account is the plugin's;
 		// its plugin beside the built-in (grok-plugin) by the plugin's id.
@@ -127,6 +127,15 @@ func searchesItself(p provider.Provider, proto provider.Protocol) bool {
 		return true
 	}
 	return slices.Contains(searchHosts[proto], provider.HostOf(p.Base(proto)))
+}
+
+// saidToSearch is a provider said to search the web by itself: by the
+// user (Searches, #359), or by the partner it was added from
+// (provider.PresetSearches: CoreCode runs both web_search tools, and Joe
+// asked for it to be on with nothing set). A plugin's Searches is its
+// config hook's.
+func saidToSearch(p provider.Provider) bool {
+	return p.Searches || provider.PresetSearches(p)
 }
 
 // googleAccount is a Google sign-in, Gemini CLI's or Antigravity's, which
@@ -336,6 +345,11 @@ func searcher() (provider.Provider, string, bool) {
 // serves only Claude Code refuses magpie's own request, which has no
 // metadata.user_id (#359).
 func searchRank(p provider.Provider) int {
+	if !p.Searches && provider.PresetSearches(p) {
+		// a partner's word, as a relay's: its quota is not magpie's to
+		// spend on other models' searches unless Settings names it
+		return -1
+	}
 	p.Searches = false
 	switch {
 	case claudeAccount(p):
@@ -379,7 +393,7 @@ func namedSearcherRank(p provider.Provider) (int, bool) {
 	if provider.KimiCodeSearch(p) != "" {
 		return manualRelayRank, true
 	}
-	if p.Searches && (searchesItself(p, provider.Anthropic) || searchesItself(p, provider.Responses)) {
+	if saidToSearch(p) && (searchesItself(p, provider.Anthropic) || searchesItself(p, provider.Responses)) {
 		return manualRelayRank, true
 	}
 	return -1, false
@@ -562,7 +576,7 @@ type SearcherChoice struct {
 func RelaysSaidToSearch() []provider.Provider {
 	var out []provider.Provider
 	for _, p := range provider.All() {
-		if p.Searches && p.On() && searchRank(p) < 0 {
+		if saidToSearch(p) && p.On() && searchRank(p) < 0 {
 			out = append(out, p)
 		}
 	}
