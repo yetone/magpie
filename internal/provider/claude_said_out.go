@@ -182,3 +182,28 @@ func staleSpare(q SubscriptionQuota, now time.Time) bool {
 	}
 	return false
 }
+
+// NoteClaudeOut keeps the Claude account user out till until because the
+// gateway rested the whole account for its allowance (not one model's):
+// the bridge's Claude Code was refused, and the switch must not move Claude
+// Code onto an account the gateway won't ask either. named is whether
+// Anthropic said until (its resetsAt, a reset header, its words, the
+// window it reported full); a guess never shortens what is kept already.
+func NoteClaudeOut(user string, until time.Time, said string, named bool) {
+	now := time.Now()
+	if user == "" || !until.After(now) {
+		return
+	}
+	if strings.TrimSpace(said) == "" {
+		said = "Anthropic refused the account for its usage limit"
+	}
+	if !named {
+		claudeSaidMu.Lock()
+		s, ok := readClaudeSaid()[strings.ToLower(user)]
+		claudeSaidMu.Unlock()
+		if ok && !s.Until.Before(until) {
+			return
+		}
+	}
+	keepClaudeOut(user, until, said, now)
+}

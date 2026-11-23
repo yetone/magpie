@@ -1989,7 +1989,15 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 		restingUntil.m[id] = r.Until
 		restingUntil.note[id] = r
 	}
+	standing := restingUntil.m[id]
 	restingUntil.Unlock()
+	if a := c.p.Account; a != nil && a.UsageAgent() == "claude" && why == failQuota && id == c.restKey() {
+		// a Claude account rested whole for its allowance is out for the
+		// switch too, till the same time (claude-limits.json): it moved
+		// Claude Code onto an account the gateway had set aside. A rest
+		// of one model (Fable's own limit) leaves the account in
+		provider.NoteClaudeOut(a.User, standing, r.said, r.By == "resets" || r.By == "window" || r.By == "retry-after")
+	}
 	if id == c.restKey() && (why == failQuota || why == failCredit) {
 		// a pool routed Until used up goes on from it, though it renews
 		// before the pool's next request (dzxx0496); one model of it

@@ -4490,6 +4490,9 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 	var before, this Usage
 	var lateUsage cliUsage    // a message left out as told by its call (onCall)
 	var reqID, errKind string // the last request's id, and how it failed
+	// when the limit that turned the turn away renews, as its
+	// rate_limit_event said: told with the turn's error (Event.Resets)
+	var refusedTill time.Time
 	usage := func(u cliUsage) Usage {
 		v := u.gateway()
 		this.add(v)
@@ -4876,6 +4879,7 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 			if user, own := ownerAccount(r.owned()); user != "" && !(own && provider.ClaudeCodeMovedOff(user)) {
 				provider.NoteClaudeLimits(user, claudeLimits(envelope.RateLimitInfo))
 			}
+			refusedTill = rejectedTill(envelope.RateLimitInfo, time.Now())
 			return
 		}
 		if envelope.Type == "result" && retell && !envelope.IsError {
@@ -4909,6 +4913,7 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 		}
 		if envelope.Type == "result" {
 			retell, answerAsked = false, false
+			defer func() { refusedTill = time.Time{} }() // the next turn's is its own
 			silent, said := !begun, aside
 			begun, aside = false, ""
 			// a turn that failed — out of quota, rate limited — ends with
@@ -4941,7 +4946,7 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 					!(own && provider.ClaudeCodeMovedOff(user)) {
 					provider.NoteClaudeSignInFailure(user, r.loginVersion, text)
 				}
-				r.emit(Event{Kind: KError, Text: text, Status: envelope.APIErrorStatus, Code: errKind, RequestID: reqID})
+				r.emit(Event{Kind: KError, Text: text, Status: envelope.APIErrorStatus, Code: errKind, RequestID: reqID, Resets: refusedTill})
 				r.endSegment()
 			case cut:
 				failed("and Claude Code ended the turn without asking again")
@@ -5264,6 +5269,24 @@ func claudeLimits(raw json.RawMessage) []provider.ClaudeLimit {
 		}
 	}
 	return out
+}
+
+// rejectedTill is when the limit a rate_limit_event's info says turned the
+// request away renews: its resetsAt, when it is rejected and the time is
+// still to come. Zero otherwise: one that only reports what is used says
+// nothing of a refusal.
+func rejectedTill(raw json.RawMessage, now time.Time) time.Time {
+	var info struct {
+		Status   string `json:"status"`
+		ResetsAt int64  `json:"resetsAt"`
+	}
+	if json.Unmarshal(raw, &info) != nil || info.Status != "rejected" || info.ResetsAt <= 0 {
+		return time.Time{}
+	}
+	if t := time.Unix(info.ResetsAt, 0); t.After(now) {
+		return t
+	}
+	return time.Time{}
 }
 
 // carryUpdate keeps this message's known 1h writes when a partial split
@@ -7846,6 +7869,17 @@ func unansweredWhy(said string) string {
 	return errEndedShort.Error()
 }
 
+// resetsOn tells restAfter, beside a refusal, when the limit that
+// refused it renews (resetsHeader, never sent on to the client): Claude
+// Code's own words for it ("resets Nov 25 at 10am (Asia/Shanghai)") are
+// not read, and an account out for its week rested a quarter of an hour.
+func resetsOn(w http.ResponseWriter, t time.Time) {
+	if t.IsZero() {
+		return
+	}
+	w.Header().Set(resetsHeader, strconv.FormatInt(t.Unix(), 10))
+}
+
 // bridgeFailed is the status and words a client is answered with when an
 // agent's run ended in an error before any answer: the status the agent
 // got, else a guess from the words, else 502.
@@ -8172,6 +8206,7 @@ func relayFailing(w http.ResponseWriter, r *http.Request, from provider.Protocol
 			code := 502
 			if n > 0 {
 				code, msg = bridgeFailed(name, head[n-1].Text, head[n-1].Status)
+				resetsOn(w, head[n-1].Resets)
 			}
 			abort(code, msg)
 			// what Anthropic said the reply's start used, the conversation
@@ -8269,6 +8304,7 @@ func relayFailing(w http.ResponseWriter, r *http.Request, from provider.Protocol
 		// client yet, so it is told the failure, as a translated reply
 		// cut short is (errEndedShort)
 		code, msg := bridgeFailed(name, col.err, col.errStatus)
+		resetsOn(w, col.errResets)
 		abort(code, msg)
 		usage.add(col.res.Usage)
 		if len(col.res.Parts) == 0 && redoable(r, name, req, code, msg) {
