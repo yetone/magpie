@@ -211,6 +211,7 @@ docker logs magpie</pre>
     <h2 id="mcp"><a class="anchor" href="#mcp">MCP 服务器</a></h2>
     <p>资源库里的 MCP 服务器在容器里运行，镜像里带着它们启动要用的命令：<code>npx</code>、<code>node</code> 和 <code>npm</code>（Node 24），以及 <code>uvx</code>、<code>uv</code>、<code>python</code> 和 <code>python3</code>。用 <code>uvx</code> 或 <code>python</code> 启动的服务器第一次会把 Python 下载到数据卷里，要几秒钟。用 <code>docker</code> 启动的服务器跑不起来：容器里没有它自己的 Docker。</p>
     <p>镜像里没有浏览器。Chrome DevTools 和 Playwright 的 MCP 服务器要启动自己的 Chrome，所以在容器里，它们在资源库里的那一行会显示 <span class="ui">这里没有 Chrome</span>。请改用 <a href="#browser">Magpie Browser</a>，它在你自己的浏览器里操作；或者让服务器连接一个它能访问到的 Chrome：Chrome DevTools 用 <code>--browserUrl http://host:9222</code>，Playwright 用 <code>--cdp-endpoint</code>。</p>
+    <p>主机或其他机器上的应用是从容器外面连到 <a href="/docs/zh/mcp-router">MCP 路由</a>的。它用的网关密钥如果限定了模型、账号或花费，就只拿到资源库里的 URL 服务器，拿不到容器里以程序运行的服务器（<code>npx</code>、<code>uvx</code> 之类）。换一个不限这些的密钥就都能拿到；路由会告诉应用少了哪些服务器、为什么（<a href="/docs/zh/mcp-router#away">从另一台电脑连接</a>）。</p>
 
     <h2 id="browser"><a class="anchor" href="#browser">你自己的浏览器</a></h2>
     <p>Magpie Browser 通过它的扩展，让 Agent 在你自己的浏览器里操作。容器里的文件夹没法直接加载成扩展，所以在浏览器界面打开 <span class="ui">资源库</span> → <span class="ui">Magpie Browser</span>，点 <span class="ui">下载扩展</span>。下载的 zip 指向这个页面自己的地址，并带一个名为 <b>Magpie Browser</b> 的专用网关密钥。解压后打开 <code>chrome://extensions</code>，打开开发者模式，点 <span class="ui">加载已解压的扩展程序</span>，选择解压出的文件夹。已经加载过的扩展，也可以在它的弹窗里填地址（<code>http://localhost:3430</code>，或网关发布到主机的端口）和网关密钥。</p>

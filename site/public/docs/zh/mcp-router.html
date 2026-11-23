@@ -134,6 +134,7 @@
     <a href="#overview">概述</a>
     <a href="#on">打开</a>
     <a href="#apps">其他应用</a>
+    <a href="#away">从另一台电脑连接</a>
     <a href="#kept">保留各自条目的 Agent</a>
     <a href="#when">什么时候用</a>
   </aside>
@@ -145,7 +146,7 @@
     <ul>
       <li><b>配一次。</b>资源库里写好一次的服务器，通过一个条目给所有 Agent 和应用使用。</li>
       <li><b>只运行一份。</b>命令型服务器（以程序启动的，比如 <code>npx …</code>）在 magpie 里只运行一份，而不是每个 Agent 各起一份。10 分钟没有调用的服务器会被停掉，下次调用时再启动。</li>
-      <li><b>其他应用一个地址。</b>Cursor、VS Code、Windsurf 或另一台电脑上的应用，连上 magpie 就能用资源库里的所有服务器。</li>
+      <li><b>其他应用一个地址。</b>Cursor、VS Code、Windsurf 或另一台电脑上的应用，连上 magpie 就能用资源库里的服务器（另一台电脑上的应用只拿到<a href="#away">其中一部分</a>）。</li>
     </ul>
     <p>工具在 Agent 里显示为 <code>服务器__工具</code>。只提供工具（不含 resources 和 prompts），在资源库里关掉的工具既不会列出也不会运行。</p>
 
@@ -175,7 +176,19 @@ magpie library mcp router off</pre>
 
     <h2 id="apps"><a class="anchor" href="#apps">其他应用</a></h2>
     <p>MCP 路由打开后，<span class="ui">其他应用</span> 一行显示一个以 <code>/mcp/magpie/hub</code> 结尾的地址，它提供资源库里的所有服务器。<span class="ui">连接…</span> → <span class="ui">其他应用</span> 里还有带 <code>?tools=on-demand</code> 的地址，给需要<a href="#on-demand">按需加载工具</a>的应用使用。<span class="ui">连接…</span> 会打开一个面板，里面有给 Cursor、VS Code、Windsurf 或任何接受 JSON MCP 配置的应用准备好的条目，可直接复制；在应用窗口里，Cursor 和 VS Code 还有 <span class="ui">添加</span>，会打开对应应用让你确认。另一台电脑上的应用需要网关密钥，和局域网里的其他请求一样（见 <a href="/docs/zh/remote">远程 magpie</a>）。</p>
-    <div class="callout"><b>命令型服务器运行在这台电脑上。</b>局域网里持有网关密钥的人都能通过 MCP 路由调用它们，权限就是你在这台电脑上的权限。密钥只给信任的人。</div>
+    <div class="callout"><b>命令型服务器运行在这台电脑上。</b>局域网里持有不限模型、账号和花费的网关密钥的人，都能通过 MCP 路由调用它们，权限就是你在这台电脑上的权限。密钥只给信任的人。</div>
+
+    <h2 id="away"><a class="anchor" href="#away">从另一台电脑连接</a></h2>
+    <p>另一台电脑上的应用，拿到的比 magpie 所在电脑上的应用少。经隧道或代理连进来的应用也算，Docker 里的 magpie 所在主机上的应用也算，因为它是从容器外面连进来的。</p>
+    <ul>
+      <li><b>在这里以程序运行的服务器</b>（<code>npx …</code>、<code>uvx …</code> 这类命令，或插件提供的工具）只给不限模型、账号和花费的网关密钥。限定了其中任何一项的密钥，只拿到资源库里的 URL 服务器。</li>
+      <li><b>以你的身份在这里操作的服务器</b>从不给：magpie 的图片和会话服务器，以及另一个 magpie 的路由。要生成图片，请带着密钥调用 <code>/mcp/magpie/image</code>，它遵守密钥的限制。</li>
+      <li><b>Magpie Browser</b> 给任何网关密钥，但只能用同一个密钥连上的浏览器。</li>
+      <li><b>Magpie Memory</b> 只给允许使用记忆的密钥（见 <a href="/docs/zh/remote#memory">其他电脑使用记忆</a>）。</li>
+      <li>只允许使用部分 MCP 服务器的密钥，只拿到那些服务器。</li>
+    </ul>
+    <p>应用会被告知少了哪些。magpie 给它的说明最后，每类没给的服务器各有一行 <code>Not given to this caller: …</code>，写明是哪些、为什么、怎样才能拿到；调用其中的工具时也会得到同样的原因。密钥不允许使用的服务器只给出数量，不写名字。</p>
+    <p><b>要拿到所有服务器</b>，给应用一个不限模型、账号和花费的网关密钥（<span class="ui">网关</span> → <span class="ui">网关密钥</span>），或者在 magpie 所在的电脑上运行它。以你的身份操作的服务器无论如何都只留在那台电脑上。</p>
 
     <h2 id="kept"><a class="anchor" href="#kept">保留各自条目的 Agent</a></h2>
     <p>以下 Agent 会保留每个服务器自己的条目，资源库页面会写明是哪些、为什么：</p>

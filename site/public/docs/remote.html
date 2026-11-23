@@ -270,6 +270,7 @@ curl -s -X POST http://127.0.0.1:3425/v1/magpie/admin/gateway-keys/add-key \
 magpie gateway-key memory &lt;id&gt; on</pre>
     </div>
     <p>While magpie is shared, that agent uses <code>http://&lt;this computer&gt;:3425/mcp/magpie/memory</code> with <code>Authorization: Bearer &lt;key&gt;</code>, or finds <code>magpie-memory</code> in the MCP router. What it saves goes into every agent’s instructions here, so no other key gets it: not the sharing key, a read-only, issued or short-lived key, nor a web page, with the key or without.</p>
+    <p>The Library’s other MCP servers through the MCP router: a key with a model, account or spend limit isn’t given the ones that run as programs on the shared computer. See <a href="/docs/mcp-router#away">From another computer</a>.</p>
 
     <h2 id="api"><a class="anchor" href="#api">Stats API</a></h2>
     <p>What the Usage page shows is also served as JSON, to this computer and, while magpie is shared, to a request with a gateway key. A key held to a budget, models or accounts is told only its own calls and limit, and the quotas of what it may use once its owner turns on <span class="ui">Quotas</span> for it (<code>magpie gateway-key quotas &lt;id&gt; on</code>).</p>

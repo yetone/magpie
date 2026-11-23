@@ -270,6 +270,7 @@ curl -s -X POST http://127.0.0.1:3425/v1/magpie/admin/gateway-keys/add-key \
 magpie gateway-key memory &lt;id&gt; on</pre>
     </div>
     <p>magpie を共有している間、そのエージェントは <code>http://&lt;このコンピュータ&gt;:3425/mcp/magpie/memory</code> を <code>Authorization: Bearer &lt;キー&gt;</code> 付きで使うか、MCP ルーターで <code>magpie-memory</code> を見つけます。保存した内容はここのすべてのエージェントの指示に入るため、ほかのキーには渡しません。共有キー、読み取り専用・発行された・短期のキー、キーの有無にかかわらず Web ページも使えません。</p>
+    <p>MCP ルーターを通したライブラリのほかの MCP サーバーについて：モデル、アカウント、利用額の制限があるキーには、共有しているコンピュータでプログラムとして動くサーバーは渡されません。<a href="/docs/ja/mcp-router#away">別のコンピュータから</a> を参照してください。</p>
 
     <h2 id="api"><a class="anchor" href="#api">統計 API</a></h2>
     <p>使用量ページの内容は JSON でも、このコンピューターに、また magpie を共有している間はゲートウェイキー付きのリクエストに提供されます。予算、モデル、アカウントで制限されたキーには、自分のリクエストと上限だけが返ります。持ち主がそのキーの<span class="ui">残量</span>をオンにすると（<code>magpie gateway-key quotas &lt;id&gt; on</code>）、使えるもののクォータも返ります。</p>

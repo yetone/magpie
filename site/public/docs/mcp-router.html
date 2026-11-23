@@ -134,6 +134,7 @@
     <a href="#overview">Overview</a>
     <a href="#on">Turn it on</a>
     <a href="#apps">Other apps</a>
+    <a href="#away">From another computer</a>
     <a href="#kept">Agents that keep their own entries</a>
     <a href="#when">When to use it</a>
   </aside>
@@ -145,7 +146,7 @@
     <ul>
       <li><b>Set up once.</b> A server written once in the Library reaches every agent and app through one entry.</li>
       <li><b>Run once.</b> A command server (one started as a program, such as <code>npx …</code>) runs once in magpie, not once in each agent. A server with no calls for 10 minutes is stopped and starts again on the next call.</li>
-      <li><b>One address for other apps.</b> Cursor, VS Code, Windsurf or an app on another computer can connect to magpie and use every Library server.</li>
+      <li><b>One address for other apps.</b> Cursor, VS Code, Windsurf or an app on another computer can connect to magpie and use the Library’s servers (an app on another computer gets <a href="#away">some of them</a>).</li>
     </ul>
     <p>Tools appear in the agent as <code>server__tool</code>. Only tools are served (no resources or prompts), and a tool you turned off in the Library is neither listed nor run.</p>
 
@@ -175,7 +176,19 @@ magpie library mcp router off</pre>
 
     <h2 id="apps"><a class="anchor" href="#apps">Other apps</a></h2>
     <p>With the router on, the <span class="ui">Other apps</span> row shows an address ending in <code>/mcp/magpie/hub</code>, which serves every server in the Library. <span class="ui">Connect…</span> → <span class="ui">Other apps</span> also gives the address with <code>?tools=on-demand</code>, for an app that should get its tools <a href="#on-demand">on demand</a>. <span class="ui">Connect…</span> opens a sheet with a ready entry to copy for Cursor, VS Code, Windsurf or any app that takes a JSON MCP config; in the app window, Cursor and VS Code also have <span class="ui">Add</span>, which opens the app to confirm. An app on another computer needs a gateway key, as every request from your network does (see <a href="/docs/remote">Remote magpie</a>).</p>
-    <div class="callout"><b>Command servers run on this computer.</b> Anyone holding a gateway key on your network can call them through the router, with your rights here. Only share keys with people you trust.</div>
+    <div class="callout"><b>Command servers run on this computer.</b> Anyone holding a gateway key with no model, account or spend limit on your network can call them through the router, with your rights here. Only share keys with people you trust.</div>
+
+    <h2 id="away"><a class="anchor" href="#away">From another computer</a></h2>
+    <p>An app on another computer is given less than an app on the computer magpie runs on. That includes an app that comes through a tunnel or proxy, and one on the host of a Docker magpie, since it reaches the container from outside.</p>
+    <ul>
+      <li><b>Servers that run as programs here</b> (a command such as <code>npx …</code> or <code>uvx …</code>, or a plugin’s tools) are given only to a gateway key with no model, account or spend limit. A key with any of those limits gets the Library’s URL servers alone.</li>
+      <li><b>Servers that act as you here</b> are never given: magpie’s image and sessions servers, and another magpie’s router. For images, call <code>/mcp/magpie/image</code> with the key, which keeps to the key’s limits.</li>
+      <li><b>Magpie Browser</b> is given to any gateway key, and reaches only a browser connected with that same key.</li>
+      <li><b>Magpie Memory</b> is given only to a key allowed to use it (see <a href="/docs/remote#memory">Memory from other computers</a>).</li>
+      <li>A key allowed only some MCP servers gets only those.</li>
+    </ul>
+    <p>The app is told what it didn’t get. magpie’s instructions to it end with a line for each kind left out, <code>Not given to this caller: …</code>, naming the servers, why, and what lets them through, and a call of one of their tools gets the same reason. Servers the key isn’t allowed to use are only counted, never named.</p>
+    <p><b>To get every server</b>, give the app a gateway key with no model, account or spend limit (<span class="ui">Gateway</span> → <span class="ui">Gateway keys</span>), or run it on the computer magpie runs on. The servers that act as you stay on that computer either way.</p>
 
     <h2 id="kept"><a class="anchor" href="#kept">Agents that keep their own entries</a></h2>
     <p>These agents keep each server’s own entry, and the Library page says which and why:</p>

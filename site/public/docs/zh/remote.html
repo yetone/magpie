@@ -270,6 +270,7 @@ curl -s -X POST http://127.0.0.1:3425/v1/magpie/admin/gateway-keys/add-key \
 magpie gateway-key memory &lt;id&gt; on</pre>
     </div>
     <p>共享 magpie 时，那个 Agent 用 <code>http://&lt;这台电脑&gt;:3425/mcp/magpie/memory</code> 加 <code>Authorization: Bearer &lt;密钥&gt;</code>，或在 MCP 路由器里找到 <code>magpie-memory</code>。它保存的内容会进入这里每个 Agent 的指令，所以别的密钥都用不了：共享密钥、只读密钥、签发的或短期的密钥都不行，网页带不带密钥也都不行。</p>
+    <p>通过 MCP 路由使用资源库里的其他 MCP 服务器时，限定了模型、账号或花费的密钥拿不到在共享电脑上以程序运行的服务器。见 <a href="/docs/zh/mcp-router#away">从另一台电脑连接</a>。</p>
 
     <h2 id="api"><a class="anchor" href="#api">统计 API</a></h2>
     <p>用量页上的内容也以 JSON 提供给本机；共享 magpie 时，也提供给带网关密钥的请求。受预算、模型或账号限制的密钥只能看到自己的请求和限额；主人为它打开<span class="ui">额度</span>后（<code>magpie gateway-key quotas &lt;id&gt; on</code>），还能看到它可用部分的额度。</p>

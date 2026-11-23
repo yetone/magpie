@@ -10549,7 +10549,7 @@ The MCP servers you add in magpie’s Library are normally written into each age
 
 - **Set up once..** A server written once in the Library reaches every agent and app through one entry.
 - **Run once..** A command server (one started as a program, such as `npx …`) runs once in magpie, not once in each agent. A server with no calls for 10 minutes is stopped and starts again on the next call.
-- **One address for other apps..** Cursor, VS Code, Windsurf or an app on another computer can connect to magpie and use every Library server.
+- **One address for other apps..** Cursor, VS Code, Windsurf or an app on another computer can connect to magpie and use the Library’s servers (an app on another computer gets some of them).
 
 Tools appear in the agent as `server__tool`. Only tools are served (no resources or prompts), and a tool you turned off in the Library is neither listed nor run.
 
@@ -10583,7 +10583,21 @@ To give every agent every tool instead, turn off Tools on demand under MCP route
 
 With the router on, the Other apps row shows an address ending in `/mcp/magpie/hub`, which serves every server in the Library. Connect… → Other apps also gives the address with `?tools=on-demand`, for an app that should get its tools on demand. Connect… opens a sheet with a ready entry to copy for Cursor, VS Code, Windsurf or any app that takes a JSON MCP config; in the app window, Cursor and VS Code also have Add, which opens the app to confirm. An app on another computer needs a gateway key, as every request from your network does (see [Remote magpie](https://usemagpie.ai/docs/remote)).
 
-> **Command servers run on this computer.** Anyone holding a gateway key on your network can call them through the router, with your rights here. Only share keys with people you trust.
+> **Command servers run on this computer.** Anyone holding a gateway key with no model, account or spend limit on your network can call them through the router, with your rights here. Only share keys with people you trust.
+
+## From another computer
+
+An app on another computer is given less than an app on the computer magpie runs on. That includes an app that comes through a tunnel or proxy, and one on the host of a Docker magpie, since it reaches the container from outside.
+
+- **Servers that run as programs here.** (a command such as `npx …` or `uvx …`, or a plugin’s tools) are given only to a gateway key with no model, account or spend limit. A key with any of those limits gets the Library’s URL servers alone.
+- **Servers that act as you here.** are never given: magpie’s image and sessions servers, and another magpie’s router. For images, call `/mcp/magpie/image` with the key, which keeps to the key’s limits.
+- **Magpie Browser.** is given to any gateway key, and reaches only a browser connected with that same key.
+- **Magpie Memory.** is given only to a key allowed to use it (see [Memory from other computers](https://usemagpie.ai/docs/remote#memory)).
+- A key allowed only some MCP servers gets only those.
+
+The app is told what it didn’t get. magpie’s instructions to it end with a line for each kind left out, `Not given to this caller: …`, naming the servers, why, and what lets them through, and a call of one of their tools gets the same reason. Servers the key isn’t allowed to use are only counted, never named.
+
+**To get every server**, give the app a gateway key with no model, account or spend limit (Gateway → Gateway keys), or run it on the computer magpie runs on. The servers that act as you stay on that computer either way.
 
 ## Agents that keep their own entries
 
@@ -10735,6 +10749,8 @@ magpie gateway-key memory <id> on
 
 While magpie is shared, that agent uses `http://<this computer>:3425/mcp/magpie/memory` with `Authorization: Bearer <key>`, or finds `magpie-memory` in the MCP router. What it saves goes into every agent’s instructions here, so no other key gets it: not the sharing key, a read-only, issued or short-lived key, nor a web page, with the key or without.
 
+The Library’s other MCP servers through the MCP router: a key with a model, account or spend limit isn’t given the ones that run as programs on the shared computer. See [From another computer](https://usemagpie.ai/docs/mcp-router#away).
+
 ## Stats API
 
 What the Usage page shows is also served as JSON, to this computer and, while magpie is shared, to a request with a gateway key. A key held to a budget, models or accounts is told only its own calls and limit, and the quotas of what it may use once its owner turns on Quotas for it (`magpie gateway-key quotas <id> on`).
@@ -10850,6 +10866,8 @@ A Grok (SuperGrok) subscription signs in through xAI’s Grok Build CLI, which t
 The Library’s MCP servers run in the container, and the image has what they start with: `npx`, `node` and `npm` (Node 24), and `uvx`, `uv`, `python` and `python3`. A server started with `uvx` or `python` downloads its Python into the volume the first time, which takes a few seconds. A server started with `docker` doesn’t run: the container has no Docker of its own.
 
 The image has no browser. Chrome DevTools’ and Playwright’s MCP servers start a Chrome of their own, so in the container their row in the Library says no Chrome here. Use Magpie Browser instead, which acts in your own browser, or point the server at a Chrome it can reach: `--browserUrl http://host:9222` for Chrome DevTools, `--cdp-endpoint` for Playwright.
+
+An app on the host or another machine reaches the [MCP router](https://usemagpie.ai/docs/mcp-router) from outside the container. With a gateway key that has a model, account or spend limit, it is given only the Library’s URL servers, not the ones the container runs as programs (`npx`, `uvx` and the like). Give it a key with no such limit to get those too; the router tells the app which servers it left out and why ([From another computer](https://usemagpie.ai/docs/mcp-router#away)).
 
 ## Your own browser
 
