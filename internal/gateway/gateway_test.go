@@ -109,6 +109,7 @@ func noRests() {
 	restingUntil.note = map[string]Rest{}
 	restingUntil.lifted = map[string]time.Time{}
 	restingUntil.renewAsked = nil
+	restingUntil.askedResting = nil
 	restingUntil.Unlock()
 	codexHolds.Lock()
 	codexHolds.m = nil

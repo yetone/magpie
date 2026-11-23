@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -71,6 +72,12 @@ const tooMany = `{"error":{"message":"Too many requests"}}`
 // own (0 for the default).
 func rateLeftGroup(t *testing.T, rest Rest, patience int, a, b *rateUp) *Server {
 	t.Helper()
+	return rateLeftGroupOf(t, rest, patience, a, b)
+}
+
+// rateLeftGroupOf is rateLeftGroup with any handler for a.
+func rateLeftGroupOf(t *testing.T, rest Rest, patience int, a http.Handler, b *rateUp) *Server {
+	t.Helper()
 	fresh(t)
 	pause := retryPause
 	retryPause = time.Millisecond
@@ -134,24 +141,34 @@ func TestGroupRateLimitedBothStillEndsInTheLimit(t *testing.T) {
 }
 
 // What the request itself is refused for isn't asked of the member left
-// out: a 400 reaches the agent from the one asked, as before.
+// out: a 400 and a conversation too long reach the agent from the one
+// asked, as before.
 func TestGroupRequestRefusedDoesNotAskTheMemberLeftOut(t *testing.T) {
-	a, b := &rateUp{status: http.StatusBadRequest, body: `{"error":{"message":"invalid request: messages must not be empty","type":"invalid_request_error"}}`}, &rateUp{}
-	s := rateLeftGroup(t, momentsRate, 0, a, b)
-	code, _ := postAs(t, s, "", `{"model":"group/g","messages":[{"role":"user","content":"hi"}]}`)
-	if code != http.StatusBadRequest || b.asked() != 0 {
-		t.Fatalf("a refused the request: %d, b asked %d", code, b.asked())
+	for name, body := range map[string]string{
+		"invalid":  `{"error":{"message":"invalid request: messages must not be empty","type":"invalid_request_error"}}`,
+		"too long": `{"error":{"message":"This model's maximum context length is 8192 tokens. However, your messages resulted in 9000 tokens.","type":"invalid_request_error","code":"context_length_exceeded"}}`,
+	} {
+		for rn, rest := range map[string]Rest{"rate": momentsRate, "outage": {Why: failOther, Status: http.StatusBadGateway, By: "backoff"}} {
+			t.Run(name+"/"+rn, func(t *testing.T) {
+				a, b := &rateUp{status: http.StatusBadRequest, body: body}, &rateUp{}
+				s := rateLeftGroup(t, rest, 0, a, b)
+				code, _ := postAs(t, s, "", `{"model":"group/g","messages":[{"role":"user","content":"hi"}]}`)
+				if code != http.StatusBadRequest || b.asked() != 0 {
+					t.Fatalf("a refused the request (%s): %d, b asked %d", name, code, b.asked())
+				}
+			})
+		}
 	}
 }
 
-// A member left out resting for its quota, its credit, or till a time its
-// vendor named is still left out (#1799): only a moment's rate limit, a
-// guess, is asked past.
+// A member left out resting for its quota, its credit, a refused key, or
+// till a time its vendor named is still left out (#1799): only a rest
+// magpie guessed the length of is asked past.
 func TestGroupMemberRestingLongerStaysOut(t *testing.T) {
 	for name, rest := range map[string]Rest{
 		"quota":       {Why: failQuota, Status: http.StatusTooManyRequests, By: "quota"},
 		"credit":      {Why: failCredit, Status: http.StatusPaymentRequired, By: "credit"},
-		"outage":      {Why: failOther, Status: http.StatusBadGateway, By: "backoff"},
+		"key":         {Why: failAuth, Status: http.StatusUnauthorized, By: "backoff"},
 		"retry-after": {Why: failRate, Status: http.StatusTooManyRequests, By: "retry-after"},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -163,6 +180,129 @@ func TestGroupMemberRestingLongerStaysOut(t *testing.T) {
 				t.Fatalf("b resting for %s: %d, b asked %d", name, code, b.asked())
 			}
 		})
+	}
+}
+
+// hangUp counts the requests it took and closes each connection without
+// a word, as a vendor gone away does.
+type hangUp struct{ n atomic.Int32 }
+
+func (h *hangUp) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h.n.Add(1)
+	if c, _, err := w.(http.Hijacker).Hijack(); err == nil {
+		c.Close()
+	}
+}
+
+// justforlxz on X after the 429 was handled: "其他的错误码也要处理". The
+// one asked failing for anything about itself (a 5xx, overloaded, no
+// connection, its key, its allowance, its model) asks a member left out as
+// resting for a while magpie guessed (a moment's rate limit, an outage, a
+// slow start), as a member after it in the order would be. Before, each
+// of these reached the agent, the member left out never asked.
+func TestGroupMemberFailingForItselfAsksTheMemberLeftOut(t *testing.T) {
+	// brief: a failure for a moment, handed on to a member resting after
+	// an outage too; the others only to one resting for a rate limit, so
+	// a group down whole isn't asked each member for one's credit (#1799)
+	fails := map[string]struct {
+		status int
+		body   string
+		brief  bool
+	}{
+		"500":       {500, `{"error":{"message":"internal error"}}`, true},
+		"502":       {502, `{"error":{"message":"bad gateway"}}`, true},
+		"503":       {503, `{"error":{"message":"service unavailable"}}`, true},
+		"504":       {504, `{"error":{"message":"gateway timeout"}}`, true},
+		"529":       {529, `{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}`, true},
+		"401":       {401, `{"error":{"message":"invalid api key"}}`, false},
+		"403":       {403, `{"error":{"message":"forbidden"}}`, false},
+		"404":       {404, `{"error":{"message":"model not found"}}`, false},
+		"429 quota": {429, `{"error":{"message":"You exceeded your current quota","type":"insufficient_quota"}}`, false},
+		"402":       {402, `{"error":{"message":"insufficient balance"}}`, false},
+		"429":       {429, tooMany, true},
+		"hung up":   {0, "", true},
+	}
+	rests := map[string]Rest{
+		"rate":   momentsRate,
+		"outage": {Why: failOther, Status: http.StatusBadGateway, By: "backoff"},
+		"slow":   {Why: failSlow, Status: http.StatusGatewayTimeout, By: "slow"},
+	}
+	for rn, rest := range rests {
+		for fn, f := range fails {
+			t.Run(rn+"/"+fn, func(t *testing.T) {
+				b := &rateUp{}
+				var a http.Handler = &rateUp{status: f.status, body: f.body}
+				if f.status == 0 {
+					a = &hangUp{}
+				}
+				s := rateLeftGroupOf(t, rest, provider.PatienceOff, a, b)
+				code, body := postAs(t, s, "", `{"model":"group/g","messages":[{"role":"user","content":"hi"}]}`)
+				if !f.brief && rn != "rate" {
+					if code < 400 || b.asked() != 0 {
+						t.Fatalf("a failed %s, b resting after %s: %d %s, b asked %d", fn, rn, code, body, b.asked())
+					}
+					return
+				}
+				if code != 200 || !strings.Contains(body, "answered") || b.asked() != 1 {
+					t.Fatalf("a failed %s, b resting for %s: %d %s, b asked %d", fn, rn, code, body, b.asked())
+				}
+			})
+		}
+	}
+}
+
+// A member handed a request while it rested isn't handed another for a
+// while (handOnEvery): a group whose members all fail for a moment is
+// asked the one back soonest a request, and the other once, not every
+// member every request (#1799).
+func TestGroupHandsOnOncePerWhile(t *testing.T) {
+	a := &rateUp{status: 503, body: `{"error":{"message":"service unavailable"}}`}
+	b := &rateUp{status: 503, body: `{"error":{"message":"service unavailable"}}`}
+	s := rateLeftGroup(t, Rest{Why: failOther, Status: 503, By: "backoff"}, provider.PatienceOff, a, b)
+	var per [3][2]int
+	for i := range per {
+		was := [2]int{a.asked(), b.asked()}
+		if code, body := postAs(t, s, "", `{"model":"group/g","messages":[{"role":"user","content":"hi"}]}`); code < 500 {
+			t.Fatalf("request %d: every member fails, answered %d %s", i, code, body)
+		}
+		per[i] = [2]int{a.asked() - was[0], b.asked() - was[1]}
+	}
+	t.Logf("asked per request (a, b): %v", per)
+	if per[0][0] == 0 || per[0][1] == 0 {
+		t.Fatalf("the first request didn't hand on: %v", per)
+	}
+	for _, p := range per[1:] {
+		if p[0] > 0 && p[1] > 0 {
+			t.Fatalf("a later request asked both members again: %v", per)
+		}
+	}
+}
+
+// lateFirst answers a streamed request only after a while, or when it is
+// let go.
+type lateFirst struct{ n atomic.Int32 }
+
+func (h *lateFirst) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h.n.Add(1)
+	select {
+	case <-time.After(5 * time.Second):
+	case <-r.Context().Done():
+	}
+}
+
+// The one asked with no first token in the group's FirstToken, a member
+// left out as resting for a while is asked next, as after a failure.
+func TestGroupSlowMemberAsksTheMemberLeftOut(t *testing.T) {
+	a, b := &lateFirst{}, &rateUp{}
+	s := rateLeftGroupOf(t, momentsRate, provider.PatienceOff, a, b)
+	g, _, _ := provider.FindGroup("group/g")
+	g.FirstToken = 1
+	if err := provider.SaveGroup(g); err != nil {
+		t.Fatal(err)
+	}
+	code, body := postAs(t, s, "", `{"model":"group/g","stream":true,"messages":[{"role":"user","content":"hi"}]}`)
+	if code != 200 || !strings.Contains(body, "answered") || b.asked() != 1 || a.n.Load() != 1 {
+		t.Fatalf("a slow, b resting for a moment: %d %s (a %d, b %d)", code, body, a.n.Load(), b.asked())
 	}
 }
 

@@ -227,6 +227,7 @@ func clearRest(key string) {
 	kept := ladderRest(restingUntil.note[key])
 	delete(restingUntil.m, key)
 	delete(restingUntil.note, key)
+	delete(restingUntil.askedResting, key) // back, it is handed requests again
 	restingUntil.Unlock()
 	if kept {
 		saveRests() // its rung starts over after a restart too

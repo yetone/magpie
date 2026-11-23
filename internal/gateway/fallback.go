@@ -1437,18 +1437,20 @@ func probeLeft(cs []candidate) (asked, left []candidate) {
 	return out, left
 }
 
-// rateLeftOf is, of the candidates probeLeft left out, those resting only
-// for a moment's rate limit, a 429 naming no time (a minute, longer each
-// time again), the one back soonest first. When every candidate a request
-// asks has failed in a way that passes, rate limited or busy for a
-// moment, these are asked next, one at a time, before the last one is
-// asked again or the agent is told (justforlxz on X: a group's member
-// answered 429 again and again, its other member resting from a 429 of
-// its own a while before was never asked, and the agent had the 429). A
-// rest for quota, credit, a sign-in, an outage, or till a time its vendor
-// named still keeps its member out (#1799): a moment's rate limit on one
-// provider says nothing of another's.
-func rateLeftOf(left []candidate) []candidate {
+// briefLeftOf is, of the candidates probeLeft left out, those resting
+// only for a while magpie guessed: a moment's rate limit (a 429 naming no
+// time), an outage (a 5xx, a timeout, no connection) or a slow first
+// token, each a minute and longer each time again. The one back soonest
+// comes first. When the last candidate a request asks fails for anything
+// about itself rather than the request, they are asked next, one at a
+// time, before the last one is asked again or the agent is told
+// (justforlxz on X: a group's member answered 429 again and again, and
+// its other member, resting from a 429 of its own a while before, was
+// never asked; "其他的错误码也要处理", a 5xx or a bad key the same). A
+// rest for quota, credit, a refused key, a restriction, or till a time
+// its vendor named still keeps its member out (#1799): a guess at one
+// provider's moment says nothing of another's, and those say when.
+func briefLeftOf(left []candidate) []candidate {
 	type held struct {
 		c     candidate
 		until time.Time
@@ -1459,7 +1461,7 @@ func rateLeftOf(left []candidate) []candidate {
 		if !ok && c.restID() != c.restKey() {
 			r, ok = restOf(c.restID())
 		}
-		if !ok || r.Why != failRate || r.there || vendorTimed(c, r) {
+		if !ok || r.Why != failRate && r.Why != failOther && r.Why != failSlow || r.there || vendorTimed(c, r) {
 			continue
 		}
 		hs = append(hs, held{c, r.Until})
@@ -1664,7 +1666,65 @@ var restingUntil = struct {
 	// timed that a reading's renewal had asked again once
 	// (askOnRenewalLocked): not asked so again till another time is named
 	renewAsked map[string]time.Time
+	// askedResting is when each candidate was last asked while it rested,
+	// by the key it rests by: the one probeOne kept, or one handed a
+	// request (briefLeftOf). One asked so lately isn't handed another
+	// (handOnEvery)
+	askedResting map[string]time.Time
 }{m: map[string]time.Time{}, note: map[string]Rest{}, lifted: map[string]time.Time{}}
+
+// handOnEvery is how often at most a member resting for a while magpie
+// guessed is handed a request another failed (briefLeftOf), counting the
+// requests that asked it as the one back soonest (#1799). A group that is
+// down whole is asked one member a request, as before, and each other
+// member once in handOnEvery, not once a request.
+var handOnEvery = 30 * time.Second
+
+// noteAskedResting notes that c is asked now while it rests.
+func noteAskedResting(c candidate) {
+	if _, ok := restingOf(c); !ok {
+		return
+	}
+	now := time.Now()
+	restingUntil.Lock()
+	defer restingUntil.Unlock()
+	if restingUntil.askedResting == nil {
+		restingUntil.askedResting = map[string]time.Time{}
+	}
+	for k, at := range restingUntil.askedResting {
+		if now.Sub(at) >= handOnEvery {
+			delete(restingUntil.askedResting, k)
+		}
+	}
+	restingUntil.askedResting[c.restKey()] = now
+}
+
+// askedLately tells whether c was asked while it rested in the last
+// handOnEvery.
+func askedLately(c candidate) bool {
+	restingUntil.Lock()
+	defer restingUntil.Unlock()
+	at, ok := restingUntil.askedResting[c.restKey()]
+	return ok && time.Since(at) < handOnEvery
+}
+
+// nextBrief takes from left the first not asked lately while it rested,
+// noting it asked, and returns the rest after it. ok is false for none.
+// A member resting after an outage or a slow answer of its own is taken
+// only when the one that failed now failed for a moment too (brief: busy,
+// overloaded, a 5xx, no connection, slow): a group whose members are down
+// isn't asked each of them for one member's spent credit or refused key
+// (#1799). One resting for a rate limit is taken for any failure of the
+// member's own: its rest says only it was asked too often.
+func nextBrief(left []candidate, brief bool) (c candidate, rest []candidate, ok bool) {
+	for i, m := range left {
+		if r, _ := restingOf(m); (brief || r.Why == failRate) && !askedLately(m) {
+			noteAskedResting(m)
+			return m, slices.Delete(slices.Clone(left), i, i+1), true
+		}
+	}
+	return candidate{}, nil, false
+}
 
 // liftedLocked notes that the rest by key was lifted now, with
 // restingUntil held. A lift older than any rest can be is let go.
