@@ -23,13 +23,14 @@ const HOME = "/srv/mg";
 const fixture = (st) => ({
   dir: `${HOME}/.magpie/library`, backups: `${HOME}/.magpie/backups`, home: HOME,
   mcpHub: st.gateway, hubPath: "/mcp/magpie/hub/",
-  agents: [{ id: "claude", name: "Claude Code", icon: "claudecode-color", skills: `${HOME}/.claude/skills`, mcp: `${HOME}/.claude.json`, ...(st.gateway ? { hub: "on" } : {}) }],
+  agents: [{ id: "claude", name: "Claude Code", icon: "claudecode-color", skills: `${HOME}/.claude/skills`, mcp: `${HOME}/.claude.json`, ...(st.gateway ? { hub: "on" } : {}) },
+    ...(st.align ? [{ id: "codex", name: "Codex", icon: "openai", mcp: `${HOME}/.codex/config.toml` }, { id: "cursor", name: "Cursor", icon: "cursor", gone: true }] : [])],
   instructions: { agents: [], sets: [] }, foundSkills: [], skills: [], problems: [], foundServers: [], projects: [],
   servers: [
     st.off
       ? { name: "notes", transport: "stdio", command: "uvx", args: ["notes-mcp"], env: { TOKEN: "x" }, agents: [], hidden: true, paused: ["claude"] }
-      : { name: "notes", transport: "stdio", command: "uvx", args: ["notes-mcp"], env: { TOKEN: "x" }, agents: ["claude"] },
-    { name: "docs", transport: "http", url: "https://docs.example/mcp", agents: ["claude"] },
+      : { name: st.align ? "magpie-memory" : "notes", transport: "stdio", command: "uvx", args: ["notes-mcp"], env: { TOKEN: "x" }, agents: st.memoryAgents || ["claude"] },
+    { name: "docs", transport: "http", url: "https://docs.example/mcp", agents: st.align ? ["claude", "cursor"] : ["claude"] },
   ],
 });
 
@@ -51,6 +52,12 @@ function server(lang, st) {
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
     if (url.pathname === "/api/state") return json({ agents: [], profiles: [], settings: { lang, theme: "light", gateway: "http://127.0.0.1:3425" } });
     if (url.pathname === "/api/library") return json(fixture(st));
+    if (url.pathname === "/api/library/servers/agents") {
+      const body = req.postDataJSON();
+      st.sent.push(body);
+      st.memoryAgents = body.agents;
+      return json({ ...fixture(st), result: { changed: [] } });
+    }
     if (url.pathname === "/api/library/servers/on") {
       const body = req.postDataJSON();
       st.sent.push(body);
@@ -86,6 +93,51 @@ const sideways = (page) => page.evaluate(() => {
 });
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  test(`${engine}: MCP All and switches align across different agent counts`, async (t) => {
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || "chromium" }));
+    t.after(() => browser.close());
+    for (const lang of ["zh", "en", "zh-TW", "ja", "de"]) await t.test(lang, async (subtest) => {
+      const st = { align: true, sent: [], checked: [] };
+      const context = await browser.newContext({ viewport: { width: 1100, height: 900 }, reducedMotion: "reduce" });
+      subtest.after(() => context.close());
+      await context.addInitScript(() => localStorage.setItem("magpie.libTab", "mcp"));
+      const page = await context.newPage();
+      page.setDefaultTimeout(5000);
+      page.setDefaultNavigationTimeout(60000);
+      await page.route("**/*", server(lang, st));
+      await page.goto("http://magpie.test/?view=library");
+      const memory = page.locator('.lib-server[data-server="magpie-memory"]');
+      const docs = page.locator('.lib-server[data-server="docs"]');
+      await memory.waitFor();
+      assert.equal(await memory.locator("[data-agent]").count(), 2);
+      assert.equal(await docs.locator("[data-agent]").count(), 3);
+      const aligned = async (selector) => {
+        const layout = await page.waitForFunction((control) => {
+          const positions = ["docs", "magpie-memory"].map((name) => document.querySelector(`.lib-server[data-server="${name}"] ${control}`)?.getBoundingClientRect().left);
+          return positions.every((left) => left > 0) ? positions : null;
+        }, selector);
+        const [docsLeft, memoryLeft] = await layout.jsonValue();
+        await layout.dispose();
+        assert(Math.abs(memoryLeft - docsLeft) < 1, `${selector} shifts with agent count (${memoryLeft} vs ${docsLeft})`);
+      };
+      await aligned(".lib-switch");
+      await aligned(".lib-ag.all");
+      const codex = memory.locator('[data-agent="codex"]');
+      const all = memory.locator(".lib-ag.all");
+      await reach(page, all);
+      await all.hover();
+      await codex.hover();
+      await aligned(".lib-ag.all");
+      await codex.click();
+      const allOff = page.waitForResponse((response) => response.url().endsWith("/servers/agents") && response.request().postDataJSON().agents.length === 0);
+      await all.click();
+      await allOff;
+      assert.deepEqual(st.sent, [{ name: "magpie-memory", agents: ["claude", "codex"] }, { name: "magpie-memory", agents: [] }]);
+      await page.setViewportSize({ width: 420, height: 900 });
+      assert.deepEqual(await sideways(page), []);
+    });
+  });
+
   test(engine + ": an MCP server switched off and on", async (t) => {
     assert(["chromium", "webkit"].includes(engine), "BROWSER must be chromium or webkit");
     I18N = strings().I18N;

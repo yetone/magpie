@@ -134,6 +134,12 @@ Pi's extensions and packages.
 
 ## Verification
 
+The Library's MCP server list aligns All and the on/off switches across
+rows at desktop widths, including rows with extra chips for agents that
+are gone. All still acts on the agents that can take that row's server.
+Narrow windows retain the compact chip layout. See
+`library-mcp-on.test.cjs`.
+
 ```sh
 go test -tags nogui ./internal/library -run 'TestPlugin|TestGit|TestInstallFromGitRepo|TestReadLooksAtEachFolderOnce|TestLinkChangedBetweenVisitsShows|TestUnreadablePartIsLookedAtAgain|TestCheckSkillsFindsNewOnes|TestNewBase|TestUpdateKeeps|TestCheckDue|TestCheckSkillsMarksItDone|TestTargets|TestWSLPiMCP|TestWSLMCPSiblings|TestServer|TestHub|TestImportServer|TestCheck|TestInstructions|TestInstructionsSetLinkedToAgentsFile|TestInstructionSets|TestTakesAlma|TestAlma|TestLinkedSet|TestLinkRefused|TestSkill|TestRemoveFoundSkill|TestInstallSet|TestInstallLists|TestEverySkillAgents|TestEveryServerAgents|TestSomeServersAgents|TestRemoveServers|TestRTK|TestEnvRefs|TestDshRefRoundTrip|TestDshImportKeepsJS|TestAgentMCPFiles|TestCodeBuddyMCPFile|TestZedMCP|TestOwnServerFromElsewhereRunsThisMagpie|TestUsersOwnServerStaysAsItIs|TestCarriedOwnServerIsEachComputersMagpie|TestCarry|TestPageReadDoesntReadUnchangedSkillsAgain|TestJustWrittenSkillIsReadAgain|TestUnreadableSkillIsntRememberedAsDifferent|TestGlanceLeavesOutTheAgentsSkills|TestPluginAgent|TestPluginMCPFormatsAreWritten|TestToolsOff|TestOffList|TestHooks|TestSubagent|TestCheckRenewsMagpiesSignIn|TestCheckWSLOnlyServerInItsDistro|TestCheckWindowsServerHere|TestCheckMixedServerEachSide|TestCheckSaysSignInRanOut|TestCheckNamesAgentsSignedInThemselves|TestSignInAsTheUsersOwnApp|TestOAuthAppChecked|TestOAuthAppSecretCarried|TestGoneAgentListedToTakeOut|TestUpdateFindsSkillsRemovedUpstream|TestGoneFromNeedsTheSourceRead'
 go test -tags nogui ./internal/library -run 'TestCommand'

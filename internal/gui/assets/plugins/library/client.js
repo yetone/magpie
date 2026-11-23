@@ -306,10 +306,13 @@ magpie.plugin("library", (ctx) => {
     }
   });
   function handGap(box, w) {
-    const n = box._n || 1;
-    // outside -19px to 3px the CSS clamps it the same, so nothing is set
-    const gap = Math.min(3, Math.max(-19, Math.round((0.48 * w - 60 - n * 24) / Math.max(1, n - 1)))) + "px";
-    if (box.style.getPropertyValue("--lib-gap") !== gap) box.style.setProperty("--lib-gap", gap);
+    const setGap = (property, count) => {
+      const gap = Math.min(3, Math.max(-19, Math.round((0.48 * w - 60 - count * 24) / Math.max(1, count - 1)))) + "px";
+      if (box.style.getPropertyValue(property) !== gap) box.style.setProperty(property, gap);
+    };
+    setGap("--lib-gap", box._n || 1);
+    const columns = box.parentElement.parentElement?._mcpAgentCount;
+    if (columns) setGap("--lib-mcp-gap", columns);
   }
   function handRoom(row, box, n) {
     box._n = n;
@@ -3078,8 +3081,15 @@ magpie.plugin("library", (ctx) => {
       // in the order the reader picked (#481), A→Z till then
       const fill = () => {
         const sorted = [...lib.servers].sort(byName(sortOf("libServers")));
-        list.replaceChildren(...sorted.filter((s) => !s.hidden).map((s) => serverRow(s, all)));
-        offList.replaceChildren(...sorted.filter((s) => s.hidden).map((s) => serverRow(s, all)));
+        for (const [section, hidden] of [[list, false], [offList, true]]) {
+          const rows = sorted.filter((server) => !!server.hidden === hidden).map((server) => serverRow(server, all));
+          section._mcpAgentCount = rows.reduce((count, row) => {
+            const chips = row.querySelector(":scope > .lib-agents");
+            return Math.max(count, Number(chips?.style.getPropertyValue("--lib-agent-count") || 0));
+          }, 0);
+          section.style.setProperty("--lib-mcp-count", section._mcpAgentCount);
+          section.replaceChildren(...rows);
+        }
         syncFold();
       };
       // one heading over the list, with what the skills' has (#1027): the
