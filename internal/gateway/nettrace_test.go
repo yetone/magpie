@@ -57,9 +57,13 @@ func TestTryTellsWhereItsTimeWent(t *testing.T) {
 	}
 	r, n := ask()
 	t.Logf("a new connection: %+v", n)
-	// the vendor's wait is the hold, give or take the machine
+	// the vendor's wait is the hold, give or take the machine. The hold
+	// starts once the vendor has read the body, which can be before the
+	// write is seen done here (a busy machine runs the trace's hook late),
+	// so some of it may be counted in Send: the two together hold it, and
+	// the wait is still the most of it.
 	holdMs := float64(hold.Milliseconds())
-	if n.Wait < holdMs-1 || n.Wait > holdMs+5000 {
+	if n.Send+n.Wait < holdMs-1 || n.Wait < holdMs/2 || n.Wait > holdMs+5000 {
 		t.Fatalf("wait %v for a %v hold: %+v", n.Wait, hold, n)
 	}
 	if n.Reused || n.TLS <= 0 || n.Asks != 1 || n.Before != 0 {
@@ -77,7 +81,7 @@ func TestTryTellsWhereItsTimeWent(t *testing.T) {
 	}
 	// the open connection carries the next one
 	_, n = ask()
-	if !n.Reused || n.DNS != 0 || n.Connect != 0 || n.TLS != 0 || n.Wait < holdMs-1 {
+	if !n.Reused || n.DNS != 0 || n.Connect != 0 || n.TLS != 0 || n.Send+n.Wait < holdMs-1 || n.Wait < holdMs/2 {
 		t.Fatalf("the open connection: %+v", n)
 	}
 }
