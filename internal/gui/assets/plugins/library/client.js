@@ -6125,7 +6125,9 @@ magpie.plugin("library", (ctx) => {
     const all = skillAgents();
     // the skill router first, over the install card and the list (the
     // owner, 11-21: at the foot of a long list nobody found it)
-    if (lib.skills.length && all.length) body.append(...skillRouterPart());
+    // with agents, even with none of the library's skills yet: the owner
+    // (11-23), every skill still in the agents' own folders, found no row
+    if (all.length) body.append(...skillRouterPart());
     body.append(installCard());
     pickingFor("skills", lib.skills);
     if (lib.skills.length) {
@@ -8052,6 +8054,8 @@ magpie.plugin("library", (ctx) => {
     who.append(el("div", "sub wraps", lib.skillRouter
       ? t("Each agent is given one skill, magpie-skills, that lists its skills. It reads a skill when a task fits it, so its prompt carries one description instead of every skill's. Restart an agent for it to read the change.")
       : t("Give each agent one skill, magpie-skills, that lists its skills, in place of each one: its prompt carries one description instead of every skill's.")));
+    // it lists the library's skills only: with none, say what brings them
+    if (!lib.skills.length) who.append(el("div", "sub wraps lib-skillrouter-empty", t("It lists the library's skills. Import the agents' own skills below for it to list them.")));
     row.append(glyph(GLYPH.skill), who, toggle(!!lib.skillRouter, t("Skill router"), (on) =>
       change("skills/router", { on }, on
         ? t("The agents are given magpie-skills in place of their skills — restart them to use it")
