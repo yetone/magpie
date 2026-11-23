@@ -84,6 +84,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           // an installed one's row does
           for (const [i, of] of [[2, (r) => !!r.kind], [1, (r) => !r.kind]]) {
             await kinds.nth(i).click();
+            // the bar glides to the top first (pluginglide.js)
+            await page.waitForFunction(() => !window.pmGlide?.busy);
             const rs = REPOS.filter(of);
             assert.deepEqual((await cards.locator(".pm-name b").allInnerTexts()).sort(), rs.map(name).sort());
             for (const r of rs) {

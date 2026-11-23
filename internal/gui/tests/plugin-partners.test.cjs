@@ -130,11 +130,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // a kind picked: the partners of that kind; another: none
         const kinds = view.locator(".pm-kinds .opt");
         await kinds.filter({ hasText: await tr("Tools") }).click();
+        // the bar glides to the top first (pluginglide.js)
+        await page.waitForFunction(() => !window.pmGlide?.busy);
         assert.deepEqual(await rows.locator(".pm-rwho b").allTextContents(), ["Notes Sync"]);
         await kinds.filter({ hasText: await tr("Agents") }).click();
+        await page.waitForFunction(() => !window.pmGlide?.busy);
         await view.locator(".pm-sec[data-kind=ag]").waitFor();
         assert.equal(await sec.count(), 0, "a kind no partner is");
         await kinds.first().click();
+        await page.waitForFunction(() => !window.pmGlide?.busy);
         await sec.waitFor();
         assert.equal(shown().length, 1, "counted again on a redraw");
         // the page's opening counted once (provider.CountPage), not each redraw

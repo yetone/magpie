@@ -249,6 +249,7 @@
       });
     }
     import("./pluginpartners.js").then(drawBody, () => {});
+    import("./pluginglide.js").catch(() => {});
     await Promise.all(parts);
     askNPM();
     askGit();
@@ -893,7 +894,7 @@
       const more = el("button", "pm-more");
       more.type = "button";
       more.append(el("span", "", t("See all")), glyph("M6 3.5 10.5 8 6 12.5", 11, 1.7));
-      more.onclick = () => { kindPick = k; drawBody(); page.scrollTo({ top: 0 }); };
+      more.onclick = () => { kindPick = k; drawBody(); };
       h.append(el("span", "grow"), more);
     }
     box.append(h, cardGrid(list.slice(0, limit)));
@@ -1061,9 +1062,11 @@
     const partners = window.pmPartners?.({ f, all: everything(() => true), kindPick, srcPick, onlyNew, entryOf, kindOf, opens, npm, logo, actionFor, glyph, OUTL });
     if (partners) out.push(partners);
     if (!f) {
-      const rec = !kindPick && recSection(all);
+      const rec = recSection(all);
       if (rec) out.push(rec);
       out.push(...market(all));
+      // a kind picked keeps the week's picks; pluginglide.js glides the bar up
+      if (window.pmGlide) out.push(pmGlide.room(kindPick, page));
       out.push(manual(), footer());
       if (mine?.registry) {
         out.push(regBox = regBox || el("div", "pm-registry"));

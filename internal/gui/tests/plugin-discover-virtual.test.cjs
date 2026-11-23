@@ -101,6 +101,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           return [...document.querySelectorAll('#view-plugins .pm-sec[data-kind="pv"] .pm-card')]
             .filter((c) => { const r = c.getBoundingClientRect(); return r.bottom > p.top && r.top < p.bottom; }).map((c) => c.dataset.pkg);
         });
+        const picksInView = () => page.evaluate(() => {
+          const p = document.querySelector("#view-plugins").getBoundingClientRect();
+          return [...document.querySelectorAll("#view-plugins .pm-recs .pm-hero, #view-plugins .pm-recs .pm-rank")]
+            .some((c) => { const r = c.getBoundingClientRect(); return r.bottom > p.top && r.top < p.bottom; });
+        });
         // wheeled as a reader does (the app puts back a scroll that isn't
         // the reader's), each step landed before the next; at every stop
         // the view has cards in it, never an empty stretch
@@ -114,7 +119,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             await page.mouse.wheel(0, Math.max(-2500, Math.min(2500, want - top)));
             for (let k = 0; k < 50 && (await view.evaluate((v) => v.scrollTop)) === top; k++) await page.waitForTimeout(20);
             await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
-            assert.ok((await inView()).length > 0, "an empty stretch at " + (await view.evaluate((v) => v.scrollTop)) + "px");
+            // the week's picks, kept above a kind picked, are cards too
+            assert.ok((await inView()).length > 0 || await picksInView(), "an empty stretch at " + (await view.evaluate((v) => v.scrollTop)) + "px");
           }
           await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
         };
