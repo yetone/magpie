@@ -5,8 +5,9 @@
 // already set to it. A pick is staged as modelPrefs[id].tier, sent with the
 // Save, put back by Escape-free reset (Restore default sends tier ""), and
 // a model with no fast mode has none. In a group's editor the member's
-// button goes Standard speed -> Fast -> Ultrafast -> Standard where the
-// account offers Ultrafast, and saves its `ultra` list. Every language,
+// button opens a menu of Standard speed, Fast and, where the account
+// offers it, Ultrafast (YsiCing on X: a button that stepped through them
+// read as only two), and saves its `ultra` list. Every language,
 // Chromium and WebKit.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -134,7 +135,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     }
   }
   for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) {
-    test(`${engine} ${lang}: a group member goes Standard speed, Fast, Ultrafast`, async (t) => {
+    test(`${engine} ${lang}: a group member's speed menu offers Ultrafast where an account does`, async (t) => {
       const browser = await launch(engine);
       t.after(() => browser.close());
       const page = await (await browser.newContext({ viewport: { width: 1100, height: 1400 }, reducedMotion: "reduce" })).newPage();
@@ -153,13 +154,22 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const fast = (name) => ed.locator(".fbrow", { has: page.locator(".n", { hasText: name }) }).locator("button.rt-fast");
       await fast("gpt-6.1-sol").waitFor();
       assert.equal(await fast("gpt-6.1-sol").textContent(), L["Fast"]);
-      await fast("gpt-6.1-sol").click();
+      const option = (text) => page.locator("#pop:not([hidden]) #list li:not(.group)", { has: page.locator(".v", { hasText: new RegExp("^" + text + "$") }) });
+      const speed = async (name, pick) => {
+        await fast(name).click();
+        await option(L["Standard speed"]).waitFor();
+        const offered = await page.locator("#pop:not([hidden]) #list li:not(.group) .v").allTextContents();
+        await option(pick).click();
+        await page.waitForFunction(() => document.querySelector("#pop").hidden);
+        return offered;
+      };
+      assert.deepEqual(await speed("gpt-6.1-sol", L["Ultrafast"]), [L["Standard speed"], L["Fast"], L["Ultrafast"]]);
       assert.equal(await fast("gpt-6.1-sol").textContent(), L["Ultrafast"]);
-      assert.equal(await fast("gpt-6.1-sol").getAttribute("aria-pressed"), "true");
-      // a member whose account has no Ultrafast goes Fast -> Standard
-      await fast("gpt-6.1-mini").click();
+      assert.equal(await fast("gpt-6.1-sol").getAttribute("class"), "rt-cond rt-fixed rt-fast on");
+      // a member whose account has no Ultrafast is offered two
+      assert.deepEqual(await speed("gpt-6.1-mini", L["Standard speed"]), [L["Standard speed"], L["Fast"]]);
       assert.equal(await fast("gpt-6.1-mini").textContent(), L["Standard speed"]);
-      await fast("gpt-6.1-mini").click();
+      await speed("gpt-6.1-mini", L["Fast"]);
       assert.equal(await fast("gpt-6.1-mini").textContent(), L["Fast"]);
       const b = ed.locator("button.primary", { hasText: L["Save"] });
       for (let i = 0; i < 10 && (await b.boundingBox()).y > 1400 - 160; i++) { await page.mouse.wheel(0, 300); await page.waitForTimeout(150); }

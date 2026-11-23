@@ -4941,9 +4941,21 @@ function routingPage(part) {
     const v = tr?.tier || (tr?.done ? "" : r.tier) || "";
     return TIER_TAG[String(v).toLowerCase()] || "";
   }
+  // tierAsked: the tag of the tier the request asked for, once it went
+  // out at another (Codex's Ultrafast sent fast, on an account whose plan
+  // has no Ultrafast on the model: YsiCing on X, 已经开启了超快，但是
+  // magpie 看到还是快速), "" when it went as asked
+  function tierAsked(r, tr, tier) {
+    const asked = TIER_TAG[String(r.tier || "").toLowerCase()] || "";
+    return tr?.done && tier && asked && asked !== tier ? asked : "";
+  }
+  const tierWord = (tag) => tag === "ultrafast" ? t("Ultrafast") : tag === "flex" ? t("flex") : t("fast");
   function tierNote(r, tr, tier) {
     const word = tr?.tier || r.tier;
-    const said = tr?.fast ? t("Sent in its vendor's fast mode, as the group says")
+    const asked = tierAsked(r, tr, tier);
+    const said = asked === "ultrafast" && tier === "fast"
+      ? t("Asked for Ultrafast, sent fast (service tier {tier}): the account it went on has no Ultrafast on this model in its plan", { tier: word })
+      : tr?.fast ? t(tier === "ultrafast" ? "Sent Ultrafast where the account offers it, as the group says" : "Sent in its vendor's fast mode, as the group says")
       : tier === "flex" ? t("Sent at its vendor's flex tier (service tier {tier}): slower, at a lower price", { tier: word })
       : t("Sent in its vendor's fast mode (service tier {tier}): quicker, at a higher price", { tier: word });
     const served = tr?.tierServed && tr.tierServed !== tr.tier ? t("Its reply said it ran at {tier}.", { tier: tr.tierServed }) : "";
@@ -4991,7 +5003,11 @@ function routingPage(part) {
       // sent in its vendor's fast mode, as the group's member is, or at
       // the service tier the request went out at: Codex's /fast asks
       // for priority (Anotiaww on X), Claude's for speed "fast"
-      const ft = el("span", "ef tier", tier === "ultrafast" ? t("Ultrafast") : tier === "flex" ? t("flex") : t("fast"));
+      // and, when it went at another than it asked, the one asked for
+      // before it, as the effort beside it does (Ultrafast → fast)
+      const ft = el("span", "ef tier"), asked = tierAsked(r, tr, tier);
+      if (asked) ft.append(el("span", "was", tierWord(asked)), el("span", "now", " → " + tierWord(tier || "fast")));
+      else ft.textContent = tierWord(tier || "fast");
       ft.title = tierNote(r, tr, tier);
       to.append(ft);
     }
@@ -8124,26 +8140,32 @@ function routingPage(part) {
           // its vendor's fast mode, where the model has one: priority
           // processing, Claude's fast mode (provider.CanFast)
           if (m?.canFast) {
-            // usual -> fast -> Ultrafast, where an account offers it -> usual
+            // a menu of its speeds, as the reasoning beside it: the usual,
+            // fast, and Ultrafast where an account offers it on the model
+            // (YsiCing on X: a button that stepped through them read as
+            // "只有标准和快速两档")
             const on = d.fast.includes(id);
             const ultra = on && !!m.ultraOK && d.ultra.includes(id);
             const fb = el("button", "rt-cond rt-fixed rt-fast" + (on ? " on" : ""), t(ultra ? "Ultrafast" : on ? "Fast" : "Standard speed"));
             fb.type = "button";
-            fb.setAttribute("aria-pressed", String(on));
+            fb.setAttribute("aria-haspopup", "menu");
             // on a provider the user added (provider.OwnFast, #1615) it is
             // only asked for: magpie can't know the provider serves it
-            fb.title = ultra ? t(m.ownFast ? "Asked for service_tier \"ultrafast\" whatever the agent asks, where your provider serves it. One that turns it away is asked without it. Click to send it at the usual speed" : "Sent Ultrafast where the account offers it, and fast where it doesn't, whatever the agent asks. Click to send it at the usual speed")
+            fb.title = ultra ? t(m.ownFast ? "Asked for service_tier \"ultrafast\" whatever the agent asks, where your provider serves it. One that turns it away is asked without it" : "Sent Ultrafast where the account offers it, and fast where it doesn't, whatever the agent asks")
               : m.ownFast
-              ? (on ? t("Asked for OpenAI's fast mode (service_tier \"priority\") whatever the agent asks: quicker, at a higher price, where your provider serves it. One that turns it away is asked without it") : t("Sent as the agent asks; click to ask your provider for OpenAI's fast mode (service_tier \"priority\")"))
-              : (on ? t(m.ultraOK ? "Sent in its vendor's fast mode whatever the agent asks: quicker, at a higher price. Click to send it Ultrafast, where the account offers it" : "Sent in its vendor's fast mode whatever the agent asks: quicker, at a higher price") : t("Sent at its vendor's usual speed; click to send it in fast mode"));
-            fb.onclick = () => {
-              const next = ultra || (on && !m.ultraOK) ? "" : on ? "ultra" : "fast";
+              ? (on ? t("Asked for OpenAI's fast mode (service_tier \"priority\") whatever the agent asks: quicker, at a higher price, where your provider serves it. One that turns it away is asked without it") : t("Sent as the agent asks"))
+              : (on ? t("Sent in its vendor's fast mode whatever the agent asks: quicker, at a higher price") : t("Sent at its vendor's usual speed"));
+            fb.onclick = (ev) => pickFrom(t("Speed"), fb, ev, [
+              { value: "", label: t("Standard speed"), note: t("as the agent asks") },
+              { value: "fast", label: t("Fast"), note: m.ultraOK || m.ownFast ? t("quicker, at a higher price") : t("No account here offers Ultrafast on this model") },
+              ...(m.ultraOK ? [{ value: "ultra", label: t("Ultrafast"), note: t("where the account offers it, Fast where it doesn't") }] : []),
+            ], (next) => {
               d.fast = d.fast.filter((x) => x !== id);
               d.ultra = d.ultra.filter((x) => x !== id);
               if (next) d.fast = [...d.fast, id];
               if (next === "ultra") d.ultra = [...d.ultra, id];
               draw();
-            };
+            }, ultra ? "ultra" : on ? "fast" : "");
             row.append(fb);
           }
           // the one account or key it is sent on (EastonXvii on X: account

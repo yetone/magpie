@@ -6,7 +6,10 @@
 // another, what it said. A request in flight shows the tier it asked for;
 // one that went out without it (a provider that drops the tier) and one
 // that asked none show no chip. A group member sent fast keeps its one
-// chip and its own title. Chromium and WebKit, 1000 and 480 wide, in
+// chip and its own title, Ultrafast its own. One that asked Ultrafast
+// and went fast, on an account whose plan has none on the model, says
+// both, "Ultrafast → fast", and why (YsiCing on X: 已经开启了超快，但是
+// magpie 看到还是快速). Chromium and WebKit, 1000 and 480 wide, in
 // every language, the API faked.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -27,6 +30,8 @@ const RUNS = [
   { tier: "priority", try: {} }, // went out without it
   { try: {} }, // asked none
   { try: { fast: true, tier: "priority" } }, // a group member sent fast
+  { tier: "ultrafast", try: { tier: "priority" } }, // Ultrafast asked, the account has none
+  { tier: "ultrafast", try: { fast: true, tier: "ultrafast" } }, // a group member sent Ultrafast
   { tier: "priority", live: true, try: {} }, // on its way
 ];
 const routes = RUNS.map((run, i) => ({
@@ -39,23 +44,33 @@ const W = {
   en: { fast: "fast", ultra: "Ultrafast", flex: "flex",
     f: (t) => `Sent in its vendor's fast mode (service tier ${t}): quicker, at a higher price`,
     x: (t) => `Sent at its vendor's flex tier (service tier ${t}): slower, at a lower price`,
-    r: (t) => `Its reply said it ran at ${t}.`, g: "Sent in its vendor's fast mode, as the group says" },
+    r: (t) => `Its reply said it ran at ${t}.`, g: "Sent in its vendor's fast mode, as the group says",
+    gu: "Sent Ultrafast where the account offers it, as the group says",
+    d: (t) => `Asked for Ultrafast, sent fast (service tier ${t}): the account it went on has no Ultrafast on this model in its plan` },
   zh: { fast: "快速", ultra: "极速", flex: "弹性",
     f: (t) => `以服务商的快速模式发送（service tier ${t}）：更快，价格更高`,
     x: (t) => `以服务商的弹性档发送（service tier ${t}）：更慢，价格更低`,
-    r: (t) => `回复说它以 ${t} 运行。`, g: "按分组设置，以服务商的快速模式发送" },
+    r: (t) => `回复说它以 ${t} 运行。`, g: "按分组设置，以服务商的快速模式发送",
+    gu: "按分组设置，账号支持极速就以极速发送",
+    d: (t) => `请求的是极速，以快速发送（service tier ${t}）：它所走的账号的套餐在这个模型上没有极速` },
   "zh-TW": { fast: "快速", ultra: "極速", flex: "彈性",
     f: (t) => `以服務商的快速模式傳送（service tier ${t}）：更快，價格更高`,
     x: (t) => `以服務商的彈性檔傳送（service tier ${t}）：更慢，價格更低`,
-    r: (t) => `回覆說它以 ${t} 執行。`, g: "按分組設定，以服務商的快速模式傳送" },
+    r: (t) => `回覆說它以 ${t} 執行。`, g: "按分組設定，以服務商的快速模式傳送",
+    gu: "按分組設定，帳號支援極速就以極速傳送",
+    d: (t) => `請求的是極速，以快速傳送（service tier ${t}）：它所走的帳號的方案在這個模型上沒有極速` },
   ja: { fast: "高速", ultra: "超高速", flex: "Flex",
     f: (t) => `ベンダーの高速モードで送りました（service tier ${t}）。速くなりますが、料金は高くなります`,
     x: (t) => `ベンダーの Flex 階層で送りました（service tier ${t}）。遅くなりますが、料金は安くなります`,
-    r: (t) => `応答では ${t} で実行されたとのことです。`, g: "グループの設定どおり、ベンダーの高速モードで送ります" },
+    r: (t) => `応答では ${t} で実行されたとのことです。`, g: "グループの設定どおり、ベンダーの高速モードで送ります",
+    gu: "グループの設定どおり、アカウントが対応していれば超高速で送ります",
+    d: (t) => `超高速を求められましたが、高速で送りました（service tier ${t}）。送り先のアカウントのプランには、このモデルの超高速がありません` },
   de: { fast: "schnell", ultra: "Ultrafast", flex: "Flex",
     f: (t) => `Im Schnellmodus des Anbieters gesendet (Service-Tier ${t}): schneller, zu höherem Preis`,
     x: (t) => `In der Flex-Stufe des Anbieters gesendet (Service-Tier ${t}): langsamer, zu niedrigerem Preis`,
-    r: (t) => `Laut Antwort lief sie mit ${t}.`, g: "Im Schnellmodus des Anbieters gesendet, gemäß Gruppe" },
+    r: (t) => `Laut Antwort lief sie mit ${t}.`, g: "Im Schnellmodus des Anbieters gesendet, gemäß Gruppe",
+    gu: "Ultrafast gesendet, wo das Konto es bietet, gemäß Gruppe",
+    d: (t) => `Ultrafast verlangt, schnell gesendet (Service-Tier ${t}): Der Tarif des Kontos, über das sie lief, hat kein Ultrafast für dieses Modell` },
 };
 
 function serve(lang) {
@@ -107,6 +122,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         null,
         null,
         [1, w.fast, w.g],
+        [1, `${w.ultra} → ${w.fast}`, w.d("priority")],
+        [1, w.ultra, w.gu],
         [1, w.fast, w.f("priority")],
       ]);
       assert(chips.every((c) => !c || c.inside), "each chip sits inside its row");

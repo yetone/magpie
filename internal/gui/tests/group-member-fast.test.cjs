@@ -2,14 +2,15 @@
 // A group's member may be sent in its vendor's fast mode (vs on Discord:
 // "gpt-6.1 sol · high · fast"). The group's card reads "· fast" after the
 // member's reasoning; in the group editor a model that has a fast mode
-// (canFast) shows a toggle beside its reasoning, "Standard speed" or
-// "Fast", and one that has none shows no toggle. Clicking it moves nothing
-// on the page; saved, the members sent fast go as fast, and a member whose
+// (canFast) shows a button beside its reasoning, "Standard speed", "Fast"
+// or "Ultrafast", that opens a menu of them (Ultrafast only where ultraOK;
+// YsiCing on X: a button stepping through them read as only two), and one
+// that has none shows no button. Picking moves nothing on the page; saved, the members sent fast go as fast, and a member whose
 // reasoning is changed stays fast under its new id, while one taken out
 // leaves it. A GPT model on a provider the user added by its address
-// (ownFast, #1615) has the toggle too, off until clicked, and its title says
+// (ownFast, #1615) has the button too, off until picked, and its title says
 // fast is asked of the provider; one OpenAI offers Ultrafast on (ultraOK)
-// goes on to Ultrafast, and its title says that is asked for. A group's
+// offers Ultrafast, and its title says that is asked for. A group's
 // card says "· Ultrafast" of a member sent so, not "· fast" (OoopsHh on X). In English and Chinese, Chromium and WebKit.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -43,13 +44,13 @@ const groups = () => ({
 
 const words = {
   en: { edit: "Edit", save: "Save", fast: "Fast", std: "Standard speed", label: "gpt-6.1-sol · high reasoning · fast", ultraLabel: "gpt-6.2-sol · Ultrafast", codexLabel: "gpt-6-astra · Ultrafast", remove: "Remove",
-    ownOff: 'Sent as the agent asks; click to ask your provider for OpenAI\'s fast mode (service_tier "priority")',
+    ownOff: "Sent as the agent asks", noUltra: "No account here offers Ultrafast on this model",
     ownOn: 'Asked for OpenAI\'s fast mode (service_tier "priority") whatever the agent asks: quicker, at a higher price, where your provider serves it. One that turns it away is asked without it',
-    ultra: "Ultrafast", ownUltra: 'Asked for service_tier "ultrafast" whatever the agent asks, where your provider serves it. One that turns it away is asked without it. Click to send it at the usual speed' },
+    ultra: "Ultrafast", ownUltra: 'Asked for service_tier "ultrafast" whatever the agent asks, where your provider serves it. One that turns it away is asked without it' },
   zh: { edit: "编辑", save: "保存", fast: "快速", std: "标准速度", label: "gpt-6.1-sol · high 推理强度 · 快速", ultraLabel: "gpt-6.2-sol · 极速", codexLabel: "gpt-6-astra · 极速", remove: "移除",
-    ownOff: '按代理的请求发送；点击向你的服务商请求 OpenAI 的快速模式（service_tier "priority"）',
+    ownOff: "按 Agent 的请求发送", noUltra: "这里没有账号在这个模型上提供极速",
     ownOn: '无论代理怎么请求，都向服务商请求 OpenAI 的快速模式（service_tier "priority"）：服务商支持时更快，价格更高。服务商拒绝这个字段时，会去掉它再请求一次',
-    ultra: "极速", ownUltra: '无论 Agent 要求什么，都向你的服务商请求极速（service_tier "ultrafast"），前提是它支持；不接受的会改为不带该字段重新请求。点一下改回标准速度' },
+    ultra: "极速", ownUltra: '无论 Agent 要求什么，都向你的服务商请求极速（service_tier "ultrafast"），前提是它支持；不接受的会改为不带该字段重新请求' },
 };
 
 function serve(lang, posts) {
@@ -109,15 +110,26 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const ed = page.locator(".rt-gedit");
       const row = (name) => ed.locator(".fbrow", { has: page.locator(".n", { hasText: name }) });
       const fast = (name) => row(name).locator("button.rt-fast");
+      const option = (text) => page.locator("#pop:not([hidden]) #list li:not(.group)", { has: page.locator(".v", { hasText: new RegExp("^" + text + "$") }) });
+      const opts = async () => page.locator("#pop:not([hidden]) #list li:not(.group) .v").allTextContents();
+      // opens its menu, says what it offers, and picks one
+      const speed = async (name, pick) => {
+        await fast(name).click();
+        await option(w.std).waitFor();
+        const offered = await opts();
+        await option(pick).click();
+        await page.waitForFunction(() => document.querySelector("#pop").hidden);
+        return offered;
+      };
       await fast("gpt-6.1-sol").waitFor();
       assert.equal(await fast("gpt-6.1-sol").textContent(), w.fast);
-      assert.equal(await fast("gpt-6.1-sol").getAttribute("aria-pressed"), "true");
+      assert.equal(await fast("gpt-6.1-sol").getAttribute("class"), "rt-cond rt-fixed rt-fast on");
       assert.equal(await fast("claude-opus-5-5").textContent(), w.std);
-      assert.equal(await fast("claude-opus-5-5").getAttribute("aria-pressed"), "false");
+      assert.equal(await fast("claude-opus-5-5").getAttribute("class"), "rt-cond rt-fixed rt-fast");
       assert.equal(await fast("glm-5").count(), 0, "no fast mode, no toggle");
       // on the user's own provider (#1615): off by default, and it says
       // fast is only asked of the provider
-      assert.equal(await fast("o4-mini").getAttribute("aria-pressed"), "false");
+      assert.equal(await fast("o4-mini").getAttribute("class"), "rt-cond rt-fixed rt-fast");
       assert.equal(await fast("o4-mini").getAttribute("title"), w.ownOff);
       assert.notEqual(await fast("claude-opus-5-5").getAttribute("title"), w.ownOff);
       const border = await page.evaluate(() => [...document.querySelectorAll(".rt-fast")].map((e) => getComputedStyle(e))
@@ -129,12 +141,18 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.waitForTimeout(200);
       const at = () => page.evaluate(() => [...document.querySelectorAll("*")].filter((e) => e.scrollTop).map((e) => [e.id || e.className, e.scrollTop]).join(";") + "|" + Math.round(document.querySelector(".rt-gedit").getBoundingClientRect().top));
       const before = await at();
+      // no account offers Ultrafast on it: the menu has two, and says why
       await fast("claude-opus-5-5").click();
+      await option(w.std).waitFor();
+      assert.deepEqual(await opts(), [w.std, w.fast]);
+      assert((await option(w.fast).textContent()).includes(w.noUltra), "Fast says why there is no Ultrafast");
+      await option(w.fast).click();
+      await page.waitForFunction(() => document.querySelector("#pop").hidden);
       assert.equal(await fast("claude-opus-5-5").textContent(), w.fast);
-      await fast("gpt-6.1-sol").click();
+      await speed("gpt-6.1-sol", w.std);
       assert.equal(await fast("gpt-6.1-sol").textContent(), w.std);
-      await fast("gpt-6.1-sol").click();
-      assert.equal(await at(), before, "the clicks moved nothing");
+      await speed("gpt-6.1-sol", w.fast);
+      assert.equal(await at(), before, "the picks moved nothing");
 
       // the gpt member's reasoning changed: still fast, under its new id
       await row("gpt-6.1-sol").locator("button.rt-fixed:not(.rt-fast)").click();
@@ -144,16 +162,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await row("claude-opus-5-5").locator("button.text", { hasText: w.remove }).click();
       assert.equal(await row("claude-opus-5-5").count(), 0);
 
-      await fast("o4-mini").click();
+      assert.deepEqual(await speed("o4-mini", w.fast), [w.std, w.fast], "no Ultrafast where OpenAI offers none");
       assert.equal(await fast("o4-mini").textContent(), w.fast);
       assert.equal(await fast("o4-mini").getAttribute("title"), w.ownOn);
-      await fast("o4-mini").click();
-      assert.equal(await fast("o4-mini").textContent(), w.std, "no Ultrafast where OpenAI offers none");
-      await fast("o4-mini").click();
-      // usual -> fast -> Ultrafast on the one OpenAI offers it on
-      await fast("gpt-6.2-sol").click();
-      assert.equal(await fast("gpt-6.2-sol").textContent(), w.fast);
-      await fast("gpt-6.2-sol").click();
+      // all three on the one OpenAI offers it on
+      assert.deepEqual(await speed("gpt-6.2-sol", w.ultra), [w.std, w.fast, w.ultra]);
       assert.equal(await fast("gpt-6.2-sol").textContent(), w.ultra);
       assert.equal(await fast("gpt-6.2-sol").getAttribute("title"), w.ownUltra);
 
@@ -175,10 +188,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         "fast", "Fast", "Ultrafast", "Standard speed", "Sent in its vendor's fast mode, as the group says",
         "Sent Ultrafast where the account offers it, as the group says",
         "Sent in its vendor's fast mode whatever the agent asks: quicker, at a higher price",
-        "Sent at its vendor's usual speed; click to send it in fast mode",
+        "Sent at its vendor's usual speed", "as the agent asks", "No account here offers Ultrafast on this model",
+        "Asked for Ultrafast, sent fast (service tier {tier}): the account it went on has no Ultrafast on this model in its plan",
         'Asked for OpenAI\'s fast mode (service_tier "priority") whatever the agent asks: quicker, at a higher price, where your provider serves it. One that turns it away is asked without it',
-        'Sent as the agent asks; click to ask your provider for OpenAI\'s fast mode (service_tier "priority")',
-        'Asked for service_tier "ultrafast" whatever the agent asks, where your provider serves it. One that turns it away is asked without it. Click to send it at the usual speed',
+        "Sent as the agent asks", "Sent Ultrafast where the account offers it, and fast where it doesn't, whatever the agent asks",
+        'Asked for service_tier "ultrafast" whatever the agent asks, where your provider serves it. One that turns it away is asked without it',
         "{model} is asked for OpenAI's fast mode for {agent}, where your provider serves it. Click to send it as {agent} asks",
         'Ask your provider for OpenAI\'s fast mode (service_tier "priority") on {model} for {agent}: quicker, at a higher price, where it serves it',
       ].filter((k) => !I18N.zh[k] || !I18N["zh-TW"][k] || !I18N.ja[k] || !I18N.de[k]));
