@@ -3,6 +3,7 @@ package library
 import (
 	"bytes"
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -54,7 +55,7 @@ func (p *Project) ownResources() map[string][]OwnResource {
 		seen[rel] = true
 		out["servers"] = append(out["servers"], p.ownServers(id, rel, format)...)
 	}
-	for _, id := range []string{"claude", "codex"} {
+	for _, id := range []string{"agy", "claude", "codex"} {
 		out["hooks"] = append(out["hooks"], p.ownHooks(id)...)
 	}
 	ids = ids[:0]
@@ -138,6 +139,10 @@ func (p *Project) ownHooks(id string) []OwnResource {
 		if err != nil {
 			continue
 		}
+		if id == "agy" {
+			out = append(out, p.ownAgyHooks(doc, rel)...)
+			continue
+		}
 		events := gjson.GetBytes(doc, "hooks").Map()
 		names := make([]string, 0, len(events))
 		for ev := range events {
@@ -155,6 +160,36 @@ func (p *Project) ownHooks(id string) []OwnResource {
 				}
 				for _, c := range ownHookCommands(raw) {
 					out = append(out, OwnResource{Name: c, Path: rel, Agent: id, Event: ev})
+				}
+			}
+		}
+	}
+	return out
+}
+
+// ownAgyHooks are the commands an Antigravity hooks.json runs that magpie
+// didn't write: every named hook's, and those in magpie's own ("magpie")
+// it has no record of.
+func (p *Project) ownAgyHooks(doc []byte, rel string) []OwnResource {
+	var out []OwnResource
+	top := gjson.ParseBytes(doc).Map()
+	for _, name := range slices.Sorted(maps.Keys(top)) {
+		v := top[name]
+		if !v.IsObject() {
+			continue
+		}
+		events := v.Map()
+		for _, ev := range slices.Sorted(maps.Keys(events)) {
+			if ev == "enabled" || !events[ev].IsArray() {
+				continue
+			}
+			for _, e := range events[ev].Array() {
+				raw := json.RawMessage(e.Raw)
+				if name == "magpie" && p.wroteHook("agy", ev, raw) {
+					continue
+				}
+				for _, c := range ownHookCommands(raw) {
+					out = append(out, OwnResource{Name: c, Path: rel, Agent: "agy", Event: ev})
 				}
 			}
 		}

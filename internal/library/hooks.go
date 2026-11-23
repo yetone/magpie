@@ -111,6 +111,9 @@ var startSpecs = map[string]*startSpec{
 	// the Grok CLI (docs/user-guide/10-hooks.md): the start source is "new"
 	// for a fresh session, /new and /clear included, or "load" for one
 	// resumed; Claude Code's own words never match there
+	// Antigravity (its "Lifecycle Hooks" doc): SessionStart runs "once when
+	// a new conversation session starts", a start of its own kind only
+	"agy":      {sources: []string{"startup"}},
 	"grok":     {sources: []string{"startup", "resume", "clear"}, groups: grokStarts},
 	"grok-app": {sources: []string{"startup", "resume", "clear"}, groups: grokStarts},
 }
@@ -202,6 +205,52 @@ type hookSpec struct {
 	flat   bool              // Cursor: an entry is the command itself, not a group of them
 	ms     bool              // Gemini: timeouts in milliseconds
 	toml   bool              // Grok: hooks are [[hooks.<Event>]] tables in config.toml, not JSON
+	// root is the object the events' lists are in: "hooks" for most
+	// agents; "magpie" in Antigravity's hooks.json, whose top-level keys
+	// are named hooks, so magpie's are one named hook of its own there
+	// and the user's are never written in (agyHookSpec).
+	root string
+}
+
+// rootKey is the object in the file the events' lists are in.
+func (sp *hookSpec) rootKey() string {
+	if sp.root != "" {
+		return sp.root
+	}
+	return "hooks"
+}
+
+// listPath is where in the file event ev's list is.
+func (sp *hookSpec) listPath(ev string) string { return sp.rootKey() + "." + ev }
+
+// agyHookSpec is how Antigravity keeps hooks (agy 1.5.14's built-in
+// "Lifecycle Hooks (hooks.json)" doc, the same file for its CLI,
+// Antigravity 2.0 and the IDE): each top-level key of hooks.json is a
+// named hook, {"enabled"?, "<Event>": [...]}, and named hooks of the same
+// event, of different plugins or files, are merged and run in order.
+// PreToolUse and PostToolUse take groups, {matcher, hooks: [{type,
+// command, timeout}]}, the matcher a regex over tool names ("*" for all),
+// each a step type lowercased without CORTEX_STEP_TYPE_ (run_command);
+// SessionStart ("once when a new conversation session starts"), Stop,
+// PreInvocation and PostInvocation take the handlers themselves, timeouts
+// in seconds. A project's is <workspace>/.agents/hooks.json, read once
+// the folder is trusted (trustedWorkspaces in ~/.gemini/antigravity-cli/
+// settings.json; agy logs "loaded 1 named hooks from 1 hooks.json
+// file(s)" then, 0 before). magpie's entries are the named hook "magpie":
+// the user's names are never written in, and an entry already under one
+// of them isn't written again (namedHas), so it never runs twice. Its
+// edit tools aren't named there, so a hook narrowed to edits isn't given; PreInvocation runs before every model
+// call, not once a prompt, so a prompt hook isn't either.
+func agyHookSpec(path string) *hookSpec {
+	return &hookSpec{
+		path: path,
+		events: map[string]string{"turn-end": "Stop", "after-tool": "PostToolUse", "before-tool": "PreToolUse",
+			"session-start": "SessionStart"},
+		native: []string{"SessionStart", "PreToolUse", "PostToolUse", "PreInvocation", "PostInvocation", "Stop"},
+		tools:  map[string]string{"shell": "run_command"},
+		agent:  "agy",
+		root:   "magpie",
+	}
 }
 
 // hookAgents are the agents magpie can give hooks to.
@@ -372,6 +421,27 @@ func (sp *hookSpec) entry(h *Hook, ev string) json.RawMessage {
 		// theirs, exactly as with a JSON agent's.
 		return json.RawMessage(grokHookBlock(ev, m, h.Command, timeout))
 	}
+	if sp.root != "" {
+		// Antigravity's: flat handlers, grouped under a matcher for a tool's
+		type cmd struct {
+			Type    string `json:"type"`
+			Command string `json:"command"`
+			Timeout int    `json:"timeout,omitempty"`
+		}
+		c := cmd{"command", h.Command, timeout}
+		var v any = c
+		if ev == "PreToolUse" || ev == "PostToolUse" {
+			if m == "" {
+				m = "*"
+			}
+			v = struct {
+				Matcher string `json:"matcher"`
+				Hooks   []cmd  `json:"hooks"`
+			}{m, []cmd{c}}
+		}
+		b, _ := json.Marshal(v)
+		return b
+	}
 	command, shell := h.Command, ""
 	if sp.agent == "claude" && h.Bundle != "" {
 		// a plugin's hook, run with the variables Claude Code gives its own
@@ -441,8 +511,15 @@ func sameHookFamily(a, b string) bool {
 	if a == b {
 		return true
 	}
-	return (a == "grok" || a == "grok-app") && (b == "grok" || b == "grok-app")
+	both := func(x, y string) bool { return (a == x || a == y) && (b == x || b == y) }
+	// the Antigravity CLI and Antigravity 2.0 read one hooks.json
+	return both("grok", "grok-app") || both("agy", "antigravity")
 }
+
+// ownEventAgents are the agents a hook can be given an event of its own
+// for: every agent magpie writes hooks for, and Antigravity, whose hooks
+// magpie writes in a project only (agyHookSpec).
+var ownEventAgents = append(slices.Clone(hookAgents), "agy")
 
 func (h *Hook) check() error {
 	if err := checkName("hook", h.Name); err != nil {
@@ -458,7 +535,7 @@ func (h *Hook) check() error {
 		return errors.New("a hook's timeout is between 0 (the agent's own) and 86400 seconds")
 	}
 	if a, ev, ok := strings.Cut(h.Event, ":"); ok {
-		if !slices.Contains(hookAgents, a) || ev == "" {
+		if !slices.Contains(ownEventAgents, a) || ev == "" {
 			return fmt.Errorf("no event called %s", h.Event)
 		}
 		for _, x := range h.Agents {
@@ -527,18 +604,45 @@ func readHooksFile(path string) ([]byte, error) {
 
 // hookList is the list the file has under hooks.<ev>.
 func hookList(doc []byte, path, ev string) ([]json.RawMessage, error) {
-	r := gjson.GetBytes(doc, "hooks."+ev)
+	return hookListAt(doc, path, "hooks."+ev)
+}
+
+// hookListAt is the list the file has at at (a gjson path).
+func hookListAt(doc []byte, path, at string) ([]json.RawMessage, error) {
+	r := gjson.GetBytes(doc, at)
 	if !r.Exists() {
 		return nil, nil
 	}
 	if !r.IsArray() {
-		return nil, fmt.Errorf("%s: hooks.%s isn't a list", path, ev)
+		return nil, fmt.Errorf("%s: %s isn't a list", path, at)
 	}
 	var list []json.RawMessage
 	if err := json.Unmarshal([]byte(r.Raw), &list); err != nil {
-		return nil, fmt.Errorf("%s: hooks.%s: %w", path, ev, err)
+		return nil, fmt.Errorf("%s: %s: %w", path, at, err)
 	}
 	return list, nil
+}
+
+// namedHas is whether a named hooks file (Antigravity's) already runs
+// entry at event ev under a hook other than own: the user's or the
+// repository's own. It isn't written again, or the command would run
+// twice (#7507).
+func namedHas(doc []byte, own, ev string, entry json.RawMessage) bool {
+	c := canonical(entry)
+	found := false
+	gjson.ParseBytes(doc).ForEach(func(k, v gjson.Result) bool {
+		if k.String() == own || !v.IsObject() || v.Get("enabled").Type == gjson.False {
+			return true // magpie's own, or one turned off
+		}
+		v.Get(gjson.Escape(ev)).ForEach(func(_, e gjson.Result) bool {
+			if canonical([]byte(e.Raw)) == c {
+				found = true
+			}
+			return !found
+		})
+		return !found
+	})
+	return found
 }
 
 // grokHookBlocks reads the [[hooks.<ev>]] blocks a Grok config.toml has, each
@@ -780,7 +884,7 @@ func (w *hookWrite) run() (recs []HookEntry, changed, ok bool) {
 		if sp.toml {
 			x, err = grokHookBlocks(sp.path, ev)
 		} else {
-			x, err = hookList(doc, sp.path, ev)
+			x, err = hookListAt(doc, sp.path, sp.listPath(ev))
 		}
 		if err == nil {
 			lists[ev] = x
@@ -861,6 +965,9 @@ func (w *hookWrite) run() (recs []HookEntry, changed, ok bool) {
 		if i := find(w.ev, w.entry); i >= 0 {
 			continue
 		}
+		if sp.root != "" && namedHas(doc, sp.root, w.ev, w.entry) {
+			continue
+		}
 		add[w.ev] = append(add[w.ev], w.entry)
 		added = append(added, HookEntry{Name: w.h.Name, Event: w.ev, Entry: w.entry})
 	}
@@ -931,9 +1038,9 @@ func (w *hookWrite) run() (recs []HookEntry, changed, ok bool) {
 		next = append(next, add[ev]...)
 		moved[ev] = m
 		if len(next) == 0 {
-			del = append(del, "hooks."+ev)
+			del = append(del, sp.listPath(ev))
 		} else {
-			set = append(set, edit.KV{Path: "hooks." + ev, Value: next})
+			set = append(set, edit.KV{Path: sp.listPath(ev), Value: next})
 		}
 	}
 	if err := keep(sp.path); err != nil {
@@ -972,8 +1079,8 @@ func (w *hookWrite) run() (recs []HookEntry, changed, ok bool) {
 	out, err := edit.PatchJSON(raw, set, del)
 	if err == nil && len(del) > 0 && len(set) == 0 {
 		// a hooks object left empty by magpie goes with what it held
-		if h := gjson.GetBytes(jsonc.ToJSON(edit.TrimBOM(out)), "hooks"); h.IsObject() && len(h.Map()) == 0 {
-			out, err = edit.PatchJSON(out, nil, []string{"hooks"})
+		if h := gjson.GetBytes(jsonc.ToJSON(edit.TrimBOM(out)), sp.rootKey()); h.IsObject() && len(h.Map()) == 0 {
+			out, err = edit.PatchJSON(out, nil, []string{sp.rootKey()})
 		}
 	}
 	if err == nil {
@@ -1270,7 +1377,8 @@ func SomeHooksAgents(names, agents []string, on bool) (*Result, error) {
 // hookTakes is whether agent a can be given h.
 func hookTakes(h *Hook, a string) bool {
 	if x, _, ok := strings.Cut(h.Event, ":"); ok {
-		return sameHookFamily(x, a)
+		// Antigravity's own events go to a project's hooks.json alone
+		return sameHookFamily(x, a) && slices.Contains(hookAgents, a)
 	}
 	if h.Event == "session-start" {
 		if _, err := startMatcher(a, h.Matcher); err != nil {
@@ -1324,6 +1432,9 @@ type HookView struct {
 	Native map[string]string `json:"native,omitempty"`
 	// Problems are the agents it couldn't be given to, and why
 	Problems map[string]string `json:"problems,omitempty"`
+	// ProjectNo is, for each agent magpie gives hooks only in a project
+	// (Antigravity), why it can't be given this one there: "" when it can
+	ProjectNo map[string]string `json:"projectNo,omitempty"`
 }
 
 // HookAgentView is an agent the Hooks tab lists.
@@ -1374,6 +1485,17 @@ func (l *Library) hooksView(targets []*Target, asleep []*agent.Agent, of func(st
 		c := *h
 		c.Agents = orNone(c.Agents)
 		hv := HookView{Hook: &c, Native: map[string]string{}, Problems: of("hook:" + h.Name)}
+		for _, t := range targets {
+			if id := t.Agent.ID; projectHookID(id) == "agy" && t.Agent.WSL == "" {
+				if hv.ProjectNo == nil {
+					hv.ProjectNo = map[string]string{}
+				}
+				hv.ProjectNo[id] = ""
+				if err := projectHookWhyNot(h, id); err != nil {
+					hv.ProjectNo[id] = err.Error()
+				}
+			}
+		}
 		for id, sp := range specs {
 			if ev, err := sp.event(id, h); err == nil {
 				hv.Native[id] = ev

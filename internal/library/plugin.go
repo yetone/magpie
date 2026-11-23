@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -247,7 +248,7 @@ func pluginSlug(s string) string {
 
 // isPlugin is whether dir looks like a plugin's folder.
 func isPlugin(dir string) bool {
-	for _, p := range []string{".claude-plugin/plugin.json", ".codex-plugin/plugin.json", "skills", "agents", "commands", "hooks/hooks.json", ".mcp.json"} {
+	for _, p := range []string{".claude-plugin/plugin.json", ".codex-plugin/plugin.json", ".antigravity-plugin/plugin.json", "skills", "agents", "commands", "hooks/hooks.json", ".mcp.json"} {
 		if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(p))); err == nil {
 			return true
 		}
@@ -275,6 +276,19 @@ func readPlugin(dir, hint, force string, over map[string]any) (*plLoaded, error)
 	if cx, err := readJSONFile(filepath.Join(dir, ".codex-plugin", "plugin.json")); err == nil {
 		codexHooks = cx["hooks"]
 		for k, v := range cx {
+			if _, ok := man[k]; !ok && k != "hooks" {
+				man[k] = v
+			}
+		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
+	// Antigravity's (#7507) too, with its hooks in the plugin's hooks.json
+	// (agyPluginHooks below)
+	agyPlugin := false
+	if ag, err := readJSONFile(filepath.Join(dir, ".antigravity-plugin", "plugin.json")); err == nil {
+		agyPlugin = true
+		for k, v := range ag {
 			if _, ok := man[k]; !ok && k != "hooks" {
 				man[k] = v
 			}
@@ -474,6 +488,15 @@ func readPlugin(dir, hint, force string, over map[string]any) (*plLoaded, error)
 		hooks, left := plHooksOfAgent(doc, name, root, sub, &n, "codex")
 		p.hooks = append(p.hooks, hooks...)
 		p.left = append(p.left, left...)
+	}
+	if agyPlugin {
+		if m, err := readJSONFile(filepath.Join(dir, "hooks.json")); err == nil {
+			hooks, left := agyPluginHooks(m, name, root, sub, &n)
+			p.hooks = append(p.hooks, hooks...)
+			p.left = append(p.left, left...)
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			leave("hooks.json", err.Error())
+		}
 	}
 
 	// what no agent here takes
@@ -748,6 +771,96 @@ func plHooksOfAgent(doc map[string]any, bundle, root string, sub func(string) st
 		}
 	}
 	return out, left
+}
+
+// agyPluginHooks reads an Antigravity plugin's hooks.json, the only file
+// agy reads a plugin's hooks from (agy 1.5.14; hooks/hooks.json is
+// Claude Code's): named hooks, each {"enabled"?, Event: [...]}, a tool
+// event's entries {"matcher", "hooks": [...]} and every other's the
+// handlers themselves, {"type": "command", "command", "timeout"}. Each
+// handler is a hook of Antigravity's own event, as written, which only a
+// project's .agents/hooks.json is given (agyHookSpec). Its command ran in
+// the plugin's folder, so it is run there: a workspace's hooks run in
+// .agents. A named hook turned off is left out.
+func agyPluginHooks(doc map[string]any, bundle, root string, sub func(string) string, n *int) ([]*Hook, []PluginLeft) {
+	native := agyHookSpec("").native
+	var out []*Hook
+	var left []PluginLeft
+	add := func(ev, matcher string, h any) {
+		hm, _ := h.(map[string]any)
+		if hm == nil {
+			return
+		}
+		if t := plStr(hm["type"]); t != "" && t != "command" {
+			left = append(left, PluginLeft{What: ev + " hook", Why: "a hook of type " + t + " isn't a command: agents take commands only"})
+			return
+		}
+		cmd := sub(plStr(hm["command"]))
+		if cmd == "" {
+			return
+		}
+		*n++
+		x := &Hook{Name: hookName(bundle, *n), Description: "From plugin " + bundle, Event: "agy:" + ev, Matcher: matcher,
+			Command: agyPluginCmd(cmd, root, pluginData(bundle)), Agents: []string{}}
+		if t, ok := hm["timeout"].(float64); ok && t > 0 && t <= 86400 {
+			x.Timeout = int(t)
+		}
+		if err := x.check(); err != nil {
+			left = append(left, PluginLeft{What: ev + " hook", Why: err.Error()})
+			*n--
+			return
+		}
+		out = append(out, x)
+	}
+	for _, name := range slices.Sorted(maps.Keys(doc)) {
+		named, _ := doc[name].(map[string]any)
+		if named == nil || named["enabled"] == false {
+			continue
+		}
+		for _, ev := range slices.Sorted(maps.Keys(named)) {
+			if ev == "enabled" {
+				continue
+			}
+			if !slices.Contains(native, ev) {
+				left = append(left, PluginLeft{What: ev + " hook", Why: "Antigravity has no event called " + ev})
+				continue
+			}
+			list, _ := named[ev].([]any)
+			for _, e := range list {
+				em, _ := e.(map[string]any)
+				if em == nil {
+					continue
+				}
+				if ev == "PreToolUse" || ev == "PostToolUse" {
+					hs, _ := em["hooks"].([]any)
+					for _, h := range hs {
+						add(ev, plStr(em["matcher"]), h)
+					}
+					continue
+				}
+				add(ev, "", em)
+			}
+		}
+	}
+	return out, left
+}
+
+// agyPluginCmd is an Antigravity plugin hook's command as a workspace's
+// hooks.json runs it: agy runs it with sh -c (cmd /c on Windows) in the
+// plugin's folder, with PLUGIN_ROOT and PLUGIN_DATA set ("They are not
+// substituted into command"), and a workspace's in .agents, with neither.
+func agyPluginCmd(cmd, root, data string) string {
+	if cmdOS == "windows" {
+		// cmd /c reads %NAME% before any set runs
+		cmd = strings.NewReplacer("%PLUGIN_ROOT%", root, "%PLUGIN_DATA%", data).Replace(cmd)
+		return `cd /d "` + root + `" && ` + cmd
+	}
+	q := func(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
+	pre := "cd " + q(root) + " && "
+	if strings.Contains(cmd, "PLUGIN_ROOT") || strings.Contains(cmd, "PLUGIN_DATA") {
+		pre += "export PLUGIN_ROOT=" + q(root) + " PLUGIN_DATA=" + q(data) + " && "
+	}
+	return pre + cmd
 }
 
 // quoteRoot quotes the plugin's folder where a command names it bare and

@@ -7741,7 +7741,10 @@ magpie.plugin("library", (ctx) => {
       const say = (next) => next.length
         ? t("{item} is in {name} for {agents}", { item: h.name, name: p.name, agents: next.map(nameOf).join(", ") })
         : t("{item} is out of {name}", { item: h.name, name: p.name });
-      row.append(glyph(GLYPH.hook), w, agentChips(all, on, projectChange("projects/hooks", p.dir, h.name, say), { blocked: hookBlocked(h) }));
+      // Antigravity takes hooks in a project only: the server says which
+      const global = hookBlocked(h);
+      const blocked = (a) => h.projectNo && a.id in h.projectNo ? h.projectNo[a.id] : global(a);
+      row.append(glyph(GLYPH.hook), w, agentChips(all, on, projectChange("projects/hooks", p.dir, h.name, say), { blocked }));
       card.append(row);
     }
     if (!(lib.hooks || []).length) card.append(el("p", "lib-aside lib-projfoot", t("No hooks in the library yet")));

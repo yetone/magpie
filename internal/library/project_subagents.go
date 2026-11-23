@@ -27,6 +27,7 @@ import (
 //	Factory Droid .factory/droids/<name>.md       docs.factory.com/cli/configuration/custom-droids
 //	Cursor        .cursor/agents/<name>.md        cursor.com/docs/subagents
 //	Copilot CLI   .github/agents/<name>.agent.md  "Repository-level custom agents are stored in the .github/agents directory"
+//	Antigravity   .agents/agents/<name>.md        the CLI's and 2.0's workspace agents (agyAgent)
 //
 // A file is recorded by its hash (Project.AgentFiles), as the user-wide
 // ones are: magpie writes over or takes away only one still exactly as it
@@ -42,6 +43,32 @@ var projectSubagentDirs = map[string]string{
 	"droid":    ".factory/droids",
 	"cursor":   ".cursor/agents",
 	"copilot":  ".github/agents",
+	// the Antigravity CLI and Antigravity 2.0 read one folder
+	"agy":         ".agents/agents",
+	"antigravity": ".agents/agents",
+}
+
+// agyReserved are the names of Antigravity's own agents, which a
+// workspace's can't take ("agent %q is a reserved or built-in name").
+var agyReserved = []string{"self", "browser", "research", "deepagent", "review-agent"}
+
+// agyAgent is a subagent as Antigravity reads one from a workspace's
+// .agents/agents (agy 1.5.14's own guide to bringing Claude Code's agents
+// over, in its plugin-migration skill): the prompt below front matter
+// with name, a description (required), subagent true and mainAgent false
+// so it stays a subagent, and tools always, since "an omitted tools gets
+// only a small read-only default set": a library subagent has no tools
+// of its own, which in Claude Code means all of them, so it gets the
+// guide's list for that. It has no model of its own (the guide drops
+// model).
+func agyAgent(s *Subagent, _, _ []string) []byte {
+	return frontmatter([][2]string{
+		{"name", yamlStr(s.Name)},
+		{"description", yamlStr(s.Description)},
+		{"subagent", "true"},
+		{"mainAgent", "false"},
+		{"tools", "[read_file, edit_file, write_file, run_command, manage_task, search_web]"},
+	}, s.Prompt)
 }
 
 // ProjectSubagentsDir is the folder, in a project, an agent reads its
@@ -51,6 +78,9 @@ func ProjectSubagentsDir(agentID string) string { return projectSubagentDirs[age
 // projectSubagentSpec is the shape of agent id's subagent files, kept in
 // the project's folder in place of the agent's own.
 func projectSubagentSpec(p *Project, id string) *subagentSpec {
+	if id == "agy" || id == "antigravity" {
+		return &subagentSpec{dir: filepath.Join(p.Dir, filepath.FromSlash(projectSubagentDirs[id])), ext: ".md", render: agyAgent}
+	}
 	sp, _ := subagentSpecOf(&Target{Agent: &agent.Agent{ID: id}})
 	if sp == nil {
 		return nil
@@ -86,6 +116,9 @@ func (l *Library) syncProjectSubagents(p *Project, fail func(what string, err er
 			continue
 		}
 		for _, id := range p.Subagents[name] {
+			if (id == "agy" || id == "antigravity") && slices.Contains(agyReserved, strings.ToLower(s.Name)) {
+				continue // a plugin's, which Antigravity wouldn't load
+			}
 			if sp := projectSubagentSpec(p, id); sp != nil {
 				wanted[p.rel(sp.path(s.Name))] = want{s, sp}
 			}
@@ -195,6 +228,13 @@ func ProjectSubagents(dir string, names, agents []string) (*Result, error) {
 		for _, id := range agents {
 			if ProjectSubagentsDir(id) == "" {
 				return fmt.Errorf("magpie knows of no folder %s reads a project's subagents from", id)
+			}
+			if id == "agy" || id == "antigravity" {
+				for _, n := range names {
+					if slices.Contains(agyReserved, strings.ToLower(n)) {
+						return fmt.Errorf("%s is the name of one of Antigravity's own agents: rename the subagent to give it to Antigravity", n)
+					}
+				}
 			}
 			ids = set(ids, id, true)
 		}
