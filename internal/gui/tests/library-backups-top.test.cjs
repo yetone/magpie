@@ -88,7 +88,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await head.locator(".lib-backups:not([disabled])").waitFor();
           await v.locator(".lib-body").first().waitFor({ state: "attached" }).catch((e) => { throw new Error(where + ": " + e.message); });
 
-          const got = await head.evaluate((h) => {
+          // found afresh in one synchronous step: a tab that lists the
+          // agents' own items draws again when /api/library/native answers,
+          // and a head found before that is no longer in the page (#4431)
+          const got = await page.evaluate(() => {
+            const h = document.querySelector("#view-library .lib-head");
             const b = h.querySelector(".lib-backups"), f = h.querySelector(".lib-more"), vw = h.closest(".view");
             const r = b.getBoundingClientRect(), fr = f.getBoundingClientRect();
             const c = getComputedStyle(b);
