@@ -4104,6 +4104,11 @@ body:not(.side-nav) #addSheet > .row-head.stuck::before { opacity: 1; box-shadow
 .add-models .detect-row input { flex: 1; min-width: 0; }
 .add-models-list { max-height: 260px; overflow-y: auto; }
 .add-models-list .hint.err { color: var(--red); }
+/* an embedding or rerank kind under Fetch models: its ids, and the path
+   they are asked on (solider1394 on X) */
+.add-models-list .rgroup + .rgroup, .add-models-list .mchips + .rgroup { margin-top: 12px; }
+.rgroup .rkind { font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+.rgroup .hint { margin-top: 6px; }
 .detect-grid { display: grid; gap: 3px 10px; align-items: center; font-size: 11.5px; padding: 4px 0 2px; }
 .detect-grid .dg-head { color: var(--faint); font-size: 11px; }
 .detect-grid .dg-model { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; }

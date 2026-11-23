@@ -11284,11 +11284,12 @@ function addFormModels(ex) {
       const r = await api("provider/list", body);
       listed = r?.models || [];
       out.replaceChildren();
-      if (!listed.length) { out.append(el("span", "hint", t(r?.retrieval ? emptyModelsHint(r) : "The vendor's list is empty. Type the model ids instead."))); return; }
+      const rr = retrievalRows(r, 1);
+      if (!listed.length) { out.append(...rr[0] ? rr : [el("span", "hint", t("The vendor's list is empty. Type the model ids instead."))]); return; }
       q.placeholder = t("filter {n} models…", { n: listed.length });
       // the picks' count and Pick all / none above the chips: they stay put
       if (listed.length > 24) out.append(q);
-      out.append(acts, chips);
+      out.append(acts, chips, ...rr);
       draw();
     } catch (err) { out.replaceChildren(el("span", "hint err", err.message)); }
     finally { go.classList.remove("busy"); }
@@ -11539,7 +11540,7 @@ let picksLeft = null;
 const MCHIPS_MAX = 240;
 // emptyModelsHint: an empty list's words; Azure's is its deployments (#1995)
 function emptyModelsHint(p) {
-  if (p.retrieval) return "Only embedding and rerank models are listed. They need no pick: ask them on /v1/embeddings and /v1/rerank.";
+  if (p.retrieval) return "No models to chat with: its embedding and rerank models are below.";
   if (p.preset !== "azure") return "The vendor's list is empty. Fetch models again, or type a model id.";
   if (providers?.fetching && !p.fetched && !p.listError) return "Asking your resource for its deployments with this key…";
   return "No deployments came back for this key. Fetch models again, or type a deployment's name as a model id.";
@@ -12420,14 +12421,14 @@ function renderVideomakers(p) {
 
 // retrievalRows: its embedding and rerank models, which need no pick and
 // aren't among its models since agents don't chat with them: they were
-// nowhere to be seen (@rfiacne on X)
-function retrievalRows(p) {
-  return [["Embedding models", p?.embedIds], ["Rerank models", p?.rerankIds]].flatMap(([l, v]) => {
-    if (!v) return [];
-    const d = el("div", "mchips still");
-    d.append(...v.map((id) => el("span", "mchip", id)));
-    return field(t(l), d);
-  });
+// nowhere to be seen (@rfiacne on X). Each kind with the path it is asked
+// on, drawn by retrievalrows.js; inline in the add form's Fetch models,
+// where a count alone read as no models (solider1394 on X)
+function retrievalRows(p, inline, at = el("span")) {
+  if (!p?.embedIds && !p?.rerankIds) return [];
+  at.hidden = 1;
+  import("./retrievalrows.js").then(() => at.isConnected && at.replaceWith(...retrievalField(p, inline)), () => {});
+  return [at];
 }
 
 function mediaChips(cls, ids, key, p, names) {

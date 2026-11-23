@@ -3387,14 +3387,19 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				out = append(out, x)
 			}
 			// embedding and rerank models need no pick: they are served
-			// on /v1/embeddings and /v1/rerank as listed (heatonz)
-			retrieval := 0
+			// on /v1/embeddings and /v1/rerank as listed (heatonz), and
+			// the form lists them by kind, as a saved provider's editor
+			// does (solider1394 on X: a count alone read as no models)
+			var embed, rerank []string
 			for _, m := range all {
-				if m.Serves == catalog.ServesEmbedding || m.Serves == catalog.ServesRerank {
-					retrieval++
+				switch m.Serves {
+				case catalog.ServesEmbedding:
+					embed = append(embed, m.ID)
+				case catalog.ServesRerank:
+					rerank = append(rerank, m.ID)
 				}
 			}
-			writeJSON(rw, map[string]any{"models": out, "retrieval": retrieval})
+			writeJSON(rw, map[string]any{"models": out, "embedIds": embed, "rerankIds": rerank})
 			return
 		case "models":
 			p, err := provider.Find(in.ID)

@@ -187,6 +187,7 @@ test("compat.js is the first of the page's own scripts", async () => {
   // claudemagpie.js when Claude Desktop's twin button or Advanced fold first shows;
   // keyrates.js when a provider with two or more keys opens;
   // maximages.js when the provider editor draws Max output;
+  // retrievalrows.js when the editor or Fetch models has embedding or rerank models;
   // appearance.js when Settings draws General or the look changes;
   // navorder.js once a page order is kept, or Settings › Sidebar pages draws;
   // the checks above
