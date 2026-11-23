@@ -1,0 +1,185 @@
+{
+ "windows": [
+  {
+   "name": "Claude Opus 5.5",
+   "model": "claude-opus-5-5",
+   "family": "Claude",
+   "pool": "Claude & GPT",
+   "models": [
+    "claude-opus-5-5",
+    "claude-opus-5-5-high",
+    "claude-opus-5-5-low",
+    "claude-opus-5-5-medium"
+   ],
+   "used": 66.394961,
+   "span": 604800,
+   "resetsAt": "2026-11-20T09:01:10.000Z"
+  },
+  {
+   "name": "Claude Sonnet 5.5",
+   "model": "claude-sonnet-5-5",
+   "family": "Claude",
+   "pool": "Claude & GPT",
+   "models": [
+    "claude-sonnet-5-5",
+    "claude-sonnet-5-5-high",
+    "claude-sonnet-5-5-low",
+    "claude-sonnet-5-5-medium"
+   ],
+   "used": 66.394961,
+   "span": 604800,
+   "resetsAt": "2026-11-20T09:01:10.000Z"
+  },
+  {
+   "name": "Gemini 3.8 Flash",
+   "model": "gemini-3.8-flash",
+   "family": "Gemini",
+   "pool": "Gemini",
+   "models": [
+    "gemini-3.8-flash",
+    "gemini-3.8-flash-high",
+    "gemini-3.8-flash-low",
+    "gemini-3.8-flash-medium"
+   ],
+   "used": 0,
+   "span": 604800,
+   "resetsAt": "2026-11-22T11:19:33.000Z"
+  },
+  {
+   "name": "Gemini 4 Argon",
+   "model": "gemini-4-argon",
+   "family": "Gemini",
+   "pool": "Gemini 4 Argon",
+   "models": [
+    "gemini-4-argon",
+    "gemini-4-argon-high",
+    "gemini-4-argon-low",
+    "gemini-4-argon-medium"
+   ],
+   "used": 0,
+   "span": 604800,
+   "resetsAt": "2026-11-22T11:19:33.000Z"
+  },
+  {
+   "name": "Gemini 4 Hydrogen",
+   "model": "gemini-4-hydrogen",
+   "family": "Gemini",
+   "pool": "Gemini",
+   "models": [
+    "gemini-4-hydrogen",
+    "gemini-4-hydrogen-high",
+    "gemini-4-hydrogen-low",
+    "gemini-4-hydrogen-medium",
+    "gemini-4-hydrogen-xhigh"
+   ],
+   "used": 0,
+   "span": 604800,
+   "resetsAt": "2026-11-22T11:19:33.000Z"
+  },
+  {
+   "name": "GPT-OSS 120B",
+   "model": "gpt-oss-120b",
+   "family": "GPT-OSS",
+   "pool": "Claude & GPT",
+   "models": [
+    "gpt-oss-120b",
+    "gpt-oss-120b-medium"
+   ],
+   "used": 66.394961,
+   "span": 604800,
+   "resetsAt": "2026-11-20T09:01:10.000Z"
+  },
+  {
+   "name": "7 days",
+   "pool": "Gemini",
+   "aside": true,
+   "models": [
+    "gemini-3.8-flash",
+    "gemini-3.8-flash-high",
+    "gemini-3.8-flash-low",
+    "gemini-3.8-flash-medium",
+    "gemini-4-hydrogen",
+    "gemini-4-hydrogen-high",
+    "gemini-4-hydrogen-low",
+    "gemini-4-hydrogen-medium",
+    "gemini-4-hydrogen-xhigh"
+   ],
+   "used": 0,
+   "span": 604800,
+   "resetsAt": "2026-11-22T11:19:33.000Z"
+  },
+  {
+   "name": "5 hours",
+   "pool": "Gemini",
+   "aside": true,
+   "models": [
+    "gemini-3.8-flash",
+    "gemini-3.8-flash-high",
+    "gemini-3.8-flash-low",
+    "gemini-3.8-flash-medium",
+    "gemini-4-hydrogen",
+    "gemini-4-hydrogen-high",
+    "gemini-4-hydrogen-low",
+    "gemini-4-hydrogen-medium",
+    "gemini-4-hydrogen-xhigh"
+   ],
+   "used": 0,
+   "span": 18000,
+   "resetsAt": "2026-11-15T16:19:33.000Z"
+  },
+  {
+   "name": "7 days",
+   "pool": "Claude & GPT",
+   "aside": true,
+   "models": [
+    "claude-opus-5-5",
+    "claude-opus-5-5-high",
+    "claude-opus-5-5-low",
+    "claude-opus-5-5-medium",
+    "claude-sonnet-5-5",
+    "claude-sonnet-5-5-high",
+    "claude-sonnet-5-5-low",
+    "claude-sonnet-5-5-medium",
+    "gpt-oss-120b",
+    "gpt-oss-120b-medium"
+   ],
+   "used": 66.394961,
+   "span": 604800,
+   "resetsAt": "2026-11-20T09:01:10.000Z"
+  },
+  {
+   "name": "5 hours",
+   "pool": "Claude & GPT",
+   "aside": true,
+   "models": [
+    "claude-opus-5-5",
+    "claude-opus-5-5-high",
+    "claude-opus-5-5-low",
+    "claude-opus-5-5-medium",
+    "claude-sonnet-5-5",
+    "claude-sonnet-5-5-high",
+    "claude-sonnet-5-5-low",
+    "claude-sonnet-5-5-medium",
+    "gpt-oss-120b",
+    "gpt-oss-120b-medium"
+   ],
+   "used": 0,
+   "span": 18000,
+   "resetsAt": "2026-11-15T16:19:33.000Z"
+  },
+  {
+   "name": "7 days",
+   "pool": "Gemini 4 Argon",
+   "aside": true,
+   "models": [
+    "gemini-4-argon",
+    "gemini-4-argon-high",
+    "gemini-4-argon-low",
+    "gemini-4-argon-medium"
+   ],
+   "used": 0,
+   "span": 604800,
+   "resetsAt": "2026-11-22T11:19:33.000Z"
+  }
+ ]
+}
