@@ -2821,7 +2821,9 @@ func (p Provider) factoryFastPrice(model string) (catalog.Price, bool) {
 // MiMo's three Token Plan catalogs list all nine of its models at $0 too,
 // and stood before xiaomi's own prices, so a pay-as-you-go call was
 // counted at $0 (#1873, mengyianx).
-var membershipCatalogs = append(slices.Clone(kimiCodePlans), "xiaomi-token-plan-cn", "xiaomi-token-plan-sgp", "xiaomi-token-plan-ams")
+// Zhipu's and Z.ai's GLM Coding Plan catalogs list theirs at $0 too.
+var membershipCatalogs = append(slices.Clone(kimiCodePlans), "xiaomi-token-plan-cn", "xiaomi-token-plan-sgp", "xiaomi-token-plan-ams",
+	"zhipuai-coding-plan", "zai-coding-plan")
 
 // kimiCodePlans are Kimi Code's membership catalogs, whose models are
 // priced as the Kimi API's (kimiCodeAPI).
