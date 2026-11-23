@@ -1103,7 +1103,7 @@ func claudeWindows(ctx context.Context, user string, active bool) ([]QuotaWindow
 	}
 	c.m[key] = claudeUsageEntry{at: now, ws: ws, heard: e.heard, tried: now, asked: asked, wait: e.wait, whole: true}
 	c.Unlock()
-	clearClaudeSaid(user) // read well: the reading decides (claude_said_out.go)
+	clearClaudeSaid(user, ws) // read well: the reading decides (claude_said_out.go)
 	// as of now, as a kept reading is: /usage gives a reset to the minute
 	// and can lag it, so a window it still counts full may have started
 	// again already

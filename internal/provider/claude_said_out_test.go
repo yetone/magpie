@@ -139,7 +139,7 @@ func TestClaudeSaidOutSpareSkipped(t *testing.T) {
 		t.Fatalf("the spare out till its reset was read %d times", n)
 	}
 	// its reset come: chosen again by its reading
-	m := readClaudeSaid()
+	m, _ := readClaudeSaid()
 	s := m[strings.ToLower(spares[0])]
 	s.Until = time.Now().Add(-time.Minute)
 	m[strings.ToLower(spares[0])] = s
@@ -200,7 +200,7 @@ func TestClaudeSaidKeepsOnlyLimits(t *testing.T) {
 	if !claudeSaidOut("A@x.com", now) {
 		t.Fatal("a limit said isn't kept")
 	}
-	clearClaudeSaid("a@x.com")
+	clearClaudeSaid("a@x.com", nil)
 	if claudeSaidOut("a@x.com", now) {
 		t.Fatal("a good read since didn't clear it")
 	}

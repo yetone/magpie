@@ -10,8 +10,11 @@ import (
 
 func forgetClaudeRefused() {
 	claudeRefused.Lock()
-	claudeRefused.at, claudeRefused.until, claudeRefused.said, claudeRefused.kept = time.Time{}, time.Time{}, "", false
+	claudeRefused.at, claudeRefused.until, claudeRefused.said, claudeRefused.kept, claudeRefused.family = time.Time{}, time.Time{}, "", false, ""
 	claudeRefused.Unlock()
+	claudeOnModels.Lock()
+	claudeOnModels.at = nil
+	claudeOnModels.Unlock()
 }
 
 // claudeWeeklyRefusal is the line Claude Code 2.1 wrote to the owner's
@@ -72,7 +75,7 @@ func TestClaudeRefusalKeptTillItsReset(t *testing.T) {
 			}
 			writeSession(t, session, claudeWeeklyRefusal(at, resets))
 			claudeLookDue()
-			got, ok := readClaudeSaid()[strings.ToLower(user)]
+			got, ok := claudeSaidNow()[strings.ToLower(user)]
 			if ok != c.kept || c.kept && !got.Until.Equal(resets) {
 				t.Fatalf("kept %v till %v, want kept %v till %v", ok, got.Until, c.kept, resets)
 			}

@@ -69,11 +69,20 @@ func TestClaudeAccountRestKeptOutForTheSwitch(t *testing.T) {
 
 	// Fable's own limit: the model rests, the account is not out
 	fable := acct("fable@example.com", "claude-fable-5-1")
-	if r := s.restAfter(fable, http.StatusTooManyRequests, http.Header{}, body("Claude Code: You've reached your Fable limit. Run /usage-credits to continue or switch models with /model.")); r.Key != fable.restID() {
-		t.Fatalf("Fable's limit rested %+v, want the model", r)
+	fr := s.restAfter(fable, http.StatusTooManyRequests, http.Header{}, body("Claude Code: You've reached your Fable limit. Run /usage-credits to continue or switch models with /model."))
+	if fr.Key != fable.restID() {
+		t.Fatalf("Fable's limit rested %+v, want the model", fr)
 	}
-	if _, _, ok := keptOut(t, "fable@example.com"); ok {
+	if until, _, _ := keptOut(t, "fable@example.com"); !until.IsZero() {
 		t.Fatal("Fable's own limit held the whole account out")
+	}
+	// it is out for Fable alone, for the switch, till the model's rest
+	now := time.Now()
+	if got := provider.ClaudeModelOutUntil("fable@example.com", "claude-fable-5-1", now); !got.Equal(fr.Until) {
+		t.Fatalf("Fable kept out till %v, want the rest's %v", got, fr.Until)
+	}
+	if got := provider.ClaudeModelOutUntil("fable@example.com", "claude-opus-5-5", now); !got.IsZero() {
+		t.Fatalf("Opus kept out till %v", got)
 	}
 
 	// a rate limit, with quota left, is a moment's
@@ -171,5 +180,30 @@ func TestClaudeBridgeRefusalKeptOut(t *testing.T) {
 				t.Fatalf("the gateway rests the account till %v (%v), the switch holds it out till %v", rested.Until, ok, until)
 			}
 		})
+	}
+}
+
+// A Claude account Claude Code said is out for Fable alone (the warm-up's
+// or a /usage run's "You've hit your Fable limit", kept in
+// claude-limits.json) is full for the gateway's Fable requests till that
+// reset, and goes behind the accounts with room; for Opus it is not.
+func TestClaudeFamilyOutFullForThatFamily(t *testing.T) {
+	fresh(t)
+	resets := time.Now().Add(30 * time.Hour).Truncate(time.Second)
+	provider.NoteClaudeModelOut("f@example.com", "claude-fable-5-1", resets, "Claude Code: You've hit your Fable limit", true)
+	acct := func(model string) candidate {
+		return candidate{p: provider.Provider{ID: "claude", Account: &provider.Account{Agent: "claude", User: "F@example.com"}}, model: model, rest: "claude"}
+	}
+	now := time.Now()
+	if got := acct("claude-fable-5-1[1m]").full(now); !got.Equal(resets) {
+		t.Fatalf("Fable full till %v, want %v", got, resets)
+	}
+	if got := acct("claude-opus-5-5").full(now); !got.IsZero() {
+		t.Fatalf("Opus full till %v, want not full", got)
+	}
+	// another vendor's account of the same name is not Claude's
+	other := candidate{p: provider.Provider{ID: "x", Account: &provider.Account{Agent: "codex", User: "f@example.com"}}, model: "claude-fable-5-1", rest: "x"}
+	if got := other.full(now); !got.IsZero() {
+		t.Fatalf("a Codex account full till %v", got)
 	}
 }

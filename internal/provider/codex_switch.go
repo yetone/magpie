@@ -334,6 +334,13 @@ func NextLogin(ctx context.Context, agent string) (from, to string, back, ok boo
 	}
 	u := someLoginUsage(ctx, agent, from, firstUser)
 	now := time.Now()
+	// the model families Claude Code is on: an account out for one
+	// family's limit alone (Claude Code's "You've hit your Fable limit")
+	// is out only for Claude Code on that family (claudeSaidOutFor)
+	var fams []string
+	if agent == "claude" {
+		fams = claudeOnFamilies(now)
+	}
 	// an account at its usage cap is spent as one at the share below
 	// (account_caps.go): it is moved off, and none is moved to or back to
 	// till the window it filled renews
@@ -346,7 +353,7 @@ func NextLogin(ctx context.Context, agent string) (from, to string, back, ok boo
 	// cap is held with every window under the share
 	if first != nil && first.On && first.Lapsed == "" && returnsToFirst(agent) {
 		if q, known := u[first.User]; known && q.Error == "" && !q.Held && !usedPast(q, backShare, now) && !capped(first.User, q) &&
-			(agent != "claude" || !claudeSaidOut(first.User, now)) {
+			(agent != "claude" || !claudeSaidOutFor(first.User, fams, now)) {
 			return from, first.User, true, true
 		}
 	}
@@ -371,7 +378,7 @@ func NextLogin(ctx context.Context, agent string) (from, to string, back, ok boo
 	// for its limit is spent as one read past the share (claudeOutUnread)
 	// and so is one Claude Code said hit its limit, till the reset it
 	// named (claudeSaidOut), whatever an older reading says
-	out := agent == "claude" && (claudeOutUnread(from, known, q, now) || claudeSaidOut(from, now))
+	out := agent == "claude" && (claudeOutUnread(from, fams, known, q, now) || claudeSaidOutFor(from, fams, now))
 	if keep || !out && (!known || q.Error != "" || !q.Held && !usedPast(q, share, now) && !capped(from, q)) {
 		return "", "", false, false
 	}
@@ -403,7 +410,7 @@ func NextLogin(ctx context.Context, agent string) (from, to string, back, ok boo
 			// old to go by: read now, by Claude Code's /usage in its own
 			// directory, one account at a time and only till one has room
 			var out bool
-			if q, known, old, out = claudeSpare(ctx, l, q, known, now); out {
+			if q, known, old, out = claudeSpare(ctx, l, fams, q, known, now); out {
 				continue
 			}
 		}
@@ -500,6 +507,10 @@ func NextInOrder(ctx context.Context, agent string) (to string, over bool, err e
 	share, _ := loginSwitching(agent)
 	u := someLoginUsage(ctx, agent, users...)
 	now := time.Now()
+	var fams []string
+	if agent == "claude" {
+		fams = claudeOnFamilies(now)
+	}
 	best, most := "", math.Inf(-1)
 	stale := ""
 	for _, l := range order {
@@ -507,7 +518,7 @@ func NextInOrder(ctx context.Context, agent string) (to string, over bool, err e
 		old := false
 		if agent == "claude" {
 			var out bool
-			if q, known, old, out = claudeSpare(ctx, l, q, known, now); out {
+			if q, known, old, out = claudeSpare(ctx, l, fams, q, known, now); out {
 				continue
 			}
 		}
@@ -543,13 +554,13 @@ func NextInOrder(ctx context.Context, agent string) (to string, over bool, err e
 // (staleSpare). out says Claude Code said the account hit its limit and
 // the reset it named hasn't come (claudeSaidOut), whatever the reading:
 // it is passed over. old says the reading is still too old after.
-func claudeSpare(ctx context.Context, l Login, q SubscriptionQuota, known bool, now time.Time) (_ SubscriptionQuota, _ bool, old, out bool) {
-	if claudeSaidOut(l.User, now) {
+func claudeSpare(ctx context.Context, l Login, fams []string, q SubscriptionQuota, known bool, now time.Time) (_ SubscriptionQuota, _ bool, old, out bool) {
+	if claudeSaidOutFor(l.User, fams, now) {
 		return q, known, false, true
 	}
 	if !known || unreadSpare(q) || staleSpare(q, now) {
 		q, known = readSpare(ctx, l)
-		if claudeSaidOut(l.User, now) {
+		if claudeSaidOutFor(l.User, fams, now) {
 			return q, known, false, true
 		}
 	}

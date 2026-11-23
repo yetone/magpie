@@ -26,6 +26,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -163,8 +164,109 @@ func scanClaudeSession(path string, from, size int64) int64 {
 			return pos // the rest is a line not yet ended
 		}
 		pos += int64(len(line))
+		noteClaudeModel(line)
 		noteClaudeRefusal(line)
 	}
+}
+
+// claudeOnModels is the model families Claude Code answered on lately, by
+// the latest time the scan read one of its replies on each ("fable":
+// "message":{"model":"claude-fable-5-1",…}): what claudeOnFamilies says
+// Claude Code is on, every session counted, as two sessions on two models
+// both stop on an account one of them is out for.
+var claudeOnModels struct {
+	sync.Mutex
+	at map[string]time.Time
+}
+
+// claudeOnRecent is how long a model Claude Code answered on counts as one
+// it is on.
+const claudeOnRecent = time.Hour
+
+// claudeReplyModel is what marks a line of Claude Code's that names the
+// model it answered on, cheaply found before it is read.
+var claudeReplyModel = []byte(`"model":"`)
+
+// noteClaudeModel keeps the family of the model line, a reply Claude Code
+// wrote, was answered on, by the line's own time. A refusal's is
+// "<synthetic>", no family.
+func noteClaudeModel(line []byte) {
+	if !bytes.Contains(line, []byte(`"type":"assistant"`)) {
+		return
+	}
+	i := bytes.Index(line, claudeReplyModel)
+	if i < 0 {
+		return
+	}
+	rest := line[i+len(claudeReplyModel):]
+	j := bytes.IndexByte(rest, '"')
+	if j < 0 || j > 200 {
+		return
+	}
+	family := claudeModelFamily(string(rest[:j]))
+	if family == "" {
+		return
+	}
+	at := time.Now()
+	if k := bytes.Index(line, []byte(`"timestamp":"`)); k >= 0 {
+		ts := line[k+len(`"timestamp":"`):]
+		if e := bytes.IndexByte(ts, '"'); e > 0 && e < 64 {
+			if t, err := time.Parse(time.RFC3339Nano, string(ts[:e])); err == nil {
+				at = t
+			}
+		}
+	}
+	c := &claudeOnModels
+	c.Lock()
+	if c.at == nil {
+		c.at = map[string]time.Time{}
+	}
+	if at.After(c.at[family]) {
+		c.at[family] = at
+	}
+	c.Unlock()
+}
+
+// claudeOnFamilies is the model families Claude Code is on at now: those
+// it answered on in the last claudeOnRecent, else the one its settings
+// name ("model": "opus" in settings.json, read, never written), else nil,
+// not known. Used to tell whether an account out for one family's limit
+// alone (claudeSaidOutFor) stops Claude Code.
+func claudeOnFamilies(now time.Time) []string {
+	var fams []string
+	c := &claudeOnModels
+	c.Lock()
+	for f, at := range c.at {
+		if now.Sub(at) < claudeOnRecent {
+			fams = append(fams, f)
+		}
+	}
+	c.Unlock()
+	if len(fams) > 0 {
+		slices.Sort(fams)
+		return fams
+	}
+	if f := claudeSettingsFamily(); f != "" {
+		return []string{f}
+	}
+	return nil
+}
+
+// claudeSettingsFamily is the family of the model Claude Code's own
+// settings.json names, read only; empty when it names none, one of no
+// family ("default"), or can't be read.
+func claudeSettingsFamily() string {
+	b, err := os.ReadFile(filepath.Join(filepath.Dir(claudeCredentialsPath()), "settings.json"))
+	if err != nil {
+		return ""
+	}
+	var s struct {
+		Model string `json:"model"`
+	}
+	if json.Unmarshal(b, &s) != nil {
+		return ""
+	}
+	return claudeModelFamily(s.Model)
 }
 
 // claudeRefusal is what marks a line Claude Code writes for a refusal for
@@ -214,6 +316,7 @@ func noteClaudeRefusal(line []byte) {
 	claudeRefused.Lock()
 	if at.After(claudeRefused.at) {
 		claudeRefused.at, claudeRefused.said, claudeRefused.until, claudeRefused.kept = at, said, claudeRefusalUntil(q, said, at), false
+		claudeRefused.family = claudeLimitFamily(q.Type, said)
 	}
 	claudeRefused.Unlock()
 	for {
@@ -242,6 +345,10 @@ var claudeRefused struct {
 	at, until time.Time
 	said      string
 	kept      bool
+	// family is the one model family the refusal was for
+	// (claudeLimitFamily: seven_day_overage_included, "your Fable
+	// limit"); empty for the whole account
+	family string
 }
 
 // claudeRefusalUntil is until when the refusal at at says the account is
@@ -293,24 +400,24 @@ func keepClaudeRefusal(user string, since, now time.Time) {
 	r := &claudeRefused
 	r.Lock()
 	due := !r.kept && r.at.After(since.Add(claudeSwitchSettles)) && r.until.After(now)
-	until, said := r.until, r.said
+	until, said, family := r.until, r.said, r.family
 	r.kept = r.kept || due
 	r.Unlock()
 	if !due {
 		return
 	}
 	claudeSaidMu.Lock()
-	kept := readClaudeSaid()
+	kept := claudeSaidNow()
 	claudeSaidMu.Unlock()
 	for k, v := range kept {
-		if k != strings.ToLower(user) && v.Until.Equal(until) {
+		if k != strings.ToLower(user) && (family == "" && v.Until.Equal(until) || family != "" && v.Models[family].Until.Equal(until)) {
 			return // the account moved off's, refused once more
 		}
 	}
 	if said == "" {
 		said = "Claude Code was refused for its limit"
 	}
-	keepClaudeOut(user, until, said, now)
+	keepClaudeOutFor(user, family, until, said, now)
 }
 
 // claudeLookDue says Claude's sign-in is to be looked at before the next
@@ -372,7 +479,7 @@ func claudeOnSince(user string, now time.Time) time.Time {
 // "You've hit your session limit", "… weekly limit", "… Fable limit for
 // this week", "… limit · resets 5pm" (2.1.327 builds it as "You've hit
 // your " and the window's words), and the older "usage limit reached".
-var claudeLimitSaid = lazyre.New(`(?i)hit your (?:[\w.-]+ ){0,3}limit|\b(?:session|weekly|usage) limit (?:reached|hit)`)
+var claudeLimitSaid = lazyre.New(`(?i)(?:hit|reached) your (?:[\w.-]+ ){0,3}limit|\b(?:session|weekly|usage) limit (?:reached|hit)`)
 
 // claudeOutUnread says the account Claude Code is on, user, whose reading
 // q (known: there is one) tells no allowance, is out all the same: the
@@ -384,13 +491,29 @@ var claudeLimitSaid = lazyre.New(`(?i)hit your (?:[\w.-]+ ){0,3}limit|\b(?:sessi
 // mid-task on the owner's accounts with every other one having room, and
 // only marking it limited by hand moved it on. A refusal of the account
 // itself (signed out, 401) is not this: nothing says it is out.
-func claudeOutUnread(user string, known bool, q SubscriptionQuota, now time.Time) bool {
+//
+// A limit of one model family alone (Claude Code's "You've hit your
+// Fable limit") is out only for Claude Code on that family (fams,
+// claudeOnFamilies; nil, not known, counts every family).
+func claudeOutUnread(user string, fams []string, known bool, q SubscriptionQuota, now time.Time) bool {
 	if known && q.Error == "" {
 		return false // read: the reading decides
 	}
 	said := claudeNotYourLimit.ReplaceAllString(q.Error, "")
 	if claudeLimitSaid.MatchString(said) {
-		return true
+		return claudeFamilyStops(claudeLimitFamily("", said), fams)
 	}
-	return !claudeDenied(said) && claudeLimitHitAfter(claudeOnSince(user, now))
+	if claudeDenied(said) || !claudeLimitHitAfter(claudeOnSince(user, now)) {
+		return false
+	}
+	claudeRefused.Lock()
+	family := claudeRefused.family
+	claudeRefused.Unlock()
+	return claudeFamilyStops(family, fams)
+}
+
+// claudeFamilyStops says a limit of family (empty: the whole account's)
+// stops Claude Code on the families fams (nil: not known, so it does).
+func claudeFamilyStops(family string, fams []string) bool {
+	return family == "" || fams == nil || slices.Contains(fams, family)
 }
