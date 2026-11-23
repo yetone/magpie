@@ -5352,7 +5352,7 @@ body.window .row.agent .who.with-models { flex-wrap: wrap; row-gap: 0; }
 .am-mr.lock .ck { opacity: .45; }
 .am-tag { margin-left: 6px; padding: 1px 6px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); font-size: 10.5px; font-weight: 500; }
 .am-none { padding: 18px 12px; color: var(--muted); font-size: 12.5px; text-align: center; }
-.am-foot { display: flex; align-items: center; gap: 8px; margin: 8px 8px 0; padding: 10px 6px 2px; border-top: 1px solid var(--line-2); font-size: 11.5px; color: var(--muted); }
+.am-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 8px 0; padding: 10px 6px 2px; border-top: 1px solid var(--line-2); font-size: 11.5px; color: var(--muted); }
 .am-foot .sp { flex: 1; }
 .am-reset { border: 0; background: none; padding: 2px 4px; border-radius: 5px; color: var(--fg-2); font: inherit; font-size: 11.5px; cursor: pointer; }
 .am-reset:hover:not(:disabled) { color: var(--accent); }
@@ -5361,10 +5361,11 @@ body.window .row.agent .who.with-models { flex-wrap: wrap; row-gap: 0; }
 .am-dot { color: var(--faint); }
 /* the agent's own switch: a model that comes later shown, or off until
    ticked (#1337); its words give way before the buttons beside it do */
-.am-only { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--fg-2); cursor: pointer; }
-.am-only[hidden] { display: none; }
-.am-only .lib-switch { flex: none; }
-.am-only > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.am-only, .am-join { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--fg-2); cursor: pointer; }
+.am-only[hidden], .am-join[hidden] { display: none; }
+.am-join { flex-basis: 100%; }
+.am-only .lib-switch, .am-join .lib-switch { flex: none; }
+.am-only > span, .am-join > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .am-foot .am-reset { flex: none; }
 /* the agent's own models, beside magpie's in its picker or not (#1642) */
 .am-own { display: flex; align-items: center; gap: 6px; min-width: 0; margin-top: 8px; font-size: 12px; color: var(--fg-2); cursor: pointer; }

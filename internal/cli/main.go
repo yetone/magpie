@@ -98,7 +98,7 @@ const usage = `magpie — one place to pick every agent's model
   magpie model name <provider/model> <name>|--reset       the name a model goes by, everywhere
   magpie model efforts <provider/model> <l>,<l>|--reset   the reasoning levels a model offers (magpie model help)
   magpie model api <provider/model> chat|responses|anthropic|gemini|auto   the API a model is asked on
-  magpie visible [<agent> <family|provider|group>,… | all | --only-picked | --show-new]
+  magpie visible [<agent> <family|provider|group>,… | all | --only-picked | --show-new | --provider-picks]
                                   which models an agent is shown: families (magpie provider/group set <id> family=…),
                                   or only the models ticked for it, a new one off until it is ticked
   magpie search [add <api> <key>|rm <api>]   Tavily, Brave, Exa, Firecrawl, You.com, DeepSeek, Doubao Search (Volcengine), Yuanbao Search (Tencent Cloud), TinyFish or SearXNG for web search when no provider can search

@@ -3,7 +3,9 @@
 // #1337): the switch in its foot is the agent's own; on, what is ticked is
 // what is sent (not what is hidden), so a model that comes later — of a new
 // provider or an old one — is off until it is ticked; off again, new models
-// show. The switch is the list's foot, not the order's.
+// show. The switch is the list's foot, not the order's. On, a second one
+// under it takes in the models ticked in a provider's editor too
+// (eiyuuzaki2333 on X).
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -19,7 +21,7 @@ function fixture(lang) {
     ...["gpt-5.5", "gpt-5.4", "o4-mini"].map((m, i) => ({ id: "openai/" + m, name: m.toUpperCase(), group: "OpenAI", icon: "openai", inUse: i === 0 })),
     ...["m1", "m2"].map((m) => ({ id: "relay/" + m, name: "Relay " + m, group: "Relay", icon: "generic" })),
   ];
-  let only = false;
+  let only = false, joins = false;
   const posts = [];
   const count = () => ({ shown: list.filter((m) => !m.hidden).length, listed: list.length });
   const state = () => ({
@@ -41,6 +43,7 @@ function fixture(lang) {
       if (req.method() === "POST") {
         const body = req.postDataJSON();
         posts.push(body);
+        if (body.joins !== undefined) { joins = body.joins; return json({ joins }); }
         if (body.only !== undefined) only = body.only;
         else if (only) {
           if (!body.shown) return route.fulfill({ status: 500, json: { error: "picks sent as hidden" } });
@@ -48,7 +51,7 @@ function fixture(lang) {
         } else for (const m of list) m.hidden = (body.hidden || []).includes(m.id) && !m.inUse;
         return json({ models: list, count: count(), only });
       }
-      return json({ models: list, ordered: false, only });
+      return json({ models: list, ordered: false, only, joins });
     }
     if (url.pathname === "/api/groups") return json({ groups: [] });
     if (url.pathname === "/api/providers") return json({ providers: [], gateway: { running: true, window: true } });
@@ -59,18 +62,20 @@ function fixture(lang) {
   }
   // a model that comes later: a new provider's, shown only its picks, is off
   const arrive = (m) => list.push({ ...m, hidden: only });
-  return { serve, posts, arrive, only: () => only };
+  return { serve, posts, arrive, only: () => only, joins: () => joins };
 }
 
 const W = {
-  en: { only: "Only models I pick", order: "Order", all: "All", showAll: "Show all" },
-  zh: { only: "只显示我勾选的模型", order: "排序", all: "全部", showAll: "全部显示" },
+  en: { only: "Only models I pick", join: "Add models I pick in a provider", order: "Order", all: "All", showAll: "Show all" },
+  zh: { only: "只显示我勾选的模型", join: "供应商里勾选的模型也加进来", order: "排序", all: "全部", showAll: "全部显示" },
+  "zh-TW": { only: "只顯示我勾選的模型", join: "供應商裡勾選的模型也加進來", order: "排序", all: "全部", showAll: "全部顯示" },
+  ja: { only: "選んだモデルだけ表示", join: "プロバイダーで選んだモデルも追加", order: "並び順", all: "すべて", showAll: "すべて表示" },
   // the longest words, beside the longest buttons, at the narrowest
-  de: { only: "Nur meine Auswahl", order: "Reihenfolge", all: "Alle", showAll: "Alle anzeigen" },
+  de: { only: "Nur meine Auswahl", join: "Im Anbieter gewählte Modelle übernehmen", order: "Reihenfolge", all: "Alle", showAll: "Alle anzeigen" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
-  for (const lang of ["en", "zh", "de"]) {
+  for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) {
     for (const width of [420, 1100]) {
       test(`${engine} ${lang} ${width}: only the models picked for an agent`, async (t) => {
         const w = W[lang];
@@ -122,6 +127,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert(ob.x >= pb.x && ob.x + ob.width <= rb.x, `switch ${JSON.stringify(ob)} clear of Hide all ${JSON.stringify(rb)}`);
         assert(rb.x + rb.width <= pb.x + pb.width, "Hide all inside the box");
         assert(pb.x >= 0 && pb.x + pb.width <= width, JSON.stringify(pb));
+        // a provider's picks taking part is only for a list of picks
+        const join = pop.locator(".am-join");
+        const joinSw = join.locator(".lib-switch");
+        assert(await join.isHidden(), "the provider's picks switch shows before Only models I pick is on");
 
         // with new models shown, taking one out sends what is hidden
         await pop.locator(".am-mr", { hasText: "Relay m2" }).click();
@@ -134,6 +143,18 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(fx.posts.at(-1), { only: true });
         assert.equal(await sw.getAttribute("aria-checked"), "true");
         assert(!(await ticked("Relay m2")) && (await ticked("Relay m1")));
+        // under it, its own row, off, its words whole inside the box
+        assert(await join.isVisible());
+        assert.equal(await join.innerText(), w.join);
+        assert.equal(await joinSw.getAttribute("aria-checked"), "false");
+        const jb = await join.boundingBox(), nb = await pop.boundingBox(), fb = await pop.locator(".am-foot .am-hide").boundingBox(), js = await join.locator("span").evaluate((e) => e.scrollWidth <= e.clientWidth);
+        assert(jb.y >= fb.y + fb.height - 1 && jb.x >= nb.x && jb.x + jb.width <= nb.x + nb.width, `join ${JSON.stringify(jb)} under ${JSON.stringify(fb)} in ${JSON.stringify(nb)}`);
+        assert(js, "the switch's words are cut off");
+        await join.locator("span").click();
+        await settle();
+        assert.deepEqual(fx.posts.at(-1), { joins: true });
+        assert.equal(fx.joins(), true);
+        assert.equal(await joinSw.getAttribute("aria-checked"), "true");
 
         // a click now sends what is ticked: o4-mini out, the rest as they were
         await pop.locator(".am-mr", { hasText: "O4-MINI" }).click();
@@ -146,6 +167,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         fx.arrive({ id: "openai/gpt-6", name: "GPT-6", group: "OpenAI", icon: "openai" });
         await open();
         assert.equal(await sw.getAttribute("aria-checked"), "true", "the switch is the agent's, kept");
+        assert.equal(await joinSw.getAttribute("aria-checked"), "true", "the provider's picks switch is kept");
         assert(!(await ticked("Fresh X1")) && !(await ticked("GPT-6")), "what comes later is off");
         // ticking one shows it, the other new one still off
         await pop.locator(".am-mr", { hasText: "GPT-6" }).click();
@@ -174,6 +196,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(fx.posts.at(-1), { only: false });
         assert.equal(fx.only(), false);
         assert.equal(await sw.getAttribute("aria-checked"), "false");
+        assert(await join.isHidden(), "the provider's picks switch stays with Only models I pick off");
         await pop.locator(".am-mr", { hasText: "Fresh X1" }).click();
         await settle();
         assert.deepEqual(fx.posts.at(-1), { hidden: ["fresh/x1"] });

@@ -547,6 +547,9 @@ func providerCmd(args []string) error {
 		if !slices.Equal(before.Models, p.Models) {
 			// models= replaces the picks, as provider models does
 			printPicksChange(before, *p, nil)
+			if err := joinPicks(*p, &before); err != nil {
+				return err
+			}
 		}
 		return nil
 	case "key":
@@ -808,6 +811,9 @@ func providerCmd(args []string) error {
 				return err
 			}
 			printPicksChange(before, *p, rest[1:])
+			if err := joinPicks(*p, &before); err != nil {
+				return err
+			}
 			return showProvider(*p)
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -890,6 +896,20 @@ func saveNew(p provider.Provider) error {
 	return announce(id)
 }
 
+// joinPicks ticks p's models picked since before for the agents shown
+// only their picks that take a provider's in (eiyuuzaki2333 on X), and
+// says which.
+func joinPicks(p provider.Provider, before *provider.Provider) error {
+	joined, err := provider.JoinPicks(p, before)
+	if err != nil {
+		return err
+	}
+	if len(joined) > 0 {
+		fmt.Println(green.Render("✓"), "picked for", strings.Join(joined, ", "), "too")
+	}
+	return nil
+}
+
 // announce says a provider was added and asks the vendor for its models.
 func announce(id string) error {
 	saved, err := provider.Find(id)
@@ -897,6 +917,9 @@ func announce(id string) error {
 		return err
 	}
 	fmt.Println(green.Render("✓"), "added", saved.Name, muted.Render("("+saved.ID+")"))
+	if err := joinPicks(*saved, nil); err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	if saved.ListsOff() {

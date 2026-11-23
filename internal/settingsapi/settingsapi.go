@@ -298,6 +298,7 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	in.Visible, in.HiddenModels, in.OrderedModels = cur.Visible, cur.HiddenModels, cur.OrderedModels
 	in.PickedModels = cur.PickedModels       // "only models I pick" (#1337)
 	in.OwnModelsHidden = cur.OwnModelsHidden // an agent's own models left out (#1642)
+	in.PicksJoin = cur.PicksJoin             // a provider's picks taken in (eiyuuzaki2333)
 	in.FastPicks = cur.FastPicks             // switched in the agents' pickers (#954)
 	in.UltraPicks = cur.UltraPicks           // and sent Ultrafast (#1954)
 	in.AgentEfforts = cur.AgentEfforts       // picked in an agent's row (#1003)

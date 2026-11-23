@@ -116,6 +116,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		DisabledModels:       []string{"*fable*", "p/m"},
 		PickedModels:         map[string][]string{"opencode": {"p/m"}},
 		OwnModelsHidden:      []string{"dsh"},
+		PicksJoin:            []string{"opencode"},
 		OrderedModels:        map[string][]string{"codex": {"group/g", "p/n"}},
 		FastPicks:            map[string][]string{"codex": {"p/n"}},
 		UltraPicks:           map[string][]string{"codex": {"p/n"}},

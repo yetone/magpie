@@ -79,8 +79,11 @@ line; agents connected to magpie lose it when it quits.
   "Only models I pick" switch turns the list around: the models ticked
   when it is switched on stay, and a model added later, of any provider,
   stays out of that agent's picker and its config until it is ticked
-  (`magpie visible <agent> --only-picked`, back with `--show-new`). A
-  model asked for by name still works either way.
+  (`magpie visible <agent> --only-picked`, back with `--show-new`). With
+  "Add models I pick in a provider" on beside it, a model ticked in a
+  provider's editor, as the provider is added or later, is ticked there too
+  (`magpie visible <agent> --provider-picks`); other new models still wait.
+  A model asked for by name still works either way.
 - **Profiles.** Snapshot every agent's settings under a name and switch all of
   them back in one move. The profile in use, the one applying would change
   nothing, is ticked, the tray panel's Profiles button shows its name, and

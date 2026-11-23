@@ -2839,6 +2839,16 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 					in.ID = to
 				}
 			}
+			// the models ticked here that weren't before are ticked for the
+			// agents shown only their picks that take a provider's in
+			// (eiyuuzaki2333 on X), so a model isn't ticked twice; before
+			// the list is fetched, so a model its vendor adds stays out
+			if p, err := provider.Find(in.ID); err == nil {
+				if _, err := provider.JoinPicks(*p, old); err != nil {
+					fail(rw, err)
+					return
+				}
+			}
 			if len(moreKeys) > 0 {
 				// those it has already are passed over, not an error
 				if added, had, err := provider.AddKeys(in.ID, moreKeys, in.KeyProtocol); err != nil && !(added == 0 && had > 0) {

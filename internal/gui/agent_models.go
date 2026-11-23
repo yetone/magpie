@@ -318,9 +318,11 @@ func agentModelsAPI(mux *http.ServeMux) {
 		}
 		_, only := provider.PickedModels(a.ListsFor())
 		// own: its pickers offer models of the agent's own beside
-		// magpie's, which ownHidden leaves out (#1642)
+		// magpie's, which ownHidden leaves out (#1642); joins: shown only
+		// its picks, it takes in a provider's too (provider.PicksJoin)
 		writeJSON(rw, map[string]any{"models": agentModelList(a), "ordered": len(provider.ModelOrder(a.ListsFor())) > 0, "only": only,
-			"own": a.OwnModels(a.Values()), "ownHidden": provider.OwnModelsHidden(a.ListsFor())})
+			"joins": provider.PicksJoin(a.ListsFor()),
+			"own":   a.OwnModels(a.Values()), "ownHidden": provider.OwnModelsHidden(a.ListsFor())})
 	})
 	// hidden is every entry to take out of the agent's lists; the others
 	// are shown, and one the agent is set to is kept in whatever is asked
@@ -338,6 +340,9 @@ func agentModelsAPI(mux *http.ServeMux) {
 	//
 	// ownHidden switches the agent's pickers between offering its own
 	// models beside magpie's and offering magpie's alone (#1642)
+	//
+	// joins switches whether an agent shown only its picks takes in the
+	// models picked in a provider's editor too (eiyuuzaki2333 on X)
 	mux.HandleFunc("POST /api/agent-models/{id}", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct {
 			Hidden []string
@@ -346,6 +351,7 @@ func agentModelsAPI(mux *http.ServeMux) {
 			Only   *bool
 			// OwnHidden, sent as ownHidden
 			OwnHidden *bool
+			Joins     *bool
 			// Widen: models its visibility keeps that were ticked, whose
 			// providers or groups it is shown from now on
 			Widen []string
@@ -377,6 +383,14 @@ func agentModelsAPI(mux *http.ServeMux) {
 				return
 			}
 			writeJSON(rw, map[string]any{"ownHidden": provider.OwnModelsHidden(a.ListsFor())})
+			return
+		}
+		if in.Joins != nil {
+			if err := provider.SetPicksJoin(a.ListsFor(), *in.Joins); err != nil {
+				fail(rw, err)
+				return
+			}
+			writeJSON(rw, map[string]any{"joins": provider.PicksJoin(a.ListsFor())})
 			return
 		}
 		if in.Order != nil {

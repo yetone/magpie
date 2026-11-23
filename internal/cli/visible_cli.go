@@ -25,6 +25,10 @@ const visibleUsage = `usage:
                                           that comes later, of any provider, stays off until it is
                                           ticked in its list on the Agents page
   magpie visible <agent> --show-new       show it the models that come later again (the default)
+  magpie visible <agent> --provider-picks shown only its picks, it takes in the models picked for a
+                                          provider too (magpie provider models <id> …, or ticked in
+                                          a provider's editor), as it is added or later; other new
+                                          models still wait · --no-provider-picks: they wait too
 
   An agent not narrowed is shown every model. The gateway's model list and the model lists
   magpie writes into the agents' files are narrowed alike; a model kept from an agent still
@@ -73,7 +77,11 @@ func visibleCmd(args []string) error {
 				says = append(says, strings.Join(names, ", "))
 			}
 			if _, ok := s.PickedModels[id]; ok {
-				says = append(says, "only models picked")
+				if slices.Contains(s.PicksJoin, id) {
+					says = append(says, "only models picked, a provider's picks taken in")
+				} else {
+					says = append(says, "only models picked")
+				}
 			}
 			fmt.Printf("  %s  %s  %s\n", pad(id, 12), strings.Join(says, " · "),
 				muted.Render(fmt.Sprintf("%d shown, %d not", len(shown), len(hidden))))
@@ -92,6 +100,16 @@ func visibleCmd(args []string) error {
 	id := strings.ToLower(a.ID)
 	if len(args) == 1 {
 		return models([]string{id})
+	}
+	if len(args) == 2 && (args[1] == "--provider-picks" || args[1] == "--no-provider-picks") {
+		if err := provider.SetPicksJoin(id, args[1] == "--provider-picks"); err != nil {
+			return err
+		}
+		fmt.Println(green.Render("✓"), "saved")
+		if _, only := provider.PickedModels(id); !only && args[1] == "--provider-picks" {
+			fmt.Println(faint.Render("  " + id + " is shown every model not taken out, a provider's picks among them; it takes them in once it is shown only its picks · magpie visible " + id + " --only-picked"))
+		}
+		return nil
 	}
 	if len(args) == 2 && (args[1] == "--only-picked" || args[1] == "--show-new") {
 		if err := provider.SetOnlyPicked(id, args[1] == "--only-picked"); err != nil {

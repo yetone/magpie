@@ -1158,6 +1158,12 @@ type Settings struct {
 	// or an old one, is not shown until it is ticked. HiddenModels is not
 	// read for such an agent. An agent named with no entries is shown none.
 	PickedModels map[string][]string `json:"pickedModels,omitempty"`
+	// PicksJoin are the agents, by id, shown only the models picked for
+	// them (PickedModels) that take in the models picked for a provider as
+	// well (eiyuuzaki2333 on X): a model ticked in a provider's editor, as
+	// it is added or later, is ticked for them too, so it isn't ticked
+	// twice. Another model that comes later still waits to be ticked.
+	PicksJoin []string `json:"picksJoin,omitempty"`
 	// OwnModelsHidden are the agents, by id, whose pickers leave out the
 	// models the agent reaches on its own, not through magpie (DeepSeek
 	// Harness's own DeepSeek models, #1642): only magpie's are offered, and

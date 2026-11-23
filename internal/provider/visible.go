@@ -529,3 +529,88 @@ func ShowFor(agent, id string) error {
 	catalog.Touched()
 	return nil
 }
+
+// PicksJoin reports whether agent, shown only the models picked for it,
+// takes in the models picked for a provider as well (eiyuuzaki2333 on X):
+// a model ticked in a provider's editor is ticked for it too.
+func PicksJoin(agent string) bool {
+	return slices.Contains(heldSettings().PicksJoin, strings.ToLower(strings.TrimSpace(agent)))
+}
+
+// SetPicksJoin switches whether agent takes in the models picked for a
+// provider. It changes no pick: only the models picked from now on join.
+func SetPicksJoin(agent string, on bool) error {
+	agent = strings.ToLower(strings.TrimSpace(agent))
+	if agent == "" {
+		return errors.New("no agent")
+	}
+	s := settings.Load()
+	if slices.Contains(s.PicksJoin, agent) == on {
+		return nil
+	}
+	if on {
+		s.PicksJoin = append(s.PicksJoin, agent)
+		slices.Sort(s.PicksJoin)
+	} else {
+		s.PicksJoin = slices.DeleteFunc(s.PicksJoin, func(a string) bool { return a == agent })
+	}
+	return settings.Save(s)
+}
+
+// JoinPicks ticks the models picked for p now (its Models) that before,
+// p as it was saved (nil: just added), didn't serve, for every agent shown
+// only its picks that takes in a provider's (PicksJoin), and returns those
+// agents, sorted. Only a pick the user made joins: a provider serving its
+// vendor's list (none picked) gives none, nor does a model its vendor
+// lists later, nor one it served before it was picked (a first untick in
+// a provider serving its vendor's list makes the rest picks). An agent
+// shown every model not taken out is shown a new one already, and one that
+// isn't shown only its picks keeps its list as the user left it.
+func JoinPicks(p Provider, before *Provider) ([]string, error) {
+	if p.ID == "" || p.NoModels {
+		return nil, nil
+	}
+	had := map[string]bool{}
+	if before != nil && !before.NoModels {
+		for _, m := range before.Models {
+			had[before.ListedModelID(strings.TrimSpace(m))] = true
+		}
+		if len(before.Models) == 0 {
+			for _, m := range before.Exposed() {
+				had[m.ID] = true
+			}
+		}
+	}
+	var add []string
+	for _, m := range normalModels(p.Models) {
+		if id := p.ListedModelID(m); !had[id] {
+			add = append(add, p.ID+"/"+id)
+		}
+	}
+	if len(add) == 0 {
+		return nil, nil
+	}
+	s := settings.Load()
+	var changed []string
+	for _, a := range s.PicksJoin {
+		picks, only := s.PickedModels[a]
+		if !only {
+			continue
+		}
+		next := sortedIDs(append(slices.Clone(picks), add...))
+		if slices.Equal(next, picks) {
+			continue
+		}
+		s.PickedModels[a] = next
+		changed = append(changed, a)
+	}
+	if len(changed) == 0 {
+		return nil, nil
+	}
+	if err := settings.Save(s); err != nil {
+		return nil, err
+	}
+	catalog.Touched()
+	slices.Sort(changed)
+	return changed, nil
+}
