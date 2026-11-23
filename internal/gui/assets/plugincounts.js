@@ -5,7 +5,6 @@
 (() => {
   const HEART = "M8 13.4S2.6 10.2 2.6 6.3A2.8 2.8 0 0 1 8 5a2.8 2.8 0 0 1 5.4 1.3c0 3.9-5.4 7.1-5.4 7.1z";
   const USER = "M8 7.8a2.4 2.4 0 1 0 0-4.8 2.4 2.4 0 0 0 0 4.8z M3.2 13.4c.6-2.3 2.5-3.6 4.8-3.6s4.2 1.3 4.8 3.6";
-  const ENOUGH = 20; // likes before the order goes by them, not by GitHub's stars
   let got = {}, liked = new Set();
   const n = (k) => got[k] || {};
   const num = (v) => v >= 1e3 ? (v / 1e3).toFixed(v >= 1e4 ? 0 : 1) + "k" : String(v);
@@ -16,29 +15,33 @@
     return c;
   };
   window.pmCounts = {
+    // answered: usemagpie.ai was asked once, so the week's ranks (which
+    // go by these counts) stop waiting, counts or none
+    answered: false,
     async load(redraw) {
+      const first = !this.answered;
       let r;
-      try { r = await api("plugins/counts"); } catch { return; }
+      try { r = await api("plugins/counts"); } catch { this.answered = true; if (first) redraw(); return; }
+      this.answered = true;
       const was = JSON.stringify([got, [...liked]]);
       got = r.plugins || {};
       liked = new Set(r.liked || []);
       // the cards are drawn already: draw them again only for a change
-      if (JSON.stringify([got, [...liked]]) !== was) redraw();
+      if (first || JSON.stringify([got, [...liked]]) !== was) redraw();
     },
     users: (k) => n(k).users || 0,
+    likes: (k) => n(k).likes || 0,
     // a card's facts: who uses it, who likes it
     chips(meta, k) {
       const { users, likes } = n(k);
       if (users) meta.append(chipOf(USER, users, t("{n} people use it, counted from the last week", { n: users.toLocaleString(intlLang()) })));
       if (likes) meta.append(chipOf(HEART, likes, t("{n} people like it", { n: likes.toLocaleString(intlLang()) })));
     },
-    // Most liked: by likes once a plugin has ENOUGH, the rest by stars
+    // Most liked: by likes, then by who uses it. Never by GitHub's stars:
+    // a plugin in a repository starred for something else would lead
+    // forever (the owner, 11-23)
     order(a, b, then) {
-      const la = n(a.package).likes || 0, lb = n(b.package).likes || 0;
-      const ea = la >= ENOUGH, eb = lb >= ENOUGH;
-      if (ea !== eb) return ea ? -1 : 1;
-      if (ea) return lb - la || then(a, b);
-      return (b.github?.stars || 0) - (a.github?.stars || 0) || lb - la || then(a, b);
+      return (n(b.package).likes || 0) - (n(a.package).likes || 0) || (n(b.package).users || 0) - (n(a.package).users || 0) || then(a, b);
     },
     // the like on a plugin's page; installed says whether it may be given
     like(k, installed) {

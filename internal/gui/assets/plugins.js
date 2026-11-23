@@ -197,6 +197,7 @@
   // when it comes, never waited on
   let npmTries = 0;
   let npmAnswered = false; // npm was asked once: no downloads then means none to rank by
+  let countsGone = false; // plugincounts.js didn't load: no magpie counts to wait for
   async function askNPM(only) {
     const names = [...new Set([...(listings || []).map((l) => l.package), ...(mine?.plugins || []).filter((e) => onNPM(e.spec)).map((e) => name(e.spec))])]
       .filter((n) => !only || !npm[n]);
@@ -236,7 +237,7 @@
       loadBuiltins(),
       providers ? null : loadProviders().then(drawBody, () => {}),
     ];
-    import("./plugincounts.js").then(() => window.pmCounts.load(drawBody), () => {});
+    import("./plugincounts.js").then(() => window.pmCounts.load(drawBody), () => { countsGone = true; drawBody(); });
     import("./pluginpartners.js").then(drawBody, () => {});
     await Promise.all(parts);
     askNPM();
@@ -666,7 +667,9 @@
   // it (magpie's community, another author on npm, a repository its
   // author tagged on GitHub), is the same card, its source said under its
   // name. A strip picks the kind, a menu the source; the top is the
-  // week's picks: one a day, the most downloaded, the most starred.
+  // week's picks: one a day, the most used and the most liked. Both are
+  // counted in magpie, not npm's downloads (any npm user's) or GitHub's
+  // stars (a repository's, which a plugin in a starred one inherits).
   const ORDER = ["pv", "mw", "ag", "tl", "pg"];
   const SHELVES = { pv: "Subscriptions", mw: "Gateway middleware", ag: "Agents", tl: "Tools for agents", pg: "Pages" };
   const SHORT = { pv: "Subscriptions", mw: "Middleware", ag: "Agents", tl: "Tools", pg: "Pages" };
@@ -676,8 +679,13 @@
   let kindPick = "", srcPick = "", onlyNew = false, sortPick = "hot";
   const srcOf = (l) => l.github ? "gh" : l.community ? "ours" : "third";
   const hotOf = (l) => l.npm?.weekly || 0;
+  // who uses it and who likes it in magpie, last week (plugincounts.js)
+  const usersOf = (l) => window.pmCounts?.users(l.package) || 0;
+  const likesOf = (l) => window.pmCounts?.likes(l.package) || 0;
   const nameOrder = (a, b) => a.name.localeCompare(b.name, intlLang());
-  const byHot = (a, b) => hotOf(b) - hotOf(a) || (b.github?.stars || 0) - (a.github?.stars || 0) || nameOrder(a, b);
+  // Most popular: by who uses it in magpie, then npm's downloads; stars
+  // only order what neither knows
+  const byHot = (a, b) => usersOf(b) - usersOf(a) || hotOf(b) - hotOf(a) || (b.github?.stars || 0) - (a.github?.stars || 0) || nameOrder(a, b);
   const ranked = (list, how = sortPick) => [...list].sort(how === "name" ? nameOrder : how === "liked" && window.pmCounts ? (a, b) => pmCounts.order(a, b, byHot) : byHot);
   // the day in the reader's own calendar, which the daily pick turns on
   const today = () => { const d = new Date(); return Math.floor((d.getTime() - d.getTimezoneOffset() * 6e4) / 864e5); };
@@ -719,17 +727,21 @@
     box.onkeydown = (ev) => { if (ev.target === box && (ev.key === "Enter" || ev.key === " ")) { ev.preventDefault(); detail(l); } };
   };
 
-  // the week's picks: null till npm has said how often each is downloaded
+  // the week's picks: undefined till npm and usemagpie.ai have answered,
+  // null when neither knows of any use
   function picks(all) {
-    const listed = ranked(all.filter((l) => !l.github && hotOf(l) > 0), "hot");
-    if (!listed.length) return null;
-    // the day's: one of the community's most downloaded not installed
-    // yet, a different one each day
-    let pool = listed.filter((l) => l.community && !entryOf(l.package)).slice(0, 14);
-    if (!pool.length) pool = listed.slice(0, 14);
-    const day = pool[today() % pool.length];
-    const starred = all.filter((l) => l.github?.stars > 0).sort((a, b) => b.github.stars - a.github.stars || nameOrder(a, b)).slice(0, 5);
-    return { day, top: listed.slice(0, 5), starred };
+    if (!npmAnswered || !(countsGone || window.pmCounts?.answered)) return undefined;
+    const used = all.filter((l) => usersOf(l) > 0).sort((a, b) => usersOf(b) - usersOf(a) || likesOf(b) - likesOf(a) || byHot(a, b));
+    const liked = all.filter((l) => likesOf(l) > 0).sort((a, b) => likesOf(b) - likesOf(a) || usersOf(b) - usersOf(a) || byHot(a, b));
+    // with no counts from magpie (offline, or none yet), npm's downloads
+    const downloaded = used.length ? [] : ranked(all.filter((l) => !l.github && hotOf(l) > 0), "hot");
+    // the day's: one of the community's most used not installed yet, a
+    // different one each day
+    const by = (used.length ? used : downloaded).filter((l) => !l.github);
+    if (!by.length) return null;
+    let pool = by.filter((l) => l.community && !entryOf(l.package)).slice(0, 14);
+    if (!pool.length) pool = by.slice(0, 14);
+    return { day: pool[today() % pool.length], used: used.slice(0, 5), liked: liked.slice(0, 5), downloaded: downloaded.slice(0, 5) };
   }
   function hero(l) {
     const box = el("article", "pm-hero");
@@ -744,9 +756,9 @@
     top.append(lg, who);
     const stats = el("div", "pm-stats");
     const stat = (v, k) => { const s = el("div", "pm-stat"); s.append(el("b", "", v), el("span", "", k)); stats.append(s); };
-    stat(count(hotOf(l)), t("Downloads last week"));
-    const u = window.pmCounts?.users(l.package);
+    const u = usersOf(l);
     if (u) stat(count(u), t("Users"));
+    if (hotOf(l) || !u) stat(count(hotOf(l)), t("Downloads last week"));
     stat(t(SHORT[kindOf(l)]), t("Kind"));
     if (l.npm?.version) stat("v" + l.npm.version, t("Version"));
     const acts = el("div", "pm-hact");
@@ -774,7 +786,7 @@
   }
   function recSection(all) {
     const p = picks(all);
-    if (!p && npmAnswered) return null;
+    if (p === null) return null;
     const sec = el("section", "pm-sec pm-recs");
     const h = el("div", "pm-rectitle");
     h.append(el("h2", "", t("This week")), el("span", "", new Date().toLocaleDateString(intlLang(), { month: "long", day: "numeric" })));
@@ -788,8 +800,10 @@
         grid.append(g);
       }
     } else {
-      grid.append(hero(p.day), rankList(t("Most downloaded"), t("last week, on npm"), p.top, (l) => t(SHORT[kindOf(l)]) + " · ↓" + t("{n}/week", { n: count(hotOf(l)) })));
-      if (p.starred.length) grid.append(rankList(t("Most starred"), t("on GitHub"), p.starred, (l) => "★ " + count(l.github.stars) + " · " + l.github.owner));
+      grid.append(hero(p.day));
+      if (p.used.length) grid.append(rankList(t("Most used"), t("in magpie, last week"), p.used, (l) => t(SHORT[kindOf(l)]) + " · " + t("{n} use it", { n: count(usersOf(l)) })));
+      else grid.append(rankList(t("Most downloaded"), t("last week, on npm"), p.downloaded, (l) => t(SHORT[kindOf(l)]) + " · ↓" + t("{n}/week", { n: count(hotOf(l)) })));
+      if (p.liked.length) grid.append(rankList(t("Most liked"), t("liked in magpie"), p.liked, (l) => "♥ " + count(likesOf(l)) + " · " + t(SHORT[kindOf(l)])));
       else grid.classList.add("two");
     }
     sec.append(h, grid);
