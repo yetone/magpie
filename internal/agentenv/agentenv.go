@@ -32,6 +32,9 @@ var Vars = []string{
 	"CLAUDE_CONFIG_DIR", "CODEX_HOME", "COPILOT_HOME", "COPILOT_PROVIDERS_CONFIG",
 	// Claude Code's temp folder, the images its sessions were given
 	"CLAUDE_CODE_TMPDIR",
+	// the Git Bash Claude Code runs hooks in on Windows, which magpie's split
+	// plugin hooks are written for
+	"CLAUDE_CODE_GIT_BASH_PATH",
 	// Zed, or a fork of it that keeps its settings (ZedG)
 	"MAGPIE_ZED_BIN", "MAGPIE_ZED_CONFIG_DIR", "MAGPIE_ZED_PROCESS_NAMES",
 	// Codex's state database, when it is kept apart from CODEX_HOME
