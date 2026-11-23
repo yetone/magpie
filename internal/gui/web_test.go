@@ -119,6 +119,29 @@ func TestWebGuardBookmark(t *testing.T) {
 	if !strings.Contains(body, "Paste the key, the k= in the link magpie printed when it started:") {
 		t.Fatalf("no cookie, where the key is: %s", body)
 	}
+	// it looks like magpie with none of the page's files, which a browser
+	// turned away can't load (jenryai on X): its styles inline, magpie's
+	// tokens light and dark, the brand's bird, nothing fetched
+	for _, want := range []string{"<style>", "--accent:#4f46e5", "prefers-color-scheme:dark", "--accent:#a5b4fc", `<svg viewBox="0 0 44 44"`, `id="bird"`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("no cookie, the page's look: no %q in %s", want, body)
+		}
+	}
+	for _, never := range []string{"<link", "<script", "src=", "url(http"} {
+		if strings.Contains(body, never) {
+			t.Fatalf("no cookie: the page fetches something (%q): %s", never, body)
+		}
+	}
+	// a link with a key that isn't this one: the same form for a
+	// browser, back to the page without the wrong key; text for others
+	bad := httptest.NewRequest("GET", "/?view=usage&k=0123456789abcdef-old", nil)
+	bad.Header.Set("Accept", "text/html")
+	if rec := do(bad); rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Body.String(), "<style>") || !strings.Contains(rec.Body.String(), "key is not this magpie web") || !strings.Contains(rec.Body.String(), `value="/?view=usage"`) || rec.Header().Get("Set-Cookie") != "" {
+		t.Fatalf("wrong key, browser: %d %v %s", rec.Code, rec.Header(), rec.Body.String())
+	}
+	if rec := do(httptest.NewRequest("GET", "/?k=0123456789abcdef-old", nil)); rec.Code != http.StatusUnauthorized || strings.Contains(rec.Body.String(), "<html") || !strings.Contains(rec.Body.String(), "printed when it started") {
+		t.Fatalf("wrong key, a client: %d %s", rec.Code, rec.Body.String())
+	}
 	// a cookie with another key: says so
 	if body := do(page("magpie_web_3430=0123456789abcdef-old")).Body.String(); !strings.Contains(body, "holds a key that isn") {
 		t.Fatalf("other key: %s", body)

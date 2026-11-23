@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"io/fs"
 	"log"
 	"net"
 	"net/http"
@@ -283,13 +284,20 @@ func webGuard(cookie, key, where string, box boxSignIn, next http.Handler) http.
 			return
 		}
 		if q := r.URL.Query(); q.Has("k") {
-			if !same(q.Get("k")) {
-				http.Error(rw, "this link's key is not this magpie web's: use the link it printed when it started", http.StatusUnauthorized)
-				return
-			}
 			q.Del("k")
 			u := *r.URL
 			u.RawQuery = q.Encode()
+			if !same(r.URL.Query().Get("k")) {
+				// a browser gets the form, as without a key: a bare line
+				// of text read as a broken page (jenryai on X)
+				why := "This link's key is not this magpie web's: the key changed since the link was made, or the link is another magpie's."
+				if r.Method == http.MethodGet && strings.Contains(r.Header.Get("Accept"), "text/html") {
+					webTurnedAway(rw, r, u.RequestURI(), why, where)
+					return
+				}
+				http.Error(rw, why+" The key is "+where+".", http.StatusUnauthorized)
+				return
+			}
 			signIn(rw, r, u.RequestURI())
 			return
 		}
@@ -375,12 +383,59 @@ func webTurnedAway(rw http.ResponseWriter, r *http.Request, back, why, where str
 	rw.Header().Set("Content-Type", "text/html; charset=utf-8")
 	rw.Header().Set("Cache-Control", "no-store")
 	rw.WriteHeader(http.StatusUnauthorized)
-	fmt.Fprintf(rw, `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>magpie web</title>
-<style>body{font:15px/1.5 system-ui,sans-serif;max-width:32em;margin:12vh auto;padding:0 16px;color:#222;background:#fafafa}@media(prefers-color-scheme:dark){body{color:#ddd;background:#1c1c1e}}input,button{font:inherit;padding:.4em .6em}input{width:100%%;box-sizing:border-box;margin:.5em 0}</style></head>
-<body><h1>magpie web</h1><p>%s</p><p>Paste the key, %s:</p>
-<form method="post" action="%s"><input type="hidden" name="back" value="%s"><input type="password" name="key" autocomplete="current-password" autofocus required><button type="submit">Sign in</button></form></body></html>`,
-		html.EscapeString(why), html.EscapeString(where), webSignInPath, html.EscapeString(back))
+	fmt.Fprintf(rw, webTurnedAwayPage, webLogo(), html.EscapeString(why), webSignInPath, html.EscapeString(where), html.EscapeString(back))
 }
+
+// webTurnedAwayPage is the page webTurnedAway fills in: the logo, why,
+// where the key is, the form's action and its return address. It is served
+// before the browser is signed in, so it reads none of the page's files
+// (webGuard serves them only signed in): its styles are its own, app.css's
+// tokens copied (--bg, --card, --line, --fg, --fg-2, --accent and their
+// dark values), light or dark as the system is (jenryai on X: a server's
+// page turned away read as unstyled).
+const webTurnedAwayPage = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>magpie web</title>
+<style>
+:root{--bg:#f4f4f6;--card:#fff;--line:#e3e3e8;--fg:#1c1c21;--fg-2:#4b4b53;--accent:#4f46e5;--accent-fg:#fff;--ring:rgba(79,70,229,.22);--edge:0 0 0 1px rgba(0,0,0,.05),0 1px 2px rgba(0,0,0,.04);color-scheme:light dark}
+@media (prefers-color-scheme:dark){:root{--bg:#1a1a1e;--card:#232327;--line:#333339;--fg:#ededf1;--fg-2:#b9b9c1;--accent:#a5b4fc;--accent-fg:#14142a;--ring:rgba(165,180,252,.25);--edge:inset 0 0 0 1px rgba(255,255,255,.06)}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px 16px;background:var(--bg);color:var(--fg);font:14px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+main{width:100%%;max-width:400px}
+.brand{display:flex;align-items:center;gap:6px;font-weight:600;letter-spacing:.01em;margin:0 0 14px 2px}
+.brand svg{display:block;overflow:visible}.brand .parts{display:none}
+.card{background:var(--card);border-radius:12px;box-shadow:var(--edge);padding:20px}
+h1{font-size:17px;font-weight:600;margin:0 0 6px}
+.why{margin:0 0 16px;color:var(--fg-2);font-size:13px}
+label{display:block;font-size:13px;margin:0 0 6px}
+.row{display:flex;gap:8px}
+input{flex:1;min-width:0;font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:7px;padding:7px 10px;outline:none;transition:border-color .15s ease,box-shadow .15s ease}
+input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--ring)}
+button{font:inherit;font-weight:500;color:var(--accent-fg);background:var(--accent);border:0;border-radius:7px;padding:7px 14px;cursor:pointer;transition:transform .12s cubic-bezier(.23,1,.32,1)}
+button:active{transform:scale(.97)}
+@media (prefers-reduced-motion:reduce){button{transition:none}button:active{transform:none}}
+</style></head>
+<body><main><div class="brand">%s<span>magpie</span></div>
+<div class="card"><h1>Sign in</h1><p class="why">%s</p>
+<form method="post" action="%s"><label for="key">Paste the key, %s:</label><input type="hidden" name="back" value="%s"><div class="row"><input type="password" id="key" name="key" autocomplete="current-password" autofocus required><button type="submit">Sign in</button></div></form></div></main></body></html>`
+
+// webLogo is the brand's bird as index.html draws it, read once from the
+// build's own index.html so the two never differ; "" when it can't be found.
+var webLogo = sync.OnceValue(func() string {
+	b, err := fs.ReadFile(assets, "assets/index.html")
+	if err != nil {
+		return ""
+	}
+	s := string(b)
+	i := strings.Index(s, `<span class="logo"`)
+	if i < 0 {
+		return ""
+	}
+	j := strings.Index(s[i:], "<svg")
+	k := strings.Index(s[i:], "</svg>")
+	if j < 0 || k < j {
+		return ""
+	}
+	return s[i+j : i+k+len("</svg>")]
+})
 
 // NetworkLinks are the links to the page, served on port, that other
 // machines open; key is the link's "/?k=…". MAGPIE_PUBLIC_URL with a port
