@@ -55,7 +55,7 @@ const usage = `magpie — one place to pick every agent's model
   magpie tui                      the same thing, in the terminal (serves the gateway while open when no magpie does)
   magpie web [--addr host:port] [--lan] [--no-open] [--gateway] [--tls-cert <file> --tls-key <file>]
                                   the app's window in a browser, with the gateway (no desktop needed: WSL, a server over SSH)
-                                  a new key each run; MAGPIE_WEB_KEY (16+ letters, digits, - . _ ~) keeps one, signed in for 400 days
+                                  a new key each run, signed in until the next; MAGPIE_WEB_KEY (16+ letters, digits, - . _ ~) keeps one, signed in for 400 days
                                   behind a reverse proxy, MAGPIE_WEB_URL=https://<the page there> prints the link through it
                                   --gateway: gateway mode, no Agents, Sessions or Library (on by itself with no agents here; Settings › General turns it off)
                                   --tls-cert/--tls-key: the page and the gateway over https:// to other computers

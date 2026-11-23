@@ -3837,10 +3837,11 @@ On Linux `host.docker.internal` is there only for a container given
 For the browser UI run the image with `magpie web --addr 0.0.0.0:3430 --no-open`
 in place of the default `serve`, and open
 `http://localhost:3430/?k=<key from docker logs magpie>` (set `MAGPIE_WEB_KEY`
-to keep one key across restarts; a browser then stays signed in for 400
-days, and `MAGPIE_NAME` to title its tab `<name> · magpie`, telling several
-deployments apart; a name set in Settings → Network and sharing → Advanced →
-Name comes first). A browser keeps cookies per host, not per port, so another service on
+to keep one key across restarts, and a browser stays signed in for 400 days;
+without it a browser stays signed in, closed and opened again too, until
+magpie starts again with a new key. Set `MAGPIE_NAME` to title its tab
+`<name> · magpie`, telling several deployments apart; a name set in Settings
+→ Network and sharing → Advanced → Name comes first). A browser keeps cookies per host, not per port, so another service on
 the same address can take the sign-in away: by clearing its site data, or by
 filling the host's cookie limit (the sign-in is the last Chrome drops). A page
 opened without it, such as a bookmark, says why it was turned away and takes

@@ -338,7 +338,7 @@ func TestPluginPageNoAPI(t *testing.T) {
 // nothing, and the rest of the page still wants the key.
 func TestPluginPageWebGuard(t *testing.T) {
 	pagePlugins(t)
-	g := webGuard("magpie_web_1", "key", 0, nil, pageMux())
+	g := webGuard("magpie_web_1", "key", "", nil, pageMux())
 	var pages []pluginPage
 	_ = json.Unmarshal(do(pageMux(), httptest.NewRequest("GET", "/api/plugin-pages", nil)).Body.Bytes(), &pages)
 	if len(pages) != 1 {

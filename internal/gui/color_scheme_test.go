@@ -27,7 +27,7 @@ func TestPagesDeclareBothColorSchemes(t *testing.T) {
 		t.Error("app.css's root doesn't take both color schemes")
 	}
 	rec := httptest.NewRecorder()
-	webTurnedAway(rec, httptest.NewRequest("GET", "/", nil), "/", "why")
+	webTurnedAway(rec, httptest.NewRequest("GET", "/", nil), "/", "why", "where")
 	if !strings.Contains(rec.Body.String(), meta) {
 		t.Errorf("magpie web's sign-in page has no %s:\n%s", meta, rec.Body.String())
 	}

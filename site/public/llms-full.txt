@@ -10833,7 +10833,7 @@ Without `web --addr 0.0.0.0:3430 --no-open` the container runs the gateway alone
 
 ## The browser UI
 
-Open the link from the log. The key in it is traded for a cookie and taken out of the address; a page opened without it is turned away (401). With `MAGPIE_WEB_KEY` set (16 or more letters, digits or `- . _ ~`; `openssl rand -hex 16` makes one) the key stays the same across restarts and the browser stays signed in for 400 days. Without it, every start makes a new key and the cookie lasts the browser session.
+Open the link from the log. The key in it is traded for a cookie and taken out of the address; a page opened without it is turned away (401). With `MAGPIE_WEB_KEY` set (16 or more letters, digits or `- . _ ~`; `openssl rand -hex 16` makes one) the key stays the same across restarts, and a browser stays signed in for 400 days. Without it, every start makes a new key: a browser stays signed in, closed and opened again too, until magpie starts again, and then needs the new link.
 
 The page is in **gateway mode**: Providers, Gateway, Routing, Usage, Sessions, Plugins and Settings, with no Agents, since there are no agents in the container. Library has its MCP servers, with the MCP router: other computers’ apps connect at the router’s address with a gateway key. Beside them are its Skills and Instructions: a magpie on another computer that adds this one as an Another computer’s magpie provider, with Use its skills and prompts on, takes them and gives them to its own agents, since a skill is a folder on the agent’s computer. Sessions lists only the sessions of agents on other computers that came through this gateway, never this machine’s agents’ files. Settings → General → Gateway mode turns it off.
 

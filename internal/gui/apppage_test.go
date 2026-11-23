@@ -2,6 +2,7 @@ package gui
 
 import (
 	"encoding/json"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -140,6 +141,21 @@ func TestAppPageServesOnlyWithItsKey(t *testing.T) {
 	}
 	if reached {
 		t.Fatal("the page was reached without its key")
+	}
+	// a browser turned away is told where the app's key is: no magpie
+	// web printed a link for it (jenryai on X)
+	{
+		r, _ := http.NewRequest("GET", "http://127.0.0.1:"+strconv.Itoa(port)+"/", nil)
+		r.Header.Set("Accept", "text/html")
+		res, err := noRedirect.Do(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		if res.StatusCode != http.StatusUnauthorized || !strings.Contains(string(b), "Settings › Network and sharing › Browser access") || strings.Contains(string(b), "printed when it started") || strings.Contains(string(b), key) {
+			t.Errorf("turned away from the app's page: %d %s", res.StatusCode, b)
+		}
 	}
 	// the gateway's client routes on the page's port need a gateway key,
 	// from this computer too (a tunnel's requests come from loopback)

@@ -90,7 +90,7 @@ func lazyCatBox(t *testing.T, reached *bool) http.Handler {
 	if err != nil || box == nil {
 		t.Fatalf("MAGPIE_WEB_SIGN_IN=lazycat: %v", err)
 	}
-	return webServed("3430", onePortWebKey, 0, box, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+	return webServed("3430", onePortWebKey, "", box, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		*reached = true
 		rw.WriteHeader(http.StatusTeapot)
 	}))
@@ -390,7 +390,7 @@ func TestWebBoxSignInChecksItsValue(t *testing.T) {
 	t.Setenv("LAZYCAT_APP_DOMAIN", lazyCatDomain)
 	box, _ := webBoxSignIn()
 	var reached bool
-	h := webServed("3430", onePortWebKey, 0, box, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+	h := webServed("3430", onePortWebKey, "", box, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		reached = true
 		rw.WriteHeader(http.StatusTeapot)
 	}))
