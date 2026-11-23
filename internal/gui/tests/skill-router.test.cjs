@@ -14,6 +14,8 @@ const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
 const { strings } = require("./strings.cjs");
+// the sidebar's Skills star, as navicons.js draws it
+const SKILLS_STAR = require("node:fs").readFileSync(path.join(__dirname, "../assets/navicons.js"), "utf8").match(/\n    skills: "([^"]+)"/)[1];
 
 const assets = path.resolve(__dirname, "../assets");
 const HOME = "/Users/mg";
@@ -138,6 +140,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         }), true, "the Skill router row is above the install card and the list");
 
         assert.equal(await v.locator(".lib-skillrouter-empty").count(), 0, "with library skills, no line on importing them");
+        // its mark is the sidebar Skills star, not a skill's page
+        assert.equal(await row.locator(".lib-glyph svg path").getAttribute("d"), SKILLS_STAR, "the Skill router row has the sidebar's Skills icon");
         // off: the row and its switch, no router buttons, no why
         assert.equal((await row.locator(".name").textContent()).trim(), w("Skill router"));
         const sw = row.locator(".lib-switch");
