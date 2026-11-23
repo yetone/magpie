@@ -73,23 +73,22 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator('#nav button[data-view="library"]').click();
       await page.waitForFunction(() => window.NAV_SUB_IC && document.querySelectorAll('.nav-sub[data-view="library"]:not(.leaving) .nav-s').length >= 10);
       await page.waitForFunction(() => [...document.querySelectorAll(".nav-sub, .nav-sub *")].every((e) => e.getAnimations().every((a) => a.playState !== "running")));
-      // the logos load before they are measured
-      await page.waitForFunction(() => [...document.querySelectorAll(".nav-sub .ic img")].every((i) => i.complete && i.naturalWidth > 0));
 
       const rows = await page.evaluate(() => {
         const name = (seg) => document.querySelector(`.lib-tabs [data-seg="${seg}"]`)?.textContent.trim().split(" · ")[0];
         return { plugins: name("plugins"), pi: name("pi"), rows: [...document.querySelectorAll('.nav-sub[data-view="library"]:not(.leaving) .nav-s')].map((s) => {
           const ic = s.querySelector(":scope > svg, :scope > .nav-s-ic > .ic"), b = ic?.getBoundingClientRect(), nb = s.querySelector(":scope > span").getBoundingClientRect();
           return { text: s.querySelector(":scope > span").textContent, spans: s.querySelectorAll(":scope > span").length, logo: ic?.dataset.icon || "", glyph: ic?.tagName === "svg",
-            img: !!ic?.querySelector("img"), mask: !!ic?.querySelector(".mask"), left: b?.left, w: b?.width, h: b?.height, mid: b && b.top + b.height / 2, nmid: nb.top + nb.height / 2 };
+            img: !!ic?.querySelector("img"), mask: !!ic?.querySelector(".mask"), left: b?.left, w: b?.width, h: b?.height, mid: b && b.top + b.height / 2, nmid: nb.top + nb.height / 2,
+            mw: ic?.querySelector(".mask")?.getBoundingClientRect().width, mh: ic?.querySelector(".mask")?.getBoundingClientRect().height };
         }) };
       });
       const claude = rows.rows.find((r) => r.text === rows.plugins), pi = rows.rows.find((r) => r.text === rows.pi);
       assert.ok(claude && pi, `both rows are listed: ${JSON.stringify(rows)}`);
       assert.equal(claude.logo, "claudecode-color", "Claude plugins shows Claude Code's logo");
-      assert.ok(claude.img && !claude.glyph, "Claude Code's logo is its colour picture");
+      assert.ok(claude.mask && !claude.img && !claude.glyph, "Claude Code's logo is a mask in one ink, not its colour picture");
       assert.equal(pi.logo, "pi", "Pi packages shows Pi's logo");
-      assert.ok(pi.mask && !pi.glyph, "Pi's logo is its mask");
+      assert.ok(pi.mask && !pi.img && !pi.glyph, "Pi's logo is its mask");
       const glyphs = rows.rows.filter((r) => r.glyph);
       assert.ok(glyphs.length >= 8, "the other rows keep their glyphs");
       for (const r of [claude, pi]) {
@@ -98,6 +97,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.ok(Math.abs(r.left - glyphs[0].left) < 0.5, `${r.text}'s logo stands in the glyphs' column`);
         assert.ok(Math.abs(r.mid - r.nmid) <= 1.5, `${r.text}'s logo is level with its name`);
         assert.equal(r.spans, 1, `${r.text}'s row has its name as its one span, which the torch lights`);
+        // drawn as high as a glyph's strokes reach (2.5 to 13.5 of 16), not across the whole box
+        assert.ok(r.mw <= 11.5 && r.mh <= 11.5 && r.mw >= 10.5, `${r.text}'s logo is the glyphs' size: ${r.mw}x${r.mh}`);
+      }
+      // both rest in --muted, the glyphs' ink, with no colour of their own
+      for (const logo of ["claudecode-color", "pi"]) {
+        const c = await rgbOf(page, `.nav-sub[data-view="library"] .nav-s .ic[data-icon="${logo}"] .mask`, "backgroundColor");
+        assert.ok(far(c.v, c.muted) < 6, `${logo} rests in --muted: ${JSON.stringify(c)}`);
       }
 
       // Pi's mask rests in --muted, as a glyph does, and takes the torch
@@ -112,12 +118,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const on = await settle(() => rgbOf(page, `${piIc} .mask`, "backgroundColor"), (c) => far(c.v, c.muted) > 30);
       assert.ok(far(on.v, on.muted) > 30, `Pi's logo is lit under the pointer: ${JSON.stringify(on)}`);
 
-      // chosen, Claude's row keeps its picture whole
+      // chosen, Claude's row's logo is whole, in the row's ink
       await page.locator(`.nav-sub[data-view="library"] .nav-s:has(> .nav-s-ic > .ic[data-icon="claudecode-color"])`).click();
-      await page.waitForSelector(`.nav-sub[data-view="library"] .nav-s.cur > .nav-s-ic > .ic[data-icon="claudecode-color"] img`);
-      const cur = await settle(() => page.$eval(`.nav-s.cur > .nav-s-ic img`, (i) => ({ w: i.getBoundingClientRect().width, o: getComputedStyle(i).opacity, ok: i.naturalWidth > 0 })),
-        (c) => c.ok && c.o === "1" && Math.round(c.w) === 14);
-      assert.ok(cur.ok && cur.o === "1" && Math.round(cur.w) === 14, `the chosen row's logo is whole: ${JSON.stringify(cur)}`);
+      await page.waitForSelector(`.nav-sub[data-view="library"] .nav-s.cur > .nav-s-ic > .ic[data-icon="claudecode-color"] .mask`);
+      const cur = await settle(() => page.$eval(`.nav-s.cur > .nav-s-ic .mask`, (i) => ({ w: i.getBoundingClientRect().width, o: getComputedStyle(i).opacity, bg: getComputedStyle(i).backgroundColor })),
+        (c) => c.o === "1" && Math.round(c.w) === 11);
+      assert.ok(cur.o === "1" && Math.round(cur.w) === 11, `the chosen row's logo is whole: ${JSON.stringify(cur)}`);
       assert.deepEqual(errors, []);
     });
   });

@@ -7,15 +7,18 @@
 window.NAV_SUB_GROUPS = {
   library: { instructions: "Every agent", memory: "Every agent", mcp: "Every agent", skills: "Every agent", hooks: "Every agent", env: "Every agent", subagents: "Every agent", commands: "Every agent", rules: "Every agent", plugins: "One agent", pi: "One agent", rtk: "magpie", bili: "magpie" },
 };
-// a tab's mark in its row: a glyph, or an agent's logo the size of one,
-// lit by navlamp.js as a glyph is when it is a mask (a colour one keeps
-// its colours, as a plugin page's logo does). The logo's span sits in an
-// <i>: the row's one span is its name (navlamp.js, app.css)
+// a tab's mark in its row: a glyph, or an agent's logo drawn as one, a
+// mask in the row's ink (a colour logo too: the owner, 11-23, a coloured
+// mark stood out among the glyphs), as high as a glyph's strokes reach,
+// and lit by navlamp.js as a glyph is. The logo's span sits in an <i>:
+// the row's one span is its name (navlamp.js, app.css)
 window.navSubIc = (v, b) => {
   const ic = window.NAV_SUB_IC[v]?.[b.dataset.seg || b.dataset.set];
   if (!ic?.icon) return ic && svg(ic, 14, 1.4);
-  const e = el("i", "nav-s-ic");
-  e.append(icon(ic.icon));
+  const e = el("i", "nav-s-ic"), s = el("span", "ic");
+  s.dataset.icon = ic.icon;
+  s.append(maskSpan(`icons/${ic.icon}.svg`));
+  e.append(s);
   return e;
 };
 // the tabs [tab, its place in the strip, its section's name where one starts],
@@ -62,8 +65,8 @@ window.NAV_SUB_IC = {
     memory: "M8 3.4C7.3 2.5 5.6 2.6 5.2 3.8 4 3.8 3.2 4.9 3.6 6 2.6 6.6 2.6 8.2 3.5 8.8 3 10 3.8 11.3 5 11.2 5.3 12.5 7 13 8 12.1 9 13 10.7 12.5 11 11.2 12.2 11.3 13 10 12.5 8.8 13.4 8.2 13.4 6.6 12.4 6 12.8 4.9 12 3.8 10.8 3.8 10.4 2.6 8.7 2.5 8 3.4zM8 3.4v8.7M5.6 6.3c.8 0 1.4.5 1.6 1.2M10.4 6.3c-.8 0-1.4.5-1.6 1.2M5.3 9.2c.7-.1 1.3.2 1.6.8M10.7 9.2c-.7-.1-1.3.2-1.6.8",
     mcp: "M6 2.5v3 M10 2.5v3 M4.5 5.5h7v2a3.5 3.5 0 0 1-7 0z M8 11v2.5",
     skills: "M8 2.5l1.4 3.6 3.6 1.4-3.6 1.4L8 12.5 6.6 8.9 3 7.5l3.6-1.4z",
-    // the agent's own logo, as its row on Agents has it: the plugins are
-    // Claude Code's, the packages Pi's (icon(), not a glyph)
+    // the agent's own logo, as its row on Agents has it, in one ink: the
+    // plugins are Claude Code's, the packages Pi's
     plugins: { icon: "claudecode-color" },
     hooks: "M10.5 2.5v6.5a3 3 0 0 1-6 0V7.5 M3 9l1.5-1.5L6 9",
     env: "M5.5 3.5h-1.5v9h1.5 M10.5 3.5h1.5v9h-1.5 M6.5 8h3",
