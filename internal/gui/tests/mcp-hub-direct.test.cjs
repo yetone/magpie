@@ -92,7 +92,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             const ed = page.locator("#modal .lib-editor");
             const sw = ed.getByRole("switch", { name: w("Through the MCP router"), exact: true });
             const tag = row.locator(".lib-tag.lib-direct");
-            const open = async (r = row) => { await reach(page, r.locator(".name")); await r.locator(".name").click(); await ed.waitFor(); };
+            // on its name's text: the router's tag beside it is a control of its own (library-mcp-route-row)
+            const open = async (r = row) => { await reach(page, r.locator(".name")); await r.locator(".name").click({ position: { x: 4, y: 4 } }); await ed.waitFor(); };
             const save = async () => { await ed.locator(":scope > .bar button.primary").click(); await ed.waitFor({ state: "detached" }); };
             const stats = () => page.locator("#view-library .lib-hubstats").textContent();
             await row.waitFor();

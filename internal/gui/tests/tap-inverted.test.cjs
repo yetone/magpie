@@ -79,7 +79,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const ed = page.locator("#modal .lib-editor");
           const name = page.locator("#view-library .lib-server .name", { hasText: "magpie-web-search" });
           await reach(page, name);
-          await name.click();
+          // at the name text: the row's router switch sits at its end
+          await name.click({ position: { x: 4, y: 4 } });
           await ed.waitFor();
           await page.waitForTimeout(600); // the dialog has stopped growing in
           const pick = (name) => ed.locator(".lib-viewpick .opt", { hasText: new RegExp("^" + name + "$") });

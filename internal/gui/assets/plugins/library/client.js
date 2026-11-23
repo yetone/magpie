@@ -694,7 +694,7 @@ magpie.plugin("library", (ctx) => {
     if (changing) return false;
     changing = true;
     const ev = window.event;
-    const pressed = ev?.type === "click" && ev.target?.closest?.("button:not(.lib-switch):not(.lib-radio)");
+    const pressed = ev?.type === "click" && ev.target?.closest?.("button:not(.lib-switch):not(.lib-radio):not(.lib-route)");
     const held = [...document.querySelectorAll("#view-library button, #modal.lib button")].filter((b) => !b.disabled);
     for (const b of held) b.disabled = true;
     page.setAttribute("aria-busy", "true");
@@ -3589,8 +3589,9 @@ magpie.plugin("library", (ctx) => {
     withPlugin(nm, s);
     if (s.plugin) nm.append(tag(t("Plugin"), "lib-local lib-plugin", t("{plugin}'s tools. Plugins can hide them from every agent, keeping the plugin; sync never carries them to your other computers", { plugin: s.plugin })));
     else if (s.local) nm.append(tag(t("Not synced"), "lib-local", s.bridge ? bridgedWhy() : t("Sync never carries it to your other computers")));
-    // out of the hub, each agent's own entry (#4382): said only while the hub is on
-    if (lib.mcpHub && s.hub === "direct") nm.append(tag(t("Not through the router"), "lib-direct", t("Each agent is given its own entry for it, as with the MCP router off")));
+    // through the hub or each agent's own entry (#4382), said on every
+    // row while the hub is on and turned from there (MetalHqa on X)
+    if (lib.mcpHub && !agentless() && !picking) nm.append(routeTag(s));
     // its status beside the name, not in it: the name is still the name
     who.classList.add("lib-srvwho");
     who.append(nm, healthEl(s.name));
@@ -3607,6 +3608,25 @@ magpie.plugin("library", (ctx) => {
     row.onclick = () => editServer(s);
     row.title = t("Edit {name}", { name: s.name });
     return row;
+  }
+
+  // Whether a server goes through the MCP router, on its row: a click
+  // turns it the other way, as the editor's switch does, and the agents
+  // are written again at once (ServerHub). Kept direct, it is the tag the
+  // row had before (.lib-direct).
+  function routeTag(s) {
+    const on = s.hub !== "direct";
+    const b = el("button", "lib-tag lib-route" + (on ? " on" : " lib-direct"), on ? t("Through the router") : t("Not through the router"));
+    b.type = "button";
+    b.setAttribute("role", "switch");
+    b.setAttribute("aria-checked", on ? "true" : "false");
+    b.title = on ? t("The agents reach it through the MCP router. Click to give each agent its own entry for it") : t("Each agent is given its own entry for it, as with the MCP router off");
+    b.onclick = (e) => {
+      e.stopPropagation();
+      change("servers/router", { name: s.name, on: !on },
+        on ? t("{name} is given to each agent directly", { name: s.name }) : t("{name} goes through the MCP router", { name: s.name }));
+    };
+    return b;
   }
 
   // A server off for everyone, or on again as it was (swang20201 on X:

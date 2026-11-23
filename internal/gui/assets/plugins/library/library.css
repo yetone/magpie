@@ -258,6 +258,14 @@ button.row.lib-hubfolded:hover { background: var(--pill); }
 .lib-tag.lib-unchecked { color: var(--faint); font-weight: 400; }
 .lib-tag.lib-unchecked.link { cursor: pointer; }
 .lib-tag.lib-unchecked.link:hover { color: var(--fg-2); }
+/* through the MCP router or each agent's own entry, turned from the row */
+.lib-tag.lib-route { cursor: pointer; transition: color .15s ease, background-color .15s ease, transform .12s cubic-bezier(.23, 1, .32, 1); }
+.lib-tag.lib-route::before { content: ""; box-sizing: border-box; width: 6px; height: 6px; border-radius: 50%; border: 1.25px solid currentColor; }
+.lib-tag.lib-route.on::before { background: currentColor; }
+.lib-tag.lib-route.lib-direct { color: var(--muted); background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+@media (hover: hover) and (pointer: fine) { .lib-tag.lib-route:hover { color: var(--fg); } }
+.lib-tag.lib-route:active { transform: scale(.97); }
+.lib-row .name:has(> .lib-tag.lib-route) { white-space: normal; text-overflow: clip; overflow-wrap: anywhere; }
 .lib-tag.lib-signed { color: var(--green); background: var(--green-soft); }
 .lib-tag.lib-signed::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
 

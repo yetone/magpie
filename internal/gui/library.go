@@ -817,6 +817,10 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 		case "servers/hub":
 			// magpie as the agents' one MCP server (#2679)
 			res, err = library.SetMCPHub(in.On)
+		case "servers/router":
+			// one server through the router or each agent's own entry,
+			// from its row (MetalHqa on X), as its editor's switch saves
+			res, err = library.ServerHub(in.Name, !in.On)
 		case "servers/hub-note":
 			// what the router says of itself to the agents, this
 			// computer's own (settings.RouterNote)
