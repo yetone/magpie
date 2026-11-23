@@ -53,6 +53,12 @@ type Part struct {
 	Name string
 	Args json.RawMessage // a JSON object
 
+	// opens is on the first part of a user message of its own that
+	// mergeTurns joined after tool results (a Responses client's next
+	// message after a turn's function_call_output items), so turnIn reads
+	// it as the message it was
+	opens bool
+
 	// tool_result
 	CallID     string
 	IsError    bool

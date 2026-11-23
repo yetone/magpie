@@ -421,15 +421,7 @@ func turnOf(from provider.Protocol, body []byte) (turn int, within bool) {
 // whole conversation, the prompt cache rewritten each time.
 func turnIn(req *Request) (turn int, within bool) {
 	answered, results := false, false
-	for _, m := range req.Messages {
-		if m.Role == "assistant" {
-			answered = true
-			results = false
-			continue
-		}
-		if m.Role != "user" {
-			continue
-		}
+	read := func(m Message) {
 		said, result := saysAnything(m), false
 		for _, p := range m.Parts {
 			switch p.Kind {
@@ -455,6 +447,29 @@ func turnIn(req *Request) (turn int, within bool) {
 			within = turn > 0
 		}
 		answered = false
+	}
+	for _, m := range req.Messages {
+		if m.Role == "assistant" {
+			answered = true
+			results = false
+			continue
+		}
+		if m.Role != "user" {
+			continue
+		}
+		// a message of its own the parse joined after the results (opens)
+		// is read as the message it was: Codex's next message after a turn
+		// that ended on its tool results, read as one with them, was the
+		// tool loop going on, and the user's new turn was kept where the
+		// old one was, its rules never asked (zyh6036 on X)
+		from := 0
+		for i, p := range m.Parts {
+			if p.opens && i > from {
+				read(Message{Role: m.Role, Parts: m.Parts[from:i]})
+				from = i
+			}
+		}
+		read(Message{Role: m.Role, Parts: m.Parts[from:]})
 	}
 	return turn, within
 }

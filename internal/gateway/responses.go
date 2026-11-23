@@ -713,6 +713,8 @@ func searchRoundsBack(msgs []Message, name string) []Message {
 
 func isSearch(p Part) bool { return p.Kind == Search }
 
+func isResult(p Part) bool { return p.Kind == ToolResult }
+
 // claudeSigned is thinking Claude signed, or its redacted_thinking.
 func claudeSigned(p Part) bool {
 	return p.Kind == Thinking && (p.SignedBy == sealAnthropic && p.Signature != "" || p.sealedBy(sealAnthropic))
@@ -1074,12 +1076,21 @@ func withoutSearchCalls(body []byte) []byte {
 }
 
 // mergeTurns joins consecutive messages of the same role, since the
-// Responses API splits an assistant turn into one item per part.
+// Responses API splits an assistant turn into one item per part. A user
+// message joined after tool results is marked where it begins (opens): the
+// message Codex sends next after a turn that ended on its tool results —
+// interrupted, or failed with no answer — is the user's next turn, as a
+// message after a Chat tool message or an Anthropic tool_result message
+// is, and turnIn tells it so.
 func mergeTurns(msgs []Message) []Message {
 	var out []Message
 	for _, m := range msgs {
 		if n := len(out); n > 0 && out[n-1].Role == m.Role && (m.Role == "user" || m.Role == "assistant") {
+			at := len(out[n-1].Parts)
 			out[n-1].Parts = append(out[n-1].Parts, m.Parts...)
+			if m.Role == "user" && len(m.Parts) > 0 && !slices.ContainsFunc(m.Parts, isResult) && slices.ContainsFunc(out[n-1].Parts[:at], isResult) {
+				out[n-1].Parts[at].opens = true
+			}
 			continue
 		}
 		out = append(out, m)
