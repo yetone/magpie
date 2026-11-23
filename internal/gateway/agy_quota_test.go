@@ -3,6 +3,8 @@ package gateway
 import (
 	"io"
 	"net/http"
+	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -189,5 +191,96 @@ func TestAgyCLIQuotaLeavesTheOtherPoolAsked(t *testing.T) {
 	defer mu.Unlock()
 	if code != 200 || !strings.Contains(body, "hello") {
 		t.Fatalf("the other pool's model: %d %s (vendor asked %v)", code, body, paths)
+	}
+}
+
+// @Airan_FS on X (11-23): with an Antigravity account's Claude quota used
+// up, agy ends the turn "⚠ Third-party quota reached. Please switch to
+// Gemini models or upgrade your subscription to increase your limits.
+// Resets in 3h22m19s." The quota is of the Claude and GPT-OSS pool, not
+// the account: Gemini's is still there. The agy-cli plugin (0.1.114)
+// relays it as a rate_limit_error in agy's words.
+const agyThirdPartyNotice = "Third-party quota reached. Please switch to Gemini models or upgrade your subscription to increase your limits. Resets in 3h22m19s."
+
+const agyThirdPartyReset = 3*time.Hour + 22*time.Minute + 19*time.Second
+
+// The model rests until the reset the notice says, not quotaRest's quarter
+// of an hour, and the account's Gemini model isn't rested with it.
+func TestAgyThirdPartyQuotaRestsTheModelUntilItsReset(t *testing.T) {
+	if got := resetsAfter([]byte(agyThirdPartyNotice)); got != agyThirdPartyReset {
+		t.Fatalf("the notice's reset reads %v, want %v", got, agyThirdPartyReset)
+	}
+	for _, said := range []string{
+		"agy bridge: Antigravity quota reached: " + agyThirdPartyNotice,
+		agyThirdPartyNotice,
+	} {
+		fresh(t)
+		acct := func(model string) candidate {
+			return candidate{p: provider.PluginForTest("agy-cli", "agy-cli"), model: model, rest: "agy-cli"}
+		}
+		opus, gemini := acct("claude-opus-5-5"), acct("gemini-4-carbon")
+		r := (&Server{}).restAfter(opus, http.StatusTooManyRequests, http.Header{}, []byte(`{"type":"error","error":{"type":"rate_limit_error","message":"`+said+`"}}`))
+		if r.Why != failQuota || r.Key != opus.restID() || r.Model != opus.model {
+			t.Fatalf("%q rested %+v, want the model %s", said, r, opus.restID())
+		}
+		if d := time.Until(r.Until); r.By != "resets" || d < agyThirdPartyReset-time.Minute || d > agyThirdPartyReset {
+			t.Fatalf("%q: Opus rests %v by %q, not the %v the notice says", said, d, r.By, agyThirdPartyReset)
+		}
+		if r, ok := restingOf(gemini); ok {
+			t.Fatalf("Gemini rests with Claude's pool: %+v", r)
+		}
+		if _, _, held := timedHeld([]candidate{gemini}); held {
+			t.Fatal("Gemini is answered Claude's 429 from the rest")
+		}
+	}
+}
+
+// Through the gateway and the plugin host: the Claude model refused with
+// agy's third-party notice is answered a 429 whose Retry-After is the
+// notice's reset, is not asked again before it, and the account's other
+// model is asked and answers.
+func TestAgyThirdPartyQuotaThroughThePlugin(t *testing.T) {
+	var mu sync.Mutex
+	var claude, other int
+	t.Setenv("FAKE_NO_FREE", "1")
+	pid := besideFake(t, "agy-cli", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		mu.Lock()
+		defer mu.Unlock()
+		if strings.HasSuffix(r.URL.Path, "/messages") {
+			claude++
+			w.WriteHeader(http.StatusTooManyRequests)
+			io.WriteString(w, `{"type":"error","error":{"type":"rate_limit_error","message":"agy bridge: Antigravity quota reached: `+agyThirdPartyNotice+`"}}`)
+			return
+		}
+		other++
+		w.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(w, sse(`data: {"choices":[{"delta":{"content":"hello"}}]}`,
+			`data: {"choices":[{"delta":{},"finish_reason":"stop"}]}`, `data: [DONE]`))
+	}))
+	s := New()
+	post := func(model string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		s.Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model":"`+pid+`/`+model+`","messages":[{"role":"user","content":"hi"}]}`)))
+		return rec
+	}
+	for i := range 2 {
+		rec := post("fake-claude")
+		if rec.Code != http.StatusTooManyRequests || strings.Contains(rec.Body.String(), `"content":"`) {
+			t.Fatalf("the Claude model, ask %d: %d %s", i+1, rec.Code, rec.Body.String())
+		}
+		ra, _ := strconv.Atoi(rec.Header().Get("Retry-After"))
+		if d := time.Duration(ra) * time.Second; d < agyThirdPartyReset-time.Minute || d > agyThirdPartyReset+time.Second {
+			t.Fatalf("ask %d: Retry-After %q, want the notice's %v", i+1, rec.Header().Get("Retry-After"), agyThirdPartyReset)
+		}
+	}
+	rec := post("fake-1")
+	mu.Lock()
+	defer mu.Unlock()
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "hello") {
+		t.Fatalf("the other pool's model: %d %s", rec.Code, rec.Body.String())
+	}
+	if claude != 1 || other != 1 {
+		t.Fatalf("the vendor was asked for Claude %d times and the other model %d, want once each", claude, other)
 	}
 }

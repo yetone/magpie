@@ -1366,8 +1366,12 @@ var resetsInWords = lazyre.New(`(?i)\bresets? in (?:(\d+)\s*d(?:ays?)?\b\s*)?(?:
 // for an account's quota used up says it the same way: "Individual quota
 // reached. Please upgrade your subscription to increase your limits.
 // Resets in 1h18m40s." (@Airan_FS on X, through the agy-cli plugin), which
-// resetsInWords can't read, as no word ends after its "h".
-var quotaResetAfter = lazyre.New(`(?i)\b(?:quota will reset after|individual quota reached\b[^\n]{0,160}?\bresets in) ((?:\d+h)?(?:\d+m)?(?:\d+(?:\.\d+)?s)?)`)
+// resetsInWords can't read, as no word ends after its "h". Its notice
+// for the account's third-party (Claude and GPT-OSS) quota used up says it
+// so too: "Third-party quota reached. Please switch to Gemini models or
+// upgrade your subscription to increase your limits. Resets in 3h22m19s."
+// (@Airan_FS on X, 11-23).
+var quotaResetAfter = lazyre.New(`(?i)\b(?:quota will reset after|(?:individual|third-party) quota reached\b[^\n]{0,160}?\bresets in) ((?:\d+h)?(?:\d+m)?(?:\d+(?:\.\d+)?s)?)`)
 
 // resetsAfter is how long the refusal says until it is back
 // (resetsInWords, quotaResetAfter, soonWords), held to longestWritten. Zero when it
@@ -2074,10 +2078,13 @@ func modelLimited(c candidate, why string, body []byte) bool {
 
 // antigravityPoolQuota is Antigravity's refusal of a model whose quota pool
 // is used up, in agy's words ("Individual quota reached. Please upgrade
-// your subscription to increase your limits. Resets in 1h18m40s.", which
-// the agy-cli plugin relays) or Code Assist's ("You have exhausted your
-// capacity on this model. Your quota will reset after 3h19m30s.").
-var antigravityPoolQuota = lazyre.New(`(?i)\bindividual quota reached\b|\bexhausted your capacity on this model\b`)
+// your subscription to increase your limits. Resets in 1h18m40s.", or, for
+// the Claude and GPT-OSS pool, "Third-party quota reached. Please switch to
+// Gemini models or upgrade your subscription to increase your limits.
+// Resets in 3h22m19s.", which the agy-cli plugin relays) or Code Assist's
+// ("You have exhausted your capacity on this model. Your quota will reset
+// after 3h19m30s.").
+var antigravityPoolQuota = lazyre.New(`(?i)\b(?:individual|third-party) quota reached\b|\bexhausted your capacity on this model\b`)
 
 // antigravityPoolSpent says a quota refusal is Antigravity's for the
 // model's pool, not the account's: Google counts an Antigravity account's
