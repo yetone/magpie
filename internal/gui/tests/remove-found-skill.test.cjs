@@ -95,7 +95,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator("#view-library .lib-body:not(.lib-skel) .lib-row").first().waitFor();
       return page;
     };
-    const row = (page, name) => page.locator("#view-library .lib-row").filter({ has: page.locator(".name", { hasText: new RegExp("^" + name + "$") }) });
+    const row = (page, name) => page.locator("#view-library .lib-row:not(.lib-hub)").filter({ has: page.locator(".name", { hasText: new RegExp("^" + name + "$") }) });
     const ask = async (page, name) => {
       await row(page, name).locator("button.lib-icon.danger").click();
       const ed = page.locator(".lib-editor").filter({ has: page.locator(".lib-confirm") });
@@ -120,7 +120,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForTimeout(300);
         assert.deepEqual(posts, ["notes"], "only the one confirmed is removed");
         assert.equal(await row(page, "notes").count(), 0, "its row is gone");
-        assert.equal(await page.locator("#view-library .lib-row").count(), 2);
+        assert.equal(await page.locator("#view-library .lib-row:not(.lib-hub)").count(), 2);
         if (said[lang].removed) assert.equal((await page.locator("#status").textContent()).trim(), said[lang].removed);
       });
     }

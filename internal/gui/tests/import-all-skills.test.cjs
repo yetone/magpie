@@ -79,7 +79,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     await t.test("in English", async () => {
       const posts = [];
       const page = await open("en", posts);
-      assert.equal(await page.locator("#view-library .lib-row").count(), 3);
+      assert.equal(await page.locator("#view-library .lib-row:not(.lib-hub)").count(), 3);
       const all = page.locator("#view-library .row-head button.lib-importall");
       assert.equal((await all.textContent()).trim(), "Bring in all");
       assert.match(await all.getAttribute("title"), /Brings the 3 skills into the library/);
@@ -87,7 +87,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await all.click();
       await page.waitForTimeout(300);
       assert.deepEqual(posts, [["grilling", "orca-cli", "notes"]]);
-      assert.equal(await page.locator("#view-library .lib-row").count(), 0, "the rows found are gone");
+      assert.equal(await page.locator("#view-library .lib-row:not(.lib-hub)").count(), 0, "the rows found are gone");
       assert.equal(await page.locator("#view-library button.lib-importall").count(), 0);
       assert.equal((await page.locator("#status").textContent()).trim(), "3 skills are in the library now");
       assert.equal(await scrolled(page), before, "the click scrolls nothing");
@@ -103,7 +103,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await all.click();
       await page.waitForTimeout(300);
       assert.deepEqual(posts, [["grilling", "orca-cli", "notes"]]);
-      assert.equal(await page.locator("#view-library .lib-row").count(), 1, "the one not brought in is still listed");
+      assert.equal(await page.locator("#view-library .lib-row:not(.lib-hub)").count(), 1, "the one not brought in is still listed");
       assert.equal(await page.locator("#view-library button.lib-importall").count(), 0, "no Bring in all for a single row");
       assert.equal((await page.locator("#status").textContent()).trim(), "notes 未能导入：no skill called notes in the agents");
       assert.equal(await scrolled(page), before, "the click scrolls nothing");

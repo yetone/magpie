@@ -111,7 +111,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.waitForFunction(() => !document.querySelector("#view-library").getAnimations({ subtree: true }).some((a) => a.playState === "running" && isFinite(a.effect.getComputedTiming().endTime)));
       return page;
     };
-    const row = (page, name) => page.locator("#view-library .lib-row").filter({ has: page.locator(".name", { hasText: new RegExp("^" + name) }) });
+    const row = (page, name) => page.locator("#view-library .lib-row:not(.lib-hub)").filter({ has: page.locator(".name", { hasText: new RegExp("^" + name) }) });
     const click = async (page, loc) => {
       // a click where the button is: Playwright's own click scrolls a
       // thing it finds still moving into view, which the reader's doesn't

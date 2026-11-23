@@ -199,7 +199,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 // The owner (11-23): every skill still in the agents' own folders, none in
 // the library, and no Skill router row at all. With agents it is there, at
 // the top, and says it lists the library's skills, so the agents' own are
-// imported for it.
+// imported for it. The MCP tab's router row shows with no server alike.
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   test(engine + ": the skill router with no skill in the library yet", async (t) => {
     I18N = strings().I18N;
@@ -234,6 +234,28 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await row.locator(".lib-switch").click();
         await row.locator('.lib-switch[aria-checked="true"]').waitFor();
         assert.deepEqual(st.sent.shift(), ["router", { on: true }]);
+
+        // the MCP tab, agents and no server: its router row is there too,
+        // over "No servers in the library yet"
+        const mctx = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce" });
+        await mctx.addInitScript(() => { try { localStorage.setItem("magpie.libTab", "mcp"); } catch {} });
+        const mp = await mctx.newPage();
+        mp.setDefaultTimeout(5000);
+        mp.setDefaultNavigationTimeout(60000);
+        mp.on("pageerror", (e) => errors.push(e.message));
+        await mp.route("**/*", server(lang, st));
+        await mp.goto("http://magpie.test/");
+        await mp.locator('button[data-view="library"]').click();
+        await mp.locator("#view-library .lib-empty").waitFor();
+        assert.equal(await mp.locator("#view-library .lib-skillrouter").count(), 0, "the MCP tab, not Skills");
+        assert.equal(await mp.evaluate(() => {
+          const v = document.querySelector("#view-library");
+          const h = v.querySelector(".lib-hub"), e = v.querySelector(".lib-empty");
+          return !!h && !!(h.compareDocumentPosition(e) & Node.DOCUMENT_POSITION_FOLLOWING);
+        }), true, "the MCP router row is over the empty list");
+        assert.deepEqual(await sideways(mp), []);
+        await mctx.close();
+        assert.deepEqual(await sideways(page), []);
         assert.deepEqual(errors, []);
         await ctx.close();
       });

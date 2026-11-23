@@ -69,12 +69,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator("#view-library .lib-body:not(.lib-skel) .lib-row").first().waitFor();
       return page;
     };
-    const row = (page, name) => page.locator("#view-library .lib-row").filter({ has: page.locator(".name", { hasText: new RegExp("^" + name + "$") }) });
+    const row = (page, name) => page.locator("#view-library .lib-row:not(.lib-hub)").filter({ has: page.locator(".name", { hasText: new RegExp("^" + name + "$") }) });
 
     await t.test("in English", async () => {
       const posts = [];
       const page = await open("en", posts);
-      assert.equal(await page.locator("#view-library .lib-row").count(), 4);
+      assert.equal(await page.locator("#view-library .lib-row:not(.lib-hub)").count(), 4);
       const orch = row(page, "orchestration");
       assert.equal(await orch.count(), 1, "one row for the shared folder and the agents' links to it");
       assert.match(await orch.locator(".lib-src").first().textContent(), /shared in\s*~\/\.agents\/skills\/orchestration/);

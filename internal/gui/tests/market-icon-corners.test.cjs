@@ -10,6 +10,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
+const { reach } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
 const HOME = "/Users/tester";
@@ -58,6 +59,8 @@ function serve(lang) {
 
 // The tile's pixels as the screen shows them: [r, g, b] by [y][x]
 async function pixels(page, tile) {
+  // the router row over the market puts it under the fold: wheel to it
+  await reach(page, tile);
   const shot = (await tile.screenshot()).toString("base64");
   return page.evaluate(async (b64) => {
     const img = new Image();
@@ -104,9 +107,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // every corner of the black tile: nothing brighter than the card
       // behind it, give or take the 8% ring
       const px = await pixels(page, icon("linear/mcp"));
-      const n = px.length, r = 18; // 9px radius at 2x
+      // a tile at a fractional y is shot a pixel row taller than wide
+      const h = px.length, w = px[0].length, r = 18; // 9px radius at 2x
       const card = light(px[0][0]);
-      for (const [cy, cx] of [[0, 0], [0, n - r], [n - r, 0], [n - r, n - r]]) {
+      for (const [cy, cx] of [[0, 0], [0, w - r], [h - r, 0], [h - r, w - r]]) {
         let most = 0;
         for (let y = cy; y < cy + r; y++) for (let x = cx; x < cx + r; x++) most = Math.max(most, light(px[y][x]));
         assert(most <= card + 30, `corner at ${cx},${cy}: ${most} against the card's ${card}`);
@@ -114,8 +118,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       // a logo with see-through parts is still on white, near its edge too
       const svg = await pixels(page, icon("acme/mcp"));
-      const m = svg.length >> 1;
-      for (const [y, x] of [[12, 12], [6, m], [m, 6], [svg.length - 7, m], [m, svg.length - 7]]) assert(light(svg[y][x]) >= 240, `svg tile at ${x},${y}: ${svg[y][x]}`);
+      const my = svg.length >> 1, mx = svg[0].length >> 1;
+      for (const [y, x] of [[12, 12], [6, mx], [my, 6], [svg.length - 7, mx], [my, svg[0].length - 7]]) assert(light(svg[y][x]) >= 240, `svg tile at ${x},${y}: ${svg[y][x]}`);
 
       // an initial keeps its grey, with no white under it
       const mono = await pixels(page, icon("none/mcp"));

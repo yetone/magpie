@@ -114,7 +114,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // the Library's skill row: Update, at work and then done
         await page.goto("http://magpie.test/");
         await page.locator('button[data-view="library"]').click();
-        const row = page.locator("#view-library .lib-row").filter({ has: page.locator(".name", { hasText: /^pdf$/ }) });
+        const row = page.locator("#view-library .lib-row:not(.lib-hub)").filter({ has: page.locator(".name", { hasText: /^pdf$/ }) });
         await row.waitFor();
         const up = row.locator(".lib-rowacts .lib-icon").first();
         assert.deepEqual((await look(up)).paths, [UP], "the row's first action is not Update");

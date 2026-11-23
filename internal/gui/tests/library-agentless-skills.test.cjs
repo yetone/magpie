@@ -120,7 +120,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
         // Skills: the skill, who takes it, and nothing of agents
         await pick(page, w("Skills"));
-        await page.waitForFunction(() => !!document.querySelector("#view-library .lib-row"));
+        await page.waitForFunction(() => !!document.querySelector("#view-library .lib-row:not(.lib-hub)"));
         assert.equal(await tabName(v), w("Skills"));
         assert.equal((await v.locator(".lib-intro").first().textContent()).trim(), w("A magpie on another computer that adds this one as a provider, with Use its skills and prompts on, takes these skills and gives them to its agents."), where);
         assert.ok((await v.textContent()).includes("pdf"), `${where}: the skill isn't listed`);

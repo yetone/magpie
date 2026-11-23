@@ -193,8 +193,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       await t.test(lang + ": a byte copy in another agent isn't said to differ", async () => {
         const page = await open(lang, []);
-        const polish = page.locator("#view-library .lib-row").filter({ has: page.locator(".name", { hasText: /^polish$/ }) });
-        const audit = page.locator("#view-library .lib-row").filter({ has: page.locator(".name", { hasText: /^audit$/ }) });
+        const polish = page.locator("#view-library .lib-row:not(.lib-hub)").filter({ has: page.locator(".name", { hasText: /^polish$/ }) });
+        const audit = page.locator("#view-library .lib-row:not(.lib-hub)").filter({ has: page.locator(".name", { hasText: /^audit$/ }) });
         await polish.waitFor();
         assert.equal(await polish.locator(".lib-have > *").count(), 2, "Claude Code and Codex have it");
         assert.equal(await polish.getByText(w.differs.replace("Gemini CLI", "Codex")).count(), 0);

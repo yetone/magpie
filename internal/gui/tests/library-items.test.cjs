@@ -138,7 +138,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await t.test(lang + ": long names, links and descriptions stay in their rows", async () => {
         for (const theme of ["light", "dark"]) for (const width of [980, 560]) {
           const page = await open(lang, { theme, width });
-          const long = page.locator("#view-library .lib-row").filter({ hasText: LONG });
+          const long = page.locator("#view-library .lib-row:not(.lib-hub)").filter({ hasText: LONG });
           await long.waitFor();
           assert.deepEqual(await fits(page), [], `${theme}, ${width}px`);
           const label = long.locator(".lib-src > span");
@@ -191,8 +191,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.mouse.wheel(0, 600);
         await page.waitForFunction(() => document.querySelector("#view-library").scrollTop > 400);
         await page.waitForTimeout(300);
-        const name = await page.evaluate(() => [...document.querySelectorAll("#view-library .lib-row")].find((r) => { const b = r.getBoundingClientRect(); return /^s\d\d$/.test(r.querySelector(".name").textContent) && b.top > 250 && b.bottom < 600; }).querySelector(".name").textContent);
-        const row = page.locator("#view-library .lib-row").filter({ has: page.locator(".name", { hasText: new RegExp("^" + name + "$") }) });
+        const name = await page.evaluate(() => [...document.querySelectorAll("#view-library .lib-row:not(.lib-hub)")].find((r) => { const b = r.getBoundingClientRect(); return /^s\d\d$/.test(r.querySelector(".name").textContent) && b.top > 250 && b.bottom < 600; }).querySelector(".name").textContent);
+        const row = page.locator("#view-library .lib-row:not(.lib-hub)").filter({ has: page.locator(".name", { hasText: new RegExp("^" + name + "$") }) });
         const had = skills.find((s) => s.name === name).agents;
         // the chips fan out under the pointer first, as a reader's hand does
         const b = await row.locator(".lib-agents").boundingBox();

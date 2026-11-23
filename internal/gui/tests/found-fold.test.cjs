@@ -124,7 +124,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       found = [];
       foundServers = servers(20);
       const page = await open("en", [], "mcp");
-      const srows = page.locator("#view-library .lib-list > .lib-row");
+      const srows = page.locator("#view-library .lib-list:not(.lib-hublist) > .lib-row");
       await page.locator("#view-library button.lib-foundmore").waitFor();
       assert.equal(await srows.count(), 5);
       assert.equal((await page.locator("#view-library button.lib-foundmore").textContent()).trim(), "Show 15 more");

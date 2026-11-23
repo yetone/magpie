@@ -111,7 +111,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.route("**/*", server(lang, st, posts));
         await page.goto("http://magpie.test/");
         await page.locator('button[data-view="library"]').click();
-        const row = (name) => page.locator("#view-library .lib-row").filter({ has: page.locator(".name", { hasText: new RegExp("^" + name + "$") }) });
+        const row = (name) => page.locator("#view-library .lib-row:not(.lib-hub)").filter({ has: page.locator(".name", { hasText: new RegExp("^" + name + "$") }) });
         await row("notes").waitFor();
         const sheet = page.locator("#modal .lib-editor");
         const ask = async (name) => {

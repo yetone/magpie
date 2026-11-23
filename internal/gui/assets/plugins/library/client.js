@@ -3016,9 +3016,9 @@ magpie.plugin("library", (ctx) => {
     const all = mcpAgents();
     pickingFor("servers", lib.servers);
     // the router first, over the list (the owner, 11-21: at the list's
-    // foot nobody found it); with no server only where it is what the
-    // page is for, with no agent, to turn on before the first server
-    if (lib.servers.length || agentless()) body.append(...hubPart());
+    // foot nobody found it), and always, with no server too: a row that
+    // comes and goes reads as no such feature (the owner, 11-23)
+    body.append(...hubPart());
     if (!lib.servers.length) {
       const add = button(t("＋ Add a server"), "action", () => editServer(null));
       body.append(empty(t("No servers in the library yet"), lib.foundServers.length && !agentless() ? t("Add one, or bring in those your agents already have, below.") : t("Paste a server's JSON from its README, or fill it in."), add));
@@ -6124,10 +6124,10 @@ magpie.plugin("library", (ctx) => {
       : t("A skill is a folder with a SKILL.md an agent loads when it's needed. The library keeps each one once and links it into the agents you pick.")));
     const all = skillAgents();
     // the skill router first, over the install card and the list (the
-    // owner, 11-21: at the foot of a long list nobody found it)
-    // with agents, even with none of the library's skills yet: the owner
-    // (11-23), every skill still in the agents' own folders, found no row
-    if (all.length) body.append(...skillRouterPart());
+    // owner, 11-21: at the foot of a long list nobody found it), and
+    // always: hidden while the library had no skill, the owner (11-23)
+    // found no row and took it for no such feature
+    body.append(...skillRouterPart());
     body.append(installCard());
     pickingFor("skills", lib.skills);
     if (lib.skills.length) {
