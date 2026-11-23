@@ -1168,6 +1168,10 @@ type cUsage struct {
 	CompletionTokensDetails *struct {
 		ReasoningTokens int `json:"reasoning_tokens"`
 	} `json:"completion_tokens_details,omitempty"`
+	// ReasoningTokens is Copilot's count of them, at the top of its usage
+	// beside completion_tokens, which counts them too (probed live on
+	// gemini-4-hydrogen: "completion_tokens":88, "reasoning_tokens":48)
+	ReasoningTokens int `json:"reasoning_tokens"`
 	// what others say was read from their cache, when prompt_tokens_details
 	// doesn't: DeepSeek's hits, Moonshot's cached_tokens, Mistral's
 	// num_cached_tokens (its older top-level count, which its API still
@@ -1221,6 +1225,9 @@ func (u cUsage) usage() Usage {
 	}
 	if u.CompletionTokensDetails != nil {
 		out.Reasoning = u.CompletionTokensDetails.ReasoningTokens
+	}
+	if out.Reasoning == 0 {
+		out.Reasoning = u.ReasoningTokens
 	}
 	if c := u.Credit; c != nil && *c >= 0 {
 		out.Credits = c

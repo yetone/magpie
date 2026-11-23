@@ -92,3 +92,33 @@ func TestTranslatedReasoningToldAsThinkingTokens(t *testing.T) {
 		t.Fatalf("message_delta doesn't tell the thinking tokens:\n%s", rec.Body)
 	}
 }
+
+// Copilot counts a reply's reasoning at the top of its usage, beside
+// completion_tokens (probed live on gemini-4-hydrogen), not in
+// completion_tokens_details: those tokens are reasoning all the same, for
+// a translated reply and a relayed one alike.
+func TestCopilotTopLevelReasoningTokensCounted(t *testing.T) {
+	events := []string{
+		`data: {"choices":[{"index":0,"delta":{"content":"hello","role":"assistant"}}],"model":"gemini-4-hydrogen"}`,
+		`data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"completion_tokens":2359,"prompt_tokens":107,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":2466,"reasoning_tokens":2351},"model":"gemini-4-hydrogen"}`,
+		`data: [DONE]`,
+	}
+	for _, x := range []struct{ path, body string }{
+		{"/v1/messages", `{"model":"fake/m1","stream":true,"messages":[{"role":"user","content":"hi"}],"max_tokens":300}`},
+		{"/v1/chat/completions", `{"model":"fake/m1","stream":true,"messages":[{"role":"user","content":"hi"}]}`},
+	} {
+		t.Run(x.path, func(t *testing.T) {
+			fresh(t)
+			up := httptest.NewServer(&paced{events: events})
+			t.Cleanup(up.Close)
+			if err := provider.Save(provider.Provider{ID: "fake", Name: "Fake", Chat: up.URL + "/v1", Key: "k", Models: []string{"m1"}}); err != nil {
+				t.Fatal(err)
+			}
+			rec := httptest.NewRecorder()
+			New().Handler().ServeHTTP(rec, httptest.NewRequest("POST", x.path, strings.NewReader(x.body)))
+			if u := lastUsage(t); rec.Code != 200 || u.Reasoning != 2351 || u.Output != 2359 {
+				t.Fatalf("%d %+v\n%s", rec.Code, u, rec.Body)
+			}
+		})
+	}
+}
