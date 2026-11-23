@@ -9995,6 +9995,8 @@ function drawEditor(p, presetID) {
     };
     side.append(b);
   }
+  // a Vibe plan's key from a sign-in to Mistral (mistralsignin.js)
+  if (pr?.id === "mistral") import("./mistralsignin.js").then(() => mistralSignIn(side, key, save), () => {});
   const keyWrap = el("div", "pair");
   keyWrap.append(key, side);
   // Vertex AI: no key, the user's Google Cloud project's token

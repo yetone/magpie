@@ -3891,6 +3891,33 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 		}
 		writeProvidersJSON(rw, providersState())
 	})
+	// a Mistral Vibe plan's key: a sign-in to Mistral in the user's
+	// browser, as Vibe's own, traded for the key the editor then saves
+	mux.HandleFunc("POST /api/mistral/signin", func(rw http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+		defer cancel()
+		id, u, err := provider.StartMistralSignIn(ctx)
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, struct {
+			ID  string `json:"id"`
+			URL string `json:"url"`
+		}{id, u})
+	})
+	mux.HandleFunc("GET /api/mistral/signin/{id}", func(rw http.ResponseWriter, r *http.Request) {
+		state, why, key := provider.MistralSignInState(r.PathValue("id"))
+		writeJSON(rw, struct {
+			State string `json:"state"`
+			Error string `json:"error,omitempty"`
+			Key   string `json:"key,omitempty"`
+		}{state, why, key})
+	})
+	mux.HandleFunc("POST /api/mistral/signin/{id}/cancel", func(rw http.ResponseWriter, r *http.Request) {
+		provider.CancelMistralSignIn(r.PathValue("id"))
+		rw.WriteHeader(http.StatusNoContent)
+	})
 	// the Qwen AI platform's Token Plan windows: a sign-in to the
 	// platform, approved in the user's browser, the provider's own
 	qianwenOf := func(rw http.ResponseWriter, r *http.Request) (string, bool) {

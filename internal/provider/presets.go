@@ -506,7 +506,10 @@ var presets = []PresetDef{
 		Website: "https://docs.qwencloud.com/developer-guides/getting-started/regions", KeysURL: "https://home.qwencloud.com/api-keys",
 		Regions: qwenCloudRegions("ap-southeast-1", "us-east-1", "eu-central-1", "ap-northeast-1", "cn-hongkong", "cn-beijing")},
 	{ID: "mistral", Name: "Mistral", Icon: "mistral-color", Kind: KindVendor, Catalog: "mistral",
-		Chat:    "https://api.mistral.ai/v1",
+		Chat: "https://api.mistral.ai/v1",
+		// a Vibe plan's key too (Pro, Student, Team: jtbbtnt54249 on X), got
+		// from the editor's sign-in (mistral_signin.go)
+		Note:    "API key or Vibe plan",
 		Website: "https://console.mistral.ai", KeysURL: "https://console.mistral.ai/api-keys"},
 	// Voyage AI makes embedding and rerank models alone, at
 	// api.voyageai.com/v1/embeddings and /v1/rerank with a Bearer key
