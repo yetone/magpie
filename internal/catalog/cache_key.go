@@ -12,12 +12,15 @@ import (
 )
 
 // CacheKey names the catalog kept on disk, models.dev's provider catalog
-// and the lab catalog beside it, by what the files hold, not by when they
-// were written. A Claude account's model list fetches the catalog again
+// and the lab catalog and v2 embedding models beside it (a price one of
+// them gives re-prices the ledger's calls), by what the files hold, not
+// by when they were written. A Claude account's model list fetches the catalog again
 // every 45 minutes (Asked), and usage keyed its whole index on the file's
 // mtime: each fetch, the same bytes, had the next usage query read every
 // session file again, ~15 s of CPU over a long history.
-func CacheKey() string { return fileKey(CachePath()) + "|" + fileKey(LabsPath()) }
+func CacheKey() string {
+	return fileKey(CachePath()) + "|" + fileKey(LabsPath()) + "|" + fileKey(EmbeddingsPath())
+}
 
 // fileKeys holds each file's last key by the stat it was hashed at, so a
 // key costs a stat until the file changes.

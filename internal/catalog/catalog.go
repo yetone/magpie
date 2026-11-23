@@ -689,6 +689,9 @@ func loadGen() (map[string]mdProvider, int) {
 				}
 				var m map[string]mdProvider
 				if json.Unmarshal(b, &m) == nil && len(m) > 0 {
+					// and the embedding models v1 leaves out, which
+					// models.dev's v2 lists and prices (embeddings.go)
+					addEmbeddings(m, readEmbeddings())
 					shareCatalog(m)
 					mdev = m
 					votes, reasons := map[string]int{}, map[string]int{}
@@ -966,7 +969,9 @@ func syncLock(ctx context.Context, onlyIfMissing bool) error {
 	// the lab catalog beside it is best effort: without it the provider
 	// catalog answers alone, and one kept before is kept
 	labsChanged, _ := syncLabs(ctx)
-	if changed || labsChanged {
+	// and v2's embedding models likewise (embeddings.go)
+	embeddingsChanged, _ := syncEmbeddings(ctx)
+	if changed || labsChanged || embeddingsChanged {
 		Reset()
 		Touched() // names, reasoning levels and context windows may be others
 	}
@@ -974,10 +979,11 @@ func syncLock(ctx context.Context, onlyIfMissing bool) error {
 }
 
 // Stale reports whether no catalog exists or the cache is older than a day
-// (fresh.go), or magpie's has no lab catalog beside it yet (labs.go).
+// (fresh.go), or magpie's has no lab catalog or v2 embedding models
+// beside it yet (labs.go, embeddings.go).
 func Stale() bool {
 	src := Source()
-	if src == "" || labsMissing() {
+	if src == "" || labsMissing() || embeddingsMissing() {
 		return true
 	}
 	st, err := os.Stat(src)
