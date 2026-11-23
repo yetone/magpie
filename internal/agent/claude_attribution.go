@@ -19,13 +19,35 @@ const (
 	AttributionCustom = "custom" // the user's own trailer text: magpie never writes over it
 )
 
-func attributionPath(home string) string {
-	return filepath.Join(here(tuneHome(home)).claudeDir(), "settings.json")
+type ClaudeSettings struct {
+	path   string
+	distro *distro
+}
+
+func (a *Agent) ClaudeSettings() (*ClaudeSettings, error) {
+	if a.unreached != nil {
+		return nil, a.unreached
+	}
+	if a.WSL != "" && (a.claudeSettings == nil || a.claudeSettings.distro == nil || !a.claudeSettings.distro.live()) {
+		return nil, fmt.Errorf("Claude Code settings are unavailable in WSL %s", a.WSL)
+	}
+	if a.claudeSettings == nil {
+		return nil, fmt.Errorf("%s has no Claude Code settings", a.Name)
+	}
+	return a.claudeSettings, nil
+}
+
+func localClaudeSettings(home string) ClaudeSettings {
+	return ClaudeSettings{path: filepath.Join(here(tuneHome(home)).claudeDir(), "settings.json")}
 }
 
 // ClaudeAttribution reads whether Claude Code adds its commit trailer.
 func ClaudeAttribution(home string) string {
-	p := attributionPath(home)
+	return localClaudeSettings(home).Attribution()
+}
+
+func (settings ClaudeSettings) Attribution() string {
+	p := settings.path
 	if raw, ok := edit.GetJSONRaw(p, "attribution"); ok && raw == "false" {
 		return AttributionOff
 	}
@@ -45,8 +67,12 @@ func ClaudeAttribution(home string) string {
 // own default: what hid it is taken out) or off (attribution.commit = "").
 // A trailer text the user wrote is left as it is, whatever is asked.
 func ClaudeAttributionSet(home string, on bool) error {
-	p := attributionPath(home)
-	cur := ClaudeAttribution(home)
+	return localClaudeSettings(home).SetAttribution(on)
+}
+
+func (settings ClaudeSettings) SetAttribution(on bool) error {
+	p := settings.path
+	cur := settings.Attribution()
 	if cur == AttributionCustom {
 		return fmt.Errorf("attribution.commit holds your own text in Claude Code's settings.json: change it there")
 	}

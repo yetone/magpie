@@ -315,25 +315,14 @@ type tunePlace struct {
 	toml   bool
 	env    []string
 	number bool
+	remote bool
 }
 
 func tuneWhere(home, agent, knob, model string) (tunePlace, error) {
 	home = tuneHome(home)
 	switch agent {
 	case "claude":
-		path := filepath.Join(here(home).claudeDir(), "settings.json")
-		switch knob {
-		case TuneCompact:
-			n := claudeName(model)
-			if n == "" {
-				return tunePlace{}, fmt.Errorf("%q is no Claude model: Claude Code's window for it is magpie's own, under Settings", model)
-			}
-			return tunePlace{path: path, key: "modelSettings." + n + ".autoCompactWindow", env: []string{claudeCompactEnv}, number: true}, nil
-		case TuneCache:
-			return tunePlace{path: path, key: "promptCacheTtl", env: []string{"FORCE_PROMPT_CACHING_5M", "CLAUDE_CODE_PROMPT_CACHE_TTL"}}, nil
-		case TuneSubCache:
-			return tunePlace{path: path, key: "subagentPromptCacheTtl", env: []string{"FORCE_PROMPT_CACHING_5M", "CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL"}}, nil
-		}
+		return localClaudeSettings(home).tuneWhere(knob, model)
 	case "codex":
 		if knob == TuneCompact {
 			// the user's own limit in config.toml, which comes before Long
@@ -342,6 +331,29 @@ func tuneWhere(home, agent, knob, model string) (tunePlace, error) {
 		}
 	}
 	return tunePlace{}, fmt.Errorf("%s has no setting %q tune can put in", agent, knob)
+}
+
+func (settings ClaudeSettings) tuneWhere(knob, model string) (tunePlace, error) {
+	spot := tunePlace{path: settings.path, remote: settings.distro != nil}
+	switch knob {
+	case TuneCompact:
+		name := claudeName(model)
+		if name == "" {
+			return tunePlace{}, fmt.Errorf("%q is no Claude model: Claude Code's window for it is magpie's own, under Settings", model)
+		}
+		spot.key = "modelSettings." + name + ".autoCompactWindow"
+		spot.env = []string{claudeCompactEnv}
+		spot.number = true
+	case TuneCache:
+		spot.key = "promptCacheTtl"
+		spot.env = []string{"FORCE_PROMPT_CACHING_5M", "CLAUDE_CODE_PROMPT_CACHE_TTL"}
+	case TuneSubCache:
+		spot.key = "subagentPromptCacheTtl"
+		spot.env = []string{"FORCE_PROMPT_CACHING_5M", "CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL"}
+	default:
+		return tunePlace{}, fmt.Errorf("claude has no setting %q tune can put in", knob)
+	}
+	return spot, nil
 }
 
 func (p tunePlace) get() (string, bool) {
@@ -356,6 +368,9 @@ func (p tunePlace) get() (string, bool) {
 func (p tunePlace) envOf(k string) string {
 	if v, _ := edit.GetJSON(p.path, "env."+k); v != "" {
 		return v
+	}
+	if p.remote {
+		return ""
 	}
 	return os.Getenv(k)
 }
@@ -382,6 +397,10 @@ func TuneRead(home, agent, knob, model string) (TuneSetting, error) {
 		st := settings.Load()
 		return TuneSetting{Value: longValue(st.ForAgent(agent)), Source: TuneLong, Ours: longOurs(st, agent)}, nil
 	}
+	return tuneReadAt(p, agent, knob, model)
+}
+
+func tuneReadAt(p tunePlace, agent, knob, model string) (TuneSetting, error) {
 	var s TuneSetting
 	for _, k := range p.env {
 		if v := p.envOf(k); v != "" && v != "0" && v != "false" {
@@ -417,6 +436,9 @@ func TuneRead(home, agent, knob, model string) (TuneSetting, error) {
 				s.Value, s.Source = v, "settings"
 			}
 		}
+	}
+	if p.remote {
+		return s, nil
 	}
 	if st, ok := tuneStashed(agent, knob, model); ok && s.Locked == "" {
 		v, _ := p.get()
@@ -869,20 +891,37 @@ func asyncGiveBack(home string, st tuneAsyncStash) error {
 // the card stashed is forgotten, so its Undo never puts an older one back
 // over it.
 func ClaudeCacheSet(home, knob, value string) error {
+	return localClaudeSettings(home).SetCache(knob, value)
+}
+
+func (settings ClaudeSettings) Cache(knob string) (TuneSetting, error) {
+	if knob != TuneCache && knob != TuneSubCache {
+		return TuneSetting{}, fmt.Errorf("Claude Code has no prompt cache %q", knob)
+	}
+	spot, err := settings.tuneWhere(knob, "")
+	if err != nil {
+		return TuneSetting{}, err
+	}
+	return tuneReadAt(spot, "claude", knob, "")
+}
+
+func (settings ClaudeSettings) SetCache(knob, value string) error {
 	if knob != TuneCache && knob != TuneSubCache {
 		return fmt.Errorf("Claude Code has no prompt cache %q", knob)
 	}
 	if value != "" && value != "5m" && value != "1h" {
 		return fmt.Errorf("the cache is kept 5m or 1h, not %q", value)
 	}
-	p, err := tuneWhere(home, "claude", knob, "")
+	p, err := settings.tuneWhere(knob, "")
 	if err != nil {
 		return err
 	}
-	if cur, _ := TuneRead(home, "claude", knob, ""); cur.Locked != "" {
+	if cur, _ := tuneReadAt(p, "claude", knob, ""); cur.Locked != "" {
 		return fmt.Errorf("%s=%s is set and comes before the setting: take it out first", cur.Locked, cur.Value)
 	}
-	forget(tuneKey("claude", knob, ""))
+	if !p.remote {
+		forget(tuneKey("claude", knob, ""))
+	}
 	if value == "" {
 		if _, ok := p.get(); !ok {
 			return nil

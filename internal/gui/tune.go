@@ -8,6 +8,7 @@ package gui
 import (
 	"cmp"
 	"encoding/json"
+	"fmt"
 	"hash/fnv"
 	"net/http"
 	"slices"
@@ -378,10 +379,24 @@ func tuneRoutes(mux *http.ServeMux) {
 	})
 	// Claude Code's prompt cache picked in its settings: "5m", "1h", or ""
 	// for Claude Code's own default (agent.ClaudeCacheSet)
+	mux.HandleFunc("GET /api/settings/claude-options/{id}", func(rw http.ResponseWriter, r *http.Request) {
+		options, err := claudeOptionsFor(r.PathValue("id"))
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, claudeOptionsState(options))
+	})
 	mux.HandleFunc("POST /api/settings/claude-cache", func(rw http.ResponseWriter, r *http.Request) {
-		var in struct{ Knob, Value string }
+		var in struct{ Agent, Knob, Value string }
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			fail(rw, err)
+			return
+		}
+		if in.Agent != "" {
+			changeClaudeOptions(rw, in.Agent, func(options *agent.ClaudeSettings) error {
+				return options.SetCache(in.Knob, in.Value)
+			})
 			return
 		}
 		if err := agent.ClaudeCacheSet("", in.Knob, in.Value); err != nil {
@@ -394,9 +409,18 @@ func tuneRoutes(mux *http.ServeMux) {
 	// Claude Code's commit trailer (Co-Authored-By) on or off
 	// (agent.ClaudeAttributionSet; 9_bishi on X)
 	mux.HandleFunc("POST /api/settings/claude-attribution", func(rw http.ResponseWriter, r *http.Request) {
-		var in struct{ On bool }
+		var in struct {
+			Agent string
+			On    bool
+		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			fail(rw, err)
+			return
+		}
+		if in.Agent != "" {
+			changeClaudeOptions(rw, in.Agent, func(options *agent.ClaudeSettings) error {
+				return options.SetAttribution(in.On)
+			})
 			return
 		}
 		if err := agent.ClaudeAttributionSet("", in.On); err != nil {
@@ -584,13 +608,54 @@ type claudeCacheJSON struct {
 }
 
 func claudeCacheState() []claudeCacheJSON {
+	return claudeCacheValues(func(knob string) (agent.TuneSetting, error) {
+		return agent.TuneRead("", "claude", knob, "")
+	})
+}
+
+func claudeCacheValues(read func(string) (agent.TuneSetting, error)) []claudeCacheJSON {
 	var out []claudeCacheJSON
 	for _, knob := range []string{agent.TuneCache, agent.TuneSubCache} {
-		s, err := agent.TuneRead("", "claude", knob, "")
+		s, err := read(knob)
 		if err != nil {
 			continue
 		}
 		out = append(out, claudeCacheJSON{Knob: knob, Value: s.Value, Locked: s.Locked})
 	}
 	return out
+}
+
+type claudeOptionsJSON struct {
+	Cache       []claudeCacheJSON `json:"claudeCache"`
+	Attribution string            `json:"claudeAttribution"`
+}
+
+func claudeOptionsState(options *agent.ClaudeSettings) claudeOptionsJSON {
+	return claudeOptionsJSON{Cache: claudeCacheValues(options.Cache), Attribution: options.Attribution()}
+}
+
+func claudeOptionsFor(id string) (*agent.ClaudeSettings, error) {
+	selected, err := agentNamed(id)
+	if err != nil {
+		return nil, err
+	}
+	if selected.ID != id {
+		return nil, fmt.Errorf("unknown agent %q", id)
+	}
+	return selected.ClaudeSettings()
+}
+
+func changeClaudeOptions(rw http.ResponseWriter, id string, change func(*agent.ClaudeSettings) error) {
+	options, err := claudeOptionsFor(id)
+	if err == nil {
+		err = change(options)
+	}
+	if err != nil {
+		fail(rw, err)
+		return
+	}
+	if id == "claude" {
+		tuneForget()
+	}
+	writeJSON(rw, claudeOptionsState(options))
 }

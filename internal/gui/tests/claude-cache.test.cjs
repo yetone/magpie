@@ -17,24 +17,40 @@ const { watchSettingsReads, agentRow, openAgentSettings, pickItem } = require(".
 
 const assets = path.resolve(__dirname, "../assets");
 
-function serve(lang, posts) {
+function serve(lang, posts, distro = "") {
   let settings = {
     theme: "light", lang, tray: "panel", currency: "usd", version: "0.1.900", dir: "~/.config/magpie", gateway: "http://127.0.0.1:3425", proxyNow: "none", proxySource: "none", visionModels: [], imageGenModels: [], titleModels: [], workbuddyCheckins: [], lanURLs: [], redactWords: [], trayUsageEvery: 3, compactAt: 400000,
     claudeCache: [{ knob: "cache_ttl", value: "1h" }, { knob: "subagent_cache_ttl", value: "1h", locked: "CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL" }],
   };
+  let wslOptions = { claudeCache: [{ knob: "cache_ttl", value: "5m" }, { knob: "subagent_cache_ttl" }], claudeAttribution: "off" };
   return async (route) => {
     const req = route.request(), url = new URL(req.url());
     const json = (data) => route.fulfill({ json: data });
     if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:${JSON.stringify(lang)},theme:"light",web:true};` });
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
-    if (url.pathname === "/api/state") return json({ agents: [agentRow("claude", "Claude Code"), agentRow("codex", "Codex")], profiles: [], settings: { lang, theme: "light" } });
+    if (url.pathname === "/api/state") {
+      const agents = [agentRow("claude", "Claude Code"), agentRow("codex", "Codex")];
+      if (distro) agents.push({ ...agentRow(`claude@wsl:${distro}`, `Claude Code · WSL ${distro}`), icon: "claude", wsl: distro });
+      return json({ agents, profiles: [], settings: { lang, theme: "light" } });
+    }
     if (url.pathname === "/api/providers") return json({ providers: [], presets: [], excluded: [], gateway: { running: true, window: true } });
     if (url.pathname === "/api/groups") return json({ groups: [], models: [] });
+    if (distro && decodeURIComponent(url.pathname) === `/api/settings/claude-options/claude@wsl:${distro}`) return json(wslOptions);
     if (url.pathname === "/api/settings/claude-cache") {
       const body = req.postDataJSON();
       posts.push({ path: url.pathname, body });
+      if (distro && body.agent === `claude@wsl:${distro}`) {
+        wslOptions = { ...wslOptions, claudeCache: wslOptions.claudeCache.map((c) => c.knob === body.knob ? { knob: c.knob, value: body.value } : c) };
+        return json(wslOptions);
+      }
       settings = { ...settings, claudeCache: settings.claudeCache.map((c) => c.knob === body.knob ? { knob: c.knob, ...(body.value ? { value: body.value } : {}) } : c) };
       return json(settings);
+    }
+    if (distro && url.pathname === "/api/settings/claude-attribution") {
+      const body = req.postDataJSON();
+      posts.push({ path: url.pathname, body });
+      wslOptions = { ...wslOptions, claudeAttribution: body.on ? "on" : "off" };
+      return json(wslOptions);
     }
     if (url.pathname === "/api/settings") {
       if (req.method() === "POST") posts.push({ path: url.pathname, body: req.postDataJSON() });
@@ -58,6 +74,34 @@ const words = {
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  test(`${engine}: WSL Claude Code's cache and signature target its distro`, async (t) => {
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || "chromium" }));
+    t.after(() => browser.close());
+    const page = await browser.newPage({ viewport: { width: 900, height: 760 }, reducedMotion: "reduce" });
+    page.setDefaultTimeout(8000);
+    const distro = "Ubuntu Work", id = `claude@wsl:${distro}`, posts = [];
+    await page.route("**/*", serve("en", posts, distro));
+    await watchSettingsReads(page);
+    await page.goto("http://magpie.test/?view=agents");
+    await openAgentSettings(page, id);
+    const row = `.row.agent[data-id="${id}"]`;
+    const cache = page.locator(`${row} [data-knob="cache_ttl"] button`);
+    const attribution = page.locator(`${row} .claude-attribution button`);
+    await cache.filter({ hasText: "5 min" }).waitFor();
+    await attribution.filter({ hasText: "Off" }).waitFor();
+    await cache.click();
+    await pickItem(page, page.locator(".proto-menu .pm-item", { hasText: words.en.dflt }));
+    await cache.filter({ hasText: words.en.dflt }).waitFor();
+    await attribution.click();
+    await pickItem(page, page.locator(".proto-menu .pm-item").filter({ has: page.getByText("On", { exact: true }) }));
+    await attribution.filter({ hasText: "On" }).waitFor();
+    assert.deepEqual(posts, [
+      { path: "/api/settings/claude-cache", body: { agent: id, knob: "cache_ttl", value: "" } },
+      { path: "/api/settings/claude-attribution", body: { agent: id, on: true } },
+    ]);
+    await openAgentSettings(page, "claude");
+    await page.locator('.row.agent[data-id="claude"] [data-knob="cache_ttl"] button').filter({ hasText: "1 hour" }).waitFor();
+  });
   for (const lang of ["en", "zh"]) {
     for (const width of [900, 420]) {
       const w = words[lang];
