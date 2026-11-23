@@ -3433,7 +3433,8 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .accent-pick .swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 /* not yet chosen, the own colour is an empty ring with a plus */
 .accent-pick .swatch.own:not(.on) { background: none; box-shadow: inset 0 0 0 1.5px var(--line); }
-.accent-pick .swatch.own:not(.on)::after { content: "+"; position: absolute; inset: 0; display: grid; place-items: center; font-size: 13px; line-height: 1; color: var(--muted); }
+/* the plus is drawn, not typed: a "+" glyph sits where its font puts it, off the circle's centre */
+.accent-pick .swatch.own:not(.on)::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: linear-gradient(var(--muted), var(--muted)) center / 8px 1.5px no-repeat, linear-gradient(var(--muted), var(--muted)) center / 1.5px 8px no-repeat; }
 .accent-pick .swatch.own input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: 0; padding: 0; cursor: default; }
 .wall-pick { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .wall-pick .wall-thumb { width: 40px; height: 26px; border-radius: 5px; object-fit: cover; box-shadow: inset 0 0 0 1px var(--line), 0 0 0 .5px var(--line); }
