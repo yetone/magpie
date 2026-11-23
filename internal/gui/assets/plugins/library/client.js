@@ -2313,9 +2313,9 @@ magpie.plugin("library", (ctx) => {
         button(t("Show all"), "lib-bundleall", () => { delete nativeOnly[kind]; render(); }));
       box.append(bar);
     }
-    const list = el("div", "list lib-list");
-    list.append(...rows);
-    box.append(list);
+    // folded like a long "In your agents" list; one plugin's own, picked
+    // from a row, is shown whole
+    box.append(foldedFound("native-" + kind, rows, !!only));
     return [box];
   }
 
