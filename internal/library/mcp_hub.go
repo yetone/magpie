@@ -233,6 +233,7 @@ func (l *Library) hubServers(agentID string) []*Server {
 	if p != nil {
 		_, given, _ = l.withPlugins(p)
 	}
+	natives := l.claudeHubNatives(id, p)
 	var out []*Server
 	for _, s := range l.MCP {
 		on := id == "" && !s.Hidden || slices.Contains(s.Agents, id)
@@ -242,6 +243,9 @@ func (l *Library) hubServers(agentID string) []*Server {
 			} else if !s.Hidden && slices.Contains(given[s.Name], id) {
 				on = true
 			}
+		}
+		if _, ok := natives[s.Bundle]; ok && s.Bundle != "" {
+			on = false // Claude Code runs the plugin's own
 		}
 		if on && inHub(s, id) {
 			out = append(out, s)

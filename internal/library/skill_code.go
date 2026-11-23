@@ -59,6 +59,7 @@ func (l *Library) hubSkills(agentID string) []gateway.HubSkill {
 	if p != nil {
 		given, _, _ = l.withPlugins(p)
 	}
+	natives := l.claudeHubNatives(id, p)
 	var out []gateway.HubSkill
 	for _, s := range l.Skills {
 		on := id == "" && !s.OffHere && !s.Dangling || s.gives(id)
@@ -68,6 +69,9 @@ func (l *Library) hubSkills(agentID string) []gateway.HubSkill {
 			} else if !s.OffHere && !s.Dangling && slices.Contains(given[s.Name], id) {
 				on = true
 			}
+		}
+		if _, ok := natives[s.Bundle]; ok && s.Bundle != "" {
+			on = false // Claude Code has the plugin's own
 		}
 		if !on {
 			continue

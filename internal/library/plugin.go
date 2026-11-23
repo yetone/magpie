@@ -1468,12 +1468,20 @@ type PluginView struct {
 	// Missing are parts the user took out one by one since
 	Missing []string `json:"missing,omitempty"`
 	Dir     string   `json:"dir"`
+	// ClaudeNative is the id Claude Code loads it under itself, user-wide,
+	// while it is given to Claude Code too: magpie gives Claude Code none
+	// of its parts (claude_native_overlap.go)
+	ClaudeNative string `json:"claudeNative,omitempty"`
 }
 
 func (l *Library) pluginsView() []PluginView {
 	out := []PluginView{}
+	natives := l.claudeNatives("")
 	for _, b := range l.Plugins {
 		v := PluginView{Plugin: b, Dir: pluginDir(b.Name)}
+		if slices.Contains(b.Agents, "claude") {
+			v.ClaudeNative = natives[b.Name]
+		}
 		// the parts the user took out one by one aren't listed as its
 		c := *b
 		c.Skills = slices.DeleteFunc(slices.Clone(b.Skills), func(n string) bool {

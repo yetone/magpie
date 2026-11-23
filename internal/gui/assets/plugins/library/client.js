@@ -6070,6 +6070,9 @@ magpie.plugin("library", (ctx) => {
     if (line) who.append(el("div", "sub lib-plparts", line));
     // synced in from another computer, its source not reached here yet
     if (p.pending) who.append(el("div", "sub lib-plpending", t("Not fetched on this computer yet: Update tries again")));
+    // Claude Code loads it natively, so magpie leaves Claude Code out of
+    // its parts: each hook would run twice (jinpwng on X)
+    if (p.claudeNative) who.append(el("div", "sub lib-plnative", t("Claude Code loads {id} itself, so magpie gives it none of this", { id: p.claudeNative })));
     row.append(glyph(GLYPH.folder), who,
       agentChips(all, p.agents, chipsChange("plugins/agents", p.name, "plugins", (x) => pluginRow(x, all)), { all: true }),
       toggle(!p.off, t("Turn {name} on or off", { name: p.name }), (v) => change("plugins/on", { name: p.name, on: v },
@@ -7744,6 +7747,12 @@ magpie.plugin("library", (ctx) => {
       const sub = el("div", "sub lib-plparts", problem || line);
       sub.title = problem || line;
       w.append(sub);
+      // Claude Code loads it natively in this project: magpie writes
+      // Claude Code none of it here, or each hook runs twice; given to
+      // Claude Code user-wide, it runs twice here all the same
+      const native = p.claudeNative?.[b.name], twice = p.claudeTwice?.[b.name];
+      if (twice) w.append(el("div", "sub lib-plnative lib-pltwice", t("Claude Code loads {id} itself in this project too, so here it runs twice: take Claude Code off the plugin to stop it", { id: twice })));
+      else if (native) w.append(el("div", "sub lib-plnative", t("Claude Code loads {id} itself, so magpie gives it none of this", { id: native })));
       const on = (p.plugins?.[b.name] || []).filter((id) => all.some((a) => a.id === id));
       const say = (next) => next.length
         ? t("{item} is in {name} for {agents}", { item: b.name, name: p.name, agents: next.map(nameOf).join(", ") })

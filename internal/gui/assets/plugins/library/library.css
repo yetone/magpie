@@ -837,6 +837,9 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-plugin > .who { flex-basis: 240px; }
 .lib-plugin.off .name, .lib-plugin.off .lib-subagentdesc { opacity: .55; }
 .lib-plugin .lib-plparts, .lib-plpick .lib-plparts { white-space: normal; overflow-wrap: anywhere; }
+/* Claude Code loads the plugin natively: why magpie gives Claude Code none of it */
+.lib-row .sub.lib-plnative { white-space: normal; overflow-wrap: anywhere; color: var(--fg-2); }
+.lib-row .sub.lib-pltwice { color: var(--amber); }
 .lib-pldetail > :is(p, details, .hint), .lib-pldetail .ebody > :is(p, details, .hint) { grid-column: 1 / -1; margin: 0; }
 .lib-pldetail p { font-size: 12.5px; line-height: 1.5; }
 .lib-pldetail .lib-plgroup > summary { cursor: pointer; font-size: 12.5px; color: var(--fg-2); }

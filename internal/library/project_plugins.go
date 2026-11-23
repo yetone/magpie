@@ -81,11 +81,13 @@ func (l *Library) withPlugins(p *Project) (skills, servers, subagents map[string
 			}
 		}
 	}
+	natives := l.projectClaudeNatives(p)
 	for name, agents := range p.Plugins {
 		b := l.plugin(name)
 		if b == nil || b.Off {
 			continue
 		}
+		agents = withoutClaudeNative(agents, natives, name)
 		for _, n := range b.Skills {
 			if s := l.skill(n); s != nil && s.Bundle == b.Name {
 				add(skills, n, agents, func(a string) bool { return ProjectSkillsDir(a) != "" })
@@ -108,6 +110,10 @@ func (l *Library) withPlugins(p *Project) (skills, servers, subagents map[string
 // projectHooks are, by agent, the hooks the project's plugins give it.
 func (l *Library) projectHooks(p *Project) map[string][]*Hook {
 	out := map[string][]*Hook{}
+	var natives map[string]string
+	if len(p.Plugins) > 0 {
+		natives = l.projectClaudeNatives(p)
+	}
 	for _, name := range slices.Sorted(maps.Keys(p.Hooks)) {
 		h := l.hook(name)
 		if h == nil {
@@ -130,12 +136,13 @@ func (l *Library) projectHooks(p *Project) map[string][]*Hook {
 		if b == nil || b.Off {
 			continue
 		}
+		agents := withoutClaudeNative(p.Plugins[name], natives, name)
 		for _, n := range b.Hooks {
 			h := l.hook(n)
 			if h == nil || h.Bundle != b.Name {
 				continue
 			}
-			for _, a := range p.Plugins[name] {
+			for _, a := range agents {
 				if ProjectHooksFile(a) != "" && hookTakes(h, a) && !slices.Contains(out[a], h) {
 					out[a] = append(out[a], h)
 				}
