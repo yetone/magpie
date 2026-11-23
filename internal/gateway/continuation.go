@@ -802,7 +802,7 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 				// and an agent told it tries again rather than end its
 				// turn (#667); a reply that said nothing has nothing to
 				// go on from, so it isn't continued
-				failed = p.Name + ": " + emptyReply
+				failed = emptyReplyFailed(p.Name, this)
 				break
 			}
 			if voids && replyCheck(r.Context()) == nil && cutVoid(stop, !said, this.Output, request.MaxTokens) {

@@ -8477,7 +8477,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		// Where a reply says its end (saysItsEnd), one that counted no
 		// usage either was cut, not empty: Command Code's killed worker
 		// ends after its role chunk, told below as a cut
-		msg := p.Name + ": " + emptyReply
+		msg := emptyReplyFailed(p.Name, sniff.u)
 		// the line left pending is a usage frame's or [DONE]: dropped too
 		holdTail, heldTail, pending = false, nil, nil
 		w.Write(append(apart(), streamFailure(provider.Chat, msg)...))
@@ -10176,7 +10176,7 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 	// a Chat reply that said nothing and never gave a finish_reason is
 	// empty too, as streamTranslated has it (28b8244d4)
 	if (empty || repliesCounted(actual) && uncounted(col.res.Usage) || cutVoidAt(actual) && col.res.Stop == "") && !saidAnything(col.res.Parts) && answersNothing(col.res.Stop) {
-		msg := p.Name + ": " + emptyReply
+		msg := emptyReplyFailed(p.Name, col.res.Usage)
 		return writeError(w, from, 502, msg), msg
 	}
 	if cutVoidAt(actual) && replyCheck(r.Context()) == nil &&
@@ -10207,6 +10207,29 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 
 // emptyReply is what a reply that says nothing fails with.
 const emptyReply = "an empty reply (the model answered nothing; try again)"
+
+// emptyReplyFailed is what p's reply that said nothing fails with: the
+// empty reply's error, and, when its usage counted output tokens, how
+// many, of them how many reasoning. Copilot's gemini-4-hydrogen ended a
+// reply with no text, call or finish_reason having counted 2351 reasoning
+// tokens of its 2359, six times running for one conversation
+// (yuushabu_buyinn on X), and "try again" alone said nothing of that. The
+// words are only what the usage counted: what to do when trying again
+// ends the same way is said as a choice, not as the cause.
+func emptyReplyFailed(name string, u Usage) string {
+	msg := name + ": " + emptyReply
+	switch {
+	case u.Reasoning > 0 && u.Output >= u.Reasoning:
+		msg += fmt.Sprintf(" — the model reasoned for %d of the %d output tokens it counted, and its reply carried no text or tool call", u.Reasoning, u.Output)
+	case u.Reasoning > 0:
+		msg += fmt.Sprintf(" — the model counted %d reasoning tokens, and its reply carried no text or tool call", u.Reasoning)
+	case u.Output > 0:
+		msg += fmt.Sprintf(" — the model counted %d output tokens, and its reply carried no text or tool call", u.Output)
+	default:
+		return msg
+	}
+	return msg + "; if trying again ends the same way, switch to another model or compact the conversation"
+}
 
 // emptyFails tells whether a reply in proto that says nothing is a
 // failure. Gemini's, Antigravity's among them, now and then ends with
