@@ -244,3 +244,25 @@ func TestDashScopeDrawsScoped(t *testing.T) {
 		}
 	}
 }
+
+// A watermark is off unless the caller asks for one: watermark true,
+// beside OpenAI's fields, goes in DashScope's parameters as it came.
+func TestDashScopeTakesAskedWatermark(t *testing.T) {
+	s, d := dashScoped(t, provider.Provider{ID: "qwen", Name: "Qwen Token Plan", Preset: "qwen-token-plan", Models: []string{"qwen3.8-max", "qwen-image-3.0-pro"}})
+	for _, c := range []struct {
+		body string
+		want bool
+	}{
+		{`{"model":"qwen/qwen-image-3.0-pro","prompt":"一只喜鹊","watermark":true}`, true},
+		{`{"model":"qwen/qwen-image-3.0-pro","prompt":"一只喜鹊","watermark":false}`, false},
+		{`{"model":"qwen/qwen-image-3.0-pro","prompt":"一只喜鹊"}`, false},
+	} {
+		if code, _, raw := postImages(t, s, "/v1/images/generations", "application/json", c.body); code != 200 {
+			t.Fatalf("%s: %d %s", c.body, code, raw)
+		}
+		params, _ := d.sent(t)["parameters"].(map[string]any)
+		if params["watermark"] != c.want {
+			t.Fatalf("%s: sent %v", c.body, params)
+		}
+	}
+}

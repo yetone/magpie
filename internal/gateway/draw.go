@@ -1787,7 +1787,10 @@ func (s *Server) drawImages(ctx context.Context, p provider.Provider, model stri
 		}
 		// only dall-e gives a URL unless asked; gpt-image turns the field away
 		if strings.Contains(m, "dall-e") || senseNovaDrawer(m) {
-			req["response_format"] = "b64_json"
+			req["response_format"] = imagesFormat(d.Want)
+		}
+		if senseNovaDrawer(m) {
+			senseNovaFields(req, d)
 		}
 		body, _ = json.Marshal(req)
 		ct, url = "application/json", base+"/images/generations"
@@ -1797,7 +1800,8 @@ func (s *Server) drawImages(ctx context.Context, p provider.Provider, model stri
 		// asked for base64
 		req := map[string]any{"model": model, "prompt": d.Prompt, "n": d.N}
 		if senseNovaDrawer(m) {
-			req["response_format"] = "b64_json"
+			req["response_format"] = imagesFormat(d.Want)
+			senseNovaFields(req, d)
 		}
 		for k, v := range map[string]string{"size": size, "quality": d.Quality, "background": d.Background, "output_format": d.Format} {
 			if v != "" {
@@ -1826,7 +1830,7 @@ func (s *Server) drawImages(ctx context.Context, p provider.Provider, model stri
 			}
 		}
 		if strings.Contains(m, "dall-e") {
-			mw.WriteField("response_format", "b64_json")
+			mw.WriteField("response_format", imagesFormat(d.Want))
 		}
 		if p.IsRemoteMagpie() && d.Tier != "" {
 			mw.WriteField("resolution", d.Tier)
@@ -1877,6 +1881,38 @@ func (s *Server) drawImages(ctx context.Context, p provider.Provider, model stri
 // (lileo0668 on Discord).
 func senseNovaDrawer(model string) bool {
 	return strings.Contains(strings.ToLower(model), "sensenova-u1")
+}
+
+// senseNovaOwn are the fields of SenseNova's images API that OpenAI's
+// hasn't, which a caller can only send beside OpenAI's: watermark (a
+// bool, false for none) and prompt_extend (a bool, true by default), as
+// SenseTime's U1.5 Lite Token Plan page documents them (justforlxz on
+// X: the watermark switch did nothing).
+var senseNovaOwn = []string{"watermark", "prompt_extend"}
+
+// senseNovaFields puts the caller's own SenseNova fields in req, as they
+// came: a form's "false" as the bool SenseNova takes. One the caller
+// didn't send is left to SenseNova's default.
+func senseNovaFields(req map[string]any, d drawing) {
+	for _, k := range senseNovaOwn {
+		if v, ok := d.Extra[k]; ok {
+			if d.Form {
+				v = formValue(k, v, nil)
+			}
+			req[k] = v
+		}
+	}
+}
+
+// imagesFormat is the response_format asked of an images API that answers
+// in a link unless asked otherwise (dall-e, SenseNova's U1): url when the
+// caller asked for url, which is then answered by that link, else
+// b64_json.
+func imagesFormat(want string) string {
+	if strings.EqualFold(want, "url") {
+		return "url"
+	}
+	return "b64_json"
 }
 
 // drawOpenRouterImages asks OpenRouter's dedicated Images API, which accepts

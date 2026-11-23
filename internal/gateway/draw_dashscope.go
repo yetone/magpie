@@ -83,7 +83,16 @@ func dashScopeBody(model string, d drawing) ([]byte, error) {
 		content = append(content, map[string]string{"image": pic.dataURL()})
 	}
 	content = append(content, map[string]string{"text": d.Prompt})
+	// no watermark unless the caller asks for one (watermark: true)
 	params := map[string]any{"watermark": false}
+	if v, ok := d.Extra["watermark"]; ok {
+		if d.Form {
+			v = formValue("watermark", v, nil)
+		}
+		if on, isBool := v.(bool); isBool {
+			params["watermark"] = on
+		}
+	}
 	if d.N > 1 {
 		params["n"] = d.N
 	}
