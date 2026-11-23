@@ -770,7 +770,11 @@ func deciders(keep func(id string) bool) []Entry {
 				if p.IsRemoteMagpie() {
 					out = append(out, sharedEntry(&p, m, s))
 				} else {
-					out = append(out, Entry{ID: p.ID + "/" + m.ID, Model: m.ID, Name: m.Name, Provider: &p})
+					// what it takes as an agent's list gives it (Pi's
+					// classifiers, #7521): Google's and a Clef's images too
+					images, imageInput := imagesIn(&p, m, s)
+					out = append(out, Entry{ID: p.ID + "/" + m.ID, Model: m.ID, Name: m.Name, Provider: &p,
+						Images: images, ImageInput: imageInput, Inputs: InputsOf(m)})
 				}
 			}
 		}

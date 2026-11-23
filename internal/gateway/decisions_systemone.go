@@ -78,6 +78,13 @@ func (t systemOneTarget) takesImages() bool {
 	return t.p.DecideVia() == provider.ViaCloudflare && provider.CloudflareClef(t.model)
 }
 
+// SystemOneTakesImages is whether magpie's /v1/systemone carries a
+// request's images (its "images", data: URLs) to p's decision model:
+// what an agent's list may say the model takes (Pi's classifiers, #7521).
+func SystemOneTakesImages(p provider.Provider, model string) bool {
+	return systemOneTarget{p, model}.takesImages()
+}
+
 func (t systemOneTarget) String() string { return t.p.ID + "/" + t.model }
 
 // systemOneTargets are the decision models System One would ask for the

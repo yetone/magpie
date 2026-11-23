@@ -174,3 +174,53 @@ func TestPiExtensionPiOnly(t *testing.T) {
 		t.Errorf("OmO got Pi's extension: %v", err)
 	}
 }
+
+// #7521: a classifier that takes images (Google's gemini-decision-1) is
+// registered with them, so Pi sends it a context's images; Jev, text
+// alone, stays text. A magpie.ts written before, with every classifier
+// text alone, is written again on the next sync.
+func TestPiExtensionClassifierInput(t *testing.T) {
+	home := piExtensionHome(t)
+	// no request reaches it: the extension only names it
+	if err := provider.Save(provider.Provider{ID: "gem", Name: "Gem", Gemini: provider.AIStudioGemini, Key: "AIza-test"}); err != nil {
+		t.Fatal(err)
+	}
+	a := pi(home)
+	path := piExtensionPath(a.Dir)
+	if err := a.Field("model").Set(magpieID + "/mixed/deepseek-v4.1-flash"); err != nil {
+		t.Fatal(err)
+	}
+	check := func(when string) {
+		t.Helper()
+		d := readPiExtension(t, path)
+		for id, want := range map[string]string{"gem/" + provider.GoogleDecision: "text,image", "mixed/typesafe/jev": "text"} {
+			m, ok := hasModel(d.Classifiers, id)
+			if !ok {
+				t.Fatalf("%s: classifiers = %+v, want %s", when, d.Classifiers, id)
+			}
+			if got := strings.Join(m.Input, ","); got != want {
+				t.Errorf("%s: %s input = %q, want %q", when, id, got, want)
+			}
+		}
+		// magpie's /v1/systemone takes images as "images", where Pi's
+		// default for a host not OpenRouter's is TypeSafe's assets
+		if src := readFile(path); strings.Contains(src, `name: m.name, input: ["text"]`) || !strings.Contains(src, "input: m.input") || !strings.Contains(src, `imageInput: "images"`) {
+			t.Errorf("%s: magpie-systemone's models take no input of their own: %.1500s", when, src)
+		}
+	}
+	check("written")
+
+	// the file as magpie wrote it before: classifiers with no input, and
+	// magpie-systemone's models text alone
+	old := strings.Replace(readFile(path), "input: m.input ?? [\"text\"]", "input: [\"text\"]", 1)
+	old = strings.Replace(old, `imageInput: "images"`, `imageInput: "assets"`, 1)
+	old = strings.ReplaceAll(old, `,"input":["text","image"]}`, `}`)
+	old = strings.ReplaceAll(old, `,"input":["text"]}`, `}`)
+	if err := os.WriteFile(path, []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	check("after a sync over the old file")
+}

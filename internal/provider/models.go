@@ -3849,6 +3849,21 @@ func InputsOf(m catalog.Model) []string {
 	return catalog.InputsOf(m.ID)
 }
 
+// imagesIn is whether p's model m takes images, and the explicit answer
+// behind it (nil when unknown): the source's word, else the catalog's,
+// with the user's own setting over both.
+func imagesIn(p *Provider, m catalog.Model, s settings.Settings) (bool, *bool) {
+	images := m.Images || catalog.SeesImages(m.ID)
+	if m.ImageInput != nil {
+		images = *m.ImageInput
+	}
+	imageInput := m.ImageInput
+	if override, ok := s.ModelImages[p.ID+"/"+m.ID]; ok {
+		images, imageInput = override, &override
+	}
+	return images, imageInput
+}
+
 // entryFor is one of a provider's models as the catalog carries it: the
 // window and the reply limit a request on it is routed and metered against,
 // with what the user set taken over the vendor's list and models.dev.
@@ -3861,14 +3876,7 @@ func entryFor(p Provider, m catalog.Model, s settings.Settings) Entry {
 func sharedEntry(p *Provider, m catalog.Model, s settings.Settings) Entry {
 	ctx := p.windowIn(m, s)
 	output := p.replyLimit(m, s)
-	images := m.Images || catalog.SeesImages(m.ID)
-	if m.ImageInput != nil {
-		images = *m.ImageInput
-	}
-	imageInput := m.ImageInput
-	if override, ok := s.ModelImages[p.ID+"/"+m.ID]; ok {
-		images, imageInput = override, &override
-	}
+	images, imageInput := imagesIn(p, m, s)
 	// a model its vendor lists with no name is called by its id: unnamed,
 	// an agent's list showed the whole magpie/<provider>/<model> (#955)
 	name := cmp.Or(m.Name, m.ID)

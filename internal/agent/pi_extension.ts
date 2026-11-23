@@ -25,8 +25,13 @@ export default async function (pi) {
 			baseUrl: MAGPIE.baseUrl,
 			apiKey: MAGPIE.apiKey,
 			// magpie's /v1/systemone takes TypeSafe's System One protocol for
-			// every decision model, Cloudflare's and OpenRouter's too
-			models: MAGPIE.classifiers.map((m) => ({ type: "classifier", api: "typesafe-system-one", id: m.id, name: m.name, input: ["text"], cost, contextWindow: 64000 })),
+			// every decision model, Cloudflare's and OpenRouter's too, and a
+			// request's images as "images", data: URLs (a Clef's field, which
+			// it carries to Google's too), not TypeSafe's assets
+			models: MAGPIE.classifiers.map((m) => ({
+				type: "classifier", api: "typesafe-system-one", id: m.id, name: m.name, input: m.input ?? ["text"], cost, contextWindow: 64000,
+				compat: { imageInput: "images", sendImageOptInHeader: false },
+			})),
 			classifiers: {
 				"typesafe-system-one": { classify: (model, context, options) => typesafe.classify(model, context, options) },
 			},

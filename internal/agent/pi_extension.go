@@ -47,6 +47,16 @@ type piExtensionModel struct {
 	Input []string `json:"input,omitempty"`
 }
 
+// piInput is a model's input as Pi takes it. pi-ai's
+// MODEL_INPUT_MODALITIES are "text" and "image" alone, so audio or video
+// a model also takes has no word there, as in models.json's list.
+func piInput(images bool) []string {
+	if images {
+		return []string{"text", "image"}
+	}
+	return []string{"text"}
+}
+
 // piExtensionFor is the extension's source for a gateway at baseURL (its
 // /v1) and key; "" when magpie has no decision or image model to list.
 func piExtensionFor(baseURL, key string) string {
@@ -57,15 +67,16 @@ func piExtensionFor(baseURL, key string) string {
 	labels := provider.LabelsFor("pi", ds)
 	classifiers := make([]piExtensionModel, 0, len(ds))
 	for i, e := range ds {
-		classifiers = append(classifiers, piExtensionModel{ID: e.ID, Name: labels[i]})
+		// Pi sends a classifier the images of its context only when its
+		// input has "image" (pi-ai's ClassifierContext.images): one that
+		// takes them (Google's gemini-decision-1, Cloudflare's Clefs) is
+		// told so where the gateway carries them to it (#7521)
+		images := e.Images && gateway.SystemOneTakesImages(*e.Provider, e.Model)
+		classifiers = append(classifiers, piExtensionModel{ID: e.ID, Name: labels[i], Input: piInput(images)})
 	}
 	images := []piExtensionModel{}
 	for _, m := range gateway.ImageModels() {
-		in := []string{"text"}
-		if m.Images {
-			in = append(in, "image")
-		}
-		images = append(images, piExtensionModel{ID: m.ID, Name: m.Name, Input: in})
+		images = append(images, piExtensionModel{ID: m.ID, Name: m.Name, Input: piInput(m.Images)})
 	}
 	if len(classifiers) == 0 && len(images) == 0 {
 		return ""
