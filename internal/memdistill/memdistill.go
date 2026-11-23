@@ -101,6 +101,9 @@ type State struct {
 	// Left is how many were due and not read when the last run ended:
 	// stopped, failed or past PerRun
 	Left int `json:"left,omitempty"`
+	// Reads is the reading the Done marks were made by (reads): marks
+	// an older one made of an agent it read wrong are dropped
+	Reads int `json:"reads,omitempty"`
 	// Dream is the nightly tidy switched on (dream.go), DreamSince when
 	Dream      bool      `json:"dream,omitempty"`
 	DreamSince time.Time `json:"dreamSince,omitzero"`
@@ -318,6 +321,7 @@ func runUpTo(ctx context.Context, auto string, complete Complete, limit int) (Re
 	if model == "" {
 		model = auto
 	}
+	reread(&st)
 	var res ran
 	var runErr error
 	if model == "" {
@@ -333,6 +337,7 @@ func runUpTo(ctx context.Context, auto string, complete Complete, limit int) (Re
 		if runErr != nil {
 			s.Error = runErr.Error()
 		}
+		reread(s)
 		if s.Done == nil {
 			s.Done = map[string]time.Time{}
 		}
@@ -420,6 +425,30 @@ func due(st State, t time.Time) ([]sessions.Session, time.Time) {
 }
 
 func key(s sessions.Session) string { return s.Agent + "/" + s.ID }
+
+// reads is how sessions are read; each step names the agents read wrong
+// before it, whose sessions are read again. 1: WorkBuddy's turns, each
+// its context and the user's words in one block, were read as context
+// whole, so every session had no turns and was marked done unread
+// (bxgz233 on X).
+const reads = 1
+
+var rereadAgents = []string{"workbuddy", "workbuddy-ai", "codebuddy"}
+
+// reread drops the Done marks a reading older than reads made of the
+// agents it read wrong.
+func reread(s *State) {
+	if s.Reads >= reads {
+		return
+	}
+	for k := range s.Done {
+		agent, _, _ := strings.Cut(k, "/")
+		if slices.Contains(rereadAgents, agent) {
+			delete(s.Done, k)
+		}
+	}
+	s.Reads = reads
+}
 
 func run(ctx context.Context, st State, model, effort string, complete Complete, limit int) (ran, error) {
 	r := ran{done: map[string]time.Time{}}

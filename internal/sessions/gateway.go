@@ -431,8 +431,18 @@ func GatewayTranscript(agent, id string) (Transcript, error) {
 			fresh = input[len(previous):]
 		}
 		for _, p := range fresh {
-			if !out.add(true, p) {
-				return out, nil
+			// a turn WorkBuddy (or Cursor) sends as its context and the
+			// user's words in one block, as in its own files (wbTyped)
+			parts := []Part{p}
+			if p.Role == "user" && p.Kind == "text" && strings.HasPrefix(strings.TrimSpace(p.Text), "<") {
+				if split, ok := wbSplit(p.Text); ok {
+					parts = split
+				}
+			}
+			for _, p := range parts {
+				if !out.add(true, p) {
+					return out, nil
+				}
 			}
 		}
 		for _, p := range turn.Output {

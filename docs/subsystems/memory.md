@@ -256,6 +256,19 @@ further (`State.Since`), unless a range is picked.
   the gateway was never learnt from (bxgz233 on X: 1000+ WorkBuddy
   sessions; `TestGatewayOnlySessionsRead`, `TestReadOnlySessionsRead`). A
   gateway session with nothing recorded has no turns and is passed over.
+- A turn counts by what the user said, a user `text` part. WorkBuddy
+  (and WorkBuddy AI, CodeBuddy Code) writes each turn as one block, its
+  `<system-reminder>` context and then the words in `<user_query>`, in
+  its files and in what it sends the gateway. Read whole, the block began
+  with `<` and was context, so every WorkBuddy session had no turns and
+  was passed over, even after the gateway listing above (bxgz233 on X,
+  v0.1.4720). `wbTyped` splits it: the query is said, the rest context,
+  in `wbTranscript`, `GatewayTranscript`, `wbPrompt` and the gateway
+  title (`TestWorkBuddySessionsRead`, `TestGatewayWorkBuddyTurnsRead`,
+  `TestWorkBuddyOneBlockTurnsAreSaid`, `TestGatewayOneBlockTurnSaid`;
+  the fixture is a real session's lines). The marks a run made of them
+  before are dropped once (`State.Reads`, `reread`), so the sessions an
+  older magpie passed over are read now.
 - What is sent: the conversation's user and assistant text only (no
   tools, no reasoning), cut to 24k characters keeping the head and the
   tail, plus the memories already kept for that project, under neutral

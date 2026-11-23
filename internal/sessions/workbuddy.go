@@ -235,10 +235,14 @@ func workbuddyLine(s *state, b []byte, main bool) {
 }
 
 // wbPrompt is the words typed in a user message: its input_text blocks,
-// less what WorkBuddy put in beside them (<system-reminder>…, @scene:…).
+// less what WorkBuddy put in beside them (<system-reminder>…, @scene:…),
+// or a block's <user_query> when WorkBuddy wrote both in one (wbTyped).
 func wbPrompt(content json.RawMessage) string {
 	var text string
 	if json.Unmarshal(content, &text) == nil {
+		if typed, _, ok := wbTyped(text); ok {
+			return title(typed)
+		}
 		if strings.HasPrefix(strings.TrimSpace(text), "<") {
 			return ""
 		}
@@ -251,7 +255,15 @@ func wbPrompt(content json.RawMessage) string {
 	var parts []string
 	for _, b := range blocks {
 		t := strings.TrimSpace(b.Text)
-		if (b.Type == "input_text" || b.Type == "text") && t != "" && !strings.HasPrefix(t, "<") && !wbScene.MatchString(t) {
+		if b.Type != "input_text" && b.Type != "text" {
+			continue
+		}
+		if typed, _, ok := wbTyped(t); ok {
+			t = typed
+		} else if strings.HasPrefix(t, "<") || wbScene.MatchString(t) {
+			continue
+		}
+		if t != "" {
 			parts = append(parts, t)
 		}
 	}

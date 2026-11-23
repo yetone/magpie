@@ -5,6 +5,8 @@ import (
 	"cmp"
 	"encoding/json"
 	"strings"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // wbTranscript tells add what a WorkBuddy, WorkBuddy AI or CodeBuddy Code
@@ -51,6 +53,12 @@ func wbParts(typ, role string, content json.RawMessage, name, callID string, arg
 		for _, text := range wbTexts(content) {
 			if role == "user" && wbScene.MatchString(strings.TrimSpace(text)) {
 				continue
+			}
+			if role == "user" {
+				if split, ok := wbSplit(text); ok {
+					parts = append(parts, split...)
+					continue
+				}
 			}
 			p := textPart(role, text)
 			if role == "assistant" {
@@ -102,4 +110,50 @@ func wbTexts(content json.RawMessage) []string {
 		}
 	}
 	return out
+}
+
+// wbQuery is what was typed in a user block WorkBuddy writes whole: its
+// <system-reminder> context first, then <user_query> with the words.
+var wbQuery = lazyre.New(`(?s)<user_query>(.*?)</user_query>`)
+
+// wbTyped is what was typed in a user block, its <user_query>s, and the
+// rest of it (WorkBuddy's context); ok is false when it names no
+// user_query. WorkBuddy writes a turn as one block, the context and the
+// query together, so a block read as context whole for its leading "<"
+// left every WorkBuddy session with nothing the user said, and memory's
+// "Learn from conversations" passed each one over (bxgz233 on X).
+func wbTyped(text string) (typed, rest string, ok bool) {
+	ms := wbQuery.FindAllStringSubmatchIndex(text, -1)
+	if len(ms) == 0 {
+		return "", text, false
+	}
+	var q []string
+	var b strings.Builder
+	at := 0
+	for _, m := range ms {
+		if t := strings.TrimSpace(text[m[2]:m[3]]); t != "" {
+			q = append(q, t)
+		}
+		b.WriteString(text[at:m[0]])
+		at = m[1]
+	}
+	b.WriteString(text[at:])
+	return strings.Join(q, "\n"), strings.TrimSpace(b.String()), true
+}
+
+// wbSplit is a user block as parts when it names a user_query: the rest
+// as context, then what was typed as text.
+func wbSplit(text string) ([]Part, bool) {
+	typed, rest, ok := wbTyped(text)
+	if !ok {
+		return nil, false
+	}
+	var parts []Part
+	if rest != "" {
+		parts = append(parts, Part{Role: "user", Kind: "context", Text: rest})
+	}
+	if typed != "" {
+		parts = append(parts, Part{Role: "user", Kind: "text", Text: typed})
+	}
+	return parts, true
 }

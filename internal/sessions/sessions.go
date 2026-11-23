@@ -1494,7 +1494,10 @@ const cacheVersion = 29
 // app's tool calls, from its transcript.
 // pi 1, raft 1, cindy 1: a pi-subagents tool result's model work is its
 // subagents', counted from their own files (piSubagentsRead).
-var parseVersions = map[string]int{"codex": 3, "zcode": 1, "dsh": 3, "antigravity": 3, "agy": 2, "pi": 1, "raft": 1, "cindy": 1}
+// workbuddy 1, workbuddy-ai 1, codebuddy 1: a session's first prompt is
+// its <user_query> when WorkBuddy wrote it in one block with its context
+// (wbTyped).
+var parseVersions = map[string]int{"codex": 3, "zcode": 1, "dsh": 3, "antigravity": 3, "agy": 2, "pi": 1, "raft": 1, "cindy": 1, "workbuddy": 1, "workbuddy-ai": 1, "codebuddy": 1}
 
 type cacheFile struct {
 	Version int    `json:"version"`

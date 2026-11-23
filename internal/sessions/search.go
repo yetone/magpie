@@ -409,6 +409,10 @@ func firstAsked(parts []Part) string {
 			continue
 		}
 		s := strings.TrimSpace(p.Text)
+		if typed, _, ok := wbTyped(s); ok && strings.HasPrefix(s, "<") {
+			// WorkBuddy's context and the user's words in one block
+			s = typed
+		}
 		if s == "" || strings.HasPrefix(s, "<") || strings.HasPrefix(s, "# AGENTS.md") || s == "[image]" {
 			continue
 		}
