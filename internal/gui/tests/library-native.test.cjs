@@ -6,7 +6,9 @@
 // copy or remove, and no row twice. In every language, both engines, at a
 // phone's width too. No backend: the API is faked here, with the shapes
 // the Go reader returns for Codex's real cache layout (chrome's inline
-// hooks, codex-app-tools' .mcp.json) and a Pi package.
+// hooks, codex-app-tools' .mcp.json) and a Pi package. A Codex plugin a
+// project's .codex/config.toml turns on or off says so per project, by
+// whether Codex trusts the project (#7244 follow-up).
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -23,6 +25,10 @@ const lib = () => ({
 const native = [
   {
     agent: "codex", agentName: "Codex", name: "chrome", version: "26.1029.61003", source: "openai-bundled", scope: "user", dir: `${HOME}/.codex/plugins/cache/openai-bundled/chrome/26.1029.61003`, enabled: false, loaded: "unknown",
+    inProjects: [
+      { dir: `${HOME}/work/app`, set: true, trusted: true, effective: true },
+      { dir: `${HOME}/work/lab`, set: true, trusted: false, effective: false },
+    ],
     parts: [
       { kind: "skill", name: "chrome", detail: "Drive Chrome" },
       { kind: "hook", name: "Stop", detail: "mcp_tool node_repl/turn_ended" },
@@ -66,11 +72,11 @@ function server(lang, tab, calls) {
 }
 
 const words = {
-  en: { head: "Installed in the agents themselves", off: "Off in Codex", project: "project scope", user: "user scope" },
-  zh: { head: "Agent 自己安装的内容", off: "在 Codex 中已关闭", project: "项目范围", user: "用户范围" },
-  "zh-TW": { head: "Agent 自己安裝的內容", off: "在 Codex 中已關閉", project: "專案範圍", user: "使用者範圍" },
-  ja: { head: "エージェント自身がインストールしたもの", off: "Codex ではオフ", project: "プロジェクトの範囲", user: "ユーザーの範囲" },
-  de: { head: "Von den Agents selbst installiert", off: "In Codex aus", project: "Projektbereich", user: "Benutzerbereich" },
+  en: { onIn: "On in app", offIn: "Off in lab", head: "Installed in the agents themselves", off: "Off in Codex", project: "project scope", user: "user scope" },
+  zh: { onIn: "在 app 中开启", offIn: "在 lab 中关闭", head: "Agent 自己安装的内容", off: "在 Codex 中已关闭", project: "项目范围", user: "用户范围" },
+  "zh-TW": { onIn: "在 app 中開啟", offIn: "在 lab 中關閉", head: "Agent 自己安裝的內容", off: "在 Codex 中已關閉", project: "專案範圍", user: "使用者範圍" },
+  ja: { onIn: "app でオン", offIn: "lab でオフ", head: "エージェント自身がインストールしたもの", off: "Codex ではオフ", project: "プロジェクトの範囲", user: "ユーザーの範囲" },
+  de: { onIn: "An in app", offIn: "Aus in lab", head: "Von den Agents selbst installiert", off: "In Codex aus", project: "Projektbereich", user: "Benutzerbereich" },
 };
 // the tab, and the rows of its kind the fake lists
 const tabs = {
@@ -120,7 +126,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert((await rows.nth(2).textContent()).includes(w.project), await rows.nth(2).textContent());
           assert((await rows.nth(2).textContent()).includes("proj-kit 2.0.0"));
           // chrome's own settings turn it off
-          assert.equal(await rows.first().locator(".lib-tag").textContent(), w.off);
+          assert.equal(await rows.first().locator(".lib-tag").first().textContent(), w.off);
+          // and what each project that sets it makes of it: on where the
+          // trusted project turns it on, off where Codex doesn't trust
+          // the project that does
+          const proj = rows.first().locator(".lib-nativeproj");
+          assert.deepEqual(await proj.allTextContents(), [w.onIn, w.offIn]);
+          assert.deepEqual(await proj.evaluateAll((xs) => xs.map((x) => x.dataset.project)), [`${HOME}/work/app`, `${HOME}/work/lab`]);
+          const titles = await proj.evaluateAll((xs) => xs.map((x) => x.title));
+          assert(titles.every((x) => x.includes(".codex/config.toml")), titles.join(" | "));
+          assert.notEqual(titles[0], titles[1]);
         }
         // read only: nothing to switch, copy or remove
         assert.equal(await rows.getByRole("switch").count(), 0);

@@ -29,6 +29,21 @@ func libraryNativeCmd(rest []string) error {
 			state = map[bool]string{true: "on", false: "off"}[*p.Enabled] + " in its settings"
 		}
 		fmt.Printf("%s  %s %s  (%s, %s)\n", p.AgentName, p.Name, p.Version, where, state)
+		// a project's own config turning it on or off (#7244): Codex
+		// applies it once the project is trusted
+		onOff := func(b *bool) string {
+			if b == nil {
+				return "unknown"
+			}
+			return map[bool]string{true: "on", false: "off"}[*b]
+		}
+		for _, in := range p.InProjects {
+			if in.Trusted {
+				fmt.Printf("    in %s: %s (its .codex/config.toml; loaded unknown)\n", in.Dir, onOff(in.Effective))
+			} else {
+				fmt.Printf("    in %s: %s (its .codex/config.toml says %s, used once Codex trusts the project)\n", in.Dir, onOff(in.Effective), onOff(in.Set))
+			}
+		}
 		for _, x := range p.Parts {
 			fmt.Printf("    %-8s %s", x.Kind, x.Name)
 			if x.Detail != "" && x.Kind != "skill" {

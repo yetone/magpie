@@ -342,3 +342,69 @@ func TestNativeClaudePlugins(t *testing.T) {
 		t.Errorf("reading changed Claude's folder")
 	}
 }
+
+// #7244 follow-up (jinpwng): a Codex plugin the user installed and turned
+// off, turned on in one project's .codex/config.toml, is listed with what
+// each project makes of it. Codex 0.171's config/read gives the project's
+// value once the project is trusted (projects."<dir>".trust_level in the
+// user's config.toml, the main checkout's for a linked worktree, the
+// repository's for a folder in it) and the user's while it isn't; a
+// project that says nothing of the plugin isn't listed.
+func TestNativeCodexPluginPerProject(t *testing.T) {
+	home, _ := nativeCodexHome(t)
+	root := t.TempDir()
+	app, lab, quiet := filepath.Join(root, "app"), filepath.Join(root, "lab"), filepath.Join(root, "quiet")
+	web := filepath.Join(app, "web")
+	for _, d := range []string{app, lab, quiet} {
+		gitInit(t, d)
+	}
+	on := "[plugins.\"chrome@openai-bundled\"]\nenabled = true\n"
+	write(t, filepath.Join(app, ".codex", "config.toml"), on)
+	write(t, filepath.Join(lab, ".codex", "config.toml"), on)
+	// git worktree add ../app-wt, with its own copy of the config
+	wt := filepath.Join(root, "app-wt")
+	own := filepath.Join(app, ".git", "worktrees", "app-wt")
+	write(t, filepath.Join(wt, ".git"), "gitdir: "+own+"\n")
+	write(t, filepath.Join(own, "gitdir"), filepath.Join(wt, ".git")+"\n")
+	write(t, filepath.Join(own, "commondir"), "../..\n")
+	write(t, filepath.Join(wt, ".codex", "config.toml"), on)
+	conf := filepath.Join(home, ".codex", "config.toml")
+	write(t, conf, read(t, conf)+"\n[projects.\""+app+"\"]\ntrust_level = \"trusted\"\n\n[projects.\""+lab+"\"]\ntrust_level = \"untrusted\"\n")
+	for _, d := range []string{web, lab, quiet, wt} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		ok(t)(AddProject(d))
+	}
+
+	p := nativeOf(t, ReadNative(), "codex", "chrome")
+	if p.Enabled == nil || *p.Enabled {
+		t.Fatalf("the user install isn't off: %v", p.Enabled)
+	}
+	got := map[string]NativeInProject{}
+	for _, in := range p.InProjects {
+		got[in.Dir] = in
+	}
+	is := func(b *bool, want bool) bool { return b != nil && *b == want }
+	if in, ok := got[web]; !ok || !in.Trusted || !is(in.Set, true) || !is(in.Effective, true) {
+		t.Errorf("a folder of the trusted repository: %+v (%v)", in, ok)
+	}
+	if in, ok := got[lab]; !ok || in.Trusted || !is(in.Set, true) || !is(in.Effective, false) {
+		t.Errorf("the untrusted project: %+v (%v)", in, ok)
+	}
+	if _, ok := got[quiet]; ok {
+		t.Error("a project that says nothing of it is listed")
+	}
+	// a linked worktree, registered by itself, is trusted by its main
+	// checkout's entry
+	if in, ok := got[wt]; !ok || !in.Trusted || !is(in.Effective, true) {
+		t.Errorf("the trusted repository's worktree: %+v", in)
+	}
+	if len(p.InProjects) == 0 {
+		t.Fatal("no project listed")
+	}
+	// the other plugins no project names stay as they were
+	if a := nativeOf(t, ReadNative(), "codex", "codex-app-tools"); len(a.InProjects) != 0 {
+		t.Errorf("codex-app-tools: %+v", a.InProjects)
+	}
+}

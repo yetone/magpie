@@ -2,6 +2,11 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "Set in {project}'s .codex/config.toml. Whether a session loaded it is unknown.": "在 {project} 的 .codex/config.toml 中设置。会话是否加载了它未知。",
+    "{project}'s .codex/config.toml turns it on, used once Codex trusts the project.": "{project} 的 .codex/config.toml 打开了它，Codex 信任该项目后生效。",
+    "{project}'s .codex/config.toml turns it off, used once Codex trusts the project.": "{project} 的 .codex/config.toml 关闭了它，Codex 信任该项目后生效。",
+    "On in {project}": "在 {project} 中开启",
+    "Off in {project}": "在 {project} 中关闭",
     "Pinned to {tag}. Newer releases:": "固定在 {tag}。更新的版本：",
     "Pinned to {tag}, the newest release.": "固定在 {tag}，已是最新版本。",
     "Update to {tag}": "更新到 {tag}",
@@ -1212,6 +1217,11 @@ magpie.strings({
     "Hook removed": "钩子已删除",
   },
   "zh-TW": {
+    "Set in {project}'s .codex/config.toml. Whether a session loaded it is unknown.": "在 {project} 的 .codex/config.toml 中設定。工作階段是否載入了它未知。",
+    "{project}'s .codex/config.toml turns it on, used once Codex trusts the project.": "{project} 的 .codex/config.toml 開啟了它，Codex 信任該專案後生效。",
+    "{project}'s .codex/config.toml turns it off, used once Codex trusts the project.": "{project} 的 .codex/config.toml 關閉了它，Codex 信任該專案後生效。",
+    "On in {project}": "在 {project} 中開啟",
+    "Off in {project}": "在 {project} 中關閉",
     "Pinned to {tag}. Newer releases:": "固定在 {tag}。較新的版本：",
     "Pinned to {tag}, the newest release.": "固定在 {tag}，已是最新版本。",
     "Update to {tag}": "更新到 {tag}",
@@ -2422,6 +2432,11 @@ magpie.strings({
     "Hook removed": "鉤子已刪除",
   },
   ja: {
+    "Set in {project}'s .codex/config.toml. Whether a session loaded it is unknown.": "{project} の .codex/config.toml で設定されています。セッションで読み込まれたかは不明です。",
+    "{project}'s .codex/config.toml turns it on, used once Codex trusts the project.": "{project} の .codex/config.toml でオンになっています。Codex がプロジェクトを信頼すると適用されます。",
+    "{project}'s .codex/config.toml turns it off, used once Codex trusts the project.": "{project} の .codex/config.toml でオフになっています。Codex がプロジェクトを信頼すると適用されます。",
+    "On in {project}": "{project} でオン",
+    "Off in {project}": "{project} でオフ",
     "Pinned to {tag}. Newer releases:": "{tag} に固定されています。新しいリリース：",
     "Pinned to {tag}, the newest release.": "{tag} に固定されています。最新のリリースです。",
     "Update to {tag}": "{tag} に更新",
@@ -3632,6 +3647,11 @@ magpie.strings({
     "Hook removed": "フックを削除しました",
   },
   de: {
+    "Set in {project}'s .codex/config.toml. Whether a session loaded it is unknown.": "In der .codex/config.toml von {project} gesetzt. Ob eine Sitzung es geladen hat, ist unbekannt.",
+    "{project}'s .codex/config.toml turns it on, used once Codex trusts the project.": "Die .codex/config.toml von {project} schaltet es ein, wirksam sobald Codex dem Projekt vertraut.",
+    "{project}'s .codex/config.toml turns it off, used once Codex trusts the project.": "Die .codex/config.toml von {project} schaltet es aus, wirksam sobald Codex dem Projekt vertraut.",
+    "On in {project}": "An in {project}",
+    "Off in {project}": "Aus in {project}",
     "Pinned to {tag}. Newer releases:": "Auf {tag} festgelegt. Neuere Releases:",
     "Pinned to {tag}, the newest release.": "Auf {tag} festgelegt, das neueste Release.",
     "Update to {tag}": "Auf {tag} aktualisieren",

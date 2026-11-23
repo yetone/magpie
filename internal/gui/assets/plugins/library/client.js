@@ -2299,6 +2299,20 @@ magpie.plugin("library", (ctx) => {
         who.append(origin);
         row.append(glyph(GLYPH[{ mcp: "web", hook: "cmd", subagent: "subagent" }[kind] || "skill"]), who);
         if (p.enabled === false) row.append(tag(t("Off in {agent}", { agent: p.agentName }), "warn", t("{agent}'s own settings turn this plugin off", { agent: p.agentName })));
+        // a project's .codex/config.toml turning it on or off (#7244),
+        // which Codex applies once the project is trusted; loading stays
+        // unknown
+        for (const pr of p.inProjects || []) {
+          const project = pr.dir.split(/[\\/]/).filter(Boolean).pop() || pr.dir;
+          const on = pr.effective === true;
+          const why = pr.trusted ? t("Set in {project}'s .codex/config.toml. Whether a session loaded it is unknown.", { project })
+            : pr.set ? t("{project}'s .codex/config.toml turns it on, used once Codex trusts the project.", { project })
+            : t("{project}'s .codex/config.toml turns it off, used once Codex trusts the project.", { project });
+          const x = tag(on ? t("On in {project}", { project }) : t("Off in {project}", { project }), on ? "" : "warn", why);
+          x.classList.add("lib-nativeproj");
+          x.dataset.project = pr.dir;
+          row.append(x);
+        }
         rows.push(row);
       }
     }
