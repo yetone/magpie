@@ -6645,6 +6645,9 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 	// the tool turns' thinking a provider's model asked for before
 	// (thinking_back.go)
 	body = s.withThinkingBack(p, to, body)
+	// a Copilot account's sealed reasoning back on the tool turns it came
+	// with (copilot_opaque.go)
+	body = withCopilotOpaque(p, to, body)
 	// DeepSeek's own API: inline images it holds for this key named by
 	// file id, uploaded once (deepseek_files.go)
 	body, byFile := s.withDeepSeekFiles(reqCtx, p, to, path, body)
@@ -7010,6 +7013,8 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 	// what a Codex account's reply says it has used, for its cap (#1295)
 	heardCodexLimits(p, res)
 	heardCodexTurnState(turnAcct, turnOf, res)
+	// and a Copilot account's sealed reasoning, kept by its tool calls
+	heardCopilotOpaque(p, to, body, res)
 	noteSignIn(ctx, p.Account, req, res)
 	return res, nil
 }

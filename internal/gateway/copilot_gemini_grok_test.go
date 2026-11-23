@@ -269,38 +269,13 @@ func copilotTurnFake(t *testing.T, models map[string]string, refuse func(model s
 	chatRefuse func(model string, body []byte) bool, chatMessage string, chatStatus int, sent *[]string,
 ) {
 	t.Helper()
-	fresh(t)
-	cfg := os.Getenv("XDG_CONFIG_HOME")
-	os.MkdirAll(filepath.Join(cfg, "github-copilot"), 0o755)
-	os.WriteFile(filepath.Join(cfg, "github-copilot", "apps.json"), mustJSON(map[string]any{
-		"github.com:Iv1.x": map[string]any{"user": "echo", "oauth_token": "gho_echo"},
-	}), 0o600)
-
 	var mu sync.Mutex
 	note := func(m string, b []byte) {
 		mu.Lock()
 		*sent = append(*sent, m+" "+string(b))
 		mu.Unlock()
 	}
-	// the account's model list, as Copilot's would have it: each model on
-	// the APIs its endpoints give
-	var live []catalog.Model
-	for id, endpoints := range models {
-		var apis []string
-		for _, e := range strings.Split(strings.Trim(strings.ReplaceAll(endpoints, "/v1/messages", "/chat/completions"), `[]"`), ",") {
-			switch strings.TrimSpace(e) {
-			case "/responses":
-				apis = append(apis, "responses")
-			default:
-				apis = append(apis, "chat")
-			}
-		}
-		live = append(live, catalog.Model{ID: id, Name: id, APIs: apis, Efforts: []string{"low", "medium", "high"}})
-	}
-	if err := catalog.SaveLive("copilot", "https://api.githubcopilot.com", live); err != nil {
-		t.Fatalf("save live: %v", err)
-	}
-	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	copilotAPIFake(t, models, func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
 		switch r.URL.Path {
 		case "/models":
@@ -338,7 +313,39 @@ func copilotTurnFake(t *testing.T, models map[string]string, refuse func(model s
 		default:
 			w.WriteHeader(404)
 		}
-	}))
+	})
+}
+
+// copilotAPIFake is a signed-in Copilot account whose API is api, serving
+// models (id → endpoints, as Copilot's model list gives them).
+func copilotAPIFake(t *testing.T, models map[string]string, api http.HandlerFunc) {
+	t.Helper()
+	fresh(t)
+	cfg := os.Getenv("XDG_CONFIG_HOME")
+	os.MkdirAll(filepath.Join(cfg, "github-copilot"), 0o755)
+	os.WriteFile(filepath.Join(cfg, "github-copilot", "apps.json"), mustJSON(map[string]any{
+		"github.com:Iv1.x": map[string]any{"user": "echo", "oauth_token": "gho_echo"},
+	}), 0o600)
+
+	// the account's model list, as Copilot's would have it: each model on
+	// the APIs its endpoints give
+	var live []catalog.Model
+	for id, endpoints := range models {
+		var apis []string
+		for _, e := range strings.Split(strings.Trim(strings.ReplaceAll(endpoints, "/v1/messages", "/chat/completions"), `[]"`), ",") {
+			switch strings.TrimSpace(e) {
+			case "/responses":
+				apis = append(apis, "responses")
+			default:
+				apis = append(apis, "chat")
+			}
+		}
+		live = append(live, catalog.Model{ID: id, Name: id, APIs: apis, Efforts: []string{"low", "medium", "high"}})
+	}
+	if err := catalog.SaveLive("copilot", "https://api.githubcopilot.com", live); err != nil {
+		t.Fatalf("save live: %v", err)
+	}
+	apiSrv := httptest.NewServer(api)
 	t.Cleanup(apiSrv.Close)
 	ghSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/token") {
