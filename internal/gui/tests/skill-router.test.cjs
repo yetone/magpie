@@ -84,6 +84,21 @@ const sideways = (page) => page.evaluate(() => {
   return over;
 });
 
+// two cards one over the other in the Library's body, with nothing between,
+// keep room between them (the owner, 11-23: the install card sat on the
+// Skill router's): every pair of boxed neighbours is at least 10px apart
+const crowded = (page) => page.evaluate(() => {
+  const boxed = (e) => { const c = getComputedStyle(e); return parseFloat(c.borderTopWidth) > 0 || c.backgroundColor !== "rgba(0, 0, 0, 0)"; };
+  const kids = [...document.querySelectorAll("#view-library .lib-body:not(.lib-skel) > *")].filter((e) => e.getBoundingClientRect().height);
+  const out = [];
+  for (let i = 1; i < kids.length; i++) {
+    if (!boxed(kids[i - 1]) || !boxed(kids[i])) continue;
+    const gap = kids[i].getBoundingClientRect().top - kids[i - 1].getBoundingClientRect().bottom;
+    if (gap < 10) out.push(`${kids[i - 1].className} | ${kids[i].className}: ${gap.toFixed(1)}px`);
+  }
+  return { n: kids.length, out };
+});
+
 const shot = async (page, name) => {
   if (!process.env.ARTIFACT_DIR) return;
   await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
@@ -129,6 +144,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await v.locator(".lib-routedirect").count(), 0);
         assert.equal(await v.locator(".lib-hub-why").count(), 0);
         assert.deepEqual(await sideways(page), []);
+        { const c = await crowded(page); assert.ok(c.n > 2, "the body is measured"); assert.deepEqual(c.out, [], "cards apart, off"); }
         await shot(page, `${engine}-${lang}-${width}-off`);
 
         // on
@@ -150,6 +166,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal((await found.textContent()).trim(), w("{agents} has skills of its own that aren't in the library, so the router doesn't list them: bring them in below.", { agents: "Claude Code" }));
         assert.equal(await v.locator(".lib-hub-why").count(), 2);
         assert.deepEqual(await sideways(page), []);
+        { const c = await crowded(page); assert.ok(c.n > 2, "the body is measured"); assert.deepEqual(c.out, [], "cards apart, on"); }
         await shot(page, `${engine}-${lang}-${width}-on`);
 
         // pdf kept out of the router

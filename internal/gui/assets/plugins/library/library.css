@@ -59,6 +59,11 @@ body.window .lib-head { top: -2px; margin: -2px 0 0; padding: 8px 0 4px; }
 .lib-aside.center { text-align: center; margin-top: 14px; }
 /* the MCP hub's switch, under the servers (#2679) */
 .lib-hublist { margin-top: 16px; }
+/* a router over a tab's list (the Skill router, the MCP router) keeps the
+   same room under it, before the card that follows: a .list has no margin,
+   so the install card sat on the router's (the owner, 11-23). The room
+   goes under the router's last piece, its row or the last why under it */
+.lib-hublist:not(:has(+ .lib-hub-why)), .lib-hub-why:not(:has(+ .lib-hub-why)) { margin-bottom: 16px; }
 .lib-hub .lib-switch { align-self: center; }
 /* its switch stays beside its text in a narrow window, as a setting's does */
 .lib-list .row.lib-hub { flex-wrap: nowrap; }

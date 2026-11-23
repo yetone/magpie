@@ -81,7 +81,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const w = words[lang], posts = [];
         const st = { checked: false, skills: [sk("dbs"), sk("dbs-goal")], newSkills: [fresh("dbs-hook", "Hooks"), fresh("dbs-save", "Saves"), fresh("dbs-xhs-title", "Titles")] };
         // all of the page in view, the narrow one too
-        const ctx = await browser.newContext({ viewport: { width, height: 1300 } });
+        const ctx = await browser.newContext({ viewport: { width, height: 1400 } });
         await ctx.addInitScript(() => { try { localStorage.setItem("magpie.libTab", "skills"); } catch {} });
         const page = await ctx.newPage();
         page.setDefaultTimeout(5000);
@@ -159,7 +159,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await t.test(`${lang} at ${width}px`, async () => {
         const w = folderWords[lang], posts = [];
         const st = { checked: false, checkFolders: true, skills: [linked("pdf")], newSkills: [inFolder("slides")] };
-        const ctx = await browser.newContext({ viewport: { width, height: 1300 } });
+        const ctx = await browser.newContext({ viewport: { width, height: 1400 } });
         await ctx.addInitScript(() => { try { localStorage.setItem("magpie.libTab", "skills"); } catch {} });
         const page = await ctx.newPage();
         page.setDefaultTimeout(5000);
