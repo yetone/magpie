@@ -116,7 +116,7 @@ func TestProjectPluginWithdrawLeavesTheUsers(t *testing.T) {
 		t.Fatalf("settings.local.json:\n%s", got)
 	}
 	// the user edits one of the plugin's hooks, and its subagent
-	write(t, settings, strings.Replace(got, `"echo done"`, `"echo done && say hi"`, 1))
+	write(t, settings, strings.Replace(got, `echo done"`, `echo done && say hi"`, 1))
 	rev := filepath.Join(a, ".claude/agents/reviewer.md")
 	write(t, rev, read(t, rev)+"\nAlso check the tests.\n")
 

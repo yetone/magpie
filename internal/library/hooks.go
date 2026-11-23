@@ -372,23 +372,29 @@ func (sp *hookSpec) entry(h *Hook, ev string) json.RawMessage {
 		// theirs, exactly as with a JSON agent's.
 		return json.RawMessage(grokHookBlock(ev, m, h.Command, timeout))
 	}
+	command, shell := h.Command, ""
+	if sp.agent == "claude" && h.Bundle != "" {
+		// a plugin's hook, run with the variables Claude Code gives its own
+		command, shell = pluginHookEnv(command, h.Bundle)
+	}
 	var v any
 	if sp.flat {
 		v = struct {
 			Command string `json:"command"`
 			Timeout int    `json:"timeout,omitempty"`
 			Matcher string `json:"matcher,omitempty"`
-		}{h.Command, timeout, m}
+		}{command, timeout, m}
 	} else {
 		type cmd struct {
 			Type    string `json:"type"`
 			Command string `json:"command"`
 			Timeout int    `json:"timeout,omitempty"`
+			Shell   string `json:"shell,omitempty"`
 		}
 		v = struct {
 			Matcher string `json:"matcher,omitempty"`
 			Hooks   []cmd  `json:"hooks"`
-		}{m, []cmd{{"command", h.Command, timeout}}}
+		}{m, []cmd{{"command", command, timeout, shell}}}
 	}
 	b, _ := json.Marshal(v)
 	return b

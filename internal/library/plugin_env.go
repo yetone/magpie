@@ -2,6 +2,7 @@ package library
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -26,6 +27,11 @@ import (
 // A hook has no env of its own in any agent's file, so the command is the
 // only place to put it; an MCP server has one, and is given both
 // variables there, as Claude Code gives them.
+//
+// A script the hook runs can read the variable too, where no command text
+// shows it (jinpwng on X): Claude Code's plugin runtime puts both in the
+// hook's environment, and nothing did for the split plugin's hook. So
+// Claude Code's entry sets them in front of the command (pluginHookEnv).
 
 var pluginEnvNames = []string{"CLAUDE_PLUGIN_ROOT", "CLAUDE_PLUGIN_DATA"}
 
@@ -98,6 +104,49 @@ func pluginEnvRefs(cmd, name string) string {
 		}
 		return pluginDir(name)
 	})
+}
+
+// pluginHookEnv is cmd, a hook of plugin name written for Claude Code,
+// with CLAUDE_PLUGIN_ROOT and CLAUDE_PLUGIN_DATA set in its environment
+// first, as Claude Code's runtime sets them for a plugin's own hook. Claude
+// Code runs a hook's command in a shell: $SHELL (bash, zsh or sh) on a Mac
+// and Linux, Git Bash on Windows when it finds one, PowerShell when it
+// doesn't (its hook schema's "shell"). The second shell
+// it returns is the one the entry pins ("" for Claude Code's default), so a
+// Git Bash installed later doesn't read PowerShell's syntax.
+func pluginHookEnv(cmd, name string) (string, string) {
+	root, data := pluginDir(name), pluginData(name)
+	if cmdOS == "windows" && gitBash() == "" {
+		q := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
+		return "$env:CLAUDE_PLUGIN_ROOT=" + q(root) + "; $env:CLAUDE_PLUGIN_DATA=" + q(data) + "; " + cmd, "powershell"
+	}
+	// Git Bash takes C:\x inside single quotes as it is
+	q := func(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
+	return "export CLAUDE_PLUGIN_ROOT=" + q(root) + " CLAUDE_PLUGIN_DATA=" + q(data) + "; " + cmd, ""
+}
+
+// gitBash is the Git Bash Claude Code runs hooks in on Windows, found as
+// Claude Code finds it: CLAUDE_CODE_GIT_BASH_PATH, Git's two install
+// folders, then the bash beside the git on PATH. "" is none.
+var gitBash = func() string {
+	is := func(p string) bool {
+		fi, err := os.Stat(p)
+		return err == nil && fi.Mode().IsRegular()
+	}
+	if p := os.Getenv("CLAUDE_CODE_GIT_BASH_PATH"); p != "" && is(p) {
+		return p
+	}
+	for _, p := range []string{`C:\Program Files\Git\bin\bash.exe`, `C:\Program Files (x86)\Git\bin\bash.exe`} {
+		if is(p) {
+			return p
+		}
+	}
+	if g, err := exec.LookPath("git"); err == nil {
+		if p := filepath.Join(filepath.Dir(filepath.Dir(g)), "bin", "bash.exe"); is(p) {
+			return p
+		}
+	}
+	return ""
 }
 
 // shellQuoteAt is the sh quote open at byte i of s: ', " or 0.
