@@ -17,7 +17,7 @@ Thanks to [Kimi](https://usemagpie.ai/go/kimi-cn/readme) for supporting magpie a
 
 <sub>赞助商</sub>
 
-<a href="https://usemagpie.ai/go/apikeyfan/readme"><picture><source media="(prefers-color-scheme: dark)" srcset="site/public/img/sponsor-apikeyfan-cn-dark.svg"><img src="site/public/img/sponsor-apikeyfan-cn.svg" width="200" height="50" alt="APIKEY.FAN"></picture></a><br>
+<a href="https://usemagpie.ai/go/ccodes/readme"><picture><source media="(prefers-color-scheme: dark)" srcset="site/public/img/sponsor-ccodes-dark.png"><img src="site/public/img/sponsor-ccodes.png" width="200" height="50" alt="Ccode-AI"></picture></a><br>
 <a href="https://usemagpie.ai/go/wandapi/readme"><picture><source media="(prefers-color-scheme: dark)" srcset="site/public/img/sponsor-wandapi-cn-dark.svg"><img src="site/public/img/sponsor-wandapi-cn.svg" width="200" height="50" alt="WandAPI"></picture></a>&emsp;&emsp;<a href="https://usemagpie.ai/go/aigocode/readme"><picture><source media="(prefers-color-scheme: dark)" srcset="site/public/img/sponsor-aigocode-readme-dark.png"><img src="site/public/img/sponsor-aigocode-readme.png" width="200" height="50" alt="AIGoCode"></picture></a><br>
 <a href="https://usemagpie.ai/go/modelgo/readme"><picture><source media="(prefers-color-scheme: dark)" srcset="site/public/img/sponsor-modelgo-dark.svg"><img src="site/public/img/sponsor-modelgo.svg" width="200" height="50" alt="ModelGo"></picture></a>&emsp;&emsp;<a href="https://usemagpie.ai/go/x6ai/readme"><picture><source media="(prefers-color-scheme: dark)" srcset="site/public/img/sponsor-x6ai-dark.svg"><img src="site/public/img/sponsor-x6ai.svg" width="200" height="50" alt="x6.ai"></picture></a>
 
