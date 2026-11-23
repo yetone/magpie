@@ -251,6 +251,11 @@ func (l *Library) syncToolRules(t *Target, how toolsOffHow, given []string, b *b
 			}
 		}
 	}
+	// Claude Code's own artifacts, beside magpie's (artifacts.go)
+	artifacts := how == toolsClaudeDeny && l.artifactsGiven(id, given)
+	if artifacts {
+		want = append(want, claudeArtifactTool)
+	}
 	if len(want) == 0 && len(a.ToolRules) == 0 {
 		return
 	}
@@ -287,6 +292,10 @@ func (l *Library) syncToolRules(t *Target, how toolsOffHow, given []string, b *b
 	}
 	if how == toolsClaudeDeny {
 		perms, _ := doc["permissions"].(map[string]any)
+		// the user's own rule for it (allowed, asked) is theirs
+		if artifacts && claudeRuled(doc, claudeArtifactTool) {
+			want = slices.DeleteFunc(want, func(r string) bool { return r == claudeArtifactTool })
+		}
 		cur, ok := entryTools(doc, []string{"permissions", "deny"})
 		if !ok {
 			fail(fmt.Errorf("%s: permissions.deny isn't a list of rules, so magpie leaves it as it is", path))
@@ -395,4 +404,18 @@ func ServerTools(name string, off []string) (*Result, error) {
 		s.DisabledTools = off
 		return nil
 	})
+}
+
+// claudeRuled is whether Claude Code's settings allow the tool, or ask
+// before it, by a rule of the user's.
+func claudeRuled(doc map[string]any, tool string) bool {
+	for _, k := range []string{"allow", "ask"} {
+		list, _ := entryTools(doc, []string{"permissions", k})
+		for _, r := range list {
+			if r == tool || r == tool+"(*)" {
+				return true
+			}
+		}
+	}
+	return false
 }

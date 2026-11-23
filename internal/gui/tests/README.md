@@ -161,6 +161,15 @@ node --test --test-concurrency=1 internal/gui/tests/gateway-caller-keys.test.cjs
 
 ## Other Browser Regressions
 
+`artifacts-page.test.cjs` checks Work › Artifacts (docs/subsystems/artifacts.md):
+its button after Library's and gone with the Library off, a row per
+artifact newest first naming the agent and, with more than one, its
+versions; a click opens the newest, the menu copies its link, opens an
+earlier version from the app's menu (none with one version) and deletes it
+after asking, with no click opening the row twice. None says so, and a
+find field shows from 8. Every language, both engines, a window at 1000
+and 560 and a browser at 420, with no sideways scroll and the API faked.
+
 `mask-alert.test.cjs` checks Insights › Masking's Masking alert (Must2333 on
 X): after the page's list and not in Settings › Usage (nb5p on Discord), Off
 to begin with; On saves `maskAlert`, another setting saved later keeps it,

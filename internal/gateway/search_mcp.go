@@ -42,6 +42,7 @@ var OwnMCPServers = []struct{ Name, Path string }{
 	{"web-search", SearchMCPPath},
 	{"memory", MemoryMCPPath},
 	{"sessions", SessionsMCPPath},
+	{"artifacts", ArtifactsMCPPath},
 	{"tools", ToolsMCPPath},
 }
 

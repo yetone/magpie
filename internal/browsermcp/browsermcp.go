@@ -16,6 +16,10 @@
 // it is.
 // `magpie mcp sessions` is the sessions' (gateway.SessionsMCPPath): what
 // was said in every agent's sessions on this computer.
+// `magpie mcp artifacts` is the artifacts' (gateway.ArtifactsMCPPath),
+// sent as memory's is, with the folder the agent started it in, which a
+// page's relative file_path is read from, and the agent's client name,
+// which its versions are recorded under.
 package browsermcp
 
 import (
@@ -81,6 +85,24 @@ func RunSessions(args []string) error {
 	return serveSessions(os.Stdin, os.Stdout, gatewayBase())
 }
 
+// RunArtifacts serves the artifacts MCP server on stdin and stdout until
+// stdin ends.
+func RunArtifacts(args []string) error {
+	if len(args) > 0 {
+		return fmt.Errorf("magpie mcp artifacts takes no arguments")
+	}
+	wd, _ := os.Getwd()
+	return serveArtifacts(os.Stdin, os.Stdout, gatewayBase(), wd)
+}
+
+// serveArtifacts passes each line to the gateway's artifacts server, as
+// serveMemory does. A publish may carry a version's files inline, up to
+// what the gateway takes.
+func serveArtifacts(in io.Reader, out io.Writer, base, wd string) error {
+	b := &bridge{base: base, path: gateway.ArtifactsMCPPath, title: "Magpie Artifacts", client: &http.Client{Timeout: 2 * time.Minute}, out: out, most: 96 << 20}
+	return relay(in, withFolder(b, wd))
+}
+
 // serveSessions passes each line to the gateway's sessions server. A
 // search while the index is first made reads for a few seconds.
 func serveSessions(in io.Reader, out io.Writer, base string) error {
@@ -129,9 +151,15 @@ func serveVision(in io.Reader, out io.Writer, base string) error {
 // the folder the agent started this in, and the client name its
 // initialize gave.
 func serveMemory(in io.Reader, out io.Writer, base, wd string) error {
+	b := &bridge{base: base, path: gateway.MemoryMCPPath, title: "Magpie Memory", client: &http.Client{Timeout: time.Minute}, out: out}
+	return relay(in, withFolder(b, wd))
+}
+
+// withFolder sends b's messages with wd and the client name its
+// initialize gave.
+func withFolder(b *bridge, wd string) *bridge {
 	var mu sync.Mutex
 	client := ""
-	b := &bridge{base: base, path: gateway.MemoryMCPPath, title: "Magpie Memory", client: &http.Client{Timeout: time.Minute}, out: out}
 	b.fix = func(body []byte) []byte {
 		// read in order, before the calls after it are passed on
 		if name := clientName(body); name != "" {
@@ -151,7 +179,7 @@ func serveMemory(in io.Reader, out io.Writer, base, wd string) error {
 			h.Set(gateway.MemoryClientHeader, client)
 		}
 	}
-	return relay(in, b)
+	return b
 }
 
 // clientName is the client's name an initialize message gives, "" for

@@ -81,7 +81,9 @@ func builtinsState() []builtinJSON {
 		j := builtinJSON{ID: m.ID, Name: m.Name, Sub: m.Sub, On: s.State == pluginrt.Active, Chosen: c.Chosen, Source: c.Source, State: s.State, Why: s.Why, InUse: c.InUse, Parts: s.Parts, Schema: m.Schema(), Config: c.Config}
 		j.SetAt, j.Opens = m.SetAt, m.Opens
 		for _, p := range m.Parts {
-			if p.Slot == "nav.page" {
+			// the first page is where its settings are (the Library's
+			// second is Artifacts)
+			if p.Slot == "nav.page" && j.Page == "" {
 				j.Page = p.Key
 			}
 		}

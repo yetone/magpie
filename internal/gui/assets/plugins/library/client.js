@@ -1086,6 +1086,12 @@ magpie.plugin("library", (ctx) => {
     if (lib) back.title = t("magpie keeps a copy of every file before it writes it.") + "\n" + tilde(lib.backups);
     else back.disabled = true;
     acts.append(more, back);
+    // Artifacts' way in where the header's row has no tab for it (markNav)
+    const art = button("", "lib-toart", () => window.show("artifacts"));
+    art.title = t("Artifacts");
+    art.append(glyph(GLYPH.doc, "lib-mini"), el("span", "", t("Artifacts")));
+    art.setAttribute("aria-label", t("Artifacts"));
+    acts.prepend(art);
     head.append(acts);
     return head;
   }
@@ -10461,6 +10467,9 @@ magpie.plugin("library", (ctx) => {
   }
 
   ctx.onConfig(() => { if (lib && page && !page.hidden) render(); });
+
+  // Work › Artifacts, the pages agents made (artifacts.js)
+  ctx.slots.add("page", artifactsPage());
 
   ctx.slots.add("page", {
     key: "library",

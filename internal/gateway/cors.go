@@ -57,6 +57,12 @@ func corsGuard(next http.Handler) http.Handler {
 				writeError(w, provider.Chat, http.StatusForbidden, "magpie doesn't answer the web page "+origin+": list it in Settings → Network and sharing → Web pages to let it call magpie with a gateway key")
 				return
 			}
+			// an artifact's page asks for its own files from its sandbox's
+			// opaque origin; it reads nothing else here (artifactPage)
+			if origin == "null" && artifactPageRead(r) {
+				next.ServeHTTP(w, r)
+				return
+			}
 			if origin == "null" && !keyedCaller(r) {
 				log.Printf("refused %s %s from Origin: null: a sandboxed frame or a local page, with no gateway key", r.Method, r.URL.Path)
 				writeError(w, provider.Chat, http.StatusForbidden, "magpie doesn't answer a sandboxed frame or a local page (Origin: null) without a gateway key: create one in magpie's Gateway page and send it as Authorization: Bearer <key> (or x-api-key)")

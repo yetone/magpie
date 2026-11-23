@@ -1749,6 +1749,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	}
 	privacyModelRoutes(mux, w)
 	maskingRoutes(mux)
+	artifactRoutes(mux)
 	builtinRoutes(mux)
 	mux.HandleFunc("GET /api/settings", func(rw http.ResponseWriter, r *http.Request) {
 		access.MigrateLegacyLANKeyBestEffort()

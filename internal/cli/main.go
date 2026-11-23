@@ -86,6 +86,7 @@ const usage = `magpie — one place to pick every agent's model
   magpie github [on github://<owner>/<repo>[/<folder>]|set k=v…|now|off]   the same in an encrypted GitHub repository (magpie github help)
 
   magpie library [sync|instructions|mcp|skill]   the instructions, MCP servers and skills written into every agent (magpie library help)
+  magpie artifacts [open <id>|delete <id>] [--json]   the pages agents published through Magpie Artifacts, as Work › Artifacts lists them
 
   magpie providers                list your providers: host, key, models, who uses them
   magpie presets                  the vendors magpie knows: add one with just a key
@@ -475,6 +476,9 @@ func run(args []string) error {
 			if len(args) > 1 && args[1] == "sessions" {
 				return browsermcp.RunSessions(args[2:])
 			}
+			if len(args) > 1 && args[1] == "artifacts" {
+				return browsermcp.RunArtifacts(args[2:])
+			}
 			return imagemcp.Run(args[1:])
 		case "claude-mcp-helper": // internal: stdio MCP subprocess spawned by Claude Code
 			return claudebridge.RunMCP(args[1:])
@@ -681,6 +685,8 @@ func run(args []string) error {
 		return usageCmd(args)
 	case "sessions":
 		return sessionsCmd(args)
+	case "artifacts", "artifact":
+		return artifactsCmd(args)
 	case "quota", "quotas":
 		return quotaCmd(args)
 	case "status":

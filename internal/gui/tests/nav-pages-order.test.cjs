@@ -16,7 +16,7 @@ const { chromium, webkit } = require("playwright");
 
 const assets = path.resolve(__dirname, "../assets");
 const BASE = "http://magpie.test/";
-const HOME = ["agents", "sessions", "library", "providers", "routing", "groups", "gateway", "usage", "masking", "plugins"];
+const HOME = ["agents", "sessions", "library", "artifacts", "providers", "routing", "groups", "gateway", "usage", "masking", "plugins"];
 const RESET = { en: "Default order", zh: "恢复默认顺序", "zh-TW": "恢復預設順序", ja: "既定の順に戻す", de: "Standardreihenfolge" };
 
 function server(lang, web) {
@@ -93,7 +93,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await page.locator('.nav-pages-menu [data-v="providers"]').getAttribute("aria-checked"), "true");
       // Routing to the top from the keyboard
       await page.locator('.nav-pages-menu [data-v="routing"]').focus();
-      for (let i = 0; i < 4; i++) await page.keyboard.press("Alt+ArrowUp");
+      for (let i = 0; i < HOME.indexOf("routing"); i++) await page.keyboard.press("Alt+ArrowUp");
       let want = move(HOME, "routing", 0);
       assert.deepEqual(await menuOrder(page), want);
       assert.deepEqual(await order(page), want, "the sidebar follows at once");
@@ -131,7 +131,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await phone.waitForSelector("#nav .nav-more");
       await arranged(phone, want);
       const bar = await phone.$$eval("#nav > button", (bs) => bs.filter((b) => getComputedStyle(b).display !== "none" && b.getBoundingClientRect().width > 0).map((b) => b.dataset.view || "more"));
-      const shown = want.filter((v) => v !== "sessions" && v !== "groups");
+      // Groups and Artifacts have no tab of their own in the bar (app.css): Routing's and
+      // Library's heads lead to them
+      const shown = want.filter((v) => v !== "sessions" && v !== "groups" && v !== "artifacts");
       assert.deepEqual(bar, [...shown.slice(0, 4), "more"], "the bar: " + JSON.stringify(bar));
       await phone.locator("#nav .nav-more").tap();
       const rest = await phone.$$eval(".nav-more-menu .pm-item", (rs) => rs.length);
@@ -165,7 +167,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.evaluate(() => localStorage.setItem("magpie.navOrder", JSON.stringify(["routing", "providers", "agents", "sessions", "library", "gateway", "usage", "masking", "plugins"])));
       await page.goto(BASE + "?view=settings");
       await page.waitForSelector(".nav-pages-pick");
-      await arranged(page, ["routing", "groups", "providers", "agents", "sessions", "library", "gateway", "usage", "masking", "plugins"]);
+      await arranged(page, ["routing", "groups", "providers", "agents", "sessions", "library", "artifacts", "gateway", "usage", "masking", "plugins"]);
 
       // Default order puts the pages and their groups back
       await page.locator(".nav-pages-pick").click();

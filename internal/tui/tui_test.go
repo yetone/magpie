@@ -288,12 +288,14 @@ func TestLibraryPage(t *testing.T) {
 	m = press(t, m, "enter")
 	m = typeIn(m, "claude")
 	m = press(t, m, "enter", "esc")
+	// the servers this test made: a sync gives every agent Magpie
+	// Artifacts besides (library/artifacts.go)
 	servers := func() []library.ServerView {
 		v, err := library.Read(nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		return v.Servers
+		return slices.DeleteFunc(v.Servers, func(s library.ServerView) bool { return s.Name == library.ArtifactsServerName })
 	}
 	if s := servers(); len(s) != 1 || !slices.Equal(s[0].Agents, []string{"claude"}) {
 		t.Fatalf("servers %+v, flash %q", s, m.flash)

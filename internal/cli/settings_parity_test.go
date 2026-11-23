@@ -189,6 +189,8 @@ var cliForRoute = map[string]string{
 	"POST /api/settings/search-count":      "magpie search count",
 	"POST /api/settings/update-mirror":     "magpie update mirror",
 	"POST /api/sync":                       "magpie sync",
+	"GET /api/artifacts":                   "magpie artifacts",
+	"POST /api/artifacts/delete":           "magpie artifacts delete",
 	"GET /api/davsync":                     "magpie webdav",
 	"POST /api/backup/export":              "magpie backup",
 	"POST /api/backup/import":              "magpie restore",

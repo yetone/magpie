@@ -78,7 +78,7 @@ for (const [name, engine] of [["webkit", webkit], ["chromium", chromium]]) {
         assert.ok(got.offered.includes("zh-TW:繁體中文") && got.offered.includes("zh:简体中文"), got.offered.join());
         if (want === "zh-TW") {
           assert.equal(got.lang, "zh-TW");
-          assert.deepEqual(got.nav, ["Agent", "會話", "資源庫", "供應商", "路由"]);
+          assert.deepEqual(got.nav, ["Agent", "會話", "資源庫", "Artifacts", "供應商"]);
           assert.deepEqual(got.units, ["1.33 億", "6.8 萬"]);
         }
         if (want === "zh") assert.deepEqual(got.units, ["1.33 亿", "6.8 万"]);

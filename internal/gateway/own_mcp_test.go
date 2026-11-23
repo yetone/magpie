@@ -42,12 +42,12 @@ func toolsAre(t *testing.T, n int) {
 	t.Cleanup(func() { toolsOn = was })
 }
 
-// With nothing set up, only memory and sessions, which need no model,
-// are listed.
+// With nothing set up, only memory, sessions and artifacts, which need no
+// model, are listed.
 func TestOwnMCPNoneWhenNothingIsOn(t *testing.T) {
 	fresh(t)
 	toolsAre(t, 0)
-	if got := ownMCPNames(t, New()); len(got) != 2 || got[memoryServerName] != MemoryMCPPath || got[sessionsServerName] != SessionsMCPPath {
+	if got := ownMCPNames(t, New()); len(got) != 3 || got[memoryServerName] != MemoryMCPPath || got[sessionsServerName] != SessionsMCPPath || got[artifactsServerName] != ArtifactsMCPPath {
 		t.Fatalf("listed %v", got)
 	}
 }

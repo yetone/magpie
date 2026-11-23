@@ -1,0 +1,709 @@
+package gateway
+
+import (
+	"bytes"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"mime"
+	"net/http"
+	"os"
+	"path"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"github.com/yetone/magpie/internal/artifact"
+	"github.com/yetone/magpie/internal/lazyre"
+	"github.com/yetone/magpie/internal/proc"
+	"github.com/yetone/magpie/internal/usage"
+)
+
+// Magpie Artifacts are an MCP server, served as the sessions' is
+// (serveMCP) to the agents on this computer alone and given as `magpie
+// mcp artifacts`, with which an agent publishes a page for the user to
+// look at or use (a report, a chart, a small app) and updates, reads,
+// lists, opens and deletes it. The pages are internal/artifact's, kept on
+// this computer with every version, and served at ArtifactPagePath<id>/,
+// whichever account or agent made them: an artifact made under one
+// Claude account still opens after magpie switches to another.
+//
+// A page is someone else's code, run in the user's browser at the
+// gateway's address, so it is served in a sandbox of its own
+// (artifactPageCSP): an opaque origin, which reads no cookie, storage or
+// reply of the gateway's, and which corsGuard turns away on every other
+// route, as it does any Origin: null without a key. Its own files are the
+// one thing it reads (artifactRead).
+
+const (
+	// ArtifactsMCPPath is where the artifacts' MCP server is served.
+	ArtifactsMCPPath = "/mcp/magpie/artifacts"
+	// ArtifactPagePath is where an artifact's page is: <id>/, or
+	// <id>@<version>/ for one version, and its files beside it.
+	ArtifactPagePath = "/a/"
+
+	artifactsServerName = "magpie-artifacts"
+	artifactPublishTool = "publish_artifact"
+	artifactReadTool    = "read_artifact"
+	artifactListTool    = "list_artifacts"
+	artifactDeleteTool  = "delete_artifact"
+	artifactOpenTool    = "open_artifact"
+
+	// artifactsMCPBody is the most a message may be: a version's 64 MiB in
+	// base64, and the JSON around it
+	artifactsMCPBody = 96 << 20
+)
+
+// artifactPageCSP is what an artifact's page and files are served under:
+// a sandbox without allow-same-origin, so the page's origin is opaque.
+// It runs its scripts, forms, dialogs, popups (links in a new tab
+// included, out of the sandbox) and downloads.
+const artifactPageCSP = "sandbox allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-downloads"
+
+// ArtifactURL is the address of artifact id's page on this computer;
+// version 0 is the newest.
+func ArtifactURL(id string, version int) string {
+	ref := id
+	if version > 0 {
+		ref += "@" + strconv.Itoa(version)
+	}
+	return URL() + ArtifactPagePath + ref + "/"
+}
+
+// openArtifactURL opens an address in the user's browser; tests stand in.
+var openArtifactURL = proc.OpenBrowser
+
+var artifactRefRe = lazyre.New(`(?:^|/a/)([a-z2-7]{26})(?:@(\d+))?(?:/|$)`)
+
+// ArtifactRef reads an artifact named by its id, id@version or address.
+func ArtifactRef(s string) (id string, version int, ok bool) {
+	s = strings.TrimSpace(s)
+	m := artifactRefRe.FindStringSubmatch(s)
+	if m == nil {
+		return "", 0, false
+	}
+	if m[2] != "" {
+		n, err := strconv.Atoi(m[2])
+		if err != nil || n < 1 {
+			return "", 0, false
+		}
+		version = n
+	}
+	return m[1], version, true
+}
+
+func (s *Server) artifactsMCP(w http.ResponseWriter, r *http.Request) {
+	// it reads and writes files on this computer for the agent: only an
+	// agent on this computer calls it, never a page
+	if !local(r) || fromBrowser(r) {
+		http.Error(w, "magpie's artifacts MCP server answers the agents on this computer alone", http.StatusForbidden)
+		return
+	}
+	serveMCP(w, r, "magpie's artifacts", artifactsServerName, artifactsMCPBody, s.artifactsMCPCall)
+}
+
+func artifactsMCPTools() []any {
+	ref := map[string]any{"type": "string", "description": "The artifact: its id or its address, as a publish or list gave it"}
+	return []any{
+		map[string]any{
+			"name":  artifactPublishTool,
+			"title": "Publish artifact",
+			"description": "Publishes an HTML page as an artifact: a private page on this computer, kept with every version, that the user opens in their browser. " +
+				"Use it whenever a page would be clearer than text, or when the user would use the page rather than only read it: a report, a chart or dashboard, a diagram, an explainer, a prototype, a small app or game. " +
+				"Write the page to a file and pass file_path (or pass the page as html). The page is self-contained HTML; a <title> of two to four words names it. " +
+				"Supporting files (scripts, styles, data, images, more pages) go in files, by the relative path the page uses, each from a local file. " +
+				"To change an artifact, pass its id: a new version is made at the same address; files left out are kept and null removes one. " +
+				"Pass the version you last read or published to refuse a publish over a newer one. Give the user the address from the answer.",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"file_path":   map[string]any{"type": "string", "description": "The page: a local .html file, absolute or relative to the folder you work in"},
+					"html":        map[string]any{"type": "string", "description": "The page itself, in place of file_path"},
+					"title":       map[string]any{"type": "string", "description": "Its name, when the page has no <title>"},
+					"description": map[string]any{"type": "string", "description": "One sentence on what it is"},
+					"id":          map[string]any{"type": "string", "description": "An artifact to update (its id or address); left out, a new one is made"},
+					"files": map[string]any{
+						"type":        "object",
+						"description": "Files beside the page, by the relative path the page references (e.g. \"app.js\", \"img/logo.png\"). Each is a local file's path, {\"text\": \"…\"} or {\"base64\": \"…\"} for content given here, or null to remove the file from an update.",
+						"additionalProperties": map[string]any{"anyOf": []any{
+							map[string]any{"type": "string"},
+							map[string]any{"type": "object", "properties": map[string]any{"from": map[string]any{"type": "string"}, "text": map[string]any{"type": "string"}, "base64": map[string]any{"type": "string"}}},
+							map[string]any{"type": "null"},
+						}},
+					},
+					"label":   map[string]any{"type": "string", "description": "A short name for this version, at most 60 characters"},
+					"version": map[string]any{"type": "integer", "minimum": 1, "description": "The version this publish was built on; a newer one makes it fail instead of being written over"},
+				},
+			},
+			"annotations": map[string]any{"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false},
+		},
+		map[string]any{
+			"name":        artifactReadTool,
+			"title":       "Read artifact",
+			"description": "Reads an artifact: what it is, its versions and files, and its page as published (or one of its files, with path). Read one before changing it, and build the new version on what comes back.",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":      ref,
+					"path":    map[string]any{"type": "string", "description": "One of its files instead of the page"},
+					"version": map[string]any{"type": "integer", "minimum": 1, "description": "An earlier version; left out, the newest"},
+				},
+				"required": []string{"id"},
+			},
+			"annotations": map[string]any{"readOnlyHint": true, "openWorldHint": false},
+		},
+		map[string]any{
+			"name":        artifactListTool,
+			"title":       "List artifacts",
+			"description": "Lists the artifacts on this computer, the most recently updated first, with their titles, addresses and versions. Use it to find an artifact to update or open again.",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"query": map[string]any{"type": "string", "description": "Only those whose title or description has these words"},
+					"limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 200, "default": 25},
+				},
+			},
+			"annotations": map[string]any{"readOnlyHint": true, "openWorldHint": false},
+		},
+		map[string]any{
+			"name":        artifactOpenTool,
+			"title":       "Open artifact",
+			"description": "Opens an artifact in the user's browser, without changing it. Use it when the user asks to see one; a publish needs no open unless they ask.",
+			"inputSchema": map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"id": ref, "version": map[string]any{"type": "integer", "minimum": 1}},
+				"required":   []string{"id"},
+			},
+			"annotations": map[string]any{"readOnlyHint": true, "openWorldHint": false},
+		},
+		map[string]any{
+			"name":        artifactDeleteTool,
+			"title":       "Delete artifact",
+			"description": "Deletes an artifact and every version of it, for good: its address stops working. Only when the user asks for that artifact to be deleted.",
+			"inputSchema": map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"id": ref},
+				"required":   []string{"id"},
+			},
+			"annotations": map[string]any{"readOnlyHint": false, "destructiveHint": true, "idempotentHint": true, "openWorldHint": false},
+		},
+	}
+}
+
+// artifactSource is a supporting file as a publish names it: a local
+// file's path, inline text or base64, or null to remove it.
+type artifactSource struct {
+	from, text, b64 string
+	inline, remove  bool
+}
+
+func (a *artifactSource) UnmarshalJSON(b []byte) error {
+	switch {
+	case string(b) == "null":
+		a.remove = true
+		return nil
+	case len(b) > 0 && b[0] == '"':
+		return json.Unmarshal(b, &a.from)
+	}
+	var o struct {
+		From   *string `json:"from"`
+		Text   *string `json:"text"`
+		Base64 *string `json:"base64"`
+	}
+	if err := json.Unmarshal(b, &o); err != nil {
+		return errors.New("a file is a path, {\"text\": …}, {\"base64\": …} or null")
+	}
+	switch {
+	case o.Text != nil:
+		a.text, a.inline = *o.Text, true
+	case o.Base64 != nil:
+		a.b64, a.inline = *o.Base64, true
+	case o.From != nil:
+		a.from = *o.From
+	default:
+		return errors.New("a file is a path, {\"text\": …}, {\"base64\": …} or null")
+	}
+	return nil
+}
+
+type artifactArgs struct {
+	FilePath    string                     `json:"file_path"`
+	HTML        *string                    `json:"html"`
+	Title       string                     `json:"title"`
+	Description string                     `json:"description"`
+	ID          string                     `json:"id"`
+	URL         string                     `json:"url"`
+	Files       map[string]*artifactSource `json:"files"`
+	Label       string                     `json:"label"`
+	Version     flexCount                  `json:"version"`
+	Path        string                     `json:"path"`
+	Query       string                     `json:"query"`
+	Limit       flexCount                  `json:"limit"`
+}
+
+// artifactCaller is who publishes, and the folder its relative paths are
+// in ("" when not known).
+type artifactCaller struct {
+	r     *http.Request
+	meta  json.RawMessage
+	agent string
+}
+
+func newArtifactCaller(r *http.Request, rawMeta json.RawMessage) *artifactCaller {
+	c := &artifactCaller{r: r, meta: rawMeta}
+	var extra struct {
+		Client string `json:"magpie/client"`
+	}
+	json.Unmarshal(rawMeta, &extra)
+	for _, name := range []string{extra.Client, r.Header.Get(MemoryClientHeader)} {
+		if c.agent == "" && strings.TrimSpace(name) != "" {
+			c.agent = memoryAgent(usage.AgentOf(name))
+		}
+	}
+	if c.agent == "" {
+		c.agent = memoryAgent(callerOf(r).agent)
+	}
+	if c.agent == "" {
+		c.agent = memoryClients.of(r.Header.Get("Mcp-Session-Id"))
+	}
+	return c
+}
+
+// dir is the folder the caller works in: the hub's roots, the folder
+// `magpie mcp artifacts` runs in, else the agent's roots.
+func (c *artifactCaller) dir() string {
+	var meta hubCallMeta
+	var extra struct {
+		Roots *[]string `json:"magpie/roots"`
+	}
+	if len(c.meta) > 0 {
+		json.Unmarshal(c.meta, &meta)
+		json.Unmarshal(c.meta, &extra)
+	}
+	var dirs []string
+	if extra.Roots != nil {
+		dirs = rootDirs(*extra.Roots)
+	} else if d := strings.TrimSpace(c.r.Header.Get(MemoryCwdHeader)); d != "" {
+		dirs = []string{d}
+	} else {
+		dirs = rootDirs(hubRoots(c.r, meta))
+	}
+	if len(dirs) == 0 {
+		return ""
+	}
+	return dirs[0]
+}
+
+// readLocal reads the file p names, relative to the caller's folder.
+func (c *artifactCaller) readLocal(p string, most int64) ([]byte, error) {
+	p = strings.TrimSpace(p)
+	if strings.HasPrefix(p, "~/") || p == "~" {
+		if home, err := os.UserHomeDir(); err == nil {
+			p = filepath.Join(home, p[1:])
+		}
+	}
+	if strings.HasPrefix(p, "file://") {
+		if ds := rootDirs([]string{p}); len(ds) == 1 {
+			p = ds[0]
+		}
+	}
+	if !filepath.IsAbs(p) {
+		d := c.dir()
+		if d == "" {
+			return nil, fmt.Errorf("%s: give its absolute path; the folder you work in isn't known here", p)
+		}
+		p = filepath.Join(d, p)
+	}
+	fi, err := os.Stat(p)
+	if err != nil {
+		return nil, err
+	}
+	if fi.IsDir() {
+		return nil, fmt.Errorf("%s is a folder, not a file", p)
+	}
+	if fi.Size() > most {
+		return nil, fmt.Errorf("%s is %d bytes; the most is %d", p, fi.Size(), most)
+	}
+	return os.ReadFile(p)
+}
+
+func (s *Server) artifactsMCPCall(r *http.Request, m mcpMessage) (any, map[string]any) {
+	switch m.Method {
+	case "initialize":
+		rememberMemoryClient(r, m)
+		return map[string]any{
+			"protocolVersion": mcpVersion(m),
+			"capabilities":    map[string]any{"tools": map[string]any{}},
+			"serverInfo":      map[string]any{"name": artifactsServerName, "title": "Magpie Artifacts", "version": Version},
+			"instructions": "Artifacts are private pages on this computer, kept with every version, that the user opens in their browser. " +
+				"When a page would be clearer than text, or the user would use the page rather than only read it (a report, a chart, a dashboard, a diagram, an explainer, a prototype, a small app), write it as HTML and publish it with " + artifactPublishTool + ", then give the user its address. " +
+				"To change one, read it first with " + artifactReadTool + " and publish with its id. Delete one only when the user asks.",
+		}, nil
+	case "ping":
+		return map[string]any{}, nil
+	case "tools/list":
+		return map[string]any{"tools": artifactsMCPTools()}, nil
+	case "tools/call":
+		var p struct {
+			Name      string          `json:"name"`
+			Arguments json.RawMessage `json:"arguments"`
+			Meta      json.RawMessage `json:"_meta"`
+		}
+		if err := json.Unmarshal(m.Params, &p); err != nil {
+			return nil, map[string]any{"code": -32602, "message": "invalid params: " + err.Error()}
+		}
+		var a artifactArgs
+		if len(p.Arguments) > 0 {
+			if err := json.Unmarshal(p.Arguments, &a); err != nil {
+				return toolResult("the arguments don't read: "+err.Error(), true), nil
+			}
+		}
+		if a.ID == "" {
+			a.ID = a.URL
+		}
+		c := newArtifactCaller(r, p.Meta)
+		var said string
+		var err error
+		switch p.Name {
+		case artifactPublishTool:
+			said, err = artifactPublish(c, a)
+		case artifactReadTool:
+			said, err = artifactRead(a)
+		case artifactListTool:
+			said, err = artifactList(a)
+		case artifactOpenTool:
+			said, err = artifactOpen(a)
+		case artifactDeleteTool:
+			said, err = artifactDelete(a)
+		default:
+			return nil, map[string]any{"code": -32602, "message": "unknown tool " + p.Name + ": this server has " +
+				strings.Join([]string{artifactPublishTool, artifactReadTool, artifactListTool, artifactOpenTool, artifactDeleteTool}, ", ")}
+		}
+		if err != nil {
+			return toolResult(err.Error(), true), nil
+		}
+		return toolResult(said, false), nil
+	}
+	return nil, map[string]any{"code": -32601, "message": "method not found: " + m.Method}
+}
+
+// artifactNamed is the artifact the arguments name, and the version.
+func artifactNamed(a artifactArgs) (*artifact.Artifact, int, error) {
+	if strings.TrimSpace(a.ID) == "" {
+		return nil, 0, errors.New("name the artifact: its id or address")
+	}
+	id, n, ok := ArtifactRef(a.ID)
+	if !ok {
+		return nil, 0, fmt.Errorf("%q isn't an artifact's id or address", a.ID)
+	}
+	if a.Version > 0 {
+		n = int(a.Version)
+	}
+	art, err := artifact.Get(id)
+	if errors.Is(err, artifact.ErrNotFound) {
+		return nil, 0, fmt.Errorf("there is no artifact %s on this computer (%s lists them)", id, artifactListTool)
+	}
+	if err != nil {
+		return nil, 0, err
+	}
+	if n > 0 && art.Version(n) == nil {
+		return nil, 0, fmt.Errorf("artifact %s has versions 1 to %d, not %d", id, art.Latest().N, n)
+	}
+	return art, n, nil
+}
+
+func artifactPublish(c *artifactCaller, a artifactArgs) (string, error) {
+	p := artifact.Publish{Title: a.Title, Description: a.Description, Label: a.Label, Agent: c.agent, Base: int(a.Version)}
+	if strings.TrimSpace(a.ID) != "" {
+		id, _, ok := ArtifactRef(a.ID)
+		if !ok {
+			return "", fmt.Errorf("%q isn't an artifact's id or address", a.ID)
+		}
+		p.ID = id
+	}
+	switch {
+	case a.HTML != nil && a.FilePath != "":
+		return "", errors.New("give the page as file_path or as html, not both")
+	case a.HTML != nil:
+		p.Page = []byte(*a.HTML)
+	case a.FilePath != "":
+		b, err := c.readLocal(a.FilePath, artifact.MaxPage)
+		if err != nil {
+			return "", err
+		}
+		p.Page = b
+	case p.ID == "":
+		return "", errors.New("give the page: file_path (a local .html file) or html")
+	}
+	if len(a.Files) > 0 {
+		p.Files = map[string][]byte{}
+	}
+	for name, src := range a.Files {
+		switch {
+		case src == nil || src.remove:
+			p.Files[name] = nil
+		case src.inline && src.b64 != "":
+			b, err := base64.StdEncoding.DecodeString(src.b64)
+			if err != nil {
+				return "", fmt.Errorf("%s: the base64 doesn't read: %v", name, err)
+			}
+			p.Files[name] = b
+		case src.inline:
+			p.Files[name] = []byte(src.text)
+		default:
+			b, err := c.readLocal(src.from, artifact.MaxFile)
+			if err != nil {
+				return "", fmt.Errorf("%s: %w", name, err)
+			}
+			p.Files[name] = b
+		}
+		if p.Files[name] == nil && !(src == nil || src.remove) {
+			p.Files[name] = []byte{}
+		}
+	}
+	art, err := artifact.PublishPage(p)
+	if errors.Is(err, artifact.ErrNotFound) {
+		return "", fmt.Errorf("there is no artifact %s on this computer (%s lists them); leave id out to make a new one", p.ID, artifactListTool)
+	}
+	if errors.Is(err, artifact.ErrConflict) {
+		return "", fmt.Errorf("%v: read it again with %s, make your change on what comes back, and publish with that version", err, artifactReadTool)
+	}
+	if err != nil {
+		return "", err
+	}
+	v := art.Latest()
+	var b strings.Builder
+	if v.N == 1 {
+		fmt.Fprintf(&b, "Published %q: %s\n", art.Title, ArtifactURL(art.ID, 0))
+	} else {
+		fmt.Fprintf(&b, "Published version %d of %q: %s\n", v.N, art.Title, ArtifactURL(art.ID, 0))
+	}
+	fmt.Fprintf(&b, "id: %s, version %d", art.ID, v.N)
+	if len(v.Files) > 0 {
+		fmt.Fprintf(&b, ", with %s", strings.Join(v.Files, ", "))
+	}
+	b.WriteString(".\nIt is private to this computer: give the user the address.")
+	return b.String(), nil
+}
+
+// artifactTextMost is the most of a file read_artifact gives as text.
+const artifactTextMost = 1 << 20
+
+func artifactRead(a artifactArgs) (string, error) {
+	art, n, err := artifactNamed(a)
+	if err != nil {
+		return "", err
+	}
+	v := art.Version(n)
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s\naddress: %s\nid: %s, version %d of %d", art.Title, ArtifactURL(art.ID, 0), art.ID, v.N, art.Latest().N)
+	if art.Description != "" {
+		fmt.Fprintf(&b, "\ndescription: %s", art.Description)
+	}
+	if len(v.Files) > 0 {
+		fmt.Fprintf(&b, "\nfiles: %s", strings.Join(v.Files, ", "))
+	}
+	where, _, err := artifact.File(art.ID, v.N, a.Path)
+	if err != nil {
+		return "", fmt.Errorf("%v (its files: %s)", err, strings.Join(append([]string{artifact.Page}, v.Files...), ", "))
+	}
+	name := a.Path
+	if name == "" {
+		name = artifact.Page
+	}
+	fi, err := os.Stat(where)
+	if err != nil {
+		return "", err
+	}
+	if fi.Size() > artifactTextMost && name != artifact.Page {
+		fmt.Fprintf(&b, "\n\n%s is %d bytes, at %s", name, fi.Size(), where)
+		return b.String(), nil
+	}
+	body, err := os.ReadFile(where)
+	if err != nil {
+		return "", err
+	}
+	if !utf8.Valid(body) {
+		fmt.Fprintf(&b, "\n\n%s is %d bytes of binary data, at %s", name, len(body), where)
+		return b.String(), nil
+	}
+	fmt.Fprintf(&b, "\n\n%s:\n%s", name, body)
+	return b.String(), nil
+}
+
+func artifactList(a artifactArgs) (string, error) {
+	all, err := artifact.List()
+	if len(all) == 0 && err != nil {
+		return "", err
+	}
+	limit := int(a.Limit)
+	if limit <= 0 {
+		limit = 25
+	}
+	words := strings.Fields(strings.ToLower(a.Query))
+	var b strings.Builder
+	shown := 0
+	for _, art := range all {
+		hay := strings.ToLower(art.Title + " " + art.Description)
+		match := true
+		for _, w := range words {
+			if !strings.Contains(hay, w) {
+				match = false
+				break
+			}
+		}
+		if !match {
+			continue
+		}
+		if shown == limit {
+			fmt.Fprintf(&b, "… and more: ask for a higher limit\n")
+			break
+		}
+		shown++
+		v := art.Latest()
+		fmt.Fprintf(&b, "- %s — %s (id %s, version %d, updated %s)", art.Title, ArtifactURL(art.ID, 0), art.ID, v.N, art.Updated.Local().Format(time.DateTime))
+		if art.Description != "" {
+			fmt.Fprintf(&b, ": %s", art.Description)
+		}
+		b.WriteString("\n")
+	}
+	if shown == 0 {
+		if len(words) > 0 {
+			return "No artifact's title or description has those words.", nil
+		}
+		return "There are no artifacts on this computer yet.", nil
+	}
+	if err != nil {
+		fmt.Fprintf(&b, "Some couldn't be read: %v\n", err)
+	}
+	return strings.TrimRight(b.String(), "\n"), nil
+}
+
+func artifactOpen(a artifactArgs) (string, error) {
+	art, n, err := artifactNamed(a)
+	if err != nil {
+		return "", err
+	}
+	u := ArtifactURL(art.ID, n)
+	if err := openArtifactURL(u); err != nil {
+		return "", fmt.Errorf("the browser didn't open: %v; the address is %s", err, u)
+	}
+	return fmt.Sprintf("Opened %q in the browser: %s", art.Title, u), nil
+}
+
+func artifactDelete(a artifactArgs) (string, error) {
+	art, _, err := artifactNamed(a)
+	if err != nil {
+		return "", err
+	}
+	if err := artifact.Delete(art.ID); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("Deleted %q and its %d versions; %s no longer opens.", art.Title, art.Latest().N, ArtifactURL(art.ID, 0)), nil
+}
+
+// artifactPageRead: r reads an artifact's page or file, which the page
+// itself asks for with Origin: null (a module script, a fetch of its
+// data), and corsGuard lets it.
+func artifactPageRead(r *http.Request) bool {
+	return (r.Method == http.MethodGet || r.Method == http.MethodHead) && strings.HasPrefix(r.URL.Path, ArtifactPagePath)
+}
+
+// artifactPage serves an artifact's page and files to the browser on this
+// computer: at ArtifactPagePath<id>/ the newest version, at <id>@<n>/
+// version n, each file at its path after that.
+func (s *Server) artifactPage(w http.ResponseWriter, r *http.Request) {
+	// local only, and at this computer's own name: a page rebound to
+	// 127.0.0.1 by its DNS (another Host) reads nothing here
+	if !local(r) || !loopbackHost(r.Host) {
+		http.Error(w, "an artifact opens in a browser on this computer, at "+URL(), http.StatusForbidden)
+		return
+	}
+	ref := r.PathValue("ref")
+	id, n, ok := ArtifactRef(ref)
+	if !ok || strings.Contains(ref, "/") {
+		http.NotFound(w, r)
+		return
+	}
+	if !strings.HasPrefix(r.URL.Path, ArtifactPagePath+ref+"/") {
+		// the page's relative links are to its own folder
+		http.Redirect(w, r, ArtifactPagePath+ref+"/", http.StatusFound)
+		return
+	}
+	name := r.PathValue("path")
+	where, art, err := artifact.File(id, n, name)
+	if err != nil {
+		if errors.Is(err, artifact.ErrNotFound) {
+			http.Error(w, "no such artifact, version or file here", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "the artifact can't be read: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	body, err := os.ReadFile(where)
+	if err != nil {
+		http.Error(w, "the artifact can't be read: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	page := name == "" || name == artifact.Page
+	ct := artifactType(name)
+	if page {
+		ct = "text/html; charset=utf-8"
+		body = artifact.Served(body)
+	}
+	h := w.Header()
+	h.Set("Content-Type", ct)
+	h.Set("Content-Security-Policy", artifactPageCSP)
+	h.Set("X-Content-Type-Options", "nosniff")
+	h.Set("Referrer-Policy", "no-referrer")
+	// the page's own module scripts and fetches come from its opaque
+	// origin (Origin: null)
+	h.Set("Access-Control-Allow-Origin", "*")
+	if n > 0 {
+		// a version never changes
+		h.Set("Cache-Control", "private, max-age=31536000, immutable")
+	} else {
+		h.Set("Cache-Control", "no-cache")
+		h.Set("ETag", strconv.Quote(art.ID+"-"+strconv.Itoa(art.Latest().N)))
+	}
+	http.ServeContent(w, r, "", art.Latest().At, bytes.NewReader(body))
+}
+
+// artifactType is the Content-Type a file is served with, by its name.
+func artifactType(name string) string {
+	ext := strings.ToLower(path.Ext(name))
+	switch ext {
+	case ".js", ".mjs", ".cjs":
+		return "text/javascript; charset=utf-8"
+	case ".html", ".htm":
+		return "text/html; charset=utf-8"
+	case ".css":
+		return "text/css; charset=utf-8"
+	case ".json", ".map":
+		return "application/json; charset=utf-8"
+	case ".svg":
+		return "image/svg+xml"
+	case ".md", ".txt", ".csv", ".tsv", "":
+		if ext == ".csv" {
+			return "text/csv; charset=utf-8"
+		}
+		return "text/plain; charset=utf-8"
+	case ".wasm":
+		return "application/wasm"
+	case ".woff2":
+		return "font/woff2"
+	case ".woff":
+		return "font/woff"
+	case ".ttf":
+		return "font/ttf"
+	case ".otf":
+		return "font/otf"
+	}
+	if ct := mime.TypeByExtension(ext); ct != "" {
+		return ct
+	}
+	return "application/octet-stream"
+}

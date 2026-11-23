@@ -235,7 +235,7 @@ const PROV_FIELDS = [["Models", "model"], ["Accounts", "keys", (p) => p.account 
 // field, not for a group's name alone
 function places() {
   const out = [];
-  for (const v of ["agents", "sessions", "library", "providers", "routing", "groups", "gateway", "usage", "masking", "plugins"]) {
+  for (const v of ["agents", "sessions", "library", "artifacts", "providers", "routing", "groups", "gateway", "usage", "masking", "plugins"]) {
     if (!pageOn(v)) continue;
     out.push({ page: v, key: v, name: t(pageName(v)), own: say(pageName(v)) + " " + v, open: () => goTo(v) });
   }

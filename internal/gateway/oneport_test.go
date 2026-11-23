@@ -15,8 +15,10 @@ import (
 // Every route Handler registers is either a client route `magpie web`'s
 // port hands to the gateway (ClientPath), or one named here that stays on
 // the gateway's port alone: its info page at /, the /api/* routes (the
-// page's own namespace there) and the Claude helper's callbacks under
-// /_magpie/. A route added to Handler and to neither fails this, so the
+// page's own namespace there), the Claude helper's callbacks under
+// /_magpie/, and the artifacts' pages under /a/, which are this
+// computer's alone (artifactPage) while the page's port is the one put
+// behind a proxy. A route added to Handler and to neither fails this, so the
 // one-port page doesn't miss it, or take it, by accident.
 func TestClientPathCoversHandler(t *testing.T) {
 	// the patterns as routes() registers them, not as its source reads
@@ -27,7 +29,7 @@ func TestClientPathCoversHandler(t *testing.T) {
 		}
 		p := strings.NewReplacer("{$}", "", "{id...}", "x", "{call...}", "x", "{id}", "x", "{token}", "x", "{name}", "x", "{agent}", "x").Replace(pat)
 		n++
-		stays := p == "/" || strings.HasPrefix(p, "/api/") || strings.HasPrefix(p, "/_magpie/")
+		stays := p == "/" || strings.HasPrefix(p, "/api/") || strings.HasPrefix(p, "/_magpie/") || strings.HasPrefix(p, ArtifactPagePath)
 		if ClientPath(p) == stays {
 			t.Errorf("%s (%s): ClientPath %v", pat, p, ClientPath(p))
 		}

@@ -23,8 +23,8 @@ func init() {
 		Name: "Library", Sub: "Instructions, MCP servers, skills and hooks, kept once and given to every agent",
 		One: "1 item given to agents", Many: "{n} items given to agents",
 		InUse:    lib.InUse,
-		Parts:    []pluginrt.Part{{Slot: "nav.page", Key: "library"}},
+		Parts:    []pluginrt.Part{{Slot: "nav.page", Key: "library"}, {Slot: "nav.page", Key: "artifacts"}},
 		Settings: Settings{},
-		Client:   []string{"i18n.js", "library.css", "client.js"},
+		Client:   []string{"i18n.js", "library.css", "artifacts.js", "client.js"},
 	})
 }

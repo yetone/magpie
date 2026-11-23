@@ -23960,10 +23960,10 @@ document.fonts?.ready.then(fitTop);
 // a font picked later (Settings' Font) can still be loading when it's applied
 document.fonts?.addEventListener("loadingdone", fitTop);
 
-// the shown page's tab; Routing's for its groups in the header's row,
-// which has no room for theirs (app.css)
+// the shown page's tab; in the header's row, which has no room for theirs
+// (app.css), Routing's for its groups and Library's for Artifacts
 function markNav(v) {
-  const tab = v === "groups" && !sideNav() ? "routing" : v;
+  const tab = sideNav() ? v : { groups: "routing", artifacts: "library" }[v] || v;
   for (const b of $("#nav").querySelectorAll("button[data-view]")) {
     const on = b.dataset.view === tab;
     b.classList.toggle("on", on);
