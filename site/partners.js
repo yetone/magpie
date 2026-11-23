@@ -115,6 +115,7 @@ export const PARTNERS = [
     keysUrl: "https://corecode.live/keys?ref=magpie",
     website: "https://corecode.live/?ref=magpie",
     iconUrl: "https://usemagpie.ai/img/partner-corecode.png",
+    searches: true,
     notes: {
       en: "High caching full-strength Claude. Get $3 free",
       zh: "高缓存满血 Claude，可开票，注册送 $3",
