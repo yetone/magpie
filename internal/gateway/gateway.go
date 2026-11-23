@@ -9035,6 +9035,15 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			// been tried with it
 			body = withoutLoneToolChoice(body)
 		}
+		if to == provider.Responses && (validatesItemIDs(p) || !s.fits(p.ID, itemIDsRefused(model), to)) {
+			// and the input items' ids go as an upstream that checks them
+			// takes them, as a relayed one's do: the built request carries
+			// what it replayed — a seal carried in a call's id is an
+			// upstream's to have minted, and Copilot mints ids of 420
+			// characters and more (#4525, #5812), which the build never
+			// bound. A request of no id to plain goes as it came.
+			body = plainItemIDs(body)
+		}
 		if to == provider.Chat && req.WebSearch && p.IsRemoteMagpie() {
 			// the other magpie searches for it (search_remote.go)
 			body = withFields(body, map[string]any{"web_search_options": map[string]any{}})
@@ -9221,6 +9230,18 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 				// (#1271): asked again with them folded to an object, and
 				// so from then on
 				s.markUnfit(p.ID, rootUnionRefused(model), to)
+				continue
+			}
+		}
+		if to == provider.Responses && badRequest(res.StatusCode) && itemIDRefusal(b) {
+			// an input item's id with a character OpenAI's don't have, or
+			// longer than they take, turned away by an upstream magpie
+			// couldn't tell checks them (a relay in front of OpenAI,
+			// #5812): asked again with ids it takes, and so from then on —
+			// the build above reads the refusal. One the request carries
+			// no plainable id over is not asked again.
+			if nb := plainItemIDs(body); !bytes.Equal(nb, body) {
+				s.markUnfit(p.ID, itemIDsRefused(model), to)
 				continue
 			}
 		}
