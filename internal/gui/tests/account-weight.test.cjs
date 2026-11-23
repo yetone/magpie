@@ -7,6 +7,9 @@
 // provider/accountweight. Hidden under the other routings. Each line stays
 // one line, with nothing past the sheet's edge, at the window's narrowest
 // and in a phone's browser, in every language, without the page scrolling.
+// The account Claude Code is signed in to says Signed in rather than First
+// while By weight, since the weights, not the order, share the
+// conversations out (Wing8Aqua on X).
 // MAGPIE_ACC_ASSETS runs it on older assets.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -100,6 +103,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal((await chip("max@example.com").textContent()).trim(), await say(page, lang, "Weight {n} · {share}%", { n: 3, share: 75 }), at);
       assert.equal((await chip("pro@example.com").textContent()).trim(), await say(page, lang, "Weight {n} · {share}%", { n: 1, share: 25 }), at);
       assert.equal(await chip("off@example.com").count(), 0, `${at}: an account not in use has no share`);
+      // the one Claude Code is signed in to isn't called First, which read
+      // as the account used most (Wing8Aqua on X): By weight shares the
+      // conversations out, not the order
+      const using = page.locator('.editor .acc[data-account-id="max@example.com"] .acc-line > .using');
+      assert.equal((await using.textContent()).trim(), await say(page, lang, "Signed in"), `${at}: By weight still says First`);
+      assert.equal(await using.getAttribute("title"), await say(page, lang, "By weight, each new conversation goes to an account by its weight and stays there"), at);
 
       // each line one line, nothing past its row
       const fit = await page.evaluate(() => [...document.querySelectorAll(".editor .accts .acc[data-account-id]")].map((r) => {
@@ -139,6 +148,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // back to Smart hides them
       await page.locator(".editor").getByRole("button", { name: await say(page, lang, "Quota first"), exact: true }).first().click();
       assert.equal(await chip("max@example.com").isVisible(), false, `${at}: a weight under Smart`);
+      assert.equal((await using.textContent()).trim(), await say(page, lang, "First"), `${at}: First under Smart`);
       // open, the editor scrolls and the dialog around it doesn't: the lines
       // its check-in and warm-up rows keep out of sight were held against
       // the dialog and grew it a second scrollbar, every row 8px narrower

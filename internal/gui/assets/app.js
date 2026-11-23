@@ -12614,7 +12614,7 @@ function renderRouting(p) {
     // in turn and by weight go round already
     kLabel.hidden = kWrap.hidden = routingNow() === "rotate" || routingNow() === "weight";
     // each key's or account's weight shows beside it while by weight
-    for (const l of document.querySelectorAll(".accts")) if (l.dataset.provider === p.id) l.classList.toggle("weighted", routingNow() === "weight");
+    for (const l of document.querySelectorAll(".accts")) if (l.dataset.provider === p.id) l.classList.toggle("weighted", routingNow() === "weight"), l.onrouting?.();
   };
   const rPick = routingSegs(routingsOf(p).map(([id, name, , js]) => [id, ROUTINGS.some((r) => r[0] === id) ? t(name) : name, , js]), routingNow(), (routing) => { draft.routing = routing; drawRouting(); });
   const rRow = el("div", "route-pick");
@@ -13848,6 +13848,10 @@ function renderAccounts(a, p) {
     } else if (l.active) {
       const using = el("span", "using", l.paused ? t("Paused") : back ? t("First for now") : several ? t("First") : t("In use"));
       if (back && !l.paused) using.title = t("{user} was nearly used up, so magpie signed {agent} in to this one; it goes back to {user} once that has room again", { user: back.user, agent: a.agentName });
+      // By weight it is only the one signed in to: the weights share the
+      // conversations out, not the order (Wing8Aqua on X read First as the
+      // account used most); drawRouting tells it the routing picked now
+      else if (several && !l.paused) (list.onrouting = () => { const w = list.matches(".weighted"); using.textContent = t(w ? "Signed in" : "First"); w ? using.title = t("By weight, each new conversation goes to an account by its weight and stays there") : using.removeAttribute("title"); })();
       line.append(using);
       if (a.agent === "qoder" || a.agent === "qoder-cn" || l.own) {
         line.append(forgetOf(l.own));
