@@ -1,12 +1,14 @@
 package gateway
 
 import (
+	"context"
 	"fmt"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -53,18 +55,26 @@ n=0
 while read -r line; do
   case "$line" in *'"type":"control_request"'*)
     id=$(printf '%s' "$line" | sed 's/.*"request_id":"\([^"]*\)".*/\1/')
+    case "$line" in *rewind_conversation*)
+      echo '{"type":"control_response","response":{"subtype":"success","request_id":"'$id'","response":{"rewound":true}}}'
+      continue;;
+    esac
     echo '{"type":"control_response","response":{"subtype":"success","request_id":"'$id'"}}'
     continue;;
   esac
   echo "told $line" >> $log
   echo "told $line" >> ` + told + `
   n=$((n+1))
+  case "$line" in *"SLOW cancelled"*)
+      echo '{"type":"user","uuid":"cancelled","sessionId":"'$sid'"}' >> "$file"
+      continue;;
+  esac
   if [ -z "$resumed" ] && [ $n = 2 ]; then
     sleep 60
     continue
   fi
   echo '{"type":"user","uuid":"ask-'$n'","sessionId":"'$sid'"}' >> "$file"
-  echo '{"type":"assistant","uuid":"line-'$n'","sessionId":"'$sid'","message":{"id":"m'$n'","model":"claude-sonnet-5"}}' >> "$file"
+  echo '{"type":"assistant","uuid":"line-'$n'","sessionId":"'$sid'","message":{"id":"m'$n'","model":"claude-sonnet-5","stop_reason":"end_turn"}}' >> "$file"
   echo '{"type":"stream_event","event":{"type":"message_start","message":{"id":"m'$n'","model":"claude-sonnet-5","usage":{"input_tokens":1}}}}'
   echo '{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"pid '$$' turn '$n'"}}}'
   echo '{"type":"assistant","uuid":"line-'$n'","message":{"id":"m'$n'","model":"claude-sonnet-5","content":[{"type":"text","text":"pid '$$' turn '$n'"}]}}'
@@ -293,5 +303,153 @@ func busyRunPassedBy(t *testing.T, mode string) {
 	}
 	if !strings.Contains(logs.String(), whole) {
 		t.Errorf("the turn was not told whole:\n%s", logs.String())
+	}
+}
+
+// A different user turn following the same history resumes the checkpoint,
+// both immediately and after the process that owned the run has stopped.
+func TestClaudeReplacementAfterCancel(t *testing.T) {
+	for _, mode := range []string{"print", "interactive"} {
+		for _, restart := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/restart=%t", mode, restart), func(t *testing.T) {
+				h := newBusyRetryHarness(t, mode)
+				t.Cleanup(func() { h.s.subscription.abortAll() })
+				history := rmsg("user", "previous conversation ALPHA")
+				first := h.ask("[" + history + "]")
+				history += "," + rmsg("assistant", first)
+				h.giveUp("[" + history + "," + rmsg("user", "SLOW cancelled") + "]")
+				if restart {
+					h.s.subscription.abortAll()
+					h.s = New()
+				}
+				before := h.toldBy()
+				reply := h.ask("[" + history + "," + rmsg("user", "replacement BETA") + "]")
+				if !restart && mode == "print" {
+					if pidOf(t, reply) != pidOf(t, first) {
+						t.Fatalf("rewound run was replaced: %q -> %q", first, reply)
+					}
+					return
+				}
+				for pid, run := range h.toldBy() {
+					if _, old := before[pid]; old {
+						continue
+					}
+					if !strings.Contains(run, "--resume ") || !strings.Contains(run, "replacement BETA") || strings.Contains(run, "ALPHA") {
+						t.Fatalf("replacement did not resume with its new turn alone: %s", run)
+					}
+					sid := strings.Fields(strings.SplitN(run, "--resume ", 2)[1])[0]
+					files, _ := filepath.Glob(filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), "projects", "*", sid+".jsonl"))
+					if len(files) != 1 {
+						t.Fatalf("resumed transcript %s missing", sid)
+					}
+					data, err := os.ReadFile(files[0])
+					if err != nil || strings.Contains(string(data), "cancelled") || strings.Count(string(data), "line-1") != 2 {
+						t.Fatalf("resumed transcript did not retain just the completed turn before the replacement: %s (%v)", data, err)
+					}
+					return
+				}
+				t.Fatal("no run resumed the saved transcript")
+			})
+		}
+	}
+}
+
+// checkingCancel signals when a replacement or shutdown actually observes
+// its predecessor's cancellation, while publication is still held.
+type checkingCancel struct {
+	context.Context
+	checked chan struct{}
+	once    sync.Once
+}
+
+func (c *checkingCancel) Err() error {
+	err := c.Context.Err()
+	if err != nil {
+		c.once.Do(func() { close(c.checked) })
+	}
+	return err
+}
+
+func TestClaudeWaitForCancelledTurn(t *testing.T) {
+	for _, shutdown := range []bool{false, true} {
+		t.Run(fmt.Sprintf("shutdown=%t", shutdown), func(t *testing.T) {
+			h := newBusyRetryHarness(t, "interactive")
+			b := h.s.subscription
+			t.Cleanup(b.abortAll)
+			first := h.ask("[" + rmsg("user", "previous") + "]")
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			prev := &checkingCancel{Context: ctx, checked: make(chan struct{})}
+			b.mu.Lock()
+			var key string
+			for key = range b.idle {
+				break
+			}
+			b.mu.Unlock()
+			if key == "" {
+				t.Fatal("no completed turn")
+			}
+			turn, err := b.watchCancel(prev, key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			release := sync.OnceFunc(func() { b.finishCancel(turn) })
+			defer release()
+			cancel()
+			next, stop := context.WithCancel(context.Background())
+			defer stop()
+			done := make(chan int, 1)
+			go func() {
+				if shutdown {
+					b.abortAll()
+					done <- 0
+					return
+				}
+				body := h.body("[" + rmsg("user", "previous") + "," + rmsg("assistant", first) + "," + rmsg("user", "never deliver BETA") + "]")
+				code, _ := h.s.serveClaudeSubscription(httptest.NewRecorder(), httptest.NewRequest("POST", "/v1/messages", strings.NewReader(body)).WithContext(next), provider.Anthropic, h.p, "claude-sonnet-5", []byte(body), new(Usage))
+				done <- code
+			}()
+			select {
+			case <-prev.checked:
+			case <-done:
+				t.Fatal("did not wait for the checkpoint")
+			case <-time.After(5 * time.Second):
+				t.Fatal("never checked the pending cancellation")
+			}
+			if shutdown {
+				select {
+				case <-done:
+					t.Fatal("shutdown returned before publication")
+				default:
+				}
+				release()
+			} else {
+				stop()
+			}
+			select {
+			case code := <-done:
+				if !shutdown && (code != 499 || strings.Contains(h.read(), "never deliver BETA")) {
+					t.Fatalf("cancelled replacement was served: %d %s", code, h.read())
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("waiter did not return")
+			}
+		})
+	}
+}
+
+func TestClaudeCancelledColdReplayIsNotShelved(t *testing.T) {
+	h := newBusyRetryHarness(t, "interactive")
+	b := h.s.subscription
+	t.Cleanup(b.abortAll)
+	h.giveUp("[" + rmsg("user", "earlier") + "," + rmsg("assistant", "previous answer") + "," + rmsg("user", "SLOW cancelled") + "]")
+	b.abortAll()
+	if !strings.Contains(h.read(), "--resume ") {
+		t.Fatal("cold request did not use a reconstructed transcript")
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if len(b.shelf) != 0 {
+		t.Fatal("reconstructed history was kept as a cancellation checkpoint")
 	}
 }

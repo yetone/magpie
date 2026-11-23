@@ -588,6 +588,14 @@ func TestClaudeCutReplyKeepsTheWholeReply(t *testing.T) {
 		`{"parentUuid":"u2","isSidechain":false,"userType":"external","cwd":"/w","sessionId":"S","version":"2.1.318","message":{"id":"msg_01C","type":"message","role":"assistant","model":"claude-opus-5-5","content":[{"type":"text","text":"run the tests"}],"stop_reason":"end_turn"},"requestId":"req_3","type":"assistant","uuid":"a4","timestamp":"2026-11-03T10:00:08.000Z"}`,
 	}
 	lines := strings.Join(rows, "\n") + "\n"
+	partial := strings.Join(rows[:5], "\n") + "\n"
+	if end := cutAfterReply([]byte(partial), "msg_01B", true); end >= 0 {
+		t.Fatalf("accepted an incomplete reply at %d", end)
+	}
+	complete := partial + rows[5] + "\n"
+	if end := cutAfterReply([]byte(lines), "msg_01B", true); end != len(complete) {
+		t.Fatalf("completed reply ends at %d, want %d", end, len(complete))
+	}
 	if err := os.WriteFile(filepath.Join(dir, "S.jsonl"), []byte(lines), 0o600); err != nil {
 		t.Fatal(err)
 	}

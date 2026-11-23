@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"maps"
@@ -83,6 +84,7 @@ var shelfRead sync.Map
 // left on disk when it ends.
 func (b *subscriptionBridge) keepShelf() {
 	b.mu.Lock()
+	b.waitCancelled(context.Background(), "")
 	for key, run := range b.idle {
 		if run.idleKey == key {
 			b.shelve(run)
@@ -248,6 +250,64 @@ func quotaShelfFor(owner, msg string, now time.Time) time.Duration {
 	return min(max(d+quotaShelfMargin, idleLongest), quotaShelfLongest)
 }
 
+// A replacement request can arrive while the cancelled request is still
+// cutting its transcript or rewinding its process. Only requests for the
+// same history wait; shutdown waits for all cancellations already observed.
+type cancelTurn struct {
+	ctx  context.Context
+	key  string
+	done chan struct{}
+}
+
+func (b *subscriptionBridge) watchCancel(ctx context.Context, key string) (*cancelTurn, error) {
+	if key == "" {
+		return nil, ctx.Err()
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if err := b.waitCancelled(ctx, key); err != nil {
+		return nil, err
+	}
+	c := &cancelTurn{ctx: ctx, key: key, done: make(chan struct{})}
+	if b.cancelTurns == nil {
+		b.cancelTurns = make(map[*cancelTurn]struct{})
+	}
+	b.cancelTurns[c] = struct{}{}
+	return c, nil
+}
+
+func (b *subscriptionBridge) finishCancel(c *cancelTurn) {
+	if c != nil {
+		b.mu.Lock()
+		delete(b.cancelTurns, c)
+		close(c.done)
+		b.mu.Unlock()
+	}
+}
+
+// waitCancelled is called with b.mu held and returns with it held.
+func (b *subscriptionBridge) waitCancelled(ctx context.Context, key string) error {
+	for ctx.Err() == nil {
+		var wait chan struct{}
+		for c := range b.cancelTurns {
+			if (key == "" || c.key == key) && c.ctx.Err() != nil {
+				wait = c.done
+				break
+			}
+		}
+		if wait == nil {
+			break
+		}
+		b.mu.Unlock()
+		select {
+		case <-wait:
+		case <-ctx.Done():
+		}
+		b.mu.Lock()
+	}
+	return ctx.Err()
+}
+
 // keepForReset shelves the session of run, whose turn of req was refused
 // for the limit of owner's account before any of its reply (relay, msg
 // the refusal's words), as the conversation stood before that turn: a
@@ -263,12 +323,19 @@ func quotaShelfFor(owner, msg string, now time.Time) time.Duration {
 // (rewound) and not gone on with since, or one with the client's own
 // cache marks, as no branch is cut of one.
 func (b *subscriptionBridge) keepForReset(run *subscriptionRun, req *Request, owner, msg string) {
-	if key, _ := nextTurn(req, owner); key == "" {
+	b.keepBeforeTurn(run, req, owner, msg, "")
+}
+
+// keepBeforeTurn saves a separate transcript ending before the request.
+// A cancellation needs the ordinary shelf lifetime and a verified cut.
+func (b *subscriptionBridge) keepBeforeTurn(run *subscriptionRun, req *Request, owner, msg, cancelledKey string) {
+	if key, _ := nextTurn(req, owner); key == "" || cancelledKey != "" && key != cancelledKey {
 		return
 	}
 	run.mu.Lock()
 	sid, sessions, tools := run.sessionID, slices.Clone(run.sessions), maps.Clone(run.tools)
 	skip := run.closed || run.rewound && !run.replied || run.clientMarks || run.rewinding != nil
+	skip = skip || cancelledKey != "" && cancelledKey != run.backKey
 	fromLen, backLine, backMsg := run.fromLen, run.backLine, run.backMsg
 	fromKey, backKey := run.fromKey, run.backKey
 	tui, appended, prefix := run.tui, run.appended, run.cachePrefix
@@ -289,6 +356,16 @@ func (b *subscriptionBridge) keepForReset(run *subscriptionRun, req *Request, ow
 			return int(fromLen)
 		})
 		took = fromKey
+	case cancelledKey != "":
+		// The TUI pastes the prompt, so its native user row doesn't carry
+		// the bridge UUID. Only the completed preceding reply proves H.
+		if backMsg == "" {
+			return
+		}
+		cut, err = cutSessionWhere(sessions, sid, "completed reply "+backMsg, func(b []byte, _ bool) int {
+			return cutAfterReply(b, backMsg, true)
+		})
+		took = backKey
 	case backLine != "" || backMsg != "":
 		cut, err = cutReply(sessions, sid, backLine, backMsg)
 		took = backKey
@@ -296,7 +373,7 @@ func (b *subscriptionBridge) keepForReset(run *subscriptionRun, req *Request, ow
 		return
 	}
 	if err != nil {
-		log.Printf("claude: the session of a turn refused for the account's limit couldn't be cut before the turn (%v); the turn asked again is told the whole conversation", err)
+		log.Printf("claude: the session couldn't be cut before the interrupted turn (%v); the turn asked again is told the whole conversation", err)
 		return
 	}
 	// the turn as the run took it: past Claude Code's local reply, a
@@ -309,8 +386,16 @@ func (b *subscriptionBridge) keepForReset(run *subscriptionRun, req *Request, ow
 	}
 	now := time.Now()
 	s := &savedSession{session: cut, sessions: sessions, owner: owner, conv: conv, key: key, tools: tools,
-		at: now, until: onWall(now.Add(quotaShelfFor(owner, msg, now))), tui: tui, appended: appended, cachePrefix: prefix}
+		at: now, tui: tui, appended: appended, cachePrefix: prefix}
+	if cancelledKey == "" {
+		s.until = onWall(now.Add(quotaShelfFor(owner, msg, now)))
+	}
 	b.mu.Lock()
+	if cancelledKey != "" && (run.handed || b.stopping) {
+		b.mu.Unlock()
+		s.discard()
+		return
+	}
 	if old := b.shelf[key]; old != nil {
 		go old.discard()
 	}
@@ -318,6 +403,10 @@ func (b *subscriptionBridge) keepForReset(run *subscriptionRun, req *Request, ow
 	b.shelfTimer(s)
 	b.trimShelf()
 	b.mu.Unlock()
+	if cancelledKey != "" {
+		log.Printf("claude: the cancelled turn left its session cut before the turn for a replacement request")
+		return
+	}
 	log.Printf("claude: a turn refused for the account's limit leaves its conversation's session, cut before the turn, for the turn asked again until %s", heldClock(s.until, now))
 }
 

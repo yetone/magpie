@@ -1,17 +1,13 @@
 package gateway
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/yetone/magpie/internal/provider"
 )
 
 // endedFixture is a run of the bridge's that parked on the client's
@@ -224,18 +220,10 @@ func TestClaudeTurnSentAgainAfterItsRunEndedBranchesOffItsSession(t *testing.T) 
 	}
 	conv := `[` + rmsg("user", "the conversation so far, told at length. fix the bug") + `,` + rmsg("assistant", first) + `,` + rmsg("user", "and run the tests") + `]`
 
-	// the turn is sent, its run holds mid-reply, and the client goes away
+	// The run holds mid-reply until it expires.
 	firstTold := h.heard()
-	body := h.body(conv)
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		var u Usage
-		h.s.serveClaudeSubscription(httptest.NewRecorder(), httptest.NewRequest("POST", "/v1/messages", strings.NewReader(body)).WithContext(ctx), provider.Anthropic, h.p, "claude-sonnet-5", []byte(body), &u)
-	}()
+	done := h.send(conv)
 	t.Cleanup(func() {
-		cancel()
 		h.s.subscription.abortAll()
 		<-done
 	})
@@ -246,22 +234,19 @@ func TestClaudeTurnSentAgainAfterItsRunEndedBranchesOffItsSession(t *testing.T) 
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	cancel()
-	<-done
-	// letGo ends the run once the request returned
-	for {
-		h.s.subscription.mu.Lock()
-		n := len(h.s.subscription.runs)
-		h.s.subscription.mu.Unlock()
-		if n == 0 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("the run given up on was never ended:\n%s", logs.String())
-		}
-		time.Sleep(10 * time.Millisecond)
+	// Expire the run independently of the client. Its retry has only
+	// the ended run to branch from, even when cancellation can shelve H.
+	h.s.subscription.mu.Lock()
+	var busy *subscriptionRun
+	for _, run := range h.s.subscription.runs {
+		busy = run
 	}
-
+	h.s.subscription.mu.Unlock()
+	if busy == nil {
+		t.Fatal("no busy run to expire")
+	}
+	busy.abortFor("it waited as long as it may")
+	<-done
 	// the client's magpie sends it again
 	if again := h.ask(conv); again == "" {
 		t.Fatal("the retry was answered nothing")

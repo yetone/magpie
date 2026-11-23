@@ -78,15 +78,16 @@ import (
 )
 
 type subscriptionBridge struct {
-	mu       sync.Mutex
-	runs     map[string]*subscriptionRun // callback token → run
-	calls    map[string]*subscriptionRun // tool_use id → run
-	idle     map[string]*subscriptionRun // conversation so far (turnKey) → run
-	shelf    map[string]*savedSession    // conversation so far (turnKey) → its saved session
-	resuming map[*savedSession]bool      // taken off the shelf, not yet owned by a run
-	baseURL  string
-	sweep    sync.Once
-	swept    sync.Map // Claude Code's project folders sweepSessions went through
+	mu          sync.Mutex
+	runs        map[string]*subscriptionRun // callback token → run
+	calls       map[string]*subscriptionRun // tool_use id → run
+	idle        map[string]*subscriptionRun // conversation so far (turnKey) → run
+	shelf       map[string]*savedSession    // conversation so far (turnKey) → its saved session
+	resuming    map[*savedSession]bool      // taken off the shelf, not yet owned by a run
+	cancelTurns map[*cancelTurn]struct{}    // requests whose cancellation can leave a saved session
+	baseURL     string
+	sweep       sync.Once
+	swept       sync.Map // Claude Code's project folders sweepSessions went through
 	// lost is why each run that had a conversation ended, by that
 	// conversation (convKey), and lostCalls by the tool calls it waited
 	// on or was last handed results for, for the log of a request that
@@ -1497,7 +1498,14 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 		// unless the run is shelved in turn; a branch's is the copy cut
 		// for it
 		from.taken()
+		key, since := nextTurn(req, owner)
+		// A tool branch may start partway through the turn. Its initial
+		// file length is a checkpoint only for the suffix it actually serves.
+		if req.replayed || len(since) != len(from.since) {
+			key = ""
+		}
 		run.mu.Lock()
+		run.backKey = key
 		run.sessionID, run.fromLen = from.session, fromLen
 		run.fromKey = from.key
 		run.mu.Unlock()
@@ -3368,7 +3376,7 @@ func cutReply(dirs []string, sid, uuid, msg string) (string, error) {
 	}
 	mark := []byte(`"uuid":"` + uuid + `"`)
 	return cutSessionWhere(dirs, sid, "reply "+msg, func(b []byte, last bool) int {
-		if end := cutAfterReply(b, msg); end > 0 {
+		if end := cutAfterReply(b, msg, false); end > 0 {
 			return end
 		}
 		if !last || uuid == "" {
@@ -3380,7 +3388,7 @@ func cutReply(dirs []string, sid, uuid, msg string) (string, error) {
 
 // cutAfterReply is where in a session's lines b the last whole assistant
 // line of message msg ends, -1 when none is there.
-func cutAfterReply(b []byte, msg string) int {
+func cutAfterReply(b []byte, msg string, completed bool) int {
 	mark := []byte(`"id":"` + msg + `"`)
 	end := -1
 	for at := 0; at < len(b); {
@@ -3397,10 +3405,11 @@ func cutAfterReply(b []byte, msg string) int {
 			Type        string `json:"type"`
 			IsSidechain bool   `json:"isSidechain"`
 			Message     struct {
-				ID string `json:"id"`
+				ID   string `json:"id"`
+				Stop string `json:"stop_reason"`
 			} `json:"message"`
 		}
-		if json.Unmarshal(line, &l) == nil && l.Type == "assistant" && !l.IsSidechain && l.Message.ID == msg {
+		if json.Unmarshal(line, &l) == nil && l.Type == "assistant" && !l.IsSidechain && l.Message.ID == msg && (!completed || l.Message.Stop == "end_turn") {
 			end = at
 		}
 	}
@@ -7637,6 +7646,19 @@ func (s *Server) serveSubscriptionAs(w http.ResponseWriter, r *http.Request, fro
 		req.Tools = append(slices.Clone(req.Tools), advisorToolDef())
 	}
 
+	// Register before claiming a run or sending this turn. A replacement
+	// can arrive as soon as the client disconnects, even during start.
+	var checkpoint *cancelTurn
+	if name == "Claude Code" && req.clientCache == nil {
+		key, _ := nextTurn(req, owner)
+		checkpoint, err = s.subscription.watchCancel(r.Context(), key)
+		if err != nil {
+			return 499, err.Error()
+		}
+	}
+	// Early returns release the registration. After the run starts the
+	// cancellation callback owns it until the cut and rewind are finished.
+	defer func() { s.subscription.finishCancel(checkpoint) }()
 	run, results, how := s.subscription.match(req)
 	// Another request has the run's calls answered, or is answering them,
 	// or the run ended. Claude Code's fork sub-agents each start from their
@@ -7800,16 +7822,27 @@ func (s *Server) serveSubscriptionAs(w http.ResponseWriter, r *http.Request, fro
 	// A turn resumed in a run kept for it is taken back instead, the run
 	// left waiting where it was before it (letGo, #780); the reply's end,
 	// which comes of that, leaves the run to it.
-	var letting atomic.Bool
-	gone := context.AfterFunc(r.Context(), func() {
-		letting.Store(true)
+	active := checkpoint
+	checkpoint = nil
+	stopCancel := context.AfterFunc(r.Context(), func() {
 		// said in the log, as the routing trace says it with a 499 (#751)
 		log.Printf("%s run on %s stopped: the client went away %s into the reply", name, model, time.Since(began).Round(time.Millisecond))
+		if active != nil {
+			s.subscription.keepBeforeTurn(run, req, owner, "", active.key)
+		}
 		run.letGo()
+		s.subscription.finishCancel(active)
 	})
+	gone := func() bool {
+		if !stopCancel() {
+			return false
+		}
+		s.subscription.finishCancel(active)
+		return true
+	}
 	defer gone()
 	abort := func(code int, msg string) {
-		if letting.Load() {
+		if r.Context().Err() != nil {
 			return
 		}
 		if code == http.StatusTooManyRequests && name == "Claude Code" {
