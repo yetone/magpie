@@ -3748,7 +3748,11 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// of those resting, only the one back soonest is asked (#1799); the
 	// whole list still finds a Codex account to spend a reset on
 	all := cands
-	cands = probeOne(cands)
+	var restLeft []candidate
+	cands, restLeft = probeLeft(cands)
+	// those it left out resting only for a moment's rate limit are asked
+	// next, once every one asked has failed for a moment (rateLeftOf)
+	rateLeft := rateLeftOf(restLeft)
 	var cacheReport *Request
 	if wantsClientCache(r, from) && slices.ContainsFunc(cands, func(c candidate) bool { return c.p.Account != nil && c.p.Account.Agent == "claude" }) {
 		var err error
@@ -4151,7 +4155,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		// asked again, of it or of the next candidate. Only a stream the
 		// agent has the headers of already is held, to be told in it
 		pass := c.p.PassesErrors()
-		hw := newHoldWriter(w, kept.sent || !pass && (!last || again < max(lastRetries, rateRetries) || other != nil || autoPicks(c) && repicked < 2 ||
+		hw := newHoldWriter(w, kept.sent || !pass && (!last || len(rateLeft) > 0 || again < max(lastRetries, rateRetries) || other != nil || autoPicks(c) && repicked < 2 ||
 			patience > 0 && rounds < replanRounds && (waitFrom.IsZero() || time.Since(waitFrom) < patience) || wantWhole))
 		// a compaction's summary is held to its end, for a cut or an
 		// error halfway to go to the next candidate (#2274)
@@ -4971,6 +4975,19 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			continue
 		}
 		watched.attempt(call, try, c.p.ID, sent, hw, capture)
+		if last && len(rateLeft) > 0 && hw.failed() && !hw.refused && !hw.turnedAway && hw.mayAskAgain() &&
+			busyFor(c, hw.code(), hw.errBody()) && !routedThere(hw.header) {
+			// the last one asked failed for a moment, rate limited or
+			// busy, and a member left out as resting for a moment's rate
+			// limit of its own may answer now (rateLeftOf): it is asked
+			// next, as one after this in the order would be, rather than
+			// this one again until the agent has its 429 (justforlxz on
+			// X). This one fails over as any before the last does, and
+			// rests again
+			cands = append(slices.Clip(cands), rateLeft[0])
+			rateLeft = rateLeft[1:]
+			last = false
+		}
 		if autoPicks(c) && repicked < 2 && !hw.passing && hw.code() == http.StatusBadRequest &&
 			(provider.CopilotRefusal(hw.errBody()) || wrongEndpoint(hw.code(), hw.errBody())) {
 			// Copilot refused the model its Auto picked, and Auto has

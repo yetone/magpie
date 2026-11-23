@@ -1396,8 +1396,15 @@ func busyOf(c candidate, over int, now time.Time) (float64, bool) {
 // rests a member (only the model, by restID), so it isn't left out over
 // those. The trace keeps every member, the resting ones with their rest.
 func probeOne(cs []candidate) []candidate {
+	out, _ := probeLeft(cs)
+	return out
+}
+
+// probeLeft is probeOne, with the resting candidates it left out too, in
+// their order.
+func probeLeft(cs []candidate) (asked, left []candidate) {
 	if len(cs) < 2 {
-		return cs
+		return cs, nil
 	}
 	soonest := -1
 	var until time.Time
@@ -1417,13 +1424,50 @@ func probeOne(cs []candidate) []candidate {
 		}
 	}
 	if rests < 2 {
-		return cs
+		return cs, nil
 	}
 	out := make([]candidate, 0, len(cs)-rests+1)
 	for i, c := range cs {
 		if i == soonest || !rest[i] {
 			out = append(out, c)
+		} else {
+			left = append(left, c)
 		}
+	}
+	return out, left
+}
+
+// rateLeftOf is, of the candidates probeLeft left out, those resting only
+// for a moment's rate limit, a 429 naming no time (a minute, longer each
+// time again), the one back soonest first. When every candidate a request
+// asks has failed in a way that passes, rate limited or busy for a
+// moment, these are asked next, one at a time, before the last one is
+// asked again or the agent is told (justforlxz on X: a group's member
+// answered 429 again and again, its other member resting from a 429 of
+// its own a while before was never asked, and the agent had the 429). A
+// rest for quota, credit, a sign-in, an outage, or till a time its vendor
+// named still keeps its member out (#1799): a moment's rate limit on one
+// provider says nothing of another's.
+func rateLeftOf(left []candidate) []candidate {
+	type held struct {
+		c     candidate
+		until time.Time
+	}
+	var hs []held
+	for _, c := range left {
+		r, ok := restOf(c.restKey())
+		if !ok && c.restID() != c.restKey() {
+			r, ok = restOf(c.restID())
+		}
+		if !ok || r.Why != failRate || r.there || vendorTimed(c, r) {
+			continue
+		}
+		hs = append(hs, held{c, r.Until})
+	}
+	slices.SortStableFunc(hs, func(a, b held) int { return a.until.Compare(b.until) })
+	out := make([]candidate, 0, len(hs))
+	for _, h := range hs {
+		out = append(out, h.c)
 	}
 	return out
 }
