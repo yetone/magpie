@@ -215,6 +215,7 @@ applies:
 - Use no native `<select>`. Dropdowns use the app's own menu (`openProtoMenu`).
 - A click never scrolls the page (`scrollOnPurpose`).
 - Don't use colored left-border stripes. Mark state with a dot or a swatch.
+- A glyph drawn beside words has its ink centred in its own box: the path is drawn so its stroked bounds' middle is the viewBox's middle, within 0.1 of 16 units. Then the row's `align-items: center` lines it up with the text, the same for every glyph. Don't nudge one spot with `translateY` or a margin; shift the path itself (every absolute y). `icon-text-align.test.cjs` measures every glyph beside words on five pages, in both engines and en, zh and ja, and names the offenders; a glyph drawn off its middle on purpose goes in its `ALLOW` with why. About 33 commits since 09-01 fixed one icon's alignment at a time before this rule (the owner, 11-23).
 
 ## Commits
 

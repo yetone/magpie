@@ -33,7 +33,7 @@
 
   const SEARCH = "M7 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8z M10 10l3 3";
   const DOWN = "M8 3v7.5 M4.8 7.6 8 10.8l3.2-3.2 M3.5 13h9";
-  const STAR = "M8 2.2l1.8 3.7 4 .6-2.9 2.8.7 4L8 11.4l-3.6 1.9.7-4L2.2 6.5l4-.6z";
+  const STAR = "M8 2.5l1.8 3.7 4 .6-2.9 2.8.7 4L8 11.7l-3.6 1.9.7-4L2.2 6.8l4-.6z";
   const SHIELD = "M8 2.3 13 4v3.8c0 3-2.1 5.1-5 5.9-2.9-.8-5-2.9-5-5.9V4z M5.8 8l1.6 1.6 2.9-3";
   const OUTL = "M9.5 3.5h3v3 M12.5 3.5 7.5 8.5 M11 9.5v3H3.5V5h3";
   const PLUG = "M6 2v3 M10 2v3 M4.5 5h7v2.5a3.5 3.5 0 0 1-7 0z M8 11v3";
@@ -816,7 +816,7 @@
     b.type = "button";
     b.setAttribute("aria-haspopup", "menu");
     b.setAttribute("aria-expanded", "false");
-    b.append(el("span", "", name), el("b", "", now), glyph("M4.5 6.5 8 10l3.5-3.5", 10, 1.8));
+    b.append(el("span", "", name), el("b", "", now), glyph("M4.5 6.2 8 9.7l3.5-3.5", 10, 1.8));
     b.onclick = (ev) => { ev.stopPropagation(); open(b); };
     return b;
   }

@@ -288,7 +288,7 @@ function svg(d, size = 12, stroke = 1.6) {
   s.innerHTML = `<path d="${d}" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round"/>`;
   return s;
 }
-const CHEV = "m5.5 6.5 2.5 2.5 2.5-2.5";
+const CHEV = "m5.5 6.8 2.5 2.5 2.5-2.5";
 // three dots, a row's actions (drawn with a thick round stroke)
 const DOTS = "M3.5 8h.01M8 8h.01M12.5 8h.01";
 const CHEV_R = "m6.5 4.5 3 3.5-3 3.5";

@@ -43,9 +43,9 @@ magpie.plugin("library", (ctx) => {
     skill: "M4 2.5h6.5L12 4v9.5H4z M6 6h4 M6 8.5h4 M6 11h2.5",
     // the sidebar's Skills star (navicons.js NAV_SUB_IC.library.skills,
     // loaded later than this may draw): the Skill router row
-    skills: "M8 2.5l1.4 3.6 3.6 1.4-3.6 1.4L8 12.5 6.6 8.9 3 7.5l3.6-1.4z",
+    skills: "M8 3l1.4 3.6 3.6 1.4-3.6 1.4L8 13 6.6 9.4 3 8l3.6-1.4z",
     doc: "M4 2.5h5.5L12 5v8.5H4z M9.5 2.5V5H12",
-    folder: "M2.5 4.5h4l1.2 1.3h5.8v6.7h-11z",
+    folder: "M2.5 4h4l1.2 1.3h5.8v6.7h-11z",
     up: "M8 12.5v-9 M4.5 7 8 3.5 11.5 7",
     down: "M8 3.5v9 M4.5 9 8 12.5 11.5 9",
     trash: "M3.5 4.5h9 M6.5 4.5V3h3v1.5 M4.5 4.5l.6 8.5h5.8l.6-8.5",
@@ -56,7 +56,7 @@ magpie.plugin("library", (ctx) => {
     back: "m9.5 4.5-3 3.5 3 3.5",
     // an arrow turning back: a skill going back where it came from
     putBack: "M6 3.5 3 6.5l3 3 M3 6.5h6.5a3.5 3.5 0 0 1 0 7H7",
-    hook: "M10.5 2.5v6.5a3 3 0 0 1-6 0V7.5 M3 9l1.5-1.5L6 9",
+    hook: "M10.5 3.25v6.5a3 3 0 0 1-6 0V8.25 M3 9.75l1.5-1.5L6 9.75",
     // a person with a second, smaller one it hands work to
     subagent: "M6 3a2.2 2.2 0 1 0 0 4.4A2.2 2.2 0 0 0 6 3z M2 13c.5-2.2 2-3.4 4-3.4s3.5 1.2 4 3.4 M11.5 7.5a1.5 1.5 0 1 0 0 .01 M10.2 12.5c.3-1.3 1.1-2 2.3-2s1.6.5 1.9 1.4",
     // a slash in a key, as a command is typed
@@ -64,7 +64,7 @@ magpie.plugin("library", (ctx) => {
     // a page with a ruled line and a check: a rule the agent keeps to
     rule: "M4 2.5h8v11H4z M6 5.5h4 M6 8h4 M6 10.8l1 1 2-2",
     // a clock with an arrow going back round it, as macOS draws backups
-    backup: "M3.2 8a4.8 4.8 0 1 0 1.4-3.4 M2.8 2.6v2.4h2.4 M8 5.3V8l1.9 1.2",
+    backup: "M3.2 8.3a4.8 4.8 0 1 0 1.4-3.4 M2.8 2.9v2.4h2.4 M8 5.6V8.3l1.9 1.2",
     power: "M8 2.5v5 M4.7 4.6a4.8 4.8 0 1 0 6.6 0",
   };
 

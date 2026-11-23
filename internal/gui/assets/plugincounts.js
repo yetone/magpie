@@ -3,8 +3,8 @@
 // a plugin's page. Loaded when the Plugins page loads, not with the core.
 // A like comes only from a computer that has the plugin installed.
 (() => {
-  const HEART = "M8 13.4S2.6 10.2 2.6 6.3A2.8 2.8 0 0 1 8 5a2.8 2.8 0 0 1 5.4 1.3c0 3.9-5.4 7.1-5.4 7.1z";
-  const USER = "M8 7.8a2.4 2.4 0 1 0 0-4.8 2.4 2.4 0 0 0 0 4.8z M3.2 13.4c.6-2.3 2.5-3.6 4.8-3.6s4.2 1.3 4.8 3.6";
+  const HEART = "M8 13.1S2.6 9.9 2.6 6A2.8 2.8 0 0 1 8 4.7a2.8 2.8 0 0 1 5.4 1.3c0 3.9-5.4 7.1-5.4 7.1z";
+  const USER = "M8 7.6a2.4 2.4 0 1 0 0-4.8 2.4 2.4 0 0 0 0 4.8z M3.2 13.2c.6-2.3 2.5-3.6 4.8-3.6s4.2 1.3 4.8 3.6";
   let got = {}, liked = new Set();
   const n = (k) => got[k] || {};
   const num = (v) => v >= 1e3 ? (v / 1e3).toFixed(v >= 1e4 ? 0 : 1) + "k" : String(v);
