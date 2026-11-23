@@ -42,7 +42,7 @@ func (p Provider) Available() []catalog.Model {
 		// a gateway's Jev among its chat models, with its window and input
 		ms = slices.Clone(ms)
 		for i, m := range ms {
-			if p.isDecision(m) {
+			if p.isDecision(m) && !p.ChatsToo(m.ID) {
 				ms[i] = withDecideFacts([]catalog.Model{m})[0]
 			}
 		}
@@ -3891,7 +3891,7 @@ func entriesOf(of func(Provider) bool, off func(pid, model string) bool) []Entry
 			if off(p.ID, m.ID) { // the user turned it off (#1867)
 				continue
 			}
-			if !p.isDecision(m) && !gone[p.ID+"/"+m.ID] {
+			if (!p.isDecision(m) || p.ChatsToo(m.ID)) && !gone[p.ID+"/"+m.ID] {
 				out = append(out, sharedEntry(&p, m, s))
 			}
 		}
@@ -4125,7 +4125,7 @@ func resolveIn(entries []Entry, id string) (Provider, string, bool) {
 	// value no entry has (an agent's bare "gpt-5.5"), every provider's whole
 	// list was 835 MB of a live magpie's 33 GB in 53 minutes
 	for _, p := range heldOf("listed", func() map[string][]*Provider { return keptOf("listed", listedBy) })[id] {
-		if !p.DecidesModel(id) {
+		if !p.OnlyDecides(id) {
 			found = append(found, *p)
 		}
 	}

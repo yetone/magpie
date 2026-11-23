@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"slices"
@@ -98,4 +99,60 @@ func TestArkDecisionSkipsPlanKeys(t *testing.T) {
 			t.Fatalf("%s asked with: %q", m, keys)
 		}
 	}
+}
+
+// arkChat stands in for Ark's pay as you go chat completions, in process,
+// and records the model each request named.
+type arkChat struct {
+	mu    sync.Mutex
+	asked []string
+}
+
+func (u *arkChat) RoundTrip(r *http.Request) (*http.Response, error) {
+	b, _ := io.ReadAll(r.Body)
+	var q struct {
+		Model string `json:"model"`
+	}
+	json.Unmarshal(b, &q)
+	u.mu.Lock()
+	u.asked = append(u.asked, r.URL.Host+r.URL.Path+" "+q.Model)
+	u.mu.Unlock()
+	if r.URL.Host != "ark.cn-beijing.volces.com" || r.URL.Path != "/api/v3/chat/completions" {
+		return &http.Response{StatusCode: 404, Header: http.Header{}, Body: io.NopCloser(strings.NewReader("")), Request: r}, nil
+	}
+	return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Request: r,
+		Body: io.NopCloser(strings.NewReader(`{"id":"c1","object":"chat.completion","model":"` + q.Model + `","choices":[{"index":0,"message":{"role":"assistant","content":"你好"},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":1,"total_tokens":6}}`))}, nil
+}
+
+// solider1394 on X: Immersive Translate and FluentRead asked magpie for
+// doubao-seed-2-1-lite-260915 on an Ark pay as you go provider and were
+// told no such model, as Ark's decision model was kept to System One.
+// Ark answers it on chat completions too: a translator's bare id, and
+// provider/model, reach Ark's chat completions with Ark's id.
+func TestArkDecisionModelServesChat(t *testing.T) {
+	fresh(t)
+	const v3 = "https://ark.cn-beijing.volces.com/api/v3"
+	if err := provider.Save(provider.Provider{ID: "volcengine", Name: "Volcengine Ark", Preset: "volcengine", Chat: v3,
+		Key: "ark-1", Models: []string{provider.ArkDecision}}); err != nil {
+		t.Fatal(err)
+	}
+	up := &arkChat{}
+	s := New()
+	s.client = &http.Client{Transport: up}
+	for _, m := range []string{provider.ArkDecision, "volcengine/" + provider.ArkDecision} {
+		code, out := sendTo(s, "/v1/chat/completions", `{"model":"`+m+`","messages":[{"role":"system","content":"You are a professional translator."},{"role":"user","content":"Translate to Chinese: hello"}],"temperature":0}`)
+		if code != 200 || !strings.Contains(out, "你好") {
+			t.Fatalf("%s: %d %s", m, code, out)
+		}
+	}
+	want := "ark.cn-beijing.volces.com/api/v3/chat/completions " + provider.ArkDecision
+	if got := up.got(); len(got) != 2 || got[0] != want || got[1] != want {
+		t.Fatalf("Ark asked: %q", got)
+	}
+}
+
+func (u *arkChat) got() []string {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return slices.Clone(u.asked)
 }

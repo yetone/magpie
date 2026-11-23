@@ -195,7 +195,16 @@ chat completions or Responses, its preset's or a custom one) needs none:
 Coding and Agent Plans answer System One nothing (404) and get none; a
 key of another plan is never asked it (`decideKeys`). A URL the user gave
 is kept. `TestArkPayAsYouGoDecides`, `TestArkDecisionSkipsPlanKeys`,
-`custom-systemone-url.test.cjs`.
+`custom-systemone-url.test.cjs`. Ark serves `ArkDecision` on chat
+completions and Responses too, so on such a provider it is a chat model as
+well (`ChatsToo`): agents are offered it, its bare id resolves, a
+conversation on it is sent, and a chat group may hold it; `OnlyDecides`
+(`DecidesModel` less `ChatsToo`) is what refuses a conversation and keeps a
+model out of the catalog. Before, it was kept to System One, and a
+translator asking it by its id was told no such model (solider1394 on X).
+The decision-only preset, Bailian's and Google's decision models, and one
+the user set to be asked on System One stay apart.
+`TestArkDecisionModelChatsToo`, `TestArkDecisionModelServesChat`.
 A provider asked at the Gemini Developer API with an AI Studio key
 (`generativelanguage.googleapis.com`, the `google` preset's OpenAI-compatible
 base or a native Gemini base; not Vertex, a signed-in account or another

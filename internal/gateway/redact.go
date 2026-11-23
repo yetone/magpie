@@ -531,7 +531,7 @@ func MaskRoute(id string) bool {
 		return false
 	}
 	p, model, ok := provider.Resolve(id)
-	if !ok || p.DecidesModel(model) {
+	if !ok || p.OnlyDecides(model) {
 		return false
 	}
 	_, ms, isGroup := provider.FindGroup(id)

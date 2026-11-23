@@ -202,3 +202,48 @@ func TestArkPayAsYouGoDecides(t *testing.T) {
 		t.Fatalf("classifiers offered: %q, want %q", got, w)
 	}
 }
+
+// solider1394 on X: doubao-seed-2-1-lite-260915, added to an Ark pay as
+// you go provider and asked by Immersive Translate and FluentRead, was
+// "not found", while another gateway served it on the same id. Ark
+// answers it on chat completions as well as System One, so the provider
+// whose System One magpie set (arkSystemOne) serves it to agents too, by
+// its bare id and as provider/model, and offers it as a classifier still.
+// Bailian's decision model, which answers nothing else, stays apart.
+func TestArkDecisionModelChatsToo(t *testing.T) {
+	arkHome(t)
+	const v3 = "https://ark.cn-beijing.volces.com/api/v3"
+	if err := Save(Provider{ID: "ark", Name: "Volcengine Ark", Preset: "volcengine", Chat: v3, Responses: v3, Key: "ark-1",
+		Models: []string{ArkDecision, "glm-4-7-251222"}}); err != nil {
+		t.Fatal(err)
+	}
+	p, err := Find("ark")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p.DecidesModel(ArkDecision) || !p.ChatsToo(ArkDecision) || p.OnlyDecides(ArkDecision) || p.ChatsToo("glm-4-7-251222") {
+		t.Fatalf("Ark's decision model: decides %v, chats %v", p.DecidesModel(ArkDecision), p.ChatsToo(ArkDecision))
+	}
+	for _, id := range []string{ArkDecision, "ark/" + ArkDecision} {
+		if got, m, ok := Resolve(id); !ok || got.ID != "ark" || m != ArkDecision {
+			t.Errorf("%s resolved to %q %q %v", id, got.ID, m, ok)
+		}
+	}
+	if !slices.ContainsFunc(providerEntries(), func(e Entry) bool { return e.ID == "ark/"+ArkDecision }) {
+		t.Error("agents aren't offered ark/" + ArkDecision)
+	}
+	if !slices.ContainsFunc(OfferedDeciders(nil), func(e Entry) bool { return e.ID == "ark/"+ArkDecision }) {
+		t.Error("no longer offered as a classifier")
+	}
+	// a chat group can hold it beside other chat models
+	if err := cleanDecisionGroup(&Group{Name: "g", Members: []string{"ark/" + ArkDecision, "ark/glm-4-7-251222"}}, nil); err != nil {
+		t.Errorf("chat group: %v", err)
+	}
+	// System One alone: the decision-only preset, Bailian's, and one the
+	// user set to be asked there
+	only := Provider{ID: "d", Decide: "https://ark.cn-beijing.volces.com/api/v1"}
+	bailian := Provider{ID: "b", Chat: "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1", Decide: "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"}
+	if only.ChatsToo(ArkDecision) || !only.OnlyDecides(ArkDecision) || !bailian.OnlyDecides(BailianDecision) {
+		t.Error("a decision model that answers nothing else taken as a chat model")
+	}
+}

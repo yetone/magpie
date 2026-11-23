@@ -2309,7 +2309,7 @@ func (s *Server) countTokens(w http.ResponseWriter, r *http.Request) {
 	// conversation: refused as the request itself would be, not sent to
 	// the vendor's count_tokens (coeo91 on Discord: OpenRouter refuses a
 	// decisions model anywhere but its decisions endpoint)
-	if ok && p.DecidesModel(model) {
+	if ok && p.OnlyDecides(model) {
 		writeError(w, provider.Anthropic, 400, decisionModelRefused(named))
 		return
 	}
@@ -3045,7 +3045,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		turnedAway()
 		return
 	}
-	if p.DecidesModel(model) {
+	if p.OnlyDecides(model) {
 		// Jev answers questions about a message, not the message
 		call.Status, call.Error = 400, "a decision model"
 		writeError(w, from, 400, decisionModelRefused(call.Model))

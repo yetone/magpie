@@ -33,6 +33,20 @@ func decidingMember(id string) bool {
 	return err == nil && p.DecidesModel(model)
 }
 
+// chattingMember reports whether a group's member names a decision model
+// that holds conversations too (Provider.ChatsToo).
+func chattingMember(id string) bool {
+	if IsGroupRef(id) {
+		return false
+	}
+	pid, model, ok := strings.Cut(id, "/")
+	if !ok || model == "" {
+		return false
+	}
+	p, err := Find(pid)
+	return err == nil && p.ChatsToo(model)
+}
+
 // Decides reports whether g is a decision group: every model it names is
 // a decision model.
 func (g Group) Decides() bool {
@@ -52,14 +66,22 @@ func DecisionGroup(ms []Member) bool {
 func cleanDecisionGroup(g *Group, all []Group) error {
 	var deciders, others []string
 	for _, m := range g.Members {
-		if model, _ := memberEffortIn(nil, m); decidingMember(model) {
+		model, _ := memberEffortIn(nil, m)
+		switch {
+		case chattingMember(model):
+			// Ark's decision model holds conversations too: a chat
+			// group may have it beside its other models, and a decision
+			// group beside other decision models
+		case decidingMember(model):
 			deciders = append(deciders, m)
-		} else {
+		default:
 			others = append(others, m)
 		}
 	}
-	if len(deciders) == 0 {
-		// a chat group: none of its groups may be a decision group
+	if len(deciders) == 0 && (len(others) > 0 || len(g.Members) == 0) {
+		// a chat group: none of its groups may be a decision group (one
+		// of Ark's decision model alone is a decision group, as Decides
+		// says)
 		for _, m := range g.Members {
 			if gid, ok := strings.CutPrefix(m, GroupPrefix); ok {
 				if sub, ok := groupOf(all, gid); ok && sub.Decides() {
