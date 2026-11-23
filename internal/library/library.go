@@ -237,6 +237,7 @@ func load() (*Library, error) {
 	l.heal()           // magpie's own servers run this computer's magpie (self_here.go)
 	l.carryTwin()      // Claude Magpie keeps what it was given as Claude Desktop (desktop_twin.go)
 	l.healPluginRefs() // a plugin's parts that still name its variables (plugin_env.go)
+	l.strayPiBack()    // a project's Pi sources v0.1.4702 read as "package" and "extension" (project_shapes.go)
 	return l, nil
 }
 

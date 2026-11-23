@@ -2,6 +2,7 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "Another build kept this Pi extension for the project. magpie writes nothing for it; a line for it in .pi/settings.json stays as it is.": "另一个版本为这个项目保留了这个 Pi 扩展。magpie 不会为它写入任何内容；.pi/settings.json 里它的那一行保持原样。",
     "project scope": "项目范围",
     "user scope": "用户范围",
     "Off in {agent}": "在 {agent} 中已关闭",
@@ -1201,6 +1202,7 @@ magpie.strings({
     "Hook removed": "钩子已删除",
   },
   "zh-TW": {
+    "Another build kept this Pi extension for the project. magpie writes nothing for it; a line for it in .pi/settings.json stays as it is.": "另一個版本為這個專案保留了這個 Pi 擴充。magpie 不會為它寫入任何內容；.pi/settings.json 裡它的那一行保持原樣。",
     "project scope": "專案範圍",
     "user scope": "使用者範圍",
     "Off in {agent}": "在 {agent} 中已關閉",
@@ -2400,6 +2402,7 @@ magpie.strings({
     "Hook removed": "鉤子已刪除",
   },
   ja: {
+    "Another build kept this Pi extension for the project. magpie writes nothing for it; a line for it in .pi/settings.json stays as it is.": "別のビルドがこのプロジェクト用にこの Pi 拡張を残していました。magpie はこれについて何も書き込まず、.pi/settings.json の該当行はそのまま残ります。",
     "project scope": "プロジェクトの範囲",
     "user scope": "ユーザーの範囲",
     "Off in {agent}": "{agent} ではオフ",
@@ -3599,6 +3602,7 @@ magpie.strings({
     "Hook removed": "フックを削除しました",
   },
   de: {
+    "Another build kept this Pi extension for the project. magpie writes nothing for it; a line for it in .pi/settings.json stays as it is.": "Ein anderer Build hat diese Pi-Erweiterung für das Projekt behalten. magpie schreibt nichts dafür; eine Zeile dafür in .pi/settings.json bleibt, wie sie ist.",
     "project scope": "Projektbereich",
     "user scope": "Benutzerbereich",
     "Off in {agent}": "In {agent} aus",

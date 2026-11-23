@@ -7844,6 +7844,18 @@ magpie.plugin("library", (ctx) => {
       row.append(glyph(GLYPH.folder), w, sw, rm);
       box.append(row);
     }
+    // what another build kept in the project's pi that magpie has no
+    // place for (#7282): shown, never written
+    for (const x of p.piNotCarried || []) {
+      const row = el("div", "row lib-row lib-projskill lib-projownrow lib-projpileft");
+      row.dataset.source = x.source;
+      const w = el("div", "who");
+      const n = el("div", "name mono", x.source);
+      n.append(tag(t("Not carried"), "", t("Another build kept this Pi extension for the project. magpie writes nothing for it; a line for it in .pi/settings.json stays as it is.")));
+      w.append(n);
+      row.append(glyph(GLYPH.folder), w);
+      box.append(row);
+    }
     for (const o of p.own?.pi || []) {
       const row = el("div", "row lib-row lib-projskill lib-projownrow lib-projpiown");
       row.dataset.source = o.name;

@@ -92,9 +92,16 @@ type Project struct {
 	// (project_pi.go)
 	Pi     map[string]string `json:"pi,omitempty"`
 	PiRecs []PiRec           `json:"piRecs,omitempty"`
-	// reshaped: claudePlugins or pi was read in another build's shape
+	// PiNotCarried are what another build kept in the project's pi that
+	// magpie has no place for, kept as read (project_shapes.go)
+	PiNotCarried []PiNotCarried `json:"piNotCarried,omitempty"`
+	// reshaped: claudePlugins or pi was read in another build's shape;
+	// piFromOld the Pi sources read so, which another build declared in
+	// the project's file; piStrays: pi held v0.1.4702's literals
 	// (project_shapes.go)
-	reshaped bool
+	reshaped  bool
+	piFromOld map[string]bool
+	piStrays  bool
 }
 
 // projectSkillsDirs is where, in a project, each agent reads skills of its
@@ -677,6 +684,9 @@ type ProjectView struct {
 	ClaudeTwice  map[string]string `json:"claudeTwice,omitempty"`
 	// Pi are the Pi packages the project has by magpie (#7249)
 	Pi []ProjectPiView `json:"pi"`
+	// PiNotCarried are entries another build kept in the project's pi
+	// that magpie has no place for (#7282)
+	PiNotCarried []PiNotCarried `json:"piNotCarried,omitempty"`
 	// Hooks are the library's hooks the project has on their own, for
 	// the agents given
 	Hooks map[string][]string `json:"hooks"`
@@ -730,6 +740,7 @@ func projectViews(l *Library, problems []Problem) []ProjectView {
 		v.ClaudePlugins = append([]string{}, p.ClaudePlugins...)
 		v.ClaudeNative, v.ClaudeTwice = l.projectClaudeOverlap(p, userNatives)
 		v.Pi = append([]ProjectPiView{}, p.piViews()...)
+		v.PiNotCarried = p.PiNotCarried
 		v.Hooks = map[string][]string{}
 		for k, a := range p.Hooks {
 			v.Hooks[k] = append([]string{}, a...)

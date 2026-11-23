@@ -113,9 +113,17 @@ func listProjectPi(dir string, asJSON bool) error {
 	if asJSON {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		return enc.Encode(map[string]any{"dir": dir, "items": items})
+		out := map[string]any{"dir": dir, "items": items}
+		if len(p.PiNotCarried) > 0 {
+			out["notCarried"] = p.PiNotCarried
+		}
+		return enc.Encode(out)
 	}
-	if len(items) == 0 {
+	// what another build kept that magpie has no place for (#7282)
+	for _, x := range p.PiNotCarried {
+		fmt.Println(amber.Render("!"), x.Source, muted.Render(x.Kind+" · not carried: another build kept it, magpie doesn't write it"))
+	}
+	if len(items) == 0 && len(p.PiNotCarried) == 0 {
 		fmt.Println(muted.Render("nothing for Pi in " + dir))
 		return nil
 	}

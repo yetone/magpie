@@ -163,9 +163,21 @@ func (l *Library) syncProjectPi(p *Project, fail func(what string, err error)) {
 		if slices.ContainsFunc(recs, func(r PiRec) bool { return r.Source == s }) {
 			continue
 		}
-		if piIndex(list, s) >= 0 {
+		if i := piIndex(list, s); i >= 0 {
 			if viaPlugin[s] {
 				continue // the project declares it already: it loads as it is
+			}
+			// another build of magpie declared it (project_shapes.go):
+			// adopted, so it can be switched, and letting go puts it back
+			if pk, _ := piPackageOf(list[i]); p.piFromOld[s] && !pk.Filtered {
+				rec := PiRec{Source: s, Entry: list[i], Orig: list[i]}
+				if pk.On != (want[s] == "on") {
+					rec.Entry = piEntryFor(s, want[s], rec.Orig)
+					list[i] = rec.Entry
+					changed = true
+				}
+				recs = append(recs, rec)
+				continue
 			}
 			fail("pi:"+s, fmt.Errorf("%s has %s already: it's the project's own, left as it is until it is adopted", piSettingsRel, s))
 			continue
