@@ -79,8 +79,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.route("**/*", server(lang, live));
         await page.goto("http://magpie.test/?view=plugins");
         const view = page.locator("#view-plugins");
-        await view.locator(".pm-recs .pm-hero").waitFor();
-        await view.locator(".pm-recs .pm-rank").first().waitFor();
+        await view.locator(".pm-recs .pm-hero[data-pkg]").waitFor();
+        await view.locator(".pm-recs .pm-rrow").first().waitFor();
         const ranks = () => view.locator(".pm-recs .pm-rank").evaluateAll((bs) => bs.map((b) => ({
           head: b.querySelector(".pm-rhead b").textContent.trim(),
           rows: [...b.querySelectorAll(".pm-rrow")].map((r) => r.dataset.pkg),

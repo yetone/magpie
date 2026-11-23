@@ -198,6 +198,7 @@
   let npmTries = 0;
   let npmAnswered = false; // npm was asked once: no downloads then means none to rank by
   let countsGone = false; // plugincounts.js didn't load: no magpie counts to wait for
+  let weekPicks;
   async function askNPM(only) {
     const names = [...new Set([...(listings || []).map((l) => l.package), ...(mine?.plugins || []).filter((e) => onNPM(e.spec)).map((e) => name(e.spec))])]
       .filter((n) => !only || !npm[n]);
@@ -238,6 +239,15 @@
       providers ? null : loadProviders().then(drawBody, () => {}),
     ];
     import("./plugincounts.js").then(() => window.pmCounts.load(drawBody), () => { countsGone = true; drawBody(); });
+    if (!weekPicks) {
+      import("./pluginweek.js").then(({ picks }) => {
+        weekPicks = picks;
+        drawBody();
+      }, () => {
+        weekPicks = () => null;
+        drawBody();
+      });
+    }
     import("./pluginpartners.js").then(drawBody, () => {});
     await Promise.all(parts);
     askNPM();
@@ -687,8 +697,6 @@
   // only order what neither knows
   const byHot = (a, b) => usersOf(b) - usersOf(a) || hotOf(b) - hotOf(a) || (b.github?.stars || 0) - (a.github?.stars || 0) || nameOrder(a, b);
   const ranked = (list, how = sortPick) => [...list].sort(how === "name" ? nameOrder : how === "liked" && window.pmCounts ? (a, b) => pmCounts.order(a, b, byHot) : byHot);
-  // the day in the reader's own calendar, which the daily pick turns on
-  const today = () => { const d = new Date(); return Math.floor((d.getTime() - d.getTimezoneOffset() * 6e4) / 864e5); };
 
   // every plugin the market can show: the list's, and the repositories
   // tagged on GitHub it doesn't list already
@@ -727,22 +735,6 @@
     box.onkeydown = (ev) => { if (ev.target === box && (ev.key === "Enter" || ev.key === " ")) { ev.preventDefault(); detail(l); } };
   };
 
-  // the week's picks: undefined till npm and usemagpie.ai have answered,
-  // null when neither knows of any use
-  function picks(all) {
-    if (!npmAnswered || !(countsGone || window.pmCounts?.answered)) return undefined;
-    const used = all.filter((l) => usersOf(l) > 0).sort((a, b) => usersOf(b) - usersOf(a) || likesOf(b) - likesOf(a) || byHot(a, b));
-    const liked = all.filter((l) => likesOf(l) > 0).sort((a, b) => likesOf(b) - likesOf(a) || usersOf(b) - usersOf(a) || byHot(a, b));
-    // with no counts from magpie (offline, or none yet), npm's downloads
-    const downloaded = used.length ? [] : ranked(all.filter((l) => !l.github && hotOf(l) > 0), "hot");
-    // the day's: one of the community's most used not installed yet, a
-    // different one each day
-    const by = (used.length ? used : downloaded).filter((l) => !l.github);
-    if (!by.length) return null;
-    let pool = by.filter((l) => l.community && !entryOf(l.package)).slice(0, 14);
-    if (!pool.length) pool = by.slice(0, 14);
-    return { day: pool[today() % pool.length], used: used.slice(0, 5), liked: liked.slice(0, 5), downloaded: downloaded.slice(0, 5) };
-  }
   function hero(l) {
     const box = el("article", "pm-hero");
     opens(box, l);
@@ -785,7 +777,8 @@
     return box;
   }
   function recSection(all) {
-    const p = picks(all);
+    const p = npmAnswered && (countsGone || window.pmCounts?.answered)
+      ? weekPicks?.(all, { usersOf, likesOf, hotOf, byHot, entryOf }) : undefined;
     if (p === null) return null;
     const sec = el("section", "pm-sec pm-recs");
     const h = el("div", "pm-rectitle");
