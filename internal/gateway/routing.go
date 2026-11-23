@@ -493,8 +493,9 @@ const (
 	failEffort = "effort"
 	// failProxy: the proxy magpie sends through (its own setting, the
 	// *_PROXY variables, the system's) didn't take the connection (#381),
-	// or the network closed each new connection before the request went
-	// out (errClosedUnsent) —
+	// the network closed each new connection before the request went
+	// out (errClosedUnsent), or a box between mangled the TLS stream
+	// under it (recordWords) —
 	// nothing reached the vendor, so the next one is asked, and nobody rests
 	failProxy = "proxy"
 	// failOffline: this computer had no network (offline.go) — nothing
@@ -540,6 +541,13 @@ const reloopedError = "the model's reasoning was stuck in a loop before it said 
 // over HTTP (proxyconnect) or SOCKS (socks connect).
 var proxyDown = lazyre.New(`proxyconnect |socks connect `)
 
+// recordWords are Go's TLS words for a stream a box between mangled: a
+// record that fails its MAC, or a header that is no record's. The connection
+// is dead, and the vendor never read a request it could answer. netproxy's
+// recordError reads the same words from an error to speak HTTP/1.1 to the
+// host after one.
+var recordWords = lazyre.New(`bad record MAC|received record with version|oversized record received`)
+
 // wordsOf is catalog.Words: an error body as its words are matched, with
 // the strings of a JSON body that escapes what isn't ASCII decoded (#1669).
 func wordsOf(body []byte) []byte { return catalog.Words(body) }
@@ -572,14 +580,15 @@ func carriedStatus(status int, body []byte) int {
 // failure says why a reply failed.
 func failure(status int, body []byte) string {
 	status = carriedStatus(status, body)
-	if status == http.StatusBadGateway && (proxyDown.Match(body) || bodyHas(body, closedUnsentWords) || bodyHas(body, stalledWords) || bodyHas(body, egress.HeldWords)) {
-		// the proxy didn't take the connection, or the network closed
-		// each new one before the request was sent (errClosedUnsent):
-		// nothing reached the vendor, and the account is as good as it
-		// was. Read as the account's failure, it rested ChatGPT accounts
-		// whose window was full till the window renewed, days off,
-		// shown as "502 · 失败" (dealyang_ on X). A Claude request magpie
-		// held for its way out's region (egress.Hold) never left either
+	if status == http.StatusBadGateway && (proxyDown.Match(body) || recordWords.Match(body) || bodyHas(body, closedUnsentWords) || bodyHas(body, stalledWords) || bodyHas(body, egress.HeldWords)) {
+		// the proxy didn't take the connection, the network closed each new
+		// one before the request was sent (errClosedUnsent), or a box
+		// between mangled the TLS stream under it (recordWords): nothing
+		// the vendor could read reached it, and the account is as good as
+		// it was. Read as the account's failure, it rested ChatGPT accounts
+		// whose window was full till the window renewed, days off, shown as
+		// "502 · 失败" (dealyang_ on X). A Claude request magpie held for
+		// its way out's region (egress.Hold) never left either
 		return failProxy
 	}
 	if _, ok := provider.Verification(body); ok && (status == 401 || status == 403) {
