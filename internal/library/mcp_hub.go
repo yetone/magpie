@@ -343,7 +343,7 @@ func (theHub) Call(ctx context.Context, agentID, server, tool string, args json.
 	ss := hubServers(agentID)
 	i := slices.IndexFunc(ss, func(s *Server) bool { return s.Name == server })
 	if i >= 0 && !gateway.HubVisitorOf(ctx).Gives(hubServerOf(ss[i])) {
-		return nil, errors.New("it acts as this computer's user, so magpie runs it for this computer's agents only")
+		return nil, errors.New("it isn't given to this caller. " + gateway.HubHeldReason(hubServerOf(ss[i])))
 	}
 	if i < 0 && agentID == "" {
 		return nil, errors.New("it isn't in magpie's Library")

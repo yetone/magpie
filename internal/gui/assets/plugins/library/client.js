@@ -3492,7 +3492,7 @@ magpie.plugin("library", (ctx) => {
       const out = [el("p", "lib-hublead lib-hubapps", t("Any app that speaks MCP connects at this address"))];
       const addr = el("div", "lib-hubaddr");
       addr.append(el("code", "", url), copyBtn(url, t("Address")));
-      out.push(addr, el("p", "lib-hubcap", t("From another computer, use the address magpie is reached at there, with a gateway key: Authorization: Bearer <key>.")));
+      out.push(addr, el("p", "lib-hubcap", t("From another computer, use the address magpie is reached at there, with a gateway key: Authorization: Bearer <key>. A key with a model, account or spend limit isn't given the servers that run as programs here.")));
       // the address that gives its tools on demand (gateway.HubOnDemandQuery;
       // Passings_z on X): which app connects isn't known, so the plain
       // address gives every tool, and an app that doesn't search its tools

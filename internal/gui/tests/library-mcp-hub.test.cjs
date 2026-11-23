@@ -331,7 +331,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal((await app("windsurf").locator(".sub").textContent()).trim(), w("Paste it into ~/.codeium/windsurf/mcp_config.json"));
         assert.deepEqual(await copied("windsurf", "Windsurf"), { mcpServers: { magpie: { serverUrl: url } } });
         assert.deepEqual(await copied("json", w("Other")), { mcpServers: { magpie: { type: "http", url } } });
-        assert.deepEqual((await sheet.locator(".lib-hubcap").allTextContents()).map((x) => x.trim()), [w("From another computer, use the address magpie is reached at there, with a gateway key: Authorization: Bearer <key>."),
+        assert.deepEqual((await sheet.locator(".lib-hubcap").allTextContents()).map((x) => x.trim()), [w("From another computer, use the address magpie is reached at there, with a gateway key: Authorization: Bearer <key>. A key with a model, account or spend limit isn't given the servers that run as programs here."),
           ...(web ? [] : [w("For an app that doesn't search its tools itself: past {n} tools, it is given one that finds a tool and one that runs it.", { n: 10 })])]);
         assert.deepEqual(await sideways(page), [], "sideways scroll, apps");
         await shot(page, `${engine}-${lang}-${width}-apps`);

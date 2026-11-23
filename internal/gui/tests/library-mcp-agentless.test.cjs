@@ -157,7 +157,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await sheet.locator(".lib-hubagent").count(), 0);
         assert.equal((await sheet.locator(".lib-hubaddr code").textContent()).trim(), url);
         assert.ok(await sheet.locator(".lib-hubapp").count() >= 3);
-        assert.equal((await sheet.locator(".lib-hubcap").textContent()).trim(), w("From another computer, use the address magpie is reached at there, with a gateway key: Authorization: Bearer <key>."));
+        assert.equal((await sheet.locator(".lib-hubcap").textContent()).trim(), w("From another computer, use the address magpie is reached at there, with a gateway key: Authorization: Bearer <key>. A key with a model, account or spend limit isn't given the servers that run as programs here."));
         assert.deepEqual(await sideways(page), [], `${where}: sideways scroll, sheet`);
         await sheet.locator(".bar button.primary").click();
         await sheet.waitFor({ state: "hidden" });
