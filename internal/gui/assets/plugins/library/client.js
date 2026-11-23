@@ -6105,6 +6105,9 @@ magpie.plugin("library", (ctx) => {
     return row;
   }
 
+  // a git source's tag pin, as library/plugin_tags.go reads it
+  const PINNED_TAG = /\/(?:tree|blob|-\/tree|-\/blob|src\/tag|src\/branch)\/v?\d+(?:\.\d+){0,3}(?:[/?#]|$)/;
+
   function pluginDetail(p) {
     const ed = el("div", "editor lib-editor lib-pldetail");
     const head = el("div", "ehead");
@@ -6135,6 +6138,21 @@ magpie.plugin("library", (ctx) => {
     }));
     bar.append(button(t("Cancel"), "", closeLibModal));
     ed.append(bar);
+    // pinned to a release tag (#7549): Update fetches that tag again, so
+    // the repository's newer stable tags are asked for and offered
+    if (PINNED_TAG.test(p.source || "")) {
+      const pin = el("div", "lib-plpin");
+      ed.insertBefore(pin, bar);
+      api("library/plugin-tags?name=" + encodeURIComponent(p.name)).then((r) => {
+        if (!r?.pin) return;
+        pin.append(el("div", "hint", (r.newer || []).length ? t("Pinned to {tag}. Newer releases:", { tag: r.pin }) : t("Pinned to {tag}, the newest release.", { tag: r.pin })));
+        const row = el("div", "lib-plpintags");
+        for (const tag of (r.newer || []).slice(0, 4)) row.append(button(t("Update to {tag}", { tag }), "lib-btn", async () => {
+          if (await change("plugins/upgrade", { name: p.name, tag }, t("{name} is at {tag} now", { name: p.name, tag }))) closeLibModal(true);
+        }));
+        if (row.childNodes.length) pin.append(row);
+      }).catch(() => {}); // the tags unknown: nothing offered, Update still is
+    }
     modal = { dirty: () => false };
     openLib(ed);
   }

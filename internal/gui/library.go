@@ -388,6 +388,16 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 	mux.HandleFunc("GET /api/library/native", func(rw http.ResponseWriter, r *http.Request) {
 		writeJSON(rw, library.ReadNative())
 	})
+	// A plugin's release pin and its repository's newer stable tags
+	// (#7549), asked for when its detail opens: git ls-remote, not polled.
+	mux.HandleFunc("GET /api/library/plugin-tags", func(rw http.ResponseWriter, r *http.Request) {
+		v, err := library.PluginTags(r.URL.Query().Get("name"))
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, v)
+	})
 	mux.HandleFunc("POST /api/library/pi", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct {
 			Pi, Ext, Pkg string
@@ -786,6 +796,7 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			Keep     bool              // a project removed keeps what magpie put in it
 			On       bool              // every skill or server given to the agents, or taken from them
 			How      string            // link or copy: how skills are given to Agent, or to every agent with none (#896)
+			Tag      string            // the release tag a pinned plugin is upgraded to (plugins/upgrade, #7549)
 			// Replace updates a skill changed here all the same, its
 			// changed version kept with the backups (#1449)
 			Replace bool
@@ -893,6 +904,8 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			res, err = library.PluginOn(in.Name, in.On)
 		case "plugins/update":
 			res, err = library.UpdatePlugin(in.Name)
+		case "plugins/upgrade":
+			res, err = library.UpgradePlugin(in.Name, in.Tag)
 		case "plugins/remove":
 			res, err = library.RemovePlugin(in.Name)
 		case "subagents/save":

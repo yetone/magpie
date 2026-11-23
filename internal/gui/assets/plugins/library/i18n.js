@@ -2,6 +2,10 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "Pinned to {tag}. Newer releases:": "固定在 {tag}。更新的版本：",
+    "Pinned to {tag}, the newest release.": "固定在 {tag}，已是最新版本。",
+    "Update to {tag}": "更新到 {tag}",
+    "{name} is at {tag} now": "{name} 现在是 {tag}",
     "Only this checkout": "仅限此检出",
     "{name} is kept to this checkout": "{name} 仅限此检出",
     "{name}'s worktrees follow it again": "{name} 的工作树重新跟随它",
@@ -1208,6 +1212,10 @@ magpie.strings({
     "Hook removed": "钩子已删除",
   },
   "zh-TW": {
+    "Pinned to {tag}. Newer releases:": "固定在 {tag}。較新的版本：",
+    "Pinned to {tag}, the newest release.": "固定在 {tag}，已是最新版本。",
+    "Update to {tag}": "更新到 {tag}",
+    "{name} is at {tag} now": "{name} 現在是 {tag}",
     "Only this checkout": "僅限此檢出",
     "{name} is kept to this checkout": "{name} 僅限此檢出",
     "{name}'s worktrees follow it again": "{name} 的工作樹重新跟隨它",
@@ -2414,6 +2422,10 @@ magpie.strings({
     "Hook removed": "鉤子已刪除",
   },
   ja: {
+    "Pinned to {tag}. Newer releases:": "{tag} に固定されています。新しいリリース：",
+    "Pinned to {tag}, the newest release.": "{tag} に固定されています。最新のリリースです。",
+    "Update to {tag}": "{tag} に更新",
+    "{name} is at {tag} now": "{name} は {tag} になりました",
     "Only this checkout": "このチェックアウトのみ",
     "{name} is kept to this checkout": "{name} はこのチェックアウトのみになりました",
     "{name}'s worktrees follow it again": "{name} のワークツリーが再び追従します",
@@ -3620,6 +3632,10 @@ magpie.strings({
     "Hook removed": "フックを削除しました",
   },
   de: {
+    "Pinned to {tag}. Newer releases:": "Auf {tag} festgelegt. Neuere Releases:",
+    "Pinned to {tag}, the newest release.": "Auf {tag} festgelegt, das neueste Release.",
+    "Update to {tag}": "Auf {tag} aktualisieren",
+    "{name} is at {tag} now": "{name} ist jetzt auf {tag}",
     "Only this checkout": "Nur dieser Checkout",
     "{name} is kept to this checkout": "{name} bleibt auf diesen Checkout beschränkt",
     "{name}'s worktrees follow it again": "Die Worktrees von {name} folgen ihm wieder",

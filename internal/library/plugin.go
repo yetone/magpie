@@ -1549,6 +1549,13 @@ func UpdatePlugin(name string) (*Result, error) {
 	if b.Source == "" {
 		return nil, fmt.Errorf("%s has no source to fetch again", name)
 	}
+	return updatePluginFrom(b, b.Source)
+}
+
+// updatePluginFrom installs b again from source: its own, or the same
+// with a newer release tag (UpgradePlugin), which it is kept by then.
+func updatePluginFrom(b *Plugin, source string) (*Result, error) {
+	name := b.Name
 	var names []string
 	if b.Pick != "" {
 		names = []string{b.Pick}
@@ -1557,7 +1564,7 @@ func UpdatePlugin(name string) (*Result, error) {
 	// kept: one looked up before a new commit was pushed is that commit's,
 	// and the update said it was done while the plugin stayed as it was
 	// until magpie restarted (jinpwng on X, a Pi package from git)
-	p, cleanup, err := fetchPluginProbe(b.Source)
+	p, cleanup, err := fetchPluginProbe(source)
 	if err != nil {
 		return nil, err
 	}
@@ -1568,9 +1575,9 @@ func UpdatePlugin(name string) (*Result, error) {
 	// download's temp folder, or a manifest that renamed the plugin.
 	if b.Pick == "" && len(p.Candidates) == 1 {
 		p.Candidates[0].Name = name
-		return installPlugins(p, b.Source, nil, nil, name)
+		return installPlugins(p, source, nil, nil, name)
 	}
-	return installPlugins(p, b.Source, names, nil, "")
+	return installPlugins(p, source, names, nil, "")
 }
 
 // ---- the page --------------------------------------------------------------

@@ -1023,3 +1023,5 @@ input.lib-memq:focus, input.lib-memtags:focus, input.lib-memwhy:focus { border-c
 .lib-rulefile > .lib-path { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 /* the box keeping a removed skill's folder in the backups, under what the sheet says */
 .lib-editor label.tick.lib-keepbox { grid-column: 1 / -1; font-size: 12.5px; }
+.lib-plpin { display: grid; gap: 6px; }
+.lib-plpintags { display: flex; gap: 6px; flex-wrap: wrap; }

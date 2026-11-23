@@ -400,6 +400,7 @@ var notYet = map[string]string{
 	"GET /api/library/market/skills":             L,  // library.go
 	"GET /api/library/market/pi":                 L,  // library.go
 	"GET /api/library/market/claude":             L,  // library.go
+	"GET /api/library/plugin-tags":               L,  // library.go: the newer release tags a pinned plugin is offered; plugins have no update command yet
 	"GET /api/library/mcp-signin/{id}":           L,  // library.go
 	"GET /api/library/pi":                        L,  // library.go
 	"GET /api/library/rtk":                       L,  // library.go
