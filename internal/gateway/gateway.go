@@ -937,6 +937,10 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	// loops' next look (#3185)
 	go filememo.Watch(freshCtx, pluginrt.Path(), settings.Path(), provider.Path(), plugin.ListPath(), plugin.ToolsPath(), access.Path())
 	go pluginrt.KeepFresh(freshCtx, filememo.OthersEvery, settings.Path(), provider.Path(), plugin.ListPath(), plugin.ToolsPath(), access.Path())
+	// and the OpenCode plugins another magpie turned on or off, added,
+	// removed or updated (magpie plugin … in a terminal) are this one's at
+	// once, as the window's change is, not on the next request
+	go plugin.KeepNoticing(freshCtx, filememo.OthersEvery)
 	// and the MCP hub's servers that the Library no longer gives are ended
 	// It reads MCPHub, which a test swaps, so the gateway's end waits for
 	// it: once ListenAndServe has returned, nothing it started still looks.

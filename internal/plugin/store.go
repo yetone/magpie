@@ -34,6 +34,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/yetone/magpie/internal/beat"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/filelock"
 	"github.com/yetone/magpie/internal/filememo"
@@ -319,21 +320,50 @@ var hostStale atomic.Bool
 // checkList notices plugins.json changed by another magpie, or a plugin
 // added by its path edited (pathstamp.go): the host is started again with
 // the plugins as they are, and the providers the other magpie last saw
-// asked for are the ones known meanwhile.
-func checkList() {
+// asked for are the ones known meanwhile. It says whether they changed.
+func checkList() bool {
 	st := seenStamp()
 	listSeen.Lock()
 	moved := listSeen.set && listSeen.stamp != st
 	listSeen.stamp, listSeen.set = st, true
 	listSeen.Unlock()
 	if !moved {
-		return
+		return false
 	}
 	provMu.Lock()
 	provCache = nil
 	provMu.Unlock()
 	hostStale.Store(true)
 	changed()
+	return true
+}
+
+// KeepNoticing has a change another magpie makes to the plugins (magpie
+// plugin on, off, add, remove, update, options or use in a terminal) seen
+// here once it is written, as the window's own change is: the host
+// started again, the providers listed anew, and the model lists agents
+// keep in their own files following (OnChange). Until something asked the
+// host, nothing here looked: the first request after a terminal turned a
+// plugin off and on again was answered with the models the plugin listed
+// before, and the agents' files kept them (Zerlight0653 on X). The
+// process serving the gateway runs it until ctx ends; every is how often
+// it looks for a change the watch of plugins.json missed (bun's files
+// under Dir(), a path plugin's own).
+func KeepNoticing(ctx context.Context, every func() time.Duration) {
+	for {
+		// taken before the look, so a write made during it isn't missed
+		written := filememo.Written()
+		if checkList() {
+			// listed again now, as the Plugins page asks its host at once
+			Cached()
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-beat.Next(every()):
+		case <-written:
+		}
+	}
 }
 
 // IsPath is whether spec names a file or folder rather than a package,
