@@ -14,8 +14,10 @@ package provider
 //   - Claude Code having written a rate_limit refusal into one of its
 //     sessions since the last read (scanClaudeLimits), which is what it
 //     shows as "You've hit your … limit". Which account it was refused on
-//     the transcript doesn't say, so it is only the cue for the read; the
-//     read decides.
+//     the transcript doesn't say, so one written since the switch found
+//     Claude Code on the account is taken as that account's: it is kept
+//     out till the reset the refusal names (keepClaudeRefusal), and the
+//     read cues; a read that comes out well since ends it.
 
 import (
 	"bufio"
@@ -180,6 +182,16 @@ func noteClaudeRefusal(line []byte) {
 		Error     string `json:"error"`
 		APIError  bool   `json:"isApiErrorMessage"`
 		Timestamp string `json:"timestamp"`
+		Message   struct {
+			Content []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"message"`
+		Quota  claudeRefusalQuota `json:"quotaLimits"`
+		Params struct {
+			Info claudeRefusalQuota `json:"rate_limit_info"`
+		} `json:"apiErrorParams"`
 	}
 	if json.Unmarshal(line, &m) != nil || m.Error != "rate_limit" || !m.APIError {
 		return
@@ -188,12 +200,117 @@ func noteClaudeRefusal(line []byte) {
 	if err != nil {
 		at = time.Now()
 	}
+	var said string
+	for _, c := range m.Message.Content {
+		if c.Type == "text" && c.Text != "" {
+			said = c.Text
+			break
+		}
+	}
+	q := m.Quota
+	if q.ResetsAt == 0 && q.Type == "" {
+		q = m.Params.Info
+	}
+	claudeRefused.Lock()
+	if at.After(claudeRefused.at) {
+		claudeRefused.at, claudeRefused.said, claudeRefused.until, claudeRefused.kept = at, said, claudeRefusalUntil(q, said, at), false
+	}
+	claudeRefused.Unlock()
 	for {
 		was := claudeLimitHit.Load()
 		if at.UnixNano() <= was || claudeLimitHit.CompareAndSwap(was, at.UnixNano()) {
 			return
 		}
 	}
+}
+
+// claudeRefusalQuota is what Claude Code keeps of the limit a refusal
+// was for: its quotaLimits, or apiErrorParams' rate_limit_info, as
+// Anthropic's unified headers had it ("seven_day", resetsAt in unix
+// seconds).
+type claudeRefusalQuota struct {
+	Status   string `json:"status"`
+	ResetsAt int64  `json:"resetsAt"`
+	Type     string `json:"rateLimitType"`
+}
+
+// claudeRefused is the latest refusal the scan read: when, until when it
+// says the account is out (claudeRefusalUntil), its words, and whether it
+// was kept for the account Claude Code was on (keepClaudeRefusal).
+var claudeRefused struct {
+	sync.Mutex
+	at, until time.Time
+	said      string
+	kept      bool
+}
+
+// claudeRefusalUntil is until when the refusal at at says the account is
+// out: the reset Anthropic named (resetsAt), else the one its words name
+// ("· resets Nov 12 at 2pm (Asia/Shanghai)"), else as long as the window
+// it named can be out from at, five hours for the 5-hour one and a day
+// for any other, where a week guessed would write the account off for
+// longer than it may be out; else claudeSaidUnknownFor. A reading of the
+// account that comes out well since (clearClaudeSaid) ends it sooner.
+func claudeRefusalUntil(q claudeRefusalQuota, said string, at time.Time) time.Time {
+	if q.ResetsAt > 0 {
+		if t := time.Unix(q.ResetsAt, 0); t.After(at) {
+			return t
+		}
+	}
+	if t, ok := claudeSaidResetAt(said, at); ok {
+		return t
+	}
+	switch {
+	case q.Type == "five_hour":
+		return at.Add(5 * time.Hour)
+	case q.Type != "":
+		return at.Add(24 * time.Hour)
+	}
+	return at.Add(claudeSaidUnknownFor)
+}
+
+// claudeSwitchSettles is how long after the switch found Claude Code on an
+// account a refusal may still be the account it was on before: a Claude
+// Code already running reads its keychain again only every half minute,
+// and a request it sent before is answered after.
+const claudeSwitchSettles = time.Minute
+
+// keepClaudeRefusal keeps the account Claude Code is on, user, out till
+// the reset the latest refusal named (claude-limits.json), when Claude
+// Code was refused since it has been on it (since) and settled there
+// (claudeSwitchSettles): the transcript doesn't name the account, and one
+// written before is another's, as is one that names the very reset kept
+// for another account already. The switch then
+// passes over the account till its reset, however its /usage reads fail,
+// rather than taking it again as the account to go back to, or as a spare
+// once Claude Code is moved off. Not while the gateway serves Claude
+// Code's requests from its accounts: a refusal is then the gateway's, of
+// whichever accounts it tried.
+func keepClaudeRefusal(user string, since, now time.Time) {
+	if ClaudeThroughMagpie() && !SwitchOnly("claude") {
+		return
+	}
+	r := &claudeRefused
+	r.Lock()
+	due := !r.kept && r.at.After(since.Add(claudeSwitchSettles)) && r.until.After(now)
+	until, said := r.until, r.said
+	r.kept = r.kept || due
+	r.Unlock()
+	if !due {
+		return
+	}
+	claudeSaidMu.Lock()
+	kept := readClaudeSaid()
+	claudeSaidMu.Unlock()
+	for k, v := range kept {
+		if k != strings.ToLower(user) && v.Until.Equal(until) {
+			return // the account moved off's, refused once more
+		}
+	}
+	if said == "" {
+		said = "Claude Code was refused for its limit"
+	}
+	keepClaudeOut(user, until, said, now)
 }
 
 // claudeLookDue says Claude's sign-in is to be looked at before the next
@@ -219,8 +336,9 @@ func claudeLookDue() bool {
 	if active == "" || !spare {
 		return false
 	}
-	claudeOnSince(active, time.Now())
+	since := claudeOnSince(active, time.Now())
 	scanClaudeLimits()
+	keepClaudeRefusal(active, since, time.Now())
 	claudeUsage.Lock()
 	e := claudeUsage.m[strings.ToLower(active)]
 	claudeUsage.Unlock()

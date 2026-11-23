@@ -35,6 +35,7 @@ func claudeOutSoon(t *testing.T, first string) (spare string, set func(string), 
 		loginUsageCache.m = nil
 		loginUsageCache.Unlock()
 		claudeLimitHit.Store(0)
+		forgetClaudeRefused()
 		claudeTranscripts.Lock()
 		claudeTranscripts.started, claudeTranscripts.off = false, nil
 		claudeTranscripts.Unlock()
@@ -213,6 +214,7 @@ func TestScanClaudeLimits(t *testing.T) {
 	claudeHome(t)
 	reset := func() {
 		claudeLimitHit.Store(0)
+		forgetClaudeRefused()
 		claudeTranscripts.Lock()
 		claudeTranscripts.started, claudeTranscripts.off = false, nil
 		claudeTranscripts.Unlock()
