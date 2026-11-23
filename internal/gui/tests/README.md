@@ -2849,8 +2849,11 @@ text colour, and that it shows in both themes, all five languages, at 980px
 and 420px, in Chromium and WebKit (chen2652). `ARTIFACT_DIR` keeps the row's
 screenshots.
 
-`plugin-badge-align.test.cjs` checks that the magpie community badge's
-shield, on a card and on Today's pick, and the card's downloads arrow are
-centred on their words: the icon's ink against the words' ink, read from a
-4x screenshot, within 1px. All five languages, 1180px and 420px, Chromium
-and WebKit. `BADGE_LOG` prints each offset.
+The community badge's shield and the card's counts (star, person, heart,
+downloads) are held level by `icon-text-align.test.cjs`, with every other
+glyph beside words. `plugin-badge-align.test.cjs` is gone (11-23): it
+measured the icon against the words' whole ink, descenders and "/week"
+included, so it asked for a .1em nudge down that sat the person 1.5 device
+px below its count in the real app. Against the digits, headless Chromium
+and WebKit read the same row 0.4 to 1.3px apart by language (each picks
+its own font for the digits), so a screenshot bound of 1px held either way.

@@ -7,8 +7,15 @@
 // off its neighbours: Discover's person beside a count sat 1.5 device
 // pixels below the star beside the next one.
 //
-// Returns [{ where, words, d, units, path }]: d in CSS px, the ink's middle
-// less the box's middle (positive: low); units, the same in a 16-unit box.
+// A glyph moved off the line by hand (a translate, a relative top) is
+// reported too, as shift in CSS px: such a nudge is fitted to one font and
+// one reference, and .pm-dl's .1em, fitted to words with descenders, sat
+// the person 1.5 device px below its count in the real app (11-23).
+//
+// Returns [{ where, words, d, units, shift, path }]: d in CSS px, the ink's
+// middle less the box's middle (positive: low); units, the same in a
+// 16-unit box; shift, how far the glyph or a box holding only it is moved
+// down from where the layout put it.
 function inkPairs(root) {
   const out = [];
   const name = (e) => {
@@ -67,7 +74,14 @@ function inkPairs(root) {
     const ys = [];
     for (const x of [bb.x - sw / 2, bb.x + bb.width + sw / 2]) for (const y of [bb.y - sw / 2, bb.y + bb.height + sw / 2]) ys.push(ctm.b * x + ctm.d * y + ctm.f);
     const icon = (Math.min(...ys) + Math.max(...ys)) / 2, d = icon - (r.top + r.height / 2);
-    out.push({ where: name(s), words: tn.data.trim().slice(0, 24), d, units: d / r.height * 16, path: (s.querySelector("path")?.getAttribute("d") || s.firstElementChild?.tagName || "").slice(0, 40) });
+    let shift = 0;
+    for (let n = s; n && !n.contains(sib); n = n.parentElement) {
+      const cs = getComputedStyle(n);
+      if (cs.transform && cs.transform !== "none") shift += new DOMMatrixReadOnly(cs.transform).m42;
+      if (cs.translate && cs.translate !== "none") shift += parseFloat(cs.translate.split(" ")[1] || "0") || 0;
+      if (cs.position === "relative") shift += (parseFloat(cs.top) || 0) - (cs.top === "auto" ? parseFloat(cs.bottom) || 0 : 0);
+    }
+    out.push({ where: name(s), words: tn.data.trim().slice(0, 24), d, units: d / r.height * 16, shift, path: (s.querySelector("path")?.getAttribute("d") || s.firstElementChild?.tagName || "").slice(0, 40) });
   }
   return out;
 }

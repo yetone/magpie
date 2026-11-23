@@ -7,8 +7,9 @@
 // star's high. The fixes before were nudges, one spot at a time, each
 // fitted to one glyph. Now every small glyph beside a line of words, on
 // every page this visits, has its ink centred in its own box (ink-align.cjs)
-// within ALLOWED of a 16-unit box, and the offenders are listed by where
-// they are. Geometry, so the same in each engine and at any scale; both
+// within ALLOWED of a 16-unit box, none is moved off the line by hand
+// (a translate or a relative top: .pm-dl's .1em sat the person 1.5 device
+// px low in the real app), and the offenders are listed by where they are. Geometry, so the same in each engine and at any scale; both
 // engines and every language still run, as each draws its own rows.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -124,11 +125,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             if (seen.has(key)) continue;
             seen.add(key);
             if (process.env.INK_LOG) console.log(engine, lang, p.units.toFixed(2), view, p.where, JSON.stringify(p.words), "|", p.path);
+            if (Math.abs(p.shift) > 0.01) bad.push(`${view}: ${p.where} beside ${JSON.stringify(p.words)} is moved ${p.shift.toFixed(2)}px off the line by hand: centre its ink in its box instead`);
             if (Math.abs(p.units) > ALLOWED) bad.push(`${view}: ${p.where} beside ${JSON.stringify(p.words)} is ${Math.abs(p.units).toFixed(2)}/16 ${p.units > 0 ? "low" : "high"} in its box (${p.path})`);
           }
         }
         assert.ok(count >= 20, `only ${count} icons beside words were found`);
-        assert.deepEqual(bad, [], `${bad.length} glyphs off their box's middle by more than ${ALLOWED}/16`);
+        assert.deepEqual(bad, [], `${bad.length} glyphs off their box's middle by more than ${ALLOWED}/16, or moved by hand`);
         assert.deepEqual(errors, []);
       });
     }
