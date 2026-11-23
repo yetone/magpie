@@ -16601,6 +16601,8 @@ function renderQuotas(lazy) {
         }
         box.append(r);
       }
+      // a Claude account at its limit: where its free resets are used
+      if (!brief && !history) box.append(claudeResets(sub, "quota-resets", "text"));
       // the account's standing say on its resets, held or not (#719)
       const policy = !brief && !history && autoResetRow(sub, "quota-autoreset");
       if (policy) box.append(policy);
@@ -18143,6 +18145,7 @@ function panelQuotaCard(q, first = false) {
     }
     card.append(r);
   }
+  card.append(claudeResets(q, "pq-resets", "pq-use"));
   const policy = autoResetRow(q, "pq-autoreset");
   const credits = creditsRow(q, "pq-credits");
   if (policy || credits) {
@@ -18239,6 +18242,22 @@ function resetsEach(r) {
 function codexResetCard(q) {
   if (!q.resets || q.resets.byWindow) return false;
   return q.provider === "codex" || !!(q.from && q.user && /^[^/]+\/codex$/.test(q.provider || ""));
+}
+
+// Claude's limit resets (support.claude.com/en/articles/17007452) are
+// free, given now and then to some plans, and used only in claude.ai's
+// Settings › Usage, on the web, the desktop or the mobile apps, never from
+// Claude Code. (Claude Code's hidden /limit-reset is a trial behind
+// Anthropic's own flags, and magpie never asks Anthropic itself with a
+// Claude sign-in.) A Claude card at a used-up limit opens that page; any
+// other card has "" (ahz2ygnhjmIJ0E0 on X: "cc有reset的功能，magpie能接入吗").
+function claudeResets(q, c, b) {
+  if (q.error || !/^([^/]+\/)?claude$/.test(q.provider) || !q.windows?.some((w) => !w.text && !w.lane && w.used >= 100)) return "";
+  const r = el("div", c + " claude-resets"), go = el("button", b, t("Open ↗"));
+  r.append(el("span", "", t("Limit resets are used on claude.ai")), go);
+  go.title = t("Claude gives some plans a free limit reset now and then. Use it in Settings › Usage on claude.ai, signed in as this account.");
+  go.onclick = (e) => { e.stopPropagation(); api("open", { url: "https://claude.ai/settings/usage" }).catch(() => {}); };
+  return r;
 }
 
 // resetUseTitle: a use spends the one that runs out first
