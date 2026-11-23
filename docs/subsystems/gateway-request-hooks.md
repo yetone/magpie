@@ -185,9 +185,11 @@ eleven seconds); each callback uses the configured bounded hook timeout. Request
   max-images=8 max-images.<model>=10`) and the one a 400 taught that
   provider's model: Copilot's words on a Copilot account, and
   100milionseek's and Coarena's own words, which name their vendor, on any
-  provider. Every image counts, those in a tool_result too; the oldest go
-  first, the latest user message's are kept, and a request with no cap or
-  within it goes as the same bytes. Session files are never touched.
+  provider. Every image counts, those in a tool_result too. An image the
+  request carries again byte for byte is left out where it came earlier
+  first (`imageShownLater`, the latest copy kept); then the oldest go,
+  with every earlier copy of one; the latest user message's are kept, and
+  a request with no cap or within it goes as the same bytes. Session files are never touched.
 - `internal/gateway/gateway_hooks.go`: bounded response observation and
   `gatewayReply`, a stream made one reply.
 - `internal/gateway/signin_hooks.go`: sign-in events, and

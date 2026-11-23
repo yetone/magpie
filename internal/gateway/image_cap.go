@@ -3,6 +3,7 @@ package gateway
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"log"
 	"net/http"
 	"strconv"
@@ -25,7 +26,8 @@ import (
 // is learned from the refusal, which names it, by account and model.
 //
 // The refused request is sent again with its oldest images each replaced
-// by a short text, as many as bring it to the cap, and the account's
+// by a short text, as many as bring it to the cap (an image it carries
+// again further on goes first, where it came earlier), and the account's
 // later requests to that model are fitted the same way before they are
 // sent (forwardOnce). The latest user message is kept whole; when its own
 // images are over the cap, nothing is left out and the refusal goes on.
@@ -151,35 +153,97 @@ func (s *Server) withinImageCap(p provider.Provider, to provider.Protocol, path 
 	}
 	out, left, ok := withoutImagesOver(to, body, n)
 	if ok && left > 0 {
-		log.Printf("%s: the request has more images than the %d %s takes; the %d oldest left out", p.Name, n, modelOf(body), left)
+		log.Printf("%s: the request has more images than the %d %s takes; %d earlier ones left out", p.Name, n, modelOf(body), left)
 		return out
 	}
 	return body
 }
 
-// withoutImagesOver is body with its oldest history images replaced by
-// imageOverCap, as many as bring it to most images; the rest of it byte
-// for byte as it came. ok is false, and body as it came, when leaving
-// every earlier one out doesn't bring it there.
+// imageShownLater stands where an image was left out that the request
+// carries again further on, byte for byte. It goes to the vendor, so it
+// names neither magpie nor the vendor.
+const imageShownLater = "[This image is omitted here; the same image appears again later in this conversation.]"
+
+// withoutImagesOver is body brought to most images, the rest of it byte
+// for byte as it came: first an image the conversation carries again
+// later, byte for byte (a screenshot read twice, an image attached again),
+// is left out where it came earlier for imageShownLater, and then, while
+// still over, the oldest history images are left out for imageOverCap,
+// with every earlier copy of one. The latest user message is kept whole.
+// ok is false, and body as it came, when leaving every earlier one out
+// doesn't bring it there.
 func withoutImagesOver(to provider.Protocol, body []byte, most int) (out []byte, left int, ok bool) {
-	over := len(bodyImages(to, body, 0, true, imageOverCap)) - most
-	if over <= 0 {
+	all := bodyImages(to, body, 0, true, imageOverCap)
+	if len(all) <= most {
 		return body, 0, true
 	}
-	imgs := bodyImages(to, body, 0, false, imageOverCap)
-	if len(imgs) < over {
+	history, gone := map[int]bool{}, map[int]string{}
+	for _, im := range bodyImages(to, body, 0, false, imageOverCap) {
+		history[im.at], gone[im.at] = true, im.with
+	}
+	later := map[int]string{}
+	for _, im := range bodyImages(to, body, 0, true, imageShownLater) {
+		later[im.at] = im.with
+	}
+	// each image once, by its bytes, at the last place it is shown: an
+	// image of the latest user message there, which is kept whole, and
+	// each of those its own
+	hashes := make([][32]byte, len(all))
+	latest := 0
+	inLatest := map[[32]byte]bool{}
+	copiesOf := map[[32]byte][]int{}
+	for i, im := range all {
+		h := sha256.Sum256(body[im.at:im.end])
+		hashes[i] = h
+		if history[im.at] {
+			copiesOf[h] = append(copiesOf[h], im.at)
+		} else {
+			latest++
+			inLatest[h] = true
+		}
+	}
+	// the history's images, oldest first by the last place each is shown
+	var hist [][]int
+	for i, im := range all {
+		h := hashes[i]
+		if c := copiesOf[h]; history[im.at] && !inLatest[h] && c[len(c)-1] == im.at {
+			hist = append(hist, c)
+		}
+	}
+	over := latest + len(hist) - most
+	if over > len(hist) {
 		return body, 0, false
+	}
+	with := map[int]string{}
+	for h, c := range copiesOf {
+		if inLatest[h] {
+			for _, at := range c {
+				with[at] = later[at]
+			}
+		}
+	}
+	for i, c := range hist {
+		for j, at := range c {
+			switch {
+			case i < over:
+				with[at] = gone[at]
+			case j < len(c)-1:
+				with[at] = later[at]
+			}
+		}
 	}
 	var b bytes.Buffer
 	b.Grow(len(body))
 	last := 0
-	for _, im := range imgs[:over] {
-		b.Write(body[last:im.at])
-		b.WriteString(im.with)
-		last = im.end
+	for _, im := range all {
+		if w, ok := with[im.at]; ok {
+			b.Write(body[last:im.at])
+			b.WriteString(w)
+			last = im.end
+		}
 	}
 	b.Write(body[last:])
-	return b.Bytes(), over, true
+	return b.Bytes(), len(with), true
 }
 
 // refitImageCap is forward's answer to res, a refusal of body for too
