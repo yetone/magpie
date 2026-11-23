@@ -451,9 +451,13 @@ func (p *Project) dropMadeFile(rel string) {
 // one of them. A worktree gone from disk takes its records with it:
 // nothing of magpie's is left there to take back. Claude Code keeps a
 // worktree's project under the main worktree's record (claudeRoot), so
-// that one serves them all.
+// that one serves them all. A project kept to its own checkout (MainOnly)
+// has no worktree that follows it: each is taken back out.
 func (l *Library) syncTrees(p *Project, res *Result, hubs map[string]*Server) {
-	dirs := p.treeDirs()
+	var dirs []string
+	if !p.MainOnly {
+		dirs = p.treeDirs()
+	}
 	var trees []*Project
 	for _, d := range dirs {
 		t := p.tree(d)
@@ -537,6 +541,11 @@ func (l *Library) treesChanged() bool {
 					return true
 				}
 			}
+		}
+		// kept to its own checkout: no worktree follows it, and the
+		// change that kept it so took them out
+		if p.MainOnly {
+			continue
 		}
 		if len(p.Skills)+len(p.Servers)+len(p.ServersOff)+len(p.SkillsOff)+len(p.Subagents)+len(p.InstrAgents)+len(p.Plugins)+len(p.Hooks)+len(p.ClaudePlugins)+len(p.Pi) == 0 && len(p.Trees) == 0 {
 			continue

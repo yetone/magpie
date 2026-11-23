@@ -60,6 +60,10 @@ type Project struct {
 	// Trees are the project's folder in each other worktree of its git
 	// repository, given the project's set, with what magpie put in each
 	Trees []*Project `json:"trees,omitempty"`
+	// MainOnly keeps the project's set to this checkout: the
+	// repository's other worktrees get none of it, and what magpie put
+	// there comes out (#7252)
+	MainOnly bool `json:"mainOnly,omitempty"`
 	// Subagents are the library's subagents the project has, and for which
 	// agents; AgentFiles the files magpie wrote for them, by their hash
 	// (project_subagents.go)
@@ -642,6 +646,20 @@ func ProjectCopy(dir string, copy bool) (*Result, error) {
 	})
 }
 
+// ProjectMainOnly sets whether a project's set stays in its own checkout:
+// on, the repository's other worktrees get none of it, and what magpie put
+// in them is taken out; off, they follow the project again (#7252).
+func ProjectMainOnly(dir string, on bool) (*Result, error) {
+	return change(func(l *Library) error {
+		p := l.project(dir)
+		if p == nil {
+			return fmt.Errorf("no project %s", dir)
+		}
+		p.MainOnly = on
+		return nil
+	})
+}
+
 // ProjectView is a project as the page shows it.
 type ProjectView struct {
 	Dir     string              `json:"dir"`
@@ -659,6 +677,8 @@ type ProjectView struct {
 	// Trees are the project's folder in the repository's other git
 	// worktrees, which follow it
 	Trees []string `json:"trees,omitempty"`
+	// MainOnly: the other worktrees get none of the project's set
+	MainOnly bool `json:"mainOnly,omitempty"`
 	// Subagents are the library's subagents the project has, for the
 	// agents named
 	Subagents map[string][]string `json:"subagents"`
@@ -748,6 +768,7 @@ func projectViews(l *Library, problems []Problem) []ProjectView {
 		for _, t := range p.Trees {
 			v.Trees = append(v.Trees, t.Dir)
 		}
+		v.MainOnly = p.MainOnly
 		if fi, err := os.Stat(p.Dir); err != nil || !fi.IsDir() {
 			v.Missing = true
 		} else {

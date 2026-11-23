@@ -262,3 +262,67 @@ func TestProjectWorktreeFollows(t *testing.T) {
 		t.Errorf("trees after: %v", v.Projects[0].Trees)
 	}
 }
+
+// #7252 (jinpwng): a project kept to its own checkout gives the
+// repository's other worktrees nothing of its set, Pi packages and
+// servers included, and what magpie put there before comes out; off, they
+// follow it again.
+func TestProjectMainOnly(t *testing.T) {
+	_, proj := scopeProject(t)
+	src := filepath.Join(t.TempDir(), "src")
+	skill(t, filepath.Join(src, "pdf"), "pdf", "Read PDFs")
+	ok(t)(InstallSkills(src, []string{"pdf"}, nil))
+	ok(t)(ProjectSkill(proj, "pdf", []string{"claude"}))
+	ok(t)(ProjectServer(proj, "erp", []string{"cursor"}))
+	ok(t)(ProjectPi(proj, "npm:pi-demo", "on"))
+
+	// git worktree add ../shop-wt
+	wt := filepath.Join(filepath.Dir(proj), "shop-wt")
+	own := filepath.Join(proj, ".git", "worktrees", "shop-wt")
+	write(t, filepath.Join(wt, ".git"), "gitdir: "+own+"\n")
+	write(t, filepath.Join(own, "gitdir"), filepath.Join(wt, ".git")+"\n")
+	write(t, filepath.Join(own, "commondir"), "../..\n")
+	keepProjectTrees()
+	wtPi := filepath.Join(wt, ".pi", "settings.json")
+	if !strings.Contains(read(t, wtPi), "pi-demo") {
+		t.Fatal("the worktree hasn't the project's Pi package")
+	}
+	if s := servers(t, filepath.Join(wt, ".cursor", "mcp.json"), "mcpServers"); s["erp"] == nil {
+		t.Fatal("the worktree hasn't the project's server")
+	}
+
+	ok(t)(ProjectMainOnly(proj, true))
+	gone(t, filepath.Join(wt, ".claude", "skills", "pdf"))
+	gone(t, wtPi)
+	// the file held only magpie's server, so it goes with it
+	gone(t, filepath.Join(wt, ".cursor", "mcp.json"))
+	// the project itself keeps all of it
+	if !isLink(t, filepath.Join(proj, ".claude", "skills", "pdf")) || !strings.Contains(read(t, filepath.Join(proj, ".pi", "settings.json")), "pi-demo") {
+		t.Error("the project lost its own set")
+	}
+	v, _ := Read(nil)
+	if !v.Projects[0].MainOnly || len(v.Projects[0].Trees) != 0 {
+		t.Errorf("view: mainOnly %v, trees %v", v.Projects[0].MainOnly, v.Projects[0].Trees)
+	}
+	if l, _ := load(); l.treesChanged() {
+		t.Error("a project kept to its checkout is synced again and again")
+	}
+	// a change to the project, and a worktree made since, stay out
+	ok(t)(ProjectPi(proj, "npm:pi-other", "on"))
+	wt2 := filepath.Join(filepath.Dir(proj), "shop-wt2")
+	own2 := filepath.Join(proj, ".git", "worktrees", "shop-wt2")
+	write(t, filepath.Join(wt2, ".git"), "gitdir: "+own2+"\n")
+	write(t, filepath.Join(own2, "gitdir"), filepath.Join(wt2, ".git")+"\n")
+	write(t, filepath.Join(own2, "commondir"), "../..\n")
+	keepProjectTrees()
+	gone(t, wtPi)
+	gone(t, filepath.Join(wt2, ".pi", "settings.json"))
+
+	// off: they follow it again
+	ok(t)(ProjectMainOnly(proj, false))
+	for _, d := range []string{wt, wt2} {
+		if s := read(t, filepath.Join(d, ".pi", "settings.json")); !strings.Contains(s, "pi-demo") || !strings.Contains(s, "pi-other") {
+			t.Errorf("%s doesn't follow again:\n%s", d, s)
+		}
+	}
+}

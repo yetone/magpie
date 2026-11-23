@@ -1035,6 +1035,8 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			res, err = library.ProjectSkillsOff(in.Dir, oneOrMore(in.Name, in.Names), in.Agents)
 		case "projects/copy":
 			res, err = library.ProjectCopy(in.Dir, in.Copy)
+		case "projects/main-only":
+			res, err = library.ProjectMainOnly(in.Dir, in.On)
 		case "projects/instructions":
 			// the text, the agents (sent as [] for none), or both
 			c := library.ProjectInstr{Text: in.Instr}

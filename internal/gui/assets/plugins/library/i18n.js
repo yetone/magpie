@@ -2,6 +2,12 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "Only this checkout": "仅限此检出",
+    "{name} is kept to this checkout": "{name} 仅限此检出",
+    "{name}'s worktrees follow it again": "{name} 的工作树重新跟随它",
+    "The repository's other worktrees get none of what this project has.": "仓库的其他工作树不会得到这个项目的任何内容。",
+    "The repository's other worktree gets what this project has.": "仓库的另一个工作树也会得到这个项目的内容。",
+    "The repository's {n} other worktrees get what this project has.": "仓库的其他 {n} 个工作树也会得到这个项目的内容。",
     "Another build kept this Pi extension for the project. magpie writes nothing for it; a line for it in .pi/settings.json stays as it is.": "另一个版本为这个项目保留了这个 Pi 扩展。magpie 不会为它写入任何内容；.pi/settings.json 里它的那一行保持原样。",
     "project scope": "项目范围",
     "user scope": "用户范围",
@@ -1202,6 +1208,12 @@ magpie.strings({
     "Hook removed": "钩子已删除",
   },
   "zh-TW": {
+    "Only this checkout": "僅限此檢出",
+    "{name} is kept to this checkout": "{name} 僅限此檢出",
+    "{name}'s worktrees follow it again": "{name} 的工作樹重新跟隨它",
+    "The repository's other worktrees get none of what this project has.": "儲存庫的其他工作樹不會得到這個專案的任何內容。",
+    "The repository's other worktree gets what this project has.": "儲存庫的另一個工作樹也會得到這個專案的內容。",
+    "The repository's {n} other worktrees get what this project has.": "儲存庫的其他 {n} 個工作樹也會得到這個專案的內容。",
     "Another build kept this Pi extension for the project. magpie writes nothing for it; a line for it in .pi/settings.json stays as it is.": "另一個版本為這個專案保留了這個 Pi 擴充。magpie 不會為它寫入任何內容；.pi/settings.json 裡它的那一行保持原樣。",
     "project scope": "專案範圍",
     "user scope": "使用者範圍",
@@ -2402,6 +2414,12 @@ magpie.strings({
     "Hook removed": "鉤子已刪除",
   },
   ja: {
+    "Only this checkout": "このチェックアウトのみ",
+    "{name} is kept to this checkout": "{name} はこのチェックアウトのみになりました",
+    "{name}'s worktrees follow it again": "{name} のワークツリーが再び追従します",
+    "The repository's other worktrees get none of what this project has.": "リポジトリのほかのワークツリーには、このプロジェクトの内容は何も入りません。",
+    "The repository's other worktree gets what this project has.": "リポジトリのもう一つのワークツリーにも、このプロジェクトの内容が入ります。",
+    "The repository's {n} other worktrees get what this project has.": "リポジトリのほかの {n} 個のワークツリーにも、このプロジェクトの内容が入ります。",
     "Another build kept this Pi extension for the project. magpie writes nothing for it; a line for it in .pi/settings.json stays as it is.": "別のビルドがこのプロジェクト用にこの Pi 拡張を残していました。magpie はこれについて何も書き込まず、.pi/settings.json の該当行はそのまま残ります。",
     "project scope": "プロジェクトの範囲",
     "user scope": "ユーザーの範囲",
@@ -3602,6 +3620,12 @@ magpie.strings({
     "Hook removed": "フックを削除しました",
   },
   de: {
+    "Only this checkout": "Nur dieser Checkout",
+    "{name} is kept to this checkout": "{name} bleibt auf diesen Checkout beschränkt",
+    "{name}'s worktrees follow it again": "Die Worktrees von {name} folgen ihm wieder",
+    "The repository's other worktrees get none of what this project has.": "Die anderen Worktrees des Repositorys erhalten nichts von diesem Projekt.",
+    "The repository's other worktree gets what this project has.": "Der andere Worktree des Repositorys erhält, was dieses Projekt hat.",
+    "The repository's {n} other worktrees get what this project has.": "Die {n} anderen Worktrees des Repositorys erhalten, was dieses Projekt hat.",
     "Another build kept this Pi extension for the project. magpie writes nothing for it; a line for it in .pi/settings.json stays as it is.": "Ein anderer Build hat diese Pi-Erweiterung für das Projekt behalten. magpie schreibt nichts dafür; eine Zeile dafür in .pi/settings.json bleibt, wie sie ist.",
     "project scope": "Projektbereich",
     "user scope": "Benutzerbereich",

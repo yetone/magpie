@@ -21,6 +21,7 @@ const libraryProjectUsage = `magpie library project [--json]      the projects (
   magpie library project skill rm <dir> <skill…>   take skills out of it
   magpie library project skill agents <dir> <skill> <a,b…|none>   the agents it has the skill for
   magpie library project copy <dir> on|off copies of its skills in place of links to the library's
+  magpie library project main-only <dir> on|off keep its set to this checkout: the repository's other worktrees get none of it
   magpie library project server [list] <dir> [--json]   its MCP servers and the agents each is for
   magpie library project server add <dir> <server…> [agents=a,b…]   give it library servers: by default for the agents
                                      its servers are for already, or, with none yet, every agent here that reads a
@@ -152,6 +153,27 @@ func libraryProjectCmd(args []string) error {
 			fmt.Println(green.Render("✓"), dir, "gets copies of its skills, made again whenever the library's skill changes")
 		} else {
 			fmt.Println(green.Render("✓"), dir, "gets links to the library's skills")
+		}
+		return nil
+	case "main-only", "mainonly":
+		if len(rest) != 2 || strings.HasPrefix(rest[0], "-") || rest[1] != "on" && rest[1] != "off" {
+			return usage()
+		}
+		dir, err := projectDir(rest[0])
+		if err != nil {
+			return err
+		}
+		res, err := library.ProjectMainOnly(dir, rest[1] == "on")
+		if err != nil {
+			return err
+		}
+		if err := projectOutcome(dir, nil, res); err != nil {
+			return err
+		}
+		if rest[1] == "on" {
+			fmt.Println(green.Render("✓"), dir, "keeps its set to this checkout: the repository's other worktrees get none of it")
+		} else {
+			fmt.Println(green.Render("✓"), dir, "is followed by the repository's other worktrees again")
 		}
 		return nil
 	case "skill":

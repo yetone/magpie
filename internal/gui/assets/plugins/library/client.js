@@ -7470,6 +7470,7 @@ magpie.plugin("library", (ctx) => {
     card.append(head);
     if (p.problems?.[""]) card.append(el("div", "lib-err", p.problems[""]));
     if (!isOpen) return card;
+    projectMainOnly(p, card);
     if (mcp) return projectOwn(p, "servers", projectServers(p, card));
     if (sub) return projectOwn(p, "subagents", projectSubagents(p, card));
     if (plg) return projectPlugins(p, card);
@@ -7815,6 +7816,26 @@ magpie.plugin("library", (ctx) => {
     card.append(el("p", "lib-aside lib-projfoot", t("Its skills, servers and subagents go where the project's own do, and its hooks into .claude/settings.local.json and .codex/hooks.json. A file there that isn't magpie's, or an entry you changed, is left as it is.")));
     if (plugins.some((b) => b.hooks?.length && (p.plugins?.[b.name] || []).includes("codex"))) card.append(el("p", "lib-aside lib-projfoot lib-projhooks-codex", t("Codex runs a project's hooks only in a project you trust, once you've reviewed them in /hooks.")));
     return card;
+  }
+
+  // A project in a git repository with other worktrees: they follow it,
+  // unless it is kept to this checkout (#7252). Shown on every tab, since
+  // it holds for everything the project has.
+  function projectMainOnly(p, card) {
+    const n = p.trees?.length || 0;
+    if (!n && !p.mainOnly) return;
+    const opts = el("div", "lib-projopts lib-projmain");
+    const say = t("Only this checkout");
+    const sw = toggle(!!p.mainOnly, say, (on) =>
+      change("projects/main-only", { dir: p.dir, on }, on ? t("{name} is kept to this checkout", { name: p.name }) : t("{name}'s worktrees follow it again", { name: p.name })));
+    const lab = el("label", "lib-projcopy");
+    const words = el("span", "", say);
+    words.onclick = (e) => { e.preventDefault(); sw.click(); };
+    lab.append(sw, words);
+    opts.append(lab, el("span", "note", p.mainOnly
+      ? t("The repository's other worktrees get none of what this project has.")
+      : n === 1 ? t("The repository's other worktree gets what this project has.") : t("The repository's {n} other worktrees get what this project has.", { n })));
+    card.append(opts);
   }
 
   // A project's Pi packages (#7249): the entries of its .pi/settings.json,
