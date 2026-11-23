@@ -1172,6 +1172,9 @@ func probeOnce(ctx context.Context, p Provider, proto Protocol, url string, body
 	}
 	b, _ := io.ReadAll(io.LimitReader(res.Body, 4096))
 	r.Error = APIError(b, res.Status)
+	if hint := p.NoCreditHint(res.StatusCode, b); hint != "" {
+		r.Error += " — " + hint
+	}
 	if p.IsPlugin() && res.StatusCode == http.StatusServiceUnavailable && res.Header.Get("Retry-After") != "" && strings.Contains(strings.ToLower(r.Error), "queued") {
 		// asked not to wait (FallbackHeader), a plugin says its vendor's
 		// queue at once. A model in a queue is served, and an agent's

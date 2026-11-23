@@ -170,3 +170,35 @@ func TestCreditLadderIsKeysOnly(t *testing.T) {
 		expire(r.Key)
 	}
 }
+
+// avenger on X: Claude Code through an Anthropic API key was refused
+// "Credit balance too low", and the key's row said only that. A key at
+// Anthropic's own API rests with Anthropic's words and what they mean
+// (provider.NoCreditHint); a relay's key passing the same words on rests
+// with its words alone.
+func TestAnthropicKeyNoCreditRestSaysWhere(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		base string
+		hint bool
+	}{
+		{"anthropic", "https://api.anthropic.com", true},
+		{"relay", "https://relay.example.com", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fresh(t)
+			s := New()
+			key := candidate{p: provider.Provider{ID: tc.name, Anthropic: tc.base, Key: "sk-ant-api03-x"}, model: "claude-sonnet-4-5", rest: tc.name + "#k"}
+			r := s.restAfter(key, http.StatusBadRequest, http.Header{}, []byte(anthropicTooLow))
+			if r.Why != failCredit {
+				t.Fatalf("rests %s, want credit", r.Why)
+			}
+			if !strings.HasPrefix(r.Error, "Your credit balance is too low to access the Anthropic API") {
+				t.Fatalf("Anthropic's words not first: %q", r.Error)
+			}
+			if got := strings.HasSuffix(r.Error, " — "+provider.AnthropicNoCreditHint); got != tc.hint {
+				t.Fatalf("hint %v, want %v: %q", got, tc.hint, r.Error)
+			}
+		})
+	}
+}

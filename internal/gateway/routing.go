@@ -1654,6 +1654,12 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	// account's fault (vendorOverloaded)
 	overloaded := why == failOther && !unserved && c.model != "" && vendorOverloaded(status, body)
 	r := Rest{Why: why, Status: status, By: "cooldown", Error: restError(status, body)}
+	if hint := c.p.NoCreditHint(status, body); hint != "" {
+		// a key at Anthropic's own API out of its organization's
+		// credit: the key's row says what that means, after the
+		// vendor's words (provider.NoCreditHint)
+		r.Error += " — " + hint
+	}
 	// out of allowance or credit for as long as magpie guessed: the vendor
 	// named no time, nor did the user (asksAt)
 	guessed := false
