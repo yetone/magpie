@@ -1576,6 +1576,12 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 		// was, and is asked again once the network is back (offline.go)
 		return Rest{Why: failOffline, Status: status, By: "off", Until: now}
 	}
+	if lanUnreached(c, status, body) {
+		// a Remote magpie on a network this computer isn't on now: it
+		// is passed over while it can't be reached, and asked again the
+		// moment it can (lan_reach.go)
+		return Rest{Why: why, Status: status, By: "off", Until: now}
+	}
 	if regionRefused(status, wordsOf(body)) {
 		// the vendor refused where the request came from (regionWords):
 		// the network's doing, and the edge's the connection reached, not

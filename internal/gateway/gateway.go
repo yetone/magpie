@@ -3955,6 +3955,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// (le13ure on X)
 			c.p = q
 		}
+		if i < len(cands)-1 && lanUnreachable(c.p) {
+			// a Remote magpie on a network this computer isn't on now
+			// (AlanWang1027713 on X): the next is asked at once, and
+			// nothing is held against this one (lan_reach.go)
+			skipped = append(skipped, c.label()+": "+unreachableSaid)
+			continue
+		}
 		if handed.release != nil && handed.who != c.who() {
 			handed.release()
 			handed.release = nil
@@ -5361,6 +5368,17 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			skipped = append(skipped, c.label()+": "+call.Error)
 			continue
 		}
+		if !last && hw.failed() && lanUnreached(c, hw.code(), hw.errBody()) {
+			// a Remote magpie on a LAN took no connection: the network's
+			// doing, not its own, so it doesn't rest; it is passed over
+			// while it can't be reached (lan_reach.go)
+			if other == nil {
+				other = &Try{Status: call.Status, Error: call.Error, errType: call.Usage.ErrType}
+			}
+			s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
+			skipped = append(skipped, c.label()+": "+call.Error)
+			continue
+		}
 		if !last && hw.failed() && failureOf(c, hw.code(), hw.errBody()) == failAuth {
 			// the account's sign-in is gone, refused by Anthropic: no rest
 			// brings it back, so none is told; it is passed over until it
@@ -6481,6 +6499,8 @@ func (s *Server) forward(ctx context.Context, p provider.Provider, to provider.P
 			heardReply(ctx, p, res)
 			noteWireModel(ctx, p, res)
 			heardNet() // the network is up (offline.go)
+			// a Remote magpie on a LAN answered (lan_reach.go)
+			noteReach(p, true)
 		}
 	}()
 	// a way of a key's request that asks outside serve's tries waits for
@@ -6499,6 +6519,11 @@ func (s *Server) forward(ctx context.Context, p provider.Provider, to provider.P
 		if q, ok := provider.SeekMoved(ctx, p, err); ok {
 			p = q
 			res, err = s.forwardOnce(ctx, p, to, path, body, in)
+		}
+		if err != nil && ctx.Err() == nil && connFailed.MatchString(err.Error()) && !proxyDown.MatchString(err.Error()) {
+			// nobody took the connection: a group passes it over on
+			// this network until it is reachable again (lan_reach.go)
+			noteReach(p, false)
 		}
 	}
 	if err == nil && res.StatusCode >= 400 {
