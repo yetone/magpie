@@ -514,6 +514,14 @@ the key's leaves the call as asked, with a log line (`compactRefused`).
   `TestHandedOffGatewayAnswersAConnectionNotedLate`,
   `TestInheritedForAnotherAddressIsLetGo`, `TestToolCallOfTheMagpieBeforeGoesToIt` in
   [`handover_test.go`](../../internal/gateway/handover_test.go).
+- `ListenAndServe` returns only once the work it started beside the server
+  has ended with its ctx (`loops` in [`loops.go`](../../internal/gateway/loops.go)):
+  the Keep… loops, `WhileServing`'s and the file watchers. One still saving
+  as ctx ended (`KeepAutoPicksHeld`'s auto-picks.json) wrote into the config
+  folder after the gateway had ended, which a test was removing (#7232). A
+  loop that doesn't end within `loopsEndFor` (10s) is named in the log and
+  left running, and none starts once the end has begun
+  (`TestGatewayEndWaitsForItsLoops`, `TestGatewayEndBoundsItsWaitForLoops`).
 - An agent's turn (Chat, Responses, Messages, Gemini's generateContent and
   Codex's backend `/responses`) that magpie holds before any route is begun
   for it is watched in `counted` ([`unrouted.go`](../../internal/gateway/unrouted.go);

@@ -935,16 +935,19 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		}
 	})
 	defer stopLimits()
+	// what it starts beside the server ends before it returns (loops.go)
+	var bg loops
 	freshCtx, stopFresh := context.WithCancel(ctx)
 	defer stopFresh()
 	// what another process writes to them is seen at once, not on the
 	// loops' next look (#3185)
-	go filememo.Watch(freshCtx, pluginrt.Path(), settings.Path(), provider.Path(), plugin.ListPath(), plugin.ToolsPath(), access.Path())
-	go pluginrt.KeepFresh(freshCtx, filememo.OthersEvery, settings.Path(), provider.Path(), plugin.ListPath(), plugin.ToolsPath(), access.Path())
+	rt, watched := pluginrt.Path(), []string{settings.Path(), provider.Path(), plugin.ListPath(), plugin.ToolsPath(), access.Path()}
+	bg.Go("filememo.Watch", func() { filememo.Watch(freshCtx, append([]string{rt}, watched...)...) })
+	bg.Go("pluginrt.KeepFresh", func() { pluginrt.KeepFresh(freshCtx, filememo.OthersEvery, watched...) })
 	// and the OpenCode plugins another magpie turned on or off, added,
 	// removed or updated (magpie plugin … in a terminal) are this one's at
 	// once, as the window's change is, not on the next request
-	go plugin.KeepNoticing(freshCtx, filememo.OthersEvery)
+	bg.Go("plugin.KeepNoticing", func() { plugin.KeepNoticing(freshCtx, filememo.OthersEvery) })
 	// and the MCP hub's servers that the Library no longer gives are ended
 	// It reads MCPHub, which a test swaps, so the gateway's end waits for
 	// it: once ListenAndServe has returned, nothing it started still looks.
@@ -958,81 +961,83 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	releaseServing := holdServing(ctx, servingLockPath(), func() {
 		// the magpie serving the gateway, and only it, keeps the saved accounts
 		// signed in, so two never refresh one sign-in at once
-		go provider.KeepLoginsAlive(ctx)
+		bg.Go("provider.KeepLoginsAlive", func() { provider.KeepLoginsAlive(ctx) })
 		// and tells the request hooks of an account to sign in again
-		go keepHooksToldOfSignIns(ctx)
+		bg.Go("keepHooksToldOfSignIns", func() { keepHooksToldOfSignIns(ctx) })
 		// and signs Codex and Claude Code in to their next account when the
 		// one they are on is spent
-		go provider.KeepOnAnAccountWithRoom(ctx)
+		bg.Go("provider.KeepOnAnAccountWithRoom", func() { provider.KeepOnAnAccountWithRoom(ctx) })
 		// and has the Codex app read its provider again as magpie becomes it
 		// for a used-up ChatGPT account, and after (its Send greys otherwise)
-		go provider.KeepCodexAppOnItsProvider(ctx, s.CodexBusy)
+		bg.Go("provider.KeepCodexAppOnItsProvider", func() { provider.KeepCodexAppOnItsProvider(ctx, s.CodexBusy) })
 		// and, when settings say to, starts its accounts' next windows as the last reset
-		go provider.KeepCodexWindowsWarm(ctx)
-		go provider.KeepClaudeWindowsWarm(ctx, warmClaude)
-		go provider.KeepAgyWindowsWarm(ctx)
+		bg.Go("provider.KeepCodexWindowsWarm", func() { provider.KeepCodexWindowsWarm(ctx) })
+		bg.Go("provider.KeepClaudeWindowsWarm", func() { provider.KeepClaudeWindowsWarm(ctx, warmClaude) })
+		bg.Go("provider.KeepAgyWindowsWarm", func() { provider.KeepAgyWindowsWarm(ctx) })
 		// and keeps Antigravity's fast-tools plugin starting a magpie that
 		// is there, once it is on
-		go keepFastTools()
+		bg.Go("keepFastTools", keepFastTools)
 		// and spends a Codex reset about to run out unused, for the accounts
 		// that let it
-		go provider.KeepResetsFromRunningOut(ctx)
+		bg.Go("provider.KeepResetsFromRunningOut", func() { provider.KeepResetsFromRunningOut(ctx) })
 		// and checks the WorkBuddy accounts in for the day's credits
-		go provider.KeepWorkBuddyCheckedIn(ctx)
+		bg.Go("provider.KeepWorkBuddyCheckedIn", func() { provider.KeepWorkBuddyCheckedIn(ctx) })
 		// and the Trae CN accounts (#694), and the MiniMax Code ones (#811)
-		go provider.KeepTraeCheckedIn(ctx)
-		go provider.KeepMiniMaxCheckedIn(ctx)
+		bg.Go("provider.KeepTraeCheckedIn", func() { provider.KeepTraeCheckedIn(ctx) })
+		bg.Go("provider.KeepMiniMaxCheckedIn", func() { provider.KeepMiniMaxCheckedIn(ctx) })
 		// and the Qoder ones' daily credits
-		go provider.KeepQoderCheckedIn(ctx)
+		bg.Go("provider.KeepQoderCheckedIn", func() { provider.KeepQoderCheckedIn(ctx) })
 		// and the accounts of the plugins that check in themselves
-		go provider.KeepPluginsCheckedIn(ctx)
+		bg.Go("provider.KeepPluginsCheckedIn", func() { provider.KeepPluginsCheckedIn(ctx) })
 		// and counts the calls those plugins' accounts made outside magpie
 		// (Cursor's editor and cursor-agent) on the Usage page
-		go usage.KeepOutsideCallsRead(ctx)
+		bg.Go("usage.KeepOutsideCallsRead", func() { usage.KeepOutsideCallsRead(ctx) })
 		// and moves the built-in subscriptions being retired onto their plugins
-		go provider.KeepRetiringMoved(ctx)
+		bg.Go("provider.KeepRetiringMoved", func() { provider.KeepRetiringMoved(ctx) })
 		// and looks up which region the Claude accounts' way out to the
 		// internet is in, through each of their proxies (internal/egress)
-		go egress.Keep(ctx, provider.ClaudeProxies)
+		bg.Go("egress.Keep", func() { egress.Keep(ctx, provider.ClaudeProxies) })
 		// and fetches the partner list every hour, asked for or not
-		go provider.KeepPartnersFresh(ctx)
-		go provider.KeepPluginsListed(ctx) // models a plugin's vendor drops or adds, while magpie runs
+		bg.Go("provider.KeepPartnersFresh", func() { provider.KeepPartnersFresh(ctx) })
+		bg.Go("provider.KeepPluginsListed", func() { provider.KeepPluginsListed(ctx) }) // models a plugin's vendor drops or adds, while magpie runs
 		// and renews the plugins' sign-ins as they come due, used or not (#5080)
-		go provider.KeepPluginsSignedIn(ctx)
+		bg.Go("provider.KeepPluginsSignedIn", func() { provider.KeepPluginsSignedIn(ctx) })
 		// and those a signed-in account's vendor adds (a ChatGPT plan's new GPT)
-		go provider.KeepAccountsListed(ctx)
+		bg.Go("provider.KeepAccountsListed", func() { provider.KeepAccountsListed(ctx) })
 		// and fetches the lists of the providers the user asked to keep fresh (#2135)
-		go provider.KeepListsFresh(ctx)
+		bg.Go("provider.KeepListsFresh", func() { provider.KeepListsFresh(ctx) })
 		// and follows a Remote magpie's list as it changes there (KaCli)
-		go provider.KeepRemoteListsFollowed(ctx)
+		bg.Go("provider.KeepRemoteListsFollowed", func() { provider.KeepRemoteListsFollowed(ctx) })
 		// and reads the group rate of each key of a relay given a top-up rate (@YIXIE233 on X)
-		go provider.KeepKeyRatesRead(ctx)
+		bg.Go("provider.KeepKeyRatesRead", func() { provider.KeepKeyRatesRead(ctx) })
 		// and keeps the community's plugins up to date, noting others' updates, and the Bun they run on
-		go plugin.KeepUpdated(ctx)
-		go plugin.KeepBunUpdated(ctx)
+		bg.Go("plugin.KeepUpdated", func() { plugin.KeepUpdated(ctx) })
+		bg.Go("plugin.KeepBunUpdated", func() { plugin.KeepBunUpdated(ctx) })
 		for _, f := range WhileServing {
-			go f(ctx)
+			bg.Go(loopName(f), func() { f(ctx) })
 		}
 	})
 	defer releaseServing()
 	// and keeps macOS from App Napping the process the agents wait on (#6261)
 	defer awake.NoNap()()
 	// and, when settings say to, keeps the computer awake while agents work
-	go awake.Keep(ctx, func() awake.Level {
-		switch set := settings.Load(); {
-		case !set.KeepAwake:
-			return awake.Off
-		case set.KeepAwakeDisplay:
-			return awake.Display
-		}
-		return awake.System
-	}, func() awake.State {
-		b := s.Busy()
-		return awake.State{Busy: b.Any(), Last: b.Last}
+	bg.Go("awake.Keep", func() {
+		awake.Keep(ctx, func() awake.Level {
+			switch set := settings.Load(); {
+			case !set.KeepAwake:
+				return awake.Off
+			case set.KeepAwakeDisplay:
+				return awake.Display
+			}
+			return awake.System
+		}, func() awake.State {
+			b := s.Busy()
+			return awake.State{Busy: b.Any(), Last: b.Last}
+		})
 	})
 	// and, on Windows, serves WSL distros under NAT at Windows' address on
 	// their network (wsl.go)
-	go s.serveWSL(ctx, srv)
+	bg.Go("serveWSL", func() { s.serveWSL(ctx, srv) })
 	drained := make(chan struct{})
 	go func() {
 		defer close(drained)
@@ -1088,6 +1093,9 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		if err == nil || errors.Is(err, http.ErrServerClosed) || s.notAccepting.Load() {
 			s.unread.stop()
 			<-drained
+			// ctx has ended, and with it every loop started beside the
+			// server: none writes into the config folder once this returns
+			bg.end()
 			return nil
 		}
 		// Relisten closed it to move the gateway: serve the one it opened
