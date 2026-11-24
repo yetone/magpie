@@ -17,8 +17,13 @@ import (
 // the gateway's address for it (/a/<id>/, a version at /a/<id>@<n>/), and
 // deletes one with every version it has.
 //
+// The user shares one on usemagpie.ai (artifact.ShareLatest), where anyone
+// with its link opens it, and stops sharing it.
+//
 //   - GET /api/artifacts lists them;
-//   - POST /api/artifacts/delete {"id"} deletes one.
+//   - POST /api/artifacts/delete {"id"} deletes one;
+//   - POST /api/artifacts/share {"id"} shares one, answering {"url"};
+//   - POST /api/artifacts/unshare {"id"} takes its shared link down.
 
 type artifactVersionJSON struct {
 	N     int       `json:"n"`
@@ -41,6 +46,10 @@ type artifactJSON struct {
 	Updated     time.Time             `json:"updated"`
 	URL         string                `json:"url"`
 	Versions    []artifactVersionJSON `json:"versions"` // newest first
+	// Shared is its link on usemagpie.ai, SharedVersion the version it
+	// shows; "" when it isn't shared
+	Shared        string `json:"shared,omitempty"`
+	SharedVersion int    `json:"sharedVersion,omitempty"`
 }
 
 func artifactsJSON() ([]artifactJSON, error) {
@@ -72,6 +81,9 @@ func artifactsJSON() ([]artifactJSON, error) {
 			}
 			j.Versions = append(j.Versions, vj)
 		}
+		if sh, err := artifact.Shared(a.ID); err == nil && sh != nil {
+			j.Shared, j.SharedVersion = sh.URL, sh.Version
+		}
 		out = append(out, j)
 	}
 	return out, nil
@@ -99,5 +111,30 @@ func artifactRoutes(mux *http.ServeMux) {
 			return
 		}
 		writeJSON(rw, map[string]bool{"deleted": true})
+	})
+	mux.HandleFunc("POST /api/artifacts/share", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ ID string }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		sh, err := artifact.ShareLatest(r.Context(), in.ID)
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, map[string]any{"url": sh.URL, "version": sh.Version})
+	})
+	mux.HandleFunc("POST /api/artifacts/unshare", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ ID string }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		if err := artifact.Unshare(r.Context(), in.ID); err != nil && !errors.Is(err, artifact.ErrNotFound) {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, map[string]bool{"unshared": true})
 	})
 }

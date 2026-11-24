@@ -57,6 +57,10 @@
 //                          until a language is picked on the page (the lang
 //                          cookie). /zh-tw/'s docs links go to the Chinese
 //                          docs, /de/'s to English.
+//   /a/<id>, /api/shares, /api/shares/<id>
+//                          shared artifacts: a page a magpie user shared,
+//                          and sharing, updating and taking one down
+//                          (shares.js); a.usemagpie.ai serves their files
 //
 // Everything else is the static site in public/.
 
@@ -65,6 +69,7 @@ import { PARTNERS } from "./partners.js";
 import { SPONSORS } from "./sponsors.js";
 import { serve as serveFile, held, onR2, mirror, githubFile } from "./files.js";
 import { handle as pluginStats, prune as prunePlugins } from "./pluginstats.js";
+import { api as shareAPI, page as sharePage, content as shareContent, prune as pruneShares, CONTENT as SHARE_HOST } from "./shares.js";
 
 const REPO = "yetone/magpie-releases";
 const SITE = "https://usemagpie.ai";
@@ -93,9 +98,16 @@ const DOC_LANGS = ["zh", "ja"];
 export default {
   async fetch(req, env, ctx) {
     const url = new URL(req.url);
+    // shared artifacts' own host serves their files and nothing else
+    if (url.hostname === SHARE_HOST) return shareContent(req, env);
     if (url.hostname.startsWith("www.")) {
       url.hostname = url.hostname.slice(4);
       return Response.redirect(url.toString(), 301);
+    }
+    if (url.pathname === "/api/shares" || url.pathname.startsWith("/api/shares/")) return shareAPI(req, env, ctx);
+    if (url.pathname.startsWith("/a/")) {
+      const got = await sharePage(req, env);
+      if (got) return got;
     }
     if (url.pathname === "/api/plugins/tagged") return taggedPlugins(ctx);
     if (url.pathname === "/api/plugins/readme") return pluginReadme(ctx, url.searchParams.get("name"));
@@ -225,6 +237,7 @@ export default {
     else {
       ctx.waitUntil(keepLedger(env, Date.now()).catch((e) => console.log("ledger", String(e))).then(() => keepDaily(env, Date.now())));
       ctx.waitUntil(prunePlugins(env));
+      ctx.waitUntil(pruneShares(env).catch((e) => console.log("shares", String(e))));
     }
   },
 };

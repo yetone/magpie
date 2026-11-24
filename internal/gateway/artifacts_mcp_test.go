@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/yetone/magpie/internal/artifact"
@@ -252,6 +253,75 @@ func TestArtifactRef(t *testing.T) {
 	for _, in := range []string{"", "nope", id + "@0", strings.Repeat("a", 27), strings.Repeat("A", 26)} {
 		if _, _, ok := ArtifactRef(in); ok {
 			t.Errorf("%q read as an artifact", in)
+		}
+	}
+}
+
+// shareSite is usemagpie.ai's /api/shares for one share, as
+// site/shares.js answers: a create, then its updates and its delete.
+func shareSite(t *testing.T) (puts func() int, up func() bool) {
+	t.Helper()
+	var mu sync.Mutex
+	n, live := 0, false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		const id = "abcdefghijklmnop"
+		if r.Method != http.MethodPost && (!live || r.Header.Get("Authorization") != "Bearer tok") {
+			http.Error(w, `{"error":"no such share"}`, http.StatusNotFound)
+			return
+		}
+		switch r.Method {
+		case http.MethodPost:
+			live = true
+			w.WriteHeader(http.StatusCreated)
+			w.Write([]byte(`{"id":"` + id + `","url":"https://usemagpie.ai/a/` + id + `","token":"tok","version":1}`))
+		case http.MethodPut:
+			n++
+			w.Write([]byte(`{"id":"` + id + `","url":"https://usemagpie.ai/a/` + id + `","version":2}`))
+		case http.MethodDelete:
+			live = false
+			w.Write([]byte(`{"deleted":true}`))
+		}
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("MAGPIE_SHARE_SITE", srv.URL)
+	return func() int { mu.Lock(); defer mu.Unlock(); return n },
+		func() bool { mu.Lock(); defer mu.Unlock(); return live }
+}
+
+// Once the user shares an artifact, an agent's next version shows at its
+// shared link, and the agent says so; list and read name the link, and a
+// delete says it took the link down too. An agent can't share one.
+func TestArtifactsSharedFollowsPublish(t *testing.T) {
+	h := artifacts(t)
+	puts, up := shareSite(t)
+	said, _ := artifactsCall(t, h, artifactPublishTool, map[string]any{"html": "<title>Plan</title>one"})
+	id := publishedID(t, said)
+	if !strings.Contains(said, "private to this computer") || puts() != 0 || up() {
+		t.Fatalf("an unshared publish: %s", said)
+	}
+	if _, err := artifact.ShareLatest(t.Context(), id); err != nil {
+		t.Fatal(err)
+	}
+	said, isErr := artifactsCall(t, h, artifactPublishTool, map[string]any{"id": id, "html": "two"})
+	if isErr || puts() != 1 || !strings.Contains(said, "https://usemagpie.ai/a/abcdefghijklmnop") || strings.Contains(said, "private") {
+		t.Fatalf("a shared publish (%d updates): %s", puts(), said)
+	}
+	if sh, _ := artifact.Shared(id); sh == nil || sh.Version != 2 {
+		t.Fatalf("shared %+v", sh)
+	}
+	for _, tool := range []string{artifactListTool, artifactReadTool} {
+		if said, _ := artifactsCall(t, h, tool, map[string]any{"id": id}); !strings.Contains(said, "shared at https://usemagpie.ai/a/abcdefghijklmnop (version 2)") {
+			t.Fatalf("%s: %s", tool, said)
+		}
+	}
+	if said, isErr := artifactsCall(t, h, artifactDeleteTool, map[string]any{"id": id}); isErr || up() || !strings.Contains(said, "its shared link") {
+		t.Fatalf("delete (link up %v): %s", up(), said)
+	}
+	for _, tool := range artifactsMCPTools() {
+		if b, _ := json.Marshal(tool.(map[string]any)["inputSchema"]); strings.Contains(string(b), "share") {
+			t.Fatalf("an agent can share: %s", b)
 		}
 	}
 }

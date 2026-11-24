@@ -17,6 +17,7 @@ package artifact
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/base32"
 	"encoding/json"
@@ -224,8 +225,15 @@ func List() ([]*Artifact, error) {
 	return out, errors.Join(bad...)
 }
 
-// Delete takes the artifact and every version of it away.
+// Delete takes the artifact and every version of it away, its shared
+// link first: one that can't be taken down keeps the artifact, so its
+// token isn't lost with it.
 func Delete(id string) error {
+	shareMu.Lock()
+	defer shareMu.Unlock()
+	if err := unshare(context.Background(), id); err != nil && !errors.Is(err, ErrNotFound) {
+		return fmt.Errorf("its shared link couldn't be taken down, so it is kept: %w", err)
+	}
 	defer lock()()
 	if _, err := readMeta(id); err != nil {
 		return err

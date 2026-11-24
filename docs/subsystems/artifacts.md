@@ -9,7 +9,8 @@ account or agent made them. Any agent that takes an MCP server can make
 them, not Claude Code alone.
 
 Three parts: an MCP server the agents publish through, the gateway serving
-each page in a sandbox of its own, and Work › Artifacts in the window.
+each page in a sandbox of its own, and Work › Artifacts in the window. The
+user can share one on usemagpie.ai ([Sharing](#sharing)).
 
 ## Source of truth
 
@@ -43,7 +44,8 @@ Rules:
   and never written over. A folder with no meta.json (a publish or delete
   cut off) is skipped.
 - `List` is newest `Updated` first; two in one instant go by id.
-- `Delete` takes the folder away with every version.
+- `Delete` takes the shared link down first ([Sharing](#sharing)), then
+  the folder with every version.
 
 ## The MCP server
 
@@ -134,21 +136,77 @@ agent's name as the Agents page says it, and `POST /api/artifacts/delete`
 deletes one; one gone already is gone as asked
 ([internal/gui/artifacts.go](../../internal/gui/artifacts.go)).
 
-A row says the title, who made it, when, and how many versions it has. A
-click opens the newest in the browser. Its menu copies the link, lists
-Earlier versions (when it has any) in the app's menu to open one, and
-deletes it after asking. A find field shows once there are 8 or more. The
+A row says the title, who made it, when, how many versions it has, and
+"Shared" when it is. A click opens the newest in the browser. Its menu
+copies the link, lists Earlier versions (when it has any) in the app's
+menu to open one, shares it after asking (`Share…`, then the shared link
+is copied) or copies the shared link and stops sharing it, and deletes it
+after asking. `POST /api/artifacts/share {id}` answers `{url, version}`
+and `POST /api/artifacts/unshare {id}` takes the link down; the list
+carries `shared` and `sharedVersion`. A find field shows once there are 8 or more. The
 Library's settings stay on its first page (`builtinsState` takes the first
 `nav.page`).
 
 `magpie artifacts` does the same in a terminal
 ([internal/cli/artifacts_cli.go](../../internal/cli/artifacts_cli.go)):
-the list (`--json` with every version's address), `open <id>[@<n>]`, and
-`delete <id>`, which takes every version and refuses an `@<n>`. Each takes
+the list (`--json` with every version's address, and `shared`),
+`open <id>[@<n>]`, `share <id>`, `unshare <id>`, and `delete <id>`, which
+takes every version; share, unshare and delete refuse an `@<n>`. Each takes
 an id or an address.
 
 The addresses are this computer's (127.0.0.1): a viewer of `magpie web`
 from another computer can list them but not open them.
+
+## Sharing
+
+Only the user shares an artifact, from Work › Artifacts or
+`magpie artifacts share`; no tool lets an agent do it, and the publish
+tool's description says so. A shared artifact opens for anyone with its
+link on usemagpie.ai ([internal/artifact/share.go](../../internal/artifact/share.go),
+[site/shares.js](../../site/shares.js)).
+
+The site:
+
+- `POST /api/shares` takes a version as multipart: a `meta` part
+  (`title`, `description`, `files`: the paths, the page first) and part
+  `i` holding `files[i]`. It answers `{id, url, token, version}`: the id
+  is 16 base32 characters, the link `https://usemagpie.ai/a/<id>`.
+  `PUT /api/shares/<id>` with `Authorization: Bearer <token>` puts a new
+  version at the same link; `DELETE` takes it down (the token, or the
+  site's `SHARE_ADMIN` for a reported page). The site keeps the token
+  only as a SHA-256 hash, holds a version to 32 MB and 256 files, and each
+  address (hashed, for an hour) to 30 creates and updates an hour.
+- The link is a page of the site's own: a slim bar with the title, a
+  link to magpie and Report, over a frame of the content host
+  `a.usemagpie.ai/<id>/<version>/`, which serves the files under the same
+  CSP sandbox as the gateway's pages (an opaque origin, so a page can't
+  reach usemagpie.ai's cookies or storage). A content address opened as a
+  page is sent to the link, so a shared page is never shown without the
+  bar. Only the current version is served; R2 holds `<id>/<n>/<path>` and
+  D1 the shares.
+
+magpie:
+
+- `<id>/share.json` (0600, beside meta.json) holds the link, the token
+  and the version it shows (`Shared`). The token is nowhere else, so a
+  share.json that doesn't read is an error, never "not shared": sharing
+  again would make a second link and lose the first one's token.
+- `ShareLatest` shares the newest version, at a new link or at the one it
+  has; the same version again asks nothing. The gateway's publish calls it
+  for a shared artifact, so the link follows each new version, and its
+  answer says the link shows it (or that it still shows the version
+  before, and why). list and read name the link.
+- A 404 on an update is a link taken down on the site: share.json goes and
+  `ErrSharedGone` says so. It is never shared again on its own, so a
+  takedown holds.
+- `Unshare` and `Delete` take the link down first; a 404 counts as done.
+  Any other failure keeps the artifact and share.json, so the token isn't
+  lost with it.
+- `shareMu` is held over each talk with the site, so a click and a publish
+  at once never make two links; the store's own lock is taken only for
+  share.json's write.
+- The site is `MAGPIE_SHARE_SITE`, else usemagpie.ai; in a test with no
+  `MAGPIE_SHARE_SITE` sharing is off, so a test never reaches the network.
 
 ## Verification
 
@@ -156,8 +214,9 @@ from another computer can list them but not open them.
 go test -tags nogui ./internal/artifact
 go test -tags nogui ./internal/gateway -run 'TestArtifact'
 go test -tags nogui ./internal/library -run 'TestArtifacts'
-go test -tags nogui ./internal/gui -run 'TestArtifactsAPI|TestBuiltin'
-go test -tags nogui ./internal/cli -run 'TestArtifactsCommand|TestEveryRouteHasACommandOrIsNamed'
+go test -tags nogui ./internal/gui -run 'TestArtifactsAPI|TestArtifactsShareAPI|TestBuiltin'
+go test -tags nogui ./internal/cli -run 'TestArtifacts|TestEveryRouteHasACommandOrIsNamed'
 node --test internal/gui/tests/artifacts-page.test.cjs
+node --test site/shares.test.mjs
 node --test internal/gui/tests/nav-pages-order.test.cjs internal/gui/tests/builtins.test.cjs
 ```

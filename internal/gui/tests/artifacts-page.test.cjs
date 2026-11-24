@@ -4,7 +4,8 @@
 // Library is off; in the header's row Library's head leads to it, and
 // Settings' search finds it. A row says who made it, when, and how many versions it
 // has, and a click opens it at the gateway's address; its menu copies the
-// link, opens an earlier version, and deletes it after asking. With none
+// link, opens an earlier version, shares it on usemagpie.ai and stops
+// sharing it, and deletes it after asking. With none
 // there it says so. In every language, both engines, a window and a narrow
 // browser, with no sideways scroll. No backend: the API is faked here.
 const assert = require("node:assert/strict");
@@ -28,12 +29,18 @@ const artifacts = [
 ];
 
 const words = {
-  en: { nav: "Artifacts", versions: "2 versions", empty: "No artifacts yet", copy: "Copy link", earlier: "Earlier versions", del: "Delete", v1: "Version 1" },
-  zh: { nav: "Artifacts", versions: "2 个版本", empty: "还没有 Artifact", copy: "复制链接", earlier: "之前的版本", del: "删除", v1: "版本 1" },
-  "zh-TW": { nav: "Artifacts", versions: "2 個版本", empty: "還沒有 Artifact", copy: "複製連結", earlier: "之前的版本", del: "刪除", v1: "版本 1" },
-  ja: { nav: "Artifacts", versions: "2 個のバージョン", empty: "Artifact はまだありません", copy: "リンクをコピー", earlier: "以前のバージョン", del: "削除", v1: "バージョン 1" },
-  de: { nav: "Artifacts", versions: "2 Versionen", empty: "Noch keine Artifacts", copy: "Link kopieren", earlier: "Frühere Versionen", del: "Löschen", v1: "Version 1" },
+  en: { nav: "Artifacts", versions: "2 versions", empty: "No artifacts yet", copy: "Copy link", earlier: "Earlier versions", del: "Delete", v1: "Version 1",
+    share: "Share…", shareGo: "Share", shared: "Shared", copyShared: "Copy shared link", stop: "Stop sharing" },
+  zh: { nav: "Artifacts", versions: "2 个版本", empty: "还没有 Artifact", copy: "复制链接", earlier: "之前的版本", del: "删除", v1: "版本 1",
+    share: "分享…", shareGo: "分享", shared: "已分享", copyShared: "复制分享链接", stop: "停止分享" },
+  "zh-TW": { nav: "Artifacts", versions: "2 個版本", empty: "還沒有 Artifact", copy: "複製連結", earlier: "之前的版本", del: "刪除", v1: "版本 1",
+    share: "分享…", shareGo: "分享", shared: "已分享", copyShared: "複製分享連結", stop: "停止分享" },
+  ja: { nav: "Artifacts", versions: "2 個のバージョン", empty: "Artifact はまだありません", copy: "リンクをコピー", earlier: "以前のバージョン", del: "削除", v1: "バージョン 1",
+    share: "共有…", shareGo: "共有", shared: "共有中", copyShared: "共有リンクをコピー", stop: "共有を停止" },
+  de: { nav: "Artifacts", versions: "2 Versionen", empty: "Noch keine Artifacts", copy: "Link kopieren", earlier: "Frühere Versionen", del: "Löschen", v1: "Version 1",
+    share: "Teilen …", shareGo: "Teilen", shared: "Geteilt", copyShared: "Geteilten Link kopieren", stop: "Nicht mehr teilen" },
 };
+const LINK = "https://usemagpie.ai/a/abcdefghijklmnop";
 
 function serve(lang, web, got, list, off) {
   return async (route) => {
@@ -47,6 +54,8 @@ function serve(lang, web, got, list, off) {
     // an empty library, so Library's head is drawn
     if (url.pathname === "/api/library") return json({ dir: "/Users/me/.magpie/library", backups: "/Users/me/.magpie/backups", home: "/Users/me", agents: [], instructions: { agents: [], sets: [] }, servers: [], foundServers: [], projects: [], foundSkills: [], skills: [], problems: [], hooks: [] });
     if (url.pathname === "/api/artifacts/delete") { const { id } = req.postDataJSON(); got.deleted.push(id); list.items = list.items.filter((a) => a.id !== id); return json({ deleted: true }); }
+    if (url.pathname === "/api/artifacts/share") { const { id } = req.postDataJSON(); got.shared.push(id); return json({ url: LINK, version: 2 }); }
+    if (url.pathname === "/api/artifacts/unshare") { got.unshared.push(req.postDataJSON().id); return json({ unshared: true }); }
     if (url.pathname === "/api/open") { got.opened.push(req.postDataJSON().url); return json({}); }
     if (url.pathname === "/api/copy") { got.copied.push(req.postDataJSON().text); return json({}); }
     if (url.pathname === "/api/providers") return json({ providers: [], gateway: { running: true } });
@@ -71,7 +80,7 @@ async function openPage(browser, { lang, web, width, items, off = [] }) {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => { if (m.type() === "error" || /scroll not asked for/.test(m.text())) errors.push(m.text()); });
-  const got = { opened: [], copied: [], deleted: [] };
+  const got = { opened: [], copied: [], deleted: [], shared: [], unshared: [] };
   const list = { items: structuredClone(items) };
   // in a browser an artifact opens in a new tab, not through /api/open
   await page.exposeFunction("__opened", (u) => { got.opened.push(u); });
@@ -141,6 +150,54 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForFunction(() => document.querySelectorAll("#view-artifacts .art-row").length === 1);
         assert.deepEqual(got.deleted, [A], where);
         assert.equal(got.opened.length, 2, `${where}: deleting opened nothing`);
+        assert.deepEqual(errors, [], where);
+        await context.close();
+      }
+    });
+
+    test(`${engine} ${lang}: Artifacts shares one on usemagpie.ai after asking, and stops sharing it`, async (t) => {
+      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+      t.after(() => browser.close());
+      for (const [web, width] of [[false, 1000], [true, 420]]) {
+        const where = `${web ? "browser" : "window"} ${width}px`;
+        const { context, page, errors, got } = await openPage(browser, { lang, web, width, items: artifacts });
+        const row = page.locator("#view-artifacts .art-row").nth(0);
+        await row.waitFor();
+        assert.ok(!(await row.locator(".sub").textContent()).includes(w.shared), `${where}: shared before sharing`);
+        const item = (name) => page.locator(".row-menu .rm-item", { hasText: name });
+        await row.locator(".art-more").click();
+        assert.equal(await item(w.copyShared).count(), 0, `${where}: a shared link to copy before sharing`);
+        await item(w.share).click();
+        const dialog = page.locator("dialog.action-confirm");
+        await dialog.waitFor();
+        assert.ok((await dialog.locator("p").textContent()).includes("usemagpie.ai"), `${where}: the ask names where it goes`);
+        // sharing loses nothing: its button isn't the red one
+        assert.equal(await dialog.locator("button.danger-fill").count(), 0, `${where}: a red Share`);
+        // Cancel shares nothing
+        await dialog.locator("button.text:not(.primary)").click();
+        await dialog.waitFor({ state: "detached" });
+        assert.deepEqual(got.shared, [], `${where}: shared on Cancel`);
+        await row.locator(".art-more").click();
+        await item(w.share).click();
+        await dialog.locator("button.primary", { hasText: w.shareGo }).click();
+        await until(() => got.copied.length);
+        assert.deepEqual(got.shared, [A], where);
+        assert.deepEqual(got.copied, [LINK], `${where}: the shared link is copied`);
+        assert.ok((await row.locator(".sub").textContent()).includes(w.shared), `${where}: the row says it is shared`);
+        await row.locator(".art-more").click();
+        assert.equal(await item(w.share).count(), 0, `${where}: Share… on a shared one`);
+        await item(w.copyShared).click();
+        await until(() => got.copied.length >= 2);
+        assert.deepEqual(got.copied, [LINK, LINK], where);
+        await row.locator(".art-more").click();
+        await item(w.stop).click();
+        await dialog.waitFor();
+        await dialog.locator("button.danger-fill").click();
+        await until(() => got.unshared.length);
+        assert.deepEqual(got.unshared, [A], where);
+        await page.waitForFunction((s) => !document.querySelector("#view-artifacts .art-row .sub").textContent.includes(s), w.shared);
+        assert.equal(got.opened.length, 0, `${where}: sharing opened the row`);
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${where}: scrolls sideways`);
         assert.deepEqual(errors, [], where);
         await context.close();
       }

@@ -15,17 +15,26 @@
   },
   "routes": [
     { "pattern": "usemagpie.ai", "custom_domain": true },
-    { "pattern": "www.usemagpie.ai", "custom_domain": true }
+    { "pattern": "www.usemagpie.ai", "custom_domain": true },
+    // shared artifacts' files (shares.js), a host of their own
+    { "pattern": "a.usemagpie.ai", "custom_domain": true }
   ],
   // the ledger of releases the Stable channel is chosen from (worker.js,
   // "The Stable channel"), kept by the cron every quarter hour
   "kv_namespaces": [{ "binding": "LEDGER", "id": "716b22ec7d4c496abb7b3dc085258fde" }],
   // RELEASES: each release's files, copied from GitHub by the five-minute
   // cron and served at /files (files.js)
-  "r2_buckets": [{ "binding": "RELEASES", "bucket_name": "magpie-releases" }],
+  "r2_buckets": [
+    { "binding": "RELEASES", "bucket_name": "magpie-releases" },
+    // SHARES: shared artifacts' files, SHARES_DB the shares (shares.js)
+    { "binding": "SHARES", "bucket_name": "magpie-shares" }
+  ],
   // PLUGINS: Discover's counts, each plugin's users and likes
   // (pluginstats.js)
-  "d1_databases": [{ "binding": "PLUGINS", "database_name": "magpie-plugins", "database_id": "ec0a0670-9de4-4906-8534-ac83c8ba3cd6" }],
+  "d1_databases": [
+    { "binding": "PLUGINS", "database_name": "magpie-plugins", "database_id": "ec0a0670-9de4-4906-8534-ac83c8ba3cd6" },
+    { "binding": "SHARES_DB", "database_name": "magpie-shares", "database_id": "e95cac10-9301-4f26-bb09-6d0e115f2762" }
+  ],
   "triggers": { "crons": ["*/15 * * * *", "*/5 * * * *"] },
   "observability": { "enabled": true }
 }

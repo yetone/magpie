@@ -191,6 +191,8 @@ var cliForRoute = map[string]string{
 	"POST /api/sync":                       "magpie sync",
 	"GET /api/artifacts":                   "magpie artifacts",
 	"POST /api/artifacts/delete":           "magpie artifacts delete",
+	"POST /api/artifacts/share":            "magpie artifacts share",
+	"POST /api/artifacts/unshare":          "magpie artifacts unshare",
 	"GET /api/davsync":                     "magpie webdav",
 	"POST /api/backup/export":              "magpie backup",
 	"POST /api/backup/import":              "magpie restore",

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,10 +18,14 @@ import (
 
 const artifactsUsage = `usage: magpie artifacts [--json]          the pages agents published (Magpie Artifacts), newest first
        magpie artifacts open <id>[@<n>]    open one in the browser: the newest version, or version n
+       magpie artifacts share <id>         share one on usemagpie.ai: anyone with its link opens it,
+                                           and each new version shows there too
+       magpie artifacts unshare <id>       take its shared link down
        magpie artifacts delete <id>        delete one with every version, for good`
 
 // artifactsCmd: `magpie artifacts` — Work › Artifacts in a terminal
-// (docs/subsystems/artifacts.md): the list, opening one and deleting one.
+// (docs/subsystems/artifacts.md): the list, opening, sharing and deleting
+// one.
 func artifactsCmd(args []string) error {
 	return artifactsTo(os.Stdout, args[1:], time.Now())
 }
@@ -43,7 +48,7 @@ func artifactsTo(w io.Writer, args []string, now time.Time) error {
 		return artifactsListTo(w, asJSON, now)
 	}
 	switch args[0] {
-	case "open", "delete", "rm", "remove":
+	case "open", "share", "unshare", "delete", "rm", "remove":
 		if len(args) != 2 {
 			return fmt.Errorf("%s takes one artifact\n%s", args[0], artifactsUsage)
 		}
@@ -70,7 +75,29 @@ func artifactsTo(w io.Writer, args []string, now time.Time) error {
 			return nil
 		}
 		if n != 0 {
-			return fmt.Errorf("delete takes the whole artifact, every version: give %s without @%d", id, n)
+			return fmt.Errorf("%s takes the whole artifact, every version: give %s without @%d", args[0], id, n)
+		}
+		switch args[0] {
+		case "share":
+			sh, err := artifact.ShareLatest(context.Background(), id)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(w, "✓ shared %s: anyone with its link opens it, and each new version shows there too\n%s\n", a.Title, sh.URL)
+			return nil
+		case "unshare":
+			sh, err := artifact.Shared(id)
+			if err != nil {
+				return err
+			}
+			if sh == nil {
+				return fmt.Errorf("%s isn't shared", a.Title)
+			}
+			if err := artifact.Unshare(context.Background(), id); err != nil {
+				return err
+			}
+			fmt.Fprintf(w, "✓ %s isn't shared any more: %s no longer opens\n", a.Title, sh.URL)
+			return nil
 		}
 		if err := artifact.Delete(id); err != nil {
 			return err
@@ -109,10 +136,16 @@ func artifactsListTo(w io.Writer, asJSON bool, now time.Time) error {
 			Updated     time.Time `json:"updated"`
 			URL         string    `json:"url"`
 			Versions    []ver     `json:"versions"` // newest first
+			// Shared is its link on usemagpie.ai, at SharedVersion
+			Shared        string `json:"shared,omitempty"`
+			SharedVersion int    `json:"sharedVersion,omitempty"`
 		}
 		out := make([]row, 0, len(list))
 		for _, a := range list {
 			r := row{ID: a.ID, Title: a.Title, Description: a.Description, Updated: a.Updated, URL: gateway.ArtifactURL(a.ID, 0)}
+			if sh, err := artifact.Shared(a.ID); err == nil && sh != nil {
+				r.Shared, r.SharedVersion = sh.URL, sh.Version
+			}
 			for i := len(a.Versions) - 1; i >= 0; i-- {
 				v := a.Versions[i]
 				r.Versions = append(r.Versions, ver{N: v.N, At: v.At, Label: v.Label, Agent: v.Agent, URL: gateway.ArtifactURL(a.ID, v.N)})
@@ -138,6 +171,9 @@ func artifactsListTo(w io.Writer, asJSON bool, now time.Time) error {
 			bits = append(bits, plural(len(a.Versions), "version"))
 		}
 		fmt.Fprintf(w, "%s  %s\n  %s\n", a.Title, strings.Join(bits, " · "), gateway.ArtifactURL(a.ID, 0))
+		if sh, err := artifact.Shared(a.ID); err == nil && sh != nil {
+			fmt.Fprintf(w, "  shared: %s\n", sh.URL)
+		}
 	}
 	return nil
 }

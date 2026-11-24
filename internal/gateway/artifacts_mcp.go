@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -116,7 +117,8 @@ func artifactsMCPTools() []any {
 				"Write the page to a file and pass file_path (or pass the page as html). The page is self-contained HTML; a <title> of two to four words names it. " +
 				"Supporting files (scripts, styles, data, images, more pages) go in files, by the relative path the page uses, each from a local file. " +
 				"To change an artifact, pass its id: a new version is made at the same address; files left out are kept and null removes one. " +
-				"Pass the version you last read or published to refuse a publish over a newer one. Give the user the address from the answer.",
+				"Pass the version you last read or published to refuse a publish over a newer one. Give the user the address from the answer. " +
+				"Only the user shares an artifact, from magpie; once they have, its shared link shows each version published after.",
 			"inputSchema": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -485,8 +487,34 @@ func artifactPublish(c *artifactCaller, a artifactArgs) (string, error) {
 	if len(v.Files) > 0 {
 		fmt.Fprintf(&b, ", with %s", strings.Join(v.Files, ", "))
 	}
-	b.WriteString(".\nIt is private to this computer: give the user the address.")
+	b.WriteString(".\n")
+	sh, err := artifact.Shared(art.ID)
+	switch {
+	case err != nil:
+		fmt.Fprintf(&b, "Whether it is shared doesn't read: %v. Give the user the address.", err)
+	case sh == nil:
+		b.WriteString("It is private to this computer: give the user the address.")
+	default:
+		// the user shared it: its link shows each new version
+		ctx, cancel := context.WithTimeout(c.r.Context(), 3*time.Minute)
+		sh2, err := artifact.ShareLatest(ctx, art.ID)
+		cancel()
+		if err != nil {
+			fmt.Fprintf(&b, "The user shared it at %s, which still shows version %d: %v. Give the user the address, and say so.", sh.URL, sh.Version, err)
+		} else {
+			fmt.Fprintf(&b, "The user shared it: anyone with its link, %s, sees this version now. Give the user the address.", sh2.URL)
+		}
+	}
 	return b.String(), nil
+}
+
+// sharedLine says where the artifact is shared, or "" when it isn't.
+func sharedLine(id string) string {
+	sh, err := artifact.Shared(id)
+	if err != nil || sh == nil {
+		return ""
+	}
+	return fmt.Sprintf("shared at %s (version %d)", sh.URL, sh.Version)
 }
 
 // artifactTextMost is the most of a file read_artifact gives as text.
@@ -502,6 +530,9 @@ func artifactRead(a artifactArgs) (string, error) {
 	fmt.Fprintf(&b, "%s\naddress: %s\nid: %s, version %d of %d", art.Title, ArtifactURL(art.ID, 0), art.ID, v.N, art.Latest().N)
 	if art.Description != "" {
 		fmt.Fprintf(&b, "\ndescription: %s", art.Description)
+	}
+	if l := sharedLine(art.ID); l != "" {
+		fmt.Fprintf(&b, "\n%s", l)
 	}
 	if len(v.Files) > 0 {
 		fmt.Fprintf(&b, "\nfiles: %s", strings.Join(v.Files, ", "))
@@ -568,6 +599,9 @@ func artifactList(a artifactArgs) (string, error) {
 		if art.Description != "" {
 			fmt.Fprintf(&b, ": %s", art.Description)
 		}
+		if l := sharedLine(art.ID); l != "" {
+			fmt.Fprintf(&b, "; %s", l)
+		}
 		b.WriteString("\n")
 	}
 	if shown == 0 {
@@ -599,10 +633,15 @@ func artifactDelete(a artifactArgs) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	sh, _ := artifact.Shared(art.ID)
 	if err := artifact.Delete(art.ID); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("Deleted %q and its %d versions; %s no longer opens.", art.Title, art.Latest().N, ArtifactURL(art.ID, 0)), nil
+	said := fmt.Sprintf("Deleted %q and its %d versions; %s no longer opens", art.Title, art.Latest().N, ArtifactURL(art.ID, 0))
+	if sh != nil {
+		said += ", and neither does its shared link, " + sh.URL
+	}
+	return said + ".", nil
 }
 
 // artifactPageRead: r reads an artifact's page or file, which the page

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/yetone/magpie/internal/artifact"
@@ -79,5 +80,70 @@ func TestArtifactsAPI(t *testing.T) {
 	}
 	if c := del(a.ID); c != http.StatusOK {
 		t.Fatalf("deleting it again: %d", c)
+	}
+}
+
+// Share puts an artifact on usemagpie.ai and answers its link, which the
+// list then shows; Stop sharing takes the link down and keeps the
+// artifact.
+func TestArtifactsShareAPI(t *testing.T) {
+	dir := t.TempDir()
+	was := artifact.Dir
+	artifact.Dir = func() string { return dir }
+	t.Cleanup(func() { artifact.Dir = was })
+	var mu sync.Mutex
+	live := false
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch r.Method {
+		case http.MethodPost:
+			live = true
+			w.WriteHeader(http.StatusCreated)
+			w.Write([]byte(`{"id":"abcdefghijklmnop","url":"https://usemagpie.ai/a/abcdefghijklmnop","token":"tok","version":1}`))
+		case http.MethodDelete:
+			live = false
+			w.Write([]byte(`{"deleted":true}`))
+		}
+	}))
+	t.Cleanup(site.Close)
+	t.Setenv("MAGPIE_SHARE_SITE", site.URL)
+	a, err := artifact.PublishPage(artifact.Publish{Page: []byte("<title>Report</title>one")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := webPageHandler(t, webHost{func() {}}, nil)
+	post := func(path, id string) *httptest.ResponseRecorder {
+		rw := httptest.NewRecorder()
+		srv.ServeHTTP(rw, httptest.NewRequest("POST", path, strings.NewReader(`{"id":"`+id+`"}`)))
+		return rw
+	}
+	listed := func() artifactJSON {
+		rw := httptest.NewRecorder()
+		srv.ServeHTTP(rw, httptest.NewRequest("GET", "/api/artifacts", nil))
+		var out struct{ Artifacts []artifactJSON }
+		if json.Unmarshal(rw.Body.Bytes(), &out) != nil || len(out.Artifacts) != 1 {
+			t.Fatalf("/api/artifacts: %d %s", rw.Code, rw.Body)
+		}
+		return out.Artifacts[0]
+	}
+	if r := listed(); r.Shared != "" {
+		t.Fatalf("shared before sharing: %+v", r)
+	}
+	rw := post("/api/artifacts/share", a.ID)
+	var got struct{ URL string }
+	if rw.Code != http.StatusOK || json.Unmarshal(rw.Body.Bytes(), &got) != nil || got.URL != "https://usemagpie.ai/a/abcdefghijklmnop" {
+		t.Fatalf("share: %d %s", rw.Code, rw.Body)
+	}
+	if r := listed(); r.Shared != got.URL || r.SharedVersion != 1 {
+		t.Fatalf("listed %+v", r)
+	}
+	if rw := post("/api/artifacts/unshare", a.ID); rw.Code != http.StatusOK {
+		t.Fatalf("unshare: %d %s", rw.Code, rw.Body)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if r := listed(); r.Shared != "" || live {
+		t.Fatalf("still shared: %+v, link up %v", r, live)
 	}
 }

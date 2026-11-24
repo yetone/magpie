@@ -3,6 +3,8 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -90,5 +92,49 @@ func TestArtifactsCommand(t *testing.T) {
 	}
 	if _, err := run("delete", a.ID); err == nil {
 		t.Fatal("deleted what was gone")
+	}
+}
+
+// `magpie artifacts share` prints the link the list then shows, and
+// unshare takes it down; neither takes a version.
+func TestArtifactsShareCommand(t *testing.T) {
+	artifactsSandbox(t)
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			w.WriteHeader(http.StatusCreated)
+			w.Write([]byte(`{"id":"abcdefghijklmnop","url":"https://usemagpie.ai/a/abcdefghijklmnop","token":"tok","version":1}`))
+			return
+		}
+		w.Write([]byte(`{"deleted":true}`))
+	}))
+	t.Cleanup(site.Close)
+	t.Setenv("MAGPIE_SHARE_SITE", site.URL)
+	run := func(args ...string) (string, error) {
+		var b bytes.Buffer
+		err := artifactsTo(&b, args, time.Now())
+		return b.String(), err
+	}
+	a, _ := artifact.PublishPage(artifact.Publish{Page: []byte("<title>Plan</title>")})
+	const link = "https://usemagpie.ai/a/abcdefghijklmnop"
+	if _, err := run("unshare", a.ID); err == nil {
+		t.Fatal("unshared one never shared")
+	}
+	if _, err := run("share", a.ID+"@1"); err == nil {
+		t.Fatal("shared a version")
+	}
+	if out, err := run("share", a.ID); err != nil || !strings.Contains(out, link) {
+		t.Fatalf("share: %q %v", out, err)
+	}
+	if out, _ := run(); !strings.Contains(out, "shared: "+link) {
+		t.Fatalf("list:\n%s", out)
+	}
+	if out, _ := run("--json"); !strings.Contains(out, `"shared": "`+link+`"`) {
+		t.Fatalf("--json:\n%s", out)
+	}
+	if out, err := run("unshare", a.ID); err != nil || !strings.Contains(out, "isn't shared any more") {
+		t.Fatalf("unshare: %q %v", out, err)
+	}
+	if out, _ := run(); strings.Contains(out, "shared:") {
+		t.Fatalf("still listed as shared:\n%s", out)
 	}
 }
