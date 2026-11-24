@@ -2,7 +2,6 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
-    "Not available: its plugin is off, or its files are gone": "暂不可用：它的插件已关闭，或模型文件不在了",
     "Find a masked word": "查找脱敏过的词",
     "No masked value has “{q}” in it": "没有哪个脱敏的值含有「{q}」",
     "Only the requests these filters show were searched": "只搜了当前筛选条件下的请求",
@@ -136,7 +135,6 @@ magpie.strings({
     "Sent as written in new messages; earlier ones stay masked, so the cache still holds": "新消息起按原样发送；之前的消息仍脱敏，缓存不受影响",
   },
   "zh-TW": {
-    "Not available: its plugin is off, or its files are gone": "暫不可用：它的外掛已關閉，或模型檔案不在了",
     "Find a masked word": "尋找脫敏過的詞",
     "No masked value has “{q}” in it": "沒有哪個脫敏的值含有「{q}」",
     "Only the requests these filters show were searched": "只搜尋了目前篩選條件下的請求",
@@ -270,7 +268,6 @@ magpie.strings({
     "Sent as written in new messages; earlier ones stay masked, so the cache still holds": "新訊息起照原樣送出；之前的訊息仍脫敏，快取不受影響",
   },
   ja: {
-    "Not available: its plugin is off, or its files are gone": "利用できません：プラグインがオフか、モデルのファイルがありません",
     "Find a masked word": "マスクした語を検索",
     "No masked value has “{q}” in it": "「{q}」を含むマスクした値はありません",
     "Only the requests these filters show were searched": "今の絞り込みで表示されるリクエストだけを検索しました",
@@ -404,7 +401,6 @@ magpie.strings({
     "Sent as written in new messages; earlier ones stay masked, so the cache still holds": "新しいメッセージからそのまま送信します。以前のメッセージはマスクしたままなので、キャッシュは保たれます",
   },
   de: {
-    "Not available: its plugin is off, or its files are gone": "Nicht verfügbar: Sein Plugin ist aus, oder seine Dateien fehlen",
     "Find a masked word": "Maskiertes Wort suchen",
     "No masked value has “{q}” in it": "Kein maskierter Wert enthält „{q}“",
     "Only the requests these filters show were searched": "Gesucht wurde nur in den Anfragen, die diese Filter zeigen",
