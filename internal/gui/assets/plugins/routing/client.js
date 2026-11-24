@@ -5075,7 +5075,7 @@ function routingPage(part) {
     return q && !cardOf(w) && q.error ? String(q.error) : "";
   }
   // plansHidden: the groups page's Hide plans was clicked (kept in
-  // localStorage, so the Routing page's fold reads it too)
+  // localStorage, so the groups page opens as it was left)
   function plansHidden() {
     try { return localStorage.getItem("magpie.routingGroupPlans") === "hidden"; } catch { return false; }
   }
@@ -5086,10 +5086,11 @@ function routingPage(part) {
   // have is left out (mergeQuotas). The tightest window that says a share
   // is the figure and the bar; the rest, and when the first of them
   // starts again, are on hover. Null when nothing adds up.
-  // Hide plans on the groups page (magpie.routingGroupPlans) folds these
-  // away too: the user asked for no plans on this page
+  // Hide plans on the groups page (magpie.routingGroupPlans) is that
+  // page's own and leaves this alone (#6861, chen2652: clicked once, it
+  // took every fold's bar away here for good, with no word of why)
   function foldQuota(ms) {
-    if (ms.length < 2 || ms.some((m) => m.w.free) || plansHidden()) return null;
+    if (ms.length < 2 || ms.some((m) => m.w.free)) return null;
     const cards = ms.map((m) => cardOf(m.w));
     if (cards.some((q) => !q) || new Set(cards).size !== cards.length) return null;
     if (new Set(cards.map((q) => q.plan || "")).size > 1) return null;

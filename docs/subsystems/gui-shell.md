@@ -284,10 +284,11 @@ and the bar, then when that window first starts again, the soonest of the
 accounts' ("renews in 2h", as an account's row says it; Sdsi134a on X),
 every window and when the first of them resets on hover. Only
 when every account in it was read, none is free, and all are on one plan;
-otherwise, while the fold is open or a kept day is shown, and while the
-groups page's Hide plans is on (`plansHidden`, `magpie.routingGroupPlans`),
-it says nothing of it and each account's row has its own. See
-`routing-fold-accounts-together.test.cjs`.
+otherwise, and while the fold is open or a kept day is shown, it says
+nothing of it and each account's row has its own. The groups page's Hide
+plans (`plansHidden`, `magpie.routingGroupPlans`) is that page's own and
+leaves the fold alone (#6861: once clicked, it took every fold's bar away
+here for good). See `routing-fold-accounts-together.test.cjs`.
 
 A group in the group's heading (`li.rt-sub`, `subNode`) folds the same way
 (`toggleSub`): folded, it says how many it routes to and what they do

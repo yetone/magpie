@@ -10,8 +10,9 @@
 // The cards are as /api/usage/quotas sends this computer's: no kind
 // (Sdsi134a on X: a kind asked for matched none of them, and the fold said
 // nothing). The figure says when its window starts again, the soonest of
-// the accounts', as an account's own row does; Hide plans on the groups
-// page (magpie.routingGroupPlans) folds the figure and the bar away.
+// the accounts', as an account's own row does. Hide plans on the groups
+// page (magpie.routingGroupPlans) is that page's own: the fold keeps its
+// figure and bar (#6861, chen2652).
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -124,15 +125,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             // nothing runs past the list
             const over = await same.evaluate((e) => Math.max(e.scrollWidth - e.clientWidth, document.documentElement.scrollWidth - innerWidth));
             assert.ok(over <= 1, `${lang} at ${width}: ${over}px past`);
-            // Hide plans: the figure and the bar go, the fold's count stays
+            // the groups page's Hide plans: the figure and the bar stay
+            // (#6861: it took them away here, with no word of why)
             await page.evaluate(() => localStorage.setItem("magpie.routingGroupPlans", "hidden"));
             await same.click();
             await page.waitForFunction(() => document.querySelectorAll(".rt-accts > li.rt-fold.open").length === 1);
             await same.click();
             await page.waitForFunction(() => document.querySelectorAll(".rt-accts > li.rt-fold:not(.open)").length === 2);
             let h = await look(same);
-            assert.ok(!h.open && !h.bar && !h.text.includes(words[lang][0]), "hidden plans: " + JSON.stringify(h));
-            // shown again: back
+            assert.ok(!h.open && h.bar && h.fill === "40%" && h.text.startsWith(words[lang][0]), "groups page's plans hidden: " + JSON.stringify(h));
+            // shown: as before
             await page.evaluate(() => localStorage.setItem("magpie.routingGroupPlans", "shown"));
             await same.click();
             await page.waitForFunction(() => document.querySelectorAll(".rt-accts > li.rt-fold.open").length === 1);
