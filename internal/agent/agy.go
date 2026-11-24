@@ -42,6 +42,8 @@ package agent
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path"
 	"path/filepath"
@@ -54,6 +56,7 @@ import (
 	"github.com/tidwall/jsonc"
 
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/fasttools"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/update"
@@ -432,7 +435,7 @@ func agyIn(at place) *Agent {
 			}
 			return ""
 		},
-		Fields: []Field{{
+		Fields: append([]Field{{
 			Key: "model", Label: "model",
 			// a level's custom model is its model's, the level agy's
 			Get: func() string { return agyLevelOf(get()) },
@@ -482,8 +485,52 @@ func agyIn(at place) *Agent {
 				}
 				return withVia(group("Antigravity CLI", own), "agy", magpieID+"/")
 			},
-		}, agyEffortField(func() bool { return !at.cold && usesMagpie(get()) })},
+		}, agyEffortField(func() bool { return !at.cold && usesMagpie(get()) })}, agyFastTools(at)...),
 	}
+}
+
+// agyFastToolsExe is the magpie the fast-tools plugin starts; a var for
+// tests.
+var agyFastToolsExe = func() string {
+	exe, _ := update.Program()
+	return exe
+}
+
+// agyFastTools is the "fast tools" switch: magpie's own plugin for
+// Antigravity (internal/fasttools), an MCP server that batches searches,
+// reads, edits and checks, a SessionStart hook with a snapshot of the
+// workspace, and rules for when to use them. It is the user's own
+// setting (Own), not wiring: Disconnect leaves it, and it works on any
+// model. A distro's agy has no magpie there to start, so it has none.
+func agyFastTools(at place) []Field {
+	if at.sys != nil {
+		return nil
+	}
+	return []Field{{
+		Key: "fasttools", Label: "fast tools", Quiet: true, Own: true,
+		Get: func() string {
+			if fasttools.On(at.home) {
+				return "on"
+			}
+			return ""
+		},
+		Set: func(v string) error {
+			switch v {
+			case "on":
+				exe := agyFastToolsExe()
+				if exe == "" {
+					return errors.New("can't tell where this magpie's program is, for the plugin to start")
+				}
+				return fasttools.Write(at.home, exe)
+			case "", "off":
+				return fasttools.Remove(at.home)
+			}
+			return fmt.Errorf("fast tools is on or off, not %q", v)
+		},
+		Options: func(map[string]string) []Option {
+			return []Option{{Value: "on", Note: "batched search, reads, edits and checks, and a workspace snapshot at the start"}}
+		},
+	}}
 }
 
 // agyLevelNames are the levels a custom model of agy's takes as its

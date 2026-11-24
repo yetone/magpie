@@ -18,6 +18,7 @@ These pages describe current responsibilities, runtime paths, state, and contrac
 | One MCP server, magpie, given to every agent in place of the Library's servers | [MCP router](mcp-router.md) |
 | Memory shared by every agent: the memory MCP server, the digest in instructions, the Memory tab | [Memory](memory.md) |
 | Pages agents make for the user: the artifacts MCP server, the sandboxed pages, Work › Artifacts, Claude Code's own Artifact tool left out | [Artifacts](artifacts.md) |
+| Antigravity's fast-tools plugin: batched search, reads, edits and checks (MCP), the workspace snapshot hook, the rules | [Fast tools](fast-tools.md) |
 | One skill, magpie-skills, listing the Library's skills in place of each agent's own | [Skill router](skill-router.md) |
 | Tray, panel, window, `magpie web` and the page's JSON API | [GUI app shell](gui-shell.md) |
 | Encrypted backups and setup synchronization over WebDAV, S3 or GitHub | [Sync and backup](sync-backup.md) |

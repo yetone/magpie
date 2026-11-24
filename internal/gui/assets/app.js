@@ -4090,6 +4090,8 @@ const EXTRA_GLYPH = {
   "sign-in": "M8 2.5a2.75 2.75 0 1 1 0 5.5 2.75 2.75 0 0 1 0-5.5zM3 13.5c.4-2.4 2.4-3.9 5-3.9s4.6 1.5 5 3.9",
   ultracode: "M3 4.25h4M3 8h2.5M3 11.75h4M9.5 4.25l3.5 3.75-3.5 3.75",
   statusline: "M2.75 3.25h10.5v9.5H2.75zM2.75 10h10.5M4.75 11.4h3.5",
+  // a bolt: agy's fast tools
+  fasttools: "M9.25 2.25 4 9h3.75l-1 4.75L12 7H8.25z",
   // the subagents' branch, with effort's rising bars after it
   [SUB_EFFORT]: "M3.25 2.75v10.5M3.25 9.25c0-2.2 1.6-3.75 3.9-3.75h.6M9.25 13.25v-2M11.5 13.25v-4M13.75 13.25v-6",
   // the subagents' branch, ending on a pin: their model, set by magpie
@@ -4794,6 +4796,8 @@ const TOGGLES = {
   ultracode: { label: "ultracode", note: "Claude plans a workflow for each substantive task", said: "{agent} ultracode → {value}" },
   // its note is the agent's own, on its field's on (Codex's footer isn't Claude Code's)
   statusline: { label: "status line", said: "{agent} status line → {value}" },
+  // agy's fast-tools plugin (internal/fasttools)
+  fasttools: { label: "fast tools", said: "{agent} fast tools → {value}" },
 };
 function toggled(f) { return Object.hasOwn(TOGGLES, f.key); }
 function fieldToggle(a, f) {

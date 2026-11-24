@@ -472,6 +472,7 @@ var zh = map[string]string{
 	"sign-in":            "登录方式",
 	"compaction model":   "压缩模型",
 	"status line":        "状态栏",
+	"fast tools":         "快速工具",
 	"protocol":           "协议",
 	"planner":            "规划模型",
 	"memories":           "记忆整理模型",
