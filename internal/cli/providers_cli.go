@@ -1854,6 +1854,16 @@ func importCmd(args []string) error {
 	if link == "" {
 		return errors.New("magpie import [-y] 'magpie://import?…'")
 	}
+	// a plugin link installs nothing by itself, here too: it says how
+	if plugin.IsLink(link) {
+		name, err := plugin.ParseLink(link)
+		if err != nil {
+			return err
+		}
+		fmt.Println("The link names the plugin " + name + ". Read what it does, then install it with:")
+		fmt.Println("  magpie plugin add " + name)
+		return nil
+	}
 	p, err := provider.ParseImport(link)
 	if err != nil {
 		return err

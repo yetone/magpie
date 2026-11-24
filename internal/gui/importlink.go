@@ -5,9 +5,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -29,8 +32,13 @@ var imports = struct {
 
 func stashImport(link string) string {
 	var in importJSON
-	p, err := provider.ParseImport(link)
-	if err != nil {
+	if plugin.IsLink(link) {
+		// one that names no package (pluginView opens the rest): the
+		// dialog says why
+		if _, err := plugin.ParseLink(link); err != nil {
+			in.Error = err.Error()
+		}
+	} else if p, err := provider.ParseImport(link); err != nil {
 		in.Error = err.Error()
 	} else {
 		in.Provider = p
@@ -42,6 +50,34 @@ func stashImport(link string) string {
 	imports.m[id] = in
 	imports.Unlock()
 	return id
+}
+
+// pluginLinks is when the last plugin link opened the window: a page that
+// hands the system link after link has the first one, then one each
+// pluginLinkGap at most, never a window that keeps jumping to a sheet.
+var pluginLinks = struct {
+	sync.Mutex
+	at time.Time
+}{}
+
+const pluginLinkGap = 2 * time.Second
+
+// pluginView is the window's address for a magpie://plugin link: Plugins,
+// with the package's sheet open over it (plugins.js). ok is false for a
+// link that names no package (stashImport says why) or one that came too
+// soon after the last.
+func pluginView(link string, now time.Time) (view string, ok bool) {
+	name, err := plugin.ParseLink(link)
+	if err != nil {
+		return "", false
+	}
+	pluginLinks.Lock()
+	defer pluginLinks.Unlock()
+	if d := now.Sub(pluginLinks.at); !pluginLinks.at.IsZero() && d >= 0 && d < pluginLinkGap {
+		return "", true
+	}
+	pluginLinks.at = now
+	return "plugins&plugin=" + url.QueryEscape(name), true
 }
 
 // ImportLink is the link among a launch's arguments, if any.

@@ -151,6 +151,12 @@ func (h *host) MainShown() bool { return application.InvokeSyncWithResult(h.main
 
 // Import opens the window on an import link, for the user to confirm.
 func (h *host) Import(link string) {
+	if view, ok := pluginView(link, time.Now()); ok {
+		if view != "" {
+			h.whenReady(func() { h.ShowMain(view) })
+		}
+		return
+	}
 	id := stash(link)
 	h.whenReady(func() {
 		application.InvokeSync(func() { h.openMain("/?view=providers&import=" + id + h.query) })

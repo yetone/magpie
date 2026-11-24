@@ -180,6 +180,10 @@ config, so it is not how an app registers itself.
   and agent rows come from adapters in magpie's source.
 - `magpie://import` links add a *provider* (a source of models, with its
   key), not an agent or an app; see [Import links](reference.md#import-links).
+- `magpie://plugin?name=<npm package>` and a plugin page's
+  `magpie.openPlugin(name)` open the package's sheet in Plugins, where the
+  user reads it and presses Install; neither installs it. See
+  [Plugin links](reference.md#plugin-links).
 
 Questions, or an adapter you'd like to discuss first: open an issue at
 <https://github.com/yetone/magpie/issues> or ask on

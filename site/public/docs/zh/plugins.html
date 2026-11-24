@@ -739,6 +739,7 @@ m plugin logout acme</pre>
     <h2 id="publish"><a class="anchor" href="#publish">发布与上架</a></h2>
     <ul>
       <li><b>npm。</b>照常发布。用户可以按名字添加（<code>magpie plugin add opencode-acme-auth</code>），按版本（<code>…@0.2.0</code>），从 git，或从文件夹。</li>
+      <li><b>链接。</b><code>magpie://plugin?name=opencode-acme-auth</code>（带 scope 的名字编码与否都可以：<code>?name=@acme/opencode-auth</code>）会打开 magpie 的<span class="ui">插件</span>页，停在这个包的详情上：README、发布者和<span class="ui">安装</span>按钮，由用户自己点。链接本身不安装任何东西。它只接受 npm 包名，不接受版本、路径、git 或 URL；不在推荐列表里的包会注明 magpie 没有人审核过它。</li>
       <li><b>搜索。</b><span class="ui">插件</span>里的搜索会向 npm 查询 <code>&lt;关键词&gt; opencode</code>，显示名字或 keywords 里同时含有 <code>opencode</code> 和 <code>auth</code>、<code>plugin</code>、<code>provider</code> 之一的包。keywords 写成 <code>["opencode", "opencode-plugin", "&lt;厂商&gt;"]</code> 就可以。它还会查询 <code>keywords:pi-package &lt;关键词&gt;</code>，显示名字或 keywords 里提到 <code>auth</code> 或 <code>provider</code> 的 pi 扩展包。</li>
       <li><b>README。</b>插件在 magpie 里的详情页显示它在 npm 上的 README。写清楚它登录什么、怎么登录、登录信息存在哪里、有哪些模型。</li>
       <li><b>推荐列表。</b><span class="ui">插件</span>页推荐的是社区仓库 <a href="https://github.com/magpie-community/plugins/blob/main/registry.json"><code>registry.json</code></a> 里的插件。magpie 最多每六小时拉取一次，并内置一份副本，拉不到时使用。想被收录，就提一个 PR 加上一项：
@@ -1010,6 +1011,7 @@ document.getElementById(<span class="s">"calls"</span>).textContent = `${s.calls
       <tr><td><code>magpie.theme, magpie.onTheme(fn)</code></td><td><code>{ dark, lang, tokens }</code>。bridge 也会在 <code>&lt;html&gt;</code> 上设置 <code>data-theme</code>、<code>lang</code>、<code>color-scheme</code> 以及 <code>--magpie-bg</code>、<code>--magpie-fg</code>、<code>--magpie-accent</code> 等，每次变化都会再设一次。</td></tr>
       <tr><td><code>magpie.options.get(), .set(o)</code></td><td>插件自己在 plugins.json 里的选项，不能是别的插件的。<code>set</code> 接受一个对象，返回保存后的选项，每秒最多一次。</td></tr>
       <tr><td><code>magpie.read(name, params)</code></td><td><code>magpie.permissions</code> 声明过的读取。其他的一律拒绝，窗口拒绝一次，magpie 再拒绝一次。<code>usage:summary</code>（<code>period</code>：<code>today</code>、<code>7d</code> 或 <code>30d</code>）给出调用数、错误数、token 和费用，以及前 20 个模型；<code>providers:list</code> 给出每个供应商的 id 和名字。没有任何读取会给出密钥、账号、登录信息或请求内容。</td></tr>
+      <tr><td><code>magpie.openPlugin(name)</code></td><td>在页面上打开 npm 包 <code>name</code> 的详情，带<span class="ui">安装</span>按钮由用户自己点；它不安装任何东西。只在页面正被看着、没有别的对话框时可用，每 1.5 秒一次。旧版 magpie 没有 <code>openPlugin</code>，先检测（<code>typeof magpie.openPlugin === "function"</code>），没有就显示包名让用户复制。</td></tr>
     </table></div>
     <h3>页面不能做什么</h3>
     <ul>

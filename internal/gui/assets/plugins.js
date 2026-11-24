@@ -1883,6 +1883,8 @@
       w.append(glyph(SHIELD, 12, 1.5), el("span", "", t(from, { owner: l.github.owner, topic })));
       main.append(w);
     }
+    // pluginlink.js's, for a package the market doesn't list
+    main.append(l.note || "");
     if (l.replaces) main.append(el("p", "pm-note", t("magpie's own sign-in to this subscription is deprecated: this plugin takes its place, and accounts signed in there move to it.")));
     const readme = el("div", "pm-readme");
     const pageKey = l.package + "\n" + (document.documentElement.lang || "en");
@@ -1945,4 +1947,9 @@
   // opened on the Plugins tab (?view=plugins): app.js showed it before
   // this file was here to load it
   if (view === "plugins") load();
+  // a package's sheet over the page the reader is on, for a plugin page's
+  // magpie.openPlugin, or the window opened by a magpie://plugin link
+  // (?plugin=): pluginlink.js
+  window.pluginOpen = (n) => import("./pluginlink.js").then((m) => m.open(n, async () => (mine && listings || await load(), [[listings, tagged], npm, detail])));
+  if (params.has("plugin")) pluginOpen(params);
 })();

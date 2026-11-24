@@ -16,6 +16,13 @@
 //                                 saves it in Downloads as name.png, and
 //                                 answers { path } ("" in magpie web,
 //                                 where the browser downloads it)
+//   await magpie.openPlugin(name) opens the sheet of the npm package
+//                                 name (@scope/pkg) over the window: what
+//                                 it is and its Install, for the reader
+//                                 to press. Nothing is installed by the
+//                                 call. Only while the page is seen, one
+//                                 each 1.5s. An older magpie has none, so
+//                                 test for it first
 //   magpie.context                where a panel is (P5): { provider: {
 //                                 id, name } } in a provider's editor,
 //                                 else {}; set once magpie.ready is
@@ -191,6 +198,7 @@
       set: (options) => call("options.set", { options }),
     },
     read: (name, params) => call("read", { name, params }),
+    openPlugin: (name) => call("plugin.open", { name }),
     image: {
       copy: (png) => call("image.copy", { png }),
       save: (png, name) => call("image.save", { png, name }),

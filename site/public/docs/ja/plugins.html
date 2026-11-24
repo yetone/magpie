@@ -739,6 +739,7 @@ m plugin logout acme</pre>
     <h2 id="publish"><a class="anchor" href="#publish">公開と掲載</a></h2>
     <ul>
       <li><b>npm。</b>パッケージを通常どおり公開します。ユーザーは名前（<code>magpie plugin add opencode-acme-auth</code>）、バージョン（<code>…@0.2.0</code>）、git、フォルダから追加できます。</li>
+      <li><b>リンク。</b><code>magpie://plugin?name=opencode-acme-auth</code>（scope 付きの名前はエンコードしてもしなくても構いません：<code>?name=@acme/opencode-auth</code>）は magpie の<span class="ui">プラグイン</span>をそのパッケージの詳細で開きます。README、公開者、<span class="ui">インストール</span>があり、押すのは読む人です。リンク自体は何もインストールしません。受け付けるのは npm パッケージ名だけで、バージョン、パス、git、URL は受け付けません。一覧にないパッケージには、magpie の誰もレビューしていないと表示されます。</li>
       <li><b>検索。</b><span class="ui">プラグイン</span> の検索は npm に <code>&lt;query&gt; opencode</code> を問い合わせます。名前かキーワードに <code>opencode</code> と、<code>auth</code>、<code>plugin</code>、<code>provider</code> のいずれかを含むパッケージが表示されます。<code>["opencode", "opencode-plugin", "&lt;vendor&gt;"]</code> のようなキーワードで条件を満たせます。あわせて <code>keywords:pi-package &lt;query&gt;</code> も問い合わせ、名前かキーワードに <code>auth</code> か <code>provider</code> を含む pi パッケージを表示します。</li>
       <li><b>README。</b>magpie のプラグインページには npm の README が表示されます。何にサインインするのか、どうやって、サインイン情報をどこに保存するのか、どのモデルがあるのかを書いてください。</li>
       <li><b>一覧。</b><span class="ui">プラグイン</span> は、コミュニティリポジトリの <a href="https://github.com/magpie-community/plugins/blob/main/registry.json"><code>registry.json</code></a> にあるプラグインをおすすめします。magpie は最大で 6 時間ごとにこれを取得し、取得できないときのためのコピーを内蔵しています。掲載してほしい場合は、項目を追加するプルリクエストを送ってください：
@@ -1010,6 +1011,7 @@ document.getElementById(<span class="s">"calls"</span>).textContent = `${s.calls
       <tr><td><code>magpie.theme, magpie.onTheme(fn)</code></td><td><code>{ dark, lang, tokens }</code>。bridge は <code>&lt;html&gt;</code> に <code>data-theme</code>、<code>lang</code>、<code>color-scheme</code> と <code>--magpie-bg</code>、<code>--magpie-fg</code>、<code>--magpie-accent</code> なども設定し、変わるたびに設定し直します。</td></tr>
       <tr><td><code>magpie.options.get(), .set(o)</code></td><td>plugins.json にあるそのプラグイン自身のオプションです。ほかのプラグインのものは扱えません。<code>set</code> はオブジェクトを受け取り、保存されたオプションを返します。呼べるのは 1 秒に 1 回までです。</td></tr>
       <tr><td><code>magpie.read(name, params)</code></td><td><code>magpie.permissions</code> で宣言した読み取りです。それ以外はウィンドウが拒否し、magpie ももう一度拒否します。<code>usage:summary</code>（<code>period</code>：<code>today</code>、<code>7d</code>、<code>30d</code>）は呼び出し数、エラー数、トークン、費用と上位 20 モデルを、<code>providers:list</code> は各プロバイダの id と名前を返します。キー、アカウント、サインイン、リクエスト本文を返す読み取りはありません。</td></tr>
+      <tr><td><code>magpie.openPlugin(name)</code></td><td>npm パッケージ <code>name</code> の詳細をページの上に開き、<span class="ui">インストール</span>は読む人が押します。何もインストールしません。ページが表示中で、ほかのダイアログが開いていないときだけ、1.5 秒に 1 回です。古い magpie には <code>openPlugin</code> がないので、先に確かめ（<code>typeof magpie.openPlugin === "function"</code>）、なければ名前をコピーできるように示してください。</td></tr>
     </table></div>
     <h3>ページにできないこと</h3>
     <ul>

@@ -3558,6 +3558,27 @@ downloaded, and downloads that one before it restarts, so you land on the
 newest (unless downloads wait for a click). Every release is on
 [yetone/magpie-releases](https://github.com/yetone/magpie-releases/releases).
 
+
+### Plugin links
+
+A plugin's author, or a page that lists plugins, can link to one:
+
+```
+magpie://plugin?name=opencode-acme-auth
+magpie://plugin?name=%40magpie-community%2Fopencode-zed-auth
+```
+
+Opening one brings up magpie's Plugins on the package's sheet: its README,
+publisher, license and *Install*. Nothing is installed until you press
+*Install*. A package magpie's list doesn't have says that nobody at magpie
+has reviewed it. Only an npm package's name is taken (no version, path,
+git repository or URL), and a link that comes within two seconds of the
+last is dropped. `magpie import <link>` prints the package and the
+`magpie plugin add` command for it, and installs nothing.
+
+A plugin's own page asks the same with `magpie.openPlugin(name)`
+([Pages in the window](https://usemagpie.ai/docs/plugins#pages)).
+
 ### Signed releases
 
 usemagpie.ai's feed only carries a release; it is not what magpie trusts. From
