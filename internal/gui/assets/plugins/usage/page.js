@@ -1538,8 +1538,13 @@ const hiddenRows = () => new Set(state.settings?.usageWindowsHidden || []);
 function withoutHiddenRows(q) {
   const hid = hiddenRows();
   if (!hid.size || q.error || !q.windows?.length) return q;
-  const ws = q.windows.filter((w) => !hid.has(windowHideKey(q, windowGroup(w))));
-  return ws.length && ws.length < q.windows.length ? { ...q, windows: ws } : q;
+  const gone = (w) => hid.has(windowHideKey(q, windowGroup(w)));
+  const ws = q.windows.filter((w) => !gone(w));
+  if (!ws.length || ws.length === q.windows.length) return q;
+  // a window's credits a day go with its row (Will on Discord: Kiro's
+  // us-east-1 rows hidden, their days still drawn)
+  const pools = [q.daily, ...(q.moreDaily || [])].filter((d) => d && !q.windows.some((w) => w.name === d.window && gone(w)));
+  return { ...q, windows: ws, daily: pools[0], moreDaily: pools.slice(1) };
 }
 // hiddenRowList: the rows the Overview leaves out, one a provider and group,
 // those of a card with every row named showing again excepted
