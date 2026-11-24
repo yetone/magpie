@@ -38,12 +38,21 @@ const INSTALLS = [
 const OFFERED = "{agent}'s settings are still here ({path}), but its command-line program isn't found: it may have been uninstalled. Install another agent, below the list, has its install command.";
 const NOT_OFFERED = "{agent}'s settings are still here ({path}), but its command-line program isn't found: it may have been uninstalled. Its settings are offered here again once it is installed.";
 
-function server(lang) {
+function server(lang, agents = AGENTS, posts = []) {
+  let current = structuredClone(agents);
+  const state = () => ({ agents: current, profiles: [], settings: { lang, theme: "light" } });
   return async (route) => {
     const req = route.request(), url = new URL(req.url());
     if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:true};` });
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
-    if (url.pathname === "/api/state") return route.fulfill({ json: { agents: AGENTS, profiles: [], settings: { lang, theme: "light" } } });
+    if (url.pathname === "/api/state") return route.fulfill({ json: state() });
+    if (req.method() === "POST" && url.pathname.startsWith("/api/agents/")) {
+      posts.push({ path: url.pathname, body: req.postDataJSON() });
+      const id = url.pathname.match(/^\/api\/agents\/disconnect\/(.+)$/)?.[1];
+      assert(id, "unexpected mutation: " + url.pathname);
+      current = current.map((a) => a.id === id ? { ...a, wired: false } : a);
+      return route.fulfill({ json: state() });
+    }
     if (url.pathname === "/api/agents/cli" && req.method() === "GET") return route.fulfill({ json: { agents: CLIS, pending: false } });
     if (url.pathname === "/api/agents/install") return route.fulfill({ json: INSTALLS });
     if (url.pathname === "/api/usage/quotas") return route.fulfill({ json: [] });
@@ -173,5 +182,58 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       });
     }
     assert.deepEqual(errors, []);
+  });
+
+  // #7291: disconnecting an existing setup needs no models, even after
+  // the CLI is removed. Check the same case for another agent and a WSL twin.
+  test(engine + ": a missing CLI with no models can still disconnect and restore", async (t) => {
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    t.after(() => browser.close());
+    for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) {
+      for (const width of [1100, 420]) {
+        for (const id of ["opencode", "hermes", "opencode@wsl:Ubuntu"]) {
+          await t.test(`${lang} ${width} ${id}`, async (t) => {
+            const context = await browser.newContext({ viewport: { width, height: 760 } });
+            t.after(() => context.close());
+            const page = await context.newPage(), posts = [], errors = [];
+            page.setDefaultTimeout(5000);
+            page.setDefaultNavigationTimeout(60000);
+            page.on("pageerror", (e) => errors.push(e.message));
+            const missing = agent(id, id === "hermes" ? "Hermes Agent" : "OpenCode", {
+              cliMissing: true, wired: true,
+              fields: [{ key: "model", label: "model", value: "", options: [] }],
+              models: { listed: 0, shown: 0 },
+            });
+            await page.route("**/*", server(lang, [missing], posts));
+            await page.goto("http://magpie.test/");
+            await page.locator(`${row(id)} .ag-missing`).waitFor();
+            const sw = page.locator(`${row(id)} .ag-conn`);
+            assert.equal(await sw.count(), 1, "a wired agent with no models lost its disconnect switch");
+            assert.equal(await sw.getAttribute("aria-checked"), "true");
+            assert.equal(await page.locator(`${row(id)} .field`).count(), 0, "the missing CLI offers settings");
+            await sw.click();
+            const ask = page.locator(".editor.disconnect-ask");
+            await ask.waitFor();
+            assert.deepEqual(posts, [], "opening the confirmation changed the config");
+            await ask.getByRole("button", { name: await said(page, lang, "Cancel"), exact: true }).click();
+            await ask.waitFor({ state: "detached" });
+            assert.deepEqual(posts, [], "Cancel disconnected the agent");
+            assert.equal(await sw.getAttribute("aria-checked"), "true");
+            // The menu is the other route to the same restore confirmation.
+            await page.locator(row(id)).click({ button: "right" });
+            await page.locator(".row-menu .rm-item", { hasText: await said(page, lang, "Disconnect from magpie") }).click();
+            await ask.waitFor();
+            assert.deepEqual(posts, [], "the menu disconnected without asking");
+            await ask.getByRole("button", { name: await said(page, lang, "Disconnect and restore"), exact: true }).click();
+            await ask.waitFor({ state: "detached" });
+            await page.locator(`.agent-fold ${row(id)}`).waitFor();
+            assert.deepEqual(posts, [{ path: "/api/agents/disconnect/" + id, body: {} }]);
+            assert.equal(await sw.count(), 0, "a disconnected missing CLI offers a connect switch");
+            assert.equal(await page.locator(`${row(id)} .field`).count(), 0);
+            assert.deepEqual(errors, []);
+          });
+        }
+      }
+    }
   });
 }

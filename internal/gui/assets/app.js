@@ -691,7 +691,7 @@ function renderAgents() {
         return row;
       }
       who.append(cliTag(a));
-      if (a.wired && connectable(a)) row.append(connectSwitch(a));
+      if (a.wired) row.append(connectSwitch(a));
       return row;
     }
     // on the name's line; a row with 「接入」 says it under the name
