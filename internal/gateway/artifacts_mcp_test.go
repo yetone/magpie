@@ -166,7 +166,7 @@ func TestArtifactsPublishSaysWhy(t *testing.T) {
 func TestArtifactsMCPOnlyForAgentsHere(t *testing.T) {
 	h := artifacts(t)
 	list := `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`
-	if m := readMCP(t, mcpPostTo(h, ArtifactsMCPPath, "127.0.0.1:50000", list)); len(m.Result.Tools) != 5 {
+	if m := readMCP(t, mcpPostTo(h, ArtifactsMCPPath, "127.0.0.1:50000", list)); len(m.Result.Tools) != 6 {
 		t.Fatalf("tools: %+v", m.Result.Tools)
 	}
 	for _, c := range []struct {

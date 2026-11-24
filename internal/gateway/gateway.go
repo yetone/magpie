@@ -1263,6 +1263,8 @@ func (s *Server) routes() *routeMux {
 	// an artifact's page and files, in a sandbox of their own (artifacts_mcp.go)
 	mux.HandleFunc("GET "+ArtifactPagePath+"{ref}", s.artifactPage)
 	mux.HandleFunc("GET "+ArtifactPagePath+"{ref}/{path...}", s.artifactPage)
+	mux.HandleFunc("POST "+ArtifactPagePath+"{ref}/"+artifactAPIDir+"db", s.artifactDB)
+	mux.HandleFunc("GET "+ArtifactPagePath+"{ref}/"+artifactAPIDir+"events", s.artifactEvents)
 	mux.HandleFunc(ImageMCPPath, s.imageMCP)
 	mux.HandleFunc(BrowserMCPPath, s.browserMCP)
 	mux.HandleFunc("GET "+BrowserExtensionPath, s.browserExtension)

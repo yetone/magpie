@@ -62,8 +62,9 @@ so the MCP router offers it too.
 
 | Tool | Does |
 | --- | --- |
-| `publish_artifact` | Publishes a page from `file_path` (relative to the agent's folder, `~` and `file://` read) or `html`, with `files` (a local path, `{text}`, `{base64}`, or null to remove one), `title`, `description`, `label`. With `id` it adds a version; with `version` it refuses a publish over a newer one. Answers the page's address. |
-| `read_artifact` | What it is, its versions and files, and the page as published, or one file with `path`, of the newest or a given version. |
+| `publish_artifact` | Publishes a page from `file_path` (relative to the agent's folder, `~` and `file://` read) or `html`, with `files` (a local path, `{text}`, `{base64}`, or null to remove one), `title`, `description`, `label` and `capabilities` ([Page runtime](#page-runtime)). With `id` it adds a version; with `version` it refuses a publish over a newer one. Answers the page's address. |
+| `read_artifact` | What it is, its versions and files, its capabilities and how many documents its data holds, and the page as published, or one file with `path`, of the newest or a given version. |
+| `artifact_data` | The page's data, as its owner: `get`, `list`, `query`, `set`, `update`, `str_replace`, `delete`, `batch`, with the same paths, limits and errors as the page. A write is told to every open view of the page. |
 | `list_artifacts` | Newest first, with `query` over title and description and a `limit`. |
 | `open_artifact` | Opens it in the user's browser (`proc.OpenBrowser`). |
 | `delete_artifact` | Deletes it with every version, for good. |
@@ -91,9 +92,10 @@ address, so:
   allow-downloads` (`artifactPageCSP`), without `allow-same-origin`. Its
   origin is opaque: it reads no cookie, storage or reply of the gateway's.
 - Its requests come with `Origin: null`. `corsGuard` lets that through for
-  a GET or HEAD under `/a/` alone (`artifactPageRead`), so a page reads its
-  own files; on every other route `Origin: null` without a key is refused
-  as before. Its files are served with `Access-Control-Allow-Origin: *`
+  a GET or HEAD under `/a/` (`artifactPageRead`), so a page reads its own
+  files, and for a POST to `/a/<ref>/_api/db` (`artifactAPICall`), its
+  store, which spends no subscription; on every other route `Origin: null`
+  without a key is refused as before. Its files are served with `Access-Control-Allow-Origin: *`
   so its module scripts and fetches load. The address is the key: a frame
   anywhere that knows it can read the page, as anyone given a link could,
   and a foreign http(s) page is refused by `corsGuard` before it.
@@ -105,6 +107,72 @@ address, so:
 - A page written as a fragment, with no doctype, is put in a document with
   a charset, a viewport and base styles (`Served`), so it doesn't render in
   quirks mode.
+
+## Page runtime
+
+A page written for claude.ai's artifact runtime (contract 0.2.99) runs
+here as written: `window.claude.use(name)` is there before the page's own
+scripts, and resolves `db`, `user` and the built-in `permissions`
+([internal/artifact/runtime.js](../../internal/artifact/runtime.js),
+[runtime.go](../../internal/artifact/runtime.go),
+[caps.go](../../internal/artifact/caps.go),
+[db.go](../../internal/artifact/db.go),
+[artifacts_api.go](../../internal/gateway/artifacts_api.go)).
+
+Declaring:
+
+- `publish_artifact` takes `capabilities` as Claude's Artifact tool does
+  (`ParseCapabilities`): left out, the version before's are carried
+  forward; `{}` clears them; any other object is the whole set. A version
+  keeps the declaration it was published with (`Version.Capabilities`).
+- Every name in the contract is accepted and kept; only `ServedCaps` (`db`,
+  `user`) are served, and the rest resolve null on the page, as an
+  unserved capability does on claude.ai. Declaring `permissions` is
+  refused: it is built in. `db`'s `rules` and `user`'s `scopes` are
+  checked at publish.
+
+On the page:
+
+- The runtime and its config are put right after `<head>` (else `<html>`,
+  else the doctype; `WithRuntime`), with every `<` in the config escaped.
+  Namespaces are frozen; `use()` is memoized and resolves an unknown or
+  unserved name null.
+- The config carries the page's token: an HMAC of the artifact id under
+  `<artifacts>/.secret` (0600, `PageToken`). It goes only into a page the
+  browser navigates to (`Sec-Fetch-Mode` navigate or none,
+  `artifactRuntimeFor`, with `Vary: Sec-Fetch-Mode`). A page's files are
+  served with `Access-Control-Allow-Origin: *`, so another page fetching
+  this one's HTML would read a token in it; a fetch gets the page without
+  the runtime.
+- Store calls are `POST /a/<ref>/_api/db` with JSON as `text/plain` (a
+  simple request, so no preflight from the opaque origin); changes come on
+  `GET /a/<ref>/_api/events` (SSE, the token in `t`), which a write by the
+  page, by the agent, or by another magpie process (looked for every 2s)
+  is told on, and `onSnapshot` queries again. A call needs this computer
+  at a loopback Host, the artifact's own token, and a version declaring
+  `db` (`artifactAPIOpen`), else `not_granted` or `revoked`.
+- `user.id()` is one id for the person at this computer (`viewerID`),
+  owner of every artifact here: `isOwner()` and `canEdit()` are true.
+
+The store:
+
+- `<id>/data.db` (SQLite), made at the first write, kept across versions,
+  gone with the artifact (`closeDB` before the folder). Documents at
+  slash paths, an even count of segments a document, odd a collection,
+  as claude.ai's.
+- Its limits are claude.ai's: a document 256 KiB and 32 deep, a path 16
+  segments and 1000 bytes, a query 10 filters, 30 `in` values and 1000
+  rows; a store 25,000 documents and 256 MiB, counted in the `totals`
+  row, which each write updates in its transaction. A write that grows
+  past a limit is `quota_exceeded`; one that shrinks a document always
+  goes.
+- `rules` give each path a read and write level (`view` < `interact` <
+  `admin` < `owner`, and `self`, held by nobody), with `{self}` the
+  viewer's own id; `data/users/<id>/` is the viewer's alone, the owner
+  included. `acquire` takes a lease on a document.
+- A shared copy on usemagpie.ai runs `SharedRuntime`: `window.claude` is
+  there and every capability resolves null, so the page shows what it
+  shows without them. Its data is never shared.
 
 ## Given to every agent, and Claude Code's own tool
 
@@ -224,11 +292,12 @@ magpie:
 
 ```sh
 go test -tags nogui ./internal/artifact
-go test -tags nogui ./internal/gateway -run 'TestArtifact'
+go test -tags nogui ./internal/gateway -run 'TestArtifact'   # TestArtifactPage* hold the page runtime's API
 go test -tags nogui ./internal/library -run 'TestArtifacts'
 go test -tags nogui ./internal/gui -run 'TestArtifactsAPI|TestArtifactsShareAPI|TestBuiltin'
 go test -tags nogui ./internal/cli -run 'TestArtifacts|TestEveryRouteHasACommandOrIsNamed'
 node --test internal/gui/tests/artifacts-page.test.cjs
+node --test internal/gui/tests/artifact-runtime.test.cjs
 node --test site/shares.test.mjs
 node --test internal/gui/tests/nav-pages-order.test.cjs internal/gui/tests/builtins.test.cjs
 ```

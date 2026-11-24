@@ -59,7 +59,9 @@ func corsGuard(next http.Handler) http.Handler {
 			}
 			// an artifact's page asks for its own files from its sandbox's
 			// opaque origin; it reads nothing else here (artifactPage)
-			if origin == "null" && artifactPageRead(r) {
+			// and calls its own store, with the token only that page holds
+			// (artifactDB), which spends no subscription
+			if origin == "null" && (artifactPageRead(r) || artifactAPICall(r)) {
 				next.ServeHTTP(w, r)
 				return
 			}

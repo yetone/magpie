@@ -151,7 +151,7 @@ func TestShareFollowsNewVersions(t *testing.T) {
 	}
 	id, got := site.only(t)
 	if sh.ID != id || sh.URL != "https://usemagpie.ai/a/"+id || sh.Version != 1 || got.title != "Plan" ||
-		got.files[Page] != "<!doctype html><title>Plan</title><p>one" || got.files["css/s.css"] != "p{}" {
+		got.files[Page] != sharedPage("<!doctype html><title>Plan</title><p>one") || got.files["css/s.css"] != "p{}" {
 		t.Fatalf("shared %+v as %+v", sh, got)
 	}
 	// share.json is the user's alone: it holds the token
@@ -175,7 +175,7 @@ func TestShareFollowsNewVersions(t *testing.T) {
 		t.Fatal(err)
 	}
 	id2, got := site.only(t)
-	if id2 != id || sh2.URL != sh.URL || sh2.Version != 2 || got.version != 2 || got.files[Page] != "<!doctype html><p>two" || got.files["css/s.css"] != "p{}" {
+	if id2 != id || sh2.URL != sh.URL || sh2.Version != 2 || got.version != 2 || got.files[Page] != sharedPage("<!doctype html><p>two") || got.files["css/s.css"] != "p{}" {
 		t.Fatalf("version 2 shared as %+v %+v", sh2, got)
 	}
 	if err := Unshare(context.Background(), a.ID); err != nil {
@@ -295,4 +295,10 @@ func TestShareRefusesWhatTheSiteCantHold(t *testing.T) {
 	if _, asks := site.count(); asks != 0 {
 		t.Fatalf("asked the site %d times", asks)
 	}
+}
+
+// sharedPage is a page as its shared copy carries it: with the runtime
+// that resolves every capability null.
+func sharedPage(page string) string {
+	return string(WithRuntime(Served([]byte(page)), SharedRuntime()))
 }

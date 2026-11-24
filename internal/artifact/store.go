@@ -84,6 +84,8 @@ type Version struct {
 	// Files are the version's files besides the page, by published path
 	Files []string `json:"files,omitempty"`
 	Size  int64    `json:"size"`
+	// Capabilities are what the page may do beyond static HTML (caps.go)
+	Capabilities Capabilities `json:"capabilities,omitempty"`
 }
 
 // Latest is the newest version.
@@ -123,6 +125,9 @@ type Publish struct {
 	// Base, when set, is the version the publisher last read: a publish
 	// over a newer one is refused (ErrConflict)
 	Base int
+	// Capabilities: nil keeps the version before's, an empty map
+	// clears them, any other is the whole set (ParseCapabilities)
+	Capabilities Capabilities
 }
 
 var (
@@ -242,6 +247,7 @@ func Delete(id string) error {
 	if err := os.Remove(filepath.Join(folder(id), metaName)); err != nil {
 		return err
 	}
+	closeDB(id)
 	return os.RemoveAll(folder(id))
 }
 
@@ -264,6 +270,9 @@ func CleanPath(p string) (string, error) {
 	}
 	if c == Page {
 		return "", fmt.Errorf("%s is the page itself: publish it as the page", Page)
+	}
+	if first, _, _ := strings.Cut(c, "/"); first == "_api" || first == "_blob" {
+		return "", fmt.Errorf("%q: %s/ is where the page runtime is served", p, first)
 	}
 	return c, nil
 }
@@ -412,7 +421,14 @@ func PublishPage(p Publish) (*Artifact, error) {
 		a.Description = desc
 	}
 	a.Updated = now
-	a.Versions = append(a.Versions, Version{N: n, At: now, Label: label, Agent: oneLine(p.Agent, 64), Files: all, Size: size})
+	caps := p.Capabilities
+	if caps == nil && prev != nil {
+		caps = prev.Capabilities
+	}
+	if len(caps) == 0 {
+		caps = nil
+	}
+	a.Versions = append(a.Versions, Version{N: n, At: now, Label: label, Agent: oneLine(p.Agent, 64), Files: all, Size: size, Capabilities: caps})
 	if err := writeMeta(a); err != nil {
 		os.RemoveAll(versionDir(a.ID, n))
 		return nil, err

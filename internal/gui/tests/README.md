@@ -170,6 +170,14 @@ after asking, with no click opening the row twice. None says so, and a
 find field shows from 8. Every language, both engines, a window at 1000
 and 560 and a browser at 420, with no sideways scroll and the API faked.
 
+`artifact-runtime.test.cjs` checks the page runtime (internal/artifact/runtime.js)
+as a page written for claude.ai's meets it: window.claude before the page's
+scripts, db and user resolved and the rest null, a bad path a TypeError at
+once, refused calls rejected with their code, every call text/plain from
+Origin null with the page's token, onSnapshot following the page's writes
+and the agent's, and a shared copy resolving every capability null. Both
+engines, under the sandbox CSP, the store faked.
+
 `mask-alert.test.cjs` checks Insights › Masking's Masking alert (Must2333 on
 X): after the page's list and not in Settings › Usage (nb5p on Discord), Off
 to begin with; On saves `maskAlert`, another setting saved later keeps it,

@@ -226,6 +226,12 @@ func shareBody(a *Artifact, v *Version) ([]byte, string, error) {
 		if err != nil {
 			return nil, "", err
 		}
+		// its pages run window.claude there too, with nothing served
+		if name == Page {
+			b = WithRuntime(Served(b), SharedRuntime())
+		} else if htmlName(name) {
+			b = WithRuntime(b, SharedRuntime())
+		}
 		part, err := w.CreateFormFile(fmt.Sprint(i), "file")
 		if err != nil {
 			return nil, "", err
@@ -278,4 +284,10 @@ func shareAsk(ctx context.Context, method, u string, s *Share, body []byte, ctyp
 		}
 	}
 	return res.StatusCode, nil
+}
+
+// htmlName is whether a file is served as a page (text/html).
+func htmlName(name string) bool {
+	n := strings.ToLower(name)
+	return strings.HasSuffix(n, ".html") || strings.HasSuffix(n, ".htm")
 }
