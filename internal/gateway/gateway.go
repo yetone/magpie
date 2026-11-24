@@ -86,6 +86,10 @@ func agentOf(r *http.Request) string {
 	if codexForClaudeCode(r.Header) {
 		return "codex"
 	}
+	if a := cloneOf(r); a != "" {
+		// omp in Claude Code's headers (claude_clones.go)
+		return a
+	}
 	return usage.AgentOf(ua)
 }
 
@@ -2285,6 +2289,7 @@ func (s *Server) countTokens(w http.ResponseWriter, r *http.Request) {
 		writeError(w, provider.Anthropic, 400, err.Error())
 		return
 	}
+	r = withClone(r, provider.Anthropic, body)
 	// counted as it will be sent: its tool exchange mended where it
 	// doesn't pair (tool_blocks_paired.go)
 	body = toolBlocksPaired(body)
@@ -2510,6 +2515,9 @@ func (s *Server) handle(from provider.Protocol) http.HandlerFunc {
 		// Qoder 1.1.82 and later name no session: the one of its own
 		// session files the request holds the prompts of (qoder_session.go)
 		r = qoderSession(r, from, body)
+		// an agent in Claude Code's headers is named as itself
+		// (claude_clones.go)
+		r = withClone(r, from, body)
 		// a Claude Code Message Thread magpie keeps no history for: sent
 		// again whole, without it (message_threads.go, #2480)
 		if from == provider.Anthropic && namesThread(body) {
