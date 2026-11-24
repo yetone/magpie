@@ -119,9 +119,7 @@ function artifactsPage() {
   // things to ask an agent for, each copied with a click, and which agents
   // can make one, or where to give them the server (the owner, 11-24: the
   // empty page told no one what it was for).
-  // each names Magpie Artifacts: an agent with a skill of its own for
-  // diagrams took the bare ask there instead (Pi with archify, owner 11-24)
-  const ASKS = ["Make a Magpie Artifact: a one-page report of this week's git commits, with a chart", "Make a Magpie Artifact: this project's architecture as a diagram", "Make a Magpie Artifact: a small Pomodoro timer I can use"];
+  const ASKS = ["Make a one-page report of this week's git commits, with a chart", "Draw this project's architecture as a diagram", "Make a small Pomodoro timer I can use"];
   // names joined as the GUI's language joins a list ("A、B和C")
   const listed = (names) => { try { return new Intl.ListFormat(intlLang(), { type: "conjunction" }).format(names); } catch { return names.join(", "); } };
   function empty() {
