@@ -293,7 +293,12 @@ func callerKeyRoutes(mux *http.ServeMux) {
 			return
 		}
 		access.MigrateLegacyLANKeyBestEffort()
-		if err := access.SetProviderKeys(in.Provider, in.Add, in.Remove); err != nil {
+		// a key on every model, unticked, keeps every other provider
+		var ids []string
+		for _, p := range provider.All() {
+			ids = append(ids, p.ID)
+		}
+		if err := access.SetProviderKeys(in.Provider, in.Add, in.Remove, ids); err != nil {
 			fail(w, err)
 			return
 		}

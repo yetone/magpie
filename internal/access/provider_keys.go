@@ -167,11 +167,15 @@ func groupsOnce() func() ([]AccountGroup, error) {
 //     some, never made every one).
 //   - remove: the key's entries of pid's own go; one held to accounts
 //     alone keeps its other providers. A key that may use every model
-//     (ReachAll), or would be left no model (Only), is refused, never
-//     narrowed to the providers there are now or let off to all.
+//     (ReachAll) is held to every other provider of providers, the ids
+//     there are now, "<id>/*" each, and every routing group, "group/*"
+//     (justforlxz on X: a key on every model, as most are, couldn't be
+//     unticked at all, so the list did nothing); a provider added later
+//     is not among them. A key that would be left no model (Only) is
+//     refused, never let off to all.
 //
 // Either every change is made or none is.
-func SetProviderKeys(pid string, add, remove []string) error {
+func SetProviderKeys(pid string, add, remove, providers []string) error {
 	pid = strings.TrimSpace(pid)
 	if pid == "" || strings.Contains(pid, "/") || strings.Contains(pid, "*") {
 		return errors.New("No such provider")
@@ -227,7 +231,21 @@ func SetProviderKeys(pid string, add, remove []string) error {
 		case pk.Reach == ReachNone:
 			continue
 		case pk.Reach == ReachAll:
-			return fmt.Errorf("%s may use every provider, those you add later too: to keep it off this one, pick the models it may use on the Gateway page", keys[i].Name)
+			var ms []string
+			for _, id := range providers {
+				if id = strings.TrimSpace(id); id != "" && !strings.ContainsAny(id, "/*") && !strings.EqualFold(id, pid) {
+					ms = append(ms, id+"/*")
+				}
+			}
+			if len(ms) == 0 {
+				// no other provider: an empty list would read as every model
+				return fmt.Errorf("%s may use every provider, and there is no other to keep it to: turn the key off, or pick its models on the Gateway page", keys[i].Name)
+			}
+			if ms, err = CleanModels(append(ms, "group/*")); err != nil {
+				return err
+			}
+			keys[i].Models, changed = ms, true
+			continue
 		case pk.Only:
 			return fmt.Errorf("%s may use only this provider's models, and with none it would use every model: turn the key off, or pick other models for it on the Gateway page", keys[i].Name)
 		}

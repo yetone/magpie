@@ -2,8 +2,9 @@
 // A provider's gateway keys (justforlxz on X: with many keys, ticking a
 // provider in each key's models is a chore). The editor's Advanced has a
 // Gateway keys row: its button says how many keys may use the provider, and
-// its menu ticks them. A key that may use every provider, and one held to
-// this provider alone, are ticked and stay ticked. The changes wait for
+// its menu ticks them. A key that may use every provider is ticked and can
+// be unticked (justforlxz on X: such keys were locked, so the list did
+// nothing); one held to this provider alone is ticked and stays ticked. The changes wait for
 // Save, go out before the provider's own save, and a closed editor drops
 // them. A provider no key could use has no row. In every language, wide and
 // narrow, in Chromium and WebKit.
@@ -54,6 +55,7 @@ function serve(lang, posts, keys) {
         const body = req.postDataJSON();
         posts.push({ action: "provider-keys", body });
         if (keys.refuse) return json({ error: keys.refuse }, 400);
+        keys.post?.(body);
         return json({ keys: keys.of(url.searchParams.get("provider")) });
       }
       return json({ keys: keys.of(url.searchParams.get("provider")) });
@@ -71,7 +73,7 @@ function serve(lang, posts, keys) {
 
 const STRINGS = [
   "Gateway keys", "Gateway keys that may use this provider", "Every key", "No key", "1 of {m} keys", "{n} of {m} keys",
-  "Every provider: hold it to some on the Gateway page", "Only this provider: change it on the Gateway page",
+  "Every provider; unticked, it keeps the others there are now", "Only this provider: change it on the Gateway page",
   "Every model", "Some models", "Maybe some, through {list}", "Search keys", "Off", "Save", "Discard",
 ];
 
@@ -140,27 +142,27 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await menu(page).locator(".pm-head").textContent(), await tr("Gateway keys that may use this provider"));
         const on = async (n) => (await item(page, n).getAttribute("aria-checked")) === "true";
         assert.deepEqual(await Promise.all(["Laptop", "Team", "CI", "Solo", "Bot"].map(on)), [true, true, false, true, true]);
-        assert.equal(await item(page, "Laptop").locator(".pm-note").textContent(), await tr("Every provider: hold it to some on the Gateway page"));
+        assert.equal(await item(page, "Laptop").locator(".pm-note").textContent(), await tr("Every provider; unticked, it keeps the others there are now"));
         assert.equal(await item(page, "Solo").locator(".pm-note").textContent(), await tr("Only this provider: change it on the Gateway page"));
         assert.equal(await item(page, "Team").locator(".pm-note").textContent(), await tr("Every model"));
         assert.equal(await item(page, "Bot").locator(".pm-note").textContent(), (await tr("Off")) + " · " + (await tr("Some models")));
         assert.equal(await item(page, "CI").locator(".pm-note").textContent(), await tr("Maybe some, through {list}", { list: "re:^gpt-" }));
-        // the locked ones stay ticked
+        // a key on every provider is unticked; one on this provider alone stays
         await item(page, "Laptop").click();
         await item(page, "Solo").click();
-        assert.equal(await on("Laptop"), true, "a key on every provider can't be unticked here");
+        assert.equal(await on("Laptop"), false, "a key on every provider is unticked here");
         assert.equal(await on("Solo"), true, "a key on this provider alone can't be unticked here");
         await item(page, "Team").click();
         await item(page, "CI").click();
         await page.keyboard.press("Escape");
         await menu(page).waitFor({ state: "detached" });
-        assert.equal(await b.textContent(), await tr("{n} of {m} keys", { n: 4, m: 5 }));
+        assert.equal(await b.textContent(), await tr("{n} of {m} keys", { n: 3, m: 5 }));
         assert.equal(posts.length, 0, "nothing is written before Save");
 
         await save(page, tr);
         await waitPosts(page, posts, 2);
         assert.deepEqual(posts.map((p) => p.action), ["provider-keys", "save"], "the keys go out before the provider's own save");
-        assert.deepEqual(posts[0].body, { provider: "relay", add: ["k-ci"], remove: ["k-team"] });
+        assert.deepEqual(posts[0].body, { provider: "relay", add: ["k-ci"], remove: ["k-all", "k-team"] });
         assert.deepEqual(errors, []);
       });
 
@@ -252,6 +254,53 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await page.locator(".editor label", { hasText: new RegExp(`^${await tr("Gateway keys")}$`) }).count(), 0);
         assert.deepEqual(errors, []);
       });
+      // justforlxz's case: new keys, each on every model, and keys held to
+      // other providers. Each click ticks or unticks, by mouse and by
+      // Space and Enter, Save writes it, and the editor opened again shows
+      // it, from a key provider's editor and a subscription's.
+      for (const name of ["Relay", "Codex"]) {
+        test(`${engine} ${lang} ${width}px: ${name}'s keys on every model, or on other providers, tick and untick, and Save keeps it`, async (t) => {
+          const pid = name.toLowerCase();
+          const saved = { "k-1": "all", "k-2": "all", "k-3": "all", "k-4": "", "k-5": "" };
+          const names = { "k-1": "Laptop", "k-2": "Phone", "k-3": "Server", "k-4": "Team", "k-5": "Bot" };
+          const keys = { of: () => Object.entries(saved).map(([id, reach]) => ({ id, name: names[id], reach })) };
+          keys.post = ({ add, remove }) => { for (const id of add) saved[id] = "whole"; for (const id of remove) saved[id] = ""; };
+          const { page, errors, posts, tr } = await open(t, name, keys);
+          const b = button(page);
+          await page.waitForFunction(() => document.querySelector(".editor button.gw-keys")?.textContent !== "…");
+          assert.equal(await b.textContent(), await tr("{n} of {m} keys", { n: 3, m: 5 }));
+          await openMenu(page);
+          const on = async (n) => (await item(page, n).getAttribute("aria-checked")) === "true";
+          const all = () => Promise.all(Object.values(names).map(on));
+          assert.deepEqual(await all(), [true, true, true, false, false]);
+          await item(page, "Laptop").click();
+          await item(page, "Team").click();
+          assert.deepEqual(await all(), [false, true, true, true, false], "a click ticks or unticks");
+          // the keyboard: Space and Enter on a row
+          await item(page, "Phone").focus();
+          await page.keyboard.press("Space");
+          await item(page, "Bot").focus();
+          await page.keyboard.press("Enter");
+          assert.deepEqual(await all(), [false, false, true, true, true], "Space and Enter tick and untick");
+          // closed by a click beside it in the editor, as a reader closes it
+          await page.locator(".editor .ehead b").click();
+          await menu(page).waitFor({ state: "detached" });
+          assert.equal(await b.textContent(), await tr("{n} of {m} keys", { n: 3, m: 5 }));
+          await save(page, tr);
+          await waitPosts(page, posts, 2);
+          assert.deepEqual(posts.map((p) => p.action), ["provider-keys", "save"]);
+          assert.deepEqual(posts[0].body, { provider: pid, add: ["k-4", "k-5"], remove: ["k-1", "k-2"] });
+          // opened again: the keys as saved
+          await page.locator(".editor").waitFor({ state: "detached" });
+          await page.locator(".row.provider", { hasText: name }).click();
+          await unfold(page);
+          await page.waitForFunction(() => document.querySelector(".editor button.gw-keys")?.textContent !== "…");
+          assert.equal(await b.textContent(), await tr("{n} of {m} keys", { n: 3, m: 5 }));
+          await openMenu(page);
+          assert.deepEqual(await all(), [false, false, true, true, true], "opened again as saved");
+          assert.deepEqual(errors, []);
+        });
+      }
     }
   }
 }

@@ -90,7 +90,7 @@ func TestProviderKeysReach(t *testing.T) {
 // holds the key the same way.
 func TestSetProviderKeys(t *testing.T) {
 	providerKeysFixture(t)
-	if err := SetProviderKeys("openai", []string{"other", "accts", "via"}, []string{"some", "whole"}); err != nil {
+	if err := SetProviderKeys("openai", []string{"other", "accts", "via"}, []string{"some", "whole"}, provs); err != nil {
 		t.Fatal(err)
 	}
 	for id, want := range map[string][]string{
@@ -122,7 +122,7 @@ func TestSetProviderKeys(t *testing.T) {
 		t.Errorf("accounts key lost a provider: %+v", who.Models)
 	}
 	// a key that reaches some of the provider's models stays at some
-	if err := SetProviderKeys("anthropic", []string{"some"}, nil); err != nil {
+	if err := SetProviderKeys("anthropic", []string{"some"}, nil, provs); err != nil {
 		t.Fatal(err)
 	}
 	if got := keyByID(t, "some").Models; !slices.Equal(got, []string{"anthropic/*"}) {
@@ -130,13 +130,13 @@ func TestSetProviderKeys(t *testing.T) {
 	}
 }
 
-// A key that may use every model is never narrowed to the providers there
-// are now, nor one held to this provider alone let off to every model:
-// both are refused, and nothing of the others changes.
+// A key held to this provider alone is never let off to every model, and
+// a key on every model with no other provider to keep it to is refused:
+// nothing of the others changes.
 func TestSetProviderKeysRefuses(t *testing.T) {
 	providerKeysFixture(t)
-	for _, id := range []string{"all", "kept-out", "only"} {
-		err := SetProviderKeys("openai", []string{"other"}, []string{id})
+	for id, ps := range map[string][]string{"only": provs, "all": {"openai"}, "kept-out": nil} {
+		err := SetProviderKeys("openai", []string{"other"}, []string{id}, ps)
 		if err == nil || !strings.Contains(err.Error(), "Gateway page") {
 			t.Errorf("%s: %v", id, err)
 		}
@@ -147,15 +147,51 @@ func TestSetProviderKeysRefuses(t *testing.T) {
 	if k := keyByID(t, "all"); len(k.Models) != 0 || len(k.Accounts) != 0 {
 		t.Errorf("every-model key changed: %+v", k)
 	}
-	if err := SetProviderKeys("openai", nil, []string{"ro"}); err == nil {
+	if err := SetProviderKeys("openai", nil, []string{"ro"}, provs); err == nil {
 		t.Error("a read-only key was taken")
 	}
-	if err := SetProviderKeys("openai", []string{"nope"}, nil); err == nil {
+	if err := SetProviderKeys("openai", []string{"nope"}, nil, provs); err == nil {
 		t.Error("an unknown key was taken")
 	}
 	for _, pid := range []string{"", "a/b", "*"} {
-		if err := SetProviderKeys(pid, []string{"other"}, nil); err == nil {
+		if err := SetProviderKeys(pid, []string{"other"}, nil, provs); err == nil {
 			t.Errorf("provider %q taken", pid)
 		}
 	}
 }
+
+// A key on every model, as a new key is, can be unticked (justforlxz on
+// X: every such key was locked, so a click did nothing). It is held to
+// every other provider there is and every routing group, its accounts
+// kept, and the gateway then keeps it off this provider alone.
+func TestSetProviderKeysNarrowsAnEveryModelKey(t *testing.T) {
+	providerKeysFixture(t)
+	if err := SetProviderKeys("openai", nil, []string{"all", "kept-out"}, provs); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"all", "kept-out"} {
+		if got, want := keyByID(t, id).Models, []string{"anthropic/*", "kimi/*", "group/*"}; !slices.Equal(got, want) {
+			t.Errorf("%s: models %v, want %v", id, got, want)
+		}
+	}
+	if got := keyByID(t, "kept-out").Accounts; !slices.Equal(got, []string{"openai/!x"}) {
+		t.Errorf("the key's accounts changed: %v", got)
+	}
+	who, ok := Authenticate(Prefix + "all-secret-0000000000")
+	if !ok || who.Allows("openai/gpt-5") || !who.Allows("anthropic/claude") || !who.Allows("kimi/k2") || !who.Allows("group/team") {
+		t.Errorf("unticked every-model key: %+v", who.Models)
+	}
+	if k := reachMap(t, "openai")["all"]; k.Reach != ReachNone {
+		t.Errorf("unticked key still reads as reaching openai: %+v", k)
+	}
+	// ticked again, it reaches openai whole
+	if err := SetProviderKeys("openai", []string{"all"}, nil, provs); err != nil {
+		t.Fatal(err)
+	}
+	if who, ok := Authenticate(Prefix + "all-secret-0000000000"); !ok || !who.Allows("openai/gpt-5") {
+		t.Errorf("ticked again: %+v", who.Models)
+	}
+}
+
+// provs are the providers the tests' keys name
+var provs = []string{"openai", "anthropic", "kimi", "OpenAI"}
