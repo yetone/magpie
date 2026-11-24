@@ -483,13 +483,23 @@ both) and the rest of an account's windows in a last column; a failed read
 and a balance say so across the windows. A head sorts by it (most used first
 for a window, A first for a name), again the other way, a third time back
 to the cards' order; accounts with nothing in that column stay last.
-A column is what its windows are of, not their names (`columnOf`;
-normalcoder_ on X: Antigravity's "Gemini · 5 hours" sat in the last column
-beside an empty Gemini one). A pooled window goes to its pool's column
-(`poolWord`, "Claude & GPT" under Claude), naming its window in the cell;
-any other window goes by its span (`spanOf`: "Weekly", "7 days" and "7d"
-share one column, headed by the name most rows use, a number on a tie),
-and a window with no span by its name. A provider with several accounts
+A column is how long its windows run, not what they are called
+(`columnOf`; normalcoder_ on X, then LotusDecoder: Volcengine's "Weekly",
+Zhipu's "MCP · Month" and Antigravity's pools' 5 hours and 7 days went in
+Other). The length is `period` on `/api/usage/quotas`, in seconds
+(`provider.WithWindowPeriods`, `QuotaWindow.Length`: the vendor's span,
+else what the name says, else 5 hours for an Antigravity model's own
+window), else what the window's name or one " · " part of it says
+(`hoursOf`, `spanOf`). A month of 28 to 31 days is one Month column, so
+Mistral's "API · Month" has no column of its own. Windows of one length on
+one account share its cell, each named by what isn't its length
+(`labelOf`: the pool, "Gemini" and "Claude & GPT"; "MCP"), and one named
+for its length alone ("Weekly" under 7 days) goes unnamed. A column is
+headed by the name most of its windows use when it says the length alone,
+else by the length (`spanHead`), a number on a tie; the lengths' columns
+take the four places before any column of a name. A window of no known
+length goes by its name, a pooled one by its pool (`poolWord`): Cursor's
+billing-cycle pools, which the plugin sends no span for, are in Other. A provider with several accounts
 (grouped as its card groups them) is one row (jay68xu on X, #6740): its
 name, how many accounts, and each column's share averaged over the accounts
 that have one; its accounts are rows under it, without the provider's name
@@ -499,7 +509,8 @@ localStorage `magpie.quotaTableOpen`. Sorting orders providers by that mean
 no row fills is left out (Account when no account is named; the window
 columns and Other only exist when some row has one). It
 scrolls in its own box at a narrow width, the subscription held at the left.
-See `usage-quota-table.test.cjs` and `usage-table-groups.test.cjs`.
+See `usage-quota-table.test.cjs`, `usage-table-groups.test.cjs`,
+`usage-table-lengths.test.cjs` and `TestWithWindowPeriods`.
 
 ### The Sessions page's folders
 

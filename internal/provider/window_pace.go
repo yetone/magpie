@@ -21,6 +21,39 @@ func (w QuotaWindow) Pace(readAt, now time.Time) (pace float64, ok bool) {
 	return max(0, min(100, w.Used)) - even, true
 }
 
+// Length is how long w runs: as its vendor said or its name says
+// (windowSpan), else, for an Antigravity model's own window, which says
+// neither, the 5 hours fetchAvailableModels gives it (modelSpan); 0 when
+// not known.
+func (w QuotaWindow) Length() time.Duration {
+	if s := windowSpan(w); s > 0 {
+		return s
+	}
+	if w.Family != "" && w.Model != "" {
+		return modelSpan
+	}
+	return 0
+}
+
+// WithWindowPeriods is qs with each window's Period set where it is known,
+// for the Usage table's columns; qs and its windows, which the caches
+// share, are left as they were.
+func WithWindowPeriods(qs []SubscriptionQuota) []SubscriptionQuota {
+	out := make([]SubscriptionQuota, len(qs))
+	for i, q := range qs {
+		if len(q.Windows) > 0 {
+			ws := make([]QuotaWindow, len(q.Windows))
+			for j, w := range q.Windows {
+				w.Period = int64(w.Length() / time.Second)
+				ws[j] = w
+			}
+			q.Windows = ws
+		}
+		out[i] = q
+	}
+	return out
+}
+
 // WithWindowStarts is qs with each window's StartsAt set where its bounds
 // are known, for the GUI's Pace number; qs and its windows, which the
 // caches share, are left as they were.

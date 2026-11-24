@@ -83,3 +83,34 @@ func TestWithWindowStarts(t *testing.T) {
 		}
 	}
 }
+
+// The Usage table puts a window in the column of its length (LotusDecoder
+// on X): the period sent is the vendor's span, else what the name says, else
+// an Antigravity model's 5 hours; none for a name of no length, and the
+// windows the caches share are left as they were.
+func TestWithWindowPeriods(t *testing.T) {
+	week := 7 * 24 * time.Hour
+	qs := []SubscriptionQuota{{Provider: "x", Windows: []QuotaWindow{
+		{Name: "Weekly", Span: week},
+		{Name: "5 hours"},
+		{Name: "Month", Span: 30 * 24 * time.Hour},
+		{Name: "Claude Sonnet 4.6", Family: "Claude", Model: "claude-sonnet-4-6"},
+		{Name: "Grok Bot", Span: week, Aside: true},
+		{Name: "Cursor Models"},
+	}}, {Provider: "y"}}
+	got := WithWindowPeriods(qs)
+	want := []int64{604800, 18000, 2592000, 18000, 604800, 0}
+	for i, w := range got[0].Windows {
+		if w.Period != want[i] {
+			t.Errorf("%s: period %d, want %d", w.Name, w.Period, want[i])
+		}
+	}
+	for _, w := range qs[0].Windows {
+		if w.Period != 0 {
+			t.Fatalf("%s: the shared window was written: %d", w.Name, w.Period)
+		}
+	}
+	if len(got) != 2 || got[1].Provider != "y" {
+		t.Fatalf("quotas: %+v", got)
+	}
+}

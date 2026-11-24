@@ -8,13 +8,15 @@
 // lines. A right-click inside an account's box is still that account's
 // menu, not the whole card's.
 //
-// Table: a column is what windows are of, not their names. An Antigravity
-// account whose pools were read has "Gemini · 5 hours" and "Gemini · 7
-// days"; they went in Other beside a Gemini column that accounts without
-// pools filled. They go in the Gemini column now, Claude & GPT's in
-// Claude's, and a vendor's "Weekly" in the 7 days column, each cell naming
-// a window its head doesn't. Both engines, every language, wide and
-// narrow; the API is faked here.
+// Table: a column is how long its windows run, not their names
+// (LotusDecoder on X, after normalcoder_). An Antigravity account whose
+// pools were read has "Gemini · 5 hours" and "Gemini · 7 days"; they went
+// in Other, then in a Gemini column that took a slot from the lengths'.
+// They go in the 5 hours and 7 days columns now, each named by its pool,
+// the accounts without pools' families in 5 hours beside them (magpie
+// sends a model's window as 5 hours long), and a vendor's "Weekly" in 7
+// days unnamed. Both engines, every language, wide and narrow; the API is
+// faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -24,8 +26,9 @@ const { chromium, webkit } = require("playwright");
 const assets = path.resolve(__dirname, "../assets");
 const at = (h) => new Date(Date.now() + h * 36e5).toISOString();
 const w = (name, used, h) => ({ name, used, resetsAt: at(h) });
-const model = (name, family, pool, used, h) => ({ name, family, ...(pool ? { pool } : {}), used, resetsAt: at(h) });
-const pool = (p, name, used, h) => ({ name, pool: p, used, resetsAt: at(h) });
+// with the period /api/usage/quotas sends: a model's own window is 5 hours
+const model = (name, family, pool, used, h) => ({ name, family, ...(pool ? { pool } : {}), used, resetsAt: at(h), period: 18000 });
+const pool = (p, name, used, h) => ({ name, pool: p, used, resetsAt: at(h), period: name === "5 hours" ? 18000 : 604800 });
 const AG = { provider: "antigravity", name: "Antigravity", icon: "antigravity-color", plan: "Google AI Pro" };
 // as magpie reports them: one account whose quota summary was read (its
 // models draw on pools, each pool's own windows beside them), two whose
@@ -150,28 +153,29 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const tr = (s) => page.evaluate((x) => t(x), s);
         const [five, week] = [await tr("5 hours"), await tr("7 days")];
         const col = (name) => table.heads.indexOf(name) - 2;
-        assert.ok(col("Gemini") >= 0 && col("Claude") >= 0, `${table.heads}`);
-        // the pooled account's Gemini windows are in the Gemini column, named
+        assert.ok(col(five) >= 0 && col(week) >= 0, `${table.heads}`);
+        assert.ok(!table.heads.includes("Gemini") && !table.heads.includes("Claude") && !table.heads.includes(await tr("Weekly")), `no column of a pool's or a family's own: ${table.heads}`);
+        // the pooled account's windows by length, each named by its pool
         const pg = table.rows["pooled@example.com"];
-        assert.deepEqual(pg[col("Gemini")], [`Gemini · ${five} 11%`, `Gemini · ${week} 23%`], `${JSON.stringify(pg)}`);
-        assert.deepEqual(pg[col("Claude")], [`Claude & GPT · ${five} 30%`, `Claude & GPT · ${week} 64%`]);
-        // the others' families in the same column, as they were
-        assert.deepEqual(table.rows["bare1@example.com"][col("Gemini")], ["40%"]);
-        // "Weekly" goes in the 7 days column, named; "7 days" unnamed
-        assert.ok(col(week) >= 0 && !table.heads.includes(await tr("Weekly")), `${table.heads}`);
-        assert.deepEqual(table.rows["k1@example.com"][col(week)], [`${await tr("Weekly")} 42%`]);
+        assert.deepEqual(pg[col(five)], ["Gemini 11%", "Claude & GPT 30%"], `${JSON.stringify(pg)}`);
+        assert.deepEqual(pg[col(week)], ["Gemini 23%", "Claude & GPT 64%"]);
+        // the others' families in 5 hours beside them, named
+        assert.deepEqual(table.rows["bare1@example.com"][col(five)], ["Gemini 40%", "Claude 5%", "GPT-OSS 5%"]);
+        // "Weekly" goes in the 7 days column, which says what it is
+        assert.deepEqual(table.rows["k1@example.com"][col(week)], ["42%"]);
+        assert.deepEqual(table.rows["z1@example.com"][col(week)], ["12%"]);
         assert.deepEqual(table.rows["c1@example.com"][col(week)], ["40%"]);
         // nothing of these left over for Other
         const other = await tr("Other");
         if (table.heads.includes(other)) {
-          for (const u of ["pooled@example.com", "k1@example.com", "z1@example.com"])
+          for (const u of ["pooled@example.com", "bare1@example.com", "k1@example.com", "z1@example.com"])
             assert.deepEqual(table.rows[u][col(other)], [], `${u}'s Other: ${table.rows[u][col(other)]}`);
         }
-        // sorting by the Gemini column reads the pooled row by its fuller window
-        await page.locator(".qt thead th .qt-sort", { hasText: "Gemini" }).click();
-        assert.equal(await page.$eval(".qt tbody tr:nth-child(1)", (x) => x.className + " " + x.dataset.provider), "qt-group antigravity", "the provider with Gemini first");
-        const firstRow = await page.$eval(".qt tbody tr:nth-child(2) .qt-acct", (x) => x.textContent.trim());
-        assert.equal(firstRow, "bare1@example.com", "40% before the pooled row's 23%");
+        // sorting by 5 hours reads a shared cell by its fuller window:
+        // Antigravity's accounts 40%, then the pooled one's 30%, then 5%
+        await page.locator(".qt thead th .qt-sort", { hasText: five }).click();
+        const order = await page.$$eval('.qt tbody tr.qt-kid[data-provider="antigravity"] .qt-acct', (xs) => xs.map((x) => x.textContent.trim()));
+        assert.deepEqual(order, ["bare1@example.com", "pooled@example.com", "bare2@example.com"]);
         if (shots) await page.screenshot({ path: path.join(shots, `table-${engine}-${lang}-${width}.png`), fullPage: true });
 
         const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

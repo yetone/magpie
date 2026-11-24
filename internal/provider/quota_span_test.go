@@ -64,6 +64,7 @@ func TestQuotaSpanCarriesEveryWindowField(t *testing.T) {
 		"capId":     "the GUI's cap marks (WithCapped)",
 		"ownCap":    "the GUI's cap marks (WithCapped)",
 		"startsAt":  "the GUI's Pace number (WithWindowStarts)",
+		"period":    "the GUI's Usage table columns (WithWindowPeriods)",
 		"trayKind":  "the GUI's menu bar picker (gui.withTrayKinds)",
 		"trayExtra": "the GUI's menu bar picker (gui.withTrayKinds)",
 		"heldBy":    "the GUI's all-accounts sum (WithHeldWindows)",

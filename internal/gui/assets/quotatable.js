@@ -9,12 +9,17 @@
 // the rest of an account's go in the last column. A click on a head sorts
 // by it, again the other way, a third time back to the cards' order.
 //
-// A column is what windows are of, not their names (normalcoder_ on X: an
-// Antigravity account's "Gemini · 5 hours" and "Gemini · 7 days" went in
-// Other beside a Gemini column): a pool's windows go in its family's
-// column, a family's in its own, and a window named for its span in the
-// span's, however the vendor words it ("Weekly", "7 days"). A cell holding
-// more than one, or one named otherwise than its column, names each.
+// A column is how long its windows run, not what they are called
+// (normalcoder_ on X, then LotusDecoder: Volcengine's "Weekly", Zhipu's
+// "MCP · Month" and Antigravity's pools' 5 hours and 7 days went in
+// Other). A window whose length magpie knows (the period it sends, else
+// the window's name: "5 hours", "Weekly", "MCP · Month") goes in that
+// length's column, and a month is one column whatever its days (Mistral's
+// "API · Month" goes in Month). Windows of one length on one account
+// share its cell, each named by what isn't its length: Antigravity's
+// "Gemini" and "Claude & GPT", Zhipu's "MCP". A window of no known length
+// goes by its name; the lengths' columns come first. A cell holding more
+// than one, or one named otherwise than its column, names each.
 //
 // A provider with several accounts is one row (jay68xu on X, #6740): its
 // name and how many, and each column's share averaged over its accounts
@@ -38,22 +43,48 @@ const spanOf = (name) => {
   const m = /^(\d+)\s*(h|hours?|d|days?|w|weeks?)$/.exec(n);
   return m ? m[1] * { h: 1, d: 24, w: 168 }[m[2][0]] : Infinity;
 };
-// columnOf: the column a window goes in, its key and its head
+// a name's parts, "MCP · Month" as MCP and Month
+const partsOf = (name) => (name || "").split(" · ");
+// hoursOf: how long a window runs in hours, by the period magpie sends,
+// else by its name or a part of it ("MCP · Month"); a month of any
+// length is 720; Infinity when not known
+function hoursOf(w) {
+  const h = w.period > 0 ? Math.round(w.period / 3600) : Math.min(...partsOf(w.window || w.name).map(spanOf));
+  return h >= 28 * 24 && h <= 31 * 24 ? 720 : h;
+}
+// labelOf: what a window is called in its length's column: its pool, else
+// its name less the part saying its length ("MCP" of "MCP · Month"); ""
+// for one named for its length alone ("Weekly"), which the column says
+function labelOf(w) {
+  if (w.window && w.pool) return w.pool;
+  return partsOf(w.name).filter((p) => spanOf(p) === Infinity).join(" · ");
+}
+// a length's head where no window of it is named for the length alone
+const SPAN_HEAD = { 5: "5 hours", 24: "1 day", 168: "7 days", 720: "Month" };
+const spanHead = (h) => SPAN_HEAD[h] || (h % 24 ? t("{n} h", { n: h }) : t("{n} days", { n: h / 24 }));
+// columnOf: the column a window goes in, its key and its head: a length's
+// head is a name of one of its windows that says the length alone
+// ("Weekly"), else the length's own
 function columnOf(w) {
+  const h = hoursOf(w);
+  if (h < Infinity) {
+    const n = spanOf(w.name), own = n === h || (h === 720 && n >= 28 * 24 && n <= 31 * 24);
+    return { key: "s:" + h, head: own ? w.name : spanHead(h), hours: h };
+  }
   if (w.window && w.pool) { const f = poolWord(w.pool); return { key: "n:" + f, head: f }; }
-  const h = spanOf(w.name);
-  return h < Infinity ? { key: "s:" + h, head: w.name } : { key: "n:" + w.name, head: w.name };
+  return { key: "n:" + w.name, head: w.name };
 }
 
-// a window's cell: its share and bar, and when it starts again
-function windowCell(w, long) {
+// a window's cell: its share and bar, and when it starts again; named
+// (name) when its column doesn't say what it is
+function windowCell(w, name) {
   const box = el("div", "qt-win");
   if (!w) return box;
   const top = el("div", "qt-fig");
   const text = quotaText(w);
   const bar = share(w) >= 0;
   top.append(el("span", "qt-n", bar ? quotaFill(w) + "%" : text));
-  if (long) top.prepend(el("span", "qt-name", t(w.name)), " ");
+  if (name) top.prepend(el("span", "qt-name", t(name)), " ");
   box.append(top);
   if (bar) {
     const track = el("div", "quota-track"), fill = el("i");
@@ -82,8 +113,11 @@ function quotaTable(subs) {
     }
   }
   const headOf = (k) => [...heads.get(k)].sort(([x, a], [y, b]) => b - a || /^\d/.test(y) - /^\d/.test(x))[0][0];
-  const names = [...count.keys()].map((n, i) => [n, i]).sort(([a, i], [b, j]) => count.get(b) - count.get(a) || i - j).slice(0, TABLE_WINDOWS)
-    .sort(([a, i], [b, j]) => spanOf(headOf(a)) - spanOf(headOf(b)) || i - j).map(([n]) => n);
+  // the lengths' columns first, then the most rows have; shown shortest first
+  const hrs = (k) => (k.startsWith("s:") ? +k.slice(2) : Infinity);
+  const names = [...count.keys()].map((n, i) => [n, i])
+    .sort(([a, i], [b, j]) => (hrs(a) === Infinity) - (hrs(b) === Infinity) || count.get(b) - count.get(a) || i - j).slice(0, TABLE_WINDOWS)
+    .sort(([a, i], [b, j]) => hrs(a) - hrs(b) || i - j).map(([n]) => n);
   const inCol = (ws, k) => ws.filter((w) => columnOf(w).key === k);
   const extra = (r) => r.ws.filter((w) => !names.includes(columnOf(w).key));
   const bare = (r) => r.sub.balance && !r.ws.length && !r.sub.error; // a balance and no window
@@ -219,12 +253,14 @@ function quotaTable(subs) {
         } else for (const n of names) {
           const here = inCol(ws, n);
           const c = el("td", "qt-w");
-          for (const w of here) c.append(windowCell(w, here.length > 1 || w.name !== headOf(n)));
+          const label = (w) => (n.startsWith("s:") ? labelOf(w) || (here.length > 1 ? w.name : "")
+            : here.length > 1 || w.name !== headOf(n) ? w.name : "");
+          for (const w of here) c.append(windowCell(w, label(w)));
           tr.append(c);
         }
         if (more && !bare({ sub, ws })) {
           const o = el("td", "qt-w qt-other");
-          for (const w of extra({ ws })) o.append(windowCell(w, true));
+          for (const w of extra({ ws })) o.append(windowCell(w, w.name));
           if (sub.balance) o.append(el("div", "qt-fig", t("{n} left", { n: sub.balance })));
           tr.append(o);
         }
