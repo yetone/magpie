@@ -3424,31 +3424,41 @@ func pricedNamesTo(dst []string, model string) []string {
 }
 
 // geminiTrialBase is the Gemini model the lower-cased id l is the trial
-// access of (ownsh1p on X: Usage showed gemini-4-argon-trial with tokens and
-// no cost): the id without its -trial, at an effort after it too
-// (gemini-4-argon-trial-high). Google's Antigravity models page
+// access, or the tiered id, of: the id without its -trial or -tiered, at an
+// effort after it too (gemini-4-argon-trial-high, gemini-4-hydrogen-tiered-high).
+//
+// -trial (ownsh1p on X: Usage showed gemini-4-argon-trial with tokens and
+// no cost): Google's Antigravity models page
 // (https://antigravity.google/docs/models/, read 2026-11-16) gives Gemini 4
 // Argon to "paid Google AI Pro plans or on trial with eligible premium
 // devices": the same model, reached on a trial, so its calls are estimated
-// at the model's list price as a paid plan's are. Only a gemini- id: a
-// -trial of another vendor's (ZCode's glm-5.3-trial, grok-4.7-trial) is
-// that vendor's own offer and keeps no price it doesn't list.
+// at the model's list price as a paid plan's are.
+//
+// -tiered (kekao on Discord: gemini-4-hydrogen-tiered-high showed no
+// price): Antigravity's one id of a model that thinks at the level the
+// request asks (collapseAntigravityModels), named "<model> (Tiered)", so
+// it is priced as that model.
+//
+// Only a gemini- id: a -trial or -tiered of another vendor's (ZCode's
+// glm-5.3-trial, grok-4.7-trial) is that vendor's own offer and keeps no
+// price it doesn't list.
 func geminiTrialBase(l string) (string, bool) {
-	if !strings.Contains(l, "-trial") {
+	if !strings.Contains(l, "-tri") && !strings.Contains(l, "-tie") {
 		return "", false // every model of every provider's list is priced on each poll
 	}
 	last := l[strings.LastIndexByte(l, '/')+1:]
 	if !strings.HasPrefix(last, "gemini-") {
 		return "", false
 	}
-	if base, ok := strings.CutSuffix(l, "-trial"); ok {
-		return base, true
-	}
-	i := strings.LastIndexByte(l, '-')
-	switch l[i+1:] {
-	case "minimal", "low", "medium", "high", "xhigh":
-		if base, ok := strings.CutSuffix(l[:i], "-trial"); ok {
-			return base + l[i:], true
+	for _, word := range []string{"-trial", "-tiered"} {
+		if base, ok := strings.CutSuffix(l, word); ok {
+			return base, true
+		}
+		// at an effort after it, Antigravity's extra-high too
+		if e, ok := effortBase(l); ok {
+			if base, ok := strings.CutSuffix(e, word); ok {
+				return base + l[len(e):], true
+			}
 		}
 	}
 	return "", false
