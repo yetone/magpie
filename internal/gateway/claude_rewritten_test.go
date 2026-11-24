@@ -214,7 +214,7 @@ func TestClaudeSessionTempFilesAreRemoved(t *testing.T) {
 	left, kept, recent, touched := image("left", 2*tempLongest), image("kept", 2*tempLongest), image("recent", time.Hour), image("touched", 2*tempLongest)
 	os.WriteFile(filepath.Join(dir, "kept.jsonl"), []byte("{}"), 0o600)
 	os.WriteFile(filepath.Join(touched, "images", "2.png"), []byte("png"), 0o600)
-	newSubscriptionBridge().sweepSessions([]string{dir})
+	newSubscriptionBridge().sweepSessions([]string{dir}, false)
 	eventually(t, "a stopped gateway's session temp files stayed", func() bool { return gone(left) })
 	for _, p := range []string{kept, recent, touched, other} {
 		if gone(p) {

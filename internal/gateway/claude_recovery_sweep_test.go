@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/bridgesid"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // An account can wait for its quota longer than the ordinary idle hour.
@@ -64,7 +67,7 @@ func TestClaudeSweepKeepsQuotaSessions(t *testing.T) {
 					bridge.mu.Unlock()
 				}()
 			}
-			bridge.sweepSessions([]string{dir})
+			bridge.sweepSessions([]string{dir}, false)
 			eventually(t, "the expired session wasn't swept", func() bool {
 				_, err := os.Stat(filepath.Join(dir, "expired.jsonl"))
 				return os.IsNotExist(err)
@@ -87,6 +90,56 @@ func TestClaudeSweepUnknownShelfLeavesFiles(t *testing.T) {
 		}
 		if _, known := newSubscriptionBridge().keptSessions(); known {
 			t.Fatal("unreadable shelf allowed a destructive sweep")
+		}
+	}
+}
+
+// A gateway that stopped leaves its runs' sessions in the callers' folders'
+// projects, where the user's own Claude Code lists them in `claude
+// --resume` (YZSR on Discord: 12 of a folder's 14 were the runs'). The
+// next gateway removes, from every project, the runs' that are older than
+// a session is kept, known by their ids, and leaves the user's own,
+// however old, a run's still kept, and a newer run's.
+func TestClaudeRunSessionsSweptFromEveryProject(t *testing.T) {
+	home := t.TempDir()
+	testenv.SetHome(t, home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	config := filepath.Join(home, ".claude")
+	dir := filepath.Join(config, "projects", "-Users-me-proj")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-2 * idleLongest)
+	mine, left, kept, recent := newUUID(), bridgesid.New(), bridgesid.New(), bridgesid.New()
+	if bridgesid.Is(mine) || !bridgesid.Is(left) {
+		t.Fatal("the runs' ids aren't told from the user's")
+	}
+	write := func(sid string, at time.Time) string {
+		path := filepath.Join(dir, sid+".jsonl")
+		if err := os.WriteFile(path, []byte("{}\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(path, at, at); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	minePath, leftPath, keptPath, recentPath := write(mine, old), write(left, old), write(kept, old), write(recent, time.Now())
+	if err := os.Mkdir(filepath.Join(dir, left), 0o700); err != nil { // its sub-agents
+		t.Fatal(err)
+	}
+	b := newSubscriptionBridge()
+	t.Cleanup(b.abortAll)
+	b.runs["active"] = &subscriptionRun{sessionID: kept, sessions: []string{dir}}
+	b.sweepRunSessions(config)
+	for _, p := range []string{leftPath, filepath.Join(dir, left)} {
+		if _, err := os.Stat(p); !os.IsNotExist(err) {
+			t.Errorf("%s stayed: %v", p, err)
+		}
+	}
+	for _, p := range []string{minePath, keptPath, recentPath} {
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("%s: %v", p, err)
 		}
 	}
 }

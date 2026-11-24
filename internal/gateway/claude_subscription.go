@@ -1054,6 +1054,7 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 		go func() {
 			sweepBridgeProjects(claudeConfigDir(), os.TempDir())
 			sweepBridgeTemps(os.TempDir())
+			b.sweepRunSessions(claudeConfigDir())
 		}()
 	})
 	tmp, err := os.MkdirTemp("", "magpie-claude-")
@@ -1143,10 +1144,8 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 		sessions = claudeSessions(configDir, work)
 		args = slices.DeleteFunc(args, func(a string) bool { return a == "--no-session-persistence" })
 		// a caller's folder keeps its own sessions beside the runs': only
-		// magpie's own folder is swept, a run's session removed by its id
-		if !client {
-			b.sweepSessions(sessions)
-		}
+		// the runs' are swept there, known by their ids (bridgesid)
+		b.sweepSessions(sessions, client)
 	}
 	// kept is the session from was, for startTrusted to go on with in
 	// magpie's folder when Claude Code asks about the caller's
@@ -3663,45 +3662,81 @@ func untouchedFor(path string, age time.Duration) bool {
 // folders, the sessions a gateway that stopped or crashed left there:
 // those untouched for longer than one would be kept. Another gateway on
 // the same account (a dev build) works in the same folder; its sessions
-// are newer.
-func (b *subscriptionBridge) sweepSessions(dirs []string) {
+// are newer. In a caller's folder (runsOnly) the user's own Claude Code
+// saves its sessions too, so only the runs' go, known by their ids
+// (bridgesid): left there, each was listed in the user's `claude
+// --resume` beside their own (YZSR on Discord: 12 of a folder's 14).
+func (b *subscriptionBridge) sweepSessions(dirs []string, runsOnly bool) {
 	for _, dir := range dirs {
 		if _, done := b.swept.LoadOrStore(dir, true); done {
 			continue
 		}
 		go func() {
 			kept, known := b.keptSessions()
-			if !known {
-				return
-			}
-			entries, _ := os.ReadDir(dir)
-			for _, e := range entries {
-				sid, ok := strings.CutSuffix(e.Name(), ".jsonl")
-				if !ok || e.IsDir() || kept[filepath.Join(dir, e.Name())] {
-					continue
-				}
-				if fi, err := e.Info(); err == nil && time.Since(fi.ModTime()) > idleLongest+time.Minute {
-					removeSession([]string{dir}, sid)
-				}
-			}
-			tmp := claudeTempDir(dir)
-			if tmp == "" {
-				return
-			}
-			entries, _ = os.ReadDir(tmp)
-			for _, e := range entries {
-				sid := e.Name()
-				if !e.IsDir() || strings.HasPrefix(sid, ".") {
-					continue
-				}
-				if _, err := os.Stat(filepath.Join(dir, sid+".jsonl")); err == nil {
-					continue
-				}
-				if untouchedFor(filepath.Join(tmp, sid), tempLongest) {
-					_ = os.RemoveAll(filepath.Join(tmp, sid))
-				}
+			if known {
+				sweepSessionDir(dir, kept, runsOnly)
 			}
 		}()
+	}
+}
+
+// sweepRunSessions sweeps the runs' sessions from every project of
+// Claude Code's folder configDir, once a gateway: a caller's folder no
+// run goes to again keeps what a stopped gateway left there otherwise.
+// Only the runs' are touched (runsOnly), and the folders sweepSessions
+// went through are left to it.
+func (b *subscriptionBridge) sweepRunSessions(configDir string) {
+	root := filepath.Join(configDir, "projects")
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return
+	}
+	kept, known := b.keptSessions()
+	if !known {
+		return
+	}
+	for _, e := range entries {
+		dir := filepath.Join(root, e.Name())
+		if !e.IsDir() {
+			continue
+		}
+		if _, done := b.swept.Load(dir); done {
+			continue
+		}
+		sweepSessionDir(dir, kept, true)
+	}
+}
+
+// sweepSessionDir removes from project folder dir the sessions untouched
+// for longer than one is kept, and the temp files of those gone, but for
+// those in kept; with runsOnly, only the runs' sessions (bridgesid.Is).
+func sweepSessionDir(dir string, kept map[string]bool, runsOnly bool) {
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		sid, ok := strings.CutSuffix(e.Name(), ".jsonl")
+		if !ok || e.IsDir() || kept[filepath.Join(dir, e.Name())] || runsOnly && !bridgesid.Is(sid) {
+			continue
+		}
+		if fi, err := e.Info(); err == nil && time.Since(fi.ModTime()) > idleLongest+time.Minute {
+			removeSession([]string{dir}, sid)
+		}
+	}
+	tmp := claudeTempDir(dir)
+	if tmp == "" {
+		return
+	}
+	entries, _ = os.ReadDir(tmp)
+	for _, e := range entries {
+		sid := e.Name()
+		if !e.IsDir() || strings.HasPrefix(sid, ".") || runsOnly && !bridgesid.Is(sid) {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(dir, sid+".jsonl")); err == nil {
+			continue
+		}
+		if untouchedFor(filepath.Join(tmp, sid), tempLongest) {
+			_ = os.RemoveAll(filepath.Join(tmp, sid))
+		}
 	}
 }
 

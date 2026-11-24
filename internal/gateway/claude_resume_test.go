@@ -350,7 +350,7 @@ func TestClaudeOldSessionsAreSwept(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("x"), 0o600)
 	long := time.Now().Add(-2 * idleLongest)
 	os.Chtimes(old, long, long)
-	newSubscriptionBridge().sweepSessions([]string{dir})
+	newSubscriptionBridge().sweepSessions([]string{dir}, false)
 	// The sweep removes the session's file, then its folder: wait for both.
 	gone := func(p string) bool { _, err := os.Stat(p); return os.IsNotExist(err) }
 	eventually(t, "the old session stayed", func() bool { return gone(old) && gone(filepath.Join(dir, "old")) })
