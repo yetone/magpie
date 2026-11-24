@@ -31,15 +31,15 @@ const artifacts = [
 
 const words = {
   en: { nav: "Artifacts", versions: "2 versions", empty: "No artifacts yet", copy: "Copy link", earlier: "Earlier versions", del: "Delete", v1: "Version 1",
-    share: "Share…", shareGo: "Share", shared: "Shared", copyShared: "Copy shared link", stop: "Stop sharing", ask: "Make a one-page report of this week's git commits, with a chart", can: "Agents that can make one: ", turnOn: "Turn it on in the Library", manage: "Manage" },
+    share: "Share…", shareGo: "Share", shared: "Shared", copyShared: "Copy shared link", stop: "Stop sharing", ask: "Make a Magpie Artifact: a one-page report of this week's git commits, with a chart", can: "Agents that can make one: ", turnOn: "Turn it on in the Library", manage: "Manage", many: "25 agents can make one" },
   zh: { nav: "Artifacts", versions: "2 个版本", empty: "还没有 Artifact", copy: "复制链接", earlier: "之前的版本", del: "删除", v1: "版本 1",
-    share: "分享…", shareGo: "分享", shared: "已分享", copyShared: "复制分享链接", stop: "停止分享", ask: "把这周的 git 提交做成一页带图表的周报", can: "可以做 Artifact 的 Agent：", turnOn: "在资源库中开启", manage: "管理" },
+    share: "分享…", shareGo: "分享", shared: "已分享", copyShared: "复制分享链接", stop: "停止分享", ask: "用 Magpie Artifacts 把这周的 git 提交做成一页带图表的周报", can: "可以做 Artifact 的 Agent：", turnOn: "在资源库中开启", manage: "管理", many: "25 个 Agent 可以做 Artifact" },
   "zh-TW": { nav: "Artifacts", versions: "2 個版本", empty: "還沒有 Artifact", copy: "複製連結", earlier: "之前的版本", del: "刪除", v1: "版本 1",
-    share: "分享…", shareGo: "分享", shared: "已分享", copyShared: "複製分享連結", stop: "停止分享", ask: "把這週的 git 提交做成一頁帶圖表的週報", can: "可以做 Artifact 的 Agent：", turnOn: "在資源庫中開啟", manage: "管理" },
+    share: "分享…", shareGo: "分享", shared: "已分享", copyShared: "複製分享連結", stop: "停止分享", ask: "用 Magpie Artifacts 把這週的 git 提交做成一頁帶圖表的週報", can: "可以做 Artifact 的 Agent：", turnOn: "在資源庫中開啟", manage: "管理", many: "25 個 Agent 可以做 Artifact" },
   ja: { nav: "Artifacts", versions: "2 個のバージョン", empty: "Artifact はまだありません", copy: "リンクをコピー", earlier: "以前のバージョン", del: "削除", v1: "バージョン 1",
-    share: "共有…", shareGo: "共有", shared: "共有中", copyShared: "共有リンクをコピー", stop: "共有を停止", ask: "今週の git コミットをグラフ付きの 1 ページのレポートにして", can: "Artifact を作れるエージェント：", turnOn: "ライブラリでオンにする", manage: "管理" },
+    share: "共有…", shareGo: "共有", shared: "共有中", copyShared: "共有リンクをコピー", stop: "共有を停止", ask: "Magpie Artifacts で、今週の git コミットをグラフ付きの 1 ページのレポートにして", can: "Artifact を作れるエージェント：", turnOn: "ライブラリでオンにする", manage: "管理", many: "25 個のエージェントが Artifact を作れます" },
   de: { nav: "Artifacts", versions: "2 Versionen", empty: "Noch keine Artifacts", copy: "Link kopieren", earlier: "Frühere Versionen", del: "Löschen", v1: "Version 1",
-    share: "Teilen …", shareGo: "Teilen", shared: "Geteilt", copyShared: "Geteilten Link kopieren", stop: "Nicht mehr teilen", ask: "Mach aus den Git-Commits dieser Woche einen einseitigen Bericht mit Diagramm", can: "Agents, die eines erstellen können: ", turnOn: "In der Bibliothek einschalten", manage: "Verwalten" },
+    share: "Teilen …", shareGo: "Teilen", shared: "Geteilt", copyShared: "Geteilten Link kopieren", stop: "Nicht mehr teilen", ask: "Mach mit Magpie Artifacts aus den Git-Commits dieser Woche einen einseitigen Bericht mit Diagramm", can: "Agents, die eines erstellen können: ", turnOn: "In der Bibliothek einschalten", manage: "Verwalten", many: "25 Agents können eines erstellen" },
 };
 const LINK = "https://usemagpie.ai/a/abcdefghijklmnop";
 
@@ -70,7 +70,7 @@ function serve(lang, web, got, list, off) {
 
 // until waits for what the page sent to arrive here, not for a duration
 async function until(fn) {
-  for (let i = 0; i < 250 && !fn(); i++) await new Promise((r) => setTimeout(r, 20));
+  for (let i = 0; i < 250 && !(await fn()); i++) await new Promise((r) => setTimeout(r, 20));
 }
 
 async function openPage(browser, { lang, web, width, items, off = [], agents }) {
@@ -218,9 +218,22 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const asks = empty.locator(".art-ask");
         assert.equal(await asks.count(), 3, where);
         assert.equal(await asks.first().textContent(), w.ask, where);
+        // each names it, or an agent's own diagram skill takes the ask
+        for (const a of await asks.allTextContents()) assert.ok(a.includes("Magpie Artifact"), `${where}: ${a}`);
+        const before = await asks.first().boundingBox();
         await asks.first().click();
         await until(() => got.copied.length);
         assert.deepEqual(got.copied, [w.ask], `${where}: the ask is copied as shown`);
+        // the words stay; only the glyph turns to a check (owner, 11-24:
+        // the button was left an empty box with a check)
+        const glyph = () => asks.first().evaluate((b) => b.querySelector("path")?.getAttribute("d"));
+        await until(async () => (await glyph()) === (await page.evaluate(() => CHECK)));
+        assert.equal(await glyph(), await page.evaluate(() => CHECK), `${where}: a check once copied`);
+        assert.equal(await asks.first().textContent(), w.ask, `${where}: the words stay once copied`);
+        const after = await asks.first().boundingBox();
+        assert.ok(Math.abs(after.width - before.width) < 1 && Math.abs(after.height - before.height) < 1, `${where}: the button kept its size`);
+        await until(async () => (await glyph()) !== (await page.evaluate(() => CHECK)));
+        assert.equal(await asks.first().locator("svg").count(), 1, `${where}: one glyph after`);
         // the names joined as the language joins a list
         const both = await page.evaluate(() => new Intl.ListFormat(intlLang(), { type: "conjunction" }).format(["Claude Code", "Codex"]));
         assert.ok(lang === "en" ? both === "Claude Code and Codex" : !both.includes(" and "), `${where}: ${both}`);
@@ -242,6 +255,21 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const go = page.locator("#view-artifacts .art-who button");
         await go.waitFor();
         assert.equal(await go.textContent(), w.turnOn);
+        assert.deepEqual(errors, []);
+        await context.close();
+      }
+      {
+        // many agents: a count on one line, the names on hover
+        const names = Array.from({ length: 25 }, (_, i) => "Agent " + String(i).padStart(2, "0"));
+        const { context, page, errors } = await openPage(browser, { lang, web: false, width: 1000, items: [], agents: names });
+        const who = page.locator("#view-artifacts .art-who");
+        await who.waitFor();
+        assert.equal(await who.textContent(), w.many + " · " + w.manage);
+        assert.ok((await who.locator("span").getAttribute("title")).includes("Agent 24"));
+        // one line: the count and Manage side by side, the line no taller
+        // than two of the count
+        const [n, m, all] = await Promise.all([who.locator("span").boundingBox(), who.locator("button").boundingBox(), who.boundingBox()]);
+        assert.ok(Math.abs(n.y + n.height / 2 - (m.y + m.height / 2)) < 4 && all.height < n.height * 2, `one line: ${JSON.stringify({ n, m, all })}`);
         assert.deepEqual(errors, []);
         await context.close();
       }

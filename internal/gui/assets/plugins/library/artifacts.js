@@ -116,7 +116,9 @@ function artifactsPage() {
   // things to ask an agent for, each copied with a click, and which agents
   // can make one, or where to give them the server (the owner, 11-24: the
   // empty page told no one what it was for).
-  const ASKS = ["Make a one-page report of this week's git commits, with a chart", "Draw this project's architecture as a diagram", "Make a small Pomodoro timer I can use"];
+  // each names Magpie Artifacts: an agent with a skill of its own for
+  // diagrams took the bare ask there instead (Pi with archify, owner 11-24)
+  const ASKS = ["Make a Magpie Artifact: a one-page report of this week's git commits, with a chart", "Make a Magpie Artifact: this project's architecture as a diagram", "Make a Magpie Artifact: a small Pomodoro timer I can use"];
   // names joined as the GUI's language joins a list ("A、B和C")
   const listed = (names) => { try { return new Intl.ListFormat(intlLang(), { type: "conjunction" }).format(names); } catch { return names.join(", "); } };
   function empty() {
@@ -128,7 +130,14 @@ function artifactsPage() {
       b.type = "button";
       b.append(svg(COPY_ICON, 13, 1.4));
       b.title = t("Copy");
-      b.onclick = () => copy(t(k), t("Prompt"), b);
+      // the glyph alone turns to a check a moment: flashCopied is for a
+      // button that is only its glyph, and wiped the words (owner, 11-24)
+      b.onclick = async () => {
+        await copy(t(k), t("Prompt"));
+        b.lastChild.replaceWith(svg(CHECK, 13, 1.7));
+        clearTimeout(b.copiedT);
+        b.copiedT = setTimeout(() => b.lastChild.replaceWith(svg(COPY_ICON, 13, 1.4)), 1200);
+      };
       asks.append(b);
     }
     e.append(asks);
@@ -137,7 +146,13 @@ function artifactsPage() {
       const go = el("button", "link", makers.length ? t("Manage") : t("Turn it on in the Library"));
       go.type = "button";
       go.onclick = async () => { if (await window.show("library") !== false) magpie.call("library", "server", "magpie-artifacts"); };
-      if (makers.length) who.append(t("Agents that can make one: {names}", { names: listed(makers) }), " · ");
+      // a few by name; more as a count, the names on hover (25 filled
+      // three lines, owner 11-24)
+      if (makers.length > 3) {
+        const n = el("span", "", t("{n} agents can make one", { n: makers.length }));
+        n.title = listed(makers);
+        who.append(n, " · ");
+      } else if (makers.length) who.append(t("Agents that can make one: {names}", { names: listed(makers) }), " · ");
       else who.append(t("No agent can make one yet."), " ");
       who.append(go);
       e.append(who);

@@ -145,8 +145,10 @@ after asking. `POST /api/artifacts/share {id}` answers `{url, version}`
 and `POST /api/artifacts/unshare {id}` takes the link down; the list
 carries `shared` and `sharedVersion`. A find field shows once there are 8 or more. With
 none yet, the page says what one is, offers three things to ask an agent
-for (a click copies one), and names the agents Magpie Artifacts is ticked
-on, with the way to its server in the Library (`magpie.call("library",
+for, each naming Magpie Artifacts so an agent's own diagram skill doesn't
+take it (a click copies one; only its glyph turns to a check), and names
+the agents Magpie Artifacts is ticked on (more than three as a count, the
+names on hover), with the way to its server in the Library (`magpie.call("library",
 "server", …)`); for that, `GET /api/artifacts` with an empty list carries
 `agents`, their names (`library.ArtifactsAgents`, none when the server is
 off), left out when the library can't be read so the page says nothing of
