@@ -1066,6 +1066,27 @@ func wslAgent(k wslKind, d distro) *Agent {
 			return f()
 		}
 	}
+	// its telemetry is the distro's file's (#7460); one stopped since is
+	// asked first, and isn't started for it
+	if tm := a.Telemetry; tm != nil {
+		stopped := func() error {
+			return fmt.Errorf("WSL %s isn't running; start it to change %s's telemetry", d.Name, k.name)
+		}
+		a.Telemetry = &Telemetry{all: tm.all,
+			Get: func() (TelemetryState, error) {
+				if !d.live() {
+					return TelemetryState{}, stopped()
+				}
+				return tm.Get()
+			},
+			Set: func(off bool) error {
+				if !d.live() {
+					return stopped()
+				}
+				return tm.Set(off)
+			},
+		}
+	}
 	// what a set leaves is kept at once, in case the distro stops before
 	// the next look
 	for i := range a.Fields {
@@ -1090,6 +1111,7 @@ func wslAgent(k wslKind, d distro) *Agent {
 func unreached(a *Agent, err error) *Agent {
 	a.unreached = err
 	a.Notice = func() string { return err.Error() }
+	a.Telemetry = nil // its file can't be opened
 	for i := range a.Fields {
 		if a.Fields[i].Set != nil {
 			a.Fields[i].Set = func(string) error { return err }

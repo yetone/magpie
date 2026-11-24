@@ -48,8 +48,11 @@ package agent
 // wrote it. Connecting or disconnecting the agent leaves it alone: it is
 // about the agent's vendor, not about magpie.
 //
-// Only an agent on this computer has it: a WSL distro's file isn't read on
-// each look, which would start a stopped distro (#3896).
+// An agent in a WSL distro has its own, in the distro's file (#7460:
+// Claude Code's in WSL had none, and Settings › Privacy's switch wrote
+// Windows' settings.json instead). Only a distro that runs has it: a
+// stopped one's file isn't read, which would start it (#3896), and one
+// that stopped since is asked first (wslAgent).
 
 import (
 	"bytes"
@@ -132,7 +135,7 @@ func anyValue(v any) bool {
 // telemetrySwitch is the switch over keys in f; stashKey is where what
 // magpie wrote is kept.
 func telemetrySwitch(at place, f telemetryFile, stashKey string, keys ...telemetryKey) *Telemetry {
-	if at.spell != nil || at.cold {
+	if at.cold {
 		return nil
 	}
 	names := make([]string, len(keys))

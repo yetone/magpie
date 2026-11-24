@@ -23,6 +23,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -107,24 +108,44 @@ func SetTelemetryAll(off bool) error {
 	// every agent, found here or not: one taken away since keeps no key of
 	// magpie's behind
 	for _, a := range All() {
-		t := a.Telemetry
-		if t == nil || stashShared()[t.all] == "" {
-			continue
-		}
-		err := t.Set(false)
-		if err != nil {
-			// on as far as magpie goes: what keeps it off is the user's
-			if st, gerr := t.Get(); gerr == nil && !hasOurs(st) {
-				err = nil
-			}
-		}
-		if err != nil {
+		if err := giveBackTelemetry(a.Telemetry); err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", a.Name, err))
-			continue
 		}
-		forget(t.all)
 	}
 	return errors.Join(errs...)
+}
+
+// giveBackTelemetry turns t back on where the switch for every agent
+// turned it off, and forgets that it did; one that can't be now (a WSL
+// distro that stopped) keeps the mark, for KeepTelemetryAllOff to try
+// again.
+func giveBackTelemetry(t *Telemetry) error {
+	if t == nil || stashShared()[t.all] == "" {
+		return nil
+	}
+	err := t.Set(false)
+	if err != nil {
+		// on as far as magpie goes: what keeps it off is the user's
+		if st, gerr := t.Get(); gerr == nil && !hasOurs(st) {
+			err = nil
+		}
+	}
+	if err != nil {
+		return err
+	}
+	forget(t.all)
+	return nil
+}
+
+// telemetryAllMarked: an agent the switch for every agent turned off is
+// still marked so (telemetrySwitch's stash key, ".telemetry.all").
+func telemetryAllMarked() bool {
+	for k, v := range stashShared() {
+		if v != "" && strings.HasSuffix(k, ".telemetry.all") {
+			return true
+		}
+	}
+	return false
 }
 
 // hasOurs: a state off by keys of magpie's, where Own are the user's
@@ -132,7 +153,9 @@ func hasOurs(st TelemetryState) bool { return st.Off && len(st.Own) < len(st.Key
 
 // KeepTelemetryAllOff turns off, while the switch for every agent is on,
 // the telemetry of an agent found since: with no window open to read the
-// state, the gateway's own look.
+// state, the gateway's own look. Once it is off, an agent the switch
+// turned off that couldn't be turned back on then (its WSL distro had
+// stopped) is, once it can be.
 func KeepTelemetryAllOff(ctx context.Context) {
 	tick := time.NewTicker(time.Minute)
 	defer tick.Stop()
@@ -141,11 +164,26 @@ func KeepTelemetryAllOff(ctx context.Context) {
 			for _, a := range Detected() {
 				_ = KeepTelemetryOff(a)
 			}
+		} else if telemetryAllMarked() {
+			giveBackTelemetryAll()
 		}
 		select {
 		case <-ctx.Done():
 			return
 		case <-tick.C:
 		}
+	}
+}
+
+// giveBackTelemetryAll turns back on each agent still marked as the
+// switch for every agent's, while that switch is off.
+func giveBackTelemetryAll() {
+	telemetryAllMu.Lock()
+	defer telemetryAllMu.Unlock()
+	if s, err := settings.SharedChecked(); err != nil || s.AgentTelemetryOff {
+		return
+	}
+	for _, a := range All() {
+		_ = giveBackTelemetry(a.Telemetry)
 	}
 }

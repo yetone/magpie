@@ -306,14 +306,15 @@ func TestUsageStatsTelemetrySwitch(t *testing.T) {
 	}
 }
 
-// An agent in a WSL distro has no switch: its file isn't read on each
-// look (#3896).
-func TestTelemetryOnlyHere(t *testing.T) {
+// An agent in a stopped WSL distro has no switch: its file isn't read on
+// each look, which would start the distro (#3896). One that runs has its
+// own (TestTelemetryInWSL).
+func TestTelemetryNotInAStoppedDistro(t *testing.T) {
 	home, _ := telemetryHome(t, ".codex/config.toml", "")
-	at := place{home: home, spell: func(p string) string { return p }}
+	at := place{home: home, spell: func(p string) string { return p }, cold: true}
 	for _, a := range []*Agent{codexIn(at), claudeIn(at), geminiIn(at), qwenIn(at)} {
 		if a.Telemetry != nil {
-			t.Errorf("%s in a distro has a telemetry switch", a.ID)
+			t.Errorf("%s in a stopped distro has a telemetry switch", a.ID)
 		}
 	}
 	if codex(home).Telemetry == nil {
