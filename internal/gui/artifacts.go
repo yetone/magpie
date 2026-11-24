@@ -4,11 +4,14 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/artifact"
 	"github.com/yetone/magpie/internal/gateway"
+	"github.com/yetone/magpie/internal/library"
 )
 
 // Work › Artifacts (docs/subsystems/artifacts.md): the pages agents
@@ -89,6 +92,34 @@ func artifactsJSON() ([]artifactJSON, error) {
 	return out, nil
 }
 
+// artifactsAgentNames is the names, as the Agents page says them, of the
+// agents Magpie Artifacts is given to; nil when the library can't be read,
+// so the page says nothing rather than "no agent".
+func artifactsAgentNames() []string {
+	ids, err := library.ArtifactsAgents()
+	if err != nil {
+		return nil
+	}
+	names := map[string]string{}
+	for _, g := range agent.All() {
+		names[g.ID] = g.Name
+	}
+	out := []string{}
+	for _, id := range ids {
+		n := names[id]
+		if base, _, ok := strings.Cut(id, "@"); n == "" && ok {
+			n = names[base] // one of an agent's own copies, as codex@work
+		}
+		if n == "" {
+			n = id
+		}
+		if !slices.Contains(out, n) {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
 func artifactRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/artifacts", func(rw http.ResponseWriter, r *http.Request) {
 		list, err := artifactsJSON()
@@ -96,7 +127,12 @@ func artifactRoutes(mux *http.ServeMux) {
 			fail(rw, err)
 			return
 		}
-		writeJSON(rw, map[string]any{"artifacts": list})
+		out := map[string]any{"artifacts": list}
+		// with none yet, the page says which agents can make one
+		if len(list) == 0 {
+			out["agents"] = artifactsAgentNames()
+		}
+		writeJSON(rw, out)
 	})
 	mux.HandleFunc("POST /api/artifacts/delete", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct{ ID string }

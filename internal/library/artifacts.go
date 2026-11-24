@@ -86,3 +86,26 @@ func (l *Library) artifactsGiven(id string, given []string) bool {
 	}
 	return false
 }
+
+// ArtifactsAgents is the agents Magpie Artifacts is ticked on, sorted,
+// for Work › Artifacts' empty page to say who can make one; none when the
+// server is off or gone.
+func ArtifactsAgents() ([]string, error) {
+	l, err := loadLocked()
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, s := range l.MCP {
+		if s == nil || s.Hidden || serverKey(s) != "magpie mcp artifacts" {
+			continue
+		}
+		for _, a := range s.Agents {
+			if !slices.Contains(out, a) {
+				out = append(out, a)
+			}
+		}
+	}
+	slices.Sort(out)
+	return out, nil
+}

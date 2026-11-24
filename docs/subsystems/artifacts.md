@@ -143,7 +143,14 @@ menu to open one, shares it after asking (`Share…`, then the shared link
 is copied) or copies the shared link and stops sharing it, and deletes it
 after asking. `POST /api/artifacts/share {id}` answers `{url, version}`
 and `POST /api/artifacts/unshare {id}` takes the link down; the list
-carries `shared` and `sharedVersion`. A find field shows once there are 8 or more. The
+carries `shared` and `sharedVersion`. A find field shows once there are 8 or more. With
+none yet, the page says what one is, offers three things to ask an agent
+for (a click copies one), and names the agents Magpie Artifacts is ticked
+on, with the way to its server in the Library (`magpie.call("library",
+"server", …)`); for that, `GET /api/artifacts` with an empty list carries
+`agents`, their names (`library.ArtifactsAgents`, none when the server is
+off), left out when the library can't be read so the page says nothing of
+them. The
 Library's settings stay on its first page (`builtinsState` takes the first
 `nav.page`).
 

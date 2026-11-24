@@ -5,7 +5,7 @@
 // usemagpie.ai (or stops sharing it), or deletes it with every version. The library plugin adds the page (client.js), since the
 // library is what gives agents the server; this file is loaded before it.
 function artifactsPage() {
-  let main = null, list = [], q = "", loaded = false;
+  let main = null, list = [], q = "", loaded = false, makers = null;
   const DOC = "M4.5 2.5h5l3 3v8h-8zM9.5 2.5v3h3M6.5 8.5h4M6.5 11h3";
   const BIN = "M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5M7 7v4M9 7v4";
   const LINK = "M6.75 9.25l2.5-2.5M7.5 4.5l1-1a2.5 2.5 0 013.5 3.5l-1 1M8.5 11.5l-1 1A2.5 2.5 0 014 9l1-1";
@@ -102,9 +102,7 @@ function artifactsPage() {
     const shown = words ? list.filter((a) => (a.title + " " + (a.description || "")).toLocaleLowerCase().includes(words)) : list;
     if (!loaded) return;
     if (!list.length) {
-      const e = el("div", "empty-state art-empty");
-      e.append(el("b", "", t("No artifacts yet")), el("span", "", t("Pages your agents make appear here.")));
-      box.replaceChildren(e);
+      box.replaceChildren(empty());
       return;
     }
     if (!shown.length) {
@@ -114,10 +112,44 @@ function artifactsPage() {
     box.replaceChildren(...shown.map(row));
   }
 
+  // With none yet, the page says what one is and how to get one: a few
+  // things to ask an agent for, each copied with a click, and which agents
+  // can make one, or where to give them the server (the owner, 11-24: the
+  // empty page told no one what it was for).
+  const ASKS = ["Make a one-page report of this week's git commits, with a chart", "Draw this project's architecture as a diagram", "Make a small Pomodoro timer I can use"];
+  // names joined as the GUI's language joins a list ("A、B和C")
+  const listed = (names) => { try { return new Intl.ListFormat(intlLang(), { type: "conjunction" }).format(names); } catch { return names.join(", "); } };
+  function empty() {
+    const e = el("div", "empty-state art-empty");
+    e.append(el("b", "", t("No artifacts yet")), el("span", "", t("Ask an agent for a page instead of text: a report, a chart, a prototype or a small tool. It's kept here with every version, to open or share.")));
+    const asks = el("div", "art-asks");
+    for (const k of ASKS) {
+      const b = el("button", "art-ask", t(k));
+      b.type = "button";
+      b.append(svg(COPY_ICON, 13, 1.4));
+      b.title = t("Copy");
+      b.onclick = () => copy(t(k), t("Prompt"), b);
+      asks.append(b);
+    }
+    e.append(asks);
+    if (makers) {
+      const who = el("div", "art-who");
+      const go = el("button", "link", makers.length ? t("Manage") : t("Turn it on in the Library"));
+      go.type = "button";
+      go.onclick = async () => { if (await window.show("library") !== false) magpie.call("library", "server", "magpie-artifacts"); };
+      if (makers.length) who.append(t("Agents that can make one: {names}", { names: listed(makers) }), " · ");
+      else who.append(t("No agent can make one yet."), " ");
+      who.append(go);
+      e.append(who);
+    }
+    return e;
+  }
+
   async function load() {
     try {
       const r = await api("artifacts");
       list = r?.artifacts || [];
+      makers = Array.isArray(r?.agents) ? r.agents : null;
       loaded = true;
       draw();
     } catch (e) { statusErr(e); }

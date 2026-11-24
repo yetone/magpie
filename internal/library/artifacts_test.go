@@ -97,3 +97,26 @@ func TestArtifactsNotTwice(t *testing.T) {
 		t.Fatalf("%d of them: %+v", n, l.MCP)
 	}
 }
+
+// Work › Artifacts' empty page says which agents can make one: those
+// Magpie Artifacts is ticked on, none once it is turned off or removed.
+func TestArtifactsAgents(t *testing.T) {
+	sandbox(t)
+	offeringArtifacts(t)
+	if got, err := ArtifactsAgents(); err != nil || len(got) != 0 {
+		t.Fatalf("before it is given: %v %v", got, err)
+	}
+	ok(t)(InstallServer(ArtifactsServerName, nil, []string{"codex", "claude"}))
+	if got, err := ArtifactsAgents(); err != nil || !slices.Equal(got, []string{"claude", "codex"}) {
+		t.Fatalf("given to two: %v %v", got, err)
+	}
+	ok(t)(ServerOn(ArtifactsServerName, false))
+	if got, _ := ArtifactsAgents(); len(got) != 0 {
+		t.Fatalf("turned off: %v", got)
+	}
+	ok(t)(ServerOn(ArtifactsServerName, true))
+	ok(t)(RemoveServer(ArtifactsServerName))
+	if got, _ := ArtifactsAgents(); len(got) != 0 {
+		t.Fatalf("removed: %v", got)
+	}
+}

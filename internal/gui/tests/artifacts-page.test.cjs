@@ -6,7 +6,8 @@
 // has, and a click opens it at the gateway's address; its menu copies the
 // link, opens an earlier version, shares it on usemagpie.ai and stops
 // sharing it, and deletes it after asking. With none
-// there it says so. In every language, both engines, a window and a narrow
+// there it says what one is, offers asks to copy, and which agents can
+// make one. In every language, both engines, a window and a narrow
 // browser, with no sideways scroll. No backend: the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -30,15 +31,15 @@ const artifacts = [
 
 const words = {
   en: { nav: "Artifacts", versions: "2 versions", empty: "No artifacts yet", copy: "Copy link", earlier: "Earlier versions", del: "Delete", v1: "Version 1",
-    share: "Share…", shareGo: "Share", shared: "Shared", copyShared: "Copy shared link", stop: "Stop sharing" },
+    share: "Share…", shareGo: "Share", shared: "Shared", copyShared: "Copy shared link", stop: "Stop sharing", ask: "Make a one-page report of this week's git commits, with a chart", can: "Agents that can make one: ", turnOn: "Turn it on in the Library", manage: "Manage" },
   zh: { nav: "Artifacts", versions: "2 个版本", empty: "还没有 Artifact", copy: "复制链接", earlier: "之前的版本", del: "删除", v1: "版本 1",
-    share: "分享…", shareGo: "分享", shared: "已分享", copyShared: "复制分享链接", stop: "停止分享" },
+    share: "分享…", shareGo: "分享", shared: "已分享", copyShared: "复制分享链接", stop: "停止分享", ask: "把这周的 git 提交做成一页带图表的周报", can: "可以做 Artifact 的 Agent：", turnOn: "在资源库中开启", manage: "管理" },
   "zh-TW": { nav: "Artifacts", versions: "2 個版本", empty: "還沒有 Artifact", copy: "複製連結", earlier: "之前的版本", del: "刪除", v1: "版本 1",
-    share: "分享…", shareGo: "分享", shared: "已分享", copyShared: "複製分享連結", stop: "停止分享" },
+    share: "分享…", shareGo: "分享", shared: "已分享", copyShared: "複製分享連結", stop: "停止分享", ask: "把這週的 git 提交做成一頁帶圖表的週報", can: "可以做 Artifact 的 Agent：", turnOn: "在資源庫中開啟", manage: "管理" },
   ja: { nav: "Artifacts", versions: "2 個のバージョン", empty: "Artifact はまだありません", copy: "リンクをコピー", earlier: "以前のバージョン", del: "削除", v1: "バージョン 1",
-    share: "共有…", shareGo: "共有", shared: "共有中", copyShared: "共有リンクをコピー", stop: "共有を停止" },
+    share: "共有…", shareGo: "共有", shared: "共有中", copyShared: "共有リンクをコピー", stop: "共有を停止", ask: "今週の git コミットをグラフ付きの 1 ページのレポートにして", can: "Artifact を作れるエージェント：", turnOn: "ライブラリでオンにする", manage: "管理" },
   de: { nav: "Artifacts", versions: "2 Versionen", empty: "Noch keine Artifacts", copy: "Link kopieren", earlier: "Frühere Versionen", del: "Löschen", v1: "Version 1",
-    share: "Teilen …", shareGo: "Teilen", shared: "Geteilt", copyShared: "Geteilten Link kopieren", stop: "Nicht mehr teilen" },
+    share: "Teilen …", shareGo: "Teilen", shared: "Geteilt", copyShared: "Geteilten Link kopieren", stop: "Nicht mehr teilen", ask: "Mach aus den Git-Commits dieser Woche einen einseitigen Bericht mit Diagramm", can: "Agents, die eines erstellen können: ", turnOn: "In der Bibliothek einschalten", manage: "Verwalten" },
 };
 const LINK = "https://usemagpie.ai/a/abcdefghijklmnop";
 
@@ -50,7 +51,7 @@ function serve(lang, web, got, list, off) {
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
     if (url.pathname === "/api/state") return json({ agents: [{ id: "codex", name: "Codex", fields: [] }, { id: "claude", name: "Claude Code", fields: [] }], profiles: [], settings: { lang, theme: "light" } });
     if (url.pathname === "/api/plugins") return json({ plugins: [] });
-    if (url.pathname === "/api/artifacts") return json({ artifacts: list.items });
+    if (url.pathname === "/api/artifacts") return json(list.agents ? { artifacts: list.items, agents: list.agents } : { artifacts: list.items });
     // an empty library, so Library's head is drawn
     if (url.pathname === "/api/library") return json({ dir: "/Users/me/.magpie/library", backups: "/Users/me/.magpie/backups", home: "/Users/me", agents: [], instructions: { agents: [], sets: [] }, servers: [], foundServers: [], projects: [], foundSkills: [], skills: [], problems: [], hooks: [] });
     if (url.pathname === "/api/artifacts/delete") { const { id } = req.postDataJSON(); got.deleted.push(id); list.items = list.items.filter((a) => a.id !== id); return json({ deleted: true }); }
@@ -72,7 +73,7 @@ async function until(fn) {
   for (let i = 0; i < 250 && !fn(); i++) await new Promise((r) => setTimeout(r, 20));
 }
 
-async function openPage(browser, { lang, web, width, items, off = [] }) {
+async function openPage(browser, { lang, web, width, items, off = [], agents }) {
   const context = await browser.newContext({ viewport: { width, height: 700 }, reducedMotion: "reduce" });
   const page = await context.newPage();
   page.setDefaultTimeout(5000);
@@ -81,7 +82,7 @@ async function openPage(browser, { lang, web, width, items, off = [] }) {
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => { if (m.type() === "error" || /scroll not asked for/.test(m.text())) errors.push(m.text()); });
   const got = { opened: [], copied: [], deleted: [], shared: [], unshared: [] };
-  const list = { items: structuredClone(items) };
+  const list = { items: structuredClone(items), agents };
   // in a browser an artifact opens in a new tab, not through /api/open
   await page.exposeFunction("__opened", (u) => { got.opened.push(u); });
   await page.addInitScript(() => { window.open = (u) => { window.__opened(String(u)); return null; }; });
@@ -206,11 +207,49 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     test(`${engine} ${lang}: Artifacts says when there are none, and goes with the Library`, async (t) => {
       const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
       t.after(() => browser.close());
+      // with none, it says what one is: three asks to copy, which agents
+      // can make one, and the way to the Library's server
+      for (const [web, width] of [[false, 1000], [true, 420]]) {
+        const where = `${web ? "browser" : "window"} ${width}px`;
+        const { context, page, errors, got } = await openPage(browser, { lang, web, width, items: [], agents: ["Claude Code", "Codex"] });
+        const empty = page.locator("#view-artifacts .art-empty");
+        await empty.locator("b").waitFor();
+        assert.equal(await empty.locator("b").textContent(), w.empty, where);
+        const asks = empty.locator(".art-ask");
+        assert.equal(await asks.count(), 3, where);
+        assert.equal(await asks.first().textContent(), w.ask, where);
+        await asks.first().click();
+        await until(() => got.copied.length);
+        assert.deepEqual(got.copied, [w.ask], `${where}: the ask is copied as shown`);
+        // the names joined as the language joins a list
+        const both = await page.evaluate(() => new Intl.ListFormat(intlLang(), { type: "conjunction" }).format(["Claude Code", "Codex"]));
+        assert.ok(lang === "en" ? both === "Claude Code and Codex" : !both.includes(" and "), `${where}: ${both}`);
+        assert.equal(await empty.locator(".art-who").textContent(), w.can + both + " · " + w.manage, where);
+        const box = await empty.boundingBox();
+        for (let i = 0; i < 3; i++) {
+          const b = await asks.nth(i).boundingBox();
+          assert.ok(b.x >= box.x && b.x + b.width <= box.x + box.width + 0.5, `${where}: ask ${i} inside the page`);
+        }
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${where}: scrolls sideways`);
+        await empty.locator(".art-who button", { hasText: w.manage }).click();
+        await page.locator("#view-library").waitFor();
+        assert.ok(await page.locator("#view-artifacts").isHidden(), `${where}: Manage stayed`);
+        assert.deepEqual(errors, [], where);
+        await context.close();
+      }
       {
+        const { context, page, errors } = await openPage(browser, { lang, web: false, width: 1000, items: [], agents: [] });
+        const go = page.locator("#view-artifacts .art-who button");
+        await go.waitFor();
+        assert.equal(await go.textContent(), w.turnOn);
+        assert.deepEqual(errors, []);
+        await context.close();
+      }
+      {
+        // the library unread: the page says nothing of the agents
         const { context, page, errors } = await openPage(browser, { lang, web: false, width: 1000, items: [] });
-        const empty = page.locator("#view-artifacts .art-empty b");
-        await empty.waitFor();
-        assert.equal(await empty.textContent(), w.empty);
+        await page.locator("#view-artifacts .art-empty .art-ask").first().waitFor();
+        assert.equal(await page.locator("#view-artifacts .art-who").count(), 0);
         assert.deepEqual(errors, []);
         await context.close();
       }
