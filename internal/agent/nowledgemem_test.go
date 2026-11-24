@@ -279,6 +279,66 @@ func TestNowledgeMemKeepsTheUsersMagpie(t *testing.T) {
 	}
 }
 
+// A "magpie" provider the user pointed at a magpie on a server (Alex on
+// Discord: the cloud magpie imported into Mem) is theirs: this magpie
+// doesn't count Mem as going through it, says nothing changed its config,
+// and leaves the provider alone when Mem is stepped out of.
+func TestNowledgeMemMagpieOnAServer(t *testing.T) {
+	home, dir := memTestHome(t)
+	f := serveFakeMem(t, dir)
+	f.add("magpie", "magpie", "deepseek/pro", "https://magpie.example.com/v1", 0.3)
+	a := nowledgeMem(home)
+	if a.Wired() {
+		t.Error("a magpie on a server taken for this one")
+	}
+	fm := a.Field("model")
+	if got := fm.Get(); got != "magpie.example.com/deepseek/pro" {
+		t.Errorf("model read as %q", got)
+	}
+	// picked again as it reads, it is the same model on the user's provider
+	if err := fm.Set(fm.Get()); err != nil {
+		t.Fatal(err)
+	}
+	if p := f.read().Providers["magpie"]; p.Model != "deepseek/pro" {
+		t.Errorf("model written as %q", p.Model)
+	}
+	if msg := a.Check(); msg != "" {
+		t.Errorf("Check: %s", msg)
+	}
+	f.mu.Lock()
+	f.ops = nil
+	f.mu.Unlock()
+	if err := a.Disconnect(); err != nil {
+		t.Fatal(err)
+	}
+	d := f.read()
+	if p := d.Providers["magpie"]; p == nil || p.APIBase != "https://magpie.example.com/v1" || d.Active != "magpie" || !d.Enabled {
+		t.Errorf("the user's provider changed: %+v %+v", d, p)
+	}
+	f.mu.Lock()
+	ops := f.ops
+	f.mu.Unlock()
+	for _, op := range ops {
+		if strings.HasPrefix(op, "POST ") {
+			t.Errorf("stepping out wrote to Mem: %v", ops)
+			break
+		}
+	}
+	// connected here after all, then stepped out: the server's comes back
+	if err := fm.Set("magpie/deepseek/flash"); err != nil {
+		t.Fatal(err)
+	}
+	if p := f.read().Providers["magpie"]; p.APIBase != gatewayV1() || !a.Wired() {
+		t.Errorf("connected: %+v", p)
+	}
+	if err := a.Disconnect(); err != nil {
+		t.Fatal(err)
+	}
+	if p := f.read().Providers["magpie"]; p.APIBase != "https://magpie.example.com/v1" || p.Model != "deepseek/pro" || a.Wired() {
+		t.Errorf("the server's magpie not put back: %+v", p)
+	}
+}
+
 // A Mem whose AI was off, with no provider at all, is left that way.
 func TestNowledgeMemFromNothing(t *testing.T) {
 	home, dir := memTestHome(t)

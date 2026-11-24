@@ -124,10 +124,16 @@ type memPrev struct {
 	Had     *memProvider `json:"had,omitempty"`
 }
 
-// memOn says magpie's provider is the one Mem's AI uses.
-func memOn(s memState) (memProvider, bool) {
+// memOn says magpie's provider is the one Mem's AI uses. One named
+// magpie at another machine's address that magpie never set up (set: what
+// Mem had is stashed) is a magpie on a server the user added themselves
+// (Alex on Discord: the cloud magpie, in Mem's own magpie provider), never
+// this magpie's, as in Alma (almaMagpie). One magpie set up and the user
+// then pointed at a proxy in front of this gateway is still magpie's
+// (#1985), Check asking the address.
+func memOn(s memState, set bool) (memProvider, bool) {
 	p, ok := s.Providers[magpieID]
-	return p, ok && s.Enabled && s.Active == magpieID
+	return p, ok && s.Enabled && s.Active == magpieID && (set || !onAnotherMachine(memBase(p)))
 }
 
 // memBase is where p sends Mem's requests.
@@ -136,6 +142,28 @@ func memBase(p memProvider) string {
 		return memDefaultBase
 	}
 	return strings.TrimSuffix(p.APIBase, "/")
+}
+
+// memOwnValue is the model field's value for p, Mem's own provider id: its
+// model, or for one named magpie that isn't this magpie's (memOn), a
+// magpie on a server, host/model, which is never read as a model of this
+// magpie's (Alex on Discord: the cloud magpie's deepseek/pro showed Mem
+// as connected here).
+func memOwnValue(id string, p memProvider) string {
+	if id == magpieID && p.Model != "" {
+		if u, err := url.Parse(memBase(p)); err == nil && u.Host != "" {
+			return u.Host + "/" + p.Model
+		}
+	}
+	return p.Model
+}
+
+// memOwnModel is the model a value of memOwnValue's names on p.
+func memOwnModel(id string, p memProvider, v string) string {
+	if own := memOwnValue(id, p); own != p.Model && v == own {
+		return p.Model
+	}
+	return v
 }
 
 // memRead is Mem's setting as remote_llm.json has it, for a Mem that
@@ -264,7 +292,7 @@ func nowledgeMem(home string) *Agent {
 			if err != nil {
 				return err
 			}
-			p, on := memOn(s)
+			p, on := memOn(s, unstashPeek(keyPrev) != "")
 			if !on || !avibeMoved(memBase(p)) {
 				return nil
 			}
@@ -274,7 +302,7 @@ func nowledgeMem(home string) *Agent {
 		},
 		Check: func() string {
 			s, _ := now()
-			p, on := memOn(s)
+			p, on := memOn(s, unstashPeek(keyPrev) != "")
 			if !on {
 				return ""
 			}
@@ -284,11 +312,11 @@ func nowledgeMem(home string) *Agent {
 			Key: "model", Label: "model",
 			Get: func() string {
 				s, _ := now()
-				if p, on := memOn(s); on {
+				if p, on := memOn(s, unstashPeek(keyPrev) != ""); on {
 					return magpieID + "/" + p.Model
 				}
 				if p, ok := s.Providers[s.Active]; ok && s.Enabled {
-					return p.Model
+					return memOwnValue(s.Active, p)
 				}
 				return ""
 			},
@@ -300,7 +328,11 @@ func nowledgeMem(home string) *Agent {
 					}
 					return wire(c, s, ref)
 				}
-				_, on := memOn(s)
+				_, on := memOn(s, unstashPeek(keyPrev) != "")
+				if p, ok := s.Providers[s.Active]; ok && !on {
+					// the user's magpie on a server, as Get spells it
+					v = memOwnModel(s.Active, p, v)
+				}
 				_, made := s.Providers[magpieID]
 				stashed := unstashPeek(keyPrev) != ""
 				if !on && !(stashed && made) {
