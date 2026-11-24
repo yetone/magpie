@@ -119,7 +119,13 @@ func (l *Library) hubServerFor(t *Target) *Server {
 	// (extensions/mcp, serverSummary): told the router's instructions
 	// alone, a Pi asked about a repository never saw DeepWiki (11-01)
 	if t.MCP != nil && t.MCP.Format == fmtPiNative {
-		s.about = gateway.HubLine(hubAbouts(l.hubServers(t.Agent.ID)))
+		ss := l.hubServers(t.Agent.ID)
+		s.about = gateway.HubLine(hubAbouts(ss))
+		for _, a := range ss {
+			if serverKey(a) == artifactsKey {
+				s.direct = append(s.direct, gateway.HubToolName(a.Name, artifactPublish))
+			}
+		}
 	}
 	return s
 }

@@ -671,6 +671,67 @@ func TestHubPiDescription(t *testing.T) {
 	}
 }
 
+// Pi declares a codemode server's tools to its model only as a line for
+// the server, so the hub entry tells it to declare Magpie Artifacts'
+// publish tool whole (toolExposure "direct"): an ask for a page then
+// reaches it without naming it. An exposure or toolExposure the user wrote
+// on the entry is theirs, and no other server is given one.
+func TestHubPiDeclaresArtifactsPublish(t *testing.T) {
+	h := hubSandbox(t)
+	setPiVersion(t, "1.6.0")
+	file := filepath.Join(h, ".pi/agent/mcp.json")
+	write(t, file, `{"mcpServers": {}}`)
+	ok(t)(SaveServer("", Server{Name: "wiki", Transport: "http", URL: "https://mcp.deepwiki.com/mcp", Agents: []string{"pi"}}))
+	ok(t)(SetMCPHub(true))
+	exposure := func() any {
+		t.Helper()
+		return piServers(t, file)[HubEntry]["toolExposure"]
+	}
+	if x := exposure(); x != nil {
+		t.Fatalf("no Artifacts, yet toolExposure %v:\n%s", x, read(t, file))
+	}
+	art := fakeStdio(t, "ok", nil)
+	art.Name, art.Args, art.Agents = ArtifactsServerName, []string{"mcp", "artifacts"}, []string{"pi"}
+	ok(t)(SaveServer("", *art))
+	want := map[string]any{"magpie-artifacts__publish_artifact": "direct"}
+	if x := exposure(); !reflect.DeepEqual(x, want) {
+		t.Fatalf("toolExposure %v, want %v:\n%s", x, want, read(t, file))
+	}
+	// an entry written before has it on the next sync
+	write(t, file, strings.Replace(read(t, file), `"toolExposure"`, `"toolExposureGone"`, 1))
+	ok(t)(Sync())
+	if x := exposure(); !reflect.DeepEqual(x, want) {
+		t.Fatalf("after a sync of an entry without it: %v:\n%s", x, read(t, file))
+	}
+	// the user's own toolExposure stays as they wrote it
+	theirs := map[string]any{"magpie-artifacts__*": "hidden"}
+	setEntry := func(k string, v any) {
+		t.Helper()
+		var doc map[string]map[string]map[string]any
+		if err := json.Unmarshal([]byte(read(t, file)), &doc); err != nil {
+			t.Fatal(err)
+		}
+		e := doc["mcpServers"][HubEntry]
+		delete(e, "toolExposureGone")
+		delete(e, "toolExposure")
+		e[k] = v
+		b, _ := json.Marshal(doc)
+		write(t, file, string(b))
+	}
+	setEntry("toolExposure", theirs)
+	ok(t)(Sync())
+	if x := exposure(); !reflect.DeepEqual(x, theirs) {
+		t.Fatalf("the user's toolExposure became %v", x)
+	}
+	// and so does a server-wide exposure, with none of magpie's beside it
+	// when the entry is written again (another server ticked)
+	setEntry("exposure", "hidden")
+	ok(t)(SaveServer("", Server{Name: "context7", Transport: "http", URL: "https://mcp.context7.com/mcp", Agents: []string{"pi"}}))
+	if e := piServers(t, file)[HubEntry]; e["exposure"] != "hidden" || e["toolExposure"] != nil || !strings.Contains(e["description"].(string), "context7") {
+		t.Fatalf("the user's exposure: %v", e)
+	}
+}
+
 func TestHubGivesMagpieImage(t *testing.T) {
 	h := hubSandbox(t)
 	claude := filepath.Join(h, ".claude.json")

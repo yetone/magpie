@@ -336,3 +336,35 @@ func TestHubMCPOtherAppsAskForToolsOnDemand(t *testing.T) {
 		t.Fatalf("with every tool whole, asked listed %v", got)
 	}
 }
+
+// A tool its server marks always loaded (Magpie Artifacts' publish) is
+// listed whole beside find_tools and call_tool, with its _meta, so an
+// agent declares it to its model and an ask for a page reaches it
+// without naming it. Turned off, the mark lists nothing more.
+func TestHubOnDemandKeepsAlwaysLoaded(t *testing.T) {
+	fresh(t)
+	tools := manyHubTools(hubOnDemandOver + 2)
+	pub := map[string]json.RawMessage{}
+	for _, x := range artifactsMCPTools() {
+		if m := x.(map[string]any); m["name"] == artifactPublishTool {
+			for k, v := range m {
+				pub[k], _ = json.Marshal(v)
+			}
+		}
+	}
+	tools = append(tools, HubTool{Server: artifactsServerName, Tool: artifactPublishTool, Spec: pub})
+	withHub(t, &fakeHub{on: true, tools: map[string][]HubTool{"opencode": tools}})
+	h := lanGuard(New().Handler())
+	body := hubPost(h, "opencode", here, toolsList).Body.String()
+	want := HubToolName(artifactsServerName, artifactPublishTool)
+	if got := listedNames(t, readMCP(t, hubPost(h, "opencode", here, toolsList))); !slices.Equal(got, []string{hubFindTool, hubCallTool, want, hubCodeTool}) {
+		t.Fatalf("listed %v", got)
+	}
+	if !strings.Contains(body, `"anthropic/alwaysLoad":true`) || !strings.Contains(body, `"antigravity/alwaysLoad":true`) {
+		t.Fatalf("the publish tool's _meta is gone: %s", body)
+	}
+	delete(pub, "_meta")
+	if got := listedNames(t, readMCP(t, hubPost(h, "opencode", here, toolsList))); !slices.Equal(got, []string{hubFindTool, hubCallTool, hubCodeTool}) {
+		t.Fatalf("without the mark, listed %v", got)
+	}
+}

@@ -176,6 +176,37 @@ func hubOnDemandSpecs(where string, ss []HubServer) []any {
 	}
 }
 
+// An agent that defers MCP tools behind a search of its own shows its
+// model only a line for each server, so an ask that doesn't name a tool
+// goes to whatever it declares instead: Pi 1.6 with archify drew an
+// architecture as a skill's diagram, never seeing publish_artifact
+// (owner, 11-24). A tool whose _meta says it is always loaded is declared
+// whole: Claude Code reads "anthropic/alwaysLoad" (2.x: "never deferred
+// behind tool search"), Antigravity "antigravity/alwaysLoad"; the hub
+// keeps it listed beside find_tools and call_tool, and Pi, which reads no
+// _meta, is given it as toolExposure "direct" (library's piDirect).
+const (
+	hubAlwaysClaude = "anthropic/alwaysLoad"
+	hubAlwaysAgy    = "antigravity/alwaysLoad"
+)
+
+func hubAlwaysLoadMeta() map[string]any {
+	return map[string]any{hubAlwaysClaude: true, hubAlwaysAgy: true}
+}
+
+// hubAlwaysLoaded is whether t's server marks it always loaded.
+func hubAlwaysLoaded(t hubTool) bool {
+	var m map[string]any
+	json.Unmarshal(t.Spec["_meta"], &m)
+	return m[hubAlwaysClaude] == true || m[hubAlwaysAgy] == true
+}
+
+// HubToolName is the name the hub gives server's tool, as hubNamed makes
+// it for a name no other tool shares.
+func HubToolName(server, tool string) string {
+	return cutName(unsafeToolChars.ReplaceAllString(server, "-")+hubSep+unsafeToolChars.ReplaceAllString(tool, "-"), 64)
+}
+
 // hubSpecOf is t as tools/list gives it: its own spec, named as the hub
 // names it, with an inputSchema, its description after where.
 func hubSpecOf(t hubTool, where string) map[string]json.RawMessage {

@@ -74,6 +74,20 @@ agent when to make one: whenever a page would be clearer than text, or the
 user would use the page rather than only read it. They say neither magpie's
 limits nor a vendor's.
 
+An ask for a page reaches `publish_artifact` without naming it, as Claude
+Code's own Artifact tool is reached, only if the model is shown the tool:
+an agent that defers MCP tools behind a search shows a server as one line,
+and a skill of the user's for diagrams then wins (Pi 1.6 with archify,
+owner 11-24). So the publish tool is declared like a built-in tool
+wherever it goes: its `_meta` marks it always loaded (`anthropic/alwaysLoad`
+for Claude Code, `antigravity/alwaysLoad` for Antigravity), the MCP router
+lists it beside `find_tools` and `call_tool` when it gives tools on demand
+(`hubAlwaysLoaded`, [MCP router](mcp-router.md)), and Pi, which reads no
+`_meta`, is given `toolExposure` `{"<router name>": "direct"}` on the
+router's entry, or `{"publish_artifact": "direct"}` on Artifacts' own
+(`piDirect`), while the entry has no `exposure` or `toolExposure` of the
+user's.
+
 The agent a version is recorded under comes from the client name
 (`magpie/client` in `_meta`, then the bridge's header), the caller's key,
 then the MCP session (`newArtifactCaller`).
@@ -254,8 +268,8 @@ after asking. `POST /api/artifacts/share {id}` answers `{url, version}`
 and `POST /api/artifacts/unshare {id}` takes the link down; the list
 carries `shared` and `sharedVersion`. A find field shows once there are 8 or more. With
 none yet, the page says what one is, offers three things to ask an agent
-for, each naming Magpie Artifacts so an agent's own diagram skill doesn't
-take it (a click copies one; only its glyph turns to a check), and names
+for in plain words (a click copies one; only its glyph turns to a
+check), and names
 the agents Magpie Artifacts is ticked on (more than three as a count, the
 names on hover), with the way to its server in the Library (`magpie.call("library",
 "server", …)`); for that, `GET /api/artifacts` with an empty list carries

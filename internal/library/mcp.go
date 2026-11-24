@@ -102,6 +102,10 @@ type Server struct {
 	// server by one before it has connected (Pi, hubServerFor)
 	about string
 
+	// direct are the hub entry's tools Pi declares to its model whole
+	// (piDirect)
+	direct []string
+
 	// startupWrote is the startup_timeout_sec magpie last wrote in the
 	// entry being written, 0 for none: one the entry has otherwise is the
 	// user's, and stays (startupTheirs)
@@ -251,6 +255,23 @@ func program(path string) bool {
 func (s *Server) same(o *Server) bool {
 	return s.Transport == o.Transport && s.Command == o.Command && slices.Equal(s.Args, o.Args) &&
 		maps.Equal(s.Env, o.Env) && s.URL == o.URL && maps.Equal(s.Headers, o.Headers) && s.about == o.about
+}
+
+// piDirect are the tools of s Pi is told to declare to its model as it
+// does a built-in tool (toolExposure "direct", docs/mcp.md "Control tool
+// exposure"), not behind codemode, whose prompt has a line for the
+// server alone: told only that line, a Pi asked to draw an architecture
+// used a skill of its own and never Magpie Artifacts (owner, 11-24).
+// They are written while the entry has neither exposure nor toolExposure:
+// either is the user's, and stays as they wrote it (merged, behind).
+func piDirect(s *Server) []string {
+	if s.Name == HubEntry {
+		return s.direct
+	}
+	if serverKey(s) == artifactsKey {
+		return []string{artifactPublish}
+	}
+	return nil
 }
 
 // ---- each agent's own format ----------------------------------------------
@@ -560,6 +581,9 @@ func (f *mcpFile) behind(s *Server, old map[string]any) bool {
 	if f.Format == fmtCodex && slices.ContainsFunc(codexRefused(s), func(k string) bool { _, ok := old[k]; return ok }) {
 		return true
 	}
+	if f.Format == fmtPiNative && old != nil && len(piDirect(s)) > 0 && !piExposed(old) {
+		return true
+	}
 	if selfTimeout(s, 0) == 0 {
 		return false
 	}
@@ -571,6 +595,13 @@ func (f *mcpFile) behind(s *Server, old map[string]any) bool {
 		return isNumber(old["timeout"], gooseOldTimeout)
 	}
 	return false
+}
+
+// piExposed is whether a Pi entry says how its tools reach the model.
+func piExposed(old map[string]any) bool {
+	_, a := old["exposure"]
+	_, b := old["toolExposure"]
+	return a || b
 }
 
 func isNumber(v any, n float64) bool {
@@ -719,6 +750,13 @@ func (f *mcpFile) encode(s *Server) ordered {
 		}
 		if s.about != "" {
 			add("description", s.about)
+		}
+		if d := piDirect(s); len(d) > 0 {
+			ex := map[string]any{}
+			for _, n := range d {
+				ex[n] = "direct"
+			}
+			add("toolExposure", ex)
 		}
 	case fmtHermes, fmtAlma:
 		// Hermes' own `hermes mcp add` writes url/headers or
@@ -1507,6 +1545,13 @@ func (f *mcpFile) merged(s *Server, old map[string]any) ordered {
 			o = slices.DeleteFunc(o, func(e kv) bool { return e.k == "startup_timeout_sec" })
 		} else {
 			mine = append(slices.Clone(mine), "startup_timeout_sec")
+		}
+	}
+	// an exposure of the user's says how the server's tools reach Pi's
+	// model, each of them
+	if f.Format == fmtPiNative && old != nil {
+		if _, ok := old["exposure"]; ok {
+			o = slices.DeleteFunc(o, func(e kv) bool { return e.k == "toolExposure" })
 		}
 	}
 	for i, e := range o {

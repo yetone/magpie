@@ -150,6 +150,9 @@ func artifactsMCPTools() []any {
 				},
 			},
 			"annotations": map[string]any{"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false},
+			// declared to the model at once, as a built-in tool is, so an ask
+			// for a page reaches it without naming it (hubAlwaysLoaded)
+			"_meta": hubAlwaysLoadMeta(),
 		},
 		map[string]any{
 			"name":        artifactReadTool,
