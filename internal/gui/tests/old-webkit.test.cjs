@@ -188,6 +188,7 @@ test("compat.js is the first of the page's own scripts", async () => {
   // keyrates.js when a provider with two or more keys opens;
   // maximages.js when the provider editor draws Max output;
   // retrievalrows.js when the editor or Fetch models has embedding or rerank models;
+  // providerkeys.js when a saved provider's editor draws its Advanced;
   // appearance.js when Settings draws General or the look changes;
   // navorder.js once a page order is kept, or Settings › Sidebar pages draws;
   // the checks above

@@ -270,6 +270,41 @@ func callerKeyRoutes(mux *http.ServeMux) {
 		w.Header().Set("Cache-Control", "no-store")
 		writeJSON(w, map[string]any{"keys": withLimits(keys), "accountNames": provider.AccountNames(), "accountGroups": accountGroupsJSON(), "secret": secret})
 	})
+	// a provider's side of the keys' models (justforlxz on X): the keys
+	// that may use a model, each with how far it reaches the provider, and
+	// ticking or unticking some of them, written to each key's own models
+	mux.HandleFunc("GET /api/provider-keys", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		keys, err := access.ProviderKeys(r.URL.Query().Get("provider"))
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, map[string]any{"keys": keys})
+	})
+	mux.HandleFunc("POST /api/provider-keys", func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Provider string   `json:"provider"`
+			Add      []string `json:"add"`
+			Remove   []string `json:"remove"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(w, err)
+			return
+		}
+		access.MigrateLegacyLANKeyBestEffort()
+		if err := access.SetProviderKeys(in.Provider, in.Add, in.Remove); err != nil {
+			fail(w, err)
+			return
+		}
+		keys, err := access.ProviderKeys(in.Provider)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, map[string]any{"keys": keys})
+	})
 	// the account groups a key's accounts may name, "@<id>" or "!@<id>"
 	// (LeiWang_2000 on X): save adds one (no id) or changes it, remove
 	// takes one off unless a key names it
