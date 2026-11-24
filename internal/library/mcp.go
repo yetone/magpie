@@ -62,6 +62,16 @@ type Server struct {
 	// and list its tools: Codex's startup_timeout_sec (#3168), the only
 	// agent given it. 0 leaves it to the agent (Codex's own is 30s).
 	StartupTimeout int `json:"startupTimeout,omitempty"`
+	// IdleTimeout is the seconds a server magpie runs itself (through the
+	// MCP hub, or for Codex at /mcp/run/) is kept with no call before it is
+	// ended, 0 for magpie's own (hubIdle, runIdle); KeepAlive keeps it
+	// until magpie stops or the server is edited (MasterYi on Discord:
+	// chrome-devtools-mcp --autoConnect, whose Chrome asks again to allow
+	// each new connection, and a heavy one ended sooner to free its
+	// browser). An agent's own entry is never given either: the agent
+	// runs that server.
+	IdleTimeout int  `json:"idleTimeout,omitempty"`
+	KeepAlive   bool `json:"keepAlive,omitempty"`
 	// Local keeps the server to this computer (huhuy72219405 on X: a
 	// server of a program or folder only this computer has). A backup or
 	// a sync never carries it, and one coming in neither takes it away nor
@@ -203,6 +213,9 @@ func (s *Server) check() error {
 	}
 	if s.StartupTimeout < 0 || s.StartupTimeout > maxStartupTimeout {
 		return fmt.Errorf("%s: the startup timeout is between 0 (the agent's own) and %d seconds", s.Name, maxStartupTimeout)
+	}
+	if s.IdleTimeout < 0 || s.IdleTimeout > maxStartupTimeout {
+		return fmt.Errorf("%s: the idle timeout is between 0 (magpie's own) and %d seconds", s.Name, maxStartupTimeout)
 	}
 	for k := range s.Env {
 		if strings.TrimSpace(k) == "" {
@@ -509,6 +522,18 @@ func selfTimeout(s *Server, def int) int {
 	if s.Name == browserServerName && s.Command != "" {
 		// a browser_wait waits up to a minute, and the page settles after
 		return max(def, 120)
+	}
+	return def
+}
+
+// idleFor is how long a server magpie runs is kept with no call: its own
+// IdleTimeout, else def; 0 with KeepAlive, which is never ended for it.
+func (s *Server) idleFor(def time.Duration) time.Duration {
+	switch {
+	case s.KeepAlive:
+		return 0
+	case s.IdleTimeout > 0:
+		return time.Duration(s.IdleTimeout) * time.Second
 	}
 	return def
 }

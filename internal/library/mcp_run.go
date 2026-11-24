@@ -6,7 +6,8 @@ package library
 // config once for each thread it has loaded, and keeps them for as long
 // as the thread is: 204 node processes, 21 GB, beside one user's Codex
 // (#3885). Here a thread's session starts its server only when the thread
-// calls on it, and ends it once the session has been idle for runIdle;
+// calls on it, and ends it once the session has been idle for runIdle (or
+// the server's own IdleTimeout; never with KeepAlive);
 // its initialize and its first lists are answered, after the first
 // session's, from what the server said then. A session that is in use
 // has a server of its own, as it had: what a server keeps for its client
@@ -54,6 +55,21 @@ type runSpec struct {
 	Command string            `json:"command"`
 	Args    []string          `json:"args"`
 	Env     map[string]string `json:"env"`
+	// Idle is how long the server is kept with nothing asked of it, 0
+	// for runIdle, -1 for as long as magpie runs (Server.idleFor)
+	Idle time.Duration `json:"idle,omitempty"`
+}
+
+// idle is how long a session's server of this spec is kept with nothing
+// asked of it, 0 for as long as magpie runs.
+func (r runSpec) idle() time.Duration {
+	switch {
+	case r.Idle < 0:
+		return 0
+	case r.Idle > 0:
+		return r.Idle
+	}
+	return runIdle
 }
 
 func (r runSpec) key() string { b, _ := json.Marshal(r); return string(b) }
@@ -69,7 +85,14 @@ func specOf(s *Server) (runSpec, bool) {
 	if len(unset) > 0 {
 		return runSpec{}, false
 	}
-	return runSpec{Command: cmd, Args: slices.Clone(args), Env: env}, true
+	r := runSpec{Command: cmd, Args: slices.Clone(args), Env: env}
+	if s.KeepAlive || s.IdleTimeout > 0 {
+		r.Idle = -1
+		if d := s.idleFor(runIdle); d > 0 {
+			r.Idle = d
+		}
+	}
+	return r, true
 }
 
 var runs struct {
@@ -243,7 +266,7 @@ func runSweep(now time.Time) {
 	for id, s := range runs.sessions {
 		s.mu.Lock()
 		quiet := now.Sub(s.last)
-		if s.child != nil && s.busy == 0 && quiet > runIdle {
+		if d := s.spec.idle(); s.child != nil && s.busy == 0 && d > 0 && quiet > d {
 			idle = append(idle, s)
 		}
 		if s.child == nil && s.busy == 0 && len(s.streams) == 0 && quiet > 24*time.Hour {

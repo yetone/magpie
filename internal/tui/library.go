@@ -454,6 +454,8 @@ func saveServer(old *library.Server, line string) tea.Cmd {
 			// and whether it is kept to this computer, and out of the hub,
 			// and the user's note on it
 			s.Agents, s.Env, s.Headers, s.OAuth, s.StartupTimeout, s.Local, s.Hub, s.Note = old.Agents, old.Env, old.Headers, old.OAuth, old.StartupTimeout, old.Local, old.Hub, old.Note
+			// and how long the router keeps it unused
+			s.IdleTimeout, s.KeepAlive = old.IdleTimeout, old.KeepAlive
 			// and the synced command, when this computer runs its own
 			// (the line typed is this computer's then; check drops it
 			// for a URL)

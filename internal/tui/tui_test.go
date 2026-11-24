@@ -312,6 +312,19 @@ func TestLibraryPage(t *testing.T) {
 	if s := servers(); len(s) != 1 || s[0].URL != "https://example.com/v2" || !slices.Equal(s[0].Agents, []string{"claude"}) {
 		t.Fatalf("servers %+v, flash %q", s[0].Server, m.flash)
 	}
+	// kept running by the router (idle=never), and still after an edit here
+	never := -1
+	if _, err := library.SetServer("ctx", library.ServerOpts{Idle: &never}); err != nil {
+		t.Fatal(err)
+	}
+	m.reloadLibrary()
+	m.lrow = row("mcp", "ctx")
+	m = press(t, m, "e", "ctrl+u")
+	m = typeIn(m, "ctx https://example.com/v3")
+	m = press(t, m, "enter")
+	if s := servers(); len(s) != 1 || s[0].URL != "https://example.com/v3" || !s[0].KeepAlive {
+		t.Fatalf("servers %+v, flash %q", s[0].Server, m.flash)
+	}
 	m = press(t, m, "s")
 	wantFlash(t, m, true, "synced")
 

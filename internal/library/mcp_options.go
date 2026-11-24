@@ -9,7 +9,8 @@ import (
 
 // ServerOpts are the settings a server takes beside its command or URL,
 // typed as key=value words on the command line (#6111, Abandon332 on X):
-// header=K=V (or K: V), env=K=V, timeout=SECS, agents=a,b, --local. A word
+// header=K=V (or K: V), env=K=V, timeout=SECS, idle=SECS|never, agents=a,b,
+// --local. A word
 // the line means as the child's own argument comes after "--".
 type ServerOpts struct {
 	Headers  map[string]string
@@ -17,6 +18,8 @@ type ServerOpts struct {
 	NoHeader []string // header-=K
 	NoEnv    []string // env-=K
 	Timeout  *int
+	// Idle is idle='s seconds, -1 for never (KeepAlive)
+	Idle     *int
 	Agents   []string // the words of agents=, for the caller to resolve
 	HasAgent bool
 	Local    *bool
@@ -28,6 +31,7 @@ type ServerOpts struct {
 var optionNames = map[string]bool{
 	"header": true, "headers": true, "env": true, "envs": true, "environment": true,
 	"timeout": true, "timeouts": true, "startup-timeout": true, "startup_timeout": true,
+	"idle": true, "idle-timeout": true, "idle_timeout": true, "idletimeout": true, "keepalive": true, "keep-alive": true, "keep_alive": true,
 	"agent": true, "agents": true, "local": true, "hub": true, "note": true,
 	"transport": true, "url": true, "oauth": true, "name": true,
 }
@@ -93,9 +97,21 @@ func SplitServerWords(words []string) (cmd []string, o ServerOpts, err error) {
 				return nil, o, fmt.Errorf("%s= takes seconds from 0 (the agent's own) to %d, not %q", key, maxStartupTimeout, v)
 			}
 			o.Timeout = &n
+		case "idle", "idle-timeout", "idle_timeout", "idletimeout":
+			n := -1
+			switch w := strings.ToLower(strings.TrimSpace(v)); w {
+			case "never", "keep", "keepalive", "keep-alive", "off":
+			default:
+				var e error
+				n, e = strconv.Atoi(w)
+				if e != nil || n < 0 || n > maxStartupTimeout {
+					return nil, o, fmt.Errorf("%s= takes seconds from 0 (magpie's own) to %d, or never, not %q", key, maxStartupTimeout, v)
+				}
+			}
+			o.Idle = &n
 		default:
 			if optionNames[key] {
-				return nil, o, fmt.Errorf("%s= isn't a setting magpie knows here: header=K=V, env=K=V, timeout=SECS, agents=a,b (put it after -- to hand it to the program)", k)
+				return nil, o, fmt.Errorf("%s= isn't a setting magpie knows here: header=K=V, env=K=V, timeout=SECS, idle=SECS|never, agents=a,b (put it after -- to hand it to the program)", k)
 			}
 			cmd = append(cmd, w)
 		}
@@ -165,6 +181,10 @@ func (o ServerOpts) Apply(s *Server) error {
 	}
 	if o.Timeout != nil {
 		s.StartupTimeout = *o.Timeout
+	}
+	if o.Idle != nil {
+		s.KeepAlive = *o.Idle < 0
+		s.IdleTimeout = max(*o.Idle, 0)
 	}
 	if o.Local != nil {
 		s.Local = *o.Local
