@@ -2312,6 +2312,9 @@ func (s *Server) countTokens(w http.ResponseWriter, r *http.Request) {
 		id = sid
 	}
 	pick := desktopSubagentPick(r, agentOf(r), named, id, body)
+	if pick == nil {
+		pick, _ = claudeSubagentPick(r, agentOf(r), named, id, body)
+	}
 	if pick.Moved() {
 		id = pick.To
 	}
@@ -3006,10 +3009,21 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	if subagent == nil {
 		subagent = s.codexSubagentPick(r, agent, call.Kind, call.Model, body, false)
 	}
-	var desktopPick *SubagentPick
+	var desktopPick, claudePick *SubagentPick
 	if subagent == nil {
 		desktopPick = desktopSubagentPick(r, agent, call.Model, asked, body)
 		subagent = desktopPick
+	}
+	// Claude Code's Explore and Plan, which inherit the lead's model past
+	// the subagent model set (#7176), on that model and its effort
+	if subagent == nil {
+		var effort string
+		claudePick, effort = claudeSubagentPick(r, agent, call.Model, asked, body)
+		subagent = claudePick
+		if claudePick.Moved() {
+			// the lead's model's effort stays with the lead
+			askedEffort = effort
+		}
 	}
 	if subagent.Moved() {
 		call.Model, asked = subagent.Asked, subagent.To
@@ -3019,7 +3033,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		askedEffort = subagentEffort
 	}
 	// any Claude Code subagent's turn, moved or not, for the Routing page's tag
-	subagentID := subagentTurnOf(r, agent, call.Kind, body, desktopPick != nil || subagentEffort != "")
+	subagentID := subagentTurnOf(r, agent, call.Kind, body, desktopPick != nil || claudePick != nil || subagentEffort != "")
 	if _, held := keyHolds(r); !held {
 		// auto groups off: a bare name several vendors serve, none the
 		// agent's own, goes to none of them (freefcw on X)

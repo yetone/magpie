@@ -537,6 +537,9 @@ func run(args []string) error {
 	// and its auto mode classifier, on a sonnet tier that follows a main
 	// model /model has moved, to the model it moved to
 	gateway.ClassifierStandIn = agent.ClassifierStandIn
+	// and its Explore and Plan subagents, which inherit the lead's model
+	// past CLAUDE_CODE_SUBAGENT_MODEL, to the model set for its subagents
+	gateway.ClaudeSubagent = agent.ClaudeSubagent
 	// a Codex that reaches magpie for account failover alone is handed
 	// only its own models (#1385)
 	gateway.CodexOwnOnly = agent.CodexOwnOnly

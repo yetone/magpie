@@ -2318,7 +2318,9 @@ func claudeIn(at place) *Agent {
 	}
 	// subagents: the model one runs on when it names none (general-purpose,
 	// an agent of the user's without a model:). Unset, the session's, as
-	// before; an agent that names a tier (Explore's haiku) takes the tier's.
+	// before. Explore and Plan say inherit, so Claude Code never reads the
+	// variable for them; the gateway moves their turns onto it
+	// (gateway.claudeSubagentPick, #7176).
 	// setSubagent writes the subagents' model and effort. With no model,
 	// the variable goes and the effort is kept unwritten (subagentSaved):
 	// the main model at an effort would pin every subagent to it.

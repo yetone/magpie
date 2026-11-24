@@ -1891,6 +1891,13 @@ func wslClaudeStandIn(model string) string {
 // wslClaudeClassifier is ClassifierStandIn for a Claude Code in a running
 // distro, known by the same User-Agent. Detection off reads none (#4872).
 func wslClaudeClassifier(model string) string {
+	return wslClaudeFirst(func(at place) string { return claudeClassifierIn(at, model) })
+}
+
+// wslClaudeFirst is the first answer of read for the Claude Code of a
+// running distro, its files mirrored first; "" with detection off (#4872)
+// or none running.
+func wslClaudeFirst(read func(place) string) string {
 	if !wslLooks() {
 		return ""
 	}
@@ -1908,7 +1915,7 @@ func wslClaudeClassifier(model string) string {
 	cfg := wslConfig()
 	for _, d := range ds {
 		d.mirror(cfg)
-		if m := claudeClassifierIn(d.place("claude@wsl:"+d.Name), model); m != "" {
+		if m := read(d.place("claude@wsl:" + d.Name)); m != "" {
 			return m
 		}
 	}
