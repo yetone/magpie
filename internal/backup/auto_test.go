@@ -179,6 +179,102 @@ func TestAutoBackupPrunes(t *testing.T) {
 	}
 }
 
+// A pile in the folder goes at the next look, not only when a backup is
+// made (WuMark1218 on X: one a day kept, never removed): files at a
+// backup's name that don't read whole, older than the newest keep that do,
+// go too. The user's own files, a folder at a backup's name, a damaged one
+// newer than what is kept and another reason's backups stay.
+func TestAutoBackupPilePruned(t *testing.T) {
+	autoHome(t)
+	dir := filepath.Join(t.TempDir(), "backups")
+	if err := SaveAuto(AutoConfig{Keep: 2, Dir: dir, Hours: 24}); err != nil {
+		t.Fatal(err)
+	}
+	var made []string
+	for i := range 2 {
+		if err := profile.Save("work", profile.Profile{Fields: map[string]string{"claude.model": fmt.Sprint("acme/m", i)}}); err != nil {
+			t.Fatal(err)
+		}
+		b, err := AutoTick(t0.Add(time.Duration(i)*24*time.Hour), "test")
+		if err != nil || b == nil {
+			t.Fatalf("tick %d: %+v %v", i, b, err)
+		}
+		made = append(made, b.Name)
+	}
+	write := func(name, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// the pile: damaged and cut-short backups older than those kept
+	var pile []string
+	for d := 1; d <= 20; d++ {
+		name := fmt.Sprintf("magpie-202610%02d-093000-auto.json", d)
+		write(name, `{"format":"magpie-backup","version":1,"bundle":`)
+		pile = append(pile, name)
+	}
+	pile = append(pile, "magpie-20261021-093000-2-auto.json")
+	write(pile[len(pile)-1], "")
+	stays := []string{"notes.txt", "magpie-20261001-093000-auto.json.bak", "magpie-20261001-093000-restore.json",
+		"magpie-20991231-000000-auto.json"}
+	for _, f := range stays {
+		write(f, "mine")
+	}
+	if err := os.Mkdir(filepath.Join(dir, "magpie-20261002-093000-2-auto.json"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stays = append(stays, "magpie-20261002-093000-2-auto.json")
+	// a look an hour later: no backup is due, the pile goes
+	if b, err := AutoTick(t0.Add(25*time.Hour), "test"); err != nil || b != nil {
+		t.Fatalf("not due: %+v %v", b, err)
+	}
+	for _, f := range pile {
+		if _, err := os.Lstat(filepath.Join(dir, f)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("%s is still there: %v", f, err)
+		}
+	}
+	for _, f := range append(stays, made...) {
+		if _, err := os.Lstat(filepath.Join(dir, f)); err != nil {
+			t.Fatalf("%s: %v", f, err)
+		}
+	}
+	if l := autoList(t); len(l) != 2 || l[0].Name != made[1] || l[1].Name != made[0] {
+		t.Fatalf("listed %+v, made %v", l, made)
+	}
+}
+
+// Fewer versions kept takes the ones past it away at the next look, not
+// at the next backup, which waits for a change.
+func TestAutoBackupKeepLowered(t *testing.T) {
+	autoHome(t)
+	dir := filepath.Join(t.TempDir(), "backups")
+	if err := SaveAuto(AutoConfig{Keep: 5, Dir: dir, Hours: 1}); err != nil {
+		t.Fatal(err)
+	}
+	var made []string
+	for i := range 5 {
+		if err := profile.Save("work", profile.Profile{Fields: map[string]string{"claude.model": fmt.Sprint("acme/m", i)}}); err != nil {
+			t.Fatal(err)
+		}
+		b, err := AutoTick(t0.Add(time.Duration(i)*time.Hour), "test")
+		if err != nil || b == nil {
+			t.Fatalf("tick %d: %+v %v", i, b, err)
+		}
+		made = append(made, b.Name)
+	}
+	if err := SaveAuto(AutoConfig{Keep: 2, Dir: dir, Hours: 1}); err != nil {
+		t.Fatal(err)
+	}
+	// due, but nothing changed: none made, and the three past the keep go
+	if b, err := AutoTick(t0.Add(6*time.Hour), "test"); err != nil || b != nil {
+		t.Fatalf("unchanged: %+v %v", b, err)
+	}
+	if l := autoList(t); len(l) != 2 || l[0].Name != made[4] || l[1].Name != made[3] {
+		t.Fatalf("kept %+v, made %v", l, made)
+	}
+}
+
 // What a backup holds is what an export without keys holds, the proxies
 // (plugin downloads' too) left out: nothing secret is in the file.
 func TestAutoBackupHoldsNoSecrets(t *testing.T) {

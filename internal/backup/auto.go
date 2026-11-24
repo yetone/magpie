@@ -7,11 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -220,7 +222,7 @@ func autoSignIns(c AutoConfig) (autoSealed, error) {
 // autoName is a backup's file name; anything else in the folder (the
 // temporary file one is written to, the user's own files) is never listed,
 // put back or removed.
-var autoName = lazyre.New(`^magpie-(\d{8}-\d{6})(?:-\d+)?-(auto|restore)\.json$`)
+var autoName = lazyre.New(`^magpie-(\d{8}-\d{6})(?:-(\d+))?-(auto|restore)\.json$`)
 
 const autoTemp = ".magpie-backup-*.tmp"
 
@@ -334,34 +336,14 @@ func readAuto(path string) (AutoBackup, autoFile, error) {
 // name that read whole and match their hash. A folder that isn't there has
 // none. Each file is read once while it stays as it was.
 func listAuto(dir string) ([]AutoBackup, error) {
-	es, err := os.ReadDir(dir)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
-	}
+	es, err := scanAuto(dir)
 	if err != nil {
 		return nil, err
 	}
 	var out []AutoBackup
 	for _, e := range es {
-		if !e.Type().IsRegular() || !autoName.MatchString(e.Name()) {
-			continue
-		}
-		fi, err := e.Info()
-		if err != nil {
-			continue
-		}
-		p := filepath.Join(dir, e.Name())
-		seen, ok := autoSeen[p]
-		if !ok || seen.size != fi.Size() || !seen.mod.Equal(fi.ModTime()) {
-			b, _, err := readAuto(p)
-			seen = autoSeenFile{size: fi.Size(), mod: fi.ModTime(), b: b, ok: err == nil}
-			if len(autoSeen) > 1000 {
-				clear(autoSeen)
-			}
-			autoSeen[p] = seen
-		}
-		if seen.ok {
-			out = append(out, seen.b)
+		if e.ok {
+			out = append(out, e.b)
 		}
 	}
 	slices.SortFunc(out, func(a, b AutoBackup) int {
@@ -373,25 +355,102 @@ func listAuto(dir string) ([]AutoBackup, error) {
 	return out, nil
 }
 
-// pruneAuto removes the backups made for reason past the newest keep, and
-// temporary files an earlier write left an hour or more ago.
+// autoEntry is a file in the backup folder at a backup's name, read or
+// not: when its name says it was made (the stamp, then the number a
+// second backup in one second gets) and for what reason.
+type autoEntry struct {
+	name, reason, stamp string
+	n                   int
+	b                   AutoBackup
+	ok                  bool // it read whole and matched its hash
+}
+
+// scanAuto is every file in dir at a backup's name, newest first by its
+// name.
+func scanAuto(dir string) ([]autoEntry, error) {
+	es, err := os.ReadDir(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var out []autoEntry
+	for _, e := range es {
+		m := autoName.FindStringSubmatch(e.Name())
+		if m == nil || !autoFileType(e.Type()) {
+			continue
+		}
+		a := autoEntry{name: e.Name(), stamp: m[1], reason: m[3], n: 1}
+		if m[2] != "" {
+			a.n, _ = strconv.Atoi(m[2])
+		}
+		if fi, err := e.Info(); err == nil && autoFileType(fi.Mode().Type()) {
+			p := filepath.Join(dir, e.Name())
+			seen, ok := autoSeen[p]
+			if !ok || seen.size != fi.Size() || !seen.mod.Equal(fi.ModTime()) {
+				b, _, err := readAuto(p)
+				seen = autoSeenFile{size: fi.Size(), mod: fi.ModTime(), b: b, ok: err == nil}
+				if len(autoSeen) > 1000 {
+					clear(autoSeen)
+				}
+				autoSeen[p] = seen
+			}
+			a.b, a.ok = seen.b, seen.ok && seen.b.Reason == a.reason
+		}
+		out = append(out, a)
+	}
+	slices.SortFunc(out, func(a, b autoEntry) int {
+		if c := strings.Compare(b.stamp, a.stamp); c != 0 {
+			return c
+		}
+		return b.n - a.n
+	})
+	return out, nil
+}
+
+// autoFileType says whether an entry of the type is a file a backup can
+// be: a regular one, or on Windows one Go calls irregular, a reparse point
+// such as a cloud drive's placeholder, which opens as the file. Never a
+// folder or a link, and elsewhere never a pipe or device, whose read could
+// wait forever.
+func autoFileType(t fs.FileMode) bool {
+	if t.IsRegular() {
+		return true
+	}
+	return runtime.GOOS == "windows" && t&^fs.ModeIrregular == 0
+}
+
+// pruneAuto keeps, of the backups made for reason, the newest keep that
+// read whole, and removes every file at a backup's name for that reason
+// older than the last of them (WuMark1218 on X: one a day, never
+// removed). By the name only magpie's own files go: the user's other
+// files in the folder, and anything that isn't a file, stay. One that
+// doesn't read whole (cut short, damaged, written by a newer magpie, or
+// not readable just now) is past what is kept either way when keep newer
+// ones do; one newer than those stays, since nothing says what it is.
+// Temporary files an earlier write left an hour or more ago go too.
 func pruneAuto(dir, reason string, keep int, now time.Time) {
-	list, err := listAuto(dir)
+	es, err := scanAuto(dir)
 	if err != nil {
 		return
 	}
-	n := 0
-	for _, b := range list {
-		if b.Reason != reason {
+	good := 0
+	for _, e := range es {
+		if e.reason != reason {
 			continue
 		}
-		if n++; n > keep {
-			os.Remove(filepath.Join(dir, b.Name))
+		if good >= keep {
+			os.Remove(filepath.Join(dir, e.name))
+			continue
+		}
+		if e.ok {
+			good++
 		}
 	}
 	tmps, _ := filepath.Glob(filepath.Join(dir, autoTemp))
 	for _, p := range tmps {
-		if fi, err := os.Stat(p); err == nil && now.Sub(fi.ModTime()) > time.Hour {
+		if fi, err := os.Lstat(p); err == nil && fi.Mode().IsRegular() && now.Sub(fi.ModTime()) > time.Hour {
 			os.Remove(p)
 		}
 	}
@@ -428,6 +487,10 @@ func AutoTick(now time.Time, app string) (*AutoBackup, error) {
 		return nil, nil
 	}
 	dir := c.dir()
+	// a pile from before the keep held for every file, or from a keep
+	// lowered since, goes at the first look, not at the next backup made
+	pruneAuto(dir, ReasonAuto, c.keep(), now)
+	pruneAuto(dir, ReasonRestore, c.keep(), now)
 	list, err := listAuto(dir)
 	if err != nil {
 		return nil, err
