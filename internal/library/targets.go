@@ -394,8 +394,20 @@ func targetOf(a *agent.Agent) *Target {
 		t.MCP = &mcpFile{Path: filepath.Join(h, ".config", "alma", "mcp.json"), Format: fmtAlma}
 		t.SkillsAlso = []string{"claude", "codex"}
 	case "cindy":
-		// Cindy keeps its user-wide skills in ~/.agents/skills
+		// Cindy keeps its user-wide skills in ~/.agents/skills. Its Codex
+		// runs with CODEX_HOME at codex-home in its data folder
+		// (getDesktopCodexHome, getAuthEnv in Cindy 0.1.94's app.asar),
+		// and copies only plugin entries into that config.toml from
+		// ~/.codex's, so Codex's servers never reached a Codex session in
+		// Cindy (sunset on Discord): its [mcp_servers] there are its own.
+		// Cindy's own block in it (cindy-remote-mcp) is written only into
+		// remote hosts' configs. Its Claude Code reads the user's
+		// ~/.claude.json, Claude Code's own; a ChatGPT account added in
+		// Cindy runs Codex in a home of its own (codex-accounts), not given.
 		t.Skills = sharedSkillsDir()
+		if a.Dir != "" {
+			t.MCP = &mcpFile{Path: filepath.Join(a.Dir, "codex-home", "config.toml"), Format: fmtCodex}
+		}
 	case "craft-agents":
 		// Craft Agents reads user-wide skills from ~/.agents/skills
 		// (skills/storage.ts, GLOBAL_AGENT_SKILLS_DIR) beside its
