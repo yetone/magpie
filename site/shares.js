@@ -301,7 +301,11 @@ iframe{flex:1;width:100%;border:0}
   return new Response(req.method === "HEAD" ? null : html, {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
-      "Cache-Control": "no-cache",
+      // no-transform: Cloudflare injects its Web Analytics beacon into
+      // HTML a worker answers, and skips a response that says this; a shared
+      // page is served as its author wrote it, with nothing of the site run
+      // in it
+      "Cache-Control": "no-cache, no-transform",
       "Content-Security-Policy": `default-src 'none'; style-src 'unsafe-inline'; img-src ${SITE}; frame-src https://${CONTENT}; base-uri 'none'; form-action 'none'`,
       "X-Content-Type-Options": "nosniff",
       "Referrer-Policy": "no-referrer",
@@ -345,7 +349,7 @@ export async function content(req, env) {
     headers: {
       "Content-Type": typeOf(path),
       // a version's files never change: a new version is a new address
-      "Cache-Control": "public, max-age=3600",
+      "Cache-Control": "public, max-age=3600, no-transform",
       "Content-Security-Policy": `sandbox ${SANDBOX}`,
       "X-Content-Type-Options": "nosniff",
       "Referrer-Policy": "no-referrer",

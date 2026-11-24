@@ -183,7 +183,10 @@ The site:
   reach usemagpie.ai's cookies or storage). A content address opened as a
   page is sent to the link, so a shared page is never shown without the
   bar. Only the current version is served; R2 holds `<id>/<n>/<path>` and
-  D1 the shares.
+  D1 the shares. Both the link and the content say `Cache-Control:
+  no-transform`, without which Cloudflare injects its Web Analytics
+  beacon into the HTML a worker answers: a shared page runs nothing of
+  the site's, and the wrapper loads no analytics.
 
 magpie:
 

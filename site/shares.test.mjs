@@ -82,6 +82,8 @@ test("shares: a shared page shows in the frame of its link, its files from the s
   assert.doesNotMatch(html, /allow-same-origin/);
   assert.match(html, />Report</);
   assert.match(w.headers.get("Content-Security-Policy"), /frame-src https:\/\/a\.usemagpie\.ai/);
+  // Cloudflare's beacon is injected into HTML a worker answers unless it says no-transform
+  assert.match(w.headers.get("Cache-Control"), /no-transform/);
 
   const p = await content(req("GET", `/${got.id}/1/`, { host: CONTENT, dest: "iframe" }), s.env);
   assert.equal(p.status, 200);
@@ -91,6 +93,7 @@ test("shares: a shared page shows in the frame of its link, its files from the s
   assert.match(csp, /^sandbox allow-scripts/);
   assert.doesNotMatch(csp, /allow-same-origin/);
   assert.equal(p.headers.get("X-Content-Type-Options"), "nosniff");
+  assert.match(p.headers.get("Cache-Control"), /no-transform/);
   const css = await content(req("GET", `/${got.id}/1/app.css`, { host: CONTENT, dest: "style" }), s.env);
   assert.equal(await css.text(), "p{color:red}");
   assert.equal(css.headers.get("Content-Type"), "text/css; charset=utf-8");
