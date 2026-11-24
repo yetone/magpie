@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/plugin"
 )
 
 // #4791 (hayden4608 on Discord, handong66): four accounts of one plan,
@@ -82,5 +84,49 @@ func TestHeldWindowsOnlyByWhatStopsTheAccount(t *testing.T) {
 	q := SubscriptionQuota{Provider: "codex", From: "studio", Windows: []QuotaWindow{five, {Name: "7 days", Used: 100}}}
 	if got := WithHeldWindows([]SubscriptionQuota{q}, now)[0].Windows[0].HeldBy; got != "" {
 		t.Errorf("another magpie's card held by %q", got)
+	}
+}
+
+// kawa_tsura on X: an Antigravity account's Claude & GPT pool read 100% of
+// its 5 hours left beside its week spent, the Gemini pool 4.3% of 5 hours
+// and 75.8% of the week. Once the week is used up (Google then leaves its
+// remainingFraction out, read as all used), the pool's 5 hours can't be
+// spent before it starts again: held by it, as a Codex account's 5 hours
+// are by its week (#4791). Nothing of the Gemini pool is held by Claude's
+// week, a week with 0.1% left holds nothing, and Gemini's week with room
+// isn't held by its 5 hours nearly spent.
+func TestHeldWindowsInAPool(t *testing.T) {
+	now := time.Unix(1_795_500_000, 0)
+	at := func(d time.Duration) string { return now.Add(d).UTC().Format(time.RFC3339) }
+	// the plugin's usage (packages/antigravity pools()), as it sends it
+	card := func(claudeWeek string) SubscriptionQuota {
+		var u plugin.Usage
+		b := `{"plan":"Google AI Pro","windows":[
+			{"name":"Claude Opus 5.5 (Thinking)","used":100,"model":"claude-opus-5-5-thinking","family":"Claude","pool":"Claude & GPT","span":604800,"resetsAt":"` + at(80*time.Hour) + `"},
+			{"name":"Gemini 3.8 Flash","used":95.7,"model":"gemini-3.8-flash","family":"Gemini","pool":"Gemini","resetsAt":"` + at(2*time.Hour) + `"},
+			{"name":"5 hours","pool":"Gemini","used":95.7,"aside":true,"span":18000,"resetsAt":"` + at(2*time.Hour) + `"},
+			{"name":"7 days","pool":"Gemini","used":24.2,"aside":true,"span":604800,"resetsAt":"` + at(140*time.Hour) + `"},
+			{"name":"5 hours","pool":"Claude & GPT","used":0,"aside":true,"span":18000,"resetsAt":"` + at(2*time.Hour) + `"},
+			{"name":"7 days","pool":"Claude & GPT",` + claudeWeek + `"aside":true,"span":604800,"resetsAt":"` + at(80*time.Hour) + `"}]}`
+		if err := json.Unmarshal([]byte(b), &u); err != nil {
+			t.Fatal(err)
+		}
+		return quotaOfPlugin(SubscriptionQuota{Provider: "antigravity", User: "a@example.com"}, u)
+	}
+	held := func(q SubscriptionQuota) map[string]string {
+		out := map[string]string{}
+		for _, w := range WithHeldWindows([]SubscriptionQuota{q}, now)[0].Windows {
+			if w.HeldBy != "" {
+				out[w.Pool+" · "+w.Name] = w.HeldBy
+			}
+		}
+		return out
+	}
+	got := held(card(`"used":100,`))
+	if len(got) != 1 || got["Claude & GPT · 5 hours"] != "7 days" {
+		t.Errorf("week used up: held %v, want only Claude & GPT · 5 hours, by its 7 days", got)
+	}
+	if got := held(card(`"used":99.9,`)); len(got) != 0 {
+		t.Errorf("week with 0.1%% left: held %v, want none", got)
 	}
 }

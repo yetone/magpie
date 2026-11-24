@@ -14,8 +14,12 @@ import "time"
 // used up read 75% of 5 hours left in all, #4791). It isn't so the other
 // way: a week with 22% left behind five hours used up still has that 22%
 // once the five hours start again. A ChatGPT account that goes on on its
-// credits isn't held. Another magpie's cards are as it sent them; qs and
-// its windows, which the caches share, are left as they were.
+// credits isn't held. A pool's window (Antigravity's Claude & GPT, its
+// models' shared allowance) holds its own pool's windows the same way, and
+// no other: a Claude & GPT week used up leaves that pool's 5 hours nothing
+// to spend, while Gemini's go on (kawa_tsura on X). Another magpie's cards
+// are as it sent them; qs and its windows, which the caches share, are
+// left as they were.
 func WithHeldWindows(qs []SubscriptionQuota, now time.Time) []SubscriptionQuota {
 	out := make([]SubscriptionQuota, len(qs))
 	for i, q := range qs {
@@ -25,7 +29,7 @@ func WithHeldWindows(qs []SubscriptionQuota, now time.Time) []SubscriptionQuota 
 		}
 		var stops []int
 		for j, w := range q.Windows {
-			if stopsAll(q, w, now) {
+			if stopsAll(q, w, now) || stopsPool(w, now) {
 				stops = append(stops, j)
 			}
 		}
@@ -36,7 +40,7 @@ func WithHeldWindows(qs []SubscriptionQuota, now time.Time) []SubscriptionQuota 
 		for j, w := range q.Windows {
 			if !w.Unlimited && !w.Text && w.Balance == nil {
 				for _, s := range stops {
-					if s != j && outlasts(q.Windows[s], w, now) {
+					if s != j && (q.Windows[s].Pool == "" || q.Windows[s].Pool == w.Pool) && outlasts(q.Windows[s], w, now) {
 						w.HeldBy = q.Windows[s].Name
 						break
 					}
@@ -56,6 +60,12 @@ func stopsAll(q SubscriptionQuota, w QuotaWindow, now time.Time) bool {
 		return false
 	}
 	return !w.Credits || !CodexCredits(q.User) // else the vendor spends the credits instead
+}
+
+// stopsPool says whether w, a pool's own window (no model of its own), is
+// used up at now: it stops every model of its pool while it is.
+func stopsPool(w QuotaWindow, now time.Time) bool {
+	return w.Pool != "" && w.Model == "" && w.Family == "" && !w.Text && !w.Unlimited && w.Balance == nil && w.Used >= 100 && !resetPassed(w, now)
 }
 
 // outlasts says whether used-up window h starts again only after w does,

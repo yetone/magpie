@@ -439,6 +439,8 @@ each place is drawn again once it is in. All three come from
   (`provider.WithHeldWindows`, set on `/api/usage/quotas`) names another
   window that stops the account for every model, is used up and starts
   again after it, as 7 days at 0% left holds 5 hours at 100% (#4791).
+  A pool's own window holds its pool's windows only: Antigravity's
+  Claude & GPT week used up holds that pool's 5 hours, not Gemini's.
   Not the other way: a week with room behind five hours used up keeps
   it. The tooltip counts how many were held; each account's own card
   still shows the vendor's figure;
