@@ -513,7 +513,7 @@ func entriesAt(ms []catalog.Model, after int, effort string) []any {
 			// detail" (qiu_eth)
 			e.DetailOriginal = m.Images && strings.HasPrefix(m.ID, "deepseek/")
 		}
-		levels := m.Efforts
+		levels := Levels(m)
 		if ultraHere(m) {
 			// Codex's Ultra on a model of another vendor's (pingqipai3
 			// on X): Codex sends the model its own top level for it, max
@@ -523,7 +523,6 @@ func entriesAt(ms []catalog.Model, after int, effort string) []any {
 			// agents of its own unasked (multi_agents.rs: Proactive at
 			// Ultra, ExplicitRequestOnly otherwise). A magpie-served lead
 			// writes their tasks as text, as Copilot's Ultra does (#656)
-			levels = append(slices.Clone(levels), "ultra")
 			e.MultiAgent = "v2"
 		}
 		for _, ef := range levels {
@@ -531,13 +530,37 @@ func entriesAt(ms []catalog.Model, after int, effort string) []any {
 		}
 		e.AgentsEffort = agentsEffort(own, m)
 		if len(m.Efforts) > 0 {
-			d := ModelDefault(m.Efforts, effort)
+			// Ultra chosen for new sessions starts this model at Ultra too,
+			// where it lists it
+			d := ModelDefault(levels, effort)
 			e.DefaultEffort = &d
 			e.Summaries = true
 		}
 		entries = append(entries, &e)
 	}
 	return entries
+}
+
+// Levels are the efforts magpie's entry for m lists: the model's own, and
+// Codex's Ultra after them where ultraHere. Settings' effort for new
+// sessions offers the same, so Ultra is there to pick wherever Codex's
+// picker has it (EDwinpzy on Discord: max at most there, Ultra in Codex).
+func Levels(m catalog.Model) []string {
+	if ultraHere(m) {
+		return append(slices.Clone(m.Efforts), "ultra")
+	}
+	return m.Efforts
+}
+
+// LevelsOf is Levels of the model id among ms; nil when it is none of
+// them, or has no levels.
+func LevelsOf(ms []catalog.Model, id string) []string {
+	for _, m := range ms {
+		if m.ID == id && len(m.Efforts) > 0 {
+			return Levels(m)
+		}
+	}
+	return nil
 }
 
 // ultraHere reports whether magpie's entry for m offers Codex's Ultra

@@ -227,9 +227,10 @@ var codexRunning = func() bool { return Running(`(^|/)codex( |$)`) }
 
 // codexEfforts are the effort control's choices for a model among ms:
 // Default first, with the level Codex takes for it when none is set, as
-// the catalog entry it reads says it, then the model's levels.
+// the catalog entry it reads says it, then the levels that entry lists,
+// Ultra included where magpie adds it (codexcat.Levels).
 func codexEfforts(ms []catalog.Model, model string) []Option {
-	e := catalog.Efforts(ms, model)
+	e := codexcat.LevelsOf(ms, model)
 	if len(e) == 0 {
 		return static("low", "medium", "high", "xhigh")
 	}
@@ -598,7 +599,9 @@ func codexIn(at place) *Agent {
 		}
 		ms := models()
 		model, effort := get("model"), get("model_reasoning_effort")
-		if e := catalog.Efforts(ms, model); len(e) > 0 && effort != "" && !contains(e, effort) {
+		// the levels the catalog Codex reads lists: Ultra picked on another
+		// vendor's model stays Ultra (codexcat.Levels)
+		if e := codexcat.LevelsOf(ms, model); len(e) > 0 && effort != "" && !contains(e, effort) {
 			to := codexcat.ModelDefault(e, effort)
 			if err := edit.SetTOMLTop(path, edit.KV{Path: "model_reasoning_effort", Value: to}); err != nil {
 				return err

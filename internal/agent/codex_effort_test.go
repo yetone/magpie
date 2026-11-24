@@ -74,7 +74,9 @@ func TestCodexCustomProviderModelHasEfforts(t *testing.T) {
 	for _, o := range ef {
 		opts = append(opts, o.Value)
 	}
-	if strings.Join(opts, ",") != ",low,high,max" {
+	// the levels the catalog lists, Ultra too: it was offered in Codex's
+	// picker and not here (EDwinpzy on Discord)
+	if strings.Join(opts, ",") != ",low,high,max,ultra" {
 		t.Errorf("effort options: %v", opts)
 	}
 	// Default says what Codex takes then: the catalog's default
@@ -88,6 +90,22 @@ func TestCodexCustomProviderModelHasEfforts(t *testing.T) {
 	}
 	if v := effort.Get(); v != "" {
 		t.Errorf("unset effort shows %q", v)
+	}
+
+	// Ultra picked for new sessions stays Ultra through a sync, as the
+	// catalog lists it, and the model starts at it in Codex
+	if err := effort.Set("ultra"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cx.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if cfg := read(); !strings.Contains(cfg, `model_reasoning_effort = "ultra"`) {
+		t.Errorf("sync took Ultra away:\n%s", cfg)
+	}
+	b, _ = os.ReadFile(filepath.Join(home, ".codex", "magpie-models.json"))
+	if !strings.Contains(string(b), `"default_reasoning_level": "ultra"`) {
+		t.Errorf("the catalog doesn't start the model at Ultra:\n%s", b)
 	}
 
 	// a level the model doesn't take, left from before, is settled when

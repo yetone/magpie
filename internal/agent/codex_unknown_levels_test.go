@@ -54,8 +54,9 @@ func TestCodexCatalogOffersUnknownModelsLevels(t *testing.T) {
 	if seen != 3 {
 		t.Errorf("%d of XJAI's models in magpie-models.json: %s", seen, raw)
 	}
-	// and magpie's own effort control for Codex offers the same
-	if opts := codexEfforts(magpieModels("codex"), "xjai/model-test"); len(opts) != 4 || opts[0].Value != "" {
+	// and magpie's own effort control for Codex offers the same, Ultra
+	// included (EDwinpzy on Discord)
+	if opts := codexEfforts(magpieModels("codex"), "xjai/model-test"); len(opts) != 5 || opts[0].Value != "" || opts[4].Value != "ultra" {
 		t.Errorf("effort control: %+v", opts)
 	}
 }
