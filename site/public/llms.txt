@@ -2,7 +2,7 @@
 
 > magpie is a free, open-source (MIT) desktop app for macOS, Windows and Linux that lets every AI coding agent use every model. Add a provider once (DeepSeek, Kimi, GLM, Qwen, MiniMax, OpenRouter, Ollama, or the Claude and ChatGPT subscriptions you already pay for), then pick it in Codex, Claude Code, Gemini CLI or any other agent. It runs a local gateway that speaks the OpenAI, Anthropic and Gemini APIs and translates between them, with streaming, tool calls and reasoning intact.
 
-magpie lives in the menu bar (tray on Windows and Linux), with a full window, a TUI and a CLI. The Mac download is about 15 MB, built on the system WebView (no Electron). It is signed and notarised on macOS and updates itself.
+magpie lives in the menu bar (tray on Windows and Linux), with a full window, a TUI and a CLI. The Mac download is about 50 MB, built on the system WebView (no Electron). It is signed and notarised on macOS and updates itself.
 
 Key facts:
 
