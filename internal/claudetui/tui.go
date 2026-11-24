@@ -496,6 +496,9 @@ var (
 	bypassYes = lazyre.New(`❯\s*Yes,\s*I accept`)
 	// how long a Yes stays drawn before Enter is pressed on it
 	trustSettle = 300 * time.Millisecond
+	// how long a question only the user answers stays drawn before the
+	// run ends on it: nothing else drawn under it in that time
+	endSettle = time.Second
 )
 
 var (
@@ -633,7 +636,7 @@ func (s *shim) ready() error {
 	deadline := time.After(readyWait)
 	answered := 0
 	prompted := false
-	var yesAt, downAt time.Time
+	var yesAt, downAt, endsAt time.Time
 	// an onboarding screen is answered once it has stayed drawn
 	// trustSettle: a key sent as it is first drawn can be lost to its
 	// being drawn again, and nothing then draws it once more
@@ -683,13 +686,29 @@ func (s *shim) ready() error {
 			doing = chromeAsking
 		}
 		s.doing.Store(doing)
+		// a question only its user answers ends the run once it has
+		// stayed drawn endSettle: a long history reaches the helper in
+		// pieces, and the dialogs' words in one at the foot of what was
+		// drawn so far ended every resumed run at once (#7341)
+		var ends error
 		switch {
 		case optionDialog(words, trustAsk, trustRow) && os.Getenv(TrustEnv) != "1":
-			return errUntrusted
+			ends = errUntrusted
 		case optionDialog(words, bypassAsk, bypassRow) && os.Getenv(BypassEnv) != "1":
-			return fmt.Errorf("Claude Code's interactive mode runs in Bypass Permissions mode and asks to accept it, which only its user answers: %s", s.lastScreen())
+			ends = fmt.Errorf("Claude Code's interactive mode runs in Bypass Permissions mode and asks to accept it, which only its user answers: %s", s.lastScreen())
 		case signIn.MatchString(p) && lastMatchNear(signIn, words, dialogBody):
-			return fmt.Errorf("Claude Code's interactive mode asks to sign in: %s", s.lastScreen())
+			ends = fmt.Errorf("Claude Code's interactive mode asks to sign in: %s", s.lastScreen())
+		}
+		if ends == nil {
+			endsAt = time.Time{}
+		} else if endsAt.IsZero() {
+			endsAt = time.Now()
+		}
+		switch {
+		case ends != nil:
+			if time.Since(endsAt) >= endSettle {
+				return ends
+			}
 		case lastMatchNear(firstRun, words, dialogFoot):
 			if err := onboard("notes", "\r"); err != nil {
 				return err

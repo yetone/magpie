@@ -363,13 +363,16 @@ func fakeClaude(args []string) {
 	}
 	streams := 0
 	// FAKE_HISTORY: a resumed conversation's history is drawn above the
-	// prompt, and it talks of the dialogs
+	// prompt, and it talks of the dialogs. Its first part is drawn alone
+	// for a moment, as a long history reaches the helper in pieces: the
+	// dialogs' words at the foot of what is drawn so far (#7341)
 	if os.Getenv("FAKE_HISTORY") != "" {
 		fmt.Print("\r\n> Why does it say asked to accept running in Bypass\x1b[1CPermissions\x1b[1Cmode?\r\n" +
 			"  ❯ No, exit\r\n  ❯ Yes, I accept\r\n  Do you trust this folder? Yes, I trust this folder\r\n" +
 			"  Choose the text style that looks best; Select login method; Press Enter to continue;\r\n" +
-			"  Enter to confirm · Esc to skip, keep browser tools off\r\n" +
-			strings.Repeat("  and more history of that conversation, long past the dialogs' words\r\n", 40))
+			"  Enter to confirm · Esc to skip, keep browser tools off\r\n")
+		time.Sleep(200 * time.Millisecond)
+		fmt.Print(strings.Repeat("  and more history of that conversation, long past the dialogs' words\r\n", 40))
 	}
 	fmt.Print("\r\n❯ ")
 	// the prompt's words, and the prompt as drawn, again as a paste
