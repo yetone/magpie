@@ -121,7 +121,8 @@ import (
 var Formats = map[string]string{
 	".json": "json", ".jsonc": "json",
 	".yaml": "yaml", ".yml": "yaml",
-	".env": "env",
+	".env":  "env",
+	".toml": "toml",
 }
 
 // FormatOf is the format a config file's name says it is in, "" for one
@@ -445,11 +446,11 @@ func (d *Desc) check() error {
 		d.Format = FormatOf(d.Config)
 	}
 	switch d.Format {
-	case "json", "yaml", "env":
+	case "json", "yaml", "toml", "env":
 	case "":
-		return fmt.Errorf("agent.config %q: say its agent.format (json, yaml or env)", d.Config)
+		return fmt.Errorf("agent.config %q: say its agent.format (json, yaml, toml or env)", d.Config)
 	default:
-		return fmt.Errorf("agent.format %q: json, yaml or env", d.Format)
+		return fmt.Errorf("agent.format %q: json, yaml, toml or env", d.Format)
 	}
 	if st := d.Startup; st != nil {
 		st.Model = strings.TrimSpace(st.Model)
@@ -470,11 +471,11 @@ func (d *Desc) check() error {
 			st.Format = FormatOf(st.Config)
 		}
 		switch st.Format {
-		case "json", "yaml", "env":
+		case "json", "yaml", "toml", "env":
 		case "":
-			return fmt.Errorf("agent.startup.config %q: say its agent.startup.format (json, yaml or env)", st.Config)
+			return fmt.Errorf("agent.startup.config %q: say its agent.startup.format (json, yaml, toml or env)", st.Config)
 		default:
-			return fmt.Errorf("agent.startup.format %q: json, yaml or env", st.Format)
+			return fmt.Errorf("agent.startup.format %q: json, yaml, toml or env", st.Format)
 		}
 	}
 	l := &d.Library

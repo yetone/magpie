@@ -169,7 +169,7 @@ export default {
 func TestPluggedRefused(t *testing.T) {
 	pluggedHome(t,
 		`export const agent = { id: "codex", config: "~/x.json", model: "m" };`,
-		`export const agent = { id: "bad", config: "~/x.toml", model: "m" };`,
+		`export const agent = { id: "bad", config: "~/x.ini", model: "m" };`,
 		`export const agent = { id: "boom", config: "~/.boom.json", model: "m" };
 export function connect() { throw new Error("no gateway for me"); }`,
 		`syntax error here (`,

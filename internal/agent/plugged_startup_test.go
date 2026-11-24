@@ -199,7 +199,7 @@ func TestPluggedStartupRefused(t *testing.T) {
 export function connect() { return { k: 1 }; }`,
 		`export const agent = { id: "a2", config: "~/.a2/m.json", startup: { config: "~/.a2/m.json", model: "m" } };
 export function connect() { return { k: 1 }; }`,
-		`export const agent = { id: "a3", config: "~/.a3/m.json", startup: { config: "~/.a3/s.toml", model: "m" } };
+		`export const agent = { id: "a3", config: "~/.a3/m.json", startup: { config: "~/.a3/s.ini", model: "m" } };
 export function connect() { return { k: 1 }; }`,
 		`export const agent = { id: "a4", config: "~/.a4/m.json", startup: { config: "~/.a4/s.json", model: "m", keys: { m: "x" } } };
 export function connect() { return { k: 1 }; }`,

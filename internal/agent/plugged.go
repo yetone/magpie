@@ -20,6 +20,7 @@ import (
 	"slices"
 	"strings"
 
+	toml "github.com/pelletier/go-toml/v2"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/jsonc"
 	"github.com/yetone/magpie/internal/agentplug"
@@ -158,6 +159,8 @@ func (f pluggedFile) get(key string) (string, bool) {
 		return edit.GetJSON(f.path, key)
 	case "yaml":
 		return edit.GetYAML(f.path, key)
+	case "toml":
+		return edit.GetTOML(f.path, key)
 	}
 	return edit.GetEnvFile(f.path, key)
 }
@@ -174,6 +177,12 @@ func (f pluggedFile) raw(key string) (string, bool) {
 		return r.Raw, r.Exists()
 	case "yaml":
 		return edit.GetYAMLText(f.path, key)
+	case "toml":
+		t, ok := edit.GetTOMLText(f.path, key)
+		if t.Table {
+			return tomlTableHad + t.Text, ok
+		}
+		return t.Text, ok
 	}
 	return edit.GetEnvFile(f.path, key)
 }
@@ -185,9 +194,18 @@ func (f pluggedFile) back(v string) any {
 		return json.RawMessage(v)
 	case "yaml":
 		return edit.YAMLText(v)
+	case "toml":
+		if body, ok := strings.CutPrefix(v, tomlTableHad); ok {
+			return edit.TOMLText{Text: body, Table: true}
+		}
+		return edit.TOMLText{Text: v}
 	}
 	return v
 }
+
+// tomlTableHad starts what a TOML file's stash holds of a key that was a
+// table there ([key], its lines as written), apart from a value as written.
+const tomlTableHad = "\x01table\n"
 
 func (f pluggedFile) set(kvs []edit.KV) error {
 	if len(kvs) == 0 {
@@ -198,6 +216,8 @@ func (f pluggedFile) set(kvs []edit.KV) error {
 		return edit.SetJSON(f.path, kvs...)
 	case "yaml":
 		return edit.SetYAML(f.path, kvs...)
+	case "toml":
+		return edit.SetTOML(f.path, kvs...)
 	}
 	for i, kv := range kvs {
 		switch v := kv.Value.(type) {
@@ -221,6 +241,8 @@ func (f pluggedFile) del(keys []string) error {
 		return edit.DelJSON(f.path, keys...)
 	case "yaml":
 		return edit.DelYAML(f.path, keys...)
+	case "toml":
+		return edit.DelTOML(f.path, keys...)
 	}
 	return edit.DelEnvFile(f.path, keys...)
 }
@@ -815,17 +837,24 @@ func plugged(at place, p *agentplug.Agent) *Agent {
 	return atomic(a, paths...)
 }
 
-// parsed is f as a hook is given it: its JSON parsed, {} for none or
-// another format.
+// parsed is f as a hook is given it: its JSON or TOML parsed, {} for
+// none, one that doesn't parse, or another format.
 func (f pluggedFile) parsed() any {
 	var cfg any = map[string]any{}
-	if f.format == "json" {
-		if b, err := edit.Read(f.path); err == nil && len(b) > 0 {
-			var v map[string]any
-			if json.Unmarshal(jsonc.ToJSON(b), &v) == nil && v != nil {
-				cfg = v
-			}
+	if f.format != "json" && f.format != "toml" {
+		return cfg
+	}
+	b, err := edit.Read(f.path)
+	if err != nil || len(b) == 0 {
+		return cfg
+	}
+	var v map[string]any
+	if f.format == "toml" {
+		if toml.Unmarshal(b, &v) == nil && v != nil {
+			cfg = v
 		}
+	} else if json.Unmarshal(jsonc.ToJSON(b), &v) == nil && v != nil {
+		cfg = v
 	}
 	return cfg
 }

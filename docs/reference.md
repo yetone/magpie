@@ -1680,7 +1680,7 @@ it is a single `*.agent.js` file:
 ```js
 export const agent = {
   id: "aider", name: "Aider", bin: "aider",
-  config: "~/.aider.conf.yml",   // json, yaml or env
+  config: "~/.aider.conf.yml",   // json, yaml, toml or env
   model: "model",                // the key of the model
   prefix: "openai/",             // written before magpie's model id
   ua: ["aider", "litellm"],
