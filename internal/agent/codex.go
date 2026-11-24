@@ -522,10 +522,19 @@ func codexIn(at place) *Agent {
 			}
 			return nil
 		}
+		// relisted: a named file now lists other models (a provider added
+		// or removed in magpie, a model the backend lists now), which
+		// the app's app-server, reading the file only as it starts, would
+		// show only at the app's next launch (ashh on Discord)
+		relisted := false
 		if cur, err := edit.Read(deskPath); err != nil || string(cur) != string(b) {
 			if err := edit.WriteAtomic(deskPath, b); err != nil {
 				return err
 			}
+			relisted = named && deskSlugs(cur) != deskSlugs(b)
+		}
+		if named && relisted {
+			stash(map[string]string{at.key("codex.desk_at"): strconv.FormatInt(time.Now().UnixNano(), 10)})
 		}
 		if !named {
 			if err := edit.SetTOMLTop(path, edit.KV{Path: "model_catalog_json", Value: deskRef}); err != nil {
@@ -3271,6 +3280,26 @@ var (
 	startRelay = codexrelay.Start
 	codexPIDs  = provider.CodexPIDs
 )
+
+// deskSlugs is the models a list for the Codex app names, sorted; "" for
+// one that can't be read. Their order, efforts, names and text changing
+// is no new list for a running app-server: its next launch reads them.
+func deskSlugs(b []byte) string {
+	var l struct {
+		Models []struct {
+			Slug string `json:"slug"`
+		} `json:"models"`
+	}
+	if json.Unmarshal(b, &l) != nil {
+		return ""
+	}
+	slugs := make([]string, 0, len(l.Models))
+	for _, m := range l.Models {
+		slugs = append(slugs, m.Slug)
+	}
+	slices.Sort(slugs)
+	return strings.Join(slugs, "\n")
+}
 
 // CodexDesktopList is the list a Codex beside its ChatGPT sign-in is
 // handed, as the file the Codex app reads it from (deskList); ok false

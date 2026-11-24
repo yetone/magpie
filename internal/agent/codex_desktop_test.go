@@ -216,8 +216,9 @@ func TestCodexDesktopListKeepsTheirs(t *testing.T) {
 // new project too. Its app-server reads the list only as it starts, so
 // magpie keeps when it named the list (DeskAt), for one running from
 // before to be restarted: the time it was named, kept while the list is
-// unknown or its file rewritten, zero once the key is gone, and new when
-// it is named again.
+// unknown or its file rewritten with the same models, new when the file
+// lists other models, zero once the key is gone, and new when it is named
+// again.
 func TestCodexDesktopListNamedAt(t *testing.T) {
 	home, read := codexHome(t, `{"tokens":{"access_token":"x","id_token":"x.e30.x"}}`, `model = "gpt-5.5"`+"\n")
 	app := true
@@ -242,14 +243,26 @@ func TestCodexDesktopListNamedAt(t *testing.T) {
 	if !strings.Contains(read(), "magpie-desktop-models.json") || at.Before(before) || at.After(time.Now()) {
 		t.Fatalf("named at %v, want after %v\n%s", at, before, read())
 	}
-	// a new list in the file is no new naming: the app's next launch reads it
-	list = `{"models":[{"slug":"gpt-6-sol"},{"slug":"fake/m2"}]}`
+	// the same models with other text, or in another order, are no new
+	// list for a running app-server: the app's next launch reads them
+	list = `{"models":[{"slug":"fake/m1","display_name":"M1"},{"slug":"gpt-6-sol","default_reasoning_level":"high"}]}`
 	if err := cx.Sync(); err != nil {
 		t.Fatal(err)
 	}
 	if !cx.DeskAt().Equal(at) {
-		t.Fatalf("named at %v after a new list, want %v", cx.DeskAt(), at)
+		t.Fatalf("named at %v after the same models, want %v", cx.DeskAt(), at)
 	}
+	// ashh on Discord: a provider added or removed in magpie never reached
+	// the running app's picker. Other models in the file are a new list,
+	// for the app-server from before to be restarted
+	list = `{"models":[{"slug":"gpt-6-sol"},{"slug":"fake/m2"}]}`
+	if err := cx.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if again := cx.DeskAt(); !again.After(at) {
+		t.Fatalf("named at %v after other models, want after %v", again, at)
+	}
+	at = cx.DeskAt()
 	// magpie API: the list goes, and with it the time
 	if err := cx.Fields[0].Set("fake/m1"); err != nil {
 		t.Fatal(err)
