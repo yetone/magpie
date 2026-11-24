@@ -1298,6 +1298,8 @@ function inScope(provider, key, fn, signIn = false) {
   }
   return scope.run({ provider, key, had }, fn)
 }
+// opens.js names the plugin whose program it refused by this
+globalThis[Symbol.for("magpie.spawnedBy")] = () => scope.getStore()?.provider ?? ""
 
 function whoOf(a) {
   return a?.accountId ?? a?.metadata?.email ?? a?.email ?? ""

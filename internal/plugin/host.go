@@ -43,6 +43,13 @@ var hostJS []byte
 //go:embed pi.js
 var piJS []byte
 
+// opensJS is preloaded into the host and the Bun scripts it starts: it
+// refuses a command that would open an empty target, which opens the
+// program's own folder (plugin-work) in Explorer instead.
+//
+//go:embed opens.js
+var opensJS []byte
+
 // message is a line the host writes.
 type message struct {
 	ID     int64           `json:"id"`
@@ -1097,6 +1104,10 @@ func startOn(ctx context.Context, bun string) (*host, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
+	opens, err := hostScript("opens", opensJS)
+	if err != nil {
+		return nil, false, err
+	}
 	if err := os.MkdirAll(settings.Dir(), 0o700); err != nil {
 		return nil, false, err
 	}
@@ -1128,7 +1139,7 @@ func startOn(ctx context.Context, bun string) (*host, bool, error) {
 	}
 	// the host outlives the request that started it
 	proxy := hostProxy(env()) // what bunCommand gives it
-	cmd := bunCommand(context.Background(), bun, settings.Dir(), "run", js)
+	cmd := bunCommand(context.Background(), bun, settings.Dir(), "run", "--preload", opens, js)
 	addr := hostAddr(cmd.Env)
 	log.Printf("plugin: host starts with %s", netLine(cmd.Env))
 	cmd.Env = hostEnv(cmd.Env)
