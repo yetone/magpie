@@ -79,13 +79,14 @@ func TestClaudePickerLeavesOutATiersModelAtItsEffort(t *testing.T) {
 	}
 	// with Claude Code's own models hidden the picker says
 	// replaceBuiltInOptions, which takes the tier rows out of /model too
-	// (#4548): Terra, on Haiku at max, keeps its row then, or it would be
-	// in /model nowhere
+	// (#4548): magpie lists each tier then as a row of the tier's word,
+	// so Terra, on Haiku at max, is in /model as "haiku", not twice, and
+	// Luna, on no tier, keeps its own row (LBaoheng24070 on X)
 	if err := provider.SetOwnModelsHidden("claude", true); err != nil {
 		t.Fatal(err)
 	}
 	set("model", "cx/gpt-6.1-sol")
-	if got := listed(); !slices.Contains(got, "cx/gpt-6-terra") || !slices.Contains(got, "cx/gpt-6-luna") {
-		t.Fatalf("picker %v with the built-in rows replaced: want Terra, on Haiku at max, listed beside Luna", got)
+	if got := listed(); !slices.Contains(got, "haiku") || slices.Contains(got, "cx/gpt-6-terra") || !slices.Contains(got, "cx/gpt-6-luna") {
+		t.Fatalf("picker %v with the built-in rows replaced: want a haiku row for Terra, on Haiku at max, and Luna's row", got)
 	}
 }

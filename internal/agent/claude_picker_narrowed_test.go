@@ -3,6 +3,8 @@ package agent
 import (
 	"encoding/json"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/yetone/magpie/internal/edit"
@@ -62,13 +64,15 @@ func TestClaudePickerNarrowedListReplacesLineup(t *testing.T) {
 		t.Fatalf("nothing left out: rows %v, replaceBuiltInOptions=%v, want both rows and no flag", ms, replace)
 	}
 
-	// one taken out: the lineup goes, the row too
+	// one taken out: the lineup goes, the row too; the tiers, which
+	// follow glm-4.6, are its rows by their words, as the lineup's are
+	// (TestClaudePickerKeepsTierWordsWithLineupReplaced)
 	if err := provider.SetHiddenModels("claude", []string{"relay/glm-5"}); err != nil {
 		t.Fatal(err)
 	}
 	sync()
-	if ms, replace := picker(); !replace || len(ms) != 1 || ms[0] != "relay/glm-4.6" {
-		t.Fatalf("glm-5 taken out: rows %v, replaceBuiltInOptions=%v, want [relay/glm-4.6] and the flag", ms, replace)
+	if ms, replace := picker(); !replace || strings.Join(ms, " ") != "opus sonnet haiku" {
+		t.Fatalf("glm-5 taken out: rows %v, replaceBuiltInOptions=%v, want [opus sonnet haiku] and the flag", ms, replace)
 	}
 
 	// only the picked ones, glm-5 not among them: the same
@@ -76,8 +80,8 @@ func TestClaudePickerNarrowedListReplacesLineup(t *testing.T) {
 		t.Fatal(err)
 	}
 	sync()
-	if ms, replace := picker(); !replace || len(ms) != 1 {
-		t.Fatalf("only picks: rows %v, replaceBuiltInOptions=%v, want one row and the flag", ms, replace)
+	if ms, replace := picker(); !replace || slices.Contains(ms, "relay/glm-5") {
+		t.Fatalf("only picks: rows %v, replaceBuiltInOptions=%v, want glm-5 left out and the flag", ms, replace)
 	}
 
 	// a custom row of the user's own keeps the lineup it is shown in

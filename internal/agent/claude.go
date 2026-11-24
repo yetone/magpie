@@ -1152,15 +1152,26 @@ func claudeIn(at place) *Agent {
 			return env(claudeCustomOptionEnv) != "" || at.spell == nil && claudeShellEnv(claudeCustomOptionEnv) != ""
 		}
 		replace := provider.OwnModelsHidden("claude") || claudeNarrowed() && !ownOption()
-		var onTier []string
+		// With the lineup replaced, each tier a model is on gets a row of
+		// its own, its model the tier's word, as the lineup's tier rows
+		// are: without one, "sonnet" named no row, and an app that runs
+		// Claude Code with "sonnet" and matches it against /model's rows by
+		// name (claude-agent-acp's resolveModelPreference, AWS Quick) took
+		// "Claude Sonnet 5.5", the real Claude model, while the user had
+		// put Sonnet on DeepSeek in magpie (LBaoheng24070 on X). The row
+		// stands for the tier's model, whose own row goes, as Claude Code
+		// leaves out a row naming a tier's model beside its lineup.
+		var onTier, tierWords []string
 		for _, t := range claudeTiers {
-			if replace {
-				break
+			v := env(tierEnv(t))
+			if v == "" {
+				continue
 			}
-			if v := env(tierEnv(t)); v != "" {
-				if _, e := tierAt(v); e != "" {
-					onTier = append(onTier, v)
-				}
+			if replace {
+				onTier = append(onTier, v)
+				tierWords = append(tierWords, t)
+			} else if _, e := tierAt(v); e != "" {
+				onTier = append(onTier, v)
 			}
 		}
 		// each row's label is the model's name as every agent's list calls
@@ -1170,11 +1181,9 @@ func claudeIn(at place) *Agent {
 		// provider the label already says is left "via magpie".
 		labels := listLabels("claude")
 		rows := []any{}
-		for _, o := range viaMagpieShared("claude", "") {
-			if slices.ContainsFunc(onTier, func(v string) bool { return claudeSameModel(v, o.Value) }) {
-				continue
-			}
-			label, note := cmp.Or(labels[o.Ref], o.Label, o.Value), o.Note
+		// named is the label and description of o's row
+		named := func(o Option) (label, note string) {
+			label, note = cmp.Or(labels[o.Ref], o.Label, o.Value), o.Note
 			// a subscription's note is its account alone, so a label left
 			// without its provider (Off, or a name the user gave) named
 			// neither in /model; the provider goes before the account then,
@@ -1187,6 +1196,26 @@ func claudeIn(at place) *Agent {
 					note = o.Group + " · " + note
 				}
 			}
+			return label, note
+		}
+		sameAs := func(v string, o Option) bool {
+			return claudeSameModel(v, o.Value) || claudeSameModel(v, spell(o.Value))
+		}
+		via := viaMagpieShared("claude", "")
+		// a tier's row is named as its model's would be, the tier first
+		for _, t := range tierWords {
+			v := env(tierEnv(t))
+			label, note := v, "via magpie"
+			if i := slices.IndexFunc(via, func(o Option) bool { return sameAs(v, o) }); i >= 0 {
+				label, note = named(via[i])
+			}
+			rows = append(rows, map[string]any{"model": t, "label": label, "description": strings.ToUpper(t[:1]) + t[1:] + " · " + note})
+		}
+		for _, o := range via {
+			if slices.ContainsFunc(onTier, func(v string) bool { return sameAs(v, o) }) {
+				continue
+			}
+			label, note := named(o)
 			rows = append(rows, map[string]any{"model": spell(mark1M(o.Value)), "label": label, "description": note})
 		}
 		if len(rows) == 0 {
