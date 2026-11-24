@@ -1166,8 +1166,12 @@ func fetchPart(src Source, name string) (dir string, part bool, err error) {
 	return dir, tooBig.has(src) && (src.Path != "" || name != ""), err
 }
 
+// wholeTimeout is how long a repository's whole download may take; a
+// variable for tests.
+var wholeTimeout = 2 * time.Minute
+
 func fetchWhole(src Source, name string) (string, error) {
-	c := &http.Client{Timeout: 2 * time.Minute}
+	c := &http.Client{Timeout: wholeTimeout}
 	get := func(u string) (*http.Response, bool, error) {
 		req, _ := http.NewRequest("GET", u, nil)
 		req.Header.Set("User-Agent", "magpie")
@@ -1220,9 +1224,13 @@ func fetchWhole(src Source, name string) (string, error) {
 	}
 	if err := untar(resp.Body, tmp); err != nil {
 		os.RemoveAll(tmp)
-		if errors.Is(err, errTooBig) {
+		if errors.Is(err, errTooBig) || downloadTimedOut(err) {
 			// a repository that is mostly something else (an app with its
-			// skills beside it, #1941): only the skills' folders
+			// skills beside it, #1941): only the skills' folders. One
+			// whose download outlasts wholeTimeout is the same, on a
+			// slower line: next-cache-components-adoption on VincentChan's
+			// (Discord), "context deadline exceeded (Client.Timeout or
+			// context cancellation while reading body)" on every sync.
 			resp.Body.Close()
 			tooBig.add(src)
 			return fetchSkillFiles(src, name)
@@ -1230,6 +1238,12 @@ func fetchWhole(src Source, name string) (string, error) {
 		return "", err
 	}
 	return tmp, nil
+}
+
+// downloadTimedOut is whether err is a download that ran out of time.
+func downloadTimedOut(err error) bool {
+	var t interface{ Timeout() bool }
+	return errors.As(err, &t) && t.Timeout()
 }
 
 // untar unpacks a GitHub tarball, whose one top folder is dropped.

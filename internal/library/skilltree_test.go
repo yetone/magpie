@@ -1,6 +1,7 @@
 package library
 
 import (
+	"context"
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
@@ -16,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // fakeBigRepo stands in for codeload, GitHub's API and
@@ -31,6 +33,7 @@ type fakeBigRepo struct {
 	serve    map[string]string // what raw hands out, where it differs
 	trees    []string          // the tree-ish each file list was asked at
 	pad      int               // files of the app's own, in the whole list only
+	slow     bool              // codeload sends a little, then nothing until the client gives up
 }
 
 func gitSHA(body string) string {
@@ -57,8 +60,16 @@ func newFakeBigRepo(t *testing.T) *fakeBigRepo {
 	codeload := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		g.mu.Lock()
 		g.tarballs++
+		slow := g.slow
 		g.mu.Unlock()
-		w.Write(tarball(t, g.files))
+		body := tarball(t, g.files)
+		if slow {
+			w.Write(body[:len(body)/4])
+			w.(http.Flusher).Flush()
+			<-r.Context().Done()
+			return
+		}
+		w.Write(body)
 	}))
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ish, found := strings.CutPrefix(r.URL.Path, "/repos/vectorize-io/hindsight/git/trees/")
@@ -332,5 +343,39 @@ func TestTruncatedListIsTooBig(t *testing.T) {
 		if _, err := fetchSkillFiles(Source{Kind: "github", Repo: "o/r", Path: path}, ""); !errors.Is(err, errTooBig) {
 			t.Errorf("path %q: %v", path, err)
 		}
+	}
+}
+
+// VincentChan (Discord): next-cache-components-adoption, synced from another
+// computer, was "not fetched from its source on this computer yet (Update
+// tries again): context deadline exceeded (Client.Timeout or context
+// cancellation while reading body)" on every sync. The repository's whole
+// download, under the size limit, outlasted its time on a slow line,
+// which the size fallback never saw. A download that runs out of time
+// fetches the skills' folders alone, as one too big does.
+func TestSkillsFromATooSlowRepository(t *testing.T) {
+	sandbox(t)
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("GH_TOKEN", "")
+	g := newFakeBigRepo(t)
+	g.slow = true
+	forgetProbes() // another test's probe of the same repository
+	maxFetch = 200 << 20
+	old := wholeTimeout
+	wholeTimeout = time.Second
+	t.Cleanup(func() { wholeTimeout = old })
+	if !downloadTimedOut(context.DeadlineExceeded) || downloadTimedOut(errTooBig) {
+		t.Fatal("downloadTimedOut")
+	}
+
+	ok(t)(InstallSkills("https://github.com/vectorize-io/hindsight", []string{"skills/hindsight-docs"}, []string{"claude"}))
+	b, err := os.ReadFile(filepath.Join(skillDir("."), "hindsight-docs", "references", "best-practices.md"))
+	if err != nil || string(b) != g.files["skills/hindsight-docs/references/best-practices.md"] {
+		t.Fatalf("hindsight-docs: %q, %v", b, err)
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.tarballs != 1 {
+		t.Errorf("codeload was asked %d times; once too slow, the repository's skills are fetched alone", g.tarballs)
 	}
 }

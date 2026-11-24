@@ -34,7 +34,8 @@ var maxFetch int64 = 200 << 20
 
 var errTooBig = errors.New("the repository is too big to install skills from")
 
-// tooBig is the repositories found too big this run: fetched again (an
+// tooBig is the repositories found too big this run, or too slow to
+// download whole within wholeTimeout: fetched again (an
 // install after its probe, an update check), they go straight to their
 // skills' folders rather than download the whole of it again first.
 var tooBig = &repoSet{m: map[string]bool{}}
