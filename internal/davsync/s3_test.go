@@ -19,6 +19,7 @@ import (
 
 	"github.com/yetone/magpie/internal/backup"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/sigv4"
 )
 
 // fakeS3 is an S3 server with one bucket and one access key, keeping
@@ -188,7 +189,7 @@ func (f *fakeS3) signed(r *http.Request, body []byte) bool {
 	}
 	// the path as S3 has it: decoded, then encoded again as SigV4 says —
 	// a + sent bare is signed as %2B
-	u.RawPath = awsEscape(u.Path, true)
+	u.RawPath = sigv4.Escape(u.Path, true)
 	again := &http.Request{Method: r.Method, URL: u, Host: r.Host, Header: http.Header{}}
 	for _, n := range strings.Split(names, ";") {
 		if n != "host" {
@@ -201,7 +202,7 @@ func (f *fakeS3) signed(r *http.Request, body []byte) bool {
 			again.Header[http.CanonicalHeaderKey(n)] = vs
 		}
 	}
-	signer{id: f.id, secret: f.secret, region: f.region, service: "s3"}.sign(again, sum(body), at)
+	sigv4.Signer{ID: f.id, Secret: f.secret, Region: f.region, Service: "s3"}.Sign(again, sum(body), at)
 	return again.Header.Get("Authorization") == auth
 }
 
@@ -334,8 +335,8 @@ func TestS3Address(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := s.objectURL().String(); got != c.url || s.sig.region != c.region {
-			t.Errorf("%+v: %s in %s, want %s in %s", c.cfg, got, s.sig.region, c.url, c.region)
+		if got := s.objectURL().String(); got != c.url || s.sig.Region != c.region {
+			t.Errorf("%+v: %s in %s, want %s in %s", c.cfg, got, s.sig.Region, c.url, c.region)
 		}
 	}
 	for _, bad := range []Config{{URL: "s3://"}, {URL: "s3:///prefix"}, {URL: "s3://bkt", Endpoint: "ftp://x"}, {URL: "s3://bkt", Endpoint: "https://x?y=z"}} {

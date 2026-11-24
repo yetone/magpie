@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Amazon Bedrock を Claude Code・Codex で使う：Bedrock API キーで Claude・GPT・DeepSeek・Kimi・GLM · magpie</title>
-<meta name="description" content="magpie で Amazon Bedrock を Claude Code・Codex・OpenCode などにつなぎます。Bedrock API キー 1 つで SigV4 は不要、リージョンを選び、global 推論プロファイルで Claude と GPT、さらに gpt-oss・Qwen・DeepSeek・Kimi・GLM・MiniMax を使えます。Bedrock Mantle はアカウント自身のモデル一覧を返します。">
+<meta name="description" content="magpie で Amazon Bedrock を Claude Code・Codex・OpenCode などにつなぎます。Bedrock API キーか AWS アクセスキーで、リージョンを選び、global 推論プロファイルで Claude と GPT、さらに gpt-oss・Qwen・DeepSeek・Kimi・GLM・MiniMax を使えます。Bedrock Mantle はアカウント自身のモデル一覧を返します。">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#fafafa">
 <script>
@@ -35,7 +35,7 @@
 <link rel="stylesheet" href="/docs.css">
 <meta property="og:site_name" content="magpie">
 <meta property="og:title" content="Amazon Bedrock を Claude Code・Codex などのエージェントで使う">
-<meta property="og:description" content="magpie で Amazon Bedrock を Claude Code・Codex・OpenCode などにつなぎます。Bedrock API キー 1 つで SigV4 は不要、リージョンを選び、global 推論プロファイルで Claude と GPT、さらに gpt-oss・Qwen・DeepSeek・Kimi・GLM・MiniMax を使えます。Bedrock Mantle はアカウント自身のモデル一覧を返します。">
+<meta property="og:description" content="magpie で Amazon Bedrock を Claude Code・Codex・OpenCode などにつなぎます。Bedrock API キーか AWS アクセスキーで、リージョンを選び、global 推論プロファイルで Claude と GPT、さらに gpt-oss・Qwen・DeepSeek・Kimi・GLM・MiniMax を使えます。Bedrock Mantle はアカウント自身のモデル一覧を返します。">
 <meta property="og:image" content="https://usemagpie.ai/img/og.png">
 <meta property="og:url" content="https://usemagpie.ai/docs/ja/bedrock">
 <meta name="twitter:card" content="summary_large_image">
@@ -46,7 +46,7 @@
   {
    "@type": "TechArticle",
    "headline": "Amazon Bedrock を Claude Code・Codex などのエージェントで使う",
-   "description": "magpie で Amazon Bedrock を Claude Code・Codex・OpenCode などにつなぎます。Bedrock API キー 1 つで SigV4 は不要、リージョンを選び、global 推論プロファイルで Claude と GPT、さらに gpt-oss・Qwen・DeepSeek・Kimi・GLM・MiniMax を使えます。Bedrock Mantle はアカウント自身のモデル一覧を返します。",
+   "description": "magpie で Amazon Bedrock を Claude Code・Codex・OpenCode などにつなぎます。Bedrock API キーか AWS アクセスキーで、リージョンを選び、global 推論プロファイルで Claude と GPT、さらに gpt-oss・Qwen・DeepSeek・Kimi・GLM・MiniMax を使えます。Bedrock Mantle はアカウント自身のモデル一覧を返します。",
    "inLanguage": "ja",
    "url": "https://usemagpie.ai/docs/ja/bedrock",
    "about": {
@@ -69,7 +69,7 @@
      "name": "magpie で Bedrock を使うのに AWS アクセスキーは必要ですか？",
      "acceptedAnswer": {
       "@type": "Answer",
-      "text": "不要です。Bedrock API キー 1 つで足り、magpie は SigV4 署名をしません。AWS コンソールの Bedrock ページで作成します。"
+      "text": "不要です。Bedrock API キー 1 つで足ります。AWS コンソールの Bedrock ページで作成します。代わりに AWS アクセスキーも使えます。プロバイダーの「詳細設定」にアクセスキー ID とシークレットアクセスキー、一時キーならセッショントークンも入れると、magpie が各リクエストに SigV4 で署名します。"
      }
     },
     {
@@ -180,7 +180,7 @@
   <article>
     <p class="eyebrow" id="overview">ドキュメント · ガイド</p>
     <h1>Amazon Bedrock を Claude Code・Codex などのエージェントで使う</h1>
-    <p class="lede">magpie には Amazon Bedrock のプリセットが 2 つあります。Bedrock ランタイムの <code>bedrock</code> と、Bedrock の Mantle エンドポイントの <code>bedrock-mantle</code> です。どちらも同じ Bedrock API キーを使い、AWS のアクセスキーや SigV4 署名は不要です。追加すると、Claude Code・Codex・OpenCode などから Bedrock の Claude、OpenAI の GPT、gpt-oss・Qwen・DeepSeek・Kimi・GLM・MiniMax を使え、料金は自分の AWS アカウントに付きます。</p>
+    <p class="lede">magpie には Amazon Bedrock のプリセットが 2 つあります。Bedrock ランタイムの <code>bedrock</code> と、Bedrock の Mantle エンドポイントの <code>bedrock-mantle</code> です。どちらも同じ Bedrock API キーを使います。AWS アクセスキーも使え、その場合は magpie が各リクエストに署名します。追加すると、Claude Code・Codex・OpenCode などから Bedrock の Claude、OpenAI の GPT、gpt-oss・Qwen・DeepSeek・Kimi・GLM・MiniMax を使え、料金は自分の AWS アカウントに付きます。</p>
     <h2 id="add"><a class="anchor" href="#add">追加する</a></h2>
     <ol class="steps">
       <li><b>キーを作る。</b>AWS コンソールの Bedrock ページで Bedrock API キーを作成します。</li>
@@ -210,7 +210,7 @@ magpie provider test bedrock-mantle</pre></div>
 
     <h2 id="faq"><a class="anchor" href="#faq">よくある質問</a></h2>
     <h3>magpie で Bedrock を使うのに AWS アクセスキーは必要ですか？</h3>
-    <p>不要です。Bedrock API キー 1 つで足り、magpie は SigV4 署名をしません。AWS コンソールの Bedrock ページで作成します。</p>
+    <p>不要です。Bedrock API キー 1 つで足ります。AWS コンソールの Bedrock ページで作成します。代わりに AWS アクセスキーも使えます。プロバイダーの「詳細設定」にアクセスキー ID とシークレットアクセスキー、一時キーならセッショントークンも入れると、magpie が各リクエストに SigV4 で署名します。</p>
     <h3>Claude Code から magpie 経由で Bedrock の Claude を使えますか？</h3>
     <p>使えます。bedrock/global.anthropic.claude-sonnet-5-5 のようなモデルを選びます。CLAUDE_CODE_USE_BEDROCK はオフのままにしてください。オンだと magpie を通りません。magpie は自分が書く設定からそれを外します。</p>
     <h3>自分のリージョンで使えないモデルがあるのはなぜ？</h3>

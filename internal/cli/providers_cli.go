@@ -36,7 +36,9 @@ const providerUsage = `usage:
   magpie provider add <preset> <key>      add a preset vendor   e.g. magpie provider add deepseek sk-…
                                           again, it adds another (deepseek-2); k=v pairs too: id, name, header.X-Foo
   magpie provider add <name> k=v…         add a custom vendor   k: url, anthropic, responses, gemini, decide, key, models, catalog, icon, header.X-Foo, balance, balance.path, balance.method, balance.token, models.url, list, search, user-agent,
-                                          access.key, access.secret (a Volcengine access key, or a Tencent Cloud SecretId and SecretKey, for its plan's windows)
+                                          access.key, access.secret (a Volcengine access key, or a Tencent Cloud SecretId and SecretKey, for its plan's windows;
+                                          on Amazon Bedrock an AWS access key, which signs requests in place of an API key),
+                                          access.token (a temporary AWS access key's session token)
   magpie provider set <id> k=v…           change a provider's settings, with the same k=v pairs as add;
                                           codex=as-sent sends Codex's Responses requests as Codex sent them
                                           (a relay that checks they are Codex's own), codex=default fits them;
@@ -1285,11 +1287,16 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 			p.BalanceToken = v
 		case "access.key":
 			// a Volcengine account's access key, which Ark tells its
-			// Coding or Agent Plan's windows to (#1427), or a Tencent Cloud
-			// SecretId, which TokenHub tells Token Plan 企业版's usage to (#1574)
+			// Coding or Agent Plan's windows to (#1427), a Tencent Cloud
+			// SecretId, which TokenHub tells Token Plan 企业版's usage to
+			// (#1574), or an AWS access key, which signs Bedrock's
+			// requests (#7687)
 			p.AccessKeyID = v
 		case "access.secret":
 			p.SecretAccessKey = v
+		case "access.token":
+			// a temporary AWS access key's session token (#7687)
+			p.SessionToken = v
 		case "models.url":
 			p.ModelsURL = v
 		case "list":

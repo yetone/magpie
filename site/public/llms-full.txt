@@ -9514,7 +9514,7 @@ Source: https://usemagpie.ai/docs/bedrock
 
 # Amazon Bedrock in Claude Code, Codex and other agents
 
-magpie has two Amazon Bedrock presets: `bedrock`, the Bedrock runtime, and `bedrock-mantle`, Bedrock's Mantle endpoint. Both take the same Bedrock API key, with no AWS access keys and no SigV4 signing. Once added, Claude Code, Codex, OpenCode and other agents can use Claude, OpenAI's GPT models, and gpt-oss, Qwen, DeepSeek, Kimi, GLM and MiniMax on Bedrock, billed to your AWS account.
+magpie has two Amazon Bedrock presets: `bedrock`, the Bedrock runtime, and `bedrock-mantle`, Bedrock's Mantle endpoint. Both take the same Bedrock API key, or an AWS access key that magpie signs each request with. Once added, Claude Code, Codex, OpenCode and other agents can use Claude, OpenAI's GPT models, and gpt-oss, Qwen, DeepSeek, Kimi, GLM and MiniMax on Bedrock, billed to your AWS account.
 
 ## Add it
 
@@ -9576,7 +9576,7 @@ With `CLAUDE_CODE_USE_BEDROCK` (or `_VERTEX`, `_MANTLE` and the like) on, Claude
 
 ### Does magpie need AWS access keys for Bedrock?
 
-No. One Bedrock API key is enough, and magpie does no SigV4 signing. Create it on the Bedrock page of the AWS console.
+No. One Bedrock API key is enough: create it on the Bedrock page of the AWS console. An AWS access key works too, in place of the key: give its ID, Secret and, for a temporary one, session token under the provider's Advanced, and magpie signs each request with SigV4.
 
 ### Can Claude Code use Claude on Bedrock through magpie?
 

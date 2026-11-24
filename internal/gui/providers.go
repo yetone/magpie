@@ -573,6 +573,9 @@ type accessKeyJSON struct {
 	Vendor    string `json:"vendor"`
 	ID        string `json:"id"`
 	SecretSet bool   `json:"secretSet"`
+	// TokenSet is that an AWS access key has a session token saved, which
+	// is never sent here either
+	TokenSet bool `json:"tokenSet,omitempty"`
 }
 
 // presetAccessKey is whose account access key a preset's plans are read
@@ -1086,7 +1089,7 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 		vendor, _ = presetAccessKey(*pr)
 	}
 	if vendor != "" || p.AccessKeyID != "" || p.SecretAccessKey != "" {
-		out.AccessKey = &accessKeyJSON{Vendor: vendor, ID: p.AccessKeyID, SecretSet: p.SecretAccessKey != ""}
+		out.AccessKey = &accessKeyJSON{Vendor: vendor, ID: p.AccessKeyID, SecretSet: p.SecretAccessKey != "", TokenSet: p.SessionToken != ""}
 	}
 	if p.IsVertex() {
 		out.Vertex = &provider.Vertex{}
@@ -2075,6 +2078,10 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// when sent blank, unless ClearAccessKey drops it.
 			AccessKeyID    *string `json:"accessKeyID"`
 			ClearAccessKey bool    `json:"clearAccessKey"`
+			// ClearSessionToken drops an AWS access key's session token
+			// (SessionToken), which a blank one keeps while the key's ID
+			// is the same (#7687)
+			ClearSessionToken bool `json:"clearSessionToken"`
 			// From is the id the provider had: another is a rename
 			From string `json:"from"`
 			// LibraryMCP, on a Remote magpie, is its editor's switch: its
@@ -2348,6 +2355,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				pr.ReplyHeaders = in.ReplyHeaders
 				pr.PassHeaders = in.PassHeaders
 				pr.SecretAccessKey = in.SecretAccessKey
+				pr.SessionToken = in.SessionToken
 				pr.Vertex = in.Vertex
 				pr.Searches = in.Searches
 				pr.PinUpstream = in.PinUpstream
@@ -2494,6 +2502,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				in.AccessKeyID = strings.TrimSpace(*req.AccessKeyID)
 			}
 			in.SecretAccessKey = strings.TrimSpace(in.SecretAccessKey)
+			in.SessionToken = strings.TrimSpace(in.SessionToken)
 			var old *provider.Provider
 			if req.New && in.NativeCompaction && !in.CarriesCompaction() {
 				fail(rw, fmt.Errorf("%s can't carry Codex's native compaction: only a provider with a Responses API, a ChatGPT account or GitHub Copilot can", cmp.Or(in.Name, in.ID)))
@@ -2744,6 +2753,12 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				}
 				if in.SecretAccessKey == "" && old != nil && !req.ClearAccessKey {
 					in.SecretAccessKey = old.SecretAccessKey
+				}
+				// an AWS access key's session token likewise, while the
+				// key is the one it was given with: another key's would
+				// only get its requests refused (#7687)
+				if in.SessionToken == "" && old != nil && !req.ClearAccessKey && !req.ClearSessionToken && in.AccessKeyID == old.AccessKeyID {
+					in.SessionToken = old.SessionToken
 				}
 				// and a Vertex AI provider's project and credentials
 				if in.Vertex == nil && old != nil {

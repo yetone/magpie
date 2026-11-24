@@ -71,7 +71,7 @@ func setUp(t *testing.T) {
 	}
 	for _, p := range []provider.Provider{
 		{ID: "acme", Name: "Acme", Chat: "https://acme.example.com/v1", Key: "sk-acme", Icon: icon,
-			BalanceToken: "balance-acme", AccessKeyID: "AK-acme", SecretAccessKey: "SK-acme",
+			BalanceToken: "balance-acme", AccessKeyID: "AK-acme", SecretAccessKey: "SK-acme", SessionToken: "ST-acme",
 			Keys:    []provider.KeyAccount{{Name: "second", Key: "sk-acme-2"}},
 			Headers: map[string]string{"X-Team": "a", "X-Api-Key": "hdr-secret"}},
 		// one of the user's whose certificate isn't checked (#2383)
@@ -123,7 +123,7 @@ func TestRoundTrip(t *testing.T) {
 	}
 	p, err := provider.Find("acme")
 	if err != nil || p.Key != "sk-acme" || len(p.Keys) != 1 || p.BalanceToken != "balance-acme" || p.Headers["X-Api-Key"] != "hdr-secret" ||
-		p.AccessKeyID != "AK-acme" || p.SecretAccessKey != "SK-acme" {
+		p.AccessKeyID != "AK-acme" || p.SecretAccessKey != "SK-acme" || p.SessionToken != "ST-acme" {
 		t.Fatalf("acme: %+v %v", p, err)
 	}
 	if b, err := provider.Find("beta"); err != nil || !b.InsecureTLS {
@@ -151,7 +151,7 @@ func TestNoKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, p := range b.Providers {
-		if p.Key != "" || len(p.Keys) != 0 || p.BalanceToken != "" || p.AccessKeyID != "" || p.SecretAccessKey != "" {
+		if p.Key != "" || len(p.Keys) != 0 || p.BalanceToken != "" || p.AccessKeyID != "" || p.SecretAccessKey != "" || p.SessionToken != "" {
 			t.Fatalf("key in a keyless backup: %+v", p)
 		}
 		if _, ok := p.Headers["X-Api-Key"]; ok {
@@ -168,7 +168,7 @@ func TestNoKeys(t *testing.T) {
 
 	home(t)
 	if err := provider.Save(provider.Provider{ID: "acme", Name: "Acme old", Chat: "https://old.example.com/v1", Key: "sk-here", BalanceToken: "balance-here",
-		AccessKeyID: "AK-here", SecretAccessKey: "SK-here"}); err != nil {
+		AccessKeyID: "AK-here", SecretAccessKey: "SK-here", SessionToken: "ST-here"}); err != nil {
 		t.Fatal(err)
 	}
 	got, err := Open(data, "pw")
@@ -182,7 +182,7 @@ func TestNoKeys(t *testing.T) {
 	if r.Added != 1 || r.Replaced != 1 || !slices.Equal(r.NeedKey, []string{"Beta"}) || r.Settings || r.Profiles != 0 {
 		t.Fatalf("result: %+v", r)
 	}
-	if p, _ := provider.Find("acme"); p.Key != "sk-here" || p.BalanceToken != "balance-here" || p.AccessKeyID != "AK-here" || p.SecretAccessKey != "SK-here" || p.Chat != "https://acme.example.com/v1" || p.Headers["X-Team"] != "a" {
+	if p, _ := provider.Find("acme"); p.Key != "sk-here" || p.BalanceToken != "balance-here" || p.AccessKeyID != "AK-here" || p.SecretAccessKey != "SK-here" || p.SessionToken != "ST-here" || p.Chat != "https://acme.example.com/v1" || p.Headers["X-Team"] != "a" {
 		t.Fatalf("acme: %+v", p)
 	}
 	if p, _ := provider.Find("beta"); p.BalanceToken != "" {

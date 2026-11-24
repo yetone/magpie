@@ -893,6 +893,11 @@ func fetchPage(ctx context.Context, url, key string, anthropic bool, headers map
 		for k, v := range headers {
 			PutUserHeader(req.Header, k, v)
 		}
+		if sign := listSignerOf(ctx); sign != nil {
+			if err := sign(req); err != nil {
+				return nil, nil, err
+			}
+		}
 		res, err := http.DefaultClient.Do(req)
 		if err != nil {
 			return nil, nil, err

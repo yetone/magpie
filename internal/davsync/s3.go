@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/yetone/magpie/internal/sigv4"
 )
 
 // s3 keeps the backup in an S3-compatible bucket — AWS S3, Cloudflare R2,
@@ -23,7 +25,7 @@ type s3 struct {
 	endpoint    *url.URL // scheme and host, and a path for a server under one
 	bucket, key string
 	pathStyle   bool
-	sig         signer
+	sig         sigv4.Signer
 	client      *http.Client
 	now         func() time.Time
 }
@@ -69,7 +71,7 @@ func newS3(c Config) (*s3, error) {
 		key = p + "/" + key
 	}
 	s := &s3{endpoint: e, bucket: u.Host, key: key, pathStyle: c.PathStyle,
-		sig: signer{id: strings.TrimSpace(c.User), secret: c.Password, region: region, service: "s3"}, client: syncClient, now: time.Now}
+		sig: sigv4.Signer{ID: strings.TrimSpace(c.User), Secret: c.Password, Region: region, Service: "s3"}, client: syncClient, now: time.Now}
 	// a bucket can't go before an address or localhost, nor one with a dot
 	// in it before a certificate for *.host: the bucket goes in the path
 	host := e.Hostname()
@@ -93,7 +95,7 @@ func (s *s3) urlOf(key string) *url.URL {
 	} else {
 		u.Host = s.bucket + "." + u.Host
 	}
-	u.Path, u.RawPath = p, awsEscape(p, true)
+	u.Path, u.RawPath = p, sigv4.Escape(p, true)
 	return &u
 }
 
@@ -105,7 +107,7 @@ func (s *s3) bucketURL() *url.URL {
 	} else {
 		u.Host = s.bucket + "." + u.Host
 	}
-	u.Path, u.RawPath = p, awsEscape(p, true)
+	u.Path, u.RawPath = p, sigv4.Escape(p, true)
 	return &u
 }
 
@@ -129,7 +131,7 @@ func (s *s3) sendTo(ctx context.Context, method string, u *url.URL, body []byte,
 	}
 	payload := sum(body)
 	req.Header.Set("X-Amz-Content-Sha256", payload)
-	s.sig.sign(req, payload, s.now())
+	s.sig.Sign(req, payload, s.now())
 	for k, v := range h {
 		if unsigned(k) {
 			req.Header.Set(k, v)
@@ -190,9 +192,9 @@ func (s *s3) explain(op string, e s3Error) error {
 		return fmt.Errorf("the S3 server refused the access key ID or secret (%s)", e)
 	case e.Code == "RequestTimeTooSkewed":
 		return fmt.Errorf("the S3 server says this computer's clock is off (%s): set it right and sync again", e)
-	case e.Region != "" && e.Region != s.sig.region &&
+	case e.Region != "" && e.Region != s.sig.Region &&
 		(e.Status == http.StatusMovedPermanently || e.Code == "AuthorizationHeaderMalformed" || e.Code == "PermanentRedirect" || e.Code == "IllegalLocationConstraintException"):
-		return fmt.Errorf("the bucket %s is in the region %s, not %s (%s): set the region to %s", s.bucket, e.Region, s.sig.region, e, e.Region)
+		return fmt.Errorf("the bucket %s is in the region %s, not %s (%s): set the region to %s", s.bucket, e.Region, s.sig.Region, e, e.Region)
 	case e.Status == http.StatusMovedPermanently || e.Code == "PermanentRedirect":
 		return fmt.Errorf("the S3 server says the bucket %s is at another endpoint (%s): check the endpoint and the region", s.bucket, e)
 	case e.Code == "NoSuchBucket":

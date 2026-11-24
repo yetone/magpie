@@ -273,6 +273,11 @@ func (p Provider) Sign(ctx context.Context, req *http.Request, proto Protocol, b
 	if p.IsRemoteMagpie() && p.Key != "" {
 		remoteKey(req.Header, p.Key)
 	}
+	// Bedrock with an AWS access key: signed last, over what is sent
+	// (#7687)
+	if p.SignsWithAccessKey() {
+		return p.signAWS(req, body)
+	}
 	return nil
 }
 

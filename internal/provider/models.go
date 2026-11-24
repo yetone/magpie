@@ -850,6 +850,10 @@ type fetched struct {
 // of the agents' model lists and of a model's own protocol setting.
 func (p Provider) fetchOne(ctx context.Context) (fetched, error) {
 	ctx = p.ownRequests(ctx, probelog.KindList) // a detection's list too
+	if p.SignsWithAccessKey() {
+		// Mantle's list, signed as its requests are (#7687)
+		ctx = catalog.WithListSigner(ctx, func(r *http.Request) error { return p.signAWS(r, nil) })
+	}
 	if u := strings.TrimSpace(p.ModelsURL); u != "" {
 		// asked where the user said, and nowhere else: the base URLs
 		// list nothing, or the wrong thing

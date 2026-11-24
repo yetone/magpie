@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Amazon Bedrock 接入 Claude Code、Codex：用 Bedrock API Key 调用 Claude、GPT、DeepSeek、Kimi 和 GLM · magpie</title>
-<meta name="description" content="用 magpie 把 Amazon Bedrock 接到 Claude Code、Codex、OpenCode 等 Agent：只要一个 Bedrock API Key，不用配 SigV4；选区域，用 global 推理配置调用 Claude 和 GPT，以及 gpt-oss、Qwen、DeepSeek、Kimi、GLM、MiniMax；Bedrock Mantle 端点会列出账号自己的模型。">
+<meta name="description" content="用 magpie 把 Amazon Bedrock 接到 Claude Code、Codex、OpenCode 等 Agent：用一个 Bedrock API Key 或 AWS 访问密钥；选区域，用 global 推理配置调用 Claude 和 GPT，以及 gpt-oss、Qwen、DeepSeek、Kimi、GLM、MiniMax；Bedrock Mantle 端点会列出账号自己的模型。">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#fafafa">
 <script>
@@ -35,7 +35,7 @@
 <link rel="stylesheet" href="/docs.css">
 <meta property="og:site_name" content="magpie">
 <meta property="og:title" content="Amazon Bedrock 接入 Claude Code、Codex 等 Agent">
-<meta property="og:description" content="用 magpie 把 Amazon Bedrock 接到 Claude Code、Codex、OpenCode 等 Agent：只要一个 Bedrock API Key，不用配 SigV4；选区域，用 global 推理配置调用 Claude 和 GPT，以及 gpt-oss、Qwen、DeepSeek、Kimi、GLM、MiniMax；Bedrock Mantle 端点会列出账号自己的模型。">
+<meta property="og:description" content="用 magpie 把 Amazon Bedrock 接到 Claude Code、Codex、OpenCode 等 Agent：用一个 Bedrock API Key 或 AWS 访问密钥；选区域，用 global 推理配置调用 Claude 和 GPT，以及 gpt-oss、Qwen、DeepSeek、Kimi、GLM、MiniMax；Bedrock Mantle 端点会列出账号自己的模型。">
 <meta property="og:image" content="https://usemagpie.ai/img/og.png">
 <meta property="og:url" content="https://usemagpie.ai/docs/zh/bedrock">
 <meta name="twitter:card" content="summary_large_image">
@@ -46,7 +46,7 @@
   {
    "@type": "TechArticle",
    "headline": "Amazon Bedrock 接入 Claude Code、Codex 等 Agent",
-   "description": "用 magpie 把 Amazon Bedrock 接到 Claude Code、Codex、OpenCode 等 Agent：只要一个 Bedrock API Key，不用配 SigV4；选区域，用 global 推理配置调用 Claude 和 GPT，以及 gpt-oss、Qwen、DeepSeek、Kimi、GLM、MiniMax；Bedrock Mantle 端点会列出账号自己的模型。",
+   "description": "用 magpie 把 Amazon Bedrock 接到 Claude Code、Codex、OpenCode 等 Agent：用一个 Bedrock API Key 或 AWS 访问密钥；选区域，用 global 推理配置调用 Claude 和 GPT，以及 gpt-oss、Qwen、DeepSeek、Kimi、GLM、MiniMax；Bedrock Mantle 端点会列出账号自己的模型。",
    "inLanguage": "zh-CN",
    "url": "https://usemagpie.ai/docs/zh/bedrock",
    "about": {
@@ -69,7 +69,7 @@
      "name": "magpie 接 Bedrock 需要 AWS Access Key 吗？",
      "acceptedAnswer": {
       "@type": "Answer",
-      "text": "不需要。只要一个 Bedrock API Key，magpie 不做 SigV4 签名。在 AWS 控制台的 Bedrock 页面创建即可。"
+      "text": "不需要。一个 Bedrock API Key 就够了，在 AWS 控制台的 Bedrock 页面创建即可。也可以用 AWS 访问密钥代替：在提供商的「高级」里填访问密钥 ID、私有访问密钥，临时密钥再填会话令牌，magpie 会用 SigV4 为每个请求签名。"
      }
     },
     {
@@ -180,7 +180,7 @@
   <article>
     <p class="eyebrow" id="overview">文档 · 指南</p>
     <h1>Amazon Bedrock 接入 Claude Code、Codex 等 Agent</h1>
-    <p class="lede">magpie 有两个 Amazon Bedrock 预设：<code>bedrock</code>（Bedrock 运行时）和 <code>bedrock-mantle</code>（Bedrock 的 Mantle 端点）。两者用同一个 Bedrock API Key，不需要 AWS 访问密钥和 SigV4 签名。接好之后，Claude Code、Codex、OpenCode 等 Agent 都能用 Bedrock 上的 Claude、OpenAI GPT，以及 gpt-oss、Qwen、DeepSeek、Kimi、GLM、MiniMax 等模型，费用记在你的 AWS 账号上。</p>
+    <p class="lede">magpie 有两个 Amazon Bedrock 预设：<code>bedrock</code>（Bedrock 运行时）和 <code>bedrock-mantle</code>（Bedrock 的 Mantle 端点）。两者用同一个 Bedrock API Key，也可以用 AWS 访问密钥，由 magpie 为每个请求签名。接好之后，Claude Code、Codex、OpenCode 等 Agent 都能用 Bedrock 上的 Claude、OpenAI GPT，以及 gpt-oss、Qwen、DeepSeek、Kimi、GLM、MiniMax 等模型，费用记在你的 AWS 账号上。</p>
     <h2 id="add"><a class="anchor" href="#add">添加</a></h2>
     <ol class="steps">
       <li><b>拿到 Key。</b>在 AWS 控制台的 Bedrock 页面创建一个 Bedrock API Key。</li>
@@ -210,7 +210,7 @@ magpie provider test bedrock-mantle</pre></div>
 
     <h2 id="faq"><a class="anchor" href="#faq">常见问题</a></h2>
     <h3>magpie 接 Bedrock 需要 AWS Access Key 吗？</h3>
-    <p>不需要。只要一个 Bedrock API Key，magpie 不做 SigV4 签名。在 AWS 控制台的 Bedrock 页面创建即可。</p>
+    <p>不需要。一个 Bedrock API Key 就够了，在 AWS 控制台的 Bedrock 页面创建即可。也可以用 AWS 访问密钥代替：在提供商的「高级」里填访问密钥 ID、私有访问密钥，临时密钥再填会话令牌，magpie 会用 SigV4 为每个请求签名。</p>
     <h3>Claude Code 能通过 magpie 用 Bedrock 上的 Claude 吗？</h3>
     <p>能。选 bedrock/global.anthropic.claude-sonnet-5-5 这样的模型即可。不要再打开 CLAUDE_CODE_USE_BEDROCK，否则 Claude Code 会绕过 magpie；magpie 接管时会把它写入的设置里的这个开关拿掉。</p>
     <h3>为什么有的模型在我的区域用不了？</h3>

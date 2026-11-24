@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Amazon Bedrock in Claude Code and Codex: Claude, GPT, DeepSeek, Kimi and GLM with a Bedrock API key · magpie</title>
-<meta name="description" content="Connect Amazon Bedrock to Claude Code, Codex, OpenCode and other agents with magpie: one Bedrock API key and no SigV4, a region to pick, Claude and GPT through global inference profiles, gpt-oss, Qwen, DeepSeek, Kimi, GLM and MiniMax, and the Bedrock Mantle endpoint that lists your account's own models.">
+<meta name="description" content="Connect Amazon Bedrock to Claude Code, Codex, OpenCode and other agents with magpie: a Bedrock API key or an AWS access key, a region to pick, Claude and GPT through global inference profiles, gpt-oss, Qwen, DeepSeek, Kimi, GLM and MiniMax, and the Bedrock Mantle endpoint that lists your account's own models.">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#fafafa">
 <script>
@@ -35,7 +35,7 @@
 <link rel="stylesheet" href="/docs.css">
 <meta property="og:site_name" content="magpie">
 <meta property="og:title" content="Amazon Bedrock in Claude Code, Codex and other agents">
-<meta property="og:description" content="Connect Amazon Bedrock to Claude Code, Codex, OpenCode and other agents with magpie: one Bedrock API key and no SigV4, a region to pick, Claude and GPT through global inference profiles, gpt-oss, Qwen, DeepSeek, Kimi, GLM and MiniMax, and the Bedrock Mantle endpoint that lists your account's own models.">
+<meta property="og:description" content="Connect Amazon Bedrock to Claude Code, Codex, OpenCode and other agents with magpie: a Bedrock API key or an AWS access key, a region to pick, Claude and GPT through global inference profiles, gpt-oss, Qwen, DeepSeek, Kimi, GLM and MiniMax, and the Bedrock Mantle endpoint that lists your account's own models.">
 <meta property="og:image" content="https://usemagpie.ai/img/og.png">
 <meta property="og:url" content="https://usemagpie.ai/docs/bedrock">
 <meta name="twitter:card" content="summary_large_image">
@@ -46,7 +46,7 @@
   {
    "@type": "TechArticle",
    "headline": "Amazon Bedrock in Claude Code, Codex and other agents",
-   "description": "Connect Amazon Bedrock to Claude Code, Codex, OpenCode and other agents with magpie: one Bedrock API key and no SigV4, a region to pick, Claude and GPT through global inference profiles, gpt-oss, Qwen, DeepSeek, Kimi, GLM and MiniMax, and the Bedrock Mantle endpoint that lists your account's own models.",
+   "description": "Connect Amazon Bedrock to Claude Code, Codex, OpenCode and other agents with magpie: a Bedrock API key or an AWS access key, a region to pick, Claude and GPT through global inference profiles, gpt-oss, Qwen, DeepSeek, Kimi, GLM and MiniMax, and the Bedrock Mantle endpoint that lists your account's own models.",
    "inLanguage": "en",
    "url": "https://usemagpie.ai/docs/bedrock",
    "about": {
@@ -69,7 +69,7 @@
      "name": "Does magpie need AWS access keys for Bedrock?",
      "acceptedAnswer": {
       "@type": "Answer",
-      "text": "No. One Bedrock API key is enough, and magpie does no SigV4 signing. Create it on the Bedrock page of the AWS console."
+      "text": "No. One Bedrock API key is enough: create it on the Bedrock page of the AWS console. An AWS access key works too, in place of the key: give its ID, Secret and, for a temporary one, session token under the provider's Advanced, and magpie signs each request with SigV4."
      }
     },
     {
@@ -180,7 +180,7 @@
   <article>
     <p class="eyebrow" id="overview">Docs · Guide</p>
     <h1>Amazon Bedrock in Claude Code, Codex and other agents</h1>
-    <p class="lede">magpie has two Amazon Bedrock presets: <code>bedrock</code>, the Bedrock runtime, and <code>bedrock-mantle</code>, Bedrock's Mantle endpoint. Both take the same Bedrock API key, with no AWS access keys and no SigV4 signing. Once added, Claude Code, Codex, OpenCode and other agents can use Claude, OpenAI's GPT models, and gpt-oss, Qwen, DeepSeek, Kimi, GLM and MiniMax on Bedrock, billed to your AWS account.</p>
+    <p class="lede">magpie has two Amazon Bedrock presets: <code>bedrock</code>, the Bedrock runtime, and <code>bedrock-mantle</code>, Bedrock's Mantle endpoint. Both take the same Bedrock API key, or an AWS access key that magpie signs each request with. Once added, Claude Code, Codex, OpenCode and other agents can use Claude, OpenAI's GPT models, and gpt-oss, Qwen, DeepSeek, Kimi, GLM and MiniMax on Bedrock, billed to your AWS account.</p>
     <h2 id="add"><a class="anchor" href="#add">Add it</a></h2>
     <ol class="steps">
       <li><b>Get a key.</b>Create a Bedrock API key on the Bedrock page of the AWS console.</li>
@@ -210,7 +210,7 @@ magpie provider test bedrock-mantle</pre></div>
 
     <h2 id="faq"><a class="anchor" href="#faq">FAQ</a></h2>
     <h3>Does magpie need AWS access keys for Bedrock?</h3>
-    <p>No. One Bedrock API key is enough, and magpie does no SigV4 signing. Create it on the Bedrock page of the AWS console.</p>
+    <p>No. One Bedrock API key is enough: create it on the Bedrock page of the AWS console. An AWS access key works too, in place of the key: give its ID, Secret and, for a temporary one, session token under the provider's Advanced, and magpie signs each request with SigV4.</p>
     <h3>Can Claude Code use Claude on Bedrock through magpie?</h3>
     <p>Yes. Pick a model such as bedrock/global.anthropic.claude-sonnet-5-5. Leave CLAUDE_CODE_USE_BEDROCK off, or Claude Code goes around magpie; magpie takes it out of the settings it writes.</p>
     <h3>Why can't I use some models in my region?</h3>

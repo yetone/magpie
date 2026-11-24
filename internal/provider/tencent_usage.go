@@ -62,7 +62,9 @@ func TakesTencentAccessKey(p Provider) bool {
 
 // AccessKeyVendor is whose account access key p's plan is read with:
 // "volcengine" (Ark's Coding and Agent Plans), "tencent" (Token Plan
-// 企业版), "alibaba" (Token Plan on aliyuncs.com), or "" for none.
+// 企业版), "alibaba" (Token Plan on aliyuncs.com), or "" for none; or
+// "aws" for Amazon Bedrock, whose access key signs its requests in place
+// of an API key (SignsWithAccessKey, #7687), no plan's usage read with it.
 func AccessKeyVendor(p Provider) string {
 	switch {
 	case TakesVolcAccessKey(p):
@@ -71,6 +73,8 @@ func AccessKeyVendor(p Provider) string {
 		return "tencent"
 	case TakesAlibabaAccessKey(p):
 		return "alibaba"
+	case p.IsBedrock():
+		return "aws"
 	}
 	return ""
 }

@@ -529,7 +529,8 @@ var presets = []PresetDef{
 		Chat: "https://api.groq.com/openai/v1", Responses: "https://api.groq.com/openai/v1",
 		Website: "https://console.groq.com", KeysURL: "https://console.groq.com/keys"},
 	// Amazon Bedrock (#176), with a Bedrock API key (AWS_BEARER_TOKEN_BEDROCK),
-	// no SigV4: its runtime serves Claude on Anthropic's messages at
+	// or an AWS access key in its place that signs each request with SigV4
+	// (#7687, SignsWithAccessKey): its runtime serves Claude on Anthropic's messages at
 	// /anthropic/v1/messages and the other models on chat completions at
 	// /openai/v1, and OpenAI's GPT models (not gpt-oss) on the Responses
 	// API there too, each in the region picked. It has no list to ask, so the
@@ -552,7 +553,7 @@ var presets = []PresetDef{
 			"openai.gpt-oss-120b-1:0", "openai.gpt-oss-20b-1:0", "qwen.qwen3-coder-480b-a35b-v1:0", "deepseek.v3.2",
 			"moonshotai.kimi-k2.5", "zai.glm-5", "minimax.minimax-m2.5"}},
 	// Amazon Bedrock's Mantle endpoint (@marktoown on X), with the same
-	// Bedrock API key: OpenAI's chat completions and Responses at /v1 (some
+	// Bedrock API key or AWS access key (signed for "bedrock-mantle"): OpenAI's chat completions and Responses at /v1 (some
 	// models at /openai/v1, which the gateway picks per model: MantleBase)
 	// and Anthropic's Messages at /anthropic/v1/messages, in-region model
 	// ids alone (anthropic.claude-sonnet-5, openai.gpt-oss-120b; no
