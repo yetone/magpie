@@ -1196,30 +1196,66 @@ type Options struct {
 
 var (
 	optMu    sync.Mutex
-	optCache = map[string]Options{}
+	optCache = map[string]optEntry{}
 	optGen   int64
 )
+
+// optEntry is a loader's options, with the sign-in they were made from
+// (signInOf). Another magpie may save the account again (the window while
+// the gateway runs as a service): its host's "auth" event reaches only
+// its own magpie, so what was made from the old sign-in is made again
+// when the sign-in on disk reads otherwise (mayne_wong on X).
+type optEntry struct {
+	o    Options
+	from string
+}
+
+// signInOf is account's sign-in as plugin-auth.json has it, every one of
+// the provider's for account "" (its first, which may change).
+func signInOf(provider, account string) string {
+	raw := authRaw()
+	if account != "" {
+		return string(raw[account])
+	}
+	keys := make([]string, 0, len(raw))
+	for k := range raw {
+		if ProviderOf(k) == provider {
+			keys = append(keys, k)
+		}
+	}
+	slices.Sort(keys)
+	var b strings.Builder
+	for _, k := range keys {
+		b.WriteString(k)
+		b.WriteByte(0)
+		b.Write(raw[k])
+		b.WriteByte(0)
+	}
+	return b.String()
+}
 
 // LoaderOptions runs the provider's auth loader for account (once per
 // sign-in and host) and gives what it returned; account "" is the
 // provider's first.
 func LoaderOptions(ctx context.Context, provider, account string) (Options, error) {
 	ck := provider + "\x00" + account
+	from := signInOf(provider, account)
 	optMu.Lock()
 	if optGen != generation.Load() {
-		optCache, optGen = map[string]Options{}, generation.Load()
+		optCache, optGen = map[string]optEntry{}, generation.Load()
 	}
-	o, ok := optCache[ck]
+	e, ok := optCache[ck]
 	optMu.Unlock()
-	if ok {
-		return o, nil
+	if ok && e.from == from {
+		return e.o, nil
 	}
+	var o Options
 	if err := Call(ctx, "load", map[string]any{"provider": provider, "account": account, "proxy": proxyOf(ctx)}, &o); err != nil {
 		return Options{}, err
 	}
 	optMu.Lock()
 	if optGen == generation.Load() {
-		optCache[ck] = o
+		optCache[ck] = optEntry{o, from}
 	}
 	optMu.Unlock()
 	return o, nil
@@ -1228,7 +1264,7 @@ func LoaderOptions(ctx context.Context, provider, account string) (Options, erro
 func init() {
 	OnChange(func() {
 		optMu.Lock()
-		optCache = map[string]Options{}
+		optCache = map[string]optEntry{}
 		optMu.Unlock()
 	})
 }

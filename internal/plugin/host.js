@@ -985,6 +985,33 @@ function authStateOf(buf) {
   return { all: {}, known: false }
 }
 
+// authKnown is each sign-in as this host last read or wrote it: key → its
+// JSON. Another magpie writes plugin-auth.json too: the window while the
+// gateway runs as a service, or the other way round. A sign-in it saved
+// again over an account this host had a loader for (settle: the same
+// Google account signed in again with agy-cli's "Add another Google
+// account", its home now in its metadata) was served by the loader made
+// from the old one until the host restarted (mayne_wong on X: a gateway
+// run as a LaunchDaemon kept answering 401 for an account the window had
+// put right). So a sign-in that reads otherwise than this host left it is
+// forgotten as one changed here is (forgetAccount), and magpie is told of
+// an account added or removed (an "auth" event), which it lists again.
+let authKnown = null // Map key → JSON
+
+// noteAuth takes all, the sign-ins as just read (own false) or as this
+// host is writing them (own true).
+function noteAuth(all, own = false) {
+  const now = new Map(Object.entries(all).map(([k, v]) => [k, JSON.stringify(v)]))
+  const was = authKnown
+  authKnown = now
+  if (own || !was) return
+  for (const k of new Set([...was.keys(), ...now.keys()])) {
+    if (was.get(k) === now.get(k)) continue
+    forgetAccount(k)
+    if (!was.has(k) || !now.has(k)) send({ event: "auth", provider: providerOf(k), account: k })
+  }
+}
+
 // authSeen is plugin-auth.json as last parsed, kept while the file has the
 // same time, size and inode: every request read and parsed it two or three
 // times (its account, its renewal, the plugin's getAuth), ~0.6 ms each for
@@ -1017,6 +1044,7 @@ function readAuth() {
     return e.all
   }
   const s = readAuthState(buf)
+  if (s.known) noteAuth(s.all)
   authSeen = st && s.own ? { mtimeMs: st.mtimeMs, size: st.size, ino: st.ino, raw: Date.now() - st.mtimeMs > AUTH_SETTLED ? null : buf, all: s.all } : null
   return s.all
 }
@@ -1180,10 +1208,15 @@ function changeAuth(change) {
     const unlock = await lockAuth()
     try {
       const { all, known } = await readAuthStateAsync()
+      // what another magpie saved since this host's last read
+      if (known) noteAuth(all)
       const out = change(all)
       // sign-ins that don't read are never written over with none: a
       // sign-out of one of them waits for the file to be put right
-      if (out !== false && (known || Object.keys(all).length > 0)) await writeAuth(all)
+      if (out !== false && (known || Object.keys(all).length > 0)) {
+        await writeAuth(all)
+        noteAuth(all, true)
+      }
       return out
     } finally {
       unlock()
@@ -3265,9 +3298,11 @@ async function renewLocked(provider, key, a, was) {
 // the account's scope, whatever the loader keeps (its fetch) saves to it.
 async function options(provider, key) {
   await fresh(provider, key)
+  // read first: a sign-in another magpie saved since drops the loader
+  // made from the one before (noteAuth)
+  const stored = readAuth()[key]
   if (loaders.has(key)) return loaders.get(key)
   const a = auths().get(provider)?.auth
-  const stored = readAuth()[key]
   let opts = {}
   if (a?.loader && stored) {
     const p = await infoOf(provider, key)

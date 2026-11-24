@@ -42,7 +42,7 @@ assert.ok(start >= 0 && end > start, 'production section exists')
 const authPath = process.argv[1]
 const context = vm.createContext({
   fs: realFs, path, authPath, Buffer, structuredClone, Date, Promise, Math, JSON, Object, Error, Array, String, Number,
-  setTimeout, process, toErr: () => {}, send: () => {},
+  setTimeout, process, toErr: () => {}, send: () => {}, forgetAccount: () => {},
 })
 vm.runInContext(source.slice(start, end), context)
 const run = code => vm.runInContext(code, context)

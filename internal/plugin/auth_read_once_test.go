@@ -45,7 +45,7 @@ const fs = { ...realFs, readFileSync: (p, ...rest) => {
   if (p === authPath) reads++
   return realFs.readFileSync(p, ...rest)
 } }
-const context = vm.createContext({ fs, authPath, Buffer, structuredClone, Date, toErr: () => {}, send: () => {}, pause: () => {} })
+const context = vm.createContext({ fs, authPath, Buffer, structuredClone, Date, toErr: () => {}, send: () => {}, pause: () => {}, forgetAccount: () => {}, providerOf: (k) => k.split("#")[0] })
 const run = code => vm.runInContext(code, context)
 run(section('function parseAuth(', '// writeDurable'))
 const past = new Date(Date.now() - 60e3)
