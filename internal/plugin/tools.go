@@ -115,9 +115,18 @@ func noteTools(loaded []Loaded) {
 		return
 	}
 	if f := ToolsNoted; f != nil {
-		go f()
+		toolsNoting.Add(1)
+		go func() {
+			defer toolsNoting.Done()
+			f()
+		}()
 	}
 }
+
+// toolsNoting counts the ToolsNoted calls under way: the library's syncs
+// write agents' settings, so Settle waits for them before a test's folder
+// goes (#7611).
+var toolsNoting sync.WaitGroup
 
 // ToolsNoted is called once the note of which plugins give tools has
 // changed: the library gives a plugin that gives tools a server of its

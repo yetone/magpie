@@ -703,6 +703,9 @@ func Settle() {
 	for _, h := range hs {
 		h.stop()
 	}
+	// nor a sync the library started when a host noted its tools, which
+	// writes agents' settings in the folder (#7611)
+	toolsNoting.Wait()
 	// nor is the restart, or a sign-in a host saved, told in the next test
 	Told()
 	// and the plugins go with the folder: the next test's, in a folder of

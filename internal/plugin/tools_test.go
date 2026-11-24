@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // A plugin's tool hook (testdata/tools): the host lists its tools, with
@@ -112,5 +114,34 @@ func TestPluginTools(t *testing.T) {
 	}
 	if _, err := ToolsOn(); err == nil {
 		t.Error("a corrupt note counted as no tools")
+	}
+}
+
+// The library's sync after a host noted its tools writes agents' settings
+// in HOME: Settle waits for it, so a test's folder isn't written in while
+// it goes (#7611, "directory not empty" at TempDir's cleanup).
+func TestSettleWaitsForToolsNoted(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(dir, "cache"))
+	if err := os.MkdirAll(settings.Dir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	late := filepath.Join(dir, "synced")
+	was := ToolsNoted
+	t.Cleanup(func() { ToolsNoted = was })
+	ToolsNoted = func() {
+		time.Sleep(500 * time.Millisecond)
+		os.WriteFile(late, []byte("x"), 0o644)
+	}
+	noteTools([]Loaded{{Spec: "/p/tools", Tools: []Tool{{Name: "shout"}}}})
+	if _, err := os.Stat(toolsPath()); err != nil {
+		t.Fatalf("the tools weren't noted, so ToolsNoted never ran: %v", err)
+	}
+	Settle()
+	if _, err := os.Stat(late); err != nil {
+		t.Fatalf("Settle returned before the sync ToolsNoted started was done: %v", err)
 	}
 }
