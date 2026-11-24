@@ -127,13 +127,16 @@ address, so:
 A page written for claude.ai's artifact runtime (contract 0.2.99) runs
 here as written: `window.claude.use(name)` is there before the page's own
 scripts, and resolves `db`, `user`, `artifact` (and `self`, its former
-name) and the built-in `permissions`
+name), `assets` and the built-in `permissions`
 ([internal/artifact/runtime.js](../../internal/artifact/runtime.js),
 [runtime.go](../../internal/artifact/runtime.go),
 [caps.go](../../internal/artifact/caps.go),
 [db.go](../../internal/artifact/db.go),
 [artifacts_api.go](../../internal/gateway/artifacts_api.go),
-[artifacts_self.go](../../internal/gateway/artifacts_self.go)).
+[artifacts_self.go](../../internal/gateway/artifacts_self.go),
+[assets.go](../../internal/artifact/assets.go),
+[svg.go](../../internal/artifact/svg.go),
+[artifacts_assets.go](../../internal/gateway/artifacts_assets.go)).
 
 Declaring:
 
@@ -142,10 +145,11 @@ Declaring:
   forward; `{}` clears them; any other object is the whole set. A version
   keeps the declaration it was published with (`Version.Capabilities`).
 - Every name in the contract is accepted and kept; only `ServedCaps` (`db`,
-  `user`, `artifact`, `self`) are served, and the rest resolve null on the
+  `user`, `artifact`, `self`, `assets`) are served, and the rest resolve null on the
   page, as an unserved capability does on claude.ai. Declaring
   `permissions` is refused: it is built in. `db`'s `rules`, `user`'s
-  `scopes` and `artifact`'s `{"publish": false}` are checked at publish.
+  `scopes`, `artifact`'s `{"publish": false}` and `assets`' `upload`
+  (`"interact"` or `"admin"`) are checked at publish.
 
 On the page:
 
@@ -209,6 +213,45 @@ The page publishing itself (`artifact`):
   `/artifact/<title>-<id>` link (host ignored), up to 200; it never
   rejects, and a ref naming nothing gets empty strings.
 
+Assets (`assets`), the files a page keeps for the people using it:
+
+- `upload(blob, {type})` sends the bytes as the body of `POST
+  /a/<ref>/_api/upload?t=<token>&type=<type>`, as `text/plain` so the
+  opaque origin needs no preflight; the type is `options.type`, else the
+  blob's, else `invalid_request`. It answers `{id, url, sizeBytes,
+  contentType}`; `url` is `/_blob/<id>`. `list()` and `delete(id or url)`
+  are `POST /a/<ref>/_api/assets` with `op`; `delete` answers
+  `{deleted}`, false when there is none by that id.
+- The types are the contract's 18 (`AssetTypes`), spelled exactly, no
+  parameters. An asset is at most 20 MiB, a stylesheet or script 16 MiB,
+  an SVG 2 MiB; an artifact holds 1000 and 1 GiB. Text is UTF-8; a
+  binary, stylesheet or script that starts with markup is refused, so
+  nothing uploaded as an image is HTML when opened. An SVG is stored
+  sanitized (`SanitizeSVG`): one `<svg>` root, scripts, `<style>`,
+  `<foreignObject>`, animation and event handlers taken out, a
+  `javascript:` or `data:` URL dropped, and a `<use>` reaches only into
+  the file itself.
+- Refusals are the contract's codes: `too_large` (413),
+  `unsupported_type` (415), `invalid_request` (400), `quota_or_state`
+  (409: the budget, or an artifact deleted), `rate_limited` (60 uploads a
+  minute per artifact), `not_granted` (another page's token, or a version
+  that doesn't declare `assets`), `store_unavailable` (the disk).
+- They are the artifact's, not a version's: `<id>/assets/<asset id>`,
+  listed in `<id>/assets.json`, kept by every publish, gone with the
+  artifact. An id is 160 random bits; `/_blob/<id>` finds it in whichever
+  artifact holds it (`BlobFile`, remembered after the first look), so
+  every version of a page reaches it at the same address.
+- `GET /_blob/<id>` answers a browser on this computer at a loopback Host
+  only, as the type it was uploaded as, with `nosniff`, `Access-Control-
+  Allow-Origin: *` and ranges (a video seeks). Opened as a document it
+  is under `sandbox` and `default-src 'none'`, so even an SVG runs
+  nothing at the gateway's origin; a PDF is left to the browser's viewer.
+  corsGuard lets `Origin: null` read it, as it does a page's files.
+- `upload: "interact"` is accepted and kept; with one person at this
+  computer, owner of every artifact, there is no Contributor to give it
+  to, so it changes nothing here.
+- `read_artifact` says how many assets an artifact has and their size.
+
 The store:
 
 - `<id>/data.db` (SQLite), made at the first write, kept across versions,
@@ -227,7 +270,9 @@ The store:
   included. `acquire` takes a lease on a document.
 - A shared copy on usemagpie.ai runs `SharedRuntime`: `window.claude` is
   there and every capability resolves null, so the page shows what it
-  shows without them. Its data is never shared.
+  shows without them. Its data is never shared, and neither are its
+  assets: `/_blob/<id>` isn't served there, so an `<img>` of one shows
+  nothing on a shared copy (#7649).
 
 ## Given to every agent, and Claude Code's own tool
 
@@ -347,7 +392,7 @@ magpie:
 
 ```sh
 go test -tags nogui ./internal/artifact
-go test -tags nogui ./internal/gateway -run 'TestArtifact'   # TestArtifactPage* hold the page runtime's API
+go test -tags nogui ./internal/gateway -run 'TestArtifact|TestAssets'   # TestArtifactPage* hold the page runtime's API
 go test -tags nogui ./internal/library -run 'TestArtifacts'
 go test -tags nogui ./internal/gui -run 'TestArtifactsAPI|TestArtifactsShareAPI|TestBuiltin'
 go test -tags nogui ./internal/cli -run 'TestArtifacts|TestEveryRouteHasACommandOrIsNamed'

@@ -6,8 +6,9 @@
 // rejects with its code, a query's onSnapshot shows the page's own writes
 // and another's (the agent's, told on the events stream), a page that
 // declares artifact publishes itself (its whole page, which every open
-// view reloads to, or files, which keep it running), and a shared copy
-// resolves every capability null. Under the sandbox CSP magpie serves
+// view reloads to, or files, which keep it running), a page that
+// declares assets uploads a file as its bytes and shows it from /_blob/,
+// and a shared copy resolves every capability null. Under the sandbox CSP magpie serves
 // pages with, so every call is from an opaque origin. In both engines.
 // The store is faked here; internal/gateway's TestArtifactPage* hold the
 // real one.
@@ -66,6 +67,7 @@ const SHARED = `<!doctype html><html><head><title>Shared</title></head><body><sc
   window.out = {
     db: await claude.use("db"),
     user: await claude.use("user"),
+    assets: await claude.use("assets"),
     perm: typeof (await claude.use("permissions")).state,
   };
 })();
@@ -108,6 +110,34 @@ const READ_ONLY = `<!doctype html><html><head><title>Read only</title></head><bo
 })().catch((e) => { window.out = { crash: String(e && e.stack || e) }; });
 </script></body></html>`;
 
+// a gallery: an upload shown in an <img> from the url it gave, listed,
+// then deleted; and the calls a page gets wrong, refused before any
+// request
+const GALLERY = `<!doctype html><html><head><title>Gallery</title></head><body><img id="pic"><script>
+(async () => {
+  const assets = await claude.use("assets");
+  const out = { served: !!assets, frozen: Object.isFrozen(assets) };
+  const png = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="), (c) => c.charCodeAt(0));
+  out.up = await assets.upload(new Blob([png], { type: "image/png" }));
+  out.font = await assets.upload(new Blob(["wOF2"]), { type: "font/woff2" });
+  const pic = document.getElementById("pic");
+  await new Promise((ok, no) => { pic.onload = ok; pic.onerror = () => no(new Error("the img didn't load")); pic.src = out.up.url; });
+  out.width = pic.naturalWidth;
+  out.list = await assets.list();
+  out.del = await assets.delete(out.up.url);
+  out.again = await assets.delete(out.up.id);
+  const code = (p) => p.then(() => "resolved", (e) => e.name + ":" + e.code);
+  out.notBlob = await code(assets.upload("text"));
+  out.empty = await code(assets.upload(new Blob([])));
+  out.noType = await code(assets.upload(new Blob(["x"])));
+  out.badOpts = await code(assets.upload(new Blob(["x"]), { type: 1 }));
+  out.badRef = await code(assets.delete(42));
+  out.html = await code(assets.upload(new Blob(["<p>"], { type: "text/html" })));
+  out.gone = await code(assets.upload(new Blob(["x"], { type: "text/plain" }), { type: "text/x-gone" }));
+  window.out = out;
+})().catch((e) => { window.out = { crash: String(e && e.stack || e) }; });
+</script></body></html>`;
+
 // a store like magpie's, small: documents by path, a write told to every
 // open events stream
 function fakeMagpie(t) {
@@ -122,8 +152,45 @@ function fakeMagpie(t) {
   };
   const tell = (p) => { for (const s of streams) s.write(`data: ${JSON.stringify({ paths: [p] })}\n\n`); };
   const err = (res, status, code) => { res.writeHead(status, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }); res.end(JSON.stringify({ error: { code, message: code } })); };
+  const gallery = { calls: [], blobs: new Map() };
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, "http://127.0.0.1");
+    if (req.method === "GET" && url.pathname === "/a/gallery/") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": CSP });
+      return res.end(served(GALLERY, { api: "/a/gallery/_api", token: "tok", caps: { assets: {} }, viewer: { id: "u_0123456789abcdef01234567" }, version: 1, home: "/a/gallery/" }));
+    }
+    if (req.method === "POST" && url.pathname.startsWith("/a/gallery/_api/")) {
+      const chunks = [];
+      req.on("data", (c) => chunks.push(c));
+      req.on("end", () => {
+        const body = Buffer.concat(chunks);
+        const what = url.pathname.split("/").pop();
+        gallery.calls.push({ what, query: Object.fromEntries(url.searchParams), body, origin: req.headers.origin, type: req.headers["content-type"] });
+        const ok = (v) => { res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }); res.end(JSON.stringify(v)); };
+        if (what === "upload") {
+          const t = url.searchParams.get("type");
+          if (url.searchParams.get("t") !== "tok") return err(res, 403, "not_granted");
+          if (t === "text/x-gone") return err(res, 404, "revoked");
+          if (!["image/png", "font/woff2"].includes(t)) return err(res, 415, "unsupported_type");
+          const id = String(gallery.blobs.size + 1).padStart(32, "a");
+          gallery.blobs.set(id, { body, t });
+          return ok({ id, url: "/_blob/" + id, sizeBytes: body.length, contentType: t });
+        }
+        const c = JSON.parse(body);
+        if (c.t !== "tok") return err(res, 403, "not_granted");
+        if (c.op === "list") return ok({ assets: [...gallery.blobs].map(([id, b]) => ({ id, url: "/_blob/" + id, contentType: b.t, sizeBytes: b.body.length, createdAt: "2026-11-24T00:00:00Z" })), usage: { files: gallery.blobs.size, bytes: 0, maxFiles: 1000, maxBytes: 1 << 30 } });
+        const id = String(c.ref).replace(/^\/_blob\//, "");
+        return ok({ deleted: gallery.blobs.delete(id) });
+      });
+      return;
+    }
+    if (req.method === "GET" && url.pathname.startsWith("/_blob/")) {
+      const b = gallery.blobs.get(url.pathname.slice(7));
+      gallery.calls.push({ what: "blob", origin: req.headers.origin });
+      if (!b) { res.writeHead(404); return res.end(); }
+      res.writeHead(200, { "Content-Type": b.t, "X-Content-Type-Options": "nosniff", "Access-Control-Allow-Origin": "*", "Content-Security-Policy": "sandbox" });
+      return res.end(b.body);
+    }
     if (req.method === "GET" && url.pathname === "/a/board/") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": CSP, "Vary": "Sec-Fetch-Mode" });
       return res.end(served(PAGE, { api: "/a/board/_api", token: "tok", caps: { db: {}, user: {} }, viewer: { id: "u_0123456789abcdef01234567" } }));
@@ -220,6 +287,7 @@ function fakeMagpie(t) {
     base: `http://127.0.0.1:${server.address().port}`,
     calls,
     list,
+    gallery,
     // another's publish of the list: the agent's, or another view's
     publishList(state) { return newVersion(listDoc(state)); },
     // the agent's write, through artifact_data
@@ -357,6 +425,47 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     assert.equal(site.list.calls.length, 0, "nothing was sent");
   });
 
+  test(`a page uploads, shows, lists and deletes its assets (${engine})`, async (t) => {
+    const site = await fakeMagpie(t);
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    t.after(() => browser.close());
+    const page = await browser.newPage();
+    const errors = [];
+    page.on("pageerror", (e) => errors.push(String(e)));
+    await page.goto(site.base + "/a/gallery/");
+    await page.waitForFunction(() => window.out, null, { timeout: 15000 });
+    const out = await page.evaluate(() => window.out);
+    assert.equal(out.crash, undefined);
+    assert.equal(out.served, true);
+    assert.equal(out.frozen, true);
+    const id = "1".padStart(32, "a");
+    assert.deepEqual(out.up, { id, url: "/_blob/" + id, sizeBytes: 70, contentType: "image/png" });
+    assert.equal(out.font.contentType, "font/woff2", "options.type over an empty blob.type");
+    assert.equal(out.width, 1, "the <img> showed the upload from its url");
+    assert.equal(out.list.assets.length, 2);
+    assert.equal(out.list.usage.maxFiles, 1000);
+    assert.deepEqual(out.del, { deleted: true });
+    assert.deepEqual(out.again, { deleted: false });
+    for (const k of ["notBlob", "empty", "noType", "badOpts", "badRef"]) assert.equal(out[k], "AssetsError:invalid_request", k);
+    assert.equal(out.html, "AssetsError:unsupported_type");
+    assert.equal(out.gone, "AssetsError:quota_or_state", "a gone artifact is the state half of quota_or_state");
+    // the file went as its bytes, as text/plain from the opaque origin,
+    // its type and token in the url; the page's mistakes sent nothing
+    const ups = site.gallery.calls.filter((c) => c.what === "upload");
+    assert.equal(ups.length, 4);
+    assert.equal(ups[0].body.toString("base64"), "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+    for (const c of ups) {
+      assert.equal(c.origin, "null");
+      assert.equal(c.type, "text/plain");
+      assert.equal(c.query.t, "tok");
+    }
+    assert.deepEqual(ups.map((c) => c.query.type), ["image/png", "font/woff2", "text/html", "text/x-gone"]);
+    const dels = site.gallery.calls.filter((c) => c.what === "assets").map((c) => JSON.parse(c.body));
+    assert.deepEqual(dels.map((c) => c.op + ":" + (c.ref || "")), ["list:", "delete:/_blob/" + id, "delete:" + id]);
+    assert.ok(site.gallery.calls.some((c) => c.what === "blob"));
+    assert.deepEqual(errors, []);
+  });
+
   test(`a shared copy resolves every capability null (${engine})`, async (t) => {
     const site = await fakeMagpie(t);
     const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
@@ -364,7 +473,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     const page = await browser.newPage();
     await page.goto(site.base + "/a/shared/");
     await page.waitForFunction(() => window.out, null, { timeout: 15000 });
-    assert.deepEqual(await page.evaluate(() => window.out), { db: null, user: null, perm: "function" });
+    assert.deepEqual(await page.evaluate(() => window.out), { db: null, user: null, assets: null, perm: "function" });
     assert.equal(site.calls.length, 0);
   });
 }

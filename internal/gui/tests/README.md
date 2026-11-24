@@ -179,7 +179,10 @@ and the agent's, a page that declares artifact publishing itself (the
 whole page reloads every open view, files keep the saving view running and
 build on its version, a conflict sends the loser to the winner, ifMatch's
 answer brings another's save), publish: false refusing with nothing sent,
-and a shared copy resolving every capability null. Both engines, under the
+a page that declares assets uploading a file as its bytes (options.type
+over the blob's), showing it in an <img> from /_blob/, listing and
+deleting it, with its own mistakes refused before any request, and a
+shared copy resolving every capability null, assets too. Both engines, under the
 sandbox CSP, the store faked.
 
 `mask-alert.test.cjs` checks Insights › Masking's Masking alert (Must2333 on

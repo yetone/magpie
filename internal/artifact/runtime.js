@@ -12,7 +12,7 @@
   // every capability resolves null there, as it does for a page's
   // visitor that claude.ai can't serve
   var publishing = !!(C.caps.artifact || C.caps.self);
-  var served = C.shared ? { permissions: true } : { db: !!C.caps.db, user: true, permissions: true, artifact: publishing, self: publishing };
+  var served = C.shared ? { permissions: true } : { db: !!C.caps.db, user: true, permissions: true, artifact: publishing, self: publishing, assets: !!C.caps.assets };
   var freeze = Object.freeze;
   function deepFreeze(v) {
     if (v && typeof v === "object" && !Object.isFrozen(v)) {
@@ -521,6 +521,49 @@
     connect();
   }
 
+  // -- assets -------------------------------------------------------------
+  // files the page uploads, kept with the artifact and served at
+  // /_blob/<id> to every version of it
+  function assetsError(code, message) {
+    var e = new Error(message || code);
+    e.name = "AssetsError";
+    // the artifact gone, or the version: the state half of quota_or_state
+    e.code = code === "revoked" ? "quota_or_state" : code;
+    return e;
+  }
+  var assets = freeze({
+    upload: function (blob, opts) {
+      if (!isBlob(blob)) return Promise.reject(assetsError("invalid_request", "upload takes a Blob or a File"));
+      if (!blob.size) return Promise.reject(assetsError("invalid_request", "the file is empty"));
+      if (opts != null && (typeof opts !== "object" || opts.type !== undefined && typeof opts.type !== "string")) return Promise.reject(assetsError("invalid_request", "options is {type}, a media type"));
+      var t = opts && opts.type !== undefined ? opts.type : blob.type;
+      if (!t) return Promise.reject(assetsError("invalid_request", "the file has no type: pass {type}, e.g. image/png"));
+      var url = C.api + "/upload?t=" + encodeURIComponent(C.token) + "&type=" + encodeURIComponent(t);
+      // as text/plain, so it needs no preflight; its real type is in the url
+      return fetch(url, { method: "POST", body: blob, headers: { "Content-Type": "text/plain" }, cache: "no-store" })
+        .then(function (r) {
+          return r.json().catch(function () { return { error: { code: r.status === 413 ? "too_large" : "upstream_error", message: "magpie answered " + r.status } }; });
+        }, function (e) {
+          throw assetsError("upstream_error", "magpie can't be reached: " + e.message);
+        })
+        .then(function (j) {
+          if (j && j.error) throw assetsError(j.error.code || "upstream_error", j.error.message);
+          return freeze({ id: j.id, url: j.url, sizeBytes: j.sizeBytes, contentType: j.contentType });
+        });
+    },
+    list: function () {
+      return post("assets", { t: C.token, op: "list" }, assetsError, "upstream_error").then(function (j) {
+        return deepFreeze({ assets: j.assets || [], usage: j.usage });
+      });
+    },
+    delete: function (ref) {
+      if (typeof ref !== "string" || !ref) return Promise.reject(assetsError("invalid_request", "delete takes an asset's id or its url"));
+      return post("assets", { t: C.token, op: "delete", ref: ref }, assetsError, "upstream_error").then(function (j) {
+        return freeze({ deleted: !!j.deleted });
+      });
+    },
+  });
+
   // -- permissions --------------------------------------------------------
   function states(names) {
     var out = {};
@@ -539,7 +582,7 @@
   });
 
   // -- claude.use ---------------------------------------------------------
-  var spaces = { db: served.db ? db : null, user: served.user ? user : null, permissions: permissions, artifact: served.artifact ? artifact : null, self: served.self ? artifact : null };
+  var spaces = { db: served.db ? db : null, user: served.user ? user : null, permissions: permissions, artifact: served.artifact ? artifact : null, self: served.self ? artifact : null, assets: served.assets ? assets : null };
   var memo = {};
   function use(name) {
     name = String(name);

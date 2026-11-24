@@ -34,7 +34,7 @@ const (
 )
 
 // artifactAPICalls are the page runtime's POSTs, under <page>/_api/.
-var artifactAPICalls = []string{"db", "publish", "meta"}
+var artifactAPICalls = []string{"db", "publish", "meta", "upload", "assets"}
 
 // artifactAPICall: r is a page's call into its runtime's API, which
 // corsGuard lets through from Origin: null, as artifactPageRead lets its

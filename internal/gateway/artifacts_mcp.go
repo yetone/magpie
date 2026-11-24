@@ -143,6 +143,7 @@ func artifactsMCPTools() []any {
 							"db keeps data outside the page, which the page reads and writes through `await claude.use(\"db\")` (doc, collection, get, set, update, delete, where, orderBy, limit, onSnapshot) and you read and seed with " + artifactDataTool + "; " +
 							"{\"db\": {\"rules\": [{\"path\": …, \"read\": …, \"write\": …}]}} sets who reads and writes where. user is who views it, through `await claude.use(\"user\")`. " +
 							"artifact lets the page save itself: `await (await claude.use(\"artifact\")).publish(html)` publishes the whole page, state embedded, as the newest version, and every open view reloads to it; publish({path: content}) saves files and keeps the page running. " +
+							"assets keeps files people add (images, video, PDF, fonts, CSV and text, 20 MiB each): `(await claude.use(\"assets\")).upload(blob)` gives {id, url}; keep the id in db and show it at \"/_blob/\" + id. " +
 							"Any other capability resolves null on the page here, so a page lights it up only when it is there. Left out, an update keeps the version before's; {} clears them.",
 					},
 					"label":   map[string]any{"type": "string", "description": "A short name for this version, at most 60 characters"},
@@ -613,6 +614,9 @@ func artifactRead(a artifactArgs) (string, error) {
 				fmt.Fprintf(&b, "\ndata: %d documents, %d bytes (%s reads them)", docs, size, artifactDataTool)
 			}
 		}
+		if list, u, err := artifact.Assets(art.ID); err == nil && len(list) > 0 {
+			fmt.Fprintf(&b, "\nassets: %d, %d bytes, served at %s<id>", u.Files, u.Bytes, artifactBlobPath)
+		}
 	}
 	where, _, err := artifact.File(art.ID, v.N, a.Path)
 	if err != nil {
@@ -721,11 +725,11 @@ func artifactDelete(a artifactArgs) (string, error) {
 	return said + ".", nil
 }
 
-// artifactPageRead: r reads an artifact's page or file, which the page
-// itself asks for with Origin: null (a module script, a fetch of its
+// artifactPageRead: r reads an artifact's page, file or asset, which the
+// page itself asks for with Origin: null (a module script, a fetch of its
 // data), and corsGuard lets it.
 func artifactPageRead(r *http.Request) bool {
-	return (r.Method == http.MethodGet || r.Method == http.MethodHead) && strings.HasPrefix(r.URL.Path, ArtifactPagePath)
+	return (r.Method == http.MethodGet || r.Method == http.MethodHead) && (strings.HasPrefix(r.URL.Path, ArtifactPagePath) || strings.HasPrefix(r.URL.Path, artifact.BlobPath))
 }
 
 // artifactPage serves an artifact's page and files to the browser on this

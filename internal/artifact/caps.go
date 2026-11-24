@@ -26,7 +26,7 @@ var capabilityNames = []string{"artifact", "assets", "comments", "db", "dictatio
 // ServedCaps are the capabilities the page runtime gives a page that declares
 // them; permissions is built in and never declared. self is artifact's
 // former name, and resolves the same namespace.
-var ServedCaps = []string{"artifact", "db", "self", "user"}
+var ServedCaps = []string{"artifact", "assets", "db", "self", "user"}
 
 // Capabilities is a version's declaration, by name.
 type Capabilities map[string]json.RawMessage
@@ -78,6 +78,11 @@ func ParseCapabilities(raw json.RawMessage) (Capabilities, error) {
 			return nil, fmt.Errorf("capability user: %w", err)
 		}
 	}
+	if v, ok := c["assets"]; ok {
+		if _, err := ParseAssetsConfig(v); err != nil {
+			return nil, fmt.Errorf("capability assets: %w", err)
+		}
+	}
 	for _, name := range []string{"artifact", "self"} {
 		if v, ok := c[name]; ok {
 			if _, err := ParseArtifactConfig(v); err != nil {
@@ -107,6 +112,27 @@ func ParseUserConfig(raw json.RawMessage) (*UserConfig, error) {
 		}
 	}
 	return u, nil
+}
+
+// AssetsConfig is the assets capability's declaration: upload "interact"
+// lets people who can't edit upload too, on claude.ai; here the page's
+// one viewer is its owner, who always may.
+type AssetsConfig struct {
+	Upload string `json:"upload,omitempty"`
+}
+
+// ParseAssetsConfig reads the assets capability's declaration.
+func ParseAssetsConfig(raw json.RawMessage) (*AssetsConfig, error) {
+	a := &AssetsConfig{}
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, a); err != nil {
+			return nil, errors.New("it is {} or {\"upload\": \"interact\"}")
+		}
+	}
+	if a.Upload != "" && a.Upload != "admin" && a.Upload != "interact" {
+		return nil, fmt.Errorf("upload is \"interact\" or \"admin\", not %q", a.Upload)
+	}
+	return a, nil
 }
 
 // ArtifactConfig is the artifact capability's declaration (and self's,

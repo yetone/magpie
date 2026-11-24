@@ -53,29 +53,37 @@ type artifactFileCall struct {
 	ContentType string  `json:"contentType"`
 }
 
-var artifactPublishes = struct {
+// minuteLimit spends at most most calls a minute, for each key.
+type minuteLimit struct {
 	sync.Mutex
-	at map[string][]time.Time
-}{at: map[string][]time.Time{}}
+	most int
+	at   map[string][]time.Time
+}
 
-// artifactPublishAllowed spends one of id's publishes this minute, or says
-// there is none left.
-func artifactPublishAllowed(id string, now time.Time) bool {
-	artifactPublishes.Lock()
-	defer artifactPublishes.Unlock()
-	keep := artifactPublishes.at[id][:0]
-	for _, t := range artifactPublishes.at[id] {
+func newMinuteLimit(most int) *minuteLimit {
+	return &minuteLimit{most: most, at: map[string][]time.Time{}}
+}
+
+// allow spends one of key's calls this minute, or says there is none
+// left.
+func (l *minuteLimit) allow(key string, now time.Time) bool {
+	l.Lock()
+	defer l.Unlock()
+	keep := l.at[key][:0]
+	for _, t := range l.at[key] {
 		if now.Sub(t) < time.Minute {
 			keep = append(keep, t)
 		}
 	}
-	if len(keep) >= artifactPublishMost {
-		artifactPublishes.at[id] = keep
+	if len(keep) >= l.most {
+		l.at[key] = keep
 		return false
 	}
-	artifactPublishes.at[id] = append(keep, now)
+	l.at[key] = append(keep, now)
 	return true
 }
+
+var artifactPublishes = newMinuteLimit(artifactPublishMost)
 
 // artifactPublishError refuses a publish, with what the page reads besides
 // its code: the live version on a conflict, the files that no longer held.
@@ -146,7 +154,7 @@ func (s *Server) artifactPublish(w http.ResponseWriter, r *http.Request) {
 	if p.Base <= 0 && p.IfMatch == nil {
 		p.Base = latest.N
 	}
-	if !artifactPublishAllowed(a.ID, time.Now()) {
+	if !artifactPublishes.allow(a.ID, time.Now()) {
 		artifactAPIError(w, http.StatusTooManyRequests, "rate_limited", fmt.Sprintf("a page publishes at most %d times a minute: save several changes at once", artifactPublishMost))
 		return
 	}
