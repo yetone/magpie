@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -35,6 +36,11 @@ func TestPoolCmd(t *testing.T) {
 	}
 	provider.ForgetAccounts()
 	t.Cleanup(provider.ForgetAccounts)
+	// --accounts saves the pool's order and syncs the agents' files behind
+	// it (agent.SyncCatalogSoon), which run settles and a test calling
+	// providerCmd has to: that sync wrote stash.json into the config folder
+	// as it was being removed (#5243)
+	t.Cleanup(agent.SyncCatalogSettled)
 
 	if err := providerCmd([]string{"provider", "pool", "codex"}); err != nil {
 		t.Fatal(err)
