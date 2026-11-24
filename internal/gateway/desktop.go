@@ -715,14 +715,16 @@ func desktopMoveTo(asked string, body []byte, byClaudeCode, bySubagent bool) (st
 	}
 	if desktopProbe(body) {
 		// Desktop's check that the gateway answers, as it starts and from
-		// Test connection: on the model the user chose in Desktop's own
-		// menu (desktopChosen), else its default model; never the model
+		// Test connection: as asked when it asks for a model the user
+		// chose in Desktop's own menus, else on that choice
+		// (desktopChosen), else on its default model; never the model
 		// of whichever session last ran (desktopPicked) on its own,
-		// which may be days old and on another provider
-		if m := desktopChosen(); m != "" {
+		// which may be days old and on another provider, nor on one
+		// magpie can't serve now (desktopServes)
+		if m := desktopChosen(asked); m != "" {
 			return m, movedCheck
 		}
-		if m := desktopDefault(asked); m != "" {
+		if m := desktopDefault(asked); m != "" && desktopServes(m) {
 			return m, movedCheckFirst
 		}
 		return asked, ""
@@ -745,6 +747,13 @@ func desktopMoveTo(asked string, body []byte, byClaudeCode, bySubagent bool) (st
 	}
 	title := !tools && aside && desktopAccepts(asked) && !desktopTierAsked(asked)
 	gone := unserved(asked)
+	if picked != "" && (gone || title || ((!tools || bySubagent) && claudeOwnID(asked))) && !desktopServes(picked) {
+		// the session's model is gone since, a routing group deleted or a
+		// model its provider no longer lists (#6719): no model of a
+		// session to put this on, as before any turn, rather than a 404
+		// or the vendor's 400 for a call that would have been answered
+		picked = ""
+	}
 	// Claude Code's own id of a Claude model (claude-haiku-5-5), asked for
 	// a background call or a subagent, that some provider serves under
 	// that model while the chat is on another: it stays with the chat's
@@ -975,7 +984,17 @@ var desktopSurfaces = []string{"code", "cowork", "chat"}
 // Desktop starts and from Test connection; a file not read or not parsed
 // is no choice (desktopDefault), and a turn alone is not one either,
 // since it can be days old.
-func desktopChosen() string {
+//
+// A check that asks for the first menu's choice itself goes as asked:
+// CyberCaius (Discord, 11-20) had MiniMax in the menu, Desktop checked
+// MiniMax, and magpie sent it to a GLM model on another provider that a
+// turn had run on since. Each choice, and the turn's model, has to be one
+// magpie really serves now (desktopServes): a routing group since deleted
+// (#6719) or a model its provider no longer lists (SivanCola on #6719,
+// opencode-go/deepseek-flash, which OpenCode Go turned away with a 400)
+// is no choice, where before any id of a group or of a provider that is
+// on was taken.
+func desktopChosen(asked string) string {
 	var path string
 	var newest time.Time
 	for _, root := range desktopSelectorRoots() {
@@ -1005,12 +1024,19 @@ func desktopChosen() string {
 	for _, s := range desktopSurfaces {
 		// Desktop's id for it (claudeLooking), as magpie serves it
 		m := unprefixed(strings.TrimSpace(v.State[s].Model))
-		if m != "" && !unserved(m) && !slices.Contains(chosen, m) {
+		if m != "" && desktopServes(m) && !slices.Contains(chosen, m) {
 			chosen = append(chosen, m)
 		}
 	}
 	if len(chosen) == 0 {
 		return ""
+	}
+	// the check asks for the menu's choice itself: answered there, though
+	// a turn ran on another model since. Only the first menu's: the
+	// others hold Desktop's default (the first listed) unless the user
+	// changed them, and that is the model the check is moved off
+	if strings.TrimSuffix(unprefixed(asked), "[1m]") == strings.TrimSuffix(chosen[0], "[1m]") {
+		return asked
 	}
 	desktopPicked.Lock()
 	loadPicked()
@@ -1020,11 +1046,41 @@ func desktopChosen() string {
 	// on now: a session switched to another model, or a menu still on the
 	// one it left
 	if picked != "" && at.After(newest) {
-		if m := unprefixed(picked); !unserved(m) {
+		if m := unprefixed(picked); desktopServes(m) {
 			return m
 		}
 	}
 	return chosen[0]
+}
+
+// desktopServes: magpie can send a request for m somewhere now. Stricter
+// than !unserved, which takes any "group/" id and any id under a provider
+// that is on: a group deleted or renamed since (#6719), or a model its
+// provider no longer lists (opencode-go/deepseek-flash, SivanCola on
+// #6719), is not served. A provider whose list magpie doesn't have is
+// taken at its word: not knowing its models is not knowing m is gone.
+func desktopServes(m string) bool {
+	if m == "" || unserved(m) {
+		return false
+	}
+	if _, off := idOff(m); off {
+		return false
+	}
+	if _, ok := provider.GroupFor(m); ok {
+		return true
+	}
+	p, model, ok := provider.Resolve(m)
+	if !ok {
+		return false
+	}
+	id := strings.TrimSuffix(m, "[1m]")
+	if provider.IsGroupRef(id) || catalogNames.get(struct{}{}, namesInCatalog)[id] {
+		return true
+	}
+	if len(p.Available()) == 0 && len(p.Exposed()) == 0 {
+		return true
+	}
+	return provider.ServesModel(p, model)
 }
 
 // desktopProbe: the request is Claude Desktop's check that a gateway

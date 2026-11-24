@@ -3053,6 +3053,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			return
 		}
 		msg := unknownModel(call.Model, "")
+		if moved != nil && asked != call.Model {
+			// magpie put it on another model (Claude Desktop's moves), and
+			// that one is gone: name it, not the one the client asked for,
+			// which magpie serves (#6719: "magpie knows no model X; did
+			// you mean X?")
+			msg = unknownModel(asked, fmt.Sprintf(" (magpie sent this request for %q there)", call.Model))
+		}
 		if g, ok := provider.DisabledGroup(asked); ok {
 			call.Error = "group switched off"
 			msg = fmt.Sprintf("the routing group %s is switched off in Magpie, so %q is not served; switch it on again on Magpie's Routing page to use it", g.Name, call.Model)
