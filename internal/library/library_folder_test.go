@@ -56,9 +56,12 @@ func TestAddFromLibraryFolderKeepsIt(t *testing.T) {
 	same()
 }
 
-// #595: a skill put in the library's folder by hand, not in library.json,
-// was shown nowhere. It is found, said to be in the library's folder, and
-// brought in where it is.
+// #595, jwaitq on Discord: a skill put in the library's folder by hand,
+// not in library.json, was shown nowhere, then only under "In your
+// agents", to be brought in by a click. The next read of the page brings
+// it in where it is, as that click did, once; a dot-folder, a folder with
+// no SKILL.md and a copy of magpie's stay out, and one the user removed
+// isn't brought back.
 func TestFoundInLibraryFolder(t *testing.T) {
 	h := sandbox(t)
 	hand := skillDir("hand")
@@ -68,28 +71,34 @@ func TestFoundInLibraryFolder(t *testing.T) {
 	symlink(t, ext, skillDir("linky"))
 	// magpie's link to it, left in Codex
 	symlink(t, hand, filepath.Join(h, ".codex/skills/hand"))
-	// not a skill
+	// a folder named in another script goes by its SKILL.md's name
+	skill(t, filepath.Join(skillsDir(), "头脑风暴"), "brainstorm", "Ideas")
+	// not a skill, magpie's own leftovers and a copy of magpie's
 	write(t, filepath.Join(skillsDir(), "notes/README.md"), "")
+	skill(t, filepath.Join(skillsDir(), oldPrefix("hand")+"-1"), "hand", "Old")
+	skill(t, filepath.Join(skillsDir(), ".hand.next"), "hand", "Next")
+	skill(t, filepath.Join(skillsDir(), "copied"), "copied", "A copy")
+	write(t, filepath.Join(skillsDir(), "copied", marker), "copied from elsewhere\n")
 
-	v, err := Read(nil)
-	if err != nil {
-		t.Fatal(err)
+	listed := func() map[string]SkillView {
+		t.Helper()
+		v, err := Read(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(v.FoundSkills) != 0 {
+			t.Errorf("still found: %+v", v.FoundSkills)
+		}
+		out := map[string]SkillView{}
+		for _, s := range v.Skills {
+			out[s.Name] = s
+		}
+		return out
 	}
-	byName := map[string]FoundSkill{}
-	for _, f := range v.FoundSkills {
-		byName[f.Name] = f
+	got := listed()
+	if len(got) != 3 || got["hand"].Kind != "" || got["linky"].Kind != "folder" || got["brainstorm"].Name == "" {
+		t.Fatalf("listed: %+v", got)
 	}
-	if len(byName) != 2 {
-		t.Fatalf("found: %+v", v.FoundSkills)
-	}
-	if f := byName["hand"]; f.Library != hand || f.Link != "" || !slices.Equal(f.Agents, []string{"codex"}) {
-		t.Errorf("hand: %+v", f)
-	}
-	if f := byName["linky"]; f.Library != skillDir("linky") || f.Link != realDir(ext) || len(f.Agents) != 0 {
-		t.Errorf("linky: %+v", f)
-	}
-
-	ok(t)(ImportSkills([]string{"hand", "linky"}))
 	if fi, err := os.Lstat(hand); err != nil || !fi.IsDir() || read(t, filepath.Join(hand, "scripts/run.sh")) != "echo hi\n" {
 		t.Errorf("hand isn't where it was: %v", err)
 	}
@@ -99,21 +108,37 @@ func TestFoundInLibraryFolder(t *testing.T) {
 	if !ours(filepath.Join(h, ".codex/skills/hand"), "hand") {
 		t.Error("codex lost hand")
 	}
+	if _, err := os.Stat(filepath.Join(skillDir("brainstorm"), "SKILL.md")); err != nil {
+		t.Errorf("brainstorm wasn't named: %v", err)
+	}
 	l, _ := load()
 	if s := l.skill("hand"); s == nil || s.Source != nil || !slices.Equal(s.Agents, []string{"codex"}) {
 		t.Errorf("hand: %+v", s)
 	}
-	if s := l.skill("linky"); s == nil || s.Source == nil || s.Source.Kind != "folder" || s.Source.Dir != realDir(ext) {
+	if s := l.skill("linky"); s == nil || s.Source == nil || s.Source.Kind != "folder" || s.Source.Dir != realDir(ext) || len(s.Agents) != 0 {
 		t.Errorf("linky: %+v", s)
 	}
-	v, _ = Read(nil)
-	if len(v.FoundSkills) != 0 {
-		t.Errorf("still found: %+v", v.FoundSkills)
+	if s := l.skill("brainstorm"); s == nil || len(s.Agents) != 0 {
+		t.Errorf("brainstorm: %+v", s)
 	}
-	for _, s := range v.Skills {
-		if want := map[string]string{"hand": "", "linky": "folder"}[s.Name]; s.Kind != want {
-			t.Errorf("%s: kind %q", s.Name, s.Kind)
+	for _, n := range []string{"notes", "copied", oldPrefix("hand") + "-1", ".hand.next"} {
+		if _, err := os.Stat(filepath.Join(skillsDir(), n)); err != nil {
+			t.Errorf("%s was moved: %v", n, err)
 		}
+	}
+
+	// once: another read lists the same, each once
+	if again := listed(); len(again) != 3 {
+		t.Errorf("listed again: %+v", again)
+	}
+	if l, _ := load(); len(l.Skills) != 3 {
+		t.Errorf("library: %+v", l.Skills)
+	}
+
+	// removed, it stays out
+	ok(t)(RemoveSkills([]string{"hand", "brainstorm"}))
+	if got := listed(); len(got) != 1 || got["linky"].Name == "" {
+		t.Errorf("after removing: %+v", got)
 	}
 }
 

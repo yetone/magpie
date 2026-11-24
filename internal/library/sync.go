@@ -694,6 +694,27 @@ func readView(problems []Problem, glance bool) (*View, error) {
 			forget = readParts()
 		}
 	}
+	// a skill folder copied into the library's own by hand is listed
+	// (skill_adopt.go, jwaitq on Discord). Not on a glance: bringing one
+	// in reads the agents' skill folders through, which a glance never
+	// waits on (#541); the read after it brings it in
+	if !glance {
+		if adopted, given := l.adoptLibraryFolders(); len(adopted) > 0 {
+			forget()
+			forget = func() {}
+			if err := l.save(); err != nil {
+				return nil, err
+			}
+			if given {
+				res := l.sync()
+				if err := l.save(); err != nil {
+					return nil, err
+				}
+				problems = append(slices.Clone(problems), res.Problems...)
+			}
+			forget = readParts()
+		}
+	}
 	// a plugin's tools, a server of their own (plugin_tools.go), and a
 	// Remote magpie's router (bridge_mcp.go): saved, and given to the
 	// agents by a sync of their own
