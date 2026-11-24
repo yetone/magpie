@@ -252,8 +252,10 @@ func TestDefinitionMaskedAsWithoutModel(t *testing.T) {
 // model is another build (ModelGeneration, a plugin's model whose files
 // changed): that one is asked afresh.
 func TestNewModelBuildFindsAfresh(t *testing.T) {
-	resetSent()
-	t.Cleanup(resetSent)
+	// a test before may have left the name known, and a known value is
+	// masked by the rules whatever the model finds
+	Forget()
+	t.Cleanup(Forget)
 	const name = "Rina Kowalczyk"
 	s := "Ask " + name + " about the release."
 	blind := &fakeModel{values: map[string]string{}}
