@@ -289,7 +289,8 @@ func TestAdvisorFailureIsLogged(t *testing.T) {
 		t.Fatalf("error_code %v", content)
 	}
 	line = l.String()
-	if !strings.Contains(line, "no advice") || !strings.Contains(line, `"unavailable"`) {
+	if !strings.Contains(line, "no advice") || !strings.Contains(line, `"unavailable"`) ||
+		!strings.Contains(line, `stop_reason "end_turn"`) || !strings.Contains(line, "output tokens of 4096") {
 		t.Fatalf("the empty answer isn't logged: %s", line)
 	}
 }
