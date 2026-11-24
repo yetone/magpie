@@ -163,7 +163,7 @@ func mapModelRefs(f *file, to func(string) string) {
 		}
 		g.Weights = renamedWeights(g.Weights, to)
 		g.EffortMaps = renamedEffortMaps(g.EffortMaps, to)
-		g.Classifier = to(g.Classifier)
+		g.MapClassifiers(to)
 		g.Pick = to(g.Pick)
 	}
 }

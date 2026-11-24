@@ -220,11 +220,14 @@ func importGroup(text string, over bool) (Imported, error) {
 		g.Off = nil // the ones it sent to are gone: those left are on
 	}
 	g.Pick = here[strings.TrimSpace(g.Pick)]
-	if c := strings.TrimSpace(g.Classifier); c != "" {
-		if g.Classifier = place(c); g.Classifier == GroupPrefix+g.ID {
-			g.Classifier = ""
+	// each classifier as this magpie has it; one it hasn't, or the group
+	// itself, is left out of the list
+	g.MapClassifiers(func(c string) string {
+		if c = place(c); c == GroupPrefix+g.ID {
+			return ""
 		}
-	}
+		return c
+	})
 	// a rule sends to a model the group names, or one its patterns match
 	// here
 	in := append(slices.Clone(g.Members), matchesIn(entries, g)...)

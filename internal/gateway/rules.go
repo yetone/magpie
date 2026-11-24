@@ -92,9 +92,13 @@ type RuleHit struct {
 
 // Classified is what the classifier was asked as a turn began, and said.
 type Classified struct {
-	By      string   `json:"by"`               // the classifier model
-	Intents []string `json:"intents"`          // what it chose among
-	Intent  string   `json:"intent,omitempty"` // what it said the message is; "" for none
+	By string `json:"by"` // the classifier model: the one that answered, or the last asked
+	// Tried: the group's classifiers asked before By that couldn't say,
+	// in order, each with why (Group.Classifiers): the next is asked when
+	// one fails (qinzhidaoa on X)
+	Tried   []ClassifierTry `json:"tried,omitempty"`
+	Intents []string        `json:"intents"`          // what it chose among
+	Intent  string          `json:"intent,omitempty"` // what it said the message is; "" for none
 	// Said: the answer as it said it — the number a chat model answered
 	// with (0 for none), or the choice a decision model named, its own
 	// "none of these" included — kept when no intent came of it, so
@@ -121,6 +125,21 @@ type Classified struct {
 
 	// AfterEffort: the reasoning picked for the turn before, which it was told
 	AfterEffort string `json:"afterEffort,omitempty"`
+}
+
+// ClassifierTry is a classifier asked that couldn't say, and why.
+type ClassifierTry struct {
+	By    string `json:"by"`
+	Error string `json:"error"`
+}
+
+// failsOver reports whether err, a classifier's, has the group ask its
+// next one: it is down, refused, rested or out of time. Not an answer
+// that wasn't a number (answerError): it is up, and its next answer is
+// as likely to be one, so a second paid ask buys nothing; and not an
+// intent said with its effort lost (effortFailed), which holds.
+func failsOver(err error) bool {
+	return err != nil && !errors.As(err, new(answerError)) && !errors.As(err, new(effortFailed))
 }
 
 type turnRule struct {
@@ -350,7 +369,7 @@ func ruleFor(key string, g provider.Group, ms []provider.Member, req *Request, a
 		// its own (@HirotaNagai on X): from the same parsed, masked request
 		prev.User, prev.Reply = turnBefore(req)
 		switch {
-		case g.Classifier == "":
+		case len(g.Classifiers()) == 0:
 			c.Error = "the group has no classifier"
 		case ask == nil:
 			c.Error = "nothing to ask the classifier with: this is a classifier's own call, or Claude Desktop's connection check"
@@ -358,8 +377,23 @@ func ruleFor(key string, g provider.Group, ms []provider.Member, req *Request, a
 			c.Error = "the message has no words to classify"
 		default:
 			t0 := time.Now()
-			v, cached, err := classify(ask, classifierHeld(g, ms), g.Classifier, intents, prev, effort, text)
-			classifiedFor(g.ID, g.Classifier, err)
+			// each in turn until one says (failsOver)
+			list := g.Classifiers()
+			var v verdict
+			var cached bool
+			var err error
+			for i, cl := range list {
+				if i > 0 {
+					c.Tried = append(c.Tried, ClassifierTry{By: c.By, Error: err.Error()})
+				}
+				prev.Then = len(list) - 1 - i
+				c.By = cl
+				if v, cached, err = classify(ask, classifierHeld(g, ms, cl), cl, intents, prev, effort, text); !failsOver(err) {
+					break
+				}
+			}
+			prev.Then = 0
+			classifiedFor(g.ID, list, err)
 			v.Intent = intentOf(v, g) // the group's own sure of an intent (#5101)
 			c.Intent, c.Said, c.Cached, c.Ms = v.Intent, v.Said, cached, int(time.Since(t0).Milliseconds())
 			if effort {
@@ -967,13 +1001,15 @@ func pausedError(asked string, paused []provider.Paused) string {
 // (AWilsonPeng on X: GPT-6 Luna held to one of two ChatGPT accounts, its
 // classifier its own member GPT-6-Luna · Codex, which asked on both). A
 // group, as the classifier, holds itself to its own when it is asked.
-func classifierHeld(g provider.Group, ms []provider.Member) access.Identity {
+//
+// cl is the classifier asked, one of the group's (Group.Classifiers).
+func classifierHeld(g provider.Group, ms []provider.Member, cl string) access.Identity {
 	name := cmp.Or(g.Name, g.ID)
 	who := access.Identity{}.HeldToGroup(name, g.Accounts)
-	if provider.IsGroupRef(g.Classifier) {
+	if provider.IsGroupRef(cl) {
 		return who
 	}
-	p, model, ok := provider.Resolve(g.Classifier)
+	p, model, ok := provider.Resolve(cl)
 	if !ok {
 		return who
 	}

@@ -37,7 +37,8 @@ const groupUsage = `usage:
                                           id (what agents pick it as: id=gpt-6-astra drops auto-; the groups
                                           it is in follow; an agent set to the old id needs setting again),
                                           effort=auto (the classifier picks each turn's reasoning; needs classifier=),
-                                          effort=agent (the agent's again), classifier=<provider/model>|group/<id>,
+                                          effort=agent (the agent's again), classifier=<provider/model>|group/<id>
+                                          (or several, a,b: b asked when a can't answer),
                                           intent-sure=<0…1> (how sure the classifier must be of an intent for it
                                           to count; 0 takes its likeliest however unsure, "none of these" never
                                           counting; empty is the 0.4 groups have always asked),
@@ -563,8 +564,9 @@ func applyGroupPairs(g *provider.Group, pairs []string, resolve func(string) (st
 			default:
 				err = fmt.Errorf("effort=auto (the classifier picks each turn's) or effort=agent (the agent's), not %q", v)
 			}
-		case "classifier", "classify":
-			g.Classifier = strings.TrimPrefix(strings.TrimSpace(v), "magpie/")
+		case "classifier", "classify", "classifiers":
+			// classifier=a,b: a first, b when a can't answer
+			g.SetClassifiers(strings.Split(v, ","))
 		case "intent-sure", "intentsure":
 			// how sure the classifier must be of an intent for it to count
 			// (#5101): 0 takes its likeliest however unsure, "none of
@@ -1337,7 +1339,7 @@ func showGroup(g provider.Group) error {
 		if !slices.ContainsFunc(g.Rules, func(r provider.Rule) bool { return r.Intent != "" }) {
 			what = "  rates how hard each turn is"
 		}
-		kv("classifier", g.Classifier+muted.Render(what))
+		kv("classifier", strings.Join(g.Classifiers(), ", ")+muted.Render(what))
 	}
 	if g.IntentSure != nil {
 		kv("intent-sure", fmt.Sprintf("%g", *g.IntentSure)+muted.Render("  how sure the classifier must be of an intent for it to count; 0 takes its likeliest"))
@@ -1382,7 +1384,7 @@ func templateCmd(rest []string) error {
 			}
 			fmt.Println("  " + strings.Join(tp.Group.Members, " → "))
 			if tp.Group.Classifier != "" {
-				fmt.Println("  " + muted.Render("classifier "+tp.Group.Classifier))
+				fmt.Println("  " + muted.Render("classifier "+strings.Join(tp.Group.Classifiers(), ", ")))
 			}
 		}
 		fmt.Println(muted.Render("magpie group template <kind> [name] adds one"))

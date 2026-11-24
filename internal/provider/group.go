@@ -274,6 +274,14 @@ type Group struct {
 	// Rules with an intent need one; a small, fast model without reasoning
 	// does.
 	Classifier string `json:"classifier,omitempty"`
+	// ClassifierMore are the classifiers asked after Classifier, in order,
+	// each only when the one before it couldn't answer (a refusal, a
+	// vendor's 5xx or 429, a dropped connection, no answer in its part of
+	// the wait; qinzhidaoa on X: the one classifier answered 502, and every
+	// turn lost its intent). Classifier stays the first, so a magpie from
+	// before it still asks that one, and a group of one classifier writes
+	// none (Classifiers, SetClassifiers).
+	ClassifierMore []string `json:"classifierMore,omitempty"`
 	// IntentSure is how confident a decision model (Jev, from TypeSafe's
 	// decision API) must be of an intent of this group's for it to count:
 	// from 0, its likeliest intent taken however unsure it is ("none of
@@ -560,7 +568,7 @@ func cloneGroups(gs []Group) []Group {
 		g.Members, g.Match, g.Matched, g.Placed = slices.Clone(g.Members), slices.Clone(g.Match), slices.Clone(g.Matched), slices.Clone(g.Placed)
 		g.Off, g.Levels, g.Fast, g.Ultra = slices.Clone(g.Off), slices.Clone(g.Levels), slices.Clone(g.Fast), slices.Clone(g.Ultra)
 		g.Accounts, g.Seen, g.Keys = slices.Clone(g.Accounts), slices.Clone(g.Seen), slices.Clone(g.Keys)
-		g.Former = slices.Clone(g.Former)
+		g.Former, g.ClassifierMore = slices.Clone(g.Former), slices.Clone(g.ClassifierMore)
 		g.Weights = maps.Clone(g.Weights)
 		g.EffortMaps = renamedEffortMaps(g.EffortMaps, func(m string) string { return m })
 		if g.IntentSure != nil {
@@ -815,8 +823,10 @@ func SetAutoGroups(on bool) error {
 					held = append(held, fmt.Sprintf("%s is in %s", strings.TrimPrefix(m, GroupPrefix), g.Name))
 				}
 			}
-			if found(g.Classifier) {
-				held = append(held, fmt.Sprintf("%s is %s's classifier", strings.TrimPrefix(g.Classifier, GroupPrefix), g.Name))
+			for _, c := range g.Classifiers() {
+				if found(c) {
+					held = append(held, fmt.Sprintf("%s is %s's classifier", strings.TrimPrefix(c, GroupPrefix), g.Name))
+				}
 			}
 		}
 		if len(held) > 0 {
@@ -2108,30 +2118,30 @@ func SaveGroup(g Group) error {
 	if g.Levels, err = CleanLevels(g.Levels); err != nil {
 		return err
 	}
-	g.Classifier = strings.TrimPrefix(strings.TrimSpace(g.Classifier), "magpie/")
+	g.MapClassifiers(func(c string) string { return strings.TrimPrefix(strings.TrimSpace(c), "magpie/") })
 	g.Effort = strings.ToLower(strings.TrimSpace(g.Effort))
 	intents := slices.ContainsFunc(g.Rules, func(r Rule) bool { return r.Intent != "" })
 	switch {
 	case g.Effort != "" && g.Effort != EffortAuto:
 		return fmt.Errorf("a group's effort is %q or left to the agent, not %q", EffortAuto, g.Effort)
-	case g.Classifier == GroupPrefix+g.ID:
+	case g.ClassifiesWith(GroupPrefix + g.ID):
 		return fmt.Errorf("%s can't be its own classifier: asking it would ask it again", g.Name)
 	case intents && g.Classifier == "":
 		return errors.New("a rule with an intent needs the group's classifier: the model that tells which intent a message is")
 	case g.Effort == EffortAuto && g.Classifier == "":
 		return errors.New("effort picked per turn needs the group's classifier: the model that rates how hard a turn is")
 	case !intents && g.Effort == "":
-		g.Classifier = "" // nothing to ask it
+		g.SetClassifiers(nil) // nothing to ask them
 	}
-	if gid, ok := strings.CutPrefix(g.Classifier, GroupPrefix); ok {
-		if c, ok := groupOf(groupsIn(providerEntries()), gid); !ok {
-			return fmt.Errorf("magpie has no group %q to classify with", gid)
-		} else if c.Disabled {
-			return fmt.Errorf("%s is switched off: switch it on to classify with it", c.Name)
-		}
-	} else if g.Classifier != "" {
-		if _, _, ok := Resolve(g.Classifier); !ok {
-			return fmt.Errorf("magpie knows no model %q to classify with", g.Classifier)
+	for _, cl := range g.Classifiers() {
+		if gid, ok := strings.CutPrefix(cl, GroupPrefix); ok {
+			if c, ok := groupOf(groupsIn(providerEntries()), gid); !ok {
+				return fmt.Errorf("magpie has no group %q to classify with", gid)
+			} else if c.Disabled {
+				return fmt.Errorf("%s is switched off: switch it on to classify with it", c.Name)
+			}
+		} else if _, _, ok := Resolve(cl); !ok {
+			return fmt.Errorf("magpie knows no model %q to classify with", cl)
 		}
 	}
 	if g.IntentSure != nil && !(*g.IntentSure >= 0 && *g.IntentSure <= 1) { // NaN too
@@ -2346,7 +2356,7 @@ func DeleteGroup(id string) error {
 		return fmt.Errorf("%s is in %s: take it out first", id, strings.Join(names, ", "))
 	}
 	for _, g := range groupsIn(providerEntries()) {
-		if !g.Hidden && g.Classifier == GroupPrefix+id {
+		if !g.Hidden && g.ClassifiesWith(GroupPrefix+id) {
 			return fmt.Errorf("%s is %s's classifier: choose another first", id, g.Name)
 		}
 	}
@@ -2397,7 +2407,7 @@ func DeleteGroups(ids []string) error {
 			if slices.Contains(g.Members, GroupPrefix+id) {
 				return fmt.Errorf("%s is in %s: take it out first", id, g.Name)
 			}
-			if g.Classifier == GroupPrefix+id {
+			if g.ClassifiesWith(GroupPrefix + id) {
 				return fmt.Errorf("%s is %s's classifier: choose another first", id, g.Name)
 			}
 		}
@@ -2446,7 +2456,7 @@ func SwitchGroup(id string, on bool) error {
 	}
 	if !on {
 		for _, o := range f.Groups {
-			if !o.Hidden && !o.Disabled && o.ID != id && o.Classifier == GroupPrefix+id {
+			if !o.Hidden && !o.Disabled && o.ID != id && o.ClassifiesWith(GroupPrefix+id) {
 				return fmt.Errorf("%s classifies %s's requests: pick another classifier there first", f.Groups[i].Name, o.Name)
 			}
 		}
@@ -2604,9 +2614,12 @@ func RenameGroup(from, to string) error {
 			}
 			return m
 		})
-		if f.Groups[i].Classifier == old {
-			f.Groups[i].Classifier = now
-		}
+		f.Groups[i].MapClassifiers(func(c string) string {
+			if c == old {
+				return now
+			}
+			return c
+		})
 	}
 	if err := store(f); err != nil {
 		return err

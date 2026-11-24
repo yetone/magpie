@@ -371,7 +371,9 @@ func groupsState() groupsJSON {
 		for _, m := range g.Members {
 			named[m] = true
 		}
-		named[g.Classifier] = true
+		for _, c := range g.Classifiers() {
+			named[c] = true
+		}
 	}
 	for _, e := range provider.OfferedDeciders(func(id string) bool { return named[id] }) {
 		out.Deciders = append(out.Deciders, modelRef{ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon, Sub: e.Provider.Account != nil})
@@ -423,7 +425,7 @@ func groupsState() groupsJSON {
 		gj.Decides = g.Decides()
 		gj.Ref = g.Ref()
 		if g.Classifier != "" {
-			if why, at, ok := classifierFailure(g.ID, g.Classifier); ok {
+			if why, at, ok := classifierFailure(g.ID, gateway.ClassifiersKey(g.Classifiers())); ok {
 				gj.ClassifierFailed = &classifierFailedJSON{Error: why, At: at}
 			}
 		}

@@ -3889,6 +3889,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		patienceFallback = waitsOf(p.Patience, singlePatience)
 	}
 	patience = maxWaits(cands, patienceFallback)
+	if patienceSpared(r) {
+		patience = 0 // a classifier with another after it (askChat)
+	}
 	var busyNow []busyTry  // the members of this round that failed so
 	rounds := 0            // the rounds they were asked again in
 	var waitFrom time.Time // when every member had first failed so

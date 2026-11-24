@@ -150,6 +150,22 @@ func TestGroupRuleIntentCmd(t *testing.T) {
 	if err := ruleCmd([]string{"classifier", "opus", "b/gpt-5.5"}); err != nil || group().Classifier != "b/gpt-5.5" {
 		t.Fatalf("%v %+v", err, group())
 	}
+	// several, asked in order when one can't answer (qinzhidaoa on X)
+	if err := ruleCmd([]string{"classifier", "opus", "b/gpt-5.5,a/only-a"}); err != nil || strings.Join(group().Classifiers(), ",") != "b/gpt-5.5,a/only-a" {
+		t.Fatalf("%v %+v", err, group())
+	}
+	if err := ruleCmd([]string{"classifier", "opus", "a/only-a", "b/gpt-5.5"}); err != nil || strings.Join(group().Classifiers(), ",") != "a/only-a,b/gpt-5.5" {
+		t.Fatalf("%v %+v", err, group())
+	}
+	if gs := storedGroups(t); gs[0]["classifierMore"] == nil {
+		t.Fatalf("stored: %v", gs)
+	}
+	if err := ruleCmd([]string{"classifier", "opus", "b/gpt-5.5"}); err != nil || group().Classifier != "b/gpt-5.5" || group().ClassifierMore != nil {
+		t.Fatalf("back to one: %v %+v", err, group())
+	}
+	if gs := storedGroups(t); gs[0]["classifierMore"] != nil {
+		t.Fatalf("one stored: %v", gs)
+	}
 	if err := ruleCmd([]string{"opus"}); err != nil {
 		t.Fatal(err)
 	}

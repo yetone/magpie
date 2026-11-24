@@ -31,7 +31,7 @@ const ruleUsage = `usage:
                                           nothing, not even when the others fail or a conversation was on it
   magpie group rule rm <group> <n>        remove rule n
   magpie group rule mv <group> <n> <to>   move rule n to place <to>
-  magpie group rule classifier <group> <model>
+  magpie group rule classifier <group> <model>[,<model>…]
                                           the model that tells which intent a message is, or
                                           group/<id>: another group, its models tried in turn
 
@@ -48,8 +48,8 @@ const ruleUsage = `usage:
   agents   it comes from one of these agents (claude, codex, opencode, … as magpie usage names them)
   intent   the user's message is of this kind, in your words ("writing or fixing tests", "a quick
            question"): as the turn begins, the group's classifier — any model magpie has, best a small
-           fast one without reasoning, or another group of them to fail over — is asked which of the intents that may match the message is,
-           once; if it fails or can't say, no intent matches. Its call shows in the usage as magpie's own
+           fast one without reasoning, or several (classifier=a,b) or another group of them to fail over — is asked which of the intents that may match the message is,
+           once; if all fail or it can't say, no intent matches. Its call shows in the usage as magpie's own
   compact  the agent is compacting the conversation (Claude Code's /compact or auto-compact, Codex's,
            OpenCode's, Pi's, Gemini CLI's, Qwen Code's, Kimi's): a cheaper, faster model can write the
            summary. The request is as long as the conversation, so a model known to take less is passed
@@ -163,7 +163,7 @@ func ruleCmd(args []string) error {
 			return err
 		}
 		if classifier != "" {
-			g.Classifier = classifier
+			g.SetClassifiers(strings.Split(classifier, ","))
 		}
 		if at == 0 || at > len(g.Rules) {
 			g.Rules = append(g.Rules, r)
@@ -194,13 +194,14 @@ func ruleCmd(args []string) error {
 		r := g.Rules[i]
 		g.Rules = slices.Insert(slices.Delete(g.Rules, i, i+1), j, r)
 	case "classifier", "classify":
-		if len(rest) != 2 {
-			return fmt.Errorf("magpie group rule classifier <group> <model>")
+		if len(rest) < 2 {
+			return fmt.Errorf("magpie group rule classifier <group> <model>[,<model>…]")
 		}
 		if !slices.ContainsFunc(g.Rules, func(r provider.Rule) bool { return r.Intent != "" }) {
 			return fmt.Errorf("%s has no rule with an intent to classify for", g.ID)
 		}
-		g.Classifier = rest[1]
+		// several, in order: the next is asked when one can't answer
+		g.SetClassifiers(strings.Split(strings.Join(rest[1:], ","), ","))
 	default:
 		return fmt.Errorf("magpie group rule has no %q\n\n%s", verb, ruleUsage)
 	}
