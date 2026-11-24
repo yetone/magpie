@@ -1165,7 +1165,12 @@ func groups() error {
 	names, uses := catalogByID(), groupUses()
 	for _, e := range provider.Served() {
 		if e.Group != "" {
-			names[e.ID] = e // a group in a group is served when it is
+			// a group in a group is served when it is. The catalog lists a
+			// found group by its public auto/<model>, while a group's
+			// members keep group/auto-<slug> (Will on Discord: a group of
+			// found groups read each "not served", "no member ready")
+			names[e.ID] = e
+			names[provider.GroupPrefix+e.Group] = e
 		}
 	}
 	type row struct{ name, id, how, members, uses, note string }

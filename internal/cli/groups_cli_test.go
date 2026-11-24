@@ -406,3 +406,63 @@ func TestGroupsMemberInAnotherCaseIsServed(t *testing.T) {
 		t.Errorf("magpie group ds:\n%s", out)
 	}
 }
+
+// A group whose members are all groups magpie found is served when they
+// are: the catalog lists a found group as auto/<model> while the members
+// keep group/auto-<slug> (Will on Discord: `magpie groups` read each found
+// group "not served" and the parent "no member ready", while `magpie
+// group <id>` showed them served). A group in it that serves nothing still
+// reads so.
+func TestGroupsListServesFoundGroupMembers(t *testing.T) {
+	groupsHome(t)
+	if err := provider.Save(provider.Provider{ID: "c", Name: "C", Key: "kc", Models: []string{"x"}, Chat: "http://127.0.0.1:1/v1", Off: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := addGroup("Of found", []string{"models=group/auto-m"}); err != nil {
+		t.Fatal(err)
+	}
+	// one saved by the found group's public id, as an agent is given it
+	if err := provider.SaveGroup(provider.Group{ID: "of-public", Name: "Of public", Members: []string{"auto/m"}}); err != nil {
+		t.Fatal(err)
+	}
+	// c is off, so its group serves nothing (addGroup refuses its model)
+	if err := provider.SaveGroup(provider.Group{ID: "dead", Name: "Dead", Members: []string{"c/x"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := addGroup("Of dead", []string{"models=group/dead"}); err != nil {
+		t.Fatal(err)
+	}
+	out, err := stdoutOf(t, groups)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := func(name string) string {
+		for _, l := range strings.Split(out, "\n") {
+			if strings.Contains(l, name) {
+				return l
+			}
+		}
+		t.Fatalf("no row for %s in:\n%s", name, out)
+		return ""
+	}
+	if l := row("Of found"); strings.Contains(l, "not served") || strings.Contains(l, "no member ready") {
+		t.Errorf("a group of a found group: %s", l)
+	}
+	if l := row("Of public"); strings.Contains(l, "not served") || strings.Contains(l, "no member ready") {
+		t.Errorf("a group of a found group by its public id: %s", l)
+	}
+	if l := row("Of dead"); !strings.Contains(l, "not served") || !strings.Contains(l, "no member ready") {
+		t.Errorf("a group of a group that serves nothing: %s", l)
+	}
+	// magpie group <id> names the found group as a routing group
+	for _, id := range []string{"of-found", "of-public"} {
+		g, err := findGroup(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		shown, err := stdoutOf(t, func() error { return showGroup(g) })
+		if err != nil || !strings.Contains(shown, "routing group") || strings.Contains(shown, "not served") {
+			t.Errorf("magpie group %s: %v\n%s", id, err, shown)
+		}
+	}
+}
