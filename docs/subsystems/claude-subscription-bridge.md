@@ -507,7 +507,20 @@ which is sent the image itself (`unpastedSaid`, `Request.unpasted`,
 `claudePrint` code `unpasted`). An image not taken is kept on the bridge
 for 12 hours (`subscriptionBridge.unpasted`, `unpastedFor`): this
 machine's turns with an image anywhere in their messages start as `-p`
-then, and text alone is still the interactive mode's. When the redo can't
+then, and text alone is still the interactive mode's. A run started as
+`-p` for this (`subscriptionRun.unpasted`, `keepsPrint`) goes on with
+its conversation for as long as it runs: the prompt suggestion asked
+after the turn and the conversation's next turn, taken back from the
+suggestion as in [A side question after a reply](#a-side-question-after-a-reply-1638),
+are told it as `-p`, only their own messages (`resume`). Before, each
+let the run go for a new interactive run told the whole conversation,
+and wrote all of it to the cache again: 268k and 313k tokens on the
+reporter's conversation (#7556, lshen1120;
+`TestClaudeUnpastedPrintRunKeepsItsConversation`). A new conversation
+still starts in the interactive mode, and a `-p` run from before the
+interactive mode was turned on is still let go at its next turn. A
+branch or a retry of such a run's session still goes to the interactive
+mode (#7616). When the redo can't
 run (Off meanwhile, the client gone) the failure is a 400, not a 502
 (`bridgeFailed`), so neither the client nor the fallback asks it again.
 An account Anthropic turned off (its organization disabled, a 400 or

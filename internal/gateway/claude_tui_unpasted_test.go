@@ -122,3 +122,49 @@ func TestClaudeUnpastableIsNoRetried502(t *testing.T) {
 		t.Fatalf("%d: another failure is still a 502", code)
 	}
 }
+
+// A turn the interactive mode didn't take goes on in the claude -p run
+// that answered it: the prompt suggestion asked after it, and the
+// conversation's next turn, told only its own message. Before, the
+// suggestion let the -p run go for a new interactive run told the whole
+// conversation, and the next turn did the same again, each writing the
+// whole history to the cache (#7556, lshen1120: 268k and 313k tokens). A
+// conversation of its own still starts in the interactive mode.
+func TestClaudeUnpastedPrintRunKeepsItsConversation(t *testing.T) {
+	h, started := unpastedHarness(t)
+	h.ask("rules", "first turn")
+	if n := helperStarts(started); n != 1 {
+		t.Fatalf("the interactive mode started %d times, want once", n)
+	}
+	h.ask("rules", "first turn", suggestionMode)
+	h.ask("rules", "first turn", "second turn")
+	if n := helperStarts(started); n != 1 {
+		t.Fatalf("the interactive mode started %d times, want once: the -p run goes on with its conversation", n)
+	}
+	runs := h.runs()
+	if len(runs) != 2 {
+		t.Fatalf("%d runs, want two: the interactive mode's, then one claude -p for the rest: %v", len(runs), runs)
+	}
+	var print string
+	for _, log := range runs {
+		if strings.Contains(log, "SUGGESTION MODE") || strings.Count(log, "\ntold ") > 1 {
+			print = log
+		}
+	}
+	var told []string
+	for l := range strings.SplitSeq(print, "\n") {
+		if strings.HasPrefix(l, "told ") {
+			told = append(told, l)
+		}
+	}
+	if len(told) != 3 || !strings.Contains(told[1], "SUGGESTION MODE") || !strings.Contains(print, "rewind_conversation") {
+		t.Fatalf("the -p run wasn't told the suggestion, then taken back from it:\n%s", print)
+	}
+	if last := told[2]; !strings.Contains(last, "second turn") || strings.Contains(last, "first turn") {
+		t.Fatalf("the next turn wasn't told only its own message: %s", last)
+	}
+	h.ask("other rules", "another conversation")
+	if n := helperStarts(started); n != 2 {
+		t.Fatalf("the interactive mode started %d times, want twice: a new conversation still tries it", n)
+	}
+}

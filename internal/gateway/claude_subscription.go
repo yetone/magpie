@@ -243,6 +243,13 @@ type subscriptionRun struct {
 	cacheTail   string
 	cachePrefix cachePrefix
 	timer       *time.Timer
+	// unpasted: it is claude -p because the interactive mode didn't take a
+	// message of its conversation (unpastedCode, set as it starts). Its
+	// conversation's next turns, and the side questions between them, go
+	// on in it as -p for as long as it runs (keepsPrint): switching each
+	// to a new interactive run told the whole conversation wrote all of it
+	// to the cache again (#7556, lshen1120)
+	unpasted bool
 
 	// Claude Code's input, kept open for the next turn; owner is the account
 	// it runs as (owned, named once in its life when it started unnamed:
@@ -1403,6 +1410,7 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 	run.lean = req.leanPrompt
 	run.appended = req.appendPrompt
 	run.tui = tui
+	run.unpasted = !tui && code == unpastedCode
 	run.cachePrefix = prefix
 	if tui {
 		run.safeguards = bytes.Clone(req.Safeguards)
@@ -2112,10 +2120,16 @@ func (b *subscriptionBridge) resume(req *Request, owner string) (*subscriptionRu
 		return nil, nil
 	}
 	if !run.tui && wantTUI(req) {
-		// a -p run from before the interactive mode was turned on goes
-		// on with no turn more
-		run.abortFor("Claude Code's interactive mode is on, and this run is -p")
-		return nil, nil
+		if !run.keepsPrint() {
+			// a -p run from before the interactive mode was turned on goes
+			// on with no turn more
+			run.abortFor("Claude Code's interactive mode is on, and this run is -p")
+			return nil, nil
+		}
+		// a -p run started for a message the interactive mode didn't
+		// take goes on with its conversation's turns, its cache read
+		asUnpasted(req)
+		log.Printf("claude: the conversation's next turn goes on in its claude -p run, started for a message the interactive mode didn't take")
 	}
 	req.clientCache.selected(false)
 	if run.tui && back != "" && urlImages(since) == 0 {
@@ -7606,10 +7620,7 @@ func (s *Server) serveSubscriptionAs(w http.ResponseWriter, r *http.Request, fro
 	// Windows 10 LTSC, every image turn a 502 the client asked again)
 	if name == "Claude Code" && claudeTUIOn() && !req.tuiRefused &&
 		(redo == unpastedCode || countImages(req.Messages) > 0 && s.subscription.imagesUnpasted()) {
-		req.unpasted = true
-		if req.clientCache != nil {
-			req.clientCache.print = true
-		}
+		asUnpasted(req)
 	}
 	if name == "Claude Code" && claudeTUIOn() && !req.tuiRefused && !req.unpasted && keptByPrint(req) {
 		// the classifier's marks keep more than its fresh interactive
@@ -8043,6 +8054,21 @@ func redoable(r *http.Request, name string, req *Request, code int, msg string) 
 // (claudetui.Unpastable).
 func unpastedSaid(name, msg string) bool {
 	return name == "Claude Code" && strings.Contains(msg, claudetui.Unpastable)
+}
+
+// asUnpasted makes req's run claude -p for a message the interactive mode
+// didn't take (unpastedCode).
+func asUnpasted(req *Request) {
+	req.unpasted = true
+	if req.clientCache != nil {
+		req.clientCache.print = true
+	}
+}
+
+// keepsPrint is whether the run is claude -p for a message the interactive
+// mode didn't take, and so goes on with its conversation's turns as -p.
+func (r *subscriptionRun) keepsPrint() bool {
+	return !r.tui && r.unpasted
 }
 
 // unpastedCode is claudePrint's code for a run that is claude -p because
