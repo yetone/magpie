@@ -124,6 +124,11 @@ type Settings struct {
 	// westernUnits, which asked for K/M/B: what that chose is now the
 	// default, so an old file's is left unread.
 	ChineseUnits bool `json:"chineseUnits,omitempty"`
+	// InUncached keeps the Requests list's In at the vendor's own input,
+	// what the prompt cache neither read nor wrote, also where a narrow
+	// window leaves the cache columns out and In otherwise says the whole
+	// prompt (01e13f0e0; JonahFu on X, who wanted In as it was).
+	InUncached bool `json:"inUncached,omitempty"`
 	// DayStart is the hour a day starts at in usage: 0 is midnight, and 1 to
 	// 6 count the small hours before it with the day before (ssharpcc on X,
 	// who codes past 1am). The Usage page, its daily cards and the gateway

@@ -369,12 +369,16 @@
       </div>
       <div id="provPrefLinks"></div>
     </div>
-    <details class="prefs-more app-only" id="usageMore">
+    <details class="prefs-more" id="usageMore">
       <summary data-t>Advanced</summary>
       <div class="list prefs">
-        <div class="row pref" id="trayCurrencyRow">
+        <div class="row pref app-only" id="trayCurrencyRow">
           <div class="who"><div class="name" data-t>Menu bar currency</div></div>
           <div id="trayCurrencySegs"></div>
+        </div>
+        <div class="row pref" id="inUncachedRow">
+          <div class="who"><div class="name" data-t>In without cache</div><div class="sub" data-t>Requests' In counts only input the cache didn't read or write, also where the cache columns are left out</div></div>
+          <div id="inUncachedSegs"></div>
         </div>
       </div>
     </details>

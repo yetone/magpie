@@ -3824,9 +3824,10 @@ function renderLedger() {
   const table = el("table", "led");
   const head = el("tr");
   const optCls = (opt) => opt === 2 ? " lc-opt2" : opt ? " lc-opt" : "";
+  const uncachedIn = !!state.settings?.inUncached;
   for (const [name, cls, opt, tip] of LED_COLS) {
     const th = el("th", (cls || "") + optCls(opt), t(name));
-    if (tip) th.title = t(tip);
+    if (tip) th.title = t(uncachedIn && name === "In" ? "Input not read from or written to the cache" : tip);
     head.append(th);
   }
   table.append(el("thead"), el("tbody"));
@@ -3944,7 +3945,9 @@ function renderLedger() {
     // tokens of a long prompt; where a narrow window leaves the cache
     // columns out, the cell says the whole prompt instead, so a turn of a
     // long message doesn't read as 2 (shangyuan0818 on X)
-    const cachedIn = r.cache_unknown ? 0 : (r.cache_read || 0) + (r.cache_write || 0);
+    // Settings › Usage › In without cache keeps it the vendor's in
+    // everywhere, as it was before (JonahFu on X)
+    const cachedIn = r.cache_unknown || uncachedIn ? 0 : (r.cache_read || 0) + (r.cache_write || 0);
     if (cachedIn > 0) {
       const whole = (r.in || 0) + cachedIn;
       // the whole is drawn from data-all (app.css), so the cell's text

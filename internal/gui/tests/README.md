@@ -2866,3 +2866,14 @@ included, so it asked for a .1em nudge down that sat the person 1.5 device
 px below its count in the real app. Against the digits, headless Chromium
 and WebKit read the same row 0.4 to 1.3px apart by language (each picks
 its own font for the digits), so a screenshot bound of 1px held either way.
+
+## Requests' In without the cache
+
+`ledger-in-uncached.test.cjs` checks Settings › Usage › Advanced › In
+without cache (JonahFu on X): folded and Off at first, in the app and in a
+page served to a browser; On saves `inUncached`, another save keeps it, Off
+saves false, and no click moves the page. With it on, the Requests list's In
+is the vendor's in beside the cache columns and with them left out
+(`.led.tight`), and the header says so; with it off, the whole prompt as
+`ledger-in-whole` has it. Every language, 1100 and 390 wide, Chromium and
+WebKit; the API is faked.
