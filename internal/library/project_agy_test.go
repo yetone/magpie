@@ -267,3 +267,63 @@ func TestAgyProjectOwnHooks(t *testing.T) {
 		t.Errorf("own hooks:\n%s", strings.Join(got, "\n"))
 	}
 }
+
+// jiangnan_ on X: a project's servers had no Antigravity chip, while the
+// library gave it servers user-wide. agy 1.5.15 starts the servers in the
+// project's .agents/mcp_config.json, in its user-wide file's shape: one file
+// for agy and the app, the user's servers and comments in it kept, and
+// nothing written to ~/.gemini/config.
+func TestAgyProjectServers(t *testing.T) {
+	h, proj := mcpProject(t)
+	f := filepath.Join(proj, ".agents", "mcp_config.json")
+	write(t, f, `{
+  // the team's own
+  "mcpServers": {"linear": {"serverUrl": "https://mcp.linear.app/mcp"}}
+}
+`)
+	for _, id := range []string{"agy", "antigravity"} {
+		if ProjectMCPFile(id) != ".agents/mcp_config.json" {
+			t.Fatalf("ProjectMCPFile(%s) = %q", id, ProjectMCPFile(id))
+		}
+	}
+	ok(t)(ProjectServer(proj, "fs", []string{"agy"}))
+	ok(t)(ProjectServer(proj, "docs", []string{"agy", "antigravity"}))
+	s := servers(t, f, "mcpServers")
+	if fs, _ := s["fs"].(map[string]any); fs["command"] != "npx" || fs["type"] != nil {
+		t.Errorf("fs: %v", fs)
+	}
+	if d, _ := s["docs"].(map[string]any); d["serverUrl"] != "https://docs.example/mcp" {
+		t.Errorf("docs: %v", d)
+	}
+	if s["linear"] == nil || !strings.Contains(read(t, f), "// the team's own") {
+		t.Errorf("the user's lost:\n%s", read(t, f))
+	}
+	if _, err := os.Stat(filepath.Join(h, ".gemini", "config", "mcp_config.json")); err == nil {
+		t.Error("the user-wide mcp_config.json was written")
+	}
+	// the app keeps docs when agy lets go of it
+	ok(t)(ProjectServer(proj, "docs", []string{"antigravity"}))
+	if s := servers(t, f, "mcpServers"); s["docs"] == nil || s["fs"] == nil {
+		t.Errorf("after agy let docs go:\n%s", read(t, f))
+	}
+	ok(t)(RemoveProject(proj, false))
+	if s := servers(t, f, "mcpServers"); len(s) != 1 || s["linear"] == nil {
+		t.Errorf("after:\n%s", read(t, f))
+	}
+}
+
+// a project with no .agents gets one made, kept out of git, and it goes
+// with magpie's last server
+func TestAgyProjectServersMadeFile(t *testing.T) {
+	_, proj := mcpProject(t)
+	ok(t)(ProjectServer(proj, "fs", []string{"antigravity"}))
+	f := filepath.Join(proj, ".agents", "mcp_config.json")
+	if servers(t, f, "mcpServers")["fs"] == nil {
+		t.Fatalf("fs not written:\n%s", read(t, f))
+	}
+	if g := excluded(t, proj); !strings.Contains(g, "/.agents/mcp_config.json\n") {
+		t.Errorf("info/exclude:\n%s", g)
+	}
+	ok(t)(ProjectServer(proj, "fs", nil))
+	gone(t, f)
+}

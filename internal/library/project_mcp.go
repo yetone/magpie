@@ -37,7 +37,13 @@ import (
 // (docs.factory.com/cli/configuration/mcp). Qoder and CodeBuddy, like
 // Claude Code, ask the user to approve a project's server before using
 // it. TRAE CN reads .trae/mcp.json once its Enable Project MCP setting is
-// on (its workbench, 2.3.105403).
+// on (its workbench, 2.3.105403). Antigravity — the app and agy alike —
+// reads .agents/mcp_config.json, its workspace customization root's
+// mcp_config.json, in the shape of its user-wide ~/.gemini/config one
+// (agy 1.5.15's embedded docs: "Customization Roots" lists ".agents"
+// relative to the workspace root, and "MCP Servers (mcp_config.json)"
+// among what any root holds; agy 1.5.15 started a server from it, at the
+// project's root and from a folder inside it, jiangnan_ on X).
 // Each is written in the shape the agent's user-wide file has.
 // DeepSeek Harness has none: its servers are @deepseek-ai/dsh-mcp-client
 // rows in a profile's patch layers (bundles, the profile's and
@@ -59,6 +65,9 @@ var projectMCPFiles = map[string]struct {
 	"codebuddy": {".mcp.json", fmtClaude},
 	"droid":     {".factory/mcp.json", fmtClaude},
 	"trae-cn":   {".trae/mcp.json", fmtTrae},
+	// one file for both, as their user-wide one is
+	"agy":         {".agents/mcp_config.json", fmtAntigravity},
+	"antigravity": {".agents/mcp_config.json", fmtAntigravity},
 }
 
 // ProjectMCPFile is the file, in a project, an agent reads the project's
