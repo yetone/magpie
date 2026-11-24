@@ -29,8 +29,8 @@ var keySlotFree = []string{
 	"POST " + RestartPath, "POST " + provider.RemoteUpdatePath, "POST /v1/messages/count_tokens",
 	"POST " + claudeMCPPath + "{token}", "/mcp/{name}", "/mcp/run/{name}", SearchMCPPath, VisionMCPPath,
 	ImageMCPPath, BrowserMCPPath, MemoryMCPPath, SessionsMCPPath, ArtifactsMCPPath, ImageMCPFiles + "{name}",
-	// an artifact page's own store, which reaches no model
-	"POST " + ArtifactPagePath + "{ref}/_api/db", ToolsMCPPath, ToolsMCPOne + "{plugin}",
+	// an artifact page's own store and versions, which reach no model
+	"POST " + ArtifactPagePath + "{ref}/_api/db", "POST " + ArtifactPagePath + "{ref}/_api/publish", "POST " + ArtifactPagePath + "{ref}/_api/meta", ToolsMCPPath, ToolsMCPOne + "{plugin}",
 	HubMCPPath + "{agent}", HubMCPAll, "/", "POST " + joinData, AdminPath,
 	// the chat page's files are kept in magpie, never sent to a model
 	"POST " + ChatPagePath + "/anthropic/v1/files", "DELETE " + ChatPagePath + "/anthropic/v1/files/{id}",

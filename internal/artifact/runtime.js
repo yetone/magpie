@@ -3,15 +3,16 @@
 // (contract 0.2.99) calls, served by magpie. It goes into the page's
 // <head> ahead of the page's own scripts, with its config: the API it
 // calls, the token that names this artifact's page, the capabilities the
-// version declares and the viewer, who on this computer is the artifact's
-// owner.
+// version declares, the viewer, who on this computer is the artifact's
+// owner, and the version the page is (pinned: its address names it).
 (function (C) {
   "use strict";
   if (window.claude && window.claude.use) return;
   // a shared copy (usemagpie.ai) serves no store and knows no viewer:
   // every capability resolves null there, as it does for a page's
   // visitor that claude.ai can't serve
-  var served = C.shared ? { permissions: true } : { db: !!C.caps.db, user: true, permissions: true };
+  var publishing = !!(C.caps.artifact || C.caps.self);
+  var served = C.shared ? { permissions: true } : { db: !!C.caps.db, user: true, permissions: true, artifact: publishing, self: publishing };
   var freeze = Object.freeze;
   function deepFreeze(v) {
     if (v && typeof v === "object" && !Object.isFrozen(v)) {
@@ -31,24 +32,29 @@
   }
 
   // -- the API ------------------------------------------------------------
-  function call(op, body) {
-    body = Object.assign({ t: C.token, op: op }, body);
+  // a POST to <api>/<what>, as text/plain so it needs no preflight; a
+  // refusal rejects with mkErr(code, message, the error's other fields),
+  // and magpie out of reach with down
+  function post(what, body, mkErr, down) {
     var text;
     try {
       text = JSON.stringify(body);
     } catch (e) {
-      return Promise.reject(dbError("transform_error", "the arguments aren't JSON: " + e.message));
+      return Promise.reject(mkErr("transform_error", "the arguments aren't JSON: " + e.message));
     }
-    return fetch(C.api + "/db", { method: "POST", body: text, headers: { "Content-Type": "text/plain" }, cache: "no-store" })
+    return fetch(C.api + "/" + what, { method: "POST", body: text, headers: { "Content-Type": "text/plain" }, cache: "no-store" })
       .then(function (r) {
-        return r.json().catch(function () { return { error: { code: "unavailable", message: "magpie answered " + r.status } }; });
+        return r.json().catch(function () { return { error: { code: down, message: "magpie answered " + r.status } }; });
       }, function (e) {
-        throw dbError("unavailable", "magpie can't be reached: " + e.message);
+        throw mkErr(down, "magpie can't be reached: " + e.message);
       })
       .then(function (j) {
-        if (j && j.error) throw dbError(j.error.code || "unavailable", j.error.message);
+        if (j && j.error) throw mkErr(j.error.code || down, j.error.message, j.error);
         return j;
       });
+  }
+  function call(op, body) {
+    return post("db", Object.assign({ t: C.token, op: op }, body), dbError, "unavailable");
   }
 
   // -- paths --------------------------------------------------------------
@@ -87,17 +93,46 @@
 
   // -- live updates -------------------------------------------------------
   // one stream for the page; each listener reads again when a write it
-  // can see is made, and every 30 s while the stream is down
+  // can see is made, and every 30 s while the stream is down. A page that
+  // publishes itself (artifact) hears each new version on it too, and
+  // reloads to it, unless its address names its version
   var listeners = new Set(), source = null, poll = null;
+  var version = C.version || 0, mine = new Set(), leaving = false;
+  // a version heard while this view's own publish is on its way may be
+  // that publish's: it waits for the answer
+  var inflight = 0, heldN = 0;
+  var follows = served.artifact && !C.pinned && version > 0;
   function heard(paths) {
     listeners.forEach(function (l) { if (!paths || l.touches(paths)) l.refresh(); });
   }
+  function newer(n) {
+    if (!follows) return;
+    if (inflight) heldN = Math.max(heldN, n);
+    else if (n > version && !mine.has(n)) reload();
+  }
+  function settled() {
+    if (--inflight || !heldN) return;
+    var n = heldN;
+    heldN = 0;
+    newer(n);
+  }
+  // the view goes to the newest version: a pinned one to the artifact's
+  // own address
+  function reload() {
+    if (leaving) return;
+    leaving = true;
+    setTimeout(function () {
+      if (C.pinned && C.home) location.assign(C.home);
+      else location.reload();
+    }, 30);
+  }
   function connect() {
-    if (source || !listeners.size || typeof EventSource !== "function") return;
-    source = new EventSource(C.api + "/events?t=" + encodeURIComponent(C.token));
+    if (source || !(listeners.size || follows) || typeof EventSource !== "function") return;
+    source = new EventSource(C.api + "/events?t=" + encodeURIComponent(C.token) + (follows ? "&v=" + version : ""));
     source.onmessage = function (e) {
       var m;
       try { m = JSON.parse(e.data); } catch (_) { return; }
+      if (m.version) return newer(+m.version);
       heard(m.paths || null);
     };
     source.onopen = function () {
@@ -108,7 +143,7 @@
     };
   }
   function disconnect() {
-    if (listeners.size) return;
+    if (listeners.size || follows) return;
     if (source) { source.close(); source = null; }
     if (poll) { clearInterval(poll); poll = null; }
   }
@@ -360,11 +395,137 @@
     search: function () { return Promise.resolve(freeze([])); },
   });
 
+  // -- artifact -----------------------------------------------------------
+  // the page publishes itself: its whole page, or the files that changed,
+  // as the artifact's newest version, which every open view reloads to
+  function artifactError(code, message, more) {
+    var e = new Error(message || code);
+    e.name = "ArtifactError";
+    e.code = code;
+    if (more) ["live", "paths", "changed", "limit"].forEach(function (k) { if (more[k] !== undefined) e[k] = deepFreeze(more[k]); });
+    return e;
+  }
+  function declared(name) {
+    var c = C.caps[name];
+    return c && typeof c === "object" ? c : null;
+  }
+  // {publish: false} on either name keeps the page from saving itself
+  var mayPublish = [declared("artifact"), declared("self")].every(function (c) { return !c || c.publish !== false; });
+  function bytes64(buf) {
+    var u = new Uint8Array(buf), s = "";
+    for (var i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+    return btoa(s);
+  }
+  function blobBytes(b) {
+    return (typeof b.arrayBuffer === "function" ? b.arrayBuffer() : new Response(b).arrayBuffer()).then(bytes64);
+  }
+  function isBlob(v) { return typeof Blob === "function" && v instanceof Blob; }
+  function bare(t) { return String(t || "").split(";")[0].trim().toLowerCase(); }
+  // one entry of a files publish, as magpie reads it
+  function fileEntry(name, v) {
+    if (v === null) return Promise.resolve(null);
+    if (typeof v === "string") return Promise.resolve({ text: v });
+    if (isBlob(v)) return blobBytes(v).then(function (b) { var e = { base64: b }; if (bare(v.type)) e.contentType = bare(v.type); return e; });
+    if (v && typeof v === "object" && !Array.isArray(v)) {
+      var e = {};
+      if (Object.prototype.hasOwnProperty.call(v, "ifMatch")) {
+        if (v.ifMatch !== null && typeof v.ifMatch !== "string") return Promise.reject(artifactError("invalid_content", name + ": ifMatch is a sha256 or null"));
+        e.ifMatch = v.ifMatch;
+      }
+      if (v.delete === true) { e.delete = true; return Promise.resolve(e); }
+      if (v.contentType !== undefined) e.contentType = String(v.contentType);
+      if (typeof v.content === "string") { e.text = v.content; return Promise.resolve(e); }
+      if (isBlob(v.content)) {
+        return blobBytes(v.content).then(function (b) {
+          e.base64 = b;
+          if (e.contentType === undefined && bare(v.content.type)) e.contentType = bare(v.content.type);
+          return e;
+        });
+      }
+    }
+    return Promise.reject(artifactError("invalid_content", name + ": a file is a string, a Blob, {content, contentType, ifMatch}, {delete: true} or null"));
+  }
+  function publish(what) {
+    if (!mayPublish) return Promise.reject(artifactError("not_granted", "the artifact declares artifact with publish: false"));
+    inflight++;
+    return sendPublish(what).then(function (r) { settled(); return r; }, function (e) { settled(); throw e; });
+  }
+  function sendPublish(what) {
+    if (typeof what === "string") {
+      return post("publish", { t: C.token, base: version, html: what }, artifactError, "upstream_error").then(function (j) {
+        // every open view, this one too, goes to it
+        mine.add(+j.version);
+        reload();
+        return freeze({ version: j.version });
+      }, lost);
+    }
+    if (!what || typeof what !== "object" || Array.isArray(what) || isBlob(what)) {
+      return Promise.reject(artifactError("invalid_content", "publish takes the page's whole html, or its files by path"));
+    }
+    var names = Object.keys(what);
+    if (!names.length) return Promise.reject(artifactError("invalid_content", "name the files that changed"));
+    return Promise.all(names.map(function (n) { return fileEntry(n, what[n]); })).then(function (entries) {
+      var files = {};
+      names.forEach(function (n, i) { files[n] = entries[i]; });
+      return post("publish", { t: C.token, base: version, files: files }, artifactError, "upstream_error");
+    }).then(function (j) {
+      // this view goes on, on the version it made; one that landed over
+      // another's save reloads to bring theirs
+      var n = +j.version;
+      mine.add(n);
+      version = Math.max(version, n);
+      if (j.changed && j.changed.length) reload();
+      var out = { version: j.version };
+      if (j.changed) out.changed = j.changed;
+      if (j.shas) out.shas = j.shas;
+      return deepFreeze(out);
+    }, lost);
+  }
+  // a conflict: another's version won, and the view goes to it
+  function lost(e) {
+    if (e && e.code === "conflict") reload();
+    throw e;
+  }
+  var artifact = freeze({
+    publish: publish,
+    edit: function () { return Promise.reject(artifactError("not_granted", "a page here changes itself with publish")); },
+    sync: function (fn) {
+      if (!mayPublish) return Promise.reject(artifactError("not_granted", "the artifact declares artifact with publish: false"));
+      return Promise.resolve().then(function () { return typeof fn === "function" ? fn() : undefined; }).then(function () {
+        if (document.querySelector("artifact-sync, [artifact-sync]")) throw artifactError("invalid_content", "artifact-sync saves nothing: publish the page instead");
+      });
+    },
+    metadata: function (refs) {
+      var list = [].concat(refs == null ? [] : refs).map(String);
+      var empty = function () {
+        var out = {};
+        list.forEach(function (r) { out[r] = freeze({ id: "", title: "", type: null }); });
+        return freeze(out);
+      };
+      if (!list.length) return Promise.resolve(freeze({}));
+      return post("meta", { t: C.token, refs: list }, artifactError, "upstream_error").then(function (j) {
+        var out = {}, got = (j && j.artifacts) || {};
+        list.forEach(function (r) {
+          var e = got[r] || {};
+          out[r] = freeze({ id: String(e.id || ""), title: String(e.title || ""), type: typeof e.type === "string" ? e.type : null });
+        });
+        return freeze(out);
+      }, empty);
+    },
+  });
+  if (served.artifact) {
+    // claude.ai's elements for a sync no page here uses take no box
+    var css = document.createElement("style");
+    css.textContent = "artifact-sync,artifact-local{display:contents}";
+    (document.head || document.documentElement).appendChild(css);
+    connect();
+  }
+
   // -- permissions --------------------------------------------------------
   function states(names) {
     var out = {};
     (names || Object.keys(C.caps)).forEach(function (n) {
-      if (served[n] && (n === "user" || C.caps[n])) out[n] = "granted";
+      if (served[n] && (n === "user" || C.caps[n] || (n === "artifact" || n === "self") && publishing)) out[n] = "granted";
       else if (names) out[n] = "unavailable";
     });
     return freeze(out);
@@ -378,7 +539,7 @@
   });
 
   // -- claude.use ---------------------------------------------------------
-  var spaces = { db: served.db ? db : null, user: served.user ? user : null, permissions: permissions };
+  var spaces = { db: served.db ? db : null, user: served.user ? user : null, permissions: permissions, artifact: served.artifact ? artifact : null, self: served.self ? artifact : null };
   var memo = {};
   function use(name) {
     name = String(name);

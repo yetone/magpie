@@ -2,6 +2,8 @@ package artifact
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
@@ -135,20 +137,24 @@ func TestListAndDelete(t *testing.T) {
 
 func TestLimits(t *testing.T) {
 	sandbox(t)
-	if _, err := PublishPage(Publish{Page: bytes.Repeat([]byte("x"), MaxPage+1)}); err == nil {
+	if _, err := PublishPage(Publish{Page: bytes.Repeat([]byte("x"), MaxPage+1)}); !errors.Is(err, ErrTooLarge) {
 		t.Error("published a page over the limit")
 	}
-	if _, err := PublishPage(Publish{Page: []byte{0xff, 0xfe}}); err == nil {
+	if _, err := PublishPage(Publish{Page: []byte{0xff, 0xfe}}); !errors.Is(err, ErrInvalid) {
 		t.Error("published a page that isn't UTF-8")
 	}
 	many := map[string][]byte{}
 	for i := 0; i <= MaxFiles; i++ {
 		many[strings.Repeat("f", 1+i%5)+string(rune('a'+i%26))+"/"+string(rune('a'+i/26))+".txt"] = []byte("x")
 	}
-	if _, err := PublishPage(Publish{Page: []byte("p"), Files: many}); err == nil {
-		t.Error("published more files than a version holds")
+	var fl *FileLimit
+	if _, err := PublishPage(Publish{Page: []byte("p"), Files: many}); !errors.As(err, &fl) || !errors.Is(err, ErrInvalid) || fl.Max != MaxFiles {
+		t.Errorf("published more files than a version holds: %v", err)
 	}
-	if _, err := PublishPage(Publish{Page: []byte("p"), Files: map[string][]byte{"a": []byte("1"), "a/b": []byte("2")}}); err == nil {
+	if _, err := PublishPage(Publish{Page: []byte("p"), Files: map[string][]byte{"../x": []byte("1")}}); !errors.Is(err, ErrInvalid) {
+		t.Errorf("a path outside: %v", err)
+	}
+	if _, err := PublishPage(Publish{Page: []byte("p"), Files: map[string][]byte{"a": []byte("1"), "a/b": []byte("2")}}); !errors.Is(err, ErrInvalid) {
 		t.Error("published a file and a folder of one name")
 	}
 	if _, err := PublishPage(Publish{ID: "nope"}); !errors.Is(err, ErrNotFound) {
@@ -188,5 +194,66 @@ func TestTitles(t *testing.T) {
 	c, _ := PublishPage(Publish{Page: []byte("x")})
 	if c.Title != "Untitled" {
 		t.Errorf("title %q", c.Title)
+	}
+}
+
+// IfMatch holds each named file to the sha the writer read (nil: absent),
+// against the newest version, whatever Base says; a mismatch refuses the
+// whole publish, naming every path that moved, sorted.
+func TestPublishIfMatch(t *testing.T) {
+	sandbox(t)
+	sum := func(s string) *string { h := sha256.Sum256([]byte(s)); x := hex.EncodeToString(h[:]); return &x }
+	a, err := PublishPage(Publish{Page: []byte("p"), Files: map[string][]byte{"a.txt": []byte("a1"), "b.txt": []byte("b1")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, ok, err := FileSHA(a.ID, 1, "a.txt"); err != nil || !ok || got != *sum("a1") {
+		t.Fatalf("FileSHA: %q %v %v", got, ok, err)
+	}
+	if got, ok, _ := FileSHA(a.ID, 1, ""); !ok || got != *sum("p") {
+		t.Fatalf("the page's sha: %q %v", got, ok)
+	}
+	if _, ok, err := FileSHA(a.ID, 1, "nope.txt"); ok || err != nil {
+		t.Fatalf("a missing file: %v %v", ok, err)
+	}
+	// another writer changes b (version 2)
+	if _, err := PublishPage(Publish{ID: a.ID, Files: map[string][]byte{"b.txt": []byte("b2")}}); err != nil {
+		t.Fatal(err)
+	}
+	// a's sha still matches: it lands, over version 2
+	b, err := PublishPage(Publish{ID: a.ID, Files: map[string][]byte{"a.txt": []byte("a2")}, IfMatch: map[string]*string{"a.txt": sum("a1")}})
+	if err != nil || b.Latest().N != 3 || read(t, a.ID, 3, "b.txt") != "b2" || read(t, a.ID, 3, "a.txt") != "a2" {
+		t.Fatalf("a matching publish: %v", err)
+	}
+	_, err = PublishPage(Publish{ID: a.ID, Files: map[string][]byte{"b.txt": []byte("b3"), "c.txt": []byte("c"), "a.txt": nil},
+		IfMatch: map[string]*string{"b.txt": sum("b1"), "c.txt": nil, "a.txt": sum("a1")}})
+	var fc *FileConflict
+	if !errors.As(err, &fc) || !errors.Is(err, ErrConflict) || fc.Newest != 3 || len(fc.Paths) != 2 {
+		t.Fatalf("a mismatch: %v %+v", err, fc)
+	}
+	if fc.Paths[0].Path != "a.txt" || *fc.Paths[0].Actual != *sum("a2") || fc.Paths[1].Path != "b.txt" || *fc.Paths[1].Expected != *sum("b1") || *fc.Paths[1].Actual != *sum("b2") {
+		t.Fatalf("the paths: %+v", fc.Paths)
+	}
+	if c, _ := Get(a.ID); c.Latest().N != 3 {
+		t.Fatalf("the refused publish was written: %+v", c.Latest())
+	}
+}
+
+// Each new version is told to the artifact's watchers.
+func TestPublishTellsTheVersion(t *testing.T) {
+	sandbox(t)
+	a, _ := PublishPage(Publish{Page: []byte("p")})
+	ch, stop := Watch(a.ID)
+	defer stop()
+	if _, err := PublishPage(Publish{ID: a.ID, Page: []byte("q")}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case c := <-ch:
+		if c.Version != 2 || c.Paths != nil && len(c.Paths) > 0 {
+			t.Fatalf("told: %+v", c)
+		}
+	default:
+		t.Fatal("the version wasn't told")
 	}
 }

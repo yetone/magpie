@@ -4,8 +4,10 @@
 // page's own scripts, use() resolves db and user later and null for what
 // isn't served, a bad path throws a TypeError at once, a refused call
 // rejects with its code, a query's onSnapshot shows the page's own writes
-// and another's (the agent's, told on the events stream), and a shared
-// copy resolves every capability null. Under the sandbox CSP magpie serves
+// and another's (the agent's, told on the events stream), a page that
+// declares artifact publishes itself (its whole page, which every open
+// view reloads to, or files, which keep it running), and a shared copy
+// resolves every capability null. Under the sandbox CSP magpie serves
 // pages with, so every call is from an opaque origin. In both engines.
 // The store is faked here; internal/gateway's TestArtifactPage* hold the
 // real one.
@@ -69,10 +71,55 @@ const SHARED = `<!doctype html><html><head><title>Shared</title></head><body><sc
 })();
 </script></body></html>`;
 
+// a page that is its own record: its items are data in the page, and
+// adding one publishes the page again, regenerated from them
+function listMain() {
+  const MAIN = document.currentScript.textContent;
+  const state = JSON.parse(document.getElementById("state").textContent);
+  for (const it of state.items) { const li = document.createElement("li"); li.textContent = it; document.getElementById("list").append(li); }
+  const doc = (s) => "<!doctype html><html><head><title>List</title></head><body><script id=state type=application/json>" + JSON.stringify(s).replace(/</g, "\\u003c") + "</scr" + "ipt><ul id=list></ul><artifact-sync id=sy><b>x</b></artifact-sync><script>" + MAIN + "</scr" + "ipt></body></html>";
+  window.loadedAt = Math.random();
+  (async () => {
+    const artifact = await claude.use("artifact");
+    const out = { items: state.items };
+    out.same = artifact === (await claude.use("self"));
+    out.frozen = Object.isFrozen(artifact);
+    out.perm = await (await claude.use("permissions")).state("artifact");
+    out.display = getComputedStyle(document.getElementById("sy")).display;
+    try { await artifact.edit(); } catch (e) { out.editCode = e.code; }
+    try { await artifact.sync(() => {}); } catch (e) { out.syncCode = e.code; }
+    out.meta = await artifact.metadata(["aaaaaaaaaaaaaaaaaaaaaaaaaa", "nope"]);
+    window.add = (item) => artifact.publish(doc({ items: [...state.items, item] }));
+    window.save = (files) => artifact.publish(files);
+    window.out = out;
+  })().catch((e) => { window.out = { crash: String(e && e.stack || e) }; });
+}
+const LIST_MAIN = "(" + String(listMain) + ")();";
+const listDoc = (state) => "<!doctype html><html><head><title>List</title></head><body><script id=state type=application/json>" + JSON.stringify(state).replace(/</g, "\\u003c") + "</script><ul id=list></ul><artifact-sync id=sy><b>x</b></artifact-sync><script>" + LIST_MAIN + "</script></body></html>";
+
+const READ_ONLY = `<!doctype html><html><head><title>Read only</title></head><body><script>
+(async () => {
+  const artifact = await claude.use("artifact");
+  const out = { served: !!artifact };
+  try { await artifact.publish("<!doctype html><p>x"); } catch (e) { out.publish = e.code; }
+  try { await artifact.publish({ "a.txt": "a" }); } catch (e) { out.files = e.code; }
+  try { await artifact.sync(() => {}); } catch (e) { out.sync = e.code; }
+  window.out = out;
+})().catch((e) => { window.out = { crash: String(e && e.stack || e) }; });
+</script></body></html>`;
+
 // a store like magpie's, small: documents by path, a write told to every
 // open events stream
 function fakeMagpie(t) {
   const docs = new Map(), streams = new Set(), calls = [];
+  // the list's versions, and its own streams; quiet holds what they'd hear
+  const list = { pages: [listDoc({ items: [] })], calls: [], streams: new Set(), quiet: false, landOver: false };
+  const newVersion = (page) => {
+    list.pages.push(page);
+    const n = list.pages.length;
+    if (!list.quiet) for (const s of list.streams) s.write(`data: {"version":${n}}\n\n`);
+    return n;
+  };
   const tell = (p) => { for (const s of streams) s.write(`data: ${JSON.stringify({ paths: [p] })}\n\n`); };
   const err = (res, status, code) => { res.writeHead(status, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }); res.end(JSON.stringify({ error: { code, message: code } })); };
   const server = http.createServer((req, res) => {
@@ -80,6 +127,50 @@ function fakeMagpie(t) {
     if (req.method === "GET" && url.pathname === "/a/board/") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": CSP, "Vary": "Sec-Fetch-Mode" });
       return res.end(served(PAGE, { api: "/a/board/_api", token: "tok", caps: { db: {}, user: {} }, viewer: { id: "u_0123456789abcdef01234567" } }));
+    }
+    if (req.method === "GET" && url.pathname === "/a/list/") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": CSP });
+      return res.end(served(list.pages.at(-1), { api: "/a/list/_api", token: "tok", caps: { artifact: {} }, viewer: { id: "u_0123456789abcdef01234567" }, version: list.pages.length, home: "/a/list/" }));
+    }
+    if (req.method === "GET" && url.pathname === "/a/ro/") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": CSP });
+      return res.end(served(READ_ONLY, { api: "/a/ro/_api", token: "tok", caps: { artifact: { publish: false } }, viewer: { id: "u_0123456789abcdef01234567" }, version: 1, home: "/a/ro/" }));
+    }
+    if (req.method === "GET" && url.pathname === "/a/list/_api/events") {
+      if (url.searchParams.get("t") !== "tok") return err(res, 403, "not_granted");
+      res.writeHead(200, { "Content-Type": "text/event-stream", "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" });
+      let hello = "retry: 2000\n: magpie\n\n";
+      if (+url.searchParams.get("v") < list.pages.length) hello += `data: {"version":${list.pages.length}}\n\n`;
+      res.write(hello);
+      list.streams.add(res);
+      req.on("close", () => list.streams.delete(res));
+      return;
+    }
+    if (req.method === "POST" && (url.pathname === "/a/list/_api/publish" || url.pathname === "/a/list/_api/meta" || url.pathname.startsWith("/a/ro/_api/"))) {
+      let body = "";
+      req.on("data", (c) => (body += c));
+      req.on("end", () => {
+        const c = JSON.parse(body);
+        list.calls.push({ c, at: url.pathname, origin: req.headers.origin, type: req.headers["content-type"] });
+        const ok = (v) => { res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }); res.end(JSON.stringify(v)); };
+        if (c.t !== "tok" || url.pathname.startsWith("/a/ro/")) return err(res, 403, "not_granted");
+        if (url.pathname.endsWith("/meta")) return ok({ artifacts: { aaaaaaaaaaaaaaaaaaaaaaaaaa: { id: "aaaaaaaaaaaaaaaaaaaaaaaaaa", title: "Other", type: null } } });
+        const every = c.files && Object.values(c.files).every((e) => e && "ifMatch" in e);
+        if (every && list.landOver) newVersion(list.pages.at(-1)); // another's save, first
+        const live = list.pages.length;
+        if (!every && c.base !== live) {
+          res.writeHead(409, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+          return res.end(JSON.stringify({ error: { code: "conflict", message: "conflict", live: String(live) } }));
+        }
+        const n = newVersion(c.html || list.pages.at(-1));
+        const out = { version: String(n) };
+        if (every) {
+          out.shas = Object.fromEntries(Object.keys(c.files).map((p) => [p, "s-" + p]));
+          out.changed = list.landOver ? [{ path: "other.txt", sha256: "s-other" }] : [];
+        }
+        ok(out);
+      });
+      return;
     }
     if (req.method === "GET" && url.pathname === "/a/shared/") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": CSP });
@@ -124,10 +215,13 @@ function fakeMagpie(t) {
     res.writeHead(404);
     res.end();
   });
-  t.after(() => { for (const s of streams) s.destroy(); server.close(); });
+  t.after(() => { for (const s of [...streams, ...list.streams]) s.destroy(); server.close(); });
   return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve({
     base: `http://127.0.0.1:${server.address().port}`,
     calls,
+    list,
+    // another's publish of the list: the agent's, or another view's
+    publishList(state) { return newVersion(listDoc(state)); },
     // the agent's write, through artifact_data
     agentSet(p, data) { const was = docs.get(p); docs.set(p, { path: p, id: p.split("/").pop(), data, version: (was ? was.version : 0) + 1, updated: new Date().toISOString() }); tell(p); },
   })));
@@ -177,6 +271,90 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     const snaps = await page.evaluate(() => window.out.snaps);
     assert.equal(snaps.at(-1), "c:three,a:uno,b:two");
     assert.deepEqual(errors, []);
+  });
+
+  test(`a page publishes itself (${engine})`, async (t) => {
+    const site = await fakeMagpie(t);
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    t.after(() => browser.close());
+    const ctx = await browser.newContext();
+    const a = await ctx.newPage(), b = await ctx.newPage();
+    const errors = [];
+    for (const p of [a, b]) {
+      p.on("pageerror", (e) => errors.push(String(e)));
+      await p.goto(site.base + "/a/list/");
+      await p.waitForFunction(() => window.out, null, { timeout: 15000 });
+    }
+    const items = (p, want) => p.waitForFunction((w) => window.out && window.out.items && window.out.items.join(",") === w, want, { timeout: 15000 });
+    const out = await a.evaluate(() => window.out);
+    assert.equal(out.crash, undefined);
+    assert.equal(out.same, true, "self is the same namespace");
+    assert.equal(out.frozen, true);
+    assert.equal(out.perm, "granted");
+    assert.equal(out.display, "contents");
+    assert.equal(out.editCode, "not_granted");
+    assert.equal(out.syncCode, "invalid_content");
+    assert.deepEqual(out.meta, { aaaaaaaaaaaaaaaaaaaaaaaaaa: { id: "aaaaaaaaaaaaaaaaaaaaaaaaaa", title: "Other", type: null }, nope: { id: "", title: "", type: null } });
+
+    // the whole page: this view and the other reload to it
+    assert.deepEqual(await a.evaluate(() => window.add("one")), { version: "2" });
+    await items(a, "one");
+    await items(b, "one");
+    const pub = site.list.calls.find((c) => c.at.endsWith("/publish"));
+    assert.equal(pub.c.base, 1);
+    assert.equal(pub.origin, "null");
+    assert.match(pub.type, /^text\/plain/);
+    assert.match(pub.c.html, /^<!doctype html>/);
+
+    // another's version won while b didn't hear it: b's edit is refused,
+    // and b goes to the winner
+    site.list.quiet = true;
+    site.publishList({ items: ["one", "agent"] });
+    const lost = await b.evaluate(() => window.add("late").then(() => null, (e) => ({ name: e.name, code: e.code, live: e.live })));
+    assert.deepEqual(lost, { name: "ArtifactError", code: "conflict", live: "3" });
+    await items(b, "one,agent");
+    site.list.quiet = false;
+    await a.reload();
+    await items(a, "one,agent");
+
+    // files: b keeps running and builds on the version it made; a reloads
+    const [aAt, bAt] = [await a.evaluate(() => window.loadedAt), await b.evaluate(() => window.loadedAt)];
+    const saved = await b.evaluate(() => window.save({
+      "data/a.json": '{"a":1}',
+      "img/dot.png": new Blob([new Uint8Array([137, 80, 78, 71])], { type: "image/png" }),
+      "old.txt": null,
+      "x.css": { content: "b{}", contentType: "text/css" },
+    }));
+    assert.deepEqual(saved, { version: "4" });
+    let c = site.list.calls.at(-1).c;
+    assert.equal(c.base, 3);
+    assert.deepEqual(c.files, { "data/a.json": { text: '{"a":1}' }, "img/dot.png": { base64: "iVBORw==", contentType: "image/png" }, "old.txt": null, "x.css": { text: "b{}", contentType: "text/css" } });
+    assert.deepEqual(await b.evaluate(() => window.save({ "data/a.json": '{"a":2}' })), { version: "5" });
+    assert.equal(site.list.calls.at(-1).c.base, 4);
+    await a.waitForFunction((at) => window.loadedAt !== at && window.out, aAt, { timeout: 15000 });
+    assert.equal(await b.evaluate(() => window.loadedAt), bAt, "the view that saved files kept running");
+
+    // with ifMatch on every file another's save may come first: the
+    // answer says what it changed, and the view reloads to bring it
+    const held = await b.evaluate(() => window.save({ "data/a.json": { content: '{"a":3}', ifMatch: "s-a" }, "new.txt": { content: "n", ifMatch: null } }));
+    assert.deepEqual(held, { version: "6", shas: { "data/a.json": "s-data/a.json", "new.txt": "s-new.txt" }, changed: [] });
+    assert.equal(await b.evaluate(() => window.loadedAt), bAt);
+    site.list.landOver = true;
+    const over = await b.evaluate(() => window.save({ "data/a.json": { content: '{"a":4}', ifMatch: "s-a" } }));
+    assert.deepEqual(over, { version: "8", shas: { "data/a.json": "s-data/a.json" }, changed: [{ path: "other.txt", sha256: "s-other" }] });
+    await b.waitForFunction((at) => window.loadedAt !== at && window.out, bAt, { timeout: 15000 });
+    assert.deepEqual(errors, []);
+  });
+
+  test(`publish: false keeps a page from saving itself (${engine})`, async (t) => {
+    const site = await fakeMagpie(t);
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    t.after(() => browser.close());
+    const page = await browser.newPage();
+    await page.goto(site.base + "/a/ro/");
+    await page.waitForFunction(() => window.out, null, { timeout: 15000 });
+    assert.deepEqual(await page.evaluate(() => window.out), { served: true, files: "not_granted", publish: "not_granted", sync: "not_granted" });
+    assert.equal(site.list.calls.length, 0, "nothing was sent");
   });
 
   test(`a shared copy resolves every capability null (${engine})`, async (t) => {

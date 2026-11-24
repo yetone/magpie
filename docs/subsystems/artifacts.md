@@ -112,12 +112,14 @@ address, so:
 
 A page written for claude.ai's artifact runtime (contract 0.2.99) runs
 here as written: `window.claude.use(name)` is there before the page's own
-scripts, and resolves `db`, `user` and the built-in `permissions`
+scripts, and resolves `db`, `user`, `artifact` (and `self`, its former
+name) and the built-in `permissions`
 ([internal/artifact/runtime.js](../../internal/artifact/runtime.js),
 [runtime.go](../../internal/artifact/runtime.go),
 [caps.go](../../internal/artifact/caps.go),
 [db.go](../../internal/artifact/db.go),
-[artifacts_api.go](../../internal/gateway/artifacts_api.go)).
+[artifacts_api.go](../../internal/gateway/artifacts_api.go),
+[artifacts_self.go](../../internal/gateway/artifacts_self.go)).
 
 Declaring:
 
@@ -126,10 +128,10 @@ Declaring:
   forward; `{}` clears them; any other object is the whole set. A version
   keeps the declaration it was published with (`Version.Capabilities`).
 - Every name in the contract is accepted and kept; only `ServedCaps` (`db`,
-  `user`) are served, and the rest resolve null on the page, as an
-  unserved capability does on claude.ai. Declaring `permissions` is
-  refused: it is built in. `db`'s `rules` and `user`'s `scopes` are
-  checked at publish.
+  `user`, `artifact`, `self`) are served, and the rest resolve null on the
+  page, as an unserved capability does on claude.ai. Declaring
+  `permissions` is refused: it is built in. `db`'s `rules`, `user`'s
+  `scopes` and `artifact`'s `{"publish": false}` are checked at publish.
 
 On the page:
 
@@ -153,6 +155,45 @@ On the page:
   `db` (`artifactAPIOpen`), else `not_granted` or `revoked`.
 - `user.id()` is one id for the person at this computer (`viewerID`),
   owner of every artifact here: `isOwner()` and `canEdit()` are true.
+
+The page publishing itself (`artifact`):
+
+- `publish(html)` sends a whole document (doctype first, else
+  `invalid_content`) to `POST /a/<ref>/_api/publish`, built on the
+  version the view is (`base`, the config's `version`). It is saved as
+  the newest version with agent `page` (`PageAgent`; Work › Artifacts
+  says "Saved from the page"), its capabilities and files carried
+  forward. Every open view, this one too, reloads to it. A pinned view
+  (`/a/<id>@<n>/`) goes to the artifact's own address.
+- `publish({path: content})` saves files: a string, a Blob (sent as
+  base64 with its type), `{content, contentType, ifMatch}`,
+  `{delete: true}` or null; `index.html` is the page and can't be
+  deleted. The saving view keeps running, and its next publish builds on
+  the version it made. With `ifMatch` (a sha256, or null for "not there")
+  on every entry, only those files are checked (`Publish.IfMatch`, a
+  `*FileConflict` naming each path's expected and actual sha), so another
+  writer's save to other files may land between; the answer then has
+  `changed`, what that save changed, and the view reloads to bring it.
+  `shas` comes back whenever `ifMatch` was given.
+- A view whose base is no longer the newest is refused `conflict` with
+  `live`, and goes to the winner. Other refusals: `not_declared` (the
+  newest version no longer declares it), `not_granted` (`publish:
+  false`, which `sync` and `edit` refuse too, or another page's token),
+  `too_large`, `invalid_content` (with `limit` for the file count),
+  `rate_limited` (30 a minute per artifact). `edit()` always refuses: a
+  page here changes itself with `publish`. `sync(fn)` runs `fn` and saves
+  nothing, and refuses a page using `<artifact-sync>`.
+- Each new version is told on the events stream as `{"version": n}`, to
+  pages that declare `artifact` or `self`, from the version they are
+  (`v`), so a version published while the page loaded is told at once.
+  A version heard while the view's own publish is on its way waits for
+  that publish's answer, so the view doesn't take its own for another's.
+- A shared artifact is shared again after a page's publish
+  (`ShareLatest`, in the background).
+- `metadata(refs)` (`POST /a/<ref>/_api/meta`) gives the title of each
+  artifact here a ref names, by id, `/a/<id>` or a claude.ai
+  `/artifact/<title>-<id>` link (host ignored), up to 200; it never
+  rejects, and a ref naming nothing gets empty strings.
 
 The store:
 

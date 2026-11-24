@@ -142,6 +142,7 @@ func artifactsMCPTools() []any {
 						"description": "What the page may do beyond static HTML, as Claude's artifacts declare it: {\"db\": {}, \"user\": {}}. " +
 							"db keeps data outside the page, which the page reads and writes through `await claude.use(\"db\")` (doc, collection, get, set, update, delete, where, orderBy, limit, onSnapshot) and you read and seed with " + artifactDataTool + "; " +
 							"{\"db\": {\"rules\": [{\"path\": …, \"read\": …, \"write\": …}]}} sets who reads and writes where. user is who views it, through `await claude.use(\"user\")`. " +
+							"artifact lets the page save itself: `await (await claude.use(\"artifact\")).publish(html)` publishes the whole page, state embedded, as the newest version, and every open view reloads to it; publish({path: content}) saves files and keeps the page running. " +
 							"Any other capability resolves null on the page here, so a page lights it up only when it is there. Left out, an update keeps the version before's; {} clears them.",
 					},
 					"label":   map[string]any{"type": "string", "description": "A short name for this version, at most 60 characters"},
@@ -391,7 +392,8 @@ func (s *Server) artifactsMCPCall(r *http.Request, m mcpMessage) (any, map[strin
 			"instructions": "Artifacts are private pages on this computer, kept with every version, that the user opens in their browser. " +
 				"When a page would be clearer than text, or the user would use the page rather than only read it (a report, a chart, a dashboard, a diagram, an explainer, a prototype, a small app), write it as HTML and publish it with " + artifactPublishTool + ", then give the user its address. " +
 				"To change one, read it first with " + artifactReadTool + " and publish with its id. Delete one only when the user asks. " +
-				"A page that keeps data (a poll, a tracker, a board, a sign-up sheet) declares capabilities {\"db\": {}, \"user\": {}} and reads it with `await claude.use(\"db\")`, as Claude's artifacts do; seed and read its data with " + artifactDataTool + ".",
+				"A page that keeps data (a poll, a tracker, a board, a sign-up sheet) declares capabilities {\"db\": {}, \"user\": {}} and reads it with `await claude.use(\"db\")`, as Claude's artifacts do; seed and read its data with " + artifactDataTool + ". " +
+				"A page that is its own record (a checklist kept in the page) declares {\"artifact\": {}} and publishes itself with `(await claude.use(\"artifact\")).publish(html)`.",
 		}, nil
 	case "ping":
 		return map[string]any{}, nil
@@ -776,6 +778,7 @@ func (s *Server) artifactPage(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "the artifact's runtime can't be made: "+err.Error(), http.StatusInternalServerError)
 				return
 			}
+			rt.Home = ArtifactPagePath + id + "/"
 			body = artifact.WithRuntime(body, rt)
 		}
 	}

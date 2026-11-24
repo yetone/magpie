@@ -175,8 +175,12 @@ as a page written for claude.ai's meets it: window.claude before the page's
 scripts, db and user resolved and the rest null, a bad path a TypeError at
 once, refused calls rejected with their code, every call text/plain from
 Origin null with the page's token, onSnapshot following the page's writes
-and the agent's, and a shared copy resolving every capability null. Both
-engines, under the sandbox CSP, the store faked.
+and the agent's, a page that declares artifact publishing itself (the
+whole page reloads every open view, files keep the saving view running and
+build on its version, a conflict sends the loser to the winner, ifMatch's
+answer brings another's save), publish: false refusing with nothing sent,
+and a shared copy resolving every capability null. Both engines, under the
+sandbox CSP, the store faked.
 
 `mask-alert.test.cjs` checks Insights › Masking's Masking alert (Must2333 on
 X): after the page's list and not in Settings › Usage (nb5p on Discord), Off

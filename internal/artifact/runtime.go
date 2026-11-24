@@ -28,6 +28,12 @@ type RuntimeConfig struct {
 	Viewer struct {
 		ID string `json:"id"`
 	} `json:"viewer"`
+	// Version is the version the page is; Pinned, that its address names
+	// it (<id>@<n>/), so a newer one doesn't reload it. Home is the
+	// artifact's own address, where a publish from a pinned view goes.
+	Version int    `json:"version,omitempty"`
+	Pinned  bool   `json:"pinned,omitempty"`
+	Home    string `json:"home,omitempty"`
 	// Shared: the page is a shared copy, on usemagpie.ai, where nothing
 	// is served and every capability resolves null
 	Shared bool `json:"shared,omitempty"`
@@ -50,6 +56,7 @@ func PageRuntime(a *Artifact, n int, api string) (*RuntimeConfig, error) {
 	c := &RuntimeConfig{API: api, Token: tok, Caps: map[string]any{}}
 	v := a.Version(n)
 	if v != nil {
+		c.Version, c.Pinned = v.N, n > 0
 		for _, name := range ServedCaps {
 			raw, ok := v.Capabilities[name]
 			if !ok {

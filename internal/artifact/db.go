@@ -557,6 +557,8 @@ func merge(base, patch map[string]any) map[string]any {
 type Change struct {
 	Artifact string
 	Paths    []string
+	// Version, when set, is a new version published: no data changed
+	Version int
 }
 
 var (
@@ -584,16 +586,22 @@ func Watch(id string) (<-chan Change, func()) {
 	}
 }
 
-func notify(id string, paths ...string) {
+func notify(id string, paths ...string) { tell(Change{Artifact: id, Paths: paths}) }
+
+// notifyVersion tells id's watchers that version n is published.
+func notifyVersion(id string, n int) { tell(Change{Artifact: id, Version: n}) }
+
+func tell(c Change) {
 	watchMu.Lock()
 	defer watchMu.Unlock()
-	for ch := range watchers[id] {
+	for ch := range watchers[c.Artifact] {
 		select {
-		case ch <- Change{Artifact: id, Paths: paths}:
+		case ch <- c:
 		default:
-			// a watcher that fell behind reads everything again
+			// a watcher that fell behind reads everything again (and
+			// the newest version, from the store)
 			select {
-			case ch <- Change{Artifact: id}:
+			case ch <- Change{Artifact: c.Artifact}:
 			default:
 			}
 		}

@@ -24,8 +24,9 @@ import (
 var capabilityNames = []string{"artifact", "assets", "comments", "db", "dictation", "downloads", "files", "mcp", "room", "sample", "self", "tts", "user"}
 
 // ServedCaps are the capabilities the page runtime gives a page that declares
-// them; permissions is built in and never declared.
-var ServedCaps = []string{"db", "user"}
+// them; permissions is built in and never declared. self is artifact's
+// former name, and resolves the same namespace.
+var ServedCaps = []string{"artifact", "db", "self", "user"}
 
 // Capabilities is a version's declaration, by name.
 type Capabilities map[string]json.RawMessage
@@ -77,6 +78,13 @@ func ParseCapabilities(raw json.RawMessage) (Capabilities, error) {
 			return nil, fmt.Errorf("capability user: %w", err)
 		}
 	}
+	for _, name := range []string{"artifact", "self"} {
+		if v, ok := c[name]; ok {
+			if _, err := ParseArtifactConfig(v); err != nil {
+				return nil, fmt.Errorf("capability %s: %w", name, err)
+			}
+		}
+	}
 	return c, nil
 }
 
@@ -99,6 +107,40 @@ func ParseUserConfig(raw json.RawMessage) (*UserConfig, error) {
 		}
 	}
 	return u, nil
+}
+
+// ArtifactConfig is the artifact capability's declaration (and self's,
+// its former name): {publish: false} keeps the page from saving itself.
+type ArtifactConfig struct {
+	Publish *bool `json:"publish,omitempty"`
+}
+
+// ParseArtifactConfig reads the artifact capability's declaration.
+func ParseArtifactConfig(raw json.RawMessage) (*ArtifactConfig, error) {
+	a := &ArtifactConfig{}
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, a); err != nil {
+			return nil, errors.New("it is {} or {\"publish\": false}")
+		}
+	}
+	return a, nil
+}
+
+// PagePublishes is whether the version's page may publish itself: it
+// declares artifact (or self) without {publish: false}. declared is
+// whether it declares either at all.
+func (c Capabilities) PagePublishes() (publishes, declared bool) {
+	for _, name := range []string{"artifact", "self"} {
+		raw, ok := c[name]
+		if !ok {
+			continue
+		}
+		declared = true
+		if a, err := ParseArtifactConfig(raw); err == nil && (a.Publish == nil || *a.Publish) {
+			publishes = true
+		}
+	}
+	return publishes, declared
 }
 
 // Level is how far a viewer reaches into an artifact's data.

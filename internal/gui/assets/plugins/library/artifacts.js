@@ -12,6 +12,9 @@ function artifactsPage() {
   const UNLINK = LINK + "M3 3l10 10";
   const open = (url) => api("open", { url }).catch(statusErr);
 
+  // who made a version: its agent, or the page itself (artifact.publish)
+  const by = (v) => (v.agent === "page" ? t("Saved from the page") : v.agentName || v.agent);
+
   function row(a) {
     const v = a.versions[0] || {};
     const r = el("div", "row art-row");
@@ -20,7 +23,7 @@ function artifactsPage() {
     r.setAttribute("role", "link");
     r.title = a.description || a.title;
     const who = el("div", "who");
-    const sub = [v.agentName || v.agent, ago(a.updated)];
+    const sub = [by(v), ago(a.updated)];
     if (a.versions.length > 1) sub.push(t("{n} versions", { n: a.versions.length }));
     if (a.shared) sub.push(t("Shared"));
     who.append(el("div", "name", a.title), el("div", "sub", sub.filter(Boolean).join(" · ")));
@@ -50,7 +53,7 @@ function artifactsPage() {
 
   // every version, newest first, each opened at its own address
   function versions(a, anchor) {
-    const opts = a.versions.map((v) => ({ v: v.url, literalName: true, name: t("Version {n}", { n: v.n }) + (v.label ? " · " + v.label : ""), note: [v.agentName || v.agent, stamp(v.at)].filter(Boolean).join(" · ") }));
+    const opts = a.versions.map((v) => ({ v: v.url, literalName: true, name: t("Version {n}", { n: v.n }) + (v.label ? " · " + v.label : ""), note: [by(v), stamp(v.at)].filter(Boolean).join(" · ") }));
     openProtoMenu(anchor, opts, "", (url) => open(url), "Versions");
   }
 

@@ -79,7 +79,7 @@ func artifactsJSON() ([]artifactJSON, error) {
 		for i := len(a.Versions) - 1; i >= 0; i-- {
 			v := a.Versions[i]
 			vj := artifactVersionJSON{N: v.N, At: v.At, Label: v.Label, Agent: v.Agent, Files: len(v.Files), Size: v.Size, URL: gateway.ArtifactURL(a.ID, v.N)}
-			if v.Agent != "" {
+			if v.Agent != "" && v.Agent != artifact.PageAgent {
 				vj.AgentName = nameOf(v.Agent)
 			}
 			j.Versions = append(j.Versions, vj)

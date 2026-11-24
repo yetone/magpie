@@ -2,7 +2,8 @@
 // Work › Artifacts: the pages agents made with Magpie Artifacts, newest
 // first. Its sidebar button sits after Library and goes with it when the
 // Library is off; in the header's row Library's head leads to it, and
-// Settings' search finds it. A row says who made it, when, and how many versions it
+// Settings' search finds it. A row says who made it (an agent, or the page
+// saving itself), when, and how many versions it
 // has, and a click opens it at the gateway's address; its menu copies the
 // link, opens an earlier version, shares it on usemagpie.ai and stops
 // sharing it, and deletes it after asking. With none
@@ -22,7 +23,7 @@ const now = Date.now();
 const artifacts = [
   { id: A, title: "Quarterly report", created: new Date(now - 3 * 864e5).toISOString(), updated: new Date(now - 2 * 36e5).toISOString(), url: at(A),
     versions: [
-      { n: 2, at: new Date(now - 2 * 36e5).toISOString(), label: "fixed totals", agent: "codex", agentName: "Codex", files: 2, size: 900, url: at(A, 2) },
+      { n: 2, at: new Date(now - 2 * 36e5).toISOString(), label: "fixed totals", agent: "page", files: 2, size: 900, url: at(A, 2) },
       { n: 1, at: new Date(now - 3 * 864e5).toISOString(), agent: "codex", agentName: "Codex", files: 1, size: 400, url: at(A, 1) },
     ] },
   { id: B, title: "Launch plan", created: new Date(now - 5 * 864e5).toISOString(), updated: new Date(now - 5 * 864e5).toISOString(), url: at(B),
@@ -30,15 +31,15 @@ const artifacts = [
 ];
 
 const words = {
-  en: { nav: "Artifacts", versions: "2 versions", empty: "No artifacts yet", copy: "Copy link", earlier: "Earlier versions", del: "Delete", v1: "Version 1",
+  en: { nav: "Artifacts", page: "Saved from the page", versions: "2 versions", empty: "No artifacts yet", copy: "Copy link", earlier: "Earlier versions", del: "Delete", v1: "Version 1",
     share: "Share…", shareGo: "Share", shared: "Shared", copyShared: "Copy shared link", stop: "Stop sharing", ask: "Make a Magpie Artifact: a one-page report of this week's git commits, with a chart", can: "Agents that can make one: ", turnOn: "Turn it on in the Library", manage: "Manage", many: "25 agents can make one" },
-  zh: { nav: "Artifacts", versions: "2 个版本", empty: "还没有 Artifact", copy: "复制链接", earlier: "之前的版本", del: "删除", v1: "版本 1",
+  zh: { nav: "Artifacts", page: "由页面保存", versions: "2 个版本", empty: "还没有 Artifact", copy: "复制链接", earlier: "之前的版本", del: "删除", v1: "版本 1",
     share: "分享…", shareGo: "分享", shared: "已分享", copyShared: "复制分享链接", stop: "停止分享", ask: "用 Magpie Artifacts 把这周的 git 提交做成一页带图表的周报", can: "可以做 Artifact 的 Agent：", turnOn: "在资源库中开启", manage: "管理", many: "25 个 Agent 可以做 Artifact" },
-  "zh-TW": { nav: "Artifacts", versions: "2 個版本", empty: "還沒有 Artifact", copy: "複製連結", earlier: "之前的版本", del: "刪除", v1: "版本 1",
+  "zh-TW": { nav: "Artifacts", page: "由頁面儲存", versions: "2 個版本", empty: "還沒有 Artifact", copy: "複製連結", earlier: "之前的版本", del: "刪除", v1: "版本 1",
     share: "分享…", shareGo: "分享", shared: "已分享", copyShared: "複製分享連結", stop: "停止分享", ask: "用 Magpie Artifacts 把這週的 git 提交做成一頁帶圖表的週報", can: "可以做 Artifact 的 Agent：", turnOn: "在資源庫中開啟", manage: "管理", many: "25 個 Agent 可以做 Artifact" },
-  ja: { nav: "Artifacts", versions: "2 個のバージョン", empty: "Artifact はまだありません", copy: "リンクをコピー", earlier: "以前のバージョン", del: "削除", v1: "バージョン 1",
+  ja: { nav: "Artifacts", page: "ページから保存", versions: "2 個のバージョン", empty: "Artifact はまだありません", copy: "リンクをコピー", earlier: "以前のバージョン", del: "削除", v1: "バージョン 1",
     share: "共有…", shareGo: "共有", shared: "共有中", copyShared: "共有リンクをコピー", stop: "共有を停止", ask: "Magpie Artifacts で、今週の git コミットをグラフ付きの 1 ページのレポートにして", can: "Artifact を作れるエージェント：", turnOn: "ライブラリでオンにする", manage: "管理", many: "25 個のエージェントが Artifact を作れます" },
-  de: { nav: "Artifacts", versions: "2 Versionen", empty: "Noch keine Artifacts", copy: "Link kopieren", earlier: "Frühere Versionen", del: "Löschen", v1: "Version 1",
+  de: { nav: "Artifacts", page: "Von der Seite gespeichert", versions: "2 Versionen", empty: "Noch keine Artifacts", copy: "Link kopieren", earlier: "Frühere Versionen", del: "Löschen", v1: "Version 1",
     share: "Teilen …", shareGo: "Teilen", shared: "Geteilt", copyShared: "Geteilten Link kopieren", stop: "Nicht mehr teilen", ask: "Mach mit Magpie Artifacts aus den Git-Commits dieser Woche einen einseitigen Bericht mit Diagramm", can: "Agents, die eines erstellen können: ", turnOn: "In der Bibliothek einschalten", manage: "Verwalten", many: "25 Agents können eines erstellen" },
 };
 const LINK = "https://usemagpie.ai/a/abcdefghijklmnop";
@@ -111,7 +112,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await rows.count(), 2, where);
         assert.equal(await rows.nth(0).locator(".name").textContent(), "Quarterly report", where);
         const sub = await rows.nth(0).locator(".sub").textContent();
-        assert.ok(sub.startsWith("Codex · ") && sub.endsWith(" · " + w.versions), `${where}: ${sub}`);
+        assert.ok(sub.startsWith(w.page + " · ") && sub.endsWith(" · " + w.versions), `${where}: the page saved the newest: ${sub}`);
         assert.ok((await rows.nth(1).locator(".sub").textContent()).startsWith("Claude Code · "), where);
         assert.ok(!(await rows.nth(1).locator(".sub").textContent()).includes(w.versions.slice(2)), `${where}: one version says no count`);
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${where}: scrolls sideways`);
@@ -133,6 +134,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const items = page.locator(".proto-menu .pm-item");
         assert.equal(await items.count(), 2, where);
         assert.ok((await items.nth(1).locator(".pm-name").textContent()).startsWith(w.v1), where);
+        assert.ok((await items.nth(0).locator(".pm-note").textContent()).startsWith(w.page + " · "), `${where}: version 2 was saved from the page`);
+        assert.ok((await items.nth(1).locator(".pm-note").textContent()).startsWith("Codex · "), `${where}: version 1 by Codex`);
         await items.nth(1).click();
         await until(() => got.opened.length >= 2);
         assert.deepEqual(got.opened, [at(A), at(A, 1)], `${where}: opens version 1`);
