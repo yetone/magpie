@@ -412,7 +412,17 @@ func buildModels(agent string) []catalog.Model {
 		// GPT group's tool-call arguments stream as the member sends them
 		// instead of being held for a Chat answer
 		if e.Group == "" {
-			if n := e.Provider.Native(e.Model); n != "" {
+			if e.Provider.AgentGemini(e.Model) {
+				// a Gemini model its provider serves on Gemini's API:
+				// there for omp and OmO, which take it first, not
+				// translated from Anthropic's (provider.AgentGemini);
+				// an agent with no Gemini API of its own (Pi, droid,
+				// dsh) keeps the one Native names
+				m.APIs = []string{string(provider.Gemini)}
+				if n := e.Provider.Native(e.Model); n != "" {
+					m.APIs = append(m.APIs, string(n))
+				}
+			} else if n := e.Provider.Native(e.Model); n != "" {
 				m.APIs = []string{string(n)}
 			} else {
 				// Gemini clients also reach Code Assist and Google plugins

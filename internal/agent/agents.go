@@ -978,6 +978,11 @@ func piModelOn(m catalog.Model, gw string, native bool, on string) map[string]an
 			e["compat"] = map[string]any{"forceAdaptiveThinking": true}
 		}
 	case !native:
+	case slices.Contains(m.APIs, string(provider.Gemini)):
+		// first, as a Gemini model a relay also serves on Messages is
+		// listed there too (provider.AgentGemini); Pi's own folder has
+		// it taken out (piAsked)
+		e["api"], e["baseUrl"] = "google-generative-ai", gw+"/v1beta"
 	case slices.Contains(m.APIs, string(provider.Responses)):
 		// strict left out of a tool of a turn asked there is taken as a
 		// strict-mode schema, every property required, optional ones
@@ -990,8 +995,6 @@ func piModelOn(m catalog.Model, gw string, native bool, on string) map[string]an
 		if gateway.AsksAdaptively(m.ID) {
 			e["compat"] = map[string]any{"forceAdaptiveThinking": true}
 		}
-	case slices.Contains(m.APIs, string(provider.Gemini)):
-		e["api"], e["baseUrl"] = "google-generative-ai", gw+"/v1beta"
 	}
 	if m.Images {
 		e["input"] = []string{"text", "image"}

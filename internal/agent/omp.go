@@ -733,6 +733,16 @@ func ompProviderAt(gw, version string) ompProviderEntry {
 		}
 		mode := "effort"
 		switch {
+		case slices.Contains(m.APIs, string(provider.Gemini)):
+			// #4277: a Gemini model on Gemini's own API at the gateway's
+			// /v1beta, as OmO's; omp posts to baseUrl/models/<id>:
+			// streamGenerateContent?alt=sse with x-goog-api-key, the key
+			// being "N/A" (kNoAuth) under auth: none, which loopback takes
+			// (pi-ai providers/google.ts, 16.0.0 to 18.14.0). First, as a
+			// Gemini model a relay also serves on Messages is listed there
+			// too (provider.AgentGemini)
+			e.API, e.BaseURL = "google-generative-ai", gw+"/v1beta"
+			mode = ompGeminiMode(m.ID)
 		case slices.Contains(m.APIs, string(provider.Responses)):
 			e.API = "openai-responses"
 		case slices.Contains(m.APIs, string(provider.Anthropic)):
@@ -747,14 +757,6 @@ func ompProviderAt(gw, version string) ompProviderEntry {
 			if gateway.AdaptiveThinking(m.ID) {
 				mode = "anthropic-adaptive"
 			}
-		case slices.Contains(m.APIs, string(provider.Gemini)):
-			// #4277: a Gemini model on Gemini's own API at the gateway's
-			// /v1beta, as OmO's; omp posts to baseUrl/models/<id>:
-			// streamGenerateContent?alt=sse with x-goog-api-key, the key
-			// being "N/A" (kNoAuth) under auth: none, which loopback takes
-			// (pi-ai providers/google.ts, 16.0.0 to 18.14.0)
-			e.API, e.BaseURL = "google-generative-ai", gw+"/v1beta"
-			mode = ompGeminiMode(m.ID)
 		}
 		// Without input omp takes it from a bundled model its fuzzy id match
 		// finds, else text only; a model the source never answered for is

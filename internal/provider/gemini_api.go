@@ -2,6 +2,7 @@ package provider
 
 import (
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/yetone/magpie/internal/lazyre"
@@ -139,4 +140,31 @@ func (p *Provider) aiStudioNative() {
 // the OpenAI-compatible list's, which is the Gemini API's list again.
 func (p Provider) AIStudioPair() bool {
 	return strings.EqualFold(p.Chat, AIStudioChat) && strings.EqualFold(p.Gemini, AIStudioGemini)
+}
+
+// AgentGemini reports whether an agent that asks each model on one API
+// (omp, OmO) is wired to ask model on Gemini's own API rather than the one
+// Native names: a Gemini model at a provider of the user's with a Gemini
+// URL that serves it there, which Native would put on Anthropic's Messages
+// (a relay with no Chat for it) or whose Base URL the user gave as the
+// Gemini one. Native names OpenAI's and Anthropic's APIs only, so
+// TJHHHH's Tokenflow relay (Anthropic and Gemini URLs, on Discord) had
+// omp ask gemini-4 on Messages, and every turn went out translated to
+// Gemini. A provider whose Chat serves the model keeps it there, as
+// before (TestOmpGeminiModelsAskedOnGeminisAPI's hybrid), and so does a
+// model the user set to an API of its own (APIs names that one alone).
+func (p Provider) AgentGemini(model string) bool {
+	if p.Gemini == "" || p.Account != nil || p.IsVertex() || p.IsRemoteMagpie() || p.NamedOnlyOn(Gemini) || !geminiNamed(model) {
+		return false
+	}
+	if apis := p.APIs(model); apis != nil && !slices.Contains(apis, Gemini) {
+		return false
+	}
+	return Protocol(p.BaseAPI) == Gemini || p.Native(model) == Anthropic
+}
+
+// geminiNamed is whether model is one of Google's Gemini models by its
+// name, after any vendor prefix (google/gemini-3-pro, models/gemini-…).
+func geminiNamed(model string) bool {
+	return strings.HasPrefix(strings.ToLower(model[strings.LastIndex(model, "/")+1:]), "gemini")
 }
