@@ -130,10 +130,28 @@ type memPrev struct {
 // (Alex on Discord: the cloud magpie, in Mem's own magpie provider), never
 // this magpie's, as in Alma (almaMagpie). One magpie set up and the user
 // then pointed at a proxy in front of this gateway is still magpie's
-// (#1985), Check asking the address.
+// (#1985), Check asking the address, while its model is one this magpie
+// serves: one on a model this magpie doesn't have is a magpie on a server
+// imported over magpie's own since (Alex on Discord, 11-25), never this
+// one behind a proxy.
 func memOn(s memState, set bool) (memProvider, bool) {
 	p, ok := s.Providers[magpieID]
-	return p, ok && s.Enabled && s.Active == magpieID && (set || !onAnotherMachine(memBase(p)))
+	if !ok || !s.Enabled || s.Active != magpieID {
+		return p, false
+	}
+	if !onAnotherMachine(memBase(p)) {
+		return p, true
+	}
+	return p, set && isMagpie(p.Model)
+}
+
+// memElsewhere says p, Mem's provider named magpie, sends Mem's requests
+// to another machine than magpie wrote: the user pointed it there since
+// (a magpie on a server imported over magpie's, or a proxy of theirs), and
+// it is theirs, never removed or written over on the way out.
+func memElsewhere(p memProvider) bool {
+	b := memBase(p)
+	return onAnotherMachine(b) && !sameHost(b, gatewayV1())
 }
 
 // memBase is where p sends Mem's requests.
@@ -327,6 +345,15 @@ func nowledgeMem(home string) *Agent {
 						return errMemDown
 					}
 					return wire(c, s, ref)
+				}
+				// magpie's provider the user pointed at another machine
+				// since magpie set it up is theirs (memElsewhere): Alex on
+				// Discord imported the magpie on their server over it, and
+				// Disconnect removed it, as it wasn't there before magpie.
+				// What magpie stashed goes, and Mem is left as the user has
+				// it, as for a magpie on a server never set up here.
+				if p, ok := s.Providers[magpieID]; ok && memElsewhere(p) {
+					forget(keyPrev)
 				}
 				_, on := memOn(s, unstashPeek(keyPrev) != "")
 				if p, ok := s.Providers[s.Active]; ok && !on {
