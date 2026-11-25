@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -401,4 +402,178 @@ func TestCodexOwnModelOutThenKeptOnChatGPT(t *testing.T) {
 		t.Fatal(err)
 	}
 	onSignIn("kept on ChatGPT, allowance back")
+}
+
+// Codex wired beside its ChatGPT sign-in by picking a magpie model (codex.beside
+// without codex.joined), after which Codex itself switched back to one of its
+// own models in config.toml: when the ChatGPT account runs out, Sync must still
+// take Codex over onto magpie (via codex/<model> with a fallback, or another
+// provider's model without one), restore the own model and beside state when
+// allowance returns or on Keep on ChatGPT, and take over again at once if
+// login goes back to ChatGPT while still out.
+func TestCodexBesideOwnModelTakenOverWhileUsedUp(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		fallback []string
+		wantOut  string
+	}{
+		{name: "with fallback", fallback: []string{"fake/m1"}, wantOut: "codex/gpt-a"},
+		{name: "other provider", wantOut: "fake/m1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home, read := codexHome(t, `{"tokens":{"access_token":"x","id_token":"x.e30.x"}}`, "model = \"gpt-a\"\n")
+			if len(tc.fallback) > 0 {
+				if err := provider.Save(provider.Provider{ID: "codex", Fallback: tc.fallback}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			os.WriteFile(filepath.Join(home, ".codex", "models_cache.json"),
+				[]byte(`{"models":[{"slug":"gpt-a","display_name":"A","priority":1}]}`), 0o644)
+			cx := codex(home)
+			// picking a magpie model without Join sets codex.beside alone
+			if err := cx.Fields[0].Set("fake/m1"); err != nil {
+				t.Fatal(err)
+			}
+			if !cx.Beside() || cx.Joined() {
+				t.Fatalf("picked magpie model: beside %v, joined %v", cx.Beside(), cx.Joined())
+			}
+			// Codex itself switches back to one of its own models
+			cfgPath := filepath.Join(home, ".codex", "config.toml")
+			if err := edit.SetTOMLTop(cfgPath, edit.KV{Path: "model", Value: "gpt-a"}); err != nil {
+				t.Fatal(err)
+			}
+			if !cx.Beside() || cx.Joined() || !cx.Wired() {
+				t.Fatalf("switched in Codex: beside %v, joined %v, wired %v\n%s", cx.Beside(), cx.Joined(), cx.Wired(), read())
+			}
+
+			t.Cleanup(func() { codexUsedUp = func() bool { return false } })
+			codexUsedUp = func() bool { return true }
+			if err := cx.Sync(); err != nil {
+				t.Fatal(err)
+			}
+			if cfg := read(); !strings.Contains(cfg, `model_provider = "magpie"`) ||
+				!strings.Contains(cfg, `model = "`+tc.wantOut+`"`) || !cx.AppOut() {
+				t.Fatalf("used up: AppOut %v\n%s", cx.AppOut(), cfg)
+			}
+
+			// allowance returns: back beside the sign-in, preserving beside (not joined)
+			codexUsedUp = func() bool { return false }
+			if err := cx.Sync(); err != nil {
+				t.Fatal(err)
+			}
+			if cfg := read(); strings.Contains(cfg, "model_provider =") || strings.Contains(cfg, "model_catalog_json") ||
+				!strings.Contains(cfg, "openai_base_url") || !strings.Contains(cfg, `model = "gpt-a"`) {
+				t.Fatalf("allowance back:\n%s", cfg)
+			}
+			if cx.AppOut() || !cx.Beside() || cx.Joined() || !cx.Wired() {
+				t.Fatalf("allowance back: AppOut %v, Beside %v, Joined %v, Wired %v", cx.AppOut(), cx.Beside(), cx.Joined(), cx.Wired())
+			}
+
+			// taken over again, then Keep on ChatGPT: stays connected beside the sign-in
+			codexUsedUp = func() bool { return true }
+			if err := cx.Sync(); err != nil {
+				t.Fatal(err)
+			}
+			if !cx.AppOut() {
+				t.Fatalf("used up again: not AppOut:\n%s", read())
+			}
+			if err := cx.Field("login").Set("chatgpt"); err != nil {
+				t.Fatal(err)
+			}
+			if cfg := read(); strings.Contains(cfg, "model_provider =") || strings.Contains(cfg, "model_catalog_json") ||
+				!strings.Contains(cfg, "openai_base_url") || !strings.Contains(cfg, `model = "gpt-a"`) {
+				t.Fatalf("kept on ChatGPT:\n%s", cfg)
+			}
+			if cx.AppOut() || !cx.AppOutOff() || !cx.Beside() || cx.Joined() || !cx.Wired() {
+				t.Fatalf("kept on ChatGPT: AppOut %v, AppOutOff %v, Beside %v, Joined %v, Wired %v",
+					cx.AppOut(), cx.AppOutOff(), cx.Beside(), cx.Joined(), cx.Wired())
+			}
+
+			// back to ChatGPT while still out: taken over at once
+			if err := cx.Field("login").Set(""); err != nil {
+				t.Fatal(err)
+			}
+			if cfg := read(); !strings.Contains(cfg, `model_provider = "magpie"`) ||
+				!strings.Contains(cfg, `model = "`+tc.wantOut+`"`) || !cx.AppOut() {
+				t.Fatalf("back to ChatGPT while out: AppOut %v\n%s", cx.AppOut(), cfg)
+			}
+		})
+	}
+}
+
+// Joined on one of Codex's own models, taken over onto a stand-in model of
+// another provider (no fallback on Codex), then Keep on ChatGPT: Codex goes
+// back to the own model it was on beside its sign-in rather than staying on
+// the stand-in model, and returning sign-in to ChatGPT while still out takes
+// over again at once.
+func TestCodexOwnModelStandInOutThenKeptOnChatGPT(t *testing.T) {
+	home, read := codexHome(t, `{"tokens":{"access_token":"x","id_token":"x.e30.x"}}`, "model = \"gpt-a\"\n")
+	os.WriteFile(filepath.Join(home, ".codex", "models_cache.json"),
+		[]byte(`{"models":[{"slug":"gpt-a","display_name":"A","priority":1}]}`), 0o644)
+	cx := codex(home)
+	if ok, err := cx.Join(); err != nil || !ok {
+		t.Fatalf("join: %v %v", ok, err)
+	}
+	t.Cleanup(func() { codexUsedUp = func() bool { return false } })
+	codexUsedUp = func() bool { return true }
+	if err := cx.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if cfg := read(); !strings.Contains(cfg, `model_provider = "magpie"`) || !strings.Contains(cfg, `model = "fake/m1"`) || !cx.AppOut() {
+		t.Fatalf("used up:\n%s", cfg)
+	}
+	if err := cx.Field("login").Set("chatgpt"); err != nil {
+		t.Fatal(err)
+	}
+	if cfg := read(); strings.Contains(cfg, "model_provider =") || strings.Contains(cfg, "model_catalog_json") ||
+		!strings.Contains(cfg, "openai_base_url") || !strings.Contains(cfg, `model = "gpt-a"`) {
+		t.Fatalf("kept on ChatGPT:\n%s", cfg)
+	}
+	if cx.AppOut() || !cx.AppOutOff() || !cx.Joined() {
+		t.Fatalf("kept on ChatGPT: AppOut %v, AppOutOff %v, Joined %v", cx.AppOut(), cx.AppOutOff(), cx.Joined())
+	}
+	if err := cx.Field("login").Set(""); err != nil {
+		t.Fatal(err)
+	}
+	if cfg := read(); !strings.Contains(cfg, `model_provider = "magpie"`) || !strings.Contains(cfg, `model = "fake/m1"`) || !cx.AppOut() {
+		t.Fatalf("back to ChatGPT while out:\n%s", cfg)
+	}
+}
+
+// Codex on an own model not listed under its magpie catalog (codexOwnViaMagpie
+// empty) while CodexServesWhileOut is true (a fallback is configured): Sync
+// falls through to another provider's model so the Codex app is not left
+// greyed out on the used-up account, and puts the model back at the reset.
+func TestCodexOwnModelUnlistedFallsBackToOtherModelWhileUsedUp(t *testing.T) {
+	home, read := codexHome(t, `{"tokens":{"access_token":"x","id_token":"x.e30.x"}}`, "model = \"gpt-unlisted\"\n")
+	if err := provider.Save(provider.Provider{ID: "codex", Fallback: []string{"fake/m1"}}); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(home, ".codex", "models_cache.json"),
+		[]byte(`{"models":[{"slug":"gpt-a","display_name":"A","priority":1}]}`), 0o644)
+	cx := codex(home)
+	if ok, err := cx.Join(); err != nil || !ok {
+		t.Fatalf("join: %v %v", ok, err)
+	}
+	if codexOwnViaMagpie("gpt-unlisted") != "" {
+		t.Fatalf("codexOwnViaMagpie(gpt-unlisted) = %q, want empty", codexOwnViaMagpie("gpt-unlisted"))
+	}
+	if !provider.CodexServesWhileOut("gpt-unlisted") {
+		t.Fatal("CodexServesWhileOut(gpt-unlisted) = false, want true so the fall-through is exercised")
+	}
+	t.Cleanup(func() { codexUsedUp = func() bool { return false } })
+	codexUsedUp = func() bool { return true }
+	if err := cx.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if cfg := read(); !strings.Contains(cfg, `model_provider = "magpie"`) || !strings.Contains(cfg, `model = "fake/m1"`) || !cx.AppOut() {
+		t.Fatalf("used up:\n%s", cfg)
+	}
+	codexUsedUp = func() bool { return false }
+	if err := cx.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if cfg := read(); strings.Contains(cfg, "model_provider =") || !strings.Contains(cfg, `model = "gpt-unlisted"`) || cx.AppOut() || !cx.Joined() {
+		t.Fatalf("allowance back: AppOut %v, Joined %v\n%s", cx.AppOut(), cx.Joined(), cfg)
+	}
 }
