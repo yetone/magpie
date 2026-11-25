@@ -369,7 +369,10 @@ func accountGroupsJSON() []access.AccountGroup {
 // it, so one that may have a member of pid's reaches pid through it. A
 // group reaches pid when a member it names is pid's, a group in it does,
 // a pattern of its may match a model of pid's (a regular expression may
-// match any), or a member it resolves to now is pid's.
+// match any), a member it resolves to now is pid's, or it follows a
+// template (Group.Template): magpie picks its members again from the
+// user's models as they change, so a model of pid's may join it later
+// with no save by the user, and a key held to it would reach pid then.
 func groupRefs(pid string) []access.GroupRef {
 	pid = strings.TrimSpace(pid)
 	all := provider.Groups()
@@ -384,6 +387,9 @@ func groupRefs(pid string) []access.GroupRef {
 			return false
 		}
 		seen[strings.ToLower(g.ID)] = true
+		if g.Template != "" {
+			return true
+		}
 		for _, m := range slices.Concat(g.Members, g.Matched) {
 			if id, ok := strings.CutPrefix(m, provider.GroupPrefix); ok {
 				if in, ok := byID[strings.ToLower(id)]; ok && reaches(in, seen) {
