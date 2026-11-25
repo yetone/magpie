@@ -542,6 +542,17 @@ the key's leaves the call as asked, with a log line (`compactRefused`).
   process's own: sticky routing is flushed to disk before the socket goes
   (`FlushSticks`), but while the old one drains, a provider's limits can be
   passed by what each has in flight.
+  A listener closed before the shutdown is not a request cut, and the log
+  says so only when one was (`shutdownServer`): on Windows `serveWSL`
+  closes the listeners it opened on the WSL networks when the gateway's
+  context ends, and the shutdown closes them again, which a Windows quit
+  with a WSL network read as a timeout and wrote as "requests still in
+  flight; they are cut" with no request in flight (#7729); a handover's
+  own socket (`stopAccepting`) is closed before the shutdown too, and said
+  the same.
+  `TestShutdownIgnoresAListenerClosedBefore`,
+  `TestShutdownCutsARequestStillAnswering` in
+  [`shutdown_test.go`](../../internal/gateway/shutdown_test.go).
   `TestHandedOverGatewayFinishesItsStream`,
   `TestHandedOffGatewayTakesNoNewConnection`,
   `TestHandedOffGatewayAnswersAConnectionItTook`,

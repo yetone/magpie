@@ -1076,17 +1076,7 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		// away, and its client opens a new one
 		s.realtimes.end()
 		go func() { defer close(sockets); s.sockets.drain(c); s.realtimes.wait(c) }()
-		if err := srv.Shutdown(c); err != nil {
-			// the requests still answering are cut where they are, and
-			// an agent streaming one reads a reply broken off (Codex:
-			// "error decoding response body")
-			log.Printf("gateway: ending after %s with requests still in flight; they are cut (%v)", s.drainFor(), err)
-			// Shutdown leaves them answering: closing their connections
-			// cancels each one's context, so its upstream call ends too
-			// and holds nothing (provider.Hold) past the gateway's end in
-			// a process that goes on (a restart, a test)
-			srv.Close()
-		}
+		s.shutdownServer(srv, c)
 		<-sockets
 		// An inline description may still have to save after its request
 		// ended, or was canceled: wait for every such description to save or
@@ -1121,6 +1111,32 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		}
 		ln = next
 	}
+}
+
+// shutdownServer ends srv's serving: the requests in flight are given
+// the drain to finish, and the ones still answering when the drain is
+// over are cut.
+//
+// A listener closed before the shutdown is not a cut request. On Windows
+// serveWSL closes the listeners it opened on the WSL networks when the
+// gateway's context ends, and the shutdown closes them again: its second
+// close says the network connection is closed, and the drain reads that
+// as a timeout and says the requests in flight were cut — every Windows
+// quit said so, with no request in flight (#7729).
+func (s *Server) shutdownServer(srv *http.Server, c context.Context) {
+	err := srv.Shutdown(c)
+	if err == nil || errors.Is(err, net.ErrClosed) {
+		return
+	}
+	// the requests still answering are cut where they are, and
+	// an agent streaming one reads a reply broken off (Codex:
+	// "error decoding response body")
+	log.Printf("gateway: ending after %s with requests still in flight; they are cut (%v)", s.drainFor(), err)
+	// Shutdown leaves them answering: closing their connections
+	// cancels each one's context, so its upstream call ends too
+	// and holds nothing (provider.Hold) past the gateway's end in
+	// a process that goes on (a restart, a test)
+	srv.Close()
 }
 
 // Handler routes the client APIs.
