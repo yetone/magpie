@@ -227,7 +227,8 @@ a local test upstream, with no vendor credentials.
 #### DeepSeek Harness: the DeepSeek row by hand
 
 Connecting dsh gives it magpie's own routes on dsh's pi-ai adapter
-(`magpie`, `magpie-responses`, `magpie-anthropic`). dsh's DeepSeek row
+(`magpie`, `magpie-responses`, `magpie-anthropic`, and
+`magpie-gemini` from dsh 0.2.2-rc.2). dsh's DeepSeek row
 (`llm-deepseek`, the `deepseek-official` route) is dsh's: magpie never
 points it anywhere, and Disconnect leaves an entry of yours there alone.
 That row does more for DeepSeek's own models than pi-ai does: when dsh's

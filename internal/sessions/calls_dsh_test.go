@@ -129,7 +129,7 @@ func TestDshCallsKept(t *testing.T) {
 // a route of the user's named like one is not taken for it.
 func TestDshGatewayProviderTakesEveryRouteOfMagpies(t *testing.T) {
 	for p, want := range map[string]bool{
-		"magpie": true, "magpie-responses": true, "magpie-anthropic": true, "dial": true,
+		"magpie": true, "magpie-responses": true, "magpie-anthropic": true, "magpie-gemini": true, "dial": true,
 		"magpie-mine": false, "jieyue": false, "": false,
 	} {
 		if got := dshGatewayProvider(dshSource{Provider: p}); got != want {

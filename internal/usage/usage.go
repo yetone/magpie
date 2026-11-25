@@ -545,10 +545,49 @@ func AgentOf(ua string) string {
 			return k.ID
 		}
 	}
+	if libraries[l] {
+		// an SDK's own User-Agent first, the app's after it: DSH's Gemini
+		// route goes out as "google-genai-sdk/2.32.0 gl-node/v25.8.2,
+		// deepseek-harness/0.2.2-rc.5 (+https://…) dsh-profile/headless"
+		if id := agentAfter(ua); id != "" {
+			return id
+		}
+	}
 	if name == "" {
 		return "other"
 	}
 	return name
+}
+
+// agentAfter is the known agent a User-Agent names after its first
+// product, among the products (not the comments) it goes on to list, or "".
+func agentAfter(ua string) string {
+	var b strings.Builder
+	depth := 0
+	for _, r := range ua {
+		switch {
+		case r == '(':
+			depth++
+		case r == ')' && depth > 0:
+			depth--
+		case depth == 0:
+			b.WriteRune(r)
+		}
+	}
+	words := strings.FieldsFunc(b.String(), func(r rune) bool { return r == ' ' || r == ',' })
+	for _, w := range words[min(1, len(words)):] {
+		name, _, _ := strings.Cut(w, "/")
+		l := strings.ToLower(name)
+		if l == "" || libraries[l] {
+			continue
+		}
+		for _, k := range knownAgents() {
+			if slices.Contains(k.Names, l) || slices.ContainsFunc(k.UA, func(p string) bool { return strings.HasPrefix(l, p) }) {
+				return k.ID
+			}
+		}
+	}
+	return ""
 }
 
 // ---- summaries --------------------------------------------------------------
