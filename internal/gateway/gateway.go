@@ -1319,6 +1319,7 @@ func (s *Server) routes() *routeMux {
 	mux.HandleFunc("POST "+ArtifactPagePath+"{ref}/"+artifactAPIDir+"sample", s.artifactSample)
 	mux.HandleFunc("POST "+ArtifactPagePath+"{ref}/"+artifactAPIDir+"comments", s.artifactComments)
 	mux.HandleFunc("POST "+ArtifactPagePath+"{ref}/"+artifactAPIDir+"tts", s.artifactTTS)
+	mux.HandleFunc("POST "+ArtifactPagePath+"{ref}/"+artifactAPIDir+"dictation", s.artifactDictation)
 	mux.HandleFunc("GET "+ArtifactPagePath+"{ref}/"+artifactAPIDir+"shell", s.artifactShellEvents)
 	mux.HandleFunc("GET "+artifactBlobPath+"{id}", s.artifactBlob)
 	mux.HandleFunc(ImageMCPPath, s.imageMCP)

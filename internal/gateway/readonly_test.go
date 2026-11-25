@@ -67,7 +67,7 @@ var readOnlyRefused = []string{
 	SearchMCPPath, VisionMCPPath, ImageMCPPath, ImageMCPFiles + "{name}",
 	BrowserMCPPath, MemoryMCPPath, SessionsMCPPath, ArtifactsMCPPath, "GET " + ArtifactPagePath + "{ref}", "GET " + ArtifactPagePath + "{ref}/{path...}",
 	"POST " + ArtifactPagePath + "{ref}/_api/db", "GET " + ArtifactPagePath + "{ref}/_api/events",
-	"POST " + ArtifactPagePath + "{ref}/_api/publish", "POST " + ArtifactPagePath + "{ref}/_api/meta", "POST " + ArtifactPagePath + "{ref}/_api/upload", "POST " + ArtifactPagePath + "{ref}/_api/assets", "POST " + ArtifactPagePath + "{ref}/_api/sample", "POST " + ArtifactPagePath + "{ref}/_api/tts", "GET " + ArtifactPagePath + "{ref}/_api/shell", "POST " + ArtifactPagePath + "{ref}/_api/comments", "GET " + artifactBlobPath + "{id}", "GET " + BrowserExtensionPath, "GET " + BrowserStatusPath, ToolsMCPPath, ToolsMCPOne + "{plugin}",
+	"POST " + ArtifactPagePath + "{ref}/_api/publish", "POST " + ArtifactPagePath + "{ref}/_api/meta", "POST " + ArtifactPagePath + "{ref}/_api/upload", "POST " + ArtifactPagePath + "{ref}/_api/assets", "POST " + ArtifactPagePath + "{ref}/_api/sample", "POST " + ArtifactPagePath + "{ref}/_api/dictation", "POST " + ArtifactPagePath + "{ref}/_api/tts", "GET " + ArtifactPagePath + "{ref}/_api/shell", "POST " + ArtifactPagePath + "{ref}/_api/comments", "GET " + artifactBlobPath + "{id}", "GET " + BrowserExtensionPath, "GET " + BrowserStatusPath, ToolsMCPPath, ToolsMCPOne + "{plugin}",
 	HubMCPPath + "{agent}", HubMCPAll, CodexPath + "/", "GET " + CodexCatalogPath,
 	"GET /v1beta/models", "POST /v1beta/models/{call...}", "/",
 }

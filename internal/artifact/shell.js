@@ -13,10 +13,10 @@
 
   // -- words ------------------------------------------------------------
   var WORDS = {
-    zh: { "Comment": "评论", "Comments": "评论", "Add comments": "添加评论", "Add a comment": "添加评论", "Reply": "回复", "Send to {agent}": "发给 {agent}", "Open": "未解决", "Resolved": "已解决", "Resolve": "解决", "Reopen": "重新打开", "Delete": "删除", "Delete?": "确定删除？", "Close": "关闭", "Stop": "停止", "Try again": "重试", "{agent} is working…": "{agent} 正在处理…", "Waiting for {agent}…": "等待 {agent}…", "{agent} couldn't finish: {error}": "{agent} 没能完成：{error}", "No comments yet": "还没有评论", "No resolved comments": "没有已解决的评论", "Comment on the page": "评论整个页面", "You": "你", "The whole page": "整个页面", "Couldn't post: {error}": "没能发出：{error}", "1 reply": "1 条回复", "{n} replies": "{n} 条回复", "magpie can't be reached": "连不上 magpie", "No agent can take it on this computer": "这台电脑上没有能处理它的 agent", "Save “{name}”?": "保存“{name}”？", "Save": "保存", "Cancel": "取消", "Reading aloud": "正在朗读" },
-    "zh-TW": { "Comment": "留言", "Comments": "留言", "Add comments": "新增留言", "Add a comment": "新增留言", "Reply": "回覆", "Send to {agent}": "傳給 {agent}", "Open": "未解決", "Resolved": "已解決", "Resolve": "解決", "Reopen": "重新開啟", "Delete": "刪除", "Delete?": "確定刪除？", "Close": "關閉", "Stop": "停止", "Try again": "重試", "{agent} is working…": "{agent} 正在處理…", "Waiting for {agent}…": "等待 {agent}…", "{agent} couldn't finish: {error}": "{agent} 沒能完成：{error}", "No comments yet": "還沒有留言", "No resolved comments": "沒有已解決的留言", "Comment on the page": "留言給整個頁面", "You": "你", "The whole page": "整個頁面", "Couldn't post: {error}": "沒能送出：{error}", "1 reply": "1 則回覆", "{n} replies": "{n} 則回覆", "magpie can't be reached": "連不上 magpie", "No agent can take it on this computer": "這台電腦上沒有能處理它的 agent", "Save “{name}”?": "儲存「{name}」？", "Save": "儲存", "Cancel": "取消", "Reading aloud": "正在朗讀" },
-    ja: { "Comment": "コメント", "Comments": "コメント", "Add comments": "コメントを追加", "Add a comment": "コメントを追加", "Reply": "返信", "Send to {agent}": "{agent} に送る", "Open": "未解決", "Resolved": "解決済み", "Resolve": "解決", "Reopen": "再開", "Delete": "削除", "Delete?": "削除しますか？", "Close": "閉じる", "Stop": "停止", "Try again": "再試行", "{agent} is working…": "{agent} が作業中…", "Waiting for {agent}…": "{agent} を待っています…", "{agent} couldn't finish: {error}": "{agent} は完了できませんでした：{error}", "No comments yet": "コメントはまだありません", "No resolved comments": "解決済みのコメントはありません", "Comment on the page": "ページ全体にコメント", "You": "あなた", "The whole page": "ページ全体", "Couldn't post: {error}": "投稿できませんでした：{error}", "1 reply": "返信 1 件", "{n} replies": "返信 {n} 件", "magpie can't be reached": "magpie に接続できません", "No agent can take it on this computer": "このコンピュータには対応できる agent がありません", "Save “{name}”?": "「{name}」を保存しますか？", "Save": "保存", "Cancel": "キャンセル", "Reading aloud": "読み上げ中" },
-    de: { "Comment": "Kommentieren", "Comments": "Kommentare", "Add comments": "Kommentare hinzufügen", "Add a comment": "Kommentar hinzufügen", "Reply": "Antworten", "Send to {agent}": "An {agent} senden", "Open": "Offen", "Resolved": "Erledigt", "Resolve": "Erledigen", "Reopen": "Wieder öffnen", "Delete": "Löschen", "Delete?": "Löschen?", "Close": "Schließen", "Stop": "Stoppen", "Try again": "Erneut versuchen", "{agent} is working…": "{agent} arbeitet…", "Waiting for {agent}…": "Wartet auf {agent}…", "{agent} couldn't finish: {error}": "{agent} wurde nicht fertig: {error}", "No comments yet": "Noch keine Kommentare", "No resolved comments": "Keine erledigten Kommentare", "Comment on the page": "Die ganze Seite kommentieren", "You": "Du", "The whole page": "Die ganze Seite", "Couldn't post: {error}": "Nicht gesendet: {error}", "1 reply": "1 Antwort", "{n} replies": "{n} Antworten", "magpie can't be reached": "magpie ist nicht erreichbar", "No agent can take it on this computer": "Kein Agent auf diesem Computer kann es übernehmen", "Save “{name}”?": "„{name}“ sichern?", "Save": "Sichern", "Cancel": "Abbrechen", "Reading aloud": "Wird vorgelesen" }
+    zh: { "Comment": "评论", "Comments": "评论", "Add comments": "添加评论", "Add a comment": "添加评论", "Reply": "回复", "Send to {agent}": "发给 {agent}", "Open": "未解决", "Resolved": "已解决", "Resolve": "解决", "Reopen": "重新打开", "Delete": "删除", "Delete?": "确定删除？", "Close": "关闭", "Stop": "停止", "Try again": "重试", "{agent} is working…": "{agent} 正在处理…", "Waiting for {agent}…": "等待 {agent}…", "{agent} couldn't finish: {error}": "{agent} 没能完成：{error}", "No comments yet": "还没有评论", "No resolved comments": "没有已解决的评论", "Comment on the page": "评论整个页面", "You": "你", "The whole page": "整个页面", "Couldn't post: {error}": "没能发出：{error}", "1 reply": "1 条回复", "{n} replies": "{n} 条回复", "magpie can't be reached": "连不上 magpie", "No agent can take it on this computer": "这台电脑上没有能处理它的 agent", "Save “{name}”?": "保存“{name}”？", "Save": "保存", "Cancel": "取消", "Reading aloud": "正在朗读", "Listening": "正在听", "Let “{name}” take dictation?": "允许“{name}”听写？", "It gets the words you say, never the sound.": "它只拿到你说的文字，拿不到声音。", "Allow": "允许", "Don't allow": "不允许", "Ask": "询问", "Permissions": "权限", "Dictation": "听写" },
+    "zh-TW": { "Comment": "留言", "Comments": "留言", "Add comments": "新增留言", "Add a comment": "新增留言", "Reply": "回覆", "Send to {agent}": "傳給 {agent}", "Open": "未解決", "Resolved": "已解決", "Resolve": "解決", "Reopen": "重新開啟", "Delete": "刪除", "Delete?": "確定刪除？", "Close": "關閉", "Stop": "停止", "Try again": "重試", "{agent} is working…": "{agent} 正在處理…", "Waiting for {agent}…": "等待 {agent}…", "{agent} couldn't finish: {error}": "{agent} 沒能完成：{error}", "No comments yet": "還沒有留言", "No resolved comments": "沒有已解決的留言", "Comment on the page": "留言給整個頁面", "You": "你", "The whole page": "整個頁面", "Couldn't post: {error}": "沒能送出：{error}", "1 reply": "1 則回覆", "{n} replies": "{n} 則回覆", "magpie can't be reached": "連不上 magpie", "No agent can take it on this computer": "這台電腦上沒有能處理它的 agent", "Save “{name}”?": "儲存「{name}」？", "Save": "儲存", "Cancel": "取消", "Reading aloud": "正在朗讀", "Listening": "正在聽", "Let “{name}” take dictation?": "允許「{name}」聽寫？", "It gets the words you say, never the sound.": "它只拿到你說的文字，拿不到聲音。", "Allow": "允許", "Don't allow": "不允許", "Ask": "詢問", "Permissions": "權限", "Dictation": "聽寫" },
+    ja: { "Comment": "コメント", "Comments": "コメント", "Add comments": "コメントを追加", "Add a comment": "コメントを追加", "Reply": "返信", "Send to {agent}": "{agent} に送る", "Open": "未解決", "Resolved": "解決済み", "Resolve": "解決", "Reopen": "再開", "Delete": "削除", "Delete?": "削除しますか？", "Close": "閉じる", "Stop": "停止", "Try again": "再試行", "{agent} is working…": "{agent} が作業中…", "Waiting for {agent}…": "{agent} を待っています…", "{agent} couldn't finish: {error}": "{agent} は完了できませんでした：{error}", "No comments yet": "コメントはまだありません", "No resolved comments": "解決済みのコメントはありません", "Comment on the page": "ページ全体にコメント", "You": "あなた", "The whole page": "ページ全体", "Couldn't post: {error}": "投稿できませんでした：{error}", "1 reply": "返信 1 件", "{n} replies": "返信 {n} 件", "magpie can't be reached": "magpie に接続できません", "No agent can take it on this computer": "このコンピュータには対応できる agent がありません", "Save “{name}”?": "「{name}」を保存しますか？", "Save": "保存", "Cancel": "キャンセル", "Reading aloud": "読み上げ中", "Listening": "聞き取り中", "Let “{name}” take dictation?": "「{name}」に音声入力を許可しますか？", "It gets the words you say, never the sound.": "渡るのは話した言葉だけで、音声は渡りません。", "Allow": "許可", "Don't allow": "許可しない", "Ask": "毎回確認", "Permissions": "権限", "Dictation": "音声入力" },
+    de: { "Comment": "Kommentieren", "Comments": "Kommentare", "Add comments": "Kommentare hinzufügen", "Add a comment": "Kommentar hinzufügen", "Reply": "Antworten", "Send to {agent}": "An {agent} senden", "Open": "Offen", "Resolved": "Erledigt", "Resolve": "Erledigen", "Reopen": "Wieder öffnen", "Delete": "Löschen", "Delete?": "Löschen?", "Close": "Schließen", "Stop": "Stoppen", "Try again": "Erneut versuchen", "{agent} is working…": "{agent} arbeitet…", "Waiting for {agent}…": "Wartet auf {agent}…", "{agent} couldn't finish: {error}": "{agent} wurde nicht fertig: {error}", "No comments yet": "Noch keine Kommentare", "No resolved comments": "Keine erledigten Kommentare", "Comment on the page": "Die ganze Seite kommentieren", "You": "Du", "The whole page": "Die ganze Seite", "Couldn't post: {error}": "Nicht gesendet: {error}", "1 reply": "1 Antwort", "{n} replies": "{n} Antworten", "magpie can't be reached": "magpie ist nicht erreichbar", "No agent can take it on this computer": "Kein Agent auf diesem Computer kann es übernehmen", "Save “{name}”?": "„{name}“ sichern?", "Save": "Sichern", "Cancel": "Abbrechen", "Reading aloud": "Wird vorgelesen", "Listening": "Hört zu", "Let “{name}” take dictation?": "„{name}“ Diktieren erlauben?", "It gets the words you say, never the sound.": "Die Seite bekommt nur deine Wörter, nie den Ton.", "Allow": "Erlauben", "Don't allow": "Nicht erlauben", "Ask": "Fragen", "Permissions": "Berechtigungen", "Dictation": "Diktieren" }
   };
   var TAGS = { en: "en", zh: "zh-CN", "zh-TW": "zh-TW", ja: "ja-JP", de: "de-DE" };
   function sysLang(s) {
@@ -144,7 +144,7 @@
       case "hello":
         pageThere = true;
         pageFollows = !!d.follows;
-        toPage({ type: "hi" });
+        toPage({ type: "hi", grants: { dictation: grantOf() } });
         toPage({ type: "mode", on: mode });
         sendPins();
         break;
@@ -167,6 +167,8 @@
         break;
       case "escape":
         if (saving) saving.done(false);
+        else if (dAsk) dAsk.done("dismissed");
+        else if (perms) perms.done();
         else if (pop) closePop();
         else if (mode) setMode(false);
         break;
@@ -182,11 +184,28 @@
       case "tts-state":
         drawReading(d.state);
         break;
+      case "dict-start":
+        startDict(d);
+        break;
+      case "dict-stop":
+        if (dict) stopDict(dict, d.viewer ? "viewer_stopped" : "stopped");
+        break;
+      case "dict-ask":
+        (grantOf() === "prompt" && !dict ? askDictation() : Promise.resolve()).then(function () {
+          toPage({ type: "grants", req: d.req, grants: { dictation: grantOf() } });
+        });
+        break;
+      case "perms":
+        openPerms(d.req);
+        break;
     }
   });
   frame.addEventListener("load", function () {
     pageThere = false;
     drawReading("idle");
+    // the page that asked is gone: so is its dictation
+    if (dict) endDict(dict, "hidden");
+    if (perms) perms.done();
     placed = {};
     drawPins();
   });
@@ -484,6 +503,263 @@
     if (readingBar) readingBar.classList.toggle("paused", state === "paused");
   }
 
+  // -- dictation --------------------------------------------------------
+  // the viewer's speech as text for the page. Asked once for each
+  // artifact (kept here, at magpie's origin, until the viewer changes it
+  // in Permissions), the microphone is opened here, never in the page;
+  // while it is open, Listening and a Stop sit at the bottom. The
+  // recording is cut at each pause into phrases, each sent to magpie with
+  // the shell's token, and the page gets only their words: a guess while
+  // a phrase goes on, the settled text once it ends.
+  var GRANT = "magpie.artifact." + C.id + ".dictation";
+  var DMAX = 60 * 60 * 1000, PHRASE_MAX = 30000, QUIET = 800, GUESS_EVERY = 2500;
+  var dict = null, dAsk = null, listenBar = null;
+  function grantOf() {
+    try { return localStorage.getItem(GRANT) || "prompt"; } catch (e) { return "prompt"; }
+  }
+  function setGrant(g) {
+    try { if (g === "prompt") localStorage.removeItem(GRANT); else localStorage.setItem(GRANT, g); } catch (e) {}
+    toPage({ type: "grants", grants: { dictation: grantOf() } });
+  }
+  // the question: "granted", "denied", or "dismissed" when closed unanswered
+  function askDictation() {
+    if (dAsk) return dAsk.p;
+    var node = el("div", "pop save");
+    node.setAttribute("role", "alertdialog");
+    var q = el("div", "ask", [t("Let “{name}” take dictation?", { name: C.title || "" })]);
+    q.id = "dict-q";
+    node.setAttribute("aria-labelledby", "dict-q");
+    var no = button(t("Don't allow")), yes = button(t("Allow"), "primary");
+    node.appendChild(q);
+    node.appendChild(el("div", "size", [t("It gets the words you say, never the sound.")]));
+    node.appendChild(el("div", "acts", [no, yes]));
+    yes.disabled = no.disabled = true;
+    var arm = setTimeout(function () { yes.disabled = no.disabled = false; }, 400);
+    var timer = setTimeout(function () { mine.done("dismissed"); }, 60000);
+    var mine = { node: node };
+    mine.p = new Promise(function (res) {
+      mine.done = function (a) {
+        if (dAsk !== mine) return;
+        dAsk = null;
+        clearTimeout(timer);
+        clearTimeout(arm);
+        node.classList.remove("in");
+        setTimeout(function () { node.remove(); }, 120);
+        if (a !== "dismissed") setGrant(a);
+        res(a);
+      };
+    });
+    dAsk = mine;
+    no.addEventListener("click", function () { mine.done("denied"); });
+    yes.addEventListener("click", function () { mine.done("granted"); });
+    ui.appendChild(node);
+    node.getBoundingClientRect();
+    node.classList.add("in");
+    return mine.p;
+  }
+  function dState(st, reason, message) {
+    var m = { type: "dict-state", state: st };
+    if (reason) m.reason = reason;
+    if (message) m.message = message;
+    toPage(m);
+    drawListening(st);
+  }
+  function recType() {
+    var c = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"];
+    for (var i = 0; i < c.length; i++) if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(c[i])) return c[i];
+    return "";
+  }
+  // a piece of recording to magpie: {text} or {error, message}
+  function hear(s, blob) {
+    var h = { "Content-Type": (blob.type || s.mime || "audio/webm").split(";")[0], "X-Magpie-Token": C.token, "X-Magpie-Version": String(C.pinned ? C.version : 0) };
+    if (s.lang) h["X-Magpie-Language"] = s.lang;
+    return fetch(C.api + "/dictation", { method: "POST", body: blob, headers: h, cache: "no-store" }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (r.ok && j && typeof j.text === "string") return { text: j.text.trim() };
+        var e = (j && j.error) || {};
+        var code = r.status === 429 ? "rate_limited" : { not_granted: 1, unavailable: 1, rate_limited: 1 }[e.code] ? e.code : "upstream_error";
+        return { error: code, message: typeof e.message === "string" ? e.message : "" };
+      });
+    }, function () { return { error: "upstream_error", message: t("magpie can't be reached") }; });
+  }
+  function phrase(s) {
+    var rec = new MediaRecorder(s.stream, s.mime ? { mimeType: s.mime } : undefined);
+    var p = { rec: rec, chunks: [], at: Date.now(), voiced: !s.an, guessing: false, guessAt: 0 };
+    rec.ondataavailable = function (e) { if (e.data && e.data.size) p.chunks.push(e.data); };
+    rec.onstop = function () { if (p.stopped) p.stopped(); };
+    rec.start(500);
+    s.phrase = p;
+  }
+  // a phrase ends: the next starts at once (unless it was the last), and
+  // its words go to the page in the order the phrases were said
+  function cut(s, last) {
+    var p = s.phrase;
+    if (!p || p.cut) return Promise.resolve();
+    p.cut = true;
+    if (!last) phrase(s);
+    return new Promise(function (res) {
+      p.stopped = res;
+      try { p.rec.stop(); } catch (e) { res(); }
+    }).then(function () {
+      if (!p.voiced || !p.chunks.length) return;
+      var heard = hear(s, new Blob(p.chunks, { type: p.chunks[0].type || s.mime }));
+      s.chain = s.chain.then(function () {
+        return heard.then(function (a) {
+          if (dict !== s) return;
+          if (a.error) return endDict(s, a.error, a.message);
+          toPage({ type: "dict-final", text: a.text });
+        });
+      });
+      return s.chain;
+    });
+  }
+  function guess(s, p) {
+    p.guessing = true;
+    p.guessAt = Date.now();
+    hear(s, new Blob(p.chunks, { type: p.chunks[0].type || s.mime })).then(function (a) {
+      p.guessing = false;
+      if (dict === s && s.phrase === p && !p.cut && !a.error && a.text) toPage({ type: "dict-partial", text: a.text });
+    });
+  }
+  var levels = null;
+  function tick(s) {
+    var now = Date.now(), p = s.phrase;
+    if (!p || s.ending) return;
+    if (now - s.began >= DMAX) return stopDict(s, "time_limit");
+    if (s.an && s.ctx.state === "running") {
+      if (!levels || levels.length !== s.an.fftSize) levels = new Float32Array(s.an.fftSize);
+      s.an.getFloatTimeDomainData(levels);
+      var sum = 0;
+      for (var i = 0; i < levels.length; i++) sum += levels[i] * levels[i];
+      var rms = Math.sqrt(sum / levels.length);
+      // a voice stands out of the room's own level, which follows the quiet
+      if (rms > Math.max(0.012, s.floor * 2.5)) { p.voiced = true; s.voiceAt = now; }
+      else s.floor = s.floor ? s.floor * 0.95 + rms * 0.05 : rms;
+    } else p.voiced = true;
+    if (p.voiced && s.an && s.ctx.state === "running" && now - s.voiceAt >= QUIET && now - p.at >= 1000 || now - p.at >= PHRASE_MAX || !p.voiced && now - p.at >= 10000) {
+      cut(s);
+      return;
+    }
+    if (p.voiced && !p.guessing && p.chunks.length && now - p.at >= 1200 && now - p.guessAt >= GUESS_EVERY) guess(s, p);
+  }
+  function startDict(d) {
+    if (dict) { if (!dict.ending && dict.stream) dState("listening"); return; }
+    var lang = typeof d.language === "string" && /^[a-z]{2}(-[A-Za-z]{2})?$/.test(d.language) ? d.language : "";
+    var s = { lang: lang, chain: Promise.resolve(), began: Date.now(), floor: 0, voiceAt: 0 };
+    dict = s;
+    dState("starting");
+    if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) || typeof MediaRecorder !== "function") return endDict(s, "unavailable", "this browser can't record");
+    var g = grantOf();
+    (g === "prompt" ? askDictation() : Promise.resolve(g)).then(function (a) {
+      if (dict !== s) return;
+      if (a === "denied") return endDict(s, "not_granted", "the viewer doesn't let this artifact take dictation");
+      if (a !== "granted") return endDict(s, "dismissed", "the viewer closed the question");
+      return navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }).then(function (stream) {
+        if (dict !== s) { stream.getTracks().forEach(function (k) { k.stop(); }); return; }
+        s.stream = stream;
+        s.mime = recType();
+        var AC = window.AudioContext || window.webkitAudioContext;
+        if (AC) {
+          try {
+            s.ctx = new AC();
+            s.an = s.ctx.createAnalyser();
+            s.an.fftSize = 1024;
+            s.ctx.createMediaStreamSource(stream).connect(s.an);
+            if (s.ctx.resume) s.ctx.resume().catch(function () {});
+          } catch (e) { s.an = null; }
+        }
+        try { phrase(s); } catch (e) { return endDict(s, "upstream_error", "the microphone couldn't be recorded"); }
+        stream.getTracks().forEach(function (k) { k.onended = function () { stopDict(s, "upstream_error"); }; });
+        s.timer = setInterval(function () { tick(s); }, 100);
+        dState("listening");
+      }, function (e) {
+        endDict(s, e && (e.name === "NotAllowedError" || e.name === "SecurityError") ? "not_granted" : "upstream_error", e && e.message || "");
+      });
+    });
+  }
+  // stop: the last phrase's words still go to the page, then idle
+  function stopDict(s, reason) {
+    if (!s || dict !== s || s.ending) return;
+    s.ending = reason;
+    if (!s.stream) return endDict(s, reason);
+    clearInterval(s.timer);
+    dState("finishing");
+    cut(s, true).then(function () { return s.chain; }).then(function () { endDict(s, reason); });
+  }
+  function endDict(s, reason, message) {
+    if (dict !== s) return;
+    dict = null;
+    clearInterval(s.timer);
+    if (dAsk) dAsk.done("dismissed");
+    if (s.phrase && !s.phrase.cut) try { s.phrase.rec.stop(); } catch (e) {}
+    if (s.stream) s.stream.getTracks().forEach(function (k) { k.onended = null; k.stop(); });
+    if (s.ctx && s.ctx.close) s.ctx.close().catch(function () {});
+    dState("idle", reason, message);
+  }
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "hidden" && dict) stopDict(dict, "hidden");
+  });
+  function drawListening(state) {
+    var on = state === "listening" || state === "finishing";
+    if (on && !listenBar) {
+      var stop = button(t("Stop"));
+      stop.addEventListener("click", function () { stopDict(dict, "viewer_stopped"); });
+      listenBar = el("div", "reading listening", [el("span", "dot"), el("span", "what", [t("Listening")]), stop]);
+      listenBar.setAttribute("role", "status");
+      ui.appendChild(listenBar);
+      listenBar.getBoundingClientRect();
+      listenBar.classList.add("in");
+    } else if (!on && listenBar) {
+      var gone = listenBar;
+      listenBar = null;
+      gone.classList.remove("in");
+      setTimeout(function () { gone.remove(); }, 120);
+    }
+    if (listenBar) listenBar.classList.toggle("paused", state === "finishing");
+  }
+
+  // the page's Permissions: what the viewer decided for this artifact,
+  // and where they change it
+  var perms = null;
+  function openPerms(req) {
+    var answer = function () { toPage({ type: "perms-closed", req: req }); };
+    if (perms) return answer();
+    var node = el("div", "pop save perms");
+    node.setAttribute("role", "dialog");
+    var h = el("div", "ask", [t("Permissions")]);
+    h.id = "perms-h";
+    node.setAttribute("aria-labelledby", "perms-h");
+    node.appendChild(h);
+    var seg = el("div", "seg");
+    [["prompt", t("Ask")], ["granted", t("Allow")], ["denied", t("Don't allow")]].forEach(function (o) {
+      var b = el("button", grantOf() === o[0] ? "on" : "", [o[1]]);
+      b.type = "button";
+      b.setAttribute("aria-pressed", String(grantOf() === o[0]));
+      b.addEventListener("click", function () {
+        setGrant(o[0]);
+        Array.prototype.forEach.call(seg.children, function (x) { x.className = x === b ? "on" : ""; x.setAttribute("aria-pressed", String(x === b)); });
+      });
+      seg.appendChild(b);
+    });
+    node.appendChild(el("div", "perm", [el("span", "", [t("Dictation")]), seg]));
+    var close = button(t("Close"));
+    node.appendChild(el("div", "acts", [close]));
+    perms = {
+      done: function () {
+        if (!perms) return;
+        perms = null;
+        node.classList.remove("in");
+        setTimeout(function () { node.remove(); }, 120);
+        answer();
+      }
+    };
+    close.addEventListener("click", perms.done);
+    ui.appendChild(node);
+    node.getBoundingClientRect();
+    node.classList.add("in");
+    close.focus();
+  }
+
   // a thread's card
   // prefill: the page's sendToClaude into the thread {text, sent(j), onClose}
   function openCard(id, at, prefill) {
@@ -704,6 +980,9 @@
   document.addEventListener("keydown", function (e) {
     if (e.key === "Escape" && !e.defaultPrevented) {
       if (saving) saving.done(false);
+      else if (dAsk) dAsk.done("dismissed");
+      else if (perms) perms.done();
+      else if (listenBar) stopDict(dict, "viewer_stopped");
       else if (readingBar) toPage({ type: "tts-stop" });
       else if (pop) closePop();
       else if (mode) setMode(false);

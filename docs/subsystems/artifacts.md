@@ -172,7 +172,8 @@ A page written for claude.ai's artifact runtime (contract 0.2.99) runs
 here as written: `window.claude.use(name)` is there before the page's own
 scripts, and resolves `db`, `user`, `artifact` (and `self`, its former
 name), `assets`, `sample`, `comments` ([Comments](#comments)), `downloads`, `tts` ([Reading
-aloud](#reading-aloud)) and the built-in `permissions`
+aloud](#reading-aloud)), `dictation` ([Dictation](#dictation)) and the
+built-in `permissions`
 ([internal/artifact/runtime.js](../../internal/artifact/runtime.js),
 [runtime.go](../../internal/artifact/runtime.go),
 [caps.go](../../internal/artifact/caps.go),
@@ -515,8 +516,49 @@ Like downloads it is served only in the shell.
   speak is `no_gesture` with `retryAfterMs`, a click or not. A page left
   hidden ends it (`hidden`), and one paused for 5 minutes (`time_limit`).
 - `language` is checked and kept, not sent: OpenAI's speech models tell
-  the language from the text. `busy` (dictation) never comes, since
-  dictation isn't served yet.
+  the language from the text. While the viewer dictates, `speak` and
+  `add` reject `busy`, and a dictation that starts ends the reading
+  (`interrupted`).
+
+### Dictation
+
+`dictation` gives a page the viewer's speech as text
+([internal/gateway/artifacts_dictation.go](../../internal/gateway/artifacts_dictation.go)),
+served only in the shell, in a browser with `MediaRecorder`.
+- The shell holds the microphone, at magpie's origin, so the page's
+  iframe needs no `allow="microphone"` and the page never gets the sound.
+  The page's `start()` must come from the viewer's click or key
+  (`navigator.userActivation`, else `no_gesture`); the shell's
+  `getUserMedia` runs on that activation, which the browser carries from
+  the frame to its parent.
+- Consent is the viewer's, once for each artifact, kept in the shell's
+  `localStorage` (`magpie.artifact.<id>.dictation`): the first start asks
+  "Let “name” take dictation?". Don't allow is kept (`not_granted` from
+  then on); closing the dialog, Escape or a minute without an answer is
+  `dismissed` and asks again on a later click. `permissions.state`
+  reads it as `prompt`, `granted` or `denied`, `request` asks in the same
+  dialog, and `manage` opens a Permissions panel with Ask, Allow and
+  Don't allow.
+- The shell cuts the recording into phrases by level (an `AnalyserNode`
+  against a moving noise floor): 800ms of quiet after speech ends a
+  phrase, and so do 30 seconds of it or 10 seconds of none. A phrase with
+  speech in it is posted to `<page>/_api/dictation` with the shell's
+  token, and its text comes back as one `onFinal`, in order; every 2.5
+  seconds the phrase so far is sent for an `onPartial` guess. The next
+  phrase records while one is sent, so nothing said is lost.
+- The route takes the shell's token alone, for a version that declares
+  `dictation`, a recording of 1 byte to 8 MiB in a browser's format
+  (webm, ogg, mp4, wav), and a language of two letters with an optional
+  region. It asks the first speech-to-text model
+  (`FirstServing(catalog.ServesTranscription)`) through `transcribe` as
+  the `artifacts` agent, so masking, routing and Usage are the
+  transcription route's. With no such model it answers `unavailable`,
+  and at most 120 pieces a minute per artifact (`rate_limited`).
+- While it listens, the shell shows "Listening" and Stop at the bottom.
+  Stop, Escape in the shell, or an Escape in the page that nothing there
+  claimed ends it as `viewer_stopped`; a hidden page ends it (`hidden`),
+  and so do 60 minutes (`time_limit`). `stop()` resolves once the last
+  phrase's words are in.
 
 ## Added by the user, and Claude Code's own tool
 
@@ -651,7 +693,7 @@ go test -tags nogui ./internal/gui -run 'TestArtifactsAPI|TestArtifactsShareAPI|
 go test -tags nogui ./internal/cli -run 'TestArtifacts|TestEveryRouteHasACommandOrIsNamed'
 node --test internal/gui/tests/artifacts-page.test.cjs
 node --test internal/gui/tests/artifact-runtime.test.cjs
-node --test internal/gui/tests/artifact-comments.test.cjs internal/gui/tests/artifact-downloads.test.cjs internal/gui/tests/artifact-tts.test.cjs
+node --test internal/gui/tests/artifact-comments.test.cjs internal/gui/tests/artifact-downloads.test.cjs internal/gui/tests/artifact-tts.test.cjs internal/gui/tests/artifact-dictation.test.cjs
 node --test site/shares.test.mjs
 node --test internal/gui/tests/nav-pages-order.test.cjs internal/gui/tests/builtins.test.cjs
 ```

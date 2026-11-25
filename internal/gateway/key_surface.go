@@ -43,9 +43,10 @@ var keyModelRoutes = map[string]bool{
 
 	// an artifact page's own calls on a model: sample, speech, dictation,
 	// and a comment sent to its agent
-	"POST " + ArtifactPagePath + "{ref}/_api/tts":      true,
-	"POST " + ArtifactPagePath + "{ref}/_api/comments": true,
-	"POST " + ArtifactPagePath + "{ref}/_api/sample":   true,
+	"POST " + ArtifactPagePath + "{ref}/_api/dictation": true,
+	"POST " + ArtifactPagePath + "{ref}/_api/tts":       true,
+	"POST " + ArtifactPagePath + "{ref}/_api/comments":  true,
+	"POST " + ArtifactPagePath + "{ref}/_api/sample":    true,
 
 	"POST /v1/chat/completions": true, "POST /chat/completions": true,
 	"POST /v1/responses": true, "POST /responses": true, "GET /v1/responses": true, "GET /responses": true,

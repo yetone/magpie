@@ -117,11 +117,25 @@ Declare {"tts": {}}.
   await t.pause(); await t.resume(); await t.stop(); await t.setRate(1.1)
 Call speak on a viewer's click: before they have clicked or typed in the page it rejects no_gesture. A new speak replaces the reading; when the reading stops, every pending call rejects stopped (its .reason says why), so stop adding. Speak only what the viewer asked to hear.
 Codes: invalid_argument, no_gesture (.retryAfterMs after the viewer stopped one), stopped, rate_limited (.retryAfterMs), not_granted, unavailable (no speech model in magpie, or open the page in its own tab), upstream_error.`},
+	{"dictation", `dictation: the viewer's speech as text, through the speech-to-text model of a provider in magpie. magpie's viewer holds the microphone, asks the viewer once for each artifact, and shows Listening and a Stop; the page gets the words, never the sound.
+Declare {"dictation": {}}.
+  const d = await claude.use("dictation")   // null in a shared copy or a browser that can't record: hide the mic, keep typing
+  btn.onclick = () => d.start().catch(e => ...)   // on the click itself, nothing awaited first; resolves once listening
+  d.start({language: "es"})                 // the speaker's language, if the page knows it
+  d.onPartial(({text}) => ...)              // a live guess, replacing the last; "" once it settles
+  d.onFinal(({text}) => ...)                // a settled phrase to append, with the space that joins it
+  d.onState(({state, reason}) => ...)       // "starting", "listening", "finishing", then "idle" with stopped, viewer_stopped, hidden, time_limit, not_granted...
+  await d.stop()                            // resolves after the last words
+  d.active()
+A session ends after 60 minutes (time_limit). Escape, the viewer's Stop or a hidden page ends it too.
+Codes: invalid_argument, no_gesture, not_granted (the viewer said no: keep typing, don't ask again), dismissed (may be retried on a later click), stopped (.reason), unavailable (no speech-to-text model in magpie, or open the page in its own tab), rate_limited, upstream_error.`},
 	{"permissions", `permissions: built in, never declared.
   const p = await claude.use("permissions")
-  await p.state("db")      // "granted" for what the page declared, else "unavailable"
-  await p.request(names)   // the same states: a page here asks no one
-What a page may do is set when it is published, so there is nothing to ask for at run time.`},
+  await p.state("db")          // "granted" for what the page declared, else "unavailable"
+  await p.state("dictation")   // "prompt" until the viewer answers, then "granted" or "denied"
+  await p.request(names)       // asks for dictation in one dialog if it is still "prompt"; never rejects
+  await p.manage()             // opens the Permissions panel and resolves when it closes; on a button, never on load
+Everything but dictation is set when the page is published. A "denied" is final: branch on it, never ask again.`},
 }
 
 // GuideNames are the capabilities the guide covers, in its order.

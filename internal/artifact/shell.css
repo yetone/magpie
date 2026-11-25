@@ -85,3 +85,6 @@ textarea:focus{outline:none;border-color:var(--accent)}
 .empty{padding:28px 16px;text-align:center;color:var(--mute)}
 .drawer .compose{border-top:.5px solid var(--line)}
 @media (prefers-reduced-motion:reduce){.pop{transform:none}.drawer{transition:opacity .2s ease;transform:none;opacity:0}.drawer.in{opacity:1}.pin,.bar button,.btn{transition:none}}
+.pop.save.perms .perm{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px}
+.pop.save.perms .seg{margin:0;flex:none}
+.pop.save.perms .seg button{padding:0 10px}

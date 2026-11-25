@@ -12,7 +12,7 @@
   // every capability resolves null there, as it does for a page's
   // visitor that claude.ai can't serve
   var publishing = !!(C.caps.artifact || C.caps.self);
-  var served = C.shared ? { permissions: true } : { db: !!C.caps.db, user: true, permissions: true, artifact: publishing, self: publishing, assets: !!C.caps.assets, sample: !!C.caps.sample, comments: !!C.caps.comments && !!C.origin, downloads: !!C.caps.downloads && !!C.origin, tts: !!C.caps.tts && !!C.origin && typeof Audio === "function" };
+  var served = C.shared ? { permissions: true } : { db: !!C.caps.db, user: true, permissions: true, artifact: publishing, self: publishing, assets: !!C.caps.assets, sample: !!C.caps.sample, comments: !!C.caps.comments && !!C.origin, downloads: !!C.caps.downloads && !!C.origin, tts: !!C.caps.tts && !!C.origin && typeof Audio === "function", dictation: !!C.caps.dictation && !!C.origin && typeof MediaRecorder === "function" };
   var freeze = Object.freeze;
   function deepFreeze(v) {
     if (v && typeof v === "object" && !Object.isFrozen(v)) {
@@ -972,6 +972,7 @@
       if (e.source !== window.parent || e.origin !== C.origin || !d || d.magpie !== SH) return;
       switch (d.type) {
         case "hi":
+          if (d.grants && typeof d.grants.dictation === "string") dgrant = d.grants.dictation;
           shellUp = true;
           shellWait.splice(0).forEach(function (f) { f(true); });
           break;
@@ -1004,6 +1005,22 @@
         case "tts-stop":
           if (reading) viewerStop();
           break;
+        case "dict-state":
+          dictState(d);
+          break;
+        case "dict-partial":
+          if (dstate === "listening" || dstate === "finishing") demit("partial", freeze({ text: String(d.text || "") }));
+          break;
+        case "dict-final":
+          dictFinal(String(d.text || ""));
+          break;
+        case "grants":
+          if (d.grants && typeof d.grants.dictation === "string") dgrant = d.grants.dictation;
+          if (d.req && pwait[d.req]) pwait[d.req]();
+          break;
+        case "perms-closed":
+          if (pwait[d.req]) pwait[d.req]();
+          break;
         case "abort":
           if (asking[d.id]) asking[d.id].abort();
           break;
@@ -1034,7 +1051,7 @@
       toShell({ type: "hover", rect: r ? { x: r.left, y: r.top, w: r.width, h: r.height } : null });
     }, true);
     window.addEventListener("keydown", function (e) {
-      if (e.key === "Escape" && (cmode || Object.keys(swait).length)) toShell({ type: "escape" });
+      if (e.key === "Escape" && (cmode || Object.keys(swait).length || dstate === "starting" || Object.keys(pwait).length)) toShell({ type: "escape" });
     }, true);
     window.addEventListener("scroll", function () { if (cpins.length) place(); if (cmode && hovered) { hovered = null; toShell({ type: "hover", rect: null }); } }, true);
     window.addEventListener("resize", function () { if (cpins.length) place(); });
@@ -1187,7 +1204,7 @@
   // the page offers a file; the shell asks the viewer, at magpie's origin,
   // and saves it only when they accept. The page never downloads itself.
   var swait = {}, sreq = 0;
-  function dErr(code, message) {
+  function sErr(code, message) {
     var e = new Error(message || code);
     e.name = "DownloadsError";
     e.code = code;
@@ -1211,12 +1228,12 @@
   }
   var downloads = freeze({
     save: function (o) {
-      if (!o || typeof o !== "object") return Promise.reject(dErr("bad_request", "save takes {filename, data}"));
-      if (o.request !== undefined) return Promise.reject(dErr("request_unknown", "no export was asked of this page"));
-      if (typeof o.filename !== "string" || o.filename.length > 512) return Promise.reject(dErr("bad_request", "filename is a string of at most 512 characters"));
+      if (!o || typeof o !== "object") return Promise.reject(sErr("bad_request", "save takes {filename, data}"));
+      if (o.request !== undefined) return Promise.reject(sErr("request_unknown", "no export was asked of this page"));
+      if (typeof o.filename !== "string" || o.filename.length > 512) return Promise.reject(sErr("bad_request", "filename is a string of at most 512 characters"));
       var name = cleanName(o.filename), dot = name.lastIndexOf("."), ext = dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
-      if (!ext || !dTypes[ext]) return Promise.reject(dErr("rejected_extension", "the extension is one of " + Object.keys(dTypes).join(" ")));
-      if (ext === "mov") return Promise.reject(dErr("not_signed", "a mov is saved only with content credentials, which a page's own file has none of: offer mp4 or webm"));
+      if (!ext || !dTypes[ext]) return Promise.reject(sErr("rejected_extension", "the extension is one of " + Object.keys(dTypes).join(" ")));
+      if (ext === "mov") return Promise.reject(sErr("not_signed", "a mov is saved only with content credentials, which a page's own file has none of: offer mp4 or webm"));
       var d = o.data, blob;
       try {
         if (typeof d === "string") blob = new Blob([d], { type: dTypes[ext] });
@@ -1224,18 +1241,18 @@
         else if (d instanceof ArrayBuffer) blob = new Blob([d.slice(0)], { type: dTypes[ext] });
         else if (ArrayBuffer.isView(d)) blob = new Blob([new Uint8Array(d.buffer, d.byteOffset, d.byteLength).slice()], { type: dTypes[ext] });
       } catch (e) {
-        return Promise.reject(dErr("bad_request", "the data can't be read: " + e.message));
+        return Promise.reject(sErr("bad_request", "the data can't be read: " + e.message));
       }
-      if (!blob || !blob.size) return Promise.reject(dErr("bad_request", "data is a non-empty string, Blob, ArrayBuffer or view"));
-      if (blob.size > 64 << 20) return Promise.reject(dErr("too_large", "a file is at most 64 MiB"));
+      if (!blob || !blob.size) return Promise.reject(sErr("bad_request", "data is a non-empty string, Blob, ArrayBuffer or view"));
+      if (blob.size > 64 << 20) return Promise.reject(sErr("too_large", "a file is at most 64 MiB"));
       return whenShell().then(function (up) {
-        if (!up) throw dErr("unavailable", "files are saved from magpie's viewer: open the page in its own tab");
+        if (!up) throw sErr("unavailable", "files are saved from magpie's viewer: open the page in its own tab");
         var req = ++sreq;
         return new Promise(function (res, rej) {
           swait[req] = function (a) {
             delete swait[req];
             if (a.status === "saved") res(freeze({ status: "saved" }));
-            else rej(dErr(a.error || "declined", a.error === "rate_limited" ? "another file is waiting for the viewer" : "the viewer didn't save it"));
+            else rej(sErr(a.error || "declined", a.error === "rate_limited" ? "another file is waiting for the viewer" : "the viewer didn't save it"));
           };
           toShell({ type: "save", req: req, filename: name, size: blob.size, blob: blob });
         });
@@ -1306,6 +1323,10 @@
     var wait = coolUntil - Date.now();
     if (wait > 0) return tErr("no_gesture", "the viewer just stopped the reading", { retryAfterMs: wait });
     return null;
+  }
+  // the viewer is dictating: nothing speaks over them
+  function busyGate() {
+    return dstate !== "idle" ? tErr("busy", "the viewer is dictating") : null;
   }
   function fetchLine(r, i) {
     var line = r.lines[i];
@@ -1406,7 +1427,7 @@
     speak: function (what, o) {
       var lines;
       try { lines = linesOf(what, o); } catch (e) { return Promise.reject(e); }
-      var g = gestureGate();
+      var g = busyGate() || gestureGate();
       if (g) return Promise.reject(g);
       if (reading) endReading(reading, "replaced");
       return startReading(lines);
@@ -1415,7 +1436,7 @@
       var lines;
       try { lines = linesOf(what, o); } catch (e) { return Promise.reject(e); }
       if (!reading) {
-        var g = gestureGate();
+        var g = busyGate() || gestureGate();
         if (g) return Promise.reject(g);
         return startReading(lines);
       }
@@ -1465,25 +1486,165 @@
     viewerStop();
   });
 
+  // -- dictation ----------------------------------------------------------
+  // The viewer's speech as text: the shell, at magpie's origin, asks the
+  // viewer, holds the microphone, shows its own Listening and Stop, and
+  // hands this page the words, never the sound. The state is the shell's;
+  // this keeps the page's promises and listeners.
+  var dstate = "idle", dgrant = "prompt", dstart = null, dnext = null, dstops = [], dlast = "";
+  var dl = { state: [], partial: [], final: [] }, pwait = {}, preq = 0;
+  var DREASONS = { stopped: 1, viewer_stopped: 1, hidden: 1, time_limit: 1, not_granted: 1, dismissed: 1, unavailable: 1, rate_limited: 1, upstream_error: 1 };
+  function dErr(code, message, more) {
+    var e = new Error(message || code);
+    e.name = "DictationError";
+    e.code = code;
+    if (more) Object.keys(more).forEach(function (k) { e[k] = more[k]; });
+    return e;
+  }
+  function demit(kind, v) {
+    dl[kind].slice().forEach(function (f) { try { f(v); } catch (e) { setTimeout(function () { throw e; }); } });
+  }
+  function dOn(kind) {
+    return function (fn) {
+      if (typeof fn !== "function") throw dErr("invalid_argument", "pass a function");
+      dl[kind].push(fn);
+      var off = function () { var i = dl[kind].indexOf(fn); if (i >= 0) dl[kind].splice(i, 1); };
+      // a listener added mid-session hears where it is, once
+      if (kind === "state" && dstate !== "idle") {
+        var now = dstate;
+        setTimeout(function () { if (dl.state.indexOf(fn) >= 0 && dstate === now) fn(freeze({ state: now })); }, 0);
+      }
+      return off;
+    };
+  }
+  // a settled piece, with the space that joins it to the last one; none
+  // between CJK characters or before closing punctuation
+  var CJK = /[⺀-鿿가-힯豈-﫿＀-￯　-〿]/;
+  function dictFinal(text) {
+    if (dstate !== "listening" && dstate !== "finishing") return;
+    text = text.trim();
+    if (!text) return;
+    var a = dlast.slice(-1), b = text.charAt(0);
+    if (dlast && !/\s/.test(a) && !CJK.test(a) && !CJK.test(b) && !/^[,.;:!?)\]}%'’"”]/.test(b)) text = " " + text;
+    dlast = text;
+    demit("partial", freeze({ text: "" }));
+    demit("final", freeze({ text: text }));
+  }
+  function dictState(d) {
+    var st = d.state;
+    if (st !== "idle" && st !== "starting" && st !== "listening" && st !== "finishing") return;
+    if (st !== "idle") {
+      if (st === dstate) return;
+      dstate = st;
+      demit("state", freeze({ state: st }));
+      if (st === "listening" && dstart) { var w = dstart; dstart = null; w.res(); }
+      return;
+    }
+    if (dstate === "idle") return;
+    var reason = DREASONS[d.reason] ? d.reason : "upstream_error";
+    dstate = "idle";
+    if (dstart) {
+      var s = dstart;
+      dstart = null;
+      var code = reason === "stopped" || reason === "viewer_stopped" || reason === "hidden" || reason === "time_limit" ? "stopped" : reason;
+      s.rej(dErr(code, d.message || "dictation ended: " + reason, { reason: reason }));
+    }
+    demit("state", freeze({ state: "idle", reason: reason }));
+    dstops.splice(0).forEach(function (f) { f(); });
+    if (dnext) { var n = dnext; dnext = null; begin(n); }
+  }
+  function begin(w) {
+    if (reading) endReading(reading, "interrupted");
+    dstart = w;
+    dictState({ state: "starting" });
+    whenShell().then(function (up) {
+      if (dstart !== w) return;
+      if (!up) return dictState({ state: "idle", reason: "unavailable", message: "the page takes dictation in magpie's viewer: open it in its own tab" });
+      toShell({ type: "dict-start", language: w.lang });
+    });
+  }
+  var dictation = freeze({
+    start: function (o) {
+      if (o !== undefined && (!o || typeof o !== "object")) return Promise.reject(dErr("invalid_argument", "options are an object"));
+      var lang = o && o.language;
+      if (lang !== undefined && (typeof lang !== "string" || !/^[a-z]{2}(-[A-Za-z]{2})?$/.test(lang))) return Promise.reject(dErr("invalid_argument", "language is a two-letter language, optionally with a region, such as \"es\" or \"es-MX\""));
+      if (dstate === "listening") return Promise.resolve();
+      if (dstate === "starting" && dstart) return dstart.p;
+      if (dnext) return dnext.p;
+      var ua = navigator.userActivation;
+      if (ua && !ua.isActive) return Promise.reject(dErr("no_gesture", "call start() from the viewer's click or key press, before anything is awaited"));
+      var w = { lang: lang };
+      w.p = new Promise(function (res, rej) { w.res = res; w.rej = rej; });
+      if (dstate === "finishing") dnext = w;
+      else begin(w);
+      return w.p;
+    },
+    stop: function () {
+      if (dnext) { var n = dnext; dnext = null; n.rej(dErr("stopped", "stopped before it was listening", { reason: "stopped" })); }
+      if (dstate === "idle") return Promise.resolve();
+      var p = new Promise(function (res) { dstops.push(res); });
+      if (dstate === "starting" && !shellUp) dictState({ state: "idle", reason: "stopped" });
+      else toShell({ type: "dict-stop" });
+      return p;
+    },
+    active: function () { return dstate !== "idle"; },
+    onPartial: dOn("partial"),
+    onFinal: dOn("final"),
+    onState: dOn("state"),
+  });
+  // an Escape nothing in the page claimed stops listening, as the
+  // shell's Stop does
+  window.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape" || (dstate !== "listening" && dstate !== "finishing") || e.defaultPrevented) return;
+    var t = e.target;
+    if (t && t.nodeType === 1 && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    toShell({ type: "dict-stop", viewer: true });
+  });
+
   // -- permissions --------------------------------------------------------
+  // dictation is the viewer's to allow, once for each artifact, in the
+  // shell; every other capability is granted with the page
   function states(names) {
     var out = {};
     (names || Object.keys(C.caps)).forEach(function (n) {
-      if (served[n] && (n === "user" || C.caps[n] || (n === "artifact" || n === "self") && publishing)) out[n] = "granted";
+      if (served[n] && (n === "user" || C.caps[n] || (n === "artifact" || n === "self") && publishing)) out[n] = n === "dictation" ? (shellUp ? dgrant : "unavailable") : "granted";
       else if (names) out[n] = "unavailable";
+      if (!names && out[n] === "unavailable") delete out[n];
     });
     return freeze(out);
   }
+  function viaShell(type) {
+    var req = ++preq;
+    return new Promise(function (res) {
+      pwait[req] = function () { delete pwait[req]; res(); };
+      toShell({ type: type, req: req });
+    });
+  }
   var permissions = freeze({
     state: function (name) {
-      return Promise.resolve(arguments.length ? states([String(name)])[String(name)] : states(null));
+      var one = arguments.length > 0;
+      return (served.dictation ? whenShell() : Promise.resolve()).then(function () {
+        return one ? states([String(name)])[String(name)] : states(null);
+      });
     },
-    request: function (names) { return Promise.resolve(states(names ? [].concat(names).map(String) : null)); },
-    manage: function () { return Promise.reject(dbError("unavailable", "magpie's pages have no Permissions panel: what a page may do is set when it is published")); },
+    request: function (names) {
+      var list = names ? [].concat(names).map(String) : null;
+      return (served.dictation ? whenShell() : Promise.resolve()).then(function () {
+        var ask = served.dictation && shellUp && dgrant === "prompt" && (!list || list.indexOf("dictation") >= 0);
+        return ask ? viaShell("dict-ask") : null;
+      }).then(function () { return states(list); });
+    },
+    manage: function () {
+      if (!served.dictation) return Promise.reject(dbError("unavailable", "this page has nothing for the viewer to allow: what it may do is set when it is published"));
+      return whenShell().then(function (up) {
+        if (!up) throw dbError("unavailable", "the Permissions panel is in magpie's viewer: open the page in its own tab");
+        return viaShell("perms");
+      }).then(function () {});
+    },
   });
 
   // -- claude.use ---------------------------------------------------------
-  var spaces = { db: served.db ? db : null, user: served.user ? user : null, permissions: permissions, artifact: served.artifact ? artifact : null, self: served.self ? artifact : null, assets: served.assets ? assets : null, sample: served.sample ? sample : null, comments: served.comments ? comments : null, downloads: served.downloads ? downloads : null, tts: served.tts ? tts : null };
+  var spaces = { db: served.db ? db : null, user: served.user ? user : null, permissions: permissions, artifact: served.artifact ? artifact : null, self: served.self ? artifact : null, assets: served.assets ? assets : null, sample: served.sample ? sample : null, comments: served.comments ? comments : null, downloads: served.downloads ? downloads : null, tts: served.tts ? tts : null, dictation: served.dictation ? dictation : null };
   var memo = {};
   function use(name) {
     name = String(name);
