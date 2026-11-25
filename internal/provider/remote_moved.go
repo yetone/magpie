@@ -331,6 +331,12 @@ var proveClient = func() *http.Client {
 // the proof only key's holder, reached at at, can make. Neither key nor
 // any header of the provider's own goes with the ask.
 func proves(ctx context.Context, scheme, at, key string) bool {
+	return provesVia(ctx, scheme, at, "", key, proveClient.Do)
+}
+
+// provesVia is proves with the ask made through do, at the magpie's root
+// path under at (a Remote magpie's address may have one).
+func provesVia(ctx context.Context, scheme, at, path, key string, do func(*http.Request) (*http.Response, error)) bool {
 	if key == "" {
 		return false
 	}
@@ -342,13 +348,13 @@ func proves(ctx context.Context, scheme, at, key string) bool {
 	body, _ := json.Marshal(map[string]string{"nonce": nonce, "key_id": RemoteKeyID(key)})
 	ctx, cancel := context.WithTimeout(ctx, seekAnswer)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, scheme+"://"+at+RemoteProvePath, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, scheme+"://"+at+path+RemoteProvePath, bytes.NewReader(body))
 	if err != nil {
 		return false
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	res, err := proveClient.Do(req)
+	res, err := do(req)
 	if err != nil {
 		return false
 	}

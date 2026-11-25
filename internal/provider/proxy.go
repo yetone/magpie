@@ -37,6 +37,7 @@ func (p Provider) Via(ctx context.Context) context.Context {
 	}
 	if roots := p.failoverRoots(); len(roots) > 1 {
 		ctx = netproxy.WithFailover(ctx, roots...)
+		ctx = netproxy.WithVouch(ctx, p.vouch())
 	}
 	cert, key, ca := p.ClientCert, p.ClientKey, p.ServerCA
 	if !p.TakesClientCert() {

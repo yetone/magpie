@@ -27,6 +27,36 @@ import (
 
 type failoverKey struct{}
 
+type vouchKey struct{}
+
+// Vouch says whether root, one of a failover's addresses, may be sent a
+// request made on its remote's behalf, which carries its key: an
+// address on a network this computer may not be on now (a café's, where
+// whatever answers at the home network's address is anyone's) has to
+// prove it is the remote first. ask sends a request the way the request
+// itself would go (its proxy, its dial), and nothing keyed goes with it.
+// at is the host:port to connect to in root's place ("" for root's own:
+// a name is connected to at the address that proved), ok false passes
+// root over as an address that took no connection.
+type Vouch func(ctx context.Context, root *url.URL, ask func(*http.Request) (*http.Response, error)) (at string, ok bool)
+
+// WithVouch is ctx whose failover (WithFailover) sends a request to an
+// address only once v vouches for it.
+func WithVouch(ctx context.Context, v Vouch) context.Context {
+	if v == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, vouchKey{}, v)
+}
+
+// errUnvouched is a failover's address passed over for not proving it is
+// its remote.
+type errUnvouched struct{ root string }
+
+func (e errUnvouched) Error() string {
+	return e.root + " did not prove it is this Remote magpie (it holds no gateway key of this provider's), so it was sent nothing"
+}
+
 type failover struct {
 	roots []*url.URL
 	key   string
@@ -158,6 +188,7 @@ func failingOver(req *http.Request, send func(*http.Request) (*http.Response, er
 	if !replay {
 		order = []int{at}
 	}
+	vouch, _ := req.Context().Value(vouchKey{}).(Vouch)
 	var res *http.Response
 	var err error
 	for n, i := range order {
@@ -187,6 +218,24 @@ func failingOver(req *http.Request, send func(*http.Request) (*http.Response, er
 			}
 		} else if len(order) > 1 {
 			r = req.WithContext(context.WithValue(req.Context(), tryCapKey{}, failoverTry))
+		}
+		if vouch != nil {
+			at, ok := vouch(r.Context(), f.roots[i], send)
+			if !ok {
+				res, err = nil, errUnvouched{f.roots[i].Redacted()}
+				continue
+			}
+			if at != "" && at != r.URL.Host {
+				// sent to the address that proved, under its name
+				host := r.Host
+				if host == "" {
+					host = r.URL.Host
+				}
+				u := *r.URL
+				u.Host = at
+				r = r.WithContext(r.Context())
+				r.URL, r.Host = &u, host
+			}
 		}
 		res, err = send(r)
 		if err == nil {
