@@ -165,7 +165,7 @@ address, so:
 A page written for claude.ai's artifact runtime (contract 0.2.99) runs
 here as written: `window.claude.use(name)` is there before the page's own
 scripts, and resolves `db`, `user`, `artifact` (and `self`, its former
-name), `assets` and the built-in `permissions`
+name), `assets`, `sample` and the built-in `permissions`
 ([internal/artifact/runtime.js](../../internal/artifact/runtime.js),
 [runtime.go](../../internal/artifact/runtime.go),
 [caps.go](../../internal/artifact/caps.go),
@@ -174,7 +174,8 @@ name), `assets` and the built-in `permissions`
 [artifacts_self.go](../../internal/gateway/artifacts_self.go),
 [assets.go](../../internal/artifact/assets.go),
 [svg.go](../../internal/artifact/svg.go),
-[artifacts_assets.go](../../internal/gateway/artifacts_assets.go)).
+[artifacts_assets.go](../../internal/gateway/artifacts_assets.go),
+[artifacts_sample.go](../../internal/gateway/artifacts_sample.go)).
 
 Declaring:
 
@@ -183,11 +184,12 @@ Declaring:
   forward; `{}` clears them; any other object is the whole set. A version
   keeps the declaration it was published with (`Version.Capabilities`).
 - Every name in the contract is accepted and kept; only `ServedCaps` (`db`,
-  `user`, `artifact`, `self`, `assets`) are served, and the rest resolve null on the
+  `user`, `artifact`, `self`, `assets`, `sample`) are served, and the rest resolve null on the
   page, as an unserved capability does on claude.ai. Declaring
   `permissions` is refused: it is built in. `db`'s `rules`, `user`'s
   `scopes`, `artifact`'s `{"publish": false}` and `assets`' `upload`
-  (`"interact"` or `"admin"`) are checked at publish.
+  (`"interact"` or `"admin"`) and `sample`'s `images` are checked at
+  publish.
 
 On the page:
 
@@ -289,6 +291,59 @@ Assets (`assets`), the files a page keeps for the people using it:
   computer, owner of every artifact, there is no Contributor to give it
   to, so it changes nothing here.
 - `read_artifact` says how many assets an artifact has and their size.
+
+Sample (`sample`), the page asking a model:
+
+- `sample(input, opts)` resolves `{text, truncated, modelTierApplied,
+  modelApplied?}`, `sample.json` the value the answer holds, and
+  `limits()` what a call may carry. The input is a string or turns that
+  start and end on a user turn; turns of one role in a row are read as
+  one. A call is at most 256 KiB of text.
+- Each round is `POST /a/<ref>/_api/sample` and goes into the gateway's
+  own Messages handler (`sampleInner`) under the agent `artifacts`'s
+  token, so it is routed, failed over, masked and counted in Usage as an
+  agent's request is. None of the page's headers go with it. Its answer
+  streams back as NDJSON: `{"text"}` pieces, then `{"end": {stop,
+  truncated, tier, model, content}}`, or `{"error": {code, message,
+  reason?}}` once text has gone out. A refusal before any text is a JSON
+  error with its status.
+- The model is the one named while the catalog has it (`modelApplied`
+  says so), else the tier's by name (`sampleTierOf`: Haiku and the other
+  small ones `quick`, Sonnet `default`, Opus and the other large ones
+  `complex`), Claude's first, one with allowance left before one out of
+  it, else the first. With images, only one that takes them. None at all
+  is `sampling_disabled`.
+- The system line is `sampleFraming`, which names no product and no
+  vendor (it goes upstream); `json` and tools each add a sentence.
+- Tools run on the page: a round that stops for `tool_use` hands back the
+  blocks the next round sends verbatim (text, thinking with its
+  signature, tool calls). The page runs each tool's `execute(input,
+  {signal})`, with the signal aborted on cancel, settle or after 150 s;
+  a result is JSON, at most 32 KB, and a throw is `Error: <message>`.
+  At most 8 rounds; the last sets `tool_choice: none`. Rounds' text is
+  joined with a blank line, and `onText` gets the whole text and the
+  delta, never empty and never after settle.
+- Images go only from a version that declares `{"sample": {"images":
+  true}}` (else `images_unavailable`): JPEG, PNG, WebP or GIF, at most
+  20 MB, 10,000 px a side and 64 MP, downsized on the page to about
+  1.2 MP and turned the way the image says, at most 8 a call.
+- An answer is replayed to the same call (the artifact, the verb, every
+  turn, the tier, model, effort and images) for its `gcTime`, 5 minutes
+  unless set, at most a day; `cache: false` asks again, `refresh`
+  overwrites, a call with tools is never kept, nor a refusal, an empty
+  answer or a `json` answer that doesn't parse.
+- Limits: 2 rounds of an artifact at once and 6 waiting, 60 a minute;
+  more is `rate_limited` (a vendor's 429 too, with `reason:
+  "usage_limit"` when it is the account's allowance). A vendor's errors
+  map to `prompt_too_large`, `image_rejected`, `invalid_request` or
+  `upstream_error`; a stop for `refusal` is `refused`, blank text
+  `empty_completion`, and `json` that doesn't parse or is cut short
+  `invalid_json` with the text. A rejection is `{code, message, text?}`.
+- No consent is asked, and `permissions` says `granted`: every artifact
+  here is the owner's own, opened on this computer, and what bounds a
+  page is the limits above and Usage, where every round shows under
+  `artifacts`. On claude.ai the first call asks the viewer, who may be
+  someone else. A shared copy resolves it null.
 
 The store:
 
@@ -439,7 +494,7 @@ magpie:
 
 ```sh
 go test -tags nogui ./internal/artifact
-go test -tags nogui ./internal/gateway -run 'TestArtifact|TestAssets|TestHubTellsArtifacts'   # TestArtifactPage* hold the page runtime's API
+go test -tags nogui ./internal/gateway -run 'TestArtifact|TestAssets|TestHubTellsArtifacts|TestSample'   # TestArtifactPage* hold the page runtime's API
 go test -tags nogui ./internal/library -run 'TestArtifacts|TestHubTellsMagpieArtifacts'
 go test -tags nogui ./internal/gui -run 'TestArtifactsAPI|TestArtifactsShareAPI|TestBuiltin'
 go test -tags nogui ./internal/cli -run 'TestArtifacts|TestEveryRouteHasACommandOrIsNamed'

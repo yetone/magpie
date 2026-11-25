@@ -26,7 +26,7 @@ var capabilityNames = []string{"artifact", "assets", "comments", "db", "dictatio
 // ServedCaps are the capabilities the page runtime gives a page that declares
 // them; permissions is built in and never declared. self is artifact's
 // former name, and resolves the same namespace.
-var ServedCaps = []string{"artifact", "assets", "db", "self", "user"}
+var ServedCaps = []string{"artifact", "assets", "db", "sample", "self", "user"}
 
 // Capabilities is a version's declaration, by name.
 type Capabilities map[string]json.RawMessage
@@ -81,6 +81,11 @@ func ParseCapabilities(raw json.RawMessage) (Capabilities, error) {
 	if v, ok := c["assets"]; ok {
 		if _, err := ParseAssetsConfig(v); err != nil {
 			return nil, fmt.Errorf("capability assets: %w", err)
+		}
+	}
+	if v, ok := c["sample"]; ok {
+		if _, err := ParseSampleConfig(v); err != nil {
+			return nil, fmt.Errorf("capability sample: %w", err)
 		}
 	}
 	for _, name := range []string{"artifact", "self"} {
@@ -150,6 +155,34 @@ func ParseArtifactConfig(raw json.RawMessage) (*ArtifactConfig, error) {
 		}
 	}
 	return a, nil
+}
+
+// SampleConfig is the sample capability's declaration: {images: true}
+// lets the page send images with its calls.
+type SampleConfig struct {
+	Images bool `json:"images,omitempty"`
+}
+
+// ParseSampleConfig reads the sample capability's declaration.
+func ParseSampleConfig(raw json.RawMessage) (*SampleConfig, error) {
+	c := &SampleConfig{}
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, c); err != nil {
+			return nil, errors.New("it is {} or {\"images\": true}")
+		}
+	}
+	return c, nil
+}
+
+// SampleImages is whether the version's page may send images with its
+// sample calls.
+func (c Capabilities) SampleImages() bool {
+	raw, ok := c["sample"]
+	if !ok {
+		return false
+	}
+	s, err := ParseSampleConfig(raw)
+	return err == nil && s.Images
 }
 
 // PagePublishes is whether the version's page may publish itself: it

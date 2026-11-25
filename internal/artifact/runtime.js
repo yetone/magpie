@@ -12,7 +12,7 @@
   // every capability resolves null there, as it does for a page's
   // visitor that claude.ai can't serve
   var publishing = !!(C.caps.artifact || C.caps.self);
-  var served = C.shared ? { permissions: true } : { db: !!C.caps.db, user: true, permissions: true, artifact: publishing, self: publishing, assets: !!C.caps.assets };
+  var served = C.shared ? { permissions: true } : { db: !!C.caps.db, user: true, permissions: true, artifact: publishing, self: publishing, assets: !!C.caps.assets, sample: !!C.caps.sample };
   var freeze = Object.freeze;
   function deepFreeze(v) {
     if (v && typeof v === "object" && !Object.isFrozen(v)) {
@@ -564,6 +564,318 @@
     },
   });
 
+  // -- sample -------------------------------------------------------------
+  // the page asking a model: each round goes to <api>/sample and its
+  // answer streams back as lines of JSON; a call with tools runs them
+  // here, between rounds, and sends their results back
+  var sampleLim = { prompt: 262144, images: 8, imageInput: 20000000, imageSide: 10000, imagePixels: 64e6, imageTarget: 1.2e6, imageOut: 5 << 20, tools: 32, rounds: 8, toolResult: 32768, toolTime: 150000, gcMost: 864e5 };
+  var sampleTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+  var sampleTiers = ["default", "complex", "quick"];
+  var sampleImages = !!(C.caps.sample && C.caps.sample.images);
+  function sampleErr(code, message, text, extra) {
+    var e = { code: code, message: message || code };
+    if (text) e.text = text;
+    if (extra && extra.reason) e.reason = extra.reason;
+    return freeze(e);
+  }
+  function isPlain(v) {
+    if (!v || typeof v !== "object") return false;
+    var p = Object.getPrototypeOf(v);
+    return p === Object.prototype || p === null;
+  }
+  function sampleTurns(input) {
+    var turns = [];
+    if (typeof input === "string") {
+      if (!input.trim()) throw sampleErr("invalid_request", "the input is empty");
+      turns.push({ role: "user", content: input });
+    } else if (Array.isArray(input)) {
+      if (!input.length) throw sampleErr("invalid_request", "the input has no turns");
+      input.forEach(function (t, i) {
+        if (!isPlain(t) || (t.role !== "user" && t.role !== "assistant")) throw sampleErr("invalid_request", "turn " + i + " is {role: \"user\" | \"assistant\", content}");
+        if (typeof t.content !== "string" || !t.content.trim()) throw sampleErr("invalid_request", "turn " + i + "'s content is a string with text in it");
+        var last = turns[turns.length - 1];
+        if (last && last.role === t.role) last.content += "\n\n" + t.content;
+        else turns.push({ role: t.role, content: t.content });
+      });
+      if (turns[0].role !== "user" || turns[turns.length - 1].role !== "user") throw sampleErr("invalid_request", "the turns start and end on a user turn");
+    } else {
+      throw sampleErr("invalid_request", "the input is a string or a list of {role, content} turns");
+    }
+    var n = 0, enc = new TextEncoder();
+    turns.forEach(function (t) { n += enc.encode(t.content).length; });
+    if (n > sampleLim.prompt) throw sampleErr("prompt_too_large", "the input is " + Math.ceil(n / 1024) + " KiB; a call takes at most 256 KiB");
+    return turns;
+  }
+  // the options, checked: what the round sends and what the page keeps
+  function sampleOpts(o, verbJSON) {
+    if (o == null) o = {};
+    if (!isPlain(o)) throw sampleErr("invalid_request", "options is an object");
+    var out = { body: { json: verbJSON }, tools: null, images: null };
+    if (o.onText !== undefined && typeof o.onText !== "function") throw sampleErr("invalid_request", "onText is a function");
+    out.onText = o.onText;
+    if (o.signal !== undefined && !(typeof AbortSignal === "function" && o.signal instanceof AbortSignal)) throw sampleErr("invalid_request", "signal is an AbortSignal");
+    out.signal = o.signal;
+    if (o.modelTier !== undefined) {
+      if (o.modelTier !== "inherit" && sampleTiers.indexOf(o.modelTier) < 0) throw sampleErr("invalid_request", "modelTier is \"default\", \"complex\" or \"quick\"");
+      out.body.modelTier = o.modelTier === "inherit" ? "default" : o.modelTier;
+    }
+    if (o.model !== undefined) {
+      if (typeof o.model !== "string") throw sampleErr("invalid_request", "model is a string");
+      out.body.model = o.model;
+    }
+    if (o.effort !== undefined) {
+      if (["low", "medium", "high"].indexOf(o.effort) >= 0) out.body.effort = o.effort;
+      else console.warn("claude.use(\"sample\"): effort is low, medium or high; " + JSON.stringify(o.effort) + " is left out");
+    }
+    if (o.tools !== undefined) {
+      if (!Array.isArray(o.tools)) throw sampleErr("invalid_request", "tools is a list");
+      if (o.tools.length > sampleLim.tools) throw sampleErr("invalid_request", "a call offers at most " + sampleLim.tools + " tools");
+      var names = {};
+      out.tools = {};
+      out.body.tools = o.tools.map(function (t, i) {
+        if (!isPlain(t)) throw sampleErr("invalid_request", "tools[" + i + "] is {name, description, inputSchema?, execute}");
+        if (typeof t.name !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(t.name) || names[t.name]) throw sampleErr("invalid_request", "tools[" + i + "]'s name is 1-128 of A-Z a-z 0-9 _ -, unique in the list");
+        names[t.name] = true;
+        if (typeof t.description !== "string" || !t.description.trim() || t.description.length > 1024) throw sampleErr("invalid_request", "tools[" + i + "] (" + t.name + ") needs a description of at most 1 KB");
+        if (typeof t.execute !== "function") throw sampleErr("invalid_request", "tools[" + i + "] (" + t.name + ")'s execute is a function");
+        var schema;
+        if (t.inputSchema !== undefined) {
+          var s;
+          try { s = JSON.stringify(t.inputSchema); } catch (e) { s = ""; }
+          if (!isPlain(t.inputSchema) || t.inputSchema.type !== "object" || !s || s.length > 4096) throw sampleErr("invalid_request", "tools[" + i + "] (" + t.name + ")'s inputSchema is a JSON Schema of type object, at most 4 KB");
+          schema = t.inputSchema;
+        }
+        out.tools[t.name] = t.execute;
+        return { name: t.name, description: t.description, inputSchema: schema };
+      });
+      if (!o.tools.length) { out.tools = null; delete out.body.tools; }
+    }
+    var cache = o.cache;
+    if (cache !== undefined) {
+      if (out.tools && cache !== false) throw sampleErr("invalid_request", "a call with tools isn't cached: leave cache out");
+      if (cache === false) out.body.cache = { off: true };
+      else if (cache === true) out.body.cache = {};
+      else if (isPlain(cache)) {
+        if (cache.gcTime !== undefined && !(typeof cache.gcTime === "number" && cache.gcTime >= 0)) throw sampleErr("invalid_request", "cache.gcTime is a number of milliseconds");
+        if (cache.refresh !== undefined && typeof cache.refresh !== "boolean") throw sampleErr("invalid_request", "cache.refresh is true or false");
+        out.body.cache = { gcTime: cache.gcTime === undefined ? 0 : Math.min(Math.round(cache.gcTime), sampleLim.gcMost), refresh: !!cache.refresh };
+      } else throw sampleErr("invalid_request", "cache is true, false or {gcTime, refresh}");
+    }
+    if (out.tools) out.body.cache = { off: true };
+    if (o.images !== undefined) {
+      if (!Array.isArray(o.images)) throw sampleErr("invalid_request", "images is a list of Blobs");
+      if (o.images.length) {
+        if (!sampleImages) throw sampleErr("images_unavailable", "the page doesn't declare {sample: {images: true}}");
+        if (o.images.length > sampleLim.images) throw sampleErr("image_rejected", "a call carries at most " + sampleLim.images + " images");
+        o.images.forEach(function (b, i) {
+          if (!isBlob(b)) throw sampleErr("invalid_request", "images[" + i + "] is a Blob");
+          if (sampleTypes.indexOf(bare(b.type)) < 0) throw sampleErr("image_rejected", "images[" + i + "] is " + (b.type || "of no type") + "; an image is JPEG, PNG, WebP or GIF");
+          if (!b.size || b.size > sampleLim.imageInput) throw sampleErr("image_rejected", "images[" + i + "] is " + (b.size ? "over 20 MB" : "empty"));
+        });
+        out.images = o.images.slice();
+      }
+    }
+    return out;
+  }
+  function blobB64(b) {
+    return new Promise(function (res, rej) {
+      var r = new FileReader();
+      r.onload = function () { var s = String(r.result); res(s.slice(s.indexOf(",") + 1)); };
+      r.onerror = function () { rej(r.error); };
+      r.readAsDataURL(b);
+    });
+  }
+  // an image as a round sends it: read, checked, and downsized to about
+  // 1.2 megapixels, turned the way the image says
+  function sampleImage(b, i) {
+    var t = bare(b.type);
+    var fail = function (m) { return sampleErr("image_rejected", "images[" + i + "] " + m); };
+    if (typeof createImageBitmap !== "function") return Promise.reject(fail("can't be read in this browser"));
+    return createImageBitmap(b, { imageOrientation: "from-image" }).catch(function () { throw fail("isn't an image this browser reads"); }).then(function (bm) {
+      var w = bm.width, h = bm.height;
+      if (!w || !h) throw fail("is empty");
+      if (w > sampleLim.imageSide || h > sampleLim.imageSide || w * h > sampleLim.imagePixels) throw fail("is " + w + "×" + h + "; an image is at most 10,000 px a side and 64 megapixels");
+      var k = Math.min(1, Math.sqrt(sampleLim.imageTarget / (w * h)));
+      if (k === 1 && b.size <= sampleLim.imageOut && t !== "image/gif") {
+        bm.close && bm.close();
+        return blobB64(b).then(function (d) { return { type: t, data: d }; });
+      }
+      var cw = Math.max(1, Math.round(w * k)), ch = Math.max(1, Math.round(h * k));
+      var cv = document.createElement("canvas");
+      cv.width = cw;
+      cv.height = ch;
+      cv.getContext("2d").drawImage(bm, 0, 0, cw, ch);
+      bm.close && bm.close();
+      var out = t === "image/jpeg" ? "image/jpeg" : t === "image/webp" ? "image/webp" : "image/png";
+      var enc = function (type, q) { return new Promise(function (res) { cv.toBlob(res, type, q); }); };
+      return enc(out, 0.85).then(function (o) {
+        if (o && o.type === out && o.size <= sampleLim.imageOut) return o;
+        return enc("image/jpeg", 0.85);
+      }).then(function (o) {
+        if (!o || o.size > sampleLim.imageOut) throw fail("is too large once downsized");
+        return blobB64(o).then(function (d) { return { type: bare(o.type), data: d }; });
+      });
+    });
+  }
+  // sample.json's reading of a reply: the whole of it, else one fenced
+  // block's body, else from the first { or [ to the last } or ]
+  function sampleParse(text) {
+    var t = text.trim();
+    try { return { ok: true, v: JSON.parse(t) }; } catch (e) {}
+    var fences = t.match(/```[A-Za-z0-9_-]*\s*\n([\s\S]*?)\n?```/g);
+    if (fences && fences.length === 1) {
+      var m = /```[A-Za-z0-9_-]*\s*\n([\s\S]*?)\n?```/.exec(fences[0]);
+      try { return { ok: true, v: JSON.parse(m[1].trim()) }; } catch (e) {}
+    }
+    var i = t.search(/[{[]/), j = Math.max(t.lastIndexOf("}"), t.lastIndexOf("]"));
+    if (i >= 0 && j > i) {
+      try { return { ok: true, v: JSON.parse(t.slice(i, j + 1)) }; } catch (e) {}
+    }
+    return { ok: false };
+  }
+  // one round: its text to on(delta) as it comes; resolves its end
+  function sampleRound(body, ctl, on) {
+    return fetch(C.api + "/sample", { method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "text/plain" }, cache: "no-store", signal: ctl.signal })
+      .then(function (r) {
+        if (!r.ok || !r.body || !/ndjson/.test(r.headers.get("Content-Type") || "")) {
+          return r.json().catch(function () { return { error: { code: r.status === 429 ? "rate_limited" : "upstream_error", message: "magpie answered " + r.status } }; }).then(function (j) {
+            var e = (j && j.error) || { code: "upstream_error", message: "magpie answered " + r.status };
+            throw sampleErr(e.code || "upstream_error", e.message, "", e);
+          });
+        }
+        var reader = r.body.getReader(), dec = new TextDecoder(), buf = "", end = null;
+        function line(l) {
+          if (!l.trim()) return;
+          var m;
+          try { m = JSON.parse(l); } catch (e) { return; }
+          if (m.text) on(m.text);
+          else if (m.end) end = m.end;
+          else if (m.error) throw sampleErr(m.error.code || "upstream_error", m.error.message, "", m.error);
+        }
+        function pump() {
+          return reader.read().then(function (x) {
+            if (x.done) {
+              buf += dec.decode();
+              line(buf);
+              if (!end) throw sampleErr("upstream_error", "the answer ended before it finished");
+              return end;
+            }
+            buf += dec.decode(x.value, { stream: true });
+            var k;
+            while ((k = buf.indexOf("\n")) >= 0) {
+              var l = buf.slice(0, k);
+              buf = buf.slice(k + 1);
+              line(l);
+            }
+            return pump();
+          });
+        }
+        return pump();
+      }, function (e) {
+        if (ctl.signal.aborted) throw e;
+        throw sampleErr("upstream_error", "magpie can't be reached: " + e.message);
+      });
+  }
+  // a tool's result as the next round reads it
+  function toolResult(id, v, err) {
+    var s;
+    if (err) s = "Error: " + (err && err.message ? err.message : String(err));
+    else if (typeof v === "string") s = v;
+    else {
+      try { s = JSON.stringify(v === undefined ? null : v); } catch (e) { s = "Error: the tool's result isn't JSON: " + e.message; err = true; }
+    }
+    if (s.length > sampleLim.toolResult) { s = "Error: the tool's result is over 32 KB; return less"; err = true; }
+    return { type: "tool_result", tool_use_id: id, content: s, is_error: !!err };
+  }
+  function runSample(input, o, verbJSON) {
+    var turns, opts;
+    try {
+      turns = sampleTurns(input);
+      opts = sampleOpts(o, verbJSON);
+    } catch (e) {
+      return Promise.reject(e);
+    }
+    if (opts.signal && opts.signal.aborted) return Promise.reject(sampleErr("cancelled", "the call was cancelled before it started"));
+    var ctl = new AbortController(), settled = false, text = "", roundText = "";
+    var stop = function () { ctl.abort(); };
+    if (opts.signal) opts.signal.addEventListener("abort", stop);
+    var said = function (delta) {
+      if (settled || !delta) return;
+      if (!roundText && text) delta = "\n\n" + delta;
+      roundText += delta;
+      text += delta;
+      if (opts.onText) {
+        try { opts.onText({ text: text, delta: delta }); } catch (e) { setTimeout(function () { throw e; }); }
+      }
+    };
+    var finish = function () {
+      settled = true;
+      if (opts.signal) opts.signal.removeEventListener("abort", stop);
+      ctl.abort();
+    };
+    var cancelled = function () { return sampleErr("cancelled", "the call was cancelled", text); };
+    return Promise.resolve().then(function () {
+      if (!opts.images) return null;
+      return Promise.all(opts.images.map(sampleImage));
+    }).then(function (ims) {
+      if (ctl.signal.aborted) throw cancelled();
+      var msgs = turns.slice(), round = 0;
+      function next() {
+        var body = Object.assign({ t: C.token, messages: msgs, last: round === sampleLim.rounds - 1 }, opts.body);
+        if (ims) body.images = ims;
+        roundText = "";
+        return sampleRound(body, ctl, said).then(function (end) {
+          var uses = (end.content || []).filter(function (b) { return b.type === "tool_use"; });
+          if (end.stop !== "tool_use" || !opts.tools || !uses.length || body.last) return end;
+          msgs = msgs.concat([{ role: "assistant", content: end.content }]);
+          var tc = new AbortController(), timer = setTimeout(function () { tc.abort(); }, sampleLim.toolTime);
+          var off = function () { tc.abort(); };
+          ctl.signal.addEventListener("abort", off);
+          return Promise.all(uses.map(function (u) {
+            var fn = opts.tools[u.name];
+            if (!fn) return toolResult(u.id, null, new Error("there is no tool named " + u.name));
+            return new Promise(function (res) { res(fn(u.input || {}, { signal: tc.signal })); }).then(function (v) { return toolResult(u.id, v); }, function (e) { return toolResult(u.id, null, e || new Error("the tool failed")); });
+          })).then(function (results) {
+            clearTimeout(timer);
+            ctl.signal.removeEventListener("abort", off);
+            tc.abort();
+            if (ctl.signal.aborted) throw cancelled();
+            msgs = msgs.concat([{ role: "user", content: results }]);
+            round++;
+            return next();
+          });
+        });
+      }
+      return next();
+    }).then(function (end) {
+      var out = text;
+      finish();
+      if (end.stop === "refusal") throw sampleErr("refused", "the model declined to answer");
+      if (!out.trim()) throw sampleErr("empty_completion", "the model's answer was empty");
+      var res = { text: out, truncated: !!end.truncated, modelTierApplied: end.tier || "default" };
+      if (end.model) res.modelApplied = end.model;
+      if (!verbJSON) return freeze(res);
+      if (res.truncated) throw sampleErr("invalid_json", "the answer was cut off before its JSON ended", out);
+      var p = sampleParse(out);
+      if (!p.ok) throw sampleErr("invalid_json", "the answer isn't JSON", out);
+      return p.v;
+    }, function (e) {
+      var was = ctl.signal.aborted && !settled;
+      finish();
+      if (was || e && e.name === "AbortError") throw cancelled();
+      if (e && e.code && !e.text && text) throw sampleErr(e.code, e.message, text, e);
+      throw e && e.code ? e : sampleErr("upstream_error", e && e.message ? e.message : String(e), text);
+    });
+  }
+  var sample = function (input, opts) { return runSample(input, opts, false); };
+  sample.json = function (input, opts) { return runSample(input, opts, true); };
+  sample.limits = function () {
+    var l = { maxPromptBytes: sampleLim.prompt, tools: freeze({ maxCount: sampleLim.tools }), modelTiers: freeze(sampleTiers.slice()) };
+    if (sampleImages) l.images = freeze({ maxCount: sampleLim.images, maxInputBytes: sampleLim.imageInput, mediaTypes: freeze(sampleTypes.slice()) });
+    return Promise.resolve(freeze(l));
+  };
+  freeze(sample);
+
   // -- permissions --------------------------------------------------------
   function states(names) {
     var out = {};
@@ -582,7 +894,7 @@
   });
 
   // -- claude.use ---------------------------------------------------------
-  var spaces = { db: served.db ? db : null, user: served.user ? user : null, permissions: permissions, artifact: served.artifact ? artifact : null, self: served.self ? artifact : null, assets: served.assets ? assets : null };
+  var spaces = { db: served.db ? db : null, user: served.user ? user : null, permissions: permissions, artifact: served.artifact ? artifact : null, self: served.self ? artifact : null, assets: served.assets ? assets : null, sample: served.sample ? sample : null };
   var memo = {};
   function use(name) {
     name = String(name);

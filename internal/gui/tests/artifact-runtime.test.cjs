@@ -8,7 +8,9 @@
 // declares artifact publishes itself (its whole page, which every open
 // view reloads to, or files, which keep it running), a page that
 // declares assets uploads a file as its bytes and shows it from /_blob/,
-// and a shared copy resolves every capability null. Under the sandbox CSP magpie serves
+// a page that declares sample asks the model and streams its answer,
+// runs its own tools between rounds, and is refused before any request
+// for what it gets wrong, and a shared copy resolves every capability null. Under the sandbox CSP magpie serves
 // pages with, so every call is from an opaque origin. In both engines.
 // The store is faked here; internal/gateway's TestArtifactPage* hold the
 // real one.
@@ -68,6 +70,7 @@ const SHARED = `<!doctype html><html><head><title>Shared</title></head><body><sc
     db: await claude.use("db"),
     user: await claude.use("user"),
     assets: await claude.use("assets"),
+    sample: await claude.use("sample"),
     perm: typeof (await claude.use("permissions")).state,
   };
 })();
@@ -138,6 +141,46 @@ const GALLERY = `<!doctype html><html><head><title>Gallery</title></head><body><
 })().catch((e) => { window.out = { crash: String(e && e.stack || e) }; });
 </script></body></html>`;
 
+// a page asking the model: an answer streamed, JSON, a tool it runs
+// between rounds, an image, and what is refused or cut off
+const ADD = { name: "add", description: "Adds two numbers", inputSchema: { type: "object", properties: { a: { type: "number" }, b: { type: "number" } } } };
+const SAMPLER = `<!doctype html><html><head><title>Sampler</title></head><body><script>
+(async () => {
+  const sample = await claude.use("sample");
+  const out = { served: typeof sample, frozen: Object.isFrozen(sample), same: sample === (await claude.use("sample")) };
+  const code = (p) => p.then((v) => "resolved:" + JSON.stringify(v), (e) => e.code + (e.text ? ":" + e.text : ""));
+  out.limits = JSON.parse(JSON.stringify(await sample.limits()));
+  if (location.pathname === "/a/sampler-noimg/") {
+    out.images = await code(sample("look", { images: [new Blob(["x"], { type: "image/png" })] }));
+    window.out = out;
+    return;
+  }
+  const seen = [];
+  out.plain = await sample("Say hi", { onText: (e) => seen.push(e.text + "|" + e.delta) });
+  out.seen = seen;
+  out.plainFrozen = Object.isFrozen(out.plain);
+  out.json = await sample.json("give json", { modelTier: "quick" });
+  const add = Object.assign({}, ${JSON.stringify(ADD)}, { execute: (i) => ({ sum: i.a + i.b }) });
+  out.tooled = await sample([{ role: "user", content: "add 2" }, { role: "user", content: "and 3" }], { tools: [add] });
+  const png = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="), (c) => c.charCodeAt(0));
+  out.image = (await sample("what is this", { images: [new Blob([png], { type: "image/png" })] })).text;
+  out.empty = await code(sample("  "));
+  out.endsAssistant = await code(sample([{ role: "user", content: "a" }, { role: "assistant", content: "b" }]));
+  out.cacheTools = await code(sample("x", { tools: [add], cache: true }));
+  out.badTier = await code(sample("x", { modelTier: "huge" }));
+  out.notImage = await code(sample("x", { images: [new Blob(["x"], { type: "text/plain" })] }));
+  out.limited = await code(sample("rate"));
+  out.midError = await code(sample("mid"));
+  out.badJSON = await code(sample.json("not json"));
+  const ac = new AbortController();
+  out.aborted = await code(sample("slow", { signal: ac.signal, onText: () => ac.abort() }));
+  const pre = new AbortController();
+  pre.abort();
+  out.preAborted = await code(sample("x", { signal: pre.signal }));
+  window.out = out;
+})().catch((e) => { window.out = { crash: String(e && e.stack || e) }; });
+</script></body></html>`;
+
 // a store like magpie's, small: documents by path, a write told to every
 // open events stream
 function fakeMagpie(t) {
@@ -153,6 +196,7 @@ function fakeMagpie(t) {
   const tell = (p) => { for (const s of streams) s.write(`data: ${JSON.stringify({ paths: [p] })}\n\n`); };
   const err = (res, status, code) => { res.writeHead(status, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }); res.end(JSON.stringify({ error: { code, message: code } })); };
   const gallery = { calls: [], blobs: new Map() };
+  const sampler = { calls: [] };
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, "http://127.0.0.1");
     if (req.method === "GET" && url.pathname === "/a/gallery/") {
@@ -181,6 +225,37 @@ function fakeMagpie(t) {
         if (c.op === "list") return ok({ assets: [...gallery.blobs].map(([id, b]) => ({ id, url: "/_blob/" + id, contentType: b.t, sizeBytes: b.body.length, createdAt: "2026-11-24T00:00:00Z" })), usage: { files: gallery.blobs.size, bytes: 0, maxFiles: 1000, maxBytes: 1 << 30 } });
         const id = String(c.ref).replace(/^\/_blob\//, "");
         return ok({ deleted: gallery.blobs.delete(id) });
+      });
+      return;
+    }
+    if (req.method === "GET" && (url.pathname === "/a/sampler/" || url.pathname === "/a/sampler-noimg/")) {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": CSP });
+      const caps = url.pathname === "/a/sampler/" ? { sample: { images: true } } : { sample: {} };
+      return res.end(served(SAMPLER, { api: url.pathname + "_api", token: "tok", caps, viewer: { id: "u_0123456789abcdef01234567" }, version: 1, home: url.pathname }));
+    }
+    if (req.method === "POST" && /^\/a\/sampler(-noimg)?\/_api\/sample$/.test(url.pathname)) {
+      let body = "";
+      req.on("data", (c) => (body += c));
+      req.on("end", () => {
+        const c = JSON.parse(body);
+        sampler.calls.push({ c, origin: req.headers.origin, type: req.headers["content-type"] });
+        if (c.t !== "tok") return err(res, 403, "not_granted");
+        const last = c.messages.at(-1).content;
+        const ask = typeof last === "string" ? last : "tool results";
+        if (ask === "rate") return err(res, 429, "rate_limited");
+        res.writeHead(200, { "Content-Type": "application/x-ndjson", "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" });
+        const line = (v) => res.write(JSON.stringify(v) + "\n");
+        const end = (stop, content) => { line({ end: { stop, tier: c.modelTier || "default", model: "claude-sonnet-5-5", content } }); res.end(); };
+        const say = (t) => { line({ text: t }); return [{ type: "text", text: t }]; };
+        if (ask === "Say hi") { line({ text: "Hel" }); line({ text: "lo" }); return end("end_turn", [{ type: "text", text: "Hello" }]); }
+        if (ask === "give json") return end("end_turn", say('Here:\n```json\n{"a": [1, 2]}\n```'));
+        if (ask === "add 2\n\nand 3") return end("tool_use", [...say("Let me add."), { type: "tool_use", id: "tu_1", name: "add", input: { a: 2, b: 3 } }]);
+        if (ask === "tool results") return end("end_turn", say("It is " + JSON.parse(last[0].content).sum + "."));
+        if (ask === "what is this") return end("end_turn", say(c.images ? "an image of " + c.images.length : "no image"));
+        if (ask === "mid") { line({ text: "part" }); line({ error: { code: "upstream_error", message: "the vendor fell over" } }); return res.end(); }
+        if (ask === "not json") return end("end_turn", say("nope"));
+        if (ask === "slow") { line({ text: "a" }); req.on("close", () => res.end()); return; }
+        end("end_turn", say("?"));
       });
       return;
     }
@@ -288,6 +363,7 @@ function fakeMagpie(t) {
     calls,
     list,
     gallery,
+    sampler,
     // another's publish of the list: the agent's, or another view's
     publishList(state) { return newVersion(listDoc(state)); },
     // the agent's write, through artifact_data
@@ -466,6 +542,81 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     assert.deepEqual(errors, []);
   });
 
+  test(`a page asks the model, runs its tools and is refused what it gets wrong (${engine})`, async (t) => {
+    const site = await fakeMagpie(t);
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    t.after(() => browser.close());
+    const page = await browser.newPage();
+    const errors = [];
+    page.on("pageerror", (e) => errors.push(String(e)));
+    await page.goto(site.base + "/a/sampler/");
+    await page.waitForFunction(() => window.out, null, { timeout: 15000 });
+    const out = await page.evaluate(() => window.out);
+    assert.equal(out.crash, undefined);
+    assert.equal(out.served, "function");
+    assert.equal(out.frozen, true);
+    assert.equal(out.same, true);
+    assert.deepEqual(out.limits, { maxPromptBytes: 262144, tools: { maxCount: 32 }, modelTiers: ["default", "complex", "quick"], images: { maxCount: 8, maxInputBytes: 20000000, mediaTypes: ["image/jpeg", "image/png", "image/webp", "image/gif"] } });
+    // the answer streamed, onText given the whole of it each time
+    assert.deepEqual(out.plain, { text: "Hello", truncated: false, modelTierApplied: "default", modelApplied: "claude-sonnet-5-5" });
+    assert.deepEqual(out.seen, ["Hel|Hel", "Hello|lo"]);
+    assert.equal(out.plainFrozen, true);
+    assert.deepEqual(out.json, { a: [1, 2] }, "one fenced block's JSON");
+    // the tool ran here, between rounds; the rounds' text joined
+    assert.equal(out.tooled.text, "Let me add.\n\nIt is 5.");
+    assert.equal(out.image, "an image of 1");
+    assert.equal(out.empty, "invalid_request");
+    assert.equal(out.endsAssistant, "invalid_request");
+    assert.equal(out.cacheTools, "invalid_request");
+    assert.equal(out.badTier, "invalid_request");
+    assert.equal(out.notImage, "image_rejected");
+    assert.equal(out.limited, "rate_limited");
+    assert.equal(out.midError, "upstream_error:part", "an error after text keeps what came");
+    assert.equal(out.badJSON, "invalid_json:nope");
+    assert.equal(out.aborted, "cancelled:a");
+    assert.equal(out.preAborted, "cancelled");
+    // every round went as text/plain from the opaque origin, with the
+    // token; what the page got wrong sent nothing
+    const calls = site.sampler.calls;
+    for (const c of calls) {
+      assert.equal(c.origin, "null");
+      assert.equal(c.type, "text/plain");
+      assert.equal(c.c.t, "tok");
+    }
+    const asks = calls.map((c) => { const l = c.c.messages.at(-1).content; return typeof l === "string" ? l : "tool results"; });
+    assert.deepEqual(asks, ["Say hi", "give json", "add 2\n\nand 3", "tool results", "what is this", "rate", "mid", "not json", "slow"]);
+    assert.equal(calls[0].c.json, false);
+    assert.equal(calls[1].c.json, true);
+    assert.equal(calls[1].c.modelTier, "quick");
+    // the tool round: offered with its schema, never cached, and the
+    // second round carries the model's turn and the tool's result
+    assert.deepEqual(calls[2].c.tools, [ADD]);
+    assert.deepEqual(calls[2].c.cache, { off: true });
+    assert.equal(calls[2].c.last, false);
+    assert.equal(calls[2].c.messages.length, 1, "same-role turns joined");
+    const second = calls[3].c.messages;
+    assert.equal(second.length, 3);
+    assert.equal(second[1].role, "assistant");
+    assert.equal(second[1].content[1].type, "tool_use");
+    assert.deepEqual(second[2].content, [{ type: "tool_result", tool_use_id: "tu_1", content: '{"sum":5}', is_error: false }]);
+    // the image went as its bytes: a 1x1 PNG needs no downsizing
+    assert.deepEqual(calls[4].c.images, [{ type: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==" }]);
+    assert.deepEqual(errors, []);
+  });
+
+  test(`a page that doesn't declare images is refused them before any request (${engine})`, async (t) => {
+    const site = await fakeMagpie(t);
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    t.after(() => browser.close());
+    const page = await browser.newPage();
+    await page.goto(site.base + "/a/sampler-noimg/");
+    await page.waitForFunction(() => window.out, null, { timeout: 15000 });
+    const out = await page.evaluate(() => window.out);
+    assert.equal(out.images, "images_unavailable");
+    assert.equal(out.limits.images, undefined);
+    assert.equal(site.sampler.calls.length, 0);
+  });
+
   test(`a shared copy resolves every capability null (${engine})`, async (t) => {
     const site = await fakeMagpie(t);
     const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
@@ -473,7 +624,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     const page = await browser.newPage();
     await page.goto(site.base + "/a/shared/");
     await page.waitForFunction(() => window.out, null, { timeout: 15000 });
-    assert.deepEqual(await page.evaluate(() => window.out), { db: null, user: null, assets: null, perm: "function" });
+    assert.deepEqual(await page.evaluate(() => window.out), { db: null, user: null, assets: null, sample: null, perm: "function" });
     assert.equal(site.calls.length, 0);
   });
 }

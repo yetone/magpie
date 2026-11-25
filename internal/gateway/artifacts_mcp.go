@@ -147,6 +147,7 @@ func artifactsMCPTools() []any {
 							"{\"db\": {\"rules\": [{\"path\": …, \"read\": …, \"write\": …}]}} sets who reads and writes where. user is who views it, through `await claude.use(\"user\")`. " +
 							"artifact lets the page save itself: `await (await claude.use(\"artifact\")).publish(html)` publishes the whole page, state embedded, as the newest version, and every open view reloads to it; publish({path: content}) saves files and keeps the page running. " +
 							"assets keeps files people add (images, video, PDF, fonts, CSV and text, 20 MiB each): `(await claude.use(\"assets\")).upload(blob)` gives {id, url}; keep the id in db and show it at \"/_blob/\" + id. " +
+							"sample lets the page ask a model: `await (await claude.use(\"sample\"))(input, {onText, tools, modelTier})` gives {text, truncated}, and sample.json(input) a parsed value; {\"sample\": {\"images\": true}} lets it send images too. Each call is memoryless, so send the instructions, data and format with it. " +
 							"Any other capability resolves null on the page here, so a page lights it up only when it is there. Left out, an update keeps the version before's; {} clears them.",
 					},
 					"label":   map[string]any{"type": "string", "description": "A short name for this version, at most 60 characters"},
