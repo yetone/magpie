@@ -282,6 +282,9 @@ button.row.lib-hubfolded:hover { background: var(--pill); }
 .lib-signin-err { margin-top: 6px; font-size: 12px; color: var(--red); line-height: 1.45; overflow-wrap: anywhere; }
 .lib-signin-link { display: flex; align-items: center; gap: 4px; margin-top: 5px; min-width: 0; }
 .lib-signin-link code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--code-style, normal) var(--code-weight, 400) 11px/1.3 var(--code-font, var(--code)); font-stretch: var(--code-stretch, 100%); color: var(--fg-2); padding: 4px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); user-select: all; -webkit-user-select: all; cursor: text; }
+.lib-signin > .note { margin-top: 6px; font-size: 12px; color: var(--fg-2); line-height: 1.45; }
+.lib-signin-callback { display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.lib-signin-callback input { flex: 1 1 14em; min-width: 0; font-family: var(--code-font, var(--code)); font-size: 12px; }
 
 /* the switch */
 .lib-switch { flex: none; position: relative; width: 32px; height: 19px; border-radius: 10px; background: var(--line); transition: background .2s var(--ease); }

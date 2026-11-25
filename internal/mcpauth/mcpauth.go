@@ -1014,12 +1014,18 @@ type State struct {
 	URL    string `json:"url,omitempty"` // the sign-in page, to open
 	State  string `json:"state"`         // waiting, done, failed or canceled
 	Error  string `json:"error,omitempty"`
+	// PasteCallback says a browser that can't reach this magpie (magpie on
+	// a server or in Docker, the page open on another machine) can finish
+	// the sign-in by pasting the address it ended on (@OoopsHh on X).
+	PasteCallback bool `json:"pasteCallback,omitempty"`
 }
 
 type flow struct {
 	mu       sync.Mutex
 	st       State
 	srv      *http.Server
+	redirect string // where the sign-in sends the browser back, for a pasted address to match
+	oauth    string // the OAuth state parameter, checked against a pasted address
 	done     chan struct{}
 	claimed  bool
 	finished bool
@@ -1148,7 +1154,7 @@ func start(ctx context.Context, name, serverURL string, app *App, add *string) (
 	}
 	au.RawQuery = aq.Encode()
 
-	f := &flow{done: make(chan struct{}), st: State{ID: randomToken(9), Server: name, URL: au.String(), State: "waiting"}}
+	f := &flow{done: make(chan struct{}), redirect: redirect, oauth: state, st: State{ID: randomToken(9), Server: name, URL: au.String(), State: "waiting", PasteCallback: true}}
 	rec := Record{URL: serverURL, Resource: m.Resource, Issuer: m.Issuer, TokenURL: m.TokenURL, ClientID: id, Secret: secret, AuthMethod: method, Scope: m.Scope}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
@@ -1318,6 +1324,100 @@ func Cancel(id string) {
 		f.finish(State{State: "canceled"})
 	}
 }
+
+// Submit finishes a sign-in whose browser couldn't reach this magpie — the
+// whole address the browser was sent back to, pasted (@OoopsHh on X). The sign-in's
+// callback listens on loopback, so a browser on another machine (magpie on
+// a server or in Docker) ends on a page that won't load; its address
+// carries the code magpie needs.
+func Submit(id, raw string) error {
+	flows.Lock()
+	f := flows.m[id]
+	flows.Unlock()
+	if f == nil {
+		return errors.New("no such sign-in")
+	}
+	return f.pastedCallback(raw)
+}
+
+// pastedCallback takes the address the sign-in's browser was sent back to.
+// Only this sign-in's own address is taken: its port, path and state. It
+// goes through the same handler the callback port serves, so the code is
+// checked and traded just as the browser's own would be, and only once —
+// whichever of the two comes first finishes the sign-in.
+func (f *flow) pastedCallback(raw string) error {
+	f.mu.Lock()
+	st, srv, redirect, oauth := f.st, f.srv, f.redirect, f.oauth
+	f.mu.Unlock()
+	if !st.PasteCallback || srv == nil {
+		return errors.New("this sign-in can't be finished from a pasted address")
+	}
+	if st.State != "waiting" {
+		return errors.New("this sign-in is over; start it again")
+	}
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Scheme != "http" || u.RawQuery == "" {
+		return errors.New("paste the whole address the browser ended on, starting with http://")
+	}
+	if !ownCallback(u, redirect, oauth) {
+		return errors.New("that address isn't from this sign-in: paste the one its browser tab ended on")
+	}
+	req, err := http.NewRequest(http.MethodGet, "http://"+u.Host+u.RequestURI(), nil)
+	if err != nil {
+		return err
+	}
+	// the handler trades the code and finishes the flow before it returns
+	srv.Handler.ServeHTTP(&pastedReply{}, req)
+	f.mu.Lock()
+	claimed := f.claimed
+	f.mu.Unlock()
+	if !claimed {
+		if cur := f.status(); cur.State == "failed" {
+			return errors.New(cur.Error)
+		}
+		return errors.New("that address didn't finish the sign-in; start it again")
+	}
+	select {
+	case <-f.done:
+	case <-time.After(45 * time.Second):
+		return errors.New("the sign-in is still finishing; magpie shows it when it's done")
+	}
+	switch cur := f.status(); cur.State {
+	case "done":
+		return nil
+	case "failed":
+		return errors.New(cur.Error)
+	}
+	return errors.New("the sign-in was canceled")
+}
+
+// ownCallback says whether a pasted address is where this sign-in's page
+// sends the browser back to: its port and path, on loopback, with its state.
+func ownCallback(u *url.URL, redirect, oauth string) bool {
+	want, err := url.Parse(redirect)
+	if err != nil || u.Port() != want.Port() {
+		return false
+	}
+	switch strings.ToLower(u.Hostname()) {
+	case "localhost", "127.0.0.1", "::1":
+	default:
+		return false
+	}
+	return u.Path == want.Path && u.Query().Get("state") == oauth
+}
+
+// pastedReply drops the handler's HTML: a pasted address finishes the flow
+// through its side effect, not its body.
+type pastedReply struct{ h http.Header }
+
+func (p *pastedReply) Header() http.Header {
+	if p.h == nil {
+		p.h = http.Header{}
+	}
+	return p.h
+}
+func (p *pastedReply) Write(b []byte) (int, error) { return len(b), nil }
+func (p *pastedReply) WriteHeader(int)             {}
 
 func page(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

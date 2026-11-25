@@ -673,6 +673,20 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 		mcpauth.Cancel(r.PathValue("id"))
 		rw.WriteHeader(http.StatusNoContent)
 	})
+	// a browser that couldn't reach magpie's callback (magpie on a server or
+	// in Docker) finishes the sign-in by pasting the address it ended on (@OoopsHh on X)
+	mux.HandleFunc("POST /api/library/mcp-signin/{id}/callback", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ URL string }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.URL == "" {
+			http.Error(rw, "no address", http.StatusBadRequest)
+			return
+		}
+		if err := mcpauth.Submit(r.PathValue("id"), in.URL); err != nil {
+			fail(rw, err)
+			return
+		}
+		rw.WriteHeader(http.StatusNoContent)
+	})
 	// a server's accounts (Elorynth on X): Kind "signin" is magpie's OAuth
 	// sign-ins to it, "header" the sets of headers it is asked with; ID "" in
 	// a use is the server's own headers

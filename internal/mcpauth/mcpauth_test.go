@@ -376,3 +376,99 @@ func TestFirewallTurnedAway(t *testing.T) {
 		})
 	}
 }
+
+// A sign-in can be finished by pasting the address the browser was sent
+// back to, for a magpie the browser can't reach (magpie on a server, in
+// Docker, the page open on another machine): the loopback callback never
+// arrives, so magpie takes the code from the pasted address instead
+// (@OoopsHh on X). Every sign-in offers this way.
+func TestPastedCallbackFinishesSignIn(t *testing.T) {
+	home(t)
+	f := mcpauthtest.New(t)
+	st, err := mcpauth.Start(t.Context(), "neon", f.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mcpauth.Cancel(st.ID)
+	if !st.PasteCallback {
+		t.Fatal("a sign-in doesn't offer the pasted-address way")
+	}
+	// the browser authorizes, but its redirect to the loopback callback
+	// never reaches this magpie: capture where it was sent instead of
+	// following it there
+	cl := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := cl.Get(st.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	back := resp.Header.Get("Location")
+	if back == "" {
+		t.Fatalf("the sign-in page didn't send the browser back (status %d)", resp.StatusCode)
+	}
+	// nothing has reached the callback: the sign-in is still waiting
+	if got, _ := mcpauth.Progress(st.ID); got.State != "waiting" {
+		t.Fatalf("state %s before the address was pasted", got.State)
+	}
+	if err := mcpauth.Submit(st.ID, back); err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	if got, _ := mcpauth.Progress(st.ID); got.State != "done" {
+		t.Fatalf("state %s after the address was pasted", got.State)
+	}
+	if r, ok := mcpauth.Get("neon"); !ok || r.Access == "" || r.Refresh == "" {
+		t.Fatalf("record after paste = %+v", r)
+	}
+	if f.Exchanged != 1 {
+		t.Fatalf("exchanged %d times", f.Exchanged)
+	}
+}
+
+// A pasted address is taken only when it is this sign-in's own callback —
+// its port and path, on loopback, with its state — so a stray or crafted
+// address can't finish someone's sign-in.
+func TestPastedCallbackRejectsStrangers(t *testing.T) {
+	home(t)
+	f := mcpauthtest.New(t)
+	st, err := mcpauth.Start(t.Context(), "neon", f.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mcpauth.Cancel(st.ID)
+	cl := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := cl.Get(st.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	back := resp.Header.Get("Location")
+	u, err := url.Parse(back)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrongState := *u
+	q := wrongState.Query()
+	q.Set("state", "not-this-signins-state")
+	wrongState.RawQuery = q.Encode()
+	for _, raw := range []string{
+		wrongState.String(), // another sign-in's state
+		strings.Replace(back, "127.0.0.1", "10.0.0.5", 1), // not loopback
+		"https://" + strings.TrimPrefix(back, "http://"),  // not http
+		"not a url",
+		"",
+	} {
+		if err := mcpauth.Submit(st.ID, raw); err == nil {
+			t.Errorf("took a stranger: %q", raw)
+		}
+	}
+	// the refusals left the sign-in untouched; its own address still finishes it
+	if got, _ := mcpauth.Progress(st.ID); got.State != "waiting" {
+		t.Fatalf("state %s after refused pastes", got.State)
+	}
+	if err := mcpauth.Submit(st.ID, back); err != nil {
+		t.Fatalf("own address refused after the strangers: %v", err)
+	}
+	if got, _ := mcpauth.Progress(st.ID); got.State != "done" {
+		t.Fatalf("state %s after the own address was pasted", got.State)
+	}
+}
