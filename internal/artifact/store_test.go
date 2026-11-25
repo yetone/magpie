@@ -7,8 +7,10 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 func sandbox(t *testing.T) string {
@@ -132,6 +134,67 @@ func TestListAndDelete(t *testing.T) {
 	}
 	if err := Delete(a.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("deleted it twice: %v", err)
+	}
+}
+
+// The list's order says which artifact was published last, even when the
+// clock stands still between the publishes: the stamps never tie, so the
+// order never falls to the ids, which are random (#7755 — the list of two
+// artifacts published in the same millisecond was a coin toss, and the
+// CLI's list with it, #7757).
+func TestListOrderSurvivesAClockThatStandsStill(t *testing.T) {
+	sandbox(t)
+	was := clock
+	clock = func() time.Time { return time.Date(2026, 11, 26, 1, 0, 0, 0, time.UTC) }
+	defer func() { clock = was }()
+	a, _ := PublishPage(Publish{Page: []byte("a"), Title: "First"})
+	b, _ := PublishPage(Publish{Page: []byte("b"), Title: "Second"})
+	PublishPage(Publish{ID: a.ID, Page: []byte("a2")})
+	l, err := List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(l) != 2 {
+		t.Fatalf("listed %+v", l)
+	}
+	if l[0].Updated.Equal(l[1].Updated) {
+		t.Fatalf("the stamps tie, so the order is the ids': %+v", l)
+	}
+	if l[0].ID != a.ID || l[1].ID != b.ID {
+		t.Fatalf("listed %+v, want %s first", l, a.ID)
+	}
+}
+
+// Pages published in one millisecond are listed in the order they were
+// published, newest first, not by their random ids (#7755, #7757); a
+// clock that went back doesn't put a publish behind the last one.
+func TestListFollowsPublishOrder(t *testing.T) {
+	sandbox(t)
+	at := time.Date(2026, 11, 26, 12, 0, 0, 0, time.UTC)
+	old := clock
+	clock = func() time.Time { return at }
+	t.Cleanup(func() { clock = old })
+	var ids []string
+	for i := range 8 {
+		if i == 6 {
+			at = at.Add(-time.Hour)
+		}
+		a, err := PublishPage(Publish{Page: []byte{'a' + byte(i)}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append([]string{a.ID}, ids...)
+	}
+	l, err := List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, a := range l {
+		got = append(got, a.ID)
+	}
+	if !slices.Equal(got, ids) {
+		t.Fatalf("listed %v, want newest first %v", got, ids)
 	}
 }
 

@@ -43,7 +43,13 @@ Rules:
 - A meta.json that can't be read is left out of `List`, named in its error,
   and never written over. A folder with no meta.json (a publish or delete
   cut off) is skipped.
-- `List` is newest `Updated` first; two in one instant go by id.
+- `List` is newest `Updated` first. The stamps never tie: a publish gets
+  the clock's, in milliseconds, and after the one the last publish got
+  (`nextStamp`), so the order says which artifact was published last even
+  when the clock stands still or is coarse (#7755 — two artifacts
+  published in the same millisecond were ordered by their random ids, and
+  the list was a coin toss; the CLI's list with it, #7757). Two in one
+  instant (two processes, or artifacts published before this) go by id.
 - `Delete` takes the shared link down first ([Sharing](#sharing)), then
   the folder with every version.
 

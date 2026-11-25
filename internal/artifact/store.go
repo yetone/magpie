@@ -37,6 +37,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -206,6 +207,32 @@ func writeMeta(a *Artifact) error {
 
 // Get is the artifact id.
 func Get(id string) (*Artifact, error) { return readMeta(id) }
+
+// clock is the store's clock, in UTC; a variable for the tests.
+var clock = func() time.Time { return time.Now().UTC() }
+
+// lastStamp is the stamp the last publish got, in milliseconds: the next
+// one is after it, so two publishes in the same millisecond don't get the
+// same stamp, and the list's order says which artifact was published last
+// (#7755 — the order fell to the ids, which are random, so a list of two
+// artifacts published in one millisecond was a coin toss).
+var lastStamp atomic.Int64
+
+// nextStamp is the stamp a publish gets: the clock's, in milliseconds, and
+// after the one the last publish got. A clock that stands still, or a
+// coarse one, doesn't change the order.
+func nextStamp() time.Time {
+	for {
+		last := lastStamp.Load()
+		now := clock().Truncate(time.Millisecond)
+		if !now.After(time.UnixMilli(last)) {
+			now = time.UnixMilli(last).UTC().Add(time.Millisecond)
+		}
+		if lastStamp.CompareAndSwap(last, now.UnixMilli()) {
+			return now
+		}
+	}
+}
 
 // List is every artifact, the most recently updated first. One whose
 // meta.json can't be read is left out, and said in the error beside the
@@ -387,7 +414,7 @@ func PublishPage(p Publish) (*Artifact, error) {
 	desc := oneLine(p.Description, maxDescription)
 
 	defer lock()()
-	now := time.Now().UTC().Truncate(time.Millisecond)
+	now := nextStamp()
 	var a *Artifact
 	var prev *Version
 	if p.ID == "" {
