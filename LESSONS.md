@@ -345,6 +345,20 @@ every user.**
 is in the code standards since 10-18. See
 [Moved to the code standards](#moved-to-the-code-standards).
 
+**Nothing lands in an agent's config, or in its permissions, without
+the user asking for it.**
+- e4b7c9bfb (11-24) gave magpie-artifacts to every agent on the first
+  Sync and wrote `Artifact` into Claude Code's `permissions.deny`. Users
+  found an MCP server in OpenCode they never added, and the deny, and
+  asked why on X (xcrong, Simon Hunter). 10b81d2c9 (v0.1.4778) made it
+  opt-in from the Library's market, and took back the one added unasked
+  once, deny included, unless the user had changed it.
+- A new server, skill, hook or rule is offered (the market, an empty
+  page that leads there), never adopted. "Removed, it stays removed" does
+  not make an unasked add acceptable: the user still has to find it
+  first.
+- Seen 1× (2026-11-24).
+
 **Before deleting or overwriting a live credential, find every record that
 could match the same key.**
 - 43a65950 matched Codex accounts by display name. Two Team seats of one
