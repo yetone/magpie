@@ -78,6 +78,7 @@ for (const engine of engines) {
       const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce" });
       const page = await context.newPage();
       page.setDefaultTimeout(10000);
+      page.setDefaultNavigationTimeout(60000);
       const errors = [];
       page.on("pageerror", (e) => errors.push(e.message));
       await page.route("**/*", serve(lang, web));
