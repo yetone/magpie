@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"crypto/tls"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -42,6 +43,51 @@ func TestWebGuard(t *testing.T) {
 	r.AddCookie(&http.Cookie{Name: "c", Value: "other"})
 	if c := do(r).Code; c != http.StatusUnauthorized {
 		t.Fatalf("wrong cookie: %d", c)
+	}
+}
+
+// Over TLS the sign-in cookie is Secure: cookies aren't kept per port, so
+// a browser would send the key in the clear to any plain-HTTP port of the
+// host, where whoever sits on the network reads it. A cookie set before
+// is set again as Secure when the page is opened over TLS.
+func TestWebCookieSecureOverTLS(t *testing.T) {
+	h := webGuard("c", "key", "", nil, http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) { rw.WriteHeader(http.StatusTeapot) }))
+	do := func(r *http.Request) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, r)
+		return rec
+	}
+	r := httptest.NewRequest("GET", "/?k=key", nil)
+	r.TLS = &tls.ConnectionState{}
+	if ck := do(r).Result().Cookies(); len(ck) != 1 || !ck[0].Secure {
+		t.Fatalf("link over TLS: %+v", ck)
+	}
+	r = httptest.NewRequest("POST", webSignInPath, strings.NewReader(url.Values{"key": {"key"}, "back": {"/"}}.Encode()))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	r.TLS = &tls.ConnectionState{}
+	if ck := do(r).Result().Cookies(); len(ck) != 1 || !ck[0].Secure {
+		t.Fatalf("form over TLS: %+v", ck)
+	}
+	// plain HTTP (a browser on this computer at 127.0.0.1) can't keep a
+	// Secure cookie
+	if ck := do(httptest.NewRequest("GET", "/?k=key", nil)).Result().Cookies(); len(ck) != 1 || ck[0].Secure {
+		t.Fatalf("link over plain HTTP: %+v", ck)
+	}
+	// an old cookie, opened over TLS, is set again as Secure
+	r = httptest.NewRequest("GET", "/", nil)
+	r.TLS = &tls.ConnectionState{}
+	r.Header.Set("Sec-Fetch-Mode", "navigate")
+	r.AddCookie(&http.Cookie{Name: "c", Value: "key"})
+	rec := do(r)
+	if ck := rec.Result().Cookies(); rec.Code != http.StatusTeapot || len(ck) != 1 || !ck[0].Secure || ck[0].Value != "key" {
+		t.Fatalf("old cookie over TLS: %d %+v", rec.Code, ck)
+	}
+	// an API call isn't answered with a cookie
+	r = httptest.NewRequest("GET", "/api/state", nil)
+	r.TLS = &tls.ConnectionState{}
+	r.AddCookie(&http.Cookie{Name: "c", Value: "key"})
+	if ck := do(r).Result().Cookies(); len(ck) != 0 {
+		t.Fatalf("API call set a cookie: %+v", ck)
 	}
 }
 

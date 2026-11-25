@@ -267,12 +267,19 @@ func webGuard(cookie, key, where string, box boxSignIn, next http.Handler) http.
 		where = "the k= in the link magpie printed when it started"
 	}
 	same := func(v string) bool { return subtle.ConstantTimeCompare([]byte(v), []byte(key)) == 1 }
-	signIn := func(rw http.ResponseWriter, r *http.Request, back string) {
+	setCookie := func(rw http.ResponseWriter, r *http.Request) {
 		// Priority=High (Chrome's): the page's host is often an address
 		// other services share on other ports, and a browser keeps a
 		// limited number of cookies for one host, all ports together;
-		// past it Chrome drops the low and medium ones first (#2033)
-		rw.Header().Add("Set-Cookie", (&http.Cookie{Name: cookie, Value: key, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: int(webCookieAge / time.Second)}).String()+"; Priority=High")
+		// past it Chrome drops the low and medium ones first (#2033).
+		// Secure over TLS: a cookie isn't kept per port, so without it a
+		// browser sends the key in the clear to any plain-HTTP port of
+		// this host, where whoever sits on the network (what --tls-cert
+		// is against) reads it
+		rw.Header().Add("Set-Cookie", (&http.Cookie{Name: cookie, Value: key, Path: "/", HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode, MaxAge: int(webCookieAge / time.Second)}).String()+"; Priority=High")
+	}
+	signIn := func(rw http.ResponseWriter, r *http.Request, back string) {
+		setCookie(rw, r)
 		http.Redirect(rw, r, back, http.StatusSeeOther)
 	}
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
@@ -325,6 +332,11 @@ func webGuard(cookie, key, where string, box boxSignIn, next http.Handler) http.
 		sent := r.CookiesNamed(cookie)
 		for _, c := range sent {
 			if same(c.Value) {
+				if r.TLS != nil && r.Header.Get("Sec-Fetch-Mode") == "navigate" {
+					// a cookie set before it was Secure is set again as
+					// Secure, in its place, when the page is opened
+					setCookie(rw, r)
+				}
 				next.ServeHTTP(rw, r)
 				return
 			}
