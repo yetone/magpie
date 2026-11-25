@@ -590,6 +590,12 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
 })</pre>
     </div>
     <p>Add <code>?models=1</code> and each one also has <code>models</code>: the id of every model it can be asked for, its provider’s whole list. Agents are offered only the first 24 of a provider’s list when no models are picked; this list stops at none of them, and leaves out only what the account can’t be asked for (a model the user kept off that account, or one on none of the provider’s APIs). Ask each as <code>&lt;provider&gt;/&lt;id&gt;</code>, offered to agents or not: <code>openai/o4-mini</code>.</p>
+    <p>Add <code>?models=full</code> instead and each of <code>models</code> is the model as <code>/v1/models</code> lists it, field for field: <code>id</code> (<code>&lt;provider&gt;/&lt;id&gt;</code>), <code>display_name</code>, <code>reasoning</code>, <code>reasoning_levels</code>, <code>context_window</code>, <code>max_output_tokens</code>, <code>modalities</code>, <code>pricing</code>, <code>magpie_label</code> and the rest, for the models <code>/v1/models</code> leaves out too. <code>?models=1</code> still gives ids.</p>
+    <div class="code">
+      <span class="lang">JavaScript</span>
+      <pre><span class="k">const</span> { data } = <span class="k">await</span> (<span class="k">await</span> fetch(base + <span class="s">"/v1/magpie/accounts?models=full"</span>)).json()
+<span class="c">// data[0].models: [{ id: "openai/o4-mini", display_name: "o4-mini", reasoning_levels: ["low", "medium", "high"], context_window: 200000, pricing: { prompt: "0.0000011", … }, … }, …]</span></pre>
+    </div>
 
     <h2 id="signin-state"><a class="anchor" href="#signin-state">Sign-in state</a></h2>
     <p>magpie marks an account whose sign-in the vendor refused. It shows the mark to the user and stops sending to the account until it works again. By default a 401 marks the account and a success clears the mark. A plugin can say more precisely what an answer means with the <code>X-Magpie-Sign-In</code> response header, which magpie removes before the answer goes on:</p>

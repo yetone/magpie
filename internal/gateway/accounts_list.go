@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -17,7 +18,9 @@ import (
 // ?models=1 adds each one's models: every model it can be asked for, as
 // "<provider>/<model>" takes them, not the first 24 a provider with no
 // picks offers agents (Exposed, manyModels; @tmr11235 again: a plugin
-// testing each model wants the whole list).
+// testing each model wants the whole list). ?models=full gives the same
+// models as /v1/models' rows (modelRows), not ids: their names, levels,
+// windows and prices, which a model past the 24 has nowhere else.
 const AccountsPath = "/v1/magpie/accounts"
 
 // listedAccount is one account or key as AccountsPath tells it.
@@ -41,7 +44,15 @@ type listedAccount struct {
 	// none of the provider's APIs and one the user's list for it leaves
 	// out (#474), and for a held key those the key may use. Each is sent
 	// as "<provider>/<id>", listed to agents or not (provider.Resolve).
-	Models []string `json:"models,omitempty"`
+	//
+	// With ?models=full they are the same models as /v1/models' rows
+	// ([]map[string]any, modelRows), each "id" its "<provider>/<id>"
+	// (@tmr11235: ids alone left a plugin without the names, levels,
+	// windows and prices of the models /v1/models doesn't list). The ids
+	// of ?models=1 stay strings: it shipped a day before, and a plugin
+	// reading them as strings would break on objects. Neither is given
+	// for an account with none.
+	Models any `json:"models,omitempty"`
 }
 
 // accountsList answers AccountsPath. It names the accounts as the quotas
@@ -59,25 +70,48 @@ func (s *Server) accountsList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	only := strings.TrimSpace(r.URL.Query().Get("provider"))
-	withModels := queryYes(r.URL.Query().Get("models"))
-	out := []listedAccount{}
+	asked := r.URL.Query().Get("models")
+	full := strings.EqualFold(strings.TrimSpace(asked), "full")
+	withModels := full || queryYes(asked)
+	var ps []provider.Provider
 	for _, p := range provider.All() {
 		if only != "" && !strings.EqualFold(only, p.ID) {
 			continue
 		}
-		if !scope.provider(p.ID) {
-			continue
+		if scope.provider(p.ID) {
+			ps = append(ps, p)
 		}
+	}
+	// each provider's models, read once a provider; with ?models=full each
+	// model's row too, built over them all at once, as /v1/models builds
+	// its own over its list: one price reader, one Codex tier list, the
+	// labels told apart across providers
+	models := make([][]catalog.Model, len(ps))
+	var rows map[string]map[string]any
+	if withModels {
+		var es []provider.Entry
+		for i, p := range ps {
+			models[i] = modelsListed(p, scope)
+			if full {
+				es = append(es, provider.EntriesOf(p, models[i])...)
+			}
+		}
+		if full {
+			rs, labels := newModelRows(r, es), provider.LabelsFor(agentOf(r), es)
+			rows = make(map[string]map[string]any, len(es))
+			for i, e := range es {
+				rows[e.ID] = rs.row(e, labels[i])
+			}
+		}
+	}
+	out := []listedAccount{}
+	for i, p := range ps {
 		on := accountsOnNow(p)
 		keysOn := map[string]bool{}
 		if p.Account == nil {
 			for _, k := range p.KeyList() {
 				keysOn[k.ID] = k.On
 			}
-		}
-		var models []string
-		if withModels {
-			models = modelsListed(p, scope)
 		}
 		for _, a := range p.AccountIDs() {
 			if scope != nil && !scope.who.AllowsAccount(p.ID, a.ID) {
@@ -91,11 +125,22 @@ func (s *Server) accountsList(w http.ResponseWriter, r *http.Request) {
 				l.Kind, l.User, l.On = "account", a.User, on[strings.ToLower(a.User)] && !p.Off
 			}
 			if withModels {
-				l.Models = []string{}
-				for _, m := range models {
-					if p.AccountServes(ref, m) {
-						l.Models = append(l.Models, m)
+				var ids []string
+				var objs []map[string]any
+				for _, m := range models[i] {
+					if !p.AccountServes(ref, m.ID) {
+						continue
 					}
+					if rows != nil {
+						objs = append(objs, rows[p.ID+"/"+m.ID])
+					} else {
+						ids = append(ids, m.ID)
+					}
+				}
+				if len(objs) > 0 {
+					l.Models = objs
+				} else if len(ids) > 0 {
+					l.Models = ids
 				}
 			}
 			out = append(out, l)
@@ -113,17 +158,17 @@ func queryYes(v string) bool {
 	return false
 }
 
-// modelsListed is the ids of every model p can be asked for (Available,
-// read once a provider), less those on none of its APIs, and for a held
-// key those the key may use.
-func modelsListed(p provider.Provider, scope *quotaScope) []string {
+// modelsListed is every model p can be asked for (Available, read once a
+// provider), less those on none of its APIs, and for a held key those the
+// key may use.
+func modelsListed(p provider.Provider, scope *quotaScope) []catalog.Model {
 	noAPI := p.NoAPI()
-	var out []string
+	var out []catalog.Model
 	for _, m := range p.Available() {
 		if noAPI(m.ID) || scope != nil && !modelListed(scope.who, p, m.ID) {
 			continue
 		}
-		out = append(out, m.ID)
+		out = append(out, m)
 	}
 	return out
 }

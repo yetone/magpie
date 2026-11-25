@@ -2838,7 +2838,11 @@ account or key. `?models=1` adds each one's `models`: the id of every
 model it can be asked for, its provider's whole list (not the first 24
 agents are offered of a provider with no picks), less a model the user
 keeps off that account and one on none of the provider's APIs. Each is
-asked as `<provider>/<id>`, offered to agents or not. It is asked as
+asked as `<provider>/<id>`, offered to agents or not. `?models=full`
+gives the same models as `/v1/models`' rows instead of ids, built by the
+same code: `id` (`<provider>/<id>`), `display_name`, `reasoning_levels`,
+`context_window`, `max_output_tokens`, `modalities`, `pricing`,
+`magpie_label` and the rest. It is asked as
 `/v1/magpie/quotas` is: this machine, or another with a key of a gateway
 shared on the local network; a read-only
 key may read it, and a key held to a budget, models or accounts only when

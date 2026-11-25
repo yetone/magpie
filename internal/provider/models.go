@@ -3950,6 +3950,20 @@ func entryFor(p Provider, m catalog.Model, s settings.Settings) Entry {
 	return sharedEntry(&p, m, s)
 }
 
+// EntriesOf is each of ms, models of p, as the catalog carries a model it
+// lists (sharedEntry): its name, levels, window and reply limit with the
+// user's settings over the vendor's list, the settings read once for them
+// all. ms may go past what agents are offered: the gateway's account list
+// tells every model of p's Available() in /v1/models' shape.
+func EntriesOf(p Provider, ms []catalog.Model) []Entry {
+	s := settings.Load()
+	out := make([]Entry, 0, len(ms))
+	for _, m := range ms {
+		out = append(out, sharedEntry(&p, m, s))
+	}
+	return out
+}
+
 // sharedEntry is entryFor that keeps p itself in the entry, so every model of
 // one provider shares one Provider (1.3KB each) instead of a copy a model.
 func sharedEntry(p *Provider, m catalog.Model, s settings.Settings) Entry {

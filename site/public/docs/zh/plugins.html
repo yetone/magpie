@@ -590,6 +590,12 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
 })</pre>
     </div>
     <p>加上 <code>?models=1</code>，每个账号还会带 <code>models</code>：它能请求的每个模型的 id，也就是供应商的完整列表。没有挑选模型时，给 agent 的列表只有供应商列表的前 24 个；这里不受这个限制，只去掉这个账号请求不了的（用户没让这个账号服务的模型，或供应商的哪个 API 都不提供的模型）。请求时写成 <code>&lt;供应商&gt;/&lt;id&gt;</code>，不管有没有给 agent，例如 <code>openai/o4-mini</code>。</p>
+    <p>改用 <code>?models=full</code>，<code>models</code> 里的每一项就是 <code>/v1/models</code> 列出的那个模型，字段一一相同：<code>id</code>（<code>&lt;供应商&gt;/&lt;id&gt;</code>）、<code>display_name</code>、<code>reasoning</code>、<code>reasoning_levels</code>、<code>context_window</code>、<code>max_output_tokens</code>、<code>modalities</code>、<code>pricing</code>、<code>magpie_label</code> 等等，<code>/v1/models</code> 没列出的模型也一样。<code>?models=1</code> 仍然只给 id。</p>
+    <div class="code">
+      <span class="lang">JavaScript</span>
+      <pre><span class="k">const</span> { data } = <span class="k">await</span> (<span class="k">await</span> fetch(base + <span class="s">"/v1/magpie/accounts?models=full"</span>)).json()
+<span class="c">// data[0].models: [{ id: "openai/o4-mini", display_name: "o4-mini", reasoning_levels: ["low", "medium", "high"], context_window: 200000, pricing: { prompt: "0.0000011", … }, … }, …]</span></pre>
+    </div>
 
     <h2 id="signin-state"><a class="anchor" href="#signin-state">登录状态</a></h2>
     <p>厂商拒绝了某个账号的登录时，magpie 会给它打上标记，告诉用户，并且在它恢复之前不再往它发请求。默认情况下，401 打标记，成功清除标记。插件可以用 <code>X-Magpie-Sign-In</code> 响应头更准确地说明一个回答的含义，magpie 会在转发前去掉这个头：</p>

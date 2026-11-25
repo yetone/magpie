@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -14,6 +15,7 @@ import (
 	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // keyVendor answers a chat request by its key: 401 with the vendor's own
@@ -247,7 +249,7 @@ func TestAccountsListTellsEveryModel(t *testing.T) {
 		t.Fatalf("%d %s", code, body)
 	}
 	var out struct {
-		Data []listedAccount `json:"data"`
+		Data []idsListed `json:"data"`
 	}
 	if err := json.Unmarshal([]byte(body), &out); err != nil {
 		t.Fatal(err)
@@ -310,12 +312,125 @@ func TestAccountsListModelsOfAHeldKey(t *testing.T) {
 	w := httptest.NewRecorder()
 	lanGuard(New().Handler()).ServeHTTP(w, r)
 	var out struct {
-		Data []listedAccount `json:"data"`
+		Data []idsListed `json:"data"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil || w.Code != 200 {
 		t.Fatalf("%d %s", w.Code, w.Body.String())
 	}
 	if len(out.Data) != 1 || !slices.Equal(out.Data[0].Models, want) {
 		t.Fatalf("the held key is told %s", w.Body.String())
+	}
+}
+
+// idsListed is a listed account as ?models=1 tells it, its models by id.
+type idsListed struct {
+	listedAccount
+	Models []string `json:"models"`
+}
+
+// @tmr11235 on X, a third time: ?models=1's ids gave a plugin none of what
+// /v1/models tells of a model, its name, levels, window or price, and a
+// model past the 24 is in no other list. ?models=full gives each account
+// its models as /v1/models' rows, built by the same code: a model both
+// list is told the same in both, one past the 24 is told as fully, and
+// ?models=1 still gives ids.
+func TestAccountsListTellsEveryModelInFull(t *testing.T) {
+	fresh(t)
+	p := provider.Provider{ID: "wide", Name: "Wide", Chat: "https://wide.example.invalid/v1", Key: firstKey,
+		Keys:          []provider.KeyAccount{{Key: secondKey, Name: "small"}},
+		AccountModels: map[string][]string{provider.KeyID(secondKey): {"m3", "m29"}}}
+	if err := provider.Save(p); err != nil {
+		t.Fatal(err)
+	}
+	var ms []catalog.Model
+	for i := range 30 {
+		ms = append(ms, catalog.Model{ID: fmt.Sprintf("m%d", i), Name: fmt.Sprintf("Model %d", i),
+			Efforts: []string{"low", "high"}, Context: 200000 + i, Output: 32000})
+	}
+	if err := catalog.SaveLive("wide", p.Chat, ms); err != nil {
+		t.Fatal(err)
+	}
+	f := func(v float64) *float64 { return &v }
+	if err := settings.Save(settings.Settings{
+		ModelPrices: map[string]settings.ModelPrice{"wide/*": {Input: f(1), Output: f(4), CacheRead: f(0.1), CacheWrite: f(0)}},
+		ModelNames:  map[string]string{"wide/m29": "Far Model"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	s := New()
+	get := func(path string) string {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", path, nil)
+		req.RemoteAddr = "127.0.0.1:5000"
+		s.Handler().ServeHTTP(rec, req)
+		if rec.Code != 200 {
+			t.Fatalf("%s: %d %s", path, rec.Code, rec.Body.String())
+		}
+		if strings.Contains(rec.Body.String(), firstKey) || strings.Contains(rec.Body.String(), secondKey) {
+			t.Fatalf("%s tells a key: %s", path, rec.Body.String())
+		}
+		return rec.Body.String()
+	}
+	var listed struct {
+		Data []map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(get("/v1/models")), &listed); err != nil {
+		t.Fatal(err)
+	}
+	row := map[string]map[string]any{}
+	for _, m := range listed.Data {
+		row[m["id"].(string)] = m
+	}
+	if row["wide/m0"] == nil || row["wide/m29"] != nil {
+		t.Fatalf("/v1/models lists the first 24 alone: %v", listed.Data)
+	}
+	var full struct {
+		Data []struct {
+			ID     string           `json:"id"`
+			Models []map[string]any `json:"models"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(get(AccountsPath+"?provider=wide&models=full")), &full); err != nil {
+		t.Fatal(err)
+	}
+	if len(full.Data) != 2 {
+		t.Fatalf("listed %v", full.Data)
+	}
+	for _, a := range full.Data {
+		want := 30
+		if a.ID == provider.KeyID(secondKey) {
+			want = 2
+		}
+		if len(a.Models) != want {
+			t.Fatalf("%s is told %d models, want %d", a.ID, len(a.Models), want)
+		}
+		for _, m := range a.Models {
+			id, _ := m["id"].(string)
+			if !strings.HasPrefix(id, "wide/m") {
+				t.Fatalf("a model not asked as <provider>/<id>: %v", m)
+			}
+			// a model /v1/models lists is told the same, field for field
+			if want, ok := row[id]; ok && !reflect.DeepEqual(m, want) {
+				t.Errorf("%s: accounts tell %v, /v1/models %v", id, m, want)
+			}
+		}
+	}
+	// one past the 24 is told as fully as one in the list
+	far := full.Data[1].Models[1]
+	if far["id"] != "wide/m29" || far["display_name"] != "Far Model" || far["context_window"] != float64(200029) ||
+		fmt.Sprint(far["reasoning_levels"]) != "[low high]" || far["max_output_tokens"] != float64(32000) ||
+		far["pricing"] == nil || far["magpie_label"] != "Far Model · Wide" || far["owned_by"] != "wide" {
+		t.Fatalf("wide/m29 is told %v", far)
+	}
+	// ?models=1 is as it shipped: ids
+	var ids struct {
+		Data []idsListed `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(get(AccountsPath+"?provider=wide&models=1")), &ids); err != nil {
+		t.Fatal(err)
+	}
+	if len(ids.Data) != 2 || len(ids.Data[0].Models) != 30 || !slices.Equal(ids.Data[1].Models, []string{"m3", "m29"}) {
+		t.Fatalf("?models=1 gives %v", ids.Data)
 	}
 }

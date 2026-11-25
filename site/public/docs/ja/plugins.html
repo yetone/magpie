@@ -590,6 +590,12 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
 })</pre>
     </div>
     <p><code>?models=1</code> を付けると、それぞれに <code>models</code> も付きます。そのアカウントで呼べるすべてのモデルの id、つまりプロバイダの完全な一覧です。モデルを選んでいないとき、エージェントに出す一覧はプロバイダの一覧の先頭 24 個だけですが、こちらにはその上限がありません。外れるのはそのアカウントで呼べないもの（ユーザーがそのアカウントに使わせないモデルや、プロバイダのどの API にもないモデル）だけです。エージェントに出しているかどうかに関係なく、<code>&lt;provider&gt;/&lt;id&gt;</code> の形で呼べます（例：<code>openai/o4-mini</code>）。</p>
+    <p>代わりに <code>?models=full</code> を付けると、<code>models</code> の各項目は <code>/v1/models</code> が返すそのモデルと同じ形になり、フィールドも同じです：<code>id</code>（<code>&lt;provider&gt;/&lt;id&gt;</code>）、<code>display_name</code>、<code>reasoning</code>、<code>reasoning_levels</code>、<code>context_window</code>、<code>max_output_tokens</code>、<code>modalities</code>、<code>pricing</code>、<code>magpie_label</code> など。<code>/v1/models</code> に出ていないモデルも同じです。<code>?models=1</code> はこれまでどおり id だけを返します。</p>
+    <div class="code">
+      <span class="lang">JavaScript</span>
+      <pre><span class="k">const</span> { data } = <span class="k">await</span> (<span class="k">await</span> fetch(base + <span class="s">"/v1/magpie/accounts?models=full"</span>)).json()
+<span class="c">// data[0].models: [{ id: "openai/o4-mini", display_name: "o4-mini", reasoning_levels: ["low", "medium", "high"], context_window: 200000, pricing: { prompt: "0.0000011", … }, … }, …]</span></pre>
+    </div>
 
     <h2 id="signin-state"><a class="anchor" href="#signin-state">サインイン状態</a></h2>
     <p>magpie は、ベンダーにサインインを拒否されたアカウントに記録を付けます。その記録をユーザーに表示し、再び使えるようになるまでそのアカウントには送信しません。デフォルトでは 401 で記録が付き、成功すると消えます。プラグインは <code>X-Magpie-Sign-In</code> レスポンスヘッダーで、応答の意味をより正確に伝えられます。このヘッダーは応答が先に渡される前に magpie が取り除きます：</p>
