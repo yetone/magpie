@@ -31,7 +31,7 @@ func providerKeysFixture(t *testing.T) {
 
 func reachMap(t *testing.T, pid string) map[string]ProviderKey {
 	t.Helper()
-	ks, err := ProviderKeys(pid)
+	ks, err := ProviderKeys(pid, testGroups)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestProviderKeysReach(t *testing.T) {
 // holds the key the same way.
 func TestSetProviderKeys(t *testing.T) {
 	providerKeysFixture(t)
-	if err := SetProviderKeys("openai", []string{"other", "accts", "via"}, []string{"some", "whole"}, provs); err != nil {
+	if err := SetProviderKeys("openai", []string{"other", "accts", "via"}, []string{"some", "whole"}, provs, testGroups); err != nil {
 		t.Fatal(err)
 	}
 	for id, want := range map[string][]string{
@@ -122,7 +122,7 @@ func TestSetProviderKeys(t *testing.T) {
 		t.Errorf("accounts key lost a provider: %+v", who.Models)
 	}
 	// a key that reaches some of the provider's models stays at some
-	if err := SetProviderKeys("anthropic", []string{"some"}, nil, provs); err != nil {
+	if err := SetProviderKeys("anthropic", []string{"some"}, nil, provs, testGroups); err != nil {
 		t.Fatal(err)
 	}
 	if got := keyByID(t, "some").Models; !slices.Equal(got, []string{"anthropic/*"}) {
@@ -136,7 +136,7 @@ func TestSetProviderKeys(t *testing.T) {
 func TestSetProviderKeysRefuses(t *testing.T) {
 	providerKeysFixture(t)
 	for id, ps := range map[string][]string{"only": provs, "all": {"openai"}, "kept-out": nil} {
-		err := SetProviderKeys("openai", []string{"other"}, []string{id}, ps)
+		err := SetProviderKeys("openai", []string{"other"}, []string{id}, ps, testGroups)
 		if err == nil || !strings.Contains(err.Error(), "Gateway page") {
 			t.Errorf("%s: %v", id, err)
 		}
@@ -147,14 +147,14 @@ func TestSetProviderKeysRefuses(t *testing.T) {
 	if k := keyByID(t, "all"); len(k.Models) != 0 || len(k.Accounts) != 0 {
 		t.Errorf("every-model key changed: %+v", k)
 	}
-	if err := SetProviderKeys("openai", nil, []string{"ro"}, provs); err == nil {
+	if err := SetProviderKeys("openai", nil, []string{"ro"}, provs, testGroups); err == nil {
 		t.Error("a read-only key was taken")
 	}
-	if err := SetProviderKeys("openai", []string{"nope"}, nil, provs); err == nil {
+	if err := SetProviderKeys("openai", []string{"nope"}, nil, provs, testGroups); err == nil {
 		t.Error("an unknown key was taken")
 	}
 	for _, pid := range []string{"", "a/b", "*"} {
-		if err := SetProviderKeys(pid, []string{"other"}, nil, provs); err == nil {
+		if err := SetProviderKeys(pid, []string{"other"}, nil, provs, testGroups); err == nil {
 			t.Errorf("provider %q taken", pid)
 		}
 	}
@@ -166,11 +166,11 @@ func TestSetProviderKeysRefuses(t *testing.T) {
 // kept, and the gateway then keeps it off this provider alone.
 func TestSetProviderKeysNarrowsAnEveryModelKey(t *testing.T) {
 	providerKeysFixture(t)
-	if err := SetProviderKeys("openai", nil, []string{"all", "kept-out"}, provs); err != nil {
+	if err := SetProviderKeys("openai", nil, []string{"all", "kept-out"}, provs, testGroups); err != nil {
 		t.Fatal(err)
 	}
 	for _, id := range []string{"all", "kept-out"} {
-		if got, want := keyByID(t, id).Models, []string{"anthropic/*", "kimi/*", "group/*"}; !slices.Equal(got, want) {
+		if got, want := keyByID(t, id).Models, []string{"anthropic/*", "kimi/*", "group/team"}; !slices.Equal(got, want) {
 			t.Errorf("%s: models %v, want %v", id, got, want)
 		}
 	}
@@ -185,11 +185,68 @@ func TestSetProviderKeysNarrowsAnEveryModelKey(t *testing.T) {
 		t.Errorf("unticked key still reads as reaching openai: %+v", k)
 	}
 	// ticked again, it reaches openai whole
-	if err := SetProviderKeys("openai", []string{"all"}, nil, provs); err != nil {
+	if err := SetProviderKeys("openai", []string{"all"}, nil, provs, testGroups); err != nil {
 		t.Fatal(err)
 	}
 	if who, ok := Authenticate(Prefix + "all-secret-0000000000"); !ok || !who.Allows("openai/gpt-5") {
 		t.Errorf("ticked again: %+v", who.Models)
+	}
+}
+
+// testGroups are the routing groups the tests' keys may name: team has no
+// member of openai's, mixed has one, and auto-gpt-5 is a group magpie
+// found for a model openai serves with another
+var testGroups = []GroupRef{
+	{Refs: []string{"group/team"}},
+	{Refs: []string{"group/mixed"}, Reaches: true},
+	{Refs: []string{"group/auto-gpt-5", "auto/gpt-5"}, Found: true, Reaches: true},
+}
+
+// A key unticked from a provider never reaches it through a routing group:
+// a key that names a group is sent to every member of it, so "group/*"
+// written for an every-model key took it to openai through any group with
+// an openai member, a group magpie found for a model openai serves with
+// another among them, while the editor said it was off openai.
+func TestSetProviderKeysKeepsGroupsOffTheProvider(t *testing.T) {
+	providerKeysFixture(t)
+	keys, err := load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys = append(keys,
+		Key{ID: "grp", Name: "grp", Secret: Prefix + "grp-secret-0000000000", Models: []string{"openai/*", "group/*"}},
+		Key{ID: "grp-only", Name: "grp-only", Secret: Prefix + "grp-only-secret-00000", Models: []string{"openai/gpt-5", "group/mixed"}},
+		Key{ID: "grp-via", Name: "grp-via", Secret: Prefix + "grp-via-secret-000000", Models: []string{"anthropic/*", "group/mixed", "auto/*"}},
+	)
+	if err := save(keys); err != nil {
+		t.Fatal(err)
+	}
+	// a group entry that reaches openai is shown as such
+	if k := reachMap(t, "openai")["grp-via"]; k.Reach != ReachNone || !slices.Equal(k.Via, []string{"group/mixed", "auto/*"}) {
+		t.Errorf("a key reaching openai through groups: %+v", k)
+	}
+	if err := SetProviderKeys("openai", nil, []string{"all", "grp"}, provs, testGroups); err != nil {
+		t.Fatal(err)
+	}
+	for id, want := range map[string][]string{
+		"all": {"anthropic/*", "kimi/*", "group/team"},
+		"grp": {"group/team"},
+	} {
+		if got := keyByID(t, id).Models; !slices.Equal(got, want) {
+			t.Errorf("%s: models %v, want %v", id, got, want)
+		}
+		who, ok := Authenticate(Prefix + map[string]string{"all": "all-secret-0000000000", "grp": "grp-secret-0000000000"}[id])
+		if !ok || who.Allows("group/mixed") || who.Allows("group/auto-gpt-5") || who.Allows("auto/gpt-5") || who.Allows("openai/gpt-5") || !who.Allows("group/team") {
+			t.Errorf("%s: unticked key still reaches openai through a group: %v", id, who.Models)
+		}
+	}
+	// groups alone, none kept: refused, never let off to every model
+	err = SetProviderKeys("openai", nil, []string{"grp-only"}, provs, testGroups)
+	if err == nil || !strings.Contains(err.Error(), "Gateway page") {
+		t.Errorf("grp-only: %v", err)
+	}
+	if got := keyByID(t, "grp-only").Models; !slices.Equal(got, []string{"openai/gpt-5", "group/mixed"}) {
+		t.Errorf("grp-only changed though refused: %v", got)
 	}
 }
 

@@ -275,7 +275,8 @@ func callerKeyRoutes(mux *http.ServeMux) {
 	// ticking or unticking some of them, written to each key's own models
 	mux.HandleFunc("GET /api/provider-keys", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
-		keys, err := access.ProviderKeys(r.URL.Query().Get("provider"))
+		pid := r.URL.Query().Get("provider")
+		keys, err := access.ProviderKeys(pid, groupRefs(pid))
 		if err != nil {
 			fail(w, err)
 			return
@@ -298,11 +299,12 @@ func callerKeyRoutes(mux *http.ServeMux) {
 		for _, p := range provider.All() {
 			ids = append(ids, p.ID)
 		}
-		if err := access.SetProviderKeys(in.Provider, in.Add, in.Remove, ids); err != nil {
+		groups := groupRefs(in.Provider)
+		if err := access.SetProviderKeys(in.Provider, in.Add, in.Remove, ids, groups); err != nil {
 			fail(w, err)
 			return
 		}
-		keys, err := access.ProviderKeys(in.Provider)
+		keys, err := access.ProviderKeys(in.Provider, groups)
 		if err != nil {
 			fail(w, err)
 			return
@@ -360,4 +362,61 @@ func accountGroupsJSON() []access.AccountGroup {
 		return []access.AccountGroup{}
 	}
 	return gs
+}
+
+// groupRefs are the routing groups as they reach provider pid, for its
+// side of the keys: a key that names a group is sent to every member of
+// it, so one that may have a member of pid's reaches pid through it. A
+// group reaches pid when a member it names is pid's, a group in it does,
+// a pattern of its may match a model of pid's (a regular expression may
+// match any), or a member it resolves to now is pid's.
+func groupRefs(pid string) []access.GroupRef {
+	pid = strings.TrimSpace(pid)
+	all := provider.Groups()
+	byID := map[string]provider.Group{}
+	for _, g := range all {
+		byID[strings.ToLower(g.ID)] = g
+	}
+	find := provider.GroupFinder()
+	var reaches func(g provider.Group, seen map[string]bool) bool
+	reaches = func(g provider.Group, seen map[string]bool) bool {
+		if seen[strings.ToLower(g.ID)] {
+			return false
+		}
+		seen[strings.ToLower(g.ID)] = true
+		for _, m := range slices.Concat(g.Members, g.Matched) {
+			if id, ok := strings.CutPrefix(m, provider.GroupPrefix); ok {
+				if in, ok := byID[strings.ToLower(id)]; ok && reaches(in, seen) {
+					return true
+				}
+				continue
+			}
+			if head, _, _ := strings.Cut(m, "/"); strings.EqualFold(strings.TrimSpace(head), pid) {
+				return true
+			}
+		}
+		for _, p := range g.Match {
+			head, _, ok := strings.Cut(p, "/")
+			if access.IsPattern(p) || !ok || access.ModelAllowed([]string{head}, pid) {
+				return true
+			}
+		}
+		if _, ms, ok := find(provider.GroupPrefix + g.ID); ok {
+			for _, m := range ms {
+				if strings.EqualFold(m.Provider.ID, pid) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	out := make([]access.GroupRef, 0, len(all))
+	for _, g := range all {
+		refs := []string{provider.GroupPrefix + g.ID}
+		if ref := g.Ref(); ref != refs[0] {
+			refs = append(refs, ref)
+		}
+		out = append(out, access.GroupRef{Refs: refs, Found: g.Auto || strings.HasPrefix(g.ID, "auto-"), Reaches: reaches(g, map[string]bool{})})
+	}
+	return out
 }
