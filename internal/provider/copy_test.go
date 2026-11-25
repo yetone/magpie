@@ -46,13 +46,15 @@ func TestAddCopy(t *testing.T) {
 		c.Routing != "rotate" || c.BalanceToken != "tok" || c.AccessKeyID != "AK-1" || c.SecretAccessKey != "SK-1" || c.SessionToken != "ST-1" || !slices.Equal(c.Fallback, src.Fallback) || c.BalanceURL != src.BalanceURL {
 		t.Fatalf("copy: %+v", c)
 	}
-	// again, under the next free id and name, with a key of its own
+	// again, under the next free id and name, with a key of its own: a
+	// different account, so from's balance token is not inherited (it would
+	// ask from's account and show its balance twice, the copy's own never).
 	form.Key = "sk-9"
 	id, err = AddCopy(form, "relay")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c, _ := Find(id); id != "relay-copy-2" || c.Name != "Relay copy 2" || c.Key != "sk-9" || len(c.Keys) != 0 {
+	if c, _ := Find(id); id != "relay-copy-2" || c.Name != "Relay copy 2" || c.Key != "sk-9" || len(c.Keys) != 0 || c.BalanceToken != "" {
 		t.Fatalf("second copy %s: %+v", id, c)
 	}
 	if _, err := AddCopy(form, "nope"); err == nil {

@@ -1606,9 +1606,13 @@ func AddCopy(p Provider, from string) (string, error) {
 		p.Key, p.KeyName, p.KeyProtocol, p.KeyWeight, p.KeyPlan = src.Key, src.KeyName, src.KeyProtocol, src.KeyWeight, src.KeyPlan
 		p.Keys = slices.Clone(src.Keys)
 		p.Routing, p.Sink, p.Affinity = src.Routing, src.Sink, src.Affinity
-	}
-	if p.BalanceToken == "" {
-		p.BalanceToken = src.BalanceToken
+		// the balance token belongs to the account the keys sign in to, so it
+		// comes with them. A copy pasted its own key is another account
+		// (zhonglin on X): inheriting from's token would ask from's account
+		// and show its balance twice, the copy's own account never asked.
+		if p.BalanceToken == "" {
+			p.BalanceToken = src.BalanceToken
+		}
 	}
 	// the access key as the copy's editor showed it: the form sends its ID
 	// but never the saved Secret, which went missing from the copy (#1821)
