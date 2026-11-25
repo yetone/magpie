@@ -1746,12 +1746,13 @@ func googleAccountOf(agent string) (Provider, bool) {
 	return googleProvider(ls[0].acct, ls[0].Plan), true
 }
 
-// googleAlsoOn is the app's accounts in use behind the first.
-func googleAlsoOn(agent string) []Provider {
+// googleAlsoOn is the app's accounts in use behind the first; withOff,
+// those turned off too, marked off.
+func googleAlsoOn(agent string, withOff bool) []Provider {
 	var out []Provider
 	for _, l := range googleLogins(agent) {
-		if !l.Active && l.On {
-			out = append(out, googleProvider(l.acct, l.Plan))
+		if !l.Active && (l.On || withOff) {
+			out = append(out, offIf(googleProvider(l.acct, l.Plan), !l.On))
 		}
 	}
 	return out

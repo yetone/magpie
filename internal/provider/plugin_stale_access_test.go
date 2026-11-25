@@ -155,7 +155,7 @@ func TestPluginStaleAccessRenewsNotLapses(t *testing.T) {
 	}
 	// a lapsed account is still one to route to: the first of the
 	// provider, or one beside it
-	routed := slices.ContainsFunc(pluginAlsoOn(mustPlugin(t)), func(p Provider) bool { return p.Account != nil && p.Account.pluginKey == keys["bad@fake"] })
+	routed := slices.ContainsFunc(pluginAlsoOn(mustPlugin(t), false), func(p Provider) bool { return p.Account != nil && p.Account.pluginKey == keys["bad@fake"] })
 	for _, l := range pluginLogins(mustPlugin(t)) {
 		routed = routed || l.User == "bad@fake" && l.Active
 	}

@@ -66,6 +66,11 @@ type Account struct {
 	// Code's own while Claude Code is signed out (claude_dirs.go).
 	standIn bool
 
+	// off is an account the user turned off, made only for a test sent
+	// to it before it is turned on (testAccounts): routing never takes
+	// one (AlsoOn leaves them out).
+	off bool
+
 	// unnamed is Claude Code's own sign-in while it is known by no name:
 	// User is a name made from its plan ("Claude Max") until Claude Code
 	// puts the account's profile in its config, as its first run does.

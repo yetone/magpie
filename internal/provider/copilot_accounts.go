@@ -326,12 +326,13 @@ func copilotAccount(cfg string) (Provider, bool) {
 	return copilotProvider(ls[0].app, ls[0].Plan), true
 }
 
-// copilotAlsoOn is the Copilot accounts in use behind the first.
-func copilotAlsoOn() []Provider {
+// copilotAlsoOn is the Copilot accounts in use behind the first; withOff,
+// those turned off too, marked off.
+func copilotAlsoOn(withOff bool) []Provider {
 	var out []Provider
 	for _, c := range copilotLogins(copilotConfigDir()) {
-		if !c.Active && c.On {
-			out = append(out, copilotProvider(c.app, c.Plan))
+		if !c.Active && (c.On || withOff) {
+			out = append(out, offIf(copilotProvider(c.app, c.Plan), !c.On))
 		}
 	}
 	return out

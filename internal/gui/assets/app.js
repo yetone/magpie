@@ -11661,7 +11661,7 @@ function renderModels(p) {
           const why = p.testsAs[as] ? t(p.testsAs[as]) : "";
           acts.push({ name, icon: PLAY_ICON, off: !!why, why, tip: t("Asked as {agent} asks, for a relay that serves only {agent}", { agent }), run: () => testOne(id, as) });
         }
-        if (p.testPicks) acts.push({ name: "Test on account…", icon: PLAY_ICON, tip: t("Pick the account or key the test is sent to"), run: () => openProtoMenu(c, p.testPicks.map((k) => ({ v: k.id, name: k.name, literalName: true })), null, (v) => testOne(id, "", v), "Account to test", "model-account-menu") });
+        if (p.testPicks) acts.push({ name: "Test on account…", icon: PLAY_ICON, tip: t("Pick the account or key the test is sent to"), run: () => openProtoMenu(c, p.testPicks.map((k) => ({ v: k.id, literalName: true, ...k })), null, (v) => testOne(id, "", v), "Account to test", "model-account-menu") });
       }
       // its id as agents and the gateway name it, to paste where a model is
       // typed (ARNO, Discord: 右击菜单除了测试模型外，还能添加拷贝模型id的功能)

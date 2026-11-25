@@ -351,9 +351,10 @@ type providerJSON struct {
 	// (provider.TestAs), for a relay that serves only them: the chip's
 	// right-click offers each, and says why one can't be when it can't
 	TestsAs map[string]string `json:"testsAs,omitempty"`
-	// TestPicks is the accounts or keys that are on when there are two
-	// or more (provider.TestPicks): the chip's right-click offers a
-	// test on one of them
+	// TestPicks is the accounts or keys, on or off, when there are two
+	// or more or one is off (provider.TestPicks): the chip's right-click
+	// offers a test on one of them, an account off tested before it is
+	// turned on
 	TestPicks []provider.TestPick `json:"testPicks,omitempty"`
 	// DecideTest is set when its decision models can each be sent a
 	// System One question (provider.AsksDecideModels): a mixed

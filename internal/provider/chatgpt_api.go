@@ -829,12 +829,13 @@ func SIWCForTest(issuer, api string) func() {
 	return func() { siwcIssuer, siwcAuthorizeURL, siwcTokenURL, siwcAPI = oldI, oldA, oldT, oldS }
 }
 
-// siwcAlsoOn is the ChatGPT API accounts in use behind the first.
-func siwcAlsoOn() []Provider {
+// siwcAlsoOn is the ChatGPT API accounts in use behind the first; withOff,
+// those turned off too, marked off.
+func siwcAlsoOn(withOff bool) []Provider {
 	var out []Provider
 	for _, l := range siwcLoginList() {
-		if !l.Active && l.On {
-			out = append(out, siwcProvider(l))
+		if !l.Active && (l.On || withOff) {
+			out = append(out, offIf(siwcProvider(l), !l.On))
 		}
 	}
 	return out

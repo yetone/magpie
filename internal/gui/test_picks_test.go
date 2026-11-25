@@ -32,9 +32,15 @@ func TestProviderInfoSaysTestPicks(t *testing.T) {
 	}
 	two := provider.Provider{ID: "relay", Name: "Relay", Chat: "http://127.0.0.1:1/v1", Key: "sk-a", KeyName: "first",
 		Keys: []provider.KeyAccount{{Name: "second", Key: "sk-b"}, {Name: "off", Key: "sk-c", Off: true}}}
+	// the key off too, last and marked (tmr11235: tested before it is turned on)
 	picks, _ := row(two)["testPicks"].([]any)
-	if len(picks) != 2 {
-		t.Fatalf("two keys on: testPicks %v", picks)
+	if len(picks) != 3 || picks[2].(map[string]any)["note"] != "Off" || picks[0].(map[string]any)["note"] != nil {
+		t.Fatalf("two keys on, one off: testPicks %v", picks)
+	}
+	onOff := provider.Provider{ID: "pair", Name: "Pair", Chat: "http://127.0.0.1:1/v1", Key: "sk-a",
+		Keys: []provider.KeyAccount{{Name: "spare", Key: "sk-c", Off: true}}}
+	if picks, _ := row(onOff)["testPicks"].([]any); len(picks) != 2 {
+		t.Fatalf("one key on, one off: testPicks %v", picks)
 	}
 	one := provider.Provider{ID: "solo", Name: "Solo", Chat: "http://127.0.0.1:1/v1", Key: "sk-a"}
 	if _, ok := row(one)["testPicks"]; ok {

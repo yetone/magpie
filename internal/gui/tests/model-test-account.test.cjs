@@ -2,7 +2,7 @@
 // tmr11235 on X: in a provider with several accounts or keys the model test
 // goes to the one routing picks, and says nothing of which. A model chip's
 // right-click now offers "Test on account…", the app's own menu (never a
-// native select) of the accounts or keys that are on (testPicks): the pick
+// native select) of the accounts or keys, on or off (testPicks): the pick
 // is posted as `account` with provider/test, and the status line names the
 // one that was asked. A provider with one shows no such entry. Narrow, as
 // the panel is, in every language, Chromium and WebKit.
@@ -15,7 +15,9 @@ const { chromium, webkit } = require("playwright");
 const assets = path.resolve(__dirname, "../assets");
 const base = { icon: "generic", responses: "", anthropic: "", catalog: "", agents: [], fallback: [], headers: {},
   key: { set: true, masked: "sk-…one" }, keyList: [], balanceToken: { takes: false, set: false }, proxy: "" };
-const PICKS = [{ id: "k1", name: "Work" }, { id: "k2", name: "Spare" }];
+// Spare is off (tmr11235 again: test a key before turning it on, since on it
+// takes requests at once): listed after those on, marked Off
+const PICKS = [{ id: "k1", name: "Work" }, { id: "k2", name: "Spare", note: "Off" }];
 const relay = { ...base, id: "relay", name: "Relay", chat: "https://relay.example.com/v1",
   models: [{ id: "gpt-5.5", name: "gpt-5.5", on: true }], testPicks: PICKS };
 // tmr11235's: ChatGPT API signed in under two ChatGPT accounts, both on
@@ -86,6 +88,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await page.locator(".editor select").count(), 0, "no native select");
       assert.equal(await pick.locator(".pm-head").textContent(), await tr("Account to test"));
       assert.deepEqual(await pick.locator(".pm-name").allTextContents(), ["Work", "Spare"]);
+      assert.deepEqual(await pick.locator(".pm-note").allTextContents(), ["", await tr("Off")], "the key off is marked so");
       const box = await pick.boundingBox();
       assert(box.x >= 0 && box.x + box.width <= 420, `the menu fits: ${JSON.stringify(box)}`);
       await pick.locator(".pm-item", { hasText: "Spare" }).click();

@@ -566,12 +566,12 @@ func (p Provider) testOne(ctx context.Context, model string) Result {
 		// the account the user picked to test (TestOn)
 		var found bool
 		if acct, found = p.accountNamed(ref); !found {
-			return Result{Model: model, Error: fmt.Sprintf("no account %q that's on", ref)}
+			return Result{Model: model, Error: fmt.Sprintf("no account %q", ref)}
 		}
 	} else if ref != "" {
 		var found bool
 		if p, found = p.keyNamed(ref); !found {
-			return Result{Model: model, Error: "no such key that's on"}
+			return Result{Model: model, Error: "no such key"}
 		}
 		acct = p
 	} else {

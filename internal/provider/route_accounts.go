@@ -27,8 +27,11 @@ type AccountOn struct {
 // it for the others on (#263), then the others on; kept signed in to an
 // account of the user's choosing, the one signed in to stands at its own
 // place in the order, not first (#524).
-func (p Provider) AccountsOn() []AccountOn {
-	also := p.AlsoOn()
+func (p Provider) AccountsOn() []AccountOn { return p.accountsOrdered(p.AlsoOn()) }
+
+// accountsOrdered is AccountsOn with p's other accounts on, also, read
+// already.
+func (p Provider) accountsOrdered(also []Provider) []AccountOn {
 	var all []AccountOn
 	if len(also) == 0 || !p.OwnPaused() {
 		all = append(all, AccountOn{Provider: p, Own: true})
