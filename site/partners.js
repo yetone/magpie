@@ -141,7 +141,7 @@ export const PARTNERS = [
     },
     langs: ["zh", "en"],
     from: "2026-10-26T00:00:00+08:00",
-    until: "2026-11-26T00:00:00+08:00",
+    until: "2026-12-26T00:00:00+08:00",
   },
   {
     id: "fastai",
