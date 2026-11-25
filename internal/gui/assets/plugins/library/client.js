@@ -6269,6 +6269,8 @@ magpie.plugin("library", (ctx) => {
       ? t("A magpie on another computer that adds this one as a provider, with Use its skills and prompts on, takes these skills and gives them to its agents.")
       : t("A skill is a folder with a SKILL.md an agent loads when it's needed. The library keeps each one once and links it into the agents you pick.")));
     const all = skillAgents();
+    // one agent's, while it can still be picked
+    if (lib.skills.length < 2 || all.length < 2 || !all.some((a) => a.id === skillAgent)) skillAgent = "";
     // the skill router first, over the install card and the list (the
     // owner, 11-21: at the foot of a long list nobody found it), and
     // always: hidden while the library had no skill, the owner (11-23)
@@ -6281,6 +6283,7 @@ magpie.plugin("library", (ctx) => {
       rh.append(el("span", "label", t("In the library")));
       const box = el("div", "lib-groups");
       if (lib.skills.length > 8) rh.append(skillFilter(box, all));
+      if (lib.skills.length > 1 && all.length > 1) rh.append(skillAgentPick(all));
       const fresh = lib.skills.filter((s) => s.kind === "github" || s.kind === "git" || s.origin);
       rh.append(el("span", "grow"));
       if (lib.skills.length > 1) rh.append(sortBy("libSkills", SKILL_SORTS(), () => { if (box.isConnected) drawSkills(box, all); }));
@@ -6378,16 +6381,16 @@ magpie.plugin("library", (ctx) => {
       rh.setAttribute("aria-busy", "true");
       rh.append(el("span", "label", t("In your agents")), el("span", "grow"), el("span", "note", t("Looking through the agents' skill folders…")));
       body.append(rh);
-    } else if (lib.foundSkills.length) {
-      const fnames = lib.foundSkills.map((f) => f.name);
+    } else if (foundShown().length) {
+      const found = foundShown(), fnames = lib.foundSkills.map((f) => f.name);
       if (pickFound && fnames.length < 2) endFoundPick();
       for (const n of foundPicked) if (!fnames.includes(n)) foundPicked.delete(n);
       for (const n of foundErrs.keys()) if (!fnames.includes(n)) foundErrs.delete(n);
       const rh = el("div", "row-head lib-foundhead");
       rh.append(el("span", "label", t("In your agents")), el("span", "grow"), el("span", "note", t("not in the library — bring one in to give it to the others")));
       // every one at once, rather than a click for each
-      if (lib.foundSkills.length > 1) {
-        const names = lib.foundSkills.map((f) => f.name);
+      if (found.length > 1) {
+        const names = found.map((f) => f.name);
         const all = button(t("Bring in all"), "action lib-updall lib-importall", async (e, b) => {
           b.classList.add("busy");
           b.textContent = t("Bringing in…");
@@ -6400,7 +6403,7 @@ magpie.plugin("library", (ctx) => {
       }
       body.append(rh);
       // picking, every row is there to be picked
-      body.append(foldedFound("skills", lib.foundSkills.map(foundSkillRow), pickFound));
+      body.append(foldedFound("skills", found.map(foundSkillRow), pickFound));
       if (pickFound) body.append(foundPickBar());
     }
     if (lib.skills.length || lib.projects.length) renderProjects(body, "skills");
@@ -6687,14 +6690,43 @@ magpie.plugin("library", (ctx) => {
     return f;
   }
 
+  // One agent's skills (MetalHqa on X: every agent's in one list): the
+  // library's it has, ticked or read itself (~/.agents/skills, or through
+  // another's folder, as its chip is lit), and those only in its own
+  // folder. The list narrows as the filter's does; nothing is given or
+  // taken. Kept while the window is open, as the filter is.
+  let skillAgent = "";
+  const hasSkill = (s, id) => (s.agents || []).includes(id) || !!s.always?.includes(id)
+    || (agentOf(id)?.skillsAlso || []).some((o) => (s.agents || []).includes(o));
+  const foundHas = (f, id) => f.agents.includes(id) || !!f.copies?.includes(id);
+  const foundShown = () => (skillAgent ? lib.foundSkills.filter((f) => foundHas(f, skillAgent)) : lib.foundSkills);
+  // the app's menu, each agent with its icon and how many it has, as
+  // Sessions' agent menu is; the button says the agent picked
+  function skillAgentPick(all) {
+    const found = lib.partial ? [] : lib.foundSkills;
+    const n = (id) => lib.skills.filter((s) => hasSkill(s, id)).length + found.filter((f) => foundHas(f, id)).length;
+    const agents = all.map((a) => ({ v: a.id, name: a.name, icon: a.icon, note: String(n(a.id)), literalName: true })).filter((o) => o.note !== "0" || o.v === skillAgent);
+    const cur = agents.find((o) => o.v === skillAgent);
+    const b = menuButton(cur ? cur.name : t("All agents"), "lib-skillagent" + (cur ? " set" : ""), () => {
+      if (b.classList.contains("open")) return closeProtoMenu();
+      const opts = [{ v: "", name: t("All agents"), note: String(lib.skills.length + found.length), literalName: true }, ...agents];
+      openProtoMenu(b, opts, skillAgent, (v) => { skillAgent = v; unfiltered.clear(); render(); }, "Agent", "lib-agentmenu");
+      document.querySelectorAll(".lib-agentmenu .pm-item").forEach((it, i) => it.firstChild.after(opts[i].icon ? icon(opts[i].icon) : el("span", "ic")));
+    });
+    if (cur) b.prepend(icon(cur.icon));
+    b.title = cur ? cur.name : "";
+    b.hidden = agents.length < 2 && !cur;
+    return b;
+  }
+
   // What a group shows: its skills the filter matches, and whether it's
   // folded. While filtering a group is open unless folded since the filter
   // changed; else as the user last left it, or folded when there are many.
   // the filter matches a skill's plugin too (#7280), and a plugin's tag
   // picked shows only what it brought
   const skillHits = (g, q) => {
-    const b = bundleOnly.skills;
-    return q || b ? g.skills.filter((s) => (!b || s.bundle === b) && (!q || g.text.get(s).includes(q))) : g.skills;
+    const b = bundleOnly.skills, a = skillAgent;
+    return q || b || a ? g.skills.filter((s) => (!b || s.bundle === b) && (!a || hasSkill(skillNamed(s.name) || s, a)) && (!q || g.text.get(s).includes(q))) : g.skills;
   };
   const groupFolded = (g, q) => (q ? unfiltered.has(g.key) : folds[g.key] ?? lib.skills.length > MANY);
 
@@ -6742,15 +6774,15 @@ magpie.plugin("library", (ctx) => {
   let foldAllBtn = null;
   function foldAllButton(box, all) {
     const b = button("", "lib-updall lib-foldall", () => {
-      const q = skillQuery.trim().toLowerCase();
+      const q = skillQuery.trim().toLowerCase(), narrow = !!(q || skillAgent);
       const shown = skillGroups().filter((g) => skillHits(g, q).length);
       if (shown.length < 2) return;
-      const fold = shown.some((g) => !groupFolded(g, q));
+      const fold = shown.some((g) => !groupFolded(g, narrow));
       for (const g of shown) {
-        if (q) { if (fold) unfiltered.add(g.key); else unfiltered.delete(g.key); }
+        if (narrow) { if (fold) unfiltered.add(g.key); else unfiltered.delete(g.key); }
         else folds[g.key] = fold;
       }
-      if (!q) saveFolds();
+      if (!narrow) saveFolds();
       if (box.isConnected) drawSkills(box, all);
     });
     b.hidden = true; // till the list is drawn, which says
@@ -6773,7 +6805,7 @@ magpie.plugin("library", (ctx) => {
   let drawn = null; // { box, lists: Map group → window }
   function drawSkills(box, all) {
     const groups = skillGroups();
-    const q = skillQuery.trim().toLowerCase();
+    const q = skillQuery.trim().toLowerCase(), narrow = !!(q || skillAgent);
     if (drawn?.box !== box) drawn = { box, lists: new Map() };
     const hitsOf = (g) => skillHits(g, q);
     const cards = [];
@@ -6784,11 +6816,11 @@ magpie.plugin("library", (ctx) => {
       const hits = hitsOf(g);
       if (!hits.length) continue;
       if (!single) shown.push(g);
-      const folded = !single && groupFolded(g, q);
+      const folded = !single && groupFolded(g, narrow);
       let w = drawn.lists.get(g.key);
       if (!folded) {
         if (!w) drawn.lists.set(g.key, (w = windowed()));
-        w.set(groupItems(g, hits, all, !!q, redraw));
+        w.set(groupItems(g, hits, all, narrow, redraw));
       }
       // from one place only: its list with no heading over it
       if (single) {
@@ -6796,11 +6828,11 @@ magpie.plugin("library", (ctx) => {
         w.el.classList.add("bare");
         card.append(w.el);
         cards.push(card);
-      } else cards.push(groupCard(g, hits, all, folded, !!q, w, redraw));
+      } else cards.push(groupCard(g, hits, all, folded, narrow, w, redraw));
     }
-    if (!cards.length) cards.push(el("div", "list lib-none", t("No skill matches “{q}”.", { q: skillQuery.trim() })));
+    if (!cards.length) cards.push(el("div", "list lib-none", q ? t("No skill matches “{q}”.", { q: skillQuery.trim() }) : t("{agent} has none of the library's skills.", { agent: nameOf(skillAgent) })));
     box.replaceChildren(...cards);
-    paintFoldAll(shown, q);
+    paintFoldAll(shown, narrow);
     if (box.isConnected) { syncLists(); if (picking) syncPicks(); } // the bar's All counts what the filter shows
   }
 
@@ -7092,7 +7124,7 @@ magpie.plugin("library", (ctx) => {
   // the skills the filter shows, in every group, folded or not
   function shownSkills() {
     const q = skillQuery.trim().toLowerCase();
-    return skillGroups().flatMap((g) => (q ? g.skills.filter((s) => g.text.get(s).includes(q)) : g.skills));
+    return skillGroups().flatMap((g) => skillHits(g, q));
   }
 
   // A box for some skills: ticked when they're all picked, half when some
@@ -7133,7 +7165,7 @@ magpie.plugin("library", (ctx) => {
     const bar = el("div", "row lib-row lib-pickbar");
     const servers = picking === "servers", hooks = picking === "hooks";
     const own = servers ? lib.servers : hooks ? lib.hooks || [] : lib.skills;
-    const shown = servers || hooks ? own : shownSkills(), q = servers || hooks ? "" : skillQuery.trim();
+    const shown = servers || hooks ? own : shownSkills(), q = !servers && !hooks && (skillQuery.trim() || skillAgent || bundleOnly.skills);
     const every = el("label", "lib-pickall");
     every.append(pickAll(shown), el("span", "", q ? t("All {n} that match", { n: shown.length }) : t("All {n}", { n: shown.length })));
     every.onclick = (e) => e.stopPropagation();
@@ -9462,7 +9494,7 @@ magpie.plugin("library", (ctx) => {
   // its bar: all of them, how many are picked, Remove…, Clear and Done
   function foundPickBar() {
     const bar = el("div", "row lib-row lib-pickbar lib-foundbar");
-    const all = lib.foundSkills, some = all.filter((f) => foundPicked.has(f.name)), n = some.length;
+    const all = foundShown(), some = all.filter((f) => foundPicked.has(f.name)), n = some.length;
     const every = el("label", "lib-pickall");
     every.append(pickBox(all.map((f) => f.name), foundPicked, syncFoundPicks), el("span", "", t("All {n}", { n: all.length })));
     every.onclick = (e) => e.stopPropagation();

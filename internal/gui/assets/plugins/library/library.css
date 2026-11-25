@@ -777,6 +777,16 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 #view-library .row-head.lib-skillshead .lib-skillq { flex: 1 1 90px; max-width: 190px; }
 #view-library .row-head .lib-skillq { width: 190px; height: 24px; margin: 0; flex: 0 1 auto; min-width: 90px; }
 .lib-skillq::-webkit-search-cancel-button { -webkit-appearance: none; }
+/* one agent's skills: as tall as the filter beside it, but for a
+   phone's taller picker (body.web .sess-pick), which wins */
+.row-head .lib-skillagent { height: 24px; flex: 0 1 auto; min-width: 0; max-width: 180px; gap: 6px; }
+.lib-skillagent .ic { width: 13px; height: 13px; }
+/* its menu: each agent's icon, its count at the end (as Sessions' agent menu) */
+.pop.proto-menu.lib-agentmenu { width: min(260px, calc(100vw - 16px)); max-height: min(360px, 70vh); overflow-y: auto; }
+.lib-agentmenu .pm-item { align-items: center; }
+.lib-agentmenu .pm-words { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex: 1; min-width: 0; }
+.lib-agentmenu .pm-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-agentmenu .pm-note { flex: none; font-variant-numeric: tabular-nums; }
 /* a project's skills out of view are neither laid out nor painted until they near it */
 .lib-projskill { content-visibility: auto; contain-intrinsic-size: auto 76px; }
 .lib-grouphead .lib-rowacts { min-width: 26px; }
