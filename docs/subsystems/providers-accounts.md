@@ -363,6 +363,27 @@ that the upstream does not list are named against all listed names and ids;
 listed models keep their `Available` names unchanged
 ([`Exposed`](../../internal/provider/models.go)).
 
+The provider editor draws a provider's models by maker, the newest first
+(WJaunita45604 on X). `/api/providers` gives each model its `maker`: the
+logo the agents' pickers draw by it (`agent.ModelIcon` on its id, else its
+name; `named` in [`providers.go`](../../internal/gui/providers.go)), empty
+for one magpie doesn't know. [`modelorder.js`](../../internal/gui/assets/modelorder.js),
+imported with advgroups.js as the Providers page first draws (which the
+editor waits for, #7051), puts each maker's models under its
+name (Anthropic, OpenAI, Google, DeepSeek, xAI, Qwen, Moonshot AI, Zhipu,
+MiniMax, Mistral, Xiaomi, StepFun, then Other), a plain small label, and
+none when the list has one maker. Other keeps the vendor's order, since
+its numbers belong to different makers; so does a list magpie can place
+no model of. Within a maker the version in the name
+shown (else the id) decides, read as `catalog.FamilyOf` reads it and
+compared number by number (5.10 over 5.9, 5 over 4.8), a release before
+its preview, the alias before its dated snapshots, a later snapshot first,
+the vendor's order between the rest. Only the order drawn changes: with
+none picked the vendor's first 24 are still the ones served, and the
+agents' pickers keep their own order (#2106, #5980). A new logo in
+`byFamily` needs a maker there (`TestEveryModelMakerIsNamedInTheEditor`;
+`TestProviderModelsSayTheirMaker`, `model-makers.test.cjs`).
+
 A relay the user added by its address (`AddedByAddress`, and not Azure,
 Bedrock, Vertex or a Remote magpie) that lists one model once per effort,
 the effort in the id (`gemini-4-argon-low`, `-medium`, `-high`; elis_pina

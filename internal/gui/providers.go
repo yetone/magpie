@@ -72,6 +72,11 @@ type modelJSON struct {
 	// Inputs are the media beyond text and images its source listed it
 	// takes, video and audio (catalog.Model.InputModalities; pingqipai3 on X)
 	Inputs []string `json:"inputs,omitempty"`
+	// Maker is the logo of the model's maker, as its id or else its name
+	// says (agent.ModelIcon, what the agents' pickers draw beside it), ""
+	// for one magpie doesn't know: the editor draws its models by maker
+	// (modelorder.js; WJaunita45604 on X)
+	Maker string `json:"maker,omitempty"`
 	// Headers are the request headers the user gave the model, sent after
 	// the provider's (provider.SetModelHeaders)
 	Headers map[string]string `json:"headers,omitempty"`
@@ -1294,6 +1299,9 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 		}
 		window := p.WindowIn(m, set)
 		j := modelJSON{ID: m.ID, Name: m.Name, Efforts: provider.EffortsOf(m), On: on, Context: window, Output: provider.OutputWithin(window, p.ReplyLimitIn(m, set)), Listed: provider.ListedWindow(m), ListedOutput: provider.OutputWithin(provider.ListedWindow(m), p.ReplyLimitIn(m, settings.Settings{})), Max: m.MaxContext, Free: m.Free, Rate: m.Rate, RateWas: m.RateWas, Images: images, ImageSet: imageSet, Own: own, Best: newest[m.ID], Inputs: mediaInputs(provider.InputsOf(m))}
+		if j.Maker = agent.ModelIcon(m.ID); j.Maker == "" && m.Name != "" {
+			j.Maker = agent.ModelIcon(m.Name)
+		}
 		list, listed, free := pricer.Prices(set, m.ID)
 		j.Zero = !m.Free && free
 		if j.Keys, j.KeyCount = keysApart(m.Keys, onKeys, keyAt); j.KeyCount == len(j.Keys) {

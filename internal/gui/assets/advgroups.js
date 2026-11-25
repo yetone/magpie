@@ -5,6 +5,10 @@
 // when Advanced holds rows of two groups or more. app.js's groupAdvanced
 // imports this when an editor first opens, so it weighs nothing on the
 // core.
+// The editor's models in their order (modelorder.js) come with it, so an
+// editor's chips are drawn by maker from the first and never move (#7051's
+// wait covers both).
+import "./modelorder.js";
 (() => {
   const GROUPS = [
     ["Routing", ["Routing", "Rate limited", "Stays", "Resets", "Warm up", "Check in", "Claude Code", "Fallback", "Rests", "Errors"]],
