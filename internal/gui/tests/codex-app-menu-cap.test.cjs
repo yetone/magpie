@@ -22,7 +22,7 @@ function server(lang, shown) {
       agents: [{
         id: "codex", name: "Codex", path: "/test/config.toml", icon: "codex-color", wired: true,
         fields: [{ key: "model", label: "model", value: "pqh/gpt-6-sol", options: [{ value: "pqh/gpt-6-sol", label: "6 Sol", ref: "pqh/gpt-6-sol" }] }],
-        models: { shown, listed: shown + 3, by: [{ name: "Routing groups", n: 26 }, { name: "pqh", n: 19 }, { name: "ZCode", n: shown - 45 }] },
+        models: { shown, listed: shown + 3, menu: 100, by: [{ name: "Routing groups", n: 26 }, { name: "pqh", n: 19 }, { name: "ZCode", n: shown - 45 }] },
       }],
       profiles: [], settings: { lang, theme: "light" },
     });

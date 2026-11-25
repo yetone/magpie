@@ -2,8 +2,10 @@ package gateway
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http/httptest"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -145,5 +147,86 @@ func TestAntigravityModelStartsOnALevel(t *testing.T) {
 		if got := AntigravityModel(c.ref, c.want); got != c.got {
 			t.Errorf("AntigravityModel(%q, %q) = %q, want %q", c.ref, c.want, got, c.got)
 		}
+	}
+}
+
+// Antigravity's app takes no more than 32 of a gateway's catalog entries
+// and skips the rest. Listed once a level, 25 models were some 50, and
+// the Gemini ones last in the list never reached its menu (0xBCD18E on
+// X). Every model now gets one entry while they fit, levels only in the
+// room left, and the model the app starts on is the entry it lists.
+func TestAntigravityCatalogFitsTheApp(t *testing.T) {
+	t.Cleanup(provider.AntigravityBuiltinForTest()) // the retired built-in route
+	for _, n := range []int{25, 40} {
+		t.Run(strconv.Itoa(n), func(t *testing.T) {
+			setup(t, provider.Anthropic, &fake{})
+			var ids []string
+			var models []catalog.Model
+			for i := range n {
+				id := fmt.Sprintf("m%02d", i)
+				if i >= n-6 {
+					id = fmt.Sprintf("gemini-4-%02d", i)
+				}
+				ids = append(ids, id)
+				models = append(models, catalog.Model{ID: id, Efforts: []string{"low", "medium", "high"}})
+			}
+			if err := provider.Save(provider.Provider{ID: "ds", Name: "DS", Key: "k", Chat: "http://127.0.0.1:1/v1", Models: ids}); err != nil {
+				t.Fatal(err)
+			}
+			if err := catalog.SaveLive("ds", "http://127.0.0.1:1/v1", models); err != nil {
+				t.Fatal(err)
+			}
+			shown, _ := provider.CatalogFor("antigravity")
+			req := httptest.NewRequest("GET", "/v1/models?format="+AntigravityFormat, nil)
+			req.Header.Set("Authorization", "Bearer "+TokenFor("antigravity"))
+			rec := httptest.NewRecorder()
+			New().Handler().ServeHTTP(rec, req)
+			var got struct {
+				List []struct{ ModelID string } `json:"list"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+				t.Fatalf("%d %s", rec.Code, rec.Body)
+			}
+			if len(got.List) > AntigravityMenuMax {
+				t.Fatalf("%d entries for %d models; the app takes %d", len(got.List), len(shown), AntigravityMenuMax)
+			}
+			// each of the first 32 models once, in order, at its levels or by its id
+			var bases []string
+			levels := map[string]int{}
+			for _, m := range got.List {
+				b, _, _ := strings.Cut(m.ModelID, ":")
+				if len(bases) == 0 || bases[len(bases)-1] != b {
+					bases = append(bases, b)
+				}
+				levels[b]++
+			}
+			var want []string
+			for _, e := range shown[:min(len(shown), AntigravityMenuMax)] {
+				want = append(want, e.ID)
+			}
+			if !slices.Equal(bases, want) {
+				t.Fatalf("listed %v\nwant %v", bases, want)
+			}
+			if n == 25 && !slices.Contains(bases, "ds/gemini-4-24") {
+				t.Errorf("the last model is missing: %v", bases)
+			}
+			// the room left goes to levels, and the app starts on the entry listed
+			if len(shown) < AntigravityMenuMax && len(got.List) < AntigravityMenuMax-1 {
+				t.Errorf("%d entries for %d models: levels left out with room for them", len(got.List), len(shown))
+			}
+			listed := map[string]bool{}
+			for _, m := range got.List {
+				listed[m.ModelID] = true
+			}
+			for _, b := range bases {
+				start := AntigravityModel(b, "high")
+				if !listed[start] {
+					t.Errorf("AntigravityModel(%q) = %q, not in the catalog", b, start)
+				}
+				if (levels[b] > 1) != strings.Contains(start, ":") {
+					t.Errorf("AntigravityModel(%q) = %q with %d entries", b, start, levels[b])
+				}
+			}
+		})
 	}
 }

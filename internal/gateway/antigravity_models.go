@@ -36,12 +36,16 @@ const AntigravityFormat = "antigravity"
 // listed once a level, "<id>:<level>" named "<name> (<Level>)", and the
 // app sends the id of the one picked, which the gateway asks for that
 // level as it does any model asked at an effort (askedAt).
+//
+// The app takes no more than AntigravityMenuMax of a gateway's entries,
+// so the levels are listed only as far as they fit (antigravityFit).
 func antigravityModels(w http.ResponseWriter, r *http.Request) {
 	shown := catalogFor(r)
 	labels := provider.LabelsFor(agentOf(r), shown)
-	list := make([]map[string]any, 0, len(shown))
-	for i, e := range shown {
-		levels := antigravityLevels(e.Efforts)
+	fit := antigravityFit(shown)
+	list := make([]map[string]any, 0, AntigravityMenuMax)
+	for i, levels := range fit {
+		e := shown[i]
 		if len(levels) == 0 {
 			list = append(list, antigravityEntry(e, e.ID, labels[i]))
 		}
@@ -50,6 +54,32 @@ func antigravityModels(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, 200, map[string]any{"list": list})
+}
+
+// AntigravityMenuMax is how many of a gateway's models Antigravity's app
+// takes: its language server (2.30.0 on Windows, 2.30 and 2.35.1 on
+// macOS) keeps the first 32 entries of the catalog and skips the rest
+// ("exceeded the maximum placeholder limit (32); skipped to prevent Model
+// enum collision"), the model it is set to start on too. Listed once a
+// level, 25 models were some 50 entries, and every one past the 32nd,
+// Gemini's among them, was missing from its menu (0xBCD18E on X).
+const AntigravityMenuMax = 32
+
+// antigravityFit is which of shown the app's catalog lists, and at which
+// levels: the first AntigravityMenuMax models, each once, and in their
+// order each model's levels (antigravityLevels) while the entries they
+// add still fit. A model whose levels don't is listed once by its id,
+// and asked at the level picked for the app (provider.AgentEffort).
+func antigravityFit(shown []provider.Entry) [][]string {
+	fit := make([][]string, min(len(shown), AntigravityMenuMax))
+	room := AntigravityMenuMax - len(fit)
+	for i := range fit {
+		if l := antigravityLevels(shown[i].Efforts); len(l) > 0 && len(l)-1 <= room {
+			fit[i] = l
+			room -= len(l) - 1
+		}
+	}
+	return fit
 }
 
 // antigravityLevelNames are the levels the app's picker gathers a model's
@@ -75,16 +105,17 @@ func antigravityLevels(efforts []string) []string {
 
 // AntigravityModel is the id Antigravity's app is started on for ref, a
 // model or routing group of magpie's (without a level): ref at want, fitted
-// to the levels the app's picker offers it (antigravityLevels), else at the
+// to the levels the app's picker offers it (antigravityFit), else at the
 // level the picker itself starts it on, medium or its weakest; ref as it
 // is when the picker offers it none, as its catalog lists it so.
 func AntigravityModel(ref, want string) string {
 	shown, _ := provider.CatalogFor("antigravity")
 	i := slices.IndexFunc(shown, func(e provider.Entry) bool { return e.ID == ref })
-	if i < 0 {
+	fit := antigravityFit(shown)
+	if i < 0 || i >= len(fit) {
 		return ref
 	}
-	levels := antigravityLevels(shown[i].Efforts)
+	levels := fit[i]
 	if len(levels) == 0 {
 		return ref
 	}

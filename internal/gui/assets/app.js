@@ -1177,7 +1177,8 @@ const PICKS_IN = { codex: "/model", claude: "/model", opencode: "/models", pi: "
 
 function connectSaid(a) {
   if (!a.wired) return t("Not connected · {agent} uses its own settings", { agent: a.name });
-  if (menuFromList(a)) return t("Connected · {n} models in {agent}'s model menu", { n: a.models.shown, agent: a.name });
+  // no more than its menu takes (Antigravity's 32, 0xBCD18E on X)
+  if (menuFromList(a)) return t("Connected · {n} models in {agent}'s model menu", { n: Math.min(a.models.shown, a.models.menu || 1 / 0), agent: a.name });
   const at = PICKS_IN[kindOf(a)];
   return at ? t("Connected · pick magpie's models with {cmd} in {agent}", { cmd: at, agent: a.name }) : t("Connected · magpie's models are in {agent}'s model list", { agent: a.name });
 }
@@ -2291,11 +2292,13 @@ function connectPanel(a, { fields, fieldBtn }) {
     holdAgentModels(a, pick);
     chips.append(pick);
     const v = kv(t("Model list"), chips);
-    // the Codex app's menu reaches only so many of them (#1262)
-    if (a.id === "codex" && a.models.shown > CODEX_APP_MENU) {
+    // the app's menu reaches only so many of them (modelCountJSON.Menu):
+    // the Codex app's (#1262), Antigravity's (0xBCD18E on X)
+    const max = a.models.menu;
+    if (a.models.shown > max) {
       const w = line();
       w.classList.add("ag-warn", "ag-menu-cap");
-      w.append(el("span", "ag-dot"), el("span", "", t("The Codex app's model menu shows only the first {max}: the last {n} models can't be picked there (the Codex CLI's /model lists them all). In Pick, turn off the ones you don't use, or drag the ones you use to the front under Order.", { max: CODEX_APP_MENU, n: a.models.shown - CODEX_APP_MENU })));
+      w.append(el("span", "ag-dot"), el("span", "", t(a.id === "codex" ? "The Codex app's model menu shows only the first {max}: the last {n} models can't be picked there (the Codex CLI's /model lists them all). In Pick, turn off the ones you don't use, or drag the ones you use to the front under Order." : "{agent}'s model menu takes only the first {max} models: the last {n} can't be picked there. In Pick, turn off the ones you don't use, or drag the ones you use to the front under Order.", { agent: a.name, max, n: a.models.shown - max })));
       v.append(w);
     }
     if (a.id === "claude-desktop") v.append(desktopLongestLine());
@@ -3304,12 +3307,6 @@ function dragCards(e, handle, card, list, cards, commit, idle = () => {}, layout
 }
 
 // ---------- an agent's model list ----------
-
-// CODEX_APP_MENU is how many models the Codex app's model menu reaches: it
-// asks Codex's app-server for model/list with limit 100 and never for the
-// next page (ChatGPT.app 26.930), so a model past them can't be picked
-// there; the Codex CLI's /model asks for every one (#1262).
-const CODEX_APP_MENU = 100;
 
 // modelsEntry: the line under an agent's name counting the models its
 // lists show ("All 41 models", or "Showing 5 / 32 models"); it opens the

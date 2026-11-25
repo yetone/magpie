@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/yetone/magpie/internal/agent"
+	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 )
@@ -258,5 +259,30 @@ func TestAgentModelsOnlyPicked(t *testing.T) {
 	}
 	if got := call("GET", ""); slices.Contains(off(got.Models), "fresh/x2") {
 		t.Fatalf("switched off, a new model hidden: %v", off(got.Models))
+	}
+}
+
+// Antigravity's app takes no more than 32 of a gateway's models
+// (gateway.AntigravityMenuMax), so its row's count carries that cap for
+// the row to say when more are picked (0xBCD18E on X); the Codex app's
+// carries its 100 (#1262), and an agent whose menu takes every model none.
+func TestAntigravityModelLineCarriesItsMenuCap(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
+	if err := provider.Save(provider.Provider{ID: "relay", Name: "Relay", Key: "k", Chat: "http://127.0.0.1:1/v1", Models: []string{"m1", "m2"}}); err != nil {
+		t.Fatal(err)
+	}
+	for id, want := range map[string]int{"antigravity": gateway.AntigravityMenuMax, "codex": 100, agent.CursorLocalID: 0} {
+		a, err := agent.Find(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c := agentModelCount(a, agentFields(a, a.Values())); c == nil || c.Menu != want || c.Shown < 2 {
+			t.Errorf("%s: %+v, want menu %d", id, c, want)
+		}
 	}
 }
