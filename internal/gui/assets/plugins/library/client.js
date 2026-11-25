@@ -85,7 +85,13 @@ magpie.plugin("library", (ctx) => {
   // (#3896, cybercaius on Discord).
   // In gateway mode (gatewaymode.go) none is shown: the page is the
   // MCP servers the router gives other computers' apps.
-  const shownAgents = () => gatewayPage() ? [] : lib.agents.filter((a) => !a.gone && !a.unseen && !isHidden(a));
+  const shownAgents = () => gatewayPage() ? [] : lib.agents.filter((a) => !a.gone && !a.unseen && !a.remote && !isHidden(a));
+  // an agent on another computer that connected to the router at its own
+  // address (remote_agents.go; bitxeno303 on X: DeepSeek Harness on their
+  // computer, magpie in Docker): ticked for servers alone, in gateway mode
+  // too, and magpie writes nothing for it
+  const remoteAgents = () => lib.agents.filter((a) => a.remote && !isHidden(a))
+    .map((a) => ({ ...a, aside: t("{agent} connects to the router from another computer", { agent: a.name }) }));
   // With no agent to write to, none on this computer or gateway mode, the
   // library is its MCP servers, served to any app through the router
   // (treeman_26897 on Discord: magpie on a server, an MCP entry point for
@@ -93,15 +99,16 @@ magpie.plugin("library", (ctx) => {
   // prompts it tells the magpies that use it as a Remote magpie
   // (fenglian980510 on X: a magpie in Docker had no Skills).
   const gatewayPage = () => typeof gatewayMode !== "undefined" && !!gatewayMode;
-  const agentless = () => !!lib && (gatewayPage() || !lib.agents.length);
+  const agentless = () => !!lib && (gatewayPage() || !lib.agents.some((a) => !a.remote));
   const AGENTLESS_TABS = ["instructions", "mcp", "skills"];
   const withGone = (all, on) => [...all, ...lib.agents.filter((a) => (a.gone || a.unseen && !isHidden(a)) && (on || []).includes(a.id) && !all.some((x) => x.id === a.id))];
-  const mcpAgents = () => shownAgents().filter((a) => a.mcp)
-    .map((a) => a.mcpVia ? { ...a, aside: t("{agent} reads MCP servers through the {ext} extension", { agent: a.name, ext: a.mcpVia }) } : a);
+  const mcpAgents = () => [...shownAgents().filter((a) => a.mcp)
+    .map((a) => a.mcpVia ? { ...a, aside: t("{agent} reads MCP servers through the {ext} extension", { agent: a.name, ext: a.mcpVia }) } : a), ...remoteAgents()];
   const skillAgents = () => shownAgents().filter((a) => a.skills);
   // the MCP hub's agents: not a stopped distro's, whose files say what it
-  // has of the hub, and can't be read without starting it
-  const hubAgents = () => mcpAgents().filter((a) => !a.asleep);
+  // has of the hub, and can't be read without starting it; nor one on
+  // another computer, which connects itself
+  const hubAgents = () => mcpAgents().filter((a) => !a.asleep && !a.remote);
   // one line for each stopped WSL distro the page lists agents of: they
   // show what magpie last saw, and a change waits for the distro to run.
   // The Instructions page passes its own rows' agents ({asleep, unseen,
@@ -3033,6 +3040,7 @@ magpie.plugin("library", (ctx) => {
 
   function sseBlocked(s) {
     return (a) => {
+      if (a.remote && !inHub(s)) return t("{agent} is on another computer: it reaches only the servers that go through the router", { agent: a.name });
       if (remote(s) && a.noRemote) return t("{agent} runs only a command from its settings — add a remote server in its Connectors instead", { agent: a.name });
       if (s.transport === "sse" && a.noSSE) return t("{agent} can't reach a server over SSE — only a command or streamable HTTP", { agent: a.name });
       // #1250: written there as it is, the agent would send the text
@@ -3046,7 +3054,7 @@ magpie.plugin("library", (ctx) => {
   const envRefs = (s) => Object.values((remote(s) ? s.headers : s.env) || {}).some((v) => envRef.test(v));
   // reaches(s) says whether an agent can be given the server
   const remote = (s) => s.transport === "http" || s.transport === "sse";
-  const reaches = (s) => (a) => !a || (!(remote(s) && a.noRemote) && !(s.transport === "sse" && a.noSSE) && !(envRefs(s) && a.noEnvRefs));
+  const reaches = (s) => (a) => !a || (!(a.remote && !inHub(s)) && !(remote(s) && a.noRemote) && !(s.transport === "sse" && a.noSSE) && !(envRefs(s) && a.noEnvRefs));
 
   let serversOffFolded = true; // the servers turned off, folded below the ones on
   try { serversOffFolded = localStorage.getItem("magpie.offServersOpen") !== "1"; } catch {}
@@ -3377,8 +3385,8 @@ magpie.plugin("library", (ctx) => {
     const bar = el("div", "bar");
     let busy = false, changed = false, q = "";
     const why = new Set();
-    if (!mcpAgents().length) hubTab = "apps";
-    if (mcpAgents().length) ed.append(segs([["agents", t("Agents")], ["apps", t("Other apps")]], hubTab, (k) => { hubTab = k; draw(); }));
+    if (!hubAgents().length) hubTab = "apps";
+    if (hubAgents().length) ed.append(segs([["agents", t("Agents")], ["apps", t("Other apps")]], hubTab, (k) => { hubTab = k; draw(); }));
     ed.append(pane, bar);
 
     // posts agents-all for some agents, on or off, and says what came of it
@@ -3645,7 +3653,7 @@ magpie.plugin("library", (ctx) => {
     who.append(noteSub(s.note, sub, serverLine(s)), toolsEl(s.name));
     row.append(mark(s.icon, s.transport === "stdio" ? GLYPH.cmd : GLYPH.web), who, ...removeAct(() => confirmRemoveServer(s)),
       // no agent to give it to: other apps reach it through the router
-      ...(agentless() ? [] : [agentChips(withGone(all, s.agents), s.agents, chipsChange("servers/agents", s.name, "servers", (x) => serverRow(x, all)), { problems: s.problems, blocked: sseBlocked(s), all: true })]),
+      ...(agentless() && !all.length ? [] : [agentChips(withGone(all, s.agents), s.agents, chipsChange("servers/agents", s.name, "servers", (x) => serverRow(x, all)), { problems: s.problems, blocked: sseBlocked(s), all: true })]),
       ...serverSwitch(s));
     if (picking) return pickRow(row, s.name);
     // a line of its own under the row, not in the name's column (tao0194)
@@ -8398,7 +8406,9 @@ magpie.plugin("library", (ctx) => {
   function byAgentRows(kind, kept) {
     const items = kind === "skills" ? lib.skills : lib.servers;
     const can = kind === "skills" ? () => true : (s, a) => reaches(s)(a);
-    return lib.agents.filter((a) => kind === "skills" ? a.skills : a.mcp).map((a) => {
+    // in gateway mode this computer's agents aren't shown (shownAgents),
+    // here neither
+    return lib.agents.filter((a) => (kind === "skills" ? a.skills : a.mcp) && (!gatewayPage() || a.remote)).map((a) => {
       const has = items.filter((x) => x.agents?.includes(a.id)).length;
       const missing = items.filter((x) => can(x, a) && !x.agents?.includes(a.id)).length;
       return { a, has, missing, hidden: isHidden(a), gone: !!a.gone };

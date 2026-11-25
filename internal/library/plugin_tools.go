@@ -257,7 +257,7 @@ func PluginServerOn(pluginName string, on bool) (*Result, error) {
 		if len(want) == 0 {
 			want = l.hubAgents()
 		}
-		r := reachNow()
+		r := reachNow(l)
 		if len(want) == 0 {
 			hidden := settings.Load().AgentsHidden
 			for _, a := range r.order {

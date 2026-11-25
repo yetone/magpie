@@ -1297,6 +1297,12 @@ func Takes(q, kind string) (string, error) {
 		}
 	}
 	what := map[string]string{"instructions": "instructions", "mcp": "MCP servers", "skills": "skills"}[kind]
+	// one on another computer using the router (remote_agents.go) takes
+	// its servers there, while it isn't on this one: an app found by its
+	// program alone (Kiro CLI) too
+	if kind == "mcp" && a.WSL == "" && isRemote(a.ID) && targetByID(a.ID) == nil {
+		return a.ID, nil
+	}
 	// an app found by its program alone (Kiro CLI), or by its own folder
 	// (TRAE CN), that isn't here: told so, not recorded and then given
 	// nothing, as Targets leaves it out

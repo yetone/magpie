@@ -77,6 +77,11 @@ type Library struct {
 	// which hands each call on to the library's servers ticked for it, in
 	// place of their own entries (#2679, mcp_hub.go)
 	MCPHub bool `json:"mcpHub,omitempty"`
+	// RemoteAgents are the agents not on this computer that connected to
+	// the router at their own address from another one (remote_agents.go):
+	// a magpie in Docker has none of its own. This computer's own:
+	// Collect doesn't carry it
+	RemoteAgents []string `json:"remoteAgents,omitempty"`
 	// SkillRouter gives each agent that can take it magpie's one skill,
 	// magpie-skills, listing the library's skills ticked for it, in place
 	// of a link of each (skill_router.go). This computer's own: Collect
