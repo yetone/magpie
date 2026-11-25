@@ -64,6 +64,10 @@ const providerUsage = `usage:
                                           image-files=off sends DeepSeek's API an agent's images inline on every
                                           turn; image-files=on, the default, uploads each once (for a day)
                                           and names it by its file id
+                                          addresses=<url>[,<url>…], on a Remote magpie, its other addresses (the same
+                                          computer through Tailscale, EasyTier…): a request goes to the one that
+                                          last answered, and on to the next when it takes no connection;
+                                          addresses= clears them
                                           upstream-providers=on, on a Remote magpie, names its models by the
                                           provider serving each there (Claude · Office › RelayA); off, the
                                           default, as that magpie's own list names them
@@ -191,6 +195,9 @@ const providerUsage = `usage:
        magpie provider set my-relay resolve.relay.example.com=10.0.0.5,dns:gw.corp.example
                                    (Advanced › Connect to: connects to 10.0.0.5, then gw.corp.example's
                                     address, while TLS and Host still say relay.example.com)
+       magpie provider set office addresses=http://100.101.2.3:3425,http://10.144.0.2:3425
+                                   (Advanced › Other addresses: the office magpie through Tailscale and
+                                    EasyTier, asked when its own address takes no connection)
        magpie provider set my-relay search=yes
                                    (the relay answers Claude Code's WebSearch and Codex's web search itself, web_search
                                     and web.run's /alpha/search: those go to it as sent, not through magpie's search)
@@ -1335,6 +1342,13 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 			default:
 				return fmt.Errorf("image-files=on|off, not %q", v)
 			}
+		case "addresses":
+			// a Remote magpie's other addresses (Provider.Addresses,
+			// evjohnicu on X); empty clears them
+			if !p.IsRemoteMagpie() {
+				return fmt.Errorf("addresses are a Remote magpie's; %s is not one", p.ID)
+			}
+			p.Addresses = strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == ' ' || r == '\n' })
 		case "upstream-providers":
 			// on: a Remote magpie's models named by the provider serving
 			// each there (Provider.UpstreamProviders, lcc580 on X)

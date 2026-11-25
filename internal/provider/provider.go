@@ -539,6 +539,14 @@ type Provider struct {
 	// TakesResolve is; a plugin's requests are made by its host, which has
 	// no way to be told. See netproxy.WithResolve and CheckResolve.
 	Resolve map[string][]string `json:"resolve,omitempty"`
+	// Addresses are a Remote magpie's other addresses: the same
+	// computer's magpie reached another way (evjohnicu on X: at home its
+	// LAN address, from outside through Tailscale or EasyTier). A request
+	// goes to the one that last answered first, and to the next when it
+	// takes no connection; an answer, a refusal too, is the remote's own.
+	// Each is a root as the base URL is (remoteMagpieEndpoints). See
+	// netproxy.WithFailover.
+	Addresses []string `json:"addresses,omitempty"`
 
 	// Proxy is the proxy magpie's requests to this provider go through
 	// (#237: Codex through one, a vendor at home without): "" follows
@@ -1374,6 +1382,9 @@ func Save(p Provider) error {
 				return fmt.Errorf("%s: %w", p.ID, err)
 			}
 			p.Resolve = r
+		}
+		if err := p.checkAddresses(); err != nil {
+			return err
 		}
 		if p.HTTP1 && !p.TakesInsecureTLS() {
 			return fmt.Errorf("%s is a preset's: only a provider you added with your own base URL can be held to HTTP/1.1", p.Name)

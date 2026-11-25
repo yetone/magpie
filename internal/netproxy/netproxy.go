@@ -263,6 +263,14 @@ func (d *dispatch) RoundTrip(req *http.Request) (*http.Response, error) {
 			return res, err
 		}
 	}
+	if res, ok, err := failingOver(req, d.send); ok {
+		return res, err
+	}
+	return d.send(req)
+}
+
+// send is RoundTrip at one address.
+func (d *dispatch) send(req *http.Request) (*http.Response, error) {
 	if d.moved() {
 		d.CloseIdleConnections()
 	}

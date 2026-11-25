@@ -134,7 +134,9 @@ var reachSeenOf = struct {
 // reachAddr is the host:port the Remote magpie p is reached at, when it
 // is one judged here, else "".
 func reachAddr(p provider.Provider) string {
-	if !p.IsRemoteMagpie() || p.Proxy != "" || len(p.Resolve) > 0 {
+	if !p.IsRemoteMagpie() || p.Proxy != "" || len(p.Resolve) > 0 || len(p.Addresses) > 0 {
+		// one with other addresses is asked at the one that answers
+		// (netproxy.WithFailover): its first may be on another network
 		return ""
 	}
 	hosts := hostsOf(p)

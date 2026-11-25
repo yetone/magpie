@@ -2,7 +2,9 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"maps"
+	"net/url"
 	"slices"
 	"strings"
 
@@ -73,9 +75,11 @@ func (p Provider) IsRemoteMagpie() bool { return p.Preset == RemoteMagpiePreset 
 
 // remoteMagpieEndpoints puts every API on the address given, however it
 // was typed: the bare host and port (plain http, which magpie serves),
-// …/v1, or the Anthropic root.
+// …/v1, or the Anthropic root. Its other addresses (Addresses) are
+// written the same way, each once, and none the same as the first.
 func (p *Provider) remoteMagpieEndpoints() {
 	if !p.IsRemoteMagpie() {
+		p.Addresses = nil
 		return
 	}
 	root := ""
@@ -88,7 +92,25 @@ func (p *Provider) remoteMagpieEndpoints() {
 	if root == "" {
 		return
 	}
-	root = strings.TrimRight(WithScheme(root, "http"), "/")
+	root = magpieRoot(root)
+	p.Chat, p.Responses, p.Anthropic = root+"/v1", root+"/v1", root
+	p.Decide = p.Chat
+	var also []string
+	for _, a := range p.Addresses {
+		if a = strings.TrimRight(strings.TrimSpace(a), "/"); a == "" {
+			continue
+		}
+		if a = magpieRoot(a); !strings.EqualFold(a, root) && !slices.ContainsFunc(also, func(b string) bool { return strings.EqualFold(a, b) }) {
+			also = append(also, a)
+		}
+	}
+	p.Addresses = also
+}
+
+// magpieRoot is the root of a magpie's address however it was typed: a
+// bare host and port is plain http, and an API's path is taken off.
+func magpieRoot(u string) string {
+	root := strings.TrimRight(WithScheme(strings.TrimRight(strings.TrimSpace(u), "/"), "http"), "/")
 	for _, suf := range []string{
 		"/v1/messages/count_tokens", "/v1/messages",
 		"/v1/chat/completions", "/v1/responses", "/v1/systemone",
@@ -98,12 +120,47 @@ func (p *Provider) remoteMagpieEndpoints() {
 		"/v1/videos", "/v1",
 	} {
 		if b, ok := strings.CutSuffix(root, suf); ok {
-			root = b
-			break
+			return b
 		}
 	}
-	p.Chat, p.Responses, p.Anthropic = root+"/v1", root+"/v1", root
-	p.Decide = p.Chat
+	return root
+}
+
+// maxAddresses is how many other addresses a Remote magpie takes.
+const maxAddresses = 8
+
+// checkAddresses holds a Remote magpie's other addresses to what can be
+// asked: each an http or https URL with a host.
+func (p Provider) checkAddresses() error {
+	if len(p.Addresses) == 0 {
+		return nil
+	}
+	if len(p.Addresses) > maxAddresses {
+		return fmt.Errorf("%s: at most %d other addresses", p.ID, maxAddresses)
+	}
+	for _, a := range p.Addresses {
+		u, err := url.Parse(a)
+		if err != nil || u.Hostname() == "" || u.Scheme != "http" && u.Scheme != "https" || u.RawQuery != "" || u.Fragment != "" {
+			return fmt.Errorf("%s: %q is not an address (http://host:port)", p.ID, a)
+		}
+	}
+	return nil
+}
+
+// failoverRoots is the addresses requests on p's behalf may go to, its
+// own first, when it has others (netproxy.WithFailover); an unsaved
+// test's are taken as a save would write them.
+func (p Provider) failoverRoots() []string {
+	if len(p.Addresses) == 0 || !p.IsRemoteMagpie() || p.Anthropic == "" {
+		return nil
+	}
+	out := []string{p.Anthropic}
+	for _, a := range p.Addresses {
+		if strings.TrimSpace(a) != "" {
+			out = append(out, magpieRoot(a))
+		}
+	}
+	return out
 }
 
 // listHeaders are the headers p's model list is asked with: a remote

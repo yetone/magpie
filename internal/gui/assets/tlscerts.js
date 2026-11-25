@@ -57,13 +57,16 @@ function drawPin(pin, draft, peek, seen) {
 window.tlsTyped = (draft, body) => {
   for (const k of ["clientCert", "clientKey", "serverCA", "serverPin"]) if (draft[k] != null) body[k] = draft[k].trim();
   if (draft.resolve) body.resolve = draft.resolve;
+  if (draft.addresses) body.addresses = draft.addresses;
 };
 
 window.tlsCertRows = function ({ p, pr, draft, at, certTakes, onHTTPS, addressOf, asTyped, show, save }) {
   if (!at.isConnected) return;
   const rows = [], saves = [];
   const keep = (f) => saves.push(f);
-  save((body, own) => { if (!own) for (const f of saves) f(body); if (draft.resolve) body.resolve = draft.resolve; });
+  save((body, own) => { if (!own) for (const f of saves) f(body); if (draft.resolve) body.resolve = draft.resolve; if (draft.addresses) body.addresses = draft.addresses; });
+  // a Remote magpie's other addresses (evjohnicu on X), first
+  if ((p?.preset || pr?.id) === "remote-magpie" && !p?.account) rows.push(addressesRow(p, draft));
   const takes = certTakes() || (p ? !!p.takesServerPin || (!!p.preset && !p.account) : !!pr) && (p?.preset || pr?.id) !== "google-vertex";
   if (takes) rows.push(pinRow({ p, pr, draft, certTakes, addressOf, asTyped, show, save: keep }));
   if (certTakes()) {
@@ -107,6 +110,21 @@ function resolveRow(draft) {
   box.onkeydown = (e) => e.stopPropagation();
   box.oninput = () => { draft.resolve = resolveOf(box.value); };
   return field(t("Connect to"), box, t("Where a host's connection goes, as curl --resolve: the name in the URL stays for TLS and Host. Tried in order; if none connects, it connects as usual. Not used through a proxy."));
+}
+
+// addressesRow: the same magpie reached other ways (Tailscale, EasyTier…),
+// one per line; a request goes to the one that last answered, and on to
+// the next when it takes no connection (provider.Addresses).
+function addressesRow(p, draft) {
+  draft.addresses ??= [...(p?.addresses || [])];
+  const box = el("textarea", "words other-addresses");
+  box.rows = 2;
+  box.spellcheck = false;
+  box.value = draft.addresses.join("\n");
+  box.placeholder = "http://100.101.2.3:3425";
+  box.onkeydown = (e) => e.stopPropagation();
+  box.oninput = () => { draft.addresses = box.value.split(/[\s,]+/).filter(Boolean); };
+  return field(t("Other addresses"), box, t("The same magpie reached another way, such as Tailscale or EasyTier, one per line. When an address takes no connection, the next is tried."));
 }
 
 function pinRow({ p, pr, draft, certTakes, addressOf, asTyped, show, save }) {

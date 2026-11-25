@@ -100,13 +100,21 @@ var lanDial = 5 * time.Second
 // lanDialCap has t give up on connecting to a private or link-local
 // address after lanDial. A name is left to the system's wait: it may
 // stand for an address outside, and Tailscale's (100.64/10), relayed on
-// its first packets, may take longer.
+// its first packets, may take longer, unless another address of the same
+// remote is left to try (WithFailover): then any address is given
+// failoverTry.
 func lanDialCap(t *http.Transport) {
 	dial := t.DialContext
 	if dial == nil {
 		dial = (&net.Dialer{}).DialContext
 	}
 	t.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		if c := tryCap(ctx); c > 0 {
+			// an address with another to try after it (WithFailover)
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, c)
+			defer cancel()
+		}
 		if h, _, err := net.SplitHostPort(addr); err == nil {
 			if ip := net.ParseIP(h); ip != nil && (ip.IsPrivate() || ip.IsLinkLocalUnicast()) {
 				ctx, cancel := context.WithTimeout(ctx, lanDial)

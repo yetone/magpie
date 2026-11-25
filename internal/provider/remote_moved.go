@@ -43,6 +43,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -120,7 +121,7 @@ func SeekMoved(ctx context.Context, p Provider, err error) (Provider, bool) {
 	if q == nil || strings.TrimSpace(q.Chat) == strings.TrimSpace(p.Chat) {
 		return p, false
 	}
-	p.Chat, p.Responses, p.Anthropic, p.Decide = q.Chat, q.Responses, q.Anthropic, q.Decide
+	p.Chat, p.Responses, p.Anthropic, p.Decide, p.Addresses = q.Chat, q.Responses, q.Anthropic, q.Decide, q.Addresses
 	return p, true
 }
 
@@ -129,16 +130,17 @@ func SeekMoved(ctx context.Context, p Provider, err error) (Provider, bool) {
 // (seekMoved) found it there, while a request held p as it read it (le13ure
 // on X: a request asked the old address again and again, through its
 // retries and its patience, after the new one was saved). Only the
-// addresses are taken; a key's view of p stays as it was.
+// addresses, its other ones too (Addresses), are taken; a key's view of p
+// stays as it was.
 func Readdressed(p Provider) (Provider, bool) {
 	if !p.IsRemoteMagpie() {
 		return p, false
 	}
 	q := lookIn(sharedAll(), p.ID)
-	if q == nil || q.ID != p.ID || !q.IsRemoteMagpie() || q.Chat == "" || q.Chat == p.Chat {
+	if q == nil || q.ID != p.ID || !q.IsRemoteMagpie() || q.Chat == "" || q.Chat == p.Chat && slices.Equal(q.Addresses, p.Addresses) {
 		return p, false
 	}
-	p.Chat, p.Responses, p.Anthropic, p.Decide = q.Chat, q.Responses, q.Anthropic, q.Decide
+	p.Chat, p.Responses, p.Anthropic, p.Decide, p.Addresses = q.Chat, q.Responses, q.Anthropic, q.Decide, q.Addresses
 	return p, true
 }
 
@@ -253,7 +255,9 @@ func isRemote(ctx context.Context, p Provider, scheme, at string) bool {
 	if !proves(ctx, scheme, at, p.Key) {
 		return false
 	}
-	p.Chat, p.Responses, p.Anthropic, p.Decide = scheme+"://"+at, "", "", ""
+	// at this address alone: another of p's (Addresses) answering would
+	// prove nothing of this one
+	p.Chat, p.Responses, p.Anthropic, p.Decide, p.Addresses = scheme+"://"+at, "", "", "", nil
 	p.remoteMagpieEndpoints()
 	b, err := remoteBody(ctx, p, "GET", "/v1/models", seekAnswer)
 	if err != nil {
