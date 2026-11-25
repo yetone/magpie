@@ -8154,7 +8154,9 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		}
 	}
 	// a message the upstream gave no phase gets one, as OpenAI's own
-	// models' do (phase.go, #2437); it goes last, as it holds events back
+	// models' do (phase.go, #2437), and its output_text parts the
+	// annotations list the AI SDK requires (output_text_shape.go); it
+	// goes last, as it holds events back
 	var phases *phaseTidy
 	if proto == provider.Responses {
 		phases = &phaseTidy{sse: sse}

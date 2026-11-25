@@ -186,7 +186,7 @@ func TestRelayedMessagesSayPhase(t *testing.T) {
 			}
 			// nothing is lost or reordered but the phase
 			want := strings.Join(tc.chunks, "")
-			if got := strings.NewReplacer(`,"phase":"commentary"`, "", `,"phase":"final_answer"`, "").Replace(body); tc.name != "upstream's own phase" && len(got) != len(want) {
+			if got := strings.NewReplacer(`,"phase":"commentary"`, "", `,"phase":"final_answer"`, "", `"annotations":[],`, "").Replace(body); tc.name != "upstream's own phase" && len(got) != len(want) {
 				t.Fatalf("relayed %d bytes, want %d\n%s", len(got), len(want), body)
 			}
 		})

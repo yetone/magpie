@@ -94,7 +94,8 @@ func phaseOutput(output []any, done bool) bool {
 }
 
 // phaseTidy gives, in a relayed Responses reply, its assistant messages a
-// phase where the upstream wrote none. In a stream a message's
+// phase where the upstream wrote none, and their output_text parts the
+// annotations list an upstream left out (output_text_shape.go). In a stream a message's
 // output_item.done waits, with what comes after it, until the next item
 // that isn't reasoning (commentary) or the reply's end (final answer); a
 // reply that isn't a stream is held whole and gone through at the end.
@@ -200,6 +201,9 @@ func withData(ev, data []byte) []byte {
 func (t *phaseTidy) event(ev []byte) []byte {
 	data := eventData(ev)
 	typ := gjson.GetBytes(data, "type").String()
+	if nb, ok := annotatedEvent(typ, data); ok {
+		ev, data = withData(ev, nb), nb
+	}
 	if t.held != nil {
 		switch typ {
 		case "response.output_item.added":
@@ -256,7 +260,7 @@ func (t *phaseTidy) release(phase string) []byte {
 // ended is the reply's last event, its output's messages given their phase
 // as the stream gave them.
 func (t *phaseTidy) ended(ev, data []byte, done bool) []byte {
-	if !anyUnphased(gjson.GetBytes(data, "response.output")) {
+	if output := gjson.GetBytes(data, "response.output"); !anyUnphased(output) && !anyBareText(output) {
 		return ev
 	}
 	var e map[string]any
@@ -265,7 +269,8 @@ func (t *phaseTidy) ended(ev, data []byte, done bool) []byte {
 	}
 	res, _ := e["response"].(map[string]any)
 	out, _ := res["output"].([]any)
-	if !phaseOutput(out, done) {
+	phased := phaseOutput(out, done)
+	if !annotateOutput(out) && !phased {
 		return ev
 	}
 	nb, err := marshalPlain(e)
@@ -290,14 +295,16 @@ func phasedEvent(data []byte, phase string) ([]byte, bool) {
 	return nb, err == nil
 }
 
-// phaseWhole is a whole Responses reply with its messages' phases.
+// phaseWhole is a whole Responses reply with its messages' phases and
+// their parts' annotations.
 func phaseWhole(b []byte) ([]byte, bool) {
 	var res map[string]any
 	if decodeNumbers(b, &res) != nil || res == nil || res["object"] != "response" {
 		return nil, false
 	}
 	out, _ := res["output"].([]any)
-	if !phaseOutput(out, res["status"] == "completed") {
+	phased := phaseOutput(out, res["status"] == "completed")
+	if !annotateOutput(out) && !phased {
 		return nil, false
 	}
 	nb, err := marshalPlain(res)
