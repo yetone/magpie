@@ -1059,10 +1059,25 @@ func leastHeld(scope, key string, cs []candidate, pl planned, ready bool) ([]can
 // nor a fallback while the provider's own model leads, nor used past
 // lowShare unless it spends its credits first (Weighed.CreditsFirst) or
 // is that low on its week alone, which Smart and Use before expiry keep
-// with those that have room (Weighed.WeekLow).
+// with those that have room (Weighed.WeekLow), nor a key nothing is read
+// of while one whose allowance is known leads (unreadBehind).
 func readyForNew(order []Weighed, i int) bool {
 	w := order[i]
-	return w.Rest == nil && !w.Aside && !standsIn(order, i) && !(w.Known && w.Used >= lowShare && !w.CreditsFirst && !(w.WeekLow && w.Used < usedShare)) && !lastBehind(order, i) && !busyBehind(order, i)
+	return w.Rest == nil && !w.Aside && !standsIn(order, i) && !(w.Known && w.Used >= lowShare && !w.CreditsFirst && !(w.WeekLow && w.Used < usedShare)) && !lastBehind(order, i) && !busyBehind(order, i) && !unreadBehind(order, i)
+}
+
+// unreadBehind says whether order[i] is a key (a relay, an API key: no
+// account) that tells nothing of what it has left, while order[0] is one
+// whose allowance is known: routing put it behind (Smart and Use before
+// expiry keep one not known after those known, Least used first one with
+// no share after those with room), as what a subscription has left is
+// lost at its reset and a pay-as-you-go key's balance keeps. Spreading
+// sessions (leastHeld) took it as one more seat, the one nobody was on, so
+// under Stays: Session every other new conversation went to a relay while
+// a Codex account had its week to spend (wangtufly on X). Keys alike, none
+// read, still spread among themselves, as connor_yang's did.
+func unreadBehind(order []Weighed, i int) bool {
+	return i > 0 && i < len(order) && order[i].Kind != "account" && !order[i].Known && order[0].Known
 }
 
 // standsIn says whether order[i] is a provider's fallback while one of the
