@@ -74,8 +74,29 @@ var desktopApps = map[string]desktopApp{
 	// on Discord: ~/.dsh shown as "CLI not found" and wired as the web
 	// profile with that app in use); deepseek-harness-desktop-bin unpacks a
 	// .deb of it into /opt/DeepSeek Harness, electron-builder's folder.
+	//
+	// The community's DSH NEXT and DSH Desktop (github.com/anywhere-labs/
+	// dsh-desktop, dshdesktop.cn; not DeepSeek's) are Electron shells
+	// around the same dsh runtime, on the same home and profile: ~/.dsh,
+	// profiles/desktop (dsh-desktop-next/src/data-directory.ts and
+	// desktop-contract.ts's DEFAULT_PROFILE; dsh-plugin-desktop's
+	// product-identity.ts), so they are dsh's app too (tresgrosplan on X:
+	// DSH NEXT not detected). DSH NEXT 2.0.24-next's arm64 dmg holds DSH
+	// NEXT.app, ai.deepseek.dsh.desktop.next, with the dsh it runs in
+	// Contents/Resources/app/package.json (dshAppVersion). Their package.json
+	// build: per-user NSIS installers under %LOCALAPPDATA%\Programs, the
+	// folder changeable, registered under the UUID v5 of the appId; a deb
+	// into /opt/<productName> with executableName dsh-desktop-next and
+	// dsh-desktop, and no scheme of their own. DSH Desktop Beta
+	// (ai.deepseek.dsh.desktop.beta) is left out: it keeps ~/.dsh-beta.
 	"dsh": {id: "com.deepseek.dsh", names: []string{"DeepSeek Harness.app"}, win: filepath.Join("DeepSeek Harness", "DeepSeek Harness.exe"), guid: "1bf39983-50d0-5fe0-9ef4-cece76f67c5e",
-		onLinux: &linuxApp{dirs: []string{"/usr/lib/deepseek-harness-desktop", "/opt/DeepSeek Harness"}, exe: "deepseek-harness", name: "DeepSeek Harness", scheme: "dsh"}},
+		onLinux: &linuxApp{dirs: []string{"/usr/lib/deepseek-harness-desktop", "/opt/DeepSeek Harness"}, exe: "deepseek-harness", name: "DeepSeek Harness", scheme: "dsh"},
+		more: []desktopApp{
+			{id: "ai.deepseek.dsh.desktop.next", names: []string{"DSH NEXT.app"}, win: filepath.Join("DSH NEXT", "DSH NEXT.exe"), guid: "4a513c97-f710-5eb4-97f6-b8e556e2c341",
+				onLinux: &linuxApp{dirs: []string{"/opt/DSH NEXT"}, exe: "dsh-desktop-next", name: "DSH NEXT"}},
+			{id: "ai.deepseek.dsh.desktop", names: []string{"DSH Desktop.app"}, win: filepath.Join("DSH Desktop", "DSH Desktop.exe"), guid: "85820364-4c28-594e-b046-8896b3669248",
+				onLinux: &linuxApp{dirs: []string{"/opt/DSH Desktop"}, exe: "dsh-desktop", name: "DSH Desktop"}},
+		}},
 	// DS Bot's desktop app (app/electron-builder.yml, 0.3.0: appId
 	// io.github.fei2411.dsbot, productName DS Bot, DS Bot.app; DeepSeek
 	// Bot, its name before) runs a DSH of its own on its data folder

@@ -152,8 +152,9 @@ func dshAt(at place) *Agent {
 			// running or not: agent-default-model is read for new
 			// ones only (#2359)
 			notes = append(notes, noticeDsh1.String())
-		} else if Running(`DeepSeek Harness\.app/`, `(^|/)dsh( |$)`, `(^|/)deepseek-harness( |$)`) {
-			// deepseek-harness is the desktop app's executable on Linux
+		} else if Running(`DeepSeek Harness\.app/`, `DSH (NEXT|Desktop)\.app/`, `(^|/)dsh( |$)`, `(^|/)deepseek-harness( |$)`, `(^|/)dsh-desktop(-next)?( |$)`) {
+			// deepseek-harness is the desktop app's executable on Linux,
+			// dsh-desktop-next and dsh-desktop the community shells'
 			notes = append(notes, noticeDsh2.String())
 		}
 		if dshSearchesHere(dir) && !gateway.CanSearch() {
@@ -2392,17 +2393,58 @@ func dshLevelsWith(list, ref string, gemini bool) []string {
 // didn't): a home there is read by that dsh, not by this machine's.
 var dshDistros sync.Map
 
-// dshAppVersion is the version of DeepSeek Harness Desktop installed here,
-// "" when there is none or it doesn't say; a var for tests.
-var dshAppVersion = func() string {
-	a := &Agent{ID: "dsh"}
-	if !a.HasApp() {
-		return ""
+// dshAppVersion is the version of dsh the desktop apps installed here run,
+// the oldest when there are several: DeepSeek Harness Desktop's own, a
+// community shell's the dsh it bundles (dshBundledVersion), not the shell's
+// (DSH NEXT 2.0.24-next runs dsh 0.2.2-rc.5); "" when there is none,
+// "unknown" when one doesn't say. A var for tests (dshAppsVersion).
+var dshAppVersion = dshAppsVersion
+
+// dshAppsVersion is dshAppVersion as it reads this machine.
+func dshAppsVersion() string {
+	oldest := ""
+	for i, b := range desktopApps["dsh"].builds() {
+		if !b.installed() {
+			continue
+		}
+		v := b.version()
+		if i > 0 {
+			v = dshBundledVersion(b)
+		}
+		if v == "" {
+			return "unknown"
+		}
+		if oldest == "" || Newer(oldest, v) {
+			oldest = v
+		}
 	}
-	if v := a.AppVersion(); v != "" {
-		return v
+	return oldest
+}
+
+// dshBundledVersion is the dsh a community shell's Mac bundle runs: the
+// @deepseek-ai/dsh its Contents/Resources/app/package.json pins (DSH
+// NEXT's mac extraResources); "" when no bundle of it says, or names a
+// range. Elsewhere that manifest is inside app.asar, so it is "".
+func dshBundledVersion(app desktopApp) string {
+	for _, bundle := range macBundles(app) {
+		if info, ok := bundleInfo(bundle); !ok || info.id != app.id {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(bundle, "Contents", "Resources", "app", "package.json"))
+		if err != nil {
+			continue
+		}
+		var m struct {
+			Dependencies map[string]string `json:"dependencies"`
+		}
+		if json.Unmarshal(b, &m) != nil {
+			continue
+		}
+		if v := strings.TrimSpace(m.Dependencies["@deepseek-ai/dsh"]); v != "" && v[0] >= '0' && v[0] <= '9' {
+			return v
+		}
 	}
-	return "unknown"
+	return ""
 }
 
 // dshSpeaksGemini says every dsh that reads the dsh home holding path
