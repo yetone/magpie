@@ -13,6 +13,7 @@ package netproxy
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"net/http"
@@ -250,6 +251,7 @@ type dispatch struct {
 type route struct {
 	choice    string
 	h1        bool
+	whole     bool // wholeRecords
 	unchecked string
 	client    string // clientRoute
 	resolve   string // resolveRoute
@@ -264,7 +266,8 @@ func (d *dispatch) RoundTrip(req *http.Request) (*http.Response, error) {
 	if d.moved() {
 		d.CloseIdleConnections()
 	}
-	r := route{choice: Resolve(choiceOf(req.Context())), h1: HTTP1 != nil && HTTP1(req.URL) || http1Asked(req) || overHTTP1(req.Context()) || h2BrokenFor(req), unchecked: uncheckedHost(req), client: clientRoute(req), resolve: resolveRoute(req)}
+	broken := h2BrokenFor(req)
+	r := route{choice: Resolve(choiceOf(req.Context())), h1: HTTP1 != nil && HTTP1(req.URL) || http1Asked(req) || overHTTP1(req.Context()) || broken, whole: broken, unchecked: uncheckedHost(req), client: clientRoute(req), resolve: resolveRoute(req)}
 	t := d.base
 	if r != (route{}) {
 		t = d.transport(r)
@@ -277,13 +280,14 @@ func (d *dispatch) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 	}
 	res, err := v4Retry(t, req)
-	if r.h1 {
-		return res, err
-	}
 	if err != nil {
 		if recordError(err) {
+			// over HTTP/1.1 too: the tries after it go in whole records
 			markH2Broken(req)
 		}
+		return res, err
+	}
+	if r.h1 {
 		return res, err
 	}
 	if res.ProtoMajor == 2 && res.Body != nil && res.Body != http.NoBody {
@@ -346,6 +350,9 @@ func (d *dispatch) transport(r route) *http.Transport {
 	if r.h1 {
 		http1Only(t)
 	}
+	if r.whole {
+		wholeRecords(t)
+	}
 	if r.unchecked != "" {
 		uncheckTLS(t)
 	}
@@ -378,6 +385,26 @@ func http1Only(t *http.Transport) {
 	if t.TLSClientConfig != nil {
 		t.TLSClientConfig.NextProtos = nil
 	}
+}
+
+// wholeRecords has t, a clone, write a request in TLS records as large as
+// TLS allows, as OpenSSL does (curl, Python): Go starts each connection
+// on records of about one TCP segment and grows them a segment a record
+// for its first 128KB (DynamicRecordSizingDisabled), and net/http hands
+// TLS a request's head and first bytes 4KB at a time (WriteBufferSize),
+// so a 70KB body went out as a dozen or more small records, each its own
+// write. Behind a fake-IP proxy whose path mangled
+// Go's requests ("tls: bad record MAC", over HTTP/1.1 too) while curl and
+// Python's were answered every time (#7567, k0ngk0ng), the requests to a
+// host after a record error (h2Broken) go out in the shape that got
+// through: a 64KB buffer, written as 16KB records. Nothing else of the
+// connection changes: its hello, its ciphers, its protocol.
+func wholeRecords(t *http.Transport) {
+	if t.TLSClientConfig == nil {
+		t.TLSClientConfig = &tls.Config{}
+	}
+	t.TLSClientConfig.DynamicRecordSizingDisabled = true
+	t.WriteBufferSize = 64 << 10
 }
 
 // CloseIdleConnections closes base's and every proxy's own.
