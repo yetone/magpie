@@ -54,7 +54,7 @@ func ShellPage(c ShellConfig) (page []byte, nonce string) {
 	p.WriteString(html.EscapeString(c.Title))
 	p.WriteString(`</title><style nonce="` + nonce + `">`)
 	p.Write(shellCSS)
-	p.WriteString(`</style></head><body><iframe id="page" title="` + html.EscapeString(c.Title) + `" allow="clipboard-write; fullscreen"></iframe><div id="ui"></div><script nonce="` + nonce + `">`)
+	p.WriteString(`</style></head><body><iframe id="page" title="` + html.EscapeString(c.Title) + `" allow="autoplay; clipboard-write; fullscreen"></iframe><div id="ui"></div><script nonce="` + nonce + `">`)
 	p.Write(bytes.TrimRight(shellJS, "\n"))
 	p.WriteString("(")
 	p.Write(cfg)

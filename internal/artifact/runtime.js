@@ -12,7 +12,7 @@
   // every capability resolves null there, as it does for a page's
   // visitor that claude.ai can't serve
   var publishing = !!(C.caps.artifact || C.caps.self);
-  var served = C.shared ? { permissions: true } : { db: !!C.caps.db, user: true, permissions: true, artifact: publishing, self: publishing, assets: !!C.caps.assets, sample: !!C.caps.sample, comments: !!C.caps.comments && !!C.origin, downloads: !!C.caps.downloads && !!C.origin };
+  var served = C.shared ? { permissions: true } : { db: !!C.caps.db, user: true, permissions: true, artifact: publishing, self: publishing, assets: !!C.caps.assets, sample: !!C.caps.sample, comments: !!C.caps.comments && !!C.origin, downloads: !!C.caps.downloads && !!C.origin, tts: !!C.caps.tts && !!C.origin && typeof Audio === "function" };
   var freeze = Object.freeze;
   function deepFreeze(v) {
     if (v && typeof v === "object" && !Object.isFrozen(v)) {
@@ -998,6 +998,12 @@
         case "saved":
           if (swait[d.req]) swait[d.req](d);
           break;
+        case "tts-audio":
+          if (twait[d.req]) twait[d.req](d);
+          break;
+        case "tts-stop":
+          if (reading) viewerStop();
+          break;
         case "abort":
           if (asking[d.id]) asking[d.id].abort();
           break;
@@ -1237,6 +1243,228 @@
     },
   });
 
+  // -- tts ----------------------------------------------------------------
+  // The page's text read aloud: the shell, holding its own token, asks
+  // magpie for each line's audio, and it plays here, in the frame the
+  // viewer clicked in. The shell draws the Stop; Escape here stops too.
+  var VOICES = ["buttery", "airy", "glassy", "rounded"];
+  var twait = {}, treq = 0, tstate = "idle", reading = null, trate = 1, coolUntil = 0;
+  var tl = { state: [], line: [], position: [] };
+  function tErr(code, message, more) {
+    var e = new Error(message || code);
+    e.name = "TTSError";
+    e.code = code;
+    if (more) Object.keys(more).forEach(function (k) { e[k] = more[k]; });
+    return e;
+  }
+  function emit(kind, v) {
+    tl[kind].slice().forEach(function (f) { try { f(v); } catch (e) { setTimeout(function () { throw e; }); } });
+  }
+  function on(kind) {
+    return function (fn) {
+      if (typeof fn !== "function") throw tErr("invalid_argument", "pass a function");
+      tl[kind].push(fn);
+      return function () { var i = tl[kind].indexOf(fn); if (i >= 0) tl[kind].splice(i, 1); };
+    };
+  }
+  function setState(st, reason) {
+    if (st === tstate && !reason) return;
+    tstate = st;
+    toShell({ type: "tts-state", state: st });
+    emit("state", freeze(reason ? { state: st, reason: reason } : { state: st }));
+  }
+  function clampRate(r, why) {
+    if (r === undefined) return undefined;
+    if (typeof r !== "number" || !isFinite(r)) throw tErr("invalid_argument", why + " is a number, 1 being normal");
+    return Math.min(1.5, Math.max(0.7, r));
+  }
+  // a call's lines, checked: a string, a line, or up to 100 lines
+  function linesOf(what, o) {
+    o = o === undefined ? {} : o;
+    if (!o || typeof o !== "object") throw tErr("invalid_argument", "options are an object");
+    var list = typeof what === "string" || what && !Array.isArray(what) && typeof what === "object" ? [what] : what;
+    if (!Array.isArray(list) || !list.length || list.length > 100) throw tErr("invalid_argument", "speak takes text, a line {text}, or 1 to 100 lines");
+    return list.map(function (l) {
+      if (typeof l === "string") l = { text: l };
+      if (!l || typeof l !== "object" || typeof l.text !== "string") throw tErr("invalid_argument", "a line is {text, voice?, rate?, language?, id?}");
+      var text = l.text.trim(), n = Array.from(text).length;
+      if (!n || n > 2000) throw tErr("invalid_argument", "a line's text is 1 to 2,000 characters");
+      var voice = l.voice !== undefined ? l.voice : o.voice !== undefined ? o.voice : "buttery";
+      if (VOICES.indexOf(voice) < 0) throw tErr("invalid_argument", "voice is one of " + VOICES.join(", "));
+      var lang = l.language !== undefined ? l.language : o.language;
+      if (lang !== undefined && (typeof lang !== "string" || !/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(lang))) throw tErr("invalid_argument", "language is a tag such as \"en\" or \"pt-BR\"");
+      if (l.id !== undefined && (typeof l.id !== "string" || !l.id || l.id.length > 64)) throw tErr("invalid_argument", "a line's id is a string of 1 to 64 characters");
+      var rate = clampRate(l.rate !== undefined ? l.rate : o.rate, "rate");
+      return { text: text, voice: voice, language: lang, id: l.id, rate: rate };
+    });
+  }
+  // the gesture: once the viewer has clicked or typed in the page; after
+  // they stopped a reading, not for a few seconds
+  function gestureGate() {
+    var ua = navigator.userActivation;
+    if (ua && !ua.hasBeenActive) return tErr("no_gesture", "tts speaks once the viewer has clicked or typed in the page");
+    var wait = coolUntil - Date.now();
+    if (wait > 0) return tErr("no_gesture", "the viewer just stopped the reading", { retryAfterMs: wait });
+    return null;
+  }
+  function fetchLine(r, i) {
+    var line = r.lines[i];
+    if (!line || line.audio) return line && line.audio;
+    var req = ++treq;
+    line.audio = new Promise(function (res) {
+      twait[req] = function (d) { delete twait[req]; res(d); };
+      toShell({ type: "tts-line", req: req, text: line.text, voice: line.voice });
+    });
+    return line.audio;
+  }
+  // a call's promise: it resolves once its own lines are spoken
+  function callOf(r, lines) {
+    return new Promise(function (res, rej) {
+      var c = { left: lines.length, ms: 0, res: res, rej: rej };
+      lines.forEach(function (l) { l.call = c; r.lines.push(l); });
+      r.calls.push(c);
+    });
+  }
+  function endReading(r, reason, err) {
+    if (reading !== r) return;
+    reading = null;
+    clearTimeout(r.pauseTimer);
+    if (r.el) {
+      r.el.pause();
+      r.el.removeAttribute("src");
+      r.el.load();
+    }
+    if (r.url) URL.revokeObjectURL(r.url);
+    document.removeEventListener("visibilitychange", r.onHide);
+    r.calls.forEach(function (c) {
+      if (c.left > 0) c.rej(err || tErr("stopped", "the reading ended: " + reason, { reason: reason }));
+    });
+    setState("idle", reason);
+  }
+  function viewerStop() {
+    coolUntil = Date.now() + 6000;
+    endReading(reading, "viewer_stopped");
+  }
+  var failReasons = { rate_limited: 1, not_granted: 1, unavailable: 1, upstream_error: 1 };
+  function playFrom(r, i) {
+    if (reading !== r) return;
+    if (i >= r.lines.length) return endReading(r, "completed");
+    var line = r.lines[i];
+    Promise.resolve(fetchLine(r, i)).then(function (d) {
+      if (reading !== r) return;
+      if (!d || d.error || !(d.blob instanceof Blob)) {
+        var code = d && failReasons[d.error] ? d.error : "upstream_error";
+        endReading(r, code, tErr(code, (d && d.message) || "the line couldn't be read aloud", d && d.retryAfterMs ? { retryAfterMs: d.retryAfterMs } : null));
+        return;
+      }
+      if (r.url) URL.revokeObjectURL(r.url);
+      r.url = URL.createObjectURL(d.blob);
+      var a = r.el;
+      a.src = r.url;
+      a.playbackRate = line.rate || trate;
+      a.onended = function () {
+        if (reading !== r) return;
+        var c = line.call;
+        c.ms += Math.round((a.duration || a.currentTime || 0) * 1000);
+        if (--c.left === 0) c.res(freeze({ playedMs: c.ms }));
+        playFrom(r, i + 1);
+      };
+      a.ontimeupdate = function () {
+        if (reading === r) emit("position", freeze({ ms: Math.round(a.currentTime * 1000), line: i }));
+      };
+      a.onerror = function () { endReading(r, "upstream_error", tErr("upstream_error", "the audio couldn't be played")); };
+      var p = a.play();
+      (p && p.then ? p : Promise.resolve()).then(function () {
+        if (reading !== r) return;
+        if (r.paused) { a.pause(); return; }
+        setState("speaking");
+        emit("line", freeze(line.id !== undefined ? { line: i, id: line.id } : { line: i }));
+        fetchLine(r, i + 1);
+      }, function (e) {
+        if (reading !== r) return;
+        if (e && e.name === "NotAllowedError") endReading(r, "interrupted", tErr("no_gesture", "the browser wants a click in the page before it plays sound"));
+        else endReading(r, "interrupted", tErr("upstream_error", "the audio couldn't be played"));
+      });
+    });
+  }
+  function startReading(lines) {
+    var r = { lines: [], calls: [], el: new Audio(), paused: false };
+    r.el.preload = "auto";
+    r.onHide = function () { if (document.visibilityState === "hidden") endReading(r, "hidden"); };
+    document.addEventListener("visibilitychange", r.onHide);
+    reading = r;
+    var p = callOf(r, lines);
+    setState("starting");
+    whenShell().then(function (up) {
+      if (reading !== r) return;
+      if (!up) return endReading(r, "unavailable", tErr("unavailable", "the page reads aloud in magpie's viewer: open it in its own tab"));
+      playFrom(r, 0);
+    });
+    return p;
+  }
+  var tts = freeze({
+    speak: function (what, o) {
+      var lines;
+      try { lines = linesOf(what, o); } catch (e) { return Promise.reject(e); }
+      var g = gestureGate();
+      if (g) return Promise.reject(g);
+      if (reading) endReading(reading, "replaced");
+      return startReading(lines);
+    },
+    add: function (what, o) {
+      var lines;
+      try { lines = linesOf(what, o); } catch (e) { return Promise.reject(e); }
+      if (!reading) {
+        var g = gestureGate();
+        if (g) return Promise.reject(g);
+        return startReading(lines);
+      }
+      return callOf(reading, lines);
+    },
+    stop: function () {
+      if (reading) endReading(reading, "stopped");
+      return Promise.resolve();
+    },
+    pause: function () {
+      var r = reading;
+      if (!r || r.paused) return Promise.resolve();
+      r.paused = true;
+      r.el.pause();
+      r.pauseTimer = setTimeout(function () { endReading(r, "time_limit"); }, 5 * 60 * 1000);
+      setState("paused");
+      return Promise.resolve();
+    },
+    resume: function () {
+      var r = reading;
+      if (!r || !r.paused) return Promise.resolve();
+      r.paused = false;
+      clearTimeout(r.pauseTimer);
+      if (r.el.src && !r.el.ended) {
+        var p = r.el.play();
+        if (p && p.catch) p.catch(function () { endReading(r, "interrupted", tErr("no_gesture", "the browser wants a click in the page before it plays sound")); });
+      }
+      setState(r.el.src ? "speaking" : "starting");
+      return Promise.resolve();
+    },
+    setRate: function (rate) {
+      try { trate = clampRate(rate, "rate"); } catch (e) { return Promise.reject(e); }
+      if (reading && reading.el) reading.el.playbackRate = trate;
+      return Promise.resolve(trate);
+    },
+    active: function () { return Promise.resolve(tstate !== "idle"); },
+    voices: function () { return Promise.resolve(freeze(VOICES.map(function (v) { return freeze({ id: v, default: v === "buttery" }); }))); },
+    onState: on("state"),
+    onLine: on("line"),
+    onPosition: on("position"),
+  });
+  // an Escape nothing in the page claimed stops the reading
+  window.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape" || !reading || e.defaultPrevented) return;
+    var t = e.target;
+    if (t && t.nodeType === 1 && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    viewerStop();
+  });
+
   // -- permissions --------------------------------------------------------
   function states(names) {
     var out = {};
@@ -1255,7 +1483,7 @@
   });
 
   // -- claude.use ---------------------------------------------------------
-  var spaces = { db: served.db ? db : null, user: served.user ? user : null, permissions: permissions, artifact: served.artifact ? artifact : null, self: served.self ? artifact : null, assets: served.assets ? assets : null, sample: served.sample ? sample : null, comments: served.comments ? comments : null, downloads: served.downloads ? downloads : null };
+  var spaces = { db: served.db ? db : null, user: served.user ? user : null, permissions: permissions, artifact: served.artifact ? artifact : null, self: served.self ? artifact : null, assets: served.assets ? assets : null, sample: served.sample ? sample : null, comments: served.comments ? comments : null, downloads: served.downloads ? downloads : null, tts: served.tts ? tts : null };
   var memo = {};
   function use(name) {
     name = String(name);

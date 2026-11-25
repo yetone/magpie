@@ -30,6 +30,15 @@ button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
 .pop.save .ask{font-weight:600;overflow-wrap:anywhere}
 .pop.save .size{color:var(--mute);font-size:12px}
 .pop.save .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
+.reading{position:fixed;bottom:16px;left:50%;display:flex;align-items:center;gap:8px;padding:3px 3px 3px 12px;border-radius:999px;background:var(--glass);-webkit-backdrop-filter:blur(20px) saturate(1.6);backdrop-filter:blur(20px) saturate(1.6);box-shadow:var(--shadow);border:.5px solid var(--line);opacity:0;transform:translateX(-50%) scale(.96);transition:opacity .16s cubic-bezier(.23,1,.32,1),transform .16s cubic-bezier(.23,1,.32,1)}
+.reading.in{opacity:1;transform:translateX(-50%)}
+.reading .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:breathe 1.2s ease-in-out infinite}
+.reading.paused .dot{animation:none;background:var(--mute)}
+.reading .what{white-space:nowrap}
+.reading .btn{border-radius:999px}
+@keyframes breathe{50%{opacity:.35}}
+@media (max-width:440px){.reading{left:12px;transform:scale(.96);transform-origin:bottom left}.reading.in{transform:none}}
+@media (prefers-reduced-motion:reduce){.reading .dot{animation:none}}
 .pop .head{display:flex;align-items:center;gap:4px;padding:10px 8px 6px 14px}
 .pop .where{flex:1;min-width:0;color:var(--mute);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .icon{width:26px;height:26px;border-radius:6px;display:grid;place-items:center;color:var(--mute);transition:background-color .15s ease,color .15s ease}

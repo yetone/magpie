@@ -171,8 +171,8 @@ address, so:
 A page written for claude.ai's artifact runtime (contract 0.2.99) runs
 here as written: `window.claude.use(name)` is there before the page's own
 scripts, and resolves `db`, `user`, `artifact` (and `self`, its former
-name), `assets`, `sample`, `comments` ([Comments](#comments)), `downloads` and the
-built-in `permissions`
+name), `assets`, `sample`, `comments` ([Comments](#comments)), `downloads`, `tts` ([Reading
+aloud](#reading-aloud)) and the built-in `permissions`
 ([internal/artifact/runtime.js](../../internal/artifact/runtime.js),
 [runtime.go](../../internal/artifact/runtime.go),
 [caps.go](../../internal/artifact/caps.go),
@@ -488,6 +488,36 @@ shell, so it is served only where comments are: a page in its shell.
   the page works as before; `downloads` is the call a page written for
   claude.ai makes.
 
+### Reading aloud
+
+`tts` reads a page's text to the viewer
+([internal/gateway/artifacts_tts.go](../../internal/gateway/artifacts_tts.go)).
+Like downloads it is served only in the shell.
+- The runtime keeps the reading: its lines, the calls waiting on them,
+  the state (`starting`, `speaking`, `paused`, `idle` with a reason),
+  pause, rate (`playbackRate`, 0.7 to 1.5) and the events. For each line
+  it asks the shell, which posts `{t, text, voice, version}` to
+  `<page>/_api/tts` with its own token and hands the audio back as a
+  Blob. The page plays it in its own frame (the iframe has
+  `allow="autoplay"`), so the viewer's click in the page is the gesture
+  the browser asks for. The next line is fetched while one plays.
+- The route takes the shell's token alone, for a version that declares
+  `tts`. It reads the line as plain text (`plainOfMarkdown`, 1 to 2000
+  characters), maps the contract's voices onto OpenAI's (buttery nova,
+  airy shimmer, glassy alloy, rounded onyx), and asks the first speech
+  model (`FirstServing(catalog.ServesSpeech)`) through `speak` as the
+  `artifacts` agent, so masking, routing and Usage are the speech
+  route's. With no speech model it answers `unavailable`, and at most 60
+  lines a minute per artifact (`rate_limited`, Retry-After).
+- While it reads, the shell shows "Reading aloud" and Stop at the bottom.
+  Stop, Escape in the shell, or an Escape in the page that nothing there
+  claimed ends it as `viewer_stopped`, and for 6 seconds after a new
+  speak is `no_gesture` with `retryAfterMs`, a click or not. A page left
+  hidden ends it (`hidden`), and one paused for 5 minutes (`time_limit`).
+- `language` is checked and kept, not sent: OpenAI's speech models tell
+  the language from the text. `busy` (dictation) never comes, since
+  dictation isn't served yet.
+
 ## Added by the user, and Claude Code's own tool
 
 [internal/library/artifacts.go](../../internal/library/artifacts.go):
@@ -621,7 +651,7 @@ go test -tags nogui ./internal/gui -run 'TestArtifactsAPI|TestArtifactsShareAPI|
 go test -tags nogui ./internal/cli -run 'TestArtifacts|TestEveryRouteHasACommandOrIsNamed'
 node --test internal/gui/tests/artifacts-page.test.cjs
 node --test internal/gui/tests/artifact-runtime.test.cjs
-node --test internal/gui/tests/artifact-comments.test.cjs internal/gui/tests/artifact-downloads.test.cjs
+node --test internal/gui/tests/artifact-comments.test.cjs internal/gui/tests/artifact-downloads.test.cjs internal/gui/tests/artifact-tts.test.cjs
 node --test site/shares.test.mjs
 node --test internal/gui/tests/nav-pages-order.test.cjs internal/gui/tests/builtins.test.cjs
 ```

@@ -13,10 +13,10 @@
 
   // -- words ------------------------------------------------------------
   var WORDS = {
-    zh: { "Comment": "评论", "Comments": "评论", "Add comments": "添加评论", "Add a comment": "添加评论", "Reply": "回复", "Send to {agent}": "发给 {agent}", "Open": "未解决", "Resolved": "已解决", "Resolve": "解决", "Reopen": "重新打开", "Delete": "删除", "Delete?": "确定删除？", "Close": "关闭", "Stop": "停止", "Try again": "重试", "{agent} is working…": "{agent} 正在处理…", "Waiting for {agent}…": "等待 {agent}…", "{agent} couldn't finish: {error}": "{agent} 没能完成：{error}", "No comments yet": "还没有评论", "No resolved comments": "没有已解决的评论", "Comment on the page": "评论整个页面", "You": "你", "The whole page": "整个页面", "Couldn't post: {error}": "没能发出：{error}", "1 reply": "1 条回复", "{n} replies": "{n} 条回复", "magpie can't be reached": "连不上 magpie", "No agent can take it on this computer": "这台电脑上没有能处理它的 agent", "Save “{name}”?": "保存“{name}”？", "Save": "保存", "Cancel": "取消" },
-    "zh-TW": { "Comment": "留言", "Comments": "留言", "Add comments": "新增留言", "Add a comment": "新增留言", "Reply": "回覆", "Send to {agent}": "傳給 {agent}", "Open": "未解決", "Resolved": "已解決", "Resolve": "解決", "Reopen": "重新開啟", "Delete": "刪除", "Delete?": "確定刪除？", "Close": "關閉", "Stop": "停止", "Try again": "重試", "{agent} is working…": "{agent} 正在處理…", "Waiting for {agent}…": "等待 {agent}…", "{agent} couldn't finish: {error}": "{agent} 沒能完成：{error}", "No comments yet": "還沒有留言", "No resolved comments": "沒有已解決的留言", "Comment on the page": "留言給整個頁面", "You": "你", "The whole page": "整個頁面", "Couldn't post: {error}": "沒能送出：{error}", "1 reply": "1 則回覆", "{n} replies": "{n} 則回覆", "magpie can't be reached": "連不上 magpie", "No agent can take it on this computer": "這台電腦上沒有能處理它的 agent", "Save “{name}”?": "儲存「{name}」？", "Save": "儲存", "Cancel": "取消" },
-    ja: { "Comment": "コメント", "Comments": "コメント", "Add comments": "コメントを追加", "Add a comment": "コメントを追加", "Reply": "返信", "Send to {agent}": "{agent} に送る", "Open": "未解決", "Resolved": "解決済み", "Resolve": "解決", "Reopen": "再開", "Delete": "削除", "Delete?": "削除しますか？", "Close": "閉じる", "Stop": "停止", "Try again": "再試行", "{agent} is working…": "{agent} が作業中…", "Waiting for {agent}…": "{agent} を待っています…", "{agent} couldn't finish: {error}": "{agent} は完了できませんでした：{error}", "No comments yet": "コメントはまだありません", "No resolved comments": "解決済みのコメントはありません", "Comment on the page": "ページ全体にコメント", "You": "あなた", "The whole page": "ページ全体", "Couldn't post: {error}": "投稿できませんでした：{error}", "1 reply": "返信 1 件", "{n} replies": "返信 {n} 件", "magpie can't be reached": "magpie に接続できません", "No agent can take it on this computer": "このコンピュータには対応できる agent がありません", "Save “{name}”?": "「{name}」を保存しますか？", "Save": "保存", "Cancel": "キャンセル" },
-    de: { "Comment": "Kommentieren", "Comments": "Kommentare", "Add comments": "Kommentare hinzufügen", "Add a comment": "Kommentar hinzufügen", "Reply": "Antworten", "Send to {agent}": "An {agent} senden", "Open": "Offen", "Resolved": "Erledigt", "Resolve": "Erledigen", "Reopen": "Wieder öffnen", "Delete": "Löschen", "Delete?": "Löschen?", "Close": "Schließen", "Stop": "Stoppen", "Try again": "Erneut versuchen", "{agent} is working…": "{agent} arbeitet…", "Waiting for {agent}…": "Wartet auf {agent}…", "{agent} couldn't finish: {error}": "{agent} wurde nicht fertig: {error}", "No comments yet": "Noch keine Kommentare", "No resolved comments": "Keine erledigten Kommentare", "Comment on the page": "Die ganze Seite kommentieren", "You": "Du", "The whole page": "Die ganze Seite", "Couldn't post: {error}": "Nicht gesendet: {error}", "1 reply": "1 Antwort", "{n} replies": "{n} Antworten", "magpie can't be reached": "magpie ist nicht erreichbar", "No agent can take it on this computer": "Kein Agent auf diesem Computer kann es übernehmen", "Save “{name}”?": "„{name}“ sichern?", "Save": "Sichern", "Cancel": "Abbrechen" }
+    zh: { "Comment": "评论", "Comments": "评论", "Add comments": "添加评论", "Add a comment": "添加评论", "Reply": "回复", "Send to {agent}": "发给 {agent}", "Open": "未解决", "Resolved": "已解决", "Resolve": "解决", "Reopen": "重新打开", "Delete": "删除", "Delete?": "确定删除？", "Close": "关闭", "Stop": "停止", "Try again": "重试", "{agent} is working…": "{agent} 正在处理…", "Waiting for {agent}…": "等待 {agent}…", "{agent} couldn't finish: {error}": "{agent} 没能完成：{error}", "No comments yet": "还没有评论", "No resolved comments": "没有已解决的评论", "Comment on the page": "评论整个页面", "You": "你", "The whole page": "整个页面", "Couldn't post: {error}": "没能发出：{error}", "1 reply": "1 条回复", "{n} replies": "{n} 条回复", "magpie can't be reached": "连不上 magpie", "No agent can take it on this computer": "这台电脑上没有能处理它的 agent", "Save “{name}”?": "保存“{name}”？", "Save": "保存", "Cancel": "取消", "Reading aloud": "正在朗读" },
+    "zh-TW": { "Comment": "留言", "Comments": "留言", "Add comments": "新增留言", "Add a comment": "新增留言", "Reply": "回覆", "Send to {agent}": "傳給 {agent}", "Open": "未解決", "Resolved": "已解決", "Resolve": "解決", "Reopen": "重新開啟", "Delete": "刪除", "Delete?": "確定刪除？", "Close": "關閉", "Stop": "停止", "Try again": "重試", "{agent} is working…": "{agent} 正在處理…", "Waiting for {agent}…": "等待 {agent}…", "{agent} couldn't finish: {error}": "{agent} 沒能完成：{error}", "No comments yet": "還沒有留言", "No resolved comments": "沒有已解決的留言", "Comment on the page": "留言給整個頁面", "You": "你", "The whole page": "整個頁面", "Couldn't post: {error}": "沒能送出：{error}", "1 reply": "1 則回覆", "{n} replies": "{n} 則回覆", "magpie can't be reached": "連不上 magpie", "No agent can take it on this computer": "這台電腦上沒有能處理它的 agent", "Save “{name}”?": "儲存「{name}」？", "Save": "儲存", "Cancel": "取消", "Reading aloud": "正在朗讀" },
+    ja: { "Comment": "コメント", "Comments": "コメント", "Add comments": "コメントを追加", "Add a comment": "コメントを追加", "Reply": "返信", "Send to {agent}": "{agent} に送る", "Open": "未解決", "Resolved": "解決済み", "Resolve": "解決", "Reopen": "再開", "Delete": "削除", "Delete?": "削除しますか？", "Close": "閉じる", "Stop": "停止", "Try again": "再試行", "{agent} is working…": "{agent} が作業中…", "Waiting for {agent}…": "{agent} を待っています…", "{agent} couldn't finish: {error}": "{agent} は完了できませんでした：{error}", "No comments yet": "コメントはまだありません", "No resolved comments": "解決済みのコメントはありません", "Comment on the page": "ページ全体にコメント", "You": "あなた", "The whole page": "ページ全体", "Couldn't post: {error}": "投稿できませんでした：{error}", "1 reply": "返信 1 件", "{n} replies": "返信 {n} 件", "magpie can't be reached": "magpie に接続できません", "No agent can take it on this computer": "このコンピュータには対応できる agent がありません", "Save “{name}”?": "「{name}」を保存しますか？", "Save": "保存", "Cancel": "キャンセル", "Reading aloud": "読み上げ中" },
+    de: { "Comment": "Kommentieren", "Comments": "Kommentare", "Add comments": "Kommentare hinzufügen", "Add a comment": "Kommentar hinzufügen", "Reply": "Antworten", "Send to {agent}": "An {agent} senden", "Open": "Offen", "Resolved": "Erledigt", "Resolve": "Erledigen", "Reopen": "Wieder öffnen", "Delete": "Löschen", "Delete?": "Löschen?", "Close": "Schließen", "Stop": "Stoppen", "Try again": "Erneut versuchen", "{agent} is working…": "{agent} arbeitet…", "Waiting for {agent}…": "Wartet auf {agent}…", "{agent} couldn't finish: {error}": "{agent} wurde nicht fertig: {error}", "No comments yet": "Noch keine Kommentare", "No resolved comments": "Keine erledigten Kommentare", "Comment on the page": "Die ganze Seite kommentieren", "You": "Du", "The whole page": "Die ganze Seite", "Couldn't post: {error}": "Nicht gesendet: {error}", "1 reply": "1 Antwort", "{n} replies": "{n} Antworten", "magpie can't be reached": "magpie ist nicht erreichbar", "No agent can take it on this computer": "Kein Agent auf diesem Computer kann es übernehmen", "Save “{name}”?": "„{name}“ sichern?", "Save": "Sichern", "Cancel": "Abbrechen", "Reading aloud": "Wird vorgelesen" }
   };
   var TAGS = { en: "en", zh: "zh-CN", "zh-TW": "zh-TW", ja: "ja-JP", de: "de-DE" };
   function sysLang(s) {
@@ -176,10 +176,17 @@
       case "save":
         askSave(d);
         break;
+      case "tts-line":
+        readLine(d);
+        break;
+      case "tts-state":
+        drawReading(d.state);
+        break;
     }
   });
   frame.addEventListener("load", function () {
     pageThere = false;
+    drawReading("idle");
     placed = {};
     drawPins();
   });
@@ -438,6 +445,45 @@
     node.classList.add("in");
   }
 
+  // -- reading aloud ----------------------------------------------------
+  // the page's tts: each line's audio is asked for here, with the shell's
+  // token, and handed to the page to play; while it reads, a Stop sits
+  // at the bottom, and Escape stops it too
+  var readingBar = null;
+  function readLine(d) {
+    var answer = function (a) { a.type = "tts-audio"; a.req = d.req; toPage(a); };
+    if (typeof d.text !== "string" || typeof d.voice !== "string") return answer({ error: "upstream_error" });
+    fetch(C.api + "/tts", { method: "POST", body: JSON.stringify({ t: C.token, text: d.text, voice: d.voice, version: C.pinned ? C.version : 0 }), headers: { "Content-Type": "text/plain" }, cache: "no-store" })
+      .then(function (r) {
+        if (r.ok) return r.blob().then(function (b) { answer({ blob: b }); });
+        var after = parseFloat(r.headers.get("Retry-After") || "");
+        return r.json().catch(function () { return {}; }).then(function (j) {
+          var e = (j && j.error) || {};
+          var a = { error: e.code || "upstream_error", message: e.message || "" };
+          if (isFinite(after) && after > 0) a.retryAfterMs = after * 1000;
+          answer(a);
+        });
+      }, function () { answer({ error: "unavailable", message: t("magpie can't be reached") }); });
+  }
+  function drawReading(state) {
+    var on = state === "starting" || state === "speaking" || state === "paused";
+    if (on && !readingBar) {
+      var stop = button(t("Stop"));
+      stop.addEventListener("click", function () { toPage({ type: "tts-stop" }); });
+      readingBar = el("div", "reading", [el("span", "dot"), el("span", "what", [t("Reading aloud")]), stop]);
+      readingBar.setAttribute("role", "status");
+      ui.appendChild(readingBar);
+      readingBar.getBoundingClientRect();
+      readingBar.classList.add("in");
+    } else if (!on && readingBar) {
+      var gone = readingBar;
+      readingBar = null;
+      gone.classList.remove("in");
+      setTimeout(function () { gone.remove(); }, 120);
+    }
+    if (readingBar) readingBar.classList.toggle("paused", state === "paused");
+  }
+
   // a thread's card
   // prefill: the page's sendToClaude into the thread {text, sent(j), onClose}
   function openCard(id, at, prefill) {
@@ -658,6 +704,7 @@
   document.addEventListener("keydown", function (e) {
     if (e.key === "Escape" && !e.defaultPrevented) {
       if (saving) saving.done(false);
+      else if (readingBar) toPage({ type: "tts-stop" });
       else if (pop) closePop();
       else if (mode) setMode(false);
       else if (drawer) closeDrawer();

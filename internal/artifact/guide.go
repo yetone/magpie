@@ -104,6 +104,19 @@ Declare {"downloads": true}.
      // data: a string (saved as UTF-8), a Blob, an ArrayBuffer or a typed array; at most 64 MiB
 Call it on a viewer's click. The extension decides the type and is one of gif png jpg jpeg webp mp4 webm txt json md docx pptx epub csv ttf html svg pdf xlsx zip fig. The name is cleaned (no path, no invisible characters, at most 240 bytes).
 Codes: declined (the viewer said no: leave it), rate_limited (another file is waiting), rejected_extension, not_signed (mov), too_large, bad_request, request_unknown (request isn't used here), unavailable (open the page in its own tab).`},
+	{"tts", `tts: the page reads text aloud to the viewer, in one of four voices, through the text-to-speech model of a provider in magpie. magpie's viewer shows a Stop while it reads; Escape stops it too.
+Declare {"tts": {}}.
+  const t = await claude.use("tts")   // null in a shared copy: keep the text on screen, hide the speaker
+  await t.speak(text)                 // plain text, 1 to 2000 characters; resolves {playedMs} once spoken
+  await t.speak(text, {voice: "airy", rate: 1.2})   // voices: buttery (default), airy, glassy, rounded; rate 0.7 to 1.5
+  await t.speak([{text, voice, id}, ...])   // up to 100 lines as one reading: a paragraph or one speaker's turn each
+  await t.add([...])                  // appends to the reading, or starts one
+  t.onState(({state, reason}) => ...)   // "starting", "speaking", "paused", then "idle" with completed, stopped, replaced, viewer_stopped, hidden, time_limit...
+  t.onLine(({line, id}) => ...)       // as each line starts
+  t.onPosition(({ms, line}) => ...)
+  await t.pause(); await t.resume(); await t.stop(); await t.setRate(1.1)
+Call speak on a viewer's click: before they have clicked or typed in the page it rejects no_gesture. A new speak replaces the reading; when the reading stops, every pending call rejects stopped (its .reason says why), so stop adding. Speak only what the viewer asked to hear.
+Codes: invalid_argument, no_gesture (.retryAfterMs after the viewer stopped one), stopped, rate_limited (.retryAfterMs), not_granted, unavailable (no speech model in magpie, or open the page in its own tab), upstream_error.`},
 	{"permissions", `permissions: built in, never declared.
   const p = await claude.use("permissions")
   await p.state("db")      // "granted" for what the page declared, else "unavailable"
