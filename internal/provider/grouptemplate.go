@@ -2,13 +2,13 @@ package provider
 
 import (
 	"cmp"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/yetone/magpie/internal/lazyre"
-	"github.com/yetone/magpie/internal/settings"
 )
 
 // A template is a routing group made of the user's own models for a need
@@ -137,11 +137,16 @@ type rated struct {
 // served, not a group, that answers an agent's chat, with its price — the
 // model's maker's list price when there is one, so a subscription's or a
 // relay's copy weighs as the model does, else what the provider charges.
-func templateModels() []rated {
-	s := settings.Load()
+func templateModels() []rated { return ratedIn(providerEntries()) }
+
+// ratedIn is templateModels among entries, the catalog without its groups:
+// what a group following a template is made of as the groups are built
+// (followTemplate), where asking Served would build them again.
+func ratedIn(entries []Entry) []rated {
+	s := heldSettings()
 	var out []rated
-	for _, e := range Served() {
-		if e.Group != "" || nonChat.MatchString(strings.ToLower(e.Model)) {
+	for _, e := range entries {
+		if e.Group != "" || e.Provider == nil || nonChat.MatchString(strings.ToLower(e.Model)) {
 			continue
 		}
 		r := rated{e: e}
@@ -391,6 +396,7 @@ func AddTemplate(kind, name string) (Group, error) {
 		return Group{}, err
 	}
 	g := t.Group
+	g.Template = kind // its picks follow the user's models from now on
 	if name = strings.TrimSpace(name); name == "" {
 		name = g.Name
 	}
@@ -404,4 +410,105 @@ func AddTemplate(kind, name string) (Group, error) {
 		}
 	}
 	return g, nil
+}
+
+// followTemplate is g, a group following a template (Group.Template), with
+// the picks the template makes of ms now: its members, routing, rules and
+// classifier. A template that can't be made of them now (a provider
+// signed out) leaves the picks it had, so the group never goes empty.
+func followTemplate(g Group, ms []rated, ds []Entry) Group {
+	if !slices.Contains(TemplateKinds, g.Template) {
+		return g
+	}
+	t := templateOf(g.Template, ms, ds)
+	if t.Why != "" || len(t.Group.Members) == 0 {
+		return g
+	}
+	g.Members, g.Routing, g.Rules = t.Group.Members, t.Group.Routing, t.Group.Rules
+	g.SetClassifiers(t.Group.Classifiers())
+	// what named the members it had: a change to any of them made the
+	// picks the user's, so these are empty while it follows
+	g.Match, g.Placed, g.Off, g.Fast, g.Ultra, g.Weights, g.EffortMaps = nil, nil, nil, nil, nil, nil, nil
+	return g
+}
+
+// followsAfter is the template a group being saved (g, cleaned, own its
+// named members) follows from now on: the one it is given, else the one
+// it followed, and only while its picks are the template's as the user
+// reads them now (followTemplate). A save that changes a member, the
+// routing, a rule or the classifier makes the picks the user's, never
+// picked over again (the user's word over magpie's); a rename or a note
+// keeps it following.
+func followsAfter(g Group, own []string, stored []Group, entries []Entry) string {
+	kind := strings.TrimSpace(g.Template)
+	var was Group
+	if i := slices.IndexFunc(stored, func(x Group) bool { return x.ID == g.ID }); i >= 0 {
+		was = stored[i]
+		if kind == "" {
+			kind = was.Template
+		}
+	}
+	if !slices.Contains(TemplateKinds, kind) {
+		return ""
+	}
+	was.Template = kind
+	now := followTemplate(was, ratedIn(entries), OfferedDeciders(nil))
+	if len(now.Members) == 0 {
+		return "" // a new group whose template can't be made now
+	}
+	for i, m := range now.Members {
+		now.Members[i] = cleanMember(entries, m)
+	}
+	rules := slices.Clone(now.Rules)
+	for i := range rules {
+		rules[i].MapUses(func(u string) string { return cleanMember(entries, u) })
+	}
+	var err error
+	if now.Rules, err = cleanRules(rules, now.Members); err != nil {
+		return ""
+	}
+	if !GroupRouting(now.Routing) {
+		now.Routing = ""
+	}
+	g.Members = own
+	if picksOf(g) != picksOf(now) {
+		return ""
+	}
+	return kind
+}
+
+// picksOf is what of a group a template picks, and the user changes to
+// pick for themselves, as one string to compare: an empty list and none
+// are the same.
+func picksOf(g Group) string {
+	b, _ := json.Marshal(struct {
+		Members, Match, Off, Fast, Ultra, Classifiers []string
+		Routing                                       string
+		Rules                                         []Rule
+		Weights                                       map[string]int
+		EffortMaps                                    map[string]map[string]string
+	}{nonEmpty(g.Members), nonEmpty(g.Match), nonEmpty(g.Off), nonEmpty(g.Fast), nonEmpty(g.Ultra), nonEmpty(g.Classifiers()),
+		g.Routing, nonEmptyRules(g.Rules), nonEmptyMap(g.Weights), nonEmptyMap(g.EffortMaps)})
+	return string(b)
+}
+
+func nonEmpty(s []string) []string {
+	if len(s) == 0 {
+		return nil
+	}
+	return s
+}
+
+func nonEmptyRules(rs []Rule) []Rule {
+	if len(rs) == 0 {
+		return nil
+	}
+	return rs
+}
+
+func nonEmptyMap[V any](m map[string]V) map[string]V {
+	if len(m) == 0 {
+		return nil
+	}
+	return m
 }

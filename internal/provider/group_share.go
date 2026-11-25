@@ -56,6 +56,7 @@ func ShareGroup(id string) (string, error) {
 	withoutMemberAccounts(&g) // a member's own account too
 	g.Keys = nil              // this magpie's gateway keys, the same
 	g.Redact = ""             // and whether it masks: the receiver's call
+	g.Template = ""           // the picks as they are: made of this magpie's models
 	g.Seen = nil              // what this magpie found: another finds its own
 	g.Rules = slices.DeleteFunc(g.Rules, Rule.ByFolder)
 	out, err := json.Marshal(SharedGroup{Magpie: ShareMark, Version: ShareVersion, Group: g})
@@ -165,6 +166,7 @@ func importGroup(text string, over bool) (Imported, error) {
 	g.Accounts = nil          // another magpie's accounts, never this one's
 	g.Keys = []string{}       // its gateway keys too; over, the user's are kept below
 	g.Redact = ""             // whether it masks is the receiver's call, never a text's
+	g.Template = ""           // the picks as written, made of the sender's models
 	withoutMemberAccounts(&g) // and a member's own account (a text made before ShareGroup dropped them)
 	entries := providerEntries()
 	all := Groups()

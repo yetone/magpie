@@ -387,6 +387,15 @@ type Group struct {
 	// out, and stays out. Empty, the group was changed before magpie
 	// kept this, and gets no member it doesn't name (Kxsg79bEYFP4 on X).
 	Seen []string `json:"seen,omitempty"`
+	// Template is the template (TemplateSmart, …) a group added from one
+	// follows (AlanWang1027713 on X: the models picked for the user, not by
+	// hand): read, its members, routing, rules and classifier are the
+	// template as the user's models make it now (followTemplate), so a
+	// model added, retired or newly released is picked up without a visit
+	// to the editor. A save that changes any of them makes the picks the
+	// user's (followsAfter); one that doesn't, a rename, keeps following.
+	// Empty is a group whose picks are the user's.
+	Template string `json:"template,omitempty"`
 	// Disabled is a group of the user's switched off (PAMI on Discord):
 	// kept on the Routing page as it is, but not offered to agents, a
 	// request to it turned away with a word of why, and skipped where
@@ -608,10 +617,20 @@ func buildGroupsIn(entries []Entry) []Group {
 	if !f.NoAutoGroups {
 		found = foundGroups(entries)
 	}
+	// the models a template weighs, rated once and only when a group
+	// follows one: rating reads every model's price
+	var follow func(Group) Group
 	for _, g := range f.Groups {
 		if g.Hidden {
 			hidden[g.ID] = true
 			continue
+		}
+		if g.Template != "" {
+			if follow == nil {
+				ms, ds := ratedIn(entries), OfferedDeciders(nil)
+				follow = func(g Group) Group { return followTemplate(g, ms, ds) }
+			}
+			g = follow(g)
 		}
 		if strings.HasPrefix(g.ID, "auto-") {
 			if have == nil {
@@ -2147,6 +2166,7 @@ func SaveGroup(g Group) error {
 	if g.IntentSure != nil && !(*g.IntentSure >= 0 && *g.IntentSure <= 1) { // NaN too
 		return fmt.Errorf("a group's intent sure is from 0 to 1, not %g", *g.IntentSure)
 	}
+	g.Template = followsAfter(g, own, f.Groups, entries)
 	g.Auto, g.Hidden = false, false
 	g.Members = own // what the patterns match is found again as it is read
 	// a found group changed keeps following its model: what magpie had

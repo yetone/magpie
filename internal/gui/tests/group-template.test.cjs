@@ -8,7 +8,10 @@
 // to a Templates menu by New group. Edit first opens the editor with the
 // template in it. 10-14: a pick from the menu does the same, filled in and
 // brought into view, not a group added out of sight. At 420px, in every
-// language, Chromium and WebKit.
+// language, Chromium and WebKit. 11-25 (AlanWang1027713 on X, "让 AI 配，
+// 不用人工配"): a group added from a template keeps following it, its
+// picks made of the user's models as they change; its row says "picked by
+// magpie", and Edit first's save sends the kind so the draft follows too.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -34,16 +37,16 @@ const templates = [
 ];
 
 const words = {
-  en: { smart: "Hard to strong, easy to cheap", thrifty: "Cheap first", steady: "Never stuck", add: "Add", edit: "Edit first", added: "Added Hard to strong, easy to cheap", menu: "Templates", need: "Needs models from two providers: A is the only one", plan: "Plan first", fast: "Fastest first", even: "Spread evenly", planNeed: "Needs a subscription or token plan" },
-  zh: { smart: "难题给强模型，简单的给便宜模型", thrifty: "便宜优先", steady: "永不卡住", add: "添加", edit: "先编辑", added: "已添加 难题给强模型，简单的给便宜模型", menu: "模板", need: "需要两家供应商的模型：目前只有 A", plan: "计划优先", fast: "最快优先", even: "均匀分担", planNeed: "需要一个订阅或 Token 套餐" },
-  "zh-TW": { smart: "難題給強模型，簡單的給便宜模型", thrifty: "便宜優先", steady: "永不卡住", add: "新增", edit: "先編輯", added: "已新增 難題給強模型，簡單的給便宜模型", menu: "範本", need: "需要兩家供應商的模型：目前只有 A", plan: "方案優先", fast: "最快優先", even: "平均分擔", planNeed: "需要一個訂閱或 Token 方案" },
-  ja: { smart: "難しい作業は強いモデル、簡単な作業は安いモデルへ", thrifty: "安いモデル優先", steady: "止まらない", add: "追加", edit: "先に編集", added: "難しい作業は強いモデル、簡単な作業は安いモデルへ を追加しました", menu: "テンプレート", need: "2 つのプロバイダーのモデルが必要です：今は A だけです", plan: "プラン優先", fast: "最速優先", even: "均等に分散", planNeed: "サブスクリプションまたはトークンプランが必要です" },
-  de: { smart: "Schweres zum starken, Leichtes zum günstigen Modell", thrifty: "Günstig zuerst", steady: "Nie blockiert", add: "Hinzufügen", edit: "Erst bearbeiten", added: "Schweres zum starken, Leichtes zum günstigen Modell hinzugefügt", menu: "Vorlagen", need: "Braucht Modelle von zwei Anbietern: A ist der einzige", plan: "Tarif zuerst", fast: "Schnellster zuerst", even: "Gleichmäßig verteilen", planNeed: "Braucht ein Abo oder einen Token-Tarif" },
+  en: { smart: "Hard to strong, easy to cheap", thrifty: "Cheap first", steady: "Never stuck", add: "Add", edit: "Edit first", added: "Added Hard to strong, easy to cheap", menu: "Templates", need: "Needs models from two providers: A is the only one", plan: "Plan first", fast: "Fastest first", even: "Spread evenly", planNeed: "Needs a subscription or token plan", picked: "picked by magpie" },
+  zh: { smart: "难题给强模型，简单的给便宜模型", thrifty: "便宜优先", steady: "永不卡住", add: "添加", edit: "先编辑", added: "已添加 难题给强模型，简单的给便宜模型", menu: "模板", need: "需要两家供应商的模型：目前只有 A", plan: "计划优先", fast: "最快优先", even: "均匀分担", planNeed: "需要一个订阅或 Token 套餐", picked: "由 magpie 挑选" },
+  "zh-TW": { smart: "難題給強模型，簡單的給便宜模型", thrifty: "便宜優先", steady: "永不卡住", add: "新增", edit: "先編輯", added: "已新增 難題給強模型，簡單的給便宜模型", menu: "範本", need: "需要兩家供應商的模型：目前只有 A", plan: "方案優先", fast: "最快優先", even: "平均分擔", planNeed: "需要一個訂閱或 Token 方案", picked: "由 magpie 挑選" },
+  ja: { smart: "難しい作業は強いモデル、簡単な作業は安いモデルへ", thrifty: "安いモデル優先", steady: "止まらない", add: "追加", edit: "先に編集", added: "難しい作業は強いモデル、簡単な作業は安いモデルへ を追加しました", menu: "テンプレート", need: "2 つのプロバイダーのモデルが必要です：今は A だけです", plan: "プラン優先", fast: "最速優先", even: "均等に分散", planNeed: "サブスクリプションまたはトークンプランが必要です", picked: "magpie が選択" },
+  de: { smart: "Schweres zum starken, Leichtes zum günstigen Modell", thrifty: "Günstig zuerst", steady: "Nie blockiert", add: "Hinzufügen", edit: "Erst bearbeiten", added: "Schweres zum starken, Leichtes zum günstigen Modell hinzugefügt", menu: "Vorlagen", need: "Braucht Modelle von zwei Anbietern: A ist der einzige", plan: "Tarif zuerst", fast: "Schnellster zuerst", even: "Gleichmäßig verteilen", planNeed: "Braucht ein Abo oder einen Token-Tarif", picked: "von magpie gewählt" },
 };
 const KEYS = ["Hard to strong, easy to cheap", "A hard task goes to the strongest model, an easy one and compaction to a cheap one", "Cheap first",
   "A cheap model first; the strongest for high reasoning, or when the cheap ones fail", "Never stuck",
   "The strongest model of each provider, each behind the other: one down doesn't stop the agent", "Needs models from two providers: {name} is the only one",
-  "Needs a model cheap beside {name}", "Needs a subscription or token plan", "Plan first", "Subscriptions and token plans first, pay-as-you-go keys only after them", "Fastest first", "Whichever provider has answered fastest lately goes first", "Spread evenly", "The strongest model, taken in turn over every provider and account that serves it", "Add a provider first", "Added {name}", "Start from a template: made of your own models, added in a click", "Edit first", "Templates"];
+  "Needs a model cheap beside {name}", "Needs a subscription or token plan", "Plan first", "Subscriptions and token plans first, pay-as-you-go keys only after them", "Fastest first", "Whichever provider has answered fastest lately goes first", "Spread evenly", "The strongest model, taken in turn over every provider and account that serves it", "Add a provider first", "Added {name}", "Start from a template: made of your own models, added in a click", "Edit first", "Templates", "picked by magpie", "picked by magpie from your models as they change — changing a pick makes it yours"];
 
 function serve(lang, posts, mine = 0) {
   // a group magpie found is no group of the user's: the cards still show
@@ -68,7 +71,11 @@ function serve(lang, posts, mine = 0) {
       const body = JSON.parse(r.request().postData() || "{}");
       posts.push(body);
       const tp = templates.find((x) => x.kind === body.kind).group;
-      list = [...list, { ...structuredClone(tp), id: tp.id + (list.some((g) => g.id === tp.id) ? "-2" : ""), name: body.name, ready: true, memberInfo: info(tp.members) }];
+      list = [...list, { ...structuredClone(tp), template: body.kind, id: tp.id + (list.some((g) => g.id === tp.id) ? "-2" : ""), name: body.name, ready: true, memberInfo: info(tp.members) }];
+      return json(groups());
+    }
+    if (url.pathname === "/api/groups/save") {
+      posts.push({ save: JSON.parse(r.request().postData() || "{}") });
       return json(groups());
     }
     if (url.pathname === "/api/providers") return json({ providers: [], presets: [], excluded: [], gateway: { running: true, window: true, url: "http://127.0.0.1:3999" } });
@@ -125,6 +132,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.waitForFunction((m) => document.querySelector("#status").textContent.includes(m), w.added);
       assert.deepEqual(posts, [{ kind: "smart", name: w.smart }]);
       await page.locator(".rt-group[data-id=smart-split]").waitFor();
+      // it follows the template: its row says so, the group magpie found doesn't
+      assert.equal((await page.locator(".rt-group[data-id=smart-split] .auto").textContent()).trim(), w.picked);
+      assert.equal(await page.locator(".rt-group .auto", { hasText: w.picked }).count(), 1);
       assert.equal(await page.locator(".rt-gedit").count(), 0, "adding opened the editor");
       assert.equal(await at(), before, "a click moved the page");
       // the user has a group now: a menu by New group, not the cards
@@ -197,7 +207,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const errors = [];
       // WebKit's notice when a layout outruns its observers, not a fault
       page.on("pageerror", (e) => { if (!/^ResizeObserver loop completed with undelivered notifications/.test(e.message)) errors.push(e.message); });
-      await page.route("**/*", serve(lang, []));
+      const posts = [];
+      await page.route("**/*", serve(lang, posts));
       await page.goto("http://magpie.test/?view=groups");
       const smart = page.locator(".rt-gtpl-card[data-kind=smart]");
       await smart.waitFor();
@@ -210,6 +221,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const text = await ed.evaluate((e) => e.textContent + [...e.querySelectorAll("input, textarea")].map((i) => i.value).join("\n"));
       for (const s of ["Big", "Mini", HARD, EASY]) assert(text.includes(s), `editor lacks ${s}`);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "the page scrolls sideways");
+      // saved, the draft goes with its kind: unchanged, magpie keeps it following
+      await ed.locator("button.primary").last().click();
+      await page.waitForFunction(() => !document.querySelector(".rt-gedit"));
+      assert.equal(posts.length, 1);
+      assert.equal(posts[0].save.template, "smart");
       assert.deepEqual(errors, []);
     });
   }

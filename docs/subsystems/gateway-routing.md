@@ -106,6 +106,21 @@ Hard turns to a strong model, easy ones to a cheap one: Hard to strong, easy to
 cheap. A template that can't be made says what it lacks (`Need*`) and has no
 buttons. Adding one saves a group beside the user's others, never over one.
 
+A group added from a template follows it (`Group.Template`, AlanWang1027713
+on X): each time the groups are built (`buildGroupsIn`, kept like the rest
+of the build), `followTemplate` makes its members, routing, rules and
+classifier again from the models the user has then, so a model retired,
+added or repriced moves the group with no editor. Its row says "picked by
+magpie". A template that can't be made now leaves the picks it had. A save
+keeps it following only while its picks are the template's as read now
+(`followsAfter`): a rename, a note or Edit first's unchanged draft (which
+sends `template`) keeps it; a changed member, routing, rule, classifier,
+fast, off, weight or effort map makes the picks the user's, for good. A
+caller that doesn't send `template` gets the one stored. A group shared as
+text, or imported, carries its picks and no template: they are another
+magpie's models. Rating reads every model's price, once per build and only
+when a group follows one: about 0.2s more a build at 6,000 models.
+
 ## Codex titles, descriptions, summaries and predictions
 
 Codex's title and description requests are independent hidden turns. The
