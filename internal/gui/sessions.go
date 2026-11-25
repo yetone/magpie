@@ -318,12 +318,17 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 		// (#2261)
 		// find: the words a search found in it, so that the part they
 		// are in is among those read (a long session's is cut)
-		read := sessions.TranscriptOf
-		if find := sessions.NeedleOf(q.Get("find")); find != "" {
+		// after: the parts after the first n, the rest of one that was
+		// cut, which the sheet reads when asked (usrname1833 on Discord)
+		after, _ := strconv.Atoi(q.Get("after"))
+		read := func(s sessions.Session) (sessions.Transcript, error) { return sessions.TranscriptAfter(s, after) }
+		if find := sessions.NeedleOf(q.Get("find")); find != "" && after <= 0 {
 			read = func(s sessions.Session) (sessions.Transcript, error) { return sessions.TranscriptAt(s, find) }
 		}
 		if sub := q.Get("sub"); sub != "" {
-			read = func(s sessions.Session) (sessions.Transcript, error) { return sessions.SubagentTranscript(s, sub) }
+			read = func(s sessions.Session) (sessions.Transcript, error) {
+				return sessions.SubagentTranscriptAfter(s, sub, after)
+			}
 		}
 		t, err := read(s)
 		if err != nil {

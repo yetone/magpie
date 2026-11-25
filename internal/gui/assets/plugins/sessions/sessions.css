@@ -271,3 +271,6 @@ body.window .row.sm-sub-row { min-height: 42px; padding-left: calc(14px + var(--
 @media (hover: hover) and (pointer: fine) { .sess-nav:not(:disabled):hover { background: var(--pill); color: var(--fg); } }
 .sess-nav:not(:disabled):active { transform: scale(.97); }
 @media (max-width: 560px) { .sess-turns { display: none; } }
+
+/* the rest of a long session, read when asked */
+.sess-talk > .sess-rest { display: block; margin: 12px 0 4px; }

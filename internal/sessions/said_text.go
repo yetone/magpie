@@ -100,7 +100,9 @@ func SessionText(s Session, ask ReadAsk, how TextHow) (string, error) {
 			from = max(tr.From, textNear(tr, needle)-textLead)
 		}
 	} else {
-		tr, err = TranscriptOf(s)
+		// read from where it is asked: a "more" past a long session's
+		// first transcriptMax characters read the same cut start again
+		tr, err = TranscriptAfter(s, from)
 	}
 	if err != nil {
 		return "", err

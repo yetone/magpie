@@ -1642,6 +1642,33 @@ magpie.plugin("sessions", (ctx) => {
     return n;
   }
 
+  // restButton reads the parts after those shown and adds them to the
+  // conversation, each box showing it drawn again
+  function restButton(box, k, s, sub, find) {
+    const b = el("button", "text sess-rest", t("Show the rest"));
+    b.type = "button";
+    b.onclick = () => {
+      const got = talks.get(k);
+      if (!got?.tr || b.disabled) return;
+      b.disabled = true;
+      b.textContent = t("Reading…");
+      const after = (got.tr.from || 0) + got.tr.parts.length;
+      api("sessions/transcript?agent=" + encodeURIComponent(s.agent) + "&id=" + encodeURIComponent(s.id) + (sub ? "&sub=" + encodeURIComponent(sub) : "") + "&after=" + after).then((more) => {
+        if (talks.get(k) !== got) return;
+        got.tr = { ...got.tr, parts: [...got.tr.parts, ...(more?.parts || [])], cut: !!more?.cut && (more?.parts || []).length > 0 };
+        for (const currentBox of document.querySelectorAll(".sess-talk")) {
+          if (currentBox.dataset.talk === k) drawTalk(currentBox, s, sub, find);
+        }
+        box.querySelector(":scope > .sess-rest")?.focus({ preventScroll: true });
+      }, (err) => {
+        b.disabled = false;
+        b.textContent = t("Show the rest");
+        status(err.message, "err");
+      });
+    };
+    return b;
+  }
+
   // drawTalk fills box with what was said in a session, read from the
   // agent's own file when it is first shown (only read, never written)
   function drawTalk(box, s, sub = "", find = "") {
@@ -1733,7 +1760,11 @@ magpie.plugin("sessions", (ctx) => {
     const fold = found?.closest(".sess-steps");
     if (fold) fold.open = true;
     if (found?.classList.contains("brief")) found.classList.add("full");
-    if (got.tr?.cut) out.push(el("p", "cx-none", t("There was more than is shown here")));
+    // a long session is read a part at a time: the rest of the agent's
+    // file is read when asked, never left out unsaid (usrname1833 on
+    // Discord). What the gateway kept has no rest to read.
+    if (got.tr?.cut && got.tr?.source !== "gateway") out.push(restButton(box, k, s, sub, find));
+    else if (got.tr?.cut) out.push(el("p", "cx-none", t("There was more than is shown here")));
     out.push(el("p", "cx-src", t(got.tr?.source === "gateway" ? "Recorded gateway traffic only; earlier, expired or uncaptured content may be missing" : "Read from the agent's session file; magpie keeps no copy")));
     box.replaceChildren(...out);
     box.dispatchEvent(new Event("talkdrawn"));

@@ -22,6 +22,7 @@ type Transcript struct {
 	From     int    `json:"from,omitempty"`
 	Source   string `json:"source,omitempty"`
 	Captured int    `json:"captured,omitempty"`
+	size     int    // characters of Parts' text, kept up as they are added
 }
 
 // transcriptMax is the characters of all of a transcript's parts.
@@ -49,16 +50,13 @@ func readable(s Session) bool {
 }
 
 func (t *Transcript) add(_ bool, p Part) bool {
-	size := 0
-	for _, x := range t.Parts {
-		size += len(x.Text)
-	}
-	if size >= transcriptMax {
+	if t.size >= transcriptMax {
 		t.Cut = true
 		return false
 	}
 	if p, ok := keep(p); ok {
 		t.Parts = append(t.Parts, p)
+		t.size += len(p.Text)
 	}
 	return true
 }
@@ -124,18 +122,37 @@ func TranscriptAt(s Session, needle string) (Transcript, error) {
 	if at < 0 || sizeAt < transcriptMax {
 		return TranscriptOf(s)
 	}
-	out := Transcript{Parts: []Part{}, From: max(0, at-transcriptLead)}
+	return TranscriptAfter(s, max(0, at-transcriptLead))
+}
+
+// TranscriptAfter is TranscriptOf from the part after the first n it
+// keeps, and From says n: the rest of a transcript that was Cut, read
+// when the reader asks for it, so that a long session is never shown
+// only up to its first transcriptMax characters (usrname1833 on Discord:
+// a long session's sheet stopped before its last turns).
+func TranscriptAfter(s Session, n int) (Transcript, error) {
+	if n <= 0 {
+		return TranscriptOf(s)
+	}
+	if !Reads(s.Agent) {
+		return Transcript{Parts: []Part{}}, ErrNotRead
+	}
+	if !HasTranscript(s.Agent) || s.Path == "" {
+		return Transcript{Parts: []Part{}}, ErrNoTranscript
+	}
+	out := Transcript{Parts: []Part{}, From: n}
 	i := 0
-	return out, readTranscript(s, func(in bool, p Part) bool {
+	err := readTranscript(s, func(in bool, p Part) bool {
 		if _, ok := keep(p); !ok {
 			return true
 		}
 		i++
-		if i <= out.From {
+		if i <= n {
 			return true
 		}
 		return out.add(in, p)
 	})
+	return out, err
 }
 
 // readTranscript tells add each part of a session's conversation, in order,

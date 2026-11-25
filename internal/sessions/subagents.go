@@ -320,6 +320,12 @@ var ErrNoSubagent = errors.New("no such subagent in this session")
 
 // SubagentTranscript is the conversation of the session's subagent sub.
 func SubagentTranscript(s Session, sub string) (Transcript, error) {
+	return SubagentTranscriptAfter(s, sub, 0)
+}
+
+// SubagentTranscriptAfter is SubagentTranscript from the part after the
+// first n (TranscriptAfter).
+func SubagentTranscriptAfter(s Session, sub string, n int) (Transcript, error) {
 	if !Reads(s.Agent) {
 		return Transcript{Parts: []Part{}}, ErrNotRead
 	}
@@ -328,7 +334,7 @@ func SubagentTranscript(s Session, sub string) (Transcript, error) {
 			continue
 		}
 		c := Session{Agent: s.Agent, ID: sa.ID, Path: sa.Path}
-		return TranscriptOf(c)
+		return TranscriptAfter(c, n)
 	}
 	return Transcript{Parts: []Part{}}, ErrNoSubagent
 }

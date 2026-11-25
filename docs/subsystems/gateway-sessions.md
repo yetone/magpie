@@ -741,6 +741,22 @@ opened survives a redraw (`stepsOpen`, `stepFull`); a search hit inside a fold
 opens it. Every part stays in the DOM, so `[data-turn]` still counts the
 turns. Verification: browser `sessions-talk-steps.test.cjs`.
 
+A transcript holds the first `transcriptMax` (400,000) characters of its
+parts, thinking and tool output included, and says `cut` when there was
+more. The sheet then ends in "Show the rest": it asks
+`GET /api/sessions/transcript?…&after=<n>` (`TranscriptAfter`,
+`SubagentTranscriptAfter`; n is `from` plus the parts it holds), adds what
+comes back and draws the turns again, until a read is not cut. Before, the
+sheet stopped at the cut with a muted line and no way on, so a long
+session's last turns couldn't be seen (usrname1833 on Discord). A gateway
+session's cut is turns the gateway didn't keep, with nothing after to
+read: it keeps the line and gets no button. `SessionText` (`magpie sessions
+show`, the sessions MCP's `read_session`) reads from `from` the same way;
+it used to read the cut start again, so its "go on from" past the cut never
+reached the end. The Markdown export reads the whole file and was never
+cut. Verification: `TestTranscriptAfterReadsTheRest`,
+`TestSessionTextReadsPastTheCut`; browser `sessions-talk-rest.test.cjs`.
+
 A gateway session without a saved Desktop name is titled by what it was
 first asked (YOU on Discord), not its `ses_…` id: `sessions.GatewayTitle` reads the first 8 complete turns of
 the oldest recorded file of it in the 7 days kept, takes the first user text
