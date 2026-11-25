@@ -28,7 +28,7 @@ button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outl
 .pop.save{top:16px;left:50%;width:300px;margin-left:-150px;padding:14px 14px 12px;gap:2px;transform-origin:top center}
 @media (max-width:324px){.pop.save{left:12px;margin-left:0}}
 .pop.save .ask{font-weight:600;overflow-wrap:anywhere}
-.pop.save .size{color:var(--mute);font-size:12px}
+.pop.save .size{color:var(--mute);font-size:12px;overflow-wrap:anywhere}
 .pop.save .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
 .reading{position:fixed;bottom:16px;left:50%;display:flex;align-items:center;gap:8px;padding:3px 3px 3px 12px;border-radius:999px;background:var(--glass);-webkit-backdrop-filter:blur(20px) saturate(1.6);backdrop-filter:blur(20px) saturate(1.6);box-shadow:var(--shadow);border:.5px solid var(--line);opacity:0;transform:translateX(-50%) scale(.96);transition:opacity .16s cubic-bezier(.23,1,.32,1),transform .16s cubic-bezier(.23,1,.32,1)}
 .reading.in{opacity:1;transform:translateX(-50%)}
@@ -88,3 +88,4 @@ textarea:focus{outline:none;border-color:var(--accent)}
 .pop.save.perms .perm{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px}
 .pop.save.perms .seg{margin:0;flex:none}
 .pop.save.perms .seg button{padding:0 10px}
+.pop.save.perms .perm span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

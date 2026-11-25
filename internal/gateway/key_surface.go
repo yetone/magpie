@@ -78,7 +78,8 @@ var keyMCPRoutes = map[string]bool{
 	BrowserMCPPath: true, MemoryMCPPath: true, SessionsMCPPath: true, ArtifactsMCPPath: true,
 	ToolsMCPPath: true, ToolsMCPOne + "{plugin}": true,
 	HubMCPPath + "{agent}": true, HubMCPAll: true,
-	"GET " + OwnMCPPath: true,
+	"GET " + OwnMCPPath:                           true,
+	"POST " + ArtifactPagePath + "{ref}/_api/mcp": true,
 }
 
 // KeyNoModelsCode is the error code a key for MCP servers only is refused

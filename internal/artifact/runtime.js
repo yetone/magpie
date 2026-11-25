@@ -12,7 +12,7 @@
   // every capability resolves null there, as it does for a page's
   // visitor that claude.ai can't serve
   var publishing = !!(C.caps.artifact || C.caps.self);
-  var served = C.shared ? { permissions: true } : { db: !!C.caps.db, user: true, permissions: true, artifact: publishing, self: publishing, assets: !!C.caps.assets, sample: !!C.caps.sample, comments: !!C.caps.comments && !!C.origin, downloads: !!C.caps.downloads && !!C.origin, tts: !!C.caps.tts && !!C.origin && typeof Audio === "function", dictation: !!C.caps.dictation && !!C.origin && typeof MediaRecorder === "function" };
+  var served = C.shared ? { permissions: true } : { db: !!C.caps.db, user: true, permissions: true, artifact: publishing, self: publishing, assets: !!C.caps.assets, sample: !!C.caps.sample, comments: !!C.caps.comments && !!C.origin, downloads: !!C.caps.downloads && !!C.origin, tts: !!C.caps.tts && !!C.origin && typeof Audio === "function", dictation: !!C.caps.dictation && !!C.origin && typeof MediaRecorder === "function", mcp: !!C.caps.mcp && !!C.origin && window.parent !== window };
   var freeze = Object.freeze;
   function deepFreeze(v) {
     if (v && typeof v === "object" && !Object.isFrozen(v)) {
@@ -973,6 +973,7 @@
       switch (d.type) {
         case "hi":
           if (d.grants && typeof d.grants.dictation === "string") dgrant = d.grants.dictation;
+          if (d.grants) mGrants(d.grants.mcp);
           shellUp = true;
           shellWait.splice(0).forEach(function (f) { f(true); });
           break;
@@ -1016,10 +1017,14 @@
           break;
         case "grants":
           if (d.grants && typeof d.grants.dictation === "string") dgrant = d.grants.dictation;
+          if (d.grants) mGrants(d.grants.mcp);
           if (d.req && pwait[d.req]) pwait[d.req]();
           break;
         case "perms-closed":
           if (pwait[d.req]) pwait[d.req]();
+          break;
+        case "mcp-done":
+          if (mwait[d.req]) mwait[d.req](d);
           break;
         case "abort":
           if (asking[d.id]) asking[d.id].abort();
@@ -1051,7 +1056,7 @@
       toShell({ type: "hover", rect: r ? { x: r.left, y: r.top, w: r.width, h: r.height } : null });
     }, true);
     window.addEventListener("keydown", function (e) {
-      if (e.key === "Escape" && (cmode || Object.keys(swait).length || dstate === "starting" || Object.keys(pwait).length)) toShell({ type: "escape" });
+      if (e.key === "Escape" && (cmode || Object.keys(swait).length || dstate === "starting" || Object.keys(pwait).length || Object.keys(mwait).some(function (k) { return mwait[k].asks; }))) toShell({ type: "escape" });
     }, true);
     window.addEventListener("scroll", function () { if (cpins.length) place(); if (cmode && hovered) { hovered = null; toShell({ type: "hover", rect: null }); } }, true);
     window.addEventListener("resize", function () { if (cpins.length) place(); });
@@ -1601,50 +1606,414 @@
     toShell({ type: "dict-stop", viewer: true });
   });
 
+  // -- MCP ----------------------------------------------------------------
+  // The tools of the MCP servers in magpie's Library that the page's
+  // manifest names. The shell, at magpie's origin, asks the viewer about
+  // each server once and makes the calls with its own token; this keeps
+  // the page's cache, its watches and their polling.
+  var MAN = (C.caps.mcp && Array.isArray(C.caps.mcp.servers) ? C.caps.mcp.servers : []).filter(function (s) { return s && typeof s.server === "string"; });
+  var mgrant = {}, mwait = {}, mreq = 0, mnotes = {}, mcache = {}, mflights = {}, mwatches = {}, mwatchN = 0;
+  var MDENIALS = { not_in_manifest: 1, needs_reauth: 1, server_not_connected: 1, blocked_by_policy: 1, approval_required: 1 };
+  var MREPLY = 130000, MWEEK = 604800000, MGC = 300000, MFLOOR = 30000, MWATCHES = 64, MINPUT = 1 << 20;
+  function mErr(code, message, more) {
+    var e = new Error(message || code);
+    e.name = "McpError";
+    e.code = code;
+    if (more) ["server", "retryable", "retryAfterMs", "result"].forEach(function (k) { if (more[k] !== undefined) e[k] = more[k]; });
+    if (e.retryAfterMs > 60000) e.retryAfterMs = 60000;
+    return e;
+  }
+  function mGrants(g) {
+    if (!g || typeof g !== "object" || Array.isArray(g)) return;
+    var was = mgrant;
+    mgrant = {};
+    Object.keys(g).forEach(function (k) { if (g[k] === "granted" || g[k] === "denied") mgrant[k] = g[k]; });
+    // a server the viewer stopped allowing answers nothing more from the cache
+    Object.keys(was).concat(Object.keys(mgrant)).forEach(function (s) { if (mgrant[s] === "denied" && was[s] !== "denied") mDrop(s); });
+  }
+  function inManifest(server) {
+    for (var i = 0; i < MAN.length; i++) if (MAN[i].server === server) return MAN[i];
+    return null;
+  }
+  // one request to the shell; rejects with the shell's error, cancelled on
+  // the signal, upstream_error when the shell stops answering
+  function viaMcp(m, signal) {
+    return whenShell().then(function (up) {
+      if (!up) throw mErr("capability_disabled", "the page calls MCP tools in magpie's viewer: open it in its own tab");
+      if (signal && signal.aborted) throw mErr("cancelled", "the call was cancelled", { server: m.server });
+      var req = ++mreq;
+      return new Promise(function (res, rej) {
+        var timer = setTimeout(function () { end(); rej(mErr("upstream_error", "magpie's viewer didn't answer in " + MREPLY / 1000 + "s", { server: m.server })); }, MREPLY);
+        var onAbort = function () { end(); toShell({ type: "mcp-cancel", req: req }); rej(mErr("cancelled", "the call was cancelled", { server: m.server })); };
+        function end() {
+          delete mwait[req];
+          clearTimeout(timer);
+          if (signal) signal.removeEventListener("abort", onAbort);
+        }
+        mwait[req] = function (d) {
+          end();
+          if (d.error) rej(mErr(String(d.error.code || "upstream_error"), String(d.error.message || ""), d.error));
+          else res(d.result || {});
+        };
+        mwait[req].asks = m.op === "call" && m.ask && mgrant[m.server] !== "granted";
+        if (signal) signal.addEventListener("abort", onAbort);
+        m.type = "mcp";
+        m.req = req;
+        toShell(m);
+      });
+    });
+  }
+  // the input as plain JSON, or the error the call rejects with
+  function plainErr(v, depth) {
+    if (depth > 100) return "bad_request";
+    if (v === null || typeof v === "string" || typeof v === "boolean") return "";
+    if (typeof v === "number") return isFinite(v) ? "" : "bad_request";
+    if (typeof v !== "object") return "bad_request";
+    var proto = Object.getPrototypeOf(v);
+    if (Array.isArray(v)) {
+      if (proto !== Array.prototype) return "bad_request";
+      for (var i = 0; i < v.length; i++) { var a = plainErr(v[i], depth + 1); if (a) return a; }
+      return "";
+    }
+    if (proto !== Object.prototype && proto !== null) return "bad_request";
+    var ks = Object.keys(v);
+    if (ks.length === 1 && ks[0] === "$file") return "capability_disabled";
+    for (var j = 0; j < ks.length; j++) {
+      if (v[ks[j]] === undefined) continue;
+      var b = plainErr(v[ks[j]], depth + 1);
+      if (b) return b;
+    }
+    return "";
+  }
+  function inputOf(server, input) {
+    if (input === undefined || input === null) return { input: undefined, id: "{}" };
+    var bad = plainErr(input, 0);
+    if (bad === "capability_disabled") return { err: mErr(bad, "file arguments aren't served here: send the bytes inline, as base64", { server: server }) };
+    if (bad || typeof input !== "object" || Array.isArray(input)) return { err: mErr("bad_request", "input is a plain JSON object", { server: server }) };
+    var s = JSON.stringify(input);
+    if (new TextEncoder().encode(s).length > MINPUT) return { err: mErr("bad_request", "input is at most 1 MiB as JSON", { server: server }) };
+    return { input: JSON.parse(s), id: canon(input) };
+  }
+  // order-insensitive JSON: one call however its members are ordered
+  function canon(v) {
+    if (v === null || typeof v !== "object") return JSON.stringify(v);
+    if (Array.isArray(v)) return "[" + v.map(function (x) { return x === undefined ? "null" : canon(x); }).join(",") + "]";
+    return "{" + Object.keys(v).filter(function (k) { return v[k] !== undefined; }).sort().map(function (k) { return JSON.stringify(k) + ":" + canon(v[k]); }).join(",") + "}";
+  }
+  function keyOf(server, tool, id) { return JSON.stringify([server, tool]) + id; }
+  function noteOf(server, tool) { return mnotes[JSON.stringify([server, tool])]; }
+  function note(server, tools) {
+    (tools || []).forEach(function (t) {
+      if (t && typeof t.name === "string" && t.annotations && typeof t.annotations === "object") mnotes[JSON.stringify([server, t.name])] = t.annotations;
+    });
+  }
+  // how a call is cached: null for not at all; known: whether the tool's
+  // hints are known yet (a call learns them)
+  function policy(server, tool, c, watch) {
+    if (c === false) return null;
+    var n = noteOf(server, tool), ro = n ? n.readOnlyHint : undefined;
+    if (ro === false) return null;
+    if (c && typeof c === "object") {
+      var gc = c.gcTime === undefined ? MGC : Math.min(Number(c.gcTime) || 0, MWEEK);
+      if (!(gc > 0)) return null;
+      var st = Math.min(Math.max(Number(c.staleTime) || 0, 0), gc);
+      return { staleTime: st, gcTime: gc, refresh: !watch && !!c.refresh };
+    }
+    if (ro === true || watch) return { staleTime: 0, gcTime: MGC };
+    return null;
+  }
+  // a result as the page gets it: its own copy, with payload, and the
+  // cache's marker when it came from the cache
+  function deliver(raw, cache) {
+    var r = JSON.parse(raw);
+    if (!r || typeof r !== "object" || Array.isArray(r)) return r;
+    if (r.structuredContent !== undefined) r.payload = r.structuredContent;
+    else {
+      var first = Array.isArray(r.content) ? r.content.filter(function (b) { return b && b.type === "text" && typeof b.text === "string"; })[0] : null;
+      if (first) { try { r.payload = JSON.parse(first.text); } catch (e) { r.payload = first.text; } }
+    }
+    if (cache) r.cache = cache;
+    return r;
+  }
+  function mStore(key, server, tool, raw, p) {
+    var was = mcache[key];
+    if (was) clearTimeout(was.timer);
+    var e = { server: server, tool: tool, raw: raw, at: Date.now(), staleTime: p.staleTime, gcTime: p.gcTime };
+    e.timer = setTimeout(function () { if (mcache[key] === e) delete mcache[key]; }, p.gcTime);
+    mcache[key] = e;
+    feed(key, { type: "data", result: deliver(raw) });
+  }
+  function mDrop(server, tool, key) {
+    Object.keys(mcache).forEach(function (k) {
+      var e = mcache[k];
+      if (server !== undefined && e.server !== server || tool !== undefined && e.tool !== tool || key !== undefined && k !== key) return;
+      clearTimeout(mcache[k].timer);
+      delete mcache[k];
+    });
+  }
+  function fresh(key) {
+    var e = mcache[key];
+    return e && Date.now() - e.at < e.gcTime ? e : null;
+  }
+  // run a call, kept by the page's cache option (copt) as judged once
+  // the tool's hints are known; share: one flight per identity at a time
+  function run(server, tool, inp, key, copt, share, ask, signal, watch) {
+    var shared = share && !signal;
+    if (shared && mflights[key]) return mflights[key];
+    var f = viaMcp({ op: "call", server: server, tool: tool, input: inp.input, ask: ask, watch: !!watch }, signal).then(function (j) {
+      if (j.annotations) note(server, [{ name: tool, annotations: j.annotations }]);
+      var r = j.result;
+      if (r && typeof r === "object" && !Array.isArray(r)) delete r.cache;
+      var raw = JSON.stringify(r === undefined ? null : r);
+      // the hints are known now: a write is never kept
+      var q = policy(server, tool, copt, watch);
+      if (q) mStore(key, server, tool, raw, q);
+      return raw;
+    }, function (e) {
+      if (MDENIALS[e.code]) mDrop(server);
+      throw e;
+    });
+    if (shared) {
+      mflights[key] = f;
+      var clear = function () { if (mflights[key] === f) delete mflights[key]; };
+      f.then(clear, clear);
+    }
+    return f;
+  }
+  function badArgs(server, tool) {
+    if (typeof server !== "string" || !server || typeof tool !== "string" || !tool) return mErr("bad_request", "server and tool are strings", { server: typeof server === "string" ? server : undefined });
+    return null;
+  }
+  function callTool(server, tool, input, o) {
+    var bad = badArgs(server, tool);
+    if (bad) return Promise.reject(bad);
+    if (o !== undefined && (o === null || typeof o !== "object")) return Promise.reject(mErr("bad_request", "options are an object", { server: server }));
+    o = o || {};
+    if (o.cache !== undefined && o.cache !== false && (o.cache === null || typeof o.cache !== "object")) return Promise.reject(mErr("bad_request", "cache is false or an object", { server: server }));
+    var signal = o.signal;
+    if (signal !== undefined && !(signal && typeof signal.aborted === "boolean" && typeof signal.addEventListener === "function")) return Promise.reject(mErr("bad_request", "signal is an AbortSignal", { server: server }));
+    if (signal && signal.aborted) return Promise.reject(mErr("cancelled", "the call was cancelled", { server: server }));
+    var inp = inputOf(server, input);
+    if (inp.err) return Promise.reject(inp.err);
+    var key = keyOf(server, tool, inp.id);
+    // p: how it is cached as far as the hints known yet tell
+    var p = policy(server, tool, o.cache);
+    if (p && !p.refresh) {
+      var e = fresh(key);
+      if (e && Date.now() - e.at < p.staleTime) return later(function () { return deliver(e.raw, { storedAt: e.at, revalidating: false }); });
+    }
+    var share = !!p && !p.refresh;
+    // a call with a signal joins a flight already up, and leaves it alone
+    var f = share && signal && mflights[key] ? race(mflights[key], signal, server) : run(server, tool, inp, key, o.cache, share, true, signal);
+    return f.then(function (raw) { return deliver(raw); });
+  }
+  function race(f, signal, server) {
+    return new Promise(function (res, rej) {
+      var onAbort = function () { rej(mErr("cancelled", "the call was cancelled", { server: server })); };
+      signal.addEventListener("abort", onAbort);
+      f.then(function (v) { signal.removeEventListener("abort", onAbort); res(v); }, function (e) { signal.removeEventListener("abort", onAbort); rej(e); });
+    });
+  }
+
+  // -- watches --
+  function feed(key, ev) {
+    var w = mwatches[key];
+    if (!w) return;
+    w.list.slice().forEach(function (x) { if (!x.gone) x.send(ev); });
+  }
+  function hear(handler) {
+    return function (ev) {
+      try { handler(ev); } catch (e) { setTimeout(function () { throw e; }); }
+    };
+  }
+  function refetch(key) {
+    var w = mwatches[key];
+    if (!w || !w.list.length) return;
+    var x = w.list[0];
+    w.last = Date.now();
+    run(x.server, x.tool, x.inp, key, x.copt, true, false, null, true).then(null, function (e) {
+      feed(key, { type: "error", error: e });
+    });
+  }
+  function poll(key) {
+    var w = mwatches[key];
+    if (!w) return;
+    clearTimeout(w.timer);
+    w.timer = null;
+    var every = 0;
+    w.list.forEach(function (x) { if (x.every && (!every || x.every < every)) every = x.every; });
+    w.every = every;
+    if (!every || document.hidden) return;
+    w.timer = setTimeout(function () { refetch(key); poll(key); }, Math.max(every - (Date.now() - (w.last || 0)), 0) || every);
+  }
+  document.addEventListener("visibilitychange", function () {
+    Object.keys(mwatches).forEach(function (key) {
+      var w = mwatches[key];
+      if (document.hidden) { clearTimeout(w.timer); w.timer = null; return; }
+      // back: catch up on what the poll missed
+      if (w.every && Date.now() - (w.last || 0) >= w.every) refetch(key);
+      poll(key);
+    });
+  });
+  function watchTool(server, tool, input, handler, o) {
+    if (typeof handler !== "function") throw new TypeError("watchTool's handler is a function");
+    var send = hear(handler), gone = false;
+    var fail = function (e) { setTimeout(function () { if (!gone) send({ type: "error", error: e }); }, 0); return function () { gone = true; }; };
+    var bad = badArgs(server, tool);
+    if (bad) return fail(bad);
+    if (o !== undefined && (o === null || typeof o !== "object")) return fail(mErr("bad_request", "options are an object", { server: server }));
+    o = o || {};
+    var n = noteOf(server, tool);
+    if (n && n.readOnlyHint === false) return fail(mErr("bad_request", tool + " declares it changes things: watch reads only, and call an action once with callTool", { server: server }));
+    var inp = inputOf(server, input);
+    if (inp.err) return fail(inp.err);
+    if (mwatchN >= MWATCHES) return fail(mErr("bad_request", "a page keeps at most " + MWATCHES + " watches: unsubscribe the ones it no longer shows", { server: server }));
+    var key = keyOf(server, tool, inp.id);
+    var w = mwatches[key] || (mwatches[key] = { list: [], timer: null, last: 0, every: 0 });
+    for (var i = 0; i < w.list.length; i++) if (w.list[i].handler === handler) return fail(mErr("bad_request", "this handler already watches this call", { server: server }));
+    var copt = o.cache && typeof o.cache === "object" ? { staleTime: o.cache.staleTime, gcTime: o.cache.gcTime } : undefined;
+    var p = policy(server, tool, copt, true) || { staleTime: 0, gcTime: MGC };
+    var every = Number(o.refetchInterval) > 0 ? Math.max(Number(o.refetchInterval), MFLOOR) : 0;
+    var x = { server: server, tool: tool, inp: inp, copt: copt, handler: handler, every: every, send: function (ev) { if (!x.gone) send(ev); } };
+    w.list.push(x);
+    mwatchN++;
+    setTimeout(function () {
+      if (x.gone) return;
+      var e = fresh(key), stale = !e || Date.now() - e.at >= p.staleTime;
+      if (e) x.send({ type: "data", result: deliver(e.raw, { storedAt: e.at, revalidating: stale }) });
+      if (stale) refetch(key);
+      poll(key);
+    }, 0);
+    return function () {
+      if (x.gone) return;
+      x.gone = true;
+      mwatchN--;
+      w.list.splice(w.list.indexOf(x), 1);
+      if (!w.list.length) { clearTimeout(w.timer); if (mwatches[key] === w) delete mwatches[key]; } else poll(key);
+    };
+  }
+  function invalidate(server, tool, input) {
+    if (server !== undefined && typeof server !== "string" || tool !== undefined && typeof tool !== "string") return Promise.reject(mErr("bad_request", "server and tool are strings"));
+    if (tool !== undefined && server === undefined) return Promise.reject(mErr("bad_request", "a tool needs its server"));
+    var key;
+    if (input !== undefined) {
+      if (server === undefined || tool === undefined) return Promise.reject(mErr("bad_request", "an input needs its server and tool"));
+      var inp = inputOf(server, input);
+      if (inp.err) return Promise.reject(inp.err);
+      key = keyOf(server, tool, inp.id);
+    }
+    mDrop(server, tool, key);
+    Object.keys(mwatches).forEach(function (k) {
+      var x = mwatches[k].list[0];
+      if (x && (server === undefined || x.server === server) && (tool === undefined || x.tool === tool) && (key === undefined || k === key)) refetch(k);
+    });
+    return later(function () {});
+  }
+  function listTools(server) {
+    if (server !== undefined && typeof server !== "string") return Promise.reject(mErr("bad_request", "server is a string"));
+    return viaMcp({ op: "list", server: server }).then(function (j) {
+      var out = (Array.isArray(j.servers) ? j.servers : []).map(function (s) {
+        var tools = (Array.isArray(s.tools) ? s.tools : []).map(function (t) {
+          var x = { name: String(t.name), description: String(t.description || "") };
+          if (t.annotations && typeof t.annotations === "object") x.annotations = t.annotations;
+          return x;
+        });
+        note(s.server, tools);
+        var st = s.authStatus === "connected" || s.authStatus === "needs_reauth" ? s.authStatus : "unknown";
+        return { server: String(s.server), kind: "connector", authStatus: st, tools: tools };
+      });
+      return deepFreeze({ servers: out });
+    });
+  }
+  function describeTool(server, tool) {
+    var bad = badArgs(server, tool);
+    if (bad) return Promise.reject(bad);
+    return viaMcp({ op: "describe", server: server, tool: tool }).then(function (j) {
+      note(server, [j]);
+      return deepFreeze(j);
+    });
+  }
+  var NOT_TOOLS = { then: 1, toJSON: 1 };
+  function serverOf(name) {
+    if (typeof name !== "string" || !name) return Promise.reject(mErr("bad_request", "name is a string"));
+    return listTools(name).then(function (l) {
+      var s = l.servers.filter(function (x) { return x.server === name; })[0];
+      if (s && s.authStatus === "needs_reauth") throw mErr("needs_reauth", name + " needs signing in again in magpie's Library", { server: name });
+      if (!s || !s.tools.length) throw mErr("server_not_connected", "no MCP server named " + name + " can be reached from this page", { server: name });
+      var h = Object.create(null);
+      s.tools.forEach(function (t) {
+        if (NOT_TOOLS[t.name] || t.name in Object.prototype || !/^[A-Za-z0-9_.-]+$/.test(t.name)) return;
+        h[t.name] = function (input, o) {
+          return callTool(name, t.name, input, o).then(function (r) { return r && r.payload !== undefined ? r.payload : r; });
+        };
+      });
+      return freeze(h);
+    });
+  }
+  var mcp = freeze({ callTool: callTool, watchTool: watchTool, invalidate: invalidate, listTools: listTools, server: serverOf, describeTool: describeTool });
+
   // -- permissions --------------------------------------------------------
-  // dictation is the viewer's to allow, once for each artifact, in the
+  // dictation and each MCP server ("mcp:<server>"; "mcp" for all of
+  // them) are the viewer's to allow, once for each artifact, in the
   // shell; every other capability is granted with the page
+  var asksViewer = served.dictation || served.mcp;
+  function mState(server) {
+    if (!served.mcp || !shellUp) return "unavailable";
+    if (server === null) {
+      if (!MAN.length) return "unavailable";
+      var all = MAN.map(function (m) { return mgrant[m.server] || "prompt"; });
+      return all.every(function (g) { return g === "granted"; }) ? "granted" : all.indexOf("prompt") >= 0 ? "prompt" : "denied";
+    }
+    return inManifest(server) ? mgrant[server] || "prompt" : "unavailable";
+  }
   function states(names) {
     var out = {};
-    (names || Object.keys(C.caps)).forEach(function (n) {
-      if (served[n] && (n === "user" || C.caps[n] || (n === "artifact" || n === "self") && publishing)) out[n] = n === "dictation" ? (shellUp ? dgrant : "unavailable") : "granted";
+    var all = names || Object.keys(C.caps).concat(served.mcp ? MAN.map(function (m) { return "mcp:" + m.server; }) : []);
+    all.forEach(function (n) {
+      if (n === "mcp" || n.indexOf("mcp:") === 0) out[n] = mState(n === "mcp" ? null : n.slice(4));
+      else if (served[n] && (n === "user" || C.caps[n] || (n === "artifact" || n === "self") && publishing)) out[n] = n === "dictation" ? (shellUp ? dgrant : "unavailable") : "granted";
       else if (names) out[n] = "unavailable";
       if (!names && out[n] === "unavailable") delete out[n];
     });
     return freeze(out);
   }
-  function viaShell(type) {
+  function viaShell(type, more) {
     var req = ++preq;
     return new Promise(function (res) {
       pwait[req] = function () { delete pwait[req]; res(); };
-      toShell({ type: type, req: req });
+      toShell(Object.assign({ type: type, req: req }, more || {}));
     });
   }
   var permissions = freeze({
     state: function (name) {
       var one = arguments.length > 0;
-      return (served.dictation ? whenShell() : Promise.resolve()).then(function () {
+      return (asksViewer ? whenShell() : Promise.resolve()).then(function () {
         return one ? states([String(name)])[String(name)] : states(null);
       });
     },
+    // one question at a time: dictation, then the MCP servers asked for
     request: function (names) {
       var list = names ? [].concat(names).map(String) : null;
-      return (served.dictation ? whenShell() : Promise.resolve()).then(function () {
+      return (asksViewer ? whenShell() : Promise.resolve()).then(function () {
         var ask = served.dictation && shellUp && dgrant === "prompt" && (!list || list.indexOf("dictation") >= 0);
         return ask ? viaShell("dict-ask") : null;
+      }).then(function () {
+        if (!served.mcp || !shellUp) return;
+        var want = MAN.filter(function (m) { return !list || list.indexOf("mcp") >= 0 || list.indexOf("mcp:" + m.server) >= 0; }).filter(function (m) { return !mgrant[m.server]; });
+        if (want.length) return viaShell("mcp-ask", { servers: want.map(function (m) { return m.server; }) });
       }).then(function () { return states(list); });
     },
     manage: function () {
-      if (!served.dictation) return Promise.reject(dbError("unavailable", "this page has nothing for the viewer to allow: what it may do is set when it is published"));
+      if (!asksViewer) return Promise.reject(dbError("unavailable", "this page has nothing for the viewer to allow: what it may do is set when it is published"));
       return whenShell().then(function (up) {
         if (!up) throw dbError("unavailable", "the Permissions panel is in magpie's viewer: open the page in its own tab");
-        return viaShell("perms");
+        return viaShell("perms", { serves: { dictation: !!served.dictation, mcp: !!served.mcp } });
       }).then(function () {});
     },
   });
 
   // -- claude.use ---------------------------------------------------------
-  var spaces = { db: served.db ? db : null, user: served.user ? user : null, permissions: permissions, artifact: served.artifact ? artifact : null, self: served.self ? artifact : null, assets: served.assets ? assets : null, sample: served.sample ? sample : null, comments: served.comments ? comments : null, downloads: served.downloads ? downloads : null, tts: served.tts ? tts : null, dictation: served.dictation ? dictation : null };
+  var spaces = { db: served.db ? db : null, user: served.user ? user : null, permissions: permissions, artifact: served.artifact ? artifact : null, self: served.self ? artifact : null, assets: served.assets ? assets : null, sample: served.sample ? sample : null, comments: served.comments ? comments : null, downloads: served.downloads ? downloads : null, tts: served.tts ? tts : null, dictation: served.dictation ? dictation : null, mcp: served.mcp ? mcp : null };
   var memo = {};
   function use(name) {
     name = String(name);

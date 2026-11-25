@@ -155,6 +155,7 @@ func artifactsMCPTools() []any {
 							"downloads hands the viewer a file the page made, once they say yes: {\"downloads\": true}, then `await (await claude.use(\"downloads\")).save({filename, data})`. " +
 							"tts reads text aloud to the viewer: {\"tts\": {}}, then `await (await claude.use(\"tts\")).speak(text)` on their click, in the voice buttery, airy, glassy or rounded. " +
 							"dictation gives the page the viewer's words as they speak: {\"dictation\": {}}, then `(await claude.use(\"dictation\")).start()` on their click, with onPartial, onFinal and onState. " +
+							"mcp calls the tools of MCP servers in the Library as the viewer, once they allow each server: {\"mcp\": {\"servers\": [{\"server\": \"github\", \"tools\": [\"list_issues\"]}]}}, then `(await claude.use(\"mcp\")).watchTool(server, tool, input, handler)` for data to show and callTool for an action. " +
 							"Any other capability resolves null on the page here, so a page lights it up only when it is there. Left out, an update keeps the version before's; {} clears them. " +
 							"Before writing a page that uses one, read its calls' shapes and answers with " + artifactGuideTool + ".",
 					},
@@ -170,7 +171,7 @@ func artifactsMCPTools() []any {
 		map[string]any{
 			"name":  artifactGuideTool,
 			"title": "Artifact capabilities guide",
-			"description": "How an artifact's page calls the capabilities publish_artifact declares (db, user, artifact, assets, sample, comments, downloads, tts, dictation, permissions): each call's shape, what it answers and its error codes, as Magpie's page runtime serves them. " +
+			"description": "How an artifact's page calls the capabilities publish_artifact declares (db, user, artifact, assets, sample, comments, downloads, tts, dictation, mcp, permissions): each call's shape, what it answers and its error codes, as Magpie's page runtime serves them. " +
 				"Read it before writing a page that uses one.",
 			"inputSchema": map[string]any{
 				"type": "object",

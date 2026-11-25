@@ -129,13 +129,29 @@ Declare {"dictation": {}}.
   d.active()
 A session ends after 60 minutes (time_limit). Escape, the viewer's Stop or a hidden page ends it too.
 Codes: invalid_argument, no_gesture, not_granted (the viewer said no: keep typing, don't ask again), dismissed (may be retried on a later click), stopped (.reason), unavailable (no speech-to-text model in magpie, or open the page in its own tab), rate_limited, upstream_error.`},
+	{"mcp", `mcp: the tools of MCP servers in the Library on this computer, called as the viewer. The viewer is asked once for each server, on the first call that needs it; tokens never reach the page.
+Declare {"mcp": {"servers": [{"server": "github", "tools": ["list_issues", "create_issue"]}]}}: each server by its name in the Library (or "host:<name>", the name with anything outside A-Z a-z 0-9 _ - as _), and only the tools the page calls. Keep it short: the viewer allows what it names.
+  const mcp = await claude.use("mcp")       // null in a shared copy: render the page without it
+  const r = await mcp.callTool("github", "create_issue", {title: "Bug"})   // an action, once, on the viewer's click
+  r.payload                                  // structuredContent, else the first text parsed as JSON, else that text; r.content has every block
+  const off = mcp.watchTool("github", "list_issues", {state: "open"}, (ev) => ev.type === "data" ? render(ev.result.payload) : showError(ev.error), {refetchInterval: 60000})
+  off()                                      // data to show: replays the cache at once (ev.result.cache = {storedAt, revalidating}), refreshes, polls at most every 30s
+  await mcp.invalidate("github", "list_issues")   // after a write: cached reads and watches refetch
+  const {servers} = await mcp.listTools()    // [{server, authStatus, tools: [{name, description, annotations}]}]; one not asked about yet: "unknown", names only
+  const gh = await mcp.server("github"); await gh.list_issues({state: "open"})   // resolves the payload
+  await mcp.describeTool("github", "list_issues")   // {inputSchema, outputSchema?} once the viewer allowed the server
+Never guess a tool's input: read describeTool, or the tool's schema where you can see it, else say so when you publish.
+A tool marked readOnlyHint is cached ({cache: {staleTime, gcTime, refresh}} tunes it, {cache: false} turns it off); a write is never cached and never watched. Input is plain JSON, at most 1 MiB; file arguments ($file) are not served here.
+A tool's failure rejects tool_error (.result is the whole result). A watch never asks the viewer: its handler gets approval_required until a callTool or permissions.request(["mcp:github"]) is allowed.
+Codes: not_in_manifest (outside the manifest, or the viewer said no: show that section as not allowed), server_not_connected (no such server in the Library), blocked_by_policy (the Library keeps it from this agent), approval_required, tool_error, server_unavailable (.retryable: retry a read once), upstream_error (.retryable, .retryAfterMs when the viewer didn't answer yet), bad_request, cancelled (an AbortSignal fired; the tool may have run), rate_limited (.retryAfterMs), capability_disabled. Retry only .retryable errors, and a write only on a new click.`},
 	{"permissions", `permissions: built in, never declared.
   const p = await claude.use("permissions")
   await p.state("db")          // "granted" for what the page declared, else "unavailable"
   await p.state("dictation")   // "prompt" until the viewer answers, then "granted" or "denied"
-  await p.request(names)       // asks for dictation in one dialog if it is still "prompt"; never rejects
+  await p.state("mcp:github")  // the same for one MCP server; "mcp" is every server in the manifest
+  await p.request(names)       // asks for what is still "prompt" (dictation, then the MCP servers in one dialog); never rejects
   await p.manage()             // opens the Permissions panel and resolves when it closes; on a button, never on load
-Everything but dictation is set when the page is published. A "denied" is final: branch on it, never ask again.`},
+Everything but dictation and MCP servers is set when the page is published. "prompt" means go ahead: the first call asks. A "denied" is final: branch on it, never ask again.`},
 }
 
 // GuideNames are the capabilities the guide covers, in its order.

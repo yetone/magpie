@@ -192,7 +192,8 @@ Declaring:
   forward; `{}` clears them; any other object is the whole set. A version
   keeps the declaration it was published with (`Version.Capabilities`).
 - Every name in the contract is accepted and kept; only `ServedCaps` (`db`,
-  `user`, `artifact`, `self`, `assets`, `sample`) are served, and the rest resolve null on the
+  `user`, `artifact`, `self`, `assets`, `sample`, `comments`, `downloads`,
+  `tts`, `dictation`, `mcp`) are served, and the rest resolve null on the
   page, as an unserved capability does on claude.ai. Declaring
   `permissions` is refused: it is built in. `db`'s `rules`, `user`'s
   `scopes`, `artifact`'s `{"publish": false}` and `assets`' `upload`
@@ -560,6 +561,53 @@ served only in the shell, in a browser with `MediaRecorder`.
   and so do 60 minutes (`time_limit`). `stop()` resolves once the last
   phrase's words are in.
 
+### MCP
+
+`mcp` lets a page call the tools of MCP servers in the Library, as the
+viewer ([internal/gateway/artifacts_pagemcp.go](../../internal/gateway/artifacts_pagemcp.go)),
+served only in the shell.
+- The manifest is `{"servers": [{"server", "tools"}]}` (`MCPConfig`,
+  checked at publish: 1 to 32 servers, 1 to 128 tools each, names of
+  `[A-Za-z0-9_.-]`). `server` is a Library server's name, or
+  `host:<name>` for the server whose name, with anything outside
+  `[A-Za-z0-9_-]` as `_`, reads so (`libraryServerOf`). Every server here
+  is on this computer, so `host:` and plain names reach the same ones.
+- Consent is the viewer's, once for each server and artifact, kept in the
+  shell's `localStorage` (`magpie.artifact.<id>.mcp:<server>`). The first
+  `callTool` on a server not asked about yet asks "Let “name” use
+  server?", naming up to six of its tools. Don't allow is kept
+  (`not_in_manifest` from then on); a dialog closed unanswered, or one
+  that can't open while another is up, is `upstream_error` with
+  `retryable` and `retryAfterMs`, and the call never ran. A watch never
+  asks (`approval_required`); `permissions.request(["mcp:<server>"])`
+  asks for several in one dialog, and the Permissions panel has a row per
+  manifest server. `describeTool` answers only once the server is
+  allowed.
+- The route, `POST <page>/_api/mcp`, takes the shell's token alone, from
+  this computer, for a version whose manifest names the server and tool.
+  `list` answers the manifest's servers found in the Library with the
+  tools the manifest lists (no schemas), and the manifest itself, so the
+  shell lists a server not asked about yet from it (`authStatus:
+  "unknown"`, names only). `call` runs `MCPHub.Call` as the agent `""`
+  (this computer), with the session `artifact-<id>`, so the Library's
+  on/off and a key's `MCPAllows` hold (`blocked_by_policy`), under
+  `hubCallWait`; at most 300 calls a minute per artifact, input a JSON
+  object of at most 1 MiB. A watch of a tool whose `readOnlyHint` is
+  false is refused. A result with `isError` is `tool_error`, with the
+  whole result.
+- The page runtime keeps the cache: a call's identity is the server, the
+  tool and its input as order-insensitive JSON (`undefined`, `null` and
+  `{}` are one). A `readOnlyHint: true` tool is cached by default
+  (`{staleTime: 0, gcTime: 5 min}`), `{cache: false}` turns it off, a
+  declared write never is, and the caps are 7 days. A cached call feeds
+  the watches of its identity, concurrent cached calls share one flight,
+  and a denial drops the server's entries. `watchTool` replays the cache
+  (`cache: {storedAt, revalidating}`), refetches when stale, polls at
+  `refetchInterval` (30s at least, paused while the page is hidden, with
+  a catch-up when it shows again), and holds at most 64 watches.
+- Not served: Claude's own servers for an artifact (`kind: "artifact"`)
+  and file arguments (`$file` rejects `capability_disabled`).
+
 ## Added by the user, and Claude Code's own tool
 
 [internal/library/artifacts.go](../../internal/library/artifacts.go):
@@ -693,7 +741,7 @@ go test -tags nogui ./internal/gui -run 'TestArtifactsAPI|TestArtifactsShareAPI|
 go test -tags nogui ./internal/cli -run 'TestArtifacts|TestEveryRouteHasACommandOrIsNamed'
 node --test internal/gui/tests/artifacts-page.test.cjs
 node --test internal/gui/tests/artifact-runtime.test.cjs
-node --test internal/gui/tests/artifact-comments.test.cjs internal/gui/tests/artifact-downloads.test.cjs internal/gui/tests/artifact-tts.test.cjs internal/gui/tests/artifact-dictation.test.cjs
+node --test internal/gui/tests/artifact-comments.test.cjs internal/gui/tests/artifact-downloads.test.cjs internal/gui/tests/artifact-tts.test.cjs internal/gui/tests/artifact-dictation.test.cjs internal/gui/tests/artifact-mcp.test.cjs
 node --test site/shares.test.mjs
 node --test internal/gui/tests/nav-pages-order.test.cjs internal/gui/tests/builtins.test.cjs
 ```

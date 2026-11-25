@@ -960,10 +960,13 @@ sits right after `readOnlyGuard`, before anything is read, reserved or
 sent, and judges the same routed pattern: a key for MCP servers only is
 refused every pattern of `keyModelRoutes` (every model route and its
 spellings, the WebSocket upgrade, `count_tokens`, decisions, the chat
-page, the model lists, the quotas, accounts, cards and routing) with 403
+page, an artifact page's `_api/sample`, `_api/tts`, `_api/dictation` and
+`_api/comments` (a comment sent to its agent runs on a model), the model
+lists, the quotas, accounts, cards and routing) with 403
 `gateway_key_mcp_only`, and a key for models only every pattern of
 `keyMCPRoutes` (the hub, `/mcp/{name}`, `/mcp/run/{name}`, magpie's own
-servers, `GET /v1/magpie/mcp`) with 403 `gateway_key_no_mcp`. A key with
+servers, `GET /v1/magpie/mcp`, an artifact page's `_api/mcp`) with 403
+`gateway_key_no_mcp`. A key with
 neither has both, as every key made before. `identityOf` keeps an issued
 key under a no-model issuer at no model whatever it asks, and `covered`
 lets any issuer hand out "no model". `hubVisitor` doesn't count no model

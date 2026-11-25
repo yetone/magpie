@@ -13,10 +13,10 @@
 
   // -- words ------------------------------------------------------------
   var WORDS = {
-    zh: { "Comment": "评论", "Comments": "评论", "Add comments": "添加评论", "Add a comment": "添加评论", "Reply": "回复", "Send to {agent}": "发给 {agent}", "Open": "未解决", "Resolved": "已解决", "Resolve": "解决", "Reopen": "重新打开", "Delete": "删除", "Delete?": "确定删除？", "Close": "关闭", "Stop": "停止", "Try again": "重试", "{agent} is working…": "{agent} 正在处理…", "Waiting for {agent}…": "等待 {agent}…", "{agent} couldn't finish: {error}": "{agent} 没能完成：{error}", "No comments yet": "还没有评论", "No resolved comments": "没有已解决的评论", "Comment on the page": "评论整个页面", "You": "你", "The whole page": "整个页面", "Couldn't post: {error}": "没能发出：{error}", "1 reply": "1 条回复", "{n} replies": "{n} 条回复", "magpie can't be reached": "连不上 magpie", "No agent can take it on this computer": "这台电脑上没有能处理它的 agent", "Save “{name}”?": "保存“{name}”？", "Save": "保存", "Cancel": "取消", "Reading aloud": "正在朗读", "Listening": "正在听", "Let “{name}” take dictation?": "允许“{name}”听写？", "It gets the words you say, never the sound.": "它只拿到你说的文字，拿不到声音。", "Allow": "允许", "Don't allow": "不允许", "Ask": "询问", "Permissions": "权限", "Dictation": "听写" },
-    "zh-TW": { "Comment": "留言", "Comments": "留言", "Add comments": "新增留言", "Add a comment": "新增留言", "Reply": "回覆", "Send to {agent}": "傳給 {agent}", "Open": "未解決", "Resolved": "已解決", "Resolve": "解決", "Reopen": "重新開啟", "Delete": "刪除", "Delete?": "確定刪除？", "Close": "關閉", "Stop": "停止", "Try again": "重試", "{agent} is working…": "{agent} 正在處理…", "Waiting for {agent}…": "等待 {agent}…", "{agent} couldn't finish: {error}": "{agent} 沒能完成：{error}", "No comments yet": "還沒有留言", "No resolved comments": "沒有已解決的留言", "Comment on the page": "留言給整個頁面", "You": "你", "The whole page": "整個頁面", "Couldn't post: {error}": "沒能送出：{error}", "1 reply": "1 則回覆", "{n} replies": "{n} 則回覆", "magpie can't be reached": "連不上 magpie", "No agent can take it on this computer": "這台電腦上沒有能處理它的 agent", "Save “{name}”?": "儲存「{name}」？", "Save": "儲存", "Cancel": "取消", "Reading aloud": "正在朗讀", "Listening": "正在聽", "Let “{name}” take dictation?": "允許「{name}」聽寫？", "It gets the words you say, never the sound.": "它只拿到你說的文字，拿不到聲音。", "Allow": "允許", "Don't allow": "不允許", "Ask": "詢問", "Permissions": "權限", "Dictation": "聽寫" },
-    ja: { "Comment": "コメント", "Comments": "コメント", "Add comments": "コメントを追加", "Add a comment": "コメントを追加", "Reply": "返信", "Send to {agent}": "{agent} に送る", "Open": "未解決", "Resolved": "解決済み", "Resolve": "解決", "Reopen": "再開", "Delete": "削除", "Delete?": "削除しますか？", "Close": "閉じる", "Stop": "停止", "Try again": "再試行", "{agent} is working…": "{agent} が作業中…", "Waiting for {agent}…": "{agent} を待っています…", "{agent} couldn't finish: {error}": "{agent} は完了できませんでした：{error}", "No comments yet": "コメントはまだありません", "No resolved comments": "解決済みのコメントはありません", "Comment on the page": "ページ全体にコメント", "You": "あなた", "The whole page": "ページ全体", "Couldn't post: {error}": "投稿できませんでした：{error}", "1 reply": "返信 1 件", "{n} replies": "返信 {n} 件", "magpie can't be reached": "magpie に接続できません", "No agent can take it on this computer": "このコンピュータには対応できる agent がありません", "Save “{name}”?": "「{name}」を保存しますか？", "Save": "保存", "Cancel": "キャンセル", "Reading aloud": "読み上げ中", "Listening": "聞き取り中", "Let “{name}” take dictation?": "「{name}」に音声入力を許可しますか？", "It gets the words you say, never the sound.": "渡るのは話した言葉だけで、音声は渡りません。", "Allow": "許可", "Don't allow": "許可しない", "Ask": "毎回確認", "Permissions": "権限", "Dictation": "音声入力" },
-    de: { "Comment": "Kommentieren", "Comments": "Kommentare", "Add comments": "Kommentare hinzufügen", "Add a comment": "Kommentar hinzufügen", "Reply": "Antworten", "Send to {agent}": "An {agent} senden", "Open": "Offen", "Resolved": "Erledigt", "Resolve": "Erledigen", "Reopen": "Wieder öffnen", "Delete": "Löschen", "Delete?": "Löschen?", "Close": "Schließen", "Stop": "Stoppen", "Try again": "Erneut versuchen", "{agent} is working…": "{agent} arbeitet…", "Waiting for {agent}…": "Wartet auf {agent}…", "{agent} couldn't finish: {error}": "{agent} wurde nicht fertig: {error}", "No comments yet": "Noch keine Kommentare", "No resolved comments": "Keine erledigten Kommentare", "Comment on the page": "Die ganze Seite kommentieren", "You": "Du", "The whole page": "Die ganze Seite", "Couldn't post: {error}": "Nicht gesendet: {error}", "1 reply": "1 Antwort", "{n} replies": "{n} Antworten", "magpie can't be reached": "magpie ist nicht erreichbar", "No agent can take it on this computer": "Kein Agent auf diesem Computer kann es übernehmen", "Save “{name}”?": "„{name}“ sichern?", "Save": "Sichern", "Cancel": "Abbrechen", "Reading aloud": "Wird vorgelesen", "Listening": "Hört zu", "Let “{name}” take dictation?": "„{name}“ Diktieren erlauben?", "It gets the words you say, never the sound.": "Die Seite bekommt nur deine Wörter, nie den Ton.", "Allow": "Erlauben", "Don't allow": "Nicht erlauben", "Ask": "Fragen", "Permissions": "Berechtigungen", "Dictation": "Diktieren" }
+    zh: { "Comment": "评论", "Comments": "评论", "Add comments": "添加评论", "Add a comment": "添加评论", "Reply": "回复", "Send to {agent}": "发给 {agent}", "Open": "未解决", "Resolved": "已解决", "Resolve": "解决", "Reopen": "重新打开", "Delete": "删除", "Delete?": "确定删除？", "Close": "关闭", "Stop": "停止", "Try again": "重试", "{agent} is working…": "{agent} 正在处理…", "Waiting for {agent}…": "等待 {agent}…", "{agent} couldn't finish: {error}": "{agent} 没能完成：{error}", "No comments yet": "还没有评论", "No resolved comments": "没有已解决的评论", "Comment on the page": "评论整个页面", "You": "你", "The whole page": "整个页面", "Couldn't post: {error}": "没能发出：{error}", "1 reply": "1 条回复", "{n} replies": "{n} 条回复", "magpie can't be reached": "连不上 magpie", "No agent can take it on this computer": "这台电脑上没有能处理它的 agent", "Save “{name}”?": "保存“{name}”？", "Save": "保存", "Cancel": "取消", "Reading aloud": "正在朗读", "Listening": "正在听", "Let “{name}” take dictation?": "允许“{name}”听写？", "It gets the words you say, never the sound.": "它只拿到你说的文字，拿不到声音。", "Allow": "允许", "Don't allow": "不允许", "Ask": "询问", "Permissions": "权限", "Dictation": "听写", "Let “{name}” use {server}?": "允许“{name}”使用 {server}？", "It can run {tools} as you.": "它能以你的身份运行 {tools}。" },
+    "zh-TW": { "Comment": "留言", "Comments": "留言", "Add comments": "新增留言", "Add a comment": "新增留言", "Reply": "回覆", "Send to {agent}": "傳給 {agent}", "Open": "未解決", "Resolved": "已解決", "Resolve": "解決", "Reopen": "重新開啟", "Delete": "刪除", "Delete?": "確定刪除？", "Close": "關閉", "Stop": "停止", "Try again": "重試", "{agent} is working…": "{agent} 正在處理…", "Waiting for {agent}…": "等待 {agent}…", "{agent} couldn't finish: {error}": "{agent} 沒能完成：{error}", "No comments yet": "還沒有留言", "No resolved comments": "沒有已解決的留言", "Comment on the page": "留言給整個頁面", "You": "你", "The whole page": "整個頁面", "Couldn't post: {error}": "沒能送出：{error}", "1 reply": "1 則回覆", "{n} replies": "{n} 則回覆", "magpie can't be reached": "連不上 magpie", "No agent can take it on this computer": "這台電腦上沒有能處理它的 agent", "Save “{name}”?": "儲存「{name}」？", "Save": "儲存", "Cancel": "取消", "Reading aloud": "正在朗讀", "Listening": "正在聽", "Let “{name}” take dictation?": "允許「{name}」聽寫？", "It gets the words you say, never the sound.": "它只拿到你說的文字，拿不到聲音。", "Allow": "允許", "Don't allow": "不允許", "Ask": "詢問", "Permissions": "權限", "Dictation": "聽寫", "Let “{name}” use {server}?": "允許「{name}」使用 {server}？", "It can run {tools} as you.": "它能以你的身分執行 {tools}。" },
+    ja: { "Comment": "コメント", "Comments": "コメント", "Add comments": "コメントを追加", "Add a comment": "コメントを追加", "Reply": "返信", "Send to {agent}": "{agent} に送る", "Open": "未解決", "Resolved": "解決済み", "Resolve": "解決", "Reopen": "再開", "Delete": "削除", "Delete?": "削除しますか？", "Close": "閉じる", "Stop": "停止", "Try again": "再試行", "{agent} is working…": "{agent} が作業中…", "Waiting for {agent}…": "{agent} を待っています…", "{agent} couldn't finish: {error}": "{agent} は完了できませんでした：{error}", "No comments yet": "コメントはまだありません", "No resolved comments": "解決済みのコメントはありません", "Comment on the page": "ページ全体にコメント", "You": "あなた", "The whole page": "ページ全体", "Couldn't post: {error}": "投稿できませんでした：{error}", "1 reply": "返信 1 件", "{n} replies": "返信 {n} 件", "magpie can't be reached": "magpie に接続できません", "No agent can take it on this computer": "このコンピュータには対応できる agent がありません", "Save “{name}”?": "「{name}」を保存しますか？", "Save": "保存", "Cancel": "キャンセル", "Reading aloud": "読み上げ中", "Listening": "聞き取り中", "Let “{name}” take dictation?": "「{name}」に音声入力を許可しますか？", "It gets the words you say, never the sound.": "渡るのは話した言葉だけで、音声は渡りません。", "Allow": "許可", "Don't allow": "許可しない", "Ask": "毎回確認", "Permissions": "権限", "Dictation": "音声入力", "Let “{name}” use {server}?": "「{name}」に {server} の使用を許可しますか？", "It can run {tools} as you.": "あなたとして {tools} を実行できます。" },
+    de: { "Comment": "Kommentieren", "Comments": "Kommentare", "Add comments": "Kommentare hinzufügen", "Add a comment": "Kommentar hinzufügen", "Reply": "Antworten", "Send to {agent}": "An {agent} senden", "Open": "Offen", "Resolved": "Erledigt", "Resolve": "Erledigen", "Reopen": "Wieder öffnen", "Delete": "Löschen", "Delete?": "Löschen?", "Close": "Schließen", "Stop": "Stoppen", "Try again": "Erneut versuchen", "{agent} is working…": "{agent} arbeitet…", "Waiting for {agent}…": "Wartet auf {agent}…", "{agent} couldn't finish: {error}": "{agent} wurde nicht fertig: {error}", "No comments yet": "Noch keine Kommentare", "No resolved comments": "Keine erledigten Kommentare", "Comment on the page": "Die ganze Seite kommentieren", "You": "Du", "The whole page": "Die ganze Seite", "Couldn't post: {error}": "Nicht gesendet: {error}", "1 reply": "1 Antwort", "{n} replies": "{n} Antworten", "magpie can't be reached": "magpie ist nicht erreichbar", "No agent can take it on this computer": "Kein Agent auf diesem Computer kann es übernehmen", "Save “{name}”?": "„{name}“ sichern?", "Save": "Sichern", "Cancel": "Abbrechen", "Reading aloud": "Wird vorgelesen", "Listening": "Hört zu", "Let “{name}” take dictation?": "„{name}“ Diktieren erlauben?", "It gets the words you say, never the sound.": "Die Seite bekommt nur deine Wörter, nie den Ton.", "Allow": "Erlauben", "Don't allow": "Nicht erlauben", "Ask": "Fragen", "Permissions": "Berechtigungen", "Dictation": "Diktieren", "Let “{name}” use {server}?": "„{name}“ {server} verwenden lassen?", "It can run {tools} as you.": "Die Seite kann {tools} in deinem Namen ausführen." }
   };
   var TAGS = { en: "en", zh: "zh-CN", "zh-TW": "zh-TW", ja: "ja-JP", de: "de-DE" };
   function sysLang(s) {
@@ -144,7 +144,7 @@
       case "hello":
         pageThere = true;
         pageFollows = !!d.follows;
-        toPage({ type: "hi", grants: { dictation: grantOf() } });
+        toPage({ type: "hi", grants: grantsOf() });
         toPage({ type: "mode", on: mode });
         sendPins();
         break;
@@ -168,6 +168,7 @@
       case "escape":
         if (saving) saving.done(false);
         else if (dAsk) dAsk.done("dismissed");
+        else if (mAsk) mAsk.done("dismissed");
         else if (perms) perms.done();
         else if (pop) closePop();
         else if (mode) setMode(false);
@@ -192,11 +193,22 @@
         break;
       case "dict-ask":
         (grantOf() === "prompt" && !dict ? askDictation() : Promise.resolve()).then(function () {
-          toPage({ type: "grants", req: d.req, grants: { dictation: grantOf() } });
+          toPage({ type: "grants", req: d.req, grants: grantsOf() });
         });
         break;
       case "perms":
-        openPerms(d.req);
+        openPerms(d.req, d.serves || {});
+        break;
+      case "mcp":
+        mcpOp(d);
+        break;
+      case "mcp-cancel":
+        if (mcalls[d.req]) mcalls[d.req].abort();
+        break;
+      case "mcp-ask":
+        mcpAskFor(d.servers).then(function () {
+          toPage({ type: "grants", req: d.req, grants: grantsOf() });
+        });
         break;
     }
   });
@@ -205,6 +217,9 @@
     drawReading("idle");
     // the page that asked is gone: so is its dictation
     if (dict) endDict(dict, "hidden");
+    // and its MCP calls, and the question it asked
+    Object.keys(mcalls).forEach(function (k) { mcalls[k].abort(); });
+    if (mAsk) mAsk.done("dismissed");
     if (perms) perms.done();
     placed = {};
     drawPins();
@@ -519,7 +534,7 @@
   }
   function setGrant(g) {
     try { if (g === "prompt") localStorage.removeItem(GRANT); else localStorage.setItem(GRANT, g); } catch (e) {}
-    toPage({ type: "grants", grants: { dictation: grantOf() } });
+    toPage({ type: "grants", grants: grantsOf() });
   }
   // the question: "granted", "denied", or "dismissed" when closed unanswered
   function askDictation() {
@@ -718,42 +733,213 @@
     if (listenBar) listenBar.classList.toggle("paused", state === "finishing");
   }
 
+  // -- MCP --------------------------------------------------------------
+  // the page calls the tools of the MCP servers in magpie's Library that
+  // its manifest names. Each server is asked about once for each artifact
+  // (kept here, like dictation, until the viewer changes it in
+  // Permissions); the calls go to magpie with the shell's token, which
+  // checks the manifest again.
+  var MGRANT = "magpie.artifact." + C.id + ".mcp:";
+  var mAsk = null, mcalls = {};
+  function mGrantOf(server) {
+    try { return localStorage.getItem(MGRANT + server) || "prompt"; } catch (e) { return "prompt"; }
+  }
+  function setMGrant(server, g) {
+    try { if (g === "prompt") localStorage.removeItem(MGRANT + server); else localStorage.setItem(MGRANT + server, g); } catch (e) {}
+  }
+  // every decision kept for this artifact: what the page reads without asking
+  function grantsOf() {
+    var g = { dictation: grantOf(), mcp: {} };
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf(MGRANT) === 0) g.mcp[k.slice(MGRANT.length)] = localStorage.getItem(k);
+      }
+    } catch (e) {}
+    return g;
+  }
+  function mErr(code, message, more) {
+    return { error: Object.assign({ code: code, message: message }, more || {}) };
+  }
+  // one request to magpie's MCP route: its JSON, an error included
+  function mcpFetch(body, signal) {
+    var b = Object.assign({ t: C.token, version: C.pinned ? C.version : 0 }, body);
+    return fetch(C.api + "/mcp", { method: "POST", body: JSON.stringify(b), headers: { "Content-Type": "text/plain" }, cache: "no-store", signal: signal })
+      .then(function (r) {
+        return r.json().catch(function () { return mErr("upstream_error", "magpie answered " + r.status, { retryable: true }); });
+      }, function (e) {
+        if (signal && signal.aborted) return mErr("cancelled", "the call was cancelled");
+        return mErr("upstream_error", t("magpie can't be reached"), { retryable: true });
+      })
+      .then(function (j) { return j || mErr("upstream_error", "magpie answered nothing", { retryable: true }); });
+  }
+  // the manifest's servers as the page sees them: one allowed as magpie
+  // lists it, one not asked about yet from the manifest alone, one the
+  // viewer said no to not at all
+  function mcpList(only) {
+    return mcpFetch({ op: "list" }).then(function (j) {
+      if (j.error) return j;
+      var on = {}, out = [];
+      (j.servers || []).forEach(function (x) { on[x.server] = x; });
+      (j.manifest || []).forEach(function (m) {
+        if (only != null && m.server !== only) return;
+        var g = mGrantOf(m.server);
+        if (g === "granted" && on[m.server]) out.push(on[m.server]);
+        else if (g === "prompt") out.push({ server: m.server, kind: "connector", authStatus: "unknown", tools: (m.tools || []).map(function (n) { return { name: n, description: "" }; }) });
+      });
+      return { servers: out, manifest: j.manifest || [], connected: on };
+    });
+  }
+  // the question, for one or more servers: "granted", "denied", or
+  // "dismissed" when closed unanswered or another question is open
+  function askMCP(list) {
+    var names = list.map(function (m) { return m.server; }).join(", ");
+    if (mAsk) return mAsk.names === names ? mAsk.p : Promise.resolve("dismissed");
+    if (saving || dAsk || perms) return Promise.resolve("dismissed");
+    var tools = [];
+    list.forEach(function (m) { (m.tools || []).forEach(function (n) { if (tools.indexOf(n) < 0) tools.push(n); }); });
+    var shown = tools.slice(0, 6).join(", ") + (tools.length > 6 ? ", …" : "");
+    var node = el("div", "pop save");
+    node.setAttribute("role", "alertdialog");
+    var q = el("div", "ask", [t("Let “{name}” use {server}?", { name: C.title || "", server: names })]);
+    q.id = "mcp-q";
+    node.setAttribute("aria-labelledby", "mcp-q");
+    var no = button(t("Don't allow")), yes = button(t("Allow"), "primary");
+    node.appendChild(q);
+    if (tools.length) node.appendChild(el("div", "size", [t("It can run {tools} as you.", { tools: shown })]));
+    node.appendChild(el("div", "acts", [no, yes]));
+    yes.disabled = no.disabled = true;
+    var arm = setTimeout(function () { yes.disabled = no.disabled = false; }, 400);
+    var timer = setTimeout(function () { mine.done("dismissed"); }, 60000);
+    var mine = { node: node, names: names };
+    mine.p = new Promise(function (res) {
+      mine.done = function (a) {
+        if (mAsk !== mine) return;
+        mAsk = null;
+        clearTimeout(timer);
+        clearTimeout(arm);
+        node.classList.remove("in");
+        setTimeout(function () { node.remove(); }, 120);
+        if (a !== "dismissed") {
+          list.forEach(function (m) { setMGrant(m.server, a); });
+          toPage({ type: "grants", grants: grantsOf() });
+        }
+        res(a);
+      };
+    });
+    mAsk = mine;
+    no.addEventListener("click", function () { mine.done("denied"); });
+    yes.addEventListener("click", function () { mine.done("granted"); });
+    ui.appendChild(node);
+    node.getBoundingClientRect();
+    node.classList.add("in");
+    return mine.p;
+  }
+  // permissions.request: one question for every server named that is
+  // connected and not asked about yet
+  function mcpAskFor(servers) {
+    return mcpList().then(function (j) {
+      if (j.error) return;
+      var want = (j.manifest || []).filter(function (m) {
+        return (!servers || servers.indexOf(m.server) >= 0) && j.connected[m.server] && mGrantOf(m.server) === "prompt";
+      });
+      if (want.length) return askMCP(want);
+    });
+  }
+  // a call, a listing or a description for the page
+  function mcpOp(d) {
+    var done = function (j) {
+      delete mcalls[d.req];
+      toPage(j.error ? { type: "mcp-done", req: d.req, error: j.error } : { type: "mcp-done", req: d.req, result: j });
+    };
+    if (d.op === "list") {
+      mcpList(d.server).then(function (j) { done(j.error ? j : { servers: j.servers }); });
+      return;
+    }
+    if (d.op !== "call" && d.op !== "describe") return done(mErr("bad_request", "no such MCP request"));
+    var server = String(d.server || ""), g = mGrantOf(server);
+    if (g === "denied" || d.op === "describe" && g !== "granted") return done(mErr("not_in_manifest", "the viewer hasn't allowed " + server + " for this page", { server: server }));
+    var ac = new AbortController();
+    mcalls[d.req] = ac;
+    var ready = Promise.resolve("granted");
+    if (g === "prompt") {
+      if (!d.ask) return done(mErr("approval_required", "a watch never asks: call the tool once, or ask with permissions.request(\"mcp:" + server + "\")", { server: server }));
+      ready = mcpList().then(function (j) {
+        if (j.error) return j;
+        var m = (j.manifest || []).filter(function (x) { return x.server === server; })[0];
+        if (!m) return mErr("not_in_manifest", server + " isn't in the page's manifest", { server: server });
+        if (!j.connected[server]) return mErr("server_not_connected", "no MCP server named " + server + " is in magpie's Library on this computer", { server: server });
+        return askMCP([m]).then(function (a) {
+          if (a === "granted") return a;
+          if (a === "denied") return mErr("not_in_manifest", "the viewer didn't allow " + server + " for this page", { server: server });
+          return mErr("upstream_error", "the viewer didn't answer", { server: server, retryable: true, retryAfterMs: 3000 });
+        });
+      });
+    }
+    ready.then(function (a) {
+      if (a !== "granted") return done(a);
+      if (ac.signal.aborted) return done(mErr("cancelled", "the call was cancelled", { server: server }));
+      var b = { op: d.op, server: server, tool: d.tool };
+      if (d.op === "call") {
+        b.input = d.input;
+        b.watch = !!d.watch;
+      }
+      mcpFetch(b, ac.signal).then(done);
+    });
+  }
+
   // the page's Permissions: what the viewer decided for this artifact,
-  // and where they change it
+  // and where they change it. serves: what the page can be allowed
   var perms = null;
-  function openPerms(req) {
+  function openPerms(req, serves) {
     var answer = function () { toPage({ type: "perms-closed", req: req }); };
     if (perms) return answer();
+    perms = { done: function () { perms = null; answer(); } };
+    (serves.mcp ? mcpList() : Promise.resolve({})).then(function (j) {
+      if (!perms) return;
+      drawPerms(serves.dictation, (j && j.manifest) || [], answer);
+    });
+  }
+  function drawPerms(dictation, manifest, answer) {
     var node = el("div", "pop save perms");
     node.setAttribute("role", "dialog");
     var h = el("div", "ask", [t("Permissions")]);
     h.id = "perms-h";
     node.setAttribute("aria-labelledby", "perms-h");
     node.appendChild(h);
-    var seg = el("div", "seg");
-    [["prompt", t("Ask")], ["granted", t("Allow")], ["denied", t("Don't allow")]].forEach(function (o) {
-      var b = el("button", grantOf() === o[0] ? "on" : "", [o[1]]);
-      b.type = "button";
-      b.setAttribute("aria-pressed", String(grantOf() === o[0]));
-      b.addEventListener("click", function () {
-        setGrant(o[0]);
-        Array.prototype.forEach.call(seg.children, function (x) { x.className = x === b ? "on" : ""; x.setAttribute("aria-pressed", String(x === b)); });
+    function row(label, get, set) {
+      var seg = el("div", "seg");
+      [["prompt", t("Ask")], ["granted", t("Allow")], ["denied", t("Don't allow")]].forEach(function (o) {
+        var b = el("button", get() === o[0] ? "on" : "", [o[1]]);
+        b.type = "button";
+        b.setAttribute("aria-pressed", String(get() === o[0]));
+        b.addEventListener("click", function () {
+          set(o[0]);
+          Array.prototype.forEach.call(seg.children, function (x) { x.className = x === b ? "on" : ""; x.setAttribute("aria-pressed", String(x === b)); });
+        });
+        seg.appendChild(b);
       });
-      seg.appendChild(b);
+      var name = el("span", "", [label]);
+      name.title = label;
+      node.appendChild(el("div", "perm", [name, seg]));
+    }
+    if (dictation) row(t("Dictation"), grantOf, setGrant);
+    manifest.forEach(function (m) {
+      row(m.server, function () { return mGrantOf(m.server); }, function (g) {
+        setMGrant(m.server, g);
+        toPage({ type: "grants", grants: grantsOf() });
+      });
     });
-    node.appendChild(el("div", "perm", [el("span", "", [t("Dictation")]), seg]));
     var close = button(t("Close"));
     node.appendChild(el("div", "acts", [close]));
-    perms = {
-      done: function () {
-        if (!perms) return;
-        perms = null;
-        node.classList.remove("in");
-        setTimeout(function () { node.remove(); }, 120);
-        answer();
-      }
+    perms.done = function () {
+      if (!perms) return;
+      perms = null;
+      node.classList.remove("in");
+      setTimeout(function () { node.remove(); }, 120);
+      answer();
     };
-    close.addEventListener("click", perms.done);
+    close.addEventListener("click", function () { if (perms) perms.done(); });
     ui.appendChild(node);
     node.getBoundingClientRect();
     node.classList.add("in");
@@ -981,6 +1167,7 @@
     if (e.key === "Escape" && !e.defaultPrevented) {
       if (saving) saving.done(false);
       else if (dAsk) dAsk.done("dismissed");
+      else if (mAsk) mAsk.done("dismissed");
       else if (perms) perms.done();
       else if (listenBar) stopDict(dict, "viewer_stopped");
       else if (readingBar) toPage({ type: "tts-stop" });

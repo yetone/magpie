@@ -26,7 +26,7 @@ var capabilityNames = []string{"artifact", "assets", "comments", "db", "dictatio
 // ServedCaps are the capabilities the page runtime gives a page that declares
 // them; permissions is built in and never declared. self is artifact's
 // former name, and resolves the same namespace.
-var ServedCaps = []string{"artifact", "assets", "comments", "db", "dictation", "downloads", "sample", "self", "tts", "user"}
+var ServedCaps = []string{"artifact", "assets", "comments", "db", "dictation", "downloads", "mcp", "sample", "self", "tts", "user"}
 
 // Capabilities is a version's declaration, by name.
 type Capabilities map[string]json.RawMessage
@@ -91,6 +91,11 @@ func ParseCapabilities(raw json.RawMessage) (Capabilities, error) {
 	if v, ok := c["sample"]; ok {
 		if _, err := ParseSampleConfig(v); err != nil {
 			return nil, fmt.Errorf("capability sample: %w", err)
+		}
+	}
+	if v, ok := c["mcp"]; ok {
+		if _, err := ParseMCPConfig(v); err != nil {
+			return nil, fmt.Errorf("capability mcp: %w", err)
 		}
 	}
 	for _, name := range []string{"artifact", "self"} {
@@ -218,6 +223,101 @@ func (c Capabilities) SampleImages() bool {
 	}
 	s, err := ParseSampleConfig(raw)
 	return err == nil && s.Images
+}
+
+// MCPConfig is the mcp capability's declaration: the manifest of the
+// servers, and each one's tools, the page may call. A server is a
+// Library MCP server's name, or host:<name> for one on this computer,
+// which in magpie is every Library server too.
+type MCPConfig struct {
+	Servers []MCPServerDecl `json:"servers"`
+}
+
+// MCPServerDecl is one server of the mcp manifest.
+type MCPServerDecl struct {
+	Server string   `json:"server"`
+	Tools  []string `json:"tools"`
+}
+
+const (
+	mcpMostServers = 32
+	mcpMostTools   = 128
+)
+
+func mcpToolName(t string) bool {
+	if len(t) == 0 || len(t) > 128 {
+		return false
+	}
+	for _, r := range t {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '.' || r == '-') {
+			return false
+		}
+	}
+	return true
+}
+
+// ParseMCPConfig reads the mcp capability's declaration.
+func ParseMCPConfig(raw json.RawMessage) (*MCPConfig, error) {
+	c := &MCPConfig{}
+	shape := errors.New(`it is {"servers": [{"server": "<name>", "tools": ["<tool>", ...]}]}`)
+	if len(raw) == 0 || json.Unmarshal(raw, c) != nil {
+		return nil, shape
+	}
+	if len(c.Servers) == 0 || len(c.Servers) > mcpMostServers {
+		return nil, fmt.Errorf("servers lists 1 to %d servers: %w", mcpMostServers, shape)
+	}
+	seen := map[string]bool{}
+	for _, s := range c.Servers {
+		if s.Server == "" || len(s.Server) > 200 || strings.ContainsFunc(s.Server, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
+			return nil, fmt.Errorf("server %q isn't a server's name", s.Server)
+		}
+		if seen[s.Server] {
+			return nil, fmt.Errorf("server %q is listed twice", s.Server)
+		}
+		seen[s.Server] = true
+		if len(s.Tools) == 0 || len(s.Tools) > mcpMostTools {
+			return nil, fmt.Errorf("server %q lists 1 to %d tools", s.Server, mcpMostTools)
+		}
+		tools := map[string]bool{}
+		for _, t := range s.Tools {
+			if !mcpToolName(t) {
+				return nil, fmt.Errorf("server %q: %q isn't a tool's name", s.Server, t)
+			}
+			if tools[t] {
+				return nil, fmt.Errorf("server %q lists tool %q twice", s.Server, t)
+			}
+			tools[t] = true
+		}
+	}
+	return c, nil
+}
+
+// Tools is the manifest's tools of server, nil if it isn't listed.
+func (c *MCPConfig) Tools(server string) []string {
+	for _, s := range c.Servers {
+		if s.Server == server {
+			return s.Tools
+		}
+	}
+	return nil
+}
+
+// Allows is whether the manifest lists tool of server.
+func (c *MCPConfig) Allows(server, tool string) bool {
+	return slices.Contains(c.Tools(server), tool)
+}
+
+// MCP is the version's mcp manifest, nil if it declares none.
+func (c Capabilities) MCP() *MCPConfig {
+	raw, ok := c["mcp"]
+	if !ok {
+		return nil
+	}
+	m, err := ParseMCPConfig(raw)
+	if err != nil {
+		return nil
+	}
+	return m
 }
 
 // PagePublishes is whether the version's page may publish itself: it
