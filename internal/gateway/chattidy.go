@@ -823,7 +823,7 @@ func reasoningText(m map[string]json.RawMessage) string {
 }
 
 // noReasoning is the reasoning_content a tool call goes to an upstream
-// that wants it back (chatReplaysReasoning) with, when the client has none
+// that wants it back (chatWantsReasoning) with, when the client has none
 // for it: a turn another model made, or one whose thinking the client
 // didn't keep. DeepSeek turns the whole request away when a tool call of
 // the turn being continued has none ("The `reasoning_content` in the
