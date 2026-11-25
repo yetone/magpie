@@ -165,7 +165,17 @@ func t3code(home string) *Agent {
 				return why
 			}
 			at := here(home)
-			return claudeCloud(at, filepath.Join(at.claudeDir(), "settings.json"))
+			settings := filepath.Join(at.claudeDir(), "settings.json")
+			// Claude Code applies its own settings' env over the instance
+			// env T3 adds, so an ANTHROPIC_BASE_URL set there (Billion
+			// Context and other Claude Code routers write one) wins over
+			// magpie's and takes T3's requests to it, as the doc above says.
+			// wiringOff reads magpie's instance, which still names the
+			// gateway, so only this catches it.
+			if f, u := claudeBaseURLElsewhere(at, settings); u != "" {
+				return "T3 Code's Claude Code takes ANTHROPIC_BASE_URL " + u + " from " + f + ", which Claude Code applies over magpie's instance, so its requests go there, not to magpie's gateway at " + gateway.URL() + "; take it out there to go through magpie"
+			}
+			return claudeCloud(at, settings)
 		},
 		Fields: []Field{{
 			Key: "provider", Label: "provider",

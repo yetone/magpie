@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/yetone/magpie/internal/edit"
@@ -431,5 +432,44 @@ func TestT3CodeKeepsTheUsersSettings(t *testing.T) {
 		return m.Slug == "gone/old"
 	}) || len(got.Config.CustomModels) == 0 {
 		t.Errorf("custom models not magpie's: %+v", got.Config.CustomModels)
+	}
+}
+
+// Claude Code applies its own settings' env over the environment T3 Code
+// gives magpie's instance, so an ANTHROPIC_BASE_URL in ~/.claude/settings.json
+// (another Claude Code router, e.g. Billion Context, writes one) wins and
+// takes T3's requests there. magpie's instance still names the gateway, so
+// only a read of Claude Code's own settings catches it; Check must say so.
+// karissasel_ on X: Billion Context's 127.0.0.1:18787 over magpie's 3425.
+func TestT3CodeForeignBaseURLInClaudeSettings(t *testing.T) {
+	home := syncHome(t)
+	t.Setenv("T3CODE_HOME", "")
+	base := filepath.Join(home, ".t3")
+	path := filepath.Join(base, "userdata", "settings.json")
+	os.MkdirAll(filepath.Dir(path), 0o755)
+	os.WriteFile(path, []byte(t3User), 0o600)
+
+	a := t3code(home)
+	if err := a.Field("provider").Set(magpieID); err != nil {
+		t.Fatal(err)
+	}
+	// wired, with nothing in ~/.claude/settings.json: magpie's instance env
+	// reaches the gateway, so Check is quiet.
+	if d := a.Check(); d != "" {
+		t.Fatalf("quiet with no override, got %q", d)
+	}
+
+	settings := filepath.Join(home, ".claude", "settings.json")
+	writeFile(t, settings, `{"env":{"ANTHROPIC_BASE_URL":"http://127.0.0.1:18787"}}`)
+	d := a.Check()
+	if !strings.Contains(d, "127.0.0.1:18787") || !strings.Contains(d, "ANTHROPIC_BASE_URL") {
+		t.Fatalf("a foreign base URL in Claude Code's settings not named: %q", d)
+	}
+
+	// the same value a user who also wired vanilla Claude Code has: the
+	// gateway, so it is magpie's, not a conflict.
+	writeFile(t, settings, `{"env":{"ANTHROPIC_BASE_URL":"`+gateway.URL()+`"}}`)
+	if d := a.Check(); d != "" {
+		t.Fatalf("the gateway taken for a foreign base URL: %q", d)
 	}
 }

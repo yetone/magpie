@@ -222,6 +222,12 @@ func TestDriftUnwiredEveryAgent(t *testing.T) {
 			continue
 		}
 		t.Run(a.ID, func(t *testing.T) {
+			// T3 Code reads Claude Code's ~/.claude/settings.json (a foreign
+			// ANTHROPIC_BASE_URL there wins over its instance env), a file it
+			// doesn't own and can't rewire. A sibling subtest's sabotage of
+			// the gateway's URL lingers in it across this shared home, so
+			// start each agent without another's Claude Code routing.
+			os.Remove(filepath.Join(here(home).claudeDir(), "settings.json"))
 			// the field that takes one of magpie's models
 			var f Field
 			want := ""
