@@ -173,6 +173,12 @@ type Model struct {
 	// with no way to turn it off: Kimi Code's supports_thinking_type
 	// "only" (reasoning.type). Kimi Code is told always_thinking for it.
 	AlwaysThinks bool `json:",omitempty"`
+	// AsksAdaptively is set on a routing group dsh asks on Messages whose
+	// every member is asked adaptively there (gateway.AsksAdaptively,
+	// which a group's own id doesn't answer): dsh gives it pi-ai's
+	// forceAdaptiveThinking, as it does such a member alone, so its xhigh
+	// and max aren't clamped to a high budget (#6778).
+	AsksAdaptively bool `json:",omitempty"`
 	// DynamicTools is set on a model its vendor's list says loads tools
 	// mid-conversation: Kimi Code's supports_dynamic_tools
 	// (tools.dynamic_load). Kimi Code is told dynamically_loaded_tools.

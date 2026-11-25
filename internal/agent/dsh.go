@@ -2195,6 +2195,43 @@ func dshRouteFor(id string, models []catalog.Model) string {
 	return dshRoute
 }
 
+// dshGroupAPIs are the APIs a routing group not on Responses
+// (provider.GroupAPI) goes on in dsh, and whether it is asked adaptively
+// on Messages: the APIs every member's own list has (modelAPIs), so a
+// group of members each best on Messages, or on Gemini's, goes on that
+// route as each would alone, every member relaying it as it is (01huadalang
+// on Discord: a group of Gemini CLI models went on Chat). A member every
+// request to is translated anyway has no say. Messages is left out when
+// the members don't all ask adaptively, or all not (gateway.AsksAdaptively,
+// which the group's id doesn't answer): pi-ai asks the group one way for
+// every member. A group whose members share neither has none and stays on
+// Chat. Gemini's is the first where dsh speaks it, and the one after, if
+// any, where it doesn't (dshAskedOne), as for a lone Gemini model.
+func dshGroupAPIs(ms []provider.Member) (apis []string, adaptive bool) {
+	found, split := false, false
+	for _, m := range ms {
+		own := modelAPIs(&m.Provider, m.Model)
+		if len(own) == 0 {
+			continue
+		}
+		asks := gateway.AsksAdaptively(m.Model)
+		if !found {
+			apis, adaptive, found = own, asks, true
+			continue
+		}
+		apis = slices.DeleteFunc(apis, func(a string) bool { return !slices.Contains(own, a) })
+		split = split || asks != adaptive
+	}
+	if split {
+		apis = slices.DeleteFunc(apis, func(a string) bool { return a == string(provider.Anthropic) })
+	}
+	apis = slices.DeleteFunc(apis, func(a string) bool { return a != string(provider.Anthropic) && a != string(provider.Gemini) })
+	if len(apis) == 0 {
+		return nil, false
+	}
+	return apis, adaptive && slices.Contains(apis, string(provider.Anthropic))
+}
+
 // dshAPI is the wire protocol a route of magpie's speaks, given the one it
 // has now and the one it is written with: the one it has when the gateway
 // speaks it — a user who switched a route to OpenAI Responses in dsh's
@@ -2498,7 +2535,8 @@ func dshKindConfig(k dshKind, models []catalog.Model, api, gw string) dshPiRoute
 		// a Gemini 3 or later: #6778) is asked adaptively too: pi-ai then
 		// sends the level itself, max as max (gateway.AsksAdaptively, the
 		// rule Pi's models.json is written by too)
-		case api == "anthropic-messages" && gateway.AsksAdaptively(m.ID):
+		// (a routing group by its members, catalog.Model.AsksAdaptively)
+		case api == "anthropic-messages" && (gateway.AsksAdaptively(m.ID) || m.AsksAdaptively):
 			e.Compat = &dshPiCompat{ForceAdaptiveThinking: true}
 		case api == "openai-responses":
 			// by the api the route stands on (the one the user picked in
