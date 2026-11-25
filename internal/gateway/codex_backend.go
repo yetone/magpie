@@ -1945,6 +1945,12 @@ func withoutUnreadable(body, msg []byte) ([]byte, bool) {
 		// (passthrough_refused.go)
 		return withoutPassthrough(body, f)
 	}
+	if agentMessageRefused.Match(wordsOf(msg)) {
+		// the ChatGPT backend doesn't run MultiAgentV2 for this model and
+		// turns its agent_message items away: each plain one is asked again
+		// as the user's turn (withoutAgentMessages)
+		return withoutAgentMessages(body)
+	}
 	if !foreignReasoning.Match(msg) && !bodyHas(bytes.ToLower(msg), "not found") {
 		return nil, false
 	}
@@ -1957,6 +1963,107 @@ func withoutUnreadable(body, msg []byte) ([]byte, bool) {
 		return withoutSeals(body)
 	}
 	return nil, false
+}
+
+// agentMessageRefused is the ChatGPT backend turning an agent_message
+// input item away: a MultiAgentV2 item (a subagent's task, or an agent's
+// message to another) that a model not running V2 doesn't take
+// ("Unsupported input item: agent_message", cyberestro on X). Each plain
+// one is asked again as the user's turn, as Grok's backend's same refusal
+// is handled (grokAgentMessage, plugins#61).
+var agentMessageRefused = lazyre.New(`(?i)unsupported input item\s*:?\s*["']?agent_message`)
+
+// withoutAgentMessages is a request's input with each plain agent_message
+// item rewritten as the user's message a Responses backend takes, and ok
+// set when one was. A sealed, empty, or otherwise-shaped agent_message is
+// left as it came: magpie reads no sealed task, and the sealed-task guard
+// (hasSealedAgentMessage) still sees it. Only a plain one, whose content
+// the model can read, is turned into a message.
+func withoutAgentMessages(body []byte) ([]byte, bool) {
+	var q map[string]json.RawMessage
+	if json.Unmarshal(body, &q) != nil {
+		return body, false
+	}
+	var items []json.RawMessage
+	if json.Unmarshal(q["input"], &items) != nil {
+		return body, false
+	}
+	changed := false
+	for i, raw := range items {
+		var item map[string]any
+		if json.Unmarshal(raw, &item) != nil {
+			continue
+		}
+		msg, ok := agentMessageAsUser(item)
+		if !ok {
+			continue
+		}
+		b, err := marshalPlain(msg)
+		if err != nil {
+			continue
+		}
+		items[i], changed = b, true
+	}
+	if !changed {
+		return body, false
+	}
+	var err error
+	if q["input"], err = marshalPlain(items); err != nil {
+		return body, false
+	}
+	nb, err := marshalPlain(q)
+	if err != nil {
+		return body, false
+	}
+	return nb, true
+}
+
+// agentMessageAsUser is a plain Codex agent_message as the user's message a
+// Responses backend takes — "From <author> to <recipient>" first, then its
+// text and images as they came — true when it is one; nil, false for a
+// sealed, empty, or other-shaped item, left as it came. It mirrors the Grok
+// plugin's grokAgentMessage (plugins#61).
+func agentMessageAsUser(item map[string]any) (map[string]any, bool) {
+	if item["type"] != "agent_message" {
+		return nil, false
+	}
+	if _, sealed := item["encrypted_content"]; sealed {
+		return nil, false
+	}
+	parts, _ := item["content"].([]any)
+	if len(parts) == 0 {
+		return nil, false
+	}
+	for _, p := range parts {
+		pm, ok := p.(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		if _, sealed := pm["encrypted_content"]; sealed {
+			return nil, false
+		}
+		_, isText := pm["text"].(string)
+		_, isURL := pm["image_url"].(string)
+		if !(pm["type"] == "input_text" && isText || pm["type"] == "input_image" && isURL) {
+			return nil, false
+		}
+	}
+	from, _ := item["author"].(string)
+	to, _ := item["recipient"].(string)
+	header := ""
+	switch {
+	case from != "" && to != "":
+		header = "From " + from + " to " + to
+	case from != "":
+		header = "From " + from
+	case to != "":
+		header = "To " + to
+	}
+	content := parts
+	if header != "" {
+		content = append([]any{map[string]any{"type": "input_text", "text": header + "\n\n"}}, parts...)
+	}
+	return map[string]any{"type": "message", "role": "user", "content": content}, true
 }
 
 // withoutItem is a Responses request without the input item of this id.
