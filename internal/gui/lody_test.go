@@ -15,6 +15,21 @@ import (
 	"github.com/yetone/magpie/internal/agent"
 )
 
+// installedApp puts app, with bundle id id, in home's Applications: on a
+// Mac, an app whose data folder has no app beside it is a leftover of
+// one uninstalled, never listed.
+func installedApp(t *testing.T, home, app, id string) {
+	t.Helper()
+	contents := filepath.Join(home, "Applications", app, "Contents")
+	if err := os.MkdirAll(contents, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	plist := "<plist><dict><key>CFBundleIdentifier</key><string>" + id + "</string></dict></plist>"
+	if err := os.WriteFile(filepath.Join(contents, "Info.plist"), []byte(plist), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 type importWindows struct {
 	Windows
 	opened string
@@ -94,6 +109,7 @@ func TestLodyImportHandoff(t *testing.T) {
 	if err := os.WriteFile(catalog, []byte(`{"workspaces":[]}`), 0600); err != nil {
 		t.Fatal(err)
 	}
+	installedApp(t, home, "Cindy.app", "com.xd.cindycn")
 	// Cindy, beside it, still says whether it has magpie: false is said,
 	// not left out as unknown
 	cfg, err := os.UserConfigDir()
@@ -211,7 +227,7 @@ func TestLodyImportRunsLodyOnLinux(t *testing.T) {
 // Cindy's database that can't be read leaves its row's added out, as
 // unknown: the window never says "Not added" for what it couldn't read.
 func TestImportStatusUnreadableIsUnknown(t *testing.T) {
-	sandboxHome(t)
+	installedApp(t, sandboxHome(t), "Cindy.app", "com.xd.cindycn")
 	cfg, err := os.UserConfigDir()
 	if err != nil {
 		t.Fatal(err)
@@ -238,7 +254,7 @@ func TestImportStatusUnreadableIsUnknown(t *testing.T) {
 // aionui:// link; with AionUi's folder and no database yet it says not
 // added, and with a database it can't read it says nothing.
 func TestAionUiImportRow(t *testing.T) {
-	sandboxHome(t)
+	installedApp(t, sandboxHome(t), "AionUi.app", "com.aionui.app")
 	cfg, err := os.UserConfigDir()
 	if err != nil {
 		t.Fatal(err)
@@ -292,7 +308,7 @@ func TestAionUiImportRow(t *testing.T) {
 // 2.x before its first start) it says nothing, and with a database
 // without magpie it says not added.
 func TestCherryStudioImportRow(t *testing.T) {
-	sandboxHome(t)
+	installedApp(t, sandboxHome(t), "Cherry Studio.app", "com.kangfenmao.CherryStudio")
 	cfg, err := os.UserConfigDir()
 	if err != nil {
 		t.Fatal(err)

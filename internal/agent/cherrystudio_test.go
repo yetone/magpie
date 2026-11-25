@@ -190,6 +190,8 @@ func cherrySandbox(t *testing.T) (home, userData string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// installed: on a Mac, its folder without the app is a leftover
+	plantApp(t, filepath.Join(home, "Applications"), "Cherry Studio.app", "com.kangfenmao.CherryStudio")
 	return home, filepath.Join(cfg, "CherryStudio")
 }
 

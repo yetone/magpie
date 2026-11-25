@@ -172,6 +172,32 @@ var desktopApps = map[string]desktopApp{
 	"nowledge-mem": {id: "co.nowledge.mem.desktop", names: []string{"Nowledge Mem.app"}},
 	"codebuddy": {id: "com.tencent.codebuddy", names: []string{"CodeBuddy.app"},
 		more: []desktopApp{{id: "com.tencent.codebuddycn", names: []string{"CodeBuddy CN.app"}}}},
+	// The apps magpie is added to by an import link, each found by its
+	// data folder, which an uninstall leaves behind (macAppRemoved).
+	// Cindy 0.1.94's brand identity: com.xd.cindycn for its cn build (data
+	// in Cindy), com.xd.cindy for its global one (CindyGlobal), both
+	// Cindy.app. AionUi's and Cherry Studio's from their electron-builder.yml.
+	"cindy": {id: "com.xd.cindycn", names: []string{"Cindy.app"},
+		more: []desktopApp{{id: "com.xd.cindy", names: []string{"Cindy.app"}}}},
+	"aionui":       {id: "com.aionui.app", names: []string{"AionUi.app"}},
+	"cherrystudio": {id: "com.kangfenmao.CherryStudio", names: []string{"Cherry Studio.app"}},
+}
+
+// removedOS is the system macAppRemoved judges for; a var so a test on
+// another one can ask for a Mac's answer.
+var removedOS = runtime.GOOS
+
+// macAppRemoved says the desktop app of agent id is gone from this Mac: no
+// bundle of any of its builds in the app folders, or where Spotlight has
+// one. An app found by its data folder alone (Cindy, AionUi, Cherry
+// Studio) leaves the folder, and its database with magpie in it, behind
+// when it is uninstalled, and its row stayed on the Agents page, added,
+// with nothing to take it off (Alex on Discord, 11-25: Cindy). Never said
+// elsewhere: where these apps install on Windows and Linux is a path
+// magpie hasn't checked, and the folder is taken as it was.
+func macAppRemoved(id string) bool {
+	app, ok := desktopApps[id]
+	return ok && removedOS == "darwin" && !slices.ContainsFunc(app.builds(), macBundle)
 }
 
 // appFolders are where apps are installed; a var so tests can point it

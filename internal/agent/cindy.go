@@ -138,7 +138,7 @@ func cindy() *Agent {
 		detect: func() bool {
 			for _, d := range dirs {
 				if isDir(d) {
-					return true
+					return !macAppRemoved("cindy")
 				}
 			}
 			return false

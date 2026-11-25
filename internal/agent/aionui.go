@@ -111,7 +111,7 @@ func aionui() *Agent {
 	return &Agent{
 		ID: "aionui", Name: "AionUi", Icon: "aionui",
 		Dir: dir, Path: dir,
-		detect: func() bool { return dir != "" && isDir(filepath.Join(dir, "aionui")) },
+		detect: func() bool { return dir != "" && isDir(filepath.Join(dir, "aionui")) && !macAppRemoved("aionui") },
 		Import: func() string { return AionUiLink(gateway.URL()) },
 		Added:  func() (bool, bool) { return st.read(db, gateway.URL()) },
 	}

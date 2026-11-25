@@ -181,6 +181,8 @@ func TestAionUiDetect(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+	// installed: on a Mac, AionUi's folder without the app is a leftover
+	plantApp(t, filepath.Join(home, "Applications"), "AionUi.app", "com.aionui.app")
 	a := aionui()
 	if a.detect() {
 		t.Fatal("detected with no AionUi folder")

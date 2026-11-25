@@ -177,7 +177,7 @@ func cherryStudio(home string) *Agent {
 			dirs, _ := cherryDirs(home)
 			for _, d := range dirs {
 				if cherryRan(d) {
-					return true
+					return !macAppRemoved("cherrystudio")
 				}
 			}
 			return false
