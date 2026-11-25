@@ -124,7 +124,9 @@ func (l *Library) hubServerFor(t *Target) *Server {
 		s.about = gateway.HubLine(hubAbouts(ss))
 		for _, a := range ss {
 			if serverKey(a) == artifactsKey {
-				s.direct = append(s.direct, gateway.HubToolName(a.Name, artifactPublish))
+				for _, n := range artifactsDirect {
+					s.direct = append(s.direct, gateway.HubToolName(a.Name, n))
+				}
 			}
 		}
 	}

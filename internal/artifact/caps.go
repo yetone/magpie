@@ -247,7 +247,7 @@ func ParseDBConfig(raw json.RawMessage) (*DBConfig, error) {
 	c := &DBConfig{}
 	if len(raw) > 0 {
 		if err := json.Unmarshal(raw, c); err != nil {
-			return nil, errors.New("it is {} or {\"rules\": [{\"path\": …, \"read\": …, \"write\": …}]}")
+			return nil, errors.New("it is {} or {\"rules\": [{\"path\": \"votes\", \"read\": \"view\", \"write\": \"owner\"}]}, where read and write are levels: view, interact, admin, owner or self")
 		}
 	}
 	if len(c.Rules) > maxRules {

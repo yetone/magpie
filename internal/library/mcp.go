@@ -282,9 +282,30 @@ func piDirect(s *Server) []string {
 		return s.direct
 	}
 	if serverKey(s) == artifactsKey {
-		return []string{artifactPublish}
+		return artifactsDirect
 	}
 	return nil
+}
+
+// piDirectBefore is whether old's toolExposure is one magpie wrote
+// before piDirect(s) grew: some of its tools, each "direct", and nothing
+// else (v0.1.4756 wrote publish_artifact alone). Anything else in it is
+// the user's.
+func piDirectBefore(s *Server, old map[string]any) bool {
+	if _, ok := old["exposure"]; ok {
+		return false
+	}
+	ex, ok := old["toolExposure"].(map[string]any)
+	if !ok || len(ex) == 0 {
+		return false
+	}
+	d := piDirect(s)
+	for k, v := range ex {
+		if v != "direct" || !slices.Contains(d, k) {
+			return false
+		}
+	}
+	return len(ex) < len(d)
 }
 
 // ---- each agent's own format ----------------------------------------------
@@ -606,7 +627,7 @@ func (f *mcpFile) behind(s *Server, old map[string]any) bool {
 	if f.Format == fmtCodex && slices.ContainsFunc(codexRefused(s), func(k string) bool { _, ok := old[k]; return ok }) {
 		return true
 	}
-	if f.Format == fmtPiNative && old != nil && len(piDirect(s)) > 0 && !piExposed(old) {
+	if f.Format == fmtPiNative && old != nil && len(piDirect(s)) > 0 && (!piExposed(old) || piDirectBefore(s, old)) {
 		return true
 	}
 	if selfTimeout(s, 0) == 0 {
@@ -1579,8 +1600,10 @@ func (f *mcpFile) merged(s *Server, old map[string]any) ordered {
 			o = slices.DeleteFunc(o, func(e kv) bool { return e.k == "toolExposure" })
 		}
 	}
+	// a toolExposure magpie wrote before it named more tools is magpie's
+	ownExposure := f.Format == fmtPiNative && old != nil && piDirectBefore(s, old)
 	for i, e := range o {
-		if v, ok := old[e.k]; ok && !slices.Contains(mine, e.k) && !(behind && f.Format == fmtGoose && e.k == "timeout") {
+		if v, ok := old[e.k]; ok && !slices.Contains(mine, e.k) && !(behind && f.Format == fmtGoose && e.k == "timeout") && !(ownExposure && e.k == "toolExposure") {
 			o[i].v = v
 		}
 		// Codex's env_vars as the user wrote them ({ name, source }), or

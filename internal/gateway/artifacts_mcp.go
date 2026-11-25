@@ -55,6 +55,7 @@ const (
 	artifactDeleteTool  = "delete_artifact"
 	artifactOpenTool    = "open_artifact"
 	artifactDataTool    = "artifact_data"
+	artifactGuideTool   = "artifact_guide"
 
 	// artifactsMCPBody is the most a message may be: a version's 64 MiB in
 	// base64, and the JSON around it
@@ -144,11 +145,12 @@ func artifactsMCPTools() []any {
 						"type": "object",
 						"description": "What the page may do beyond static HTML, as Claude's artifacts declare it: {\"db\": {}, \"user\": {}}. " +
 							"db keeps data outside the page, which the page reads and writes through `await claude.use(\"db\")` (doc, collection, get, set, update, delete, where, orderBy, limit, onSnapshot) and you read and seed with " + artifactDataTool + "; " +
-							"{\"db\": {\"rules\": [{\"path\": …, \"read\": …, \"write\": …}]}} sets who reads and writes where. user is who views it, through `await claude.use(\"user\")`. " +
+							"{\"db\": {\"rules\": [{\"path\": \"votes\", \"read\": \"view\", \"write\": \"owner\"}]}} sets who reads and writes where, by levels: view, interact, admin, owner, self. user is who views it, through `await claude.use(\"user\")`. " +
 							"artifact lets the page save itself: `await (await claude.use(\"artifact\")).publish(html)` publishes the whole page, state embedded, as the newest version, and every open view reloads to it; publish({path: content}) saves files and keeps the page running. " +
 							"assets keeps files people add (images, video, PDF, fonts, CSV and text, 20 MiB each): `(await claude.use(\"assets\")).upload(blob)` gives {id, url}; keep the id in db and show it at \"/_blob/\" + id. " +
 							"sample lets the page ask a model: `await (await claude.use(\"sample\"))(input, {onText, tools, modelTier})` gives {text, truncated}, and sample.json(input) a parsed value; {\"sample\": {\"images\": true}} lets it send images too. Each call is memoryless, so send the instructions, data and format with it. " +
-							"Any other capability resolves null on the page here, so a page lights it up only when it is there. Left out, an update keeps the version before's; {} clears them.",
+							"Any other capability resolves null on the page here, so a page lights it up only when it is there. Left out, an update keeps the version before's; {} clears them. " +
+							"Before writing a page that uses one, read its calls' shapes and answers with " + artifactGuideTool + ".",
 					},
 					"label":   map[string]any{"type": "string", "description": "A short name for this version, at most 60 characters"},
 					"version": map[string]any{"type": "integer", "minimum": 1, "description": "The version this publish was built on; a newer one makes it fail instead of being written over"},
@@ -158,6 +160,20 @@ func artifactsMCPTools() []any {
 			// declared to the model at once, as a built-in tool is, so an ask
 			// for a page reaches it without naming it (hubAlwaysLoaded)
 			"_meta": hubAlwaysLoadMeta(),
+		},
+		map[string]any{
+			"name":  artifactGuideTool,
+			"title": "Artifact capabilities guide",
+			"description": "How an artifact's page calls the capabilities publish_artifact declares (db, user, artifact, assets, sample, permissions): each call's shape, what it answers and its error codes, as Magpie's page runtime serves them. " +
+				"Read it before writing a page that uses one.",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"capabilities": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "The ones the page uses, e.g. [\"db\", \"user\"]; left out, every one"},
+				},
+			},
+			"annotations": map[string]any{"readOnlyHint": true, "openWorldHint": false},
+			"_meta":       hubAlwaysLoadMeta(),
 		},
 		map[string]any{
 			"name":        artifactReadTool,
@@ -489,9 +505,11 @@ func (s *Server) artifactsMCPCall(r *http.Request, m mcpMessage) (any, map[strin
 			said, err = artifactDelete(c, a)
 		case artifactDataTool:
 			said, err = artifactData(a)
+		case artifactGuideTool:
+			said, err = artifactGuide(a)
 		default:
 			return nil, map[string]any{"code": -32602, "message": "unknown tool " + p.Name + ": this server has " +
-				strings.Join([]string{artifactPublishTool, artifactReadTool, artifactListTool, artifactOpenTool, artifactDataTool, artifactDeleteTool}, ", ")}
+				strings.Join([]string{artifactPublishTool, artifactGuideTool, artifactReadTool, artifactListTool, artifactOpenTool, artifactDataTool, artifactDeleteTool}, ", ")}
 		}
 		if err != nil {
 			return toolResult(err.Error(), true), nil
@@ -499,6 +517,24 @@ func (s *Server) artifactsMCPCall(r *http.Request, m mcpMessage) (any, map[strin
 		return toolResult(said, false), nil
 	}
 	return nil, map[string]any{"code": -32601, "message": "method not found: " + m.Method}
+}
+
+// artifactGuide is the guide to the capabilities a.Capabilities names:
+// a list of names, or a declaration's object, whose keys they are.
+func artifactGuide(a artifactArgs) (string, error) {
+	var names []string
+	if len(a.Capabilities) > 0 && string(a.Capabilities) != "null" {
+		if json.Unmarshal(a.Capabilities, &names) != nil {
+			var m map[string]json.RawMessage
+			if json.Unmarshal(a.Capabilities, &m) != nil {
+				return "", errors.New("capabilities is a list of their names, e.g. [\"db\", \"user\"]")
+			}
+			for k := range m {
+				names = append(names, k)
+			}
+		}
+	}
+	return artifact.Guide(names)
 }
 
 // artifactNamed is the artifact the arguments name, and the version.

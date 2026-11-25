@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -693,9 +694,18 @@ func TestHubPiDeclaresArtifactsPublish(t *testing.T) {
 	art := fakeStdio(t, "ok", nil)
 	art.Name, art.Args, art.Agents = ArtifactsServerName, []string{"mcp", "artifacts"}, []string{"pi"}
 	ok(t)(SaveServer("", *art))
-	want := map[string]any{"magpie-artifacts__publish_artifact": "direct"}
+	want := map[string]any{"magpie-artifacts__publish_artifact": "direct", "magpie-artifacts__artifact_guide": "direct", "magpie-artifacts__artifact_data": "direct"}
 	if x := exposure(); !reflect.DeepEqual(x, want) {
 		t.Fatalf("toolExposure %v, want %v:\n%s", x, want, read(t, file))
+	}
+	// the publish tool alone, as v0.1.4756 wrote it, is magpie's and grows
+	write(t, file, regexp.MustCompile(`"magpie-artifacts__artifact_(guide|data)": ?"direct", ?`).ReplaceAllString(read(t, file), ``))
+	if x := exposure(); reflect.DeepEqual(x, want) {
+		t.Fatalf("the fixture didn't take the guide out:\n%s", read(t, file))
+	}
+	ok(t)(Sync())
+	if x := exposure(); !reflect.DeepEqual(x, want) {
+		t.Fatalf("after a sync of v0.1.4756's toolExposure: %v:\n%s", x, read(t, file))
 	}
 	// an entry written before has it on the next sync
 	write(t, file, strings.Replace(read(t, file), `"toolExposure"`, `"toolExposureGone"`, 1))

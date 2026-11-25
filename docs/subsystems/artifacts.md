@@ -93,6 +93,7 @@ An agent on this computer is told no base and answered as before.
 | Tool | Does |
 | --- | --- |
 | `publish_artifact` | Publishes a page from `file_path` (read on magpie's computer, relative to the agent's folder, `~` and `file://` read) or `html`, with `files` (a local path, `{text}`, `{base64}`, or null to remove one), `title`, `description`, `label` and `capabilities` ([Page runtime](#page-runtime)). With `id` it adds a version; with `version` it refuses a publish over a newer one. Answers the page's address. |
+| `artifact_guide` | How a page calls each capability (`db`, `user`, `artifact`, `assets`, `sample`, `permissions`): the calls' shapes, answers and error codes as the page runtime serves them, and what differs from claude.ai, for the ones `capabilities` names (a list or a declaration) or all of them ([guide.go](../../internal/artifact/guide.go), `Guide`). Publish's `capabilities` points to it, and a db rule that doesn't read names the levels. `TestGuideNamesWhatRuntimeServes` fails when `runtime.js` serves a namespace or a `user` call the guide lacks. |
 | `read_artifact` | What it is, its versions and files, its capabilities and how many documents its data holds, and the page as published, or one file with `path`, of the newest or a given version. |
 | `artifact_data` | The page's data, as its owner: `get`, `list`, `query`, `set`, `update`, `str_replace`, `delete`, `batch`, with the same paths, limits and errors as the page. A write is told to every open view of the page. |
 | `list_artifacts` | Newest first, with `query` over title and description and a `limit`. |
@@ -108,15 +109,20 @@ An ask for a page reaches `publish_artifact` without naming it, as Claude
 Code's own Artifact tool is reached, only if the model is shown the tool:
 an agent that defers MCP tools behind a search shows a server as one line,
 and a skill of the user's for diagrams then wins (Pi 1.6 with archify,
-owner 11-24). So the publish tool is declared like a built-in tool
+owner 11-24). So the publish tool (and the guide and the data tool, below) is declared like a built-in tool
 wherever it goes: its `_meta` marks it always loaded (`anthropic/alwaysLoad`
 for Claude Code, `antigravity/alwaysLoad` for Antigravity), the MCP router
 lists it beside `find_tools` and `call_tool` when it gives tools on demand
 (`hubAlwaysLoaded`, [MCP router](mcp-router.md)), and Pi, which reads no
-`_meta`, is given `toolExposure` `{"<router name>": "direct"}` on the
-router's entry, or `{"publish_artifact": "direct"}` on Artifacts' own
-(`piDirect`), while the entry has no `exposure` or `toolExposure` of the
-user's.
+`_meta`, is given `toolExposure` with `"direct"` for `publish_artifact`,
+`artifact_guide` and `artifact_data` (their router names on the router's
+entry, `artifactsDirect`, `piDirect`), while the entry has no `exposure`
+or `toolExposure` of the user's. Behind codemode, a Pi writing a poll page
+never found the guide or the data tool: it read the runtime's source for
+the calls and seeded the data with curl and the page's token (11-24). A
+`toolExposure` naming some of those tools, each `"direct"`, and nothing
+else is the one magpie wrote before (v0.1.4756 wrote the publish tool
+alone), and is written again (`piDirectBefore`).
 
 The agent a version is recorded under comes from the client name
 (`magpie/client` in `_meta`, then the bridge's header), the caller's key,

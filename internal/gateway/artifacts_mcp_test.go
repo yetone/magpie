@@ -166,7 +166,7 @@ func TestArtifactsPublishSaysWhy(t *testing.T) {
 func TestArtifactsMCPOnlyForAgentsHere(t *testing.T) {
 	h := artifacts(t)
 	list := `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`
-	if m := readMCP(t, mcpPostTo(h, ArtifactsMCPPath, "127.0.0.1:50000", list)); len(m.Result.Tools) != 6 {
+	if m := readMCP(t, mcpPostTo(h, ArtifactsMCPPath, "127.0.0.1:50000", list)); len(m.Result.Tools) != 7 {
 		t.Fatalf("tools: %+v", m.Result.Tools)
 	}
 	for _, c := range []struct {
@@ -323,5 +323,39 @@ func TestArtifactsSharedFollowsPublish(t *testing.T) {
 		if b, _ := json.Marshal(tool.(map[string]any)["inputSchema"]); strings.Contains(string(b), "share") {
 			t.Fatalf("an agent can share: %s", b)
 		}
+	}
+}
+
+// The guide is a tool of its own, loaded with the server, read-only: it
+// gives the capabilities a list or a declaration names, and publish's
+// capabilities point an agent to it.
+func TestArtifactsGuideTool(t *testing.T) {
+	h := artifacts(t)
+	var guide, publish map[string]any
+	for _, x := range artifactsMCPTools() {
+		switch m := x.(map[string]any); m["name"] {
+		case artifactGuideTool:
+			guide = m
+		case artifactPublishTool:
+			publish = m
+		}
+	}
+	if guide == nil || guide["annotations"].(map[string]any)["readOnlyHint"] != true || guide["_meta"].(map[string]any)["anthropic/alwaysLoad"] != true {
+		t.Fatalf("the guide tool: %v", guide)
+	}
+	if b, _ := json.Marshal(publish["inputSchema"]); !strings.Contains(string(b), artifactGuideTool) || !strings.Contains(string(b), "view, interact, admin, owner, self") {
+		t.Fatalf("publish's capabilities don't name the guide or the levels: %s", b)
+	}
+	for _, args := range []map[string]any{{"capabilities": []string{"db"}}, {"capabilities": map[string]any{"db": map[string]any{}}}} {
+		said, isErr := artifactsCall(t, h, artifactGuideTool, args)
+		if isErr || !strings.Contains(said, "db.collection(") || strings.Contains(said, "\nsample: ") {
+			t.Fatalf("guide %v: %s", args, said)
+		}
+	}
+	if said, isErr := artifactsCall(t, h, artifactGuideTool, map[string]any{}); isErr || !strings.Contains(said, "\nsample: ") || !strings.Contains(said, "\nassets: ") {
+		t.Fatalf("the whole guide: %s", said)
+	}
+	if said, isErr := artifactsCall(t, h, artifactGuideTool, map[string]any{"capabilities": []string{"room"}}); !isErr || !strings.Contains(said, "room") {
+		t.Fatalf("room: %v %s", isErr, said)
 	}
 }

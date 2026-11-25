@@ -32,6 +32,13 @@ const (
 	artifactPublish = "publish_artifact"
 )
 
+// artifactsDirect are its tools Pi declares to its model whole: the
+// publish, the guide to what a page calls (artifactGuideTool) and the
+// data a page keeps (artifactDataTool). Behind codemode, a Pi writing a
+// poll page never found the last two: it read the page runtime's source
+// for the calls and seeded the data with curl (11-24).
+var artifactsDirect = []string{artifactPublish, "artifact_guide", "artifact_data"}
+
 // claudeArtifactTool is Claude Code's own tool for artifacts, as its
 // permission rules name it.
 const claudeArtifactTool = "Artifact"

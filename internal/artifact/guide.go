@@ -1,0 +1,128 @@
+package artifact
+
+import (
+	"fmt"
+	"slices"
+	"strings"
+)
+
+// The guide is how a page calls each capability, written for the agent
+// that writes the page: what claude.use(name) resolves to on magpie, the
+// calls' shapes and what they answer, and what differs from claude.ai.
+// It follows runtime.js, db.go and caps.go here; a change to what a page
+// can call changes it too (TestGuideNamesWhatRuntimeServes).
+
+// guideIntro goes first, whatever is asked.
+const guideIntro = `How a Magpie Artifact page calls its capabilities.
+
+Declare each one the page uses in publish_artifact's capabilities, then in the page:
+  const db = await claude.use("db")   // the capability's calls, or null
+null means this view can't run it (not declared, or a shared copy): render the page without it and light the feature up when the promise resolves. window.claude has use() alone; the namespace is frozen, so keep the reference and wrap it, never assign to it. A call that fails rejects with an Error that has .code (below) and .message.
+
+Who views it: a page opens on this computer, from magpie, and its viewer is its owner; db, assets and sample keep their data in magpie here. A link the user shares on usemagpie.ai shows a copy of the page in which every capability but permissions resolves null, so a page shared that way must work without them (show the data the version embeds, or say it is read-only).
+
+Values from db, a model's answer or a file are never markup: set them with textContent, or escape & < > " ' before they join HTML.
+`
+
+var guideCaps = []struct{ name, text string }{
+	{"db", `db: data kept outside the page, which the page reads and writes and you read and seed with artifact_data.
+Declare {"db": {}} or {"db": {"rules": [{"path": "votes", "read": "view", "write": "owner"}]}}. read and write are levels, least to most: "view", "interact", "admin", "owner"; "self" is a level nobody holds, for a {self} rule's prefix ({"path": "votes", "read": "view", "write": "self"}, {"path": "votes/{self}", "read": "view", "write": "interact"}). Here the viewer is the owner, so rules decide nothing yet; write them for who should write once others can.
+Paths: segments joined by "/"; an odd count is a collection ("votes"), an even one a document ("votes/v1"). data/users/<id>/... is the viewer's own (id from user.id()).
+  const ref = db.doc("polls/p1")          // or db.collection("polls").doc("p1"); .doc() with no id makes one
+  const snap = await ref.get()            // snap.exists, snap.id, snap.data(): the object, or undefined
+  await ref.set({title: "Lunch"})          // the whole document; a JSON object
+  await ref.update({title: "Dinner"})      // merges into it; fails invalid_argument when it doesn't exist
+  await ref.delete()
+  const added = await db.collection("votes").add({choice: "a"})   // a ref with a new id
+  const q = db.collection("votes").where("choice", "==", "a").orderBy("at", "desc").limit(50)
+  const qs = await q.get()                // qs.docs (each like snap), qs.size, qs.empty, qs.docChanges()
+  const off = q.onSnapshot((qs) => render(qs.docs.map((d) => ({id: d.id, ...d.data()}))), (err) => show(err))
+  off()                                   // stop listening
+  ref.onSnapshot((snap) => ..., (err) => ...)   // one document, the same way
+where's ops: == != < <= > >= in not-in array-contains (in and not-in take an array). orderBy(field, "asc" | "desc").
+onSnapshot calls back at once with what is there, then whenever another view or artifact_data changes it; this page's own writes show at once with snap.metadata.hasPendingWrites true. Subscribe once per query, outside render. An empty db is normal: seed what the page needs with artifact_data after publishing, never data hard-coded in the page.
+Codes: invalid_argument, quota_exceeded, transform_error (data that isn't JSON), unavailable, revoked (the artifact was deleted).`},
+	{"user", `user: who views the page.
+Declare {"user": {}} for the viewer's id: without it id() and me().id are null and profiles() is {}. isOwner(), canEdit() and can(name) need no declaration.
+  const user = await claude.use("user")
+  await user.id()        // an opaque id, stable for this viewer; store it, never a name
+  await user.me()        // {id, name, avatarUrl, color, email, isOwner, canEdit}
+  await user.isOwner()   // true here
+  await user.canEdit()   // true here
+  await user.can("data.write")
+  await user.profiles([id1, id2])   // {id: {id, name, avatarUrl, color, isMe}}
+  await user.search(q)   // people to pick: [] here
+Names are "" on magpie (there is no account to name): show name || "You" or "Someone", and tell people apart by color or avatarUrl.`},
+	{"artifact", `artifact: the page saves itself, as the artifact's newest version. Use it for a page that is the record (a checklist, a board, a plan edited in place); data kept apart from the page is db.
+Declare {"artifact": {}} ({"artifact": {"publish": false}} keeps the page from saving itself). "self" is its former name and works the same.
+  const artifact = await claude.use("artifact")
+  await artifact.publish(html)   // a whole document, doctype first: every open view reloads to it
+  await artifact.publish({"data.json": JSON.stringify(state)})   // files by path: the page keeps running
+     // a file is a string, a Blob, {content, contentType, ifMatch: sha256 | null}, or null / {delete: true}
+     // answers {version, changed?, shas?}
+Embed the state as data in the page you publish (JSON in a <script type="application/json">, each < written \u003c) and render from it; never serialize the live DOM. Publish after a viewer's action, never on load, and batch quick edits into one publish.
+Codes: conflict (another view published first: this view reloads to it; don't retry), not_granted, invalid_content, too_large, revoked.`},
+	{"assets", `assets: files people add to the page (images, video, PDF, fonts, CSV, text; 20 MiB each).
+Declare {"assets": {}}.
+  const assets = await claude.use("assets")
+  const a = await assets.upload(blob)   // {id, url, sizeBytes, contentType}
+  await assets.list()                   // {assets: [...], usage: {files, bytes, maxFiles, maxBytes}}
+  await assets.delete(id)               // {deleted}; only on a viewer's deliberate action
+Keep the id in db; show it at "/_blob/" + id (<img>, <video>, <a>; an SVG only in <img> or CSS). Never run an asset as code, CSS or HTML.
+Codes: too_large, unsupported_type, quota_or_state (the artifact's assets are full), store_unavailable.`},
+	{"sample", `sample: the page asks a model, through magpie's providers.
+Declare {"sample": {}}, or {"sample": {"images": true}} to send images too.
+  const sample = await claude.use("sample")
+  const r = await sample("Summarize: " + text, {onText: ({text}) => (out.textContent = text)})
+     // r.text, r.truncated; onText's text is the whole answer so far: assign it, don't append
+  const v = await sample.json("Return {\"items\": [...]} for: " + text)   // the answer parsed
+  await sample([{role: "user", content: "..."}, {role: "assistant", content: "..."}, {role: "user", content: "..."}])
+  opts: {signal, modelTier: "quick" | "default" | "complex", images: [Blob], cache: false,
+         tools: [{name, description, inputSchema, execute: async (input) => smallResult}]}
+  await sample.limits()   // {maxPromptBytes, tools: {maxCount}, modelTiers, images?}
+Each call is memoryless: send the instructions, the data and the format the page wants every time. Answers are kept 5 minutes for the same input (cache: false for a chat). Call it on a viewer's click, not on every keystroke.
+Codes: rate_limited (back off; never loop), invalid_json (r.text has what came), cancelled, prompt_too_large, image_rejected, images_unavailable, sampling_disabled (no provider in magpie), upstream_error.`},
+	{"permissions", `permissions: built in, never declared.
+  const p = await claude.use("permissions")
+  await p.state("db")      // "granted" for what the page declared, else "unavailable"
+  await p.request(names)   // the same states: a page here asks no one
+What a page may do is set when it is published, so there is nothing to ask for at run time.`},
+}
+
+// GuideNames are the capabilities the guide covers, in its order.
+func GuideNames() []string {
+	var out []string
+	for _, c := range guideCaps {
+		out = append(out, c.name)
+	}
+	return out
+}
+
+// Guide is the guide for names, every capability when there are none;
+// "self" is artifact's. An error names one it doesn't know.
+func Guide(names []string) (string, error) {
+	var want []string
+	for _, n := range names {
+		n = strings.ToLower(strings.TrimSpace(n))
+		if n == "self" {
+			n = "artifact"
+		}
+		if n == "" || slices.Contains(want, n) {
+			continue
+		}
+		if !slices.Contains(GuideNames(), n) {
+			return "", fmt.Errorf("%q isn't a capability a page here has; they are %s", n, strings.Join(GuideNames(), ", "))
+		}
+		want = append(want, n)
+	}
+	var b strings.Builder
+	b.WriteString(guideIntro)
+	for _, c := range guideCaps {
+		if len(want) == 0 || slices.Contains(want, c.name) {
+			b.WriteString("\n")
+			b.WriteString(c.text)
+			b.WriteString("\n")
+		}
+	}
+	return b.String(), nil
+}
