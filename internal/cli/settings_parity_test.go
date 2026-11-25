@@ -418,6 +418,7 @@ var notYet = map[string]string{
 	"POST /api/library/market/about":             L,  // library.go
 	"POST /api/library/mcp-account":              L,  // library.go
 	"POST /api/library/mcp-signin":               L,  // library.go
+	"POST /api/library/mcp-signin/{id}/callback": L,  // library.go: the pasted callback URL finishes a sign-in whose loopback the browser can't reach
 	"POST /api/library/mcp-signin/{id}/cancel":   L,  // library.go
 	"POST /api/library/mcp-signout":              L,  // library.go
 	"POST /api/library/mcp/check":                L,  // library.go
