@@ -194,6 +194,7 @@ agents ticked under Instructions, unless `Instructions.NoMemory`
 | `POST /api/memory/remove` | `{ids}` |
 | `POST /api/memory/status` | `{ids, status}`: `SetStatus`, in one write, as `Edit` by the user per memory (`TestSetStatusOfSome`, `TestMemoryStatusRouteActsOnSome`) |
 | `POST /api/memory/digest` | `{on}` |
+| `GET /api/memory/stats?days=7\|30` | `memory.Stats`: the day-by-day counts below (`TestMemoryStatsRoute`) |
 
 A reply after a change carries `problem` when publishing the digest
 failed. The tab is in [plugins/library/client.js](../../internal/gui/assets/plugins/library/client.js)
@@ -397,6 +398,50 @@ meaning, since it downloads a model (~135 MB).
   `{on}` give the row its state: the download's progress, the memories
   read, and why either failed.
 
+### Activity counts
+
+The Memory tab shows how memory is made, recalled, updated and cleaned
+(the owner, 11-25), from counts kept in
+[stats.go](../../internal/memory/stats.go): `memory-stats.json` beside the
+memory folder, this computer's own (never in a backup or sync), counts
+only and never a memory's text (`TestStatsBackfillAndNoText`), a day a
+key for 400 days (`keepDays`). `change` counts what a write did once it is
+written (`count(f.counts)`); a count that can't be written is let go, and
+a file that can't be read is never written over
+(`TestStatsUnreadableIsLeftAlone`).
+
+- Created, by origin: a memory added. The same text saved again is an
+  update, and a tidy merge's memory is the merge, not a new one.
+- Updated: text, kind, scope, why, tags or pin changed; the same text
+  saved again; a tidy merge or a promotion, once each. A status change
+  alone isn't one.
+- Cleaned, by who (`you`, `agent`, `tidy`, `expiry`): a memory in use or
+  to review becoming archived, superseded or deleted. Deleting one already
+  set aside isn't counted again (`TestStatsCountEachChange`,
+  `TestStatsCountTidyAndExpiry`).
+- Searches, Found, Recalled: an agent's `Search` with words, the ones that
+  returned something, and the memories returned. The tab's own search
+  (`Rank`) and a listing aren't counted.
+
+`Stats(n)` gives the last n local days, today last, with `since` (the
+first day counted) and the memories in use and to review now. A day before
+`since` has no counts; its Created is taken from the memory files' own
+dates (`backfilled`).
+
+The tab's four tiles ([memstats.js](../../internal/gui/assets/plugins/library/memstats.js),
+imported when the Memory tab first draws) over 7 or 30 days:
+
+| Tile | Value |
+| --- | --- |
+| Creation rate | memories made ÷ days, each day's own made |
+| Recall rate | agent searches that found something ÷ agent searches |
+| Update rate | updates ÷ memories in use now |
+| Cleanup rate | memories cleaned ÷ memories in use now |
+
+A tile picked opens its daily chart: a column a counted day, none for a
+day not counted (or, for recall, with no search), the day's numbers on
+hover or the arrow keys. Tested by `library-memory-stats.test.cjs`.
+
 ### Backups and sync
 
 Memory goes to another computer in a backup file (the scheduled backups
@@ -470,8 +515,8 @@ over the In use list, unsearched and not narrowed to a scope
 ```sh
 mote-run go test ./internal/memory ./internal/backup ./internal/davsync ./internal/memdistill ./internal/memembed ./internal/library
 mote-run sh -c 'MAGPIE_EMBED_DIR=$HOME/models/pml go test -run Embedder ./internal/pii/guard'
-mote-run go test -run 'Distill|Dream' ./internal/gui
+mote-run go test -run 'Distill|Dream|MemoryStats' ./internal/gui
 mote-run go test -tags nogui -run 'MemoryMCP|OwnMCP' ./internal/gateway
 mote-run go test ./internal/browsermcp ./internal/cli
-mote-run node --test internal/gui/tests/library-memory.test.cjs internal/gui/tests/library-memory-select.test.cjs internal/gui/tests/library-memory-suggest.test.cjs
+mote-run node --test internal/gui/tests/library-memory.test.cjs internal/gui/tests/library-memory-select.test.cjs internal/gui/tests/library-memory-suggest.test.cjs internal/gui/tests/library-memory-stats.test.cjs
 ```

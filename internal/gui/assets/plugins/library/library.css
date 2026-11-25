@@ -951,6 +951,60 @@ body.window .lib-list .lib-row { --lib-indent: 38px; }
 .lib-pi-row > .lib-pi-copy { flex: none; }
 .lib-pi + .lib-pi-head { margin-top: 18px; }
 
+/* Memory's numbers (memstats.js): four tiles, each a value and its days
+   as small columns, and the picked one's chart under them. Ink is the
+   app's greys; the one accent is the data. Nothing moves but hover */
+.lib-memstats-hold { height: 160px; margin-bottom: 12px; }
+.lib-memstats { margin-bottom: 12px; }
+.lib-memstats.wait .ms-tiles { opacity: .55; }
+.lib-memstats .ms-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px 2px 16px; }
+.lib-memstats .ms-title { min-width: 0; font-size: 12px; font-weight: 500; color: var(--fg-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lib-memstats .ms-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; padding: 4px 6px 6px; transition: opacity .15s ease; }
+.lib-memstats .ms-tile { display: flex; flex-direction: column; align-items: stretch; min-width: 0; padding: 8px 10px 10px; border: 0; border-radius: 9px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; transition: background-color .15s ease, transform .12s cubic-bezier(.23, 1, .32, 1); }
+@media (hover: hover) and (pointer: fine) { .lib-memstats .ms-tile:hover { background: var(--pill); } }
+.lib-memstats .ms-tile:active { transform: scale(.97); }
+.lib-memstats .ms-tile.on { background: var(--accent-soft); }
+.lib-memstats .ms-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.lib-memstats .ms-name { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lib-memstats .ms-value { display: flex; align-items: baseline; gap: 3px; margin-top: 3px; color: var(--fg); white-space: nowrap; }
+.lib-memstats .ms-value span { font-size: 22px; font-weight: 600; letter-spacing: -.01em; line-height: 1.15; }
+.lib-memstats .ms-value small { font-size: 12px; color: var(--muted); font-weight: 500; }
+.lib-memstats .ms-sub { margin-top: 1px; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lib-memstats .ms-spark { display: flex; align-items: flex-end; gap: 2px; height: 22px; margin-top: 9px; box-shadow: inset 0 -1px 0 var(--line-2); }
+.lib-memstats .ms-spark span { flex: 1 1 0; min-width: 1px; height: 100%; display: flex; align-items: flex-end; }
+.lib-memstats .ms-spark i { display: block; width: 100%; max-width: 10px; margin: 0 auto; border-radius: 1.5px 1.5px 0 0; background: var(--faint); opacity: .55; }
+.lib-memstats .ms-spark span.now i { background: var(--accent); opacity: 1; }
+.lib-memstats .ms-chart { margin: 0 12px; padding: 12px 0 12px; border-top: 1px solid var(--line-2); }
+.lib-memstats .ms-plot { position: relative; height: 148px; margin: 20px 0 0; outline: none; }
+.lib-memstats .ms-plot:focus-visible { box-shadow: 0 0 0 2px var(--accent); border-radius: 4px; }
+.lib-memstats .ms-grid { position: absolute; left: 0; right: 0; height: 0; border-top: 1px solid var(--line-2); pointer-events: none; }
+.lib-memstats .ms-grid span { position: absolute; right: 0; bottom: 3px; font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.lib-memstats .ms-cols { position: absolute; inset: 0; display: flex; align-items: stretch; border-bottom: 1px solid var(--line); }
+.lib-memstats .ms-col { flex: 1 1 0; min-width: 0; display: flex; align-items: flex-end; justify-content: center; padding: 0 2px; border-radius: 6px 6px 0 0; transition: background-color .12s ease; }
+.lib-memstats .ms-col.hot { background: var(--pill); }
+.lib-memstats .ms-col i { display: block; width: 100%; max-width: 24px; border-radius: 4px 4px 0 0; background: var(--accent); }
+.lib-memstats .ms-cols.dense .ms-col { padding: 0 1px; }
+.lib-memstats .ms-cols.dense .ms-col i { border-radius: 2px 2px 0 0; }
+.lib-memstats .ms-axis { display: flex; margin-top: 6px; font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.lib-memstats .ms-axis span { flex: 1 1 0; min-width: 0; text-align: center; white-space: nowrap; overflow: visible; }
+.lib-memstats .ms-axis.dense span:first-child { text-align: left; }
+.lib-memstats .ms-axis.dense span:last-child { text-align: right; }
+.lib-memstats .ms-axis span:empty { flex-basis: 0; }
+.lib-memstats .ms-note { margin-top: 10px; font-size: 11px; color: var(--muted); }
+.lib-memstats .ms-none { display: flex; align-items: center; justify-content: center; height: 96px; font-size: 12px; color: var(--muted); text-align: center; }
+.lib-memstats .ms-read { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 12px; row-gap: 2px; min-height: 34px; margin-top: 2px; font-size: 11.5px; line-height: 16px; color: var(--fg-2); }
+.lib-memstats .ms-read .ms-about { color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.lib-memstats .ms-read b { font-weight: 500; color: var(--muted); }
+.lib-memstats .ms-read strong { font-size: 13px; font-weight: 600; color: var(--fg); font-variant-numeric: tabular-nums; }
+.lib-memstats .ms-read em { font-style: normal; color: var(--fg); font-variant-numeric: tabular-nums; }
+.lib-memstats .ms-read .ms-muted { color: var(--muted); }
+/* narrow: two tiles a row */
+@media (max-width: 560px) {
+  .lib-memstats .ms-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lib-memstats-hold { height: 278px; }
+}
+@media (prefers-reduced-motion: reduce) { .lib-memstats .ms-tile:active { transform: none; } }
+
 /* Memory: the digest switch, a search with its filters, and the memories */
 .lib-memcard { margin-bottom: 12px; }
 .lib-membar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 2px 8px; }

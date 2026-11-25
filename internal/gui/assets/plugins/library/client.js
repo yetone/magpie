@@ -1301,6 +1301,7 @@ magpie.plugin("library", (ctx) => {
       body.append(skeleton("memory").lastChild);
       return;
     }
+    body.append(memStats());
     const card = el("div", "list lib-list lib-memcard");
     const row = el("div", "row lib-row lib-memdigest");
     const who = el("div", "who");
@@ -1369,6 +1370,20 @@ magpie.plugin("library", (ctx) => {
     }
     body.append(list);
     if (memPicking) body.append(memPickBar());
+  }
+
+  // the tab's numbers and trend (memstats.js), imported the first time
+  // the tab draws; until then a place of the card's height holds the page
+  // still
+  let memStatsAsked = false;
+  function memStats() {
+    if (window.memStatsCard) return window.memStatsCard(mem);
+    const hold = el("div", "lib-memstats-hold");
+    if (!memStatsAsked) {
+      memStatsAsked = true;
+      import(new URL("plugins/library/memstats.js", document.baseURI).href).then(() => tab === "memory" && render(), () => { memStatsAsked = false; });
+    }
+    return hold;
   }
 
   // what memory suggests (memory.Suggest): a memory learned in several
