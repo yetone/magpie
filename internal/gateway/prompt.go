@@ -55,6 +55,10 @@ type Prompt struct {
 	// sent is what the body's bytes were made of (sentSizes), for the
 	// ledger row's Record.UpParts; never written to the routing history
 	sent sentSizes
+	// est is the estimate read from the body, before it was anchored or
+	// counted (anchored); in memory only, 0 for a prompt read back from
+	// the history
+	est int
 }
 
 // sentSizes is a body's bytes by what they were, as the builder read the
@@ -283,6 +287,7 @@ func (b *promptBuilder) prompt() *Prompt {
 		p.Tokens += part.Tokens
 		p.Parts = append(p.Parts, part)
 	}
+	p.est = p.Tokens
 	return p
 }
 
@@ -358,9 +363,17 @@ func (p *Prompt) calibrate(counted, window int) {
 	if counted <= 0 || p.Counted {
 		return
 	}
+	if p.scale(counted) {
+		p.Counted = true
+	}
+}
+
+// scale scales the parts to counted tokens, the largest taking what rounding
+// leaves so they add up; false when there is no estimate to scale.
+func (p *Prompt) scale(counted int) bool {
 	est := p.Tokens
 	if est <= 0 {
-		return
+		return false
 	}
 	scale := float64(counted) / float64(est)
 	sum := 0
@@ -382,7 +395,8 @@ func (p *Prompt) calibrate(counted, window int) {
 		}
 		p.Parts[big].Tokens += counted - sum
 	}
-	p.Tokens, p.Counted = counted, true
+	p.Tokens = counted
+	return true
 }
 
 // --- text: instruction files, reminders, harness messages ---
@@ -1099,9 +1113,7 @@ func (b *promptBuilder) responsesItem(raw json.RawMessage) {
 			n += tokensOf(s.Text)
 			said = append(said, s.Text)
 		}
-		// the reasoning itself, sealed: about three quarters of its
-		// base64 is what was sealed
-		n += len(it.Encrypted) * 3 / 4 / 4
+		n += sealedTokens(len(it.Encrypted))
 		pc := txt("thinking", strings.Join(said, "\n\n"))
 		if len(it.Encrypted) > 0 {
 			pc.Size = len(it.Encrypted)
@@ -1191,6 +1203,23 @@ func responsesContent(c json.RawMessage) []rPart {
 			detail: p.Detail, file: p.Type == "input_file"})
 	}
 	return out
+}
+
+// sealedTokens is what a reasoning item sealed in encrypted_content stands
+// for, by the length of its base64: about 3.2 KB of it is there whatever
+// the reasoning was, then about 13 bytes a reasoning token. Measured on
+// 1259 Codex steps that sealed one item each, against the reasoning tokens
+// the step reported: 3176 + 13.4 a token on gpt-6-sol, 3278 + 12.5 on
+// gpt-6.2-sol. Read as its bytes over four, an item of 90 reasoning tokens
+// was taken for about 830, and a long agent turn, an item a step, for
+// nearly twice the prompt the vendor counted (tangcuyu on Discord: Alma on
+// auto/gpt-6.2-astra, 294K live against 164K counted).
+func sealedTokens(n int) int {
+	const envelope, perToken = 3200, 13
+	if n <= envelope {
+		return 0
+	}
+	return (n - envelope + perToken - 1) / perToken
 }
 
 // --- OpenAI Chat Completions ---
@@ -1362,14 +1391,66 @@ func (p *Prompt) calibrated(counted, window int) *Prompt {
 	if p == nil {
 		return nil
 	}
+	c := p.copied()
+	c.calibrate(counted, window)
+	return c
+}
+
+// copied is p with parts and items of its own.
+func (p *Prompt) copied() *Prompt {
 	c := *p
 	c.Parts = make([]PromptPart, len(p.Parts))
 	for i, part := range p.Parts {
 		part.Items = append([]PromptItem(nil), part.Items...)
 		c.Parts[i] = part
 	}
-	c.calibrate(counted, window)
 	return &c
+}
+
+// anchored is p, the prompt of r as read from its body, put on the prompt
+// the vendor counted for an earlier request of r's conversation: what was
+// counted for that one, and the estimate of what r adds to it. The two
+// estimates read the same history alike, so what the estimate gets wrong
+// about it (a sealed item, a tool's output, an image) is taken back with
+// the count, and only what is new is estimated (tangcuyu on Discord:
+// Alma's chat on auto/gpt-6.2-astra was 294K live, past its 272K window,
+// though the vendor had counted 164K for the request before).
+//
+// The earlier request is the one of the same agent, session (or, without
+// one, conversation) and model, answered and counted, whose estimate is
+// the largest not past r's: the step before it, not a title or memory
+// call that went between them in the same session. p as it is when there
+// is none, or when p names a previous response the vendor holds (Held).
+// Called under the trace's lock: routes is the trace's.
+func anchored(routes []*Route, r *Route, p *Prompt) *Prompt {
+	if p == nil || r == nil || p.Held || p.est <= 0 {
+		return p
+	}
+	if r.Session == "" && r.Conv == "" {
+		return p
+	}
+	var at *Prompt
+	for _, q := range routes {
+		if q == r || !q.Done || q.Agent != r.Agent || q.Model != r.Model || q.Session != r.Session {
+			continue
+		}
+		if r.Session == "" && q.Conv != r.Conv {
+			continue
+		}
+		qp := q.Prompt
+		if qp == nil || !qp.Counted || qp.Held || qp.est <= 0 || qp.est > p.est {
+			continue
+		}
+		if at == nil || qp.est >= at.est {
+			at = qp
+		}
+	}
+	if at == nil {
+		return p
+	}
+	c := p.copied()
+	c.scale(at.Tokens + p.est - at.est)
+	return c
 }
 
 // promptCounted is the prompt the vendor counted for the try that
@@ -1410,7 +1491,8 @@ func livePrompt(p *Prompt, window int) *Prompt {
 }
 
 // inspectPrompt reads the request's prompt beside it, putting the estimate
-// in the trace as soon as it is read; wait returns it, for the route's
+// (anchored to its conversation's last count) in the trace as soon as it
+// is read; wait returns it, for the route's
 // end to scale to what was counted. masked is the body as the vendor would
 // get it with masking on, kept a while for the card's text (PromptText);
 // plain when it went unmasked, so is masked only when the card asks.
@@ -1421,6 +1503,8 @@ func (s *Server) inspectPrompt(tr *Route, from provider.Protocol, body, masked [
 		if p != nil {
 			s.trace.keepBody(tr.ID, from, masked, plain)
 			s.trace.update(tr, func(t *Route) {
+				// under the trace's lock, as update calls it
+				p = anchored(s.trace.routes, t, p)
 				if t.Prompt == nil {
 					t.Prompt = livePrompt(p, t.window)
 				}
