@@ -902,6 +902,9 @@ func saveNew(p provider.Provider) error {
 // only their picks that take a provider's in (eiyuuzaki2333 on X), and
 // says which.
 func joinPicks(p provider.Provider, before *provider.Provider) error {
+	if q, err := provider.Find(p.ID); err == nil {
+		p = *q // as saved: a remote magpie's pick its list dropped is set aside (goneKeptAside)
+	}
 	joined, err := provider.JoinPicks(p, before)
 	if err != nil {
 		return err
@@ -2539,6 +2542,10 @@ func editPicks(p provider.Provider, args []string) ([]string, error) {
 // models were exposed before and after, and which went or came. A list
 // that replaced the old one says so, and how to add one instead.
 func printPicksChange(before, after provider.Provider, args []string) {
+	asked := after.Models
+	if q, err := provider.Find(after.ID); err == nil {
+		after = *q // as saved: a remote magpie's pick its list dropped is set aside (goneKeptAside)
+	}
 	ids := func(p provider.Provider) []string {
 		var out []string
 		for _, m := range p.Exposed() {
@@ -2589,6 +2596,11 @@ func printPicksChange(before, after provider.Provider, args []string) {
 	for _, id := range added {
 		if len(avail) > 0 && !avail[id] {
 			fmt.Println(" ", amber.Render("!"), after.ID+"/"+id, muted.Render("isn't in "+after.Name+"'s list; exposed as given"))
+		}
+	}
+	for _, id := range asked {
+		if !slices.Contains(after.Models, id) && slices.Contains(after.Delisted, id) {
+			fmt.Println(" ", amber.Render("!"), after.ID+"/"+id, muted.Render("left "+after.Name+"'s list; set aside until it lists it again"))
 		}
 	}
 }

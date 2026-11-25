@@ -1417,6 +1417,7 @@ func Save(p Provider) error {
 	if i >= 0 {
 		was = &f.Providers[i]
 	}
+	p.Models, p.Delisted = goneKeptAside(p, was)
 	p.PickedFrom = listedWith(p, was)
 	p.Delisted = delistedWith(p, was)
 	p.DelistedAt = delistedAtWith(p, was)
@@ -1479,6 +1480,45 @@ func delistedWith(p Provider, was *Provider) []string {
 		return nil
 	}
 	return d
+}
+
+// goneKeptAside are p's Models and Delisted with a remote magpie's pick its
+// list set aside kept aside while that list still lacks it. Another
+// magpie's list is followed in the background: an editor opened before it
+// dropped a routing group still held the group among its picks, and its
+// Save picked it again (delistedWith), where no later fetch could tell it
+// from one typed by hand, so the group stayed in this magpie's list for
+// good (CryptoSarom on X). It comes back with a list that has it
+// (relistPicks). A pick typed by hand was never set aside, and stays.
+func goneKeptAside(p Provider, was *Provider) ([]string, []string) {
+	if was == nil || len(was.Delisted) == 0 || len(p.Models) == 0 || !p.IsRemoteMagpie() {
+		return p.Models, p.Delisted
+	}
+	now := liveIDs(p.ID)
+	if len(now) == 0 {
+		return p.Models, p.Delisted // no list to tell by
+	}
+	var kept, aside []string
+	for _, m := range p.Models {
+		if slices.Contains(was.Delisted, m) && !now[m] {
+			aside = append(aside, m)
+		} else {
+			kept = append(kept, m)
+		}
+	}
+	if len(aside) == 0 {
+		return p.Models, p.Delisted
+	}
+	d := p.Delisted
+	if d == nil {
+		d = slices.Clone(was.Delisted)
+	}
+	for _, m := range aside {
+		if !slices.Contains(d, m) {
+			d = append(d, m)
+		}
+	}
+	return kept, d
 }
 
 // delistedAtWith is what p.DelistedAt is saved as: zero while some pick is

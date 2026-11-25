@@ -3460,6 +3460,17 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			if q, err := provider.Find(p.ID); err == nil {
 				p = q
 			}
+			if p.IsRemoteMagpie() {
+				// and those set aside before it: another magpie's list
+				// is followed in the background, so an editor opened
+				// before still holds a pick that list dropped, and its
+				// Save put it back (CryptoSarom on X)
+				for _, m := range p.Delisted {
+					if !slices.Contains(dropped, m) {
+						dropped = append(dropped, m)
+					}
+				}
+			}
 			writeJSON(rw, struct {
 				Count    int          `json:"count"`
 				Dropped  []string     `json:"dropped,omitempty"`
