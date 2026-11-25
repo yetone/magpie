@@ -384,8 +384,7 @@ func copyBeside(exe, to string) (string, error) {
 // once the installed one has said it. When to can't be started, this one
 // runs on.
 func Forward(from, to string) error {
-	marker := filepath.Join(os.TempDir(), fmt.Sprintf("magpie-installed-%d", os.Getpid()))
-	os.Remove(marker)
+	marker := markerPath(fmt.Sprintf("magpie-installed-%d", os.Getpid()), to)
 	defer os.Remove(marker)
 	var env []string
 	for _, e := range os.Environ() {

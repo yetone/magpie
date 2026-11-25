@@ -1230,6 +1230,15 @@ one thread was magpie's own: the no-activate hook, left on while
 `os.Exit` while the app still runs (Wails' on a fatal error), and for
 versions before the fix.
 
+The old one waits up to 20s (`startWait`) for the new one to write the
+file `MAGPIE_STARTED` names (`startChecked` in
+[`blocked.go`](../../internal/update/blocked.go)), and else ends it, puts
+itself back and notes the version as refused (#894). That file is made in
+the temp folder, or beside the exe when the temp folder can't be written,
+as when TEMP names a drive that isn't there: every update was refused
+then, which is one way to 柒拾's "didn't start within 20s" on Discord
+(`markerPath`, `TestRelaunchWithoutATempFolder`). `Forward`'s does the same.
+
 Two magpies never show at once. On a Mac the old one lets go of its
 instance lock before it gives the socket (`releaseInstance`), so the new
 one's `runningAlready` takes it, and once the ack comes the old one hides

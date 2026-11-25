@@ -115,6 +115,50 @@ func TestRelaunchReportedStays(t *testing.T) {
 	}
 }
 
+// 柒拾 on Discord: with TEMP naming a folder that isn't there, the new
+// version couldn't write its word in the temp folder, was ended after
+// startWait and the update noted as refused, on every try. Its word goes
+// beside the exe then, where the update has just written. The stand-in
+// writes it as reportStarted does.
+func TestRelaunchWithoutATempFolder(t *testing.T) {
+	gone := filepath.Join(t.TempDir(), "unmounted", "Temp")
+	for _, k := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(k, gone)
+	}
+	was := startWait
+	startWait = 2 * time.Second
+	t.Cleanup(func() { startWait = was })
+	for _, forward := range []bool{false, true} {
+		exe, old := relaunchFiles(t)
+		var at string
+		stubLaunch(t, func(_ string, _, env []string) (<-chan struct{}, func(), error) {
+			for _, kv := range env {
+				if p, ok := strings.CutPrefix(kv, startedEnv+"="); ok {
+					at = p
+					t.Setenv(startedEnv, p)
+					reportStarted()
+				}
+			}
+			return make(chan struct{}), func() { t.Error("killed") }, nil
+		})
+		var err error
+		if forward {
+			err = Forward(old, exe)
+		} else {
+			err = RelaunchBinary(exe, old, false, "")
+		}
+		if err != nil {
+			t.Fatalf("forward=%v: %v", forward, err)
+		}
+		if filepath.Dir(at) != filepath.Dir(exe) {
+			t.Errorf("forward=%v: word written at %s, want beside %s", forward, at, exe)
+		}
+		if _, err := os.Stat(at); !os.IsNotExist(err) {
+			t.Errorf("forward=%v: the word was left behind: %v", forward, err)
+		}
+	}
+}
+
 // What the started magpie writes is what the one starting it waits for.
 func TestReportStarted(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "started")
