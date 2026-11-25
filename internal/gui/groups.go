@@ -13,6 +13,7 @@ import (
 	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/gateway"
+	"github.com/yetone/magpie/internal/middleware"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 )
@@ -68,6 +69,10 @@ type groupsJSON struct {
 	// Defaults: what every group follows when it sets no value of its own
 	// (settings.GroupSink, GroupFirstToken, GroupPatience)
 	Defaults groupDefaultsJSON `json:"defaults"`
+	// JSRoutings: the routings JS gateway plugins serve now, as in the
+	// state, read again each time the page is shown: one installed since
+	// the state was read is offered at once (guhailin3 on X)
+	JSRoutings []middleware.Routing `json:"jsRoutings"`
 }
 
 type groupKeyJSON struct {
@@ -356,6 +361,7 @@ func groupsState() groupsJSON {
 	_, offset := time.Now().Zone()
 	out := groupsJSON{Groups: []groupJSON{}, Models: []modelRef{}, Pools: []poolJSON{}, Deciders: []modelRef{}, Drawers: []modelRef{}, Found: provider.AutoGroupsOn(), Templates: provider.Templates(),
 		Clock: clockJSON{Zone: provider.LocalZone(), Offset: offset}}
+	out.JSRoutings = middleware.Routings()
 	def := settings.Load()
 	out.Defaults = groupDefaultsJSON{Sink: def.GroupSink, FirstToken: def.GroupFirstToken, Patience: def.GroupPatience}
 	for i := range out.Templates {

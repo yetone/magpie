@@ -297,6 +297,8 @@
       const [m, p] = await Promise.all([api("plugins"), api("providers")]);
       mine = m;
       providers = p;
+      // a routing the plugin serves is in every routing picker at once
+      if (m.jsRoutings) state.jsRoutings = m.jsRoutings;
       merge();
       // the Providers page owns the dialog as it draws: only drawn when shown
       if (view === "providers") renderProviders();

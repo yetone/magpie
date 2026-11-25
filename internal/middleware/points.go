@@ -406,6 +406,7 @@ func (o *observer) Serve() (stop func()) {
 	o.mu.Lock()
 	o.queue = q
 	o.mu.Unlock()
+	live.Store(o)
 	written := filememo.Written() // before the look, so a write made during it isn't missed
 	o.refresh()
 	wg.Add(2)
@@ -458,6 +459,7 @@ func (o *observer) Serve() (stop func()) {
 	var once sync.Once
 	return func() {
 		once.Do(func() {
+			live.CompareAndSwap(o, nil)
 			close(done)
 			wg.Wait()
 			o.mu.Lock()
@@ -467,6 +469,10 @@ func (o *observer) Serve() (stop func()) {
 		})
 	}
 }
+
+// live is the observer serving now, which Routings brings up to date
+// before it answers.
+var live atomic.Pointer[observer]
 
 // refresh serves the set in force now, when it isn't served yet.
 func (o *observer) refresh() {
@@ -507,8 +513,14 @@ type Routing struct {
 
 // Routings are the strategies of the modules loaded that this process's
 // router serves now: none while plugins/middleware is off or the gateway
-// isn't served here.
+// isn't served here. The set in force is served first: the observer
+// serves it once it hears the write, so a picker drawn just after a
+// plugin was installed or switched on left its routings out until the
+// page was read again (guhailin3 on X).
 func Routings() []Routing {
+	if o := live.Load(); o != nil {
+		o.refresh()
+	}
 	out := []Routing{}
 	for _, m := range current().list {
 		for _, st := range m.strats {

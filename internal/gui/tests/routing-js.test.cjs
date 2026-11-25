@@ -1,7 +1,7 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // A JS gateway plugin's strategies are routings "<plugin>/<name>"
 // (internal/middleware/points.go). The ones the gateway serves now
-// (jsRoutings in the settings state) are offered in a provider's editor
+// (jsRoutings in the state) are offered in a provider's editor
 // beside the built-in ones, say which plugin routes, and are saved as
 // picked. A routing saved whose plugin serves it no more shows as it is,
 // saying its accounts go in their listed order. With the JS gateway
@@ -28,7 +28,7 @@ const relay = {
 };
 
 function serve(lang, posts, off = []) {
-  const state = { agents: [], profiles: [], settings: { lang, theme: "light", jsRoutings: [{ id: "spread/fewest-tokens", name: "fewest-tokens", plugin: "spread" }] } };
+  const state = { agents: [], profiles: [], settings: { lang, theme: "light" }, jsRoutings: [{ id: "spread/fewest-tokens", name: "fewest-tokens", plugin: "spread" }] };
   const providers = { providers: [sub, relay], presets: [], excluded: [], gateway: { running: true, window: true } };
   return async (route) => {
     const url = new URL(route.request().url());

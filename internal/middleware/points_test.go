@@ -140,6 +140,32 @@ func TestStrategiesFollowOwnWrite(t *testing.T) {
 	}
 }
 
+// Routings lists a plugin's routing the moment it is on, without waiting
+// for the observer to hear the write: a picker drawn just after the
+// plugin was installed offered it only once the page was read again
+// (guhailin3 on X). plugins.json is written here as another process would,
+// which the observer only looks for every few seconds.
+func TestRoutingsServeTheSetInForce(t *testing.T) {
+	e := file(t, `export const strategies = { a: (p, s) => s.map((_, i) => i) };`)
+	use(t, e)
+	serve(t)
+	if r := Routings(); len(r) != 1 || r[0].ID != "x/a" {
+		t.Fatalf("routings %+v", r)
+	}
+	p := filepath.Join(t.TempDir(), "pace-drain.middleware.js")
+	if err := os.WriteFile(p, []byte(`export const strategies = { pd: (p, s) => s.map((_, i) => i) };`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	use(t, e, plugin.Entry{Spec: p})
+	r := Routings()
+	if len(r) != 2 || !slices.ContainsFunc(r, func(x Routing) bool { return x.ID == "pace-drain/pd" }) {
+		t.Fatalf("a plugin just turned on isn't listed: %+v", r)
+	}
+	if !routes.Served("pace-drain/pd") {
+		t.Fatal("listed but not served")
+	}
+}
+
 // Not served (plugins/middleware off), nothing is registered.
 func TestStrategiesStopWithServe(t *testing.T) {
 	use(t, file(t, `export const strategies = { a: (p, s) => s.map((_, i) => i) };`))

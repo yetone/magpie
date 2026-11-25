@@ -240,6 +240,10 @@ type pluginsJSON struct {
 	// failed install's, from before magpie took them out), each with a
 	// Remove: Bun installs every one again at every install
 	Leftovers []plugin.Leftover `json:"leftovers"`
+	// JSRoutings: the routings JS gateway plugins serve now, as in the
+	// state, so one a plugin installed or switched on here serves is in
+	// every routing picker at once
+	JSRoutings []middleware.Routing `json:"jsRoutings"`
 }
 
 // registryJSON is plugin.Registry with its file's path as the page shows it.
@@ -252,7 +256,7 @@ func registryJSON() plugin.RegistryInUse {
 }
 
 func pluginsState(ctx context.Context, w Windows) pluginsJSON {
-	s := pluginsJSON{Plugins: []pluginEntryJSON{}, Bun: plugin.HasBun(), BunVer: plugin.BunInUse(), Movable: provider.MoveCandidates(), Picker: w != nil && !isWeb(w), Mirror: settings.Shared().ChinaMirror, Registry: registryJSON(), Leftovers: plugin.Leftovers()}
+	s := pluginsJSON{Plugins: []pluginEntryJSON{}, Bun: plugin.HasBun(), BunVer: plugin.BunInUse(), Movable: provider.MoveCandidates(), Picker: w != nil && !isWeb(w), Mirror: settings.Shared().ChinaMirror, Registry: registryJSON(), Leftovers: plugin.Leftovers(), JSRoutings: middleware.Routings()}
 	if s.Leftovers == nil {
 		s.Leftovers = []plugin.Leftover{}
 	}
