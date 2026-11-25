@@ -121,6 +121,7 @@ func syncSteps(all, gone []*Target, b *backups, res *Result) []func(*Library) {
 				defer l.claudeAside()()
 			}
 			l.syncInstructions(t, all, b, res, true)
+			l.syncMCP2(t, b, res)
 			l.syncMCP(t, b, res)
 			l.syncHooks(t, b, res)
 			l.syncEnv(t, b, res)
@@ -135,6 +136,7 @@ func syncSteps(all, gone []*Target, b *backups, res *Result) []func(*Library) {
 	steps = append(steps, func(l *Library) { l.takeEdits(append(slices.Clone(all), gone...), res) })
 	for _, t := range gone {
 		steps = append(steps, func(l *Library) {
+			l.syncMCP2(t, b, res)
 			l.syncMCP(t, b, res)
 			l.syncHooks(t, b, res)
 			l.syncEnv(t, b, res)
@@ -403,6 +405,86 @@ func (l *Library) syncMCP(t *Target, b *backups, res *Result) {
 	}
 	if how == toolsClaudeDeny || how == toolsOpenCode {
 		l.syncToolRules(t, how, mine, b, res)
+	}
+}
+
+// syncMCP2 writes the Library's MCP servers into a second runtime's file,
+// for an agent that runs more than one and reads each in its own format:
+// Cindy's Pi reads pi-agent-home/mcp.json (fmtPiNative) beside its Codex
+// config.toml (targets.go). It reconciles that file to the servers syncMCP
+// keeps in the shared applied list, so it runs just before syncMCP, while
+// a.MCP still holds the last sync's set: a server unticked since is taken
+// out of this file too, each one still given is written. The applied list
+// stays syncMCP's to set; this only mirrors the same servers in the other
+// format. Hub routing (mcp_hub.go) isn't carried here: with it on, Cindy's
+// Codex gets the one hub entry and its Pi the servers direct.
+func (l *Library) syncMCP2(t *Target, b *backups, res *Result) {
+	if res.unreached(t) || t.MCP2 == nil || t.Agent == nil {
+		return
+	}
+	f := t.MCP2
+	id := t.Agent.ID
+	a := l.applied(id)
+	base := gatewayOf(t)
+	given := map[string]*Server{}
+	for _, s := range l.MCP {
+		if slices.Contains(s.Agents, id) {
+			given[s.Name] = s
+		}
+	}
+	if len(given) == 0 && len(a.MCP) == 0 {
+		return
+	}
+	entries, err := f.entries()
+	if err != nil {
+		res.fail(id, "mcp", err)
+		return
+	}
+	write := func(what string, fn func() error) {
+		for _, p := range f.files() {
+			if err := b.keep(id, p); err != nil {
+				res.fail(id, what, err)
+				return
+			}
+		}
+		if err := fn(); err != nil {
+			res.fail(id, what, err)
+			return
+		}
+		res.changed(id)
+	}
+	// a server unticked since the last sync leaves this file too
+	for _, name := range a.MCP {
+		if _, ok := given[name]; ok {
+			continue
+		}
+		if _, ok := entries[name]; ok || f.holds(name) {
+			write("mcp:"+name, func() error { return f.del(name) })
+		}
+	}
+	for name, s := range given {
+		s = through(s, base)
+		if err := f.supports(s); err != nil {
+			res.fail(id, "mcp:"+name, err)
+			continue
+		}
+		s, _ = f.side(s)
+		if !f.WSL {
+			s = npxDirect(s)
+		}
+		s = f.withCmdVars(s)
+		s = wroteStartup(s, a.Startup[s.Name])
+		old := entries[s.Name]
+		if err := f.foreign(old); err != nil {
+			res.fail(id, "mcp:"+s.Name, err)
+			continue
+		}
+		if old != nil {
+			if cur, ok := f.current(s.Name, old, s); ok && cur.same(s) && f.has(s) && !f.behind(s, old) {
+				continue
+			}
+		}
+		write("mcp:"+s.Name, func() error { return f.putEntry(s, f.merged(s, old)) })
 	}
 }
 
