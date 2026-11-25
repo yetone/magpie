@@ -42,6 +42,9 @@ const groupUsage = `usage:
                                           intent-sure=<0…1> (how sure the classifier must be of an intent for it
                                           to count; 0 takes its likeliest however unsure, "none of these" never
                                           counting; empty is the 0.4 groups have always asked),
+                                          classify-prompt="<text>" (your own instructions to the classifier on
+                                          telling the intents apart, in place of magpie's; it still answers with
+                                          the intent's number; empty keeps magpie's),
                                           pick=<model> (routing=manual, every request to that one of its models),
                                           fast=<m1>[,m2…] (the models sent in their vendor's fast mode; empty for none),
                                           ultra=<m1>[,m2…] (those of them sent in the faster Ultrafast mode of a ChatGPT
@@ -582,6 +585,10 @@ func applyGroupPairs(g *provider.Group, pairs []string, resolve func(string) (st
 				break
 			}
 			g.IntentSure = &sure
+		case "classify-prompt", "classifyprompt", "classifier-prompt":
+			// the user's own instructions to the classifier, in place of
+			// magpie's (sloceanxc on X); empty keeps magpie's
+			g.ClassifyPrompt = strings.TrimSpace(v)
 		case "fast":
 			// the members sent in their vendor's fast mode, as they are in
 			// the group
@@ -637,7 +644,7 @@ func applyGroupPairs(g *provider.Group, pairs []string, resolve func(string) (st
 			g.Pick, err = pickMember(g.Members, v)
 			g.Routing = provider.Manual
 		default:
-			return fmt.Errorf("unknown field %q (fields: name, note, models, models+, models-, routing, pick, stays, context, levels, family, effort, classifier, intent-sure, fast, weight, listed; magpie group help)", k)
+			return fmt.Errorf("unknown field %q (fields: name, note, models, models+, models-, routing, pick, stays, context, levels, family, effort, classifier, intent-sure, classify-prompt, fast, weight, listed; magpie group help)", k)
 		}
 		if err != nil {
 			return err
@@ -1348,6 +1355,9 @@ func showGroup(g provider.Group) error {
 	}
 	if g.IntentSure != nil {
 		kv("intent-sure", fmt.Sprintf("%g", *g.IntentSure)+muted.Render("  how sure the classifier must be of an intent for it to count; 0 takes its likeliest"))
+	}
+	if g.ClassifyPrompt != "" {
+		kv("classify-prompt", g.ClassifyPrompt+muted.Render("  the classifier's instructions, in place of magpie's"))
 	}
 	if u := groupUses()[g.ID]; len(u) > 0 {
 		kv("used by", green.Render(strings.Join(u, ", ")))

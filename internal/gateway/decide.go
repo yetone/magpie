@@ -193,8 +193,14 @@ func jevState(prev before, effort bool, text string) map[string]string {
 	return st
 }
 
+// intentAsk is what Jev is asked of the kinds: magpie's question, or the
+// group's own instructions (before.Prompt) and which kind the message is
+// by them.
 func intentAsk(prev before) string {
-	q := "The `message` is what a user asked a coding assistant. Which kind of request fits it best?"
+	q := "The `message` is what a user asked an AI assistant. Which kind of request fits it best?"
+	if p := strings.TrimSpace(prev.Prompt); p != "" {
+		q = p + "\n\nBy these instructions, which kind is the `message`?"
+	}
 	if prev.Intent != "" {
 		q += " A message that only carries on from the user's message before it (go on, yes, do it, fix that) is of `previous_message_kind`; one that asks for something of its own is of the kind that fits it."
 	}
@@ -221,14 +227,14 @@ func priorAsk(prev before) string {
 // judged by the work asked for.
 func levelAsk(prev before, work bool) string {
 	q := intentAsk(prev)
-	if work {
+	if work && strings.TrimSpace(prev.Prompt) == "" { // the group's own words judge in place of magpie's
 		q += " The kinds are levels of how much work a request is: judge the work the message asks for, not how short it is — a few words can ask for a whole program."
 	}
 	return q
 }
 
 func effortAsk(prev before) string {
-	q := "How much reasoning does a coding assistant need to handle the `message` well?"
+	q := "How much reasoning does an AI assistant need to handle the `message` well?"
 	if prev.Effort != "" {
 		q += " A message that only carries on from the user's message before it (go on, yes, do it) needs what that one did, `previous_message_reasoning` (low, medium, high or xhigh)."
 	}
@@ -349,10 +355,10 @@ func (s *Server) jevLevelled(ctx context.Context, p provider.Provider, model str
 		return l, nil
 	}
 	qs := map[string]any{"levels": map[string]any{"type": "noul",
-		"instructions": "Are these `kinds` levels of one scale that every request to a coding assistant is at, such as how hard, how big or how urgent it is — rather than topics or tasks that a request may be none of?"}}
+		"instructions": "Are these `kinds` levels of one scale that every request to an AI assistant is at, such as how hard, how big or how urgent it is — rather than topics or tasks that a request may be none of?"}}
 	for i := range intents {
 		qs[fmt.Sprintf("work%d", i)] = map[string]any{"type": "score",
-			"instructions": fmt.Sprintf("Taking `kinds` as levels of one scale for requests to a coding assistant, how much work is a request at the level `kinds[%d]`?", i),
+			"instructions": fmt.Sprintf("Taking `kinds` as levels of one scale for requests to an AI assistant, how much work is a request at the level `kinds[%d]`?", i),
 			"criteria":     levelWork}
 	}
 	body, _ := json.Marshal(map[string]any{"model": model, "state": map[string]any{"kinds": intents}, "questions": qs})

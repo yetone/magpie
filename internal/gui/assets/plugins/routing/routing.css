@@ -1013,6 +1013,14 @@ body.window .rt-gedit > .bar { --vfoot: 8px; }
 .rt-info[hidden] { display: none; }
 .rt-gadds { align-items: center; }
 .rt-pickrow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+/* the classifier's own instructions: a few lines, the ⓘ at the top beside them */
+.rt-cls-promptrow { flex-wrap: nowrap; align-items: flex-start; }
+.rt-cls-prompt, .editor .rt-cls-prompt {
+  flex: 1 1 auto; min-width: 0; box-sizing: border-box; min-height: 62px; margin: 0; padding: 6px 9px; border-radius: 7px;
+  border: 1px solid var(--line); background: var(--card); color: var(--fg); font: inherit; line-height: 1.45;
+  resize: vertical; outline: none; overflow-wrap: anywhere;
+}
+.rt-cls-prompt:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
 .rt-cond {
   display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; border-radius: 999px;
   border: 1px dashed var(--line); background: transparent; color: var(--muted);

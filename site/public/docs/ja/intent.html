@@ -219,10 +219,10 @@ magpie group rule rm coder 2</pre>
     </figure>
 
     <h2 id="prompt"><a class="anchor" href="#prompt">判定モデルに送られる内容</a></h2>
-    <p>リクエストの全文は以下のとおりで、ほかには何も送りません。システムメッセージは固定です。ユーザーメッセージには、手順 2 で集めたインテントがルールの順に並びます。</p>
+    <p>リクエストの全文は以下のとおりで、ほかには何も送りません。システムメッセージは magpie 既定のものです（グループに独自の指示があればそれを使います。<a href="#own">下記</a>参照）。ユーザーメッセージには、手順 2 で集めたインテントがルールの順に並びます。</p>
     <div class="code">
       <span class="lang">System</span>
-      <pre class="wrapped">You route a user's message to a coding assistant by what it asks for. Given numbered kinds of request and the user's message, answer with the number of the kind the message is, or 0 if it is none of them. Answer with the number only.</pre>
+      <pre class="wrapped">You sort a user's message, sent to an AI assistant, into one of several kinds. Given numbered kinds and the user's message, answer with the number of the kind that fits the message best. The kinds may be topics, or levels such as how hard or how big a request is; when they are levels, every message has one, a greeting or a question about the assistant included. Answer 0 only when the message is plainly none of the kinds. Answer with the number only.</pre>
     </div>
     <div class="code">
       <span class="lang">User</span>
@@ -235,7 +235,7 @@ The user's message:
 Write unit tests for the parseTokens function and fix any that fail.
 &lt;/message&gt;
 
-The number of its kind (0 for none):</pre>
+The number of the kind that fits it best (0 only if none does):</pre>
     </div>
     <ul>
       <li><b>最新のメッセージだけ。</b>magpie が送るのは最後のユーザーメッセージのテキスト部分だけです。それより前のターン、システムプロンプト、ツール定義、ファイルは送りません。</li>
@@ -244,6 +244,16 @@ The number of its kind (0 for none):</pre>
       <li><b>長いメッセージは短縮します。</b>4,000 文字を超える場合、最初の 3,000 文字と最後の 1,000 文字を <code>…</code> でつないで送ります。何を求めているかは、たいてい最初と最後に書かれているからです。</li>
       <li><b>リクエストの設定。</b>OpenAI 形式の chat completion で、ストリーミングなし、<code>temperature 0</code>、<code>max_tokens 2048</code>、User-Agent は <code>magpie-router/1</code> です。判定モデルの推理レベルがわかっていれば、最も低いものを指定します。<code>none</code> があればそれを、なければ最低のレベル（例：<code>low</code>）です。レベルが不明なら何も送らず、ベンダーのデフォルトに任せます。ほかのリクエストと同じく判定モデルのプロバイダ向けに変換するので、Anthropic や Gemini などのモデルも使えます。</li>
     </ul>
+
+    <h3 id="own">独自の指示</h3>
+    <p>magpie 既定のシステムメッセージが判定モデルを誤らせる場合は、グループに独自の指示を書けます。グループの編集画面で<span class="ui">詳細設定</span>を開き、<span class="ui">意図判定プロンプト</span>に書くか（インテントのあるルールがあるときに表示されます）、<code>magpie group set &lt;グループ&gt; classify-prompt="…"</code> を実行します。指示は magpie の既定の指示に代わり、magpie は答え方だけを付け加えます。</p>
+    <div class="code">
+      <span class="lang">System</span>
+      <pre class="wrapped">&lt;あなたの指示&gt;
+
+The user's message comes with numbered kinds. Answer with the number of the kind the message is by the instructions above, or 0 when it is none of them. Answer with the number only.</pre>
+    </div>
+    <p>インテントは引き続き番号付きで並び、ユーザーメッセージは <code>The number of its kind (0 for none):</code> で終わります。判定モデル（Jev）にもこの指示で尋ねます。最大 4,000 文字で、空にすると magpie 既定のものに戻ります。指示を変えると、古い指示での答えを使い回さずに尋ね直します。グループを共有すると指示も一緒に共有されます。</p>
 
     <h2 id="failures"><a class="anchor" href="#failures">判定できないとき</a></h2>
     <p>判定モデルは補助役であって、関門ではありません。判定モデルに何が起きても、ターンには必ず回答があります。インテント付きのルールが一致しなくなるだけです。</p>

@@ -413,6 +413,11 @@ func (w TimeWindow) Text() string {
 // MaxIntent is how long an intent may be, in characters.
 const MaxIntent = 200
 
+// MaxClassifyPrompt is how long a group's own classifier instructions
+// (Group.ClassifyPrompt) may be, in characters: they go with every turn's
+// question, so they stay a prompt, not a document.
+const MaxClassifyPrompt = 4000
+
 // Conditions says what a rule matches, for a list or a trace.
 func (r Rule) Conditions() []string {
 	var out []string

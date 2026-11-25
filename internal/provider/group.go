@@ -29,6 +29,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/lazyre"
@@ -288,6 +289,13 @@ type Group struct {
 	// these" never counting), to 1, certain. nil asks 0.4, as groups have
 	// always asked (#5101).
 	IntentSure *float64 `json:"intentSure,omitempty"`
+	// ClassifyPrompt is the user's own instructions to the classifier on
+	// telling the rules' intents apart, in place of magpie's (sloceanxc
+	// on X: magpie's, written for coding, misled the classifier on theirs).
+	// The intents are still listed by number and the answer asked for as
+	// a number, which is how it is read; "" keeps magpie's. At most
+	// MaxClassifyPrompt characters.
+	ClassifyPrompt string `json:"classifyPrompt,omitempty"`
 	// Effort "auto" has the classifier — Jev, from TypeSafe's decision API,
 	// or any model, asked in words — judge how hard each turn is to think
 	// about as it begins, and the turn asks its model for that much
@@ -2162,6 +2170,10 @@ func SaveGroup(g Group) error {
 		} else if _, _, ok := Resolve(cl); !ok {
 			return fmt.Errorf("magpie knows no model %q to classify with", cl)
 		}
+	}
+	g.ClassifyPrompt = strings.TrimSpace(g.ClassifyPrompt)
+	if n := utf8.RuneCountInString(g.ClassifyPrompt); n > MaxClassifyPrompt {
+		return fmt.Errorf("a group's classifier prompt is at most %d characters, not %d", MaxClassifyPrompt, n)
 	}
 	if g.IntentSure != nil && !(*g.IntentSure >= 0 && *g.IntentSure <= 1) { // NaN too
 		return fmt.Errorf("a group's intent sure is from 0 to 1, not %g", *g.IntentSure)

@@ -2,6 +2,9 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "Classifier prompt": "意图判断提示词",
+    "Empty: magpie's own. The message goes to the intent that fits it best.": "留空即用 magpie 自带的：消息归入最贴合的意图。",
+    "Told to the classifier in place of magpie's instructions as each turn begins. The intents are still listed by number, and it still answers with the number alone.": "每轮开始时，代替 magpie 的说明发给意图判断模型。意图仍按编号列出，它仍只回答编号。",
     "Expand routes to": "路由展开到",
     "Long lists start folded, short ones open": "长列表先折叠，短的展开",
     "A row for each provider's model, its accounts and keys folded into it": "每个供应商的模型一行，账号和密钥折叠在里面",
@@ -780,6 +783,9 @@ magpie.strings({
     "Bound to some keys, the group is theirs alone: any other gateway key neither sees it in its model list nor can use it. A request from this computer without a key still can.": "绑定到某些密钥后，这个组只归它们用：其他网关密钥既不会在模型列表里看到它，也用不了它。本机不带密钥的请求仍然可以用。",
   },
   "zh-TW": {
+    "Classifier prompt": "意圖判斷提示詞",
+    "Empty: magpie's own. The message goes to the intent that fits it best.": "留空即用 magpie 內建的：訊息歸入最貼合的意圖。",
+    "Told to the classifier in place of magpie's instructions as each turn begins. The intents are still listed by number, and it still answers with the number alone.": "每輪開始時，取代 magpie 的說明傳給意圖判斷模型。意圖仍按編號列出，它仍只回答編號。",
     "Expand routes to": "路由展開到",
     "Long lists start folded, short ones open": "長列表先摺疊，短的展開",
     "A row for each provider's model, its accounts and keys folded into it": "每個供應商的模型一行，帳號和金鑰摺疊在裡面",
@@ -1558,6 +1564,9 @@ magpie.strings({
     "Bound to some keys, the group is theirs alone: any other gateway key neither sees it in its model list nor can use it. A request from this computer without a key still can.": "綁定到某些金鑰後，這個組只歸它們用：其他閘道金鑰既不會在模型列表裡看到它，也用不了它。本機不帶金鑰的請求仍然可以用。",
   },
   ja: {
+    "Classifier prompt": "意図判定プロンプト",
+    "Empty: magpie's own. The message goes to the intent that fits it best.": "空なら magpie 既定のもの：メッセージを最も合うインテントに振り分けます。",
+    "Told to the classifier in place of magpie's instructions as each turn begins. The intents are still listed by number, and it still answers with the number alone.": "各ターンの開始時に、magpie の指示の代わりに意図判定モデルへ伝えます。インテントは引き続き番号付きで並び、モデルは番号だけを答えます。",
     "Expand routes to": "ルートの展開",
     "Long lists start folded, short ones open": "長いリストは折りたたみ、短いものは展開",
     "A row for each provider's model, its accounts and keys folded into it": "プロバイダーのモデルごとに1行、アカウントとキーはその中に折りたたみ",
@@ -2336,6 +2345,9 @@ magpie.strings({
     "Bound to some keys, the group is theirs alone: any other gateway key neither sees it in its model list nor can use it. A request from this computer without a key still can.": "キーを紐づけると、このグループはそのキー専用になります。ほかのゲートウェイキーではモデル一覧に表示されず、使うこともできません。このコンピューターからキーなしで送るリクエストは引き続き使えます。",
   },
   de: {
+    "Classifier prompt": "Klassifikator-Prompt",
+    "Empty: magpie's own. The message goes to the intent that fits it best.": "Leer: der von magpie. Die Nachricht geht an die Absicht, die am besten passt.",
+    "Told to the classifier in place of magpie's instructions as each turn begins. The intents are still listed by number, and it still answers with the number alone.": "Wird dem Klassifikator zu Beginn jeder Runde statt der Anweisungen von magpie gesagt. Die Absichten stehen weiter nummeriert darin, und er antwortet weiter nur mit der Nummer.",
     "Expand routes to": "Routen aufklappen bis",
     "Long lists start folded, short ones open": "Lange Listen zugeklappt, kurze offen",
     "A row for each provider's model, its accounts and keys folded into it": "Eine Zeile je Modell eines Anbieters, seine Konten und Schlüssel darin zugeklappt",

@@ -3538,10 +3538,10 @@ A real request through a group with two intent rules (“a quick question or exp
 
 ## What the classifier sees
 
-This is the whole request, and nothing else is sent. The system message is fixed. The user message lists your intents in rule order, as they were collected in step 2:
+This is the whole request, and nothing else is sent. The system message is magpie’s, unless the group has its own instructions (below). The user message lists your intents in rule order, as they were collected in step 2:
 
 ```
-You route a user's message to a coding assistant by what it asks for. Given numbered kinds of request and the user's message, answer with the number of the kind the message is, or 0 if it is none of them. Answer with the number only.
+You sort a user's message, sent to an AI assistant, into one of several kinds. Given numbered kinds and the user's message, answer with the number of the kind that fits the message best. The kinds may be topics, or levels such as how hard or how big a request is; when they are levels, every message has one, a greeting or a question about the assistant included. Answer 0 only when the message is plainly none of the kinds. Answer with the number only.
 ```
 
 ```
@@ -3554,7 +3554,7 @@ The user's message:
 Write unit tests for the parseTokens function and fix any that fail.
 </message>
 
-The number of its kind (0 for none):
+The number of the kind that fits it best (0 only if none does):
 ```
 
 - **Only your latest message..** magpie sends the text parts of the last user message and nothing else: no earlier turns, no system prompt, no tool definitions, no files.
@@ -3562,6 +3562,18 @@ The number of its kind (0 for none):
 - **Agent reminders are removed..** `<system-reminder>…</system-reminder>` blocks, which Claude Code adds to your message, are stripped. Other text an agent puts in the same message is kept.
 - **Long messages are shortened..** Over 4,000 characters, magpie keeps the first 3,000 and the last 1,000, joined by `…`. The start and the end usually say what is being asked.
 - **The request settings..** An OpenAI-style chat completion, not streamed, with `temperature 0`, `max_tokens 2048` and User-Agent `magpie-router/1`. When magpie knows the classifier’s reasoning levels, it asks for the least: `none` if the model has it, else its lowest level (for example `low`). When the levels aren’t known, nothing is sent and the vendor’s default applies. magpie translates it for the classifier’s provider, like any other request, so an Anthropic, Gemini or other model works too.
+
+### Your own instructions
+
+When magpie’s system message leads the classifier the wrong way for your intents, give the group its own. In the group’s editor, open Advanced and write them in Classifier prompt (shown once a rule has an intent), or run `magpie group set <group> classify-prompt="…"`. They take the place of magpie’s instructions, and magpie adds only how to answer:
+
+```
+<your instructions>
+
+The user's message comes with numbered kinds. Answer with the number of the kind the message is by the instructions above, or 0 when it is none of them. Answer with the number only.
+```
+
+The intents are still listed by number, and the user message ends with `The number of its kind (0 for none):`. A decision model (Jev) is asked by your instructions too. Up to 4,000 characters; empty brings magpie’s back. A change asks the classifier again rather than reusing an answer given under the old instructions, and the instructions go with the group when you share it.
 
 ## When it can’t say
 

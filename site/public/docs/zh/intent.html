@@ -219,10 +219,10 @@ magpie group rule rm coder 2</pre>
     </figure>
 
     <h2 id="prompt"><a class="anchor" href="#prompt">意图判断模型看到什么</a></h2>
-    <p>下面就是完整的请求，此外不发送任何内容。系统消息是固定的；用户消息按第 2 步收集的顺序（也就是规则顺序）列出你的意图：</p>
+    <p>下面就是完整的请求，此外不发送任何内容。系统消息是 magpie 自带的，除非分组写了自己的提示词（见<a href="#own">下文</a>）；用户消息按第 2 步收集的顺序（也就是规则顺序）列出你的意图：</p>
     <div class="code">
       <span class="lang">System</span>
-      <pre class="wrapped">You route a user's message to a coding assistant by what it asks for. Given numbered kinds of request and the user's message, answer with the number of the kind the message is, or 0 if it is none of them. Answer with the number only.</pre>
+      <pre class="wrapped">You sort a user's message, sent to an AI assistant, into one of several kinds. Given numbered kinds and the user's message, answer with the number of the kind that fits the message best. The kinds may be topics, or levels such as how hard or how big a request is; when they are levels, every message has one, a greeting or a question about the assistant included. Answer 0 only when the message is plainly none of the kinds. Answer with the number only.</pre>
     </div>
     <div class="code">
       <span class="lang">User</span>
@@ -235,7 +235,7 @@ The user's message:
 Write unit tests for the parseTokens function and fix any that fail.
 &lt;/message&gt;
 
-The number of its kind (0 for none):</pre>
+The number of the kind that fits it best (0 only if none does):</pre>
     </div>
     <ul>
       <li><b>只发你最新的一条消息。</b>magpie 只发送最后一条用户消息里的文字部分：不含之前的轮次、系统提示词、工具定义或文件。</li>
@@ -244,6 +244,16 @@ The number of its kind (0 for none):</pre>
       <li><b>长消息会截短。</b>超过 4000 个字符时，保留前 3000 个和后 1000 个，中间用 <code>…</code> 连接。请求想做什么，一般在开头和结尾都能看出来。</li>
       <li><b>请求参数。</b>OpenAI 格式的 chat completion，不流式，<code>temperature 0</code>，<code>max_tokens 2048</code>，User-Agent 为 <code>magpie-router/1</code>。magpie 知道判断模型支持哪些推理档位时，会要最低的一档：支持 <code>none</code> 就用 <code>none</code>，否则用它最低的档位（比如 <code>low</code>）；不知道档位时不传，由厂商默认。magpie 会像处理其他请求一样把它转换成判断模型所属供应商的协议，所以 Anthropic、Gemini 等模型也能用。</li>
     </ul>
+
+    <h3 id="own">用自己的提示词</h3>
+    <p>如果 magpie 自带的系统消息让意图判断模型对你的意图判断失准，可以给分组写自己的提示词：在分组编辑器里展开<span class="ui">高级</span>，填写<span class="ui">意图判断提示词</span>（有规则设了意图时才显示），或运行 <code>magpie group set &lt;分组&gt; classify-prompt="…"</code>。它取代 magpie 自带的说明，magpie 只在后面补上如何作答：</p>
+    <div class="code">
+      <span class="lang">System</span>
+      <pre class="wrapped">&lt;你的提示词&gt;
+
+The user's message comes with numbered kinds. Answer with the number of the kind the message is by the instructions above, or 0 when it is none of them. Answer with the number only.</pre>
+    </div>
+    <p>意图仍按编号列出，用户消息以 <code>The number of its kind (0 for none):</code> 结尾。决策模型（Jev）也按你的提示词判断。最多 4,000 字；留空即恢复 magpie 自带的。改了提示词后会重新询问，不沿用旧提示词下的答案；分享分组时提示词随分组一起分享。</p>
 
     <h2 id="failures"><a class="anchor" href="#failures">判断不出来时</a></h2>
     <p>意图判断模型只是辅助，不是关卡。它出什么问题，这一轮都照常有回答，只是带意图的规则不命中。</p>

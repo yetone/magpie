@@ -74,6 +74,13 @@ type before struct {
 	// still asked in time. Not part of the question: an answer is the
 	// same wherever in the list it was asked.
 	Then int
+	// Prompt: the asking group's own instructions for a classifier asked
+	// in words (provider.Group.ClassifyPrompt), in place of magpie's
+	// (classifySystem); "" for magpie's. Part of the question, so of
+	// classify's key: the same message under other instructions is
+	// asked again. A decision model (Jev) is asked its intent and level
+	// questions by them too (intentAsk, levelAsk).
+	Prompt string
 }
 
 // verdict is what a classifier said.
@@ -181,7 +188,7 @@ func classify(ask classifier, held access.Identity, model string, intents []stri
 		rest += "\x00" + strings.Join(held.Accounts, "\x00")
 	}
 	h := sha256.New()
-	h.Write([]byte(model + "\x00" + strings.ToLower(strings.Join(intents, "\x00")) + "\x00" + prev.Intent + "\x00" + prev.Effort + "\x00" + prev.User + "\x00" + prev.Reply + "\x00" + strconv.FormatBool(effort) + "\x00" + text))
+	h.Write([]byte(model + "\x00" + strings.ToLower(strings.Join(intents, "\x00")) + "\x00" + prev.Intent + "\x00" + prev.Effort + "\x00" + prev.User + "\x00" + prev.Reply + "\x00" + prev.Prompt + "\x00" + strconv.FormatBool(effort) + "\x00" + text))
 	key := hex.EncodeToString(h.Sum(nil))
 	now := time.Now()
 	classified.Lock()
@@ -398,11 +405,32 @@ func assistantSaid(m Message) string {
 	return strings.Join(said, "\n")
 }
 
-const classifyPrompt = "You route a user's message to a coding assistant. " +
+// classifyPrompt is magpie's own instructions to a classifier asked in
+// words. It names no kind of assistant: magpie serves any agent, and a
+// "coding assistant" framing led a classifier to judge a chat, a story or
+// a translation by what a coder would ask (sloceanxc on X).
+const classifyPrompt = "You sort a user's message, sent to an AI assistant, into one of several kinds. " +
 	"Given numbered kinds and the user's message, answer with the number of the kind that fits the message best. " +
 	"The kinds may be topics, or levels such as how hard or how big a request is; " +
 	"when they are levels, every message has one, a greeting or a question about the assistant included. " +
 	"Answer 0 only when the message is plainly none of the kinds. Answer with the number only."
+
+// classifyAnswer is what follows a group's own instructions (before.Prompt):
+// the answer readIntent reads, a number, and nothing of magpie's way of
+// judging, which the user's words replace.
+const classifyAnswer = "The user's message comes with numbered kinds. " +
+	"Answer with the number of the kind the message is by the instructions above, or 0 when it is none of them. " +
+	"Answer with the number only."
+
+// classifySystem is the system prompt a classifier asked in words is sent:
+// the group's own instructions, when it has any, then how to answer;
+// magpie's own otherwise.
+func classifySystem(prompt string) string {
+	if prompt = strings.TrimSpace(prompt); prompt == "" {
+		return classifyPrompt
+	}
+	return prompt + "\n\n" + classifyAnswer
+}
 
 // classifyBody is the Chat request asking model which of intents text is,
 // at effort when it isn't "". A model that reasons does so before it
@@ -425,11 +453,16 @@ func classifyBody(model, effort string, intents []string, prev before, text stri
 	}
 	b.WriteString("\nThe user's message:\n<message>\n")
 	b.WriteString(text)
-	b.WriteString("\n</message>\n\nThe number of the kind that fits it best (0 only if none does):")
+	b.WriteString("\n</message>\n\n")
+	if strings.TrimSpace(prev.Prompt) == "" {
+		b.WriteString("The number of the kind that fits it best (0 only if none does):")
+	} else {
+		b.WriteString("The number of its kind (0 for none):")
+	}
 	req := map[string]any{
 		"model": model,
 		"messages": []map[string]string{
-			{"role": "system", "content": classifyPrompt},
+			{"role": "system", "content": classifySystem(prev.Prompt)},
 			{"role": "user", "content": b.String()},
 		},
 		"stream":      false,
@@ -649,7 +682,7 @@ func (s *Server) askClassifierIn(wait time.Duration, who access.Identity, model 
 	return v, nil
 }
 
-const effortPrompt = "You judge how much reasoning a coding assistant needs to handle a user's message well. " +
+const effortPrompt = "You judge how much reasoning an AI assistant needs to handle a user's message well. " +
 	"Given numbered levels and the user's message, answer with the number of the level it needs. Answer with the number only."
 
 // effortBody is the Chat request asking model how hard text is to think

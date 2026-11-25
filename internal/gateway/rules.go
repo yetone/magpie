@@ -359,7 +359,7 @@ func ruleFor(key string, g provider.Group, ms []provider.Member, req *Request, a
 		if had && slices.Contains(intents, tr.intent) {
 			c.After = tr.intent // a message that only carries on is of its kind
 		}
-		prev := before{Intent: c.After}
+		prev := before{Intent: c.After, Prompt: g.ClassifyPrompt} // the group's own instructions, when it has them
 		if had && effort {
 			prev.Effort = tr.effort // and needs the reasoning it had
 			c.AfterEffort = tr.effort
