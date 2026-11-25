@@ -6606,14 +6606,15 @@ function renderFileError() {
 // is deprecated, said wherever it is marked so.
 const DEPRECATED_WHY = "Some subscriptions are reached in ways their vendors' terms may not allow. So that magpie itself isn't banned over them, subscription providers are being decoupled from magpie and run by community plugins instead.";
 // deprecatedSub: a built-in subscription with a plugin, not moved onto it
-const deprecatedSub = (agent) => (providers?.movable || []).includes(agent) && !movedSub(agent);
-// unusedSub: a deprecated built-in with no account in magpie, which the
+const deprecatedSub = (agent) => providers?.movable?.includes(agent) && !movedSub(agent);
+// unusedSub: a deprecated built-in, or one whose plugin magpie gives
+// nobody new (noNew: Antigravity), with no account in magpie, which the
 // add sheet leaves to the Plugins page
-const unusedSub = (agent) => deprecatedSub(agent) && !(providers?.providers || []).some((p) => p.account?.agent === agent);
+const unusedSub = (agent) => (deprecatedSub(agent) || providers?.noNew?.includes(agent)) && !providers?.providers?.some((p) => p.account?.agent === agent);
 // replacedSub: a deprecated built-in whose plugin is installed and serves
 // it, under the plugin's own id (the built-in's with "-plugin") until moved;
 // its accounts, if any, still work, and its plugin's Move brings them over
-const replacedSub = (agent) => deprecatedSub(agent) && (providers?.plugins || []).some((x) => x.pid === agent);
+const replacedSub = (agent) => deprecatedSub(agent) && providers?.plugins?.some((x) => x.pid === agent);
 function deprecatedBadge() {
   const b = el("span", "badge deprecated", t("Deprecated"));
   b.title = t(DEPRECATED_WHY);
@@ -12821,7 +12822,7 @@ const subOf = (agent) => {
 // page can be open before the providers are read (providers is null then)
 const subNames = (ids) => ids.map((id) => SUBS.find((x) => x.agent === id)?.name
   || providers?.plugins?.find((x) => x.id === id)?.name || id).join(", ");
-const movedSub = (agent) => (providers?.onPlugins || []).includes(agent);
+const movedSub = (agent) => providers?.onPlugins?.includes(agent);
 
 // pluginMethod: a moved built-in's one-click way, its first or its site's;
 // none for a plugin's own provider, which asks.
@@ -12894,7 +12895,7 @@ let justAdded = ""; // the account that just came in, to greet it
 const accountToolsOpen = new Set(); // rows whose ⋯ is open
 
 // hasLogins: the subscription has an account signed in already
-const hasLogins = (agent) => (providers?.providers || []).some((p) => p.account?.agent === agent && p.account.logins?.length);
+const hasLogins = (agent) => providers?.providers?.some((p) => p.account?.agent === agent && p.account.logins?.length);
 
 async function startSignIn(agent, risky, site, o = {}) {
   if (signingOpen()) api("signin/" + signing.id + "/cancel", {}).catch(() => {});

@@ -309,7 +309,7 @@ Removing a plugin also sets aside the model picks its providers left in `provide
 - `provider.AddPlugin` is what the GUI, the CLI and `AddPlugins` (backup and sync) add through. It puts the package's records back, each one whose id has no record now. One the user gave to a provider since stays aside.
 - Switching a plugin off sets nothing aside, since off is undone by switching it back on. Records left behind by removals before this change stay as they are; they can't be told from picks a sync brought for a plugin not installed here yet.
 
-New users do not see an unused deprecated built-in in the Add sheet. `unusedSub` leaves it out when it has no account. Until an installed replacement takes ownership, `replacedSub` makes the Add sheet show the plugin tile. The Plugins page is the installation entry point.
+New users do not see an unused deprecated built-in in the Add sheet. `unusedSub` leaves it out when it has no account. The same holds for a built-in whose plugin magpie gives to nobody new (`plugin.WithdrawnOf`, listed in `/api/providers` as `noNew`: Antigravity), moved or not; Antigravity (local agy CLI) is the way in. Until an installed replacement takes ownership, `replacedSub` makes the Add sheet show the plugin tile. The Plugins page is the installation entry point.
 
 `keepMovedCurrent` maintains the required plugin version for moved subscriptions. Raising the owning mover's `min` after publishing a plugin fix triggers this update path. Update failures are logged; disabled packages and local-folder installations are not automatically replaced.
 

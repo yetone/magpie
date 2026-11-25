@@ -880,6 +880,10 @@ type providersJSON struct {
 	// MovesTo is the plugin each of them goes to, for the add sheet's
 	// offer to install it before signing in
 	MovesTo map[string]string `json:"movesTo,omitempty"`
+	// NoNew are the ones whose plugin magpie gives to nobody new
+	// (plugin.WithdrawnOf): the add sheet offers one only to a user who
+	// still has its accounts
+	NoNew []string `json:"noNew,omitempty"`
 	// Unmoved are the retired built-ins whose accounts haven't moved onto
 	// their plugins yet, served by nothing until they do, with why
 	Unmoved []provider.MoveCandidate `json:"unmoved,omitempty"`
@@ -1579,6 +1583,9 @@ func providersState() providersJSON {
 			s.MovesTo = map[string]string{}
 		}
 		s.MovesTo[id] = provider.MovePackage(id)
+		if _, ok := plugin.WithdrawnOf(s.MovesTo[id]); ok {
+			s.NoNew = append(s.NoNew, id)
+		}
 	}
 	s.AgyMove = provider.AgyMoveUsers()
 	for _, c := range provider.MoveCandidates() {
