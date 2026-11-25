@@ -49,6 +49,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -56,6 +57,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/lazyre"
 )
 
@@ -362,21 +364,53 @@ func vertexGeneration(model string) int {
 
 // vertexModels are the models a location serves, as each answered
 // on 2026-10-06: every one at global (and Gemini 4 Argon, there since
-// 2026-10-13, #2155, Carbon since 11-10 and Hydrogen since 11-12, #6452,
-// and the partner models Google serves at global alone, VertexPartner);
-// Gemini 3's Flash models at us and eu, which serve no Pro, preview or
-// 2.5, and Gemini 4, which Google's model pages give PayGo at global, us
-// and eu; Gemini 2.5 at a region, where a few add one more
-// (asia-northeast1's gemini-3.5-flash), typed in by hand.
+// 2026-10-13, #2155, Carbon since 11-10, Hydrogen since 11-12, #6452, and
+// Neon since 11-18, and the partner models Google serves at global alone,
+// VertexPartner); Gemini 3's Flash models at us and eu, which serve no
+// Pro, preview or 2.5, and Gemini 4, which Google's model pages give
+// PayGo at global, us and eu; Gemini 2.5 at a region, where a few add one
+// more (asia-northeast1's gemini-3.5-flash), typed in by hand. A Gemini 4
+// or later model that models.dev's google-vertex entry has and these
+// don't yet joins global, us and eu (vertexNewGemini).
 func vertexModels(loc string) []string {
 	switch cmp.Or(loc, "global") {
 	case "global":
-		return Preset(VertexPreset).Models
+		return vertexNewGemini(Preset(VertexPreset).Models)
 	case "us", "eu":
-		return []string{"gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite",
-			"gemini-4-carbon", "gemini-4-hydrogen", "gemini-4-argon", "gemini-3.1-flash-lite"}
+		return vertexNewGemini([]string{"gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite",
+			"gemini-4-neon", "gemini-4-carbon", "gemini-4-hydrogen", "gemini-4-argon", "gemini-3.1-flash-lite"})
 	}
 	return []string{"gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"}
+}
+
+// vertexNewGemini is list with each Gemini model of generation 4 or later
+// that models.dev's google-vertex entry (the synced catalog) has and list
+// hasn't, newest first, ahead of list's own Gemini 4: a model Google
+// releases is offered once models.dev has it, not once magpie is given
+// its id (T_t__biu on X: no Gemini 4 Neon, a week after Google's
+// 2026-11-18 release, as Carbon and Hydrogen before it, #6452). Every
+// Gemini 4 so far is served at global, us and eu, which Google's model
+// pages say of each. Left out: a preview, which us and eu have never
+// served, and a cyber model (gemini-4-neon-cyber-permissive), which
+// Google gives on its allowlist alone.
+func vertexNewGemini(list []string) []string {
+	var add []string
+	for _, m := range catalog.ProviderShared("google-vertex") {
+		id := strings.ToLower(m.ID)
+		if vertexGeneration(id) < 4 || strings.Contains(id, "preview") || strings.Contains(id, "cyber") ||
+			slices.Contains(list, id) || slices.Contains(add, id) {
+			continue
+		}
+		add = append(add, id)
+	}
+	if len(add) == 0 {
+		return list
+	}
+	i := slices.IndexFunc(list, func(m string) bool { return vertexGeneration(m) >= 4 })
+	if i < 0 {
+		i = 0
+	}
+	return slices.Concat(list[:i], add, list[i:])
 }
 
 // vertexScope is what a token is minted for: Google Cloud's APIs.
@@ -782,7 +816,7 @@ func impersonateFor(ctx context.Context, tok, account string, delegates []string
 // overview lists them: Gemini alone, none of the partner or Claude models.
 func vertexExpressModels() []string {
 	var out []string
-	for _, m := range Preset(VertexPreset).Models {
+	for _, m := range vertexModels("global") {
 		if !VertexPartner(m) && !VertexClaude(m) {
 			out = append(out, m)
 		}

@@ -32,6 +32,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/testenv"
 )
 
@@ -536,8 +537,9 @@ func TestVertexProviderListed(t *testing.T) {
 			wrong = func(m string) bool { return !strings.HasPrefix(m, "gemini-2.5-") }
 		}
 		if loc == "global" || loc == "us" || loc == "eu" {
-			// Gemini 4 is served at each of the three (#6452)
-			for _, m := range []string{"gemini-4-carbon", "gemini-4-hydrogen", "gemini-4-argon"} {
+			// Gemini 4 is served at each of the three (#6452), Neon too
+			// (Google's Gemini 4 Neon page, read 2026-11-25: global, us, eu)
+			for _, m := range []string{"gemini-4-neon", "gemini-4-carbon", "gemini-4-hydrogen", "gemini-4-argon"} {
 				if !slices.Contains(got, m) {
 					t.Errorf("at %s: no %s in %v", loc, m, got)
 				}
@@ -546,6 +548,77 @@ func TestVertexProviderListed(t *testing.T) {
 		if len(got) == 0 || slices.ContainsFunc(got, wrong) || loc == "global" && len(got) != len(global) {
 			t.Errorf("at %s: %v", loc, got)
 		}
+	}
+}
+
+// A Gemini 4 or later model Google releases on Vertex AI is offered once
+// models.dev's google-vertex entry has it, not once magpie is given its id
+// (T_t__biu on X: no Gemini 4 Neon a week after its release): at global,
+// us and eu and in express mode, ahead of the Gemini 4 models listed, and
+// not at a region. A preview, a cyber model Google gives on its allowlist,
+// an older Gemini, another vendor's model and AI Studio's own entry add
+// nothing, and a model already listed isn't listed twice.
+func TestVertexNewGeminiFromCatalog(t *testing.T) {
+	vertexHome(t)
+	os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755)
+	// gemini-4-xenon stands for a release models.dev has and magpie's
+	// lists don't; the rest are rows magpie must not take
+	if err := os.WriteFile(catalog.CachePath(), []byte(`{
+	  "google-vertex":{"id":"google-vertex","models":{
+	    "gemini-4-xenon":{"id":"gemini-4-xenon","release_date":"2026-12-02","modalities":{"input":["text"],"output":["text"]},"limit":{"context":1048576,"output":65536}},
+	    "gemini-4-neon":{"id":"gemini-4-neon","release_date":"2026-11-18","modalities":{"input":["text"],"output":["text"]},"limit":{"context":1048576,"output":65536}},
+	    "gemini-4-xenon-preview":{"id":"gemini-4-xenon-preview","release_date":"2026-12-01","modalities":{"input":["text"],"output":["text"]}},
+	    "gemini-4-neon-cyber-permissive":{"id":"gemini-4-neon-cyber-permissive","release_date":"2026-11-18","modalities":{"input":["text"],"output":["text"]}},
+	    "gemini-3.9-flash":{"id":"gemini-3.9-flash","release_date":"2026-11-20","modalities":{"input":["text"],"output":["text"]}},
+	    "claude-opus-6@default":{"id":"claude-opus-6@default","release_date":"2026-11-21","modalities":{"input":["text"],"output":["text"]}}}},
+	  "google":{"id":"google","models":{
+	    "gemini-4-krypton":{"id":"gemini-4-krypton","release_date":"2026-12-03","modalities":{"input":["text"],"output":["text"]}}}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	catalog.Reset()
+	t.Cleanup(catalog.Reset)
+	never := []string{"gemini-4-xenon-preview", "gemini-4-neon-cyber-permissive", "gemini-3.9-flash", "claude-opus-6@default", "gemini-4-krypton"}
+	for _, loc := range []string{"global", "us", "eu", "us-central1"} {
+		if err := Save(Provider{ID: "vertex-prod", Name: "Vertex prod", Preset: VertexPreset, Vertex: &Vertex{Project: "acme-vertex", Location: loc}}); err != nil {
+			t.Fatal(err)
+		}
+		p, err := Find("vertex-prod")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := p.Fetch(context.Background()); err != nil {
+			t.Fatalf("at %s: %v", loc, err)
+		}
+		got := modelIDs(p.Available())
+		for _, m := range never {
+			if slices.Contains(got, m) {
+				t.Errorf("at %s: %s offered: %v", loc, m, got)
+			}
+		}
+		if loc == "us-central1" {
+			if slices.Contains(got, "gemini-4-xenon") {
+				t.Errorf("at %s, a region: %v", loc, got)
+			}
+			continue
+		}
+		x, n := slices.Index(got, "gemini-4-xenon"), slices.Index(got, "gemini-4-neon")
+		if x < 0 || n < 0 || x > n || x != slices.IndexFunc(got, func(m string) bool { return strings.HasPrefix(m, "gemini-4-") }) {
+			t.Errorf("at %s: want gemini-4-xenon first of Gemini 4, before gemini-4-neon: %v", loc, got)
+		}
+		seen := map[string]bool{}
+		for _, m := range got {
+			if seen[m] {
+				t.Errorf("at %s: %s listed twice: %v", loc, m, got)
+			}
+			seen[m] = true
+		}
+		if loc == "global" && len(got) != len(Preset(VertexPreset).Models)+1 {
+			t.Errorf("at %s: %d models, want the preset's %d and xenon: %v", loc, len(got), len(Preset(VertexPreset).Models), got)
+		}
+	}
+	express := vertexExpressModels()
+	if !slices.Contains(express, "gemini-4-xenon") || slices.ContainsFunc(express, func(m string) bool { return slices.Contains(never, m) || VertexPartner(m) || VertexClaude(m) }) {
+		t.Errorf("express: %v", express)
 	}
 }
 
@@ -1420,6 +1493,7 @@ func TestVertexTestRequest(t *testing.T) {
 		"gemini-4-argon":         low,
 		"gemini-4-carbon":        low,
 		"gemini-4-hydrogen":      low,
+		"gemini-4-neon":          low,
 		"gemini-3-flash-preview": low,
 		"gemini-2.5-pro":         budget(128),
 		"Gemini-2.5-Pro":         budget(128),
