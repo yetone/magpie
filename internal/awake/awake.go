@@ -10,6 +10,10 @@
 // agent recording the screen to check its work found it locked), and
 // closing a laptop's lid or choosing Sleep still sleeps.
 //
+// While the gateway is shared with other computers, sleep is held off as
+// long as it is, whether a request is in flight or not: another computer's
+// agent can't wake this one.
+//
 // On a Mac it is `caffeinate -i` (-d with the display), on Windows
 // SetThreadExecutionState with ES_SYSTEM_REQUIRED (and ES_DISPLAY_REQUIRED),
 // on Linux `systemd-inhibit --what=idle:sleep`, whose idle inhibitor the
@@ -49,11 +53,19 @@ const (
 type State struct {
 	Busy bool      // a request in flight or a turn waiting on tools
 	Last time.Time // when the last request ended
+	// Shared: other computers send their agents' requests here (sharing
+	// on the network, or a gateway listening beyond loopback). Their next
+	// request can come at any time, and one that meets this computer
+	// asleep gets nothing until someone touches it (eachg0 on X: with
+	// the screen locked, a shared Mac's requests timed out now and then
+	// with keep-awake on, and came right with a key pressed), so sleep is
+	// held off the whole time it is shared, idle or not.
+	Shared bool
 }
 
 // want is whether sleep is held off at now for st.
 func want(st State, now time.Time) bool {
-	return st.Busy || (!st.Last.IsZero() && now.Sub(st.Last) < Grace)
+	return st.Busy || st.Shared || (!st.Last.IsZero() && now.Sub(st.Last) < Grace)
 }
 
 // Keep holds sleep off as far as level says while state says the agents are
@@ -75,7 +87,8 @@ func Keep(ctx context.Context, level func() Level, state func() State) {
 		// taken before the look, so a write made during it isn't missed
 		written := filememo.Written()
 		l := level()
-		if l != Off && want(state(), time.Now()) {
+		st := state()
+		if l != Off && want(st, time.Now()) {
 			if release != nil && held != l {
 				release()
 				release = nil
@@ -88,7 +101,9 @@ func Keep(ctx context.Context, level func() Level, state func() State) {
 					failed = true
 				} else {
 					release, held = r, l
-					if l == Display {
+					if st.Shared && !st.Busy {
+						log.Print("awake: the gateway is shared; keeping the computer from sleeping while it is")
+					} else if l == Display {
 						log.Print("awake: agents at work; keeping the computer from sleeping and its display on")
 					} else {
 						log.Print("awake: agents at work; keeping the computer from sleeping")

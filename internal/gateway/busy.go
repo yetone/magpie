@@ -5,6 +5,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/yetone/magpie/internal/awake"
 )
 
 // Busy is what a restart of the magpie serving the gateway would cut
@@ -44,6 +46,15 @@ func (s *Server) Busy() Busy {
 		b.BridgeLast = time.Unix(0, n)
 	}
 	return b
+}
+
+// awakeState is what awake.Keep holds sleep off for: the agents' requests
+// in flight and when the last ended, and whether other computers reach
+// the gateway — shared on the network, listening beyond loopback, or at a
+// public address — whose agents' next request can come at any time.
+func (s *Server) awakeState() awake.State {
+	b := s.Busy()
+	return awake.State{Busy: b.Any(), Last: b.Last, Shared: remoteKeyed() || publicURL() != ""}
 }
 
 // CodexBusy is how many of Codex's requests are in flight and when its

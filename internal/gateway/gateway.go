@@ -1030,10 +1030,7 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 				return awake.Display
 			}
 			return awake.System
-		}, func() awake.State {
-			b := s.Busy()
-			return awake.State{Busy: b.Any(), Last: b.Last}
-		})
+		}, s.awakeState)
 	})
 	// and, on Windows, serves WSL distros under NAT at Windows' address on
 	// their network (wsl.go)

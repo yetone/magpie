@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // What a restart would cut short (#577): a reply streaming counts until
@@ -370,5 +371,42 @@ func TestCodexBusy(t *testing.T) {
 	}
 	if n, last := s.CodexBusy(); n != 0 || time.Since(last) > 5*time.Second {
 		t.Fatalf("after: %d %v", n, last)
+	}
+}
+
+// Keep awake holds sleep off for as long as other computers reach the
+// gateway, idle or not (eachg0 on X: a Mac sharing its gateway slept once
+// its agents had been idle past the grace, and a request from another
+// computer timed out until someone touched it). Not shared, an idle
+// gateway lets it sleep as before.
+func TestAwakeStateShared(t *testing.T) {
+	fresh(t)
+	t.Setenv("MAGPIE_ADDR", "")
+	t.Setenv("MAGPIE_PUBLIC_URL", "")
+	t.Setenv("LAZYCAT_APP_DOMAIN", "")
+	s := New()
+	if st := s.awakeState(); st.Shared || st.Busy {
+		t.Fatalf("not shared: %+v", st)
+	}
+	if err := settings.Save(settings.Settings{LAN: true}); err != nil {
+		t.Fatal(err)
+	}
+	if st := s.awakeState(); !st.Shared || st.Busy {
+		t.Fatalf("shared on the local network: %+v", st)
+	}
+	if err := settings.Save(settings.Settings{LAN: false}); err != nil {
+		t.Fatal(err)
+	}
+	if st := s.awakeState(); st.Shared {
+		t.Fatalf("sharing turned off: %+v", st)
+	}
+	t.Setenv("MAGPIE_ADDR", "0.0.0.0:3425")
+	if st := s.awakeState(); !st.Shared {
+		t.Fatalf("listening on the network: %+v", st)
+	}
+	t.Setenv("MAGPIE_ADDR", "")
+	t.Setenv("MAGPIE_PUBLIC_URL", "https://magpie.example.com")
+	if st := s.awakeState(); !st.Shared {
+		t.Fatalf("at a public address: %+v", st)
 	}
 }

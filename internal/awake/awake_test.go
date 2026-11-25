@@ -21,6 +21,10 @@ func TestWant(t *testing.T) {
 		{State{Busy: true}, true},
 		{State{Last: now.Add(-time.Minute)}, true},
 		{State{Last: now.Add(-Grace - time.Second)}, false},
+		// shared with other computers, held with nothing in flight and
+		// nothing ever served, and long past the grace (eachg0 on X)
+		{State{Shared: true}, true},
+		{State{Shared: true, Last: now.Add(-Grace - time.Hour)}, true},
 	} {
 		if got := want(c.st, now); got != c.want {
 			t.Errorf("want(%+v) = %v, want %v", c.st, got, c.want)
