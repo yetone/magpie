@@ -89,6 +89,30 @@ type loginRead struct {
 	e    loginUsageEntry
 }
 
+// LoginReadsDone waits, at most till ctx ends, for every account's usage
+// being read now to be read: a read outlives the request that began it,
+// and a test changes what it reads (CodexBase) only once none is.
+func LoginReadsDone(ctx context.Context) {
+	for {
+		c := &loginUsageCache
+		c.Lock()
+		var r *loginRead
+		for _, p := range c.pending {
+			r = p
+			break
+		}
+		c.Unlock()
+		if r == nil {
+			return
+		}
+		select {
+		case <-r.done:
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
 // loginUsageFor, when set, stands in for LoginUsage's readings (tests),
 // as UsageClaudeVia does for Claude's own. It is held for reading while it
 // runs: Allowances reads in the background and returns without waiting,

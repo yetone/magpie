@@ -41,8 +41,9 @@ type lanes struct {
 	ended map[string]time.Time
 	turns map[string]int // how many turns each has had come back
 	idles int            // turns waiting in idle, for tests
-	// planned is each's turns found not near a usage cap that haven't
-	// taken their lane yet: out on it already, for out and idle (#6958)
+	// planned is each's turns found not near a usage cap, or let in near
+	// it, that haven't taken their lane yet: out on it already, for out
+	// and idle (#6958)
 	planned map[string]int
 	// read is how many turns had come back on each when one of its turns
 	// last took its lane: a reply tells the usage as its turn begins, so
@@ -59,6 +60,17 @@ func (l *lanes) began(who string) {
 		l.read = map[string]int{}
 	}
 	l.read[who] = l.turns[who]
+}
+
+// readThrough notes a reading of who's usage that has its first n turns
+// come back: read again with none out (nearCapAgain).
+func (l *lanes) readThrough(who string, n int) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.read == nil {
+		l.read = map[string]int{}
+	}
+	l.read[who] = max(l.read[who], n)
 }
 
 // inReading is how many of who's turns come back the reading last told

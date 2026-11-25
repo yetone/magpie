@@ -156,6 +156,13 @@ func capWatched(c candidate) (provider.Allowance, provider.WindowCaps, bool) {
 // begins, so turns out at the vendor, and those come back since the turn
 // whose reply told it began, are in no reading yet: what they will spend
 // is ahead of the reading.
+//
+// Turns don't spend alike: a long conversation, a cache missed or a
+// compaction spends several points of a small plan's five hours in one
+// turn, its neighbours a fraction of one (yalifesign on X again: capped
+// at 90%, used to 100%). So a turn is taken to spend the most one has
+// spent there in that window, not what they spent on average, and, till
+// that is known, a few points.
 type turnSpends struct {
 	mu sync.Mutex
 	m  map[string]turnSpend
@@ -164,7 +171,13 @@ type turnSpends struct {
 type turnSpend struct {
 	used  float64 // the usage last known
 	turns int     // turns come back that reading has
-	per   float64 // what a turn spent then, at most maxTurnSpend
+	read  int     // turns come back the latest reading has, moved or not
+	// per is the most a turn spent in the window, at most maxTurnSpend;
+	// learned once the usage moved over turns read. renewed: the window
+	// renewed since, and what was learned in the one before stands till
+	// a turn spends in this one
+	per              float64
+	learned, renewed bool
 }
 
 // maxTurnSpend bounds what one turn is taken to spend: a reading that
@@ -180,23 +193,68 @@ const maxTurnSpend = 2 * nearCapPoints
 func (t *turnSpends) ahead(who string, used float64, turns, read, out int) float64 {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	s := t.noteLocked(who, used, min(read, turns))
+	return s.guess() * float64(out+max(turns-s.turns, 0))
+}
+
+// own is what one more turn on who is taken to spend, as learned (ahead
+// noted its last reading): none till it is learned, as a turn held by a
+// guess would never let it be learned, and at most nearCapPoints, the
+// most a turn holds an account short of its cap.
+func (t *turnSpends) own(who string) float64 {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	s := t.m[who]
+	if !s.learned {
+		return 0
+	}
+	return min(s.per, nearCapPoints)
+}
+
+func (t *turnSpends) noteLocked(who string, used float64, read int) turnSpend {
 	if t.m == nil {
 		t.m = map[string]turnSpend{}
 	}
-	read = min(read, turns)
 	s, ok := t.m[who]
+	read = max(read, s.read)
 	switch {
-	case !ok || used < s.used:
-		// first known, or renewed: what a turn spent stands
+	case !ok:
 		s.used, s.turns = used, read
+	case used < s.used:
+		s.used, s.turns, s.renewed = used, read, true
 	case used > s.used:
-		if n := read - s.turns; n > 0 {
-			s.per = min((used-s.used)/float64(n), maxTurnSpend)
+		n := read - s.turns
+		if n <= 0 {
+			// moved by turns not counted read yet (a reading taken
+			// again, its readThrough still to come): the rise waits for
+			// them, or it would be learned of no turn
+			break
 		}
+		per := min((used-s.used)/float64(n), maxTurnSpend)
+		if s.learned && !s.renewed {
+			per = max(s.per, per)
+		}
+		s.per, s.learned, s.renewed = per, true, false
 		s.used, s.turns = used, read
 	}
+	s.read = read
 	t.m[who] = s
-	return s.per * float64(out+max(turns-s.turns, 0))
+	return s
+}
+
+// guess is what a turn not in a reading yet is taken to spend: what was
+// learned; with nothing learned, a few points (nearCapPoints) while no
+// turn has been read since the usage was first known, as a turn of a big
+// model on a small plan spends, and under a point among those read that
+// didn't move it, as a usage is told in whole points.
+func (s turnSpend) guess() float64 {
+	if s.learned {
+		return s.per
+	}
+	if n := s.read - s.turns; n > 0 {
+		return min(nearCapPoints, 1/float64(n))
+	}
+	return nearCapPoints
 }
 
 // userCapped says whether c's account has a usage limit the user set on it
@@ -211,26 +269,55 @@ func userCapped(c candidate) bool {
 }
 
 // nearCapAgain reads the usage of c's account, near its cap and at used
-// as its turn was planned (ahead of it what turns not read yet spend), again before the turn goes, waiting at most
-// carefulWait: when a turn on it came back since it was last read (ended),
-// as a reply tells what was used as it begins, without its own turn, and
-// what that turn spent is in no reading yet; and when this turn waited for
-// the one before it and nothing has told the account's usage since (the
-// reply before it said nothing of it).
-func nearCapAgain(ctx context.Context, c candidate, used, ahead float64, waited bool, ended time.Time) {
+// as its turn was planned (ahead of it what turns not read yet spend),
+// again before the turn goes, waiting at most carefulWait: when a turn on
+// it came back since it was last read (ended), as a reply tells what was
+// used as it begins, without its own turn, and what that turn spent is in
+// no reading yet; and when this turn waited for the one before it and
+// nothing has told the account's usage since (the reply before it said
+// nothing of it). It says whether it read it: the reading then has every
+// turn come back before it.
+func nearCapAgain(ctx context.Context, c candidate, used, ahead float64, waited bool, ended time.Time) bool {
 	now, ok := nearCapOf(c, time.Now(), nearCapPoints+ahead)
 	if !ok {
-		return // renewed
+		return false // renewed
 	}
 	a := c.p.Account
 	at, _, read := usageRead(a.UsageAgent(), a.User)
 	spent := !ended.IsZero() && (!read || ended.After(at))
 	if !spent && !(waited && now == used) {
-		return
+		return false
 	}
 	ctx, cancel := context.WithTimeout(ctx, carefulWait)
 	defer cancel()
-	readUsageNow(ctx, a.UsageAgent(), a.User)
+	return readUsageNow(ctx, a.UsageAgent(), a.User)
+}
+
+// nearCapHeld is how c's account is held as its turn goes, near its cap
+// and every turn out on it back: at its cap, or short of it by what one
+// turn there is taken to spend (turnSpends.own), and what turns come back
+// no reading has yet will. A turn let in a point under its cap spent
+// three or four of a small plan's five hours on its own (yalifesign on
+// X: capped at 90%, used to 100%), so the account stops short of the
+// cap by the most a turn spent there, not past it by that much.
+func (s *Server) nearCapHeld(c candidate, now time.Time) *capHold {
+	if h := capHeld(c.p, c.p, c.model, now); h != nil {
+		return h
+	}
+	al, caps, ok := capWatched(c)
+	if !ok {
+		return nil
+	}
+	_, ahead, _ := s.nearCapOf(c, now)
+	turn := s.turnSpend.own(c.who())
+	if turn+ahead <= 0 {
+		return nil
+	}
+	h := al.CapHeldWithin(c.model, caps, turn+ahead, now)
+	if h == nil {
+		return nil
+	}
+	return &capHold{cap: h.Cap, used: h.Used, back: h.Back, turn: turn + ahead}
 }
 
 // phaseQueue is the phase of a request that waits, before any try is begun,

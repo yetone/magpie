@@ -411,6 +411,9 @@ type Weighed struct {
 	// share, CapBack when the last window at or past it renews
 	Capped  int        `json:"capped,omitempty"`
 	CapBack *time.Time `json:"capBack,omitempty"`
+	// CapTurn: held short of Capped, as its next turn is taken to spend
+	// this many points (nearCapHeld)
+	CapTurn float64 `json:"capTurn,omitempty"`
 	// CapAmount: held (Capped) at a window's fixed amount of its own unit
 	// rather than a share: CapCount of it used, in CapUnit
 	CapAmount float64 `json:"capAmount,omitempty"`

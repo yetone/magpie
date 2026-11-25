@@ -128,6 +128,9 @@ type capHold struct {
 	// unread: held by a careful provider as its usage can't be told, why
 	// (carefulDoubt), cap then the account's own
 	unread string
+	// turn: held short of cap, as a turn there is taken to spend this
+	// many points, and those come back no reading has yet (nearCapHeld)
+	turn float64
 	// spend: a key held at the spend cap set on it (provider.SpendCap),
 	// cap then 100 and used the share of it spent
 	spend *spendHold
@@ -1083,6 +1086,9 @@ func heldReasons(ws []Weighed, now time.Time) ([]string, time.Time) {
 			continue
 		}
 		s := fmt.Sprintf("%s (%s) is at %.0f%% of a usage window, past its %d%% cap", w.Name, w.Who, w.Used, w.Capped)
+		if w.CapTurn > 0 && w.Used < float64(w.Capped) {
+			s = fmt.Sprintf("%s (%s) is at %.0f%% of a usage window, and its next turn would take it past its %d%% cap: a turn there has spent up to %s points", w.Name, w.Who, w.Used, w.Capped, amountText(w.CapTurn))
+		}
 		if w.CapAmount > 0 {
 			s = fmt.Sprintf("%s (%s) has used %s %s of a usage window, past its cap of %s", w.Name, w.Who, amountText(w.CapCount), w.CapUnit, amountText(w.CapAmount))
 		}
@@ -1284,7 +1290,7 @@ func barredOf(cs []candidate, q provider.Provider, fallback bool, from provider.
 		w := weighed(c, q, weighing{}, fallback, from)
 		w.Unlisted, w.Via = true, via
 		if h := c.capped; h != nil {
-			w.Capped, w.Used, w.NoCredits, w.ExtraUsage, w.Unread = h.cap, h.used, h.noCredits, h.extra, h.unread
+			w.Capped, w.Used, w.NoCredits, w.ExtraUsage, w.Unread, w.CapTurn = h.cap, h.used, h.noCredits, h.extra, h.unread, h.turn
 			w.CapAmount, w.CapCount, w.CapUnit = h.amount, h.count, h.unit
 			if sp := h.spend; sp != nil {
 				w.SpendCap, w.Spent, w.SpendPeriod = sp.usd, sp.spent, sp.period

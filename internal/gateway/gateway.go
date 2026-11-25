@@ -4200,10 +4200,24 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				}
 				held = true
 			}
-			_, ended, _ := s.lanes.out(c.who())
-			nearCapAgain(r.Context(), c, nearUsed, nearAhead, held, ended)
+			_, ended, back := s.lanes.out(c.who())
+			if nearCapAgain(r.Context(), c, nearUsed, nearAhead, held, ended) {
+				// every turn back before it was read is in it
+				s.lanes.readThrough(c.who(), back)
+			}
 			nearDone = done
-			if h := capHeld(c.p, c.p, c.model, time.Now()); h != nil {
+			// let in, the turn is out on the account from here, as a turn
+			// found far from its cap is from its check: a turn checked
+			// before this one took its lane saw none out, was found far
+			// at a reading 6 points under its cap, and the two went past
+			// it together. One step with the far turns' check and count
+			s.nearCap.check.Lock()
+			h := s.nearCapHeld(c, time.Now())
+			if h == nil {
+				onWay = s.lanes.plan(c.who())
+			}
+			s.nearCap.check.Unlock()
+			if h != nil {
 				nearDone()
 				nearDone = nil
 				c.capped = h

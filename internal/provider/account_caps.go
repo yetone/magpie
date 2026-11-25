@@ -517,6 +517,14 @@ type CapHold struct {
 // caps (WindowCaps.Of), not renewed since; nil when none is. A window
 // whose reset has passed is empty again; no caps hold nothing.
 func (a Allowance) CapHeld(model string, caps WindowCaps, now time.Time) *CapHold {
+	return a.CapHeldWithin(model, caps, 0, now)
+}
+
+// CapHeldWithin is CapHeld for a window less than points under its share
+// too: a turn that spends that many would take it past. A cap at a fixed amount
+// holds at the amount still, and the credits a Codex account is set not
+// to spend at 100%.
+func (a Allowance) CapHeldWithin(model string, caps WindowCaps, points float64, now time.Time) *CapHold {
 	if !caps.Holds() {
 		return nil
 	}
@@ -529,7 +537,7 @@ func (a Allowance) CapHeld(model string, caps WindowCaps, now time.Time) *CapHol
 			continue // held by extraCapped's 100%, not by itself
 		}
 		share, credits, amount := caps.limitShare(l.Name, l.Of, l.aside)
-		if !past(share, amount, l.Used, l.Amount) {
+		if !past(share, amount, l.Used, l.Amount) && (credits || share <= 0 || amount > 0 || l.Used <= share-points) {
 			continue
 		}
 		if !l.Resets.IsZero() && !l.Resets.After(now) {
