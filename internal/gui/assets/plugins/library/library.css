@@ -988,6 +988,20 @@ body.window .lib-list .lib-row { --lib-indent: 38px; }
 .lib-memstats .ms-col i { display: block; width: 100%; max-width: 24px; border-radius: 4px 4px 0 0; background: var(--accent); }
 .lib-memstats .ms-cols.dense .ms-col { padding: 0 1px; }
 .lib-memstats .ms-cols.dense .ms-col i { border-radius: 2px 2px 0 0; }
+.lib-memstats .ms-side { display: flex; align-items: center; gap: 6px; flex: none; }
+.lib-memstats .ms-style .opt { display: inline-flex; align-items: center; padding: 0 6px; }
+.lib-memstats .ms-style svg { display: block; }
+/* the line: the columns stay as the pointer's targets, drawn bare; the
+   day under the pointer is a hairline and a dot on the line */
+.lib-memstats .ms-plot.line .ms-col { position: relative; background: none; }
+.lib-memstats .ms-plot.line .ms-col.hot::after { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: var(--line); }
+.lib-memstats .ms-marks { position: absolute; inset: 0 0 1px; pointer-events: none; }
+.lib-memstats .ms-marks svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.lib-memstats .ms-marks .ms-stroke { fill: none; stroke: var(--accent); stroke-width: 2px; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.lib-memstats .ms-marks .ms-area { fill: var(--accent); opacity: .1; }
+:root[data-theme="dark"] .lib-memstats .ms-marks .ms-area { opacity: .06; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .lib-memstats .ms-marks .ms-area { opacity: .06; } }
+.lib-memstats .ms-pt, .lib-memstats .ms-dot { position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--card); }
 .lib-memstats .ms-axis { display: flex; margin-top: 6px; font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .lib-memstats .ms-axis span { flex: 1 1 0; min-width: 0; text-align: center; white-space: nowrap; overflow: visible; }
 .lib-memstats .ms-axis.dense span:first-child { text-align: left; }

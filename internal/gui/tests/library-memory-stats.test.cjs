@@ -3,9 +3,11 @@
 // and their trend): four tiles over the last 7 days, each named in the
 // reader's language with what it counts said on hover, a value and its
 // days as small columns, read from /api/memory/stats. A tile picked opens
-// its chart: a column a counted day, none for a day nothing was counted
-// (before counting began, or no searches that day), the day's exact
-// numbers on hover. 30 days reads the counts again. Every language, wide
+// its chart: a column a day, none for a day with nothing to count (before
+// counting began, or no searches that day); what was made counts every
+// day, a day no memory file names as 0. The day's exact numbers on hover. The chart is columns or a line (the owner, 11-25:
+// 折线图跟柱状图切换), the choice kept across a reload. 30 days reads the
+// counts again. Every language, wide
 // and narrow, Chromium and WebKit; no backend, the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -83,11 +85,11 @@ function server(lang, asked) {
 
 const view = "#view-library";
 const words = {
-  en: { names: ["Creation rate", "Recall rate", "Update rate", "Cleanup rate"], recallAbout: /share that returned at least one memory/, subs: [/7 new/, /6 of 8 searches/, /3 updated/, /4 cleaned up/], searches: /Agent searches/, since: /Counted from/ },
-  zh: { names: ["创建率", "召回率", "更新率", "清洗率"], recallAbout: /至少找到一条记忆的比例/, subs: [/7/, /8 次搜索中找到 6 次/, /更新 3 次/, /清洗 4 条/], searches: /Agent 搜索/, since: /开始统计/ },
-  "zh-TW": { names: ["建立率", "召回率", "更新率", "清理率"], recallAbout: /至少找到一則記憶的比例/, subs: [/7/, /8 次搜尋中找到 6 次/, /更新 3 次/, /清理 4 則/], searches: /Agent 搜尋/, since: /開始統計/ },
-  ja: { names: ["作成率", "リコール率", "更新率", "整理率"], recallAbout: /1件以上見つかった割合/, subs: [/7/, /8 回の検索中 6 回ヒット/, /3 回更新/, /4 件整理/], searches: /エージェントの検索/, since: /から集計/ },
-  de: { names: ["Neuzugänge", "Trefferquote", "Aktualisierungsrate", "Aufräumrate"], recallAbout: /mindestens eine Erinnerung gefunden/, subs: [/7 neue/, /6 von 8 Suchen/, /3 aktualisiert/, /4 aufgeräumt/], searches: /Suchen von Agenten/, since: /Gezählt seit/ },
+  en: { bar: "Bar chart", line: "Line chart", names: ["Creation rate", "Recall rate", "Update rate", "Cleanup rate"], recallAbout: /share that returned at least one memory/, subs: [/7 new/, /6 of 8 searches/, /3 updated/, /4 cleaned up/], searches: /Agent searches/, since: /Counted from/ },
+  zh: { bar: "柱状图", line: "折线图", names: ["创建率", "召回率", "更新率", "清洗率"], recallAbout: /至少找到一条记忆的比例/, subs: [/7/, /8 次搜索中找到 6 次/, /更新 3 次/, /清洗 4 条/], searches: /Agent 搜索/, since: /开始统计/ },
+  "zh-TW": { bar: "長條圖", line: "折線圖", names: ["建立率", "召回率", "更新率", "清理率"], recallAbout: /至少找到一則記憶的比例/, subs: [/7/, /8 次搜尋中找到 6 次/, /更新 3 次/, /清理 4 則/], searches: /Agent 搜尋/, since: /開始統計/ },
+  ja: { bar: "棒グラフ", line: "折れ線グラフ", names: ["作成率", "リコール率", "更新率", "整理率"], recallAbout: /1件以上見つかった割合/, subs: [/7/, /8 回の検索中 6 回ヒット/, /3 回更新/, /4 件整理/], searches: /エージェントの検索/, since: /から集計/ },
+  de: { bar: "Balkendiagramm", line: "Liniendiagramm", names: ["Neuzugänge", "Trefferquote", "Aktualisierungsrate", "Aufräumrate"], recallAbout: /mindestens eine Erinnerung gefunden/, subs: [/7 neue/, /6 von 8 Suchen/, /3 aktualisiert/, /4 aufgeräumt/], searches: /Suchen von Agenten/, since: /Gezählt seit/ },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -129,7 +131,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.equal((await tile.locator(".ms-name").textContent()).trim(), w.names[i]);
           assert.equal((await tile.locator(".ms-value").textContent()).replace(/\s/g, ""), values[i]);
           assert.match(await tile.locator(".ms-sub").textContent(), w.subs[i]);
-          // a column a day, the first one dated by the files, the second not counted
+          // a column a day
           assert.equal(await tile.locator(".ms-spark > span").count(), 7);
           const r = await tile.boundingBox();
           assert.ok(r.x >= box.x - 1 && r.x + r.width <= box.x + box.width + 1, `tile ${i} is cut off`);
@@ -138,15 +140,19 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           }
         }
         assert.match(await tiles.nth(1).getAttribute("title"), w.recallAbout);
-        assert.equal(await tiles.nth(0).locator(".ms-spark > span:not(:has(i))").count(), 1);
+        // what was made counts every day, a day no file names as 0; what
+        // was updated has nothing before counting began
+        assert.equal(await tiles.nth(0).locator(".ms-spark > span:not(:has(i))").count(), 0);
+        assert.equal(await tiles.nth(2).locator(".ms-spark > span:not(:has(i))").count(), 2);
         // wide, a row of four; narrow, two rows of two
         const ys = new Set();
         for (const tile of await tiles.all()) ys.add(Math.round((await tile.boundingBox()).y));
         assert.equal(ys.size, width > 560 ? 1 : 2);
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "the page scrolls sideways");
 
-        // nothing is charted until a tile is picked
+        // nothing is charted until a tile is picked, and there's no chart style to pick
         assert.equal(await card.locator(".ms-chart").count(), 0);
+        assert.equal(await card.locator(".ms-style").count(), 0);
         await tiles.nth(1).click();
         const chart = page.locator(`${view} .lib-memstats .ms-chart[data-metric="recall"]`);
         await chart.waitFor();
@@ -171,16 +177,69 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await chart.locator(".ms-read:not(.on)").waitFor();
         assert.match(await read.textContent(), w.recallAbout);
 
+        // as a line: beside the period, two icons named in the reader's language
+        const style = (id) => page.locator(`${view} .lib-memstats .ms-head .ms-style .opt[data-seg="${id}"]`);
+        assert.equal(await style("bars").getAttribute("aria-label"), w.bar);
+        assert.equal(await style("line").getAttribute("title"), w.line);
+        assert.equal(await style("bars").getAttribute("aria-pressed"), "true");
+        const sb = await style("line").boundingBox(), pr = await card.locator(".ms-range").boundingBox();
+        assert.ok(Math.abs(sb.y + sb.height / 2 - (pr.y + pr.height / 2)) < 2 && sb.x < pr.x, "the chart style isn't beside the period");
+        await style("line").click();
+        const lined = page.locator(`${view} .lib-memstats .ms-chart[data-metric="recall"] .ms-plot.line`);
+        await lined.waitFor();
+        // a line through the counted run, a dot for the day alone, no columns
+        assert.equal(await lined.locator(".ms-col i").count(), 0);
+        assert.equal(await lined.locator(".ms-stroke").count(), 1);
+        assert.equal(await lined.locator(".ms-pt").count(), 1);
+        assert.equal(await lined.locator(".ms-dot").count(), 0);
+        // hovered, the day's dot sits on its value and its numbers above the plot
+        const l4 = await lined.locator(".ms-col").nth(4).boundingBox();
+        await page.mouse.move(l4.x + l4.width / 2, l4.y + 8);
+        const lread = page.locator(`${view} .lib-memstats .ms-chart .ms-read.on`);
+        await lread.waitFor();
+        assert.match(await lread.textContent(), /50\s?%/);
+        assert.match(await lread.textContent(), w.searches);
+        const dot = await lined.locator(".ms-dot").boundingBox(), marks = await lined.locator(".ms-marks").boundingBox();
+        assert.ok(Math.abs(dot.x + dot.width / 2 - (l4.x + l4.width / 2)) < 2, "the dot isn't on its day");
+        assert.ok(Math.abs(dot.y + dot.height / 2 - (marks.y + marks.height / 2)) < 2, "the dot isn't at 50%");
+        assert.ok((await lread.boundingBox()).y + (await lread.boundingBox()).height <= (await lined.boundingBox()).y + 1, "the day's numbers are on the plot");
+        await page.mouse.move(1, 1);
+        await lined.locator(".ms-dot").waitFor({ state: "detached" });
+
+        // kept across a reload
+        await page.reload();
+        await page.locator('button[data-view="library"]').click();
+        await page.locator(`${view} .lib-memstats:not(.wait) .ms-tile >> nth=1`).click();
+        await lined.waitFor();
+        assert.equal(await style("line").getAttribute("aria-pressed"), "true");
+        // and back to columns
+        await style("bars").click();
+        await page.locator(`${view} .lib-memstats .ms-chart[data-metric="recall"] .ms-plot:not(.line)`).waitFor();
+        assert.deepEqual(await page.locator(`${view} .lib-memstats .ms-chart .ms-col`).evaluateAll((cs) => cs.map((c) => !!c.querySelector("i"))), [false, false, true, false, true, true, false]);
+
         // 30 days reads the counts again; the chart stays on its metric
         await card.locator('.ms-range .opt[data-seg="30"]').click();
         await page.locator(`${view} .lib-memstats .ms-chart[data-metric="recall"] .ms-col >> nth=29`).waitFor();
-        assert.deepEqual(asked, ["7", "30"]);
+        assert.deepEqual(asked, ["7", "7", "30"]);
         assert.equal(await page.locator(`${view} .lib-memstats .ms-tile >> nth=0`).locator(".ms-spark > span").count(), 30);
-        // what was made: the days before counting, dated by the files, drawn fainter
+        // what was made: the days before counting, dated by the files, drawn like the rest
         await page.locator(`${view} .lib-memstats .ms-tile >> nth=0`).click();
         const made = page.locator(`${view} .lib-memstats .ms-chart[data-metric="created"]`);
         await made.waitFor();
         assert.equal(await made.locator(".ms-col.back i").count(), 5);
+        // as a line: a count's 0 is a value, so one line through all 30
+        // days, a day no file made on the baseline, never a dot alone
+        await style("line").click();
+        await made.locator(".ms-plot.line").waitFor();
+        assert.equal(await made.locator(".ms-stroke").count(), 1);
+        assert.equal(await made.locator(".ms-pt").count(), 0);
+        const z1 = await made.locator(".ms-col").nth(1).boundingBox();
+        await page.mouse.move(z1.x + z1.width / 2, z1.y + 8);
+        await made.locator(".ms-dot").waitFor();
+        const zdot = await made.locator(".ms-dot").boundingBox(), zmarks = await made.locator(".ms-marks").boundingBox();
+        assert.ok(Math.abs(zdot.y + zdot.height / 2 - (zmarks.y + zmarks.height)) < 2, "a day with nothing made isn't on the baseline");
+        assert.match(await made.locator(".ms-read.on strong").textContent(), /^0$/);
+        await page.mouse.move(1, 1);
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "the chart scrolls the page sideways");
         // picked again, it folds away
         await page.locator(`${view} .lib-memstats .ms-tile >> nth=0`).click();

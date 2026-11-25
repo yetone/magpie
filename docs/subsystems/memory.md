@@ -438,9 +438,22 @@ imported when the Memory tab first draws) over 7 or 30 days:
 | Update rate | updates ÷ memories in use now |
 | Cleanup rate | memories cleaned ÷ memories in use now |
 
-A tile picked opens its daily chart: a column a counted day, none for a
-day not counted (or, for recall, with no search), the day's numbers on
-hover or the arrow keys. Tested by `library-memory-stats.test.cjs`.
+A tile picked opens its daily chart, the day's numbers on hover or the
+arrow keys. A count's 0 is a value: what was made counts every day (a day
+before `since` that no file names made 0), and updates and cleanups every
+day from `since` on. Only a day with nothing to count has no value: an
+update or cleanup before `since`, or a recall day with no search ("No
+searches", never 0%). With a chart open, two icons beside the period draw
+it as columns or as a line (the owner, 11-25), kept in `localStorage`
+`magpie.memStatsChart` like Usage's `magpie.ledChart`. The line is
+straight from day to day, so it never passes a day's value, with a 0 on
+the baseline; it breaks only where a day has no value, as the columns
+draw nothing there, and a day alone between two breaks is a dot, with no
+connector or wash across a break. Today counts as it stands, so a count's
+line ends on today's value, 0 included. The sparklines stay columns
+either way: most of their days are 0 or empty, which a line of 7 points
+draws as noise, and columns keep today's accent apart. Tested by
+`library-memory-stats.test.cjs`.
 
 ### Backups and sync
 

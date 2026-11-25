@@ -9,10 +9,17 @@
 // the page until then.
 (() => {
   let days = 7, open = "", data = {}, at = {}, seen = null, asking = null, card = null, failed = false;
+  // the chart as columns (the default) or a line, kept like Usage's
+  // (magpie.ledChart); fade is set by the switch, for the one draw after it
+  const MARK = "magpie.memStatsChart";
+  let mark = "bars", fade = false;
+  try { if (localStorage.getItem(MARK) === "line") mark = "line"; } catch {}
 
   const sum = (ds, f) => ds.reduce((n, d) => n + (f(d) || 0), 0);
   const total = (m) => Object.values(m || {}).reduce((n, v) => n + v, 0);
-  const counted = (d) => d.recorded || d.backfilled;
+  // a day before counting began has only what was made, from the
+  // memories' files: a day no file names made 0, not "unknown"
+  const filed = (d) => !d.recorded;
   const pct = (n, of) => (of ? Math.round((n / of) * 1000) / 10 : null);
   const num = (n) => (n == null ? "—" : n.toLocaleString(typeof intlLang === "function" ? intlLang() : undefined, { maximumFractionDigits: 1 }));
   const dateOf = (s, opts = { month: "short", day: "numeric" }) => {
@@ -30,7 +37,7 @@
         const n = sum(ds, (d) => total(d.created));
         return { value: num(Math.round((n / ds.length) * 10) / 10), unit: t("new / day"), sub: t("{n} new", { n: num(n) }) };
       },
-      day: (d) => (counted(d) ? total(d.created) : null),
+      day: (d) => total(d.created),
       rows: (d) => [
         [t("By you"), (d.created || {}).user],
         [t("By agents"), (d.created || {}).agent],
@@ -122,6 +129,51 @@
     return [1, 2, 2.5, 5, 10].map((s) => s * p).find((s) => s >= v);
   };
 
+  // the line: straight runs between days with a value, so it never passes
+  // above or below one. A count's 0 is a value, on the baseline; only a
+  // day with none (not counted, or a rate with nothing to divide) breaks
+  // it, as bar mode draws nothing there; a
+  // day alone between two such is a dot. A faint wash under each run. The
+  // day under the pointer gets a dot of its own.
+  function lineMarks(vals, top) {
+    const n = vals.length, x = (i) => ((i + 0.5) / n) * 100, y = (v) => 100 - Math.min(100, (v / top) * 100);
+    const box = el("div", "ms-marks");
+    box.setAttribute("aria-hidden", "true");
+    const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    s.setAttribute("viewBox", "0 0 100 100");
+    s.setAttribute("preserveAspectRatio", "none");
+    const runs = [];
+    vals.forEach((v, i) => {
+      if (v == null) return;
+      if (i && vals[i - 1] != null) runs.at(-1).push(i);
+      else runs.push([i]);
+    });
+    const dot = (i, cls) => {
+      const d = el("span", cls);
+      d.style.left = x(i) + "%";
+      d.style.top = y(vals[i]) + "%";
+      return d;
+    };
+    for (const run of runs) {
+      if (run.length < 2) {
+        box.append(dot(run[0], "ms-pt"));
+        continue;
+      }
+      const pts = run.map((i) => `${x(i)},${y(vals[i])}`).join(" L");
+      s.insertAdjacentHTML("beforeend", `<path class="ms-area" d="M${x(run[0])},100 L${pts} L${x(run.at(-1))},100 Z"/><path class="ms-stroke" d="M${pts}"/>`);
+    }
+    box.prepend(s);
+    let hot = null;
+    return {
+      box,
+      at(i) {
+        hot?.remove();
+        hot = i >= 0 && vals[i] != null ? dot(i, "ms-dot") : null;
+        if (hot) box.append(hot);
+      },
+    };
+  }
+
   function chart(r, key) {
     const M = METRICS[key];
     const vals = r.days.map(M.day);
@@ -144,6 +196,7 @@
       plot.append(g);
     }
     const cols = el("div", "ms-cols" + (r.days.length > 14 ? " dense" : ""));
+    const line = mark === "line" && lineMarks(vals, top);
     // the day under the pointer is read out over the plot, never on it;
     // with none, what the metric counts
     const read = el("div", "ms-read");
@@ -155,7 +208,7 @@
       const c = el("div", "ms-col" + (v == null ? " gap" : "") + (d.backfilled ? " back" : ""));
       c.setAttribute("role", "listitem");
       c.setAttribute("aria-label", `${dateOf(d.day)}: ${v == null ? (M.none?.(d) || t("Not counted yet")) : num(v) + (M.pct ? "%" : "")}`);
-      if (v != null) {
+      if (v != null && !line) {
         const bar = el("i");
         bar.style.height = v ? Math.max(1.5, (v / top) * 100) + "%" : "0";
         c.append(bar);
@@ -163,6 +216,15 @@
       cols.append(c);
     });
     plot.append(cols);
+    if (line) {
+      plot.classList.add("line");
+      plot.append(line.box);
+    }
+    if (fade) {
+      fade = false;
+      // only opacity: nothing moves, so reduced motion keeps it
+      (line ? line.box : cols).animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160, easing: "cubic-bezier(.23, 1, .32, 1)" });
+    }
 
     let hot = -1;
     const show = (i) => {
@@ -170,22 +232,26 @@
       cols.children[hot]?.classList.remove("hot");
       hot = i;
       read.classList.toggle("on", i >= 0);
-      if (i < 0) return void rest();
+      if (i < 0) {
+        if (line) line.at(-1);
+        return void rest();
+      }
       const c = cols.children[i], d = r.days[i], v = vals[i];
       c.classList.add("hot");
-      const line = [el("b", "", dateOf(d.day, { weekday: "short", month: "short", day: "numeric" }))];
-      if (v == null) line.push(el("span", "ms-muted", M.none?.(d) || t("Not counted yet")));
+      if (line) line.at(i);
+      const words = [el("b", "", dateOf(d.day, { weekday: "short", month: "short", day: "numeric" }))];
+      if (v == null) words.push(el("span", "ms-muted", M.none?.(d) || t("Not counted yet")));
       else {
-        line.push(el("strong", "", num(v) + (M.pct ? "%" : "")));
+        words.push(el("strong", "", num(v) + (M.pct ? "%" : "")));
         for (const [name, n] of M.rows(d)) {
           if (!n && key !== "recall") continue;
           const part = el("span", "ms-part");
           part.append(name + " ", el("em", "", num(n || 0)));
-          line.push(part);
+          words.push(part);
         }
-        if (d.backfilled) line.push(el("span", "ms-muted", t("From the memories' own dates")));
+        if (key === "created" && filed(d)) words.push(el("span", "ms-muted", t("From the memories' own dates")));
       }
-      read.replaceChildren(...line);
+      read.replaceChildren(...words);
     };
     // the column under the pointer, by its x: the whole height is its target
     plot.onpointermove = (e) => {
@@ -223,7 +289,27 @@
       want(seen);
     });
     range.classList.add("ms-range");
-    head.append(el("div", "ms-title", t("Memory activity")), range);
+    const side = el("div", "ms-side");
+    if (open) {
+      const style = segs([["bars", svg("M3.5 13V8.5M8 13V3.5M12.5 13V6.5", 14, 1.7)], ["line", svg("M2.5 11.5 6 7.5l3 2.5 4.5-6", 14, 1.7)]], mark, (v) => {
+        if (v === mark) return;
+        mark = v;
+        fade = true;
+        try { localStorage.setItem(MARK, v); } catch {}
+        card.replaceWith(draw());
+      });
+      style.classList.add("ms-style");
+      style.setAttribute("role", "group");
+      style.setAttribute("aria-label", t("Chart style"));
+      for (const b of style.querySelectorAll(".opt")) {
+        const name = t(b.dataset.seg === "line" ? "Line chart" : "Bar chart");
+        b.title = name;
+        b.setAttribute("aria-label", name);
+      }
+      side.append(style);
+    }
+    side.append(range);
+    head.append(el("div", "ms-title", t("Memory activity")), side);
     const tiles = el("div", "ms-tiles");
     const ds = r ? r.days : [];
     for (const key of ORDER) {
