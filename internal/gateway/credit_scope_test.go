@@ -103,6 +103,10 @@ func TestOutOfCreditLeavesFreeModels(t *testing.T) {
 	if !p.PaidBesideFree("deepseek-v4-pro") || p.PaidBesideFree("fake-1") {
 		t.Fatalf("deepseek-v4-pro paid beside free %v, fake-1 %v", p.PaidBesideFree("deepseek-v4-pro"), p.PaidBesideFree("fake-1"))
 	}
+	// a free model WorkBuddy refuses still rests the account (no package)
+	if p.FreeBesidePaid("fake-1") {
+		t.Fatal("fake-1 free beside paid outside OpenCode")
+	}
 	restingUntil.Lock()
 	restingUntil.m, restingUntil.note = map[string]time.Time{}, map[string]Rest{}
 	restingUntil.Unlock()

@@ -1122,6 +1122,7 @@ func fetchPage(ctx context.Context, url, key string, anthropic bool, headers map
 			codexFacts(&m, r, codex)
 		}
 		kimiFacts(&m, r)
+		m.Free = m.Free || goFree(r.Go)
 		m.Via = slices.Clip(r.Via)
 		if p := EndpointAPIs([]string{r.Prefers}); len(p) == 1 {
 			m.Prefers = p[0]
@@ -1240,6 +1241,25 @@ type liveModel struct {
 	ThinkEfforts any `json:"think_efforts"`
 	Reasoning    any `json:"reasoning"`
 	Tools        any `json:"tools"`
+	// what OpenCode Go's list (/zen/go/v1/models) says of a model on its
+	// plans: monthly_usage, the requests each plan's month holds, is null
+	// on a model its windows don't count, one of its free ones (beam-free,
+	// hy4-flash-free), which Go serves with every window used up (#7496).
+	// Raw, as an odd value mustn't lose the whole list
+	Go json.RawMessage `json:"go"`
+}
+
+// goFree says OpenCode Go's word on a model (liveModel's Go) is that its
+// plan's windows don't count it: a monthly_usage that is null, not left
+// out. An object Go fills in per plan, or anything else, is a model that
+// draws on them.
+func goFree(raw json.RawMessage) bool {
+	var g map[string]json.RawMessage
+	if json.Unmarshal(raw, &g) != nil {
+		return false
+	}
+	u, ok := g["monthly_usage"]
+	return ok && string(bytes.TrimSpace(u)) == "null"
 }
 
 // kimiFacts reads what Kimi Code's model list says of a model's thinking

@@ -157,7 +157,8 @@ type Model struct {
 	// including models whose ids don't name Jev.
 	Decides bool `json:",omitempty"`
 	// Free is set on a model a subscription serves at no cost to its
-	// allowance: WorkBuddy's "credits": "x0.00".
+	// allowance: WorkBuddy's "credits": "x0.00", OpenCode Go's
+	// "monthly_usage": null.
 	Free bool `json:",omitempty"`
 	// Rate is what a request costs of a subscription's credits, as a
 	// multiple, when its vendor lists it: Qoder's price_factor (0.5),

@@ -2118,20 +2118,55 @@ func (p Provider) Thinks(model string) bool {
 }
 
 // PaidBesideFree says model costs its subscription's credits while the
-// subscription serves other models at no cost to them (catalog.Model's
-// Free: WorkBuddy's "x0.00", Qoder's is_free, Cline's free models). Its
-// credits running out then says nothing of those: they draw on none
-// (Creat.wu on Discord). False for a model not on the list, or where no
-// model is free.
+// subscription serves other models at no cost to them (costsNothing:
+// WorkBuddy's "x0.00", Qoder's is_free, Cline's free models, OpenCode Go's
+// and Zen's). Its credits or windows running out then say nothing of
+// those: they draw on none (Creat.wu on Discord; Go's "If you reach the
+// usage limit, you can continue using the free models", #7496). False for
+// a model not on the list, or where no model is free.
 func (p Provider) PaidBesideFree(model string) bool {
-	listed, paid, free := false, false, false
+	listed, free, freeToo, _ := p.freeBeside(model)
+	return listed && !free && freeToo
+}
+
+// FreeBesidePaid says model is one OpenCode serves at no cost
+// (costsNothing) beside models that cost: a refusal of it for credit or
+// quota is its own, as it draws on neither, and says nothing of the
+// others (ggbdpq, #7496). OpenCode's alone: WorkBuddy refuses even its
+// 0-rate models to an account with no package, a refusal of the account.
+func (p Provider) FreeBesidePaid(model string) bool {
+	listed, free, _, paidToo := p.freeBeside(model)
+	return listed && free && paidToo && p.IsOpenCode()
+}
+
+// freeBeside is whether p lists model, whether it costs nothing there
+// (costsNothing), and whether p lists another model that does, and one
+// that doesn't.
+func (p Provider) freeBeside(model string) (listed, free, freeToo, paidToo bool) {
 	for _, m := range p.Available() {
-		if strings.EqualFold(m.ID, model) {
-			listed, paid = true, !m.Free
+		f := p.costsNothing(m)
+		switch {
+		case strings.EqualFold(m.ID, model):
+			listed, free = true, f
+		case f:
+			freeToo = true
+		default:
+			paidToo = true
 		}
-		free = free || m.Free
 	}
-	return listed && paid && free
+	return listed, free, freeToo, paidToo
+}
+
+// costsNothing says p serves m at no cost to its allowance or credits by
+// its vendor's word: catalog.Model's Free (WorkBuddy's "x0.00", Qoder's
+// is_free, Cline's free models, OpenCode Go's "monthly_usage": null), or,
+// at OpenCode, one of Zen's free models (OpenCodeFree) or of Go's
+// (openCodeGoFree), for a list saved before Go's word was read from it.
+// Not the user's CountFree, which says how Usage counts the provider and
+// nothing of what the vendor holds back, nor another vendor's $0 price:
+// a free tier priced 0 may still draw on the key's limits.
+func (p Provider) costsNothing(m catalog.Model) bool {
+	return m.Free || p.IsOpenCode() && (p.OpenCodeFree(m.ID) || p.openCodeGoFree(m.ID))
 }
 
 // FreeModel says model costs nothing on p: its vendor serves it at no cost

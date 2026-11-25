@@ -238,11 +238,28 @@ func (p Provider) OpenCodeFree(model string) bool {
 // openCodeGoLists says p is at OpenCode Go's gateway and models.dev's
 // opencode-go lists model.
 func (p Provider) openCodeGoLists(model string) bool {
-	if !slices.ContainsFunc([]string{p.Chat, p.Responses, p.Anthropic}, func(u string) bool { return openCodeGateway(u) == "go" }) {
+	if !p.atOpenCodeGo() {
 		return false
 	}
 	_, ok := catalog.PriceOf("opencode-go", model)
 	return ok
+}
+
+// atOpenCodeGo says p is at OpenCode Go's gateway, on one of its APIs.
+func (p Provider) atOpenCodeGo() bool {
+	return slices.ContainsFunc([]string{p.Chat, p.Responses, p.Anthropic}, func(u string) bool { return openCodeGateway(u) == "go" })
+}
+
+// openCodeGoFree says model is one of OpenCode Go's free models on p, at
+// Go's gateway: one models.dev's opencode-go prices at nothing on every
+// count (beam-free, hy4-flash-free), as Go's own list gives no monthly
+// usage for it. Go's windows don't count it (#7496).
+func (p Provider) openCodeGoFree(model string) bool {
+	if !p.atOpenCodeGo() {
+		return false
+	}
+	pr, ok := catalog.PriceOf("opencode-go", model)
+	return ok && pr.Input == 0 && pr.Output == 0 && pr.CacheRead == 0 && pr.CacheWrite == 0
 }
 
 // openCodeFreeIDs are Zen's free models whose ids don't end in -free.

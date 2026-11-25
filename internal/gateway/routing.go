@@ -1745,7 +1745,7 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 			// under below; another computer's magpie rests its model
 			// for it, as before
 			id := c.restKey()
-			if c.p.PaidBesideFree(c.model) || modelLimited(c, why, body) {
+			if c.p.PaidBesideFree(c.model) || c.p.FreeBesidePaid(c.model) || modelLimited(c, why, body) {
 				id = c.restID()
 			}
 			d, r.By, r.Failures, guessed = creditBackoff(id, header, body, now)
@@ -1979,9 +1979,13 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	// the subscription serves other models free is that model's: the free
 	// ones draw on no credits, and the account still serves them (Creat.wu
 	// on Discord: WorkBuddy AI's 14018 "Credits exhausted" on glm-5.3-flash
-	// rested the account, and its free models went nowhere). A free model
-	// the vendor refuses all the same rests on its own refusal.
-	if (why == failCredit || why == failQuota) && c.p.PaidBesideFree(c.model) {
+	// rested the account, and its free models went nowhere; Winnie7572 on
+	// X and tkhs101's #7496: OpenCode Go's weekly limit on a paid model
+	// rested the key, and its free models, which Go still served, were
+	// answered the kept 429 in a millisecond). A free model the vendor
+	// refuses all the same rests on its own refusal, which says nothing
+	// of the paid ones (ggbdpq).
+	if (why == failCredit || why == failQuota) && (c.p.PaidBesideFree(c.model) || c.p.FreeBesidePaid(c.model)) {
 		id = c.restID()
 	}
 	if remoteModelRest(c, why, header) {
