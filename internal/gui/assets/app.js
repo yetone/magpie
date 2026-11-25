@@ -1654,7 +1654,7 @@ function switchEntry(a) {
     setTimeout(() => b.classList.remove("done"), 5000 - ago);
   }
   b.append(pn ? el("span", "chev", svg(CHEV, 11, 1.7)) : svg(CHEV, 10, 1.6));
-  const opts = ls.filter((l) => !l.token && !l.accessOnly).map((l) => ({ v: "u:" + l.user, name: l.user, literalName: true, note: l.lapsed ? "Sign-in required" : accountPlan({ agent: a.id, plan: l.plan }) }));
+  const opts = ls.filter((l) => !l.token && !l.accessOnly).map((l) => ({ v: "u:" + l.user, name: l.user, literalName: true, note: l.lapsed ? "Sign-in required" : accountPlan({ ...l, agent: a.id }) }));
   const on = cx ? t("magpie only switches {agent}'s sign-in; its requests go straight to OpenAI", ag) : t("magpie serves no requests on these accounts");
   // the Only switch setting, where the accounts page offers it
   if (!cx || ls.filter((l) => !l.lapsed && (l.active || l.on)).length > 1) opts.push({ v: "only", name: t("Only switch {agent}'s sign-in", ag), literalName: true, ticked: !!p.switchOnly, note: on });
@@ -6829,8 +6829,14 @@ function askSignOutLogin(a, l) {
 // accountPlan is the account's chip: its vendor and plan, the plan alone
 // when it already names the vendor (a plugin's own "Zed Pro").
 function accountPlan(a) {
-  // a plugin beside a built-in (cursor-plugin) by the built-in's
-  const agent = a.builtin || a.agent;
+  // a plugin beside a built-in (cursor-plugin) by the built-in's. A Claude
+  // or Codex account's plan is the one its last reading says, as the
+  // tray's card names it: Codex's usage tells the plan now, its sign-in
+  // the one it was signed in on, and a Claude reading is the plan after
+  // its run (CoderMaurice on X: an upgraded account read its old plan in
+  // the editor only). Another's reading names its plan in words of its
+  // own; with none read, the sign-in's.
+  const agent = a.builtin || a.agent, q = /^(claude|codex)$/.test(agent) && !a.lapsed && loginUsage[agent]?.data?.[a.user], plan = (q && !q.error && q.plan) || a.plan;
   const cap = (s) => s[0].toUpperCase() + s.slice(1);
   // "Xiaomi MiMo" and "MiMo 高阶" overlap in "MiMo": said once
   const named = (name, plan) => {
@@ -6841,9 +6847,9 @@ function accountPlan(a) {
     }
     return name + " " + plan;
   };
-  if (agent === "codex" || agent === "chatgpt-api") return named("ChatGPT", a.plan && cap(planName(a.plan)));
+  if (agent === "codex" || agent === "chatgpt-api") return named("ChatGPT", plan && cap(planName(plan)));
   if (agent === "copilot") return named("GitHub", a.plan && cap(a.plan));
-  if (agent === "claude") return named("Claude", a.plan && cap(a.plan));
+  if (agent === "claude") return named("Claude", plan && cap(plan));
   if (agent === "cursor") return named("Cursor", a.plan && cap(a.plan));
   if (agent === "grok") return a.plan || "Grok";
   if (agent === "gemini" || agent === "antigravity") return a.plan || "Google";
@@ -13813,7 +13819,7 @@ function renderAccounts(a, p) {
     // one line, First or Make first at its right end (the owner, 10-29)
     const line = el("div", "acc-line");
     row.append(line);
-    line.append(dot, accountNameButton(p, l.user), planChip(accountPlan({ agent: a.agent, builtin: a.builtin, plan: l.plan })));
+    line.append(dot, accountNameButton(p, l.user), planChip(accountPlan({ ...l, agent: a.agent, builtin: a.builtin })));
     if (p && on && several) line.append(keyWeight(p, { name: l.user }, wOf(l), weights, "provider/accountweight", { id: p.id, account: l.user }));
     // its own models (#474), when there is another account to send the rest to
     const [amPill, amBox] = ls.length > 1 || accountModelsOf(p, l.user).length ? accountModels(p, l.user, false, l.user) : [];
@@ -14507,15 +14513,17 @@ function accountQuota(data, user, capFor = () => 0, settable = null, prov) {
     balance.append(el("span", "aq-n", t("Balance")), el("b", "", q.balance));
     line.append(balance);
   }
-  // the two rolling windows fit a line; the per-model ones go in its
-  // tooltip; per-model windows of a family are the family's one
+  // the three windows the tray's card draws (panelQuotaCard), a Claude
+  // Max account's weekly Fable one too (CoderMaurice on X: it was in this
+  // line's tooltip only); the rest go in its tooltip; per-model windows
+  // of a family are the family's one
   const counted = q.windows.filter((w) => !w.unlimited);
   const ws = familyWindows(counted);
   if (!ws.length) { line.append(el("span", "aq-none", t("Unlimited"))); return line; }
   if (ws.some((w) => w.members)) return poolLine(line, ws, q, capFor, settable);
-  line.title = ws.slice(2).map((w) => w.tiers ? tiersText(w) : t(w.name) + " " + quotaText(w)).join(ws !== counted ? "\n" : " · ");
+  line.title = ws.slice(3).map((w) => w.tiers ? tiersText(w) : t(w.name) + " " + quotaText(w)).join(ws !== counted ? "\n" : " · ");
   if (q.asOf) line.title = tipLines(line.title, asOfText(q));
-  for (const w of ws.slice(0, 2)) {
+  for (const w of ws.slice(0, 3)) {
     const used = to100(w.used);
     const m = el("span", "aq-w" + (used >= 90 ? " full" : ""));
     const track = el("span", "aq-track");

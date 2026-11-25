@@ -229,8 +229,9 @@ func parseLogins(b []byte) ([]savedLogin, error) {
 	// signed in before is left out, and gone from the file at its next write
 	out = slices.DeleteFunc(out, func(l savedLogin) bool { return l.Agent == "dimagent" })
 	for i := range out {
-		// a Max 20x saved before it was named Ultra
-		if out[i].Agent == "claude" && out[i].Plan == "max" {
+		// a Max 20x saved before it was named Ultra, and a Pro account
+		// saved before its tier said it was upgraded (claudePlanShown)
+		if out[i].Agent == "claude" && (out[i].Plan == "max" || out[i].Plan == "pro") {
 			if c, ok := parseClaudeCredentials(out[i].Auth); ok {
 				var acct map[string]any
 				_ = json.Unmarshal(out[i].Profile, &acct)

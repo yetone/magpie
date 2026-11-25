@@ -472,23 +472,58 @@ func syncClaudeDir(l *savedLogin) (has, changed bool, err error) {
 }
 
 // takeClaudeDir puts the sign-in Claude Code keeps in an account's config
-// directory into its saved login, and says whether that changed it.
+// directory into its saved login, and says whether that changed it. A
+// sign-in Claude Code renewed only the plan of, its tokens the same,
+// changes it too: Claude Code writes the tier its profile read now beside
+// the tokens it holds, and the account's plan is read from it
+// (claudePlanShown), with the plan name Claude Code kept in the
+// directory's profile.
 func takeClaudeDir(l *savedLogin, c claudeCredentials) (bool, error) {
-	if old, ok := parseClaudeCredentials(l.Auth); ok && old.OAuth.AccessToken == c.OAuth.AccessToken &&
-		old.OAuth.RefreshToken == c.OAuth.RefreshToken {
+	plan := l.Plan
+	if c.OAuth.SubscriptionType != "" {
+		var acct map[string]any
+		if len(l.Profile) > 0 {
+			_ = json.Unmarshal(l.Profile, &acct)
+		}
+		shown := claudeShownPlan(acct)
+		if s := claudeDirShownPlan(claudeAccountDir(l.User)); s != "" {
+			shown = s
+		}
+		plan = claudePlanShown(c.OAuth.SubscriptionType, c.OAuth.RateLimitTier, shown)
+	}
+	old, ok := parseClaudeCredentials(l.Auth)
+	renewed := !ok || old.OAuth.AccessToken != c.OAuth.AccessToken || old.OAuth.RefreshToken != c.OAuth.RefreshToken
+	if !renewed && old.OAuth.SubscriptionType == c.OAuth.SubscriptionType &&
+		old.OAuth.RateLimitTier == c.OAuth.RateLimitTier && plan == l.Plan {
 		return false, nil
 	}
 	b, err := c.marshal()
 	if err != nil {
 		return false, err
 	}
-	l.Auth = b
-	if c.OAuth.SubscriptionType != "" {
-		l.Plan = c.OAuth.plan()
+	l.Auth, l.Plan = b, plan
+	if renewed {
+		l.Renewed = time.Now().UTC().Truncate(time.Second)
+		l.Lapsed, l.Refused = "", ""
 	}
-	l.Renewed = time.Now().UTC().Truncate(time.Second)
-	l.Lapsed, l.Refused = "", ""
 	return true, nil
+}
+
+// claudeDirShownPlan is the plan name Claude Code keeps in config
+// directory dir's profile (claudeShownPlan): "" when it keeps none, or
+// the file can't be read.
+func claudeDirShownPlan(dir string) string {
+	b, err := os.ReadFile(filepath.Join(dir, ".claude.json"))
+	if err != nil {
+		return ""
+	}
+	var p struct {
+		Account map[string]any `json:"oauthAccount"`
+	}
+	if json.Unmarshal(b, &p) != nil {
+		return ""
+	}
+	return claudeShownPlan(p.Account)
 }
 
 // claudeStandIn is the saved account served in the place of Claude Code's

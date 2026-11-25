@@ -414,6 +414,17 @@ func loginProvider(l Login) string {
 	return l.Agent
 }
 
+// savedLoginPlan is the plan logins.json keeps for agent's account user
+// now: "" for none.
+func savedLoginPlan(agent, user string) string {
+	for _, l := range sharedLogins() {
+		if l.Agent == agent && strings.EqualFold(l.User, user) {
+			return l.Plan
+		}
+	}
+	return ""
+}
+
 func loginQuota(ctx context.Context, l Login) SubscriptionQuota {
 	ctx = ViaLogin(ctx, loginProvider(l), l.User) // asked through the account's own proxy
 	if strings.HasPrefix(l.Agent, "plugin:") {
@@ -475,6 +486,12 @@ func loginQuota(ctx context.Context, l Login) SubscriptionQuota {
 			q.Error = err.Error()
 		} else {
 			q.ReadAt = claudeReadAt(l.User)
+		}
+		// the plan as the run left it: Claude Code renews the account's
+		// tier in its directory, which syncSavedClaude keeps (an account
+		// upgraded since l was read, CoderMaurice on X)
+		if plan := savedLoginPlan(l.Agent, l.User); plan != "" {
+			q.Plan = plan
 		}
 		return q
 	}

@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
@@ -20,6 +21,10 @@ func TestClaudeMax20xIsUltra(t *testing.T) {
 		{"max", "default_claude_max_5x", "max"},
 		{"max", "", "max"},
 		{"pro", "default_claude_ai", "pro"},
+		// upgraded from Pro: Claude Code keeps "pro", the tier says Max
+		{"pro", "default_claude_max_5x", "max"},
+		{"pro", "default_claude_max_20x", "ultra"},
+		{"enterprise", "default_claude_max_20x", "enterprise"},
 		{"team", "default_claude_max_5x", "team"},
 		{"ultra", "default_claude_max_20x", "ultra"},
 	} {
@@ -134,5 +139,93 @@ func TestClaudeSavedPlanFromProfileName(t *testing.T) {
 	ls, err := parseLogins(b)
 	if err != nil || len(ls) != 1 || ls[0].Plan != "ultra" {
 		t.Fatalf("saved plan %+v %v; want ultra", ls, err)
+	}
+}
+
+// CoderMaurice on X: a Claude account upgraded from Pro to Max kept
+// "Claude Pro" on its row in the editor, while the tray drew Max's weekly
+// Fable window for it. Claude Code keeps the subscription type it was
+// signed in with ("pro") and renews only the rate-limit tier beside the
+// same tokens, so the plan is the tier's: on a saved account, read back
+// from the directory its /usage ran in, and on one saved before.
+func TestClaudeUpgradedFromProReadsMax(t *testing.T) {
+	claudeThree(t)
+	pro := "pro@x.com"
+	if err := SwitchLogin("claude", "max@x.com"); err != nil {
+		t.Fatal(err)
+	}
+	planOf := func() string {
+		for _, l := range Logins("claude") {
+			if l.User == pro {
+				if l.Active {
+					t.Fatal("the Pro account is still Claude Code's own")
+				}
+				return l.Plan
+			}
+		}
+		t.Fatal("no Pro account")
+		return ""
+	}
+	if p := planOf(); p != "pro" {
+		t.Fatalf("before the upgrade the account reads %q", p)
+	}
+	renewedAt := func() time.Time {
+		for _, l := range readLogins() {
+			if l.User == pro {
+				return l.Renewed
+			}
+		}
+		return time.Time{}
+	}
+	was := renewedAt()
+	var text atomic.Value
+	text.Store("Current session: 33% used\nCurrent week (all models): 40% used\nCurrent week (Fable): 40% used")
+	runs := fakeClaudeUsage(t, &text, nil)
+	UsageClaudeVia(func(_ context.Context, dir string) (string, error) {
+		runs.Add(1)
+		if dir == claudeAccountDir(pro) {
+			// Claude Code's run renews the profile: the tokens it holds
+			// stay, the tier is Max's now, the subscription type still Pro's
+			c, ok := readClaudeDir(dir)
+			if !ok {
+				return "", errors.New("no sign-in in the account's directory")
+			}
+			oauth := c.raw["claudeAiOauth"].(map[string]any)
+			oauth["rateLimitTier"] = "default_claude_max_5x"
+			writeFile(t, filepath.Join(dir, ".credentials.json"), c.raw)
+		}
+		return text.Load().(string), nil
+	})
+	ctx := context.Background()
+	RefreshUsage(ctx, "claude", pro)
+	q := LoginUsage(ctx, "claude")[pro]
+	if q.Error != "" || len(q.Windows) < 3 {
+		t.Fatalf("the refresh read no allowance: %+v", q)
+	}
+	if q.Plan != "max" {
+		t.Errorf("the reading names the plan %q, want max", q.Plan)
+	}
+	if p := planOf(); p != "max" {
+		t.Errorf("the saved account reads %q after its run, want max", p)
+	}
+	for _, l := range readLogins() {
+		if l.User == pro {
+			c, _ := parseClaudeCredentials(l.Auth)
+			if c.OAuth.RateLimitTier != "default_claude_max_5x" || c.OAuth.AccessToken != "tok-"+pro {
+				t.Errorf("saved sign-in %+v; want the same tokens with Max's tier", c.OAuth)
+			}
+		}
+	}
+	// only the plan changed: the sign-in wasn't renewed
+	if r := renewedAt(); !r.Equal(was) {
+		t.Errorf("a tier renewed alone marked the sign-in renewed at %v (was %v)", r, was)
+	}
+
+	// saved before: logins.json says "pro" beside Max's tier
+	b, _ := json.Marshal([]savedLogin{{Agent: "claude", User: "u@example.com", Plan: "pro",
+		Auth: json.RawMessage(`{"claudeAiOauth":{"accessToken":"a","refreshToken":"r","subscriptionType":"pro","rateLimitTier":"default_claude_max_5x"}}`)}})
+	ls, err := parseLogins(b)
+	if err != nil || len(ls) != 1 || ls[0].Plan != "max" {
+		t.Fatalf("saved plan %+v %v; want max", ls, err)
 	}
 }

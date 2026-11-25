@@ -461,8 +461,15 @@ func claudePlan(sub, tier string) string { return claudePlanShown(sub, tier, "")
 // "Claude <name>" ("Ultra" for a Max 20x account, none for Max 5x). A
 // known tier decides; the name is read only when the tier doesn't say,
 // so a profile left from another account can't rename this one.
+//
+// The tier decides a Pro account too: Claude Code keeps the subscription
+// type it was signed in with (subscriptionType, "the stored login plan")
+// and renews only the tier from the profile, so an account upgraded from
+// Pro to Max still says "pro" beside a Max tier (CoderMaurice on X: the
+// editor read "Claude Pro" while the account drew Max's Fable window).
+// A Team or Enterprise seat is named as it is, whatever its seat's tier.
 func claudePlanShown(sub, tier, shown string) string {
-	if sub != "max" {
+	if sub != "max" && sub != "pro" {
 		return sub
 	}
 	switch {
@@ -470,8 +477,12 @@ func claudePlanShown(sub, tier, shown string) string {
 		return "ultra"
 	case strings.Contains(tier, "max_5x"):
 		return "max"
-	case strings.EqualFold(strings.TrimSpace(shown), "ultra"):
+	}
+	switch name := strings.ToLower(strings.TrimSpace(shown)); {
+	case name == "ultra" && (sub == "max" || tier == ""):
 		return "ultra"
+	case name == "max" && tier == "":
+		return "max"
 	}
 	return sub
 }

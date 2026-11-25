@@ -377,8 +377,11 @@ func accountRows(ls []provider.Login, now time.Time) []accountRow {
 			if !strings.EqualFold(user, l.User) {
 				continue
 			}
-			if r.Plan == "" {
-				r.Plan = q.Plan
+			// a Claude or Codex account's plan as its reading says, as the
+			// GUI names it: Codex's sign-in says the plan it was signed in
+			// on, not one upgraded since (CoderMaurice on X)
+			if r.Plan == "" || q.Plan != "" && q.Error == "" && (l.Agent == "claude" || l.Agent == "codex") {
+				r.Plan = cmp.Or(q.Plan, r.Plan)
 			}
 			r.Error, r.Resets, r.AsOf, r.ReadAt, r.Balance = q.Error, q.Resets, q.AsOf, q.ReadAt, q.Balance
 			// a pool's own windows stand in for the models' drawing on it,

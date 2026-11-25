@@ -217,3 +217,24 @@ func TestAccountRowsTellCredits(t *testing.T) {
 		t.Fatalf("%+v", rows)
 	}
 }
+
+// A Codex account upgraded from Plus says Pro from its reading, as the GUI's
+// row does, while a reading that failed leaves the sign-in's plan
+// (CoderMaurice on X).
+func TestAccountRowsPlanFromReading(t *testing.T) {
+	now := time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
+	provider.LoginUsageVia(func(context.Context, string) map[string]provider.SubscriptionQuota {
+		return map[string]provider.SubscriptionQuota{
+			"plus@example.com":   {Provider: "codex", User: "plus@example.com", Plan: "pro", Windows: []provider.QuotaWindow{{Name: "5 hours", Used: 10}}},
+			"unread@example.com": {Provider: "codex", User: "unread@example.com", Plan: "", Error: "Codex didn't answer"},
+		}
+	})
+	t.Cleanup(func() { provider.LoginUsageVia(nil) })
+	rows := accountRows([]provider.Login{
+		{Agent: "codex", User: "plus@example.com", Plan: "plus", Active: true, On: true},
+		{Agent: "codex", User: "unread@example.com", Plan: "plus", On: true},
+	}, now)
+	if len(rows) != 2 || rows[0].Plan != "pro" || rows[1].Plan != "plus" {
+		t.Fatalf("%+v", rows)
+	}
+}
