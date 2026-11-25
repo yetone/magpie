@@ -8,6 +8,7 @@ import (
 
 	"github.com/tidwall/gjson"
 
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
 )
@@ -344,8 +345,49 @@ func outputFillRefused(model string) string { return "filled-output:" + model }
 // max_tokens of at least 2048 in thinking mode (cloud.tencent.com/document/
 // product/1823/132248). A memory tool's max_tokens of 4096 was spent on
 // reasoning alone, every reply cut at its length with no answer (WaiooT on X).
+//
+// Google's Gemini does the same on Google's own routes: a Gemini 2.5 or
+// later thinks by default (gemini-4-hydrogen and the Pros at high), and
+// the reply limit counts its thoughts ("the maximum number of tokens a
+// response can generate, including thought tokens", aistudio.google.com/
+// docs/thinking). Nowledge Mem's max_tokens of 8192 to Gemini 4 Hydrogen
+// at AI Studio was spent on reasoning alone, every reply a 502 with no
+// answer (fwxkogaia on X).
 func thinksByDefault(p provider.Provider, model string) bool {
-	return strings.HasSuffix(p.VendorHost(), "tencentmaas.com") && strings.Contains(strings.ToLower(model), "deepseek")
+	if strings.HasSuffix(p.VendorHost(), "tencentmaas.com") && strings.Contains(strings.ToLower(model), "deepseek") {
+		return true
+	}
+	return googleGemini(p, model) && geminiThinksByDefault(model)
+}
+
+// googleGemini is whether p serves model as Google serves it: one of
+// Google's hosts (AI Studio's OpenAI-compatible and Gemini APIs, Vertex
+// AI's, Code Assist's), Vertex AI, or a Google sign-in. OpenRouter's Gemini
+// isn't: it holds a request's whole max_tokens against the balance ("can
+// only afford"), so a raised limit would turn a small balance away. Nor
+// is a relay, a proxy on this computer or the LAN included (which
+// geminiCompat reads as AI Studio's for the request's shape): it may hold
+// or cap the limit too, and its void is asked again for room (voidRoom).
+func googleGemini(p provider.Provider, model string) bool {
+	if !strings.Contains(strings.ToLower(model), "gemini") {
+		return false
+	}
+	h := strings.ToLower(p.VendorHost())
+	return h == "googleapis.com" || strings.HasSuffix(h, ".googleapis.com") ||
+		p.IsVertex() || googleAccount(p) || googlePlugin(p)
+}
+
+// geminiThinksByDefault is whether a Gemini model thinks at length on a
+// request that asks nothing of its thinking: 2.5 and later, but not a
+// Flash-Lite (2.5's doesn't think unless asked, 3's thinks at minimal) or
+// an image model; and the -latest aliases, which name a current one.
+func geminiThinksByDefault(model string) bool {
+	m := strings.ToLower(strings.TrimPrefix(model, "models/"))
+	if strings.Contains(m, "lite") || strings.Contains(m, "image") || catalog.DrawsID(m) {
+		return false
+	}
+	return geminiGeneration(m) >= 3 || strings.Contains(m, "gemini-2.5") ||
+		strings.HasSuffix(m, "gemini-pro-latest") || strings.HasSuffix(m, "gemini-flash-latest")
 }
 
 // namesReasoning is whether body, in proto's words, says how the model is
@@ -353,7 +395,9 @@ func thinksByDefault(p provider.Provider, model string) bool {
 func namesReasoning(proto provider.Protocol, body []byte) bool {
 	switch proto {
 	case provider.Chat:
-		for _, k := range []string{"reasoning_effort", "thinking", "enable_thinking", "chat_template_kwargs", "reasoning"} {
+		// extra_body's google.thinking_config is Gemini's own, through
+		// its OpenAI-compatible API
+		for _, k := range []string{"reasoning_effort", "thinking", "enable_thinking", "chat_template_kwargs", "reasoning", "extra_body.google.thinking_config", "thinking_config"} {
 			if gjson.GetBytes(body, k).Exists() {
 				return true
 			}
@@ -361,6 +405,8 @@ func namesReasoning(proto provider.Protocol, body []byte) bool {
 		return false
 	case provider.Responses:
 		return gjson.GetBytes(body, "reasoning").Exists()
+	case provider.Anthropic:
+		return gjson.GetBytes(body, "thinking").Exists() || gjson.GetBytes(body, "output_config.effort").Exists()
 	}
 	return true
 }
@@ -384,7 +430,11 @@ func withThinkingRoom(p provider.Provider, model string, proto provider.Protocol
 		}
 	case provider.Responses:
 		field = "max_output_tokens"
+	case provider.Anthropic:
+		field = "max_tokens"
 	default:
+		// a Gemini client's maxOutputTokens is in Gemini's own words,
+		// which count the thoughts: its own choice
 		return body
 	}
 	n := int(gjson.GetBytes(body, field).Int())
