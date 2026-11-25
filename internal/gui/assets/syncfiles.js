@@ -41,10 +41,14 @@ window.davForm = function (v) {
   const [agentsL, agents] = tick(t("Agents' models"), v.agents !== false);
   const [libL, lib] = tick(t("Library: instructions, MCP servers, skills, hooks, subagents and Claude plugins"), v.library !== false);
   const [memL, mem] = tick(t("Memory: what the agents know, merged memory by memory"), v.memory !== false);
-  const keysShow = () => { keysL.hidden = !prov.checked; };
+  // rarely changed: under Advanced, open when one is set away from its default
+  // only the providers' list and keys sync, each provider's settings stay
+  // on this computer (StudyingPython on X). This computer's choice, never
+  // in the setup text
+  const [ownL, own] = tick(t("Sync only the providers' list and API keys"), !!v.providerSettingsHere);
+  const keysShow = () => { keysL.hidden = ownL.hidden = !prov.checked; };
   keysShow();
   prov.onchange = keysShow;
-  // rarely changed: under Advanced, open when one is set away from its default
   const [profL, prof] = tick(t("Profiles"), v.profiles !== false);
   // usage: off unless picked, each computer its own (#542)
   const [useL, use] = tick(t("Usage: this computer's calls, for the Usage page on the others"), !!v.usage);
@@ -83,9 +87,9 @@ window.davForm = function (v) {
   const what = el("div", "stack");
   what.append(provL, keysL, setL, agentsL, libL, memL);
   const adv = el("details", "more advanced sync-advanced");
-  adv.open = v.profiles === false || !!v.usage || !!v.signIns;
+  adv.open = v.profiles === false || !!v.usage || !!v.signIns || !!v.providerSettingsHere;
   const advIn = el("div", "stack");
-  advIn.append(profL, useL, siL, exL, siSay, el("div", "hint", t("Usage goes as a file a day: times, tokens, models and costs, never what was said. Turn it on on each computer that shares its own.")));
+  advIn.append(ownL, profL, useL, siL, exL, siSay, el("div", "hint", t("Usage goes as a file a day: times, tokens, models and costs, never what was said. Turn it on on each computer that shares its own.")));
   adv.append(el("summary", "", t("Advanced")), advIn);
   const davFields = [...field(t("Address"), url, t("A folder named magpie is made in it.")),
     ...field(t("User"), user),
@@ -203,7 +207,7 @@ window.davForm = function (v) {
     // so a setup from before the choice is saved as it was
     const outs = {};
     for (const [k, c] of [["providers", prov], ["settings", sets], ["profiles", prof]]) if (!c.checked || v[k] === false) outs[k] = c.checked;
-    return { ...where, passphrase: phrase.value, keys: keys.checked, agents: agents.checked, library: lib.checked, memory: mem.checked, ...outs, ...(use.checked || v.usage ? { usage: use.checked } : {}), ...(si.checked || v.signIns ? { signIns: si.checked } : {}), ...(except.length || v.signInsExcept?.length ? { signInsExcept: except } : {}) };
+    return { ...where, passphrase: phrase.value, keys: keys.checked, agents: agents.checked, library: lib.checked, memory: mem.checked, ...outs, ...(use.checked || v.usage ? { usage: use.checked } : {}), ...(si.checked || v.signIns ? { signIns: si.checked } : {}), ...(own.checked || v.providerSettingsHere ? { providerSettingsHere: own.checked } : {}), ...(except.length || v.signInsExcept?.length ? { signInsExcept: except } : {}) };
   };
   peek.onclick = async () => {
     if (!(await openPasted())) return;

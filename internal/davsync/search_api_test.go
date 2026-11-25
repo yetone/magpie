@@ -36,13 +36,13 @@ func TestSyncSearchAPIs(t *testing.T) {
 	if err := provider.SetSearchAPI(provider.SearchAPI{Vendor: "exa", Key: "k"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := bring(backup.Bundle{}, "providers"); err != nil {
+	if err := bring(backup.Bundle{}, "providers", nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(provider.StoredSearchAPIs()) != 1 {
 		t.Fatal("an older magpie's providers took them away")
 	}
-	if err := bring(backup.Bundle{Searches: &[]provider.SearchAPI{}}, "providers"); err != nil {
+	if err := bring(backup.Bundle{Searches: &[]provider.SearchAPI{}}, "providers", nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(provider.StoredSearchAPIs()) != 0 {

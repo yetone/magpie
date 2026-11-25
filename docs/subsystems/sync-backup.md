@@ -111,6 +111,35 @@ sync both ways throughout. A kept agent is not listed under Kept on this
 computer, which is the implicit own fields only (`TestAgentHereThroughSync`,
 `TestAgentsHereIsThisComputers`, `agent-here.test.cjs`).
 
+The providers' settings can be kept to each computer the same way, so that
+only the list and the keys sync (StudyingPython on X: "只希望同步供应商的key和列表，
+不希望同步供应商设置"). **Sync only the providers' list and API keys**, under
+Advanced in the sync form (`Config.ProviderSettingsHere`,
+`magpie s3 set provider-settings-here=yes`), is this computer's choice in
+sync.json, off by default and not in the setup text. The settings are the
+fields in [`provider.settingFields`](../../internal/provider/settings_here.go):
+model picks and model rules, on or off, routing, limits and rests, prices
+and balances, request options, headers, proxy and TLS options. What goes
+with a key still syncs: its URLs and API, the header it is sent in, the
+account behind it (AWS, Vertex, Zhipu's team), a client certificate and the
+server's pin, and a secret header (`SecretHeader`) among the headers.
+Which providers there are, their names and icons, their order and the
+routing groups sync too. `TestProviderFieldsSortedForSync` fails on a new
+field of `Provider` until it is put on one side. On, `withSettings` adds the
+`settingsOwn` sentinel to the own set: `withoutOwn` blanks every provider's
+settings in the hashes (`provider.WithoutSettings`), so a setting here is no
+change to push and the server's is none to bring; `keepServersOwn` puts the
+server's settings back into the providers this computer pushes, a provider
+the server lacks going up with this computer's; and `bring` mirrors with
+`provider.MirrorKeepingSettings`, which keeps the settings of a provider here
+and gives one new here the settings it came with. sync-state.json records
+the choice as of the last sync (`Settings`), as `Here` is, so turning it on
+or off is no change on either side. Turned off, the next change here goes up
+again. A Restore from the server keeps the settings too; a backup file's
+Restore and the Restore's Undo do not (`TestProviderSettingsStayOnEachComputer`,
+`TestModelPicksStayOnEachComputer`, `TestProviderSettingsHereTurnedOnSendsNothing`,
+`TestWithSettingsOf`, `sync-provider-settings-here.test.cjs`).
+
 A provider can also be kept on one computer
 ([`Provider.ThisDevice`](../../internal/provider/provider.go): the provider
 row's menu, `magpie provider this-device <id> yes|no`), for a local model that

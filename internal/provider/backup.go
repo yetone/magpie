@@ -104,7 +104,16 @@ func RestoreGroups(gs []Group) error {
 // the office, and sync set each computer to the other's every day. A
 // provider kept on this computer (ThisDevice) is neither replaced nor
 // removed by them.
-func Mirror(ps []Provider, gs []Group) error {
+func Mirror(ps []Provider, gs []Group) error { return mirror(ps, gs, false) }
+
+// MirrorKeepingSettings is Mirror with each provider here keeping its own
+// settings (WithSettingsOf), as a computer whose provider settings stay
+// on it (davsync's Config.ProviderSettingsHere) takes another's list and
+// keys: a provider new here takes the settings it came with, which it
+// needs some of.
+func MirrorKeepingSettings(ps []Provider, gs []Group) error { return mirror(ps, gs, true) }
+
+func mirror(ps []Provider, gs []Group, settingsHere bool) error {
 	f, err := read()
 	if err != nil {
 		return err
@@ -129,6 +138,9 @@ func Mirror(ps []Provider, gs []Group) error {
 			p = KeepSecrets(p, h, p.Key == "" && len(p.Keys) == 0)
 			p.KeepLogin, p.KeepLoginAs, p.SwitchOnly, p.RestartApp = h.KeepLogin, h.KeepLoginAs, h.SwitchOnly, h.RestartApp
 			p.KeepSelf = h.KeepSelf
+			if settingsHere {
+				p = WithSettingsOf(p, h)
+			}
 		} else {
 			p.KeepLoginAs = "" // an account signed in on the other computer
 			p.KeepSelf = false // kept on the other computer, of a magpie that isn't this one

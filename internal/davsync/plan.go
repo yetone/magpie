@@ -94,7 +94,7 @@ func Preview(ctx context.Context) (Plan, error) {
 		}
 		st := loadState()
 		if st.Key != stateKey(c) {
-			st = state{Key: stateKey(c), Brought: st.Brought, Replaced: st.Replaced, Own: st.Own, Follow: st.Follow, Here: st.Here}
+			st = state{Key: stateKey(c), Brought: st.Brought, Replaced: st.Replaced, Own: st.Own, Follow: st.Follow, Here: st.Here, Settings: st.Settings}
 		}
 		var err error
 		p, err = preview(ctx, c, st)
@@ -119,7 +119,7 @@ func PreviewWith(ctx context.Context, c Config) (Plan, error) {
 		}
 		st := loadState()
 		if st.Key != stateKey(c) {
-			st = state{Key: stateKey(c), Brought: st.Brought, Replaced: st.Replaced, Own: st.Own, Follow: st.Follow, Here: st.Here}
+			st = state{Key: stateKey(c), Brought: st.Brought, Replaced: st.Replaced, Own: st.Own, Follow: st.Follow, Here: st.Here, Settings: st.Settings}
 		}
 		var err error
 		p, err = preview(ctx, c, st)
@@ -147,6 +147,9 @@ func preview(ctx context.Context, c Config, st state) (Plan, error) {
 
 // previewed fills pv from what syncOnce decided.
 func previewed(pv *Plan, c Config, local, remote, merged backup.Bundle, bringIn, here, there, goneThere []string, prevSignIns map[string]string) error {
+	// the provider settings kept here are neither brought nor taken up
+	kept := withSettings(nil, c.ProviderSettingsHere)
+	local, remote, merged = withoutOwn(local, kept), withoutOwn(remote, kept), withoutOwn(merged, kept)
 	M := hashes(merged)
 	Rh := hashes(remote)
 	for _, p := range Parts {
@@ -418,7 +421,7 @@ func UndoSync(force bool) ([]string, error) {
 		if err != nil {
 			return err
 		}
-		ownNow := withHere(st.Own, st.Here)
+		ownNow := withSettings(withHere(st.Own, st.Here), st.Settings)
 		H := hashesOwn(local, ownNow)
 		if !force {
 			var since []string
@@ -442,7 +445,7 @@ func UndoSync(force bool) ([]string, error) {
 				if _, err := bringAgents(kept.Agents, ownNow); err != nil {
 					return fmt.Errorf("bringing back the %s: %w", p, err)
 				}
-			} else if err := bring(kept, p); err != nil {
+			} else if err := bring(kept, p, ownNow); err != nil {
 				return fmt.Errorf("bringing back the %s: %w", p, err)
 			}
 			back = append(back, p)

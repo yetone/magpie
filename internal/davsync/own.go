@@ -8,6 +8,7 @@ import (
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/backup"
 	"github.com/yetone/magpie/internal/profile"
+	"github.com/yetone/magpie/internal/provider"
 )
 
 // An agent's field that sync wrote over a value picked on this computer,
@@ -50,6 +51,13 @@ func noticeOwn(st *state, here map[string]string) {
 // hashed to tell a change, so a pick of an own field is no change to push
 // and the server's value of one is no change to bring.
 func withoutOwn(b backup.Bundle, own map[string]bool) backup.Bundle {
+	if own[settingsOwn] && b.Providers != nil {
+		ps := make([]provider.Provider, len(b.Providers))
+		for i, p := range b.Providers {
+			ps[i] = provider.WithoutSettings(p)
+		}
+		b.Providers = ps
+	}
 	if len(own) == 0 || b.Agents == nil {
 		return b
 	}
@@ -84,6 +92,25 @@ func withHere(own map[string]bool, here []string) map[string]bool {
 	return out
 }
 
+// settingsOwn, in an own set, is every provider's settings, kept on this
+// computer (Config.ProviderSettingsHere). Like an agent kept here, it is
+// made for each sync and never kept in Own; the state keeps whether the
+// last sync had it (Settings). No agent field is named so.
+const settingsOwn = "\x00providerSettings"
+
+// withSettings is own with the providers' settings in it, when on.
+func withSettings(own map[string]bool, on bool) map[string]bool {
+	if !on {
+		return own
+	}
+	out := maps.Clone(own)
+	if out == nil {
+		out = map[string]bool{}
+	}
+	out[settingsOwn] = true
+	return out
+}
+
 // isOwn is whether field k is in own: by itself, or as its agent's.
 func isOwn(own map[string]bool, k string) bool {
 	if own[k] {
@@ -108,9 +135,24 @@ func hashesOwn(b backup.Bundle, own map[string]bool) map[string]string {
 }
 
 // keepServersOwn puts the server's values of this computer's own fields
-// back into the agents a sync takes up from here: they never go up.
-func keepServersOwn(merged *backup.Bundle, remote backup.Bundle, own map[string]bool) {
-	if len(own) == 0 {
+// back into part p (agents or providers) that a sync takes up from here:
+// they never go up. A provider the server doesn't have goes up with this
+// computer's settings, the ones another computer takes for it.
+func keepServersOwn(merged *backup.Bundle, remote backup.Bundle, own map[string]bool, p string) {
+	if p == "providers" && own[settingsOwn] {
+		theirs := map[string]provider.Provider{}
+		for _, r := range remote.Providers {
+			theirs[r.ID] = r
+		}
+		ps := slices.Clone(merged.Providers)
+		for i, m := range ps {
+			if r, ok := theirs[m.ID]; ok {
+				ps[i] = provider.WithSettingsOf(m, r)
+			}
+		}
+		merged.Providers = ps
+	}
+	if p != "agents" || len(own) == 0 {
 		return
 	}
 	a := maps.Clone(merged.Agents)

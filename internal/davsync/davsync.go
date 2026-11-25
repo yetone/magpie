@@ -118,6 +118,17 @@ type Config struct {
 	// copy goes on as it was for the computers that sync them. None, as
 	// in a setup made before the choice, leaves none out.
 	SignInsExcept []string `json:"signInsExcept,omitempty"`
+	// ProviderSettingsHere keeps each provider's settings on this
+	// computer, so only the list and the keys sync (provider.WithoutSettings;
+	// StudyingPython on X: "只希望同步供应商的key和列表，不希望同步供应商设置"):
+	// a setting made here (models, routing, limits, headers, proxy, on or
+	// off…) never goes up, and the server's never comes in for a provider
+	// here, while providers added, removed, renamed or given a new key
+	// sync as ever. A provider new here takes the settings it came with,
+	// and one new on the server goes up with this computer's. Off, as in a
+	// setup made before the choice, the settings go with their providers.
+	// The choice is this computer's: the setup text doesn't carry it.
+	ProviderSettingsHere bool `json:"providerSettingsHere,omitempty"`
 	// Other is the most recently left server, retained for older clients.
 	// Servers holds every inactive kind. Nothing syncs to them.
 	Other *Server `json:"other,omitempty"`
@@ -280,6 +291,10 @@ type state struct {
 	// AgentsHere) as the last sync left them: an agent turned so since is
 	// a change the next sync settles, its hashes made as before it.
 	Here []string `json:"here,omitempty"`
+	// Settings is Config.ProviderSettingsHere as the last sync had it, for
+	// the same reason as Here: turning it on or off is no change on either
+	// side.
+	Settings bool `json:"providerSettings,omitempty"`
 	// SignIns is the sign-ins (id → hash) the last sync left both on the
 	// server and here: one gone from a side since was removed there. Nil
 	// when not known (never synced with them, or a blind write went
@@ -564,6 +579,9 @@ type View struct {
 	// SignInsExcept are the subscriptions whose sign-ins stay out
 	// (Config.SignInsExcept)
 	SignInsExcept []string `json:"signInsExcept,omitempty"`
+	// ProviderSettingsHere is whether the providers' settings stay on
+	// this computer (Config.ProviderSettingsHere)
+	ProviderSettingsHere bool `json:"providerSettingsHere,omitempty"`
 	// UsageError is why usage couldn't be shared the last time it was tried
 	UsageError string    `json:"usageError,omitempty"`
 	Last       time.Time `json:"last,omitzero"`
@@ -645,7 +663,7 @@ func Status() View {
 			}
 		}
 	}
-	v.Usage, v.SignIns, v.SignInsExcept = c.Usage, c.SignIns, c.SignInsExcept
+	v.Usage, v.SignIns, v.SignInsExcept, v.ProviderSettingsHere = c.Usage, c.SignIns, c.SignInsExcept, c.ProviderSettingsHere
 	if c.Agents {
 		v.Own = ownFields(st)
 	}
@@ -807,7 +825,7 @@ func syncNow(ctx context.Context, force bool, expect string) error {
 	}
 	st := loadState()
 	if st.Key != stateKey(c) { // another folder or passphrase: start afresh
-		st = state{Key: stateKey(c), Brought: st.Brought, Replaced: st.Replaced, Own: st.Own, Follow: st.Follow, Here: st.Here}
+		st = state{Key: stateKey(c), Brought: st.Brought, Replaced: st.Replaced, Own: st.Own, Follow: st.Follow, Here: st.Here, Settings: st.Settings}
 	}
 	if expect != "" { // what the user saw previewed, or nothing
 		p, err := preview(ctx, c, st)
@@ -1229,8 +1247,9 @@ func changed(part string, keys bool) time.Time {
 }
 
 // bring puts the server's part in here: providers and profiles mirrored,
-// so what went elsewhere goes here too.
-func bring(b backup.Bundle, part string) error {
+// so what went elsewhere goes here too. The providers here keep their
+// settings when own has them (withSettings).
+func bring(b backup.Bundle, part string, own map[string]bool) error {
 	switch part {
 	case "providers":
 		for name, data := range b.Icons {
@@ -1241,7 +1260,11 @@ func bring(b backup.Bundle, part string) error {
 				}
 			}
 		}
-		if err := provider.Mirror(b.Providers, b.Groups); err != nil {
+		mirror := provider.Mirror
+		if own[settingsOwn] {
+			mirror = provider.MirrorKeepingSettings
+		}
+		if err := mirror(b.Providers, b.Groups); err != nil {
 			return err
 		}
 		if err := provider.MirrorOrder(b.Order); err != nil {
@@ -1410,7 +1433,9 @@ func syncOnce(ctx context.Context, c Config, st *state, pv *Plan) error {
 	// hashes leave out: none of them, once Settings gave them back.
 	// An agent whose picks stay here (hereOf) is own in every field, as
 	// the last sync had it in prev, as it is now in keep and afterW.
-	prev := withHere(maps.Clone(st.Own), st.Here)
+	// The providers' settings kept here (Config.ProviderSettingsHere) are
+	// own the same way, as the last sync had them in prev (st.Settings).
+	prev := withSettings(withHere(maps.Clone(st.Own), st.Here), st.Settings)
 	if c.Agents {
 		noticeOwn(st, local.Agents)
 	}
@@ -1421,8 +1446,8 @@ func syncOnce(ctx context.Context, c Config, st *state, pv *Plan) error {
 	}
 	st.Follow = false
 	kept := hereOf(c, local)
-	moved := !slices.Equal(kept, st.Here)
-	keep, afterW := withHere(own, kept), withHere(after, kept)
+	moved := !slices.Equal(kept, st.Here) || st.Settings != c.ProviderSettingsHere
+	keep, afterW := withSettings(withHere(own, kept), c.ProviderSettingsHere), withSettings(withHere(after, kept), c.ProviderSettingsHere)
 	L := hashesOwn(local, prev)
 	// parts left out at the last sync and synced now: joined again
 	var rejoin []string
@@ -1494,7 +1519,7 @@ func syncOnce(ctx context.Context, c Config, st *state, pv *Plan) error {
 		if err := push(c.only(local), "", blind{}); err != nil {
 			return err
 		}
-		st.Own, st.Here = after, kept
+		st.Own, st.Here, st.Settings = after, kept, c.ProviderSettingsHere
 		st.Local = hashesOwn(local, afterW)
 		st.SignIns = nil
 		if c.SignIns {
@@ -1632,9 +1657,7 @@ func syncOnce(ctx context.Context, c Config, st *state, pv *Plan) error {
 		switch {
 		case lc && !rc:
 			take(&merged, local, p)
-			if p == "agents" {
-				keepServersOwn(&merged, remote, keep)
-			}
+			keepServersOwn(&merged, remote, keep, p)
 		case rc && !lc && first && unset(remote, p) && !unset(local, p):
 			// Joining a file whose part holds nothing of its own (its
 			// first writer had no providers, no settings of its own, an
@@ -1656,9 +1679,7 @@ func syncOnce(ctx context.Context, c Config, st *state, pv *Plan) error {
 		case lc && rc: // both: the newer stays
 			if changed(p, c.Keys).After(remote.Created) {
 				take(&merged, local, p)
-				if p == "agents" {
-					keepServersOwn(&merged, remote, keep)
-				}
+				keepServersOwn(&merged, remote, keep, p)
 				there = append(there, p)
 			} else {
 				bringIn = append(bringIn, p)
@@ -1711,7 +1732,7 @@ func syncOnce(ctx context.Context, c Config, st *state, pv *Plan) error {
 			}
 			continue
 		}
-		if err := bring(remote, p); err != nil {
+		if err := bring(remote, p, afterW); err != nil {
 			return fmt.Errorf("bringing in the %s: %w", p, err)
 		}
 	}
@@ -1730,7 +1751,7 @@ func syncOnce(ctx context.Context, c Config, st *state, pv *Plan) error {
 			return fmt.Errorf("bringing in the agents: %w", err)
 		}
 	}
-	st.Own, st.Here, R = after, kept, Rafter
+	st.Own, st.Here, st.Settings, R = after, kept, c.ProviderSettingsHere, Rafter
 	// the plugins the other computers removed, removed here as Settings
 	// removes one; one that can't be (its agent is on magpie) is tried
 	// again at the next sync, and isn't sent up meanwhile

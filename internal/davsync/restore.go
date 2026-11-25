@@ -102,7 +102,9 @@ func Restore(ctx context.Context) ([]string, error) {
 		if err != nil {
 			return err
 		}
-		here := withHere(nil, hereOf(c, local)) // an agent's picks kept here are no change
+		// an agent's picks kept here are no change, nor are the providers'
+		// settings kept here
+		here := withSettings(withHere(nil, hereOf(c, local)), c.ProviderSettingsHere)
 		L, R := hashesOwn(local, here), hashesOwn(remote, here)
 		for _, p := range Parts {
 			if L[p] == R[p] || !c.syncs(p) || (p == "library" && remote.Library == nil) {
@@ -112,7 +114,7 @@ func Restore(ctx context.Context) ([]string, error) {
 		}
 		st := loadState()
 		if st.Key != stateKey(c) {
-			st = state{Key: stateKey(c), Brought: st.Brought, Replaced: st.Replaced, Own: st.Own, Here: st.Here}
+			st = state{Key: stateKey(c), Brought: st.Brought, Replaced: st.Replaced, Own: st.Own, Here: st.Here, Settings: st.Settings}
 		}
 		if len(brought) > 0 {
 			kept, err := keepHere(c)
@@ -131,7 +133,7 @@ func Restore(ctx context.Context) ([]string, error) {
 					}
 					continue
 				}
-				if err := bring(remote, p); err != nil {
+				if err := bring(remote, p, here); err != nil {
 					return fmt.Errorf("bringing in the %s: %w", p, err)
 				}
 			}
@@ -155,8 +157,8 @@ func Restore(ctx context.Context) ([]string, error) {
 		}
 		// as a sync that brought them in leaves it: the next one has
 		// nothing to push back
-		st.Here = hereOf(c, local)
-		own := withHere(st.Own, st.Here)
+		st.Here, st.Settings = hereOf(c, local), c.ProviderSettingsHere
+		own := withSettings(withHere(st.Own, st.Here), st.Settings)
 		st.Local, st.Remote, st.Sum, st.Server = hashesOwn(local, own), hashesOwn(remote, own), sum(data), ver
 		st.Blind = nil // what is here now is what the server has
 		remember(data)
@@ -237,11 +239,11 @@ func Upload(ctx context.Context) error {
 		}
 		st := loadState()
 		if st.Key != stateKey(c) {
-			st = state{Key: stateKey(c), Brought: st.Brought, Replaced: st.Replaced, Own: st.Own, Here: st.Here}
+			st = state{Key: stateKey(c), Brought: st.Brought, Replaced: st.Replaced, Own: st.Own, Here: st.Here, Settings: st.Settings}
 		}
 		// as the first sync to an empty server leaves it
-		st.Here = hereOf(c, local)
-		own := withHere(st.Own, st.Here)
+		st.Here, st.Settings = hereOf(c, local), c.ProviderSettingsHere
+		own := withSettings(withHere(st.Own, st.Here), st.Settings)
 		st.Local, st.Remote, st.Sum, st.Server = hashesOwn(local, own), hashesOwn(b, own), sum(sealed), v
 		st.Blind = nil // it replaced what wasn't a backup: nothing to merge again
 		remember(sealed)
@@ -281,7 +283,8 @@ func Undo() ([]string, error) {
 			if L[p] == K[p] || !c.syncs(p) || (p == "library" && kept.Library == nil) {
 				continue
 			}
-			if err := bring(kept, p); err != nil {
+			// what was here before the Restore, picks and all
+			if err := bring(kept, p, nil); err != nil {
 				return fmt.Errorf("bringing back the %s: %w", p, err)
 			}
 			back = append(back, p)
