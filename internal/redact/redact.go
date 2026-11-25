@@ -22,6 +22,8 @@ import (
 	"crypto/sha256"
 	"encoding/base32"
 	"encoding/json"
+	"html"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -1725,6 +1727,15 @@ func containsAny(s string, subs []string) bool {
 // one back: API_KEY_k3v9x2mq, phone_b5puzbfv, PHONE_B5PUZBFV.
 var placeholderBody = lazyre.New(`[A-Za-z][A-Za-z0-9_]*_[A-Za-z2-7]{8}`)
 
+// The ways a model writes a placeholder's braces and the spaces in them
+// back: as given; percent-encoded, in a link's target; as an HTML page's
+// entities; escaped, as Markdown has a brace.
+var (
+	openBraces  = []string{`\{`, "{", "%7B", "%7b", "&#123;", "&#x7b;", "&#x7B;", "&lbrace;", "&lcub;"}
+	closeBraces = []string{`\}`, "}", "%7D", "%7d", "&#125;", "&#x7d;", "&#x7D;", "&rbrace;", "&rcub;"}
+	braceSpaces = []string{" ", "\t", "%20"}
+)
+
 // Restore puts the values back in s. escaped is for text that is itself
 // JSON (a tool call's arguments), where a value goes in escaped.
 //
@@ -1751,7 +1762,10 @@ func restore(s string, escaped bool, put map[string]int) string {
 	last := 0
 	for _, m := range placeholderBody.FindAllStringIndex(s, -1) {
 		a, z := m[0], m[1]
-		if a < last || a > 0 && isWordByte(s[a-1]) || z < len(s) && isWordByte(s[z]) {
+		if a >= 2 && s[a-2] == '%' && s[a-1] == '7' && (s[a] == 'B' || s[a] == 'b') && a+1 < z && isLetter(s[a+1]) {
+			a++ // found from the B of a link's %7B
+		}
+		if a < last || a > 0 && isWordByte(s[a-1]) && !encodedBefore(s[:a]) || z < len(s) && isWordByte(s[z]) {
 			continue
 		}
 		p := canonical(s[a:z])
@@ -1759,7 +1773,7 @@ func restore(s string, escaped bool, put map[string]int) string {
 		if !ok {
 			continue
 		}
-		a, z = braces(s, a, z)
+		a, z, enc := braces(s, a, z)
 		if a < last {
 			continue
 		}
@@ -1767,6 +1781,12 @@ func restore(s string, escaped bool, put map[string]int) string {
 			put[p]++
 		}
 		b.WriteString(s[last:a])
+		switch enc {
+		case '%':
+			v = url.PathEscape(v)
+		case '&':
+			v = html.EscapeString(v)
+		}
 		if escaped {
 			v = jsonEscape(v)
 		}
@@ -1790,34 +1810,83 @@ func isWordByte(c byte) bool {
 	return c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_'
 }
 
+// encodedBefore says pre, the text before a placeholder's body, ends in
+// a percent-encoded brace, and the spaces after it, as a link's target
+// has them (%7B%7B%20): they end in a word's letters and digits, and the
+// body after them is a word of its own all the same.
+func encodedBefore(pre string) bool {
+	for strings.HasSuffix(pre, "%20") {
+		pre = pre[:len(pre)-3]
+	}
+	return len(pre) >= 3 && strings.EqualFold(pre[len(pre)-3:], "%7B")
+}
+
 // braces widens s[a:z], a placeholder's body, over the braces the model
 // wrote around it, and the spaces inside them: both of {{ and }}, or one
 // of them dropped ({{X} or {X}}), or just {{ or just }}. A single brace
-// on one side alone is the text's own ({X as in code) and stays.
-func braces(s string, a, z int) (int, int) {
-	la, l := a, 0
-	for la > 0 && (s[la-1] == ' ' || s[la-1] == '\t') {
-		la--
+// on one side alone is the text's own ({X as in code) and stays. A brace
+// may be written in any of openBraces' and closeBraces' ways, Markdown's
+// \{ only with a \} on the other side: alone, its backslash is a Windows
+// path's (C:\dir\{{X}}). enc is how the braces widened over were
+// encoded: '%' percent-encoded, '&' as HTML, so the value goes in the
+// same way, or 0.
+func braces(s string, a, z int) (int, int, byte) {
+	la, l, lenc, lmd := widen(s, a, -1, openBraces)
+	rz, r, renc, rmd := widen(s, z, 1, closeBraces)
+	if lmd && !rmd {
+		la, l, lenc, _ = widen(s, a, -1, openBraces[1:])
 	}
-	for l < 2 && la > 0 && s[la-1] == '{' {
-		la--
-		l++
+	if rmd && !lmd {
+		rz, r, renc, _ = widen(s, z, 1, closeBraces[1:])
 	}
-	rz, r := z, 0
-	for rz < len(s) && (s[rz] == ' ' || s[rz] == '\t') {
-		rz++
-	}
-	for r < 2 && rz < len(s) && s[rz] == '}' {
-		rz++
-		r++
-	}
+	var enc byte
 	if l == 2 || l == 1 && r >= 1 {
-		a = la
+		a, enc = la, lenc
 	}
 	if r == 2 || r == 1 && l >= 1 {
-		z = rz
+		z, enc = rz, max(enc, renc)
 	}
-	return a, z
+	return a, z, enc
+}
+
+// widen goes from i in s, back (dir -1) or on (1), over the spaces
+// inside a placeholder's braces and then up to two of the braces in bs.
+// It says where it ended, how many braces it went over, how they were
+// encoded (encodedAs) and whether one was Markdown's (bs[0]).
+func widen(s string, i, dir int, bs []string) (end, n int, enc byte, md bool) {
+	next := func(ts []string) string {
+		for _, t := range ts {
+			if dir < 0 && strings.HasSuffix(s[:i], t) || dir > 0 && strings.HasPrefix(s[i:], t) {
+				return t
+			}
+		}
+		return ""
+	}
+	for t := next(braceSpaces); t != ""; t = next(braceSpaces) {
+		i += dir * len(t)
+		if len(t) > 1 {
+			enc = '%'
+		}
+	}
+	for ; n < 2; n++ {
+		t := next(bs)
+		if t == "" {
+			break
+		}
+		i += dir * len(t)
+		enc = max(enc, encodedAs(t))
+		md = md || t[0] == '\\'
+	}
+	return i, n, enc, md
+}
+
+// encodedAs is how a brace written as t is encoded: '%', '&' or 0.
+func encodedAs(t string) byte {
+	switch t[0] {
+	case '%', '&':
+		return t[0]
+	}
+	return 0
 }
 
 // maxPlaceholder is the longest placeholder Mask writes: {{, a kind (a
@@ -1830,10 +1899,75 @@ const maxPlaceholder = len("{{") + maxKind + len("_") + 8 + len("}}")
 // no brace before it, a last word that starts as a placeholder this magpie
 // made does (PHO, PHONE_b5pu), or is one whose }} may still come.
 func partialTail(s string) int {
-	if n := braceTail(s); n > 0 {
+	if n := max(braceTail(s), encodedTail(s)); n > 0 {
 		return n
 	}
 	return max(wordTail(s), shapeTail(s))
+}
+
+// encodedTail is braceTail for braces written in another of openBraces'
+// and closeBraces' ways (%7B%7BAPI_, SECRET_k3v9x2mq%7D), read as the
+// braces they are, and for the start of one such brace the next piece
+// finishes (%7, &#12).
+func encodedTail(s string) int {
+	w := s[max(0, len(s)-3*maxPlaceholder-16):]
+	if !strings.ContainsAny(w, `%&\`) {
+		return 0
+	}
+	var plain []byte
+	var at []int // where each byte of plain starts in w
+	part := -1   // where the start of a brace the next piece finishes is
+	tokens := [][]string{openBraces, closeBraces, braceSpaces}
+	for j := 0; j < len(w); {
+		var c byte
+		n := 0
+		for k, ts := range tokens {
+			for _, t := range ts {
+				if len(t) > 1 && strings.HasPrefix(w[j:], t) {
+					c, n = "{} "[k], len(t)
+					break
+				}
+			}
+			if n > 0 {
+				break
+			}
+		}
+		if n == 0 {
+			for _, ts := range tokens[:2] {
+				for _, t := range ts {
+					if len(t) > len(w)-j && strings.HasPrefix(t, w[j:]) {
+						part = j
+					}
+				}
+			}
+			if part >= 0 {
+				break
+			}
+			c, n = w[j], 1
+		}
+		plain = append(plain, c)
+		at = append(at, j)
+		j += n
+	}
+	if part < 0 {
+		if n := braceTail(string(plain)); n > 0 {
+			return len(w) - at[len(plain)-n]
+		}
+		return 0
+	}
+	// the start of a brace held, and what is before it as braceTail
+	// would hold it: {{X} with %7 to come, which may be its last brace
+	hold := len(w) - part
+	if n := braceTail(string(plain)); n > 0 {
+		hold = len(w) - at[len(plain)-n]
+	}
+	at = append(at, part)
+	for _, c := range []byte("{} ") {
+		if n := braceTail(string(append(plain, c))); n > 0 {
+			hold = max(hold, len(w)-at[len(plain)+1-n])
+		}
+	}
+	return hold
 }
 
 // braceTail is a tail from {, or {{, on: then spaces, a placeholder's body
