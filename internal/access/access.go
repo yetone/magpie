@@ -232,7 +232,7 @@ type Key struct {
 const RoutingSmart = "smart"
 
 // keyRoutings are the built-in routings a key can set, besides Smart.
-var keyRoutings = []string{provider.Ordered, provider.Drain, provider.Rotate, provider.LeastUsed, provider.Pace, provider.Weighted, provider.FreeFirst, provider.Fastest, provider.Cheapest, provider.FreeExpiring, provider.SmallFirst}
+var keyRoutings = []string{provider.Ordered, provider.Drain, provider.PaceDrain, provider.Rotate, provider.LeastUsed, provider.Pace, provider.Weighted, provider.FreeFirst, provider.Fastest, provider.Cheapest, provider.FreeExpiring, provider.SmallFirst}
 
 // CleanRouting is a key's group routing as it is kept: "" to follow the
 // group, RoutingSmart, a built-in routing or a plugin's.

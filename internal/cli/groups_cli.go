@@ -110,6 +110,8 @@ const groupUsage = `usage:
            order   the first model until it can't answer, then the next
            drain   one account or key until it is used up, then the next, and stays there: an
                    earlier one that renews meanwhile doesn't take the requests back
+           pace-drain  picks as pace does, the one with the most left per hour until it renews, then
+                   stays on it until it is used up, and picks again
            rotate  each message you send goes to the next member's account or key, its tool calls
                    staying with it; with stays=session a whole conversation stays on one
            usage   the account or key with the most of its allowance left first
@@ -169,6 +171,7 @@ var routingNames = []struct {
 	{provider.Fastest, "fast", []string{"fastest", "speed", "speed-first"}},
 	{provider.Cheapest, "cheap", []string{"cheapest", "cheapest-first", "price", "cost"}},
 	{provider.Drain, "drain", []string{"until-used-up", "use-up", "sticky"}},
+	{provider.PaceDrain, "pace-drain", []string{"pace-then-drain", "expiry-one-by-one"}},
 	{provider.FreeExpiring, "expiring", []string{"free-expiring", "free-expiry", "free-soonest", "soonest-free"}},
 	{provider.SmallFirst, "fit", []string{"small-first", "smallest-first", "small-context-first", "context"}},
 	{provider.Manual, "manual", []string{"pick", "picked", "pinned"}},

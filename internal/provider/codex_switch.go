@@ -162,9 +162,10 @@ const SpentShare = 98
 // SpentShareOf is the share past which routing counts an account spent:
 // SpentShare, but In order sends requests to the first until a window of it
 // is used up or the vendor refuses it, so there an account at 98% is still
-// tried in its turn (#530); Until used up stays on one until then too.
+// tried in its turn (#530); Until used up, and Before expiry, one by one,
+// stay on one until then too.
 func SpentShareOf(routing string) float64 {
-	if routing == Ordered || routing == Drain {
+	if routing == Ordered || routing == Drain || routing == PaceDrain {
 		return 100
 	}
 	return SpentShare
@@ -197,13 +198,14 @@ func loginSwitching(agent string) (share float64, keep bool) {
 // does Codex's go back when it is routed Until used up: the gateway then
 // keeps its requests on the account it moved to (routes.Drain), so Codex
 // signed back in to the first showed that one in use while the other's
-// allowance was spent (WalterAIBuilder on X); it stays with the requests.
+// allowance was spent (WalterAIBuilder on X); it stays with the requests,
+// and so under Before expiry, one by one, which stays on one as well.
 func returnsToFirst(agent string) bool {
 	for _, p := range storedFile().Providers {
 		if p.ID == agent {
 			// kept on the first (KeepLogin), set aside under SwitchOnly,
 			// is still the user's word that the first comes first
-			return p.Routing == Ordered || p.KeepLogin || agent == "codex" && !p.SwitchOnly && p.Routing != Drain
+			return p.Routing == Ordered || p.KeepLogin || agent == "codex" && !p.SwitchOnly && p.Routing != Drain && p.Routing != PaceDrain
 		}
 	}
 	return agent == "codex"

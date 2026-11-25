@@ -312,6 +312,68 @@ var turns = struct {
 	m map[string]int // pool → requests routed in turn
 }{m: map[string]int{}}
 
+// PaceDrain picks a seat as Pace does — the one with the most left per
+// hour until it renews, whose quota a reset would waste soonest — and then
+// stays on it as Drain does until it is used up, when it picks again by
+// pace (guhailin3 on X: Use before expiry moved a Codex pool from account
+// to account as their paces crossed, and Until used up took them in the
+// listed order, not the one whose week ran out first). Used up is as in
+// Drain: a window of it used up (provider.SpentShareOf), resting out of
+// quota or credit (Seat.Spent), or refused so since the pool's last
+// request (Drained, which it shares with Drain). One resting after a
+// failure or a rate limit is left too, for the next by pace: it failed,
+// and the pool doesn't come back to it until it is picked again. An
+// account not known that tells what it has left as it answers goes first
+// once, as in Pace, without being kept, so its pace is known at the next
+// pick. The one it is on goes first, the others after it in Pace's order,
+// for failover. Asking again with nothing changed gives the same order, so
+// a preview moves nothing.
+var PaceDrain = Strategy{ByUse: true, Exact: true, Order: func(pool string, seats []Seat) []int {
+	spent := func(s Seat) bool {
+		return s.Spent || !s.First && !s.Trial && s.Known && s.Used >= provider.SpentShareOf(provider.PaceDrain)
+	}
+	paced := Pace.Order(pool, seats)
+	drains.Lock()
+	defer drains.Unlock()
+	on := drains.m[pool]
+	at := slices.IndexFunc(seats, func(s Seat) bool { return s.Key != "" && s.Key == on.key })
+	if at < 0 || on.past || spent(seats[at]) || seats[at].Resting {
+		// the first by pace that can be kept: known, then one learning
+		// when every one is, then one resting, then any not used up;
+		// with every one used up it stays where it is
+		pick := -1
+		for _, ok := range []func(Seat) bool{
+			func(s Seat) bool { return !s.Learns && !s.Resting },
+			func(s Seat) bool { return !s.Resting },
+			func(Seat) bool { return true },
+		} {
+			if pick = slices.IndexFunc(paced, func(i int) bool { return !spent(seats[i]) && ok(seats[i]) }); pick >= 0 {
+				break
+			}
+		}
+		if pick >= 0 {
+			at = paced[pick]
+		} else if at < 0 {
+			at = paced[0]
+		}
+	}
+	drains.m[pool] = drainAt{key: seats[at].Key}
+	out := make([]int, 0, len(seats))
+	// one learning goes first, once, while the pool stays on its pick
+	for _, i := range paced {
+		if i != at && seats[i].Learns && !spent(seats[i]) && !seats[i].Resting && !seats[at].Learns {
+			out = append(out, i)
+		}
+	}
+	out = append(out, at)
+	for _, i := range paced {
+		if i != at && !slices.Contains(out, i) {
+			out = append(out, i)
+		}
+	}
+	return out
+}}
+
 // Rotate starts each request one further along the pool.
 var Rotate = Strategy{Order: func(pool string, seats []Seat) []int {
 	turns.Lock()
@@ -692,6 +754,7 @@ var Builtin = map[string]Strategy{
 	provider.Fastest:      Fastest,
 	provider.Cheapest:     Cheapest,
 	provider.Drain:        Drain,
+	provider.PaceDrain:    PaceDrain,
 	provider.FreeExpiring: FreeExpiring,
 	provider.SmallFirst:   SmallFirst,
 }

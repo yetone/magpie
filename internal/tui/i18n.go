@@ -261,6 +261,7 @@ var zh = map[string]string{
 	"speed first":                                                "速度优先",
 	"cheapest first":                                             "最便宜优先",
 	"until used up":                                              "用完再换",
+	"before expiry, one by one":                                  "到期前逐个用完",
 	"free, soonest to expire":                                    "免费且最快到期优先",
 	"small context first":                                        "小上下文优先",
 	"manual":                                                     "手动",

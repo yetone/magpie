@@ -128,7 +128,7 @@ func gatewayKeysTo(out io.Writer, args []string) error {
 		args = args[:2]
 	}
 	if (action == "list" && len(args) != 1) || (action != "list" && len(args) != 2) {
-		return fmt.Errorf("usage: magpie gateway-key list | add <name> [--key <value> | --key -] [--read-only] | rotate <id> [--key <value> | --key -] | remove <id> | limit <id> [list | off | reset [<n>] | remove <n> | [add] day|week|month|total|<N>d|<N>h|account [--account <provider>/<account> --window <name>] [--tokens N] [--cost USD] [--cache-reads] [--model <provider>/<model>|<provider>/* ...]] | models <id> [all | <provider>/<model>|<provider>/*|re:<regexp> ...] | aliases <id> [none | <name>=<provider>/<model> ...] | accounts <id> [all | <provider>/<account>|<provider>/<key id> ...] | quotas <id> [on | off] | concurrency <id> [<n> | off] | tier <id> [follow | standard | fast | ultrafast] | routing <id> [follow | smart | order | drain | rotate | usage | pace | weight | free | fast | cheap | expiring | fit | <plugin>/<name>] | redact <id> [follow | on | off] | mcp <id> [all | none | <server>|<server>/<tool> ...] | access <id> [read-only | full] | move <id> <place> | issue --ttl <duration> [--name <name>] [--models a,b] [--accounts a,b] [--tokens N] [--cost USD] [--read-only] [--from <id>] | issuer <id> [on | off] | oidc [list | add --key <id> --repo owner/name … | remove <rule id>]")
+		return fmt.Errorf("usage: magpie gateway-key list | add <name> [--key <value> | --key -] [--read-only] | rotate <id> [--key <value> | --key -] | remove <id> | limit <id> [list | off | reset [<n>] | remove <n> | [add] day|week|month|total|<N>d|<N>h|account [--account <provider>/<account> --window <name>] [--tokens N] [--cost USD] [--cache-reads] [--model <provider>/<model>|<provider>/* ...]] | models <id> [all | <provider>/<model>|<provider>/*|re:<regexp> ...] | aliases <id> [none | <name>=<provider>/<model> ...] | accounts <id> [all | <provider>/<account>|<provider>/<key id> ...] | quotas <id> [on | off] | concurrency <id> [<n> | off] | tier <id> [follow | standard | fast | ultrafast] | routing <id> [follow | smart | order | drain | pace-drain | rotate | usage | pace | weight | free | fast | cheap | expiring | fit | <plugin>/<name>] | redact <id> [follow | on | off] | mcp <id> [all | none | <server>|<server>/<tool> ...] | access <id> [read-only | full] | move <id> <place> | issue --ttl <duration> [--name <name>] [--models a,b] [--accounts a,b] [--tokens N] [--cost USD] [--read-only] [--from <id>] | issuer <id> [on | off] | oidc [list | add --key <id> --repo owner/name … | remove <rule id>]")
 	}
 	switch action {
 	case "list", "add", "rotate", "remove":
@@ -915,10 +915,10 @@ func gatewayKeyTier(out io.Writer, args []string) error {
 // justforlxz on X):
 //
 //	magpie gateway-key routing <id>             its routing
-//	magpie gateway-key routing <id> follow|smart|order|drain|rotate|usage|pace|weight|free|fast|cheap|expiring|fit|<plugin>/<name>
+//	magpie gateway-key routing <id> follow|smart|order|drain|pace-drain|rotate|usage|pace|weight|free|fast|cheap|expiring|fit|<plugin>/<name>
 func gatewayKeyRouting(out io.Writer, args []string) error {
 	if len(args) == 0 || len(args) > 2 {
-		return fmt.Errorf("usage: magpie gateway-key routing <id> [follow | smart | order | drain | rotate | usage | pace | weight | free | fast | cheap | expiring | fit | <plugin>/<name>]")
+		return fmt.Errorf("usage: magpie gateway-key routing <id> [follow | smart | order | drain | pace-drain | rotate | usage | pace | weight | free | fast | cheap | expiring | fit | <plugin>/<name>]")
 	}
 	id := args[0]
 	if len(args) == 2 {

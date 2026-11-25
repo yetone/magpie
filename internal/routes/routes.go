@@ -6,7 +6,7 @@
 //
 // Smart, the default, is the core's. The others a provider or group can be
 // routed by (order, rotate, usage, pace, weight, free, fast, cheap,
-// drain, expiring) are here for a plugin to
+// drain, pace-drain, expiring, fit) are here for a plugin to
 // register: plugins/rotation does, and off, a pool routed by one of them is
 // tried in its listed order, as an unknown routing always was.
 package routes
@@ -35,7 +35,8 @@ type Seat struct {
 	Used float64
 	// WeekLow: Used is at LowShare or more for its budget windows alone
 	// (a day or longer: the week), no rate cap of it near full
-	// (provider.Allowance.CapUsed). Smart and Use before expiry keep it
+	// (provider.Allowance.CapUsed). Smart and Use before expiry (and
+	// Before expiry, one by one, which picks as it does) keep it
 	// with those that have room: what the week has left is lost at its
 	// reset, and kept for last a week at 90% renewing today went unused
 	// (ysicing_01858 on Discord).

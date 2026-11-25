@@ -2339,6 +2339,13 @@ each of these groups ordered by the share used.
   is. Each member's own accounts go as its provider routes them, and the
   Routing page says an account went after those known only of one
   weighed against a known account of the same member.
+- **Before expiry, one by one** (`pace-drain`): picks the account as Use
+  before expiry does, the highest pace first, and then stays on it, as
+  Until used up does, until it is used up (100%), refused for its quota or
+  credit, or fails; then it picks again by pace. A pick isn't left for
+  another whose pace has risen since, nor taken back by one that renews;
+  so each account's allowance is used up in turn, the one that would lose
+  the most at its reset first.
 - **In turn**: each turn of a conversation goes to the next account. A new
   conversation goes to the account the fewest other conversations of the
   last 30 minutes are on.

@@ -1065,7 +1065,7 @@ function gatewayTierBadge(k) {
 // still sends to its pick. The built-in rotation's routings leave the menu
 // while it is off (ROTATION), one the key has kept.
 const KEY_ROUTINGS = [
-  ["", "As the group routes"], ["smart", "Quota first"], ["order", "In order"], ["drain", "Until used up"],
+  ["", "As the group routes"], ["smart", "Quota first"], ["order", "In order"], ["drain", "Until used up"], ["pace-drain", "Before expiry, one by one"],
   ["rotate", "In turn"], ["usage", "Least used first"], ["pace", "Use before expiry"], ["weight", "By weight"],
   ["free", "Free first"], ["fast", "Speed first"], ["cheap", "Cheapest first"], ["expiring", "Free quota by expiry"],
   ["fit", "Small context first"],

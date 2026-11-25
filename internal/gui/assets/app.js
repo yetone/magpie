@@ -12544,6 +12544,9 @@ const ROUTINGS = [
   ["drain", "Until used up", "Requests stay on one until it is used up, then go to the next in the list and stay there: one before it that renews meanwhile doesn't take them back. One rate limited or failing is passed over while it rests, and requests come back to it after."],
   // the unit that goes round is the user's message (affine's "new-turn"),
   // not a session (Wing8Aqua on X)
+  // picked as Use before expiry picks, kept as Until used up keeps
+  // (guhailin3 on X; routes.PaceDrain)
+  ["pace-drain", "Before expiry, one by one", "Requests go to the subscription with the most left per hour until it is lost, as Use before expiry picks, and stay on it until it is used up or fails; then the next is picked the same way."],
   ["rotate", "In turn", "Each message you send goes to the next one, round the list; the agent's tool calls for it stay on the same one. A move costs some prompt cache; with Stays on Session, a whole conversation stays on one instead."],
   ["usage", "Least used first", "Each request goes to the one used least: a subscription by the share of its allowance used, a key by the tokens it served in the last hours."],
   ["pace", "Use before expiry", "Each request goes to the subscription with the most left per hour until it is lost, at its reset or as credits expire; one at 90% of its five hours waits until the others can't answer, a week at 90% is still spent before its reset. A key goes by the tokens it served in the last hours."],
@@ -12557,7 +12560,7 @@ const drawRotFig = (b, on, a) => (b.hidden = !on) ? b.replaceChildren() : (drawR
 // the routings besides Smart are the built-in plugin rotation's
 // (plugins/rotation): off, their options leave the page (data-feature),
 // and Smart is left — one in use keeps it on
-const ROTATION = new Set(["order", "drain", "rotate", "usage", "pace", "weight", "free", "fast", "cheap", "expiring", "fit"]);
+const ROTATION = new Set(["order", "drain", "pace-drain", "rotate", "usage", "pace", "weight", "free", "fast", "cheap", "expiring", "fit"]);
 // jsRoutings: the routings JS gateway plugins serve now ("<plugin>/<name>",
 // plugins/middleware's: the state's jsRoutings, which the Routing and
 // Plugins pages' own reads bring up to date too), and saved, a routing
@@ -12633,7 +12636,7 @@ function renderRouting(p) {
       ? t("Routing picks the account for each request through magpie, in the accounts' order; {agent} on its own stays signed in to {user}, whatever it has left.", { agent: a.agentName, user: keptLogin(p) })
       : p.keepLogin && !p.switchOnly
       ? t("Routing picks the account for each request through magpie; {agent} on its own stays signed in to the first account, whatever it has left.", { agent: a.agentName })
-      : routing === "drain"
+      : routing === "drain" || routing === "pace-drain"
         // Until used up keeps the requests on the next, and the sign-in
         // with them (provider.returnsToFirst; WalterAIBuilder on X)
         ? t("Routing picks the account for each request through magpie; {agent} on its own uses the one it is signed in to, which magpie moves to the next ticked account with room once it is used up, and keeps it there till that one is used up too.", { agent: a.agentName })
@@ -13742,7 +13745,7 @@ function firstLogin(a, p) {
 }
 
 function byQuotaOf(p, r = p?.routing || "") {
-  return p?.account && ["", "usage", "pace"].includes(r) ? ROUTINGS.find(([id]) => id === r)?.[1] : "";
+  return p?.account && ["", "usage", "pace", "pace-drain"].includes(r) ? ROUTINGS.find(([id]) => id === r)?.[1] : "";
 }
 function firstNoteOf(p, user) {
   return t("{user} is first in the order; {routing} still goes by each account's quota, so the order only settles ties. In order uses the first first.", { user, routing: t(byQuotaOf(p)) });

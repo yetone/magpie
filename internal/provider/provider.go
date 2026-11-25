@@ -136,7 +136,9 @@ type Provider struct {
 	// The window can be shorter than a week. "weight" by each key's
 	// weight, a key with 3 taking three requests to one with 1's.
 	// "drain" one until it is used up, then the next, which keeps them
-	// when an earlier one renews (routes.Drain). Whichever it is, one out
+	// when an earlier one renews (routes.Drain). "pace-drain" picks as
+	// "pace" does and then stays on it as "drain" does until it is used
+	// up (routes.PaceDrain). Whichever it is, one out
 	// of credit, out of quota, rate limited or failing is passed over for
 	// as long as that lasts.
 	Routing string `json:"routing,omitempty"`
@@ -2082,7 +2084,7 @@ func normalize(p Provider) Provider {
 	if p.Decide == "" {
 		p.Decide = p.googleDecisions()
 	}
-	if p.Routing != Ordered && p.Routing != Rotate && p.Routing != LeastUsed && p.Routing != Pace && p.Routing != Weighted && p.Routing != FreeFirst && p.Routing != Fastest && p.Routing != Drain && !PluginRouting(p.Routing) {
+	if p.Routing != Ordered && p.Routing != Rotate && p.Routing != LeastUsed && p.Routing != Pace && p.Routing != Weighted && p.Routing != FreeFirst && p.Routing != Fastest && p.Routing != Drain && p.Routing != PaceDrain && !PluginRouting(p.Routing) {
 		p.Routing = ""
 	}
 	if !slices.Contains(Affinities, p.Affinity) {

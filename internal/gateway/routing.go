@@ -2833,11 +2833,12 @@ func routingOf(routing string) string {
 }
 
 // keepsWeek: routed so, a pool keeps an account running low on its week
-// alone with those that have room (routes.Seat.WeekLow): Smart and Use
-// before expiry, which spend what a reset would lose.
+// alone with those that have room (routes.Seat.WeekLow): Smart, Use
+// before expiry and Before expiry, one by one (which picks as Use before
+// expiry does), which spend what a reset would lose.
 func keepsWeek(routing string) bool {
 	r := routingOf(routing)
-	return r == "" || r == provider.Pace
+	return r == "" || r == provider.Pace || r == provider.PaceDrain
 }
 
 // goesRound: routed so, a pool goes round by itself (in turn, by weight),
