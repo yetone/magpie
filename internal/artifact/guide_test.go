@@ -38,7 +38,7 @@ func TestGuideNamesWhatRuntimeServes(t *testing.T) {
 			t.Errorf("the guide has no user.%s", f[1])
 		}
 	}
-	for _, s := range []string{`db.doc(`, `.onSnapshot(`, `artifact.publish(`, `assets.upload(`, `sample.json(`, `p.state(`, "view", "interact", "admin", "owner", "self"} {
+	for _, s := range []string{`db.doc(`, `.onSnapshot(`, `artifact.publish(`, `assets.upload(`, `sample.json(`, `downloads.save(`, `p.state(`, "view", "interact", "admin", "owner", "self"} {
 		if !strings.Contains(all, s) {
 			t.Errorf("the guide has no %s", s)
 		}

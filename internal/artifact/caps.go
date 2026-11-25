@@ -26,7 +26,7 @@ var capabilityNames = []string{"artifact", "assets", "comments", "db", "dictatio
 // ServedCaps are the capabilities the page runtime gives a page that declares
 // them; permissions is built in and never declared. self is artifact's
 // former name, and resolves the same namespace.
-var ServedCaps = []string{"artifact", "assets", "comments", "db", "sample", "self", "user"}
+var ServedCaps = []string{"artifact", "assets", "comments", "db", "downloads", "sample", "self", "user"}
 
 // Capabilities is a version's declaration, by name.
 type Capabilities map[string]json.RawMessage

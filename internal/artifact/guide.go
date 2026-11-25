@@ -97,6 +97,13 @@ Declare {"comments": {"composer_only": true}} for openComposer and anchorFor alo
   await comments.delete(threadId)
 Call the writing calls on a viewer's click, never on load. Text is 1 to 4096 bytes of UTF-8, newlines and tabs but no other control characters. Mark parts that take no comments with data-uncommentable, and the element a comment should pin to with data-comment-target.
 Codes: invalid, not_granted, not_found, consent_required (the viewer didn't send it), claude_unavailable, unavailable, capability_disabled (customAnchors isn't served here).`},
+	{"downloads", `downloads: the page hands the viewer a file it made (an export, a CSV, a picture of a chart). magpie's viewer asks them first, one file at a time, and they may say no.
+Declare {"downloads": true}.
+  const downloads = await claude.use("downloads")   // null in a shared copy: hide the button
+  await downloads.save({filename: "plan.csv", data})   // {status: "saved"}
+     // data: a string (saved as UTF-8), a Blob, an ArrayBuffer or a typed array; at most 64 MiB
+Call it on a viewer's click. The extension decides the type and is one of gif png jpg jpeg webp mp4 webm txt json md docx pptx epub csv ttf html svg pdf xlsx zip fig. The name is cleaned (no path, no invisible characters, at most 240 bytes).
+Codes: declined (the viewer said no: leave it), rate_limited (another file is waiting), rejected_extension, not_signed (mov), too_large, bad_request, request_unknown (request isn't used here), unavailable (open the page in its own tab).`},
 	{"permissions", `permissions: built in, never declared.
   const p = await claude.use("permissions")
   await p.state("db")      // "granted" for what the page declared, else "unavailable"

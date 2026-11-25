@@ -171,7 +171,7 @@ address, so:
 A page written for claude.ai's artifact runtime (contract 0.2.99) runs
 here as written: `window.claude.use(name)` is there before the page's own
 scripts, and resolves `db`, `user`, `artifact` (and `self`, its former
-name), `assets`, `sample`, `comments` ([Comments](#comments)) and the
+name), `assets`, `sample`, `comments` ([Comments](#comments)), `downloads` and the
 built-in `permissions`
 ([internal/artifact/runtime.js](../../internal/artifact/runtime.js),
 [runtime.go](../../internal/artifact/runtime.go),
@@ -466,6 +466,28 @@ Sending to the agent:
 - Not on usemagpie.ai: a shared copy has no shell and `comments`
   resolves null.
 
+### Downloads
+
+`downloads.save({filename, data})` hands the viewer a file through the
+shell, so it is served only where comments are: a page in its shell.
+- The runtime checks the call as contract 0.2.99 has it: the name (a
+  string of at most 512 characters, cleaned of path, invisible
+  characters and runs of space, cut to 240 bytes), the extension's
+  allowlist (`mov` is `not_signed`: a page's file has no content
+  credentials), data as a string, Blob, ArrayBuffer or view, at most
+  64 MiB, and no `request` (`request_unknown`). The extension gives the
+  type.
+- The shell checks the name and size again, since a page can post to it
+  without the runtime, and asks the viewer: "Save “name”?" with its size,
+  Cancel and Save. One file at a time (a second is `rate_limited`); Save
+  and Cancel take no click for 400ms after it shows; Escape, Cancel or a
+  minute without an answer is `declined`. Save writes the bytes as
+  `application/octet-stream` from magpie's origin, never as a page that
+  could open there.
+- The page's sandbox still has `allow-downloads`, so `<a download>` in
+  the page works as before; `downloads` is the call a page written for
+  claude.ai makes.
+
 ## Added by the user, and Claude Code's own tool
 
 [internal/library/artifacts.go](../../internal/library/artifacts.go):
@@ -599,7 +621,7 @@ go test -tags nogui ./internal/gui -run 'TestArtifactsAPI|TestArtifactsShareAPI|
 go test -tags nogui ./internal/cli -run 'TestArtifacts|TestEveryRouteHasACommandOrIsNamed'
 node --test internal/gui/tests/artifacts-page.test.cjs
 node --test internal/gui/tests/artifact-runtime.test.cjs
-node --test internal/gui/tests/artifact-comments.test.cjs
+node --test internal/gui/tests/artifact-comments.test.cjs internal/gui/tests/artifact-downloads.test.cjs
 node --test site/shares.test.mjs
 node --test internal/gui/tests/nav-pages-order.test.cjs internal/gui/tests/builtins.test.cjs
 ```

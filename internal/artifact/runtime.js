@@ -12,7 +12,7 @@
   // every capability resolves null there, as it does for a page's
   // visitor that claude.ai can't serve
   var publishing = !!(C.caps.artifact || C.caps.self);
-  var served = C.shared ? { permissions: true } : { db: !!C.caps.db, user: true, permissions: true, artifact: publishing, self: publishing, assets: !!C.caps.assets, sample: !!C.caps.sample, comments: !!C.caps.comments && !!C.origin };
+  var served = C.shared ? { permissions: true } : { db: !!C.caps.db, user: true, permissions: true, artifact: publishing, self: publishing, assets: !!C.caps.assets, sample: !!C.caps.sample, comments: !!C.caps.comments && !!C.origin, downloads: !!C.caps.downloads && !!C.origin };
   var freeze = Object.freeze;
   function deepFreeze(v) {
     if (v && typeof v === "object" && !Object.isFrozen(v)) {
@@ -995,6 +995,9 @@
         case "ask":
           askListeners(d);
           break;
+        case "saved":
+          if (swait[d.req]) swait[d.req](d);
+          break;
         case "abort":
           if (asking[d.id]) asking[d.id].abort();
           break;
@@ -1025,7 +1028,7 @@
       toShell({ type: "hover", rect: r ? { x: r.left, y: r.top, w: r.width, h: r.height } : null });
     }, true);
     window.addEventListener("keydown", function (e) {
-      if (e.key === "Escape" && cmode) toShell({ type: "escape" });
+      if (e.key === "Escape" && (cmode || Object.keys(swait).length)) toShell({ type: "escape" });
     }, true);
     window.addEventListener("scroll", function () { if (cpins.length) place(); if (cmode && hovered) { hovered = null; toShell({ type: "hover", rect: null }); } }, true);
     window.addEventListener("resize", function () { if (cpins.length) place(); });
@@ -1174,6 +1177,66 @@
   }
   freeze(comments);
 
+  // -- downloads ----------------------------------------------------------
+  // the page offers a file; the shell asks the viewer, at magpie's origin,
+  // and saves it only when they accept. The page never downloads itself.
+  var swait = {}, sreq = 0;
+  function dErr(code, message) {
+    var e = new Error(message || code);
+    e.name = "DownloadsError";
+    e.code = code;
+    return e;
+  }
+  var dTypes = { gif: "image/gif", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime", txt: "text/plain;charset=utf-8", json: "application/json", md: "text/markdown;charset=utf-8",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation", epub: "application/epub+zip", csv: "text/csv;charset=utf-8", ttf: "font/ttf", html: "text/html;charset=utf-8", svg: "image/svg+xml", pdf: "application/pdf",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", zip: "application/zip", fig: "application/octet-stream" };
+  // the name as the viewer is shown it: no invisible characters or path,
+  // one space for a run of them, at most 240 bytes of UTF-8
+  function cleanName(n) {
+    n = n.replace(/[\u0000-\u001f\u007f-\u009f­​-‏‪-‮⁠-⁯﻿]/g, "").replace(/[\/\\:*?"<>|]/g, "_").replace(/\s+/g, " ").trim().replace(/^\.+/, "");
+    var enc = new TextEncoder();
+    if (enc.encode(n).length > 240) {
+      var dot = n.lastIndexOf("."), ext = dot > 0 ? n.slice(dot) : "", base = dot > 0 ? n.slice(0, dot) : n;
+      var chars = Array.from(base);
+      while (chars.length && enc.encode(chars.join("") + ext).length > 240) chars.pop();
+      n = chars.join("").trim() + ext;
+    }
+    return n;
+  }
+  var downloads = freeze({
+    save: function (o) {
+      if (!o || typeof o !== "object") return Promise.reject(dErr("bad_request", "save takes {filename, data}"));
+      if (o.request !== undefined) return Promise.reject(dErr("request_unknown", "no export was asked of this page"));
+      if (typeof o.filename !== "string" || o.filename.length > 512) return Promise.reject(dErr("bad_request", "filename is a string of at most 512 characters"));
+      var name = cleanName(o.filename), dot = name.lastIndexOf("."), ext = dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
+      if (!ext || !dTypes[ext]) return Promise.reject(dErr("rejected_extension", "the extension is one of " + Object.keys(dTypes).join(" ")));
+      if (ext === "mov") return Promise.reject(dErr("not_signed", "a mov is saved only with content credentials, which a page's own file has none of: offer mp4 or webm"));
+      var d = o.data, blob;
+      try {
+        if (typeof d === "string") blob = new Blob([d], { type: dTypes[ext] });
+        else if (typeof Blob === "function" && d instanceof Blob) blob = d.type === dTypes[ext] ? d : new Blob([d], { type: dTypes[ext] });
+        else if (d instanceof ArrayBuffer) blob = new Blob([d.slice(0)], { type: dTypes[ext] });
+        else if (ArrayBuffer.isView(d)) blob = new Blob([new Uint8Array(d.buffer, d.byteOffset, d.byteLength).slice()], { type: dTypes[ext] });
+      } catch (e) {
+        return Promise.reject(dErr("bad_request", "the data can't be read: " + e.message));
+      }
+      if (!blob || !blob.size) return Promise.reject(dErr("bad_request", "data is a non-empty string, Blob, ArrayBuffer or view"));
+      if (blob.size > 64 << 20) return Promise.reject(dErr("too_large", "a file is at most 64 MiB"));
+      return whenShell().then(function (up) {
+        if (!up) throw dErr("unavailable", "files are saved from magpie's viewer: open the page in its own tab");
+        var req = ++sreq;
+        return new Promise(function (res, rej) {
+          swait[req] = function (a) {
+            delete swait[req];
+            if (a.status === "saved") res(freeze({ status: "saved" }));
+            else rej(dErr(a.error || "declined", a.error === "rate_limited" ? "another file is waiting for the viewer" : "the viewer didn't save it"));
+          };
+          toShell({ type: "save", req: req, filename: name, size: blob.size, blob: blob });
+        });
+      });
+    },
+  });
+
   // -- permissions --------------------------------------------------------
   function states(names) {
     var out = {};
@@ -1192,7 +1255,7 @@
   });
 
   // -- claude.use ---------------------------------------------------------
-  var spaces = { db: served.db ? db : null, user: served.user ? user : null, permissions: permissions, artifact: served.artifact ? artifact : null, self: served.self ? artifact : null, assets: served.assets ? assets : null, sample: served.sample ? sample : null, comments: served.comments ? comments : null };
+  var spaces = { db: served.db ? db : null, user: served.user ? user : null, permissions: permissions, artifact: served.artifact ? artifact : null, self: served.self ? artifact : null, assets: served.assets ? assets : null, sample: served.sample ? sample : null, comments: served.comments ? comments : null, downloads: served.downloads ? downloads : null };
   var memo = {};
   function use(name) {
     name = String(name);
