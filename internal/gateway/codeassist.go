@@ -1031,6 +1031,15 @@ func thinkingConfig(r *Request, model string, claude bool, at string) map[string
 				level = "low"
 			case effort == "medium" && (strings.Contains(m, "flash") || gen > 3):
 				level = "medium"
+			case effort == "xhigh" && gen >= 4:
+				// xhigh is Gemini 4's own level (Google's generateContent
+				// reference lists MINIMAL, LOW, MEDIUM, HIGH, XHIGH), so a
+				// custom Gemini provider's xhigh goes up as xhigh, not held
+				// at high. The effort is already fitted to the model's own
+				// levels (fitFor), so xhigh arrives only for a model whose
+				// catalog has it (gemini-4-neon), or one whose levels aren't
+				// known; every Gemini 3 turns a thinking level xhigh away.
+				level = "xhigh"
 			}
 			// a variant at xhigh (Gemini 4 Hydrogen) is asked at xhigh, which
 			// Google lists for it; a model with no such variant stays at high

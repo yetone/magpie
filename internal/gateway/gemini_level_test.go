@@ -29,6 +29,7 @@ func TestGeminiLaterGenerationsToldALevel(t *testing.T) {
 	fresh(t)
 	os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755)
 	os.WriteFile(catalog.CachePath(), []byte(`{"google-vertex":{"models":{
+	"gemini-4-neon":{"id":"gemini-4-neon","reasoning_options":[{"type":"effort","values":["low","medium","high","xhigh"]}]},
 	"gemini-4-argon":{"id":"gemini-4-argon","reasoning_options":[{"type":"effort","values":["low","medium","high"]}]},
 	"gemini-3.8-flash":{"id":"gemini-3.8-flash","reasoning_options":[{"type":"effort","values":["low","medium","high"]}]},
 	"gemini-2.5-flash":{"id":"gemini-2.5-flash","reasoning_options":[{"type":"effort","values":["low","medium","high"]}]}}}}`), 0o644)
@@ -57,7 +58,7 @@ func TestGeminiLaterGenerationsToldALevel(t *testing.T) {
 	}))
 	t.Cleanup(up.Close)
 	if err := provider.Save(provider.Provider{ID: "gv", Name: "Google", Key: "k", Catalog: "google-vertex",
-		Gemini: up.URL + "/v1beta", Models: []string{"gemini-4-argon", "gemini-3.8-flash", "gemini-2.5-flash", "gemini-3-pro-preview"}}); err != nil {
+		Gemini: up.URL + "/v1beta", Models: []string{"gemini-4-neon", "gemini-4-argon", "gemini-3.8-flash", "gemini-2.5-flash", "gemini-3-pro-preview"}}); err != nil {
 		t.Fatal(err)
 	}
 	s := New()
@@ -67,6 +68,14 @@ func TestGeminiLaterGenerationsToldALevel(t *testing.T) {
 		path, model, effort string
 		want                map[string]any
 	}{
+		{"/v1/chat/completions", "gemini-4-neon", "low", level("low")},
+		{"/v1/chat/completions", "gemini-4-neon", "medium", level("medium")},
+		{"/v1/chat/completions", "gemini-4-neon", "high", level("high")},
+		// Gemini 4 Neon has xhigh of its own: it goes up as xhigh, not held
+		// at high (the reporter's case). Argon, without xhigh, keeps high.
+		{"/v1/chat/completions", "gemini-4-neon", "xhigh", level("xhigh")},
+		{"/v1/responses", "gemini-4-neon", "xhigh", level("xhigh")},
+		{"/v1/chat/completions", "gemini-4-argon", "xhigh", level("high")},
 		{"/v1/chat/completions", "gemini-4-argon", "low", level("low")},
 		{"/v1/chat/completions", "gemini-4-argon", "medium", level("medium")},
 		{"/v1/chat/completions", "gemini-4-argon", "high", level("high")},
