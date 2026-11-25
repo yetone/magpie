@@ -1238,6 +1238,10 @@ the temp folder, or beside the exe when the temp folder can't be written,
 as when TEMP names a drive that isn't there: every update was refused
 then, which is one way to 柒拾's "didn't start within 20s" on Discord
 (`markerPath`, `TestRelaunchWithoutATempFolder`). `Forward`'s does the same.
+Its name ends in a random suffix and it is made new and the user's own
+(`os.CreateTemp`, 0600): /tmp is shared on Linux, and a link another
+user left at a fixed name was written through, over the file it named
+(`TestRelaunchMarkerNotAGuessableName`).
 
 Two magpies never show at once. On a Mac the old one lets go of its
 instance lock before it gives the socket (`releaseInstance`), so the new

@@ -111,27 +111,36 @@ func startChecked(exe, old string, args, env []string) error {
 	return blocked
 }
 
-// markerPath is where a file named name goes that a magpie started from
-// exe writes and this one reads: in the temp folder, else beside exe, a
-// folder this update has just written into. A TEMP naming a folder that
-// isn't there (a RAM disk not mounted, a drive taken out) leaves no temp
-// folder, and a started version that couldn't write its word there was
-// ended at startWait and the update called refused, every time
-// (reproduced with TEMP=R:\Temp on the Windows box; one way to 柒拾's
-// "didn't start within 20s" on Discord). The file is made
-// empty here, in the folder that took it, and left for the started magpie
-// to write over: awaitStarted waits for it to hold something.
+// markerPath is a new, empty file, named name and a random suffix, that a
+// magpie started from exe writes and this one reads: in the temp folder,
+// else beside exe, a folder this update has just written into. A TEMP
+// naming a folder that isn't there (a RAM disk not mounted, a drive taken
+// out) leaves no temp folder, and a started version that couldn't write
+// its word there was ended at startWait and the update called refused,
+// every time (reproduced with TEMP=R:\Temp on the Windows box; one way to
+// 柒拾's "didn't start within 20s" on Discord). The file is made here,
+// in the folder that took it, and left for the started magpie to write
+// over: awaitStarted waits for it to hold something.
+//
+// The temp folder can be shared (/tmp on Linux), so the file is never at
+// a name someone else can guess and make first: os.CreateTemp makes it
+// new (O_EXCL, never through a link) and the user's own (0600). A fixed
+// "magpie-started-<pid>" there could be another user's link, and writing
+// it emptied and then wrote over whatever file of this user's the link
+// named; or their file, already holding a word, said a new version that
+// never ran was up.
 func markerPath(name, exe string) string {
 	dirs := []string{os.TempDir(), filepath.Dir(exe)}
 	for i, dir := range dirs {
-		p := filepath.Join(dir, name)
-		if err := os.WriteFile(p, nil, 0o644); err != nil {
+		f, err := os.CreateTemp(dir, name+"-*")
+		if err != nil {
 			if i == 0 {
 				log.Printf("update: the temp folder %s can't be written (%v); the new version says it is up beside %s", dir, err, filepath.Base(exe))
 			}
 			continue
 		}
-		return p
+		f.Close()
+		return f.Name()
 	}
 	return filepath.Join(dirs[0], name)
 }
