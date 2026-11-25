@@ -266,6 +266,7 @@ func Found() []string {
 	add("hermes", HermesDirs()...)
 	add("alma", almaDB())
 	add("openmausbot", ombDB())
+	add("catpaw", catpawDB())
 	add("liveagent", liveagentSessions())
 	add("minimax-code", minimaxSessions())
 	kimi := []string{kimiSessions()}

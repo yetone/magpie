@@ -224,6 +224,11 @@ var others = []*Agent{
 	// Sessions lists those as Raft's (internal/sessions/raft.go), while
 	// their requests say "pi (…)" and are Pi's
 	{ID: "raft", Name: "Raft", Icon: "generic"},
+	// CatPaw (Meituan's CatPaw IDE) runs its agent on its own models;
+	// Sessions lists its conversations (internal/sessions/catpaw.go). Its
+	// icon is the app's own, CatPawAI.icns of catpawai.dmg, cut to its tile
+	// (KenyonCode on X)
+	{ID: "catpaw", Name: "CatPaw", Icon: "catpaw"},
 	// Magpie Memory reading conversations into memories: its requests are
 	// made as memdistill.Agent, by its token and never a User-Agent, and
 	// drawn with the brain the Library's Memory tab has (the owner, 11-12)

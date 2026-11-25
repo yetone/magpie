@@ -48,6 +48,7 @@ var skillsCounted = map[string]struct {
 	"workbuddy-ai": {none: "reads with WorkBuddy's parser, which counts no skills"},
 	"hermes":       {none: "its skill_view tool is not read; hermes is not run in a sandbox (it rewrites the live launcher)"},
 	"openmausbot":  {none: "a bot finds a skill with skills_list and reads its SKILL.md with its file tools, no tool of its own; the real sample has no such turn"},
+	"catpaw":       {none: "a skill reaches CatPaw's agent as a skill_chunk message whose fields were not seen in a real conversation (no signed-in CatPaw to have one)"},
 	"cursor":       {none: "selected skills live in selectedContext; needs a signed-in Cursor for a real session"},
 	"agy":          {none: "skill_lookup's keys are not known from a real session"},
 	"antigravity":  {none: "its steps' payloads are encrypted at rest; only the usage in steps.metadata is read"},
