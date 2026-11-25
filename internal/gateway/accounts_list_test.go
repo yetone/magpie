@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/yetone/magpie/internal/access"
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -196,5 +199,123 @@ func TestAccountPinnedByLoginID(t *testing.T) {
 	}
 	if len(*heads) != 1 || (*heads)[0].Get("chatgpt-account-id") != "acct-2" {
 		t.Fatalf("upstream %v", *heads)
+	}
+}
+
+// @tmr11235 on X again: agents are offered the first 24 of a provider's
+// list when the user picked none (manyModels), and a plugin testing each
+// model wants them all. ?models=1 gives each account and key every model
+// it can be asked for, less what the user's list for it leaves out, and a
+// model past the 24 is asked as "<provider>/<model>", pinned or not.
+func TestAccountsListTellsEveryModel(t *testing.T) {
+	fresh(t)
+	v := &keyVendor{}
+	up := httptest.NewServer(v)
+	t.Cleanup(up.Close)
+	p := provider.Provider{ID: "wide", Name: "Wide", Chat: up.URL + "/v1", Key: firstKey,
+		Keys:          []provider.KeyAccount{{Key: secondKey, Name: "small"}},
+		AccountModels: map[string][]string{provider.KeyID(secondKey): {"m3", "m29"}}}
+	if err := provider.Save(p); err != nil {
+		t.Fatal(err)
+	}
+	var ms []catalog.Model
+	var all []string
+	for i := range 30 {
+		ms = append(ms, catalog.Model{ID: fmt.Sprintf("m%d", i)})
+		all = append(all, fmt.Sprintf("m%d", i))
+	}
+	if err := catalog.SaveLive("wide", p.Chat, ms); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := provider.Find("wide"); err != nil || len(got.Exposed()) != 24 {
+		t.Fatalf("the list agents are offered is not the first 24: %v", err)
+	}
+	s := New()
+	get := func(path string) (int, string) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", path, nil)
+		req.RemoteAddr = "127.0.0.1:5000"
+		s.Handler().ServeHTTP(rec, req)
+		return rec.Code, rec.Body.String()
+	}
+	// not asked for, none: the list stays as it was
+	if code, body := get(AccountsPath + "?provider=wide"); code != 200 || strings.Contains(body, `"models"`) {
+		t.Fatalf("without ?models: %d %s", code, body)
+	}
+	code, body := get(AccountsPath + "?provider=wide&models=1")
+	if code != 200 {
+		t.Fatalf("%d %s", code, body)
+	}
+	var out struct {
+		Data []listedAccount `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(body), &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Data) != 2 {
+		t.Fatalf("listed %s", body)
+	}
+	for _, a := range out.Data {
+		want := all
+		if a.ID == provider.KeyID(secondKey) {
+			want = []string{"m3", "m29"}
+		}
+		if !slices.Equal(a.Models, want) {
+			t.Errorf("%s's models %v, want %v", a.Label, a.Models, want)
+		}
+	}
+	// a model past the 24 is served, unpinned and pinned
+	if code, body := keyedPost(t, s, "wide/m29", ""); code != 200 {
+		t.Fatalf("wide/m29: %d %s", code, body)
+	}
+	if code, body := keyedPost(t, s, "wide/m28", out.Data[0].Pin); code != 200 || !strings.Contains(body, "from "+firstKey) {
+		t.Fatalf("wide/m28 pinned to %s: %d %s", out.Data[0].Pin, code, body)
+	}
+}
+
+// A held key is told a provider only when it may use every model agents
+// are offered of it (quotaScope), and then only the models it may use:
+// past the 24, those its list names.
+func TestAccountsListModelsOfAHeldKey(t *testing.T) {
+	fresh(t)
+	t.Setenv("MAGPIE_ADDR", "")
+	p := provider.Provider{ID: "wide", Name: "Wide", Chat: "https://wide.example.invalid/v1", Key: firstKey}
+	if err := provider.Save(p); err != nil {
+		t.Fatal(err)
+	}
+	var ms []catalog.Model
+	for i := range 30 {
+		ms = append(ms, catalog.Model{ID: fmt.Sprintf("m%d", i)})
+	}
+	if err := catalog.SaveLive("wide", p.Chat, ms); err != nil {
+		t.Fatal(err)
+	}
+	var may, want []string
+	for i := range 24 {
+		may, want = append(may, fmt.Sprintf("wide/m%d", i)), append(want, fmt.Sprintf("m%d", i))
+	}
+	may, want = append(may, "wide/m28"), append(want, "m28")
+	keys, secrets := newCaller(t, "Owner", "Held")
+	for action, c := range map[string]access.Change{
+		"models-key": {Key: keys[1].ID, Models: may},
+		"quotas-key": {Key: keys[1].ID, Quotas: true},
+	} {
+		if _, err := access.Update(action, c); err != nil {
+			t.Fatal(action, err)
+		}
+	}
+	r := httptest.NewRequest("GET", AccountsPath+"?provider=wide&models=1", nil)
+	r.RemoteAddr = "192.168.1.9:5000"
+	r.Header.Set("Authorization", "Bearer "+secrets[1])
+	w := httptest.NewRecorder()
+	lanGuard(New().Handler()).ServeHTTP(w, r)
+	var out struct {
+		Data []listedAccount `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil || w.Code != 200 {
+		t.Fatalf("%d %s", w.Code, w.Body.String())
+	}
+	if len(out.Data) != 1 || !slices.Equal(out.Data[0].Models, want) {
+		t.Fatalf("the held key is told %s", w.Body.String())
 	}
 }

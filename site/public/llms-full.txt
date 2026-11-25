@@ -11667,6 +11667,8 @@ const res = await fetch(base + "/v1/chat/completions", {
 })
 ```
 
+Add `?models=1` and each one also has `models`: the id of every model it can be asked for, its provider’s whole list. Agents are offered only the first 24 of a provider’s list when no models are picked; this list stops at none of them, and leaves out only what the account can’t be asked for (a model the user kept off that account, or one on none of the provider’s APIs). Ask each as `<provider>/<id>`, offered to agents or not: `openai/o4-mini`.
+
 ## Sign-in state
 
 magpie marks an account whose sign-in the vendor refused. It shows the mark to the user and stops sending to the account until it works again. By default a 401 marks the account and a success clears the mark. A plugin can say more precisely what an answer means with the `X-Magpie-Sign-In` response header, which magpie removes before the answer goes on:

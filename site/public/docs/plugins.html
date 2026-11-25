@@ -589,6 +589,7 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
   body: JSON.stringify({ model: <span class="s">"openai/gpt-5.5"</span>, messages: [{ role: <span class="s">"user"</span>, content: <span class="s">"ping"</span> }] }),
 })</pre>
     </div>
+    <p>Add <code>?models=1</code> and each one also has <code>models</code>: the id of every model it can be asked for, its provider’s whole list. Agents are offered only the first 24 of a provider’s list when no models are picked; this list stops at none of them, and leaves out only what the account can’t be asked for (a model the user kept off that account, or one on none of the provider’s APIs). Ask each as <code>&lt;provider&gt;/&lt;id&gt;</code>, offered to agents or not: <code>openai/o4-mini</code>.</p>
 
     <h2 id="signin-state"><a class="anchor" href="#signin-state">Sign-in state</a></h2>
     <p>magpie marks an account whose sign-in the vendor refused. It shows the mark to the user and stops sending to the account until it works again. By default a 401 marks the account and a success clears the mark. A plugin can say more precisely what an answer means with the <code>X-Magpie-Sign-In</code> response header, which magpie removes before the answer goes on:</p>

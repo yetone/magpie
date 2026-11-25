@@ -2827,8 +2827,13 @@ provider, those whose vendor tells no quota included, by identifiers only:
 never the key), `kind` (`account` or `key`), `label`, `user`, `plan`, `on`
 and `pin`, `"<provider>/<id>"`. `?provider=<id>` lists one provider's.
 `X-Magpie-Account: <pin>` (or the id alone) pins a request to that
-account or key. It is asked as `/v1/magpie/quotas` is: this machine, or
-another with a key of a gateway shared on the local network; a read-only
+account or key. `?models=1` adds each one's `models`: the id of every
+model it can be asked for, its provider's whole list (not the first 24
+agents are offered of a provider with no picks), less a model the user
+keeps off that account and one on none of the provider's APIs. Each is
+asked as `<provider>/<id>`, offered to agents or not. It is asked as
+`/v1/magpie/quotas` is: this machine, or another with a key of a gateway
+shared on the local network; a read-only
 key may read it, and a key held to a budget, models or accounts only when
 its owner lets it be told quotas, and then only of the accounts it may
 use.

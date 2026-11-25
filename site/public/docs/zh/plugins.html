@@ -589,6 +589,7 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
   body: JSON.stringify({ model: <span class="s">"openai/gpt-5.5"</span>, messages: [{ role: <span class="s">"user"</span>, content: <span class="s">"ping"</span> }] }),
 })</pre>
     </div>
+    <p>加上 <code>?models=1</code>，每个账号还会带 <code>models</code>：它能请求的每个模型的 id，也就是供应商的完整列表。没有挑选模型时，给 agent 的列表只有供应商列表的前 24 个；这里不受这个限制，只去掉这个账号请求不了的（用户没让这个账号服务的模型，或供应商的哪个 API 都不提供的模型）。请求时写成 <code>&lt;供应商&gt;/&lt;id&gt;</code>，不管有没有给 agent，例如 <code>openai/o4-mini</code>。</p>
 
     <h2 id="signin-state"><a class="anchor" href="#signin-state">登录状态</a></h2>
     <p>厂商拒绝了某个账号的登录时，magpie 会给它打上标记，告诉用户，并且在它恢复之前不再往它发请求。默认情况下，401 打标记，成功清除标记。插件可以用 <code>X-Magpie-Sign-In</code> 响应头更准确地说明一个回答的含义，magpie 会在转发前去掉这个头：</p>

@@ -589,6 +589,7 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
   body: JSON.stringify({ model: <span class="s">"openai/gpt-5.5"</span>, messages: [{ role: <span class="s">"user"</span>, content: <span class="s">"ping"</span> }] }),
 })</pre>
     </div>
+    <p><code>?models=1</code> を付けると、それぞれに <code>models</code> も付きます。そのアカウントで呼べるすべてのモデルの id、つまりプロバイダの完全な一覧です。モデルを選んでいないとき、エージェントに出す一覧はプロバイダの一覧の先頭 24 個だけですが、こちらにはその上限がありません。外れるのはそのアカウントで呼べないもの（ユーザーがそのアカウントに使わせないモデルや、プロバイダのどの API にもないモデル）だけです。エージェントに出しているかどうかに関係なく、<code>&lt;provider&gt;/&lt;id&gt;</code> の形で呼べます（例：<code>openai/o4-mini</code>）。</p>
 
     <h2 id="signin-state"><a class="anchor" href="#signin-state">サインイン状態</a></h2>
     <p>magpie は、ベンダーにサインインを拒否されたアカウントに記録を付けます。その記録をユーザーに表示し、再び使えるようになるまでそのアカウントには送信しません。デフォルトでは 401 で記録が付き、成功すると消えます。プラグインは <code>X-Magpie-Sign-In</code> レスポンスヘッダーで、応答の意味をより正確に伝えられます。このヘッダーは応答が先に渡される前に magpie が取り除きます：</p>

@@ -13,6 +13,11 @@ import (
 // card for, never an API key or a ChatGPT API account). Each is named by
 // its identifiers alone, never a key or a token, with the value
 // X-Magpie-Account takes to pin a request to it (pin).
+//
+// ?models=1 adds each one's models: every model it can be asked for, as
+// "<provider>/<model>" takes them, not the first 24 a provider with no
+// picks offers agents (Exposed, manyModels; @tmr11235 again: a plugin
+// testing each model wants the whole list).
 const AccountsPath = "/v1/magpie/accounts"
 
 // listedAccount is one account or key as AccountsPath tells it.
@@ -31,6 +36,12 @@ type listedAccount struct {
 	Plan  string `json:"plan,omitempty"`
 	// On says requests may go to it: the provider is on and so is it
 	On bool `json:"on"`
+	// Models, asked for with ?models=1, are the ids of every model it can
+	// be asked for: its provider's whole list (Available), less a model on
+	// none of the provider's APIs and one the user's list for it leaves
+	// out (#474), and for a held key those the key may use. Each is sent
+	// as "<provider>/<id>", listed to agents or not (provider.Resolve).
+	Models []string `json:"models,omitempty"`
 }
 
 // accountsList answers AccountsPath. It names the accounts as the quotas
@@ -48,6 +59,7 @@ func (s *Server) accountsList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	only := strings.TrimSpace(r.URL.Query().Get("provider"))
+	withModels := queryYes(r.URL.Query().Get("models"))
 	out := []listedAccount{}
 	for _, p := range provider.All() {
 		if only != "" && !strings.EqualFold(only, p.ID) {
@@ -63,20 +75,57 @@ func (s *Server) accountsList(w http.ResponseWriter, r *http.Request) {
 				keysOn[k.ID] = k.On
 			}
 		}
+		var models []string
+		if withModels {
+			models = modelsListed(p, scope)
+		}
 		for _, a := range p.AccountIDs() {
 			if scope != nil && !scope.who.AllowsAccount(p.ID, a.ID) {
 				continue
 			}
 			l := listedAccount{Provider: p.ID, ProviderName: p.Name, ID: a.ID, Pin: p.ID + "/" + a.ID, Label: a.Shown(p), Plan: a.Plan}
+			ref := a.User
 			if a.Key {
-				l.Kind, l.On = "key", keysOn[a.ID] && !p.Off
+				l.Kind, l.On, ref = "key", keysOn[a.ID] && !p.Off, a.ID
 			} else {
 				l.Kind, l.User, l.On = "account", a.User, on[strings.ToLower(a.User)] && !p.Off
+			}
+			if withModels {
+				l.Models = []string{}
+				for _, m := range models {
+					if p.AccountServes(ref, m) {
+						l.Models = append(l.Models, m)
+					}
+				}
 			}
 			out = append(out, l)
 		}
 	}
 	writeJSON(w, 200, map[string]any{"object": "list", "data": out})
+}
+
+// queryYes says a query's yes: 1, true or yes.
+func queryYes(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "yes":
+		return true
+	}
+	return false
+}
+
+// modelsListed is the ids of every model p can be asked for (Available,
+// read once a provider), less those on none of its APIs, and for a held
+// key those the key may use.
+func modelsListed(p provider.Provider, scope *quotaScope) []string {
+	noAPI := p.NoAPI()
+	var out []string
+	for _, m := range p.Available() {
+		if noAPI(m.ID) || scope != nil && !modelListed(scope.who, p, m.ID) {
+			continue
+		}
+		out = append(out, m.ID)
+	}
+	return out
 }
 
 // accountsOnNow is the users of p's accounts requests may take
