@@ -34,7 +34,7 @@ const (
 )
 
 // artifactAPICalls are the page runtime's POSTs, under <page>/_api/.
-var artifactAPICalls = []string{"db", "publish", "meta", "upload", "assets", "sample"}
+var artifactAPICalls = []string{"db", "publish", "meta", "upload", "assets", "sample", "comments"}
 
 // artifactAPICall: r is a page's call into its runtime's API, which
 // corsGuard lets through from Origin: null, as artifactPageRead lets its
@@ -254,6 +254,9 @@ func (s *Server) artifactEvents(w http.ResponseWriter, r *http.Request) {
 				}
 				newest = c.Version
 				line = fmt.Sprintf("data: {\"version\":%d}\n\n", c.Version)
+			case c.Comments:
+				// the shell's (artifactShellEvents), not the page's
+				continue
 			case c.Paths == nil:
 				// one that fell behind: every path, and the newest version
 				line = "data: {}\n\n"

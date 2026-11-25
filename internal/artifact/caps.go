@@ -26,7 +26,7 @@ var capabilityNames = []string{"artifact", "assets", "comments", "db", "dictatio
 // ServedCaps are the capabilities the page runtime gives a page that declares
 // them; permissions is built in and never declared. self is artifact's
 // former name, and resolves the same namespace.
-var ServedCaps = []string{"artifact", "assets", "db", "sample", "self", "user"}
+var ServedCaps = []string{"artifact", "assets", "comments", "db", "sample", "self", "user"}
 
 // Capabilities is a version's declaration, by name.
 type Capabilities map[string]json.RawMessage
@@ -81,6 +81,11 @@ func ParseCapabilities(raw json.RawMessage) (Capabilities, error) {
 	if v, ok := c["assets"]; ok {
 		if _, err := ParseAssetsConfig(v); err != nil {
 			return nil, fmt.Errorf("capability assets: %w", err)
+		}
+	}
+	if v, ok := c["comments"]; ok {
+		if _, err := ParseCommentsConfig(v); err != nil {
+			return nil, fmt.Errorf("capability comments: %w", err)
 		}
 	}
 	if v, ok := c["sample"]; ok {
@@ -155,6 +160,36 @@ func ParseArtifactConfig(raw json.RawMessage) (*ArtifactConfig, error) {
 		}
 	}
 	return a, nil
+}
+
+// CommentsConfig is the comments capability's declaration:
+// composer_only grants only openComposer and anchorFor, which write
+// nothing; customAnchors adds customAnchors().
+type CommentsConfig struct {
+	ComposerOnly  bool `json:"composer_only,omitempty"`
+	CustomAnchors bool `json:"customAnchors,omitempty"`
+}
+
+// ParseCommentsConfig reads the comments capability's declaration.
+func ParseCommentsConfig(raw json.RawMessage) (*CommentsConfig, error) {
+	c := &CommentsConfig{}
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, c); err != nil {
+			return nil, errors.New("it is {}, {\"composer_only\": true} or {\"customAnchors\": true}")
+		}
+	}
+	return c, nil
+}
+
+// CommentsComposerOnly is whether the version's page declares comments
+// as composer_only: it opens the composer and writes nothing.
+func CommentsComposerOnly(c Capabilities) bool {
+	raw, ok := c["comments"]
+	if !ok {
+		return false
+	}
+	cc, err := ParseCommentsConfig(raw)
+	return err != nil || cc.ComposerOnly
 }
 
 // SampleConfig is the sample capability's declaration: {images: true}

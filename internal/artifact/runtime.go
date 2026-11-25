@@ -34,6 +34,9 @@ type RuntimeConfig struct {
 	Version int    `json:"version,omitempty"`
 	Pinned  bool   `json:"pinned,omitempty"`
 	Home    string `json:"home,omitempty"`
+	// Origin is magpie's origin, as the browser names it: the viewer
+	// shell's, which the page's runtime speaks to (shell.js)
+	Origin string `json:"origin,omitempty"`
 	// Shared: the page is a shared copy, on usemagpie.ai, where nothing
 	// is served and every capability resolves null
 	Shared bool `json:"shared,omitempty"`

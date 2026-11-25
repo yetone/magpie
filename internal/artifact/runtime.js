@@ -12,7 +12,7 @@
   // every capability resolves null there, as it does for a page's
   // visitor that claude.ai can't serve
   var publishing = !!(C.caps.artifact || C.caps.self);
-  var served = C.shared ? { permissions: true } : { db: !!C.caps.db, user: true, permissions: true, artifact: publishing, self: publishing, assets: !!C.caps.assets, sample: !!C.caps.sample };
+  var served = C.shared ? { permissions: true } : { db: !!C.caps.db, user: true, permissions: true, artifact: publishing, self: publishing, assets: !!C.caps.assets, sample: !!C.caps.sample, comments: !!C.caps.comments && !!C.origin };
   var freeze = Object.freeze;
   function deepFreeze(v) {
     if (v && typeof v === "object" && !Object.isFrozen(v)) {
@@ -876,6 +876,304 @@
   };
   freeze(sample);
 
+  // -- the viewer shell ---------------------------------------------------
+  // In a tab, magpie frames the page in its viewer shell (shell.js), which
+  // draws the comments over it. The page tells the shell where things
+  // are; the shell tells it the comment mode and the threads' anchors.
+  // Messages go to magpie's origin alone, and come from the parent at it.
+  var SH = "artifact-shell", framed = !C.shared && !!C.origin && window.parent !== window;
+  var shellUp = false, shellWait = [], cmode = false, cpins = [], cstyle = null, creq = 0, cwait = {};
+  var askers = [], asking = {};
+  function toShell(m) {
+    if (!framed) return;
+    m.magpie = SH;
+    try { window.parent.postMessage(m, C.origin); } catch (e) {}
+  }
+  function whenShell() {
+    if (shellUp) return Promise.resolve(true);
+    if (!framed) return Promise.resolve(false);
+    return new Promise(function (res) {
+      shellWait.push(res);
+      setTimeout(function () { res(shellUp); }, 3000);
+    });
+  }
+  // an element's anchor path: from the nearest id, else from body, by
+  // each element's place among its kind
+  var idRe = /^[A-Za-z][\w-]*$/;
+  function pathOf(node) {
+    var parts = [];
+    for (var e = node; e && e.nodeType === 1; e = e.parentElement) {
+      if (e === document.documentElement) break;
+      if (e === document.body) { parts.unshift("body"); break; }
+      if (e.id && idRe.test(e.id) && document.querySelectorAll("#" + e.id).length === 1) { parts.unshift("#" + e.id); break; }
+      var i = 1, s = e;
+      while ((s = s.previousElementSibling)) if (s.tagName === e.tagName) i++;
+      parts.unshift(e.tagName.toLowerCase() + ":nth-of-type(" + i + ")");
+    }
+    return parts.join(">") || "body";
+  }
+  function find(path) {
+    try { return path ? document.querySelector(path) : null; } catch (e) { return null; }
+  }
+  function labelOf(e) {
+    var w = e.getAttribute("aria-label") || e.getAttribute("alt") || e.getAttribute("title") || "";
+    if (!w) w = (e.innerText || e.textContent || "").replace(/\s+/g, " ").trim();
+    if (!w) w = e.tagName.toLowerCase();
+    return w.length > 60 ? w.slice(0, 59) + "…" : w;
+  }
+  function quoteIn(e) {
+    var sel = window.getSelection && window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) return "";
+    var r = sel.getRangeAt(0);
+    if (!e.contains(r.commonAncestorContainer) && !r.commonAncestorContainer.contains(e)) return "";
+    var q = String(sel).replace(/\s+/g, " ").trim();
+    return q.length > 500 ? q.slice(0, 499) + "…" : q;
+  }
+  function targetOf(e) {
+    if (!e || e.nodeType !== 1) e = e && e.parentElement;
+    if (!e || e.closest("[data-uncommentable]")) return null;
+    return e.closest("[data-comment-target]") || e;
+  }
+  function anchorAt(e, cx, cy) {
+    var r = e.getBoundingClientRect();
+    var x = r.width ? (cx - r.left) / r.width : 0.5, y = r.height ? (cy - r.top) / r.height : 0.5;
+    return { path: pathOf(e), x: Math.min(1, Math.max(0, x)), y: Math.min(1, Math.max(0, y)) };
+  }
+  // where each pin goes, in the frame's own coordinates
+  var placing = false;
+  function place() {
+    if (placing) return;
+    placing = true;
+    requestAnimationFrame(function () {
+      placing = false;
+      var map = {};
+      cpins.forEach(function (p) {
+        var e = find(p.path), r = e && e.getBoundingClientRect();
+        map[p.id] = r && (r.width || r.height) ? { x: r.left + p.x * r.width, y: r.top + p.y * r.height } : null;
+      });
+      toShell({ type: "placed", map: map });
+    });
+  }
+  function setCMode(on) {
+    cmode = on;
+    if (on && !cstyle) {
+      cstyle = document.createElement("style");
+      cstyle.textContent = "*{cursor:crosshair!important}[data-uncommentable],[data-uncommentable] *{cursor:default!important}";
+      (document.head || document.documentElement).appendChild(cstyle);
+    } else if (!on && cstyle) {
+      cstyle.remove();
+      cstyle = null;
+      toShell({ type: "hover", rect: null });
+    }
+  }
+  if (framed) {
+    window.addEventListener("message", function (e) {
+      var d = e.data;
+      if (e.source !== window.parent || e.origin !== C.origin || !d || d.magpie !== SH) return;
+      switch (d.type) {
+        case "hi":
+          shellUp = true;
+          shellWait.splice(0).forEach(function (f) { f(true); });
+          break;
+        case "mode":
+          setCMode(!!d.on);
+          break;
+        case "pins":
+          cpins = Array.isArray(d.list) ? d.list.slice(0, 500) : [];
+          place();
+          break;
+        case "reveal":
+          var el = find(d.path);
+          if (el && el.scrollIntoView) el.scrollIntoView({ block: "center", behavior: "smooth" });
+          break;
+        case "composed":
+          if (cwait[d.req]) cwait[d.req](d);
+          break;
+        case "sent":
+          if (cwait[d.req]) cwait[d.req](d);
+          break;
+        case "ask":
+          askListeners(d);
+          break;
+        case "abort":
+          if (asking[d.id]) asking[d.id].abort();
+          break;
+      }
+    });
+    // comment mode: a click on the page is a comment there, not the page's
+    var swallow = function (e) {
+      if (!cmode || !e.isTrusted) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    };
+    ["pointerdown", "mousedown", "pointerup", "mouseup", "dblclick", "auxclick", "submit"].forEach(function (k) { window.addEventListener(k, swallow, true); });
+    window.addEventListener("click", function (e) {
+      if (!cmode || !e.isTrusted) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      var tgt = targetOf(e.target);
+      if (!tgt) return;
+      toShell({ type: "compose", anchor: anchorAt(tgt, e.clientX, e.clientY), at: { x: e.clientX, y: e.clientY }, label: labelOf(tgt), quote: quoteIn(tgt) });
+    }, true);
+    var hovered = null;
+    window.addEventListener("mousemove", function (e) {
+      if (!cmode) return;
+      var tgt = targetOf(e.target);
+      if (tgt === hovered) return;
+      hovered = tgt;
+      var r = tgt && tgt !== document.body && tgt.getBoundingClientRect();
+      toShell({ type: "hover", rect: r ? { x: r.left, y: r.top, w: r.width, h: r.height } : null });
+    }, true);
+    window.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && cmode) toShell({ type: "escape" });
+    }, true);
+    window.addEventListener("scroll", function () { if (cpins.length) place(); if (cmode && hovered) { hovered = null; toShell({ type: "hover", rect: null }); } }, true);
+    window.addEventListener("resize", function () { if (cpins.length) place(); });
+    var hello = function () {
+      toShell({ type: "hello", follows: follows });
+      if (typeof MutationObserver === "function") {
+        new MutationObserver(function () { if (cpins.length) place(); }).observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
+      }
+    };
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", hello);
+    else hello();
+  }
+
+  // -- comments -----------------------------------------------------------
+  // the page writes threads, as the viewer; the shell shows them, so
+  // nothing here reads them back
+  function cErr(code, message) {
+    var e = new Error(message || code);
+    e.name = "CommentsError";
+    e.code = code;
+    return e;
+  }
+  var cdecl = C.caps.comments || {}, composerOnly = !!cdecl.composer_only;
+  function ccall(op, body) {
+    return post("comments", Object.assign({ t: C.token, op: op, version: version }, body), cErr, "unavailable");
+  }
+  function checkText(s) {
+    if (typeof s !== "string" || !s.trim()) return Promise.reject(cErr("invalid", "a comment's text is a non-empty string"));
+    if (new TextEncoder().encode(s).length > 4096) return Promise.reject(cErr("invalid", "a comment is at most 4 KiB as UTF-8"));
+    if (/[\u0000-\u0008\u000b-\u001f\u007f]/.test(s)) return Promise.reject(cErr("invalid", "a comment has no control characters but newlines and tabs"));
+    return null;
+  }
+  function checkAnchor(a) {
+    return a && typeof a === "object" && typeof a.path === "string" && a.path && typeof a.x === "number" && typeof a.y === "number";
+  }
+  // where a composer the page opens points: like a click, at what the
+  // viewer sees. An element (or range) out of view comes into it, and the
+  // point is the middle of its visible part (a range's: under it)
+  function shown(e, range) {
+    var rectOf = function () { return (range || e).getBoundingClientRect(); };
+    var r = rectOf();
+    if (!(r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth) && e.scrollIntoView) {
+      e.scrollIntoView({ block: "nearest", inline: "nearest" });
+      r = rectOf();
+    }
+    var mid = function (a, b, max) { return (Math.max(a, 0) + Math.min(b, max)) / 2; };
+    return { x: mid(r.left, r.right, innerWidth), y: range ? Math.min(Math.max(r.bottom, 0), innerHeight) : mid(r.top, r.bottom, innerHeight) };
+  }
+  function shellAsk(m) {
+    return whenShell().then(function (up) {
+      if (!up) throw cErr("unavailable", "comments open in magpie's viewer: open the page in its own tab");
+      var req = ++creq;
+      return new Promise(function (res) {
+        cwait[req] = function (d) { delete cwait[req]; res(d); };
+        m.req = req;
+        toShell(m);
+      });
+    });
+  }
+  function askListeners(d) {
+    var ctl = new AbortController(), i = 0, ls = askers.slice();
+    asking[d.id] = ctl;
+    var req = freeze({ text: String(d.text || ""), anchor: d.anchor == null ? null : String(d.anchor), label: d.label || undefined });
+    function next() {
+      if (i >= ls.length || ctl.signal.aborted) return Promise.resolve({ handled: false });
+      var l = ls[i++];
+      return Promise.resolve().then(function () { return l(req, { signal: ctl.signal }); }).then(function (a) {
+        return a && a.handled ? a : next();
+      }, next);
+    }
+    next().then(function (a) {
+      delete asking[d.id];
+      var reply = a && typeof a.reply === "string" ? a.reply.slice(0, 500) : undefined;
+      toShell({ type: "answer", id: d.id, handled: !!(a && a.handled), reply: reply });
+    });
+  }
+  var comments = {
+    openComposer: function (target) {
+      var e = target && (target.element || target.range && target.range.commonAncestorContainer);
+      if (e && e.nodeType !== 1) e = e.parentElement;
+      if (!e || !e.isConnected) return Promise.reject(cErr("invalid", "openComposer takes {element} or {range} in this document"));
+      var tgt = targetOf(e);
+      if (!tgt) return Promise.resolve(freeze({ opened: false }));
+      var at = shown(e, target.range);
+      var quote = target.range ? String(target.range).replace(/\s+/g, " ").trim().slice(0, 500) : "";
+      return shellAsk({ type: "compose", anchor: anchorAt(tgt, at.x, at.y), at: at, label: labelOf(tgt), quote: quote }).then(function (d) {
+        return freeze({ opened: !!d.opened });
+      });
+    },
+    anchorFor: function (e) {
+      if (!e || e.nodeType !== 1 || !e.isConnected) return Promise.reject(cErr("invalid", "anchorFor takes an element in this document"));
+      return Promise.resolve(freeze({ path: pathOf(e), x: 0.5, y: 0.5 }));
+    },
+    onSendToClaude: function (l) {
+      if (typeof l !== "function") throw new TypeError("onSendToClaude takes a function");
+      askers.push(l);
+      return function () { var i = askers.indexOf(l); if (i >= 0) askers.splice(i, 1); };
+    },
+  };
+  if (!composerOnly) {
+    comments.create = function (o) {
+      var bad = checkText(o && o.text);
+      if (bad) return bad;
+      if (!checkAnchor(o.anchor)) return Promise.reject(cErr("invalid", "create takes the anchor anchorFor gave"));
+      var e = find(o.anchor.path);
+      return ccall("create", { anchor: { path: o.anchor.path, x: o.anchor.x, y: o.anchor.y }, label: e ? labelOf(e) : "", text: o.text }).then(function (j) {
+        return freeze({ threadId: j.threadId, commentId: j.commentId });
+      });
+    };
+    comments.reply = function (id, text) {
+      var bad = checkText(text);
+      if (bad) return bad;
+      if (typeof id !== "string" || !id) return Promise.reject(cErr("invalid", "reply takes a threadId"));
+      return ccall("reply", { thread: id, text: text }).then(function (j) { return freeze({ commentId: j.commentId }); });
+    };
+    // the viewer sends it from the shell's composer, written for them:
+    // the page alone sends nothing to the agent
+    comments.sendToClaude = function (o) {
+      var bad = checkText(o && o.text);
+      if (bad) return bad;
+      var m = { type: "send", text: o.text };
+      if (o.threadId) m.threadId = String(o.threadId);
+      else if (checkAnchor(o.anchor)) {
+        var e = find(o.anchor.path);
+        m.anchor = { path: o.anchor.path, x: o.anchor.x, y: o.anchor.y };
+        m.label = e ? labelOf(e) : "";
+        if (e) m.at = shown(e);
+      } else return Promise.reject(cErr("invalid", "sendToClaude takes {anchor, text} or {threadId, text}"));
+      return shellAsk(m).then(function (d) {
+        if (d.error) throw cErr(d.error, d.error === "consent_required" ? "the viewer didn't send it" : d.error === "claude_unavailable" ? "no agent can take it; nothing was posted" : "it can't be sent from here");
+        return freeze({ threadId: d.threadId, commentId: d.commentId });
+      });
+    };
+    comments.canSendToClaude = function () {
+      return ccall("can", {}).then(function (j) { return j.can || "off"; }, function () { return "off"; });
+    };
+    comments.resolve = function (id, resolved) {
+      return ccall("resolve", { thread: String(id), resolved: !!resolved }).then(function () {});
+    };
+    comments["delete"] = function (id) {
+      return ccall("delete", { thread: String(id) }).then(function () {});
+    };
+  }
+  if (cdecl.customAnchors) {
+    comments.customAnchors = function () { return Promise.reject(cErr("capability_disabled", "custom anchors aren't served here yet: the shell anchors comments to elements")); };
+  }
+  freeze(comments);
+
   // -- permissions --------------------------------------------------------
   function states(names) {
     var out = {};
@@ -894,7 +1192,7 @@
   });
 
   // -- claude.use ---------------------------------------------------------
-  var spaces = { db: served.db ? db : null, user: served.user ? user : null, permissions: permissions, artifact: served.artifact ? artifact : null, self: served.self ? artifact : null, assets: served.assets ? assets : null, sample: served.sample ? sample : null };
+  var spaces = { db: served.db ? db : null, user: served.user ? user : null, permissions: permissions, artifact: served.artifact ? artifact : null, self: served.self ? artifact : null, assets: served.assets ? assets : null, sample: served.sample ? sample : null, comments: served.comments ? comments : null };
   var memo = {};
   function use(name) {
     name = String(name);

@@ -38,6 +38,7 @@ var keySurfaceNeither = []string{
 	"POST " + ArtifactPagePath + "{ref}/_api/db", "GET " + ArtifactPagePath + "{ref}/_api/events",
 	"POST " + ArtifactPagePath + "{ref}/_api/publish", "POST " + ArtifactPagePath + "{ref}/_api/meta",
 	"POST " + ArtifactPagePath + "{ref}/_api/upload", "POST " + ArtifactPagePath + "{ref}/_api/assets",
+	"GET " + ArtifactPagePath + "{ref}/_api/shell",
 	"GET " + artifactBlobPath + "{id}", "GET " + BrowserExtensionPath, "GET " + BrowserStatusPath,
 }
 

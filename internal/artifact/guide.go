@@ -82,6 +82,21 @@ Declare {"sample": {}}, or {"sample": {"images": true}} to send images too.
   await sample.limits()   // {maxPromptBytes, tools: {maxCount}, modelTiers, images?}
 Each call is memoryless: send the instructions, the data and the format the page wants every time. Answers are kept 5 minutes for the same input (cache: false for a chat). Call it on a viewer's click, not on every keystroke.
 Codes: rate_limited (back off; never loop), invalid_json (r.text has what came), cancelled, prompt_too_large, image_rejected, images_unavailable, sampling_disabled (no provider in magpie), upstream_error.`},
+	{"comments", `comments: the viewer comments on the page, pinned to its elements, and can send a comment to you (the agent that published it), which answers in the thread. The viewer's comment mode, pins and threads are drawn by magpie's viewer around the page; the page only adds ways in.
+Declare {"comments": {"composer_only": true}} for openComposer and anchorFor alone, or {"comments": {}} for the calls that write too. WRITE-ONLY: never build the page's own list of comments; the viewer shows every thread.
+  const comments = await claude.use("comments")   // null in a shared copy
+  await comments.openComposer({element: el})   // or {range}: the viewer's composer at el; {opened}
+  const anchor = await comments.anchorFor(el)   // {path, x, y}
+  const off = comments.onSendToClaude(async (req, {signal}) => ({handled: false}))
+     // req: {text, anchor, label} when the viewer sends a comment; {handled: true, reply} answers it from the page
+  await comments.create({anchor, text})          // {threadId, commentId}
+  await comments.reply(threadId, text)           // {commentId}
+  await comments.sendToClaude({anchor, text})    // or {threadId, text}: opens the composer filled in; the viewer presses Send
+  await comments.canSendToClaude()               // "available", "no_session" or "off"
+  await comments.resolve(threadId, true)
+  await comments.delete(threadId)
+Call the writing calls on a viewer's click, never on load. Text is 1 to 4096 bytes of UTF-8, newlines and tabs but no other control characters. Mark parts that take no comments with data-uncommentable, and the element a comment should pin to with data-comment-target.
+Codes: invalid, not_granted, not_found, consent_required (the viewer didn't send it), claude_unavailable, unavailable, capability_disabled (customAnchors isn't served here).`},
 	{"permissions", `permissions: built in, never declared.
   const p = await claude.use("permissions")
   await p.state("db")      // "granted" for what the page declared, else "unavailable"

@@ -171,7 +171,8 @@ address, so:
 A page written for claude.ai's artifact runtime (contract 0.2.99) runs
 here as written: `window.claude.use(name)` is there before the page's own
 scripts, and resolves `db`, `user`, `artifact` (and `self`, its former
-name), `assets`, `sample` and the built-in `permissions`
+name), `assets`, `sample`, `comments` ([Comments](#comments)) and the
+built-in `permissions`
 ([internal/artifact/runtime.js](../../internal/artifact/runtime.js),
 [runtime.go](../../internal/artifact/runtime.go),
 [caps.go](../../internal/artifact/caps.go),
@@ -373,6 +374,98 @@ The store:
   assets: `/_blob/<id>` isn't served there, so an `<img>` of one shows
   nothing on a shared copy (#7649).
 
+## Comments
+
+The viewer comments on a page, pinned to its elements, and can send a
+comment to the agent that published it, which changes the page and
+answers in the thread, as claude.ai's artifact shell does
+([internal/artifact/shell.go](../../internal/artifact/shell.go),
+[shell.js](../../internal/artifact/shell.js),
+[comments.go](../../internal/artifact/comments.go),
+[artifacts_comments.go](../../internal/gateway/artifacts_comments.go),
+[artifacts_send.go](../../internal/gateway/artifacts_send.go)).
+
+The viewer shell:
+
+- A tab opening the page (`Sec-Fetch-Dest: document`) gets the shell
+  (`artifactShell`), not the page. It runs at magpie's own origin under
+  `ShellCSP` (a nonce for its one script and style, `frame-ancestors
+  'none'`), `no-store`, with no `Access-Control-Allow-Origin`, and frames
+  the same address, query kept; its script adds the fragment, which the
+  server never sees. The frame's request is served the page as before,
+  sandboxed, with the runtime.
+- It holds the shell's token (`ShellToken`, an HMAC apart from the
+  page's), which lists and writes threads and sends them to the agent.
+  The page's token never does what the shell's does, and the reverse.
+- It talks to the page's runtime by `postMessage` (`{magpie:
+  "artifact-shell"}`) and hears only `e.source === frame.contentWindow`:
+  a frame inside the page is not heard. It posts with `"*"`, since the
+  page's origin is opaque; what it sends is what the page could read
+  anyway (its pins, its own comments' replies).
+- Comment mode (the bar's Add comments): the runtime takes the page's
+  clicks in the capture phase, so the page's own handlers never hear
+  them, and anchors a thread at the clicked element (`#id` when unique,
+  else a path), at a point in its box. `[data-uncommentable]` takes no
+  comment; `[data-comment-target]` takes the click to itself. Escape
+  ends the mode.
+- Pins follow the page as it scrolls (the runtime reports each pin's
+  place). A pin shows while its anchor is in the frame, dropped or moved
+  to stay inside it at an edge (`drawPins`). A card replies, resolves, reopens and deletes (asking once);
+  the list holds Open and Resolved and a composer for the whole page.
+  ⌘↩ posts, ⌘⇧↩ sends to the agent.
+- `<page>/_api/shell?t=<shell token>` is its stream: `{"comments":true}`
+  when threads change, in this process or another, and `{"version":n}`
+  when one is published, so a shell on the newest loads it.
+
+The store and API:
+
+- `<id>/comments.json`, beside meta.json, written through a temp file;
+  at most `MaxThreads` threads of `MaxReplies` comments, text 1 to 4096
+  bytes of UTF-8, newlines and tabs but no other control characters
+  (`CheckCommentText`). A thread opens again when a person writes in it,
+  not when the agent answers; it goes with its last comment.
+- `POST <page>/_api/comments`, JSON as `text/plain` with `t` the token
+  and `op`: list, create, reply, resolve, delete (a thread, or one
+  comment), send, stop and can. Local callers at a loopback Host only.
+- A page's own token, from a version declaring `comments` in full, may
+  create, reply, resolve, delete and can. `{composer_only: true}` writes
+  nothing: it opens the shell's composer (`openComposer`) and makes
+  anchors (`anchorFor`). Like a click, that composer (and
+  `sendToClaude`'s) points at what the viewer sees: an element out of
+  view is scrolled into it, and the point and the anchor are the middle
+  of its visible part (`shown` in runtime.js). Nothing lists threads but the shell (the
+  contract's WRITE-ONLY).
+- A page never sends to the agent: `send: true` with its token is
+  `consent_required`. `sendToClaude` opens the shell's composer filled
+  in, and nothing goes until the viewer presses Send; dismissed, or
+  posted as a plain comment, it rejects `consent_required`. When the
+  viewer sends, the page's `onSendToClaude` hears it first and may answer
+  `{handled: true, reply}`: the comment is posted plain and the reply
+  shown.
+
+Sending to the agent:
+
+- The agent is the publisher's (`sendAgentOf`: claude-cli and
+  claude-code are Claude Code, opencode and pi by prefix) when its
+  command is installed, else the first installed of Claude Code, Codex,
+  OpenCode, Pi. With none, `canSendToClaude` is `no_session` and a send
+  is `claude_unavailable`, with nothing posted.
+- The publisher's session is found among the agent's sessions, in its
+  folder, active when it published, with the artifact's id in its file,
+  and resumed without a window: `claude -p --resume` (acceptEdits, the
+  artifacts tools and Read/Glob/Grep/Edit/Write only), `codex exec
+  resume` (workspace-write), `opencode run --session`, `pi -p
+  --session`. None found: a new session, in the publisher's folder or
+  one of the artifact's own under `.runs`.
+- The prompt (`sendPrompt`) names no product. The thread's spot, label
+  and quote come from the page, so they are quoted as data; the comments
+  are the viewer's. One run at a time per artifact, a later send waiting
+  (`waiting`); Stop cancels it; at most 20 minutes. What the agent says
+  at the end is posted in the thread, and a version it published shows
+  in the shell at once.
+- Not on usemagpie.ai: a shared copy has no shell and `comments`
+  resolves null.
+
 ## Added by the user, and Claude Code's own tool
 
 [internal/library/artifacts.go](../../internal/library/artifacts.go):
@@ -500,12 +593,13 @@ magpie:
 
 ```sh
 go test -tags nogui ./internal/artifact
-go test -tags nogui ./internal/gateway -run 'TestArtifact|TestAssets|TestHubTellsArtifacts|TestSample'   # TestArtifactPage* hold the page runtime's API
+go test -tags nogui ./internal/gateway -run 'TestArtifact|TestAssets|TestSample|TestSendAgentOf|TestHubTellsArtifacts'   # TestArtifactPage* hold the page runtime's API, TestArtifactComment* comments
 go test -tags nogui ./internal/library -run 'TestArtifacts|TestHubTellsMagpieArtifacts'
 go test -tags nogui ./internal/gui -run 'TestArtifactsAPI|TestArtifactsShareAPI|TestBuiltin'
 go test -tags nogui ./internal/cli -run 'TestArtifacts|TestEveryRouteHasACommandOrIsNamed'
 node --test internal/gui/tests/artifacts-page.test.cjs
 node --test internal/gui/tests/artifact-runtime.test.cjs
+node --test internal/gui/tests/artifact-comments.test.cjs
 node --test site/shares.test.mjs
 node --test internal/gui/tests/nav-pages-order.test.cjs internal/gui/tests/builtins.test.cjs
 ```

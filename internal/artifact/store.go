@@ -85,6 +85,9 @@ type Version struct {
 	Label string    `json:"label,omitempty"`
 	// Agent is who published it, as the gateway knew the caller
 	Agent string `json:"agent,omitempty"`
+	// Cwd is the folder the agent worked in, when it was known: where a
+	// comment sent to an agent finds the session that published it
+	Cwd string `json:"cwd,omitempty"`
 	// Files are the version's files besides the page, by published path
 	Files []string `json:"files,omitempty"`
 	Size  int64    `json:"size"`
@@ -121,6 +124,7 @@ type Publish struct {
 	Description string
 	Label       string
 	Agent       string
+	Cwd         string
 	// Page is the page itself; on an update nil keeps the one before
 	Page []byte
 	// Files are the files beside the page, by published path; on an
@@ -552,7 +556,7 @@ func PublishPage(p Publish) (*Artifact, error) {
 	if len(caps) == 0 {
 		caps = nil
 	}
-	a.Versions = append(a.Versions, Version{N: n, At: now, Label: label, Agent: oneLine(p.Agent, 64), Files: all, Size: size, Capabilities: caps})
+	a.Versions = append(a.Versions, Version{N: n, At: now, Label: label, Agent: oneLine(p.Agent, 64), Cwd: p.Cwd, Files: all, Size: size, Capabilities: caps})
 	if err := writeMeta(a); err != nil {
 		os.RemoveAll(versionDir(a.ID, n))
 		return nil, err
