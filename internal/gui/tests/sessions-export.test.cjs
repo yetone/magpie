@@ -4,9 +4,12 @@
 // conversation in its details. In the app it posts sessions/export with the
 // session's agent and id (the server finds the file and saves to Downloads)
 // and the status says where it went; in magpie web the browser downloads
-// /api/sessions/markdown. It doesn't open or close the row, nor move the
-// page; an agent whose sessions can't be read has no such button. In
-// English and Chinese, Chromium and WebKit, at a narrow width.
+// /api/sessions/markdown. The button opens the app's menu (never a native
+// select) with the whole conversation or only what was said, which asks
+// with only=said (usrname1833 on Discord). It doesn't open or close the
+// row, nor move the page; an agent whose sessions can't be read has no
+// such button. In English and Chinese, Chromium and WebKit, at a narrow
+// width.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -47,7 +50,7 @@ function serve(lang, web, calls) {
       });
     }
     if (url.pathname === "/api/sessions/export") {
-      calls.push({ path: "export", method: route.request().method(), agent: url.searchParams.get("agent"), id: url.searchParams.get("id") });
+      calls.push({ path: "export", method: route.request().method(), agent: url.searchParams.get("agent"), id: url.searchParams.get("id"), only: url.searchParams.get("only") });
       return json({ path: "~/Downloads/magpie-session-claude-c-1.md" });
     }
     if (url.pathname === "/api/sessions/transcript") {
@@ -64,8 +67,8 @@ function serve(lang, web, calls) {
 }
 
 const words = {
-  en: { nav: "Sessions", exp: "Export Markdown", saved: "Saved to ~/Downloads/magpie-session-claude-c-1.md" },
-  zh: { nav: "会话", exp: "导出 Markdown", saved: "已保存到 ~/Downloads/magpie-session-claude-c-1.md" },
+  en: { nav: "Sessions", exp: "Export Markdown", saved: "Saved to ~/Downloads/magpie-session-claude-c-1.md", picks: ["Whole conversation", "Messages only"] },
+  zh: { nav: "会话", exp: "导出 Markdown", saved: "已保存到 ~/Downloads/magpie-session-claude-c-1.md", picks: ["整段会话", "仅对话消息"] },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -101,19 +104,40 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // the reader wheels down to it, then the click must hold the page
         await reach(page, exp);
         const top = await row.evaluate((e) => e.getBoundingClientRect().top);
+        // the menu: the app's own, the whole conversation or only what was said
+        const choose = async (i) => {
+          await exp.click();
+          const menu = page.locator(".proto-menu.sess-export-menu");
+          await menu.waitFor();
+          assert.equal(await exp.getAttribute("aria-expanded"), "true");
+          assert.deepEqual((await menu.locator(".pm-item .pm-name").allTextContents()).map((x) => x.trim()), w.picks);
+          assert.equal(await page.locator("select").count(), 0, "no native select");
+          await menu.locator(".pm-item").nth(i).click();
+          await menu.waitFor({ state: "detached" });
+        };
         if (web) {
           // the browser's own download of sessions/markdown, its name the
           // server's (Content-Disposition, checked in Go): a download of a
           // routed response isn't one Playwright sees in every engine, so
           // the link followed is what is checked
           await page.evaluate(() => { window.followed = []; HTMLAnchorElement.prototype.click = function () { window.followed.push([this.href, this.hasAttribute("download")]); }; });
-          await exp.click();
-          assert.deepEqual(await page.evaluate(() => window.followed), [["http://magpie.test/api/sessions/markdown?agent=claude&id=c-1", true]]);
+          await choose(0);
+          await choose(1);
+          assert.deepEqual(await page.evaluate(() => window.followed), [
+            ["http://magpie.test/api/sessions/markdown?agent=claude&id=c-1", true],
+            ["http://magpie.test/api/sessions/markdown?agent=claude&id=c-1&only=said", true],
+          ]);
           assert.equal(calls.filter((c) => c.path === "export").length, 0);
         } else {
-          await exp.click();
+          await choose(0);
           await page.locator("#status", { hasText: w.saved }).waitFor();
-          assert.deepEqual(calls.filter((c) => c.path === "export"), [{ path: "export", method: "POST", agent: "claude", id: "c-1" }]);
+          const said = page.waitForResponse((r) => r.url().includes("/api/sessions/export") && r.url().includes("only=said"));
+          await choose(1);
+          await said;
+          assert.deepEqual(calls.filter((c) => c.path === "export"), [
+            { path: "export", method: "POST", agent: "claude", id: "c-1", only: null },
+            { path: "export", method: "POST", agent: "claude", id: "c-1", only: "said" },
+          ]);
         }
         await page.waitForTimeout(200);
         assert.equal(await row.evaluate((e) => e.getBoundingClientRect().top), top, "the click moved the page");
@@ -136,7 +160,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await view.locator(".sess-export").count(), 0);
 
         if (lang === "zh") {
-          const missing = await page.evaluate(() => ["Export Markdown", "Save the whole conversation as a Markdown file"]
+          const missing = await page.evaluate(() => ["Export Markdown", "Save the whole conversation as a Markdown file", "Whole conversation", "Messages only",
+            "Only what the user and the agent said, without thinking or tool calls"]
             .filter((k) => !I18N.zh[k] || !I18N["zh-TW"][k] || !I18N.ja[k] || !I18N.de[k]));
           assert.deepEqual(missing, [], "every string has its Chinese, Traditional Chinese, Japanese and German");
         }

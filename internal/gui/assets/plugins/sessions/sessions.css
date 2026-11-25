@@ -91,6 +91,8 @@ body.window .sm-group .row.sm-sess { padding-left: 32px; }
 .row.sess .sm-del.off:hover { color: var(--muted); background: none; }
 .pop.proto-menu.sess-carry-menu { width: min(300px, calc(100vw - 16px)); background: var(--card); }
 .sess-talk-btn, .sess-export { height: 22px; padding: 0 8px; font-size: 11.5px; }
+.sess-export { display: inline-flex; align-items: center; gap: 2px; padding-right: 5px; }
+.sess-export svg { flex: none; opacity: .7; }
 .sess-talk { max-height: min(560px, 70vh); overflow-y: auto; margin-top: 4px; padding: 8px 10px 4px; border-radius: 9px; border: 1px solid var(--line-2); background: var(--bg); }
 .sm-restore { display: inline-flex; align-items: center; gap: 5px; }
 .sm-ask-list { grid-column: 1 / -1; min-width: 0; margin: 0; padding: 0; list-style: none; font-size: 12.5px; color: var(--fg); line-height: 1.6; }
@@ -239,6 +241,29 @@ body.window .row.sm-sub-row { min-height: 42px; padding-left: calc(14px + var(--
 .modal .editor.sess-sheet > .ehead b { min-width: 0; margin-right: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .modal .editor.sess-sheet > .ebody { display: block; outline: none; }
 .sess-sheet .sess-talk { max-height: none; overflow: visible; margin: 0; padding: 0; border: 0; background: none; }
+/* a turn (usrname1833 on Discord): what the user said and the agent's
+   answer read as the conversation; the steps between fold to one line,
+   and each step to its first lines */
+.sess-talk .sess-ask:not(:first-child) { margin-top: 16px; }
+.sess-talk .sess-ask .cx-t, .sess-talk .sess-final .cx-t { padding: 9px 12px; border-radius: 10px; font: 13px/1.55 var(--font); color: var(--fg); }
+.sess-talk .sess-ask .cx-t { border-color: transparent; background: var(--accent-soft); }
+.sess-steps { margin: 0 0 6px; }
+.sess-steps > summary { display: inline-flex; align-items: center; gap: 3px; height: 22px; padding: 0 6px 0 8px; border-radius: 6px; list-style: none; font-size: 11.5px; color: var(--muted); cursor: pointer; user-select: none; -webkit-user-select: none; }
+.sess-steps > summary::-webkit-details-marker { display: none; }
+.sess-steps > summary svg { transform: rotate(-90deg); transition: transform 160ms cubic-bezier(.23, 1, .32, 1); }
+.sess-steps[open] > summary { margin-bottom: 4px; }
+.sess-steps[open] > summary svg { transform: none; }
+.sess-steps > .cx-part { margin-left: 10px; }
+.sess-steps .cx-t { font-size: 11px; color: var(--fg-2); }
+.sess-steps > .cx-part.brief { cursor: pointer; outline: none; }
+.sess-steps > .cx-part.brief:not(.full) .cx-t { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+.sess-steps > .cx-part.brief.full .cx-t { cursor: text; }
+.sess-steps > .cx-part.brief:focus-visible .cx-t { box-shadow: 0 0 0 2px var(--accent-soft); }
+@media (hover: hover) and (pointer: fine) {
+  .sess-steps > summary:hover { color: var(--fg-2); background: var(--pill); }
+  .sess-steps > .cx-part.brief:not(.full):hover .cx-t { background: var(--pill); }
+}
+@media (prefers-reduced-motion: reduce) { .sess-steps > summary svg { transition: none; } }
 .sess-turns { flex: none; min-width: 5ch; margin-right: 4px; text-align: right; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .sess-nav { flex: none; width: 26px; height: 26px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 7px; background: none; color: var(--muted); cursor: pointer; transition: background-color .12s ease, color .12s ease, transform .1s cubic-bezier(.23, 1, .32, 1); }
 .sess-nav:disabled { opacity: .35; cursor: default; }

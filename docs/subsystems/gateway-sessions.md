@@ -721,7 +721,25 @@ and otherwise a known gateway session from what its transcript reads
 (`sessions.WriteGatewayMarkdown`, "Recorded by: magpie's gateway", with a note
 when turns or a part's end weren't kept). A magpie that others reach as a
 remote magpie has no file of their agents' sessions, so this is the only way
-it can export them. Verification: `TestGatewaySessionExportsMarkdown`.
+it can export them. Both take `only=said` (the Sessions page's Export
+Markdown menu, "Messages only"; usrname1833 on Discord): `sessions.KeepSaid`
+keeps the user's and the agent's text and images, leaves out thinking, tool
+calls and results and context, says so under the heading, and names the file
+`…-messages.md`. Any other `only` exports the whole conversation.
+Verification: `TestGatewaySessionExportsMarkdown`, `TestSessionExportOnlySaid`,
+`TestMarkdownKeepSaid`, `TestGatewayMarkdownKeepSaid`; browser
+`sessions-export.test.cjs`.
+
+The conversation sheet (`drawTalk` in the sessions plugin's `client.js`)
+draws each turn as the user's words (`sess-ask`), one fold of its steps
+(`details.sess-steps`, "N steps": thinking, tool calls and results, context
+and what the agent said on the way), and its last words (`sess-final`, the
+turn's last assistant text). A turn with no last words shows its fold only.
+In the fold each step is a line (thinking, context) or its first three lines
+(`brief`), and a click or Enter shows it whole. Which folds and steps were
+opened survives a redraw (`stepsOpen`, `stepFull`); a search hit inside a fold
+opens it. Every part stays in the DOM, so `[data-turn]` still counts the
+turns. Verification: browser `sessions-talk-steps.test.cjs`.
 
 A gateway session without a saved Desktop name is titled by what it was
 first asked (YOU on Discord), not its `ses_…` id: `sessions.GatewayTitle` reads the first 8 complete turns of

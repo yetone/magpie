@@ -336,9 +336,11 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 	// read from the agent's own file as transcript is: to the browser that
 	// asks (magpie web), which saves it itself, and, in the app, to
 	// Downloads.
+	// only=said keeps only what the user and the agent said, no thinking
+	// or tools (usrname1833 on Discord)
 	mux.HandleFunc("GET /api/sessions/markdown", func(rw http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		stem, md, err := sessionMarkdown(q.Get("agent"), q.Get("id"))
+		stem, md, err := sessionMarkdown(q.Get("agent"), q.Get("id"), keptOf(q.Get("only")))
 		if err != nil {
 			fail(rw, err)
 			return
@@ -349,7 +351,7 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 	})
 	mux.HandleFunc("POST /api/sessions/export", func(rw http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		stem, md, err := sessionMarkdown(q.Get("agent"), q.Get("id"))
+		stem, md, err := sessionMarkdown(q.Get("agent"), q.Get("id"), keptOf(q.Get("only")))
 		if err != nil {
 			fail(rw, err)
 			return
@@ -526,7 +528,16 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 // transcript reads it: the agent of one that reaches this magpie through a
 // remote magpie ran on another machine, so there is no file of it here, and
 // its download was a 400 "no such session" (akic404 on Discord).
-func sessionMarkdown(agentID, id string) (stem string, md []byte, err error) {
+// keptOf is what an export's only= asks it to keep: "said", what the user
+// and the agent said; anything else, the whole conversation.
+func keptOf(only string) sessions.Kept {
+	if only == "said" {
+		return sessions.KeepSaid
+	}
+	return sessions.KeepAll
+}
+
+func sessionMarkdown(agentID, id string, keep sessions.Kept) (stem string, md []byte, err error) {
 	s, ok := sessions.Find(agentID, id)
 	var t sessions.Transcript
 	if !ok {
@@ -547,9 +558,9 @@ func sessionMarkdown(agentID, id string) (stem string, md []byte, err error) {
 	}
 	var b bytes.Buffer
 	if ok {
-		err = sessions.WriteMarkdown(&b, s, wslName(name, s))
+		err = sessions.WriteMarkdownKept(&b, s, wslName(name, s), keep)
 	} else {
-		err = sessions.WriteGatewayMarkdown(&b, s, name, t)
+		err = sessions.WriteGatewayMarkdownKept(&b, s, name, t, keep)
 	}
 	if err != nil {
 		return "", nil, err
@@ -564,7 +575,11 @@ func sessionMarkdown(agentID, id string) (stem string, md []byte, err error) {
 		}
 		return '-'
 	}, s.Agent+"-"+string(short))
-	return "magpie-session-" + safe, b.Bytes(), nil
+	stem = "magpie-session-" + safe
+	if keep == sessions.KeepSaid {
+		stem += "-messages"
+	}
+	return stem, b.Bytes(), nil
 }
 
 // wslName is an agent's name for a session it ran in a WSL distro, as the

@@ -68,6 +68,8 @@ magpie.plugin("sessions", (ctx) => {
   let detail = "";            // the session opened to its details
   const talkOpen = new Set(); // conversations whose sheet was opened, by agent/id
   const talks = new Map();    // what was said in them, as read, by agent/id
+  const stepsOpen = new Map(); // the turns whose steps were unfolded, by conversation
+  const stepFull = new WeakSet(); // the steps shown whole
   // A session's subagents sit under it, folded (#2261): the conversations
   // its agent started inside it (Claude Code, Qoder, OpenCode, Kimi Code:
   // s.subagents, each opened to what was said in it), and the Codex
@@ -1515,19 +1517,23 @@ magpie.plugin("sessions", (ctx) => {
     return d;
   }
 
-  // exportBtn saves a session's whole conversation as Markdown (#1276),
-  // read from the agent's own file by the server: in magpie web the browser
+  // exportBtn saves a session's conversation as Markdown (#1276), read
+  // from the agent's own file by the server: the whole of it, or only what
+  // the user and the agent said, no thinking or tools (usrname1833 on
+  // Discord), picked in the app's menu. In magpie web the browser
   // downloads it, in the app it goes to Downloads and the status says where.
   function exportBtn(s) {
-    const b = el("button", "text sess-export", t("Export Markdown"));
+    const b = el("button", "text sess-export");
     b.type = "button";
-    b.title = t("Save the whole conversation as a Markdown file");
+    b.setAttribute("aria-haspopup", "menu");
+    b.setAttribute("aria-expanded", "false");
+    b.append(el("span", "", t("Export Markdown")), svg(CHEV, 11, 1.6));
     const q = "agent=" + encodeURIComponent(s.agent) + "&id=" + encodeURIComponent(s.id);
-    b.onclick = async (e) => {
-      e.stopPropagation();
+    const save = async (only) => {
+      const qo = q + (only ? "&only=" + only : "");
       if (web) {
         const a = el("a");
-        a.href = "/api/sessions/markdown?" + q;
+        a.href = "/api/sessions/markdown?" + qo;
         a.download = "";
         a.click();
         return;
@@ -1536,7 +1542,7 @@ magpie.plugin("sessions", (ctx) => {
       b.disabled = true;
       b.classList.add("busy");
       try {
-        const r = await api("sessions/export?" + q, {});
+        const r = await api("sessions/export?" + qo, {});
         status(t("Saved to {path}", { path: r.path }), "ok");
       } catch (err) {
         status(err.message, "err");
@@ -1544,6 +1550,14 @@ magpie.plugin("sessions", (ctx) => {
         b.disabled = false;
         b.classList.remove("busy");
       }
+    };
+    b.onclick = (e) => {
+      e.stopPropagation();
+      if (b.classList.contains("open")) return closeProtoMenu();
+      openProtoMenu(b, [
+        { v: "", name: "Whole conversation", note: "", title: t("Save the whole conversation as a Markdown file") },
+        { v: "said", name: "Messages only", note: "", title: t("Only what the user and the agent said, without thinking or tool calls") },
+      ], null, (v) => { b.focus({ preventScroll: true }); save(v); }, "Export Markdown", "sess-export-menu", "right");
     };
     return b;
   }
@@ -1600,6 +1614,34 @@ magpie.plugin("sessions", (ctx) => {
     }, (err) => status(err.message, "err"));
   }
 
+  // stepSaid is one step of a turn, in its fold: thinking and what the
+  // agent put in itself fold to their line as they always have; anything
+  // else long shows its first lines, and a click (or Enter) shows it whole
+  // and back, unless it was to select words in it
+  function stepSaid(it) {
+    const n = ledSaid(it.p, it.model);
+    if (n.tagName === "DETAILS") return n;
+    n.querySelector(":scope > .cx-more")?.remove();
+    n.classList.remove("clamp");
+    const text = it.p.text || "";
+    if (text.length <= 240 && text.split("\n").length <= 3 && !it.p.cut) return n;
+    n.classList.add("brief");
+    const whole = (on) => {
+      n.classList.toggle("full", on);
+      n.setAttribute("aria-expanded", on);
+      if (on) stepFull.add(it.p); else stepFull.delete(it.p);
+    };
+    whole(stepFull.has(it.p));
+    n.tabIndex = 0;
+    n.onclick = () => { if (!String(getSelection?.() || "")) whole(!n.classList.contains("full")); };
+    n.onkeydown = (e) => {
+      if (e.target !== n || (e.key !== "Enter" && e.key !== " ")) return;
+      e.preventDefault();
+      whole(!n.classList.contains("full"));
+    };
+    return n;
+  }
+
   // drawTalk fills box with what was said in a session, read from the
   // agent's own file when it is first shown (only read, never written)
   function drawTalk(box, s, sub = "", find = "") {
@@ -1632,7 +1674,9 @@ magpie.plugin("sessions", (ctx) => {
     // each reply names its model once, at its first part, and again
     // only where the model changes inside it (#2253): the model its own
     // line in the agent's file names, so none where the file names none
-    let said = "", fresh = true, foundOne = false;
+    let said = "", fresh = true;
+    const turns = [];
+    let turn = null;
     for (const p of parts) {
       let model = "";
       if (p.role === "assistant") {
@@ -1640,11 +1684,55 @@ magpie.plugin("sessions", (ctx) => {
         said = p.model || "";
         fresh = false;
       } else if (p.role === "user") fresh = true;
-      const said1 = ledSaid(p, model);
-      if (p.role === "user" && (!p.kind || p.kind === "text")) said1.dataset.turn = "1";
-      if (find && !foundOne && (!p.kind || p.kind === "text" || p.kind === "context") && needleOf(p.text || "").includes(find)) { said1.classList.add("sess-found"); foundOne = true; }
-      out.push(said1);
+      // a turn is the user's words, the steps the agent took, and its
+      // last words, which answer them (usrname1833 on Discord)
+      const it = { p, model, words: p.role === "user" && (!p.kind || p.kind === "text") };
+      const asks = p.role === "user" && (!p.kind || p.kind === "text" || p.kind === "image");
+      if (asks && turn && !turn.rest.length) turn.head.push(it);
+      else if (asks && (it.words || !turn)) turns.push(turn = { head: [it], rest: [] });
+      else {
+        if (!turn) turns.push(turn = { head: [], rest: [] });
+        turn.rest.push(it);
+      }
     }
+    let found = null;
+    const node = (it, n) => {
+      if (it.words) n.dataset.turn = "1";
+      if (find && !found && (!it.p.kind || it.p.kind === "text" || it.p.kind === "context") && needleOf(it.p.text || "").includes(find)) { n.classList.add("sess-found"); found = n; }
+      return n;
+    };
+    const open = stepsOpen.get(box.dataset.talk) || new Set();
+    stepsOpen.set(box.dataset.talk, open);
+    turns.forEach((tn, i) => {
+      for (const it of tn.head) {
+        const n = node(it, ledSaid(it.p, it.model));
+        n.classList.add("sess-ask");
+        out.push(n);
+      }
+      let fi = -1;
+      tn.rest.forEach((it, j) => { if (it.p.role === "assistant" && (!it.p.kind || it.p.kind === "text")) fi = j; });
+      const steps = tn.rest.filter((_, j) => j !== fi);
+      if (steps.length) {
+        const d = el("details", "sess-steps");
+        const sum = el("summary");
+        sum.append(el("span", "", t(steps.length === 1 ? "1 step" : "{n} steps", { n: steps.length })), svg(CHEV, 11, 1.6));
+        d.append(sum, ...steps.map((it) => node(it, stepSaid(it))));
+        d.open = open.has(i);
+        d.addEventListener("toggle", () => { if (d.open) open.add(i); else open.delete(i); });
+        out.push(d);
+      }
+      if (fi >= 0) {
+        const it = tn.rest[fi];
+        // the fold may hold where this reply's model was named
+        const n = node(it, ledSaid(it.p, it.model || it.p.model || ""));
+        n.classList.add("sess-final");
+        out.push(n);
+      }
+    });
+    // what a search found is shown, in whatever fold holds it
+    const fold = found?.closest(".sess-steps");
+    if (fold) fold.open = true;
+    if (found?.classList.contains("brief")) found.classList.add("full");
     if (got.tr?.cut) out.push(el("p", "cx-none", t("There was more than is shown here")));
     out.push(el("p", "cx-src", t(got.tr?.source === "gateway" ? "Recorded gateway traffic only; earlier, expired or uncaptured content may be missing" : "Read from the agent's session file; magpie keeps no copy")));
     box.replaceChildren(...out);

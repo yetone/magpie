@@ -5,7 +5,9 @@
 // reply's first part, once a reply, and again only where the model changes
 // inside it. A part that names none (Claude Code's own line, an agent whose
 // file has no model) says none, and the user's words and a tool's result
-// never do. The label stays inside its line at 420px. In five languages,
+// never do. A turn's last words name their model too when the steps
+// folded above them hold where it was named (usrname1833's folds). The
+// label stays inside its line at 420px, folds open. In five languages,
 // Chromium and WebKit, at 1100 and 420 wide.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -29,7 +31,7 @@ const PARTS = [
   { role: "assistant", kind: "text", text: "API Error: 529" },
 ];
 // the parts that say a model, by index, and which
-const WANT = [[1, "gpt-6-astra"], [6, "deepseek-v4"], [7, LONG]];
+const WANT = [[1, "gpt-6-astra"], [4, "gpt-6-astra"], [6, "deepseek-v4"], [7, LONG]];
 
 function serve(lang, calls) {
   const s = { agent: "claude", id: "c-1", cwd: "/work/c", title: "Rename foo", start: at(10), last: at(5), models: [],
@@ -97,6 +99,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await talk.locator(".cx-part").first().waitFor();
         assert.deepEqual(calls, ["c-1"]);
         assert.equal(await talk.locator(".cx-part").count(), PARTS.length);
+        await talk.evaluate((b) => b.querySelectorAll("details.sess-steps").forEach((d) => { d.open = true; }));
 
         const got = await talk.locator(".cx-part").evaluateAll((ps) => ps.map((p, i) => {
           const m = p.querySelector(".cx-h .cx-model");

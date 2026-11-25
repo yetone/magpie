@@ -13,16 +13,42 @@ import (
 	"time"
 )
 
+// Kept is what of a conversation a Markdown file keeps.
+type Kept int
+
+const (
+	// KeepAll keeps every part: thinking, tools and context too.
+	KeepAll Kept = iota
+	// KeepSaid keeps only what the user and the agent said to each other
+	// (usrname1833 on Discord: an export to read the conversation, not
+	// its work): their words and images, no thinking, tool call or
+	// result, and nothing the agent put in itself.
+	KeepSaid
+)
+
+// keeps says whether a file that keeps k has p in it.
+func (k Kept) keeps(p Part) bool {
+	if k != KeepSaid {
+		return true
+	}
+	return (p.Role == "user" || p.Role == "assistant") && (p.Kind == "" || p.Kind == "text" || p.Kind == "image")
+}
+
 // WriteMarkdown writes s's conversation, read whole from its file, as
 // Markdown: a heading with what the session is, then each turn under who
 // said it. Thinking, a tool's result and what the agent put in itself are
 // folded (<details>); a tool's call is its name and arguments. name is the
 // agent as the reader knows it. The file is only read.
 func WriteMarkdown(w io.Writer, s Session, name string) error {
+	return WriteMarkdownKept(w, s, name, KeepAll)
+}
+
+// WriteMarkdownKept is WriteMarkdown keeping only what keep keeps.
+func WriteMarkdownKept(w io.Writer, s Session, name string, keep Kept) error {
 	if !HasTranscript(s.Agent) || s.Path == "" {
 		return ErrNoTranscript
 	}
-	return writeMarkdown(w, s, name, "File", s.Path, false, func(each func(Part) bool) error {
+	return writeMarkdown(w, s, name, "File", s.Path, false, keep, func(each func(Part) bool) error {
 		return readTranscript(s, func(_ bool, p Part) bool { return each(p) })
 	})
 }
@@ -34,7 +60,13 @@ func WriteMarkdown(w io.Writer, s Session, name string) error {
 // there is no file here, only what the gateway kept. It says so, and says
 // when older turns or the end of a long part weren't kept.
 func WriteGatewayMarkdown(w io.Writer, s Session, name string, t Transcript) error {
-	return writeMarkdown(w, s, name, "Recorded by", "magpie's gateway", t.Cut, func(each func(Part) bool) error {
+	return WriteGatewayMarkdownKept(w, s, name, t, KeepAll)
+}
+
+// WriteGatewayMarkdownKept is WriteGatewayMarkdown keeping only what keep
+// keeps.
+func WriteGatewayMarkdownKept(w io.Writer, s Session, name string, t Transcript, keep Kept) error {
+	return writeMarkdown(w, s, name, "Recorded by", "magpie's gateway", t.Cut, keep, func(each func(Part) bool) error {
 		for _, p := range t.Parts {
 			if !each(p) {
 				break
@@ -44,7 +76,7 @@ func WriteGatewayMarkdown(w io.Writer, s Session, name string, t Transcript) err
 	})
 }
 
-func writeMarkdown(w io.Writer, s Session, name, fromKey, from string, cut bool, parts func(func(Part) bool) error) error {
+func writeMarkdown(w io.Writer, s Session, name, fromKey, from string, cut bool, keep Kept, parts func(func(Part) bool) error) error {
 	b := bufio.NewWriter(w)
 	title := strings.TrimSpace(s.Title)
 	if title == "" {
@@ -70,12 +102,15 @@ func writeMarkdown(w io.Writer, s Session, name, fromKey, from string, cut bool,
 	if cut {
 		b.WriteString("\n*Not all of this session was kept: what follows is what is left of it.*\n")
 	}
+	if keep == KeepSaid {
+		b.WriteString("\n*Only what the user and the agent said: thinking and tool calls are left out.*\n")
+	}
 	b.WriteString("\n---\n")
 	who := ""
 	said := false
 	err := parts(func(p Part) bool {
 		p.Text = strings.TrimSpace(p.Text)
-		if p.Text == "" {
+		if p.Text == "" || !keep.keeps(p) {
 			return true
 		}
 		said = true
