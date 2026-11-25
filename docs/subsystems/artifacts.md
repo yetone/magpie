@@ -274,20 +274,28 @@ The store:
   assets: `/_blob/<id>` isn't served there, so an `<img>` of one shows
   nothing on a shared copy (#7649).
 
-## Given to every agent, and Claude Code's own tool
+## Added by the user, and Claude Code's own tool
 
 [internal/library/artifacts.go](../../internal/library/artifacts.go):
 
-- The first Sync after it shipped adds `magpie-artifacts` (`magpie mcp
-  artifacts`) to the library, ticked for every agent whose MCP config takes
-  a command (`adoptArtifacts`), and records `ArtifactsOffered`. A user who
-  removes it, or unticks an agent, keeps it that way; one who had it
-  already is left as they were.
+- Nothing gives `magpie-artifacts` (`magpie mcp artifacts`) to an agent
+  unasked. It is in the Library's market (featured), and Work › Artifacts'
+  empty page leads there ("Turn it on in the Library").
+- From 11-24 to 11-25 the first Sync added it, ticked for every agent whose
+  MCP config takes a command, and recorded `ArtifactsOffered`. Users asked
+  why a server and a deny rule appeared that they never chose (X, 11-25),
+  so the first Sync after that takes back the one it added, once
+  (`withdrawArtifacts`, `ArtifactsWithdrawn`): the server still under its
+  name and ticked on every agent it was given to leaves the library and
+  each agent's config, with Claude Code's deny below. One the user changed
+  (an agent unticked) or added again later is theirs. Pages already
+  published stay on Work › Artifacts.
 - Claude Code given it leaves out its own Artifact tool: `Artifact` in its
   `permissions.deny`, beside the rules magpie writes for tools turned off
   (`syncToolRules`, `claudeArtifactTool`), recorded in `Applied` and taken
   back when the server goes. A rule of the user's own for `Artifact`
-  (allow or ask, `claudeRuled`) is theirs, and magpie writes no deny.
+  (allow or ask, `claudeRuled`) is theirs, and magpie writes no deny. The
+  market's text says so before the user adds it.
 
 ## Work › Artifacts
 

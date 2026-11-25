@@ -7,45 +7,102 @@ import (
 	"testing"
 )
 
-func offeringArtifacts(t *testing.T) {
+// givenUnasked puts the library where a Sync of 11-24 left it: Magpie
+// Artifacts added for every agent that takes it, and ArtifactsOffered.
+func givenUnasked(t *testing.T) []string {
 	t.Helper()
-	offerArtifacts = true
-	t.Cleanup(func() { offerArtifacts = false })
+	m := artifactsServer()
+	s := m.server
+	selfCommand(&s)
+	var agents []string
+	for _, tg := range Targets() {
+		if tg.MCP != nil && tg.MCP.supports(&s) == nil && !slices.Contains(agents, tg.Agent.ID) {
+			agents = append(agents, tg.Agent.ID)
+		}
+	}
+	ok(t)(InstallServer(ArtifactsServerName, nil, agents))
+	ok(t)(change(func(l *Library) error { l.ArtifactsOffered = true; return nil }))
+	return agents
 }
 
-// Magpie Artifacts is given to every agent that takes it on the first
-// Sync, once: removed, it stays removed. Claude Code given it leaves its
-// own Artifact tool out, and has it back when the server goes.
-func TestArtifactsGivenOnce(t *testing.T) {
+// Nothing gives Magpie Artifacts to an agent unasked: a Sync adds no
+// server and leaves Claude Code's own Artifact tool alone.
+func TestArtifactsNotGivenUnasked(t *testing.T) {
 	h := sandbox(t)
-	offeringArtifacts(t)
 	settings := filepath.Join(h, ".claude", "settings.json")
 	write(t, settings, `{"permissions": {"deny": ["Bash(rm:*)"]}}`)
 	ok(t)(Sync())
 	l, _ := load()
-	s := l.server(ArtifactsServerName)
-	if s == nil || !l.ArtifactsOffered || !slices.Contains(s.Agents, "claude") || !slices.Contains(s.Agents, "codex") {
-		t.Fatalf("not given: %+v offered=%v", s, l.ArtifactsOffered)
-	}
-	if serverKey(s) != "magpie mcp artifacts" {
-		t.Fatalf("not magpie's own: %+v", s)
-	}
-	if deny, _ := claudeDeny(t, settings); !slices.Equal(deny, []string{"Bash(rm:*)", claudeArtifactTool}) {
-		t.Errorf("deny: %v", deny)
-	}
-	es, _ := targetByID("claude").MCP.entries()
-	if es[ArtifactsServerName] == nil {
-		t.Errorf("Claude Code's config has no %s: %v", ArtifactsServerName, es)
-	}
-
-	ok(t)(RemoveServer(ArtifactsServerName))
-	ok(t)(Sync())
-	l, _ = load()
-	if l.server(ArtifactsServerName) != nil {
-		t.Fatal("a removed Magpie Artifacts came back")
+	for _, s := range l.MCP {
+		if serverKey(s) == artifactsKey {
+			t.Fatalf("given unasked: %+v", s)
+		}
 	}
 	if deny, _ := claudeDeny(t, settings); !slices.Equal(deny, []string{"Bash(rm:*)"}) {
-		t.Errorf("Claude's own Artifact still left out after the server went: %v", deny)
+		t.Errorf("deny: %v", deny)
+	}
+}
+
+// The one a Sync of 11-24 added unasked is taken back by the next Sync,
+// once, with Claude Code's deny of its own Artifact; added again by the
+// user, it stays.
+func TestArtifactsGivenUnaskedTakenBack(t *testing.T) {
+	h := sandbox(t)
+	settings := filepath.Join(h, ".claude", "settings.json")
+	write(t, settings, `{"permissions": {"deny": ["Bash(rm:*)"]}}`)
+	agents := givenUnasked(t)
+	if !slices.Contains(agents, "claude") || !slices.Contains(agents, "codex") {
+		t.Fatalf("the old adding's agents: %v", agents)
+	}
+	if deny, _ := claudeDeny(t, settings); !slices.Equal(deny, []string{"Bash(rm:*)", claudeArtifactTool}) {
+		t.Fatalf("set up: deny %v", deny)
+	}
+	if es, _ := targetByID("claude").MCP.entries(); es[ArtifactsServerName] == nil {
+		t.Fatalf("set up: Claude Code's config has no %s", ArtifactsServerName)
+	}
+
+	ok(t)(Sync())
+	l, _ := load()
+	if l.server(ArtifactsServerName) != nil || !l.ArtifactsWithdrawn {
+		t.Fatalf("not taken back: %+v withdrawn=%v", l.server(ArtifactsServerName), l.ArtifactsWithdrawn)
+	}
+	if deny, _ := claudeDeny(t, settings); !slices.Equal(deny, []string{"Bash(rm:*)"}) {
+		t.Errorf("Claude's own Artifact still left out: %v", deny)
+	}
+	if es, _ := targetByID("claude").MCP.entries(); es[ArtifactsServerName] != nil {
+		t.Errorf("Claude Code's config still has %s", ArtifactsServerName)
+	}
+	if es, _ := targetByID("codex").MCP.entries(); es[ArtifactsServerName] != nil {
+		t.Errorf("Codex's config still has %s", ArtifactsServerName)
+	}
+
+	// the user adds it again: theirs, and it stays
+	ok(t)(InstallServer(ArtifactsServerName, nil, []string{"claude"}))
+	ok(t)(Sync())
+	l, _ = load()
+	if s := l.server(ArtifactsServerName); s == nil || !slices.Equal(s.Agents, []string{"claude"}) {
+		t.Fatalf("the user's own was taken: %+v", s)
+	}
+	if deny, _ := claudeDeny(t, settings); !slices.Equal(deny, []string{"Bash(rm:*)", claudeArtifactTool}) {
+		t.Errorf("chosen for Claude Code, its own Artifact not left out: %v", deny)
+	}
+}
+
+// One the user changed since it was added (an agent unticked) is theirs.
+func TestArtifactsChangedStays(t *testing.T) {
+	sandbox(t)
+	agents := givenUnasked(t)
+	l, _ := load()
+	mine := *l.server(ArtifactsServerName)
+	mine.Agents = slices.DeleteFunc(slices.Clone(agents), func(a string) bool { return a == "codex" })
+	ok(t)(SaveServer(ArtifactsServerName, mine))
+	ok(t)(Sync())
+	l, _ = load()
+	if s := l.server(ArtifactsServerName); s == nil || slices.Contains(s.Agents, "codex") || !slices.Contains(s.Agents, "claude") {
+		t.Fatalf("the user's changed one: %+v", s)
+	}
+	if !l.ArtifactsWithdrawn {
+		t.Error("not recorded: a later Sync would look again")
 	}
 }
 
@@ -53,10 +110,9 @@ func TestArtifactsGivenOnce(t *testing.T) {
 // allows it keeps it, and one that denies it stays when magpie's goes.
 func TestArtifactsKeepTheUsersRule(t *testing.T) {
 	h := sandbox(t)
-	offeringArtifacts(t)
 	settings := filepath.Join(h, ".claude", "settings.json")
 	write(t, settings, `{"permissions": {"allow": ["Artifact"]}}`)
-	ok(t)(Sync())
+	ok(t)(InstallServer(ArtifactsServerName, nil, []string{"claude"}))
 	if got := read(t, settings); strings.Contains(got, "deny") {
 		t.Errorf("denied what the user allowed:\n%s", got)
 	}
@@ -64,7 +120,7 @@ func TestArtifactsKeepTheUsersRule(t *testing.T) {
 	h = sandbox(t)
 	settings = filepath.Join(h, ".claude", "settings.json")
 	write(t, settings, `{"permissions": {"deny": ["Artifact"]}}`)
-	ok(t)(Sync())
+	ok(t)(InstallServer(ArtifactsServerName, nil, []string{"claude"}))
 	l, _ := load()
 	if r := l.applied("claude").ToolRules; slices.Contains(r, claudeArtifactTool) {
 		t.Errorf("the user's rule recorded as magpie's: %v", r)
@@ -75,34 +131,10 @@ func TestArtifactsKeepTheUsersRule(t *testing.T) {
 	}
 }
 
-// A library that has the server already, added by hand under another
-// name, gets no second one.
-func TestArtifactsNotTwice(t *testing.T) {
-	sandbox(t)
-	offeringArtifacts(t)
-	ok(t)(InstallServer(ArtifactsServerName, nil, []string{"claude"}))
-	l, _ := load()
-	mine := *l.server(ArtifactsServerName)
-	mine.Name = "pages"
-	ok(t)(SaveServer(ArtifactsServerName, mine))
-	ok(t)(Sync())
-	l, _ = load()
-	n := 0
-	for _, s := range l.MCP {
-		if serverKey(s) == "magpie mcp artifacts" {
-			n++
-		}
-	}
-	if n != 1 || !l.ArtifactsOffered {
-		t.Fatalf("%d of them: %+v", n, l.MCP)
-	}
-}
-
 // Work › Artifacts' empty page says which agents can make one: those
 // Magpie Artifacts is ticked on, none once it is turned off or removed.
 func TestArtifactsAgents(t *testing.T) {
 	sandbox(t)
-	offeringArtifacts(t)
 	if got, err := ArtifactsAgents(); err != nil || len(got) != 0 {
 		t.Fatalf("before it is given: %v %v", got, err)
 	}

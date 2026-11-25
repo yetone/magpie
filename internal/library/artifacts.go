@@ -1,23 +1,24 @@
 package library
 
-import (
-	"fmt"
-	"slices"
-)
+import "slices"
 
-// Magpie Artifacts (gateway's artifacts_mcp.go) is given to every agent
-// that can take it, once:
+// Magpie Artifacts (gateway's artifacts_mcp.go) is the user's to add:
 //
-//   - The first Sync after it shipped adds it to the library, ticked for
-//     every agent whose MCP config takes a command (adoptArtifacts), and
-//     records that it did (ArtifactsOffered): a user who removes it, or
-//     unticks an agent, keeps it that way.
-//   - A library that has it already, added by hand, is left as it is.
+//   - Nothing gives it to an agent unasked. It is in the Library's market
+//     (featured), and Work › Artifacts' empty page leads there.
+//   - From 11-24 to 11-25 the first Sync added it, ticked for every agent
+//     whose MCP config takes a command, and recorded ArtifactsOffered.
+//     Users asked why a server and a deny rule appeared that they never
+//     chose, so the first Sync after that takes back the one it added,
+//     once (withdrawArtifacts, ArtifactsWithdrawn): still under its name
+//     and ticked on every agent it was given to. One the user changed
+//     (an agent unticked, renamed) or added again later is theirs.
 //   - Claude Code given it leaves out its own Artifact tool, whose pages
 //     are its claude.ai account's and don't open after magpie switches
 //     that account: a deny rule beside magpie's others (syncToolRules,
 //     claudeArtifactTool), taken back when the server goes. A user's own
-//     rule for Artifact, allow or deny, is theirs.
+//     rule for Artifact, allow or deny, is theirs. The market's text says
+//     so, for the user to know before they add it.
 
 // ArtifactsServerName is the name Magpie Artifacts' server is written
 // under, the name the gateway's own artifacts server goes by (ownMCP).
@@ -41,43 +42,28 @@ const claudeArtifactTool = "Artifact"
 // with the folder the agent started it in.
 func artifactsServer() MarketServer {
 	return localServer(ArtifactsServerName, "Magpie Artifacts", "Magpie", "https://usemagpie.ai/favicon.png", "https://usemagpie.ai",
-		"Pages your agents make for you (reports, charts, diagrams, prototypes, small apps), kept on this computer with every version and opened in your browser, whichever account made them.", magpieCommand, []string{"mcp", "artifacts"})
+		"Pages your agents make for you (reports, charts, diagrams, prototypes, small apps), kept on this computer with every version and opened in your browser, whichever account made them. Claude Code given it uses it in place of its own Artifact tool.", magpieCommand, []string{"mcp", "artifacts"})
 }
 
-// offerArtifacts is whether Sync gives Magpie Artifacts to the agents;
-// the package's tests that count servers turn it off.
-var offerArtifacts = true
-
-// adoptArtifacts adds Magpie Artifacts once; true when it changed the
-// library.
-func (l *Library) adoptArtifacts() bool {
-	if l.ArtifactsOffered || !offerArtifacts {
+// withdrawArtifacts takes back, once, the Magpie Artifacts the first
+// Sync of 11-24 added unasked (ArtifactsOffered): the server under its
+// name, ticked on every agent that adding ticked. True when it changed
+// the library.
+func (l *Library) withdrawArtifacts() bool {
+	if !l.ArtifactsOffered || l.ArtifactsWithdrawn {
 		return false
 	}
-	l.ArtifactsOffered = true
-	m := artifactsServer()
-	s := m.server
-	s.Args = slices.Clone(s.Args)
-	selfCommand(&s)
-	if l.haveServer(&s) != "" {
+	l.ArtifactsWithdrawn = true
+	s := l.server(ArtifactsServerName)
+	if s == nil || serverKey(s) != artifactsKey {
 		return true
 	}
-	s.Agents = []string{}
 	for _, t := range Targets() {
-		if t.MCP != nil && t.MCP.supports(&s) == nil && !slices.Contains(s.Agents, t.Agent.ID) {
-			s.Agents = append(s.Agents, t.Agent.ID)
+		if t.MCP != nil && t.MCP.supports(s) == nil && !slices.Contains(s.Agents, t.Agent.ID) {
+			return true // an agent unticked: the user's now
 		}
 	}
-	slices.Sort(s.Agents)
-	base := s.Name
-	for i := 2; l.server(s.Name) != nil; i++ {
-		s.Name = fmt.Sprintf("%s-%d", base, i)
-	}
-	l.MCP = append(l.MCP, &s)
-	if l.Icons == nil {
-		l.Icons = map[string]string{}
-	}
-	l.Icons[serverKey(&s)] = m.Icon
+	_ = removeServer(l, ArtifactsServerName)
 	return true
 }
 

@@ -89,9 +89,11 @@ type Library struct {
 	// router was given a server, for one the user removed not to come
 	// back (bridge_mcp.go)
 	BridgesOffered []string `json:"bridgesOffered,omitempty"`
-	// ArtifactsOffered is set once Magpie Artifacts was given to the agents,
-	// for a user who removed it not to see it come back (artifacts.go)
-	ArtifactsOffered bool `json:"artifactsOffered,omitempty"`
+	// ArtifactsOffered is set when a Sync of 11-24 gave Magpie Artifacts
+	// to the agents unasked, and ArtifactsWithdrawn once a later one took
+	// it back (artifacts.go)
+	ArtifactsOffered   bool `json:"artifactsOffered,omitempty"`
+	ArtifactsWithdrawn bool `json:"artifactsWithdrawn,omitempty"`
 	// BridgesOn are the Remote magpies (provider ids) the user asked to
 	// give their router a server, in the editor's switch (bridge_mcp.go)
 	BridgesOn []string `json:"bridgesOn,omitempty"`
