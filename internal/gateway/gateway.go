@@ -2306,8 +2306,9 @@ func (s *Server) countTokens(w http.ResponseWriter, r *http.Request) {
 	}
 	r = withClone(r, provider.Anthropic, body)
 	// counted as it will be sent: its tool exchange mended where it
-	// doesn't pair (tool_blocks_paired.go)
-	body = toolBlocksPaired(body)
+	// doesn't pair (tool_blocks_paired.go), without a call naming no
+	// function (nameless_calls.go)
+	body = toolBlocksPaired(namelessBlocksOut(body))
 	named := unprefixed(model)
 	if m := claudeTierStandIn(r, agentOf(r), model); m != "" {
 		model = m // counted on the model the request will go to
@@ -6252,6 +6253,11 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 	// nothing (servedTierAt)
 	defer func() { call.Usage.Tier = servedThere(w, p, servedTierAt(p.VendorHost(), call.Usage.Tier)) }()
 	// Normalize for the actual destination, separately on each fallback.
+	// A call naming no function, and its answer, go to nobody
+	// (nameless_calls.go, #7565), relayed or translated.
+	if from == provider.Responses {
+		body = namelessItemsOut(body)
+	}
 	// Native ChatGPT accounts accept standalone tool outputs themselves.
 	if from == provider.Responses && (p.Account == nil || p.Account.Agent != "codex") {
 		body = joinToolRuns(body)
@@ -6263,6 +6269,9 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 		// the whole request away for (#2611); before the relay, the
 		// translation and a plugin's fetch alike
 		body = chatCallIDs(body)
+		// a call naming no function, and its answer, by the ids just
+		// given (nameless_calls.go, #7565)
+		body = namelessChatCallsOut(body)
 	}
 	// a response the request named that magpie doesn't hold goes only to
 	// a provider it is relayed to as written (prev_response.go): Claude's
@@ -7399,8 +7408,10 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		body = saltedCallIDsBack(body)
 		// a call no result answers, or a result answering no call, which
 		// Anthropic turns the whole request away for, and every later
-		// one of the conversation with it (tool_blocks_paired.go)
-		body = toolBlocksPaired(body)
+		// one of the conversation with it (tool_blocks_paired.go); a
+		// call naming no function, and its answer, first
+		// (nameless_calls.go, #7565)
+		body = toolBlocksPaired(namelessBlocksOut(body))
 		// Claude Code's advisor, named by magpie's id (advisor.go); its
 		// calls' usage rows go by that id (advisorRows)
 		advisor = advisorKeyModel(advisorAsked(provider.Anthropic, body))
@@ -10457,6 +10468,9 @@ func afterParse(proto provider.Protocol, body []byte, req *Request) (*Request, e
 	// and the sealed reasoning a Responses upstream gave before it
 	// (reasoning_carry.go)
 	unreasonCalls(req)
+	// a call naming no function, which an upstream turns the whole
+	// request away for, and its answer (nameless_calls.go, #7565)
+	withoutNamelessCalls(req)
 	req.LastIsTurn = proto == provider.Chat || proto == provider.Responses
 	if req.ToolChoice == "required" && len(req.Tools) == 0 && !req.WebSearch && requiredAllowlist(proto, body) {
 		return nil, fmt.Errorf("required tool choice has no callable tools after filtering")
@@ -10728,7 +10742,9 @@ func encoder(proto provider.Protocol, w *sseWriter, r *Request, usage ...*Usage)
 		// JSON it asked for (format_fence.go)
 		enc = &fenceEncoder{streamEncoder: enc}
 	}
-	return enc
+	// a call naming no function reaches no client, nor any encoder
+	// beneath (nameless_calls.go, #7565)
+	return &namelessEncoder{streamEncoder: enc}
 }
 
 func makeEncoder(proto provider.Protocol, w *sseWriter, r *Request) streamEncoder {
@@ -10749,6 +10765,8 @@ func render(proto provider.Protocol, res Result, r *Request) []byte {
 	// a model's whole floats in a call's arguments reach the client as
 	// integers (grok_integral.go, #1431, #3152)
 	res = wholeResult(res)
+	// a call naming no function reaches no client (nameless_calls.go, #7565)
+	res = namelessResult(res)
 	if r.CR {
 		res = crResult(res)
 	}
