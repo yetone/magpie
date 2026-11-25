@@ -68,6 +68,25 @@ func memoryChanged(rw http.ResponseWriter) {
 }
 
 func memoryRoutes(mux *http.ServeMux) {
+	// the tab's numbers and trend: the last days' counts (memory.Stats),
+	// 7 unless days says 30
+	mux.HandleFunc("GET /api/memory/stats", func(rw http.ResponseWriter, r *http.Request) {
+		n := 7
+		switch d := r.URL.Query().Get("days"); d {
+		case "", "7":
+		case "30":
+			n = 30
+		default:
+			http.Error(rw, "days is 7 or 30", http.StatusBadRequest)
+			return
+		}
+		st, err := memory.Stats(n)
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, st)
+	})
 	mux.HandleFunc("GET /api/memory", func(rw http.ResponseWriter, r *http.Request) {
 		v, err := readMemory()
 		if err != nil {

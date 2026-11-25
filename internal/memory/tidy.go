@@ -136,12 +136,15 @@ func Tidy(p Plan) ([]Change, error) {
 					continue
 				}
 				c.IDs, c.Was = append(c.IDs, m.ID), append(c.Was, m.Status)
+				f.leaves(m, ByTidy)
 				m.Status, m.SupersededBy, m.Updated = Superseded, into.ID, t
 			}
+			f.tally().Updated++
 			out = append(out, c)
 		}
 		aside := func(m *Memory, why string) {
 			out = append(out, Change{Action: SetAside, IDs: []string{m.ID}, Was: []string{m.Status}, Text: m.Text, Why: why})
+			f.leaves(m, ByTidy)
 			m.Status, m.Updated = Archived, t
 		}
 		for _, s := range p.Stale {

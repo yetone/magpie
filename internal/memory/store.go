@@ -557,7 +557,11 @@ func change(fn func(f *file) error) error {
 	if err := fn(f); err != nil {
 		return err
 	}
-	return write(f)
+	if err := write(f); err != nil {
+		return err
+	}
+	count(f.counts)
+	return nil
 }
 
 // view reads memory under the lock: consistent with the last write, and

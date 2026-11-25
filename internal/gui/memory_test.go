@@ -74,3 +74,42 @@ func TestMemoryStatusRouteActsOnSome(t *testing.T) {
 		t.Fatalf("after removing two: %v", s)
 	}
 }
+
+// The Memory tab's numbers come from /api/memory/stats: the last 7 or 30
+// days, today last, with what was saved counted today. Any other range
+// is refused.
+func TestMemoryStatsRoute(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	mux := http.NewServeMux()
+	memoryRoutes(mux)
+	text := "Prefers pnpm."
+	if _, _, err := memory.Save(memory.Input{Text: &text}, memory.FromUser, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []int{7, 30} {
+		rec := httptest.NewRecorder()
+		path := "/api/memory/stats"
+		if n == 30 {
+			path += "?days=30"
+		}
+		mux.ServeHTTP(rec, httptest.NewRequest("GET", path, nil))
+		var r memory.Report
+		if rec.Code != 200 || json.Unmarshal(rec.Body.Bytes(), &r) != nil {
+			t.Fatalf("%s: %d %s", path, rec.Code, rec.Body)
+		}
+		if len(r.Days) != n || r.Active != 1 || r.Since == "" {
+			t.Fatalf("%s: %d days, %d active, since %q", path, len(r.Days), r.Active, r.Since)
+		}
+		if last := r.Days[n-1]; !last.Recorded || last.Created[memory.FromUser] != 1 {
+			t.Fatalf("%s: today %+v", path, last)
+		}
+	}
+	for _, bad := range []string{"9", "0", "x", "400"} {
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest("GET", "/api/memory/stats?days="+bad, nil))
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("days=%s: %d", bad, rec.Code)
+		}
+	}
+}

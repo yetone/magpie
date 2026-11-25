@@ -272,6 +272,7 @@ func Promote(ids []string) (*Memory, error) {
 			o.Status, o.SupersededBy, o.Updated, o.Edited = Superseded, k.ID, t, t
 		}
 		k.Updated, k.Edited = t, t
+		f.tally().Updated++
 		kept = k
 		return nil
 	})

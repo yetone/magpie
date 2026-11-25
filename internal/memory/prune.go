@@ -34,6 +34,7 @@ func Prune() (Pruned, error) {
 			}
 			switch m.Status {
 			case Candidate:
+				f.leaves(m, ByExpiry)
 				m.Status, m.Updated = Archived, t
 				p.Archived++
 			case Archived, Superseded:
