@@ -103,6 +103,27 @@ func cindyDirs() []string {
 	return append(have, not...)
 }
 
+// cindyClaudeHere reports whether Cindy has its own Claude Code here:
+// <its data folder>/claude-code/<version>/claude, claude.exe on Windows
+// (the claude-code kind's installSubdir and binaryName in
+// apps/desktop/src/main/agent-binaries, Cindy 0.1.146). It runs with the
+// user's ~/.claude and ~/.claude.json, as Claude Code does, and makes them
+// on its first run (T_t__biu on X, #7872).
+func cindyClaudeHere() bool {
+	for _, d := range cindyDirs() {
+		vs, err := os.ReadDir(filepath.Join(d, "claude-code"))
+		if err != nil {
+			continue
+		}
+		for _, v := range vs {
+			if v.IsDir() && isFile(filepath.Join(d, "claude-code", v.Name(), exe("claude"))) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // cindyAdded reports whether any of Cindy's databases in dirs has magpie:
 // one per account (cindy-<account>.db) once signed in, cindy-local-v1.db
 // before. One that has it is enough; else one that couldn't be read leaves

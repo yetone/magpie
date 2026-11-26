@@ -735,7 +735,19 @@ func tierEfforts(model string) []string {
 	return claudeEffortsFor(model)
 }
 
-func claude(home string) *Agent { return claudeIn(here(home)) }
+// claude is Claude Code on this machine. Cindy's bundled copy runs with
+// the user's ~/.claude and ~/.claude.json and makes them on its first run,
+// so with only that copy here they are Cindy's, no Claude Code to list
+// (otherCopy, T_t__biu on X, #7872); its row in the Library stays, as
+// Cindy's copy reads CLAUDE.md, the MCP servers in ~/.claude.json and the
+// skills as Claude Code does (shared, sharedApp).
+func claude(home string) *Agent {
+	a := claudeIn(here(home))
+	a.otherCopy = func() bool { return claudeOnlyCindys(a, home) }
+	a.shared = a.Name
+	a.sharedApp = cindyClaudeHere
+	return a
+}
 
 // claudeRouted says the Claude Code at a place, its settings.json at path,
 // sends its requests to magpie's gateway: its ANTHROPIC_BASE_URL is the

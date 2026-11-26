@@ -387,7 +387,9 @@ type Agent struct {
 	// shared, when set, is the name of what the agent keeps in a folder its
 	// vendor's other app reads and writes the same way: Cursor CLI's
 	// ~/.cursor (MCP servers, skills, hooks, chats) is the Cursor editor's
-	// too, so the Library and Sessions call it Cursor (SharedName).
+	// too, so the Library and Sessions call it Cursor (SharedName). Claude
+	// Code's is its own Name: Cindy's bundled copy reads ~/.claude as it
+	// does (cindyClaudeHere).
 	shared string
 	// sharedApp, when set, reports whether an app of the vendor's that
 	// reads the shared folder is here, the folder or not: VS Code and
@@ -404,6 +406,19 @@ type Agent struct {
 	// magpie's, no sign the agent is here (jiangshangmuyun on X: Codex,
 	// never installed, listed after a ChatGPT account was added).
 	signIn string
+	// readHere are files in Dir another app reads there as its own, which
+	// the user or magpie's Library writes for that app: Pi's AGENTS.md
+	// and the rest of its instructions, which Cindy's Pi reads too, and
+	// which the Library writes for Cindy with no Pi here (T_t__biu on X,
+	// #7872). A folder holding only these (and skills) is no sign the
+	// agent is here.
+	readHere []string
+	// otherCopy, when set, says whether what is at Dir and Path is only
+	// what another app's own copy of the agent made, nothing else of the
+	// agent's being here: Cindy's bundled Claude Code makes ~/.claude and
+	// ~/.claude.json on its first run (T_t__biu on X, #7872). They are
+	// then no sign the agent is here.
+	otherCopy func() bool
 	// sign, when set, is one more sign the agent is here, for a folder
 	// that is dirShared: a file only the agent (or its own app) writes
 	// there (the Qoder app's status file, #2138).
@@ -482,10 +497,7 @@ func (a *Agent) Detected() bool {
 	if a.Dir != "" && Taken(a.Dir) {
 		return false
 	}
-	if _, ok := statKind(a.Path); ok && (a.pathOwn == nil || a.pathOwn()) {
-		return true
-	}
-	if a.Dir != "" && !a.dirShared && agentDir(a.Dir, a.signIn) {
+	if a.configHere() && (a.otherCopy == nil || !a.otherCopy()) {
 		return true
 	}
 	if a.sign != nil && a.sign() {
@@ -500,6 +512,15 @@ func (a *Agent) Detected() bool {
 		return true
 	}
 	return false
+}
+
+// configHere reports whether the agent's config file, or a folder it made
+// itself, is here.
+func (a *Agent) configHere() bool {
+	if _, ok := statKind(a.Path); ok && (a.pathOwn == nil || a.pathOwn()) {
+		return true
+	}
+	return a.Dir != "" && !a.dirShared && agentDir(a.Dir, append([]string{a.signIn}, a.readHere...)...)
 }
 
 // binAt is where the agent's command name is, as magpie runs it: on
@@ -526,7 +547,7 @@ func binAt(name string) string {
 // installers (npx skills and the like) make <folder>/skills for every agent
 // they know, installed or not; a folder holding nothing else is theirs.
 // own names a file magpie may have written there itself (Agent.signIn),
-// no sign either.
+// or one another app reads there (Agent.readHere), no sign either.
 func agentDir(p string, own ...string) bool {
 	es, err := os.ReadDir(p)
 	if err != nil {

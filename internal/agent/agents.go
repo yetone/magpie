@@ -1543,6 +1543,12 @@ func pi(home string) *Agent { return piIn(here(home)) }
 func piIn(at place) *Agent {
 	a := piLike(at, "pi", "Pi", piDir(at))
 	a.UA = []string{"pi-"}
+	// Cindy's Pi reads Pi's instructions here, the first of these there is
+	// (readPiGlobalContext in Cindy's maker-core), and the Library writes
+	// AGENTS.md for Cindy with no Pi here: a folder holding only them is
+	// Cindy's, while Pi's own run leaves settings.json, auth.json or
+	// sessions beside them (T_t__biu on X, #7872)
+	a.readHere = []string{"AGENTS.override.md", "AGENTS.md", "AGENTS.MD", "CLAUDE.md", "CLAUDE.MD"}
 	return a
 }
 

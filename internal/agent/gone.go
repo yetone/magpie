@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/yetone/magpie/internal/claudecode"
+	"github.com/yetone/magpie/internal/desktopdir"
 	"github.com/yetone/magpie/internal/proc"
 )
 
@@ -137,6 +138,40 @@ func (a *Agent) cliHeld() (held, known bool) {
 	// Gemini CLI's folder is Antigravity's and Gemini Code Assist's too,
 	// and Gemini is listed only by its program (gemini.go)
 	return false, false
+}
+
+// claudeOnlyCindys reports whether a's folder, the default ~/.claude, is
+// there for Cindy's bundled Claude Code alone: Cindy's copy is here and
+// nothing else that is Claude Code or reads the folder as it does (as
+// cliHeld looks for them): no claude command where magpie or a terminal
+// finds one, no ~/.claude/local, no copy of magpie's, no editor
+// extension, no Claude Desktop, no JetBrains or Zed agent. Cindy strips
+// CLAUDE_CONFIG_DIR when it starts, so a folder that variable names is
+// the user's own Claude Code's.
+func claudeOnlyCindys(a *Agent, home string) bool {
+	if home == "" {
+		h, err := os.UserHomeDir()
+		if err != nil {
+			return false
+		}
+		home = h
+	}
+	if filepath.Clean(a.Dir) != filepath.Join(home, ".claude") || !cindyClaudeHere() {
+		return false
+	}
+	if a.binsOwn(binAt(a.Bin)) || a.binsOwn(proc.FindTool(a.Bin)) {
+		return false
+	}
+	if isFile(filepath.Join(home, ".claude", "local", exe("claude"))) {
+		return false
+	}
+	if p, _ := claudecode.Downloaded(); p != "" {
+		return false
+	}
+	if extensionHere(home, "anthropic.claude-code") || appHere("Claude.app") || desktopdir.OS == "windows" && desktopInstalled(home) {
+		return false
+	}
+	return !jetBrainsHere(home) && !zedAgentsHere(home)
 }
 
 // extensionHere reports whether an editor here has the extension id
