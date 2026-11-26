@@ -44,7 +44,9 @@ const (
 const hubOnDemandOver = 10
 
 // hubSearchesItself are the agents that load MCP tools only when searched
-// for, by their id without a WSL distro (claude@wsl:Ubuntu is claude).
+// for, by their id without a WSL distro or a profile (hubKindOf:
+// claude@wsl:Ubuntu, a Claude Code config folder's claude#work and omp's
+// profile omp#work are claude, claude and omp).
 // Droid (0.231) defers every MCP tool but GitHub's and agent-browser's to
 // its ToolSearch, which matches the names and descriptions it is given, and
 // omp (18.9) mounts every MCP tool as an xd:// device, its schema read only
@@ -122,11 +124,22 @@ func hubOnDemand(agent string, n int, asked bool) bool {
 	if (agent == "" && !asked) || n <= hubOnDemandOver {
 		return false
 	}
-	id, _, _ := strings.Cut(HubAgentOf(agent), "@")
-	if hubSearchesItself[id] {
+	if hubSearchesItself[hubKindOf(agent)] {
 		return false
 	}
 	return !settings.Shared().RouterAllTools
+}
+
+// hubKindOf is the agent a hub address's agent is one of: its id without
+// a project's key, a WSL distro or a profile. A profile is the same
+// program in a folder of its own (claude#work is Claude Code with
+// CLAUDE_CONFIG_DIR=~/.claude-work, omp#work omp's profiles/work), so it
+// searches its tools as the program does: read as an agent of its own,
+// each was given find_tools in place of the tools it searches itself.
+func hubKindOf(agent string) string {
+	id, _, _ := strings.Cut(HubAgentOf(agent), "@")
+	id, _, _ = strings.Cut(id, "#")
+	return id
 }
 
 // hubToolCount is how many tools ss have, as the instructions know them.

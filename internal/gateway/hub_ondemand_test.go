@@ -3,6 +3,7 @@ package gateway
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"slices"
 	"strings"
 	"testing"
@@ -272,6 +273,37 @@ func TestHubFindsItselfIsWhoGetsEveryTool(t *testing.T) {
 		if !hubOnDemand(id, n, false) {
 			t.Fatalf("%s is given every tool but not named", id)
 		}
+	}
+}
+
+// A profile of an agent that searches its MCP tools itself searches them
+// as that agent does: a Claude Code config folder (claude#work, its
+// address hub/claude%23work), omp's profile (omp#work) and one in a WSL
+// distro are given every tool whole, as claude and omp are, through the
+// hub's own route. Read by the whole id, each was given find_tools in
+// place of the tools it searches itself.
+func TestHubProfileSearchesAsItsAgent(t *testing.T) {
+	fresh(t)
+	n := hubOnDemandOver + 2
+	ids := []string{"claude#work", "omp#work", "claude#work@wsl:Ubuntu", "claude#work~1a2b3c4d5e6f"}
+	tools := map[string][]HubTool{}
+	for _, id := range ids {
+		tools[id] = manyHubTools(n)
+	}
+	withHub(t, &fakeHub{on: true, tools: tools})
+	h := lanGuard(New().Handler())
+	for _, id := range ids {
+		if hubOnDemand(id, n, false) {
+			t.Errorf("%s given its %d tools on demand", id, n)
+		}
+		got := listedNames(t, readMCP(t, hubPost(h, url.PathEscape(id), here, toolsList)))
+		if slices.Contains(got, hubFindTool) || !slices.Contains(got, "github__create_issue") {
+			t.Errorf("hub/%s listed %v", id, got)
+		}
+	}
+	// a profile of an agent that sends every tool keeps them on demand
+	if !hubOnDemand("hermes#work", n, false) {
+		t.Error("hermes#work given every tool whole")
 	}
 }
 
