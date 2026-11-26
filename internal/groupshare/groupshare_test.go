@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -172,7 +173,7 @@ func TestPublishThenUpdate(t *testing.T) {
 	if !strings.Contains(string(raw), "tok-"+m.ID) {
 		t.Fatalf("the token isn't kept here: %s", raw)
 	}
-	if info, _ := os.Stat(path()); info.Mode().Perm() != 0o600 {
+	if info, _ := os.Stat(path()); runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 { // Windows has no such bits
 		t.Errorf("shared-groups.json is %v, want 0600: it holds the token", info.Mode().Perm())
 	}
 	again, err := Publish(ctx, "mine", Meta{Title: "My group, v2", Public: false})
