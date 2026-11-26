@@ -184,6 +184,34 @@ func TestArtifactsMCPOnlyForAgentsHere(t *testing.T) {
 	}
 }
 
+// An agent that defers MCP tools behind a search shows the server as the
+// start of its instructions only (Codex 0.172 cuts it near 250
+// characters), so what makes an agent publish a page it writes, and the
+// tool it searches for, are in that start.
+func TestArtifactsInstructionsLeadWithTheTrigger(t *testing.T) {
+	h := artifacts(t)
+	var m struct {
+		Result struct {
+			Instructions string `json:"instructions"`
+		} `json:"result"`
+	}
+	w := mcpPostTo(h, ArtifactsMCPPath, "127.0.0.1:50000", `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"codex-mcp-client","version":"0.172.0"}}}`)
+	if err := json.Unmarshal(w.Body.Bytes(), &m); err != nil {
+		t.Fatalf("%v: %s", err, w.Body)
+	}
+	head := m.Result.Instructions[:min(200, len(m.Result.Instructions))]
+	for _, want := range []string{artifactPublishTool, "HTML", "tool", "game", "app", "HTML file"} {
+		if !strings.Contains(head, want) {
+			t.Errorf("the first 200 characters don't say %q: %q", want, head)
+		}
+	}
+	for _, not := range []string{"magpie", "Magpie", "Codex", "Claude Code"} {
+		if strings.Contains(m.Result.Instructions, not) {
+			t.Errorf("the instructions name %q", not)
+		}
+	}
+}
+
 // A page runs in a sandbox with an opaque origin: it reads its own files
 // and nothing else of the gateway's, and only the browser on this
 // computer, at this computer's own name, opens it.

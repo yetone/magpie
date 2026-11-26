@@ -467,11 +467,15 @@ func (s *Server) artifactsMCPCall(r *http.Request, m mcpMessage) (any, map[strin
 			"protocolVersion": mcpVersion(m),
 			"capabilities":    map[string]any{"tools": map[string]any{}},
 			"serverInfo":      map[string]any{"name": artifactsServerName, "title": "Magpie Artifacts", "version": Version},
-			"instructions": "Artifacts are private pages on this computer, kept with every version, that the user opens in their browser. " +
-				"When a page would be clearer than text, or the user would use the page rather than only read it (a report, a chart, a dashboard, a diagram, an explainer, a prototype, a small app), write it as HTML and publish it with " + artifactPublishTool + ", then give the user its address. " +
-				"An HTML page, tool, game or app you write for the user to open is published the same way, even when they ask for an HTML file or it is saved in the folder, unless it is a project's own source (a site or an app the folder is the code of). " +
+			// The first sentence carries the trigger: an agent that defers
+			// these tools shows only the start of this text (Codex cuts it
+			// near 250 characters), and has to search for the tool by it.
+			"instructions": "Publish every HTML page, chart, report, diagram, dashboard, tool, game or small app you make for the user with " + artifactPublishTool + ", even when they ask for an HTML file; they open it in their browser. " +
+				"Artifacts are private pages on this computer, kept with every version. " +
+				"Make one whenever a page would be clearer than text, or the user would use the page rather than only read it (an explainer, a prototype, a calculator), then give the user its address. " +
+				"A page saved in the folder is published too, unless it is a project's own source (a site or an app the folder is the code of). " +
 				"To change one, read it first with " + artifactReadTool + " and publish with its id. Delete one only when the user asks. " +
-				"Files are read on the computer magpie runs on: an agent on another computer or in another container passes the page as html. " +
+				"Files are read on the computer this server runs on: an agent on another computer or in another container passes the page as html. " +
 				"A page that keeps data (a poll, a tracker, a board, a sign-up sheet) declares capabilities {\"db\": {}, \"user\": {}} and reads it with `await claude.use(\"db\")`, as Claude's artifacts do; seed and read its data with " + artifactDataTool + ". " +
 				"A page that is its own record (a checklist kept in the page) declares {\"artifact\": {}} and publishes itself with `(await claude.use(\"artifact\")).publish(html)`.",
 		}, nil

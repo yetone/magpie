@@ -103,7 +103,11 @@ An agent on this computer is told no base and answered as before.
 The server's `instructions` and the publish tool's description tell the
 agent when to make one: whenever a page would be clearer than text, or the
 user would use the page rather than only read it. They say neither magpie's
-limits nor a vendor's.
+limits nor a vendor's. Their first sentence carries the trigger (every HTML
+page, chart, tool or game made for the user goes to `publish_artifact`):
+Codex 0.172 defers MCP tools behind `tool_search` and shows a server only as
+the first ~250 characters of its instructions, so a trigger later in the
+text was never seen (probe on mote, 11-25).
 
 An ask for a page reaches `publish_artifact` without naming it, as Claude
 Code's own Artifact tool is reached, only if the model is shown the tool:
