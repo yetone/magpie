@@ -20,6 +20,7 @@ const artifactsUsage = `usage: magpie artifacts [--json]          the pages agen
        magpie artifacts open <id>[@<n>]    open one in the browser: the newest version, or version n
        magpie artifacts share <id>         share one on usemagpie.ai: anyone with its link opens it,
                                            and each new version shows there too
+       magpie artifacts open-shared <id>   open its shared page as its owner
        magpie artifacts unshare <id>       take its shared link down
        magpie artifacts delete <id>        delete one with every version, for good`
 
@@ -48,7 +49,7 @@ func artifactsTo(w io.Writer, args []string, now time.Time) error {
 		return artifactsListTo(w, asJSON, now)
 	}
 	switch args[0] {
-	case "open", "share", "unshare", "delete", "rm", "remove":
+	case "open", "share", "open-shared", "unshare", "delete", "rm", "remove":
 		if len(args) != 2 {
 			return fmt.Errorf("%s takes one artifact\n%s", args[0], artifactsUsage)
 		}
@@ -84,6 +85,24 @@ func artifactsTo(w io.Writer, args []string, now time.Time) error {
 				return err
 			}
 			fmt.Fprintf(w, "✓ shared %s: anyone with its link opens it, and each new version shows there too\n%s\n", a.Title, sh.URL)
+			return nil
+		case "open-shared":
+			// a one-time code in the link: usemagpie.ai trades it for an
+			// owner key the browser keeps
+			u, err := artifact.OwnerLink(context.Background(), id)
+			if errors.Is(err, artifact.ErrSharedGone) {
+				return fmt.Errorf("%s's shared link was taken down on usemagpie.ai", a.Title)
+			}
+			if err != nil {
+				if sh, _ := artifact.Shared(id); sh == nil {
+					return fmt.Errorf("%s isn't shared", a.Title)
+				}
+				return err
+			}
+			if err := openArtifact(u); err != nil {
+				return fmt.Errorf("couldn't open %s: %w", u, err)
+			}
+			fmt.Fprintf(w, "✓ opened %s's shared page as its owner\n", a.Title)
 			return nil
 		case "unshare":
 			sh, err := artifact.Shared(id)

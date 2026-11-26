@@ -40,7 +40,7 @@ function artifactsPage() {
       if (more.classList.contains("open")) return closeAgentMenu();
       const acts = [{ name: "Copy link", icon: COPY_ICON, run: () => copy(a.url, t("Link")) }];
       if (a.versions.length > 1) acts.push({ name: "Earlier versions", icon: DOC, run: () => versions(a, more) });
-      if (a.shared) acts.push({ name: "Copy shared link", icon: LINK, sep: true, run: () => copy(a.shared, t("Shared link")) }, { name: "Stop sharing", icon: UNLINK, run: () => unshare(a) });
+      if (a.shared) acts.push({ name: "Open shared page", icon: LINK, sep: true, run: () => openShared(a) }, { name: "Copy shared link", icon: COPY_ICON, run: () => copy(a.shared, t("Shared link")) }, { name: "Stop sharing", icon: UNLINK, run: () => unshare(a) });
       else acts.push({ name: "Share…", icon: LINK, sep: true, run: () => share(a) });
       acts.push({ name: "Delete", icon: BIN, sep: true, run: () => remove(a) });
       openRowMenu(more, acts);
@@ -73,6 +73,15 @@ function artifactsPage() {
       a.shared = r.url;
       draw();
       await copy(r.url, t("Shared link"));
+    } catch (e) { statusErr(e); }
+  }
+
+  // the shared page as its owner sees it there: a one-time code that
+  // usemagpie.ai trades for a key this browser keeps (site/live.js)
+  async function openShared(a) {
+    try {
+      const r = await api("artifacts/owner-link", { id: a.id });
+      await open(r.url);
     } catch (e) { statusErr(e); }
   }
 

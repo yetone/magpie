@@ -40,6 +40,7 @@ var keySurfaceNeither = []string{
 	"POST " + ArtifactPagePath + "{ref}/_api/upload", "POST " + ArtifactPagePath + "{ref}/_api/assets",
 	"GET " + ArtifactPagePath + "{ref}/_api/shell",
 	"POST " + ArtifactPagePath + "{ref}/_api/files",
+	"GET " + ArtifactPagePath + "{ref}/_api/live",
 	"GET " + artifactBlobPath + "{id}", "GET " + BrowserExtensionPath, "GET " + BrowserStatusPath,
 }
 

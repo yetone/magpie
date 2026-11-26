@@ -35,6 +35,10 @@
     { "binding": "PLUGINS", "database_name": "magpie-plugins", "database_id": "ec0a0670-9de4-4906-8534-ac83c8ba3cd6" },
     { "binding": "SHARES_DB", "database_name": "magpie-shares", "database_id": "e95cac10-9301-4f26-bb09-6d0e115f2762" }
   ],
+  // LIVE: each shared page's data and room, by the share's id (live.js);
+  // LIVE_KEY, a secret, signs its viewers' tokens
+  "durable_objects": { "bindings": [{ "name": "LIVE", "class_name": "ShareLive" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ShareLive"] }],
   "triggers": { "crons": ["*/15 * * * *", "*/5 * * * *"] },
   "observability": { "enabled": true }
 }

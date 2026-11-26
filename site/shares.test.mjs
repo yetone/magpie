@@ -2,34 +2,10 @@
 // node:sqlite and R2 by r2stub.mjs.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DatabaseSync } from "node:sqlite";
 import { api, page, content, prune, cleanPath, RATE, MAX_BYTES, CONTENT } from "./shares.js";
 import worker from "./worker.js";
 import { bucket } from "./r2stub.mjs";
-
-function d1() {
-  const db = new DatabaseSync(":memory:");
-  const stmt = (sql, args = []) => ({
-    bind: (...a) => stmt(sql, a),
-    run: async () => {
-      const r = db.prepare(sql).run(...args);
-      return { success: true, meta: { changes: Number(r.changes) } };
-    },
-    first: async () => db.prepare(sql).get(...args) ?? null,
-    async exec() {
-      return /^\s*(SELECT|.*RETURNING)/is.test(sql) ? { results: db.prepare(sql).all(...args) } : this.run();
-    },
-  });
-  return {
-    raw: db,
-    prepare: (sql) => stmt(sql),
-    async batch(list) {
-      const out = [];
-      for (const s of list) out.push(await s.exec());
-      return out;
-    },
-  };
-}
+import { d1 } from "./d1stub.mjs";
 
 function setup() {
   const env = { SHARES_DB: d1(), SHARES: bucket(), SHARE_ADMIN: "admin-secret-token" };

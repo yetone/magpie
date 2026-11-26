@@ -278,6 +278,10 @@ func TestParseCapabilities(t *testing.T) {
 		`{"db":{"rules":[{"path":"a","read":"view"},{"path":"a/{self}","write":"interact"}]}}`,
 		`{"db":{"rules":[{"path":"{self}/a"}]}}`,
 		`{"user":{"scopes":["phone"]}}`,
+		`{"room":{"topics":{"move":"view"}}}`,
+		`{"room":{"topics":{"Move":"interact"}}}`,
+		`{"room":{"topics":"move"}}`,
+		`{"room":{"topics":{` + manyTopics(65) + `}}}`,
 		`[]`,
 	} {
 		if _, err := ParseCapabilities(json.RawMessage(bad)); err == nil {
@@ -289,6 +293,8 @@ func TestParseCapabilities(t *testing.T) {
 		`{"downloads":true,"room":{}}`,
 		`{"db":{"rules":[{"path":"signoffs","read":"view","write":"self"},{"path":"signoffs/{self}","read":"view","write":"interact"}]}}`,
 		`{"user":{"scopes":["profile","email"]}}`,
+		`{"room":{"topics":{"move":"interact","chat.say":"admin"}}}`,
+		`{"room":{"topics":{` + manyTopics(64) + `}}}`,
 	} {
 		if _, err := ParseCapabilities(json.RawMessage(good)); err != nil {
 			t.Errorf("%s: %v", good, err)
@@ -300,6 +306,16 @@ func TestParseCapabilities(t *testing.T) {
 	if c, err := ParseCapabilities(json.RawMessage(`{}`)); c == nil || len(c) != 0 || err != nil {
 		t.Errorf("{}: %v %v", c, err)
 	}
+}
+
+// manyTopics is n room topics opened to Contributors, as a declaration's
+// object members.
+func manyTopics(n int) string {
+	t := make([]string, n)
+	for i := range t {
+		t[i] = fmt.Sprintf(`"t%d":"interact"`, i)
+	}
+	return strings.Join(t, ",")
 }
 
 // A publish that leaves capabilities out keeps the version before's; {}
@@ -467,7 +483,7 @@ func TestWithRuntime(t *testing.T) {
 			t.Errorf("%s: the config ends its script early", c2.page)
 		}
 	}
-	shared := string(WithRuntime([]byte("<p>x"), SharedRuntime()))
+	shared := string(WithRuntime([]byte("<p>x"), SharedRuntime(nil)))
 	if !strings.Contains(shared, `"shared":true`) || strings.Contains(shared, `"token":"`+"x") {
 		t.Errorf("the shared runtime: %.300s", shared[len(shared)-300:])
 	}

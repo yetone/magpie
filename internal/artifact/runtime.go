@@ -37,16 +37,33 @@ type RuntimeConfig struct {
 	// Origin is magpie's origin, as the browser names it: the viewer
 	// shell's, which the page's runtime speaks to (shell.js)
 	Origin string `json:"origin,omitempty"`
-	// Shared: the page is a shared copy, on usemagpie.ai, where nothing
-	// is served and every capability resolves null
+	// Shared: the page is a shared copy, on usemagpie.ai. What it
+	// declares of SharedCaps is served there (site/live.js), once the
+	// link's page hands the frame a session; the rest resolves null.
 	Shared bool `json:"shared,omitempty"`
 }
 
-// SharedRuntime is the runtime a shared copy's pages run: window.claude
-// is there, so a page written for it runs, and each capability is null,
-// so the page shows what it shows without them.
-func SharedRuntime() *RuntimeConfig {
-	return &RuntimeConfig{Caps: map[string]any{}, Shared: true}
+// SharedCaps are the capabilities a shared copy is served on
+// usemagpie.ai: its data, its room, and who is viewing.
+var SharedCaps = []string{"db", "room", "user"}
+
+// SharedRuntime is the runtime a shared copy of version v runs (v nil: a
+// page that declares nothing): window.claude is there, so a page written
+// for it runs; what it declares of SharedCaps waits for the link's
+// session, and every other capability is null, so the page shows what it
+// shows without them.
+func SharedRuntime(v *Version) *RuntimeConfig {
+	c := &RuntimeConfig{Caps: map[string]any{}, Shared: true}
+	if v != nil {
+		for _, name := range SharedCaps {
+			if raw, ok := v.Capabilities[name]; ok {
+				var decl any = map[string]any{}
+				json.Unmarshal(raw, &decl)
+				c.Caps[name] = decl
+			}
+		}
+	}
+	return c
 }
 
 // PageRuntime is the runtime config for artifact a's version n (0: the

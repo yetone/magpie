@@ -284,7 +284,7 @@ func List() ([]*Artifact, error) {
 func Delete(id string) error {
 	shareMu.Lock()
 	defer shareMu.Unlock()
-	if err := unshare(context.Background(), id); err != nil && !errors.Is(err, ErrNotFound) {
+	if err := unshare(context.Background(), id, false); err != nil && !errors.Is(err, ErrNotFound) {
 		return fmt.Errorf("its shared link couldn't be taken down, so it is kept: %w", err)
 	}
 	defer lock()()

@@ -100,6 +100,10 @@ func TestArtifactsCommand(t *testing.T) {
 func TestArtifactsShareCommand(t *testing.T) {
 	artifactsSandbox(t)
 	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/owner") {
+			w.Write([]byte(`{"code":"c0de","url":"https://usemagpie.ai/a/abcdefghijklmnop#owner=c0de"}`))
+			return
+		}
 		if r.Method == http.MethodPost {
 			w.WriteHeader(http.StatusCreated)
 			w.Write([]byte(`{"id":"abcdefghijklmnop","url":"https://usemagpie.ai/a/abcdefghijklmnop","token":"tok","version":1}`))
@@ -119,11 +123,21 @@ func TestArtifactsShareCommand(t *testing.T) {
 	if _, err := run("unshare", a.ID); err == nil {
 		t.Fatal("unshared one never shared")
 	}
+	var opened []string
+	was := openArtifact
+	openArtifact = func(u string) error { opened = append(opened, u); return nil }
+	t.Cleanup(func() { openArtifact = was })
+	if _, err := run("open-shared", a.ID); err == nil || !strings.Contains(err.Error(), "isn't shared") || len(opened) != 0 {
+		t.Fatalf("open-shared, not shared: %v %v", err, opened)
+	}
 	if _, err := run("share", a.ID+"@1"); err == nil {
 		t.Fatal("shared a version")
 	}
 	if out, err := run("share", a.ID); err != nil || !strings.Contains(out, link) {
 		t.Fatalf("share: %q %v", out, err)
+	}
+	if out, err := run("open-shared", a.ID); err != nil || !strings.Contains(out, "as its owner") || len(opened) != 1 || opened[0] != link+"#owner=c0de" {
+		t.Fatalf("open-shared: %q %v %v", out, err, opened)
 	}
 	if out, _ := run(); !strings.Contains(out, "shared: "+link) {
 		t.Fatalf("list:\n%s", out)

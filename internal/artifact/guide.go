@@ -19,14 +19,14 @@ Declare each one the page uses in publish_artifact's capabilities, then in the p
   const db = await claude.use("db")   // the capability's calls, or null
 null means this view can't run it (not declared, or a shared copy): render the page without it and light the feature up when the promise resolves. window.claude has use() alone; the namespace is frozen, so keep the reference and wrap it, never assign to it. A call that fails rejects with an Error that has .code (below) and .message.
 
-Who views it: a page opens on this computer, from magpie, and its viewer is its owner; db, assets and sample keep their data in magpie here. A link the user shares on usemagpie.ai shows a copy of the page in which every capability but permissions resolves null, so a page shared that way must work without them (show the data the version embeds, or say it is read-only).
+Who views it: a page opens on this computer, from magpie, and its viewer is its owner; db, assets and sample keep their data in magpie here. A link the user shares on usemagpie.ai shows a copy of the page to anyone with it. There db, user and room work for its visitors: they sign in on the link's page (level "interact", guest: true), and one not signed in only views (level "view", not in the room). Every other capability but permissions resolves null there, so a page that may be shared works without them (show the data the version embeds, or say it is read-only).
 
 Values from db, a model's answer or a file are never markup: set them with textContent, or escape & < > " ' before they join HTML.
 `
 
 var guideCaps = []struct{ name, text string }{
 	{"db", `db: data kept outside the page, which the page reads and writes and you read and seed with artifact_data.
-Declare {"db": {}} or {"db": {"rules": [{"path": "votes", "read": "view", "write": "owner"}]}}. read and write are levels, least to most: "view", "interact", "admin", "owner"; "self" is a level nobody holds, for a {self} rule's prefix ({"path": "votes", "read": "view", "write": "self"}, {"path": "votes/{self}", "read": "view", "write": "interact"}). Here the viewer is the owner, so rules decide nothing yet; write them for who should write once others can.
+Declare {"db": {}} or {"db": {"rules": [{"path": "votes", "read": "view", "write": "owner"}]}}. read and write are levels, least to most: "view", "interact", "admin", "owner"; "self" is a level nobody holds, for a {self} rule's prefix ({"path": "votes", "read": "view", "write": "self"}, {"path": "votes/{self}", "read": "view", "write": "interact"}). Opened on the user's computer, a page's viewer is the owner, so rules decide nothing; on a shared link they decide what its visitors read and write, so write them for that.
 Paths: segments joined by "/"; an odd count is a collection ("votes"), an even one a document ("votes/v1"). data/users/<id>/... is the viewer's own (id from user.id()).
   const ref = db.doc("polls/p1")          // or db.collection("polls").doc("p1"); .doc() with no id makes one
   const snap = await ref.get()            // snap.exists, snap.id, snap.data(): the object, or undefined
@@ -154,6 +154,19 @@ Declare {"files": {}}: the folder is the one you publish from, kept by the versi
   const tools = await files.asSampleTools()   // list_project_files and read_project_file for sample's tools (declare sample too)
 Call it on a click or after load, never in a loop. Don't copy what you read into db, assets or a version unless the viewer asks: whoever opens the page reads those.
 Codes: not_found (no such path, or outside the folder), not_granted (the viewer said no: hide it), changed (the file changed while it was saved: try again on a new click), rate_limited (.retryAfterMs), too_large (over 512 MiB to save), declined (the viewer didn't save it), bad_request, unavailable, capability_disabled.`},
+	{"room", `room: whoever has the page open right now (every tab of it on this computer, and the visitors of a shared link), for moments and presence: cursors, who is here, a move in a game, "next slide". Nothing is kept and a message can be lost, so state a late joiner needs goes in db, and the page works alone.
+Declare {"room": {}}. Sending on a topic needs level admin unless the declaration opens it: {"room": {"topics": {"move": "interact"}}} lets a shared link's signed-in visitors send on move (never open one to "view").
+  const room = await claude.use("room")   // null when the page can't connect, or for a visitor not signed in: work without it
+  await room.emit("move", {x: 3, y: 4})   // heard by everyone in the room, this page too (sameTab: true); send absolute state, not a change
+  const off = room.on("move", (m) => ...)   // m.data, and who sent it: m.peer, m.by, m.isMe, m.sameTab, m.guest
+  await room.presence({cursor: {x, y}})   // this page's own state, merged (a null deletes its key); cleared when it leaves
+  room.onPeers(({peers, joined, left, updated}) => render(peers))   // everyone here, this page's own with sameTab: true; at most once a frame
+     // a peer: {peer, by (the viewer's id, when the page declares user), kind ("viewer"), isMe, sameTab, guest, presence, updatedAt}
+  room.peers(); room.connected(); room.onConnection((up) => ...)
+  const r = await room.join("table-2")    // a room of its own, heard only by those who joined it: emit, on, presence, peers, onPeers, leave()
+Topics and room names: ^[a-z][a-z0-9_.-]{0,47}$ (a room may start with a digit). data and the merged presence are JSON, 4096 bytes and 8 deep at most; about 40 messages a second, past which they are dropped. A page is in 16 named rooms at most.
+What is heard is untrusted (anyone with the link): presence is never authority, and set it with textContent.
+Codes (on emit, presence, join, and on's and onPeers' onError): invalid_argument, not_permitted (the topic isn't open to this viewer's level), rate_limited, limit_reached, upstream_error, revoked (the artifact was deleted).`},
 	{"permissions", `permissions: built in, never declared.
   const p = await claude.use("permissions")
   await p.state("db")          // "granted" for what the page declared, else "unavailable"

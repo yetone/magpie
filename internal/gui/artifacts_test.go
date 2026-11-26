@@ -96,12 +96,18 @@ func TestArtifactsShareAPI(t *testing.T) {
 	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
-		switch r.Method {
-		case http.MethodPost:
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/owner"):
+			if r.Header.Get("Authorization") != "Bearer tok" {
+				http.Error(w, "wrong token", http.StatusForbidden)
+				return
+			}
+			w.Write([]byte(`{"code":"c0de","url":"https://usemagpie.ai/a/abcdefghijklmnop#owner=c0de"}`))
+		case r.Method == http.MethodPost:
 			live = true
 			w.WriteHeader(http.StatusCreated)
 			w.Write([]byte(`{"id":"abcdefghijklmnop","url":"https://usemagpie.ai/a/abcdefghijklmnop","token":"tok","version":1}`))
-		case http.MethodDelete:
+		case r.Method == http.MethodDelete:
 			live = false
 			w.Write([]byte(`{"deleted":true}`))
 		}
@@ -137,6 +143,11 @@ func TestArtifactsShareAPI(t *testing.T) {
 	}
 	if r := listed(); r.Shared != got.URL || r.SharedVersion != 1 {
 		t.Fatalf("listed %+v", r)
+	}
+	// the owner opens it with a one-time code
+	rw = post("/api/artifacts/owner-link", a.ID)
+	if rw.Code != http.StatusOK || json.Unmarshal(rw.Body.Bytes(), &got) != nil || got.URL != "https://usemagpie.ai/a/abcdefghijklmnop#owner=c0de" {
+		t.Fatalf("owner-link: %d %s", rw.Code, rw.Body)
 	}
 	if rw := post("/api/artifacts/unshare", a.ID); rw.Code != http.StatusOK {
 		t.Fatalf("unshare: %d %s", rw.Code, rw.Body)

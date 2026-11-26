@@ -12,9 +12,9 @@ import (
 // runtime lacks, or not told of one it has, writes a page that fails.
 func TestGuideNamesWhatRuntimeServes(t *testing.T) {
 	js := string(runtimeJS)
-	m := regexp.MustCompile(`var spaces = \{([^}]*)\}`).FindStringSubmatch(js)
+	m := regexp.MustCompile(`var impls = \{([^}]*)\}`).FindStringSubmatch(js)
 	if m == nil {
-		t.Fatal("no spaces in runtime.js")
+		t.Fatal("no impls in runtime.js")
 	}
 	var spaces []string
 	for _, kv := range regexp.MustCompile(`(\w+):`).FindAllStringSubmatch(m[1], -1) {
@@ -55,8 +55,8 @@ func TestGuideForSome(t *testing.T) {
 	if !strings.HasPrefix(g, guideIntro) || !strings.Contains(g, "\ndb: ") || !strings.Contains(g, "\nartifact: ") || strings.Contains(g, "\nsample: ") || strings.Count(g, "\ndb: ") != 1 {
 		t.Fatalf("db and self:\n%s", g)
 	}
-	if _, err := Guide([]string{"room"}); err == nil || !strings.Contains(err.Error(), "db, user, artifact") {
-		t.Fatalf("room: %v", err)
+	if _, err := Guide([]string{"speech"}); err == nil || !strings.Contains(err.Error(), "db, user, artifact") {
+		t.Fatalf("speech: %v", err)
 	}
 }
 

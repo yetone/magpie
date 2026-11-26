@@ -10,6 +10,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/yetone/magpie/internal/lazyre"
 )
 
 // Capabilities (docs/subsystems/artifacts.md, "Page runtime"): what a page
@@ -28,7 +30,7 @@ var capabilityNames = []string{"artifact", "assets", "comments", "db", "dictatio
 // ServedCaps are the capabilities the page runtime gives a page that declares
 // them; permissions is built in and never declared. self is artifact's
 // former name, and resolves the same namespace.
-var ServedCaps = []string{"artifact", "assets", "comments", "db", "dictation", "downloads", "files", "mcp", "sample", "self", "tts", "user"}
+var ServedCaps = []string{"artifact", "assets", "comments", "db", "dictation", "downloads", "files", "mcp", "room", "sample", "self", "tts", "user"}
 
 // Capabilities is a version's declaration, by name.
 type Capabilities map[string]json.RawMessage
@@ -103,6 +105,11 @@ func ParseCapabilities(raw json.RawMessage) (Capabilities, error) {
 	if v, ok := c["files"]; ok {
 		if _, err := ParseFilesConfig(v); err != nil {
 			return nil, fmt.Errorf("capability files: %w", err)
+		}
+	}
+	if v, ok := c["room"]; ok {
+		if _, err := ParseRoomConfig(v); err != nil {
+			return nil, fmt.Errorf("capability room: %w", err)
 		}
 	}
 	for _, name := range []string{"artifact", "self"} {
@@ -208,6 +215,40 @@ func CommentsComposerOnly(c Capabilities) bool {
 // lets the page send images with its calls.
 type SampleConfig struct {
 	Images bool `json:"images,omitempty"`
+}
+
+// RoomConfig is the room capability's declaration: the event topics
+// opened below Editors (admin), each to "interact" or "admin". Presence
+// is anyone's in the room.
+type RoomConfig struct {
+	Topics map[string]string `json:"topics,omitempty"`
+}
+
+var (
+	roomTopicRe = lazyre.New(`^[a-z][a-z0-9_.-]{0,47}$`)
+	roomLevels  = []string{"interact", "admin", "owner"}
+)
+
+// ParseRoomConfig reads the room capability's declaration.
+func ParseRoomConfig(raw json.RawMessage) (*RoomConfig, error) {
+	c := &RoomConfig{}
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, c); err != nil {
+			return nil, errors.New(`it is {} or {"topics": {"move": "interact"}}`)
+		}
+	}
+	if len(c.Topics) > 64 {
+		return nil, errors.New("it opens 64 topics at most")
+	}
+	for t, lvl := range c.Topics {
+		if !roomTopicRe.MatchString(t) {
+			return nil, fmt.Errorf("topic %q: a topic is ^[a-z][a-z0-9_.-]{0,47}$", t)
+		}
+		if !slices.Contains(roomLevels, lvl) {
+			return nil, fmt.Errorf("topic %s: its level is \"interact\" or \"admin\", never %q (Viewers don't send)", t, lvl)
+		}
+	}
+	return c, nil
 }
 
 // ParseSampleConfig reads the sample capability's declaration.

@@ -161,6 +161,20 @@ func artifactRoutes(mux *http.ServeMux) {
 		}
 		writeJSON(rw, map[string]any{"url": sh.URL, "version": sh.Version})
 	})
+	// the shared page, opened as its owner: a one-time code in its link
+	mux.HandleFunc("POST /api/artifacts/owner-link", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ ID string }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		u, err := artifact.OwnerLink(r.Context(), in.ID)
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, map[string]string{"url": u})
+	})
 	mux.HandleFunc("POST /api/artifacts/unshare", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct{ ID string }
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {

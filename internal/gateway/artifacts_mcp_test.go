@@ -383,7 +383,7 @@ func TestArtifactsGuideTool(t *testing.T) {
 	if said, isErr := artifactsCall(t, h, artifactGuideTool, map[string]any{}); isErr || !strings.Contains(said, "\nsample: ") || !strings.Contains(said, "\nassets: ") {
 		t.Fatalf("the whole guide: %s", said)
 	}
-	if said, isErr := artifactsCall(t, h, artifactGuideTool, map[string]any{"capabilities": []string{"room"}}); !isErr || !strings.Contains(said, "room") {
-		t.Fatalf("room: %v %s", isErr, said)
+	if said, isErr := artifactsCall(t, h, artifactGuideTool, map[string]any{"capabilities": []string{"speech"}}); !isErr || !strings.Contains(said, "speech") {
+		t.Fatalf("speech: %v %s", isErr, said)
 	}
 }

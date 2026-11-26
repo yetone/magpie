@@ -8,11 +8,91 @@
 (function (C) {
   "use strict";
   if (window.claude && window.claude.use) return;
-  // a shared copy (usemagpie.ai) serves no store and knows no viewer:
-  // every capability resolves null there, as it does for a page's
-  // visitor that claude.ai can't serve
+  // a shared copy (usemagpie.ai) is served its data, its room and who is
+  // viewing there, once the link's page hands it a session (adopt); every
+  // other capability resolves null, as it does for a page's visitor that
+  // claude.ai can't serve
   var publishing = !!(C.caps.artifact || C.caps.self);
-  var served = C.shared ? { permissions: true } : { db: !!C.caps.db, user: true, permissions: true, artifact: publishing, self: publishing, assets: !!C.caps.assets, sample: !!C.caps.sample, comments: !!C.caps.comments && !!C.origin, downloads: !!C.caps.downloads && !!C.origin, tts: !!C.caps.tts && !!C.origin && typeof Audio === "function", dictation: !!C.caps.dictation && !!C.origin && typeof MediaRecorder === "function", mcp: !!C.caps.mcp && !!C.origin && window.parent !== window, files: !!C.caps.files && !!C.origin && window.parent !== window };
+  var sockets = typeof WebSocket === "function";
+  var served = C.shared ? { permissions: true } : { db: !!C.caps.db, user: true, permissions: true, artifact: publishing, self: publishing, assets: !!C.caps.assets, sample: !!C.caps.sample, comments: !!C.caps.comments && !!C.origin, downloads: !!C.caps.downloads && !!C.origin, tts: !!C.caps.tts && !!C.origin && typeof Audio === "function", dictation: !!C.caps.dictation && !!C.origin && typeof MediaRecorder === "function", mcp: !!C.caps.mcp && !!C.origin && window.parent !== window, files: !!C.caps.files && !!C.origin && window.parent !== window, room: !!C.caps.room && sockets };
+  // levels, as the store and the room rank them
+  var LEVELS = { view: 0, interact: 1, admin: 2, owner: 3 };
+  var level = LEVELS.owner;
+
+  // -- the shared copy's session -----------------------------------------
+  // The link's page (site/shares.js) signs the viewer in and asks
+  // usemagpie.ai for a session: the API, a token, the viewer and the
+  // capabilities. The frame says hello to its parent, which answers with
+  // the session, again when the token is renewed; it relays the room's
+  // socket too ({type: "live"}). Only the parent is heard.
+  var ST = "artifact-share", session = null, sessionWait = [], fromShare = null;
+  var waitsSession = C.shared && window.parent !== window && !!(C.caps.db || C.caps.room || C.caps.user);
+  function adopt(s) {
+    if (!s || typeof s.api !== "string" || typeof s.token !== "string" || !s.viewer || typeof s.viewer !== "object") return;
+    C.api = s.api;
+    C.token = s.token;
+    var first = !session;
+    session = s;
+    if (!first) return;
+    var caps = s.caps && typeof s.caps === "object" ? s.caps : {};
+    C.caps = Object.assign({}, C.caps, { db: caps.db, room: caps.room, user: caps.user });
+    ["db", "room", "user"].forEach(function (k) { if (!C.caps[k]) delete C.caps[k]; });
+    C.viewer = { id: typeof s.viewer.id === "string" ? s.viewer.id : "", name: typeof s.viewer.name === "string" ? s.viewer.name : "", owner: !!s.viewer.owner, guest: !!s.viewer.guest };
+    level = LEVELS[s.viewer.level] != null ? LEVELS[s.viewer.level] : LEVELS.view;
+    served.db = !!C.caps.db;
+    served.user = !!C.caps.user;
+    // nobody signed in isn't in the room
+    served.room = !!C.caps.room && !!C.viewer.id;
+    whoAmI();
+    sessionWait.splice(0).forEach(function (f) { f(); });
+  }
+  // whenSession resolves once a session is here, or after ms without one
+  function whenSession(ms) {
+    if (session || !waitsSession) return Promise.resolve();
+    return new Promise(function (res) {
+      sessionWait.push(res);
+      setTimeout(res, ms);
+    });
+  }
+  // the link's page opened this frame at #magpie-share=<key>: hello says
+  // it, so a page navigated to in this window never gets the session. It
+  // leaves the address before the page's own scripts read it.
+  var shareKey = "";
+  if (waitsSession) {
+    var km = /(^#|&)magpie-share=([A-Za-z0-9_-]+)&?/.exec(location.hash);
+    if (km) {
+      shareKey = km[2];
+      var rest = location.hash.replace(km[0], km[1] === "#" ? "#" : km[1]).replace(/[#&]$/, "");
+      try { history.replaceState(history.state, "", location.pathname + location.search + rest); } catch (e) {}
+    }
+  }
+  // hello hands over a port this document made: the link's page answers
+  // on it alone, so whatever it sends reaches this document and no other,
+  // even one loaded into the frame before word of the change arrived
+  var sharePort = null;
+  function sayHello() {
+    try {
+      var ch = new MessageChannel();
+      if (sharePort) sharePort.close();
+      sharePort = ch.port1;
+      sharePort.onmessage = function (e) {
+        var d = e.data;
+        if (!d || d.magpie !== ST) return;
+        if (d.type === "session") adopt(d);
+        else if (d.type === "live" && fromShare && d.msg && typeof d.msg === "object") fromShare(d.msg);
+      };
+      window.parent.postMessage({ magpie: ST, type: "hello", key: shareKey }, "*", [ch.port2]);
+    } catch (e) {}
+  }
+  function toLink(m) {
+    if (!sharePort) return false;
+    try { sharePort.postMessage(Object.assign({ magpie: ST }, m)); } catch (e) { return false; }
+    return true;
+  }
+  if (waitsSession) {
+    window.addEventListener("pagehide", function () { toLink({ type: "bye" }); });
+    sayHello();
+  }
   var freeze = Object.freeze;
   function deepFreeze(v) {
     if (v && typeof v === "object" && !Object.isFrozen(v)) {
@@ -54,7 +134,23 @@
       });
   }
   function call(op, body) {
-    return post("db", Object.assign({ t: C.token, op: op }, body), dbError, "unavailable");
+    var t = C.token;
+    return post("db", Object.assign({ t: t, op: op }, body), dbError, "unavailable").catch(function (e) {
+      // a shared copy's session ended: the link's page opens another
+      if (e.code !== "expired" || !C.shared) throw e;
+      return renewed(t).then(function () {
+        if (C.token === t) throw dbError("unavailable", "the page's session ended");
+        return post("db", Object.assign({ t: C.token, op: op }, body), dbError, "unavailable");
+      });
+    });
+  }
+  // renewed resolves once the token isn't t, or after 10 s
+  function renewed(t) {
+    return new Promise(function (res) {
+      var n = 0, h = setInterval(function () {
+        if (C.token !== t || ++n >= 40) { clearInterval(h); res(); }
+      }, 250);
+    });
   }
 
   // -- paths --------------------------------------------------------------
@@ -127,6 +223,8 @@
     }, 30);
   }
   function connect() {
+    // a shared copy hears its writes on the room's socket (live)
+    if (C.shared) return;
     if (source || !(listeners.size || follows) || typeof EventSource !== "function") return;
     source = new EventSource(C.api + "/events?t=" + encodeURIComponent(C.token) + (follows ? "&v=" + version : ""));
     source.onmessage = function (e) {
@@ -353,8 +451,9 @@
 
   // -- user ---------------------------------------------------------------
   // on this computer the viewer is the artifact's owner, with no name or
-  // picture magpie may give a page
-  var uid = C.caps.user ? C.viewer.id : null;
+  // picture magpie may give a page; on a shared copy, whoever the
+  // session names: the owner, a visitor signed in by name (a guest), or
+  // nobody signed in, at their level
   var palette = ["#5E81AC", "#A3785F", "#6F8F72", "#8E6C8A", "#B0884A", "#5F8A8B", "#9C6B6B", "#7A7F8C"];
   function colorOf(id) {
     var h = 0;
@@ -364,31 +463,61 @@
   function avatar(color) {
     return "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="16" fill="' + color + '"/><circle cx="16" cy="12.5" r="5.5" fill="#fff" fill-opacity=".85"/><path d="M6.5 27a9.5 9.5 0 0 1 19 0" fill="#fff" fill-opacity=".85"/></svg>');
   }
-  var myColor = uid ? colorOf(uid) : "#8E8E93";
-  var me = freeze({ id: uid, name: "", avatarUrl: avatar(myColor), color: myColor, email: null, isOwner: true, canEdit: true });
-  var can = { "data.write": true, "files.write": false, "assets.write": false, "people.add": false };
-  var profileCache = new Map();
-  function profile(id) {
-    if (!profileCache.has(id)) {
-      var c = colorOf(id);
-      profileCache.set(id, freeze({ id: id, name: "", avatarUrl: avatar(c), color: c, email: null, isMe: id === uid, guest: false, roles: null }));
-    }
-    return profileCache.get(id);
+  function scoped(name) {
+    var u = C.caps.user;
+    return !!(u && Array.isArray(u.scopes) && u.scopes.indexOf(name) >= 0);
+  }
+  var uid = null, me = null, can = null, profileCache = new Map();
+  function whoAmI() {
+    var v = C.viewer || {};
+    uid = C.caps.user ? v.id || null : null;
+    var color = uid ? colorOf(uid) : "#8E8E93";
+    var owner = !C.shared || !!v.owner;
+    me = freeze({ id: uid, name: C.shared && scoped("profile") ? v.name || "" : "", avatarUrl: avatar(color), color: color, email: null, isOwner: owner, canEdit: level >= LEVELS.admin });
+    can = { "data.write": level >= LEVELS.interact, "files.write": false, "assets.write": false, "people.add": false };
+    profileCache = new Map();
+  }
+  whoAmI();
+  function profile(id, name, guest) {
+    var c = colorOf(id);
+    return freeze({ id: id, name: name || "", avatarUrl: avatar(c), color: c, email: null, isMe: id === uid, guest: !!guest, roles: null });
+  }
+  // the names of ids, as usemagpie.ai knows them; reads never reject
+  function sharedProfiles(ids) {
+    var want = ids.filter(function (id) { return !profileCache.has(id); });
+    var got = !want.length ? Promise.resolve({}) : fetch(C.api + "/profiles", { method: "POST", body: JSON.stringify({ t: C.token, ids: want.slice(0, 200) }), headers: { "Content-Type": "text/plain" }, cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { return j && j.profiles && typeof j.profiles === "object" ? j.profiles : {}; }, function () { return null; });
+    return got.then(function (ps) {
+      var out = {};
+      ids.forEach(function (id) {
+        if (profileCache.has(id)) return (out[id] = profileCache.get(id));
+        var p = ps && ps[id];
+        var one = profile(id, p && typeof p.name === "string" ? p.name : "", p ? p.guest : id !== uid);
+        if (ps) profileCache.set(id, one); // a failed read is asked again
+        out[id] = one;
+      });
+      return freeze(out);
+    });
   }
   var user = freeze({
-    isOwner: function () { return Promise.resolve(true); },
-    canEdit: function () { return Promise.resolve(true); },
+    isOwner: function () { return Promise.resolve(me.isOwner); },
+    canEdit: function () { return Promise.resolve(me.canEdit); },
     can: function (name) { return Promise.resolve(can[name] === true); },
     me: function () { return Promise.resolve(me); },
     id: function () { return Promise.resolve(uid); },
-    name: function () { return Promise.resolve(""); },
+    name: function () { return Promise.resolve(me.name); },
     avatarUrl: function () { return Promise.resolve(uid ? me.avatarUrl : null); },
     email: function () { return Promise.resolve(null); },
     profiles: function (ids) {
+      if (!C.caps.user) return Promise.resolve(freeze({}));
+      var list = [].concat(ids == null ? [] : ids).map(String);
+      if (C.shared) return sharedProfiles(list);
       var out = {};
-      if (C.caps.user) {
-        [].concat(ids == null ? [] : ids).forEach(function (id) { id = String(id); out[id] = profile(id); });
-      }
+      list.forEach(function (id) {
+        if (!profileCache.has(id)) profileCache.set(id, profile(id, "", false));
+        out[id] = profileCache.get(id);
+      });
       return Promise.resolve(freeze(out));
     },
     // hits always have a name, and no one here has one to give
@@ -2140,13 +2269,509 @@
     },
   });
 
+  // -- room ---------------------------------------------------------------
+  // Whoever has the page open now (contract 0.2.99's room): one socket
+  // for the page, its lobby ("") and the named rooms it joined. On this
+  // computer the socket is magpie's (<api>/live, artifacts_room.go), and
+  // every peer is the same person in another tab; on a shared copy the
+  // link's page holds the socket to usemagpie.ai and relays it, and the
+  // room's other messages tell the store which documents changed.
+  // Messages are site/live.js's: join, leave, emit, presence from here;
+  // hi, joined, peer, gone, msg, changed, error back.
+  var ROOM_RE = /^[a-z0-9][a-z0-9_.-]{0,47}$/, TOPIC_RE = /^[a-z][a-z0-9_.-]{0,47}$/;
+  var MAX_DATA = 4096, MAX_DEPTH = 8, MAX_ROOMS = 16, NONE = freeze([]);
+  var wire = { up: false, started: false, ws: null, wait: 1000 };
+  var rooms = new Map(), refN = 0, dead = null, dropTold = false;
+  var bucket = { n: 80, at: 0 };
+  function roomError(code, message) {
+    var e = new Error(message || code);
+    e.name = "RoomError";
+    e.code = code;
+    return e;
+  }
+  function wsURL() {
+    var u = new URL(C.api + "/live", location.href);
+    u.protocol = u.protocol === "https:" ? "wss:" : "ws:";
+    u.searchParams.set("t", C.token);
+    return u.href;
+  }
+  function wireSend(m) {
+    if (!wire.up) return false;
+    if (C.shared) {
+      return toLink({ type: "live", msg: m });
+    }
+    try { wire.ws.send(JSON.stringify(m)); } catch (e) { return false; }
+    return true;
+  }
+  function wireStart() {
+    if (wire.started) return;
+    wire.started = true;
+    if (C.shared) {
+      // the link's page says {t: "open"} when its socket is up (again)
+      sayHello();
+      return;
+    }
+    dial();
+  }
+  function dial() {
+    if (dead) return;
+    var ws;
+    try { ws = new WebSocket(wsURL()); } catch (e) { return redial(); }
+    wire.ws = ws;
+    ws.onopen = function () { wire.wait = 1000; heardLive({ t: "open" }); };
+    ws.onmessage = function (e) {
+      var m;
+      try { m = JSON.parse(e.data); } catch (_) { return; }
+      if (m && typeof m === "object") heardLive(m);
+    };
+    ws.onclose = function (e) {
+      if (wire.ws !== ws) return;
+      wire.ws = null;
+      heardLive({ t: "closed" });
+      // the artifact is gone, or this page's token isn't its any more
+      if (e.code === 4001 || e.code === 4003) return die("revoked", "the page's room is closed");
+      redial();
+    };
+  }
+  function redial() {
+    setTimeout(dial, wire.wait);
+    wire.wait = Math.min(wire.wait * 2, 30000);
+  }
+
+  // a value a room carries: JSON's own kinds, at most MAX_DEPTH deep
+  function plainObj(v) { return v !== null && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype; }
+  function jsonish(v, d) {
+    if (v === null || typeof v === "string" || typeof v === "boolean") return true;
+    if (typeof v === "number") return isFinite(v);
+    if (d > MAX_DEPTH || typeof v !== "object") return false;
+    if (Array.isArray(v)) return v.every(function (x) { return jsonish(x, d + 1); });
+    if (!plainObj(v)) return false;
+    for (var k in v) if (Object.prototype.hasOwnProperty.call(v, k) && !jsonish(v[k], d + 1)) return false;
+    return true;
+  }
+  function depthOf(v, d) {
+    d = d || 0;
+    if (d > MAX_DEPTH) return d;
+    if (v && typeof v === "object") {
+      var m = d + 1;
+      for (var k in v) m = Math.max(m, depthOf(v[k], d + 1));
+      return m;
+    }
+    return d;
+  }
+  function size(v) { return new TextEncoder().encode(JSON.stringify(v)).length; }
+  var badKey = { __proto__: 1, constructor: 1, prototype: 1 };
+  function budget() {
+    var now = Date.now();
+    bucket.n = Math.min(80, bucket.n + (now - (bucket.at || now)) / 1000 * 40);
+    bucket.at = now;
+    if (bucket.n < 1) return false;
+    bucket.n -= 1;
+    return true;
+  }
+  function tick(fn) { Promise.resolve().then(fn); }
+
+  function peerOf(p) {
+    return freeze({ peer: String(p.peer), by: p.by == null ? null : String(p.by), isMe: !!p.isMe, sameTab: !!p.sameTab, kind: p.kind === "agent" ? "agent" : "viewer", guest: !!p.guest, presence: deepFreeze(plainObj(p.presence) ? p.presence : {}), updatedAt: +p.updatedAt || 0 });
+  }
+  // one room: the lobby (name "") or a named one
+  function Room(name) {
+    this.name = name;
+    this.state = "idle"; // joining, in, ended, left
+    this.ref = 0;
+    this.peers = new Map();
+    this.snap = NONE;
+    this.changed = { joined: new Map(), left: new Map(), updated: new Map() };
+    this.flushing = false;
+    this.peerFns = new Set();
+    this.topicFns = new Map();
+    this.connFns = new Set();
+    this.lastUp = false;
+    this.mine = {};
+    this.patch = null;
+    this.sendAt = 0;
+    this.ended = null;
+    this.waiters = [];
+  }
+  Room.prototype.up = function () { return !dead && wire.up && this.state === "in"; };
+  Room.prototype.join = function () {
+    if (dead || !wire.up || this.state === "ended" || this.state === "left") return;
+    this.ref = ++refN;
+    this.state = "joining";
+    wireSend({ t: "join", room: this.name, ref: this.ref });
+  };
+  Room.prototype.mark = function (kind, p) {
+    var c = this.changed, id = p.peer;
+    if (kind === "joined") {
+      if (c.left.has(id)) { c.left.delete(id); c.updated.set(id, p); } else c.joined.set(id, p);
+    } else if (kind === "left") {
+      if (c.joined.has(id)) c.joined.delete(id); else { c.updated.delete(id); c.left.set(id, p); }
+    } else if (c.joined.has(id)) c.joined.set(id, p);
+    else c.updated.set(id, p);
+    this.dirty();
+  };
+  Room.prototype.dirty = function () {
+    var self = this;
+    this.snap = null;
+    if (this.flushing) return;
+    this.flushing = true;
+    var go = function () { self.flush(); };
+    if (typeof requestAnimationFrame === "function" && document.visibilityState !== "hidden") requestAnimationFrame(go);
+    else setTimeout(go, 50);
+  };
+  Room.prototype.list = function () {
+    if (!this.snap) this.snap = freeze(Array.from(this.peers.values()));
+    return this.snap;
+  };
+  Room.prototype.flush = function () {
+    this.flushing = false;
+    var c = this.changed;
+    if (!c.joined.size && !c.left.size && !c.updated.size) return;
+    var change = freeze({ peers: this.list(), joined: freeze(Array.from(c.joined.values())), left: freeze(Array.from(c.left.values())), updated: freeze(Array.from(c.updated.values())) });
+    this.changed = { joined: new Map(), left: new Map(), updated: new Map() };
+    this.peerFns.forEach(function (l) { if (l.started) l.fn(change); });
+  };
+  // the room as joined: who is new, gone or changed since what was known
+  Room.prototype.reconcile = function (list) {
+    var self = this, now = new Map();
+    list.forEach(function (raw) { var p = peerOf(raw); now.set(p.peer, p); });
+    this.peers.forEach(function (p, id) { if (!now.has(id)) { self.peers.delete(id); self.mark("left", p); } });
+    now.forEach(function (p, id) {
+      var was = self.peers.get(id);
+      if (p.sameTab && Object.keys(self.mine).length) p = self.withMine(p);
+      self.peers.set(id, p);
+      if (!was) self.mark("joined", p);
+      else if (was.updatedAt !== p.updatedAt || JSON.stringify(was.presence) !== JSON.stringify(p.presence)) self.mark("updated", p);
+    });
+  };
+  Room.prototype.withMine = function (p) {
+    return freeze(Object.assign({}, p, { presence: deepFreeze(JSON.parse(JSON.stringify(this.mine))), updatedAt: Date.now() }));
+  };
+  // offline: only this page is left, as far as it knows
+  Room.prototype.alone = function () {
+    var self = this;
+    this.peers.forEach(function (p, id) { if (!p.sameTab) { self.peers.delete(id); self.mark("left", p); } });
+  };
+  Room.prototype.connection = function () {
+    var up = this.up();
+    if (up === this.lastUp) return;
+    this.lastUp = up;
+    this.connFns.forEach(function (l) { if (l.started) l.fn(up); });
+  };
+  // the room ends: each listener hears why once
+  Room.prototype.end = function (code, message) {
+    if (this.state === "ended" || this.state === "left") return;
+    this.state = "ended";
+    this.ended = { code: code, message: message };
+    var e = { code: code, message: message };
+    [this.peerFns, this.connFns].forEach(function (set) { set.forEach(function (l) { if (l.onError) try { l.onError(e); } catch (x) { fail(null, x); } }); set.clear(); });
+    this.topicFns.forEach(function (set) { set.forEach(function (l) { if (l.onError) try { l.onError(e); } catch (x) { fail(null, x); } }); });
+    this.topicFns.clear();
+    this.alone();
+    this.waiters.splice(0).forEach(function (w) { w.no(roomError(code, message)); });
+  };
+  Room.prototype.refused = function () {
+    if (dead) return roomError(dead.code, dead.message);
+    if (this.state === "ended") return roomError(this.ended.code, this.ended.message);
+    if (this.state === "left") return roomError("invalid_argument", "this page left room " + JSON.stringify(this.name) + ": join it again");
+    return null;
+  };
+  Room.prototype.emit = function (topic, data) {
+    var no = this.refused();
+    if (no) return Promise.reject(no);
+    if (typeof topic !== "string" || !TOPIC_RE.test(topic)) return Promise.reject(roomError("invalid_argument", "a topic is ^[a-z][a-z0-9_.-]{0,47}$"));
+    if (data !== undefined && (!jsonish(data, 0) || depthOf(data) > MAX_DEPTH)) return Promise.reject(roomError("invalid_argument", "data is JSON: plain objects, arrays, strings, finite numbers, booleans and null, " + MAX_DEPTH + " deep at most"));
+    if (data !== undefined && size(data) > MAX_DATA) return Promise.reject(roomError("invalid_argument", "data is " + MAX_DATA + " bytes of JSON at most"));
+    var topics = C.caps.room && plainObj(C.caps.room.topics) ? C.caps.room.topics : {};
+    var need = topics[topic] || "admin";
+    if (level < (LEVELS[need] != null ? LEVELS[need] : LEVELS.admin)) return Promise.reject(roomError("not_permitted", "only " + need + " and up send on " + topic + ": open it in the declaration, room: {topics: {" + topic + ": \"interact\"}}"));
+    // dropped while nobody is reached, never queued
+    if (!this.up()) return Promise.resolve();
+    if (!budget()) {
+      if (!dropTold) {
+        dropTold = true;
+        fail(null, roomError("rate_limited", "emits past about 40 a second are dropped"));
+      }
+      return Promise.resolve();
+    }
+    var m = { t: "emit", room: this.name, topic: topic };
+    if (data !== undefined) m.data = data;
+    wireSend(m);
+    return Promise.resolve();
+  };
+  Room.prototype.presence = function (patch) {
+    var no = this.refused();
+    if (no) return Promise.reject(no);
+    if (!plainObj(patch)) return Promise.reject(roomError("invalid_argument", "a presence patch is a plain object"));
+    var merged = Object.assign({}, this.mine);
+    for (var k in patch) {
+      if (!Object.prototype.hasOwnProperty.call(patch, k)) continue;
+      if (badKey[k] === 1) return Promise.reject(roomError("invalid_argument", k + " can't be a key"));
+      var v = patch[k];
+      if (v === null) { delete merged[k]; continue; }
+      if (!jsonish(v, 1)) return Promise.reject(roomError("invalid_argument", "presence." + k + " isn't JSON: plain objects, arrays, strings, finite numbers, booleans and null"));
+      merged[k] = v;
+    }
+    if (depthOf(merged) > MAX_DEPTH) return Promise.reject(roomError("invalid_argument", "presence nests " + MAX_DEPTH + " deep at most"));
+    if (size(merged) > MAX_DATA) return Promise.reject(roomError("invalid_argument", "presence is " + MAX_DATA + " bytes of JSON at most, merged"));
+    this.mine = JSON.parse(JSON.stringify(merged));
+    var self = this;
+    // shown here at once
+    this.peers.forEach(function (p, id) {
+      if (!p.sameTab) return;
+      var q = self.withMine(p);
+      self.peers.set(id, q);
+      self.mark("updated", q);
+    });
+    // sent whole, about 30 times a second
+    if (!this.patch) {
+      var wait = Math.max(0, this.sendAt + 33 - Date.now());
+      setTimeout(function () { self.sendPresence(); }, wait);
+    }
+    this.patch = true;
+    return Promise.resolve();
+  };
+  Room.prototype.sendPresence = function () {
+    if (!this.patch) return;
+    this.patch = null;
+    if (!this.up()) return; // sent again on the next join
+    this.sendAt = Date.now();
+    var whole = {}, self = this;
+    // the room merges: what was set and since removed goes as null
+    (this.sent || []).forEach(function (k) { if (!(k in self.mine)) whole[k] = null; });
+    Object.assign(whole, this.mine);
+    this.sent = Object.keys(this.mine);
+    wireSend({ t: "presence", room: this.name, patch: whole });
+  };
+  Room.prototype.on = function (topic, fn, onError) {
+    if (typeof fn !== "function") throw new TypeError("room.on(topic, handler): the handler is a function");
+    var l = { fn: fn, onError: typeof onError === "function" ? onError : null, dead: false }, self = this;
+    var no = typeof topic !== "string" || !TOPIC_RE.test(topic) ? roomError("invalid_argument", "a topic is ^[a-z][a-z0-9_.-]{0,47}$") : this.refused();
+    if (no) {
+      tick(function () { if (!l.dead && l.onError) l.onError({ code: no.code, message: no.message }); });
+      return function () { l.dead = true; };
+    }
+    if (!this.topicFns.has(topic)) this.topicFns.set(topic, new Set());
+    this.topicFns.get(topic).add(l);
+    return function () {
+      l.dead = true;
+      var set = self.topicFns.get(topic);
+      if (set) set.delete(l);
+    };
+  };
+  Room.prototype.onPeers = function (fn, onError) {
+    if (typeof fn !== "function") throw new TypeError("onPeers(handler): the handler is a function");
+    var l = { fn: fn, onError: typeof onError === "function" ? onError : null, started: false }, self = this;
+    var no = this.refused();
+    if (no) {
+      tick(function () { if (l.onError) l.onError({ code: no.code, message: no.message }); });
+      return function () { l.onError = null; };
+    }
+    this.peerFns.add(l);
+    tick(function () {
+      if (!self.peerFns.has(l)) return;
+      // what is waiting goes to the others first, so this one's first
+      // delivery is the room so far and nothing of it comes again
+      if (self.flushing) self.flush();
+      l.started = true;
+      var all = self.list();
+      fn(freeze({ peers: all, joined: all, left: NONE, updated: NONE }));
+    });
+    return function () { self.peerFns.delete(l); };
+  };
+  Room.prototype.onConnection = function (fn, onError) {
+    if (typeof fn !== "function") throw new TypeError("onConnection(handler): the handler is a function");
+    var l = { fn: fn, onError: typeof onError === "function" ? onError : null, started: false }, self = this;
+    var no = this.refused();
+    if (no) {
+      tick(function () { if (l.onError) l.onError({ code: no.code, message: no.message }); });
+      return function () { l.onError = null; };
+    }
+    this.connFns.add(l);
+    tick(function () {
+      if (!self.connFns.has(l)) return;
+      l.started = true;
+      fn(self.up());
+    });
+    return function () { self.connFns.delete(l); };
+  };
+  Room.prototype.heard = function (m) {
+    switch (m.t) {
+      case "joined": {
+        if (m.ref !== this.ref || this.state !== "joining") return;
+        this.state = "in";
+        this.reconcile(Array.isArray(m.peers) ? m.peers : []);
+        if (Object.keys(this.mine).length) { this.sent = []; this.patch = true; this.sendPresence(); }
+        this.waiters.splice(0).forEach(function (w) { w.yes(); });
+        break;
+      }
+      case "peer": {
+        if (!m.peer || this.state !== "in") return;
+        var p = peerOf(m.peer), was = this.peers.has(p.peer);
+        if (p.sameTab && Object.keys(this.mine).length) p = this.withMine(p);
+        this.peers.set(p.peer, p);
+        this.mark(was ? "updated" : "joined", p);
+        break;
+      }
+      case "gone": {
+        var q = this.peers.get(String(m.peer));
+        if (!q) return;
+        this.peers.delete(q.peer);
+        this.mark("left", q);
+        break;
+      }
+      case "msg": {
+        var set = this.topicFns.get(m.topic);
+        if (!set || !set.size || !m.from) return;
+        var f = m.from;
+        var msg = freeze({ peer: String(f.peer), by: f.by == null ? null : String(f.by), isMe: !!f.isMe, sameTab: !!f.sameTab, kind: f.kind === "agent" ? "agent" : "viewer", guest: !!f.guest, topic: m.topic, data: m.data === undefined ? undefined : deepFreeze(m.data) });
+        Array.from(set).forEach(function (l) { if (!l.dead) try { l.fn(msg); } catch (e) { fail(null, e); } });
+        break;
+      }
+    }
+    this.connection();
+  };
+
+  // heardLive is each message of the socket, or the relay's
+  function heardLive(m) {
+    if (m.t === "open") {
+      var was = wire.up;
+      wire.up = true;
+      rooms.forEach(function (r) { r.join(); });
+      // a shared copy's writes made while its socket was away
+      if (C.shared && !was) heard(null);
+      return;
+    }
+    if (m.t === "closed") {
+      if (!wire.up) return;
+      wire.up = false;
+      rooms.forEach(function (r) {
+        if (r.state === "in" || r.state === "joining") r.state = "idle";
+        r.alone();
+        r.connection();
+      });
+      return;
+    }
+    if (m.t === "changed") return heard(Array.isArray(m.paths) ? m.paths.map(String) : null);
+    if (m.t === "error") {
+      var code = String(m.code || "upstream_error"), message = String(m.message || code);
+      if (m.ref == null) {
+        if (code === "revoked" || code === "not_granted") die(code, message);
+        return;
+      }
+      rooms.forEach(function (r) {
+        if (r.ref !== m.ref || r.state !== "joining") return;
+        if (r.name === "" && (code === "not_granted" || code === "revoked" || code === "not_permitted")) return die(code === "not_permitted" ? "not_granted" : code, message);
+        // a room joined before that can't be joined again ends
+        rooms.delete(r.name);
+        r.end(code, message);
+      });
+      return;
+    }
+    if (typeof m.room !== "string") return;
+    var r = rooms.get(m.room);
+    if (r) r.heard(m);
+  }
+  // die: this page load can't be in the room
+  function die(code, message) {
+    if (dead) return;
+    dead = { code: code, message: message };
+    rooms.forEach(function (r) { r.end(code, message); r.connection(); });
+  }
+  function lobby() {
+    var r = rooms.get("");
+    if (!r) {
+      r = new Room("");
+      rooms.set("", r);
+      wireStart();
+      r.join();
+    }
+    return r;
+  }
+  function named(r) {
+    return freeze({
+      name: r.name,
+      emit: function (topic, data) { return r.emit(topic, data); },
+      on: function (topic, fn, onError) { return r.on(topic, fn, onError); },
+      presence: function (patch) { return r.presence(patch); },
+      peers: function () { return r.list(); },
+      onPeers: function (fn, onError) { return r.onPeers(fn, onError); },
+      connected: function () { return r.up(); },
+      onConnection: function (fn, onError) { return r.onConnection(fn, onError); },
+      leave: function () {
+        if (r.state === "left") return Promise.resolve();
+        var was = r.state;
+        r.state = "left";
+        r.peerFns.clear();
+        r.connFns.clear();
+        r.topicFns.clear();
+        if (rooms.get(r.name) === r) rooms.delete(r.name);
+        if (was === "in" || was === "joining") wireSend({ t: "leave", room: r.name });
+        r.waiters.splice(0).forEach(function (w) { w.no(roomError("invalid_argument", "left before it was joined")); });
+        return Promise.resolve();
+      },
+    });
+  }
+  function joinRoom(name) {
+    if (dead) return Promise.reject(roomError(dead.code, dead.message));
+    if (typeof name !== "string" || !ROOM_RE.test(name)) return Promise.reject(roomError("invalid_argument", "a room's name is ^[a-z0-9][a-z0-9_.-]{0,47}$"));
+    lobby();
+    var r = rooms.get(name);
+    if (r && r.face) return r.joining;
+    var n = 0;
+    rooms.forEach(function (x) { if (x.name) n++; });
+    if (n >= MAX_ROOMS) return Promise.reject(roomError("limit_reached", "a page is in " + MAX_ROOMS + " rooms at most: leave one first"));
+    r = new Room(name);
+    r.face = named(r);
+    rooms.set(name, r);
+    r.joining = new Promise(function (yes, no) {
+      var t = setTimeout(function () {
+        if (r.state === "in") return;
+        if (rooms.get(name) === r) rooms.delete(name);
+        if (r.state === "joining") wireSend({ t: "leave", room: name });
+        r.state = "left";
+        no(roomError("upstream_error", "no answer within 10 seconds"));
+      }, 10000);
+      r.waiters.push({ yes: function () { clearTimeout(t); yes(r.face); }, no: function (e) { clearTimeout(t); if (rooms.get(name) === r) rooms.delete(name); no(e); } });
+    });
+    r.joining.catch(function () {});
+    r.join();
+    return r.joining;
+  }
+  // a shared copy hears its documents' changes on the relay, room or not
+  if (waitsSession) fromShare = heardLive;
+  var room = freeze({
+    emit: function (topic, data) { return lobby().emit(topic, data); },
+    on: function (topic, fn, onError) { return lobby().on(topic, fn, onError); },
+    presence: function (patch) { return lobby().presence(patch); },
+    peers: function () { return lobby().list(); },
+    onPeers: function (fn, onError) { return lobby().onPeers(fn, onError); },
+    connected: function () { return lobby().up(); },
+    onConnection: function (fn, onError) { return lobby().onConnection(fn, onError); },
+    join: joinRoom,
+    // magpie has no Claude session beside the page to send to
+    sendToClaudeSession: function () { return Promise.reject(roomError("claude_unavailable", "nothing beside this page takes it: use comments' sendToClaude")); },
+    canSendToClaudeSession: function () { return Promise.resolve("unsupported"); },
+  });
+
   // -- claude.use ---------------------------------------------------------
-  var spaces = { db: served.db ? db : null, user: served.user ? user : null, permissions: permissions, artifact: served.artifact ? artifact : null, self: served.self ? artifact : null, assets: served.assets ? assets : null, sample: served.sample ? sample : null, comments: served.comments ? comments : null, downloads: served.downloads ? downloads : null, tts: served.tts ? tts : null, dictation: served.dictation ? dictation : null, mcp: served.mcp ? mcp : null, files: served.files ? files : null };
+  // what each name is, if this view serves it: a shared copy knows once
+  // its session is here
+  var impls = { db: db, user: user, permissions: permissions, artifact: artifact, self: artifact, assets: assets, sample: sample, comments: comments, downloads: downloads, tts: tts, dictation: dictation, mcp: mcp, files: files, room: room };
   var memo = {};
   function use(name) {
     name = String(name);
-    if (!Object.prototype.hasOwnProperty.call(spaces, name) || !spaces[name]) return later(function () { return null; });
-    return memo[name] || (memo[name] = later(function () { return spaces[name]; }));
+    if (!Object.prototype.hasOwnProperty.call(impls, name)) return later(function () { return null; });
+    if (memo[name]) return memo[name];
+    var wait = C.shared && (name === "db" || name === "user" || name === "room") ? whenSession(10000) : Promise.resolve();
+    return (memo[name] = wait.then(function () {
+      return later(function () {
+        if (!served[name]) return null;
+        // the lobby is joined as soon as the page asks for its room
+        if (name === "room") lobby();
+        return impls[name];
+      });
+    }));
   }
   Object.defineProperty(window, "claude", { value: freeze({ use: use }), writable: false, configurable: false, enumerable: true });
 })

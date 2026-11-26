@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // fakeSite is usemagpie.ai's /api/shares as site/shares.js answers it.
@@ -22,6 +23,8 @@ type fakeSite struct {
 	shares map[string]*fakeShare
 	fail   int // answer every ask with this status
 	asks   int
+	// dataFail answers GET …/data with this status
+	dataFail int
 }
 
 type fakeShare struct {
@@ -29,6 +32,12 @@ type fakeShare struct {
 	version int
 	title   string
 	files   map[string]string // path → contents, of the version shown
+	caps    map[string]any    // meta's capabilities
+	owner   string            // meta's owner
+	// docs is the share's data: the data part it was first sent with,
+	// then what its viewers wrote (a test sets it)
+	docs   []SharedDoc
+	seeded bool
 }
 
 func newFakeSite(t *testing.T) *fakeSite {
@@ -48,9 +57,10 @@ func (f *fakeSite) serve(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"down"}`, f.fail)
 		return
 	}
-	id := strings.TrimPrefix(r.URL.Path, "/api/shares/")
+	// "/api/shares" (a new share), "/api/shares/<id>" or "/api/shares/<id>/<sub>"
+	id, sub, _ := strings.Cut(strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, "/api/shares"), "/"), "/")
 	sh := f.shares[id]
-	if r.Method != http.MethodPost {
+	if r.Method != http.MethodPost || sub != "" {
 		if sh == nil {
 			http.Error(w, `{"error":"no such share"}`, http.StatusNotFound)
 			return
@@ -60,14 +70,49 @@ func (f *fakeSite) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	switch {
+	case sub == "data" && r.Method == http.MethodGet:
+		if f.dataFail != 0 {
+			http.Error(w, `{"error":"down"}`, f.dataFail)
+			return
+		}
+		// as live.js answers it: held says the page's data was seeded
+		docs := sh.docs
+		if docs == nil {
+			docs = []SharedDoc{}
+		}
+		json.NewEncoder(w).Encode(map[string]any{"held": sh.seeded, "docs": docs})
+		return
+	case sub == "owner" && r.Method == http.MethodPost:
+		json.NewEncoder(w).Encode(map[string]string{"code": "c0de", "url": "https://usemagpie.ai/a/" + id + "#owner=c0de"})
+		return
+	case sub != "":
+		http.Error(w, `{"error":"no such route"}`, http.StatusNotFound)
+		return
+	}
+	// meta and data: what shares.js keeps of them
+	keep := func(sh *fakeShare, caps map[string]any, owner string) bool {
+		sh.caps, sh.owner = caps, owner
+		if raw := r.FormValue("data"); raw != "" && !sh.seeded {
+			var docs []SharedDoc
+			if err := json.Unmarshal([]byte(raw), &docs); err != nil {
+				http.Error(w, "bad data", http.StatusBadRequest)
+				return false
+			}
+			sh.docs, sh.seeded = docs, true
+		}
+		return true
+	}
+	var meta struct {
+		Title        string
+		Files        []string
+		Capabilities map[string]any
+		Owner        string
+	}
 	read := func() (string, map[string]string, bool) {
 		if err := r.ParseMultipartForm(64 << 20); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return "", nil, false
-		}
-		var meta struct {
-			Title string
-			Files []string
 		}
 		if err := json.Unmarshal([]byte(r.FormValue("meta")), &meta); err != nil || len(meta.Files) == 0 || meta.Files[0] != Page {
 			http.Error(w, "bad meta", http.StatusBadRequest)
@@ -94,12 +139,19 @@ func (f *fakeSite) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		id := strings.Repeat("a", 15) + string(rune('b'+len(f.shares)))
-		f.shares[id] = &fakeShare{token: "tok-" + id, version: 1, title: title, files: files}
+		sh := &fakeShare{token: "tok-" + id, version: 1, title: title, files: files}
+		if !keep(sh, meta.Capabilities, meta.Owner) {
+			return
+		}
+		f.shares[id] = sh
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(map[string]any{"id": id, "url": "https://usemagpie.ai/a/" + id, "token": "tok-" + id, "version": 1})
 	case http.MethodPut:
 		title, files, ok := read()
 		if !ok {
+			return
+		}
+		if !keep(sh, meta.Capabilities, meta.Owner) {
 			return
 		}
 		sh.version++
@@ -300,5 +352,258 @@ func TestShareRefusesWhatTheSiteCantHold(t *testing.T) {
 // sharedPage is a page as its shared copy carries it: with the runtime
 // that resolves every capability null.
 func sharedPage(page string) string {
-	return string(WithRuntime(Served([]byte(page)), SharedRuntime()))
+	return string(WithRuntime(Served([]byte(page)), SharedRuntime(nil)))
+}
+
+func (f *fakeSite) setDocs(id string, docs []SharedDoc) {
+	f.mu.Lock()
+	f.shares[id].docs = docs
+	f.mu.Unlock()
+}
+
+func (f *fakeSite) failData(status int) { f.mu.Lock(); f.dataFail = status; f.mu.Unlock() }
+
+// livePage is an artifact that declares what a live share serves, and
+// sample, which it doesn't; its store holds two documents.
+func livePage(t *testing.T) (*Artifact, *DB) {
+	t.Helper()
+	a, err := PublishPage(Publish{Page: []byte("<p>board"), Capabilities: Capabilities{
+		"db":     json.RawMessage(`{}`),
+		"user":   json.RawMessage(`{}`),
+		"room":   json.RawMessage(`{"topics":{"move":"interact"}}`),
+		"sample": json.RawMessage(`{}`),
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := OpenDB(a.ID, 0, Viewer{Agent: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for path, data := range map[string]map[string]any{"cards/c1": {"title": "one"}, "cards/c2": {"title": "two"}} {
+		if err := db.Set(path, data); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return a, db
+}
+
+// A page that keeps data and has a room is shared with what usemagpie.ai
+// serves it (db, room, user; never sample), its owner's id, and its
+// data; a page that declares none of those sends none of it.
+func TestShareCarriesWhatTheSiteServes(t *testing.T) {
+	sandbox(t)
+	site := newFakeSite(t)
+	a, _ := livePage(t)
+	if _, err := ShareLatest(context.Background(), a.ID); err != nil {
+		t.Fatal(err)
+	}
+	_, got := site.only(t)
+	if len(got.caps) != 3 || got.caps["db"] == nil || got.caps["user"] == nil || got.caps["sample"] != nil {
+		t.Fatalf("capabilities: %v", got.caps)
+	}
+	if topics := got.caps["room"].(map[string]any)["topics"].(map[string]any); topics["move"] != "interact" {
+		t.Fatalf("room's declaration: %v", got.caps["room"])
+	}
+	me, _ := viewerID()
+	if got.owner != me {
+		t.Fatalf("owner %q, want %q", got.owner, me)
+	}
+	if len(got.docs) != 2 || got.docs[0].Path != "cards/c1" || got.docs[0].Data["title"] != "one" || got.docs[1].Version != 1 || got.docs[1].Updated.IsZero() {
+		t.Fatalf("data: %+v", got.docs)
+	}
+
+	plain, _ := PublishPage(Publish{Page: []byte("<p>plain")})
+	sh, err := ShareLatest(context.Background(), plain.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	site.mu.Lock()
+	p := site.shares[sh.ID]
+	site.mu.Unlock()
+	if p.caps != nil || p.owner != "" || p.seeded {
+		t.Fatalf("a plain page sent %v %q %v", p.caps, p.owner, p.seeded)
+	}
+}
+
+// Unsharing takes what the viewers wrote back into the store first, in
+// place of what it held; a failed read keeps the page shared, and its
+// store as it was.
+func TestUnshareTakesTheDataBack(t *testing.T) {
+	sandbox(t)
+	site := newFakeSite(t)
+	a, db := livePage(t)
+	sh, err := ShareLatest(context.Background(), a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.UnixMilli(1_790_000_000_000)
+	site.setDocs(sh.ID, []SharedDoc{
+		{Path: "cards/c1", Data: map[string]any{"title": "one, edited"}, Version: 5, Updated: at},
+		{Path: "votes/u_1", Data: map[string]any{"up": true}, Version: 1, Updated: at},
+	})
+
+	site.failData(http.StatusInternalServerError)
+	if err := Unshare(context.Background(), a.ID); err == nil {
+		t.Fatal("unshared with its data unread")
+	}
+	if s, _ := Shared(a.ID); s == nil {
+		t.Fatal("not shared any more")
+	}
+	if n, _ := site.count(); n != 1 {
+		t.Fatal("the link went down")
+	}
+	if d, _ := db.Get("cards/c1"); d == nil || d.Data["title"] != "one" {
+		t.Fatalf("the store changed: %+v", d)
+	}
+
+	site.failData(0)
+	if err := Unshare(context.Background(), a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := site.count(); n != 0 {
+		t.Fatal("the link is still up")
+	}
+	d, _ := db.Get("cards/c1")
+	if d == nil || d.Data["title"] != "one, edited" || d.Version != 5 || !d.Updated.Equal(at) {
+		t.Fatalf("cards/c1: %+v", d)
+	}
+	if d, _ := db.Get("cards/c2"); d != nil {
+		t.Fatalf("a document the share deleted came back: %+v", d)
+	}
+	if d, _ := db.Get("votes/u_1"); d == nil {
+		t.Fatal("a viewer's vote was lost")
+	}
+	if n, _, _ := Stats(a.ID); n != 2 {
+		t.Fatalf("%d documents", n)
+	}
+}
+
+// What the share holds goes back even when the version shown last
+// declares no db (one before did); a share whose versions never
+// declared db leaves the store alone, and a site that says it never
+// held the data writes nothing over it.
+func TestUnshareTakesBackWhatTheShareHeld(t *testing.T) {
+	sandbox(t)
+	site := newFakeSite(t)
+	a, db := livePage(t)
+	sh, err := ShareLatest(context.Background(), a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := PublishPage(Publish{ID: a.ID, Page: []byte("<p>room only"), Capabilities: Capabilities{"room": json.RawMessage(`{}`)}}); err != nil {
+		t.Fatal(err)
+	}
+	if s, err := ShareLatest(context.Background(), a.ID); err != nil || !s.Data {
+		t.Fatalf("the share forgot it holds data: %+v %v", s, err)
+	}
+	site.setDocs(sh.ID, []SharedDoc{{Path: "cards/c1", Data: map[string]any{"title": "kept"}, Version: 3}})
+	if err := Unshare(context.Background(), a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if d, _ := db.Get("cards/c1"); d == nil || d.Data["title"] != "kept" {
+		t.Fatalf("cards/c1: %+v", d)
+	}
+
+	// shared with a room alone, then given db: the site seeds it, so the
+	// share holds it; but one whose site says it never held any is left
+	room, _ := PublishPage(Publish{Page: []byte("<p>room"), Capabilities: Capabilities{"room": json.RawMessage(`{}`)}})
+	rdb, err := OpenDB(room.ID, 0, Viewer{Agent: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rdb.Set("notes/n1", map[string]any{"t": "mine"}); err != nil {
+		t.Fatal(err)
+	}
+	rs, err := ShareLatest(context.Background(), room.ID)
+	if err != nil || rs.Data {
+		t.Fatalf("a room alone holds data: %+v %v", rs, err)
+	}
+	site.failData(http.StatusInternalServerError)
+	if err := Unshare(context.Background(), room.ID); err != nil {
+		t.Fatalf("a share with no data asked for it: %v", err)
+	}
+	site.failData(0)
+	if d, _ := rdb.Get("notes/n1"); d == nil || d.Data["t"] != "mine" {
+		t.Fatalf("notes/n1: %+v", d)
+	}
+}
+
+// Deleting a shared artifact takes its link down without reading its
+// data, which has nowhere to go.
+func TestDeleteDoesntTakeBack(t *testing.T) {
+	sandbox(t)
+	site := newFakeSite(t)
+	a, _ := livePage(t)
+	if _, err := ShareLatest(context.Background(), a.ID); err != nil {
+		t.Fatal(err)
+	}
+	site.failData(http.StatusInternalServerError)
+	if err := Delete(a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := site.count(); n != 0 {
+		t.Fatal("the link is still up")
+	}
+}
+
+// The owner link is the share's own link with a code; an artifact not
+// shared, or taken down there, has none.
+func TestOwnerLink(t *testing.T) {
+	sandbox(t)
+	site := newFakeSite(t)
+	a, _ := livePage(t)
+	if _, err := OwnerLink(context.Background(), a.ID); err == nil {
+		t.Fatal("an owner link for a page not shared")
+	}
+	sh, err := ShareLatest(context.Background(), a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, err := OwnerLink(context.Background(), a.ID)
+	if err != nil || u != sh.URL+"#owner=c0de" {
+		t.Fatalf("%q %v", u, err)
+	}
+	site.drop(sh.ID)
+	if _, err := OwnerLink(context.Background(), a.ID); !errors.Is(err, ErrSharedGone) {
+		t.Fatalf("taken down: %v", err)
+	}
+}
+
+// DumpDocs and RestoreDocs carry a store whole; a document the store
+// wouldn't take refuses all of them, and the store stays as it was.
+func TestRestoreDocsAllOrNone(t *testing.T) {
+	sandbox(t)
+	a, db := livePage(t)
+	docs, err := DumpDocs(a.ID)
+	if err != nil || len(docs) != 2 {
+		t.Fatalf("%+v %v", docs, err)
+	}
+	for _, bad := range [][]SharedDoc{
+		{{Path: "cards/x", Data: map[string]any{}}, {Path: "cards/x", Data: map[string]any{}}},
+		{{Path: "cards", Data: map[string]any{}}},
+		{{Path: "../x", Data: map[string]any{}}},
+		{{Path: "cards/x", Data: nil}},
+		{{Path: "cards/big", Data: map[string]any{"s": strings.Repeat("x", 257<<10)}}},
+	} {
+		if err := RestoreDocs(a.ID, append(append([]SharedDoc{}, docs...), bad...)); err == nil {
+			t.Fatalf("took %+v", bad)
+		}
+		if n, _, _ := Stats(a.ID); n != 2 {
+			t.Fatalf("after %+v: %d documents", bad, n)
+		}
+	}
+	docs[0].Data = map[string]any{"title": "back"}
+	if err := RestoreDocs(a.ID, docs); err != nil {
+		t.Fatal(err)
+	}
+	if d, _ := db.Get("cards/c1"); d.Data["title"] != "back" {
+		t.Fatalf("%+v", d)
+	}
+	if err := RestoreDocs(a.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	if n, b, _ := Stats(a.ID); n != 0 || b != 0 {
+		t.Fatalf("emptied: %d %d", n, b)
+	}
 }

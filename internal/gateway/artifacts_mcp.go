@@ -157,6 +157,7 @@ func artifactsMCPTools() []any {
 							"dictation gives the page the viewer's words as they speak: {\"dictation\": {}}, then `(await claude.use(\"dictation\")).start()` on their click, with onPartial, onFinal and onState. " +
 							"mcp calls the tools of MCP servers in the Library as the viewer, once they allow each server: {\"mcp\": {\"servers\": [{\"server\": \"github\", \"tools\": [\"list_issues\"]}]}}, then `(await claude.use(\"mcp\")).watchTool(server, tool, input, handler)` for data to show and callTool for an action. " +
 							"files reads the files of the folder you publish from, once the viewer allows it: {\"files\": {}}, then `(await claude.use(\"files\")).list({path, recursive})`, read(path) for {bytes, size, revision}, download(path) and asSampleTools(). " +
+							"room reaches whoever has the page open right now, its visitors on usemagpie.ai too: {\"room\": {}}, then `(await claude.use(\"room\"))` emit(topic, data), on(topic, fn), presence(patch), onPeers(fn) and join(name); nothing is kept, so state a late joiner needs goes in db, and {\"room\": {\"topics\": {\"move\": \"interact\"}}} lets signed-in visitors send on move. " +
 							"Any other capability resolves null on the page here, so a page lights it up only when it is there. Left out, an update keeps the version before's; {} clears them. " +
 							"Before writing a page that uses one, read its calls' shapes and answers with " + artifactGuideTool + ".",
 					},
@@ -172,7 +173,7 @@ func artifactsMCPTools() []any {
 		map[string]any{
 			"name":  artifactGuideTool,
 			"title": "Artifact capabilities guide",
-			"description": "How an artifact's page calls the capabilities publish_artifact declares (db, user, artifact, assets, sample, comments, downloads, tts, dictation, mcp, files, permissions): each call's shape, what it answers and its error codes, as Magpie's page runtime serves them. " +
+			"description": "How an artifact's page calls the capabilities publish_artifact declares (db, user, artifact, assets, sample, comments, downloads, tts, dictation, mcp, files, room, permissions): each call's shape, what it answers and its error codes, as Magpie's page runtime serves them. " +
 				"Read it before writing a page that uses one.",
 			"inputSchema": map[string]any{
 				"type": "object",
@@ -918,7 +919,7 @@ func (s *Server) artifactPage(w http.ResponseWriter, r *http.Request) {
 			h.Add("Vary", "Sec-Fetch-Dest")
 		}
 		if reader {
-			body = artifact.WithRuntime(body, artifact.SharedRuntime())
+			body = artifact.WithRuntime(body, artifact.SharedRuntime(nil)) // no link session there: every capability null
 		} else if artifactRuntimeFor(r) {
 			rt, err := artifact.PageRuntime(art, n, ArtifactPagePath+ref+"/"+strings.TrimSuffix(artifactAPIDir, "/"))
 			if err != nil {

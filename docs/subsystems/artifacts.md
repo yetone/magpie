@@ -93,7 +93,7 @@ An agent on this computer is told no base and answered as before.
 | Tool | Does |
 | --- | --- |
 | `publish_artifact` | Publishes a page from `file_path` (read on magpie's computer, relative to the agent's folder, `~` and `file://` read) or `html`, with `files` (a local path, `{text}`, `{base64}`, or null to remove one), `title`, `description`, `label` and `capabilities` ([Page runtime](#page-runtime)). With `id` it adds a version; with `version` it refuses a publish over a newer one. Answers the page's address. |
-| `artifact_guide` | How a page calls each capability (`db`, `user`, `artifact`, `assets`, `sample`, `comments`, `downloads`, `tts`, `dictation`, `mcp`, `files`, `permissions`): the calls' shapes, answers and error codes as the page runtime serves them, and what differs from claude.ai, for the ones `capabilities` names (a list or a declaration) or all of them ([guide.go](../../internal/artifact/guide.go), `Guide`). Publish's `capabilities` points to it, and a db rule that doesn't read names the levels. `TestGuideNamesWhatRuntimeServes` fails when `runtime.js` serves a namespace or a `user` call the guide lacks. |
+| `artifact_guide` | How a page calls each capability (`db`, `user`, `artifact`, `assets`, `sample`, `comments`, `downloads`, `tts`, `dictation`, `mcp`, `files`, `room`, `permissions`): the calls' shapes, answers and error codes as the page runtime serves them, and what differs from claude.ai, for the ones `capabilities` names (a list or a declaration) or all of them ([guide.go](../../internal/artifact/guide.go), `Guide`). Publish's `capabilities` points to it, and a db rule that doesn't read names the levels. `TestGuideNamesWhatRuntimeServes` fails when `runtime.js` serves a namespace (its `impls`) or a `user` call the guide lacks. The guide's opening says what a shared link serves its visitors (db, user and room, [Live sharing](#live-sharing)). |
 | `read_artifact` | What it is, its versions and files, its capabilities and how many documents its data holds, and the page as published, or one file with `path`, of the newest or a given version. |
 | `artifact_data` | The page's data, as its owner: `get`, `list`, `query`, `set`, `update`, `str_replace`, `delete`, `batch`, with the same paths, limits and errors as the page. A write is told to every open view of the page. |
 | `list_artifacts` | Newest first, with `query` over title and description and a `limit`. |
@@ -177,7 +177,7 @@ here as written: `window.claude.use(name)` is there before the page's own
 scripts, and resolves `db`, `user`, `artifact` (and `self`, its former
 name), `assets`, `sample`, `comments` ([Comments](#comments)), `downloads`, `tts` ([Reading
 aloud](#reading-aloud)), `dictation` ([Dictation](#dictation)), `mcp`
-([MCP](#mcp)), `files` ([Files](#files)) and the
+([MCP](#mcp)), `files` ([Files](#files)), `room` ([Room](#room)) and the
 built-in `permissions`
 ([internal/artifact/runtime.js](../../internal/artifact/runtime.js),
 [runtime.go](../../internal/artifact/runtime.go),
@@ -198,7 +198,7 @@ Declaring:
   keeps the declaration it was published with (`Version.Capabilities`).
 - Every name in the contract is accepted and kept; only `ServedCaps` (`db`,
   `user`, `artifact`, `self`, `assets`, `sample`, `comments`, `downloads`,
-  `tts`, `dictation`, `mcp`, `files`) are served, and the rest resolve null on the
+  `tts`, `dictation`, `mcp`, `files`, `room`) are served, and the rest resolve null on the
   page, as an unserved capability does on claude.ai. Declaring
   `permissions` is refused: it is built in. `db`'s `rules`, `user`'s
   `scopes`, `artifact`'s `{"publish": false}` and `assets`' `upload`
@@ -374,12 +374,20 @@ The store:
 - `rules` give each path a read and write level (`view` < `interact` <
   `admin` < `owner`, and `self`, held by nobody), with `{self}` the
   viewer's own id; `data/users/<id>/` is the viewer's alone, the owner
-  included. `acquire` takes a lease on a document.
+  included. `acquire` takes a lease on a document, from 1 second to 10
+  minutes (30 seconds unless asked). The lease only answers the next
+  `acquire`: a `set`, `update` or `delete` from anyone with write access
+  still goes, as a page's own lock would.
+- A query reads its whole collection and filters and orders it in Go,
+  which the 25,000-document store bounds; there are no indexes. Values
+  order by kind (null, booleans, numbers, strings, arrays, objects), and
+  two objects by their JSON with sorted keys.
 - A shared copy on usemagpie.ai runs `SharedRuntime`: `window.claude` is
-  there and every capability resolves null, so the page shows what it
-  shows without them. Its data is never shared, and neither are its
-  assets: `/_blob/<id>` isn't served there, so an `<img>` of one shows
-  nothing on a shared copy (#7649).
+  there, `db`, `room` and `user` are served there by the site ([Live
+  sharing](#live-sharing)), and every other capability resolves null, so
+  the page shows what it shows without them. Its assets aren't shared:
+  `/_blob/<id>` isn't served there, so an `<img>` of one shows nothing on
+  a shared copy (#7649).
 
 ## Comments
 
@@ -650,6 +658,42 @@ served only in the shell.
   next part starts; a file with a NUL in its first 8000 bytes is named as
   not text).
 
+### Room
+
+`room` reaches whoever has the page open now
+([internal/gateway/artifacts_room.go](../../internal/gateway/artifacts_room.go),
+the room section of runtime.js). Here every tab is the owner's; on a
+shared copy the site serves it to its visitors too ([Live
+sharing](#live-sharing)), on the same wire.
+
+- One WebSocket a page, `GET <page>/_api/live?t=<token>`, from this
+  computer, for a version that declares room (`artifactAPIOpen`). The
+  page sends `{t: join|leave|emit|presence, room, ref, topic, data,
+  patch}`; it hears `hi {sid}`, `joined {ref, room, peers}`, `peer`,
+  `gone`, `msg {room, topic, data, from}` and `error {ref?, code,
+  message}`. Room `""` is the lobby, which `use("room")` joins; a name
+  is `^[a-z0-9][a-z0-9_.-]{0,47}$`, at most 16 a socket.
+- A peer is `{peer, by, kind, presence, sameTab, isMe, guest}`; `by` is
+  the viewer's id when the page declares user, else null. Here `isMe` is
+  true for every tab (all are the owner's) and `sameTab` marks the
+  page's own socket.
+- Limits, the page's and the hub's alike: `data` and the merged
+  presence 4096 bytes and 8 deep, a message 64 KiB, 40 a second with a
+  burst of 80 (a page past it drops the message and reports
+  `rate_limited` once), 200 peers a room, 256 messages queued a socket
+  (a socket that falls further behind is dropped).
+- `emit` is heard by everyone in the room, the sender too (as
+  `sameTab`). A topic's level is the declaration's (`{room: {topics:
+  {move: "interact"}}}`, else admin), checked on the page; here every
+  tab is the owner, so the hub checks none.
+- Presence merges the patch, a null deleting its key, and is sent whole
+  about every 33ms; a newcomer gets every peer's in `joined`.
+- The socket is dialled again with a backoff (1s to 30s) and every room
+  joined again; `onConnection` says when it drops. The artifact deleted
+  closes it with 4001, which ends the room for good (`revoked`).
+- Nothing is kept: a page that needs state for a late joiner keeps it
+  in `db`.
+
 ## Added by the user, and Claude Code's own tool
 
 [internal/library/artifacts.go](../../internal/library/artifacts.go):
@@ -773,17 +817,64 @@ magpie:
 - The site is `MAGPIE_SHARE_SITE`, else usemagpie.ai; in a test with no
   `MAGPIE_SHARE_SITE` sharing is off, so a test never reaches the network.
 
+### Live sharing
+
+A shared page that declares `db`, `room` or `user` is served them on
+usemagpie.ai, so its visitors use it together
+([site/live.js](../../site/live.js),
+[internal/artifact/share_data.go](../../internal/artifact/share_data.go)).
+
+- `shareBody` sends the declaration of those three in meta's
+  `capabilities`, and the owner's id (`viewerID`) as `owner`, so the
+  owner's `data/users/<id>/` stay theirs there. A version that declares
+  `db` sends the store whole as a `data` part (`DumpDocs`); the site
+  takes it once, from the first version that declares `db` (the share's
+  object is then `held`), and keeps its own after that, which visitors
+  have been writing, through versions that drop `db` too. The share
+  remembers that it held data (`Share.Data`).
+- While shared, the data lives on the site: visitors read and write it
+  there, under the page's rules. Visitors sign in on the link's page
+  (level `interact`, `guest: true`); one not signed in views (`view`).
+  The wrapper hands the frame a session (`hello`, then the token and
+  the viewer), and the frame's store calls and room go to
+  `/api/shares/<id>/rt/…`. The wrapper opens the frame with a random
+  key in its hash (`#magpie-share=`), which the runtime takes off the
+  address before the page runs and says in `hello`, with a
+  MessagePort it made. The wrapper sends only on that port, so only
+  that document hears it, even after a link in the frame loads another
+  page there; a document that says another key gets nothing, and the
+  frame is opened again at a new key. A new token comes ten minutes
+  before the old one ends, on a new socket.
+- Bounds: a share's object takes 1,000 sockets, 20 of one signed-in
+  viewer; joins, leaves, emits and presence share a page's 40 a second;
+  a message is 64 KiB of UTF-8. Sign-ins and shares are counted apart,
+  30 an hour from one address each. Taking a share down ends its
+  object's data and the owners' keys and codes.
+- `Unshare` takes the data back first, when a version declared `db`:
+  `GET /api/shares/<id>/data` (the share's token, `{held, docs}`) and
+  `RestoreDocs`, which replaces the store whole,
+  each document at its version and time, all or none. A read that fails,
+  or data the store won't take, keeps the page shared and says why, so
+  nothing the visitors wrote is lost. A 404 is a link taken down: there
+  is nothing to take, and so is `held: false`. `Delete` doesn't take it
+  back.
+- The owner opens the shared page as its owner from Work › Artifacts'
+  "Open shared page" or `magpie artifacts open-shared` (`OwnerLink`):
+  `POST /api/shares/<id>/owner` gives a one-time code in the link's
+  hash, which the link's page trades for an owner key its browser
+  keeps.
+
 ## Verification
 
 ```sh
 go test -tags nogui ./internal/artifact
-go test -tags nogui ./internal/gateway -run 'TestArtifact|TestAssets|TestSample|TestSendAgentOf|TestHubTellsArtifacts'   # TestArtifactPage* hold the page runtime's API, TestArtifactComment* comments
+go test -tags nogui ./internal/gateway -run 'TestArtifact|TestAssets|TestSample|TestSendAgentOf|TestHubTellsArtifacts'   # TestArtifactPage* hold the page runtime's API, TestArtifactComment* comments, TestArtifactLive* the room
 go test -tags nogui ./internal/library -run 'TestArtifacts|TestHubTellsMagpieArtifacts'
 go test -tags nogui ./internal/gui -run 'TestArtifactsAPI|TestArtifactsShareAPI|TestBuiltin'
 go test -tags nogui ./internal/cli -run 'TestArtifacts|TestEveryRouteHasACommandOrIsNamed'
 node --test internal/gui/tests/artifacts-page.test.cjs
 node --test internal/gui/tests/artifact-runtime.test.cjs
 node --test internal/gui/tests/artifact-comments.test.cjs internal/gui/tests/artifact-downloads.test.cjs internal/gui/tests/artifact-tts.test.cjs internal/gui/tests/artifact-dictation.test.cjs internal/gui/tests/artifact-mcp.test.cjs
-node --test site/shares.test.mjs
+node --test site/shares.test.mjs site/live.test.mjs
 node --test internal/gui/tests/nav-pages-order.test.cjs internal/gui/tests/builtins.test.cjs
 ```
