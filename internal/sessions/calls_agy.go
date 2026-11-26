@@ -75,7 +75,11 @@ func AgyDir() string {
 // plain agy's were).
 func t3AgyDirs() []string {
 	home, _ := os.UserHomeDir()
-	base := appdir.T3Code(home)
+	return t3AgyDirsIn(appdir.T3Code(home))
+}
+
+// t3AgyDirsIn are the agy profiles in the T3 Code folder base.
+func t3AgyDirsIn(base string) []string {
 	var out []string
 	for _, state := range []string{"userdata", "dev"} {
 		root := filepath.Join(base, state, "providers", "antigravity")

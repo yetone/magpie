@@ -130,6 +130,29 @@ func wslScan(h WSLHome) []file {
 	return out
 }
 
+// wslT3Agy are the transcripts of agy run by T3 Code in a distro, in each
+// profile under the distro's ~/.t3 (t3AgyDirs): T3 Code run in WSL keeps
+// them there, and agy's requests go to Google, not through magpie
+// (tovelo on Discord: Antigravity in T3 Code in WSL Ubuntu wasn't on
+// Usage, a plain agy there was). They are call sources alone, as this
+// computer's are: a conversation of T3 Code's isn't resumed with agy.
+// T3CODE_HOME set in the distro can't be read from Windows.
+func wslT3Agy(h WSLHome) []file {
+	base := filepath.Join(h.Home, ".t3")
+	if h.Open != nil {
+		base = h.Open(base)
+	}
+	own := t3AgyDirs()
+	var out []file
+	for _, d := range t3AgyDirsIn(base) {
+		if slices.ContainsFunc(own, func(o string) bool { return sameDir(d, o) }) {
+			continue // a link to this computer's own, read as this computer's
+		}
+		out = append(out, agyTranscripts(d)...)
+	}
+	return out
+}
+
 // wslEntry is a file of a distro's listing, as kept on disk.
 type wslEntry struct {
 	Agent string    `json:"agent"`
@@ -149,6 +172,8 @@ type wslEntry struct {
 	// conversation's database taken in (agyCallStat); nil for a file that
 	// isn't one (a conversation listed from its row alone)
 	Calls *wslStat `json:"calls,omitempty"`
+	// CallsOnly: a call source that isn't listed as a session (wslT3Agy)
+	CallsOnly bool `json:"callsOnly,omitempty"`
 }
 
 // wslStat is a file's size and time.
@@ -276,7 +301,7 @@ func wslFilesAs(calls bool, agents ...string) []file {
 		cold := !l.Running || !up[n]
 		in := &fileMore{wsl: n} // the distro's files share it
 		for _, e := range l.Files {
-			if !want[e.Agent] {
+			if !want[e.Agent] || e.CallsOnly && !calls {
 				continue
 			}
 			f := file{agent: e.Agent, key: e.Key, path: e.Path, main: e.Main, size: e.Size, mod: modOf(e.Mod), more: in, cold: cold, readOnly: e.ReadOnly}
@@ -322,6 +347,11 @@ func wslList(gen uint64, done chan struct{}) {
 		l := &wslListing{Home: h.Home, Running: true, Files: []wslEntry{}}
 		for _, f := range wslScan(h) {
 			l.Files = append(l.Files, wslEntryOf(f))
+		}
+		for _, f := range wslT3Agy(h) {
+			e := wslEntryOf(f)
+			e.CallsOnly = true
+			l.Files = append(l.Files, e)
 		}
 		lists[h.Distro] = l
 	}
@@ -403,6 +433,9 @@ func wslDirs() []string {
 	seen := map[string]bool{}
 	for _, l := range wslSess.lists {
 		for _, e := range l.Files {
+			if e.CallsOnly {
+				continue // T3 Code's agy, not a sessions folder here either
+			}
 			for _, a := range wslAgents {
 				if d := filepath.Join(l.Home, a.dir); a.agent == e.Agent && !seen[d] {
 					seen[d] = true

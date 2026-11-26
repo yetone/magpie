@@ -1089,7 +1089,9 @@ no tokens and no conversation to open (`readable`). Resume is `agy --conversatio
 picks it up from any folder; when agy is set to use magpie it is the
 agent's launch command (the gateway's variables and `--model`) with
 `--conversation` after it (`sessions.AgyStart`, set by package agent).
-Subagents (`parent_conversation_id`) and agy in WSL are not read.
+Subagents (`parent_conversation_id`) are not read. On Windows, agy's
+conversations in a WSL distro's `~/.gemini/antigravity-cli` are read with
+the distro's other sessions (`wslScan`, `TestWSLAntigravityApp`).
 agy's calls are also read from the profile T3 Code gives each of its
 Antigravity instances (`t3AgyDirs`): T3 Code runs `agy acp --gemini-dir
 <profile> --app-data-dir antigravity-acp` on the instance's own Google
@@ -1098,7 +1100,11 @@ sign-in, the profile under `<T3 Code's folder>/userdata/providers/antigravity/`
 `appdir.T3Code`), and those requests go to Google, not through the gateway
 (zzzkl on X; `TestAgyCallsInT3Code`, on what agy 1.5.10 wrote run that way).
 `Found` lists agy for those folders too. The Sessions page doesn't list
-them: `agy --conversation` would look in agy's own folder.
+them: `agy --conversation` would look in agy's own folder. T3 Code run in
+a WSL distro keeps its profiles under the distro's `~/.t3`, read with the
+distro's listing as call sources alone (`wslT3Agy`, entries marked
+`callsOnly`; tovelo on Discord, `TestWSLAgyCallsInT3Code`); a
+`$T3CODE_HOME` set in the distro can't be read from Windows.
 Verification: `TestAgySessions`, `TestAgyTitleLater`, `TestAgyGrows`,
 `TestAgyTranscript`, `TestAgyFolder`, `TestAgyRowOnly`, on conversations agy 1.3.5 and 1.4.7
 wrote in a sandbox.
