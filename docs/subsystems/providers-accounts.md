@@ -237,6 +237,27 @@ and a `prompt_feedback.block_reason` with no answers is a 400 saying why
 (`DecideResult`). Before, `google/gemini-decision-1` fell to OpenRouter's
 decision list. `TestGoogleDecideWire`, `TestGoogleKeyDecides`,
 `TestGoogleSystemOne`, `TestGoogleDecisionsTakesImages`.
+A routing rule's classifier set to an OpenAI API key's `gpt-6-luna`
+(`api.openai.com`; not Azure, a relay listing the id, a ChatGPT sign-in, a
+plugin, another magpie or a provider with a decision API of its own) is
+asked at OpenAI's Decisions API, `POST /v1/decisions` (`OpenAIDecider`,
+`ViaOpenAI`; zyh6036 on X), where before it was asked through chat. Only
+the classifier changes: the provider gets no `Decide`, so `gpt-6-luna`
+stays a chat model in agents, groups and the catalog, `/v1/decisions` goes
+straight to OpenAI as before, and `/v1/systemone` still reaches it through
+`systemOneByDecisions`. `askClassifierIn` sends it to `askDecider`, and
+`decideKeys` turns each of the key's candidates into a decider at the
+key's own base; the key goes as a Bearer token. Jev's System One request
+goes as `SystemOneAsDecisions` makes it (noul as `predicate`, choice and
+score with `choices` and `levels`, the state as an `input_json` part of a
+user message) and the answer comes back as `DecisionAsSystemOne` reads it
+(`DecideAsk`, `DecideAnswer`), both moved from the gateway to
+`decisions_wire.go`. A question OpenAI declines (`{"type":"refusal"}`) is
+no answer (`readJev`): never "none of these" or the lowest effort. Its
+usage is the routing classifier's own, priced at gpt-6-luna's catalog rate
+with cached tokens counted as input. `TestOpenAIDecider`,
+`TestOpenAIDecisionsWire`, `TestOpenAIDecisionsClassify`,
+`TestOpenAIDecisionsRefusal`, `TestOpenAIDecisionsOnlyLuna`.
 Refresh replaces the list: removed decisions stop routing, and an empty
 remote list never gains a fabricated Jev alias.
 An older peer without the decision-list extension continues serving its

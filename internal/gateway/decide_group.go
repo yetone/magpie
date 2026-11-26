@@ -156,6 +156,13 @@ func (s *Server) serveDecisionGroup(w http.ResponseWriter, r *http.Request, body
 func (s *Server) decideKeys(p provider.Provider, model string) ([]candidate, planned) {
 	p.Fallback = nil
 	cs, pl := s.plan(p, model, provider.Chat)
+	// an OpenAI key's gpt-6-luna is asked at OpenAI's Decisions API
+	// (askClassifierIn): each of its keys there
+	for i := range cs {
+		if d, ok := cs[i].p.OpenAIDecider(cs[i].model); ok {
+			cs[i].p = d
+		}
+	}
 	// a key on another of its preset's plans is asked at that plan's
 	// endpoints, where there may be no System One (Volcengine's Coding
 	// Plan beside its pay as you go): never there

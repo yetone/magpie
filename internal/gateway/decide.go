@@ -253,6 +253,7 @@ func readJev(b []byte, intents []string, levels bool, prev before) (verdict, err
 	var out struct {
 		Model   string `json:"model"`
 		Answers map[string]struct {
+			Type          string         `json:"type"`
 			Choice        string         `json:"choice"`
 			Score         float64        `json:"score"`
 			Confidence    float64        `json:"confidence"`
@@ -265,6 +266,14 @@ func readJev(b []byte, intents []string, levels bool, prev before) (verdict, err
 	}
 	if err := decodeJSON(b, &out); err != nil {
 		return verdict{}, answerError{fmt.Errorf("not a System One answer")}
+	}
+	// a question the model declined (OpenAI's Decisions API answers it
+	// {"type":"refusal"}) is no answer: never "none of these" or the
+	// lowest effort, which its empty choice and zero score would read as
+	for k, a := range out.Answers {
+		if a.Type == "refusal" {
+			delete(out.Answers, k)
+		}
 	}
 	var v verdict
 	if a, ok := out.Answers["intent"]; ok && len(intents) > 0 && !levels {

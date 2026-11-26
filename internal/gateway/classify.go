@@ -641,6 +641,13 @@ func (s *Server) askClassifierIn(wait time.Duration, who access.Identity, model 
 	if p, m, ok := provider.Resolve(model); ok && p.DecidesModel(m) {
 		return s.askDecider(wait, who, p, m, intents, prev, effort, text)
 	}
+	// an OpenAI key's gpt-6-luna: asked at OpenAI's Decisions API, as Jev
+	// is at System One (zyh6036 on X), not through chat
+	if p, m, ok := provider.Resolve(model); ok {
+		if _, ok := p.OpenAIDecider(m); ok {
+			return s.askDecider(wait, who, p, m, intents, prev, effort, text)
+		}
+	}
 	// a group of decision models: each in turn (decide_group.go)
 	if v, ok, err := s.askDecisionGroup(wait, who, model, intents, prev, effort, text); ok {
 		return v, err

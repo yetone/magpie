@@ -12,7 +12,9 @@ import (
 // a header and ask a noul as a boolean; Workers AI takes the state and
 // questions as the input of a run of the model, and a Clef there takes
 // the request as it is, its model named as Clef names itself; Google's
-// Decisions API takes it as googleAsk makes it.
+// Decisions API takes it as googleAsk makes it, and OpenAI's as
+// SystemOneAsDecisions does (one it can't translate goes as it is, for
+// OpenAI to refuse with a 400 naming what it has no place for).
 func DecideAsk(via, model string, body []byte) []byte {
 	var q map[string]any
 	if via == ViaSystemOne || via == ViaVercel || json.Unmarshal(body, &q) != nil {
@@ -20,6 +22,14 @@ func DecideAsk(via, model string, body []byte) []byte {
 	}
 	if via == ViaGoogle {
 		return googleAsk(q, body)
+	}
+	if via == ViaOpenAI {
+		req, _, err := SystemOneAsDecisions(body)
+		if err != nil {
+			return body
+		}
+		b, _ := json.Marshal(req)
+		return b
 	}
 	delete(q, "model")
 	switch via {
@@ -44,13 +54,19 @@ func DecideAsk(via, model string, body []byte) []byte {
 	return body
 }
 
-// DecideAnswer is a gateway's answer as System One gives it: out of
+// DecideAnswer is a gateway's answer as System One gives it: OpenAI's
+// Decisions answer as DecisionAsSystemOne reads it; out of
 // Cloudflare's envelope, or, from Vercel's evaluation models (its TypeSafe
 // API answers as System One does), a boolean's probability as a
 // noul, a confidence from the probabilities where there is none, and its
 // usage named as System One names it.
 func DecideAnswer(via string, b []byte) []byte {
 	switch via {
+	case ViaOpenAI:
+		// a list of typed answers, each named as its question was
+		if out, err := DecisionAsSystemOne(b, nil); err == nil {
+			return out
+		}
 	case ViaCloudflare:
 		var env struct {
 			Result json.RawMessage `json:"result"`

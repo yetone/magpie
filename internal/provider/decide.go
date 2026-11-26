@@ -122,6 +122,45 @@ func (p Provider) googleDecisions() string {
 	return ""
 }
 
+// OpenAIDecision is the model OpenAI's Decisions API answers (POST
+// /v1/decisions, "Only `gpt-6-luna` is supported", openai-openapi's
+// DecisionRequest): predicate, choice and score questions over an input,
+// as System One asks noul, choice and score ones. gpt-6-luna holds
+// conversations too, on chat completions and Responses.
+const OpenAIDecision = "gpt-6-luna"
+
+// openaiDecides reports whether base is OpenAI's own API host,
+// api.openai.com, where an API key is answered at /v1/decisions.
+func openaiDecides(base string) bool {
+	return HostOf(base) == "api.openai.com"
+}
+
+// OpenAIDecider is p as the decision provider a routing rule's
+// classifier set to model asks, when p is an OpenAI API key's provider
+// and model is gpt-6-luna: p with OpenAI's API as its decision base,
+// asked at /v1/decisions (ViaOpenAI) rather than through chat (zyh6036
+// on X). false for any other model or provider: a signed-in account
+// (ChatGPT's backend has no Decisions route), a plugin, a remote magpie,
+// Azure, a relay that lists gpt-6-luna, and a provider with another
+// decision API of its own keep how they were asked; one whose decision
+// base the user set to api.openai.com (#4316) is p as it is. p itself is
+// unchanged, so gpt-6-luna stays a conversation model everywhere else,
+// and in groups.
+func (p Provider) OpenAIDecider(model string) (Provider, bool) {
+	if model != OpenAIDecision || p.Account != nil || p.IsPlugin() || p.IsRemoteMagpie() || p.IsAzure() || p.IsVertex() {
+		return Provider{}, false
+	}
+	if p.Decides() {
+		return p, p.DecideVia() == ViaOpenAI
+	}
+	base := strings.TrimRight(p.Base(Chat), "/")
+	if !openaiDecides(base) {
+		return Provider{}, false
+	}
+	p.Decide = base
+	return p, true
+}
+
 // vendorDecision is the decision model of the vendor whose System One
 // API base is, Bailian's, Ark's or Google's, which its model list never
 // names (Google's: its chat list is the chat models').
@@ -398,13 +437,16 @@ var cloudflareDecideModels = []catalog.Model{
 // and probabilities for a confidence); or Workers AI (System One's
 // questions and answers, in Cloudflare's envelope and at an account's
 // address); or Google's Decisions API (System One's questions over an
-// input, at the Gemini API's /decisions, its key as x-goog-api-key).
+// input, at the Gemini API's /decisions, its key as x-goog-api-key); or
+// OpenAI's (System One's questions as predicate, choice and score ones in
+// a list, at api.openai.com's /v1/decisions, SystemOneAsDecisions).
 const (
 	ViaSystemOne  = "systemone"
 	ViaVercel     = "vercel"
 	ViaVercelEval = "vercel-eval"
 	ViaCloudflare = "cloudflare"
 	ViaGoogle     = "google"
+	ViaOpenAI     = "openai"
 )
 
 // DecideVia is the way p's decision API is asked, known by its host or by
@@ -418,6 +460,8 @@ func (p Provider) DecideVia() string {
 	switch h := HostOf(base); {
 	case googleDecides(base):
 		return ViaGoogle
+	case openaiDecides(base):
+		return ViaOpenAI
 	case strings.HasSuffix(base, "/v4/ai"):
 		return ViaVercelEval
 	case h == "ai-gateway.vercel.sh" || strings.HasSuffix(base, "/typesafe") || strings.Contains(base, "/typesafe/v1"):
@@ -637,6 +681,13 @@ func (p Provider) DecideURL(ctx context.Context) (string, error) {
 		return api + "/accounts/" + acct + "/ai/run", nil
 	case ViaGoogle:
 		return strings.TrimSuffix(strings.TrimRight(p.Decide, "/"), "/decisions") + "/decisions", nil
+	case ViaOpenAI:
+		// OpenAI's API is under /v1; a base given as the bare host is too
+		base := strings.TrimSuffix(strings.TrimRight(p.Decide, "/"), "/decisions")
+		if u, err := url.Parse(base); err == nil && strings.Trim(u.Path, "/") == "" {
+			base = strings.TrimRight(base, "/") + "/v1"
+		}
+		return base + "/decisions", nil
 	}
 	return p.Decide + "/systemone", nil
 }
