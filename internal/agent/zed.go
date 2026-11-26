@@ -263,6 +263,11 @@ func zedReach(path string) string {
 			return u
 		}
 	}
+	// behind billion-context's prefix to the gateway where it was before
+	// its port moved: through the prefix to where it is now (#7846)
+	if p := biliToMagpie(u); p != "" {
+		return p + gatewayV1()
+	}
 	return gatewayV1()
 }
 

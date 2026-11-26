@@ -291,6 +291,11 @@ func hermesPrefix(at place, path string) string {
 		if ok && p != "" && loopbackWithPath(strings.TrimSuffix(p, "/")) {
 			return p
 		}
+		// billion-context's prefix to the gateway where it was before its
+		// port moved: kept in front of where it is now (#7846)
+		if p := biliToMagpie(v); p != "" {
+			return p
+		}
 	}
 	return ""
 }

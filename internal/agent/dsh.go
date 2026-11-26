@@ -1176,6 +1176,11 @@ func dshReach(dir, gw string) string {
 			if p, ok := strings.CutSuffix(base, gw); ok && p != "" && loopbackWithPath(strings.TrimSuffix(p, "/")) {
 				return p + gw
 			}
+			// billion-context's prefix to the gateway where it was before
+			// its port moved: kept in front of where it is now (#7846)
+			if p := biliToMagpie(base); p != "" {
+				return p + gw
+			}
 		}
 	}
 	return gw

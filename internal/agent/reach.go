@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/gateway"
+	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/wslrun"
 )
@@ -184,6 +185,38 @@ func chainsToGateway(v, want string) bool {
 	return up.Scheme == w.Scheme && up.Port() == w.Port() && up.Port() != "" &&
 		strings.TrimSuffix(up.Path, "/") == strings.TrimSuffix(w.Path, "/") &&
 		up.User == nil && up.RawQuery == ""
+}
+
+// biliLaneRE is billion-context's lane in front of an address, as bili
+// writes it (isBiliClaudeBaseUrl in its dist): its proxy on this
+// machine's loopback, /bili/, a protocol bili names (anthropic/) or none,
+// then the http(s) address it forwards to.
+var biliLaneRE = lazyre.New(`^(https?://(?:127\.0\.0\.1|localhost|\[::1\]):\d{1,5}/bili/(?:[a-z][a-z0-9-]*/)?)(https?://\S+)$`)
+
+// biliLane splits v, an address behind billion-context's lane
+// (http://127.0.0.1:18787/bili/https://api.anthropic.com), into the lane
+// (http://127.0.0.1:18787/bili/) and the address bili forwards to. bili
+// reads its upstream from the path alone, so the gateway's address in
+// that place is bili forwarding to magpie. A lane in front of another
+// lane is split at the first, so writing the gateway after it leaves one.
+func biliLane(v string) (prefix, upstream string, ok bool) {
+	m := biliLaneRE.FindStringSubmatch(strings.TrimSpace(v))
+	if m == nil {
+		return "", "", false
+	}
+	return m[1], m[2], true
+}
+
+// biliToMagpie is the lane (biliLane) in front of v when what bili
+// forwards to is on this machine: magpie's own provider in an agent's
+// config behind bili's lane, at the gateway's address before its port
+// moved (Rewire). "" for any other v.
+func biliToMagpie(v string) string {
+	p, up, ok := biliLane(v)
+	if !ok || onAnotherMachine(up) {
+		return ""
+	}
+	return p
 }
 
 // magpieAsked is magpieAt waited for, for a write: base, not asked yet, is

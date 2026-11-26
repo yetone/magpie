@@ -777,8 +777,18 @@ func claudeIn(at place) *Agent {
 	// answered (#1985, claudeProxied), which a pick keeps (gwAt)
 	routed := func() bool { return claudeRouted(at, path) }
 	gwAt := func() string {
-		if u := env("ANTHROPIC_BASE_URL"); claudeProxied(at, path, u) {
+		u := env("ANTHROPIC_BASE_URL")
+		if claudeProxied(at, path, u) {
 			return u
+		}
+		// behind billion-context's lane (its plugin's …/bili/<upstream>):
+		// the gateway takes the upstream's place, so Claude Code goes
+		// through bili to magpie whether bili or magpie came first, and
+		// after the gateway's port moved (XueYukii on X, #7846). What it
+		// forwarded to before is stashed with the user's endpoint and
+		// comes back behind the lane on Disconnect.
+		if p, _, ok := biliLane(u); ok {
+			return p + at.gw()
 		}
 		return at.gw()
 	}
