@@ -279,6 +279,8 @@ footer a:hover { color: var(--ink); }
 .col li { display: flex; align-items: center; gap: 9px; font-size: 14.5px; }
 .col li img { width: 18px; height: 18px; }
 .col li span { color: var(--ink3); font-size: 13px; margin-left: auto; }
+/* a plan named in words is the row's name, not a tag at its end */
+.col li span.name { color: inherit; font-size: inherit; margin-left: 0; }
 .hub { background: var(--card); color: var(--ink); border: 1px solid color-mix(in srgb, var(--ink) 22%, var(--line)); border-radius: 18px; padding: 24px 22px; text-align: center; box-shadow: var(--shadow); }
 .hub img, .hub .mb { width: 44px; height: 44px; }
 .hub b { display: block; font-size: 18px; margin: 8px 0 4px; letter-spacing: -.01em; }
@@ -618,8 +620,8 @@ footer a:hover { color: var(--ink); }
           <li><img src="/icons/deepseek-color.svg" alt="">DeepSeek</li>
           <li><img class="bird" src="/icons/kimi.svg" alt="">Kimi</li>
           <li><img src="/icons/zhipu-color.svg" alt="">GLM</li>
-          <li><img src="/icons/claude-color.svg" alt=""><span data-i18n="how.claude">Your Claude plan</span></li>
-          <li><img class="bird" src="/icons/openai.svg" alt=""><span data-i18n="how.chatgpt">Your ChatGPT plan</span></li>
+          <li><img src="/icons/claude-color.svg" alt=""><span class="name" data-i18n="how.claude">Your Claude plan</span></li>
+          <li><img class="bird" src="/icons/openai.svg" alt=""><span class="name" data-i18n="how.chatgpt">Your ChatGPT plan</span></li>
         </ul>
       </div>
     </div>
