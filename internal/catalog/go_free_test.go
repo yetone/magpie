@@ -95,3 +95,34 @@ func TestFetchOpenCodeGoDecisions(t *testing.T) {
 		t.Error("a chat model was marked as a decision model")
 	}
 }
+
+// Zen's list marks its decision models the same way, as it sent them on
+// 11-26: the three Jevs, Gemini Decision 1 and GPT-6 Luna Decision, which
+// it left out before since none answers with text.
+func TestFetchOpenCodeZenDecisions(t *testing.T) {
+	list, err := os.ReadFile("testdata/opencode-zen-models-2026-11-26.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		rw.Write(list)
+	}))
+	defer srv.Close()
+	ms, _, err := FetchAt(context.Background(), srv.URL+"/zen/v1", "", false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decides []string
+	for _, m := range ms {
+		if m.Decides {
+			decides = append(decides, m.ID)
+		}
+	}
+	slices.Sort(decides)
+	if want := []string{"gemini-decision-1", "gpt-6-luna-decision", "jev-1.13", "jev-1.13-free", "jev-1.14"}; !slices.Equal(decides, want) {
+		t.Errorf("decision models %v, want %v", decides, want)
+	}
+	if !slices.ContainsFunc(ms, func(m Model) bool { return m.ID == "deepseek-v4.1-flash" && !m.Decides }) {
+		t.Error("a chat model is missing or marked as a decision model")
+	}
+}

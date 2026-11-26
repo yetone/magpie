@@ -119,6 +119,8 @@ func TestOpenCodeGoDecisions(t *testing.T) {
 	if p.Jev() != "jev-1.14" {
 		t.Errorf("default decision model %q", p.Jev())
 	}
+	// where Go's System One answers (a key that isn't Go's gets 401 there,
+	// and 404 one path off, on 11-26)
 	if u, err := p.DecideURL(t.Context()); err != nil || u != decide+"/systemone" {
 		t.Errorf("asked at %q, %v", u, err)
 	}
@@ -190,5 +192,48 @@ func TestPresetAndSubscriptionModelAPI(t *testing.T) {
 	settings.Save(s)
 	if _, ok := one.ModelAPI("gpt-9"); ok {
 		t.Fatal("a single-API subscription took a pick")
+	}
+}
+
+// Zen's list marks its decision models as Go's does (type "decision"), so
+// Gemini Decision 1 and GPT-6 Luna Decision, which Zen's System One serves
+// (it asked for a key, and turned an unknown model away, on 11-26), route
+// groups beside its Jevs, and none of them is offered to agents.
+func TestOpenCodeZenListedDecisions(t *testing.T) {
+	detectHome(t)
+	p, err := FromPreset("opencode-zen")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Save(p); err != nil {
+		t.Fatal(err)
+	}
+	live := []catalog.Model{{ID: "deepseek-v4.1-flash"}, {ID: "jev-1.13", Decides: true}, {ID: "jev-1.13-free", Decides: true},
+		{ID: "gemini-decision-1", Decides: true}, {ID: "gpt-6-luna-decision", Decides: true}, {ID: "jev-1.14", Decides: true}}
+	if err := catalog.SaveLive(p.ID, p.Chat, live); err != nil {
+		t.Fatal(err)
+	}
+	found, err := Find(p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p = *found
+	for _, e := range providerEntries() {
+		if e.Provider.ID == p.ID && e.Model != "deepseek-v4.1-flash" {
+			t.Errorf("%s/%s was offered to agents", p.ID, e.Model)
+		}
+	}
+	var offered []string
+	for _, e := range OfferedDeciders(nil) {
+		if e.Provider.ID == p.ID {
+			offered = append(offered, e.Model)
+		}
+	}
+	slices.Sort(offered)
+	if want := []string{"gemini-decision-1", "gpt-6-luna-decision", "jev-1.13", "jev-1.13-free", "jev-1.14"}; !slices.Equal(offered, want) {
+		t.Errorf("offered decisions %v, want %v", offered, want)
+	}
+	if j := p.Jev(); j != "jev-1.13-free" {
+		t.Errorf("keyless Jev %q", j)
 	}
 }
