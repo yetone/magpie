@@ -283,6 +283,24 @@ func LiveKinded(provider string) bool {
 	return err == nil && f.Kinded
 }
 
+// LiveOutdated is whether the provider's fetched list was saved under
+// rules older than the fetch's now, and is fetched again once: a list
+// saved before lists kept the models made for other APIs (LiveKinded),
+// or a Jina AI list saved with the ids its API doesn't take
+// ("jina-ai/jina-embeddings-v3"), its jina-clip and jina-colbert models
+// among the chat models (fenglian980510 on X). A list that can't be read
+// is fetched again too.
+func LiveOutdated(provider string) bool {
+	f, err := readLive(provider)
+	if err != nil || !f.Kinded {
+		return true
+	}
+	if !JinaAPI(f.Base) {
+		return false
+	}
+	return slices.ContainsFunc(f.Models, func(m Model) bool { return strings.HasPrefix(m.ID, "jina-ai/") })
+}
+
 // Chat is ms without the models that draw, make videos or are made for
 // another API (Model.Serves).
 func Chat(ms []Model) []Model {
@@ -963,11 +981,21 @@ func fetchPage(ctx context.Context, url, key string, anthropic bool, headers map
 	// Anthropic's and OpenAI's /v1/models both page with has_more and
 	// last_id.
 	var out []Model
-	vercel, together := VercelGateway(url), TogetherAPI(url)
+	vercel, together, jina := VercelGateway(url), TogetherAPI(url), JinaAPI(url)
 	for i, r := range rows {
 		id := r.ID
 		if id == "" {
 			id = r.Name
+		}
+		// Jina AI's list names each model "jina-ai/<model>", the shape
+		// OpenRouter asks of the providers it lists, but its API takes
+		// "<model>" alone: every request schema in its OpenAPI spec
+		// (api.jina.ai/openapi.json) picks its shape by a bare id
+		// ("jina-embeddings-v3", "jina-reranker-v3", "jina-ocr-v1"). So
+		// the model is the id its API and docs use, the one a request
+		// goes on with (fenglian980510 on X)
+		if jina {
+			id = strings.TrimPrefix(id, "jina-ai/")
 		}
 		var codex json.RawMessage
 		if i < len(raws) && CodexEntry(raws[i]) {
@@ -992,6 +1020,12 @@ func fetchPage(ctx context.Context, url, key string, anthropic bool, headers map
 			// Volcengine Ark's names: {"input_modalities": […],
 			// "output_modalities": ["video"]}
 			ins, outs = Kinds(r.Modalities.InputModalities), Kinds(r.Modalities.OutputModalities)
+		}
+		if ins == nil && outs == nil && r.Outputs != nil {
+			// the same names at the row's top level, the shape OpenRouter
+			// asks of a provider's list (Jina AI's): "output_modalities":
+			// ["embeddings"] for an embedding model
+			ins, outs = Kinds(strs(r.Inputs)), Kinds(strs(r.Outputs))
 		}
 		// a model the list says makes videos: another magpie's kind, or,
 		// where the list marks no kind, Ark's domain "VideoGeneration" or
@@ -1029,6 +1063,12 @@ func fetchPage(ctx context.Context, url, key string, anthropic bool, headers map
 		// togethercomputer/m2-bert-80M-32k-retrieval, its reranker
 		// Salesforce/Llama-Rank-V1. Another list's row that says
 		// "embedding" or "rerank" means the same
+		// a model whose only output is embeddings (Jina's jina-clip-v2 and
+		// jina-colbert-v2, whose ids don't say so) is one for that API
+		if serves == "" && !drawer && !films && !decision && headers["X-Magpie-Drawers"] == "" && !slices.Contains(outs, "text") &&
+			(slices.Contains(outs, "embeddings") || slices.Contains(outs, "embedding")) {
+			serves = ServesEmbedding
+		}
 		switch strings.ToLower(r.Type) {
 		case "embedding", "embeddings":
 			drawer, films, serves = false, false, ServesEmbedding
@@ -1230,6 +1270,10 @@ type liveModel struct {
 	Window    any    `json:"context_window"`
 	MaxWindow any    `json:"max_context_window"`
 	Inputs    any    `json:"input_modalities"`
+	// what a model gives, at the row's top level: OpenRouter's shape for
+	// a provider's list (Jina AI's), ["embeddings"] for an embedding
+	// model. any, as an odd value mustn't lose the whole list
+	Outputs any `json:"output_modalities"`
 	// what Kimi Code's list (/coding/v1/models) says of a model's
 	// thinking and tools, flat and nested: supports_thinking_type
 	// "only" is a model that always thinks, supports_dynamic_tools one
@@ -1477,6 +1521,29 @@ func (p Price) sane() bool {
 func TogetherAPI(u string) bool {
 	x, err := url.Parse(strings.TrimSpace(u))
 	return err == nil && strings.EqualFold(x.Hostname(), "api.together.xyz")
+}
+
+// JinaAPI reports whether u is at Jina AI's API (api.jina.ai), whose
+// model list names a model by an id its API doesn't take (fetchPage).
+func JinaAPI(u string) bool {
+	x, err := url.Parse(strings.TrimSpace(u))
+	return err == nil && strings.EqualFold(x.Hostname(), "api.jina.ai")
+}
+
+// strs is the strings of v, a JSON array read as any; nil for anything
+// else.
+func strs(v any) []string {
+	xs, ok := v.([]any)
+	if !ok {
+		return nil
+	}
+	out := []string{}
+	for _, x := range xs {
+		if s, ok := x.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // VercelGateway reports whether u is at Vercel's AI Gateway

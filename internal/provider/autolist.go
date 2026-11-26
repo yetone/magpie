@@ -296,15 +296,17 @@ func refreshDueLists(ctx context.Context, now time.Time) []string {
 	for _, p := range ordered(own, f.Order) {
 		every := p.RefreshInterval()
 		// a list saved before lists kept the models made for other APIs
-		// (embeddings, rerank, speech, transcriptions) is fetched again
-		// once, schedule or none, so their routes and groups have them
-		// without the user's Refresh (#5339); tried once a run, so one
-		// that fails waits for its schedule, the next start or a Refresh
+		// (embeddings, rerank, speech, transcriptions), or one saved by
+		// an older reading of its vendor's list (catalog.LiveOutdated),
+		// is fetched again once, schedule or none, so their routes and
+		// groups have them without the user's Refresh (#5339); tried once
+		// a run, so one that fails waits for its schedule, the next start
+		// or a Refresh
 		listsTried.Lock()
 		_, triedOnce := listsTried.m[p.ID]
 		listsTried.Unlock()
 		_, fetched := p.Fetched()
-		once := !triedOnce && fetched && !catalog.LiveKinded(p.ID)
+		once := !triedOnce && fetched && catalog.LiveOutdated(p.ID)
 		// one that lists nothing (Preset.NoList) has no list to keep fresh
 		if every == 0 && !once || p.Off || !p.lists() {
 			continue
