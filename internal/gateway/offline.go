@@ -35,15 +35,8 @@ import (
 // is told apart before it.
 var connFailed = lazyre.New(`dial tcp |dial udp |lookup [^ ]+|TLS handshake timeout|network is unreachable|no route to host|Unable to connect|ConnectionRefused|FailedToOpenSocket|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ENETUNREACH|EHOSTUNREACH`)
 
-// lastHeard is when any upstream last answered, as unix nanoseconds.
-var lastHeard atomic.Int64
-
 // heardFresh is how long a reply from anywhere says the network is up.
 const heardFresh = 15 * time.Second
-
-// heardNet notes a reply from an upstream: whatever it said, the network
-// reached it.
-func heardNet() { lastHeard.Store(time.Now().UnixNano()) }
 
 // offlineKeep is how long a verdict on the network is kept: the failures
 // of one request's members, and of the requests beside it, ask once.
@@ -52,12 +45,22 @@ const offlineKeep = 5 * time.Second
 // offlineDial is how long one dial of another provider's host is waited for.
 var offlineDial = 2 * time.Second
 
-var offlineSeen = struct {
-	sync.Mutex
+// network is what a Server has heard of the network: when an upstream
+// last answered, and the verdict kept. It is the Server's own, so a reply
+// that reaches another Server in the process (a test's, finishing after
+// its test) says nothing of this one's network (#7871).
+type network struct {
+	heard atomic.Int64 // when any upstream last answered, as unix nanoseconds
+
+	mu   sync.Mutex
 	at   time.Time
 	off  bool
 	busy chan struct{} // closed when the network being asked now is known
-}{}
+}
+
+// heardNet notes a reply from an upstream: whatever it said, the network
+// reached it.
+func (n *network) heardNet() { n.heard.Store(time.Now().UnixNano()) }
 
 // hasNetwork says whether an interface is up with an address beyond its own
 // link; swapped in tests. Unknown is yes, as before.
@@ -173,36 +176,37 @@ func reachesNone(hosts []string) bool {
 // computer having no network: no connection was made, nothing answered
 // lately, and the network is down or reaches none of the other providers.
 // With no other provider to ask, and an interface up, it is c's.
-func offlineFailure(c candidate, status int, body []byte) bool {
+func (s *Server) offlineFailure(c candidate, status int, body []byte) bool {
 	if status != http.StatusBadGateway || proxyDown.Match(body) || !connFailed.Match(body) {
 		return false
 	}
-	if time.Since(time.Unix(0, lastHeard.Load())) < heardFresh {
+	n := &s.network
+	if time.Since(time.Unix(0, n.heard.Load())) < heardFresh {
 		return false
 	}
 	for {
-		offlineSeen.Lock()
-		if time.Since(offlineSeen.at) < offlineKeep {
-			off := offlineSeen.off
-			offlineSeen.Unlock()
+		n.mu.Lock()
+		if time.Since(n.at) < offlineKeep {
+			off := n.off
+			n.mu.Unlock()
 			return off
 		}
-		if wait := offlineSeen.busy; wait != nil {
-			offlineSeen.Unlock()
+		if wait := n.busy; wait != nil {
+			n.mu.Unlock()
 			<-wait
 			continue
 		}
 		done := make(chan struct{})
-		offlineSeen.busy = done
-		offlineSeen.Unlock()
+		n.busy = done
+		n.mu.Unlock()
 		off := !hasNetwork()
 		if !off {
 			hosts := otherHosts(c.p)
 			off = len(hosts) > 0 && reachesNone(hosts)
 		}
-		offlineSeen.Lock()
-		offlineSeen.at, offlineSeen.off, offlineSeen.busy = time.Now(), off, nil
-		offlineSeen.Unlock()
+		n.mu.Lock()
+		n.at, n.off, n.busy = time.Now(), off, nil
+		n.mu.Unlock()
 		close(done)
 		return off
 	}

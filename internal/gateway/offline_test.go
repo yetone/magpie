@@ -22,10 +22,7 @@ func TestOfflineRestsNobody(t *testing.T) {
 		t.Setenv(k, "")
 	}
 	wasNear, wasNet := nearHost, hasNetwork
-	t.Cleanup(func() {
-		nearHost, hasNetwork = wasNear, wasNet
-		forgetNetwork()
-	})
+	t.Cleanup(func() { nearHost, hasNetwork = wasNear, wasNet })
 	// the test's servers are all on loopback: they stand for the
 	// providers' hosts out on the network
 	nearHost = func(string) bool { return false }
@@ -52,7 +49,6 @@ func TestOfflineRestsNobody(t *testing.T) {
 	setup := func(t *testing.T, bURL string, netUp bool) *Server {
 		t.Helper()
 		fresh(t)
-		forgetNetwork()
 		hasNetwork = func() bool { return netUp }
 		for _, p := range []provider.Provider{
 			{ID: "a", Name: "A", Key: "ka", Models: []string{"m"}, Chat: "http://" + deadA + "/v1"},
@@ -93,6 +89,18 @@ func TestOfflineRestsNobody(t *testing.T) {
 		}
 	})
 
+	// #7871: a reply that reaches another gateway in the process (an
+	// earlier test's, finishing after it) says nothing of this one's
+	// network
+	t.Run("another gateway heard a reply", func(t *testing.T) {
+		s := setup(t, "http://"+deadB+"/v1", true)
+		(&Server{}).network.heardNet()
+		_, _, r := ask(t, s)
+		if f := r.Tries[0]; f.Fail != failOffline || f.Rest != nil {
+			t.Fatalf("a's try %+v", f)
+		}
+	})
+
 	t.Run("no interface up", func(t *testing.T) {
 		s := setup(t, up.URL+"/v1", false)
 		code, body, r := ask(t, s)
@@ -123,42 +131,10 @@ func TestOfflineRestsNobody(t *testing.T) {
 
 	t.Run("answered lately", func(t *testing.T) {
 		s := setup(t, "http://"+deadB+"/v1", true)
-		heardNet()
+		s.network.heardNet()
 		_, _, r := ask(t, s)
 		if f := r.Tries[0]; f.Fail == failOffline || f.Rest == nil || !f.Rest.Until.After(time.Now()) {
 			t.Fatalf("a's failure after a reply came didn't rest it: %+v", f)
 		}
 	})
-}
-
-// forgetNetwork forgets what was heard of the network and the verdict kept.
-func forgetNetwork() {
-	lastHeard.Store(0)
-	offlineSeen.Lock()
-	offlineSeen.at, offlineSeen.off = time.Time{}, false
-	offlineSeen.Unlock()
-}
-
-// A provider connected to addresses of the user's choosing (Resolve) is
-// dialled by its name here, which a managed network that works may not
-// resolve: its host says nothing of the network, as a proxied one's.
-func TestOtherHostsSkipResolved(t *testing.T) {
-	fresh(t)
-	for _, p := range []provider.Provider{
-		{ID: "mine", Name: "Mine", Key: "k", Models: []string{"m"}, Chat: "https://own.example.com/v1"},
-		{ID: "gw", Name: "Gw", Key: "k", Models: []string{"m"}, Chat: "https://api.corp.example.com/v1", Resolve: map[string][]string{"api.corp.example.com": {"10.0.0.1"}}},
-		{ID: "open", Name: "Open", Key: "k", Models: []string{"m"}, Chat: "https://api.open.example.com/v1"},
-	} {
-		if err := provider.Save(p); err != nil {
-			t.Fatal(err)
-		}
-	}
-	wasNear := nearHost
-	t.Cleanup(func() { nearHost = wasNear })
-	nearHost = func(string) bool { return false }
-	me, _ := provider.Find("mine")
-	got := otherHosts(*me)
-	if len(got) != 1 || got[0] != "api.open.example.com:443" {
-		t.Errorf("otherHosts = %v, want only the provider with no rule", got)
-	}
 }

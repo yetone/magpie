@@ -1610,7 +1610,7 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 		// as soon as the switch is off
 		return Rest{Why: why, Status: status, By: "off", Until: now}
 	}
-	if offlineFailure(c, status, body) {
+	if s.offlineFailure(c, status, body) {
 		// this computer had no network: the provider is as good as it
 		// was, and is asked again once the network is back (offline.go)
 		return Rest{Why: failOffline, Status: status, By: "off", Until: now}

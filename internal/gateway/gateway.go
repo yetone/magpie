@@ -574,6 +574,9 @@ type Server struct {
 	endingOnce sync.Once
 	endOnce    sync.Once
 
+	// network is what this gateway has heard of the network (offline.go)
+	network network
+
 	mu     sync.Mutex
 	recent []Call
 	calls  uint64 // the last Call.ID given
@@ -5552,7 +5555,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			skipped = append(skipped, c.label()+": "+call.Error)
 			continue
 		}
-		if !last && hw.failed() && offlineFailure(c, hw.code(), hw.errBody()) {
+		if !last && hw.failed() && s.offlineFailure(c, hw.code(), hw.errBody()) {
 			// this computer has no network (usrname1833 on Discord): the
 			// request never reached the vendor, so this one doesn't rest,
 			// and is asked first again once the network is back
@@ -6244,7 +6247,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				// restricted by its code (WorkBuddy's 11140), gone here
 				try.Fail = failRestricted
 			}
-			if offlineFailure(c, call.Status, []byte(call.Error)) {
+			if s.offlineFailure(c, call.Status, []byte(call.Error)) {
 				// the last one left failed for want of a network
 				// (offline.go): told so, and it doesn't rest
 				try.Fail = failOffline
@@ -6702,7 +6705,7 @@ func (s *Server) forward(ctx context.Context, p provider.Provider, to provider.P
 		if err == nil {
 			heardReply(ctx, p, res)
 			noteWireModel(ctx, p, res)
-			heardNet() // the network is up (offline.go)
+			s.network.heardNet() // the network is up (offline.go)
 			// a Remote magpie on a LAN answered (lan_reach.go)
 			noteReach(p, true)
 		}
