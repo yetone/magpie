@@ -34,7 +34,7 @@ const zh = {
   "nav.menu": "菜单",
   "nav.download": "下载",
 
-  "hero.h1": "套餐汇成一池，<span>Agent 随便用。</span>",
+  "hero.h1": "所有套餐，<br><span>一池通用。</span>",
   "hero.lede": "Claude Max、ChatGPT Pro、GitHub Copilot、GLM Coding Plan、Kimi Code、火山方舟 Coding Plan……把买过的套餐全加进 magpie，Claude Code、Codex、Claude Desktop 或任何 Agent 都能一起用。套餐不再绑死在买它的那个 Agent 上，一个用完了，下一个自动接上。按量付费的密钥和本地模型也进同一个池子。",
   "dl.mac": "下载 Mac 版",
   "hero.term": "用终端安装",
@@ -512,7 +512,7 @@ const zhTW = {
   "nav.language": "語言",
   "nav.menu": "選單",
   "nav.download": "下載",
-  "hero.h1": "方案匯成一池，<span>Agent 隨便用。</span>",
+  "hero.h1": "所有方案，<br><span>一池通用。</span>",
   "hero.lede": "Claude Max、ChatGPT Pro、GitHub Copilot、GLM Coding Plan、Kimi Code、火山方舟 Coding Plan……把買過的方案全加進 magpie，Claude Code、Codex、Claude Desktop 或任何 Agent 都能一起用。方案不再綁死在買它的那個 Agent 上，一個用完了，下一個自動接上。按量計費的金鑰和本機模型也進同一個池子。",
   "dl.mac": "下載 Mac 版",
   "hero.term": "用終端機安裝",
