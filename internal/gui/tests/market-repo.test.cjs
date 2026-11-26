@@ -31,7 +31,7 @@ const candidates = [
   { name: "tdd", path: "skills/tdd", description: "Test first." },
   { name: "grill-me", path: "skills/grill-me", description: "Asks hard questions." },
   { name: "write-a-prd", path: "skills/write-a-prd", description: "Writes a PRD." },
-  { name: "triage", path: "skills/triage", description: "Triage issues." },
+  { name: "triage", path: "skills/triage", description: "Triage issues: reads each new one, asks for what is missing, labels it, links the ones it repeats, and says which can wait and which cannot, so the list stays short and every report gets an answer." },
   { name: "caveman", path: "skills/caveman", description: "Talks less.", have: true },
 ];
 const words = {
@@ -84,10 +84,10 @@ function serve(lang, st) {
   };
 }
 
-async function open(engine, lang, t, st) {
+async function open(engine, lang, t, st, width = 420) {
   const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
   t.after(() => browser.close());
-  const context = await browser.newContext({ viewport: { width: 420, height: 760 }, reducedMotion: "reduce" });
+  const context = await browser.newContext({ viewport: { width, height: 760 }, reducedMotion: "reduce" });
   const page = await context.newPage();
   page.setDefaultTimeout(5000);
   page.setDefaultNavigationTimeout(60000);
@@ -191,6 +191,35 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         ["market/skill", { source: "mattpocock/skills", id: "tdd", agents: ["claude"] }],
         ["market/skill", { source: "mattpocock/skills", id: "write-a-prd", agents: ["claude"] }],
       ]);
+      assert.deepEqual(errors, []);
+    });
+
+    // AXmake110 on X: in a window wider than a phone's, each skill's name
+    // and about stood against the sheet's right edge, far from its tick:
+    // the row is a label, and an editor's labels (a form's names, beside
+    // their fields) are set right. Each row reads from its tick, as every
+    // other list does; an about long enough to wrap, each of its lines too.
+    test(`${engine} ${lang}: a repository's skills read from their ticks in a wide window`, async (t) => {
+      const st = { about: [], probed: [], installs: [], probeGate: Promise.resolve() };
+      const { page, errors } = await open(engine, lang, t, st, 1100);
+      await page.locator('#view-library .mk-card[data-id="repo:mattpocock/skills"]').click();
+      const sheet = page.locator("#modal .mk-reposheet");
+      await page.waitForFunction(() => document.querySelectorAll("#modal .mk-reposheet .lib-pick").length === 5);
+      const rows = await sheet.locator(".lib-pick").evaluateAll((rs) => rs.map((r) => {
+        const lines = (e) => { const g = document.createRange(); g.selectNodeContents(e); return [...g.getClientRects()].filter((x) => x.width > 0).map((x) => Math.round(x.left)); };
+        return { name: r.querySelector(".name").textContent, row: r.getBoundingClientRect().width, tick: r.querySelector("input").getBoundingClientRect().right, nameAt: lines(r.querySelector(".name")), subAt: lines(r.querySelector(".sub")) };
+      }));
+      assert.equal(rows.length, 5);
+      // triage's about wraps, so its second line is measured too
+      assert(rows.find((r) => r.name === "triage").subAt.length >= 2);
+      for (const r of rows) {
+        // the row is wide, so a name set right would be hundreds of px off
+        assert(r.row > 500, `${r.name}: row ${r.row}px wide`);
+        // the gap between tick and words is the row's 10px
+        const at = r.nameAt[0];
+        assert(at - r.tick >= 6 && at - r.tick <= 14, `${r.name}: name ${at - r.tick}px from its tick`);
+        for (const x of r.subAt) assert(Math.abs(x - at) <= 1, `${r.name}: about's line at ${x}, name at ${at}`);
+      }
       assert.deepEqual(errors, []);
     });
   }

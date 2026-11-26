@@ -480,6 +480,9 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-pick { display: flex; align-items: flex-start; gap: 10px; padding: 7px 6px; border-radius: 8px; cursor: default; }
 .lib-pick:hover:not(.dim) { background: var(--pill); }
 .lib-pick.dim { opacity: .55; }
+/* a row is a label, and an editor sets its labels (a form's names) right:
+   in a sheet the row still reads from its tick (AXmake110 on X) */
+.editor label.lib-pick { text-align: start; }
 .lib-pick input { margin: 2px 0 0; accent-color: var(--fg); flex: none; }
 .lib-pick .who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .lib-pick .name { font-size: 13px; font-weight: 500; }
