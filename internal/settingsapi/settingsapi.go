@@ -30,7 +30,7 @@ var Keys = []string{
 	// Appearance
 	"theme", "accent", "colorblind", "reduceMotion", "noBird", "lang", "uiFont", "codeFont",
 	// the tray, the Dock and this computer
-	"tray", "dock", "dockWindow", "dockNever", "lightweight", "keepAwake", "keepAwakeDisplay",
+	"tray", "dock", "dockWindow", "dockNever", "lightweight", "gpuRendering", "keepAwake", "keepAwakeDisplay",
 	"noWSLAgents", "sessionTerminal", "signInLinkOnly", "quitNoAsk", "restoreOnQuit", "name",
 	// the menu bar's allowance cards
 	"trayUsages", "trayUsage", "trayUsageEvery", "trayNoLogos", "trayAnthropicMark", "trayNoBird", "trayNoNumber", "trayPace", "trayNoCost", "trayWindows",
@@ -259,6 +259,11 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	// (zhujiu on Discord), which the Quit question sets too
 	if _, sent := fields["quitNoAsk"]; !sent {
 		in.QuitNoAsk = cur.QuitNoAsk
+	}
+	// nor whether the pages are drawn on the GPU (Linux), set from its
+	// own row
+	if _, sent := fields["gpuRendering"]; !sent {
+		in.GPURendering = cur.GPURendering
 	}
 	// nor whether a quit puts the agents back as they were
 	if _, sent := fields["restoreOnQuit"]; !sent {

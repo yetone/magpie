@@ -20324,6 +20324,18 @@ function renderSettings() {
   $("#lightweightRow").hidden = web;
   $("#lightweightSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.lightweight === true ? "on" : "off",
     (v) => savePrefs({ ...keep, lightweight: v === "on" })));
+  // Linux's app alone: whether WebKitGTK draws on the GPU, read at the
+  // next start (webkit_linux.go; ZDegress on X). Unchosen it follows
+  // magpie's pick, and a choice equal to it is saved as none, so a
+  // later pick (a driver changed) still applies. WEBKIT_* variables the
+  // user set are theirs, and the row says so instead.
+  const gpu = !web && s.gpu;
+  $("#generalMore").hidden = !gpu;
+  if (gpu) {
+    $("#gpuSub").textContent = gpu.env?.length ? t("Set by {vars} in the environment; magpie leaves it as it is", { vars: gpu.env.join(", ") }) : t("Takes effect when magpie next starts");
+    $("#gpuSegs").replaceChildren(gpu.env?.length ? "" : segs([["off", t("Off")], ["on", t("On")]], (s.gpuRendering ?? gpu.auto) ? "on" : "off",
+      (v) => savePrefs({ ...keep, gpuRendering: (v === "on") === gpu.auto ? null : v === "on" })));
+  }
   // the display kept on too (#975)
   $("#keepAwakeSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")], ["display", t("Screen on too")]],
     !s.keepAwake ? "off" : s.keepAwakeDisplay ? "display" : "on",
