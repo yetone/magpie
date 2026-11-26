@@ -249,6 +249,7 @@ type walker struct {
 	out  bytes.Buffer
 	last int
 	fn   func(path, key, s string) string
+	bare func(path, key, raw string) // a number, true, false or null, when set
 }
 
 func (w *walker) ws(i int) int {
@@ -371,6 +372,9 @@ func (w *walker) value(i int, path, key string) (int, bool) {
 		}
 		if j == i {
 			return i, false
+		}
+		if w.bare != nil {
+			w.bare(path, key, string(w.in[i:j]))
 		}
 		return j, true
 	}

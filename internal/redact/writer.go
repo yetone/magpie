@@ -16,6 +16,11 @@ import (
 // text ends in what may be the start of one is held until the next, and if
 // that one goes on with the same text the start moves over to it. Nothing
 // is added or dropped, so the text the agent puts together is the same.
+// The same text is the same string of the stream, not one at the same
+// place in the next event: another tool call's arguments, Gemini's next
+// whole functionCall or its answer after its thoughts are texts of their
+// own (pieces), and a start moved onto one of them took its last letter
+// from one path and gave it to the next (#7837).
 type Writer struct {
 	w       http.ResponseWriter
 	mode    int // 0 not yet known, 1 a stream, 2 a whole body, 3 left as it is
@@ -33,11 +38,31 @@ const (
 )
 
 // held is an event one or more of whose texts ended in what may be the
-// start of a placeholder: each one's tail by its path.
+// start of a placeholder: each one's tail by which text it is a piece of.
 type held struct {
 	ctx       string
-	tails     map[string]string
-	full, cut []byte // the event as it is, and without the tails
+	tails     map[string]string // by text
+	text      map[string]string // the text of each path a tail was cut from
+	cuts      map[string]string // by path: what is left without the tail, put back
+	full      []byte            // the event as it is
+	pre, post []byte
+	data      []byte // the event's JSON, put back
+}
+
+// out is the held event as it goes out ahead of the next one: cut where
+// the next event goes on with that text, whose tail it carries, and
+// whole everywhere else, where the text ended.
+func (h *held) out(on map[string]bool) []byte {
+	if len(on) == 0 {
+		return h.full
+	}
+	d, _ := walk(h.data, func(path, _, s string) string {
+		if c, ok := h.cuts[path]; ok && on[h.text[path]] {
+			return c
+		}
+		return s
+	})
+	return rebuild(h.pre, d, h.post)
 }
 
 // NewWriter wraps w; Finish must be called when the handler is done.
@@ -232,15 +257,23 @@ func (rw *Writer) event(ev []byte) error {
 		return err
 	}
 	ctx := name + "|" + eventCtx(data)
-	// the starts of placeholders the last event ended in go on here
+	var texts *pieces // read once, if this event goes on with a text or holds one
+	// the starts of placeholders the last event ended in go on here, each
+	// on the string of the text it was cut from
 	var carry map[string]string
 	if p := rw.pending; p != nil {
-		if p.ctx == ctx && hasPaths(data, p.tails) {
-			if _, err := rw.w.Write(p.cut); err != nil {
-				return err
+		var on map[string]bool
+		if p.ctx == ctx {
+			texts = piecesOf(data)
+			for path, t := range texts.on(p.tails) {
+				if carry == nil {
+					carry, on = map[string]string{}, map[string]bool{}
+				}
+				carry[path] = p.tails[t]
+				on[t] = true
 			}
-			carry = p.tails
-		} else if _, err := rw.w.Write(p.full); err != nil {
+		}
+		if _, err := rw.w.Write(p.out(on)); err != nil {
 			return err
 		}
 		rw.pending = nil
@@ -249,7 +282,7 @@ func (rw *Writer) event(ev []byte) error {
 	if typ == "" {
 		typ = name
 	}
-	var tails, cuts map[string]string
+	var tails, text, cuts map[string]string
 	restored, _ := walk(data, func(path, key, s string) string {
 		if c, ok := carry[path]; ok {
 			s = c + s
@@ -262,11 +295,20 @@ func (rw *Writer) event(ev []byte) error {
 		// without it and the brace left behind
 		if !kept[key] && key != "obfuscation" {
 			if n := partialTail(s); n > 0 {
-				if tails == nil {
-					tails, cuts = map[string]string{}, map[string]string{}
+				if texts == nil {
+					texts = piecesOf(data)
 				}
-				tails[path] = s[len(s)-n:]
-				cuts[path] = Restore(s[:len(s)-n], asJSON(key, typ))
+				// a string that is whole, or the last piece of its
+				// text, goes out whole: nothing of the next event is
+				// its own; so does a second string of one text
+				if t, _, more := texts.of(path); more && tails[t] == "" {
+					if tails == nil {
+						tails, text, cuts = map[string]string{}, map[string]string{}, map[string]string{}
+					}
+					tails[t] = s[len(s)-n:]
+					text[path] = t
+					cuts[path] = Restore(s[:len(s)-n], asJSON(key, typ))
+				}
 			}
 		}
 		// counted here only: cut is s again without its tail, and
@@ -278,13 +320,7 @@ func (rw *Writer) event(ev []byte) error {
 		_, err := rw.w.Write(full)
 		return err
 	}
-	cutData, _ := walk(restored, func(path, _, s string) string {
-		if c, ok := cuts[path]; ok {
-			return c
-		}
-		return s
-	})
-	rw.pending = &held{ctx: ctx, tails: tails, full: full, cut: rebuild(pre, cutData, post)}
+	rw.pending = &held{ctx: ctx, tails: tails, text: text, cuts: cuts, full: full, pre: pre, post: post, data: restored}
 	return nil
 }
 
@@ -392,14 +428,129 @@ func eventCtx(data []byte) string {
 	return b.String()
 }
 
-// hasPaths says data has a string at each of the paths.
-func hasPaths(data []byte, paths map[string]string) bool {
-	found := 0
-	walk(data, func(p, _, s string) string {
-		if _, ok := paths[p]; ok {
-			found++
+// pieces says which text of a stream each string of an event is a piece
+// of. A string's text is its path, with each object in an array named by
+// what the protocol names it by rather than where it stands: Chat
+// Completions' tool call by its index (the next call's first piece sits
+// where the last one's did, at tool_calls.0), Gemini's candidate by its
+// index, a streamed argument by its jsonPath, and a Gemini part as a
+// thought or not (the answer comes at parts.0.text after the thoughts).
+// In a Gemini part only text is streamed in pieces, and a functionCall's
+// partialArgs value while willContinue says more of it is to come: a
+// functionCall's args, a functionResponse's response, code and its result
+// come whole, each part a call or a result of its own, so nothing of one
+// is held for the next (#7837: the "d" of one read_file's "/tmp/foo1.md"
+// went to the start of the next one's Path).
+type pieces struct {
+	names map[string]string // the values of pieceNames' keys, by path
+	strs  []string          // the path of every string
+}
+
+// pieceNames are the keys an object in an array is named by (the first
+// of index, jsonPath and id it has), thought, which marks a Gemini part,
+// and willContinue, which says a partialArgs value goes on.
+var pieceNames = map[string]bool{"index": true, "jsonPath": true, "json_path": true, "id": true,
+	"thought": true, "willContinue": true, "will_continue": true}
+
+func piecesOf(data []byte) *pieces {
+	p := &pieces{names: map[string]string{}}
+	note := func(path, key, v string) {
+		if pieceNames[key] {
+			p.names[path] = v
 		}
+	}
+	w := walker{in: data, bare: note, fn: func(path, key, s string) string {
+		p.strs = append(p.strs, path)
+		note(path, key, s)
 		return s
-	})
-	return found == len(paths)
+	}}
+	w.value(w.ws(0), "", "")
+	return p
+}
+
+// of is the text the string at path is a piece of; piece says it goes on
+// with what the text had in an event before, and more that the next
+// event may go on with it.
+func (p *pieces) of(path string) (text string, piece, more bool) {
+	segs := strings.Split(path, ".")
+	var b strings.Builder
+	part := -1 // where a Gemini part's own keys start
+	for i, s := range segs {
+		at := strings.Join(segs[:i+1], ".")
+		if i < len(segs)-1 && isIndexSeg(s) { // an object in an array
+			switch {
+			case p.has(at, "index"):
+				s = "#" + p.names[at+".index"]
+			case p.has(at, "jsonPath"), p.has(at, "json_path"):
+				s = "@" + p.names[at+".jsonPath"] + p.names[at+".json_path"]
+			case p.has(at, "id"):
+				s = "$" + p.names[at+".id"]
+			}
+			if p.names[at+".thought"] == "true" {
+				s += "+thought"
+			}
+			if i > 0 && segs[i-1] == "parts" {
+				part = i + 1
+			}
+		}
+		if i > 0 {
+			b.WriteByte('.')
+		}
+		b.WriteString(s)
+	}
+	text = b.String()
+	if part < 0 {
+		return text, true, true
+	}
+	own := segs[part:]
+	switch {
+	case len(own) == 1 && own[0] == "text":
+		return text, true, true
+	case len(own) == 4 && (own[0] == "functionCall" || own[0] == "function_call") &&
+		(own[1] == "partialArgs" || own[1] == "partial_args") && isIndexSeg(own[2]) &&
+		(own[3] == "stringValue" || own[3] == "string_value"):
+		at := strings.Join(segs[:part+3], ".")
+		return text, true, p.names[at+".willContinue"] == "true" || p.names[at+".will_continue"] == "true"
+	}
+	return text, false, false
+}
+
+func (p *pieces) has(at, key string) bool {
+	_, ok := p.names[at+"."+key]
+	return ok
+}
+
+// on is, for each text of tails this event goes on with, the path of its
+// string here. A text two strings here could go on with goes on with
+// neither.
+func (p *pieces) on(tails map[string]string) map[string]string {
+	at := map[string]string{}
+	n := map[string]int{}
+	for _, path := range p.strs {
+		if t, piece, _ := p.of(path); piece {
+			if _, ok := tails[t]; ok {
+				at[t] = path
+				n[t]++
+			}
+		}
+	}
+	out := map[string]string{}
+	for t, path := range at {
+		if n[t] == 1 {
+			out[path] = t
+		}
+	}
+	return out
+}
+
+func isIndexSeg(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }
