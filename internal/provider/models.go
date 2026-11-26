@@ -1449,9 +1449,10 @@ func (p Provider) fixV1(ctx context.Context, base, at string) string {
 
 // servesAtBase reports whether p's OpenAI URL that is base has its
 // endpoint there: a POST of an empty body to base/chat/completions (or
-// /responses) that is answered with anything but 404 or 405 — a 400 for the
-// missing model, a 401 for the key — names a route that exists. A request
-// that fails to connect says nothing, and is taken as the URL being right.
+// /responses) that is answered with anything but 404, 405 or a web page
+// served 200 — a 400 for the missing model, a 401 for the key — names a
+// route that exists. A request that fails to connect says nothing, and is
+// taken as the URL being right.
 func (p Provider) servesAtBase(ctx context.Context, base string) bool {
 	for _, e := range []struct{ at, end string }{{p.Chat, "/chat/completions"}, {p.Responses, "/responses"}} {
 		if strings.TrimRight(strings.TrimSpace(e.at), "/") != base {
@@ -1472,9 +1473,16 @@ func (p Provider) servesAtBase(ctx context.Context, base string) bool {
 			cancel()
 			return true
 		}
-		io.Copy(io.Discard, io.LimitReader(res.Body, 1<<16))
+		// a relay's site answers any path its API isn't at 200 with its
+		// own page (new-api's and one-api's web app): no route of the
+		// API's (sarosaka1023 on X)
+		res = NotAnAPIReply(res, "")
+		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<16))
 		res.Body.Close()
 		cancel()
+		if res.StatusCode == http.StatusBadGateway && ServedPage(string(b)) {
+			continue
+		}
 		if res.StatusCode != http.StatusNotFound && res.StatusCode != http.StatusMethodNotAllowed {
 			return true
 		}

@@ -7166,6 +7166,14 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 	// envelope: the 401 (or 429 …) it stands for, so the next key or
 	// member is asked and the agent told why (@xanahopper on X)
 	res = notAnAPIReply(clineUnwrapped(p, provider.ZhipuEnveloped(req, openCodeBareRefusal(req, res))), "")
+	if to == provider.Chat || to == provider.Responses {
+		// a relay's base typed without its /v1, answered with the relay's
+		// web page: asked again under /v1, and the base set there when the
+		// API answers; else the 502 says to add it (sarosaka1023 on X)
+		if res, err = provider.RetryMissingV1(p, to, req, res, again); err != nil {
+			return res, err
+		}
+	}
 	if p.Account != nil && p.Account.Agent == "codex" {
 		// a large request ChatGPT closed the connection on: asked again,
 		// nobody resting for it, and said what may help (#1628)

@@ -949,22 +949,39 @@ func probe(ctx context.Context, p Provider, proto Protocol, url string, body []b
 
 func probeRetried(ctx context.Context, p Provider, proto Protocol, url string, body []byte, model string, wait time.Duration) Result {
 	r := probeAt(ctx, p, proto, url, body, model, wait)
-	if r.Status != http.StatusNotFound {
+	page := r.Status == http.StatusBadGateway && ServedPage(r.Error)
+	if r.Status != http.StatusNotFound && !page {
 		return r
 	}
 	// a relay given without the /v1 it serves OpenAI's API under
 	// (Cyrus_4433 on X: claude-relay-service's …/openai, whose chat is at
-	// …/openai/v1/chat/completions, answered every model 404 Not Found)
-	// is asked there too, and an answer there sets the base right, so
-	// the gateway's requests go there as well
+	// …/openai/v1/chat/completions, answered every model 404 Not Found;
+	// sarosaka1023 on X: new-api's site answers its root's
+	// /chat/completions 200 with its web page) is asked there too, and an
+	// answer there sets the base right, so the gateway's requests go there
+	// as well
 	if base, at, ok := p.missingV1(proto, url); ok {
-		if v := probeAt(ctx, p, proto, at, body, model, wait); v.OK {
+		v := probeAt(ctx, p, proto, at, body, model, wait)
+		if v.OK {
 			p.setV1(base)
 			v.V1 = base + "/v1"
 			return v
 		}
+		if page && v.Status != 0 && v.Status != http.StatusNotFound && !(v.Status == http.StatusBadGateway && ServedPage(v.Error)) {
+			// the API is there, and refused (a key it doesn't take): its
+			// refusal is the answer, and says where it is
+			v.Error += " — " + MissingV1Hint(base)
+			return v
+		}
 	}
 	return r
+}
+
+// MissingV1Hint says what to change when a relay's base URL base, given
+// without /v1, was answered with the relay's web page and its API under
+// /v1 answered.
+func MissingV1Hint(base string) string {
+	return "the Base URL " + base + " answers with the relay's website, not its API, which is under /v1: set the Base URL to " + base + "/v1"
 }
 
 func probeAt(ctx context.Context, p Provider, proto Protocol, url string, body []byte, model string, wait time.Duration) Result {
@@ -996,15 +1013,30 @@ func probeAt(ctx context.Context, p Provider, proto Protocol, url string, body [
 // (…/api/plan/v3) is the vendor's API as written (fixV1).
 func (p Provider) missingV1(proto Protocol, url string) (base, at string, ok bool) {
 	end := map[Protocol]string{Chat: "/chat/completions", Responses: "/responses"}[proto]
-	if end == "" || p.Account != nil || p.IsAzure() || p.IsBedrock() || p.IsVertex() {
+	if end == "" {
 		return "", "", false
 	}
 	base, found := strings.CutSuffix(url, end)
-	if !found || base == "" || catalog.Versioned(base) || strings.TrimRight(base, "/") != strings.TrimRight(p.Base(proto), "/") {
+	if !found || base == "" || strings.TrimRight(base, "/") != p.v1Missable(proto) {
 		return "", "", false
 	}
 	base = strings.TrimRight(base, "/")
 	return base, base + "/v1" + end, true
+}
+
+// v1Missable is p's OpenAI base for proto, without a trailing slash, when
+// it is one a relay's /v1 may be missing from (missingV1): a URL, not an
+// account's or a cloud's, with no version in its path (catalog.Versioned:
+// a vendor's …/v3 or …/v1beta is its API as written); "" otherwise.
+func (p Provider) v1Missable(proto Protocol) string {
+	if proto != Chat && proto != Responses || p.Account != nil || p.IsAzure() || p.IsBedrock() || p.IsVertex() {
+		return ""
+	}
+	base := strings.TrimRight(strings.TrimSpace(p.Base(proto)), "/")
+	if base == "" || catalog.Versioned(base) {
+		return ""
+	}
+	return base
 }
 
 func probeOnce(ctx context.Context, p Provider, proto Protocol, url string, body []byte, model string, wait time.Duration) (r Result) {

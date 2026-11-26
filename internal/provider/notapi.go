@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/yetone/magpie/internal/lazyre"
@@ -75,6 +76,15 @@ func EventsStart(head []byte) bool {
 // HTMLStart is how a web page begins.
 var HTMLStart = lazyre.New(`(?i)^<(!doctype\s+html|html[\s>]|head[\s>]|body[\s>])`)
 
+// pageWhy is in every reason NotAnAPIReply gives for a web page served in
+// place of a reply, and in no other (ServedPage).
+const pageWhy = " with a web page ("
+
+// ServedPage reports whether msg, an error NotAnAPIReply's 502 carries,
+// says a web page was served in place of a reply: a relay's site, which
+// answers a path its API isn't at (missingV1).
+func ServedPage(msg string) bool { return strings.Contains(msg, pageWhy) }
+
 // servedPage says what a page served in place of a reply was, by its
 // title, and for a firewall's block page what to do about it.
 func servedPage(res *http.Response, ct string) string {
@@ -82,7 +92,7 @@ func servedPage(res *http.Response, ct string) string {
 	if ct == "" {
 		ct = "no Content-Type"
 	}
-	why := "answered " + res.Status + " with a web page (" + strings.TrimSpace(strings.SplitN(ct, ";", 2)[0]) + "), not an API reply"
+	why := "answered " + res.Status + pageWhy + strings.TrimSpace(strings.SplitN(ct, ";", 2)[0]) + "), not an API reply"
 	if t := PageTitle(b); t != "" {
 		why += ": “" + t + "”"
 	}
@@ -120,4 +130,69 @@ type bufferedBody struct {
 // AsBadGateway is res as a 502 saying name and why (asBadGateway).
 func AsBadGateway(res *http.Response, name, why string) *http.Response {
 	return asBadGateway(res, name, why)
+}
+
+// RetryMissingV1 hands on res, the answer to req; or, when res is a web
+// page served in place of a reply (NotAnAPIReply's 502) and req went to
+// p's OpenAI base without the /v1 a relay serves its API under
+// (v1Missable), the answer to req asked again under /v1 when that is an
+// API's reply, and p's base set there (setV1); the API's refusal there,
+// with what to change added to its message; else res. A
+// relay's site (new-api's, one-api's) answers any path its API isn't at
+// with its own page, so a base typed without /v1 was answered 502 and
+// nothing told the user why (sarosaka1023 on X). do sends a request as
+// req was sent.
+func RetryMissingV1(p Provider, proto Protocol, req *http.Request, res *http.Response, do func(*http.Request) (*http.Response, error)) (*http.Response, error) {
+	if res == nil || res.StatusCode != http.StatusBadGateway || res.Body == nil || req == nil {
+		return res, nil
+	}
+	base := p.v1Missable(proto)
+	u := *req.URL
+	u.RawQuery, u.Fragment = "", ""
+	rest, ok := strings.CutPrefix(u.String(), base+"/")
+	if base == "" || !ok || strings.HasPrefix(rest, "v1/") {
+		return res, nil
+	}
+	b, _ := io.ReadAll(io.LimitReader(res.Body, 64<<10))
+	res.Body.Close()
+	res.Body = io.NopCloser(bytes.NewReader(b))
+	if !ServedPage(APIError(b, res.Status)) {
+		return res, nil
+	}
+	if req.GetBody == nil {
+		return res, nil
+	}
+	body, err := req.GetBody()
+	if err != nil {
+		return res, nil
+	}
+	again := req.Clone(req.Context())
+	again.Body = body
+	again.URL.Path = strings.TrimSuffix(again.URL.Path, "/"+rest) + "/v1/" + rest
+	again.URL.RawPath = ""
+	got, err := do(again)
+	if err != nil {
+		return res, nil
+	}
+	got = NotAnAPIReply(got, "")
+	if got.StatusCode < 300 {
+		p.setV1(base)
+		return got, nil
+	}
+	gb, _ := io.ReadAll(io.LimitReader(got.Body, 64<<10))
+	got.Body.Close()
+	if got.StatusCode == http.StatusNotFound || ServedPage(APIError(gb, got.Status)) {
+		return res, nil // no API there either
+	}
+	// the API is there, and refused (a key it doesn't take, a limit): its
+	// refusal is the answer, rested for as any, and says where it is
+	gb = withMessage(gb, APIError(gb, got.Status)+" — "+MissingV1Hint(base))
+	got.Body = io.NopCloser(bytes.NewReader(gb))
+	got.ContentLength = int64(len(gb))
+	if got.Header == nil {
+		got.Header = http.Header{}
+	}
+	got.Header.Set("Content-Length", strconv.Itoa(len(gb)))
+	got.Header.Del("Content-Encoding")
+	return got, nil
 }
