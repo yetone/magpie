@@ -4,8 +4,9 @@ The full manual: every agent magpie wires, every provider option, the gateway, r
 
 Renamed a project folder? See [relocating Claude Code sessions](session-relocation.md).
 
-One place to pick every agent's model: Codex on DeepSeek, Claude Code
-on Kimi, Gemini CLI on GLM, from the menu bar. [usemagpie.ai](https://usemagpie.ai)
+Every plan you pay for, in one pool, for any agent: Claude Code on your
+ChatGPT Pro, Codex on your Claude Max, Claude Desktop on your GLM Coding
+Plan. When one runs out, the next takes over. [usemagpie.ai](https://usemagpie.ai)
 
 [![Discord](https://img.shields.io/badge/Discord-join%20the%20community-5865F2?logo=discord&logoColor=white)](https://discord.gg/vGSnD3ZKQF)
 
