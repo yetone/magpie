@@ -336,3 +336,116 @@ func TestZCodeRiskControlNotToldAsFirewall(t *testing.T) {
 		})
 	}
 }
+
+// A 4xx carrying magpie's restricted-account hint (ZCode's 405 code 3012
+// suspension, whose message no longer says "request has been blocked", or
+// WorkBuddy's hint on a non-403 4xx) is retryable so a group fails over to
+// its other providers instead of aborting at tries=1 (#7774). The restricted
+// provider's other accounts are still skipped by riskRefused, and a plain
+// 405 without a restricted or firewall hint stays non-retryable.
+func TestRestricted4xxFailsOver(t *testing.T) {
+	zcodeSuspended := `{"type":"error","error":{"type":"permission_error","message":"ZCode: Your account has been suspended for misusing the Start Plan, such as proxying it to non-ZCode clients. Please contact support if you believe this is a mistake. (405, code 3012) — ` + provider.ZCodeRestrictedHint + `"}}`
+	wbHint405 := `{"error":{"message":"request illegal — ` + provider.WBRestrictedHint + `","type":"permission_error"}}`
+	old405 := `{"type":"error","error":{"type":"permission_error","message":"405 Method Not Allowed — ZCode's Start Plan still turned this request away"}}`
+
+	if provider.EdgeBlocked([]byte(zcodeSuspended)) {
+		t.Fatal("test fixture unexpectedly matches EdgeBlocked")
+	}
+	if !retryable(http.StatusMethodNotAllowed, []byte(zcodeSuspended)) {
+		t.Fatal("retryable(405, ZCodeRestrictedHint) = false, want true")
+	}
+	if !retryable(http.StatusMethodNotAllowed, []byte(wbHint405)) {
+		t.Fatal("retryable(405, WBRestrictedHint) = false, want true")
+	}
+	if !retryable(http.StatusBadRequest, []byte(wbHint405)) {
+		t.Fatal("retryable(400, WBRestrictedHint) = false, want true")
+	}
+	if retryable(http.StatusMethodNotAllowed, []byte(old405)) {
+		t.Fatal("retryable(405, plain 405) = true, want false")
+	}
+	if retryable(http.StatusOK, []byte(zcodeSuspended)) {
+		t.Fatal("retryable(200, ZCodeRestrictedHint) = true, want false")
+	}
+	escaped := strings.Replace(zcodeSuspended, "'", `'`, 1)
+	if !retryable(http.StatusMethodNotAllowed, []byte(escaped)) {
+		t.Fatal("retryable(405, JSON-escaped ZCodeRestrictedHint) = false, want true")
+	}
+	if !restrictedRefused(provider.Provider{ID: "zcode"}, http.StatusMethodNotAllowed, []byte(escaped)) {
+		t.Fatal("restrictedRefused(405, JSON-escaped ZCodeRestrictedHint) = false, want true")
+	}
+
+	// Sibling caller decideFailed must also rest on 405 restricted.
+	t.Run("decideFailed rests on 405 restricted", func(t *testing.T) {
+		fresh(t)
+		s := New()
+		p := provider.Provider{ID: "zcode", Name: "ZCode", Account: &provider.Account{Agent: "plugin", User: "u1"}}
+		c := candidate{p: p, model: "GLM-5.4", rest: p.ID + "#u1"}
+		why, rest := s.decideFailed(c, http.StatusMethodNotAllowed, nil, []byte(zcodeSuspended))
+		if why != failRestricted || rest == nil || rest.By != "restricted" || rest.Key != c.restKey() {
+			t.Fatalf("decideFailed = (%q, %+v), want failRestricted with rest", why, rest)
+		}
+	})
+
+	// Group failover: ZCode 405 suspension rests account 1, skips the
+	// restricted provider's other accounts, and fails over to the group's
+	// other provider.
+	t.Run("group fails over past 405 restricted", func(t *testing.T) {
+		codexSignedIn(t, "b@example.com")
+		if err := provider.SetRouting("codex", provider.Ordered); err != nil {
+			t.Fatal(err)
+		}
+		var tried []string
+		chatgptRefusing(t, &tried, func(w http.ResponseWriter) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			io.WriteString(w, zcodeSuspended)
+		})
+		other := &scripted{replies: []reply{{200, "", chatOK}}}
+		scriptedOn(t, "b", provider.Chat, other)
+		if err := provider.SaveGroup(provider.Group{Name: "G", Members: []string{"codex/gpt-5.5", "b/m"}, Routing: provider.Ordered}); err != nil {
+			t.Fatal(err)
+		}
+		s := New()
+		code, body := postAs(t, s, "", `{"model":"group/g","messages":[{"role":"user","content":"hi"}]}`)
+		if code != http.StatusOK || other.n != 1 {
+			t.Fatalf("%d %s; other asked %d times; accounts asked %v", code, body, other.n, tried)
+		}
+		if strings.Join(tried, ",") != "acct-1" {
+			t.Fatalf("restricted provider's other accounts were asked: %v", tried)
+		}
+		r := lastRoute(s)
+		if len(r.Tries) != 2 || r.Tries[0].Status != http.StatusMethodNotAllowed || r.Tries[0].Fail != failRestricted || r.Tries[0].Rest == nil || r.Tries[0].Rest.By != "restricted" {
+			t.Fatalf("tries %+v", r.Tries)
+		}
+		if _, ok := restOf("codex@b@example.com"); ok {
+			t.Fatal("unasked sibling account was rested")
+		}
+	})
+
+	// Alone with two accounts: returns 405, rests account 1 as restricted,
+	// and never sends the request on to account 2.
+	t.Run("lone provider rests and skips sibling on 405 restricted", func(t *testing.T) {
+		codexSignedIn(t, "b@example.com")
+		if err := provider.SetRouting("codex", provider.Ordered); err != nil {
+			t.Fatal(err)
+		}
+		var tried []string
+		chatgptRefusing(t, &tried, func(w http.ResponseWriter) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			io.WriteString(w, zcodeSuspended)
+		})
+		s := New()
+		code, body := postAs(t, s, "", `{"model":"codex/gpt-5.5","messages":[{"role":"user","content":"hi"}]}`)
+		if code != http.StatusMethodNotAllowed || !strings.Contains(body, provider.ZCodeRestrictedHint) {
+			t.Fatalf("reply %d %s", code, body)
+		}
+		if strings.Join(tried, ",") != "acct-1" {
+			t.Fatalf("sibling account was asked: %v", tried)
+		}
+		r := lastRoute(s)
+		if len(r.Tries) != 1 || r.Tries[0].Fail != failRestricted || r.Tries[0].Rest == nil || r.Tries[0].Rest.By != "restricted" {
+			t.Fatalf("tries %+v", r.Tries)
+		}
+	})
+}

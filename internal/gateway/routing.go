@@ -758,10 +758,11 @@ func restrictedSaid(status int, body []byte) bool {
 // built-in's or the plugin's. Another vendor's code 11140 is its own, and
 // isn't read so.
 func restrictedRefused(p provider.Provider, status int, body []byte) bool {
-	if restrictedSaid(status, body) {
+	w := wordsOf(body)
+	if restrictedSaid(status, w) {
 		return true
 	}
-	return isWorkBuddy(p) && provider.WBRestricted(status, wordsOf(body)) || googleSuspended(p, status, body) || claudeAccountOff(p, status, body)
+	return isWorkBuddy(p) && provider.WBRestricted(status, w) || googleSuspended(p, status, body) || claudeAccountOff(p, status, body)
 }
 
 // claudeOffWords are Anthropic's, and Claude Code's, words for an account

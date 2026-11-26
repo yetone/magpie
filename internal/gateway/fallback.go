@@ -2182,6 +2182,13 @@ func retryable(status int, body []byte) bool {
 		// the vendor's firewall blocked this address (Alibaba Cloud's 405
 		// in front of zcode.z.ai): another provider goes another way
 		return true
+	case restrictedSaid(status, body):
+		// magpie's own restricted-account hint (ZCode's 405 code 3012,
+		// WorkBuddy's 11140) on any 4xx: the account is restricted, so
+		// another provider in the group can still serve the request
+		// (#7774); riskRefused keeps sibling accounts of the same
+		// provider out
+		return true
 	case status >= 400 && status < 500 && failure(status, raw) == failCredit:
 		// out of credit, as failure reads it, whatever the status: another
 		// account may have a balance. SuperMagic's 400 "您的可用积分已不足…
