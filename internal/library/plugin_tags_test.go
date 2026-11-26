@@ -4,6 +4,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -22,6 +23,9 @@ func TestPluginUpgradesToNewerTag(t *testing.T) {
 		"skills/tidy/SKILL.md":       "---\nname: tidy\ndescription: Tidies\n---\nmarker-v1\n",
 	})
 	bare := strings.TrimPrefix(addr, "file://")
+	if runtime.GOOS == "windows" && len(bare) > 2 && bare[0] == '/' && bare[2] == ':' {
+		bare = bare[1:] // file:///C:/…
+	}
 	tag := func(name string) {
 		t.Helper()
 		if out, err := exec.Command(realGit, "--git-dir", filepath.FromSlash(bare), "tag", name, "refs/heads/main").CombinedOutput(); err != nil {
