@@ -371,6 +371,7 @@ const sessions = new Map() // oauth sign-in in progress → its authorize result
 const inflight = new Map() // fetch id → its lifecycle and owned resources
 const renewing = new Map() // account → its sign-in's renewal under way
 const unrenewed = new Map() // account → its last renewal that failed: {at, secret, gone, error, n}
+const unsaved = new Map() // account → a renewal the vendor gave whose save failed: {secret (the one it replaces), fields}
 let config = { provider: {} } // what the plugins' config hooks made of it
 
 // loadWait bounds one plugin's load (its import and its plugin function)
@@ -3130,7 +3131,10 @@ function renewal(provider, key) {
   let r = renewing.get(key)
   if (r) return r
   const f = unrenewed.get(key)
-  if (f && f.secret === secretOf(stored) && (f.gone || Date.now() - f.at < retryAfter(f.n ?? 1))) return null
+  // a renewal whose save failed is saved again at once: it asks the
+  // vendor nothing (unsaved)
+  const held = unsaved.get(key)?.secret === secretOf(stored)
+  if (f && f.secret === secretOf(stored) && !held && (f.gone || Date.now() - f.at < retryAfter(f.n ?? 1))) return null
   pending++ // the host doesn't leave in the middle of it
   r = renew(provider, key, a).finally(() => {
     renewing.delete(key)
@@ -3296,9 +3300,13 @@ async function renewLocked(provider, key, a, was) {
   const at = renewAt(a, now)
   if (!at || Date.now() < at) return
   was = now
-  let got
+  // a renewal the vendor gave for this very sign-in, whose save failed:
+  // the vendor has spent its refresh token, so what it gave is saved now
+  // rather than the spent one sent again (see unsaved below)
+  const held = unsaved.get(key)
+  let got = held && held.secret === secretOf(was) ? held.fields : undefined
   try {
-    got = await inScope(provider, key, () => a.refresh(JSON.parse(JSON.stringify(was)), provider))
+    got ??= await inScope(provider, key, () => a.refresh(JSON.parse(JSON.stringify(was)), provider))
   } catch (e) {
     // the token was spent by a host that didn't wait for this one's lock
     // (a magpie from before it) and saved what it got: not signed out
@@ -3322,10 +3330,26 @@ async function renewLocked(provider, key, a, was) {
   // that one stands. Checked under the lock the save is made under, so
   // nothing comes between the two.
   const { type: _t, ...fields } = got
-  const kept = await changeAuth((all) => {
-    if (changed(all[key], was)) return false
-    all[key] = { ...was, ...fields, type: "oauth" }
-  })
+  // A save that fails (plugin-auth.json refused to be replaced: a file
+  // another program holds open on Windows, a full disk) lost what the
+  // vendor gave, and one that spends a refresh token once (MiniMax) turned
+  // the old token away at the next renewal and signed the account out
+  // (Tiemo404 on X). What it gave is kept, and saved at the next try; the
+  // sign-in on disk goes on as it is till then.
+  let kept
+  try {
+    kept = await changeAuth((all) => {
+      if (changed(all[key], was)) return false
+      all[key] = { ...was, ...fields, type: "oauth" }
+    })
+  } catch (e) {
+    unsaved.set(key, { secret: secretOf(was), fields })
+    const why = `saving the renewed sign-in: ${e?.message ?? e}`
+    failedRenewal(key, was, false, why)
+    send({ event: "log", level: "error", message: `${auths().get(provider)?.spec ?? provider}: auth.refresh: ${why}` })
+    return
+  }
+  unsaved.delete(key)
   if (kept === false) return
   unrenewed.delete(key)
   forgetAccount(key)
