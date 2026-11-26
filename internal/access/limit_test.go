@@ -532,3 +532,41 @@ func TestLimitWindowFollowsTheDayStart(t *testing.T) {
 		}
 	}
 }
+
+// A magpie set to a time zone of its own (JackyFill on X) renews a key's
+// daily cap at that zone's midnight, as the Usage page cuts its days, not
+// at the computer's: at 05:00 UTC on the 15th it is 22:00 on the 14th in
+// Los Angeles, so the day began at its midnight on the 14th. A time asked
+// in a zone of its own keeps it. Run under TZ=UTC and TZ=Pacific/Kiritimati.
+func TestLimitWindowFollowsTheTimeZone(t *testing.T) {
+	la, err := time.LoadLocation("America/Los_Angeles")
+	if err != nil {
+		t.Skip(err)
+	}
+	zone := func(name string) {
+		s := settings.Load()
+		s.TimeZone = name
+		if err := settings.Save(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Cleanup(func() { zone("") })
+	now := time.Date(2026, 9, 15, 5, 0, 0, 0, time.UTC).In(time.Local)
+	zone("America/Los_Angeles")
+	from, to := Window("day", now)
+	if want := time.Date(2026, 9, 14, 0, 0, 0, 0, la); !from.Equal(want) || !to.Equal(want.AddDate(0, 0, 1)) || from.Location() != time.Local {
+		t.Errorf("set: day %v..%v in %v, want from %v in Local", from, to, from.Location(), want)
+	}
+	if from, _ := Window("month", now); !from.Equal(time.Date(2026, 9, 1, 0, 0, 0, 0, la)) {
+		t.Errorf("set: month from %v, want Los Angeles' Sep 1", from)
+	}
+	fixed := time.FixedZone("X", 8*3600)
+	if from, _ := Window("day", now.In(fixed)); !from.Equal(time.Date(2026, 9, 15, 0, 0, 0, 0, fixed)) {
+		t.Errorf("asked in a zone of its own: day from %v, want that zone's midnight", from)
+	}
+	zone("")
+	y, m, d := now.Date()
+	if from, _ := Window("day", now); !from.Equal(time.Date(y, m, d, 0, 0, 0, 0, time.Local)) {
+		t.Errorf("unset: day from %v, want the computer's midnight", from)
+	}
+}

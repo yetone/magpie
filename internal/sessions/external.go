@@ -179,13 +179,13 @@ type ExternalDayUsage struct {
 // st itself is not written: its Days and Sessions may be kept for the next
 // read (keptStats), so what is changed is copied first.
 func MergeExternalStats(st Stats, days []ExternalDayUsage, external []ExternalSession) Stats {
-	oldFirst, _ := time.ParseInLocation(time.DateOnly, st.From, time.Local)
+	oldFirst, _ := time.ParseInLocation(time.DateOnly, st.From, Local())
 	for _, d := range days {
 		if d.Date <= st.To && (st.From == "" || d.Date < st.From) {
 			st.From = d.Date
 		}
 	}
-	first, _ := time.ParseInLocation(time.DateOnly, st.From, time.Local)
+	first, _ := time.ParseInLocation(time.DateOnly, st.From, Local())
 	if !oldFirst.IsZero() && !first.Equal(oldFirst) {
 		// noted, not written into a copy of every session
 		st.shift += int(math.Round(oldFirst.Sub(first).Hours() / 24))
@@ -234,7 +234,7 @@ func MergeExternalStats(st Stats, days []ExternalDayUsage, external []ExternalSe
 		s := Summary{Key: e.Agent + ":" + e.ID, Agent: e.Agent, ID: e.ID, Title: cmp.Or(names[e.Agent+"|"+e.ID], e.Title), Gateway: true, Last: e.Last, Tokens: e.Tokens, Cost: e.Cost, Priced: true, Models: []string{}, Days: []int{}}
 		perDay := map[int]*summaryDay{}
 		for _, u := range e.Daily {
-			day, err := time.ParseInLocation(time.DateOnly, u.Date, time.Local)
+			day, err := time.ParseInLocation(time.DateOnly, u.Date, Local())
 			if err != nil {
 				continue
 			}

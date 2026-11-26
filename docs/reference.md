@@ -4205,6 +4205,7 @@ magpie settings set noBird on   # checked and saved as the window saves it
 magpie settings set redactWords acme,globex
 magpie settings reset theme     # back to its default
 magpie settings set dayStart 4   # a day starts at 4:00 (0 to 6): the Usage page and daily and monthly key caps cut days there; the Sessions page does not yet
+magpie settings set timeZone Asia/Shanghai   # this magpie's days and times in that zone, not the computer's: Usage, Sessions, the TUI and CLI, key caps, the menu bar, quota alerts, and every time the window shows; reset follows the system
 
 magpie quota                    # what is left of every subscription, plan and key balance
 magpie quota refresh codex      # read Codex's cards again now (once per 30s)

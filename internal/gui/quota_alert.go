@@ -9,6 +9,7 @@ import (
 
 	"github.com/yetone/magpie/internal/lazyre"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // onAlerts is told when the Settings page turns a usage or balance alert
@@ -79,8 +80,9 @@ func alertClockZh(at, now time.Time) string {
 
 // zhClock is provider.ResetClock in Chinese with these weekday names.
 func zhClock(at, now time.Time, weekdays [7]string) string {
-	at, now = at.Local(), now.Local()
-	day := func(t time.Time) time.Time { y, m, d := t.Date(); return time.Date(y, m, d, 0, 0, 0, 0, time.Local) }
+	loc := settings.Location()
+	at, now = at.In(loc), now.In(loc)
+	day := func(t time.Time) time.Time { y, m, d := t.Date(); return time.Date(y, m, d, 0, 0, 0, 0, loc) }
 	switch days := int(math.Round(day(at).Sub(day(now)).Hours() / 24)); {
 	case days <= 0:
 		return at.Format("15:04")
@@ -113,8 +115,9 @@ func alertWindowJa(name string) string {
 
 // alertClockJa is provider.ResetClock in Japanese.
 func alertClockJa(at, now time.Time) string {
-	at, now = at.Local(), now.Local()
-	day := func(t time.Time) time.Time { y, m, d := t.Date(); return time.Date(y, m, d, 0, 0, 0, 0, time.Local) }
+	loc := settings.Location()
+	at, now = at.In(loc), now.In(loc)
+	day := func(t time.Time) time.Time { y, m, d := t.Date(); return time.Date(y, m, d, 0, 0, 0, 0, loc) }
 	switch days := int(math.Round(day(at).Sub(day(now)).Hours() / 24)); {
 	case days <= 0:
 		return at.Format("15:04")
@@ -154,8 +157,9 @@ func alertWindowDe(name string) string {
 
 // alertClockDe is provider.ResetClock in German.
 func alertClockDe(at, now time.Time) string {
-	at, now = at.Local(), now.Local()
-	day := func(t time.Time) time.Time { y, m, d := t.Date(); return time.Date(y, m, d, 0, 0, 0, 0, time.Local) }
+	loc := settings.Location()
+	at, now = at.In(loc), now.In(loc)
+	day := func(t time.Time) time.Time { y, m, d := t.Date(); return time.Date(y, m, d, 0, 0, 0, 0, loc) }
 	switch days := int(math.Round(day(at).Sub(day(now)).Hours() / 24)); {
 	case days <= 0:
 		return "um " + at.Format("15:04")

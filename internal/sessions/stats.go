@@ -242,8 +242,8 @@ func statsReadAll(ranges []int, now time.Time, native map[string]bool, alias fun
 // native is asked for. The ranges' Stats, aliased, and the map are kept for
 // the next read (keptStats), so neither is written.
 func statsKept(ranges []int, now time.Time, wantNative bool, alias func(string) string, names string) ([]Stats, map[string]bool) {
-	now = now.In(time.Local)
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+	now = now.In(Local())
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, Local())
 
 	storeMu.RLock()
 	defer storeMu.RUnlock()
@@ -553,7 +553,7 @@ func statsOfRange(days int, today time.Time, files []file, copies map[string]str
 	if listed == nil {
 		groups = byKey(files, func(f *file) bool { return shares[f.key] != nil })
 	}
-	first, _ := time.ParseInLocation(time.DateOnly, out.From, time.Local)
+	first, _ := time.ParseInLocation(time.DateOnly, out.From, Local())
 	// made to size: grown by append, 34k sessions' list held a quarter
 	// more than its rows, and every copy it was grown through (#2278)
 	out.Sessions = make([]Summary, 0, len(shares))
@@ -582,7 +582,7 @@ func statsOfRange(days int, today time.Time, files []file, copies map[string]str
 		}
 		sum.perDay = make([]summaryDay, 0, len(sh.perDate))
 		for _, pd := range sh.perDate {
-			t, err := time.ParseInLocation(time.DateOnly, pd.date, time.Local)
+			t, err := time.ParseInLocation(time.DateOnly, pd.date, Local())
 			if err != nil {
 				continue
 			}
@@ -725,8 +725,8 @@ type Skill struct {
 // ("" for any), with the n that spent the most each way.
 func (st Stats) Overview(agent, model, cwd string, n int) Overview {
 	out := Overview{Days: []int{}, Top: map[string][]Summary{}}
-	first, err1 := time.ParseInLocation(time.DateOnly, st.From, time.Local)
-	last, err2 := time.ParseInLocation(time.DateOnly, st.To, time.Local)
+	first, err1 := time.ParseInLocation(time.DateOnly, st.From, Local())
+	last, err2 := time.ParseInLocation(time.DateOnly, st.To, Local())
 	if err1 == nil && err2 == nil && !last.Before(first) {
 		out.Days = make([]int, int(math.Round(last.Sub(first).Hours()/24))+1)
 	}

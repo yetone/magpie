@@ -195,8 +195,9 @@ func sessionsSearchTo(w io.Writer, args []string) error {
 	}
 	var since time.Time
 	if o.days > 0 {
-		y, m, d := time.Now().Date()
-		since = time.Date(y, m, d-(o.days-1), 0, 0, 0, 0, time.Local)
+		loc := sessions.Local() // Settings' time zone, else the system's
+		y, m, d := time.Now().In(loc).Date()
+		since = time.Date(y, m, d-(o.days-1), 0, 0, 0, 0, loc)
 	}
 	found, err := sessions.SearchSaidSince(ctx, needle, o.agent, since, o.limit)
 	if errors.Is(err, sessions.ErrNoWords) {

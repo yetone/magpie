@@ -51,9 +51,15 @@ const MaxSpendCap = 1_000_000
 // next begins, zero for a cap in all, which never renews.
 func (c SpendCap) Window(now time.Time) (start, reset time.Time) {
 	// a day that starts after midnight (settings.DayStart) moves the day
-	// and the month with it
+	// and the month with it. Asked in this computer's zone, the days are
+	// Settings' time zone's (JackyFill on X): the Usage page's.
 	home := now.Location()
-	loc := dayzone.Shift(home, settings.Shared().DayStart)
+	s := settings.Shared()
+	base := home
+	if home == time.Local {
+		base = s.Location()
+	}
+	loc := dayzone.Shift(base, s.DayStart)
 	now = now.In(loc)
 	y, m, d := now.Date()
 	defer func() {

@@ -101,13 +101,13 @@ const SpanAll = "all"
 
 // SpanOf is the days from from to date, both included (YYYY-MM-DD; date ""
 // is today, from "" is date alone and SpanAll the first day with calls), in
-// zone (nil is this computer's), as DayOf is one day: a week's, a month's or
+// zone (nil is this magpie's, usage.Zone("")), as DayOf is one day: a week's, a month's or
 // all time's totals and the agents and models that made them. A day after
 // today is an error, as is a from after date.
 func SpanOf(from, date string, zone *time.Location) (Day, error) {
 	span := from
 	if zone == nil {
-		zone = time.Local
+		zone = usage.Zone("")
 	}
 	today := usage.Clock().In(zone).Format(time.DateOnly)
 	if date == "" {

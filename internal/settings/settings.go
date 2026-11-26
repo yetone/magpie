@@ -134,6 +134,11 @@ type Settings struct {
 	// who codes past 1am). The Usage page, its daily cards and the gateway
 	// keys' daily and calendar caps cut their days there.
 	DayStart int `json:"dayStart,omitempty"`
+	// TimeZone is the IANA zone ("Asia/Shanghai") this magpie's days and
+	// times are in, in place of the system's (JackyFill on X: a magpie on a
+	// server and one on the desk, read on one scale). Empty follows the
+	// system. See Location.
+	TimeZone string `json:"timeZone,omitempty"`
 	// Dock keeps magpie in the Mac's Dock as well as the menu bar, for a
 	// menu bar too full to show its icon.
 	Dock bool `json:"dock,omitempty"`
@@ -2793,6 +2798,9 @@ func saveOwn(s Settings, recording, reads bool) error {
 	}
 	if s.DayStart < 0 || s.DayStart > 6 {
 		return fmt.Errorf("a day starts at an hour from 0 to 6, not %d", s.DayStart)
+	}
+	if s.TimeZone != "" && !ValidTimeZone(s.TimeZone) {
+		return fmt.Errorf("a time zone is an IANA name such as Asia/Shanghai, or empty to follow the system, not %q", s.TimeZone)
 	}
 	if s.UsageAlert < 0 || s.UsageAlert > 100 {
 		return fmt.Errorf("a usage alert is at a percentage from 1 to 100, or 0 for off, not %d", s.UsageAlert)

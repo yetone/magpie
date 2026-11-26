@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // Quotas is what is left everywhere magpie can ask: the signed-in
@@ -243,10 +245,12 @@ func BalanceText(b float64, unit string) string {
 }
 
 // ResetClock is when a window starts again, on the clock: "14:30" today,
-// "tomorrow 09:00", "Wed 14:30" within the week, else "Oct 3 14:30".
+// "tomorrow 09:00", "Wed 14:30" within the week, else "Oct 3 14:30", in
+// the time zone Settings names (the system's by default).
 func ResetClock(at, now time.Time) string {
-	at, now = at.Local(), now.Local()
-	day := func(t time.Time) time.Time { y, m, d := t.Date(); return time.Date(y, m, d, 0, 0, 0, 0, time.Local) }
+	loc := settings.Location()
+	at, now = at.In(loc), now.In(loc)
+	day := func(t time.Time) time.Time { y, m, d := t.Date(); return time.Date(y, m, d, 0, 0, 0, 0, loc) }
 	switch days := int(math.Round(day(at).Sub(day(now)).Hours() / 24)); {
 	case days <= 0:
 		return at.Format("15:04")

@@ -424,7 +424,7 @@ func sessionStats(w io.Writer, o sessionsOpts, st sessions.Stats, now time.Time)
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, faint.Render("  "+pad("date", 14)+pad("tokens", 9)+pad("cost", 10)+pad("cache read", 12)+pad("active", 9)))
 	for _, d := range days {
-		day, _ := time.ParseInLocation(time.DateOnly, d.Date, time.Local)
+		day, _ := time.ParseInLocation(time.DateOnly, d.Date, sessions.Local())
 		c := faint.Render(pad("—", 9))
 		if d.Cost > 0 {
 			c = pad(cost(stats.Totals{Cost: d.Cost}), 9)
@@ -536,7 +536,7 @@ func agoAt(t, now time.Time) string {
 	case d < 60*24*time.Hour:
 		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
 	}
-	return t.In(time.Local).Format("2006-01-02")
+	return t.In(sessions.Local()).Format("2006-01-02")
 }
 
 func nameOf(names map[string]string, id string) string {

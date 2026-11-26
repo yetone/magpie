@@ -761,6 +761,10 @@ type pageKey struct {
 	// state's key turns with this computer's day, and a reader in another
 	// zone has a today of their own
 	Date string
+	// Zone is the zone the page is cut in, Filter.Zone or, for none,
+	// Zone(""), which Settings' time zone and day start move: a page
+	// asked for with no zone before a change is not served after it
+	Zone *time.Location
 }
 type requestIndex struct {
 	sync.Mutex
@@ -940,7 +944,9 @@ func readRequestState(now time.Time) requestState {
 	meta += "|" + provider.UsageNamesKey()
 	h.Reset()
 	snapshot := readLogSnapshot()
-	fmt.Fprint(h, meta, snapshot.version, now.In(time.Local).Format("2006-01-02 MST"))
+	// a page asked for with no zone is in Zone(""), which Settings' time
+	// zone and day start move: kept apart by it, not served from before
+	fmt.Fprint(h, meta, snapshot.version, now.In(time.Local).Format("2006-01-02 MST"), "|", Zone("").String())
 	hashCodexIdentities(h, codexIdentities)
 	for _, s := range sources {
 		fmt.Fprintf(h, "%s:%d:%d;", s.Path, s.Size, s.Modified.UnixNano())
@@ -1022,7 +1028,7 @@ func queryPageOf(p Period, f Filter, offset, limit int, readSource func(sessions
 	idx.Lock()
 	idx.keepWhileAsked()
 	idx.adopt(st)
-	q := pageKey{p, f, offset, limit, now.Format(time.DateOnly)}
+	q := pageKey{p, f, offset, limit, now.Format(time.DateOnly), now.Location()}
 	if page, ok := idx.pages[q]; ok {
 		idx.Unlock()
 		return page

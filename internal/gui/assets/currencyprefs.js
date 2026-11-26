@@ -1,6 +1,7 @@
 // Settings › Usage › Currency, its Totals in row and Advanced's Menu bar
-// currency. app.js imports this when Settings draws its usage prefs
-// (renderTrayUsage), so it weighs nothing on the core.
+// currency, and Advanced's Time zone through timezone.js. app.js imports
+// this when Settings draws its usage prefs (renderTrayUsage), so it weighs
+// nothing on the core.
 
 window.currencyPrefs = function currencyPrefs(s, keep) {
   const two = CURRENCIES.slice(0, 2).map(([id, name]) => [id, t(name)]);
@@ -14,6 +15,7 @@ window.currencyPrefs = function currencyPrefs(s, keep) {
   // open when it is set
   $("#trayCurrencySegs").replaceChildren(segs([["", t("Same as totals")], ...two], s.trayCurrency || "", (v) => savePrefs({ ...keep, trayCurrency: v })));
   if (s.trayCurrency) $("#usageMore").open = true;
+  window.timeZonePref ? timeZonePref(s, keep) : import("./timezone.js").then(() => timeZonePref(s, keep), () => {});
   const rate = s.fx?.rate, sub = $("#currencySub");
   sub.textContent = s.currency === "provider" ? t("Each provider's costs in what it sells in: yuan for DeepSeek, Kimi, Zhipu and other Chinese vendors, dollars for the rest")
     : t("What a cost — the Usage page's, the tray panel's, the TUI's and the CLI's — is shown as; a vendor's own balance, already in its own currency, is never converted");

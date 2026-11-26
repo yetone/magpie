@@ -371,7 +371,7 @@ func trayAsOf(lang string, q provider.SubscriptionQuota) string {
 	if q.AsOf == nil {
 		return ""
 	}
-	return "\n" + trayText(lang, "as of %s, couldn't be read just now", q.AsOf.Local().Format(trayText(lang, "Jan 2 15:04")))
+	return "\n" + trayText(lang, "as of %s, couldn't be read just now", q.AsOf.In(settings.Location()).Format(trayText(lang, "Jan 2 15:04")))
 }
 
 func resetAt(w provider.QuotaWindow, now time.Time) time.Time {
@@ -503,9 +503,9 @@ type trayTotalGot struct {
 }
 
 // sum is p's total as the Requests tab has it, summed again once it is a
-// minute old or of another day.
+// minute old or of another day, as usage cuts days.
 func (m *trayTotalMemo) sum(p usage.Period, now time.Time) usage.Totals {
-	day := now.Format(time.DateOnly)
+	day := now.In(usage.Zone("")).Format(time.DateOnly)
 	m.Lock()
 	g, ok := m.got[p]
 	m.Unlock()

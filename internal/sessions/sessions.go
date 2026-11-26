@@ -429,12 +429,41 @@ func routedSkill(path string) string {
 // idleGap is the longest pause between two lines still counted as work.
 const idleGap = 5 * time.Minute
 
-// dateOf is the local date of a time, "" for none.
+// dateOf is the local date of a time (in Local), "" for none.
 func dateOf(t time.Time) string {
 	if t.IsZero() {
 		return ""
 	}
-	return t.In(time.Local).Format(time.DateOnly)
+	return t.In(Local()).Format(time.DateOnly)
+}
+
+// local is Settings' time zone as zone last read it: own is nil when none
+// is set, and the days are then the system's, time.Local as it is when
+// asked (a test moves it); local is nil before the first read.
+var local atomic.Pointer[struct{ own *time.Location }]
+
+// Local is the zone this magpie's days are dates in: Settings' timeZone
+// (JackyFill on X), else the system's. The setting is read again at each
+// load of the cache (zone), not on each line a parse dates.
+func Local() *time.Location {
+	z := local.Load()
+	if z == nil {
+		return zoneNow()
+	}
+	if z.own != nil {
+		return z.own
+	}
+	return time.Local
+}
+
+// zoneNow reads Settings' zone again, kept for Local, and is Local.
+func zoneNow() *time.Location {
+	own := settings.OwnZone()
+	local.Store(&struct{ own *time.Location }{own})
+	if own != nil {
+		return own
+	}
+	return time.Local
 }
 
 func (s *state) day(date string) *day {
@@ -479,7 +508,7 @@ func (s *state) saw(t time.Time, main bool) {
 		if gap := t.Sub(s.Last); main && !s.Last.IsZero() && gap < idleGap {
 			d := s.day(dateOf(t))
 			d.Active += gap.Milliseconds()
-			d.Hours.add(t.In(time.Local).Hour(), gap.Milliseconds())
+			d.Hours.add(t.In(Local()).Hour(), gap.Milliseconds())
 		}
 		s.Last = t
 	}
@@ -1511,11 +1540,13 @@ type cacheFile struct {
 }
 
 // zone tells time zones apart well enough for the days kept by date: their
-// offsets in winter and in summer. Moved to another, the files are read again.
+// offsets in winter and in summer. Moved to another, the files are read
+// again. The zone is Local, read again here.
 func zone() string {
+	loc := zoneNow()
 	y := time.Now().Year()
-	_, w := time.Date(y, 1, 1, 0, 0, 0, 0, time.Local).Zone()
-	_, s := time.Date(y, 7, 1, 0, 0, 0, 0, time.Local).Zone()
+	_, w := time.Date(y, 1, 1, 0, 0, 0, 0, loc).Zone()
+	_, s := time.Date(y, 7, 1, 0, 0, 0, 0, loc).Zone()
 	return strconv.Itoa(w) + "/" + strconv.Itoa(s)
 }
 

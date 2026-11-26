@@ -69,8 +69,10 @@ func sessNothing() string {
 func sessFilter(all []sessions.Session, days int, model, folder string, now time.Time) []sessions.Session {
 	var since time.Time
 	if days > 0 {
-		now = now.In(time.Local)
-		since = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local).AddDate(0, 0, 1-days)
+		// the days are the sessions' own: Settings' time zone, else the system's
+		loc := sessions.Local()
+		now = now.In(loc)
+		since = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc).AddDate(0, 0, 1-days)
 	}
 	var out []sessions.Session
 	for _, s := range all {
@@ -313,7 +315,7 @@ func sessAgo(t, now time.Time) string {
 	case d < 60*24*time.Hour:
 		return trf("%dd ago", int(d.Hours()/24))
 	}
-	return t.In(time.Local).Format("2006-01-02")
+	return t.In(sessions.Local()).Format("2006-01-02")
 }
 
 // sessLines is the stats view below the header: the bar, the totals, the
@@ -486,7 +488,7 @@ func sessChart(days []sessions.DayTotal, byCost bool, width, height int) []strin
 }
 
 func shortDate(d string) string {
-	t, err := time.ParseInLocation(time.DateOnly, d, time.Local)
+	t, err := time.ParseInLocation(time.DateOnly, d, sessions.Local())
 	if err != nil {
 		return d
 	}

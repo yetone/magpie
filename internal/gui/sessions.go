@@ -925,7 +925,7 @@ func combinedSessionStatsAll(days []int) []sessions.Stats {
 func withGatewaySessions(st sessions.Stats, days int, nativeKeys map[string]bool) sessions.Stats {
 	var since time.Time
 	if days > 0 && st.From != "" {
-		since, _ = time.ParseInLocation(time.DateOnly, st.From, time.Local)
+		since, _ = time.ParseInLocation(time.DateOnly, st.From, sessions.Local())
 	}
 	gs, gd := usage.GatewaySessionWindowExcept(since, nativeKeys)
 	ext := make([]sessions.ExternalSession, 0, len(gs))

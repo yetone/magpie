@@ -162,3 +162,33 @@ func TestSpendCapWindowFollowsTheDayStart(t *testing.T) {
 		t.Errorf("month window %v..%v, want September from 04:00", from, to)
 	}
 }
+
+// A magpie set to a time zone of its own (JackyFill on X) renews a key's
+// spend cap at that zone's midnight: at 05:00 UTC on the 15th the day began
+// at Los Angeles' midnight on the 14th. Run under TZ=UTC and
+// TZ=Pacific/Kiritimati.
+func TestSpendCapWindowFollowsTheTimeZone(t *testing.T) {
+	la, err := time.LoadLocation("America/Los_Angeles")
+	if err != nil {
+		t.Skip(err)
+	}
+	zone := func(name string) {
+		s := settings.Load()
+		s.TimeZone = name
+		if err := settings.Save(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Cleanup(func() { zone("") })
+	now := time.Date(2026, 9, 15, 5, 0, 0, 0, time.UTC).In(time.Local)
+	zone("America/Los_Angeles")
+	from, to := SpendCap{USD: 1, Period: SpendDay}.Window(now)
+	if want := time.Date(2026, 9, 14, 0, 0, 0, 0, la); !from.Equal(want) || !to.Equal(want.AddDate(0, 0, 1)) {
+		t.Errorf("set: day %v..%v, want from %v", from, to, want)
+	}
+	zone("")
+	y, m, d := now.Date()
+	if from, _ := (SpendCap{USD: 1, Period: SpendDay}).Window(now); !from.Equal(time.Date(y, m, d, 0, 0, 0, 0, time.Local)) {
+		t.Errorf("unset: day from %v, want the computer's midnight", from)
+	}
+}

@@ -342,7 +342,7 @@ func TestUsageOverBudgetPageIsCached(t *testing.T) {
 	equalPage(t, got, pageFromLedger(All, Filter{}, 0, 100, LedgerOf(All, Filter{})))
 	requestCache.Lock()
 	defer requestCache.Unlock()
-	if _, ok := requestCache.pages[pageKey{All, Filter{}, 0, 100, "2026-09-30"}]; !ok {
+	if _, ok := requestCache.pages[pageKey{All, Filter{}, 0, 100, "2026-09-30", Zone("")}]; !ok {
 		t.Fatal("page of an over-budget history not cached")
 	}
 }

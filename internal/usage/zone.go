@@ -25,8 +25,18 @@ var zones sync.Map // name → *time.Location, one for each name
 // With a day that starts after midnight (Settings' dayStart, ssharpcc on
 // X), the zone is that zone moved so its midnight is that hour (dayzone):
 // every day and hour the page cuts by it starts there.
+//
+// A magpie with a time zone of its own (Settings' timeZone, JackyFill on
+// X) is in that zone for every reader, whatever zone the browser names:
+// the days are the data's, so that a magpie on a server and one on the
+// desk set to one zone count the same days, and every page of one magpie
+// (its window, a browser, another magpie's window onto it) the same.
 func Zone(name string) *time.Location {
-	return dayzone.Shift(zoneNamed(name), settings.Shared().DayStart)
+	s := settings.Shared()
+	if s.TimeZone != "" && settings.ValidTimeZone(s.TimeZone) {
+		name = s.TimeZone
+	}
+	return dayzone.Shift(zoneNamed(name), s.DayStart)
 }
 
 func zoneNamed(name string) *time.Location {
