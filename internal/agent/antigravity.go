@@ -434,6 +434,20 @@ func antigravity(home string) *Agent {
 	}
 }
 
+func init() {
+	// the model the app starts on goes first in its catalog's 32
+	// entries (gateway.antigravityFit), its levels included
+	gateway.AntigravityStart = func() string {
+		home, _ := homes()
+		for _, p := range antigravityFiles(home) {
+			if f := newAgyFile(p); f.wired() {
+				return antigravityBase(f.model())
+			}
+		}
+		return ""
+	}
+}
+
 // antigravityBase is the model the app starts on without the level its
 // picker starts it at (gateway.AntigravityModel).
 func antigravityBase(id string) string {

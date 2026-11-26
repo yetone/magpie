@@ -561,3 +561,42 @@ func TestAntigravitySyncWiresConfigJSON(t *testing.T) {
 		t.Errorf("settings.json:\n%s", readFile(legacy))
 	}
 }
+
+// The app's catalog puts the model it starts on first in the 32 entries it
+// takes (leslie_luo on Discord: Gemini 4 Neon late in a long list had Low
+// and Medium only), so the gateway is told that model, read from the
+// wired file, and the app starts on a level of it, not on its bare id.
+func TestAntigravityStartModelToldToTheGateway(t *testing.T) {
+	home := antigravityHome(t)
+	var ids []string
+	var models []catalog.Model
+	for i := range 40 {
+		id, efforts := "m"+strings.Repeat("x", i), []string{"low", "medium", "high"}
+		if i == 36 {
+			id, efforts = "gemini-4-neon", []string{"low", "medium", "high", "xhigh"}
+		}
+		ids = append(ids, id)
+		models = append(models, catalog.Model{ID: id, Efforts: efforts})
+	}
+	if err := provider.Save(provider.Provider{ID: "cpa", Name: "cpa", Chat: "http://127.0.0.1:8317/v1", Key: "key", Models: ids}); err != nil {
+		t.Fatal(err)
+	}
+	if err := catalog.SaveLive("cpa", "http://127.0.0.1:8317/v1", models); err != nil {
+		t.Fatal(err)
+	}
+	if got := gateway.AntigravityStart(); got != "" {
+		t.Fatalf("start %q before the app is wired", got)
+	}
+	a := antigravity(home)
+	if err := a.Field("model").Set("magpie/cpa/gemini-4-neon"); err != nil {
+		t.Fatal(err)
+	}
+	if got := gateway.AntigravityStart(); got != "cpa/gemini-4-neon" {
+		t.Errorf("start %q, want cpa/gemini-4-neon", got)
+	}
+	var m map[string]any
+	json.Unmarshal(antigravityFile(t, filepath.Join(home, ".antigravity", "settings.json"))["models"], &m)
+	if got, _ := m["defaultModelId"].(string); got != "cpa/gemini-4-neon:medium" {
+		t.Errorf("defaultModelId %q, want cpa/gemini-4-neon:medium", got)
+	}
+}
