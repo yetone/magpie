@@ -781,6 +781,14 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
    phone's taller picker (body.web .sess-pick), which wins */
 .row-head .lib-skillagent { height: 24px; flex: 0 1 auto; min-width: 0; max-width: 180px; gap: 6px; }
 .lib-skillagent .ic { width: 13px; height: 13px; }
+/* on In your agents' heading (no skill in the library): whole, and the
+   heading takes a second line before the pick is cut to "All…" */
+#view-library .row-head.lib-foundhead:has(> .lib-skillagent:not([hidden])) { flex-wrap: wrap; row-gap: 6px; padding-block: 1px; }
+#view-library .row-head.lib-foundhead > .lib-skillagent, #view-library .row-head.lib-foundhead:has(> .lib-skillagent:not([hidden])) > .label { flex: none; }
+/* the note takes what room is left, and never pushes the buttons down */
+#view-library .row-head.lib-foundhead:has(> .lib-skillagent:not([hidden])) > .note { flex: 1 1 0; text-align: right; }
+/* in a narrow window it would show a letter or two: none */
+@media (max-width: 640px) { #view-library .row-head.lib-foundhead:has(> .lib-skillagent:not([hidden])) > .note { display: none; } }
 /* its menu: each agent's icon, its count at the end (as Sessions' agent menu) */
 .pop.proto-menu.lib-agentmenu { width: min(260px, calc(100vw - 16px)); max-height: min(360px, 70vh); overflow-y: auto; }
 .lib-agentmenu .pm-item { align-items: center; }

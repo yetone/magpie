@@ -21,7 +21,7 @@ const assets = path.resolve(__dirname, process.env.MAGPIE_ASSETS || "../assets")
 const HOME = "/Users/chuan";
 const agent = (id, name, icon) => ({ id, name, icon, skills: `${HOME}/.${id}/skills`, mcp: `${HOME}/.${id}/mcp.json` });
 const skill = (name, agents, extra = {}) => ({ name, description: "Does " + name, kind: "", agents, ...extra });
-const lib = () => ({
+const full = () => ({
   dir: `${HOME}/.magpie/library`, backups: `${HOME}/.magpie/backups`, home: HOME,
   agents: [agent("claude", "Claude Code", "claudecode-color"), agent("codex", "Codex", "codex-color"), agent("gemini", "Gemini CLI", "geminicli-color"), agent("qwen", "Qwen Code", "qwen-color")],
   instructions: { agents: [] }, foundServers: [], projects: [], problems: [], servers: [],
@@ -30,6 +30,14 @@ const lib = () => ({
   foundSkills: [{ name: "claude-own", description: "Claude's own", agents: ["claude"] }, { name: "codex-own", description: "Codex's own", agents: ["codex"] },
     { name: "gemini-own", description: "Gemini's own", agents: ["gemini"] }],
 });
+// MetalHqa again: "I couldn't find it". With no skill in the library (or
+// one) there was no pick at all, while In your agents listed every agent's
+// own skills in one: the pick sits on that heading then, and on the
+// library's from one skill up.
+const own = (name, agents) => ({ name, description: "Its own " + name, agents });
+const ownOnly = (skills = []) => ({ ...full(), skills,
+  foundSkills: [own("claude-a", ["claude"]), own("claude-b", ["claude"]), own("codex-a", ["codex"]), own("gemini-a", ["gemini"])] });
+let lib = full, web = true;
 const ALL = ["both-skill", "claude-1", "claude-2", "claude-3", "claude-4", "codex-1", "codex-2", "codex-3", "shared-skill", "nobody-skill"];
 
 let I18N;
@@ -47,7 +55,7 @@ function server(lang, writes) {
     const url = new URL(route.request().url());
     if (route.request().method() !== "GET" && url.pathname.startsWith("/api/library")) writes.push(url.pathname);
     const json = (data) => route.fulfill({ json: data });
-    if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"${theme}",web:true};` });
+    if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"${theme}",web:${web}};` });
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
     if (url.pathname === "/api/state") return json({ agents: [], profiles: [], settings: { lang, theme } });
     if (url.pathname === "/api/library") return json(lib());
@@ -66,6 +74,8 @@ function server(lang, writes) {
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   test(engine + ": Skills shows one agent's skills when it is picked", async (t) => {
     I18N = strings().I18N;
+    lib = full;
+    web = true;
     const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || "chromium" }));
     t.after(() => browser.close());
     for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) for (const width of [1100, 420]) {
@@ -148,6 +158,85 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
         assert.deepEqual(writes, [], "a pick wrote to the library");
         assert.deepEqual(errors, []);
+      });
+    }
+  });
+}
+
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  test(engine + ": with no skill in the library, In your agents' heading has the pick", async (t) => {
+    I18N = strings().I18N;
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || "chromium" }));
+    t.after(() => browser.close());
+    // the app's window and a browser's page, whose heading wraps on its own
+    for (const surface of ["app", "web"]) for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) for (const width of [1100, 420]) {
+      await t.test(`${surface} ${lang} ${width}`, async () => {
+        web = surface === "web";
+        const ctx = await browser.newContext({ viewport: { width, height: 1600 }, reducedMotion: "reduce" });
+        t.after(() => ctx.close());
+        await ctx.addInitScript(() => { try { localStorage.setItem("magpie.libTab", "skills"); } catch {} });
+        const open = async (data) => {
+          lib = data;
+          const page = await ctx.newPage();
+          page.setDefaultTimeout(5000);
+          page.setDefaultNavigationTimeout(60000);
+          const errors = [], writes = [];
+          page.on("pageerror", (e) => errors.push(e.message));
+          await page.route("**/*", server(lang, writes));
+          await page.goto("http://magpie.test/");
+          await page.locator('button[data-view="library"]').click();
+          await page.locator("#view-library .lib-found").first().waitFor();
+          return { page, errors, writes, v: page.locator("#view-library") };
+        };
+        const whole = async (pick) => {
+          const box = await pick.boundingBox();
+          assert.ok(box.x >= 0 && box.x + box.width <= width, `the pick is in the window: ${JSON.stringify(box)}`);
+          assert.ok(await pick.locator("span").first().evaluate((s) => s.scrollWidth <= s.clientWidth), "the pick's words are whole, not cut short");
+        };
+
+        // none in the library: on In your agents' heading
+        {
+          const { page, errors, writes, v } = await open(() => ownOnly());
+          assert.equal(await v.locator(".lib-skillshead").count(), 0);
+          const pick = v.locator(".lib-foundhead .lib-skillagent");
+          assert.equal((await pick.textContent()).trim(), tr(lang, "All agents"));
+          assert.ok(await pick.isVisible());
+          await whole(pick);
+          const found = async () => (await v.locator(".lib-found > .who > .name").evaluateAll((ns) => ns.map((n) => n.firstChild.textContent.trim()))).sort();
+          assert.deepEqual(await found(), ["claude-a", "claude-b", "codex-a", "gemini-a"]);
+          const menu = page.locator(".lib-agentmenu");
+          await pick.click();
+          await menu.waitFor();
+          const items = await menu.locator(".pm-item").evaluateAll((bs) => bs.map((b) => [b.querySelector(".pm-name").textContent, b.querySelector(".pm-note").textContent]));
+          assert.deepEqual(items, [[tr(lang, "All agents"), "4"], ["Claude Code", "2"], ["Codex", "1"], ["Gemini CLI", "1"]]);
+          await menu.locator(".pm-item", { hasText: "Claude Code" }).click();
+          await menu.waitFor({ state: "detached" });
+          await v.locator(".lib-found", { hasText: "codex-a" }).waitFor({ state: "detached" });
+          assert.deepEqual(await found(), ["claude-a", "claude-b"]);
+          const now = v.locator(".lib-foundhead .lib-skillagent");
+          assert.equal((await now.textContent()).trim(), "Claude Code");
+          await whole(now);
+          await now.click();
+          await menu.waitFor();
+          await menu.locator(".pm-item").first().click();
+          await v.locator(".lib-found", { hasText: "codex-a" }).waitFor();
+          assert.deepEqual(await found(), ["claude-a", "claude-b", "codex-a", "gemini-a"]);
+          assert.deepEqual(writes, []);
+          assert.deepEqual(errors, []);
+          await page.close();
+        }
+
+        // one in the library: on the library's heading, as from two up,
+        // and not again below
+        {
+          const { page, errors, v } = await open(() => ownOnly([skill("only-one", ["claude"])]));
+          const pick = v.locator(".lib-skillshead .lib-skillagent");
+          assert.ok(await pick.isVisible());
+          await whole(pick);
+          assert.equal(await v.locator(".lib-foundhead .lib-skillagent").count(), 0);
+          assert.deepEqual(errors, []);
+          await page.close();
+        }
       });
     }
   });

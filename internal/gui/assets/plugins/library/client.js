@@ -6269,8 +6269,9 @@ magpie.plugin("library", (ctx) => {
       ? t("A magpie on another computer that adds this one as a provider, with Use its skills and prompts on, takes these skills and gives them to its agents.")
       : t("A skill is a folder with a SKILL.md an agent loads when it's needed. The library keeps each one once and links it into the agents you pick.")));
     const all = skillAgents();
-    // one agent's, while it can still be picked
-    if (lib.skills.length < 2 || all.length < 2 || !all.some((a) => a.id === skillAgent)) skillAgent = "";
+    // one agent's, while it can still be picked: with no skill in the
+    // library, while the agent still has some of its own
+    if (all.length < 2 || !all.some((a) => a.id === skillAgent) || !lib.skills.length && !lib.partial && !foundShown().length) skillAgent = "";
     // the skill router first, over the install card and the list (the
     // owner, 11-21: at the foot of a long list nobody found it), and
     // always: hidden while the library had no skill, the owner (11-23)
@@ -6283,7 +6284,7 @@ magpie.plugin("library", (ctx) => {
       rh.append(el("span", "label", t("In the library")));
       const box = el("div", "lib-groups");
       if (lib.skills.length > 8) rh.append(skillFilter(box, all));
-      if (lib.skills.length > 1 && all.length > 1) rh.append(skillAgentPick(all));
+      if (all.length > 1) rh.append(skillAgentPick(all));
       const fresh = lib.skills.filter((s) => s.kind === "github" || s.kind === "git" || s.origin);
       rh.append(el("span", "grow"));
       if (lib.skills.length > 1) rh.append(sortBy("libSkills", SKILL_SORTS(), () => { if (box.isConnected) drawSkills(box, all); }));
@@ -6387,7 +6388,12 @@ magpie.plugin("library", (ctx) => {
       for (const n of foundPicked) if (!fnames.includes(n)) foundPicked.delete(n);
       for (const n of foundErrs.keys()) if (!fnames.includes(n)) foundErrs.delete(n);
       const rh = el("div", "row-head lib-foundhead");
-      rh.append(el("span", "label", t("In your agents")), el("span", "grow"), el("span", "note", t("not in the library — bring one in to give it to the others")));
+      rh.append(el("span", "label", t("In your agents")));
+      // with no skill in the library there is no heading above for the
+      // agent pick, and this list is every agent's skills in one (MetalHqa
+      // on X found no pick): it sits here instead
+      if (!lib.skills.length && all.length > 1) rh.append(skillAgentPick(all));
+      rh.append(el("span", "grow"), el("span", "note", t("not in the library — bring one in to give it to the others")));
       // every one at once, rather than a click for each
       if (found.length > 1) {
         const names = found.map((f) => f.name);
