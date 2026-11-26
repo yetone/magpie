@@ -24,13 +24,17 @@ import (
 const (
 	agyCLIID      = "agy-cli"
 	agyCLIPackage = "@magpie-community/opencode-agy-cli-auth"
-	// 0.1.139: a replay over agy's 128 KiB prompt cap goes in whole over
+	// 0.1.140: usage is read through agy alone (`agy -p /usage`), never
+	// with agy's stored token against Google's quota endpoints, and a
+	// slow read says agy is still reading instead of "timed out"
+	// (9uK7K2AqpF10987, Jayc1world on X); 0.1.139: a replay over agy's
+	// 128 KiB prompt cap goes in whole over
 	// several prompts instead of being cut to the newest turns
 	// (yayoi_no_yume on X); 0.1.133: each account moved gets an agy home
 	// of its own, and a request of one never goes on in another's agy, so
 	// one account's 429 no longer rests the other (Archivemylife on X);
 	// 0.1.68: auth.import takes the old plugin's sign-ins
-	agyCLIMin = "0.1.139"
+	agyCLIMin = "0.1.140"
 )
 
 // agyMoving are the Antigravity accounts agy-cli doesn't have yet, as the
