@@ -67,3 +67,62 @@ func TestMCPCallRowsListedNotCounted(t *testing.T) {
 		t.Fatalf("hosts %v", hosts)
 	}
 }
+
+// tomtanir and lyl50478600 on X: how many times, and how often, each MCP
+// tool was called. The page of the MCP tool purpose counts its calls by
+// server and tool, the most called first, with those that failed and a
+// rate a day from the tool's first call; a page of anything else counts
+// none, and the agent picked is kept to.
+func TestMCPToolCallsCounted(t *testing.T) {
+	reportedHome(t)
+	// noon, so the calls of the last hour are today's
+	y, m, d := time.Now().Date()
+	now := holdClock(t, time.Date(y, m, d, 12, 0, 0, 0, time.Local))
+	call := func(at time.Time, agent, server, tool, failed string) {
+		Append(Record{Time: at, Agent: agent, Operation: "execute_tool", Requested: tool, Host: server, Millis: 30, Error: failed,
+			Endpoint: "/mcp/magpie/hub/" + agent, Kind: KindMCP, Source: SourceMCP})
+	}
+	day := 24 * time.Hour
+	for i := range 6 {
+		call(now.Add(-4*day+time.Duration(i)*time.Hour), "claude", "github", "create_issue", "")
+	}
+	call(now.Add(-2*day), "claude", "github", "create_issue", "it didn't answer")
+	call(now.Add(-time.Hour), "claude", "fetch", "fetch", "")
+	call(now.Add(-time.Minute), "codex", "fetch", "fetch", "")
+	Append(Record{Time: now.Add(-time.Minute), Agent: "claude", Provider: "openai", Model: "gpt-5", Requested: "gpt-5", Status: 200, Input: 10, Output: 5})
+
+	p := QueryPage(All, Filter{Purpose: "kind:mcp"}, 0, 50)
+	if len(p.Tools) != 2 {
+		t.Fatalf("tools %+v", p.Tools)
+	}
+	gh, fetch := p.Tools[0], p.Tools[1]
+	if gh.Server != "github" || gh.Tool != "create_issue" || gh.Calls != 7 || gh.Failed != 1 || !gh.Last.Equal(now.Add(-2*day)) {
+		t.Errorf("github %+v", gh)
+	}
+	if d := gh.PerDay; d < 7/4.01 || d > 7/3.99 {
+		t.Errorf("github is called %v a day, want 7 over 4 days", d)
+	}
+	if fetch.Server != "fetch" || fetch.Tool != "fetch" || fetch.Calls != 2 || fetch.Failed != 0 || fetch.PerDay != 2 {
+		t.Errorf("fetch %+v (called within the day: 2 a day)", fetch)
+	}
+
+	// the agent picked: its calls alone
+	p = QueryPage(All, Filter{Purpose: "kind:mcp", Agent: "codex"}, 0, 50)
+	if len(p.Tools) != 1 || p.Tools[0].Tool != "fetch" || p.Tools[0].Calls != 1 {
+		t.Errorf("codex's tools %+v", p.Tools)
+	}
+	// a day picked: that day's calls, the rate of the one day
+	p = QueryPage(All, Filter{Purpose: "kind:mcp", Day: now.Add(-2 * day).Format(time.DateOnly)}, 0, 50)
+	if len(p.Tools) != 1 || p.Tools[0].Calls != 1 || p.Tools[0].Failed != 1 || p.Tools[0].PerDay != 1 {
+		t.Errorf("the day's tools %+v", p.Tools)
+	}
+	// the period: today holds fetch's two alone
+	p = QueryPage(Today, Filter{Purpose: "kind:mcp"}, 0, 50)
+	if len(p.Tools) != 1 || p.Tools[0].Tool != "fetch" || p.Tools[0].Calls != 2 {
+		t.Errorf("the last day's tools %+v", p.Tools)
+	}
+	// any other page counts no tools
+	if p := QueryPage(All, Filter{}, 0, 50); p.Tools != nil {
+		t.Errorf("the page of every purpose counts tools: %+v", p.Tools)
+	}
+}

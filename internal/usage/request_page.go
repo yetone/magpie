@@ -80,6 +80,9 @@ type RequestPage struct {
 	// Big is the request that wrote the most to the cache, of the rows the
 	// filter keeps
 	Big BigWrite
+	// Tools are the MCP tool calls the filter keeps, by tool, when it
+	// keeps those alone (mcpTools)
+	Tools []ToolCalls
 }
 
 type packedRow struct {
@@ -2827,6 +2830,7 @@ func buildRequestBlocksIn(p Period, f Filter, offset, limit int, now time.Time, 
 		}
 	}
 	out.Computers, out.Names = computerShares(computers, names)
+	out.Tools = mcpTools(f, since, p.Until(now), now, gateways)
 	var base []Point
 	var chartSince time.Time
 	chartSince, out.Bucket, base = timeline(p, now, first)
@@ -2934,11 +2938,18 @@ func pageFromLedgerAt(p Period, f Filter, offset, limit int, all Ledgered, now t
 	offset = min(offset, len(l.Rows))
 	out.Rows = l.Rows[offset:min(len(l.Rows), offset+limit)]
 	speeds := speedRank{}
+	tools := mcpTally{}
 	for _, r := range l.Rows {
 		if !r.IsRejected() && !r.IsProbe() {
 			speeds.add(&r)
 			out.Big.add(&r)
 		}
+		if f.picksMCP() && r.Kind == KindMCP {
+			tools.add(&r)
+		}
+	}
+	if f.picksMCP() {
+		out.Tools = tools.list(toolsEnd(p.Until(now), now), f.Day != "")
 	}
 	out.Speeds, out.ProviderSpeeds = speeds.result(), speeds.providers()
 	chartRows := l.Rows

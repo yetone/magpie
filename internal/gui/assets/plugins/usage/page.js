@@ -2645,6 +2645,41 @@ function drawLedSpeed(l) {
   box.append(head, scroll);
 }
 
+// each MCP tool's calls in the period, while the purpose picks the tool
+// calls (tomtanir and lyl50478600 on X): how many, how often, how many
+// failed, the most called first (usage.ToolCalls). Their rows are below.
+function drawLedTools(l) {
+  const box = $("#ledTools");
+  const list = l.tools || [];
+  box.hidden = !list.length;
+  box.replaceChildren();
+  if (box.hidden) return;
+  const head = el("div", "led-bar");
+  head.append(el("b", "led-spd-t", t("Tool calls")));
+  const table = el("table", "led-spd led-tools by-prov");
+  const hr = el("tr");
+  for (const [label, cls] of [["Tool", "nm"], ["Calls", "n"], ["Per day", "n"], ["Failed", "n"]]) hr.append(el("th", cls, t(label)));
+  const thead = el("thead");
+  thead.append(hr);
+  const body = el("tbody");
+  const rate = (n) => n.toLocaleString(intlLang(), { maximumFractionDigits: n < 10 ? 1 : 0 });
+  for (const x of list) {
+    const tr = el("tr");
+    const name = el("td", "nm", x.tool || "—");
+    const server = el("div", "led-spd-prov", x.server || "magpie");
+    name.append(server);
+    name.title = (x.tool || "—") + " · " + server.textContent;
+    const fail = el("td", "n" + (x.failed ? " off" : " faint"), ledNum(x.failed || 0));
+    fail.title = t("{n} of {m} failed", { n: ledNum(x.failed || 0), m: ledNum(x.calls) });
+    tr.append(name, el("td", "n", ledNum(x.calls)), el("td", "n", rate(x.per_day || 0)), fail);
+    body.append(tr);
+  }
+  table.append(thead, body);
+  const scroll = el("div", "led-spd-scroll");
+  scroll.append(table);
+  box.append(head, scroll);
+}
+
 // ---- what the bytes sent upstream were made of (theforeveriris on X:
 // "8.6 GB up from plain-text projects?"). Every request sends the whole
 // conversation again, so a request's bytes are about its context; the
@@ -2751,6 +2786,7 @@ function renderLedgerDash(l) {
   dash.hidden = !l.total && !l.day;
   if (dash.hidden) return;
   drawLedSpeed(l);
+  drawLedTools(l);
   ledUpLast = l;
   drawLedUp(l);
   const total = allTokens(l);

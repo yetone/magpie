@@ -322,6 +322,10 @@ type Ledger struct {
 	// BigWrite: the request that wrote the most to the cache, of the rows
 	// the filter keeps
 	BigWrite usage.BigWrite `json:"big_write"`
+	// Tools: the MCP tool calls of the rows the filter keeps, by server
+	// and tool, the most called first, while it keeps those alone (the
+	// MCP tool purpose)
+	Tools []usage.ToolCalls `json:"tools,omitempty"`
 }
 
 // Share is a usage.Share with the name and logo the page shows it by.
@@ -427,6 +431,7 @@ func LedgerPage(p usage.Period, f usage.Filter, offset, limit int) Ledger {
 	out.Bucket, out.Series = l.Bucket, l.Series
 	out.Purposes = l.Purposes
 	out.BigWrite = l.Big
+	out.Tools = l.Tools
 	out.Day = f.Day
 	out.Provider = f.Provider
 	out.CallerKeys = inKeyOrder(callerGroups(usage.Summary{CallerKeys: l.CallerKeys}))

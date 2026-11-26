@@ -1302,6 +1302,18 @@ arguments are never kept, not even masked.
   server, the Requested cell the tool, and the status Succeeded or
   Failed. The Purpose filter names `kind:mcp` "MCP tool"
   (`purposeKinds`, `purposes.js`).
+- **Counted by tool:** while the Purpose filter is `kind:mcp`
+  (`Filter.picksMCP`), a requests page also holds `Tools` (`tools` in
+  `/api/usage/requests`, `mcp_tools.go`; tomtanir and lyl50478600 on X):
+  each server and tool's calls among the rows the filter keeps, how many
+  failed, the last, and `per_day`, the calls over the days from the tool's
+  first call in the period to its end (now for one not ended), one at
+  least, or over the one day of a day's page. It is read from the probe
+  chunk only (`mcpTools`; the ledger path tallies its own rows), and for
+  no other purpose, so the cells, their cache and `settledCountVersion`
+  don't change. The page shows it as the Tool calls card under the chart
+  (`drawLedTools`, `#ledTools`), the most called first.
+  `TestMCPToolCallsCounted` and `usage-mcp-tools.test.cjs` cover it.
 
 ### Claude Code's helper requests and the largest cache write
 
