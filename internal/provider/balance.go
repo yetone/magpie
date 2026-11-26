@@ -1797,6 +1797,8 @@ func KeyBalances(ctx context.Context) []SubscriptionQuota {
 					q.Balance = amount
 					now := time.Now()
 					q.ReadAt = &now
+					// what routing goes by, read just now (KeyAllowance)
+					noteKeyAllowance(j.p, ws, now)
 				}
 				out[i] = keepReading(ctx, q, keyTag("balance", j.p.Key))
 				return

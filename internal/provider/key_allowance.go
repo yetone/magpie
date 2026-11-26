@@ -68,6 +68,12 @@ func readsKeyWindows(p Provider) bool {
 	if _, ok := planQuotaSourceOf(p); ok {
 		return true
 	}
+	// a Cline API key's ClinePass limits, which its card has read since
+	// #79 while routing knew nothing of them: the Routing page showed a
+	// ClinePass seat with no bar and no reset (xzhih on X)
+	if clineKeyCard(p) {
+		return true
+	}
 	return accountPlanOf(p) != ""
 }
 
@@ -289,6 +295,15 @@ func keyWindows(ctx context.Context, p Provider) (keyReading, error) {
 		r.plan, r.ws, _, err = planKeyWindows(q.Via(ctx), q, src, q.Key)
 		return r, err
 	}
+	if clineKeyCard(q) {
+		// as its card reads them (KeyBalances): the limits failing
+		// beside a balance read is a failed read, never "no windows"
+		r.ws, r.balance, err = clineKeyUsage(ctx, q)
+		if err != nil {
+			return keyReading{}, err
+		}
+		return r, nil
+	}
 	var parts []BalancePart
 	r.balance, parts, r.split, r.ws, _, _, err = balanceRead(ctx, q)
 	r.parts = cardParts(parts)
@@ -342,6 +357,9 @@ func keyAllowanceOf(p Provider, ws []QuotaWindow, now time.Time) Allowance {
 // p's list's as it is now (costsNothing); ws as it is at any other
 // vendor, or with none free. A window still counts model "", the key.
 func (p Provider) paidOnly(ws []QuotaWindow) []QuotaWindow {
+	if len(ws) > 0 && clineKeyCard(p) {
+		return clinePassOnly(ws)
+	}
 	if len(ws) == 0 || !p.atOpenCodeGo() {
 		return ws
 	}
@@ -362,6 +380,29 @@ func (p Provider) paidOnly(ws []QuotaWindow) []QuotaWindow {
 		}
 	}
 	return out
+}
+
+// clinePassOnly is ws, a Cline key's ClinePass limits, each made to count
+// only the plan's models (cline-pass/…): Cline serves its free models
+// apart from the plan's quota ("separate from ClinePass quota", its
+// recommended-models feed) and its other models from the account's
+// credits, so a week used up holds neither. A window still counts model
+// "", the key.
+func clinePassOnly(ws []QuotaWindow) []QuotaWindow {
+	out := slices.Clone(ws)
+	for i, w := range out {
+		if w.Model == "" && w.Family == "" && w.matches == nil {
+			out[i].matches = clinePassModel
+		}
+	}
+	return out
+}
+
+// clinePassModel says model, as routing asks for it, draws on ClinePass's
+// limits: one of the plan's, or "" for the key itself.
+func clinePassModel(model string) bool {
+	m := strings.ToLower(strings.TrimSpace(model))
+	return m == "" || strings.HasPrefix(m, clinePassPrefix) || strings.Contains(m, "/"+clinePassPrefix)
 }
 
 // lastKeyAllowance is p's key's windows as its card last read them, kept

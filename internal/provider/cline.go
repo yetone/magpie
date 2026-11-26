@@ -53,6 +53,10 @@ func (p Provider) IsCline() bool {
 // the feed's free list names may not (stealth/space-bunny-alpha).
 const clineFreePrefix = "cline-free/"
 
+// clinePassPrefix is what the ids of ClinePass's models start with: the
+// ones its 5-hour, weekly and monthly limits count (clinePassOnly).
+const clinePassPrefix = "cline-pass/"
+
 // clineFeed is the list Cline's own clients take their pickers from:
 // GET {base}/ai/cline/recommended-models, asked with the client's headers
 // and no key. Its clinePass models are the plan's, its free ones are served
