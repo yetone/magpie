@@ -14,6 +14,8 @@ magpie.plugin("library", (ctx) => {
 
   let lib = null;        // the page, as /api/library gives it
   let taken = 0;         // how many times lib was set, for a read to tell a newer answer came first
+  let wholeAt = 0;       // the last time it was set whole, not a part of it
+  const partAt = {};     // when each key was last set by a part of the page
   let tab = "instructions";
   let shown = "";        // the tab the page last drew, which fades in only when it changes
   let fits = [];         // textareas to fit before the page is painted
@@ -607,7 +609,22 @@ magpie.plugin("library", (ctx) => {
   // written kept as they were last clicked. A server or skill added,
   // removed or renamed changes what the market calls added (#300): one gone
   // from the library loses its mark at once, and the market is asked again.
+  // What a change to the MCP servers alone answers with (library.ReadMCP):
+  // reading the whole page again went through every agent's skill folders,
+  // seconds of each Save on Windows (zysicyj on X).
+  const MCP_PART = ["agents", "servers", "foundServers", "projects", "plugins", "mcpHub"];
   function take(v) {
+    // a part of the page, the rest kept as it is: the instructions' (#1624)
+    // or the MCP servers'
+    if (v.part) {
+      const keys = v.part === "mcp" ? MCP_PART : ["instructions"], from = v.part === "mcp" ? v.mcp : v;
+      const p = { ...lib, problems: v.problems, result: v.result };
+      for (const k of [...keys, "problems"]) {
+        if (k !== "problems") p[k] = from[k];
+        partAt[k] = taken + 1;
+      }
+      v = p;
+    } else if (v !== lib) wholeAt = taken + 1; // lib taken again is no newer than it was
     // What the reader hid stays hidden while it still fails and nothing
     // else does: every change writes every agent again, so a file magpie
     // can't stat fails at each one (#3745). A failure not hidden brings the
@@ -682,8 +699,12 @@ magpie.plugin("library", (ctx) => {
     try {
       const at = taken;
       const v = await api("library");
-      // a change answered meanwhile, with the library as it is after it
-      if (taken !== at) return;
+      // a change answered meanwhile, with the library as it is after it;
+      // one answered with a part of it, newer than this read in that part
+      if (taken !== at) {
+        if (wholeAt > at) return;
+        for (const k of Object.keys(partAt)) if (partAt[k] > at) v[k] = lib[k];
+      }
       const was = lib && seen(lib);
       take(v);
       if (glanced && tab !== "skills") return;
@@ -723,7 +744,7 @@ magpie.plugin("library", (ctx) => {
     let ok = false;
     try {
       const v = await api("library/" + path, body);
-      take(v.part === "instructions" ? { ...lib, instructions: v.instructions, problems: v.problems, result: v.result } : v);
+      take(v);
       status(""); // what it did, said next, or nothing for one that says nothing
       report(v.result, done, null, settled);
       ok = true;

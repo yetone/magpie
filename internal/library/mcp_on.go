@@ -14,7 +14,7 @@ import (
 // it back, none when it had none (it is the router's alone again). A
 // plugin's server is the same switch as its row on the Plugins page.
 func ServerOn(name string, on bool) (*Result, error) {
-	return change(func(l *Library) error {
+	return changeMCP(func(l *Library) error {
 		s := l.server(name)
 		if s == nil {
 			return fmt.Errorf("no server called %s", name)

@@ -912,7 +912,7 @@ func InstallServer(id string, values map[string]string, agents []string) (*Resul
 	if err := s.check(); err != nil {
 		return nil, err
 	}
-	return change(func(l *Library) error {
+	return changeMCP(func(l *Library) error {
 		if have := l.haveServer(&s); have != "" {
 			return fmt.Errorf("the library has it already, as %s", have)
 		}

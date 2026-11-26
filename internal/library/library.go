@@ -6,6 +6,7 @@
 package library
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
@@ -394,14 +395,29 @@ func set(list []string, id string, on bool) []string {
 // changed into the agents. The processes of a server taken out are ended
 // after, with the lock let go (mcp_reap.go).
 func change(f func(l *Library) error) (*Result, error) {
-	res, err := changeLocked(f)
+	return changeAs(f, false)
+}
+
+// changeMCP is change for one to the MCP servers alone (their agents,
+// settings, tools), which writes only the agents' MCP files: the servers'
+// entries, the router's, the tool rules beside them, and the projects'.
+// A whole sync went through every agent's skills too, copies hashed and
+// all, and on Windows ticking Magpie Artifacts on ~30 agents said Saving…
+// for about a minute (zysicyj on X). Should f, or what change does after
+// it, have changed anything else, every agent is written as change does.
+func changeMCP(f func(l *Library) error) (*Result, error) {
+	return changeAs(f, true)
+}
+
+func changeAs(f func(l *Library) error, mcp bool) (*Result, error) {
+	res, err := changeLocked(f, mcp)
 	if res != nil && len(res.dropped) > 0 {
 		ending(res.dropped)
 	}
 	return res, err
 }
 
-func changeLocked(f func(l *Library) error) (*Result, error) {
+func changeLocked(f func(l *Library) error, mcp bool) (*Result, error) {
 	mu.Lock()
 	defer mu.Unlock()
 	l, err := load()
@@ -410,6 +426,10 @@ func changeLocked(f func(l *Library) error) (*Result, error) {
 	}
 	// what a subagent's file says first, for f to change that
 	l.followSubagentFiles()
+	var was []byte
+	if mcp {
+		was = l.beyondMCP()
+	}
 	if err := f(l); err != nil {
 		return nil, err
 	}
@@ -419,6 +439,36 @@ func changeLocked(f func(l *Library) error) (*Result, error) {
 	if err := l.save(); err != nil {
 		return nil, err
 	}
-	res := l.sync()
+	var res *Result
+	if mcp && was != nil && bytes.Equal(was, l.beyondMCP()) {
+		res = l.syncMCPOnly()
+	} else {
+		res = l.sync()
+	}
 	return res, l.save()
+}
+
+// beyondMCP is the library but for its MCP servers and what goes with
+// them, as saved: a change to the servers alone leaves it as it was. Nil
+// when it can't be told.
+func (l *Library) beyondMCP() []byte {
+	c := *l
+	c.MCP, c.Away, c.Projects, c.Applied, c.Icons = nil, nil, nil, nil, nil
+	c.MCPHub, c.BridgesOn, c.BridgesOffered, c.PluginsOffered = false, nil, nil, nil
+	c.ArtifactsOffered, c.ArtifactsWithdrawn = false, false
+	b, err := json.Marshal(&c)
+	if err != nil {
+		return nil
+	}
+	// a subagent's file names the servers it uses that the library has
+	// and that are on (renderSubagent): one removed, renamed or turned
+	// off changes the file, which the whole sync writes
+	for _, s := range l.Subagents {
+		for _, n := range s.MCP {
+			if x := l.server(n); x != nil && !x.Hidden {
+				b = append(b, "\x00"+s.Name+"\x00"+n...)
+			}
+		}
+	}
+	return b
 }

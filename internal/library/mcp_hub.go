@@ -92,7 +92,7 @@ func inHub(s *Server, id string) bool {
 // entry (direct); the agents are written again at once, so the entry it
 // had the other way goes.
 func ServerHub(name string, direct bool) (*Result, error) {
-	return change(func(l *Library) error {
+	return changeMCP(func(l *Library) error {
 		s := l.server(name)
 		if s == nil {
 			return fmt.Errorf("no server called %s", name)

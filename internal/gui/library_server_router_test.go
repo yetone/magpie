@@ -32,12 +32,17 @@ func TestServerRouterFromRow(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("router %v: %d %s", on, rec.Code, rec.Body)
 		}
-		var v struct{ Servers []library.Server }
-		if err := json.Unmarshal(rec.Body.Bytes(), &v); err != nil {
+		// a change to the servers alone answers with their part of the page
+		var a struct {
+			Part string
+			MCP  struct{ Servers []library.Server }
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &a); err != nil {
 			t.Fatal(err)
 		}
-		if len(v.Servers) != 1 {
-			t.Fatalf("servers in the view: %+v", v.Servers)
+		v := a.MCP
+		if a.Part != "mcp" || len(v.Servers) != 1 {
+			t.Fatalf("servers in the view (%q): %+v", a.Part, v.Servers)
 		}
 		// read again from disk, as the next page load reads it
 		get := httptest.NewRecorder()
