@@ -93,7 +93,7 @@ An agent on this computer is told no base and answered as before.
 | Tool | Does |
 | --- | --- |
 | `publish_artifact` | Publishes a page from `file_path` (read on magpie's computer, relative to the agent's folder, `~` and `file://` read) or `html`, with `files` (a local path, `{text}`, `{base64}`, or null to remove one), `title`, `description`, `label` and `capabilities` ([Page runtime](#page-runtime)). With `id` it adds a version; with `version` it refuses a publish over a newer one. Answers the page's address. |
-| `artifact_guide` | How a page calls each capability (`db`, `user`, `artifact`, `assets`, `sample`, `permissions`): the calls' shapes, answers and error codes as the page runtime serves them, and what differs from claude.ai, for the ones `capabilities` names (a list or a declaration) or all of them ([guide.go](../../internal/artifact/guide.go), `Guide`). Publish's `capabilities` points to it, and a db rule that doesn't read names the levels. `TestGuideNamesWhatRuntimeServes` fails when `runtime.js` serves a namespace or a `user` call the guide lacks. |
+| `artifact_guide` | How a page calls each capability (`db`, `user`, `artifact`, `assets`, `sample`, `comments`, `downloads`, `tts`, `dictation`, `mcp`, `files`, `permissions`): the calls' shapes, answers and error codes as the page runtime serves them, and what differs from claude.ai, for the ones `capabilities` names (a list or a declaration) or all of them ([guide.go](../../internal/artifact/guide.go), `Guide`). Publish's `capabilities` points to it, and a db rule that doesn't read names the levels. `TestGuideNamesWhatRuntimeServes` fails when `runtime.js` serves a namespace or a `user` call the guide lacks. |
 | `read_artifact` | What it is, its versions and files, its capabilities and how many documents its data holds, and the page as published, or one file with `path`, of the newest or a given version. |
 | `artifact_data` | The page's data, as its owner: `get`, `list`, `query`, `set`, `update`, `str_replace`, `delete`, `batch`, with the same paths, limits and errors as the page. A write is told to every open view of the page. |
 | `list_artifacts` | Newest first, with `query` over title and description and a `limit`. |
@@ -176,7 +176,8 @@ A page written for claude.ai's artifact runtime (contract 0.2.99) runs
 here as written: `window.claude.use(name)` is there before the page's own
 scripts, and resolves `db`, `user`, `artifact` (and `self`, its former
 name), `assets`, `sample`, `comments` ([Comments](#comments)), `downloads`, `tts` ([Reading
-aloud](#reading-aloud)), `dictation` ([Dictation](#dictation)) and the
+aloud](#reading-aloud)), `dictation` ([Dictation](#dictation)), `mcp`
+([MCP](#mcp)), `files` ([Files](#files)) and the
 built-in `permissions`
 ([internal/artifact/runtime.js](../../internal/artifact/runtime.js),
 [runtime.go](../../internal/artifact/runtime.go),
@@ -197,7 +198,7 @@ Declaring:
   keeps the declaration it was published with (`Version.Capabilities`).
 - Every name in the contract is accepted and kept; only `ServedCaps` (`db`,
   `user`, `artifact`, `self`, `assets`, `sample`, `comments`, `downloads`,
-  `tts`, `dictation`, `mcp`) are served, and the rest resolve null on the
+  `tts`, `dictation`, `mcp`, `files`) are served, and the rest resolve null on the
   page, as an unserved capability does on claude.ai. Declaring
   `permissions` is refused: it is built in. `db`'s `rules`, `user`'s
   `scopes`, `artifact`'s `{"publish": false}` and `assets`' `upload`
@@ -611,6 +612,43 @@ served only in the shell.
   a catch-up when it shows again), and holds at most 64 watches.
 - Not served: Claude's own servers for an artifact (`kind: "artifact"`)
   and file arguments (`$file` rejects `capability_disabled`).
+
+### Files
+
+`files` lets a page read the files of one folder on this computer, as
+the viewer ([internal/gateway/artifacts_pagefiles.go](../../internal/gateway/artifacts_pagefiles.go)),
+served only in the shell.
+- The folder is fixed at publish, never by the page (`FilesDir`,
+  `Version.FilesDir`). `{"files": {}}`, or a `project` that isn't an
+  absolute path (a Claude project id such as `chan_…`), is the folder the
+  publishing agent works in (`Publish.Cwd`, from the caller's roots);
+  `{"project": "/abs"}` names one. A publish with no folder of its own,
+  as a page's publishing itself is, keeps the version before's; a
+  publish that can't name one is refused. Refused too: a folder that
+  isn't there, a disk's root, the home folder or one holding it,
+  compared by the folder itself (`os.SameFile`, so a symlink or another
+  case is caught), and every folder when the home folder can't be found.
+- Consent is the viewer's, once for each artifact, kept in the shell's
+  `localStorage` (`magpie.artifact.<id>.files`). The first call asks "Let
+  “name” read the files in folder?", with the whole path under it. Don't
+  allow is `not_granted` from then on; a dialog closed unanswered starts
+  a 3s wait (`rate_limited`), and one that can't open while another is up
+  is `rate_limited` too. `permissions.request(["files"])` asks, and the
+  Permissions panel has a Files row.
+- The route, `POST <page>/_api/files`, takes the shell's token alone,
+  from this computer, for a version that declares files. It opens the
+  folder with `os.Root`, so no path, `..` or symlink leaves it, and
+  `.git` is never listed or read. `list` answers 500 entries a page in
+  walk order with a cursor (the last path); `read` at most 25 MiB, with
+  `X-Magpie-Size` and `X-Magpie-Revision` (a hash of size and time
+  changed); a download `stat`s the file, the viewer confirms its name and
+  size, and `save` sends it only at that revision (`changed` else), at
+  most 512 MiB, never a program or script (`.exe`, `.js`, `.sh`, `.bat`
+  and the like: `bad_request`). At most 600 calls a minute per artifact.
+- `asSampleTools()` gives `list_project_files` and `read_project_file`
+  (about 12 KB of text a call, ended at a whole character, with where the
+  next part starts; a file with a NUL in its first 8000 bytes is named as
+  not text).
 
 ## Added by the user, and Claude Code's own tool
 

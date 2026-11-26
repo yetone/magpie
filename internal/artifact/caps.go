@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -26,7 +28,7 @@ var capabilityNames = []string{"artifact", "assets", "comments", "db", "dictatio
 // ServedCaps are the capabilities the page runtime gives a page that declares
 // them; permissions is built in and never declared. self is artifact's
 // former name, and resolves the same namespace.
-var ServedCaps = []string{"artifact", "assets", "comments", "db", "dictation", "downloads", "mcp", "sample", "self", "tts", "user"}
+var ServedCaps = []string{"artifact", "assets", "comments", "db", "dictation", "downloads", "files", "mcp", "sample", "self", "tts", "user"}
 
 // Capabilities is a version's declaration, by name.
 type Capabilities map[string]json.RawMessage
@@ -96,6 +98,11 @@ func ParseCapabilities(raw json.RawMessage) (Capabilities, error) {
 	if v, ok := c["mcp"]; ok {
 		if _, err := ParseMCPConfig(v); err != nil {
 			return nil, fmt.Errorf("capability mcp: %w", err)
+		}
+	}
+	if v, ok := c["files"]; ok {
+		if _, err := ParseFilesConfig(v); err != nil {
+			return nil, fmt.Errorf("capability files: %w", err)
 		}
 	}
 	for _, name := range []string{"artifact", "self"} {
@@ -318,6 +325,77 @@ func (c Capabilities) MCP() *MCPConfig {
 		return nil
 	}
 	return m
+}
+
+// FilesConfig is the files capability's declaration. Claude's project is
+// a Claude Code project's id; here it is a folder on this computer, given
+// as an absolute path, and anything else (Claude's "chan_..." among them)
+// is the folder the publishing agent worked in.
+type FilesConfig struct {
+	Project string `json:"project,omitempty"`
+}
+
+// ParseFilesConfig reads the files capability's declaration.
+func ParseFilesConfig(raw json.RawMessage) (*FilesConfig, error) {
+	c := &FilesConfig{}
+	if len(raw) == 0 || json.Unmarshal(raw, c) != nil {
+		return nil, errors.New(`it is {} for the folder the agent works in, or {"project": "<absolute folder>"}`)
+	}
+	if len(c.Project) > 4096 || strings.ContainsRune(c.Project, 0) {
+		return nil, errors.New("project isn't a folder's path")
+	}
+	return c, nil
+}
+
+// FilesDir is the folder a version declaring files reads: its project
+// when that is an absolute path, else cwd, the folder the publishing
+// agent worked in. It is refused when there is none, when it is a disk's
+// root or the home folder or holds it, and when it isn't a folder.
+func FilesDir(c Capabilities, cwd string) (string, error) {
+	raw, ok := c["files"]
+	if !ok {
+		return "", nil
+	}
+	fc, err := ParseFilesConfig(raw)
+	if err != nil {
+		return "", err
+	}
+	dir := fc.Project
+	if !filepath.IsAbs(dir) {
+		dir = cwd
+	}
+	if dir == "" || !filepath.IsAbs(dir) {
+		return "", errors.New(`files reads the folder the agent works in, and magpie wasn't told yours: declare {"files": {"project": "<absolute folder>"}}`)
+	}
+	dir = filepath.Clean(dir)
+	fi, err := os.Stat(dir)
+	if err != nil || !fi.IsDir() {
+		return "", fmt.Errorf("%s isn't a folder on this computer", dir)
+	}
+	if filesTooWide(fi) {
+		return "", fmt.Errorf("files reads one project's folder, not %s: name the project's own folder", dir)
+	}
+	return dir, nil
+}
+
+// filesTooWide is whether the folder is a disk's root, or the home folder
+// or one that holds it: more than one project's files. It compares the
+// folders themselves, so another spelling (a symlink, /USERS on a disk
+// that ignores case) is caught too, and a home folder it can't find
+// leaves every folder too wide.
+func filesTooWide(dir os.FileInfo) bool {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return true
+	}
+	for h := filepath.Clean(home); ; h = filepath.Dir(h) {
+		if hi, err := os.Stat(h); err == nil && os.SameFile(dir, hi) {
+			return true
+		}
+		if filepath.Dir(h) == h {
+			return false
+		}
+	}
 }
 
 // PagePublishes is whether the version's page may publish itself: it

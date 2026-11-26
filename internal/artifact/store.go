@@ -93,6 +93,10 @@ type Version struct {
 	Size  int64    `json:"size"`
 	// Capabilities are what the page may do beyond static HTML (caps.go)
 	Capabilities Capabilities `json:"capabilities,omitempty"`
+	// FilesDir is the folder the page reads with files (FilesDir in
+	// caps.go), set at publish; a publish with no folder of its own (a
+	// page publishing itself) keeps the one before
+	FilesDir string `json:"filesDir,omitempty"`
 }
 
 // Latest is the newest version.
@@ -455,6 +459,21 @@ func PublishPage(p Publish) (*Artifact, error) {
 	if prev != nil {
 		n = prev.N + 1
 	}
+	caps := p.Capabilities
+	if caps == nil && prev != nil {
+		caps = prev.Capabilities
+	}
+	if len(caps) == 0 {
+		caps = nil
+	}
+	cwd := p.Cwd
+	if cwd == "" && prev != nil {
+		cwd = prev.FilesDir
+	}
+	filesDir, err := FilesDir(caps, cwd)
+	if err != nil {
+		return nil, refuse(ErrInvalid, fmt.Errorf("capability files: %w", err))
+	}
 	// what the version holds: the files kept from the one before, then
 	// those given now
 	keep := []string{}
@@ -549,14 +568,7 @@ func PublishPage(p Publish) (*Artifact, error) {
 		a.Description = desc
 	}
 	a.Updated = now
-	caps := p.Capabilities
-	if caps == nil && prev != nil {
-		caps = prev.Capabilities
-	}
-	if len(caps) == 0 {
-		caps = nil
-	}
-	a.Versions = append(a.Versions, Version{N: n, At: now, Label: label, Agent: oneLine(p.Agent, 64), Cwd: p.Cwd, Files: all, Size: size, Capabilities: caps})
+	a.Versions = append(a.Versions, Version{N: n, At: now, Label: label, Agent: oneLine(p.Agent, 64), Cwd: p.Cwd, Files: all, Size: size, Capabilities: caps, FilesDir: filesDir})
 	if err := writeMeta(a); err != nil {
 		os.RemoveAll(versionDir(a.ID, n))
 		return nil, err

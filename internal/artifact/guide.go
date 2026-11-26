@@ -144,14 +144,25 @@ Never guess a tool's input: read describeTool, or the tool's schema where you ca
 A tool marked readOnlyHint is cached ({cache: {staleTime, gcTime, refresh}} tunes it, {cache: false} turns it off); a write is never cached and never watched. Input is plain JSON, at most 1 MiB; file arguments ($file) are not served here.
 A tool's failure rejects tool_error (.result is the whole result). A watch never asks the viewer: its handler gets approval_required until a callTool or permissions.request(["mcp:github"]) is allowed.
 Codes: not_in_manifest (outside the manifest, or the viewer said no: show that section as not allowed), server_not_connected (no such server in the Library), blocked_by_policy (the Library keeps it from this agent), approval_required, tool_error, server_unavailable (.retryable: retry a read once), upstream_error (.retryable, .retryAfterMs when the viewer didn't answer yet), bad_request, cancelled (an AbortSignal fired; the tool may have run), rate_limited (.retryAfterMs), capability_disabled. Retry only .retryable errors, and a write only on a new click.`},
+	{"files", `files: the files of the folder you work in, read by the page on this computer. magpie's viewer asks the viewer once for each artifact, naming the folder; the page never chooses it.
+Declare {"files": {}}: the folder is the one you publish from, kept by the versions after it. {"files": {"project": "/abs/path"}} names another folder (a Claude project id such as "chan_..." means yours). Never the home folder, a disk's root or a folder holding home; .git is left out.
+  const files = await claude.use("files")   // null in a shared copy or another tab: hide it
+  const {entries, cursor} = await files.list({path: "src", recursive: true})   // [{path, isDirectory, size}], 500 a page; pass cursor back for more
+  const {bytes, size, revision} = await files.read("README.md", {offset: 0, length: 65536})   // bytes is a Uint8Array, at most 25 MiB a call
+  new TextDecoder().decode(bytes)
+  await files.download("dist/report.pdf")   // asks the viewer to save it; programs and scripts (.exe, .js, .sh, .bat …) are refused
+  const tools = await files.asSampleTools()   // list_project_files and read_project_file for sample's tools (declare sample too)
+Call it on a click or after load, never in a loop. Don't copy what you read into db, assets or a version unless the viewer asks: whoever opens the page reads those.
+Codes: not_found (no such path, or outside the folder), not_granted (the viewer said no: hide it), changed (the file changed while it was saved: try again on a new click), rate_limited (.retryAfterMs), too_large (over 512 MiB to save), declined (the viewer didn't save it), bad_request, unavailable, capability_disabled.`},
 	{"permissions", `permissions: built in, never declared.
   const p = await claude.use("permissions")
   await p.state("db")          // "granted" for what the page declared, else "unavailable"
   await p.state("dictation")   // "prompt" until the viewer answers, then "granted" or "denied"
   await p.state("mcp:github")  // the same for one MCP server; "mcp" is every server in the manifest
-  await p.request(names)       // asks for what is still "prompt" (dictation, then the MCP servers in one dialog); never rejects
+  await p.state("files")       // the same for the project's files
+  await p.request(names)       // asks for what is still "prompt" (dictation, files, then the MCP servers in one dialog); never rejects
   await p.manage()             // opens the Permissions panel and resolves when it closes; on a button, never on load
-Everything but dictation and MCP servers is set when the page is published. "prompt" means go ahead: the first call asks. A "denied" is final: branch on it, never ask again.`},
+Everything but dictation, MCP servers and files is set when the page is published. "prompt" means go ahead: the first call asks. A "denied" is final: branch on it, never ask again.`},
 }
 
 // GuideNames are the capabilities the guide covers, in its order.

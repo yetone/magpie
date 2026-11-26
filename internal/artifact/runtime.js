@@ -12,7 +12,7 @@
   // every capability resolves null there, as it does for a page's
   // visitor that claude.ai can't serve
   var publishing = !!(C.caps.artifact || C.caps.self);
-  var served = C.shared ? { permissions: true } : { db: !!C.caps.db, user: true, permissions: true, artifact: publishing, self: publishing, assets: !!C.caps.assets, sample: !!C.caps.sample, comments: !!C.caps.comments && !!C.origin, downloads: !!C.caps.downloads && !!C.origin, tts: !!C.caps.tts && !!C.origin && typeof Audio === "function", dictation: !!C.caps.dictation && !!C.origin && typeof MediaRecorder === "function", mcp: !!C.caps.mcp && !!C.origin && window.parent !== window };
+  var served = C.shared ? { permissions: true } : { db: !!C.caps.db, user: true, permissions: true, artifact: publishing, self: publishing, assets: !!C.caps.assets, sample: !!C.caps.sample, comments: !!C.caps.comments && !!C.origin, downloads: !!C.caps.downloads && !!C.origin, tts: !!C.caps.tts && !!C.origin && typeof Audio === "function", dictation: !!C.caps.dictation && !!C.origin && typeof MediaRecorder === "function", mcp: !!C.caps.mcp && !!C.origin && window.parent !== window, files: !!C.caps.files && !!C.origin && window.parent !== window };
   var freeze = Object.freeze;
   function deepFreeze(v) {
     if (v && typeof v === "object" && !Object.isFrozen(v)) {
@@ -973,6 +973,7 @@
       switch (d.type) {
         case "hi":
           if (d.grants && typeof d.grants.dictation === "string") dgrant = d.grants.dictation;
+          if (d.grants && typeof d.grants.files === "string") fgrant = d.grants.files;
           if (d.grants) mGrants(d.grants.mcp);
           shellUp = true;
           shellWait.splice(0).forEach(function (f) { f(true); });
@@ -1017,6 +1018,7 @@
           break;
         case "grants":
           if (d.grants && typeof d.grants.dictation === "string") dgrant = d.grants.dictation;
+          if (d.grants && typeof d.grants.files === "string") fgrant = d.grants.files;
           if (d.grants) mGrants(d.grants.mcp);
           if (d.req && pwait[d.req]) pwait[d.req]();
           break;
@@ -1025,6 +1027,9 @@
           break;
         case "mcp-done":
           if (mwait[d.req]) mwait[d.req](d);
+          break;
+        case "files-done":
+          if (fwait[d.req]) fwait[d.req](d);
           break;
         case "abort":
           if (asking[d.id]) asking[d.id].abort();
@@ -1952,11 +1957,131 @@
   }
   var mcp = freeze({ callTool: callTool, watchTool: watchTool, invalidate: invalidate, listTools: listTools, server: serverOf, describeTool: describeTool });
 
+  // -- files --------------------------------------------------------------
+  // The files of the folder the page's version names. The shell, at
+  // magpie's origin, asks the viewer once and makes the calls with its own
+  // token; magpie checks each path again, inside that folder alone.
+  var fgrant = "prompt", fwait = {}, freq = 0;
+  var FREAD = 25 << 20, FTEXT = 12 << 10;
+  var FCODES = { not_found: 1, not_granted: 1, changed: 1, rate_limited: 1, too_large: 1, declined: 1, bad_request: 1, unavailable: 1, capability_disabled: 1, capability_removed: 1, transform_error: 1 };
+  function fErr(code, message, more) {
+    var e = new Error(message || code);
+    e.name = "FilesError";
+    e.code = FCODES[code] ? code : "unavailable";
+    if (more && typeof more.retryAfterMs === "number" && more.retryAfterMs > 0) e.retryAfterMs = Math.min(more.retryAfterMs, 60000);
+    return e;
+  }
+  function viaFiles(m) {
+    return whenShell().then(function (up) {
+      if (!up) throw fErr("capability_disabled", "the page reads files in magpie's viewer: open it in its own tab");
+      var req = ++freq;
+      return new Promise(function (res, rej) {
+        // a download waits for the viewer, a read for its bytes
+        var timer = setTimeout(function () { delete fwait[req]; rej(fErr("unavailable", "magpie's viewer didn't answer")); }, m.op === "download" ? 15 * 60000 : 130000);
+        fwait[req] = function (d) {
+          delete fwait[req];
+          clearTimeout(timer);
+          if (d.error) rej(fErr(String(d.error.code || "unavailable"), String(d.error.message || ""), d.error));
+          else res(d.result || {});
+        };
+        m.type = "files";
+        m.req = req;
+        toShell(m);
+      });
+    });
+  }
+  function filesPathArg(p, what) {
+    if (typeof p !== "string" || p.length > 4096) throw fErr("bad_request", what + " is a path string, as an entry gives it");
+    return p;
+  }
+  function filesNum(v, what, most) {
+    if (v === undefined) return undefined;
+    if (typeof v !== "number" || !isFinite(v) || v < 0 || Math.floor(v) !== v || v > most) throw fErr("bad_request", what + " is a whole number from 0 to " + most);
+    return v;
+  }
+  function filesList(o) {
+    try {
+      if (o !== undefined && (o === null || typeof o !== "object")) throw fErr("bad_request", "list takes {path, recursive, cursor}");
+      o = o || {};
+      var m = { op: "list", path: o.path === undefined ? "" : filesPathArg(o.path, "path"), recursive: !!o.recursive };
+      if (o.cursor !== undefined) m.cursor = filesPathArg(o.cursor, "cursor");
+    } catch (e) { return Promise.reject(e); }
+    return viaFiles(m).then(function (j) {
+      var out = { entries: (Array.isArray(j.entries) ? j.entries : []).map(function (e) {
+        return freeze({ path: String(e.path), isDirectory: !!e.isDirectory, size: Number(e.size) || 0 });
+      }) };
+      if (typeof j.cursor === "string" && j.cursor) out.cursor = j.cursor;
+      freeze(out.entries);
+      return freeze(out);
+    });
+  }
+  function filesRead(path, o) {
+    var m;
+    try {
+      if (o !== undefined && (o === null || typeof o !== "object")) throw fErr("bad_request", "read's options are {offset, length}");
+      o = o || {};
+      m = { op: "read", path: filesPathArg(path, "path"), offset: filesNum(o.offset, "offset", Number.MAX_SAFE_INTEGER), length: filesNum(o.length, "length", FREAD) };
+      if (m.path === "") throw fErr("bad_request", "read takes a file's path");
+    } catch (e) { return Promise.reject(e); }
+    return viaFiles(m).then(function (j) {
+      var b = j.bytes instanceof ArrayBuffer ? new Uint8Array(j.bytes) : new Uint8Array(0);
+      return freeze({ bytes: b, size: Number(j.size) || 0, revision: String(j.revision || "") });
+    });
+  }
+  function filesDownload(path) {
+    try {
+      path = filesPathArg(path, "path");
+      if (path === "") throw fErr("bad_request", "download takes a file's path");
+    } catch (e) { return Promise.reject(e); }
+    return viaFiles({ op: "download", path: path }).then(function () { return freeze({ status: "saved" }); });
+  }
+  // two tools for sample: Claude lists the folder and reads its text files
+  function filesTools() {
+    var listTool = {
+      name: "list_project_files",
+      description: "Lists the files and folders of the project. path is a folder (omit it for the top level); recursive lists everything below it; cursor continues a list that said there is more.",
+      inputSchema: { type: "object", properties: { path: { type: "string" }, recursive: { type: "boolean" }, cursor: { type: "string" } } },
+      execute: function (input) {
+        input = input || {};
+        return filesList({ path: typeof input.path === "string" ? input.path : undefined, recursive: !!input.recursive, cursor: typeof input.cursor === "string" && input.cursor ? input.cursor : undefined }).then(function (r) {
+          var lines = r.entries.map(function (e) { return e.isDirectory ? e.path + "/" : e.path + " (" + e.size + " bytes)"; });
+          if (r.cursor) lines.push("(more: call again with cursor " + JSON.stringify(r.cursor) + ")");
+          return lines.join("\n") || "(empty)";
+        });
+      }
+    };
+    var readTool = {
+      name: "read_project_file",
+      description: "Reads a text file of the project, about 12 KB at a time. offset is the byte to start at; the answer says where the next part starts.",
+      inputSchema: { type: "object", properties: { path: { type: "string" }, offset: { type: "integer", minimum: 0 } }, required: ["path"] },
+      execute: function (input) {
+        input = input || {};
+        var off = typeof input.offset === "number" && input.offset >= 0 ? Math.floor(input.offset) : 0;
+        return filesRead(String(input.path || ""), { offset: off, length: FTEXT }).then(function (r) {
+          var b = r.bytes;
+          for (var i = 0; i < Math.min(b.length, 8000); i++) if (b[i] === 0) return "(" + input.path + " isn't a text file: " + r.size + " bytes)";
+          // end at a whole character
+          var end = b.length;
+          if (off + end < r.size) {
+            var i = end - 1, k = 0;
+            while (i >= 0 && k < 3 && (b[i] & 0xc0) === 0x80) { i--; k++; }
+            if (i >= 0 && b[i] >= 0xc0 && end - i < (b[i] >= 0xf0 ? 4 : b[i] >= 0xe0 ? 3 : 2)) end = i;
+          }
+          var text = new TextDecoder().decode(b.subarray(0, end));
+          var next = off + end;
+          return next < r.size ? text + "\n(" + (r.size - next) + " more bytes: call again with offset " + next + ")" : text;
+        });
+      }
+    };
+    return Promise.resolve(freeze([freeze(listTool), freeze(readTool)]));
+  }
+  var files = freeze({ list: filesList, read: filesRead, download: filesDownload, asSampleTools: filesTools });
+
   // -- permissions --------------------------------------------------------
   // dictation and each MCP server ("mcp:<server>"; "mcp" for all of
   // them) are the viewer's to allow, once for each artifact, in the
   // shell; every other capability is granted with the page
-  var asksViewer = served.dictation || served.mcp;
+  var asksViewer = served.dictation || served.mcp || served.files;
   function mState(server) {
     if (!served.mcp || !shellUp) return "unavailable";
     if (server === null) {
@@ -1971,7 +2096,7 @@
     var all = names || Object.keys(C.caps).concat(served.mcp ? MAN.map(function (m) { return "mcp:" + m.server; }) : []);
     all.forEach(function (n) {
       if (n === "mcp" || n.indexOf("mcp:") === 0) out[n] = mState(n === "mcp" ? null : n.slice(4));
-      else if (served[n] && (n === "user" || C.caps[n] || (n === "artifact" || n === "self") && publishing)) out[n] = n === "dictation" ? (shellUp ? dgrant : "unavailable") : "granted";
+      else if (served[n] && (n === "user" || C.caps[n] || (n === "artifact" || n === "self") && publishing)) out[n] = n === "dictation" ? (shellUp ? dgrant : "unavailable") : n === "files" ? (shellUp ? fgrant : "unavailable") : "granted";
       else if (names) out[n] = "unavailable";
       if (!names && out[n] === "unavailable") delete out[n];
     });
@@ -1991,12 +2116,15 @@
         return one ? states([String(name)])[String(name)] : states(null);
       });
     },
-    // one question at a time: dictation, then the MCP servers asked for
+    // one question at a time: dictation, files, then the MCP servers asked for
     request: function (names) {
       var list = names ? [].concat(names).map(String) : null;
       return (asksViewer ? whenShell() : Promise.resolve()).then(function () {
         var ask = served.dictation && shellUp && dgrant === "prompt" && (!list || list.indexOf("dictation") >= 0);
         return ask ? viaShell("dict-ask") : null;
+      }).then(function () {
+        var ask = served.files && shellUp && fgrant === "prompt" && (!list || list.indexOf("files") >= 0);
+        return ask ? viaShell("files-ask") : null;
       }).then(function () {
         if (!served.mcp || !shellUp) return;
         var want = MAN.filter(function (m) { return !list || list.indexOf("mcp") >= 0 || list.indexOf("mcp:" + m.server) >= 0; }).filter(function (m) { return !mgrant[m.server]; });
@@ -2007,13 +2135,13 @@
       if (!asksViewer) return Promise.reject(dbError("unavailable", "this page has nothing for the viewer to allow: what it may do is set when it is published"));
       return whenShell().then(function (up) {
         if (!up) throw dbError("unavailable", "the Permissions panel is in magpie's viewer: open the page in its own tab");
-        return viaShell("perms", { serves: { dictation: !!served.dictation, mcp: !!served.mcp } });
+        return viaShell("perms", { serves: { dictation: !!served.dictation, mcp: !!served.mcp, files: !!served.files } });
       }).then(function () {});
     },
   });
 
   // -- claude.use ---------------------------------------------------------
-  var spaces = { db: served.db ? db : null, user: served.user ? user : null, permissions: permissions, artifact: served.artifact ? artifact : null, self: served.self ? artifact : null, assets: served.assets ? assets : null, sample: served.sample ? sample : null, comments: served.comments ? comments : null, downloads: served.downloads ? downloads : null, tts: served.tts ? tts : null, dictation: served.dictation ? dictation : null, mcp: served.mcp ? mcp : null };
+  var spaces = { db: served.db ? db : null, user: served.user ? user : null, permissions: permissions, artifact: served.artifact ? artifact : null, self: served.self ? artifact : null, assets: served.assets ? assets : null, sample: served.sample ? sample : null, comments: served.comments ? comments : null, downloads: served.downloads ? downloads : null, tts: served.tts ? tts : null, dictation: served.dictation ? dictation : null, mcp: served.mcp ? mcp : null, files: served.files ? files : null };
   var memo = {};
   function use(name) {
     name = String(name);
