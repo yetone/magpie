@@ -951,6 +951,9 @@ func announce(id string) error {
 		// the URLs asked and what they said; the base stays as given
 		fmt.Println(amber.Render("!"), muted.Render(err.Error()))
 	}
+	if saved.IsRemoteMagpie() {
+		addedRemote(saved.ID)
+	}
 	n := len(saved.Exposed())
 	if saved.DecideOnly() {
 		fmt.Println("  it routes groups: magpie group set <id> effort=auto classifier="+saved.ID+"/"+saved.Jev(),
@@ -963,6 +966,28 @@ func announce(id string) error {
 		fmt.Printf("  %d models in the catalog · %s\n", n, muted.Render("magpie models"))
 	}
 	return nil
+}
+
+// addedRemote: a Remote magpie just added with a key that may use all of
+// it, the user's own hub, takes its MCP servers, skills and prompts, as
+// the app's editor does (library.AddedRemote, starballl on X).
+func addedRemote(id string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	mcp, shared := library.AddedRemote(ctx, id, true, true)
+	cancel()
+	if mcp {
+		fmt.Println(green.Render("✓"), "its MCP servers are in the Library")
+	}
+	if !shared {
+		return
+	}
+	ctx, cancel = context.WithTimeout(context.Background(), 2*provider.RemoteLibraryWait)
+	defer cancel()
+	if r, err := library.UseRemoteLibrary(ctx, id); err != nil {
+		fmt.Println(amber.Render("!"), "its skills and prompts:", muted.Render(err.Error()))
+	} else {
+		fmt.Println(green.Render("✓"), "its skills and prompts are in the Library", muted.Render(fmt.Sprintf("(%d)", len(r.Added))))
+	}
 }
 
 func showProvider(p provider.Provider) error { return showProviderAsking(p, true) }

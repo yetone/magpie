@@ -22,6 +22,7 @@ import (
 
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/fx"
+	"github.com/yetone/magpie/internal/library"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/usage"
@@ -692,6 +693,18 @@ func addCmd(p provider.Provider) tea.Cmd {
 		}
 		if err != nil {
 			return flashMsg{text: text + " · " + fetchNote(err)}
+		}
+		if saved.IsRemoteMagpie() {
+			// the user's own hub: its MCP servers, skills and prompts
+			// come with it, as in the app (library.AddedRemote,
+			// starballl on X)
+			if _, shared := library.AddedRemote(ctx, id, true, true); shared {
+				go func() {
+					ctx, cancel := context.WithTimeout(context.Background(), 2*provider.RemoteLibraryWait)
+					defer cancel()
+					_, _ = library.UseRemoteLibrary(ctx, id)
+				}()
+			}
 		}
 		return flashMsg{text: text + " · " + modelsNote(id, len(ms)), ok: len(ms) > 0}
 	}

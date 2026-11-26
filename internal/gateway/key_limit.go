@@ -178,10 +178,13 @@ func protoOfPath(path string) provider.Protocol {
 // (scopeQuotas). An account is not named: a key its owner tells no quota
 // is told no account either. A key held to nothing has none of these.
 // "mcp" is the MCP servers and tools a key may use, when its owner chose
-// some.
+// some. "full" says the caller may use all of this magpie (fullCaller).
 func (s *Server) keyLimit(w http.ResponseWriter, r *http.Request) {
 	who := access.Caller(r.Context())
 	out := map[string]any{"limited": false, "key": who.KeyName}
+	if fullCaller(r, who) {
+		out["full"] = true
+	}
 	if heldKey(who) {
 		var heldTo []string
 		if who.Limited() {
@@ -235,4 +238,20 @@ func (s *Server) keyLimit(w http.ResponseWriter, r *http.Request) {
 	all := budget.All(access.Key{ID: who.KeyID, Name: who.KeyName, Limit: who.Limit, More: who.More}, limitClock())
 	out["limited"], out["limit"], out["limits"] = true, budget.Binding(all), all
 	writeJSON(w, 200, out)
+}
+
+// fullCaller: the caller may use all of this magpie, as its owner does:
+// this computer with no key, or a key held to no budget, model, account
+// or MCP server, neither read-only nor the Magpie Browser extension's,
+// not issued under another, never expiring and with no cap on requests at
+// once, while magpie is shared. Another magpie adding this one as its
+// Remote magpie with such a key takes its MCP servers, skills and prompts
+// too (library.AddedRemote; starballl on X: a hub's, set up once there);
+// a key held to anything was made to give someone a part, and is not.
+func fullCaller(r *http.Request, who access.Identity) bool {
+	if who.KeyID == "" {
+		return local(r)
+	}
+	return (local(r) || sharedWith(r)) && !heldKey(who) && len(who.MCP) == 0 && !who.ReadOnly && !who.Browser &&
+		who.Issuer == nil && who.Expires.IsZero() && who.MaxConcurrency == 0
 }

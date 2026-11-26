@@ -2987,14 +2987,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 						return
 					}
 					if *req.LibraryShared {
-						id := in.ID
-						go func() {
-							ctx, cancel := context.WithTimeout(context.Background(), 2*provider.RemoteLibraryWait)
-							defer cancel()
-							if _, err := library.UseRemoteLibrary(ctx, id); err != nil {
-								log.Printf("library: the Library of %s: %v", id, err)
-							}
-						}()
+						go remoteLibraryRead(in.ID)
 					}
 				}
 			}
@@ -3031,6 +3024,18 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				}
 				wg.Wait()
 				cancel()
+				// a Remote magpie just added with a key that may use all
+				// of it, the user's own hub: its MCP servers, skills and
+				// prompts come with it, unless a switch was set by hand
+				// (starballl on X). After its list, which tells a magpie
+				// that is this one.
+				if req.New && p.IsRemoteMagpie() && (req.LibraryMCP == nil || req.LibraryShared == nil) {
+					ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+					if _, shared := library.AddedRemote(ctx, in.ID, req.LibraryMCP == nil, req.LibraryShared == nil); shared {
+						go remoteLibraryRead(in.ID)
+					}
+					cancel()
+				}
 			}
 			// after the list is fetched: a limit has to name a model it has
 			if req.Outputs != nil {
@@ -4445,4 +4450,14 @@ func withdrawnLines() []withdrawnJSON {
 		out = append(out, withdrawnJSON{Withdrawal: w, Beside: insteadOn && w.ID == "antigravity" && provider.AgyHasEvery()})
 	}
 	return out
+}
+
+// remoteLibraryRead reads the Library of the Remote magpie id, its "Use
+// its skills and prompts" switch just turned on; a variable for the tests.
+var remoteLibraryRead = func(id string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*provider.RemoteLibraryWait)
+	defer cancel()
+	if _, err := library.UseRemoteLibrary(ctx, id); err != nil {
+		log.Printf("library: the Library of %s: %v", id, err)
+	}
 }

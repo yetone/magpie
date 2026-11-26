@@ -9,9 +9,12 @@
 // own words and sends nothing; with one, the address goes as the preset's
 // endpoint, however it was typed (the backend puts every API on it).
 // Below the key, a Name and an ID, left blank the preset's, the ID
-// following the name until one is typed; and a switch, off, for its MCP
-// servers to be added to the Library (treeman_26897 on Discord), which a
-// saved one's editor has too, as the backend reads it.
+// following the name until one is typed; and switches for its MCP servers
+// to be added to the Library (treeman_26897 on Discord) and for its skills
+// and prompts, shown on when it is added and sent only when changed: the
+// backend turns them on for a key that may use all of that magpie, the
+// user's own hub (starballl on X). A saved one's editor has them too, as
+// the backend reads them.
 // Nothing moves the page. English and Chinese; no backend, the API is
 // faked here.
 const assert = require("node:assert/strict");
@@ -198,7 +201,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           editor.querySelector("input.endpoint"), editor.querySelector('input[type="password"]'),
         ].map((input) => input.getBoundingClientRect().top));
         assert(ey < ky, "the endpoint above the key");
-        // a Name and an ID under the key, blank; the switch off
+        // a Name and an ID under the key, blank; the Library's switches
+        // ticked, sent only when changed: magpie turns them on for a key
+        // that may use all of that magpie (starballl on X)
         const name = ed.locator("input.provider-name"), id = ed.locator("input.provider-id");
         assert.equal(await ed.locator("label", { hasText: new RegExp("^" + w.name + "$") }).count(), 1);
         assert.equal(await name.getAttribute("placeholder"), "Remote magpie");
@@ -206,7 +211,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const ny = await name.evaluate((n) => n.getBoundingClientRect().top);
         assert(ky < ny, "the name under the key");
         const mcp = ed.locator(".library-mcp", { hasText: w.mcp }).locator("input");
-        assert.equal(await mcp.isChecked(), false, "off when added");
+        assert.equal(await mcp.isChecked(), true, "ticked when added");
+        assert.equal(await ed.locator(".library-shared input").isChecked(), true, "skills and prompts ticked when added");
+        assert.equal(await ed.locator(".connect-agents input").isChecked(), false, "connecting agents off when added");
 
         // no endpoint: said, nothing sent, the page where it was
         await key.fill("sk-magpie-x");
@@ -228,10 +235,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(s.chat, "192.168.1.20:3425");
         assert.equal(s.name, "Remote magpie");
         assert.equal(s.id, "remote-magpie");
-        assert.equal(s.libraryMCP, false);
-        assert.equal(s.libraryShared, false, "skills and prompts off when added");
+        assert.equal("libraryMCP" in s, false, "untouched: left to magpie");
+        assert.equal("libraryShared" in s, false, "skills and prompts untouched: left to magpie");
 
-        // named, its id following; then an id of its own; switched on
+        // named, its id following; then an id of its own; MCP unticked, and
+        // skills unticked and ticked again: each sent as the user left it
         await page.locator("#addProvider").click();
         await tile.click();
         await ed.locator(".ehead b", { hasText: "Remote magpie" }).waitFor();
@@ -239,11 +247,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await ed.locator("input[type=password]").first().fill("sk-magpie-y");
         await ed.locator("input.provider-name").fill("Home Lab");
         assert.equal(await ed.locator("input.provider-id").getAttribute("placeholder"), "home-lab");
-        await ed.locator(".library-mcp input").check();
+        await ed.locator(".library-mcp input").uncheck();
+        await ed.locator(".library-shared input").uncheck();
         await ed.locator(".library-shared input").check();
         await ed.locator(".bar button.primary", { hasText: w.add }).click();
         await page.waitForFunction(() => !document.querySelector(".editor.new"));
-        assert.deepEqual([saves[1].name, saves[1].id, saves[1].libraryMCP, saves[1].libraryShared], ["Home Lab", "home-lab", true, true]);
+        assert.deepEqual([saves[1].name, saves[1].id, saves[1].libraryMCP, saves[1].libraryShared], ["Home Lab", "home-lab", false, true]);
         await page.locator("#addProvider").click();
         await tile.click();
         await ed.locator(".ehead b", { hasText: "Remote magpie" }).waitFor();
@@ -253,7 +262,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await ed.locator("input.provider-id").fill("Lab 2");
         await ed.locator(".bar button.primary", { hasText: w.add }).click();
         await page.waitForFunction(() => !document.querySelector(".editor.new"));
-        assert.deepEqual([saves[2].name, saves[2].id, saves[2].libraryMCP], ["Home Lab", "lab-2", false]);
+        assert.deepEqual([saves[2].name, saves[2].id, saves[2].libraryMCP], ["Home Lab", "lab-2", undefined]);
 
         // another preset's editor has no endpoint field
         await page.locator("#addProvider").click();

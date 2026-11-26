@@ -10075,7 +10075,10 @@ function drawEditor(p, presetID) {
     name.onkeydown = idIn.onkeydown = key.onkeydown;
     ed.append(...field(t("Name"), name), ...field(t("ID"), idIn));
   }
-  // off when added
+  // added: its MCP servers, skills and prompts start ticked and send
+  // nothing until changed, for magpie to turn on with a key that may use
+  // all of that magpie, the user's own hub (library.AddedRemote,
+  // starballl on X); connecting agents starts off
   if ((p?.preset || pr?.id) === "remote-magpie" && !p?.account) {
     // KoiLx0 on X: its skills and prompts; an agent connected there,
     // installed here, connected here too, one disconnected here stays so
@@ -10085,7 +10088,8 @@ function drawEditor(p, presetID) {
       ["libraryShared", t("Use its skills and prompts"), t("Skills and prompts"), ed],
       ["connectAgents", t("Connect new agents to this remote"), t("Agents"), advIn],
     ]) {
-      const [l, c] = tick(say, (draft[k] ??= !!p?.[k]));
+      const hub = !p && k !== "connectAgents";
+      const [l, c] = tick(say, hub ? draft[k] ?? true : (draft[k] ??= !!p?.[k]));
       l.classList.add(k.replace(/(?=[A-Z])/, "-").toLowerCase());
       c.onchange = () => (draft[k] = c.checked);
       to.append(...field(head, l));

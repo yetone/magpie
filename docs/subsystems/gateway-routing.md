@@ -1000,7 +1000,13 @@ adds what holds it (`heldTo`), its `models`, `quotas` (`access.Key.Quotas`)
 and, with that on, `quotaProviders`, the providers `newQuotaScope` tells it,
 so it agrees with the quotas routes and the status line (steven_4422: a key
 held to Claude's models read `limited: false` there and 403 on the line).
-It names no account. `TestStatuslineHeldKeyScope`. A key may hold up to five
+It names no account. `full: true` says the caller may use all of this
+magpie, as its owner does (`fullCaller`): this computer without a key, or,
+from here or a shared network, a key held to no budget, model, account or
+MCP server, neither read-only nor the extension's, not issued, never
+expiring and with no cap on requests at once. A magpie adding this one as
+a Remote magpie with such keys turns its Library switches on
+(`library.AddedRemote`; starballl on X). `TestKeyLimitSaysFull`. `TestStatuslineHeldKeyScope`. A key may hold up to five
 limits at once, each in its own window, and a request needs every one
 (#2227, `budget.Reserve`: one reservation per window, and a refusal names
 the spent limit that resets last). The saved key keeps the first limit in
@@ -1727,7 +1733,7 @@ told its own calls and limit alone:
 | `GET /v1/magpie/usage/requests?cursor=start\|now\|<next_cursor>&limit=` | the same requests as changes (#6060): `rows` to upsert by stable `id` with `original_ids`, `deleted` ids, `next_cursor`, `has_more`; a cursor it can't resume from is a 400/410 with a `code`, never a gap (see [the request feed](gateway-sessions.md#the-request-feed)) |
 | `GET /v1/magpie/quotas[?kept=1]` | each subscription's windows; `kept=1` without asking a vendor |
 | `GET /v1/magpie/quotas/history?days=&provider=&user=` | what was left of each window over time (45 days at most) |
-| `GET /v1/magpie/limit` | the key's own limits, its `expires`, and `issuerLimits`; a held key's `heldTo`, `models`, `quotas` and `quotaProviders` |
+| `GET /v1/magpie/limit` | the key's own limits, its `expires`, and `issuerLimits`; a held key's `heldTo`, `models`, `quotas` and `quotaProviders`; `full` for a caller that may use all of magpie |
 | `GET`/`POST /v1/magpie/statusline[?format=json]` | Claude Code's status line, as text or JSON, of the cards `scopeQuotas` tells the key |
 | `GET /v1/magpie/concurrency` | requests in flight per account |
 | `POST`/`GET /v1/magpie/keys`, `DELETE /v1/magpie/keys/{id}` | short-lived keys, above |

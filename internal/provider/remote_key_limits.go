@@ -67,6 +67,9 @@ type remoteKeyAnswer struct {
 	Key     string           `json:"key"`
 	Limit   *remoteKeyLimit  `json:"limit"`
 	Limits  []remoteKeyLimit `json:"limits"`
+	// Full: the key may use all of that magpie, as its owner does (the
+	// gateway's fullCaller); false from a magpie too old to say.
+	Full bool `json:"full"`
 }
 
 type remoteKeyLimit struct {
@@ -289,4 +292,27 @@ func askRemoteKeyLimit(ctx context.Context, p Provider, key string) (*remoteKeyA
 		return nil, fmt.Errorf("%s answered its key's limit in a form magpie doesn't read", remoteName(p))
 	}
 	return &a, nil
+}
+
+// RemoteKeyFull is whether every key p uses may use all of the magpie it
+// reaches, as that magpie's owner does (the gateway's fullCaller): no
+// budget, models, accounts or MCP servers it is held to, not read-only,
+// issued or expiring. A Remote magpie added with such keys is the user's
+// own hub, and takes its MCP servers, skills and prompts at once
+// (library.AddedRemote; starballl on X). A magpie that can't say, or
+// can't be reached, is not: unknown is not full.
+func RemoteKeyFull(ctx context.Context, p Provider) bool {
+	if !p.IsRemoteMagpie() || p.Account != nil || p.Anthropic == "" {
+		return false
+	}
+	_, keys := remoteKeys(p)
+	if len(keys) == 0 {
+		return false
+	}
+	for _, k := range keys {
+		if a, err := askRemoteKeyLimit(ctx, p, k); err != nil || !a.Full {
+			return false
+		}
+	}
+	return true
 }

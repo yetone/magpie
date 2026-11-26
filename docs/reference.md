@@ -794,7 +794,11 @@ budget, models or accounts is also told `heldTo` (`budget`, `models`,
 `accounts`), `models` (what it may use), `quotas` (whether its owner lets
 it see quotas and the status line) and, while that is on,
 `quotaProviders` (the providers whose cards it is told); `limited` stays
-about its budget alone. A magpie that has this
+about its budget alone. A key that may use all of magpie (no budget,
+models, accounts or MCP servers, not read-only, issued or expiring, no
+cap on requests at once) is told `full: true`; a magpie that adds this
+one as a Remote magpie with such a key takes its MCP servers, skills and
+prompts at once. A magpie that has this
 one as a Remote magpie provider shows each of its keys' limits on its
 Usage page this way (#1547). Requests from
 this computer that send no gateway key are not limited; a gateway key used
