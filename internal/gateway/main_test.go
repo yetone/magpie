@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"fmt"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"testing"
@@ -39,6 +40,9 @@ func TestMain(m *testing.M) {
 	// the tests serve their Remote magpie from this process, which is
 	// then this magpie itself (remote_self_test.go turns it on again)
 	provider.LeaveOutSelf = false
+	// a test never reaches the network: a request from a LAN address
+	// (RemoteAddr 192.168.…) asks no DNS or computer for its name
+	clientNames.look = func(context.Context, netip.Addr) string { return "" }
 	code, err := isolatedTests(m)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)

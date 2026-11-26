@@ -831,19 +831,28 @@ function routingPage(part) {
   // An agent magpie knows keeps its name beside the key's, as Usage's
   // rows read ("DimCode · Server"): DimCode calling a Docker magpie by a
   // key named "Magpie" read as that alone (Yayoi_no_yume on X).
-  function callerName(r) {
+  // A request from another computer names it after (r.client, its name
+  // when the gateway has learnt it, else its address): agents on two
+  // computers sharing this one's gateway both read "DeepSeek Harness",
+  // as one node, with nothing to say which asked (jzing.draw on Discord).
+  // The stage's nodes say the computer on their small line (whoName,
+  // computerOf), where a narrow node's cut name can't lose it.
+  function whoName(r) {
     const k = r.callerKey && (callerKeys.find((x) => x.id === r.callerKey)?.name || r.callerKeyName);
     if (!k) return agentName(r.agent);
     const ag = agentOf(r.agent);
     return ag?.name && ag.name !== k ? `${ag.name} · ${k}` : k;
   }
+  const computerOf = (r) => r.client ? r.clientName || r.client : "";
+  const callerName = (r) => [whoName(r), computerOf(r)].filter(Boolean).join(" · ");
   // callerLines head a caller's tooltip: its name, then its agent's when
-  // the name doesn't say it already
+  // the name doesn't say it already, then its computer's address when the
+  // name gives the computer's name
   const callerLines = (r) => {
     const c = callerName(r), a = agentName(r.agent);
-    return c === a || c.startsWith(a + " · ") ? [c] : [c, a];
+    return [...(c === a || c.startsWith(a + " · ") ? [c] : [c, a]), ...(r.client && r.clientName ? [r.client] : [])];
   };
-  const srcOf = (r) => r.callerKey ? r.agent + "\u0001" + r.callerKey : r.agent;
+  const srcOf = (r) => (r.callerKey ? r.agent + "\u0001" + r.callerKey : r.agent) + (r.client ? "\u0002" + r.client : "");
   // userShown is an account of provider as the user named it in magpie
   // (provider.AccountNames, #1515), else as its plugin's usage names it
   // (accountUsers, #4416), else as its vendor names it. The name
@@ -2975,14 +2984,14 @@ function routingPage(part) {
       const a = agents.get(id), r = rs.filter((x) => srcOf(x) === id).pop(), ag = agentOf(r.agent);
       for (const n of [a.node, a.wire]) n.style.setProperty("--agent", hueOf(id));
       if (a.icon !== (ag?.icon || "generic")) { a.icon = ag?.icon || "generic"; a.ic.replaceChildren(icon(a.icon)); }
-      setText(a.name, callerName(r));
+      setText(a.name, whoName(r));
       // one agent working in more than one folder at once: which, by
       // their last level (#1068). The stage holds an agent's latest
       // request alone, so its others still going, or just done, count too.
       const n = now(), going = pinned ? [] : [...src().values()].filter((x) => srcOf(x) === id && (!x.done || at(x.time) + (x.ms || 0) > n - LINGER));
       const fs = foldersOf([...new Set([...going, ...rs.filter((x) => srcOf(x) === id)])].sort((x, y) => x.id - y.id));
       // told again every second (countdown): only what changed is written
-      setText(a.sub, fs.length > 1 ? fs.map(lastLevel).join(", ") : r.model);
+      setText(a.sub, computerOf(r) || (fs.length > 1 ? fs.map(lastLevel).join(", ") : r.model));
       const tip = [...callerLines(r), r.model, ...fs.map((f) => t("Folder") + ": " + f)].join("\n");
       if (a.node.title !== tip) a.node.title = tip;
     }
@@ -4274,7 +4283,8 @@ function routingPage(part) {
     // the folder its agent works in, the last two levels of it (#1068),
     // and why it went on another model than it named
     const folder = (movedSays(r) ? "\n" + movedWhy(r) : "") + (r.folder ? "\n" + t("Folder") + ": " + r.folder : "")
-      + (r.callerKey ? "\n" + t("Gateway key") + ": " + keyName(r) : "");
+      + (r.callerKey ? "\n" + t("Gateway key") + ": " + keyName(r) : "")
+      + (r.client ? "\n" + t("Computer") + ": " + (r.clientName ? `${r.clientName} (${r.client})` : r.client) : "");
     const w = !noAnswer(how) && r.tries.length > 1 && tr && tried(r, tr);
     if (!w) return head + r.provider + folder;
     const first = r.tries[0], f = tried(r, first);
@@ -10307,7 +10317,9 @@ function routingPage(part) {
       n.node.className = "ps-node ps-ag";
       n.node.style.setProperty("--agent", hueOf(id));
       n.wire.style.setProperty("--agent", hueOf(id));
-      n.node.replaceChildren(icon(ag?.icon || "generic"), el("span", "ps-name", callerName(r)));
+      const nm = el("span", "ps-name", whoName(r));
+      if (computerOf(r)) nm.append(el("small", "", computerOf(r)));
+      n.node.replaceChildren(icon(ag?.icon || "generic"), nm);
       n.node.title = [...callerLines(r), ...foldersOf(recent.filter((x) => srcOf(x) === id).slice(0, 20).reverse()).map((f) => t("Folder") + ": " + f)].join("\n");
       return n.node;
     }));

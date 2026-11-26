@@ -704,6 +704,7 @@ func (u *unroutedHold) showLocked() {
 		rt.Phase = phaseRedact
 	}
 	rt.CallerKey, rt.CallerKeyName = callerKeyOf(u.r.Context())
+	rt.Client, rt.ClientName = clientOf(u.r)
 	u.shown = u.s.trace.begin(rt)
 }
 
