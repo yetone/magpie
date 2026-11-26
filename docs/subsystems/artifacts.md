@@ -66,9 +66,33 @@ the client name its `initialize` gave, as Magpie Memory's does
 (`withFolder`). It is listed among the gateway's own servers (`ownMCP`),
 so the MCP router offers it too.
 
+An agent on another computer reaches it only through the router, with a
+gateway key (#7890: magpie in Docker, the agent in another container).
+The router runs `magpie mcp artifacts` in magpie's own folder and calls
+the gateway on loopback, so the server would see a local caller. The
+router tells it instead: `hubCall` sets `HubCaller.Base` for a caller that
+isn't `local` to `imageMCPBase` (`MAGPIE_PUBLIC_URL`, else the scheme and
+Host it called), and the Library passes it as `_meta["magpie/base"]` to
+this server alone (`HubBaseMeta`). The server keeps it only as an http(s)
+address with a host and nothing after (`artifactBase`), and uses it for
+the text of its answers, never for access:
+
+- every address it answers is at that base (`artifactCaller.link`); the
+  publish answer says so, and names `MAGPIE_PUBLIC_URL` when the base is
+  the Host called rather than it;
+- a `file_path` (or a file in `files` given by path) that is relative, or
+  that magpie's computer doesn't have, is answered with why: the file is
+  on the agent's computer, so pass the page as `html` and its files as
+  `{text}`/`{base64}`, or put it in a folder mounted into both
+  (`artifactFarFile`). An absolute path magpie has is read as before;
+- `open_artifact` opens no browser on magpie's computer and answers the
+  address to give the user.
+
+An agent on this computer is told no base and answered as before.
+
 | Tool | Does |
 | --- | --- |
-| `publish_artifact` | Publishes a page from `file_path` (relative to the agent's folder, `~` and `file://` read) or `html`, with `files` (a local path, `{text}`, `{base64}`, or null to remove one), `title`, `description`, `label` and `capabilities` ([Page runtime](#page-runtime)). With `id` it adds a version; with `version` it refuses a publish over a newer one. Answers the page's address. |
+| `publish_artifact` | Publishes a page from `file_path` (read on magpie's computer, relative to the agent's folder, `~` and `file://` read) or `html`, with `files` (a local path, `{text}`, `{base64}`, or null to remove one), `title`, `description`, `label` and `capabilities` ([Page runtime](#page-runtime)). With `id` it adds a version; with `version` it refuses a publish over a newer one. Answers the page's address. |
 | `read_artifact` | What it is, its versions and files, its capabilities and how many documents its data holds, and the page as published, or one file with `path`, of the newest or a given version. |
 | `artifact_data` | The page's data, as its owner: `get`, `list`, `query`, `set`, `update`, `str_replace`, `delete`, `batch`, with the same paths, limits and errors as the page. A write is told to every open view of the page. |
 | `list_artifacts` | Newest first, with `query` over title and description and a `limit`. |
@@ -119,8 +143,16 @@ address, so:
   so its module scripts and fetches load. The address is the key: a frame
   anywhere that knows it can read the page, as anyone given a link could,
   and a foreign http(s) page is refused by `corsGuard` before it.
-- Only a local caller at a loopback Host is served (`local`,
+- A local caller is served at a loopback Host only (`local`,
   `loopbackHost`), so a page rebound to 127.0.0.1 by its DNS reads nothing.
+- Another computer's browser is served while magpie is on the network
+  (`remoteKeyed`: shared on the LAN, or `MAGPIE_ADDR` beyond loopback, as
+  in the Docker image), without a key: `lanGuard` lets a GET or HEAD under
+  `/a/<ref>/` with no key through (`artifactPageAsked`), but not under
+  `_api/`. Its page gets the runtime a shared copy gets
+  (`artifact.SharedRuntime`): no token, each capability null. Its store
+  (`_api/*`) and assets (`/_blob/`) stay this computer's, so a page that
+  keeps data or assets shows what it shows without them there.
 - `nosniff`, `Referrer-Policy: no-referrer`. A numbered version is
   immutable and cached for a year; the newest is `no-cache` with an ETag
   of its version.
@@ -346,7 +378,8 @@ takes every version; share, unshare and delete refuse an `@<n>`. Each takes
 an id or an address.
 
 The addresses are this computer's (127.0.0.1): a viewer of `magpie web`
-from another computer can list them but not open them.
+from another computer can list them but not open them from the list (an
+agent away is given its own, above).
 
 ## Sharing
 
@@ -406,8 +439,8 @@ magpie:
 
 ```sh
 go test -tags nogui ./internal/artifact
-go test -tags nogui ./internal/gateway -run 'TestArtifact|TestAssets'   # TestArtifactPage* hold the page runtime's API
-go test -tags nogui ./internal/library -run 'TestArtifacts'
+go test -tags nogui ./internal/gateway -run 'TestArtifact|TestAssets|TestHubTellsArtifacts'   # TestArtifactPage* hold the page runtime's API
+go test -tags nogui ./internal/library -run 'TestArtifacts|TestHubTellsMagpieArtifacts'
 go test -tags nogui ./internal/gui -run 'TestArtifactsAPI|TestArtifactsShareAPI|TestBuiltin'
 go test -tags nogui ./internal/cli -run 'TestArtifacts|TestEveryRouteHasACommandOrIsNamed'
 node --test internal/gui/tests/artifacts-page.test.cjs

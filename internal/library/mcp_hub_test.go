@@ -814,6 +814,45 @@ func TestHubTellsMagpieMemoryItsCaller(t *testing.T) {
 	}
 }
 
+// Magpie Artifacts is told the address an agent on another computer
+// reached the hub at (gateway.HubCaller.Base), to give it links there
+// rather than at this computer's 127.0.0.1 (#7890); an agent here is
+// told nothing new, and another server is never told it.
+func TestHubTellsMagpieArtifactsWhereAnAgentAwayIs(t *testing.T) {
+	h := hubSandbox(t)
+	write(t, filepath.Join(h, ".claude.json"), `{"mcpServers": {}}`)
+	art := fakeStdio(t, "ok", nil)
+	art.Name, art.Args, art.Agents = ArtifactsServerName, []string{"mcp", "artifacts"}, []string{"claude"}
+	ok(t)(SaveServer("", *art))
+	other := fakeStdio(t, "ok", nil)
+	other.Agents = []string{"claude"}
+	ok(t)(SaveServer("", *other))
+	ok(t)(SetMCPHub(true))
+	hub := theHub{}
+	ctx := context.Background()
+
+	away := gateway.WithHubCaller(ctx, gateway.HubCaller{Base: "http://magpie:3425", Session: "s"})
+	res, err := hub.Call(away, "claude", ArtifactsServerName, "a", json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := hubText(t, res); !strings.Contains(got, `meta={"magpie/base":"http://magpie:3425"}`) {
+		t.Errorf("artifacts away called as %q", got)
+	}
+	for _, c := range []struct {
+		ctx    context.Context
+		server string
+	}{{away, "fake"}, {gateway.WithHubCaller(ctx, gateway.HubCaller{Session: "s"}), ArtifactsServerName}, {ctx, ArtifactsServerName}} {
+		res, err := hub.Call(c.ctx, "claude", c.server, "a", json.RawMessage(`{}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := hubText(t, res); strings.Contains(got, "meta=") {
+			t.Errorf("%s: called as %q", c.server, got)
+		}
+	}
+}
+
 // The router runs one Magpie Browser for every agent behind it, so each
 // call names its caller's session in _meta, for the browser to keep each
 // caller in a tab of its own; another server is sent no session, and a

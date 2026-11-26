@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -116,6 +118,7 @@ func artifactsMCPTools() []any {
 			"description": "Publishes an HTML page as an artifact: a private page on this computer, kept with every version, that the user opens in their browser. " +
 				"Use it whenever a page would be clearer than text, or when the user would use the page rather than only read it: a report, a chart or dashboard, a diagram, an explainer, a prototype, a small app or game. " +
 				"Write the page to a file and pass file_path (or pass the page as html). The page is self-contained HTML; a <title> of two to four words names it. " +
+				"file_path and files' paths are read on the computer magpie runs on: from another computer or container, pass the page as html and its files as text or base64. " +
 				"Supporting files (scripts, styles, data, images, more pages) go in files, by the relative path the page uses, each from a local file. " +
 				"To change an artifact, pass its id: a new version is made at the same address; files left out are kept and null removes one. " +
 				"Pass the version you last read or published to refuse a publish over a newer one. Give the user the address from the answer. " +
@@ -123,7 +126,7 @@ func artifactsMCPTools() []any {
 			"inputSchema": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"file_path":   map[string]any{"type": "string", "description": "The page: a local .html file, absolute or relative to the folder you work in"},
+					"file_path":   map[string]any{"type": "string", "description": "The page: a .html file on the computer magpie runs on, absolute or relative to the folder you work in"},
 					"html":        map[string]any{"type": "string", "description": "The page itself, in place of file_path"},
 					"title":       map[string]any{"type": "string", "description": "Its name, when the page has no <title>"},
 					"description": map[string]any{"type": "string", "description": "One sentence on what it is"},
@@ -300,19 +303,24 @@ type artifactArgs struct {
 }
 
 // artifactCaller is who publishes, and the folder its relative paths are
-// in ("" when not known).
+// in ("" when not known). base is the address an agent on another
+// computer reaches magpie at, as the hub passed it on (HubBaseMeta), ""
+// for one on this computer.
 type artifactCaller struct {
 	r     *http.Request
 	meta  json.RawMessage
 	agent string
+	base  string
 }
 
 func newArtifactCaller(r *http.Request, rawMeta json.RawMessage) *artifactCaller {
 	c := &artifactCaller{r: r, meta: rawMeta}
 	var extra struct {
 		Client string `json:"magpie/client"`
+		Base   string `json:"magpie/base"`
 	}
 	json.Unmarshal(rawMeta, &extra)
+	c.base = artifactBase(extra.Base)
 	for _, name := range []string{extra.Client, r.Header.Get(MemoryClientHeader)} {
 		if c.agent == "" && strings.TrimSpace(name) != "" {
 			c.agent = memoryAgent(usage.AgentOf(name))
@@ -325,6 +333,41 @@ func newArtifactCaller(r *http.Request, rawMeta json.RawMessage) *artifactCaller
 		c.agent = memoryClients.of(r.Header.Get("Mcp-Session-Id"))
 	}
 	return c
+}
+
+// artifactBase is s when it is an http(s) address with a host and
+// nothing after it, without its trailing slash; else "".
+func artifactBase(s string) string {
+	s = strings.TrimRight(strings.TrimSpace(s), "/")
+	u, err := url.Parse(s)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil ||
+		u.Path != "" || u.RawQuery != "" || u.Fragment != "" || strings.ContainsAny(u.Host, " \"\\<>") {
+		return ""
+	}
+	return u.Scheme + "://" + u.Host
+}
+
+// away: the caller is an agent on another computer (or in another
+// container), whose files magpie doesn't see.
+func (c *artifactCaller) away() bool { return c.base != "" }
+
+// link is the address of artifact id's page (version 0: the newest) for
+// the caller: at the address it reaches magpie at when it is away, else
+// this computer's (ArtifactURL).
+func (c *artifactCaller) link(id string, version int) string {
+	if c == nil || c.base == "" {
+		return ArtifactURL(id, version)
+	}
+	return c.base + strings.TrimPrefix(ArtifactURL(id, version), URL())
+}
+
+// artifactFarFile is why an agent on another computer can't give the
+// page as file_path: its files are on its own computer, and magpie reads
+// only those of the one it runs on.
+func artifactFarFile(p string) error {
+	return fmt.Errorf("%s isn't on the computer magpie runs on: you are on another computer or in another container, and magpie reads only its own files. "+
+		"Pass the page itself as html, and each file beside it in files as {\"text\": …} or {\"base64\": …}; "+
+		"or put the file in a folder mounted into both, and give the path magpie sees it at", p)
 }
 
 // dir is the folder the caller works in: the hub's roots, the folder
@@ -366,6 +409,10 @@ func (c *artifactCaller) readLocal(p string, most int64) ([]byte, error) {
 		}
 	}
 	if !filepath.IsAbs(p) {
+		if c.away() {
+			// relative to the agent's own folder, which isn't here
+			return nil, artifactFarFile(p)
+		}
 		d := c.dir()
 		if d == "" {
 			return nil, fmt.Errorf("%s: give its absolute path; the folder you work in isn't known here", p)
@@ -374,6 +421,9 @@ func (c *artifactCaller) readLocal(p string, most int64) ([]byte, error) {
 	}
 	fi, err := os.Stat(p)
 	if err != nil {
+		if c.away() && errors.Is(err, fs.ErrNotExist) {
+			return nil, artifactFarFile(p)
+		}
 		return nil, err
 	}
 	if fi.IsDir() {
@@ -396,6 +446,7 @@ func (s *Server) artifactsMCPCall(r *http.Request, m mcpMessage) (any, map[strin
 			"instructions": "Artifacts are private pages on this computer, kept with every version, that the user opens in their browser. " +
 				"When a page would be clearer than text, or the user would use the page rather than only read it (a report, a chart, a dashboard, a diagram, an explainer, a prototype, a small app), write it as HTML and publish it with " + artifactPublishTool + ", then give the user its address. " +
 				"To change one, read it first with " + artifactReadTool + " and publish with its id. Delete one only when the user asks. " +
+				"Files are read on the computer magpie runs on: an agent on another computer or in another container passes the page as html. " +
 				"A page that keeps data (a poll, a tracker, a board, a sign-up sheet) declares capabilities {\"db\": {}, \"user\": {}} and reads it with `await claude.use(\"db\")`, as Claude's artifacts do; seed and read its data with " + artifactDataTool + ". " +
 				"A page that is its own record (a checklist kept in the page) declares {\"artifact\": {}} and publishes itself with `(await claude.use(\"artifact\")).publish(html)`.",
 		}, nil
@@ -428,13 +479,13 @@ func (s *Server) artifactsMCPCall(r *http.Request, m mcpMessage) (any, map[strin
 		case artifactPublishTool:
 			said, err = artifactPublish(c, a)
 		case artifactReadTool:
-			said, err = artifactRead(a)
+			said, err = artifactRead(c, a)
 		case artifactListTool:
-			said, err = artifactList(a)
+			said, err = artifactList(c, a)
 		case artifactOpenTool:
-			said, err = artifactOpen(a)
+			said, err = artifactOpen(c, a)
 		case artifactDeleteTool:
-			said, err = artifactDelete(a)
+			said, err = artifactDelete(c, a)
 		case artifactDataTool:
 			said, err = artifactData(a)
 		default:
@@ -541,9 +592,9 @@ func artifactPublish(c *artifactCaller, a artifactArgs) (string, error) {
 	v := art.Latest()
 	var b strings.Builder
 	if v.N == 1 {
-		fmt.Fprintf(&b, "Published %q: %s\n", art.Title, ArtifactURL(art.ID, 0))
+		fmt.Fprintf(&b, "Published %q: %s\n", art.Title, c.link(art.ID, 0))
 	} else {
-		fmt.Fprintf(&b, "Published version %d of %q: %s\n", v.N, art.Title, ArtifactURL(art.ID, 0))
+		fmt.Fprintf(&b, "Published version %d of %q: %s\n", v.N, art.Title, c.link(art.ID, 0))
 	}
 	fmt.Fprintf(&b, "id: %s, version %d", art.ID, v.N)
 	if len(v.Files) > 0 {
@@ -562,6 +613,11 @@ func artifactPublish(c *artifactCaller, a artifactArgs) (string, error) {
 	switch {
 	case err != nil:
 		fmt.Fprintf(&b, "Whether it is shared doesn't read: %v. Give the user the address.", err)
+	case sh == nil && c.away():
+		b.WriteString("Give the user the address: a browser that reaches magpie there opens it, without a key.")
+		if c.base != publicURL() {
+			b.WriteString(" It is the address you called magpie at; if the user's browser reaches magpie at another, magpie's MAGPIE_PUBLIC_URL set to it gives links there.")
+		}
 	case sh == nil:
 		b.WriteString("It is private to this computer: give the user the address.")
 	default:
@@ -590,14 +646,14 @@ func sharedLine(id string) string {
 // artifactTextMost is the most of a file read_artifact gives as text.
 const artifactTextMost = 1 << 20
 
-func artifactRead(a artifactArgs) (string, error) {
+func artifactRead(c *artifactCaller, a artifactArgs) (string, error) {
 	art, n, err := artifactNamed(a)
 	if err != nil {
 		return "", err
 	}
 	v := art.Version(n)
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s\naddress: %s\nid: %s, version %d of %d", art.Title, ArtifactURL(art.ID, 0), art.ID, v.N, art.Latest().N)
+	fmt.Fprintf(&b, "%s\naddress: %s\nid: %s, version %d of %d", art.Title, c.link(art.ID, 0), art.ID, v.N, art.Latest().N)
 	if art.Description != "" {
 		fmt.Fprintf(&b, "\ndescription: %s", art.Description)
 	}
@@ -646,7 +702,7 @@ func artifactRead(a artifactArgs) (string, error) {
 	return b.String(), nil
 }
 
-func artifactList(a artifactArgs) (string, error) {
+func artifactList(c *artifactCaller, a artifactArgs) (string, error) {
 	all, err := artifact.List()
 	if len(all) == 0 && err != nil {
 		return "", err
@@ -676,7 +732,7 @@ func artifactList(a artifactArgs) (string, error) {
 		}
 		shown++
 		v := art.Latest()
-		fmt.Fprintf(&b, "- %s — %s (id %s, version %d, updated %s)", art.Title, ArtifactURL(art.ID, 0), art.ID, v.N, art.Updated.Local().Format(time.DateTime))
+		fmt.Fprintf(&b, "- %s — %s (id %s, version %d, updated %s)", art.Title, c.link(art.ID, 0), art.ID, v.N, art.Updated.Local().Format(time.DateTime))
 		if art.Description != "" {
 			fmt.Fprintf(&b, ": %s", art.Description)
 		}
@@ -697,10 +753,14 @@ func artifactList(a artifactArgs) (string, error) {
 	return strings.TrimRight(b.String(), "\n"), nil
 }
 
-func artifactOpen(a artifactArgs) (string, error) {
+func artifactOpen(c *artifactCaller, a artifactArgs) (string, error) {
 	art, n, err := artifactNamed(a)
 	if err != nil {
 		return "", err
+	}
+	if c.away() {
+		// a browser would open on the computer magpie runs on, not the user's
+		return "", fmt.Errorf("magpie runs on another computer than yours, so it opens no browser for you: give the user the address, %s", c.link(art.ID, n))
 	}
 	u := ArtifactURL(art.ID, n)
 	if err := openArtifactURL(u); err != nil {
@@ -709,7 +769,7 @@ func artifactOpen(a artifactArgs) (string, error) {
 	return fmt.Sprintf("Opened %q in the browser: %s", art.Title, u), nil
 }
 
-func artifactDelete(a artifactArgs) (string, error) {
+func artifactDelete(c *artifactCaller, a artifactArgs) (string, error) {
 	art, _, err := artifactNamed(a)
 	if err != nil {
 		return "", err
@@ -718,7 +778,7 @@ func artifactDelete(a artifactArgs) (string, error) {
 	if err := artifact.Delete(art.ID); err != nil {
 		return "", err
 	}
-	said := fmt.Sprintf("Deleted %q and its %d versions; %s no longer opens", art.Title, art.Latest().N, ArtifactURL(art.ID, 0))
+	said := fmt.Sprintf("Deleted %q and its %d versions; %s no longer opens", art.Title, art.Latest().N, c.link(art.ID, 0))
 	if sh != nil {
 		said += ", and neither does its shared link, " + sh.URL
 	}
@@ -732,13 +792,31 @@ func artifactPageRead(r *http.Request) bool {
 	return (r.Method == http.MethodGet || r.Method == http.MethodHead) && (strings.HasPrefix(r.URL.Path, ArtifactPagePath) || strings.HasPrefix(r.URL.Path, artifact.BlobPath))
 }
 
-// artifactPage serves an artifact's page and files to the browser on this
-// computer: at ArtifactPagePath<id>/ the newest version, at <id>@<n>/
-// version n, each file at its path after that.
+// artifactPageAsked: r, from another computer, reads an artifact's page
+// or one of its files, by the address an agent there was given (#7890).
+// lanGuard lets it in without a key while magpie is on the network
+// (remoteKeyed): the page's id, 128 random bits, is what opens it, as a
+// shared copy's link on usemagpie.ai is. Its store (artifactAPIDir) and
+// assets aren't reached this way.
+func artifactPageAsked(r *http.Request) bool {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead || r.URL.RawPath != "" || len(callerKeys(r)) > 0 {
+		return false
+	}
+	rest, ok := strings.CutPrefix(r.URL.Path, ArtifactPagePath)
+	return ok && rest != "" && !strings.Contains(rest, "/"+artifactAPIDir)
+}
+
+// artifactPage serves an artifact's page and files: at
+// ArtifactPagePath<id>/ the newest version, at <id>@<n>/ version n, each
+// file at its path after that. The browser on this computer runs the
+// page with its runtime and store; one on another computer, while magpie
+// is on the network, reads it as a shared copy's is read, each
+// capability null and no token in it.
 func (s *Server) artifactPage(w http.ResponseWriter, r *http.Request) {
-	// local only, and at this computer's own name: a page rebound to
+	reader := !local(r)
+	// from this computer, at its own name only: a page rebound to
 	// 127.0.0.1 by its DNS (another Host) reads nothing here
-	if !local(r) || !loopbackHost(r.Host) {
+	if reader && !remoteKeyed() || !reader && !loopbackHost(r.Host) {
 		http.Error(w, "an artifact opens in a browser on this computer, at "+URL(), http.StatusForbidden)
 		return
 	}
@@ -779,7 +857,9 @@ func (s *Server) artifactPage(w http.ResponseWriter, r *http.Request) {
 		// the page's runtime, and the token to its store, go into what a
 		// browser navigates to alone (artifactRuntimeFor)
 		h.Add("Vary", "Sec-Fetch-Mode")
-		if artifactRuntimeFor(r) {
+		if reader {
+			body = artifact.WithRuntime(body, artifact.SharedRuntime())
+		} else if artifactRuntimeFor(r) {
 			rt, err := artifact.PageRuntime(art, n, ArtifactPagePath+ref+"/"+strings.TrimSuffix(artifactAPIDir, "/"))
 			if err != nil {
 				http.Error(w, "the artifact's runtime can't be made: "+err.Error(), http.StatusInternalServerError)

@@ -410,6 +410,14 @@ func (theHub) Call(ctx context.Context, agentID, server, tool string, args json.
 	if wantsCaller(s) {
 		meta = imageMeta(gateway.HubCallerOf(ctx))
 	}
+	if c := gateway.HubCallerOf(ctx); c.Base != "" && serverKey(s) == artifactsKey {
+		// an agent on another computer is given links at the address it
+		// reaches magpie at, not this computer's 127.0.0.1 (#7890)
+		if meta == nil {
+			meta = map[string]any{}
+		}
+		meta[gateway.HubBaseMeta] = c.Base
+	}
 	if c := gateway.HubCallerOf(ctx); c.Session != "" && keepsSession(s) {
 		if meta == nil {
 			meta = map[string]any{}
