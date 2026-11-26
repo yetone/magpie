@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
@@ -42,9 +43,11 @@ import (
 //
 // A kept socket that fails before the reply is handed on (it was closed
 // while kept, the write fails, an error frame comes first, such as
-// previous_response_not_found or the connection limit) is closed, and the
-// turn goes whole on a new socket, and from there over HTTP, as a turn
-// with no kept socket does.
+// previous_response_not_found or the connection limit, or it is found
+// dead: codex_socket_alive.go) is closed, and the turn goes whole on a new
+// socket, and from there over HTTP, as a turn with no kept socket does. A
+// kept socket the backend ends, or that is found dead, while it waits is
+// let go then.
 
 var (
 	// codexKeepIdle is how long a kept socket waits for its next turn
@@ -85,6 +88,19 @@ type codexKept struct {
 	replyID string
 	copilot bool // Copilot's socket (copilotCreate)
 	relay   bool // a relay's (provider.SocketRelay)
+
+	// what tells a live socket from a dead one (codex_socket_alive.go)
+	wire    *codexWire
+	bounds  codexAliveBounds
+	frames  chan codexFrame
+	done    <-chan struct{}
+	probe   chan struct{}
+	reading atomic.Bool  // the reader waits on the socket
+	reads   atomic.Int64 // reads ended
+	heard   atomic.Int64 // when a frame or a pong last came
+	heardAt atomic.Int64 // wire.written then
+	writing atomic.Bool  // a turn's message is being written
+	dead    atomic.Pointer[string]
 }
 
 // close ends the socket at once.

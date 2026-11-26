@@ -465,10 +465,12 @@ func (t codexSocket) socket(req *http.Request, msg []byte, key string, shape *co
 	stop := context.AfterFunc(req.Context(), cancel)
 	timer := time.AfterFunc(codexSocketDial, cancel)
 	u := *req.URL
+	k := &codexKept{key: key, host: u.Host, copilot: copilot, relay: relay, wire: &codexWire{}}
 	c, hs, err := websocket.Dial(ctx, u.String(), &websocket.DialOptions{
-		HTTPClient:      &http.Client{Transport: t.next, CheckRedirect: provider.KeepsCredentials},
+		HTTPClient:      &http.Client{Transport: codexWireTrip{t.next, k.wire}, CheckRedirect: provider.KeepsCredentials},
 		HTTPHeader:      codexSocketHeaders(req, copilot),
 		CompressionMode: websocket.CompressionNoContextTakeover,
+		OnPongReceived:  func(context.Context, []byte) { k.hear() },
 	})
 	stopped := timer.Stop()
 	going := stop()
@@ -520,7 +522,8 @@ func (t codexSocket) socket(req *http.Request, msg []byte, key string, shape *co
 		}
 		header[k] = vs
 	}
-	k := &codexKept{c: c, cancel: cancel, key: key, host: u.Host, header: header, opened: time.Now(), copilot: copilot, relay: relay}
+	k.c, k.cancel, k.header, k.opened = c, cancel, header, time.Now()
+	k.start(ctx)
 	return t.turn(req, k, msg, shape, false, "")
 }
 
@@ -541,16 +544,24 @@ func (t codexSocket) turn(req *http.Request, k *codexKept, msg []byte, shape *co
 		return err
 	}
 	trace := socketTrace(req, reused)
-	if err := k.c.Write(req.Context(), websocket.MessageText, msg); err != nil {
+	k.writing.Store(true)
+	err := k.c.Write(req.Context(), websocket.MessageText, msg)
+	k.writing.Store(false)
+	if err != nil {
 		k.close()
 		return nil, ended(err)
+	}
+	if reused {
+		// it waited since its last turn: a dead one is found now, while
+		// the turn can still go on a new one
+		k.probed()
 	}
 	wroteSocket(req.Context(), len(msg))
 	if trace != nil && trace.WroteRequest != nil {
 		trace.WroteRequest(httptrace.WroteRequestInfo{})
 	}
 	header := k.header.Clone()
-	body := &codexSocketBody{c: k.c, ctx: req.Context(), k: k, shape: shape}
+	body := &codexSocketBody{ctx: req.Context(), k: k, shape: shape}
 	for i := range codexSocketPrelude {
 		frame, err := body.frame()
 		if i == 0 && err == nil && trace != nil && trace.GotFirstResponseByte != nil {
@@ -786,7 +797,6 @@ func sseEvent(kind string, frame []byte) []byte {
 
 // codexSocketBody is the socket's frames read as server-sent events.
 type codexSocketBody struct {
-	c      *websocket.Conn
 	ctx    context.Context
 	k      *codexKept
 	shape  *codexTurnShape // nil: the socket isn't kept after the turn
@@ -804,7 +814,7 @@ func (b *codexSocketBody) frame() ([]byte, error) {
 	if b.done {
 		return nil, io.EOF
 	}
-	typ, data, err := b.c.Read(b.ctx)
+	typ, data, err := b.k.next(b.ctx)
 	if err != nil {
 		b.done = true
 		b.k.close()
