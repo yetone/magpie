@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -16,9 +17,11 @@ import (
 // sign-in routed to workspace: the tokens of a single sign-in, its
 // refresh token the same whichever workspace is picked. Real tokens carry
 // the workspace in id_token's and access_token's
-// https://api.openai.com/auth claims and in tokens.account_id; reclaimed
-// says the switch got tokens naming the new workspace, else only
-// account_id was rewritten.
+// https://api.openai.com/auth claims and in tokens.account_id. The app's
+// switch (codex-rs workspace_switching.rs, switch_workspace) exchanges
+// the access token for one naming the new workspace and rewrites
+// account_id, the id_token left as signed in; reclaimed says a refresh
+// since has the id_token name it too.
 func codexAppSignIn(t *testing.T, home, workspace, plan string, reclaimed bool) {
 	t.Helper()
 	claimWS, claimPlan := "ws-personal", "prolite" // as signed in
@@ -26,13 +29,14 @@ func codexAppSignIn(t *testing.T, home, workspace, plan string, reclaimed bool) 
 		claimWS, claimPlan = workspace, plan
 	}
 	auth := map[string]any{"chatgpt_account_id": claimWS, "chatgpt_plan_type": claimPlan, "chatgpt_user_id": "user-jd"}
+	access := map[string]any{"chatgpt_account_id": workspace, "chatgpt_plan_type": plan, "chatgpt_user_id": "user-jd"}
 	writeFile(t, filepath.Join(home, ".codex", "auth.json"), map[string]any{
 		"auth_mode": "chatgpt", "OPENAI_API_KEY": nil,
 		"tokens": map[string]any{
 			"id_token": fakeJWT(map[string]any{"email": "jd@example.com", "sid": "sid-jd",
 				"https://api.openai.com/auth": auth}),
 			"access_token": fakeJWT(map[string]any{"exp": float64(time.Now().Add(time.Hour).Unix()), "session_id": "sid-jd",
-				"https://api.openai.com/auth": auth}),
+				"https://api.openai.com/auth": access}),
 			"refresh_token": "r-jd", "account_id": workspace,
 		},
 		"last_refresh": time.Now().UTC().Format(time.RFC3339),
@@ -81,7 +85,12 @@ func workspaceSwitchReadsApart(t *testing.T, reclaimed, backHome bool) {
 	var askedMu sync.Mutex
 	asked := map[string]int{}
 	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ws := r.Header.Get("chatgpt-account-id")
+		// billed to the workspace the access token names (LemonFish233
+		// on X), which the header must agree with
+		ws := codexTokenWorkspace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+		if h := r.Header.Get("chatgpt-account-id"); h != ws {
+			t.Errorf("%s asked for workspace %q with %q's access token", r.URL.Path, h, ws)
+		}
 		s, ok := seats[ws]
 		if !ok {
 			t.Errorf("%s asked for workspace %q", r.URL.Path, ws)

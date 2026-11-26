@@ -83,8 +83,10 @@ func ExportLogins(agent, format string, users []string) (ExportResult, error) {
 	}
 	for i, l := range ls {
 		if agent == "codex" {
+			// while there it is this account's workspace: one sign-in
+			// routed to another carries that one's access token
 			if home := codexHeldIn(l); home != "" {
-				if b, _, err := readCodexLogin(home, false); err == nil {
+				if b, _, err := readCodexLogin(home, false); err == nil && !codexOtherWorkspace(l, b) {
 					ls[i].Auth = b
 				}
 			}

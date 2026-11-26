@@ -716,8 +716,9 @@ func codexLoginAuth(l Login) []byte {
 	for _, x := range readLogins() {
 		if x.Agent == "codex" && strings.EqualFold(x.User, l.User) {
 			// as Codex keeps it in its other folder, when it is signed in there
+			// on this account's workspace (codexOtherWorkspace)
 			if home := codexHeldIn(x); home != "" {
-				if b, _, err := readCodexLogin(home, false); err == nil {
+				if b, _, err := readCodexLogin(home, false); err == nil && !codexOtherWorkspace(x, b) {
 					return b
 				}
 			}

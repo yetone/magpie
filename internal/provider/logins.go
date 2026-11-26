@@ -1307,7 +1307,8 @@ func loginsNow(agent string) []Login {
 			if using {
 				auth = liveCodex
 			} else if home := codexHeldIn(l); home != "" {
-				if in, ok := codexLoginIn(home); ok {
+				// as long as there it is this account's workspace
+				if in, ok := codexLoginIn(home); ok && !codexOtherWorkspace(l, in.Auth) {
 					auth = in.Auth
 				}
 			}

@@ -251,7 +251,12 @@ func renewSaved(ctx context.Context, agent, user string, force bool, stale strin
 	if l == nil {
 		return "", "", fmt.Errorf("no saved %s account %q", agent, user)
 	}
-	if agent == "codex" && heldByCodex(*l) {
+	var live savedLogin
+	held := false
+	if agent == "codex" {
+		live, held = heldByCodex(*l)
+	}
+	if held {
 		// the account Codex is signed in to now (switched to since this
 		// was asked for, or the copy kept of it as it was): one sign-in in
 		// two places, whose refresh token a refresh here would spend under
@@ -261,10 +266,24 @@ func renewSaved(ctx context.Context, agent, user string, force bool, stale strin
 		// (万贤凯 on Discord). So it is renewed where Codex keeps it, as
 		// Codex's own (codexTokenRenewing), and the copy is left as it is:
 		// a switch away saves it afresh from Codex's.
+		//
+		// Unless Codex has it routed to another workspace of the login:
+		// the access token names the workspace it bills, whatever
+		// chatgpt-account-id says (codexOtherWorkspace), so the account's
+		// own token goes, never Codex's.
+		if codexOtherWorkspace(*l, live.Auth) {
+			return codexOwnAccessToken(*l, stale)
+		}
 		tok, accountID, err := codexTokenRenewing(ctx, codexHome(), stale)
+		if err == nil && codexTokenOfAnother(*l, tok) {
+			return codexOwnAccessToken(*l, stale) // switched meanwhile
+		}
 		return tok, codexOwnWorkspace(*l, accountID), err
 	}
 	if home := codexHeldIn(*l); home != "" {
+		if in, ok := codexLoginIn(home); ok && codexOtherWorkspace(*l, in.Auth) {
+			return codexOwnAccessToken(*l, stale)
+		}
 		// the same for an account Codex is signed in to in another of
 		// its folders (CODEX_HOME=~/.codex-work): Codex there refreshes
 		// it too, so magpie renews it in that folder, never in a copy
@@ -280,6 +299,9 @@ func renewSaved(ctx context.Context, agent, user string, force bool, stale strin
 				err = codexHeldRefusal{err}
 			}
 			return "", "", err
+		}
+		if codexTokenOfAnother(*l, tok) {
+			return codexOwnAccessToken(*l, stale)
 		}
 		return tok, codexOwnWorkspace(*l, accountID), nil
 	}
@@ -338,15 +360,91 @@ func renewSaved(ctx context.Context, agent, user string, force bool, stale strin
 // in to: the same login, or the same refresh token. Asked under
 // savedTokenMu, which a switch holds too, so it can't change before the
 // refresh it decides is done.
-func heldByCodex(l savedLogin) bool {
+func heldByCodex(l savedLogin) (live savedLogin, held bool) {
 	live, ok := liveLogin("codex")
 	if !ok {
+		return live, false
+	}
+	return live, sameLogin(live, l) || sameRefresh(live.Auth, l.Auth)
+}
+
+// codexOtherWorkspace says the sign-in Codex holds (held, an auth.json
+// sharing the saved account l's refresh token) is routed to another
+// workspace than l's own. The Codex app's workspace switch (codex-rs
+// login/src/auth/manager/workspace_switching.rs, switch_workspace)
+// exchanges the access token for one naming the workspace picked
+// (/accounts/switch-workspace-token) and keeps the refresh token, so the
+// workspaces of one login share that refresh token and each has its own
+// access token. ChatGPT bills a request to the workspace its access
+// token names: Codex's sent with l's chatgpt-account-id read and spent
+// the workspace Codex is on (LemonFish233 on X: the personal Plus card
+// showed the Team seat's plan and week, and a request pinned to Plus got
+// the Team seat's rate limits back). Unknown on either side is not
+// another.
+func codexOtherWorkspace(l savedLogin, held json.RawMessage) bool {
+	var a codexAuth
+	if json.Unmarshal(held, &a) != nil {
 		return false
 	}
-	if sameLogin(live, l) {
-		return true
+	ws := codexTokenWorkspace(a.Tokens.AccessToken)
+	if ws == "" {
+		_, ws = codexWho(held)
 	}
-	return sameRefresh(live.Auth, l.Auth)
+	_, own := codexWho(l.Auth)
+	return own != "" && ws != "" && ws != own
+}
+
+// codexTokenOfAnother says the access token tok names another workspace
+// than the saved account l's own.
+func codexTokenOfAnother(l savedLogin, tok string) bool {
+	_, own := codexWho(l.Auth)
+	ws := codexTokenWorkspace(tok)
+	return own != "" && ws != "" && ws != own
+}
+
+// codexTokenWorkspace is the ChatGPT workspace an access token names, the
+// one a request sent with it is billed to; "" when it names none.
+func codexTokenWorkspace(tok string) string {
+	return claimString(jwtClaims(tok), "https://api.openai.com/auth", "chatgpt_account_id")
+}
+
+// codexOwnAccessToken is renewSaved for a saved ChatGPT account whose
+// refresh token Codex holds routed to another workspace
+// (codexOtherWorkspace): the access token kept for the account, while it
+// names its workspace and has time left. It is never refreshed here:
+// the refresh token is Codex's, and spent here it would sign Codex out.
+// One run out, or the one the backend just turned away (stale), lapses
+// the account with a sign-in to make again, its own (a sign-in in magpie
+// has a refresh token of its own), or Codex switched back to it, which
+// saves it afresh.
+func codexOwnAccessToken(l savedLogin, stale string) (tok, accountID string, err error) {
+	var a codexAuth
+	_ = json.Unmarshal(l.Auth, &a)
+	_, own := codexWho(l.Auth)
+	tok = a.Tokens.AccessToken
+	if ws := codexTokenWorkspace(tok); tok != "" && (ws == "" || ws == own) {
+		if stale != "" && tok != stale {
+			return tok, own, nil
+		}
+		// not five minutes early, as a renewal is: it can't be renewed
+		if stale == "" && !accessTokenRunOut(tok, time.Now().Add(time.Minute)) {
+			return tok, own, nil
+		}
+	}
+	msg := codexSharedLapse(l.User)
+	_ = editSideLogin("codex", l.User, func(ls []savedLogin, i int) ([]savedLogin, error) {
+		if sameAuth(ls[i].Auth, l.Auth) { // not saved afresh meanwhile
+			ls[i].Lapsed = msg
+		}
+		return ls, nil
+	})
+	return "", "", refreshRefused(msg)
+}
+
+// codexSharedLapse is why a saved ChatGPT account sharing Codex's sign-in
+// on another workspace can't be used once its access token is gone.
+func codexSharedLapse(user string) string {
+	return user + "'s sign-in has expired: it is one sign-in with Codex's, which is on another workspace now, so magpie can't renew it without signing Codex out. Sign in again, or switch Codex to it"
 }
 
 // codexOwnWorkspace is the workspace the saved ChatGPT account l is, for
