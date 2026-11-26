@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -206,8 +207,9 @@ func TestShareFollowsNewVersions(t *testing.T) {
 		got.files[Page] != sharedPage("<!doctype html><title>Plan</title><p>one") || got.files["css/s.css"] != "p{}" {
 		t.Fatalf("shared %+v as %+v", sh, got)
 	}
-	// share.json is the user's alone: it holds the token
-	if fi, err := os.Stat(filepath.Join(folder(a.ID), shareName)); err != nil || fi.Mode().Perm() != 0o600 {
+	// share.json is the user's alone: it holds the token (Windows has no
+	// such bits: a file there is its owner's by its folder's ACL)
+	if fi, err := os.Stat(filepath.Join(folder(a.ID), shareName)); err != nil || runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600 {
 		t.Fatalf("share.json: %v %v", fi.Mode(), err)
 	}
 	// sharing it again asks nothing
