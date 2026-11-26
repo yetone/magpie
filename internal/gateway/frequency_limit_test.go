@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"bufio"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -127,5 +128,72 @@ func TestSingleProviderWaitsOutAFrequencyLimit(t *testing.T) {
 	}
 	if r := lastRoute(s); len(r.Tries) != 2 || r.Tries[0].Fail != failRate || r.Tries[0].Again < 1900 {
 		t.Errorf("tries %+v: want the first asked again as a rate limit after its 2s", r.Tries)
+	}
+}
+
+// The #7274 reporter's 429 from OpenAI, the body as it came with only the
+// organization redacted: a tokens-per-minute limit whose closing advice,
+// "adding a payment method … /account/billing", the credit words match.
+const tpmWithPaymentAdvice = `{
+  "message": "Rate limit reached for gpt-6.2-sol in organization <redacted> on tokens per min (TPM): Limit 1000000, Used 736214, Requested 401420. Please try again in 8.259s. Visit https://platform.openai.com/account/rate-limits to learn more. You can increase your rate limit by adding a payment method to your account at https://platform.openai.com/account/billing.",
+  "type": "tokens",
+  "param": null,
+  "code": "rate_limit_exceeded"
+}`
+
+// A limit per minute is a rate limit its billing advice doesn't make
+// money: the same one is asked again, and patience waits for it (#7274).
+// A 429 that says the money is spent, or names no rate per minute beside
+// its billing words, is still not waited for.
+func TestRateLimitWithBillingAdviceIsWaitedFor(t *testing.T) {
+	body := []byte(tpmWithPaymentAdvice)
+	if got := failure(429, body); got != failRate {
+		t.Fatalf("failure %s, want %s", got, failRate)
+	}
+	if !busy(429, body) {
+		t.Error("busy false: patience won't wait for a TPM limit with billing advice")
+	}
+	if _, ok := passing(429, http.Header{}, body, 0); !ok {
+		t.Error("passing false: the same one isn't asked again")
+	}
+	for _, b := range []string{
+		`{"error":{"code":"credit_balance_exhausted","message":"Credits exhausted. Requested 40000 above your TPM limit."}}`,
+		`{"error":{"message":"Insufficient balance. Please try again in 30 seconds"}}`,
+		`{"error":{"message":"Rate limit reached. Please add a payment method to continue."}}`,
+		`{"error":{"message":"Too many requests: your account is suspended for billing."}}`,
+	} {
+		if busy(429, []byte(b)) {
+			t.Errorf("%s: busy", b)
+		}
+		if _, ok := passing(429, http.Header{}, []byte(b), 0); ok {
+			t.Errorf("%s: passing", b)
+		}
+	}
+}
+
+// The reporter's case through the gateway: one provider whose vendor
+// answers the TPM 429 and then the answer gets the answer, not the 429.
+// The wait it names is shortened to keep the test quick.
+func TestTPMWithBillingAdviceAskedAgain(t *testing.T) {
+	said := strings.Replace(tpmWithPaymentAdvice, "8.259s", "0.5s", 1)
+	u := &busyUpstream{replies: []busyReply{
+		{code: 429, body: said},
+		{code: 200, body: anthropicAnswer},
+	}}
+	s := busyProvider(t, u)
+	scaled(t, 5*time.Second)
+	gw := httptest.NewServer(s.Handler())
+	t.Cleanup(gw.Close)
+	res, err := http.Post(gw.URL+"/v1/messages", "application/json", strings.NewReader(singleAsk(true)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	b, _ := io.ReadAll(res.Body)
+	if res.StatusCode != 200 || !strings.Contains(string(b), "message_stop") || u.asked() != 2 {
+		t.Fatalf("agent got %d %q, upstream asked %d times; want the answer on the second ask; %+v", res.StatusCode, b, u.asked(), lastRoute(s).Tries)
+	}
+	if r := lastRoute(s); len(r.Tries) != 2 || r.Tries[0].Fail != failRate {
+		t.Errorf("tries %+v: want the first a rate limit, asked again", r.Tries)
 	}
 }

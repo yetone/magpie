@@ -74,9 +74,21 @@ func busy(status int, body []byte) bool {
 			!bodyHas(body, cutVoidWords) &&
 			!queued(body)
 	case status == 429:
-		return failure(status, body) == failRate && !creditWords.Match(wordsOf(body)) && !walled(body)
+		return failure(status, body) == failRate && !moneySaid(body) && !walled(body)
 	}
 	return false
+}
+
+// moneySaid says a rate limit's 429 speaks of the account's money
+// (creditWords), which a moment doesn't mend. A limit per minute its own
+// words name (minuteRate: TPM, RPM, a minute's window, and no balance
+// spent) is a rate limit whatever billing advice follows: OpenAI's TPM
+// 429 ends "You can increase your rate limit by adding a payment method
+// to your account at https://platform.openai.com/account/billing.", and
+// read as money it was neither asked again nor waited for (#7274).
+func moneySaid(body []byte) bool {
+	w := wordsOf(body)
+	return creditWords.Match(w) && !minuteRate(w)
 }
 
 // queuedWords matches the 503 the Qoder plugin answers when Qoder put a
