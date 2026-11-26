@@ -31,9 +31,10 @@ package agent
 // /generative_ui: YujunT46308), is off while it's on magpie. Nothing in
 // the file keeps both; noticeAntigravity says so where it is connected.
 // The models its own sign-in gave it (Code Assist's fetchAvailableModels)
-// leave its picker with it: with no account under magpie's Antigravity
-// subscription, noticeAntigravityOwn says how to have them back, through
-// the gateway on that account's quota (T_t__biu on X).
+// leave its picker with it: with no account under Antigravity (local agy
+// CLI), noticeAntigravityOwn says how to have them back beside magpie's,
+// run by the user's own agy (T_t__biu, zysicyj on X). The Antigravity
+// subscription it named before is retired, and its accounts serve nothing.
 //
 // The same file is read by agy (Antigravity's CLI) too, below its own
 // ~/.gemini/antigravity-cli/settings.json: an agy connected on its own row
@@ -58,6 +59,9 @@ const (
 	antigravityModel  = "models.defaultModelId"
 	antigravityList   = "models.list"
 	antigravitySource = "models.listSource"
+	// agyCLI is Antigravity (local agy CLI)'s provider: the user's own
+	// agy, signed in to Google, serves its account's models through it
+	agyCLI = "agy-cli"
 )
 
 // antigravityCatalog is the catalog Antigravity's app is pointed at: the
@@ -310,7 +314,7 @@ func antigravity(home string) *Agent {
 			if !wired() {
 				return ""
 			}
-			if len(provider.Logins("antigravity")) == 0 {
+			if len(provider.Logins(agyCLI)) == 0 {
 				return noticeAntigravity.String() + " " + noticeAntigravityOwn.String()
 			}
 			return noticeAntigravity.String()
@@ -466,7 +470,7 @@ func antigravityTidy(path string) error {
 // what antigravity says after a change (notice.go)
 var (
 	noticeAntigravity      = newNotice("Antigravity reads its gateway at start-up — restart Antigravity to use magpie's models. On a gateway it uses no Google sign-in, so what Google turns on for your account (its experiments, and commands such as /boost, /teamwork, /plugin and /generative_ui) is gone while it's on magpie; turning it off here gives that back. An agy not connected on its own row follows it too.")
-	noticeAntigravityOwn   = newNotice("The models your own Google sign-in gives Antigravity leave its list too; sign that Google account in under magpie's Antigravity subscription and they come back, on that account's quota.")
+	noticeAntigravityOwn   = newNotice("The models your own Google sign-in gives Antigravity leave its list too; install Antigravity (local agy CLI) from Plugins and they come back beside magpie's, run by the agy you signed in to.")
 	noticeAntigravityAdmin = newNotice("Antigravity's {path} sets a gateway of its own, which wins over ~/.antigravity/settings.json, so it doesn't reach magpie")
 	noticeAntigravityEnv   = newNotice("AGY_LLM_GATEWAY_URL is set to {url}, which wins over ~/.antigravity/settings.json, so Antigravity started with it doesn't reach magpie")
 )

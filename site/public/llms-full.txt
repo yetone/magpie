@@ -4681,7 +4681,7 @@ The catalog lists a model at each of its reasoning levels, so the app’s own pi
 
 On a gateway, Antigravity uses no Google sign-in and its backend asks Google for nothing. What Google turns on for your account, its experiments and commands such as `/boost`, `/teamwork`, `/plugin` and `/generative_ui`, is gone while it is on magpie. Taking the row off magpie gives it back.
 
-The models your own sign-in gave the app leave its picker too. To have them back on magpie, sign the same Google account in under magpie’s Antigravity subscription in the Providers tab: its models are then in the app’s list, served on that account’s quota, beside any other Google account you add there.
+The models your own sign-in gave the app leave its picker too. To have them back beside magpie’s, install Antigravity (local agy CLI) from Plugins (`magpie plugin add @magpie-community/opencode-agy-cli-auth`). It runs the agy you installed and signed in to, so your account’s models are in the app’s list next to every other model in magpie, and Google sees agy’s own requests. Signing a Google account in to magpie’s Antigravity subscription is retired: Google bans accounts used that way ([Subscriptions](https://usemagpie.ai/docs/subscriptions)).
 
 ## The agy CLI
 
