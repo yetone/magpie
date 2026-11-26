@@ -466,14 +466,24 @@ func codexIn(at place) *Agent {
 		_, err := os.Stat(deskPath)
 		return errors.Is(err, fs.ErrNotExist)
 	}
-	// deskWanted: magpie is connected beside the ChatGPT sign-in (joined,
-	// or on one of magpie's models), not as Codex's provider, on this
-	// machine's Codex, and the Codex app reads this config. The CLI alone
-	// keeps asking the gateway for the list, which follows every change at
-	// once; a Codex here for account failover alone has no models of
-	// magpie's to show.
+	// deskWanted: this machine's Codex reaches magpie by the base URL
+	// beside its ChatGPT sign-in, not with magpie its provider, and the
+	// Codex app reads this config. That is every Codex the gateway hands
+	// magpie's models with its own (codexModels), joined, beside, or with
+	// no mark of either: a base URL the user wrote, or one whose mark the
+	// stash lost (wbssg0401 on X: the CLI and the threads from before had
+	// magpie's models, and the app's new conversation GPT alone, as the
+	// app shows its own presets for the built-in provider with no
+	// model_catalog_json). The CLI alone keeps asking the gateway for the
+	// list, which follows every change at once; a Codex here for account
+	// failover alone is handed its own models only (failingOver,
+	// CodexOwnOnly).
 	deskWanted := func() bool {
-		if at.spell != nil || asProvider() || !viaBase() || !(joined() || beside()) || !chatGPT() {
+		if at.spell != nil || asProvider() || !viaBase() || !chatGPT() {
+			return false
+		}
+		// failingOver's base URL, which failover takes out at the sync
+		if !wired() && stashShared()[at.key("codex.failover")] == "1" {
 			return false
 		}
 		for _, r := range codexReaders(at) {
