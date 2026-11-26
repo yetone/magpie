@@ -138,3 +138,73 @@ func TestKeyWindowsElsewhereStayWhole(t *testing.T) {
 		t.Error("a model free by name or price elsewhere counted as one the vendor serves free")
 	}
 }
+
+// xzhih on X, #7773: an OpenCode Go key at its usage cap was shown held
+// as a whole, while the gateway, asking the cap per model, served its
+// free models. KeyCapLeaves names them; at another vendor, whose windows
+// count every model, a key at its cap leaves none.
+func TestKeyCapLeavesGoFreeModels(t *testing.T) {
+	keyLimitsHome(t)
+	goPrices(t)
+	if err := catalog.SaveLive("go", OpenCodeGoChat, []catalog.Model{{ID: "glm-5.3"}, {ID: "hy4-flash-free"}}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	resets := now.Add(time.Hour)
+	ws := []QuotaWindow{{Name: "5 hours", Used: 80, Span: 5 * time.Hour, ResetsAt: &resets}}
+	read := func(q Provider) (Allowance, bool) { return keyAllowanceOf(q, ws, now), true }
+	p := goFreeKey
+	p.AccountCaps = map[string]int{KeyID(p.Key): 50}
+	if err := Save(p); err != nil {
+		t.Fatal(err)
+	}
+	ka, _ := p.KeyAccountOf(KeyID(p.Key))
+	if p.KeyCapHeld(ka, "", now, read) == nil {
+		t.Fatal("the key isn't held at its cap: this test is about one that is")
+	}
+	if got := p.KeyCapLeaves(ka, now, read); len(got) != 1 || got[0] != "hy4-flash-free" {
+		t.Errorf("at the cap the Go key leaves %v, want [hy4-flash-free]", got)
+	}
+	// below the cap, nothing is held, so nothing is left
+	ws[0].Used = 30
+	if got := p.KeyCapLeaves(ka, now, read); got != nil {
+		t.Errorf("below the cap: %v", got)
+	}
+	ws[0].Used = 80
+
+	g := Provider{ID: "glm", Key: "k", Chat: "https://open.bigmodel.cn/api/coding/paas/v4", AccountCaps: map[string]int{KeyID("k"): 50}}
+	if err := catalog.SaveLive("glm", g.Chat, []catalog.Model{{ID: "glm-5.3"}, {ID: "hy4-flash-free"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Save(g); err != nil {
+		t.Fatal(err)
+	}
+	gk, _ := g.KeyAccountOf(KeyID("k"))
+	if g.KeyCapHeld(gk, "", now, read) == nil {
+		t.Fatal("the other vendor's key isn't held at its cap")
+	}
+	if got := g.KeyCapLeaves(gk, now, read); got != nil {
+		t.Errorf("another vendor's key at its cap leaves %v", got)
+	}
+}
+
+// ModelsRestAlone is OpenCode's, with free models beside paid ones: an
+// old whole-key rest or notice of such a key is the pre-v0.1.4818 rule's
+// (#7773). Another vendor's key, a $0 model on its list too, isn't.
+func TestModelsRestAlone(t *testing.T) {
+	keyLimitsHome(t)
+	goPrices(t)
+	if err := catalog.SaveLive("go", OpenCodeGoChat, []catalog.Model{{ID: "glm-5.3"}, {ID: "hy4-flash-free"}}); err != nil {
+		t.Fatal(err)
+	}
+	if !goFreeKey.ModelsRestAlone() {
+		t.Error("an OpenCode Go key with a free model beside paid ones")
+	}
+	g := Provider{ID: "glm", Key: "k", Chat: "https://open.bigmodel.cn/api/coding/paas/v4"}
+	if err := catalog.SaveLive("glm", g.Chat, []catalog.Model{{ID: "glm-5.3"}, {ID: "hy4-flash-free", Free: true}}); err != nil {
+		t.Fatal(err)
+	}
+	if g.ModelsRestAlone() {
+		t.Error("another vendor's key")
+	}
+}

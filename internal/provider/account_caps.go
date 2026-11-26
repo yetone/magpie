@@ -107,6 +107,31 @@ func (p Provider) KeyCapHeld(k KeyAccount, model string, now time.Time, read fun
 	return al.CapHeld(model, caps, now)
 }
 
+// KeyCapLeaves are the models on p's list that the usage cap holding
+// the key k as a whole (KeyCapHeld for model "") holds none of, by the
+// windows read gives: a window that counts only some models (paidOnly:
+// OpenCode Go's count none of its free ones) leaves the others to the
+// key, as the gateway asks KeyCapHeld per model. The Providers page said
+// the key was passed over while its free models were served (xzhih on
+// X, #7773). Nil when it isn't held, or holds every model.
+func (p Provider) KeyCapLeaves(k KeyAccount, now time.Time, read func(Provider) (Allowance, bool)) []string {
+	caps := p.CapsOf(keyID(k.Key))
+	if !caps.Holds() {
+		return nil
+	}
+	al, ok := read(p.WithKey(k))
+	if !ok || al.CapHeld("", caps, now) == nil {
+		return nil
+	}
+	var out []string
+	for _, m := range p.Available() {
+		if al.CapHeld(m.ID, caps, now) == nil {
+			out = append(out, m.ID)
+		}
+	}
+	return out
+}
+
 // KeyAccountOf is the key of p with the id ref (KeyInfo.ID), and whether
 // p has it.
 func (p Provider) KeyAccountOf(ref string) (KeyAccount, bool) {

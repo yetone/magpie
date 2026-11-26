@@ -2139,6 +2139,25 @@ func (p Provider) FreeBesidePaid(model string) bool {
 	return listed && free && paidToo && p.IsOpenCode()
 }
 
+// ModelsRestAlone says a credit or quota refusal of any model on p's list
+// rests that model alone, never p's key as a whole: each is paid beside
+// free ones (PaidBesideFree) or free beside paid ones (FreeBesidePaid),
+// as at OpenCode Go and Zen. A magpie before v0.1.4818 rested such a key
+// whole, as nothing marked OpenCode's free models; a ladder rest or a
+// notice it left under the whole key held, or showed out, the free models
+// the key still serves (xzhih on X, #7773).
+func (p Provider) ModelsRestAlone() bool {
+	free, paid := false, false
+	for _, m := range p.Available() {
+		if p.costsNothing(m) {
+			free = true
+		} else {
+			paid = true
+		}
+	}
+	return free && paid && p.IsOpenCode()
+}
+
 // freeBeside is whether p lists model, whether it costs nothing there
 // (costsNothing), and whether p lists another model that does, and one
 // that doesn't.

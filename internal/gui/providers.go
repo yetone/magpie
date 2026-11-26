@@ -1156,6 +1156,7 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 			out.KeyList[i].Rest = noticeRest(n)
 		}
 	}
+	keyModelRests(p.ID, out.KeyList, restKey)
 	// and one with a spend cap, what it has spent of it (the gateway
 	// holds it at the cap by the same count, gateway.spendHeld)
 	for i, k := range out.KeyList {
@@ -1182,8 +1183,10 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 			if !ok {
 				continue
 			}
-			if h := p.KeyCapHeld(ka, "", now, provider.KeyAllowance); h != nil {
-				out.KeyList[i].CapHeld = &provider.KeyCapState{Used: h.Used, Cap: h.Cap, Back: h.Back}
+			if h := p.KeyCapHeld(ka, "", now, keyAllowance); h != nil {
+				// and the models it still serves at the cap: OpenCode
+				// Go's free ones, which no window counts (#7773)
+				out.KeyList[i].CapHeld = &provider.KeyCapState{Used: h.Used, Cap: h.Cap, Back: h.Back, Free: p.KeyCapLeaves(ka, now, keyAllowance)}
 			}
 		}
 	}
@@ -1526,6 +1529,49 @@ var (
 	limitNoticeOf     = gateway.LimitNoticeOf
 	limitNoticesUnder = gateway.LimitNoticesUnder
 )
+
+// keyAllowance is provider.KeyAllowance, swapped in tests.
+var keyAllowance = provider.KeyAllowance
+
+// keyModelRests puts on each key of ks that is on its models' own rests
+// in force, then the notices of those whose rests ended before the limit
+// did, as the gateway keys them (restKey(k)/model, gateway.restID). A
+// refusal at OpenCode Go or Zen rests the paid model alone since
+// v0.1.4818, and the key row showed only a whole key's rest, so it said
+// nothing of which models were out, or, with an old whole-key notice,
+// that all of them were (xzhih on X, #7773).
+func keyModelRests(id string, ks []provider.KeyInfo, restKey func(provider.KeyInfo) string) {
+	of := map[string]int{}
+	for i, k := range ks {
+		if k.On {
+			of[restKey(k)] = i
+		}
+	}
+	if len(of) == 0 {
+		return
+	}
+	add := func(key string, r provider.KeyRest) bool {
+		base, model, ok := strings.Cut(key, "/")
+		i, mine := of[base]
+		if !ok || !mine || model == "" {
+			return false
+		}
+		r.Model = cmp.Or(r.Model, model)
+		ks[i].Rests = append(ks[i].Rests, r)
+		return true
+	}
+	resting := map[string]bool{}
+	for _, r := range restsUnder(id) {
+		if add(r.Key, provider.KeyRest{Why: r.Why, Status: r.Status, Until: r.Until, Key: r.Key, Probed: r.Probed, By: r.By, Model: r.Model, Error: r.Error, Rate: r.Rate}) {
+			resting[r.Key] = true
+		}
+	}
+	for _, n := range limitNoticesUnder(id) {
+		if !resting[n.Key] {
+			add(n.Key, *noticeRest(n))
+		}
+	}
+}
 
 // noticeRest is a rate limit or quota the gateway rests on no more, as
 // the row shows it: Notice set, Until when the vendor said it lifts.

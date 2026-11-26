@@ -130,7 +130,7 @@ func loadRests() {
 	if json.Unmarshal(b, &saved) != nil {
 		return
 	}
-	known, err := restKeysStored()
+	known, alone, err := restKeysStored()
 	if err != nil {
 		return // which keys are there is unknown: none are rested by guess
 	}
@@ -139,6 +139,14 @@ func loadRests() {
 	for k, v := range saved {
 		r := v.Rest
 		if !ladderRest(r) || r.Until.IsZero() || now.Sub(r.Until) > restsKeep || !known(k) {
+			continue
+		}
+		if alone(k) {
+			// a whole key out of credit at a provider that now rests each
+			// model alone was rested so by a magpie before v0.1.4818
+			// (ModelsRestAlone): kept, it held the free models the key
+			// still serves for up to a week (#7773). Let go; a paid
+			// model refused again rests by itself
 			continue
 		}
 		if _, ok := restingUntil.m[k]; ok {
@@ -157,21 +165,43 @@ func loadRests() {
 }
 
 // restKeysStored says whether a rest key — a provider's id, or id#key,
-// either followed by /model — names a key providers.json still has.
-func restKeysStored() (func(string) bool, error) {
+// either followed by /model — names a key providers.json still has, and
+// whether it is such a key whole (no /model) at a provider that rests a
+// credit or quota refusal of each of its models alone
+// (provider.ModelsRestAlone): a rest or notice kept under it is the
+// whole-key rule's of a magpie before v0.1.4818 (#7773). The second is
+// asked of a provider once, and only of one a key is asked about.
+func restKeysStored() (known, alone func(string) bool, err error) {
 	ps, err := provider.Stored()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	keys := map[string]bool{}
-	for _, p := range ps {
+	of := map[string]int{}
+	for i, p := range ps {
 		keys[p.ID] = len(p.KeyList()) > 0
+		of[p.ID] = i
 		for _, k := range p.KeyList() {
 			keys[p.ID+"#"+k.ID] = true
+			of[p.ID+"#"+k.ID] = i
 		}
 	}
-	return func(k string) bool {
+	each := map[int]bool{}
+	known = func(k string) bool {
 		k, _, _ = strings.Cut(k, "/")
 		return keys[k]
-	}, nil
+	}
+	alone = func(k string) bool {
+		i, ok := of[k]
+		if !ok || !keys[k] {
+			return false // a model's own, or no key of the file's
+		}
+		v, asked := each[i]
+		if !asked {
+			v = ps[i].ModelsRestAlone()
+			each[i] = v
+		}
+		return v
+	}
+	return known, alone, nil
 }

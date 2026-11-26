@@ -54,6 +54,12 @@ type KeyInfo struct {
 	// Rest is why the gateway passes it over now, after a failure, and
 	// until when; nil while it takes requests.
 	Rest *KeyRest `json:"rest,omitempty"`
+	// Rests are its models' own rests and notices (key/model), soonest
+	// back first: where a refusal rests the model alone (OpenCode Go's
+	// paid models with its windows used up), the key still serves the
+	// others, so the row says which are out without dimming the key
+	// (xzhih on X, #7773).
+	Rests []KeyRest `json:"rests,omitempty"`
 	// Spend is the spend cap set on it and what it has spent in its
 	// period; nil with none.
 	Spend *KeySpend `json:"spend,omitempty"`
@@ -79,11 +85,14 @@ type KeySpend struct {
 
 // KeyCapState is a key held at its usage cap: the share used of the fullest
 // window at its cap, that cap and when the last such window renews (zero
-// when one doesn't say).
+// when one doesn't say). Free are the models on its list the cap holds
+// none of (KeyCapLeaves): OpenCode Go's free models, which no window
+// counts, still go to the key (xzhih on X, #7773).
 type KeyCapState struct {
 	Used float64   `json:"used"`
 	Cap  int       `json:"cap"`
 	Back time.Time `json:"back,omitzero"`
+	Free []string  `json:"free,omitempty"`
 }
 
 // KeyRest is a key's rest as the gateway keeps it: failQuota, failRate…,

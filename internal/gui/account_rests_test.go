@@ -124,3 +124,57 @@ func TestLimitNoticesInProviderState(t *testing.T) {
 		t.Fatalf("a key resting: %+v, want its rest", r)
 	}
 }
+
+// xzhih on X, #7773: an OpenCode Go key's paid model rests alone since
+// v0.1.4818, and its row showed only a whole key's rest, so it said
+// nothing of which models were out. A key's row now has its models' own
+// rests, then the notices of those resting no more, each by its model,
+// and the key's own Rest stays nil: the key still serves its others. A
+// key of another provider whose id the first starts with, and an account,
+// add nothing to it.
+func TestKeyModelRestsInProviderState(t *testing.T) {
+	h := t.TempDir()
+	t.Setenv("HOME", h)
+	t.Setenv("USERPROFILE", h)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
+	at, end := time.Now().Add(-2*time.Hour).Truncate(time.Second), time.Now().Add(4*time.Hour).Truncate(time.Second)
+	wasRests, wasUnder, wasOf, wasKey := restsUnder, limitNoticesUnder, limitNoticeOf, keyRestOf
+	defer func() { restsUnder, limitNoticesUnder, limitNoticeOf, keyRestOf = wasRests, wasUnder, wasOf, wasKey }()
+	keyRestOf = func(string) (gateway.Rest, bool) { return gateway.Rest{}, false }
+	limitNoticeOf = func(string) (gateway.LimitNotice, bool) { return gateway.LimitNotice{}, false }
+	p := provider.Provider{ID: "go", Name: "OpenCode Go", Chat: "https://example.invalid/v1", Key: "k"}
+	key := p.RestKey(p.KeyList()[0])
+	restsUnder = func(string) []gateway.Rest {
+		return []gateway.Rest{
+			{Why: "quota", Status: 429, Until: end, By: "window", Key: key + "/glm-5.3", Model: "glm-5.3"},
+			{Why: "quota", Status: 429, Until: end, By: "window", Key: "google/gemini-x"},
+			{Why: "rate", Status: 429, Until: end, Key: "go@me/kimi"},
+		}
+	}
+	limitNoticesUnder = func(string) []gateway.LimitNotice {
+		return []gateway.LimitNotice{
+			{Key: key + "/kimi-k3", Why: "quota", Status: 429, Error: "usage limit reached", At: at, Until: end},
+			// resting still: its rest is shown, not this
+			{Key: key + "/glm-5.3", Why: "quota", Status: 429, At: at},
+		}
+	}
+	k := providerInfo(p, nil).KeyList[0]
+	if k.Rest != nil {
+		t.Fatalf("the key rests as a whole: %+v", k.Rest)
+	}
+	if len(k.Rests) != 2 {
+		t.Fatalf("rests %+v, want glm-5.3's rest and kimi-k3's notice", k.Rests)
+	}
+	if r := k.Rests[0]; r.Notice || r.Model != "glm-5.3" || r.By != "window" || r.Key != key+"/glm-5.3" {
+		t.Fatalf("glm-5.3's: %+v, want its rest", r)
+	}
+	if n := k.Rests[1]; !n.Notice || n.Model != "kimi-k3" || !n.Until.Equal(end) || n.Error != "usage limit reached" {
+		t.Fatalf("kimi-k3's: %+v, want its notice", n)
+	}
+	// and the page is sent them
+	b, _ := json.Marshal(providerInfo(p, nil).KeyList[0])
+	if !strings.Contains(string(b), `"rests":[`) {
+		t.Fatalf("not sent to the page: %s", b)
+	}
+}

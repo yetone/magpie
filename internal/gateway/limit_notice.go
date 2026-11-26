@@ -209,8 +209,9 @@ func saveNotices() {
 // one ended since, or a file that can't be read or parsed, adds nothing.
 func loadNotices() {
 	noticesSaving.Lock()
-	defer noticesSaving.Unlock()
 	loadNoticesLocked(noticesPath())
+	noticesSaving.Unlock()
+	saveDropped() // the file without what the read let go
 }
 
 func loadNoticesLocked(path string) {
@@ -230,10 +231,33 @@ func loadNoticesLocked(path string) {
 		return
 	}
 	now := time.Now()
+	// a key out of quota as a whole, at a provider that now rests each
+	// model alone (provider.ModelsRestAlone), was noted so by a magpie
+	// before v0.1.4818: its row said the key was out, the free models it
+	// still serves with it, till the reset days off (xzhih on X, #7773).
+	// It is let go; a paid model refused again is noted by itself. Found
+	// before the lock is taken: it reads providers.json
+	oldRule := map[string]bool{}
+	var alone func(string) bool
+	for k, n := range saved {
+		if n.Why != failQuota || strings.Contains(k, "/") {
+			continue
+		}
+		if alone == nil {
+			if _, alone, _ = restKeysStored(); alone == nil {
+				break // unread: each kept as it was
+			}
+		}
+		oldRule[k] = alone(k)
+	}
 	limitNotices.Lock()
 	defer limitNotices.Unlock()
 	for k, n := range saved {
 		if _, ok := limitNotices.m[k]; ok || n.At.After(now) || !n.live(now) {
+			continue
+		}
+		if oldRule[k] {
+			noticesDropped.Store(true)
 			continue
 		}
 		n.Key = k

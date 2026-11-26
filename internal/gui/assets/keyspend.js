@@ -58,6 +58,7 @@ window.keySpendFill = function (row, p, k) {
   row.querySelector(":scope > .acap")?.remove();
   row.querySelector(":scope > .key-cap-line")?.remove();
   row.querySelector(":scope > .key-spend-line")?.remove();
+  row.querySelectorAll(":scope > .key-model-rest").forEach((x) => x.remove());
   const pill = keySpendPill(p, k), gap = row.querySelector(":scope > .grow");
   gap ? gap.before(pill) : row.append(pill);
   // a key whose usage windows magpie reads takes the usage cap an account
@@ -66,18 +67,34 @@ window.keySpendFill = function (row, p, k) {
     const cp = accountCapPill(p, k.id, accountCapOf(p, k.id), "", true);
     pill.before(cp);
     if (k.capHeld) {
-      const h = k.capHeld;
-      const n = capHeldNote({ used: h.used, cap: h.cap, back: h.back ? Date.parse(h.back) : 0, all: true, some: [] }, h.cap, p.keyList?.filter((x) => x.on).length > 1, "");
+      const h = k.capHeld, back = h.back ? Date.parse(h.back) : 0;
+      // the cap holds its paid models alone: OpenCode Go's free ones,
+      // which no window counts, still go to it (xzhih on X, #7773)
+      const n = h.free?.length ? el("span", "using acap-held", back ? t("Paid models at its cap · back {in}", { in: untilText(back) }) : t("Paid models at its cap"))
+        : capHeldNote({ used: h.used, cap: h.cap, back, all: true, some: [] }, h.cap, p.keyList?.filter((x) => x.on).length > 1, "");
+      if (h.free?.length) n.title = t("A usage window is at {n}%, past this key's {cap}% cap, so magpie sends its paid models' requests to the next key or a fallback until it renews. Its free models still use this key: {models}", { n: Math.round(h.used), cap: h.cap, models: h.free.join(", ") });
       const cl = el("div", "key-rest-line key-cap-line");
       cl.append(n);
       const at = row.querySelector(":scope > .key-rest-line") || row.querySelector(":scope > .key-acts");
       at ? at.after(cl) : row.append(cl);
-      row.classList.add("resting");
+      if (!h.free?.length) row.classList.add("resting");
     }
   }
   const line = keySpendLine(k);
-  if (!line) return;
-  const at = row.querySelector(":scope > .key-rest-line") || row.querySelector(":scope > .key-acts");
-  at ? at.after(line) : row.append(line);
-  row.classList.add("resting");
+  if (line) {
+    const at = row.querySelector(":scope > .key-rest-line") || row.querySelector(":scope > .key-acts");
+    at ? at.after(line) : row.append(line);
+    row.classList.add("resting");
+  }
+  // its models' own rests and notices, the key serving its others: no
+  // dimmed row (xzhih on X, #7773)
+  const rs = (k.rests || []).filter(restShown);
+  if (!rs.length) return;
+  const lines = rs.map((r) => {
+    const l = restLineOf(r, r.model, t("Until then {model} goes to the next key or a fallback; this key's other models are used as before", { model: r.model }), r.model + " · " + (k.name || k.masked), () => { k.rests = k.rests.filter((x) => x !== r); });
+    l.classList.add("key-model-rest");
+    return l;
+  });
+  const ls = row.querySelectorAll(":scope > .key-rest-line"), at = ls[ls.length - 1] || row.querySelector(":scope > .key-acts");
+  at ? at.after(...lines) : row.append(...lines);
 };
