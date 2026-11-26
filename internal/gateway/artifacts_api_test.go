@@ -3,6 +3,7 @@ package gateway
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -86,6 +87,12 @@ func TestArtifactPageStore(t *testing.T) {
 	}
 	if code, out := storeCall(h, id, map[string]any{"t": tok, "op": "acquire", "path": "locks/a", "holder": "tab1", "ttlMs": 5000}); code != 200 || out["lease"].(map[string]any)["acquired"] != true {
 		t.Fatalf("acquire: %d %v", code, out)
+	}
+	// a ttl so large that it wraps round in nanoseconds is the longest lease
+	code, out = storeCall(h, id, map[string]any{"t": tok, "op": "acquire", "path": "locks/b", "holder": "tab1", "ttlMs": int64(9223372036854775)})
+	exp, _ := time.Parse(time.RFC3339Nano, fmt.Sprint(out["lease"].(map[string]any)["expiresAt"]))
+	if code != 200 || time.Until(exp) < 9*time.Minute {
+		t.Fatalf("a huge ttl: %d %v", code, out)
 	}
 	if code, out := storeCall(h, id, map[string]any{"t": tok, "op": "set", "path": "tasks", "data": map[string]any{}}); code != 400 || errCode(out) != "invalid_argument" {
 		t.Fatalf("a set at a collection: %d %v", code, out)

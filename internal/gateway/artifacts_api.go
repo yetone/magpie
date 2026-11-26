@@ -171,7 +171,9 @@ func (s *Server) artifactDB(w http.ResponseWriter, r *http.Request) {
 		err = db.Delete(c.Path)
 	case "acquire":
 		var l *artifact.Lease
-		if l, err = db.Acquire(c.Path, c.Holder, time.Duration(c.TTLMs)*time.Millisecond, c.Data); err == nil {
+		// in milliseconds, held under an hour first so a huge one can't
+		// wrap round to a short or negative lease
+		if l, err = db.Acquire(c.Path, c.Holder, time.Duration(min(c.TTLMs, int64(time.Hour/time.Millisecond)))*time.Millisecond, c.Data); err == nil {
 			out = map[string]any{"lease": l}
 		}
 	default:
