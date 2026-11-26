@@ -31,7 +31,9 @@ import (
 //	Qoder         AGENTS.md, or its settings' context.fileName
 //	CodeBuddy     CODEBUDDY.md
 //	Cursor, Copilot CLI, Kimi Code, Droid, Crush, Grok Build, Cline,
-//	Command Code and Goose read AGENTS.md at the project's root.
+//	Command Code, Goose and Dim read AGENTS.md at the project's root
+//	(Dim: the nearest AGENTS.md above the folder it runs in,
+//	read_instructions in arcships/dim's prompt_sources.rs).
 //
 // A file several picked agents read is written once.
 var projectInstrNames = map[string][]string{
@@ -53,6 +55,7 @@ var projectInstrNames = map[string][]string{
 	"cline":       {"AGENTS.md"},
 	"commandcode": {"AGENTS.md"},
 	"goose":       {"AGENTS.md"},
+	"dim":         {"AGENTS.md"},
 }
 
 // the order an agent looks for its names in, where that isn't the order

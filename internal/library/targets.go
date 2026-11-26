@@ -463,8 +463,13 @@ func targetOf(a *agent.Agent) *Target {
 		// from <cwd>/.agents/skills (dim-agent-capabilities' skills
 		// catalog: SKILLS_DIR under the platform's home, $HOME or
 		// %USERPROFILE%, and under the folder it runs in; arcships/dim
-		// c68dad5). Skills only: Dim's MCP servers and instructions aren't
-		// given, and nothing here touches its sign-in or its requests.
+		// c68dad5). Its user-wide instructions are AGENTS.md in that same
+		// home, "# User instructions (~/AGENTS.md)" (read_instructions in
+		// dim-agent-capabilities' prompt_sources.rs; the string is in
+		// dimcode-darwin-arm64 0.1.0-alpha.29's binary; lml on Discord).
+		// Dim's MCP servers aren't given, and nothing here touches its
+		// sign-in or its requests.
+		t.Instructions = filepath.Join(h, "AGENTS.md")
 		t.Skills = sharedSkillsDir()
 	case "hermes":
 		// Hermes Agent reads mcp_servers from $HERMES_HOME/config.yaml, the
