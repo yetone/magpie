@@ -1130,9 +1130,11 @@ func cacheKeyCamel(body []byte) []byte {
 	return bytes.TrimSuffix(out.Bytes(), []byte("\n"))
 }
 
-// thinkingConfigField is Gemini's thinking_config as unfit remembers a
-// provider that refused it.
-const thinkingConfigField = "thinking_config"
+// thinkingConfigRefused is Gemini's thinking_config as unfit remembers a
+// model on a provider that refused it: per model so a local multi-backend
+// router (OmniRoute, #7821) keeps asking its real Gemini routes for thoughts
+// after one backend such as Poe turns google away.
+func thinkingConfigRefused(model string) string { return "thinking_config\x00" + model }
 
 // gemini3Levels are the levels Gemini 3 thinks at, of which a model may
 // take only some (gemini-3.8-flash has no minimal): those it is asked at
@@ -1161,13 +1163,22 @@ func geminiRefusedLevel(body []byte) string {
 }
 
 // refusesThinkingConfig recognizes an upstream turning a request away for
-// the thinking_config it was sent, by its error naming it.
+// the thinking_config it was sent, by its error naming it — or refusing the
+// unwrapped top-level google field when a local router forwarded extra_body's
+// contents to a backend that doesn't know it (#7821).
 func refusesThinkingConfig(status int, body []byte) bool {
 	if !badRequest(status) {
 		return false
 	}
 	b := bytes.ToLower(body)
-	return bodyHas(b, "extra_body") || bodyHas(b, "thinking") || bodyHas(b, "include_thoughts")
+	if bodyHas(b, "extra_body") || bodyHas(b, "thinking") || bodyHas(b, "include_thoughts") {
+		return true
+	}
+	var fault any
+	if decodeJSON(body, &fault) != nil {
+		fault = string(body)
+	}
+	return unsupportedOptionalField(fault, "google")
 }
 
 // aiStudioThinking is the thinking_config asking Gemini for its thoughts at

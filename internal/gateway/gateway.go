@@ -9113,7 +9113,7 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			r := *req
 			r.Metadata, req = nil, &r
 		}
-		if want := to == provider.Chat && geminiCompat(p.VendorHost(), model) && s.fits(p.ID, thinkingConfigField, to); want != req.GeminiCompat {
+		if want := to == provider.Chat && geminiCompat(p.VendorHost(), model) && s.fits(p.ID, thinkingConfigRefused(model), to); want != req.GeminiCompat {
 			r := *req
 			r.GeminiCompat, req = want, &r
 		}
@@ -9433,11 +9433,13 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 				continue
 			}
 		}
-		if req.GeminiCompat && refusesThinkingConfig(res.StatusCode, b) {
+		if req.GeminiCompat && bodyHas(body, `"extra_body"`) && refusesThinkingConfig(res.StatusCode, b) {
 			// Gemini's own fields turned away (a proxy that isn't in front
-			// of Google after all, or Google changing them): asked as
-			// before, with reasoning_effort, and not sent them again
-			s.markUnfit(p.ID, thinkingConfigField, to)
+			// of Google after all, a backend behind a local router that
+			// doesn't take google, or Google changing them): asked as
+			// before, with reasoning_effort, and not sent them again for
+			// this model
+			s.markUnfit(p.ID, thinkingConfigRefused(model), to)
 			continue
 		}
 		if badRequest(res.StatusCode) && s.fits(p.ID, historyToolsRefused, to) {
@@ -9894,6 +9896,11 @@ var leadingRejectedOptionalField = lazyre.New("(?i)^\\s*([a-z_]+)\\s+is\\s+(?:un
 // which reaches the client as it came.
 var valueRejectedForField = lazyre.New("(?i)['\"\\x60][^'\"\\x60]{0,64}['\"\\x60]\\s+is\\s+(?:unsupported|not supported)\\s+for\\s+['\"\\x60]([a-z_]+)['\"\\x60]")
 
+// unsupportedFieldList is a vendor naming one or more fields it won't take
+// after a colon: Poe's "This bot does not support these request fields:
+// google" (#7821).
+var unsupportedFieldList = lazyre.New("(?i)\\bdoes not support (?:this|these) (?:request )?(?:field|fields|parameter|parameters|property|properties|argument|arguments)\\s*:\\s*(['\"\\x60]?[a-z_]+['\"\\x60]?(?:\\s*,\\s*['\"\\x60]?[a-z_]+['\"\\x60]?)*)")
+
 func unsupportedOptionalField(fault any, field string) bool {
 	switch v := fault.(type) {
 	case string:
@@ -9950,6 +9957,13 @@ func unsupportedOptionalField(fault any, field string) bool {
 		for _, match := range valueRejectedForField.FindAllStringSubmatch(v, -1) {
 			if match[1] == field {
 				return true
+			}
+		}
+		for _, match := range unsupportedFieldList.FindAllStringSubmatch(v, -1) {
+			for f := range strings.SplitSeq(match[1], ",") {
+				if strings.Trim(strings.TrimSpace(f), "'\"`") == field {
+					return true
+				}
 			}
 		}
 		if match := leadingRejectedOptionalField.FindStringSubmatch(v); match != nil && match[1] == field {

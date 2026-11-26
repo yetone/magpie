@@ -681,3 +681,145 @@ func TestPassthroughGeminiMinimalRefused(t *testing.T) {
 		}
 	}
 }
+
+// refusesThinkingConfig recognizes both Gemini's own thinking_config /
+// extra_body refusals and a refusal of the unwrapped top-level google field
+// (as Poe behind OmniRoute answers in #7821), without tripping on real Google
+// errors that mention google.dev, googleapis.com, or a google/ model name.
+func TestRefusesThinkingConfig(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		status int
+		body   string
+		want   bool
+	}{
+		{"extra_body", 400, `{"error":{"message":"Invalid JSON payload received. Unknown name \"extra_body\": Cannot find field.","code":400}}`, true},
+		{"poe plain", 400, `[400]: This bot does not support these request fields: google`, true},
+		{"poe json", 400, `{"error":{"message":"[400]: This bot does not support these request fields: google","type":"invalid_request_error"}}`, true},
+		{"poe list", 400, `{"error":{"message":"This bot does not support these request fields: stream_options, google"}}`, true},
+		{"google unknown name", 400, `{"error":{"message":"Invalid JSON payload received. Unknown name \"google\": Cannot find field.","code":400}}`, true},
+		{"pydantic extra_forbidden", 422, `{"detail":[{"type":"extra_forbidden","loc":["body","google"],"msg":"Extra inputs are not permitted"}]}`, true},
+		{"google docs url", 400, `{"error":{"code":400,"message":"Invalid argument. See https://ai.google.dev/gemini-api/docs","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo"}]}}`, false},
+		{"google model name", 400, `{"error":{"code":400,"message":"The model 'google/gemini-3.8-flash' is not supported."}}`, false},
+		{"prefix field name", 400, `[400]: This bot does not support these request fields: google_search`, false},
+		{"nested google field", 400, `{"error":{"message":"Invalid JSON payload received. Unknown name \"google\" at 'messages[0]': Cannot find field."}}`, false},
+		{"server error", 500, `[500]: This bot does not support these request fields: google`, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if got := refusesThinkingConfig(c.status, []byte(c.body)); got != c.want {
+				t.Errorf("refusesThinkingConfig(%d, %s) = %v, want %v", c.status, c.body, got, c.want)
+			}
+		})
+	}
+}
+
+// A local multi-backend router (OmniRoute, #7821) unwraps extra_body and
+// forwards google to a non-Google backend such as Poe, which rejects the
+// google field. Magpie falls back to reasoning_effort and remembers the
+// refusal for that model, while real Gemini models behind the same router
+// keep asking for Gemini's thoughts (and ignore unrelated Google 400s).
+func TestGeminiGoogleFieldRefusedOnLocalRouter(t *testing.T) {
+	fresh(t)
+	var mu sync.Mutex
+	var bodies []map[string]any
+	var returnGoogle400 atomic.Bool
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+		json.NewDecoder(r.Body).Decode(&b)
+		mu.Lock()
+		bodies = append(bodies, b)
+		mu.Unlock()
+		model, _ := b["model"].(string)
+		if model == "poe/gemini-4-hydrogen" && b["extra_body"] != nil {
+			w.WriteHeader(400)
+			io.WriteString(w, `[400]: This bot does not support these request fields: google`)
+			return
+		}
+		if model == "ai-studio/gemini-3.8-flash" && returnGoogle400.Load() {
+			w.WriteHeader(400)
+			io.WriteString(w, `{"error":{"code":400,"message":"Invalid argument. See https://ai.google.dev/gemini-api/docs","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo"}]}}`)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		content := "ok"
+		if geminiThinkingConfig(b)["include_thoughts"] == true {
+			content = "<thought>thinking</thought>ok"
+		}
+		for _, c := range []string{
+			`{"id":"x","model":` + strconv.Quote(model) + `,"choices":[{"index":0,"delta":{"role":"assistant","content":` + strconv.Quote(content) + `}}]}`,
+			`{"id":"x","model":` + strconv.Quote(model) + `,"choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":3}}`,
+		} {
+			io.WriteString(w, "data: "+c+"\n\n")
+		}
+		io.WriteString(w, "data: [DONE]\n\n")
+	}))
+	t.Cleanup(up.Close)
+	p := provider.Provider{
+		ID:     "home-c",
+		Name:   "OmniRoute",
+		Key:    "k",
+		Models: []string{"poe/gemini-4-hydrogen", "ai-studio/gemini-3.8-flash"},
+		Chat:   up.URL,
+	}
+	if err := provider.Save(p); err != nil {
+		t.Fatal(err)
+	}
+	s := New()
+	askCodex := func(model string) (int, string) {
+		return postTo(t, s, "/v1/responses", `{"model":"home-c/`+model+`","stream":true,"reasoning":{"effort":"xhigh","summary":"auto"},"input":[{"role":"user","content":"hi"}]}`)
+	}
+
+	// First turn on Poe model: extra_body rejected -> retried with reasoning_effort xhigh.
+	if code, out := askCodex("poe/gemini-4-hydrogen"); code != 200 || !strings.Contains(out, "ok") {
+		t.Fatalf("poe turn 1: %d %s", code, out)
+	}
+	mu.Lock()
+	if len(bodies) != 2 {
+		t.Fatalf("poe turn 1 sent %d requests, want 2", len(bodies))
+	}
+	if bodies[0]["extra_body"] == nil || bodies[1]["extra_body"] != nil || bodies[1]["reasoning_effort"] != "xhigh" {
+		t.Fatalf("poe turn 1 bodies: [0]=%v [1]=%v", bodies[0], bodies[1])
+	}
+	mu.Unlock()
+
+	// Second turn on Poe model: straight to reasoning_effort without extra_body.
+	if code, out := askCodex("poe/gemini-4-hydrogen"); code != 200 || !strings.Contains(out, "ok") {
+		t.Fatalf("poe turn 2: %d %s", code, out)
+	}
+	mu.Lock()
+	if len(bodies) != 3 || bodies[2]["extra_body"] != nil || bodies[2]["reasoning_effort"] != "xhigh" {
+		t.Fatalf("poe turn 2 bodies (%d): last=%v", len(bodies), bodies[len(bodies)-1])
+	}
+	mu.Unlock()
+
+	// Real Gemini model on the same router still gets extra_body.google.thinking_config.
+	if code, out := askCodex("ai-studio/gemini-3.8-flash"); code != 200 || !strings.Contains(out, "thinking") {
+		t.Fatalf("ai-studio turn 1: %d %s", code, out)
+	}
+	mu.Lock()
+	if len(bodies) != 4 || geminiThinkingConfig(bodies[3])["include_thoughts"] != true {
+		t.Fatalf("ai-studio turn 1 bodies (%d): last=%v", len(bodies), bodies[len(bodies)-1])
+	}
+	mu.Unlock()
+
+	// Unrelated Google 400 mentioning googleapis/google.dev does not disable thinking_config.
+	returnGoogle400.Store(true)
+	if code, _ := askCodex("ai-studio/gemini-3.8-flash"); code != 400 {
+		t.Fatalf("ai-studio Google 400: got %d, want 400", code)
+	}
+	mu.Lock()
+	if len(bodies) != 5 {
+		t.Fatalf("Google 400 retried unexpectedly: %d requests", len(bodies))
+	}
+	mu.Unlock()
+
+	returnGoogle400.Store(false)
+	if code, out := askCodex("ai-studio/gemini-3.8-flash"); code != 200 || !strings.Contains(out, "thinking") {
+		t.Fatalf("ai-studio after Google 400: %d %s", code, out)
+	}
+	mu.Lock()
+	if len(bodies) != 6 || geminiThinkingConfig(bodies[5])["include_thoughts"] != true {
+		t.Fatalf("ai-studio lost thinking_config after Google 400: %v", bodies[len(bodies)-1])
+	}
+	mu.Unlock()
+}
