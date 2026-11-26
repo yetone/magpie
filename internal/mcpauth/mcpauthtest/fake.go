@@ -69,14 +69,22 @@ type Fake struct {
 	// headers and then nothing until HoldGet closes, as one with no
 	// notification to send yet does (#7744)
 	HoldGet chan struct{}
+	// Tools are what tools/list lists, when set; the reply is otherwise
+	// the bare method's name
+	Tools []string
 
-	refuse  bool // RefuseTokens
-	codes   map[string]codeGrant
-	secrets map[string]string // client id → secret, of those that have one
-	methods map[string]string // client id → its token_endpoint_auth_method
-	valid   map[string]bool   // access tokens
-	refresh map[string]bool
-	n       int
+	refuse bool // RefuseTokens
+	// throttle is a token endpoint turning every renewal away with 429
+	// (Throttle), with this Retry-After when it isn't ""
+	throttle     bool
+	retryAfter   string
+	refreshAsked int
+	codes        map[string]codeGrant
+	secrets      map[string]string // client id → secret, of those that have one
+	methods      map[string]string // client id → its token_endpoint_auth_method
+	valid        map[string]bool   // access tokens
+	refresh      map[string]bool
+	n            int
 }
 
 type codeGrant struct{ challenge, client, redirect, resource, scope string }
@@ -216,6 +224,17 @@ func New(t *testing.T) *Fake {
 			f.Exchanged++
 			offline = offline || slices.Contains(strings.Fields(g.scope), "offline_access")
 		case "refresh_token":
+			f.refreshAsked++
+			if f.throttle {
+				// Canva's answer (#7451, Asher-S-Wu)
+				if f.retryAfter != "" {
+					w.Header().Set("Retry-After", f.retryAfter)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusTooManyRequests)
+				io.WriteString(w, `{"error":"too_many_requests","error_description":"Too many refresh_token requests"}`)
+				return
+			}
 			if !f.refresh[r.PostForm.Get("refresh_token")] {
 				fail("invalid_grant")
 				return
@@ -309,6 +328,18 @@ func (f *Fake) mcp(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
+		f.mu.Lock()
+		tools := f.Tools
+		f.mu.Unlock()
+		if msg.Method == "tools/list" && tools != nil {
+			var l []map[string]any
+			for _, n := range tools {
+				l = append(l, map[string]any{"name": n, "inputSchema": map[string]any{"type": "object"}})
+			}
+			b, _ := json.Marshal(map[string]any{"tools": l})
+			fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":%s}`, id, b)
+			return
+		}
 		fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":{"method":%q}}`, id, msg.Method)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -393,4 +424,28 @@ func (f *Fake) ForgetRefresh() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.refresh = map[string]bool{}
+}
+
+// Throttle turns every renewal from now on away as Canva's token endpoint
+// does one it rate-limits (#7451): 429, too_many_requests, with
+// retryAfter as its Retry-After unless it is "". Unthrottle ends it.
+func (f *Fake) Throttle(retryAfter string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.throttle, f.retryAfter = true, retryAfter
+}
+
+// Unthrottle renews tokens again.
+func (f *Fake) Unthrottle() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.throttle = false
+}
+
+// RefreshAsked is how many renewals were asked for, those turned away
+// included.
+func (f *Fake) RefreshAsked() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.refreshAsked
 }

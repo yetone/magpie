@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -209,6 +210,14 @@ func mcpRefused(w http.ResponseWriter, name string, err error) {
 	msg := err.Error()
 	if errors.Is(err, mcpauth.ErrExpired) || errors.Is(err, mcpauth.ErrNotSignedIn) {
 		msg = "magpie's sign-in to the MCP server " + name + " has run out: sign in to it again in magpie's Library"
+	}
+	// a renewal the server rate-limited: the agent is told how long to
+	// wait, and that the sign-in stands (#7451)
+	var rl *mcpauth.RateLimitError
+	if errors.As(err, &rl) {
+		status = http.StatusTooManyRequests
+		w.Header().Set("Retry-After", strconv.Itoa(int(rl.Wait()/time.Second)))
+		msg = "the MCP server " + name + ": " + msg
 	}
 	http.Error(w, msg, status)
 }

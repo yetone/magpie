@@ -64,6 +64,44 @@ var Changed func(name string)
 // renewLead is how long before it runs out a token is renewed.
 var renewLead = 2 * time.Minute
 
+// A token endpoint that answers a renewal 429 is not asked again until
+// the wait it gave in Retry-After is over (at most maxRetryAfter), or,
+// with none given, a wait that doubles from rateLimitBase with each 429
+// in a row up to rateLimitMax (#7451, Asher-S-Wu: every request through
+// the router asked Canva again, a call to another server's tool too).
+const (
+	rateLimitBase = 30 * time.Second
+	rateLimitMax  = 15 * time.Minute
+	maxRetryAfter = 24 * time.Hour
+)
+
+// clockFn is what the package reads the time from; a test moves it past
+// a wait (SetClockForTest).
+var (
+	clockMu sync.RWMutex
+	clockFn = time.Now
+)
+
+func clock() time.Time {
+	clockMu.RLock()
+	defer clockMu.RUnlock()
+	return clockFn()
+}
+
+// SetClockForTest has mcpauth read the time from fn until the returned
+// function puts the clock back.
+func SetClockForTest(fn func() time.Time) (restore func()) {
+	clockMu.Lock()
+	was := clockFn
+	clockFn = fn
+	clockMu.Unlock()
+	return func() {
+		clockMu.Lock()
+		clockFn = was
+		clockMu.Unlock()
+	}
+}
+
 // signInTimeout is how long a sign-in waits for the browser.
 var signInTimeout = 10 * time.Minute
 
@@ -72,6 +110,34 @@ var ErrNotSignedIn = errors.New("magpie isn't signed in to this server")
 
 // ErrExpired is a sign-in the server no longer takes: it has to be done again.
 var ErrExpired = errors.New("magpie's sign-in to this server has run out: sign in again in the Library")
+
+// ErrRateLimited is a sign-in whose token endpoint turned its renewal away
+// with 429: it isn't asked again until the wait is over. A RateLimitError
+// says when.
+var ErrRateLimited = errors.New("the server is limiting how often magpie renews its sign-in")
+
+// RateLimitError is a renewal magpie won't ask for before At: the token
+// endpoint answered 429 (Cause, when this request was the one turned away).
+type RateLimitError struct {
+	At    time.Time
+	Cause error
+}
+
+// Wait is how long is left of the wait, a second at least.
+func (e *RateLimitError) Wait() time.Duration {
+	return max(e.At.Sub(clock()).Round(time.Second), time.Second)
+}
+
+func (e *RateLimitError) Error() string {
+	s := ErrRateLimited.Error() + ": magpie renews it in " + e.Wait().String() + ", and until then can't use it"
+	if e.Cause != nil {
+		s += " (" + e.Cause.Error() + ")"
+	}
+	return s
+}
+
+func (e *RateLimitError) Is(target error) bool { return target == ErrRateLimited }
+func (e *RateLimitError) Unwrap() error        { return e.Cause }
 
 // ErrNoSignIn is a server that answered an agent's first request without
 // asking for a sign-in: it works as it is. One that takes a key as a header
@@ -144,6 +210,12 @@ type Record struct {
 	// Dead is a sign-in the server refused to renew: the page asks for it
 	// again
 	Dead bool `json:"dead,omitempty"`
+	// RetryAt is when a renewal the token endpoint turned away with 429
+	// may be asked for again, unix ms; RateLimits counts the 429s in a
+	// row, for the wait when the server named none. A renewal, or signing
+	// in again, ends both; each account has its own.
+	RetryAt    int64 `json:"retryAt,omitempty"`
+	RateLimits int   `json:"rateLimits,omitempty"`
 
 	// More than one sign-in to a server (Elorynth on X: several accounts,
 	// one in use). This record is always the one in use, so every reader of
@@ -257,6 +329,9 @@ type Status struct {
 	SignedIn bool  `json:"signedIn"`
 	Dead     bool  `json:"dead,omitempty"`
 	At       int64 `json:"at,omitempty"`
+	// RetryAt is when a rate-limited renewal is asked for again, unix ms,
+	// while that is still to come
+	RetryAt int64 `json:"retryAt,omitempty"`
 	// Accounts are the sign-ins, when there is more than one
 	Accounts []Account `json:"accounts,omitempty"`
 }
@@ -268,6 +343,9 @@ func StatusOf(name, serverURL string) Status {
 		return Status{}
 	}
 	st := Status{SignedIn: true, Dead: r.Dead, At: r.At}
+	if !r.Dead && cooling(r) {
+		st.RetryAt = r.RetryAt
+	}
 	if l := Accounts(name); len(l) > 1 {
 		st.Accounts = l
 	}
@@ -486,20 +564,43 @@ func Token(ctx context.Context, name string) (string, error) {
 	if !due(r) {
 		return r.Access, nil
 	}
-	return renew(ctx, name, func(cur Record) bool { return due(cur) })
+	// a renewal turned away with 429 isn't asked for again before its
+	// time, by this request or any other: a token still good meanwhile
+	// is used
+	if cooling(r) {
+		return waiting(r, true)
+	}
+	return renew(ctx, name, func(cur Record) bool { return due(cur) }, true)
 }
 
 // Renew renews the sign-in the server just refused stale, unless another
 // request renewed it meanwhile: then the new token is returned.
 func Renew(ctx context.Context, name, stale string) (string, error) {
-	return renew(ctx, name, func(cur Record) bool { return cur.Access == stale })
+	return renew(ctx, name, func(cur Record) bool { return cur.Access == stale }, false)
 }
 
 func due(r Record) bool {
-	return r.Expires != 0 && time.Now().Add(renewLead).UnixMilli() >= r.Expires
+	return r.Expires != 0 && clock().Add(renewLead).UnixMilli() >= r.Expires
 }
 
-func renew(ctx context.Context, name string, still func(Record) bool) (string, error) {
+// cooling says a renewal of r was turned away with 429 and its wait isn't
+// over.
+func cooling(r Record) bool { return r.RetryAt > clock().UnixMilli() }
+
+// waiting is what a request gets while r's renewal waits: its token while
+// it hasn't run out, when the server hasn't refused it (good), else
+// the wait.
+func waiting(r Record, good bool) (string, error) {
+	if good && r.Expires > clock().UnixMilli() {
+		return r.Access, nil
+	}
+	return "", &RateLimitError{At: time.UnixMilli(r.RetryAt)}
+}
+
+// renew renews the sign-in while still holds for it; good says its token
+// hasn't been refused, so it is used, while it lasts, when the renewal
+// has to wait.
+func renew(ctx context.Context, name string, still func(Record) bool, good bool) (string, error) {
 	mu := lockOf(name)
 	mu.Lock()
 	defer mu.Unlock()
@@ -517,6 +618,9 @@ func renew(ctx context.Context, name string, still func(Record) bool) (string, e
 	if !still(r) {
 		return r.Access, nil
 	}
+	if cooling(r) {
+		return waiting(r, good)
+	}
 	if r.Refresh == "" {
 		markDead(name, r.Access)
 		return "", ErrExpired
@@ -528,6 +632,16 @@ func renew(ctx context.Context, name string, still func(Record) bool) (string, e
 	t, err := tokenRequest(ctx, r, form)
 	if err != nil {
 		var te *tokenError
+		// a 429 is the server asking for a wait, not refusing the
+		// sign-in: it stays, and nothing asks again before the wait is
+		// over
+		if errors.As(err, &te) && te.Status == http.StatusTooManyRequests {
+			r.RetryAt = markRateLimited(name, r.Access, te.RetryAfter).UnixMilli()
+			if tok, werr := waiting(r, good); werr == nil {
+				return tok, nil
+			}
+			return "", &RateLimitError{At: time.UnixMilli(r.RetryAt), Cause: err}
+		}
 		if errors.As(err, &te) && (dead(te.Code) || te.Status == http.StatusUnauthorized) {
 			markDead(name, r.Access)
 			return "", ErrExpired
@@ -544,6 +658,7 @@ func renew(ctx context.Context, name string, still func(Record) bool) (string, e
 			cur.Refresh = t.Refresh
 		}
 		cur.Expires = t.expires()
+		cur.RetryAt, cur.RateLimits = 0, 0
 		return true
 	})
 	return t.Access, err
@@ -577,6 +692,53 @@ func markDead(name, access string) {
 	})
 }
 
+// markRateLimited records the 429 a renewal of the sign-in holding access
+// got, and is when it may be asked for again: after retryAfter, the wait
+// the server gave, or the next step of the backoff when it gave none. A
+// sign-in redone meanwhile is left as it is.
+func markRateLimited(name, access string, retryAfter time.Duration) time.Time {
+	now := clock()
+	at := now.Add(max(retryAfter, rateLimitBase/30)) // never asked again at once
+	_ = update(func(m map[string]*Record) bool {
+		cur := m[name]
+		if cur == nil || cur.Access != access {
+			return false
+		}
+		if retryAfter <= 0 {
+			at = now.Add(backoff(cur.RateLimits))
+		}
+		cur.RateLimits++
+		cur.RetryAt = at.UnixMilli()
+		return true
+	})
+	return at
+}
+
+// backoff is the wait after n 429s in a row that named none.
+func backoff(n int) time.Duration {
+	d := rateLimitBase
+	for ; n > 0 && d < rateLimitMax; n-- {
+		d *= 2
+	}
+	return min(d, rateLimitMax)
+}
+
+// retryAfter reads a Retry-After header, seconds or an HTTP date, as the
+// wait from now, at most maxRetryAfter; 0 when it names none.
+func retryAfter(v string, now time.Time) time.Duration {
+	v = strings.TrimSpace(v)
+	var d time.Duration
+	if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+		if n > int64(maxRetryAfter/time.Second) {
+			return maxRetryAfter
+		}
+		d = time.Duration(n) * time.Second
+	} else if at, err := http.ParseTime(v); err == nil {
+		d = at.Sub(now)
+	}
+	return min(max(d, 0), maxRetryAfter)
+}
+
 type tokens struct {
 	Access    string `json:"access_token"`
 	Refresh   string `json:"refresh_token"`
@@ -588,13 +750,15 @@ func (t tokens) expires() int64 {
 	if t.ExpiresIn <= 0 {
 		return 0
 	}
-	return time.Now().Add(time.Duration(t.ExpiresIn) * time.Second).UnixMilli()
+	return clock().Add(time.Duration(t.ExpiresIn) * time.Second).UnixMilli()
 }
 
 type tokenError struct {
-	Status      int
-	Code        string `json:"error"`
-	Description string `json:"error_description"`
+	Status int
+	// RetryAfter is a 429's Retry-After, when it named a wait
+	RetryAfter  time.Duration `json:"-"`
+	Code        string        `json:"error"`
+	Description string        `json:"error_description"`
 }
 
 func (e *tokenError) Error() string {
@@ -633,6 +797,9 @@ func tokenRequest(ctx context.Context, r Record, form url.Values) (tokens, error
 	b, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode/100 != 2 {
 		te := &tokenError{Status: resp.StatusCode}
+		if resp.StatusCode == http.StatusTooManyRequests {
+			te.RetryAfter = retryAfter(resp.Header.Get("Retry-After"), clock())
+		}
 		_ = json.Unmarshal(b, te)
 		return tokens{}, te
 	}
@@ -1194,7 +1361,7 @@ func start(ctx context.Context, name, serverURL string, app *App, add *string) (
 			return
 		}
 		r2 := rec
-		r2.Access, r2.Refresh, r2.Expires, r2.At = t.Access, t.Refresh, t.expires(), time.Now().UnixMilli()
+		r2.Access, r2.Refresh, r2.Expires, r2.At = t.Access, t.Refresh, t.expires(), clock().UnixMilli()
 		if t.Scope != "" {
 			r2.Scope = t.Scope
 		}

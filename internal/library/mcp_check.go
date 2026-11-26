@@ -153,7 +153,8 @@ func healthKey(s *Server, own ownSignIns) string {
 	}
 	// and the agents signed in to it themselves: one signed in since
 	// isn't left as "needs sign-in"
-	return fmt.Sprintf("%s|%v|%v|%d|%q|%q", b, st.SignedIn, st.Dead, st.At, sides, own.of(s))
+	// and a renewal's wait for a 429 (#7451): checked again once it is over
+	return fmt.Sprintf("%s|%v|%v|%d|%d|%q|%q", b, st.SignedIn, st.Dead, st.At, st.RetryAt, sides, own.of(s))
 }
 
 // CheckServers checks the library's servers called names (every one when
@@ -846,11 +847,23 @@ func remoteHeaders(ctx context.Context, s *Server) (http.Header, *ServerHealth) 
 	if s.Transport == "http" && mcpauth.SignedIn(s.Name, s.URL) {
 		tok, err := mcpauth.Token(ctx, s.Name)
 		if err != nil {
-			return nil, &ServerHealth{State: "auth", OAuth: true, Detail: err.Error()}
+			return nil, renewHealth(err, 0)
 		}
 		h.Set("Authorization", "Bearer "+tok)
 	}
 	return h, nil
+}
+
+// renewHealth is a sign-in whose token couldn't be had: one the server
+// rate-limited the renewal of is still signed in, and waits, not "needs
+// sign-in" beside "Signed in" (#7451, Asher-S-Wu); any other asks for a
+// sign-in.
+func renewHealth(err error, code int) *ServerHealth {
+	if errors.Is(err, mcpauth.ErrRateLimited) {
+		h := failed("ratelimited", err.Error())
+		return &h
+	}
+	return &ServerHealth{State: "auth", Code: code, OAuth: true, Detail: err.Error()}
 }
 
 // netHealth puts a failed request in the page's words.
@@ -955,7 +968,7 @@ func (c *httpSession) call(ctx context.Context, id int, body []byte) (*rpcMsg, *
 			io.Copy(io.Discard, io.LimitReader(res.Body, 1<<16))
 			fresh, err := mcpauth.Renew(ctx, c.s.Name, tok)
 			if err != nil {
-				return nil, &ServerHealth{State: "auth", Code: 401, OAuth: true, Detail: err.Error()}
+				return nil, renewHealth(err, 401)
 			}
 			c.mu.Lock()
 			c.renewed, c.tok = true, fresh

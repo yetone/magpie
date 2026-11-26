@@ -4,7 +4,9 @@
 // click before its sign-in, kept that check's "needs sign-in" after it; it
 // is checked again once its sign-in changed. And a check that found
 // magpie's sign-in run out (the server refused even a renewed token) turns
-// the row's tag to "Sign-in ran out". Every language, Chromium and WebKit,
+// the row's tag to "Sign-in ran out". A renewal the server rate-limited
+// (#7451, Asher-S-Wu: Canva's 429) reads "renewal rate-limited", in amber,
+// beside a "Signed in" that still stands. Every language, Chromium and WebKit,
 // 1100 and 390 wide; nothing scrolls sideways. No backend: the API is
 // faked here.
 const assert = require("node:assert/strict");
@@ -29,6 +31,8 @@ function server(lang, calls) {
       { name: "notion", transport: "http", url: "https://mcp.notion.com/mcp", agents: [], signIn: { signedIn: false } },
       // signed in, and in use: checked as the tab opens
       { name: "linear", transport: "http", url: "https://mcp.linear.app/mcp", agents: ["claude"], signIn: { signedIn: true, at: 1 } },
+      // signed in, its renewal turned away with 429
+      { name: "canva", transport: "http", url: "https://mcp.canva.com/mcp", agents: ["claude"], signIn: { signedIn: true, at: 1 } },
     ],
   };
   let polls = 0;
@@ -48,6 +52,7 @@ function server(lang, calls) {
         // the server refused even a renewed token: the backend marked it run out
         if (n === "linear") s.signIn = { signedIn: true, dead: true, at: 1 };
         if (n === "linear") servers[n] = { state: "auth", code: 401, oauth: true, signIn: s.signIn };
+        else if (n === "canva") servers[n] = { state: "error", why: "ratelimited", detail: "the token endpoint answered 429: too_many_requests (Too many refresh_token requests)", signIn: { ...s.signIn, retryAt: Date.now() + 60000 } };
         else servers[n] = s.signIn.signedIn ? { state: "ok", tools: 7, signIn: s.signIn } : { state: "auth", code: 401, oauth: true, signIn: s.signIn };
       }
       return route.fulfill({ json: { servers } });
@@ -106,6 +111,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await row("linear").locator(".name .lib-tag", { hasText: w("Sign-in ran out") }).waitFor();
           assert.deepEqual(await tags("linear"), [w("Sign-in ran out")]);
 
+          // canva's renewal waits out the server's 429: still signed in
+          await status("canva").locator("span", { hasText: w("renewal rate-limited") }).waitFor();
+          assert.equal(await status("canva").evaluate((b) => b.classList.contains("auth")), true);
+          const tip = await status("canva").getAttribute("title");
+          assert.ok(tip.includes(w("The server is limiting how often magpie renews its sign-in. It stays signed in, and magpie renews it once the wait is over")), tip);
+          assert.deepEqual(await tags("canva"), [w("Signed in")]);
+
           // notion, checked by a click, then signed in to
           await status("notion").locator("span", { hasText: w("not checked") }).waitFor();
           await status("notion").click();
@@ -120,7 +132,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.deepEqual(await tags("notion"), [w("Signed in")]);
           assert.deepEqual(calls.filter((c) => c.includes("notion")), ["check notion", "start notion", "check notion"]);
           // linear isn't checked again for its tag
-          assert.equal(calls.filter((c) => c === "check linear").length, 1, calls.join("; "));
+          assert.equal(calls.filter((c) => c.startsWith("check ") && c.slice(6).split(",").includes("linear")).length, 1, calls.join("; "));
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "no sideways scroll");
           await ctx.close();
         });

@@ -2,6 +2,7 @@ package library
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/yetone/magpie/internal/mcpauth"
@@ -60,5 +61,30 @@ func TestCheckSaysSignInRanOut(t *testing.T) {
 	h := CheckServer(context.Background(), &Server{Name: "neon", Transport: "http", URL: f.URL})
 	if h.State != "auth" || !h.OAuth || h.SignIn == nil || !h.SignIn.Dead {
 		t.Fatalf("a sign-in that won't renew: %+v", h)
+	}
+}
+
+// #7451 (Asher-S-Wu): a renewal the token endpoint turns away with 429 is
+// a sign-in that waits, not one that needs signing in again: the check
+// says the renewal is rate-limited, beside a sign-in still standing, and
+// a second check in the wait doesn't ask the server again.
+func TestCheckSaysRenewalRateLimited(t *testing.T) {
+	sandbox(t)
+	f := mcpauthtest.New(t)
+	ok(t)(SaveServer("", Server{Name: "canva", Transport: "http", URL: f.URL, Agents: []string{}}))
+	f.SignIn(t, "canva")
+	f.Revoke()
+	f.Throttle("60")
+	for i := range 2 {
+		h := CheckServer(context.Background(), &Server{Name: "canva", Transport: "http", URL: f.URL})
+		if h.State == "auth" || h.Why != "ratelimited" || !strings.Contains(h.Detail, "Too many refresh_token requests") && i == 0 {
+			t.Fatalf("check %d of a renewal answered 429: %+v", i, h)
+		}
+		if h.SignIn == nil || !h.SignIn.SignedIn || h.SignIn.Dead || h.SignIn.RetryAt == 0 {
+			t.Fatalf("check %d: sign-in %+v", i, h.SignIn)
+		}
+	}
+	if n := f.RefreshAsked(); n != 1 {
+		t.Fatalf("asked the server to renew %d times, want 1", n)
 	}
 }
