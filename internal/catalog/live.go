@@ -986,7 +986,7 @@ func fetchPage(ctx context.Context, url, key string, anthropic bool, headers map
 		// Another magpie's list is already what its user exposed. Keep
 		// its retrieval models too; a vendor's general list still leaves
 		// out models agents can't chat with.
-		decision := r.Kind == "decision"
+		decision := r.Kind == "decision" || strings.EqualFold(r.Type, "decision")
 		ins, outs := Kinds(r.Modalities.Input), Kinds(r.Modalities.Output)
 		if ins == nil && outs == nil {
 			// Volcengine Ark's names: {"input_modalities": […],

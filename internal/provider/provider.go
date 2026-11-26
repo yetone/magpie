@@ -2062,10 +2062,11 @@ func normalize(p Provider) Provider {
 	if anon := p.AnonymousKey(); anon != "" && p.Key == "" {
 		p.Key = anon
 	}
-	// a Zen provider saved before its preset had System One for Jev
-	// (01huadalang: its Jev was asked as a chat model, and failed), an
-	// OpenRouter one before its decision models were listed (ARNO)
-	if (p.Preset == "opencode-zen" || p.Preset == "openrouter") && p.Decide == "" && p.Chat != "" {
+	// a Zen or Go provider saved before its preset had System One for its
+	// decision models (01huadalang: Zen's Jev was asked as a chat model,
+	// and failed), an OpenRouter one before its decision models were listed
+	// (ARNO)
+	if (p.Preset == "opencode-zen" || p.Preset == "opencode-go" || p.Preset == "openrouter") && p.Decide == "" && p.Chat != "" {
 		if pr := Preset(p.Preset); pr != nil {
 			p.Decide = pr.Decide
 		}

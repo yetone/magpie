@@ -65,6 +65,83 @@ func TestOpenCodeZenJevDecides(t *testing.T) {
 	}
 }
 
+// OpenCode Go serves Jev 1.14, Gemini Decision 1 and GPT-6 Luna Decision
+// on System One under its own key. Its model list marks them, so they
+// route groups without being offered to agents as chat models.
+func TestOpenCodeGoDecisions(t *testing.T) {
+	detectHome(t)
+	p, err := FromPreset("opencode-go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const decide = "https://opencode.ai/inference/go/systemone/v1"
+	if p.Decide != decide {
+		t.Fatalf("preset decide %q", p.Decide)
+	}
+	p.Key = "sk-go"
+	if err := Save(p); err != nil {
+		t.Fatal(err)
+	}
+	old := p
+	old.Decide = ""
+	if err := Save(old); err != nil {
+		t.Fatal(err)
+	}
+	found, err := Find(p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if found.Decide != decide {
+		t.Fatalf("saved Go decide %q", found.Decide)
+	}
+	live := []catalog.Model{
+		{ID: "deepseek-v4.1-flash"},
+		{ID: "jev-1.14", Name: "Jev 1.14", Decides: true, Context: 64_000},
+		{ID: "gemini-decision-1", Name: "Gemini Decision 1", Decides: true, Context: 262_144, Images: true},
+		{ID: "gpt-6-luna-decision", Name: "GPT-6 Luna Decision", Decides: true, Context: 1_050_000, Images: true},
+	}
+	if err := catalog.SaveLive(p.ID, p.Chat, live); err != nil {
+		t.Fatal(err)
+	}
+	found, err = Find(p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p = *found
+	for _, id := range []string{"jev-1.14", "gemini-decision-1", "gpt-6-luna-decision"} {
+		if !p.DecidesModel(id) {
+			t.Errorf("%s isn't a decision model", id)
+		}
+	}
+	if p.DecidesModel("deepseek-v4.1-flash") {
+		t.Error("a chat model became a decision model")
+	}
+	if p.Jev() != "jev-1.14" {
+		t.Errorf("default decision model %q", p.Jev())
+	}
+	if u, err := p.DecideURL(t.Context()); err != nil || u != decide+"/systemone" {
+		t.Errorf("asked at %q, %v", u, err)
+	}
+	if ms := p.DecisionModels(); len(ms) != 3 {
+		t.Errorf("decision models %+v", ms)
+	}
+	for _, e := range providerEntries() {
+		if e.Provider.ID == p.ID && p.DecidesModel(e.Model) {
+			t.Errorf("%s/%s was offered to agents", p.ID, e.Model)
+		}
+	}
+	var offered []string
+	for _, e := range OfferedDeciders(nil) {
+		if e.Provider.ID == p.ID {
+			offered = append(offered, e.Model)
+		}
+	}
+	slices.Sort(offered)
+	if !slices.Equal(offered, []string{"gemini-decision-1", "gpt-6-luna-decision", "jev-1.14"}) {
+		t.Errorf("offered decisions %v", offered)
+	}
+}
+
 // A preset's model (OpenCode Go's deepseek-v4.1-flash, which answers on
 // Responses as well as chat) and a subscription's can be asked on one API
 // the user picks, as a custom provider's can (01huadalang on Discord); Auto

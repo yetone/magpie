@@ -625,6 +625,10 @@ var presets = []PresetDef{
 		Website: "https://www.gmicloud.ai", KeysURL: "https://console.gmicloud.ai"},
 	{ID: "opencode-go", Name: "OpenCode Go", Icon: "opencode", Kind: KindRelay, Catalog: "opencode-go",
 		Chat: OpenCodeGoChat, Responses: OpenCodeGoChat, Anthropic: OpenCodeGoAnthropic,
+		// Go's decision models (Jev 1.14, Gemini Decision 1 and GPT-6 Luna
+		// Decision) are served on System One under the same key, while its
+		// model list marks them "type": "decision"
+		Decide:  "https://opencode.ai/inference/go/systemone/v1",
 		Note:    "open coding models, $10/month",
 		Website: "https://opencode.ai/docs/go", KeysURL: "https://opencode.ai/auth"},
 	// Cline's plan for open models, at the Cline API with a Cline key: the

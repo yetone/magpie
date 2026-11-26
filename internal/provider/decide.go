@@ -274,6 +274,11 @@ func (p Provider) DecidesModel(model string) bool {
 		}
 		return !p.serverMarksDecisions() && model == OpenRouterJev
 	}
+	// a provider that marks decision models in the same list as its chat
+	// models (OpenCode Go's "type": "decision")
+	if slices.ContainsFunc(catalog.LiveByID(p.ID, model), func(m catalog.Model) bool { return m.Decides }) {
+		return true
+	}
 	return jevID(model) || p.DecideVia() == ViaCloudflare && CloudflareClef(model)
 }
 
@@ -372,10 +377,17 @@ func (p Provider) DecisionModels() []catalog.Model {
 		}
 		return p.decideModels()
 	}
-	if !p.IsRemoteMagpie() && (p.DecideOnly() || !p.listsDecisions() && !p.bailianApart()) {
+	if !p.IsRemoteMagpie() && (p.DecideOnly() || !p.listsDecisions() && !p.bailianApart() && !p.liveMarksDecisions()) {
 		return nil
 	}
 	return p.decideModels()
+}
+
+// liveMarksDecisions reports whether p's fetched model list marks any of
+// its conversation provider's models as decision models.
+func (p Provider) liveMarksDecisions() bool {
+	live, _, ok := catalog.Live(p.ID)
+	return ok && slices.ContainsFunc(live, func(m catalog.Model) bool { return m.Decides })
 }
 
 // decideListDue reports whether p's list of decision models at OpenRouter
