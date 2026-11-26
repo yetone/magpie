@@ -4588,7 +4588,7 @@ input.words.window-in { width: 96px; font-variant-numeric: tabular-nums; }
 .fld > .hint.lead { display: none; }
 /* the card comes from its row, a little smaller, on the strong ease-out
    (UI motion rules: a tooltip 125-200ms, never from nothing) */
-.set-hint { position: fixed; z-index: 60; max-width: min(380px, calc(100vw - 32px)); padding: 8px 11px; border-radius: 9px; background: var(--pop-bg); box-shadow: var(--shadow); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); font-size: 12px; line-height: 1.45; color: var(--fg-2); overflow-wrap: anywhere; pointer-events: none; opacity: 0; transform: translateY(-2px) scale(.96); transition: opacity .15s ease, transform .15s cubic-bezier(.23, 1, .32, 1); }
+.set-hint { position: fixed; z-index: 60; width: max-content; max-width: min(380px, calc(100vw - 32px)); padding: 8px 11px; border-radius: 9px; background: var(--pop-bg); box-shadow: var(--shadow); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); font-size: 12px; line-height: 1.45; color: var(--fg-2); overflow-wrap: anywhere; pointer-events: none; opacity: 0; transform: translateY(-2px) scale(.96); transition: opacity .15s ease, transform .15s cubic-bezier(.23, 1, .32, 1); }
 .set-hint.on { opacity: 1; transform: none; }
 .set-hint > p { margin: 0; }
 .set-hint > p + p { margin-top: 4px; }
