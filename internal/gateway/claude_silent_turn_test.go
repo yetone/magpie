@@ -2,12 +2,14 @@ package gateway
 
 import (
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/yetone/magpie/internal/claudetui"
@@ -158,8 +160,10 @@ func TestClaudeSilentTurnFails(t *testing.T) {
 							t.Fatalf("17 images: status %d: %s", code, body)
 						}
 						code, body := send(18)
-						if code != 502 || !strings.Contains(body, past.why) {
-							t.Fatalf("18 images: status %d, not a 502 saying %q:\n%s", code, past.why, body)
+						if stream && code == http.StatusOK {
+							assertSilentTurnStreamError(t, body, past.why)
+						} else if code != http.StatusBadGateway || !strings.Contains(body, past.why) {
+							t.Fatalf("18 images: status %d, want a failure saying %q:\n%s", code, past.why, body)
 						}
 						if strings.Contains(body, `"content":null`) || strings.Contains(body, "saw 18") {
 							t.Fatalf("18 images: an answer of nothing:\n%s", body)
@@ -169,6 +173,95 @@ func TestClaudeSilentTurnFails(t *testing.T) {
 			}
 		}
 	}
+}
+
+// Let either keepalive path (bridge keepBridgeHeard or held-stream keepAlive)
+// open the stream for a quiet run before the run fails. A client that only sees
+// the event's text needs the reason and the same retry signal the HTTP 502
+// would have carried (#7849).
+func TestClaudeSilentTurnFailsAfterKeepalive(t *testing.T) {
+	for _, proto := range []provider.Protocol{provider.Anthropic, provider.Responses, provider.Chat} {
+		t.Run(string(proto)+"/bridge", func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				const why = "Claude Code did not take the message"
+				events := make(chan Event)
+				quit := make(chan struct{})
+				defer close(quit)
+				rec := httptest.NewRecorder()
+				r := httptest.NewRequest(http.MethodPost, "/", nil)
+				go func() {
+					time.Sleep(bridgeHeardAfter + keepaliveEvery + keepaliveGap)
+					synctest.Wait()
+					if !rec.Flushed || rec.Code != http.StatusOK {
+						t.Error("the stream did not open while Claude Code was quiet")
+					}
+					events <- Event{Kind: KError, Text: why, Status: http.StatusBadGateway}
+					close(events)
+				}()
+				var usage Usage
+				code, msg := relay(rec, r, proto, "Claude Code", &Request{Model: "claude-sonnet-5-5", Stream: true}, keepBridgeHeard(events, quit), &usage,
+					func() { t.Error("tried to abort with an HTTP error after the stream opened") }, nil,
+					func(_, _ string, ok bool) {
+						if ok {
+							t.Error("the silent turn was recorded as successful")
+						}
+					})
+				if code != http.StatusOK || msg != why {
+					t.Fatalf("relay returned %d, %q", code, msg)
+				}
+				assertSilentTurnStreamError(t, rec.Body.String(), why)
+			})
+		})
+		t.Run(string(proto)+"/held", func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				const why = "Claude Code did not take the message"
+				rec := httptest.NewRecorder()
+				r := httptest.NewRequest(http.MethodPost, "/", nil)
+				hw := newHoldWriter(rec, true)
+				hw.ctx = r.Context()
+				hw.streams = true
+				hw.alive = &keptAlive{proto: proto, model: "claude/claude-sonnet-5-5", told: time.Now()}
+				stop := hw.watch()
+				events := make(chan Event)
+				go func() {
+					time.Sleep(keepHeldAfter + watchEvery)
+					synctest.Wait()
+					if !rec.Flushed || rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), ": keepalive") {
+						t.Error("the held stream did not send a keepalive while Claude Code was quiet")
+					}
+					events <- Event{Kind: KError, Text: why, Status: http.StatusBadGateway}
+					close(events)
+				}()
+				var usage Usage
+				aborted := false
+				code, msg := relay(hw, r, proto, "Claude Code", &Request{Model: "claude-sonnet-5-5", Stream: true}, events, &usage,
+					func() { aborted = true }, nil,
+					func(_, _ string, _ bool) {
+						t.Error("ended should not run for a held pre-stream failure")
+					})
+				stop()
+				hw.release()
+				if code != http.StatusBadGateway || msg != why || !aborted {
+					t.Fatalf("relay returned %d, %q (aborted=%v)", code, msg, aborted)
+				}
+				assertSilentTurnStreamError(t, rec.Body.String(), why)
+			})
+		})
+	}
+}
+
+func assertSilentTurnStreamError(t *testing.T, body, why string) {
+	t.Helper()
+	if strings.Contains(body, "event: message_stop") || strings.Contains(body, "event: response.completed") || strings.Contains(body, "data: [DONE]") {
+		t.Fatalf("silent turn ended as a successful stream:\n%s", body)
+	}
+	for frame := range strings.SplitSeq(body, "\n\n") {
+		kind, _, msg := streamEvent([]byte(frame))
+		if kind == eventError && strings.Contains(msg, why) && strings.Contains(msg, "you can retry") {
+			return
+		}
+	}
+	t.Fatalf("no retryable stream error saying %q:\n%s", why, body)
 }
 
 // A reply whose events end with neither its stop nor an error — a run

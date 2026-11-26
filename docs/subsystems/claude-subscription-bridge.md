@@ -1407,6 +1407,11 @@ without it and is sent the protocol's pings until the run speaks
 (`keepBridgeHeard`, #5043): the replay of a long conversation can take
 minutes before its first word, and Claude Code hung up at 599s and
 started again from the replay, writing it to the cache once more (#3808).
+If the run then ends without an answer, the stream ends with its
+protocol's error event carrying the reason and, for a retryable status
+whose reason alone does not say so, a retry hint (`relayFailing`, #7849).
+With the HTTP headers still unsent, the failure can go out as a 502.
+`TestClaudeSilentTurnFailsAfterKeepalive` holds all three stream formats.
 See [gateway routing](gateway-routing.md) for the keepalive rules.
 
 magpie ends a run (`abort`) by asking Claude Code to end with SIGTERM

@@ -8349,6 +8349,9 @@ func relayFailing(w http.ResponseWriter, r *http.Request, from provider.Protocol
 				return
 			case KError:
 				failed = ev.Text
+				// A keepalive may already have sent the 200. Carry the
+				// retryable status in the error's text as streamError does.
+				ev.Text = saysPassing(ev.Status, ev.Text)
 			case KStart, KUsage:
 				usage.add(ev.Usage)
 				usage.add(Usage{Served: ev.Model, RequestID: ev.RequestID})
