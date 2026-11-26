@@ -308,6 +308,24 @@ func (l *Library) syncMCP(t *Target, b *backups, res *Result) {
 			res.dropped = append(res.dropped, had)
 		}
 	}
+	// an entry of the agent's own under the name of a server the hub now
+	// gives it would put that server's tools in front of the agent twice,
+	// once whole beside the hub's (Col0urfu1_ on X: context went up with
+	// the router on). With the router off magpie writes the Library's
+	// server over that entry, so with it on the entry goes, kept in the
+	// backup as then. One magpie wrote for another agent sharing the file
+	// stays that agent's
+	if hub != nil && !t.Gone {
+		for _, s := range l.MCP {
+			if !slices.Contains(s.Agents, id) || !hubbed(s) || s.Name == HubEntry || slices.Contains(a.MCP, s.Name) {
+				continue
+			}
+			if e, ok := entries[s.Name]; !ok || t.MCP.foreign(e) != nil || l.sharerWrote(t, s.Name) {
+				continue
+			}
+			write("mcp:"+s.Name, func() error { return t.MCP.del(s.Name) })
+		}
+	}
 	given := []*Server{}
 	for _, s := range l.MCP {
 		if slices.Contains(s.Agents, id) && !hubbed(s) {

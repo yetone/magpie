@@ -958,3 +958,51 @@ func TestHubKeepsThisComputersOwnServersHere(t *testing.T) {
 		t.Errorf("listed for a key from elsewhere: %v", got)
 	}
 }
+
+// An entry of the agent's own under the name of a server the hub gives it
+// goes, as the router-off sync writes the Library's server over it: left
+// beside the magpie entry, the agent was given that server's tools twice,
+// and context went up with the router on (Col0urfu1_ on X). An own entry
+// of another name stays.
+func TestHubTakesOutTheAgentsOwnCopy(t *testing.T) {
+	h := hubSandbox(t)
+	claude := filepath.Join(h, ".claude.json")
+	write(t, claude, `{"mcpServers": {"github": {"command": "npx", "args": ["-y", "gh-own"]}, "mine": {"command": "x"}}}`)
+	ok(t)(SetMCPHub(true))
+	ok(t)(SaveServer("", Server{Name: "github", Transport: "stdio", Command: "npx", Args: []string{"-y", "gh"}, Agents: []string{"claude"}}))
+	names := func() []string {
+		t.Helper()
+		e, err := targetByID("claude").MCP.entries()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for k := range e {
+			out = append(out, k)
+		}
+		slices.Sort(out)
+		return out
+	}
+	if got := names(); !slices.Equal(got, []string{"magpie", "mine"}) {
+		t.Fatalf("claude with github ticked through the router: %v\n%s", got, read(t, claude))
+	}
+	if got := hubServers("claude"); len(got) != 1 || got[0].Name != "github" {
+		t.Fatalf("the hub gives claude %v", got)
+	}
+	// one the user puts back by hand goes on the next sync, as the
+	// Library's server would be written over it with the router off
+	write(t, claude, `{"mcpServers": {"magpie": {"type": "http", "url": "http://127.0.0.1:3425`+gateway.HubMCPPath+`claude"}, "github": {"command": "npx", "args": ["-y", "gh-own"]}, "mine": {"command": "x"}}}`)
+	ok(t)(SaveServer("", Server{Name: "web", Transport: "http", URL: "https://example.com/mcp", Agents: []string{"claude"}}))
+	if got := names(); !slices.Equal(got, []string{"magpie", "mine"}) {
+		t.Fatalf("claude after its own github came back: %v\n%s", got, read(t, claude))
+	}
+	// with the router off, the Library's github is written in its place
+	ok(t)(SetMCPHub(false))
+	e, err := targetByID("claude").MCP.entries()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if args, _ := e["github"]["args"].([]any); len(args) != 2 || args[1] != "gh" || e["magpie"] != nil {
+		t.Fatalf("claude with the router off:\n%s", read(t, claude))
+	}
+}
