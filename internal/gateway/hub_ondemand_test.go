@@ -275,6 +275,25 @@ func TestHubFindsItselfIsWhoGetsEveryTool(t *testing.T) {
 	}
 }
 
+// T_t__biu on X (#7873) asked for Cindy among the agents given every tool
+// whole. Its Codex, the one runtime of Cindy's that reaches hub/cindy,
+// defers MCP tools only for a model its catalog marks supports_search_tool,
+// which a model of magpie's isn't unless its slug is one of Cindy's bundled
+// GPT ones: given every tool whole, it would send them all on every
+// request. So Cindy keeps find_tools and call_tool past hubOnDemandOver.
+func TestCindyGetsToolsOnDemand(t *testing.T) {
+	fresh(t)
+	if slices.Contains(HubFindsItself(), "cindy") {
+		t.Fatal("cindy is named as searching its MCP tools itself")
+	}
+	if hubOnDemand("cindy", hubOnDemandOver, false) {
+		t.Errorf("cindy given %d tools on demand", hubOnDemandOver)
+	}
+	if !hubOnDemand("cindy", hubOnDemandOver+1, false) {
+		t.Errorf("cindy given %d tools whole", hubOnDemandOver+1)
+	}
+}
+
 // The address for any other app gives its tools on demand when asked
 // (HubOnDemandQuery): Passings_z on X (11-21) connected their own harness
 // to /mcp/magpie/hub with Tools on demand on and was given every tool.

@@ -59,6 +59,16 @@ const hubOnDemandOver = 10
 // their place it searched twice (izhidigua on X, 11-19).
 // The Library's Tools on demand row names them from HubFindsItself, so its
 // words can't leave one out again (they named four of the six, 11-18).
+// Cindy isn't one (T_t__biu on X, #7873, Cindy 0.1.146): the only runtime
+// of its own that reaches /mcp/magpie/hub/cindy is its Codex (codex-home's
+// config.toml; its Pi is given the servers direct, its Claude Code reads
+// ~/.claude.json, hub/claude). That Codex defers MCP tools only for a model
+// whose catalog entry has supports_search_tool, and Cindy's catalog
+// (catalogWithModels in maker-host) copies the flag only for a GPT slug
+// that matches its own bundled catalog: a model of magpie's under any other
+// name gets the fallback entry, with no supports_search_tool, so Cindy's
+// Codex sends every tool whole on every request. find_tools and call_tool
+// are what keep those requests small.
 var hubSearchers = []string{"claude", "claude-desktop", "codex", "pi", "droid", "omp", "agy", "antigravity"}
 
 var hubSearchesItself = func() map[string]bool {
