@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/lastgood"
 )
 
@@ -133,41 +134,98 @@ func TestFollowEditsTellsAgents(t *testing.T) {
 	if err := Save(Provider{ID: "a", Chat: "https://a.example.invalid/v1", Key: "sk-a", Models: []string{"m"}}); err != nil {
 		t.Fatal(err)
 	}
+	path := Path()
+	original, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Keep both size and mtime fixed, including after filememo has settled.
+	mtime := time.Now().Add(-time.Hour)
+	write := func(b []byte) {
+		t.Helper()
+		if err := os.WriteFile(path, b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(path, mtime, mtime); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(original)
+	_ = storedFile() // cache the original at the fixed mtime
+
 	var told atomic.Int64
 	was := catalog.Changed
 	catalog.Changed = func() { told.Add(1) }
 	t.Cleanup(func() { catalog.Changed = was })
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() { defer close(done); FollowEdits(ctx, func() time.Duration { return 10 * time.Millisecond }) }()
-	t.Cleanup(func() { cancel(); <-done })
-	waitTold := func(n int64) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	ready, step, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	run := FollowEdits(ctx, func() time.Duration {
+		select {
+		case ready <- struct{}{}:
+		case <-ctx.Done():
+			return time.Hour
+		}
+		select {
+		case <-step:
+		case <-ctx.Done():
+		}
+		return time.Hour
+	})
+	waitReady := func() {
 		t.Helper()
-		for end := time.Now().Add(10 * time.Second); told.Load() < n; {
-			if time.Now().After(end) {
-				t.Fatalf("told %d times, want %d", told.Load(), n)
-			}
-			time.Sleep(5 * time.Millisecond)
+		select {
+		case <-ready:
+		case <-ctx.Done():
+			t.Fatal("watcher did not reach its next wait")
 		}
 	}
-	// a broken edit first: nothing told, and then a good one, told
-	if err := os.WriteFile(Path(), []byte(`{"providers":[{"id":"a",}]}`), 0o600); err != nil {
+	check := func(edit string, want int64) {
+		t.Helper()
+		filememo.Forget() // wake the same channel that Watch wakes
+		select {
+		case step <- struct{}{}:
+		case <-ctx.Done():
+			t.Fatal("watcher did not accept the wake")
+		}
+		waitReady()
+		if n := told.Load(); n != want {
+			t.Fatalf("after %s: told %d times, want %d", edit, n, want)
+		}
+	}
+
+	// The first edit lands after setup but before the watcher runs.
+	changed := bytes.Replace(original, []byte(`"m"`), []byte(`"n"`), 1)
+	write(changed)
+	go func() { defer close(done); run() }()
+	t.Cleanup(func() { cancel(); <-done })
+	waitReady()
+	check("the edit before startup", 1)
+	got, err := Find("a")
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(Path(), []byte(`{"providers":[{"id":"a","chat":"https://a.example.invalid/v1","key":"sk-a","models":["m","added"]}]}`), 0o600); err != nil {
-		t.Fatal(err)
+	if strings.Join(got.Models, ",") != "n" {
+		t.Fatalf("the changed model list was not read: %v", got.Models)
 	}
-	waitTold(1)
-	// magpie's own save: told by the save alone
+
+	broken := bytes.Clone(changed)
+	broken[0] = '!'
+	write(broken)
+	check("the broken edit", 1)
+	write(original)
+	check("the repaired edit at the same mtime and size", 2)
+
 	if err := Save(Provider{ID: "b", Chat: "https://b.example.invalid/v1", Key: "sk-b"}); err != nil {
 		t.Fatal(err)
 	}
-	waitTold(2)
-	if err := os.WriteFile(Path(), []byte(`{"providers":[{"id":"a","chat":"https://a.example.invalid/v1","key":"sk-a","models":["m"]}]}`), 0o600); err != nil {
+	check("magpie's own save", 3)
+	saved, err := os.ReadFile(path)
+	if err != nil {
 		t.Fatal(err)
 	}
-	waitTold(3)
-	if n := told.Load(); n != 3 {
-		t.Errorf("told %d times, want 3: magpie's own save told twice", n)
-	}
+	write(changed)
+	check("the edit after magpie's save", 4)
+	write(saved)
+	check("the edit restoring bytes from magpie's previous save", 5)
 }

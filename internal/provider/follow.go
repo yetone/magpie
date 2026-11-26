@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"crypto/sha256"
 	"log"
 	"sync"
 	"time"
@@ -12,22 +13,27 @@ import (
 	"github.com/yetone/magpie/internal/steady"
 )
 
-// ownWrite is providers.json as this process last wrote it (store): a
-// change FollowEdits finds that isn't this is another's. Held across the
-// write and its stamp, so the file is never looked at between them.
-var ownWrite struct {
-	sync.Mutex
-	stamp rootStamp
+type storedWrite struct {
+	path string
+	sum  [sha256.Size]byte
 }
 
-// writeStored is store's write, its stamp kept as this process's own.
+// ownWrite protects the write and its record so FollowEdits reads the file
+// and the record on the same side of a save.
+var ownWrite struct {
+	sync.Mutex
+	last *storedWrite
+}
+
+// writeStored records the bytes passed to store's write. Reading the path
+// back here could instead identify another process's edit as our own.
 func writeStored(path string, b []byte) error {
 	ownWrite.Lock()
 	defer ownWrite.Unlock()
 	if err := writePrivate(path, b); err != nil {
 		return err
 	}
-	ownWrite.stamp = stampOf(path)
+	ownWrite.last = &storedWrite{path, sha256.Sum256(b)}
 	return nil
 }
 
@@ -40,38 +46,57 @@ func writeStored(path string, b []byte) error {
 // edit that doesn't parse changes nothing: magpie runs on the last good
 // generation (read), says so, and leaves the file to be fixed. It looks
 // when Watch is told of a change, and every so often (every) for one it
-// missed, until ctx ends.
-func FollowEdits(ctx context.Context, every func() time.Duration) {
-	last := stampOf(Path())
-	for {
-		// taken before the look, so a write made during it isn't missed
-		written := filememo.Written()
-		select {
-		case <-ctx.Done():
-			return
-		case <-beat.Next(every()):
-		case <-written:
-		}
-		ownWrite.Lock()
-		st := stampOf(Path())
-		ours := st == ownWrite.stamp
-		ownWrite.Unlock()
-		if st == last {
-			continue
-		}
-		last = st
-		if ours || !st.ok {
-			continue
-		}
-		b, err := steady.ReadFile(Path())
-		if err != nil {
-			continue
-		}
-		if !validProviders(b) {
-			// read says so, once, and gives the last good generation
-			log.Printf("%s was edited outside magpie and doesn't parse: magpie runs on its last good copy and saves nothing over it until it is fixed", Path())
-			continue
-		}
-		catalog.Touched()
+// missed, until ctx ends. It takes the baseline before returning the loop
+// to start, so an edit made before the goroutine runs is still seen.
+func FollowEdits(ctx context.Context, every func() time.Duration) func() {
+	path := Path()
+	written := filememo.Written()
+	var last [sha256.Size]byte
+	b, lastWrite, err := followedFile(path)
+	if err == nil {
+		last = sha256.Sum256(b)
+	} else if lastWrite != nil && lastWrite.path == path {
+		last = lastWrite.sum
 	}
+	return func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-beat.Next(every()):
+			case <-written:
+			}
+			// Subscribe before reading so a write during the check wakes us again.
+			written = filememo.Written()
+			b, saved, err := followedFile(path)
+			if err != nil {
+				continue
+			}
+			if saved != lastWrite {
+				lastWrite = saved
+				if saved != nil && saved.path == path {
+					last = saved.sum // store tells agents about this write
+				}
+			}
+			sum := sha256.Sum256(b)
+			if sum == last {
+				continue
+			}
+			last = sum
+			if !validProviders(b) {
+				log.Printf("%s was edited outside magpie and doesn't parse: magpie runs on its last good copy and saves nothing over it until it is fixed", path)
+				continue
+			}
+			// The bytes changed even if filememo's time and size did not.
+			filememo.DropKind("providers")
+			catalog.Touched()
+		}
+	}
+}
+
+func followedFile(path string) ([]byte, *storedWrite, error) {
+	ownWrite.Lock()
+	defer ownWrite.Unlock()
+	b, err := steady.ReadFile(path)
+	return b, ownWrite.last, err
 }

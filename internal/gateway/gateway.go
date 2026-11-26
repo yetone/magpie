@@ -970,7 +970,7 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	bg.Go("plugin.KeepNoticing", func() { plugin.KeepNoticing(freshCtx, filememo.OthersEvery) })
 	// and an edit of providers.json made by hand reaches the agents' own
 	// model lists, as a save in the window does (sarosaka1023 on X)
-	bg.Go("provider.FollowEdits", func() { provider.FollowEdits(freshCtx, filememo.OthersEvery) })
+	bg.Go("provider.FollowEdits", provider.FollowEdits(freshCtx, filememo.OthersEvery))
 	// and the MCP hub's servers that the Library no longer gives are ended
 	// It reads MCPHub, which a test swaps, so the gateway's end waits for
 	// it: once ListenAndServe has returned, nothing it started still looks.
