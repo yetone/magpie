@@ -1139,6 +1139,11 @@ func probeOnce(ctx context.Context, p Provider, proto Protocol, url string, body
 		// Zhipu's Responses API refuses a key 200, in an envelope: the
 		// refusal it is, not a green check (@xanahopper on X)
 		res = ZhipuEnveloped(req, res)
+		// a web page or an empty body answered 200 is no answer, as the
+		// gateway reads it (NotAnAPIReply): a relay's site, which answers
+		// any path it doesn't serve, made a wrong Gemini URL's models
+		// green while agents' requests there failed (Neo on Discord)
+		res = NotAnAPIReply(res, "")
 	}
 	r.Millis = time.Since(start).Milliseconds()
 	if err != nil {
