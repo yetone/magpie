@@ -167,6 +167,16 @@ Host request state is limited to 128 runs and expires after 15 minutes. The
 response RPC has the request RPC's limit (the budget plus one second, at least
 eleven seconds); each callback uses the configured bounded hook timeout. Request-owned state is released after notification.
 
+The host answers the request RPC over one stdout line, which Go reads up to
+`maxWireLine` (32 MiB, told to the host at init as `lineMax`); a longer line
+used to kill the shared host and every plugin's request with it (#5699). When
+no hook changed the request, the answer is `{id, token, unchanged: true}` with
+no body, and the gateway sends the caller's own bytes, as it does with no hook
+installed. A changed body that makes the answer longer than the line gives up
+that hook run: the request goes on unchanged, its run is closed and gets no
+`onResponse`, and a warning is logged. Any other answer or event too long for
+a line fails only its own call (#7306): a plugin's error text, an RPC result.
+
 ## Sources and verification
 
 - `internal/plugin/gateway.go`: entry discovery, cancellation, completion dispatch.
@@ -202,6 +212,11 @@ eleven seconds); each callback uses the configured bounded hook timeout. Request
   8000 ms hooks still sharing ten seconds, an over-long timeout
   clamped, caller cancellation under a long budget, and the Go mirror of the
   budget.
+  `internal/plugin/gateway_wire_test.go`: a body over 32 MiB that no hook
+  changed, one whose hook timed out, and one a hook grew past the line each
+  keep the request and the host; a small rewrite still arrives; and
+  `TestPluginAnswerTooLongFailsThatCallOnly` fails only a fetch whose error
+  text is over the line.
   `TestGatewaySignInHook` (a sign-in-only hook, options, a throwing hook)
   and `TestRevokedAccountToldToHooksOnce` (a revoked ChatGPT account told
   once, not before a hook is installed, with no token) guard sign-ins.

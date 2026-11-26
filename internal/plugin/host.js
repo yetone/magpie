@@ -110,12 +110,41 @@ function queueLine(line) {
   }
 }
 
+// wireLineMax is the longest line magpie reads from this process, its
+// newline included (maxWireLine in host.go, told at init as lineMax). A
+// longer one is read as a child that never ends a line: magpie kills this
+// process, and every plugin's provider goes down with it (#5699).
+let wireLineMax = 32 << 20
+
+// lineFor is msg's line, or, when that would be longer than wireLineMax,
+// an error for its call in its place (cut), so only that call fails and not
+// this process. An event with no call to fail is dropped (line null). Both
+// are said in the log, by size only.
+function lineFor(msg) {
+  const line = JSON.stringify(msg) + "\n"
+  // a UTF-16 unit is at most 3 bytes of UTF-8: count only a line that may pass
+  if (line.length * 3 <= wireLineMax) return { line, cut: false }
+  const size = Buffer.byteLength(line)
+  if (size <= wireLineMax) return { line, cut: false }
+  const what = msg.id == null ? `an event (${String(msg.event).slice(0, 40)})` : "an answer"
+  queueLine(JSON.stringify({ event: "log", level: "warn", message: `plugin host: ${what} of ${size} bytes is longer than the ${wireLineMax} bytes a line may carry; ${msg.id == null ? "dropped" : "that call failed"}` }) + "\n")
+  if (msg.id == null) return { line: null, cut: true }
+  return { line: JSON.stringify({ id: msg.id, error: { message: `the plugin's answer is ${size} bytes, longer than the ${wireLineMax} bytes the plugin host may send at once` } }) + "\n", cut: true }
+}
+
 // send queues one message, ignoring whether it was written.
-const send = (msg) => queueLine(JSON.stringify(msg) + "\n").promise
+const send = (msg) => {
+  const { line } = lineFor(msg)
+  return line == null ? Promise.resolve(null) : queueLine(line).promise
+}
 
 // sendCancelable is send, with a way to give the wait up. A string is a
-// line made already (chunkLine).
-const sendCancelable = (msg) => queueLine(typeof msg === "string" ? msg : JSON.stringify(msg) + "\n")
+// line made already (chunkLine), a frame's size.
+const sendCancelable = (msg) => {
+  if (typeof msg === "string") return queueLine(msg)
+  const { line } = lineFor(msg)
+  return line == null ? { promise: Promise.resolve(null), cancel: () => {} } : queueLine(line)
+}
 
 // chunkLine is JSON.stringify({id, event: "chunk", data}) + "\n", made by
 // joining: base64 has nothing JSON escapes, and stringify scanning every
@@ -1668,6 +1697,9 @@ async function gatewayBegin(p, signal) {
   run.timer = setTimeout(() => closeGateway(run), GATEWAY_RUN_TTL)
   run.timer.unref()
   let body = p.body
+  // whether a hook's body was taken: one that returns undefined, throws, times
+  // out or is rolled back keeps the caller's, whose bytes need no wire
+  let rewritten = false
   // The total budget bounds many installed hooks as well as one slow hook.
   const total = AbortSignal.any([signal, run.controller.signal, AbortSignal.timeout(gatewayBudget())])
   for (const h of gatewayHooks) {
@@ -1705,6 +1737,7 @@ async function gatewayBegin(p, signal) {
         if (JSON.stringify(next[key]) !== JSON.stringify(body[key])) throw new Error("context hook changed client tools, model or streaming")
       }
       if (JSON.stringify(next.config?.tools) !== JSON.stringify(body.config?.tools) || JSON.stringify(next.config?.toolConfig) !== JSON.stringify(body.config?.toolConfig)) throw new Error("context hook changed client tools")
+      if (next !== body) rewritten = true
       body = next
       run.plugins.push({ h, ctx })
     } catch {
@@ -1727,6 +1760,13 @@ async function gatewayBegin(p, signal) {
     signal.throwIfAborted()
     return null
   }
+  // No hook rewrote the body: the run's identity is all the caller needs,
+  // and it keeps the bytes it already has. Nothing the size of the request
+  // crosses the wire, so a request no hook touched never makes a line too
+  // long for magpie to read (#5699), and isn't serialized again (#5168). A
+  // rewritten one too long for a line fails this request only (lineFor),
+  // which goes as it came.
+  if (!rewritten) return { id: run.id, token: run.token, unchanged: true }
   return { id: run.id, token: run.token, body }
 }
 
@@ -3728,6 +3768,7 @@ const handlers = {
     chosen = p.options ?? {}
     if (p.loadMillis > 0) loadWait = p.loadMillis
     if (p.listMillis > 0) listWait = p.listMillis
+    if (Number.isSafeInteger(p.lineMax) && p.lineMax > 0) wireLineMax = p.lineMax
     await loadPlugins(p.plugins ?? [])
     // from here on, when magpie holds this host as the one calls go to
     watchHeavy(p.heavy)
@@ -3911,8 +3952,16 @@ rl.on("line", (line) => {
       .then(() => gatewayRequest(msg.params ?? {}, ctl.signal))
       .then(
         (result) => {
-          if (!ctl.signal.aborted) return send({ id: msg.id, result })
-          if (msg.params?.operation === "begin" && result?.id) closeGateway(gatewayRuns.get(result.id))
+          const begun = msg.params?.operation === "begin" && result?.id
+          if (ctl.signal.aborted) {
+            if (begun) closeGateway(gatewayRuns.get(result.id))
+            return
+          }
+          const { line, cut } = lineFor({ id: msg.id, result })
+          // a rewritten body too long to send back: the request goes as it
+          // came, so its run, which no one will finish, ends here
+          if (cut && begun) closeGateway(gatewayRuns.get(result.id))
+          return queueLine(line).promise
         },
         () => { if (!ctl.signal.aborted) return send({ id: msg.id, result: null }) },
       )
