@@ -15741,7 +15741,7 @@ function scrollCloses(box, e) {
   // a box scrolling its own text (a long one goes back to its start as it
   // loses focus to the click that opened the menu) moves nothing
   if (e.target.matches?.("input, textarea")) return false;
-  return !e.target.classList?.contains("view") || performance.now() < purposeUntil && purposeUntil !== guardUntil;
+  return !e.target.classList?.contains("view") || readerTurn() && purposeUntil !== guardUntil;
 }
 // openProtoMenu picks one of opts, or several when value is a list (ticked
 // in turn, menu kept open; live: choose after each tick).
@@ -15841,7 +15841,7 @@ function openProtoMenu(anchor, opts, value, choose, head = "Protocol this key sp
   // A live pick can shrink the list or wrap its heading and clamp the scroll.
   // Only the reader's scroll dismisses it; the click guard holds its anchor.
   const scroll = (e) => {
-    if (box.contains(e.target) || live && performance.now() >= purposeUntil) return;
+    if (box.contains(e.target) || live && !readerTurn()) return;
     if (scrollCloses(box, e)) closeProtoMenu();
   };
   const keys = (e) => {
@@ -23046,7 +23046,22 @@ let purposeUntil = 0, held = null;
 // field brought back into sight, backToReader): it lets that scroll stand,
 // but it isn't the reader's, so an app menu the click opens stays open.
 let guardUntil = 0;
-const readerScrolls = (ms) => { quotaFocus = ""; purposeUntil = Math.max(purposeUntil, performance.now() + ms); held = null; guardUntil = 0; };
+// A window the reader's input opens lasts its time or the next FRAMES frames
+// drawn, whichever ends later (up to 2s): a scroll is heard at the frame
+// after it, and where a frame takes longer than the window (WebKitGTK
+// drawing a long page on Linux, a busy machine), every scroll a wheel or a
+// bar's drag made came after it and was put back, so the Library's MCP list
+// barely moved (aublurer on X, Omarchy). Frames are counted only while a
+// window is open.
+const FRAMES = 3, FRAMES_MS = 2000, SHUT = { n: 0, cap: 0 };
+let frameNo = 0, counting = false, purposeFrames = SHUT, flingFrames = SHUT;
+const frameWin = () => ({ n: frameNo + FRAMES, cap: performance.now() + FRAMES_MS });
+const frameOpen = (w) => frameNo < w.n && performance.now() < w.cap;
+const frameTicks = () => { frameNo++; counting = frameOpen(purposeFrames) || frameOpen(flingFrames); if (counting) requestAnimationFrame(frameTicks); };
+const countFrames = () => { if (!counting) { counting = true; requestAnimationFrame(frameTicks); } };
+// the reader's window is open: their scroll is theirs
+const readerTurn = () => performance.now() < purposeUntil || frameOpen(purposeFrames);
+const readerScrolls = (ms) => { quotaFocus = ""; purposeUntil = Math.max(purposeUntil, performance.now() + ms); purposeFrames = frameWin(); countFrames(); held = null; guardUntil = 0; };
 function scrollOnPurpose(e, ms = 1000) {
   if (!e?.isTrusted || performance.now() - e.timeStamp > 1000) {
     console.warn("magpie: a scroll not asked for by the reader was refused");
@@ -23060,7 +23075,7 @@ function scrollOnPurpose(e, ms = 1000) {
 // the view up while it is drawn) is put back there, not taken as theirs.
 function arrived(v) {
   readerLeaves(v);
-  purposeUntil = performance.now();
+  purposeUntil = performance.now(); purposeFrames = SHUT;
 }
 const SCROLL_KEYS = new Set(["PageUp", "PageDown", "Home", "End", "ArrowUp", "ArrowDown", " "]);
 // Enter/Space can move focus to another field (opening a form, or validation).
@@ -23108,7 +23123,7 @@ function waitsBack(v) {
   clearTimeout(w?.t); waits.delete(v);
   if (w?.d === d && w.h === v.scrollHeight && performance.now() - w.at < 80) { readerWay.set(v, d); readerLeaves(v); flings(); return true; }
   const h = v.scrollHeight;
-  waits.set(v, { d, h, at: performance.now(), t: setTimeout(() => { waits.delete(v); if (d > 0 && h === v.scrollHeight && v.scrollTop + v.clientHeight >= h - 1) { readerWay.set(v, d); readerLeaves(v); } else if (performance.now() >= purposeUntil && held?.v !== v) { const from = v.scrollTop; backToReader(v); puttingBack(v, from, false); } }, 120) });
+  waits.set(v, { d, h, at: performance.now(), t: setTimeout(() => { waits.delete(v); if (d > 0 && h === v.scrollHeight && v.scrollTop + v.clientHeight >= h - 1) { readerWay.set(v, d); readerLeaves(v); } else if (!readerTurn() && held?.v !== v) { const from = v.scrollTop; backToReader(v); puttingBack(v, from, false); } }, 120) });
   return true;
 }
 // Given back is what was put back after the reader's input was made (its
@@ -23140,9 +23155,9 @@ addEventListener("touchmove", (e) => {
 // so: each of their scrolls keeps the next one the reader's till it rests.
 // Put back, the page shook (jiakun_zhao on X: 滚动会抽搐; issenn: 高频振动并复位).
 let flingUntil = 0;
-const flings = () => { flingUntil = performance.now() + 250; readerScrolls(250); };
+const flings = () => { flingUntil = performance.now() + 250; flingFrames = frameWin(); readerScrolls(250); };
 addEventListener("touchend", flings, { capture: true, passive: true });
-addEventListener("scroll", () => { if (performance.now() < flingUntil) flings(); }, { capture: true, passive: true });
+addEventListener("scroll", () => { if (performance.now() < flingUntil || frameOpen(flingFrames)) flings(); }, { capture: true, passive: true });
 // a drag, not the tremble of a click
 let downAt = null;
 // A scrollbar drag is the reader's, but Chromium and WebView2 send no
@@ -23193,6 +23208,10 @@ addEventListener("blur", panEnds);
 addEventListener("keydown", (e) => {
   panEnds();
   const typing = e.target.closest?.("input, textarea, select, [contenteditable]");
+  // WebKit plays a key's scroll over frames, as it plays a coast: past a slow
+  // frame at the key the rest were put back (aublurer on X), so its scrolls
+  // keep the next one the reader's, as a fling's do
+  if (!typing && SCROLL_KEYS.has(e.key)) { flingUntil = Math.max(flingUntil, performance.now() + 400); flingFrames = frameWin(); }
   if (e.key === "Tab" || (!typing && SCROLL_KEYS.has(e.key))) readerScrolls(400);
   if (e.isTrusted && e.key === "Enter") keyboardFocus(e);
 }, true);
@@ -23241,7 +23260,7 @@ function pinnedAt(v) {
 // as soon as what's above it has changed size, before the reader sees it
 // (followPin; a part redrawn or moved with nothing changing size calls it)
 function followPin(v) {
-  if (pinOf.has(v) && (!pinOnly.has(v) || pinAt.get(v)) && !v.hidden && held?.v !== v && performance.now() >= purposeUntil) backToReader(v);
+  if (pinOf.has(v) && (!pinOnly.has(v) || pinAt.get(v)) && !v.hidden && held?.v !== v && !readerTurn()) backToReader(v);
 }
 const pinSizes = new ResizeObserver(() => { for (const v of pinOf.keys()) followPin(v); });
 function backToReader(v) {
@@ -23269,7 +23288,7 @@ function backToReader(v) {
 const readerWay = new WeakMap();
 function backAfterLoad(v) {
   const at = readerAt.get(v);
-  if (!v.hidden && (barDrag === v || performance.now() < purposeUntil && at != null && readerWay.get(v) === Math.sign(Math.round(v.scrollTop - at)))) readerLeaves(v);
+  if (!v.hidden && (barDrag === v || readerTurn() && at != null && readerWay.get(v) === Math.sign(Math.round(v.scrollTop - at)))) readerLeaves(v);
   else backToReader(v);
 }
 // Where an element is on the screen in its view. What's held is the element
@@ -23378,7 +23397,7 @@ let relaidUntil = 0;
 const relaid = new ResizeObserver(() => {
   if (performance.now() > relaidUntil) { relaid.disconnect(); return; }
   const v = $("#view-" + view);
-  if (v && !v.hidden && !held && performance.now() >= purposeUntil) backToReader(v);
+  if (v && !v.hidden && !held && !readerTurn()) backToReader(v);
 });
 addEventListener("resize", () => {
   if (innerWidth === heldWidth) return;
@@ -23405,9 +23424,9 @@ function keepHeld() {
   requestAnimationFrame(keepHeld);
 }
 addEventListener("click", (e) => {
-  const readers = performance.now() < purposeUntil;
+  const readers = readerTurn();
   // what came before the click (Space pressed on a button, a tremble, the lift of a tap) is no scroll
-  purposeUntil = flingUntil = 0;
+  purposeUntil = flingUntil = 0; purposeFrames = flingFrames = SHUT;
   // a pick in a menu (in body, outside any view) is a click on the pill that
   // opened it: what it changes comes in around that pill, which stays put (#961)
   const at = protoMenu?.box.contains(e.target) ? protoMenu.anchor : e.target;
@@ -23432,7 +23451,7 @@ for (const v of document.querySelectorAll(".view")) {
   v.addEventListener("scroll", () => {
     if (v.hidden) return;
     if (panning?.v === v) readerScrolls(250);
-    if (performance.now() < purposeUntil || barDrag === v) {
+    if (readerTurn() || barDrag === v) {
       const by = v.scrollTop - (readerAt.get(v) ?? v.scrollTop);
       if (Math.abs(by) >= 1) readerWay.set(v, Math.sign(by));
       fitRoom(v); readerLeaves(v); scrolledFrom.set(v, document.activeElement); return;
