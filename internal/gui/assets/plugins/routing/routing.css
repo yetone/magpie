@@ -920,6 +920,8 @@ body.window .rt-gedit > .bar { --vfoot: 8px; }
 /* a member's own account: a long address ellipsizes rather than pushing
    the row past the editor's edge */
 .rt-gedit .fbrow .rt-macct { flex: 0 1 auto; min-width: 0; }
+/* pinned to an account the group's Accounts leave out: never sent */
+.rt-gedit .fbrow .rt-macct.bad { border-style: solid; border-color: var(--amber, var(--muted)); }
 .rt-gedit > .rt-gacc[hidden] { display: none; }
 /* a group bound to gateway keys (Group.Keys): a long key name ellipsizes */
 .rt-gedit > .rt-gkeys[hidden] { display: none; }

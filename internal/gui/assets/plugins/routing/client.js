@@ -6784,6 +6784,28 @@ function routingPage(part) {
     const a = groupIndexOf().accounts.get(pid)?.get(full);
     return { id: full, name: a?.name || acct, plan: a?.plan || "" };
   };
+  // groupAllows: a group's accounts (Group.Accounts) allow the account a,
+  // "<provider>/<id>", by the gateway's rule (access.AllowsAccount, which
+  // groupHeld asks): a provider the list names no account of may use each
+  // of its accounts, one it names only those, in any case, and one kept
+  // out ("<provider>/!<id>") never. A member pinned to an account the
+  // group leaves out is never sent (JJasonsun on Discord)
+  const groupAllows = (accounts, a) => {
+    const lc = (x) => String(x || "").trim().toLowerCase();
+    const key = lc(a), pid = key.slice(0, key.indexOf("/") + 1);
+    let named = false;
+    for (const x of (accounts || []).map(lc)) {
+      if (!x.startsWith(pid)) continue;
+      const ref = x.slice(pid.length);
+      if (ref.startsWith("!")) { if (pid + ref.slice(1) === key) return false; continue; }
+      if (x === key) return true;
+      named = true;
+    }
+    return !named;
+  };
+  // memberOut: the account member id is pinned to, when the group's
+  // accounts leave it out; null when it names none or one they allow
+  const memberOut = (accounts, id) => { const a = memberAccount(id); return a && !groupAllows(accounts, a.id) ? a : null; };
   // a decision model (Jev) is a member of a group of decision models only,
   // asked at /v1/systemone (provider/decide_group.go): it is in
   // groups.deciders, not groups.models
@@ -6909,7 +6931,7 @@ function routingPage(part) {
     const i = memberInfoOf(g, id), m = modelOf(id), s = subOf(id), f = fixedOf(id);
     if (s) return { pv: t("routing group"), mn: s.name, at: "" };
     const acct = memberAccount(id);
-    const at = (acct ? ` · ${acct.name}` : "") + (f ? ` · ${fixedWords(f)}` : "") + (fastIn(g, id) ? ` · ${speedIn(g, id)}` : "") + (freeIn(g, id) ? ` · ${t("free")}` : "");
+    const at = (acct ? ` · ${acct.name}` + (memberOut(g?.accounts, id) ? ` (${t("not allowed in this group")})` : "") : "") + (f ? ` · ${fixedWords(f)}` : "") + (fastIn(g, id) ? ` · ${speedIn(g, id)}` : "") + (freeIn(g, id) ? ` · ${t("free")}` : "");
     if (m) return { pv: m.providerName, mn: modelName(m), at };
     if (i?.providerOff) return { pv: i.name, mn: i.model, at: `${at} (${t("switched off")})` };
     return i?.name ? { pv: i.name, mn: i.model, at } : { pv: "", mn: id, at: "" };
@@ -8153,7 +8175,8 @@ function routingPage(part) {
         const nm = el("span", "", memberName(id));
         nm.title = memberName(id);
         n.append(nm);
-        if (m || s) n.append(el("small", "", subOf(id) || drawerOf(id) ? memberNote(id) : [m.providerName, memberAccount(id)?.name].filter(Boolean).join(" · ")));
+        const out = m && !s && memberOut(d.accounts, id);
+        if (m || s) n.append(el("small", "", subOf(id) || drawerOf(id) ? memberNote(id) : [m.providerName, memberAccount(id)?.name, out && t("not allowed in this group")].filter(Boolean).join(" · ")));
         else if (info?.providerOff) n.append(el("small", "", `${info.name} · ${t("switched off")}`));
         if (info?.free && !s) {
           const fr = el("small", "rt-free", t("free"));
@@ -8313,18 +8336,25 @@ function routingPage(part) {
           const accts = groups.accounts?.[m?.provider] || [];
           if (accts.length) {
             const mine = memberAccount(id);
-            const ab = el("button", "rt-cond rt-fixed rt-macct" + (mine ? " on" : ""));
+            // only an account the group's Accounts allow can be picked:
+            // the gateway never sends a member on another (planLevel's
+            // groupHeld). One picked before the group left it out stays
+            // on the row, said, until another is picked
+            const allows = (a) => groupAllows(d.accounts, a);
+            const ab = el("button", "rt-cond rt-fixed rt-macct" + (mine ? " on" : "") + (out ? " bad" : ""));
             ab.type = "button";
             ab.append(el("span", "", mine ? mine.name : t("Any account")));
-            ab.title = mine ? t("Sent on {account} alone; when it can't answer, the next model in the group is tried", { account: mine.name }) : t("Sent on any account the group allows");
-            ab.setAttribute("aria-label", `${memberName(id)}: ${ab.textContent}`);
+            ab.title = out ? t("{account} is not an account this group may use, so this model is never used. Pick one the group allows, or Any account", { account: mine.name })
+              : mine ? t("Sent on {account} alone; when it can't answer, the next model in the group is tried", { account: mine.name }) : t("Sent on any account the group allows");
+            ab.setAttribute("aria-label", `${memberName(id)}: ${ab.textContent}` + (out ? ` (${t("not allowed in this group")})` : ""));
             const bare = (a) => a.slice(m.provider.length + 1);
             const used = (a) => d.members.some((x) => x !== id && splitMember(x)[0] === model && splitMember(x)[2] === bare(a));
-            // the accounts it isn't on yet, here or in another row
-            const free = accts.filter((a) => !used(a.id) && a.id !== mine?.id);
+            // the accounts it isn't on yet, here or in another row, that
+            // the group allows
+            const free = accts.filter((a) => !used(a.id) && a.id !== mine?.id && allows(a.id));
             ab.onclick = (ev) => pickFrom("account", ab, ev, [
               { value: "", label: t("Any account"), note: t("any the group allows") },
-              ...accts.map((a) => ({ value: a.id, label: a.name, note: [planName(a.plan), used(a.id) && t("in the group already")].filter(Boolean).join(" · ") })),
+              ...accts.map((a) => ({ value: a.id, label: a.name, unserved: !allows(a.id), note: [planName(a.plan), !allows(a.id) ? t("not allowed in this group") : used(a.id) && t("in the group already")].filter(Boolean).join(" · ") })),
               ...(free.length ? [{ value: "+", label: t("Also on another account…"), note: t("a member of its own, tried after this one") }] : []),
             ], (v) => {
               if (v === "+") {
@@ -8460,7 +8490,7 @@ function routingPage(part) {
           options: all.map((a) => ({ value: a.id, label: a.name, note: planName(a.plan) || "" })), picked: (v) => d.accounts.includes(v), onPick: (v) => {
             if (!v) return;
             d.accounts = d.accounts.includes(v) ? d.accounts.filter((x) => x !== v) : [...d.accounts, v];
-            drawAccounts();
+            draw(); // a member's account the group now leaves out says so
           } }, b, ev);
         row.append(b);
         accList.append(row);
