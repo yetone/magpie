@@ -171,7 +171,8 @@ func TestLibraryPluginImportCmd(t *testing.T) {
 		t.Fatalf("project plugin on: %v\n%s", err, out)
 	}
 	b, _ := os.ReadFile(filepath.Join(proj, ".pi", "settings.json"))
-	if !strings.Contains(string(b), filepath.ToSlash(filepath.Join("plugins", "acme-pi-guard"))) && !strings.Contains(string(b), filepath.Join("plugins", "acme-pi-guard")) {
+	// a Windows path is written with its backslashes escaped: \\
+	if !strings.Contains(strings.ReplaceAll(string(b), `\\`, "/"), "plugins/acme-pi-guard") {
 		t.Errorf(".pi/settings.json has no entry for the package:\n%s", b)
 	}
 }
