@@ -771,7 +771,11 @@ function renderWebPage(asked) {
   const head = $("#webPageHead"), box = $("#webPageList");
   if (!box) return;
   head.hidden = box.hidden = web;
-  if (web) return;
+  // in a browser on the page, its passkeys stand in its place (passkeys.js)
+  if (web) {
+    if (!asked) window.renderPasskeys ? renderPasskeys() : import(new URL("passkeys.js", document.baseURI).href).then(() => renderPasskeys(), () => {});
+    return;
+  }
   if (!asked) api("web-page").then((r) => { webPageState = r; renderWebPage(true); }).catch(() => {});
   const s = webPageState;
   if (!s) return;

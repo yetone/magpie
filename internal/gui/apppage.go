@@ -332,12 +332,20 @@ func appPageRoutes(mux *http.ServeMux) {
 				c.Port = 0
 			}
 		}
+		old := c.Key
 		if in.NewKey || CheckWebKey(c.Key) != nil {
 			c.Key = NewWebKey()
 		}
 		if err := saveAppPage(c); err != nil {
 			fail(rw, err)
 			return
+		}
+		// the passkeys made under the old key go with it: none signs
+		// in under the new one (webGuard), and none is left behind
+		if old != c.Key && old != "" {
+			if err := dropPasskeysUnder(old); err != nil {
+				log.Printf("browser access: the old key's passkeys can't be removed: %v", err)
+			}
 		}
 		appPageServer.apply()
 		appPageServer.nudge()
