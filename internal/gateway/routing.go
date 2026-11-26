@@ -1581,6 +1581,11 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 		// request is asked again, and no rest and no failure counted (#2873)
 		return Rest{Why: why, Status: status, By: "off", Until: now}
 	}
+	if c.off {
+		// an account or key turned off, pinned (pinOff): routing leaves it
+		// out as it is, and a rest would stand over it once it is on
+		return Rest{Why: why, Status: status, By: "off", Until: now}
+	}
 	if c.p.PassesErrors() {
 		// the user leaves its errors to the client (errors=pass): none of
 		// its keys is set aside for one, and the next request is asked
@@ -2280,7 +2285,7 @@ func remoteModelRest(c candidate, why string, header http.Header) bool {
 // rest after a failure that says nothing of why (RestCapOff) isn't
 // rested, nor its slow starts counted.
 func restSlow(c candidate, now time.Time) (Rest, bool) {
-	if c.p.NoFailRest() {
+	if c.p.NoFailRest() || c.off {
 		return Rest{}, false
 	}
 	id := c.restID()

@@ -11668,7 +11668,7 @@ Your `fetch` gets the same as `x-magpie-caller-agent`, `x-magpie-caller-name` an
 
 ### One account, by its id
 
-To test whether one account or key works, list them all and send a request pinned to one. `GET /v1/magpie/accounts` names every account and API key of every provider, whether or not its vendor tells a quota: its provider, `id` (a key’s is a fingerprint, never the key), `kind` (`account` or `key`), `label`, `on` and `pin`. No key or token is in it. `?provider=<id>` lists one provider’s. Send `pin` as `X-Magpie-Account` and only that account is tried: no routing, no failover, and its failure comes back as the vendor said it.
+To test whether one account or key works, list them all and send a request pinned to one. `GET /v1/magpie/accounts` names every account and API key of every provider, whether or not its vendor tells a quota: its provider, `id` (a key’s is a fingerprint, never the key), `kind` (`account` or `key`), `label`, `on` and `pin`. No key or token is in it. `?provider=<id>` lists one provider’s. Send `pin` as `X-Magpie-Account` and only that account is tried: no routing, no failover, and its failure comes back as the vendor said it. An account or key turned off (`on: false`) can be pinned too, to try it before turning it on: it takes that request alone, routing still leaves it out, and a failure doesn’t rest it. A gateway key held to models, accounts or limits gets 403 for one that is off.
 
 ```
 const base = "http://" + process.env.MAGPIE_ADDR

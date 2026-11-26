@@ -149,6 +149,50 @@ func (p Provider) keyNamed(ref string) (Provider, bool) {
 	return p, false
 }
 
+// OffPick is an account or key of a provider that the user turned off,
+// as OffNamed finds it for one request sent to it.
+type OffPick struct {
+	// Provider is the provider as that account, or on that key alone
+	Provider
+	// Own is the agent's own sign-in, paused while others are on (#263)
+	Own bool
+	// KeyID is the key's fingerprint (KeyInfo.ID); "" for an account
+	KeyID string
+}
+
+// OffNamed is p's account or key named ref that the user turned off: an
+// account by its user, a key by its fingerprint or its name. It is built
+// for one request a caller pins to it (X-Magpie-Account), as a test is
+// (testAccounts, keyNamed): tmr11235 on X wanted a plugin to send with an
+// account before turning it on, as Test on account… does. Routing still
+// leaves it out (AlsoOn, KeysOn). ok is false for one that is on, or none
+// so named.
+func (p Provider) OffNamed(ref string) (OffPick, bool) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return OffPick{}, false
+	}
+	if p.Account != nil {
+		for _, a := range p.testAccounts() {
+			if a.Off && strings.EqualFold(a.Account.User, ref) {
+				return OffPick{Provider: a.Provider, Own: !a.Account.off}, true
+			}
+		}
+		return OffPick{}, false
+	}
+	for _, k := range p.Keys {
+		if !k.Off || k.Key == "" || k.Key == p.Key {
+			continue
+		}
+		if id := keyID(k.Key); id == ref || k.Name != "" && strings.EqualFold(k.Name, ref) {
+			if q, ok := p.keyNamed(id); ok {
+				return OffPick{Provider: q, KeyID: id}, true
+			}
+		}
+	}
+	return OffPick{}, false
+}
+
 // testedAccount is who a request sent with p goes as, for a result to
 // name: a pool's account, or the key of a provider that has several.
 func (p Provider) testedAccount() string {

@@ -22,9 +22,11 @@ import (
 // words for a key in bad, else a reply naming the key. It notes each key
 // asked.
 type keyVendor struct {
-	mu    sync.Mutex
-	bad   map[string]bool
-	asked []string
+	mu  sync.Mutex
+	bad map[string]bool
+	// limited answers 429 with a Retry-After, which rests a key on
+	limited map[string]bool
+	asked   []string
 }
 
 func (v *keyVendor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -34,6 +36,12 @@ func (v *keyVendor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	v.asked = append(v.asked, key)
 	v.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
+	if v.limited[key] {
+		w.Header().Set("Retry-After", "120")
+		w.WriteHeader(http.StatusTooManyRequests)
+		io.WriteString(w, `{"error":{"message":"Rate limit reached for requests","type":"requests","code":"rate_limit_exceeded"}}`)
+		return
+	}
 	if v.bad[key] {
 		w.WriteHeader(http.StatusUnauthorized)
 		io.WriteString(w, `{"error":{"message":"Incorrect API key provided: `+provider.Mask(key)+`","type":"invalid_request_error","code":"invalid_api_key"}}`)
@@ -182,10 +190,16 @@ func TestAccountPinnedByListedID(t *testing.T) {
 	if code, body := keyedPost(t, s, "keyed/m", "keyed/"+provider.KeyID(firstKey)); code != 200 || !strings.Contains(body, "from "+firstKey) {
 		t.Fatalf("the only key on, pinned: %d %s", code, body)
 	}
-	if code, body := keyedPost(t, s, "keyed/m", "keyed/"+provider.KeyID(secondKey)); code != http.StatusNotFound {
+	if got := v.seen(); !slices.Equal(got, []string{firstKey}) {
+		t.Fatalf("keys asked %v", got)
+	}
+	// the one off, pinned, is asked alone (TestAccountPinnedOffKey): its
+	// 401 is the answer
+	v.asked = nil
+	if code, body := keyedPost(t, s, "keyed/m", "keyed/"+provider.KeyID(secondKey)); code != http.StatusUnauthorized {
 		t.Fatalf("the key off, pinned: %d %s", code, body)
 	}
-	if got := v.seen(); !slices.Equal(got, []string{firstKey}) {
+	if got := v.seen(); !slices.Equal(got, []string{secondKey}) {
 		t.Fatalf("keys asked %v", got)
 	}
 }

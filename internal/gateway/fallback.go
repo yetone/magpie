@@ -103,6 +103,10 @@ type candidate struct {
 	// given a request for want of a slot (laneMate) nor kept on by a
 	// conversation (affine)
 	reserve int
+	// off is an account or key the user turned off, sent a request pinned
+	// to it (pinOff): its failure rests nothing, as a test sent to it
+	// writes nothing, and routing goes on leaving it out
+	off bool
 }
 
 // unmasked says a request to the try goes as written: its groups say so,
@@ -5130,7 +5134,13 @@ func streamStatus(msg string) int {
 // that one. The error says why none is left: no such account, one that
 // doesn't list the model, or one resting. A name that isn't ASCII comes
 // percent-encoded (pinnedName), and matches as written or decoded.
-func pinTo(raw string, cands []candidate, pl planned) ([]candidate, planned, int, string) {
+//
+// One the user turned off is found too, when no account routing plans is
+// named (pinOff): it is sent the request alone, as Test on account…
+// sends one a test (tmr11235 on X: a plugin testing an account before it
+// is turned on). offOK is false for a caller held to limits (keyHolds,
+// accountHolds), which is told no rather than reaching it.
+func pinTo(raw string, cands []candidate, pl planned, from provider.Protocol, offOK bool) ([]candidate, planned, int, string) {
 	want := pinnedName(raw)
 	// by its stable id too, as AccountsPath lists it: "<provider>/<id>",
 	// or the id alone; a key so, whatever it is named
@@ -5172,6 +5182,16 @@ func pinTo(raw string, cands []candidate, pl planned) ([]candidate, planned, int
 		if match(w, nil) {
 			return nil, pl, http.StatusBadRequest, fmt.Sprintf("%s: %s's plan doesn't list %s", AccountHeader, w.Who, w.Model)
 		}
+	}
+	if c, w, found := pinOff(raw, want, targets, cands, pl, from); found {
+		switch {
+		case !offOK:
+			return nil, pl, http.StatusForbidden, fmt.Sprintf("%s: %s is turned off in magpie, and a gateway key held to limits doesn't send to an account that is off", AccountHeader, w.Who)
+		case w.Unlisted:
+			return nil, pl, http.StatusBadRequest, fmt.Sprintf("%s: %s's plan doesn't list %s", AccountHeader, w.Who, w.Model)
+		}
+		w.Unlisted = false
+		return []candidate{c}, planned{order: []Weighed{w}}, 0, ""
 	}
 	var have []string
 	for _, w := range append(slices.Clone(pl.order), pl.left...) {

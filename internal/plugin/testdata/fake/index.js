@@ -285,6 +285,23 @@ export const FakePlugin = async ({ client }) => ({
             init.signal?.addEventListener("abort", () => (clearTimeout(t), no(init.signal.reason)))
           })
         }
+        // $FAKE_PIN_OFF ("<provider>/<model>"): the plugin sends the request
+        // on through magpie's gateway at $MAGPIE_ADDR, pinned to that
+        // provider's account or key turned off, as a plugin testing an
+        // account before it is turned on does (tmr11235 on X)
+        if (process.env.FAKE_PIN_OFF) {
+          const [pid] = process.env.FAKE_PIN_OFF.split("/")
+          const base = "http://" + process.env.MAGPIE_ADDR
+          const { data } = await (await fetch(base + "/v1/magpie/accounts?provider=" + pid)).json()
+          const off = data.find((a) => !a.on)
+          if (!off) return new Response(JSON.stringify({ error: { message: "FakeCo: none of " + pid + " is off" } }), { status: 404, headers: { "content-type": "application/json" } })
+          return fetch(base + "/v1/chat/completions", {
+            method: "POST",
+            signal: init.signal,
+            headers: { authorization: "Bearer magpie", "content-type": "application/json", "x-magpie-account": encodeURIComponent(off.pin) },
+            body: JSON.stringify({ ...JSON.parse(init.body), model: process.env.FAKE_PIN_OFF }),
+          })
+        }
         // $FAKE_H2: the request goes on node:http2 to that origin, as
         // Cursor's plugin runs its chats
         if (process.env.FAKE_H2) return h2(process.env.FAKE_H2, new URL(url).pathname)

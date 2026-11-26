@@ -3828,7 +3828,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	if pin != "" {
 		var status int
 		var msg string
-		if cands, pl, status, msg = pinTo(pin, cands, pl); status != 0 {
+		// an account turned off is reached by this machine, or a key
+		// held to nothing (pinOff)
+		if cands, pl, status, msg = pinTo(pin, cands, pl, from, !keyHeld && !accHeld); status != 0 {
 			call.Status, call.Error = status, "account pinned: "+pinnedName(pin)
 			writeError(w, from, status, msg)
 			finishCapture()
@@ -11040,7 +11042,8 @@ const SessionHeader = "X-Magpie-Session"
 // ("<provider>/<id>", pinTargets), percent-encoded
 // when it isn't ASCII (pinnedName): only it is tried, and when it can't take the request the caller is told why rather
 // than another account answering — a probe of one account needs that one.
-// It goes no further than magpie.
+// One the user turned off is reached too (pinOff), from this machine or
+// by a gateway key held to nothing. It goes no further than magpie.
 const AccountHeader = "X-Magpie-Account"
 
 // sessionOf is the session a request names, "" when it names none.

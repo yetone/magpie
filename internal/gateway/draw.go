@@ -1396,7 +1396,7 @@ func (s *Server) drawOnAccounts(ctx context.Context, r *http.Request, p provider
 // key, a request refused, a vendor down; nor does any on a provider set
 // never to rest for a limit (LimitRestOff).
 func restDrawer(c candidate, code int, msg string) {
-	if c.p.Account == nil || c.p.LimitRestOff || c.model == "" {
+	if c.p.Account == nil || c.p.LimitRestOff || c.model == "" || c.off {
 		return
 	}
 	now := time.Now()

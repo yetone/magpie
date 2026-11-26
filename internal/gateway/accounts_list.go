@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/yetone/magpie/internal/catalog"
@@ -37,7 +38,8 @@ type listedAccount struct {
 	Label string `json:"label"`          // the name it is shown by: the user's name for it, its email or login, a key's name or its masked self
 	User  string `json:"user,omitempty"` // a signed-in account's email or login
 	Plan  string `json:"plan,omitempty"`
-	// On says requests may go to it: the provider is on and so is it
+	// On says routing may send to it: the provider is on and so is it.
+	// One off is still sent a request pinned to it (pinOff)
 	On bool `json:"on"`
 	// Models, asked for with ?models=1, are the ids of every model it can
 	// be asked for: its provider's whole list (Available), less a model on
@@ -259,4 +261,65 @@ func pinnedBy(ts []pinTarget, w Weighed, c *candidate) bool {
 		}
 	}
 	return false
+}
+
+// pinOff is the account or key a pin names (as pinTo matches one: its
+// user, a key's name, its stable id) that the user turned off, of a
+// provider routing planned for the request: a candidate made for this
+// request alone (provider.OffNamed), and its row for the trace, Unlisted
+// when the account's own list of models leaves the model out (#474).
+// tmr11235 on X: a plugin testing an account wants to before turning it
+// on, which puts it to work at once, as Test on account… can. It takes
+// what the provider's planned candidate for the model goes with (a
+// group's effort, fast), and nothing is written of it: routing still
+// leaves it out, and its failure rests nothing (candidate.off). Asked
+// only once no account planned is named: it reads logins.json.
+func pinOff(raw, want string, targets []pinTarget, cands []candidate, pl planned, from provider.Protocol) (candidate, Weighed, bool) {
+	seen := map[string]bool{}
+	for _, w := range append(slices.Clone(pl.order), pl.left...) {
+		k := strings.ToLower(w.Provider) + "/" + w.Model
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		p, err := provider.Find(w.Provider)
+		if err != nil {
+			continue
+		}
+		refs := []string{want, raw}
+		if pid, id, ok := strings.Cut(want, "/"); ok && strings.EqualFold(pid, p.ID) {
+			refs = append(refs, id)
+		}
+		for _, t := range targets {
+			if strings.EqualFold(t.provider, p.ID) {
+				refs = append(refs, t.user, t.key)
+			}
+		}
+		for _, ref := range refs {
+			o, ok := p.OffNamed(ref)
+			if !ok {
+				continue
+			}
+			c := candidate{model: w.Model}
+			if i := slices.IndexFunc(cands, func(c candidate) bool { return strings.EqualFold(c.p.ID, p.ID) && c.model == w.Model }); i >= 0 {
+				c = cands[i]
+			}
+			c.p, c.rest, c.rank, c.capped, c.noURL, c.reserve, c.seats, c.off = o.Provider, p.ID, 0, nil, "", 0, nil, true
+			served := o.KeyID
+			switch {
+			case o.KeyID != "":
+				c.rest += "#" + o.KeyID
+			case !o.Own:
+				c.rest += "@" + o.Account.User
+			}
+			if o.KeyID == "" {
+				served = o.Account.User
+			}
+			row := weighed(c, *p, weighing{}, w.Fallback, from)
+			row.Via = w.Via
+			row.Unlisted = !p.AccountServes(served, w.Model)
+			return c, row, true
+		}
+	}
+	return candidate{}, Weighed{}, false
 }

@@ -2847,7 +2847,10 @@ provider, those whose vendor tells no quota included, by identifiers only:
 never the key), `kind` (`account` or `key`), `label`, `user`, `plan`, `on`
 and `pin`, `"<provider>/<id>"`. `?provider=<id>` lists one provider's.
 `X-Magpie-Account: <pin>` (or the id alone) pins a request to that
-account or key. `?models=1` adds each one's `models`: the id of every
+account or key, one turned off (`on: false`) too: it is sent that request
+alone, routing still leaves it out, and its failure rests nothing. A
+gateway key held to models, accounts or limits is told 403 for one that
+is off. `?models=1` adds each one's `models`: the id of every
 model it can be asked for, its provider's whole list (not the first 24
 agents are offered of a provider with no picks), less a model the user
 keeps off that account and one on none of the provider's APIs. Each is

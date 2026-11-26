@@ -576,7 +576,7 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
     <p>你的 <code>fetch</code> 在 <code>init.headers</code> 里拿到同样的内容：<code>x-magpie-caller-agent</code>、<code>x-magpie-caller-name</code> 和 <code>x-magpie-caller-via</code>（逗号分隔），每个值都经过百分号编码（用 <code>decodeURIComponent</code> 解开）。magpie 会从插件发出的请求里去掉这些头，厂商看不到，无论谁发起，厂商收到的请求都一样。</p>
 
     <h3 id="pin"><a class="anchor" href="#pin">按 id 指定一个账号</a></h3>
-    <p>想测一个账号或 key 能不能用，先列出所有账号，再发一个固定到它的请求。<code>GET /v1/magpie/accounts</code> 列出每个供应商的每个账号和 API key，不管厂商有没有给额度：它的供应商、<code>id</code>（key 的 id 是指纹，不是 key 本身）、<code>kind</code>（<code>account</code> 或 <code>key</code>）、<code>label</code>、<code>on</code> 和 <code>pin</code>。里面没有任何 key 或 token。加 <code>?provider=&lt;id&gt;</code> 只列一个供应商的。把 <code>pin</code> 放进 <code>X-Magpie-Account</code> 发请求，就只试这一个账号：不路由，不切换，失败时原样返回厂商的错误。</p>
+    <p>想测一个账号或 key 能不能用，先列出所有账号，再发一个固定到它的请求。<code>GET /v1/magpie/accounts</code> 列出每个供应商的每个账号和 API key，不管厂商有没有给额度：它的供应商、<code>id</code>（key 的 id 是指纹，不是 key 本身）、<code>kind</code>（<code>account</code> 或 <code>key</code>）、<code>label</code>、<code>on</code> 和 <code>pin</code>。里面没有任何 key 或 token。加 <code>?provider=&lt;id&gt;</code> 只列一个供应商的。把 <code>pin</code> 放进 <code>X-Magpie-Account</code> 发请求，就只试这一个账号：不路由，不切换，失败时原样返回厂商的错误。关闭的账号或 key（<code>on: false</code>）也能这样指定，开之前先试：只有这一个请求发给它，路由照样不用它，失败也不会让它休息。受模型、账号或限额约束的网关 key 指定关闭的账号会得到 403。</p>
     <div class="code">
       <span class="lang">JavaScript</span>
       <pre><span class="k">const</span> base = <span class="s">"http://"</span> + process.env.MAGPIE_ADDR
