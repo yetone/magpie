@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -319,5 +320,114 @@ func TestLinkID(t *testing.T) {
 		if got := LinkID(in); got != want {
 			t.Errorf("LinkID(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// A group removed and another made under its id is a new group: sharing
+// it puts it at a link of its own, never at the removed one's as its next
+// version, and the removed one's link can still be taken down (#7883).
+func TestRemovedGroupForgetsItsLink(t *testing.T) {
+	home(t)
+	s := newSite(t)
+	ctx := context.Background()
+	old, err := Publish(ctx, "mine", Meta{Title: "Fast", Public: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.DeleteGroup("mine"); err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.SaveGroup(provider.Group{Name: "Mine", Members: []string{"myrelay/y"}}); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := Shared()["mine"]; ok {
+		t.Fatalf("the new group is taken as the removed one's share: %+v", got)
+	}
+	m, err := Publish(ctx, "mine", Meta{Title: "Fast", Public: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.ID == old.ID || m.Version != 1 || s.count("PUT /api/groups/"+old.ID) != 0 || s.count("POST /api/groups") != 2 {
+		t.Fatalf("shared at %+v after %+v; asked %v", m, old, s.asked)
+	}
+	if v := s.groups[old.ID]["version"]; v != 1 {
+		t.Errorf("the removed group's link is at version %v", v)
+	}
+	r, ok := RetiredLink(old.URL)
+	if !ok || r.ID != old.ID || r.Token != "" || r.Group != "mine" {
+		t.Fatalf("RetiredLink(%s) = %+v, %v", old.URL, r, ok)
+	}
+	if err := Unpublish(ctx, old.URL); err != nil {
+		t.Fatal(err)
+	}
+	if _, up := s.groups[old.ID]; up || s.count("DELETE /api/groups/"+old.ID) != 1 {
+		t.Errorf("the removed group's link is still up: %v", s.asked)
+	}
+	if _, ok := s.groups[m.ID]; !ok || Shared()["mine"].ID != m.ID {
+		t.Errorf("taking the old link down took the new one: %v %v", s.groups, Shared())
+	}
+	if _, ok := RetiredLink(old.ID); ok {
+		t.Error("taken down, still kept")
+	}
+}
+
+// A group imported from a link, removed, and another made under its id
+// is not told of that link's newer versions (#7883); nor after a sync
+// that removes it.
+func TestRemovedGroupForgetsWhereItCameFrom(t *testing.T) {
+	for _, how := range []string{"delete", "deletes", "mirror"} {
+		t.Run(how, func(t *testing.T) {
+			home(t)
+			newSite(t)
+			ctx := context.Background()
+			m, err := Publish(ctx, "mine", Meta{Title: "Theirs", Public: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			p, err := Fetch(ctx, m.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			res, err := provider.ImportShared(p.Group, nil, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := Imported(res.ID, p); err != nil {
+				t.Fatal(err)
+			}
+			switch how {
+			case "delete":
+				err = provider.DeleteGroup(res.ID)
+			case "deletes":
+				err = provider.DeleteGroups([]string{res.ID})
+			case "mirror":
+				ps, _ := provider.Stored()
+				gs, _ := provider.StoredGroups()
+				err = provider.Mirror(ps, slices.DeleteFunc(gs, func(g provider.Group) bool { return g.ID == res.ID }))
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, ok := Sources()[res.ID]; ok {
+				t.Fatalf("removed by %s, still from %s", how, m.ID)
+			}
+			if err := provider.SaveGroup(provider.Group{ID: res.ID, Name: res.ID, Members: []string{"myrelay/x"}}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Publish(ctx, "mine", Meta{Title: "Theirs", Public: true}); err != nil {
+				t.Fatal(err)
+			}
+			updates.Lock()
+			updates.at = updates.at.AddDate(0, 0, -1)
+			updates.Unlock()
+			if u, err := Updates(ctx); err != nil || len(u) != 0 {
+				t.Errorf("the new %s is told of the removed one's link: %v %v", res.ID, u, err)
+			}
+			if how == "mirror" {
+				if _, ok := Shared()["mine"]; !ok {
+					t.Error("the mirror forgot a group it kept")
+				}
+			}
+		})
 	}
 }

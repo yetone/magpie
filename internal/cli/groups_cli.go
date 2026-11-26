@@ -69,7 +69,8 @@ const groupUsage = `usage:
                                           or --unlisted, opened only by its link. Its models, routing and rules
                                           go; no key, account or folder, and a provider you added yourself is
                                           named custom. Again, it updates the link; --stop takes it down;
-                                          --text prints it as text to paste instead, sending nothing
+                                          --text prints it as text to paste instead, sending nothing. A group
+                                          removed leaves its link up: share <link> --stop takes it down
   magpie group import <link|text|-> [--over <id>]
                                           add a group shared at a usemagpie.ai/g/… link (or as text): each model
                                           you don't have goes to the same model from a provider you have, or is

@@ -2477,7 +2477,24 @@ func DeleteGroup(id string) error {
 	if !found {
 		return fmt.Errorf("no group %q", id)
 	}
-	return store(f)
+	if err := store(f); err != nil {
+		return err
+	}
+	groupsGone([]string{id})
+	return nil
+}
+
+// GroupsGone, when set, is told the ids of the user's groups that were
+// removed, once the removal is stored: by DeleteGroup (and so
+// DeleteGroups) and by a sync that mirrors another computer's groups.
+// groupshare sets it, so a group made later under the same id is not
+// taken as the one that was shared or imported (#7883).
+var GroupsGone func(ids []string)
+
+func groupsGone(ids []string) {
+	if f := GroupsGone; f != nil && len(ids) > 0 {
+		f(ids)
+	}
 }
 
 // DeleteGroups removes several groups at once, as DeleteGroup does each

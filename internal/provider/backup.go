@@ -153,8 +153,20 @@ func mirror(ps []Provider, gs []Group, settingsHere bool) error {
 		}
 	}
 	f.Providers = out
+	before := f.Groups
 	f.Groups = slices.DeleteFunc(slices.Clone(gs), func(g Group) bool { return g.ID == "" || g.ID != GroupSlug(g.ID) })
-	return store(f)
+	if err := store(f); err != nil {
+		return err
+	}
+	// the groups the other computer doesn't have are gone here too
+	var gone []string
+	for _, g := range before {
+		if !g.Hidden && !slices.ContainsFunc(f.Groups, func(n Group) bool { return n.ID == g.ID && !n.Hidden }) {
+			gone = append(gone, g.ID)
+		}
+	}
+	groupsGone(gone)
+	return nil
 }
 
 // Carried is the plugins a backup or a sync carries: those added from npm

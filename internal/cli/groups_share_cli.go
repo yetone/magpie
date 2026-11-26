@@ -15,7 +15,7 @@ import (
 // groupShareCmd: `magpie group share <id> [--title …] [--about …] [--by …]
 // [--unlisted] | --stop | --text`, the Routing page's Share… sheet.
 func groupShareCmd(rest []string) error {
-	usage := "magpie group share <id> [--title <title>] [--about <text>] [--by <name>] [--unlisted] | --stop | --text"
+	usage := "magpie group share <id> [--title <title>] [--about <text>] [--by <name>] [--unlisted] | --stop | --text\n       magpie group share <link> --stop   (a link a removed group was shared at)"
 	var id string
 	meta := groupshare.Meta{Public: true}
 	stop, text := false, false
@@ -60,6 +60,14 @@ func groupShareCmd(rest []string) error {
 	}
 	g, err := findGroup(id)
 	if err != nil {
+		// a link a removed group was shared at can still be taken down
+		if old, ok := groupshare.RetiredLink(id); ok && stop {
+			if err := groupshare.Unpublish(context.Background(), old.ID); err != nil {
+				return err
+			}
+			fmt.Println(green.Render("✓"), bold.Render(old.URL), "is no longer shared")
+			return nil
+		}
 		return err
 	}
 	switch {

@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -89,9 +90,22 @@ type From struct {
 	Seen int `json:"seen,omitempty"`
 }
 
+// Retired is a link a group shared before it was removed: kept, with its
+// token, so it is never lost; a group made later under the same id
+// shares at a link of its own (#7883). The link stays up as it was.
+type Retired struct {
+	Mine
+	Group string    `json:"group"` // its id here, when it was removed
+	Gone  time.Time `json:"gone"`
+}
+
 type record struct {
-	Mine map[string]Mine `json:"mine,omitempty"`
-	From map[string]From `json:"from,omitempty"`
+	Mine    map[string]Mine `json:"mine,omitempty"`
+	From    map[string]From `json:"from,omitempty"`
+	Retired []Retired       `json:"retired,omitempty"`
+	// Ever: a group was imported from a link here once, so the daily
+	// report goes on, saying none is used when those were removed
+	Ever bool `json:"ever,omitempty"`
 	// Liked are the shared groups liked here, by their ids
 	Liked []string `json:"liked,omitempty"`
 }
@@ -114,6 +128,41 @@ func change(f func(r *record)) error {
 }
 
 func path() string { return filepath.Join(settings.Dir(), "shared-groups.json") }
+
+func init() { provider.GroupsGone = forget }
+
+// forget is what a removed group leaves behind: where it was imported
+// from is dropped, and the link it was shared at is set aside (Retired),
+// so a group made later under its id is neither shared at that link as
+// its next version nor told of that link's updates (#7883). Nothing is
+// written when none of ids is recorded.
+func forget(ids []string) {
+	mu.Lock()
+	defer mu.Unlock()
+	r, err := read()
+	if err != nil {
+		log.Printf("groups: %v: removed groups %v keep their shared links", err, ids)
+		return
+	}
+	changed := false
+	for _, gid := range ids {
+		if _, ok := r.From[gid]; ok {
+			delete(r.From, gid)
+			changed = true
+		}
+		if m, ok := r.Mine[gid]; ok {
+			r.Retired = append(r.Retired, Retired{Mine: m, Group: gid, Gone: time.Now().UTC()})
+			delete(r.Mine, gid)
+			changed = true
+		}
+	}
+	if !changed {
+		return
+	}
+	if err := write(r); err != nil {
+		log.Printf("groups: %v: removed groups %v keep their shared links", err, ids)
+	}
+}
 
 // read is shared-groups.json; one that doesn't read is an error, never
 // "none shared", which would share a group again under a second link.
@@ -270,7 +319,12 @@ func Unpublish(ctx context.Context, gid string) error {
 	}
 	m, ok := r.Mine[gid]
 	if !ok {
-		return nil
+		// a link a removed group was shared at, by its link or id
+		old, ok := retiredIn(r, gid)
+		if !ok {
+			return nil
+		}
+		m = old.Mine
 	}
 	site := Site()
 	if site == "" {
@@ -280,7 +334,37 @@ func Unpublish(ctx context.Context, gid string) error {
 	if err != nil && status != http.StatusNotFound {
 		return err
 	}
-	return change(func(r *record) { delete(r.Mine, gid) })
+	return change(func(r *record) {
+		if r.Mine[gid].ID == m.ID {
+			delete(r.Mine, gid)
+		}
+		r.Retired = slices.DeleteFunc(r.Retired, func(o Retired) bool { return o.ID == m.ID })
+	})
+}
+
+// RetiredLink is the link a removed group was shared at, by the link or
+// its id (LinkID): still up, and taken down by Unpublish with it.
+func RetiredLink(link string) (Retired, bool) {
+	mu.Lock()
+	r, err := read()
+	mu.Unlock()
+	if err != nil {
+		return Retired{}, false
+	}
+	o, ok := retiredIn(r, link)
+	o.Token = "" // only Unpublish sends it
+	return o, ok
+}
+
+func retiredIn(r record, link string) (Retired, bool) {
+	if id := LinkID(link); id != "" {
+		for _, o := range r.Retired {
+			if o.ID == id {
+				return o, true
+			}
+		}
+	}
+	return Retired{}, false
 }
 
 // Page is a shared group as usemagpie.ai has it.
@@ -402,6 +486,7 @@ func Imported(gid string, page Page) error {
 			r.From = map[string]From{}
 		}
 		r.From[gid] = From{ID: page.ID, Version: page.Version, Title: page.Title, At: time.Now().UTC()}
+		r.Ever = true
 	})
 }
 
@@ -532,7 +617,7 @@ func Report(ctx context.Context, install string) error {
 	mu.Lock()
 	r, err := read()
 	mu.Unlock()
-	if err != nil || len(r.From) == 0 {
+	if err != nil || len(r.From) == 0 && !r.Ever {
 		// nothing ever imported here: nothing to say, every day
 		return err
 	}
