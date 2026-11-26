@@ -150,7 +150,8 @@ func TestFontSettingsAPIAndBoot(t *testing.T) {
 		t.Helper()
 		r := httptest.NewRecorder()
 		handler.ServeHTTP(r, httptest.NewRequest("GET", "/boot.js", nil))
-		body := strings.TrimSuffix(strings.TrimPrefix(r.Body.String(), "window.bootPrefs = "), ";\n")
+		// the prefs are boot.js's first line; the look's stylesheet may follow
+		body, _, _ := strings.Cut(strings.TrimPrefix(r.Body.String(), "window.bootPrefs = "), ";\n")
 		var got map[string]json.RawMessage
 		if err := json.Unmarshal([]byte(body), &got); err != nil {
 			t.Fatal(err)

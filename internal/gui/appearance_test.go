@@ -77,7 +77,7 @@ func TestAccentSetting(t *testing.T) {
 	if rec := lookServe(srv, "POST", "/api/settings", `{"theme":"light","lang":"en","accent":""}`); rec.Code != http.StatusOK || settings.Load().Accent != "" {
 		t.Fatalf("accent not reset: %d %q", rec.Code, settings.Load().Accent)
 	}
-	if boot := lookServe(srv, "GET", "/boot.js", "").Body.String(); strings.Contains(boot, "lookCSS") || !strings.Contains(boot, `"look":","`) {
+	if boot := lookServe(srv, "GET", "/boot.js", "").Body.String(); strings.Contains(boot, "--accent:") || !strings.Contains(boot, `"look":","`) {
 		t.Fatalf("boot.js still draws a look: %s", boot)
 	}
 }
@@ -215,10 +215,10 @@ func TestWallpaper(t *testing.T) {
 // picture: the page would show its colour over nothing.
 func TestWallpaperStampWithoutFile(t *testing.T) {
 	appearanceHome(t)
-	if css := lookCSS(settings.Settings{Wallpaper: 1}); css != "" {
+	if css := lookCSS(settings.Settings{Wallpaper: 1}); css != contrastFollowCSS {
 		t.Fatalf("drawn without a file: %s", css)
 	}
-	if css := lookCSS(settings.Settings{}); css != "" {
+	if css := lookCSS(settings.Settings{}); css != contrastFollowCSS {
 		t.Fatalf("magpie's own look drew: %s", css)
 	}
 }
@@ -243,7 +243,7 @@ func TestAccentTintsGrounds(t *testing.T) {
 		}
 		return out
 	}
-	if css := lookCSS(settings.Settings{}); css != "" {
+	if css := lookCSS(settings.Settings{}); css != contrastFollowCSS {
 		t.Fatalf("magpie's own look draws %q", css)
 	}
 	css := lookCSS(settings.Settings{Accent: "#7c3aed"})
@@ -353,7 +353,9 @@ func TestTintBasesAreAppCSS(t *testing.T) {
 func TestLookFixture(t *testing.T) {
 	want := map[string]string{}
 	for _, a := range []string{"#0d9488", "#db2777", "#7c3aed", "#000000", "#52525b", "#191047"} {
-		want[a] = lookCSS(settings.Settings{Accent: a})
+		// the accent's own rules: Increase contrast, left to the system,
+		// would add the same stylesheet to each (TestContrastSetting)
+		want[a] = lookCSS(settings.Settings{Accent: a, Contrast: settings.ContrastNormal})
 	}
 	b, _ := json.MarshalIndent(want, "", "  ")
 	b = append(b, '\n')

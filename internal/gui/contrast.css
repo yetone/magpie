@@ -1,0 +1,67 @@
+/* Settings › Appearance › Increase contrast, as the system's (usrname1833
+   on Discord: grey on white, hairline edges, projects and their sessions
+   hard to tell apart). lookCSS (appearance.go) adds it after the accent's
+   rules, as written when it is turned on and inside
+   @media (prefers-contrast: more) when it is left to the system.
+
+   The light rule holds wherever the theme isn't dark; the dark ones come
+   after it at its weight, so each sets every colour the light one does
+   (TestContrastSetsEveryColourInBoth). body.panel is named beside :root,
+   as the tray panel draws its surfaces there, at a weight over app.css's
+   panel rules.
+
+   WCAG contrast ratios, at magpie's own accent, on every ground the
+   colour is drawn on (bg, card, card-2, pill, pill-hover, the selection
+   and the panel's bg and card):
+   light  text  --fg 13.8  --fg-2 8.3  --muted 5.4  --faint 4.7
+                --ctl-fg 6.4  accent 4.6 (focus ring 5.7 on bg)
+          edges --line 3.3 (3.7 on card)  --line-2 1.7, was 1.2
+   dark   text  --fg 8.5  --fg-2 6.2  --muted 4.9  --faint 4.6
+                --ctl-fg 5.2  accent 4.7 (focus ring 8.7 on bg)
+          edges --line 3.1 (3.5 on card)  --line-2 1.7, was 1.1
+   Row separators (--line-2) mark no control's edge, so 3:1 isn't asked of
+   them; the lists' and fields' edges (--line, --pill-line) are 3:1. */
+html:not(.omarchy):root:not([data-theme="dark"]), html:not(.omarchy):root:not([data-theme="dark"]) body.panel {
+  --fg: #111114; --fg-2: #3a3a41; --muted: #55555d; --faint: #5e5e66; --ctl-fg: #4a4a52;
+  --line: #84848e; --line-2: #bdbdc6; --pill-line: var(--line);
+  --card-edge: 0 0 0 1px var(--line);
+  --pill-hover: #dcdce3; --seg-track: #e2e2e8;
+  --seg-edge: 0 0 0 1px var(--line), 0 1px 2px rgba(0, 0, 0, .14);
+  --sel: color-mix(in srgb, var(--accent) 20%, #ffffff);
+  --shadow: 0 16px 44px rgba(20, 22, 30, .16), 0 2px 8px rgba(20, 22, 30, .06), 0 0 0 1px var(--line);
+}
+@media (prefers-color-scheme: dark) {
+  html:not(.omarchy):root:not([data-theme="light"]), html:not(.omarchy):root:not([data-theme="light"]) body.panel {
+    --fg: #f4f4f7; --fg-2: #d2d2d8; --muted: #bdbdc5; --faint: #b4b4bc; --ctl-fg: #c0c0c8;
+    --line: #77777f; --line-2: #4e4e56; --pill-line: var(--line);
+    --card-edge: inset 0 0 0 1px var(--line);
+    --pill-hover: #404048; --seg-track: rgba(255, 255, 255, .08);
+    --seg-edge: inset 0 0 0 1px var(--line), 0 1px 2px rgba(0, 0, 0, .3);
+    --sel: color-mix(in srgb, var(--accent) 22%, #232327);
+    --shadow: 0 16px 44px rgba(0, 0, 0, .55), 0 2px 8px rgba(0, 0, 0, .3), 0 0 0 1px var(--line);
+  }
+}
+html:not(.omarchy):root[data-theme="dark"], html:not(.omarchy):root[data-theme="dark"] body.panel {
+  --fg: #f4f4f7; --fg-2: #d2d2d8; --muted: #bdbdc5; --faint: #b4b4bc; --ctl-fg: #c0c0c8;
+  --line: #77777f; --line-2: #4e4e56; --pill-line: var(--line);
+  --card-edge: inset 0 0 0 1px var(--line);
+  --pill-hover: #404048; --seg-track: rgba(255, 255, 255, .08);
+  --seg-edge: inset 0 0 0 1px var(--line), 0 1px 2px rgba(0, 0, 0, .3);
+  --sel: color-mix(in srgb, var(--accent) 22%, #232327);
+  --shadow: 0 16px 44px rgba(0, 0, 0, .55), 0 2px 8px rgba(0, 0, 0, .3), 0 0 0 1px var(--line);
+}
+/* a focused control's ring a step wider */
+html:not(.omarchy) :is(button, input, textarea, [tabindex]):focus-visible { outline-width: 3px; }
+/* Sessions: a project's row reads as the head of its sessions. Its name
+   is heavier and its row a shade off the card; its sessions sit further
+   in, their titles in the second text colour at regular weight; and a
+   project is parted from the next by an edge, its sessions by a
+   separator */
+html:not(.omarchy) .row.sm-folder, html:not(.omarchy) .row.sm-others-row { background: color-mix(in srgb, var(--fg) 5%, var(--card)); }
+html:not(.omarchy) .row.sm-folder:hover, html:not(.omarchy) .row.sm-others-row:hover { background: var(--pill-hover); }
+html:not(.omarchy) .sm-fline .name, html:not(.omarchy) .sm-others-row .name { font-weight: 650; }
+html:not(.omarchy) .row.sm-sess > .who > .name { font-weight: 400; color: var(--fg-2); }
+html:not(.omarchy) .sm-group .row.sm-sess { padding-left: 40px; }
+html:not(.omarchy) body.window .sm-group .row.sm-sess { padding-left: 44px; }
+html:not(.omarchy) .sm-folders > .sm-group + .sm-group, html:not(.omarchy) .sm-folders > .sm-group + .sm-more-folders,
+html:not(.omarchy) .sm-others > .sm-group, html:not(.omarchy) .sm-others > .sm-more-folders { border-top-color: var(--line); }

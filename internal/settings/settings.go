@@ -62,6 +62,12 @@ var CodexClients = []string{"", "desktop"}
 // Codex asks) first.
 var CodexServiceTiers = []string{"", CodexTierStandard, "priority", "ultrafast"}
 
+// Contrast's values beside "", which follows the system.
+const (
+	ContrastMore   = "more"
+	ContrastNormal = "normal"
+)
+
 // Settings is what the user chose. "" and "system" both mean "follow the OS".
 type Settings struct {
 	Theme string `json:"theme,omitempty"` // system | light | dark
@@ -77,6 +83,11 @@ type Settings struct {
 	// Plugins page's README, for a small server where its watch for them
 	// is work enough to matter (Yayoi_no_yume on X). Off means shown.
 	NoBird bool `json:"noBird,omitempty"`
+	// Contrast is Increase contrast, as the system's: darker text, edges
+	// that read at 3:1 and plainer selection, for low vision
+	// (usrname1833 on Discord). "" follows the system's
+	// prefers-contrast, ContrastMore turns it on, ContrastNormal off.
+	Contrast string `json:"contrast,omitempty"`
 	// Accent is the colour picked for magpie's buttons, links and
 	// selection, as #rrggbb; "" keeps magpie's own (CHENGJIAHEGOXIS on
 	// X). Each theme draws it as dark or light as its text needs.

@@ -19,7 +19,7 @@
 // Each line: the words a reader may type (_ joins a phrase's words) | the
 // names they lead to.
 const CONCEPTS = [
-  "accessibility a11y 可访问性 无障碍 辅助功能 可訪問性 無障礙 輔助使用 協助工具 アクセシビリティ 見やすさ barrierefrei bedienungshilfe | text size|reduce motion|colorblind|appearance|interface font|code font",
+  "accessibility a11y 可访问性 无障碍 辅助功能 可訪問性 無障礙 輔助使用 協助工具 アクセシビリティ 見やすさ barrierefrei bedienungshilfe contrast low_vision 对比度 对比 看不清 视力 對比 視力 コントラスト 見えにくい kontrast sehschwäche | text size|increase contrast|reduce motion|colorblind|appearance|interface font|code font",
   "theme dark_mode light_mode darkmode 深色 暗色 夜间 浅色 主题 外观 皮肤 主題 外觀 深色模式 ダーク ライト テーマ 外観 dunkel hell erscheinungsbild | appearance|accent color|background image",
   "zoom font_size bigger smaller 字体 字號 字号 放大 缩小 缩放 字體 縮放 フォント 拡大 縮小 schrift vergrößern | text size|interface font|code font",
   "animation 动画 动效 動畫 アニメーション animation | reduce motion|loading bird",

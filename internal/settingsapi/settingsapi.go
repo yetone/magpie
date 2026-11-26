@@ -28,7 +28,7 @@ import (
 // written.
 var Keys = []string{
 	// Appearance
-	"theme", "accent", "colorblind", "reduceMotion", "noBird", "lang", "uiFont", "codeFont",
+	"theme", "contrast", "accent", "colorblind", "reduceMotion", "noBird", "lang", "uiFont", "codeFont",
 	// the tray, the Dock and this computer
 	"tray", "dock", "dockWindow", "dockNever", "lightweight", "gpuRendering", "keepAwake", "keepAwakeDisplay",
 	"noWSLAgents", "sessionTerminal", "signInLinkOnly", "quitNoAsk", "restoreOnQuit", "name",
@@ -60,6 +60,7 @@ var Keys = []string{
 // from the window as from the CLI). A setting's "" is its default.
 var Choices = map[string][]string{
 	"theme":           settings.Themes,
+	"contrast":        {"", settings.ContrastMore, settings.ContrastNormal},
 	"lang":            settings.Langs,
 	"tray":            settings.Trays,
 	"currency":        settings.Currencies,
@@ -249,6 +250,10 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	// nor whether animations are stilled (#3813)
 	if _, sent := fields["reduceMotion"]; !sent {
 		in.ReduceMotion = cur.ReduceMotion
+	}
+	// nor Increase contrast, which pages before it never sent
+	if _, sent := fields["contrast"]; !sent {
+		in.Contrast = cur.Contrast
 	}
 	// nor the accent colour, which pages before it never sent
 	if _, sent := fields["accent"]; !sent {
@@ -462,6 +467,9 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	// gateway mode, set on its own (gateway-mode)
 	in.GatewayMode = cur.GatewayMode
 	in.NoAccountDiscovery = cur.NoAccountDiscovery // set on its own (account-discovery, or the CLI)
+	if c := in.Contrast; c != "" && c != settings.ContrastMore && c != settings.ContrastNormal {
+		return in, fmt.Errorf("contrast is %q, %q or \"\" (as the system), not %q", settings.ContrastMore, settings.ContrastNormal, c)
+	}
 	if v := strings.TrimSpace(in.Vision); v != "" && v != "off" && v != cur.Vision {
 		if _, _, ok := provider.Resolve(v); !ok {
 			return in, fmt.Errorf("no model %s to describe images", v)

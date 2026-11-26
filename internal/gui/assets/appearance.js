@@ -21,6 +21,10 @@ window.lookPaint = async function () {
 };
 
 window.drawLook = function (s, keep) {
+  // Increase contrast: left to the system, it shows what the system asks
+  // for, and either choice is the user's from then on (usrname1833)
+  $("#contrastSegs").title = t("Darker text, clearer edges and selection, as with the system's Increase Contrast");
+  $("#contrastSegs").replaceChildren(segsOO(s.contrast === "more" || (!s.contrast && matchMedia("(prefers-contrast: more)").matches), (v) => savePrefs({ ...keep, contrast: v ? "more" : "normal" })));
   $("#colorblindSegs").title = t("Colorblind-safe chart colors, and each allowance window's line in a dash of its own");
   $("#colorblindSegs").replaceChildren(segsOO(s.colorblind, (v) => savePrefs({ ...keep, colorblind: v })));
   $("#reduceMotionSegs").title = t("Animations stand still, as with the system's Reduce Motion, so magpie keeps the computer less busy");

@@ -19917,8 +19917,9 @@ function applyPrefs(s, rate) {
     // tooltip says which mode it was drawn in
     for (const b of document.querySelectorAll(".quota-curve:not(.balance-curve)")) b.title = quotaCurveTitle();
   }
-  // an accent or picture of the user's own (appearance.go), when not the one drawn
-  const look = (s.accent || "") + "," + (s.wallpaper || "");
+  // an accent, picture or contrast of the user's own (appearance.go), when not the one drawn;
+  // lookKey's "accent,stampcontrast", an unset one "" as an array joins it
+  const look = [s.accent, s.wallpaper] + [s.contrast];
   if (look !== (applyPrefs.look ??= window.bootPrefs?.look ?? ",")) applyPrefs.look = look, import("./appearance.js").then(() => lookPaint(), () => {});
   applyPrefs.ready = true;
   // a browser tab's title names this magpie (Settings' Name, else

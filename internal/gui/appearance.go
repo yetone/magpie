@@ -1,6 +1,7 @@
 package gui
 
 import (
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -43,18 +44,33 @@ func wallpaperType(b []byte) (string, error) {
 }
 
 // lookKey is what the page compares to know its look is the saved one,
-// as app.js's applyPrefs writes it: the accent and the wallpaper's stamp.
+// as app.js's applyPrefs writes it: the accent, the wallpaper's stamp and
+// Increase contrast. The contrast comes last, with no comma of its own,
+// so the key of magpie's own look stays "," for the pages that start
+// from it.
 func lookKey(s settings.Settings) string {
 	w := ""
 	if s.Wallpaper != 0 {
 		w = strconv.FormatInt(s.Wallpaper, 10)
 	}
-	return s.Accent + "," + w
+	return s.Accent + "," + w + s.Contrast
 }
 
-// lookCSS is the stylesheet that draws s's accent and wallpaper, "" for
-// magpie's own look. It never applies under Omarchy, whose theme is the
-// look there.
+// contrastCSS is Settings › Appearance › Increase contrast's stylesheet
+// (usrname1833 on Discord), in light and dark; contrast.css records the
+// ratios its colours were chosen for.
+//
+//go:embed contrast.css
+var contrastCSS string
+
+// contrastFollowCSS is contrastCSS left to the system: magpie's own look
+// draws it only while the system asks for more contrast.
+var contrastFollowCSS = "@media (prefers-contrast: more){\n" + contrastCSS + "}\n"
+
+// lookCSS is the stylesheet that draws s's accent, wallpaper and
+// contrast; for magpie's own look, contrastFollowCSS alone. The accent,
+// the wallpaper and contrast's colours never apply under Omarchy, whose
+// theme is the look there.
 func lookCSS(s settings.Settings) string {
 	var b strings.Builder
 	if c, ok := parseHex(s.Accent); ok {
@@ -81,6 +97,16 @@ func lookCSS(s settings.Settings) string {
 			fmt.Fprintf(&b, "html:not(.omarchy) body:not(.panel){background:linear-gradient(%[1]s,%[1]s),url(\"/api/appearance/wallpaper?v=%[2]d\") center/cover no-repeat var(--bg)}\n", wallVeil, s.Wallpaper)
 			b.WriteString("html:not(.omarchy) body:not(.panel) .sidebar{background:transparent}\n")
 		}
+	}
+	// Increase contrast comes after the accent, in rules of the same
+	// weight, so its edges and text are drawn over the accent's tints.
+	// Left to the system, it is drawn while the system asks for more
+	// contrast; turned on or off, the choice is what holds
+	switch s.Contrast {
+	case settings.ContrastMore:
+		b.WriteString(contrastCSS)
+	case "":
+		b.WriteString(contrastFollowCSS)
 	}
 	return b.String()
 }

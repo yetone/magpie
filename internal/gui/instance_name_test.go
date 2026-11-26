@@ -37,7 +37,9 @@ func TestInstanceName(t *testing.T) {
 		rec := httptest.NewRecorder()
 		srv.ServeHTTP(rec, httptest.NewRequest("GET", "/boot.js", nil))
 		var got map[string]any
-		if err := json.Unmarshal([]byte(strings.TrimSuffix(strings.TrimPrefix(rec.Body.String(), "window.bootPrefs = "), ";\n")), &got); err != nil {
+		// the prefs are boot.js's first line; the look's stylesheet may follow
+		prefs, _, _ := strings.Cut(strings.TrimPrefix(rec.Body.String(), "window.bootPrefs = "), ";\n")
+		if err := json.Unmarshal([]byte(prefs), &got); err != nil {
 			t.Fatal(err)
 		}
 		return got

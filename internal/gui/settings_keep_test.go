@@ -242,6 +242,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 	was.BusyLoad = 150                                // the Routing page's busy-load
 	was.MTLS = true                                   // Network and sharing's settings/mtls
 	was.Wallpaper = 1700000000000                     // Settings > General's Background image, appearance/wallpaper
+	was.Contrast = settings.ContrastMore              // Settings > General's Increase contrast, sent by its own row alone
 	was.HTTPS = true                                  // Network and sharing's settings/https
 	was.OnTop = true                                  // the title bar's pin, window/ontop
 	was.ImageResolution = "4K"                        // Settings > Images' Resolution row, sent by that row alone
