@@ -194,6 +194,9 @@ func TestSealedTaskGoesToTheLeadsLoggedAccountFirst(t *testing.T) {
 	var tried []string
 	chatgpt(t, func(w http.ResponseWriter, r *http.Request) {
 		io.ReadAll(r.Body)
+		if !strings.HasSuffix(r.URL.Path, "/responses") {
+			t.Errorf("DIAG stray request: %s %s account=%q ua=%q", r.Method, r.URL.String(), r.Header.Get("chatgpt-account-id"), r.Header.Get("User-Agent"))
+		}
 		tried = append(tried, r.Header.Get("chatgpt-account-id"))
 		io.WriteString(w, sse(`data: {"type":"response.output_text.delta","delta":"on it"}`,
 			`data: {"type":"response.completed","response":{"id":"r1","status":"completed","output":[]}}`))
