@@ -22,6 +22,14 @@ import (
 	"time"
 )
 
+// blocked is whether the copy at p is one takeEdits couldn't scan. With
+// none, which is nearly always, p isn't followed: a sync asked for each
+// skill in each agent, and following every one was seconds of a click on
+// Windows (zysicyj on X).
+func (l *Library) blocked(p string) bool {
+	return len(l.blockedSkills) > 0 && l.blockedSkills[realDir(p)]
+}
+
 // takeEdits takes into the library the newest edit made in an agent's copy
 // of each of its skills, before the sync gives the library's to the agents.
 func (l *Library) takeEdits(targets []*Target, res *Result) {

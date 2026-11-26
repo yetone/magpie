@@ -1089,6 +1089,11 @@ func targets(gone bool) []*Target {
 	return out
 }
 
+// detectAgents is agent.All, which finds each agent on PATH and in its
+// folders: seconds on Windows, so a change finds them once, not once for
+// each skill it settles (zysicyj on X). A test counts the finds.
+var detectAgents = agent.All
+
 // targetsAsleep is targets, and the agents in WSL distros that aren't
 // running now: none is a target, as its files can't be opened without
 // starting the distro, but the page lists them (asleepView). Each running
@@ -1100,7 +1105,7 @@ func targetsAsleep(gone bool) ([]*Target, []*agent.Agent) {
 	for _, a := range apps() {
 		own[a.ID] = true
 	}
-	for _, a := range agent.All() {
+	for _, a := range detectAgents() {
 		// the agents here, and a folder an agent shares with its vendor's
 		// other app when only that app is here: the Cursor editor reads
 		// ~/.cursor's mcp.json and skills with no cursor-agent installed

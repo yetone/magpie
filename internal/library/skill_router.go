@@ -174,7 +174,7 @@ func (l *Library) routedFor(t *Target, sharers []string, cp bool, inShared func(
 		// the agent's own skill by that name, or one blocked, stays as it
 		// is: the user settles it as with the router off
 		q := filepath.Join(t.Skills, s.Name)
-		if l.blockedSkills[realDir(q)] {
+		if l.blocked(q) {
 			continue
 		}
 		if _, err := os.Lstat(q); err == nil && !ours(q, s.Name) && !routerOurs(q) && realDir(q) != realDir(skillDir(s.Name)) {

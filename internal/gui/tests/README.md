@@ -1552,6 +1552,15 @@ found skill with a byte copy in another agent shows both agents' icons and
 no "differs in"; one that really differs still says so. Chromium and
 WebKit, in English and Chinese, with `/api/plugins` faked.
 
+`own-skill-all.test.cjs` lists four agents' own skills by the library's
+names (zysicyj on X: ten agents, a click each): the warning's heading has
+one "All agents" menu, whose "Use the library's" and "Keep each agent's
+own" post `skills/use-library-all` and `skills/keep-own-all` with every
+agent's names; Claude Desktop's still stand after "use", with no menu.
+One agent's own Keep says what it did, not the other agents' own skills
+still listed. One agent alone, or a write that failed beside them, gets
+no menu. All five languages, Chromium and WebKit, at 980px and 360px; the API is faked.
+
 `library-sections.test.cjs` hides the Library's tabs from Plugins ›
 Built-in (lantian_x on X): the Library row's Sections link opens a menu of
 the tabs, each ticked; unticking Hooks and Environment variables posts the

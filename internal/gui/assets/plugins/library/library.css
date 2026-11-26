@@ -331,6 +331,7 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-problems-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
 .lib-problems-head b { flex: 1 1 10em; font-weight: 600; min-width: 0; overflow-wrap: break-word; }
 .lib-problems-head .action { flex: none; margin-left: auto; }
+.lib-problems-head .lib-problems-all { margin-left: auto; height: 24px; }
 .lib-problems-head .lib-x { margin: -4px -6px -4px -2px; color: var(--muted); }
 .lib-problems-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--amber); }
 .lib-problems ul { list-style: none; margin: 6px 0 0; padding: 0 0 0 15px; display: grid; gap: 4px; }

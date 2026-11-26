@@ -710,7 +710,7 @@ magpie.plugin("library", (ctx) => {
   // click doesn't make or remove a set twice (Hipple, #1624: a minute a
   // click with nothing to show for it).
   let changing = false;
-  async function change(path, body, done) {
+  async function change(path, body, done, settled) {
     if (changing) return false;
     changing = true;
     const ev = window.event;
@@ -725,7 +725,7 @@ magpie.plugin("library", (ctx) => {
       const v = await api("library/" + path, body);
       take(v.part === "instructions" ? { ...lib, instructions: v.instructions, problems: v.problems, result: v.result } : v);
       status(""); // what it did, said next, or nothing for one that says nothing
-      report(v.result, done);
+      report(v.result, done, null, settled);
       ok = true;
       return true;
     } catch (e) {
@@ -741,7 +741,10 @@ magpie.plugin("library", (ctx) => {
   }
   // given, for a row's agent chips, is the agents that have it now: an
   // agent written that isn't one of them had it taken out (#332).
-  function report(res, done, given) {
+  // settled, for the warning's own skills, is the agents settled: the
+  // others' own skills, still in the warning, aren't said again in place
+  // of what was done (zysicyj on X: each of ten clicks told of the rest)
+  function report(res, done, given, settled) {
     if (!res) return;
     // subagents imported from a repository (subagent_import.go)
     const sa = res.subagents;
@@ -786,9 +789,10 @@ magpie.plugin("library", (ctx) => {
       status(parts.join(" · "), skipped.length ? "warn" : "ok", skipped.length ? 12000 : 6000);
       return;
     }
-    if (res.problems?.length) {
-      const p = res.problems[0];
-      status(t("{agent}: {error}", { agent: tilde(nameOf(p.agent)), error: p.error }) + (res.problems.length > 1 ? " " + t("(and {n} more)", { n: res.problems.length - 1 }) : ""), "warn", 8000);
+    const told = (res.problems || []).filter((p) => !settled || failure(p) || settled.includes(p.agent));
+    if (told.length) {
+      const p = told[0];
+      status(t("{agent}: {error}", { agent: tilde(nameOf(p.agent)), error: p.error }) + (told.length > 1 ? " " + t("(and {n} more)", { n: told.length - 1 }) : ""), "warn", 8000);
       return;
     }
     const n = res.changed?.length || 0;
@@ -843,6 +847,19 @@ magpie.plugin("library", (ctx) => {
       hide.append(svg("M4.5 4.5l7 7M11.5 4.5l-7 7", 11, 1.6));
       hide.title = t("Hide until something new can't be written");
       ttl.append(again, hide);
+    } else if (owns.size > 1) {
+      // every agent's settled the same way at once, one write for them all
+      // (zysicyj on X: ten agents of forty each, a click each); Claude
+      // Desktop's own are only ever kept
+      const own = Object.fromEntries(owns);
+      const ids = [...owns.keys()], taking = ids.filter((id) => id !== "claude-desktop");
+      const all = menuButton(t("All agents"), "lib-problems-all", () => openProtoMenu(all, [
+        ...(taking.length ? [{ v: "use", name: "Use the library's", note: "" }] : []),
+        { v: "keep", name: "Keep each agent's own", note: "" },
+      ], "", (v) => v === "use"
+        ? change("skills/use-library-all", { own }, t("Every agent listed has the library's skills now; their own are kept with the backups"), taking)
+        : change("skills/keep-own-all", { own }, t("Every agent listed keeps its own skills"), ids), "For every agent listed", "", "right"));
+      ttl.append(all);
     }
     card.append(ttl);
     const ul = el("ul");
@@ -869,11 +886,11 @@ magpie.plugin("library", (ctx) => {
       const body = one ? { name: names[0], agent: id } : { names, agent: id };
       const fix = el("div", "lib-problems-fix");
       if (!desktop) {
-        const use = button(t("Use the library's"), "action", () => change("skills/use-library", body, one ? t("{agent} has the library's {name} now; its own is kept with the backups", { agent: who, name }) : t("{agent} has the library's {names} now; its own are kept with the backups", { agent: who, names: name })));
+        const use = button(t("Use the library's"), "action", () => change("skills/use-library", body, one ? t("{agent} has the library's {name} now; its own is kept with the backups", { agent: who, name }) : t("{agent} has the library's {names} now; its own are kept with the backups", { agent: who, names: name }), [id]));
         use.title = one ? t("Sets {agent}'s own {name} aside with the backups and gives it the library's in its place", { agent: who, name }) : t("Sets {agent}'s own {names} aside with the backups and gives it the library's in their place", { agent: who, names: name });
         fix.append(use);
       }
-      const keep = button(t("Keep {agent}'s", { agent: who }), "action", () => change("skills/keep-own", body, one ? t("{agent} keeps its own {name}", { agent: who, name }) : t("{agent} keeps its own {names}", { agent: who, names: name })));
+      const keep = button(t("Keep {agent}'s", { agent: who }), "action", () => change("skills/keep-own", body, one ? t("{agent} keeps its own {name}", { agent: who, name }) : t("{agent} keeps its own {names}", { agent: who, names: name }), [id]));
       keep.title = one ? t("{agent} keeps its own {name}, and the library no longer gives it this skill", { agent: who, name }) : t("{agent} keeps its own {names}, and the library no longer gives it these skills", { agent: who, names: name });
       fix.append(keep);
       li.append(fix);

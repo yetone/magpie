@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -727,19 +728,31 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 	defer l.syncLiveAgentPicks(t, res)
 	a := l.applied(id)
 	// another agent may read the very same folder (one linked to the other):
-	// what that agent is to have stays
+	// what that agent is to have stays. Each agent's folder is followed
+	// once here, not again for each skill: 15 agents with 40 skills each
+	// followed up to 9,000 folders a sync, seconds of it on Windows (zysicyj
+	// on X).
+	folder := realDir(t.Skills)
+	shared := realDir(sharedSkillsDir())
+	isShared := folder == shared
 	sharers := []string{}
+	var holders []*Target // the agents whose folder ~/.agents/skills is
 	for _, o := range all {
-		if o != t && o.Skills != "" && realDir(o.Skills) == realDir(t.Skills) {
+		if o.Skills == "" {
+			continue
+		}
+		r := realDir(o.Skills)
+		if o != t && r == folder {
 			sharers = append(sharers, o.Agent.ID)
+		}
+		if r == shared {
+			holders = append(holders, o)
 		}
 	}
 	cp := l.copies(t, sharers)
 	// an agent that reads ~/.agents/skills as well as its own folder finds
 	// a skill magpie put there for another (Kimi Code) already: a link in
 	// its own too would be the skill twice
-	shared := realDir(sharedSkillsDir())
-	isShared := realDir(t.Skills) == shared
 	// the user's own skills there, read once for this agent
 	var own sharedOwn
 	rivals := func() sharedOwn {
@@ -752,7 +765,7 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 	// ~/.agents/skills: kept there, put there by the setting, or magpie's
 	// link there for the agent whose folder it is
 	fromShared := func(s *Skill) bool {
-		if s == nil || !t.readsSharedDir() || realDir(t.Skills) == shared {
+		if s == nil || !t.readsSharedDir() || isShared {
 			return false
 		}
 		// a link there is no skill to an agent that skips a junction
@@ -766,9 +779,8 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 			return true
 		}
 		p := filepath.Join(sharedSkillsDir(), s.Name)
-		return slices.ContainsFunc(all, func(o *Target) bool {
-			return o.Skills != "" && realDir(o.Skills) == shared && s.gives(o.Agent.ID)
-		}) && (ours(p, s.Name) || realDir(p) == realDir(skillDir(s.Name)))
+		return slices.ContainsFunc(holders, func(o *Target) bool { return s.gives(o.Agent.ID) }) &&
+			(ours(p, s.Name) || realDir(p) == realDir(skillDir(s.Name)))
 	}
 	// an agent read in one place by the shared folder and in another by
 	// its own folder alone (ownFolderToo: Codex, whose folder is all
@@ -777,7 +789,7 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 	// leading to the library's one folder
 	ownToo := ownFolderToo(id)
 	inShared := func(s *Skill) bool {
-		if s == nil || !t.readsSharedDir() || realDir(t.Skills) == shared {
+		if s == nil || !t.readsSharedDir() || isShared {
 			return false
 		}
 		if skipsJunctions(id) && linked(filepath.Join(sharedSkillsDir(), s.Name)) {
@@ -808,7 +820,7 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 		}
 		// the folder is ~/.agents/skills itself: what the setting puts
 		// there (skills_shared.go) stays
-		if l.keepsShared(s) && realDir(t.Skills) == realDir(sharedSkillsDir()) {
+		if l.keepsShared(s) && isShared {
 			return true
 		}
 		return s.gives(id) || slices.ContainsFunc(sharers, s.gives) || alsoOwn(s)
@@ -827,7 +839,7 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 	for _, name := range a.Skills {
 		s := l.skill(name)
 		p := filepath.Join(t.Skills, name)
-		if l.blockedSkills[realDir(p)] {
+		if l.blocked(p) {
 			mine = append(mine, name)
 			continue
 		}
@@ -855,7 +867,7 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 			continue
 		}
 		p := filepath.Join(t.Skills, s.Name)
-		if l.blockedSkills[realDir(p)] {
+		if l.blocked(p) {
 			if !slices.Contains(mine, s.Name) {
 				mine = append(mine, s.Name)
 			}
@@ -1008,7 +1020,7 @@ func (l *Library) sweepShared(all []*Target, res *Result) {
 		p := filepath.Join(sharedSkillsDir(), name)
 		// the user's own entries stay, and so does a copy takeEdits
 		// couldn't scan, held in place for its edits
-		if !ours(p, name) || l.blockedSkills[realDir(p)] {
+		if !ours(p, name) || l.blocked(p) {
 			continue
 		}
 		s := l.skill(name)
@@ -2422,36 +2434,48 @@ func UseLibrarySkill(name, agentID string) (*Result, error) {
 // KeepAgentSkills settles those.
 func UseLibrarySkills(names []string, agentID string) (*Result, error) {
 	return change(func(l *Library) error {
-		for _, name := range names {
-			s, t, err := ownSkill(l, name, agentID)
-			if err != nil {
+		ss, t, err := ownSkills(l, names, agentID)
+		if err != nil {
+			return err
+		}
+		return takeLibrary(l, ss, t)
+	})
+}
+
+// takeLibrary gives t the library's ss in place of its own, set aside.
+func takeLibrary(l *Library, ss []*Skill, t *Target) error {
+	if len(t.Desktop) > 0 {
+		return fmt.Errorf("Claude Desktop keeps its own %s: it can't be put aside for the library's, only kept", ss[0].Name)
+	}
+	// its own by a name is the user's in ~/.agents/skills, which it reads
+	// besides its own folder: that one is set aside (every other reader of
+	// the folder had it as its own too). The folder is read once for every
+	// name: each is another entry of it.
+	var shared sharedOwn
+	if t.readsSharedDir() && realDir(t.Skills) != realDir(sharedSkillsDir()) {
+		shared = readSharedOwn()
+	}
+	others := sharing(t)
+	for _, s := range ss {
+		name := s.Name
+		p := filepath.Join(t.Skills, name)
+		if _, err := os.Lstat(p); err == nil && !ours(p, name) && realDir(p) != realDir(skillDir(name)) {
+			if _, err := setAside(t.Agent.ID, p); err != nil {
 				return err
 			}
-			if len(t.Desktop) > 0 {
-				return fmt.Errorf("Claude Desktop keeps its own %s: it can't be put aside for the library's, only kept", name)
-			}
-			p := filepath.Join(t.Skills, name)
-			if _, err := os.Lstat(p); err == nil && !ours(p, name) && realDir(p) != realDir(skillDir(name)) {
-				if _, err := setAside(t.Agent.ID, p); err != nil {
+		}
+		if shared != nil {
+			if q, same := shared.rival(name); q != "" && !same {
+				if _, err := setAside(t.Agent.ID, q); err != nil {
 					return err
 				}
 			}
-			// its own by that name is the user's in ~/.agents/skills, which
-			// it reads besides its own folder: that one is set aside (every
-			// other reader of the folder had it as its own too)
-			if t.readsSharedDir() && realDir(t.Skills) != realDir(sharedSkillsDir()) {
-				if q, same := readSharedOwn().rival(name); q != "" && !same {
-					if _, err := setAside(t.Agent.ID, q); err != nil {
-						return err
-					}
-				}
-			}
-			if !slices.Contains(s.Agents, t.Agent.ID) && !slices.ContainsFunc(sharing(t), func(o string) bool { return slices.Contains(s.Agents, o) }) {
-				s.Agents = set(s.Agents, t.Agent.ID, true)
-			}
 		}
-		return nil
-	})
+		if !slices.Contains(s.Agents, t.Agent.ID) && !slices.ContainsFunc(others, func(o string) bool { return slices.Contains(s.Agents, o) }) {
+			s.Agents = set(s.Agents, t.Agent.ID, true)
+		}
+	}
+	return nil
 }
 
 // KeepAgentSkill settles it the other way: the agent keeps its own, and
@@ -2465,23 +2489,82 @@ func KeepAgentSkill(name, agentID string) (*Result, error) {
 // once (#1896).
 func KeepAgentSkills(names []string, agentID string) (*Result, error) {
 	return change(func(l *Library) error {
-		for _, name := range names {
-			s, t, err := ownSkill(l, name, agentID)
-			if err != nil {
-				return err
+		ss, t, err := ownSkills(l, names, agentID)
+		if err != nil {
+			return err
+		}
+		keepOwn(ss, t)
+		return nil
+	})
+}
+
+// keepOwn takes t, and the agents reading its very folder, off ss.
+func keepOwn(ss []*Skill, t *Target) {
+	ids := append(sharing(t), t.Agent.ID)
+	for _, s := range ss {
+		for _, id := range ids {
+			s.Agents = set(s.Agents, id, false)
+		}
+	}
+}
+
+// SettleOwnSkills settles the own skills of every agent in own (its id to
+// its skills by the library's names) at once, the Library warning's "All
+// agents" (zysicyj on X: ten agents with 40 each, a click each). With
+// useLibrary each gets the library's, its own set aside (UseLibrarySkills);
+// without, each keeps its own (KeepAgentSkills). It is one change, so the
+// agents are written once for them all, not once an agent. Claude
+// Desktop's own are only ever kept, so useLibrary leaves it as it is; an
+// agent gone, or a skill taken out of the library, since the page listed
+// them is passed over, and the next sync says what still stands.
+func SettleOwnSkills(own map[string][]string, useLibrary bool) (*Result, error) {
+	if len(own) == 0 {
+		return nil, errors.New("no agent named")
+	}
+	return change(func(l *Library) error {
+		for _, id := range slices.Sorted(maps.Keys(own)) {
+			var names []string
+			for _, n := range own[id] {
+				if l.skill(n) != nil {
+					names = append(names, n)
+				}
 			}
-			for _, id := range append(sharing(t), t.Agent.ID) {
-				s.Agents = set(s.Agents, id, false)
+			if len(names) == 0 {
+				continue
+			}
+			ss, t, err := ownSkills(l, names, id)
+			if err != nil {
+				continue
+			}
+			if !useLibrary {
+				keepOwn(ss, t)
+				continue
+			}
+			if len(t.Desktop) > 0 {
+				continue
+			}
+			if err := takeLibrary(l, ss, t); err != nil {
+				return fmt.Errorf("%s: %w", t.Agent.Name, err)
 			}
 		}
 		return nil
 	})
 }
 
-func ownSkill(l *Library, name, agentID string) (*Skill, *Target, error) {
-	s := l.skill(name)
-	if s == nil {
-		return nil, nil, fmt.Errorf("no skill called %s", name)
+// ownSkills are the library's skills by these names, and the agent whose
+// own by them are settled, found once for them all. Found again for each
+// name, every agent on the computer was looked for on PATH twice a skill:
+// an agent with 40 of them took 5 to 11 seconds a click on Windows
+// (zysicyj on X).
+func ownSkills(l *Library, names []string, agentID string) ([]*Skill, *Target, error) {
+	if len(names) == 0 {
+		return nil, nil, errors.New("no skill named")
+	}
+	ss := make([]*Skill, len(names))
+	for i, name := range names {
+		if ss[i] = l.skill(name); ss[i] == nil {
+			return nil, nil, fmt.Errorf("no skill called %s", name)
+		}
 	}
 	id, err := Takes(agentID, "skills")
 	if err != nil {
@@ -2491,7 +2574,7 @@ func ownSkill(l *Library, name, agentID string) (*Skill, *Target, error) {
 	if t == nil || t.Skills == "" {
 		return nil, nil, fmt.Errorf("%s has no skills folder magpie knows of", agentID)
 	}
-	return s, t, nil
+	return ss, t, nil
 }
 
 // sharing are the other agents whose skills folder is the very same as t's.

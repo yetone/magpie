@@ -820,6 +820,9 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			// a skill's file saved: its place in the skill, its new text,
 			// and what it held when the page opened it
 			File, Text, Was string
+			// every agent's own skills in the library's way, by agent
+			// (skills/use-library-all, skills/keep-own-all)
+			Own map[string][]string `json:"own"`
 			library.InstructionsChange
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
@@ -1018,6 +1021,9 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			res, err = library.SkillRouterHow(in.Name, in.On)
 		case "skills/keep-own":
 			res, err = library.KeepAgentSkills(oneOrMore(in.Name, in.Names), in.Agent)
+		case "skills/use-library-all", "skills/keep-own-all":
+			// the warning's every agent at once, one sync for them all
+			res, err = library.SettleOwnSkills(in.Own, r.PathValue("action") == "use-library-all")
 		case "market/server":
 			res, err = library.InstallServer(in.ID, in.Values, in.Agents)
 		case "market/skill":

@@ -78,7 +78,7 @@ func (l *Library) syncShared(all []*Target, res *Result) {
 			continue
 		}
 		p := filepath.Join(sharedSkillsDir(), s.Name)
-		if l.blockedSkills[realDir(p)] {
+		if l.blocked(p) {
 			continue
 		}
 		if ours(p, s.Name) {
