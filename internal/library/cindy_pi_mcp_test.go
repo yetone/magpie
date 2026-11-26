@@ -16,6 +16,8 @@ import (
 // server removed again leaves both files.
 func TestCindyPiMCP(t *testing.T) {
 	h := sandbox(t)
+	// a Mac finds Cindy by its app as well as its folder (#7766)
+	holdApp(t, h, "Cindy.app", "com.xd.cindycn")
 	t.Setenv("APPDATA", filepath.Join(h, "AppData", "Roaming"))
 	cfg, err := os.UserConfigDir()
 	if err != nil {
