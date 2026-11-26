@@ -435,7 +435,7 @@ window.askSyncPreview = function (plan, go) {
     const head = el("div", "ehead");
     head.append(el("b", "", t("Preview of the sync")));
     ed.append(head);
-    const by = (d) => plan.parts.filter((p) => p.do === d);
+    const by = (d) => (plan.parts ?? []).filter((p) => p.do === d);
     const items = (p) => {
       const list = el("div", "sync-items");
       const shown = (p.items || []).slice(0, 8);

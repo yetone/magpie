@@ -134,7 +134,7 @@ func preview(ctx context.Context, c Config, st state) (Plan, error) {
 	st.Server = version{}
 	st.Local, st.Remote = maps.Clone(st.Local), maps.Clone(st.Remote)
 	st.Own, st.Brought, st.Replaced = maps.Clone(st.Own), maps.Clone(st.Brought), maps.Clone(st.Replaced)
-	var p Plan
+	p := Plan{Parts: []PartPlan{}}
 	if err := syncOnce(ctx, c, &st, &p); err != nil {
 		return Plan{}, err
 	}

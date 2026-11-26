@@ -76,7 +76,11 @@ function serve(lang, posts) {
       for (const k of ["providers", "settings", "profiles"]) if (k in b) sync[k] = b[k];
       return json(sync);
     }
-    if (pathname === "/api/davsync/preview") { post(); return json(plan("t" + ++tokens)); }
+    if (pathname === "/api/davsync/preview") {
+      post();
+      const token = "t" + ++tokens;
+      return json(tokens === 3 ? { token, parts: null } : plan(token));
+    }
     if (pathname === "/api/davsync/sync-previewed") {
       post();
       // the first is stale: the server changed since the preview
@@ -197,6 +201,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await modal.locator(".editor-error", { hasText: w("something changed since the preview: look at it again before syncing") }).waitFor();
         await click(modal.locator("button", { hasText: exact(w("Sync now")) }));
         assert.equal((await waitPosts("/api/davsync/sync-previewed", 2)).token, "t2");
+        await modal.waitFor({ state: "detached" });
+
+        // An unchanged preview from an older backend can have null parts.
+        await click(peekRow.locator("button", { hasText: exact(w("Preview…")) }));
+        await modal.getByText(w("Nothing to sync: this computer and the server are the same."), { exact: true }).waitFor();
+        assert.equal(await modal.locator(".bar button").count(), 1);
+        await click(modal.getByRole("button", { name: w("Close"), exact: true }));
         await modal.waitFor({ state: "detached" });
 
         // undo: asked first, then again over a change made here since

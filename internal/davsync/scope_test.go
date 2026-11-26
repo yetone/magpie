@@ -2,6 +2,7 @@ package davsync
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http/httptest"
 	"os"
@@ -233,12 +234,23 @@ func TestPreviewThenSync(t *testing.T) {
 	if got := ids(); !slices.Equal(got, []string{"pa=ka", "pz=kz"}) {
 		t.Fatalf("after the previewed sync: %v", got)
 	}
-	// nothing left to do: every part the same
+	// Nothing left to do: clients still get a JSON array of parts.
 	p, err = Preview(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, pp := range p.Parts {
+	encoded, err := json.Marshal(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded Plan
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Parts == nil {
+		t.Fatalf("after syncing, expected parts array: %s", encoded)
+	}
+	for _, pp := range decoded.Parts {
 		if pp.Do != "same" {
 			t.Fatalf("after syncing, %s: %+v", pp.Part, pp)
 		}

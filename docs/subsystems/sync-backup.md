@@ -258,10 +258,13 @@ it does, and take it back.
   before any write, here or on the server. A part's plan says `in`, `up`,
   `same` or `off`, whether it replaces a change made here (`replaces`), and
   its items added, removed or changed; memory, sign-ins and plugins removed
-  by another computer are counted. `Plan.Token` hashes what the sync would
-  do; `SyncPreviewed(token)` runs only while a new plan has the same token,
-  else `ErrPlanChanged` and the GUI shows the new plan. A preview from the
-  form (`PreviewWith`) is of the unsaved setup, and its Save and sync is
+  by another computer are counted. Successful previews always return `parts`
+  as an array. When `syncOnce` returns early because neither side has changed,
+  `parts` is empty and Settings shows “Nothing to sync”. `Plan.Token` hashes
+  what the sync would do. `SyncPreviewed(token)` runs only while a new plan
+  has the same token. Otherwise it returns `ErrPlanChanged` and the GUI
+  shows the new plan. A preview from the form (`PreviewWith`) is of the
+  unsaved setup, and its Save and sync is
   the form's ordinary save, without a token. Reached by Settings → Sync →
   Preview a sync, the form's Preview, `/api/davsync/preview`,
   `/api/davsync/sync-previewed` and `magpie <webdav|s3|github> preview`.
