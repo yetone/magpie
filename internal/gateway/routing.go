@@ -1811,7 +1811,7 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 			// key's own limit apart): the sink keeps the same scope, or
 			// one model's 429 would send the remote's other models, never
 			// limited, behind the others too
-			if remoteModelRest(c, failRate, header) || modelLimitedBy(c, failRate, header, body) {
+			if remoteModelRest(c, failRate, header) || modelLimitedBy(c, failRate, header, body) || freeRateAlone(c, failRate) {
 				sink(c.restID(), now)
 			} else {
 				sink(c.restKey(), now)
@@ -1984,8 +1984,10 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	// rested the key, and its free models, which Go still served, were
 	// answered the kept 429 in a millisecond). A free model the vendor
 	// refuses all the same rests on its own refusal, which says nothing
-	// of the paid ones (ggbdpq).
-	if (why == failCredit || why == failQuota) && (c.p.PaidBesideFree(c.model) || c.p.FreeBesidePaid(c.model)) {
+	// of the paid ones (ggbdpq). Its rate limit is its own too (xzhih on
+	// X): a 429 on hy4-flash-free held glm-5.3, which the key's windows
+	// still had room for, for the rate limit's time
+	if (why == failCredit || why == failQuota) && (c.p.PaidBesideFree(c.model) || c.p.FreeBesidePaid(c.model)) || freeRateAlone(c, why) {
 		id = c.restID()
 	}
 	if remoteModelRest(c, why, header) {
@@ -2324,6 +2326,14 @@ func backingOff(key string, now time.Time) bool {
 	return ok && now.Before(until) && restingUntil.note[key].Why == failOther
 }
 
+// freeRateAlone says whether a rate limit is the model's alone because
+// it is a free model beside paid ones (OpenCode Go's hy4-flash-free beside
+// glm-5.3, xzhih on X): its rest, its backoff count and its sink are kept
+// to the model, so the paid models the key still has room for go on.
+func freeRateAlone(c candidate, why string) bool {
+	return why == failRate && c.p.FreeBesidePaid(c.model)
+}
+
 // vendorSaidWhen says whether a 429's headers or body name a time it is
 // limited till, as rateRest reads them.
 func vendorSaidWhen(header http.Header, body []byte) bool {
@@ -2342,7 +2352,7 @@ func vendorSaidWhen(header http.Header, body []byte) bool {
 // count where it is, so one request's own retries don't stretch it.
 func (s *Server) rateRest(c candidate, header http.Header, body []byte, sharedPool bool, now time.Time) (time.Duration, string, int) {
 	id := c.restKey()
-	if c.isOpenRouterFree() && sharedPool || remoteModelRest(c, failRate, header) || modelLimitedBy(c, failRate, header, body) {
+	if c.isOpenRouterFree() && sharedPool || remoteModelRest(c, failRate, header) || modelLimitedBy(c, failRate, header, body) || freeRateAlone(c, failRate) {
 		id = c.restID()
 	}
 	n := 1

@@ -214,3 +214,82 @@ func TestOpenCodeGoKeyCapLeavesFreeModels(t *testing.T) {
 		t.Fatalf("Go reached for %v, want hy4-flash-free alone (glm-5.3 held at the cap)", got)
 	}
 }
+
+// xzhih on X: a 429 on a free model beside paid ones is about that free
+// model alone. A rate limit on hy4-flash-free rested the whole Go key, so glm-5.3, which the key's
+// windows still had room for, was held for the rate limit's time, and its
+// row said the key was out. The rest and its notice are hy4-flash-free's
+// alone now, and glm-5.3 reaches Go and is served.
+func TestOpenCodeGoFreeRateLimitLeavesPaid(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		hdr    http.Header
+		body   string
+		rested bool // magpie rests on it (a time named), rather than trying again
+	}{
+		{"named, with Retry-After", http.Header{"Content-Type": {"application/json"}, "Retry-After": {"600"}},
+			`{"error":{"message":"Rate limit exceeded. Please try again later.","type":"rate_limit_error"}}`, true},
+		{"named, no time", http.Header{"Content-Type": {"application/json"}},
+			`{"error":{"message":"Rate limit exceeded. Please try again later.","type":"rate_limit_error"}}`, false},
+		{"bare", http.Header{}, "", false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			_, p, _ := goWindowServer(t, true, nil)
+			keyWindows(t, nil)
+			if !p.FreeBesidePaid("hy4-flash-free") {
+				t.Fatal("hy4-flash-free not free beside paid")
+			}
+			var mu sync.Mutex
+			var reached []string
+			s := New()
+			s.client = &http.Client{Transport: countTransport(func(r *http.Request) (*http.Response, error) {
+				b, _ := io.ReadAll(r.Body)
+				r.Body.Close()
+				mu.Lock()
+				defer mu.Unlock()
+				if strings.Contains(string(b), `"model":"hy4-flash-free"`) {
+					reached = append(reached, "hy4-flash-free")
+					return &http.Response{StatusCode: 429, Header: c.hdr.Clone(), Body: io.NopCloser(strings.NewReader(c.body))}, nil
+				}
+				reached = append(reached, "glm-5.3")
+				return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"text/event-stream"}},
+					Body: io.NopCloser(strings.NewReader(streamFor(r.URL.Path, "from go")))}, nil
+			})}
+			if rec := askGo(s, "hy4-flash-free"); rec.Code != 429 {
+				t.Fatalf("hy4-flash-free answered %d %s", rec.Code, rec.Body)
+			}
+			restingUntil.Lock()
+			var rests []string
+			for id, r := range restingUntil.note {
+				rests = append(rests, id)
+				if id != "go/hy4-flash-free" {
+					t.Errorf("the free model's 429 rests %s by %s (%s), want go/hy4-flash-free alone", id, r.By, r.Why)
+				}
+			}
+			restingUntil.Unlock()
+			if c.rested && len(rests) == 0 {
+				t.Fatal("hy4-flash-free's 429 rested nothing")
+			}
+			if n, ok := noticeOf(t, "go"); ok {
+				t.Errorf("the Go key has a whole-key notice: %+v", n)
+			}
+			sunk.Lock()
+			_, sank := sunk.m["go"]
+			sunk.Unlock()
+			if sank {
+				t.Error("the Go key sank behind the others for the free model's 429")
+			}
+			for i := 0; i < 2; i++ {
+				if rec := askGo(s, "glm-5.3"); rec.Code != 200 || !strings.Contains(rec.Body.String(), "from go") {
+					t.Fatalf("glm-5.3 answered %d %s; rests %v", rec.Code, rec.Body, rests)
+				}
+			}
+			mu.Lock()
+			got := strings.Join(reached, " ")
+			mu.Unlock()
+			if !strings.HasPrefix(got, "hy4-flash-free") || !strings.HasSuffix(got, " glm-5.3 glm-5.3") {
+				t.Fatalf("Go reached for %s", got)
+			}
+		})
+	}
+}
