@@ -1,6 +1,6 @@
 # magpie
 
-> magpie is a free, open-source (MIT) desktop app for macOS, Windows and Linux that lets every AI coding agent use every model. Add a provider once (DeepSeek, Kimi, GLM, Qwen, MiniMax, OpenRouter, Ollama, or the Claude and ChatGPT subscriptions you already pay for), then pick it in Codex, Claude Code, Gemini CLI or any other agent. It runs a local gateway that speaks the OpenAI, Anthropic and Gemini APIs and translates between them, with streaming, tool calls and reasoning intact.
+> magpie is a free, open-source (MIT) desktop app for macOS, Windows and Linux that lets every AI agent use every model. Add a provider once (DeepSeek, Kimi, GLM, Qwen, MiniMax, OpenRouter, Ollama, or the Claude and ChatGPT subscriptions you already pay for), then pick it in Codex, Claude Code, Gemini CLI or any other agent. It runs a local gateway that speaks the OpenAI, Anthropic and Gemini APIs and translates between them, with streaming, tool calls and reasoning intact.
 
 magpie lives in the menu bar (tray on Windows and Linux), with a full window, a TUI and a CLI. The Mac download is about 50 MB, built on the system WebView (no Electron). It is signed and notarised on macOS and updates itself.
 
@@ -718,7 +718,7 @@ Using Claude Code or Codex too? See [Models in Claude Code](https://usemagpie.ai
 
 Source: https://usemagpie.ai/docs/subscriptions
 
-# Use your Claude Pro/Max, ChatGPT Plus/Pro or GitHub Copilot subscription in any coding agent
+# Use your Claude Pro/Max, ChatGPT Plus/Pro or GitHub Copilot subscription in any agent
 
 Sign in to a subscription once, in magpie. Its models then show in every agent magpie sets up: GPT models from your ChatGPT plan in Claude Code, Claude models from your Claude plan in Codex or OpenCode, Copilot’s models in any of them. No API key.
 
@@ -1178,7 +1178,7 @@ Source: https://usemagpie.ai/docs/alternatives
 
 # magpie, CC Switch and Claude Code Router compared
 
-magpie, [CC Switch](https://github.com/farion1231/cc-switch) and [Claude Code Router](https://github.com/musistudio/claude-code-router) (CCR) all help you run AI coding agents on the providers and models you choose. They overlap, and each is good at something. This page puts them side by side, using each project’s own README for the other two and magpie’s source for magpie.
+magpie, [CC Switch](https://github.com/farion1231/cc-switch) and [Claude Code Router](https://github.com/musistudio/claude-code-router) (CCR) all help you run AI agents on the providers and models you choose. They overlap, and each is good at something. This page puts them side by side, using each project’s own README for the other two and magpie’s source for magpie.
 
 ### CC Switch
 
@@ -5470,7 +5470,7 @@ Platform custom (OpenAI-compatible), at http://127.0.0.1:3425/v1, or the gateway
 
 magpie lists AionUi once it has run on this computer. Open AionUi once, then look again.
 
-More desktop apps on the same models: [Every model in Cherry Studio, through magpie](https://usemagpie.ai/docs/cherry-studio) and [AstrBot on any model](https://usemagpie.ai/docs/astrbot). Using coding agents too? See [Subscriptions in any agent](https://usemagpie.ai/docs/subscriptions). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+More desktop apps on the same models: [Every model in Cherry Studio, through magpie](https://usemagpie.ai/docs/cherry-studio) and [AstrBot on any model](https://usemagpie.ai/docs/astrbot). Using other agents too? See [Subscriptions in any agent](https://usemagpie.ai/docs/subscriptions). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
@@ -8679,7 +8679,7 @@ Once Cherry Studio has a provider at the gateway’s address, the row shows magp
 
 ## Usage and keys
 
-On a gateway that isn’t shared, the key in the link is Cherry Studio’s own, so its requests are counted as Cherry Studio’s in magpie’s Usage, apart from your coding agents. When the gateway is shared on your network with gateway keys, the link carries a key that works there.
+On a gateway that isn’t shared, the key in the link is Cherry Studio’s own, so its requests are counted as Cherry Studio’s in magpie’s Usage, apart from your other agents. When the gateway is shared on your network with gateway keys, the link carries a key that works there.
 
 ## FAQ
 
@@ -8703,7 +8703,7 @@ Cherry Studio shows models you added to the provider. Fetch the magpie provider�
 
 magpie lists it once Cherry Studio has run on this computer. Open Cherry Studio once, then look again.
 
-Another desktop app on the same models: [AionUi on any model](https://usemagpie.ai/docs/aionui). Using a coding agent too? See [Subscriptions in any agent](https://usemagpie.ai/docs/subscriptions) and [Get started](https://usemagpie.ai/docs/start). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+Another desktop app on the same models: [AionUi on any model](https://usemagpie.ai/docs/aionui). Using other agents too? See [Subscriptions in any agent](https://usemagpie.ai/docs/subscriptions) and [Get started](https://usemagpie.ai/docs/start). Something fails? See [Fixing common errors](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
@@ -9123,7 +9123,7 @@ Yes. Make a routing group with DeepSeek and a fallback in order, routing In orde
 
 Stays is Auto by default: a conversation stays with its account while the cache is worth keeping, and always within a turn, so rotating doesn't lose the cache on every request.
 
-Related: [Use your Claude Pro/Max, ChatGPT Plus/Pro or GitHub Copilot subscription in any coding agent](https://usemagpie.ai/docs/subscriptions). Something fails? See [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+Related: [Use your Claude Pro/Max, ChatGPT Plus/Pro or GitHub Copilot subscription in any agent](https://usemagpie.ai/docs/subscriptions). Something fails? See [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
@@ -9218,7 +9218,7 @@ magpie quota alert 80 has the magpie app notify when any window reaches 80% used
 
 Yes. magpie quota --json and GET http://127.0.0.1:3425/v1/magpie/quotas give the same; magpie's skill magpie-quota teaches an agent to read it and wait for allowance.
 
-Related: [Round robin and failover across accounts, keys and providers](https://usemagpie.ai/docs/routing-groups) and [Use your Claude Pro/Max, ChatGPT Plus/Pro or GitHub Copilot subscription in any coding agent](https://usemagpie.ai/docs/subscriptions). Something fails? See [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
+Related: [Round robin and failover across accounts, keys and providers](https://usemagpie.ai/docs/routing-groups) and [Use your Claude Pro/Max, ChatGPT Plus/Pro or GitHub Copilot subscription in any agent](https://usemagpie.ai/docs/subscriptions). Something fails? See [Fixing common errors: 401, 429, 502, 504 and more](https://usemagpie.ai/docs/troubleshooting), or ask on [Discord](https://discord.gg/vGSnD3ZKQF).
 
 ---
 
