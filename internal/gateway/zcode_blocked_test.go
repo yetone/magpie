@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -366,7 +368,11 @@ func TestRestricted4xxFailsOver(t *testing.T) {
 	if retryable(http.StatusOK, []byte(zcodeSuspended)) {
 		t.Fatal("retryable(200, ZCodeRestrictedHint) = true, want false")
 	}
-	escaped := strings.Replace(zcodeSuspended, "'", `'`, 1)
+	// the hint's apostrophe as a JSON encoder may write it
+	escaped := strings.Replace(zcodeSuspended, "'", `\u0027`, 1)
+	if escaped == zcodeSuspended || strings.Contains(escaped, provider.ZCodeRestrictedHint) {
+		t.Fatal("the escaped fixture still has the hint as written")
+	}
 	if !retryable(http.StatusMethodNotAllowed, []byte(escaped)) {
 		t.Fatal("retryable(405, JSON-escaped ZCodeRestrictedHint) = false, want true")
 	}
@@ -448,4 +454,66 @@ func TestRestricted4xxFailsOver(t *testing.T) {
 			t.Fatalf("tries %+v", r.Tries)
 		}
 	})
+}
+
+// The reporter's case (#7774, ArmedHelicopter): a group whose first
+// member is the ZCode plugin, answering 405 with ZCode's newer code 3012
+// words ("Your account has been suspended…", no "request has been
+// blocked" in it) and magpie's restricted hint. The hint said "the group's
+// other providers are used", yet the route ended at that one try and the
+// agent got the 405. Now the next member answers, the ZCode account rests
+// as restricted, and the provider's other ZCode account is never sent the
+// request the vendor's risk control just read.
+func TestZCodeSuspendedGroupFailsOver(t *testing.T) {
+	const suspended = `{"type":"error","error":{"type":"permission_error","message":"ZCode: Your account has been suspended for misusing the Start Plan, such as proxying it to non-ZCode clients. Please contact support if you believe this is a mistake. (405, code 3012) — ` + provider.ZCodeRestrictedHint + `"}}`
+	t.Setenv("FAKE_ZCODE", "1")
+	var mu sync.Mutex
+	var asked []string
+	movedFake(t, "zcode", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.ReadAll(r.Body)
+		mu.Lock()
+		asked = append(asked, strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		io.WriteString(w, suspended)
+	}))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if _, err := plugin.APIKey(ctx, "zcode", 0, nil, "k2", plugin.NewAccount); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := plugin.Providers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if p, err := provider.Find("zcode"); err != nil || len(p.AlsoOn()) != 1 {
+		t.Fatalf("Find(zcode) = %+v, %v", p, err)
+	}
+	b := &scripted{replies: []reply{{200, "", chatOK}}}
+	scriptedOn(t, "b", provider.Chat, b)
+	if err := provider.SaveGroup(provider.Group{Name: "agentcompass", Members: []string{"zcode/GLM-5.3", "b/m"}, Routing: provider.Ordered}); err != nil {
+		t.Fatal(err)
+	}
+	s := New()
+	code, body := postAs(t, s, "", `{"model":"group/agentcompass","messages":[{"role":"user","content":"hi"}]}`)
+	mu.Lock()
+	zc, n := strings.Join(asked, ","), len(asked)
+	mu.Unlock()
+	if code != http.StatusOK || b.n != 1 {
+		t.Fatalf("group: %d %s (ZCode asked %q, b %d)", code, body, zc, b.n)
+	}
+	if n != 1 {
+		t.Fatalf("ZCode's other account was sent the request: %q", zc)
+	}
+	r := lastRoute(s)
+	if len(r.Tries) != 2 || r.Tries[0].Status != http.StatusMethodNotAllowed || r.Status != http.StatusOK {
+		t.Fatalf("route %d, tries %+v", r.Status, r.Tries)
+	}
+	f := r.Tries[0]
+	if f.Fail != failRestricted || f.Rest == nil || f.Rest.Why != failRestricted || f.Rest.By != "restricted" {
+		t.Fatalf("ZCode's try failed %q, rested %+v", f.Fail, f.Rest)
+	}
+	if !strings.Contains(f.Error, provider.ZCodeRestrictedHint) {
+		t.Fatalf("ZCode's try told %q", f.Error)
+	}
 }
