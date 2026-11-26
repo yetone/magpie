@@ -6925,8 +6925,10 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 		body = extra
 	}
 	if !countsTokens(path) {
-		// the tier it goes at, the user's own fields in it (#1784)
+		// the tier it goes at, the user's own fields in it (#1784), and a
+		// Gemini's thinking level as it goes (#7400)
 		noteWireTier(ctx, to, body)
+		noteWireLevel(ctx, p, to, body)
 	}
 	if to == provider.Anthropic && p.IsVertex() {
 		// Claude at the project, as Anthropic's Vertex SDK asks it: the
@@ -7661,8 +7663,10 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	// nor a system turn in Messages (xai_body.go, #3392)
 	body = xaiBody(p, proto, body)
 	// a Gemini 3 or later on an Anthropic or Chat relay is asked a
-	// thinking level, never a budget (gemini_level_body.go)
+	// thinking level, never a budget (gemini_level_body.go), and the log
+	// says the level that went (noteWireLevel, #7400)
 	body = geminiLevelBody(p, proto, model, body)
+	noteRelayedGemini(r.Context(), proto, model)
 	// a Grok subscription is given Codex's namespaced functions flat
 	// (grokBody), and Zed's plugin likewise (ZedBody); a call to one goes
 	// back under its namespace (#404). Any vendor asked as Codex sends it
@@ -9210,7 +9214,7 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 		if err != nil {
 			return nil, to, err
 		}
-		noteWireEffort(ctx, to, sent)
+		noteWireEffort(ctx, to, sent, model)
 		if to == provider.Anthropic && !s.fits(p.ID, thinkingNeeded(model), to) {
 			// a model whose upstream said thinking must be enabled
 			// (thinkingNeededRefusal): a request built thinking off, or

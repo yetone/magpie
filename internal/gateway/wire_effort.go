@@ -4,7 +4,10 @@ import (
 	"cmp"
 	"context"
 	"net/http"
+	"slices"
 	"strings"
+
+	"github.com/tidwall/gjson"
 
 	"github.com/yetone/magpie/internal/provider"
 )
@@ -32,6 +35,9 @@ type wireAt struct {
 	// model: the model id the plugin the try went to said it sent its
 	// vendor (noteWireModel)
 	model string
+	// gemini: the try asks a Gemini model, whose builder says the level in
+	// its own fields, read from the body as it goes out (noteWireLevel)
+	gemini bool
 }
 
 type wireAtKey struct{}
@@ -42,15 +48,93 @@ func withWireAt(ctx context.Context, w *wireAt) context.Context {
 }
 
 // noteWireEffort leaves, where the request's context has a place for it,
-// the reasoning req goes to to at.
-func noteWireEffort(ctx context.Context, to provider.Protocol, req *Request) {
+// the reasoning req goes to to at, model the id it was built for. Each
+// build notes afresh, so a try built again (a field turned away) never
+// keeps the level of the body before it.
+func noteWireEffort(ctx context.Context, to provider.Protocol, req *Request, model string) {
 	w, _ := ctx.Value(wireAtKey{}).(*wireAt)
 	if w == nil {
 		return
 	}
-	if e, ok := wireEffort(to, req); ok {
+	w.effort, w.set = wireEffort(to, req)
+	w.gemini = req.GeminiCompat || geminiBound(to, model)
+}
+
+// noteRelayedGemini leaves, where the request's context has a place for
+// it, that a request relayed on its own API to to goes to a Gemini model
+// whose level the body says (geminiLevelBody refits it on an Anthropic or
+// Chat relay), for noteWireLevel to read as it leaves.
+func noteRelayedGemini(ctx context.Context, to provider.Protocol, model string) {
+	if w, _ := ctx.Value(wireAtKey{}).(*wireAt); w != nil {
+		w.gemini = geminiBound(to, model)
+	}
+}
+
+// geminiBound says a try to to for model asks a Gemini model in fields of
+// its own: Gemini's and Code Assist's APIs, and a Gemini 3 or later on an
+// Anthropic or Chat relay.
+func geminiBound(to provider.Protocol, model string) bool {
+	return to == provider.Gemini || to == provider.CodeAssist ||
+		(to == provider.Anthropic || to == provider.Chat) && geminiGeneration(strings.ToLower(model)) >= 3
+}
+
+// noteWireLevel leaves, where the request's context has a place for it,
+// the thinking level the body of a try to a Gemini model names as it goes
+// out (#7400). Gemini's builders say a level of their own — a Gemini 3
+// Pro asked medium thinks at high, none and minimal at low, xhigh on
+// Gemini's OpenAI-compatible API goes as high — and a Gemini on an
+// Anthropic or Chat relay is fitted to its levels (geminiLevelBody); the
+// log said the effort asked while another went. Read after the user's own
+// fields are in (WithExtraBody), so what the log says is what left. A
+// body naming no level (a budget, the model's own) leaves what was noted
+// at build. A plugin is told the effort itself (provider.WithEffort), and
+// its body is not what its vendor gets.
+func noteWireLevel(ctx context.Context, p provider.Provider, to provider.Protocol, body []byte) {
+	w, _ := ctx.Value(wireAtKey{}).(*wireAt)
+	if w == nil || !w.gemini || p.IsPlugin() {
+		return
+	}
+	if e, ok := geminiWireLevel(to, body); ok {
 		w.effort, w.set = e, true
 	}
+}
+
+// geminiWireLevel is the thinking level a body to a Gemini model names,
+// where each API puts it, in the log's words: generateContent's
+// generationConfig.thinkingConfig.thinkingLevel (Code Assist's under its
+// request), the OpenAI-compatible API's extra_body thinking_config or
+// reasoning_effort, an Anthropic relay's output_config.effort unless
+// thinking is off. false when it names none of the levels.
+func geminiWireLevel(to provider.Protocol, body []byte) (string, bool) {
+	var v gjson.Result
+	switch to {
+	case provider.Gemini:
+		v = topValue(body, "generationConfig").Get("thinkingConfig.thinkingLevel")
+	case provider.CodeAssist:
+		v = topValue(body, "request").Get("generationConfig.thinkingConfig.thinkingLevel")
+	case provider.Chat:
+		google := topValue(body, "extra_body").Get("google")
+		tc := google.Get("thinking_config")
+		if !tc.Exists() {
+			tc = google.Get("thinkingConfig")
+		}
+		if v = tc.Get("thinking_level"); !v.Exists() {
+			v = tc.Get("thinkingLevel")
+		}
+		if !v.Exists() && !tc.Exists() {
+			v = topValue(body, "reasoning_effort")
+		}
+	case provider.Anthropic:
+		if topValue(body, "thinking").Get("type").String() == "disabled" {
+			return "", false
+		}
+		v = topValue(body, "output_config").Get("effort")
+	}
+	if v.Type != gjson.String {
+		return "", false
+	}
+	e := strings.ToLower(strings.TrimSpace(v.String()))
+	return e, slices.Contains(provider.Levels, e)
 }
 
 // wireEffort is the reasoning a request built from req asks the model for,
@@ -59,7 +143,8 @@ func noteWireEffort(ctx context.Context, to provider.Protocol, req *Request) {
 // model's levels don't say it can stop (effortOf), thinking turned off
 // goes as off to Anthropic's API — and the log said the one asked while
 // another was sent (#1636). false for an API whose builder says it its own
-// way (Gemini's levels and budgets), which the log leaves as asked.
+// way (Gemini's levels and budgets): the level is read from the body as it
+// leaves (noteWireLevel), and a budget is left as asked.
 func wireEffort(to provider.Protocol, req *Request) (string, bool) {
 	switch {
 	case req.GeminiCompat:
