@@ -9,6 +9,7 @@ import (
 	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/sessions"
 )
 
 func codexHome(t *testing.T, auth, config string) (home string, read func() string) {
@@ -32,6 +33,9 @@ func codexHome(t *testing.T, auth, config string) (home string, read func() stri
 	// Windows' own folders too: Claude Desktop's are in LOCALAPPDATA
 	t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
 	t.Setenv("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))
+	// Moving Codex threads queues an async session cache save under HOME;
+	// drain it before TempDir removes the directory (#7801).
+	t.Cleanup(sessions.Saved)
 	noKeychain(t)
 	usedUp := codexUsedUp
 	codexUsedUp = func() bool { return false }

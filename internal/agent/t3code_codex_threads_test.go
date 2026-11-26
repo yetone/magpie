@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/sessions"
 )
 
 // codexThreadBy writes a thread of Codex's on the provider p that the
@@ -63,6 +65,21 @@ func TestT3CodexThreadsStayOnMagpie(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	syncCodex := func(t *testing.T, home string) {
+		t.Helper()
+		path := sessions.CachePath()
+		t.Cleanup(func() {
+			if _, err := os.Stat(path); err != nil {
+				t.Errorf("session cache wasn't saved before TempDir cleanup: %v", err)
+			}
+		})
+		// Moving threads queues a cache save. Drain it before checking the
+		// cache and before codexHome's TempDir removes its directory (#7801).
+		t.Cleanup(sessions.Saved)
+		if err := codex(home).Sync(); err != nil {
+			t.Fatal(err)
+		}
+	}
 	t.Run("in this Codex home", func(t *testing.T) {
 		home, _ := codexHome(t, "", "model = \"gpt-5.4\"\n"+table)
 		dir := filepath.Join(home, ".codex")
@@ -71,7 +88,7 @@ func TestT3CodexThreadsStayOnMagpie(t *testing.T) {
 		codexThreadBy(t, dir, cliMine, "magpie", "codex_cli_rs", "codex-2/gpt-6.1-sol")
 		codexThreadBy(t, dir, t3Moved, "openai", "T3 Code", "codex-2/gpt-6.1-sol")
 		codexThreadBy(t, dir, t3Theirs, "openai", "T3 Code", "gpt-5.4")
-		codex(home).Sync()
+		syncCodex(t, home)
 		for id, want := range map[string]string{t3Mine: "magpie", cliMine: "openai", t3Moved: "magpie", t3Theirs: "openai"} {
 			if p := codexRowOn(t, dir, id); p != want {
 				t.Errorf("thread %s on %q, want %q", id, p, want)
@@ -88,7 +105,7 @@ func TestT3CodexThreadsStayOnMagpie(t *testing.T) {
 		dir := filepath.Join(home, ".codex")
 		t3With(t, home, `"homePath":"~/.codex-t3",`)
 		codexThreadBy(t, dir, t3Mine, "magpie", "T3 Code", "codex-2/gpt-6.1-sol")
-		codex(home).Sync()
+		syncCodex(t, home)
 		if p := codexRowOn(t, dir, t3Mine); p != "openai" {
 			t.Errorf("thread on %q, want openai", p)
 		}
