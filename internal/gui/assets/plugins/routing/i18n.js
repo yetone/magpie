@@ -2,6 +2,8 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "{name} has no fallback, so nothing took over.": "{name} 没有设置备用，没有谁接手。",
+    "Set a fallback": "设置备用",
     "Classifier prompt": "意图判断提示词",
     "Empty: magpie's own. The message goes to the intent that fits it best.": "留空即用 magpie 自带的：消息归入最贴合的意图。",
     "Told to the classifier in place of magpie's instructions as each turn begins. The intents are still listed by number, and it still answers with the number alone.": "每轮开始时，代替 magpie 的说明发给意图判断模型。意图仍按编号列出，它仍只回答编号。",
@@ -787,6 +789,8 @@ magpie.strings({
     "Bound to some keys, the group is theirs alone: any other gateway key neither sees it in its model list nor can use it. A request from this computer without a key still can.": "绑定到某些密钥后，这个组只归它们用：其他网关密钥既不会在模型列表里看到它，也用不了它。本机不带密钥的请求仍然可以用。",
   },
   "zh-TW": {
+    "{name} has no fallback, so nothing took over.": "{name} 沒有設定備用，沒有誰接手。",
+    "Set a fallback": "設定備用",
     "Classifier prompt": "意圖判斷提示詞",
     "Empty: magpie's own. The message goes to the intent that fits it best.": "留空即用 magpie 內建的：訊息歸入最貼合的意圖。",
     "Told to the classifier in place of magpie's instructions as each turn begins. The intents are still listed by number, and it still answers with the number alone.": "每輪開始時，取代 magpie 的說明傳給意圖判斷模型。意圖仍按編號列出，它仍只回答編號。",
@@ -1572,6 +1576,8 @@ magpie.strings({
     "Bound to some keys, the group is theirs alone: any other gateway key neither sees it in its model list nor can use it. A request from this computer without a key still can.": "綁定到某些金鑰後，這個組只歸它們用：其他閘道金鑰既不會在模型列表裡看到它，也用不了它。本機不帶金鑰的請求仍然可以用。",
   },
   ja: {
+    "{name} has no fallback, so nothing took over.": "{name} にはフォールバックが設定されていないため、引き継ぐものがありませんでした。",
+    "Set a fallback": "フォールバックを設定",
     "Classifier prompt": "意図判定プロンプト",
     "Empty: magpie's own. The message goes to the intent that fits it best.": "空なら magpie 既定のもの：メッセージを最も合うインテントに振り分けます。",
     "Told to the classifier in place of magpie's instructions as each turn begins. The intents are still listed by number, and it still answers with the number alone.": "各ターンの開始時に、magpie の指示の代わりに意図判定モデルへ伝えます。インテントは引き続き番号付きで並び、モデルは番号だけを答えます。",
@@ -2357,6 +2363,8 @@ magpie.strings({
     "Bound to some keys, the group is theirs alone: any other gateway key neither sees it in its model list nor can use it. A request from this computer without a key still can.": "キーを紐づけると、このグループはそのキー専用になります。ほかのゲートウェイキーではモデル一覧に表示されず、使うこともできません。このコンピューターからキーなしで送るリクエストは引き続き使えます。",
   },
   de: {
+    "{name} has no fallback, so nothing took over.": "Für {name} ist kein Fallback eingestellt, also hat nichts übernommen.",
+    "Set a fallback": "Fallback einstellen",
     "Classifier prompt": "Klassifikator-Prompt",
     "Empty: magpie's own. The message goes to the intent that fits it best.": "Leer: der von magpie. Die Nachricht geht an die Absicht, die am besten passt.",
     "Told to the classifier in place of magpie's instructions as each turn begins. The intents are still listed by number, and it still answers with the number alone.": "Wird dem Klassifikator zu Beginn jeder Runde statt der Anweisungen von magpie gesagt. Die Absichten stehen weiter nummeriert darin, und er antwortet weiter nur mit der Nummer.",

@@ -3892,6 +3892,10 @@ function routingPage(part) {
       else if (tr.done && tryOk(tr) && tr.routed) items.push([routedWhy(tr), "aside", tr]);
       if (tr.done && tryOk(tr) && tr.upstream) items.push([upstreamWhy(tr), "aside upstream-said", tr]);
     });
+    // the request ended on a provider's refusal with nothing set to take
+    // over: said where it ended, with the way to set something
+    const lone = fallbackWanted(r);
+    if (lone) items.push([t("{name} has no fallback, so nothing took over.", { name: lone.name }), "aside fallback-none", { model: lone.id }, lone.w]);
     if (r.done && !r.tries.length) items.push([t("Nothing was tried: {error}", { error: r.error || r.status }), "bad"]);
     // one magpie held too long before routing it was stopped, and what
     // held it saved to a report (the app's log goes only to stderr, which
@@ -3931,9 +3935,48 @@ function routingPage(part) {
       if (c === "swap") li.prepend(swapTag(tr), " ");
       if (c === "aside time") li.replaceChildren(timeElement(tr));
       if (c === "aside held") li.append(" ", ...heldActions(tr.model));
+      if (c === "aside fallback-none") li.append(" ", fallbackAction(tr.model));
       return li;
     }));
     keptIcons = null;
+  }
+
+  // fallbackWanted is the provider a request ended on, when it ended on
+  // an error a fallback takes — rate limited, out of quota or credit,
+  // overloaded, down, slow — with no fallback set for it, the agent having
+  // asked for its model, not a group: null otherwise. jimlee0824v2 on X:
+  // OpenCode Zen Free's DeepSeek ran out after a few requests, the agent
+  // stopped on the 429, and the backup they asked for, a group to go on
+  // to, is the provider's Fallback, under Advanced, where they didn't
+  // find it.
+  const FALLS_OVER = new Set(["rate", "quota", "credit", "overloaded", "slow"]);
+  function fallbackWanted(r) {
+    const tr = r.tries.at(-1);
+    if (!r.done || r.group || !tr?.done || tryOk(tr) || tr.gone) return null;
+    if (!(tr.status === 429 || tr.status >= 500 || FALLS_OVER.has(tr.fail))) return null;
+    if ([...r.order, ...(r.left || [])].some((x) => x.fallback)) return null;
+    const w = tried(r, tr);
+    if (!w || w.fallback || !w.provider) return null;
+    // as the provider is now: one given a fallback since asks for none
+    const p = providers?.providers?.find((x) => x.id === w.provider);
+    if (providers && (!p || p.fallback?.length || decideOnly(p))) return null;
+    return { id: w.provider, name: p?.name || w.name || w.provider, w };
+  }
+  // fallbackAction opens the provider's editor at its Fallback, Advanced
+  // open, where a model or a routing group is picked
+  function fallbackAction(id) {
+    const b = el("button", "link", t("Set a fallback"));
+    b.onclick = async () => {
+      advanced = { of: id, open: true };
+      await openProvider(id);
+      // an editor first drawn waits for advgroups.js (app.js advMod)
+      await advMod();
+      if (editing !== id) return;
+      const q = document.querySelector(".editor .fallback input");
+      q?.scrollIntoView({ block: "center" });
+      q?.focus(NO_SCROLL);
+    };
+    return b;
   }
 
   // heldActions are a held request's report's buttons: Copy Report, and

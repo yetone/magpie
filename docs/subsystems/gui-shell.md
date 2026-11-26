@@ -929,6 +929,15 @@ place while the sessions take turns. The block of the request the card
 tells of is lit (`aria-pressed`); a click picks that session's newest
 request. The card's footer names the session by its title too (tjhhhh on
 Discord, `routing-ctx-sessions.test.cjs`).
+A request that ended on a provider's refusal a fallback would take (429,
+5xx, out of quota or credit, overloaded, slow), with no fallback in its
+order and not for a routing group, ends its story with a line that the
+provider has no fallback (`fallbackWanted` in `plugins/routing/client.js`,
+judged against the provider as it is now). Its Set a fallback opens the
+provider's editor with Advanced open and its Fallback's box focused, where
+a model or a routing group is picked. A user whose one free key answered
+429 asked for a group to go on to, not knowing the Fallback was there
+(jimlee0824v2 on X, `routing-fallback-none.test.cjs`).
 
 The Plugins page updates the npm search-results section when a search answers,
 leaving suggested plugin cards in place so a click begun before the answer still
