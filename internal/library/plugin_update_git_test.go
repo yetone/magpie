@@ -38,7 +38,7 @@ func TestPiPackageFromGitUpdatesInPlace(t *testing.T) {
 	write(t, file, "{\n  \"packages\": [\"npm:pi-own\"]\n}\n")
 	ok(t)(ProjectPlugin(proj, name, []string{"pi"}))
 	before := read(t, file)
-	if !strings.Contains(before, pluginDir(name)) || !strings.Contains(before, "npm:pi-own") {
+	if !strings.Contains(before, inJSON(pluginDir(name))) || !strings.Contains(before, "npm:pi-own") {
 		t.Fatalf("assigned:\n%s", before)
 	}
 
@@ -182,7 +182,7 @@ func TestPluginUpdateFetchesPastALookup(t *testing.T) {
 	if s := read(t, filepath.Join(pluginDir(name), "package.json")); !strings.Contains(s, `"2.0.0"`) {
 		t.Fatalf("package.json: %s", s)
 	}
-	if after := read(t, filepath.Join(proj, ".pi/settings.json")); after != settings || !strings.Contains(after, pluginDir(name)) {
+	if after := read(t, filepath.Join(proj, ".pi/settings.json")); after != settings || !strings.Contains(after, inJSON(pluginDir(name))) {
 		t.Fatalf("the project's settings:\n%s\nwas\n%s", after, settings)
 	}
 

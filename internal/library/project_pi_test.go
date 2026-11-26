@@ -121,7 +121,7 @@ func TestProjectPluginPiPackage(t *testing.T) {
 		ok(t)(AddProject(d))
 	}
 	file := filepath.Join(a, ".pi/settings.json")
-	count := func(p string) int { return strings.Count(read(t, p), dir) }
+	count := func(p string) int { return strings.Count(read(t, p), inJSON(dir)) }
 
 	// not for Pi: no package
 	ok(t)(ProjectPlugin(a, "acme-kit", []string{"claude"}))
@@ -196,11 +196,11 @@ func TestPiExtensionOnlyPackageIsAPlugin(t *testing.T) {
 	ok(t)(ProjectPlugin(proj, "acme-pi-guard", []string{"pi"}))
 	ok(t)(ProjectPlugin(proj, "acme-pi-guard", []string{"pi"}))
 	s := read(t, file)
-	if strings.Count(s, pluginDir("acme-pi-guard")) != 1 || !strings.Contains(s, "npm:pi-own") {
+	if strings.Count(s, inJSON(pluginDir("acme-pi-guard"))) != 1 || !strings.Contains(s, "npm:pi-own") {
 		t.Fatalf("one entry beside the project's own:\n%s", s)
 	}
 	ok(t)(ProjectPlugin(proj, "acme-pi-guard", nil))
-	if s := read(t, file); strings.Contains(s, pluginDir("acme-pi-guard")) || !strings.Contains(s, "npm:pi-own") {
+	if s := read(t, file); strings.Contains(s, inJSON(pluginDir("acme-pi-guard"))) || !strings.Contains(s, "npm:pi-own") {
 		t.Fatalf("withdrawn:\n%s", s)
 	}
 
