@@ -3887,6 +3887,11 @@ func fail(rw http.ResponseWriter, err error) {
 			out["code"] = "signed_in_only"
 		}
 	}
+	// a shared group usemagpie.ai took down, or no site to share on: an
+	// i18n.js key (said)
+	if code, said := groupGone(err); code != "" {
+		out["code"], out["said"] = code, said
+	}
 	// a text that isn't a group to import (laincatx on X), said in the
 	// reader's language
 	var share *provider.ShareError

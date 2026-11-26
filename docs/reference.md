@@ -4834,6 +4834,15 @@ and models to look after first, by magpie's own ids only:
   `~/.config/magpie/plugin-likes.json`. The code is
   [internal/stats/plugins.go](../internal/stats/plugins.go) and
   [site/pluginstats.js](../site/pluginstats.js).
+- to usemagpie.ai too, which of the routing groups shared there were
+  imported here from a link and are still here, by their share ids only
+  (`POST /api/groups/report`, at most 50), with the same id, so the
+  gallery can say how many use each (the ids that reported it in 7 days).
+  A group of the user's own, one imported from text, and a group's name or
+  members here never go; a computer that never imported one sends nothing.
+  A like on a shared group goes there too. The code is
+  [internal/groupshare](../internal/groupshare/groupshare.go) and
+  [site/groups.js](../site/groups.js).
 
 No names, base URLs, accounts, keys, prompts or usage go. Turn that part off
 in Settings → Privacy → Share the agents, providers, models and plugins I use; the

@@ -5,7 +5,8 @@
 // (Usage): a provider of the user's own is only "custom". No names, URLs,
 // accounts, keys, prompts or usage go. With that part, usemagpie.ai is
 // told which of the plugins Discover lists are installed here, for
-// Discover's counts (plugins.go). Settings → Privacy turns it off,
+// Discover's counts (plugins.go), and which routing groups shared there
+// were imported here, for its gallery's (groupshare.Report). Settings → Privacy turns it off,
 // and so do DO_NOT_TRACK=1 and MAGPIE_NO_STATS=1; a build from source
 // never sends it.
 package stats
@@ -24,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yetone/magpie/internal/groupshare"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/update"
@@ -148,9 +150,15 @@ func Send(ctx context.Context, version, what string, now time.Time) error {
 		// Discover's counts; the day's event went, so this isn't tried
 		// again till tomorrow when it fails
 		_ = sendPlugins(ctx, id)
+		// the shared routing groups imported here, for usemagpie.ai's
+		// gallery
+		_ = groupshare.Report(ctx, id)
 	}
 	return os.WriteFile(stamp, []byte(day+"\n"), 0o644)
 }
+
+// InstallID is installID: what a like on usemagpie.ai is counted by.
+func InstallID() (string, error) { return installID() }
 
 // installID is this computer's id, made up the first time: random, tied to
 // nothing about it or the user.

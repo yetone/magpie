@@ -11,7 +11,7 @@ import (
 	"github.com/yetone/magpie/internal/provider"
 )
 
-// laincatx on X: the Routing view's Copy to share answers the group as
+// laincatx on X: the Routing view's Copy as text answers the group as
 // text with no key in it, and Import a group adds it back as a group of
 // the user's, saying what it left out; text that is no shared group is
 // refused in words.

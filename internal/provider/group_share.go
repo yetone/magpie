@@ -2,9 +2,11 @@ package provider
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 )
 
 // A routing group shared as text (laincatx on X): one group's routing,
@@ -34,20 +36,30 @@ type SharedGroup struct {
 // a folder is a path on the sharer's own machine, which names their
 // projects and means nothing on another.
 func ShareGroup(id string) (string, error) {
+	s, err := sharedGroup(id)
+	if err != nil {
+		return "", err
+	}
+	out, err := json.Marshal(s)
+	return string(out), err
+}
+
+// sharedGroup is group id as ShareGroup shares it.
+func sharedGroup(id string) (SharedGroup, error) {
 	all := Groups()
 	i := slices.IndexFunc(all, func(g Group) bool { return g.ID == id && !g.Hidden })
 	if i < 0 {
-		return "", fmt.Errorf("no group %q", id)
+		return SharedGroup{}, fmt.Errorf("no group %q", id)
 	}
 	// a copy shares nothing with the group read: the rules' time windows
 	// are pointers
 	raw, err := json.Marshal(all[i])
 	if err != nil {
-		return "", err
+		return SharedGroup{}, err
 	}
 	var g Group
 	if err := json.Unmarshal(raw, &g); err != nil {
-		return "", err
+		return SharedGroup{}, err
 	}
 	g.Members, g.Match = ownMembers(g)
 	g.Matched = nil
@@ -58,9 +70,10 @@ func ShareGroup(id string) (string, error) {
 	g.Redact = ""             // and whether it masks: the receiver's call
 	g.Template = ""           // the picks as they are: made of this magpie's models
 	g.Seen = nil              // what this magpie found: another finds its own
+	g.Former = nil            // the ids it had here: another magpie's requests never asked them
+	g.RoutedAt = time.Time{}  // when the user here last changed its routing
 	g.Rules = slices.DeleteFunc(g.Rules, Rule.ByFolder)
-	out, err := json.Marshal(SharedGroup{Magpie: ShareMark, Version: ShareVersion, Group: g})
-	return string(out), err
+	return SharedGroup{Magpie: ShareMark, Version: ShareVersion, Group: g}, nil
 }
 
 // ShareError is why a text can't be imported as a group, by Why, for the
@@ -79,13 +92,13 @@ func (e *ShareError) Error() string {
 	case "newer":
 		return fmt.Sprintf("this group was shared from a newer magpie (format %d): update magpie to import it", e.Format)
 	case "no_format":
-		return "this shared group says no format it is in: copy it again with Copy to share"
+		return "this shared group says no format it is in: copy it again with Copy as text"
 	case "unreadable":
 		return fmt.Sprintf("this shared group can't be read: %v", e.Err)
 	case "none_here":
 		return "none of the group's models is in your magpie: " + strings.Join(e.Models, ", ")
 	}
-	return "this is not a routing group shared from magpie: copy one with Copy to share in a group's menu"
+	return "this is not a routing group shared from magpie: paste its usemagpie.ai/g/ link, or the text from Copy as text in a group's menu"
 }
 
 func (e *ShareError) Unwrap() error { return e.Err }
@@ -162,11 +175,132 @@ func importGroup(text string, over bool) (Imported, error) {
 	if err != nil {
 		return Imported{}, err
 	}
-	g := s.Group
-	g.Accounts = nil          // another magpie's accounts, never this one's
-	g.Keys = []string{}       // its gateway keys too; over, the user's are kept below
-	g.Redact = ""             // whether it masks is the receiver's call, never a text's
-	g.Template = ""           // the picks as written, made of the sender's models
+	return ImportShared(s, nil, over)
+}
+
+// ImportShared is importGroup of a group already read (ReadShared), with
+// the user's own say on its members: use has a member the group names
+// sent to one of this magpie's instead, or left out (""), in place of
+// what memberHere finds.
+func ImportShared(s SharedGroup, use map[string]string, over bool) (Imported, error) {
+	g, res, err := planShared(s, use, over)
+	if err != nil {
+		return res, err
+	}
+	if err := SaveGroup(g); err != nil {
+		return res, err
+	}
+	res.ID, res.Name = g.ID, g.Name
+	return res, nil
+}
+
+// ImportPlan is what importing a shared group would make here, shown
+// before anything is saved: each member the group names and what it is
+// here, the rules left out, and the group of the user's it replaces.
+type ImportPlan struct {
+	Name    string       `json:"name"`
+	Note    string       `json:"note,omitempty"`
+	Routing string       `json:"routing,omitempty"`
+	Match   []string     `json:"match,omitempty"`
+	Members []PlanMember `json:"members"`
+	// Rules are the group's rules, and Dropped how many of them are left
+	// out (Imported.Rules).
+	Rules      int    `json:"rules,omitempty"`
+	Dropped    int    `json:"dropped,omitempty"`
+	Classifier string `json:"classifier,omitempty"`
+	// Replaces is the user's group importing replaces (over), by id.
+	Replaces string `json:"replaces,omitempty"`
+	// Empty: none of its members is here, so nothing would be added
+	// (ShareError none_here).
+	Empty bool `json:"empty,omitempty"`
+}
+
+// PlanMember is one member of a shared group, as this magpie would have
+// it: Here itself (Shared), another provider's same model, or "" for
+// none. Same are this magpie's members serving the same model, to pick
+// from instead.
+type PlanMember struct {
+	Shared string   `json:"shared"`
+	Here   string   `json:"here,omitempty"`
+	Same   []string `json:"same,omitempty"`
+}
+
+// PlanImport is ImportShared's ImportPlan, saving nothing.
+func PlanImport(s SharedGroup, use map[string]string, over bool) ImportPlan {
+	g, res, err := planShared(s, use, over)
+	plan := ImportPlan{Name: g.Name, Note: g.Note, Routing: g.Routing, Match: g.Match, Rules: len(s.Group.Rules), Dropped: res.Rules, Classifier: g.Classifier}
+	if res.Replaced {
+		plan.Replaces = g.ID
+	}
+	var sErr *ShareError
+	if errors.As(err, &sErr) && sErr.Why == "none_here" {
+		plan.Empty = true
+		plan.Name = strings.TrimSpace(s.Group.Name)
+	}
+	entries, all := providerEntries(), Groups()
+	members, _ := ownMembers(s.Group)
+	for _, m := range members {
+		m = strings.TrimSpace(m)
+		pm := PlanMember{Shared: m, Here: memberHere(entries, all, m)}
+		if to, ok := use[m]; ok {
+			pm.Here = usedHere(entries, all, to)
+		}
+		pm.Same = sameHere(entries, m)
+		plan.Members = append(plan.Members, pm)
+	}
+	return plan
+}
+
+// usedHere is to, a member the user picked for a shared one, when this
+// magpie has it; "" when it hasn't, or the user left the member out.
+func usedHere(entries []Entry, all []Group, to string) string {
+	if to = strings.TrimSpace(to); to == "" || memberHere(entries, all, to) != to {
+		return ""
+	}
+	return to
+}
+
+// sameHere are this magpie's members that serve shared member m's model
+// (AutoGroupOf), with its effort: what the user may send it to instead.
+func sameHere(entries []Entry, m string) []string {
+	m = CanonicalRef(strings.TrimPrefix(strings.TrimSpace(m), "magpie/"))
+	m, _ = MemberAccount(m)
+	model, effort := memberEffortIn(entries, m)
+	pid, id, ok := strings.Cut(model, "/")
+	if !ok || pid+"/" == GroupPrefix {
+		return nil
+	}
+	same := AutoGroupOf(pid, id)
+	var out []string
+	for _, e := range entries {
+		if e.Group == "" && AutoGroupOf(e.Provider.ID, e.Model) == same {
+			if to := WithMemberEffort(e.ID, effort); !slices.Contains(out, to) {
+				out = append(out, to)
+			}
+		}
+		if len(out) == 12 {
+			break
+		}
+	}
+	return out
+}
+
+// planShared is the group ImportShared saves, and what it made of the
+// shared one, saving nothing.
+func planShared(s SharedGroup, use map[string]string, over bool) (Group, Imported, error) {
+	// a copy: s is the caller's, and its rules' time windows are pointers
+	var g Group
+	if raw, err := json.Marshal(s.Group); err != nil {
+		return g, Imported{}, err
+	} else if err := json.Unmarshal(raw, &g); err != nil {
+		return g, Imported{}, err
+	}
+	g.Accounts = nil    // another magpie's accounts, never this one's
+	g.Keys = []string{} // its gateway keys too; over, the user's are kept below
+	g.Redact = ""       // whether it masks is the receiver's call, never a text's
+	g.Template = ""     // the picks as written, made of the sender's models
+	g.Former = nil      // the sender's old ids: a request here asking one means another group
+	g.RoutedAt = time.Time{}
 	withoutMemberAccounts(&g) // and a member's own account (a text made before ShareGroup dropped them)
 	entries := providerEntries()
 	all := Groups()
@@ -180,6 +314,9 @@ func importGroup(text string, over bool) (Imported, error) {
 			return to
 		}
 		to := memberHere(entries, all, m)
+		if u, ok := use[m]; ok {
+			to = usedHere(entries, all, u)
+		}
 		here[m] = to
 		switch {
 		case to == "":
@@ -198,7 +335,7 @@ func importGroup(text string, over bool) (Imported, error) {
 	}
 	g.Match, g.Matched = match, nil
 	if len(g.Members) == 0 && len(g.Match) == 0 {
-		return res, &ShareError{Why: "none_here", Models: res.Missing}
+		return g, res, &ShareError{Why: "none_here", Models: res.Missing}
 	}
 	kept := func(list []string) []string {
 		var out []string
@@ -289,19 +426,26 @@ func importGroup(text string, over bool) (Imported, error) {
 			}
 		}
 		g.Auto, g.Hidden, g.Disabled = false, false, false
-		if err := SaveGroup(g); err != nil {
-			return res, err
-		}
-		res.ID, res.Name, res.Replaced = g.ID, g.Name, true
-		return res, nil
+		res.Replaced = true
+		return g, res, nil
 	}
 	g.Name, g.ID = freeGroupName(all, name, "")
 	g.Auto, g.Hidden, g.Disabled = false, false, false
-	if err := SaveGroup(g); err != nil {
-		return res, err
+	return g, res, nil
+}
+
+// MembersHere is how many of a shared group's members this magpie has,
+// itself or as another provider's same model (memberHere): what the
+// gallery shows of each group.
+func MembersHere(members []string) int {
+	entries, all := providerEntries(), Groups()
+	n := 0
+	for _, m := range members {
+		if !IsPattern(m) && memberHere(entries, all, m) != "" {
+			n++
+		}
 	}
-	res.ID, res.Name = g.ID, g.Name
-	return res, nil
+	return n
 }
 
 // memberHere is what member m of a shared group is in this magpie: m

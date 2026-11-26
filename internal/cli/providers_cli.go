@@ -8,6 +8,7 @@ import (
 	"log"
 	"maps"
 	"math"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -1914,6 +1915,11 @@ func importCmd(args []string) error {
 	}
 	if link == "" {
 		return errors.New("magpie import [-y] 'magpie://import?…'")
+	}
+	// a routing group shared on usemagpie.ai is added as a group, a copy
+	// the user can change or remove like any of theirs
+	if u, err := url.Parse(link); err == nil && strings.EqualFold(u.Scheme, provider.Scheme) && strings.EqualFold(u.Host, "group") {
+		return groupImportCmd([]string{link})
 	}
 	// a plugin link installs nothing by itself, here too: it says how
 	if plugin.IsLink(link) {

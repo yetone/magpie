@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yetone/magpie/internal/groupshare"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/provider"
 )
@@ -38,6 +39,8 @@ func stashImport(link string) string {
 		if _, err := plugin.ParseLink(link); err != nil {
 			in.Error = err.Error()
 		}
+	} else if _, ok := groupView(link, time.Time{}); !ok && isGroupLink(link) {
+		in.Error = "this link names no routing group shared on usemagpie.ai: copy it again from the group's page"
 	} else if p, err := provider.ParseImport(link); err != nil {
 		in.Error = err.Error()
 	} else {
@@ -78,6 +81,35 @@ func pluginView(link string, now time.Time) (view string, ok bool) {
 	}
 	pluginLinks.at = now
 	return "plugins&plugin=" + url.QueryEscape(name), true
+}
+
+// groupView is the window's address for a link to a routing group shared
+// on usemagpie.ai (magpie://group?id=…, the Open in magpie of its page):
+// Routing, with its import preview over it (routing's client.js). ok is
+// false for any other link, and, opening nothing, for one that came too
+// soon after the last, as pluginView.
+func groupView(link string, now time.Time) (view string, ok bool) {
+	if !isGroupLink(link) {
+		return "", false
+	}
+	id := groupshare.LinkID(link)
+	if id == "" {
+		return "", false // stashImport says it can't be read
+	}
+	pluginLinks.Lock()
+	defer pluginLinks.Unlock()
+	if d := now.Sub(pluginLinks.at); !pluginLinks.at.IsZero() && d >= 0 && d < pluginLinkGap {
+		return "", true
+	}
+	pluginLinks.at = now
+	return "groups&shared=" + id, true
+}
+
+// isGroupLink reports whether link is a magpie://group link, one that
+// names a group or not.
+func isGroupLink(link string) bool {
+	u, err := url.Parse(strings.TrimSpace(link))
+	return err == nil && strings.EqualFold(u.Scheme, provider.Scheme) && strings.EqualFold(u.Host+strings.Trim(u.Opaque+u.Path, "/"), "group")
 }
 
 // ImportLink is the link among a launch's arguments, if any.

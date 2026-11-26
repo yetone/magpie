@@ -7076,7 +7076,7 @@ function routingPage(part) {
       groupRowsLocale = locale;
       groupImportRow = null;
     }
-    if (!filterOnly) groupsQuotas = typeof quotas === "undefined" ? undefined : quotas;
+    if (!filterOnly) { groupsQuotas = typeof quotas === "undefined" ? undefined : quotas; queueMicrotask(askUpdates); }
     // the ones switched off are listed after the ones on, each part in the
     // order the user set (justacati on X); moving one still moves it in
     // that order, which is the one agents' pickers show
@@ -7280,21 +7280,119 @@ function routingPage(part) {
     ok.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 400, delay: 1500, easing: "ease-in", fill: "forwards" })
       .finished.then(() => ok.remove(), () => ok.remove());
   }
-  // Copy to share (laincatx on X): the group as text, its models, routing
-  // and rules and no key (provider.ShareGroup), for anyone to paste into
-  // their magpie's Import
-  async function shareGroup(g) {
+  // copyAsText: the group as text, its models, routing and rules and no
+  // key (provider.ShareGroup), to paste into another magpie's Import with
+  // nothing sent to usemagpie.ai (laincatx on X)
+  async function copyAsText(g, btn) {
     try {
       const st = await api("groups/share", { id: g.id });
-      await copy(st.shared, g.name, null, t("{name} copied: paste it into Import on another magpie's Routing page", { name: g.name }));
+      await copy(st.shared, g.name, btn, t("{name} copied: paste it into Import on another magpie's Routing page", { name: g.name }));
     } catch (e) { status(e.message, "err"); }
   }
-  async function openImport() {
+  // shareSheet: Share… on a group's menu (earayu on X): the group at a
+  // link on usemagpie.ai, in its gallery or only for who has the link.
+  // Shared, the sheet has the link, Update for the group as it is now, and
+  // Stop sharing. What goes out is under Advanced: never a key, and a
+  // provider the user added is named custom (provider.PublicGroup).
+  function shareSheet(g) {
+    const mine = groups.links?.[g.id];
+    const ed = el("div", "editor rt-gshare");
+    const head = el("div", "ehead");
+    head.append(el("b", "", t(mine ? "{name} is shared" : "Share {name}", { name: g.name })));
+    ed.append(head);
+    const title = el("input");
+    title.value = mine?.title || g.name;
+    title.maxLength = 80;
+    const about = el("textarea");
+    about.rows = 3;
+    about.maxLength = 500;
+    about.value = mine?.description || "";
+    about.placeholder = t("What it is for, and how it routes");
+    const by = el("input");
+    by.maxLength = 40;
+    by.value = mine?.author || "";
+    by.placeholder = t("Anonymous");
+    const [ptk, pcb] = window.tick(t("List it on usemagpie.ai/groups"), mine ? !!mine.public : true);
+    ed.append(...field(t("Title"), title), ...field(t("Description"), about), ...field(t("By"), by), ...field(t("Gallery"), ptk));
+    if (mine) {
+      const link = el("div", "rt-gshare-link");
+      link.append(el("code", "", mine.url), copyBtn(mine.url, t("Link")));
+      ed.append(...field(t("Link"), link));
+    }
+    // what goes out, read from magpie as Share would send it
+    const adv = edAligned(el("details", "more advanced"));
+    adv.append(el("summary", "", t("Advanced")));
+    const inner = el("div", "inner");
+    const out = el("pre", "rt-gshare-json");
+    const asText = el("button", "text", t("Copy as text"));
+    asText.type = "button";
+    asText.title = t("{name} as text to paste into another magpie: its models, routing and rules, no key", { name: g.name });
+    asText.onclick = (e) => { e.stopPropagation(); copyAsText(g, null); };
+    inner.append(el("div", "hint expl", t("What goes to usemagpie.ai: no key or account, and a provider you added yourself is named custom.")), out, asText);
+    adv.append(inner);
+    adv.ontoggle = async () => {
+      if (!adv.open || out.textContent) return;
+      try { out.textContent = JSON.stringify((await api("groups/public", { id: g.id })).shared.group, null, 2); }
+      catch (e) { out.textContent = e.message; }
+    };
+    ed.append(adv);
+    const bar = el("div", "bar");
+    const go = el("button", "text primary rt-gshare-go", t(mine ? "Update" : "Share"));
+    go.type = "button";
+    go.onclick = async (e) => {
+      e.stopPropagation();
+      go.disabled = true;
+      go.classList.add("busy");
+      try {
+        const st = await api("groups/publish", { id: g.id, meta: { title: title.value.trim() || g.name, description: about.value.trim(), author: by.value.trim(), public: pcb.checked } });
+        groups = groupsFrom(st);
+        renderGroups();
+        const url = st.published.url;
+        if (mine) status(t("{name} updated at {url}", { name: g.name, url }), "ok");
+        else await copy(url, g.name, null, t("{name} is shared: its link is copied", { name: g.name }));
+        shareSheet(groups.groups.find((x) => x.id === g.id) || g);
+      } catch (err) {
+        go.disabled = false;
+        go.classList.remove("busy");
+        status(err.message, "err");
+      }
+    };
+    const cancel = el("button", "text", t(mine ? "Done" : "Cancel"));
+    cancel.type = "button";
+    cancel.onclick = cancelAsk;
+    bar.append(el("span", "grow"));
+    if (mine) {
+      const stop = el("button", "text danger rt-gshare-stop", t("Stop sharing"));
+      stop.type = "button";
+      stop.title = t("Its link stops opening and it leaves the gallery; groups others imported from it stay theirs");
+      stop.onclick = async (e) => {
+        e.stopPropagation();
+        stop.disabled = true;
+        try {
+          groups = groupsFrom(await api("groups/unpublish", { id: g.id }));
+          renderGroups();
+          status(t("{name} is no longer shared", { name: g.name }), "ok");
+          closeConfirmAsk();
+        } catch (err) { stop.disabled = false; status(err.message, "err"); }
+      };
+      bar.append(stop);
+    }
+    bar.append(cancel, go);
+    ed.append(bar);
+    confirmAsk = ed;
+    openModal(ed, !!mine && !$("#modal").hidden);
+    $("#modal").classList.add("lib");
+  }
+  // openImport: Import's box, empty, or the preview of a group shared on
+  // usemagpie.ai (from: { source, into }: a magpie://group link, a card
+  // of the gallery, or a newer version of a group imported from it)
+  async function openImport(from) {
     if (groupDirty() && !(await confirmDiscard())) return;
     gEdit = null; gSel = null;
     gImport = {};
     gImportText.value = "";
     renderGroups();
+    if (from) return previewImport({ source: from.source, into: from.into });
     gImportText.focus({ preventScroll: true });
   }
   function closeImport() {
@@ -7313,64 +7411,285 @@ function routingPage(part) {
     if (x?.magpie !== "routing-group" || !id) return null;
     return groups.groups.find((g) => g.id === id && !g.auto && !g.hidden) || null;
   }
-  // importBox: paste a shared group, Import adds it; then what was added,
-  // and what of it this magpie has none of, until Done
+  // previewImport: what importing would make here, saving nothing
+  // (provider.PlanImport): a link's group fetched, or the text read; the
+  // members the user sent elsewhere (use) go along, so the plan is the
+  // import's own
+  async function previewImport(at) {
+    const was = gImport;
+    const body = { use: at.use || {} };
+    if (at.source) body.source = at.source;
+    else body.text = at.text;
+    if (at.into) body.into = at.into;
+    else if (at.text && importOver(at.text)) body.replace = true;
+    gImport = { ...(was || {}), busy: true };
+    renderGroups();
+    try {
+      const p = await api("groups/preview", body);
+      if (gImport === null) return; // closed meanwhile
+      gImport = { pv: p, at: { ...at, source: p.source?.id || at.source, use: body.use } };
+    } catch (e) {
+      if (gImport === null) return;
+      gImport = { ...(was || {}), busy: false };
+      status(e.message, "err");
+    }
+    renderGroups();
+  }
+  // importBox: a link or a group as text, then its preview: each member as
+  // it would be here, sent to another provider's same model or left out by
+  // a click; Import adds it; then what was added, until Done. Under the box,
+  // while nothing is pasted, the groups others shared on usemagpie.ai.
   let gImportBox = null;
   function importBox() {
     gImportBox ||= el("div", "rt-gimport");
-    const box = gImportBox, res = gImport.res;
+    const box = gImportBox, res = gImport.res, pv = gImport.pv;
     const parts = [];
-    if (!res) {
-      gImportText.placeholder = t("Paste a group copied with Copy to share");
-      gImportText.setAttribute("aria-label", t("A routing group shared from magpie"));
-      const go = el("button", "text primary rt-gimport-go", t("Import"));
-      go.type = "button";
-      // a text whose group id is a group of the user's replaces that group:
-      // the button and the line under the box say which, before it is pressed
-      const warn = el("div", "rt-gimport-note rt-gimport-over");
-      warn.hidden = true;
-      const sync = () => {
-        const over = importOver(gImportText.value);
-        go.textContent = over ? t("Replace {name}", { name: over.name }) : t("Import");
-        warn.hidden = !over;
-        warn.textContent = over ? t("{name} has the same id: its models, routing and rules are replaced by this group's; its accounts and folder rules stay", { name: over.name }) : "";
-      };
-      gImportText.oninput = sync;
-      go.onclick = async () => {
-        const text = gImportText.value;
-        if (!text.trim()) { gImportText.focus({ preventScroll: true }); return; }
-        const replace = !!importOver(text);
-        go.disabled = true;
-        try {
-          groups = groupsFrom(await api("groups/import", replace ? { text, replace } : { text }));
-          gImport = { res: groups.imported };
-          gImportText.value = "";
-          status(t(groups.imported.replaced ? "Replaced {name}" : "Added {name}", { name: groups.imported.name }), "ok");
-          renderGroups();
-          load(); // the gateway's model list, the agents' pickers
-        } catch (e) { go.disabled = false; status(e.message, "err"); }
-      };
-      const no = el("button", "text", t("Cancel"));
-      no.type = "button";
-      no.onclick = closeImport;
-      const acts = el("div", "acts");
-      acts.append(go, no);
-      sync();
-      parts.push(el("div", "rt-gtpl-head", t("Paste a routing group someone shared from their magpie: its models, routing and rules come with it, never a key")), gImportText, warn, acts);
-    } else {
+    const acts = el("div", "acts");
+    const button = (name, cls, run) => {
+      const b = el("button", "text" + (cls ? " " + cls : ""), t(name));
+      b.type = "button";
+      b.onclick = run;
+      return b;
+    };
+    if (res) {
       parts.push(el("div", "rt-gimport-done", t(res.replaced ? "Replaced {name}" : "Added {name}", { name: res.name })));
       if (res.missing?.length) parts.push(el("div", "rt-gimport-missing", t("Not in your magpie, left out: {models}", { models: res.missing.join(", ") })));
       if (res.instead?.length) parts.push(el("div", "rt-gimport-note", t("The same model from your own provider: {models}", { models: res.instead.join(", ") })));
       if (res.rules) parts.push(el("div", "rt-gimport-note", t(res.rules === 1 ? "1 rule left out with them" : "{n} rules left out with them", { n: res.rules })));
-      const done = el("button", "text", t("Done"));
-      done.type = "button";
-      done.onclick = closeImport;
-      const acts = el("div", "acts");
-      acts.append(done);
+      acts.append(button("Done", "", closeImport));
       parts.push(acts);
+    } else if (pv) {
+      parts.push(...previewParts(pv, gImport.at));
+    } else {
+      gImportText.placeholder = t("Paste a usemagpie.ai/g/… link, or a group copied as text");
+      gImportText.setAttribute("aria-label", t("A routing group shared from magpie"));
+      const go = button("Preview", "primary rt-gimport-go", () => {
+        const text = gImportText.value.trim();
+        if (!text) { gImportText.focus({ preventScroll: true }); return; }
+        previewImport({ text });
+      });
+      go.disabled = !!gImport.busy;
+      // the gallery steps aside while something is pasted
+      const gal = galleryBox();
+      gal.hidden = !!gImportText.value.trim();
+      gImportText.oninput = () => { gal.hidden = !!gImportText.value.trim(); };
+      acts.append(go, button("Cancel", "", closeImport));
+      parts.push(el("div", "rt-gtpl-head", t("A routing group someone shared: its models, routing and rules come with it, never a key")), gImportText, acts, gal);
     }
     replaceKeeping(box, parts);
     return box;
+  }
+  // previewParts: the shared group as importing it would make it here
+  function previewParts(pv, at) {
+    const plan = pv.plan, src = pv.source, out = [];
+    const hd = el("div", "rt-gimp-hd");
+    hd.append(el("b", "", src?.title || plan.name));
+    if (src?.author) hd.append(el("span", "note", t("by {name}", { name: src.author })));
+    if (src?.url) {
+      const page = el("a", "rt-gimp-page", t("Its page"));
+      page.href = src.url;
+      page.onclick = (e) => { e.preventDefault(); api("open", { url: src.url }).catch(() => {}); };
+      hd.append(el("span", "grow"), page);
+    }
+    out.push(hd);
+    const about = src?.description || plan.note;
+    if (about) out.push(el("div", "rt-gimport-note rt-gimp-about", about));
+    const list = el("div", "rt-gimp-list");
+    for (const m of plan.members) list.append(planMember(m, at));
+    out.push(list);
+    const lost = plan.members.filter((m) => !m.here).length;
+    if (plan.dropped) out.push(el("div", "rt-gimport-note", t(plan.dropped === 1 ? "1 rule left out with them" : "{n} rules left out with them", { n: plan.dropped })));
+    const over = plan.replaces && groups.groups.find((g) => g.id === plan.replaces);
+    if (over) out.push(el("div", "rt-gimport-note rt-gimport-over", t("{name} has the same id: its models, routing and rules are replaced by this group's; its accounts and folder rules stay", { name: over.name })));
+    if (plan.empty) out.push(el("div", "rt-gimport-missing", t("None of its models is in your magpie: add a provider that serves one first")));
+    else if (lost) out.push(el("div", "rt-gimport-note", t(lost === 1 ? "1 model left out: not in your magpie" : "{n} models left out: not in your magpie", { n: lost })));
+    const acts = el("div", "acts");
+    const go = el("button", "text primary rt-gimport-go", over ? t("Replace {name}", { name: over.name }) : t("Import"));
+    go.type = "button";
+    go.disabled = !!plan.empty || !!gImport.busy;
+    go.onclick = async () => {
+      go.disabled = true;
+      const body = { use: at.use || {} };
+      if (at.source) body.source = at.source;
+      else { body.text = pv.text; if (plan.replaces) body.replace = true; }
+      if (at.into) body.into = at.into;
+      try {
+        groups = groupsFrom(await api("groups/import", body));
+        if (gUpdates && at.into) delete gUpdates[at.into];
+        gImport = { res: groups.imported };
+        gImportText.value = "";
+        status(t(groups.imported.replaced ? "Replaced {name}" : "Added {name}", { name: groups.imported.name }), "ok");
+        renderGroups();
+        load(); // the gateway's model list, the agents' pickers
+      } catch (e) { go.disabled = false; status(e.message, "err"); }
+    };
+    const back = el("button", "text", t("Back"));
+    back.type = "button";
+    back.onclick = () => { gImport = {}; renderGroups(); };
+    const no = el("button", "text", t("Cancel"));
+    no.type = "button";
+    no.onclick = closeImport;
+    acts.append(go, back, no);
+    out.push(acts);
+    return out;
+  }
+  // planMember: one member of the shared group, and what it is here: a
+  // click picks another provider's same model, or leaves it out
+  const planGroup = {}; // no group of the user's: a member as magpie names it
+  function planMember(m, at) {
+    const row = el("div", "rt-gimp-m" + (m.here ? "" : " out"));
+    row.dataset.shared = m.shared;
+    row.append(el("i", "dot"), el("code", "from", m.shared), el("span", "to-arrow", "→"));
+    const picks = [...new Set([m.here, ...(m.same || [])].filter(Boolean))];
+    const wanted = at.use && m.shared in at.use;
+    const said = m.here ? memberLabel(planGroup, m.here) : t(wanted ? "Left out" : "Not in your magpie");
+    if (!picks.length && !wanted) { row.append(el("span", "to none", said)); return row; }
+    const b = el("button", "text rt-gimp-pick", "");
+    b.type = "button";
+    b.setAttribute("aria-haspopup", "menu");
+    b.append(el("span", "", said), svg(CHEV, 11, 1.6));
+    b.onclick = (e) => {
+      e.stopPropagation();
+      const again = agentMenu?.anchor === b;
+      closeAgentMenu();
+      if (again) return;
+      const set = (to) => previewImport({ ...at, use: { ...(at.use || {}), [m.shared]: to } });
+      // what it would be with no pick of the user's: the same model here
+      const all = [...new Set([...picks, ...(m.same || [])])];
+      openRowMenu(b, [
+        ...all.map((id) => ({ name: memberLabel(planGroup, id), literal: true, icon: id === m.here ? CHECK : "", run: () => set(id) })),
+        { name: "Leave out", icon: m.here ? "" : CHECK, sep: all.length > 0, run: () => set("") },
+      ]);
+    };
+    row.append(b);
+    return row;
+  }
+  // galleryBox: the groups others shared on usemagpie.ai, the most used or
+  // the newest, searched; a card's click previews it, ♥ likes it
+  let gComm = null;
+  function galleryBox() {
+    gComm ||= { sort: "top", q: "", page: 0, list: null, more: false };
+    const box = el("div", "rt-ggal");
+    const hd = el("div", "rt-ggal-hd");
+    const q = el("input", "sess-filter rt-ggal-q");
+    q.type = "search";
+    q.placeholder = t("Search shared groups");
+    q.setAttribute("aria-label", q.placeholder);
+    q.value = gComm.q;
+    let timer = 0;
+    q.oninput = () => { clearTimeout(timer); timer = setTimeout(() => { gComm.q = q.value.trim(); askGallery(0); }, 300); };
+    hd.append(el("b", "", t("Shared by others")), el("span", "grow"), q, segs([["top", t("Most used")], ["new", t("Newest")]], gComm.sort, (s) => { gComm.sort = s; askGallery(0); }));
+    box.append(hd);
+    const cards = el("div", "rt-ggal-cards");
+    if (gComm.err) cards.append(el("div", "note rt-ggal-none", t("Couldn't reach usemagpie.ai: {error}", { error: gComm.err })));
+    else if (!gComm.list) { cards.append(el("div", "note rt-ggal-none", t("Loading…"))); if (!gComm.busy) askGallery(0); }
+    else if (!gComm.list.length) cards.append(el("div", "note rt-ggal-none", t(gComm.q ? "No shared group matches" : "No group is shared yet")));
+    else for (const c of gComm.list) cards.append(galleryCard(c));
+    box.append(cards);
+    if (gComm.more) {
+      const more = el("button", "text rt-ggal-more", t("More"));
+      more.type = "button";
+      more.disabled = !!gComm.busy;
+      more.onclick = () => askGallery(gComm.page + 1);
+      box.append(more);
+    }
+    return box;
+  }
+  async function askGallery(page) {
+    const ask = { sort: gComm.sort, q: gComm.q, page };
+    gComm.busy = ask;
+    try {
+      const r = await api("groups/community", ask);
+      if (gComm.busy !== ask) return; // a newer search went out
+      gComm.list = page ? [...(gComm.list || []), ...(r.groups || [])] : r.groups || [];
+      gComm.more = !!r.more;
+      gComm.page = page;
+      gComm.err = "";
+    } catch (e) {
+      if (gComm.busy !== ask) return;
+      gComm.err = e.message;
+    }
+    gComm.busy = null;
+    if (gImport && !gImport.pv && !gImport.res) renderGroups();
+  }
+  function galleryCard(c) {
+    const card = el("div", "rt-ggal-card" + (c.here ? "" : " none"));
+    card.dataset.id = c.id;
+    card.tabIndex = 0;
+    card.setAttribute("role", "button");
+    const hd = el("div", "hd");
+    hd.append(el("b", "", c.title));
+    const like = el("button", "rt-ggal-like" + (c.liked ? " on" : ""));
+    like.type = "button";
+    like.setAttribute("aria-pressed", String(!!c.liked));
+    like.setAttribute("aria-label", t("Like"));
+    like.append(svg(HEART, 12, 1.5), el("span", "", String(c.likes || 0)));
+    like.onclick = async (e) => {
+      e.stopPropagation();
+      like.disabled = true;
+      try {
+        const r = await api("groups/like", { source: c.id, on: !c.liked });
+        c.liked = !c.liked;
+        c.likes = r.likes;
+        like.classList.toggle("on", c.liked);
+        like.setAttribute("aria-pressed", String(c.liked));
+        like.lastChild.textContent = String(c.likes || 0);
+      } catch (err) { status(err.message, "err"); }
+      like.disabled = false;
+    };
+    hd.append(like);
+    card.append(hd);
+    if (c.description) card.append(el("div", "about", c.description));
+    const n = c.members?.length || 0;
+    card.append(el("div", "mem", (c.members || []).map((m) => m.split("/").slice(1).join("/") || m).join(memberJoin(c))));
+    const foot = el("div", "foot note");
+    foot.append(el("span", "", t("{here} of {n} models in your magpie", { here: c.here || 0, n })));
+    if (c.uses) foot.append(el("span", "", t(c.uses === 1 ? "used by 1" : "used by {n}", { n: c.uses })));
+    if (c.author) foot.append(el("span", "", t("by {name}", { name: c.author })));
+    if (c.mine) foot.append(el("span", "tag", t("Yours")));
+    else if (c.imported) foot.append(el("span", "tag", t("Imported")));
+    card.append(foot);
+    const open = () => previewImport({ source: c.id, into: c.imported || "" });
+    card.onclick = open;
+    card.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } };
+    return card;
+  }
+  // askUpdates: once a page load, which groups imported from usemagpie.ai
+  // have a newer version there (groupshare.Updates, kept an hour)
+  let gUpdates = null, gUpdatesAsked = false;
+  async function askUpdates() {
+    if (gUpdatesAsked || !groups || !Object.keys(groups.from || {}).length) return;
+    gUpdatesAsked = true;
+    try { gUpdates = (await api("groups/updates", {})).updates || {}; } catch { return; }
+    if (Object.keys(gUpdates).length) renderGroups();
+  }
+  // updateLine: under a group imported from usemagpie.ai whose author
+  // shared a newer version: Review previews it over this group, Not now
+  // leaves this version be
+  function updateLine(g, up) {
+    const line = el("div", "mem rt-gupdate");
+    // the dot rides in the words, so a line they wrap onto never starts bare
+    const says = el("span");
+    says.append(el("i", "dot"), t("Its author shared a newer version"));
+    line.append(says);
+    const review = el("button", "text rt-gupdate-review", t("Review"));
+    review.type = "button";
+    review.onclick = (e) => { e.stopPropagation(); openImport({ source: up.id, into: g.id }); };
+    const later = el("button", "text rt-gupdate-later", t("Not now"));
+    later.type = "button";
+    later.onclick = async (e) => {
+      e.stopPropagation();
+      later.disabled = true;
+      try {
+        groups = groupsFrom(await api("groups/passover", { id: g.id, version: up.version }));
+        delete gUpdates[g.id];
+        renderGroups();
+      } catch (err) { later.disabled = false; status(err.message, "err"); }
+    };
+    const acts = el("span", "acts");
+    acts.append(review, later);
+    line.append(acts);
+    return line;
   }
   // a template's name and what it does, in the user's language
   // (provider.TemplateNames)
@@ -7724,6 +8043,8 @@ function routingPage(part) {
       note.title = g.note;
       main.append(note);
     }
+    const up = gUpdates?.[g.id];
+    if (up) main.append(updateLine(g, up));
     const manual = g.routing === "manual";
     const mem = manual ? pickRow(g) : memberLine(g, shownMembers(g), true);
     main.append(mem);
@@ -7893,9 +8214,11 @@ function routingPage(part) {
       // change without touching the one agents use (lc on Discord)
       { name: "Duplicate", icon: COPY_ICON, sep: true, tip: t("A copy of {name} with its models, routing and rules, listed after it", { name: g.name }),
         run: async () => { if (!groupDirty() || await confirmDiscard()) groupAction("copy", { id: g.id, name: t("{name} copy", { name: g.name }) }, t("Duplicated {name}", { name: g.name })); } },
-      // the group as text for someone else's magpie (laincatx on X)
-      { name: "Copy to share", icon: OUT, tip: t("{name} as text to paste into another magpie: its models, routing and rules, no key", { name: g.name }),
-        run: () => shareGroup(g) },
+      // the group at a link on usemagpie.ai (earayu on X); as text, under
+      // the sheet's Advanced (laincatx on X)
+      { name: groups.links?.[g.id] ? "Shared…" : "Share…", icon: OUT, off: !!g.auto, why: g.auto ? t("Found by magpie: change it first to make it yours") : "",
+        tip: t("A link anyone can import {name} from: its models, routing and rules, never a key", { name: g.name }),
+        run: () => shareSheet(g) },
       // the card's own Remove, with its own question first (jimlee0824v2 on X)
       { name: "Remove", icon: "M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5M7 7v4M9 7v4", sep: true,
         run: () => groupAction("delete", { id: g.id }, t("{name} removed", { name: g.name })) },
@@ -9852,7 +10175,11 @@ function routingPage(part) {
     ed?.querySelector("input")?.focus({ preventScroll: true });
   }
   const askedGroup = document.body.classList.contains("window") && params.get("newgroup");
+  // a magpie://group link (groupView): the shared group's preview, once
+  const askedShare = document.body.classList.contains("window") && params.get("shared");
+  if (askedShare) { params.delete("shared"); history.replaceState(null, "", "?" + params); }
   if (askedGroup) loadGroups().then(() => window.newGroupWith(askedGroup, ""));
+  else if (askedShare) loadGroups().then(() => openImport({ source: askedShare }));
   else loadGroups();
 
   // ---------- where the reader is, as requests come ----------

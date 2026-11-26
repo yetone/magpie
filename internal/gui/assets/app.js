@@ -198,10 +198,10 @@ async function api(path, body, heads, signal) {
       err.code = data.code;
       err.message = {
         newer: t("This group was shared from a newer magpie (format {n}): update magpie to import it", { n: data.format }),
-        no_format: t("This shared group says no format it is in: copy it again with Copy to share"),
-        unreadable: t("This shared group can't be read: copy it again with Copy to share"),
+        no_format: t("This shared group says no format it is in: copy it again with Copy as text"),
+        unreadable: t("This shared group can't be read: copy it again with Copy as text"),
         none_here: t("None of the group's models is in your magpie: {models}", { models: data.models }),
-      }[data.share] || t("This is not a routing group shared from magpie: copy one with Copy to share in a group's menu");
+      }[data.share] || t("This is not a routing group shared from magpie: paste its link, or the text from Copy as text");
     }
     // an agent's npm update whose global folder (Program Files) needs an
     // administrator, or RTK's winget for every user, the prompt declined or

@@ -64,6 +64,16 @@ const groupUsage = `usage:
                                           reasoning or when the cheap ones fail), steady (the strongest model of
                                           each of up to three providers, each behind the other). A name or id in
                                           use is numbered, never replaced
+  magpie group share <id> [--title <t>] [--about <text>] [--by <name>] [--unlisted]
+                                          share a group at a usemagpie.ai/g/… link: listed on usemagpie.ai/groups,
+                                          or --unlisted, opened only by its link. Its models, routing and rules
+                                          go; no key, account or folder, and a provider you added yourself is
+                                          named custom. Again, it updates the link; --stop takes it down;
+                                          --text prints it as text to paste instead, sending nothing
+  magpie group import <link|text|-> [--over <id>]
+                                          add a group shared at a usemagpie.ai/g/… link (or as text): each model
+                                          you don't have goes to the same model from a provider you have, or is
+                                          left out; --over <id> replaces that group (the author's newer version)
   magpie group rm <id>…                   remove groups (one magpie found is hidden instead)
   magpie group restore <id>               bring back a group magpie found that you removed
   magpie group auto [on|off]              whether magpie finds groups on its own (on by default); off, none is
@@ -809,6 +819,10 @@ func groupCmd(args []string) error {
 		return showGroup(g)
 	case "template", "templates", "tpl":
 		return templateCmd(rest)
+	case "share", "publish":
+		return groupShareCmd(rest)
+	case "import":
+		return groupImportCmd(rest)
 	case "rule", "rules":
 		return ruleCmd(rest)
 	case "show":

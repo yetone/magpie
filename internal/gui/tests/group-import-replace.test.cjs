@@ -1,9 +1,10 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // issennknight on Discord: Import of a shared routing group whose id is a
 // group of the user's own replaces that group instead of adding another.
-// The box says so before it is pressed (the button reads Replace <name>,
-// a line says what stays), a group magpie found or an id nobody has is
-// still added, and only a replacing import posts replace. At 420px, in
+// Pasted text is previewed first (groups/preview); the preview says so
+// before Import is pressed (the button reads Replace <name>, a line says
+// what stays), a group magpie found or an id nobody has is still added,
+// and only a replacing preview and import post replace. At 420px, in
 // every language, Chromium and WebKit.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -20,11 +21,11 @@ const info = (ids) => ids.map((id) => ({ id, ready: true }));
 const group = (id, name, members, more = {}) => ({ id, name, members, ready: true, memberInfo: info(members), ...more });
 
 const words = {
-  en: { imp: "Import", rep: "Replace One", hint: "One has the same id", done: "Replaced One" },
-  zh: { imp: "导入", rep: "替换 One", hint: "One 的 id 相同", done: "已替换 One" },
-  "zh-TW": { imp: "匯入", rep: "取代 One", hint: "One 的 id 相同", done: "已取代 One" },
-  ja: { imp: "インポート", rep: "One を置き換える", hint: "One と ID が同じ", done: "One を置き換えました" },
-  de: { imp: "Importieren", rep: "One ersetzen", hint: "One hat dieselbe ID", done: "One ersetzt" },
+  en: { pv: "Preview", imp: "Import", rep: "Replace One", hint: "One has the same id", done: "Replaced One" },
+  zh: { pv: "预览", imp: "导入", rep: "替换 One", hint: "One 的 id 相同", done: "已替换 One" },
+  "zh-TW": { pv: "預覽", imp: "匯入", rep: "取代 One", hint: "One 的 id 相同", done: "已取代 One" },
+  ja: { pv: "プレビュー", imp: "インポート", rep: "One を置き換える", hint: "One と ID が同じ", done: "One を置き換えました" },
+  de: { pv: "Vorschau", imp: "Importieren", rep: "One ersetzen", hint: "One hat dieselbe ID", done: "One ersetzt" },
 };
 const shared = (id) => JSON.stringify({ magpie: "routing-group", version: 1, group: { id, name: "One", members: ["a/x"] } });
 function serve(lang, posts) {
@@ -52,6 +53,18 @@ function serve(lang, posts) {
       posts.push(["copy", JSON.parse(r.request().postData() || "{}").text]);
       return json({});
     }
+    if (url.pathname === "/api/groups/preview") {
+      // provider.PlanImport: the user's group the id names is replaced
+      // only when replace is asked
+      const b = JSON.parse(r.request().postData() || "{}");
+      posts.push(["preview", b.text, b.replace]);
+      const a = b.text.indexOf("{"), z = b.text.lastIndexOf("}");
+      let x = null;
+      try { x = JSON.parse(b.text.slice(a, z + 1)); } catch {}
+      if (x?.magpie !== "routing-group") return r.fulfill({ status: 400, json: { error: "this is not a routing group shared from magpie", code: "share", share: "not_shared", format: "0", models: "" } });
+      const replaces = b.replace && x.group.id.toLowerCase() === "one" ? "one" : undefined;
+      return json({ text: JSON.stringify(x), source: null, plan: { name: x.group.name, members: x.group.members.map((m) => ({ shared: m, here: m })), replaces }, into: "" });
+    }
     if (url.pathname === "/api/groups/import") {
       const { text } = JSON.parse(r.request().postData() || "{}");
       posts.push(["import", text, JSON.parse(r.request().postData()).replace]);
@@ -70,6 +83,7 @@ function serve(lang, posts) {
 }
 
 
+const imports = (posts) => posts.filter((p) => p[0] === "import");
 const listed = (page) => page.locator(".rt-groups > .rt-group").evaluateAll((rs) => rs.map((r) => r.dataset.id));
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -90,17 +104,29 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator(".rt-gimportbtn").click();
         const text = page.locator(".rt-gimport-text"), go = page.locator(".rt-gimport-go"), over = page.locator(".rt-gimport-over");
         await text.waitFor();
-        assert.equal((await go.textContent()).trim(), w.imp);
+        assert.equal((await go.textContent()).trim(), w.pv);
         assert(await over.isHidden(), "a hint with nothing pasted");
+        const back = page.locator(".rt-gimport .acts > button").nth(1); // Import, Back, Cancel
 
-        // an id no group of the user's has, or one magpie found: Import
+        // an id no group of the user's has, or one magpie found: previewed
+        // as an Import, no replace asked
         for (const id of ["nope", "found"]) {
           await text.fill(shared(id));
+          assert.equal((await go.textContent()).trim(), w.pv, id);
+          await go.click();
+          await page.locator(".rt-gimp-list").waitFor();
           assert.equal((await go.textContent()).trim(), w.imp, id);
           assert(await over.isHidden(), id);
+          assert.equal(posts.at(-1)[2], undefined, "replace asked in the preview of " + id);
+          await back.click();
+          await text.waitFor();
         }
-        // the id of the user's own group: says which it replaces, before
+        // the id of the user's own group: the preview says which it
+        // replaces, before Import is pressed
         await text.fill("```\n" + shared("One") + "\n```");
+        await go.click();
+        await page.locator(".rt-gimp-list").waitFor();
+        assert.equal(posts.at(-1)[2], true, "replace not asked in the preview");
         assert.equal((await go.textContent()).trim(), w.rep);
         assert((await over.textContent()).includes(w.hint), await over.textContent());
         const ob = await over.boundingBox(), gb = await go.boundingBox();
@@ -108,11 +134,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator(".rt-gfilter").fill("o");
         await page.locator(".rt-gfilter").fill("");
         assert.equal((await go.textContent()).trim(), w.rep, "the redraw lost the label");
+        assert.equal(imports(posts).length, 0, "imported before Import was pressed");
         await go.click();
         await page.locator(".rt-gimport-done").waitFor();
         assert.equal((await page.locator(".rt-gimport-done").textContent()).trim(), w.done);
-        assert.equal(posts.length, 1);
-        assert.equal(posts[0][2], true, "replace not asked");
+        assert.equal(imports(posts).length, 1);
+        assert.equal(imports(posts)[0][2], true, "replace not asked");
         assert.deepEqual(await listed(page), ["one", "two", "found"]);
 
         // an id nobody has: added as before, no replace asked
@@ -120,11 +147,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator(".rt-gimportbtn").click();
         await text.fill(shared("nope"));
         await go.click();
+        await page.locator(".rt-gimp-list").waitFor();
+        await go.click();
         await page.locator(".rt-gimport-done").waitFor();
-        assert.equal(posts[1][2], undefined, "replace asked for an id nobody has");
+        assert.equal(imports(posts)[1][2], undefined, "replace asked for an id nobody has");
         assert.deepEqual(await listed(page), ["one", "two", "found", "new"]);
         if (lang !== "en") {
-          const keys = ["Replace {name}", "{name} has the same id: its models, routing and rules are replaced by this group's; its accounts and folder rules stay", "Replaced {name}"];
+          const keys = ["Preview", "Replace {name}", "{name} has the same id: its models, routing and rules are replaced by this group's; its accounts and folder rules stay", "Replaced {name}"];
           const missing = await page.evaluate(([l, ks]) => ks.filter((k) => !I18N[l][k]), [lang, keys]);
           assert.deepEqual(missing, [], `every string has its ${lang}`);
         }
