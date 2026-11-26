@@ -7722,9 +7722,6 @@ func (s *Server) serveSubscriptionAs(w http.ResponseWriter, r *http.Request, fro
 	if run != nil && run.lean != req.leanPrompt {
 		run, how = nil, "system prompt mode changed"
 	}
-	if run != nil && !run.claimResume() {
-		run, how = nil, answeredElsewhere
-	}
 	// Tool-call IDs find the process that made them, independently of the
 	// account routing selected. Continuing a different owner's process would
 	// spend its quota and report its reply or limit against the chosen account.
@@ -7732,10 +7729,26 @@ func (s *Server) serveSubscriptionAs(w http.ResponseWriter, r *http.Request, fro
 	// the exception: its run's Claude Code puts the account's profile in
 	// Claude Code's config, so its tool results come back on the same
 	// sign-in named by its email, and the run goes on under that name.
-	if run != nil && run.owned() != owner && !run.takeNamedOwner(owner) {
+	if run != nil {
 		was := run.owned()
-		run.abort()
-		run, how = nil, accountChanged+": the run was on "+ownerSaid(was)+", this request goes to "+ownerSaid(owner)
+		switch {
+		case was != owner && !run.takeNamedOwner(owner):
+			// The run is not claimed for another account's request: a
+			// fork sub-agent routed to another account answers its lead's
+			// calls too, and the lead's own results still come on the
+			// run's account. Ending the run here ended the lead's turn
+			// mid-way, and its results were told whole to a new run
+			// (recih, #7852); it goes on waiting, as it does for a fork on
+			// its own account. The same login moved between Claude Code's
+			// home and a saved one is the run's own caller, whose old
+			// process (in a home that now reads another sign-in) is let go.
+			if strings.TrimSuffix(was, "\x00"+ownHome) == strings.TrimSuffix(owner, "\x00"+ownHome) && run.claimResume() {
+				run.abort()
+			}
+			run, how = nil, accountChanged+": the run was on "+ownerSaid(was)+", this request goes to "+ownerSaid(owner)
+		case !run.claimResume():
+			run, how = nil, answeredElsewhere
+		}
 	}
 	// the request's conversation was rewritten since the run's last reply —
 	// the client's own, as Pi does compacting it mid-turn, or another

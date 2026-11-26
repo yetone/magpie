@@ -14,6 +14,8 @@ import (
 // Tool results identify a waiting process, but the router may have picked
 // another account since that process made its call. The selected account
 // must answer, including when the same account moved out of the agent's home.
+// A fork sub-agent answered on another account leaves the lead's run waiting
+// on the run's account for the lead's own results (recih, #7852).
 func TestClaudeToolResultsKeepTheSelectedAccount(t *testing.T) {
 	for _, ids := range []string{"exact", "remapped"} {
 		// "named since": the run started on Claude Code's own sign-in before
@@ -87,9 +89,21 @@ func TestClaudeToolResultsKeepTheSelectedAccount(t *testing.T) {
 				if err := json.Unmarshal(rec.Body.Bytes(), &reply); err != nil || len(reply.Content) != 1 || reply.Content[0].Text != want {
 					t.Fatalf("selected account replied %s; want %q (decode: %v)", rec.Body, want, err)
 				}
+				parentContinues := mode == "another account" || mode == "unnamed, another account"
+				if parentContinues {
+					// The child answered on B. Deliver the parent's own result
+					// on A and require its original waiting process to answer.
+					parent := h.started[0]
+					parentBody := strings.Replace(body, `"content":"result"`, `"content":"parent result"`, 1)
+					rec := httptest.NewRecorder()
+					code, msg := h.s.serveSubscription(rec, httptest.NewRequest("POST", "/v1/messages", strings.NewReader(parentBody)), provider.Anthropic, "Claude Code", "claude-sonnet-5", parent.owned(), []byte(parentBody), &Usage{}, h.start)
+					if code != 200 || !strings.Contains(rec.Body.String(), "kept run") || h.runs() != 1 {
+						t.Fatalf("parent did not resume its original run: %d %s %s", code, msg, rec.Body)
+					}
+				}
 				select {
 				case got := <-received:
-					if got != (mode == "same owner" || mode == "named since") {
+					if got != (parentContinues || mode == "same owner" || mode == "named since") {
 						t.Fatalf("old process received the result: %v, mode %s", got, mode)
 					}
 				case <-time.After(2 * time.Second):
@@ -101,8 +115,8 @@ func TestClaudeToolResultsKeepTheSelectedAccount(t *testing.T) {
 }
 
 // Only a run started on Claude Code's own sign-in while it had no name
-// takes a new owner, and only that sign-in named: every other change of
-// account still ends the run.
+// takes a new owner, and only that sign-in named: a different account never
+// takes the waiting process.
 func TestClaudeRunTakesOnlyItsOwnSignInsName(t *testing.T) {
 	unnamed := "claude\x00Claude Max\x00" + ownHome + "\x00" + unnamedOwner
 	named := "claude\x00a@example.com\x00" + ownHome

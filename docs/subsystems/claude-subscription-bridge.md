@@ -1643,8 +1643,18 @@ unnamed takes the named owner of the same provider's own sign-in
 (`takeNamedOwner`), and goes on: a run in Claude Code's own home runs as
 whatever that home is signed in to. A turn that ends without a tool call
 takes the name before its keys are made (`nameOwner`, from
-`provider.ClaudeOwnName`), so the next turn finds the idle run. Every
-other change of owner still lets the run go. The owner is an atomic
+`provider.ClaudeOwnName`), so the next turn finds the idle run.
+
+Any other owner's request gets a run of its own and leaves the waiting
+run alone: it isn't claimed, and its pending calls and timer stay as
+they were. A fork sub-agent routed to another account answers its lead's
+calls by their ids, and the lead's own results still come on the run's
+account. Until 11-26 the run was let go for the fork, mid-turn, and the
+lead's results were told whole to a new run (recih, #7852). Only the same
+login moved between Claude Code's home and a saved one (owners equal but
+for `own`) lets the run go, when it can claim it: the process in the
+home now reads another sign-in. `TestClaudeToolResultsKeepTheSelectedAccount`
+holds both. The owner is an atomic
 pointer (`owned`), read by the run's reader without a lock.
 
 ### A conversation the client rewrote (#912)
