@@ -660,7 +660,7 @@ export async function page(req, env, now = Date.now()) {
 <h1>${esc(t.gallery)}</h1>
 <p class="sub">${esc(t.gallerySub)}</p>
 <form class="find" method="get" action="/groups" role="search">${qy.sort === "new" ? '<input type="hidden" name="sort" value="new">' : ""}${pinned ? `<input type="hidden" name="lang" value="${lang}">` : ""}<input type="search" name="q" value="${esc(qy.q)}" placeholder="${esc(t.search)}" aria-label="${esc(t.search)}" maxlength="${MAX_QUERY}"><button class="btn ghost" type="submit">${esc(t.go)}</button></form>
-<nav class="tabs"><a href="${esc(link({ sort: "top", page: 0 }))}"${qy.sort === "top" ? ' aria-current="page"' : ""}>${esc(t.top)}</a><a href="${esc(link({ sort: "new", page: 0 }))}"${qy.sort === "new" ? ' aria-current="page"' : ""}>${esc(t.fresh)}</a></nav>
+<div class="tabs"><a href="${esc(link({ sort: "top", page: 0 }))}"${qy.sort === "top" ? ' aria-current="page"' : ""}>${esc(t.top)}</a><a href="${esc(link({ sort: "new", page: 0 }))}"${qy.sort === "new" ? ' aria-current="page"' : ""}>${esc(t.fresh)}</a></div>
 <div class="list">${cards || `<p class="empty">${esc(t.none)}</p>`}</div>
 ${got.more ? `<a class="next" href="${esc(link({ page: qy.page + 1 }))}">${esc(t.next)}</a>` : ""}
 </div></div>

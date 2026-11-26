@@ -387,6 +387,16 @@ test("groups: the gallery lists the listed groups, finds and pages", async () =>
   assert.equal(await page(req("GET", "/g/short"), s.env), null);
 });
 
+test("groups: no page puts a nav in its card, which docs.css draws as the site's sticky header", async () => {
+  const s = setup();
+  await share(s, { title: "Alpha" });
+  const id = (await (await page(req("GET", "/groups"), s.env)).text()).match(/href="\/g\/([a-z0-9]+)/)[1];
+  for (const path of ["/groups", "/groups?q=nothing-like-it&sort=new", `/g/${id}`]) {
+    const html = await (await page(req("GET", path), s.env)).text();
+    assert.doesNotMatch(html, /<nav[\s>]/, path);
+  }
+});
+
 test("groups: the worker routes the pages and the API", async () => {
   const s = setup();
   const r = await worker.fetch(req("POST", "/api/groups", { body: meta({ title: "Via worker" }) }), s.env, s.ctx);
