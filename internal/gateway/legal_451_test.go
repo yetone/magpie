@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -25,6 +26,11 @@ var legal451Bodies = []struct{ name, ctype, body string }{
 	{"json", "application/json", `{"error":{"message":"The request was blocked.","type":"invalid_request_error"}}`},
 	{"stepfun", "application/json", `{"error":{"type":"censorship_blocked","message":"The content you provided or machine outputted is blocked."}}`},
 }
+
+// told451 finds the refusal in what the agent got: 451 as a number of
+// its own, not inside an id magpie made up (msg_…8745124…, red once in
+// ten -race runs), or the refusal's words.
+var told451 = regexp.MustCompile(`\b451\b|blocked|Unavailable For Legal Reasons`)
 
 // legalOK is a member that answers every request, as a stream when asked
 // for one.
@@ -101,7 +107,7 @@ func TestLegal451FailsOverAndRestsNobody(t *testing.T) {
 					if code != http.StatusOK || b.asked() != 1 || a.n != 1 {
 						t.Fatalf("%d %s (a %d, b %d)", code, body, a.n, b.asked())
 					}
-					if strings.Contains(body, "451") || strings.Contains(body, "blocked") {
+					if told451.MatchString(body) {
 						t.Fatalf("the agent was told the refusal: %s", body)
 					}
 					r := lastRoute(s)
