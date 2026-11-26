@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title data-i18n="meta.title">magpie: one model switcher for Claude Code, Codex and Gemini CLI</title>
-<meta name="description" data-i18n-attr="content:meta.desc" content="One place to pick every agent's model. Codex on DeepSeek, Claude Code on Kimi, Gemini CLI on GLM, from the menu bar, through one local gateway.">
+<title data-i18n="meta.title">magpie: every plan you pay for, in any agent</title>
+<meta name="description" data-i18n-attr="content:meta.desc" content="Pool every plan you pay for — Claude, ChatGPT, Copilot, GLM Coding Plan, Kimi Code and more — and use them in Claude Code, Codex, Claude Desktop or any other agent. No plan stays locked to one agent; when one runs out, the next takes over.">
 <meta name="color-scheme" content="light dark">
 <!-- Google Search Console owns https://usemagpie.ai/ by this tag: keep it -->
 <meta name="google-site-verification" content="oR5FNVicy-fUTiCq8dXQNL45eoN09v5zp0zdQJeqBn0">
@@ -40,14 +40,14 @@ window.themeTitle = (m) => T("Theme: " + m, "主题：" + { system: "跟随系�
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="magpie">
 <meta property="og:locale" data-i18n-attr="content:meta.locale" content="en_US">
-<meta property="og:title" data-i18n-attr="content:meta.title" content="magpie: one model switcher for Claude Code, Codex and Gemini CLI">
-<meta property="og:description" data-i18n-attr="content:meta.tagline" content="Every agent’s model. One place.">
+<meta property="og:title" data-i18n-attr="content:meta.title" content="magpie: every plan you pay for, in any agent">
+<meta property="og:description" data-i18n-attr="content:meta.tagline" content="All your plans, one pool. Any agent.">
 <meta property="og:image" content="https://usemagpie.ai/img/og.png">
 <meta property="og:image:width" content="2400">
 <meta property="og:image:height" content="1260">
-<meta property="og:image:alt" data-i18n-attr="content:meta.ogalt" content="magpie: every agent’s model, one place">
-<meta name="twitter:title" data-i18n-attr="content:meta.title" content="magpie: one model switcher for Claude Code, Codex and Gemini CLI">
-<meta name="twitter:description" data-i18n-attr="content:meta.tagline" content="Every agent’s model. One place.">
+<meta property="og:image:alt" data-i18n-attr="content:meta.ogalt" content="magpie: all your plans, one pool, any agent">
+<meta name="twitter:title" data-i18n-attr="content:meta.title" content="magpie: every plan you pay for, in any agent">
+<meta name="twitter:description" data-i18n-attr="content:meta.tagline" content="All your plans, one pool. Any agent.">
 <meta name="twitter:image" content="https://usemagpie.ai/img/og.png">
 <meta property="og:url" data-i18n-attr="content:meta.url" content="https://usemagpie.ai/">
 <link rel="canonical" data-i18n-attr="href:meta.url" href="https://usemagpie.ai/">
@@ -60,7 +60,7 @@ window.themeTitle = (m) => T("Theme: " + m, "主题：" + { system: "跟随系�
 <meta name="twitter:card" content="summary_large_image">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@graph":[
-{"@type":"SoftwareApplication","@id":"https://usemagpie.ai/#app","name":"magpie","url":"https://usemagpie.ai/","description":"One place to pick every agent's model: Codex, Claude Code, Gemini CLI and more, through one local gateway, from the menu bar.","applicationCategory":"DeveloperApplication","operatingSystem":"macOS 12+, Windows, Linux","downloadUrl":"https://github.com/yetone/magpie-releases/releases/latest","image":"https://usemagpie.ai/img/og.png","license":"https://opensource.org/licenses/MIT","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"sameAs":["https://github.com/yetone/magpie"]},
+{"@type":"SoftwareApplication","@id":"https://usemagpie.ai/#app","name":"magpie","url":"https://usemagpie.ai/","description":"Pool every plan you pay for (Claude, ChatGPT, Copilot, GLM Coding Plan, Kimi Code and more) and use them in Claude Code, Codex, Claude Desktop or any other agent, through one local gateway. No plan stays locked to one agent; when one runs out, the next takes over.","applicationCategory":"DeveloperApplication","operatingSystem":"macOS 12+, Windows, Linux","downloadUrl":"https://github.com/yetone/magpie-releases/releases/latest","image":"https://usemagpie.ai/img/og.png","license":"https://opensource.org/licenses/MIT","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"sameAs":["https://github.com/yetone/magpie"]},
 {"@type":"WebSite","@id":"https://usemagpie.ai/#site","name":"magpie","url":"https://usemagpie.ai/","inLanguage":["en","zh-CN","ja","de"]}
 ]}
 </script>
@@ -165,6 +165,8 @@ nav.open .menu .i-close { display: block; }
 .hero { padding: 80px 0 32px; display: grid; grid-template-columns: 1.05fr .95fr; gap: 56px; align-items: center; }
 .hero h1 { font-size: clamp(40px, 6vw, 64px); line-height: 1.04; letter-spacing: -.035em; font-weight: 700; margin: 0 0 22px; }
 .hero h1 span { color: var(--ink3); }
+/* Japanese breaks between phrases only, at the <wbr>s, never inside a word */
+:lang(ja) .hero h1 { font-size: clamp(36px, 5.2vw, 54px); word-break: keep-all; }
 .hero p.lede { font-size: 19px; color: var(--ink2); margin: 0 0 32px; max-width: 30em; }
 .cta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 .meta { margin-top: 14px; font-size: 13px; color: var(--ink3); }
@@ -356,12 +358,18 @@ footer a:hover { color: var(--ink); }
   .grid.rt-points { grid-template-columns: 1fr; }
 }
 .wide img { width: 100%; height: auto; height: auto; display: block; border-radius: 14px; box-shadow: var(--shadow); border: 1px solid var(--line); }
-.subs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.subs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
 .subs > div { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px; }
 .subs .who { display: flex; align-items: center; gap: 8px; font-weight: 600; margin-bottom: 8px; }
 .subs .who img { width: 20px; height: 20px; }
 .subs p { margin: 0; color: var(--ink2); font-size: 15px; }
-.subs code { font-size: 13px; }
+.subs code { font-size: 13px; white-space: nowrap; }
+.subs .stack { display: inline-flex; gap: 4px; }
+.pool { margin: 20px 0 0; max-width: 760px; color: var(--ink2); }
+.pool b { color: var(--ink); font-weight: 600; }
+.pool code { font-size: 14px; white-space: nowrap; }
+.pool a { white-space: nowrap; }
+@media (max-width: 1080px) { .subs { grid-template-columns: repeat(2, 1fr); } }
 
 @media (max-width: 860px) {
   .hero { grid-template-columns: 1fr; padding-top: 56px; gap: 44px; }
@@ -440,12 +448,12 @@ footer a:hover { color: var(--ink); }
 <main class="wrap">
   <header class="hero">
     <div>
-      <h1 data-i18n="hero.h1">Every agent’s model. <span>One place.</span></h1>
-      <p class="lede" data-i18n="hero.lede">magpie gives every agent every model. Add a provider once — DeepSeek, Kimi, GLM, Qwen, OpenRouter, Ollama, or the Claude and ChatGPT plans you already pay for — and pick it from Codex, Claude Code, Gemini CLI or any other agent, in one click.</p>
+      <h1 data-i18n="hero.h1">All your plans, one pool. <span>Any agent.</span></h1>
+      <p class="lede" data-i18n="hero.lede">Claude Max, ChatGPT Pro, GitHub Copilot, GLM Coding Plan, Kimi Code, Volcengine Coding Plan — add every plan you pay for to magpie, and Claude Code, Codex, Claude Desktop or any other agent can use all of them. No plan stays locked to the agent you bought it for, and when one runs out, the next takes over. Pay-as-you-go keys and local models join the same pool.</p>
       <div class="chips">
-        <span class="chip"><img src="/icons/codex-color.svg" alt=""><b>Codex</b><i>→</i><img src="/icons/deepseek-color.svg" alt="">DeepSeek V4 Pro</span>
-        <span class="chip"><img src="/icons/claudecode-color.svg" alt=""><b>Claude Code</b><i>→</i><img class="bird" src="/icons/kimi.svg" alt="">Kimi K3</span>
-        <span class="chip"><img src="/icons/geminicli-color.svg" alt=""><b>Gemini CLI</b><i>→</i><img src="/icons/zhipu-color.svg" alt="">GLM-5.3</span>
+        <span class="chip"><img src="/icons/claudecode-color.svg" alt=""><b>Claude Code</b><i>→</i><img class="bird" src="/icons/openai.svg" alt="">ChatGPT Pro</span>
+        <span class="chip"><img src="/icons/codex-color.svg" alt=""><b>Codex</b><i>→</i><img src="/icons/claude-color.svg" alt="">Claude Max</span>
+        <span class="chip"><img src="/icons/claude-color.svg" alt=""><b>Claude Desktop</b><i>→</i><img src="/icons/zhipu-color.svg" alt="">GLM Coding Plan</span>
       </div>
       <div class="cta">
         <a class="btn dl" href="/download">
@@ -568,6 +576,19 @@ footer a:hover { color: var(--ink); }
     </ul>
   </div>
 
+  <section id="subscriptions">
+    <p class="eyebrow" data-i18n="subs.eyebrow">Plans, pooled</p>
+    <h2 data-i18n="subs.h2">Bought for one agent. Used by all of them.</h2>
+    <p class="sub" data-i18n="subs.sub">Signed in to Claude Code, Codex or Copilot? That sign-in becomes a provider, with nothing to copy or paste. A coding plan sold as a key — GLM, Kimi Code, Volcengine, Bailian, StepFun — takes one paste. Then every model of every plan is in every agent’s picker.</p>
+    <div class="subs">
+      <div><div class="who"><img src="/icons/claude-color.svg" alt="">Claude Pro / Max</div><p data-i18n="subs.claude">Bought for Claude Code, used in Codex, OpenCode or Pi too: <code>claude/claude-sonnet-5</code>.</p></div>
+      <div><div class="who"><img class="bird" src="/icons/openai.svg" alt="">ChatGPT Plus / Pro</div><p data-i18n="subs.codex">Bought for Codex, used in Claude Code or Claude Desktop too: <code>codex/gpt-5.5</code>.</p></div>
+      <div><div class="who"><img class="bird" src="/icons/githubcopilot.svg" alt="">GitHub Copilot</div><p data-i18n="subs.copilot">Your Copilot seat, outside VS Code too, in any agent: <code>copilot/claude-sonnet-5</code>.</p></div>
+      <div><div class="who"><span class="stack"><img src="/icons/zhipu-color.svg" alt=""><img class="bird" src="/icons/kimi.svg" alt=""><img src="/icons/volcengine-color.svg" alt=""></span><span data-i18n="subs.plans.t">Coding plans</span></div><p data-i18n="subs.plans">GLM, Kimi Code, Volcengine, Bailian, StepFun and more: paste the plan’s key once, and every agent can use it.</p></div>
+    </div>
+    <p class="pool" data-i18n="subs.pool"><b>Then pool them.</b> A routing group puts every plan behind one model name, such as <code>group/my-plans</code>. Every agent picks that one name and magpie picks the plan: when one runs low or hits a limit, the next answers, before your agent ever sees an error. <a href="/docs/routing-groups">Routing groups</a></p>
+  </section>
+
   <section id="how">
     <p class="eyebrow" data-i18n="how.eyebrow">How it works</p>
     <h2 data-i18n="how.h2">One gateway speaks every API.</h2>
@@ -642,16 +663,6 @@ footer a:hover { color: var(--ink); }
     </div>
   </section>
 
-  <section id="subscriptions">
-    <p class="eyebrow" data-i18n="subs.eyebrow">Subscriptions, shared</p>
-    <h2 data-i18n="subs.h2">The plans you pay for, in every agent.</h2>
-    <p class="sub" data-i18n="subs.sub">Signed in to an agent? That login becomes a provider. Its models show up in every other agent’s picker — nothing copied, no key to paste, tokens refreshed the way the agent does it.</p>
-    <div class="subs">
-      <div><div class="who"><img src="/icons/claude-color.svg" alt="">Claude Pro / Max</div><p data-i18n="subs.claude">Your Claude Code sign-in powers OpenCode, Pi or Goose: <code>claude/claude-sonnet-5</code>.</p></div>
-      <div><div class="who"><img class="bird" src="/icons/openai.svg" alt="">ChatGPT Plus / Pro</div><p data-i18n="subs.codex">Your Codex sign-in puts GPT in Claude Code: <code>codex/gpt-5.5</code>.</p></div>
-      <div><div class="who"><img class="bird" src="/icons/githubcopilot.svg" alt="">GitHub Copilot</div><p data-i18n="subs.copilot">Your Copilot seat serves any agent: <code>copilot/claude-sonnet-4.5</code>.</p></div>
-    </div>
-  </section>
 
   <section id="routing">
     <p class="eyebrow" data-i18n="rt.eyebrow">Smart routing</p>
