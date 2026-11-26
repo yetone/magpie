@@ -5,17 +5,27 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/yetone/magpie/internal/agent"
 )
 
 // cindyLeftovers takes out of Cindy's folders the servers magpie wrote
-// where nothing reads them. From v0.1.4777 the Library wrote the servers
-// given Cindy into pi-agent-home/mcp.json too, for Cindy's Pi, which never
-// reads it (targets.go). It runs before syncMCP, while the applied list
+// where nothing reads them. It runs before syncMCP, while the applied list
 // still names what the last sync wrote; only those names are taken out,
 // each file kept in the backup first, and a file left with no server is
-// removed (Cindy makes none there), and its folder if that is then empty.
+// removed, and its folder if that is then empty.
+//
+//   - pi-agent-home/mcp.json: from v0.1.4777 the Library wrote the servers
+//     given Cindy there too, for Cindy's Pi, which never reads it
+//     (targets.go). Cindy makes no such file.
+//   - codex-home/config.toml in a folder no build of Cindy keeps its data
+//     in (agent.CindyData): the cn build's Cindy, which the global build
+//     makes for what the two share, was taken for Cindy's data folder
+//     whenever it was there, so the global build's servers went into a
+//     config.toml there that nothing reads (agent's cindyDirs). One in a
+//     folder a build does keep its data in is that build's Codex's, and
+//     is left as it is.
 func (l *Library) cindyLeftovers(t *Target, b *backups, res *Result) {
 	if t.Agent == nil || t.Agent.ID != "cindy" || res.unreached(t) {
 		return
@@ -26,6 +36,11 @@ func (l *Library) cindyLeftovers(t *Target, b *backups, res *Result) {
 	}
 	for _, d := range agent.CindyFolders() {
 		l.dropMine(&mcpFile{Path: filepath.Join(d, "pi-agent-home", "mcp.json"), Format: fmtPiNative}, a.MCP, b, res)
+		f := &mcpFile{Path: filepath.Join(d, "codex-home", "config.toml"), Format: fmtCodex}
+		if (t.MCP != nil && samePath(t.MCP.Path, f.Path)) || agent.CindyData(d) {
+			continue
+		}
+		l.dropMine(f, a.MCP, b, res)
 	}
 }
 
@@ -68,6 +83,14 @@ func leftEmpty(f *mcpFile) bool {
 	data, err := os.ReadFile(f.Path)
 	if err != nil {
 		return false
+	}
+	if f.Format == fmtCodex {
+		for _, line := range strings.Split(string(data), "\n") {
+			if line = strings.TrimSpace(line); line != "" && !strings.HasPrefix(line, "#") {
+				return false
+			}
+		}
+		return true
 	}
 	var m map[string]any
 	if json.Unmarshal(data, &m) != nil {

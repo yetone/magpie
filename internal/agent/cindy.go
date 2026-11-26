@@ -18,6 +18,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
+	"time"
 
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/sessions"
@@ -83,37 +85,109 @@ func cindyHas(path, gw string) (has, known bool) {
 	return n > 0, true
 }
 
-// CindyFolders are the data folders of both of Cindy's builds, here or
-// not: Cindy, the cn build's (Electron's default, from productName), and
-// CindyGlobal, the global build's, under the user's config folder
-// (Electron's appData: ~/Library/Application Support, %APPDATA%,
-// $XDG_CONFIG_HOME or ~/.config).
+// cindyBuilds are Cindy's two builds, each with its own data folder under
+// the user's config folder (Electron's appData: ~/Library/Application
+// Support, %APPDATA%, $XDG_CONFIG_HOME or ~/.config) and its own bundle id
+// (userDataDirNameByRegion and appIdByRegion in maker-shared's
+// brandIdentity.ts, Cindy 0.1.148): the cn build keeps Electron's default
+// folder, Cindy, from productName; the global build moves it to
+// CindyGlobal before anything is read (regionUserData.ts). Both are
+// Cindy.app on a Mac.
+var cindyBuilds = []struct{ dir, id string }{{"Cindy", "com.xd.cindycn"}, {"CindyGlobal", "com.xd.cindy"}}
+
+// CindyFolders are the data folders of both of Cindy's builds, here or not.
 func CindyFolders() []string {
 	d, err := os.UserConfigDir()
 	if err != nil {
 		return nil
 	}
-	return []string{filepath.Join(d, "Cindy"), filepath.Join(d, "CindyGlobal")}
+	var out []string
+	for _, b := range cindyBuilds {
+		out = append(out, filepath.Join(d, b.dir))
+	}
+	return out
 }
 
-// cindyDirs are where Cindy keeps its data (~/Library/Application
-// Support/Cindy on a Mac, CindyGlobal for its global build), those there
-// first: there once Cindy was installed and opened.
-func cindyDirs() []string {
-	d, err := os.UserConfigDir()
-	if err != nil {
-		return nil
-	}
-	var have, not []string
-	for _, n := range []string{"Cindy", "CindyGlobal"} {
-		p := filepath.Join(d, n)
-		if _, err := os.Stat(p); err == nil {
-			have = append(have, p)
-		} else {
-			not = append(not, p)
+// cindyUsed is when Cindy last wrote its database in d (cindy-local-v1.db
+// before a sign-in, cindy-<account>.db after, and the -wal and -shm beside
+// them), zero when d holds none. That database is what says a build keeps
+// its data in d: the global build makes the cn build's folder too, for
+// what the two share (shared-system-skills, shared-skill-mutation-locks,
+// shared-worktree-recycle-journals: built-in-skill-activation.ts,
+// sharedMutationLease.ts and recycleJournal.ts write them under appData's
+// Cindy whatever the build), and magpie's own writes there made
+// codex-home and pi-agent-home in it.
+func cindyUsed(d string) time.Time {
+	var at time.Time
+	ps, _ := filepath.Glob(filepath.Join(d, "cindy-*.db*"))
+	for _, p := range ps {
+		if fi, err := os.Stat(p); err == nil && fi.Mode().IsRegular() && fi.ModTime().After(at) {
+			at = fi.ModTime()
 		}
 	}
-	return append(have, not...)
+	return at
+}
+
+// CindyData reports whether d is a folder a build of Cindy keeps its data
+// in (cindyUsed), not only one it or magpie made files in.
+func CindyData(d string) bool { return !cindyUsed(d).IsZero() }
+
+// cindyDirs are Cindy's data folders, the one it reads first: those with a
+// build's database in them (cindyUsed) before those without; of two with
+// one, on a Mac the installed build's (Cindy.app's bundle id; only one
+// Cindy.app can be in a folder), else the one written last; then those
+// that are there. Before, the cn build's Cindy came first whenever it was
+// there, and on the global build it always is (cindyUsed), so the Library
+// wrote Cindy's MCP servers into a Cindy/codex-home/config.toml nothing
+// reads, and CindyGlobal's, which the global build's Codex reads, had none.
+func cindyDirs() []string {
+	type folder struct {
+		path  string
+		used  time.Time
+		there bool
+		app   bool
+	}
+	var fs []folder
+	both := 0
+	for _, p := range CindyFolders() {
+		f := folder{path: p, used: cindyUsed(p), there: isDir(p)}
+		if !f.used.IsZero() {
+			both++
+		}
+		fs = append(fs, f)
+	}
+	if both > 1 && removedOS == "darwin" {
+		for i := range fs {
+			fs[i].app = macBundle(desktopApp{id: cindyBuilds[i].id, names: []string{"Cindy.app"}})
+		}
+	}
+	slices.SortStableFunc(fs, func(a, b folder) int {
+		switch {
+		case a.used.IsZero() != b.used.IsZero():
+			return trueFirst(!a.used.IsZero(), !b.used.IsZero())
+		case a.used.IsZero():
+			return trueFirst(a.there, b.there)
+		case a.app != b.app:
+			return trueFirst(a.app, b.app)
+		}
+		return b.used.Compare(a.used)
+	})
+	out := make([]string, len(fs))
+	for i, f := range fs {
+		out[i] = f.path
+	}
+	return out
+}
+
+// trueFirst orders true before false.
+func trueFirst(a, b bool) int {
+	switch {
+	case a == b:
+		return 0
+	case a:
+		return -1
+	}
+	return 1
 }
 
 // cindyClaudeHere reports whether Cindy has its own Claude Code here:

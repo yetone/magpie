@@ -363,6 +363,17 @@ immutable with no WAL log, from a copy with one; a plain read-only open
 made `-wal` and `-shm` in Cindy's folder while it was closed), and one that
 can't be read, or a stopped WSL distro's, is unknown, never "not added"
 (`TestCindyHasClosedWALAndUnreadable`, `TestImportStatusUnreadableIsUnknown`).
+Cindy's data folder (`Agent.Dir`, where the Library writes its Codex's
+`codex-home/config.toml`) is the cn build's `Cindy` or the global build's
+`CindyGlobal` under `os.UserConfigDir` (Electron's appData on every system
+Cindy runs on). The global build makes `Cindy` too, for the `shared-*`
+folders both builds write, so a folder counts as the data folder by a
+build's database in it (`cindy-*.db`, `cindyUsed`), never by being there:
+with both builds' data here, the installed Cindy.app's bundle id decides on
+a Mac (`com.xd.cindy` is CindyGlobal), else the database written last.
+Before, `Cindy` came first whenever it was there, and the global build's
+servers went where nothing reads them (`cindyDirs`, `TestCindyDataFolder`,
+`TestCindyGlobalBuildMCP`).
 Cindy names each model its import's `modelsUrl` lists by `display_name`
 before `name` (`parseModelsListResponse` in its app, 0.1.94), so
 `/v1/models` asked with Cindy's key gives `display_name` the name the
