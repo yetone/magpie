@@ -683,16 +683,32 @@ func pageRead(read string, params map[string]any) (any, error) {
 			Cost   float64   `json:"cost"`
 			Models []model   `json:"models"`
 		}{Period: string(period), Since: s.Since, Calls: s.Calls, Errors: s.Errors, Input: s.Input, Output: s.Output, Cache: s.CacheRead, Cost: s.Cost, Models: []model{}}
-		for i, g := range s.Models {
-			if i == 20 {
-				break
-			}
-			m := g.Model
-			if m == "" {
-				m = g.ID
-			}
-			out.Models = append(out.Models, model{Model: m, Calls: g.Calls, Input: g.Input, Output: g.Output, Cost: g.Cost})
+		// The ledger groups by provider, model and endpoint. Combine every
+		// row for the name the plugin sees before choosing the top 20.
+		byName := make(map[string]model)
+		for _, g := range s.Models {
+			name := cmp.Or(g.Model, g.ID)
+			m := byName[name]
+			m.Model = name
+			m.Calls += g.Calls
+			m.Input += g.Input
+			m.Output += g.Output
+			m.Cost += g.Cost
+			byName[name] = m
 		}
+		for _, m := range byName {
+			out.Models = append(out.Models, m)
+		}
+		slices.SortFunc(out.Models, func(a, b model) int {
+			if n := cmp.Compare(b.Input+b.Output, a.Input+a.Output); n != 0 {
+				return n
+			}
+			if n := cmp.Compare(b.Calls, a.Calls); n != 0 {
+				return n
+			}
+			return cmp.Compare(a.Model, b.Model)
+		})
+		out.Models = out.Models[:min(len(out.Models), 20)]
 		return out, nil
 	}
 	return nil, fmt.Errorf("no read %q", read)

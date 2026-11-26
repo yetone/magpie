@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/settings"
+	"github.com/yetone/magpie/internal/usage"
 )
 
 // pagePlugins writes plugins.json with the example page plugin
@@ -195,6 +197,64 @@ func TestPluginPageReadsWhatItDeclared(t *testing.T) {
 	key := "x" + time.Now().String()
 	if !pageSetAllowed(key, time.Now()) || pageSetAllowed(key, time.Now()) || !pageSetAllowed(key, time.Now().Add(2*time.Second)) {
 		t.Error("pageSetAllowed")
+	}
+}
+
+func TestPluginPageUsageSummaryMergesModelsBeforeTop20(t *testing.T) {
+	sandboxHome(t)
+	at := time.Now()
+	add := func(provider, model string, input, output int) {
+		cost := 0.125
+		usage.Append(usage.Record{Time: at, Agent: "opencode", Provider: provider, Model: model,
+			Input: input, Output: output, Source: usage.SourceReported, OwnCost: &cost, Status: 200})
+	}
+	// Each of these rows is smaller than every other model, but together
+	// they have more calls than either model with the same token total.
+	for i := range 22 {
+		add(fmt.Sprintf("relay-%02d", i), "shared-model", 2, 3)
+	}
+	add("relay-00", "largest-model", 111, 0)
+	add("relay-00", "a-tied-model", 110, 0)
+	add("relay-00", "z-tied-model", 0, 110)
+	for i := range 18 {
+		add("relay-00", fmt.Sprintf("other-model-%02d", i), 100-i, 0)
+	}
+
+	v, err := pageRead("usage:summary", map[string]any{"period": "7d"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	writeJSON(w, v)
+	type model struct {
+		Model  string  `json:"model"`
+		Calls  int     `json:"calls"`
+		Input  int     `json:"input"`
+		Output int     `json:"output"`
+		Cost   float64 `json:"cost"`
+	}
+	var got struct {
+		Calls  int     `json:"calls"`
+		Models []model `json:"models"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Calls != 43 || len(got.Models) != 20 {
+		t.Fatalf("summary has %d calls and %d models, want 43 calls and 20 models", got.Calls, len(got.Models))
+	}
+	want := model{Model: "shared-model", Calls: 22, Input: 44, Output: 66, Cost: 2.75}
+	if got.Models[1] != want {
+		t.Fatalf("second model = %+v, want %+v", got.Models[1], want)
+	}
+	order := []string{"largest-model", "shared-model", "a-tied-model", "z-tied-model"}
+	for i := range 16 {
+		order = append(order, fmt.Sprintf("other-model-%02d", i))
+	}
+	for i, name := range order {
+		if got.Models[i].Model != name {
+			t.Errorf("model %d = %q, want %q", i, got.Models[i].Model, name)
+		}
 	}
 }
 
