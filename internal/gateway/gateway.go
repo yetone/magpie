@@ -2905,7 +2905,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// Claude Code's auto mode classifier and AgentSummary name themselves
 	// nowhere: told by their content, recorded as inferred
 	if call.Kind == "" {
-		call.Kind = inferredKind(r.Header, from, body)
+		call.Kind = inferredKind(r, from, body)
 	}
 	// the reply counted as it reaches the agent, for the Routing page
 	// while it is out (#4951); learned from once it ends

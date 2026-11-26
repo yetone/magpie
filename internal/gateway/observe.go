@@ -79,8 +79,11 @@ func observedKind(agent, kind string, body []byte) string {
 // nowhere in the request: its auto mode classifier and its AgentSummary,
 // told by their content. They are recorded as inferred
 // (usage.InferredSuffix), never as the client's word; "" for any other.
-func inferredKind(in http.Header, from provider.Protocol, body []byte) string {
-	if !fromClaudeCode(in) || from != provider.Anthropic {
+// Claude Code's is told as claudeCodeAsks tells it, so one another magpie
+// passed on is told too: a Remote magpie recorded its helpers unmarked
+// (recih, #7852).
+func inferredKind(r *http.Request, from provider.Protocol, body []byte) string {
+	if from != provider.Anthropic || !claudeCodeAsks(r) {
 		return ""
 	}
 	switch {

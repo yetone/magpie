@@ -21,18 +21,25 @@ func TestClaudeHelperRequestsAreLabelled(t *testing.T) {
 	printed := strings.Replace(summary, `"content":"a"`, `"content":"Describe your most recent action in 3-5 words."`, 1)
 	printed = strings.Replace(printed, `,{"type":"text","text":"Describe your most recent action in 3-5 words. Do not use tools."}`, "", 1)
 	chat := `{"model":"m1","max_tokens":4096,"messages":[{"role":"user","content":"write 3-5 words about the sea"}]}`
-	for _, tc := range []struct{ name, body, ua, want string }{
-		{"summary", summary, "claude-cli/2.1.310 (external, cli)", "agent_summary_inferred"},
-		{"classifier", autoModeAsk("m1"), "claude-cli/2.1.310 (external, cli)", "auto_mode_check_inferred"},
-		{"printed by a tool", printed, "claude-cli/2.1.310 (external, cli)", ""},
-		{"a chat", chat, "claude-cli/2.1.310 (external, cli)", ""},
-		{"another agent's summary", summary, "curl/8", ""},
+	for _, tc := range []struct{ name, body, ua, forwarded, want string }{
+		{"summary", summary, "claude-cli/2.1.310 (external, cli)", "", "agent_summary_inferred"},
+		{"classifier", autoModeAsk("m1"), "claude-cli/2.1.310 (external, cli)", "", "auto_mode_check_inferred"},
+		{"printed by a tool", printed, "claude-cli/2.1.310 (external, cli)", "", ""},
+		{"a chat", chat, "claude-cli/2.1.310 (external, cli)", "", ""},
+		{"relayed summary", summary, "magpie/1", "claude-cli/2.1.310", "agent_summary_inferred"},
+		{"relayed classifier", autoModeAsk("m1"), "magpie/1", "claude-cli/2.1.310", "auto_mode_check_inferred"},
+		{"relayed non-Claude client", summary, "magpie/1", "curl/8", ""},
+		{"forwarded header on direct request", autoModeAsk("m1"), "curl/8", "claude-cli/2.1.310", ""},
+		{"another agent's summary", summary, "curl/8", "", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dshSetup(t)
 			s := New()
 			req := httptest.NewRequest("POST", "/v1/messages", strings.NewReader(tc.body))
 			req.Header.Set("User-Agent", tc.ua)
+			if tc.forwarded != "" {
+				req.Header.Set(ClientUAHeader, tc.forwarded)
+			}
 			req.Header.Set("anthropic-version", "2023-06-01")
 			rec := httptest.NewRecorder()
 			s.Handler().ServeHTTP(rec, req)

@@ -1308,11 +1308,16 @@ arguments are never kept, not even masked.
 Claude Code's AgentSummary ("Describe your most recent action in 3-5
 words.") and its auto mode classifier name themselves nowhere in the
 request, so `inferredKind` (observe.go) tells them by their content, for
-a `claude-cli/` request on the Messages API only, and the ledger row's
+a Claude Code request on the Messages API only, and the ledger row's
 Kind is `agent_summary_inferred` or `auto_mode_check_inferred`
 (`usage.InferredSuffix`). The name says "(inferred)"; both spellings share
 the plain kind's purpose, which a client marker would use. Anything else
-stays unmarked.
+stays unmarked. Claude Code's request is told by its `claude-cli/`
+User-Agent, or, from another magpie, by the agent's User-Agent that magpie
+names (`ClientUAHeader`, `claudeCodeAsks`); until 11-26 a Remote magpie
+recorded the relayed helpers unmarked (recih, #7852). The header counts
+only on a magpie's request, so a direct one that sets it is not taken for
+Claude Code's.
 
 A requests page also holds `BigWrite` (big_write.go): the gateway-served
 row that wrote the most to the cache, kept per chunk (`chunkPart.big`) and
