@@ -118,7 +118,7 @@ func TestMoveToAgyImportsTheOldSignIns(t *testing.T) {
 	if len(got) != 1 || got[0].Status != "added" {
 		t.Fatalf("%+v", got)
 	}
-	if !slices.Equal(s.installed, []string{agyCLIPackage + "@" + agyCLIMin}) || agyCLIMin != "0.1.133" {
+	if !slices.Equal(s.installed, []string{agyCLIPackage + "@" + agyCLIMin}) || agyCLIMin != "0.1.139" {
 		t.Fatalf("installed %v", s.installed)
 	}
 	if len(s.texts) != 1 {
