@@ -20,26 +20,27 @@ import (
 // TZ=Asia/Shanghai.
 func TestUsageRoutesReadTheViewersZone(t *testing.T) {
 	sandboxHome(t)
+	// a reader's zone v, and a moment and a call before it on one day in v
+	// and on two in the computer's zone
 	var v *time.Location
-	for _, name := range []string{"Asia/Shanghai", "America/Los_Angeles"} {
-		if z := usage.Zone(name); z != time.Local {
-			v = z
-			break
-		}
-	}
-	// a moment and a call before it on one day in v and on two in the
-	// computer's zone
 	var now, call time.Time
 	day := func(at time.Time, l *time.Location) string { return at.In(l).Format(time.DateOnly) }
 find:
-	for n := 0; n < 48; n++ {
-		now = time.Date(2026, 9, 30, n, 0, 0, 0, time.UTC)
-		for h := 1; h < 24; h++ {
-			call = now.Add(-time.Duration(h) * time.Hour)
-			if day(call, v) == day(now, v) && day(call, time.Local) != day(now, time.Local) {
-				break find
+	for _, name := range []string{"Asia/Shanghai", "America/Los_Angeles"} {
+		v = usage.Zone(name)
+		for n := 0; n < 48; n++ {
+			now = time.Date(2026, 9, 30, n, 0, 0, 0, time.UTC)
+			for h := 1; h < 24; h++ {
+				call = now.Add(-time.Duration(h) * time.Hour)
+				if day(call, v) == day(now, v) && day(call, time.Local) != day(now, time.Local) {
+					break find
+				}
 			}
 		}
+		v = nil
+	}
+	if v == nil {
+		t.Fatalf("no zone here whose day differs from the computer's (%v)", time.Local)
 	}
 	old := usage.Clock
 	usage.Clock = func() time.Time { return now.In(time.Local) }

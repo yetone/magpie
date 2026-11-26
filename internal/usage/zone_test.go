@@ -4,6 +4,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // viewerZone is a zone whose clock this computer's doesn't keep: the
@@ -134,5 +136,31 @@ func TestZoneNames(t *testing.T) {
 		if Zone(tz) != time.Local {
 			t.Errorf("Zone(%q), this computer's own zone, is not time.Local", tz)
 		}
+	}
+}
+
+// A name read while a test held time.Local in another zone is judged
+// again under the time.Local after: Shanghai, read while the computer was
+// held in Los Angeles' time, stayed apart from a time.Local in Shanghai's
+// for every later reader, and a test that took it for another clock found
+// no day between them (#7847).
+func TestZoneJudgedUnderTheLocalOfTheRead(t *testing.T) {
+	sh, err1 := time.LoadLocation("Asia/Shanghai")
+	la, err2 := time.LoadLocation("America/Los_Angeles")
+	if err1 != nil || err2 != nil {
+		t.Skip(err1, err2)
+	}
+	testenv.Zone(t, sh)
+	t.Run("held in Los Angeles", func(t *testing.T) {
+		testenv.Zone(t, la)
+		if Zone("Asia/Shanghai") == time.Local {
+			t.Fatal("Shanghai is the computer's zone while it keeps Los Angeles' time")
+		}
+	})
+	if Zone("Asia/Shanghai") != time.Local {
+		t.Fatal("Shanghai, read under Los Angeles, is still apart from a computer in Shanghai's time")
+	}
+	if Zone("Asia/Shanghai") != Zone("Asia/Shanghai") {
+		t.Fatal("two locations for one name")
 	}
 }
