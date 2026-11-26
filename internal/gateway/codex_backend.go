@@ -662,48 +662,9 @@ func withoutSealedMessages(body []byte) ([]byte, bool) {
 	}
 	changed := false
 	for i, raw := range items {
-		var item map[string]json.RawMessage
-		if json.Unmarshal(raw, &item) != nil || string(item["type"]) != `"agent_message"` {
-			continue
+		if b, ok := withoutSealedAgentMessage(raw, nativeSealedAgentPayload.MatchString); ok {
+			items[i], changed = b, true
 		}
-		var parts []map[string]any
-		if json.Unmarshal(item["content"], &parts) != nil {
-			continue
-		}
-		message, sealed := false, false
-		for _, p := range parts {
-			switch p["type"] {
-			case "input_text":
-				t, _ := p["text"].(string)
-				message = message || strings.HasPrefix(t, "Message Type: MESSAGE\n")
-			case "encrypted_content":
-				c, _ := p["encrypted_content"].(string)
-				sealed = sealed || nativeSealedAgentPayload.MatchString(c)
-			}
-		}
-		if !message || !sealed {
-			continue
-		}
-		var from string
-		json.Unmarshal(item["author"], &from)
-		if from == "" {
-			from = "another agent"
-		}
-		note := "[magpie: this message from " + from + " was sealed by the ChatGPT backend, which answered that agent on one of Codex's own models, and only it can open it; this model can't, so it was left out. An agent's final result still reaches the agent that spawned it as text.]"
-		for j, p := range parts {
-			if c, _ := p["encrypted_content"].(string); p["type"] == "encrypted_content" && nativeSealedAgentPayload.MatchString(c) {
-				parts[j] = map[string]any{"type": "input_text", "text": note}
-			}
-		}
-		b, err := marshalPlain(parts)
-		if err != nil {
-			continue
-		}
-		item["content"] = b
-		if b, err = marshalPlain(item); err != nil {
-			continue
-		}
-		items[i], changed = b, true
 	}
 	if !changed {
 		return body, false
@@ -717,6 +678,61 @@ func withoutSealedMessages(body []byte) ([]byte, bool) {
 		return body, false
 	}
 	return nb, true
+}
+
+// withoutSealedAgentMessage is a single agent_message input item with each
+// matching encrypted_content part replaced by an explanatory note when the
+// item carries Message Type: MESSAGE (leaving NEW_TASK and unlabeled tasks
+// untouched). A nil strip matches any non-empty encrypted_content.
+func withoutSealedAgentMessage(raw []byte, strip func(string) bool) ([]byte, bool) {
+	var item map[string]json.RawMessage
+	if json.Unmarshal(raw, &item) != nil || string(item["type"]) != `"agent_message"` {
+		return nil, false
+	}
+	var parts []map[string]any
+	if json.Unmarshal(item["content"], &parts) != nil {
+		return nil, false
+	}
+	matches := func(c string) bool { return c != "" && (strip == nil || strip(c)) }
+	message, sealed := false, false
+	for _, p := range parts {
+		switch p["type"] {
+		case "input_text":
+			t, _ := p["text"].(string)
+			message = message || strings.HasPrefix(t, "Message Type: MESSAGE\n")
+		case "encrypted_content":
+			c, _ := p["encrypted_content"].(string)
+			sealed = sealed || matches(c)
+		}
+	}
+	if !message || !sealed {
+		return nil, false
+	}
+	var from string
+	json.Unmarshal(item["author"], &from)
+	if from == "" {
+		from = "another agent"
+	}
+	// The note goes upstream in the input, to whichever vendor serves the
+	// turn (OpenAI's own on a foreign-seal retry, #7830), so it names
+	// neither magpie nor a vendor: the server that sealed the message is
+	// a third-party Responses provider as often as the ChatGPT backend.
+	note := "[This message from " + from + " was sealed by the server that answered that agent, and only that server can open it, so it was left out here. An agent's final result still reaches the agent that spawned it as text.]"
+	for j, p := range parts {
+		if c, _ := p["encrypted_content"].(string); p["type"] == "encrypted_content" && matches(c) {
+			parts[j] = map[string]any{"type": "input_text", "text": note}
+		}
+	}
+	b, err := marshalPlain(parts)
+	if err != nil {
+		return nil, false
+	}
+	item["content"] = b
+	b, err = marshalPlain(item)
+	if err != nil {
+		return nil, false
+	}
+	return b, true
 }
 
 // compactSigninHeld is the calling key when its accounts (#905) hold a

@@ -884,3 +884,220 @@ func TestSealsTakenOutLeaveTheRest(t *testing.T) {
 		}
 	}
 }
+
+// Sealed agent_message items carrying Message Type: MESSAGE are replaced with
+// a note when another backend can't open them (withoutSeals / withoutRefused),
+// while NEW_TASK sealed tasks stay untouched (#7830).
+func TestSealsTakenOutHandlesAgentMessages(t *testing.T) {
+	fresh(t)
+	refusedSeals.Lock()
+	refusedSeals.m = map[string]sealsRefused{}
+	refusedSeals.Unlock()
+
+	msgA := `{"type":"agent_message","id":"amsg_a","author":"/root/sub","recipient":"/root","content":[{"type":"input_text","text":"Message Type: MESSAGE\nTask name: /root\nSender: /root/sub\nPayload:\n"},{"type":"encrypted_content","encrypted_content":"gAAAAASealedByProviderA=="}]}`
+	msgB := `{"type":"agent_message","id":"amsg_b","author":"/root/sub2","recipient":"/root","content":[{"type":"input_text","text":"Message Type: MESSAGE\nTask name: /root\nSender: /root/sub2\nPayload:\n"},{"type":"encrypted_content","encrypted_content":"gAAAAASealedByCodexB=="}]}`
+	task := `{"type":"agent_message","id":"amsg_task","author":"/root","recipient":"/root/sub","content":[{"type":"input_text","text":"Message Type: NEW_TASK\nTask name: /root/sub\nPayload:\n"},{"type":"encrypted_content","encrypted_content":"gAAAAASealedTaskA=="}]}`
+
+	// NEW_TASK alone is never stripped by withoutSeals.
+	if got, ok := withoutSeals([]byte(`{"input":[` + codexUser("hi") + `,` + task + `]}`)); ok {
+		t.Fatalf("NEW_TASK must not be stripped: %s", got)
+	}
+
+	// Message Type: MESSAGE is replaced with a note, leaving NEW_TASK intact.
+	in := `{"input":[` + codexUser("hi") + `,` + msgA + `,` + task + `],"model":"gpt-5.5"}`
+	left, ok := withoutSeals([]byte(in))
+	if !ok {
+		t.Fatalf("withoutSeals did not strip sealed agent_message MESSAGE")
+	}
+	if strings.Contains(string(left), "gAAAAASealedByProviderA==") || !strings.Contains(string(left), "left out") {
+		t.Fatalf("sealed MESSAGE not replaced with note: %s", left)
+	}
+	if !strings.Contains(string(left), "gAAAAASealedTaskA==") {
+		t.Fatalf("sealed NEW_TASK was stripped: %s", left)
+	}
+	// the note goes upstream, to OpenAI too on this retry: it names
+	// neither magpie nor a vendor
+	for _, w := range []string{"magpie", "ChatGPT", "Codex", "OpenAI"} {
+		if strings.Contains(strings.ToLower(string(left)), strings.ToLower(w)) {
+			t.Fatalf("the note sent upstream names %s: %s", w, left)
+		}
+	}
+
+	// refused + withoutRefused remembers msgA's seal for codex@b so later turns
+	// strip msgA up front while keeping msgB sealed by codex@b itself.
+	refused("thread-amsg", "codex@b", []byte(in), left)
+	next := `{"input":[` + codexUser("hi") + `,` + msgA + `,` + msgB + `],"model":"gpt-5.5"}`
+	got, ok := withoutRefused("thread-amsg", "codex@b", []byte(next))
+	if !ok {
+		t.Fatalf("withoutRefused did not strip previously refused agent_message seal")
+	}
+	if strings.Contains(string(got), "gAAAAASealedByProviderA==") || !strings.Contains(string(got), "left out") {
+		t.Fatalf("refused msgA was not stripped: %s", got)
+	}
+	if !strings.Contains(string(got), "gAAAAASealedByCodexB==") {
+		t.Fatalf("codex@b's own msgB was wrongly stripped: %s", got)
+	}
+	if _, ok := withoutRefused("thread-amsg", "provider-a", []byte(next)); ok {
+		t.Fatalf("provider-a should still receive its own sealed message")
+	}
+}
+
+// #7830: A routing group has a third-party Responses provider (provider-a) and
+// a ChatGPT Codex account. Because codex is a sealedReader, pre-route
+// withoutSealedMessages is skipped. When provider-a fails over to codex and
+// codex rejects provider-a's sealed agent_message (Message Type: MESSAGE) with
+// invalid_encrypted_content, the foreignReasoning retry strips both top-level
+// seals and sealed agent_message MESSAGE items, records the refusal, and lets
+// the fallback succeed on retry and on subsequent turns without re-failing.
+func TestForeignSealedAgentMessageFailoverToCodex(t *testing.T) {
+	fresh(t)
+	home := os.Getenv("HOME")
+	refusedSeals.Lock()
+	refusedSeals.m = map[string]sealsRefused{}
+	refusedSeals.Unlock()
+
+	claims := func(m map[string]any) string {
+		b, _ := json.Marshal(m)
+		return "h." + base64.RawURLEncoding.EncodeToString(b) + ".s"
+	}
+	os.MkdirAll(filepath.Join(home, ".codex"), 0o755)
+	os.WriteFile(filepath.Join(home, ".codex", "auth.json"), mustJSON(map[string]any{"auth_mode": "chatgpt", "tokens": map[string]any{
+		"id_token":      claims(map[string]any{"email": "me@example.com"}),
+		"access_token":  claims(map[string]any{"exp": time.Now().Add(time.Hour).Unix()}),
+		"refresh_token": "r", "account_id": "acct-1"}}), 0o600)
+	provider.ForgetAccounts()
+	t.Cleanup(provider.ForgetAccounts)
+
+	var aDown bool
+	var aMu sync.Mutex
+	aSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.ReadAll(r.Body)
+		aMu.Lock()
+		down := aDown
+		aMu.Unlock()
+		if down {
+			w.WriteHeader(502)
+			io.WriteString(w, `{"error":{"message":"upstream empty reply"}}`)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(w, sse(
+			`data: {"type":"response.created","response":{"id":"r1","model":"gpt-6.2"}}`,
+			`data: {"type":"response.output_text.delta","delta":"from provider-a"}`,
+			`data: {"type":"response.completed","response":{"id":"r1","status":"completed","usage":{"input_tokens":7,"output_tokens":1}}}`))
+	}))
+	t.Cleanup(aSrv.Close)
+
+	var codexMu sync.Mutex
+	var codexBodies []string
+	codexSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		body := string(b)
+		codexMu.Lock()
+		codexBodies = append(codexBodies, body)
+		codexMu.Unlock()
+		if strings.Contains(body, "gAAAAASealedReasoningA") {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(400)
+			io.WriteString(w, `{"error":{"message":"The encrypted content for item rs_a could not be verified. Reason: Encrypted content could not be decrypted or parsed.","code":"invalid_encrypted_content"}}`)
+			return
+		}
+		if strings.Contains(body, "gAAAAASealedMsgA") {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(400)
+			io.WriteString(w, `{"error":{"message":"The encrypted content for item amsg_a could not be verified. Reason: encrypted content hydration failed: Encrypted content could not be decrypted or parsed.","code":"invalid_encrypted_content"}}`)
+			return
+		}
+		if strings.Contains(body, "gAAAAASealedTaskA") {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(400)
+			io.WriteString(w, `{"error":{"message":"The encrypted content for item amsg_task could not be verified. Reason: encrypted content hydration failed: Encrypted content could not be decrypted or parsed.","code":"invalid_encrypted_content"}}`)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(w, sse(
+			`data: {"type":"response.created","response":{"id":"r2","model":"gpt-5.5"}}`,
+			`data: {"type":"response.output_text.delta","delta":"from codex"}`,
+			`data: {"type":"response.completed","response":{"id":"r2","status":"completed","usage":{"input_tokens":7,"output_tokens":1}}}`))
+	}))
+	t.Cleanup(codexSrv.Close)
+
+	was := provider.CodexBase
+	provider.CodexBase = codexSrv.URL + "/backend-api/codex"
+	t.Cleanup(func() { provider.CodexBase = was })
+
+	if err := provider.Save(provider.Provider{ID: "provider-a", Name: "Provider A", Key: "k", Models: []string{"gpt-6.2"}, Responses: aSrv.URL + "/v1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.SaveGroup(provider.Group{Name: "Mixed", Members: []string{"provider-a/gpt-6.2", "codex/gpt-5.5"}, Routing: provider.Ordered}); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New()
+	turn := func(thread string, items ...string) (int, string) {
+		t.Helper()
+		in := `{"type":"message","role":"user","content":[{"type":"input_text","text":"continue"}]}`
+		for _, it := range items {
+			in += "," + it
+		}
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("POST", "/v1/responses", strings.NewReader(`{"model":"group/mixed","stream":true,"input":[`+in+`]}`))
+		req.Header.Set("session_id", thread)
+		s.Handler().ServeHTTP(rec, req)
+		return rec.Code, rec.Body.String()
+	}
+
+	rsA := `{"type":"reasoning","id":"rs_a","summary":[],"encrypted_content":"gAAAAASealedReasoningA=="}`
+	amsgA := `{"type":"agent_message","id":"amsg_a","author":"/root/sub","recipient":"/root","content":[{"type":"input_text","text":"Message Type: MESSAGE\nTask name: /root\nSender: /root/sub\nPayload:\n"},{"type":"encrypted_content","encrypted_content":"gAAAAASealedMsgA=="}]}`
+	amsgCodex := `{"type":"agent_message","id":"amsg_c","author":"/root/sub2","recipient":"/root","content":[{"type":"input_text","text":"Message Type: MESSAGE\nTask name: /root\nSender: /root/sub2\nPayload:\n"},{"type":"encrypted_content","encrypted_content":"gAAAAASealedMsgCodex=="}]}`
+	amsgTask := `{"type":"agent_message","id":"amsg_task","author":"/root","recipient":"/root/sub","content":[{"type":"input_text","text":"Message Type: NEW_TASK\nTask name: /root/sub\nPayload:\n"},{"type":"encrypted_content","encrypted_content":"gAAAAASealedTaskA=="}]}`
+
+	// Turn 1: answered by provider-a.
+	if code, body := turn("thread-7830"); code != 200 || !strings.Contains(body, "from provider-a") {
+		t.Fatalf("turn 1: %d %s", code, body)
+	}
+
+	// Turn 2: provider-a fails -> fails over to codex with both rs_a and amsg_a.
+	aMu.Lock()
+	aDown = true
+	aMu.Unlock()
+	code, body := turn("thread-7830", rsA, amsgA)
+	if code != 200 || !strings.Contains(body, "from codex") {
+		t.Fatalf("turn 2 failover to codex: %d %s", code, body)
+	}
+	codexMu.Lock()
+	if len(codexBodies) != 2 {
+		t.Fatalf("codex attempts on turn 2 = %d, want 2 (initial 400 + single stripped retry)", len(codexBodies))
+	}
+	if strings.Contains(codexBodies[1], "gAAAAASealedReasoningA") || strings.Contains(codexBodies[1], "gAAAAASealedMsgA") || !strings.Contains(codexBodies[1], "left out") {
+		t.Fatalf("turn 2 retry body still had foreign seals or missed note: %s", codexBodies[1])
+	}
+	codexBodies = nil
+	codexMu.Unlock()
+
+	// Turn 3: next turn on codex strips amsg_a up front (1 try) and keeps codex's own amsg_c.
+	code, body = turn("thread-7830", rsA, amsgA, amsgCodex)
+	if code != 200 || !strings.Contains(body, "from codex") {
+		t.Fatalf("turn 3 on codex: %d %s", code, body)
+	}
+	codexMu.Lock()
+	if len(codexBodies) != 1 {
+		t.Fatalf("codex attempts on turn 3 = %d, want 1 (refused seal stripped up front)", len(codexBodies))
+	}
+	if strings.Contains(codexBodies[0], "gAAAAASealedMsgA") || !strings.Contains(codexBodies[0], "gAAAAASealedMsgCodex==") {
+		t.Fatalf("turn 3 body mismatch: %s", codexBodies[0])
+	}
+	codexBodies = nil
+	codexMu.Unlock()
+
+	// Sealed NEW_TASK must NOT be stripped on foreignReasoning; codex's 400 is preserved.
+	code, _ = turn("thread-7830-task", amsgTask)
+	if code != 400 {
+		t.Fatalf("sealed NEW_TASK failover = %d, want 400 (must not be stripped)", code)
+	}
+	codexMu.Lock()
+	if len(codexBodies) != 1 {
+		t.Fatalf("codex attempts for NEW_TASK = %d, want 1", len(codexBodies))
+	}
+	codexMu.Unlock()
+}
