@@ -21,6 +21,7 @@ import (
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/daemon"
 	"github.com/yetone/magpie/internal/gateway"
+	"github.com/yetone/magpie/internal/library"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
@@ -1849,6 +1850,9 @@ func serve() error {
 	go provider.KeepRemotesUpdated(ctx, version)
 	// the models a Remote magpie's agents are on, as the app follows them
 	go agent.KeepFollowingRemote(ctx, 30*time.Second)
+	// and the skills and prompts of a Remote magpie whose Library is
+	// used here, as the app's KeepLinked reads them (frankittee)
+	go library.KeepBorrowing(ctx, 30*time.Second)
 	drained := make(chan struct{})
 	// a SIGTERM (Kubernetes', Docker's, a service manager's) finishes the
 	// requests in flight first (serve_drain.go)

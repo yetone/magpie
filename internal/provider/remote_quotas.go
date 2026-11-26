@@ -556,21 +556,40 @@ func remoteBody(ctx context.Context, p Provider, method, path string, wait time.
 // remoteBodyAs is remoteBody for an answer of up to max bytes, and with
 // noShare as the word for a remote that doesn't have the path.
 func remoteBodyAs(ctx context.Context, p Provider, method, path string, wait time.Duration, max int64, noShare string) ([]byte, error) {
+	b, _, err := remoteBodyTagged(ctx, p, method, path, wait, max, noShare, "")
+	return b, err
+}
+
+// remoteBodyTagged is remoteBodyAs asking with If-None-Match: tag, when
+// not "", and giving back the answer's ETag. A 304 is a nil body and no
+// error: what was read with tag is still what the remote has.
+func remoteBodyTagged(ctx context.Context, p Provider, method, path string, wait time.Duration, max int64, noShare, tag string) ([]byte, string, error) {
 	// through p's own transport, as its model calls go: its proxy, its
 	// client certificate and the server certificate it trusts
 	ctx, cancel := context.WithTimeout(p.Via(ctx), wait)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, method, p.Anthropic+path, nil)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	req.Header.Set("Accept", "application/json")
+	if tag != "" {
+		req.Header.Set("If-None-Match", tag)
+	}
 	p.signRemote(req, p.Key)
 	res, err := p.Do(http.DefaultClient, req)
 	if err != nil {
-		return nil, fmt.Errorf("%s %s: %w", errRemoteUnreachable, remoteName(p), err)
+		return nil, "", fmt.Errorf("%s %s: %w", errRemoteUnreachable, remoteName(p), err)
 	}
 	defer res.Body.Close()
+	if tag != "" && res.StatusCode == http.StatusNotModified {
+		return nil, tag, nil
+	}
+	b, err := remoteBodyRead(ctx, p, res, max, noShare)
+	return b, res.Header.Get("ETag"), err
+}
+
+func remoteBodyRead(ctx context.Context, p Provider, res *http.Response, max int64, noShare string) ([]byte, error) {
 	b, err := io.ReadAll(io.LimitReader(res.Body, max))
 	if err != nil && ctx.Err() != nil {
 		return nil, fmt.Errorf("%s %s: %w", errRemoteUnreachable, remoteName(p), ctx.Err())

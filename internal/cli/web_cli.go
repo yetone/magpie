@@ -13,6 +13,7 @@ import (
 	"github.com/yetone/magpie/internal/daemon"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/gui"
+	"github.com/yetone/magpie/internal/library"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/stats"
 )
@@ -93,7 +94,12 @@ func webCmd(args []string) error {
 		drainOnSignal(gui.ServedGateway(), sig)
 		w.Close()
 	})()
-	if !w.ServesGateway() {
+	if w.ServesGateway() {
+		// a Remote magpie's skills and prompts, as the app's KeepLinked
+		// reads them (frankittee); another magpie serving the gateway
+		// (the app, the service) reads them itself
+		go library.KeepBorrowing(context.Background(), 30*time.Second)
+	} else {
 		// another magpie has the gateway (the service, magpie serve, the
 		// app): this page shows its settings and accounts, read from the
 		// same files, and takes the gateway up when that one stops
@@ -249,6 +255,8 @@ func serveCmd(args []string) error {
 	go stats.Run(version, "serve")
 	// the models a Remote magpie's agents are on, as the app follows them
 	go agent.KeepFollowingRemote(context.Background(), 30*time.Second)
+	// and a Remote magpie's skills and prompts (frankittee)
+	go library.KeepBorrowing(context.Background(), 30*time.Second)
 	w, err := gui.StartWeb(web, version)
 	if err != nil {
 		return err

@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yetone/magpie/internal/gateway"
@@ -31,19 +32,74 @@ func init() {
 	}
 }
 
-// borrowEvery is how often KeepLinked reads the Remote magpies' Libraries.
-const borrowEvery = 10 * time.Minute
+// borrowEvery is how often the Remote magpies' Libraries are read, so a
+// prompt or skill changed there is here within it (frankittee on
+// Discord: at ten minutes, and never in magpie serve or magpie web, a
+// prompt edited on the remote looked as if it never came). A Library
+// that is still what was read last answers 304 (its ETag), and one sent
+// whole by an older magpie is taken in only when it changed (borrowSeen).
+var borrowEvery = time.Minute
 
-var lastBorrow time.Time
+var lastBorrow struct {
+	sync.Mutex
+	at time.Time
+}
 
 // keepBorrowed reads the Libraries of the Remote magpies switched on,
 // each borrowEvery.
 func keepBorrowed(ctx context.Context) {
-	if time.Since(lastBorrow) < borrowEvery {
+	lastBorrow.Lock()
+	if time.Since(lastBorrow.at) < borrowEvery {
+		lastBorrow.Unlock()
 		return
 	}
-	lastBorrow = time.Now()
+	lastBorrow.at = time.Now()
+	lastBorrow.Unlock()
 	UseRemoteLibraries(ctx)
+}
+
+// KeepBorrowing runs keepBorrowed every interval until ctx ends, for a
+// magpie that doesn't run KeepLinked (the app's): magpie serve, the
+// service and a container, and magpie web.
+func KeepBorrowing(ctx context.Context, interval time.Duration) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for ctx.Err() == nil {
+		keepBorrowed(ctx)
+		select {
+		case <-ctx.Done():
+		case <-t.C:
+		}
+	}
+}
+
+// borrowSeen is, per Remote magpie, what its Library was when it was last
+// taken in: the remote's ETag, or the body's hash ("sum:…") from a magpie
+// that sends none. In memory only: a start, and the switch turned either
+// way, read it whole again.
+var borrowSeen = struct {
+	sync.Mutex
+	m map[string]string
+}{m: map[string]string{}}
+
+// takenIn counts the Libraries UseRemoteLibrary took in (Borrow), for
+// the tests: an unchanged one isn't.
+var takenIn atomic.Int64
+
+func seenBorrow(id string) string {
+	borrowSeen.Lock()
+	defer borrowSeen.Unlock()
+	return borrowSeen.m[id]
+}
+
+func setSeenBorrow(id, tag string) {
+	borrowSeen.Lock()
+	defer borrowSeen.Unlock()
+	if tag == "" {
+		delete(borrowSeen.m, id)
+	} else {
+		borrowSeen.m[id] = tag
+	}
 }
 
 // A Remote magpie's Library, used here (KoiLx0 on X: prompts and skills
@@ -214,6 +270,7 @@ func BorrowedOn() map[string]bool {
 // Library is read at once (UseRemoteLibraries); off, what was taken from
 // it and not changed since is taken out.
 func SetBorrow(id string, on bool) (*Result, error) {
+	setSeenBorrow(id, "")
 	if on {
 		return change(func(l *Library) error {
 			if !slices.Contains(l.BorrowOn, id) {
@@ -493,10 +550,26 @@ func setBorrowNote(id, note string) {
 // UseRemoteLibrary reads the Library of the Remote magpie id and keeps it
 // here (Borrow).
 func UseRemoteLibrary(ctx context.Context, id string) (*BorrowResult, error) {
-	body, name, err := provider.RemoteLibrary(ctx, id)
+	seen := seenBorrow(id)
+	tag := ""
+	if !strings.HasPrefix(seen, "sum:") {
+		tag = seen
+	}
+	body, name, etag, err := provider.RemoteLibrary(ctx, id, tag)
 	if err != nil {
 		setBorrowNote(id, err.Error())
 		return nil, err
+	}
+	if body == nil { // 304: still what was taken in last
+		return &BorrowResult{}, nil
+	}
+	now := etag
+	if now == "" {
+		h := sha256.Sum256(body)
+		now = "sum:" + hex.EncodeToString(h[:16])
+	}
+	if now == seen {
+		return &BorrowResult{}, nil
 	}
 	var b Bundle
 	if err := json.Unmarshal(body, &b); err != nil {
@@ -505,11 +578,14 @@ func UseRemoteLibrary(ctx context.Context, id string) (*BorrowResult, error) {
 		return nil, err
 	}
 	b.MCP = nil // its servers run there: the router's switch gives them
+	takenIn.Add(1)
 	r, err := Borrow(id, name, &b)
 	if err != nil {
+		setSeenBorrow(id, "")
 		setBorrowNote(id, err.Error())
 		return nil, err
 	}
+	setSeenBorrow(id, now)
 	note := ""
 	if len(r.Kept) > 0 {
 		note = "kept as yours: " + strings.Join(r.Kept, ", ")

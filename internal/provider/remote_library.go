@@ -24,18 +24,22 @@ const maxRemoteLibrary = 48 << 20
 const errRemoteNoLibrary = "remote magpie doesn't share its Library; update magpie on that computer"
 
 // RemoteLibrary is the body of the Library the remote magpie id shares,
-// and the remote's name.
-func RemoteLibrary(ctx context.Context, id string) ([]byte, string, error) {
+// the remote's name and the answer's ETag. tag, when not "", is the ETag
+// of the body read last: a remote whose Library is still that answers
+// 304, and the body is nil (frankittee on Discord: read every minute, an
+// unchanged Library isn't sent again). A magpie from before ETags sends
+// the body each time.
+func RemoteLibrary(ctx context.Context, id, tag string) (body []byte, name, etag string, err error) {
 	p, err := Find(id)
 	if err != nil {
-		return nil, "", err
+		return nil, "", "", err
 	}
 	if !p.IsRemoteMagpie() {
-		return nil, "", fmt.Errorf("%s is no remote magpie", id)
+		return nil, "", "", fmt.Errorf("%s is no remote magpie", id)
 	}
 	if p.Key == "" || p.Anthropic == "" {
-		return nil, "", errors.New("the remote magpie's address and key are needed")
+		return nil, "", "", errors.New("the remote magpie's address and key are needed")
 	}
-	b, err := remoteBodyAs(ctx, *p, http.MethodGet, RemoteLibraryPath, RemoteLibraryWait, maxRemoteLibrary, errRemoteNoLibrary)
-	return b, remoteName(*p), err
+	b, etag, err := remoteBodyTagged(ctx, *p, http.MethodGet, RemoteLibraryPath, RemoteLibraryWait, maxRemoteLibrary, errRemoteNoLibrary, tag)
+	return b, remoteName(*p), etag, err
 }

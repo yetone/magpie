@@ -1465,9 +1465,28 @@ func (s *Server) sharedLibrary(w http.ResponseWriter, r *http.Request) {
 		writeError(w, provider.Chat, http.StatusInternalServerError, "reading the Library: "+err.Error())
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
+	// tagged, so a magpie reading it every minute gets a 304 while it is
+	// the same (frankittee on Discord, library.keepBorrowed)
+	sum := sha256.Sum256(b)
+	tag := `"` + hex.EncodeToString(sum[:16]) + `"`
+	w.Header().Set("ETag", tag)
 	w.Header().Set("Cache-Control", "no-store")
+	if etagMatches(r.Header.Get("If-None-Match"), tag) {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
 	w.Write(b)
+}
+
+// etagMatches is whether an If-None-Match header names tag, weak or not.
+func etagMatches(header, tag string) bool {
+	for _, t := range strings.Split(header, ",") {
+		if t = strings.TrimPrefix(strings.TrimSpace(t), "W/"); t == tag || t == "*" {
+			return true
+		}
+	}
+	return false
 }
 
 // SharedAgentModels is the models this magpie's agents are on as another
