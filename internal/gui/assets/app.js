@@ -4432,6 +4432,9 @@ async function load(again) {
     paintUpdateAll(true);
     loadCLIs(); // after the rows, never holding them up
     loadInstalls();
+    // the window back on Plugins: what's installed and its sign-ins read
+    // again too, quietly and at most every 15 s (plugins.js pluginsBack)
+    if (again && view === "plugins") window.pluginsBack?.();
     // the Providers page made ready behind the one shown (#1519)
     if (mode !== "panel" && !(view === "providers" || providersPage(view))) prefetchProviders();
     if (mode === "panel") { renderPanelQuota(true); if (!early) panelQuotasNow(again); panelAccounts(); }
@@ -4450,6 +4453,7 @@ async function load(again) {
   } catch (e) {
     statusErr(e);
   }
+  load.at = performance.now(); // when the agents were last read (show)
   renderUpdateBadge();
   cliBehindOnce();
   if (state?.configBlocked && !configBlockedAsked && $("#modal").hidden) configBlockedAsk(state.configBlocked);
@@ -23457,6 +23461,7 @@ async function show(v) {
   // Plugins opened from another page: on Installed when an update waits, and
   // the opening counted for its partners (plugins.js pmOpen, provider.CountPage)
   if (v !== view && v === "plugins") window.pmOpen?.(pluginUpdates);
+  const toAgents = v === "agents" && v !== view;
   view = v;
   renderBack();
   window.hideAccounts?.page();
@@ -23488,6 +23493,10 @@ async function show(v) {
   if ((rtView(v) || v === "providers" && !featuresOff.has("usage")) && (!quotas || Date.now() - quotasAt > 60e3)) loadQuotas();
   if (v === "settings") (settingsLoad = loadSettings()).then(back, settingsUnread);
   if (v === "plugins") window.loadPlugins?.()?.then(back);
+  // Agents opened from another page reads them again when the last read is
+  // over 15 s old, or a plugin was added or removed since (agentsStale): the
+  // same read the window's focus makes, never a rescan
+  if (toAgents && load.done && performance.now() - (load.at || 0) > 15e3) loadBack();
   syncTitle();
   syncURL();
   return true;
@@ -24489,6 +24498,9 @@ if (mode === "window") {
 // page shown with it held at its first frame was a blank pane under its
 // header and sidebar (WaiooT on X)
 function playViews() { for (const v of $$(".view")) for (const a of v.getAnimations?.() || []) try { a.finish(); } catch {} }
+// agentsStale: what the agents were read as is out of date (a plugin added
+// or removed): Agents opened next reads them again
+window.agentsStale = () => { load.at = 0; };
 function loadBack() {
   const f = loadBack.flight;
   if (f && performance.now() - f.at < 1000) return f.done;
