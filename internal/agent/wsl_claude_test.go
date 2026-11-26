@@ -209,8 +209,9 @@ func TestWSLClaudePick(t *testing.T) {
 		managed := filepath.Join(root, "etc", "claude-code", "managed-settings.json")
 		os.MkdirAll(filepath.Dir(managed), 0o755)
 		os.WriteFile(managed, []byte(`{"env": {"ANTHROPIC_BASE_URL": "https://corp.example"}}`), 0o644)
-		if c := a.Check(); !strings.Contains(c, "/etc/claude-code/managed-settings.json") || !strings.Contains(c, "corp.example") {
-			t.Fatalf("managed: %q", c)
+		// what setting it again can't change: drift of its own kind
+		if d := a.Drift(); d == nil || d.Kind != "outside" || !strings.Contains(d.Detail, "/etc/claude-code/managed-settings.json") || !strings.Contains(d.Detail, "corp.example") {
+			t.Fatalf("managed: %+v", d)
 		}
 		os.Remove(managed)
 

@@ -273,6 +273,15 @@ type Agent struct {
 	// something else rewrote the config — or "" when it is all there
 	// (see Drift).
 	Check func() string
+	// Outside, for an agent something beyond the config magpie writes can
+	// take past magpie (Claude Code's managed settings, a provider switch
+	// in its own settings or the shell), says what does, or "" when
+	// nothing does. Setting the agent again can't change that, so it is
+	// drift of its own kind, "outside", told how to fix rather than
+	// offered a Reconnect that says it worked while it didn't (jimlee0824v2
+	// on X). Check is asked first: a config gone off is "unwired", which
+	// Rewire sets again on a port change whatever else holds.
+	Outside func() string
 	// LastUsed, for an agent that keeps a log of its own prompts, is when
 	// it was last used — each prompt a request the gateway should have
 	// seen, so one it didn't went round magpie (see Drift). Zero if unknown.

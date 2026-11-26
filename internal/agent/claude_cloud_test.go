@@ -228,7 +228,7 @@ func TestClaudeCloudSwitchElsewhereIsSaid(t *testing.T) {
 				}
 				return
 			}
-			if d == nil || d.Kind != "unwired" || !strings.Contains(d.Detail, c.want) {
+			if d == nil || d.Kind != "outside" || !strings.Contains(d.Detail, c.want) {
 				t.Fatalf("drift %+v, want one saying %q", d, c.want)
 			}
 			// the template's own words, its slots filled, for the GUI to
@@ -319,12 +319,12 @@ func TestT3CodeSaysAClaudeCloudSwitch(t *testing.T) {
 	if err := a.Field("provider").Set(magpieID); err != nil {
 		t.Fatal(err)
 	}
-	if got := a.Check(); !strings.Contains(got, "CLAUDE_CODE_USE_BEDROCK") || !strings.Contains(got, "Amazon Bedrock") {
-		t.Fatalf("check %q", got)
+	if d := a.Drift(); d == nil || d.Kind != "outside" || !strings.Contains(d.Detail, "CLAUDE_CODE_USE_BEDROCK") || !strings.Contains(d.Detail, "Amazon Bedrock") {
+		t.Fatalf("drift %+v", d)
 	}
 	writeFile(t, claudePath, `{}`)
-	if got := a.Check(); got != "" {
-		t.Fatalf("check %q with the switch gone", got)
+	if d := a.Drift(); d != nil {
+		t.Fatalf("drift %+v with the switch gone", d)
 	}
 
 	// put on magpie's instance in T3's own editor

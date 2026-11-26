@@ -1052,6 +1052,14 @@ func wslAgent(k wslKind, d distro) *Agent {
 			return check()
 		}
 	}
+	if outside := a.Outside; outside != nil {
+		a.Outside = func() string {
+			if !d.live() {
+				return ""
+			}
+			return outside()
+		}
+	}
 	for _, p := range []*func() bool{&a.Routed, &a.Joined, &a.Beside} {
 		if f := *p; f != nil {
 			*p = func() bool { return d.live() && f() }

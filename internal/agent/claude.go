@@ -138,10 +138,15 @@ var claudeShellEnv = func(k string) string {
 // the variable is the one it goes by. A project's .claude/settings.json is
 // not looked at: magpie doesn't know which folders Claude Code runs in.
 func claudeCloud(at place, path string) string {
-	managed := claudeManaged()
-	if at.sys != nil {
-		managed = at.sys("/etc/claude-code/managed-settings.json")
-	}
+	_, why := claudeCloudAt(at, path)
+	return why
+}
+
+// claudeCloudAt is claudeCloud with the file the switch is set in, as
+// given ("" for the shell): one in path itself is what connecting Claude
+// Code takes out (dropClouds), so Check's, and one elsewhere Outside's.
+func claudeCloudAt(at place, path string) (string, string) {
+	managed := claudeManagedAt(at)
 	global := claudeGlobal(at, filepath.Dir(path))
 	for _, k := range agentenv.ClaudeProviders {
 		set := false
@@ -151,37 +156,41 @@ func claudeCloud(at place, path string) string {
 				continue
 			}
 			if claudeSwitchOn(v) {
-				return noticeClaudeCloudFile.say("file", at.native(f), "var", k, "cloud", claudeClouds[k])
+				return f, noticeClaudeCloudFile.say("file", at.native(f), "var", k, "cloud", claudeClouds[k])
 			}
 			set = true
 			break
 		}
 		// a distro's environment magpie can't read
 		if !set && at.spell == nil && claudeSwitchOn(claudeShellEnv(k)) {
-			return noticeClaudeCloudShell.say("var", k, "cloud", claudeClouds[k])
+			return "", noticeClaudeCloudShell.say("var", k, "cloud", claudeClouds[k])
 		}
 	}
-	return ""
+	return "", ""
 }
 
-// claudeBaseURLElsewhere says where Claude Code's own settings name an
-// ANTHROPIC_BASE_URL other than the gateway, which it applies over an env an
-// outer tool adds to the process (as T3 Code adds magpie's instance env), so
-// the Claude Code at path sends its requests there and never reaches magpie;
-// the file as the agent names it and the URL, both "" when none does. Claude
-// Code puts the env of .claude.json, then the user's settings, then managed
-// settings over the environment it was started in (claudeCloud), so the first
-// of managed, settings and .claude.json that names one is the value it goes
-// by. A base URL that reaches magpie another way (a reverse proxy,
-// reachesMagpie) is magpie's. The shell isn't read: the instance env
-// overwrites a base URL exported there, so only these files win over it.
-func claudeBaseURLElsewhere(at place, path string) (string, string) {
-	managed := claudeManaged()
+// claudeManagedAt is the managed settings file (an administrator's) of
+// the Claude Code at at, which wins over every other settings file and a
+// --settings flag.
+func claudeManagedAt(at place) string {
 	if at.sys != nil {
-		managed = at.sys("/etc/claude-code/managed-settings.json")
+		return at.sys("/etc/claude-code/managed-settings.json")
 	}
-	global := claudeGlobal(at, filepath.Dir(path))
-	for _, f := range []string{managed, path, global} {
+	return claudeManaged()
+}
+
+// claudeBaseURLIn says which of files, given in Claude Code's precedence
+// (managed, then settings.json, then .claude.json), is the first to name
+// an ANTHROPIC_BASE_URL, when that one isn't the gateway: the file as
+// given and the URL, both "" when the first that names one is magpie's or
+// none does. Claude Code puts the env of .claude.json, then the user's
+// settings, then managed settings over the environment it was started in
+// (claudeCloud), so an outer tool's env (T3 Code's instance env) loses to
+// them. A base URL that reaches magpie another way (a reverse proxy,
+// reachesMagpie) is magpie's. The shell isn't read: an outer tool's env
+// overwrites a base URL exported there, so only these files win over it.
+func claudeBaseURLIn(at place, files ...string) (string, string) {
+	for _, f := range files {
 		v, has := edit.GetJSON(f, "env.ANTHROPIC_BASE_URL")
 		if !has {
 			continue
@@ -192,7 +201,7 @@ func claudeBaseURLElsewhere(at place, path string) (string, string) {
 		if v == at.gw() || reachesMagpie(v, at.gw()) {
 			return "", ""
 		}
-		return at.native(f), v
+		return f, v
 	}
 	return "", ""
 }
@@ -2770,14 +2779,6 @@ func claudeIn(at place) *Agent {
 			// sends is for magpie (claudeKeyed): with a key of the user's
 			// own it is their endpoint, told as it is, never asked (#3480)
 			keyed := claudeKeyed(at, path)
-			// an administrator's settings win over the user's
-			managed := claudeManaged()
-			if at.sys != nil {
-				managed = at.sys("/etc/claude-code/managed-settings.json")
-			}
-			if u, _ := edit.GetJSON(managed, "env.ANTHROPIC_BASE_URL"); u != "" && u != at.gw() && !(keyed && reachesMagpie(u, at.gw())) {
-				return "Claude Code's managed settings (" + at.native(managed) + ") set ANTHROPIC_BASE_URL to " + u + ", which wins over magpie's"
-			}
 			if keyed {
 				if off := wiringOff("Claude Code", path, getEnv, "ANTHROPIC_BASE_URL", at.gw()); off != "" {
 					return off
@@ -2785,7 +2786,8 @@ func claudeIn(at place) *Agent {
 			} else if u, _ := getEnv("ANTHROPIC_BASE_URL"); u != at.gw() {
 				return whatsOff("Claude Code", path, "ANTHROPIC_BASE_URL", u, at.gw())
 			}
-			if why := claudeCloud(at, path); why != "" {
+			// a switch in settings.json, which connecting takes out
+			if f, why := claudeCloudAt(at, path); why != "" && f == path {
 				return why
 			}
 			// the key it sends: none where it keeps its claude.ai sign-in,
@@ -2806,6 +2808,22 @@ func claudeIn(at place) *Agent {
 				return where + " " + how + ", so Claude Code sends magpie its claude.ai sign-in, if it has one, not magpie's key — to keep it so, set its sign-in to claude.ai"
 			}
 			return wiringOff("Claude Code", path, getEnv, "ANTHROPIC_AUTH_TOKEN", at.gwKey())
+		},
+		// an administrator's base URL, which wins over the one magpie
+		// writes, or a provider switch in managed settings, .claude.json or
+		// the shell: setting Claude Code again can't change either
+		Outside: func() string {
+			if !isMagpie(get()) {
+				return ""
+			}
+			managed := claudeManagedAt(at)
+			if u, _ := edit.GetJSON(managed, "env.ANTHROPIC_BASE_URL"); u != "" && u != at.gw() && !(claudeKeyed(at, path) && reachesMagpie(u, at.gw())) {
+				return noticeClaudeManagedBase.say("file", at.native(managed), "url", u)
+			}
+			if f, why := claudeCloudAt(at, path); f != path {
+				return why
+			}
+			return ""
 		},
 		// every prompt typed into Claude Code goes into history.jsonl, and
 		// so does every one magpie's bridge gives it in magpie's own work
@@ -3423,10 +3441,11 @@ var (
 	noticeClaudeUltracode = newNotice("an open Claude Code session keeps the ultracode it started with — restart it to use this.")
 )
 
-// why a Claude Code wired to magpie goes to a cloud instead (claudeCloud)
+// why a Claude Code wired to magpie goes elsewhere: a cloud (claudeCloud) or an administrator's base URL (Outside)
 var (
-	noticeClaudeCloudFile  = newNotice("{file} sets {var}, so Claude Code sends its requests to {cloud}, not to magpie: take it out there to go through magpie.")
-	noticeClaudeCloudShell = newNotice("{var} is set in your shell's environment, so Claude Code started there sends its requests to {cloud}, not to magpie: take it out of your shell's profile to go through magpie.")
+	noticeClaudeCloudFile   = newNotice("{file} sets {var}, so Claude Code sends its requests to {cloud}, not to magpie: take it out there to go through magpie.")
+	noticeClaudeManagedBase = newNotice("Claude Code's managed settings ({file}) set ANTHROPIC_BASE_URL to {url}, which wins over magpie's: take it out there to go through magpie.")
+	noticeClaudeCloudShell  = newNotice("{var} is set in your shell's environment, so Claude Code started there sends its requests to {cloud}, not to magpie: take it out of your shell's profile to go through magpie.")
 )
 
 // magpiesPicker says whether settings.json's modelPicker is one magpie

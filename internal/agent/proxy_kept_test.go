@@ -474,8 +474,8 @@ func claudeOwnEndpointNeverAsked(t *testing.T, proxy, ownKey string) {
 	claudeManaged = func() string { return filepath.Join(home, "managed-settings.json") }
 	t.Cleanup(func() { claudeManaged = managed })
 	os.WriteFile(claudeManaged(), []byte(`{"env":{"ANTHROPIC_BASE_URL":"`+proxy+`"}}`), 0o644)
-	if d := cl.Drift(); d == nil || !strings.Contains(d.Detail, "managed settings") || !strings.Contains(d.Detail, proxy) {
-		t.Fatalf("its own key, an administrator's proxy: %+v", d)
+	if o := cl.Outside(); !strings.Contains(o, "managed settings") || !strings.Contains(o, proxy) {
+		t.Fatalf("its own key, an administrator's proxy: %q", o)
 	}
 	never("an administrator's proxy")
 	os.Remove(claudeManaged())

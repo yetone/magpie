@@ -80,6 +80,13 @@ const (
 // T3, and a sync doesn't bring it back.
 const t3CodexOffered = "t3code.codex"
 
+// what T3 Code's Claude Code is taken past magpie by (Check, Outside)
+var (
+	noticeT3FlagOff         = newNotice("The ANTHROPIC_BASE_URL in the launch arguments of magpie's instance in T3 Code ({file}) is {url}, not magpie's gateway at {gateway}.")
+	noticeT3BaseElsewhere   = newNotice("{file} sets ANTHROPIC_BASE_URL to {url}, which Claude Code puts over magpie's instance in T3 Code: reconnect to have the instance's launch arguments name magpie, which win over it.")
+	noticeT3BaseOwnSettings = newNotice("{file} sets ANTHROPIC_BASE_URL to {url}, which Claude Code puts over magpie's instance in T3 Code, whose own --settings names a file magpie leaves alone: take it out there to go through magpie.")
+)
+
 // t3Base is T3 Code's folder for home: $T3CODE_HOME, else ~/.t3. Its
 // settings are userdata/settings.json in it.
 func t3Base(home string) string { return appdir.T3Code(home) }
@@ -146,11 +153,7 @@ func t3code(home string) *Agent {
 		// its custom models are the models picked for it (#1508)
 		ListsModels: true,
 		// magpie's instance still on the gateway, as for every agent with
-		// a Check (TestDriftUnwiredEveryAgent, TestPortMovesEveryAgent).
-		// The user's ~/.claude settings env is put over the instance's, so
-		// a provider switch on there (or in the shell T3 was started from)
-		// takes magpie's instance to that cloud too; magpie only says so,
-		// as that file is Claude Code's, wired or not
+		// a Check (TestDriftUnwiredEveryAgent, TestPortMovesEveryAgent)
 		Check: func() string {
 			if !wired() {
 				return ""
@@ -164,16 +167,50 @@ func t3code(home string) *Agent {
 			if why := wiringOff("T3 Code", path, func(k string) (string, bool) { return t3EnvOf(path, k) }, "ANTHROPIC_BASE_URL", gateway.URL()); why != "" {
 				return why
 			}
-			at := here(home)
-			settings := filepath.Join(at.claudeDir(), "settings.json")
 			// Claude Code applies its own settings' env over the instance
-			// env T3 adds, so an ANTHROPIC_BASE_URL set there (Billion
-			// Context and other Claude Code routers write one) wins over
-			// magpie's and takes T3's requests to it, as the doc above says.
-			// wiringOff reads magpie's instance, which still names the
-			// gateway, so only this catches it.
-			if f, u := claudeBaseURLElsewhere(at, settings); u != "" {
-				return "T3 Code's Claude Code takes ANTHROPIC_BASE_URL " + u + " from " + f + ", which Claude Code applies over magpie's instance, so its requests go there, not to magpie's gateway at " + gateway.URL() + "; take it out there to go through magpie"
+			// env T3 adds, so an ANTHROPIC_BASE_URL set there (CC Switch,
+			// Billion Context and other Claude Code routers write one)
+			// wins over magpie's; the gateway in the instance's --settings
+			// wins over that (t3ClaudeArgs), and setting magpie again puts
+			// it back where it is gone or off. One managed settings name is
+			// Outside's, as is any while the user's own --settings names a
+			// file.
+			if u, ok := t3FlagBase(path); ok {
+				if u == gateway.URL() || reachesMagpie(u, gateway.URL()) {
+					return ""
+				}
+				return noticeT3FlagOff.say("file", filepath.Base(path), "url", u, "gateway", gateway.URL())
+			}
+			if t3OwnSettings(path) {
+				return ""
+			}
+			at, settings := t3ClaudeAt(home, path)
+			managed := claudeManagedAt(at)
+			if f, u := claudeBaseURLIn(at, managed, settings, claudeGlobal(at, filepath.Dir(settings))); u != "" && f != managed {
+				return noticeT3BaseElsewhere.say("file", at.native(f), "url", u)
+			}
+			return ""
+		},
+		// what setting magpie's instance again can't change: an
+		// administrator's base URL, which wins over flag settings too; a
+		// base URL in Claude Code's settings while the user's own
+		// --settings names a file, where magpie's can't go; a provider
+		// switch in a file or the shell T3 was started from, which takes
+		// it to that cloud whatever the base URL. magpie only says so, as
+		// those are Claude Code's, wired or not
+		Outside: func() string {
+			if !claudeOn() {
+				return ""
+			}
+			at, settings := t3ClaudeAt(home, path)
+			managed := claudeManagedAt(at)
+			if f, u := claudeBaseURLIn(at, managed, settings, claudeGlobal(at, filepath.Dir(settings))); u != "" {
+				if f == managed {
+					return noticeClaudeManagedBase.say("file", at.native(f), "url", u)
+				}
+				if t3OwnSettings(path) {
+					return noticeT3BaseOwnSettings.say("file", at.native(f), "url", u)
+				}
 			}
 			return claudeCloud(at, settings)
 		},
@@ -249,6 +286,13 @@ func t3InstanceJSON(path, gw string) map[string]any {
 			config[k] = v
 		}
 	}
+	// the gateway again as flag settings, which Claude Code puts over its
+	// own settings files (t3ClaudeArgs), in the launch arguments the user
+	// gave magpie's instance
+	theirs, _ := edit.GetJSON(path, t3Instance+".config.launchArgs")
+	if args, _ := t3ClaudeArgs(theirs, gw); args != "" {
+		config["launchArgs"] = args
+	}
 	environment := []map[string]any{
 		{"name": "ANTHROPIC_BASE_URL", "value": gw, "sensitive": false},
 		{"name": "ANTHROPIC_AUTH_TOKEN", "value": keyAt(gw), "sensitive": false},
@@ -299,10 +343,11 @@ func t3EnvOf(path, k string) (string, bool) {
 // the one at path: what the user set on it in T3 Code's own settings
 // stays (#2030, Kanscape: its name and Auto-compact after were reset on
 // every start). Its name, whether it is on, and every key magpie doesn't
-// write (config.autoCompactWindow, config.launchArgs, accentColor) are
-// theirs, as are the environment variables besides magpie's own. The
-// custom models and the gateway's variables are magpie's, and so is a
-// binary path or Claude home while T3's own Claude has one to carry over.
+// write (config.autoCompactWindow, accentColor) are theirs, as are the
+// environment variables besides magpie's own and the launch arguments
+// besides the gateway's in their --settings (t3ClaudeArgs). The custom
+// models and the gateway's variables are magpie's, and so is a binary
+// path or Claude home while T3's own Claude has one to carry over.
 // Only magpie's instance is read: another, such as T3's own Claude, lends
 // it nothing of the user's.
 func t3Merged(path, gw string) any {
@@ -568,11 +613,27 @@ func t3Stashed(key string) bool {
 
 // t3Tokens is T3 Code's tokenizeCliArgs (packages/shared/src/cliArgs.ts),
 // which splits an instance's launchArgs into the arguments it passes to
-// `codex app-server`.
+// `codex app-server`, or, for a Claude instance, reads as Claude Code's.
 func t3Tokens(s string) []string {
-	in := []rune(strings.TrimSpace(s))
 	var out []string
-	cur, quote, quoted := "", rune(0), false
+	for _, t := range t3Split(s) {
+		out = append(out, t.v)
+	}
+	return out
+}
+
+// t3Tok is an argument of launchArgs as T3 Code reads it, and where it is
+// in them: the runes from up to to.
+type t3Tok struct {
+	v        string
+	from, to int
+}
+
+// t3Split is t3Tokens with where each argument is, in runes of s.
+func t3Split(s string) []t3Tok {
+	in := []rune(s)
+	var out []t3Tok
+	cur, quote, quoted, from := "", rune(0), false, -1
 	space := func(r rune) bool { return strings.ContainsRune(" \t\n\r\f\v", r) }
 	for i := 0; i < len(in); i++ {
 		c := in[i]
@@ -588,14 +649,17 @@ func t3Tokens(s string) []string {
 			}
 			continue
 		}
+		if from < 0 && !space(c) {
+			from = i
+		}
 		switch {
 		case c == '\'' || c == '"':
 			quote, quoted = c, true
 		case space(c):
 			if cur != "" || quoted {
-				out = append(out, cur)
-				cur, quoted = "", false
+				out = append(out, t3Tok{cur, from, i})
 			}
+			cur, quoted, from = "", false, -1
 		case c == '\\' && i+1 < len(in) && (space(in[i+1]) || in[i+1] == '\'' || in[i+1] == '"'):
 			cur += string(in[i+1])
 			i++
@@ -604,7 +668,134 @@ func t3Tokens(s string) []string {
 		}
 	}
 	if cur != "" || quoted {
-		out = append(out, cur)
+		out = append(out, t3Tok{cur, from, len(in)})
 	}
 	return out
+}
+
+// t3Settings is the --settings argument T3 Code reads from a Claude
+// instance's launchArgs (readClaudeLaunchArgSettings): the last one, as
+// parseCliArgs keeps it, with --append-system-prompt taking the argument
+// after it whatever it is, and nothing after a bare -- read. at is false
+// when there is none; inline is its JSON when the value is inline JSON,
+// nil when it names a file or can't be read (the user's own, which magpie
+// leaves alone).
+type t3Settings struct {
+	at       bool
+	from, to int // runes of launchArgs the flag and its value take up
+	inline   map[string]any
+}
+
+func t3SettingsOf(args string) t3Settings {
+	toks := t3Split(args)
+	var s t3Settings
+	for i := 0; i < len(toks); i++ {
+		v := toks[i].v
+		if v == "--" {
+			break
+		}
+		if !strings.HasPrefix(v, "--") {
+			continue
+		}
+		start := toks[i].from
+		name, val, eq := strings.Cut(v[2:], "=")
+		end, has := toks[i].to, eq
+		if !eq && i+1 < len(toks) && (name == "append-system-prompt" || !strings.HasPrefix(toks[i+1].v, "--")) {
+			val, end, has = toks[i+1].v, toks[i+1].to, true
+			i++
+		}
+		if name != "settings" {
+			continue
+		}
+		s = t3Settings{at: true, from: start, to: end}
+		var m map[string]any
+		if t := strings.TrimSpace(val); has && strings.HasPrefix(t, "{") && json.Unmarshal([]byte(t), &m) == nil && m != nil {
+			s.inline = m
+		}
+	}
+	return s
+}
+
+// t3ClaudeArgs is launchArgs, the ones of magpie's Claude instance, with
+// magpie's gateway at gw and its key in the env of their --settings: so
+// Claude Code takes them as flag settings, which win over its own
+// settings files, where another router's ANTHROPIC_BASE_URL (CC Switch's,
+// Billion Context's) beat the instance env T3 adds, and the instance
+// stayed off magpie whatever Reconnect wrote (jimlee0824v2 on X). An
+// inline --settings of the user's keeps all the rest of it; one that
+// names a file is theirs, left as it is, and false says magpie's aren't
+// there.
+func t3ClaudeArgs(args, gw string) (string, bool) {
+	s := t3SettingsOf(args)
+	if s.at && s.inline == nil {
+		return args, false
+	}
+	m := s.inline
+	if m == nil {
+		m = map[string]any{}
+	}
+	env, _ := m["env"].(map[string]any)
+	if env == nil {
+		env = map[string]any{}
+	}
+	env["ANTHROPIC_BASE_URL"] = gw
+	env["ANTHROPIC_AUTH_TOKEN"] = keyAt(gw)
+	m["env"] = env
+	var b bytes.Buffer
+	e := json.NewEncoder(&b)
+	e.SetEscapeHTML(false)
+	if e.Encode(m) != nil {
+		return args, false
+	}
+	arg := "--settings " + t3Quote(strings.TrimSuffix(b.String(), "\n"))
+	if !s.at {
+		return strings.TrimSpace(strings.TrimSpace(args) + " " + arg), true
+	}
+	in := []rune(args)
+	return string(in[:s.from]) + arg + string(in[s.to:]), true
+}
+
+// t3Quote is v as one argument for T3 Code's tokenizer: in single quotes,
+// where nothing is escaped, unless it has one; else in double quotes, \
+// before ", \, $ and `.
+func t3Quote(v string) string {
+	if !strings.Contains(v, "'") {
+		return "'" + v + "'"
+	}
+	r := strings.NewReplacer(`\`, `\\`, `"`, `\"`, "$", `\$`, "`", "\\`")
+	return `"` + r.Replace(v) + `"`
+}
+
+// t3FlagBase is the ANTHROPIC_BASE_URL the inline --settings of magpie's
+// Claude instance at path gives Claude Code, and whether it has one.
+func t3FlagBase(path string) (string, bool) {
+	args, _ := edit.GetJSON(path, t3Instance+".config.launchArgs")
+	s := t3SettingsOf(args)
+	env, _ := s.inline["env"].(map[string]any)
+	u, ok := env["ANTHROPIC_BASE_URL"].(string)
+	return strings.TrimSpace(u), ok && strings.TrimSpace(u) != ""
+}
+
+// t3OwnSettings reports whether magpie's Claude instance at path has a
+// --settings of the user's that magpie leaves alone: one naming a file.
+func t3OwnSettings(path string) bool {
+	args, _ := edit.GetJSON(path, t3Instance+".config.launchArgs")
+	s := t3SettingsOf(args)
+	return s.at && s.inline == nil
+}
+
+// t3ClaudeAt is the Claude Code magpie's Claude instance at path runs: its
+// place, and the settings.json T3 has it read, in the Claude home given
+// the instance (config.homePath, ~ being home), else Claude Code's own.
+func t3ClaudeAt(home, path string) (place, string) {
+	at := here(home)
+	dir := at.claudeDir()
+	if h, _ := edit.GetJSON(path, t3Instance+".config.homePath"); strings.TrimSpace(h) != "" {
+		h = strings.TrimSpace(h)
+		if h == "~" || strings.HasPrefix(h, "~/") || strings.HasPrefix(h, `~\`) {
+			h = at.join(h[1:])
+		}
+		dir = h
+	}
+	return at, filepath.Join(dir, "settings.json")
 }

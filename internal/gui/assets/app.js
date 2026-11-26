@@ -1095,7 +1095,10 @@ function driftFix(a, label = "Apply again") {
   const fix = el("button", "ag-fix");
   fix.type = "button";
   fix.title = `${t(DRIFT_WHY[d.kind] || DRIFT_WHY.unwired, { agent: a.name, model: want })}\n${tNotice(d.detail)}`;
-  const deaf = d.kind === "unreachable" || d.kind === "proxied";
+  // "outside": something past its config (Claude Code's managed settings,
+  // a provider switch) that setting it again can't change, so the pill
+  // says how to fix it instead (jimlee0824v2 on X)
+  const deaf = d.kind === "unreachable" || d.kind === "proxied" || d.kind === "outside";
   if (deaf && d.move) label = t("Use {url}", { url: d.move.replace(/^https?:\/\//, "") });
   else if (deaf) label = "How to fix";
   fix.setAttribute("aria-label", t(label));
@@ -1142,6 +1145,7 @@ const DRIFT_WHY = {
   bypassed: "{agent} was used without going through magpie — restart it after applying",
   unreachable: "{agent} is set up, but nothing answers at the address it reaches magpie by",
   proxied: "{agent} reaches magpie through a proxy that doesn't pass its requests on",
+  outside: "{agent} is set up, but a setting outside its config takes it past magpie",
 };
 
 // an i in a circle: the pill that explains rather than acts
@@ -2514,6 +2518,10 @@ async function reapplyAgent(a, btn) {
     state = await api("agents/reapply/" + a.id, {});
     renderAgents();
     document.querySelector(`.agent[data-id="${CSS.escape(a.id)}"] .field`)?.classList.add("flash");
+    // set again, it may still not go through magpie: say why, never that
+    // it does (jimlee0824v2 on X)
+    const left = state.agents?.find((x) => x.id === a.id)?.drift;
+    if (left) return status(tNotice(left.detail) || t(DRIFT_WHY[left.kind] || DRIFT_WHY.unwired, { agent: a.name, model: left.want }), "err");
     const msg = t("{agent} goes through magpie again", { agent: a.name });
     saidOk(msg);
   } catch (e) {

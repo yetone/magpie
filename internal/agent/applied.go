@@ -146,6 +146,9 @@ type Drift struct {
 	// Kind says what is off:
 	//   "unwired"  the model is magpie's but the config no longer sends it
 	//              through magpie (Check);
+	//   "outside"  the config is right, but something beyond it that
+	//              setting it again can't change takes the agent's
+	//              requests elsewhere (Outside);
 	//   "replaced" a magpie model magpie set was replaced by the agent's own;
 	//   "bypassed" the config is right, yet the agent was used since and
 	//              nothing of it reached the gateway — it runs on an old
@@ -228,6 +231,11 @@ func (a *Agent) drift(memo *valueMemo) *Drift {
 	if a.Check != nil {
 		if d := a.Check(); d != "" {
 			return &Drift{Kind: "unwired", Field: on.Key, Now: vals[on.Key], Want: vals[on.Key], Detail: d}
+		}
+	}
+	if a.Outside != nil {
+		if d := a.Outside(); d != "" {
+			return &Drift{Kind: "outside", Field: on.Key, Now: vals[on.Key], Want: vals[on.Key], Detail: d}
 		}
 	}
 	rec := appliedOf(a.ID)

@@ -288,7 +288,8 @@ func TestDriftUnwiredEveryAgent(t *testing.T) {
 }
 
 // Claude Code's managed settings win over the user's: a base URL there is
-// drift magpie can only point out.
+// drift magpie can only point out, of the kind setting it again can't
+// change (jimlee0824v2 on X).
 func TestClaudeDriftManaged(t *testing.T) {
 	home, _ := codexHome(t, "", "")
 	managed := claudeManaged
@@ -299,8 +300,15 @@ func TestClaudeDriftManaged(t *testing.T) {
 		t.Fatal(err)
 	}
 	os.WriteFile(claudeManaged(), []byte(`{"env":{"ANTHROPIC_BASE_URL":"https://corp.example"}}`), 0o644)
-	if d := cl.Drift(); d == nil || d.Kind != "unwired" || !strings.Contains(d.Detail, "managed") {
+	if d := cl.Drift(); d == nil || d.Kind != "outside" || !strings.Contains(d.Detail, "managed") {
 		t.Fatalf("managed: %+v", d)
+	}
+	// setting magpie again can't change it, and doesn't say it did
+	if err := cl.Reapply(); err != nil {
+		t.Fatal(err)
+	}
+	if d := cl.Drift(); d == nil || d.Kind != "outside" {
+		t.Fatalf("managed, after Reconnect: %+v", d)
 	}
 }
 
