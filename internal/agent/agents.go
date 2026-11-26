@@ -458,6 +458,7 @@ func openCodeSpelled(path string, v1 func() string) func(string) bool {
 		if prefixed(v) {
 			return true
 		}
+		v, _ = openCodeCut(v)
 		p, ref, ok := strings.Cut(v, "/")
 		if !ok || p == "" {
 			return false
@@ -1318,6 +1319,27 @@ func openCodeLike(at place, id, name, icon, bin, dir, auth string, ua []string, 
 			return put(v)
 		}
 	}
+	// the model's default variant (opencode_effort.go), OpenCode's own
+	// alone: MiMo Code's and DevEco Code's reading of one isn't known
+	effort := ocEffort{path: path, file: file, offered: func(m string) []string {
+		return openCodeOffered(id, path, at.v1(), m, false)
+	}}
+	fields := []Field{
+		{Key: "model", Label: "model", Get: effort.model, Set: set("model"), Options: opts("model")},
+		{Key: "small", Label: "small", Get: func() string { return file().small() }, Set: set("small_model"), Options: opts("small")},
+	}
+	if id == "opencode" {
+		model := set("model")
+		fields[0].Set = func(v string) error { return effort.moved(v, model) }
+		fields = append(fields, Field{
+			Key: "effort", Label: "effort", Get: effort.get, Set: effort.set,
+			// the variants OpenCode has for one of magpie's models, its
+			// levels: none for any other, whose variants are OpenCode's
+			Options: func(cur map[string]string) []Option {
+				return static(openCodeOffered(id, path, at.v1(), cur["model"], true)...)
+			},
+		})
+	}
 	return &Agent{
 		ID: id, Name: name, Icon: icon, Aliases: aliases, Spelled: openCodeSpelled(path, at.v1),
 		UA:  ua,
@@ -1334,10 +1356,7 @@ func openCodeLike(at place, id, name, icon, bin, dir, auth string, ua []string, 
 			// file: put it back, or the agent has nothing to send it to
 			return file().sync(onMagpie())
 		},
-		Fields: []Field{
-			{Key: "model", Label: "model", Get: jsonGet(path, "model"), Set: set("model"), Options: opts("model")},
-			{Key: "small", Label: "small", Get: func() string { return file().small() }, Set: set("small_model"), Options: opts("small")},
-		},
+		Fields: fields,
 	}
 }
 
@@ -1364,13 +1383,17 @@ func openCodeRef(path, id, v string) (string, error) {
 // openCodeRefAt is openCodeRef for the agent at a place, which reaches the
 // gateway at its own address.
 func openCodeRefAt(at place, path, id, v string) (string, error) {
+	// OpenCode 2's default variant after the model (opencode_effort.go)
+	// stays with it
+	v, variant := openCodeCut(v)
 	ref, ok := strings.CutPrefix(v, magpieID+"/")
 	if !ok || !isMagpie(ref) {
-		return v, nil
+		return openCodeJoin(v, variant), nil
 	}
 	if own := ownGatewayProvider(path, ref, at.v1()); own != "" {
-		return own + "/" + ref, nil
+		return openCodeJoin(own+"/"+ref, variant), nil
 	}
+	v = openCodeJoin(v, variant)
 	block := func() any { return magpieProviderJSONAt("opencode", id, at.gw()) }
 	return v, openCodeFileAt(at, path, id, block).sync(true)
 }
