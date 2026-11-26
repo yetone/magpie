@@ -312,3 +312,16 @@ func TestGoogleNoulCriteria(t *testing.T) {
 	choice := `{"model":"gemini-decision-1","state":"x","questions":{"b":{"type":"choice","instructions":"?","criteria":{"true":"yes","false":"no"}}}}`
 	sameJSON(t, "choice", DecideAsk(ViaGoogle, GoogleDecision, []byte(choice)), strings.Replace(choice, `"state"`, `"input"`, 1))
 }
+
+// #7790: a System One request's audio goes to Google as audio blocks of
+// its input (AudioContent in google-genai: type audio, data or uri,
+// mime_type): a data: URL's bytes with its type, another URL at its uri
+// with the type its extension names, when it is one Google lists.
+func TestGoogleAudioBlocks(t *testing.T) {
+	ask := `{"model":"gemini-decision-1","state":"listen","questions":{"q":{"type":"noul","instructions":"?"}},"audio":["data:audio/ogg;base64,T2dnUw==","https://example.com/a/CALL.FLAC#t=1","https://generativelanguage.googleapis.com/v1beta/files/abc","",7]}`
+	sameJSON(t, "audio", DecideAsk(ViaGoogle, GoogleDecision, []byte(ask)),
+		`{"model":"gemini-decision-1","input":[{"type":"text","text":"listen"},{"type":"audio","data":"T2dnUw==","mime_type":"audio/ogg"},{"type":"audio","uri":"https://example.com/a/CALL.FLAC#t=1","mime_type":"audio/flac"},{"type":"audio","uri":"https://generativelanguage.googleapis.com/v1beta/files/abc"}],"questions":{"q":{"type":"noul","instructions":"?"}}}`)
+	// an empty list is no audio: the input stays text
+	empty := `{"model":"gemini-decision-1","state":"listen","questions":{},"audio":[]}`
+	sameJSON(t, "empty", DecideAsk(ViaGoogle, GoogleDecision, []byte(empty)), `{"model":"gemini-decision-1","input":"listen","questions":{}}`)
+}

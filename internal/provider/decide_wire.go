@@ -131,16 +131,17 @@ func DecideAnswer(via string, b []byte) []byte {
 // input, text as it is and an object or list as its JSON text ("Serialize
 // JSON objects and arrays to a string and pass them as text"), where an
 // object would be read as a content block and refused (400 "type
-// parameter is required at input[0]"); its images, data: URLs, are image
-// blocks after it, and any other URL a block at that uri. Its questions
-// are System One's, noul, choice and score, but a choice's option with no
-// description (null, as magpie's "none of these" goes) has an empty one,
-// which Google takes, and a noul's criteria named true and false, as
-// System One and Pi name them, are Google's true_description and
-// false_description (NoulCriteria in google-genai; Google refused
-// "Unknown parameter 'false' at 'questions.b.criteria'", bunnybit0121 on
-// X, #7789). Everything else goes as it is, for Google to refuse what it
-// has no place for with a 400 naming it.
+// parameter is required at input[0]"); its images and its audio, data:
+// URLs, are image and audio blocks after it, and any other URL a block at
+// that uri (googleBlock). Its questions are System One's, noul, choice
+// and score, but a choice's option with no description (null, as magpie's
+// "none of these" goes) has an empty one, which Google takes, and a
+// noul's criteria named true and false, as System One and Pi name them,
+// are Google's true_description and false_description (NoulCriteria in
+// google-genai; Google refused "Unknown parameter 'false' at
+// 'questions.b.criteria'", bunnybit0121 on X, #7789). Everything else
+// goes as it is, for Google to refuse what it has no place for with a
+// 400 naming it.
 func googleAsk(q map[string]any, body []byte) []byte {
 	state, ok := q["state"]
 	if !ok {
@@ -153,23 +154,22 @@ func googleAsk(q map[string]any, body []byte) []byte {
 		text = string(b)
 	}
 	var input any = text
-	if ims, ok := q["images"].([]any); ok {
-		delete(q, "images")
-		blocks := []any{map[string]any{"type": "text", "text": text}}
-		for _, im := range ims {
-			u, _ := im.(string)
-			if u == "" {
-				continue
-			}
-			block := map[string]any{"type": "image", "uri": u}
-			if meta, data, ok := strings.Cut(strings.TrimPrefix(u, "data:"), ","); ok && strings.HasPrefix(u, "data:") && strings.HasSuffix(meta, ";base64") {
-				block = map[string]any{"type": "image", "data": data, "mime_type": strings.TrimSuffix(meta, ";base64")}
-			}
-			blocks = append(blocks, block)
+	blocks := []any{map[string]any{"type": "text", "text": text}}
+	for _, f := range [][2]string{{"images", "image"}, {"audio", "audio"}} {
+		field, kind := f[0], f[1]
+		list, ok := q[field].([]any)
+		if !ok {
+			continue
 		}
-		if len(blocks) > 1 {
-			input = blocks
+		delete(q, field)
+		for _, v := range list {
+			if u, _ := v.(string); u != "" {
+				blocks = append(blocks, googleBlock(kind, u))
+			}
 		}
+	}
+	if len(blocks) > 1 {
+		input = blocks
 	}
 	q["input"] = input
 	if qs, ok := q["questions"].(map[string]any); ok {
@@ -200,6 +200,46 @@ func googleAsk(q map[string]any, body []byte) []byte {
 	}
 	b, _ := json.Marshal(q)
 	return b
+}
+
+// googleBlock is an image or audio URL of a System One request as a
+// content block of Google's input (google-genai's ImageContent and
+// AudioContent): a base64 data: URL's bytes as data with its mime_type,
+// any other URL (https, or a Files API uri) at its uri. Google asks for
+// the mime type there too ("Always set the MIME type to the real file
+// format"), which an audio file's extension gives when it is one of the
+// formats Google lists.
+func googleBlock(kind, u string) map[string]any {
+	if meta, data, ok := strings.Cut(strings.TrimPrefix(u, "data:"), ","); ok && strings.HasPrefix(u, "data:") && strings.HasSuffix(meta, ";base64") {
+		return map[string]any{"type": kind, "data": data, "mime_type": strings.TrimSuffix(meta, ";base64")}
+	}
+	block := map[string]any{"type": kind, "uri": u}
+	if kind == "audio" {
+		if mt, ok := googleAudioTypes[audioExt(u)]; ok {
+			block["mime_type"] = mt
+		}
+	}
+	return block
+}
+
+// googleAudioTypes are the audio formats Google's Decisions API takes
+// (AudioContentMimeType in google-genai), by a file's extension.
+var googleAudioTypes = map[string]string{
+	"wav": "audio/wav", "mp3": "audio/mp3", "aif": "audio/aiff", "aiff": "audio/aiff",
+	"aac": "audio/aac", "ogg": "audio/ogg", "oga": "audio/ogg", "flac": "audio/flac",
+	"m4a": "audio/m4a", "opus": "audio/opus", "webm": "audio/webm",
+}
+
+// audioExt is the extension of a URL's last path segment, lower case,
+// its query and fragment left out.
+func audioExt(u string) string {
+	u, _, _ = strings.Cut(u, "#")
+	u, _, _ = strings.Cut(u, "?")
+	u = u[strings.LastIndex(u, "/")+1:]
+	if i := strings.LastIndex(u, "."); i >= 0 {
+		return strings.ToLower(u[i+1:])
+	}
+	return ""
 }
 
 // DecideResult is a decision API's answer, status and body, as System

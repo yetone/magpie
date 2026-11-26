@@ -85,6 +85,36 @@ func SystemOneTakesImages(p provider.Provider, model string) bool {
 	return systemOneTarget{p, model}.takesImages()
 }
 
+// takesAudio is whether the model takes a System One request's audio
+// (its "audio", data: URLs or URLs, beside "images"): Google's
+// gemini-decision-1 does, as audio blocks of its input (#7790), and
+// another magpie passes it on. No other decision API has a place for it.
+func (t systemOneTarget) takesAudio() bool {
+	return t.p.IsRemoteMagpie() || t.p.DecideVia() == provider.ViaGoogle
+}
+
+// systemOneAudio says whether a System One request carries audio, and a
+// 400's message when its "audio" is not a list of URLs.
+func systemOneAudio(body []byte) (bool, string) {
+	var q struct {
+		Audio json.RawMessage `json:"audio"`
+	}
+	if json.Unmarshal(body, &q) != nil || len(q.Audio) == 0 || string(q.Audio) == "null" {
+		return false, ""
+	}
+	var list []string
+	if json.Unmarshal(q.Audio, &list) != nil {
+		return false, `"audio" is a list of audio URLs (data: URLs, or URLs the model fetches)`
+	}
+	return len(list) > 0, ""
+}
+
+// noAudioError is the 400 a System One request with audio gets from
+// magpie, sent nowhere, when the model it asked can't take audio.
+func noAudioError(asked string) string {
+	return fmt.Sprintf("%s can't take audio: magpie's System One carries \"audio\" only to Google's gemini-decision-1 (and to another magpie). Ask that model, or send the request without audio", asked)
+}
+
 func (t systemOneTarget) String() string { return t.p.ID + "/" + t.model }
 
 // systemOneTargets are the decision models System One would ask for the

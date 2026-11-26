@@ -1157,6 +1157,12 @@ the `ark-beta-systemone-api: true` header magpie adds on Ark's host, and its
 one decision model `doubao-seed-2-1-lite-260915`. The Coding and Agent
 Plans' paths don't serve it, so it bills as pay as you go.
 
+A Google Gemini provider with an AI Studio key (the `google` preset) decides
+with `google/gemini-decision-1` on Google's Decisions API, on the same keys.
+`/v1/systemone` sends it the state, the questions, and `images` and `audio`,
+each a list of data: URLs or URLs. A decision model that can't take audio
+is refused a request with audio, with a 400 that says so.
+
 Qwen Cloud (qwencloud.com), Alibaba's international Qwen platform, has keys
 of its own, made at home.qwencloud.com. Its pay as you go is `qwencloud`,
 at `{region}.maas.qwencloudapi.com` in six regions (`ap-southeast-1`, the

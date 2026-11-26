@@ -230,18 +230,23 @@ Google's Decisions API (`POST /v1beta/decisions`, `ViaGoogle`) serves
 (`DecideProtocol`), never as a Bearer token. Google takes System One's
 questions as they are, with a choice's undescribed option as `""` and a
 noul's `true`/`false` criteria as Google's `true_description` and
-`false_description` (google-genai's `NoulCriteria`; #7789); the state goes as `input`, a string as it is and an object as its JSON text
-(an object would be read as a content block), and the images as image
-blocks after it (`googleAsk`). Google's decision model is in no key's own
-list of models (they are picked from the chat models), so such a list
-never bars it (`decisionUnlisted` in `AccountServes`, Bailian's and Ark's
-alike; #7788). The answer's usage
+`false_description` (google-genai's `NoulCriteria`; #7789); the state goes
+as `input`, a string as it is and an object as its JSON text (an object
+would be read as a content block), and the request's `images` and `audio`
+as image and audio blocks after it, a data: URL's bytes as `data` with its
+`mime_type`, another URL as `uri` (`googleAsk`, `googleBlock`; #7790).
+`/v1/systemone` sends `audio` only to a model that takes it (Google's, or
+another magpie); any other is a 400 that says so, and a decision group
+asks only its members that take it. Google's decision model is in no
+key's own list of models (they are picked from the chat models), so such
+a list never bars it (`decisionUnlisted` in `AccountServes`, Bailian's
+and Ark's alike; #7788). The answer's usage
 (`total_input_tokens`/`total_output_tokens`) comes back as System One's,
 and a `prompt_feedback.block_reason` with no answers is a 400 saying why
 (`DecideResult`). Before, `google/gemini-decision-1` fell to OpenRouter's
 decision list. `TestGoogleDecideWire`, `TestGoogleKeyDecides`,
 `TestGoogleSystemOne`, `TestGoogleDecisionsTakesImages`,
-`TestGoogleDecisionKeyLists`.
+`TestGoogleDecisionKeyLists`, `TestSystemOneAudio`.
 A routing rule's classifier set to an OpenAI API key's `gpt-6-luna`
 (`api.openai.com`; not Azure, a relay listing the id, a ChatGPT sign-in, a
 plugin, another magpie or a provider with a decision API of its own) is

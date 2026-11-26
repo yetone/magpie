@@ -169,3 +169,126 @@ func TestGoogleDecisionKeyLists(t *testing.T) {
 		t.Fatalf("Google asked: %q", asked)
 	}
 }
+
+// bunnybit0121 on X (#7789, #7790): a noul's criteria named true and
+// false, as Pi sends them, reach Google as its true_description and
+// false_description, and the request's audio as audio blocks of the
+// input after its images.
+func TestGoogleSystemOneNoulAndAudio(t *testing.T) {
+	fresh(t)
+	up := &googleDecisionsUp{reply: `{"answers":{"b":{"type":"noul","noul":0.05,"confidence":0.94}},"usage":{"total_input_tokens":242,"total_output_tokens":0}}`}
+	s := googleKey(t, up)
+	code, out := sendTo(s, "/v1/systemone", `{"model":"google/`+provider.GoogleDecision+`","state":{"message":"The export crashes the app."},`+
+		`"questions":{"b":{"type":"noul","instructions":"Is it about billing?","criteria":{"true":"billing","false":"other"}}},`+
+		`"images":["data:image/png;base64,iVBORw0KGgo="],"audio":["data:audio/wav;base64,UklGRg==","https://example.com/call.mp3?sig=1"]}`)
+	if code != 200 || !strings.Contains(out, `"noul":0.05`) || !strings.Contains(out, `"input_tokens":242`) {
+		t.Fatalf("System One: %d %s", code, out)
+	}
+	_, bodies := up.got()
+	if len(bodies) != 1 {
+		t.Fatalf("Google asked %d times", len(bodies))
+	}
+	c, _ := json.Marshal(bodies[0]["questions"])
+	if want := `{"b":{"criteria":{"false_description":"other","true_description":"billing"},"instructions":"Is it about billing?","type":"noul"}}`; string(c) != want {
+		t.Fatalf("questions %s\nwant %s", c, want)
+	}
+	in, _ := json.Marshal(bodies[0]["input"])
+	if want := `[{"text":"{\"message\":\"The export crashes the app.\"}","type":"text"},{"data":"iVBORw0KGgo=","mime_type":"image/png","type":"image"},{"data":"UklGRg==","mime_type":"audio/wav","type":"audio"},{"mime_type":"audio/mp3","type":"audio","uri":"https://example.com/call.mp3?sig=1"}]`; string(in) != want {
+		t.Fatalf("input %s\nwant %s", in, want)
+	}
+	if _, left := bodies[0]["audio"]; left {
+		t.Fatalf("audio left as a field: %v", bodies[0])
+	}
+}
+
+// #7790: /v1/systemone carries audio to a model that takes it only. A
+// Jev, which has no place for it, is never asked: the request is a 400
+// that says so. A decision group asks only its members that take audio,
+// and one with none of them is a 400 too. An "audio" that is not a list
+// of URLs is a 400, sent nowhere.
+func TestSystemOneAudio(t *testing.T) {
+	fresh(t)
+	f := &decideFleet{status: map[string]int{}}
+	jev := f.serve()
+	defer jev.Close()
+	up := &googleDecisionsUp{reply: `{"answers":{"intent":{"type":"choice","choice":"bug","confidence":0.9,"probabilities":{"bug":0.95,"chat":0.05}}},"usage":{"total_input_tokens":120,"total_output_tokens":0}}`}
+	s := googleKey(t, up)
+	s.client = &http.Client{Transport: hostSplit{google: up}}
+	if err := provider.Save(provider.Provider{ID: "ja", Name: "JA", Key: "ka", Decide: jev.URL + "/v1"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, g := range []provider.Group{
+		{ID: "mixed", Name: "Mixed", Members: []string{"ja/jev-latest", "google/" + provider.GoogleDecision}},
+		{ID: "jevs", Name: "Jevs", Members: []string{"ja/jev-latest"}},
+	} {
+		if err := provider.SaveGroup(g); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ask := func(model, audio string) (int, string) {
+		return sendTo(s, "/v1/systemone", `{"model":"`+model+`","state":{"message":"listen"},"questions":{"intent":{"type":"choice","criteria":{"bug":"a bug","chat":"small talk"}}}`+audio+`}`)
+	}
+	const wav = `,"audio":["data:audio/wav;base64,UklGRg=="]`
+
+	if code, out := ask("ja/jev-latest", wav); code != 400 || !strings.Contains(out, "can't take audio") || !strings.Contains(out, "gemini-decision-1") {
+		t.Fatalf("Jev with audio: %d %s", code, out)
+	}
+	if code, out := ask("group/jevs", wav); code != 400 || !strings.Contains(out, "no decision model of the group Jevs can take audio") {
+		t.Fatalf("Jev group with audio: %d %s", code, out)
+	}
+	if code, out := ask("google/"+provider.GoogleDecision, `,"audio":"data:audio/wav;base64,UklGRg=="`); code != 400 || !strings.Contains(out, "list of audio URLs") {
+		t.Fatalf("audio not a list: %d %s", code, out)
+	}
+	if code, out := ask("group/jevs", `,"audio":{"a":1}`); code != 400 || !strings.Contains(out, "list of audio URLs") {
+		t.Fatalf("group, audio not a list: %d %s", code, out)
+	}
+	if got := f.took(); len(got) != 0 {
+		t.Fatalf("Jev asked %q", got)
+	}
+	if asked, _ := up.got(); len(asked) != 0 {
+		t.Fatalf("Google asked %q", asked)
+	}
+
+	// the mixed group, its Jev first, asks Google alone
+	if code, out := ask("group/mixed", wav); code != 200 || !strings.Contains(out, `"choice":"bug"`) {
+		t.Fatalf("mixed group with audio: %d %s", code, out)
+	}
+	if got := f.took(); len(got) != 0 {
+		t.Fatalf("Jev asked %q", got)
+	}
+	if asked, bodies := up.got(); len(asked) != 1 || !strings.Contains(fmtJSON(bodies[0]["input"]), `"type":"audio"`) {
+		t.Fatalf("Google asked %q %v", asked, bodies)
+	}
+	// and without audio, its Jev as before; an empty list is no audio
+	for _, audio := range []string{"", `,"audio":[]`, `,"audio":null`} {
+		if code, out := ask("group/mixed", audio); code != 200 {
+			t.Fatalf("mixed group, audio %q: %d %s", audio, code, out)
+		}
+		if got := f.took(); len(got) != 1 {
+			t.Fatalf("audio %q: Jev asked %q", audio, got)
+		}
+		if code, out := ask("ja/jev-latest", audio); code != 200 {
+			t.Fatalf("Jev, audio %q: %d %s", audio, code, out)
+		}
+		f.took()
+	}
+}
+
+// hostSplit sends Google's host to google, and loopback (a test's own
+// servers) as it is; nothing else is reached.
+type hostSplit struct{ google http.RoundTripper }
+
+func (h hostSplit) RoundTrip(r *http.Request) (*http.Response, error) {
+	switch r.URL.Hostname() {
+	case "generativelanguage.googleapis.com":
+		return h.google.RoundTrip(r)
+	case "127.0.0.1", "localhost", "::1":
+		return http.DefaultTransport.RoundTrip(r)
+	}
+	return nil, errors.New("test reached " + r.URL.Host)
+}
+
+func fmtJSON(v any) string {
+	b, _ := json.Marshal(v)
+	return string(b)
+}

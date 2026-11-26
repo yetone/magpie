@@ -111,6 +111,17 @@ func (s *Server) serveDecisionGroup(w http.ResponseWriter, r *http.Request, body
 		writeError(w, provider.Chat, http.StatusServiceUnavailable, pausedError(asked, paused))
 		return
 	}
+	// a request with audio asks only the members that read it (#7790)
+	if audio, msg := systemOneAudio(body); msg != "" {
+		writeError(w, provider.Chat, http.StatusBadRequest, msg)
+		return
+	} else if audio {
+		ms = slices.DeleteFunc(slices.Clone(ms), func(m provider.Member) bool { return !(systemOneTarget{m.Provider, m.Model}).takesAudio() })
+		if len(ms) == 0 {
+			writeError(w, provider.Chat, http.StatusBadRequest, fmt.Sprintf("no decision model of the group %s can take audio: magpie's System One carries \"audio\" only to Google's gemini-decision-1 (and to another magpie). Add one to the group, or send the request without audio", g.Name))
+			return
+		}
+	}
 	cs, pl, ms := s.decideTries(g, ms)
 	if len(ms) == 0 {
 		writeError(w, provider.Chat, http.StatusNotFound, fmt.Sprintf("no decision model of the group %s can be asked now: their providers are switched off or gone", g.Name))

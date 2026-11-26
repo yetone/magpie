@@ -644,6 +644,15 @@ func (s *Server) serveSystemOneBody(w http.ResponseWriter, r *http.Request, body
 		writeError(w, provider.Chat, st, msg)
 		return
 	}
+	// audio goes only to a model that reads it (#7790): any other is
+	// told so, never asked the question without what it was about
+	if audio, msg := systemOneAudio(body); msg != "" {
+		writeError(w, provider.Chat, http.StatusBadRequest, msg)
+		return
+	} else if audio && !(systemOneTarget{p, model}).takesAudio() {
+		writeError(w, provider.Chat, http.StatusBadRequest, noAudioError(asked))
+		return
+	}
 	// its keys or accounts in its routing's order, each asked until one
 	// answers (decideKeys): one out of quota rests, and the next takes the
 	// request (fflake33 on Discord). One the user set not to serve the
