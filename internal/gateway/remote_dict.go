@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
 	"errors"
 	"hash/maphash"
 	"io"
@@ -120,18 +121,193 @@ func dictWindow(dict int) int {
 	return 1 << bits.Len(uint(n-1))
 }
 
-// dczEncode is body as "dcz" against dict.
-func dczEncode(body, dict []byte) ([]byte, error) {
-	enc, err := zstd.NewWriter(nil, zstd.WithEncoderDictRaw(0, dict), zstd.WithWindowSize(dictWindow(len(dict))),
-		zstd.WithEncoderConcurrency(1), zstd.WithEncoderCRC(true), zstd.WithEncoderLevel(zstd.SpeedDefault))
-	if err != nil {
-		return nil, err
-	}
-	defer enc.Close()
+// dczEncode is body as "dcz" against dict, whose anchors are at.
+//
+// zstd's own match finder reaches a large dictionary only near its end:
+// at the default level its table holds one place per hash for 128K
+// hashes, the dictionary's later places writing over its earlier ones,
+// so in a dictionary of several MB a match into its first part is all
+// but never found, and a long history of images unchanged went again
+// nearly whole (recih, #7866: 89% of 6 MiB, 96% of 12 MiB). Its better
+// levels reach further at a cost that grows with the dictionary, and
+// still cost that much on content that is all new.
+//
+// So the long runs body shares with dict are found here, from the
+// anchors both already have (dictMatches), and each goes as a frame of
+// its own that only copies from the dictionary (appendCopyFrame); what
+// is between them goes as zstd's own frames against the dictionary's
+// last dczTail bytes, which is as far back as its finder reaches anyway.
+// A "dcz" body is a run of zstd frames, each decoded against the same
+// dictionary, as every magpie that reads "dcz" decodes it.
+func dczEncode(body, dict []byte, at anchors) ([]byte, error) {
 	sum := sha256.Sum256(dict)
 	out := make([]byte, 0, dczHeaderLen+len(body)/16+256)
 	out = append(append(out, dczMagic...), sum[:]...)
-	return enc.EncodeAll(body, out), nil
+	tail := dict[len(dict)-min(len(dict), dczTail):]
+	var enc *zstd.Encoder
+	gap := func(b []byte) error {
+		if len(b) == 0 {
+			return nil
+		}
+		if enc == nil {
+			var err error
+			enc, err = zstd.NewWriter(nil, zstd.WithEncoderDictRaw(0, tail), zstd.WithWindowSize(dictWindow(len(tail))),
+				zstd.WithEncoderConcurrency(1), zstd.WithEncoderCRC(true), zstd.WithEncoderLevel(zstd.SpeedDefault))
+			if err != nil {
+				return err
+			}
+		}
+		out = enc.EncodeAll(b, out)
+		return nil
+	}
+	defer func() {
+		if enc != nil {
+			enc.Close()
+		}
+	}()
+	window := dictWindow(len(dict))
+	pos := 0
+	for _, m := range dictMatches(body, dict, at) {
+		if err := gap(body[pos:m.at]); err != nil {
+			return nil, err
+		}
+		out = appendCopyFrame(out, len(dict)-m.from, m.n, window)
+		pos = m.at + m.n
+	}
+	if err := gap(body[pos:]); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+const (
+	// dczTail is how much of the dictionary's end zstd's own frames in a
+	// "dcz" body are compressed against
+	dczTail = 1 << 20
+	// dczRunMin is the shortest run shared with the dictionary that goes
+	// as a frame of its own
+	dczRunMin = 1 << 10
+	// dczRunLong is the shortest run in the dictionary's last dczTail
+	// bytes that goes as a frame of its own
+	dczRunLong = 64 << 10
+	// dczRunsMost bounds the frames of runs, and so of zstd's own frames
+	// between them, in one body
+	dczRunsMost = 256
+)
+
+// dictRun is a run of body, from at for n bytes, that is dict's from from.
+type dictRun struct{ at, from, n int }
+
+// dictMatches are the runs body shares with dict, of dczRunMin bytes or
+// more (dczRunLong in dict's last dczTail), in body's order, found from the anchors of body that dict has
+// too (at) and grown from there both ways.
+func dictMatches(body, dict []byte, at anchors) []dictRun {
+	var runs []dictRun
+	pos := 0
+	eachAnchor(body, func(i int, k uint64) bool {
+		q, ok := at[k]
+		if i < pos || !ok || int(q)+anchorSpan > len(dict) || !bytes.Equal(body[i:i+anchorSpan], dict[q:int(q)+anchorSpan]) {
+			return true
+		}
+		s, f := i, int(q)
+		for s > pos && f > 0 && body[s-1] == dict[f-1] {
+			s, f = s-1, f-1
+		}
+		e := i + anchorSpan + commonPrefix(body[i+anchorSpan:], dict[int(q)+anchorSpan:])
+		// a short run in the tail zstd's own frames are compressed
+		// against is left to them: a frame of its own costs more than
+		// their finder finding it
+		if e-s >= dczRunLong || e-s >= dczRunMin && f < len(dict)-dczTail {
+			runs = append(runs, dictRun{at: s, from: f, n: e - s})
+			pos = e
+		}
+		return len(runs) < dczRunsMost
+	})
+	return runs
+}
+
+// commonPrefix is how many bytes a and b start with alike.
+func commonPrefix(a, b []byte) int {
+	n := min(len(a), len(b))
+	i := 0
+	for ; i+8 <= n; i += 8 {
+		if x := binary.LittleEndian.Uint64(a[i:]) ^ binary.LittleEndian.Uint64(b[i:]); x != 0 {
+			return i + bits.TrailingZeros64(x)/8
+		}
+	}
+	for i < n && a[i] == b[i] {
+		i++
+	}
+	return i
+}
+
+// zstd's frame and block format (RFC 8878), as much of it as a frame
+// that only copies from its dictionary needs.
+const (
+	zstdBlockMax = 128 << 10
+	// a sequence's match is 3 bytes or more
+	zstdMatchMin = 3
+)
+
+var (
+	zstdFrameMagic = []byte{0x28, 0xb5, 0x2f, 0xfd}
+	// Match_Length_Code's baselines and extra bits (RFC 8878 3.1.1.3.2.1.1)
+	mlBaseline = [53]uint32{3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34,
+		35, 37, 39, 41, 43, 47, 51, 59, 67, 83, 99, 131, 259, 515, 1027, 2051, 4099, 8195, 16387, 32771, 65539}
+	mlExtraBits = [53]uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		1, 1, 1, 1, 2, 2, 3, 3, 4, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+)
+
+// appendCopyFrame appends a zstd frame of n bytes copied from the
+// dictionary, starting dist bytes before its end: no literals, a block
+// for every zstdBlockMax bytes, each one sequence whose codes go as RLE
+// (one symbol, no table), so the block is its codes' extra bits alone.
+// Within the frame the distance back to the dictionary stays dist, the
+// frame's own bytes before it added to the dictionary's after.
+func appendCopyFrame(out []byte, dist, n, window int) []byte {
+	// no content size, no checksum (the body's SHA-256 is checked), no
+	// dictionary id: window = 2^(10+exponent)
+	out = append(out, zstdFrameMagic...)
+	out = append(out, 0, byte(bits.Len(uint(window))-1-10)<<3)
+	ofv := uint64(dist) + 3 // Offset_Value: past the three repeat codes
+	ofc := bits.Len64(ofv) - 1
+	for n > 0 {
+		ml := min(n, zstdBlockMax)
+		if r := n - ml; r > 0 && r < zstdMatchMin {
+			ml -= zstdMatchMin
+		}
+		n -= ml
+		mlc := len(mlBaseline) - 1
+		for mlBaseline[mlc] > uint32(ml) {
+			mlc--
+		}
+		// the decoder reads the bitstream from its end: the offset's
+		// extra bits, then the match length's, then the literal
+		// length's (none); a 1 bit marks the end
+		var bs uint64
+		nb := 0
+		bs |= uint64(uint32(ml)-mlBaseline[mlc]) << nb
+		nb += int(mlExtraBits[mlc])
+		bs |= (ofv - 1<<ofc) << nb
+		nb += ofc
+		bs |= 1 << nb
+		nb++
+		size := 6 + (nb+7)/8
+		last := 0
+		if n == 0 {
+			last = 1
+		}
+		h := uint32(size)<<3 | 2<<1 | uint32(last) // a compressed block
+		out = append(out, byte(h), byte(h>>8), byte(h>>16),
+			0x00,           // raw literals, none
+			0x01,           // one sequence
+			1<<6|1<<4|1<<2, // literal lengths, offsets and match lengths RLE
+			0, byte(ofc), byte(mlc))
+		for i := 0; i < (nb+7)/8; i++ {
+			out = append(out, byte(bs>>(8*i)))
+		}
+	}
+	return out
 }
 
 // dczReader reads a "dcz" body r against dict, whose SHA-256 its header
@@ -158,8 +334,9 @@ var errDictMiss = errors.New("magpie doesn't hold the dictionary this body was c
 // anchors are the places in a body chosen by its content alone, each
 // known by a hash of the bytes after it: two bodies that share content
 // share its anchors wherever it sits in each, a cheap measure of how
-// much one compresses against the other.
-type anchors map[uint64]struct{}
+// much one compresses against the other. Each is kept with where it
+// first is in the body, for dictMatches.
+type anchors map[uint64]int32
 
 var (
 	gear       [256]uint64
@@ -186,18 +363,28 @@ const (
 
 func anchorsOf(b []byte) anchors {
 	a := anchors{}
+	eachAnchor(b, func(i int, k uint64) bool {
+		if _, ok := a[k]; !ok {
+			a[k] = int32(i)
+		}
+		return len(a) < anchorMost
+	})
+	return a
+}
+
+// eachAnchor calls f with each anchor of b in order, and its hash, until
+// f says to stop.
+func eachAnchor(b []byte, f func(i int, k uint64) bool) {
 	var h uint64
 	for i, c := range b {
 		h = h<<1 + gear[c]
 		if h&anchorMask != 0 || i+anchorSpan > len(b) {
 			continue
 		}
-		a[maphash.Bytes(anchorSeed, b[i:i+anchorSpan])] = struct{}{}
-		if len(a) >= anchorMost {
-			break
+		if !f(i, maphash.Bytes(anchorSeed, b[i:i+anchorSpan])) {
+			return
 		}
 	}
-	return a
 }
 
 // shared is how many of a's anchors b has too.
@@ -340,7 +527,7 @@ func sendDict(p provider.Provider, req *http.Request, body []byte) (*dictSend, i
 		return d, len(body)
 	}
 	if base != nil {
-		if z, err := dczEncode(body, base.body); err == nil && len(z) < len(body) {
+		if z, err := dczEncode(body, base.body, base.at); err == nil && len(z) < len(body) {
 			provider.SetBody(req, z)
 			req.Header.Set("Content-Encoding", "dcz")
 			req.Header.Set(availableDictHeader, sfBinary(base.sum))

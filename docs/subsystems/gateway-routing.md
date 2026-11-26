@@ -3646,8 +3646,24 @@ the other magpie, `keptBodyRequests`, between `withCaller` and
   counts), with `Available-Dictionary` naming it and
   `X-Magpie-Body-Digest` the SHA-256 of the body itself; with no kept body
   to share, as plain `zstd`. The "dcz" body is RFC 9842's: the magic, the
-  dictionary's SHA-256, a zstd frame with its checksum and a window of at
-  least 8 MB or 1.25 times the dictionary.
+  dictionary's SHA-256, then zstd frames, each decoded against the same
+  dictionary, with a window of at least 8 MB or 1.25 times the
+  dictionary.
+- zstd's own match finder reaches only a large dictionary's end (at the
+  default level one place per hash for 128K hashes, the later places
+  writing over the earlier), so a history of images unchanged went again
+  nearly whole: 6 MiB as 89% of the body, 12 MiB as 96% (recih, #7866).
+  `dczEncode` finds the runs the body shares with the dictionary itself
+  (`dictMatches`, from both bodies' anchors, grown both ways), and each
+  run of 1 KB or more goes as a frame that only copies from the
+  dictionary (`appendCopyFrame`: no literals, one RLE-coded sequence a
+  128 KB block). A run in the dictionary's last MB goes so only from 64
+  KB, as zstd's finder reaches it. What is between the runs goes as
+  zstd's own frames at the default level against the dictionary's last
+  MB. Measured (`TestDictReachesALongImageHistory`): 1 to 12 MiB of
+  images unchanged go as 230 to 2,010 bytes, reordered as 1,102; an
+  image added or replaced as its base64; all new as it was, in about the
+  time plain zstd takes.
 - A dictionary the other magpie doesn't hold in that scope (restart,
   evicted, another key or computer), a header that names another, a body
   that doesn't decode or whose digest differs: 400 with
@@ -3665,8 +3681,8 @@ the other magpie, `keptBodyRequests`, between `withCaller` and
   relayed.
 - Measured (`TestDictSavingOnALongConversation`): two interleaved agent
   conversations, 80 requests growing to 1.1 MB with a 300 KB screenshot,
-  44.6 MB as they were, 26.4 MB as zstd, 0.64 MB as dcz; the last request
-  1,368 bytes.
+  47.5 MB as they were, 26.8 MB as zstd, 0.65 MB as dcz; the last request
+  2,428 bytes.
 - Not covered: the kept bodies are in memory only on both sides, so the
   first request after either restarts goes as zstd or whole. Responses on
   a socket and replies are not compressed.

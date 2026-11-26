@@ -399,7 +399,7 @@ func TestKeptBodyIsOnlyItsCallers(t *testing.T) {
 		t.Fatalf("not kept: %v", rec.Header())
 	}
 	next := c.turn(1)
-	z, err := dczEncode(next, first)
+	z, err := dczEncode(next, first, anchorsOf(first))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -503,5 +503,142 @@ func TestKeptBodiesBounded(t *testing.T) {
 	}
 	if s.size > dictClientBytes {
 		t.Fatalf("this side kept %d bytes", s.size)
+	}
+}
+
+// imageHistory is a request whose history holds images, as base64, and the
+// user's words after them, as recih's fixtures in #7866 have it.
+func imageHistory(images [][]byte, words ...string) []byte {
+	blocks := []any{}
+	for _, b := range images {
+		blocks = append(blocks, map[string]any{"type": "image", "source": map[string]any{"type": "base64", "media_type": "image/png", "data": base64.StdEncoding.EncodeToString(b)}})
+	}
+	msgs := []any{map[string]any{"role": "user", "content": blocks}}
+	for _, w := range words {
+		msgs = append(msgs, map[string]any{"role": "user", "content": w})
+	}
+	b, _ := json.Marshal(map[string]any{"model": "office/fake/m1", "max_tokens": 32000, "system": "You are an agent.", "messages": msgs})
+	return b
+}
+
+// randomImages are n images of size bytes in all, as random as a PNG or
+// JPEG is to a compressor.
+func randomImages(seed uint64, size, n int) [][]byte {
+	r := rand.New(rand.NewPCG(seed, seed^0x9e37))
+	out := make([][]byte, n)
+	for i := range out {
+		out[i] = make([]byte, size/n)
+		for j := 0; j < len(out[i]); j += 8 {
+			v := r.Uint64()
+			for k := 0; k < 8 && j+k < len(out[i]); k++ {
+				out[i][j+k] = byte(v >> (8 * k))
+			}
+		}
+	}
+	return out
+}
+
+// A history of images several MB long, sent again unchanged with a word
+// added, goes as a few KB, as a short one does: zstd's own finder reached
+// only the dictionary's end, so 6 MiB of images went as 89% of the body
+// and 12 MiB as 96% (recih, #7866). Images added, replaced or reordered
+// go as what is new, no more than its base64; all new, as plain zstd
+// would have them.
+func TestDictReachesALongImageHistory(t *testing.T) {
+	p := provider.Provider{ID: "office", Preset: provider.RemoteMagpiePreset, Key: "rk", Chat: "http://office:3425/v1"}
+	b64 := func(ims ...[]byte) int {
+		n := 0
+		for _, b := range ims {
+			n += base64.StdEncoding.EncodedLen(len(b))
+		}
+		return n
+	}
+	six := randomImages(10, 6<<20, 4)
+	fresh := randomImages(99, 6<<20, 4)
+	type tc struct {
+		name       string
+		dict, body []byte
+		most       int // bytes it may go as
+	}
+	var cases []tc
+	for _, mb := range []int{1, 3, 6, 12} {
+		ims := randomImages(uint64(mb), mb<<20, 4)
+		cases = append(cases, tc{fmt.Sprintf("%d MiB unchanged", mb), imageHistory(ims, "look"), imageHistory(ims, "look", "continue"), 8 << 10})
+	}
+	cases = append(cases,
+		tc{"reordered", imageHistory(six, "look"), imageHistory([][]byte{six[3], six[1], six[0], six[2]}, "look", "continue"), 8 << 10},
+		tc{"one added", imageHistory(six, "look"), imageHistory(append(slices.Clone(six), fresh[0]), "look", "continue"), b64(fresh[0]) + 8<<10},
+		tc{"one replaced", imageHistory(six, "look"), imageHistory([][]byte{six[0], fresh[1], six[2], six[3]}, "look", "continue"), b64(fresh[1]) + 8<<10},
+		tc{"all new", imageHistory(six, "look"), imageHistory(fresh, "look", "continue"), 0},
+	)
+	for _, c := range cases {
+		freshDicts(t)
+		route := prevRoute(p)
+		sentDicts.put(route, &sentDict{sum: sha256.Sum256(c.dict), body: c.dict, at: anchorsOf(c.dict), when: time.Now()})
+		req := httptest.NewRequest("POST", "http://office:3425/v1/messages", nil)
+		start := time.Now()
+		d, sent := sendDict(p, req, c.body)
+		took := time.Since(start)
+		if d == nil {
+			t.Fatalf("%s: no dictSend", c.name)
+		}
+		wire := c.body
+		if d.enc != "" {
+			wire, _ = io.ReadAll(req.Body)
+		}
+		if len(wire) != sent {
+			t.Fatalf("%s: %d bytes on the wire, %d said", c.name, len(wire), sent)
+		}
+		most := c.most
+		if most == 0 {
+			most = len(zstdEncode(c.body)) + 1<<10
+		}
+		t.Logf("%s: %d bytes as %q %d (%.3f%%), plain zstd %d, in %v", c.name, len(c.body), d.enc, sent, 100*float64(sent)/float64(len(c.body)),
+			len(zstdEncode(c.body)), took.Round(time.Millisecond))
+		if d.enc == "dcz" {
+			rd, err := dczReader(bytes.NewReader(wire), c.dict)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := io.ReadAll(rd)
+			rd.Close()
+			if err != nil || !bytes.Equal(got, c.body) {
+				t.Fatalf("%s decoded %d bytes of %d, %v", c.name, len(got), len(c.body), err)
+			}
+		} else if c.most != 0 {
+			t.Fatalf("%s went %q", c.name, d.enc)
+		}
+		if sent > most {
+			t.Fatalf("%s went as %d bytes, more than %d", c.name, sent, most)
+		}
+	}
+}
+
+// A frame that copies from the dictionary decodes to what it copies, at
+// any length a block split can leave, from anywhere in the dictionary,
+// and after another frame.
+func TestCopyFrameDecodes(t *testing.T) {
+	dict := randomImages(7, 3<<20, 1)[0]
+	sum := sha256.Sum256(dict)
+	window := dictWindow(len(dict))
+	for _, n := range []int{dczRunMin, zstdBlockMax - 1, zstdBlockMax, zstdBlockMax + 1, zstdBlockMax + 2, zstdBlockMax + 3, 2*zstdBlockMax + 1, len(dict)} {
+		for _, from := range []int{0, 12345, len(dict) - n} {
+			if from+n > len(dict) {
+				continue
+			}
+			z := append(append([]byte{}, dczMagic...), sum[:]...)
+			z = appendCopyFrame(z, len(dict)-from, n, window)
+			z = appendCopyFrame(z, len(dict), 100, window) // the dictionary's start, after
+			rd, err := dczReader(bytes.NewReader(z), dict)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := io.ReadAll(rd)
+			rd.Close()
+			want := append(slices.Clone(dict[from:from+n]), dict[:100]...)
+			if err != nil || !bytes.Equal(got, want) {
+				t.Fatalf("%d bytes from %d: decoded %d, %v", n, from, len(got), err)
+			}
+		}
 	}
 }
