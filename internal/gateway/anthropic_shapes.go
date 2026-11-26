@@ -83,6 +83,16 @@ import (
 // defer_loading, so the model still sees what ToolSearch loaded
 // (withRefsAsText). A translated route (Chat, Responses, Gemini) already
 // carries them as that text (stringOrText).
+//
+// Command Code's Anthropic endpoint names no block at all: a tool_reference
+// in a tool_result is 400 "Invalid input at messages.72.content" (#7833,
+// kongk0ng, whose analysis this follows), with or without text beside it.
+// A refusal of messages.N.content is read against message N of the body as
+// sent (system messages moved to the top, deferred blocks left out): a
+// tool_result there holding a reference marks the references refused, and
+// a deferred block there (or a tool_definition in a tool_result, the newer
+// ToolSearch answer) marks the deferred blocks refused. A message N with
+// neither is over something else, and the 400 goes back as it came.
 
 // The refusals, remembered in unfit under the provider's id as betas are.
 const (
@@ -101,6 +111,7 @@ var (
 	displayRefused      = lazyre.New(`thinking\.(?:adaptive|enabled)\.display:? Extra inputs are not permitted`)
 	turnEffortRefused   = lazyre.New(`messages\.\d+\.output_config:? Extra inputs are not permitted|Mid-conversation reasoning effort \(configuration_update\) is not supported`)
 	turnRoleRefused     = lazyre.New(`messages\.(\d+)\.role\b`)
+	turnContentRefused  = lazyre.New(`messages\.(\d+)\.content(?:$|[^.\[\w])`)
 	safeguardsRefused   = lazyre.New(`\bsafeguards:? Extra inputs are not permitted`)
 	deferredRefused     = lazyre.New("messages\\[\\d+\\]\\.content: unknown variant `(?:tool_addition|tool_removal|tool_definition|tool_reference)`")
 	refsOnlyRefused     = lazyre.New("missing field `content`")
@@ -149,10 +160,7 @@ func (s *Server) refuseShapes(p provider.Provider, errBody, body []byte) bool {
 		// the references in a tool_result themselves; one a deferred
 		// block's refusal names, while such blocks are still sent, is
 		// that refusal's
-		sent := s.withoutRefusedShapes(p, body)
-		if deferredOutUpFront(p, provider.Anthropic, sent) {
-			sent = withoutDeferredTools(sent)
-		}
+		sent := s.sentShapes(p, body)
 		if hasResultRefs(sent) && !(deferredRefused.Match(errBody) && hasDeferredTools(sent)) {
 			mark(shapeRefs)
 		}
@@ -161,12 +169,58 @@ func (s *Server) refuseShapes(p provider.Provider, errBody, body []byte) bool {
 	// messages as they were sent; a refusal naming a user or assistant
 	// message is over something else
 	if m := turnRoleRefused.FindSubmatch(errBody); m != nil {
-		sent := s.withoutRefusedShapes(p, body)
-		if gjson.GetBytes(sent, "messages."+string(m[1])+".role").String() == "system" {
+		if gjson.GetBytes(s.sentShapes(p, body), "messages."+string(m[1])+".role").String() == "system" {
 			mark(shapeTurnSystem)
 		}
 	}
+	// a message's content refused as a whole, naming no block (Command
+	// Code, #7833): what of Claude Code's own blocks that message holds
+	// as sent. One naming a block in it ("messages.2.content.0: unexpected
+	// `tool_use_id`") is about that block.
+	if m := turnContentRefused.FindSubmatch(errBody); m != nil {
+		msg := gjson.GetBytes(s.sentShapes(p, body), "messages."+string(m[1]))
+		if msgRefs(msg) {
+			mark(shapeRefs)
+		}
+		if msgDeferred(msg) {
+			mark(shapeDeferred)
+		}
+	}
 	return fresh
+}
+
+// sentShapes is body as forwardOnce sends p it, as far as the shapes go:
+// what p refused before left out, and the deferred blocks out up front
+// where they always are, so a refusal's message index counts the
+// messages p was sent.
+func (s *Server) sentShapes(p provider.Provider, body []byte) []byte {
+	sent := s.withoutRefusedShapes(p, body)
+	if deferredOutUpFront(p, provider.Anthropic, sent) {
+		sent = withoutDeferredTools(sent)
+	}
+	return sent
+}
+
+// msgRefs is a message with a tool_result holding a tool_reference.
+func msgRefs(m gjson.Result) bool {
+	found := false
+	m.Get("content").ForEach(func(_, b gjson.Result) bool {
+		found = b.Get("type").String() == "tool_result" && holdsRef(b.Get("content"))
+		return !found
+	})
+	return found
+}
+
+// msgDeferred is a message with a deferred-tool block, or a tool_result
+// holding a tool_definition (hasDeferredTools, for one message).
+func msgDeferred(m gjson.Result) bool {
+	found := false
+	m.Get("content").ForEach(func(_, b gjson.Result) bool {
+		found = deferredBlock(b.Get("type").String()) ||
+			b.Get("type").String() == "tool_result" && strings.Contains(b.Get("content").Raw, `"tool_definition"`)
+		return !found
+	})
+	return found
 }
 
 // withoutRefusedShapes is body as the provider takes it, leaving out what
@@ -392,11 +446,7 @@ func hasDeferredTools(body []byte) bool {
 	}
 	found := false
 	getIn(body, "messages").ForEach(func(_, m gjson.Result) bool {
-		m.Get("content").ForEach(func(_, b gjson.Result) bool {
-			found = deferredBlock(b.Get("type").String()) ||
-				b.Get("type").String() == "tool_result" && strings.Contains(b.Get("content").Raw, `"tool_definition"`)
-			return !found
-		})
+		found = msgDeferred(m)
 		return !found
 	})
 	return found
@@ -683,10 +733,7 @@ func hasResultRefs(body []byte) bool {
 	}
 	found := false
 	getIn(body, "messages").ForEach(func(_, m gjson.Result) bool {
-		m.Get("content").ForEach(func(_, b gjson.Result) bool {
-			found = b.Get("type").String() == "tool_result" && holdsRef(b.Get("content"))
-			return !found
-		})
+		found = msgRefs(m)
 		return !found
 	})
 	return found

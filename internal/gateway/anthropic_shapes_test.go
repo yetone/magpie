@@ -171,9 +171,10 @@ func TestClaudeCodesNewShapesKeptWhereTaken(t *testing.T) {
 	}
 }
 
-// commandCodeAPI checks messages as Command Code's Provider API does
-// (#1407): a role other than user or assistant inside messages is turned
-// away by its index.
+// commandCodeAPI checks messages as Command Code's Provider API does: a
+// role other than user or assistant inside messages (#1407), or a block it
+// doesn't read in a message's content or a tool_result's (a tool_reference
+// beside text too, #7833), is turned away by the message's index alone.
 type commandCodeAPI struct {
 	mu     sync.Mutex
 	bodies []map[string]any
@@ -194,8 +195,43 @@ func (v *commandCodeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, `{"type":"error","error":{"type":"invalid_request_error","message":"Invalid input at messages.%d.role"}}`, i)
 			return
 		}
+		if !commandCodeReads(x.(map[string]any)["content"]) {
+			w.WriteHeader(400)
+			fmt.Fprintf(w, `{"type":"error","error":{"type":"invalid_request_error","message":"Invalid input at messages.%d.content"}}`, i)
+			return
+		}
 	}
 	io.WriteString(w, `{"model":"claude-sonnet-5-5","id":"msg_1","type":"message","role":"assistant","content":[{"type":"text","text":"OK."}],"stop_reason":"end_turn","usage":{"input_tokens":20,"output_tokens":5}}`)
+}
+
+// commandCodeReads is a message's content Command Code takes: a string,
+// or blocks of the types it knows, a tool_result's content a string or
+// text and image blocks.
+func commandCodeReads(c any) bool {
+	blocks, ok := c.([]any)
+	if !ok {
+		_, ok = c.(string)
+		return ok
+	}
+	for _, x := range blocks {
+		b, _ := x.(map[string]any)
+		switch b["type"] {
+		case "text", "image", "document", "thinking", "redacted_thinking", "tool_use":
+		case "tool_result":
+			inner, ok := b["content"].([]any)
+			if !ok {
+				continue
+			}
+			for _, y := range inner {
+				if t := y.(map[string]any)["type"]; t != "text" && t != "image" {
+					return false
+				}
+			}
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func (v *commandCodeAPI) all() []map[string]any {
