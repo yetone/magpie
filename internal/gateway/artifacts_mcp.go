@@ -14,6 +14,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -883,6 +884,10 @@ func (s *Server) artifactPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := r.PathValue("path")
+	if app, ok := strings.CutPrefix(name, artifactAPIDir); ok && n == 0 {
+		s.artifactApp(w, r, id, app)
+		return
+	}
 	where, art, err := artifact.File(id, n, name)
 	if err != nil {
 		if errors.Is(err, artifact.ErrNotFound) {
@@ -976,6 +981,7 @@ func (s *Server) artifactShell(w http.ResponseWriter, r *http.Request, art *arti
 		Pinned:  n > 0,
 		Origin:  requestOrigin(r),
 		Lang:    settings.Load().Lang,
+		App:     ArtifactPagePath + art.ID + "/" + strings.TrimSuffix(artifactAPIDir, "/"),
 	})
 	h := w.Header()
 	h.Add("Vary", "Sec-Fetch-Mode")
@@ -987,6 +993,63 @@ func (s *Server) artifactShell(w http.ResponseWriter, r *http.Request, art *arti
 	h.Set("Cache-Control", "no-store")
 	if r.Method != http.MethodHead {
 		w.Write(page)
+	}
+}
+
+// artifactApp serves what installs artifact id as an app from the
+// browser (artifact.Manifest): its manifest, icons and service worker,
+// under its newest page's _api. A pinned version has none: the app
+// always opens the newest.
+func (s *Server) artifactApp(w http.ResponseWriter, r *http.Request, id, name string) {
+	a, err := artifact.Get(id)
+	if err != nil {
+		if errors.Is(err, artifact.ErrNotFound) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, "the artifact can't be read: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	home := ArtifactPagePath + id + "/"
+	api := home + strings.TrimSuffix(artifactAPIDir, "/")
+	var body []byte
+	h := w.Header()
+	switch {
+	case name == artifact.AppManifest:
+		body = artifact.Manifest(a, home, api)
+		h.Set("Content-Type", "application/manifest+json")
+		h.Set("Cache-Control", "no-cache")
+	case name == artifact.AppWorker:
+		body = artifact.AppWorkerJS(settings.Load().Lang)
+		h.Set("Content-Type", "text/javascript; charset=utf-8")
+		h.Set("Cache-Control", "no-cache")
+		// its scope is the page's folder, above _api where it is
+		h.Set("Service-Worker-Allowed", home)
+		// it fetches the app's window from magpie, and nothing else
+		h.Set("Content-Security-Policy", "default-src 'none'; connect-src 'self'")
+	case strings.HasPrefix(name, artifact.AppIcon) && strings.HasSuffix(name, ".png"):
+		size, err := strconv.Atoi(strings.TrimSuffix(strings.TrimPrefix(name, artifact.AppIcon), ".png"))
+		if err != nil || !slices.Contains(artifact.AppIconSizes, size) {
+			http.NotFound(w, r)
+			return
+		}
+		if body, err = artifact.AppIconPNG(a, size); err != nil {
+			http.Error(w, "the icon can't be drawn: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		h.Set("Content-Type", "image/png")
+		// drawn from the title, which a new version may change
+		h.Set("Cache-Control", "no-cache")
+	default:
+		http.NotFound(w, r)
+		return
+	}
+	h.Set("X-Content-Type-Options", "nosniff")
+	if h.Get("Content-Security-Policy") == "" {
+		h.Set("Content-Security-Policy", "default-src 'none'")
+	}
+	if r.Method != http.MethodHead {
+		w.Write(body)
 	}
 }
 

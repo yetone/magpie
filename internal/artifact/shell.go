@@ -41,6 +41,10 @@ type ShellConfig struct {
 	Origin string `json:"origin"`
 	// Lang is magpie's language setting (system, en, zh, zh-TW, ja, de)
 	Lang string `json:"lang,omitempty"`
+	// App is the newest page's _api, where its app manifest, icons and
+	// service worker are (app.go): a pinned version's shell takes its
+	// icon, and only the newest's installs
+	App string `json:"app,omitempty"`
 }
 
 // ShellPage is the shell's HTML, and the nonce its CSP must allow.
@@ -52,7 +56,14 @@ func ShellPage(c ShellConfig) (page []byte, nonce string) {
 	var p bytes.Buffer
 	p.WriteString(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="referrer" content="no-referrer"><title>`)
 	p.WriteString(html.EscapeString(c.Title))
-	p.WriteString(`</title><style nonce="` + nonce + `">`)
+	p.WriteString(`</title>`)
+	if c.App != "" {
+		p.WriteString(`<link rel="icon" href="` + html.EscapeString(c.App+"/"+AppIcon+"192.png") + `">`)
+		if !c.Pinned {
+			p.WriteString(`<link rel="manifest" href="` + html.EscapeString(c.App+"/"+AppManifest) + `">`)
+		}
+	}
+	p.WriteString(`<style nonce="` + nonce + `">`)
 	p.Write(shellCSS)
 	p.WriteString(`</style></head><body><iframe id="page" title="` + html.EscapeString(c.Title) + `" allow="autoplay; clipboard-write; fullscreen"></iframe><div id="ui"></div><script nonce="` + nonce + `">`)
 	p.Write(bytes.TrimRight(shellJS, "\n"))
@@ -66,5 +77,5 @@ func ShellPage(c ShellConfig) (page []byte, nonce string) {
 // style alone, the page in a frame from magpie's address, and nothing
 // framing it.
 func ShellCSP(nonce string) string {
-	return "default-src 'none'; script-src 'nonce-" + nonce + "'; style-src 'nonce-" + nonce + "'; frame-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+	return "default-src 'none'; script-src 'nonce-" + nonce + "'; style-src 'nonce-" + nonce + "'; frame-src 'self'; connect-src 'self'; img-src 'self' data:; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 }

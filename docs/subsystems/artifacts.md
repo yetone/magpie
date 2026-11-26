@@ -170,6 +170,44 @@ address, so:
   a charset, a viewport and base styles (`Served`), so it doesn't render in
   quirks mode.
 
+## Install as app
+
+The newest page installs from the browser it opens in, as its own app
+with its own window and icon, on every system the browser runs on
+([internal/artifact/app.go](../../internal/artifact/app.go),
+`artifactApp`). Its folder `/a/<id>/` is the app's scope, start and id,
+so the app always opens the newest version. Under its `_api` (a name no
+published file can take) the gateway serves, for `/a/<id>/` only:
+
+- `app.webmanifest` (`Manifest`): the title as its name (cut to 24
+  characters for `short_name`, the id when untitled), `standalone`, and
+  the two icons;
+- `app-icon-192.png` and `app-icon-512.png` (`AppIconPNG`): a rounded
+  square in one of eight quiet colours, picked by the id, with the
+  title's first letter or digit in white, or a page glyph when Go Bold
+  has no such letter (a Chinese title); `no-cache`, since a new version
+  may retitle it;
+- `app-sw.js` (`AppWorkerJS`), with `Service-Worker-Allowed: /a/<id>/`.
+  It handles the app's window opening only (a navigation to a document)
+  and answers it from navigation preload. It never fetches the window
+  itself: a worker's fetch goes as `Sec-Fetch-Dest: empty`, where the
+  gateway serves the page alone, not the shell. When magpie can't be
+  reached it answers a page saying so in magpie's language (the
+  browser's with `system`), which tries again every 3s. A browser with no
+  navigation preload goes to the network as before.
+
+Any other name there, or a pinned `/a/<id>@<n>/_api/…`, is not found. The
+shell links the manifest (newest only) and the icon (every version), its
+CSP allows `manifest-src` and `worker-src 'self'`, and it registers the
+worker when not pinned. When the browser offers to install (Chromium's
+`beforeinstallprompt`), the bar gets an install button; an offer is used
+once and the button goes once installed. Library's **Install as app**
+opens the page with `#install`, which the shell takes off the address and
+answers: with an offer it asks first (the browser's own question needs a
+click in the page), and with none it says how there (Safari: File › Add
+to Dock) or that this browser can't. Only this computer reaches the
+gateway, so an installed app works where magpie runs.
+
 ## Page runtime
 
 A page written for claude.ai's artifact runtime (contract 0.2.99) runs
@@ -741,7 +779,7 @@ deletes one; one gone already is gone as asked
 A row says the title, who made it, when, how many versions it has, and
 "Shared" when it is. A click opens the newest in the browser. Its menu
 copies the link, lists Earlier versions (when it has any) in the app's
-menu to open one, shares it after asking (`Share…`, then the shared link
+menu to open one, installs it as an app ([Install as app](#install-as-app)), shares it after asking (`Share…`, then the shared link
 is copied) or copies the shared link and stops sharing it, and deletes it
 after asking. `POST /api/artifacts/share {id}` answers `{url, version}`
 and `POST /api/artifacts/unshare {id}` takes the link down; the list
@@ -874,13 +912,13 @@ usemagpie.ai, so its visitors use it together
 
 ```sh
 go test -tags nogui ./internal/artifact
-go test -tags nogui ./internal/gateway -run 'TestArtifact|TestAssets|TestSample|TestSendAgentOf|TestHubTellsArtifacts'   # TestArtifactPage* hold the page runtime's API, TestArtifactComment* comments, TestArtifactLive* the room
+go test -tags nogui ./internal/gateway -run 'TestArtifact|TestAssets|TestSample|TestSendAgentOf|TestHubTellsArtifacts'   # TestArtifactPage* hold the page runtime's API, TestArtifactComment* comments, TestArtifactLive* the room, TestArtifactApp installing
 go test -tags nogui ./internal/library -run 'TestArtifacts|TestHubTellsMagpieArtifacts'
 go test -tags nogui ./internal/gui -run 'TestArtifactsAPI|TestArtifactsShareAPI|TestBuiltin'
 go test -tags nogui ./internal/cli -run 'TestArtifacts|TestEveryRouteHasACommandOrIsNamed'
 node --test internal/gui/tests/artifacts-page.test.cjs
 node --test internal/gui/tests/artifact-runtime.test.cjs
-node --test internal/gui/tests/artifact-comments.test.cjs internal/gui/tests/artifact-downloads.test.cjs internal/gui/tests/artifact-tts.test.cjs internal/gui/tests/artifact-dictation.test.cjs internal/gui/tests/artifact-mcp.test.cjs
+node --test internal/gui/tests/artifact-comments.test.cjs internal/gui/tests/artifact-downloads.test.cjs internal/gui/tests/artifact-tts.test.cjs internal/gui/tests/artifact-dictation.test.cjs internal/gui/tests/artifact-mcp.test.cjs internal/gui/tests/artifact-install.test.cjs
 node --test site/shares.test.mjs site/live.test.mjs
 node --test internal/gui/tests/nav-pages-order.test.cjs internal/gui/tests/builtins.test.cjs
 ```
