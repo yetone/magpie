@@ -3161,6 +3161,19 @@ mounts each path with the same key it called with. `OwnMCPServers` is the
 fixed list `magpie tool` walks; this one follows the switches. Covered by
 `TestOwnMCPNoneWhenNothingIsOn` and `TestOwnMCPLists*WhileOn`.
 
+To a caller `/mcp/<name>` serves (`local` or `sharedWith`), the same
+answer has `signedIn`: each server magpie is signed in to
+(`mcpauth.Servers`), as `{"name","url","path"}`, `path` being
+`/mcp/<name>` on this gateway (`mcpProxy`), with the servers the caller's
+key may not use left out (`signedInMCP`). It is for an app that reads the
+Library's servers from library.json itself: the community chat page called
+a server the Library showed Signed in with no sign-in (plugins#873). The
+app matches an entry by its name and its URL both, as `through` in
+`library/mcp_signin.go` does for an agent (a sign-in under the same name
+to another URL is not that entry's), and calls `path` for a streamable
+HTTP entry only. It holds no credential: the token stays in magpie, which
+renews it. Covered by `TestOwnMCPListsSignedInServers`.
+
 ## Side models magpie picks: allowance first
 
 When magpie picks the model itself (`AutoVision` for image recognition,

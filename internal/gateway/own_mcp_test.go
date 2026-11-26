@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/yetone/magpie/internal/gwtool"
+	"github.com/yetone/magpie/internal/mcpauth"
+	"github.com/yetone/magpie/internal/mcpauth/mcpauthtest"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 )
@@ -168,5 +170,67 @@ func TestOwnUnreadyWhileNotListed(t *testing.T) {
 	defer func() { searchOn = gwtool.Serve(gwtool.WebSearch) }()
 	if why := OwnUnready("magpie-web-search"); !strings.Contains(why, "Plugins") {
 		t.Fatalf("plugins/search off: %q", why)
+	}
+}
+
+// plugins#873 (duhu2000): the chat page reads the Library's servers from
+// library.json and called a server magpie is signed in to with no
+// sign-in. OwnMCPPath tells it, with no credential, each server magpie is
+// signed in to: its name and URL, to match the Library's entry by both,
+// and the path on this gateway that carries magpie's sign-in, which
+// answers. A key held to other servers is told of none of them.
+func TestOwnMCPListsSignedInServers(t *testing.T) {
+	fresh(t)
+	toolsAre(t, 0)
+	t.Setenv("MAGPIE_ADDR", "")
+	t.Setenv("MAGPIE_PUBLIC_URL", "")
+	f := mcpauthtest.New(t)
+	f.SignIn(t, "neon")
+	token, _ := mcpauth.Token(t.Context(), "neon")
+	h := lanGuard(New().Handler())
+	list := func(hdr ...string) (string, []SignedInMCP) {
+		t.Helper()
+		r := httptest.NewRequest("GET", OwnMCPPath, nil)
+		r.RemoteAddr = "127.0.0.1:50000"
+		for i := 0; i+1 < len(hdr); i += 2 {
+			r.Header.Set(hdr[i], hdr[i+1])
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		var got struct {
+			SignedIn []SignedInMCP `json:"signedIn"`
+		}
+		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &got) != nil {
+			t.Fatalf("%s: %d %s", OwnMCPPath, w.Code, w.Body)
+		}
+		return w.Body.String(), got.SignedIn
+	}
+	body, got := list()
+	if len(got) != 1 || got[0] != (SignedInMCP{Name: "neon", URL: f.URL, Path: "/mcp/neon"}) {
+		t.Fatalf("signed in: %+v", got)
+	}
+	if token == "" || strings.Contains(body, token) {
+		t.Fatalf("the list carries the token (%q): %s", token, body)
+	}
+
+	// the path it names answers, with magpie's sign-in
+	r := httptest.NewRequest("POST", got[0].Path, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize"}`))
+	r.RemoteAddr = "127.0.0.1:50000"
+	r.Host = "127.0.0.1:3425"
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Accept", "application/json, text/event-stream")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != 200 || f.Seen.Get("Authorization") != "Bearer "+token {
+		t.Fatalf("%s: %d %s, the server got %q", got[0].Path, w.Code, w.Body, f.Seen.Get("Authorization"))
+	}
+
+	other := keyHeldToMCP(t, "Other", "github")
+	if _, got := list("Authorization", "Bearer "+other); len(got) != 0 {
+		t.Fatalf("a key held to github is told of %+v", got)
+	}
+	neon := keyHeldToMCP(t, "Neon", "neon")
+	if _, got := list("Authorization", "Bearer "+neon); len(got) != 1 || got[0].Name != "neon" {
+		t.Fatalf("a key given neon: %+v", got)
 	}
 }

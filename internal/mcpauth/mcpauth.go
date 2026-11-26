@@ -315,6 +315,28 @@ func Get(name string) (Record, bool) {
 	return c, true
 }
 
+// Server is a server magpie is signed in to, as its sign-in names it:
+// never a token or a client's secret.
+type Server struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
+}
+
+// Servers are the servers magpie is signed in to, by name.
+func Servers() []Server {
+	fileMu.Lock()
+	m := load()
+	fileMu.Unlock()
+	out := make([]Server, 0, len(m))
+	for name, r := range m {
+		if r != nil {
+			out = append(out, Server{Name: name, URL: r.URL})
+		}
+	}
+	slices.SortFunc(out, func(a, b Server) int { return strings.Compare(a.Name, b.Name) })
+	return out
+}
+
 // SignedIn says whether magpie holds a sign-in to the server by that name
 // at that URL: one to give the agents magpie's address for. One the server
 // refused to renew still is, so the agents get magpie's word to sign in
