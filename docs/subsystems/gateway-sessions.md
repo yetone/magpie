@@ -307,6 +307,25 @@ the gateway's rows). It reads the configuration as it is now, as
 `workbuddyGateway` does. Verification: `TestZCodeHandAddedGatewayProvider`,
 `TestGatewayBase`.
 
+The tokens a session file's call pairs by are its input with its cache
+write, its output and its cache read, and also, when it read from the
+cache, that input less the cache read (`localMatchTokens` in
+[`request_page.go`](../../internal/usage/request_page.go)): an agent that
+speaks OpenAI's protocol to the gateway and writes its file in Anthropic's
+shape keeps `prompt_tokens`, cache read included, as `input_tokens`, while
+the gateway records the uncached part. Qoder and Qoder CN do (#7107:
+29,351 = 1,703 + 27,648), so every call they made through magpie was
+listed again under Not through magpie, at a ~50% cache hit (Toby5080 on
+X). The match must still be the only one both ways, and every agent's
+calls are paired so. A call whose model, or the model it asked for, is a
+routing group's id (`group/<id>`, also after `magpie/`) is the gateway's
+however it pairs, as a call under one of magpie's alias ids is
+(`viaGateway`, `magpieOnly` in
+[`gateway_alias.go`](../../internal/usage/gateway_alias.go)): only magpie
+serves one. A found group's `auto/<model>` is not taken, since a relay
+may name a model so. Verification: `TestQoderCallsThroughMagpieCountOnce`,
+`TestMagpieOnlyModels`.
+
 The Claude subscription bridge's own Claude Code runs save their sessions
 in a Claude folder the readers list (the user's own, or a saved account's
 under `claude-accounts`), often in the caller's project. They aren't the

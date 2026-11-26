@@ -3,6 +3,7 @@ package usage
 import (
 	"strings"
 
+	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/sessions"
 )
 
@@ -47,8 +48,22 @@ func tenDigits(s string) bool {
 // beside it, it showed twice, once under an alias that is no model
 // (CrazyJal on X). A call that never went through the gateway never names
 // an alias.
+//
+// A routing group's id (group/<id>) is the same: only magpie serves one, so
+// a call under it went through magpie whether or not it paired with the
+// gateway's record (magpieOnly). Qoder CN's calls under group/cheap-model
+// were listed again as a local session's (Toby5080 on X).
 func viaGateway(c sessions.Call) bool {
-	return MagpieAlias(c.Model) || c.Requested != "" && MagpieAlias(c.Requested)
+	return MagpieAlias(c.Model) || magpieOnly(c.Model) || c.Requested != "" && (MagpieAlias(c.Requested) || magpieOnly(c.Requested))
+}
+
+// magpieOnly says id names a routing group, "group/<id>" (any case, as
+// access reads it), alone or after magpie's own provider id as an agent
+// that writes "<provider>/<model>" puts it. No vendor serves such a model.
+// A found group's "auto/<model>" isn't taken: a relay may name a model so.
+func magpieOnly(id string) bool {
+	id = strings.TrimPrefix(id, "magpie/")
+	return len(id) > len(provider.GroupPrefix) && strings.EqualFold(id[:len(provider.GroupPrefix)], provider.GroupPrefix)
 }
 
 // ownCalls is cs without the calls the gateway's log counts (viaGateway). cs
