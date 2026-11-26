@@ -6413,7 +6413,16 @@ function routingPage(part) {
   const gSet = el("div", "list rt-gset");
   gSet.dataset.feature = "groups";
   gSet.append(gFound, gNames, ...gDefs);
-  gsec.append(gHead, gList, gOff, sHead, gSet, pHead, pList);
+  // what few change, folded under Advanced below them: whether a model one
+  // provider alone serves is a found group too (realLemonawa on X), shown
+  // while found groups are on
+  const gOne = el("div", "rt-gone hint-row");
+  const gMore = el("details", "prefs-more rt-gmore");
+  gMore.dataset.feature = "groups";
+  const gMoreList = el("div", "list rt-gset");
+  gMoreList.append(gOne);
+  gMore.append(el("summary", "", t("Advanced")), gMoreList);
+  gsec.append(gHead, gList, gOff, sHead, gSet, gMore, pHead, pList);
   // on the Routing groups page, a page of their own; Try again on it puts
   // them back in its markup made anew. With the groups off, that page's
   // tab leaves the sidebar (yyddbds on Discord: it stayed), and what is
@@ -7050,6 +7059,7 @@ function routingPage(part) {
       // so the key being typed into it lands once (#1055)
       replaceKeeping(gHead, head);
       drawFound();
+      drawOne();
       drawNames();
       drawDefaults();
     }
@@ -7463,6 +7473,45 @@ function routingPage(part) {
       : t("Off: only the groups you made or changed are listed and served. An agent set to a found group is moved to its model from one provider, and a request still naming one goes there too.")));
     if (on) txt.append(skipPick());
     gFound.replaceChildren(txt, s);
+  }
+  // drawOne: the switch under Advanced for a group of a model one provider
+  // alone serves (provider.SetAutoGroupsOfOne): on, auto/<model> is there
+  // before a second provider lists the model and stays when one goes
+  // (#5799). Off by default; the groups the user made or changed stay as
+  // they are either way. Open at first when it is on.
+  function drawOne() {
+    const on = groups.ofOne === true;
+    gMore.hidden = groups.found === false;
+    if (!gMore.dataset.drawn) {
+      gMore.dataset.drawn = "1";
+      gMore.open = on;
+    }
+    const s = el("button", "lib-switch" + (on ? " on" : ""));
+    s.type = "button";
+    s.setAttribute("role", "switch");
+    s.setAttribute("aria-checked", String(on));
+    s.setAttribute("aria-label", t("Groups of one provider"));
+    s.append(el("i"));
+    s.onclick = (e) => { e.stopPropagation(); setOne(!on, s); };
+    const txt = el("div", "txt");
+    txt.append(el("b", "", t("Groups of one provider")), el("small", "expl", t("A model only one of your providers serves becomes a group too (auto/…), so agents keep that name when a second provider comes or one goes.")));
+    gOne.replaceChildren(txt, s);
+  }
+  async function setOne(on, s) {
+    if (groupDirty() && !(await confirmDiscard())) return;
+    s.classList.toggle("on", on);
+    s.setAttribute("aria-checked", String(on));
+    try {
+      groups = groupsFrom(await api("groups/ofone", { on }));
+      gEdit = null;
+      renderGroups();
+      saidMoved(t("Found groups changed"), groups.moved);
+      load(); // the gateway's model list, the agents' pickers
+    } catch (e) {
+      s.classList.toggle("on", !on);
+      s.setAttribute("aria-checked", String(!on));
+      status(e.message, "err");
+    }
   }
   // skipPick: the providers kept out of found groups (chenxiang0010 on
   // Discord), picked in the app's menu and saved as it closes: their

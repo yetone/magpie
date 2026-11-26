@@ -9,7 +9,8 @@ package provider
 // The user makes groups, in the Routing view. magpie also finds some on
 // its own: a model more than one provider serves under the same name is a
 // group of those, derived each time and never stored until the user
-// changes one. Models of different names are only ever grouped by the
+// changes one; a model one provider serves is one too while the user asks
+// for that (AutoGroupsOfOne). Models of different names are only ever grouped by the
 // user — in a group of their own, or by saying in a provider's Names &
 // levels that one is the same as another (settings' ModelSameAs): nothing
 // here guesses which models are alike beyond how vendors spell one id.
@@ -814,8 +815,9 @@ func (g Group) own() Group {
 }
 
 // AutoGroupsOn reports whether magpie finds groups on its own: a model
-// more than one provider serves is a group of them (autoGroups). It is on
-// until the user turns it off.
+// more than one provider serves is a group of them (autoGroups), and one
+// provider alone too while AutoGroupsOfOneOn. It is on until the user
+// turns it off.
 func AutoGroupsOn() bool { return !load().NoAutoGroups }
 
 // SetAutoGroups turns the groups magpie finds on its own on or off, all of
@@ -835,32 +837,77 @@ func SetAutoGroups(on bool) error {
 		return nil
 	}
 	if !on {
-		all := groupsIn(providerEntries())
-		found := func(ref string) bool {
-			gid, ok := strings.CutPrefix(ref, GroupPrefix)
-			return ok && slices.ContainsFunc(all, func(o Group) bool { return o.ID == gid && o.Auto && !o.Hidden })
-		}
-		var held []string
-		for _, g := range all {
-			if g.Auto || g.Hidden {
-				continue
-			}
-			for _, m := range g.Members {
-				if found(m) {
-					held = append(held, fmt.Sprintf("%s is in %s", strings.TrimPrefix(m, GroupPrefix), g.Name))
-				}
-			}
-			for _, c := range g.Classifiers() {
-				if found(c) {
-					held = append(held, fmt.Sprintf("%s is %s's classifier", strings.TrimPrefix(c, GroupPrefix), g.Name))
-				}
-			}
-		}
-		if len(held) > 0 {
-			return fmt.Errorf("%s: take it out, or change it to make it yours, first", strings.Join(held, ", "))
+		if err := foundHeld(groupsIn(providerEntries()), func(Group) bool { return true }); err != nil {
+			return err
 		}
 	}
 	f.NoAutoGroups = !on
+	return store(f)
+}
+
+// foundHeld is the error for the found groups going (those of all gone
+// says) that a group of the user's has in it, or classifies with: it
+// would lose them unsaid, so they are taken out first, as DeleteGroup
+// keeps one. nil when none of the user's holds one.
+func foundHeld(all []Group, gone func(Group) bool) error {
+	found := func(ref string) bool {
+		gid, ok := strings.CutPrefix(ref, GroupPrefix)
+		return ok && slices.ContainsFunc(all, func(o Group) bool { return o.ID == gid && o.Auto && !o.Hidden && gone(o) })
+	}
+	var held []string
+	for _, g := range all {
+		if g.Auto || g.Hidden {
+			continue
+		}
+		for _, m := range g.Members {
+			if found(m) {
+				held = append(held, fmt.Sprintf("%s is in %s", strings.TrimPrefix(m, GroupPrefix), g.Name))
+			}
+		}
+		for _, c := range g.Classifiers() {
+			if found(c) {
+				held = append(held, fmt.Sprintf("%s is %s's classifier", strings.TrimPrefix(c, GroupPrefix), g.Name))
+			}
+		}
+	}
+	if len(held) > 0 {
+		return fmt.Errorf("%s: take it out, or change it to make it yours, first", strings.Join(held, ", "))
+	}
+	return nil
+}
+
+// AutoGroupsOfOneOn reports whether magpie finds a group for a model only
+// one provider serves too (SetAutoGroupsOfOne). It is off until the user
+// turns it on.
+func AutoGroupsOfOneOn() bool { return load().AutoGroupsOfOne }
+
+// SetAutoGroupsOfOne makes a model only one provider serves a group magpie
+// finds too, or no longer (realLemonawa on X). On, auto/<model> is there
+// before a second provider lists the model, and stays when a provider
+// goes (#5799): an agent set to it keeps its name, and takes in each
+// provider that comes to serve it. Only the groups magpie finds change:
+// the groups the user made or changed, a found one included, and the
+// records of those removed stay as they are. Off, a group of one that
+// one of the user's has in it, or classifies with, holds it on until it
+// is taken out, as turning found groups off does.
+func SetAutoGroupsOfOne(on bool) error {
+	f, err := read()
+	if err != nil {
+		return err
+	}
+	if f.AutoGroupsOfOne == on {
+		return nil
+	}
+	if !on {
+		entries := providerEntries()
+		two := foundGroupsOf(entries, 2)
+		if err := foundHeld(groupsIn(entries), func(g Group) bool {
+			return !slices.ContainsFunc(two, func(o Group) bool { return o.ID == g.ID })
+		}); err != nil {
+			return err
+		}
+	}
+	f.AutoGroupsOfOne = on
 	return store(f)
 }
 
@@ -982,10 +1029,11 @@ var editionTwins = map[string]string{
 // AutoStandIn is the model a request for a group magpie found goes to
 // when there is no such group now: while such groups are off
 // (SetAutoGroups), once the providers the user keeps out of them
-// (SetAutoGroupSkip) took it away, or once fewer than two providers serve
+// (SetAutoGroupSkip) took it away, once fewer than two providers serve
 // its model (a provider removed, or its list without the model: canlee886
 // on X, a Codex thread saved on group/auto-gpt-6-1-sol failed every turn
-// with 404). It is its model, from the first provider that serves it, one
+// with 404) while groups of one are off, or once those are turned off
+// (SetAutoGroupsOfOne). It is its model, from the first provider that serves it, one
 // not kept out first, as "provider/model": the same model, never another.
 // An agent set to the group, or a session begun on it, keeps working, on
 // one provider. ok is false for any other id, a group there is, a group
@@ -1059,8 +1107,20 @@ func GoneAutoGroup(ref string) bool {
 // the models of the providers switched off: one switched off for a while
 // stays in the group, a member the gateway skips (membersIn), rather than
 // taking a group of two away with every agent, rule and group set to it.
+// A model only one provider serves is a group too while the user has
+// asked for that (AutoGroupsOfOne).
 func foundGroups(entries []Entry) []Group {
-	return autoGroups(unskipped(foundFrom(entries, heldOffEntries()), heldOf("file", load).AutoGroupSkip), heldSettings().ModelSameAs)
+	least := 2
+	if heldOf("file", load).AutoGroupsOfOne {
+		least = 1
+	}
+	return foundGroupsOf(entries, least)
+}
+
+// foundGroupsOf is foundGroups of the models at least that many providers
+// serve.
+func foundGroupsOf(entries []Entry, least int) []Group {
+	return autoGroupsOf(unskipped(foundFrom(entries, heldOffEntries()), heldOf("file", load).AutoGroupSkip), heldSettings().ModelSameAs, least)
 }
 
 // unskipped is entries without the models of the providers skip names:
@@ -1132,6 +1192,13 @@ func foundFrom(entries, idle []Entry) []Entry {
 // user said one is the same as another (same: settings' ModelSameAs) — in
 // the order the providers were added.
 func autoGroups(entries []Entry, same map[string]string) []Group {
+	return autoGroupsOf(entries, same, 2)
+}
+
+// autoGroupsOf is autoGroups of the models at least that many providers
+// serve: 1 makes a group of a model one provider alone serves too
+// (AutoGroupsOfOne).
+func autoGroupsOf(entries []Entry, same map[string]string, least int) []Group {
 	var order []string
 	by := map[string][]Entry{}
 	for _, e := range entries {
@@ -1151,7 +1218,7 @@ func autoGroups(entries []Entry, same map[string]string) []Group {
 	var out []Group
 	for _, k := range order {
 		es := by[k]
-		if len(es) < 2 {
+		if len(es) < max(least, 1) {
 			continue
 		}
 		// the model's own name: one a user gave it is that provider's alone

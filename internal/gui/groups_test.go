@@ -94,6 +94,43 @@ func TestGroupsFoundSwitch(t *testing.T) {
 	}
 }
 
+// groups/ofone, under the Routing groups page's Advanced, makes a model
+// one provider alone serves a found group too (realLemonawa on X), and
+// back: the state says which, and lists the group of one while it is on.
+func TestGroupsOfOneSwitch(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	if err := provider.Save(provider.Provider{ID: "a", Name: "a", Key: "ka", Chat: "http://127.0.0.1:1/v1", Models: []string{"m"}}); err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	groupRoutes(mux)
+	one := func(body string) groupsJSON {
+		t.Helper()
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, httptest.NewRequest("POST", "/api/groups/ofone", strings.NewReader(body)))
+		if w.Code != 200 {
+			t.Fatalf("%s: %d %s", body, w.Code, w.Body)
+		}
+		var st groupsJSON
+		if err := json.Unmarshal(w.Body.Bytes(), &st); err != nil {
+			t.Fatal(err)
+		}
+		return st
+	}
+	if st := groupsState(); st.OfOne || len(st.Groups) != 0 {
+		t.Fatalf("off by default: %v %+v", st.OfOne, st.Groups)
+	}
+	if st := one(`{"on":true}`); !st.OfOne || len(st.Groups) != 1 || st.Groups[0].ID != "auto-m" || !provider.AutoGroupsOfOneOn() {
+		t.Fatalf("on: %v %+v", st.OfOne, st.Groups)
+	}
+	if st := one(`{"on":false}`); st.OfOne || len(st.Groups) != 0 {
+		t.Fatalf("off: %v %+v", st.OfOne, st.Groups)
+	}
+}
+
 // groups/skip keeps providers out of the groups magpie finds
 // (chenxiang0010 on Discord): the state names them, and lists every
 // provider that can be, one kept out that is gone too.

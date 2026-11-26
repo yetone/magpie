@@ -34,6 +34,9 @@ type groupsJSON struct {
 	Drawers []modelRef `json:"drawers"`
 	// Found: magpie finds groups on its own (provider.AutoGroupsOn)
 	Found bool `json:"found"`
+	// OfOne: a model one provider alone serves is a found group too
+	// (provider.AutoGroupsOfOneOn), set under the page's Advanced
+	OfOne bool `json:"ofOne"`
 	// Skip: the providers kept out of found groups, by id
 	// (provider.AutoGroupSkip); Skippable: those that can be, each a
 	// provider ready to serve, switched off or not, and one in Skip that
@@ -359,7 +362,7 @@ func groupAccounts(gs []provider.Group) map[string][]keyModelJSON {
 
 func groupsState() groupsJSON {
 	_, offset := time.Now().Zone()
-	out := groupsJSON{Groups: []groupJSON{}, Models: []modelRef{}, Pools: []poolJSON{}, Deciders: []modelRef{}, Drawers: []modelRef{}, Found: provider.AutoGroupsOn(), Templates: provider.Templates(),
+	out := groupsJSON{Groups: []groupJSON{}, Models: []modelRef{}, Pools: []poolJSON{}, Deciders: []modelRef{}, Drawers: []modelRef{}, Found: provider.AutoGroupsOn(), OfOne: provider.AutoGroupsOfOneOn(), Templates: provider.Templates(),
 		Clock: clockJSON{Zone: provider.LocalZone(), Offset: offset}}
 	out.JSRoutings = middleware.Routings()
 	def := settings.Load()
@@ -569,7 +572,7 @@ func groupRoutes(mux *http.ServeMux) {
 		var body struct {
 			provider.Group
 			From string `json:"from"` // the id the group had: another is a rename
-			On   bool   `json:"on"`   // found: magpie finds groups on its own
+			On   bool   `json:"on"`   // found: magpie finds groups on its own; ofone: of one provider too
 			// skip: the providers kept out of found groups
 			// (provider.SetAutoGroupSkip)
 			Skip []string `json:"skip"`
@@ -602,6 +605,10 @@ func groupRoutes(mux *http.ServeMux) {
 			// from one provider; a request still naming one goes there too
 			// (provider.AutoStandIn)
 			moved, err = agent.Reseat(func() error { return provider.SetAutoGroups(body.On) })
+		case "ofone":
+			// off, an agent set to a group of one is moved to its model,
+			// as turning found groups off does
+			moved, err = agent.Reseat(func() error { return provider.SetAutoGroupsOfOne(body.On) })
 		case "skip":
 			// an agent set to a found group skipping took away is moved to
 			// its model from one provider, as turning found groups off does

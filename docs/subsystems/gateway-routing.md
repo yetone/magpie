@@ -41,6 +41,20 @@ request is still 404, and `unknownModel` says the model is gone and to pick
 another for the conversation instead of listing every id
 (`provider.GoneAutoGroup`; canlee886 on X, `TestFoundGroupGoneGoesToItsModel`).
 
+A found group is a model two or more providers serve, unless the user asks
+for groups of one too (`AutoGroupsOfOne` in providers.json,
+`provider.SetAutoGroupsOfOne`: the Routing groups page's Advanced, `magpie
+group auto one on`; realLemonawa on X). Then a model one provider alone
+serves is a group as well (`autoGroupsOf`'s `least`), so `auto/<model>` is
+there before a second provider lists the model and stays when one goes
+(#5799). Only the found groups change: the groups the user made or changed,
+and the records of those removed, stay as they are. It is off by default,
+since every model would be listed twice in every agent's picker. Turning it
+off goes through `agent.Reseat`, and a request still naming a group of one
+goes to its model (`AutoStandIn`); a group of one that one of the user's
+holds keeps it on until taken out (`foundHeld`, as `SetAutoGroups` does;
+`TestAutoGroupsOfOne`).
+
 ## Responsibilities and sources of truth
 
 | Part | Responsibility | Source |

@@ -813,6 +813,12 @@ type file struct {
 	// their models are in none, so a model only one other provider serves
 	// is no group. The groups the user made or changed keep them.
 	AutoGroupSkip []string `json:"autoGroupSkip,omitempty"`
+	// AutoGroupsOfOne: the user asked for a group of a model only one
+	// provider serves too (SetAutoGroupsOfOne; realLemonawa on X), so
+	// auto/<model> is there before a second provider lists it and stays
+	// when one goes. Off, as it is unless set, a found group is a model
+	// two or more providers serve.
+	AutoGroupsOfOne bool `json:"autoGroupsOfOne,omitempty"`
 	// Order is the order the user put the providers in on the Providers
 	// tab (#499), by id; one not in it follows those that are, in the
 	// order it was added (see SetOrder).
