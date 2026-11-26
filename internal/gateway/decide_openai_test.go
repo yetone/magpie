@@ -141,6 +141,7 @@ func (u *openaiUp) got() ([]string, []map[string]any) {
 func openaiClassified(t *testing.T, classifier string, rules ...provider.Rule) (*Server, *openaiUp, *openaiUp) {
 	t.Helper()
 	s, _, _ := ruled(t)
+	decisionsOffForTest(t)
 	for _, k := range []string{"HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy", "NO_PROXY", "no_proxy"} {
 		t.Setenv(k, "")
 	}

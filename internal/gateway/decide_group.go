@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/yetone/magpie/internal/access"
@@ -384,6 +385,53 @@ func (s *Server) askDecider(wait time.Duration, who access.Identity, p provider.
 		return verdict{}, fmt.Errorf("no key or account of %s may be asked %s now", p.Name, model)
 	}
 	return s.askDecideTries(wait, cs, intents, prev, effort, text)
+}
+
+// decisionsUnserved reports whether OpenAI's Decisions API turned a call
+// to p away as one it doesn't serve the key at all, not for the key's
+// money or load: a request it can't read (400, 422), a key, project or
+// model it doesn't take there (403, 404, 405). The key's gpt-6-luna is
+// then asked through chat as it was before (askClassifierIn), and its
+// answer there lifts the rest the refusal put on the key (zyh6036 on
+// X: every Codex turn went to the group's first member, gpt-6-luna
+// itself, with no record of the classifier's calls).
+func decisionsUnserved(p provider.Provider, status int, body []byte) bool {
+	if p.DecideVia() != provider.ViaOpenAI {
+		return false
+	}
+	switch status {
+	case http.StatusBadRequest, http.StatusUnprocessableEntity, http.StatusForbidden, http.StatusNotFound, http.StatusMethodNotAllowed:
+		return !quotaWords.Match(wordsOf(body))
+	}
+	return false
+}
+
+// decisionsOff is when each OpenAI key Decisions didn't serve
+// (decisionsUnserved) is asked there again: until then its gpt-6-luna
+// is asked through chat, not first at a route that turns it away.
+var decisionsOff = struct {
+	sync.Mutex
+	until map[string]time.Time
+}{until: map[string]time.Time{}}
+
+// decisionsOffFor is how long a key Decisions didn't serve is asked
+// through chat.
+const decisionsOffFor = time.Hour
+
+func decisionsKey(p provider.Provider) string { return p.ID + "|" + provider.KeyID(p.Key) }
+
+// decisionsRefusedNow reports whether p's key is asked through chat for
+// now (decisionsOff).
+func decisionsRefusedNow(p provider.Provider) bool {
+	decisionsOff.Lock()
+	defer decisionsOff.Unlock()
+	return time.Now().Before(decisionsOff.until[decisionsKey(p)])
+}
+
+func noteDecisionsRefused(p provider.Provider) {
+	decisionsOff.Lock()
+	defer decisionsOff.Unlock()
+	decisionsOff.until[decisionsKey(p)] = time.Now().Add(decisionsOffFor)
 }
 
 // askDecideTries asks each of cs as Jev is (askJev) until one answers, the

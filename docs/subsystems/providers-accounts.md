@@ -268,6 +268,21 @@ usage is the routing classifier's own, priced at gpt-6-luna's catalog rate
 with cached tokens counted as input. `TestOpenAIDecider`,
 `TestOpenAIDecisionsWire`, `TestOpenAIDecisionsClassify`,
 `TestOpenAIDecisionsRefusal`, `TestOpenAIDecisionsOnlyLuna`.
+A Decisions call that fails is a routing usage row with its status and
+error (`systemOne`), as a classifier asked through chat is; before, only
+an answered call left one, so a refused classifier showed nowhere in
+Recent calls. When Decisions doesn't serve the key at all (400, 422,
+403, 404 or 405 with no quota words: `decisionsUnserved`), the key's
+`gpt-6-luna` is asked through chat in the same turn, as it was before,
+and for an hour after (`decisionsOff`), so each turn still goes to its
+intent's member instead of the group's first (zyh6036 on X, after
+v0.1.4830: every Codex turn went to gpt-6-luna itself). Its answer there
+lifts the rest the refusal put on the key. A refusal for the key's money
+or load (429, 5xx) rests the key, and the turn falls back as the rule
+says, with the error on the route. `TestCodexTurnsClassifiedByLuna`,
+`TestCodexLunaDecisionsRefusedRecorded`,
+`TestCodexLunaDecisionsUnservedAskedByChat`,
+`TestCodexTurnsClassifiedBySignedInLuna`.
 Refresh replaces the list: removed decisions stop routing, and an empty
 remote list never gains a fabricated Jev alias.
 An older peer without the decision-list extension continues serving its

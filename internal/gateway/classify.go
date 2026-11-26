@@ -644,8 +644,23 @@ func (s *Server) askClassifierIn(wait time.Duration, who access.Identity, model 
 	// an OpenAI key's gpt-6-luna: asked at OpenAI's Decisions API, as Jev
 	// is at System One (zyh6036 on X), not through chat
 	if p, m, ok := provider.Resolve(model); ok {
-		if _, ok := p.OpenAIDecider(m); ok {
-			return s.askDecider(wait, who, p, m, intents, prev, effort, text)
+		if d, ok := p.OpenAIDecider(m); ok && !decisionsRefusedNow(d) {
+			t0 := time.Now()
+			v, err := s.askDecider(wait, who, p, m, intents, prev, effort, text)
+			var refused decideRefused
+			if !errors.As(err, &refused) || !decisionsUnserved(d, refused.status, refused.body) {
+				return v, err
+			}
+			// Decisions doesn't serve the key (a project without it, a
+			// request it reads otherwise): gpt-6-luna is asked through
+			// chat, as before, in what is left of the wait, and for an
+			// hour (zyh6036 on X: no turn was told, each went to the
+			// group's first member)
+			noteDecisionsRefused(d)
+			log.Printf("routing: OpenAI's Decisions API didn't serve %s (%v): asked through chat for %s", model, err, decisionsOffFor)
+			if wait -= time.Since(t0); wait <= 0 {
+				return verdict{}, err
+			}
 		}
 	}
 	// a group of decision models: each in turn (decide_group.go)
